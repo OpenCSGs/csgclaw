@@ -1,3 +1,5 @@
+import { classNames } from "@/shared/lib/classNames";
+import styles from "./GlobalNotice.module.css";
 import { Toast as RadixToast } from "radix-ui";
 import { AlertTriangle, Info, X } from "lucide-react";
 import { useCallback, useMemo, useRef, useState } from "react";
@@ -24,25 +26,27 @@ export function GlobalNoticeProvider({ children }: { children: ReactNode }) {
         {notice ? (
           <RadixToast.Root
             key={notice.id}
-            className={`global-notice ${notice.tone ?? "info"}`}
+            className={classNames(styles["global-notice"], styles[notice.tone ?? "info"])}
             open
             onOpenChange={(open) => {
               if (!open) setNotice(null);
             }}
           >
-            <Icon className="global-notice-icon" size={20} aria-hidden="true" />
-            <div className="global-notice-content">
+            <Icon className={styles["global-notice-icon"]} size={20} aria-hidden="true" />
+            <div className={styles["global-notice-content"]}>
               {notice.title ? (
-                <RadixToast.Title className="global-notice-title">{notice.title}</RadixToast.Title>
+                <RadixToast.Title className={styles["global-notice-title"]}>{notice.title}</RadixToast.Title>
               ) : null}
-              <RadixToast.Description className="global-notice-description">{notice.message}</RadixToast.Description>
+              <RadixToast.Description className={styles["global-notice-description"]}>
+                {notice.message}
+              </RadixToast.Description>
             </div>
-            <RadixToast.Close className="global-notice-close" aria-label={notice.closeLabel}>
+            <RadixToast.Close className={styles["global-notice-close"]} aria-label={notice.closeLabel}>
               <X size={16} aria-hidden="true" />
             </RadixToast.Close>
           </RadixToast.Root>
         ) : null}
-        <RadixToast.Viewport className="global-notice-viewport" />
+        <RadixToast.Viewport className={styles["global-notice-viewport"]} />
       </RadixToast.Provider>
     </GlobalNoticeContext.Provider>
   );

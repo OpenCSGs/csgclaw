@@ -1,0 +1,322 @@
+.upgrade-status-card {
+  display: grid;
+  grid-template-columns: 10px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  margin-top: 16px;
+  padding: 12px 14px;
+  border: 1px solid color-mix(in oklab, var(--primary) 28%, var(--line));
+  border-radius: 8px;
+  background: var(--primary-soft);
+  color: var(--text);
+}
+
+.upgrade-status-card p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.upgrade-status-dot {
+  width: 10px;
+  height: 10px;
+  margin-top: 5px;
+  border-radius: 999px;
+  background: var(--primary);
+  box-shadow: 0 0 0 4px color-mix(in oklab, var(--primary) 16%, transparent);
+}
+
+.upgrade-status-card.starting .upgrade-status-dot,
+.upgrade-status-card.restarting .upgrade-status-dot {
+  animation: upgrade-pulse 1.4s ease-in-out infinite;
+}
+
+.upgrade-status-card.done {
+  border-color: color-mix(in oklab, var(--success-700) 32%, var(--line));
+  background: var(--success-50);
+}
+
+.upgrade-status-card.done .upgrade-status-dot {
+  background: var(--success-700);
+  box-shadow: 0 0 0 4px color-mix(in oklab, var(--success-700) 16%, transparent);
+}
+
+.upgrade-status-card.error {
+  border-color: color-mix(in oklab, var(--danger) 32%, var(--line));
+  background: var(--error-50);
+}
+
+.upgrade-status-card.error .upgrade-status-dot {
+  background: var(--danger);
+  box-shadow: 0 0 0 4px color-mix(in oklab, var(--danger) 16%, transparent);
+}
+
+.upgrade-status-card.manual_restart {
+  border-color: color-mix(in oklab, var(--warning-700) 32%, var(--line));
+  background: var(--warning-50);
+}
+
+.upgrade-status-card.manual_restart .upgrade-status-dot {
+  background: var(--warning-700);
+  box-shadow: 0 0 0 4px color-mix(in oklab, var(--warning-700) 16%, transparent);
+}
+
+.profile-model-row {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.env-editor {
+  display: grid;
+  gap: 8px;
+}
+
+.env-row {
+  display: grid;
+  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.env-row input:where(:not([data-csg-control])) {
+  min-width: 0;
+}
+
+.env-remove-button:where(:not([data-csg-control])) {
+  border-color: var(--line);
+  color: var(--muted);
+}
+
+.env-add-button {
+  justify-self: start;
+  margin-top: 2px;
+}
+
+@media (max-width: 960px) {
+  .profile-runtime-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .profile-refresh {
+    width: 100%;
+  }
+}
+
+@media (max-width: 640px) {
+  .profile-runtime-grid,
+  .profile-api-grid,
+  .profile-advanced-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.modal-card {
+  padding: 26px;
+}
+
+.modal-actions {
+  border-top-color: var(--line);
+}
+
+.modal-title {
+  color: var(--text);
+  font-size: 22px;
+  line-height: 1.08;
+}
+
+.selection-item {
+  border-color: var(--line);
+  border-radius: 8px;
+  background: var(--field);
+}
+
+.selection-item.selection-all-item {
+  border-color: color-mix(in oklab, var(--primary) 34%, var(--line));
+  background:
+    linear-gradient(90deg, color-mix(in oklab, var(--primary) 13%, transparent), transparent 72%), var(--field);
+}
+
+.selection-item > input:where(:not([data-csg-control]))[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  inline-size: 16px;
+  block-size: 16px;
+  min-height: 16px;
+  min-block-size: 16px;
+  max-block-size: 16px;
+  align-self: center;
+  margin: 0;
+  border-radius: 4px;
+  accent-color: var(--primary);
+}
+
+.selection-item > input:where(:not([data-csg-control]))[type="checkbox"]:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px color-mix(in oklab, var(--primary) 72%, white);
+}
+
+.selection-item.compact-toggle-row {
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 14px;
+}
+
+.selection-item.compact-toggle-row span {
+  white-space: nowrap;
+}
+
+.profile-modal.agent-modal .agent-fast-mode-field .compact-toggle-row {
+  align-self: stretch;
+  align-items: flex-start;
+  gap: 8px;
+  min-height: var(--input-height-md);
+  padding: 11px 12px;
+  cursor: pointer;
+}
+
+.profile-modal.agent-modal .agent-model-config-grid .agent-fast-mode-field .compact-toggle-row {
+  align-items: center;
+  padding-block: 10px;
+  box-shadow: var(--input-shadow);
+}
+
+.profile-modal.agent-modal .agent-fast-mode-field input:where(:not([data-csg-control]))[type="checkbox"] {
+  appearance: none;
+  display: grid;
+  place-items: center;
+  flex: 0 0 18px;
+  width: 18px;
+  height: 18px;
+  min-width: 18px;
+  min-height: 18px;
+  margin: 2px 0 0;
+  padding: 0;
+  border: 1.5px solid var(--gray-300);
+  border-radius: 5px;
+  background: var(--white);
+  box-shadow: var(--shadow-xs);
+  cursor: pointer;
+}
+
+.profile-modal.agent-modal
+  .agent-model-config-grid
+  .agent-fast-mode-field
+  input:where(:not([data-csg-control]))[type="checkbox"] {
+  margin-top: 0;
+}
+
+.profile-modal.agent-modal .agent-fast-mode-field input:where(:not([data-csg-control]))[type="checkbox"]:hover {
+  border-color: var(--brand-300);
+}
+
+.profile-modal.agent-modal .agent-fast-mode-field input:where(:not([data-csg-control]))[type="checkbox"]:focus-visible {
+  border-color: var(--brand-300);
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.profile-modal.agent-modal .agent-fast-mode-field input:where(:not([data-csg-control]))[type="checkbox"]:checked {
+  border-color: var(--brand-600);
+  background: var(--brand-600);
+}
+
+.profile-modal.agent-modal
+  .agent-fast-mode-field
+  input:where(:not([data-csg-control]))[type="checkbox"]:checked::after {
+  width: 5px;
+  height: 9px;
+  border: solid var(--white);
+  border-width: 0 2px 2px 0;
+  content: "";
+  transform: translateY(-1px) rotate(45deg);
+}
+
+.profile-modal.agent-modal .agent-fast-mode-help {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: var(--input-text);
+  font: var(--text-md-normal);
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.profile-modal.agent-modal .agent-sandbox-toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.profile-modal.agent-modal .agent-sandbox-toggle.readonly {
+  cursor: default;
+}
+
+.profile-modal.agent-modal .agent-sandbox-toggle.readonly:hover,
+.profile-modal.agent-modal .agent-sandbox-toggle.readonly:focus-within,
+.profile-modal.agent-modal .agent-sandbox-toggle.readonly:has(input:where(:not([data-csg-control])):checked) {
+  border-color: var(--line);
+  background: var(--surface);
+  color: inherit;
+  box-shadow: var(--shadow-xs);
+}
+
+.profile-modal.agent-modal .agent-sandbox-copy {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.profile-modal.agent-modal .agent-sandbox-copy strong {
+  color: var(--text);
+  font-size: var(--text-sm-size);
+  font-weight: var(--font-weight-medium);
+  line-height: var(--text-sm-line-height);
+}
+
+.profile-modal.agent-modal .agent-sandbox-copy small {
+  color: var(--muted);
+  font-size: var(--text-xs-size);
+  font-weight: var(--font-weight-normal);
+  line-height: var(--text-xs-line-height);
+  white-space: normal;
+}
+
+.profile-modal.agent-modal .agent-sandbox-field input:where(:not([data-csg-control]))[type="checkbox"] {
+  margin: 1px 0 0;
+}
+
+.selection-item:hover {
+  border-color: color-mix(in oklab, var(--brand-600) 42%, var(--line));
+  box-shadow:
+    var(--shadow-xs),
+    0 0 0 3px color-mix(in oklab, var(--brand-600) 12%, transparent);
+}
+
+.profile-editor-shell {
+  gap: 16px;
+  margin-top: 0;
+}
+
+.profile-modal.agent-modal .profile-editor-shell {
+  min-width: 0;
+  gap: 20px;
+  padding: 16px 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.profile-modal.agent-modal .profile-section {
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.profile-modal.agent-modal .agent-identity-section {
+  padding: 0;
+}

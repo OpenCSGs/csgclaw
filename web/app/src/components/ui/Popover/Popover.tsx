@@ -1,3 +1,4 @@
+import styles from "./Popover.module.css";
 import { Popover as RadixPopover } from "radix-ui";
 import { forwardRef } from "react";
 import type { ComponentPropsWithoutRef, ComponentRef } from "react";
@@ -39,7 +40,7 @@ export const PopoverContent = forwardRef<ComponentRef<typeof RadixPopover.Conten
         <RadixPopover.Content
           ref={ref}
           align={align}
-          className={classNames("csg-popover-content", className)}
+          className={classNames(styles["csg-popover-content"], className)}
           collisionPadding={collisionPadding}
           sideOffset={sideOffset}
           {...props}

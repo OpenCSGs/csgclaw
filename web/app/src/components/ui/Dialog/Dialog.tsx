@@ -1,3 +1,4 @@
+import styles from "./Dialog.module.css";
 import { Dialog as RadixDialog } from "radix-ui";
 import { X } from "lucide-react";
 import { forwardRef } from "react";
@@ -40,7 +41,13 @@ export type DialogOverlayProps = ComponentPropsWithoutRef<typeof RadixDialog.Ove
 
 export const DialogOverlay = forwardRef<ComponentRef<typeof RadixDialog.Overlay>, DialogOverlayProps>(
   function DialogOverlay({ className, ...props }, ref) {
-    return <RadixDialog.Overlay ref={ref} className={classNames("csg-dialog-overlay", className)} {...props} />;
+    return (
+      <RadixDialog.Overlay
+        ref={ref}
+        className={classNames(classNames(styles["csg-dialog-overlay"], "csg-dialog-overlay"), className)}
+        {...props}
+      />
+    );
   },
 );
 
@@ -59,7 +66,7 @@ export const DialogContent = forwardRef<ComponentRef<typeof RadixDialog.Content>
         <DialogOverlay className={overlayClassName} />
         <RadixDialog.Content
           ref={ref}
-          className={classNames("csg-dialog-content", className)}
+          className={classNames(classNames(styles["csg-dialog-content"], "csg-dialog-content"), className)}
           tabIndex={tabIndex}
           onOpenAutoFocus={(event) => {
             onOpenAutoFocus?.(event);
@@ -89,7 +96,7 @@ export const DialogHeader = forwardRef<HTMLDivElement, DialogHeaderProps>(functi
   { className, ...props },
   ref,
 ) {
-  return <div ref={ref} className={classNames("csg-dialog-header", className)} {...props} />;
+  return <div ref={ref} className={classNames(styles["csg-dialog-header"], className)} {...props} />;
 });
 
 export type DialogBodyProps = HTMLAttributes<HTMLDivElement>;
@@ -98,7 +105,13 @@ export const DialogBody = forwardRef<HTMLDivElement, DialogBodyProps>(function D
   { className, ...props },
   ref,
 ) {
-  return <div ref={ref} className={classNames("csg-dialog-body", className)} {...props} />;
+  return (
+    <div
+      ref={ref}
+      className={classNames(classNames(styles["csg-dialog-body"], "csg-dialog-body"), className)}
+      {...props}
+    />
+  );
 });
 
 export type DialogFooterProps = HTMLAttributes<HTMLDivElement>;
@@ -107,7 +120,13 @@ export const DialogFooter = forwardRef<HTMLDivElement, DialogFooterProps>(functi
   { className, ...props },
   ref,
 ) {
-  return <div ref={ref} className={classNames("csg-dialog-footer", className)} {...props} />;
+  return (
+    <div
+      ref={ref}
+      className={classNames(classNames(styles["csg-dialog-footer"], "csg-dialog-footer"), className)}
+      {...props}
+    />
+  );
 });
 
 export type DialogTitleProps = ComponentPropsWithoutRef<typeof RadixDialog.Title>;
@@ -116,14 +135,26 @@ export const DialogTitle = forwardRef<ComponentRef<typeof RadixDialog.Title>, Di
   { className, ...props },
   ref,
 ) {
-  return <RadixDialog.Title ref={ref} className={classNames("csg-dialog-title", className)} {...props} />;
+  return (
+    <RadixDialog.Title
+      ref={ref}
+      className={classNames(classNames(styles["csg-dialog-title"], "csg-dialog-title"), className)}
+      {...props}
+    />
+  );
 });
 
 export type DialogDescriptionProps = ComponentPropsWithoutRef<typeof RadixDialog.Description>;
 
 export const DialogDescription = forwardRef<ComponentRef<typeof RadixDialog.Description>, DialogDescriptionProps>(
   function DialogDescription({ className, ...props }, ref) {
-    return <RadixDialog.Description ref={ref} className={classNames("csg-dialog-description", className)} {...props} />;
+    return (
+      <RadixDialog.Description
+        ref={ref}
+        className={classNames(classNames(styles["csg-dialog-description"], "csg-dialog-description"), className)}
+        {...props}
+      />
+    );
   },
 );
 
@@ -145,8 +176,13 @@ export const DialogCloseButton = forwardRef<HTMLButtonElement, DialogCloseButton
 ) {
   const button = (
     <DialogClose asChild>
-      <Button ref={ref} className={classNames("csg-dialog-close", className)} aria-label={label} {...props}>
-        <span className="icon-button-mark" aria-hidden="true">
+      <Button
+        ref={ref}
+        className={classNames(classNames(styles["csg-dialog-close"], "csg-dialog-close"), className)}
+        aria-label={label}
+        {...props}
+      >
+        <span className={classNames(styles["icon-button-mark"], "icon-button-mark")} aria-hidden="true">
           <X size={18} strokeWidth={2} />
         </span>
       </Button>

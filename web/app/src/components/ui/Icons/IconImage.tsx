@@ -1,9 +1,16 @@
+import { classNames } from "@/shared/lib/classNames";
+import styles from "./Icons.module.css";
 import type { CSSProperties, ReactElement } from "react";
-import "./Icons.css";
 
 export function IconImage(name: string): ReactElement {
   const iconURL = `icons/${name}.svg`;
-  return <span className="svg-icon" aria-hidden="true" style={iconMaskStyle(iconURL)}></span>;
+  return (
+    <span
+      className={classNames(styles["svg-icon"], "svg-icon")}
+      aria-hidden="true"
+      style={iconMaskStyle(iconURL)}
+    ></span>
+  );
 }
 
 function iconMaskStyle(iconURL: string): CSSProperties {

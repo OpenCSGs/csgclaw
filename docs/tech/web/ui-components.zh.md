@@ -25,18 +25,24 @@
 
 - 每个导出组件包使用一个 PascalCase 目录。
 - 实现、CSS 和 `index.ts` 放在同一个组件目录。
-- 组件包 CSS 从该包的 `index.ts` 导入。
+- 组件实现直接导入自身 `.module.css`；`index.ts` 只导出公开接口。
 - 公共 UI 组件从 `src/components/ui/index.ts` 统一 re-export。
 - 移动或替换组件后避免保留旧路径兼容 re-export；直接更新调用方。
 
 ## 样式
 
 - 颜色、圆角、阴影、focus ring 和共享层级值优先使用 `src/shared/styles/tokens.css` 里的 token。
-- 组件自有样式放在组件旁边。
+- 自有样式和动画使用同目录 CSS Modules；UI 样式不使用 `:global`、组件内主题选择器或 `!important`。
 - 少量布局细节可以使用 Tailwind CSS utility class；稳定组件样式应使用组件自己的 class name。
 - token 已存在时，不要在 UI 组件里使用裸的全局颜色、阴影或 z-index 值。
 - UI 基础件应保持足够中性，便于跨页面复用。业务专属布局和文案留在 `src/components/ui` 之外。
-- 后续通用样式会逐步沉淀到 Tailwind CSS 和共享 token；页面级个性化样式可以先就近写在页面或 feature CSS 中，确认复用价值后再抽取。
+- 明暗主题和共享状态角色统一在 `shared/styles/tokens.css` 管理；Tailwind 用于少量布局。
+- 已有根节点和内容布局 class 仅在业务仍使用时作为兼容钩子保留，不覆盖基础控件的颜色、字体或状态；新增组合使用 props 和调用方布局 wrapper。
+- Combobox 在 UI 库内部复用选择控件的视觉模块；业务代码导入组件入口，不导入私有 stylesheet。
+
+## 按钮与导航链接
+
+执行操作使用 `Button` 或 `IconButton`，页面导航使用 `LinkButton`。`LinkButton` 渲染原生链接，保留 `href`、`target`、`rel` 和键盘激活行为，与 Button 共用局部的变体、尺寸、内容及焦点样式。不要通过给原生元素添加全局 `btn` 类来复刻按钮。
 
 ## 浮层层级
 
@@ -82,11 +88,11 @@
 
 Field 向 TextInput、TextArea、SelectTrigger 和 Combobox 传递 label/control ID、hint/error 描述、invalid 和 required 可访问状态；显式 ID 与名称优先。Field 的 required 用于字段标记，需要原生校验时同时设置控件 required。一个 Field 对应一个逻辑控件。
 
-TextInput、TextArea 拥有带 class/data 标识的样式，全局历史输入选择器排除它们。紧凑输入使用 size="sm"；组合搜索容器负责边框和背景时使用 variant="plain"，避免 `!important`。
+TextInput、TextArea 拥有局部、带 data 标识的样式；历史输入和工作区选择器排除所有 `data-csg-control` 元素。收窄迁移期间，原生复合表单保留在 `shared/styles/inputs.css`，受管理 Field 的标签、提示和错误样式保持局部。紧凑输入使用 size="sm"；组合搜索容器负责边框和背景时使用 variant="plain"，避免 `!important`。
 
 PanelHeader 提供内容与 actions 布局，EmptyState 提供标题、描述和操作，SegmentedControl 提供命名单选组及键盘导航。业务文案和持久化留给调用方。菜单表面、hover/selected、Tooltip 和 Dialog 背景颜色通过 shared/styles/tokens.css 的语义 token 管理。
 
-在 web/app 运行 `corepack pnpm ui:lab`，打开独立 ui-lab.html 展示生产组件；无需应用数据，也不进入生产构建。
+在 web/app 运行 `corepack pnpm ui:lab`，打开独立 ui-lab.html 展示生产组件和真实工作区 CSS 的组合场景；无需应用数据，也不进入生产构建。
 
 ## Dropdown Menu
 

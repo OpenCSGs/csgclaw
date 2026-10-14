@@ -125,7 +125,7 @@ pnpm --dir web/app install
 - 导出的组件包使用 PascalCase 目录名。
 - 主实现文件使用与组件相同的 PascalCase 名称。
 - 每个导出的组件包都有 `index.ts` 入口。
-- `index.ts` 只导入必要 CSS 并 re-export 公开符号。
+- `index.ts` 只 re-export 公开符号；组件实现直接导入自身 CSS Modules，入口不注入组件样式。
 - 避免 `message-content` 这种 kebab-case 组件目录，也避免 `workspace-views` 这种语义模糊的分组名。
 
 示例:
@@ -134,7 +134,7 @@ pnpm --dir web/app install
 src/pages/WorkspacePage/components/
   AgentDetailPane/
     AgentDetailPane.tsx
-    AgentDetailPane.css
+    AgentDetailPane.module.css
     index.ts
 ```
 
@@ -155,14 +155,16 @@ src/pages/WorkspacePage/components/
 
 ## 样式
 
-- 组件自有 CSS 与组件放在一起，并使用组件名，例如 `AgentDetailPane.css`。
-- feature 级共享 CSS 可以放在该 feature 的 components 目录，例如 `WorkspaceComponents.css`。
+- 组件自有样式默认使用同目录的 CSS Modules，例如 `AgentDetailPane.module.css`，由实现文件导入。
+- `components/ui` 全部使用 CSS Modules；类名和动画局部化，主题与共享状态消费语义 token。
+- 现有工作区 CSS 入口通过有序 import 加载历史业务样式。迁移具体组件时保持顺序，不继续在入口汇总组件皮肤。
 - 全局样式和设计 token 放在 `src/shared/styles/`。
 - 新增 UI 工作遵循渐进式样式顺序：先组合已有全局组件或 feature 局部组件；如果没有合适组件，再实现最小必要的局部组件。
 - 新增样式时，颜色、间距、圆角、阴影和层级值优先使用已有 CSS 变量和 token。
 - 如果只是普通布局或少量通用样式，并且不需要新的语义选择器，优先使用 Tailwind CSS utility class。
-- 稳定的组件外观、复杂选择器、渲染后内容（例如 Markdown）或 utility 难表达的状态，使用组件 CSS 或 CSS Module。新抽取的页面私有组件优先使用 CSS Module。
-- CSS class 名应绑定组件或 feature 语义，避免容易全局冲突的泛用名称。
+- 稳定组件外观、复杂选择器、渲染后内容或 utility 难表达的状态使用 CSS Modules；第三方 DOM 适配限定在局部内容根下。
+- CSS class 名应绑定组件或 feature 语义。迁移期间保留已有公开布局钩子，不通过它们覆盖其他控件的皮肤或状态。
+- 历史原生输入和禁用按钮选择器排除 `data-csg-control` 元素；组件自身管理 variant、focus、invalid、loading 和 disabled。
 - 不要把页面专属样式放进 `src/shared/styles/`。
 - 跨组件浮层必须使用 `src/shared/styles/tokens.css` 中的 z-index token；modal、popover、portal 和 tooltip 的层级模型见 `docs/tech/web/ui-components.md` 或 `docs/tech/web/ui-components.zh.md`。
 - 这些样式规则作为新增文件和新增组件工作的渐进式规范。已有文件没有遵循时，不需要只为样式规范做无功能改动；如果正在对单个文件做功能重构，可以把本次触及的样式顺手按该顺序优化。

@@ -7,6 +7,7 @@ import { createTranslator } from "@/shared/i18n";
 import { AgentAppsPanel, AppManagedMCPRows } from "./AgentAppsPanel";
 import { AppSettingsDialog } from "./AppSettingsDialog";
 import { useAgentApps } from "./useAgentApps";
+import buttonStyles from "@/components/ui/Button/Button.module.css";
 
 const t = createTranslator("en");
 const definition: AppDefinition = {
@@ -106,6 +107,9 @@ describe("Agent Apps", () => {
     const view = render(<Harness />);
     await screen.findByText("Work GitLab");
     await user.click(screen.getByRole("button", { name: /Work GitLab/ }));
+    const manageLink = screen.getByRole("link", { name: t("appManageResource") });
+    expect(manageLink).toHaveAttribute("href", "#/connectors/resource-1");
+    expect(manageLink).toHaveClass(buttonStyles.btn, buttonStyles["btn-secondary-gray"], buttonStyles["btn-sm"]);
     await user.click(screen.getByRole("button", { name: "Disconnect" }));
     await waitFor(() => expect(screen.getByRole("dialog")).toHaveTextContent("Disconnected"));
     view.unmount();
@@ -114,6 +118,23 @@ describe("Agent Apps", () => {
     await screen.findByText("Manually disconnected. Reconnect explicitly to restore access.");
     expect(fetch.mock.calls.some(([url]) => url.endsWith("/connect"))).toBe(false);
   });
+
+  it.each([false, true])(
+    "resource catalog management links retain button styles when all resources are bound: %s",
+    async (allBound) => {
+      mockServer(allBound ? [installation] : []);
+      const user = userEvent.setup();
+      render(<Harness />);
+      if (allBound) await screen.findByRole("button", { name: /Work GitLab/ });
+      await user.click(screen.getByRole("button", { name: "Add" }));
+      await user.click(screen.getByRole("menuitem", { name: "Add from resources" }));
+      const dialog = within(screen.getByRole("dialog"));
+      if (!allBound) await dialog.findByRole("button", { name: /^Work GitLab/ });
+      const link = dialog.getByRole("link", { name: t("appManageResources") });
+      expect(link).toHaveAttribute("href", "#/connectors");
+      expect(link).toHaveClass(buttonStyles.btn, buttonStyles["btn-secondary-gray"], buttonStyles["btn-sm"]);
+    },
+  );
 
   it("clears the previous agent's installations when the selected agent changes", async () => {
     mockServer([installation]);

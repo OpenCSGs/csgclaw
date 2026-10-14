@@ -1,0 +1,116 @@
+.computer-detail-pane {
+  --computer-page-content-width: min(100%, 1520px);
+
+  min-width: 0;
+  min-height: 100%;
+  gap: 16px;
+  justify-items: center;
+  padding: 32px;
+  background: var(--bg);
+}
+
+.computer-overview-card,
+.computer-agent-panel {
+  width: var(--computer-page-content-width);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface);
+  box-shadow: var(--shadow-xs);
+}
+
+.computer-overview-card {
+  display: grid;
+  gap: 16px;
+  padding: 18px 20px;
+}
+
+.computer-detail-pane .entity-header {
+  width: 100%;
+  gap: 12px;
+  padding: 0 0 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.computer-summary-strip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 170px));
+  align-items: stretch;
+  gap: 12px;
+  padding: 0;
+}
+
+.computer-summary-item {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: var(--shadow-xs);
+}
+
+.computer-summary-item strong {
+  color: var(--text);
+  font-size: 18px;
+  font-weight: 720;
+  line-height: 1;
+}
+
+.computer-summary-item span {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 680;
+  line-height: 16px;
+}
+
+.computer-agent-panel {
+  display: grid;
+  gap: 14px;
+  padding: 18px 20px;
+}
+
+.computer-agent-panel .section-header-inline {
+  min-height: 40px;
+}
+
+.computer-agent-panel .section-label {
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.computer-agent-panel .section-header-inline .btn {
+  min-width: 72px;
+}
+
+.computer-agent-list .entity-list-row {
+  min-height: 58px;
+  padding: 8px;
+  border-radius: 12px;
+}
+
+.computer-agent-list .entity-list-main-button {
+  min-height: 42px;
+  width: 100%;
+  padding: 7px 10px;
+  border-radius: 10px;
+}
+
+.computer-agent-list .entity-list-main {
+  gap: 3px;
+}
+
+.computer-agent-list .entity-list-main strong {
+  font-size: 15px;
+  font-weight: 720;
+  line-height: 20px;
+}
+
+.computer-agent-list .entity-list-main small {
+  font-size: 13px;
+  line-height: 18px;
+}

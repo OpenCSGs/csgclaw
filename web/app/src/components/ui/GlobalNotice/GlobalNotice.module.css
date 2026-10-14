@@ -27,8 +27,8 @@
 }
 
 .global-notice.warning {
-  border-color: var(--warning-300);
-  background: color-mix(in srgb, var(--warning-50) 82%, var(--panel));
+  border-color: var(--notice-warning-border);
+  background: var(--notice-warning-background);
 }
 
 .global-notice-icon {
@@ -50,7 +50,7 @@
 }
 
 .global-notice-description {
-  color: var(--gray-600);
+  color: var(--muted);
   font: var(--text-sm-normal);
 }
 
@@ -99,9 +99,4 @@
     opacity: 0;
     transform: translateY(-6px);
   }
-}
-
-:root[data-theme="dark"] .global-notice.warning {
-  border-color: color-mix(in srgb, var(--warning-500) 55%, var(--line));
-  background: color-mix(in srgb, var(--warning-950) 35%, var(--panel));
 }

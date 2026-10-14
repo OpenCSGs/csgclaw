@@ -1,3 +1,4 @@
+import styles from "./DropdownMenu.module.css";
 import { DropdownMenu as RadixDropdownMenu } from "radix-ui";
 import { forwardRef } from "react";
 import type { ComponentPropsWithoutRef, ComponentRef } from "react";
@@ -28,7 +29,7 @@ export const DropdownMenuContent = forwardRef<ComponentRef<typeof RadixDropdownM
         <RadixDropdownMenu.Content
           ref={ref}
           align={align}
-          className={classNames("csg-dropdown-menu-content", className)}
+          className={classNames(styles["csg-dropdown-menu-content"], className)}
           sideOffset={sideOffset}
           {...props}
         >
@@ -53,7 +54,7 @@ export const DropdownMenuItem = forwardRef<ComponentRef<typeof RadixDropdownMenu
     return (
       <RadixDropdownMenu.Item
         ref={ref}
-        className={classNames("csg-dropdown-menu-item", itemTone !== "default" && itemTone, className)}
+        className={classNames(styles["csg-dropdown-menu-item"], itemTone !== "default" && styles[itemTone], className)}
         {...props}
       />
     );
@@ -69,10 +70,13 @@ export const DropdownMenuCheckboxItem = forwardRef<
   return (
     <RadixDropdownMenu.CheckboxItem
       ref={ref}
-      className={classNames("csg-dropdown-menu-item csg-dropdown-menu-checkbox-item", className)}
+      className={classNames(
+        classNames(styles["csg-dropdown-menu-item"], styles["csg-dropdown-menu-checkbox-item"]),
+        className,
+      )}
       {...props}
     >
-      <span className="csg-dropdown-menu-item-indicator" aria-hidden="true">
+      <span className={styles["csg-dropdown-menu-item-indicator"]} aria-hidden="true">
         <RadixDropdownMenu.ItemIndicator>✓</RadixDropdownMenu.ItemIndicator>
       </span>
       {children}
@@ -89,7 +93,7 @@ export const DropdownMenuSeparator = forwardRef<
   return (
     <RadixDropdownMenu.Separator
       ref={ref}
-      className={classNames("csg-dropdown-menu-separator", className)}
+      className={classNames(styles["csg-dropdown-menu-separator"], className)}
       {...props}
     />
   );

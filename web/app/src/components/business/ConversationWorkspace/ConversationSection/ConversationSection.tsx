@@ -8,10 +8,12 @@ import { MessagePreviewText } from "@/components/business/MessageContent";
 import { AgentAvatarContent } from "@/components/business/AgentAvatar";
 import { avatarFallbackText } from "@/shared/avatar";
 import { RoomAvatar, resolveRoomAvatarMembers } from "@/components/business/RoomAvatar";
-import { Tooltip } from "@/components/ui";
+import { IconButton, Tooltip } from "@/components/ui";
 import { TrashIcon } from "@/components/ui/Icons";
 import type { IMConversation, LocaleCode, TranslateFn, UsersById } from "@/models/conversations";
 import { conversationPendingQuestionCount } from "@/models/agentActivity";
+import { classNames } from "@/shared/lib/classNames";
+import styles from "./ConversationSection.module.css";
 
 export function ConversationSection({
   title,
@@ -50,7 +52,11 @@ export function ConversationSection({
         return (
           <div
             key={conversation.id}
-            className={`conversation-item ${conversation.id === activeConversationId ? "active" : ""}`}
+            className={classNames(
+              "conversation-item",
+              styles.item,
+              conversation.id === activeConversationId && "active",
+            )}
           >
             <button className="conversation-item-main" onClick={() => onSelect(conversation.id)}>
               {displayUser ? (
@@ -83,20 +89,20 @@ export function ConversationSection({
                 </div>
               </div>
             </button>
-            <button
-              className="btn btn-outline-danger btn-sm conversation-delete-button"
-              aria-label={`${t("deleteRoom")} ${conversation.title}`}
-              onClick={(event) => {
-                event.stopPropagation();
-                onDelete(conversation.id);
-              }}
-            >
-              <Tooltip content={`${t("deleteRoom")} ${conversation.title}`}>
-                <span className="conversation-delete-icon" aria-hidden="true">
-                  <TrashIcon />
-                </span>
-              </Tooltip>
-            </button>
+            <Tooltip content={`${t("deleteRoom")} ${conversation.title}`}>
+              <IconButton
+                variant="outlineDanger"
+                size="sm"
+                className={classNames(styles.deleteButton, "conversation-delete-button")}
+                label={`${t("deleteRoom")} ${conversation.title}`}
+                icon={<TrashIcon />}
+                markClassName="conversation-delete-icon"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onDelete(conversation.id);
+                }}
+              />
+            </Tooltip>
           </div>
         );
       })}

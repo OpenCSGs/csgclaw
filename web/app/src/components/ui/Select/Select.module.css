@@ -13,6 +13,8 @@
     box-shadow 160ms ease,
     color 160ms ease,
     opacity 160ms ease;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .csg-select-value,
@@ -52,14 +54,6 @@
 
 .csg-select-trigger[data-placeholder] .csg-select-value {
   color: var(--input-text-placeholder);
-}
-
-.field .csg-select-value,
-.field .csg-select-value span {
-  color: inherit;
-  font-size: inherit;
-  font-weight: inherit;
-  letter-spacing: 0;
 }
 
 .csg-select-chevron {
@@ -191,6 +185,6 @@
 .csg-select-trigger[aria-invalid="true"] {
   border-color: var(--input-border-error);
 }
-.csg-select-trigger[aria-invalid="true"]:focus-visible {
+.csg-select-trigger[aria-invalid="true"]:is(:focus-visible, [data-state="open"]) {
   box-shadow: var(--input-shadow-error-focus);
 }

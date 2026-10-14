@@ -1,0 +1,253 @@
+.btn {
+  --btn-height: 40px;
+  --btn-min-width: 80px;
+  --btn-padding-x: 16px;
+  --btn-font-size: 14px;
+  --btn-line-height: 20px;
+  --button-border: var(--button-neutral-border);
+  --button-background: var(--button-neutral-background);
+  --button-text: var(--button-neutral-text);
+  --button-hover-border: var(--button-neutral-hover-border);
+  --button-hover-background: var(--button-neutral-hover-background);
+  --button-hover-text: var(--button-neutral-hover-text);
+  --button-shadow: var(--shadow-soft);
+  --button-ring: var(--focus-ring);
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1);
+  min-width: var(--btn-min-width);
+  min-height: var(--btn-height);
+  height: var(--btn-height);
+  padding: 0 var(--btn-padding-x);
+  border: 1px solid var(--button-border);
+  border-radius: var(--radius-base);
+  background: var(--button-background);
+  color: var(--button-text);
+  box-shadow: var(--button-shadow);
+  font-family: var(--font-sans);
+  font-size: var(--btn-font-size);
+  font-weight: var(--font-weight-medium);
+  line-height: var(--btn-line-height);
+  white-space: nowrap;
+  text-align: center;
+  text-decoration: none;
+  cursor: pointer;
+  transition:
+    background-color 180ms ease,
+    border-color 180ms ease,
+    color 180ms ease,
+    box-shadow 180ms ease;
+}
+.btn-sm {
+  --btn-height: 32px;
+  --btn-min-width: 64px;
+  --btn-padding-x: 12px;
+  --btn-font-size: 13px;
+  --btn-line-height: 18px;
+}
+.btn-lg {
+  --btn-height: 44px;
+  --btn-min-width: 88px;
+  --btn-padding-x: 18px;
+  --btn-font-size: 15px;
+  --btn-line-height: 22px;
+}
+.btn-xl {
+  --btn-height: 48px;
+  --btn-min-width: 96px;
+  --btn-padding-x: 20px;
+  --btn-font-size: 16px;
+  --btn-line-height: 24px;
+}
+.btn-2xl {
+  --btn-height: 56px;
+  --btn-min-width: 112px;
+  --btn-padding-x: 24px;
+  --btn-font-size: 18px;
+  --btn-line-height: 28px;
+}
+.btn.btn-primary {
+  --button-border: var(--button-primary-border);
+  --button-background: var(--primary-button-background);
+  --button-text: var(--on-primary);
+  --button-hover-border: var(--button-primary-hover-border);
+  --button-hover-background: var(--primary-button-hover-background);
+  --button-hover-text: var(--on-primary);
+}
+.btn.btn-secondary-color {
+  --button-border: var(--button-brand-border);
+  --button-background: var(--button-brand-background);
+  --button-text: var(--accent-text);
+  --button-hover-border: var(--button-brand-hover-border);
+  --button-hover-background: var(--control-selected-background);
+  --button-hover-text: var(--accent-text-strong);
+}
+.btn.btn-danger {
+  --button-border: var(--button-danger-border);
+  --button-background: var(--button-danger-background);
+  --button-text: var(--on-primary);
+  --button-hover-border: var(--button-danger-hover-border);
+  --button-hover-background: var(--error-700);
+  --button-hover-text: var(--on-primary);
+  --button-ring: var(--error-focus-ring);
+}
+.btn.btn-outline-danger {
+  --button-border: var(--button-danger-outline-border);
+  --button-background: var(--button-danger-outline-background);
+  --button-text: var(--danger-text);
+  --button-hover-border: var(--button-danger-outline-hover-border);
+  --button-hover-background: var(--danger-hover-background);
+  --button-hover-text: var(--danger-text-strong);
+  --button-ring: var(--error-focus-ring);
+}
+.btn:is(
+  .btn-tertiary-gray,
+  .btn-tertiary-color,
+  .btn-tertiary-danger,
+  .btn-link-gray,
+  .btn-link-color,
+  .btn-link-danger
+) {
+  --button-border: transparent;
+  --button-background: transparent;
+  --button-hover-border: transparent;
+  --button-shadow: none;
+}
+.btn:is(.btn-tertiary-color, .btn-link-color) {
+  --button-text: var(--accent-text);
+  --button-hover-text: var(--accent-text-strong);
+  --button-hover-background: var(--control-hover-background);
+}
+.btn:is(.btn-tertiary-gray, .btn-link-gray) {
+  --button-text: var(--button-tertiary-text);
+  --button-hover-text: var(--button-tertiary-hover-text);
+  --button-hover-background: var(--button-tertiary-hover-background);
+}
+.btn:is(.btn-tertiary-danger, .btn-link-danger) {
+  --button-text: var(--danger-text);
+  --button-hover-text: var(--danger-text-strong);
+  --button-hover-background: var(--danger-hover-background);
+  --button-ring: var(--error-focus-ring);
+}
+.btn:is(.btn-link-gray, .btn-link-color, .btn-link-danger) {
+  min-width: 0;
+  min-height: 0;
+  height: auto;
+  padding: 0;
+  border-radius: 0;
+  --button-hover-background: transparent;
+}
+.btn.csg-icon-button {
+  width: var(--btn-height);
+  min-width: var(--btn-height);
+  padding: 0;
+}
+.btn:is(:hover, :active, .active):not(:disabled) {
+  border-color: var(--button-hover-border);
+  background: var(--button-hover-background);
+  color: var(--button-hover-text);
+}
+.btn.active:not(:disabled):not(.btn-primary, .btn-danger) {
+  border-color: var(--button-brand-hover-border);
+  background: var(--control-selected-background);
+  color: var(--accent-text);
+}
+.btn:focus-visible {
+  outline: none;
+  box-shadow: var(--button-shadow), var(--button-ring);
+}
+.btn:disabled {
+  border-color: var(--button-disabled-border);
+  background: var(--button-disabled-background);
+  color: var(--input-text-disabled);
+  box-shadow: var(--button-disabled-shadow);
+  cursor: not-allowed;
+}
+.btn:is(
+    .btn-tertiary-gray,
+    .btn-tertiary-color,
+    .btn-tertiary-danger,
+    .btn-link-gray,
+    .btn-link-color,
+    .btn-link-danger
+  ):disabled {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+}
+.btn.btn-loading.btn-primary:disabled {
+  border-color: var(--button-primary-border);
+  background: var(--primary-button-background);
+  color: var(--on-primary);
+}
+.btn.btn-loading:disabled {
+  cursor: wait;
+}
+.btn-content {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: inherit;
+  min-width: 0;
+}
+.btn.csg-icon-button .btn-content {
+  width: 100%;
+  height: 100%;
+}
+.btn.btn-loading .btn-content {
+  visibility: hidden;
+}
+.btn-loading-overlay {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+}
+.btn-loading-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: var(--radius-full);
+  opacity: 0.78;
+  animation: btn-loading-spin 720ms linear infinite;
+}
+@keyframes btn-loading-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Icon sizes are a component API, independent of workspace button selectors. */
+.csg-icon-button.btn-sm {
+  --btn-height: 28px;
+}
+.csg-icon-button.btn-md {
+  --btn-height: 34px;
+}
+.csg-icon-button.btn-lg {
+  --btn-height: 40px;
+}
+.csg-icon-button:is(.btn-danger, .btn-outline-danger, .btn-tertiary-danger).btn-sm {
+  --btn-height: 36px;
+}
+.csg-icon-button:is(.btn-danger, .btn-outline-danger, .btn-tertiary-danger).btn-md {
+  --btn-height: 40px;
+}
+.csg-icon-button:is(.btn-danger, .btn-outline-danger, .btn-tertiary-danger).btn-lg {
+  --btn-height: 44px;
+}
+
+.btn-secondary-gray {
+  --button-text: var(--button-neutral-text);
+}
+.btn-md {
+  --btn-height: 40px;
+  --btn-min-width: 80px;
+  --btn-padding-x: 16px;
+  --btn-font-size: 14px;
+  --btn-line-height: 20px;
+}

@@ -3,6 +3,7 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createTranslator } from "@/shared/i18n";
 import { TooltipProvider } from "@/components/ui";
+import buttonStyles from "@/components/ui/Button/Button.module.css";
 import type { TranslateFn } from "@/models/conversations";
 import { normalizeTaskList } from "@/models/tasks";
 import { RoomTaskDialog, RoomTaskReference } from "./RoomTaskDialog";
@@ -101,7 +102,7 @@ describe("RoomTaskDialog", () => {
     render(<Fixture initial="old" />);
     const dialog = screen.getByRole("dialog", { name: "Portal" });
     const close = within(dialog).getByRole("button", { name: "close" });
-    expect(close).toHaveClass("btn-sm", "csg-icon-button");
+    expect(close).toHaveClass(buttonStyles["btn-sm"], buttonStyles["csg-icon-button"]);
     expect(within(dialog).queryByRole("button", { name: "tasksRefreshShort" })).not.toBeInTheDocument();
   });
   it("shows room parents and their child states directly in the room overview", () => {

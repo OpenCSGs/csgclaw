@@ -19,43 +19,6 @@
   letter-spacing: 0;
 }
 
-.field input:not([data-csg-control]),
-.field select {
-  width: 100%;
-  border: 1px solid var(--input-border);
-  border-radius: var(--input-radius);
-  padding: var(--input-padding-md);
-  background: var(--input-background);
-  color: var(--input-text);
-  box-shadow: var(--input-shadow);
-  font: inherit;
-  outline: none;
-}
-
-.field textarea:not([data-csg-control]) {
-  width: 100%;
-  min-height: 96px;
-}
-
-.field input:not([data-csg-control]):hover,
-.field select:hover {
-  border-color: var(--input-border-hover);
-}
-
-.field input:not([data-csg-control]):focus,
-.field select:focus {
-  border-color: var(--input-border-focus);
-  box-shadow: var(--input-shadow-focus);
-}
-
-.field input:not([data-csg-control]):disabled,
-.field select:disabled {
-  border-color: var(--input-border);
-  background-color: var(--input-background-disabled);
-  color: var(--input-text-disabled);
-  cursor: not-allowed;
-}
-
 .field-hint,
 .form-error {
   color: var(--muted);
@@ -130,4 +93,12 @@
   border-radius: 0;
   background: transparent;
   box-shadow: none;
+}
+.csg-text-control[data-variant="plain"]:is(:hover, :focus, [aria-invalid="true"]) {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.csg-text-control:disabled::placeholder {
+  color: var(--input-text-disabled);
 }

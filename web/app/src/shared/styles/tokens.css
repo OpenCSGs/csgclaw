@@ -639,3 +639,117 @@
   --shadow-soft: 0 1px 2px rgba(0, 0, 0, 0.28);
   --focus-ring: 0 0 0 var(--space-1) color-mix(in srgb, var(--brand-500) 28%, transparent);
 }
+
+/* Shared control state roles. */
+
+:root {
+  --accent-text: var(--brand-700);
+  --accent-text-strong: var(--brand-800);
+  --danger-text: var(--error-700);
+  --danger-text-strong: var(--error-800);
+  --danger-hover-background: var(--error-50);
+  --warning-text: var(--warning-700);
+  --success-text: var(--success-700);
+  --success-background: var(--success-50);
+  --primary-button-background: var(--brand-600);
+  --primary-button-hover-background: var(--brand-700);
+  --button-primary-border: var(--brand-600);
+  --button-primary-hover-border: var(--brand-700);
+  --button-neutral-border: var(--gray-300);
+  --button-neutral-background: var(--white);
+  --button-neutral-text: var(--gray-700);
+  --button-neutral-hover-border: var(--gray-300);
+  --button-neutral-hover-background: var(--gray-50);
+  --button-neutral-hover-text: var(--gray-800);
+  --button-tertiary-text: var(--gray-600);
+  --button-tertiary-hover-text: var(--gray-700);
+  --button-tertiary-hover-background: var(--gray-50);
+  --button-brand-border: color-mix(in oklab, var(--brand-600) 20%, var(--line));
+  --button-brand-background: color-mix(in oklab, var(--brand-600) 5%, var(--surface));
+  --button-brand-hover-border: color-mix(in oklab, var(--brand-600) 28%, var(--line));
+  --button-danger-border: var(--error-600);
+  --button-danger-background: var(--error-600);
+  --button-danger-hover-border: var(--error-700);
+  --button-danger-outline-border: color-mix(in oklab, var(--error-600) 32%, var(--line));
+  --button-danger-outline-background: color-mix(in oklab, var(--error-600) 8%, var(--surface));
+  --button-danger-outline-hover-border: color-mix(in oklab, var(--error-600) 46%, var(--line));
+  --button-disabled-border: var(--gray-200);
+  --button-disabled-background: var(--gray-100);
+  --button-disabled-shadow: var(--shadow-xs);
+}
+:root[data-theme="dark"] {
+  --accent-text: var(--brand-300);
+  --accent-text-strong: var(--brand-100);
+  --danger-text: var(--error-300);
+  --danger-text-strong: var(--error-200);
+  --danger-hover-background: color-mix(in srgb, var(--error-600) 20%, transparent);
+  --warning-text: var(--warning-300);
+  --success-text: var(--success-300);
+  --success-background: color-mix(in srgb, var(--success-600) 12%, var(--panel));
+  --button-primary-border: color-mix(in srgb, var(--brand-100) 34%, transparent);
+  --button-primary-hover-border: color-mix(in srgb, var(--brand-100) 44%, transparent);
+  --button-neutral-border: color-mix(in srgb, var(--gray-300) 18%, transparent);
+  --button-neutral-background: var(--gray-800);
+  --button-neutral-text: var(--gray-25);
+  --button-neutral-hover-border: color-mix(in srgb, var(--gray-300) 28%, transparent);
+  --button-neutral-hover-background: color-mix(in srgb, var(--gray-700) 36%, var(--gray-900));
+  --button-neutral-hover-text: var(--gray-25);
+  --button-tertiary-text: var(--gray-300);
+  --button-tertiary-hover-text: var(--gray-25);
+  --button-tertiary-hover-background: var(--gray-800);
+  --button-danger-border: color-mix(in srgb, var(--error-300) 32%, transparent);
+  --button-danger-background: color-mix(in oklab, var(--error-600) 86%, var(--error-800));
+  --button-danger-hover-border: color-mix(in srgb, var(--error-300) 42%, transparent);
+  --button-danger-outline-border: color-mix(in srgb, var(--error-300) 22%, transparent);
+  --button-danger-outline-background: color-mix(in srgb, var(--error-600) 16%, transparent);
+  --button-danger-outline-hover-border: color-mix(in srgb, var(--error-300) 32%, transparent);
+  --button-disabled-border: color-mix(in srgb, var(--gray-300) 12%, transparent);
+  --button-disabled-background: color-mix(in srgb, var(--gray-300) 8%, transparent);
+  --button-disabled-shadow: none;
+}
+
+/* Input and field roles, shared by native forms and managed controls. */
+:root {
+  --input-height-md: 44px;
+  --input-height-sm: 36px;
+  --input-padding-md: 10px 14px;
+  --textarea-padding-md: var(--space-3) 14px;
+  --input-radius: var(--radius-md);
+  --input-background: var(--white);
+  --input-background-disabled: var(--gray-50);
+  --input-border: var(--gray-300);
+  --input-border-hover: var(--gray-400);
+  --input-border-focus: var(--brand-300);
+  --input-border-error: var(--error-300);
+  --input-text: var(--gray-900);
+  --input-text-placeholder: var(--gray-500);
+  --input-text-disabled: var(--gray-500);
+  --input-shadow: var(--shadow-xs);
+  --input-shadow-focus: var(--focus-ring), var(--shadow-xs);
+  --input-shadow-error-focus: var(--shadow-xs), var(--error-focus-ring);
+  --field-label-color: var(--gray-700);
+  --field-label-font-size: var(--text-sm-size);
+  --field-label-font-weight: var(--font-weight-normal);
+  --field-label-line-height: var(--text-sm-line-height);
+}
+
+:root[data-theme="dark"] {
+  --input-background: var(--field);
+  --input-background-disabled: var(--panel-strong);
+  --input-border: var(--line);
+  --input-border-hover: var(--gray-600);
+  --input-text: var(--text);
+  --input-shadow: none;
+  --input-shadow-focus: var(--focus-ring);
+  --input-shadow-error-focus: var(--error-focus-ring);
+  --field-label-color: var(--muted);
+}
+
+:root {
+  --notice-warning-border: var(--warning-300);
+  --notice-warning-background: color-mix(in srgb, var(--warning-50) 82%, var(--panel));
+}
+:root[data-theme="dark"] {
+  --notice-warning-border: color-mix(in srgb, var(--warning-500) 55%, var(--line));
+  --notice-warning-background: color-mix(in srgb, var(--warning-950) 35%, var(--panel));
+}

@@ -1,3 +1,4 @@
+import styles from "./Switch.module.css";
 import { Switch as RadixSwitch } from "radix-ui";
 import { forwardRef } from "react";
 import type { ComponentPropsWithoutRef, ComponentRef } from "react";
@@ -10,8 +11,13 @@ export const Switch = forwardRef<ComponentRef<typeof RadixSwitch.Root>, SwitchPr
   ref,
 ) {
   return (
-    <RadixSwitch.Root ref={ref} className={classNames("csg-switch", className)} {...props}>
-      <RadixSwitch.Thumb className="csg-switch-thumb" />
+    <RadixSwitch.Root
+      ref={ref}
+      data-csg-control="switch"
+      className={classNames(classNames(styles["csg-switch"], "csg-switch"), className)}
+      {...props}
+    >
+      <RadixSwitch.Thumb className={classNames(styles["csg-switch-thumb"], "csg-switch-thumb")} />
     </RadixSwitch.Root>
   );
 });

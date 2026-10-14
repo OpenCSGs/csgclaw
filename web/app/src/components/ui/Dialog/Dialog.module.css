@@ -68,3 +68,11 @@
   padding: 0;
   border-radius: 8px;
 }
+
+.icon-button-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+}

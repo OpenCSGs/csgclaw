@@ -26,9 +26,18 @@
   box-shadow: var(--input-shadow-focus);
 }
 .csg-combobox-options {
+  min-width: 0;
+  overflow-x: hidden;
   overflow-y: auto;
   max-height: min(280px, calc(var(--radix-popover-content-available-height, 320px) - 52px));
   overscroll-behavior: contain;
+}
+.csg-combobox-label {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .csg-combobox-native {
   position: absolute;
@@ -36,4 +45,11 @@
   height: 1px;
   opacity: 0;
   pointer-events: none;
+}
+
+.csg-combobox-search[data-invalid="true"] {
+  border-color: var(--input-border-error);
+}
+.csg-combobox-search[data-invalid="true"]:focus-within {
+  box-shadow: var(--input-shadow-error-focus);
 }

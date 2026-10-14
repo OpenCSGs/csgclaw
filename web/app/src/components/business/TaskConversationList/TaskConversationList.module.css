@@ -16,8 +16,14 @@
 }
 .list {
   min-height: 0;
-  overflow: auto;
+  min-width: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding-inline: var(--task-conversation-inline-padding, 0px);
   flex: 1;
+}
+.list::-webkit-scrollbar {
+  width: var(--task-conversation-scrollbar-width, 6px);
 }
 .row {
   position: relative;
@@ -89,6 +95,9 @@
   color: var(--danger);
   font-size: 12px;
   margin: 0;
+}
+.root > .error {
+  margin-inline: var(--task-conversation-inline-padding, 0px);
 }
 .empty {
   font-size: 12px;
@@ -219,6 +228,7 @@
   display: flex;
   align-items: center;
   gap: 6px;
+  margin-inline: var(--task-conversation-inline-padding, 0px);
 }
 .root .searchBar .search {
   min-width: 0;

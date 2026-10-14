@@ -1,3 +1,4 @@
+import styles from "./SegmentedControl.module.css";
 import { ToggleGroup } from "radix-ui";
 import type { ReactNode } from "react";
 import { Tooltip } from "@/components/ui/Tooltip";
@@ -27,7 +28,7 @@ export function SegmentedControl<Value extends string>({
     <ToggleGroup.Root
       type="single"
       value={value}
-      className={classNames("csg-segmented-control", className)}
+      className={classNames(styles["csg-segmented-control"], className)}
       aria-label={label}
       onValueChange={(next) => {
         const option = options.find((item) => item.value === next && !item.disabled);
@@ -37,9 +38,10 @@ export function SegmentedControl<Value extends string>({
       {options.map((option) => (
         <Tooltip key={option.value} content={option.accessibleName}>
           <ToggleGroup.Item
+            data-csg-control="segmented-control"
             value={option.value}
             disabled={option.disabled}
-            className="csg-segmented-control-item"
+            className={styles["csg-segmented-control-item"]}
             aria-label={option.accessibleName}
           >
             {option.label}

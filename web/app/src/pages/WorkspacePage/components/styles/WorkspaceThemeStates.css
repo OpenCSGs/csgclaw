@@ -1,0 +1,306 @@
+.entity-header {
+  border-bottom-color: var(--line);
+}
+
+.entity-title-row h1 {
+  color: var(--text);
+  font-weight: 700;
+}
+
+.messages-empty,
+.rich-empty {
+  border-color: var(--gray-200);
+  border-style: solid;
+  background: var(--surface);
+}
+
+@media (max-width: 960px) {
+  .app-shell {
+    gap: 0;
+    padding: 0;
+  }
+}
+
+@media (max-width: 720px) {
+  .app-shell,
+  .app-shell.sidebar-collapsed {
+    grid-template-rows: minmax(260px, 40dvh) minmax(0, 1fr);
+  }
+}
+
+html,
+body,
+button:where(:not([data-csg-control])),
+input:where(:not([data-csg-control])),
+textarea:where(:not([data-csg-control])),
+select:where(:not([data-csg-control])),
+.composer-editor,
+.message-bubble,
+.modal-card,
+.header-popover,
+.profile-preview-popover {
+  font-family: var(--font-sans);
+}
+
+.chat-title,
+.entity-title-row h1,
+.modal-title,
+.preview-name {
+  font-family: var(--font-display);
+}
+
+.svg-icon {
+  width: 100%;
+  height: 100%;
+  display: block;
+  background-color: currentColor;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-size: contain;
+  mask-size: contain;
+  pointer-events: none;
+  user-select: none;
+}
+
+.workspace-tab-icon .svg-icon,
+.icon-button-mark .svg-icon,
+.tool-menu-icon .svg-icon,
+.conversation-delete-icon .svg-icon,
+.agent-icon-button .svg-icon,
+.entity-list-icon .svg-icon,
+.entity-avatar .svg-icon {
+  width: 100%;
+  height: 100%;
+}
+
+:root[data-theme="dark"] body,
+:root[data-theme="dark"] .app-shell,
+:root[data-theme="dark"] .messages {
+  background: var(--bg);
+}
+
+:root[data-theme="dark"] .sidebar,
+:root[data-theme="dark"] .chat-panel {
+  border-color: var(--line);
+  background: var(--sidebar);
+  box-shadow: none;
+}
+
+:root[data-theme="dark"] .chat-panel,
+:root[data-theme="dark"] .chat-header,
+:root[data-theme="dark"] .modal-card,
+:root[data-theme="dark"] .modal-actions,
+:root[data-theme="dark"] .header-popover,
+:root[data-theme="dark"] .mention-picker,
+:root[data-theme="dark"] .profile-preview-popover {
+  border-color: var(--line);
+  background: var(--panel);
+  color: var(--text);
+}
+
+:root[data-theme="dark"] .sidebar-header,
+:root[data-theme="dark"] .chat-header,
+:root[data-theme="dark"] .composer {
+  border-color: var(--line);
+}
+
+:root[data-theme="dark"] .chat-title-bar .chat-title-row .chat-title-group .chat-title,
+:root[data-theme="dark"] .chat-title,
+:root[data-theme="dark"] .modal-title,
+:root[data-theme="dark"] .preview-name,
+:root[data-theme="dark"] .entity-title-row h1 {
+  color: var(--text);
+}
+
+:root[data-theme="dark"] .chat-kicker,
+:root[data-theme="dark"] .chat-subtitle,
+:root[data-theme="dark"] .message-meta,
+:root[data-theme="dark"] .message-meta .message-author,
+:root[data-theme="dark"] .message-row .message-card .message-meta .message-author,
+:root[data-theme="dark"] .message-row.own .message-card .message-meta .message-author,
+:root[data-theme="dark"] .entity-field span,
+:root[data-theme="dark"] .preview-title,
+:root[data-theme="dark"] .header-popover-title,
+:root[data-theme="dark"] .section-label {
+  color: var(--muted);
+}
+
+:root[data-theme="dark"] .message-row.own .message-card .message-meta .message-author {
+  color: var(--gray-300);
+}
+
+:root[data-theme="dark"] .composer-box,
+:root[data-theme="dark"] .profile-section,
+:root[data-theme="dark"] .entity-field,
+:root[data-theme="dark"] .entity-list-row,
+:root[data-theme="dark"] .agent-row,
+:root[data-theme="dark"] .auth-status-row,
+:root[data-theme="dark"] .selection-item {
+  border-color: var(--line);
+  background: var(--panel-strong);
+  box-shadow: none;
+}
+
+:root[data-theme="dark"] .workspace-tab,
+:root[data-theme="dark"] .icon-button:where(:not([data-csg-control])),
+:root[data-theme="dark"] .member-badge-button,
+:root[data-theme="dark"] .secondary-button:where(:not([data-csg-control])),
+:root[data-theme="dark"] .modal-close:where(:not([data-csg-control])),
+:root[data-theme="dark"] .tool-menu-row,
+:root[data-theme="dark"] .agent-add-button:where(:not([data-csg-control])),
+:root[data-theme="dark"] .agent-icon-button:where(:not([data-csg-control])),
+:root[data-theme="dark"] .agent-action-text:where(:not([data-csg-control])),
+:root[data-theme="dark"] .env-remove-button:where(:not([data-csg-control])) {
+  border-color: var(--line);
+  background: var(--panel);
+  color: #d0d5dd;
+  box-shadow: none;
+}
+
+:root[data-theme="dark"] .workspace-tab:hover,
+:root[data-theme="dark"] .conversation-item:hover .conversation-item-main,
+:root[data-theme="dark"] .entity-list-main-button:hover,
+:root[data-theme="dark"] .icon-button:where(:not([data-csg-control])):hover,
+:root[data-theme="dark"] .member-badge-button:hover,
+:root[data-theme="dark"] .secondary-button:where(:not([data-csg-control])):hover,
+:root[data-theme="dark"] .modal-close:where(:not([data-csg-control])):hover,
+:root[data-theme="dark"] .tool-menu-row:hover,
+:root[data-theme="dark"] .agent-add-button:where(:not([data-csg-control])):hover,
+:root[data-theme="dark"] .agent-icon-button:where(:not([data-csg-control])):hover,
+:root[data-theme="dark"] .agent-action-text:where(:not([data-csg-control])):hover,
+:root[data-theme="dark"] .env-remove-button:where(:not([data-csg-control])):hover,
+:root[data-theme="dark"] .modal-card .selection-item.compact-toggle-row:hover,
+:root[data-theme="dark"] .profile-section .selection-item.compact-toggle-row:hover,
+:root[data-theme="dark"] .modal-card .selection-item.compact-toggle-row:focus-within,
+:root[data-theme="dark"] .profile-section .selection-item.compact-toggle-row:focus-within {
+  border-color: #475467;
+  background: #182230;
+  color: var(--text);
+}
+
+:root[data-theme="dark"] .workspace-tab.active,
+:root[data-theme="dark"] .conversation-item.active .conversation-item-main,
+:root[data-theme="dark"] .icon-button:where(:not([data-csg-control])).active,
+:root[data-theme="dark"] .member-badge-button.active,
+:root[data-theme="dark"] .agent-row.manager,
+:root[data-theme="dark"] .selection-item.selection-all-item,
+:root[data-theme="dark"]
+  .modal-card
+  .selection-item.compact-toggle-row:has(input:where(:not([data-csg-control])):checked),
+:root[data-theme="dark"]
+  .profile-section
+  .selection-item.compact-toggle-row:has(input:where(:not([data-csg-control])):checked) {
+  border-color: rgba(77, 106, 214, 0.62);
+  background: rgba(77, 106, 214, 0.18);
+  color: #d0d5dd;
+}
+
+:root[data-theme="dark"] .profile-section .selection-item.compact-toggle-row.agent-sandbox-toggle.readonly,
+:root[data-theme="dark"] .profile-section .selection-item.compact-toggle-row.agent-sandbox-toggle.readonly:hover,
+:root[data-theme="dark"] .profile-section .selection-item.compact-toggle-row.agent-sandbox-toggle.readonly:focus-within,
+:root[data-theme="dark"]
+  .profile-section
+  .selection-item.compact-toggle-row.agent-sandbox-toggle.readonly:has(input:where(:not([data-csg-control])):checked) {
+  border-color: var(--line);
+  background: var(--surface);
+  color: var(--text);
+}
+
+:root[data-theme="dark"] .workspace-tab.active .workspace-tab-icon,
+:root[data-theme="dark"] .workspace-tab.active .workspace-tab-icon .svg-icon,
+:root[data-theme="dark"] .workspace-tab-icon,
+:root[data-theme="dark"] .entity-avatar,
+:root[data-theme="dark"] .entity-list-icon,
+:root[data-theme="dark"] .rich-empty-mark {
+  color: var(--primary-strong);
+}
+
+:root[data-theme="dark"] .entity-list-icon,
+:root[data-theme="dark"] .entity-avatar,
+:root[data-theme="dark"] .rich-empty-mark {
+  border-color: var(--line);
+  background: #182230;
+}
+
+:root[data-theme="dark"] .message-row.own .message-bubble,
+:root[data-theme="dark"] .composer-send-button:where(:not([data-csg-control])) {
+  border-color: #3250bd;
+  background: #3250bd;
+  color: #ffffff;
+}
+
+:root[data-theme="dark"]
+  .modal-card
+  .field:where(:not([data-csg-field]))
+  input:where(:not([data-csg-control])):not([type="checkbox"], [type="radio"]),
+:root[data-theme="dark"] .modal-card .field:where(:not([data-csg-field])) textarea:where(:not([data-csg-control])),
+:root[data-theme="dark"] .modal-card .field:where(:not([data-csg-field])) select:where(:not([data-csg-control])),
+:root[data-theme="dark"]
+  .profile-section
+  .field:where(:not([data-csg-field]))
+  input:where(:not([data-csg-control])):not([type="checkbox"], [type="radio"]),
+:root[data-theme="dark"] .profile-section .field:where(:not([data-csg-field])) textarea:where(:not([data-csg-control])),
+:root[data-theme="dark"] .profile-section .field:where(:not([data-csg-field])) select:where(:not([data-csg-control])),
+:root[data-theme="dark"] .env-row input:where(:not([data-csg-control])),
+:root[data-theme="dark"] .composer-editor {
+  border-color: var(--line);
+  background-color: var(--field);
+  color: var(--text);
+  box-shadow: none;
+}
+
+:root[data-theme="dark"]
+  .modal-card
+  .field:where(:not([data-csg-field]))
+  input:where(:not([data-csg-control])):not([type="checkbox"], [type="radio"])::placeholder,
+:root[data-theme="dark"]
+  .modal-card
+  .field:where(:not([data-csg-field]))
+  textarea:where(:not([data-csg-control]))::placeholder,
+:root[data-theme="dark"]
+  .profile-section
+  .field:where(:not([data-csg-field]))
+  input:where(:not([data-csg-control])):not([type="checkbox"], [type="radio"])::placeholder,
+:root[data-theme="dark"]
+  .profile-section
+  .field:where(:not([data-csg-field]))
+  textarea:where(:not([data-csg-control]))::placeholder,
+:root[data-theme="dark"] .env-row input:where(:not([data-csg-control]))::placeholder,
+:root[data-theme="dark"] .composer-editor:empty::before {
+  color: var(--gray-400);
+}
+
+.composer-send-button:where(:not([data-csg-control])):hover:not(:disabled) {
+  border-color: var(--brand-700);
+  background: var(--brand-700);
+  color: var(--white);
+  box-shadow: var(--shadow-xs);
+  transform: none;
+}
+
+.composer-send-button:where(:not([data-csg-control])):active:not(:disabled) {
+  border-color: var(--brand-700);
+  background: var(--brand-700);
+  color: var(--white);
+  box-shadow: var(--shadow-xs);
+  transform: none;
+}
+
+.composer-send-button:where(:not([data-csg-control])):disabled,
+.composer-send-button:where(:not([data-csg-control]))[disabled] {
+  border-color: var(--gray-200);
+  background: var(--gray-100);
+  color: var(--gray-400);
+  box-shadow: var(--shadow-xs);
+  opacity: 1;
+  transform: none;
+}
+
+:root[data-theme="dark"] .composer-send-button:where(:not([data-csg-control])),
+:root[data-theme="dark"] .composer-send-button:where(:not([data-csg-control])):hover:not(:disabled),
+:root[data-theme="dark"] .composer-send-button:where(:not([data-csg-control])):active:not(:disabled),
+:root[data-theme="dark"] .composer-send-button:where(:not([data-csg-control])):focus-visible {
+  color: var(--white);
+}

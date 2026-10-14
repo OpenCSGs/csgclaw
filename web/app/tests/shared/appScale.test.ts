@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { stylesheetSource } from "../helpers/styleRules";
 
 function readSource(path: string): string {
   return readFileSync(resolve(process.cwd(), path), "utf8");
@@ -8,7 +9,7 @@ function readSource(path: string): string {
 describe("default app scale", () => {
   it("renders the full UI at normal viewport scale", () => {
     const globals = readSource("src/shared/styles/globals.css");
-    const workspace = readSource("src/pages/WorkspacePage/components/WorkspaceComponents.css");
+    const workspace = stylesheetSource(resolve("src/pages/WorkspacePage/components/WorkspaceComponents.css"));
     const workspaceLayout = readSource("src/pages/WorkspacePage/components/WorkspaceLayout/WorkspaceLayout.module.css");
     const settings = readSource("src/pages/SettingsPage/SettingsPage.module.css");
 

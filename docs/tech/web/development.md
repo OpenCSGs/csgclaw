@@ -125,7 +125,7 @@ If a subdirectory later needs its own rules, add a short README in that subdirec
 - Exported component packages use PascalCase directories.
 - The primary implementation file uses the same PascalCase name as the component.
 - Each exported component package has an `index.ts` entrypoint.
-- `index.ts` files should only import required package CSS and re-export public symbols.
+- `index.ts` files re-export public symbols. Implementations import their own CSS Modules; barrels do not inject component styles.
 - Avoid kebab-case component directories such as `message-content` and vague grouping names such as `workspace-views`.
 
 Example:
@@ -134,7 +134,7 @@ Example:
 src/pages/WorkspacePage/components/
   AgentDetailPane/
     AgentDetailPane.tsx
-    AgentDetailPane.css
+    AgentDetailPane.module.css
     index.ts
 ```
 
@@ -155,14 +155,16 @@ src/pages/WorkspacePage/components/
 
 ## Styling
 
-- Component-owned CSS lives next to the component and uses the component name, such as `AgentDetailPane.css`.
-- Feature-level shared CSS can live in the feature components folder, such as `WorkspaceComponents.css`.
+- Component-owned styles default to CSS Modules beside the implementation, such as `AgentDetailPane.module.css`, imported by that implementation.
+- `components/ui` uses CSS Modules throughout. Keep class names and animation names local; colors and shared state relationships come from semantic tokens.
+- The legacy workspace stylesheet entrypoints retain ordered imports for existing business styles. Keep their order stable while migrating a specific owner; do not add another component skin to these files.
 - Global styles and design tokens stay in `src/shared/styles/`.
 - New UI work should follow a progressive styling order: first compose existing global or feature-local components; if no component fits, implement the smallest local component needed.
 - For new styles, prefer existing CSS variables and tokens before introducing new color, spacing, radius, shadow, or layer values.
 - If a style is ordinary layout or a small common detail and does not need a new semantic selector, prefer Tailwind CSS utility classes.
-- Use component CSS or CSS Modules for stable component presentation, complex selectors, generated markup such as rendered Markdown, or states that are awkward to express with utilities. Prefer CSS Modules for newly extracted page-private components.
-- Keep CSS class names tied to component or feature semantics; avoid generic class names that can collide globally.
+- Use CSS Modules for stable component presentation, complex selectors, generated markup such as rendered Markdown, or states that are awkward to express with utilities. Scope third-party DOM adaptations beneath a local content root.
+- Keep CSS class names tied to component or feature semantics. Existing public layout hooks remain during the workspace migration; do not use them to override another control's skin or state.
+- Legacy native-input and disabled-button skins exclude `data-csg-control` elements. A library control owns its own variant, focus, invalid, loading and disabled styling; preserve this boundary when editing legacy CSS.
 - Do not put page-specific styles in `src/shared/styles/`.
 - Cross-component overlay layers must use the z-index tokens in `src/shared/styles/tokens.css`; see `docs/tech/web/ui-components.md` for the modal, popover, portal, and tooltip layering model.
 - These styling rules are progressive for new files and new component work. Existing files that do not yet follow this order do not need churn-only rewrites; when a single file is already being functionally refactored, it is reasonable to move that file's touched styles toward this order.

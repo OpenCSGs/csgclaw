@@ -1,3 +1,4 @@
+import styles from "./PanelHeader.module.css";
 import type { HTMLAttributes, ReactNode } from "react";
 import { classNames } from "@/shared/lib/classNames";
 
@@ -5,9 +6,9 @@ export type PanelHeaderProps = HTMLAttributes<HTMLElement> & { actions?: ReactNo
 
 export function PanelHeader({ children, actions, className, ...props }: PanelHeaderProps) {
   return (
-    <header className={classNames("csg-panel-header", className)} {...props}>
+    <header className={classNames(styles["csg-panel-header"], className)} {...props}>
       {children}
-      {actions ? <div className="csg-panel-header-actions">{actions}</div> : null}
+      {actions ? <div className={styles["csg-panel-header-actions"]}>{actions}</div> : null}
     </header>
   );
 }

@@ -7,6 +7,7 @@ import { AgentDetailPane, AgentView, NotificationParticipantDetailPane } from "@
 import { agentToDraft, type AgentDraft } from "@/models/agents";
 import { AGENT_PROFILE_ACTIVE_TAB_STORAGE_KEY } from "@/shared/storage/keys";
 import { createTranslator } from "@/shared/i18n";
+import buttonStyles from "@/components/ui/Button/Button.module.css";
 
 const labels: Record<string, string> = {
   agentActivityTab: "Activity",
@@ -822,7 +823,7 @@ describe("agent action visibility", () => {
       "Disconnect Feishu",
     ]);
     const disconnectButton = screen.getByRole("button", { name: "Disconnect Feishu" });
-    expect(disconnectButton).toHaveClass("btn-outline-danger");
+    expect(disconnectButton).toHaveClass(buttonStyles["btn-outline-danger"]);
     await user.click(disconnectButton);
     expect(onDisconnectFeishu).toHaveBeenCalledWith(expect.objectContaining({ id: worker.id }));
   });

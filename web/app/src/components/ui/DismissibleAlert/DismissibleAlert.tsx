@@ -1,3 +1,4 @@
+import styles from "./DismissibleAlert.module.css";
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { X } from "lucide-react";
@@ -24,7 +25,7 @@ export function DismissibleAlert({ children, className, messageKey, closeLabel =
       {children}
       <button
         type="button"
-        className="dismissible-alert-close-btn"
+        className={styles["dismissible-alert-close-btn"]}
         onClick={() => setDismissed(true)}
         aria-label={closeLabel}
       >

@@ -1,3 +1,5 @@
+import selectionStyles from "../Select/Select.module.css";
+import styles from "./Combobox.module.css";
 import { Check, ChevronDown, Search } from "lucide-react";
 import { Fragment, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import type { ButtonHTMLAttributes, ReactNode } from "react";
@@ -148,12 +150,20 @@ export function Combobox({
     <PopoverRoot open={isOpen} onOpenChange={changeOpen} modal={inDialog}>
       <PopoverTrigger asChild>
         <button
+          data-csg-control="combobox"
           {...fieldProps}
           ref={attachTrigger}
           type="button"
           className={classNames(
-            "csg-select-trigger inline-flex w-full items-center justify-between gap-2",
-            `csg-select-trigger-${size}`,
+            classNames(
+              classNames(selectionStyles["csg-select-trigger"], "csg-select-trigger"),
+              "inline-flex",
+              "w-full",
+              "items-center",
+              "justify-between",
+              "gap-2",
+            ),
+            selectionStyles[`csg-select-trigger-${size}`],
             triggerClassName,
           )}
           disabled={disabled}
@@ -174,15 +184,27 @@ export function Combobox({
             }
           }}
         >
-          <span className="csg-select-value min-w-0 flex-1 truncate">
+          <span
+            className={classNames(
+              classNames(selectionStyles["csg-select-value"], "csg-select-value"),
+              "min-w-0",
+              "flex-1",
+              "truncate",
+            )}
+          >
             {selectedLabel ?? selected?.label ?? (selectedValue || placeholder)}
           </span>
-          <ChevronDown className="csg-select-chevron shrink-0" aria-hidden="true" size={16} />
+          <ChevronDown
+            className={classNames(classNames(selectionStyles["csg-select-chevron"], "csg-select-chevron"), "shrink-0")}
+            aria-hidden="true"
+            size={16}
+          />
         </button>
       </PopoverTrigger>
       {name || required ? (
         <select
-          className="csg-combobox-native"
+          data-csg-control="native-select"
+          className={styles["csg-combobox-native"]}
           tabIndex={-1}
           aria-hidden="true"
           name={name}
@@ -214,7 +236,7 @@ export function Combobox({
         ref={contentRef}
         role="presentation"
         portalContainer={contentProps?.portalContainer}
-        className={classNames("csg-combobox-content", contentClassName)}
+        className={classNames(styles["csg-combobox-content"], contentClassName)}
         onOpenAutoFocus={(event) => {
           contentProps?.onOpenAutoFocus?.(event);
           if (event.defaultPrevented) return;
@@ -241,7 +263,7 @@ export function Combobox({
           if (!event.defaultPrevented) restoreFocus.current = false;
         }}
       >
-        <div className="csg-combobox-search">
+        <div className={styles["csg-combobox-search"]} data-invalid={fieldProps["aria-invalid"] || undefined}>
           <Search size={15} aria-hidden="true" />
           <FieldContext.Provider value={null}>
             <TextInput
@@ -295,14 +317,14 @@ export function Combobox({
           </FieldContext.Provider>
         </div>
         <div
-          className="csg-combobox-options"
+          className={styles["csg-combobox-options"]}
           role="listbox"
           id={listId}
           aria-label={triggerProps["aria-label"] ?? searchPlaceholder}
           aria-busy={loading}
         >
           {loading ? (
-            <div className="csg-select-empty" role="status">
+            <div className={selectionStyles["csg-select-empty"]} role="status">
               {loadingLabel}
             </div>
           ) : filtered.length ? (
@@ -315,7 +337,10 @@ export function Combobox({
                   aria-disabled={option.disabled || undefined}
                   data-highlighted={option.value === activeValue ? "" : undefined}
                   data-disabled={option.disabled ? "" : undefined}
-                  className="csg-select-item relative flex w-full items-center rounded-md py-2 pr-3 pl-8"
+                  className={classNames(
+                    selectionStyles["csg-select-item"],
+                    "relative flex w-full items-center rounded-md py-2 pr-3 pl-8",
+                  )}
                   onPointerMove={() => {
                     if (!option.disabled) setHighlightedValue(option.value);
                   }}
@@ -323,22 +348,26 @@ export function Combobox({
                   onClick={() => commit(option)}
                 >
                   {option.value === selectedValue ? (
-                    <Check className="csg-select-item-indicator absolute left-2" size={16} aria-hidden="true" />
+                    <Check
+                      className={classNames(selectionStyles["csg-select-item-indicator"], "absolute left-2")}
+                      size={16}
+                      aria-hidden="true"
+                    />
                   ) : null}
-                  <span className="csg-select-item-copy">
-                    <span>{option.label}</span>
+                  <span className={selectionStyles["csg-select-item-copy"]}>
+                    <span className={styles["csg-combobox-label"]}>{option.label}</span>
                     {option.description ? (
-                      <span className="csg-select-item-description">{option.description}</span>
+                      <span className={selectionStyles["csg-select-item-description"]}>{option.description}</span>
                     ) : null}
                   </span>
                 </div>
                 {option.separatorAfter && index < filtered.length - 1 ? (
-                  <div role="separator" className="csg-select-separator -mx-1 my-1" />
+                  <div role="separator" className={classNames(selectionStyles["csg-select-separator"], "my-1")} />
                 ) : null}
               </Fragment>
             ))
           ) : (
-            <div className="csg-select-empty" role="status">
+            <div className={selectionStyles["csg-select-empty"]} role="status">
               {emptyLabel}
             </div>
           )}

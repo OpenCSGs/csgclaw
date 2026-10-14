@@ -4,12 +4,18 @@ import userEvent from "@testing-library/user-event";
 import { Combobox } from "./Combobox";
 import { Field } from "@/components/ui/FormControls";
 import { DialogContent, DialogRoot, DialogTitle } from "@/components/ui/Dialog";
+import selectionStyles from "../Select/Select.module.css";
 
 const options = [
   { value: "alpha", label: "Alpha" },
   { value: "disabled", label: "Disabled", disabled: true },
   { value: "beta", label: "Beta" },
 ];
+
+test.each(["sm", "md"] as const)("size %s retains the local trigger sizing", (size) => {
+  render(<Combobox size={size} options={options} searchPlaceholder="Find" />);
+  expect(screen.getByRole("combobox")).toHaveClass(selectionStyles[`csg-select-trigger-${size}`]);
+});
 
 function Harness({ onChange = () => {} }: { onChange?: (value: string) => void }) {
   const [value, setValue] = useState("alpha");
@@ -120,6 +126,38 @@ test("a disabled picker cannot be opened", async () => {
   render(<Combobox disabled value="alpha" options={options} searchPlaceholder="Find" />);
   await user.click(screen.getByRole("combobox"));
   expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+});
+
+test("group separators and long labels preserve keyboard selection and search", async () => {
+  const user = userEvent.setup();
+  const changed = vi.fn();
+  const longLabel = "provider/model_with_a_long_unbroken_identifier_".repeat(4);
+  render(
+    <Combobox
+      defaultValue="auto"
+      options={[
+        { value: "auto", label: "Auto", separatorAfter: true },
+        { value: "disabled", label: "Disabled model", disabled: true },
+        { value: "long", label: longLabel, description: "Provider model" },
+      ]}
+      searchPlaceholder="Find model"
+      onValueChange={changed}
+    />,
+  );
+  const trigger = screen.getByRole("combobox");
+  await user.click(trigger);
+  expect(screen.getByRole("separator")).toBeInTheDocument();
+  expect(screen.getByRole("option", { name: (name) => name.startsWith(longLabel) })).toHaveTextContent(
+    "Provider model",
+  );
+  await user.keyboard("{ArrowDown}{Enter}");
+  expect(changed).toHaveBeenCalledWith("long");
+  await waitFor(() => expect(trigger).toHaveFocus());
+  await user.click(trigger);
+  await user.type(screen.getByRole("combobox", { name: "Find model" }), "unbroken_identifier");
+  expect(screen.getAllByRole("option")).toHaveLength(1);
+  expect(screen.queryByRole("separator")).not.toBeInTheDocument();
+  expect(screen.getByRole("option")).toHaveAttribute("aria-selected", "true");
 });
 
 test("Tab and Shift+Tab leave a portalled picker within the containing dialog", async () => {

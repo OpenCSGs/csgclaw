@@ -1,3 +1,4 @@
+import styles from "./FormControls.module.css";
 import { forwardRef, useId } from "react";
 import type { InputHTMLAttributes, ReactNode, TextareaHTMLAttributes } from "react";
 import { classNames } from "@/shared/lib/classNames";
@@ -29,12 +30,24 @@ export function Field({ children, className, error, hint, label, required = fals
         required,
       }}
     >
-      <label className={classNames("field", "csg-field", className)} data-invalid={error ? "true" : undefined}>
+      <label
+        className={classNames(
+          classNames(styles["field"], "field"),
+          classNames(styles["csg-field"], "csg-field"),
+          className,
+        )}
+        data-csg-field
+        data-invalid={error ? "true" : undefined}
+      >
         {label ? (
-          <span className="field-label" id={labelId}>
+          <span className={classNames(styles["field-label"], "field-label")} id={labelId}>
             {label}
             {required ? (
-              <span className="field-required" aria-hidden="true">
+              <span
+                className={classNames(styles["field-required"], "field-required")}
+                data-csg-field-part
+                aria-hidden="true"
+              >
                 {" "}
                 *
               </span>
@@ -43,12 +56,12 @@ export function Field({ children, className, error, hint, label, required = fals
         ) : null}
         {children}
         {hint ? (
-          <small className="field-hint" id={hintId}>
+          <small className={classNames(styles["field-hint"], "field-hint")} data-csg-field-part id={hintId}>
             {hint}
           </small>
         ) : null}
         {error ? (
-          <div className="form-error" id={errorId} role="alert">
+          <div className={classNames(styles["form-error"], "form-error")} data-csg-field-part id={errorId} role="alert">
             {error}
           </div>
         ) : null}
@@ -70,7 +83,7 @@ export const TextInput = forwardRef<HTMLInputElement, TextInputProps>(function T
   return (
     <input
       ref={ref}
-      className={classNames("csg-text-control", className)}
+      className={classNames(styles["csg-text-control"], className)}
       data-csg-control="input"
       data-size={size}
       data-variant={variant}
@@ -86,7 +99,7 @@ export const TextArea = forwardRef<HTMLTextAreaElement, TextAreaProps>(function 
   return (
     <textarea
       ref={ref}
-      className={classNames("csg-text-control", className)}
+      className={classNames(styles["csg-text-control"], className)}
       data-csg-control="textarea"
       {...controlProps}
     />

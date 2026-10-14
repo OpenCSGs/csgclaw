@@ -1,3 +1,4 @@
+import styles from "./Select.module.css";
 import { Select as RadixSelect } from "radix-ui";
 import { Check, ChevronDown } from "lucide-react";
 import { Fragment, forwardRef } from "react";
@@ -17,8 +18,8 @@ export type SelectOption = {
 };
 
 const triggerSizeClassNames: Record<SelectSize, string> = {
-  sm: "csg-select-trigger-sm",
-  md: "csg-select-trigger-md",
+  sm: styles["csg-select-trigger-sm"],
+  md: styles["csg-select-trigger-md"],
 };
 
 const SELECT_EMPTY_ITEM_VALUE = "__csg-select-empty-value__";
@@ -64,18 +65,38 @@ export const SelectTrigger = forwardRef<ComponentRef<typeof RadixSelect.Trigger>
     return (
       <RadixSelect.Trigger
         ref={ref}
+        data-csg-control="select"
         className={classNames(
-          "csg-select-trigger inline-flex w-full items-center justify-between gap-2",
+          classNames(
+            classNames(styles["csg-select-trigger"], "csg-select-trigger"),
+            "inline-flex",
+            "w-full",
+            "items-center",
+            "justify-between",
+            "gap-2",
+          ),
           triggerSizeClassNames[size],
           className,
         )}
         {...controlProps}
       >
-        <span className="csg-select-value min-w-0 flex-1 truncate">
+        <span
+          className={classNames(
+            classNames(styles["csg-select-value"], "csg-select-value"),
+            "min-w-0",
+            "flex-1",
+            "truncate",
+          )}
+        >
           {children ?? <RadixSelect.Value placeholder={placeholder} />}
         </span>
         <RadixSelect.Icon asChild>
-          <ChevronDown className="csg-select-chevron shrink-0" aria-hidden="true" size={16} strokeWidth={2} />
+          <ChevronDown
+            className={classNames(classNames(styles["csg-select-chevron"], "csg-select-chevron"), "shrink-0")}
+            aria-hidden="true"
+            size={16}
+            strokeWidth={2}
+          />
         </RadixSelect.Icon>
       </RadixSelect.Trigger>
     );
@@ -96,13 +117,15 @@ export const SelectContent = forwardRef<ComponentRef<typeof RadixSelect.Content>
       <RadixSelect.Portal container={portalContainer}>
         <RadixSelect.Content
           ref={ref}
-          className={classNames("csg-select-content overflow-hidden", className)}
+          className={classNames(classNames(styles["csg-select-content"], "overflow-hidden"), className)}
           position={position}
           sideOffset={sideOffset}
           {...props}
         >
           {header}
-          <RadixSelect.Viewport className="csg-select-viewport p-1">{children}</RadixSelect.Viewport>
+          <RadixSelect.Viewport className={classNames(styles["csg-select-viewport"], "p-1")}>
+            {children}
+          </RadixSelect.Viewport>
         </RadixSelect.Content>
       </RadixSelect.Portal>
     );
@@ -115,7 +138,13 @@ export const SelectLabel = forwardRef<ComponentRef<typeof RadixSelect.Label>, Se
   { className, ...props },
   ref,
 ) {
-  return <RadixSelect.Label ref={ref} className={classNames("csg-select-label px-2 py-1.5", className)} {...props} />;
+  return (
+    <RadixSelect.Label
+      ref={ref}
+      className={classNames(classNames(styles["csg-select-label"], "px-2", "py-1.5"), className)}
+      {...props}
+    />
+  );
 });
 
 export type SelectItemProps = ComponentPropsWithoutRef<typeof RadixSelect.Item> & {
@@ -130,20 +159,39 @@ export const SelectItem = forwardRef<ComponentRef<typeof RadixSelect.Item>, Sele
     <RadixSelect.Item
       ref={ref}
       className={classNames(
-        "csg-select-item relative flex w-full items-center rounded-md py-2 pr-3 pl-8",
-        description ? "csg-select-item-with-description" : "",
+        classNames(
+          styles["csg-select-item"],
+          "relative",
+          "flex",
+          "w-full",
+          "items-center",
+          "rounded-md",
+          "py-2",
+          "pr-3",
+          "pl-8",
+        ),
+        description ? styles["csg-select-item-with-description"] : "",
         className,
       )}
       {...props}
     >
-      <span className="csg-select-item-indicator absolute left-2 inline-flex items-center justify-center">
+      <span
+        className={classNames(
+          styles["csg-select-item-indicator"],
+          "absolute",
+          "left-2",
+          "inline-flex",
+          "items-center",
+          "justify-center",
+        )}
+      >
         <RadixSelect.ItemIndicator>
           <Check aria-hidden="true" size={16} strokeWidth={2} />
         </RadixSelect.ItemIndicator>
       </span>
-      <span className="csg-select-item-copy">
+      <span className={styles["csg-select-item-copy"]}>
         <RadixSelect.ItemText>{children}</RadixSelect.ItemText>
-        {description ? <span className="csg-select-item-description">{description}</span> : null}
+        {description ? <span className={styles["csg-select-item-description"]}>{description}</span> : null}
       </span>
     </RadixSelect.Item>
   );
@@ -156,7 +204,7 @@ export const SelectSeparator = forwardRef<ComponentRef<typeof RadixSelect.Separa
     return (
       <RadixSelect.Separator
         ref={ref}
-        className={classNames("csg-select-separator -mx-1 my-1", className)}
+        className={classNames(classNames(styles["csg-select-separator"], "-mx-1", "my-1"), className)}
         {...props}
       />
     );
@@ -220,7 +268,7 @@ export function Select({
               </Fragment>
             ))
           ) : (
-            <div className="csg-select-empty">{emptyLabel}</div>
+            <div className={styles["csg-select-empty"]}>{emptyLabel}</div>
           ))}
       </SelectContent>
     </SelectRoot>

@@ -1,3 +1,7 @@
+.viewport {
+  height: 100%;
+  overflow-y: auto;
+}
 .page {
   max-width: 1100px;
   margin: 0 auto;
