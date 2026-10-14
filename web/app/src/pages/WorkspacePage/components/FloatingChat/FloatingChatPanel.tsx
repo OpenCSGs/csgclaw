@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { errorMessage } from "@/api/client";
 import {
@@ -54,8 +54,8 @@ export function FloatingChatPanel({ agentName, chatProps, headerAccessory, onPic
     inviteActionLabel,
     locale,
     managerProfile,
-    managerProfileIncomplete,
-    managerRuntimeUnavailable,
+    composerDisabledReason = "",
+    threadComposerDisabledReason = "",
     memberMenuRef,
     mentionCandidates,
     mentionIndex,
@@ -126,26 +126,42 @@ export function FloatingChatPanel({ agentName, chatProps, headerAccessory, onPic
   const [deleteRoomBusy, setDeleteRoomBusy] = useState(false);
   const [deleteRoomError, setDeleteRoomError] = useState("");
   const [documentPreview, setDocumentPreview] = useState<DocumentPreviewRequest | null>(null);
-  const composerDisabledReason = managerRuntimeUnavailable ? t("managerCodexMissingWarning") : t("profileIncomplete");
-  const composerDisabled = Boolean(managerRuntimeUnavailable || managerProfileIncomplete);
+  const composerDisabled = Boolean(composerDisabledReason);
+  const mainMessages = useMemo(
+    () => conversation.messages.filter((message) => !message.relates_to),
+    [conversation.messages],
+  );
+  const threadMessages = useMemo(
+    () => (activeThreadView?.root ? [activeThreadView.root, ...(activeThreadView.replies ?? [])] : []),
+    [activeThreadView],
+  );
   const questionMode = useQuestionAnswerMode({
-    messages: conversation.messages.filter((message) => !message.relates_to),
+    messages: mainMessages,
     responderID: currentUserID,
     roomID: conversation.id,
     t,
   });
   const threadQuestionMode = useQuestionAnswerMode({
-    messages: activeThreadView?.root ? [activeThreadView.root, ...(activeThreadView.replies ?? [])] : [],
+    messages: threadMessages,
     responderID: currentUserID,
     roomID: conversation.id,
     t,
   });
-  const floatingConversationMessages = conversation.messages.filter((message) => !isManagerBootstrapNotice(message));
-  const floatingVisibleMessages = visibleMessages.filter((message) => !isManagerBootstrapNotice(message));
-  const floatingConversation =
-    floatingConversationMessages.length === conversation.messages.length
-      ? conversation
-      : { ...conversation, messages: floatingConversationMessages };
+  const floatingConversationMessages = useMemo(
+    () => conversation.messages.filter((message) => !isManagerBootstrapNotice(message)),
+    [conversation.messages],
+  );
+  const floatingVisibleMessages = useMemo(
+    () => visibleMessages.filter((message) => !isManagerBootstrapNotice(message)),
+    [visibleMessages],
+  );
+  const floatingConversation = useMemo(
+    () =>
+      floatingConversationMessages.length === conversation.messages.length
+        ? conversation
+        : { ...conversation, messages: floatingConversationMessages },
+    [conversation, floatingConversationMessages],
+  );
   const floatingComposerT = useCallback<TranslateFn>(
     (key, params) => (key === "inputPlaceholder" ? t("floatingChatInputPlaceholder") : t(key, params)),
     [t],
@@ -200,7 +216,7 @@ export function FloatingChatPanel({ agentName, chatProps, headerAccessory, onPic
       error={threadError}
       draftSegments={threadDraftSegments}
       attachmentDrafts={threadAttachmentDrafts}
-      disabled={composerDisabled}
+      disabled={Boolean(threadComposerDisabledReason)}
       usersById={usersById}
       locale={locale}
       theme={theme}

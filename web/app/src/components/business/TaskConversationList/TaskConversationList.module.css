@@ -1,0 +1,263 @@
+.root {
+  --input-text-placeholder: var(--muted);
+  min-height: 0;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 12px;
+}
+.search {
+  width: 100%;
+  border: 1px solid var(--input-border);
+  background: var(--input-background);
+  color: var(--input-text);
+  border-radius: var(--radius-md);
+  padding: 9px 10px;
+}
+.list {
+  min-height: 0;
+  overflow: auto;
+  flex: 1;
+}
+.row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border-radius: var(--radius-md);
+  margin: 3px 0;
+}
+.row:hover,
+.active {
+  background: var(--panel-soft);
+}
+.open {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 6px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+.avatar {
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+.avatar img {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+.text {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  flex: 1;
+}
+.text strong {
+  font-size: 13px;
+  font-weight: 500;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.text small {
+  color: var(--muted);
+  font-size: 11px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.more {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  padding: 6px;
+  cursor: pointer;
+}
+.error,
+.dialog .error {
+  color: var(--danger);
+  font-size: 12px;
+  margin: 0;
+}
+.empty {
+  font-size: 12px;
+  color: var(--muted);
+  padding: 12px 4px;
+}
+.dialog {
+  width: min(440px, calc(100vw - 32px));
+  display: grid;
+  gap: 16px;
+  padding: 24px;
+}
+.dialog p {
+  margin: 0;
+  color: var(--muted);
+}
+.dialog label {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.dialog input:not([type="checkbox"]) {
+  border: 1px solid var(--input-border);
+  border-radius: var(--radius-md);
+  padding: 10px;
+  background: var(--input-background);
+  color: var(--input-text);
+}
+.dialogActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.compact .row {
+  min-height: 42px;
+  margin: 0;
+}
+.compact .open {
+  padding: 10px 10px 10px 12px;
+  gap: 8px;
+}
+.compact .avatar {
+  order: 5;
+  width: 22px;
+  height: 22px;
+}
+.compact .avatar img {
+  width: 22px;
+  height: 22px;
+}
+.compact .text strong {
+  font-size: 13px;
+  font-weight: 560;
+}
+.compact .text small {
+  display: none;
+}
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.compact .actions {
+  position: absolute;
+  right: 38px;
+  opacity: 0;
+  pointer-events: none;
+}
+.compact .more {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border-radius: var(--radius-sm);
+}
+.more:hover {
+  color: var(--text);
+  background: var(--line);
+}
+.more:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.more:focus-visible,
+.open:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -2px;
+}
+.compact .row:is(:hover, :focus-within, :has([data-state="open"])) .actions {
+  opacity: 1;
+  pointer-events: auto;
+}
+.compact .row:is(:hover, :focus-within, :has([data-state="open"])) .timestamp {
+  display: none;
+}
+.compact .row:is(:hover, :focus-within, :has([data-state="open"])) .text {
+  padding-right: 78px;
+}
+@media (hover: none) {
+  .compact .actions {
+    opacity: 1;
+    pointer-events: auto;
+  }
+  .compact .timestamp {
+    display: none;
+  }
+  .compact .text {
+    padding-right: 78px;
+  }
+}
+.timestamp {
+  color: var(--muted);
+  font-size: 11px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.workingDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--warning-500);
+  flex-shrink: 0;
+}
+
+.searchBar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.root .searchBar .search {
+  min-width: 0;
+  width: 100%;
+  font-size: 12px;
+  padding: 7px 10px;
+  height: 34px;
+  min-height: 34px;
+}
+.root .searchBar .directory {
+  height: 34px;
+  min-height: 34px;
+  width: 92px;
+  padding: 6px 8px;
+  flex-shrink: 0;
+  font-size: 11px;
+  background: var(--input-background);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+}
+
+.searchField {
+  position: relative;
+  min-width: 0;
+  flex: 1;
+}
+.searchField > svg {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--muted);
+  pointer-events: none;
+}
+.root .searchBar .search {
+  padding-left: 32px;
+}
+
+.compact .noAvatar .actions {
+  right: 6px;
+}

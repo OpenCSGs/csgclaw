@@ -243,8 +243,9 @@ type templateService interface {
 	FetchWorkspace(context.Context, string) (hub.WorkspaceRef, error)
 }
 
-func codexMemoryPath(layout agentruntime.Layout, runtimeKind string) string {
-	if agentruntime.RuntimeConfigForKind(runtimeKind).LegacyKind() != RuntimeKindCodex || strings.TrimSpace(layout.SkillsRoot) == "" {
+func runtimeMemoryPath(layout agentruntime.Layout, runtimeKind string) string {
+	kind := agentruntime.RuntimeConfigForKind(runtimeKind).LegacyKind()
+	if (kind != RuntimeKindCodex && kind != RuntimeKindDSH) || strings.TrimSpace(layout.SkillsRoot) == "" {
 		return ""
 	}
 	return filepath.Join(filepath.Dir(layout.SkillsRoot), "memories", "memory_summary.md")
@@ -1080,7 +1081,7 @@ func (s *Controller) resolveTemplateCreateSpecWithService(
 			} else if !errors.Is(readErr, os.ErrNotExist) {
 				return CreateAgentSpec{}, cleanup, fmt.Errorf("read host runtime template instructions: %w", readErr)
 			}
-			if memoryPath := strings.TrimSpace(workspace.MemoryPath); templateRuntimeKind == RuntimeKindCodex && memoryPath != "" {
+			if memoryPath := strings.TrimSpace(workspace.MemoryPath); (templateRuntimeKind == RuntimeKindCodex || templateRuntimeKind == RuntimeKindDSH) && memoryPath != "" {
 				memoryPath, pathErr := validatedCodexTemplateMemoryPath(workspace.Path, memoryPath)
 				if pathErr != nil {
 					return CreateAgentSpec{}, cleanup, pathErr
@@ -1392,7 +1393,7 @@ func (s *Controller) validateReplaceWorkerSpecBeforeDelete(ctx context.Context, 
 	if err != nil {
 		return err
 	}
-	if err := s.validateRuntimeConfig(ctx, runtimeKind, runtimeConfigSnapshotForAgent(s.hydrateProfileFromCatalog(resolvedProfile), spec.RuntimeOptions)); err != nil {
+	if err := s.validateCreateRuntimeConfig(ctx, spec, runtimeKind, runtimeConfigSnapshotForAgent(s.hydrateProfileFromCatalog(resolvedProfile), spec.RuntimeOptions)); err != nil {
 		return err
 	}
 	return s.validateMCPServers(ctx, runtimeKind, mcpServersSnapshotForAgent(spec.MCPServers))
@@ -2258,7 +2259,7 @@ func (s *Controller) createWorker(ctx context.Context, spec CreateAgentSpec, rep
 		return Agent{}, err
 	}
 	runtimeResolvedProfile := s.hydrateProfileFromCatalog(resolvedProfile)
-	if err := s.validateRuntimeConfig(ctx, runtimeKind, runtimeConfigSnapshotForAgent(runtimeResolvedProfile, spec.RuntimeOptions)); err != nil {
+	if err := s.validateCreateRuntimeConfig(ctx, spec, runtimeKind, runtimeConfigSnapshotForAgent(runtimeResolvedProfile, spec.RuntimeOptions)); err != nil {
 		return Agent{}, err
 	}
 	if err := s.validateMCPServers(ctx, runtimeKind, mcpServersSnapshotForAgent(spec.MCPServers)); err != nil {

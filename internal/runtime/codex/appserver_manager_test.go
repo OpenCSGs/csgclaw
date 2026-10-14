@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -2606,13 +2607,17 @@ func TestAppServerThreadStartRegistersPublishFileDynamicTool(t *testing.T) {
 	}
 }
 
-func TestAppServerReadOnlyThreadOmitsUploadFileDynamicTool(t *testing.T) {
+func TestAppServerReadOnlyThreadKeepsResumableDynamicTools(t *testing.T) {
 	spec := testAppServerSessionSpec(t.TempDir())
 	spec.ExecutionMode = ExecutionModeReadOnly
 	params := appServerThreadStartParams(spec, true)
 	tools, ok := params["dynamicTools"].([]map[string]any)
-	if !ok || len(tools) != 1 || tools[0]["name"] != appServerPublishFileToolName {
-		t.Fatalf("dynamicTools = %#v, want publish tool only", params["dynamicTools"])
+	if !ok || len(tools) != 4 {
+		t.Fatalf("dynamicTools = %#v, want the stable engine tool set", params["dynamicTools"])
+	}
+	spec.ExecutionMode = ExecutionModeStandard
+	if !reflect.DeepEqual(tools, appServerThreadStartParams(spec, true)["dynamicTools"]) {
+		t.Fatal("execution mode changed the native thread tool set")
 	}
 }
 
@@ -2658,26 +2663,23 @@ func TestAppServerUploadFileDynamicToolUploadsToConfiguredMCPSameOrigin(t *testi
 	}
 }
 
-func TestAppServerUploadFileDynamicToolRejectsReadOnlyMode(t *testing.T) {
-	live := &liveSession{
-		spec:                  SessionSpec{ExecutionMode: ExecutionModeReadOnly},
-		filePublishingThreads: map[string]bool{"thread-1": true},
-		turnContexts:          testAppServerTurnContexts("thread-1", "turn-1", context.Background()),
-	}
-	manager := newAppServerManager(testAppServerManagerDepsWithSink(&recordingSink{}))
-	response, err := manager.handleAppServerServerRequest("runtime-1", live, appServerServerRequest{
-		Method: "item/tool/call",
-		Params: mustJSONRaw(t, map[string]any{
-			"threadId": "thread-1", "turnId": "turn-1", "callId": "call-1", "tool": appServerUploadFileToolName,
-			"arguments": map[string]any{"path": "secret.txt", "server": "parser", "uploadUri": "/upload"},
-		}),
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	result, _ := response.(map[string]any)
-	if result["success"] != false || !strings.Contains(fmt.Sprint(result), "read-only mode") {
-		t.Fatalf("response = %#v, want read-only rejection", response)
+func TestAppServerMutatingDynamicToolsRejectReadOnlyMode(t *testing.T) {
+	for _, tool := range []string{appServerUploadFileToolName, "csgclaw_generate_image", "csgclaw_generate_video"} {
+		t.Run(tool, func(t *testing.T) {
+			live := &liveSession{spec: SessionSpec{ExecutionMode: ExecutionModeReadOnly}, filePublishingThreads: map[string]bool{"thread-1": true}, turnContexts: testAppServerTurnContexts("thread-1", "turn-1", context.Background())}
+			manager := newAppServerManager(testAppServerManagerDepsWithSink(&recordingSink{}))
+			response, err := manager.handleAppServerServerRequest("runtime-1", live, appServerServerRequest{Method: "item/tool/call", Params: mustJSONRaw(t, map[string]any{
+				"threadId": "thread-1", "turnId": "turn-1", "callId": "call-1", "tool": tool,
+				"arguments": map[string]any{"path": "secret.txt", "server": "parser", "uploadUri": "/upload", "prompt": "test"},
+			})})
+			if err != nil {
+				t.Fatal(err)
+			}
+			result, _ := response.(map[string]any)
+			if result["success"] != false || !strings.Contains(fmt.Sprint(result), "read-only mode") {
+				t.Fatalf("response = %#v, want read-only rejection", response)
+			}
+		})
 	}
 }
 
@@ -3052,6 +3054,26 @@ func TestAppServerManagerHelperProcess(t *testing.T) {
 	}
 	mode := args[len(args)-1]
 	switch mode {
+	case "room-configuration":
+		threads := 0
+		runAppServerHelper(t, func(index int, msg map[string]any) (map[string]any, bool) {
+			params, _ := msg["params"].(map[string]any)
+			switch msg["method"] {
+			case "thread/start":
+				threads++
+				return rpcResult(msg["id"], map[string]any{"threadId": fmt.Sprintf("thread-%d-%d", os.Getpid(), threads)}), true
+			case "thread/resume":
+				return rpcResult(msg["id"], map[string]any{"threadId": params["threadId"]}), true
+			case "turn/start":
+				threadID := params["threadId"]
+				turnID := fmt.Sprintf("turn-%d", index)
+				writeRPCNotification(t, "turn/started", map[string]any{"threadId": threadID, "turn": map[string]any{"id": turnID}})
+				writeRPCNotification(t, "turn/completed", map[string]any{"threadId": threadID, "turn": map[string]any{"id": turnID, "status": "completed"}})
+				return rpcResult(msg["id"], map[string]any{"turnId": turnID}), true
+			}
+			return nil, false
+		})
+
 	case "fail-before-handshake":
 		_, _ = fmt.Fprintln(os.Stderr, "login failed")
 		_, _ = fmt.Fprintln(os.Stderr, "api_key = sk-secret")
@@ -3408,6 +3430,38 @@ func TestAppServerManagerHelperProcess(t *testing.T) {
 					"turn":     map[string]any{"id": "turn-delta", "status": "interrupted"},
 				})
 				return rpcResult(msg["id"], map[string]any{}), true
+			default:
+				return nil, false
+			}
+		})
+	case "prompt-cancel-no-active-turn", "prompt-cancel-invalid-request", "prompt-cancel-turn-mismatch", "prompt-cancel-interrupt-error":
+		turnStarts := 0
+		runAppServerHelper(t, func(index int, msg map[string]any) (map[string]any, bool) {
+			switch msg["method"] {
+			case "thread/start":
+				return rpcResult(msg["id"], map[string]any{"threadId": "main-thread"}), true
+			case "turn/start":
+				turnStarts++
+				if turnStarts > 1 {
+					writeRPCNotification(t, "turn/completed", map[string]any{"threadId": "main-thread", "turn": map[string]any{"id": "turn-next", "status": "completed"}})
+					return rpcResult(msg["id"], map[string]any{"turnId": "turn-next"}), true
+				}
+				return rpcResult(msg["id"], map[string]any{"turnId": "turn-cancel"}), true
+			case "turn/interrupt":
+				assertTurnInterruptParams(t, msg, "main-thread", "turn-cancel")
+				code, message := appServerRPCInvalidRequest, "no active turn to interrupt"
+				if mode == "prompt-cancel-invalid-request" {
+					message = "interrupt request is invalid"
+				}
+				if mode == "prompt-cancel-turn-mismatch" {
+					message = "expected active turn id turn-cancel but found turn-active"
+				}
+				if mode == "prompt-cancel-interrupt-error" {
+					code = appServerRPCInternalError
+				}
+				return map[string]any{"jsonrpc": "2.0", "id": msg["id"], "error": map[string]any{
+					"code": code, "message": message,
+				}}, true
 			default:
 				return nil, false
 			}
@@ -3835,5 +3889,30 @@ func TestAppServerCompletedMessageCorrectsStreamedDraft(t *testing.T) {
 	events := withoutContextUsage(sink.snapshot())
 	if len(events) != 2 || events[1].Text != "Corrected" || events[1].Payload.(map[string]any)["text_snapshot"] != true {
 		t.Fatalf("events=%+v", events)
+	}
+}
+
+func TestGenerateImageToolFollowsCurrentExecutionMode(t *testing.T) {
+	calls := 0
+	ctx := contract.WithImageGenerationHandler(context.Background(), func(context.Context, string, string) error {
+		calls++
+		return nil
+	})
+	live := &liveSession{filePublishingThreads: map[string]bool{"thread-1": true}, turnContexts: testAppServerTurnContexts("thread-1", "turn-1", ctx)}
+	manager := newAppServerManager(testAppServerManagerDeps())
+	for _, mode := range []string{ExecutionModeReadOnly, ExecutionModeStandard, ExecutionModeReadOnly, ExecutionModeStandard} {
+		live.spec.ExecutionMode = mode
+		response, err := manager.handleAppServerServerRequest("runtime-1", live, appServerServerRequest{Method: "item/tool/call", Params: mustJSONRaw(t, map[string]any{
+			"threadId": "thread-1", "turnId": "turn-1", "callId": "call-image", "tool": "csgclaw_generate_image", "arguments": map[string]any{"prompt": "blue sky"},
+		})})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if response.(map[string]any)["success"] != (mode == ExecutionModeStandard) {
+			t.Fatalf("mode %s: %#v", mode, response)
+		}
+	}
+	if calls != 2 {
+		t.Fatalf("generation called %d times, want two standard-mode calls", calls)
 	}
 }

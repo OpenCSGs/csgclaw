@@ -58,7 +58,14 @@ export function WorkspaceLayout() {
   const primaryResizePointerIdRef = useRef<number | null>(null);
   const sidebarProps = controller.ready ? controller.sidebarProps : null;
   const isSidebarCollapsed = sidebarProps?.isSidebarCollapsed ?? false;
-  const showSidebarContext = controller.ready && workspaceHasContextSidebar(controller.activePane);
+  const showSidebarContext =
+    controller.ready &&
+    workspaceHasContextSidebar(controller.activePane) &&
+    (!controller.taskEntry ||
+      (controller.activePane.type !== "conversation" &&
+        controller.activePane.type !== "agent" &&
+        controller.activePane.type !== "team" &&
+        controller.activePane.type !== "settings"));
   const autoPrimarySidebarWidth = useMemo(
     () =>
       sidebarProps
@@ -67,7 +74,10 @@ export function WorkspaceLayout() {
     [sidebarProps],
   );
   const primarySidebarWidthBounds = useMemo(() => workspacePrimarySidebarWidthBounds(), []);
-  const primarySidebarExpandedWidth = primarySidebarWidthOverride ?? autoPrimarySidebarWidth;
+  const primarySidebarExpandedWidth =
+    controller.ready && controller.taskEntry
+      ? Math.max(260, primarySidebarWidthOverride ?? 288)
+      : (primarySidebarWidthOverride ?? autoPrimarySidebarWidth);
   const sidebarWidthBounds = useMemo(
     () => workspaceSidebarWidthBounds(primarySidebarExpandedWidth),
     [primarySidebarExpandedWidth],

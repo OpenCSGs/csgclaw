@@ -15,7 +15,9 @@ func TestSetLLMConfigReconcilesOpenCSGCreationDefaults(t *testing.T) {
 		want     string
 	}{
 		{"environment switch", ModelProviderIDOpenCSG, []string{"staging-model"}, "staging-model"},
+		{"environment switch prefers auto", ModelProviderIDOpenCSG, []string{"staging-model", "auto"}, "auto"},
 		{"still available", ModelProviderIDOpenCSG, []string{"staging-model", "production-model"}, "production-model"},
+		{"explicit model with auto available", ModelProviderIDOpenCSG, []string{"auto", "production-model"}, "production-model"},
 		{"empty or failed catalog", ModelProviderIDOpenCSG, nil, ""},
 		{"another provider", ModelProviderIDCodex, []string{"staging-model"}, "production-model"},
 	} {

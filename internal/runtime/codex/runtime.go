@@ -3,13 +3,16 @@ package codex
 import (
 	"context"
 	"crypto/sha256"
+	"csgclaw/internal/runtime/conversationconfig"
 	skill "csgclaw/internal/skill/state"
+	"csgclaw/internal/taskconfig"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"io/fs"
 	"log/slog"
+	"maps"
 	"net/url"
 	"os"
 	pathpkg "path"
@@ -48,7 +51,7 @@ const (
 const readOnlyRuntimeInstructions = `CSGClaw has placed this Agent in read-only mode.
 You may answer questions, analyze content already present in the conversation, load the main SKILL.md instructions for assigned Skills, and use only available read-only data tools.
 You must not claim to read local files, inspect environment variables, run commands, execute Skill scripts, modify files or external data, or request elevated permissions.
-If the user asks for a mutating or environment-changing operation, explain in the user's language that the Agent is read-only and that they can switch to Standard mode under Agent Profile > Runtime Environment > Execution Mode. Offer a read-only analysis or plan when useful.`
+If the user asks for a mutating or environment-changing operation, explain in the user's language that the Agent is read-only and that the deployment administrator controls the execution mode. Offer a read-only analysis or plan when useful.`
 
 var (
 	runtimeDirRemoveInitialDelay = 100 * time.Millisecond
@@ -155,6 +158,7 @@ type BinaryProvider interface {
 }
 
 type Dependencies struct {
+	ResolveRoomProfile    func(string, string, taskconfig.Config) (agentruntime.Profile, error)
 	BinaryProvider        BinaryProvider
 	ResolveAgent          func(h agentruntime.Handle) (AgentRef, error)
 	MaterializeMCPServers func(context.Context, map[string]any) (map[string]any, error)
@@ -216,6 +220,7 @@ func codexMCPFileBridgeServers(servers map[string]any, agentID string) (map[stri
 }
 
 type Runtime struct {
+	conversationSettings     sync.Map
 	deps                     Dependencies
 	managerMu                sync.Mutex
 	configMu                 sync.Mutex
@@ -418,7 +423,7 @@ func (r *Runtime) New(ctx context.Context, spec agentruntime.Spec) (agentruntime
 	var conversationSessions map[string]string
 	var filePublishingConversations map[string]bool
 	if sessionMeta, readErr := r.readSessionMetadata(strings.TrimSpace(spec.RuntimeID)); readErr == nil {
-		conversationSessions, filePublishingConversations = persistedConversationsForProfile(sessionMeta, spec.Profile)
+		conversationSessions, filePublishingConversations = r.persistedRoomConversations(sessionMeta, spec.Profile)
 	} else if !errors.Is(readErr, os.ErrNotExist) {
 		return agentruntime.Handle{}, fmt.Errorf("read persisted codex conversations: %w", readErr)
 	}
@@ -528,11 +533,21 @@ func (r *Runtime) Start(ctx context.Context, h agentruntime.Handle) (agentruntim
 	if err != nil {
 		return agentruntime.StateUnknown, err
 	}
+	if r.deps.ResolveRoomProfile != nil {
+		home, homeErr := r.deps.AgentHome(agentRef.ID)
+		if homeErr != nil {
+			return agentruntime.StateUnknown, homeErr
+		}
+		if err := conversationconfig.ImportLegacy(home, hostStateDirName, sessionFileName, []string{"conversation_sessions", "file_publishing_conversations"}, []string{"home/sessions", "home/archived_sessions"}); err != nil {
+			return agentruntime.StateUnknown, err
+		}
+	}
+
 	agentRef.Profile = agentRef.Profile.Normalized()
 	var conversationSessions map[string]string
 	var filePublishingConversations map[string]bool
 	if sessionMeta, readErr := r.readSessionMetadata(strings.TrimSpace(h.RuntimeID)); readErr == nil {
-		conversationSessions, filePublishingConversations = persistedConversationsForProfile(sessionMeta, agentRef.Profile)
+		conversationSessions, filePublishingConversations = r.persistedRoomConversations(sessionMeta, agentRef.Profile)
 	} else if !errors.Is(readErr, os.ErrNotExist) {
 		return agentruntime.StateUnknown, fmt.Errorf("read persisted codex conversations: %w", readErr)
 	}
@@ -781,11 +796,14 @@ func (r *Runtime) ensureSession(ctx context.Context, spec SessionSpec, copyHostS
 	spec.HomeDir = r.hostSessionHomeDir(dirs.Home)
 	spec.CodexHomeDir = dirs.CodexHome
 	spec.StderrPath = dirs.StderrLog
-	runtimeOptions, err := DecodeRuntimeOptions(agentRef.RuntimeOptions)
+	runtimeOptions, err := conversationRuntimeOptions(agentRef.RuntimeOptions)
 	if err != nil {
 		return nil, err
 	}
 	spec.ExecutionMode = runtimeOptions.ExecutionMode
+	if agentRef.RuntimeOptions[conversationReadOnlyOption] == true {
+		spec.ExecutionMode = ExecutionModeReadOnly
+	}
 	spec.MemoryEnabled = runtimeOptions.MemoryMode != MemoryModeDisabled
 	runtimeMCPServers, err := r.runtimeMCPServers(ctx, spec.AgentID, agentRef.MCPServers)
 	if err != nil {
@@ -809,12 +827,12 @@ func (r *Runtime) ensureSession(ctx context.Context, spec SessionSpec, copyHostS
 	if err := r.seedCodexHomeConfig(spec.CodexHomeDir, spec.WorkspaceDir, spec.Profile, agentRef.RuntimeOptions, spec.MCPServers); err != nil {
 		return nil, err
 	}
-	if copyHostSkills || spec.ExecutionMode == ExecutionModeReadOnly {
+	if copyHostSkills || (spec.ExecutionMode == ExecutionModeReadOnly && r.deps.ResolveRoomProfile == nil) {
 		if err := r.seedCodexHomeSkillsForExecutionMode(spec.CodexHomeDir, spec.ExecutionMode); err != nil {
 			return nil, err
 		}
 	}
-	if err := r.seedCodexHomeWorkspaceSkills(spec.AgentID, spec.WorkspaceDir, spec.CodexHomeDir); err != nil {
+	if err := r.seedAgentWorkspaceSkills(spec); err != nil {
 		return nil, err
 	}
 	if err := r.seedManagerTemplate(spec.AgentID, spec.CodexHomeDir); err != nil {
@@ -823,7 +841,11 @@ func (r *Runtime) ensureSession(ctx context.Context, spec SessionSpec, copyHostS
 	if err := r.refreshCodexHomeAgentsFile(agentruntime.Handle{RuntimeID: runtimeID}, spec.CodexHomeDir); err != nil {
 		return nil, err
 	}
-	if err := r.writeSkillStates(spec.CodexHomeDir, agentRef.SkillStates); err != nil {
+	skillStates, err := r.conversationSkillStates(spec.CodexHomeDir, spec.ExecutionMode, agentRef.SkillStates)
+	if err != nil {
+		return nil, err
+	}
+	if err := r.writeSkillStates(spec.CodexHomeDir, skillStates); err != nil {
 		return nil, err
 	}
 	if strings.TrimSpace(spec.BinaryPath) == "" {
@@ -906,15 +928,18 @@ func (r *Runtime) hydratePersistedSession(ctx context.Context, manager *appServe
 		FilePublishingConversations:    cloneFilePublishingConversations(sessionMeta.FilePublishingConversations),
 		ConversationProfileFingerprint: conversationProfileFingerprint(agentRef.Profile.Provider, agentRef.Profile.BaseURL, agentRef.Profile.ModelID),
 	}
-	if strings.TrimSpace(sessionMeta.ConversationProfileFingerprint) != spec.ConversationProfileFingerprint {
+	if r.deps.ResolveRoomProfile == nil && strings.TrimSpace(sessionMeta.ConversationProfileFingerprint) != spec.ConversationProfileFingerprint {
 		spec.ConversationSessions = nil
 		spec.FilePublishingConversations = nil
 	}
-	runtimeOptions, err := DecodeRuntimeOptions(agentRef.RuntimeOptions)
+	runtimeOptions, err := conversationRuntimeOptions(agentRef.RuntimeOptions)
 	if err != nil {
 		return nil, err
 	}
 	spec.ExecutionMode = runtimeOptions.ExecutionMode
+	if agentRef.RuntimeOptions[conversationReadOnlyOption] == true {
+		spec.ExecutionMode = ExecutionModeReadOnly
+	}
 	spec.MemoryEnabled = runtimeOptions.MemoryMode != MemoryModeDisabled
 	spec.MCPServers, err = r.runtimeMCPServers(ctx, agentID, agentRef.MCPServers)
 	if err != nil {
@@ -929,12 +954,12 @@ func (r *Runtime) hydratePersistedSession(ctx context.Context, manager *appServe
 	if err := r.seedCodexHomeConfig(spec.CodexHomeDir, spec.WorkspaceDir, spec.Profile, agentRef.RuntimeOptions, spec.MCPServers); err != nil {
 		return nil, err
 	}
-	if spec.ExecutionMode == ExecutionModeReadOnly {
+	if spec.ExecutionMode == ExecutionModeReadOnly && r.deps.ResolveRoomProfile == nil {
 		if err := r.seedCodexHomeSkillsForExecutionMode(spec.CodexHomeDir, spec.ExecutionMode); err != nil {
 			return nil, err
 		}
 	}
-	if err := r.seedCodexHomeWorkspaceSkills(spec.AgentID, spec.WorkspaceDir, spec.CodexHomeDir); err != nil {
+	if err := r.seedAgentWorkspaceSkills(spec); err != nil {
 		return nil, err
 	}
 	if err := r.seedManagerTemplate(spec.AgentID, spec.CodexHomeDir); err != nil {
@@ -943,7 +968,11 @@ func (r *Runtime) hydratePersistedSession(ctx context.Context, manager *appServe
 	if err := r.refreshCodexHomeAgentsFile(agentruntime.Handle{RuntimeID: runtimeID}, spec.CodexHomeDir); err != nil {
 		return nil, err
 	}
-	if err := r.writeSkillStates(spec.CodexHomeDir, agentRef.SkillStates); err != nil {
+	skillStates, err := r.conversationSkillStates(spec.CodexHomeDir, spec.ExecutionMode, agentRef.SkillStates)
+	if err != nil {
+		return nil, err
+	}
+	if err := r.writeSkillStates(spec.CodexHomeDir, skillStates); err != nil {
 		return nil, err
 	}
 	if ctx == nil {
@@ -1024,7 +1053,7 @@ func (r *Runtime) seedCodexHomeConfig(runtimeCodexHome, workspaceDir string, pro
 	}
 	configPath := filepath.Join(runtimeCodexHome, configFileName)
 	profile = profile.Normalized()
-	options, err := DecodeRuntimeOptions(runtimeOptions)
+	options, err := conversationRuntimeOptions(runtimeOptions)
 	if err != nil {
 		return err
 	}
@@ -1422,6 +1451,11 @@ func (r *Runtime) resolveAgent(h agentruntime.Handle) (AgentRef, error) {
 	if strings.TrimSpace(agentRef.Name) == "" || strings.TrimSpace(agentRef.ID) == "" {
 		return AgentRef{}, fmt.Errorf("resolved agent is incomplete")
 	}
+	if value, ok := r.conversationSettings.Load(h.RuntimeID); ok {
+		if settings, applied := value.(*conversationconfig.State).Current(); applied {
+			agentRef.Profile, agentRef.RuntimeOptions = settings.Profile, maps.Clone(settings.Options)
+		}
+	}
 	agentRef.ID = canonicalRuntimeAgentID(agentRef.ID)
 	return agentRef, nil
 }
@@ -1468,7 +1502,7 @@ func (r *Runtime) refreshCodexHomeAgentsFileWithFragments(h agentruntime.Handle,
 	}
 	path := filepath.Join(codexHomeDir, "AGENTS.md")
 	instructions := agentRef.Instructions
-	if IsReadOnlyExecutionMode(agentRef.RuntimeOptions) {
+	if opts, err := conversationRuntimeOptions(agentRef.RuntimeOptions); err == nil && opts.ExecutionMode == ExecutionModeReadOnly {
 		instructions = strings.TrimSpace(instructions + "\n\n" + readOnlyRuntimeInstructions)
 	}
 	block := runtimeinstructions.RenderRuntimeAgentsInstructionsBlockWithOptions(agentRef.ID, instructions, runtimeinstructions.RuntimeManagedInstructionsOptions{

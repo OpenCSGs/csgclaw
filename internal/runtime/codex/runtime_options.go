@@ -2,6 +2,7 @@ package codex
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -25,9 +26,6 @@ type RuntimeOptions struct {
 }
 
 func DecodeRuntimeOptions(raw map[string]any) (RuntimeOptions, error) {
-	if len(raw) == 0 {
-		return defaultRuntimeOptions(), nil
-	}
 	if value, ok := raw["auto_compact"]; ok && value != "enabled" && value != true {
 		return RuntimeOptions{}, fmt.Errorf("this Codex runtime does not support disabling automatic context compaction")
 	}
@@ -39,20 +37,15 @@ func DecodeRuntimeOptions(raw map[string]any) (RuntimeOptions, error) {
 		}
 		opts.LocalWorkspaceDir = strings.TrimSpace(text)
 	}
-	if value, ok := raw[executionModeOptionKey]; ok && value != nil {
-		text, ok := value.(string)
-		if !ok {
-			return RuntimeOptions{}, fmt.Errorf("%s must be a string", executionModeOptionKey)
-		}
-		mode := strings.ToLower(strings.TrimSpace(text))
-		if mode != "" {
-			switch mode {
-			case ExecutionModeStandard, ExecutionModeReadOnly:
-				opts.ExecutionMode = mode
-			default:
-				return RuntimeOptions{}, fmt.Errorf("%s must be %q or %q", executionModeOptionKey, ExecutionModeStandard, ExecutionModeReadOnly)
-			}
-		}
+	// Execution mode is owned by the server process, including restored agents.
+	mode := strings.ToLower(strings.TrimSpace(os.Getenv("CSGCLAW_EXECUTION_MODE")))
+	switch mode {
+	case "", ExecutionModeStandard:
+		opts.ExecutionMode = ExecutionModeStandard
+	case ExecutionModeReadOnly:
+		opts.ExecutionMode = ExecutionModeReadOnly
+	default:
+		return RuntimeOptions{}, fmt.Errorf("CSGCLAW_EXECUTION_MODE must be %q or %q", ExecutionModeStandard, ExecutionModeReadOnly)
 	}
 	if value, ok := raw[memoryModeOptionKey]; ok && value != nil {
 		text, ok := value.(string)

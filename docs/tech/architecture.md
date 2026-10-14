@@ -117,6 +117,11 @@ The built-in channel sends `/new` to OpenClaw and `/clear` to PicoClaw, while Co
 Hosted CSGClaw and Feishu Binding Managers select local Codex Agents.
 A missing conversation adapter or Extension driver returns an explicit unsupported status/error; Engine never chooses a legacy execution route.
 
+Local DSH selects reasoning effort from the ACP options returned after selecting the configured model, for both new and resumed sessions.
+An exact match is preserved; otherwise a positive effort maps to the nearest advertised level, preferring the higher level on a tie and considering `max` above `xhigh`.
+For DSH options `off`, `low`, `high`, `max`, this maps `minimal` to `low`, `medium` to `high`, and `xhigh` to `max`; profile values remain unchanged.
+Model-default reasoning sends no explicit selection, and disabled reasoning requires an advertised `off` or `none` option.
+
 ## RuntimeExtension
 
 An Extension stores only a name, kind, Source reference, failure policy and status.

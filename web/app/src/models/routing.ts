@@ -118,9 +118,7 @@ export function paneFromLocation(pathname = window.location.pathname): Workspace
     return { type: WorkspacePaneTypes.computer, id: DefaultWorkspacePaneIds.computer };
   }
   if (agentRouteSegments.has(section)) {
-    return id
-      ? { type: WorkspacePaneTypes.agent, id }
-      : { type: WorkspacePaneTypes.computer, id: DefaultWorkspacePaneIds.computer };
+    return { type: WorkspacePaneTypes.agent, id };
   }
   if (section === WorkspaceRouteSegments.notifications) {
     return { type: WorkspacePaneTypes.notifications, id: "" };
@@ -185,8 +183,8 @@ export function pathForPane(
   if (!pane || pane.type === WorkspacePaneTypes.computer) {
     return `/${WorkspaceRouteSegments.computer}`;
   }
-  if (pane.type === WorkspacePaneTypes.agent && pane.id) {
-    return `/${WorkspaceRouteSegments.agents}/${encodeURIComponent(pane.id)}`;
+  if (pane.type === WorkspacePaneTypes.agent) {
+    return pane.id ? `/${WorkspaceRouteSegments.agents}/${encodeURIComponent(pane.id)}` : "/agents";
   }
   if (pane.type === WorkspacePaneTypes.notifications) {
     return `/${WorkspaceRouteSegments.notifications}`;

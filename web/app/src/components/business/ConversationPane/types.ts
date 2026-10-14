@@ -1,3 +1,4 @@
+import type { TaskConfiguration } from "@/models/taskConfiguration";
 import type { SkillContinuation } from "@/models/slashCommands";
 import type { ContextUsage } from "@/models/modelMetadata";
 import type { Dispatch, KeyboardEvent as ReactKeyboardEvent, RefObject, SetStateAction } from "react";
@@ -93,8 +94,8 @@ export type ConversationPaneProps = {
   locale: LocaleCode;
   logAgent?: AgentLike | null;
   managerProfile?: AgentProfileLike | null;
-  managerProfileIncomplete?: boolean | null;
-  managerRuntimeUnavailable?: boolean | null;
+  composerDisabledReason?: string;
+  threadComposerDisabledReason?: string;
   memberMenuRef: RefObject<HTMLDivElement | null>;
   mentionCandidates: MentionPickerUser[];
   mentionIndex: number;
@@ -118,6 +119,7 @@ export type ConversationPaneProps = {
   onDeleteRoom: (id: string) => VoidOrPromise;
   onDismissThreadSlashPicker?: () => void;
   onInviteAction: () => void;
+  onNewTask?: (agentID?: string, configuration?: TaskConfiguration) => void;
   onMessageAction: (action: MessageAction, message?: MessageLike | null) => VoidOrPromise;
   onPreserveMessageAnchor?: (anchor?: HTMLElement | null) => void;
   onOpenAgentDetail?: (agent: AgentLike, anchor: HTMLElement) => VoidOrPromise;

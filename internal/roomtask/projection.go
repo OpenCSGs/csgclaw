@@ -2,9 +2,25 @@ package roomtask
 
 import (
 	"fmt"
+	"log/slog"
+	"time"
 
+	"csgclaw/internal/diagnostics"
 	"csgclaw/internal/taskcore"
 )
+
+// DeliveryError means the ledger is saved but an IM projection could not be
+// delivered. Retrying delivery preserves task IDs and execution attempts.
+type DeliveryError struct {
+	Projection Projection
+	Err        error
+}
+
+func (e *DeliveryError) Error() string {
+	p := e.Projection
+	return fmt.Sprintf("task state saved; notification delivery failed (room=%s task=%s message=%s participant=%s attempt=%d kind=%s); run task retry-delivery --room %s without rerunning work or restarting Serve: %v", p.RoomID, p.TaskID, p.ID, p.TargetID, p.Attempt, p.Kind, p.RoomID, diagnostics.Redact(e.Err.Error()))
+}
+func (e *DeliveryError) Unwrap() error { return e.Err }
 
 func eventID(root string, seq int64) string { return fmt.Sprintf("task:%s:event:%d", root, seq) }
 
@@ -62,7 +78,14 @@ func (s *Service) projection(root taskcore.Task, e taskcore.TaskEvent, r Roster)
 
 // Retry replays stable event IDs, not executions. IM and the participant bridge
 // deduplicate those IDs. No task lock is held while invoking the delivery sink.
-func (s *Service) RetryDelivery(room string) error {
+func (s *Service) RetryDelivery(room string) (deliveryErr error) {
+	start := time.Now()
+	count := 0
+	defer func() {
+		if elapsed := time.Since(start); elapsed >= time.Second {
+			slog.Warn("room task delivery replay slow", "phase", "message_projection", "room_id", room, "projection_count", count, "duration", elapsed, "failed", deliveryErr != nil)
+		}
+	}()
 	r, err := s.members(room)
 	if err != nil {
 		return err
@@ -79,8 +102,11 @@ func (s *Service) RetryDelivery(room string) error {
 			if !ok {
 				continue
 			}
+			count++
 			if err := s.send(p); err != nil {
-				return fmt.Errorf("task state saved; retry-delivery without rerunning work: %w", err)
+				failure := &DeliveryError{Projection: p, Err: err}
+				slog.Error("room task notification delivery failed", "phase", "message_projection", "room_id", p.RoomID, "task_id", p.TaskID, "message_id", p.ID, "participant_id", p.TargetID, "attempt", p.Attempt, "kind", p.Kind, "task_state_saved", true, "duration", time.Since(start), "error", diagnostics.Redact(err.Error()), "action", "retry task delivery; do not rerun work or restart Serve")
+				return failure
 			}
 			if e.Type == EventReported {
 				if err := s.core.Mutate(root.ID, func(a *taskcore.Snapshot, _ func() (string, error)) error {

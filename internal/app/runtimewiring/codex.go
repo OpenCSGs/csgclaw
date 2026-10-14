@@ -16,12 +16,17 @@ func WithCodexRuntime() agent.ControllerOption {
 			return fmt.Errorf("agent service is required")
 		}
 
+		if _, err := runtimecodex.DecodeRuntimeOptions(nil); err != nil {
+			return err
+		}
+
 		host := s.PicoClawRuntimeHost()
 		events := runtimecodex.NewEventSink()
 		permissions := runtimecodex.NewPermissionBroker(events)
 		userInputs := runtimecodex.NewUserInputBroker(events)
 		rt := runtimecodex.New(runtimecodex.Dependencies{
-			BinaryProvider: codexcli.Provider{},
+			ResolveRoomProfile: s.TaskRuntimeProfile,
+			BinaryProvider:     codexcli.Provider{},
 			MaterializeMCPServers: func(ctx context.Context, servers map[string]any) (map[string]any, error) {
 				return s.MaterializeRuntimeMCPServers(ctx, agent.RuntimeKindCodex, servers)
 			},

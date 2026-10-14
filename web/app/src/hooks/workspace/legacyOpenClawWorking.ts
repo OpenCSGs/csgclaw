@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { ConversationWorkingParticipant } from "@/components/business/ConversationPane";
 import {
   agentActivityToolMergeKey,
@@ -41,11 +41,28 @@ type LegacyWorkingResult = {
   participants: ConversationWorkingParticipant[];
 };
 
-export function useLegacyOpenClawWorkingFallback(
-  args: Omit<LegacyOpenClawWorkingArgs, "now">,
-): ConversationWorkingParticipant[] {
+export function useLegacyOpenClawWorkingFallback({
+  agents,
+  authoritative,
+  conversation,
+  currentUserID,
+  hasObservedWorkLease,
+  usersById,
+}: Omit<LegacyOpenClawWorkingArgs, "now">): ConversationWorkingParticipant[] {
   const [now, setNow] = useState(() => Date.now());
-  const result = legacyOpenClawWorkingResult({ ...args, now: Math.max(now, Date.now()) });
+  const result = useMemo(
+    () =>
+      legacyOpenClawWorkingResult({
+        agents,
+        authoritative,
+        conversation,
+        currentUserID,
+        hasObservedWorkLease,
+        usersById,
+        now: Math.max(now, Date.now()),
+      }),
+    [agents, authoritative, conversation, currentUserID, hasObservedWorkLease, now, usersById],
+  );
 
   useEffect(() => {
     if (result.nextDeadline === null) {

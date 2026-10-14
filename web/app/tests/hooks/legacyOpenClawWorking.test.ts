@@ -145,16 +145,18 @@ describe("withLegacyOpenClawWorkingFallback", () => {
         sender_id: "user-admin",
       },
     ]);
-    const { result } = renderHook(() =>
-      useLegacyOpenClawWorkingFallback({
-        agents: [agent("openclaw_sandbox")],
-        authoritative: [],
-        conversation: pendingConversation,
-        currentUserID: "user-admin",
-        hasObservedWorkLease: () => false,
-        usersById,
-      }),
-    );
+    const inputs = {
+      agents: [agent("openclaw_sandbox")],
+      authoritative: [],
+      conversation: pendingConversation,
+      currentUserID: "user-admin",
+      hasObservedWorkLease: () => false,
+      usersById,
+    };
+    const { result, rerender } = renderHook(() => useLegacyOpenClawWorkingFallback(inputs));
+    const initialParticipants = result.current;
+    rerender();
+    expect(result.current).toBe(initialParticipants);
 
     expect(result.current).toEqual([pendingParticipant()]);
     act(() => vi.advanceTimersByTime(90_000));

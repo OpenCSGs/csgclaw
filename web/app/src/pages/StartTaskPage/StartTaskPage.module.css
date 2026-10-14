@@ -1,0 +1,193 @@
+.page {
+  grid-column: 1 / -1;
+  grid-row: 1 / -1;
+  min-height: 0;
+  height: 100%;
+  overflow-y: auto;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  background: var(--panel);
+  color: var(--text);
+  --input-text-placeholder: var(--muted);
+}
+.inner {
+  width: min(880px, 100%);
+  padding: 44px 32px 56px;
+  margin: auto;
+  display: flex;
+  flex-direction: column;
+}
+.head {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  text-align: center;
+  margin-bottom: 22px;
+}
+.head h1 {
+  margin: 0;
+  font-size: 26px;
+  font-weight: 600;
+  line-height: 34px;
+  letter-spacing: -0.01em;
+}
+.head p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 21px;
+}
+.pane {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.composerGroup {
+  position: relative;
+}
+.composer {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid color-mix(in srgb, var(--text) 16%, transparent);
+  border-radius: 18px;
+  background: var(--input-background);
+  box-shadow: var(--shadow-xs);
+  overflow: hidden;
+}
+.page .composer .input {
+  min-height: 148px;
+  padding: 16px 16px 8px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 15.5px;
+  line-height: 25px;
+  resize: none;
+}
+.page .composer .input:focus {
+  outline: none;
+  box-shadow: none;
+}
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px 10px;
+}
+.page .actions .send {
+  border-radius: 50%;
+  width: 28px;
+  min-width: 28px;
+  height: 28px;
+  min-height: 28px;
+  padding: 0;
+}
+.files {
+  list-style: none;
+  margin: 0;
+  padding: 0 12px;
+}
+.files li {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+}
+.preset {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--primary);
+}
+.setup {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  display: grid;
+  gap: 10px;
+}
+.setup p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+.setup > button {
+  justify-self: start;
+}
+.error {
+  color: var(--danger);
+  font-size: 13px;
+  margin: 0;
+}
+.emptyRoom {
+  align-self: flex-start;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  padding: 4px;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.examples {
+  margin-top: 34px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.chip {
+  padding: 5px 12px 5px 9px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font: inherit;
+  font-size: 12.5px;
+  line-height: 20px;
+  cursor: pointer;
+}
+.chip svg {
+  color: var(--primary);
+}
+.chip:hover {
+  border-color: var(--primary);
+  color: var(--text);
+  background: var(--primary-soft);
+}
+.examplesClose {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  width: 24px;
+  height: 24px;
+  cursor: pointer;
+}
+@media (max-width: 960px) {
+  .inner {
+    padding: 32px 20px 40px;
+  }
+  .examples {
+    flex-wrap: wrap;
+  }
+}

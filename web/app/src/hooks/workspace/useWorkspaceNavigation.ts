@@ -1,4 +1,5 @@
 import { useCallback, useEffect } from "react";
+import { settingsDialogSearch, profileDialogSearch } from "@/models/workspaceDialogs";
 import {
   DefaultWorkspacePaneIds,
   WorkspacePaneTypes,
@@ -99,14 +100,13 @@ export function useWorkspaceNavigation({
   );
 
   const selectHuman = useCallback(
-    (item: { id?: string | null } | null | undefined, options: NavigatePaneOptions = {}) => {
+    (item: { id?: string | null } | null | undefined) => {
       if (!item?.id) {
         return;
       }
-      const next: WorkspacePane = { type: WorkspacePaneTypes.human, id: item.id };
-      navigatePane(next, rooms, options);
+      navigate({ search: profileDialogSearch(location.search, item.id) }, { replace: true });
     },
-    [navigatePane, rooms],
+    [location.search, navigate],
   );
 
   const selectComputer = useCallback(
@@ -125,13 +125,9 @@ export function useWorkspaceNavigation({
     [navigatePane, rooms],
   );
 
-  const selectSettings = useCallback(
-    (options: NavigatePaneOptions = {}) => {
-      const next: WorkspacePane = { type: WorkspacePaneTypes.settings, id: "" };
-      navigatePane(next, rooms, options);
-    },
-    [navigatePane, rooms],
-  );
+  const selectSettings = useCallback(() => {
+    navigate({ search: settingsDialogSearch(location.search) }, { replace: true });
+  }, [location.search, navigate]);
 
   const selectTasks = useCallback(
     (taskID = "", options: NavigatePaneOptions = {}) => {

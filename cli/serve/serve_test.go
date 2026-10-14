@@ -1424,7 +1424,7 @@ models = ["${MODEL_ID}"]
 		`access_token = "pc*********et"`,
 		`no_auth = true`,
 		`default_manager_template = "builtin.manager-codex"`,
-		`default_worker_template = "builtin.openclaw-worker"`,
+		`default_worker_template = "builtin.codex-worker"`,
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("effective config missing %q:\n%s", want, got)
@@ -1472,7 +1472,7 @@ models = ["gpt-test"]
 	if got, want := cfg.Bootstrap.DefaultManagerTemplate, "builtin.manager-codex"; got != want {
 		t.Fatalf("cfg.Bootstrap.DefaultManagerTemplate = %q, want %q", got, want)
 	}
-	if got, want := cfg.Bootstrap.DefaultWorkerTemplate, "builtin.openclaw-worker"; got != want {
+	if got, want := cfg.Bootstrap.DefaultWorkerTemplate, "builtin.codex-worker"; got != want {
 		t.Fatalf("cfg.Bootstrap.DefaultWorkerTemplate = %q, want %q", got, want)
 	}
 
@@ -1483,7 +1483,7 @@ models = ["gpt-test"]
 	saved := string(data)
 	for _, want := range []string{
 		`default_manager_template = "builtin.manager-codex"`,
-		`default_worker_template = "builtin.openclaw-worker"`,
+		`default_worker_template = "builtin.codex-worker"`,
 	} {
 		if !strings.Contains(saved, want) {
 			t.Fatalf("saved config missing %q:\n%s", want, saved)
@@ -2179,5 +2179,19 @@ func (m *fakeFeishuBindingManager) Reconcile(ctx context.Context) error {
 func (m *fakeFeishuBindingManager) Close() {
 	if m != nil && m.close != nil {
 		m.close()
+	}
+}
+
+func TestRefreshStartupModelProvidersSkipsCSGHub(t *testing.T) {
+	previous := CheckCatalogModelProvider
+	t.Cleanup(func() { CheckCatalogModelProvider = previous })
+	CheckCatalogModelProvider = func(context.Context, agent.ModelProviderCheckInput) agent.ModelProviderCheckResult {
+		t.Fatal("platform startup probed models")
+		return agent.ModelProviderCheckResult{}
+	}
+	cfg := config.Config{Sandbox: config.SandboxConfig{Provider: "csghub"}}
+	_, results, err := refreshStartupModelProviders(context.Background(), cfg, filepath.Join(t.TempDir(), "missing", "config.toml"), nil)
+	if err != nil || len(results) != 0 {
+		t.Fatalf("results = %v, error = %v", results, err)
 	}
 }

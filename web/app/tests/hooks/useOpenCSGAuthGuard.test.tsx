@@ -17,6 +17,20 @@ function authenticatedStatus(loggedInAt: string): AuthStatus {
 }
 
 describe("useOpenCSGAuthGuard", () => {
+  it("opens reauthorization when a background auth failure is retried explicitly", () => {
+    const error = { status: 401 };
+    const { result } = renderHook(() =>
+      useOpenCSGAuthGuard({ login: vi.fn(), status: authenticatedStatus("2026-10-14T00:00:00Z") }),
+    );
+    act(() => {
+      result.current.handleAuthenticationError(error, { openDialog: false });
+    });
+    expect(result.current.dialogOpen).toBe(false);
+    act(() => {
+      result.current.handleAuthenticationError(error);
+    });
+    expect(result.current.dialogOpen).toBe(true);
+  });
   it("opens the shared login dialog when authentication is required", () => {
     const login = vi.fn(async () => {});
     const { result, rerender } = renderHook(

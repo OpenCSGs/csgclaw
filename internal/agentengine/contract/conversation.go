@@ -1,6 +1,9 @@
 package contract
 
-import "context"
+import (
+	"context"
+	"csgclaw/internal/taskconfig"
+)
 
 // ConversationInterface executes conversations for the Agent selected by
 // Conversations.
@@ -83,16 +86,23 @@ type InputFile struct {
 	Resolved *OutputFile `json:"-"`
 }
 
+// RoomConfiguration supplies execution settings without adding a conversation identity.
+type RoomConfiguration struct {
+	RoomID        string
+	Configuration taskconfig.Config
+}
+
 // TurnRequest contains conversation identity and caller-normalized input.
 type TurnRequest struct {
-	ImageGeneration *ImageGenerationTask `json:"image_generation,omitempty"`
-	VideoGeneration *VideoGenerationTask `json:"video_generation,omitempty"`
-	ID              TurnID               `json:"id"`
-	ConversationKey ConversationKey      `json:"conversation_key"`
-	Input           []InputPart          `json:"input"`
-	Admission       AdmissionPolicy      `json:"admission,omitempty"`
-	Continuation    ContinuationPolicy   `json:"continuation,omitempty"`
-	Interaction     InteractionPolicy    `json:"interaction,omitempty"`
+	RoomConfiguration *RoomConfiguration   `json:"-"`
+	ImageGeneration   *ImageGenerationTask `json:"image_generation,omitempty"`
+	VideoGeneration   *VideoGenerationTask `json:"video_generation,omitempty"`
+	ID                TurnID               `json:"id"`
+	ConversationKey   ConversationKey      `json:"conversation_key"`
+	Input             []InputPart          `json:"input"`
+	Admission         AdmissionPolicy      `json:"admission,omitempty"`
+	Continuation      ContinuationPolicy   `json:"continuation,omitempty"`
+	Interaction       InteractionPolicy    `json:"interaction,omitempty"`
 }
 
 // TurnEventKind identifies progress emitted during a turn.

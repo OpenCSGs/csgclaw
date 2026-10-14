@@ -117,6 +117,11 @@ OpenClaw 和 PicoClaw 继续通过这些原生 gateway 协议提供支持。
 托管 CSGClaw 和飞书 Binding Manager 选择 Local Codex Agent。
 缺少 Conversation Adapter 或 Extension Driver 时返回明确的不支持状态，不选择旧执行路径。
 
+Local DSH 在新建和恢复会话时，依据选中配置模型后 ACP 返回的选项选择推理强度。
+精确匹配的档位保持原样；其余开启推理的档位映射到就近的可用档位，距离相同时优先更高档位，`max` 排在 `xhigh` 之上。
+当 DSH 提供 `off`、`low`、`high`、`max` 时，`minimal` 映射为 `low`、`medium` 映射为 `high`、`xhigh` 映射为 `max`，不修改 Profile 中的原始值。
+模型默认不发送显式推理选项；关闭推理要求 DSH 提供 `off` 或 `none` 选项。
+
 ## RuntimeExtension
 
 Extension 只持久化 name、kind、Source 引用、failure policy 和状态。

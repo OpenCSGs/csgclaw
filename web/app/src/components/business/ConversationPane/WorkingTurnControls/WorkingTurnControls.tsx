@@ -9,11 +9,13 @@ export function WorkingTurnControls({
   t,
   onStop,
   placement = "inline",
+  hideContextUsage = false,
 }: {
   participant: ConversationWorkingParticipant;
   t: TranslateFn;
   onStop?: (participant: ConversationWorkingParticipant) => VoidOrPromise;
   placement?: "inline" | "message";
+  hideContextUsage?: boolean;
 }) {
   const busy = participant.stopping || participant.stopSending;
   const stopLabel = participant.stopping
@@ -32,7 +34,7 @@ export function WorkingTurnControls({
     return null;
   const content = (
     <>
-      {!message && (participant.showContextUsage || participant.contextUsage) ? (
+      {!message && !hideContextUsage && (participant.showContextUsage || participant.contextUsage) ? (
         <ContextUsageRing usage={participant.contextUsage} t={t} />
       ) : null}
       {participant.canStop && onStop ? (

@@ -112,7 +112,7 @@ function managerChatProps(
     locale: "en",
     logAgent: null,
     managerProfile: null,
-    managerProfileIncomplete: false,
+    composerDisabledReason: "",
     memberMenuRef: createRef<HTMLDivElement>(),
     mentionCandidates: [],
     mentionIndex: 0,

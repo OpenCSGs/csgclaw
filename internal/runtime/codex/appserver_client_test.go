@@ -162,7 +162,7 @@ func TestAppServerClientRespondsErrorForUnhandledServerRequest(t *testing.T) {
 	if !ok {
 		t.Fatalf("response error = %#v, want object", resp["error"])
 	}
-	if got := errObj["code"]; got != float64(-32601) {
+	if got := errObj["code"]; got != float64(appServerRPCMethodNotFound) {
 		t.Fatalf("error code = %v, want -32601", got)
 	}
 }

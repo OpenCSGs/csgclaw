@@ -1,3 +1,4 @@
+import type { TaskEntryController } from "@/hooks/workspace/useTaskEntry";
 import type { AgentLike } from "@/models/agents";
 import type { CreateTeamPayload } from "@/api/tasks";
 import type {
@@ -46,6 +47,7 @@ export const WorkspaceContextSectionIds = {
 export type WorkspaceContextSectionId = ValueOf<typeof WorkspaceContextSectionIds>;
 
 export type WorkspaceSidebarProps = {
+  taskEntry?: TaskEntryController;
   activePane: WorkspacePane;
   onSelectApps?: () => void;
   activeThreadRootID: string;
@@ -62,6 +64,7 @@ export type WorkspaceSidebarProps = {
   authError: string;
   authPending: boolean;
   authStatus: AuthStatus;
+  authExpired?: boolean;
   directMessages: IMConversation[];
   showUpgradeControls: boolean;
   hub: WorkspaceHubController["hub"];

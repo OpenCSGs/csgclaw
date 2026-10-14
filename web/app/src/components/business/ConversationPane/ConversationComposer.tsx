@@ -1,11 +1,12 @@
+import { ComposerAddMenu } from "./ComposerAddMenu";
 import type { SkillContinuation } from "@/models/slashCommands";
 import { WorkingTurnControls } from "./WorkingTurnControls";
 import { memo, useId, useMemo, useRef } from "react";
-import type { KeyboardEvent as ReactKeyboardEvent, RefObject } from "react";
-import { ArrowUp, ChevronRight, Paperclip, Plus, RotateCcw, Square, Undo2 } from "lucide-react";
+import type { KeyboardEvent as ReactKeyboardEvent, RefObject, ReactNode } from "react";
+import { ArrowUp, ChevronRight, RotateCcw, Square, Undo2 } from "lucide-react";
 import { CLIProxyAuthControl } from "@/components/business/ProfileControls";
 import type { DocumentPreviewRequest } from "@/components/business/DocumentPreviewPanel";
-import { Button, PopoverClose, PopoverContent, PopoverRoot, PopoverTrigger, Tooltip } from "@/components/ui";
+import { Button, Tooltip } from "@/components/ui";
 import type { CLIProxyAuthStatusMap } from "@/hooks/workspace/useCLIProxyAuthStatuses";
 import type { AgentProfileLike } from "@/models/agents";
 import type { AttachmentDraft } from "@/models/attachments";
@@ -75,6 +76,8 @@ export type ConversationComposerProps = {
   slashPickerOpen: boolean;
   t: TranslateFn;
   workingParticipants?: ConversationWorkingParticipant[];
+  toolbar?: ReactNode;
+  hideWorkingContextUsage?: boolean;
 };
 
 export const ConversationComposer = memo(function ConversationComposer({
@@ -104,6 +107,8 @@ export const ConversationComposer = memo(function ConversationComposer({
   slashPickerOpen,
   t,
   workingParticipants = [],
+  toolbar,
+  hideWorkingContextUsage = false,
   onApplyMention,
   onApplySlashCandidate,
   onAddAttachments = () => {},
@@ -164,6 +169,7 @@ export const ConversationComposer = memo(function ConversationComposer({
       {workingParticipants.length > 0 ? (
         <ComposerWorkingIndicator
           participants={workingParticipants}
+          hideContextUsage={hideWorkingContextUsage}
           t={t}
           onAction={onWorkingAction}
           onStop={onStopWorkingTurn}
@@ -270,6 +276,7 @@ export const ConversationComposer = memo(function ConversationComposer({
               event.currentTarget.value = "";
             }}
           />
+          {toolbar}
           <span id={composerHelpId} className="sr-only">
             {t("composerTip")}
           </span>
@@ -340,12 +347,14 @@ export const ConversationComposer = memo(function ConversationComposer({
 });
 
 function ComposerWorkingIndicator({
+  hideContextUsage,
   participants,
   t,
   onAction,
   onStop,
 }: {
   participants: readonly ConversationWorkingParticipant[];
+  hideContextUsage?: boolean;
   t: TranslateFn;
   onAction?: (participant?: ConversationWorkingParticipant) => void;
   onStop?: (participant: ConversationWorkingParticipant) => VoidOrPromise;
@@ -357,6 +366,7 @@ function ComposerWorkingIndicator({
           <ComposerWorkingTurn
             key={participant.leaseID || participant.id || participant.name}
             participant={participant}
+            hideContextUsage={hideContextUsage}
             t={t}
             onAction={onAction}
             onStop={onStop}
@@ -368,12 +378,14 @@ function ComposerWorkingIndicator({
 }
 
 function ComposerWorkingTurn({
+  hideContextUsage,
   participant,
   t,
   onAction,
   onStop,
 }: {
   participant: ConversationWorkingParticipant;
+  hideContextUsage?: boolean;
   t: TranslateFn;
   onAction?: (participant?: ConversationWorkingParticipant) => void;
   onStop?: (participant: ConversationWorkingParticipant) => VoidOrPromise;
@@ -431,7 +443,7 @@ function ComposerWorkingTurn({
             {content}
           </div>
         )}
-        <WorkingTurnControls participant={participant} t={t} onStop={onStop} />
+        <WorkingTurnControls participant={participant} t={t} onStop={onStop} hideContextUsage={hideContextUsage} />
         {participant.contextUsage?.compacting || thinkingLatestLine ? (
           <span className="composer-thinking-latest">
             {participant.contextUsage?.compacting ? t("contextCompacting") : thinkingLatestLine}
@@ -477,51 +489,4 @@ function workingActionLabel(action: ConversationWorkingAction, t: TranslateFn): 
     default:
       return t("conversationWorkingThinking");
   }
-}
-
-type ComposerAddMenuProps = {
-  disabled: boolean;
-  t: TranslateFn;
-  onAddFiles: () => void;
-};
-
-function ComposerAddMenu({ disabled, t, onAddFiles }: ComposerAddMenuProps) {
-  return (
-    <PopoverRoot>
-      <Tooltip content={t("composerAddContent")}>
-        <PopoverTrigger asChild>
-          <span>
-            <Button
-              aria-haspopup="dialog"
-              aria-label={t("composerAddContent")}
-              className="composer-add-button"
-              disabled={disabled}
-              iconOnly
-              size="lg"
-              variant="tertiaryGray"
-            >
-              <Plus aria-hidden="true" size={24} strokeWidth={1.8} />
-            </Button>
-          </span>
-        </PopoverTrigger>
-      </Tooltip>
-      <PopoverContent aria-label={t("composerAddContent")} className="composer-add-popover" role="dialog" side="top">
-        <section className="composer-add-section" aria-label={t("composerAdd")}>
-          <div className="composer-add-section-label">{t("composerAdd")}</div>
-          <PopoverClose asChild>
-            <button
-              type="button"
-              className="composer-add-menu-item"
-              aria-label={t("addAttachment")}
-              title={t("addAttachment")}
-              onClick={onAddFiles}
-            >
-              <Paperclip aria-hidden="true" size={19} />
-              <span>{t("addAttachment")}</span>
-            </button>
-          </PopoverClose>
-        </section>
-      </PopoverContent>
-    </PopoverRoot>
-  );
 }

@@ -1,10 +1,10 @@
+import { TaskConversationControls } from "../TaskConversationControls/TaskConversationControls";
 import { WorkingTurnControls } from "@/components/business/ConversationPane/WorkingTurnControls";
 import { workingParticipantForProgress } from "@/models/turnWorkingParticipant";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { errorMessage } from "@/api/client";
 import {
   Conversation,
-  ContextUsageRing,
   AgentQuestionComposer,
   type ConversationWorkingParticipant,
   type ConversationPaneProps,
@@ -216,6 +216,7 @@ function ConversationPaneContent({
   onClearRoomMessages = (_id) => {},
   inviteActionLabel,
   onInviteAction,
+  onNewTask,
   mentionCandidates,
   mentionIndex,
   onApplyMention,
@@ -234,8 +235,8 @@ function ConversationPaneContent({
   onDismissThreadSlashPicker = () => {},
   onSetThreadSlashIndex = (_index) => {},
   managerProfile,
-  managerProfileIncomplete,
-  managerRuntimeUnavailable,
+  composerDisabledReason = "",
+  threadComposerDisabledReason = "",
   authStatuses,
   authBusyProvider,
   onProviderLogin,
@@ -293,16 +294,23 @@ function ConversationPaneContent({
   const [deleteRoomError, setDeleteRoomError] = useState("");
   const [documentPreview, setDocumentPreview] = useState<DocumentPreviewRequest | null>(null);
   const [citationSelection, setCitationSelection] = useState<CitationSelection | null>(null);
-  const composerDisabledReason = managerRuntimeUnavailable ? t("managerCodexMissingWarning") : t("profileIncomplete");
-  const composerDisabled = Boolean(managerRuntimeUnavailable || managerProfileIncomplete);
+  const composerDisabled = Boolean(composerDisabledReason);
+  const mainMessages = useMemo(
+    () => conversation.messages.filter((message) => !message.relates_to),
+    [conversation.messages],
+  );
+  const threadMessages = useMemo(
+    () => (activeThreadView?.root ? [activeThreadView.root, ...(activeThreadView.replies ?? [])] : []),
+    [activeThreadView],
+  );
   const questionMode = useQuestionAnswerMode({
-    messages: conversation.messages.filter((message) => !message.relates_to),
+    messages: mainMessages,
     responderID: currentUserID,
     roomID: conversation.id,
     t,
   });
   const threadQuestionMode = useQuestionAnswerMode({
-    messages: activeThreadView?.root ? [activeThreadView.root, ...(activeThreadView.replies ?? [])] : [],
+    messages: threadMessages,
     responderID: currentUserID,
     roomID: conversation.id,
     t,
@@ -358,9 +366,6 @@ function ConversationPaneContent({
         ? {
             header: (
               <>
-                {participant.showContextUsage || participant.contextUsage ? (
-                  <ContextUsageRing usage={participant.contextUsage} t={t} />
-                ) : null}
                 <WorkingTurnControls participant={participant} t={t} onStop={onStopWorkingTurn} placement="message" />
               </>
             ),
@@ -484,7 +489,7 @@ function ConversationPaneContent({
       error={threadError}
       draftSegments={threadDraftSegments}
       attachmentDrafts={threadAttachmentDrafts}
-      disabled={composerDisabled}
+      disabled={Boolean(threadComposerDisabledReason)}
       usersById={usersById}
       locale={locale}
       theme={theme}
@@ -598,7 +603,7 @@ function ConversationPaneContent({
         agents={agents}
         conversation={conversation}
         currentUserID={currentUserID}
-        emptyStateSlot={<></>}
+        emptyStateSlot={false}
         locale={locale}
         messageActionBusy={messageActionBusy}
         messageActionFeedback={messageActionFeedback}
@@ -645,6 +650,16 @@ function ConversationPaneContent({
           slashPickerLoading={slashPickerLoading}
           slashPickerOpen={slashPickerOpen}
           t={t}
+          toolbar={
+            <TaskConversationControls
+              conversation={conversation}
+              participants={workingParticipantsWithActivity}
+              agents={agents}
+              t={t}
+              onNewTask={onNewTask}
+            />
+          }
+          hideWorkingContextUsage
           workingParticipants={messageControls.composerParticipants}
           onApplyMention={onApplyMention}
           onApplySlashCandidate={onApplySlashCandidate}

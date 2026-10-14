@@ -165,6 +165,18 @@ export type UseConfigControllerArgs = {
 export type ConfigController = {
   configModalProps: ConfigModalControllerProps | null;
   openConfigModal: () => void;
+  settings: {
+    draft: ConfigSettingsDraft;
+    providers: string[];
+    hubTemplates: readonly HubTemplate[];
+    loading: boolean;
+    phase: ConfigPhase;
+    error: string;
+    onDraftChange: (patch: Partial<ConfigSettingsDraft>) => void;
+    onReload: () => void;
+    onSaveAndRestart: () => Promise<void>;
+    load: () => Promise<void>;
+  };
 };
 
 export type ProfilePreviewAnchorRect = {
@@ -203,6 +215,7 @@ export type ProfilePreviewController = {
 };
 
 export type UseConversationControllerArgs = {
+  modelProviders?: ModelProviderCatalog | null;
   activeConversationId: string;
   activePane: WorkspacePane;
   agents: AgentLike[];
@@ -259,11 +272,13 @@ export type UseAgentControllerArgs = {
   openCSGAuthGuard: OpenCSGAuthGuard;
   onAgentDeleted?: (item: AgentLike) => void;
   profileDetailAgentID?: string;
+  redirectToIncompleteManagerProfile?: boolean;
   refreshMCPServers?: () => Promise<unknown>;
   refreshHubTemplates: () => Promise<void>;
   refreshWorkspaceAgents: (options?: FetchAgentsOptions) => Promise<AgentLike[]>;
   refreshWorkspaceBootstrap: () => Promise<IMData | null>;
   refreshWorkspaceBootstrapConfig: () => Promise<RuntimeBootstrapConfig | null>;
+  refreshWorkspaceHubTemplates?: () => Promise<HubTemplate[]>;
   refreshWorkspaceManagerProfile: () => Promise<AgentProfileLike | null>;
   refreshWorkspaceModelProviders?: () => Promise<ModelProviderCatalog | null>;
   rooms: IMConversation[];

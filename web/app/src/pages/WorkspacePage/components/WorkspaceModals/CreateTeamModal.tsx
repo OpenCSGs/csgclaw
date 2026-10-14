@@ -53,17 +53,15 @@ export function CreateTeamModal({
           <ModalCloseButton label={t("close")} onClose={onClose} />
         </div>
 
-        {editing ? null : (
-          <label className="field">
-            <span>{requiredFieldLabel(t("teamNameLabel"))}</span>
-            <input
-              autoFocus
-              value={teamTitle}
-              onChange={(event) => onTeamTitleChange(event.currentTarget.value)}
-              placeholder={t("teamNamePlaceholder")}
-            />
-          </label>
-        )}
+        <label className="field">
+          <span>{requiredFieldLabel(t("teamNameLabel"))}</span>
+          <input
+            autoFocus
+            value={teamTitle}
+            onChange={(event) => onTeamTitleChange(event.currentTarget.value)}
+            placeholder={t("teamNamePlaceholder")}
+          />
+        </label>
 
         <div className="field">
           <span>{t("teamMembersLabel")}</span>

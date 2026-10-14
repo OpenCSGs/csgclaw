@@ -190,15 +190,12 @@ func configureSession(ctx context.Context, proc *process, sessionID string, opti
 	if err := proc.client.call(ctx, "session/set_config_option", map[string]any{"sessionId": sessionID, "configId": "model", "value": modelValue}, &updated, nil); err != nil {
 		return fmt.Errorf("select DSH model: %w", err)
 	}
-	if effort := strings.TrimSpace(proc.profile.ReasoningEffort); !config.UsesModelReasoningDefault(effort) {
-		if effort == config.ReasoningEffortNone {
-			effort = "off"
-		}
+	if effort := config.NormalizeReasoningEffort(proc.profile.ReasoningEffort); !config.UsesModelReasoningDefault(effort) {
 		candidateOptions := updated.ConfigOptions
 		if len(candidateOptions) == 0 {
 			candidateOptions = options
 		}
-		effortValue, found := selectOption(candidateOptions, "reasoning_effort", effort)
+		effortValue, found := selectReasoningEffort(candidateOptions, effort)
 		if !found {
 			return fmt.Errorf("DSH ACP does not advertise reasoning effort %q", effort)
 		}
@@ -207,6 +204,42 @@ func configureSession(ctx context.Context, proc *process, sessionID string, opti
 		}
 	}
 	return nil
+}
+
+// selectReasoningEffort uses the selected model's advertised values. Missing
+// positive efforts map to the nearest supported level, preferring higher on a
+// tie. Disabling reasoning requires an explicit off/none option.
+func selectReasoningEffort(options []json.RawMessage, desired string) (string, bool) {
+	desired = config.NormalizeReasoningEffort(desired)
+	if desired == config.ReasoningEffortNone {
+		if value, ok := selectOption(options, "reasoning_effort", "off"); ok {
+			return value, true
+		}
+	}
+	if value, ok := selectOption(options, "reasoning_effort", desired); ok {
+		return value, true
+	}
+	levels := append(config.CommonReasoningEfforts(), "max")
+	requested := -1
+	for i, level := range levels {
+		if level == desired {
+			requested = i
+			break
+		}
+	}
+	if requested < 0 {
+		return "", false
+	}
+	for distance := 1; distance < len(levels); distance++ {
+		for _, i := range []int{requested + distance, requested - distance} {
+			if i >= 0 && i < len(levels) {
+				if value, ok := selectOption(options, "reasoning_effort", levels[i]); ok {
+					return value, true
+				}
+			}
+		}
+	}
+	return "", false
 }
 
 func selectOption(options []json.RawMessage, configID, desired string) (string, bool) {

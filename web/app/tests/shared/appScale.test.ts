@@ -23,6 +23,7 @@ describe("default app scale", () => {
     expect(globals).toContain("font-family: var(--font-sans);");
     expect(workspace).toContain("height: var(--app-ui-viewport-height);");
     expect(workspaceLayout.match(/height: var\(--app-ui-viewport-height\);/g)).toHaveLength(3);
-    expect(settings).toContain("min-height: var(--app-ui-viewport-height);");
+    expect(settings).not.toContain("zoom:");
+    expect(settings).not.toContain("125dvh");
   });
 });

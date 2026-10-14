@@ -34,7 +34,7 @@ export function isHubTemplateMemoryEnabled(template: HubTemplate | null | undefi
   const runtimeKind = String(template?.runtime_kind ?? "")
     .trim()
     .toLowerCase();
-  if (runtimeKind !== "codex") return false;
+  if (runtimeKind !== "codex" && runtimeKind !== "dsh") return false;
   return (
     String(template?.runtime_options?.memory_mode ?? "enabled")
       .trim()
@@ -47,11 +47,7 @@ export function isVisibleInHubTemplateList(template: HubTemplate | null | undefi
     .trim()
     .toLowerCase();
   if (sourceKind === HUB_REGISTRY_KIND_REMOTE) {
-    return (
-      String(template?.source?.name ?? "")
-        .trim()
-        .toLowerCase() === OFFICIAL_HUB_REGISTRY_NAME
-    );
+    return true;
   }
   return (
     String(template?.role ?? "")

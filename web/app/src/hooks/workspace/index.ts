@@ -16,3 +16,5 @@ export * from "./useWorkspaceNavigation";
 export * from "./useWorkspaceShellController";
 export * from "./workspaceQueries";
 export * from "./workspaceUiStore";
+
+export * from "./useWorkspaceDialogs";

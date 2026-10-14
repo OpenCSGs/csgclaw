@@ -1,0 +1,31 @@
+.controls {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.defaults {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--muted);
+  min-width: 0;
+}
+.defaults > span {
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.usage {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.usage small {
+  font-size: 11px;
+  color: var(--muted);
+}

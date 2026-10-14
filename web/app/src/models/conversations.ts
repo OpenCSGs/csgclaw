@@ -1,3 +1,4 @@
+import type { TaskConfiguration } from "@/models/taskConfiguration";
 import { newerProgressMessage } from "@/models/turnProgress";
 import type { ContextUsage } from "@/models/modelMetadata";
 import { flattenMentionText } from "@/components/business/MessageContent/mentions";
@@ -152,6 +153,14 @@ function videoGenerationParentMessageID(message: IMMessage): string {
 }
 
 export type IMConversation = {
+  configuration?: TaskConfiguration;
+  archived?: boolean;
+  pinned?: boolean;
+  custom_title?: boolean;
+  task_session?: boolean;
+  created_at?: string;
+  client_request_id?: string;
+
   type?: RoomType | null;
   manager_id?: string;
   description?: string | null;
@@ -856,9 +865,6 @@ export function formatTime(value: string | number | Date | null | undefined, loc
   });
 }
 
-/** Format a timestamp for sidebar list items:
- *  today → time only, yesterday → "昨天"/"Yesterday",
- *  2–7 days ago → weekday, same year → month-day, older → year-month-day. */
 export function formatSidebarTime(
   value: string | number | Date | null | undefined,
   locale: LocaleCode,
@@ -997,7 +1003,7 @@ export function applyIMEvent<T extends IMData | null | undefined>(
     return applyThreadToData(current, event.room_id || event.thread.room_id, event.thread);
   }
   if (event.type === "room.updated" && event.room?.id) {
-    return mergeRoomNotificationUpdateInData(current, event.room as IMConversation);
+    return mergeRoomMetadataUpdateInData(current, event.room as IMConversation);
   }
   if (
     (event.type === "conversation.created" ||
@@ -1205,7 +1211,7 @@ export function upsertConversationInData<T extends IMData | null | undefined>(
   return { ...current, rooms: sortConversations(rooms) };
 }
 
-export function mergeRoomNotificationUpdateInData<T extends IMData | null | undefined>(
+export function mergeRoomMetadataUpdateInData<T extends IMData | null | undefined>(
   current: T,
   conversation: IMConversation | null | undefined,
 ): T | IMData {
@@ -1219,7 +1225,15 @@ export function mergeRoomNotificationUpdateInData<T extends IMData | null | unde
   }
   const rooms = current.rooms.map((item) =>
     item.id === conversation.id
-      ? { ...item, notify_all_agents: conversation.notify_all_agents ?? item.notify_all_agents }
+      ? {
+          ...item,
+          title: conversation.title,
+          custom_title: Boolean(conversation.custom_title),
+          archived: Boolean(conversation.archived),
+          pinned: Boolean(conversation.pinned),
+          configuration: conversation.configuration,
+          notify_all_agents: conversation.notify_all_agents ?? item.notify_all_agents,
+        }
       : item,
   );
   return { ...current, rooms };

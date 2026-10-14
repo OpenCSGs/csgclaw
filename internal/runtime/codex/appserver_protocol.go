@@ -21,6 +21,12 @@ type appServerServerRequest struct {
 	Params json.RawMessage
 }
 
+const (
+	appServerRPCInvalidRequest = -32600
+	appServerRPCMethodNotFound = -32601
+	appServerRPCInternalError  = -32603
+)
+
 type appServerRPCError struct {
 	Code    int             `json:"code"`
 	Message string          `json:"message"`

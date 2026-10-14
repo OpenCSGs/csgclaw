@@ -1,6 +1,6 @@
 import { useWorkspaceControllerContext } from "@/hooks/workspace";
 import { ComputerView } from "./components";
-import { useAgentRuntimes } from "./useAgentRuntimes";
+import { useAgentRuntimes } from "@/components/business/AgentRuntimeSection/useAgentRuntimes";
 
 export function ComputerPage() {
   const controller = useWorkspaceControllerContext();

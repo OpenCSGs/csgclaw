@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"strings"
 	"sync"
+	"time"
 
 	"csgclaw/internal/agentengine"
 	"csgclaw/internal/channel"
@@ -224,15 +225,35 @@ func (w *Worker) handle(ctx context.Context, item queuedEvent) {
 		cancel()
 		w.clearActive(item.conversationKey, item.dedupeKey)
 	}()
+	start := time.Now()
+	attrs := []any{"phase", "agent_turn", "binding_id", w.binding.StableID(), "participant_id", w.binding.ParticipantID, "agent_id", w.binding.AgentID, "room_id", item.event.RoomID, "task_id", item.event.TaskID, "attempt", item.event.TaskAttempt, "message_id", item.event.MessageID, "conversation_key", item.conversationKey}
+	if item.event.RoomManager {
+		attrs = append(attrs, "room_role", "manager")
+	} else {
+		attrs = append(attrs, "room_role", "worker")
+	}
+	if item.event.TaskID != "" {
+		slog.Info("room task Agent turn starting", attrs...)
+	}
 	outcome, err := w.adapter.Handle(turnCtx, w.binding, item.event)
-	if err != nil {
+	attrs = append(attrs, "turn_id", outcome.Turn.TurnID, "duration", time.Since(start), "turn_status", outcome.Result.Status)
+	if item.event.TaskID != "" {
+		if err != nil {
+			slog.Error("room task Agent turn failed", append(attrs, "error", diagnostics.Redact(err.Error()))...)
+		} else if outcome.Result.Error != nil {
+			slog.Error("room task Agent runtime failed", append(attrs, "error_code", outcome.Result.Error.Code, "error", diagnostics.Redact(outcome.Result.Error.Message))...)
+		} else {
+			slog.Info("room task Agent turn finished", attrs...)
+		}
+	}
+	if err != nil && item.event.TaskID == "" {
 		slog.Error("handle built-in IM event failed",
 			"binding_id", w.binding.StableID(),
 			"participant_id", w.binding.ParticipantID,
 			"message_id", item.event.MessageID,
 			"conversation_key", item.conversationKey,
 			"turn_id", outcome.Turn.TurnID,
-			"error", err,
+			"error", diagnostics.Redact(err.Error()),
 		)
 	}
 }

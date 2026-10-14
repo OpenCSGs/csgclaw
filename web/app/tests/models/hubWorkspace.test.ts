@@ -48,14 +48,14 @@ describe("hub workspace helpers", () => {
     ).toBe(false);
   });
 
-  it("shows memory only for Codex templates whose memory mode is enabled", () => {
-    expect(isHubTemplateMemoryEnabled({ runtime_kind: "codex" })).toBe(true);
-    expect(isHubTemplateMemoryEnabled({ runtime_kind: "codex", runtime_options: { memory_mode: "enabled" } })).toBe(
+  it.each(["codex", "dsh"])("shows memory for enabled %s templates", (runtimeKind) => {
+    expect(isHubTemplateMemoryEnabled({ runtime_kind: runtimeKind })).toBe(true);
+    expect(isHubTemplateMemoryEnabled({ runtime_kind: runtimeKind, runtime_options: { memory_mode: "enabled" } })).toBe(
       true,
     );
-    expect(isHubTemplateMemoryEnabled({ runtime_kind: "codex", runtime_options: { memory_mode: "disabled" } })).toBe(
-      false,
-    );
+    expect(
+      isHubTemplateMemoryEnabled({ runtime_kind: runtimeKind, runtime_options: { memory_mode: "disabled" } }),
+    ).toBe(false);
     expect(isHubTemplateMemoryEnabled({ runtime_kind: "openclaw_sandbox" })).toBe(false);
   });
 
@@ -81,7 +81,7 @@ describe("hub workspace helpers", () => {
     ).toBe(true);
     expect(
       isVisibleInHubTemplateList({ id: "team.review-bot", role: "worker", source: { kind: "remote", name: "team" } }),
-    ).toBe(false);
+    ).toBe(true);
   });
 
   it("formats localized template counts", () => {

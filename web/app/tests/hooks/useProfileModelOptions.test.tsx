@@ -45,6 +45,21 @@ function apiDraft(overrides: Partial<AgentDraft> = {}): AgentDraft {
 }
 
 describe("useProfileModelOptions", () => {
+  it("does not carry a previous provider's authentication error into a new draft", async () => {
+    const error = { status: 401, message: "Invalid provider key" };
+    vi.mocked(fetchAgentProfileModels).mockRejectedValue(error);
+    const { result, rerender } = renderHook(({ draft }) => useProfileModelOptions({ draft }), {
+      initialProps: { draft: apiDraft({ provider: "codex" }) },
+      wrapper: createWrapper(),
+    });
+    await waitFor(() => expect(result.current.modelError).toEqual(error));
+    vi.mocked(fetchAgentProfileModels).mockResolvedValue({ models: ["new-model"] });
+    rerender({ draft: apiDraft({ provider: "csghub" }) });
+    expect(result.current.modelError).toBeNull();
+    await waitFor(() => expect(result.current.models).toEqual(["new-model"]));
+    expect(result.current.modelError).toBeNull();
+  });
+
   it("drops retained query data when refreshing models fails", async () => {
     vi.mocked(fetchAgentProfileModels).mockResolvedValue({ models: ["previously-available"] });
     const draft = apiDraft({ provider: "codex", model_id: "saved-model" });

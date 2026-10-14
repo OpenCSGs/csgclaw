@@ -386,11 +386,11 @@ func TestDSHLaunchArgsEnablePresentOverlay(t *testing.T) {
 	root := filepath.Join("tmp", "agent", hostStateDirName)
 	wantPatch := filepath.Join(root, patchFileName)
 	args := dshLaunchArgs(root, true)
-	if len(args) != 6 || args[0] != "--profile" || args[1] != "acp" || args[2] != "--patch" || args[3] != filepath.Join(root, contextPatchFileName) || args[5] != wantPatch {
+	if len(args) != 8 || args[0] != "--profile" || args[1] != "acp" || args[2] != "--patch" || args[3] != filepath.Join(root, contextPatchFileName) || args[5] != filepath.Join(root, memoryPatchFileName) || args[7] != wantPatch {
 		t.Fatalf("dshLaunchArgs() = %q", args)
 	}
 	fallback := dshLaunchArgs(root, false)
-	if len(fallback) != 4 || fallback[0] != "--profile" || fallback[1] != "acp" || fallback[3] != filepath.Join(root, contextPatchFileName) {
+	if len(fallback) != 6 || fallback[0] != "--profile" || fallback[1] != "acp" || fallback[3] != filepath.Join(root, contextPatchFileName) || fallback[5] != filepath.Join(root, memoryPatchFileName) {
 		t.Fatalf("fallback dshLaunchArgs() = %q", fallback)
 	}
 }
@@ -698,6 +698,8 @@ func TestDSHHelperProcess(t *testing.T) {
 			os.Exit(8)
 		}
 	}
+	sessionID := "session-1"
+	sessionNumber := 0
 	scanner := bufio.NewScanner(os.Stdin)
 	encoder := json.NewEncoder(os.Stdout)
 	for scanner.Scan() {
@@ -719,6 +721,10 @@ func TestDSHHelperProcess(t *testing.T) {
 				"mcpCapabilities":    map[string]any{"http": true},
 			}})
 		case "session/new":
+			if os.Getenv("DSH_TEST_UNIQUE_SESSIONS") == "1" {
+				sessionNumber++
+				sessionID = fmt.Sprintf("session-%d-%d", os.Getpid(), sessionNumber)
+			}
 			if recordPath := os.Getenv("DSH_TEST_SESSION_RECORD"); recordPath != "" {
 				cwd, _ := os.Getwd()
 				record, _ := json.Marshal(map[string]any{"method": frame.Method, "cwd": cwd, "params": frame.Params})
@@ -726,8 +732,11 @@ func TestDSHHelperProcess(t *testing.T) {
 					os.Exit(8)
 				}
 			}
-			respond(map[string]any{"sessionId": "session-1", "configOptions": helperConfigOptions()})
+			respond(map[string]any{"sessionId": sessionID, "configOptions": helperConfigOptions()})
 		case "session/resume":
+			if os.Getenv("DSH_TEST_UNIQUE_SESSIONS") == "1" {
+				sessionID, _ = frame.Params["sessionId"].(string)
+			}
 			if recordPath := os.Getenv("DSH_TEST_SESSION_RECORD"); recordPath != "" {
 				cwd, _ := os.Getwd()
 				record, _ := json.Marshal(map[string]any{"method": frame.Method, "cwd": cwd, "params": frame.Params})
@@ -741,14 +750,14 @@ func TestDSHHelperProcess(t *testing.T) {
 					continue
 				}
 			}
-			respond(map[string]any{"sessionId": "session-1", "configOptions": helperConfigOptions()})
+			respond(map[string]any{"sessionId": sessionID, "configOptions": helperConfigOptions()})
 		case "session/set_config_option":
 			respond(map[string]any{"configOptions": helperConfigOptions()})
 		case "session/prompt":
 			_ = encoder.Encode(map[string]any{
 				"jsonrpc": "2.0", "method": "session/update",
 				"params": map[string]any{
-					"sessionId": "session-1",
+					"sessionId": sessionID,
 					"update": map[string]any{
 						"sessionUpdate": "agent_thought_chunk",
 						"content":       map[string]any{"type": "text", "text": "thinking"},
@@ -761,7 +770,7 @@ func TestDSHHelperProcess(t *testing.T) {
 			_ = encoder.Encode(map[string]any{
 				"jsonrpc": "2.0", "method": "session/update",
 				"params": map[string]any{
-					"sessionId": "session-1",
+					"sessionId": sessionID,
 					"update": map[string]any{
 						"sessionUpdate": "tool_call", "toolCallId": "present-1", "title": "present", "kind": "other", "status": "in_progress",
 						"rawInput": map[string]any{"files": []any{map[string]any{"path": "index.html", "description": "HTML preview"}}},
@@ -771,7 +780,7 @@ func TestDSHHelperProcess(t *testing.T) {
 			_ = encoder.Encode(map[string]any{
 				"jsonrpc": "2.0", "method": "session/update",
 				"params": map[string]any{
-					"sessionId": "session-1",
+					"sessionId": sessionID,
 					"update": map[string]any{
 						"sessionUpdate": "tool_call_update", "toolCallId": "present-1", "status": "completed",
 						"content": []any{map[string]any{"type": "content", "content": map[string]any{"type": "text", "text": "Presented index.html"}}},
@@ -781,7 +790,7 @@ func TestDSHHelperProcess(t *testing.T) {
 			_ = encoder.Encode(map[string]any{
 				"jsonrpc": "2.0", "method": "session/update",
 				"params": map[string]any{
-					"sessionId": "session-1",
+					"sessionId": sessionID,
 					"update": map[string]any{
 						"sessionUpdate": "agent_message_chunk",
 						"content":       map[string]any{"type": "text", "text": "hello from dsh"},

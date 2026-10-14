@@ -24,7 +24,7 @@ import (
 
 // Conversation exposes the Runtime-neutral execution contract for this Runtime.
 func (r *Runtime) Conversation(runtimeID string) contract.RuntimeConversation {
-	return NewConversationAdapter(runtimeID, r)
+	return r.configuredConversation(runtimeID)
 }
 
 // NewConversationAdapter binds an execution handle to the native Codex backend.

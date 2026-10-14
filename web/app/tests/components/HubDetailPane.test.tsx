@@ -2,7 +2,7 @@ import { render as rtlRender, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { useState, type ReactNode } from "react";
-import { HubDetailPane } from "@/pages/HubPage/components";
+import { HubDetailPane } from "@/components/business/HubDetailPane";
 import type { HubTemplate } from "@/models/hubWorkspace";
 
 function render(ui: ReactNode) {
@@ -144,6 +144,7 @@ function t(key: string, params: Record<string, string | number> = {}) {
     agentMemoryTab: "Memory",
     agentMemoryDocumentLabel: "Read-only memory summary",
     agentProfileMCPTab: "MCP",
+    agentAppsTab: "Connectors",
     agentProfileSectionNavLabel: "Template sections",
     agentSkillsTitle: "Skills",
     agentSkillsDescription: "Manage skills.",
@@ -208,6 +209,7 @@ function renderHubDetailPane(
     publishError?: string;
     lazyMemory?: boolean;
     loaded?: boolean;
+    inlineTemplateDetail?: boolean;
   } = {},
 ) {
   const selectedTemplate = options.selectedTemplate ?? template;
@@ -261,6 +263,7 @@ function renderHubDetailPane(
     const workspaceFile = workspaceFiles[selectedWorkspacePath as keyof typeof workspaceFiles] || null;
     return (
       <HubDetailPane
+        inlineTemplateDetail={options.inlineTemplateDetail}
         locale="en"
         t={t}
         onCreateFromTemplate={vi.fn()}
@@ -921,10 +924,11 @@ describe("HubDetailPane", () => {
     await user.click(screen.getByRole("button", { name: "Publish to community" }));
     expect(screen.getByRole("button", { name: "Publish template only" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Publish and deploy" })).toBeInTheDocument();
-    expect(screen.queryByRole("checkbox", { name: "Include agent memory" })).not.toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: "Include agent memory" })).not.toBeChecked();
+    await user.click(screen.getByRole("checkbox", { name: "Include agent memory" }));
     await user.click(screen.getByRole("button", { name: "Publish and deploy" }));
 
-    expect(onPublishTemplate).toHaveBeenCalledWith(localTemplate, true, false);
+    expect(onPublishTemplate).toHaveBeenCalledWith(localTemplate, true, true);
   });
 
   it("does not show publishing success when publishing fails", async () => {
@@ -1069,13 +1073,15 @@ describe("HubDetailPane", () => {
     expect(screen.getByRole("button", { name: "Create" })).toBeInTheDocument();
   });
 
-  it("groups template details into runtime, instructions, memory, skills, and MCP tabs", async () => {
+  it.each([false, true])("groups template details into working tabs (inline: %s)", async (inlineTemplateDetail) => {
     const user = userEvent.setup();
     const { container } = renderHubDetailPane("template", {
       selectedTemplate: { ...template, runtime_kind: "codex" },
+      inlineTemplateDetail,
     });
 
-    await openTemplateDetail(user);
+    if (!inlineTemplateDetail) await openTemplateDetail(user);
+    else expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Profile" })).toHaveAttribute("aria-current", "location");
     expect(screen.getByDisplayValue("demo:latest")).toBeInTheDocument();
     expect(screen.getAllByText("Environment variables").length).toBeGreaterThan(0);
@@ -1100,7 +1106,7 @@ describe("HubDetailPane", () => {
     );
     expect(container.querySelector(".workspace-file-tree")).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: /^MCP/ }));
+    await user.click(screen.getByRole("button", { name: /^Connectors/ }));
     expect(screen.getByText("context7")).toBeInTheDocument();
     expect(screen.getByText("Context lookup")).toBeInTheDocument();
   });

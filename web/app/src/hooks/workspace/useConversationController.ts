@@ -1,3 +1,4 @@
+import { effectiveConversationProfile } from "@/models/taskConfiguration";
 import { useSlashSelection } from "./useSlashSelection";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent } from "react";
@@ -390,7 +391,12 @@ function runtimeAuthenticationErrorUsesOpenCSG(
     String(senderAgent.role || senderUser?.role || "")
       .trim()
       .toLowerCase() === "manager";
-  const profile = senderIsManager && managerProfile ? managerProfile : agentProfileConfig(senderAgent);
+  const profile = effectiveConversationProfile(
+    senderAgent,
+    room.is_direct ? room.configuration : undefined,
+    undefined,
+    senderIsManager && managerProfile ? managerProfile : agentProfileConfig(senderAgent),
+  );
   if (!String(profile?.model_provider_id ?? "").trim()) {
     return null;
   }
@@ -398,7 +404,7 @@ function runtimeAuthenticationErrorUsesOpenCSG(
 }
 
 export function useConversationController({
-  activeConversationId,
+  activeConversationId: storedConversationId,
   activePane,
   agents,
   autoSelectFallbackConversation = true,
@@ -407,6 +413,7 @@ export function useConversationController({
   data,
   locale,
   managerProfile,
+  modelProviders,
   managerProfileIncomplete,
   managerRuntimeUnavailable = false,
   managerRuntimeWarning = "",
@@ -431,6 +438,9 @@ export function useConversationController({
   stopWorkingTurn,
   workingParticipantsForRoom,
 }: UseConversationControllerArgs) {
+  // Keep displayed messages and outgoing drafts bound to the routed conversation.
+  const activeConversationId =
+    activePane.type === WorkspacePaneTypes.conversation && activePane.id ? activePane.id : storedConversationId;
   const {
     handleAuthenticationError: handleOpenCSGAuthenticationError,
     handleRuntimeAuthenticationError: handleOpenCSGRuntimeAuthenticationError,
@@ -576,9 +586,13 @@ export function useConversationController({
     selectedConversation && !isDirectConversation(selectedConversation) ? selectedConversation : null;
   const selectedConversationID = selectedConversation?.id ?? "";
   const selectedMessageCount = selectedConversation?.messages?.length ?? 0;
+  const authoritativeWorkingParticipants = useMemo(
+    () => workingParticipantsForRoom(selectedConversationID),
+    [selectedConversationID, workingParticipantsForRoom],
+  );
   const workingParticipants = useLegacyOpenClawWorkingFallback({
     agents,
-    authoritative: workingParticipantsForRoom(selectedConversationID),
+    authoritative: authoritativeWorkingParticipants,
     conversation: selectedConversation,
     currentUserID: data?.current_user_id,
     hasObservedWorkLease,
@@ -637,23 +651,58 @@ export function useConversationController({
       }),
     [agents, data?.current_user_id, selectedConversation, usersById],
   );
-  const outgoingSegmentsUseOpenCSG = useCallback(
-    (segments: readonly ComposerSegment[]) =>
-      recipientAgentsForSegments(segments).some((agent) => {
-        const isManager = Boolean(
-          activeConversationManagerAgent && localIdentitiesMatch(activeConversationManagerAgent.id, agent.id),
-        );
-        const profile = isManager && managerProfile ? managerProfile : agentProfileConfig(agent);
-        return modelProviderConfigUsesOpenCSG(profile);
-      }),
-    [activeConversationManagerAgent, managerProfile, recipientAgentsForSegments],
-  );
-  const managerRuntimeErrorMessage = managerRuntimeWarning || t("managerCodexMissingWarning");
+  function recipientIsManager(agent: AgentLike) {
+    return (
+      agent.role === "manager" ||
+      Boolean(activeConversationManagerAgent && localIdentitiesMatch(activeConversationManagerAgent.id, agent.id))
+    );
+  }
+  function recipientProfile(agent: AgentLike) {
+    return effectiveConversationProfile(
+      agent,
+      selectedConversation?.is_direct ? selectedConversation.configuration : undefined,
+      modelProviders,
+      recipientIsManager(agent) && managerProfile ? managerProfile : agentProfileConfig(agent),
+    );
+  }
+  function outgoingSegmentsUseOpenCSG(segments: readonly ComposerSegment[]) {
+    return recipientAgentsForSegments(segments).some((agent) =>
+      modelProviderConfigUsesOpenCSG(recipientProfile(agent)),
+    );
+  }
+  function recipientConfigurationError(segments: readonly ComposerSegment[]): string {
+    for (const agent of recipientAgentsForSegments(segments)) {
+      const isManager = recipientIsManager(agent);
+      if (isManager && managerRuntimeUnavailable) return managerRuntimeWarning || t("managerCodexMissingWarning");
+      const profile = recipientProfile(agent);
+      const hasOverride =
+        selectedConversation?.is_direct && Boolean(selectedConversation.configuration?.model_provider_id);
+      if (
+        profile?.profile_complete === false ||
+        (!hasOverride && (agent.profile_complete === false || (isManager && managerProfileIncomplete)))
+      ) {
+        return t("profileIncomplete");
+      }
+    }
+    return "";
+  }
+  function composerConfigurationError(segments: readonly ComposerSegment[]): string {
+    // Free-room recipients can be changed by editing mentions.
+    return selectedConversation &&
+      (isDirectConversation(selectedConversation) || selectedConversation.type === RoomTypes.onDemand)
+      ? recipientConfigurationError(segments)
+      : "";
+  }
+  function recipientAuthenticationError(segments: readonly ComposerSegment[]): string {
+    for (const agent of recipientAgentsForSegments(segments)) {
+      const provider = normalizeAuthProviderName(recipientProfile(agent)?.provider);
+      if (providerNeedsAuth(provider) && authStatuses[provider]?.authenticated === false) return t("authRequired");
+    }
+    return "";
+  }
   function activeConversationAgentOfflineMessage(segments: readonly ComposerSegment[]): string {
     const recipients = recipientAgentsForSegments(segments);
-    if (recipients.length === 0 || recipients.some(isAgentLifecycleRunning)) {
-      return "";
-    }
+    if (recipients.length === 0 || recipients.some(isAgentLifecycleRunning)) return "";
     const agent = recipients[0];
     const name = String(agent.name || agent.id || "").trim();
     const reason = agentOfflineReasonLabel(agentRuntimeState(agent), t);
@@ -1040,17 +1089,9 @@ export function useConversationController({
   }, [activeConversationId, showCreateRoom, showInvite]);
 
   async function sendMessage(): Promise<void> {
-    if (managerRuntimeUnavailable) {
-      setComposerError(managerRuntimeErrorMessage);
-      return;
-    }
-    if (managerProfileIncomplete) {
-      setComposerError(t("profileIncomplete"));
-      return;
-    }
-    const managerProvider = normalizeAuthProviderName(managerProfile?.provider);
-    if (providerNeedsAuth(managerProvider) && authStatuses[managerProvider]?.authenticated === false) {
-      setComposerError(t("authRequired"));
+    const eligibilityError = recipientConfigurationError(draftSegments) || recipientAuthenticationError(draftSegments);
+    if (eligibilityError) {
+      setComposerError(eligibilityError);
       return;
     }
     if (!data?.current_user_id || !activeConversation || (!draftText.trim() && attachmentDrafts.length === 0)) {
@@ -1230,17 +1271,10 @@ export function useConversationController({
   }
 
   async function sendThreadReply(): Promise<void> {
-    if (managerRuntimeUnavailable) {
-      setThreadError(managerRuntimeErrorMessage);
-      return;
-    }
-    if (managerProfileIncomplete) {
-      setThreadError(t("profileIncomplete"));
-      return;
-    }
-    const managerProvider = normalizeAuthProviderName(managerProfile?.provider);
-    if (providerNeedsAuth(managerProvider) && authStatuses[managerProvider]?.authenticated === false) {
-      setThreadError(t("authRequired"));
+    const eligibilityError =
+      recipientConfigurationError(activeThreadDraftSegments) || recipientAuthenticationError(activeThreadDraftSegments);
+    if (eligibilityError) {
+      setThreadError(eligibilityError);
       return;
     }
     if (!activeThreadDraft.trim() && activeThreadAttachmentDrafts.length === 0) {
@@ -1840,9 +1874,18 @@ export function useConversationController({
       slashContinuation: mainSkills.continuation,
       slashPickerOpen: slashPickerActive,
       onApplySlashCandidate: applySlashCandidate,
-      managerProfile,
-      managerProfileIncomplete,
-      managerRuntimeUnavailable,
+      managerProfile:
+        recipientAgentsForSegments(draftSegments)
+          .map(recipientProfile)
+          .find(
+            (profile) =>
+              providerNeedsAuth(profile?.provider) &&
+              authStatuses[normalizeAuthProviderName(profile?.provider)]?.authenticated === false,
+          ) ??
+        recipientAgentsForSegments(draftSegments).map(recipientProfile)[0] ??
+        null,
+      composerDisabledReason: composerConfigurationError(draftSegments),
+      threadComposerDisabledReason: composerConfigurationError(activeThreadDraftSegments),
       authStatuses,
       authBusyProvider,
       onProviderLogin,

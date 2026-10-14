@@ -8441,6 +8441,42 @@ func TestApplyTemplateDefaultsMergesExplicitRuntimeOptions(t *testing.T) {
 	}
 }
 
+func TestResolveDSHTemplateMemory(t *testing.T) {
+	hubSvc := mustNewLocalTemplateHubService(t, "dsh-worker", hub.Template{
+		ID: "dsh-worker", Name: "dsh-worker", Role: hub.TemplateRoleWorker, RuntimeKind: RuntimeKindDSH,
+		RuntimeOptions: map[string]any{"permission_mode": "read-only", "memory_mode": "enabled"},
+	})
+	svc, err := NewController(testModelConfig(), config.ServerConfig{}, "manager-image:1", "", WithHubService(hubSvc), WithRuntime(runtimedsh.New(runtimedsh.Dependencies{})))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !svc.SupportsMemory(RuntimeKindDSH) {
+		t.Fatal("DSH memory capability is not exposed")
+	}
+	for _, enabled := range []bool{true, false} {
+		mode := "enabled"
+		if !enabled {
+			mode = "disabled"
+		}
+		resolved, cleanup, err := svc.resolveTemplateCreateSpec(context.Background(), CreateAgentSpec{Name: "alice", FromTemplate: "local.dsh-worker", RuntimeOptions: map[string]any{"memory_mode": mode}})
+		if cleanup != nil {
+			defer cleanup()
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		if resolved.TemplateMemorySet != enabled || (enabled && resolved.TemplateMemory != "# Template memory\n") {
+			t.Fatalf("memory seed = %q, set=%v", resolved.TemplateMemory, resolved.TemplateMemorySet)
+		}
+		if resolved.RuntimeOptions["memory_mode"] != mode || resolved.RuntimeOptions["permission_mode"] != "read-only" {
+			t.Fatalf("runtime options = %#v", resolved.RuntimeOptions)
+		}
+		if _, err := os.Stat(filepath.Join(resolved.FromTemplate, ".csgclaw-template-memory")); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("memory staging leaked into project: %v", err)
+		}
+	}
+}
+
 func TestApplyTemplateEnvDefaults(t *testing.T) {
 	t.Parallel()
 
@@ -9765,8 +9801,8 @@ func TestTemplateSafeRuntimeOptionsPreservesDSHPermissionMode(t *testing.T) {
 	if err != nil {
 		t.Fatalf("templateSafeRuntimeOptions() error = %v", err)
 	}
-	if len(got) != 1 || got["permission_mode"] != "read-only" {
-		t.Fatalf("templateSafeRuntimeOptions() = %#v, want only DSH permission mode", got)
+	if len(got) != 2 || got["permission_mode"] != "read-only" || got["memory_mode"] != "enabled" {
+		t.Fatalf("templateSafeRuntimeOptions() = %#v, want DSH permission and memory modes", got)
 	}
 }
 
@@ -11683,7 +11719,7 @@ func mustNewLocalTemplateHubServiceWithMCP(t *testing.T, id string, item hub.Tem
 	store := hub.NewLocalStore(registryRoot)
 	workspaceRef := hub.WorkspaceRef{Kind: hub.WorkspaceKindDir, Path: workspaceRoot}
 	includeMemory := false
-	if agentruntime.RuntimeConfigForKind(item.RuntimeKind).LegacyKind() == RuntimeKindCodex {
+	if kind := agentruntime.RuntimeConfigForKind(item.RuntimeKind).LegacyKind(); kind == RuntimeKindCodex || kind == RuntimeKindDSH {
 		memoryPath := filepath.Join(t.TempDir(), "memory_summary.md")
 		if err := os.WriteFile(memoryPath, []byte("# Template memory\n"), 0o644); err != nil {
 			t.Fatalf("WriteFile(memory_summary.md) error = %v", err)
@@ -12459,5 +12495,72 @@ func TestUpdateAgentProfileSyncsGatewayHostConfigWithoutRecreate(t *testing.T) {
 	}
 	if got.AgentProfile.EnvRestartRequired {
 		t.Fatal("Agent().AgentProfile.EnvRestartRequired = true, want false after config sync")
+	}
+}
+
+func TestPlatformTemplateCreationDefersModelCheck(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	for _, tc := range []struct {
+		provider, template string
+		skip               bool
+	}{
+		{"csghub", "local.worker", true},
+		{"csghub", "", false},
+		{"docker", "local.worker", false},
+	} {
+		t.Run(tc.provider+"/"+tc.template, func(t *testing.T) {
+			calls := 0
+			svc, err := NewController(testModelConfig(), config.ServerConfig{}, "manager-image:test", "",
+				WithSandboxProvider(fakeProvider{name: tc.provider}),
+				WithRuntime(fakeAgentRuntime{kind: RuntimeKindCodex, validate: func(_ context.Context, current agentruntime.RuntimeConfigSnapshot) error {
+					calls++
+					if current.SkipModelAvailabilityCheck != tc.skip {
+						t.Fatalf("skip = %v, want %v", current.SkipModelAvailabilityCheck, tc.skip)
+					}
+					return nil
+				}}))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := svc.validateCreateRuntimeConfig(context.Background(), CreateAgentSpec{FromTemplate: tc.template}, RuntimeKindCodex, agentruntime.RuntimeConfigSnapshot{}); err != nil {
+				t.Fatal(err)
+			}
+			if calls != 1 {
+				t.Fatalf("validation calls = %d", calls)
+			}
+		})
+	}
+}
+
+func TestCreatePlatformTemplateWorkerWithUnavailableModel(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	hubSvc := mustNewLocalTemplateHubService(t, "codex-worker", hub.Template{ID: "codex-worker", Name: "codex-worker", Role: hub.TemplateRoleWorker, RuntimeKind: RuntimeNameCodex})
+	calls := 0
+	svc, err := NewController(testModelConfig(), config.ServerConfig{}, "manager-image:test", "",
+		WithHubService(hubSvc), WithSandboxProvider(fakeProvider{name: "csghub"}),
+		WithRuntime(fakeAgentRuntime{kind: RuntimeKindCodex,
+			validate: func(_ context.Context, current agentruntime.RuntimeConfigSnapshot) error {
+				calls++
+				if !current.SkipModelAvailabilityCheck {
+					return errors.New("model unavailable")
+				}
+				return nil
+			},
+			new: func(_ context.Context, spec agentruntime.Spec) (agentruntime.Handle, error) {
+				return agentruntime.Handle{RuntimeID: spec.RuntimeID, HandleID: "template-worker"}, nil
+			},
+		}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := svc.CreateRecord(context.Background(), CreateRequest{Spec: CreateAgentSpec{
+		ID: "platform-worker", Name: "platform-worker", FromTemplate: "local.codex-worker",
+		AgentProfile: AgentProfile{Provider: ProviderAPI, BaseURL: "https://unavailable.example/v1", APIKey: "test-key", ModelID: "offline-model", ProfileComplete: true},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.BoxID != "template-worker" || got.Status != "running" || calls != 1 {
+		t.Fatalf("worker = %#v, validation calls = %d", got, calls)
 	}
 }

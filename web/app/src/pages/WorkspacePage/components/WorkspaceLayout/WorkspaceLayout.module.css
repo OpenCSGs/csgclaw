@@ -131,6 +131,11 @@
 }
 
 @media (max-width: 960px) {
+  :global(.app-shell.sidebar-has-context),
+  :global(.app-shell.sidebar-no-context) {
+    grid-template-columns: minmax(0, var(--sidebar-slot-width)) minmax(0, 1fr);
+  }
+
   :global(.app-shell:not(.sidebar-collapsed)) {
     --sidebar-slot-width: min(100vw, 600px);
   }
@@ -145,6 +150,12 @@
 }
 
 @media (max-width: 720px) {
+  :global(.app-shell.sidebar-collapsed.sidebar-has-context),
+  :global(.app-shell.sidebar-collapsed.sidebar-no-context) {
+    grid-template-columns: var(--workspace-primary-sidebar-collapsed-width) minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
+  }
+
   :global(.app-shell:not(.sidebar-collapsed)) {
     grid-template-columns: 1fr;
     grid-template-rows: minmax(0, 1fr);

@@ -813,11 +813,8 @@ func appServerThreadStartParams(spec SessionSpec, publishFiles bool) map[string]
 		"developerInstructions":  runtimeinstructions.ImageGenerationPromptPolicy + "\n" + runtimeinstructions.VideoGenerationPromptPolicy,
 	}
 	if publishFiles {
-		tools := []map[string]any{appServerPublishFileToolSpec()}
-		if spec.ExecutionMode != ExecutionModeReadOnly {
-			tools = append(tools, appServerGenerateImageToolSpec(), appServerGenerateVideoToolSpec(), appServerUploadFileToolSpec())
-		}
-		params["dynamicTools"] = tools
+		// Native tools are immutable on resume; enforce the current mode in the call handler.
+		params["dynamicTools"] = []map[string]any{appServerPublishFileToolSpec(), appServerGenerateImageToolSpec(), appServerGenerateVideoToolSpec(), appServerUploadFileToolSpec()}
 	}
 	if spec.Profile.ModelID != "" {
 		params["model"] = spec.Profile.ModelID
@@ -1996,12 +1993,29 @@ func (m *appServerManager) stopAppServerTurn(live *liveSession, waiter *appServe
 	if interruptErr == nil {
 		return nil
 	}
+	stopFields := []any{
+		"runtime_id", live.spec.RuntimeID,
+		"thread_id", waiter.threadID,
+		"turn_id", waiter.currentTurnID(),
+		"reason", reason,
+		"interrupt_error", redactAppServerDiagnostic([]byte(interruptErr.Error()), live.spec),
+	}
+	if live.cmd != nil && live.cmd.Process != nil {
+		stopFields = append(stopFields, "pid", live.cmd.Process.Pid)
+	}
+	slog.Warn("stopping codex app-server after turn interrupt failure", stopFields...)
 	stopCtx, cancel := context.WithTimeout(context.Background(), appServerStopTimeout)
 	defer cancel()
 	stopErr := m.Stop(stopCtx, SessionHandle{RuntimeID: live.spec.RuntimeID})
 	if stopErr == nil || errors.Is(stopErr, os.ErrNotExist) {
+		// The worker log is closed when Stop completes, so record the result
+		// in the service log rather than writing through the closed logger.
+		slog.Info("codex app-server stop completed after turn interrupt failure",
+			append(stopFields, "already_absent", errors.Is(stopErr, os.ErrNotExist))...)
 		return nil
 	}
+	slog.Error("codex app-server stop failed after turn interrupt failure",
+		append(stopFields, "error", redactAppServerDiagnostic([]byte(stopErr.Error()), live.spec))...)
 	if live.appClient != nil {
 		live.appClient.logError(
 			"stop codex app-server after turn interrupt failure",
@@ -2028,6 +2042,20 @@ func (m *appServerManager) interruptAppServerTurn(live *liveSession, waiter *app
 		"threadId": threadID,
 		"turnId":   turnID,
 	}); err != nil {
+		// Codex uses InvalidRequest for both inactive turns and active-turn
+		// ID mismatches. Only its explicit inactive-turn response is safe to
+		// treat as completed cancellation; other rejections need the stop fallback.
+		var rpcErr appServerRPCError
+		if errors.As(err, &rpcErr) && rpcErr.Code == appServerRPCInvalidRequest && rpcErr.Message == "no active turn to interrupt" {
+			live.appClient.logInfo("codex app-server turn interrupt rejected; preserving runtime",
+				"runtime_id", live.spec.RuntimeID,
+				"thread_id", threadID,
+				"turn_id", turnID,
+				"rpc_code", rpcErr.Code,
+				"rpc_message", redactAppServerDiagnostic([]byte(rpcErr.Message), live.spec),
+			)
+			return nil
+		}
 		return fmt.Errorf("interrupt codex app-server turn: %w", err)
 	}
 
@@ -2117,6 +2145,11 @@ func (m *appServerManager) waitAppServerSession(runtimeID string, live *liveSess
 		}
 	}
 	if live.appClient != nil {
+		live.appClient.logInfo("codex app-server process exited",
+			"runtime_id", runtimeID,
+			"pid", live.cmd.Process.Pid,
+			"exit_code", exitCode,
+		)
 		live.appClient.closeAllPending(fmt.Errorf("codex app-server exited with code %d", exitCode))
 	}
 	isCurrent := m.detachSession(runtimeID, live)

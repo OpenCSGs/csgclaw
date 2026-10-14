@@ -4,7 +4,9 @@ import (
 	"context"
 	"csgclaw/internal/diagnostics"
 	"csgclaw/internal/modelcap"
+	"csgclaw/internal/runtime/conversationconfig"
 	skill "csgclaw/internal/skill/state"
+	"csgclaw/internal/taskconfig"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -61,6 +63,7 @@ type AgentRef struct {
 type BinaryResolver func(context.Context) (dshcli.Info, error)
 
 type Dependencies struct {
+	ResolveRoomProfile    func(string, string, taskconfig.Config) (agentruntime.Profile, error)
 	ResolveBinary         BinaryResolver
 	ResolveAgent          func(agentruntime.Handle) (AgentRef, error)
 	MaterializeMCPServers func(context.Context, map[string]any) (map[string]any, error)
@@ -68,7 +71,8 @@ type Dependencies struct {
 }
 
 type Runtime struct {
-	deps Dependencies
+	conversationSettings sync.Map
+	deps                 Dependencies
 
 	mu                       sync.Mutex
 	mcpRefreshMu             sync.Mutex
@@ -198,7 +202,7 @@ func (r *Runtime) ensureRuntimeDirs(agentHome string) (agentruntime.Layout, erro
 }
 
 func (r *Runtime) Conversation(runtimeID string) contract.RuntimeConversation {
-	return &conversation{runtime: r, runtimeID: strings.TrimSpace(runtimeID)}
+	return r.configuredConversation(strings.TrimSpace(runtimeID))
 }
 
 func (r *Runtime) Provision(ctx context.Context, req agentruntime.ProvisionRequest) error {
@@ -268,6 +272,9 @@ func (r *Runtime) Provision(ctx context.Context, req agentruntime.ProvisionReque
 	}
 	if err := writeRuntimePatch(filepath.Join(root, patchFileName), req.Profile); err != nil {
 		return err
+	}
+	if err := provisionMemory(root, req); err != nil {
+		return fmt.Errorf("provision DSH memory: %w", err)
 	}
 	r.mu.Lock()
 	r.roots[strings.TrimSpace(req.RuntimeID)] = root
@@ -350,7 +357,7 @@ func (r *Runtime) start(ctx context.Context, h agentruntime.Handle, spec *agentr
 	if r.deps.ResolveAgent == nil || r.deps.AgentHome == nil {
 		return agentruntime.StateUnknown, fmt.Errorf("DSH runtime dependencies are incomplete")
 	}
-	ref, err := r.deps.ResolveAgent(h)
+	ref, err := r.resolveAgent(h)
 	if err != nil {
 		return agentruntime.StateUnknown, err
 	}
@@ -395,11 +402,21 @@ func (r *Runtime) start(ctx context.Context, h agentruntime.Handle, spec *agentr
 	if err != nil {
 		return agentruntime.StateUnknown, err
 	}
+	if r.deps.ResolveRoomProfile != nil {
+		if err := conversationconfig.ImportLegacy(agentHome, hostStateDirName, runtimeFileName, []string{"sessions"}, []string{"home/sessions", "home/storages/session_projcache/sessions"}); err != nil {
+			return agentruntime.StateUnknown, err
+		}
+	}
+
 	meta := runtimeMetadata{RuntimeID: runtimeID, AgentID: ref.ID, Executable: binary.Path, Version: binary.Version, PermissionMode: opts.PermissionMode, WorkspaceDir: workspace, State: agentruntime.StateCreated, CreatedAt: time.Now().UTC(), Sessions: map[string]string{}}
 	if persisted, readErr := readMetadata(root); readErr == nil {
 		meta.CreatedAt = persisted.CreatedAt
 		var configChanged bool
 		meta.Sessions, configChanged = sessionsForRuntimeConfig(persisted, opts.PermissionMode, workspace, layout.WorkspaceRoot)
+		if r.deps.ResolveRoomProfile != nil {
+			meta.Sessions = persisted.Sessions
+			configChanged = false
+		}
 		if configChanged && len(persisted.Sessions) > 0 {
 			slog.Info("DSH workspace or permission mode changed; starting fresh sessions", "runtime_id", runtimeID, "previous_mode", persistedPermissionMode(persisted), "permission_mode", opts.PermissionMode, "previous_workspace", persistedWorkspaceDir(persisted, layout.WorkspaceRoot), "workspace", workspace, "session_count", len(persisted.Sessions))
 		}
@@ -413,6 +430,9 @@ func (r *Runtime) start(ctx context.Context, h agentruntime.Handle, spec *agentr
 		return agentruntime.StateUnknown, err
 	}
 	if err := writeRuntimePatch(filepath.Join(root, patchFileName), ref.Profile); err != nil {
+		return agentruntime.StateUnknown, err
+	}
+	if err := writeMemoryPatch(root, ref.RuntimeOptions, ref.Profile); err != nil {
 		return agentruntime.StateUnknown, err
 	}
 	if err := projectSkills(root, layout.SkillsRoot, ref.SkillStates); err != nil {
@@ -523,7 +543,7 @@ func (r *Runtime) launch(ctx context.Context, root, workspace, binary string, pr
 }
 
 func dshLaunchArgs(root string, enablePresent bool) []string {
-	args := []string{"--profile", "acp", "--patch", filepath.Join(root, contextPatchFileName)}
+	args := []string{"--profile", "acp", "--patch", filepath.Join(root, contextPatchFileName), "--patch", filepath.Join(root, memoryPatchFileName)}
 	if enablePresent {
 		args = append(args, "--patch", filepath.Join(root, patchFileName))
 	}
@@ -710,7 +730,7 @@ func (r *Runtime) rootFor(h agentruntime.Handle) (string, error) {
 	if r.deps.ResolveAgent == nil || r.deps.AgentHome == nil {
 		return "", fmt.Errorf("DSH runtime %q location is unavailable", runtimeID)
 	}
-	ref, err := r.deps.ResolveAgent(h)
+	ref, err := r.resolveAgent(h)
 	if err != nil {
 		return "", err
 	}
@@ -856,6 +876,7 @@ func (r *Runtime) RestartRequired(change agentruntime.RuntimeConfigChange) (bool
 }
 
 func (r *Runtime) ReconcileConfig(ctx context.Context, h agentruntime.Handle, change agentruntime.RuntimeConfigChange) error {
+	r.conversationState(h.RuntimeID).Clear()
 	root, err := r.rootFor(h)
 	if err != nil {
 		return err
@@ -871,7 +892,7 @@ func (r *Runtime) ReconcileConfig(ctx context.Context, h agentruntime.Handle, ch
 	}
 	var ref AgentRef
 	if r.deps.ResolveAgent != nil {
-		ref, err = r.deps.ResolveAgent(h)
+		ref, err = r.resolveAgent(h)
 		if err != nil {
 			return err
 		}

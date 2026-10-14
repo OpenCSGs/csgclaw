@@ -155,15 +155,15 @@ func normalizeTemplateRuntimeOptions(runtimeKind string, raw map[string]any) (ma
 	runtimeKind = normalizeTemplateRuntimeKind(runtimeKind)
 	if runtimeKind == runtime.KindDSH {
 		for key := range raw {
-			if key != runtimedsh.PermissionModeOptionKey {
-				return nil, fmt.Errorf("DSH runtime_options supports only permission_mode")
+			if key != runtimedsh.PermissionModeOptionKey && key != runtimedsh.MemoryModeOptionKey {
+				return nil, fmt.Errorf("DSH runtime_options supports only permission_mode and memory_mode")
 			}
 		}
 		opts, err := runtimedsh.DecodeRuntimeOptions(raw)
 		if err != nil {
-			return nil, fmt.Errorf("runtime_options.%s is invalid: %w", runtimedsh.PermissionModeOptionKey, err)
+			return nil, fmt.Errorf("DSH runtime_options are invalid: %w", err)
 		}
-		return map[string]any{runtimedsh.PermissionModeOptionKey: opts.PermissionMode}, nil
+		return map[string]any{runtimedsh.PermissionModeOptionKey: opts.PermissionMode, runtimedsh.MemoryModeOptionKey: opts.MemoryMode}, nil
 	}
 	if runtimeKind != runtime.KindCodex {
 		return nil, fmt.Errorf("runtime_options are supported only for Codex and DSH worker templates")

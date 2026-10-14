@@ -665,6 +665,10 @@ func cloneCompletedTurn(input completedTurn) completedTurn {
 }
 
 func cloneTurnRequest(input TurnRequest) TurnRequest {
+	if input.RoomConfiguration != nil {
+		configuration := *input.RoomConfiguration
+		input.RoomConfiguration = &configuration
+	}
 	if input.ImageGeneration != nil {
 		task := contract.CloneImageGenerationTask(*input.ImageGeneration)
 		input.ImageGeneration = &task

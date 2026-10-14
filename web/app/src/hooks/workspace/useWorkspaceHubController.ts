@@ -20,7 +20,7 @@ import type { UseWorkspaceHubControllerArgs } from "./types";
 
 type WorkspaceHubSelection = ReturnType<typeof useWorkspaceHubSelection>;
 type DeleteHubTemplate = (template: HubTemplate | null | undefined) => Promise<boolean>;
-type DeleteSkill = (skill: SkillSummary | null | undefined) => Promise<boolean>;
+type DeleteSkill = (skill: SkillSummary | null | undefined, options?: { navigate?: boolean }) => Promise<boolean>;
 export type PublishHubTemplateResult = { status: "success" } | { status: "partial"; message: string } | null;
 export type InstallRemoteSkillOptions = {
   replace?: boolean;
@@ -228,7 +228,7 @@ export function useWorkspaceHubController({
   );
 
   const deleteSkill = useCallback(
-    async (skill: SkillSummary | null | undefined): Promise<boolean> => {
+    async (skill: SkillSummary | null | undefined, options: { navigate?: boolean } = {}): Promise<boolean> => {
       const name = String(skill?.name || "").trim();
       if (!name || isReadonlySkill(skill)) {
         return false;
@@ -240,7 +240,7 @@ export function useWorkspaceHubController({
         const nextSkill = nextWorkspaceSkillAfterDelete(workspaceSkills, name);
         setSelectedHubSkillName(nextSkill?.name ?? "");
         setSelectedHubSkillPath(nextSkill ? `${nextSkill.name}/SKILL.md` : "");
-        onSkillDeleted?.(nextSkill);
+        if (options.navigate !== false) onSkillDeleted?.(nextSkill);
         queryClient.setQueryData<SkillSummary[]>(workspaceQueryKeys.skills(), (current) =>
           (Array.isArray(current) ? current : []).filter((item) => item.name !== name),
         );

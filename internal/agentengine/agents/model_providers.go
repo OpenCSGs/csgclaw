@@ -5,6 +5,7 @@ import (
 	"csgclaw/internal/modelcap"
 	"fmt"
 	"net/http"
+	"net/url"
 	"reflect"
 	"slices"
 	"sort"
@@ -229,7 +230,7 @@ func builtinModelProviderSummary(id string, provider config.ProviderConfig) Mode
 		ID:            id,
 		Preset:        id,
 		Builtin:       true,
-		Models:        append([]string(nil), provider.Models...),
+		Models:        prioritizeOpenCSGAutoModel(id, provider.BaseURL, provider.Models),
 		ImageModels:   imageModels(id, provider.Models, provider.ImageModels),
 		VideoModels:   videoModels(id, provider.Models, provider.VideoModels),
 		VideoMetadata: modelcap.CloneVideoGeneration(provider.VideoMetadata),
@@ -303,7 +304,7 @@ func customProviderSummary(id string, provider config.ProviderConfig) ModelProvi
 		APIKeySet:       strings.TrimSpace(provider.APIKey) != "",
 		APIKeyPreview:   apiKeyPreview(provider.APIKey),
 		Headers:         cloneStringMap(provider.Headers),
-		Models:          append([]string(nil), provider.Models...),
+		Models:          prioritizeOpenCSGAutoModel(id, provider.BaseURL, provider.Models),
 		ImageModels:     imageModels(id, provider.Models, provider.ImageModels),
 		VideoModels:     videoModels(id, provider.Models, provider.VideoModels),
 		VideoMetadata:   modelcap.CloneVideoGeneration(provider.VideoMetadata),
@@ -411,7 +412,7 @@ func CheckModelProvider(ctx context.Context, input ModelProviderCheckInput) Mode
 		return result
 	}
 	result.Status = ModelProviderStatusConnected
-	result.Models = sortModelIDs(models)
+	result.Models = prioritizeOpenCSGAutoModel(id, result.ResolvedBaseURL, sortModelIDs(models))
 	result.ImageModels = imageModels(id, models, images)
 	result.VideoModels = videoModels(id, models, videos)
 	result.VisionModels = sortModelIDs(visions)
@@ -652,6 +653,32 @@ func ModelProviderConfigForProfile(llm config.LLMConfig, profile AgentProfile) (
 	default:
 		return config.ProviderConfig{}, false
 	}
+}
+
+// OpenCSG's auto route chooses the concrete model. Keep it first so callers
+// that need an initial selection use the gateway default, regardless of the
+// catalog order or the name of a custom staging/production provider.
+func prioritizeOpenCSGAutoModel(providerID, baseURL string, models []string) []string {
+	out := append([]string(nil), models...)
+	if NormalizeModelProviderID(providerID) != ModelProviderIDOpenCSG {
+		endpoint, err := url.Parse(baseURL)
+		if err != nil {
+			return out
+		}
+		switch strings.ToLower(endpoint.Hostname()) {
+		case "ai.space.opencsg.com", "aigateway.opencsg.com", "aigateway.opencsg-stg.com":
+		default:
+			return out
+		}
+	}
+	for i, model := range out {
+		if model == "auto" {
+			copy(out[1:i+1], out[:i])
+			out[0] = model
+			break
+		}
+	}
+	return out
 }
 
 func CatalogProviderModelConfig(llm config.LLMConfig, selector string) (AgentProfile, bool) {

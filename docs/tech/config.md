@@ -4,6 +4,19 @@ English | [中文](config.zh.md)
 
 `csgclaw serve` uses the local config file for server access, bootstrap image selection, sandbox isolation, and optional channels, and it auto-creates missing local state on first run. Agent LLM provider profiles are stored in agent state and managed from the Web UI.
 
+## Codex Execution Mode
+
+Set `CSGCLAW_EXECUTION_MODE` on the CSGClaw server process before startup:
+
+- `standard`: permits reading and modifying data with the runtime's available tools (default).
+- `read_only`: permits conversation analysis and approved read-only tools; disables command execution and local filesystem access.
+
+An unset or empty value uses `standard`. Invalid values fail server startup. This process-wide setting overrides stored Agent and template `execution_mode` values. The Web UI hides the execution mode selector. Restart the server after changing the environment variable.
+
+```sh
+CSGCLAW_EXECUTION_MODE=read_only csgclaw serve
+```
+
 ## Server Address
 
 `listen_addr` is the address that the local HTTP server binds to.
@@ -36,6 +49,10 @@ show_upgrade = true
 ```
 
 ## Model Provider Examples
+
+OpenCSG AIGateway uses `auto` as the initial model choice when the gateway advertises it.
+This applies to the signed-in OpenCSG provider and custom providers pointing to the production or staging AIGateway.
+An explicitly selected model remains selected; when `auto` is unavailable, CSGClaw uses the first available model.
 
 ### Local CSGHub-lite
 
@@ -336,3 +353,5 @@ Channel integration is optional. CSGClaw works with the built-in Web UI by defau
 Keep `config.toml` focused on shared server, model, bootstrap, and sandbox settings. Feishu credentials live on Feishu participants in `~/.csgclaw/im/participants.json` and are written with `csgclaw-cli participant bind`; legacy `[channels.feishu]` blocks and `channels/feishu.toml` are not read by the participant-backed flow.
 
 For detailed field definitions and examples, see [Feishu Channel Configuration](channel/feishu.md).
+
+When `[bootstrap].default_worker_template` is omitted or empty, the default Worker template is `builtin.codex-worker`. Explicit template settings remain unchanged.

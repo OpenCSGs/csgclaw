@@ -149,7 +149,7 @@ describe("useWorkspaceNavigation", () => {
     expect(screen.getByTestId("pane")).toHaveTextContent("team:team-1");
   });
 
-  it("selects humans by opening the human detail route", async () => {
+  it("opens the profile dialog without changing the current conversation", async () => {
     window.history.replaceState({}, "", "/rooms/room-1");
 
     render(
@@ -161,8 +161,9 @@ describe("useWorkspaceNavigation", () => {
     fireEvent.click(screen.getByRole("button", { name: "Open human" }));
 
     await waitFor(() => {
-      expect(screen.getByTestId("path")).toHaveTextContent("/humans/u-admin");
+      expect(screen.getByTestId("search")).toHaveTextContent("?dialog=profile&human=u-admin");
     });
-    expect(screen.getByTestId("pane")).toHaveTextContent("human:u-admin");
+    expect(screen.getByTestId("path")).toHaveTextContent("/rooms/room-1");
+    expect(screen.getByTestId("pane")).toHaveTextContent("conversation:room-1");
   });
 });

@@ -1,3 +1,4 @@
+import { parseMCPServerDocument } from "@/models/mcpServerDocument";
 import { GlobalAppsPanel } from "@/components/business/Apps";
 import { ResourceListCard } from "@/components/business/ResourceListCard";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
@@ -27,7 +28,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { ConnectorBoxesIcon, SidebarMcpIcon, SidebarPuzzlePiece02Icon } from "@/components/ui/Icons";
-import { KnowledgeBaseDiscoveryDialog } from "@/pages/WorkspacePage/components/WorkspaceSidebar/KnowledgeBaseDiscoveryDialog";
+import { KnowledgeBaseDiscoveryDialog } from "@/components/business/KnowledgeBaseDiscoveryDialog";
 import { formatRuntimeKindLabel, isBuiltinOpenClawWorkerTemplate } from "@/models/agents";
 import {
   canPublishHubTemplateToCommunity,
@@ -42,7 +43,6 @@ import {
   mcpServerDisplayName,
   mcpManagedKnowledgeBaseSource,
   mcpServerDescription,
-  mcpServerPayloadFromDocument,
   mcpServersFromTemplateDocument,
   mcpToolParameters,
 } from "@/models/mcp";
@@ -394,7 +394,7 @@ function knowledgeFilterLabel(filter: KnowledgeFilterTabID, t: TranslateFn): str
   }
 }
 
-function ResourceFeaturedIcon({ children }: { children: ReactNode }) {
+export function ResourceFeaturedIcon({ children }: { children: ReactNode }) {
   return (
     <span className={moduleClassNames("hub-skill-featured-icon")} aria-hidden="true">
       <span className={moduleClassNames("hub-skill-featured-icon-shadow")}></span>
@@ -403,7 +403,7 @@ function ResourceFeaturedIcon({ children }: { children: ReactNode }) {
   );
 }
 
-function SkillFeaturedIcon() {
+export function SkillFeaturedIcon() {
   return (
     <ResourceFeaturedIcon>
       <SidebarPuzzlePiece02Icon size={16} aria-hidden="true" />
@@ -411,7 +411,7 @@ function SkillFeaturedIcon() {
   );
 }
 
-function ResourceSearchField({
+export function ResourceSearchField({
   onChange,
   placeholder,
   value,
@@ -859,34 +859,7 @@ function jsonEditorExtensions(t: TranslateFn): Extension[] {
   ];
 }
 
-type MCPServerDocumentParseResult =
-  | {
-      kind: "valid";
-      payload: MCPServerPayload;
-    }
-  | {
-      kind: "structure" | "syntax";
-      message: string;
-    };
-
-function parseMCPServerDocument(value: string, t: TranslateFn): MCPServerDocumentParseResult {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(value);
-  } catch {
-    return { kind: "syntax", message: t("resourcesMCPServerDocumentInvalid") };
-  }
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-    return { kind: "structure", message: t("resourcesMCPServerDocumentObjectRequired") };
-  }
-  const payload = mcpServerPayloadFromDocument(parsed);
-  if (!payload) {
-    return { kind: "structure", message: t("resourcesMCPServerDocumentInvalidShape") };
-  }
-  return { kind: "valid", payload };
-}
-
-function JSONConfigEditor({
+export function JSONConfigEditor({
   hideLabel = false,
   invalid = false,
   label,
@@ -1008,6 +981,7 @@ function HubPreviewEmptyIcon() {
 
 export type HubDetailPaneProps = {
   hub?: HubDetailPaneHub;
+  inlineTemplateDetail?: boolean;
   locale?: LocaleCode;
   onCreateFromTemplate?: (item: HubTemplate) => void | Promise<void>;
   t?: TranslateFn;
@@ -1017,6 +991,7 @@ export function HubDetailPane({
   t = (key) => key,
   locale = "en",
   hub,
+  inlineTemplateDetail = false,
   onCreateFromTemplate = () => {},
 }: HubDetailPaneProps) {
   const {
@@ -1334,7 +1309,7 @@ export function HubDetailPane({
       },
       {
         id: "mcp" as const,
-        label: t("agentProfileMCPTab"),
+        label: t("agentAppsTab"),
         count: templateMCPServers.length > 0 ? templateMCPServers.length : undefined,
       },
     ],
@@ -1799,7 +1774,7 @@ export function HubDetailPane({
                 )}
               </div>
             </>
-          ) : activeResourceType === "template" ? (
+          ) : activeResourceType === "template" && !(inlineTemplateDetail && selectedTemplate) ? (
             <div className={moduleClassNames("hub-skill-list-page")}>
               <header className={moduleClassNames("hub-skill-list-header")}>
                 <div className={moduleClassNames("hub-skill-list-heading")}>
@@ -1899,7 +1874,7 @@ export function HubDetailPane({
                 )}
               </section>
             </div>
-          ) : legacyResourceDetailEnabled() && selectedTemplate ? (
+          ) : (inlineTemplateDetail || legacyResourceDetailEnabled()) && selectedTemplate ? (
             <>
               <div className={moduleClassNames("hub-inspector-hero")}>
                 <div className={moduleClassNames("hub-inspector-hero-row")}>
@@ -2753,11 +2728,7 @@ export function HubDetailPane({
                 *
               </span>
               <strong>
-                {activeResourceType === "mcp"
-                  ? t("resourcesMCPEmpty")
-                  : templates.length || skills.length || mcpServers.length
-                    ? t("resourcesLoading")
-                    : t("resourcesEmpty")}
+                {templates.length || skills.length || mcpServers.length ? t("resourcesLoading") : t("resourcesEmpty")}
               </strong>
             </div>
           )}
@@ -2830,7 +2801,12 @@ export function HubDetailPane({
         </DialogContent>
       </DialogRoot>
       <DialogRoot
-        open={activeResourceType === "template" && templateDetailDialogOpen && Boolean(selectedTemplate)}
+        open={
+          !inlineTemplateDetail &&
+          activeResourceType === "template" &&
+          templateDetailDialogOpen &&
+          Boolean(selectedTemplate)
+        }
         onOpenChange={(open) => {
           setTemplateDetailDialogOpen(open);
           if (!open) onSelectTemplate?.(null);
@@ -3781,5 +3757,215 @@ export function HubDetailPane({
         </DialogContent>
       </DialogRoot>
     </section>
+  );
+}
+
+export function ResourceFilterTabs<TID extends string>({
+  label,
+  onChange,
+  tabs,
+  value,
+}: {
+  label: string;
+  onChange: (id: TID) => void;
+  tabs: ReadonlyArray<{ id: TID; label: string }>;
+  value: TID;
+}) {
+  return (
+    <div className={moduleClassNames("hub-skill-filter-tabs")} role="tablist" aria-label={label}>
+      {tabs.map((tab) => {
+        const active = tab.id === value;
+        return (
+          <button
+            key={tab.id}
+            type="button"
+            role="tab"
+            aria-selected={active}
+            className={moduleClassNames("hub-skill-filter-tab", active && "active")}
+            onClick={() => onChange(tab.id)}
+          >
+            {tab.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+export function MCPServerCreateDialog({
+  busy,
+  createError,
+  initialDocument,
+  manualOnly = false,
+  onChangeDocument,
+  onCreate,
+  onOpenChange,
+  onRemoteVisibleChange,
+  open,
+  remote,
+  source = "mcp",
+  t,
+}: {
+  busy: boolean;
+  createError: string;
+  initialDocument: string;
+  onChangeDocument?: (value: string) => void;
+  onCreate: (payload: MCPServerPayload) => Promise<boolean> | boolean | undefined;
+  onOpenChange: (open: boolean) => void;
+  onRemoteVisibleChange?: (visible: boolean) => void;
+  open: boolean;
+  remote: {
+    error: string;
+    hasMore: boolean;
+    installBusy: string;
+    installedServers: readonly MCPServer[];
+    items: readonly RemoteMCPServer[];
+    loading: boolean;
+    loadingMore: boolean;
+    search: string;
+    onInstall?: (server: RemoteMCPServer) => Promise<boolean> | boolean;
+    onLoadMore?: () => void;
+    onRefresh?: () => void;
+    onSearchChange?: (value: string) => void;
+  };
+  source?: "mcp" | "knowledge";
+  /** Hides remote installation when the caller provides a separate marketplace. */
+  manualOnly?: boolean;
+  t: TranslateFn;
+}) {
+  const [mode, setMode] = useState<MCPCreateMode>("manual");
+  const [document, setDocument] = useState(initialDocument || DEFAULT_MCP_SERVER_DOCUMENT);
+  const [parseError, setParseError] = useState("");
+
+  useEffect(() => {
+    if (open) {
+      setDocument(initialDocument || DEFAULT_MCP_SERVER_DOCUMENT);
+      setParseError("");
+      setMode("manual");
+    }
+  }, [initialDocument, open]);
+
+  function close() {
+    setParseError("");
+    setMode("manual");
+    onOpenChange(false);
+  }
+
+  function changeDocument(value: string) {
+    setDocument(value);
+    onChangeDocument?.(value);
+    setParseError("");
+  }
+
+  async function save() {
+    const result = parseMCPServerDocument(document, t);
+    if (result.kind !== "valid") {
+      setParseError(result.kind === "structure" ? result.message : "");
+      return;
+    }
+    const saved = await onCreate(result.payload);
+    if (saved) {
+      close();
+    }
+  }
+
+  const activeMode: MCPCreateMode = manualOnly ? "manual" : mode;
+
+  return (
+    <DialogRoot
+      open={open}
+      onOpenChange={(next) => {
+        if (next) {
+          onOpenChange(true);
+        } else {
+          close();
+        }
+      }}
+    >
+      <DialogContent className={moduleClassNames("mcp-dialog")}>
+        <DialogHeader className={moduleClassNames("hub-skill-delete-dialog-header")}>
+          <div className={moduleClassNames("hub-skill-delete-dialog-copy")}>
+            <DialogTitle>{t("resourcesMCPCreateTitle")}</DialogTitle>
+            <DialogDescription>{t("resourcesMCPFormDescription")}</DialogDescription>
+          </div>
+          <DialogCloseButton label={t("close")} size="sm" variant="tertiaryGray" />
+        </DialogHeader>
+        <DialogBody className={moduleClassNames("mcp-form")}>
+          {source !== "knowledge" && !manualOnly ? (
+            <div className={moduleClassNames("mcp-form-mode")} role="tablist" aria-label={t("resourcesMCPCreateTitle")}>
+              <button
+                type="button"
+                className={moduleClassNames("mcp-form-tab", mode === "manual" && "active")}
+                aria-selected={mode === "manual"}
+                role="tab"
+                onClick={() => setMode("manual")}
+              >
+                <Server size={15} strokeWidth={2} aria-hidden="true" />
+                {t("resourcesMCPManualTab")}
+              </button>
+              <button
+                type="button"
+                className={moduleClassNames("mcp-form-tab", mode === "remote" && "active")}
+                aria-selected={mode === "remote"}
+                role="tab"
+                onClick={() => {
+                  if (mode === "remote") {
+                    onRemoteVisibleChange?.(true);
+                    return;
+                  }
+                  setMode("remote");
+                }}
+              >
+                <CloudDownload size={15} strokeWidth={2} aria-hidden="true" />
+                {t("resourcesMCPRemoteInstallTab")}
+              </button>
+            </div>
+          ) : null}
+          {activeMode === "manual" ? (
+            <>
+              <JSONConfigEditor
+                hideLabel
+                label={t("resourcesMCPServerDocumentJSONLabel")}
+                value={document}
+                onChange={changeDocument}
+                invalid={Boolean(parseError)}
+                minRows={12}
+                t={t}
+              />
+              {parseError || createError ? (
+                <div className={moduleClassNames("form-error hub-json-editor-error")}>{parseError || createError}</div>
+              ) : null}
+            </>
+          ) : (
+            <RemoteMCPList
+              error={remote.error}
+              hasMore={remote.hasMore}
+              installedServers={remote.installedServers}
+              installBusy={remote.installBusy}
+              items={remote.items}
+              loading={remote.loading}
+              loadingMore={remote.loadingMore}
+              onInstall={remote.onInstall}
+              onLoadMore={remote.onLoadMore}
+              onRefresh={remote.onRefresh}
+              onSearchChange={remote.onSearchChange}
+              onVisibleChange={onRemoteVisibleChange}
+              search={remote.search}
+              t={t}
+            />
+          )}
+        </DialogBody>
+        <DialogFooter className={moduleClassNames("hub-skill-delete-dialog-actions")}>
+          <Button variant="secondaryGray" size="sm" disabled={busy} onClick={close}>
+            {t("cancel")}
+          </Button>
+          {activeMode === "manual" ? (
+            <Button variant="primary" size="sm" loading={busy} onClick={save}>
+              {busy ? t("resourcesMCPCreating") : t("resourcesMCPCreateAction")}
+            </Button>
+          ) : null}
+        </DialogFooter>
+      </DialogContent>
+    </DialogRoot>
   );
 }

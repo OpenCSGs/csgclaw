@@ -118,7 +118,7 @@ func (s *ModelConfiguration) SetLLMConfig(llmCfg config.LLMConfig) {
 			s.profileDefaults = stripCatalogProviderCredentials(s.profileDefaults, ModelProviderIDOpenCSG)
 			s.profileDefaults.ModelID = ""
 			if len(provider.Models) > 0 {
-				s.profileDefaults.ModelID = provider.Models[0]
+				s.profileDefaults.ModelID = prioritizeOpenCSGAutoModel(ModelProviderIDOpenCSG, provider.BaseURL, provider.Models)[0]
 			}
 			s.profileDefaults.ProfileComplete = profileIsComplete(s.profileDefaults)
 		}
@@ -182,7 +182,7 @@ func (s *ModelConfiguration) ListModelsForRequest(ctx context.Context, req Profi
 	if err != nil {
 		return nil, err
 	}
-	return sortModelIDs(models), nil
+	return models, nil
 }
 
 func (s *ModelConfiguration) hydrateProfileFromCatalog(profile AgentProfile) AgentProfile {
