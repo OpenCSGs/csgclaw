@@ -2627,7 +2627,7 @@ export const messages = {
         "CSGClaw 尚未登录 OpenCSG，或登录已过期。请在设置中登录正确环境，然后重新连接连接器。",
       app_opencsg_login_rejected: "OpenCSG 拒绝了当前登录凭据。请在设置中重新登录，然后重新连接连接器。",
       app_opencsg_environment_mismatch:
-        "当前 OpenCSG 登录环境与 MCP 地址不匹配。请切换到对应的正式或 staging 环境，或改用手动 Token。",
+        "当前 OpenCSG 登录站点与 MCP 地址不匹配。请登录对应站点（支持自定义站点），或改用手动 Token。",
       app_opencsg_endpoint_untrusted:
         "不能向此地址发送 OpenCSG 登录凭据。请使用匹配环境的 OpenCSG HTTPS 服务地址，或改用手动 Token。",
       app_platform_access_denied:
@@ -5438,7 +5438,7 @@ export const messages = {
       app_opencsg_login_rejected:
         "OpenCSG rejected the current login. Sign in again in Settings, then reconnect the Connector.",
       app_opencsg_environment_mismatch:
-        "The OpenCSG login environment does not match the MCP address. Select the matching production or staging environment, or use a manual token.",
+        "The OpenCSG login site does not match the MCP address. Sign in to the matching site (custom sites are supported), or use a manual token.",
       app_opencsg_endpoint_untrusted:
         "OpenCSG login credentials cannot be sent to this address. Use a matching OpenCSG HTTPS service address or a manual token.",
       app_platform_access_denied:
