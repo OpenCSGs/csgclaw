@@ -302,6 +302,7 @@ function templateMatchesQuery(template: HubTemplate, query: string): boolean {
   return [
     template.id,
     template.name,
+    template.display_name,
     template.namespace,
     template.description,
     template.image,

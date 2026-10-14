@@ -11,6 +11,7 @@ type PublishAgentTemplatePayload = {
   agent_id: string;
   registry: AgentTemplatePublishTarget;
   name: string;
+  display_name?: string;
   description: string;
   include_memory?: boolean;
   deploy?: boolean;
@@ -49,11 +50,13 @@ export function publishAgentTemplateRequest(
   name: string,
   description: string,
   includeMemory = false,
+  displayName = "",
 ): Promise<HubTemplate> {
   const payload: PublishAgentTemplatePayload = {
     agent_id: agentID,
     registry: registry === "official_deploy" ? "official" : registry,
     name,
+    ...(displayName.trim() ? { display_name: displayName.trim() } : { display_name: name }),
     description,
     ...(includeMemory ? { include_memory: true } : {}),
     ...(registry === "official_deploy" ? { deploy: true } : {}),

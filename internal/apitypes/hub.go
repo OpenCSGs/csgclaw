@@ -7,6 +7,7 @@ type CreateHubTemplateRequest struct {
 	TemplateID    string  `json:"template_id,omitempty"`
 	Registry      string  `json:"registry,omitempty"`
 	Name          string  `json:"name,omitempty"`
+	DisplayName   *string `json:"display_name,omitempty"`
 	Description   *string `json:"description,omitempty"`
 	IncludeMemory bool    `json:"include_memory,omitempty"`
 	Deploy        bool    `json:"deploy,omitempty"`
@@ -23,6 +24,7 @@ type HubTemplate struct {
 	ID             string               `json:"id"`
 	Namespace      string               `json:"namespace,omitempty"`
 	Name           string               `json:"name"`
+	DisplayName    string               `json:"display_name,omitempty"`
 	Description    string               `json:"description,omitempty"`
 	Role           string               `json:"role,omitempty"`
 	RuntimeKind    string               `json:"runtime_kind,omitempty"`

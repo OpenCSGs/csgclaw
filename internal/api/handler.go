@@ -1932,6 +1932,9 @@ func (h *Handler) handleHubTemplates(w http.ResponseWriter, r *http.Request) {
 					spec.ID = strings.TrimSpace(req.Name)
 					spec.Name = strings.TrimSpace(req.Name)
 				}
+				if req.DisplayName != nil {
+					spec.DisplayName = strings.TrimSpace(*req.DisplayName)
+				}
 				if req.Description != nil {
 					spec.Description = strings.TrimSpace(*req.Description)
 				}
@@ -2121,6 +2124,7 @@ func presentHubTemplate(item hub.Template) apitypes.HubTemplate {
 		ID:             item.ID,
 		Namespace:      item.Namespace,
 		Name:           item.Name,
+		DisplayName:    item.DisplayName,
 		Description:    item.Description,
 		Role:           item.Role,
 		RuntimeKind:    bootstrapRuntimeKind(item.RuntimeKind),

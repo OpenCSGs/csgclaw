@@ -2385,6 +2385,8 @@ export const messages = {
     agentPublishTemplateLocalSubtitle: "填写模板信息并保存到本地模板。",
     agentPublishTemplateCommunitySubtitle: "填写模板信息并发布到社区。",
     agentPublishTemplateName: "模板名称",
+    agentPublishTemplateDisplayName: "展示名称",
+    agentPublishTemplateDisplayNameHint: "支持中文，留空时使用模板名称。",
     agentPublishTemplateNameHint: "必须以英文字母开头，最多 24 个字符，仅支持英文字母、数字、下划线和短横线。",
     agentPublishTemplateNameInvalid:
       "模板名称必须以英文字母开头，最多 24 个字符，且只能包含英文字母、数字、下划线和短横线。",
@@ -5175,6 +5177,8 @@ export const messages = {
     agentPublishTemplateLocalSubtitle: "Enter template details and save it as a local template.",
     agentPublishTemplateCommunitySubtitle: "Enter template details and publish it to the community.",
     agentPublishTemplateName: "Template name",
+    agentPublishTemplateDisplayName: "Display name",
+    agentPublishTemplateDisplayNameHint: "Supports Chinese. Uses the template name when empty.",
     agentPublishTemplateNameHint:
       "Start with an English letter; use up to 24 English letters, numbers, underscores, or hyphens.",
     agentPublishTemplateNameInvalid:

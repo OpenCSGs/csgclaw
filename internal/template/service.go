@@ -258,6 +258,7 @@ func (s *Service) PublishTemplate(ctx context.Context, id, registry string, incl
 		IncludeMemory:  includeMemory,
 		ID:             item.Name,
 		Name:           item.Name,
+		DisplayName:    item.DisplayName,
 		Description:    item.Description,
 		RuntimeKind:    item.RuntimeKind,
 		Version:        item.Version,

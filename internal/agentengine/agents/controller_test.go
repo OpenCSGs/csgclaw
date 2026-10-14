@@ -9592,7 +9592,7 @@ func TestHubPublishSpecUsesAgentWorkspaceSnapshot(t *testing.T) {
 	if err != nil {
 		t.Fatalf("HubPublishSpec() error = %v", err)
 	}
-	if spec.ID != "alice" || spec.Name != "alice" {
+	if spec.ID != created.ID || spec.Name != created.ID || spec.DisplayName != "alice" {
 		t.Fatalf("publish identity = %q/%q, want alice/alice", spec.ID, spec.Name)
 	}
 	if spec.Description != "review worker" {

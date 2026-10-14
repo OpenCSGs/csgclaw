@@ -233,6 +233,7 @@ func TestRemoteStorePublishUploadsArchiveAndCreatesTemplateCode(t *testing.T) {
 	item, err := store.Publish(context.Background(), PublishSpec{
 		ID:             "legacy-internal-id",
 		Name:           "ReviewBot_2",
+		DisplayName:    "代码审查助手",
 		Description:    "Reviews changes",
 		RuntimeKind:    "codex",
 		RuntimeOptions: map[string]any{"execution_mode": "read_only", "memory_mode": "disabled"},
@@ -267,7 +268,7 @@ func TestRemoteStorePublishUploadsArchiveAndCreatesTemplateCode(t *testing.T) {
 	if got, want := created.Name, "ReviewBot_2"; got != want {
 		t.Fatalf("create name = %q, want agent.toml name %q", got, want)
 	}
-	if got, want := created.Nickname, "ReviewBot_2"; got != want {
+	if got, want := created.Nickname, "代码审查助手"; got != want {
 		t.Fatalf("create nickname = %q, want agent.toml name %q", got, want)
 	}
 	if !created.Private {

@@ -29,6 +29,7 @@ func ValidatePublishTemplateName(name string) error {
 type templateManifest struct {
 	SchemaVersion  string               `toml:"schema_version,omitempty"`
 	Name           string               `toml:"name"`
+	DisplayName    string               `toml:"display_name,omitempty"`
 	Description    string               `toml:"description,omitempty"`
 	RuntimeKind    string               `toml:"runtime_kind"`
 	Version        string               `toml:"version,omitempty"`

@@ -1325,7 +1325,7 @@ describe("useAgentController", () => {
     expect(result.current.agentViewProps.saveBillingURL).toBe("https://opencsg-stg.com/settings/billing");
 
     await act(async () => {
-      await result.current.agentViewProps.onPublish?.("official", "manager", "manager template", false);
+      await result.current.agentViewProps.onPublish?.("official", "manager", "manager template", false, "中文助手");
     });
 
     expect(result.current.agentViewProps.saveError).toBe("");
@@ -1366,6 +1366,7 @@ describe("useAgentController", () => {
           "reviewer",
           "Reviews changes",
           false,
+          "中文助手",
         )) ?? false;
     });
 
@@ -1416,6 +1417,7 @@ describe("useAgentController", () => {
           "reviewer",
           "Reviews changes",
           false,
+          "中文助手",
         )) ?? false;
     });
 

@@ -2010,6 +2010,7 @@ export function useAgentController({
     name: string,
     description: string,
     includeMemory: boolean,
+    displayName: string,
   ): Promise<boolean> {
     if (!selectedAgentForPage?.id || agentPagePublishBusy) {
       return false;
@@ -2030,6 +2031,7 @@ export function useAgentController({
         name,
         description,
         includeMemory,
+        displayName,
       );
       await refreshHubTemplates();
       if (published?.id) {

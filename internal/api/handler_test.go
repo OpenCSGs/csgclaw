@@ -5776,7 +5776,7 @@ func TestHandleHubTemplatesPublishesAgentSnapshot(t *testing.T) {
 	srv := &Handler{svc: svc, agentEngine: agentengine.New(svc), workspace: svc.Workspace(), agentModels: svc.Models(), agentRuntime: svc}
 	srv.SetHubService(hubSvc)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/hub/templates", strings.NewReader(
-		`{"agent_id":"u-alice","registry":"local","name":"ReviewBot_2","description":"Published review template"}`,
+		`{"agent_id":"u-alice","registry":"local","name":"ReviewBot_2","display_name":"代码审查助手","description":"Published review template"}`,
 	))
 	rec := httptest.NewRecorder()
 
@@ -5797,6 +5797,9 @@ func TestHandleHubTemplatesPublishesAgentSnapshot(t *testing.T) {
 	}
 	if got.Role != hub.TemplateRoleWorker {
 		t.Fatalf("template role = %q, want %q", got.Role, hub.TemplateRoleWorker)
+	}
+	if got.DisplayName != "代码审查助手" {
+		t.Fatalf("display name = %q", got.DisplayName)
 	}
 	if got.Source.Name != "local" || got.Source.Kind != "local" {
 		t.Fatalf("template source = %+v, want local/local", got.Source)
@@ -5867,7 +5870,7 @@ func TestHandleHubTemplatesPublishesCodexRuntimeOptions(t *testing.T) {
 	if got.RuntimeOptions["execution_mode"] != "read_only" || got.RuntimeOptions["memory_mode"] != "disabled" {
 		t.Fatalf("runtime options = %#v, want execution_mode=read_only and memory_mode=disabled", got.RuntimeOptions)
 	}
-	manifestData, err := os.ReadFile(filepath.Join(registryRoot, "templates", created.Name, "agent.toml"))
+	manifestData, err := os.ReadFile(filepath.Join(registryRoot, "templates", publishSpec.Name, "agent.toml"))
 	if err != nil {
 		t.Fatalf("ReadFile(agent.toml) error = %v", err)
 	}
@@ -6080,8 +6083,8 @@ func TestHandleHubTemplatesPublishesAgentSnapshotToDefaultRegistryWhenOmitted(t 
 	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if got.ID != "local.alice" {
-		t.Fatalf("template id = %q, want %q", got.ID, "local.alice")
+	if got.ID != "local."+created.ID {
+		t.Fatalf("template id = %q, want %q", got.ID, "local."+created.ID)
 	}
 	if got.Role != hub.TemplateRoleWorker {
 		t.Fatalf("template role = %q, want %q", got.Role, hub.TemplateRoleWorker)

@@ -192,6 +192,7 @@ export type AgentDetailPaneProps = {
     name: string,
     description: string,
     includeMemory: boolean,
+    displayName: string,
   ) => boolean | Promise<boolean>;
   onRecreate: AgentActionHandler;
   onSave?: () => VoidOrPromise;
@@ -385,6 +386,7 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
   const [deleteMCPDialogOpen, setDeleteMCPDialogOpen] = useState(false);
   const [mcpPendingDelete, setMCPPendingDelete] = useState<MCPServer | null>(null);
   const [publishTarget, setPublishTarget] = useState<AgentTemplatePublishTarget | null>(null);
+  const [publishTemplateDisplayName, setPublishTemplateDisplayName] = useState("");
   const [publishTemplateName, setPublishTemplateName] = useState("");
   const [publishTemplateDescription, setPublishTemplateDescription] = useState("");
   const [publishTemplateIncludeMemory, setPublishTemplateIncludeMemory] = useState(false);
@@ -424,13 +426,14 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
   const openPublishDialog = useCallback(
     (target: AgentTemplatePublishTarget) => {
       setPublishTarget(target);
-      setPublishTemplateName(String(item.name || "").trim());
+      setPublishTemplateName(String(item.id || "").trim());
+      setPublishTemplateDisplayName(String(item.name || "").trim());
       setPublishTemplateDescription(String(item.description || "").trim());
       setPublishTemplateIncludeMemory(false);
       setPublishTemplateNameError("");
       setPublishAttempted(false);
     },
-    [item.description, item.name],
+    [item.description, item.id, item.name],
   );
   const submitPublishTemplate = useCallback(
     async (target = publishTarget) => {
@@ -444,12 +447,26 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
       }
       setPublishTemplateNameError("");
       setPublishAttempted(true);
-      const published = await onPublish(target, name, publishTemplateDescription.trim(), publishTemplateIncludeMemory);
+      const published = await onPublish(
+        target,
+        name,
+        publishTemplateDescription.trim(),
+        publishTemplateIncludeMemory,
+        publishTemplateDisplayName.trim(),
+      );
       if (published) {
         setPublishTarget(null);
       }
     },
-    [onPublish, publishTarget, publishTemplateDescription, publishTemplateIncludeMemory, publishTemplateName, t],
+    [
+      onPublish,
+      publishTarget,
+      publishTemplateDisplayName,
+      publishTemplateDescription,
+      publishTemplateIncludeMemory,
+      publishTemplateName,
+      t,
+    ],
   );
   const saveMetadataField = useCallback(
     <K extends keyof AgentMetadataSavePatch>(field: K, value: AgentMetadataSavePatch[K]): boolean => {
@@ -1536,6 +1553,15 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
                   {publishTemplateNameError}
                 </span>
               ) : null}
+            </label>
+            <label className="agent-publish-field">
+              <span>{t("agentPublishTemplateDisplayName")}</span>
+              <input
+                value={publishTemplateDisplayName}
+                aria-label={t("agentPublishTemplateDisplayName")}
+                onChange={(event) => setPublishTemplateDisplayName(event.target.value)}
+              />
+              <small>{t("agentPublishTemplateDisplayNameHint")}</small>
             </label>
             <label className="agent-publish-field">
               <span>{t("agentPublishTemplateDescription")}</span>
