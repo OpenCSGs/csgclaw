@@ -21,6 +21,48 @@ const definition: AppDefinition = {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("Global Apps", () => {
+  it("replaces a saved environment error with the current successful probe", async () => {
+    const user = userEvent.setup();
+    const resource = {
+      installation_id: "global-1",
+      app_id: "feishu",
+      name: "Team Feishu",
+      feishu_app_id: "test-app",
+      enabled: true,
+      status: "error",
+      last_error: "Environment mismatch",
+      last_error_code: "app_opencsg_environment_mismatch",
+      config: { transport: "http", url: "https://service.example/mcp", auth_mode: "feishu" },
+      credentials_set: { app_id: true, app_secret: true },
+      tools: [],
+      bindings: [],
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: RequestInit) => {
+        if (init?.method === "POST") return Response.json({ connected: true, tools: [] });
+        return Response.json({ items: String(url).endsWith("catalog") ? [definition] : [resource] });
+      }),
+    );
+    render(
+      <MemoryRouter initialEntries={["/connectors/global-1"]}>
+        <Routes>
+          <Route path="/connectors/:resourceId" element={<GlobalAppsPanel t={t} />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    const dialog = within(await screen.findByRole("dialog"));
+    expect(dialog.getByRole("alert")).toHaveTextContent(t("errors.app_opencsg_environment_mismatch"));
+    await user.click(dialog.getByRole("button", { name: "Test connection" }));
+    expect(await dialog.findByRole("status")).toHaveTextContent("Connected · 0 tools");
+    expect(dialog.queryByRole("alert")).not.toBeInTheDocument();
+    expect(dialog.queryByText(t("appStatusError"))).not.toBeInTheDocument();
+    expect(dialog.getByText(t("appResourceUsers", { count: 0 }))).toBeVisible();
+    await user.type(dialog.getByLabelText("MCP service URL"), "/changed");
+    expect(dialog.queryByRole("status")).not.toBeInTheDocument();
+    expect(dialog.getByRole("alert")).toHaveTextContent(t("errors.app_opencsg_environment_mismatch"));
+  });
+
   it("tests the current draft without saving and invalidates the result after edits", async () => {
     const user = userEvent.setup();
     // These assertions exercise draft changes, not individual keystrokes.

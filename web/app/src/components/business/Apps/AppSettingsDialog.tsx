@@ -33,6 +33,7 @@ import styles from "./AgentAppsPanel.module.css";
 type Props = {
   definition: AppDefinition;
   resourceDetails?: ReactNode;
+  savedConnectionStatus?: ReactNode;
   globalResource?: boolean;
   existing: AppInstallation | null;
   t: TranslateFn;
@@ -45,6 +46,7 @@ type Props = {
 export function AppSettingsDialog({
   definition,
   resourceDetails,
+  savedConnectionStatus,
   globalResource = false,
   existing,
   t,
@@ -476,6 +478,7 @@ export function AppSettingsDialog({
             </div>
           ) : null}
           {probe && !tested ? <p className={styles.hint}>{t("appProbeStale")}</p> : null}
+          {!tested ? savedConnectionStatus : null}
           {resourceDetails}
           <div ref={probeResultRef}>
             <AppToolList

@@ -258,7 +258,7 @@ export function GlobalAppsPanel({
           globalResource
           definition={definition}
           existing={adding ? null : editing}
-          resourceDetails={
+          savedConnectionStatus={
             editing && !adding ? (
               <div className={styles.resourceDetails}>
                 <p className={styles.hint}>{appStatus(editing, t)}</p>
@@ -267,6 +267,12 @@ export function GlobalAppsPanel({
                     {appConnectionError(editing, t)}
                   </p>
                 ) : null}
+              </div>
+            ) : undefined
+          }
+          resourceDetails={
+            editing && !adding ? (
+              <div className={styles.resourceDetails}>
                 <p className={styles.hint}>{t("appResourceUsers", { count: editing.bindings?.length || 0 })}</p>
                 <ul className={styles.bindingList}>
                   {editing.bindings?.map((binding) => (
