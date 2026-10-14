@@ -4,7 +4,7 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import userEvent from "@testing-library/user-event";
 import { ConversationPane } from "@/pages/ConversationPage/components/ConversationPane";
 import { AgentActivityMsgTypes, CSGCLAW_AGENT_ACTIVITY_TYPE } from "@/shared/constants/messages";
-import { CONVERSATION_ACTIVITY_PANEL_WIDTH_STORAGE_KEY } from "@/shared/storage/keys";
+import { CHAT_SIDE_PANEL_WIDTH_STORAGE_KEY } from "@/shared/storage/keys";
 import type { ConversationPaneProps } from "@/components/business/ConversationPane";
 import { agentToDraft } from "@/models/agents";
 import type { IMConversation, IMUser, ThreadView, TranslateFn } from "@/models/conversations";
@@ -168,6 +168,7 @@ const t: TranslateFn = (key, params = {}) => {
     conversationActivityAllActors: "All",
     conversationActivityRoomTimeline: "Current conversation · {name} · Room activity",
     conversationActivityResize: "Resize activity side panel",
+    chatSideResize: "Resize chat sidebar",
     latestThreadReply: "Latest reply",
     replyInThread: "Reply in thread",
     send: "Send",
@@ -210,6 +211,8 @@ function renderThreadPane({
   agentDetailPanelProps = null,
   agentDetailPanelStateRef,
   usersByIdOverride = usersById,
+  statefulThreads = false,
+  onRestoreThread = vi.fn(),
 }: {
   agents?: NonNullable<ConversationPaneProps["agents"]>;
   agentDetailPanelProps?: ConversationPaneProps["agentDetailPanelProps"];
@@ -235,6 +238,8 @@ function renderThreadPane({
   replies?: ThreadView["replies"];
   showToolCalls?: boolean;
   usersByIdOverride?: ConversationPaneProps["usersById"];
+  statefulThreads?: boolean;
+  onRestoreThread?: (rootID: string) => void;
 } = {}) {
   const root = {
     content: "Hi! How can I help you today?",
@@ -262,6 +267,8 @@ function renderThreadPane({
   };
 
   function Harness() {
+    const [threadRootID, setThreadRootID] = useState(root.id);
+    const restoreCount = useRef(0);
     const [showChannelTools, setShowChannelTools] = useState(false);
     const [showMemberList, setShowMemberList] = useState(false);
     const [threadDraftSegments, setThreadDraftSegments] = useState<ComposerSegment[]>([]);
@@ -271,8 +278,8 @@ function renderThreadPane({
     }
     return (
       <ConversationPane
-        activeThreadRootID="msg-root"
-        activeThreadView={thread}
+        activeThreadRootID={threadRootID}
+        activeThreadView={{ ...thread, root: timelineMessages.find((message) => message.id === threadRootID) ?? root }}
         agents={agents}
         authBusyProvider=""
         authStatuses={{}}
@@ -310,7 +317,18 @@ function renderThreadPane({
         onMessageAction={() => {}}
         onOpenAgentDetail={onOpenAgentDetail}
         onPreserveMessageAnchor={onPreserveMessageAnchor}
-        onOpenThread={() => {}}
+        onOpenThread={(message) => {
+          if (statefulThreads && message.id) setThreadRootID(message.id);
+        }}
+        onRestoreThread={
+          statefulThreads
+            ? (rootID) => {
+                onRestoreThread(rootID);
+                if (++restoreCount.current > 6) throw new Error("Thread roots keep alternating");
+                setThreadRootID(rootID);
+              }
+            : undefined
+        }
         onRemoveMember={onRemoveMember}
         onProviderLogin={() => {}}
         onPreviewUser={onPreviewUser}
@@ -345,7 +363,34 @@ describe("ConversationPane", () => {
     window.localStorage.clear();
   });
 
-  it("opens the room activity side panel and closes the active thread", async () => {
+  it("switches from thread A to B without restoring A again", async () => {
+    const user = userEvent.setup();
+    const onRestoreThread = vi.fn();
+    const view = renderThreadPane({
+      statefulThreads: true,
+      onRestoreThread,
+      messages: [
+        { id: "msg-root", content: "Thread A", sender_id: "u-manager", created_at: "2026-05-25T08:13:00Z" },
+        { id: "thread-b", content: "Thread B", sender_id: "u-manager", created_at: "2026-05-25T08:14:00Z" },
+      ],
+    });
+    await waitFor(() => expect(document.querySelector(".thread-root")).toHaveTextContent("Thread A"));
+    const row = screen.getByText("Thread B").closest(".message-row") as HTMLElement;
+    await user.hover(row);
+    await user.click(row.querySelector(".thread-hover-button") as HTMLButtonElement);
+    await waitFor(() => expect(document.querySelector(".thread-root")).toHaveTextContent("Thread B"));
+    expect(onRestoreThread).not.toHaveBeenCalled();
+    view.unmount();
+    renderThreadPane({
+      statefulThreads: true,
+      onRestoreThread,
+      messages: [{ id: "msg-root", content: "Thread A", sender_id: "u-manager", created_at: "2026-05-25T08:13:00Z" }],
+    });
+    await waitFor(() => expect(document.querySelector(".thread-root")).toHaveTextContent("Thread A"));
+    expect(onRestoreThread).not.toHaveBeenCalled();
+  });
+
+  it("opens activity in a tab while retaining the active thread", async () => {
     const user = userEvent.setup();
     const onCloseThread = vi.fn();
 
@@ -358,10 +403,11 @@ describe("ConversationPane", () => {
     expect(document.querySelector(".thread-panel")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Activity records" }));
 
-    expect(onCloseThread).toHaveBeenCalledTimes(1);
+    expect(onCloseThread).not.toHaveBeenCalled();
     expect(screen.getByRole("heading", { name: "Activity" })).toBeInTheDocument();
     expect(document.querySelector(".conversation-activity-panel")).toBeInTheDocument();
-    expect(document.querySelector(".thread-panel")).not.toBeInTheDocument();
+    expect(document.querySelector(".thread-panel")).toBeInTheDocument();
+    expect(document.querySelector(".thread-panel")?.closest("[role=tabpanel]")).toHaveAttribute("hidden");
   });
 
   it("shows newest activity first by default", async () => {
@@ -463,8 +509,11 @@ describe("ConversationPane", () => {
     expect(devFilter).toHaveAttribute("aria-pressed", "true");
   });
 
-  it("restores and persists the activity panel width", async () => {
-    window.localStorage.setItem(CONVERSATION_ACTIVITY_PANEL_WIDTH_STORAGE_KEY, "512");
+  it("restores and persists the shared sidebar width", async () => {
+    const bounds = vi
+      .spyOn(HTMLElement.prototype, "getBoundingClientRect")
+      .mockReturnValue(new DOMRect(0, 0, 1200, 900));
+    window.localStorage.setItem(CHAT_SIDE_PANEL_WIDTH_STORAGE_KEY, "512");
     const user = userEvent.setup();
     renderThreadPane({
       agents: [{ id: "u-manager", name: "manager", role: "worker" }],
@@ -472,7 +521,7 @@ describe("ConversationPane", () => {
     });
 
     await user.click(screen.getByRole("button", { name: "Activity records" }));
-    const separator = screen.getByRole("separator", { name: "Resize activity side panel" });
+    const separator = screen.getByRole("separator", { name: "Resize chat sidebar" });
     expect(separator).toHaveAttribute("aria-valuenow", "512");
 
     separator.focus();
@@ -480,8 +529,9 @@ describe("ConversationPane", () => {
 
     expect(separator).toHaveAttribute("aria-valuenow", "536");
     await waitFor(() => {
-      expect(window.localStorage.getItem(CONVERSATION_ACTIVITY_PANEL_WIDTH_STORAGE_KEY)).toBe("536");
+      expect(window.localStorage.getItem(CHAT_SIDE_PANEL_WIDTH_STORAGE_KEY)).toBe("536");
     });
+    bounds.mockRestore();
   });
 
   it("advances after an option answer and keeps it while navigating", async () => {

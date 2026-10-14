@@ -64,14 +64,12 @@ export function documentPreviewKind(
   if (byMediaType) {
     return byMediaType;
   }
-  if (mediaType.startsWith("text/")) {
-    return "text";
-  }
   const extension = item.name.toLowerCase().split(".").pop() ?? "";
   const byExtension = extensionKinds.get(extension);
   if (byExtension) {
     return byExtension;
   }
+  if (mediaType.startsWith("text/")) return "text";
   return data && detectTextEncoding(data) ? "text" : "unsupported";
 }
 

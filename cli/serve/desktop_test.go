@@ -7,7 +7,15 @@ import (
 )
 
 func TestListenDesktopEndpointsSeparatesRendererAndSandboxBindings(t *testing.T) {
-	rendererListener, sandboxListener, err := listenDesktopEndpoints()
+	var requested []string
+	rendererListener, sandboxListener, err := listenDesktopEndpointsWith(func(network, address string) (net.Listener, error) {
+		requested = append(requested, address)
+		// Check the production address without claiming a running Desktop's port.
+		if address == desktopRendererListenAddr {
+			address = "127.0.0.1:0"
+		}
+		return net.Listen(network, address)
+	})
 	if err != nil {
 		t.Fatalf("listenDesktopEndpoints() error = %v", err)
 	}
@@ -18,8 +26,8 @@ func TestListenDesktopEndpointsSeparatesRendererAndSandboxBindings(t *testing.T)
 	if !ok || !rendererAddr.IP.IsLoopback() {
 		t.Fatalf("renderer address = %v, want loopback TCP address", rendererListener.Addr())
 	}
-	if got := rendererAddr.String(); got != desktopRendererListenAddr {
-		t.Fatalf("renderer address = %q, want stable address %q", got, desktopRendererListenAddr)
+	if !reflect.DeepEqual(requested, []string{desktopRendererListenAddr, "0.0.0.0:0"}) {
+		t.Fatalf("requested addresses = %q, want stable renderer and ephemeral sandbox", requested)
 	}
 	sandboxAddr, ok := sandboxListener.Addr().(*net.TCPAddr)
 	if !ok || !sandboxAddr.IP.IsUnspecified() {

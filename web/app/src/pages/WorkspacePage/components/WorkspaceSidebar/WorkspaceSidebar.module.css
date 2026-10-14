@@ -23,7 +23,7 @@
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  border-right: 1px solid #eaecf0;
+  border-right: 1px solid var(--workspace-divider-color, var(--line));
   background: var(--white);
   color: #344054;
   font-family: var(--font-family-text);
@@ -385,7 +385,7 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
-  border-right: 1px solid #eaecf0;
+  border-right: 1px solid var(--workspace-divider-color, var(--line));
   background: var(--white);
   box-shadow: none;
   transform: translateX(0);
@@ -572,7 +572,7 @@
 :global(:root[data-theme="dark"]) .mainColumn,
 :global(:root[data-theme="dark"]) .contextHeader,
 :global(:root[data-theme="dark"]) .contextSearch {
-  border-color: var(--line);
+  border-color: var(--workspace-divider-color, var(--line));
   background: var(--surface);
 }
 

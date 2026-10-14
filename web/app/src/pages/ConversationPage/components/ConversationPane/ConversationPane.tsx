@@ -11,14 +11,14 @@ import {
   useQuestionAnswerMode,
   useConversationDraftEditorSync,
 } from "@/components/business/ConversationPane";
-import { DocumentPreviewPanel, type DocumentPreviewRequest } from "@/components/business/DocumentPreviewPanel";
-import { CitationSources, type CitationSelection } from "@/components/business/MessageContent";
+import type { DocumentPreviewRequest } from "@/components/business/DocumentPreviewPanel";
+import { ChatSidePanel, useChatTools } from "@/components/business/ChatSidePanel";
+import { type CitationSelection } from "@/components/business/MessageContent";
 import { AgentView, type AgentDetailPaneHandle } from "@/pages/AgentPage/components";
 import { Button, DialogCloseButton, DialogContent, DialogRoot, DialogTitle } from "@/components/ui";
 import { normalizeAuthProviderName } from "@/models/agents";
 import { getConversationDescription, isDirectConversation, isOnDemandConversation } from "@/models/conversations";
 import type { AgentDetailSidePanelProps } from "@/hooks/workspace/types";
-import { ConversationActivityPanel } from "../ConversationActivityPanel";
 import { RoomTaskDialog, RoomTaskReference } from "../RoomTaskDialog";
 import type { ReactNode } from "react";
 import { useSearchParams } from "react-router-dom";
@@ -31,7 +31,7 @@ import {
   conversationActivityAgents,
   conversationActivityEntries,
   conversationWorkingParticipantsWithActivity,
-} from "../ConversationActivityPanel/conversationActivity";
+} from "@/components/business/ConversationActivityPanel/conversationActivity";
 
 function hasBlockingAgentDetailChangesAfterMetadataCommit(
   props: Pick<AgentDetailSidePanelProps, "draft" | "hasUnsavedChanges" | "savedDraft">,
@@ -272,6 +272,7 @@ function ConversationPaneContent({
   threadDraftSegments,
   threadAttachmentDrafts,
   onOpenThread,
+  onRestoreThread,
   onCloseThread,
   onThreadDraftChange,
   onThreadSlashQueryChange,
@@ -286,14 +287,13 @@ function ConversationPaneContent({
 }: ConversationPaneProps & RoomTaskSlots) {
   const description = getConversationDescription(conversation, currentUserID, usersById, locale, t);
   const managerProvider = normalizeAuthProviderName(managerProfile?.provider);
-  const [activityPanelOpen, setActivityPanelOpen] = useState(false);
-  const [focusedActivityEntryID, setFocusedActivityEntryID] = useState<string | null>(null);
+  const tools = useChatTools({ conversation, currentUserID, agents, usersById, editorRef, t });
+  const { openPreview, openActivity, openSources } = tools;
+  const { openTab, closeTab, state: sideState } = tools.controller;
   const [clearMessagesDialogOpen, setClearMessagesDialogOpen] = useState(false);
   const [deleteRoomDialogOpen, setDeleteRoomDialogOpen] = useState(false);
   const [deleteRoomBusy, setDeleteRoomBusy] = useState(false);
   const [deleteRoomError, setDeleteRoomError] = useState("");
-  const [documentPreview, setDocumentPreview] = useState<DocumentPreviewRequest | null>(null);
-  const [citationSelection, setCitationSelection] = useState<CitationSelection | null>(null);
   const composerDisabled = Boolean(composerDisabledReason);
   const mainMessages = useMemo(
     () => conversation.messages.filter((message) => !message.relates_to),
@@ -329,7 +329,10 @@ function ConversationPaneContent({
     const byMessage = new Map<string, ConversationWorkingParticipant>();
     const moved = new Set<ConversationWorkingParticipant>();
     const threadVisible =
-      activeThreadRootID && !agentDetailPanelProps && !documentPreview && !activityPanelOpen && !citationSelection;
+      activeThreadRootID &&
+      !agentDetailPanelProps &&
+      tools.controller.state.open &&
+      tools.controller.state.activeID === "thread";
     const threadMessages =
       threadVisible && activeThreadView?.root ? [activeThreadView.root, ...(activeThreadView.replies ?? [])] : [];
     for (const message of [...visibleMessages, ...threadMessages]) {
@@ -350,11 +353,10 @@ function ConversationPaneContent({
   }, [
     activeThreadRootID,
     activeThreadView,
-    activityPanelOpen,
     agentDetailPanelProps,
-    citationSelection,
+    tools.controller.state.open,
+    tools.controller.state.activeID,
     conversation.id,
-    documentPreview,
     onStopWorkingTurn,
     visibleMessages,
     workingParticipantsWithActivity,
@@ -382,78 +384,47 @@ function ConversationPaneContent({
     setDeleteRoomDialogOpen(false);
     setDeleteRoomBusy(false);
     setDeleteRoomError("");
-    setDocumentPreview(null);
-    setCitationSelection(null);
   }, [conversation.id]);
-
-  const handleToggleActivityPanel = useCallback(() => {
-    if (!activityPanelOpen) {
-      onCloseThread();
-      onToggleChannelTools(false);
-      setDocumentPreview(null);
-      setCitationSelection(null);
-    }
-    setActivityPanelOpen((open) => !open);
-  }, [activityPanelOpen, onCloseThread, onToggleChannelTools]);
 
   const handleOpenActivityPanel = useCallback(
     (participant?: ConversationWorkingParticipant) => {
-      setFocusedActivityEntryID(participant?.activity?.entryID || null);
-      onCloseThread();
       onToggleChannelTools(false);
-      setDocumentPreview(null);
-      setCitationSelection(null);
-      setActivityPanelOpen(true);
+      openActivity(participant?.activity?.entryID);
     },
-    [onCloseThread, onToggleChannelTools],
+    [onToggleChannelTools, openActivity],
   );
 
   const handlePreviewAttachment = useCallback(
     (request: DocumentPreviewRequest) => {
-      if (agentDetailPanelProps?.onClose(false) === false) {
-        return;
-      }
+      if (agentDetailPanelProps?.onClose(false) === false) return;
       onPreserveMessageAnchor(request.anchor);
-      onCloseThread();
-      setActivityPanelOpen(false);
-      setDocumentPreview(request);
-      setCitationSelection(null);
+      onToggleChannelTools(false);
+      openPreview(request);
     },
-    [agentDetailPanelProps, onCloseThread, onPreserveMessageAnchor],
+    [agentDetailPanelProps, onPreserveMessageAnchor, onToggleChannelTools, openPreview],
   );
 
+  const previousThreadRoot = useRef<string | undefined>(undefined);
   useEffect(() => {
-    if (activeThreadRootID) {
-      setActivityPanelOpen(false);
-      setDocumentPreview(null);
-      setCitationSelection(null);
-    }
-  }, [activeThreadRootID]);
+    if (previousThreadRoot.current === activeThreadRootID) return;
+    previousThreadRoot.current = activeThreadRootID;
+    if (activeThreadRootID && !sideState.tabs.some((tab) => tab.kind === "thread" && tab.rootID === activeThreadRootID))
+      openTab({ id: "thread", kind: "thread", rootID: activeThreadRootID });
+  }, [activeThreadRootID, sideState.tabs, openTab]);
+
+  const handleCloseThread = useCallback(() => {
+    closeTab("thread");
+    onCloseThread();
+  }, [closeTab, onCloseThread]);
 
   const handleOpenCitation = useCallback(
     (selection: CitationSelection) => {
       if (agentDetailPanelProps?.onClose(false) === false) return;
       onPreserveMessageAnchor(selection.anchor);
-      onCloseThread();
       onToggleChannelTools(false);
-      setActivityPanelOpen(false);
-      setDocumentPreview(null);
-      setCitationSelection(selection);
+      openSources(selection);
     },
-    [agentDetailPanelProps, onCloseThread, onPreserveMessageAnchor, onToggleChannelTools],
-  );
-
-  const handleCitationChange = useCallback(
-    (id: string | null) => {
-      if (!id) {
-        const anchor = citationSelection?.anchor;
-        setCitationSelection(null);
-        requestAnimationFrame(() => anchor?.isConnected && anchor.focus({ preventScroll: true }));
-        return;
-      }
-      setCitationSelection((current) => (current ? { ...current, activeID: id } : null));
-    },
-    [citationSelection],
+    [agentDetailPanelProps, onPreserveMessageAnchor, onToggleChannelTools, openSources],
   );
 
   const handleOpenClearMessagesDialog = useCallback(() => {
@@ -487,6 +458,7 @@ function ConversationPaneContent({
       thread={activeThreadView}
       loading={threadLoading}
       error={threadError}
+      fileScope={tools.fileScope}
       draftSegments={threadDraftSegments}
       attachmentDrafts={threadAttachmentDrafts}
       disabled={Boolean(threadComposerDisabledReason)}
@@ -495,7 +467,7 @@ function ConversationPaneContent({
       theme={theme}
       showToolCalls={showToolCalls}
       t={t}
-      onClose={onCloseThread}
+      onClose={handleCloseThread}
       onDraftChange={onThreadDraftChange}
       onSlashQueryChange={onThreadSlashQueryChange}
       onAddAttachments={onAddThreadAttachments}
@@ -519,37 +491,6 @@ function ConversationPaneContent({
     />
   ) : null;
   const agentDetailPanel = agentDetailPanelProps ? <AgentDetailSidePanel {...agentDetailPanelProps} /> : null;
-  const activityPanel = activityPanelOpen ? (
-    <ConversationActivityPanel
-      key={conversation.id}
-      agents={agents}
-      conversation={conversation}
-      initialEntryID={focusedActivityEntryID}
-      locale={locale}
-      t={t}
-      usersById={usersById}
-      onClose={() => setActivityPanelOpen(false)}
-      onCitationSelect={handleOpenCitation}
-    />
-  ) : null;
-  const documentPreviewPanel = documentPreview ? (
-    <DocumentPreviewPanel
-      {...documentPreview}
-      t={t}
-      onClose={() => setDocumentPreview(null)}
-      onIndexChange={(index) => setDocumentPreview((current) => (current ? { ...current, index } : current))}
-    />
-  ) : null;
-  const citationPanel = citationSelection ? (
-    <CitationSources
-      activeID={citationSelection.activeID}
-      cited={citationSelection.cited}
-      onActiveChange={handleCitationChange}
-      t={t}
-      variant="panel"
-    />
-  ) : null;
-  const sidePanel = agentDetailPanel ?? documentPreviewPanel ?? activityPanel ?? citationPanel ?? threadPanel;
 
   return (
     <>
@@ -559,25 +500,11 @@ function ConversationPaneContent({
         conversation={conversation}
         conversationMembers={conversationMembers}
         description={description}
+        headerTrailingAccessory={tools.toggle}
         headerAccessory={
           <>
             {taskHeader}
-            <Button
-              className="icon-button activity-record-button"
-              active={activityPanelOpen}
-              iconOnly
-              size="lg"
-              variant="secondaryGray"
-              aria-label={t("conversationActivityOpen")}
-              aria-pressed={activityPanelOpen}
-              data-tooltip={t("conversationActivityOpen")}
-              data-tooltip-side="bottom"
-              onClick={handleToggleActivityPanel}
-            >
-              <span className="icon-button-mark" aria-hidden="true">
-                <ActivityWaveIcon />
-              </span>
-            </Button>
+            {tools.toolbar}
           </>
         }
         inviteActionLabel={inviteActionLabel}
@@ -625,6 +552,7 @@ function ConversationPaneContent({
         <AgentQuestionComposer mode={questionMode} t={t} usersById={usersById} />
       ) : (
         <Conversation.Composer
+          fileScope={tools.fileScope}
           authBusyProvider={authBusyProvider}
           authStatuses={authStatuses}
           composerDisabled={composerDisabled}
@@ -679,7 +607,33 @@ function ConversationPaneContent({
           onWorkingAction={handleOpenActivityPanel}
         />
       )}
-      {sidePanel}
+      {agentDetailPanel}
+      <ChatSidePanel
+        key={conversation.id}
+        controller={tools.controller}
+        fileScope={tools.fileScope}
+        conversation={conversation}
+        agents={agents}
+        usersById={usersById}
+        locale={locale}
+        t={t}
+        onReference={tools.onReference}
+        onPreview={(item) => handlePreviewAttachment({ items: [item], index: 0 })}
+        onSources={handleOpenCitation}
+        onCollapse={tools.collapse}
+        activeThreadRootID={activeThreadRootID}
+        threadPanel={threadPanel}
+        onThreadSelect={(rootID) => {
+          if (onRestoreThread) {
+            void onRestoreThread(rootID);
+            return;
+          }
+          const message = conversation.messages.find((item) => item.id === rootID);
+          if (message) void onOpenThread(message);
+        }}
+        onThreadClose={onCloseThread}
+      />
+
       <Conversation.RoomDangerConfirmDialog
         cancelLabel={t("cancel")}
         closeLabel={t("close")}
@@ -713,19 +667,5 @@ function ConversationPaneContent({
         />
       ) : null}
     </>
-  );
-}
-
-function ActivityWaveIcon() {
-  return (
-    <svg aria-hidden="true" fill="none" focusable="false" viewBox="0 0 24 24">
-      <path
-        d="M4 12h3.4l2-4 3.4 8 2.1-4H20"
-        stroke="currentColor"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth="1.9"
-      />
-    </svg>
   );
 }

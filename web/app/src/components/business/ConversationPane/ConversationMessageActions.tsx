@@ -1,3 +1,4 @@
+import { writeTextToClipboard } from "@/shared/lib/clipboard";
 import { DiagnosticMessageAction } from "@/components/business/TurnDiagnostics";
 import { diagnosticReference } from "@/models/diagnostics";
 import { useEffect, useRef, useState, type ReactNode } from "react";
@@ -119,27 +120,6 @@ export function ConversationMessageActions({
       ) : null}
     </div>
   );
-}
-
-async function writeTextToClipboard(text: string): Promise<boolean> {
-  try {
-    await navigator.clipboard.writeText(text);
-    return true;
-  } catch {
-    const textarea = document.createElement("textarea");
-    textarea.value = text;
-    textarea.style.position = "fixed";
-    textarea.style.left = "-9999px";
-    document.body.appendChild(textarea);
-    textarea.select();
-    try {
-      return document.execCommand("copy");
-    } catch {
-      return false;
-    } finally {
-      textarea.remove();
-    }
-  }
 }
 
 async function writeImageToClipboard(url: string): Promise<void> {

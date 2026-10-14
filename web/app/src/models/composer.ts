@@ -1,4 +1,6 @@
+import { fileReferenceKey, type ComposerFileReference, type FileReference } from "./fileReferences";
 export type ComposerSegment =
+  | { type: "file"; reference: ComposerFileReference; text: string }
   | {
       text: string;
       type: "text";
@@ -67,6 +69,31 @@ export function createMentionTokenElement(user: ComposerMentionUser): HTMLSpanEl
   return token;
 }
 
+export function createFileReferenceToken(reference: ComposerFileReference): HTMLSpanElement {
+  const token = document.createElement("span");
+  token.className = "composer-mention-token composer-file-token";
+  token.dataset.composerFile = JSON.stringify(reference);
+  token.contentEditable = "false";
+  token.textContent = `@${reference.label}`;
+  token.title = reference.source === "workspace" ? `${reference.agent_id}: ${reference.path}` : reference.name;
+  return token;
+}
+
+export function composerFileReferences(segments: readonly ComposerSegment[]): FileReference[] {
+  const unique = new Map<string, FileReference>();
+  for (const segment of segments) {
+    if (segment.type !== "file") continue;
+    const ref = segment.reference;
+    unique.set(
+      fileReferenceKey(ref),
+      ref.source === "workspace"
+        ? { source: ref.source, agent_id: ref.agent_id, path: ref.path }
+        : { source: ref.source, attachment_id: ref.attachment_id },
+    );
+  }
+  return [...unique.values()];
+}
+
 export function createSlashTokenElement(value: unknown): HTMLSpanElement {
   const token = document.createElement("span");
   token.className = "composer-slash-token";
@@ -86,6 +113,10 @@ export function normalizeComposerSegmentsForDisplay(
     }
     if (segment.type === "mention") {
       normalized.push({ type: "mention", userId: segment.userId, userName: segment.userName });
+      continue;
+    }
+    if (segment.type === "file") {
+      normalized.push(segment);
       continue;
     }
     const text = String(segment.text ?? "");
@@ -115,6 +146,10 @@ export function appendComposerSegments(
           name: segment.userName,
         }),
       );
+      continue;
+    }
+    if (segment.type === "file") {
+      parent.append(createFileReferenceToken(segment.reference));
       continue;
     }
     if (segment.type === "slash") {
@@ -163,6 +198,20 @@ export function collectComposerSegments(node: Node, segments: ComposerSegment[])
       return;
     }
     const element = child as HTMLElement;
+    if (element.dataset?.composerFile) {
+      try {
+        const reference = JSON.parse(element.dataset.composerFile) as ComposerFileReference;
+        if (
+          (reference.source === "workspace" && reference.agent_id && reference.path) ||
+          (reference.source === "attachment" && reference.attachment_id)
+        ) {
+          segments.push({ type: "file", reference, text: `@${reference.label}` });
+          return;
+        }
+      } catch {
+        /* Invalid tokens are read as plain text. */
+      }
+    }
     if (element.dataset?.userId) {
       segments.push({
         type: "mention",
@@ -201,6 +250,10 @@ export function normalizeComposerSegments(
       if (!segment.userId) {
         continue;
       }
+      normalized.push(segment);
+      continue;
+    }
+    if (segment.type === "file") {
       normalized.push(segment);
       continue;
     }
@@ -264,6 +317,8 @@ export function areComposerSegmentsEqual(
       }
       return segment.userId === other.userId && segment.userName === other.userName;
     }
+    if (segment.type === "file")
+      return other.type === "file" && JSON.stringify(segment.reference) === JSON.stringify(other.reference);
     if (other.type === "mention") {
       return false;
     }
@@ -312,6 +367,7 @@ export function serializeComposerSegments(segments: readonly ComposerSegment[] |
         const userName = segment.userName || userID;
         return `<at user_id="${userID}">${userName}</at>`;
       }
+      if (segment.type === "file") return `@${JSON.stringify(segment.reference.label)}`;
       return segment.text ?? "";
     })
     .join("");
@@ -362,7 +418,7 @@ export function normalizeTextMentions(
     if (!segment) {
       continue;
     }
-    if (segment.type === "mention") {
+    if (segment.type === "mention" || segment.type === "file") {
       normalized.push(segment);
       continue;
     }
@@ -408,7 +464,7 @@ export function getComposerMentionState(root: HTMLElement | null | undefined): C
   if (!context) {
     return null;
   }
-  const match = context.textBeforeCursor.match(/(^|\s)@([a-zA-Z0-9._-]*)$/);
+  const match = context.textBeforeCursor.match(/(^|\s)@([^\s@]*)$/);
   if (!match) {
     return null;
   }
@@ -598,7 +654,12 @@ function hasComposerContent(node: Node): boolean {
     if (element.dataset?.composerCaretAnchor) {
       return false;
     }
-    if (element.tagName === "BR" || element.dataset?.userId || element.dataset?.composerSlashToken) {
+    if (
+      element.tagName === "BR" ||
+      element.dataset?.userId ||
+      element.dataset?.composerSlashToken ||
+      element.dataset?.composerFile
+    ) {
       return true;
     }
     return hasComposerContent(element);
@@ -757,7 +818,7 @@ function isComposerTokenNode(node: Node | null | undefined): node is HTMLElement
     return false;
   }
   const element = node as HTMLElement;
-  return Boolean(element.dataset?.userId || element.dataset?.composerSlashToken);
+  return Boolean(element.dataset?.userId || element.dataset?.composerSlashToken || element.dataset?.composerFile);
 }
 
 function getAdjacentSlashTokenContext(node: Node, offset: number): { element: HTMLElement; textNode: Text } | null {
@@ -779,7 +840,7 @@ function getAdjacentSlashTokenContext(node: Node, offset: number): { element: HT
 function replacementEndsWithWhitespace(segments: readonly ComposerSegment[] | null | undefined): boolean {
   for (let index = (segments?.length ?? 0) - 1; index >= 0; index -= 1) {
     const segment = segments?.[index];
-    if (!segment || segment.type === "mention") {
+    if (!segment || segment.type === "mention" || segment.type === "file") {
       continue;
     }
     const text = String(segment.text ?? "");

@@ -796,6 +796,7 @@ func bootstrapRuntimeKind(runtime string) string {
 }
 
 type createMessageRequest struct {
+	FileReferences  []FileReference              `json:"file_references,omitempty"`
 	RoomID          string                       `json:"room_id"`
 	ClientMessageID string                       `json:"client_message_id,omitempty"`
 	SenderID        string                       `json:"sender_id"`
@@ -2419,6 +2420,8 @@ func writeAPIError(w http.ResponseWriter, err error, fallbackStatus int) {
 
 func knownAPIError(err error, fallbackStatus int) (string, int) {
 	switch {
+	case errors.Is(err, errFileReference):
+		return "file_reference_unavailable", fallbackStatus
 	case errors.Is(err, im.ErrTitleRequired):
 		return "title_required", fallbackStatus
 	case errors.Is(err, im.ErrCreatorIDRequired):
@@ -3023,6 +3026,15 @@ func (h *Handler) handleCreateMessage(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	var releaseReferences = func() {}
+	defer func() { releaseReferences() }()
+	if len(req.FileReferences) > 0 {
+		serviceReq.ResolveAttachments = func() ([]im.MessageAttachmentUpload, error) {
+			uploads, release, err := h.resolveFileReferences(serviceReq.RoomID, appRequestAgentID(r), req.FileReferences)
+			releaseReferences = release
+			return uploads, err
+		}
+	}
 	message, created, err := channel.SendMessageOnce(serviceReq)
 	if err != nil {
 		writeAPIError(w, err, http.StatusBadRequest)

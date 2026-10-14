@@ -17,6 +17,7 @@ const SyntaxHighlightedText = lazy(() =>
 export function DocumentPreviewContent({
   data,
   contentType,
+  onError,
   truncated,
   item,
   objectURL,
@@ -27,6 +28,7 @@ export function DocumentPreviewContent({
   contentType?: string;
   truncated?: boolean;
   item: AttachmentPreviewItem;
+  onError?: () => void;
   objectURL: string;
   scale: number;
   t: (key: string) => string;
@@ -46,10 +48,21 @@ export function DocumentPreviewContent({
   const loading = <div className="document-preview-status">{t("attachmentPreviewLoading")}</div>;
 
   if (kind === "video") {
-    return <video className="w-full max-h-full" src={objectURL} controls preload="metadata" aria-label={item.name} />;
+    return (
+      <video
+        className="w-full max-h-full"
+        src={objectURL}
+        onError={onError}
+        controls
+        preload="metadata"
+        aria-label={item.name}
+      />
+    );
   }
   if (kind === "audio") {
-    return <audio className="w-full" src={objectURL} controls preload="metadata" aria-label={item.name} />;
+    return (
+      <audio className="w-full" src={objectURL} onError={onError} controls preload="metadata" aria-label={item.name} />
+    );
   }
   if (kind === "image") {
     return (
@@ -58,6 +71,7 @@ export function DocumentPreviewContent({
           className="document-preview-image"
           src={objectURL}
           alt={item.name}
+          onError={onError}
           style={{ transform: `scale(${scale})` }}
         />
       </div>

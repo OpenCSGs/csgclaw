@@ -62,6 +62,7 @@ import {
 import styles from "./ConversationActivityPanel.module.css";
 
 type ConversationActivityPanelProps = {
+  embedded?: boolean;
   agents: readonly AgentLike[];
   conversation: IMConversation;
   initialEntryID?: string | null;
@@ -116,6 +117,7 @@ function persistPanelWidth(width: number) {
 }
 
 export function ConversationActivityPanel({
+  embedded = false,
   agents,
   conversation,
   initialEntryID = null,
@@ -358,29 +360,36 @@ export function ConversationActivityPanel({
   return (
     <aside
       ref={panelRef}
-      className={classNames("conversation-activity-panel", styles.panel, resizing && styles.resizing)}
+      className={classNames(
+        "conversation-activity-panel",
+        styles.panel,
+        embedded && styles.embedded,
+        resizing && styles.resizing,
+      )}
       aria-labelledby="conversation-activity-title"
       style={panelStyle}
     >
-      <div
-        className={styles.resizeHandle}
-        role="separator"
-        tabIndex={0}
-        aria-label={t("conversationActivityResize")}
-        aria-orientation="vertical"
-        aria-valuenow={Math.round(panelWidth)}
-        onKeyDown={(event) => {
-          if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") {
-            return;
-          }
-          event.preventDefault();
-          setPanelWidth((current) => clampPanelWidth(current + (event.key === "ArrowLeft" ? 24 : -24)));
-        }}
-        onPointerCancel={handleResizeEnd}
-        onPointerDown={handleResizeStart}
-        onPointerMove={handleResizeMove}
-        onPointerUp={handleResizeEnd}
-      />
+      {!embedded ? (
+        <div
+          className={styles.resizeHandle}
+          role="separator"
+          tabIndex={0}
+          aria-label={t("conversationActivityResize")}
+          aria-orientation="vertical"
+          aria-valuenow={Math.round(panelWidth)}
+          onKeyDown={(event) => {
+            if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") {
+              return;
+            }
+            event.preventDefault();
+            setPanelWidth((current) => clampPanelWidth(current + (event.key === "ArrowLeft" ? 24 : -24)));
+          }}
+          onPointerCancel={handleResizeEnd}
+          onPointerDown={handleResizeStart}
+          onPointerMove={handleResizeMove}
+          onPointerUp={handleResizeEnd}
+        />
+      ) : null}
 
       <header className={styles.header}>
         <div className={styles.titleGroup}>

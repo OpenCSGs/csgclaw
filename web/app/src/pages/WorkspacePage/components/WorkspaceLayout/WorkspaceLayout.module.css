@@ -111,7 +111,7 @@
 
 :global(:root[data-theme="dark"]) .primarySidebarResizer::before,
 :global(:root[data-theme="dark"]) .sidebarResizer::before {
-  background: rgba(208, 213, 221, 0.18);
+  background: var(--workspace-resizer-rest-color, rgba(208, 213, 221, 0.18));
 }
 
 :global(:root[data-theme="dark"]) .primarySidebarResizer:hover::before,

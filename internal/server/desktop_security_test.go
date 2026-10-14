@@ -20,8 +20,8 @@ func TestDesktopSecurityHeadersAllowOnlyHashedInlineBootstrap(t *testing.T) {
 	if strings.Contains(csp, "script-src 'self' 'unsafe-inline'") {
 		t.Fatalf("Content-Security-Policy = %q, unsafe-inline must remain disabled", csp)
 	}
-	if !strings.Contains(csp, "frame-src 'self' blob:") {
-		t.Fatalf("Content-Security-Policy = %q, want same-origin and blob attachment previews", csp)
+	if !strings.Contains(csp, "frame-src 'self' blob: http: https:") {
+		t.Fatalf("Content-Security-Policy = %q, want attachment previews and sandboxed browser frames", csp)
 	}
 	if !strings.Contains(csp, "object-src 'none'") {
 		t.Fatalf("Content-Security-Policy = %q, object embedding must remain disabled", csp)

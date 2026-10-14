@@ -1,4 +1,5 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import JSZip from "jszip";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { vi } from "vitest";
 import { DocumentPreviewPanel } from "@/components/business/DocumentPreviewPanel";
@@ -97,6 +98,31 @@ const t = (key: string, params?: Record<string, string | number>) => {
 };
 
 describe("DocumentPreviewPanel", () => {
+  it("shows media failures and reloads the preview without closing its tab", async () => {
+    render(
+      <DocumentPreviewPanel
+        index={0}
+        items={[
+          {
+            id: "broken-image",
+            name: "image.png",
+            mediaType: "image/png",
+            sizeBytes: 4,
+            file: new File(["test"], "image.png", { type: "image/png" }),
+          },
+        ]}
+        t={t}
+        onClose={() => {}}
+        onIndexChange={() => {}}
+      />,
+    );
+    const image = await screen.findByRole("img", { name: "image.png" });
+    fireEvent.error(image);
+    expect(await screen.findByText("Preview failed")).toBeInTheDocument();
+    const reload = screen.getAllByRole("button", { name: "chatPreviewReload" }).at(-1)!;
+    await userEvent.click(reload);
+    expect(await screen.findByRole("img", { name: "image.png" })).toBeInTheDocument();
+  });
   beforeEach(() => {
     pdfMock.pageCount = 1;
     mammothMock.html = "<p>Full-width document body</p>";
@@ -384,20 +410,26 @@ describe("DocumentPreviewPanel", () => {
   });
 
   it("resets PowerPoint navigation when switching to a shorter deck", async () => {
+    async function deck(name: string) {
+      const zip = new JSZip();
+      zip.file(
+        "ppt/presentation.xml",
+        '<p:presentation xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><p:defaultTextStyle><a:lvl1pPr/></p:defaultTextStyle></p:presentation>',
+      );
+      return new File([await zip.generateAsync({ type: "arraybuffer" })], name, {
+        type: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+      });
+    }
     const items: AttachmentPreviewItem[] = [
       {
-        file: new File(["first deck"], "first.pptx", {
-          type: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-        }),
+        file: await deck("first.pptx"),
         id: "pptx-first",
         mediaType: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
         name: "first.pptx",
         sizeBytes: 10,
       },
       {
-        file: new File(["short deck"], "short.pptx", {
-          type: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-        }),
+        file: await deck("short.pptx"),
         id: "pptx-short",
         mediaType: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
         name: "short.pptx",

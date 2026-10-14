@@ -2,12 +2,13 @@ import { shell, type BrowserWindow, type WebContents } from "electron";
 
 export function installNavigationPolicy(window: BrowserWindow, allowedOrigin: string): void {
   const webContents = window.webContents;
-  const handleNavigation = (event: Electron.Event, targetURL: string) => {
+  const handleNavigation = (event: Electron.Event, targetURL: string, _isInPlace?: boolean, isMainFrame?: boolean) => {
+    if (isMainFrame === false) return;
     if (isAllowedInternalURL(targetURL, allowedOrigin)) {
       return;
     }
     event.preventDefault();
-    if (isSafeHTTPSURL(targetURL)) {
+    if (isSafeWebURL(targetURL)) {
       void shell.openExternal(targetURL, { activate: true });
     }
   };
@@ -16,7 +17,7 @@ export function installNavigationPolicy(window: BrowserWindow, allowedOrigin: st
   webContents.on("will-redirect", handleNavigation);
   webContents.on("will-attach-webview", (event) => event.preventDefault());
   webContents.setWindowOpenHandler(({ url }) => {
-    if (isSafeHTTPSURL(url)) {
+    if (isSafeWebURL(url)) {
       void shell.openExternal(url, { activate: true });
     }
     return { action: "deny" };
@@ -47,6 +48,15 @@ export function isSafeHTTPSURL(rawURL: string): boolean {
   try {
     const parsed = new URL(rawURL);
     return parsed.protocol === "https:" && !parsed.username && !parsed.password;
+  } catch {
+    return false;
+  }
+}
+
+export function isSafeWebURL(rawURL: string): boolean {
+  try {
+    const parsed = new URL(rawURL);
+    return ["https:", "http:"].includes(parsed.protocol) && !parsed.username && !parsed.password;
   } catch {
     return false;
   }

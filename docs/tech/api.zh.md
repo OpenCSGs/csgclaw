@@ -1625,3 +1625,44 @@ tools、instructions、非 user role、attachments 和未知请求字段都会�
 - `/api/bots/{id}/messages/send`
 - `/api/bots/{id}/llm/*`
 - 任何未在 `internal/api/router.go` 中注册的旧路径
+
+## 聊天侧栏文件
+
+### `GET /api/v1/agents/{id}/workspace?path=...&depth=1`
+
+仅列出所选工作区目录的直接子项。
+`path` 是工作区相对路径，默认为根目录。
+聊天文件浏览器按需展开目录。
+工作区列表和原始内容接口均支持可选的 `room_id`。
+Agent 必须属于该房间；已配置的私聊任务使用该房间锁定的工作目录，其他会话使用 Agent 默认工作区。
+
+### `GET /api/v1/agents/{id}/workspace/content?path=...`
+
+流式返回文件原始内容、MIME 类型和下载文件名，并支持 HTTP Range。
+路径必须指向所选 Agent 工作区内的普通文件，不允许符号链接或向上穿越。
+接口沿用工作区管理接口的访问策略。
+HTML 内容带有隔离策略，Web UI 继续使用现有清洗预览。
+
+### 在 `POST /api/v1/messages` 中引用文件
+
+JSON 和 multipart 的 `payload` 均支持可选的 `file_references` 数组。
+工作区来源格式为 `{"source":"workspace","agent_id":"alice","path":"docs/report.md"}`。
+会话附件来源格式为 `{"source":"attachment","attachment_id":"att-example"}`。
+来源 Agent 必须属于目标房间，来源附件必须仍被该房间引用。
+工作区引用使用目标房间的工作目录，与文件列表及预览保持一致。
+相同来源去重，并与手动上传共同遵守现有附件数量与大小限制。
+工作区目录使用相同来源格式，发送时生成一个 ZIP 附件，保留目录名称和内部相对结构。
+目录内禁止符号链接和特殊文件，原始内容与 ZIP 大小均遵守单文件限制，每个目录最多包含 10,000 个条目。
+服务端把引用文件保存为普通消息附件快照，沿用现有文件投递机制交给接收 Agent。
+输入框显示 `@路径`，提交文本使用 `@"docs/report.md"` 这样的带引号文件字面量。
+文件字面量不会触发人员 mention，即使文件名或目录名与成员同名。
+来源不可用时返回 `file_reference_unavailable`，不创建半条消息。
+已成功发送的同一发送者和 `client_message_id` 重试直接返回原消息，不重新读取源文件。
+
+聊天侧栏复用房间附件列表和下载接口。
+附件列表要求现有的服务端令牌、Desktop 会话凭据或已验证的 Agent 凭据。
+仍被当前房间引用的单个附件也可使用其现有下载能力令牌读取，该令牌不能用于列举附件或修改数据。
+Fetch Metadata 不作为鉴权凭据。
+Web UI 从现有消息接口读取附件元数据，并使用单文件能力令牌预览和下载，消息接口的访问策略保持不变。
+外部客户端和 Agent 保留原有令牌与房间成员检查。
+浏览器不会获得服务端管理令牌，也不会获得删除权限。

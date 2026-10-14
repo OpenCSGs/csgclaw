@@ -123,6 +123,7 @@ export type ConversationPaneProps = {
   onMessageAction: (action: MessageAction, message?: MessageLike | null) => VoidOrPromise;
   onPreserveMessageAnchor?: (anchor?: HTMLElement | null) => void;
   onOpenAgentDetail?: (agent: AgentLike, anchor: HTMLElement) => VoidOrPromise;
+  onRestoreThread?: (rootID: string) => VoidOrPromise;
   onOpenThread: (message: IMMessage) => VoidOrPromise;
   onRemoveMember?: (memberID: string) => VoidOrPromise;
   onRemoveAttachment?: (id: string) => void;

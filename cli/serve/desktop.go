@@ -127,11 +127,15 @@ func (desktopServeCmd) Run(parent context.Context, run *command.Context, args []
 }
 
 func listenDesktopEndpoints() (net.Listener, net.Listener, error) {
-	rendererListener, err := net.Listen("tcp4", desktopRendererListenAddr)
+	return listenDesktopEndpointsWith(net.Listen)
+}
+
+func listenDesktopEndpointsWith(listen func(string, string) (net.Listener, error)) (net.Listener, net.Listener, error) {
+	rendererListener, err := listen("tcp4", desktopRendererListenAddr)
 	if err != nil {
 		return nil, nil, fmt.Errorf("listen on desktop renderer loopback address: %w", err)
 	}
-	sandboxListener, err := net.Listen("tcp4", "0.0.0.0:0")
+	sandboxListener, err := listen("tcp4", "0.0.0.0:0")
 	if err != nil {
 		_ = rendererListener.Close()
 		return nil, nil, fmt.Errorf("listen on desktop sandbox address: %w", err)

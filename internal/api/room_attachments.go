@@ -11,7 +11,7 @@ import (
 )
 
 func (h *Handler) authorizeRoomAttachments(w http.ResponseWriter, r *http.Request) bool {
-	if appRequestAgentID(r) == "" && !h.validateServerAccessToken(r.Header.Get("Authorization")) {
+	if appRequestAgentID(r) == "" && !h.validateServerAccessToken(r.Header.Get("Authorization")) && !h.authorizeRoomAttachmentCapability(r) {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return false
 	}
@@ -35,6 +35,19 @@ func (h *Handler) authorizeRoomAttachments(w http.ResponseWriter, r *http.Reques
 		return false
 	}
 	return true
+}
+
+// A file capability grants only that live attachment, never a room listing or mutation.
+func (h *Handler) authorizeRoomAttachmentCapability(r *http.Request) bool {
+	if r.Method != http.MethodGet || r.Header.Get("Authorization") != "" || r.Header.Get("X-CSGClaw-Caller-Agent") != "" || h.im == nil {
+		return false
+	}
+	id := pathValue(r, "attachment_id")
+	if id == "" {
+		return false
+	}
+	file, err := h.im.RoomAttachmentFile(pathValue(r, "id"), id)
+	return err == nil && file.AuthorizesDownloadToken(r.URL.Query().Get("token"))
 }
 
 func (h *Handler) handleRoomAttachments(w http.ResponseWriter, r *http.Request) {
@@ -72,7 +85,8 @@ func (h *Handler) handleRoomAttachmentDownload(w http.ResponseWriter, r *http.Re
 	}
 	w.Header().Set("X-CSGClaw-File-SHA256", file.Attachment.SHA256)
 	w.Header().Set("X-CSGClaw-File-Size", strconv.FormatInt(file.Attachment.SizeBytes, 10))
-	// Membership and live room references are checked on every download.
+	// Every download retains the live-reference check; scoped Agent reads also
+	// require current room membership.
 	serveAttachment(w, r, file, false)
 }
 

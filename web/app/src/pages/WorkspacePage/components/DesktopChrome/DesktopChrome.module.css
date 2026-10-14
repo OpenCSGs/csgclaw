@@ -1,0 +1,85 @@
+.frame {
+  --desktop-titlebar-height: 48px;
+  --desktop-workspace-inset: 8px;
+  --workspace-divider-color: color-mix(in srgb, var(--line) 65%, transparent);
+  --workspace-resizer-rest-color: transparent;
+  --app-ui-viewport-height: calc(100dvh - var(--desktop-titlebar-height) - var(--desktop-workspace-inset));
+  display: grid;
+  grid-template-rows: var(--desktop-titlebar-height) minmax(0, 1fr);
+  height: 100dvh;
+  min-width: 0;
+  overflow: hidden;
+  background: var(--surface);
+}
+.titlebar {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 14px;
+  padding: 0 16px;
+  background: var(--surface);
+  color: var(--text);
+  -webkit-app-region: drag;
+  user-select: none;
+}
+.titlebar button {
+  -webkit-app-region: no-drag;
+}
+.titlebar[data-focused="false"] .identity {
+  opacity: 0.62;
+}
+.leading {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.frame[data-desktop-platform="darwin"] .leading {
+  margin-left: 80px;
+}
+.identity {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+}
+.identity strong {
+  font-weight: 600;
+  letter-spacing: -0.2px;
+}
+.divider {
+  color: var(--muted);
+}
+.context {
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.trailing {
+  flex: 0 0 0;
+}
+.frame:not([data-desktop-platform="darwin"]) .trailing {
+  flex-basis: 138px;
+}
+.content {
+  margin: 0 var(--desktop-workspace-inset) var(--desktop-workspace-inset);
+  min-height: 0;
+  min-width: 0;
+  border-radius: var(--radius-xl);
+  overflow: hidden;
+}
+.frame .content :global(main.chat-panel) {
+  border-radius: var(--radius-xl);
+  border-color: var(--workspace-divider-color);
+  border-left-color: transparent;
+}
+.frame .content :global(.chat-side-panel) {
+  border-left-color: var(--workspace-divider-color);
+}
+/* Native views do not inherit DOM clipping, so keep their bounds inside the curve. */
+.content :global(.chat-browser-native) {
+  margin: 0 var(--desktop-workspace-inset) var(--desktop-workspace-inset) 0;
+}

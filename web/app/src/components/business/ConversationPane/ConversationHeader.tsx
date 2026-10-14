@@ -17,6 +17,7 @@ export type ConversationHeaderProps = {
   conversationMembers: IMUser[];
   description?: string;
   headerAccessory?: ReactNode;
+  headerTrailingAccessory?: ReactNode;
   inviteActionLabel: string;
   agents?: AgentLike[];
   memberMenuRef?: RefObject<HTMLDivElement | null>;
@@ -43,6 +44,7 @@ export const ConversationHeader = memo(function ConversationHeader({
   conversationMembers,
   description,
   headerAccessory,
+  headerTrailingAccessory,
   inviteActionLabel,
   agents = [],
   memberMenuRef,
@@ -147,25 +149,25 @@ export const ConversationHeader = memo(function ConversationHeader({
               t={t}
             />
             <div ref={channelToolsRef} className="header-menu tools-menu">
-              <Button
-                className="icon-button"
-                active={showChannelTools}
-                iconOnly
-                size="lg"
-                variant="secondaryGray"
-                aria-label={t("channelTools")}
-                aria-expanded={showChannelTools}
-                data-tooltip={t("channelTools")}
-                data-tooltip-side="bottom"
-                onClick={() => {
-                  onToggleChannelTools((value) => !value);
-                  onToggleMemberList?.(false);
-                }}
-              >
-                <span className="icon-button-mark">
-                  <WrenchIcon />
-                </span>
-              </Button>
+              <Tooltip content={t("channelTools")} contentProps={{ side: "bottom" }}>
+                <Button
+                  className="icon-button"
+                  active={showChannelTools}
+                  iconOnly
+                  size="lg"
+                  variant="secondaryGray"
+                  aria-label={t("channelTools")}
+                  aria-expanded={showChannelTools}
+                  onClick={() => {
+                    onToggleChannelTools((value) => !value);
+                    onToggleMemberList?.(false);
+                  }}
+                >
+                  <span className="icon-button-mark">
+                    <WrenchIcon />
+                  </span>
+                </Button>
+              </Tooltip>
               {showChannelTools ? (
                 <div className="header-popover tools-popover">
                   <div className="header-popover-title">{t("channelTools")}</div>
@@ -191,25 +193,26 @@ export const ConversationHeader = memo(function ConversationHeader({
               ) : null}
             </div>
             {showInviteAction ? (
-              <Button
-                className="icon-button member-management-button"
-                iconOnly
-                size="lg"
-                variant="secondaryGray"
-                aria-label={inviteActionLabel}
-                data-tooltip={inviteActionLabel}
-                data-tooltip-side="bottom"
-                onClick={(event) => {
-                  event.preventDefault();
-                  event.stopPropagation();
-                  onInviteAction();
-                }}
-              >
-                <span className="icon-button-mark">
-                  <AddUserIcon />
-                </span>
-              </Button>
+              <Tooltip content={inviteActionLabel} contentProps={{ side: "bottom" }}>
+                <Button
+                  className="icon-button member-management-button"
+                  iconOnly
+                  size="lg"
+                  variant="secondaryGray"
+                  aria-label={inviteActionLabel}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    onInviteAction();
+                  }}
+                >
+                  <span className="icon-button-mark">
+                    <AddUserIcon />
+                  </span>
+                </Button>
+              </Tooltip>
             ) : null}
+            {headerTrailingAccessory}
           </div>
         </div>
         {description ? <div className="chat-subtitle">{description}</div> : null}

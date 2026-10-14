@@ -7,6 +7,7 @@ import (
 	"os"
 	pathpkg "path"
 	"path/filepath"
+	"sort"
 	"strings"
 	"unicode/utf8"
 
@@ -22,23 +23,23 @@ func List(root, relativePath string) (apitypes.WorkspaceListing, error) {
 	if err != nil {
 		return apitypes.WorkspaceListing{}, err
 	}
-	base := root
-	if cleanPath != "" {
-		base = filepath.Join(root, filepath.FromSlash(cleanPath))
-	}
-	info, err := os.Lstat(base)
+	bounded, err := os.OpenRoot(root)
 	if err != nil {
-		return apitypes.WorkspaceListing{}, fmt.Errorf("stat workspace %q: %w", cleanPath, err)
+		return apitypes.WorkspaceListing{}, err
 	}
-	if info.Mode()&os.ModeSymlink != 0 {
-		return apitypes.WorkspaceListing{}, fmt.Errorf("workspace path %q is a symlink", cleanPath)
+	defer bounded.Close()
+	directory, err := openBoundedPath(bounded, cleanPath, true)
+	if err != nil {
+		return apitypes.WorkspaceListing{}, err
 	}
-	if !info.IsDir() {
-		return apitypes.WorkspaceListing{}, fmt.Errorf("workspace path %q is not a directory", cleanPath)
+	directory.Close()
+	base := cleanPath
+	if base == "" {
+		base = "."
 	}
 
 	entries := make([]apitypes.WorkspaceEntry, 0)
-	err = filepath.WalkDir(base, func(path string, d os.DirEntry, walkErr error) error {
+	err = fs.WalkDir(safeDirectoryFS{root: bounded}, base, func(path string, d fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
 		}
@@ -51,14 +52,13 @@ func List(root, relativePath string) (apitypes.WorkspaceListing, error) {
 			}
 			return nil
 		}
-		rel, err := filepath.Rel(root, path)
-		if err != nil {
-			return err
-		}
-		rel = filepath.ToSlash(rel)
+		rel := path
 		info, err := d.Info()
 		if err != nil {
 			return err
+		}
+		if !info.IsDir() && !info.Mode().IsRegular() {
+			return nil
 		}
 		entry := apitypes.WorkspaceEntry{
 			Path:  rel,
@@ -93,25 +93,16 @@ func ListDirectory(root, relativePath string) (apitypes.WorkspaceListing, error)
 	if err != nil {
 		return apitypes.WorkspaceListing{}, err
 	}
-	base := root
-	if cleanPath != "" {
-		base = filepath.Join(root, filepath.FromSlash(cleanPath))
-	}
-	info, err := os.Lstat(base)
+	directory, err := openPath(root, cleanPath, true)
 	if err != nil {
-		return apitypes.WorkspaceListing{}, fmt.Errorf("stat workspace %q: %w", cleanPath, err)
+		return apitypes.WorkspaceListing{}, err
 	}
-	if info.Mode()&os.ModeSymlink != 0 {
-		return apitypes.WorkspaceListing{}, fmt.Errorf("workspace path %q is a symlink", cleanPath)
-	}
-	if !info.IsDir() {
-		return apitypes.WorkspaceListing{}, fmt.Errorf("workspace path %q is not a directory", cleanPath)
-	}
-
-	children, err := os.ReadDir(base)
+	defer directory.Close()
+	children, err := directory.ReadDir(-1)
 	if err != nil {
-		return apitypes.WorkspaceListing{}, fmt.Errorf("read workspace directory %q: %w", cleanPath, err)
+		return apitypes.WorkspaceListing{}, err
 	}
+	sort.Slice(children, func(i, j int) bool { return children[i].Name() < children[j].Name() })
 	entries := make([]apitypes.WorkspaceEntry, 0, len(children))
 	for _, child := range children {
 		if child.Type()&os.ModeSymlink != 0 {
@@ -120,6 +111,9 @@ func ListDirectory(root, relativePath string) (apitypes.WorkspaceListing, error)
 		childInfo, err := child.Info()
 		if err != nil {
 			return apitypes.WorkspaceListing{}, fmt.Errorf("read workspace entry %q: %w", child.Name(), err)
+		}
+		if !childInfo.IsDir() && !childInfo.Mode().IsRegular() {
+			continue
 		}
 		entryPath := child.Name()
 		if cleanPath != "" {
@@ -154,22 +148,15 @@ func ReadFile(root, relativePath string) (apitypes.WorkspaceFile, error) {
 	if err != nil {
 		return apitypes.WorkspaceFile{}, err
 	}
-	absPath := filepath.Join(root, filepath.FromSlash(cleanPath))
-	info, err := os.Lstat(absPath)
-	if err != nil {
-		return apitypes.WorkspaceFile{}, fmt.Errorf("stat workspace file %q: %w", cleanPath, err)
-	}
-	if info.Mode()&os.ModeSymlink != 0 {
-		return apitypes.WorkspaceFile{}, fmt.Errorf("workspace file %q is a symlink", cleanPath)
-	}
-	if info.IsDir() {
-		return apitypes.WorkspaceFile{}, fmt.Errorf("workspace path %q is a directory", cleanPath)
-	}
-	handle, err := os.Open(absPath)
+	handle, err := OpenFile(root, cleanPath)
 	if err != nil {
 		return apitypes.WorkspaceFile{}, fmt.Errorf("read workspace file %q: %w", cleanPath, err)
 	}
 	defer handle.Close()
+	info, err := handle.Stat()
+	if err != nil {
+		return apitypes.WorkspaceFile{}, err
+	}
 	data, err := io.ReadAll(handle)
 	if err != nil {
 		return apitypes.WorkspaceFile{}, fmt.Errorf("read workspace file %q: %w", cleanPath, err)

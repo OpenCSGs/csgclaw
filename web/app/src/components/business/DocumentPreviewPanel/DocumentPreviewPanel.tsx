@@ -9,6 +9,7 @@ import {
   type PointerEvent,
 } from "react";
 import {
+  AtSign,
   ChevronLeft,
   ChevronRight,
   Download,
@@ -18,6 +19,7 @@ import {
   Minus,
   Plus,
   RotateCcw,
+  RefreshCw,
   X,
 } from "lucide-react";
 import { Button, Tooltip } from "@/components/ui";
@@ -47,6 +49,8 @@ export function DocumentPreviewPanel({
   items,
   mode = "panel",
   onClose,
+  onReference,
+  active = true,
   onIndexChange,
   t,
 }: DocumentPreviewPanelProps) {
@@ -61,6 +65,7 @@ export function DocumentPreviewPanel({
   const [data, setData] = useState<ArrayBuffer | null>(null);
   const [objectURL, setObjectURL] = useState("");
   const [fullscreen, setFullscreen] = useState(false);
+  const [retry, setRetry] = useState(0);
   const [loadState, setLoadState] = useState<"error" | "loading" | "ready">("loading");
 
   useEffect(() => {
@@ -146,9 +151,10 @@ export function DocumentPreviewPanel({
         URL.revokeObjectURL(nextObjectURL);
       }
     };
-  }, [item]);
+  }, [item, retry]);
 
   useEffect(() => {
+    if (mode === "embedded") return;
     const handleKeyDown = (event: globalThis.KeyboardEvent) => {
       if (event.key === "Escape" && !document.fullscreenElement) {
         onClose();
@@ -156,7 +162,7 @@ export function DocumentPreviewPanel({
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [onClose]);
+  }, [onClose, mode]);
 
   useEffect(() => {
     const handleFullscreenChange = () => {
@@ -168,8 +174,14 @@ export function DocumentPreviewPanel({
   }, []);
 
   useEffect(() => {
+    if (mode === "embedded") return;
     return () => anchor?.focus({ preventScroll: true });
-  }, [anchor]);
+  }, [anchor, mode]);
+
+  useEffect(() => {
+    if (!active)
+      panelRef.current?.querySelectorAll("video,audio").forEach((media) => (media as HTMLMediaElement).pause());
+  }, [active]);
 
   const downloadURL = useMemo(() => {
     if (item?.downloadURL) {
@@ -263,6 +275,29 @@ export function DocumentPreviewPanel({
           <span>{formatAttachmentSize(item.sizeBytes)}</span>
         </div>
         <div className="document-preview-toolbar">
+          {onReference ? (
+            <Button
+              className="document-preview-reference"
+              iconOnly
+              size="sm"
+              variant="tertiaryGray"
+              aria-label={t("chatFileReference")}
+              onClick={onReference}
+            >
+              <AtSign size={16} />
+            </Button>
+          ) : null}
+          <Tooltip content={t("chatPreviewReload")}>
+            <Button
+              iconOnly
+              size="sm"
+              variant="tertiaryGray"
+              aria-label={t("chatPreviewReload")}
+              onClick={() => setRetry((value) => value + 1)}
+            >
+              <RefreshCw size={15} />
+            </Button>
+          </Tooltip>
           {items.length > 1 ? (
             <>
               <Tooltip content={t("attachmentsScrollPrevious")}>
@@ -341,17 +376,21 @@ export function DocumentPreviewPanel({
               <Expand aria-hidden="true" size={15} />
             </Button>
           </Tooltip>
-          <Tooltip content={t(fullscreen ? "attachmentPreviewExitFullscreen" : "attachmentPreviewFullscreen")}>
-            <Button
-              iconOnly
-              size="sm"
-              variant="tertiaryGray"
-              aria-label={t(fullscreen ? "attachmentPreviewExitFullscreen" : "attachmentPreviewFullscreen")}
-              onClick={() => void toggleFullscreen()}
-            >
-              {fullscreen ? <Minimize2 aria-hidden="true" size={15} /> : <Maximize2 aria-hidden="true" size={15} />}
-            </Button>
-          </Tooltip>
+          {mode !== "embedded" ? (
+            <>
+              <Tooltip content={t(fullscreen ? "attachmentPreviewExitFullscreen" : "attachmentPreviewFullscreen")}>
+                <Button
+                  iconOnly
+                  size="sm"
+                  variant="tertiaryGray"
+                  aria-label={t(fullscreen ? "attachmentPreviewExitFullscreen" : "attachmentPreviewFullscreen")}
+                  onClick={() => void toggleFullscreen()}
+                >
+                  {fullscreen ? <Minimize2 aria-hidden="true" size={15} /> : <Maximize2 aria-hidden="true" size={15} />}
+                </Button>
+              </Tooltip>
+            </>
+          ) : null}
           {downloadURL ? (
             <Tooltip content={t("downloadAttachment")}>
               <a
@@ -383,11 +422,17 @@ export function DocumentPreviewPanel({
           <div className="document-preview-status">{t("attachmentPreviewLoading")}</div>
         ) : null}
         {loadState === "error" ? (
-          <div className="document-preview-status is-error">{t("attachmentPreviewFailed")}</div>
+          <div className="document-preview-status is-error">
+            {t("attachmentPreviewFailed")}
+            <Button size="sm" variant="secondaryGray" onClick={() => setRetry((value) => value + 1)}>
+              {t("chatPreviewReload")}
+            </Button>
+          </div>
         ) : null}
         {loadState === "ready" && data ? (
           <>
             <DocumentPreviewContent
+              onError={() => setLoadState("error")}
               contentType={contentType}
               data={data}
               item={item}

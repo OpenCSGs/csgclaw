@@ -27,6 +27,11 @@
   }
 }
 
+/* The Popper wrapper must be transparent to pointers as well as its content. */
+[data-radix-popper-content-wrapper]:has(> .csg-tooltip-content) {
+  pointer-events: none;
+}
+
 :root[data-theme="dark"] .csg-tooltip-content {
   border-color: var(--gray-700);
   background: var(--gray-900);

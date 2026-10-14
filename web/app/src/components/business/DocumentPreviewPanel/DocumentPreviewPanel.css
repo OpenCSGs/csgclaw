@@ -125,7 +125,7 @@
   flex: 0 1 auto;
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: flex-start;
   gap: 3px;
   overflow-x: auto;
   scrollbar-width: none;
@@ -524,5 +524,33 @@
 
   .document-preview-shiki .shiki {
     padding: 18px 16px 48px;
+  }
+}
+
+.document-preview-reference {
+  opacity: 0;
+  pointer-events: none;
+}
+.document-preview-header:hover .document-preview-reference,
+.document-preview-header:focus-within .document-preview-reference {
+  opacity: 1;
+  pointer-events: auto;
+}
+@media (hover: none) {
+  .document-preview-reference {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+
+.document-preview-panel.is-embedded {
+  container: embedded-document-preview / inline-size;
+}
+@container embedded-document-preview (max-width: 440px) {
+  .document-preview-header {
+    flex-wrap: wrap;
+  }
+  .document-preview-toolbar {
+    flex: 1 1 100%;
   }
 }

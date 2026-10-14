@@ -7,8 +7,10 @@ export type DocumentPreviewRequest = {
 };
 
 export type DocumentPreviewPanelProps = DocumentPreviewRequest & {
-  mode?: "overlay" | "panel";
+  mode?: "overlay" | "panel" | "embedded";
   onClose: () => void;
+  onReference?: () => void;
+  active?: boolean;
   onIndexChange: (index: number) => void;
   t: (key: string, params?: Record<string, string | number>) => string;
 };
