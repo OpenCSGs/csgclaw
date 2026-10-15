@@ -41,8 +41,6 @@ beforeEach(() => {
     restartSidecar: vi.fn(),
     showWindow: vi.fn(),
     showTurnNotification: vi.fn(),
-    getNotificationPermission: vi.fn().mockResolvedValue(null),
-    requestNotificationPermission: vi.fn().mockResolvedValue(null),
     onTurnNotificationClick: vi.fn(),
     setUpdateChannel: vi.fn(),
     setThemeSource: vi.fn(),

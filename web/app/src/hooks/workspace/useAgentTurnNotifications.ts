@@ -52,7 +52,6 @@ export function useAgentTurnNotifications(args: UseAgentTurnNotificationsArgs): 
   const refs = useRef(args);
   const notifiedEventKeysRef = useRef(new Set<string>());
   const turnMessagesRef = useRef(new Map<string, IMMessage>());
-  const nativePermissionRef = useRef<SystemNotificationPermission | null>(null);
   const [permission, setPermission] = useState<SystemNotificationPermission>(readSystemNotificationPermission);
 
   useEffect(() => {
@@ -65,22 +64,12 @@ export function useAgentTurnNotifications(args: UseAgentTurnNotificationsArgs): 
     });
   }, []);
 
-  const refreshPermission = useCallback(async () => {
-    const bridge = getDesktopBridge();
-    if (bridge) {
-      try {
-        const native = await bridge.getNotificationPermission();
-        nativePermissionRef.current = native;
-        setPermission(native ?? readSystemNotificationPermission());
-      } catch {
-        nativePermissionRef.current = "unsupported";
-        setPermission("unsupported");
-      }
-    } else setPermission(readSystemNotificationPermission());
+  const refreshPermission = useCallback(() => {
+    setPermission(readSystemNotificationPermission());
   }, []);
 
   useEffect(() => {
-    void refreshPermission();
+    refreshPermission();
     window.addEventListener("focus", refreshPermission);
     document.addEventListener("visibilitychange", refreshPermission);
     return () => {
@@ -90,22 +79,6 @@ export function useAgentTurnNotifications(args: UseAgentTurnNotificationsArgs): 
   }, [refreshPermission]);
 
   const requestPermission = useCallback(async (): Promise<SystemNotificationPermission> => {
-    const bridge = getDesktopBridge();
-    if (bridge) {
-      try {
-        const native = await bridge.requestNotificationPermission();
-        if (native !== null) {
-          nativePermissionRef.current = native;
-          setPermission(native);
-          return native;
-        }
-        nativePermissionRef.current = null;
-      } catch {
-        nativePermissionRef.current = "unsupported";
-        setPermission("unsupported");
-        return "unsupported";
-      }
-    }
     if (typeof window.Notification !== "function") {
       setPermission("unsupported");
       return "unsupported";
@@ -134,7 +107,7 @@ export function useAgentTurnNotifications(args: UseAgentTurnNotificationsArgs): 
     ): void => {
       if (
         current.mode === TurnNotificationModes.off ||
-        (nativePermissionRef.current ?? readSystemNotificationPermission()) !== "granted" ||
+        readSystemNotificationPermission() !== "granted" ||
         input.participantIdentities.some((id) => localIdentitiesMatch(id, current.currentUserID)) ||
         notifiedEventKeysRef.current.has(input.eventKey)
       ) {
@@ -168,7 +141,7 @@ export function useAgentTurnNotifications(args: UseAgentTurnNotificationsArgs): 
       notifiedEventKeysRef.current.add(eventKey);
       const onError = () => {
         notifiedEventKeysRef.current.delete(eventKey);
-        void refreshPermission();
+        refreshPermission();
       };
       try {
         const desktopBridge = getDesktopBridge();

@@ -18,9 +18,6 @@ export const DesktopIPC = {
   restartSidecar: "csgclaw:desktop:restart-sidecar",
   showWindow: "csgclaw:desktop:show-window",
   showTurnNotification: "csgclaw:desktop:show-turn-notification",
-  getNotificationPermission: "csgclaw:desktop:get-notification-permission",
-  requestNotificationPermission:
-    "csgclaw:desktop:request-notification-permission",
   turnNotificationClick: "csgclaw:desktop:turn-notification-click",
   setThemeSource: "csgclaw:desktop:set-theme-source",
   setUpdateChannel: "csgclaw:desktop:set-update-channel",
@@ -89,12 +86,6 @@ export type DesktopBridge = {
   restartSidecar(): Promise<void>;
   showWindow(): Promise<void>;
   showTurnNotification(input: DesktopTurnNotification): Promise<void>;
-  getNotificationPermission(): Promise<
-    "default" | "granted" | "denied" | "unsupported" | null
-  >;
-  requestNotificationPermission(): Promise<
-    "default" | "granted" | "denied" | "unsupported" | null
-  >;
   onTurnNotificationClick(listener: (roomID: string) => void): () => void;
   setThemeSource(theme: DesktopThemeSource): Promise<void>;
   setUpdateChannel(channel: DesktopUpdateChannel): Promise<DesktopUpdateStatus>;

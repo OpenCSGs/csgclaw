@@ -27,9 +27,6 @@ const DesktopIPC = {
   restartSidecar: "csgclaw:desktop:restart-sidecar",
   showWindow: "csgclaw:desktop:show-window",
   showTurnNotification: "csgclaw:desktop:show-turn-notification",
-  getNotificationPermission: "csgclaw:desktop:get-notification-permission",
-  requestNotificationPermission:
-    "csgclaw:desktop:request-notification-permission",
   turnNotificationClick: "csgclaw:desktop:turn-notification-click",
   setThemeSource: "csgclaw:desktop:set-theme-source",
   setUpdateChannel: "csgclaw:desktop:set-update-channel",
@@ -64,10 +61,6 @@ const bridge: DesktopBridge = Object.freeze({
     ipcRenderer.invoke(DesktopIPC.installDownloadedUpdate),
   restartSidecar: () => ipcRenderer.invoke(DesktopIPC.restartSidecar),
   showWindow: () => ipcRenderer.invoke(DesktopIPC.showWindow),
-  getNotificationPermission: () =>
-    ipcRenderer.invoke(DesktopIPC.getNotificationPermission),
-  requestNotificationPermission: () =>
-    ipcRenderer.invoke(DesktopIPC.requestNotificationPermission),
   showTurnNotification: (input: DesktopTurnNotification) =>
     ipcRenderer.invoke(DesktopIPC.showTurnNotification, input),
   onTurnNotificationClick: (listener: (roomID: string) => void) => {

@@ -69,8 +69,6 @@ describe("useConfigController", () => {
       restartSidecar,
       showWindow: vi.fn().mockResolvedValue(undefined),
       showTurnNotification: vi.fn().mockResolvedValue(undefined),
-      getNotificationPermission: vi.fn().mockResolvedValue(null),
-      requestNotificationPermission: vi.fn().mockResolvedValue(null),
       onTurnNotificationClick: vi.fn(() => vi.fn()),
       setUpdateChannel: vi.fn().mockResolvedValue({
         state: "idle",

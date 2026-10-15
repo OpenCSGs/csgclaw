@@ -1,4 +1,4 @@
-import { act, renderHook, waitFor } from "@testing-library/react";
+import { act, renderHook } from "@testing-library/react";
 import { buildUsersById, type IMServerEvent, type TranslateFn } from "@/models/conversations";
 import { buildTurnNotificationTag, TurnNotificationModes, type TurnNotificationMode } from "@/models/turnNotifications";
 import { useAgentTurnNotifications } from "@/hooks/workspace/useAgentTurnNotifications";
@@ -126,8 +126,6 @@ function desktopBridge(showWindow: DesktopBridge["showWindow"]): DesktopBridge {
     restartSidecar: vi.fn(),
     showWindow,
     showTurnNotification: vi.fn().mockResolvedValue(undefined),
-    getNotificationPermission: vi.fn().mockResolvedValue(null),
-    requestNotificationPermission: vi.fn().mockResolvedValue(null),
     onTurnNotificationClick: vi.fn(() => vi.fn()),
     setUpdateChannel: vi.fn(),
     setThemeSource: vi.fn(),
@@ -221,21 +219,25 @@ describe("useAgentTurnNotifications", () => {
     expect(notificationRecords[0]?.silent).toBe(true);
   });
 
-  it("uses native helper permission instead of the renderer's granted permission", async () => {
+  it("uses the shared notification permission API on desktop", async () => {
+    FakeNotification.permission = "denied";
     const bridge = desktopBridge(vi.fn());
-    vi.mocked(bridge.getNotificationPermission).mockResolvedValue("denied");
-    vi.mocked(bridge.requestNotificationPermission).mockResolvedValue("granted");
     window.csgclawDesktop = bridge;
     const { result } = renderNotifications(TurnNotificationModes.always);
-    await waitFor(() => expect(result.current.permission).toBe("denied"));
+    expect(result.current.permission).toBe("denied");
     act(() => result.current.handleRealtimeEvent(workEvent({ reason: "released", state: "idle" })));
     expect(bridge.showTurnNotification).not.toHaveBeenCalled();
+    FakeNotification.requestPermission.mockImplementationOnce(async () => {
+      FakeNotification.permission = "granted";
+      return "granted";
+    });
     await act(async () => {
       await expect(result.current.requestPermission()).resolves.toBe("granted");
     });
     act(() => result.current.handleRealtimeEvent(workEvent({ reason: "released", state: "idle" })));
     expect(bridge.showTurnNotification).toHaveBeenCalledOnce();
-    expect(FakeNotification.requestPermission).not.toHaveBeenCalled();
+    expect(result.current.permission).toBe("granted");
+    expect(FakeNotification.requestPermission).toHaveBeenCalledOnce();
   });
 
   it("uses an explicit final reply for agents without work lease events", () => {

@@ -51,8 +51,6 @@ export type DesktopBridge = {
   restartSidecar(): Promise<void>;
   showWindow(): Promise<void>;
   showTurnNotification(input: DesktopTurnNotification): Promise<void>;
-  getNotificationPermission(): Promise<"default" | "granted" | "denied" | "unsupported" | null>;
-  requestNotificationPermission(): Promise<"default" | "granted" | "denied" | "unsupported" | null>;
   onTurnNotificationClick(listener: (roomID: string) => void): () => void;
   setUpdateChannel(channel: DesktopUpdateChannel): Promise<DesktopUpdateStatus>;
   setThemeSource(theme: DesktopThemeSource): Promise<void>;
@@ -82,8 +80,6 @@ export function getDesktopBridge(): DesktopBridge | null {
     typeof bridge.restartSidecar === "function" &&
     typeof bridge.showWindow === "function" &&
     typeof bridge.showTurnNotification === "function" &&
-    typeof bridge.getNotificationPermission === "function" &&
-    typeof bridge.requestNotificationPermission === "function" &&
     typeof bridge.onTurnNotificationClick === "function" &&
     typeof bridge.setUpdateChannel === "function" &&
     typeof bridge.setThemeSource === "function" &&

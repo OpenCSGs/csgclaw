@@ -1,42 +1,17 @@
 import { Notification } from "electron";
 import type { DesktopTurnNotification } from "../shared/desktopBridge.types";
 import { logDesktopError } from "./desktopLogger";
-import {
-  MacNotification,
-  macNotificationService,
-  stopMacNotificationService,
-} from "./macNotificationService";
-type NotificationHandle = {
-  once(event: "show" | "close" | "click", listener: () => void): unknown;
-  once(
-    event: "failed",
-    listener: (event: unknown, detail: string) => void,
-  ): unknown;
-  show(): void;
-  close(): void;
-};
 
 export class TurnNotifications {
   // macOS removes delivered notifications when their native objects are collected.
-  private readonly active = new Map<string, NotificationHandle>();
+  private readonly active = new Map<string, Notification>();
 
   constructor(
     private readonly onClick: (roomID: string) => void,
-    private readonly create = (
-      input: DesktopTurnNotification,
-    ): NotificationHandle =>
-      process.platform === "darwin"
-        ? new MacNotification(input)
-        : new Notification(input),
-    private readonly supported = () =>
-      process.platform === "darwin" || Notification.isSupported(),
+    private readonly create = (input: DesktopTurnNotification): Notification =>
+      new Notification(input),
+    private readonly supported = () => Notification.isSupported(),
   ) {}
-
-  permission(request = false) {
-    return process.platform === "darwin"
-      ? macNotificationService().permission(request)
-      : Promise.resolve(null);
-  }
 
   show(input: unknown): Promise<void> {
     const parsed = parseTurnNotification(input);
@@ -79,7 +54,6 @@ export class TurnNotifications {
   dispose(): void {
     for (const notification of this.active.values()) notification.close();
     this.active.clear();
-    stopMacNotificationService();
   }
 }
 

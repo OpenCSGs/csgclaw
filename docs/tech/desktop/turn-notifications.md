@@ -14,14 +14,10 @@ Completion notifications use terminal turn progress or explicit final replies, n
 A turn's final reply and work-release event share a notification identity scoped to its room and agent.
 The Electron main process retains native notification objects until dismissal, activation, or bounded history eviction so macOS does not remove them during garbage collection.
 
-On macOS, a bundled accessory application named CSGClaw Notifications delivers notifications independently of the foreground window.
-This avoids foreground suppression observed when Electron delivers notifications under the main application's identity.
-The helper uses the normal macOS notification service and respects Focus and screen-sharing notification rules.
-Allow notifications for “CSGClaw 通知” when macOS asks; the Settings permission indicator reads this helper's actual authorization.
-The sound preference controls the helper's notification sound independently of the banner.
-Clicking a notification forwards its room identity to the main application.
-The helper exits when the desktop process closes its input stream.
+macOS, Windows, and Linux use the same Electron main-process notification API.
+The permission indicator and request action use the renderer's standard Notification API on every platform.
+Electron's permission status does not report operating-system banner, sound, or Focus settings.
+Clicking a notification opens its conversation in CSGClaw.
 
-The desktop build compiles and signs the helper on macOS and packages it as an extra resource outside `app.asar`.
-The target architecture follows `CSGCLAW_DESKTOP_ARCH` or `CSGCLAW_DESKTOP_GOARCH`.
-Windows and Linux continue using Electron's notification API.
+On macOS 27.0.1, temporary banners can fail to appear while CSGClaw is focused even when notification delivery is accepted.
+This foreground presentation issue remains unresolved.

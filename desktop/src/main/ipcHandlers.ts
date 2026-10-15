@@ -86,14 +86,6 @@ export function registerIPCHandlers(
     assertSender(event);
     showWindow();
   });
-  ipcMain.handle(DesktopIPC.getNotificationPermission, (event) => {
-    assertSender(event);
-    return notifications.permission();
-  });
-  ipcMain.handle(DesktopIPC.requestNotificationPermission, (event) => {
-    assertSender(event);
-    return notifications.permission(true);
-  });
   ipcMain.handle(DesktopIPC.showTurnNotification, (event, input: unknown) => {
     assertSender(event);
     return notifications.show(input);
@@ -111,8 +103,6 @@ export function registerIPCHandlers(
   return () => {
     notifications.dispose();
     ipcMain.removeHandler(DesktopIPC.showTurnNotification);
-    ipcMain.removeHandler(DesktopIPC.getNotificationPermission);
-    ipcMain.removeHandler(DesktopIPC.requestNotificationPermission);
     ipcMain.removeHandler(DesktopIPC.getRuntimeInfo);
     ipcMain.removeHandler(DesktopIPC.openOAuth);
     ipcMain.removeHandler(DesktopIPC.checkForUpdates);

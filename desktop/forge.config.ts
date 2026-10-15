@@ -132,13 +132,7 @@ const config: ForgeConfig = {
       updateConfig,
       markLightIcon,
       markDarkIcon,
-      ...(isMacTarget
-        ? [
-            macDockLightIcon,
-            macDockDarkIcon,
-            path.resolve(__dirname, "dist", "native", "CSGClaw Notifications.app"),
-          ]
-        : []),
+      ...(isMacTarget ? [macDockLightIcon, macDockDarkIcon] : []),
       ...(isWindowsTarget ? [windowsTaskbarLightIcon, windowsTaskbarDarkIcon] : []),
       ...(isWindowsTarget ? [windowsIcon, windowsUpdateHelper] : []),
     ],
