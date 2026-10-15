@@ -180,8 +180,8 @@ export function FloatingChatPanel({ agentName, chatProps, headerAccessory, onPic
   }, [conversation.id]);
 
   const handlePreviewAttachment = useCallback(
-    (request: DocumentPreviewRequest) => {
-      openPreview(request);
+    (request: DocumentPreviewRequest, originTabID?: "files") => {
+      openPreview(request, originTabID);
     },
     [openPreview],
   );
@@ -370,7 +370,7 @@ export function FloatingChatPanel({ agentName, chatProps, headerAccessory, onPic
         locale={locale}
         t={t}
         onReference={tools.onReference}
-        onPreview={(item) => handlePreviewAttachment({ items: [item], index: 0 })}
+        onPreview={(item) => handlePreviewAttachment({ items: [item], index: 0 }, "files")}
         onSources={openSources}
         onCollapse={tools.collapse}
         activeThreadRootID={activeThreadRootID}

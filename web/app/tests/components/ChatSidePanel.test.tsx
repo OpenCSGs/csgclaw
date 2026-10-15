@@ -70,7 +70,7 @@ function Harness({
         locale="en"
         t={t}
         onReference={tools.onReference}
-        onPreview={(item) => tools.openPreview({ items: [item], index: 0 })}
+        onPreview={(item) => tools.openPreview({ items: [item], index: 0 }, "files")}
         onSources={tools.openSources}
         onCollapse={tools.collapse}
         onThreadSelect={() => {}}
@@ -304,6 +304,19 @@ describe("shared chat sidebar", () => {
     expect(screen.getByRole("tab", { name: "example.org" })).toHaveAttribute("aria-selected", "true");
     await user.click(screen.getByRole("button", { name: "Close tab example.org" }));
     expect(screen.getByRole("tab", { name: "Files" })).toHaveAttribute("aria-selected", "true");
+  });
+  it("returns to the file directory after closing a file preview beside a browser tab", async () => {
+    const user = userEvent.setup();
+    render(<Harness />, { wrapper: createQueryWrapper().wrapper });
+    await user.click(screen.getByRole("button", { name: "Files" }));
+    await screen.findByRole("button", { name: /^README.md/ });
+    await user.click(screen.getByRole("button", { name: "Browser" }));
+    await user.click(screen.getByRole("tab", { name: "Files" }));
+    await user.click(screen.getByRole("button", { name: /^README.md/ }));
+    expect(screen.getByRole("tab", { name: "README.md" })).toHaveAttribute("aria-selected", "true");
+    await user.click(screen.getByRole("button", { name: "Close tab README.md" }));
+    expect(screen.getByRole("tab", { name: "Files" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("button", { name: /^README.md/ })).toBeVisible();
   });
   it("inserts a source-bound file reference at the saved caret without losing surrounding text", async () => {
     const user = userEvent.setup();

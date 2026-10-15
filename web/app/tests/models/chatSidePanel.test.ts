@@ -45,6 +45,31 @@ describe("chat sidebar state", () => {
     expect(state.tabs).toEqual([]);
     expect(state.open).toBe(true);
   });
+  it("returns a file opened from the directory to Files instead of a neighboring browser tab", () => {
+    let state = openChatSideTab(initialChatSideState(), { id: "files", kind: "files" });
+    state = openChatSideTab(state, { id: "browser", kind: "browser", url: "https://example.org/" });
+    state = openChatSideTab(state, {
+      id: "readme",
+      kind: "file",
+      name: reference.name,
+      reference,
+      sizeBytes: 12,
+      mediaType: "",
+      originTabID: "files",
+    });
+    expect(restoreChatSideState(serializeChatSideState(state)).tabs[2]).toEqual(state.tabs[2]);
+    expect(closeChatSideTab(state, "readme").activeID).toBe("files");
+    expect(closeChatSideTab(closeChatSideTab(state, "files"), "readme").activeID).toBe("browser");
+    state = openChatSideTab(state, {
+      id: "readme",
+      kind: "file",
+      name: reference.name,
+      reference,
+      sizeBytes: 12,
+      mediaType: "",
+    });
+    expect(closeChatSideTab(state, "readme").activeID).toBe("browser");
+  });
   it("restores new tabs and chooses a tool in place without duplicating singleton tabs", () => {
     let state = openChatSideTab(initialChatSideState(), { id: "files", kind: "files" });
     state = openChatSideTab(state, { id: "new-1", kind: "new" });
