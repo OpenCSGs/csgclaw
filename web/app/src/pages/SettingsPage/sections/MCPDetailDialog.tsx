@@ -1,7 +1,7 @@
 import { useMCPProbe } from "./useMCPProbe";
 import { mcpOriginLabel as originLabel } from "./resourceOrigins";
 import { useEffect, useState } from "react";
-import { Plug, Plus, RefreshCw, Trash2 } from "lucide-react";
+import { Plug, Plus, RefreshCw, Trash2, X } from "lucide-react";
 import {
   Button,
   DialogBody,
@@ -190,7 +190,7 @@ export function MCPDetailDialog({
                     {market.error}
                   </p>
                 ) : null}
-                <MCPProbeCards probe={probe} probing={probing} error={probeError} t={t} />
+                <MCPProbeCards probe={probe} probing={probing} error={probeError} onDismiss={resetProbe} t={t} />
                 <section className={styles.card}>
                   <h3 className={styles.cardTitle}>{t("iaMCPConfigTitle")}</h3>
                   {installed && !readOnlyConfig ? (
@@ -315,11 +315,13 @@ export function MCPProbeCards({
   probe,
   probing = false,
   error = "",
+  onDismiss,
   t,
 }: {
   probe: MCPProbeResult | null;
   probing?: boolean;
   error?: string;
+  onDismiss?: () => void;
   t: TranslateFn;
 }) {
   if (probing) {
@@ -335,7 +337,14 @@ export function MCPProbeCards({
   return (
     <>
       <section className={styles.card} role={probe.connected ? "status" : "alert"}>
-        <h3 className={styles.cardTitle}>{t("iaMCPStatusTitle")}</h3>
+        <div className={styles.statusLine}>
+          <h3 className={styles.cardTitle}>{t("iaMCPStatusTitle")}</h3>
+          {onDismiss ? (
+            <Button iconOnly variant="tertiaryGray" size="sm" aria-label={t("close")} onClick={onDismiss}>
+              <X size={14} aria-hidden="true" />
+            </Button>
+          ) : null}
+        </div>
         {probe.connected ? (
           <div className={styles.statusLine}>
             <p className={styles.statusOk}>

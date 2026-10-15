@@ -27,6 +27,7 @@ import (
 	"csgclaw/internal/sandbox"
 	"csgclaw/internal/sandbox/sandboxtest"
 	"csgclaw/internal/sandboxproviders"
+	"csgclaw/internal/skill/installstate"
 	skillsystem "csgclaw/internal/skill/system"
 	hub "csgclaw/internal/template"
 	"encoding/json"
@@ -4943,11 +4944,11 @@ func TestHandleSkillsListsGlobalSkillsAndBrowsesFiles(t *testing.T) {
 	for _, item := range skills {
 		skillsByName[item.Name] = item
 	}
-	if got := skillsByName["alpha"]; got.Description != "Alpha skill" || got.Source != skillsystem.SkillSourceLocal || got.Readonly {
-		t.Fatalf("alpha skill = %+v, want local alpha with description", got)
+	if got := skillsByName["alpha"]; got.Description != "Alpha skill" || got.Source != installstate.SourceUnknown || got.Readonly {
+		t.Fatalf("alpha skill = %+v, want untracked alpha with description", got)
 	}
-	if got := skillsByName["beta"]; got.Name != "beta" || got.Description != "" || got.Source != skillsystem.SkillSourceLocal || got.Readonly {
-		t.Fatalf("beta skill = %+v, want local beta without description", got)
+	if got := skillsByName["beta"]; got.Name != "beta" || got.Description != "" || got.Source != installstate.SourceUnknown || got.Readonly {
+		t.Fatalf("beta skill = %+v, want untracked beta without description", got)
 	}
 	if got := skillsByName["skill-installer"]; got.Name != "skill-installer" || got.Source != skillsystem.SkillSourceSystem || !got.Readonly {
 		t.Fatalf("skill-installer = %+v, want read-only system skill", got)
@@ -5534,6 +5535,26 @@ enabled = true
 	}
 	if skill.Name != "agent-builder" || skill.Description != "Build agents" {
 		t.Fatalf("installed skill = %+v, want agent-builder summary", skill)
+	}
+	listed, err := listSkills(filepath.Join(home, ".csgclaw", "skills"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	marketOrigin := false
+	for _, item := range listed {
+		if item.Name == "agent-builder" && item.Source == "market" {
+			marketOrigin = true
+		}
+	}
+	if !marketOrigin {
+		t.Fatal("installed market skill lost its source in the API list")
+	}
+	records, err := installstate.Read(filepath.Join(home, ".csgclaw", "skills"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if record := records["agent-builder"]; record.RegistryURL != officialHub.URL || record.RemotePath != "AIWizards/agent-builder" || record.Ref != "dev" || record.SHA256 == "" {
+		t.Fatalf("installation record = %+v, want the effective Hub and requested skill identity", record)
 	}
 	skillRoot := filepath.Join(home, ".csgclaw", "skills", "agent-builder")
 	if _, err := os.Stat(filepath.Join(skillRoot, "SKILL.md")); err != nil {

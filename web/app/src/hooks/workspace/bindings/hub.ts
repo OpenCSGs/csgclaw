@@ -31,7 +31,10 @@ export function bindWorkspaceHub({
       onSelectMCPInPlace: hub.setSelectedMCPServerName,
       onSelectKnowledgeBaseInPlace: (item: RemoteKnowledgeBase | null | undefined) =>
         hub.setSelectedKnowledgeBaseID(item?.id || ""),
-      onCreateMCPInPlace: hub.detailPaneProps.onCreateMCP,
+      onCreateMCPInPlace: (payload: MCPServerPayload) =>
+        hub.detailPaneProps.onCreateMCP(payload, { preserveSelection: true }),
+      onUpdateMCPInPlace: (name: string, payload: MCPServerPayload) =>
+        hub.detailPaneProps.onUpdateMCP(name, payload, { preserveSelection: true }),
       onSelectTemplate,
       onSelectSkill: (name: string | null | undefined) => onSelectSkill(name ? { name, description: "" } : null),
       onSelectMCP: (name: string | null | undefined) => onSelectMCP(name ? { name, config: {} } : null),

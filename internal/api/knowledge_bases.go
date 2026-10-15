@@ -165,8 +165,8 @@ func (h *Handler) handleRemoteKnowledgeBaseMCPConfig(w http.ResponseWriter, r *h
 			return
 		}
 		if existing := knowledgebase.FindConfiguredServer(servers, item.ContentID); existing != "" {
-			http.Error(w, "mcp server already exists: "+existing, http.StatusConflict)
-			return
+			// Reading a configuration also supports refreshing an existing connection.
+			name = existing
 		}
 	}
 	writeJSON(w, http.StatusOK, knowledgeBaseMCPConfigResponse{Name: name, Config: config})

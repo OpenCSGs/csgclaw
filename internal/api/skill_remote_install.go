@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strings"
 
+	skillinstall "csgclaw/internal/skill/installstate"
 	skilllocal "csgclaw/internal/skill/local"
 	skillremote "csgclaw/internal/skill/remote"
 )
@@ -134,7 +135,13 @@ func (h *Handler) handleSkillInstall(w http.ResponseWriter, r *http.Request) {
 		root,
 		skillremote.AgenticHubSkillArchiveName(remotePath),
 		archive,
-		skilllocal.InstallArchiveOptions{Replace: req.Replace},
+		skilllocal.InstallArchiveOptions{Replace: req.Replace, Origin: skillinstall.Record{
+			Source:      skillinstall.SourceMarket,
+			Registry:    "opencsg",
+			RegistryURL: baseURL,
+			RemotePath:  remotePath,
+			Ref:         ref,
+		}},
 	)
 	if err != nil {
 		writeSkillInstallError(w, err)

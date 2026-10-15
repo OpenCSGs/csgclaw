@@ -54,6 +54,38 @@ func TestWriteKnowledgeBaseErrorReturnsStableForbiddenCode(t *testing.T) {
 	assertAPIErrorCode(t, recorder, http.StatusForbidden, "knowledge_base_access_forbidden")
 }
 
+func TestKnowledgeBaseConfigCanRefreshAnExistingConnection(t *testing.T) {
+	originalLoader, originalTransport := loadKnowledgeBaseConnection, http.DefaultTransport
+	t.Cleanup(func() { loadKnowledgeBaseConnection, http.DefaultTransport = originalLoader, originalTransport })
+	loadKnowledgeBaseConnection = func(context.Context) (knowledgeBaseConnection, error) {
+		return knowledgeBaseConnection{CSGHubBaseURL: "https://hub.example.test", CSGHubAccessToken: "test-token"}, nil
+	}
+	http.DefaultTransport = knowledgeBaseRoundTripFunc(func(req *http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(`{"data":{"id":42,"name":"Handbook","content_id":"content-42","type":"llmwiki","metadata":{"mcp_endpoint_url":"https://gateway.example.test/v1/llmwikis/content-42/mcp","resource_state":{"readiness":"ready","mcp_status":"ready"}}}}`))}, nil
+	})
+	store := &knowledgeBaseServerStore{servers: map[string]any{
+		"renamed-kb": map[string]any{"type": "remote", "url": "https://old.example.test/mcp", "_meta": map[string]any{"com.opencsg/mcp": map[string]any{"type": "llm_wiki", "resource_id": "42", "content_id": "content-42", "auth_type": "csghub_access_token"}}},
+	}}
+	handler := &Handler{mcp: mcp.NewService(mcp.WithServerStore(store))}
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/knowledge-bases/remote/42/mcp-config", nil)
+	request.SetPathValue("id", "42")
+	recorder := httptest.NewRecorder()
+	handler.handleRemoteKnowledgeBaseMCPConfig(recorder, request)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("config status = %d, body = %s", recorder.Code, recorder.Body.String())
+	}
+	var response knowledgeBaseMCPConfigResponse
+	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	if response.Name != "renamed-kb" || response.Config["url"] != "https://gateway.example.test/v1/llmwikis/content-42/mcp" {
+		t.Fatalf("config = %+v", response)
+	}
+	if got := store.servers["renamed-kb"].(map[string]any)["url"]; got != "https://old.example.test/mcp" {
+		t.Fatal("reading the refreshed configuration mutated the saved server")
+	}
+}
+
 func TestLoadKnowledgeBaseConnectionUsesManagedCommunityRunnerIdentity(t *testing.T) {
 	originalInteractiveLoader := loadInteractiveKnowledgeBaseConnection
 	originalLoader := loadKnowledgeBaseConnection

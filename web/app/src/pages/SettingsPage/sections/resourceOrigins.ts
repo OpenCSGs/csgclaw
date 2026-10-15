@@ -16,5 +16,8 @@ export function skillOriginLabel(skill: SkillSummary, t: TranslateFn): string {
   if (kind === "builtin") {
     return t("resourcesSkillSystemBadge");
   }
+  if (kind === "unknown") {
+    return t("iaSkillsBadgeUnknown");
+  }
   return kind === "market" ? t("iaSkillsBadgeMarket") : t("iaSkillsBadgeLocal");
 }

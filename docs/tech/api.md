@@ -162,7 +162,13 @@ Installs one remote Skill from the same effective OpenCSG Hub. For a signed-in u
 }
 ```
 
-Returns `201 Created` with the installed local Skill summary. A duplicate without `replace` returns `409 Conflict`.
+Returns `201 Created` with the installed local Skill summary, including `source: "market"`. Installation records are kept in `.skillhub-lock.json` under the skills root, shared with CLI installs, and include the registry URL, remote path/ref, skill content SHA256, and installation/update times. `GET /api/v1/skills` reads these records; ZIP uploads use `source: "local"`, and untracked installations use `source: "unknown"`. Older CLI records with a registry are recognized as market installs. Replacing or deleting a Skill also updates its installation record. A duplicate without `replace` returns `409 Conflict`.
+
+## Knowledge Base Configuration API
+
+### `GET /api/v1/knowledge-bases/remote/{id}/mcp-config`
+
+Reads the current user's authorized knowledge-base MCP configuration without modifying local connections. It also works for installed knowledge bases and returns the existing local server name, preserving its identity when refreshing the configuration. Persist the returned configuration through the MCP create or update API.
 
 ## Participant API
 

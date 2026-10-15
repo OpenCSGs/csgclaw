@@ -229,14 +229,14 @@ export function useWorkspaceMCPSelection({
   }, []);
 
   const createMCPServer = useCallback(
-    async (payload: MCPServerPayload) => {
+    async (payload: MCPServerPayload, options?: { preserveSelection?: boolean }) => {
       setMCPMutationBusy(true);
       setMCPCreateError("");
       try {
         const state = await createMCPServerRequest(payload);
         queryClient.setQueryData(workspaceQueryKeys.mcpServers(), state);
         await queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.knowledgeBasesScope() });
-        setSelectedHubResourceType(mcpCreateSource);
+        if (!options?.preserveSelection) setSelectedHubResourceType(mcpCreateSource);
         if (mcpCreateSource === "knowledge") {
           setKnowledgeBaseAdded(true);
         } else {
@@ -256,15 +256,17 @@ export function useWorkspaceMCPSelection({
   );
 
   const updateMCPServer = useCallback(
-    async (currentName: string, payload: MCPServerPayload) => {
+    async (currentName: string, payload: MCPServerPayload, options?: { preserveSelection?: boolean }) => {
       setMCPMutationBusy(true);
       setMCPMutationError("");
       try {
         const state = await updateMCPServerRequest(currentName, payload);
         queryClient.setQueryData(workspaceQueryKeys.mcpServers(), state);
         await queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.knowledgeBasesScope() });
-        setSelectedHubResourceType("mcp");
-        setSelectedMCPServerName(currentName);
+        if (!options?.preserveSelection) {
+          setSelectedHubResourceType("mcp");
+          setSelectedMCPServerName(currentName);
+        }
         return true;
       } catch (error) {
         setMCPMutationError(errorMessage(error, t("resourcesMCPSaveFailed")));

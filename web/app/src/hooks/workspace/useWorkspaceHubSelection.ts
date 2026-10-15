@@ -122,6 +122,7 @@ export function useWorkspaceHubSelection({
     selectedMCPServerName: storedSelectedMCPServerName,
   });
   const [remoteSkillsEnabled, setRemoteSkillsEnabled] = useState(false);
+  const [knowledgeBasesVisible, setKnowledgeBasesVisible] = useState(false);
   const [remoteSkillsSearch, setRemoteSkillsSearch] = useState("");
   const [remoteSkillsSearchQuery, setRemoteSkillsSearchQuery] = useState("");
   const skillsQuery = useWorkspaceSkillsQuery({ enabled: selectedHubResourceType === "skill" });
@@ -496,6 +497,8 @@ export function useWorkspaceHubSelection({
     templatesLoaded: templatesQuery?.isFetched ?? false,
     enabled:
       selectedHubResourceType === "mcp" ||
+      selectedHubResourceType === "knowledge" ||
+      knowledgeBasesVisible ||
       activePane.type === WorkspacePaneTypes.agent ||
       activePane.type === WorkspacePaneTypes.apps,
     openCSGAuthGuard,
@@ -503,7 +506,7 @@ export function useWorkspaceHubSelection({
 
   const knowledgeBases = useWorkspaceKnowledgeBaseSelection({
     openCSGAuthGuard,
-    enabled: selectedHubResourceType === "knowledge",
+    enabled: selectedHubResourceType === "knowledge" || knowledgeBasesVisible,
     openCreateMCPDialog,
     selectedKnowledgeBaseID,
     setSelectedKnowledgeBaseID,
@@ -535,6 +538,7 @@ export function useWorkspaceHubSelection({
   ]);
 
   return {
+    setKnowledgeBasesVisible,
     templates: resourcesTemplates,
     skills,
     remoteSkills,

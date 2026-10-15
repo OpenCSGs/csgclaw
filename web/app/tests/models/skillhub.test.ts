@@ -1,7 +1,18 @@
 import { describe, expect, it } from "vitest";
-import { isReadonlySkill, remoteSkillInstallName, skillSourceBadgeName } from "@/models/skillhub";
+import { isReadonlySkill, remoteSkillInstallName, skillOriginKind, skillSourceBadgeName } from "@/models/skillhub";
 
 describe("skill hub helpers", () => {
+  it.each([
+    ["market", "market"],
+    ["official", "market"],
+    ["local", "local"],
+    ["system", "builtin"],
+    ["unknown", "unknown"],
+    [undefined, "unknown"],
+  ])("preserves installation source %s without guessing from the skill name", (source, expected) => {
+    expect(skillOriginKind({ name: "market-skill", source })).toBe(expected);
+  });
+
   it("treats official and system skills as readonly", () => {
     expect(isReadonlySkill({ name: "remote", source: "official" })).toBe(true);
     expect(isReadonlySkill({ name: "mine", source: "personal" })).toBe(true);
