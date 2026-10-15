@@ -1,5 +1,5 @@
 import { act, render, screen } from "@testing-library/react";
-import { ResourceLoadMore } from "@/pages/AgentPage/components/ResourceLoadMore";
+import { ResourceLoadMore } from "@/components/business/AgentDetails/ResourceLoadMore";
 import type { ResourceContinuation } from "@/hooks/workspace/useInfiniteAgentResources";
 
 it("observes the profile scroll region and only loads eligible batches", () => {

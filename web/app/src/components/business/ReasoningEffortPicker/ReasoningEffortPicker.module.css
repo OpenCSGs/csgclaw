@@ -1,0 +1,63 @@
+.root {
+  min-width: 0;
+}
+
+.body {
+  padding: var(--space-3) var(--space-4);
+}
+
+.heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  min-height: 22px;
+}
+
+.title {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.badge {
+  padding: 2px 7px;
+  border-radius: var(--radius-full);
+  background: var(--panel-soft);
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 16px;
+}
+
+.value {
+  margin-top: var(--space-2);
+  color: var(--text);
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 28px;
+}
+
+.description {
+  min-height: 36px;
+  margin: var(--space-1) 0 var(--space-2);
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.endpoints {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-2);
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 18px;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-1);
+  border-top: 1px solid var(--line);
+}

@@ -336,6 +336,10 @@ func (s *RemoteStore) getTemplate(ctx context.Context, id string, repository rem
 	if name == "" {
 		name = strings.TrimSpace(repository.Name)
 	}
+	displayName := strings.TrimSpace(manifest.DisplayName)
+	if displayName == "" {
+		displayName = strings.TrimSpace(repository.Nickname)
+	}
 	namespace := strings.SplitN(id, "/", 2)[0]
 	runtimeOptions, err := normalizeTemplateRuntimeOptions(manifest.RuntimeKind, manifest.RuntimeOptions)
 	if err != nil {
@@ -345,6 +349,7 @@ func (s *RemoteStore) getTemplate(ctx context.Context, id string, repository rem
 		ID:             remoteTemplateName(id),
 		Namespace:      namespace,
 		Name:           name,
+		DisplayName:    displayName,
 		Description:    description,
 		Role:           TemplateRoleWorker,
 		RuntimeKind:    normalizeTemplateRuntimeKind(manifest.RuntimeKind),
@@ -775,7 +780,7 @@ func (s *RemoteStore) Publish(ctx context.Context, spec PublishSpec) (Template, 
 	request := remoteCreateCodeRequest{
 		Namespace:     s.username,
 		Name:          normalized.Name,
-		Nickname:      normalized.Name,
+		Nickname:      normalized.DisplayName,
 		Description:   normalized.Description,
 		Private:       true,
 		DefaultBranch: "main",
@@ -794,6 +799,7 @@ func (s *RemoteStore) Publish(ctx context.Context, spec PublishSpec) (Template, 
 		ID:             id,
 		Namespace:      s.username,
 		Name:           normalized.Name,
+		DisplayName:    normalized.DisplayName,
 		Description:    normalized.Description,
 		Role:           TemplateRoleWorker,
 		RuntimeKind:    normalized.RuntimeKind,

@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { TaskConfigurationToolbar } from "@/components/business/TaskConfigurationToolbar";
 import { WorkspaceControllerProvider } from "@/hooks/workspace";
@@ -23,14 +24,23 @@ function setup(configuration: TaskConfiguration = {}, onChange = vi.fn(), direct
     },
     openAgentSettings: vi.fn(),
   } as unknown as WorkspaceController;
-  render(
-    <WorkspaceControllerProvider controller={controller}>
+  function Toolbar() {
+    const [current, setCurrent] = useState(configuration);
+    return (
       <TaskConfigurationToolbar
         agent={{ id: "agent-test", name: "Test", runtime_kind: "codex", model_config: { model_id: "default-model" } }}
-        configuration={configuration}
+        configuration={current}
         directoryLocked={directoryLocked}
-        onChange={onChange}
+        onChange={async (next) => {
+          await onChange(next);
+          setCurrent(next);
+        }}
       />
+    );
+  }
+  render(
+    <WorkspaceControllerProvider controller={controller}>
+      <Toolbar />
     </WorkspaceControllerProvider>,
   );
   return { onChange, controller };
@@ -54,11 +64,41 @@ describe("task configuration", () => {
   });
   it("applies reasoning and reports failed saves without hiding the menu", async () => {
     const save = vi.fn().mockRejectedValue(new Error("busy conversation"));
-    setup({ model_id: "gpt-test", model_provider_id: "codex" }, save);
+    setup({ model_id: "gpt-test", model_provider_id: "codex", reasoning_effort: "medium" }, save);
     fireEvent.click(screen.getByRole("button", { name: "iaReasoningTitle" }));
-    fireEvent.click(screen.getByRole("button", { name: /^high$/ }));
+    fireEvent.keyDown(screen.getByRole("slider", { name: "iaReasoningTitle" }), { key: "ArrowRight" });
     expect(await screen.findByRole("alert")).toHaveTextContent("busy conversation");
     expect(save).toHaveBeenCalledWith({ model_id: "gpt-test", model_provider_id: "codex", reasoning_effort: "high" });
+    await waitFor(() => expect(screen.getByRole("slider")).toHaveAttribute("aria-valuetext", "profileReasoningMedium"));
+  });
+  it("saves slider steps with the keyboard, keeps the panel open and can restore the agent default", async () => {
+    const { onChange } = setup({ workspace_dir: "/project", reasoning_effort: "low" });
+    fireEvent.click(screen.getByRole("button", { name: "iaReasoningTitle" }));
+    const slider = screen.getByRole("slider", { name: "iaReasoningTitle" });
+    slider.focus();
+    expect(slider).toHaveAttribute("aria-valuetext", "profileReasoningLow");
+    fireEvent.keyDown(slider, { key: "End" });
+    await waitFor(() => expect(slider).toHaveAttribute("aria-valuetext", "profileReasoningXHigh"));
+    expect(slider).toHaveFocus();
+    expect(onChange).toHaveBeenLastCalledWith({ workspace_dir: "/project", reasoning_effort: "xhigh" });
+    fireEvent.keyDown(slider, { key: "Home" });
+    await waitFor(() => expect(slider).toHaveAttribute("aria-valuetext", "profileReasoningDisabled"));
+    expect(onChange).toHaveBeenLastCalledWith({ workspace_dir: "/project", reasoning_effort: "none" });
+    fireEvent.click(screen.getByRole("button", { name: "iaReasoningFollowAgent" }));
+    await waitFor(() => expect(onChange).toHaveBeenLastCalledWith({ workspace_dir: "/project", reasoning_effort: "" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "iaReasoningFollowAgent" })).toBeDisabled());
+    expect(slider).toHaveAttribute("aria-valuetext", "profileReasoningAuto");
+  });
+  it("keeps model default separate from following the agent", async () => {
+    const { onChange } = setup({ reasoning_effort: "high" });
+    fireEvent.click(screen.getByRole("button", { name: "iaReasoningTitle" }));
+    fireEvent.click(screen.getByRole("button", { name: "profileReasoningAuto" }));
+    await waitFor(() => expect(onChange).toHaveBeenLastCalledWith({ reasoning_effort: "auto" }));
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "profileReasoningAuto" })).toHaveAttribute("aria-pressed", "true"),
+    );
+    expect(screen.getByRole("button", { name: "iaReasoningFollowAgent" })).toBeEnabled();
+    expect(screen.getByRole("slider")).toHaveAttribute("aria-valuetext", "profileReasoningAuto");
   });
   it("locks the directory in an existing conversation", () => {
     setup({ workspace_dir: "/project" }, vi.fn(), true);

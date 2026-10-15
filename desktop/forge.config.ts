@@ -88,10 +88,9 @@ const macSignIdentity =
   requestedMacSignIdentity || (!hasAppleNotarizationCredentials ? "-" : undefined);
 const usesAdHocMacSignature = macSignIdentity === "-";
 const skipMacSigning = process.env.CSGCLAW_MACOS_SKIP_SIGN === "1";
-// CSGClaw does not use Chromium cookies as its credential store. Keep cookie
-// encryption disabled on every platform so packaging and signing do not add an
-// OS credential-store prompt for data the application does not rely on.
-const enableCookieEncryption = false;
+// The independent browser profile retains website sessions. Protect its cookies
+// with Chromium's OS-backed encryption; application credentials stay in Go.
+const enableCookieEncryption = true;
 const windowsSign =
   process.env.CSGCLAW_WINDOWS_SIGN_TOOL && process.env.CSGCLAW_WINDOWS_SIGN_PARAMS
     ? {

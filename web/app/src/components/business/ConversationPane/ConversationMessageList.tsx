@@ -24,7 +24,6 @@ import {
   groupVideoGenerationMessages,
   isEventMessage,
   localIdentitiesMatch,
-  resolveAgentForUser,
   resolveUserByLocalIdentity,
   threadHasReplies,
   type IMConversation,
@@ -42,6 +41,8 @@ import { ConversationMessageActions } from "./ConversationMessageActions";
 import { shouldShowMessageDateDivider } from "./messageTimeUtils";
 import type { VoidOrPromise } from "./types";
 import { VideoGenerationCard } from "./VideoGenerationCard";
+import { MessageTimeline, buildMessageTimelineItems, resolveMessageAgent } from "./MessageTimeline";
+import timelineStyles from "./MessageTimeline/MessageTimeline.module.css";
 
 export type ConversationMessageListProps = {
   agents?: AgentLike[];
@@ -121,175 +122,188 @@ const MessageListContent = memo(function MessageListContent({
     [visibleMessages, videoGroups],
   );
 
+  const timelineItems = useMemo(
+    () => buildMessageTimelineItems(displayMessages, agents, usersById, t("attachment")),
+    [displayMessages, agents, usersById, t],
+  );
+
   return (
-    <section ref={messageListRef} className="messages">
-      {headerSlot}
-      {conversation.messages.length === 0 ? (
-        (emptyStateSlot ?? (
+    <div className={`conversation-message-area ${timelineStyles.area}`}>
+      <section ref={messageListRef} className="messages">
+        {headerSlot}
+        {conversation.messages.length === 0 ? (
+          (emptyStateSlot ?? (
+            <div className="messages-empty rich-empty">
+              <span aria-hidden="true" className="rich-empty-mark">
+                {">"}
+              </span>
+              <strong>{t("noMessages")}</strong>
+            </div>
+          ))
+        ) : displayMessages.length === 0 ? (
           <div className="messages-empty rich-empty">
             <span aria-hidden="true" className="rich-empty-mark">
-              {">"}
+              #
             </span>
-            <strong>{t("noMessages")}</strong>
+            <strong>{t("noVisibleMessages")}</strong>
           </div>
-        ))
-      ) : displayMessages.length === 0 ? (
-        <div className="messages-empty rich-empty">
-          <span aria-hidden="true" className="rich-empty-mark">
-            #
-          </span>
-          <strong>{t("noVisibleMessages")}</strong>
-        </div>
-      ) : null}
-      {displayMessages.map((message, index) => {
-        if (emptyCompletedProgress(message)) return null;
-        const timestampParts = formatMessageTimestampParts(message.created_at, locale, t);
-        const previousMessage = displayMessages[index - 1];
-        const showDivider = shouldShowMessageDateDivider(previousMessage, message);
+        ) : null}
+        {displayMessages.map((message, index) => {
+          if (emptyCompletedProgress(message)) return null;
+          const timestampParts = formatMessageTimestampParts(message.created_at, locale, t);
+          const previousMessage = displayMessages[index - 1];
+          const showDivider = shouldShowMessageDateDivider(previousMessage, message);
 
-        if (isEventMessage(message)) {
+          if (isEventMessage(message)) {
+            return (
+              <Fragment key={message.id || `event-${index}`}>
+                {showDivider ? <MessageTimeDivider parts={timestampParts} /> : null}
+                <div className="message-event-row">
+                  <div className="message-event-text">{formatEventMessage(message, usersById, locale)}</div>
+                </div>
+              </Fragment>
+            );
+          }
+          const user = resolveUserByLocalIdentity(message.sender_id, usersById);
+          if (!user) {
+            return null;
+          }
+          const own = localIdentitiesMatch(message.sender_id, currentUserID);
+          const isAdmin = user?.role === "admin";
+          const messageAgent = resolveMessageAgent(agents, user, message.sender_id);
+          const messageAgentRunning = isAgentAvailable(messageAgent);
+          const messageAvatar = user.avatar || messageAgent?.avatar;
+          const messageAvatarFallback = messageAgent
+            ? resolveAgentAvatarFallback(messageAgent, usersById)
+            : avatarFallbackText(user.avatar, user.name, user.id);
+          const threadSummary = threadHasReplies(message.thread) ? message.thread : null;
+          const latestThreadReply = threadSummary?.latest_reply;
+          const messageStateKey = longMessageStateKey(conversation, message, index);
+          const embeddedVideos = message.id ? videoGroups.childrenByParentID.get(message.id) || [] : [];
+          const isVideoGeneration = Boolean(message.metadata?.video_generation);
           return (
-            <Fragment key={message.id || `event-${index}`}>
+            <Fragment key={message.id || `message-${index}`}>
               {showDivider ? <MessageTimeDivider parts={timestampParts} /> : null}
-              <div className="message-event-row">
-                <div className="message-event-text">{formatEventMessage(message, usersById, locale)}</div>
+              <div
+                className={`message-row ${own ? "own" : ""} ${isAdmin ? "admin" : ""} ${message.metadata?.image_generation || isVideoGeneration ? "image-generation-message" : ""}`.trim()}
+                data-message-id={message.id || undefined}
+              >
+                <button
+                  type="button"
+                  className="avatar avatar-button"
+                  aria-label={`${t(messageAgent ? "agentDetailPanel" : "profilePreview")} ${user.name}`}
+                  onClick={(event) => {
+                    if (messageAgent && onOpenAgentDetail) {
+                      onOpenAgentDetail(messageAgent, event.currentTarget);
+                      return;
+                    }
+                    onPreviewUser(user, event.currentTarget);
+                  }}
+                >
+                  <AgentAvatarContent avatar={messageAvatar} fallback={messageAvatarFallback} />
+                  {messageAgent ? (
+                    <span
+                      className={`message-avatar-status ${messageAgentRunning ? "online" : ""}`}
+                      aria-hidden="true"
+                    />
+                  ) : null}
+                </button>
+                <div className="message-card">
+                  <div className="message-meta">
+                    <span className="message-author">{user.name}</span>
+                    <MessageTimestamp parts={timestampParts} />
+                  </div>
+                  {message.content && !message.metadata?.image_generation ? (
+                    <div className="message-bubble">
+                      <MessageContent
+                        key={`${message.id}:${theme}`}
+                        content={message.content}
+                        message={message}
+                        progressControls={renderTurnControls?.(message)}
+                        videoMessages={embeddedVideos}
+                        actionBusy={messageActionBusy}
+                        actionFeedback={messageActionFeedback}
+                        enableLongMessageCollapse={own}
+                        longMessageExpanded={own ? expandedLongMessages[messageStateKey] === true : undefined}
+                        onAction={onMessageAction}
+                        onLongMessageExpandedChange={
+                          own
+                            ? (expanded) =>
+                                setExpandedLongMessages((current) => ({
+                                  ...current,
+                                  [messageStateKey]: expanded,
+                                }))
+                            : undefined
+                        }
+                        onQuestionSelect={onQuestionSelect}
+                        onCitationSelect={onCitationSelect}
+                        t={t}
+                      />
+                    </div>
+                  ) : null}
+                  <DiagnosticMessageAction metadata={message.metadata} t={t} />
+                  <ImageGenerationStatus message={message} roomID={conversation.id} t={t} />
+                  {isVideoGeneration ? (
+                    <VideoGenerationCard message={message} t={t} onPreviewAttachment={onPreviewAttachment} />
+                  ) : (
+                    <MessageAttachments
+                      attachments={message.attachments}
+                      t={t}
+                      onPreviewAttachment={onPreviewAttachment}
+                    />
+                  )}
+                  {embeddedVideos.map((video) => (
+                    <VideoGenerationCard
+                      key={video.id || String(video.created_at || video.content)}
+                      message={video}
+                      t={t}
+                      onPreviewAttachment={onPreviewAttachment}
+                    />
+                  ))}
+                  {threadSummary ? (
+                    <div className="message-thread-actions has-thread-summary">
+                      <button type="button" className="thread-action-button" onClick={() => onOpenThread(message)}>
+                        <span aria-hidden="true">{IconImage("rooms")}</span>
+                        <span>{formatThreadReplyCount(threadSummary.reply_count, t)}</span>
+                      </button>
+                      {latestThreadReply ? (
+                        <button type="button" className="thread-latest-reply" onClick={() => onOpenThread(message)}>
+                          <span>{t("latestThreadReply")}</span>
+                          <strong className="truncate">
+                            <MessagePreviewText
+                              content={
+                                latestThreadReply.content || latestThreadReply.attachments?.[0]?.name || t("attachment")
+                              }
+                            />
+                          </strong>
+                        </button>
+                      ) : (
+                        <button type="button" className="thread-latest-reply" onClick={() => onOpenThread(message)}>
+                          <span>{t("threadStarted")}</span>
+                          <strong>{formatThreadReplyCount(threadSummary.reply_count, t)}</strong>
+                        </button>
+                      )}
+                    </div>
+                  ) : null}
+                  <ConversationMessageActions
+                    metadata={message.metadata}
+                    className="message-hover-actions"
+                    leading={renderMessageFooter?.(message)}
+                    content={message.metadata?.image_generation ? null : message.content}
+                    image={
+                      message.metadata?.image_generation ? message.attachments?.find(isImageAttachment) : undefined
+                    }
+                    onOpenThread={() => onOpenThread(message)}
+                    t={t}
+                  />
+                </div>
               </div>
             </Fragment>
           );
-        }
-        const user = resolveUserByLocalIdentity(message.sender_id, usersById);
-        if (!user) {
-          return null;
-        }
-        const own = localIdentitiesMatch(message.sender_id, currentUserID);
-        const isAdmin = user?.role === "admin";
-        const messageAgent = resolveMessageAgent(agents, user, message.sender_id);
-        const messageAgentRunning = isAgentAvailable(messageAgent);
-        const messageAvatar = user.avatar || messageAgent?.avatar;
-        const messageAvatarFallback = messageAgent
-          ? resolveAgentAvatarFallback(messageAgent, usersById)
-          : avatarFallbackText(user.avatar, user.name, user.id);
-        const threadSummary = threadHasReplies(message.thread) ? message.thread : null;
-        const latestThreadReply = threadSummary?.latest_reply;
-        const messageStateKey = longMessageStateKey(conversation, message, index);
-        const embeddedVideos = message.id ? videoGroups.childrenByParentID.get(message.id) || [] : [];
-        const isVideoGeneration = Boolean(message.metadata?.video_generation);
-        return (
-          <Fragment key={message.id || `message-${index}`}>
-            {showDivider ? <MessageTimeDivider parts={timestampParts} /> : null}
-            <div
-              className={`message-row ${own ? "own" : ""} ${isAdmin ? "admin" : ""} ${message.metadata?.image_generation || isVideoGeneration ? "image-generation-message" : ""}`.trim()}
-              data-message-id={message.id || undefined}
-            >
-              <button
-                type="button"
-                className="avatar avatar-button"
-                aria-label={`${t(messageAgent ? "agentDetailPanel" : "profilePreview")} ${user.name}`}
-                onClick={(event) => {
-                  if (messageAgent && onOpenAgentDetail) {
-                    onOpenAgentDetail(messageAgent, event.currentTarget);
-                    return;
-                  }
-                  onPreviewUser(user, event.currentTarget);
-                }}
-              >
-                <AgentAvatarContent avatar={messageAvatar} fallback={messageAvatarFallback} />
-                {messageAgent ? (
-                  <span className={`message-avatar-status ${messageAgentRunning ? "online" : ""}`} aria-hidden="true" />
-                ) : null}
-              </button>
-              <div className="message-card">
-                <div className="message-meta">
-                  <span className="message-author">{user.name}</span>
-                  <MessageTimestamp parts={timestampParts} />
-                </div>
-                {message.content && !message.metadata?.image_generation ? (
-                  <div className="message-bubble">
-                    <MessageContent
-                      key={`${message.id}:${theme}`}
-                      content={message.content}
-                      message={message}
-                      progressControls={renderTurnControls?.(message)}
-                      videoMessages={embeddedVideos}
-                      actionBusy={messageActionBusy}
-                      actionFeedback={messageActionFeedback}
-                      enableLongMessageCollapse={own}
-                      longMessageExpanded={own ? expandedLongMessages[messageStateKey] === true : undefined}
-                      onAction={onMessageAction}
-                      onLongMessageExpandedChange={
-                        own
-                          ? (expanded) =>
-                              setExpandedLongMessages((current) => ({
-                                ...current,
-                                [messageStateKey]: expanded,
-                              }))
-                          : undefined
-                      }
-                      onQuestionSelect={onQuestionSelect}
-                      onCitationSelect={onCitationSelect}
-                      t={t}
-                    />
-                  </div>
-                ) : null}
-                <DiagnosticMessageAction metadata={message.metadata} t={t} />
-                <ImageGenerationStatus message={message} roomID={conversation.id} t={t} />
-                {isVideoGeneration ? (
-                  <VideoGenerationCard message={message} t={t} onPreviewAttachment={onPreviewAttachment} />
-                ) : (
-                  <MessageAttachments
-                    attachments={message.attachments}
-                    t={t}
-                    onPreviewAttachment={onPreviewAttachment}
-                  />
-                )}
-                {embeddedVideos.map((video) => (
-                  <VideoGenerationCard
-                    key={video.id || String(video.created_at || video.content)}
-                    message={video}
-                    t={t}
-                    onPreviewAttachment={onPreviewAttachment}
-                  />
-                ))}
-                {threadSummary ? (
-                  <div className="message-thread-actions has-thread-summary">
-                    <button type="button" className="thread-action-button" onClick={() => onOpenThread(message)}>
-                      <span aria-hidden="true">{IconImage("rooms")}</span>
-                      <span>{formatThreadReplyCount(threadSummary.reply_count, t)}</span>
-                    </button>
-                    {latestThreadReply ? (
-                      <button type="button" className="thread-latest-reply" onClick={() => onOpenThread(message)}>
-                        <span>{t("latestThreadReply")}</span>
-                        <strong className="truncate">
-                          <MessagePreviewText
-                            content={
-                              latestThreadReply.content || latestThreadReply.attachments?.[0]?.name || t("attachment")
-                            }
-                          />
-                        </strong>
-                      </button>
-                    ) : (
-                      <button type="button" className="thread-latest-reply" onClick={() => onOpenThread(message)}>
-                        <span>{t("threadStarted")}</span>
-                        <strong>{formatThreadReplyCount(threadSummary.reply_count, t)}</strong>
-                      </button>
-                    )}
-                  </div>
-                ) : null}
-                <ConversationMessageActions
-                  metadata={message.metadata}
-                  className="message-hover-actions"
-                  leading={renderMessageFooter?.(message)}
-                  content={message.metadata?.image_generation ? null : message.content}
-                  image={message.metadata?.image_generation ? message.attachments?.find(isImageAttachment) : undefined}
-                  onOpenThread={() => onOpenThread(message)}
-                  t={t}
-                />
-              </div>
-            </div>
-          </Fragment>
-        );
-      })}
-    </section>
+        })}
+      </section>
+      <MessageTimeline key={conversation.id} items={timelineItems} scrollRef={messageListRef} t={t} />
+    </div>
   );
 });
 
@@ -297,15 +311,4 @@ function longMessageStateKey(conversation: IMConversation, message: IMMessage, i
   const conversationKey = String(conversation.id || "conversation");
   const messageKey = String(message.id || `${message.created_at || "message"}:${index}`);
   return `${conversationKey}:${messageKey}`;
-}
-
-function resolveMessageAgent(
-  agents: readonly AgentLike[],
-  user: IMUser,
-  senderID: string | null | undefined,
-): AgentLike | null {
-  const senderIdentity = String(senderID || "").trim();
-  const alternateUser =
-    senderIdentity && senderIdentity !== user.id ? { ...user, id: senderIdentity, user_id: user.id } : null;
-  return resolveAgentForUser(agents, user, alternateUser ? [alternateUser] : []);
 }

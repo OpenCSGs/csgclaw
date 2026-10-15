@@ -1,3 +1,4 @@
+import { AgentModelFields } from "@/components/business/AgentModelFields";
 import { BOT_TYPE_NORMAL, DEFAULT_RUNTIME_KIND } from "@/shared/constants/agents";
 import { useEffect, useMemo, useRef, useState, type SetStateAction } from "react";
 import {
@@ -7,7 +8,6 @@ import {
   FieldHelpTooltip,
   isBlank,
   MCPServersPanel,
-  ModelOptionLabel,
   NotifierControls,
   ReasoningControls,
   requiredFieldLabel,
@@ -22,6 +22,7 @@ import {
   agentDraftMissingRequiredEnv,
   agentCreateTemplateLocked,
   applyTemplateToDraft,
+  agentTemplateDisplayName,
   composeLegacyRuntimeKind,
   createAgentSelectableTemplates,
   formatRuntimeKindLabel,
@@ -39,10 +40,10 @@ import {
 } from "@/models/agents";
 import type { AgentDraft, AgentLike, RuntimeBootstrapConfig } from "@/models/agents";
 import {
-  MODEL_PROVIDER_IDS,
+  modelIDsForProviderSelection,
+  providerNameForProviderID,
   modelProviderAvatarPath,
   modelProviderSelectOptionsFromCatalog,
-  providerNameForProviderID,
   selectorForProviderModel,
   type ModelProviderCatalog,
   type ModelProviderOption,
@@ -160,8 +161,18 @@ export function AgentProfileModal({
     agentDraft.model_provider_id ||
     providerOptions.find((option) => option.models.includes(agentDraft.model_id))?.id ||
     "";
+  useEffect(() => {
+    if (String(agentDraft.model_provider_id || "").trim() || !selectedProviderID) {
+      return;
+    }
+    onAgentDraftChange({
+      ...agentDraft,
+      provider: providerNameForProviderID(selectedProviderID),
+      model_provider_id: selectedProviderID,
+    });
+  }, [agentDraft, onAgentDraftChange, selectedProviderID]);
   const selectedProvider = providerOptions.find((option) => option.id === selectedProviderID) ?? null;
-  const selectedProviderModels = selectedProvider?.models ?? [];
+  const selectedProviderModels = modelIDsForProviderSelection(selectedProviderID, selectedProvider?.models ?? []);
   const selectedModelValue = agentDraft.model_id || "";
   const workerTemplates = useMemo(() => {
     const selectableTemplates = createAgentSelectableTemplates(hubTemplates);
@@ -507,7 +518,7 @@ export function AgentProfileModal({
                         .filter((item) => item.id)
                         .map((item) => ({
                           value: item.id || "",
-                          label: item.name || item.id || "",
+                          label: agentTemplateDisplayName(item) || item.id || "",
                           description: String(item.description || "").trim() || undefined,
                         }))}
                     />
@@ -682,90 +693,16 @@ export function AgentProfileModal({
                 <div className="agent-section-form">
                   <div className="agent-section-form-content agent-model-form-content">
                     <div className="profile-runtime-grid agent-model-config-grid">
-                      <label className="field">
-                        {requiredFieldLabel(t("profileModelProvider"))}
-                        <Select
-                          value={selectedProviderID}
-                          required
-                          selectedLabel={
-                            selectedProvider ? (
-                              <ModelOptionLabel avatar={selectedProvider.avatar} model={selectedProvider.displayName} />
-                            ) : undefined
-                          }
-                          onValueChange={(value) => {
-                            const nextProvider = providerOptions.find((option) => option.id === value);
-                            if (!nextProvider) {
-                              onAgentDraftChange({ ...agentDraft, model_id: "", model_provider_id: "" });
-                              return;
-                            }
-                            if (nextProvider.id === MODEL_PROVIDER_IDS.OpenCSG && !onRequireOpenCSGAuth()) {
-                              return;
-                            }
-                            onAgentDraftChange({
-                              ...agentDraft,
-                              provider: providerNameForProviderID(nextProvider.id),
-                              model_provider_id: nextProvider.id,
-                              model_id: nextProvider.models[0] || "",
-                            });
-                          }}
-                          triggerProps={{ "aria-label": t("profileModelProvider"), "aria-required": true }}
-                          options={[
-                            {
-                              value: "",
-                              label: agentModelBusy ? t("profileLoadingModels") : t("profileProviderSelect"),
-                            },
-                            ...providerOptions.map((option) => ({
-                              value: option.value,
-                              disabled: option.disabled,
-                              label: (
-                                <ModelOptionLabel
-                                  avatar={option.avatar}
-                                  model={option.displayName}
-                                  provider={
-                                    option.models.length
-                                      ? t("modelProviderModelCount", { count: option.models.length })
-                                      : t("modelProviderNoModels")
-                                  }
-                                />
-                              ),
-                              textValue: option.displayName,
-                            })),
-                          ]}
-                        />
-                      </label>
-                      <label className="field">
-                        {requiredFieldLabel(t("profileModel"))}
-                        <Select
-                          value={selectedModelValue}
-                          required
-                          disabled={!selectedProviderID || !selectedProviderModels.length}
-                          onValueChange={(value) => onAgentDraftChange({ ...agentDraft, model_id: value })}
-                          searchable
-                          searchPlaceholder={t("modelProviderModelSearch")}
-                          emptyLabel={t("modelProviderNoModels")}
-                          triggerProps={{ "aria-label": t("profileModel"), "aria-required": true }}
-                          options={[
-                            {
-                              value: "",
-                              label: selectedProviderID ? t("profileSelectModel") : t("profileProviderSelectFirst"),
-                            },
-                            ...selectedProviderModels.map((modelID) => ({
-                              value: modelID,
-                              label: <ModelOptionLabel model={modelID} showAvatar={false} />,
-                              textValue: modelID,
-                            })),
-                            ...(selectedModelValue && !selectedProviderModels.includes(selectedModelValue)
-                              ? [
-                                  {
-                                    value: selectedModelValue,
-                                    label: <ModelOptionLabel model={selectedModelValue} showAvatar={false} />,
-                                    textValue: selectedModelValue,
-                                  },
-                                ]
-                              : []),
-                          ]}
-                        />
-                      </label>
+                      <AgentModelFields
+                        providerOptions={providerOptions}
+                        providerID={selectedProviderID}
+                        modelID={selectedModelValue}
+                        models={selectedProviderModels}
+                        busy={agentModelBusy}
+                        onPatch={(patch) => onAgentDraftChange({ ...agentDraft, ...patch })}
+                        onRequireOpenCSGAuth={onRequireOpenCSGAuth}
+                        t={t}
+                      />
                       <ReasoningControls
                         value={agentDraft.reasoning_effort}
                         onChange={(value) => onAgentDraftChange({ ...agentDraft, reasoning_effort: value })}

@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { Check, ChevronDown, Folder, Gauge, Search, Settings2, ShieldCheck } from "lucide-react";
-import { Button, PopoverRoot, PopoverTrigger, PopoverContent } from "@/components/ui";
+import { Button, PopoverRoot, PopoverTrigger, PopoverContent, TextInput } from "@/components/ui";
+import { ReasoningEffortPicker } from "@/components/business/ReasoningEffortPicker";
+import { reasoningEffortLabel } from "@/components/business/ProfileControls";
 import { useOptionalWorkspaceControllerContext } from "@/hooks/workspace";
 import {
   agentProfileConfig,
@@ -13,7 +15,6 @@ import {
 } from "@/models/agents";
 import { modelProviderAvatarPath } from "@/models/modelProviders";
 import { supportsTaskConfiguration, type TaskConfiguration } from "@/models/taskConfiguration";
-import { REASONING_OPTIONS } from "@/shared/constants/agents";
 import { pickLocalDirectoryPath } from "@/components/business/ProfileControls/runtimeOptionDirectoryPicker";
 import styles from "./TaskConfigurationToolbar.module.css";
 
@@ -46,6 +47,7 @@ export function TaskConfigurationToolbar({
   const [open, setOpen] = useState<Menu>("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [reasoningPreview, setReasoningPreview] = useState<string>();
   const editable = supportsTaskConfiguration(agent) && Boolean(onChange);
   const blocked = disabled || saving;
   const providers = controller?.modelProviders?.providers ?? [];
@@ -61,24 +63,31 @@ export function TaskConfigurationToolbar({
       schema?.choices?.find((choice) => choice.value === value),
       controller?.sidebarProps?.locale || "zh",
     ) || value;
-  const labelForReasoning = (value: string) => (value === "auto" ? t("iaReasoningDefault") : value);
+  const labelForReasoning = (value: string) =>
+    value === "auto" ? t("iaReasoningDefault") : reasoningEffortLabel(t, value);
   const toggle = (kind: Menu, value: boolean) => {
     setOpen(value ? kind : "");
     setQuery("");
     setError("");
+    setReasoningPreview(undefined);
   };
-  async function change(patch: TaskConfiguration) {
+  async function change(patch: TaskConfiguration, keepOpen = false) {
     if (!editable || blocked) return;
     setSaving(true);
     setError("");
     try {
       await onChange?.({ ...configuration, ...patch });
-      setOpen("");
+      if (!keepOpen) setOpen("");
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : t("sendFailed"));
     } finally {
       setSaving(false);
     }
+  }
+  async function commitReasoning(value: string) {
+    setReasoningPreview(value);
+    await change({ reasoning_effort: value }, true);
+    setReasoningPreview(undefined);
   }
   const editAgent = () => {
     setOpen("");
@@ -144,7 +153,8 @@ export function TaskConfigurationToolbar({
             <>
               <label className={styles.directoryInput}>
                 {t("iaWorkdirTitle")}
-                <input
+                <TextInput
+                  size="sm"
                   aria-label={t("taskConfigurationDirectoryPath")}
                   placeholder="/path/to/workspace"
                   value={query}
@@ -215,7 +225,9 @@ export function TaskConfigurationToolbar({
             <PopoverContent className={styles.popover} side="top" align="end" aria-label={t("iaModelTitle")}>
               <div className={styles.search}>
                 <Search size={14} />
-                <input
+                <TextInput
+                  size="sm"
+                  variant="plain"
                   autoFocus
                   aria-label={t("iaModelSearch")}
                   placeholder={t("iaModelSearch")}
@@ -274,19 +286,14 @@ export function TaskConfigurationToolbar({
               </button>
             </PopoverTrigger>
             <PopoverContent className={styles.popover} side="top" align="end" aria-label={t("iaReasoningTitle")}>
-              {row(
-                t("iaReasoningFollowing"),
-                !configuration.reasoning_effort,
-                () => void change({ reasoning_effort: "" }),
-                labelForReasoning(profile?.reasoning_effort || "auto"),
-              )}
-              {REASONING_OPTIONS.map((value) =>
-                row(
-                  labelForReasoning(value),
-                  configuration.reasoning_effort === value,
-                  () => void change({ reasoning_effort: value }),
-                ),
-              )}
+              <ReasoningEffortPicker
+                value={reasoningPreview ?? configuration.reasoning_effort ?? ""}
+                agentEffort={profile?.reasoning_effort ?? undefined}
+                disabled={!editable || blocked}
+                onValueChange={setReasoningPreview}
+                onValueCommit={(value) => void commitReasoning(value)}
+                t={t}
+              />
               {errorMessage}
               {hint}
             </PopoverContent>

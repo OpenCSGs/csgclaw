@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { saveMCPServerAndSelect } from "@/hooks/workspace/useWorkspaceController";
+import { saveMCPServerAndSelect } from "@/hooks/workspace/bindings/hub";
 
 const payload = {
   config: { type: "remote", url: "https://gateway.example.test/mcp" },

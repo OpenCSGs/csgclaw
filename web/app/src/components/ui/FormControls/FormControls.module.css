@@ -1,0 +1,104 @@
+.csg-field {
+  align-content: start;
+}
+
+.field {
+  display: grid;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.field > .field-label,
+.field > span:not(.field-hint),
+.field > .field-label-with-help {
+  color: var(--field-label-color);
+  font-family: var(--font-sans);
+  font-size: var(--field-label-font-size);
+  font-weight: var(--field-label-font-weight);
+  line-height: var(--field-label-line-height);
+  letter-spacing: 0;
+}
+
+.field-hint,
+.form-error {
+  color: var(--muted);
+}
+
+.form-error {
+  margin-top: 14px;
+  color: var(--danger);
+}
+
+.field-required {
+  color: var(--danger);
+}
+
+.csg-text-control {
+  width: 100%;
+  min-width: 0;
+  min-height: var(--input-height-md);
+  padding: var(--input-padding-md);
+  border: 1px solid var(--input-border);
+  border-radius: var(--input-radius);
+  background: var(--input-background);
+  color: var(--input-text);
+  box-shadow: var(--input-shadow);
+  font: var(--text-md-normal);
+  outline: none;
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease;
+}
+.csg-text-control::placeholder {
+  color: var(--input-text-placeholder);
+}
+.csg-text-control:hover:not(:disabled, [aria-invalid="true"]) {
+  border-color: var(--input-border-hover);
+}
+.csg-text-control:focus {
+  border-color: var(--input-border-focus);
+  box-shadow: var(--input-shadow-focus);
+}
+.csg-text-control:disabled {
+  background: var(--input-background-disabled);
+  color: var(--input-text-disabled);
+  cursor: not-allowed;
+}
+.csg-text-control[aria-invalid="true"] {
+  border-color: var(--input-border-error);
+}
+.csg-text-control[aria-invalid="true"]:focus {
+  box-shadow: var(--input-shadow-error-focus);
+}
+.csg-text-control[data-csg-control="input"] {
+  height: var(--input-height-md);
+}
+
+.csg-text-control[data-csg-control="textarea"] {
+  min-height: 116px;
+  padding: var(--textarea-padding-md);
+  resize: vertical;
+}
+.csg-text-control[data-size="sm"] {
+  height: var(--input-height-sm);
+  min-height: var(--input-height-sm);
+  padding: var(--space-2) var(--space-3);
+  font: var(--text-sm-normal);
+}
+.csg-text-control[data-variant="plain"] {
+  height: var(--input-plain-height, 32px);
+  min-height: var(--input-plain-height, 32px);
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.csg-text-control[data-variant="plain"]:is(:hover, :focus, [aria-invalid="true"]) {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.csg-text-control:disabled::placeholder {
+  color: var(--input-text-disabled);
+}

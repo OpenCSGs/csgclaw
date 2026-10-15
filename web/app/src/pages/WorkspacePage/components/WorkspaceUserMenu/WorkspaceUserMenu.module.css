@@ -13,7 +13,7 @@
   display: grid;
   grid-template-columns: 28px minmax(0, 1fr) 16px;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   cursor: pointer;
   font: inherit;
   text-align: left;
@@ -68,7 +68,7 @@
   color: var(--text);
   font-size: 13px;
   font-weight: 500;
-  line-height: 20px;
+  line-height: 18px;
 }
 
 .hint {
@@ -76,7 +76,7 @@
   color: var(--muted);
   font-size: 12px;
   font-weight: 400;
-  line-height: 18px;
+  line-height: 16px;
 }
 
 .caret {
@@ -88,8 +88,13 @@
   justify-content: center;
 }
 
+.caret svg {
+  width: 14px;
+  height: 14px;
+}
+
 .menuHeader {
-  padding: 10px 12px 8px;
+  padding: 8px;
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -112,7 +117,7 @@
 .menuIcon {
   width: 16px;
   height: 16px;
-  margin-right: 8px;
+  flex: 0 0 16px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -120,9 +125,47 @@
   vertical-align: -3px;
 }
 
+.menuIcon svg {
+  width: 16px;
+  height: 16px;
+}
+
 .menuSubmenuLabel {
   min-width: 0;
   flex: 1 1 auto;
+}
+
+.menu {
+  width: clamp(232px, var(--radix-dropdown-menu-trigger-width), 280px);
+  min-width: 0;
+  max-width: calc(100vw - 24px);
+  max-height: var(--radix-dropdown-menu-content-available-height);
+  overflow-y: auto;
+}
+
+.connection {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 4px 8px 6px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.connectionCopy {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.connectionCopy small {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .menuValue {

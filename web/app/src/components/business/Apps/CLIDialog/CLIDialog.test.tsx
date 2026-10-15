@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createTranslator } from "@/shared/i18n";
@@ -39,7 +39,10 @@ const resource: AppInstallation = {
     authorization_url: "https://open.feishu.cn/device",
   },
 };
-afterEach(() => vi.resetAllMocks());
+afterEach(() => {
+  vi.resetAllMocks();
+  vi.useRealTimers();
+});
 const definition: AppDefinition = {
   app_id: "feishu",
   kind: "cli",
@@ -177,16 +180,109 @@ describe("Feishu CLI authorization", () => {
     expect(startCLIOperation).not.toHaveBeenCalled();
   });
   it("cancels the persisted session explicitly", async () => {
-    vi.mocked(fetchAppResource).mockResolvedValue(resource);
-    vi.mocked(cancelCLIOperation).mockResolvedValue({
+    const operation = {
       ...resource.operation!,
       status: "cancelled",
       authorization_url: undefined,
+    };
+    vi.mocked(fetchAppResource).mockResolvedValue(resource);
+    vi.mocked(cancelCLIOperation).mockImplementation(async () => {
+      vi.mocked(fetchAppResource).mockResolvedValue({ ...resource, operation });
+      return operation;
     });
     render(<CLIDialog definition={definition} existing={resource} t={t} onClose={vi.fn()} onChanged={vi.fn()} />);
     await userEvent.setup().click(screen.getByRole("button", { name: "Cancel" }));
     await waitFor(() => expect(cancelCLIOperation).toHaveBeenCalledWith("global-cli", "session-1"));
     expect(screen.queryByRole("link", { name: "Authorize account" })).not.toBeInTheDocument();
+  });
+  it.each([false, true])(
+    "refreshes cancelled authorization before the regular polling tick (pending=%s)",
+    async (pending) => {
+      vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+      const user = userEvent.setup();
+      const cancelled: AppInstallation = {
+        ...resource,
+        status: "needs_configuration",
+        operation: { ...resource.operation!, status: "cancelled", authorization_url: undefined },
+      };
+      vi.mocked(fetchAppResource).mockResolvedValue(resource);
+      vi.mocked(cancelCLIOperation).mockImplementation(async () => {
+        if (!pending) vi.mocked(fetchAppResource).mockResolvedValue(cancelled);
+        return resource.operation!;
+      });
+      const changed = vi.fn().mockResolvedValue(undefined);
+      render(<CLIDialog definition={definition} existing={resource} t={t} onClose={vi.fn()} onChanged={changed} />);
+      await act(async () => {});
+      await user.click(screen.getByRole("button", { name: "Cancel" }));
+      if (pending) {
+        expect(screen.getByRole("button", { name: "Cancel" })).toBeDisabled();
+        expect(changed).not.toHaveBeenCalled();
+        vi.mocked(fetchAppResource).mockResolvedValue(cancelled);
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(100);
+        });
+      }
+      await waitFor(() => expect(changed).toHaveBeenCalledOnce());
+      expect(screen.queryByText("In progress")).not.toBeInTheDocument();
+      expect(screen.queryByRole("link", { name: "Authorize account" })).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Connect Feishu" })).toBeEnabled();
+    },
+  );
+
+  it("ignores a resource response started before cancellation", async () => {
+    let release!: (value: AppInstallation) => void;
+    vi.mocked(fetchAppResource).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          release = resolve;
+        }),
+    );
+    const cancelled: AppInstallation = {
+      ...resource,
+      status: "needs_configuration",
+      operation: { ...resource.operation!, status: "cancelled", authorization_url: undefined },
+    };
+    vi.mocked(fetchAppResource).mockResolvedValue(cancelled);
+    vi.mocked(cancelCLIOperation).mockResolvedValue(resource.operation!);
+    render(<CLIDialog definition={definition} existing={resource} t={t} onClose={vi.fn()} onChanged={vi.fn()} />);
+    await userEvent.setup().click(screen.getByRole("button", { name: "Cancel" }));
+    await screen.findByRole("button", { name: "Connect Feishu" });
+    await act(async () => {
+      release(resource);
+    });
+    expect(screen.queryByText("In progress")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Connect Feishu" })).toBeEnabled();
+  });
+  it("recovers from a failed refresh after cancellation", async () => {
+    vi.mocked(fetchAppResource).mockResolvedValue(resource);
+    vi.mocked(cancelCLIOperation).mockImplementation(async () => {
+      vi.mocked(fetchAppResource).mockRejectedValueOnce(new Error("Resource service unavailable"));
+      return resource.operation!;
+    });
+    const changed = vi.fn();
+    render(<CLIDialog definition={definition} existing={resource} t={t} onClose={vi.fn()} onChanged={changed} />);
+    await userEvent.setup().click(screen.getByRole("button", { name: "Cancel" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Resource service unavailable");
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeEnabled();
+    expect(changed).not.toHaveBeenCalled();
+  });
+  it("stops refreshing a pending cancellation when the dialog unmounts", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    vi.mocked(fetchAppResource).mockResolvedValue(resource);
+    vi.mocked(cancelCLIOperation).mockResolvedValue(resource.operation!);
+    const { unmount } = render(
+      <CLIDialog definition={definition} existing={resource} t={t} onClose={vi.fn()} onChanged={vi.fn()} />,
+    );
+    await userEvent.setup().click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeDisabled();
+    unmount();
+    vi.mocked(fetchAppResource).mockClear();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2000);
+      window.dispatchEvent(new Event("focus"));
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    expect(fetchAppResource).not.toHaveBeenCalled();
   });
   it("shows migration failures and offers reconnection", async () => {
     const failed = {

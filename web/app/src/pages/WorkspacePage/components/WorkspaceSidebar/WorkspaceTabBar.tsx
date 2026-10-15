@@ -1,7 +1,7 @@
 import { Button, Tooltip } from "@/components/ui";
 import { HubIcon, RoomsIcon, TaskIcon, UsersIcon } from "@/components/ui/Icons";
 import { WorkspaceTabs } from "@/models/routing";
-import type { WorkspaceSidebarProps } from "./types";
+import type { WorkspaceSidebarProps } from "@/hooks/workspace/contracts/sidebar";
 
 type WorkspaceTabBarProps = Pick<
   WorkspaceSidebarProps,

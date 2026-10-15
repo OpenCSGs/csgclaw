@@ -1,4 +1,3 @@
-import { WORKSPACE_GROUPS_COLLAPSED_STORAGE_KEY } from "@/shared/storage/keys";
 import { isDirectConversation } from "@/models/conversations";
 import type { IMConversation } from "@/models/conversations";
 
@@ -95,12 +94,6 @@ export type WorkspacePane = {
 };
 
 export type CollapsedWorkspaceGroups = Record<string, boolean>;
-
-const DEFAULT_COLLAPSED_WORKSPACE_GROUPS: CollapsedWorkspaceGroups = {
-  "direct-messages": false,
-  rooms: true,
-  threads: true,
-};
 
 export function paneFromLocation(pathname = window.location.pathname): WorkspacePane {
   const parts = String(pathname || "/")
@@ -278,18 +271,6 @@ export function workspaceHasContextSidebar(pane: WorkspacePane | null | undefine
 
 export function workspaceShowsFloatingChat(pane: WorkspacePane | null | undefined): boolean {
   return pane?.type !== WorkspacePaneTypes.conversation || !pane.id;
-}
-
-export function readCollapsedWorkspaceGroups(): CollapsedWorkspaceGroups {
-  try {
-    const parsed = JSON.parse(window.localStorage.getItem(WORKSPACE_GROUPS_COLLAPSED_STORAGE_KEY) || "{}");
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-      return { ...DEFAULT_COLLAPSED_WORKSPACE_GROUPS };
-    }
-    return { ...DEFAULT_COLLAPSED_WORKSPACE_GROUPS, ...(parsed as CollapsedWorkspaceGroups) };
-  } catch (_) {
-    return { ...DEFAULT_COLLAPSED_WORKSPACE_GROUPS };
-  }
 }
 
 export function pathForAgentApps(agentID: string): string {

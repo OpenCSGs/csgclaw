@@ -1,3 +1,4 @@
+import styles from "./Popover.module.css";
 import { Popover as RadixPopover } from "radix-ui";
 import { forwardRef } from "react";
 import type { ComponentPropsWithoutRef, ComponentRef } from "react";
@@ -8,6 +9,13 @@ export type PopoverRootProps = ComponentPropsWithoutRef<typeof RadixPopover.Root
 export function PopoverRoot(props: PopoverRootProps) {
   return <RadixPopover.Root {...props} />;
 }
+
+export const PopoverAnchor = forwardRef<
+  ComponentRef<typeof RadixPopover.Anchor>,
+  ComponentPropsWithoutRef<typeof RadixPopover.Anchor>
+>(function PopoverAnchor(props, ref) {
+  return <RadixPopover.Anchor ref={ref} {...props} />;
+});
 
 export type PopoverTriggerProps = ComponentPropsWithoutRef<typeof RadixPopover.Trigger>;
 
@@ -39,7 +47,7 @@ export const PopoverContent = forwardRef<ComponentRef<typeof RadixPopover.Conten
         <RadixPopover.Content
           ref={ref}
           align={align}
-          className={classNames("csg-popover-content", className)}
+          className={classNames(styles["csg-popover-content"], className)}
           collisionPadding={collisionPadding}
           sideOffset={sideOffset}
           {...props}

@@ -1,6 +1,6 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { TeamDetailPane } from "@/pages/TeamPage/components";
+import { TeamDetailPane } from "@/components/business/TeamDetailPane";
 import type { TranslateFn } from "@/models/conversations";
 import type { WorkspaceTeam } from "@/models/tasks";
 

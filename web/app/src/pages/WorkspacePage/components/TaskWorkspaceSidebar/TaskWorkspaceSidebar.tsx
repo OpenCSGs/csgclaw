@@ -5,7 +5,7 @@ import { resolveAgentChannelUserID, agentRuntimeOptions } from "@/models/agents"
 import { resolveConversationUser, agentMatchesUser } from "@/models/conversations";
 import { WorkspacePaneTypes } from "@/models/routing";
 import { Tooltip } from "@/components/ui";
-import type { WorkspaceSidebarProps } from "../WorkspaceSidebar/types";
+import type { WorkspaceSidebarProps } from "@/hooks/workspace/contracts/sidebar";
 import type { TaskEntryController } from "@/hooks/workspace/useTaskEntry";
 import type { IMConversation } from "@/models/conversations";
 import styles from "./TaskWorkspaceSidebar.module.css";

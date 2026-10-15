@@ -100,6 +100,7 @@ func (s *LocalStore) Get(_ context.Context, id string) (Template, error) {
 	return Template{
 		ID:             id,
 		Name:           manifest.Name,
+		DisplayName:    manifest.DisplayName,
 		Description:    manifest.Description,
 		Role:           TemplateRoleWorker,
 		RuntimeKind:    normalizeTemplateRuntimeKind(manifest.RuntimeKind),
@@ -263,6 +264,7 @@ func (s *LocalStore) loadTemplate(id string) (string, templateManifest, error) {
 func (s *LocalStore) writeManifest(path string, spec PublishSpec) error {
 	manifest := templateManifest{
 		Name:        spec.Name,
+		DisplayName: spec.DisplayName,
 		Description: spec.Description,
 		RuntimeKind: normalizeTemplateRuntimeKind(spec.RuntimeKind),
 		Version:     spec.Version,
@@ -292,6 +294,10 @@ func normalizePublishSpec(spec PublishSpec) (PublishSpec, error) {
 		return PublishSpec{}, err
 	}
 
+	spec.DisplayName = strings.TrimSpace(spec.DisplayName)
+	if spec.DisplayName == "" {
+		spec.DisplayName = strings.TrimSpace(spec.Name)
+	}
 	spec.Name = strings.TrimSpace(spec.Name)
 	if spec.Name == "" {
 		return PublishSpec{}, ErrTemplateNameRequired

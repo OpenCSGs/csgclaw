@@ -1,0 +1,25 @@
+.csg-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: var(--space-6);
+  color: var(--muted);
+  text-align: center;
+}
+.csg-empty-state h2 {
+  margin: 0;
+  color: var(--text);
+  font: var(--text-md-medium);
+}
+.csg-empty-state p {
+  max-width: 480px;
+  margin: 0;
+  font: var(--text-sm-normal);
+}
+.csg-empty-state-actions {
+  display: flex;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}

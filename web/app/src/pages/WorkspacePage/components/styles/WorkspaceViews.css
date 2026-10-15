@@ -1,0 +1,675 @@
+.entity-heading {
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.entity-title-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.entity-title-row h1 {
+  margin: 0;
+}
+
+.entity-heading p {
+  max-width: 760px;
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.status-pill {
+  border-radius: 999px;
+  padding: 3px 8px;
+  background: var(--panel-soft);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 720;
+}
+
+.status-pill.online {
+  background: var(--primary-soft);
+}
+
+.entity-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.entity-field {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  display: grid;
+  gap: 5px;
+}
+
+.entity-field span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 720;
+  text-transform: uppercase;
+}
+
+.entity-field strong {
+  min-width: 0;
+  color: var(--text);
+  font-size: 15px;
+  overflow-wrap: anywhere;
+}
+
+.entity-badge-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.profile-preview-popover {
+  position: fixed;
+  z-index: var(--z-page-overlay);
+  display: grid;
+  align-content: start;
+  max-height: calc(100vh - 24px);
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  background: color-mix(in oklab, var(--panel) 96%, black);
+  backdrop-filter: blur(18px);
+  animation: drawer-in 180ms ease both;
+}
+
+.preview-header,
+.preview-hero,
+.preview-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.preview-header {
+  justify-content: space-between;
+}
+
+.preview-title {
+  letter-spacing: 0.08em;
+}
+
+.preview-hero {
+  align-items: center;
+}
+
+.preview-identity {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.preview-meta,
+.preview-description {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.preview-description {
+  margin: 0;
+}
+
+.preview-fields {
+  display: grid;
+}
+
+.preview-actions {
+  flex-wrap: wrap;
+}
+
+@media (max-width: 640px) {
+  .profile-preview-popover {
+    max-height: calc(100vh - 16px);
+    padding: 16px;
+    border-radius: 18px;
+  }
+}
+
+@media (max-width: 640px) {
+  .preview-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.section-header-inline {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.entity-list {
+  display: grid;
+  gap: 8px;
+}
+
+.entity-list-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  padding: 8px;
+}
+
+.entity-list-main-button {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+
+.entity-list-icon {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--primary-strong);
+  background: var(--primary-soft);
+}
+
+.entity-list-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.entity-list-icon .agent-avatar-image {
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  object-fit: cover;
+}
+
+.entity-list-main {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.entity-list-main strong,
+.entity-list-main small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.entity-list-main small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+@media (max-width: 960px) {
+  .app-shell {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 960px) {
+  .chat-header,
+  .modal-header,
+  .modal-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}
+
+@media (max-width: 960px) {
+  .profile-grid,
+  .profile-grid-compact,
+  .profile-runtime-grid,
+  .profile-advanced-grid,
+  .entity-grid,
+  .env-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+.app-shell {
+  position: relative;
+  z-index: 1;
+}
+
+.sidebar,
+.chat-panel {
+  border-color: var(--line);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+  animation: rise-in 360ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+:root[data-theme="light"] .sidebar,
+:root[data-theme="light"] .chat-panel {
+  background: var(--panel);
+}
+
+.sidebar-header,
+.chat-header,
+.composer {
+  padding: 18px;
+}
+
+.icon-button,
+.member-badge-button,
+.secondary-button,
+.modal-close,
+.agent-add-button,
+.agent-icon-button,
+.agent-action-text,
+.env-remove-button,
+.tool-menu-row {
+  transition:
+    color 180ms ease,
+    background-color 180ms ease,
+    border-color 180ms ease,
+    opacity 180ms ease,
+    transform 180ms cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 180ms ease;
+}
+
+.icon-button:active,
+.member-badge-button:active,
+.composer-send-button:active,
+.secondary-button:active {
+  transform: translateY(1px) scale(0.99);
+}
+
+.workspace-tab:focus-visible,
+.composer-send-button:where(:not([data-csg-control])):focus-visible,
+.field:where(:not([data-csg-field])) input:where(:not([data-csg-control])):not([type="checkbox"], [type="radio"]):focus,
+.field:where(:not([data-csg-field])) textarea:where(:not([data-csg-control])):focus,
+.field:where(:not([data-csg-field])) select:where(:not([data-csg-control])):focus,
+.composer-editor:focus,
+.secondary-button:where(:not([data-csg-control])):focus-visible,
+.modal-close:where(:not([data-csg-control])):focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.field:where(:not([data-csg-field])) input:where(:not([data-csg-control])):not([type="checkbox"], [type="radio"]):focus,
+.field:where(:not([data-csg-field])) textarea:where(:not([data-csg-control])):focus,
+.field:where(:not([data-csg-field])) select:where(:not([data-csg-control])):focus {
+  border-color: var(--input-border-focus);
+  box-shadow: var(--input-shadow-focus);
+}
+
+.env-remove-button:where(:not([data-csg-control])) {
+  position: relative;
+  z-index: 3;
+  pointer-events: auto;
+}
+
+.env-remove-button:where(:not([data-csg-control])):hover {
+  border-color: oklch(0.77 0.16 164 / 0.42);
+  background: var(--primary-soft);
+  color: var(--primary-strong);
+}
+
+.agent-name,
+.conversation-name,
+.message-author {
+  font-weight: 680;
+}
+
+.mini-badge,
+.agent-badge,
+.agent-status,
+.status-pill {
+  border: 1px solid var(--line);
+  font-family: var(--font-mono);
+}
+
+.icon-button:where(:not([data-csg-control])),
+.member-badge-button,
+.secondary-button:where(:not([data-csg-control])),
+.modal-close:where(:not([data-csg-control])),
+.tool-menu-row,
+.agent-add-button:where(:not([data-csg-control])),
+.agent-icon-button:where(:not([data-csg-control])),
+.agent-action-text:where(:not([data-csg-control])) {
+  border-color: var(--line);
+  background: var(--field);
+  color: var(--text);
+  border-radius: 8px;
+}
+
+.icon-button:where(:not([data-csg-control])):hover,
+.member-badge-button:hover,
+.secondary-button:where(:not([data-csg-control])):hover,
+.modal-close:where(:not([data-csg-control])):hover,
+.tool-menu-row:hover,
+.agent-add-button:where(:not([data-csg-control])):hover,
+.agent-icon-button:where(:not([data-csg-control])):hover,
+.agent-action-text:where(:not([data-csg-control])):hover {
+  border-color: oklch(0.77 0.16 164 / 0.42);
+  background: color-mix(in oklab, var(--field) 82%, var(--primary-soft));
+  color: var(--text);
+}
+
+.header-popover,
+.mention-picker,
+.profile-preview-popover,
+.modal-card {
+  border-radius: 8px;
+  border-color: var(--line);
+  background:
+    linear-gradient(180deg, oklch(1 0 0 / 0.04), transparent),
+    color-mix(in oklab, var(--panel) 94%, oklch(0.04 0.006 82));
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(18px);
+}
+
+:root[data-theme="light"] .header-popover,
+:root[data-theme="light"] .mention-picker,
+:root[data-theme="light"] .profile-preview-popover,
+:root[data-theme="light"] .modal-card {
+  background: color-mix(in oklab, var(--panel) 96%, oklch(1 0 0));
+}
+
+.composer-send-button {
+  border: 1px solid oklch(0.77 0.16 164 / 0.48);
+}
+
+.secondary-button,
+.modal-close {
+  font-weight: 650;
+}
+
+.messages-empty,
+.rich-empty {
+  display: grid;
+  place-items: center;
+  gap: 10px;
+  max-width: min(440px, 100%);
+  margin: auto;
+  padding: 24px;
+  border-radius: 8px;
+  border: 1px dashed oklch(0.77 0.16 164 / 0.34);
+  text-align: center;
+}
+
+.rich-empty strong,
+.shell-empty-state strong {
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 640;
+  line-height: 1.5;
+}
+
+.rich-empty-mark {
+  width: 32px;
+  height: 32px;
+  display: inline-grid;
+  place-items: center;
+  border: 1px solid oklch(0.77 0.16 164 / 0.42);
+  border-radius: 8px;
+  color: var(--primary-strong);
+  background: var(--field);
+  font-family: var(--font-mono);
+  font-size: 18px;
+  line-height: 1;
+}
+
+.shell-empty-state {
+  gap: 8px;
+  align-content: center;
+  justify-items: center;
+  background:
+    linear-gradient(90deg, oklch(1 0 0 / 0.02) 1px, transparent 1px),
+    linear-gradient(0deg, oklch(1 0 0 / 0.018) 1px, transparent 1px);
+  background-size: 36px 36px;
+}
+
+.field {
+  gap: 8px;
+}
+
+.selection-list,
+.profile-section,
+.entity-field,
+.entity-list-row,
+.agent-row,
+.auth-status-row {
+  border-color: var(--line);
+  border-radius: 8px;
+  background: linear-gradient(180deg, oklch(1 0 0 / 0.025), transparent), var(--surface);
+}
+
+.form-error:where(:not([data-csg-field-part])) {
+  border: 1px solid color-mix(in oklab, var(--danger) 42%, var(--line));
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: color-mix(in oklab, var(--danger) 12%, var(--surface));
+  color: color-mix(in oklab, var(--danger) 86%, var(--text));
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.entity-pane {
+  padding: 34px;
+  gap: 24px;
+  background-size: 40px 40px;
+}
+
+.entity-header {
+  border-bottom: 1px solid var(--line);
+}
+
+.entity-avatar {
+  border-color: oklch(0.77 0.16 164 / 0.36);
+  background: linear-gradient(135deg, oklch(0.77 0.16 164 / 0.16), transparent 60%), var(--field);
+  color: var(--primary-strong);
+}
+
+.entity-title-row h1 {
+  font-family: var(--font-display);
+}
+
+.entity-heading p {
+  color: var(--muted);
+}
+
+.status-pill.online {
+  border-color: oklch(0.77 0.16 164 / 0.42);
+  color: var(--primary-strong);
+}
+
+.entity-field {
+  padding: 14px;
+}
+
+.entity-field span {
+  letter-spacing: 0.09em;
+}
+
+.profile-section-title,
+.preview-title,
+.header-popover-title,
+.section-label {
+  color: var(--muted);
+  letter-spacing: 0.1em;
+}
+
+.entity-list-main-button:hover {
+  color: var(--primary-strong);
+}
+
+.agent-icon-button:where(:not([data-csg-control])).danger {
+  border-color: color-mix(in oklab, var(--danger) 46%, var(--line));
+  background: color-mix(in oklab, var(--danger) 10%, var(--field));
+  color: color-mix(in oklab, var(--danger) 88%, var(--text));
+}
+
+@media (max-width: 1100px) {
+  .app-shell {
+    --sidebar-slot-width: 300px;
+  }
+}
+
+@media (max-width: 960px) {
+  .app-shell {
+    --sidebar-slot-width: 100%;
+  }
+}
+
+@media (max-width: 960px) {
+  .chat-header,
+  .modal-header,
+  .modal-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}
+
+@media (max-width: 960px) {
+  .entity-pane {
+    padding: 24px 18px;
+  }
+}
+
+@media (max-width: 960px) {
+  .entity-header {
+    grid-template-columns: 56px minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 960px) {
+  .entity-avatar {
+    width: 56px;
+    height: 56px;
+  }
+}
+
+@media (max-width: 960px) {
+  .entity-title-row h1 {
+    font-size: 24px;
+  }
+}
+
+@media (max-width: 960px) {
+  .entity-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .app-shell,
+  .app-shell.sidebar-collapsed {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .hub-inspector-brand,
+  .hub-inspector-grid,
+  .hub-workbench,
+  .hub-workspace-panels,
+  .entity-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.secondary-button:where(:not([data-csg-control])),
+.modal-close:where(:not([data-csg-control])),
+.agent-action-text:where(:not([data-csg-control])),
+.tool-menu-row,
+.member-badge-button {
+  border-color: var(--gray-300);
+  background: var(--white);
+  color: var(--gray-700);
+  box-shadow: var(--shadow-xs);
+}
+
+.secondary-button:where(:not([data-csg-control])):hover:not(:disabled),
+.modal-close:where(:not([data-csg-control])):hover:not(:disabled),
+.agent-action-text:where(:not([data-csg-control])):hover:not(:disabled),
+.tool-menu-row:hover:not(:disabled),
+.member-badge-button:hover:not(:disabled) {
+  border-color: var(--gray-300);
+  background: var(--gray-50);
+  color: var(--gray-800);
+  box-shadow: var(--shadow-xs);
+}
+
+.secondary-button:where(:not([data-csg-control])):focus-visible,
+.modal-close:where(:not([data-csg-control])):focus-visible,
+.agent-action-text:where(:not([data-csg-control])):focus-visible,
+.tool-menu-row:focus-visible,
+.member-badge-button:focus-visible {
+  border-color: var(--gray-300);
+  background: var(--white);
+  color: var(--gray-700);
+  box-shadow:
+    var(--shadow-xs),
+    0 0 0 4px rgba(152, 162, 179, 0.14);
+}
+
+.icon-button:where(:not([data-csg-control])).active,
+.member-badge-button.active,
+.workspace-tab.active {
+  border-color: color-mix(in oklab, var(--brand-600) 20%, var(--line));
+  background: color-mix(in oklab, var(--brand-600) 5%, var(--surface));
+  color: var(--brand-700);
+  box-shadow: var(--shadow-xs);
+}
+
+.icon-button:where(:not([data-csg-control])).active:hover:not(:disabled),
+.member-badge-button.active:hover:not(:disabled) {
+  border-color: color-mix(in oklab, var(--brand-600) 28%, var(--line));
+  background: color-mix(in oklab, var(--brand-600) 9%, var(--surface));
+  color: var(--brand-800);
+  box-shadow: var(--shadow-xs);
+}
+
+.agent-icon-button:where(:not([data-csg-control])).danger,
+.tool-menu-row.danger,
+.conversation-delete-button:where(:not([data-csg-control])) {
+  border-color: color-mix(in oklab, var(--error-600) 18%, var(--line));
+  background: var(--surface);
+  color: var(--error-700);
+  box-shadow: var(--shadow-xs);
+}
+
+.agent-icon-button:where(:not([data-csg-control])).danger:hover:not(:disabled),
+.tool-menu-row.danger:hover:not(:disabled),
+.conversation-delete-button:where(:not([data-csg-control])):hover:not(:disabled) {
+  border-color: color-mix(in oklab, var(--error-600) 28%, var(--line));
+  background: color-mix(in oklab, var(--error-600) 6%, var(--surface));
+  color: var(--error-800);
+}
+
+.env-remove-button:where(:not([data-csg-control])) {
+  border-color: transparent;
+  background: transparent;
+  color: var(--gray-600);
+  box-shadow: none;
+}
+
+.env-remove-button:where(:not([data-csg-control])):hover:not(:disabled) {
+  border-color: transparent;
+  background: var(--gray-50);
+  color: var(--gray-700);
+  box-shadow: none;
+}

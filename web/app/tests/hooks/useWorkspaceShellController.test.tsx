@@ -39,7 +39,6 @@ function ShellHarness() {
     setIsSidebarCollapsed,
     setWorkspaceTab,
     t,
-    theme: "dark",
     workspaceTab,
   });
 
@@ -114,7 +113,6 @@ describe("useWorkspaceShellController", () => {
         setIsSidebarCollapsed: vi.fn(),
         setWorkspaceTab,
         t,
-        theme: "dark",
         workspaceTab,
       });
 
@@ -161,7 +159,6 @@ describe("useWorkspaceShellController", () => {
         setIsSidebarCollapsed: vi.fn(),
         setWorkspaceTab,
         t,
-        theme: "dark",
         workspaceTab,
       });
 

@@ -1667,3 +1667,75 @@ The following paths often seen in older docs are no longer registered in the cur
 - `/api/bots/{id}/messages/send`
 - `/api/bots/{id}/llm/*`
 - Any other legacy path not registered in `internal/api/router.go`
+
+## Chat side panel files
+
+### `GET /api/v1/agents/{id}/workspace?path=...&depth=1`
+
+Lists only the immediate children of the selected workspace directory.
+The `path` is workspace-relative and defaults to the root.
+Directories are expanded on demand by the chat file browser.
+Both workspace listing and content accept an optional `room_id`.
+The Agent must belong to that room; configured direct tasks use the room's locked working directory instead of the Agent default.
+
+The response also includes `absolute_path` for display and copying, and `open_targets` for locally available applications.
+These host paths are never used as Agent file references.
+
+### `GET /api/v1/agents/{id}/workspace/location?path=...&room_id=...`
+
+Resolves an existing regular file or directory to `{absolute_path, directory, open_targets}` using the same room workspace and bounded path validation as previews.
+Remote clients receive an empty `open_targets` list.
+
+### `POST /api/v1/agents/{id}/workspace/open?room_id=...`
+
+Accepts `{ "path": "docs/report.md", "target": "system" }` and returns `204` after handing off to the selected application.
+Only loopback clients using a literal loopback host may invoke native applications.
+Browser callers must send an exact same-origin JSON request; authenticated local callers may omit Origin.
+Explicit invalid credentials and scoped Agent callers cannot invoke this operation.
+Targets are server-defined identifiers for installed applications, never executable paths or shell commands.
+`system` reveals a file or opens its directory in the file manager; editor targets open the file or directory, and terminal targets open the current directory or a file's parent.
+Errors use `workspace_open_denied`, `workspace_file_unavailable`, or `workspace_open_failed`.
+
+### `GET /api/v1/agents/{id}/workspace/content?path=...`
+
+Streams the original workspace file with its MIME type, download filename, and HTTP Range support.
+The path must identify a regular file beneath the selected Agent workspace, without symlinks or parent traversal.
+This endpoint uses the existing workspace administration access policy.
+HTML is delivered with a sandbox policy; the Web UI renders it through the existing sanitized preview.
+
+### Referencing files in `POST /api/v1/messages`
+
+Both JSON and multipart `payload` accept an optional `file_references` array:
+
+```json
+{
+  "room_id": "room-1",
+  "sender_id": "admin",
+  "content": "Review @docs/report.md",
+  "client_message_id": "reference-send-1",
+  "file_references": [
+    {"source": "workspace", "agent_id": "alice", "path": "docs/report.md"},
+    {"source": "attachment", "attachment_id": "att-example"}
+  ]
+}
+```
+
+A workspace source must belong to an Agent in the destination room.
+Workspace references resolve beneath the same destination room working directory used by listing and preview.
+An attachment source must still be referenced by that room.
+Repeated identical sources are included once, and references share the existing attachment quotas with uploads.
+Workspace directory references use the same source format and snapshot the directory as one ZIP attachment, preserving its name and relative structure.
+Symlinks and special files are rejected; both original bytes and ZIP size must fit the single-file limit, with at most 10,000 entries per directory.
+The server snapshots referenced bytes into ordinary message attachments and uses the existing per-recipient file delivery pipeline.
+The composer displays `@path` and serializes file references as quoted literals such as `@"docs/report.md"`.
+Quoted file literals never mention participants, including when a filename or directory matches a member name.
+Unavailable sources return `file_reference_unavailable` without creating a partial message.
+A completed retry with the same sender and `client_message_id` returns the saved message without reopening source files.
+
+The chat sidebar reuses the room attachment listing and download routes.
+Attachment lists require the existing server, Desktop session, or scoped Agent credential.
+A live attachment download also accepts that attachment’s existing download capability, granting no listing or mutation rights.
+Fetch Metadata is never an authorization credential.
+The Web UI browses attachment metadata from the existing transcript APIs and uses per-file capabilities for previews and downloads; transcript access policy remains unchanged.
+External clients and Agents retain their existing token and room-membership checks.
+Browser requests do not receive the server management token and do not gain deletion permissions.

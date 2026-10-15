@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useMessageListAutoScroll } from "@/hooks/workspace/useMessageListAutoScroll";
+import { MESSAGE_LIST_NAVIGATE_EVENT } from "@/shared/constants/workspace";
 function Harness({ inspecting, revision }: { inspecting: boolean; revision: number }) {
   const ref = useRef<HTMLElement>(null);
   const [expanded, setExpanded] = useState(false);
@@ -47,6 +48,31 @@ function atBottom() {
   return chat;
 }
 describe("transcript scrolling while inspecting statistics", () => {
+  it("resumes following through the latest action even when already at the bottom", () => {
+    const view = render(<Harness inspecting={false} revision={1} />);
+    const chat = atBottom();
+    fireEvent(chat, new Event(MESSAGE_LIST_NAVIGATE_EVENT));
+    fireEvent(chat, new CustomEvent(MESSAGE_LIST_NAVIGATE_EVENT, { detail: "follow" }));
+    Object.defineProperty(chat, "scrollHeight", { value: 1800 });
+    view.rerender(<Harness inspecting={false} revision={2} />);
+    expect(chat.scrollTop).toBe(1800);
+  });
+  it("lets directory navigation cancel a pending bottom follow before new replies arrive", async () => {
+    const view = render(<Harness inspecting={false} revision={1} />);
+    const chat = atBottom();
+    fireEvent(chat, new Event(MESSAGE_LIST_NAVIGATE_EVENT));
+    chat.scrollTop = 120;
+    Object.defineProperty(chat, "scrollHeight", { value: 1800 });
+    view.rerender(<Harness inspecting={false} revision={2} />);
+    await act(() => new Promise((resolve) => setTimeout(resolve, 40)));
+    expect(chat.scrollTop).toBe(120);
+    chat.scrollTop = 1400;
+    fireEvent.scroll(chat);
+    await act(() => new Promise((resolve) => setTimeout(resolve, 40)));
+    Object.defineProperty(chat, "scrollHeight", { value: 2000 });
+    view.rerender(<Harness inspecting={false} revision={3} />);
+    expect(chat.scrollTop).toBe(2000);
+  });
   it("preserves disclosure position but allows follow and subsequent streaming while still expanded", async () => {
     const view = render(<Harness inspecting={false} revision={1} />);
     const chat = atBottom();

@@ -1,7 +1,7 @@
 import { parseTurnProgress } from "@/models/turnProgress";
 import { useCallback, useEffect, useLayoutEffect, useRef, type RefObject } from "react";
 import type { IMMessage } from "@/models/conversations";
-import { MESSAGE_LIST_BOTTOM_THRESHOLD } from "@/shared/constants/workspace";
+import { MESSAGE_LIST_BOTTOM_THRESHOLD, MESSAGE_LIST_NAVIGATE_EVENT } from "@/shared/constants/workspace";
 
 type MessageListScrollBehavior = "auto" | "smooth";
 
@@ -80,6 +80,17 @@ export function useMessageListAutoScroll({
 
   const pauseOnUpwardWheel = useCallback((event: WheelEvent) => {
     if (event.deltaY < 0) shouldAutoScrollRef.current = false;
+  }, []);
+
+  const handleMessageNavigation = useCallback((event: Event) => {
+    shouldAutoScrollRef.current = event instanceof CustomEvent && event.detail === "follow";
+    pendingInitialFollowRef.current = false;
+    preservingAnchorRef.current = false;
+    messageListAnchorVersionRef.current += 1;
+    cancelBrowserAnimationFrame(messageListAnchorFrameRef.current);
+    messageListAnchorFrameRef.current = null;
+    cancelBrowserAnimationFrame(messageListScrollFrameRef.current);
+    messageListScrollFrameRef.current = null;
   }, []);
 
   const updateAutoScrollState = useCallback(() => {
@@ -191,6 +202,7 @@ export function useMessageListAutoScroll({
     if (observed) {
       observed.removeEventListener("scroll", scheduleAutoScrollStateUpdate);
       observed.removeEventListener("wheel", pauseOnUpwardWheel);
+      observed.removeEventListener(MESSAGE_LIST_NAVIGATE_EVENT, handleMessageNavigation);
       observed.removeEventListener("click", preserveDisclosureAnchor, true);
     }
     messageListResizeObserverRef.current?.disconnect();
@@ -206,7 +218,7 @@ export function useMessageListAutoScroll({
     autoScrollStateFrameRef.current = null;
     messageListScrollFrameRef.current = null;
     messageListAnchorFrameRef.current = null;
-  }, [scheduleAutoScrollStateUpdate, pauseOnUpwardWheel, preserveDisclosureAnchor]);
+  }, [scheduleAutoScrollStateUpdate, pauseOnUpwardWheel, preserveDisclosureAnchor, handleMessageNavigation]);
 
   useLayoutEffect(() => {
     const nextElement = active ? messageListRef.current : null;
@@ -228,6 +240,7 @@ export function useMessageListAutoScroll({
     }
     nextElement.addEventListener("scroll", scheduleAutoScrollStateUpdate, { passive: true });
     nextElement.addEventListener("wheel", pauseOnUpwardWheel, { passive: true });
+    nextElement.addEventListener(MESSAGE_LIST_NAVIGATE_EVENT, handleMessageNavigation);
     // Capture before React changes the disclosure layout, including keyboard clicks.
     nextElement.addEventListener("click", preserveDisclosureAnchor, true);
 

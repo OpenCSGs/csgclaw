@@ -1,3 +1,5 @@
+import type { ChatFileScope } from "@/components/business/ChatSidePanel/types";
+import { useFileMentions } from "./FileMentionPicker";
 import type { SkillContinuation } from "@/models/slashCommands";
 import { emptyCompletedProgress } from "@/models/turnProgress";
 import { messageListScrollKey, useMessageListAutoScroll } from "@/hooks/workspace/useMessageListAutoScroll";
@@ -23,6 +25,7 @@ import {
   insertComposerLineBreak,
   insertComposerSegmentsAtSelection,
   insertPlainTextAtSelection,
+  isComposerKeyboardEventComposing,
   normalizeComposerSegmentsForDisplay,
   normalizeTextMentions,
   parseComposerSegments,
@@ -71,6 +74,7 @@ type ThreadMentionState = {
 };
 
 export type ConversationThreadPanelProps = {
+  fileScope?: ChatFileScope;
   renderTurnControls?: (message: IMMessage) => ProgressControlSlots | null;
   agents?: AgentLike[];
   disabled: boolean;
@@ -108,6 +112,7 @@ export type ConversationThreadPanelProps = {
 };
 
 export function ConversationThreadPanel({
+  fileScope,
   renderTurnControls,
   thread,
   agents = [],
@@ -190,6 +195,15 @@ export function ConversationThreadPanel({
     return getMentionCandidates(mentionableUsers, mentionState.query) as MentionPickerUser[];
   }, [mentionState, mentionableUsers]);
 
+  const fileMentions = useFileMentions({
+    scope: fileScope,
+    editorRef: threadEditorRef,
+    onSync: () => syncThreadDraft(),
+    people: threadMentionCandidates,
+    personIndex: mentionIndex,
+    onPerson: insertThreadMention,
+    t,
+  });
   const threadScrollKey = useMemo(
     () => messageListScrollKey([...(visibleRoot ? [visibleRoot] : []), ...displayReplies]),
     [visibleRoot, displayReplies],
@@ -226,6 +240,7 @@ export function ConversationThreadPanel({
     onDraftChange(segments);
     syncThreadMentionState(target);
     syncThreadSlashQuery(target);
+    fileMentions.sync();
   }
 
   function syncThreadSlashQuery(target = threadEditorRef.current) {
@@ -235,6 +250,7 @@ export function ConversationThreadPanel({
   function syncThreadQueryState(target = threadEditorRef.current) {
     syncThreadMentionState(target);
     syncThreadSlashQuery(target);
+    fileMentions.sync();
   }
 
   function syncThreadMentionState(target = threadEditorRef.current) {
@@ -401,7 +417,9 @@ export function ConversationThreadPanel({
               onSelect={(name) => onApplyThreadSlashCandidate(name)}
             />
           ) : null}
-          {threadMentionCandidates.length > 0 ? (
+          {fileScope ? (
+            fileMentions.picker
+          ) : threadMentionCandidates.length > 0 ? (
             <MentionPicker
               users={threadMentionCandidates}
               activeIndex={mentionIndex}
@@ -429,7 +447,7 @@ export function ConversationThreadPanel({
             onInput={(event) => syncThreadDraft(event.currentTarget)}
             onClick={(event) => syncThreadQueryState(event.currentTarget)}
             onKeyDown={(event) => {
-              if (disabled) {
+              if (disabled || isComposerKeyboardEventComposing(event) || fileMentions.handleKeyDown(event)) {
                 return;
               }
               if (event.key === "Backspace" && removeAdjacentMentionToken(threadEditorRef.current, "backward")) {

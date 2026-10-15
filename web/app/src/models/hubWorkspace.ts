@@ -174,7 +174,8 @@ export function mergeHubTemplateDetail(
 }
 
 export function hubTemplateFullName(template: HubTemplate | null | undefined): string {
-  const name = String(template?.name ?? "").trim();
+  const displayName = String(template?.display_name ?? "").trim();
+  const name = displayName || String(template?.name ?? "").trim();
   const namespace = String(template?.namespace ?? "").trim();
   if (namespace && name) {
     return `${namespace}/${name}`;

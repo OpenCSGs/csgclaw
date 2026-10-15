@@ -472,6 +472,7 @@ type NullableAgentDraftFields = {
 export type AgentDraftSource = AgentLike & NullableAgentDraftFields;
 
 export type AgentTemplateLike = {
+  display_name?: string | null;
   description?: string | null;
   id?: string | null;
   image?: string | null;
@@ -1593,6 +1594,10 @@ export function pickDefaultAgentTemplate(
   return candidates[0];
 }
 
+export function agentTemplateDisplayName(template: AgentTemplateLike | null | undefined): string {
+  return String(template?.display_name ?? "").trim() || template?.name || "";
+}
+
 export function applyTemplateToDraft(
   draft: AgentDraft,
   template: AgentTemplateLike | null | undefined,
@@ -1630,7 +1635,7 @@ export function applyTemplateToDraft(
     ...draft,
     from_template: template.id || "",
     template_name: template.name || template.id || "",
-    name: template.name || draft.name || "",
+    name: agentTemplateDisplayName(template) || draft.name || "",
     runtime_kind: runtimeSelection.runtime_kind,
     runtime_name: runtimeSelection.runtime_name,
     sandbox_enabled: runtimeSelection.sandbox_enabled,

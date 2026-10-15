@@ -1,5 +1,5 @@
 import { useWorkspaceControllerContext } from "@/hooks/workspace";
-import { ConversationView } from "./components";
+import { ConversationView } from "@/components/business/ConversationWorkspace";
 
 export function ConversationPage() {
   const controller = useWorkspaceControllerContext();

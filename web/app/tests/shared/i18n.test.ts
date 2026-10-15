@@ -71,6 +71,21 @@ describe("i18n messages", () => {
     expect(Object.keys(messages.zh.errors).filter((key) => /\s/.test(key))).toEqual([]);
   });
 
+  it.each([
+    ["zh", "file_reference_unavailable", "引用文件不可用，请检查文件是否存在以及来源 Agent 是否仍在会话中。"],
+    [
+      "en",
+      "file_reference_unavailable",
+      "Referenced file is unavailable. Check that it exists and its source agent is still in this conversation.",
+    ],
+    ["zh", "workspace_file_unavailable", "工作区文件不可用。"],
+    ["en", "workspace_file_unavailable", "Workspace file is unavailable."],
+  ] as const)("keeps the %s %s error distinct from the generic fallback", (locale, code, expected) => {
+    expect(localizeAPIError({ status: 400, code, message: "file read failed" }, createTranslator(locale))).toBe(
+      expected,
+    );
+  });
+
   it("hides English diagnostics for generic template publishing failures in Chinese", () => {
     const message =
       'publish hub template to "official": remote hub request failed with status 500: failed to update repository path';

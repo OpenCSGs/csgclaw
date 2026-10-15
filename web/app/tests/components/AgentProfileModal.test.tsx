@@ -823,6 +823,7 @@ describe("AgentProfileModal", () => {
             {
               id: "Agentic/feishu-assistant",
               name: "feishu-assistant",
+              display_name: "飞书助手",
               role: "worker",
               runtime_kind: "openclaw_sandbox",
               description: "Remote OpenClaw template.",
@@ -860,7 +861,9 @@ describe("AgentProfileModal", () => {
     expect(await screen.findByRole("combobox", { name: "Template" })).toHaveTextContent("Codex Worker");
     await userEvent.setup().click(screen.getByRole("combobox", { name: "Template" }));
     expect(screen.queryByRole("option", { name: "OpenClaw Worker" })).not.toBeInTheDocument();
-    expect(screen.getByRole("option", { name: "feishu-assistant" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "飞书助手" })).toBeInTheDocument();
+    await userEvent.setup().click(screen.getByRole("option", { name: "飞书助手" }));
+    expect(screen.getByRole("combobox", { name: "Template" })).toHaveTextContent("飞书助手");
   });
 
   it("warns when the selected sandbox runtime is unavailable", () => {
@@ -1642,7 +1645,7 @@ describe("AgentProfileModal", () => {
     );
 
     await user.click(screen.getByRole("combobox", { name: "Model" }));
-    const searchInput = screen.getByRole("searchbox", { name: "Search models" });
+    const searchInput = screen.getByRole("combobox", { name: "Search models" });
     await user.type(searchInput, "qwen");
 
     expect(searchInput).toHaveFocus();

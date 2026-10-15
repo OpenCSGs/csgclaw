@@ -1,3 +1,4 @@
+import styles from "./Tooltip.module.css";
 import { Tooltip as RadixTooltip } from "radix-ui";
 import type { ComponentPropsWithoutRef, ComponentRef, ReactNode } from "react";
 import { forwardRef } from "react";
@@ -46,7 +47,7 @@ export const TooltipContent = forwardRef<ComponentRef<typeof RadixTooltip.Conten
         <RadixTooltip.Content
           ref={ref}
           align={align}
-          className={classNames("csg-tooltip-content", className)}
+          className={classNames(styles["csg-tooltip-content"], className)}
           collisionPadding={collisionPadding}
           side={side}
           sideOffset={sideOffset}

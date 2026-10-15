@@ -47,22 +47,15 @@
   display: flex;
   align-items: center;
   gap: 7px;
-  border: 1px solid var(--line);
-  border-radius: 7px;
+  border: 1px solid var(--input-border);
+  border-radius: var(--input-radius);
+  background: var(--input-background);
   margin: 2px 2px 6px;
   padding: 0 8px;
   color: var(--muted);
 }
-.popover .search input {
-  width: 100%;
-  min-width: 0;
-  min-height: 30px;
-  padding: 4px 0;
-  border: 0;
-  background: transparent;
-  color: var(--text);
-  box-shadow: none;
-  font-size: 12px;
+.search > svg {
+  flex-shrink: 0;
 }
 .list {
   max-height: 300px;
@@ -142,12 +135,9 @@
 .popover:focus {
   outline: none;
 }
-.popover .search input:focus {
-  outline: none;
-  box-shadow: none;
-}
 .search:focus-within {
-  border-color: var(--primary);
+  border-color: var(--input-border-focus);
+  box-shadow: var(--input-shadow-focus);
 }
 .row:not(:disabled) {
   cursor: pointer;
@@ -170,9 +160,6 @@
   padding: 8px;
   color: var(--muted);
   font-size: 12px;
-}
-.directoryInput input {
-  width: 100%;
 }
 .error {
   margin: 8px;

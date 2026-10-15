@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { CircleAlert, Plus } from "lucide-react";
 import {
   createAppResource,
@@ -24,6 +24,7 @@ import {
 import { localizeAPIError } from "@/shared/i18n";
 import { errorMessage } from "@/api/client";
 import type { TranslateFn } from "@/models/conversations";
+import { pathForPane } from "@/models/routing";
 import { CLIDialog } from "./CLIDialog";
 import { AppSettingsDialog } from "./AppSettingsDialog";
 import { AppIcon } from "./AgentAppsPanel";
@@ -57,25 +58,36 @@ export function GlobalAppsPanel({
   const [loaded, setLoaded] = useState(false);
   const seq = useRef(0);
   const navigate = useNavigate();
+  const location = useLocation();
   const [localEditingID, setLocalEditingID] = useState("");
   useEffect(() => {
     onCountChange?.(items.length);
   }, [items.length, onCountChange]);
   const { resourceId } = useParams();
   const [searchParams] = useSearchParams();
-  const reload = useCallback(async (signal?: AbortSignal) => {
-    const request = ++seq.current;
-    try {
-      const [resources, catalog] = await Promise.all([fetchAppResources(signal), fetchAppDefinitions(signal)]);
-      if (!signal?.aborted && request === seq.current) {
-        setItems(resources);
-        setDefinitions(catalog);
-        setLoaded(true);
+  const reload = useCallback(
+    async (signal?: AbortSignal) => {
+      const request = ++seq.current;
+      try {
+        const [resources, catalog] = await Promise.all([fetchAppResources(signal), fetchAppDefinitions(signal)]);
+        if (!signal?.aborted && request === seq.current) {
+          setItems(resources);
+          setDefinitions(catalog);
+          setLoaded(true);
+          setError(null);
+          if (resourceId && !resources.some((item) => item.installation_id === resourceId)) {
+            void navigate(pathForPane({ type: "apps", id: "" }), {
+              replace: true,
+              state: { missingConnectorId: resourceId },
+            });
+          }
+        }
+      } catch (e) {
+        if (!signal?.aborted && request === seq.current) setError(e);
       }
-    } catch (e) {
-      if (!signal?.aborted) setError(e);
-    }
-  }, []);
+    },
+    [navigate, resourceId],
+  );
   useEffect(() => {
     const abort = new AbortController();
     void reload(abort.signal);
@@ -84,10 +96,11 @@ export function GlobalAppsPanel({
     }, 15000);
     return () => {
       abort.abort();
+      seq.current += 1;
       clearInterval(interval);
     };
   }, [reload]);
-  const editing = items.find((item) => item.installation_id === (embedded ? localEditingID : resourceId)) || null;
+  const editing = items.find((item) => item.installation_id === (resourceId ?? localEditingID)) || null;
   const availableDefinitions = definitions.filter(
     (definition) =>
       definition.app_id !== "llm-wiki" &&
@@ -100,9 +113,9 @@ export function GlobalAppsPanel({
       : availableDefinitions.find((d) => d.app_id === searchParams.get("add_connector")));
   const close = () => {
     setAdding(null);
+    setLocalEditingID("");
     void reload();
-    if (embedded) setLocalEditingID("");
-    else void navigate("/connectors");
+    if (resourceId || !embedded) void navigate(pathForPane({ type: "apps", id: "" }));
   };
   const query = search.trim().toLocaleLowerCase();
   const matches = (name: string, description: string) =>
@@ -182,7 +195,7 @@ export function GlobalAppsPanel({
               onClick={() =>
                 embedded
                   ? setLocalEditingID(app.installation_id)
-                  : void navigate(`/connectors/${encodeURIComponent(app.installation_id)}`)
+                  : void navigate(pathForPane({ type: "apps", id: app.installation_id }))
               }
             >
               <span className={styles.connectorIcon}>
@@ -203,10 +216,10 @@ export function GlobalAppsPanel({
           );
         })}
       </div>
-      {resourceId && loaded && !editing ? (
+      {location.state?.missingConnectorId ? (
         <DismissibleAlert
           className={`${styles.cliError} ${styles.resourceError}`}
-          messageKey={t("appNotFound")}
+          messageKey={location.state.missingConnectorId}
           closeLabel={t("close")}
         >
           <CircleAlert size={16} aria-hidden="true" />
@@ -252,7 +265,7 @@ export function GlobalAppsPanel({
           globalResource
           definition={definition}
           existing={adding ? null : editing}
-          resourceDetails={
+          savedConnectionStatus={
             editing && !adding ? (
               <div className={styles.resourceDetails}>
                 <p className={styles.hint}>{appStatus(editing, t)}</p>
@@ -261,6 +274,12 @@ export function GlobalAppsPanel({
                     {appConnectionError(editing, t)}
                   </p>
                 ) : null}
+              </div>
+            ) : undefined
+          }
+          resourceDetails={
+            editing && !adding ? (
+              <div className={styles.resourceDetails}>
                 <p className={styles.hint}>{t("appResourceUsers", { count: editing.bindings?.length || 0 })}</p>
                 <ul className={styles.bindingList}>
                   {editing.bindings?.map((binding) => (

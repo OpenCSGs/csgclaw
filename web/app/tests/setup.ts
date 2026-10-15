@@ -1,5 +1,13 @@
 import "@testing-library/jest-dom/vitest";
 
+if (typeof ResizeObserver === "undefined") {
+  globalThis.ResizeObserver = class {
+    observe = () => undefined;
+    unobserve = () => undefined;
+    disconnect = () => undefined;
+  };
+}
+
 if (!HTMLElement.prototype.hasPointerCapture) {
   HTMLElement.prototype.hasPointerCapture = () => false;
 }

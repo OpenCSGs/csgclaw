@@ -52,7 +52,7 @@ Chinese companion: `architecture.zh.md`.
   |     React entrypoint only
   |
   +-- bootstrap/
-  |     App startup, providers, query client, error boundary, root assembly
+  |     App startup, providers, theme synchronizer, error boundary, root assembly
   |
   +-- routes/
   |     URL to page mapping only; no page implementation details
@@ -67,7 +67,7 @@ Chinese companion: `architecture.zh.md`.
   |     |     Applications and MCP in one view; existing APIs and forms remain separate
   |     |
   |     +-- ConversationPage
-  |     |     Conversation route content and conversation-private components
+  |     |     Route adapter for the shared ConversationWorkspace view
   |     |
   |     +-- ComputerPage
   |     |     Computer route content and computer-private components
@@ -76,11 +76,11 @@ Chinese companion: `architecture.zh.md`.
   |     |     Agent route content and agent-private components
   |     |
   |     +-- HubPage
-  |           Hub resources and MCP details (/mcp-servers/:name); shared connector view
+  |           Hub resources and MCP details; shares HubDetailPane with AppsPage
   |
   +-- hooks/
   |     Shared React controllers and reusable hooks
-  |     Example: workspace controller composes navigation, data, mutations, UI state
+  |     Workspace contract + focused bindings/controllers compose data and actions
   |
   +-- api/
   |     HTTP transport boundary

@@ -18,6 +18,7 @@ const (
 type Template struct {
 	ID             string
 	Namespace      string
+	DisplayName    string
 	Name           string
 	Description    string
 	Role           string
@@ -66,6 +67,7 @@ type PublishSpec struct {
 	Registry       string
 	IncludeMemory  bool
 	ID             string
+	DisplayName    string
 	Name           string
 	Description    string
 	RuntimeKind    string

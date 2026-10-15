@@ -33,6 +33,7 @@ func TestLocalStorePublishRoundTrip(t *testing.T) {
 	publishedAt := time.Date(2026, 5, 12, 8, 30, 0, 0, time.UTC)
 	published, err := store.Publish(context.Background(), PublishSpec{
 		Name:           "frontend-alice",
+		DisplayName:    "前端助手",
 		IncludeMemory:  true,
 		Description:    "Frontend worker with UI and styling skills",
 		RuntimeKind:    runtime.KindCodex,
@@ -43,6 +44,9 @@ func TestLocalStorePublishRoundTrip(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatalf("Publish() error = %v", err)
+	}
+	if published.DisplayName != "前端助手" {
+		t.Fatalf("display name = %q", published.DisplayName)
 	}
 	if got, want := published.ID, "frontend-alice"; got != want {
 		t.Fatalf("Publish().ID = %q, want %q", got, want)

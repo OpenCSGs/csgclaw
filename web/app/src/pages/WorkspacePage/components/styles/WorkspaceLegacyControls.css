@@ -1,0 +1,402 @@
+.icon-button,
+.agent-icon-button,
+.env-remove-button,
+.conversation-delete-button {
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  min-height: 36px;
+  padding: 0;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.env-remove-button {
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  min-height: 28px;
+}
+
+.agent-action-text,
+.secondary-button.compact,
+.entity-toolbar .secondary-button {
+  min-width: 64px;
+  min-height: 32px;
+  height: 32px;
+  padding: 0 12px;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.secondary-button:not(.compact),
+.modal-close {
+  min-width: 80px;
+  min-height: 40px;
+  height: 40px;
+  padding: 0 16px;
+  font-size: 14px;
+  line-height: 20px;
+}
+
+button:where(:not([data-csg-control])):disabled:not(.csg-switch),
+button:where(:not([data-csg-control]))[disabled]:not(.csg-switch),
+.agent-icon-button:where(:not([data-csg-control])):disabled,
+.agent-action-text:where(:not([data-csg-control])):disabled,
+.composer-send-button:where(:not([data-csg-control])):disabled,
+.secondary-button:where(:not([data-csg-control])):disabled,
+.modal-close:where(:not([data-csg-control])):disabled {
+  cursor: not-allowed;
+  pointer-events: none;
+  background: var(--gray-100);
+  border-color: var(--gray-200);
+  color: var(--gray-400);
+  box-shadow: var(--shadow-xs);
+  opacity: 1;
+}
+
+:root[data-theme="dark"] .secondary-button:where(:not([data-csg-control])),
+:root[data-theme="dark"] .modal-close:where(:not([data-csg-control])),
+:root[data-theme="dark"] .agent-action-text:where(:not([data-csg-control])),
+:root[data-theme="dark"] .tool-menu-row,
+:root[data-theme="dark"] .member-badge-button,
+:root[data-theme="dark"] .icon-button:where(:not([data-csg-control])),
+:root[data-theme="dark"] .agent-icon-button:where(:not([data-csg-control])) {
+  border-color: rgba(208, 213, 221, 0.18);
+  background: var(--gray-800);
+  color: var(--gray-25);
+  box-shadow: none;
+}
+
+:root[data-theme="dark"] .secondary-button:where(:not([data-csg-control])):hover:not(:disabled),
+:root[data-theme="dark"] .modal-close:where(:not([data-csg-control])):hover:not(:disabled),
+:root[data-theme="dark"] .agent-action-text:where(:not([data-csg-control])):hover:not(:disabled),
+:root[data-theme="dark"] .tool-menu-row:hover:not(:disabled),
+:root[data-theme="dark"] .member-badge-button:hover:not(:disabled),
+:root[data-theme="dark"] .icon-button:where(:not([data-csg-control])):hover:not(:disabled),
+:root[data-theme="dark"] .agent-icon-button:where(:not([data-csg-control])):hover:not(:disabled) {
+  border-color: rgba(208, 213, 221, 0.28);
+  background: #253044;
+  color: var(--gray-25);
+}
+
+:root[data-theme="dark"] .composer-send-button:where(:not([data-csg-control])):hover:not(:disabled) {
+  border-color: var(--brand-100);
+  background: var(--brand-100);
+  color: var(--gray-950);
+}
+
+:root[data-theme="dark"] .agent-icon-button:where(:not([data-csg-control])).danger,
+:root[data-theme="dark"] .tool-menu-row.danger,
+:root[data-theme="dark"] .conversation-delete-button:where(:not([data-csg-control])) {
+  border-color: rgba(253, 162, 155, 0.28);
+  background: rgba(217, 45, 32, 0.12);
+  color: #fda29b;
+}
+
+:root[data-theme="dark"] button:where(:not([data-csg-control])):disabled:not(.csg-switch),
+:root[data-theme="dark"] button:where(:not([data-csg-control]))[disabled]:not(.csg-switch),
+:root[data-theme="dark"] .agent-icon-button:where(:not([data-csg-control])):disabled,
+:root[data-theme="dark"] .agent-action-text:where(:not([data-csg-control])):disabled,
+:root[data-theme="dark"] .composer-send-button:where(:not([data-csg-control])):disabled,
+:root[data-theme="dark"] .secondary-button:where(:not([data-csg-control])):disabled,
+:root[data-theme="dark"] .modal-close:where(:not([data-csg-control])):disabled {
+  border-color: rgba(208, 213, 221, 0.12);
+  background: rgba(208, 213, 221, 0.08);
+  color: var(--gray-500);
+  box-shadow: none;
+}
+
+.app-shell {
+  --sidebar-slot-width: 316px;
+  gap: 0;
+  padding: 0;
+  background: var(--bg);
+}
+
+.sidebar,
+.chat-panel,
+:root[data-theme="light"] .sidebar,
+:root[data-theme="light"] .chat-panel {
+  border-radius: 0;
+  background: var(--panel);
+  box-shadow: none;
+}
+
+.sidebar-header,
+.chat-header {
+  background: var(--surface);
+}
+
+.sidebar-header,
+.chat-header {
+  border-bottom: 1px solid var(--line);
+}
+
+.workspace-tab-icon,
+.entity-avatar,
+.entity-list-icon,
+.rich-empty-mark {
+  color: var(--primary-strong);
+}
+
+.workspace-tab,
+.conversation-item-main,
+.agent-row,
+.entity-list-row,
+.entity-field,
+.profile-section,
+.selection-item,
+.auth-status-row {
+  border-radius: var(--radius-md);
+}
+
+.workspace-tab:hover,
+.conversation-item:hover .conversation-item-main,
+.entity-list-main-button:hover {
+  background: var(--gray-50);
+}
+
+:root[data-theme="dark"] .workspace-tab:hover,
+:root[data-theme="dark"] .conversation-item:hover .conversation-item-main {
+  background: var(--panel-strong);
+}
+
+.workspace-tab.active,
+.conversation-item.active .conversation-item-main {
+  border-color: var(--brand-100);
+  background: var(--brand-25);
+  color: var(--primary-strong);
+  box-shadow: none;
+}
+
+:root[data-theme="dark"] .workspace-tab.active,
+:root[data-theme="dark"] .conversation-item.active .conversation-item-main {
+  border-color: rgba(101, 132, 248, 0.38);
+  background: rgba(101, 132, 248, 0.12);
+}
+
+.entity-list-icon,
+.entity-avatar,
+.rich-empty-mark {
+  border-color: var(--line);
+  background: var(--brand-25);
+  color: var(--primary-strong);
+}
+
+.icon-button:where(:not([data-csg-control])),
+.member-badge-button,
+.secondary-button:where(:not([data-csg-control])),
+.modal-close:where(:not([data-csg-control])),
+.tool-menu-row,
+.agent-add-button:where(:not([data-csg-control])),
+.agent-icon-button:where(:not([data-csg-control])),
+.agent-action-text:where(:not([data-csg-control])),
+.env-remove-button:where(:not([data-csg-control])) {
+  border-color: var(--line);
+  border-radius: var(--radius-md);
+  background: var(--field);
+  color: var(--gray-700);
+  box-shadow: var(--shadow-xs);
+}
+
+:root[data-theme="dark"] .icon-button:where(:not([data-csg-control])),
+:root[data-theme="dark"] .member-badge-button,
+:root[data-theme="dark"] .secondary-button:where(:not([data-csg-control])),
+:root[data-theme="dark"] .modal-close:where(:not([data-csg-control])),
+:root[data-theme="dark"] .tool-menu-row,
+:root[data-theme="dark"] .agent-add-button:where(:not([data-csg-control])),
+:root[data-theme="dark"] .agent-icon-button:where(:not([data-csg-control])),
+:root[data-theme="dark"] .agent-action-text:where(:not([data-csg-control])),
+:root[data-theme="dark"] .env-remove-button:where(:not([data-csg-control])) {
+  color: var(--text);
+  box-shadow: none;
+}
+
+.icon-button:where(:not([data-csg-control])):hover,
+.member-badge-button:hover,
+.secondary-button:where(:not([data-csg-control])):hover,
+.modal-close:where(:not([data-csg-control])):hover,
+.tool-menu-row:hover,
+.agent-add-button:where(:not([data-csg-control])):hover,
+.agent-icon-button:where(:not([data-csg-control])):hover,
+.agent-action-text:where(:not([data-csg-control])):hover,
+.env-remove-button:where(:not([data-csg-control])):hover {
+  border-color: var(--gray-300);
+  background: var(--gray-50);
+  color: var(--gray-800);
+  transform: none;
+}
+
+:root[data-theme="dark"] .icon-button:where(:not([data-csg-control])):hover,
+:root[data-theme="dark"] .member-badge-button:hover,
+:root[data-theme="dark"] .secondary-button:where(:not([data-csg-control])):hover,
+:root[data-theme="dark"] .modal-close:where(:not([data-csg-control])):hover,
+:root[data-theme="dark"] .tool-menu-row:hover,
+:root[data-theme="dark"] .agent-add-button:where(:not([data-csg-control])):hover,
+:root[data-theme="dark"] .agent-icon-button:where(:not([data-csg-control])):hover,
+:root[data-theme="dark"] .agent-action-text:where(:not([data-csg-control])):hover,
+:root[data-theme="dark"] .env-remove-button:where(:not([data-csg-control])):hover {
+  border-color: rgba(208, 213, 221, 0.28);
+  background: var(--panel-strong);
+  color: var(--text);
+}
+
+.icon-button:where(:not([data-csg-control])).active,
+.member-badge-button.active {
+  border-color: var(--brand-300);
+  background: var(--brand-25);
+  color: var(--brand-700);
+}
+
+.composer-editor:focus,
+.field:where(:not([data-csg-field])) input:where(:not([data-csg-control])):not([type="checkbox"], [type="radio"]):focus,
+.field:where(:not([data-csg-field])) textarea:where(:not([data-csg-control])):focus,
+.field:where(:not([data-csg-field])) select:where(:not([data-csg-control])):focus,
+.secondary-button:where(:not([data-csg-control])):focus-visible,
+.modal-close:where(:not([data-csg-control])):focus-visible {
+  border-color: var(--brand-500);
+  box-shadow: var(--focus-ring);
+}
+
+.header-popover,
+.mention-picker,
+.profile-preview-popover,
+.modal-card,
+:root[data-theme="light"] .header-popover,
+:root[data-theme="light"] .mention-picker,
+:root[data-theme="light"] .profile-preview-popover,
+:root[data-theme="light"] .modal-card {
+  border-radius: var(--radius-xl);
+  border-color: var(--line);
+  background: var(--panel);
+  box-shadow: var(--shadow-md);
+  backdrop-filter: none;
+}
+
+.entity-field span,
+.profile-section-title,
+.preview-title,
+.header-popover-title,
+.section-label {
+  color: var(--muted);
+  letter-spacing: 0;
+}
+
+.field:where(:not([data-csg-field])) input:where(:not([data-csg-control])):not([type="checkbox"], [type="radio"]),
+.field:where(:not([data-csg-field])) textarea:where(:not([data-csg-control])),
+.field:where(:not([data-csg-field])) select:where(:not([data-csg-control])),
+.profile-section
+  .field:where(:not([data-csg-field]))
+  input:where(:not([data-csg-control])):not([type="checkbox"], [type="radio"]),
+.profile-section .field:where(:not([data-csg-field])) textarea:where(:not([data-csg-control])),
+.profile-section .field:where(:not([data-csg-field])) select:where(:not([data-csg-control])),
+.env-row input:where(:not([data-csg-control])) {
+  border-color: var(--input-border);
+  border-radius: var(--input-radius);
+  background: var(--input-background);
+  color: var(--input-text);
+  box-shadow: var(--input-shadow);
+}
+
+:root[data-theme="dark"]
+  .field:where(:not([data-csg-field]))
+  input:where(:not([data-csg-control])):not([type="checkbox"], [type="radio"]),
+:root[data-theme="dark"] .field:where(:not([data-csg-field])) textarea:where(:not([data-csg-control])),
+:root[data-theme="dark"] .field:where(:not([data-csg-field])) select:where(:not([data-csg-control])),
+:root[data-theme="dark"]
+  .profile-section
+  .field:where(:not([data-csg-field]))
+  input:where(:not([data-csg-control])):not([type="checkbox"], [type="radio"]),
+:root[data-theme="dark"] .profile-section .field:where(:not([data-csg-field])) textarea:where(:not([data-csg-control])),
+:root[data-theme="dark"] .profile-section .field:where(:not([data-csg-field])) select:where(:not([data-csg-control])),
+:root[data-theme="dark"] .env-row input:where(:not([data-csg-control])) {
+  border-color: var(--input-border);
+  background: var(--input-background);
+  color: var(--input-text);
+  box-shadow: var(--input-shadow);
+}
+
+.field:where(:not([data-csg-field])) input:where(:not([data-csg-control])):not([type="checkbox"], [type="radio"]):hover,
+.field:where(:not([data-csg-field])) textarea:where(:not([data-csg-control])):hover,
+.field:where(:not([data-csg-field])) select:where(:not([data-csg-control])):hover,
+.profile-section
+  .field:where(:not([data-csg-field]))
+  input:where(:not([data-csg-control])):not([type="checkbox"], [type="radio"]):hover,
+.profile-section .field:where(:not([data-csg-field])) textarea:where(:not([data-csg-control])):hover,
+.profile-section .field:where(:not([data-csg-field])) select:where(:not([data-csg-control])):hover,
+.env-row input:where(:not([data-csg-control])):hover {
+  border-color: var(--input-border-hover);
+}
+
+.profile-section,
+.entity-field,
+.entity-list-row,
+.agent-row,
+.auth-status-row,
+.selection-item {
+  border-color: var(--line);
+  background: var(--surface);
+  box-shadow: var(--shadow-xs);
+}
+
+:root[data-theme="dark"] .profile-section,
+:root[data-theme="dark"] .entity-field,
+:root[data-theme="dark"] .entity-list-row,
+:root[data-theme="dark"] .agent-row,
+:root[data-theme="dark"] .auth-status-row,
+:root[data-theme="dark"] .selection-item {
+  box-shadow: none;
+}
+
+.agent-row.manager,
+.selection-item.selection-all-item {
+  border-color: var(--brand-100);
+  background: var(--brand-25);
+}
+
+:root[data-theme="dark"] .agent-row.manager,
+:root[data-theme="dark"] .selection-item.selection-all-item {
+  border-color: rgba(101, 132, 248, 0.3);
+  background: rgba(101, 132, 248, 0.1);
+}
+
+.agent-status.running,
+.status-pill.online,
+.workspace-status-dot.online {
+  color: var(--success-700);
+}
+
+.workspace-status-dot {
+  width: 9px;
+  height: 9px;
+  flex: 0 0 9px;
+  border-radius: 999px;
+  background: var(--muted);
+  opacity: 0.55;
+}
+
+.workspace-status-dot.online {
+  background: currentColor;
+  opacity: 1;
+  box-shadow: 0 0 0 3px rgba(18, 183, 106, 0.14);
+}
+
+.mini-badge.warn,
+.agent-badge.warn {
+  color: var(--warning-700);
+  background: var(--warning-50);
+}
+
+.form-error:where(:not([data-csg-field-part])),
+.agent-icon-button:where(:not([data-csg-control])).danger {
+  border-color: rgba(217, 45, 32, 0.28);
+  background: var(--error-50);
+  color: var(--error-600);
+}
+
+.entity-pane {
+  background: var(--bg);
+}

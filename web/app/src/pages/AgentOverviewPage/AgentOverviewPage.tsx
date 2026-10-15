@@ -1,8 +1,8 @@
 import { resolveTeamAvatarMembers } from "@/models/tasks";
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { ChevronRight, List, Plus, Search } from "lucide-react";
-import { Button } from "@/components/ui";
+import { ChevronRight, List, LoaderCircle, Plus, Search } from "lucide-react";
+import { Button, PanelHeader, EmptyState, TextInput } from "@/components/ui";
 import { AgentAvatarContent } from "@/components/business/AgentAvatar";
 import { RoomAvatar } from "@/components/business/RoomAvatar";
 import { useWorkspaceControllerContext } from "@/hooks/workspace";
@@ -11,15 +11,25 @@ import { isVisibleInHubTemplateList } from "@/models/hubWorkspace";
 import { agentRoleLabel, type AgentLike } from "@/models/agents";
 
 import styles from "./AgentOverviewPage.module.css";
+import { useAgentViewBindings } from "@/hooks/workspace/useAgentViewBindings";
+import { AgentOverviewGuide } from "./components";
 
-const AgentPage = lazy(() => import("@/pages/AgentPage").then((module) => ({ default: module.AgentPage })));
-const TeamPage = lazy(() => import("@/pages/TeamPage").then((module) => ({ default: module.TeamPage })));
+const AgentView = lazy(() =>
+  import("@/components/business/AgentDetails").then((module) => ({ default: module.AgentView })),
+);
+const TeamDetailPane = lazy(() =>
+  import("@/components/business/TeamDetailPane").then((module) => ({ default: module.TeamDetailPane })),
+);
+const ConversationView = lazy(() =>
+  import("@/components/business/ConversationWorkspace").then((module) => ({ default: module.ConversationView })),
+);
 const HubDetailPane = lazy(() =>
   import("@/components/business/HubDetailPane").then((module) => ({ default: module.HubDetailPane })),
 );
 
 export function AgentOverviewPage() {
   const controller = useWorkspaceControllerContext();
+  const agentViewProps = useAgentViewBindings();
   const location = useLocation();
   const navigate = useNavigate();
   const requestedTab = new URLSearchParams(location.search).get("tab");
@@ -64,6 +74,14 @@ export function AgentOverviewPage() {
         ? item.source?.name === "official" || item.source?.kind === "builtin"
         : item.source?.name !== "official" && item.source?.kind !== "builtin"),
   );
+  const templatesLoading = templatesQuery.isLoading && !templates.length;
+  const templatesFailed = templatesQuery.isError && !templates.length;
+  const templateEmptyTitle = query.trim()
+    ? t("workspaceSearchNoResults")
+    : t(templateFilter === "official" ? "iaTemplatesOfficialEmpty" : "iaTemplatesPersonalEmpty");
+  const templateEmptyHint = query.trim()
+    ? t("iaTemplatesSearchHint")
+    : t(templateFilter === "official" ? "iaTemplatesOfficialEmptyHint" : "iaTemplatesPersonalEmptyHint");
   const activeID = controller.activePane.id;
   function selectTab(value: string) {
     const params = new URLSearchParams(location.search);
@@ -79,7 +97,7 @@ export function AgentOverviewPage() {
   };
   return (
     <section className={styles.page}>
-      <header className={styles.header}>
+      <PanelHeader className={styles.header}>
         <Button
           ref={listToggleRef}
           className={styles.listToggle}
@@ -109,115 +127,143 @@ export function AgentOverviewPage() {
             </Button>
             <Button size="sm" onClick={() => void props.onCreateAgent()}>
               <Plus size={14} />
-              {t("createAgent")}
+              {t("iaAgentsCreateAgent")}
             </Button>
           </div>
         ) : null}
-      </header>
+      </PanelHeader>
       <div className={styles.split}>
         {listOpen ? (
           <button type="button" className={styles.listBackdrop} aria-label={t("close")} onClick={closeList} />
         ) : null}
-        <aside id="agent-overview-list" className={`${styles.list} ${listOpen ? styles.listOpen : ""}`}>
-          <label className={styles.search}>
-            <Search size={15} />
-            <input
-              aria-label={t(templatesTab ? "resourcesTemplateSearchPlaceholder" : "taskEntrySearchTarget")}
-              placeholder={t(templatesTab ? "resourcesTemplateSearchPlaceholder" : "taskEntrySearchTarget")}
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-            />
-          </label>
-          <nav className={styles.filters} aria-label={t("agentsTab")}>
-            {(templatesTab ? ["official", "personal"] : ["all", "agents", "teams"]).map((value) => (
-              <button
-                key={value}
-                type="button"
-                aria-pressed={(templatesTab ? templateFilter : filter) === value}
-                onClick={() => (templatesTab ? setTemplateFilter(value) : setFilter(value))}
-              >
-                {t(`taskEntryOverview_${value}`)}
-              </button>
-            ))}
-          </nav>
-          {templatesTab ? (
-            <>
-              {templatesQuery.isLoading ? <p role="status">{t("loading")}</p> : null}
-              {templatesQuery.isError ? (
-                <p role="alert">
-                  {t("resourcesLoadFailed")}
-                  <Button onClick={() => void templatesQuery.refetch()}>{t("retry")}</Button>
-                </p>
-              ) : null}
-              {shownTemplates.map((item) => (
+        <aside
+          id="agent-overview-list"
+          className={`${styles.list} ${listOpen ? styles.listOpen : ""}`}
+          aria-busy={templatesTab && templatesLoading}
+        >
+          <div className={styles.listControls}>
+            <label className={styles.search}>
+              <Search size={15} />
+              <TextInput
+                variant="plain"
+                size="sm"
+                aria-label={t(templatesTab ? "resourcesTemplateSearchPlaceholder" : "taskEntrySearchTarget")}
+                placeholder={t(templatesTab ? "resourcesTemplateSearchPlaceholder" : "taskEntrySearchTarget")}
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+              />
+            </label>
+            <nav className={styles.filters} aria-label={t("agentsTab")}>
+              {(templatesTab ? ["official", "personal"] : ["all", "agents", "teams"]).map((value) => (
                 <button
+                  key={value}
                   type="button"
-                  key={item.id}
-                  className={`${styles.row} ${selectedTemplateID === item.id ? styles.active : ""}`}
-                  onClick={() => {
-                    controller.hubViewProps?.onSelectTemplateInPlace(item);
-                    setHasSelectedTemplate(true);
-                    closeList();
-                  }}
+                  aria-pressed={(templatesTab ? templateFilter : filter) === value}
+                  onClick={() => (templatesTab ? setTemplateFilter(value) : setFilter(value))}
                 >
-                  <span className={styles.identity}>
-                    <strong>{item.name}</strong>
-                    <small>{item.description}</small>
-                  </span>
-                  <ChevronRight size={14} />
+                  {t(`taskEntryOverview_${value}`)}
                 </button>
               ))}
-              {!templatesQuery.isLoading && !templatesQuery.isError && !shownTemplates.length ? (
-                <p className={styles.emptyList}>{t("workspaceSearchNoResults")}</p>
-              ) : null}
-            </>
-          ) : (
-            <>
-              {filter === "all" || filter === "agents"
-                ? agents.map((item) => (
-                    <button
-                      type="button"
-                      key={item.id}
-                      className={`${styles.row} ${activeID === item.id ? styles.active : ""}`}
-                      onClick={() => chooseAgent(item)}
-                    >
-                      <span className={styles.avatar}>
-                        <AgentAvatarContent avatar={item.avatar} fallback={item.name?.slice(0, 1) || "A"} />
-                      </span>
-                      <span className={styles.identity}>
-                        <strong>{item.name}</strong>
-                        <small>{agentRoleLabel(item, t)}</small>
-                      </span>
-                      <ChevronRight size={14} />
-                    </button>
-                  ))
-                : null}
-              {filter === "all" || filter === "teams"
-                ? teams.map((item) => (
-                    <button
-                      type="button"
-                      key={item.id}
-                      className={`${styles.row} ${activeID === item.id ? styles.active : ""}`}
-                      onClick={() => {
-                        closeList();
-                        props.onSelectTeam(item);
-                      }}
-                    >
-                      <RoomAvatar
-                        members={resolveTeamAvatarMembers(item, props.workerAgentItems, props.usersById)}
-                        size={28}
-                        showCountBadge={false}
-                      />
-                      <span className={styles.identity}>
-                        <strong>{item.title}</strong>
-                        <small>{t("taskEntryTeamMembers", { count: item.member_agent_ids.length })}</small>
-                      </span>
-                      <ChevronRight size={14} />
-                    </button>
-                  ))
-                : null}
-            </>
-          )}
+            </nav>
+          </div>
+          <div className={styles.listEntries}>
+            {templatesTab ? (
+              <>
+                {templatesLoading ? (
+                  <div>
+                    <p className={styles.listStatus}>{t("iaTemplatesLoading")}</p>
+                    <div className={styles.skeletonList} aria-hidden="true">
+                      {[0, 1, 2, 3].map((index) => (
+                        <div key={index} className={styles.skeletonRow}>
+                          <span />
+                          <span />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : templatesQuery.isFetching ? (
+                  <p className={styles.listStatus} role="status">
+                    {t("iaTemplatesRefreshing")}
+                  </p>
+                ) : null}
+                {templatesQuery.isError ? (
+                  <div className={styles.listError} role="alert">
+                    <p>{t(templatesFailed ? "iaTemplatesLoadFailed" : "iaTemplatesRefreshFailed")}</p>
+                    <Button size="sm" onClick={() => void templatesQuery.refetch()}>
+                      {t("retry")}
+                    </Button>
+                  </div>
+                ) : null}
+                {shownTemplates.map((item) => (
+                  <button
+                    type="button"
+                    key={item.id}
+                    className={`${styles.row} ${selectedTemplateID === item.id ? styles.active : ""}`}
+                    onClick={() => {
+                      controller.hubViewProps?.onSelectTemplateInPlace(item);
+                      setHasSelectedTemplate(true);
+                      closeList();
+                    }}
+                  >
+                    <span className={styles.identity}>
+                      <strong>{item.name}</strong>
+                      <small>{item.description}</small>
+                    </span>
+                    <ChevronRight size={14} />
+                  </button>
+                ))}
+                {!templatesQuery.isLoading && !templatesQuery.isError && !shownTemplates.length ? (
+                  <p className={styles.emptyList}>{templateEmptyTitle}</p>
+                ) : null}
+              </>
+            ) : (
+              <>
+                {filter === "all" || filter === "agents"
+                  ? agents.map((item) => (
+                      <button
+                        type="button"
+                        key={item.id}
+                        className={`${styles.row} ${activeID === item.id ? styles.active : ""}`}
+                        onClick={() => chooseAgent(item)}
+                      >
+                        <span className={styles.avatar}>
+                          <AgentAvatarContent avatar={item.avatar} fallback={item.name?.slice(0, 1) || "A"} />
+                        </span>
+                        <span className={styles.identity}>
+                          <strong>{item.name}</strong>
+                          <small>{agentRoleLabel(item, t)}</small>
+                        </span>
+                        <ChevronRight size={14} />
+                      </button>
+                    ))
+                  : null}
+                {filter === "all" || filter === "teams"
+                  ? teams.map((item) => (
+                      <button
+                        type="button"
+                        key={item.id}
+                        className={`${styles.row} ${activeID === item.id ? styles.active : ""}`}
+                        onClick={() => {
+                          closeList();
+                          props.onSelectTeam(item);
+                        }}
+                      >
+                        <RoomAvatar
+                          members={resolveTeamAvatarMembers(item, props.workerAgentItems, props.usersById)}
+                          size={28}
+                          showCountBadge={false}
+                        />
+                        <span className={styles.identity}>
+                          <strong>{item.title}</strong>
+                          <small>{t("taskEntryTeamMembers", { count: item.member_agent_ids.length })}</small>
+                        </span>
+                        <ChevronRight size={14} />
+                      </button>
+                    ))
+                  : null}
+              </>
+            )}
+          </div>
         </aside>
         <div className={styles.detail}>
           {templatesTab ? (
@@ -225,25 +271,49 @@ export function AgentOverviewPage() {
               <Suspense fallback={null}>
                 <HubDetailPane {...controller.hubViewProps} inlineTemplateDetail />
               </Suspense>
+            ) : !templatesLoading && !templatesFailed && shownTemplates.length ? (
+              <AgentOverviewGuide templates t={t} />
             ) : (
-              <div className={styles.empty}>
-                <h2>{t("iaAgentsMarketTab")}</h2>
-                <p>{t("iaAgentsSelectTemplate")}</p>
-              </div>
+              <EmptyState
+                className={styles.empty}
+                icon={templatesLoading ? <LoaderCircle className={styles.loadingIcon} size={28} /> : undefined}
+                title={
+                  templatesLoading
+                    ? t("iaTemplatesLoading")
+                    : templatesFailed
+                      ? t("iaTemplatesLoadFailed")
+                      : templateEmptyTitle
+                }
+                description={
+                  templatesLoading
+                    ? t("iaTemplatesLoadingHint")
+                    : templatesFailed
+                      ? t("iaTemplatesRetryHint")
+                      : templateEmptyHint
+                }
+                actions={
+                  templatesFailed ? (
+                    <Button size="sm" onClick={() => void templatesQuery.refetch()}>
+                      {t("retry")}
+                    </Button>
+                  ) : undefined
+                }
+              />
             )
           ) : activeID && controller.activePane.type === "agent" ? (
             <Suspense fallback={null}>
-              <AgentPage />
+              {agentViewProps ? (
+                <AgentView {...agentViewProps} />
+              ) : (
+                <ConversationView {...controller.conversationViewProps} />
+              )}
             </Suspense>
           ) : activeID && controller.activePane.type === "team" ? (
             <Suspense fallback={null}>
-              <TeamPage />
+              <TeamDetailPane {...controller.teamViewProps} />
             </Suspense>
           ) : (
-            <div className={styles.empty}>
-              <h2>{t("iaAgentsMineTab")}</h2>
-              <p>{t("iaAgentsSelectAgent")}</p>
-            </div>
+            <AgentOverviewGuide t={t} />
           )}
         </div>
       </div>

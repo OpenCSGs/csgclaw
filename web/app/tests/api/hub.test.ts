@@ -16,6 +16,12 @@ function mockFetch(): Mock<typeof fetch> {
 }
 
 describe("hub API", () => {
+  it("sends Chinese display names separately from the validated name", async () => {
+    const fetchMock = mockFetch();
+    await publishAgentTemplateRequest("agent-alice", "local", "ReviewBot_2", "", false, "代码审查助手");
+    const payload = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
+    expect(payload).toMatchObject({ name: "ReviewBot_2", display_name: "代码审查助手" });
+  });
   afterEach(() => {
     vi.unstubAllGlobals();
   });
@@ -70,6 +76,7 @@ describe("hub API", () => {
           agent_id: "agent-alice",
           registry,
           name: "ReviewBot_2",
+          display_name: "ReviewBot_2",
           description: "Reviews changes",
         }),
         method: "POST",
@@ -89,6 +96,7 @@ describe("hub API", () => {
           agent_id: "agent-alice",
           registry: "official",
           name: "ReviewBot_2",
+          display_name: "ReviewBot_2",
           description: "Reviews changes",
           deploy: true,
         }),

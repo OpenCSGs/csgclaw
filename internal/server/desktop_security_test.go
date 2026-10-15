@@ -1,14 +1,34 @@
 package server
 
 import (
+	"crypto/sha256"
+	"encoding/base64"
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"regexp"
 	"strings"
 	"testing"
 
 	"csgclaw/internal/opencsgmcp"
 )
+
+func TestDocumentBootstrapCSPHashMatchesSource(t *testing.T) {
+	source, err := os.ReadFile("../../web/app/index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	match := regexp.MustCompile(`(?s)<script id="document-bootstrap">(.*?)</script>`).FindSubmatch(source)
+	if len(match) != 2 {
+		t.Fatal("document bootstrap script is missing")
+	}
+	digest := sha256.Sum256(match[1])
+	expected := "'sha256-" + base64.StdEncoding.EncodeToString(digest[:]) + "'"
+	if documentBootstrapCSPHash != expected {
+		t.Fatalf("bootstrap CSP hash = %s, want %s", documentBootstrapCSPHash, expected)
+	}
+}
 
 func TestDesktopSecurityHeadersAllowOnlyHashedInlineBootstrap(t *testing.T) {
 	header := make(http.Header)
@@ -20,8 +40,8 @@ func TestDesktopSecurityHeadersAllowOnlyHashedInlineBootstrap(t *testing.T) {
 	if strings.Contains(csp, "script-src 'self' 'unsafe-inline'") {
 		t.Fatalf("Content-Security-Policy = %q, unsafe-inline must remain disabled", csp)
 	}
-	if !strings.Contains(csp, "frame-src 'self' blob:") {
-		t.Fatalf("Content-Security-Policy = %q, want same-origin and blob attachment previews", csp)
+	if !strings.Contains(csp, "frame-src 'self' blob: http: https:") {
+		t.Fatalf("Content-Security-Policy = %q, want attachment previews and sandboxed browser frames", csp)
 	}
 	if !strings.Contains(csp, "object-src 'none'") {
 		t.Fatalf("Content-Security-Policy = %q, object embedding must remain disabled", csp)

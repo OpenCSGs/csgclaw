@@ -1,0 +1,18 @@
+.deleteButton {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(2px);
+  transition:
+    opacity 160ms ease,
+    transform 160ms ease;
+}
+
+.item:hover .deleteButton,
+.deleteButton:focus-visible {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+}

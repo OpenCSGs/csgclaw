@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type UIEvent } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { copyPreviewBuffer } from "./previewBuffer";
+import { normalizePowerPointPreview } from "./normalizePowerPoint";
 
 type PPTXPreviewer = {
   destroy: () => void;
@@ -34,10 +35,11 @@ export default function PowerPointPreview({
     setError(false);
     setSlide(1);
     setSlideCount(0);
-    void import("pptx-preview")
-      .then(({ init }) => {
+    void Promise.all([import("pptx-preview"), normalizePowerPointPreview(copyPreviewBuffer(data))])
+      .then(([{ init }, previewData]) => {
+        if (cancelled) return;
         previewer = init(stage, { mode: "list", width: 960 });
-        return previewer.preview(copyPreviewBuffer(data));
+        return previewer.preview(previewData);
       })
       .then(() => {
         if (cancelled) {

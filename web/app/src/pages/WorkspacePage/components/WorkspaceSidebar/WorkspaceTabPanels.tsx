@@ -22,7 +22,8 @@ import {
   WorkspaceHumanRow,
   WorkspaceThreadRow,
 } from "../WorkspaceRows";
-import type { WorkspaceContextSectionId, WorkspaceSidebarProps } from "./types";
+import type { WorkspaceSidebarProps } from "@/hooks/workspace/contracts/sidebar";
+import { WorkspaceContextSectionId } from "./types";
 
 const MessageSectionIds = {
   rooms: WorkspaceContextSectionIds.rooms,

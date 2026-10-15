@@ -1,15 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { initializeMermaidTheme } from "@/components/business/MessageContent";
 import { messages } from "@/shared/i18n/messages";
-import { getDesktopBridge } from "@/shared/platform/desktopBridge";
+import { writeWorkspacePreference } from "@/shared/storage/workspacePreferences";
 import {
   HUB_NEW_BADGE_SEEN_STORAGE_KEY,
   LOCALE_STORAGE_KEY,
   SIDEBAR_COLLAPSED_STORAGE_KEY,
-  THEME_STORAGE_KEY,
   WORKSPACE_GROUPS_COLLAPSED_STORAGE_KEY,
 } from "@/shared/storage/keys";
-import { resolveThemeMode } from "@/shared/theme/theme";
 import { WorkspacePaneTypes, WorkspaceTabs, workspaceTabForPane } from "@/models/routing";
 import type { WorkspaceTab } from "@/models/routing";
 import type { UseWorkspaceShellControllerArgs, WorkspaceShellController } from "./types";
@@ -79,7 +76,6 @@ export function useWorkspaceShellController({
   setCollapsedWorkspaceGroups,
   setWorkspaceTab,
   t,
-  theme,
   workspaceTab,
 }: UseWorkspaceShellControllerArgs): WorkspaceShellController {
   const [showHubNewBadge, setShowHubNewBadge] = useState(() => !readHubNewBadgeSeen());
@@ -109,36 +105,15 @@ export function useWorkspaceShellController({
     const messageLocale = locale === "zh" ? "zh" : "en";
     document.documentElement.lang = locale === "zh" ? "zh-CN" : "en";
     document.title = messages[messageLocale].pageTitle;
-    window.localStorage.setItem(LOCALE_STORAGE_KEY, locale);
+    writeWorkspacePreference(LOCALE_STORAGE_KEY, locale);
   }, [locale]);
 
   useEffect(() => {
-    function applyTheme() {
-      const resolvedTheme = resolveThemeMode(theme);
-      document.documentElement.dataset.theme = resolvedTheme;
-      document.documentElement.style.colorScheme = resolvedTheme;
-      initializeMermaidTheme(resolvedTheme);
-    }
-
-    applyTheme();
-    window.localStorage.setItem(THEME_STORAGE_KEY, theme);
-    void getDesktopBridge()?.setThemeSource(theme);
-
-    if (theme !== "system" || typeof window.matchMedia !== "function") {
-      return undefined;
-    }
-
-    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
-    mediaQuery.addEventListener("change", applyTheme);
-    return () => mediaQuery.removeEventListener("change", applyTheme);
-  }, [theme]);
-
-  useEffect(() => {
-    window.localStorage.setItem(SIDEBAR_COLLAPSED_STORAGE_KEY, String(isSidebarCollapsed));
+    writeWorkspacePreference(SIDEBAR_COLLAPSED_STORAGE_KEY, String(isSidebarCollapsed));
   }, [isSidebarCollapsed]);
 
   useEffect(() => {
-    window.localStorage.setItem(WORKSPACE_GROUPS_COLLAPSED_STORAGE_KEY, JSON.stringify(collapsedWorkspaceGroups));
+    writeWorkspacePreference(WORKSPACE_GROUPS_COLLAPSED_STORAGE_KEY, JSON.stringify(collapsedWorkspaceGroups));
   }, [collapsedWorkspaceGroups]);
 
   const dismissHubNewBadge = useCallback(() => {

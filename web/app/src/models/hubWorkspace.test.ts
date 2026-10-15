@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  hubTemplateFullName,
   HubTemplateErrorCodes,
   hubTemplateErrorCode,
   hubTemplateReviewState,
@@ -145,5 +146,23 @@ describe("hubTemplateErrorCode", () => {
 
   it("does not infer codes from legacy error messages", () => {
     expect(hubTemplateErrorCode({ message: '{"code":"AGENT-ERR-23"}' })).toBe("");
+  });
+});
+
+describe("template display names", () => {
+  it("prefers Chinese display names and keeps old template names as fallback", () => {
+    expect(hubTemplateFullName({ id: "local.reviewer", name: "reviewer", display_name: "代码审查助手" })).toBe(
+      "代码审查助手",
+    );
+    for (const namespace of ["alice", "bob"]) {
+      expect(
+        hubTemplateFullName({ id: `${namespace}/reviewer`, namespace, name: "reviewer", display_name: "代码审查助手" }),
+      ).toBe(`${namespace}/代码审查助手`);
+    }
+    expect(
+      hubTemplateFullName({ id: "alice/reviewer", namespace: "alice", name: "reviewer", display_name: "  " }),
+    ).toBe("alice/reviewer");
+    expect(hubTemplateFullName({ id: "local.reviewer", name: "reviewer" })).toBe("reviewer");
+    expect(hubTemplateFullName({ id: "alice/reviewer", name: "reviewer", namespace: "alice" })).toBe("alice/reviewer");
   });
 });

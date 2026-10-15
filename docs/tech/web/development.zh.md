@@ -125,7 +125,7 @@ pnpm --dir web/app install
 - 导出的组件包使用 PascalCase 目录名。
 - 主实现文件使用与组件相同的 PascalCase 名称。
 - 每个导出的组件包都有 `index.ts` 入口。
-- `index.ts` 只导入必要 CSS 并 re-export 公开符号。
+- `index.ts` 只 re-export 公开符号；组件实现直接导入自身 CSS Modules，入口不注入组件样式。
 - 避免 `message-content` 这种 kebab-case 组件目录，也避免 `workspace-views` 这种语义模糊的分组名。
 
 示例:
@@ -134,7 +134,7 @@ pnpm --dir web/app install
 src/pages/WorkspacePage/components/
   AgentDetailPane/
     AgentDetailPane.tsx
-    AgentDetailPane.css
+    AgentDetailPane.module.css
     index.ts
 ```
 
@@ -155,14 +155,16 @@ src/pages/WorkspacePage/components/
 
 ## 样式
 
-- 组件自有 CSS 与组件放在一起，并使用组件名，例如 `AgentDetailPane.css`。
-- feature 级共享 CSS 可以放在该 feature 的 components 目录，例如 `WorkspaceComponents.css`。
+- 组件自有样式默认使用同目录的 CSS Modules，例如 `AgentDetailPane.module.css`，由实现文件导入。
+- `components/ui` 全部使用 CSS Modules；类名和动画局部化，主题与共享状态消费语义 token。
+- 现有工作区 CSS 入口通过有序 import 加载历史业务样式。迁移具体组件时保持顺序，不继续在入口汇总组件皮肤。
 - 全局样式和设计 token 放在 `src/shared/styles/`。
 - 新增 UI 工作遵循渐进式样式顺序：先组合已有全局组件或 feature 局部组件；如果没有合适组件，再实现最小必要的局部组件。
 - 新增样式时，颜色、间距、圆角、阴影和层级值优先使用已有 CSS 变量和 token。
 - 如果只是普通布局或少量通用样式，并且不需要新的语义选择器，优先使用 Tailwind CSS utility class。
-- 稳定的组件外观、复杂选择器、渲染后内容（例如 Markdown）或 utility 难表达的状态，使用组件 CSS 或 CSS Module。新抽取的页面私有组件优先使用 CSS Module。
-- CSS class 名应绑定组件或 feature 语义，避免容易全局冲突的泛用名称。
+- 稳定组件外观、复杂选择器、渲染后内容或 utility 难表达的状态使用 CSS Modules；第三方 DOM 适配限定在局部内容根下。
+- CSS class 名应绑定组件或 feature 语义。迁移期间保留已有公开布局钩子，不通过它们覆盖其他控件的皮肤或状态。
+- 历史原生输入和禁用按钮选择器排除 `data-csg-control` 元素；组件自身管理 variant、focus、invalid、loading 和 disabled。
 - 不要把页面专属样式放进 `src/shared/styles/`。
 - 跨组件浮层必须使用 `src/shared/styles/tokens.css` 中的 z-index token；modal、popover、portal 和 tooltip 的层级模型见 `docs/tech/web/ui-components.md` 或 `docs/tech/web/ui-components.zh.md`。
 - 这些样式规则作为新增文件和新增组件工作的渐进式规范。已有文件没有遵循时，不需要只为样式规范做无功能改动；如果正在对单个文件做功能重构，可以把本次触及的样式顺手按该顺序优化。
@@ -244,3 +246,23 @@ src/pages/WorkspacePage/components/
 - 不要手动编辑 `web/static-dist`。
 - 使用前端构建流程重新生成 embedded assets。
 - 如果验证构建意外写入了 `web/static-dist`，需要说明，并且只在明确安全或获得确认后清理。
+
+## 工作区契约与共享视图归属
+
+`hooks/workspace/workspaceControllerContract.ts` 显式定义 ready/loading 联合类型，Context 使用该契约；共享侧栏契约位于 `hooks/workspace/contracts/`。根控制器组合数据和操作；`bindings/` 负责局部视图适配，`useModelProviderCreation` 负责模型服务创建、检查、刷新和导航。
+
+路由页面负责适配 props。AppsPage 和 HubPage 共同使用 HubDetailPane，由 AppsPage 管理连接器的专属适配。AgentDetails、TeamDetailPane 和 ConversationWorkspace 是共享业务视图；AgentActivityPanel、AgentList 仍由 AgentPage 私有管理。业务组件和控制器不引用页面所属模块。页面之间可以通过 package 入口或同名路由组件进行组装，其他 helper 和私有组件归所属页面管理；规则无需逐个登记页面例外。
+
+## 应用级主题与 UI Lab
+
+`workspaceUiStore.theme` 保存用户偏好，`bootstrap/AppThemeSynchronizer` 负责 DOM 主题、持久化、系统变化订阅、Mermaid 和桌面 bridge 同步。页面和外壳控制器消费偏好，不再各自安装主题 effect。`shared/theme/theme.ts` 管理解析与默认深色退化。
+
+本轮保留 `index.html` 现有首屏脚本：React 挂载前应用保存的 light/dark，system 仍回退到深色。AppThemeSynchronizer 在 React 启动后解析系统偏好，因此浅色系统下首次显示短暂深色的可能性继续保留。未来修改首屏脚本时必须同步更新 `internal/server/desktop_security.go` 的 `documentBootstrapCSPHash`，服务端回归测试校验源码哈希。运行时存储受限或系统 API 缺失不会阻断主题同步。
+
+`lint` 运行 ESLint；`test` 和 `check` 通过 Vitest 运行 `tests/components/UiBoundaries.test.ts`。公共源码解析逻辑放在 `tests/helpers/sourceDependencies.ts`，检查直接 import、re-export 和写明路径的动态 import。
+
+检查按目录职责判断：基础 UI 不依赖 API、控制器、页面及应用 storage/realtime/platform；共享业务组件和 hooks 不依赖页面模块；跨页组装使用公开页面入口。允许使用纯 model helper，不维护按组件名称写死的名单。
+
+组件交互和字段状态的测试尽量放在组件旁边，公共测试工具放在 `tests/helpers/`。颜色与 token 归属在组件样式中审查；CSS 级联、主题颜色及视口行为补真实浏览器验证，不再按特定组件名单禁止一组 CSS 字符串。
+
+在 `web/app` 运行 `corepack pnpm ui:lab`，使用项目固定包管理器打开 `ui-lab.html`。展示入口直接使用生产组件，无需后端、账号或控制器，且不进入生产构建。验收明暗主题、错误状态、长列表和嵌套弹窗；Portal 裁切、视口碰撞和焦点行为必须补真实浏览器验证。

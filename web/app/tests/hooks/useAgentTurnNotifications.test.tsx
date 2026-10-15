@@ -124,6 +124,10 @@ function desktopBridge(showWindow: DesktopBridge["showWindow"]): DesktopBridge {
     setUpdateChannel: vi.fn(),
     setThemeSource: vi.fn(),
     onUpdateStatus: vi.fn(),
+    getWindowState: vi.fn(),
+    onWindowState: vi.fn(),
+    browserCommand: vi.fn(),
+    onBrowserState: vi.fn(),
   };
 }
 

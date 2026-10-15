@@ -1,4 +1,4 @@
-import type { WorkspaceSidebarProps } from "./types";
+import type { WorkspaceSidebarProps } from "@/hooks/workspace/contracts/sidebar";
 
 type SidebarHeaderProps = Pick<WorkspaceSidebarProps, "currentWorkspaceLabel" | "runningAgentCount" | "t"> & {
   agentCount: number;

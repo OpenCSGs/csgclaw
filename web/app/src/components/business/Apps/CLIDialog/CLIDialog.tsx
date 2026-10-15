@@ -43,6 +43,7 @@ export function CLIDialog({ definition, existing, t, onClose, onChanged }: Props
   const feishu = definition.app_id === "feishu";
   const [resource, setResource] = useState(existing);
   const [busy, setBusy] = useState(false);
+  const [cancellingSession, setCancellingSession] = useState<string | null>(null);
   const [error, setError] = useState<unknown>(null);
   const [showQRCode, setShowQRCode] = useState(false);
   const retry = useRef<{ action: CLIAction; id: string; revision: number | undefined } | null>(null);
@@ -57,17 +58,33 @@ export function CLIDialog({ definition, existing, t, onClose, onChanged }: Props
       pending = true;
       try {
         const value = await fetchAppResource(resourceID, abort.signal);
-        if (!abort.signal.aborted) setResource(value);
+        if (!abort.signal.aborted) {
+          setResource(value);
+          if (
+            cancellingSession &&
+            (value.operation?.session_id !== cancellingSession ||
+              (value.operation.status !== "running" && value.operation.status !== "pending"))
+          ) {
+            setCancellingSession(null);
+            await onChanged();
+          }
+        }
       } catch (failure) {
-        if (!abort.signal.aborted) setError(failure);
+        if (!abort.signal.aborted) {
+          setError(failure);
+          setCancellingSession(null);
+        }
       } finally {
         pending = false;
       }
     };
     void refresh();
-    const timer = window.setInterval(() => {
-      if (!document.hidden) void refresh();
-    }, 1500);
+    const timer = window.setInterval(
+      () => {
+        if (!document.hidden) void refresh();
+      },
+      cancellingSession ? 100 : 1500,
+    );
     const refreshOnReturn = () => {
       if (!document.hidden) void refresh();
     };
@@ -79,7 +96,7 @@ export function CLIDialog({ definition, existing, t, onClose, onChanged }: Props
       window.removeEventListener("focus", refreshOnReturn);
       document.removeEventListener("visibilitychange", refreshOnReturn);
     };
-  }, [resourceID]);
+  }, [resourceID, cancellingSession, onChanged]);
   async function run(action: CLIAction) {
     setBusy(true);
     setError(null);
@@ -121,7 +138,7 @@ export function CLIDialog({ definition, existing, t, onClose, onChanged }: Props
     try {
       const operation = await cancelCLIOperation(resource.installation_id, resource.operation.session_id);
       setResource({ ...resource, operation });
-      await onChanged();
+      setCancellingSession(resource.operation.session_id);
     } catch (failure) {
       setError(failure);
     } finally {
@@ -129,6 +146,7 @@ export function CLIDialog({ definition, existing, t, onClose, onChanged }: Props
     }
   }
   const operation = resource?.operation;
+  const actionPending = busy || cancellingSession !== null;
   const active = operation?.status === "running" || operation?.status === "pending";
   const ready = Boolean(resource?.authorized && !resource.disconnected);
   const identityAuthorized = (identity: "bot" | "user") => {
@@ -342,7 +360,7 @@ export function CLIDialog({ definition, existing, t, onClose, onChanged }: Props
         <DialogFooter className={styles.cliFooter}>
           {active ? (
             <>
-              <Button disabled={busy} onClick={() => void cancel()}>
+              <Button disabled={actionPending} onClick={() => void cancel()}>
                 {t("cancel")}
               </Button>
               {!feishu && operation?.authorization_url ? (
@@ -363,11 +381,11 @@ export function CLIDialog({ definition, existing, t, onClose, onChanged }: Props
               {ready ? (
                 <div className={styles.cliFooterActions}>
                   {feishu && resource?.auth_status?.identities.user.verified !== true ? (
-                    <Button disabled={busy} onClick={() => void run("login")}>
+                    <Button disabled={actionPending} onClick={() => void run("login")}>
                       {t("feishuCLILogin")}
                     </Button>
                   ) : null}
-                  <Button variant="danger" disabled={busy} onClick={() => void run("disconnect")}>
+                  <Button variant="danger" disabled={actionPending} onClick={() => void run("disconnect")}>
                     {t("appDisconnect")}
                   </Button>
                 </div>
@@ -376,7 +394,7 @@ export function CLIDialog({ definition, existing, t, onClose, onChanged }: Props
                 <Button
                   className={styles.cliConnectAction}
                   variant="primary"
-                  disabled={busy}
+                  disabled={actionPending}
                   onClick={() => void run("connect")}
                 >
                   {t(feishu ? "feishuCLIConnect" : "appConnect")}

@@ -1,0 +1,202 @@
+.composer-send-button:where(:not([data-csg-control])) {
+  border-radius: 6px;
+  border-color: var(--brand-600);
+  background: var(--brand-600);
+  color: var(--white);
+  box-shadow: var(--shadow-xs);
+}
+
+.composer-send-button:where(:not([data-csg-control])):hover:not(:disabled),
+.composer-send-button:where(:not([data-csg-control])):active:not(:disabled) {
+  border-color: var(--brand-700);
+  background: var(--brand-700);
+  color: var(--white);
+  box-shadow: var(--shadow-xs);
+  transform: none;
+}
+
+.composer-send-button:where(:not([data-csg-control])):focus-visible {
+  border-color: var(--brand-600);
+  background: var(--brand-600);
+  color: var(--white);
+  box-shadow:
+    var(--shadow-xs),
+    0 0 0 4px rgba(77, 106, 214, 0.2);
+}
+
+.agent-icon-button:where(:not([data-csg-control])).danger,
+.conversation-delete-button:where(:not([data-csg-control])) {
+  border-radius: 6px;
+  border-color: var(--error-600);
+  background: var(--error-600);
+  color: var(--white);
+  box-shadow: var(--shadow-xs);
+}
+
+.tool-menu-row.danger {
+  border-radius: 6px;
+  border-color: color-mix(in oklab, var(--error-600) 32%, var(--line));
+  background: color-mix(in oklab, var(--error-600) 8%, var(--surface));
+  color: var(--error-700);
+  box-shadow: var(--shadow-xs);
+}
+
+.agent-icon-button:where(:not([data-csg-control])).danger:hover:not(:disabled),
+.conversation-delete-button:where(:not([data-csg-control])):hover:not(:disabled),
+.agent-icon-button:where(:not([data-csg-control])).danger:active:not(:disabled),
+.conversation-delete-button:where(:not([data-csg-control])):active:not(:disabled) {
+  border-color: var(--error-700);
+  background: var(--error-700);
+  color: var(--white);
+  box-shadow: var(--shadow-xs);
+  transform: none;
+}
+
+.tool-menu-row.danger:hover:not(:disabled),
+.tool-menu-row.danger:active:not(:disabled) {
+  border-color: color-mix(in oklab, var(--error-600) 46%, var(--line));
+  background: color-mix(in oklab, var(--error-600) 14%, var(--surface));
+  color: var(--error-800);
+  box-shadow: var(--shadow-xs);
+  transform: none;
+}
+
+.agent-icon-button:where(:not([data-csg-control])).danger:focus-visible,
+.conversation-delete-button:where(:not([data-csg-control])):focus-visible {
+  border-color: var(--error-600);
+  background: var(--error-600);
+  color: var(--white);
+  box-shadow:
+    var(--shadow-xs),
+    0 0 0 4px rgba(240, 68, 56, 0.16);
+}
+
+.tool-menu-row.danger:focus-visible {
+  border-color: color-mix(in oklab, var(--error-600) 38%, var(--line));
+  background: color-mix(in oklab, var(--error-600) 8%, var(--surface));
+  color: var(--error-800);
+  box-shadow:
+    var(--shadow-xs),
+    0 0 0 4px rgba(240, 68, 56, 0.14);
+}
+
+:root[data-theme="dark"] .composer-send-button:where(:not([data-csg-control])) {
+  border-color: rgba(172, 189, 255, 0.34);
+  background: var(--brand-600);
+  color: var(--white);
+}
+
+:root[data-theme="dark"] .composer-send-button:where(:not([data-csg-control])):hover:not(:disabled),
+:root[data-theme="dark"] .composer-send-button:where(:not([data-csg-control])):active:not(:disabled) {
+  border-color: rgba(172, 189, 255, 0.44);
+  background: var(--brand-700);
+  color: var(--white);
+}
+
+:root[data-theme="dark"] .agent-icon-button:where(:not([data-csg-control])).danger,
+:root[data-theme="dark"] .conversation-delete-button:where(:not([data-csg-control])) {
+  border-color: rgba(253, 162, 155, 0.32);
+  background: color-mix(in oklab, var(--error-600) 86%, var(--error-800));
+  color: var(--white);
+}
+
+:root[data-theme="dark"] .tool-menu-row.danger {
+  border-color: rgba(253, 162, 155, 0.22);
+  background: rgba(217, 45, 32, 0.16);
+  color: #fda29b;
+}
+
+:root[data-theme="dark"] .agent-icon-button:where(:not([data-csg-control])).danger:hover:not(:disabled),
+:root[data-theme="dark"] .conversation-delete-button:where(:not([data-csg-control])):hover:not(:disabled),
+:root[data-theme="dark"] .agent-icon-button:where(:not([data-csg-control])).danger:active:not(:disabled),
+:root[data-theme="dark"] .conversation-delete-button:where(:not([data-csg-control])):active:not(:disabled) {
+  border-color: rgba(253, 162, 155, 0.42);
+  background: var(--error-700);
+  color: var(--white);
+}
+
+:root[data-theme="dark"] .tool-menu-row.danger:hover:not(:disabled),
+:root[data-theme="dark"] .tool-menu-row.danger:active:not(:disabled) {
+  border-color: rgba(253, 162, 155, 0.32);
+  background: rgba(217, 45, 32, 0.2);
+  color: #fecdca;
+}
+
+.composer-send-button:where(:not([data-csg-control])):disabled,
+.composer-send-button:where(:not([data-csg-control]))[disabled],
+.agent-icon-button:where(:not([data-csg-control])).danger:disabled,
+.agent-icon-button:where(:not([data-csg-control])).danger[disabled],
+.tool-menu-row.danger:disabled,
+.tool-menu-row.danger[disabled],
+.conversation-delete-button:where(:not([data-csg-control])):disabled,
+.conversation-delete-button:where(:not([data-csg-control]))[disabled] {
+  border-color: var(--gray-200);
+  background: var(--gray-100);
+  color: var(--gray-400);
+  box-shadow: var(--shadow-xs);
+  opacity: 1;
+  transform: none;
+}
+
+:root[data-theme="dark"] .composer-send-button:where(:not([data-csg-control])):disabled,
+:root[data-theme="dark"] .composer-send-button:where(:not([data-csg-control]))[disabled],
+:root[data-theme="dark"] .agent-icon-button:where(:not([data-csg-control])).danger:disabled,
+:root[data-theme="dark"] .agent-icon-button:where(:not([data-csg-control])).danger[disabled],
+:root[data-theme="dark"] .tool-menu-row.danger:disabled,
+:root[data-theme="dark"] .tool-menu-row.danger[disabled],
+:root[data-theme="dark"] .conversation-delete-button:where(:not([data-csg-control])):disabled,
+:root[data-theme="dark"] .conversation-delete-button:where(:not([data-csg-control]))[disabled] {
+  border-color: rgba(208, 213, 221, 0.12);
+  background: rgba(208, 213, 221, 0.08);
+  color: var(--gray-500);
+  box-shadow: none;
+}
+
+.chat-panel > .chat-header {
+  padding: 8px 20px;
+  background: var(--surface);
+}
+
+.chat-panel > .chat-header .chat-title-bar {
+  min-height: 40px;
+  gap: 12px;
+}
+
+.chat-panel > .chat-header .chat-title-group {
+  gap: 1px 10px;
+}
+
+.chat-panel > .chat-header .chat-kicker {
+  gap: 6px;
+  font-size: 11px;
+  line-height: 14px;
+}
+
+.chat-panel > .chat-header .chat-title {
+  font-size: 20px;
+  line-height: 24px;
+}
+
+.chat-panel > .chat-header .chat-title-actions {
+  gap: 8px;
+}
+
+.chat-panel > .chat-header .chat-title-actions .btn.icon-button {
+  width: 44px;
+  min-width: 44px;
+  max-width: 44px;
+  height: 44px;
+  min-height: 44px;
+  padding: 0;
+  border-radius: 10px;
+}
+
+.chat-panel > .chat-header .chat-title-actions .btn.icon-button .btn-content {
+  width: 100%;
+  height: 100%;
+}
+
+.chat-panel > .chat-header .chat-title-actions .icon-button .icon-button-mark {
+  width: 20px;
+  height: 20px;
+}

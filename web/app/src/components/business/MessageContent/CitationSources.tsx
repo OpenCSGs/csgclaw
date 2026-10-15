@@ -33,7 +33,7 @@ type CitationSourcesProps = {
   cited: RenderedCitation[];
   onActiveChange: (id: string | null) => void;
   t?: TranslateFn;
-  variant?: "dialog" | "panel";
+  variant?: "dialog" | "panel" | "embedded";
 };
 
 function label(t: TranslateFn | undefined, key: string, fallback: string) {
@@ -73,7 +73,7 @@ export function CitationSources({ activeID, cited, onActiveChange, t, variant = 
   }, [clampPanelWidth, variant]);
 
   useEffect(() => {
-    if (variant === "panel" && !resizing) persistPanelWidth(panelWidth);
+    if (variant !== "dialog" && !resizing) persistPanelWidth(panelWidth);
   }, [panelWidth, resizing, variant]);
 
   const handleResizeEnd = (event: PointerEvent<HTMLDivElement>) => {
@@ -85,7 +85,7 @@ export function CitationSources({ activeID, cited, onActiveChange, t, variant = 
     setResizing(false);
   };
 
-  if (variant === "panel") {
+  if (variant !== "dialog") {
     return active ? (
       <aside
         ref={panelRef}

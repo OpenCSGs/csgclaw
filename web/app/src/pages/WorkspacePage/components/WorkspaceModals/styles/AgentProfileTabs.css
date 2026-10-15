@@ -1,0 +1,147 @@
+.profile-modal.agent-modal .agent-create-kind-tabbar {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-bottom: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+.profile-modal.agent-modal .agent-create-kind-tabbar .workspace-tab {
+  justify-content: flex-start;
+  min-width: 0;
+  min-height: 74px;
+  height: auto;
+  padding: 12px 16px;
+  border: 1px solid var(--gray-300);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--gray-700);
+  box-shadow: none;
+  transform: none;
+}
+
+.profile-modal.agent-modal .agent-create-kind-tabbar .workspace-tab:hover,
+.profile-modal.agent-modal .agent-create-kind-tabbar .workspace-tab:focus-visible {
+  border-color: var(--gray-300);
+  background: transparent;
+  color: var(--gray-700);
+  box-shadow: none;
+  transform: none;
+}
+
+.profile-modal.agent-modal .agent-create-kind-tabbar .workspace-tab.active {
+  border-color: var(--brand-600);
+  background: var(--brand-25);
+  color: var(--brand-600);
+  box-shadow: none;
+}
+
+.profile-modal.agent-modal .agent-create-kind-tabbar .workspace-tab .btn-content,
+.profile-modal.agent-modal .agent-create-kind-tabbar .workspace-tab-copy {
+  width: 100%;
+  min-width: 0;
+}
+
+.profile-modal.agent-modal .agent-create-kind-tabbar .workspace-tab .btn-content {
+  justify-content: flex-start;
+  text-align: left;
+}
+
+.profile-modal.agent-modal .agent-create-kind-tabbar .workspace-tab-copy {
+  display: grid;
+  gap: 4px;
+  justify-items: start;
+  text-align: left;
+}
+
+.profile-modal.agent-modal .agent-create-kind-tabbar .workspace-tab-copy strong {
+  color: var(--gray-700);
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 24px;
+}
+
+.profile-modal.agent-modal .agent-create-kind-tabbar .workspace-tab.active .workspace-tab-copy strong {
+  color: var(--brand-600);
+}
+
+:root[data-theme="dark"] .profile-modal.agent-modal .agent-create-kind-tabbar .workspace-tab-copy strong {
+  color: var(--gray-200);
+}
+
+.profile-modal.agent-modal .agent-create-kind-tabbar .workspace-tab-copy small {
+  display: block;
+  color: var(--gray-600);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 300;
+  line-height: 22px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+:root[data-theme="dark"] .profile-modal.agent-modal .modal-header {
+  background: var(--panel);
+  border-bottom-color: rgba(208, 213, 221, 0.14);
+}
+
+:root[data-theme="dark"] .profile-modal.agent-modal .modal-title {
+  color: var(--text);
+}
+
+:root[data-theme="dark"] .profile-modal.agent-modal .modal-subtitle {
+  color: var(--muted);
+}
+
+:root[data-theme="dark"] .profile-modal.agent-modal .modal-header .modal-close:where(:not([data-csg-control])) {
+  color: var(--muted);
+}
+
+:root[data-theme="dark"]
+  .profile-modal.agent-modal
+  .modal-header
+  .modal-close:where(:not([data-csg-control])):hover:not(:disabled),
+:root[data-theme="dark"]
+  .profile-modal.agent-modal
+  .modal-header
+  .modal-close:where(:not([data-csg-control])):active:not(:disabled),
+:root[data-theme="dark"]
+  .profile-modal.agent-modal
+  .modal-header
+  .modal-close:where(:not([data-csg-control])):focus-visible {
+  color: var(--text);
+}
+
+:root[data-theme="dark"] .profile-modal.agent-modal .agent-create-kind-tabbar .workspace-tab {
+  border-color: rgba(208, 213, 221, 0.18);
+  background: color-mix(in oklab, var(--field) 88%, transparent);
+  color: var(--text);
+}
+
+:root[data-theme="dark"] .profile-modal.agent-modal .agent-create-kind-tabbar .workspace-tab:hover,
+:root[data-theme="dark"] .profile-modal.agent-modal .agent-create-kind-tabbar .workspace-tab:focus-visible {
+  border-color: rgba(101, 132, 248, 0.44);
+  background: color-mix(in oklab, var(--field) 84%, var(--primary) 8%);
+  color: var(--text);
+}
+
+:root[data-theme="dark"] .profile-modal.agent-modal .agent-create-kind-tabbar .workspace-tab.active {
+  border-color: rgba(101, 132, 248, 0.72);
+  background: rgba(77, 106, 214, 0.2);
+  color: var(--text);
+}
+
+:root[data-theme="dark"] .profile-modal.agent-modal .agent-create-kind-tabbar .workspace-tab-copy strong,
+:root[data-theme="dark"]
+  .profile-modal.agent-modal
+  .agent-create-kind-tabbar
+  .workspace-tab.active
+  .workspace-tab-copy
+  strong {
+  color: var(--text);
+}
+
+:root[data-theme="dark"] .profile-modal.agent-modal .agent-create-kind-tabbar .workspace-tab-copy small {
+  color: var(--muted);
+}

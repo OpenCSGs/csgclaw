@@ -1,5 +1,15 @@
+import { installWindowChrome, windowChromeOptions } from "./windowChrome";
+import { NativeBrowserManager } from "./nativeBrowser";
 import path from "node:path";
-import { app, BrowserWindow, session, shell, type NativeImage, type Session } from "electron";
+import {
+  app,
+  BrowserWindow,
+  session,
+  nativeTheme,
+  shell,
+  type NativeImage,
+  type Session,
+} from "electron";
 import { installNavigationPolicy } from "./navigationPolicy";
 import { isWindowsDesktop, windowsAppIconPath } from "./platform";
 import { installPermissionPolicy } from "./permissionPolicy";
@@ -19,23 +29,27 @@ export class WindowManager {
   private readonly windowsTaskbarIcon = new WindowsTaskbarIcon(
     process.platform,
     process.windowsStore,
-    (iconPath) => syncWindowsShortcutIcon({
-      platform: process.platform,
-      windowsStore: process.windowsStore,
-      packaged: app.isPackaged,
-      executablePath: process.execPath,
-      appData: app.getPath("appData"),
-      userData: app.getPath("userData"),
-      desktop: app.getPath("desktop"),
-      iconPath,
-      shell,
-      onError: (error) => logDesktopError("windows-shortcut-icon-failed", error),
-    }),
+    (iconPath) =>
+      syncWindowsShortcutIcon({
+        platform: process.platform,
+        windowsStore: process.windowsStore,
+        packaged: app.isPackaged,
+        executablePath: process.execPath,
+        appData: app.getPath("appData"),
+        userData: app.getPath("userData"),
+        desktop: app.getPath("desktop"),
+        iconPath,
+        shell,
+        onError: (error) =>
+          logDesktopError("windows-shortcut-icon-failed", error),
+      }),
   );
   private readonly desktopSession: Session;
 
   constructor(private readonly options: WindowManagerOptions) {
-    this.desktopSession = session.fromPartition("persist:csgclaw-desktop", { cache: true });
+    this.desktopSession = session.fromPartition("persist:csgclaw-desktop", {
+      cache: true,
+    });
     this.installRequestAuthentication();
   }
 
@@ -61,7 +75,7 @@ export class WindowManager {
       minHeight: 680,
       show: false,
       title: "CSGClaw",
-      backgroundColor: "#0d1017",
+      ...windowChromeOptions(process.platform, nativeTheme.shouldUseDarkColors),
       ...(isWindowsDesktop
         ? {
             icon: this.windowsTaskbarIcon.image ?? windowsAppIconPath(),
@@ -83,6 +97,8 @@ export class WindowManager {
       },
     });
     this.mainWindow = window;
+    installWindowChrome(window, () => this.allowedOrigin);
+    new NativeBrowserManager(window, () => this.allowedOrigin);
     this.windowsTaskbarIcon.apply(window);
     // A hidden window has no live taskbar button. Restore the cached presentation
     // when it is shown, including after closing to the tray.
@@ -107,14 +123,23 @@ export class WindowManager {
     });
     window.webContents.on("render-process-gone", (_event, details) => {
       if (!this.options.shouldQuit()) {
-        this.options.onLoadFailure(new Error(`Renderer process exited: ${details.reason}`));
+        this.options.onLoadFailure(
+          new Error(`Renderer process exited: ${details.reason}`),
+        );
       }
     });
-    window.webContents.on("did-fail-load", (_event, errorCode, errorDescription, _url, isMainFrame) => {
-      if (isMainFrame && errorCode !== -3 && !this.options.shouldQuit()) {
-        this.options.onLoadFailure(new Error(`Renderer failed to load (${errorCode}): ${errorDescription}`));
-      }
-    });
+    window.webContents.on(
+      "did-fail-load",
+      (_event, errorCode, errorDescription, _url, isMainFrame) => {
+        if (isMainFrame && errorCode !== -3 && !this.options.shouldQuit()) {
+          this.options.onLoadFailure(
+            new Error(
+              `Renderer failed to load (${errorCode}): ${errorDescription}`,
+            ),
+          );
+        }
+      },
+    );
 
     await window.loadURL(`${this.allowedOrigin}/`);
     return window;
@@ -144,9 +169,11 @@ export class WindowManager {
   async refreshWindowsIcon(): Promise<void> {
     const window = this.mainWindow;
     if (window) {
-      await this.windowsTaskbarIcon.refresh(window).catch((error) =>
-        logDesktopError("windows-taskbar-icon-refresh-failed", error),
-      );
+      await this.windowsTaskbarIcon
+        .refresh(window)
+        .catch((error) =>
+          logDesktopError("windows-taskbar-icon-refresh-failed", error),
+        );
     }
   }
 
@@ -158,14 +185,20 @@ export class WindowManager {
   }
 
   get window(): BrowserWindow | null {
-    return this.mainWindow && !this.mainWindow.isDestroyed() ? this.mainWindow : null;
+    return this.mainWindow && !this.mainWindow.isDestroyed()
+      ? this.mainWindow
+      : null;
   }
 
   private installRequestAuthentication(): void {
     this.desktopSession.webRequest.onBeforeSendHeaders((details, callback) => {
       const requestHeaders = { ...details.requestHeaders };
       try {
-        if (this.allowedOrigin && this.authToken && new URL(details.url).origin === this.allowedOrigin) {
+        if (
+          this.allowedOrigin &&
+          this.authToken &&
+          new URL(details.url).origin === this.allowedOrigin
+        ) {
           for (const name of Object.keys(requestHeaders)) {
             if (name.toLowerCase() === "authorization") {
               delete requestHeaders[name];

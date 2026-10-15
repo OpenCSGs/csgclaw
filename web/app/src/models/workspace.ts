@@ -10,6 +10,8 @@ export type WorkspaceEntry = {
 
 export type WorkspaceListing = {
   entries?: WorkspaceEntry[];
+  absolute_path?: string;
+  open_targets?: string[];
   kind?: string | null;
   path?: string | null;
 };

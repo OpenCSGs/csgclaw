@@ -3,6 +3,7 @@ import { useState, type ReactNode } from "react";
 import { ArrowRight, ArrowUpRight, BookOpen, Plus, RefreshCw, ChevronDown, Server } from "lucide-react";
 import {
   Button,
+  LinkButton,
   DropdownMenuRoot,
   DropdownMenuTrigger,
   DropdownMenuContent,
@@ -229,13 +230,14 @@ export function AgentAppsPanel({
                 )}
                 <div className={styles.settingsActions}>
                   <div className={styles.settingsActionGroup}>
-                    <a
-                      className={`btn btn-secondary-gray btn-sm ${styles.manageResourceLink}`}
+                    <LinkButton
+                      size="sm"
+                      className={styles.manageResourceLink}
                       href={`#/connectors/${encodeURIComponent(selected.resource_id || "")}`}
                     >
                       {t("appManageResource")}
                       <ArrowUpRight size={14} />
-                    </a>
+                    </LinkButton>
                     {selected.kind !== "cli" ? (
                       <Button
                         size="sm"
@@ -328,22 +330,18 @@ export function AgentAppsPanel({
                   <strong>{t("appNoAvailableResourcesTitle")}</strong>
                   <p>{t("appNoAvailableResources")}</p>
                 </div>
-                <a className={`btn btn-secondary-gray btn-sm ${styles.catalogManageAction}`} href={manageResourcesHref}>
-                  <span className="btn-content">
-                    <ConnectorBoxesIcon size={16} />
-                    {t("appManageResources")}
-                    <ArrowRight size={14} />
-                  </span>
-                </a>
-              </div>
-            ) : (
-              <a className={`btn btn-secondary-gray btn-sm ${styles.catalogManageAction}`} href={manageResourcesHref}>
-                <span className="btn-content">
+                <LinkButton size="sm" className={styles.catalogManageAction} href={manageResourcesHref}>
                   <ConnectorBoxesIcon size={16} />
                   {t("appManageResources")}
                   <ArrowRight size={14} />
-                </span>
-              </a>
+                </LinkButton>
+              </div>
+            ) : (
+              <LinkButton size="sm" className={styles.catalogManageAction} href={manageResourcesHref}>
+                <ConnectorBoxesIcon size={16} />
+                {t("appManageResources")}
+                <ArrowRight size={14} />
+              </LinkButton>
             )}
           </DialogBody>
         </DialogContent>

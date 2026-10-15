@@ -1,5 +1,5 @@
 import { useWorkspaceControllerContext } from "@/hooks/workspace";
-import { TeamDetailPane } from "./components";
+import { TeamDetailPane } from "@/components/business/TeamDetailPane";
 
 export function TeamPage() {
   const controller = useWorkspaceControllerContext();

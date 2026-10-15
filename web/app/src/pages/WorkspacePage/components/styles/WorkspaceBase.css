@@ -1,0 +1,608 @@
+.app-shell {
+  display: grid;
+  grid-template-columns: minmax(0, var(--sidebar-slot-width)) minmax(0, 1fr);
+  min-height: var(--app-ui-viewport-height);
+  height: var(--app-ui-viewport-height);
+  overflow: hidden;
+}
+
+.sidebar,
+.chat-panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  min-height: 0;
+}
+
+.chat-panel {
+  display: grid;
+  overflow: hidden;
+}
+
+.modal-header,
+.modal-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: center;
+}
+
+.modal-header > div:first-child {
+  min-width: 0;
+}
+
+.section-label {
+  display: block;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.chat-subtitle,
+.message-meta,
+.conversation-preview {
+  color: var(--muted);
+}
+
+.conversation-item {
+  position: relative;
+  width: 100%;
+  border-radius: 18px;
+}
+
+.conversation-item-main {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr);
+  gap: 14px;
+  padding: 14px;
+  border: 0;
+  background: transparent;
+  border-radius: 18px;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+  transition:
+    background 160ms ease,
+    transform 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.conversation-item:hover .conversation-item-main,
+.conversation-item.active .conversation-item-main {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.72), rgba(43, 109, 246, 0.08));
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-soft);
+}
+
+.conversation-delete-button:where(:not([data-csg-control])) {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  color: rgba(148, 33, 33, 0.86);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(2px);
+  transition:
+    opacity 160ms ease,
+    transform 160ms ease,
+    background 160ms ease,
+    color 160ms ease;
+}
+
+.conversation-item:hover .conversation-delete-button:where(:not([data-csg-control])) {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+
+.pending-question-badge {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  padding: 1px 7px;
+  background: var(--warning-100);
+  color: var(--warning-800);
+  font-size: 11px;
+  font-weight: 750;
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+.conversation-delete-button:where(:not([data-csg-control])):hover {
+  background: rgba(254, 226, 226, 0.96);
+  color: #b91c1c;
+}
+
+.conversation-delete-button:where(:not([data-csg-control])):focus-visible {
+  opacity: 1;
+  pointer-events: auto;
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(185, 28, 28, 0.14);
+}
+
+.conversation-delete-icon {
+  width: 14px;
+  height: 14px;
+  display: inline-flex;
+}
+
+.conversation-delete-icon svg {
+  width: 100%;
+  height: 100%;
+}
+
+.agent-section {
+  border-top: 1px solid var(--line);
+  padding: 12px 14px 16px;
+  display: grid;
+  gap: 10px;
+  max-height: 46%;
+  overflow: auto;
+}
+
+.agent-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 0 4px;
+}
+
+.agent-add-button:where(:not([data-csg-control])),
+.agent-icon-button:where(:not([data-csg-control])) {
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--field);
+  color: var(--text);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition:
+    transform 160ms ease,
+    background 160ms ease,
+    border-color 160ms ease;
+}
+
+.agent-add-button:where(:not([data-csg-control])):hover,
+.agent-icon-button:where(:not([data-csg-control])):hover,
+.agent-action-text:where(:not([data-csg-control])):hover {
+  transform: translateY(-1px);
+  background: var(--panel-soft);
+}
+
+.agent-add-button svg,
+.agent-icon-button svg {
+  width: 16px;
+  height: 16px;
+}
+
+.agent-list {
+  display: grid;
+  gap: 8px;
+}
+
+.agent-row {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr);
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid oklch(0.38 0.016 82 / 0.42);
+  border-radius: 8px;
+  background: oklch(0.2 0.014 82 / 0.54);
+}
+
+.agent-row.manager {
+  background: oklch(0.24 0.03 92 / 0.62);
+}
+
+.agent-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background: var(--field);
+  color: var(--primary-strong);
+}
+
+.agent-avatar svg {
+  width: 20px;
+  height: 20px;
+}
+
+.agent-avatar .agent-avatar-image {
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  object-fit: cover;
+}
+
+.agent-row-main {
+  min-width: 0;
+}
+
+.agent-row-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.agent-row-statuses {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.agent-runtime-status-detail {
+  color: var(--muted);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.agent-name {
+  font-weight: 700;
+  font-size: 13px;
+}
+
+.agent-status,
+.agent-badge {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 2px 7px;
+  font-size: 10px;
+  color: var(--muted);
+  background: var(--field);
+  white-space: nowrap;
+}
+
+.agent-badge.ready {
+  border-color: color-mix(in oklab, var(--success-700) 28%, var(--line));
+  background: var(--success-50);
+  color: var(--success-700);
+}
+
+.agent-status.running {
+  color: var(--mention);
+  border-color: oklch(0.62 0.11 152 / 0.44);
+}
+
+.agent-meta {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.agent-badges {
+  margin-top: 7px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.agent-badge.warn {
+  color: oklch(0.78 0.14 64);
+  border-color: oklch(0.68 0.13 64 / 0.44);
+}
+
+.agent-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.agent-action-text:where(:not([data-csg-control])) {
+  min-height: 30px;
+  padding: 0 9px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--field);
+  color: var(--text);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  transition:
+    transform 160ms ease,
+    background 160ms ease;
+}
+
+.agent-icon-button:where(:not([data-csg-control])):disabled,
+.agent-action-text:where(:not([data-csg-control])):disabled {
+  opacity: 0.48;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.agent-empty,
+.agent-error {
+  font-size: 12px;
+}
+
+.avatar {
+  width: 48px;
+  height: 48px;
+  flex: 0 0 48px;
+  border-radius: 50%;
+  background: var(--avatar-default-bg);
+  color: var(--avatar-default-fg);
+  font-weight: var(--avatar-default-weight);
+  display: grid;
+  place-items: center;
+  box-shadow: none;
+}
+
+.avatar .agent-avatar-image,
+.thread-message-avatar .agent-avatar-image {
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  object-fit: cover;
+}
+
+.avatar-button {
+  border: 0;
+  padding: 0;
+  font: inherit;
+  cursor: pointer;
+}
+
+.avatar-button:hover,
+.avatar-button:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.conversation-main,
+.conversation-head {
+  min-width: 0;
+}
+
+.conversation-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: baseline;
+}
+
+.conversation-name,
+.message-author {
+  font-size: 15px;
+  font-weight: 650;
+}
+
+.conversation-preview,
+.chat-subtitle,
+.message-bubble,
+.composer-editor {
+  line-height: 1.5;
+}
+
+.icon-button:where(:not([data-csg-control])) {
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--field);
+  color: var(--text);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition:
+    transform 160ms ease,
+    background 160ms ease,
+    border-color 160ms ease;
+}
+
+.icon-button:hover {
+  transform: translateY(-1px);
+}
+
+.icon-button:where(:not([data-csg-control])).active {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+  color: var(--primary-strong);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+
+.icon-button-mark {
+  width: 16px;
+  height: 16px;
+  display: inline-flex;
+}
+
+.icon-button-mark svg {
+  width: 100%;
+  height: 100%;
+}
+
+.secondary-button:where(:not([data-csg-control])),
+.modal-close:where(:not([data-csg-control])) {
+  height: 34px;
+  padding: 0 12px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--field);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  flex: 0 0 auto;
+  white-space: nowrap;
+  transition:
+    transform 160ms ease,
+    background 160ms ease,
+    border-color 160ms ease;
+}
+
+.secondary-button:hover,
+.modal-close:hover {
+  transform: translateY(-1px);
+}
+
+.mention {
+  color: var(--mention);
+  font-weight: 700;
+}
+
+.message-mention {
+  color: var(--mention);
+  font-weight: 600;
+}
+
+.composer-editor:focus,
+.field:where(:not([data-csg-field])) input:where(:not([data-csg-control])):not([type="checkbox"], [type="radio"]):focus,
+.field:where(:not([data-csg-field])) textarea:where(:not([data-csg-control])):focus,
+.field:where(:not([data-csg-field])) select:where(:not([data-csg-control])):focus {
+  border-color: rgba(43, 109, 246, 0.44);
+  box-shadow: 0 0 0 4px rgba(43, 109, 246, 0.12);
+}
+
+.secondary-button:where(:not([data-csg-control])) {
+  background: var(--field);
+}
+
+.secondary-button.compact {
+  min-height: 32px;
+  padding: 0 12px;
+  white-space: nowrap;
+}
+
+.modal-subtitle,
+.selection-item small,
+.selection-empty,
+.form-error:where(:not([data-csg-field-part])) {
+  color: var(--muted);
+}
+
+.field {
+  display: grid;
+  margin-top: 18px;
+}
+
+.field .field-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  width: fit-content;
+}
+
+.field:where(:not([data-csg-field])) .field-required-star,
+.profile-section .field:where(:not([data-csg-field])) .field-required-star {
+  color: var(--danger);
+  font-weight: 800;
+  line-height: 1;
+}
+
+.field:where(:not([data-csg-field])) input:where(:not([data-csg-control])):not([type="checkbox"], [type="radio"]),
+.field:where(:not([data-csg-field])) textarea:where(:not([data-csg-control])),
+.field:where(:not([data-csg-field])) select:where(:not([data-csg-control])) {
+  width: 100%;
+  border: 1px solid var(--input-border);
+  border-radius: var(--input-radius);
+  padding: var(--input-padding-md);
+  font: inherit;
+  color: var(--input-text);
+  background: var(--input-background);
+  box-shadow: var(--input-shadow);
+  outline: none;
+}
+
+.field textarea:where(:not([data-csg-control])) {
+  min-height: 96px;
+  resize: vertical;
+}
+
+.selection-empty,
+.form-error {
+  margin-top: 14px;
+}
+
+.agent-publish-dialog .form-error {
+  white-space: pre-line;
+}
+
+.span-2 {
+  grid-column: 1 / -1;
+}
+
+.workspace-header {
+  padding-bottom: 12px;
+}
+
+.env-remove-button:where(:not([data-csg-control])) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  font: inherit;
+  cursor: pointer;
+}
+
+.mini-badge {
+  border-radius: 999px;
+  padding: 2px 6px;
+  background: var(--panel-soft);
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 720;
+}
+
+.workspace-empty,
+.agent-empty {
+  padding: 8px 10px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.entity-pane {
+  min-height: 0;
+  overflow-y: auto;
+  display: grid;
+  align-content: start;
+}
+
+.entity-header {
+  display: grid;
+  align-items: center;
+}
+
+.entity-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line);
+}
+
+.entity-avatar svg,
+.entity-avatar .agent-avatar-image {
+  width: 54px;
+  height: 54px;
+}
+
+.entity-avatar .agent-avatar-image {
+  border-radius: 10px;
+  object-fit: cover;
+}

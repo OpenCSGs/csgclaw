@@ -264,6 +264,25 @@ describe("agent model helpers", () => {
     expect(agentSandboxEnabled({ runtime_kind: "codex" })).toBe(false);
   });
 
+  it.each([
+    ["代码审查助手", "代码审查助手"],
+    ["  代码审查助手  ", "代码审查助手"],
+    ["", "agent-reviewer"],
+    ["  ", "agent-reviewer"],
+    [undefined, "agent-reviewer"],
+  ])("uses display name %s for the agent while preserving template identity", (displayName, expectedName) => {
+    const draft = applyTemplateToDraft(
+      agentToDraft({ name: "Existing" }),
+      { id: "local.agent-reviewer", name: "agent-reviewer", display_name: displayName },
+      null,
+    );
+    expect(draft).toMatchObject({
+      name: expectedName,
+      from_template: "local.agent-reviewer",
+      template_name: "agent-reviewer",
+    });
+  });
+
   it("keeps runtime fields in sync when applying a worker template", () => {
     const draft = applyTemplateToDraft(
       {

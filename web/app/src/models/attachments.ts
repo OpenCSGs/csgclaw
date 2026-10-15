@@ -1,3 +1,4 @@
+import type { ComposerFileReference } from "./fileReferences";
 export type AttachmentKind = "image" | "file";
 
 export const MAX_ATTACHMENTS_PER_MESSAGE = 10;
@@ -31,6 +32,7 @@ export type MessageAttachment = {
 };
 
 export type AttachmentPreviewItem = {
+  reference?: ComposerFileReference;
   downloadURL?: string;
   file?: File;
   id: string;

@@ -1,8 +1,16 @@
+import type {
+  DesktopBrowserRequest,
+  DesktopBrowserState,
+} from "./desktopBrowser.types";
 import { DesktopPlatform } from "./desktopEnvironment";
 
 export { DesktopPlatform } from "./desktopEnvironment";
 
 export const DesktopIPC = {
+  getWindowState: "csgclaw:desktop:get-window-state",
+  windowState: "csgclaw:desktop:window-state",
+  browserCommand: "csgclaw:desktop:browser-command",
+  browserState: "csgclaw:desktop:browser-state",
   checkForUpdates: "csgclaw:desktop:check-for-updates",
   getRuntimeInfo: "csgclaw:desktop:get-runtime-info",
   installDownloadedUpdate: "csgclaw:desktop:install-downloaded-update",
@@ -14,7 +22,10 @@ export const DesktopIPC = {
   updateStatus: "csgclaw:desktop:update-status",
 } as const;
 
-export type OAuthPurpose = "opencsg-auth" | "github-connector" | "gitlab-connector";
+export type OAuthPurpose =
+  | "opencsg-auth"
+  | "github-connector"
+  | "gitlab-connector";
 export type DesktopThemeSource = "system" | "light" | "dark";
 export type DesktopUpdateChannel = "release" | "beta";
 
@@ -49,7 +60,15 @@ export type DesktopUpdateStatus = {
   message?: string;
 };
 
+export type DesktopWindowState = { focused: boolean; fullscreen: boolean };
+
 export type DesktopBridge = {
+  getWindowState(): Promise<DesktopWindowState>;
+  onWindowState(listener: (state: DesktopWindowState) => void): () => void;
+  browserCommand(
+    input: DesktopBrowserRequest,
+  ): Promise<DesktopBrowserState | null>;
+  onBrowserState(listener: (state: DesktopBrowserState) => void): () => void;
   getRuntimeInfo(): Promise<DesktopRuntimeInfo>;
   openOAuth(input: DesktopOAuthInput): Promise<{ opened: boolean }>;
   checkForUpdates(): Promise<DesktopUpdateStatus>;

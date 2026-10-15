@@ -20,6 +20,8 @@ export const MODEL_PROVIDER_IDS = {
   ClaudeCode: "claude_code",
 } as const;
 
+export const OPENCSG_AUTO_MODEL_ID = "auto";
+
 export const BUILTIN_MODEL_PROVIDER_IDS = [
   MODEL_PROVIDER_IDS.OpenCSG,
   MODEL_PROVIDER_IDS.CSGHubLite,
@@ -118,6 +120,32 @@ export function mergeModelProviderModelIDs(
 
 export function modelProviderConfigUsesOpenCSG(config: ModelProviderConfigLike | null | undefined): boolean {
   return String(config?.model_provider_id ?? "").trim() === MODEL_PROVIDER_IDS.OpenCSG;
+}
+
+export function isOpenCSGAutoModel(providerID: string, modelID: string): boolean {
+  return (
+    normalizeModelProviderID(providerID) === MODEL_PROVIDER_IDS.OpenCSG &&
+    String(modelID ?? "")
+      .trim()
+      .toLowerCase() === OPENCSG_AUTO_MODEL_ID
+  );
+}
+
+export function modelIDsForProviderSelection(providerID: string, modelIDs: readonly string[]): string[] {
+  const models = [...modelIDs];
+  if (normalizeModelProviderID(providerID) !== MODEL_PROVIDER_IDS.OpenCSG) {
+    return models;
+  }
+  const autoIndex = models.findIndex((modelID) => isOpenCSGAutoModel(providerID, modelID));
+  if (autoIndex <= 0) {
+    return models;
+  }
+  const [autoModel] = models.splice(autoIndex, 1);
+  return [autoModel, ...models];
+}
+
+export function defaultModelIDForProvider(providerID: string, modelIDs: readonly string[]): string {
+  return modelIDsForProviderSelection(providerID, modelIDs)[0] || "";
 }
 
 type RawCatalog = {

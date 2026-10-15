@@ -1,0 +1,142 @@
+.area {
+  position: relative;
+  display: grid;
+  min-height: 0;
+  min-width: 0;
+  isolation: isolate;
+}
+
+.timeline {
+  position: absolute;
+  top: 50%;
+  right: 7px;
+  z-index: 3;
+  width: 32px;
+  max-height: calc(100% - 56px);
+  transform: translateY(-50%);
+}
+
+.rail {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 24px;
+  touch-action: none;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  outline: none;
+  box-shadow: none;
+}
+
+.rail[data-keyboard-focus]:focus-visible {
+  box-shadow: var(--focus-ring);
+}
+
+.rail[data-dragging] {
+  cursor: grabbing;
+  user-select: none;
+}
+
+.mark {
+  position: absolute;
+  right: 4px;
+  height: 2px;
+  transform: translateY(-50%);
+  pointer-events: none;
+  background: var(--muted);
+  opacity: 0.45;
+  transition: width 170ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.mark[data-active] {
+  background: var(--text);
+  opacity: 1;
+}
+
+.anchor {
+  position: absolute;
+  left: 0;
+  width: 1px;
+  height: 1px;
+  pointer-events: none;
+  transition: top 90ms ease-out;
+}
+
+.preview {
+  width: min(320px, calc(100vw - 64px));
+  max-width: var(--radix-popover-content-available-width);
+  max-height: var(--radix-popover-content-available-height);
+  overflow: hidden;
+  border-radius: var(--radius-xl);
+  animation: previewIn 140ms ease-out;
+}
+
+.previewLink {
+  display: grid;
+  gap: 6px;
+  width: 100%;
+  padding: 12px 14px 10px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.previewLink:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -3px;
+  border-radius: var(--radius-xl);
+}
+
+.title,
+.summary {
+  display: -webkit-box;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+}
+
+.title {
+  -webkit-line-clamp: 2;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 20px;
+}
+
+.summary {
+  -webkit-line-clamp: 3;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.position {
+  justify-self: end;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mark,
+  .anchor {
+    transition: none;
+  }
+  .preview {
+    animation: none;
+  }
+}
+
+@keyframes previewIn {
+  from {
+    opacity: 0;
+    transform: translateX(4px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}

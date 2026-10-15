@@ -1,8 +1,7 @@
 import { Bot, Check, Copy, MessageSquareText, Plus, RotateCcw, Send, ShieldCheck, Square } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Button, Field, Select, TextArea, TextInput } from "@/components/ui";
+import { Button, Field, Combobox, TextArea, TextInput } from "@/components/ui";
 import { createTranslator, detectInitialLocale } from "@/shared/i18n";
-import { detectInitialTheme, resolveThemeMode } from "@/shared/theme/theme";
 import { useSessionDemo } from "@/pages/SessionDemoPage/useSessionDemo";
 import styles from "./SessionDemoPage.module.css";
 
@@ -12,17 +11,6 @@ export function SessionDemoPage() {
   const session = useSessionDemo(t);
   const [copied, setCopied] = useState("");
   const messagesRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const theme = detectInitialTheme();
-    const media = window.matchMedia("(prefers-color-scheme: dark)");
-    const apply = () => {
-      document.documentElement.dataset.theme = resolveThemeMode(theme);
-    };
-    apply();
-    if (theme === "system") media.addEventListener("change", apply);
-    return () => media.removeEventListener("change", apply);
-  }, []);
 
   useEffect(() => {
     if (session.messages.length === 0 && !session.pendingInput) return;
@@ -71,7 +59,7 @@ export function SessionDemoPage() {
             </div>
 
             <Field label={t("sessionDemoAgent")} hint={session.agentLocked ? t("sessionDemoAgentLocked") : undefined}>
-              <Select
+              <Combobox
                 aria-label={t("sessionDemoAgent")}
                 disabled={session.agentLocked || session.agentsLoading}
                 value={session.agentId}
@@ -82,7 +70,6 @@ export function SessionDemoPage() {
                   label: agent.name,
                   description: agent.id,
                 }))}
-                searchable
                 searchPlaceholder={t("sessionDemoSearchAgents")}
               />
             </Field>

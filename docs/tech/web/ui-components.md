@@ -25,18 +25,24 @@ If a page needs a new highly customized UI, start with a page-private component.
 
 - Use one PascalCase folder per exported component package.
 - Keep implementation, CSS, and `index.ts` together in that folder.
-- Import package CSS from the package `index.ts`.
+- Import the component's `.module.css` from its implementation. Keep `index.ts` limited to public exports.
 - Re-export public UI components from `src/components/ui/index.ts`.
 - Avoid compatibility re-export paths after moving or replacing a component; update callers instead.
 
 ## Styling
 
 - Prefer tokens from `src/shared/styles/tokens.css` for color, radius, shadow, focus rings, and shared layer values.
-- Keep component-owned styles beside the component.
+- Keep component-owned styles beside the component in CSS Modules, including animation names. UI modules do not use `:global`, per-component theme selectors or `!important`.
 - Tailwind CSS utility classes are fine for small layout details, but stable component styling should use component-owned class names.
 - Do not use raw global color, shadow, or z-index values in UI components when a token exists.
 - Keep UI primitives visually neutral enough for reuse across pages. Business-specific layout and copy should stay outside `src/components/ui`.
-- Shared styling will be gradually moved into Tailwind CSS and shared tokens. Page-specific styling may start near the page or feature CSS, then be extracted after its reuse value is clear.
+- Keep semantic theme roles in `shared/styles/tokens.css`; light/dark changes update these roles rather than repeating primitive selectors. Tailwind remains suitable for small layout details.
+- Existing root/content layout class hooks are retained only where business consumers still use them. They are compatibility surfaces, not permission to override primitive colors, fonts or states. New integrations use props and caller-owned wrappers.
+- Combobox shares the selection presentation module inside the UI library; business consumers import component entrypoints rather than private stylesheets.
+
+## Buttons And Navigation Links
+
+Use `Button` or `IconButton` for commands and `LinkButton` for navigation. `LinkButton` renders a native anchor, preserves `href`, `target`, `rel` and keyboard activation, and shares Button's scoped variant, size, content and focus styles. Do not recreate a button by adding global `btn` classes to native elements.
 
 ## Overlay Layers
 
@@ -68,11 +74,41 @@ When adding a Radix component with a portal, expose a container escape hatch whe
 
 `Select` is built on the `Select` namespace from `radix-ui`. Prefer the data-driven `options` prop for normal forms. Use the compound exports (`SelectRoot`, `SelectTrigger`, `SelectContent`, `SelectItem`) only when a custom layout is needed.
 
+`Select` is for finite, non-searchable choices. Use `Combobox` for searchable single selection.
+
 `Select` maps an empty business value (`""`) to an internal Radix item value, because Radix reserves empty string for clearing selection. Callers should continue to read and write `""` normally.
+
+## Combobox And Model Fields
+
+`Combobox` composes the shared Popover and TextInput with a single input-focus model. Arrow keys skip disabled options, Enter confirms, Escape closes the picker, and Tab/Shift+Tab leave it in form order. IME confirmation must not select an option. `value`/`open` may be controlled; `defaultValue`/`defaultOpen` support uncontrolled use. Use `textValue` for JSX labels, and supply translated search, empty and loading labels.
+
+Empty business values remain `""`; a hidden native select preserves `name`/`required` submission. Filtering does not change the selected value, and a saved value remains visible when options are missing or loading. Disabling an option prevents selection. Loading prevents confirmation. Callers clear selection by setting `value` to `""` or providing an explicit empty option.
+
+Content portals to the document body to escape scroll-container clipping. Inside a Dialog it uses a nested modal focus scope; Escape leaves the parent dialog open and Tab returns to its next field. `contentProps.portalContainer` remains an escape hatch for a suitable unclipped host. Keep collision detection enabled and verify long lists and narrow viewports in UI Lab.
+
+Provider metadata, authentication guards, model discovery and retained unavailable models belong to `components/business/AgentModelFields`. Its `ModelPicker` wraps the generic Combobox; creation and detail views share the same provider/model field rules.
+
+## Fields And Reusable Layouts
+
+`Field` supplies control/label IDs, hint/error descriptions, invalid state and required accessibility state to TextInput, TextArea, SelectTrigger and Combobox. Explicit IDs and accessible names take precedence. `required` on Field marks the field; set `required` on the control when native form validation is needed. Keep one logical control per Field.
+
+TextInput and TextArea own their local, data-marked styles. Legacy input and workspace selectors exclude all `data-csg-control` elements. Compound native forms remain in `shared/styles/inputs.css` during the scoped migration; the managed Field has local label/hint/error styles. Use `size="sm"` for compact text inputs and `variant="plain"` when a composed search container owns the border/background. Avoid overrides with `!important`.
+
+PanelHeader composes content and an optional actions slot, EmptyState displays a title/description/actions, and SegmentedControl provides a named single-choice group with keyboard navigation. Business copy and persistence remain with callers.
+
+Semantic tokens own menu surfaces, hover/selected states, tooltip colors and dialog backdrops. Add a theme role in `shared/styles/tokens.css` when a primitive needs a new color relationship. Component CSS consumes the role without repeating light/dark branches.
+
+The standalone `ui-lab.html` entry demonstrates these production components without application data, including integration with the real legacy workspace stylesheet entrypoints. Start it with `corepack pnpm ui:lab` from `web/app`; it is a development fixture and is excluded from production build inputs.
+
+## Slider
+
+`Slider` wraps Radix's single-thumb slider with shared theme tokens, optional step marks, a translated accessible label and value text. Use `onValueChange` for live previews and `onValueCommit` for persistence after pointer release or keyboard changes. `neutral` represents an automatic value outside the numeric scale. Reasoning-specific levels, descriptions and default actions live in `components/business/ReasoningEffortPicker`, shared by the start panel and conversation toolbar.
 
 ## Dropdown Menu
 
 `DropdownMenu` is built on the `DropdownMenu` namespace from `radix-ui`. Compose menus with the shared `DropdownMenuRoot`, `DropdownMenuTrigger`, `DropdownMenuContent`, `DropdownMenuItem`, and `DropdownMenuSeparator` exports so pages inherit consistent hover, keyboard, danger-state, portal, and focus behavior.
+
+Use `size="sm"` on `DropdownMenuContent` for compact menus. Section headings use `DropdownMenuLabel`; reserve disabled menu items for unavailable actions.
 
 ## Dialog
 

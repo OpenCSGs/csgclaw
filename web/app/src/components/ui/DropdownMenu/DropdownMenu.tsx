@@ -1,3 +1,4 @@
+import styles from "./DropdownMenu.module.css";
 import { DropdownMenu as RadixDropdownMenu } from "radix-ui";
 import { forwardRef } from "react";
 import type { ComponentPropsWithoutRef, ComponentRef } from "react";
@@ -19,16 +20,21 @@ export const DropdownMenuTrigger = forwardRef<ComponentRef<typeof RadixDropdownM
 
 export type DropdownMenuContentProps = ComponentPropsWithoutRef<typeof RadixDropdownMenu.Content> & {
   portalContainer?: ComponentPropsWithoutRef<typeof RadixDropdownMenu.Portal>["container"];
+  size?: "sm" | "md";
 };
 
 export const DropdownMenuContent = forwardRef<ComponentRef<typeof RadixDropdownMenu.Content>, DropdownMenuContentProps>(
-  function DropdownMenuContent({ align = "end", children, className, portalContainer, sideOffset = 8, ...props }, ref) {
+  function DropdownMenuContent(
+    { align = "end", children, className, portalContainer, sideOffset = 8, size = "md", ...props },
+    ref,
+  ) {
     return (
       <RadixDropdownMenu.Portal container={portalContainer}>
         <RadixDropdownMenu.Content
           ref={ref}
           align={align}
-          className={classNames("csg-dropdown-menu-content", className)}
+          className={classNames(styles["csg-dropdown-menu-content"], className)}
+          data-size={size}
           sideOffset={sideOffset}
           {...props}
         >
@@ -38,6 +44,19 @@ export const DropdownMenuContent = forwardRef<ComponentRef<typeof RadixDropdownM
     );
   },
 );
+
+export const DropdownMenuLabel = forwardRef<
+  ComponentRef<typeof RadixDropdownMenu.Label>,
+  ComponentPropsWithoutRef<typeof RadixDropdownMenu.Label>
+>(function DropdownMenuLabel({ className, ...props }, ref) {
+  return (
+    <RadixDropdownMenu.Label
+      ref={ref}
+      className={classNames(styles["csg-dropdown-menu-label"], className)}
+      {...props}
+    />
+  );
+});
 
 export type DropdownMenuItemTone = "default" | "warning" | "danger";
 
@@ -53,7 +72,7 @@ export const DropdownMenuItem = forwardRef<ComponentRef<typeof RadixDropdownMenu
     return (
       <RadixDropdownMenu.Item
         ref={ref}
-        className={classNames("csg-dropdown-menu-item", itemTone !== "default" && itemTone, className)}
+        className={classNames(styles["csg-dropdown-menu-item"], itemTone !== "default" && styles[itemTone], className)}
         {...props}
       />
     );
@@ -69,10 +88,13 @@ export const DropdownMenuCheckboxItem = forwardRef<
   return (
     <RadixDropdownMenu.CheckboxItem
       ref={ref}
-      className={classNames("csg-dropdown-menu-item csg-dropdown-menu-checkbox-item", className)}
+      className={classNames(
+        classNames(styles["csg-dropdown-menu-item"], styles["csg-dropdown-menu-checkbox-item"]),
+        className,
+      )}
       {...props}
     >
-      <span className="csg-dropdown-menu-item-indicator" aria-hidden="true">
+      <span className={styles["csg-dropdown-menu-item-indicator"]} aria-hidden="true">
         <RadixDropdownMenu.ItemIndicator>✓</RadixDropdownMenu.ItemIndicator>
       </span>
       {children}
@@ -89,7 +111,7 @@ export const DropdownMenuSeparator = forwardRef<
   return (
     <RadixDropdownMenu.Separator
       ref={ref}
-      className={classNames("csg-dropdown-menu-separator", className)}
+      className={classNames(styles["csg-dropdown-menu-separator"], className)}
       {...props}
     />
   );
