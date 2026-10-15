@@ -7,6 +7,7 @@ describe("FileTypeIcon", () => {
     render(<FileTypeIcon name="README.md" />);
 
     expect(screen.getByText("MD")).toBeInTheDocument();
+    expect(document.querySelector(".chat-file-type-icon > img")).toHaveAttribute("src");
     expect(document.querySelector(".chat-file-type-mark")).not.toBeInTheDocument();
   });
 
