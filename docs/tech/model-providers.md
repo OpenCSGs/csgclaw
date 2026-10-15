@@ -36,7 +36,8 @@ CSGClaw identifies itself truthfully and does not impersonate another client to 
 ## Connection verification and storage
 
 `POST /api/v1/model-providers` accepts `preset`, `region`, `api_protocol`, and `connect: true` in addition to the existing connection fields.
-With `connect: true`, the server discovers models, verifies a minimal inference, and saves only after success.
+With `connect: true`, the server discovers models, verifies a minimal conversation inference when conversation models are available, and saves only after success.
+Image-only and video-only services are verified through their authenticated model directory; checking a connection does not create a paid image or video generation task.
 An omitted display name is generated from the service name, with a numeric suffix when necessary.
 Explicit duplicate display names are rejected.
 

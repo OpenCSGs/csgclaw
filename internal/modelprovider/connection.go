@@ -163,6 +163,12 @@ func CheckService(ctx context.Context, c ServiceConnection, verify bool) (Servic
 	}
 	out.Models = chatModels
 
+	// An authenticated directory can describe a valid generation-only service.
+	// Do not replace its media catalog with chat presets or issue a paid image/
+	// video generation request merely to verify the connection.
+	if len(out.Models) == 0 && (len(out.ImageModels) > 0 || len(out.VideoModels) > 0) {
+		return out, nil
+	}
 	if len(out.Models) == 0 {
 		out.Models = append([]string(nil), c.Models...)
 		out.Source = "manual"

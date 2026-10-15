@@ -121,3 +121,31 @@ func TestProtocolStreamCloseCancelsUpstream(t *testing.T) {
 		t.Fatal("upstream was not canceled")
 	}
 }
+
+func TestChatResponsesIncompletePreservesFinishReason(t *testing.T) {
+	for _, stream := range []bool{false, true} {
+		t.Run(fmt.Sprintf("stream=%v", stream), func(t *testing.T) {
+			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				terminal := `{"id":"limited","object":"response","model":"model","status":"incomplete","incomplete_details":{"reason":"max_output_tokens"},"output":[],"usage":{"input_tokens":8,"output_tokens":2,"total_tokens":10}}`
+				if stream {
+					w.Header().Set("Content-Type", "text/event-stream")
+					fmt.Fprint(w, "data: "+`{"type":"response.created","response":{"id":"limited","model":"model"}}`+"\n\n")
+					fmt.Fprint(w, "data: "+`{"type":"response.incomplete","response":`+terminal+"}\n\n")
+				} else {
+					w.Header().Set("Content-Type", "application/json")
+					fmt.Fprint(w, terminal)
+				}
+			}))
+			defer upstream.Close()
+			svc := NewService(config.ModelConfig{}, protocolProfile{agent.AgentProfile{Provider: agent.ProviderAPI, BaseURL: upstream.URL, APIKey: "key", ModelID: "model", APIProtocol: modelpreset.Responses}})
+			body := []byte(fmt.Sprintf(`{"messages":[{"role":"user","content":"hi"}],"stream":%v}`, stream))
+			result, status, _, err := svc.ChatCompletions(context.Background(), "agent", body)
+			if err != nil || status != 200 || !strings.Contains(string(result), `"finish_reason":"length"`) {
+				t.Fatalf("lost incomplete status: status=%d body=%s err=%v", status, result, err)
+			}
+			if stream && strings.Count(string(result), "data: [DONE]") != 1 {
+				t.Fatalf("missing terminal marker: %s", result)
+			}
+		})
+	}
+}
