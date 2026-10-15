@@ -106,11 +106,11 @@ function MentionHarness() {
 }
 
 describe("shared chat sidebar", () => {
-  it("hides Agent selection in a direct chat, displays the absolute directory and opens it through the menu", async () => {
+  it("hides Agent selection in a direct chat, displays the workspace breadcrumb and opens its path through the menu", async () => {
     const user = userEvent.setup();
     render(<Harness />, { wrapper: createQueryWrapper().wrapper });
     await user.click(screen.getByRole("button", { name: "Files" }));
-    await screen.findByText("/workspace/Alice");
+    expect(within(await screen.findByRole("navigation", { name: "Workspace files" })).getByText("Alice")).toBeInTheDocument();
     expect(screen.queryByRole("combobox", { name: "Workspace agent" })).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Open file or directory" }));
     await user.click(screen.getByRole("menuitem", { name: "Open in file manager" }));

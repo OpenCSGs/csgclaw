@@ -22,7 +22,7 @@ import {
   RefreshCw,
   X,
 } from "lucide-react";
-import { Button, Tooltip } from "@/components/ui";
+import { Button, EmptyState, LinkButton, Tooltip } from "@/components/ui";
 import { formatAttachmentSize } from "@/models/attachments";
 import { DOCUMENT_PREVIEW_PANEL_WIDTH_STORAGE_KEY } from "@/shared/storage/keys";
 import { DocumentPreviewContent } from "./DocumentPreviewContent";
@@ -278,18 +278,19 @@ export function DocumentPreviewPanel({
         <div className="document-preview-toolbar">
           {toolbarAccessory}
           {onReference ? (
-            <Button
-              className="document-preview-reference"
-              iconOnly
-              size="sm"
-              variant="tertiaryGray"
-              aria-label={t("chatFileReference")}
-              onClick={onReference}
-            >
-              <AtSign size={16} />
-            </Button>
+            <Tooltip content={t("chatFileReference")} contentProps={{ side: "bottom" }}>
+              <Button
+                iconOnly
+                size="sm"
+                variant="tertiaryGray"
+                aria-label={t("chatFileReference")}
+                onClick={onReference}
+              >
+                <AtSign size={16} />
+              </Button>
+            </Tooltip>
           ) : null}
-          <Tooltip content={t("chatPreviewReload")}>
+          <Tooltip content={t("chatPreviewReload")} contentProps={{ side: "bottom" }}>
             <Button
               iconOnly
               size="sm"
@@ -302,7 +303,7 @@ export function DocumentPreviewPanel({
           </Tooltip>
           {items.length > 1 ? (
             <>
-              <Tooltip content={t("attachmentsScrollPrevious")}>
+              <Tooltip content={t("attachmentsScrollPrevious")} contentProps={{ side: "bottom" }}>
                 <Button
                   iconOnly
                   size="sm"
@@ -317,7 +318,7 @@ export function DocumentPreviewPanel({
               <span>
                 {index + 1}/{items.length}
               </span>
-              <Tooltip content={t("attachmentsScrollNext")}>
+              <Tooltip content={t("attachmentsScrollNext")} contentProps={{ side: "bottom" }}>
                 <Button
                   iconOnly
                   size="sm"
@@ -331,7 +332,7 @@ export function DocumentPreviewPanel({
               </Tooltip>
             </>
           ) : null}
-          <Tooltip content={t("attachmentPreviewZoomOut")}>
+          <Tooltip content={t("attachmentPreviewZoomOut")} contentProps={{ side: "bottom" }}>
             <Button
               iconOnly
               size="sm"
@@ -344,7 +345,7 @@ export function DocumentPreviewPanel({
             </Button>
           </Tooltip>
           <span>{Math.round(scale * 100)}%</span>
-          <Tooltip content={t("attachmentPreviewZoomIn")}>
+          <Tooltip content={t("attachmentPreviewZoomIn")} contentProps={{ side: "bottom" }}>
             <Button
               iconOnly
               size="sm"
@@ -356,7 +357,7 @@ export function DocumentPreviewPanel({
               <Plus aria-hidden="true" size={16} />
             </Button>
           </Tooltip>
-          <Tooltip content={t("attachmentPreviewResetZoom")}>
+          <Tooltip content={t("attachmentPreviewResetZoom")} contentProps={{ side: "bottom" }}>
             <Button
               iconOnly
               size="sm"
@@ -367,7 +368,7 @@ export function DocumentPreviewPanel({
               <RotateCcw aria-hidden="true" size={15} />
             </Button>
           </Tooltip>
-          <Tooltip content={t("attachmentPreviewFit")}>
+          <Tooltip content={t("attachmentPreviewFit")} contentProps={{ side: "bottom" }}>
             <Button
               iconOnly
               size="sm"
@@ -380,7 +381,10 @@ export function DocumentPreviewPanel({
           </Tooltip>
           {mode !== "embedded" ? (
             <>
-              <Tooltip content={t(fullscreen ? "attachmentPreviewExitFullscreen" : "attachmentPreviewFullscreen")}>
+              <Tooltip
+                content={t(fullscreen ? "attachmentPreviewExitFullscreen" : "attachmentPreviewFullscreen")}
+                contentProps={{ side: "bottom" }}
+              >
                 <Button
                   iconOnly
                   size="sm"
@@ -394,18 +398,20 @@ export function DocumentPreviewPanel({
             </>
           ) : null}
           {downloadURL ? (
-            <Tooltip content={t("downloadAttachment")}>
-              <a
+            <Tooltip content={t("downloadAttachment")} contentProps={{ side: "bottom" }}>
+              <LinkButton
                 className="document-preview-icon-link"
                 href={downloadURL}
                 download={item.name}
                 aria-label={t("downloadAttachment")}
+                size="sm"
+                variant="tertiaryGray"
               >
                 <Download aria-hidden="true" size={16} />
-              </a>
+              </LinkButton>
             </Tooltip>
           ) : null}
-          <Tooltip content={t("close")}>
+          <Tooltip content={t("close")} contentProps={{ side: "bottom" }}>
             <Button
               className="document-preview-close-button"
               iconOnly
@@ -424,12 +430,18 @@ export function DocumentPreviewPanel({
           <div className="document-preview-status">{t("attachmentPreviewLoading")}</div>
         ) : null}
         {loadState === "error" ? (
-          <div className="document-preview-status is-error">
-            {t("attachmentPreviewFailed")}
-            <Button size="sm" variant="secondaryGray" onClick={() => setRetry((value) => value + 1)}>
-              {t("chatPreviewReload")}
-            </Button>
-          </div>
+          <EmptyState
+            className="document-preview-status is-error document-preview-error-state"
+            title={t("attachmentPreviewErrorTitle")}
+            description={t("attachmentPreviewFailed")}
+            actions={
+              <div className="document-preview-error-actions">
+                <Button size="sm" variant="secondaryGray" onClick={() => setRetry((value) => value + 1)}>
+                  {t("chatPreviewReload")}
+                </Button>
+              </div>
+            }
+          />
         ) : null}
         {loadState === "ready" && data ? (
           <>

@@ -269,8 +269,12 @@ export function ChatSidePanel({
           aria-label={t("chatSideTabs")}
           onKeyDown={(event) => {
             if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+            if (!state.tabs.length) return;
             event.preventDefault();
-            const index = state.tabs.findIndex((tab) => tab.id === state.activeID);
+            const index = Math.max(
+              0,
+              state.tabs.findIndex((tab) => tab.id === state.activeID),
+            );
             const next =
               event.key === "Home"
                 ? 0
@@ -288,33 +292,36 @@ export function ChatSidePanel({
             const Icon = iconFor(tab);
             return (
               <div className={`chat-side-tab${tab.id === state.activeID ? " is-active" : ""}`} key={tab.id}>
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={tab.id === state.activeID}
-                  tabIndex={tab.id === state.activeID ? 0 : -1}
-                  id={`chat-tab-label-${encodeURIComponent(tab.id)}`}
-                  aria-controls={`chat-tab-${encodeURIComponent(tab.id)}`}
-                  title={labelFor(tab)}
-                  onClick={() => patch({ activeID: tab.id })}
-                >
-                  <Icon size={15} />
-                  <span>{labelFor(tab)}</span>
-                </button>
-                <button
-                  type="button"
-                  className="chat-side-tab-close"
-                  aria-label={t("chatCloseTab", { name: labelFor(tab) })}
-                  onClick={() => close(tab)}
-                >
-                  <X size={13} />
-                </button>
+                <Tooltip content={labelFor(tab)} contentProps={{ side: "bottom" }}>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={tab.id === state.activeID}
+                    tabIndex={tab.id === state.activeID ? 0 : -1}
+                    id={`chat-tab-label-${encodeURIComponent(tab.id)}`}
+                    aria-controls={`chat-tab-${encodeURIComponent(tab.id)}`}
+                    onClick={() => patch({ activeID: tab.id })}
+                  >
+                    <Icon size={15} />
+                    <span>{labelFor(tab)}</span>
+                  </button>
+                </Tooltip>
+                <Tooltip content={t("chatCloseTab", { name: labelFor(tab) })} contentProps={{ side: "bottom" }}>
+                  <button
+                    type="button"
+                    className="chat-side-tab-close"
+                    aria-label={t("chatCloseTab", { name: labelFor(tab) })}
+                    onClick={() => close(tab)}
+                  >
+                    <X size={13} />
+                  </button>
+                </Tooltip>
               </div>
             );
           })}
         </div>
         <div className="chat-side-layout-actions">
-          <Tooltip content={t("chatSideNew")}>
+          <Tooltip content={t("chatSideNew")} contentProps={{ side: "bottom" }}>
             <Button
               className="chat-side-new"
               iconOnly
@@ -326,7 +333,7 @@ export function ChatSidePanel({
               <Plus size={18} />
             </Button>
           </Tooltip>
-          <Tooltip content={t(maximized ? "chatSideRestore" : "chatSideMaximize")}>
+          <Tooltip content={t(maximized ? "chatSideRestore" : "chatSideMaximize")} contentProps={{ side: "bottom" }}>
             <Button
               iconOnly
               size="sm"
@@ -337,7 +344,7 @@ export function ChatSidePanel({
               {maximized ? <Minimize2 size={17} /> : <Maximize2 size={17} />}
             </Button>
           </Tooltip>
-          <Tooltip content={t("chatSideCollapse")}>
+          <Tooltip content={t("chatSideCollapse")} contentProps={{ side: "bottom" }}>
             <Button
               iconOnly
               size="sm"

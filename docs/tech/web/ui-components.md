@@ -44,6 +44,10 @@ If a page needs a new highly customized UI, start with a page-private component.
 
 Use `Button` or `IconButton` for commands and `LinkButton` for navigation. `LinkButton` renders a native anchor, preserves `href`, `target`, `rel` and keyboard activation, and shares Button's scoped variant, size, content and focus styles. Do not recreate a button by adding global `btn` classes to native elements.
 
+## Breadcrumb
+
+`Breadcrumb` is a semantic navigation pattern in the shared UI library; Radix Primitives does not provide a dedicated breadcrumb primitive. Use the `home` item for the home/root action and `items` for path segments. Mark the current segment with `current`, and provide either `href` or `onClick` for navigable segments. Long paths collapse their middle segments into the shared Radix Dropdown Menu; `maxVisibleItems` and `overflowLabel` allow callers to adapt the layout and localization.
+
 ## Overlay Layers
 
 Layer values are shared design tokens. Local component stacking such as `z-index: 1` or `2` is acceptable inside a contained stacking context, but cross-component overlays must use these tokens:

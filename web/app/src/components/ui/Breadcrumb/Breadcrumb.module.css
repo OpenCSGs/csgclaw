@@ -1,0 +1,109 @@
+.breadcrumb {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--muted);
+  font-family: var(--font-family-text);
+  font-size: 14px;
+  font-weight: var(--font-weight-normal, 400);
+  line-height: 22px;
+}
+
+.list {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  align-items: center;
+  gap: 0;
+  overflow: hidden;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.segment {
+  display: inline-flex;
+  min-width: 0;
+  flex: 0 1 auto;
+  align-items: center;
+  gap: 12px;
+}
+
+.divider {
+  display: block;
+  width: 20px;
+  height: 20px;
+  flex: 0 0 20px;
+}
+
+.item,
+.overflowTrigger {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  border: 0;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.item:not(.homeItem) {
+  max-width: clamp(48px, 20vw, 160px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.item:hover,
+.overflowTrigger:hover {
+  color: var(--text);
+}
+
+.item:focus-visible,
+.overflowTrigger:focus-visible {
+  outline: 2px solid var(--accent-text);
+  outline-offset: 2px;
+  border-radius: var(--radius-xs, 2px);
+}
+
+.current {
+  color: var(--accent-text);
+  font-weight: var(--font-weight-medium, 500);
+  cursor: default;
+}
+
+.current:hover {
+  color: var(--accent-text);
+}
+
+.homeItem {
+  width: 20px;
+  height: 22px;
+  justify-content: center;
+}
+
+.homeItem img {
+  display: block;
+  width: 20px;
+  height: 20px;
+  flex: 0 0 20px;
+}
+
+.overflowTrigger {
+  min-height: 22px;
+  color: var(--muted);
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  clip-path: inset(50%);
+}
