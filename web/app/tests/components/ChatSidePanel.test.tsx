@@ -110,7 +110,9 @@ describe("shared chat sidebar", () => {
     const user = userEvent.setup();
     render(<Harness />, { wrapper: createQueryWrapper().wrapper });
     await user.click(screen.getByRole("button", { name: "Files" }));
-    expect(within(await screen.findByRole("navigation", { name: "Workspace files" })).getByText("Alice")).toBeInTheDocument();
+    expect(
+      within(await screen.findByRole("navigation", { name: "Workspace files" })).getByText("Alice"),
+    ).toBeInTheDocument();
     expect(screen.queryByRole("combobox", { name: "Workspace agent" })).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Open file or directory" }));
     await user.click(screen.getByRole("menuitem", { name: "Open in file manager" }));
