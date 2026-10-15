@@ -61,7 +61,6 @@ const defaultIcons: Record<string, FileIcon> = {
   image: { page: "fig", mark: "default-image-mark" },
   video: { page: "mp4", mark: "default-video-mark" },
   audio: { page: "mp3", mark: "default-audio-mark" },
-  folder: { page: "fig", mark: "default-folder-mark" },
   empty: { page: "fig" },
 };
 
@@ -116,14 +115,20 @@ export function FileTypeIcon({
   mediaType?: string;
   isFolder?: boolean;
 }) {
+  if (isFolder)
+    return (
+      <span className="chat-file-type-icon is-folder" aria-hidden="true">
+        <img src={assets["/src/assets/file-types/folder.svg"]} width={24} height={24} alt="" />
+      </span>
+    );
+
   const filename = name.replaceAll("\\", "/").split("/").pop() ?? "";
   const extension = filename.includes(".") ? filename.slice(filename.lastIndexOf(".") + 1).toLowerCase() : "";
-  const icon = isFolder
-    ? defaultIcons.folder
-    : (formatIcons[extension] ??
-      (assets[`/src/assets/file-types/${extension}.svg`]
-        ? { page: extension, label: extension.toUpperCase() }
-        : defaultIcons[getDefaultType(extension, mediaType.toLowerCase())]));
+  const icon =
+    formatIcons[extension] ??
+    (assets[`/src/assets/file-types/${extension}.svg`]
+      ? { page: extension, label: extension.toUpperCase() }
+      : defaultIcons[getDefaultType(extension, mediaType.toLowerCase())]);
   const page = assets[`/src/assets/file-types/${icon.page}.svg`];
   const mark = icon.mark && assets[`/src/assets/file-types/${icon.mark}.svg`];
 

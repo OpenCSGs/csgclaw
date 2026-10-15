@@ -348,6 +348,13 @@
   width: 32px;
   height: 40px;
 }
+.chat-file-type-icon.is-folder {
+  transform: none;
+}
+.chat-file-type-icon.is-folder > img:first-child {
+  width: 24px;
+  height: 24px;
+}
 .chat-file-type-icon > span:not(.chat-file-type-mark) {
   position: absolute;
   inset: 57.5% 10% 15%;
