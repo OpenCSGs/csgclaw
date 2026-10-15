@@ -1636,6 +1636,24 @@ tools、instructions、非 user role、attachments 和未知请求字段都会�
 工作区列表和原始内容接口均支持可选的 `room_id`。
 Agent 必须属于该房间；已配置的私聊任务使用该房间锁定的工作目录，其他会话使用 Agent 默认工作区。
 
+响应还包含用于展示和复制的 `absolute_path`，以及本机可用应用标识 `open_targets`。
+宿主机绝对路径不用于 Agent 文件引用。
+
+### `GET /api/v1/agents/{id}/workspace/location?path=...&room_id=...`
+
+按会话工作区和预览相同的路径边界校验，解析普通文件或目录，返回 `{absolute_path, directory, open_targets}`。
+远程客户端的 `open_targets` 为空。
+
+### `POST /api/v1/agents/{id}/workspace/open?room_id=...`
+
+接受 `{ "path": "docs/report.md", "target": "system" }`，交给指定应用打开后返回 `204`。
+仅允许使用 localhost 或回环 IP 作为 Host 的回环客户端调用本机应用。
+浏览器必须发送严格同源的 JSON 请求，已认证的本机客户端可不发送 Origin。
+显式无效凭据和 Agent 范围凭据不能调用此操作。
+目标必须是服务端定义的已安装应用标识，不能传入可执行路径或 shell 命令。
+`system` 在文件管理器中定位文件或打开目录；编辑器打开文件或目录，终端打开当前目录或文件所在目录。
+错误码为 `workspace_open_denied`、`workspace_file_unavailable` 或 `workspace_open_failed`。
+
 ### `GET /api/v1/agents/{id}/workspace/content?path=...`
 
 流式返回文件原始内容、MIME 类型和下载文件名，并支持 HTTP Range。

@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"csgclaw/internal/agentworkspace"
+	"csgclaw/internal/apitypes"
 )
 
 var (
@@ -66,7 +67,16 @@ func (h *Handler) handleAgentWorkspaceListing(w http.ResponseWriter, r *http.Req
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	writeJSON(w, http.StatusOK, listing)
+	absolutePath, err := filepath.Abs(filepath.Join(root, filepath.FromSlash(listing.Path)))
+	if err != nil {
+		writeAgentWorkspaceError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, struct {
+		apitypes.WorkspaceListing
+		AbsolutePath string   `json:"absolute_path"`
+		OpenTargets  []string `json:"open_targets"`
+	}{listing, absolutePath, h.workspaceOpenTargets(r)})
 }
 
 func (h *Handler) handleAgentWorkspaceFileRead(w http.ResponseWriter, r *http.Request, resolveRoot func(string) (string, error)) {

@@ -1,7 +1,7 @@
 import { createElement, useCallback, useEffect, useMemo, useRef } from "react";
 import type { RefObject } from "react";
 import type { AgentLike } from "@/models/agents";
-import { isNotificationBotAgent } from "@/models/agents";
+import { isManagerAgent, isNotificationBotAgent } from "@/models/agents";
 import type { IMConversation, TranslateFn, UsersById } from "@/models/conversations";
 import { isDirectConversation } from "@/models/conversations";
 import { insertComposerSegmentsAtSelection, placeCaretAtEnd } from "@/models/composer";
@@ -24,6 +24,7 @@ type ChatToolsOptions = {
 
 export function useChatTools({ conversation, currentUserID, agents, editorRef, t }: ChatToolsOptions) {
   const controller = useChatSidePanel(currentUserID, conversation.id);
+  const direct = isDirectConversation(conversation);
   const triggerRef = useRef<HTMLElement | null>(null);
   const selectionRef = useRef<{ editor: HTMLElement; range: Range } | null>(null);
   const fileAgents = useMemo(
@@ -34,22 +35,26 @@ export function useChatTools({ conversation, currentUserID, agents, editorRef, t
       ),
     [conversation, agents],
   );
-  const defaultAgentID = isDirectConversation(conversation)
+  const defaultAgentID = direct
     ? (fileAgents[0]?.id ?? "")
-    : (fileAgents.find((agent) => agent.identities.includes(conversation.manager_id ?? "") || agent.id === "manager")
-        ?.id ??
+    : (fileAgents.find(
+        (agent) =>
+          agent.identities.includes(conversation.manager_id ?? "") ||
+          isManagerAgent(agents.find((candidate) => candidate.id === agent.id)),
+      )?.id ??
       fileAgents[0]?.id ??
       "");
   const fileScope = useMemo(
     () => ({
       roomID: conversation.id,
+      direct,
       userID: currentUserID,
       agents: fileAgents.map(({ id, name }) => ({ id, name })),
       defaultAgentID,
       retainedMessages: conversation.threads?.flatMap((thread) => thread.context ?? []),
       messages: conversation.messages,
     }),
-    [conversation.id, conversation.threads, conversation.messages, currentUserID, fileAgents, defaultAgentID],
+    [conversation.id, conversation.threads, conversation.messages, currentUserID, fileAgents, defaultAgentID, direct],
   );
   const { openTab, patch } = controller;
   useEffect(() => {

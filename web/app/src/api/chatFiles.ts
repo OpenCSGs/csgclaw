@@ -1,4 +1,4 @@
-import { get, resolveRequestPath } from "./client";
+import { get, post, resolveRequestPath } from "./client";
 import type { WorkspaceListing } from "@/models/workspace";
 import type { AttachmentPreviewItem } from "@/models/attachments";
 import type { ComposerFileReference } from "@/models/fileReferences";
@@ -97,4 +97,25 @@ export function filePreviewItem(
     downloadURL: url,
     previewURL: url,
   };
+}
+
+export type WorkspaceLocation = { absolute_path: string; directory: boolean; open_targets: string[] };
+
+export function fetchWorkspaceLocation(
+  agentID: string,
+  roomID: string,
+  path: string,
+  signal?: AbortSignal,
+): Promise<WorkspaceLocation> {
+  return get(
+    `api/v1/agents/${encodeURIComponent(agentID)}/workspace/location?${new URLSearchParams({ room_id: roomID, path })}`,
+    { signal },
+  );
+}
+
+export function openWorkspaceLocation(agentID: string, roomID: string, path: string, target: string): Promise<void> {
+  return post(
+    `api/v1/agents/${encodeURIComponent(agentID)}/workspace/open?${new URLSearchParams({ room_id: roomID })}`,
+    { path, target },
+  );
 }

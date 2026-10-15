@@ -51,6 +51,7 @@ export function DocumentPreviewPanel({
   onClose,
   onReference,
   active = true,
+  toolbarAccessory,
   onIndexChange,
   t,
 }: DocumentPreviewPanelProps) {
@@ -275,6 +276,7 @@ export function DocumentPreviewPanel({
           <span>{formatAttachmentSize(item.sizeBytes)}</span>
         </div>
         <div className="document-preview-toolbar">
+          {toolbarAccessory}
           {onReference ? (
             <Button
               className="document-preview-reference"

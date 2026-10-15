@@ -1678,6 +1678,24 @@ Directories are expanded on demand by the chat file browser.
 Both workspace listing and content accept an optional `room_id`.
 The Agent must belong to that room; configured direct tasks use the room's locked working directory instead of the Agent default.
 
+The response also includes `absolute_path` for display and copying, and `open_targets` for locally available applications.
+These host paths are never used as Agent file references.
+
+### `GET /api/v1/agents/{id}/workspace/location?path=...&room_id=...`
+
+Resolves an existing regular file or directory to `{absolute_path, directory, open_targets}` using the same room workspace and bounded path validation as previews.
+Remote clients receive an empty `open_targets` list.
+
+### `POST /api/v1/agents/{id}/workspace/open?room_id=...`
+
+Accepts `{ "path": "docs/report.md", "target": "system" }` and returns `204` after handing off to the selected application.
+Only loopback clients using a literal loopback host may invoke native applications.
+Browser callers must send an exact same-origin JSON request; authenticated local callers may omit Origin.
+Explicit invalid credentials and scoped Agent callers cannot invoke this operation.
+Targets are server-defined identifiers for installed applications, never executable paths or shell commands.
+`system` reveals a file or opens its directory in the file manager; editor targets open the file or directory, and terminal targets open the current directory or a file's parent.
+Errors use `workspace_open_denied`, `workspace_file_unavailable`, or `workspace_open_failed`.
+
 ### `GET /api/v1/agents/{id}/workspace/content?path=...`
 
 Streams the original workspace file with its MIME type, download filename, and HTTP Range support.

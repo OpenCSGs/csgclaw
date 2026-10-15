@@ -217,11 +217,12 @@
 .chat-files-location {
   flex-wrap: wrap;
 }
-.chat-files-location > :first-child {
+.chat-files-location > .chat-files-agent {
   max-width: 220px;
   min-width: 120px;
 }
 .chat-files-path {
+  flex: 1;
   display: flex;
   min-width: 0;
   align-items: center;

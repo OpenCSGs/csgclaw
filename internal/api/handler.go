@@ -99,6 +99,7 @@ type Handler struct {
 	channelBindings            ChannelBindingReconciler
 	sessionBindings            *agentsession.Store
 	localDirectoryPicker       func(context.Context) (string, error)
+	workspaceOpener            func(context.Context, string, string, bool) error
 	feishuRegistrationStateDir string
 	runtimeExtensionSourcesSet bool
 	larkCLISigningOnce         sync.Once

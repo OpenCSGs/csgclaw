@@ -1,3 +1,4 @@
+import { WorkspacePathActions } from "./WorkspacePathActions";
 import { useRoomFileReader } from "./useRoomFileReader";
 import { useState } from "react";
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -143,16 +144,19 @@ export function FilesTab({
       </div>
       {isWorkspace ? (
         <div className="chat-files-location">
-          <Select
-            aria-label={t("chatWorkspaceAgent")}
-            value={agentID}
-            options={scope.agents.map((agent) => ({ value: agent.id, label: agent.name }))}
-            onValueChange={(value) => {
-              controller.patch({ agentID: value, directory: "" });
-              setQuery("");
-              setVisibleCount(100);
-            }}
-          />
+          {!scope.direct ? (
+            <Select
+              triggerProps={{ "aria-label": t("chatWorkspaceAgent") }}
+              triggerClassName="chat-files-agent"
+              value={agentID}
+              options={scope.agents.map((agent) => ({ value: agent.id, label: agent.name }))}
+              onValueChange={(value) => {
+                controller.patch({ agentID: value, directory: "" });
+                setQuery("");
+                setVisibleCount(100);
+              }}
+            />
+          ) : null}
           <div className="chat-files-path">
             <Button
               iconOnly
@@ -164,8 +168,25 @@ export function FilesTab({
             >
               <ArrowUp size={16} />
             </Button>
-            <span title={directory || "/"}>{directory || "/"}</span>
+            <span title={workspace.data?.absolute_path || directory || "/"}>
+              {workspace.data?.absolute_path || directory || "/"}
+            </span>
           </div>
+          <WorkspacePathActions
+            agentID={agentID}
+            roomID={scope.roomID}
+            path={directory}
+            location={
+              workspace.data?.absolute_path
+                ? {
+                    absolute_path: workspace.data.absolute_path,
+                    directory: true,
+                    open_targets: workspace.data.open_targets ?? [],
+                  }
+                : undefined
+            }
+            t={t}
+          />
         </div>
       ) : null}
       <input

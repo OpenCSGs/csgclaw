@@ -5,7 +5,13 @@ import { useFileMentions } from "@/components/business/ConversationPane/FileMent
 import { ChatSidePanel, useChatTools } from "@/components/business/ChatSidePanel";
 import { createTranslator } from "@/shared/i18n";
 import { parseComposerSegments } from "@/models/composer";
-import { fetchRoomFileMessages, fetchRoomFiles, fetchWorkspaceDirectory } from "@/api/chatFiles";
+import {
+  fetchRoomFileMessages,
+  fetchRoomFiles,
+  fetchWorkspaceDirectory,
+  fetchWorkspaceLocation,
+  openWorkspaceLocation,
+} from "@/api/chatFiles";
 import type { IMConversation } from "@/models/conversations";
 import { createQueryWrapper } from "../helpers/queryClient";
 
@@ -14,6 +20,8 @@ vi.mock("@/api/chatFiles", async (importOriginal) => ({
   fetchRoomFiles: vi.fn(),
   fetchRoomFileMessages: vi.fn(),
   fetchWorkspaceDirectory: vi.fn(),
+  fetchWorkspaceLocation: vi.fn(),
+  openWorkspaceLocation: vi.fn(),
 }));
 vi.mock("@/shared/realtime/imEvents", () => ({ subscribeIMEvents: vi.fn(() => () => {}) }));
 const t = createTranslator("en");
@@ -27,9 +35,22 @@ const conversation: IMConversation = {
   messages: [],
 };
 
-function Harness({ room = conversation }: { room?: IMConversation }) {
+function Harness({
+  room = conversation,
+  availableAgents = agents,
+}: {
+  room?: IMConversation;
+  availableAgents?: typeof agents;
+}) {
   const editorRef = useRef<HTMLDivElement>(null);
-  const tools = useChatTools({ conversation: room, currentUserID: "admin", agents, usersById, editorRef, t });
+  const tools = useChatTools({
+    conversation: room,
+    currentUserID: "admin",
+    agents: availableAgents,
+    usersById,
+    editorRef,
+    t,
+  });
   return (
     <main className="chat-panel">
       <header className="chat-header">
@@ -85,6 +106,48 @@ function MentionHarness() {
 }
 
 describe("shared chat sidebar", () => {
+  it("hides Agent selection in a direct chat, displays the absolute directory and opens it through the menu", async () => {
+    const user = userEvent.setup();
+    render(<Harness />, { wrapper: createQueryWrapper().wrapper });
+    await user.click(screen.getByRole("button", { name: "Files" }));
+    await screen.findByText("/workspace/Alice");
+    expect(screen.queryByRole("combobox", { name: "Workspace agent" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Open file or directory" }));
+    await user.click(screen.getByRole("menuitem", { name: "Open in file manager" }));
+    await waitFor(() => expect(openWorkspaceLocation).toHaveBeenCalledWith("alice", "sidebar-test", "", "system"));
+    await user.click(screen.getByRole("button", { name: /^README.md/ }));
+    await user.click(screen.getByRole("button", { name: "Open file or directory" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Visual Studio Code" }));
+    await waitFor(() =>
+      expect(openWorkspaceLocation).toHaveBeenCalledWith("alice", "sidebar-test", "README.md", "vscode"),
+    );
+  });
+
+  it("keeps Agent selection available in a room", async () => {
+    const user = userEvent.setup();
+    render(<Harness room={{ ...conversation, is_direct: false }} />, { wrapper: createQueryWrapper().wrapper });
+    await user.click(screen.getByRole("button", { name: "Files" }));
+    expect(await screen.findByRole("combobox", { name: "Workspace agent" })).toBeInTheDocument();
+  });
+
+  it("defaults a room to its Manager workspace even when workers appear first", async () => {
+    const user = userEvent.setup();
+    render(
+      <Harness
+        room={{
+          ...conversation,
+          id: "room-manager-default",
+          is_direct: false,
+          members: ["admin", "alice", "agent-manager"],
+        }}
+        availableAgents={[...agents, { id: "agent-manager", name: "Manager", role: "manager" }]}
+      />,
+      { wrapper: createQueryWrapper().wrapper },
+    );
+    await user.click(screen.getByRole("button", { name: "Files" }));
+    expect(await screen.findByRole("combobox", { name: "Workspace agent" })).toHaveTextContent("Manager");
+  });
+
   it("references a directory while preserving the existing draft", async () => {
     const user = userEvent.setup();
     render(<Harness />, { wrapper: createQueryWrapper().wrapper });
@@ -157,7 +220,15 @@ describe("shared chat sidebar", () => {
 
   beforeEach(() => {
     localStorage.clear();
+    vi.mocked(fetchWorkspaceLocation).mockResolvedValue({
+      absolute_path: "/workspace/Alice/README.md",
+      directory: false,
+      open_targets: ["system", "vscode"],
+    });
+    vi.mocked(openWorkspaceLocation).mockResolvedValue(undefined);
     vi.mocked(fetchWorkspaceDirectory).mockResolvedValue({
+      absolute_path: "/workspace/Alice",
+      open_targets: ["system", "terminal"],
       entries: [
         { path: "docs", name: "docs", type: "dir" },
         { path: "README.md", name: "README.md", type: "file", size: 10 },

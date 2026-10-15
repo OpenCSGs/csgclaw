@@ -7,6 +7,29 @@ import (
 	"strings"
 )
 
+// OpenEntry validates a workspace file or directory using the same bounded,
+// nonblocking reads as previews. Callers own the returned handle.
+func OpenEntry(root, relativePath string) (*os.File, error) {
+	path, err := cleanRelativePath(relativePath)
+	if err != nil {
+		return nil, err
+	}
+	bounded, err := os.OpenRoot(root)
+	if err != nil {
+		return nil, err
+	}
+	defer bounded.Close()
+	name := path
+	if name == "" {
+		name = "."
+	}
+	info, err := bounded.Lstat(filepath.FromSlash(name))
+	if err != nil {
+		return nil, err
+	}
+	return openBoundedPath(bounded, path, info.IsDir())
+}
+
 // OpenFile opens a regular file beneath root without following symlinks.
 // The returned handle owns the source independently of later path replacements.
 func OpenFile(root, relativePath string) (*os.File, error) {

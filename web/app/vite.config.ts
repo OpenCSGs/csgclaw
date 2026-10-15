@@ -85,7 +85,7 @@ export default defineConfig(({ command }) => ({
     host: "127.0.0.1",
     port: 5173,
     proxy: {
-      "/api": "http://127.0.0.1:18080",
+      "/api": { target: "http://127.0.0.1:18080", changeOrigin: false },
       "/healthz": "http://127.0.0.1:18080",
     },
   },

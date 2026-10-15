@@ -1,3 +1,4 @@
+import { WorkspacePathActions } from "./WorkspacePathActions";
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -537,6 +538,17 @@ function FileTab({
       active={active}
       t={t}
       onClose={onClose}
+      toolbarAccessory={
+        tab.reference?.source === "workspace" ? (
+          <WorkspacePathActions
+            agentID={tab.reference.agent_id}
+            roomID={roomID}
+            path={tab.reference.path}
+            active={active}
+            t={t}
+          />
+        ) : undefined
+      }
       onIndexChange={() => {}}
       onReference={tab.reference ? () => onReference(tab.reference!) : undefined}
     />

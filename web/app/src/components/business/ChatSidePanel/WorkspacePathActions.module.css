@@ -1,0 +1,15 @@
+.actions {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+.icons {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+.error {
+  max-width: 220px;
+  font-size: 12px;
+  color: var(--muted);
+}

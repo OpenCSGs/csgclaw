@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import type { AttachmentPreviewItem } from "@/models/attachments";
 
 export type DocumentPreviewRequest = {
@@ -11,6 +12,7 @@ export type DocumentPreviewPanelProps = DocumentPreviewRequest & {
   onClose: () => void;
   onReference?: () => void;
   active?: boolean;
+  toolbarAccessory?: ReactNode;
   onIndexChange: (index: number) => void;
   t: (key: string, params?: Record<string, string | number>) => string;
 };
