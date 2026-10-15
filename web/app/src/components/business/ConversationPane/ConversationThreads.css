@@ -19,21 +19,21 @@
 }
 
 .chat-panel.has-thread-panel > .chat-header,
-.chat-panel.has-thread-panel > .messages,
+.chat-panel.has-thread-panel > .conversation-message-area,
 .chat-panel.has-thread-panel > .composer {
   grid-column: 1;
   min-width: 0;
 }
 
 .chat-panel:has(> .conversation-activity-panel) > .chat-header,
-.chat-panel:has(> .conversation-activity-panel) > .messages,
+.chat-panel:has(> .conversation-activity-panel) > .conversation-message-area,
 .chat-panel:has(> .conversation-activity-panel) > .composer {
   grid-column: 1;
   min-width: 0;
 }
 
 .chat-panel:has(> .conversation-citation-panel) > .chat-header,
-.chat-panel:has(> .conversation-citation-panel) > .messages,
+.chat-panel:has(> .conversation-citation-panel) > .conversation-message-area,
 .chat-panel:has(> .conversation-citation-panel) > .composer {
   grid-column: 1;
   min-width: 0;

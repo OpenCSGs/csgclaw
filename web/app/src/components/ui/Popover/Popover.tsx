@@ -10,6 +10,13 @@ export function PopoverRoot(props: PopoverRootProps) {
   return <RadixPopover.Root {...props} />;
 }
 
+export const PopoverAnchor = forwardRef<
+  ComponentRef<typeof RadixPopover.Anchor>,
+  ComponentPropsWithoutRef<typeof RadixPopover.Anchor>
+>(function PopoverAnchor(props, ref) {
+  return <RadixPopover.Anchor ref={ref} {...props} />;
+});
+
 export type PopoverTriggerProps = ComponentPropsWithoutRef<typeof RadixPopover.Trigger>;
 
 export const PopoverTrigger = forwardRef<ComponentRef<typeof RadixPopover.Trigger>, PopoverTriggerProps>(

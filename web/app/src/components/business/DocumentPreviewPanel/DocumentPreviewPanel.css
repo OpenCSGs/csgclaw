@@ -14,7 +14,7 @@
 }
 
 .chat-panel:has(> .document-preview-panel.is-panel) > .chat-header,
-.chat-panel:has(> .document-preview-panel.is-panel) > .messages,
+.chat-panel:has(> .document-preview-panel.is-panel) > .conversation-message-area,
 .chat-panel:has(> .document-preview-panel.is-panel) > .composer {
   min-width: 0;
   grid-column: 1;

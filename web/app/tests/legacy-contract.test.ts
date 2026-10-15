@@ -142,8 +142,8 @@ describe("legacy UI contract", () => {
 
   it("keeps the message timeline from exposing horizontal scroll", () => {
     expect(styles).toMatch(/\.messages\s*\{[\s\S]*overflow-x:\s*hidden;/);
-    expect(styles).toContain(".chat-panel.has-thread-panel > .messages");
-    expect(styles).toMatch(/\.chat-panel\.has-thread-panel > \.messages[\s\S]*min-width:\s*0;/);
+    expect(styles).toContain(".chat-panel.has-thread-panel > .conversation-message-area");
+    expect(styles).toMatch(/\.chat-panel\.has-thread-panel > \.conversation-message-area[\s\S]*min-width:\s*0;/);
     expect(styles).toMatch(/\.message-row\s*\{[\s\S]*max-width:\s*min\(100%, 76%, 840px\);/);
   });
 

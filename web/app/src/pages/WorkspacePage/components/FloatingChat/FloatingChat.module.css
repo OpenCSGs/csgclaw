@@ -300,7 +300,7 @@
   position: relative;
 }
 
-.conversation > :global(.messages) {
+.conversation > :global(.conversation-message-area) > :global(.messages) {
   padding: var(--space-4);
   gap: 14px;
   background: var(--panel);
