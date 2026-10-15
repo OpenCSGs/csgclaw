@@ -69,7 +69,7 @@
   right: 0;
   bottom: auto;
   z-index: 2;
-  padding-top: 2px;
+  padding-top: 8px;
   opacity: 0;
   pointer-events: auto;
   transition: opacity 140ms ease;
@@ -104,13 +104,15 @@
 
 .message-action-controls {
   display: flex;
+  flex-wrap: nowrap;
+  min-width: 0;
+  max-width: 100%;
   align-items: center;
   justify-content: flex-end;
-  gap: 12px;
+  gap: 0 8px;
 }
 
 .message-row:not(.own) .message-hover-actions {
-  right: auto;
   justify-content: flex-start;
 }
 
@@ -121,6 +123,7 @@
 .message-action-button {
   width: 22px;
   height: 22px;
+  flex: 0 0 22px;
   border: 0;
   border-radius: 0;
   padding: 0;
@@ -149,6 +152,54 @@
   width: 16px;
   height: 16px;
   stroke-width: 2.2;
+}
+
+.message-token-usage {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  max-width: 100%;
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 22px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 140ms ease;
+}
+
+.message-token-usage-text,
+.message-token-usage-measure {
+  white-space: nowrap;
+}
+
+.message-token-usage-measure {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: max-content;
+  height: 0;
+  overflow: visible;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.message-token-usage-info {
+  flex: 0 0 22px;
+}
+
+.csg-tooltip-content.message-token-usage-tooltip {
+  box-sizing: border-box;
+  max-width: min(360px, calc(100vw - 24px));
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.message-row:hover .message-token-usage,
+.message-row:focus-within .message-token-usage {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .message-thread-actions {
@@ -665,7 +716,7 @@ button.thread-message-avatar:focus-visible {
   inset: auto;
   width: 100%;
   box-sizing: border-box;
-  padding-block: 4px;
+  padding-block: 8px;
   opacity: 1;
 }
 .message-action-leading {
@@ -681,4 +732,14 @@ button.thread-message-avatar:focus-visible {
 .message-row:hover .message-hover-actions.has-leading > .message-action-button,
 .message-row:focus-within .message-hover-actions.has-leading > .message-action-button {
   opacity: 1;
+}
+
+@media (max-width: 720px) {
+  .message-hover-actions:has(.message-token-usage):not(.has-leading) {
+    position: static;
+    inset: auto;
+    width: 100%;
+    box-sizing: border-box;
+    padding-top: 8px;
+  }
 }

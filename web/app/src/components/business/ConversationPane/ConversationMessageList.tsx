@@ -42,6 +42,7 @@ import { ConversationMessageActions } from "./ConversationMessageActions";
 import { shouldShowMessageDateDivider } from "./messageTimeUtils";
 import type { VoidOrPromise } from "./types";
 import { VideoGenerationCard } from "./VideoGenerationCard";
+import { MessageTokenUsage } from "./MessageTokenUsage";
 
 export type ConversationMessageListProps = {
   agents?: AgentLike[];
@@ -279,6 +280,7 @@ const MessageListContent = memo(function MessageListContent({
                   metadata={message.metadata}
                   className="message-hover-actions"
                   leading={renderMessageFooter?.(message)}
+                  tokenUsage={messageAgent && !own ? <MessageTokenUsage t={t} /> : null}
                   content={message.metadata?.image_generation ? null : message.content}
                   image={message.metadata?.image_generation ? message.attachments?.find(isImageAttachment) : undefined}
                   onOpenThread={() => onOpenThread(message)}

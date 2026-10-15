@@ -354,7 +354,7 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  margin: 14px 0;
+  margin: 22px 0;
   color: var(--muted);
   font-size: 12px;
   font-weight: 650;
@@ -2540,8 +2540,8 @@ button.message-file-attachment {
   max-width: min(100%, 1120px);
 }
 
-.message-row:not(.own) + .message-row:not(.own) {
-  margin-top: 24px;
+.message-row + .message-row {
+  margin-top: 36px;
 }
 
 .message-row > .avatar.avatar-button {

@@ -2,7 +2,8 @@ import { writeTextToClipboard } from "@/shared/lib/clipboard";
 import { DiagnosticMessageAction } from "@/components/business/TurnDiagnostics";
 import { diagnosticReference } from "@/models/diagnostics";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Check, Copy, MessageSquareReply } from "lucide-react";
+import { Check } from "lucide-react";
+import { CopyMessageIcon, ReplyMessageIcon } from "./MessageActionIcons";
 import { resolveRequestPath } from "@/api/client";
 import type { MessageAttachment } from "@/models/attachments";
 import { flattenMentionText } from "@/components/business/MessageContent";
@@ -14,6 +15,7 @@ export type ConversationMessageActionsProps = {
   metadata?: Record<string, unknown> | null;
   className?: string;
   leading?: ReactNode;
+  tokenUsage?: ReactNode;
   content?: string | null;
   image?: MessageAttachment | null;
   onOpenThread?: () => VoidOrPromise;
@@ -26,6 +28,7 @@ export function ConversationMessageActions({
   content,
   image,
   leading,
+  tokenUsage,
   onOpenThread,
   t,
 }: ConversationMessageActionsProps) {
@@ -80,7 +83,7 @@ export function ConversationMessageActions({
     }, 2000);
   }
 
-  if (!canCopy && !onOpenThread && !leading && !diagnosticReference(metadata)) {
+  if (!canCopy && !onOpenThread && !leading && !tokenUsage && !diagnosticReference(metadata)) {
     return null;
   }
 
@@ -98,7 +101,7 @@ export function ConversationMessageActions({
           disabled={copying}
           onClick={() => void copyMessage()}
         >
-          {copied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
+          {copied ? <Check aria-hidden="true" /> : <CopyMessageIcon />}
         </button>
       ) : null}
       {copyError ? (
@@ -115,9 +118,10 @@ export function ConversationMessageActions({
           data-tooltip-side="top"
           onClick={() => void onOpenThread()}
         >
-          <MessageSquareReply aria-hidden="true" />
+          <ReplyMessageIcon />
         </button>
       ) : null}
+      {tokenUsage}
     </div>
   );
 }
