@@ -27,6 +27,8 @@ import type { SystemNotificationPermission } from "../useAgentTurnNotifications"
 
 export type WorkspaceSidebarProps = {
   turnNotificationMode?: TurnNotificationMode;
+  turnNotificationSound?: boolean;
+  onTurnNotificationSoundChange?: (enabled: boolean) => void;
   turnNotificationPermission?: SystemNotificationPermission;
   onRequestTurnNotificationPermission?: () => Promise<SystemNotificationPermission>;
   onTurnNotificationModeChange?: (mode: TurnNotificationMode) => Promise<void>;

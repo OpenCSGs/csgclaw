@@ -8,8 +8,8 @@
   "main": "dist/main/main.js",
   "type": "commonjs",
   "scripts": {
-    "build": "tsc -p tsconfig.json",
-    "test": "pnpm run build && node --test dist/main/windowChrome.test.js dist/main/browserPolicy.test.js dist/main/channelSwitchUpdate.test.js dist/main/deferredRelaunch.test.js dist/main/desktopLogger.test.js dist/main/desktopThemePreference.test.js dist/main/navigationPolicy.test.js dist/main/sidecar/childEnvironment.test.js dist/main/sidecar/systemProxy.test.js dist/main/updateFeed.test.js dist/main/updatePolicy.test.js dist/main/windowsTaskbar.test.js dist/main/windowsShortcuts.test.js dist/main/windowsThemeIcon.test.js dist/preload/index.test.js dist/shared/desktopEnvironment.test.js dist/shared/desktopTheme.test.js dist/shared/releaseVersion.test.js",
+    "build": "tsc -p tsconfig.json && node scripts/build-notification-helper.cjs",
+    "test": "pnpm run build && node --test dist/main/macNotificationService.test.js dist/main/turnNotifications.test.js dist/main/windowChrome.test.js dist/main/browserPolicy.test.js dist/main/channelSwitchUpdate.test.js dist/main/deferredRelaunch.test.js dist/main/desktopLogger.test.js dist/main/desktopThemePreference.test.js dist/main/navigationPolicy.test.js dist/main/sidecar/childEnvironment.test.js dist/main/sidecar/systemProxy.test.js dist/main/updateFeed.test.js dist/main/updatePolicy.test.js dist/main/windowsTaskbar.test.js dist/main/windowsShortcuts.test.js dist/main/windowsThemeIcon.test.js dist/preload/index.test.js dist/shared/desktopEnvironment.test.js dist/shared/desktopTheme.test.js dist/shared/releaseVersion.test.js",
     "start": "pnpm run build && electron-forge start",
     "make": "pnpm run build && electron-forge make",
     "publish": "pnpm run build && electron-forge publish"

@@ -13,6 +13,7 @@ import {
   buildTurnNotificationTag,
   formatTurnNotificationBody,
   isCompletedAgentTurnEvent,
+  isCompletedAgentTurnMessage,
   shouldShowTurnNotification,
   TurnNotificationModes,
 } from "@/models/turnNotifications";
@@ -25,6 +26,7 @@ type UseAgentTurnNotificationsArgs = {
   agents: readonly AgentLike[];
   currentUserID: string;
   mode: TurnNotificationMode;
+  soundEnabled?: boolean;
   onSelectConversation: (roomID: string) => void;
   rooms: readonly IMConversation[];
   t: TranslateFn;
@@ -49,6 +51,8 @@ export function readSystemNotificationPermission(): SystemNotificationPermission
 export function useAgentTurnNotifications(args: UseAgentTurnNotificationsArgs): AgentTurnNotificationController {
   const refs = useRef(args);
   const notifiedEventKeysRef = useRef(new Set<string>());
+  const turnMessagesRef = useRef(new Map<string, IMMessage>());
+  const nativePermissionRef = useRef<SystemNotificationPermission | null>(null);
   const [permission, setPermission] = useState<SystemNotificationPermission>(readSystemNotificationPermission);
 
   useEffect(() => {
@@ -56,16 +60,52 @@ export function useAgentTurnNotifications(args: UseAgentTurnNotificationsArgs): 
   }, [args]);
 
   useEffect(() => {
-    const refreshPermission = () => setPermission(readSystemNotificationPermission());
+    return getDesktopBridge()?.onTurnNotificationClick((roomID) => {
+      if (roomID) refs.current.onSelectConversation(roomID);
+    });
+  }, []);
+
+  const refreshPermission = useCallback(async () => {
+    const bridge = getDesktopBridge();
+    if (bridge) {
+      try {
+        const native = await bridge.getNotificationPermission();
+        nativePermissionRef.current = native;
+        setPermission(native ?? readSystemNotificationPermission());
+      } catch {
+        nativePermissionRef.current = "unsupported";
+        setPermission("unsupported");
+      }
+    } else setPermission(readSystemNotificationPermission());
+  }, []);
+
+  useEffect(() => {
+    void refreshPermission();
     window.addEventListener("focus", refreshPermission);
     document.addEventListener("visibilitychange", refreshPermission);
     return () => {
       window.removeEventListener("focus", refreshPermission);
       document.removeEventListener("visibilitychange", refreshPermission);
     };
-  }, []);
+  }, [refreshPermission]);
 
   const requestPermission = useCallback(async (): Promise<SystemNotificationPermission> => {
+    const bridge = getDesktopBridge();
+    if (bridge) {
+      try {
+        const native = await bridge.requestNotificationPermission();
+        if (native !== null) {
+          nativePermissionRef.current = native;
+          setPermission(native);
+          return native;
+        }
+        nativePermissionRef.current = null;
+      } catch {
+        nativePermissionRef.current = "unsupported";
+        setPermission("unsupported");
+        return "unsupported";
+      }
+    }
     if (typeof window.Notification !== "function") {
       setPermission("unsupported");
       return "unsupported";
@@ -81,123 +121,160 @@ export function useAgentTurnNotifications(args: UseAgentTurnNotificationsArgs): 
     }
   }, []);
 
-  const handleRealtimeEvent = useCallback((event: IMServerEvent) => {
-    const current = refs.current;
+  const showAgentTurnNotification = useCallback(
+    (
+      current: UseAgentTurnNotificationsArgs,
+      input: {
+        agent: AgentLike;
+        eventKey: string;
+        message?: IMMessage;
+        participantIdentities: string[];
+        roomID: string;
+      },
+    ): void => {
+      if (
+        current.mode === TurnNotificationModes.off ||
+        (nativePermissionRef.current ?? readSystemNotificationPermission()) !== "granted" ||
+        input.participantIdentities.some((id) => localIdentitiesMatch(id, current.currentUserID)) ||
+        notifiedEventKeysRef.current.has(input.eventKey)
+      ) {
+        return;
+      }
+      if (
+        !shouldShowTurnNotification(current.mode, {
+          documentVisible: document.visibilityState === "visible",
+          windowFocused: typeof document.hasFocus !== "function" || document.hasFocus(),
+        })
+      ) {
+        return;
+      }
 
-    if (event.type === "participant.work.updated" && event.work) {
-      const agent = resolveEventAgent(current.agents, current.usersById, [
-        event.work.user_id,
-        event.work.participant_id,
-      ]);
+      const roomID = input.roomID.trim();
+      const room = current.rooms.find((candidate) => candidate.id === roomID);
+      const agentName = String(input.agent.name || input.agent.user_name || input.agent.id || "Agent").trim();
+      const rawPreview = formatMessagePreviewText(input.message?.content)
+        .replace(/[\u200b-\u200d\ufeff]/g, "")
+        .trim();
+      const preview = truncateNotificationPreview(rawPreview);
+      const roomTitle = String(room?.title || "").trim();
+      const body = formatTurnNotificationBody(current.t, {
+        agentName,
+        preview,
+        room,
+        roomTitle,
+      });
+
+      const eventKey = input.eventKey;
+      notifiedEventKeysRef.current.add(eventKey);
+      const onError = () => {
+        notifiedEventKeysRef.current.delete(eventKey);
+        void refreshPermission();
+      };
+      try {
+        const desktopBridge = getDesktopBridge();
+        if (desktopBridge) {
+          void desktopBridge
+            .showTurnNotification({
+              title: current.t("turnNotificationTitle", { agent: agentName }),
+              body,
+              id: buildTurnNotificationTag(eventKey),
+              roomID,
+              silent: current.soundEnabled === false,
+            })
+            .catch(onError);
+          return;
+        }
+        const notification = new window.Notification(current.t("turnNotificationTitle", { agent: agentName }), {
+          body,
+          icon: "favicon.ico",
+          tag: buildTurnNotificationTag(input.eventKey),
+          silent: current.soundEnabled === false,
+        });
+        notification.onerror = onError;
+        notification.onclick = () => {
+          notification.close();
+          window.focus();
+          if (roomID) {
+            refs.current.onSelectConversation(roomID);
+          }
+        };
+      } catch {
+        onError();
+      }
+    },
+    [refreshPermission],
+  );
+
+  const handleRealtimeEvent = useCallback(
+    (event: IMServerEvent) => {
+      const current = refs.current;
+
+      if (event.type === "participant.work.updated" && event.work) {
+        const agent = resolveEventAgent(current.agents, current.usersById, [
+          event.work.user_id,
+          event.work.participant_id,
+        ]);
+        if (!agent) {
+          return;
+        }
+        if (!isCompletedAgentTurnEvent(event)) {
+          return;
+        }
+        const roomID = event.work.room_id || String(event.room_id || "");
+        const requestKey = notificationEventKeyForWork(event.work);
+        const eventKey = scopedEventKey(agent, roomID, requestKey);
+        const message =
+          turnMessagesRef.current.get(eventKey) ??
+          latestAgentTurnMessage(
+            current.rooms.find((room) => room.id === roomID),
+            [event.work.user_id, event.work.participant_id],
+            requestKey,
+          );
+        if (message && !isCompletedAgentTurnMessage(message)) return;
+        showAgentTurnNotification(current, {
+          agent,
+          eventKey,
+          message,
+          participantIdentities: [event.work.user_id, event.work.participant_id],
+          roomID,
+        });
+        return;
+      }
+
+      if (event.type !== "message.created" || !event.message || isEventMessage(event.message)) {
+        return;
+      }
+      if (isToolCallMessage(event.message)) {
+        return;
+      }
+      const senderID = String(event.message.sender_id || "").trim();
+      const agent = resolveEventAgent(current.agents, current.usersById, [senderID]);
       if (!agent) {
         return;
       }
-      if (!isCompletedAgentTurnEvent(event)) {
-        return;
+      const roomID = String(event.room_id || event.room?.id || "");
+      const eventKey = scopedEventKey(agent, roomID, notificationEventKeyForMessage(event.message, senderID));
+      turnMessagesRef.current.set(eventKey, event.message);
+      if (turnMessagesRef.current.size > 512) {
+        turnMessagesRef.current.delete(turnMessagesRef.current.keys().next().value!);
       }
+      if (!isCompletedAgentTurnMessage(event.message)) return;
       showAgentTurnNotification(current, {
         agent,
-        eventKey: notificationEventKeyForWork(event.work),
-        participantIdentities: [event.work.user_id, event.work.participant_id],
-        roomID: event.work.room_id || String(event.room_id || ""),
+        eventKey,
+        message: event.message,
+        participantIdentities: [senderID],
+        roomID,
       });
-      return;
-    }
-
-    if (event.type !== "message.created" || !event.message || isEventMessage(event.message)) {
-      return;
-    }
-    if (isToolCallMessage(event.message) || !formatMessagePreviewText(event.message.content)) {
-      return;
-    }
-    const senderID = String(event.message.sender_id || "").trim();
-    const agent = resolveEventAgent(current.agents, current.usersById, [senderID]);
-    if (!agent) {
-      return;
-    }
-    showAgentTurnNotification(current, {
-      agent,
-      eventKey: notificationEventKeyForMessage(event.message, senderID),
-      message: event.message,
-      participantIdentities: [senderID],
-      roomID: String(event.room_id || event.room?.id || ""),
-    });
-  }, []);
-
-  function showAgentTurnNotification(
-    current: UseAgentTurnNotificationsArgs,
-    input: {
-      agent: AgentLike;
-      eventKey: string;
-      message?: IMMessage;
-      participantIdentities: string[];
-      roomID: string;
     },
-  ): void {
-    if (
-      current.mode === TurnNotificationModes.off ||
-      readSystemNotificationPermission() !== "granted" ||
-      input.participantIdentities.some((id) => localIdentitiesMatch(id, current.currentUserID)) ||
-      notifiedEventKeysRef.current.has(input.eventKey)
-    ) {
-      return;
-    }
-    if (
-      !shouldShowTurnNotification(current.mode, {
-        documentVisible: document.visibilityState === "visible",
-        windowFocused: typeof document.hasFocus !== "function" || document.hasFocus(),
-      })
-    ) {
-      return;
-    }
-
-    const roomID = input.roomID.trim();
-    const room = current.rooms.find((candidate) => candidate.id === roomID);
-    const agentName = String(input.agent.name || input.agent.user_name || input.agent.id || "Agent").trim();
-    const message = input.message ?? latestVisibleAgentMessage(room, input.participantIdentities);
-    const rawPreview = formatMessagePreviewText(message?.content);
-    const preview = truncateNotificationPreview(rawPreview);
-    const roomTitle = String(room?.title || "").trim();
-    const body = formatTurnNotificationBody(current.t, {
-      agentName,
-      preview,
-      room,
-      roomTitle,
-    });
-
-    try {
-      const notification = new window.Notification(current.t("turnNotificationTitle", { agent: agentName }), {
-        body,
-        icon: "favicon.ico",
-        tag: buildTurnNotificationTag(input.eventKey),
-      });
-      notifiedEventKeysRef.current.add(input.eventKey);
-      notification.onerror = () => {
-        notifiedEventKeysRef.current.delete(input.eventKey);
-        setPermission(readSystemNotificationPermission());
-      };
-      notification.onclick = async () => {
-        notification.close();
-        const desktopBridge = getDesktopBridge();
-        if (desktopBridge) {
-          try {
-            await desktopBridge.showWindow();
-          } catch {
-            return;
-          }
-        } else {
-          window.focus();
-        }
-        if (roomID) {
-          refs.current.onSelectConversation(roomID);
-        }
-      };
-    } catch {
-      setPermission(readSystemNotificationPermission());
-    }
-  }
+    [showAgentTurnNotification],
+  );
 
   return { handleRealtimeEvent, permission, requestPermission };
+}
+
+function scopedEventKey(agent: AgentLike, roomID: string, key: string): string {
+  return JSON.stringify([roomID, agent.id, key]);
 }
 
 function resolveEventAgent(
@@ -224,7 +301,9 @@ function messageRequestID(message: IMMessage): string {
   const metadata = asRecord(message.metadata);
   const openclaw = asRecord(metadata?.openclaw);
   const codex = asRecord(metadata?.codex);
+  const csgclaw = asRecord(metadata?.csgclaw);
   return firstText(
+    csgclaw?.request_id,
     openclaw?.request_id,
     openclaw?.requestId,
     openclaw?.source_message_id,
@@ -248,19 +327,21 @@ function firstText(...values: unknown[]): string {
   return "";
 }
 
-function latestVisibleAgentMessage(
+function latestAgentTurnMessage(
   room: IMConversation | null | undefined,
   participantIdentities: readonly string[],
+  requestKey: string,
 ): IMMessage | undefined {
   return [...(room?.messages || [])].reverse().find((message) => {
     if (
       !participantIdentities.some((identity) => localIdentitiesMatch(message.sender_id, identity)) ||
+      notificationEventKeyForMessage(message, message.sender_id || "") !== requestKey ||
       isEventMessage(message) ||
       isToolCallMessage(message)
     ) {
       return false;
     }
-    return Boolean(formatMessagePreviewText(message.content));
+    return true;
   });
 }
 

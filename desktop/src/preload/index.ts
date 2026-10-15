@@ -5,6 +5,7 @@ import type {
 import { contextBridge, ipcRenderer } from "electron";
 import type {
   DesktopBridge,
+  DesktopTurnNotification,
   DesktopWindowState,
   DesktopOAuthInput,
   DesktopThemeSource,
@@ -25,6 +26,11 @@ const DesktopIPC = {
   openOAuth: "csgclaw:desktop:open-oauth",
   restartSidecar: "csgclaw:desktop:restart-sidecar",
   showWindow: "csgclaw:desktop:show-window",
+  showTurnNotification: "csgclaw:desktop:show-turn-notification",
+  getNotificationPermission: "csgclaw:desktop:get-notification-permission",
+  requestNotificationPermission:
+    "csgclaw:desktop:request-notification-permission",
+  turnNotificationClick: "csgclaw:desktop:turn-notification-click",
   setThemeSource: "csgclaw:desktop:set-theme-source",
   setUpdateChannel: "csgclaw:desktop:set-update-channel",
   updateStatus: "csgclaw:desktop:update-status",
@@ -58,6 +64,19 @@ const bridge: DesktopBridge = Object.freeze({
     ipcRenderer.invoke(DesktopIPC.installDownloadedUpdate),
   restartSidecar: () => ipcRenderer.invoke(DesktopIPC.restartSidecar),
   showWindow: () => ipcRenderer.invoke(DesktopIPC.showWindow),
+  getNotificationPermission: () =>
+    ipcRenderer.invoke(DesktopIPC.getNotificationPermission),
+  requestNotificationPermission: () =>
+    ipcRenderer.invoke(DesktopIPC.requestNotificationPermission),
+  showTurnNotification: (input: DesktopTurnNotification) =>
+    ipcRenderer.invoke(DesktopIPC.showTurnNotification, input),
+  onTurnNotificationClick: (listener: (roomID: string) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, roomID: string) =>
+      listener(roomID);
+    ipcRenderer.on(DesktopIPC.turnNotificationClick, handler);
+    return () =>
+      ipcRenderer.removeListener(DesktopIPC.turnNotificationClick, handler);
+  },
   setThemeSource: (theme: DesktopThemeSource) =>
     ipcRenderer.invoke(DesktopIPC.setThemeSource, theme),
   setUpdateChannel: (channel: DesktopUpdateChannel) =>

@@ -60,6 +60,8 @@ export function useWorkspaceController(): WorkspaceController {
   const theme = useWorkspaceUiStore((state) => state.theme);
   const setTheme = useWorkspaceUiStore((state) => state.setTheme);
   const turnNotificationMode = useWorkspaceUiStore((state) => state.turnNotificationMode);
+  const turnNotificationSound = useWorkspaceUiStore((state) => state.turnNotificationSound);
+  const setTurnNotificationSound = useWorkspaceUiStore((state) => state.setTurnNotificationSound);
   const setTurnNotificationMode = useWorkspaceUiStore((state) => state.setTurnNotificationMode);
   const showToolCalls = useWorkspaceUiStore((state) => state.showToolCalls);
   const setShowToolCalls = useWorkspaceUiStore((state) => state.setShowToolCalls);
@@ -352,6 +354,7 @@ export function useWorkspaceController(): WorkspaceController {
     agents,
     currentUserID: displayData?.current_user_id ?? "",
     mode: turnNotificationMode,
+    soundEnabled: turnNotificationSound,
     onSelectConversation: selectConversation,
     rooms,
     t,
@@ -861,6 +864,8 @@ export function useWorkspaceController(): WorkspaceController {
       onThemeChange: setTheme,
       turnNotificationMode,
       turnNotificationPermission,
+      turnNotificationSound,
+      onTurnNotificationSoundChange: setTurnNotificationSound,
       onRequestTurnNotificationPermission: requestTurnNotificationPermission,
       onTurnNotificationModeChange: changeTurnNotificationMode,
       locale,

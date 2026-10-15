@@ -513,8 +513,34 @@
   }
 }
 
-.notificationSelectTrigger {
-  width: 100%;
+.notificationControls {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  padding: 4px;
+  margin: -4px;
+}
+
+.notificationControls > * {
+  flex-shrink: 0;
+}
+
+.notificationControls .notificationSelectTrigger {
+  width: 196px;
+}
+
+.notificationSoundControl {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 20px;
+  white-space: nowrap;
+  cursor: pointer;
 }
 
 .notificationSelectContent {
@@ -526,7 +552,6 @@
   align-items: center;
 
   justify-content: flex-start;
-  flex-wrap: wrap;
   gap: 12px;
 }
 
@@ -563,13 +588,6 @@
 
 .permissionDenied > span {
   background: var(--error-500);
-}
-
-.notificationPermissionHint {
-  margin: 0;
-  color: var(--muted);
-  font-size: 12px;
-  line-height: 18px;
 }
 
 .settingLine,
@@ -886,8 +904,7 @@
   color: var(--gray-400);
 }
 
-:root[data-theme="dark"] .permissionStatus,
-:root[data-theme="dark"] .notificationPermissionHint {
+:root[data-theme="dark"] .permissionStatus {
   color: var(--gray-400);
 }
 
@@ -1070,21 +1087,6 @@
 
   .environmentControls {
     width: 100%;
-  }
-
-  .notificationSelectTrigger,
-  .notificationPermissionControls {
-    width: 100%;
-  }
-
-  .notificationPermissionControls {
-    justify-content: flex-start;
-    flex-wrap: wrap;
-  }
-
-  .notificationPermissionHint {
-    margin-top: -4px;
-    text-align: left;
   }
 }
 

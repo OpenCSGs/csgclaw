@@ -14,6 +14,7 @@ export const HUB_NEW_BADGE_SEEN_STORAGE_KEY = "csgclaw.im.hubNewBadgeSeen" as co
 export const AGENT_PROFILE_ACTIVE_TAB_STORAGE_KEY = "csgclaw.im.agentProfileActiveTab" as const;
 export const AGENT_CREATION_WARNINGS_STORAGE_KEY = "csgclaw.im.agentCreationWarnings" as const;
 export const SESSION_DEMO_STORAGE_KEY = "csgclaw.session-demo.v1" as const;
+export const TURN_NOTIFICATION_SOUND_STORAGE_KEY = "csgclaw.im.turnNotificationSound" as const;
 export const TURN_NOTIFICATION_MODE_STORAGE_KEY = "csgclaw.im.turnNotificationMode" as const;
 export const HUB_RESOURCE_TYPE_STORAGE_KEY = "csgclaw.im.hubResourceType" as const;
 

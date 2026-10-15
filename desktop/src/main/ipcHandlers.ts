@@ -17,6 +17,7 @@ import { parseDesktopThemeSource } from "../shared/desktopTheme";
 import { isSafeHTTPSURL, isTrustedMainFrame } from "./navigationPolicy";
 import type { SidecarSupervisor } from "./sidecar/SidecarSupervisor";
 import type { DesktopUpdater } from "./updater";
+import { TurnNotifications } from "./turnNotifications";
 
 const confirmedCustomOAuthHosts = new Set<string>();
 
@@ -29,6 +30,10 @@ export function registerIPCHandlers(
   showWindow: () => void,
   setThemeSource: (theme: DesktopThemeSource) => void,
 ): () => void {
+  const notifications = new TurnNotifications((roomID) => {
+    showWindow();
+    getWindow()?.webContents.send(DesktopIPC.turnNotificationClick, roomID);
+  });
   const assertSender = (event: IpcMainInvokeEvent) => {
     const window = getWindow();
     const origin = getAllowedOrigin();
@@ -81,6 +86,18 @@ export function registerIPCHandlers(
     assertSender(event);
     showWindow();
   });
+  ipcMain.handle(DesktopIPC.getNotificationPermission, (event) => {
+    assertSender(event);
+    return notifications.permission();
+  });
+  ipcMain.handle(DesktopIPC.requestNotificationPermission, (event) => {
+    assertSender(event);
+    return notifications.permission(true);
+  });
+  ipcMain.handle(DesktopIPC.showTurnNotification, (event, input: unknown) => {
+    assertSender(event);
+    return notifications.show(input);
+  });
   ipcMain.handle(DesktopIPC.setThemeSource, (event, input: unknown) => {
     assertSender(event);
     setThemeSource(parseDesktopThemeSource(input));
@@ -92,6 +109,10 @@ export function registerIPCHandlers(
   });
 
   return () => {
+    notifications.dispose();
+    ipcMain.removeHandler(DesktopIPC.showTurnNotification);
+    ipcMain.removeHandler(DesktopIPC.getNotificationPermission);
+    ipcMain.removeHandler(DesktopIPC.requestNotificationPermission);
     ipcMain.removeHandler(DesktopIPC.getRuntimeInfo);
     ipcMain.removeHandler(DesktopIPC.openOAuth);
     ipcMain.removeHandler(DesktopIPC.checkForUpdates);
