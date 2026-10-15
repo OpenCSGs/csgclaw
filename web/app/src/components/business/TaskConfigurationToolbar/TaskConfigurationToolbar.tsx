@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Check, ChevronDown, Folder, Gauge, Search, Settings2, ShieldCheck } from "lucide-react";
+import { Check, ChevronDown, Folder, Gauge, Settings2, ShieldCheck } from "lucide-react";
 import { Button, PopoverRoot, PopoverTrigger, PopoverContent, TextInput } from "@/components/ui";
 import { ReasoningEffortPicker } from "@/components/business/ReasoningEffortPicker";
 import { reasoningEffortLabel } from "@/components/business/ProfileControls";
@@ -13,7 +13,8 @@ import {
   localizedRuntimeOptionChoiceLabel,
   type AgentLike,
 } from "@/models/agents";
-import { modelProviderAvatarPath } from "@/models/modelProviders";
+import { modelProviderSelectOptionsFromCatalog } from "@/models/modelProviders";
+import { ConnectedModelPicker } from "@/components/business/ConnectedModelPicker";
 import { supportsTaskConfiguration, type TaskConfiguration } from "@/models/taskConfiguration";
 import { pickLocalDirectoryPath } from "@/components/business/ProfileControls/runtimeOptionDirectoryPicker";
 import styles from "./TaskConfigurationToolbar.module.css";
@@ -41,7 +42,6 @@ export function TaskConfigurationToolbar({
   const profile = agentProfileConfig(agent);
   const options = agentRuntimeOptions(agent);
   const directory = configuration.workspace_dir ?? String(options.local_workspace_dir || "");
-  const model = configuration.model_id || profile?.model_id || t("iaModelUnset");
   const reasoning = configuration.reasoning_effort || profile?.reasoning_effort || "auto";
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState<Menu>("");
@@ -50,7 +50,7 @@ export function TaskConfigurationToolbar({
   const [reasoningPreview, setReasoningPreview] = useState<string>();
   const editable = supportsTaskConfiguration(agent) && Boolean(onChange);
   const blocked = disabled || saving;
-  const providers = controller?.modelProviders?.providers ?? [];
+  const providers = modelProviderSelectOptionsFromCatalog(controller?.modelProviders);
   const schema = runtimeOptionSchemasForAgent(agentRuntimeKind(agent), agent).find(
     (option) =>
       option.type === "select" && ["execution_mode", "permission_mode"].includes(String(option.path || option.key)),
@@ -215,68 +215,29 @@ export function TaskConfigurationToolbar({
       ) : null}
       {showModel ? (
         <div className={styles.modelGroup}>
-          <PopoverRoot open={open === "model"} onOpenChange={(value) => toggle("model", value)}>
-            <PopoverTrigger asChild>
-              <button type="button" disabled={blocked} className={styles.trigger} aria-label={t("iaModelTitle")}>
-                <span>{model}</span>
-                <ChevronDown size={12} />
-              </button>
-            </PopoverTrigger>
-            <PopoverContent className={styles.popover} side="top" align="end" aria-label={t("iaModelTitle")}>
-              <div className={styles.search}>
-                <Search size={14} />
-                <TextInput
-                  size="sm"
-                  variant="plain"
-                  autoFocus
-                  aria-label={t("iaModelSearch")}
-                  placeholder={t("iaModelSearch")}
-                  value={query}
-                  onChange={(event) => setQuery(event.target.value)}
-                />
-              </div>
-              <div className={styles.list}>
-                {row(
-                  t("iaModelFollowAgent"),
-                  !configuration.model_id,
-                  () => void change({ model_provider_id: "", model_id: "", reasoning_effort: "" }),
-                  profile?.model_id || undefined,
-                )}
-                {providers.map((provider) => {
-                  const models = provider.models.filter(
-                    (value) =>
-                      !provider.imageModels?.includes(value) &&
-                      !provider.videoModels?.includes(value) &&
-                      `${provider.display_name} ${value}`.toLowerCase().includes(query.toLowerCase()),
-                  );
-                  return models.length ? (
-                    <section key={provider.id}>
-                      <h3>{provider.display_name || provider.id}</h3>
-                      {models.map((value) =>
-                        row(
-                          value,
-                          configuration.model_provider_id === provider.id && configuration.model_id === value,
-                          () =>
-                            void change({ model_provider_id: provider.id, model_id: value, reasoning_effort: "auto" }),
-                          provider.status === "failed" ? provider.message : undefined,
-                          provider.status === "failed",
-                          modelProviderAvatarPath(provider),
-                        ),
-                      )}
-                    </section>
-                  ) : null;
-                })}
-              </div>
-              {errorMessage}
-              {hint}
-              {agent && controller?.ready ? (
-                <Button className={styles.footer} variant="tertiaryGray" size="sm" onClick={editAgent}>
-                  <Settings2 size={15} />
-                  {t("taskRuntimeEditAgent")}
-                </Button>
-              ) : null}
-            </PopoverContent>
-          </PopoverRoot>
+          <ConnectedModelPicker
+            providers={providers}
+            providerID={configuration.model_provider_id || profile?.model_provider_id || ""}
+            modelID={configuration.model_id || profile?.model_id || ""}
+            followDefault={!configuration.model_id}
+            disabled={blocked || !editable}
+            compact
+            onFollowDefault={() => change({ model_provider_id: "", model_id: "", reasoning_effort: "" })}
+            onChoose={(id, model) => change({ model_provider_id: id, model_id: model, reasoning_effort: "auto" })}
+            t={controller?.t || ((key) => t(key))}
+            footer={
+              <>
+                {errorMessage}
+                {hint}
+                {agent && controller?.ready ? (
+                  <Button variant="tertiaryGray" size="sm" onClick={editAgent}>
+                    <Settings2 size={15} />
+                    {t("taskRuntimeEditAgent")}
+                  </Button>
+                ) : null}
+              </>
+            }
+          />
           <PopoverRoot open={open === "reasoning"} onOpenChange={(value) => toggle("reasoning", value)}>
             <PopoverTrigger asChild>
               <button type="button" disabled={blocked} className={styles.trigger} aria-label={t("iaReasoningTitle")}>

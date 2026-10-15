@@ -105,7 +105,7 @@ func (s *ModelConfiguration) SetLLMConfig(llmCfg config.LLMConfig) {
 	s.normalizeProfileReference = profileCatalogNormalizer(llmCfg)
 	if err == nil {
 		s.model = defaultModel
-		if strings.TrimSpace(s.profileDefaults.ModelProviderID) != "" || strings.TrimSpace(s.profileDefaults.Provider) == "" {
+		if strings.TrimSpace(s.profileDefaults.ModelID) == "" && strings.TrimSpace(s.profileDefaults.ModelProviderID) == "" && strings.TrimSpace(s.profileDefaults.Provider) == "" {
 			s.profileDefaults = profileFromConfigModel(defaultSelector, "", defaultModel)
 		}
 	}
@@ -210,6 +210,7 @@ func (s *ModelConfiguration) hydrateProfileFromCatalogLocked(profile AgentProfil
 	if provider, ok := ModelProviderConfigForProfile(s.llm, out); ok {
 		out.ModelMetadata = modelcap.Resolve(providerID, provider.BaseURL, out.ModelID, provider.ModelMetadata[out.ModelID], provider.ModelOverrides[out.ModelID])
 		out.BaseURL = provider.BaseURL
+		out.APIProtocol = provider.APIProtocol
 		out.APIKey = provider.APIKey
 		out.Headers = cloneStringMap(provider.Headers)
 		if strings.TrimSpace(out.ReasoningEffort) == "" && strings.TrimSpace(provider.ReasoningEffort) != "" {

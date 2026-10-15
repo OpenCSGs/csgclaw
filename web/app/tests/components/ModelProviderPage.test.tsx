@@ -153,10 +153,13 @@ describe("ModelProviderPage", () => {
     renderModelProviderPage();
 
     await waitFor(() =>
-      expect(checkModelProvider).toHaveBeenCalledWith("openai", {
-        api_key: "",
-        base_url: "https://api.openai.com/v1",
-      }),
+      expect(checkModelProvider).toHaveBeenCalledWith(
+        "openai",
+        expect.objectContaining({
+          api_key: "",
+          base_url: "https://api.openai.com/v1",
+        }),
+      ),
     );
   });
 
@@ -513,10 +516,13 @@ describe("ModelProviderPage", () => {
     );
 
     await waitFor(() =>
-      expect(checkModelProvider).toHaveBeenCalledWith("opencsg", {
-        api_key: "",
-        base_url: "https://aigateway.opencsg-stg.com/v1",
-      }),
+      expect(checkModelProvider).toHaveBeenCalledWith(
+        "opencsg",
+        expect.objectContaining({
+          api_key: "",
+          base_url: "https://aigateway.opencsg-stg.com/v1",
+        }),
+      ),
     );
     expect(await screen.findByText("stage-model")).toBeInTheDocument();
   });

@@ -137,6 +137,7 @@ func (h *Handler) registerCoreRoutes(router chi.Router) {
 		r.Delete("/skills/{name}", h.deleteSkill)
 		r.Get("/skills/tree", h.getSkillTree)
 		r.Get("/skills/file", h.getSkillFile)
+		r.Get("/model-provider-presets", h.listModelProviderPresets)
 		r.Route("/model-providers", func(r chi.Router) {
 			r.Get("/", h.handleModelProviders)
 			r.Post("/", h.handleModelProviders)

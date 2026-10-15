@@ -133,6 +133,7 @@ type RuntimeSpec struct {
 
 // ModelSpec selects model behavior without embedding provider credentials.
 type ModelSpec struct {
+	APIProtocol     string                               `json:"api_protocol,omitempty"`
 	ImageGeneration *modelprovider.ImageGenerationConfig `json:"image_generation,omitempty"`
 	VideoGeneration *modelprovider.VideoGenerationConfig `json:"video_generation,omitempty"`
 	Selector        string                               `json:"selector,omitempty"`

@@ -1,0 +1,79 @@
+# Model connections
+
+The model settings page groups official services by brand, then separates API, Coding Plan, Agent Plan, and Token Plan connections.
+Choose a service and region, follow **Get Key** to its official console, paste the Key, and select **Connect**.
+The service address and API protocol are filled automatically.
+The advanced section supports a custom connection name, endpoint, protocol, request headers, and model IDs.
+
+Each connection owns its credentials, service, region, and model directory.
+You can configure several accounts for the same service.
+API and subscription credentials are separate even when their endpoints are identical.
+A failed connection never switches to a different region or billing channel.
+
+## Supported services
+
+The authoritative directory is `internal/modelpreset/catalog.go` and is available at `GET /api/v1/model-provider-presets`.
+It includes the official documentation and Key console links for each service and region.
+The Web UI reads this directory rather than maintaining another set of endpoints.
+
+| Brand | Services | Regions |
+| --- | --- | --- |
+| OpenAI | API | Global |
+| Claude | API | Global |
+| Kimi | API, Coding | China, Global |
+| Alibaba Cloud | API, Token Plan | China, Singapore |
+| Volcengine Ark | API, Coding Plan, Agent Plan | Beijing |
+| GLM | API, Coding Plan | China, Z.ai |
+| Xiaomi MiMo | API; Token Plan | Global API; China, Singapore, Europe Plan |
+| MiniMax | API, M Plan | China, Global |
+| DeepSeek | API | Global |
+
+Claude API uses a Console API Key and the native Messages protocol.
+It is a separate connection from the existing Claude Code account login.
+Subscription access and model permissions remain subject to the provider's terms and account entitlements.
+CSGClaw identifies itself truthfully and does not impersonate another client to bypass access restrictions.
+
+## Connection verification and storage
+
+`POST /api/v1/model-providers` accepts `preset`, `region`, `api_protocol`, and `connect: true` in addition to the existing connection fields.
+With `connect: true`, the server discovers models, verifies a minimal inference, and saves only after success.
+An omitted display name is generated from the service name, with a numeric suffix when necessary.
+Explicit duplicate display names are rejected.
+
+`api_protocol` is `responses`, `chat_completions`, or `anthropic_messages`.
+The provider config loader, external model storage, onboarding, Agent profiles, and session profile resolution preserve it.
+Agents continue to use the local CSGClaw LLM bridge, which translates requests and streamed tool events to the configured upstream protocol.
+
+Model discovery uses the provider's authenticated model endpoint.
+If discovery is unsupported or empty, a documented preset or manually supplied model list can be used only after a successful inference.
+The response identifies `model_source` as `upstream`, `preset`, or `manual`.
+A documented model list describes candidates, not a guarantee of access to every model.
+Authentication, quota, permission, and network failures are shown separately and cannot be hidden by a preset model list.
+
+Credentials are persisted by the backend and are omitted from connection-directory responses.
+Provider errors shown during connection do not include raw upstream bodies or echoed secrets.
+Official logos ship locally, with provenance recorded in `web/app/public/model-providers/SOURCES.md`.
+
+## Agent creation defaults
+
+The separate default-model settings form has been removed.
+A successful Agent creation remembers its conversation, image-generation, and video-generation selections on the backend, so the next creation can reuse them after a browser refresh or server restart.
+Editing an existing Agent, cancelling creation, or failing to create an Agent does not replace those selections.
+For each model category, creation validates the remembered selection against the current provider catalog, then falls back to an available model from the same service or another available service.
+Disconnected services and unavailable model categories are excluded; a category with no usable models stays empty.
+Custom creation and Agent settings share the image and video selectors.
+
+## Changing models
+
+Agent settings define the default model for new sessions.
+Changing the model in a conversation affects that conversation only, retains its history, and applies to the next message.
+**Follow Agent default** removes the conversation override.
+Changing models is disabled while a reply is running, and a failed save retains the previous selection.
+The same searchable model selector is used by Agent settings and conversation controls, with service and connection names to distinguish identical model IDs.
+
+## Verification
+
+Contract tests cover service presets, authentication, discovery, unavailable discovery, failed inference, persistence, and all three wire protocols.
+Protocol tests include tool definitions, tool IDs, tool-result continuation, streaming completion, and cancellation.
+Headless UI verification covers onboarding, connection errors, regions, keyboard navigation, conversation persistence, themes, narrow screens, and deployment under a URL prefix.
+Real-provider availability requires the corresponding account's authorized test Key; contract fixtures do not establish a live vendor connection.

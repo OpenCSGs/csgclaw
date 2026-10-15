@@ -1,212 +1,143 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { CreateModelProviderModal } from "@/pages/WorkspacePage/components/WorkspaceModals";
+import { fetchModelProviderPresets } from "@/api/modelProviders";
+import { createTranslator } from "@/shared/i18n";
+import type { ModelServicePreset } from "@/models/modelProviderPresets";
 import { normalizeModelProviderCatalog } from "@/models/modelProviders";
-import type { TranslateFn } from "@/models/conversations";
 
-const labels: Record<string, string> = {
-  cancel: "Cancel",
-  close: "Close",
-  modelProviderAPIKeyHint: "Stored locally.",
-  modelProviderAvatar: "Avatar",
-  modelProviderBaseURLRequired: "Base URL is required.",
-  modelProviderCheck: "Check",
-  modelProviderCreateAction: "Create",
-  modelProviderCreateConnectionDescription: "Save the endpoint, key, and model list.",
-  modelProviderCreateConnectionTitle: "Connection",
-  modelProviderCreateIdentityDescription: "Set a sidebar name.",
-  modelProviderCreateIdentityTitle: "Identity",
-  modelProviderCreatePresetDescription: "Choose a provider preset to prefill the endpoint and display name.",
-  modelProviderCreatePresetTitle: "Type",
-  modelProviderCreateSubtitle: "Add a reusable model API provider.",
-  modelProviderCreateTitle: "Add model provider",
-  modelProviderDisplayName: "Display name",
-  modelProviderDuplicateDisplayName: "Display name is already used.",
-  modelProviderModelCount: "{count} models",
-  modelProviderModels: "Models",
-  modelProviderModelsHint: "Optional models.",
-  modelProviderModelSearch: "Search models",
-  modelProviderNoModels: "No models",
-  modelProviderNotChecked: "Not checked",
-  modelProviderPreset: "Provider preset",
-  modelProviderPresetCustom: "Custom",
-  modelProviderPresetDeepSeek: "DeepSeek",
-  modelProviderPresetOpenAI: "OpenAI",
-  modelProviderPresetZhipu: "Zhipu",
-  profileAPIKey: "API Key",
-  profileAPIKeyNewPlaceholder: "sk-...",
-  profileBaseURL: "Base URL",
-};
+vi.mock("@/api/modelProviders", () => ({ fetchModelProviderPresets: vi.fn() }));
+const t = createTranslator("en");
+const presets: ModelServicePreset[] = [
+  {
+    id: "test-api",
+    brand: "test",
+    brand_name: "Test AI",
+    name: "Test API",
+    avatar: "model-providers/kimi.png",
+    aliases: ["Moon"],
+    api_protocol: "chat_completions",
+    docs_url: "https://docs.example.test",
+    regions: [
+      { id: "cn", name: "China", base_url: "https://cn.example.test/v1", key_url: "https://cn.example.test/keys" },
+      {
+        id: "global",
+        name: "Global",
+        base_url: "https://global.example.test/v1",
+        key_url: "https://global.example.test/keys",
+      },
+    ],
+    models: [],
+  },
+  {
+    id: "test-plan",
+    brand: "test",
+    brand_name: "Test AI",
+    name: "Test Coding Plan",
+    avatar: "model-providers/kimi.png",
+    aliases: ["Coding"],
+    api_protocol: "responses",
+    docs_url: "https://docs.example.test/plan",
+    regions: [
+      { id: "cn", name: "China", base_url: "https://plan.example.test/v1", key_url: "https://plan.example.test/keys" },
+    ],
+    models: [],
+  },
+];
+beforeEach(() => {
+  vi.mocked(fetchModelProviderPresets).mockResolvedValue({ presets });
+});
 
-const t: TranslateFn = (key, params = {}) =>
-  Object.entries(params).reduce((text, [name, value]) => text.replace(`{${name}}`, String(value)), labels[key] ?? key);
+async function setup(props: Partial<Parameters<typeof CreateModelProviderModal>[0]> = {}) {
+  const onCreate = vi.fn();
+  const view = render(<CreateModelProviderModal busy={false} onClose={vi.fn()} onCreate={onCreate} t={t} {...props} />);
+  const user = userEvent.setup();
+  await user.click(await screen.findByRole("button", { name: /Test AI/ }));
+  return { ...view, user, onCreate };
+}
 
-describe("CreateModelProviderModal", () => {
-  it("renders a full OpenAI-compatible provider form", () => {
-    render(<CreateModelProviderModal busy={false} modelProviders={null} onClose={vi.fn()} onCreate={vi.fn()} t={t} />);
+it("groups services by brand and only requires a Key", async () => {
+  const { user, onCreate } = await setup();
+  expect(screen.queryByLabelText(t("profileBaseURL"))).not.toBeInTheDocument();
+  expect(screen.getByRole("link", { name: /Get Key/ })).toHaveAttribute("href", "https://cn.example.test/keys");
+  expect(screen.getByLabelText(t("profileAPIKey"))).toHaveAttribute("type", "password");
+  await user.type(screen.getByLabelText(t("profileAPIKey")), "test-key");
+  await user.click(screen.getByRole("button", { name: "Connect" }));
+  expect(onCreate).toHaveBeenCalledWith(
+    expect.objectContaining({
+      preset: "test-api",
+      region: "cn",
+      base_url: "https://cn.example.test/v1",
+      api_key: "test-key",
+      api_protocol: "chat_completions",
+      connect: true,
+      display_name: undefined,
+    }),
+  );
+});
 
-    expect(screen.getByLabelText(/Display name/)).toHaveValue("");
-    expect(screen.getByRole("button", { name: "Create" })).toBeDisabled();
-    expect(screen.getByRole("combobox", { name: "Provider preset" })).toHaveTextContent("OpenAI");
-    expect(screen.getByLabelText(/Base URL/)).toHaveValue("https://api.openai.com/v1");
-    expect(screen.getByLabelText(/API Key/)).toHaveValue("");
-    expect(screen.getByLabelText(/API Key/)).toHaveAttribute("type", "password");
-    expect(screen.getAllByText("Not checked").length).toBeGreaterThan(0);
-    expect(screen.getByRole("textbox", { name: "Search models" })).toBeInTheDocument();
-    expect(screen.queryByRole("textbox", { name: "Models" })).not.toBeInTheDocument();
+it("clears credentials and advanced transport overrides when changing service", async () => {
+  const { user, onCreate } = await setup();
+  await user.type(screen.getByLabelText(t("profileAPIKey")), "api-key");
+  await user.click(screen.getByRole("button", { name: /Advanced settings/ }));
+  await user.clear(screen.getByLabelText(t("profileBaseURL")));
+  await user.type(screen.getByLabelText(t("profileBaseURL")), "https://override.test/v1");
+  await user.click(screen.getByRole("combobox", { name: "Service type" }));
+  await user.click(screen.getByRole("option", { name: "Test Coding Plan" }));
+  expect(screen.getByLabelText(t("profileAPIKey"))).toHaveValue("");
+  expect(screen.getByLabelText(t("profileBaseURL"))).toHaveValue("https://plan.example.test/v1");
+  await user.type(screen.getByLabelText(t("profileAPIKey")), "plan-key");
+  await user.click(screen.getByRole("button", { name: "Connect" }));
+  expect(onCreate).toHaveBeenCalledWith(
+    expect.objectContaining({ preset: "test-plan", api_protocol: "responses", api_key: "plan-key" }),
+  );
+});
+
+it("matches region credentials and clears the previous Key", async () => {
+  const { user, onCreate } = await setup();
+  await user.type(screen.getByLabelText(t("profileAPIKey")), "cn-key");
+  await user.click(screen.getByRole("combobox", { name: "Region" }));
+  await user.click(screen.getByRole("option", { name: "Global" }));
+  expect(screen.getByLabelText(t("profileAPIKey"))).toHaveValue("");
+  expect(screen.getByRole("link", { name: /Get Key/ })).toHaveAttribute("href", "https://global.example.test/keys");
+  await user.type(screen.getByLabelText(t("profileAPIKey")), "global-key");
+  await user.click(screen.getByRole("button", { name: "Connect" }));
+  expect(onCreate).toHaveBeenCalledWith(
+    expect.objectContaining({ region: "global", base_url: "https://global.example.test/v1" }),
+  );
+});
+
+it("validates explicit names and custom headers without discarding the Key", async () => {
+  const { user, onCreate } = await setup({
+    modelProviders: normalizeModelProviderCatalog({ providers: [{ id: "used", display_name: "Used", models: [] }] }),
   });
+  await user.click(screen.getByRole("button", { name: /Advanced settings/ }));
+  await user.type(screen.getByLabelText(t("profileAPIKey")), "test-key");
+  await user.type(screen.getByLabelText(t("modelProviderDisplayName")), "Used");
+  expect(screen.getByRole("button", { name: "Connect" })).toBeDisabled();
+  await user.clear(screen.getByLabelText(t("modelProviderDisplayName")));
+  await user.type(screen.getByLabelText(t("profileHeaders")), "invalid");
+  await user.click(screen.getByRole("button", { name: "Connect" }));
+  expect(screen.getByRole("alert")).toHaveTextContent(t("modelConnectHeadersInvalid"));
+  expect(screen.getByLabelText(t("profileAPIKey"))).toHaveValue("test-key");
+  expect(onCreate).not.toHaveBeenCalled();
+});
 
-  it("submits endpoint, key, and normalized seed models", async () => {
-    const user = userEvent.setup();
-    const onCreate = vi.fn();
-    const onCheckAccess = vi.fn().mockResolvedValue({
-      id: "openai-draft",
-      status: "connected",
-      models: ["gpt-4.1", "gpt-4.1", "gpt-4.1-mini"],
-    });
+it("keeps connection failures in the form and allows retry", async () => {
+  const { user } = await setup({ error: "Wrong Key for this region" });
+  expect(screen.getByRole("alert")).toHaveTextContent("Wrong Key for this region");
+  await user.type(screen.getByLabelText(t("profileAPIKey")), "retry-key");
+  expect(screen.getByRole("button", { name: "Connect" })).toBeEnabled();
+});
 
-    render(
-      <CreateModelProviderModal
-        busy={false}
-        modelProviders={null}
-        onCheckAccess={onCheckAccess}
-        onClose={vi.fn()}
-        onCreate={onCreate}
-        t={t}
-      />,
-    );
-
-    await user.type(screen.getByLabelText(/Display name/), "Team API");
-    await user.clear(screen.getByLabelText(/Base URL/));
-    await user.type(screen.getByLabelText(/Base URL/), "http://127.0.0.1:4000/v1");
-    await user.type(screen.getByLabelText(/API Key/), "sk-test");
-    await user.click(screen.getByRole("button", { name: "Check" }));
-    expect(await screen.findByText("gpt-4.1-mini")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Create" }));
-
-    expect(onCreate).toHaveBeenCalledWith({
-      api_key: "sk-test",
-      base_url: "http://127.0.0.1:4000/v1",
-      display_name: "Team API",
-      models: ["gpt-4.1", "gpt-4.1-mini"],
-      preset: "openai",
-    });
-  });
-
-  it("blocks duplicate display names", async () => {
-    const user = userEvent.setup();
-    const catalog = normalizeModelProviderCatalog({
-      providers: [{ id: "openai", display_name: "OpenAI API", models: [] }],
-    });
-
-    render(
-      <CreateModelProviderModal busy={false} modelProviders={catalog} onClose={vi.fn()} onCreate={vi.fn()} t={t} />,
-    );
-
-    expect(screen.queryByText("Display name is already used.")).not.toBeInTheDocument();
-    await user.type(screen.getByLabelText(/Display name/), "OpenAI API");
-    expect(screen.getByText("Display name is already used.")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Create" })).toBeDisabled();
-  });
-
-  it("loads models after an explicit connection check", async () => {
-    const user = userEvent.setup();
-    const onCheckAccess = vi.fn().mockResolvedValue({
-      id: "openai-draft",
-      status: "connected",
-      models: ["gpt-4.1", "gpt-4.1-mini"],
-    });
-
-    render(
-      <CreateModelProviderModal
-        busy={false}
-        modelProviders={null}
-        onCheckAccess={onCheckAccess}
-        onClose={vi.fn()}
-        onCreate={vi.fn()}
-        t={t}
-      />,
-    );
-
-    await user.type(screen.getByLabelText(/Display name/), "Team API");
-    await user.clear(screen.getByLabelText(/Base URL/));
-    await user.type(screen.getByLabelText(/Base URL/), "http://127.0.0.1:4000/v1");
-    await user.type(screen.getByLabelText(/API Key/), "sk-test");
-
-    await user.click(screen.getByRole("button", { name: "Check" }));
-    expect(await screen.findByText("gpt-4.1-mini")).toBeInTheDocument();
-    expect(screen.getByRole("list", { name: "Models" })).toBeInTheDocument();
-    expect(screen.queryByRole("textbox", { name: "Models" })).not.toBeInTheDocument();
-    expect(onCheckAccess).toHaveBeenCalledWith({
-      api_key: "sk-test",
-      base_url: "http://127.0.0.1:4000/v1",
-      display_name: "Team API",
-      models: [],
-      preset: "openai",
-    });
-  });
-
-  it("switches preset defaults before the user enters connection details", async () => {
-    const user = userEvent.setup();
-
-    render(<CreateModelProviderModal busy={false} modelProviders={null} onClose={vi.fn()} onCreate={vi.fn()} t={t} />);
-
-    await user.click(screen.getByRole("combobox", { name: "Provider preset" }));
-    await user.click(screen.getByRole("option", { name: "Zhipu" }));
-
-    expect(screen.getByLabelText(/Base URL/)).toHaveValue("https://open.bigmodel.cn/api/paas/v4");
-    expect(screen.getByLabelText(/Display name/)).toHaveAttribute("placeholder", "Zhipu API");
-  });
-
-  it("renders failed provider checks as inline warnings", async () => {
-    const user = userEvent.setup();
-    const onCheckAccess = vi.fn().mockRejectedValue(new Error("status 401 Unauthorized"));
-
-    render(
-      <CreateModelProviderModal
-        busy={false}
-        modelProviders={null}
-        onCheckAccess={onCheckAccess}
-        onClose={vi.fn()}
-        onCreate={vi.fn()}
-        t={t}
-      />,
-    );
-
-    await user.type(screen.getByLabelText(/API Key/), "bad-key");
-    await user.click(screen.getByRole("button", { name: "Check" }));
-
-    await screen.findAllByText("status 401 Unauthorized");
-    const warning = document.body.querySelector(".create-model-provider-check-status.warning");
-    expect(warning).toHaveTextContent("status 401 Unauthorized");
-    expect(warning).not.toHaveClass("form-error");
-  });
-
-  it("keeps failed provider checks visible in the connection section", async () => {
-    const user = userEvent.setup();
-    const onCheckAccess = vi.fn().mockRejectedValue(new Error("status 401 Unauthorized"));
-
-    render(
-      <CreateModelProviderModal
-        busy={false}
-        modelProviders={null}
-        onCheckAccess={onCheckAccess}
-        onClose={vi.fn()}
-        onCreate={vi.fn()}
-        t={t}
-      />,
-    );
-
-    await user.type(screen.getByLabelText(/API Key/), "bad-key");
-    await user.click(screen.getByRole("button", { name: "Check" }));
-
-    await screen.findAllByText("status 401 Unauthorized");
-    const warning = document.body.querySelector(".create-model-provider-check-status.warning");
-    const header = document.body.querySelector(".create-model-provider-modal .modal-header");
-    const body = document.body.querySelector(".create-model-provider-body");
-
-    expect(header).not.toContainElement(warning as HTMLElement);
-    expect(body).toContainElement(warning as HTMLElement);
-    expect(warning?.closest(".create-model-provider-check-row")).toBeInTheDocument();
-  });
+it("Escape closes a service menu without dismissing the connection form", async () => {
+  const onClose = vi.fn();
+  const { user } = await setup({ onClose });
+  await user.click(screen.getByRole("combobox", { name: "Service type" }));
+  await user.keyboard("{Escape}");
+  expect(screen.getByRole("dialog")).toBeInTheDocument();
+  expect(onClose).not.toHaveBeenCalled();
+  expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+  await user.keyboard("{Escape}");
+  expect(onClose).toHaveBeenCalledTimes(1);
 });

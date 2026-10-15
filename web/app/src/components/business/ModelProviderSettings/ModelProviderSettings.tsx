@@ -1,3 +1,5 @@
+import { useModelProviderPresets } from "@/hooks/useModelProviderPresets";
+import directoryStyles from "./ProviderDirectory.module.css";
 import { ModelMetadataFields } from "./ModelMetadataFields";
 import { modelOverridesEqual, type ModelOverride } from "@/models/modelMetadata";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -15,7 +17,7 @@ import {
 import { errorMessage } from "@/api/client";
 import { checkModelProvider, deleteModelProvider, updateModelProvider } from "@/api/modelProviders";
 import { APIKeyField, ModelProviderModelList } from "@/components/business/ProfileControls";
-import { TextInput } from "@/components/ui";
+import { TextInput, Select } from "@/components/ui";
 import {
   Button,
   DismissibleAlert,
@@ -44,6 +46,7 @@ import { WorkspacePaneTypes } from "@/models/routing";
 import "./ModelProviderSettings.css";
 
 type ProviderDraft = {
+  apiProtocol: string;
   modelOverrides: Record<string, ModelOverride>;
   apiKey: string;
   baseURL: string;
@@ -59,6 +62,7 @@ type ProviderCheckState = {
 
 function providerToDraft(provider: ModelProvider | null | undefined): ProviderDraft {
   return {
+    apiProtocol: provider?.api_protocol || "",
     modelOverrides: provider?.model_overrides || {},
     apiKey: "",
     baseURL: provider?.base_url || "",
@@ -103,6 +107,7 @@ export function ModelProviderSettings({ embedded = false }: { embedded?: boolean
   const [error, setError] = useState("");
   const [deleteSuccess, setDeleteSuccess] = useState(false);
   const [providerSearch, setProviderSearch] = useState("");
+  const directory = useModelProviderPresets();
   const [detailOpen, setDetailOpen] = useState(false);
   const isBuiltinCLI = provider?.id === "codex" || provider?.id === "claude_code";
   const isOpenCSG = provider?.id === MODEL_PROVIDER_IDS.OpenCSG;
@@ -122,6 +127,8 @@ export function ModelProviderSettings({ embedded = false }: { embedded?: boolean
       }
       try {
         const result = await checkModelProvider(providerID, {
+          connect: options.showError || undefined,
+          api_protocol: draft.apiProtocol || undefined,
           base_url: baseURL,
           api_key: apiKey,
         });
@@ -149,7 +156,7 @@ export function ModelProviderSettings({ embedded = false }: { embedded?: boolean
         }
       }
     },
-    [providerID, refreshWorkspaceModelProviders, t],
+    [providerID, refreshWorkspaceModelProviders, t, draft.apiProtocol],
   );
 
   useEffect(() => {
@@ -266,6 +273,7 @@ export function ModelProviderSettings({ embedded = false }: { embedded?: boolean
     provider.videoModels,
   );
   const dirty =
+    draft.apiProtocol !== savedDraft.apiProtocol ||
     draft.apiKey !== savedDraft.apiKey ||
     draft.baseURL !== savedDraft.baseURL ||
     draft.displayName !== savedDraft.displayName ||
@@ -312,6 +320,7 @@ export function ModelProviderSettings({ embedded = false }: { embedded?: boolean
           ? { model_overrides: draft.modelOverrides }
           : {
               display_name: provider.builtin ? undefined : draft.displayName,
+              api_protocol: draft.apiProtocol || undefined,
               base_url: draft.baseURL,
               api_key: draft.apiKey,
               models: parseModelProviderModelsText(draft.modelsText),
@@ -441,6 +450,48 @@ export function ModelProviderSettings({ embedded = false }: { embedded?: boolean
             })}
           </div>
         </section>
+        <section className={directoryStyles.directory} aria-label={t("modelConnectAvailable")}>
+          <h2>{t("modelConnectAvailable")}</h2>
+          <div className={directoryStyles.grid}>
+            {(directory.data?.presets ?? [])
+              .filter(
+                (preset, index, all) =>
+                  all.findIndex((p) => p.brand === preset.brand) === index &&
+                  all.some(
+                    (p) =>
+                      p.brand === preset.brand &&
+                      `${p.brand_name} ${p.name} ${p.aliases.join(" ")}`
+                        .toLowerCase()
+                        .includes(providerSearch.toLowerCase()),
+                  ),
+              )
+              .map((preset) => (
+                <button
+                  type="button"
+                  key={preset.brand}
+                  className={directoryStyles.card}
+                  onClick={() => void controller.sidebarProps?.onCreateModelProvider?.({ preset: preset.id })}
+                >
+                  <img src={preset.avatar} alt="" />
+                  <span>
+                    <strong>{preset.brand_name}</strong>
+                    <small>
+                      {(directory.data?.presets ?? [])
+                        .filter((p) => p.brand === preset.brand)
+                        .map((p) => p.name)
+                        .join(" · ")}
+                    </small>
+                  </span>
+                  <span aria-hidden="true">+</span>
+                </button>
+              ))}
+          </div>
+          {directory.isError ? (
+            <Button variant="secondaryGray" onClick={directory.refetch}>
+              {t("retry")}
+            </Button>
+          ) : null}
+        </section>
       </section>
 
       <DialogRoot open={detailOpen} onOpenChange={setDetailOpen}>
@@ -455,6 +506,18 @@ export function ModelProviderSettings({ embedded = false }: { embedded?: boolean
             <div className="model-provider-header-main">
               <DialogTitle>{provider.display_name || provider.id}</DialogTitle>
               <p>{providerSubtitle}</p>
+              {provider.model_source ? (
+                <p>
+                  {t("modelConnectModelSource")}:{" "}
+                  {t(
+                    provider.model_source === "preset"
+                      ? "modelConnectSourcePreset"
+                      : provider.model_source === "manual"
+                        ? "modelConnectSourceManual"
+                        : "modelConnectSourceUpstream",
+                  )}
+                </p>
+              ) : null}
             </div>
             <div className={`model-provider-status-pill ${effectiveTone}`}>
               <span className={`workspace-status-dot ${effectiveTone}`} aria-hidden="true"></span>
@@ -542,6 +605,22 @@ export function ModelProviderSettings({ embedded = false }: { embedded?: boolean
                             placeholder="https://api.openai.com/v1"
                           />
                         </label>
+                        {!provider.builtin ? (
+                          <label className="field">
+                            <span>{t("modelConnectProtocol")}</span>
+                            <Select
+                              value={draft.apiProtocol}
+                              onValueChange={(apiProtocol) => setDraft((current) => ({ ...current, apiProtocol }))}
+                              options={[
+                                { value: "", label: "Auto" },
+                                { value: "responses", label: "OpenAI Responses" },
+                                { value: "chat_completions", label: "OpenAI Chat Completions" },
+                                { value: "anthropic_messages", label: "Anthropic Messages" },
+                              ]}
+                              triggerProps={{ "aria-label": t("modelConnectProtocol") }}
+                            />
+                          </label>
+                        ) : null}
                         <APIKeyField
                           t={t}
                           value={draft.apiKey}

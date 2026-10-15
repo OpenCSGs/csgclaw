@@ -59,7 +59,9 @@ export type WorkspaceSidebarProps = {
   onCollapseSidebar: () => void;
   onAuthEnvironmentChange: (environment: AuthEnvironmentDraft) => void;
   onCreateAgent: () => void | Promise<void>;
-  onCreateModelProvider?: () => void | Promise<void>;
+  onCreateModelProvider?: (
+    options?: import("../useModelProviderCreation").ModelProviderCreationOptions,
+  ) => void | Promise<void>;
   onCreateTeam: (payload: CreateTeamPayload) => Promise<void>;
   onOpenCreateTeam: () => void | Promise<void>;
   onOpenCreateTask: () => void | Promise<void>;

@@ -12,12 +12,16 @@ import (
 	"csgclaw/internal/agentengine"
 	agent "csgclaw/internal/agentengine/agents"
 	"csgclaw/internal/config"
+	"csgclaw/internal/modelpreset"
 	"github.com/go-chi/chi/v5"
 )
 
 var appCheckModelProvider = agent.CheckModelProvider
 
 type modelProviderRequest struct {
+	Region          string                       `json:"region,omitempty"`
+	APIProtocol     string                       `json:"api_protocol,omitempty"`
+	Connect         bool                         `json:"connect,omitempty"`
 	ModelOverrides  map[string]modelcap.Metadata `json:"model_overrides,omitempty"`
 	ID              string                       `json:"id,omitempty"`
 	DisplayName     string                       `json:"display_name,omitempty"`
@@ -66,6 +70,10 @@ func (h *Handler) createModelProvider(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf("decode request: %v", err), http.StatusBadRequest)
 		return
 	}
+	if err := resolveModelProviderRequest(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 	if err := validateModelOverrides(req.ModelOverrides); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"error": map[string]string{"code": "invalid_request_error", "message": err.Error()}})
 		return
@@ -77,6 +85,10 @@ func (h *Handler) createModelProvider(w http.ResponseWriter, r *http.Request) {
 	}
 	if strings.TrimSpace(req.DisplayName) == "" {
 		req.DisplayName = defaultModelProviderDisplayName(req.Preset)
+		baseName := req.DisplayName
+		for n := 2; agent.ValidateUniqueModelProviderDisplayName(cfg.Models, "", req.DisplayName) != nil; n++ {
+			req.DisplayName = fmt.Sprintf("%s %d", baseName, n)
+		}
 	}
 	if err := agent.ValidateUniqueModelProviderDisplayName(cfg.Models, "", req.DisplayName); err != nil {
 		http.Error(w, err.Error(), http.StatusConflict)
@@ -91,7 +103,24 @@ func (h *Handler) createModelProvider(w http.ResponseWriter, r *http.Request) {
 	if cfg.Models.Providers == nil {
 		cfg.Models.Providers = make(map[string]config.ProviderConfig)
 	}
-	cfg.Models.Providers[id] = providerConfigFromRequest(config.ProviderConfig{}, req, false).Resolved()
+	provider := providerConfigFromRequest(config.ProviderConfig{}, req, false).Resolved()
+	if req.Connect {
+		checked := appCheckModelProvider(r.Context(), providerCheckInput(id, provider, true))
+		if checked.Status != agent.ModelProviderStatusConnected {
+			writeJSON(w, http.StatusBadRequest, map[string]any{"error": map[string]string{"code": checked.ErrorCode, "message": checked.Message}})
+			return
+		}
+		provider.Status = checked.Status
+		provider.Message = checked.Message
+		provider.LastCheckedAt = checked.LastCheckedAt
+		provider.Models = checked.Models
+		provider.ModelMetadata = checked.ModelMetadata
+		provider.ImageModels = checked.ImageModels
+		provider.VideoModels = checked.VideoModels
+		provider.VisionModels = checked.VisionModels
+		provider.ModelSource = checked.ModelSource
+	}
+	cfg.Models.Providers[id] = provider
 	delete(cfg.Models.Profiles, id)
 	if err := h.saveModelProvidersConfig(path, cfg); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -110,6 +139,10 @@ func (h *Handler) updateModelProvider(w http.ResponseWriter, r *http.Request) {
 	var req modelProviderRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, fmt.Sprintf("decode request: %v", err), http.StatusBadRequest)
+		return
+	}
+	if err := resolveModelProviderRequest(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 	if err := validateModelOverrides(req.ModelOverrides); err != nil {
@@ -141,13 +174,7 @@ func (h *Handler) updateModelProvider(w http.ResponseWriter, r *http.Request) {
 	updatedProvider := providerConfigFromRequest(existing, req, true).Resolved()
 	providerInUse := h.modelProviderInUse(cfg.Models, id)
 	if providerInUse && modelProviderTransportChanged(existing, updatedProvider) {
-		result := appCheckModelProvider(r.Context(), agent.ModelProviderCheckInput{
-			ID:      id,
-			BaseURL: updatedProvider.BaseURL,
-			APIKey:  updatedProvider.APIKey,
-			Headers: updatedProvider.Headers,
-			Models:  updatedProvider.Models,
-		})
+		result := appCheckModelProvider(r.Context(), providerCheckInput(id, updatedProvider, true))
 		if result.Status != agent.ModelProviderStatusConnected {
 			message := strings.TrimSpace(result.Message)
 			if message == "" {
@@ -175,7 +202,7 @@ func (h *Handler) updateModelProvider(w http.ResponseWriter, r *http.Request) {
 func modelProviderTransportChanged(existing, updated config.ProviderConfig) bool {
 	existing = existing.Resolved()
 	updated = updated.Resolved()
-	return existing.BaseURL != updated.BaseURL ||
+	return existing.APIProtocol != updated.APIProtocol || existing.Region != updated.Region || existing.BaseURL != updated.BaseURL ||
 		existing.APIKey != updated.APIKey ||
 		!maps.Equal(existing.Headers, updated.Headers)
 }
@@ -226,6 +253,10 @@ func (h *Handler) checkModelProvider(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	if err := resolveModelProviderRequest(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 	cfg, path, err := h.loadBootstrapConfig()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -234,14 +265,8 @@ func (h *Handler) checkModelProvider(w http.ResponseWriter, r *http.Request) {
 	cfg.Models = cfg.Models.Normalized()
 	existing := cfg.Models.Providers[id]
 	merged := providerConfigFromRequest(existing, req, true).Resolved()
-	result := appCheckModelProvider(r.Context(), agent.ModelProviderCheckInput{
-		ID:      id,
-		BaseURL: merged.BaseURL,
-		APIKey:  merged.APIKey,
-		Headers: merged.Headers,
-		Models:  merged.Models,
-	})
-	if updated, changed := agent.ApplyModelProviderCheckResult(cfg.Models, id, result); changed {
+	result := appCheckModelProvider(r.Context(), providerCheckInput(id, merged, req.Connect))
+	if updated, changed := agent.ApplyModelProviderCheckResult(cfg.Models, id, result); changed && !modelProviderTransportChanged(existing, merged) {
 		cfg.Models = updated
 		if err := h.saveModelProvidersConfig(path, cfg); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -279,6 +304,12 @@ func (h *Handler) refreshOpenCSGModelProvider(ctx context.Context) error {
 
 func providerConfigFromRequest(existing config.ProviderConfig, req modelProviderRequest, preserveSecret bool) config.ProviderConfig {
 	out := existing.Resolved()
+	if req.Region != "" {
+		out.Region = req.Region
+	}
+	if req.APIProtocol != "" {
+		out.APIProtocol = req.APIProtocol
+	}
 	if req.ModelOverrides != nil {
 		out.ModelOverrides = modelcap.Clone(req.ModelOverrides)
 	}
@@ -310,6 +341,9 @@ func providerConfigFromRequest(existing config.ProviderConfig, req modelProvider
 }
 
 func defaultModelProviderDisplayName(preset string) string {
+	if p, ok := modelpreset.Find(preset); ok {
+		return p.Name
+	}
 	switch strings.ToLower(strings.TrimSpace(preset)) {
 	case "zhipu":
 		return "Zhipu API"
@@ -387,4 +421,38 @@ func validateModelOverrides(values map[string]modelcap.Metadata) error {
 		}
 	}
 	return nil
+}
+
+func (h *Handler) listModelProviderPresets(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]any{"presets": modelpreset.Catalog()})
+}
+
+func resolveModelProviderRequest(req *modelProviderRequest) error {
+	if !modelpreset.ValidProtocol(req.APIProtocol) {
+		return fmt.Errorf("invalid api_protocol")
+	}
+	if req.Preset == "" {
+		return nil
+	}
+	p, ok := modelpreset.Find(req.Preset)
+	if !ok {
+		return fmt.Errorf("unknown model provider preset %q", req.Preset)
+	}
+	region, ok := p.Region(req.Region)
+	if !ok {
+		return fmt.Errorf("region %q is unavailable for %s", req.Region, p.Name)
+	}
+	// A preset supplied without transport fields uses the official service defaults.
+	req.Region = region.ID
+	if req.BaseURL == "" {
+		req.BaseURL = region.BaseURL
+	}
+	if req.APIProtocol == "" {
+		req.APIProtocol = p.Protocol
+	}
+	return nil
+}
+
+func providerCheckInput(id string, p config.ProviderConfig, verify bool) agent.ModelProviderCheckInput {
+	return agent.ModelProviderCheckInput{ID: id, BaseURL: p.BaseURL, APIKey: p.APIKey, Headers: p.Headers, Models: p.Models, Preset: p.Preset, Region: p.Region, APIProtocol: p.APIProtocol, Verify: verify}
 }

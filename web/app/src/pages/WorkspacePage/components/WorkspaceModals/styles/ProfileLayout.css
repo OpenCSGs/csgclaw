@@ -23,7 +23,10 @@
 }
 
 .profile-modal.agent-modal .modal-header {
+  display: flex;
+  flex-direction: row;
   align-items: flex-start;
+  justify-content: space-between;
   gap: var(--space-4);
   padding: 0 0 20px;
   background: var(--white);
@@ -32,8 +35,13 @@
 
 .profile-modal.agent-modal .modal-header > div:first-child {
   display: grid;
+  flex: 1;
   gap: var(--space-1);
   min-width: 0;
+}
+
+.profile-modal.agent-modal .modal-header > .modal-close {
+  flex-shrink: 0;
 }
 
 .profile-modal.agent-modal .modal-title {
@@ -350,34 +358,6 @@
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10px;
   align-items: start;
-}
-
-.profile-runtime-grid.agent-model-config-grid {
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 170px), 1fr));
-}
-
-.profile-runtime-grid.agent-model-config-grid > .field {
-  display: grid;
-  gap: 7px;
-  min-width: 0;
-}
-
-.profile-runtime-grid.agent-model-config-grid .csg-select-trigger,
-.profile-runtime-grid.agent-model-config-grid .agent-fast-mode-toggle {
-  width: 100%;
-  min-width: 0;
-  max-width: 100%;
-  box-sizing: border-box;
-}
-
-.profile-runtime-grid.agent-model-config-grid .csg-select-trigger {
-  align-items: center;
-}
-
-.profile-runtime-grid.agent-model-config-grid .csg-select-value {
-  display: flex;
-  min-width: 0;
-  align-items: center;
 }
 
 .profile-runtime-grid > .field,

@@ -7,6 +7,7 @@ import (
 	agent "csgclaw/internal/agentengine/agents"
 	"csgclaw/internal/apitypes"
 	"csgclaw/internal/im"
+	"csgclaw/internal/modelprovider"
 	hub "csgclaw/internal/template"
 	"csgclaw/internal/utils"
 	"encoding/base32"
@@ -950,6 +951,9 @@ func participantEngineCreateRequest(spec agent.CreateAgentSpec) agentengine.Agen
 				Options:     utils.CloneAnyMap(spec.RuntimeOptions),
 			},
 			Model: agentengine.ModelSpec{
+				ImageGeneration: modelprovider.CloneImageGeneration(spec.AgentProfile.ImageGeneration),
+				VideoGeneration: modelprovider.CloneVideoGeneration(spec.AgentProfile.VideoGeneration),
+				APIProtocol:     spec.AgentProfile.APIProtocol,
 				Name:            spec.AgentProfile.Name,
 				Description:     spec.AgentProfile.Description,
 				Provider:        spec.AgentProfile.Provider,

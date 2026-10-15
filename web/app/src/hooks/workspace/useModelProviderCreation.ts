@@ -1,16 +1,20 @@
+import { apiErrorCode, errorMessage } from "@/api/client";
 import { useRef, useState } from "react";
-import { checkModelProvider, createModelProvider, type ModelProviderPayload } from "@/api/modelProviders";
+import { createModelProvider, type ModelProviderPayload } from "@/api/modelProviders";
 import type { ModelProvider, ModelProviderCatalog } from "@/models/modelProviders";
 import type { LocaleCode, TranslateFn } from "@/models/conversations";
 
+export type ModelProviderCreationOptions = { preset?: string; onConnected?: (provider: ModelProvider) => void };
+
 export type ModelProviderCreationProps = {
+  initialPreset?: string;
   busy: boolean;
   locale: LocaleCode;
   error: string;
   modelProviders: ModelProviderCatalog | null;
   onClose: () => void;
   onCreate: (payload: ModelProviderPayload) => Promise<void>;
-  onCheckAccess: (payload: ModelProviderPayload) => ReturnType<typeof checkModelProvider>;
+  onClearError: () => void;
   t: TranslateFn;
 };
 
@@ -33,6 +37,7 @@ export function useModelProviderCreation({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const pending = useRef(false);
+  const options = useRef<ModelProviderCreationOptions>({});
   async function create(payload: ModelProviderPayload) {
     if (pending.current) return;
     pending.current = true;
@@ -40,18 +45,26 @@ export function useModelProviderCreation({
     setError("");
     try {
       const created = await createModelProvider(payload);
-      if (created.id && payload.base_url && (payload.api_key || created.api_key_set)) {
-        try {
-          await checkModelProvider(created.id, payload);
-        } catch {
-          // A saved provider remains usable; its detail view can retry the access check.
-        }
-      }
       const refreshed = await refresh();
-      if (!keepCurrentPage) onSelect(refreshed?.providers.find((provider) => provider.id === created.id) ?? created);
+      const connected = refreshed?.providers.find((provider) => provider.id === created.id) ?? created;
+      if (options.current.onConnected) options.current.onConnected(connected);
+      else if (!keepCurrentPage) onSelect(connected);
       setOpen(false);
-    } catch {
-      setError(t("modelProviderCreateFailed"));
+    } catch (cause) {
+      const code = apiErrorCode(cause);
+      const message = (
+        {
+          invalid_api_key: "modelConnectErrorKey",
+          permission_denied: "modelConnectErrorPermission",
+          insufficient_quota: "modelConnectErrorQuota",
+          rate_limit: "modelConnectErrorRate",
+          timeout: "modelConnectErrorNetwork",
+          network_error: "modelConnectErrorNetwork",
+          model_not_found: "modelConnectErrorModel",
+          models_required: "modelConnectManualModels",
+        } as const
+      )[code as "invalid_api_key"];
+      setError(message ? t(message) : errorMessage(cause, t("modelProviderCreateFailed")));
     } finally {
       pending.current = false;
       setBusy(false);
@@ -60,6 +73,7 @@ export function useModelProviderCreation({
   const modalProps: ModelProviderCreationProps | null = open
     ? {
         busy,
+        initialPreset: options.current.preset,
         locale,
         error,
         modelProviders: catalog,
@@ -68,11 +82,12 @@ export function useModelProviderCreation({
         onClose: () => {
           if (!pending.current) setOpen(false);
         },
-        onCheckAccess: (payload) => checkModelProvider("openai-draft", payload),
+        onClearError: () => setError(""),
       }
     : null;
   return {
-    open: () => {
+    open: (request: ModelProviderCreationOptions = {}) => {
+      options.current = request;
       setError("");
       setOpen(true);
     },

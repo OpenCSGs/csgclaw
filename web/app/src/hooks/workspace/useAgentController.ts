@@ -59,7 +59,7 @@ import { ACTION_REBUILD_MANAGER } from "@/shared/constants/messages";
 import { selectUnusedAgentAvatar } from "@/shared/avatarOptions";
 import { AGENT_CREATION_WARNINGS_STORAGE_KEY, FEISHU_REGISTRATIONS_STORAGE_KEY } from "@/shared/storage/keys";
 import { localizeAPIError } from "@/shared/i18n";
-import { LAST_CREATED_AGENT_MODEL_STORAGE_KEY } from "@/shared/storage/keys";
+import { agentDraftWithAvailableModels } from "@/models/agentCreationModels";
 import {
   applyTemplateToDraft,
   advanceAgentProgress,
@@ -125,9 +125,7 @@ import {
   modelProviderCatalogWithModels,
   modelProviderConfigUsesOpenCSG,
   modelProviderOptionsFromCatalog,
-  providerNameForProviderID,
 } from "@/models/modelProviders";
-import type { ModelProviderOption } from "@/models/modelProviders";
 import { WorkspacePaneTypes } from "@/models/routing";
 import { useCLIProxyAuthStatuses } from "./useCLIProxyAuthStatuses";
 import { workspaceQueryKeys } from "./workspaceQueries";
@@ -156,11 +154,6 @@ function hasUnavailableSandboxRuntimeChoice(config: RuntimeBootstrapConfig | nul
 }
 
 type AgentCreateMode = "template" | "custom";
-
-type LastCreatedAgentModelPreference = {
-  modelID: string;
-  providerID: string;
-};
 
 type AgentWithProfile = {
   agent: AgentLike;
@@ -419,104 +412,6 @@ function saveFeishuPendingRegistrations(registrations: Record<string, FeishuPend
   } catch {
     // Persistence is best-effort; the in-memory state still drives the current tab.
   }
-}
-
-function loadLastCreatedAgentModelPreference(): LastCreatedAgentModelPreference | null {
-  if (typeof window === "undefined") {
-    return null;
-  }
-  try {
-    const raw = window.localStorage.getItem(LAST_CREATED_AGENT_MODEL_STORAGE_KEY);
-    if (!raw) {
-      return null;
-    }
-    const decoded = JSON.parse(raw);
-    const providerID = String((decoded as { providerID?: unknown })?.providerID || "").trim();
-    const modelID = String((decoded as { modelID?: unknown })?.modelID || "").trim();
-    if (!providerID || !modelID) {
-      return null;
-    }
-    return { providerID, modelID };
-  } catch {
-    return null;
-  }
-}
-
-function saveLastCreatedAgentModelPreference(draft: Partial<AgentDraft> | null | undefined): void {
-  if (typeof window === "undefined") {
-    return;
-  }
-  const providerID = String(draft?.model_provider_id || "").trim();
-  const modelID = String(draft?.model_id || "").trim();
-  if (!providerID || !modelID) {
-    return;
-  }
-  try {
-    window.localStorage.setItem(
-      LAST_CREATED_AGENT_MODEL_STORAGE_KEY,
-      JSON.stringify({
-        providerID,
-        modelID,
-      }),
-    );
-  } catch {
-    // Best-effort only; fallback defaults still work.
-  }
-}
-
-function draftWithModelProviderFallback(draft: AgentDraft, options: readonly ModelProviderOption[]): AgentDraft {
-  const preference = loadLastCreatedAgentModelPreference();
-  if (preference?.providerID && preference?.modelID) {
-    const exactMatch = options.find(
-      (item) => item.providerID === preference.providerID && item.modelID === preference.modelID,
-    );
-    if (exactMatch) {
-      return {
-        ...draft,
-        provider: providerNameForProviderID(preference.providerID),
-        model_provider_id: preference.providerID,
-        model_id: preference.modelID,
-      };
-    }
-    const providerMatch = options.find((item) => item.providerID === preference.providerID && item.modelID);
-    if (providerMatch) {
-      return {
-        ...draft,
-        provider: providerNameForProviderID(preference.providerID),
-        model_provider_id: preference.providerID,
-        model_id: providerMatch.modelID,
-      };
-    }
-  }
-  const providerID = String(draft.model_provider_id || "").trim();
-  const modelID = String(draft.model_id || "").trim();
-  if (providerID && modelID && options.some((item) => item.providerID === providerID && item.modelID === modelID)) {
-    return draft;
-  }
-  let option = options.find((item) => {
-    if (!item.providerID || !item.modelID) {
-      return false;
-    }
-    if (providerID) {
-      return item.providerID === providerID;
-    }
-    if (modelID) {
-      return item.modelID === modelID;
-    }
-    return true;
-  });
-  if (!option) {
-    option = options.find((item) => item.providerID && item.modelID);
-  }
-  if (!option) {
-    return { ...draft, model_id: "" };
-  }
-  return {
-    ...draft,
-    provider: providerNameForProviderID(option.providerID),
-    model_provider_id: option.providerID,
-    model_id: option.modelID,
-  };
 }
 
 export function shouldReturnToAgentOverviewAfterAgentMissing(
@@ -1597,11 +1492,9 @@ export function useAgentController({
     ]);
     const effectiveBootstrapConfig = refreshedBootstrapConfig || bootstrapConfig;
     const effectiveHubTemplates = refreshedHubTemplates.length ? refreshedHubTemplates : hubTemplates;
-    const createModelOptions = modelProviderOptionsFromCatalog(
-      modelProviderCatalogForAgentAvailability(refreshedModelProviders, {
-        codexAvailable: effectiveBootstrapConfig?.manager_runtime?.installed !== false,
-      }),
-    );
+    const createModelCatalog = modelProviderCatalogForAgentAvailability(refreshedModelProviders, {
+      codexAvailable: effectiveBootstrapConfig?.manager_runtime?.installed !== false,
+    });
     setAgentModalBootstrapConfig(effectiveBootstrapConfig);
     const createWorkerTemplates = createAgentSelectableTemplates(effectiveHubTemplates);
     const preferredRuntimeKind = "codex";
@@ -1629,7 +1522,7 @@ export function useAgentController({
         agent_profile: defaults,
       });
       draft = applyTemplateToDraft(draft, selectedTemplate, effectiveBootstrapConfig, managerAgent?.image || "");
-      draft = draftWithModelProviderFallback(draft, createModelOptions);
+      draft = agentDraftWithAvailableModels(draft, createModelCatalog, openCSGAuthenticated);
       setAgentDraft(draft);
       setShowAgentModal(true);
     } catch (_) {
@@ -1651,7 +1544,7 @@ export function useAgentController({
         agent_profile: managerProfile,
       });
       draft = applyTemplateToDraft(draft, selectedTemplate, effectiveBootstrapConfig, managerAgent?.image || "");
-      draft = draftWithModelProviderFallback(draft, createModelOptions);
+      draft = agentDraftWithAvailableModels(draft, createModelCatalog, openCSGAuthenticated);
       setAgentDraft(draft);
       setShowAgentModal(true);
     }
@@ -2233,7 +2126,6 @@ export function useAgentController({
         await queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.agentMCPServers(editingAgentID) });
       }
       if (isCreate) {
-        saveLastCreatedAgentModelPreference(agentDraft);
         const skippedResources = Array.isArray(saved.skipped_resources) ? saved.skipped_resources : [];
         if (saved.id && skippedResources.length > 0) {
           const resourceLines = skippedResources.map((resource) =>

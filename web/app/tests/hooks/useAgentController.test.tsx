@@ -411,7 +411,6 @@ describe("useAgentController", () => {
       state: "unblocked",
     };
     window.localStorage.removeItem(feishuRegistrationStorageKey);
-    window.localStorage.removeItem("csgclaw.im.lastCreatedAgentModel");
     vi.mocked(fetchAgent).mockResolvedValueOnce(oldAgent).mockResolvedValueOnce(latestAgent);
     vi.mocked(fetchAgentProfile).mockResolvedValue(profile);
     vi.mocked(fetchAgentProfileDefaults).mockResolvedValue(profile);
@@ -530,7 +529,6 @@ describe("useAgentController", () => {
 
   afterEach(() => {
     window.localStorage.removeItem(feishuRegistrationStorageKey);
-    window.localStorage.removeItem("csgclaw.im.lastCreatedAgentModel");
   });
 
   it("keeps background model authentication failures inline until the user retries", async () => {
@@ -2867,10 +2865,6 @@ describe("useAgentController", () => {
       model_provider_id: "opencsg",
       model_id: "production-model",
     });
-    window.localStorage.setItem(
-      "csgclaw.im.lastCreatedAgentModel",
-      JSON.stringify({ providerID: "opencsg", modelID: "production-model" }),
-    );
     const productionCatalog = catalog("production-model");
     const stagingCatalog = catalog("staging-model");
     const refreshCatalog = async () => stagingCatalog;
@@ -3349,6 +3343,7 @@ describe("useAgentController", () => {
     const { result } = renderHook(
       () =>
         useAgentControllerHarness({
+          openCSGAuthenticated: true,
           bootstrapConfig: {
             manager_runtime: {
               name: "codex",
@@ -3374,6 +3369,89 @@ describe("useAgentController", () => {
       provider: "csghub",
       model_provider_id: "opencsg",
       model_id: "deepseek-v4",
+    });
+  });
+  it("prefills and submits the last successful conversation, image and video choices", async () => {
+    const models = normalizeModelProviderCatalog({
+      providers: [
+        {
+          id: "service",
+          status: "connected",
+          models: ["chat", "another"],
+          image_models: ["image-first", "image-last"],
+          video_models: ["video-first", "video-last"],
+        },
+      ],
+    });
+    vi.mocked(fetchAgentProfileDefaults).mockResolvedValue({
+      provider: "api",
+      model_provider_id: "service",
+      model_id: "another",
+      image_generation: { provider_id: "service", model_id: "image-last" },
+      video_generation: { provider_id: "service", model_id: "video-last" },
+    });
+    const { result } = renderHook(
+      () => useAgentControllerHarness({ modelProviders: models, modelProvidersLoaded: true }).controller,
+      { wrapper: createWrapper() },
+    );
+    await act(async () => {
+      await result.current.computerViewProps.onCreateAgent({
+        id: "builtin.codex-worker",
+        name: "new-worker",
+        runtime_kind: "codex",
+      });
+    });
+    expect(result.current.agentProfileModalProps?.agentDraft).toMatchObject({
+      model_provider_id: "service",
+      model_id: "another",
+      image_generation: { provider_id: "service", model_id: "image-last" },
+      video_generation: { provider_id: "service", model_id: "video-last" },
+    });
+    await act(async () => {
+      await result.current.agentProfileModalProps?.onSave();
+    });
+    expect(createBotRequest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agent_profile: expect.objectContaining({
+          model_provider_id: "service",
+          model_id: "another",
+          image_generation: { provider_id: "service", model_id: "image-last" },
+          video_generation: { provider_id: "service", model_id: "video-last" },
+        }),
+      }),
+    );
+  });
+
+  it("fills each missing generation model and replaces disconnected remembered models", async () => {
+    const models = normalizeModelProviderCatalog({
+      providers: [
+        { id: "service", status: "connected", models: ["chat"], image_models: ["image"], video_models: ["video"] },
+        {
+          id: "failed",
+          status: "failed",
+          models: ["old"],
+          image_models: ["stale-image"],
+          video_models: ["stale-video"],
+        },
+      ],
+    });
+    vi.mocked(fetchAgentProfileDefaults).mockResolvedValue({
+      model_provider_id: "failed",
+      model_id: "old",
+      image_generation: { provider_id: "failed", model_id: "stale-image" },
+    });
+    const { result } = renderHook(
+      () => useAgentControllerHarness({ modelProviders: models, modelProvidersLoaded: true }).controller,
+      { wrapper: createWrapper() },
+    );
+    await act(async () => {
+      await result.current.computerViewProps.onCreateAgent();
+    });
+    expect(result.current.agentProfileModalProps?.agentDraft).toMatchObject({
+      model_provider_id: "service",
+      model_id: "chat",
+      image_generation: { provider_id: "service", model_id: "image" },
+      video_generation: { provider_id: "service", model_id: "video" },
     });
   });
 });

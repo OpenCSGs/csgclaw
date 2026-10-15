@@ -1,0 +1,68 @@
+.root {
+  container-type: inline-size;
+  display: grid;
+  gap: var(--space-5);
+  min-width: 0;
+}
+
+.root > fieldset {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.root > fieldset + fieldset {
+  padding-top: var(--space-5);
+  border-top: 1px solid var(--line);
+}
+
+.root > fieldset > legend {
+  float: left;
+  width: 100%;
+  margin-bottom: var(--space-3);
+  padding: 0;
+  color: var(--text);
+  font: var(--text-sm-semibold);
+}
+
+.root > fieldset > legend + * {
+  clear: both;
+}
+
+.fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3) var(--space-4);
+  align-items: start;
+}
+
+.root :global(.field) {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.root :global(.csg-select-trigger),
+.root :global(.agent-fast-mode-toggle) {
+  width: 100%;
+  min-width: 0;
+  min-height: var(--input-height-md);
+  box-sizing: border-box;
+}
+
+.root :global(.csg-select-trigger) :global(.model-option-model) {
+  font: var(--text-md-normal);
+}
+
+.hint {
+  margin: var(--space-3) 0 0;
+  color: var(--muted);
+  font: var(--text-xs-normal);
+}
+
+@container (max-width: 460px) {
+  .fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

@@ -17,6 +17,8 @@ export default mergeConfig(
       ],
     },
     test: {
+      // Bound DOM worker contention so interaction tests retain predictable timing on CI.
+      maxWorkers: 4,
       environment: "jsdom",
       globals: true,
       setupFiles: "./tests/setup.ts",

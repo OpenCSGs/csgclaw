@@ -60,6 +60,7 @@ var (
 )
 
 type AgentProfile struct {
+	APIProtocol          string                               `json:"api_protocol,omitempty"`
 	ModelMetadata        modelcap.Resolved                    `json:"-"`
 	ImageGeneration      *modelprovider.ImageGenerationConfig `json:"image_generation,omitempty"`
 	VideoGeneration      *modelprovider.VideoGenerationConfig `json:"video_generation,omitempty"`
@@ -82,6 +83,7 @@ type AgentProfile struct {
 }
 
 type AgentProfileView struct {
+	APIProtocol          string                               `json:"api_protocol,omitempty"`
 	ImageGeneration      *modelprovider.ImageGenerationConfig `json:"image_generation,omitempty"`
 	VideoGeneration      *modelprovider.VideoGenerationConfig `json:"video_generation,omitempty"`
 	Name                 string                               `json:"name,omitempty"`
@@ -298,6 +300,7 @@ func profileViewWithAgentRuntimeOptions(profile AgentProfile, _ map[string]any, 
 		Description:          profile.Description,
 		Provider:             profile.Provider,
 		ModelProviderID:      profile.ModelProviderID,
+		APIProtocol:          profile.APIProtocol,
 		BaseURL:              profile.BaseURL,
 		APIKeySet:            strings.TrimSpace(profile.APIKey) != "",
 		APIKeyPreview:        apiKeyPreview(profile.APIKey),
@@ -376,6 +379,7 @@ func profileFromConfigModel(name, description string, model config.ModelConfig) 
 		Name:            name,
 		Description:     description,
 		Provider:        model.Provider,
+		APIProtocol:     model.APIProtocol,
 		ModelProviderID: modelProviderID,
 		BaseURL:         model.BaseURL,
 		APIKey:          model.APIKey,
@@ -396,6 +400,7 @@ func modelConfigFromProfile(profile AgentProfile) config.ModelConfig {
 	profile = normalizeProfile(profile, profile.Name, profile.Description)
 	return config.ModelConfig{
 		Provider:        profile.Provider,
+		APIProtocol:     profile.APIProtocol,
 		BaseURL:         profileBaseURL(profile),
 		APIKey:          profileAPIKey(profile),
 		ModelID:         profile.ModelID,

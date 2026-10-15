@@ -247,6 +247,7 @@ func (s *Controller) runtimeProfileForKind(runtimeKind, agentID, fallbackName, f
 
 	return (agentruntime.Profile{
 		ModelMetadata:   metadata,
+		APIProtocol:     profile.APIProtocol,
 		Provider:        profile.Provider,
 		BaseURL:         baseURL,
 		APIKey:          apiKey,
@@ -791,6 +792,7 @@ func runtimeProfileFromAgent(profile AgentProfile) agentruntime.Profile {
 	return (agentruntime.Profile{
 		ModelMetadata: profile.ModelMetadata,
 
+		APIProtocol:     profile.APIProtocol,
 		Provider:        strings.TrimSpace(profile.Provider),
 		BaseURL:         strings.TrimSpace(profile.BaseURL),
 		APIKey:          strings.TrimSpace(profile.APIKey),

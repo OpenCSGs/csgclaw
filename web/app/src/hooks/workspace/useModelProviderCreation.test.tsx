@@ -45,14 +45,14 @@ function setup(keepCurrentPage = false) {
   return { ...hook, refresh, onSelect };
 }
 
-test("saving refreshes the catalog and selects the discovered provider even if the access check fails", async () => {
+test("connecting refreshes the catalog and selects the provider without a second access check", async () => {
   vi.mocked(createModelProvider).mockResolvedValue(provider);
   vi.mocked(checkModelProvider).mockRejectedValue(new Error("temporarily unavailable"));
   const { result, refresh, onSelect } = setup();
   await act(async () => {
     await result.current.modalProps!.onCreate(payload);
   });
-  expect(checkModelProvider).toHaveBeenCalledWith(provider.id, payload);
+  expect(checkModelProvider).not.toHaveBeenCalled();
   expect(refresh).toHaveBeenCalledTimes(1);
   expect(onSelect).toHaveBeenCalledWith(refreshedProvider);
   expect(result.current.modalProps).toBeNull();
@@ -76,7 +76,7 @@ test("failed saves keep the dialog open and allow a retry", async () => {
   await act(async () => {
     await result.current.modalProps!.onCreate(payload);
   });
-  expect(result.current.modalProps?.error).toBe(createTranslator("en")("modelProviderCreateFailed"));
+  expect(result.current.modalProps?.error).toBe("failed");
   expect(result.current.modalProps?.busy).toBe(false);
   expect(refresh).not.toHaveBeenCalled();
   await act(async () => {

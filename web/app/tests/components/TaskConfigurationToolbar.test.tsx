@@ -49,9 +49,9 @@ function setup(configuration: TaskConfiguration = {}, onChange = vi.fn(), direct
 describe("task configuration", () => {
   it("applies a model to this session and keeps the working directory", async () => {
     const { onChange, controller } = setup({ workspace_dir: "/project" });
-    fireEvent.click(screen.getByRole("button", { name: "iaModelTitle" }));
+    fireEvent.click(screen.getByRole("combobox", { name: "iaModelTitle" }));
     expect(screen.queryByRole("button", { name: "image-test" })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "gpt-test" }));
+    fireEvent.click(screen.getByRole("option", { name: /gpt-test/ }));
     await waitFor(() =>
       expect(onChange).toHaveBeenCalledWith({
         workspace_dir: "/project",

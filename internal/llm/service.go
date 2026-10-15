@@ -10,6 +10,7 @@ import (
 	"csgclaw/internal/codexmodel"
 	"csgclaw/internal/config"
 	"csgclaw/internal/modelcap"
+	"csgclaw/internal/modelpreset"
 	"csgclaw/internal/modelprovider"
 	"encoding/json"
 	"errors"
@@ -272,6 +273,9 @@ func (s *Service) forwardRemoteChatWithAuthRefresh(ctx context.Context, profile 
 		return nil, &HTTPError{Status: http.StatusBadRequest, Message: fmt.Sprintf("decode request: %v", err)}
 	}
 	mergeProfilePayload(payload, profile)
+	if profile.APIProtocol != "" && profile.APIProtocol != modelpreset.ChatCompletions {
+		return s.forwardProtocol(ctx, profile, payload, "openai")
+	}
 	normalizeCompletionTokenLimits(payload)
 	encoded, err := json.Marshal(payload)
 	if err != nil {
@@ -330,6 +334,9 @@ func (s *Service) forwardRemoteResponsesWithAuthRefresh(ctx context.Context, pro
 		return nil, &HTTPError{Status: http.StatusBadRequest, Message: fmt.Sprintf("decode request: %v", err)}
 	}
 	mergeResponsesPayload(payload, profile)
+	if profile.APIProtocol != "" && profile.APIProtocol != modelpreset.Responses {
+		return s.forwardProtocol(ctx, profile, payload, "openai-response")
+	}
 
 	baseURL, apiKey, err := s.agentProfileTarget(ctx, profile)
 	if err != nil {
