@@ -265,8 +265,8 @@ func TestGlobalResourceAPIReportsActualConnectionState(t *testing.T) {
 	if err := json.Unmarshal(created.Body.Bytes(), &resource); err != nil {
 		t.Fatal(err)
 	}
-	if resource.Status != "not_connected" {
-		t.Fatalf("configuration alone claimed a connection: %s", resource.Status)
+	if resource.Status != "connected" {
+		t.Fatalf("validated resource did not report its own connection: %s", resource.Status)
 	}
 	bound := appAuthRequest(t, h, http.MethodPost, "/api/v1/agents/"+alice.ID+"/connectors", `{"resource_id":"`+resource.InstallationID+`","connect":true}`, "", nil)
 	if bound.Code != http.StatusCreated {
@@ -291,5 +291,5 @@ func TestGlobalResourceAPIReportsActualConnectionState(t *testing.T) {
 	if response.Code != http.StatusOK {
 		t.Fatalf("disconnect: %d %s", response.Code, response.Body)
 	}
-	check("not_connected")
+	check("connected")
 }

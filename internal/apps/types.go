@@ -152,10 +152,13 @@ type ProbeRequest struct {
 }
 
 type ProbeResult struct {
-	Connected       bool                `json:"connected"`
-	Tools           []*mcp.Tool         `json:"tools"`
-	ServerInfo      *mcp.Implementation `json:"server_info,omitempty"`
-	ProtocolVersion string              `json:"protocol_version,omitempty"`
+	// Process-local proof of the credential version used by the probe; never serialized.
+	credentialService    *Service
+	credentialGeneration uint64
+	Connected            bool                `json:"connected"`
+	Tools                []*mcp.Tool         `json:"tools"`
+	ServerInfo           *mcp.Implementation `json:"server_info,omitempty"`
+	ProtocolVersion      string              `json:"protocol_version,omitempty"`
 }
 
 type ConnectorHTTPConfig struct {

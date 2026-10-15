@@ -2653,6 +2653,56 @@ describe("useAgentController", () => {
     }
   });
 
+  it.each(["pending", "missing", "network"])(
+    "refreshes actual Feishu bindings when registration is %s",
+    async (outcome) => {
+      vi.useFakeTimers();
+      const openSpy = vi.spyOn(window, "open").mockImplementation(() => null);
+      const workerAgent: AgentLike = { ...oldAgent, id: "u-dev", name: "dev", role: "worker" };
+      const connectedWorker: AgentLike = {
+        ...workerAgent,
+        participants: [{ agent_id: "u-dev", channel: "feishu", channel_user_kind: "app_id", id: "dev", type: "agent" }],
+      };
+      if (outcome === "pending") {
+        vi.mocked(finalizeFeishuRegistrationRequest).mockResolvedValue({ status: "pending", agent_id: "u-dev" });
+      } else {
+        vi.mocked(finalizeFeishuRegistrationRequest).mockRejectedValue({ status: outcome === "missing" ? 404 : 502 });
+      }
+      try {
+        const { result } = renderHook(
+          () =>
+            useAgentControllerHarness({
+              activePane: { type: WorkspacePaneTypes.agent, id: "u-dev" },
+              agents: [workerAgent],
+            }).controller,
+          { wrapper: createWrapper() },
+        );
+        await act(async () => {
+          await result.current.agentViewProps.onStartFeishuConnect?.(workerAgent);
+        });
+        // Simulate completion elsewhere after the page loaded its disconnected agent.
+        vi.mocked(fetchAgent).mockReset();
+        vi.mocked(fetchAgent).mockResolvedValue(connectedWorker);
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(1_000);
+        });
+        expect(result.current.agentViewProps.item?.participants?.[0]?.channel).toBe("feishu");
+        expect(Boolean(result.current.agentViewProps.feishuPendingRegistration)).toBe(outcome !== "missing");
+        // A still-pending reconnect must continue polling after synchronization.
+        if (outcome === "pending") {
+          const calls = vi.mocked(finalizeFeishuRegistrationRequest).mock.calls.length;
+          await act(async () => {
+            await vi.advanceTimersByTimeAsync(1_000);
+          });
+          expect(vi.mocked(finalizeFeishuRegistrationRequest).mock.calls.length).toBeGreaterThan(calls);
+        }
+      } finally {
+        openSpy.mockRestore();
+        vi.useRealTimers();
+      }
+    },
+  );
+
   it("automatically finalizes a Feishu reconnect for an already connected agent", async () => {
     vi.useFakeTimers();
     const openSpy = vi.spyOn(window, "open").mockImplementation(() => null);

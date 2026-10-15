@@ -448,13 +448,13 @@ func (h *Handler) handleConnectorResources(w http.ResponseWriter, r *http.Reques
 	case http.MethodGet:
 		if id == "" {
 			var items []apps.Installation
-			items, err = h.apps.List(r.Context(), "")
+			items, err = h.apps.CheckResources(r.Context())
 			for i := range items {
 				items[i] = h.connectorResourceView(items[i])
 			}
 			result = map[string]any{"items": items}
 		} else {
-			result, err = h.apps.Get(r.Context(), "", id)
+			result, err = h.apps.CheckResource(r.Context(), id, false)
 		}
 	case http.MethodPost:
 		var req apps.CreateRequest
@@ -464,7 +464,8 @@ func (h *Handler) handleConnectorResources(w http.ResponseWriter, r *http.Reques
 		req.Connect = false
 		unlockConnector := h.lockGitLabConnectorSettings(req.AppID, req.Config, &req.Credentials)
 		defer unlockConnector()
-		if _, probeErr := h.apps.Probe(r.Context(), "", apps.ProbeRequest{AppID: req.AppID, Config: req.Config, Credentials: req.Credentials}); probeErr != nil {
+		probe, probeErr := h.apps.Probe(r.Context(), "", apps.ProbeRequest{AppID: req.AppID, Config: req.Config, Credentials: req.Credentials})
+		if probeErr != nil {
 			writeConnectorError(w, probeErr)
 			return
 		}
@@ -476,6 +477,11 @@ func (h *Handler) handleConnectorResources(w http.ResponseWriter, r *http.Reques
 		result, err = h.apps.Create(r.Context(), "", req)
 		if err != nil {
 			rollbackConnector()
+		}
+		if err == nil {
+			if resource, ok := result.(apps.Installation); ok {
+				result, err = h.apps.RecordResourceProbe(resource, probe)
+			}
 		}
 		status = http.StatusCreated
 	case http.MethodPatch:
@@ -494,11 +500,14 @@ func (h *Handler) handleConnectorResources(w http.ResponseWriter, r *http.Reques
 		}
 		unlockConnector := h.lockGitLabConnectorSettings(current.AppID, config, req.Credentials)
 		defer unlockConnector()
+		var validated *apps.ProbeResult
 		if req.Config != nil || req.Credentials != nil {
-			if probeErr := h.apps.ProbeResourceUpdate(r.Context(), id, current.UpdatedAt, req); probeErr != nil {
+			probe, probeErr := h.apps.ProbeResourceUpdateResult(r.Context(), id, current.UpdatedAt, req)
+			if probeErr != nil {
 				writeConnectorError(w, probeErr)
 				return
 			}
+			validated = &probe
 		}
 		rollbackConnector, saveErr := h.saveGitLabConnectorSettings(r.Context(), "", current.AppID, config, req.Credentials)
 		if saveErr != nil {
@@ -508,6 +517,13 @@ func (h *Handler) handleConnectorResources(w http.ResponseWriter, r *http.Reques
 		result, err = h.apps.UpdateResourceAt(r.Context(), id, req, current.UpdatedAt)
 		if err != nil {
 			rollbackConnector()
+		}
+		if err == nil {
+			if validated != nil {
+				result, err = h.apps.RecordResourceProbe(result.(apps.Installation), *validated)
+			} else {
+				result, err = h.apps.CheckResource(r.Context(), id, true)
+			}
 		}
 	case http.MethodDelete:
 		err = h.apps.Delete(r.Context(), "", id)

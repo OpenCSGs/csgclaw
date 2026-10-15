@@ -27,13 +27,14 @@ type record struct {
 }
 
 type entry struct {
-	record        record
-	generation    uint64
-	connection    *connection
-	pendingCancel context.CancelFunc
-	recovery      *connectionRecovery
-	recoveryDelay time.Duration
-	connectedAt   time.Time
+	resourceHealth *resourceHealth
+	record         record
+	generation     uint64
+	connection     *connection
+	pendingCancel  context.CancelFunc
+	recovery       *connectionRecovery
+	recoveryDelay  time.Duration
+	connectedAt    time.Time
 }
 
 type gateway struct {
@@ -45,16 +46,17 @@ type gateway struct {
 }
 
 type Service struct {
-	mu            sync.Mutex
-	path          string
-	dataRoot      string
-	ephemeralData bool
-	options       Options
-	packages      map[string]pluginPackage
-	entries       map[string]*entry
-	gateways      map[string]*gateway
-	ctx           context.Context
-	cancel        context.CancelFunc
+	credentialGeneration uint64
+	mu                   sync.Mutex
+	path                 string
+	dataRoot             string
+	ephemeralData        bool
+	options              Options
+	packages             map[string]pluginPackage
+	entries              map[string]*entry
+	gateways             map[string]*gateway
+	ctx                  context.Context
+	cancel               context.CancelFunc
 }
 
 func NewService(statePath string, options Options) (*Service, error) {
@@ -551,6 +553,9 @@ func (s *Service) DeleteAgent(ctx context.Context, agentID string) error {
 }
 
 func (s *Service) Probe(ctx context.Context, agentID string, in ProbeRequest) (ProbeResult, error) {
+	s.mu.Lock()
+	credentialGeneration := s.credentialGeneration
+	s.mu.Unlock()
 	if in.InstallationID != "" {
 		s.mu.Lock()
 		e, err := s.findLocked(agentID, in.InstallationID)
@@ -591,6 +596,8 @@ func (s *Service) Probe(ctx context.Context, agentID string, in ProbeRequest) (P
 		return ProbeResult{}, err
 	}
 	defer conn.close()
+	result.credentialService = s
+	result.credentialGeneration = credentialGeneration
 	return *result, nil
 }
 
@@ -637,8 +644,13 @@ func (s *Service) InvalidateConnector(connectorID string) {
 	var connections []detached
 	revisions := map[string]uint64{}
 	s.mu.Lock()
+	s.credentialGeneration++
 	for id, e := range s.entries {
-		if e.record.AgentID == "" || e.record.Config.AuthMode != "connector" || !strings.EqualFold(strings.TrimSpace(e.record.Config.ConnectorID), connectorID) {
+		if e.record.Config.AuthMode != "connector" || !strings.EqualFold(strings.TrimSpace(e.record.Config.ConnectorID), connectorID) {
+			continue
+		}
+		if e.record.AgentID == "" {
+			e.resourceHealth = nil
 			continue
 		}
 		conn := e.connection
