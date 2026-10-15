@@ -141,125 +141,129 @@ export function AgentOverviewPage() {
           className={`${styles.list} ${listOpen ? styles.listOpen : ""}`}
           aria-busy={templatesTab && templatesLoading}
         >
-          <label className={styles.search}>
-            <Search size={15} />
-            <TextInput
-              variant="plain"
-              size="sm"
-              aria-label={t(templatesTab ? "resourcesTemplateSearchPlaceholder" : "taskEntrySearchTarget")}
-              placeholder={t(templatesTab ? "resourcesTemplateSearchPlaceholder" : "taskEntrySearchTarget")}
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-            />
-          </label>
-          <nav className={styles.filters} aria-label={t("agentsTab")}>
-            {(templatesTab ? ["official", "personal"] : ["all", "agents", "teams"]).map((value) => (
-              <button
-                key={value}
-                type="button"
-                aria-pressed={(templatesTab ? templateFilter : filter) === value}
-                onClick={() => (templatesTab ? setTemplateFilter(value) : setFilter(value))}
-              >
-                {t(`taskEntryOverview_${value}`)}
-              </button>
-            ))}
-          </nav>
-          {templatesTab ? (
-            <>
-              {templatesLoading ? (
-                <div>
-                  <p className={styles.listStatus}>{t("iaTemplatesLoading")}</p>
-                  <div className={styles.skeletonList} aria-hidden="true">
-                    {[0, 1, 2, 3].map((index) => (
-                      <div key={index} className={styles.skeletonRow}>
-                        <span />
-                        <span />
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ) : templatesQuery.isFetching ? (
-                <p className={styles.listStatus} role="status">
-                  {t("iaTemplatesRefreshing")}
-                </p>
-              ) : null}
-              {templatesQuery.isError ? (
-                <div className={styles.listError} role="alert">
-                  <p>{t(templatesFailed ? "iaTemplatesLoadFailed" : "iaTemplatesRefreshFailed")}</p>
-                  <Button size="sm" onClick={() => void templatesQuery.refetch()}>
-                    {t("retry")}
-                  </Button>
-                </div>
-              ) : null}
-              {shownTemplates.map((item) => (
+          <div className={styles.listControls}>
+            <label className={styles.search}>
+              <Search size={15} />
+              <TextInput
+                variant="plain"
+                size="sm"
+                aria-label={t(templatesTab ? "resourcesTemplateSearchPlaceholder" : "taskEntrySearchTarget")}
+                placeholder={t(templatesTab ? "resourcesTemplateSearchPlaceholder" : "taskEntrySearchTarget")}
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+              />
+            </label>
+            <nav className={styles.filters} aria-label={t("agentsTab")}>
+              {(templatesTab ? ["official", "personal"] : ["all", "agents", "teams"]).map((value) => (
                 <button
+                  key={value}
                   type="button"
-                  key={item.id}
-                  className={`${styles.row} ${selectedTemplateID === item.id ? styles.active : ""}`}
-                  onClick={() => {
-                    controller.hubViewProps?.onSelectTemplateInPlace(item);
-                    setHasSelectedTemplate(true);
-                    closeList();
-                  }}
+                  aria-pressed={(templatesTab ? templateFilter : filter) === value}
+                  onClick={() => (templatesTab ? setTemplateFilter(value) : setFilter(value))}
                 >
-                  <span className={styles.identity}>
-                    <strong>{item.name}</strong>
-                    <small>{item.description}</small>
-                  </span>
-                  <ChevronRight size={14} />
+                  {t(`taskEntryOverview_${value}`)}
                 </button>
               ))}
-              {!templatesQuery.isLoading && !templatesQuery.isError && !shownTemplates.length ? (
-                <p className={styles.emptyList}>{templateEmptyTitle}</p>
-              ) : null}
-            </>
-          ) : (
-            <>
-              {filter === "all" || filter === "agents"
-                ? agents.map((item) => (
-                    <button
-                      type="button"
-                      key={item.id}
-                      className={`${styles.row} ${activeID === item.id ? styles.active : ""}`}
-                      onClick={() => chooseAgent(item)}
-                    >
-                      <span className={styles.avatar}>
-                        <AgentAvatarContent avatar={item.avatar} fallback={item.name?.slice(0, 1) || "A"} />
-                      </span>
-                      <span className={styles.identity}>
-                        <strong>{item.name}</strong>
-                        <small>{agentRoleLabel(item, t)}</small>
-                      </span>
-                      <ChevronRight size={14} />
-                    </button>
-                  ))
-                : null}
-              {filter === "all" || filter === "teams"
-                ? teams.map((item) => (
-                    <button
-                      type="button"
-                      key={item.id}
-                      className={`${styles.row} ${activeID === item.id ? styles.active : ""}`}
-                      onClick={() => {
-                        closeList();
-                        props.onSelectTeam(item);
-                      }}
-                    >
-                      <RoomAvatar
-                        members={resolveTeamAvatarMembers(item, props.workerAgentItems, props.usersById)}
-                        size={28}
-                        showCountBadge={false}
-                      />
-                      <span className={styles.identity}>
-                        <strong>{item.title}</strong>
-                        <small>{t("taskEntryTeamMembers", { count: item.member_agent_ids.length })}</small>
-                      </span>
-                      <ChevronRight size={14} />
-                    </button>
-                  ))
-                : null}
-            </>
-          )}
+            </nav>
+          </div>
+          <div className={styles.listEntries}>
+            {templatesTab ? (
+              <>
+                {templatesLoading ? (
+                  <div>
+                    <p className={styles.listStatus}>{t("iaTemplatesLoading")}</p>
+                    <div className={styles.skeletonList} aria-hidden="true">
+                      {[0, 1, 2, 3].map((index) => (
+                        <div key={index} className={styles.skeletonRow}>
+                          <span />
+                          <span />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : templatesQuery.isFetching ? (
+                  <p className={styles.listStatus} role="status">
+                    {t("iaTemplatesRefreshing")}
+                  </p>
+                ) : null}
+                {templatesQuery.isError ? (
+                  <div className={styles.listError} role="alert">
+                    <p>{t(templatesFailed ? "iaTemplatesLoadFailed" : "iaTemplatesRefreshFailed")}</p>
+                    <Button size="sm" onClick={() => void templatesQuery.refetch()}>
+                      {t("retry")}
+                    </Button>
+                  </div>
+                ) : null}
+                {shownTemplates.map((item) => (
+                  <button
+                    type="button"
+                    key={item.id}
+                    className={`${styles.row} ${selectedTemplateID === item.id ? styles.active : ""}`}
+                    onClick={() => {
+                      controller.hubViewProps?.onSelectTemplateInPlace(item);
+                      setHasSelectedTemplate(true);
+                      closeList();
+                    }}
+                  >
+                    <span className={styles.identity}>
+                      <strong>{item.name}</strong>
+                      <small>{item.description}</small>
+                    </span>
+                    <ChevronRight size={14} />
+                  </button>
+                ))}
+                {!templatesQuery.isLoading && !templatesQuery.isError && !shownTemplates.length ? (
+                  <p className={styles.emptyList}>{templateEmptyTitle}</p>
+                ) : null}
+              </>
+            ) : (
+              <>
+                {filter === "all" || filter === "agents"
+                  ? agents.map((item) => (
+                      <button
+                        type="button"
+                        key={item.id}
+                        className={`${styles.row} ${activeID === item.id ? styles.active : ""}`}
+                        onClick={() => chooseAgent(item)}
+                      >
+                        <span className={styles.avatar}>
+                          <AgentAvatarContent avatar={item.avatar} fallback={item.name?.slice(0, 1) || "A"} />
+                        </span>
+                        <span className={styles.identity}>
+                          <strong>{item.name}</strong>
+                          <small>{agentRoleLabel(item, t)}</small>
+                        </span>
+                        <ChevronRight size={14} />
+                      </button>
+                    ))
+                  : null}
+                {filter === "all" || filter === "teams"
+                  ? teams.map((item) => (
+                      <button
+                        type="button"
+                        key={item.id}
+                        className={`${styles.row} ${activeID === item.id ? styles.active : ""}`}
+                        onClick={() => {
+                          closeList();
+                          props.onSelectTeam(item);
+                        }}
+                      >
+                        <RoomAvatar
+                          members={resolveTeamAvatarMembers(item, props.workerAgentItems, props.usersById)}
+                          size={28}
+                          showCountBadge={false}
+                        />
+                        <span className={styles.identity}>
+                          <strong>{item.title}</strong>
+                          <small>{t("taskEntryTeamMembers", { count: item.member_agent_ids.length })}</small>
+                        </span>
+                        <ChevronRight size={14} />
+                      </button>
+                    ))
+                  : null}
+              </>
+            )}
+          </div>
         </aside>
         <div className={styles.detail}>
           {templatesTab ? (
