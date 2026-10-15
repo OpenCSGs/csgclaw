@@ -1917,10 +1917,6 @@ func (h *Handler) handleHubTemplates(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
-		if req.Deploy && strings.TrimSpace(req.Registry) != config.DefaultOfficialHubRegistryName {
-			http.Error(w, "only community templates can be deployed", http.StatusBadRequest)
-			return
-		}
 		var item hub.Template
 		publishingTemplate := strings.TrimSpace(req.TemplateID) != ""
 		if publishingTemplate {
@@ -1930,6 +1926,9 @@ func (h *Handler) handleHubTemplates(w http.ResponseWriter, r *http.Request) {
 			spec, err = h.workspace.HubPublishSpec(req.AgentID, req.IncludeMemory)
 			if err == nil {
 				spec.Registry = req.Registry
+				if req.Avatar != nil {
+					spec.Avatar = strings.TrimSpace(*req.Avatar)
+				}
 				if strings.TrimSpace(req.Name) != "" {
 					spec.ID = strings.TrimSpace(req.Name)
 					spec.Name = strings.TrimSpace(req.Name)
@@ -1946,7 +1945,11 @@ func (h *Handler) handleHubTemplates(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 			if err == nil {
-				item, err = hubSvc.Publish(r.Context(), spec)
+				if req.ReplaceTemplateID != "" {
+					item, err = hubSvc.ReplaceLocal(r.Context(), req.ReplaceTemplateID, spec)
+				} else {
+					item, err = hubSvc.Publish(r.Context(), spec)
+				}
 			}
 		}
 		if err != nil {
@@ -1981,27 +1984,6 @@ func (h *Handler) handleHubTemplates(w http.ResponseWriter, r *http.Request) {
 			}
 			writeHubTemplateError(w, status, code, err.Error(), "")
 			return
-		}
-		if req.Deploy {
-			if err := createCommunityAgentInstance(r.Context(), item, authStatus); err != nil {
-				status := http.StatusBadGateway
-				code := ""
-				if errors.Is(err, errCommunityInstanceTemplatePending) {
-					status = http.StatusConflict
-					code = communityInstanceTemplatePendingCode
-				} else if errors.Is(err, errCommunityInstanceSensitiveCheck) {
-					status = http.StatusConflict
-					code = communityInstanceSensitiveCheckCode
-				} else if errors.Is(err, errCommunityInstanceResourceUnavailable) {
-					status = http.StatusServiceUnavailable
-					code = communityInstanceResourceUnavailableCode
-				}
-				if code == "" {
-					code = "template_deploy_failed"
-				}
-				writeHubTemplateError(w, status, code, communityInstanceUpstreamMessage(err), item.ID)
-				return
-			}
 		}
 		writeJSON(w, http.StatusCreated, presentHubTemplate(item))
 	default:
@@ -2127,6 +2109,7 @@ func presentHubTemplate(item hub.Template) apitypes.HubTemplate {
 		Namespace:      item.Namespace,
 		Name:           item.Name,
 		DisplayName:    item.DisplayName,
+		Avatar:         item.Avatar,
 		Description:    item.Description,
 		Role:           item.Role,
 		RuntimeKind:    bootstrapRuntimeKind(item.RuntimeKind),

@@ -38,8 +38,11 @@ import type {
   FetchAgentsOptions,
 } from "@/api/agents";
 import { patchCsgclawUserRequest } from "@/api/participants";
-import { publishAgentTemplateRequest, type AgentTemplatePublishTarget } from "@/api/hub";
-import { HubTemplateErrorCodes, hubTemplateErrorCode, upsertHubTemplateReviewState } from "@/models/hubWorkspace";
+import {
+  publishAgentTemplateRequest,
+  publishHubTemplateToCommunityRequest,
+  type AgentTemplatePublishTarget,
+} from "@/api/hub";
 import type { HubTemplate } from "@/models/hubWorkspace";
 import { createUserRequest, joinAgentToRoomRequest } from "@/api/im";
 import { fetchSkills } from "@/api/skills";
@@ -562,6 +565,7 @@ export function useAgentController({
   modelProvidersLoaded = false,
   openCSGAuthGuard,
   onAgentDeleted,
+  onTemplatePublished,
   profileDetailAgentID = "",
   redirectToIncompleteManagerProfile = true,
   refreshMCPServers = async () => null,
@@ -582,7 +586,6 @@ export function useAgentController({
   setAgentsData,
   setBootstrapData,
   setManagerProfileData,
-  setHubPublishError = () => undefined,
   setSelectedHubTemplateId,
   t,
 }: UseAgentControllerArgs) {
@@ -625,6 +628,7 @@ export function useAgentController({
   const [agentPageSavedDraft, setAgentPageSavedDraft] = useState<AgentDraft | null>(null);
   const [agentPageBusy, setAgentPageBusy] = useState(false);
   const [agentPagePublishBusy, setAgentPagePublishBusy] = useState(false);
+  const pendingTemplatePublications = useRef(new Map<string, { id: string; metadata: string }>());
   const [agentPagePublishError, setAgentPagePublishError] = useState("");
   const [agentPageError, setAgentPageError] = useState("");
   const [agentPageBillingURL, setAgentPageBillingURL] = useState("");
@@ -2023,16 +2027,47 @@ export function useAgentController({
     if (target !== "local" && !canPublishCommunityTemplateRuntime(agentRuntimeKind(selectedAgentForPage))) {
       return false;
     }
+    const publicationKey = JSON.stringify([selectedAgentForPage.id, name]);
+    const metadata = JSON.stringify([description, includeMemory, displayName]);
+    const pendingPublication =
+      target === "official" ? pendingTemplatePublications.current.get(publicationKey) : undefined;
+    let localTemplateID = pendingPublication?.id;
     setAgentPagePublishBusy(true);
     try {
-      const published = await publishAgentTemplateRequest(
-        selectedAgentForPage.id,
-        target,
-        name,
-        description,
-        includeMemory,
-        displayName,
-      );
+      let published: HubTemplate;
+      if (target === "local") {
+        published = await publishAgentTemplateRequest(
+          selectedAgentForPage.id,
+          "local",
+          name,
+          description,
+          includeMemory,
+          displayName,
+          resolveAgentAvatarSource(selectedAgentForPage, usersById) ||
+            String(agents.find((item) => item.id === selectedAgentForPage.id)?.avatar || ""),
+        );
+      } else {
+        if (!localTemplateID || pendingPublication?.metadata !== metadata) {
+          const local = await publishAgentTemplateRequest(
+            selectedAgentForPage.id,
+            "local",
+            name,
+            description,
+            includeMemory,
+            displayName,
+            resolveAgentAvatarSource(selectedAgentForPage, usersById) ||
+              String(agents.find((item) => item.id === selectedAgentForPage.id)?.avatar || ""),
+            localTemplateID || "",
+          );
+          localTemplateID = String(local.id || "").trim();
+          if (!localTemplateID) throw new Error("Local template response is missing its ID");
+          pendingTemplatePublications.current.set(publicationKey, { id: localTemplateID, metadata });
+        }
+        published = await publishHubTemplateToCommunityRequest(localTemplateID, includeMemory);
+        onTemplatePublished?.(published);
+        pendingTemplatePublications.current.delete(publicationKey);
+        localTemplateID = undefined;
+      }
       await refreshHubTemplates();
       if (published?.id) {
         setSelectedHubTemplateId(published.id);
@@ -2042,35 +2077,14 @@ export function useAgentController({
       }
       return true;
     } catch (err) {
-      if (target !== "local" && handleOpenCSGAuthenticationError(err)) {
+      if (localTemplateID) {
+        await refreshHubTemplates().catch(() => undefined);
+      }
+      if (target !== "local" && handleOpenCSGAuthenticationError(err) && !localTemplateID) {
         return false;
       }
-      const errorCode = hubTemplateErrorCode(err);
-      const deploySensitiveCheckFailed = errorCode === HubTemplateErrorCodes.reviewFailed;
-      const deployReviewPending = errorCode === HubTemplateErrorCodes.reviewPending;
-      const publishedTemplateID = String((err as ApiError | null)?.publishedTemplateId ?? "").trim();
-      const message = errorMessage(err, t("agentActionFailed"));
-      if (target === "official_deploy" && publishedTemplateID) {
-        await refreshHubTemplates();
-        if (deploySensitiveCheckFailed || deployReviewPending) {
-          queryClient.setQueryData<HubTemplate[]>(workspaceQueryKeys.hubTemplates(), (templates) =>
-            upsertHubTemplateReviewState(
-              templates,
-              publishedTemplateID,
-              deployReviewPending ? "Pending" : "Fail",
-              deployReviewPending ? "" : message,
-              agentRuntimeKind(selectedAgentForPage),
-            ),
-          );
-        }
-        // Publishing succeeded, but deployment did not. Keep the upstream
-        // result visible after navigating to the newly published template,
-        // including the common case where review is still pending.
-        setHubPublishError(message);
-        setSelectedHubTemplateId(publishedTemplateID);
-        navigatePane({ type: WorkspacePaneTypes.hub, id: publishedTemplateID, resourceType: "template" }, rooms);
-        return true;
-      }
+      const reason = errorMessage(err, t("agentActionFailed"));
+      const message = localTemplateID ? t("agentTemplateSavedPublishFailed", { reason }) : reason;
       setAgentPagePublishError(message);
       setAgentPageSaveError(message);
       return false;
@@ -3078,6 +3092,9 @@ export function useAgentController({
         }
       },
       onPublish: publishAgentPage,
+      onPublishLogin: () => {
+        requireOpenCSGAuthentication();
+      },
       onProviderLogin: loginCLIProxyProvider,
       onRequireOpenCSGAuth: requireOpenCSGAuthentication,
       onStart: (item: AgentLike | null | undefined) => runAgentAction(item, "start"),

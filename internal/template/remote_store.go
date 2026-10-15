@@ -29,7 +29,7 @@ const (
 	defaultRemoteHTTPTimeout    = 60 * time.Second
 	defaultRemoteMaxJSONBytes   = 4 * 1024 * 1024
 	defaultRemoteMaxFileBytes   = 50 * 1024 * 1024
-	officialTemplateNamespace   = "Agentic"
+	officialTemplateNamespace   = "agentichub"
 	remoteManifestFileName      = "agent.toml"
 	remoteAgentTemplatesPerPage = 20
 	remoteCommunityTemplateType = "csgclaw"

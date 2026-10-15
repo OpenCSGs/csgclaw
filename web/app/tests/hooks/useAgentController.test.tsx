@@ -42,7 +42,7 @@ import {
   updateAgentRequest,
 } from "@/api/agents";
 import { createUserRequest } from "@/api/im";
-import { publishAgentTemplateRequest } from "@/api/hub";
+import { publishAgentTemplateRequest, publishHubTemplateToCommunityRequest } from "@/api/hub";
 import { fetchAgentMCPServerSourceStatus } from "@/api/mcp";
 import { patchCsgclawUserRequest } from "@/api/participants";
 import { fetchSkills } from "@/api/skills";
@@ -149,6 +149,7 @@ vi.mock("@/api/hub", async () => {
   return {
     ...actual,
     publishAgentTemplateRequest: vi.fn(),
+    publishHubTemplateToCommunityRequest: vi.fn(),
   };
 });
 
@@ -246,7 +247,6 @@ function useAgentControllerHarness(
     refreshedBootstrapConfig?: RuntimeBootstrapConfig | null;
     refreshMCPServers?: () => Promise<unknown>;
     refreshWorkspaceModelProviders?: () => Promise<ModelProviderCatalog | null>;
-    setHubPublishError?: (message: string) => void;
     t?: TranslateFn;
   } = {},
 ) {
@@ -334,7 +334,6 @@ function useAgentControllerHarness(
     setManagerProfileData: (value) => {
       setManagerProfile((current) => (typeof value === "function" ? value(current) : value));
     },
-    setHubPublishError: options.setHubPublishError,
     setSelectedHubTemplateId: setSelectedHubTemplateIdRef.current,
     t: options.t ?? t,
   });
@@ -405,6 +404,7 @@ describe("useAgentController", () => {
     vi.mocked(updateAgentRequest).mockReset();
     vi.mocked(patchCsgclawUserRequest).mockReset();
     vi.mocked(publishAgentTemplateRequest).mockReset();
+    vi.mocked(publishHubTemplateToCommunityRequest).mockReset();
     navigationBlockerMock.current = {
       proceed: vi.fn(),
       reset: vi.fn(),
@@ -1332,103 +1332,158 @@ describe("useAgentController", () => {
     expect(result.current.agentViewProps.saveBillingURL).toBe("");
   });
 
-  it("opens the published template when community deployment is waiting for review", async () => {
-    const setHubPublishError = vi.fn();
+  it("saves a local snapshot before publishing that template to agentic hub", async () => {
     const worker: AgentLike = {
       ...oldAgent,
       id: "u-worker",
-      name: "reviewer",
+      name: "Reviewer",
       role: "worker",
+      avatar: "avatars/custom.png",
       runtime_kind: "codex",
     };
-    vi.mocked(publishAgentTemplateRequest).mockRejectedValueOnce({
-      status: 409,
-      code: "AGENT-ERR-22",
-      message: "sensitive-content review is still pending",
-      publishedTemplateId: "alice/reviewer",
-    } satisfies ApiError);
+    const local = { id: "local.Reviewer", name: "Reviewer" };
+    const remote = { id: "alice/Reviewer", name: "Reviewer" };
+    vi.mocked(publishAgentTemplateRequest).mockResolvedValue(local);
+    vi.mocked(publishHubTemplateToCommunityRequest).mockImplementation(async () => {
+      expect(publishAgentTemplateRequest).toHaveBeenCalledWith(
+        "u-worker",
+        "local",
+        "Reviewer",
+        "Reviews changes",
+        true,
+        "审查助手",
+        "avatars/custom.png",
+        "",
+      );
+      return remote;
+    });
+    const agents = [worker];
     const { result } = renderHook(
       () =>
         useAgentControllerHarness({
           activePane: { type: WorkspacePaneTypes.agent, id: "u-worker" },
-          agents: [worker],
+          agents,
           openCSGAuthenticated: true,
-          setHubPublishError,
         }),
       { wrapper: createWrapper() },
     );
-
-    let published = false;
     await act(async () => {
-      published =
-        (await result.current.controller.agentViewProps.onPublish?.(
-          "official_deploy",
-          "reviewer",
+      expect(
+        await result.current.controller.agentViewProps.onPublish?.(
+          "official",
+          "Reviewer",
           "Reviews changes",
-          false,
-          "中文助手",
-        )) ?? false;
+          true,
+          "审查助手",
+        ),
+      ).toBe(true);
     });
-
-    expect(published).toBe(true);
-    expect(result.current.refreshHubTemplates).toHaveBeenCalledOnce();
-    expect(result.current.setSelectedHubTemplateId).toHaveBeenCalledWith("alice/reviewer");
-    expect(setHubPublishError).toHaveBeenCalledWith("sensitive-content review is still pending");
-    expect(result.current.navigatePane).toHaveBeenCalledWith(
-      { type: WorkspacePaneTypes.hub, id: "alice/reviewer", resourceType: "template" },
-      [],
-    );
+    expect(publishHubTemplateToCommunityRequest).toHaveBeenCalledWith(local.id, true);
+    expect(result.current.setSelectedHubTemplateId).toHaveBeenCalledWith(remote.id);
   });
 
-  it.each([
-    ["RESOURCE-ERR-1", "deployment resource is unavailable"],
-    ["template_deploy_failed", "template deployment failed"],
-  ])("opens the published template after partial deployment failure %s", async (code, message) => {
-    const setHubPublishError = vi.fn();
-    const worker: AgentLike = {
-      ...oldAgent,
-      id: "u-worker",
-      name: "reviewer",
-      role: "worker",
-      runtime_kind: "codex",
-    };
-    vi.mocked(publishAgentTemplateRequest).mockRejectedValueOnce({
-      status: 502,
-      code,
-      message,
-      publishedTemplateId: "alice/reviewer",
-    } satisfies ApiError);
+  it.each([false, true])(
+    "retries a failed publication without a name conflict (changed metadata: %s)",
+    async (changed) => {
+      const publicationTranslator = ((key: string, values?: Record<string, unknown>) =>
+        key === "agentTemplateSavedPublishFailed" ? `Saved locally: ${values?.reason}` : key) as TranslateFn;
+      const worker: AgentLike = {
+        ...oldAgent,
+        id: "u-worker",
+        name: "Reviewer",
+        role: "worker",
+        runtime_kind: "codex",
+      };
+      vi.mocked(publishAgentTemplateRequest).mockResolvedValue({ id: "local.Reviewer", name: "Reviewer" });
+      vi.mocked(publishHubTemplateToCommunityRequest)
+        .mockRejectedValueOnce(new Error("Hub unavailable"))
+        .mockResolvedValueOnce({ id: "alice/Reviewer", name: "Reviewer" });
+      const agents = [worker];
+      const { result } = renderHook(
+        () =>
+          useAgentControllerHarness({
+            activePane: { type: WorkspacePaneTypes.agent, id: "u-worker" },
+            agents,
+            openCSGAuthenticated: true,
+            t: publicationTranslator,
+          }),
+        { wrapper: createWrapper() },
+      );
+      await act(async () => {
+        expect(
+          await result.current.controller.agentViewProps.onPublish?.(
+            "official",
+            "Reviewer",
+            "Reviews",
+            false,
+            "审查助手",
+          ),
+        ).toBe(false);
+      });
+      expect(result.current.controller.agentViewProps.publishError).toBe("Saved locally: Hub unavailable");
+      expect(result.current.refreshHubTemplates).toHaveBeenCalledOnce();
+      await act(async () => {
+        expect(
+          await result.current.controller.agentViewProps.onPublish?.(
+            "official",
+            "Reviewer",
+            changed ? "Updated description" : "Reviews",
+            changed,
+            changed ? "新展示名" : "审查助手",
+          ),
+        ).toBe(true);
+      });
+      expect(publishAgentTemplateRequest).toHaveBeenCalledTimes(changed ? 2 : 1);
+      if (changed)
+        expect(publishAgentTemplateRequest).toHaveBeenLastCalledWith(
+          "u-worker",
+          "local",
+          "Reviewer",
+          "Updated description",
+          true,
+          "新展示名",
+          "",
+          "local.Reviewer",
+        );
+      expect(publishHubTemplateToCommunityRequest).toHaveBeenCalledTimes(2);
+    },
+  );
+
+  it("allows local saving without login and blocks save-and-publish before any writes", async () => {
+    const worker: AgentLike = { ...oldAgent, id: "u-worker", name: "Reviewer", role: "worker", runtime_kind: "codex" };
+    vi.mocked(publishAgentTemplateRequest).mockResolvedValue({ id: "local.Reviewer", name: "Reviewer" });
+    const agents = [worker];
+    const authGuard = { ...openCSGAuthGuardStub(false), requireAuthentication: vi.fn(() => false) };
     const { result } = renderHook(
       () =>
         useAgentControllerHarness({
           activePane: { type: WorkspacePaneTypes.agent, id: "u-worker" },
-          agents: [worker],
-          openCSGAuthenticated: true,
-          setHubPublishError,
+          agents,
+          openCSGAuthGuard: authGuard,
         }),
       { wrapper: createWrapper() },
     );
-
-    let published = false;
     await act(async () => {
-      published =
-        (await result.current.controller.agentViewProps.onPublish?.(
-          "official_deploy",
-          "reviewer",
-          "Reviews changes",
+      expect(
+        await result.current.controller.agentViewProps.onPublish?.(
+          "official",
+          "Reviewer",
+          "Reviews",
           false,
-          "中文助手",
-        )) ?? false;
+          "审查助手",
+        ),
+      ).toBe(false);
     });
-
-    expect(published).toBe(true);
-    expect(result.current.refreshHubTemplates).toHaveBeenCalledOnce();
-    expect(result.current.setSelectedHubTemplateId).toHaveBeenCalledWith("alice/reviewer");
-    expect(setHubPublishError).toHaveBeenCalledWith(message);
-    expect(result.current.navigatePane).toHaveBeenCalledWith(
-      { type: WorkspacePaneTypes.hub, id: "alice/reviewer", resourceType: "template" },
-      [],
-    );
+    expect(publishAgentTemplateRequest).not.toHaveBeenCalled();
+    act(() => result.current.controller.agentViewProps.onPublishLogin?.());
+    expect(authGuard.requireAuthentication).toHaveBeenCalledTimes(2);
+    await act(async () => {
+      expect(
+        await result.current.controller.agentViewProps.onPublish?.("local", "Reviewer", "Reviews", false, "审查助手"),
+      ).toBe(true);
+    });
+    expect(publishAgentTemplateRequest).toHaveBeenCalledOnce();
+    expect(publishHubTemplateToCommunityRequest).not.toHaveBeenCalled();
   });
 
   it("does not wait for bootstrap or skill refresh after saving only the selected agent model", async () => {

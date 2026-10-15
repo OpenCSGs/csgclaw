@@ -259,6 +259,7 @@ export function useWorkspaceController(): WorkspaceController {
     modelProvidersLoaded,
     openCSGAuthGuard,
     onAgentDeleted: handleAgentDeleted,
+    onTemplatePublished: hub.showPublishedTemplate,
     profileDetailAgentID: conversationProfileDetailAgentID,
     refreshMCPServers: hub.refetchMCPServers,
     refreshHubTemplates,
@@ -278,7 +279,6 @@ export function useWorkspaceController(): WorkspaceController {
     setAgentsData,
     setBootstrapData,
     setManagerProfileData,
-    setHubPublishError: hub.setPublishError,
     setSelectedHubTemplateId,
     t,
   });
@@ -973,6 +973,11 @@ export function useWorkspaceController(): WorkspaceController {
         }
       : null,
     hubViewProps: {
+      templateUsername: openCSGAuthGuard.authenticated ? auth.status.user_id : "",
+      onTemplateLogin: () => {
+        openCSGAuthGuard.requireAuthentication();
+      },
+      agenticHubSiteURL: openCSGAuthGuard.authenticated ? auth.status.opencsg_base_url || auth.status.base_url : "",
       t,
       locale,
       hub: hubViewHub,

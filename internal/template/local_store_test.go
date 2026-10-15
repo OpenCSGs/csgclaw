@@ -34,6 +34,7 @@ func TestLocalStorePublishRoundTrip(t *testing.T) {
 	published, err := store.Publish(context.Background(), PublishSpec{
 		Name:           "frontend-alice",
 		DisplayName:    "前端助手",
+		Avatar:         "avatars/custom.png",
 		IncludeMemory:  true,
 		Description:    "Frontend worker with UI and styling skills",
 		RuntimeKind:    runtime.KindCodex,
@@ -44,6 +45,13 @@ func TestLocalStorePublishRoundTrip(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatalf("Publish() error = %v", err)
+	}
+	if published.Avatar != "avatars/custom.png" {
+		t.Fatalf("avatar = %q", published.Avatar)
+	}
+	reloaded, err := NewLocalStore(registryRoot).Get(context.Background(), published.ID)
+	if err != nil || reloaded.Avatar != "avatars/custom.png" {
+		t.Fatalf("reloaded avatar = %q, error = %v", reloaded.Avatar, err)
 	}
 	if published.DisplayName != "前端助手" {
 		t.Fatalf("display name = %q", published.DisplayName)
@@ -602,4 +610,45 @@ func writeWorkspaceFile(t *testing.T, dirName, relPath, contents string) string 
 		t.Fatalf("WriteFile(%q) error = %v", fullPath, err)
 	}
 	return root
+}
+
+func TestLocalStoreReplaceRefreshesSnapshotAndPreservesOldOnFailure(t *testing.T) {
+	store := NewLocalStore(t.TempDir())
+	workspace := t.TempDir()
+	instructions := filepath.Join(workspace, "AGENTS.md")
+	if err := os.WriteFile(instructions, []byte("original"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	spec := PublishSpec{Name: "reviewer", DisplayName: "Old", RuntimeKind: runtime.KindCodex, WorkspaceRef: WorkspaceRef{Kind: WorkspaceKindDir, Path: workspace}}
+	if _, err := store.Publish(context.Background(), spec); err != nil {
+		t.Fatal(err)
+	}
+	spec.DisplayName, spec.Description, spec.Avatar = "New", "Updated", "avatars/new.png"
+	if err := os.WriteFile(instructions, []byte("updated"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	got, err := store.Replace(context.Background(), "reviewer", spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.ID != "reviewer" || got.DisplayName != "New" || got.Description != "Updated" || got.Avatar != "avatars/new.png" {
+		t.Fatalf("replacement = %+v", got)
+	}
+	content, err := os.ReadFile(filepath.Join(store.templateRoot("reviewer"), "instructions", "AGENTS.md"))
+	if err != nil || !strings.Contains(string(content), "updated") {
+		t.Fatalf("snapshot = %s, error = %v", content, err)
+	}
+	spec.Name = "different-name"
+	if _, err := store.Replace(context.Background(), "reviewer", spec); err == nil {
+		t.Fatal("replacement renamed template")
+	}
+	spec.Name = "reviewer"
+	spec.RuntimeKind = "invalid-runtime"
+	if _, err := store.Replace(context.Background(), "reviewer", spec); err == nil {
+		t.Fatal("invalid replacement succeeded")
+	}
+	kept, err := store.Get(context.Background(), "reviewer")
+	if err != nil || kept.Description != "Updated" {
+		t.Fatalf("original was not retained: %+v, %v", kept, err)
+	}
 }

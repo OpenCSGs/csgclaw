@@ -5,16 +5,17 @@ const HUB_TEMPLATES_PATH = "/api/v1/hub/templates";
 const HUB_TEMPLATE_ESCAPE = "~";
 const HUB_TEMPLATE_NAMESPACE_SEPARATOR = "~s~";
 
-export type AgentTemplatePublishTarget = "local" | "official" | "official_deploy";
+export type AgentTemplatePublishTarget = "local" | "official";
 
 type PublishAgentTemplatePayload = {
   agent_id: string;
   registry: AgentTemplatePublishTarget;
   name: string;
   display_name?: string;
+  avatar?: string;
+  replace_template_id?: string;
   description: string;
   include_memory?: boolean;
-  deploy?: boolean;
 };
 
 export function fetchHubTemplates(): Promise<HubTemplate[]> {
@@ -51,29 +52,27 @@ export function publishAgentTemplateRequest(
   description: string,
   includeMemory = false,
   displayName = "",
+  avatar = "",
+  replaceTemplateID = "",
 ): Promise<HubTemplate> {
   const payload: PublishAgentTemplatePayload = {
     agent_id: agentID,
-    registry: registry === "official_deploy" ? "official" : registry,
+    registry,
     name,
     ...(displayName.trim() ? { display_name: displayName.trim() } : { display_name: name }),
     description,
+    ...(registry === "local" && avatar ? { avatar } : {}),
+    ...(registry === "local" && replaceTemplateID ? { replace_template_id: replaceTemplateID } : {}),
     ...(includeMemory ? { include_memory: true } : {}),
-    ...(registry === "official_deploy" ? { deploy: true } : {}),
   };
   return post<HubTemplate>(HUB_TEMPLATES_PATH, payload);
 }
 
-export function publishHubTemplateToCommunityRequest(
-  templateID: string,
-  deploy = false,
-  includeMemory = false,
-): Promise<HubTemplate> {
+export function publishHubTemplateToCommunityRequest(templateID: string, includeMemory = false): Promise<HubTemplate> {
   return post<HubTemplate>(HUB_TEMPLATES_PATH, {
     template_id: templateID,
     registry: "official",
     ...(includeMemory ? { include_memory: true } : {}),
-    ...(deploy ? { deploy: true } : {}),
   });
 }
 
