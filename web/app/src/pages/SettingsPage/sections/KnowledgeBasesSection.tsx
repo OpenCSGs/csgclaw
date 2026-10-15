@@ -7,6 +7,7 @@ import { Button, Tooltip } from "@/components/ui";
 import { ResourceList, ResourceListCard } from "@/components/business/ResourceListCard";
 import { useWorkspaceControllerContext } from "@/hooks/workspace";
 import { isAuthenticated } from "@/models/auth";
+import { agenticHubKnowledgeCreateURL } from "@/models/authEnvironment";
 import { configuredKnowledgeBases, type RemoteKnowledgeBase } from "@/models/knowledgeBases";
 import { ResourceFeaturedIcon, ResourceFilterTabs, ResourceSearchField } from "@/components/business/HubDetailPane";
 import { KnowledgeBaseDetailDialog, type KnowledgeBaseDetailTarget } from "./KnowledgeBaseDetailDialog";
@@ -168,8 +169,6 @@ export function KnowledgeBasesSection() {
 }
 
 type KnowledgeTabID = "installed" | "market";
-
-const AGENTIC_HUB_CREATE_URL = "https://opencsg.com/agentichub?view=resources&subview=rag";
 
 type KnowledgeBasesView = NonNullable<
   NonNullable<ReturnType<typeof useWorkspaceControllerContext>["hubViewProps"]>["hub"]
@@ -340,10 +339,12 @@ function MarketPane({
 }
 
 function CreateKnowledgeHint({ t }: { t: (key: string, vars?: Record<string, string | number>) => string }) {
+  const { sidebarProps } = useWorkspaceControllerContext();
+  const createURL = agenticHubKnowledgeCreateURL(sidebarProps?.authStatus, sidebarProps?.authEnvironment);
   return (
     <p className={styles.createHint}>
       {t("iaKnowledgeCreateHint")}
-      <a href={AGENTIC_HUB_CREATE_URL} target="_blank" rel="noreferrer">
+      <a href={createURL} target="_blank" rel="noreferrer">
         {t("iaKnowledgeCreateAction")}
       </a>
     </p>

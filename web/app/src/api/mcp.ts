@@ -6,6 +6,7 @@ import type { MCPProbeResult, MCPServerPayload, MCPServerSourceStatus, RemoteMCP
 
 const MCP_SERVERS_PATH = "/api/v1/mcp-servers";
 const REMOTE_MCP_SERVERS_PAGE_SIZE = 12;
+const REMOTE_MCP_INSTALL_TIMEOUT_MS = 15_000;
 
 export type RemoteMCPServersPage = {
   hasMore: boolean;
@@ -118,14 +119,27 @@ export async function installRemoteMCPServerRequest(id: string): Promise<string>
   if (!normalizedID) {
     throw new Error("remote MCP server id is required");
   }
-  const payload = await post<RemoteMCPServerInstallResponse>(
-    `${MCP_SERVERS_PATH}/remote/${encodeURIComponent(normalizedID)}/install`,
-  );
-  const name = stringFromUnknown(payload?.name);
-  if (!name) {
-    throw new Error("remote MCP server installation returned no name");
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), REMOTE_MCP_INSTALL_TIMEOUT_MS);
+  try {
+    const payload = await post<RemoteMCPServerInstallResponse>(
+      `${MCP_SERVERS_PATH}/remote/${encodeURIComponent(normalizedID)}/install`,
+      undefined,
+      { signal: controller.signal },
+    );
+    const name = stringFromUnknown(payload?.name);
+    if (!name) {
+      throw new Error("remote MCP server installation returned no name");
+    }
+    return name;
+  } catch (error) {
+    if (controller.signal.aborted) {
+      throw { status: 504, code: "remote_mcp_install_timeout", message: "Remote MCP installation timed out" };
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
   }
-  return name;
 }
 
 export async function fetchRemoteMCPServersPage(page = 1, search = ""): Promise<RemoteMCPServersPage> {

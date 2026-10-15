@@ -248,6 +248,8 @@ describe("model provider catalog helpers", () => {
   it("maps provider statuses to sidebar dot tones", () => {
     expect(providerStatusTone("connected")).toBe("online");
     expect(providerStatusTone("failed")).toBe("warning");
+    expect(providerStatusTone("unconfigured")).toBe("warning");
+    expect(providerStatusTone("error")).toBe("warning");
     expect(providerStatusTone("unknown")).toBe("neutral");
     expect(providerStatusTone("unknown", { builtin: true })).toBe("online");
   });

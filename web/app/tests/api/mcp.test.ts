@@ -18,6 +18,7 @@ function mockFetch(handler: (input: RequestInfo | URL, init?: RequestInit) => Pr
 
 describe("MCP API", () => {
   afterEach(() => {
+    vi.useRealTimers();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });
@@ -91,6 +92,25 @@ describe("MCP API", () => {
       "api/v1/mcp-servers/remote/builtin%3Acalendar/install",
       expect.objectContaining({ method: "POST" }),
     );
+  });
+
+  it("bounds a stalled installation request and returns a localizable timeout", async () => {
+    vi.useFakeTimers();
+    mockFetch(
+      (_input, init) =>
+        new Promise((_resolve, reject) => {
+          init?.signal?.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")), {
+            once: true,
+          });
+        }),
+    );
+    const assertion = expect(installRemoteMCPServerRequest("user:39")).rejects.toMatchObject({
+      status: 504,
+      code: "remote_mcp_install_timeout",
+    });
+    await vi.advanceTimersByTimeAsync(15_000);
+    await assertion;
+    expect(vi.getTimerCount()).toBe(0);
   });
 
   it("probes the current MCP draft and normalizes its tools", async () => {

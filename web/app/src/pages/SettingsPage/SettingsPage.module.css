@@ -224,6 +224,24 @@
   padding: 4px 0 8px;
 }
 
+.marketInstalled,
+.marketInstallError {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 18px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.marketInstalled {
+  color: var(--success-text);
+}
+
+.marketInstallError {
+  color: var(--danger-text);
+}
+
 .tag {
   display: inline-flex;
   align-items: center;

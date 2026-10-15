@@ -62,7 +62,7 @@ export function KnowledgeBaseDetailDialog({
   const detail = hub?.detailPaneProps;
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [deleteError, setDeleteError] = useState("");
-  const { probe, probing, run: runProbe, reset: resetProbe } = useMCPProbe();
+  const { probe, probing, error: probeError, run: runProbe, reset: resetProbe } = useMCPProbe();
 
   const mcpName = String(kb?.configuredMCPName || "").trim();
   const mcpServer = useMemo(
@@ -151,6 +151,7 @@ export function KnowledgeBaseDetailDialog({
                 </div>
               </DialogHeader>
               <DialogBody className={styles.body}>
+                <MCPProbeCards probe={probe} probing={probing} error={probeError} t={t} />
                 {connectError ? (
                   <p className="form-error" role="alert">
                     {connectError}
@@ -178,8 +179,6 @@ export function KnowledgeBaseDetailDialog({
                     )}
                   </section>
                 )}
-
-                <MCPProbeCards probe={probe} t={t} />
               </DialogBody>
               <DialogFooter className={styles.footer}>
                 {removeAction ? (
@@ -209,7 +208,7 @@ export function KnowledgeBaseDetailDialog({
                 {variant === "installed" && mcpServer ? (
                   <Button variant="secondaryGray" size="sm" loading={probing} onClick={() => void runProbe(mcpServer)}>
                     <RefreshCw size={15} strokeWidth={2} aria-hidden="true" />
-                    {t("iaMCPTestConnection")}
+                    {probing ? t("resourcesMCPTesting") : t("iaMCPTestConnection")}
                   </Button>
                 ) : null}
                 {variant === "market" && kb ? (

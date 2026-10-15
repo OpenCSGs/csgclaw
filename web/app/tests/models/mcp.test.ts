@@ -3,6 +3,7 @@ import {
   formatMCPServerDocument,
   hasMCPServerName,
   mcpServerDisplayName,
+  mcpServerOrigin,
   isRemoteMCPInstalled,
   managedMCPServerSnapshotDiffers,
   mcpManagedKnowledgeBaseSource,
@@ -196,6 +197,16 @@ describe("MCP catalog helpers", () => {
 });
 
 describe("MCP identities", () => {
+  it.each([
+    [{ command: "npx", args: ["local-server"] }, "manual"],
+    [{ source: "system" }, "builtin"],
+    [{ source: "official" }, "market"],
+    [{ _meta: { "com.opencsg/marketplace": { server_id: "42" } } }, "market"],
+    [{ _meta: { "com.opencsg/mcp": { type: "agentichub_mcp", resource_id: "42" } } }, "market"],
+    [{ _meta: { "com.opencsg/mcp": { type: "llm_wiki", resource_id: "142" } } }, "knowledge"],
+  ])("recognizes persisted source metadata %j as %s", (config, origin) => {
+    expect(mcpServerOrigin({ name: "mcp_fixed", config })).toBe(origin);
+  });
   it("keeps keys for actions and uses Unicode display names in the UI and rename payload", () => {
     const [server] = mcpServersFromMap({ mcp_fixed: { display_name: "必应 搜索", url: "https://example.test" } });
     expect(server.name).toBe("mcp_fixed");

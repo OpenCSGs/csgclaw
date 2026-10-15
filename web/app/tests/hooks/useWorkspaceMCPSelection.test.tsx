@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { act, renderHook } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { createMCPServerRequest } from "@/api/mcp";
+import { createMCPServerRequest, installRemoteMCPServerRequest } from "@/api/mcp";
 import { useWorkspaceMCPSelection } from "@/hooks/workspace/useWorkspaceMCPSelection";
 import { workspaceQueryKeys } from "@/hooks/workspace/workspaceQueries";
 import { openCSGAuthGuardStub } from "../helpers/openCSGAuthGuard";
@@ -9,9 +9,10 @@ import { openCSGAuthGuardStub } from "../helpers/openCSGAuthGuard";
 vi.mock("@/api/mcp", async () => ({
   ...(await vi.importActual<typeof import("@/api/mcp")>("@/api/mcp")),
   createMCPServerRequest: vi.fn(),
+  installRemoteMCPServerRequest: vi.fn(),
 }));
 
-function setup() {
+function setup(authGuard = openCSGAuthGuardStub()) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const invalidate = vi.spyOn(client, "invalidateQueries");
   const selectType = vi.fn();
@@ -29,7 +30,7 @@ function setup() {
         skillCount: 0,
         templateCount: 0,
         enabled: false,
-        openCSGAuthGuard: openCSGAuthGuardStub(),
+        openCSGAuthGuard: authGuard,
         t: (key) => key,
       }),
     { wrapper },
@@ -38,6 +39,54 @@ function setup() {
 }
 
 const payload = { name: "kb-docs", config: { url: "https://example.test/mcp" } };
+
+afterEach(() => vi.clearAllMocks());
+
+describe("remote MCP installation feedback", () => {
+  const item = { id: "user:39", name: "kb-tourism" };
+
+  it("keeps a visible scoped error even when the auth guard handles a 401", async () => {
+    const auth = openCSGAuthGuardStub();
+    auth.handleAuthenticationError = vi.fn(() => true);
+    vi.mocked(installRemoteMCPServerRequest).mockRejectedValueOnce({ status: 401, message: "Sign in required" });
+    const { result, client } = setup(auth);
+    await act(async () => expect(await result.current.installRemoteMCPServer(item)).toBe(false));
+    expect(auth.handleAuthenticationError).toHaveBeenCalled();
+    expect(result.current.remoteMCPInstallFailure).toEqual({
+      id: item.id,
+      message: "resourcesMCPRemoteInstallSignInRequired",
+    });
+    expect(result.current.mcpMutationError).toBe("resourcesMCPRemoteInstallSignInRequired");
+    expect(result.current.remoteMCPInstallBusy).toBe("");
+    client.clear();
+  });
+
+  it("stops loading on success even while resource discovery is still refreshing", async () => {
+    vi.mocked(installRemoteMCPServerRequest).mockResolvedValueOnce("mcp_fixed");
+    const { result, client, invalidate } = setup();
+    invalidate.mockImplementation(() => new Promise(() => {}));
+    await act(async () => expect(await result.current.installRemoteMCPServer(item)).toBe(true));
+    expect(result.current.remoteMCPInstallBusy).toBe("");
+    expect(result.current.mcpMutationBusy).toBe(false);
+    expect(result.current.remoteMCPInstallFailure).toBeNull();
+    expect(result.current.mcpAdded).toBe(true);
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: workspaceQueryKeys.mcpServers() });
+    client.clear();
+  });
+
+  it("clears a previous installation failure after a successful retry", async () => {
+    vi.mocked(installRemoteMCPServerRequest)
+      .mockRejectedValueOnce(new Error("Endpoint unavailable"))
+      .mockResolvedValueOnce("mcp_fixed");
+    const { result, client } = setup();
+    await act(async () => expect(await result.current.installRemoteMCPServer(item)).toBe(false));
+    expect(result.current.remoteMCPInstallFailure?.message).toBe("Endpoint unavailable");
+    await act(async () => expect(await result.current.installRemoteMCPServer(item)).toBe(true));
+    expect(result.current.remoteMCPInstallFailure).toBeNull();
+    expect(result.current.mcpMutationError).toBe("");
+    client.clear();
+  });
+});
 
 describe("MCP creation source", () => {
   it("keeps knowledge base creation on knowledge and refreshes the list after saving", async () => {

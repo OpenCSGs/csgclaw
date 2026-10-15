@@ -7,7 +7,7 @@ import { ResourceList, ResourceListCard } from "@/components/business/ResourceLi
 import { SidebarMcpIcon } from "@/components/ui/Icons";
 import { useWorkspaceControllerContext } from "@/hooks/workspace";
 import { isAuthenticated } from "@/models/auth";
-import { mcpServerDisplayName } from "@/models/mcp";
+import { isRemoteMCPInstalled, mcpServerDisplayName } from "@/models/mcp";
 import {
   MCPServerCreateDialog,
   ResourceFeaturedIcon,
@@ -41,11 +41,10 @@ export function ConnectorsSection() {
     setRemoteEnabled?.(tab === "market" && authed);
   }, [authed, setRemoteEnabled, tab]);
 
-  async function installAndReveal(item: NonNullable<typeof hub>["remoteMCPServers"][number]) {
+  async function installFromMarket(item: NonNullable<typeof hub>["remoteMCPServers"][number]) {
     const installed = await detail?.onInstallRemoteMCP?.(item);
     if (installed) {
       setTarget(null);
-      setTab("installed");
     }
   }
 
@@ -162,7 +161,7 @@ export function ConnectorsSection() {
             authed={authed}
             hub={hub}
             installedServers={servers}
-            onInstall={(item) => void installAndReveal(item)}
+            onInstall={(item) => void installFromMarket(item)}
             onLogin={() => controller.sidebarProps?.onRequireOpenCSGAuthentication?.()}
             onOpenServer={(server) => setTarget({ variant: "market", server })}
             remoteServers={remoteServers}
@@ -204,9 +203,10 @@ export function ConnectorsSection() {
         market={
           target?.variant === "market"
             ? {
-                installed: servers.some((server) => server.name === target.server.id),
+                installed: isRemoteMCPInstalled(servers, target.server),
                 busy: hub?.remoteMCPInstallBusy === target.server.id,
-                onAction: () => void installAndReveal(target.server),
+                error: hub?.remoteMCPInstallFailure?.id === target.server.id ? hub.remoteMCPInstallFailure.message : "",
+                onAction: () => void installFromMarket(target.server),
               }
             : undefined
         }

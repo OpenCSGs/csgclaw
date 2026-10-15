@@ -7,6 +7,30 @@ import { SkillUploadDialog } from "./SkillUploadDialog";
 afterEach(() => vi.restoreAllMocks());
 
 describe("SkillUploadDialog", () => {
+  it("omits remote installation controls entirely in ZIP-only mode", () => {
+    render(
+      <SkillUploadDialog
+        open
+        zipOnly
+        busy={false}
+        error=""
+        installedSkills={[]}
+        onOpenChange={vi.fn()}
+        onSubmit={vi.fn()}
+        remoteInstallBusy=""
+        remoteInstallError=""
+        remoteSkills={[]}
+        remoteSkillsError=""
+        remoteSkillsHasMore={false}
+        remoteSkillsLoading={false}
+        remoteSkillsLoadingMore={false}
+        remoteSkillsSearch=""
+        t={(key) => key}
+      />,
+    );
+    expect(screen.queryByRole("tab", { hidden: true })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /resourcesSkillUploadDropTitle/ })).toBeVisible();
+  });
   it.each([false, true])("opens the ZIP picker and uploads the selected file (remote mode: %s)", async (remote) => {
     const user = userEvent.setup();
     const onSubmit = vi.fn().mockResolvedValue(true);

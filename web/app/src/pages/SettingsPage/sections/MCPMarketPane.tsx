@@ -5,7 +5,7 @@ import { SidebarMcpIcon } from "@/components/ui/Icons";
 import { useWorkspaceControllerContext } from "@/hooks/workspace";
 import { ResourceFeaturedIcon, ResourceSearchField } from "@/components/business/HubDetailPane";
 import styles from "../SettingsPage.module.css";
-import type { MCPServer } from "@/models/mcp";
+import { isRemoteMCPInstalled, type MCPServer } from "@/models/mcp";
 
 type MCPHub = NonNullable<ReturnType<typeof useWorkspaceControllerContext>["hubViewProps"]>["hub"];
 
@@ -68,6 +68,7 @@ export function MCPMarketPane({
   if (remoteServers.length === 0) {
     return <p className={styles.listNotice}>{t("resourcesMCPRemoteServersEmpty")}</p>;
   }
+  const fallbackError = hub?.remoteMCPInstallFailure ? "" : hub?.mcpMutationError;
 
   if (rows) {
     return (
@@ -77,9 +78,14 @@ export function MCPMarketPane({
           placeholder={t("iaMCPMarketSearchPlaceholder")}
           onChange={(value) => hub?.setRemoteMCPServersSearch?.(value)}
         />
+        {fallbackError ? (
+          <p className="form-error" role="alert">
+            {fallbackError}
+          </p>
+        ) : null}
         <div className="agent-skill-candidates-list" role="list">
           {remoteServers.map((item) => {
-            const installed = installedServers.some((server) => server.name === item.id);
+            const installed = isRemoteMCPInstalled(installedServers, item);
             const installing = hub?.remoteMCPInstallBusy === item.id;
             return (
               <div key={item.id} className="agent-skill-candidate is-static">
@@ -89,6 +95,11 @@ export function MCPMarketPane({
                 <button type="button" className="agent-skill-candidate-copy" onClick={() => onOpenServer(item)}>
                   <span className="agent-skill-name">{item.name}</span>
                   <span className="agent-skill-description">{item.description || item.url || item.name}</span>
+                  <MCPMarketItemFeedback
+                    installed={installed}
+                    error={hub?.remoteMCPInstallFailure?.id === item.id ? hub.remoteMCPInstallFailure.message : ""}
+                    t={t}
+                  />
                 </button>
                 <Button
                   variant={installed ? "secondaryGray" : "primary"}
@@ -97,7 +108,7 @@ export function MCPMarketPane({
                   disabled={Boolean(hub?.remoteMCPInstallBusy)}
                   onClick={() => onInstall(item)}
                 >
-                  {installed ? t("iaMCPUpdate") : t("resourcesMCPRemoteInstallAction")}
+                  {installed ? t("resourcesMCPRemoteReplaceAction") : t("resourcesMCPRemoteInstallAction")}
                 </Button>
               </div>
             );
@@ -115,26 +126,33 @@ export function MCPMarketPane({
             </Button>
           </div>
         ) : null}
-        {hub?.mcpMutationError ? (
-          <p className="form-error" role="alert">
-            {hub.mcpMutationError}
-          </p>
-        ) : null}
       </>
     );
   }
 
   return (
     <>
+      {fallbackError ? (
+        <p className="form-error" role="alert">
+          {fallbackError}
+        </p>
+      ) : null}
       <ResourceList>
         {remoteServers.map((item) => {
-          const installed = installedServers.some((server) => server.name === item.id);
+          const installed = isRemoteMCPInstalled(installedServers, item);
           const installing = hub?.remoteMCPInstallBusy === item.id;
           return (
             <ResourceListCard
               key={item.id}
               title={item.name}
               description={item.description || item.url || item.name}
+              badge={
+                <MCPMarketItemFeedback
+                  installed={installed}
+                  error={hub?.remoteMCPInstallFailure?.id === item.id ? hub.remoteMCPInstallFailure.message : ""}
+                  t={t}
+                />
+              }
               icon={
                 <ResourceFeaturedIcon>
                   <SidebarMcpIcon size={16} aria-hidden="true" />
@@ -144,13 +162,14 @@ export function MCPMarketPane({
               onOpen={() => onOpenServer(item)}
               actions={
                 installed ? (
-                  <Tooltip content={t("iaMCPUpdate")}>
+                  <Tooltip content={t("resourcesMCPRemoteReplaceAction")}>
                     <span>
                       <Button
                         iconOnly
                         size="sm"
                         variant="secondaryGray"
-                        aria-label={t("iaMCPUpdate")}
+                        aria-label={t("resourcesMCPRemoteReplaceAction")}
+                        loading={installing}
                         disabled={Boolean(hub?.remoteMCPInstallBusy)}
                         onClick={() => void onInstall?.(item)}
                       >
@@ -193,11 +212,26 @@ export function MCPMarketPane({
           </Button>
         </div>
       ) : null}
+    </>
+  );
+}
 
-      {hub?.mcpMutationError ? (
-        <p className="form-error" role="alert">
-          {hub.mcpMutationError}
-        </p>
+function MCPMarketItemFeedback({
+  installed,
+  error,
+  t,
+}: {
+  installed: boolean;
+  error: string;
+  t: (key: string) => string;
+}) {
+  return (
+    <>
+      {installed ? <span className={styles.marketInstalled}>{t("iaMCPTabInstalled")}</span> : null}
+      {error ? (
+        <span className={styles.marketInstallError} role="alert">
+          {error}
+        </span>
       ) : null}
     </>
   );

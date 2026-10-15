@@ -518,6 +518,8 @@ export function providerStatusTone(
     case "connected":
       return "online";
     case "failed":
+    case "error":
+    case "unconfigured":
       return "warning";
     default:
       if (normalizeModelProviderID(provider?.id) === MODEL_PROVIDER_IDS.OpenCSG) {
@@ -536,7 +538,10 @@ export function modelProviderStatusLabel(
     case "connected":
       return t("modelProviderConnected");
     case "failed":
+    case "error":
       return t("modelProviderStatusFailed");
+    case "unconfigured":
+      return t("modelProviderStatusUnconfigured");
     case "unknown":
     case "":
       return t("modelProviderNotChecked");
