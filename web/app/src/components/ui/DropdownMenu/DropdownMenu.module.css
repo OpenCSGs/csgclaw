@@ -27,6 +27,28 @@
   user-select: none;
 }
 
+.csg-dropdown-menu-label {
+  padding: 6px 10px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.csg-dropdown-menu-content[data-size="sm"] {
+  padding: var(--space-1);
+}
+
+.csg-dropdown-menu-content[data-size="sm"] .csg-dropdown-menu-item {
+  min-height: 32px;
+  gap: var(--space-2);
+  padding: 6px 8px;
+  font-size: 13px;
+}
+
+.csg-dropdown-menu-content[data-size="sm"] .csg-dropdown-menu-label {
+  padding-inline: 8px;
+}
+
 .csg-dropdown-menu-item svg {
   flex: 0 0 auto;
 }

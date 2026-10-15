@@ -4,6 +4,7 @@ import { AgentAvatarContent } from "@/components/business/AgentAvatar";
 import {
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuRoot,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
@@ -101,7 +102,14 @@ export function WorkspaceUserMenu({
         </button>
       </DropdownMenuTrigger>
 
-      <DropdownMenuContent align="start" side="top" sideOffset={8} style={{ minWidth: 232 }}>
+      <DropdownMenuContent
+        className={styles.menu}
+        size="sm"
+        align="start"
+        side="top"
+        sideOffset={6}
+        collisionPadding={12}
+      >
         <div className={styles.menuHeader}>
           <span className={classNames(styles.menuHeaderName, "truncate")}>{name}</span>
           <span className={classNames(styles.menuHeaderMeta, "truncate")}>
@@ -110,21 +118,18 @@ export function WorkspaceUserMenu({
         </div>
         <DropdownMenuSeparator />
 
-        <DropdownMenuItem disabled>
-          <span className={styles.menuSubmenuLabel}>{t("iaUserMenuOpenCSGGroup")}</span>
-        </DropdownMenuItem>
+        <DropdownMenuLabel>{t("iaUserMenuOpenCSGGroup")}</DropdownMenuLabel>
         {openCSG.authenticated ? (
           <>
-            <DropdownMenuItem disabled>
+            <div className={styles.connection}>
               <span className={styles.menuIcon} aria-hidden="true">
                 <span className={styles.openCSGDot} data-connected={!openCSG.expired} />
               </span>
-              <span className={styles.menuSubmenuLabel}>
-                {[t(openCSG.expired ? "csghubReauthorize" : "iaUserMenuOpenCSGConnected"), openCSG.baseURL]
-                  .filter(Boolean)
-                  .join(" · ")}
+              <span className={styles.connectionCopy}>
+                <span>{t(openCSG.expired ? "csghubReauthorize" : "iaUserMenuOpenCSGConnected")}</span>
+                {openCSG.baseURL ? <small title={openCSG.baseURL}>{openCSG.baseURL}</small> : null}
               </span>
-            </DropdownMenuItem>
+            </div>
             {openCSG.expired ? (
               <DropdownMenuItem onSelect={onOpenCSGLogin}>{t("csghubReauthorize")}</DropdownMenuItem>
             ) : null}
@@ -161,9 +166,7 @@ export function WorkspaceUserMenu({
 
         <DropdownMenuSeparator />
 
-        <DropdownMenuItem disabled>
-          <span className={styles.menuSubmenuLabel}>{t("themeSwitcher")}</span>
-        </DropdownMenuItem>
+        <DropdownMenuLabel>{t("themeSwitcher")}</DropdownMenuLabel>
         {THEME_OPTIONS.map((option) => (
           <DropdownMenuItem
             key={option.key}
@@ -182,9 +185,7 @@ export function WorkspaceUserMenu({
 
         <DropdownMenuSeparator />
 
-        <DropdownMenuItem disabled>
-          <span className={styles.menuSubmenuLabel}>{t("languageSwitcher")}</span>
-        </DropdownMenuItem>
+        <DropdownMenuLabel>{t("languageSwitcher")}</DropdownMenuLabel>
         {(
           [
             { key: "zh" as LocaleCode, labelKey: "languageOptionZh" as const },

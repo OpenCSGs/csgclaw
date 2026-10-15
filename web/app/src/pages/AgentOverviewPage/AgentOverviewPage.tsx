@@ -1,8 +1,8 @@
 import { resolveTeamAvatarMembers } from "@/models/tasks";
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { ChevronRight, List, Plus, Search } from "lucide-react";
-import { Button, PanelHeader, EmptyState } from "@/components/ui";
+import { ChevronRight, List, LoaderCircle, Plus, Search } from "lucide-react";
+import { Button, PanelHeader, EmptyState, TextInput } from "@/components/ui";
 import { AgentAvatarContent } from "@/components/business/AgentAvatar";
 import { RoomAvatar } from "@/components/business/RoomAvatar";
 import { useWorkspaceControllerContext } from "@/hooks/workspace";
@@ -12,6 +12,7 @@ import { agentRoleLabel, type AgentLike } from "@/models/agents";
 
 import styles from "./AgentOverviewPage.module.css";
 import { useAgentViewBindings } from "@/hooks/workspace/useAgentViewBindings";
+import { AgentOverviewGuide } from "./components";
 
 const AgentView = lazy(() =>
   import("@/components/business/AgentDetails").then((module) => ({ default: module.AgentView })),
@@ -73,6 +74,14 @@ export function AgentOverviewPage() {
         ? item.source?.name === "official" || item.source?.kind === "builtin"
         : item.source?.name !== "official" && item.source?.kind !== "builtin"),
   );
+  const templatesLoading = templatesQuery.isLoading && !templates.length;
+  const templatesFailed = templatesQuery.isError && !templates.length;
+  const templateEmptyTitle = query.trim()
+    ? t("workspaceSearchNoResults")
+    : t(templateFilter === "official" ? "iaTemplatesOfficialEmpty" : "iaTemplatesPersonalEmpty");
+  const templateEmptyHint = query.trim()
+    ? t("iaTemplatesSearchHint")
+    : t(templateFilter === "official" ? "iaTemplatesOfficialEmptyHint" : "iaTemplatesPersonalEmptyHint");
   const activeID = controller.activePane.id;
   function selectTab(value: string) {
     const params = new URLSearchParams(location.search);
@@ -118,7 +127,7 @@ export function AgentOverviewPage() {
             </Button>
             <Button size="sm" onClick={() => void props.onCreateAgent()}>
               <Plus size={14} />
-              {t("createAgent")}
+              {t("iaAgentsCreateAgent")}
             </Button>
           </div>
         ) : null}
@@ -127,10 +136,16 @@ export function AgentOverviewPage() {
         {listOpen ? (
           <button type="button" className={styles.listBackdrop} aria-label={t("close")} onClick={closeList} />
         ) : null}
-        <aside id="agent-overview-list" className={`${styles.list} ${listOpen ? styles.listOpen : ""}`}>
+        <aside
+          id="agent-overview-list"
+          className={`${styles.list} ${listOpen ? styles.listOpen : ""}`}
+          aria-busy={templatesTab && templatesLoading}
+        >
           <label className={styles.search}>
             <Search size={15} />
-            <input
+            <TextInput
+              variant="plain"
+              size="sm"
               aria-label={t(templatesTab ? "resourcesTemplateSearchPlaceholder" : "taskEntrySearchTarget")}
               placeholder={t(templatesTab ? "resourcesTemplateSearchPlaceholder" : "taskEntrySearchTarget")}
               value={query}
@@ -151,12 +166,30 @@ export function AgentOverviewPage() {
           </nav>
           {templatesTab ? (
             <>
-              {templatesQuery.isLoading ? <p role="status">{t("loading")}</p> : null}
-              {templatesQuery.isError ? (
-                <p role="alert">
-                  {t("resourcesLoadFailed")}
-                  <Button onClick={() => void templatesQuery.refetch()}>{t("retry")}</Button>
+              {templatesLoading ? (
+                <div>
+                  <p className={styles.listStatus}>{t("iaTemplatesLoading")}</p>
+                  <div className={styles.skeletonList} aria-hidden="true">
+                    {[0, 1, 2, 3].map((index) => (
+                      <div key={index} className={styles.skeletonRow}>
+                        <span />
+                        <span />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : templatesQuery.isFetching ? (
+                <p className={styles.listStatus} role="status">
+                  {t("iaTemplatesRefreshing")}
                 </p>
+              ) : null}
+              {templatesQuery.isError ? (
+                <div className={styles.listError} role="alert">
+                  <p>{t(templatesFailed ? "iaTemplatesLoadFailed" : "iaTemplatesRefreshFailed")}</p>
+                  <Button size="sm" onClick={() => void templatesQuery.refetch()}>
+                    {t("retry")}
+                  </Button>
+                </div>
               ) : null}
               {shownTemplates.map((item) => (
                 <button
@@ -177,7 +210,7 @@ export function AgentOverviewPage() {
                 </button>
               ))}
               {!templatesQuery.isLoading && !templatesQuery.isError && !shownTemplates.length ? (
-                <p className={styles.emptyList}>{t("workspaceSearchNoResults")}</p>
+                <p className={styles.emptyList}>{templateEmptyTitle}</p>
               ) : null}
             </>
           ) : (
@@ -234,11 +267,33 @@ export function AgentOverviewPage() {
               <Suspense fallback={null}>
                 <HubDetailPane {...controller.hubViewProps} inlineTemplateDetail />
               </Suspense>
+            ) : !templatesLoading && !templatesFailed && shownTemplates.length ? (
+              <AgentOverviewGuide templates t={t} />
             ) : (
               <EmptyState
                 className={styles.empty}
-                title={t("iaAgentsMarketTab")}
-                description={t("iaAgentsSelectTemplate")}
+                icon={templatesLoading ? <LoaderCircle className={styles.loadingIcon} size={28} /> : undefined}
+                title={
+                  templatesLoading
+                    ? t("iaTemplatesLoading")
+                    : templatesFailed
+                      ? t("iaTemplatesLoadFailed")
+                      : templateEmptyTitle
+                }
+                description={
+                  templatesLoading
+                    ? t("iaTemplatesLoadingHint")
+                    : templatesFailed
+                      ? t("iaTemplatesRetryHint")
+                      : templateEmptyHint
+                }
+                actions={
+                  templatesFailed ? (
+                    <Button size="sm" onClick={() => void templatesQuery.refetch()}>
+                      {t("retry")}
+                    </Button>
+                  ) : undefined
+                }
               />
             )
           ) : activeID && controller.activePane.type === "agent" ? (
@@ -254,7 +309,7 @@ export function AgentOverviewPage() {
               <TeamDetailPane {...controller.teamViewProps} />
             </Suspense>
           ) : (
-            <EmptyState className={styles.empty} title={t("iaAgentsMineTab")} description={t("iaAgentsSelectAgent")} />
+            <AgentOverviewGuide t={t} />
           )}
         </div>
       </div>

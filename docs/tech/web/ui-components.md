@@ -100,9 +100,15 @@ Semantic tokens own menu surfaces, hover/selected states, tooltip colors and dia
 
 The standalone `ui-lab.html` entry demonstrates these production components without application data, including integration with the real legacy workspace stylesheet entrypoints. Start it with `corepack pnpm ui:lab` from `web/app`; it is a development fixture and is excluded from production build inputs.
 
+## Slider
+
+`Slider` wraps Radix's single-thumb slider with shared theme tokens, optional step marks, a translated accessible label and value text. Use `onValueChange` for live previews and `onValueCommit` for persistence after pointer release or keyboard changes. `neutral` represents an automatic value outside the numeric scale. Reasoning-specific levels, descriptions and default actions live in `components/business/ReasoningEffortPicker`, shared by the start panel and conversation toolbar.
+
 ## Dropdown Menu
 
 `DropdownMenu` is built on the `DropdownMenu` namespace from `radix-ui`. Compose menus with the shared `DropdownMenuRoot`, `DropdownMenuTrigger`, `DropdownMenuContent`, `DropdownMenuItem`, and `DropdownMenuSeparator` exports so pages inherit consistent hover, keyboard, danger-state, portal, and focus behavior.
+
+Use `size="sm"` on `DropdownMenuContent` for compact menus. Section headings use `DropdownMenuLabel`; reserve disabled menu items for unavailable actions.
 
 ## Dialog
 

@@ -51,3 +51,9 @@
     grid-template-columns: minmax(0, 1fr);
   }
 }
+.reasoningPreview {
+  width: min(330px, 100%);
+  border: 1px solid var(--popover-border);
+  border-radius: var(--radius-md);
+  background: var(--popover-background);
+}

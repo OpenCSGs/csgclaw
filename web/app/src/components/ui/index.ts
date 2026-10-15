@@ -15,3 +15,4 @@ export * from "./PanelHeader";
 export * from "./SegmentedControl";
 export * from "./Tooltip";
 export * from "./Switch";
+export * from "./Slider";

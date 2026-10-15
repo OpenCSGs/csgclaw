@@ -20,16 +20,21 @@ export const DropdownMenuTrigger = forwardRef<ComponentRef<typeof RadixDropdownM
 
 export type DropdownMenuContentProps = ComponentPropsWithoutRef<typeof RadixDropdownMenu.Content> & {
   portalContainer?: ComponentPropsWithoutRef<typeof RadixDropdownMenu.Portal>["container"];
+  size?: "sm" | "md";
 };
 
 export const DropdownMenuContent = forwardRef<ComponentRef<typeof RadixDropdownMenu.Content>, DropdownMenuContentProps>(
-  function DropdownMenuContent({ align = "end", children, className, portalContainer, sideOffset = 8, ...props }, ref) {
+  function DropdownMenuContent(
+    { align = "end", children, className, portalContainer, sideOffset = 8, size = "md", ...props },
+    ref,
+  ) {
     return (
       <RadixDropdownMenu.Portal container={portalContainer}>
         <RadixDropdownMenu.Content
           ref={ref}
           align={align}
           className={classNames(styles["csg-dropdown-menu-content"], className)}
+          data-size={size}
           sideOffset={sideOffset}
           {...props}
         >
@@ -39,6 +44,19 @@ export const DropdownMenuContent = forwardRef<ComponentRef<typeof RadixDropdownM
     );
   },
 );
+
+export const DropdownMenuLabel = forwardRef<
+  ComponentRef<typeof RadixDropdownMenu.Label>,
+  ComponentPropsWithoutRef<typeof RadixDropdownMenu.Label>
+>(function DropdownMenuLabel({ className, ...props }, ref) {
+  return (
+    <RadixDropdownMenu.Label
+      ref={ref}
+      className={classNames(styles["csg-dropdown-menu-label"], className)}
+      {...props}
+    />
+  );
+});
 
 export type DropdownMenuItemTone = "default" | "warning" | "danger";
 

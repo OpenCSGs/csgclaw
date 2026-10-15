@@ -13,19 +13,20 @@
   min-width: 44px;
   min-height: 36px;
   padding: var(--space-2) var(--space-3);
-  border: 0;
+  border: 1px solid transparent;
   border-radius: var(--radius-base);
   background: transparent;
   color: var(--muted);
   font: var(--text-sm-medium);
   cursor: pointer;
 }
-.csg-segmented-control-item[data-state="on"] {
+.csg-segmented-control-item[aria-checked="true"] {
+  border-color: color-mix(in srgb, var(--primary) 36%, transparent);
   background: var(--panel);
-  color: var(--text);
+  color: var(--primary-strong);
   box-shadow: var(--shadow-soft);
 }
-.csg-segmented-control-item:hover:not(:disabled) {
+.csg-segmented-control-item:hover:not(:disabled, [aria-checked="true"]) {
   color: var(--text);
 }
 .csg-segmented-control-item:focus-visible {

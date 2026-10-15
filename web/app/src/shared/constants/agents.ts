@@ -41,6 +41,7 @@ export const NOTIFIER_DELIVERY_OPTIONS = ["webhook", "remote_pull"];
 export const DEFAULT_NOTIFIER_POLL_INTERVAL = "5s";
 export const CLIPROXY_AUTH_PROVIDERS = new Set(["codex", "claude_code"]);
 export const REASONING_EFFORTS = ["minimal", "low", "medium", "high", "xhigh"] as const;
+export const REASONING_SLIDER_STEPS = [REASONING_DISABLED_EFFORT, ...REASONING_EFFORTS] as const;
 export const REASONING_OPTIONS = [DEFAULT_REASONING_EFFORT, REASONING_DISABLED_EFFORT, ...REASONING_EFFORTS] as const;
 
 export const SHOW_AGENT_LIFECYCLE_ACTIONS = false;

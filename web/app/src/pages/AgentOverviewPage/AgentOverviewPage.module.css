@@ -79,22 +79,6 @@
 .search svg {
   flex-shrink: 0;
 }
-.page .list .search input,
-.page .list .search input:focus {
-  min-width: 0;
-  width: 100%;
-  height: 32px;
-  min-height: 0;
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  box-shadow: none;
-  font-size: 13px;
-}
-:global(:root[data-theme="dark"]) .page .list .search input {
-  background: transparent;
-}
 .filters {
   display: flex;
   gap: 8px;
@@ -205,6 +189,65 @@
   padding: 16px 8px;
   color: var(--muted);
   font-size: 13px;
+}
+.listStatus {
+  margin: 0;
+  padding: 8px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 18px;
+}
+.listError {
+  padding: 8px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 18px;
+}
+.listError p {
+  margin: 0 0 8px;
+}
+.skeletonList {
+  display: grid;
+  gap: 8px;
+  padding: 4px 8px;
+}
+.skeletonRow {
+  display: grid;
+  gap: 10px;
+  padding: 14px 4px;
+}
+.skeletonRow span {
+  height: 10px;
+  border-radius: var(--radius-full);
+  background: var(--panel-soft);
+  animation: template-loading 1.5s ease-in-out infinite alternate;
+}
+.skeletonRow span:first-child {
+  width: 55%;
+  height: 13px;
+}
+.skeletonRow:nth-child(even) span:first-child {
+  width: 70%;
+}
+.skeletonRow span:last-child {
+  width: 90%;
+}
+.loadingIcon {
+  color: var(--muted);
+  animation: template-spinner 1s linear infinite;
+}
+@keyframes template-loading {
+  from {
+    opacity: 0.45;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes template-spinner {
+  to {
+    transform: rotate(360deg);
+  }
 }
 .page .listToggle,
 .listBackdrop {

@@ -21,6 +21,7 @@ import {
   TooltipProvider,
 } from "@/components/ui";
 import { ModelPicker } from "@/components/business/AgentModelFields";
+import { ReasoningEffortPicker } from "@/components/business/ReasoningEffortPicker";
 import { FieldHelpTooltip } from "@/components/business/ProfileControls";
 import { ConversationSection } from "@/components/business/ConversationWorkspace/ConversationSection";
 import { createTranslator } from "@/shared/i18n";
@@ -44,6 +45,7 @@ export function UiLab() {
   const [value, setValue] = useState("model-1");
   const [sort, setSort] = useState("recent");
   const [model, setModel] = useState("qwen-3.5");
+  const [reasoning, setReasoning] = useState("");
   const [dialog, setDialog] = useState(false);
   const [error, setError] = useState(false);
   const [showDemoConversation, setShowDemoConversation] = useState(true);
@@ -178,6 +180,18 @@ export function UiLab() {
             <Button variant="secondaryGray" onClick={() => setValue("")}>
               Clear selection
             </Button>
+          </section>
+          <section className={styles.card}>
+            <h2>Reasoning effort</h2>
+            <div className={styles.reasoningPreview}>
+              <ReasoningEffortPicker
+                value={reasoning}
+                agentEffort="high"
+                onValueChange={setReasoning}
+                onValueCommit={setReasoning}
+                t={createTranslator("zh")}
+              />
+            </div>
           </section>
           <section className={styles.card}>
             <PanelHeader>
