@@ -128,7 +128,7 @@ func TestCLIConfiguredUserStillAppliesIdentityPolicy(t *testing.T) {
 	f.mu.Lock()
 	f.calls = nil
 	f.mu.Unlock()
-	if got := waitCLIOperation(t, s, id, startCLITest(t, s, id, "repair", "policy")); got.Status != "completed" {
+	if got := waitCLIOperation(t, s, id, startCLITest(t, s, id, "connect", "policy")); got.Status != "completed" {
 		t.Fatal(got)
 	}
 	for _, call := range f.calls {
@@ -140,6 +140,28 @@ func TestCLIConfiguredUserStillAppliesIdentityPolicy(t *testing.T) {
 		if !slices.Contains(f.calls, command) {
 			t.Fatalf("missing identity command %s", command)
 		}
+	}
+}
+
+func TestFeishuDisconnectAcceptsAlreadyRemovedConfiguration(t *testing.T) {
+	packages, err := loadPackages()
+	if err != nil {
+		t.Fatal(err)
+	}
+	spec := packages["feishu"].CLI
+	var calls []string
+	workflow := connectorcli.Workflow{Client: connectorcli.Client{Runner: func(_ context.Context, _ connectorcli.Client, _ io.Reader, args ...string) ([]byte, error) {
+		calls = append(calls, strings.Join(args, " "))
+		return []byte(`{"error":{"subtype":"not_configured"}}`), fmt.Errorf("configuration already removed")
+	}}}
+	if err := workflow.Run(t.Context(), spec.UnAuth); err != nil {
+		t.Fatal(err)
+	}
+	if err := workflow.Run(t.Context(), spec.Disconnect); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(calls, []string{"auth logout", "config remove"}) {
+		t.Fatalf("cleanup commands=%v", calls)
 	}
 }
 

@@ -97,7 +97,7 @@ func (s *Service) applyBinding(ctx context.Context, id string) (result error) {
 		defer s.mu.Unlock()
 		if e := s.entries[id]; e != nil {
 			e.record.LastErrorCode = "configuration_failed"
-			e.record.LastError = "Connector configuration needs repair."
+			e.record.LastError = "Connector configuration is incomplete; disconnect and reconnect."
 			e.record.Status = "error"
 			_ = s.persistLocked(id, &e.record)
 		}

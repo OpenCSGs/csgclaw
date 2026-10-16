@@ -79,8 +79,11 @@ func (s *Service) RestoreCLIMigration(ctx context.Context) error {
 	if m == nil || m.Status == "completed" {
 		return nil
 	}
+	if s.migrationDisconnectRequested() {
+		return nil
+	}
 	if m.Status == "waiting_for_legacy_callers" {
-		return errors.New("Feishu CLI migration needs repair")
+		return errors.New("Feishu CLI migration failed; disconnect and reconnect")
 	}
 	return s.executeMigration(ctx)
 }
@@ -402,6 +405,15 @@ func (s *Service) prepareMigrationGlobal(ctx context.Context) error {
 	}
 	pkg, err := s.installCLI(ctx, filepath.Join(s.dataRoot, m.ResourceID, "package"), s.packages["feishu"].CLI.Install, nil)
 	if err != nil {
+		return err
+	}
+	if err := s.editCLI(m.ResourceID, func(r *record) error {
+		r.CLI.Executable = pkg.Executable
+		r.CLI.SkillsDir = pkg.SkillsDir
+		r.PackageVersion = pkg.Version
+		r.SkillVersion = r.Package.CLI.Install.Skills.Version
+		return nil
+	}); err != nil {
 		return err
 	}
 	client := larkcli.Client{Executable: pkg.Executable, ConfigDir: r.CLI.ConfigDir, OperationID: "migration", Process: func(ref larkcli.ProcessRef) error {

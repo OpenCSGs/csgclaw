@@ -200,7 +200,7 @@ export type CLIIdentity = {
   scope?: string;
   tokenStatus?: string;
 };
-export type CLIAction = "connect" | "login" | "logout" | "disconnect" | "repair" | "check";
+export type CLIAction = "connect" | "login" | "logout" | "disconnect" | "check";
 export type CLIOperation = {
   operation_id: string;
   session_id: string;

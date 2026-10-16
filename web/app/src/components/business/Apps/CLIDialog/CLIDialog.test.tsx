@@ -284,12 +284,21 @@ describe("Feishu CLI authorization", () => {
     });
     expect(fetchAppResource).not.toHaveBeenCalled();
   });
-  it("shows migration failures and offers reconnection", async () => {
-    const failed = {
+  it.each([false, true])("disconnects a failed migration before reconnecting (authorized=%s)", async (authorized) => {
+    const failed: AppInstallation = {
       ...resource,
-      status: "error" as const,
+      authorized,
+      status: "error",
       last_error_code: "migration_failed",
       operation: undefined,
+      auth_status: {
+        appId: "cli_test",
+        defaultAs: "auto",
+        identities: {
+          bot: { available: authorized, verified: authorized, status: "ready" },
+          user: { available: authorized, verified: authorized, status: "ready" },
+        },
+      },
       migration: {
         status: "waiting_for_legacy_callers",
         workers: [
@@ -298,9 +307,69 @@ describe("Feishu CLI authorization", () => {
       },
     };
     vi.mocked(fetchAppResource).mockResolvedValue(failed);
+    const disconnect = {
+      ...resource.operation!,
+      action: "disconnect" as const,
+      stage: "pending",
+      status: "pending" as const,
+    };
+    vi.mocked(startCLIOperation).mockResolvedValue(disconnect);
     render(<CLIDialog definition={definition} existing={failed} t={t} onClose={vi.fn()} onChanged={vi.fn()} />);
-    expect(await screen.findByRole("alert")).toHaveTextContent("Historical configuration migration needs repair.");
-    expect(screen.getByRole("button", { name: "Connect Feishu" })).toBeEnabled();
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Historical configuration migration is incomplete. Disconnect and connect again.",
+    );
+    expect(screen.queryByRole("button", { name: "Connect Feishu" })).not.toBeInTheDocument();
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Disconnect" }));
+    expect(startCLIOperation).toHaveBeenCalledWith(failed, "disconnect", expect.any(String));
+
+    const disconnected: AppInstallation = {
+      ...failed,
+      authorized: false,
+      disconnected: true,
+      status: "needs_configuration",
+      last_error_code: undefined,
+      auth_status: undefined,
+      migration: undefined,
+      revision: 5,
+      operation: { ...disconnect, stage: "completed", status: "completed" },
+    };
+    vi.mocked(fetchAppResource).mockResolvedValue(disconnected);
+    await act(async () => {
+      window.dispatchEvent(new Event("focus"));
+    });
+    expect(await screen.findByRole("button", { name: "Connect Feishu" })).toBeEnabled();
+    expect(screen.queryByRole("button", { name: "Disconnect" })).not.toBeInTheDocument();
+    vi.mocked(startCLIOperation).mockResolvedValue(resource.operation!);
+    await user.click(screen.getByRole("button", { name: "Connect Feishu" }));
+    expect(startCLIOperation).toHaveBeenLastCalledWith(disconnected, "connect", expect.any(String));
+  });
+  it.each([false, true])("offers disconnect retry while cleanup is incomplete (authorized=%s)", async (authorized) => {
+    const failed: AppInstallation = {
+      ...resource,
+      authorized,
+      disconnected: !authorized,
+      status: "error",
+      last_error_code: "cleanup_pending",
+      operation: { ...resource.operation!, action: "disconnect", status: "failed" },
+      auth_status: {
+        appId: "cli_test",
+        defaultAs: "auto",
+        identities: {
+          bot: { available: authorized, verified: authorized, status: "ready" },
+          user: { available: false, status: "pending" },
+        },
+      },
+    };
+    vi.mocked(fetchAppResource).mockResolvedValue(failed);
+    vi.mocked(startCLIOperation).mockResolvedValue({ ...resource.operation!, action: "disconnect" });
+    render(<CLIDialog definition={definition} existing={failed} t={t} onClose={vi.fn()} onChanged={vi.fn()} />);
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Cleanup is incomplete. Retry disconnecting, then connect again.",
+    );
+    expect(screen.queryByRole("button", { name: "Connect Feishu" })).not.toBeInTheDocument();
+    await userEvent.setup().click(screen.getByRole("button", { name: "Disconnect" }));
+    expect(startCLIOperation).toHaveBeenCalledWith(failed, "disconnect", expect.any(String));
   });
   it("hides an expired authorization error after a new authorization starts", async () => {
     const expired: AppInstallation = {

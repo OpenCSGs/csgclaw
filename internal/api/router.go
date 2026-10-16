@@ -164,7 +164,7 @@ func (h *Handler) registerCoreRoutes(router chi.Router) {
 			r.Get("/resources", h.handleConnectorResources)
 			r.Post("/resources", h.handleConnectorResources)
 			r.Post("/resources:probe", h.handleConnectorResourceProbe)
-			r.Post("/resources/{resource_id}/cli/{cli_action:connect|login|logout|disconnect|repair|check}", h.handleConnectorCLI)
+			r.Post("/resources/{resource_id}/cli/{cli_action:connect|login|logout|disconnect|check}", h.handleConnectorCLI)
 			r.Get("/resources/{resource_id}/cli/sessions/{session_id}", h.handleConnectorCLI)
 			r.Delete("/resources/{resource_id}/cli/sessions/{session_id}", h.handleConnectorCLI)
 			r.Get("/resources/{resource_id}", h.handleConnectorResources)

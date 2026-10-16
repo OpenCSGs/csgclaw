@@ -172,7 +172,7 @@ func activeCLI(op *cliOperation) bool {
 // StartCLI records intent before the background task acquires any Agent lifecycle lock.
 func (s *Service) StartCLI(_ context.Context, id string, in CLIRequest) (CLIOperation, error) {
 	switch in.Action {
-	case "connect", "login", "logout", "disconnect", "repair", "check":
+	case "connect", "login", "logout", "disconnect", "check":
 	default:
 		return CLIOperation{}, ErrInvalid
 	}
@@ -209,6 +209,9 @@ func (s *Service) StartCLI(_ context.Context, id string, in CLIRequest) (CLIOper
 	}
 	if in.Revision != e.record.Revision {
 		return CLIOperation{}, ErrChanged
+	}
+	if m := s.cliMigration; m != nil && m.ResourceID == id && m.Status == "disconnecting" && in.Action != "disconnect" {
+		return CLIOperation{}, ErrConflict
 	}
 	if activeCLI(state.Operation) {
 		if state.Operation.Action == in.Action {
@@ -254,7 +257,7 @@ func (s *Service) StartCLI(_ context.Context, id string, in CLIRequest) (CLIOper
 		return CLIOperation{}, err
 	}
 	e.record = next
-	if (in.Action == "connect" || in.Action == "repair") && s.cliMigration != nil && s.cliMigration.ResourceID == id && s.cliMigration.Status != "completed" {
+	if in.Action == "connect" && s.cliMigration != nil && s.cliMigration.ResourceID == id && s.cliMigration.Status != "completed" {
 		migration := copyJSON(s.cliMigration)
 		migration.Status = "pending"
 		if err := s.saveMigrationLocked(migration); err != nil {
@@ -412,7 +415,7 @@ func (s *Service) processConnectorWork() {
 	for _, id := range queued {
 		s.promoteQueuedCLI(id)
 	}
-	if m := s.migrationSnapshot(); m != nil && (m.Status == "pending" || m.Status == "running") {
+	if m := s.migrationSnapshot(); m != nil && (m.Status == "pending" || m.Status == "running") && !s.migrationDisconnectRequested() {
 		_ = s.executeMigration(s.ctx)
 	}
 	s.mu.Lock()
@@ -505,6 +508,9 @@ func (s *Service) executeCLI(id string) {
 		settled := false
 		migration := s.migrationSnapshot()
 		migrationReady := migration == nil || migration.ResourceID != id || migration.Status == "completed"
+		if migration != nil && migration.Status == "disconnecting" && latest.CLI != nil && latest.CLI.Operation.Action == "disconnect" && latest.CLI.Operation.Committed {
+			migrationReady = true
+		}
 		if migrationReady && latest.CLI != nil && latest.CLI.Recovery == nil && (!latest.CLI.Operation.Committed || cancelled) {
 			recovery, stop := context.WithTimeout(s.ctx, 30*time.Second)
 			var restoreErr error
@@ -513,7 +519,7 @@ func (s *Service) executeCLI(id string) {
 			}
 			// Committed authorization remains authoritative while cancellation finishes worker updates.
 			if restoreErr == nil {
-				restoreErr = s.applyCLIWorkers(recovery, id)
+				restoreErr = s.finishCLIWorkers(recovery, id)
 			}
 			stop()
 			settled = restoreErr == nil
@@ -575,7 +581,7 @@ func (s *Service) performCLI(ctx context.Context, id string) error {
 	if err != nil {
 		return err
 	}
-	if m := s.migrationSnapshot(); m != nil && m.ResourceID == id && m.Status != "completed" {
+	if m := s.migrationSnapshot(); m != nil && m.ResourceID == id && m.Status != "completed" && r.CLI.Operation.Action != "disconnect" {
 		return errors.New("waiting_for_legacy_callers")
 	}
 	op := r.CLI.Operation
@@ -592,6 +598,11 @@ func (s *Service) performCLI(ctx context.Context, id string) error {
 	}); err != nil {
 		return err
 	}
+	if op.Action == "disconnect" {
+		if err = s.prepareMigrationDisconnect(ctx, id); err != nil {
+			return err
+		}
+	}
 	if err = s.suspendCLIWorkers(ctx, id); err != nil {
 		return err
 	}
@@ -604,7 +615,7 @@ func (s *Service) performCLI(ctx context.Context, id string) error {
 		}
 	}
 	if op.Committed {
-		return s.applyCLIWorkers(ctx, id)
+		return s.finishCLIWorkers(ctx, id)
 	}
 	if op.Action != "disconnect" {
 		pkg, err := s.installCLI(ctx, filepath.Join(s.dataRoot, id, "package"), r.Package.CLI.Install, func(stage string) {
@@ -671,8 +682,16 @@ func (s *Service) performCLI(ctx context.Context, id string) error {
 	}); err != nil {
 		return err
 	}
-	return s.applyCLIWorkers(ctx, id)
+	return s.finishCLIWorkers(ctx, id)
 }
+
+func (s *Service) finishCLIWorkers(ctx context.Context, id string) error {
+	if err := s.applyCLIWorkers(ctx, id); err != nil {
+		return err
+	}
+	return s.finishMigrationDisconnect(id)
+}
+
 func (s *Service) suspendCLIWorkers(ctx context.Context, id string) error {
 	s.mu.Lock()
 	var workers []string

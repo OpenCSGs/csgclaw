@@ -89,3 +89,37 @@ func TestLegacyWorkerRunningUsesDesiredState(t *testing.T) {
 		})
 	}
 }
+
+func TestConnectorCLIDisconnectRoute(t *testing.T) {
+	service, err := apps.NewService("", apps.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = service.Close() })
+	resource, err := service.EnsureFeishuCLI(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := &Handler{apps: service, serverNoAuth: true}
+	router := h.Routes()
+	for _, tc := range []struct {
+		action string
+		status int
+	}{
+		{"repair", http.StatusNotFound},
+		{"disconnect", http.StatusAccepted},
+	} {
+		t.Run(tc.action, func(t *testing.T) {
+			body, err := json.Marshal(apps.CLIRequest{OperationID: tc.action, Revision: resource.Revision})
+			if err != nil {
+				t.Fatal(err)
+			}
+			req := httptest.NewRequest(http.MethodPost, "/api/v1/connectors/resources/"+resource.InstallationID+"/cli/"+tc.action, strings.NewReader(string(body)))
+			response := httptest.NewRecorder()
+			router.ServeHTTP(response, req)
+			if response.Code != tc.status {
+				t.Fatalf("status=%d body=%s", response.Code, response.Body)
+			}
+		})
+	}
+}

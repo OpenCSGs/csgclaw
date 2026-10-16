@@ -149,6 +149,12 @@ export function CLIDialog({ definition, existing, t, onClose, onChanged }: Props
   const actionPending = busy || cancellingSession !== null;
   const active = operation?.status === "running" || operation?.status === "pending";
   const ready = Boolean(resource?.authorized && !resource.disconnected);
+  const cleanupPending = Boolean(
+    (resource?.migration && resource.migration.status !== "completed") ||
+    resource?.last_error_code === "cleanup_pending" ||
+    (operation?.action === "disconnect" && operation.status === "failed"),
+  );
+  const canDisconnect = ready || cleanupPending;
   const identityAuthorized = (identity: "bot" | "user") => {
     const value = resource?.auth_status?.identities[identity];
     return Boolean(value?.available && value.verified === true);
@@ -179,7 +185,7 @@ export function CLIDialog({ definition, existing, t, onClose, onChanged }: Props
   };
   const requestError = error ? localizeAPIError(error, t) || errorMessage(error) : "";
   const storedError =
-    resource?.last_error_code && !active ? t(errorLabels[resource.last_error_code] ?? "feishuCLIRepairHint") : "";
+    resource?.last_error_code && !active ? t(errorLabels[resource.last_error_code] ?? "feishuCLIReconnectHint") : "";
   return (
     <DialogRoot
       open
@@ -378,9 +384,9 @@ export function CLIDialog({ definition, existing, t, onClose, onChanged }: Props
             </>
           ) : (
             <>
-              {ready ? (
+              {canDisconnect ? (
                 <div className={styles.cliFooterActions}>
-                  {feishu && resource?.auth_status?.identities.user.verified !== true ? (
+                  {ready && !cleanupPending && feishu && resource?.auth_status?.identities.user.verified !== true ? (
                     <Button disabled={actionPending} onClick={() => void run("login")}>
                       {t("feishuCLILogin")}
                     </Button>
@@ -390,7 +396,7 @@ export function CLIDialog({ definition, existing, t, onClose, onChanged }: Props
                   </Button>
                 </div>
               ) : null}
-              {!ready ? (
+              {!canDisconnect ? (
                 <Button
                   className={styles.cliConnectAction}
                   variant="primary"

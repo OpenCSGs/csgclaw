@@ -252,7 +252,15 @@ and DSH receive the generic CLI runtime extension. Failed or cancelled commands
 are followed by a status check, preserving completed CLI changes and reporting
 actual authorization. Historical channel migration retains its import support.
 Cancellation completes worker updates for committed authorization state and honors
-each worker's current desired state. A failed recovery remains pending repair.
+each worker's current desired state. If migration or cleanup fails, the dialog
+keeps Disconnect available. Disconnect stops every affected legacy worker, removes
+CLI authorization, runtime configuration, and managed Skills, and clears migration
+recovery data. Resource IDs, bindings, and worker enablement are retained. Running
+workers resume without the connector; stopped workers stay stopped. Cleanup failures
+remain retryable through Disconnect and block reconnection until cleanup succeeds.
+An interrupted disconnect resumes on startup without importing old credentials.
+After success, Connect starts a fresh authorization and configures enabled bindings.
+The supported CLI actions are `connect`, `login`, `logout`, `disconnect`, and `check`.
 The catalog's version is the connector package version; `package_version` on a CLI
 resource reports the installed executable version.
 

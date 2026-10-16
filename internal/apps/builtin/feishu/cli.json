@@ -479,6 +479,11 @@
       "args": [
         "auth",
         "logout"
+      ],
+      "accept_error_json": [
+        {
+          "/error/subtype": "not_configured"
+        }
       ]
     }
   ],

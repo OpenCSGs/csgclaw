@@ -92,7 +92,7 @@ func (s *Service) authorizeCLI(ctx context.Context, id string, r record) (bool, 
 			}
 			return false, nil, nil
 		}
-	case "connect", "repair", "login":
+	case "connect", "login":
 		if err := stage("authorization"); err != nil {
 			return false, nil, err
 		}
