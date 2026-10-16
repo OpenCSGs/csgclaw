@@ -387,6 +387,7 @@
   transform: translateY(0.8px);
 }
 .chat-file-name {
+  font: var(--text-md-normal);
   flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
