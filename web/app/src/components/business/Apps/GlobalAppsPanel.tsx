@@ -210,10 +210,10 @@ export function GlobalAppsPanel({
         {filteredItems.map((app) => {
           const cardDescription = description(app);
           return (
-            <article key={app.installation_id} className={styles.resourceConnectorRow}>
+            <article key={app.installation_id} className={`${styles.connectorCard} ${styles.resourceConnectorRow}`}>
               <button
                 type="button"
-                className={`${styles.connectorCard} ${styles.resourceConnectorCard}`}
+                className={styles.resourceConnectorCard}
                 onClick={() =>
                   embedded
                     ? setLocalEditingID(app.installation_id)
@@ -231,13 +231,13 @@ export function GlobalAppsPanel({
                     {cardDescription}
                   </span>
                 </span>
-                <span className={styles.status} data-status={app.enabled ? app.status : "disabled"}>
-                  {appStatus(app, t)}
-                </span>
               </button>
+              <span className={styles.status} data-status={app.enabled ? app.status : "disabled"}>
+                {appStatus(app, t)}
+              </span>
               <DropdownMenuRoot>
                 <DropdownMenuTrigger asChild>
-                  <Button size="sm" variant="tertiaryGray" aria-label={t("connectorsActions", { name: app.name })}>
+                  <Button iconOnly size="sm" variant="tertiaryGray" aria-label={t("connectorsActions", { name: app.name })}>
                     <MoreHorizontal size={16} />
                   </Button>
                 </DropdownMenuTrigger>

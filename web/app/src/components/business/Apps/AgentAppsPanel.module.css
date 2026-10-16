@@ -468,7 +468,8 @@ fieldset.fields {
   display: flex;
   align-items: center;
   min-width: 0;
-  padding-right: 8px;
+  gap: 8px;
+  padding: 12px;
   border-radius: 6px;
 }
 .resourceConnectorRow:hover,
@@ -476,9 +477,16 @@ fieldset.fields {
   background: var(--gray-100);
 }
 .resourceConnectorRow > .resourceConnectorCard {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr);
+  align-items: center;
   flex: 1;
   min-width: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
   background: transparent;
+  color: inherit;
 }
 .resourceConnectorRow > button[aria-haspopup="menu"] {
   opacity: 0;

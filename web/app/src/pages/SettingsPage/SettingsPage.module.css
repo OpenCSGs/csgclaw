@@ -236,6 +236,9 @@
 
 .marketInstalled {
   color: var(--success-text);
+  flex-shrink: 0;
+  margin-top: 0;
+  white-space: nowrap;
 }
 
 .marketInstallError {

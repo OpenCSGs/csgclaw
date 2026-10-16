@@ -11,6 +11,7 @@ export function ResourceListCard({
   description,
   icon,
   badge,
+  titleBadge,
   actions,
   active,
   onOpen,
@@ -20,6 +21,7 @@ export function ResourceListCard({
   description?: string;
   icon: ReactNode;
   badge?: ReactNode;
+  titleBadge?: ReactNode;
   actions?: ReactNode;
   active?: boolean;
   onOpen: () => void;
@@ -31,7 +33,10 @@ export function ResourceListCard({
           {icon}
         </span>
         <span className={styles.copy}>
-          <span className={styles.title}>{title}</span>
+          <span className={styles.titleRow}>
+            <span className={styles.title} title={title}>{title}</span>
+            {titleBadge}
+          </span>
           <span className={styles.description}>{description || title}</span>
           {badge}
         </span>

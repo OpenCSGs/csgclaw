@@ -60,7 +60,14 @@
   display: grid;
   min-width: 0;
 }
+.titleRow {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 8px;
+}
 .title {
+  min-width: 0;
   color: var(--gray-700);
   font-size: 14px;
   font-weight: 500;
