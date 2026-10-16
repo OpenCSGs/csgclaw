@@ -127,7 +127,7 @@ describe("Agent Apps", () => {
     await user.click(screen.getByRole("button", { name: /Work GitLab/ }));
     const manageLink = screen.getByRole("link", { name: t("appManageResource") });
     expect(manageLink).toHaveAttribute("href", "#/connectors/resource-1");
-    expect(manageLink).toHaveClass(buttonStyles.btn, buttonStyles["btn-secondary-gray"], buttonStyles["btn-md"]);
+    expect(manageLink).toHaveClass(buttonStyles.btn, buttonStyles["btn-primary"], buttonStyles["btn-md"]);
     await user.click(screen.getByRole("button", { name: "Disconnect" }));
     await waitFor(() => expect(screen.getByRole("dialog")).toHaveTextContent("Disconnected"));
     view.unmount();
