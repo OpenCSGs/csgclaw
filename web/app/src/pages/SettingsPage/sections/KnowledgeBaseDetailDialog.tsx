@@ -11,6 +11,7 @@ import {
   DialogHeader,
   DialogRoot,
   DialogTitle,
+  DismissibleAlert,
   Switch,
 } from "@/components/ui";
 import { fetchRemoteKnowledgeBaseMCPConfig } from "@/api/knowledgeBases";
@@ -18,7 +19,7 @@ import { useWorkspaceControllerContext } from "@/hooks/workspace";
 import { MCPProbeCards } from "./MCPDetailDialog";
 import styles from "./MCPDetailDialog.module.css";
 import pageStyles from "../SettingsPage.module.css";
-import type { RemoteKnowledgeBase } from "@/models/knowledgeBases";
+import { knowledgeBaseMCPServer, type RemoteKnowledgeBase } from "@/models/knowledgeBases";
 import type { TranslateFn } from "@/models/conversations";
 
 export type KnowledgeBaseDetailTarget = {
@@ -66,8 +67,8 @@ export function KnowledgeBaseDetailDialog({
 
   const mcpName = String(kb?.configuredMCPName || "").trim();
   const mcpServer = useMemo(
-    () => (mcpName ? ((hub?.mcpServers ?? []).find((server) => server.name === mcpName) ?? null) : null),
-    [hub?.mcpServers, mcpName],
+    () => (kb ? knowledgeBaseMCPServer(kb, hub?.mcpServers ?? []) : null),
+    [hub?.mcpServers, kb],
   );
   const connected = Boolean(String(kb?.configuredMCPName || "").trim());
 
@@ -127,8 +128,8 @@ export function KnowledgeBaseDetailDialog({
         <DialogContent className={styles.dialog} portalContainer={portalContainer}>
           {kb ? (
             <>
-              <DialogHeader>
-                <div>
+              <DialogHeader className={styles.header}>
+                <div className={styles.headerCopy}>
                   <div className={styles.titleRow}>
                     <DialogTitle>{kb.name || kb.id}</DialogTitle>
                     <span className={pageStyles.tag}>
@@ -136,7 +137,9 @@ export function KnowledgeBaseDetailDialog({
                       {t("iaKnowledgeBadgeAgenticHub")}
                     </span>
                   </div>
-                  <DialogDescription>{kb.description || kb.name || kb.id}</DialogDescription>
+                  <DialogDescription className={styles.description}>
+                    {kb.description || kb.name || kb.id}
+                  </DialogDescription>
                 </div>
                 <div className="flex shrink-0 items-center gap-3">
                   {toggle && mcpServer ? (
@@ -151,11 +154,11 @@ export function KnowledgeBaseDetailDialog({
                 </div>
               </DialogHeader>
               <DialogBody className={styles.body}>
-                <MCPProbeCards probe={probe} probing={probing} error={probeError} t={t} />
+                <MCPProbeCards probe={probe} probing={probing} error={probeError} onDismiss={resetProbe} t={t} />
                 {connectError ? (
-                  <p className="form-error" role="alert">
-                    {connectError}
-                  </p>
+                  <DismissibleAlert className="form-error" messageKey={connectError} closeLabel={t("close")}>
+                    <span role="alert">{connectError}</span>
+                  </DismissibleAlert>
                 ) : null}
                 {variant === "market" ? (
                   previewLoading || preview ? (
@@ -175,7 +178,19 @@ export function KnowledgeBaseDetailDialog({
                       /* Edit the underlying connection in MCP settings. */
                       <pre className={styles.code}>{configDocument}</pre>
                     ) : (
-                      <p className={styles.statusIdle}>{t("iaKnowledgeMCPMissing")}</p>
+                      <>
+                        <p className={styles.statusIdle}>
+                          {t(detail?.mcpStateLoading ? "resourcesLoading" : "iaKnowledgeMCPMissing")}
+                        </p>
+                        <Button
+                          size="sm"
+                          variant="secondaryGray"
+                          loading={detail?.mcpStateLoading}
+                          onClick={() => void hub?.refetchMCPServers?.()}
+                        >
+                          {t("retry")}
+                        </Button>
+                      </>
                     )}
                   </section>
                 )}
@@ -193,20 +208,26 @@ export function KnowledgeBaseDetailDialog({
                     {t("agentRemoveKnowledgeFromAgent")}
                   </Button>
                 ) : null}
-                {allowDelete && variant === "installed" && mcpServer ? (
+                {allowDelete && variant === "installed" && connected ? (
                   <Button
                     className={styles.footerDelete}
                     variant="danger"
                     size="sm"
-                    disabled={Boolean(detail?.mcpMutationBusy)}
+                    disabled={!mcpServer || Boolean(detail?.mcpMutationBusy)}
                     onClick={() => setConfirmOpen(true)}
                   >
                     <Trash2 size={15} strokeWidth={2} aria-hidden="true" />
                     {t("iaKnowledgeDeleteAction")}
                   </Button>
                 ) : null}
-                {variant === "installed" && mcpServer ? (
-                  <Button variant="secondaryGray" size="sm" loading={probing} onClick={() => void runProbe(mcpServer)}>
+                {variant === "installed" && connected ? (
+                  <Button
+                    variant="secondaryGray"
+                    size="sm"
+                    disabled={!mcpServer}
+                    loading={probing}
+                    onClick={() => void runProbe(mcpServer)}
+                  >
                     <RefreshCw size={15} strokeWidth={2} aria-hidden="true" />
                     {probing ? t("resourcesMCPTesting") : t("iaMCPTestConnection")}
                   </Button>

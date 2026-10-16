@@ -1,4 +1,14 @@
-import { Button } from "@/components/ui";
+import {
+  Button,
+  DialogRoot,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogCloseButton,
+  DialogBody,
+  DialogFooter,
+} from "@/components/ui";
 import {
   formatSidebarVersionLabel,
   isLocalBuildVersion,
@@ -8,7 +18,6 @@ import {
 import type { UpgradePhase, UpgradeStatus } from "@/models/upgradeStatus";
 import type { TranslateFn } from "@/models/conversations";
 import { getDesktopBridge } from "@/shared/platform/desktopBridge";
-import { ModalCloseButton } from "./ModalCloseButton";
 
 export type UpgradeModalProps = {
   appVersion?: string;
@@ -45,54 +54,65 @@ export function UpgradeModal({
   const visibleError = upgradeError || statusError;
   const desktopApp = Boolean(getDesktopBridge());
   return (
-    <div className="modal-backdrop">
-      <div className="modal-card upgrade-modal" onClick={(event) => event.stopPropagation()}>
-        <div className="modal-header">
+    <DialogRoot
+      open
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+    >
+      <DialogContent className="upgrade-modal">
+        <DialogHeader>
           <div>
-            <div className="modal-title">{t("upgradeTitle")}</div>
-            <div className="modal-subtitle">{subtitle}</div>
+            <DialogTitle>{t("upgradeTitle")}</DialogTitle>
+            <DialogDescription>{subtitle}</DialogDescription>
           </div>
-          <ModalCloseButton label={t("close")} onClose={onClose} />
-        </div>
-        <div className="upgrade-summary">
-          <div className="upgrade-summary-row">
-            <span>{t("upgradeCurrentVersion")}</span>
-            <strong>{formatSidebarVersionLabel(currentVersion)}</strong>
+          <DialogCloseButton label={t("close")} />
+        </DialogHeader>
+        <DialogBody>
+          <div className="upgrade-summary">
+            <div className="upgrade-summary-row">
+              <span>{t("upgradeCurrentVersion")}</span>
+              <strong>{formatSidebarVersionLabel(currentVersion)}</strong>
+            </div>
+            <div className="upgrade-summary-row">
+              <span>{t("upgradeLatestVersion")}</span>
+              <strong>
+                {upgradeStatus?.latest_version
+                  ? formatSidebarVersionLabel(upgradeStatus.latest_version)
+                  : t("upgradeNoLatest")}
+              </strong>
+            </div>
+            <div className="upgrade-summary-row">
+              <span>{t("upgradeStatus")}</span>
+              <strong>{statusLabel}</strong>
+            </div>
           </div>
-          <div className="upgrade-summary-row">
-            <span>{t("upgradeLatestVersion")}</span>
-            <strong>
-              {upgradeStatus?.latest_version
-                ? formatSidebarVersionLabel(upgradeStatus.latest_version)
-                : t("upgradeNoLatest")}
-            </strong>
+          <div className={`upgrade-status-card ${upgradePhase}`}>
+            <span className="upgrade-status-dot" aria-hidden="true"></span>
+            <p>
+              {upgradePhase === "manual_restart" || upgradeStatus?.manual_restart_required
+                ? t("upgradeManualRestartBody")
+                : manualUpgradeRequired
+                  ? t("upgradeManualUpgradeBody")
+                  : upgradePhase === "done"
+                    ? t("upgradeDoneBody")
+                    : upgradePhase === "restarting" ||
+                        upgradePhase === "starting" ||
+                        upgradeBusy ||
+                        upgradeStatus?.upgrading
+                      ? t("upgradeContinueUsing")
+                      : desktopApp
+                        ? t(upgradeStatus?.downloaded ? "upgradeDesktopDownloadedBody" : "upgradeDesktopConfirmBody")
+                        : t("upgradeConfirmBody")}
+            </p>
           </div>
-          <div className="upgrade-summary-row">
-            <span>{t("upgradeStatus")}</span>
-            <strong>{statusLabel}</strong>
-          </div>
-        </div>
-        <div className={`upgrade-status-card ${upgradePhase}`}>
-          <span className="upgrade-status-dot" aria-hidden="true"></span>
-          <p>
-            {upgradePhase === "manual_restart" || upgradeStatus?.manual_restart_required
-              ? t("upgradeManualRestartBody")
-              : manualUpgradeRequired
-                ? t("upgradeManualUpgradeBody")
-                : upgradePhase === "done"
-                  ? t("upgradeDoneBody")
-                  : upgradePhase === "restarting" ||
-                      upgradePhase === "starting" ||
-                      upgradeBusy ||
-                      upgradeStatus?.upgrading
-                    ? t("upgradeContinueUsing")
-                    : desktopApp
-                      ? t(upgradeStatus?.downloaded ? "upgradeDesktopDownloadedBody" : "upgradeDesktopConfirmBody")
-                      : t("upgradeConfirmBody")}
-          </p>
-        </div>
-        {visibleError ? <div className="form-error">{visibleError}</div> : null}
-        <div className="modal-actions">
+          {visibleError ? (
+            <div className="form-error" role="alert">
+              {visibleError}
+            </div>
+          ) : null}
+        </DialogBody>
+        <DialogFooter>
           {upgradePhase === "done" ? (
             <Button variant="primary" size="md" onClick={() => window.location.reload()}>
               {t("upgradeRefresh")}
@@ -122,8 +142,8 @@ export function UpgradeModal({
               </Button>
             </>
           )}
-        </div>
-      </div>
-    </div>
+        </DialogFooter>
+      </DialogContent>
+    </DialogRoot>
   );
 }

@@ -162,7 +162,9 @@ func (s *Service) Install(ctx context.Context, slug, version string, registry Re
 		_ = os.RemoveAll(destDir)
 		return InstallResult{}, err
 	}
-	if err := writeLockRecord(skillsRoot, newInstallRecord(reg.id, installSlug, resolvedVersion, sha256)); err != nil {
+	record := newInstallRecord(reg.id, installSlug, resolvedVersion, sha256)
+	record.RegistryURL = reg.client.baseURL
+	if err := writeLockRecord(skillsRoot, record); err != nil {
 		_ = os.RemoveAll(destDir)
 		return InstallResult{}, err
 	}

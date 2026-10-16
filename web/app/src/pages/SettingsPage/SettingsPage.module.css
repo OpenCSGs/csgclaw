@@ -1302,6 +1302,17 @@
 .archivePreference {
   display: flex;
   align-items: center;
-  gap: 8px;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--field);
   margin-bottom: 16px;
+}
+
+.archivePreference p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 12px;
 }

@@ -162,7 +162,13 @@ Server 保持当前 Hub catalog 的排序，并返回归一化后的 Skill 摘�
 }
 ```
 
-成功返回 `201 Created` 和已安装的本地 Skill 摘要；未设置 `replace` 时同名冲突返回 `409 Conflict`。
+成功返回 `201 Created` 和已安装的本地 Skill 摘要，包含 `source: "market"`。安装记录统一保存在技能根目录的 `.skillhub-lock.json`，与 CLI 安装共用，记录市场地址、远程路径/ref、技能内容 SHA256 及安装/更新时间。`GET /api/v1/skills` 读取该清单；ZIP 上传使用 `source: "local"`，没有记录的安装使用 `source: "unknown"`；包含 registry 的旧 CLI 记录识别为市场安装。替换或删除技能时同步维护安装记录。未设置 `replace` 时同名冲突返回 `409 Conflict`。
+
+## 知识库配置 API
+
+### `GET /api/v1/knowledge-bases/remote/{id}/mcp-config`
+
+读取当前用户有权访问的知识库 MCP 配置，不修改本地连接。已安装的知识库也可读取，返回值使用已有本地服务名称，刷新配置时保留其身份。通过 MCP 创建或更新接口保存返回的配置。
 
 ## Participant API
 

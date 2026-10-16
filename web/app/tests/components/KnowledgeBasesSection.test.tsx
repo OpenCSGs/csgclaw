@@ -13,6 +13,7 @@ vi.mock("@/api/knowledgeBases", () => ({ fetchRemoteKnowledgeBaseMCPConfig: fetc
 function setup(connected = false) {
   const onCreateMCPInPlace = vi.fn().mockResolvedValue(true);
   const onUpdateMCP = vi.fn().mockResolvedValue(true);
+  const setKnowledgeBasesVisible = vi.fn();
   const item = {
     id: "kb-1",
     contentID: "content-1",
@@ -25,17 +26,18 @@ function setup(connected = false) {
     sidebarProps: { authStatus: { ...emptyAuthStatus(), authenticated: true } },
     hubViewProps: {
       hub: {
+        setKnowledgeBasesVisible,
         mcpServers: [],
         detailPaneProps: {
           onCreateMCPInPlace,
-          onUpdateMCP,
+          onUpdateMCPInPlace: onUpdateMCP,
           knowledgeBases: { items: connected ? [item] : [], discoveryItems: [item] },
         },
       },
     },
   } as unknown as WorkspaceController;
   const { client: queryClient } = createQueryWrapper();
-  render(
+  const view = render(
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <WorkspaceControllerProvider controller={controller}>
@@ -44,13 +46,20 @@ function setup(connected = false) {
       </TooltipProvider>
     </QueryClientProvider>,
   );
-  return { onCreateMCPInPlace, onUpdateMCP, user: userEvent.setup() };
+  return { onCreateMCPInPlace, onUpdateMCP, setKnowledgeBasesVisible, view, user: userEvent.setup() };
 }
 
 beforeEach(() => {
   fetchConfig
     .mockReset()
     .mockResolvedValue({ name: "remote-display-name", config: { url: "https://example.com/mcp" } });
+});
+
+it("loads knowledge resources while settings is visible regardless of the background pane", () => {
+  const { view, setKnowledgeBasesVisible } = setup();
+  expect(setKnowledgeBasesVisible).toHaveBeenLastCalledWith(true);
+  view.unmount();
+  expect(setKnowledgeBasesVisible).toHaveBeenLastCalledWith(false);
 });
 
 it("updates a connected knowledge base using its persisted identity", async () => {
@@ -81,6 +90,7 @@ it("shows a failed update inside the open detail dialog and permits retry", asyn
   const dialog = screen.getByRole("dialog");
   await user.click(within(dialog).getByRole("button", { name: "iaKnowledgeUpdate" }));
   expect(within(dialog).getByRole("alert")).toHaveTextContent("resourcesKnowledgeBaseConfigFailed");
+  expect(screen.getAllByRole("alert")).toHaveLength(1);
   await user.click(within(dialog).getByRole("button", { name: "iaKnowledgeUpdate" }));
   expect(onUpdateMCP).toHaveBeenCalledTimes(2);
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();

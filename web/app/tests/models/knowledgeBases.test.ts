@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { configuredKnowledgeBases, mergeRemoteKnowledgeBasePages } from "@/models/knowledgeBases";
+import {
+  configuredKnowledgeBases,
+  mergeRemoteKnowledgeBasePages,
+  knowledgeBaseMCPServer,
+} from "@/models/knowledgeBases";
 import type { RemoteKnowledgeBase } from "@/models/knowledgeBases";
 
 const REMOTE_KNOWLEDGE_BASES: RemoteKnowledgeBase[] = [
@@ -17,6 +21,24 @@ const REMOTE_KNOWLEDGE_BASES: RemoteKnowledgeBase[] = [
     name: "Added locally",
   },
 ];
+
+it("resolves an installed connection by stable metadata after its local name changes", () => {
+  const server = {
+    name: "renamed",
+    config: {
+      _meta: {
+        "com.opencsg/mcp": {
+          type: "llm_wiki",
+          auth_type: "csghub_access_token",
+          resource_id: "local",
+          content_id: "content-local",
+        },
+      },
+    },
+  };
+  expect(knowledgeBaseMCPServer(REMOTE_KNOWLEDGE_BASES[1], [server])).toBe(server);
+  expect(knowledgeBaseMCPServer(REMOTE_KNOWLEDGE_BASES[0], [server])).toBeNull();
+});
 
 describe("configuredKnowledgeBases", () => {
   it("keeps only remote knowledge bases already saved as local MCP servers", () => {

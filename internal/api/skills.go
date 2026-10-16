@@ -222,7 +222,7 @@ func listSkills(root string) ([]skillsystem.SkillSummary, error) {
 			itemsByName[item.Name] = skillsystem.SkillSummary{
 				Name:        item.Name,
 				Description: item.Description,
-				Source:      skillsystem.SkillSourceLocal,
+				Source:      item.Source,
 			}
 		}
 	}

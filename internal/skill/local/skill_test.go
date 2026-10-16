@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"csgclaw/internal/skill/installstate"
 )
 
 func TestListReturnsSkillDirectoriesWithDescriptions(t *testing.T) {
@@ -99,6 +101,94 @@ func TestInstallArchive(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(root, "alpha", "SKILL.md")); err != nil {
 		t.Fatalf("installed SKILL.md missing: %v", err)
+	}
+}
+
+func TestInstallOriginSurvivesListingAndReplacement(t *testing.T) {
+	root := t.TempDir()
+	archive := mustZip(t, map[string]string{
+		"alpha/SKILL.md": "# Alpha\n",
+	})
+	for _, source := range []string{installstate.SourceMarket, installstate.SourceLocal, installstate.SourceMarket} {
+		origin := installstate.Record{Source: source}
+		if source == installstate.SourceMarket {
+			origin.RegistryURL = "https://hub.example.test"
+			origin.RemotePath = "owner/alpha"
+			origin.Ref = "main"
+		}
+		item, err := InstallArchiveWithOptions(root, "alpha.zip", archive, InstallArchiveOptions{Replace: true, Origin: origin})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if item.Source != source {
+			t.Fatalf("installation source = %q, want %q", item.Source, source)
+		}
+		items, err := List(root)
+		if err != nil || len(items) != 1 || items[0].Source != source {
+			t.Fatalf("listed origin = %+v, error = %v; want %q", items, err, source)
+		}
+		records, err := installstate.Read(root)
+		if err != nil {
+			t.Fatal(err)
+		}
+		record := records["alpha"]
+		if record.RemotePath != origin.RemotePath || record.RegistryURL != origin.RegistryURL || record.Ref != origin.Ref || record.SHA256 == "" {
+			t.Fatalf("installation record = %+v, want current source identity and hash", record)
+		}
+	}
+	files, err := os.ReadDir(filepath.Join(root, "alpha"))
+	if err != nil || len(files) != 1 || files[0].Name() != "SKILL.md" {
+		t.Fatalf("skill files = %v, err = %v; installer should not add files to the skill", files, err)
+	}
+	before, err := installstate.Read(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The same skill packaged without its enclosing directory has the same hash.
+	_, err = InstallArchiveWithOptions(root, "alpha.zip", mustZip(t, map[string]string{
+		"SKILL.md": "# Alpha\n",
+	}), InstallArchiveOptions{Replace: true, Origin: before["alpha"]})
+	if err != nil {
+		t.Fatal(err)
+	}
+	after, err := installstate.Read(root)
+	if err != nil || after["alpha"].SHA256 != before["alpha"].SHA256 {
+		t.Fatalf("content hash changed with archive layout: %+v, err = %v", after, err)
+	}
+	if err := Delete(root, "alpha"); err != nil {
+		t.Fatal(err)
+	}
+	records, err := installstate.Read(root)
+	if err != nil || len(records) != 0 {
+		t.Fatalf("records after deletion = %+v, err = %v", records, err)
+	}
+}
+
+func TestListRecognizesLegacyCLIRecordsAndUntrackedSkills(t *testing.T) {
+	root := t.TempDir()
+	mustWriteFile(t, filepath.Join(root, "legacy", "SKILL.md"), "# Legacy\n")
+	mustWriteFile(t, filepath.Join(root, "untracked", "SKILL.md"), "# Untracked\n")
+	mustWriteFile(t, filepath.Join(root, "untracked", ".csgclaw-origin.json"), `{"source":"market"}`)
+	mustWriteFile(t, filepath.Join(root, ".skillhub-lock.json"), `{"skills":{"legacy":{"registry":"clawhub","slug":"legacy","version":"1.0.0"}}}`)
+	items, err := List(root)
+	if err != nil || len(items) != 2 || items[0].Source != installstate.SourceMarket || items[1].Source != installstate.SourceUnknown {
+		t.Fatalf("skills = %+v, err = %v; want tracked market and unknown sources", items, err)
+	}
+}
+
+func TestInstallDoesNotChangeFilesWhenRecordsCannotBeRead(t *testing.T) {
+	root := t.TempDir()
+	mustWriteFile(t, filepath.Join(root, "alpha", "SKILL.md"), "# Original\n")
+	mustWriteFile(t, filepath.Join(root, ".skillhub-lock.json"), "invalid json")
+	_, err := InstallArchiveWithOptions(root, "alpha.zip", mustZip(t, map[string]string{
+		"alpha/SKILL.md": "# Replacement\n",
+	}), InstallArchiveOptions{Replace: true})
+	if err == nil {
+		t.Fatal("expected invalid installation records to prevent replacement")
+	}
+	content, err := os.ReadFile(filepath.Join(root, "alpha", "SKILL.md"))
+	if err != nil || string(content) != "# Original\n" {
+		t.Fatalf("existing skill changed: %q, err = %v", content, err)
 	}
 }
 
