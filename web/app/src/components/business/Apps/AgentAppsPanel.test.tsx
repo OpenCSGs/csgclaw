@@ -56,13 +56,15 @@ function Harness({ agentID = "agent-1", mode = "apps" }: { agentID?: string; mod
   );
 }
 
-function mockServer(initial: AppInstallation[] = []) {
+function mockServer(
+  initial: AppInstallation[] = [],
+  resources: AppInstallation[] = [{ ...installation, installation_id: "resource-1", agent_id: "", bindings: [] }],
+) {
   let items = initial;
   const fetch = vi.fn(async (url: string, init?: RequestInit) => {
     const path = String(url);
     if (path === "api/v1/connectors/catalog") return Response.json({ items: [definition] });
-    if (path === "api/v1/connectors/resources")
-      return Response.json({ items: [{ ...installation, installation_id: "resource-1", agent_id: "", bindings: [] }] });
+    if (path === "api/v1/connectors/resources") return Response.json({ items: resources });
     if (init?.method === "POST" && path.endsWith("connectors:probe"))
       return Response.json({ connected: true, tools: installation.tools });
     if (init?.method === "POST" && path.endsWith("/disconnect")) {
@@ -100,6 +102,27 @@ describe("Agent Apps", () => {
     expect(screen.getByRole("dialog")).toBeVisible();
   });
 
+  it("falls back to the global Feishu resource for runtime status and skills", async () => {
+    const binding = { ...feishuInstallation, resource_id: "feishu-resource", skills: undefined };
+    const resource = {
+      ...feishuInstallation,
+      installation_id: "feishu-resource",
+      resource_id: "feishu-resource",
+      agent_id: "",
+      runtime_status: "loaded",
+      skills: [{ skill_name: "lark-doc", bundle_version: "1", content_digest: "digest", managed: true }],
+      bindings: [],
+    };
+    mockServer([binding], [resource]);
+    const user = userEvent.setup();
+    render(<Harness />);
+
+    await user.click(await screen.findByRole("button", { name: /Feishu/ }));
+
+    expect(screen.getByText(t("feishuCLILoadedRuntime"))).toBeVisible();
+    expect(screen.getByText(`lark-doc · ${t("feishuCLIManagedSkill")}`)).toBeVisible();
+  });
+
   it("binds a global resource without asking for or copying credentials", async () => {
     const fetch = mockServer();
     const user = userEvent.setup();
@@ -119,22 +142,23 @@ describe("Agent Apps", () => {
     expect(screen.queryByLabelText("Token / API key")).not.toBeInTheDocument();
   });
 
-  it("disconnects explicitly and never reconnects when the list is fetched again", async () => {
-    const fetch = mockServer([installation]);
+  it("only shows reconnection when the app is disconnected", async () => {
+    mockServer([installation]);
     const user = userEvent.setup();
     const view = render(<Harness />);
     await screen.findByText("Work GitLab");
     await user.click(screen.getByRole("button", { name: /Work GitLab/ }));
     const manageLink = screen.getByRole("link", { name: t("appManageResource") });
     expect(manageLink).toHaveAttribute("href", "#/connectors/resource-1");
-    expect(manageLink).toHaveClass(buttonStyles.btn, buttonStyles["btn-secondary-gray"], buttonStyles["btn-sm"]);
-    await user.click(screen.getByRole("button", { name: "Disconnect" }));
-    await waitFor(() => expect(screen.getByRole("dialog")).toHaveTextContent("Disconnected"));
+    expect(manageLink).toHaveClass(buttonStyles.btn, buttonStyles["btn-primary"], buttonStyles["btn-md"]);
+    expect(screen.queryByRole("button", { name: "Disconnect" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Reconnect" })).not.toBeInTheDocument();
     view.unmount();
+    mockServer([{ ...installation, disconnected: true, status: "disconnected" }]);
     render(<Harness />);
     await user.click(await screen.findByRole("button", { name: /Work GitLab/ }));
     await screen.findByText("Manually disconnected. Reconnect explicitly to restore access.");
-    expect(fetch.mock.calls.some(([url]) => url.endsWith("/connect"))).toBe(false);
+    expect(screen.getByRole("button", { name: "Reconnect" })).toBeEnabled();
   });
 
   it.each([false, true])(

@@ -1,8 +1,8 @@
 import { mcpOriginLabel as originLabel } from "./resourceOrigins";
 import { useEffect, useMemo, useState } from "react";
-import { LoaderCircle, Plus } from "lucide-react";
+import { ChevronDown, LoaderCircle, Plus } from "lucide-react";
 import { GlobalAppsPanel } from "@/components/business/Apps";
-import { Button } from "@/components/ui";
+import { Button, DropdownMenuContent, DropdownMenuItem, DropdownMenuRoot, DropdownMenuTrigger } from "@/components/ui";
 import { ResourceList, ResourceListCard } from "@/components/business/ResourceListCard";
 import { SidebarMcpIcon } from "@/components/ui/Icons";
 import { useWorkspaceControllerContext } from "@/hooks/workspace";
@@ -68,10 +68,19 @@ export function ConnectorsSection() {
       }
       description={t("iaSettingsCardConnectorsHint")}
       actions={
-        <Button variant="primary" size="md" onClick={() => setCreateOpen(true)}>
-          <Plus size={14} strokeWidth={2.2} aria-hidden="true" />
-          {t("resourcesMCPCreateTitle")}
-        </Button>
+        <DropdownMenuRoot>
+          <DropdownMenuTrigger asChild>
+            <Button variant="primary" size="md">
+              <Plus size={14} strokeWidth={2.2} aria-hidden="true" />
+              {t("connectorsAdd")}
+              <ChevronDown size={14} aria-hidden="true" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent>
+            <DropdownMenuItem onSelect={() => setCreateOpen(true)}>{t("resourcesMCPCreateTitle")}</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => setAppCatalogOpen(true)}>{t("appAdd")}</DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenuRoot>
       }
     >
       <ResourceFilterTabs label={t("iaSettingsCardConnectors")} tabs={tabs} value={tab} onChange={setTab} />
@@ -88,10 +97,6 @@ export function ConnectorsSection() {
             <h3 className={styles.groupTitle}>
               {t("iaConnectorsGroupApps")}
               <span className={styles.countBadge}>{appCount}</span>
-              <Button className="ml-auto" variant="tertiaryGray" size="sm" onClick={() => setAppCatalogOpen(true)}>
-                <Plus size={14} />
-                {t("appAdd")}
-              </Button>
             </h3>
             <GlobalAppsPanel
               embedded

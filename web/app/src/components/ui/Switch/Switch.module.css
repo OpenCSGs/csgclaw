@@ -39,6 +39,20 @@
   transform: translateX(20px);
 }
 
+.csg-switch[data-size="sm"] {
+  width: 36px;
+  height: 20px;
+}
+
+.csg-switch[data-size="sm"] .csg-switch-thumb {
+  width: 16px;
+  height: 16px;
+}
+
+.csg-switch[data-size="sm"] .csg-switch-thumb[data-state="checked"] {
+  transform: translateX(16px);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .csg-switch,
   .csg-switch-thumb {

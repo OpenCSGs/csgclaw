@@ -3,6 +3,7 @@ import {
   formatMCPServerDocument,
   hasMCPServerName,
   mcpServerDisplayName,
+  mcpServerDescription,
   mcpServerOrigin,
   isRemoteMCPInstalled,
   managedMCPServerSnapshotDiffers,
@@ -32,12 +33,12 @@ describe("MCP catalog helpers", () => {
       {
         name: "filesystem",
         config: { command: "npx", args: ["-y", "@modelcontextprotocol/server-filesystem"], startup_timeout_sec: 60 },
-        description: "npx -y @modelcontextprotocol/server-filesystem",
+        description: "",
       },
       {
         name: "github",
         config: { url: "https://github.example/mcp" },
-        description: "https://github.example/mcp",
+        description: "",
       },
     ]);
   });
@@ -78,9 +79,18 @@ describe("MCP catalog helpers", () => {
       {
         name: "context7",
         config: { command: "npx", args: ["-y", "context7-mcp"] },
-        description: "npx -y context7-mcp",
+        description: "",
       },
     ]);
+  });
+
+  it("uses friendly descriptions for bundled desktop MCPs instead of their executable paths", () => {
+    expect(mcpServerDescription({ display_name: "computer-use", command: "/path/to/client" })).toBe(
+      "Control desktop apps and browsers.",
+    );
+    expect(mcpServerDescription({ display_name: "node_repl", command: "/path/to/node_repl" })).toBe(
+      "Run JavaScript for browser and desktop automation.",
+    );
   });
 
   it("reads published template MCP files in direct and legacy wrapped formats", () => {

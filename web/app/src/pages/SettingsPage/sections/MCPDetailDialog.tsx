@@ -227,7 +227,7 @@ export function MCPDetailDialog({
                   <Button
                     className={styles.footerDelete}
                     variant="danger"
-                    size="sm"
+                    size="md"
                     loading={removeAction.busy}
                     onClick={() => removeAction.onRemove()}
                   >
@@ -239,7 +239,7 @@ export function MCPDetailDialog({
                   <Button
                     className={styles.footerDelete}
                     variant="danger"
-                    size="sm"
+                    size="md"
                     disabled={Boolean(detail?.mcpMutationBusy)}
                     onClick={() => setConfirmOpen(true)}
                   >
@@ -248,18 +248,18 @@ export function MCPDetailDialog({
                   </Button>
                 ) : null}
                 {dirty ? (
-                  <Button variant="primary" size="sm" loading={saving} onClick={() => void saveConfig()}>
+                  <Button variant="primary" size="md" loading={saving} onClick={() => void saveConfig()}>
                     {t("save")}
                   </Button>
                 ) : null}
                 {installed ? (
-                  <Button variant="secondaryGray" size="sm" loading={probing} onClick={() => void runProbe(installed)}>
+                  <Button variant="secondaryGray" size="md" loading={probing} onClick={() => void runProbe(installed)}>
                     <RefreshCw size={15} strokeWidth={2} aria-hidden="true" />
                     {probing ? t("resourcesMCPTesting") : t("iaMCPTestConnection")}
                   </Button>
                 ) : null}
                 {marketItem && market ? (
-                  <Button variant="primary" size="sm" loading={market.busy} onClick={market.onAction}>
+                  <Button variant="primary" size="md" loading={market.busy} onClick={market.onAction}>
                     {market.installed ? (
                       <RefreshCw size={15} strokeWidth={2} aria-hidden="true" />
                     ) : (
@@ -293,12 +293,12 @@ export function MCPDetailDialog({
             </p>
           ) : null}
           <DialogFooter>
-            <Button variant="secondaryGray" size="sm" onClick={() => setConfirmOpen(false)}>
+            <Button variant="secondaryGray" size="md" onClick={() => setConfirmOpen(false)}>
               {t("cancel")}
             </Button>
             <Button
               variant="danger"
-              size="sm"
+              size="md"
               loading={Boolean(detail?.mcpMutationBusy)}
               onClick={() => void handleDelete()}
             >
