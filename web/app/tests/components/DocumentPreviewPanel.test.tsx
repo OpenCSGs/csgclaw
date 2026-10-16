@@ -161,7 +161,10 @@ describe("DocumentPreviewPanel", () => {
     );
     render(<DocumentPreviewPanel index={0} items={items} t={t} onClose={vi.fn()} onIndexChange={vi.fn()} />);
     expect(await screen.findByRole("heading", { name: "中文" })).toBeInTheDocument();
-    await userEvent.setup().click(screen.getByRole("tab", { name: "Code" }));
+    const sourceMode = screen.getByRole("radio", { name: "Code" });
+    expect(sourceMode).toHaveAttribute("data-csg-control", "segmented-control");
+    await userEvent.setup().click(sourceMode);
+    expect(sourceMode).toHaveAttribute("aria-checked", "true");
     expect(screen.getByText("# 中文")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Download" })).toHaveAttribute("href", items[0]!.downloadURL);
   });
@@ -301,7 +304,7 @@ describe("DocumentPreviewPanel", () => {
     expect(frameDocument).not.toContain("window.hacked");
     expect(frameDocument).not.toContain("tracker.example");
 
-    await user.click(screen.getByRole("tab", { name: "Code" }));
+    await user.click(screen.getByRole("radio", { name: "Code" }));
     await waitFor(() =>
       expect(container.querySelector('.document-preview-shiki[data-language="html"]')).toHaveTextContent(
         "window.hacked = true",
@@ -443,6 +446,7 @@ describe("DocumentPreviewPanel", () => {
     expect(container.querySelectorAll(".pptx-preview-slide-wrapper")).toHaveLength(10);
     const nextSlide = container.querySelector<HTMLButtonElement>(".document-preview-page-controls button:last-child");
     expect(nextSlide).not.toBeNull();
+    expect(nextSlide).toHaveAttribute("data-csg-control", "button");
     for (let index = 1; index < 10; index += 1) {
       await userEvent.click(nextSlide!);
     }
@@ -622,6 +626,10 @@ describe("DocumentPreviewPanel", () => {
     expect(screen.getAllByTestId("mock-pdf-page")[0]).toHaveAttribute("data-width", "612");
     const pdfMain = container.querySelector(".document-preview-pdf-main");
     expect(pdfMain).toHaveClass("is-width-fitted");
+    expect(container.querySelector(".document-preview-page-controls button")).toHaveAttribute(
+      "data-csg-control",
+      "button",
+    );
     await user.click(screen.getByRole("button", { name: "Zoom in" }));
     expect(pdfMain).toHaveClass("allows-horizontal-pan");
     expect(container.querySelectorAll(".document-preview-pdf-page")).toHaveLength(3);

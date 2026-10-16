@@ -109,13 +109,13 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 14px;
+  font: var(--text-sm-semibold);
 }
 
 .document-preview-title-group span,
 .document-preview-toolbar > span {
   color: var(--muted);
-  font-size: 11px;
+  font: var(--text-xs-normal);
   white-space: nowrap;
 }
 
@@ -304,27 +304,11 @@
   position: sticky;
   z-index: 2;
   top: 0;
-  padding: 7px 10px;
+  padding: 3px 10px;
   display: flex;
   justify-content: flex-end;
-  gap: 4px;
   border-bottom: 1px solid var(--line);
   background: var(--panel);
-}
-
-.document-preview-mode-switch button {
-  padding: 5px 10px;
-  border: 1px solid transparent;
-  border-radius: var(--radius-md);
-  background: transparent;
-  color: var(--muted);
-  cursor: pointer;
-}
-
-.document-preview-mode-switch button.active {
-  border-color: var(--primary);
-  background: var(--primary-soft);
-  color: var(--primary-strong);
 }
 
 .document-preview-text {
@@ -364,6 +348,7 @@
   border-radius: var(--radius-md);
   background: transparent;
   color: var(--muted);
+  font: var(--text-xs-medium);
   cursor: pointer;
 }
 
@@ -475,29 +460,7 @@
   border-top: 1px solid var(--line);
   background: var(--panel);
   color: var(--muted);
-  font-size: 12px;
-}
-
-.document-preview-page-controls button {
-  width: 28px;
-  height: 28px;
-  border: 0;
-  border-radius: var(--radius-md);
-  display: grid;
-  place-items: center;
-  background: transparent;
-  color: inherit;
-  cursor: pointer;
-}
-
-.document-preview-page-controls button:hover:not(:disabled) {
-  background: var(--field);
-  color: var(--text);
-}
-
-.document-preview-page-controls button:disabled {
-  opacity: 0.35;
-  cursor: default;
+  font: var(--text-xs-normal);
 }
 
 .document-preview-ppt-stage {

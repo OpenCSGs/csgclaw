@@ -1,6 +1,7 @@
 import { useCallback, useLayoutEffect, useMemo, useRef, useState, type UIEvent } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Document, Page, pdfjs } from "react-pdf";
+import { Button } from "@/components/ui";
 import pdfWorkerURL from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import { copyPreviewBuffer } from "./previewBuffer";
 import "react-pdf/dist/Page/AnnotationLayer.css";
@@ -134,23 +135,29 @@ export default function PdfPreview({ data, scale, t }: { data: ArrayBuffer; scal
       </div>
       {pageCount > 0 ? (
         <div className="document-preview-page-controls">
-          <button
-            type="button"
+          <Button
+            iconOnly
+            size="sm"
+            variant="tertiaryGray"
             aria-label={t("attachmentsScrollPrevious")}
+            title={t("attachmentsScrollPrevious")}
             disabled={page <= 1}
             onClick={() => goToPage(page - 1)}
           >
             <ChevronLeft aria-hidden="true" size={16} />
-          </button>
+          </Button>
           <span>{t("attachmentPreviewPageCount", { page, count: pageCount })}</span>
-          <button
-            type="button"
+          <Button
+            iconOnly
+            size="sm"
+            variant="tertiaryGray"
             aria-label={t("attachmentsScrollNext")}
+            title={t("attachmentsScrollNext")}
             disabled={page >= pageCount}
             onClick={() => goToPage(page + 1)}
           >
             <ChevronRight aria-hidden="true" size={16} />
-          </button>
+          </Button>
         </div>
       ) : null}
     </div>

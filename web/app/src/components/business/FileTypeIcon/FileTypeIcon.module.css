@@ -1,0 +1,60 @@
+.icon {
+  position: relative;
+  display: flex;
+  width: 40px;
+  height: 40px;
+  flex: 0 0 40px;
+  align-items: center;
+  justify-content: center;
+  transform: scale(0.6);
+}
+
+.icon > img:first-child {
+  display: block;
+  width: 32px;
+  height: 40px;
+}
+
+.folder {
+  transform: none;
+}
+
+.folder::before {
+  content: "";
+  width: 24px;
+  height: 24px;
+  background: var(--primary-strong);
+  -webkit-mask: url("../../../assets/file-types/folder.svg") center / contain no-repeat;
+  mask: url("../../../assets/file-types/folder.svg") center / contain no-repeat;
+}
+
+.icon > span:not(.mark) {
+  position: absolute;
+  inset: 57.5% 10% 15%;
+  color: #fff;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: normal;
+  text-align: center;
+  word-break: break-word;
+}
+
+.mark {
+  position: absolute;
+  inset: 40% 30% 20%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.mark img {
+  display: block;
+  width: 16px;
+  height: 16px;
+}
+
+.wideMark img {
+  width: 14.4px;
+  height: 9.6px;
+  transform: translateY(0.8px);
+}

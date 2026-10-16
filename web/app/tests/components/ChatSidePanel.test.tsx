@@ -125,6 +125,37 @@ describe("shared chat sidebar", () => {
     );
   });
 
+  it("uses the workspace root name as the first breadcrumb and returns to it from a directory", async () => {
+    const user = userEvent.setup();
+    let releaseNested = () => {};
+    const nestedGate = new Promise<void>((resolve) => {
+      releaseNested = resolve;
+    });
+    vi.mocked(fetchWorkspaceDirectory).mockImplementation(async (_agent, path) => {
+      if (path) await nestedGate;
+      return {
+        absolute_path: `/workspace/Alice${path ? `/${path}` : ""}`,
+        open_targets: [],
+        entries: path
+          ? [{ path: "docs/guide.md", name: "guide.md", type: "file" }]
+          : [{ path: "docs", name: "docs", type: "dir" }],
+      };
+    });
+    render(<Harness />, { wrapper: createQueryWrapper().wrapper });
+    await user.click(screen.getByRole("button", { name: "Files" }));
+    const breadcrumb = await screen.findByRole("navigation", { name: "Workspace files" });
+    expect(within(breadcrumb).getByText("Alice")).toHaveAttribute("aria-current", "page");
+    expect(breadcrumb.querySelector("img")).not.toBeInTheDocument();
+
+    await user.click(await screen.findByRole("button", { name: "docs" }));
+    expect(within(breadcrumb).getByRole("button", { name: "Alice" })).toBeInTheDocument();
+    expect(within(breadcrumb).getByText("docs")).toHaveAttribute("aria-current", "page");
+    releaseNested();
+    await screen.findByRole("button", { name: /^guide.md/ });
+    await user.click(within(breadcrumb).getByRole("button", { name: "Alice" }));
+    expect(within(breadcrumb).getByText("Alice")).toHaveAttribute("aria-current", "page");
+  });
+
   it("keeps Agent selection available in a room", async () => {
     const user = userEvent.setup();
     render(<Harness room={{ ...conversation, is_direct: false }} />, { wrapper: createQueryWrapper().wrapper });
@@ -214,7 +245,7 @@ describe("shared chat sidebar", () => {
       "href",
       "https://example.org/",
     );
-    await user.click(screen.getByRole("button", { name: "Open" }));
+    await user.keyboard("{Enter}");
     expect(screen.getByTitle("Browser")).toHaveAttribute("src", "https://example.org/");
     expect(screen.getByRole("tab", { name: "example.org" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getAllByRole("link", { name: "Open in external browser" })).toHaveLength(2);
@@ -279,6 +310,11 @@ describe("shared chat sidebar", () => {
     await user.click(screen.getByRole("button", { name: "Files" }));
     await screen.findByRole("button", { name: /^README.md/ });
     const panel = screen.getByRole("complementary");
+    expect(within(panel).getByRole("tab", { name: "Files" }).querySelector(".chat-side-folder-icon")).toHaveAttribute(
+      "aria-hidden",
+      "true",
+    );
+    expect(within(panel).getByRole("searchbox", { name: "Search files" })).toHaveAttribute("data-size", "sm");
     await user.click(within(panel).getByRole("tab", { name: "Conversation attachments" }));
     await screen.findByRole("button", { name: /^report.pdf/ });
     await user.click(within(panel).getByRole("button", { name: "Collapse sidebar" }));
@@ -288,11 +324,11 @@ describe("shared chat sidebar", () => {
     await user.click(screen.getByRole("button", { name: "Browser" }));
     const address = screen.getByRole("textbox", { name: "Web address" });
     await user.type(address, "javascript:alert(1)");
-    await user.click(screen.getByRole("button", { name: "Open" }));
+    await user.keyboard("{Enter}");
     expect(screen.getByRole("alert")).toHaveTextContent("Enter a valid HTTP or HTTPS URL");
     await user.clear(address);
     await user.type(address, "https://example.org/");
-    await user.click(screen.getByRole("button", { name: "Open" }));
+    await user.keyboard("{Enter}");
     expect(screen.getByTitle("Browser")).toHaveAttribute("sandbox", "allow-scripts allow-forms");
     const stored = Object.keys(localStorage)
       .filter((key) => key.includes("chatSidePanel.v1"))
@@ -314,7 +350,9 @@ describe("shared chat sidebar", () => {
     await user.click(screen.getByRole("tab", { name: "Files" }));
     await user.click(screen.getByRole("button", { name: /^README.md/ }));
     expect(screen.getByRole("tab", { name: "README.md" })).toHaveAttribute("aria-selected", "true");
-    await user.click(screen.getByRole("button", { name: "Close tab README.md" }));
+    const closePreview = screen.getByRole("button", { name: "Close tab README.md" });
+    expect(closePreview).toHaveAttribute("data-csg-control", "button");
+    await user.click(closePreview);
     expect(screen.getByRole("tab", { name: "Files" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByRole("button", { name: /^README.md/ })).toBeVisible();
   });

@@ -302,19 +302,25 @@ export function ChatSidePanel({
                     aria-controls={`chat-tab-${encodeURIComponent(tab.id)}`}
                     onClick={() => patch({ activeID: tab.id })}
                   >
-                    <Icon size={15} />
+                    {tab.kind === "files" ? (
+                      <span className="chat-side-folder-icon" aria-hidden="true" />
+                    ) : (
+                      <Icon size={15} aria-hidden="true" />
+                    )}
                     <span>{labelFor(tab)}</span>
                   </button>
                 </Tooltip>
                 <Tooltip content={t("chatCloseTab", { name: labelFor(tab) })} contentProps={{ side: "bottom" }}>
-                  <button
-                    type="button"
+                  <Button
+                    iconOnly
+                    size="sm"
+                    variant="tertiaryGray"
                     className="chat-side-tab-close"
                     aria-label={t("chatCloseTab", { name: labelFor(tab) })}
                     onClick={() => close(tab)}
                   >
                     <X size={13} />
-                  </button>
+                  </Button>
                 </Tooltip>
               </div>
             );

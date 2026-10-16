@@ -1,35 +1,33 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { FileTypeIcon } from "@/components/business/ChatSidePanel/FileTypeIcon";
+import { FileTypeIcon } from "@/components/business/FileTypeIcon";
 
 describe("FileTypeIcon", () => {
   it("uses the Figma folder icon without a document page or generic mark", () => {
-    render(<FileTypeIcon isFolder />);
+    const { container } = render(<FileTypeIcon isFolder />);
 
-    expect(document.querySelector(".chat-file-type-icon.is-folder")).toBeInTheDocument();
-    expect(document.querySelector(".chat-file-type-icon.is-folder > img")).not.toBeInTheDocument();
-    expect(document.querySelector(".chat-file-type-mark")).not.toBeInTheDocument();
+    expect(container.firstElementChild).toHaveAttribute("aria-hidden", "true");
+    expect(container.querySelector("img")).not.toBeInTheDocument();
   });
 
   it("uses a format-specific label instead of the generic document mark for Markdown", () => {
-    render(<FileTypeIcon name="README.md" />);
+    const { container } = render(<FileTypeIcon name="README.md" />);
 
     expect(screen.getByText("MD")).toBeInTheDocument();
-    expect(document.querySelector(".chat-file-type-icon > img")).toHaveAttribute("src");
-    expect(document.querySelector(".chat-file-type-mark")).not.toBeInTheDocument();
+    expect(container.querySelectorAll("img")).toHaveLength(1);
   });
 
   it("uses the matching SVG automatically when an asset exists for the extension", () => {
     render(<FileTypeIcon name="snippet.js" />);
 
     expect(screen.getByText("JS")).toBeInTheDocument();
-    expect(document.querySelector(".chat-file-type-mark")).not.toBeInTheDocument();
+    expect(document.querySelectorAll("img")).toHaveLength(1);
   });
 
   it("keeps generic marks for formats without a dedicated icon", () => {
-    render(<FileTypeIcon name="notes.odt" />);
+    const { container } = render(<FileTypeIcon name="notes.odt" />);
 
     expect(screen.queryByText("ODT")).not.toBeInTheDocument();
-    expect(document.querySelector(".chat-file-type-mark")).toBeInTheDocument();
+    expect(container.querySelectorAll("img")).toHaveLength(2);
   });
 });

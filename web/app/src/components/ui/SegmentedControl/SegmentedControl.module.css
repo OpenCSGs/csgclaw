@@ -10,6 +10,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: var(--space-1);
   min-width: 44px;
   min-height: 36px;
   padding: var(--space-2) var(--space-3);
@@ -19,6 +20,16 @@
   color: var(--muted);
   font: var(--text-sm-medium);
   cursor: pointer;
+}
+.csg-segmented-control[data-size="sm"] {
+  gap: var(--space-0-5);
+  padding: var(--space-0-5);
+}
+.csg-segmented-control[data-size="sm"] .csg-segmented-control-item {
+  min-width: 32px;
+  min-height: 26px;
+  padding: 0 var(--space-2);
+  font: var(--text-xs-medium);
 }
 .csg-segmented-control-item[aria-checked="true"] {
   border-color: color-mix(in srgb, var(--primary) 36%, transparent);

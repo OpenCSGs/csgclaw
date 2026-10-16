@@ -1,3 +1,5 @@
+import styles from "./FileTypeIcon.module.css";
+
 const assets = import.meta.glob<string>("/src/assets/file-types/*.svg", {
   eager: true,
   import: "default",
@@ -115,7 +117,7 @@ export function FileTypeIcon({
   mediaType?: string;
   isFolder?: boolean;
 }) {
-  if (isFolder) return <span className="chat-file-type-icon is-folder" aria-hidden="true" />;
+  if (isFolder) return <span className={`${styles.icon} ${styles.folder}`} aria-hidden="true" />;
 
   const filename = name.replaceAll("\\", "/").split("/").pop() ?? "";
   const extension = filename.includes(".") ? filename.slice(filename.lastIndexOf(".") + 1).toLowerCase() : "";
@@ -128,11 +130,11 @@ export function FileTypeIcon({
   const mark = icon.mark && assets[`/src/assets/file-types/${icon.mark}.svg`];
 
   return (
-    <span className="chat-file-type-icon" aria-hidden="true">
+    <span className={styles.icon} aria-hidden="true">
       {page ? <img src={page} width={32} height={40} alt="" /> : null}
       {icon.label ? <span>{icon.label}</span> : null}
       {mark ? (
-        <span className={`chat-file-type-mark${icon.wideMark ? " is-wide" : ""}`}>
+        <span className={`${styles.mark}${icon.wideMark ? ` ${styles.wideMark}` : ""}`}>
           <img src={mark} width={icon.wideMark ? 15.9 : 16} height={icon.wideMark ? 11.1 : 16} alt="" />
         </span>
       ) : null}

@@ -423,7 +423,11 @@ describe("ConversationPane", () => {
 
     await user.click(screen.getByRole("button", { name: "Activity records" }));
 
-    expect(screen.getByRole("button", { name: "Newest first" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("radio", { name: "Newest first" })).toHaveAttribute("aria-checked", "true");
+    expect(screen.getByRole("radio", { name: "Newest first" })).toHaveAttribute(
+      "data-csg-control",
+      "segmented-control",
+    );
     const rows = within(document.querySelector(".conversation-activity-panel") as HTMLElement).getAllByRole("listitem");
     expect(rows[0]).toHaveTextContent("newer event");
     expect(rows[1]).toHaveTextContent("older event");

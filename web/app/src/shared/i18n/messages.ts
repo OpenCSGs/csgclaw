@@ -584,6 +584,9 @@ export const messages = {
     chatBrowserInvalid: "请输入有效的 HTTP 或 HTTPS 网址",
     chatBrowserEmbedHint: "网页无法显示或需要登录？部分网站禁止嵌入，请在系统浏览器中继续。",
     chatBrowserEmpty: "输入网址浏览网页",
+    chatBrowserEmptyTitle: "在会话中浏览网页",
+    chatBrowserEmptyDescription:
+      "在上方地址栏输入网址并按 Enter，即可边对话边查看网页。部分网站可能需要在外部浏览器打开。",
     chatActivityHint: "查看这个会话的执行过程",
     chatMentionPeople: "人员",
     chatMentionFiles: "文件",
@@ -3433,6 +3436,9 @@ export const messages = {
     chatBrowserEmbedHint:
       "Page unavailable or needs sign-in? Some sites block embedding. Continue in your system browser.",
     chatBrowserEmpty: "Enter a URL to browse a web page",
+    chatBrowserEmptyTitle: "Browse alongside your conversation",
+    chatBrowserEmptyDescription:
+      "Enter a URL above and press Enter to view a page while chatting. Some sites may need to open in an external browser.",
     chatActivityHint: "Explore this conversation’s activity",
     chatMentionPeople: "People",
     chatMentionFiles: "Files",

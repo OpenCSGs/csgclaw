@@ -3,10 +3,7 @@
   max-width: 100%;
   overflow: hidden;
   color: var(--muted);
-  font-family: var(--font-family-text);
-  font-size: 14px;
-  font-weight: var(--font-weight-normal, 400);
-  line-height: 22px;
+  font: var(--text-sm-normal);
 }
 
 .list {

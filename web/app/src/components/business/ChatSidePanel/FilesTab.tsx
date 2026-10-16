@@ -5,8 +5,8 @@ import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-quer
 import { AtSign, RefreshCw } from "lucide-react";
 import { attachmentCapability, fetchWorkspaceDirectory, filePreviewItem } from "@/api/chatFiles";
 import { errorMessage } from "@/api/client";
-import { Breadcrumb, Button, Select, Tooltip } from "@/components/ui";
-import { FileTypeIcon } from "./FileTypeIcon";
+import { Breadcrumb, Button, Select, TextInput, Tooltip } from "@/components/ui";
+import { FileTypeIcon } from "@/components/business/FileTypeIcon";
 import { formatAttachmentSize, type AttachmentPreviewItem } from "@/models/attachments";
 import type { ComposerFileReference } from "@/models/fileReferences";
 import type { TranslateFn } from "@/models/conversations";
@@ -37,13 +37,18 @@ export function FilesTab({
     : scope.defaultAgentID;
   const directory = controller.state.directory;
   const directorySegments = directory.split("/").filter(Boolean);
+  const rootWorkspace = useQuery({
+    queryKey: ["chat-workspace", scope.roomID, agentID, ""],
+    queryFn: ({ signal }) => fetchWorkspaceDirectory(agentID, "", signal, scope.roomID),
+    enabled: Boolean(agentID),
+  });
   const workspace = useQuery({
     queryKey: ["chat-workspace", scope.roomID, agentID, directory],
     queryFn: ({ signal }) => fetchWorkspaceDirectory(agentID, directory, signal, scope.roomID),
     enabled: Boolean(agentID),
   });
   const workspaceRootName =
-    workspace.data?.absolute_path?.split(/[\\/]/).filter(Boolean).at(-1) || t("chatWorkspaceFiles");
+    rootWorkspace.data?.absolute_path?.split(/[\\/]/).filter(Boolean).at(-1) || t("chatWorkspaceFiles");
   const attachments = useInfiniteQuery({
     queryKey: ["chat-room-files", scope.roomID, query],
     queryFn: ({ pageParam, signal }) => reader.read(query, pageParam, signal),
@@ -164,20 +169,15 @@ export function FilesTab({
           <Breadcrumb
             className="chat-files-path"
             aria-label={t("chatWorkspaceFiles")}
-            home={{
-              label: workspaceRootName,
-              onClick: () => changeDirectory(""),
-            }}
             overflowLabel={t("chatBreadcrumbShowEarlier")}
-            items={
-              directorySegments.length
-                ? directorySegments.map((segment, index) => ({
-                    label: segment,
-                    current: index === directorySegments.length - 1,
-                    onClick: () => changeDirectory(directorySegments.slice(0, index + 1).join("/")),
-                  }))
-                : [{ label: workspaceRootName, current: true }]
-            }
+            items={[
+              { label: workspaceRootName, current: directorySegments.length === 0, onClick: () => changeDirectory("") },
+              ...directorySegments.map((segment, index) => ({
+                label: segment,
+                current: index === directorySegments.length - 1,
+                onClick: () => changeDirectory(directorySegments.slice(0, index + 1).join("/")),
+              })),
+            ]}
           />
           <WorkspacePathActions
             agentID={agentID}
@@ -197,8 +197,8 @@ export function FilesTab({
         </div>
       ) : null}
       <div className="chat-files-search-wrap">
-        <input
-          className="chat-files-search"
+        <TextInput
+          size="sm"
           type="search"
           placeholder={t("chatSearchFiles")}
           aria-label={t("chatSearchFiles")}
