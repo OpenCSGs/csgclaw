@@ -79,12 +79,10 @@ export function AgentModelFields({
       <Field required label={t("profileModel")}>
         <ConnectedModelPicker
           selectionLabel="model"
-          providers={providerOptions.map((option) =>
-            option.id === providerID ? { ...option, models: [...models] } : option,
-          )}
+          providers={selectedProvider ? [{ ...selectedProvider, models: [...models] }] : []}
           providerID={providerID}
           modelID={modelID}
-          disabled={busy || providerOptions.every((option) => option.disabled || !option.models.length)}
+          disabled={busy || !selectedProvider || selectedProvider.disabled || !models.length}
           onChoose={(id, model) => {
             if (id === MODEL_PROVIDER_IDS.OpenCSG && !onRequireOpenCSGAuth()) return;
             onPatch({ provider: providerNameForProviderID(id), model_provider_id: id, model_id: model });

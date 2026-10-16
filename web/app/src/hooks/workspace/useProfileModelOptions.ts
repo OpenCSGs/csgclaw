@@ -16,7 +16,7 @@ function modelProbeReady(draft: AgentDraft | null): boolean {
   if (!draft) {
     return false;
   }
-  if (draft.provider !== "api") {
+  if (String(draft.model_provider_id || "").trim() || draft.provider !== "api") {
     return true;
   }
   const hasBaseURL = String(draft.base_url || "").trim() !== "";
