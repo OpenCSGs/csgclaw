@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { CircleAlert, Plus } from "lucide-react";
+import { CircleAlert, Plus, MoreHorizontal } from "lucide-react";
 import {
   createAppResource,
+  deleteAppResource,
   fetchAppDefinitions,
   fetchAppResources,
   probeAppResource,
@@ -12,6 +13,11 @@ import {
 } from "@/api/apps";
 import {
   Button,
+  DropdownMenuRoot,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DialogFooter,
   DialogRoot,
   DialogContent,
   DialogHeader,
@@ -55,6 +61,8 @@ export function GlobalAppsPanel({
   const catalog = catalogOpen ?? localCatalog;
   const setCatalog = onCatalogOpenChange ?? setLocalCatalog;
   const [error, setError] = useState<unknown>(null);
+  const [removing, setRemoving] = useState<AppInstallation | null>(null);
+  const [busy, setBusy] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const seq = useRef(0);
   const navigate = useNavigate();
@@ -117,6 +125,20 @@ export function GlobalAppsPanel({
     void reload();
     if (resourceId || !embedded) void navigate(pathForPane({ type: "apps", id: "" }));
   };
+  async function mutate(operation: () => Promise<unknown>) {
+    setBusy(true);
+    setError(null);
+    try {
+      await operation();
+      await reload();
+      return true;
+    } catch (failure) {
+      setError(failure);
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  }
   const query = search.trim().toLocaleLowerCase();
   const matches = (name: string, description: string) =>
     !query || `${name} ${description}`.toLocaleLowerCase().includes(query);
@@ -188,31 +210,65 @@ export function GlobalAppsPanel({
         {filteredItems.map((app) => {
           const cardDescription = description(app);
           return (
-            <button
-              key={app.installation_id}
-              type="button"
-              className={`${styles.connectorCard} ${styles.resourceConnectorCard}`}
-              onClick={() =>
-                embedded
-                  ? setLocalEditingID(app.installation_id)
-                  : void navigate(pathForPane({ type: "apps", id: app.installation_id }))
-              }
-            >
-              <span className={styles.connectorIcon}>
-                <AppIcon appID={app.app_id} />
-              </span>
-              <span className={styles.connectorCopy}>
-                <span className={styles.connectorTitle} title={app.name}>
-                  {app.name}
+            <article key={app.installation_id} className={styles.resourceConnectorRow}>
+              <button
+                type="button"
+                className={`${styles.connectorCard} ${styles.resourceConnectorCard}`}
+                onClick={() =>
+                  embedded
+                    ? setLocalEditingID(app.installation_id)
+                    : void navigate(pathForPane({ type: "apps", id: app.installation_id }))
+                }
+              >
+                <span className={styles.connectorIcon}>
+                  <AppIcon appID={app.app_id} />
                 </span>
-                <span className={styles.connectorDescription} title={cardDescription}>
-                  {cardDescription}
+                <span className={styles.connectorCopy}>
+                  <span className={styles.connectorTitle} title={app.name}>
+                    {app.name}
+                  </span>
+                  <span className={styles.connectorDescription} title={cardDescription}>
+                    {cardDescription}
+                  </span>
                 </span>
-              </span>
-              <span className={styles.status} data-status={app.enabled ? app.status : "disabled"}>
-                {appStatus(app, t)}
-              </span>
-            </button>
+                <span className={styles.status} data-status={app.enabled ? app.status : "disabled"}>
+                  {appStatus(app, t)}
+                </span>
+              </button>
+              <DropdownMenuRoot>
+                <DropdownMenuTrigger asChild>
+                  <Button size="sm" variant="tertiaryGray" aria-label={t("connectorsActions", { name: app.name })}>
+                    <MoreHorizontal size={16} />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent>
+                  <DropdownMenuItem
+                    onSelect={() =>
+                      embedded
+                        ? setLocalEditingID(app.installation_id)
+                        : void navigate(pathForPane({ type: "apps", id: app.installation_id }))
+                    }
+                  >
+                    {t("appSettings")}
+                  </DropdownMenuItem>
+                  {app.kind !== "cli" ? (
+                    <>
+                      <DropdownMenuItem
+                        disabled={busy}
+                        onSelect={() =>
+                          void mutate(() => updateAppResource(app.installation_id, { enabled: !app.enabled }))
+                        }
+                      >
+                        {t(app.enabled ? "appDisable" : "appEnable")}
+                      </DropdownMenuItem>
+                      <DropdownMenuItem danger disabled={busy} onSelect={() => setRemoving(app)}>
+                        {t("appRemove")}
+                      </DropdownMenuItem>
+                    </>
+                  ) : null}
+                </DropdownMenuContent>
+              </DropdownMenuRoot>
+            </article>
           );
         })}
       </div>
@@ -320,6 +376,50 @@ export function GlobalAppsPanel({
           }}
         />
       ) : null}
+      <DialogRoot
+        open={!!removing}
+        onOpenChange={(open) => {
+          if (!open) setRemoving(null);
+        }}
+      >
+        <DialogContent className={styles.catalogDialog}>
+          <DialogHeader>
+            <div>
+              <DialogTitle>{t("appRemoveConfirmTitle", { name: removing?.name || "" })}</DialogTitle>
+              <DialogDescription>{t("appDeleteResourceDescription")}</DialogDescription>
+            </div>
+            <DialogCloseButton label={t("close")} variant="tertiaryGray" size="sm" iconOnly />
+          </DialogHeader>
+          <DialogBody>
+            <p>{t("appResourceUsers", { count: removing?.bindings?.length || 0 })}</p>
+            <ul>
+              {removing?.bindings?.map((binding) => (
+                <li key={binding.installation_id}>{binding.agent_name || binding.agent_id}</li>
+              ))}
+            </ul>
+          </DialogBody>
+          <DialogFooter>
+            <Button disabled={busy} onClick={() => setRemoving(null)}>
+              {t("cancel")}
+            </Button>
+            <Button
+              variant="danger"
+              disabled={busy}
+              onClick={() => {
+                if (removing)
+                  void mutate(() => deleteAppResource(removing.installation_id)).then((ok) => {
+                    if (ok) {
+                      setRemoving(null);
+                      close();
+                    }
+                  });
+              }}
+            >
+              {t("appRemove")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </DialogRoot>
     </section>
   );
 }

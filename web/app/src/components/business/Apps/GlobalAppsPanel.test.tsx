@@ -219,7 +219,12 @@ describe("Global Apps", () => {
       </MemoryRouter>,
     );
     await screen.findByText("Team Feishu");
-    await user.click(screen.getByRole("button", { name: /Team Feishu/ }));
+    await user.click(screen.getByRole("button", { name: "Actions for Team Feishu" }));
+    expect(screen.getByRole("menuitem", { name: "Settings" })).toBeVisible();
+    expect(screen.getByRole("menuitem", { name: "Disable" })).toBeVisible();
+    expect(screen.getByRole("menuitem", { name: "Remove" })).toBeVisible();
+    await user.keyboard("{Escape}");
+    await user.click(screen.getByRole("button", { name: /^Team Feishu/ }));
     expect(screen.getByRole("dialog")).toHaveTextContent("Team Feishu");
   });
 });

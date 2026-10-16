@@ -464,6 +464,32 @@ fieldset.fields {
   text-align: left;
   cursor: pointer;
 }
+.resourceConnectorRow {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  padding-right: 8px;
+  border-radius: 6px;
+}
+.resourceConnectorRow:hover,
+.resourceConnectorRow:focus-within {
+  background: var(--gray-100);
+}
+.resourceConnectorRow > .resourceConnectorCard {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+}
+.resourceConnectorRow > button[aria-haspopup="menu"] {
+  opacity: 0;
+  pointer-events: none;
+}
+.resourceConnectorRow:hover > button[aria-haspopup="menu"],
+.resourceConnectorRow:focus-within > button[aria-haspopup="menu"],
+.resourceConnectorRow > button[aria-haspopup="menu"][data-state="open"] {
+  opacity: 1;
+  pointer-events: auto;
+}
 .resourceConnectorCard:focus-visible {
   outline: 2px solid var(--brand-600);
   outline-offset: 4px;
@@ -512,6 +538,13 @@ fieldset.fields {
 :global(:root[data-theme="dark"]) .connectorCard:hover,
 :global(:root[data-theme="dark"]) .connectorCard:focus-within {
   background: var(--gray-800);
+}
+:global(:root[data-theme="dark"]) .resourceConnectorRow:hover,
+:global(:root[data-theme="dark"]) .resourceConnectorRow:focus-within {
+  background: var(--gray-800);
+}
+:global(:root[data-theme="dark"]) .resourceConnectorRow > .resourceConnectorCard {
+  background: transparent;
 }
 :global(:root[data-theme="dark"]) .connectorTitle {
   color: var(--gray-100);
