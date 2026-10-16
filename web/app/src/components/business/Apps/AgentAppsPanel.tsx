@@ -270,7 +270,7 @@ export function AgentAppsPanel({
                 <LinkButton
                   size="md"
                   variant="primary"
-                  className={styles.manageResourceLink}
+                  className={`${styles.manageResourceLink} ${styles.settingsPrimaryAction}`}
                   href={`#/connectors/${encodeURIComponent(selected.resource_id || "")}`}
                 >
                   {t("appManageResource")}

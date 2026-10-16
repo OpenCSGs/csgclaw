@@ -235,6 +235,9 @@
   order: -1;
   margin-right: auto;
 }
+.settingsPrimaryAction {
+  order: 1;
+}
 .settingsActionGroup {
   display: flex;
   align-items: center;
