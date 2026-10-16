@@ -48,7 +48,7 @@
     "react-hook-form": "~7.76.0",
     "react-pdf": "~10.5.0",
     "react-router-dom": "~7.15.1",
-    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
+    "xlsx": "0.18.5",
     "zod": "~4.4.3",
     "zustand": "~5.0.13"
   },

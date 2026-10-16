@@ -200,7 +200,7 @@ it.each(["/connectors", "/resources"])("preserves local dialog navigation on %s"
       <ConnectorRouteFixture />
     </MemoryRouter>,
   );
-  await user.click(await screen.findByRole("button", { name: /Local connector/ }));
+  await user.click(await screen.findByRole("button", { name: /^Local connector/ }));
   expect(await screen.findByRole("dialog")).toHaveTextContent("Local connector");
   expect(screen.getByLabelText("Current route")).toHaveTextContent(path);
   await user.click(screen.getByRole("button", { name: "Close" }));
@@ -266,7 +266,7 @@ it("refreshes cancelled authorization through the production AppsPage", async ()
     </MemoryRouter>,
   );
   const user = userEvent.setup();
-  await user.click(await screen.findByRole("button", { name: /Feishu/ }));
+  await user.click(await screen.findByRole("button", { name: /^Feishu/ }));
   expect(await screen.findByRole("link", { name: "Authorize account" })).toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "Cancel" }));
   expect(await screen.findByRole("button", { name: "Connect Feishu" })).toBeEnabled();
