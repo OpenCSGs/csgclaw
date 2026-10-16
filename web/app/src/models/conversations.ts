@@ -459,7 +459,7 @@ export function formatConversationPreview(
   return conversation ? getConversationSubtitle(conversation, currentUserID, usersById, locale, t) : "";
 }
 
-export function formatMessagePreviewText(content: unknown): string {
+export function formatMessagePreviewText(content: unknown, options: { preserveLineBreaks?: boolean } = {}): string {
   const activity = parseAgentActivity(content);
   const preview =
     activity?.content.action?.title ||
@@ -467,7 +467,8 @@ export function formatMessagePreviewText(content: unknown): string {
     activity?.content.question?.questions[0]?.question ||
     activity?.content.body ||
     content;
-  return collapsePreviewWhitespace(stripPreviewCodeFence(flattenMentionText(renderSlashCommandPreviewText(preview))));
+  const text = stripPreviewCodeFence(flattenMentionText(renderSlashCommandPreviewText(preview)));
+  return options.preserveLineBreaks ? text.trim() : collapsePreviewWhitespace(text);
 }
 
 export type MessagePreviewTextToken = {

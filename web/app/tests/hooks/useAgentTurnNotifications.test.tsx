@@ -260,6 +260,31 @@ describe("useAgentTurnNotifications", () => {
     expect(notificationRecords[0]?.body).toBe("Research room: Fallback reply");
   });
 
+  it.each([false, true])("sends a plain-text first-line preview with desktop=%s", (desktop) => {
+    const bridge = desktopBridge(vi.fn());
+    if (desktop) window.csgclawDesktop = bridge;
+    const { result } = renderNotifications(TurnNotificationModes.always, { isDirect: true });
+    act(() =>
+      result.current.handleRealtimeEvent({
+        type: "message.created",
+        room_id: "room-1",
+        message: {
+          id: "markdown-reply",
+          sender_id: "user-worker",
+          content: "## 🌤️ **上海今日天气**\n根据中国天气网的数据：\n| 项目 | 内容 |",
+          metadata: { codex: { delivery_kind: "final" } },
+        },
+      }),
+    );
+    if (desktop) {
+      expect(bridge.showTurnNotification).toHaveBeenCalledWith(expect.objectContaining({ body: "🌤️ 上海今日天气……" }));
+      expect(notificationRecords).toHaveLength(0);
+    } else {
+      expect(notificationRecords).toHaveLength(1);
+      expect(notificationRecords[0]?.body).toBe("🌤️ 上海今日天气……");
+    }
+  });
+
   it("does not describe a runtime failure as a completed reply", () => {
     const { result } = renderNotifications(TurnNotificationModes.always);
 

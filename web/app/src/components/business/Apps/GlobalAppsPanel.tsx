@@ -237,7 +237,12 @@ export function GlobalAppsPanel({
               </span>
               <DropdownMenuRoot>
                 <DropdownMenuTrigger asChild>
-                  <Button iconOnly size="sm" variant="tertiaryGray" aria-label={t("connectorsActions", { name: app.name })}>
+                  <Button
+                    iconOnly
+                    size="sm"
+                    variant="tertiaryGray"
+                    aria-label={t("connectorsActions", { name: app.name })}
+                  >
                     <MoreHorizontal size={16} />
                   </Button>
                 </DropdownMenuTrigger>

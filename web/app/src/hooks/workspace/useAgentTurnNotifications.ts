@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { AgentLike } from "@/models/agents";
 import {
-  formatMessagePreviewText,
   isEventMessage,
   isToolCallMessage,
   localIdentitiesMatch,
@@ -12,6 +11,7 @@ import type { IMConversation, IMMessage, IMServerEvent, TranslateFn, UsersById }
 import {
   buildTurnNotificationTag,
   formatTurnNotificationBody,
+  formatTurnNotificationPreview,
   isCompletedAgentTurnEvent,
   isCompletedAgentTurnMessage,
   shouldShowTurnNotification,
@@ -38,8 +38,6 @@ type AgentTurnNotificationController = {
   permission: SystemNotificationPermission;
   requestPermission: () => Promise<SystemNotificationPermission>;
 };
-
-const NOTIFICATION_PREVIEW_MAX_LENGTH = 160;
 
 export function readSystemNotificationPermission(): SystemNotificationPermission {
   if (typeof window === "undefined" || typeof window.Notification !== "function") {
@@ -125,10 +123,7 @@ export function useAgentTurnNotifications(args: UseAgentTurnNotificationsArgs): 
       const roomID = input.roomID.trim();
       const room = current.rooms.find((candidate) => candidate.id === roomID);
       const agentName = String(input.agent.name || input.agent.user_name || input.agent.id || "Agent").trim();
-      const rawPreview = formatMessagePreviewText(input.message?.content)
-        .replace(/[\u200b-\u200d\ufeff]/g, "")
-        .trim();
-      const preview = truncateNotificationPreview(rawPreview);
+      const preview = formatTurnNotificationPreview(input.message?.content);
       const roomTitle = String(room?.title || "").trim();
       const body = formatTurnNotificationBody(current.t, {
         agentName,
@@ -316,11 +311,4 @@ function latestAgentTurnMessage(
     }
     return true;
   });
-}
-
-function truncateNotificationPreview(preview: string): string {
-  if (preview.length <= NOTIFICATION_PREVIEW_MAX_LENGTH) {
-    return preview;
-  }
-  return `${preview.slice(0, NOTIFICATION_PREVIEW_MAX_LENGTH - 1).trimEnd()}…`;
 }
