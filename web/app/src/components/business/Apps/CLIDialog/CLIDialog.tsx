@@ -377,7 +377,7 @@ export function CLIDialog({ definition, existing, t, onClose, onChanged }: Props
                     href={operation.authorization_url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="btn btn-primary btn-sm"
+                    className="btn btn-primary btn-md"
                   >
                     {t("cliAuthorize")}
                   </a>

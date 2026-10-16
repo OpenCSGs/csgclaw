@@ -206,10 +206,15 @@
 }
 .settingsDialog {
   width: min(640px, calc(100vw - 32px));
+  height: min(640px, calc(100vh - 32px));
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 .settingsBody {
-  overflow-y: auto;
-  max-height: min(70vh, 760px);
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   gap: 18px;
@@ -222,6 +227,9 @@
   flex-wrap: wrap;
   padding-top: 14px;
   border-top: 1px solid var(--line);
+}
+.settingsFooter {
+  flex-wrap: wrap;
 }
 .settingsActionGroup {
   display: flex;
@@ -300,6 +308,17 @@ fieldset.fields {
   max-height: 260px;
   overflow-y: auto;
 }
+.toolsFillAvailableHeight {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
+}
+.toolsFillAvailableHeight ul {
+  max-height: none;
+  min-height: 0;
+  flex: 1;
+}
 .tools li {
   padding: 9px 12px;
   border-radius: 8px;
@@ -365,6 +384,12 @@ fieldset.fields {
 }
 .footer > button {
   flex: 1;
+}
+.footerWithRemove > button {
+  flex: 0 0 auto;
+}
+.footerWithRemove .removeButton {
+  margin-right: auto;
 }
 @media (max-width: 600px) {
   .formSection {

@@ -824,7 +824,7 @@ function createJsonSyntaxLinter(t: TranslateFn) {
   };
 }
 
-function jsonEditorExtensions(t: TranslateFn): Extension[] {
+function jsonEditorExtensions(t: TranslateFn, lineWrapping = true): Extension[] {
   return [
     lineNumbers(),
     highlightActiveLineGutter(),
@@ -835,25 +835,31 @@ function jsonEditorExtensions(t: TranslateFn): Extension[] {
     linter(createJsonSyntaxLinter(t), { delay: 250 }),
     keymap.of([indentWithTab, ...defaultKeymap, ...historyKeymap]),
     EditorState.tabSize.of(2),
-    EditorView.lineWrapping,
+    ...(lineWrapping ? [EditorView.lineWrapping] : []),
     jsonEditorTheme,
   ];
 }
 
 export function JSONConfigEditor({
+  fillAvailableHeight = false,
   hideLabel = false,
   invalid = false,
   label,
+  lineWrapping = true,
   minRows = 12,
   onChange,
+  readOnly = false,
   t,
   value,
 }: {
+  fillAvailableHeight?: boolean;
   hideLabel?: boolean;
   invalid?: boolean;
   label: string;
+  lineWrapping?: boolean;
   minRows?: number;
   onChange: (value: string) => void;
+  readOnly?: boolean;
   t: TranslateFn;
   value: string;
 }) {
@@ -862,7 +868,14 @@ export function JSONConfigEditor({
   const editorViewRef = useRef<EditorView | null>(null);
   const initialValueRef = useRef(value);
   const onChangeRef = useRef(onChange);
-  const editorExtensions = useMemo(() => jsonEditorExtensions(t), [t]);
+  const editorExtensions = useMemo(
+    () => [
+      ...jsonEditorExtensions(t, lineWrapping),
+      EditorState.readOnly.of(readOnly),
+      EditorView.editable.of(!readOnly),
+    ],
+    [lineWrapping, readOnly, t],
+  );
   const minHeight = `${Math.max(minRows, 6) * 19.2 + 28}px`;
 
   useEffect(() => {
@@ -880,6 +893,7 @@ export function JSONConfigEditor({
           ...editorExtensions,
           EditorView.contentAttributes.of({
             "aria-label": label,
+            ...(readOnly ? { "aria-readonly": "true" } : {}),
             id: editorId,
           }),
           EditorView.updateListener.of((update) => {
@@ -896,7 +910,7 @@ export function JSONConfigEditor({
       editorViewRef.current = null;
       view.destroy();
     };
-  }, [editorExtensions, editorId, label]);
+  }, [editorExtensions, editorId, label, readOnly]);
 
   useEffect(() => {
     const view = editorViewRef.current;
@@ -918,7 +932,9 @@ export function JSONConfigEditor({
 
   return (
     <div
-      className={moduleClassNames(`hub-json-editor${invalid ? " is-invalid" : ""}`)}
+      className={moduleClassNames(
+        `hub-json-editor${invalid ? " is-invalid" : ""}${fillAvailableHeight ? " is-fill-available-height" : ""}`,
+      )}
       style={{ "--hub-json-editor-min-height": minHeight } as CSSProperties}
     >
       <label className={moduleClassNames(`hub-json-editor-label${hideLabel ? " sr-only" : ""}`)} htmlFor={editorId}>

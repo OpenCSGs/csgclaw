@@ -4,16 +4,19 @@ import { forwardRef } from "react";
 import type { ComponentPropsWithoutRef, ComponentRef } from "react";
 import { classNames } from "@/shared/lib/classNames";
 
-export type SwitchProps = ComponentPropsWithoutRef<typeof RadixSwitch.Root>;
+export type SwitchProps = ComponentPropsWithoutRef<typeof RadixSwitch.Root> & {
+  size?: "sm" | "md";
+};
 
 export const Switch = forwardRef<ComponentRef<typeof RadixSwitch.Root>, SwitchProps>(function Switch(
-  { className, ...props },
+  { className, size = "md", ...props },
   ref,
 ) {
   return (
     <RadixSwitch.Root
       ref={ref}
       data-csg-control="switch"
+      data-size={size}
       className={classNames(classNames(styles["csg-switch"], "csg-switch"), className)}
       {...props}
     >

@@ -2,9 +2,17 @@ import type { AppTool } from "@/api/apps";
 import type { TranslateFn } from "@/models/conversations";
 import styles from "./AgentAppsPanel.module.css";
 
-export function AppToolList({ tools, t }: { tools: AppTool[]; t: TranslateFn }) {
+export function AppToolList({
+  tools,
+  t,
+  fillAvailableHeight = false,
+}: {
+  tools: AppTool[];
+  t: TranslateFn;
+  fillAvailableHeight?: boolean;
+}) {
   return (
-    <details className={styles.tools}>
+    <details className={`${styles.tools} ${fillAvailableHeight ? styles.toolsFillAvailableHeight : ""}`} open>
       <summary>{t("appAvailableTools", { count: tools.length })}</summary>
       {tools.length ? (
         <ul>

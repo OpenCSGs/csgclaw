@@ -74,6 +74,17 @@ function setup() {
 afterEach(() => vi.clearAllMocks());
 
 describe("MCP market installation", () => {
+  it("combines MCP and connector creation under one Add menu", async () => {
+    setup();
+    const user = userEvent.setup();
+
+    await user.click(screen.getByRole("button", { name: "添加" }));
+
+    expect(screen.getByRole("menuitem", { name: "添加 MCP 服务" })).toBeVisible();
+    expect(screen.getByRole("menuitem", { name: "添加连接器" })).toBeVisible();
+    expect(screen.queryByRole("button", { name: "添加连接器" })).not.toBeInTheDocument();
+  });
+
   it("shows a direct plus-button failure beside that card and in a named notice", async () => {
     vi.mocked(installRemoteMCPServerRequest).mockRejectedValueOnce({
       status: 502,

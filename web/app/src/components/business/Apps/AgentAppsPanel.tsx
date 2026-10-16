@@ -63,6 +63,10 @@ export function AgentAppsPanel({
       (!addAppID || resource.app_id === addAppID),
   );
   const manageResourcesHref = addAppID ? `#/connectors?add_connector=${encodeURIComponent(addAppID)}` : "#/connectors";
+  const connectorDescription = (app: AppInstallation) => {
+    const definition = controller.definitions.find((item) => item.app_id === app.app_id);
+    return definition?.interface.shortDescription || definition?.description || "";
+  };
   async function run(operation: () => Promise<unknown>) {
     setError(null);
     try {
@@ -134,7 +138,11 @@ export function AgentAppsPanel({
           <span className={styles.connectorCopy}>
             <span className={styles.connectorTitle}>{appName("feishu", t)}</span>
             <span className={styles.connectorDescription}>
-              {!cliSupported ? t("feishuCLIUnsupported") : feishu ? appStatus(feishu, t) : t("feishuCLIWorkerHint")}
+              {!cliSupported
+                ? t("feishuCLIUnsupported")
+                : feishu
+                  ? connectorDescription(feishu)
+                  : t("feishuCLIWorkerHint")}
             </span>
           </span>
           <span
@@ -145,6 +153,7 @@ export function AgentAppsPanel({
             <Switch
               aria-label={t("feishuCLIWorkerSwitch")}
               checked={Boolean(feishu?.enabled)}
+              size="sm"
               disabled={!cliSupported || Boolean(controller.busyID) || feishu?.status === "applying"}
               onCheckedChange={(enabled) =>
                 void run(() =>
@@ -157,11 +166,17 @@ export function AgentAppsPanel({
         {controller.items
           .filter((app) => app.kind !== "cli" || app.app_id !== "feishu")
           .map((app) => (
-            <button
+            <article
               key={app.installation_id}
-              type="button"
               className={`${styles.connectorCard} ${styles.connectorOpen}`}
+              role="button"
+              tabIndex={0}
               onClick={() => onSelect(app.installation_id)}
+              onKeyDown={(event) => {
+                if (event.key !== "Enter" && event.key !== " ") return;
+                event.preventDefault();
+                onSelect(app.installation_id);
+              }}
             >
               <span className={styles.connectorIcon}>
                 <AppIcon appID={app.app_id} />
@@ -170,14 +185,22 @@ export function AgentAppsPanel({
                 <span className={styles.connectorTitle} title={app.name}>
                   {app.name}
                 </span>
-                <span className={styles.connectorDescription}>
-                  {appName(app.app_id, t)} · {app.config.url || app.config.command}
-                </span>
+                <span className={styles.connectorDescription}>{connectorDescription(app)}</span>
               </span>
-              <span className={styles.status} data-status={app.enabled ? app.status : "disabled"}>
-                {appStatus(app, t)}
+              <span
+                className={styles.connectorToggle}
+                onClick={(event) => event.stopPropagation()}
+                onKeyDown={(event) => event.stopPropagation()}
+              >
+                <Switch
+                  aria-label={app.name}
+                  checked={app.enabled}
+                  size="sm"
+                  disabled={Boolean(controller.busyID) || (!app.enabled && app.resource_enabled === false)}
+                  onCheckedChange={(enabled) => void run(() => controller.update(app.installation_id, { enabled }))}
+                />
               </span>
-            </button>
+            </article>
           ))}
       </div>
       {!controller.items.length && !controller.loading ? <p className={styles.hint}>{t("appEmptyTitle")}</p> : null}
@@ -226,61 +249,63 @@ export function AgentAppsPanel({
                     </ul>
                   </div>
                 ) : (
-                  <AppToolList tools={selected.tools} t={t} />
+                  <AppToolList tools={selected.tools} t={t} fillAvailableHeight />
                 )}
-                <div className={styles.settingsActions}>
-                  <div className={styles.settingsActionGroup}>
-                    <LinkButton
-                      size="sm"
-                      className={styles.manageResourceLink}
-                      href={`#/connectors/${encodeURIComponent(selected.resource_id || "")}`}
-                    >
-                      {t("appManageResource")}
-                      <ArrowUpRight size={14} />
-                    </LinkButton>
-                    {selected.kind !== "cli" ? (
-                      <Button
-                        size="sm"
-                        disabled={!!controller.busyID || !selected.enabled || selected.resource_enabled === false}
-                        onClick={() => void run(() => controller.connect(selected.installation_id))}
-                      >
-                        <RefreshCw size={14} />
-                        {selected.status === "connected" ? t("appReconnect") : t("appConnect")}
-                      </Button>
-                    ) : null}
-                    <Button
-                      size="sm"
-                      disabled={!!controller.busyID}
-                      onClick={() =>
-                        void run(() => controller.update(selected.installation_id, { enabled: !selected.enabled }))
-                      }
-                    >
-                      {selected.enabled ? t("appDisable") : t("appEnable")}
-                    </Button>
-                    {selected.kind !== "cli" ? (
-                      <Button
-                        size="sm"
-                        disabled={!!controller.busyID || selected.disconnected}
-                        onClick={() => void run(() => controller.disconnect(selected.installation_id))}
-                      >
-                        {t("appDisconnect")}
-                      </Button>
-                    ) : null}
-                  </div>
-                  {selected.kind !== "cli" ? (
-                    <Button
-                      size="sm"
-                      variant="outlineDanger"
-                      disabled={!!controller.busyID}
-                      onClick={() => setRemoving(selected)}
-                    >
-                      {t("appRemove")}
-                    </Button>
-                  ) : null}
-                </div>
               </>
             ) : null}
           </DialogBody>
+          {selected ? (
+            <DialogFooter className={styles.settingsFooter}>
+              <div className={styles.settingsActionGroup}>
+                <LinkButton
+                  size="md"
+                  className={styles.manageResourceLink}
+                  href={`#/connectors/${encodeURIComponent(selected.resource_id || "")}`}
+                >
+                  {t("appManageResource")}
+                  <ArrowUpRight size={14} />
+                </LinkButton>
+                {selected.kind !== "cli" ? (
+                  <Button
+                    size="md"
+                    disabled={!!controller.busyID || !selected.enabled || selected.resource_enabled === false}
+                    onClick={() => void run(() => controller.connect(selected.installation_id))}
+                  >
+                    <RefreshCw size={14} />
+                    {selected.status === "connected" ? t("appReconnect") : t("appConnect")}
+                  </Button>
+                ) : null}
+                <Button
+                  size="md"
+                  disabled={!!controller.busyID}
+                  onClick={() =>
+                    void run(() => controller.update(selected.installation_id, { enabled: !selected.enabled }))
+                  }
+                >
+                  {selected.enabled ? t("appDisable") : t("appEnable")}
+                </Button>
+                {selected.kind !== "cli" ? (
+                  <Button
+                    size="md"
+                    disabled={!!controller.busyID || selected.disconnected}
+                    onClick={() => void run(() => controller.disconnect(selected.installation_id))}
+                  >
+                    {t("appDisconnect")}
+                  </Button>
+                ) : null}
+              </div>
+              {selected.kind !== "cli" ? (
+                <Button
+                  size="md"
+                  variant="outlineDanger"
+                  disabled={!!controller.busyID}
+                  onClick={() => setRemoving(selected)}
+                >
+                  {t("appRemove")}
+                </Button>
+              ) : null}
+            </DialogFooter>
+          ) : null}
         </DialogContent>
       </DialogRoot>
       <DialogRoot

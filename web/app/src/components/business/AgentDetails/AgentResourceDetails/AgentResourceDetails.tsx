@@ -7,6 +7,7 @@ import type { MCPServer } from "@/models/mcp";
 import type { SlashSkillOption } from "@/models/slashCommands";
 import { mcpServerDisplayName, mcpServerDetailConfig } from "@/models/mcp";
 import { WorkspaceFileTree, WorkspaceFilePreview } from "@/components/business/WorkspaceFileTree";
+import { JSONConfigEditor } from "@/components/business/HubDetailPane";
 import {
   Button,
   Switch,
@@ -63,7 +64,11 @@ export function AgentResourceDetails({
     enabled: Boolean(skill),
   });
   const enabled = skill ? skill.enabled !== false : server?.config?.enabled !== false;
-  const dialogClassName = skill ? `${styles.dialog} hub-standard-skill-dialog` : styles.dialog;
+  const dialogClassName = skill
+    ? `${styles.dialog} hub-standard-skill-dialog`
+    : server
+      ? styles.connectorDialog
+      : styles.dialog;
   return (
     <DialogRoot
       open
@@ -82,7 +87,7 @@ export function AgentResourceDetails({
             <DialogCloseButton label={t("close")} />
           </div>
         </DialogHeader>
-        <DialogBody className={skill ? "hub-standard-skill-dialog-body" : undefined}>
+        <DialogBody className={skill ? "hub-standard-skill-dialog-body" : server ? styles.connectorBody : undefined}>
           {error ? (
             <div role="alert" className="form-error">
               {error}
@@ -128,7 +133,17 @@ export function AgentResourceDetails({
               />
             </div>
           ) : server ? (
-            <pre className={styles.config}>{JSON.stringify(mcpServerDetailConfig(server.config), null, 2)}</pre>
+            <JSONConfigEditor
+              fillAvailableHeight
+              hideLabel
+              readOnly
+              label={t("iaMCPConfigTitle")}
+              lineWrapping={false}
+              minRows={12}
+              onChange={() => undefined}
+              t={t}
+              value={JSON.stringify(mcpServerDetailConfig(server.config), null, 2)}
+            />
           ) : null}
         </DialogBody>
         <DialogFooter>
