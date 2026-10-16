@@ -353,8 +353,8 @@
 }
 .chat-file-type-icon.is-folder::before {
   content: "";
-  width: 28px;
-  height: 28px;
+  width: 24px;
+  height: 24px;
   background: var(--primary-strong);
   -webkit-mask: url("../../../assets/file-types/folder.svg") center / contain no-repeat;
   mask: url("../../../assets/file-types/folder.svg") center / contain no-repeat;
