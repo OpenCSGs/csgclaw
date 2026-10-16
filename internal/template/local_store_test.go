@@ -652,3 +652,26 @@ func TestLocalStoreReplaceRefreshesSnapshotAndPreservesOldOnFailure(t *testing.T
 		t.Fatalf("original was not retained: %+v, %v", kept, err)
 	}
 }
+
+func TestLocalStoreReplaceRefreshesFilesWithUnchangedMetadata(t *testing.T) {
+	store := NewLocalStore(t.TempDir())
+	workspace := t.TempDir()
+	instructions := filepath.Join(workspace, "AGENTS.md")
+	if err := os.WriteFile(instructions, []byte("original instructions"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	spec := PublishSpec{Name: "reviewer", DisplayName: "Reviewer", Description: "Reviews changes", RuntimeKind: runtime.KindCodex, WorkspaceRef: WorkspaceRef{Kind: WorkspaceKindDir, Path: workspace}}
+	if _, err := store.Publish(context.Background(), spec); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(instructions, []byte("corrected instructions"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.Replace(context.Background(), "reviewer", spec); err != nil {
+		t.Fatal(err)
+	}
+	content, err := os.ReadFile(filepath.Join(store.templateRoot("reviewer"), "instructions", "AGENTS.md"))
+	if err != nil || string(content) != "corrected instructions" {
+		t.Fatalf("stale retry snapshot: %q, err=%v", content, err)
+	}
+}

@@ -628,7 +628,7 @@ export function useAgentController({
   const [agentPageSavedDraft, setAgentPageSavedDraft] = useState<AgentDraft | null>(null);
   const [agentPageBusy, setAgentPageBusy] = useState(false);
   const [agentPagePublishBusy, setAgentPagePublishBusy] = useState(false);
-  const pendingTemplatePublications = useRef(new Map<string, { id: string; metadata: string }>());
+  const pendingTemplatePublications = useRef(new Map<string, string>());
   const [agentPagePublishError, setAgentPagePublishError] = useState("");
   const [agentPageError, setAgentPageError] = useState("");
   const [agentPageBillingURL, setAgentPageBillingURL] = useState("");
@@ -2028,10 +2028,9 @@ export function useAgentController({
       return false;
     }
     const publicationKey = JSON.stringify([selectedAgentForPage.id, name]);
-    const metadata = JSON.stringify([description, includeMemory, displayName]);
     const pendingPublication =
       target === "official" ? pendingTemplatePublications.current.get(publicationKey) : undefined;
-    let localTemplateID = pendingPublication?.id;
+    let localTemplateID = pendingPublication;
     setAgentPagePublishBusy(true);
     try {
       let published: HubTemplate;
@@ -2047,22 +2046,21 @@ export function useAgentController({
             String(agents.find((item) => item.id === selectedAgentForPage.id)?.avatar || ""),
         );
       } else {
-        if (!localTemplateID || pendingPublication?.metadata !== metadata) {
-          const local = await publishAgentTemplateRequest(
-            selectedAgentForPage.id,
-            "local",
-            name,
-            description,
-            includeMemory,
-            displayName,
-            resolveAgentAvatarSource(selectedAgentForPage, usersById) ||
-              String(agents.find((item) => item.id === selectedAgentForPage.id)?.avatar || ""),
-            localTemplateID || "",
-          );
-          localTemplateID = String(local.id || "").trim();
-          if (!localTemplateID) throw new Error("Local template response is missing its ID");
-          pendingTemplatePublications.current.set(publicationKey, { id: localTemplateID, metadata });
-        }
+        // Always refresh the snapshot: workspace files can change independently of the form.
+        const local = await publishAgentTemplateRequest(
+          selectedAgentForPage.id,
+          "local",
+          name,
+          description,
+          includeMemory,
+          displayName,
+          resolveAgentAvatarSource(selectedAgentForPage, usersById) ||
+            String(agents.find((item) => item.id === selectedAgentForPage.id)?.avatar || ""),
+          localTemplateID || "",
+        );
+        localTemplateID = String(local.id || "").trim();
+        if (!localTemplateID) throw new Error("Local template response is missing its ID");
+        pendingTemplatePublications.current.set(publicationKey, localTemplateID);
         published = await publishHubTemplateToCommunityRequest(localTemplateID, includeMemory);
         onTemplatePublished?.(published);
         pendingTemplatePublications.current.delete(publicationKey);

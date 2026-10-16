@@ -1383,7 +1383,7 @@ describe("useAgentController", () => {
   });
 
   it.each([false, true])(
-    "retries a failed publication without a name conflict (changed metadata: %s)",
+    "refreshes edited workspace files before retrying publication (changed metadata: %s)",
     async (changed) => {
       const publicationTranslator = ((key: string, values?: Record<string, unknown>) =>
         key === "agentTemplateSavedPublishFailed" ? `Saved locally: ${values?.reason}` : key) as TranslateFn;
@@ -1394,7 +1394,12 @@ describe("useAgentController", () => {
         role: "worker",
         runtime_kind: "codex",
       };
-      vi.mocked(publishAgentTemplateRequest).mockResolvedValue({ id: "local.Reviewer", name: "Reviewer" });
+      let workspaceInstructions = "original instructions";
+      let snapshotInstructions = "";
+      vi.mocked(publishAgentTemplateRequest).mockImplementation(async () => {
+        snapshotInstructions = workspaceInstructions;
+        return { id: "local.Reviewer", name: "Reviewer" };
+      });
       vi.mocked(publishHubTemplateToCommunityRequest)
         .mockRejectedValueOnce(new Error("Hub unavailable"))
         .mockResolvedValueOnce({ id: "alice/Reviewer", name: "Reviewer" });
@@ -1422,6 +1427,7 @@ describe("useAgentController", () => {
       });
       expect(result.current.controller.agentViewProps.publishError).toBe("Saved locally: Hub unavailable");
       expect(result.current.refreshHubTemplates).toHaveBeenCalledOnce();
+      workspaceInstructions = "corrected AGENTS.md instructions";
       await act(async () => {
         expect(
           await result.current.controller.agentViewProps.onPublish?.(
@@ -1433,18 +1439,18 @@ describe("useAgentController", () => {
           ),
         ).toBe(true);
       });
-      expect(publishAgentTemplateRequest).toHaveBeenCalledTimes(changed ? 2 : 1);
-      if (changed)
-        expect(publishAgentTemplateRequest).toHaveBeenLastCalledWith(
-          "u-worker",
-          "local",
-          "Reviewer",
-          "Updated description",
-          true,
-          "新展示名",
-          "",
-          "local.Reviewer",
-        );
+      expect(publishAgentTemplateRequest).toHaveBeenCalledTimes(2);
+      expect(publishAgentTemplateRequest).toHaveBeenLastCalledWith(
+        "u-worker",
+        "local",
+        "Reviewer",
+        changed ? "Updated description" : "Reviews",
+        changed,
+        changed ? "新展示名" : "审查助手",
+        "",
+        "local.Reviewer",
+      );
+      expect(snapshotInstructions).toBe("corrected AGENTS.md instructions");
       expect(publishHubTemplateToCommunityRequest).toHaveBeenCalledTimes(2);
     },
   );
