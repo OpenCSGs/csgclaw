@@ -3635,6 +3635,7 @@ export function HubDetailPane({
             {mcpCreateMode === "manual" ? (
               <>
                 <JSONConfigEditor
+                  fillAvailableHeight
                   hideLabel
                   label={t("resourcesMCPServerDocumentJSONLabel")}
                   value={mcpDraftDocument}
@@ -3669,11 +3670,11 @@ export function HubDetailPane({
             )}
           </DialogBody>
           <DialogFooter className={moduleClassNames("hub-skill-delete-dialog-actions")}>
-            <Button variant="secondaryGray" size="sm" disabled={mcpMutationBusy} onClick={closeMCPFormDialog}>
+            <Button variant="secondaryGray" size="md" disabled={mcpMutationBusy} onClick={closeMCPFormDialog}>
               {t("cancel")}
             </Button>
             {mcpCreateMode === "manual" ? (
-              <Button variant="primary" size="sm" loading={mcpMutationBusy} onClick={handleSaveMCP}>
+              <Button variant="primary" size="md" loading={mcpMutationBusy} onClick={handleSaveMCP}>
                 {mcpMutationBusy ? t("resourcesMCPCreating") : t("resourcesMCPCreateAction")}
               </Button>
             ) : null}
@@ -3952,6 +3953,7 @@ export function MCPServerCreateDialog({
           {activeMode === "manual" ? (
             <>
               <JSONConfigEditor
+                fillAvailableHeight
                 hideLabel
                 label={t("resourcesMCPServerDocumentJSONLabel")}
                 value={document}
@@ -3984,11 +3986,11 @@ export function MCPServerCreateDialog({
           )}
         </DialogBody>
         <DialogFooter className={moduleClassNames("hub-skill-delete-dialog-actions")}>
-          <Button variant="secondaryGray" size="sm" disabled={busy} onClick={close}>
+          <Button variant="secondaryGray" size="md" disabled={busy} onClick={close}>
             {t("cancel")}
           </Button>
           {activeMode === "manual" ? (
-            <Button variant="primary" size="sm" loading={busy} onClick={save}>
+            <Button variant="primary" size="md" loading={busy} onClick={save}>
               {busy ? t("resourcesMCPCreating") : t("resourcesMCPCreateAction")}
             </Button>
           ) : null}
