@@ -202,7 +202,7 @@ export function CLIDialog({ definition, existing, t, onClose, onChanged }: Props
           </div>
           <DialogCloseButton label={t("close")} variant="tertiaryGray" size="sm" iconOnly />
         </DialogHeader>
-        <DialogBody className={styles.settingsBody}>
+        <DialogBody className={`${styles.settingsBody} ${styles.scrollableSettingsBody}`}>
           <div className={styles.cliStatus}>
             {requestError ? (
               <DismissibleAlert

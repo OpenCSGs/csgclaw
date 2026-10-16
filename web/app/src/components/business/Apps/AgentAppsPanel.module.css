@@ -219,6 +219,9 @@
   flex-direction: column;
   gap: 18px;
 }
+.scrollableSettingsBody {
+  overflow-y: auto;
+}
 .settingsActions {
   display: flex;
   align-items: center;

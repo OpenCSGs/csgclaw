@@ -432,7 +432,7 @@ export function AppSettingsDialog({
           </div>
           <DialogCloseButton label={t("close")} disabled={Boolean(busy)} size="sm" variant="tertiaryGray" iconOnly />
         </DialogHeader>
-        <DialogBody className={styles.settingsBody}>
+        <DialogBody className={`${styles.settingsBody} ${styles.scrollableSettingsBody}`}>
           <fieldset className={styles.fields} disabled={Boolean(busy)}>
             {connectionOptions}
             <details className={styles.advanced}>
