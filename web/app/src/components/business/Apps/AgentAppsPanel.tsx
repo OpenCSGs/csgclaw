@@ -23,7 +23,7 @@ import { localizeAPIError } from "@/shared/i18n";
 import type { AppInstallation } from "@/api/apps";
 import type { TranslateFn } from "@/models/conversations";
 import { ConnectorBoxesIcon, ConnectorGitLabIcon } from "@/components/ui/Icons";
-import { appName, appStatus, appConnectionError } from "./appForm";
+import { appName, appStatus, appConnectionError, appDescription } from "./appForm";
 import { AppToolList } from "./AppToolList";
 import type { AgentAppsController } from "./useAgentApps";
 import styles from "./AgentAppsPanel.module.css";
@@ -65,7 +65,7 @@ export function AgentAppsPanel({
   const manageResourcesHref = addAppID ? `#/connectors?add_connector=${encodeURIComponent(addAppID)}` : "#/connectors";
   const connectorDescription = (app: AppInstallation) => {
     const definition = controller.definitions.find((item) => item.app_id === app.app_id);
-    return definition?.interface.shortDescription || definition?.description || "";
+    return definition ? appDescription(definition, t) : "";
   };
   async function run(operation: () => Promise<unknown>) {
     setError(null);
