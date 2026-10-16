@@ -18,6 +18,7 @@ export function SegmentedControl<Value extends string>({
   label,
   className,
   size = "md",
+  variant = "default",
 }: {
   value: Value;
   onChange: (value: Value) => void;
@@ -25,6 +26,7 @@ export function SegmentedControl<Value extends string>({
   label: string;
   className?: string;
   size?: "sm" | "md";
+  variant?: "default" | "text";
 }) {
   return (
     <ToggleGroup.Root
@@ -33,6 +35,7 @@ export function SegmentedControl<Value extends string>({
       className={classNames(styles["csg-segmented-control"], className)}
       aria-label={label}
       data-size={size}
+      data-variant={variant}
       onValueChange={(next) => {
         const option = options.find((item) => item.value === next && !item.disabled);
         if (option) onChange(option.value);

@@ -100,19 +100,29 @@
 
 .document-preview-title-group {
   min-width: 0;
-  flex: 1 1 auto;
+  flex: 1 1 0;
   display: grid;
   gap: 1px;
 }
 
 .document-preview-title-group strong {
-  overflow: hidden;
-  text-overflow: ellipsis;
+  min-width: 0;
+  display: flex;
   white-space: nowrap;
   font: var(--text-sm-semibold);
 }
 
-.document-preview-title-group span,
+.document-preview-title-base {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.document-preview-title-extension {
+  flex: 0 0 auto;
+}
+
+.document-preview-title-group > span,
 .document-preview-toolbar > span {
   color: var(--muted);
   font: var(--text-xs-normal);
@@ -121,8 +131,8 @@
 
 .document-preview-toolbar {
   min-width: 0;
-  max-width: 100%;
-  flex: 0 1 auto;
+  max-width: calc(100% - 80px);
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   justify-content: flex-start;
@@ -461,6 +471,17 @@
   background: var(--panel);
   color: var(--muted);
   font: var(--text-xs-normal);
+}
+
+.document-preview-page-editor {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.document-preview-page-input {
+  width: 64px;
+  text-align: center;
 }
 
 .document-preview-ppt-stage {

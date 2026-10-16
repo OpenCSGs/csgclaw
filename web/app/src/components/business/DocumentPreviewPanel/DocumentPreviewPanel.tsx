@@ -43,6 +43,13 @@ function readPanelWidth() {
   }
 }
 
+function splitFileName(name: string) {
+  const extensionStart = name.lastIndexOf(".");
+  return extensionStart > 0 && extensionStart < name.length - 1
+    ? { base: name.slice(0, extensionStart), extension: name.slice(extensionStart) }
+    : { base: name, extension: "" };
+}
+
 export function DocumentPreviewPanel({
   anchor,
   index,
@@ -191,6 +198,8 @@ export function DocumentPreviewPanel({
     return objectURL;
   }, [item?.downloadURL, objectURL]);
 
+  const fileName = splitFileName(item?.name ?? "");
+
   if (!item) {
     return null;
   }
@@ -272,7 +281,10 @@ export function DocumentPreviewPanel({
       ) : null}
       <header className="document-preview-header">
         <div className="document-preview-title-group">
-          <strong title={item.name}>{item.name}</strong>
+          <strong title={item.name}>
+            <span className="document-preview-title-base">{fileName.base}</span>
+            {fileName.extension ? <span className="document-preview-title-extension">{fileName.extension}</span> : null}
+          </strong>
           <span>{formatAttachmentSize(item.sizeBytes)}</span>
         </div>
         <div className="document-preview-toolbar">

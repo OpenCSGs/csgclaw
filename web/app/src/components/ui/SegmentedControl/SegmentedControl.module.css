@@ -37,8 +37,27 @@
   color: var(--primary-strong);
   box-shadow: var(--shadow-soft);
 }
+.csg-segmented-control[data-variant="text"] {
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+.csg-segmented-control[data-variant="text"] .csg-segmented-control-item {
+  border: 0;
+}
+.csg-segmented-control[data-variant="text"] .csg-segmented-control-item[aria-checked="true"] {
+  background: transparent;
+  color: var(--accent-text);
+  box-shadow: none;
+}
 .csg-segmented-control-item:hover:not(:disabled, [aria-checked="true"]) {
   color: var(--text);
+}
+.csg-segmented-control[data-variant="text"] .csg-segmented-control-item:hover:not(:disabled, [aria-checked="true"]) {
+  color: var(--muted);
+}
+.csg-segmented-control[data-variant="text"] .csg-segmented-control-item:active:not(:disabled) {
+  color: var(--accent-text);
 }
 .csg-segmented-control-item:focus-visible {
   outline: none;

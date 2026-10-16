@@ -100,6 +100,7 @@ TextInput and TextArea own their local, data-marked styles. Legacy input and wor
 
 PanelHeader composes content and an optional actions slot, EmptyState displays a title/description/actions, and SegmentedControl provides a named single-choice group with keyboard navigation. Business copy and persistence remain with callers.
 Use `size="sm"` for compact segmented controls in toolbars or preview headers.
+Use `variant="text"` when a compact switch should have no surrounding border or selected fill; its selected text uses the accent color.
 
 Semantic tokens own menu surfaces, hover/selected states, tooltip colors and dialog backdrops. Add a theme role in `shared/styles/tokens.css` when a primitive needs a new color relationship. Component CSS consumes the role without repeating light/dark branches.
 

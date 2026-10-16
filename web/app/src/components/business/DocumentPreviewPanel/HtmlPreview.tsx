@@ -117,6 +117,7 @@ export default function HtmlPreview({ scale, text, t }: { scale: number; text: s
         <SegmentedControl
           label={t("attachmentPreviewViewMode")}
           size="sm"
+          variant="text"
           value={mode}
           onChange={setMode}
           options={[

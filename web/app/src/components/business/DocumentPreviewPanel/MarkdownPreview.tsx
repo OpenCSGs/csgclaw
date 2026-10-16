@@ -12,6 +12,7 @@ export function MarkdownPreview({ scale, text, t }: { scale: number; text: strin
           <SegmentedControl
             label={t("attachmentPreviewViewMode")}
             size="sm"
+            variant="text"
             value={mode}
             onChange={setMode}
             options={[

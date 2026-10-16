@@ -80,6 +80,9 @@ const t = (key: string, params?: Record<string, string | number>) => {
     attachmentPreviewLoading: "Loading preview",
     attachmentPreviewOutline: "Document outline",
     attachmentPreviewPageCount: `Page ${params?.page ?? 0} of ${params?.count ?? 0}`,
+    attachmentPreviewPageInput: "Enter page number",
+    attachmentPreviewPageTotal: `of ${params?.count ?? 0}`,
+    attachmentPreviewJumpToPage: "Click to enter a page number",
     attachmentPreviewSlideCount: `Slide ${params?.page ?? 0} of ${params?.count ?? 0}`,
     attachmentPreviewTruncated: "Only the first 32 MiB is shown",
     attachmentPreviewResetZoom: "Reset zoom",
@@ -163,6 +166,7 @@ describe("DocumentPreviewPanel", () => {
     expect(await screen.findByRole("heading", { name: "中文" })).toBeInTheDocument();
     const sourceMode = screen.getByRole("radio", { name: "Code" });
     expect(sourceMode).toHaveAttribute("data-csg-control", "segmented-control");
+    expect(sourceMode.closest('[role="radiogroup"]')).toHaveAttribute("data-variant", "text");
     await userEvent.setup().click(sourceMode);
     expect(sourceMode).toHaveAttribute("aria-checked", "true");
     expect(screen.getByText("# 中文")).toBeInTheDocument();
@@ -649,6 +653,73 @@ describe("DocumentPreviewPanel", () => {
     fireEvent.scroll(pdfMain!);
     expect(screen.getByText("Page 3 of 3")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Next file" })).toBeDisabled();
+  });
+
+  it("keeps long file extensions visible in the preview title", async () => {
+    const name = `${"agentic-design-patterns-".repeat(5)}20251011.pdf`;
+    const { container } = render(
+      <DocumentPreviewPanel
+        index={0}
+        items={[{ id: "long-pdf", name, mediaType: "application/pdf", sizeBytes: 4, file: new File(["test"], name) }]}
+        t={t}
+        onClose={() => {}}
+        onIndexChange={() => {}}
+      />,
+    );
+
+    const title = container.querySelector(".document-preview-title-group strong");
+    expect(title).toHaveAttribute("title", name);
+    expect(title?.querySelector(".document-preview-title-base")).toHaveTextContent(name.slice(0, -4));
+    expect(title?.querySelector(".document-preview-title-extension")).toHaveTextContent(".pdf");
+  });
+
+  it("jumps to an entered PDF page and lets Escape cancel editing", async () => {
+    const user = userEvent.setup();
+    pdfMock.pageCount = 12;
+    const { container } = render(
+      <DocumentPreviewPanel
+        index={0}
+        items={[
+          {
+            id: "jump-pdf",
+            name: "report.pdf",
+            mediaType: "application/pdf",
+            sizeBytes: 4,
+            file: new File(["test"], "report.pdf", { type: "application/pdf" }),
+          },
+        ]}
+        t={t}
+        onClose={() => {}}
+        onIndexChange={() => {}}
+      />,
+    );
+
+    expect(await screen.findByRole("button", { name: "Page 1 of 12" })).toBeInTheDocument();
+    const pageNine = container.querySelector<HTMLElement>('.document-preview-pdf-page[data-page-number="9"]');
+    const pageTwelve = container.querySelector<HTMLElement>('.document-preview-pdf-page[data-page-number="12"]');
+    const scrollToNine = vi.fn();
+    const scrollToTwelve = vi.fn();
+    Object.defineProperty(pageNine!, "scrollIntoView", { configurable: true, value: scrollToNine });
+    Object.defineProperty(pageTwelve!, "scrollIntoView", { configurable: true, value: scrollToTwelve });
+
+    await user.click(screen.getByRole("button", { name: "Page 1 of 12" }));
+    const pageInput = screen.getByRole("spinbutton", { name: "Enter page number" });
+    expect(pageInput).toHaveFocus();
+    await user.clear(pageInput);
+    await user.type(pageInput, "9{Enter}");
+    expect(scrollToNine).toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Page 9 of 12" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Page 9 of 12" }));
+    await user.clear(screen.getByRole("spinbutton", { name: "Enter page number" }));
+    await user.type(screen.getByRole("spinbutton", { name: "Enter page number" }), "99{Enter}");
+    expect(scrollToTwelve).toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Page 12 of 12" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Page 12 of 12" }));
+    await user.clear(screen.getByRole("spinbutton", { name: "Enter page number" }));
+    await user.type(screen.getByRole("spinbutton", { name: "Enter page number" }), "3{Escape}");
+    expect(screen.getByRole("button", { name: "Page 12 of 12" })).toBeInTheDocument();
   });
 
   it("never renders a DOCX outline and always uses the full preview width", async () => {

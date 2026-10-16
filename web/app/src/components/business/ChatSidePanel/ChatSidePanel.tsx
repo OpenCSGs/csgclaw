@@ -304,6 +304,8 @@ export function ChatSidePanel({
                   >
                     {tab.kind === "files" ? (
                       <span className="chat-side-folder-icon" aria-hidden="true" />
+                    ) : tab.kind === "file" ? (
+                      <span className="chat-side-file-icon" aria-hidden="true" />
                     ) : (
                       <Icon size={15} aria-hidden="true" />
                     )}

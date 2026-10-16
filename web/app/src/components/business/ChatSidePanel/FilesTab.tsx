@@ -1,6 +1,6 @@
 import { WorkspacePathActions } from "./WorkspacePathActions";
 import { useRoomFileReader } from "./useRoomFileReader";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AtSign, RefreshCw } from "lucide-react";
 import { attachmentCapability, fetchWorkspaceDirectory, filePreviewItem } from "@/api/chatFiles";
@@ -32,6 +32,21 @@ export function FilesTab({
   const [visibleCount, setVisibleCount] = useState(100);
   const queryClient = useQueryClient();
   const reader = useRoomFileReader(scope);
+  const refreshTranscript = reader.refresh;
+  const attachmentIDs = JSON.stringify(
+    [...(scope.messages ?? []), ...(scope.retainedMessages ?? [])]
+      .flatMap((message) => (message.attachments ?? []).map((attachment) => attachment.id))
+      .sort(),
+  );
+  const observedAttachments = useRef({ roomID: scope.roomID, ids: attachmentIDs });
+  useEffect(() => {
+    const previous = observedAttachments.current;
+    observedAttachments.current = { roomID: scope.roomID, ids: attachmentIDs };
+    if (previous.roomID !== scope.roomID || previous.ids === attachmentIDs) return;
+    void Promise.resolve(refreshTranscript()).then(() =>
+      queryClient.invalidateQueries({ queryKey: ["chat-room-files", scope.roomID] }),
+    );
+  }, [attachmentIDs, scope.roomID, refreshTranscript, queryClient]);
   const agentID = scope.agents.some((agent) => agent.id === controller.state.agentID)
     ? controller.state.agentID
     : scope.defaultAgentID;

@@ -170,15 +170,25 @@
 .chat-side-tab > [role="tab"] > svg {
   flex: 0 0 auto;
 }
-.chat-side-tab > [role="tab"] > .chat-side-folder-icon {
+.chat-side-tab > [role="tab"] > .chat-side-folder-icon,
+.chat-side-tab > [role="tab"] > .chat-side-file-icon {
   display: block;
   width: 15px;
   height: 15px;
   flex: 0 0 15px;
   max-width: none;
   background: currentColor;
+}
+.chat-side-tab > [role="tab"] > .chat-side-folder-icon {
   -webkit-mask: url("../../../assets/file-types/folder.svg") center / contain no-repeat;
   mask: url("../../../assets/file-types/folder.svg") center / contain no-repeat;
+}
+.chat-side-tab > [role="tab"] > .chat-side-file-icon {
+  -webkit-mask: url("../../../assets/file-types/file-05.svg") center / contain no-repeat;
+  mask: url("../../../assets/file-types/file-05.svg") center / contain no-repeat;
+}
+.chat-side-tab.is-active > [role="tab"] > :is(svg, .chat-side-folder-icon, .chat-side-file-icon) {
+  color: var(--accent-text);
 }
 .chat-side-tab .chat-side-tab-close {
   flex: 0 0 auto;

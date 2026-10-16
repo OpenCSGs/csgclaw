@@ -341,6 +341,68 @@ describe("shared chat sidebar", () => {
     await user.click(screen.getByRole("button", { name: "Close tab example.org" }));
     expect(screen.getByRole("tab", { name: "Files" })).toHaveAttribute("aria-selected", "true");
   });
+  it("updates conversation attachments when a message adds a file without refetching for text-only messages", async () => {
+    const user = userEvent.setup();
+    const initialMessage = {
+      id: "message",
+      sender_id: "admin",
+      content: "",
+      created_at: "2026-10-14T00:00:00Z",
+      attachments: [
+        {
+          id: "attachment-id",
+          name: "report.pdf",
+          media_type: "application/pdf",
+          size_bytes: 30,
+          kind: "file",
+          created_at: "2026-10-14T00:00:00Z",
+          sha256: "test",
+          download_url: "/api/v1/attachments/attachment-id?token=test-capability",
+        },
+      ],
+    };
+    const textMessage = {
+      id: "text-message",
+      sender_id: "admin",
+      content: "Hello",
+      created_at: "2026-10-14T00:01:00Z",
+      attachments: [],
+    };
+    const uploadedMessage = {
+      id: "upload-message",
+      sender_id: "admin",
+      content: "",
+      created_at: "2026-10-14T00:02:00Z",
+      attachments: [
+        {
+          id: "new-attachment-id",
+          name: "new-image.svg",
+          media_type: "image/svg+xml",
+          size_bytes: 42,
+          kind: "file",
+          created_at: "2026-10-14T00:02:00Z",
+          sha256: "new-test",
+          download_url: "/api/v1/attachments/new-attachment-id?token=new-capability",
+        },
+      ],
+    };
+    vi.mocked(fetchRoomFileMessages).mockResolvedValue([initialMessage]);
+    const view = render(<Harness room={{ ...conversation, messages: [initialMessage] }} />, {
+      wrapper: createQueryWrapper().wrapper,
+    });
+    await user.click(screen.getByRole("button", { name: "Files" }));
+    await user.click(screen.getByRole("tab", { name: "Conversation attachments" }));
+    await screen.findByRole("button", { name: /^report.pdf/ });
+    const initialFetches = vi.mocked(fetchRoomFileMessages).mock.calls.length;
+
+    view.rerender(<Harness room={{ ...conversation, messages: [initialMessage, textMessage] }} />);
+    expect(fetchRoomFileMessages).toHaveBeenCalledTimes(initialFetches);
+
+    vi.mocked(fetchRoomFileMessages).mockResolvedValue([initialMessage, textMessage, uploadedMessage]);
+    view.rerender(<Harness room={{ ...conversation, messages: [initialMessage, textMessage, uploadedMessage] }} />);
+    await screen.findByRole("button", { name: /^new-image.svg/ });
+    expect(vi.mocked(fetchRoomFileMessages).mock.calls.length).toBeGreaterThan(initialFetches);
+  });
   it("returns to the file directory after closing a file preview beside a browser tab", async () => {
     const user = userEvent.setup();
     render(<Harness />, { wrapper: createQueryWrapper().wrapper });
@@ -350,6 +412,7 @@ describe("shared chat sidebar", () => {
     await user.click(screen.getByRole("tab", { name: "Files" }));
     await user.click(screen.getByRole("button", { name: /^README.md/ }));
     expect(screen.getByRole("tab", { name: "README.md" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: "README.md" }).querySelector(".chat-side-file-icon")).toBeInTheDocument();
     const closePreview = screen.getByRole("button", { name: "Close tab README.md" });
     expect(closePreview).toHaveAttribute("data-csg-control", "button");
     await user.click(closePreview);
