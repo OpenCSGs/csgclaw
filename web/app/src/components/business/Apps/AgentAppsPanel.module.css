@@ -231,6 +231,10 @@
 .settingsFooter {
   flex-wrap: wrap;
 }
+.settingsRemoveButton {
+  order: -1;
+  margin-right: auto;
+}
 .settingsActionGroup {
   display: flex;
   align-items: center;

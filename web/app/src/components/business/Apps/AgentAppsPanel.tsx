@@ -299,7 +299,8 @@ export function AgentAppsPanel({
               {selected.kind !== "cli" ? (
                 <Button
                   size="md"
-                  variant="outlineDanger"
+                  variant="danger"
+                  className={styles.settingsRemoveButton}
                   disabled={!!controller.busyID}
                   onClick={() => setRemoving(selected)}
                 >
