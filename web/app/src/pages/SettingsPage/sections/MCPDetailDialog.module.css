@@ -62,11 +62,11 @@
 }
 
 .statusOk {
-  color: var(--success-700);
+  color: var(--success-text);
 }
 
 .statusBad {
-  color: var(--warning-700);
+  color: var(--warning-text);
 }
 
 .statusIdle {
@@ -96,7 +96,7 @@
 .confirmError {
   margin: 0;
   padding: 0 24px;
-  color: var(--danger-700, #b42318);
+  color: var(--danger-text);
   font-size: 12px;
   line-height: 18px;
 }

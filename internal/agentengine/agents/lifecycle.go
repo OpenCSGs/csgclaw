@@ -8,6 +8,7 @@ import (
 	"time"
 
 	agentruntime "csgclaw/internal/runtime"
+	"csgclaw/internal/sandbox"
 )
 
 // restartRuntime restarts the in-process Codex app-server without deleting
@@ -59,7 +60,9 @@ func (s *Controller) restartRuntimeLocked(ctx context.Context, id string) (Agent
 		return Agent{}, err
 	}
 	handle := runtimeHandleForAgent(got)
-	if _, err := runtimeImpl.Stop(ctx, handle); err != nil {
+	// An Agent configured for the first time may have no prior native process.
+	// Start below can create it while retaining any persisted conversation state.
+	if _, err := runtimeImpl.Stop(ctx, handle); err != nil && !sandbox.IsNotFound(err) {
 		return Agent{}, fmt.Errorf("stop codex agent for restart: %w", err)
 	}
 	if _, err := s.updateRuntimeState(got.ID, agentruntime.Info{

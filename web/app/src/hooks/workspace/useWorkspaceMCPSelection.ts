@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { useGlobalNotice } from "@/components/ui";
+import type { TranslateFn } from "@/models/conversations";
 import { errorMessage } from "@/api/client";
 import { localizeAPIError } from "@/shared/i18n";
 import {
@@ -28,7 +30,7 @@ type UseWorkspaceMCPSelectionArgs = {
   setSelectedHubResourceType: (value: HubResourceType) => void;
   skillCount: number;
   skillsLoaded?: boolean;
-  t: (key: string) => string;
+  t: TranslateFn;
   templateCount: number;
   templatesLoaded?: boolean;
   enabled?: boolean;
@@ -54,6 +56,7 @@ export function useWorkspaceMCPSelection({
     requireAuthentication: requireOpenCSGAuthentication,
   } = openCSGAuthGuard;
   const queryClient = useQueryClient();
+  const { showNotice } = useGlobalNotice();
   const [mcpCreateDialogOpen, setMCPCreateDialogOpen] = useState(false);
   const [mcpCreateInitialDocument, setMCPCreateInitialDocument] = useState("");
   const [mcpCreateSource, setMCPCreateSource] = useState<"mcp" | "knowledge">("mcp");
@@ -75,6 +78,7 @@ export function useWorkspaceMCPSelection({
   const [remoteMCPServersSearch, setRemoteMCPServersSearch] = useState("");
   const [remoteMCPServersSearchQuery, setRemoteMCPServersSearchQuery] = useState("");
   const [remoteMCPInstallBusy, setRemoteMCPInstallBusy] = useState("");
+  const [remoteMCPInstallFailure, setRemoteMCPInstallFailure] = useState<{ id: string; message: string } | null>(null);
   const mcpServersQuery = useWorkspaceMCPServersQuery({ enabled });
   const remoteMCPServersQuery = useWorkspaceRemoteMCPServersQuery(remoteMCPServersSearchQuery, {
     enabled: remoteMCPServersEnabled && openCSGAuthenticated,
@@ -279,7 +283,17 @@ export function useWorkspaceMCPSelection({
         setMCPMutationError(t("resourcesMCPRemoteInstallFailed"));
         return false;
       }
+      setRemoteMCPInstallFailure(null);
       if (!requireOpenCSGAuthentication()) {
+        const message = t("resourcesMCPRemoteInstallSignInRequired");
+        setRemoteMCPInstallFailure({ id, message });
+        setMCPMutationError(message);
+        showNotice({
+          title: t("resourcesMCPRemoteInstallFailureTitle", { name: item?.name || id }),
+          message,
+          closeLabel: t("close"),
+          tone: "warning",
+        });
         return false;
       }
       setMCPMutationBusy(true);
@@ -287,7 +301,9 @@ export function useWorkspaceMCPSelection({
       setRemoteMCPInstallBusy(id);
       try {
         await installRemoteMCPServerRequest(id);
-        await Promise.all([
+        // Installation has already committed. Refresh discovery in the background
+        // so a slow catalog cannot keep the install action pending.
+        void Promise.allSettled([
           queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.mcpServers() }),
           queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.knowledgeBasesScope() }),
         ]);
@@ -295,11 +311,24 @@ export function useWorkspaceMCPSelection({
         setSelectedMCPServerName("");
         setMCPAdded(true);
         setMCPCreateDialogOpen(false);
+        showNotice({
+          title: t("resourcesMCPRemoteInstallSuccessTitle"),
+          message: t("resourcesMCPRemoteInstallSuccessMessage", { name: item?.name || id }),
+          closeLabel: t("close"),
+        });
         return true;
       } catch (error) {
-        if (!handleOpenCSGAuthenticationError(error)) {
-          setMCPMutationError(localizeAPIError(error, t, t("resourcesMCPRemoteInstallFailed")));
-        }
+        const message = handleOpenCSGAuthenticationError(error)
+          ? t("resourcesMCPRemoteInstallSignInRequired")
+          : localizeAPIError(error, t, t("resourcesMCPRemoteInstallFailed"));
+        setRemoteMCPInstallFailure({ id, message });
+        setMCPMutationError(message);
+        showNotice({
+          title: t("resourcesMCPRemoteInstallFailureTitle", { name: item?.name || id }),
+          message,
+          closeLabel: t("close"),
+          tone: "warning",
+        });
         return false;
       } finally {
         setRemoteMCPInstallBusy("");
@@ -310,6 +339,7 @@ export function useWorkspaceMCPSelection({
       handleOpenCSGAuthenticationError,
       queryClient,
       requireOpenCSGAuthentication,
+      showNotice,
       setSelectedMCPServerName,
       setSelectedHubResourceType,
       t,
@@ -405,7 +435,7 @@ export function useWorkspaceMCPSelection({
         const intercepted = Boolean(knowledgeBaseSource && handleOpenCSGAuthenticationError(error));
         if (mcpProbeRequestID.current === requestID) {
           if (!intercepted) {
-            setMCPProbeError(errorMessage(error, t("resourcesMCPTestFailed")));
+            setMCPProbeError(localizeAPIError(error, t, t("resourcesMCPTestFailed")));
           }
         }
         if (knowledgeBaseSource && !intercepted) {
@@ -498,6 +528,7 @@ export function useWorkspaceMCPSelection({
     refetchRemoteMCPServers: refreshRemoteMCPServers,
     refetchMCPServers: mcpServersQuery.refetch,
     remoteMCPInstallBusy,
+    remoteMCPInstallFailure,
     remoteMCPServers,
     remoteMCPServersError,
     remoteMCPServersHasMore: Boolean(remoteMCPServersQuery.hasNextPage),

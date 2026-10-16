@@ -9,6 +9,7 @@ import {
   deleteAgentSkillRequest,
   fetchAgentMemoryDocument,
   fetchAgentMCPServers,
+  fetchAgentProfileModels,
   startFeishuRegistrationRequest,
   updateAgentMemoryEnabled,
 } from "@/api/agents";
@@ -22,6 +23,37 @@ function mockFetch(): Mock<typeof fetch> {
 describe("agents API", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
+  });
+
+  it("discovers models by the selected provider ID without sending the previous provider's credentials", async () => {
+    const fetchMock = mockFetch();
+    fetchMock.mockResolvedValue(
+      new Response(JSON.stringify({ id: "new-provider", status: "connected", models: ["new-model"] })),
+    );
+    await expect(
+      fetchAgentProfileModels({
+        agent_id: "agent-manager",
+        model_provider_id: "new-provider",
+        provider: "api",
+        base_url: "https://previous.example.test/v1",
+        api_key: "previous-test-key",
+        headers: { "X-Previous": "previous" },
+      }),
+    ).resolves.toEqual({ models: ["new-model"] });
+    expect(fetchMock).toHaveBeenCalledExactlyOnceWith(
+      "api/v1/model-providers/new-provider/check",
+      expect.objectContaining({ method: "POST", body: "{}" }),
+    );
+  });
+
+  it("surfaces a failed provider check instead of using its retained model list", async () => {
+    const fetchMock = mockFetch();
+    fetchMock.mockResolvedValue(
+      new Response(JSON.stringify({ status: "failed", message: "Provider is unavailable", models: ["old-model"] })),
+    );
+    await expect(fetchAgentProfileModels({ model_provider_id: "failed-provider", provider: "api" })).rejects.toThrow(
+      "Provider is unavailable",
+    );
   });
 
   it("posts batch add requests to the agent-scoped skills endpoint", async () => {

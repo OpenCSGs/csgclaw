@@ -35,6 +35,8 @@ export type DesktopUpdateStatus = {
   message?: string;
 };
 
+export type DesktopTurnNotification = { id: string; title: string; body: string; roomID: string; silent: boolean };
+
 export type DesktopWindowState = { focused: boolean; fullscreen: boolean };
 
 export type DesktopBridge = {
@@ -48,6 +50,8 @@ export type DesktopBridge = {
   installDownloadedUpdate(): Promise<void>;
   restartSidecar(): Promise<void>;
   showWindow(): Promise<void>;
+  showTurnNotification(input: DesktopTurnNotification): Promise<void>;
+  onTurnNotificationClick(listener: (roomID: string) => void): () => void;
   setUpdateChannel(channel: DesktopUpdateChannel): Promise<DesktopUpdateStatus>;
   setThemeSource(theme: DesktopThemeSource): Promise<void>;
   onUpdateStatus(listener: (status: DesktopUpdateStatus) => void): () => void;
@@ -75,6 +79,8 @@ export function getDesktopBridge(): DesktopBridge | null {
     typeof bridge.installDownloadedUpdate === "function" &&
     typeof bridge.restartSidecar === "function" &&
     typeof bridge.showWindow === "function" &&
+    typeof bridge.showTurnNotification === "function" &&
+    typeof bridge.onTurnNotificationClick === "function" &&
     typeof bridge.setUpdateChannel === "function" &&
     typeof bridge.setThemeSource === "function" &&
     typeof bridge.onUpdateStatus === "function"

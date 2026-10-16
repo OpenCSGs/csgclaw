@@ -5,11 +5,7 @@ import {
   type ModelOverride,
 } from "@/models/modelMetadata";
 import type { ProviderName } from "@/models/agents";
-import {
-  modelProviderPresetMeta,
-  normalizeModelProviderPreset,
-  type ModelProviderPreset,
-} from "@/models/modelProviderPresets";
+import { normalizeModelProviderPreset, type ModelProviderPreset } from "@/models/modelProviderPresets";
 import type { LocaleCode, TranslateFn } from "@/models/conversations";
 import { messages } from "@/shared/i18n/messages";
 
@@ -51,6 +47,11 @@ export type ModelProvider = {
   kind: string;
   display_name: string;
   preset: ModelProviderPreset;
+  avatar?: string;
+  service_name?: string;
+  region?: string;
+  api_protocol?: string;
+  model_source?: string;
   builtin: boolean;
   base_url?: string;
   api_key_set?: boolean;
@@ -82,6 +83,7 @@ export type ModelProviderOption = {
 };
 
 export type ModelProviderSelectOption = {
+  serviceName?: string;
   avatar: string;
   builtin?: boolean;
   disabled?: boolean;
@@ -205,6 +207,11 @@ function normalizeModelProvider(raw: unknown): ModelProvider {
   return {
     id,
     kind,
+    avatar: String(record.avatar || "") || undefined,
+    service_name: String(record.service_name || "") || undefined,
+    region: String(record.region || "") || undefined,
+    api_protocol: String(record.api_protocol || "") || undefined,
+    model_source: String(record.model_source || "") || undefined,
     imageModels: normalizeModelIDs(record.image_models),
     videoModels: normalizeModelIDs(record.video_models),
     model_metadata: normalizeModelMetadataMap(record.model_metadata),
@@ -438,8 +445,9 @@ export function modelProviderSelectOptionsFromCatalog(
         avatar: modelProviderAvatarPath(provider),
         builtin: provider.builtin || undefined,
         displayName: provider.display_name || provider.id,
+        serviceName: provider.service_name,
         id: provider.id,
-        disabled: disabled || undefined,
+        disabled: disabled || provider.status === "failed" || undefined,
         models: disabled ? [] : [...provider.models],
         imageModels: disabled ? [] : (provider.imageModels ?? []),
         videoModels: disabled ? [] : (provider.videoModels ?? []),
@@ -499,12 +507,12 @@ export function parseModelProviderModelsText(value: string): string[] {
   return models;
 }
 
-export function modelProviderAvatarPath(provider: Pick<ModelProvider, "id" | "builtin" | "preset"> | string): string {
-  if (typeof provider !== "string" && !provider.builtin) {
-    const presetAvatar = modelProviderPresetMeta(provider.preset).avatar;
-    if (presetAvatar) {
-      return presetAvatar;
-    }
+export function modelProviderAvatarPath(
+  provider: (Pick<ModelProvider, "id" | "builtin" | "preset"> & { avatar?: string }) | string,
+): string {
+  if (typeof provider !== "string") {
+    if ("avatar" in provider && typeof provider.avatar === "string" && provider.avatar) return provider.avatar;
+    if (!provider.builtin && MODEL_PROVIDER_AVATARS[provider.preset]) return MODEL_PROVIDER_AVATARS[provider.preset];
   }
   const id = normalizeModelProviderID(typeof provider === "string" ? provider : provider.id);
   return MODEL_PROVIDER_AVATARS[id] || MODEL_PROVIDER_AVATARS.openai;
@@ -518,6 +526,8 @@ export function providerStatusTone(
     case "connected":
       return "online";
     case "failed":
+    case "error":
+    case "unconfigured":
       return "warning";
     default:
       if (normalizeModelProviderID(provider?.id) === MODEL_PROVIDER_IDS.OpenCSG) {
@@ -536,7 +546,10 @@ export function modelProviderStatusLabel(
     case "connected":
       return t("modelProviderConnected");
     case "failed":
+    case "error":
       return t("modelProviderStatusFailed");
+    case "unconfigured":
+      return t("modelProviderStatusUnconfigured");
     case "unknown":
     case "":
       return t("modelProviderNotChecked");

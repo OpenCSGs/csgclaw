@@ -1,5 +1,7 @@
 import { isDirectConversation, normalizeComparable } from "@/models/conversations";
-import type { IMServerEvent, TranslateFn } from "@/models/conversations";
+import type { IMMessage, IMServerEvent, TranslateFn } from "@/models/conversations";
+import { openClawDeliveryKind } from "@/models/agentActivity";
+import { parseTurnProgress } from "@/models/turnProgress";
 
 export const TurnNotificationModes = {
   off: "off",
@@ -41,6 +43,15 @@ export function isCompletedAgentTurnEvent(event: IMServerEvent | null | undefine
     event.work.state === "idle" &&
     event.work.reason === "released",
   );
+}
+
+export function isCompletedAgentTurnMessage(message: IMMessage): boolean {
+  const progress = parseTurnProgress(message);
+  if (progress) {
+    return progress.status === "succeeded";
+  }
+  const metadata = message.metadata as { csgclaw?: { delivery_kind?: unknown } } | undefined;
+  return (metadata?.csgclaw?.delivery_kind ?? openClawDeliveryKind(message)) === "final";
 }
 
 export function buildTurnNotificationTag(eventKey: string): string {

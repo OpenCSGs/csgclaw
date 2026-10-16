@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type UIEvent } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type UIEvent } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { copyPreviewBuffer } from "./previewBuffer";
 import { normalizePowerPointPreview } from "./normalizePowerPoint";
@@ -23,6 +23,22 @@ export default function PowerPointPreview({
   const [slideCount, setSlideCount] = useState(0);
   const [slide, setSlide] = useState(1);
   const [error, setError] = useState(false);
+  const [fittedScale, setFittedScale] = useState(1);
+
+  useLayoutEffect(() => {
+    const container = scrollRef.current;
+    if (!container) return;
+    const measure = () => {
+      if (container.clientWidth <= 0) return;
+      const style = window.getComputedStyle(container);
+      const padding = (parseFloat(style.paddingLeft) || 0) + (parseFloat(style.paddingRight) || 0);
+      setFittedScale(Math.min(1, Math.max(1, container.clientWidth - padding) / 960));
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     const stage = stageRef.current;
@@ -76,6 +92,10 @@ export default function PowerPointPreview({
 
   function handleScroll(event: UIEvent<HTMLDivElement>) {
     const container = event.currentTarget;
+    if (container.scrollTop > 0 && container.scrollHeight - container.clientHeight - container.scrollTop <= 1) {
+      setSlide(slideCount);
+      return;
+    }
     const containerTop = container.getBoundingClientRect().top;
     let closestSlide = slide;
     let closestDistance = Number.POSITIVE_INFINITY;
@@ -95,7 +115,7 @@ export default function PowerPointPreview({
   return (
     <div className="document-preview-powerpoint">
       <div ref={scrollRef} className="document-preview-ppt-stage-shell" onScroll={handleScroll}>
-        <div ref={stageRef} className="document-preview-ppt-stage" style={{ transform: `scale(${scale})` }} />
+        <div ref={stageRef} className="document-preview-ppt-stage" style={{ zoom: fittedScale * scale }} />
       </div>
       {slideCount > 0 ? (
         <div className="document-preview-page-controls">

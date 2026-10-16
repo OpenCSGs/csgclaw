@@ -21,6 +21,7 @@ export type ComboboxOption = {
 
 export type ComboboxProps = {
   options: readonly ComboboxOption[];
+  footer?: ReactNode;
   value?: string;
   defaultValue?: string;
   onValueChange?: (value: string) => void;
@@ -52,6 +53,7 @@ function searchText(option: ComboboxOption): string {
 
 export function Combobox({
   options,
+  footer,
   value,
   defaultValue = "",
   onValueChange,
@@ -372,6 +374,7 @@ export function Combobox({
             </div>
           )}
         </div>
+        {footer}
       </PopoverContent>
     </PopoverRoot>
   );

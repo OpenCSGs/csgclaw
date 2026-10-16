@@ -3942,7 +3942,7 @@ func TestWriteHubTemplateErrorUsesStructuredContract(t *testing.T) {
 	writeHubTemplateError(
 		recorder,
 		http.StatusServiceUnavailable,
-		communityInstanceResourceUnavailableCode,
+		"RESOURCE-ERR-1",
 		"The resource is temporarily unavailable.",
 		"alice/reviewer",
 	)
@@ -3960,7 +3960,7 @@ func TestWriteHubTemplateErrorUsesStructuredContract(t *testing.T) {
 	if err := json.NewDecoder(recorder.Body).Decode(&payload); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if payload.Error.Code != communityInstanceResourceUnavailableCode ||
+	if payload.Error.Code != "RESOURCE-ERR-1" ||
 		payload.Error.PublishedTemplateID != "alice/reviewer" {
 		t.Fatalf("error payload = %+v", payload.Error)
 	}
@@ -5776,7 +5776,7 @@ func TestHandleHubTemplatesPublishesAgentSnapshot(t *testing.T) {
 	srv := &Handler{svc: svc, agentEngine: agentengine.New(svc), workspace: svc.Workspace(), agentModels: svc.Models(), agentRuntime: svc}
 	srv.SetHubService(hubSvc)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/hub/templates", strings.NewReader(
-		`{"agent_id":"u-alice","registry":"local","name":"ReviewBot_2","display_name":"代码审查助手","description":"Published review template"}`,
+		`{"agent_id":"u-alice","registry":"local","name":"ReviewBot_2","display_name":"代码审查助手","description":"Published review template","avatar":"avatars/custom.png","deploy":true}`,
 	))
 	rec := httptest.NewRecorder()
 
@@ -5798,6 +5798,9 @@ func TestHandleHubTemplatesPublishesAgentSnapshot(t *testing.T) {
 	if got.Role != hub.TemplateRoleWorker {
 		t.Fatalf("template role = %q, want %q", got.Role, hub.TemplateRoleWorker)
 	}
+	if got.Avatar != "avatars/custom.png" {
+		t.Fatalf("avatar = %q", got.Avatar)
+	}
 	if got.DisplayName != "代码审查助手" {
 		t.Fatalf("display name = %q", got.DisplayName)
 	}
@@ -5817,6 +5820,21 @@ func TestHandleHubTemplatesPublishesAgentSnapshot(t *testing.T) {
 	if duplicateRec.Code != http.StatusConflict {
 		t.Fatalf("duplicate status = %d, want %d; body=%s", duplicateRec.Code, http.StatusConflict, duplicateRec.Body.String())
 	}
+	replacement := httptest.NewRecorder()
+	srv.Routes().ServeHTTP(replacement, httptest.NewRequest(http.MethodPost, "/api/v1/hub/templates", strings.NewReader(
+		`{"agent_id":"u-alice","registry":"local","name":"ReviewBot_2","display_name":"新展示名","description":"Updated snapshot","replace_template_id":"local.ReviewBot_2"}`,
+	)))
+	if replacement.Code != http.StatusCreated {
+		t.Fatalf("replace status = %d; body=%s", replacement.Code, replacement.Body.String())
+	}
+	var updated apitypes.HubTemplate
+	if err := json.Unmarshal(replacement.Body.Bytes(), &updated); err != nil {
+		t.Fatal(err)
+	}
+	if updated.ID != "local.ReviewBot_2" || updated.Description != "Updated snapshot" || updated.DisplayName != "新展示名" {
+		t.Fatalf("replacement = %+v", updated)
+	}
+
 }
 
 func TestHandleHubTemplatesPublishesCodexRuntimeOptions(t *testing.T) {

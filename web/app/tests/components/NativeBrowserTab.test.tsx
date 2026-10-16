@@ -40,6 +40,8 @@ beforeEach(() => {
     installDownloadedUpdate: vi.fn(),
     restartSidecar: vi.fn(),
     showWindow: vi.fn(),
+    showTurnNotification: vi.fn(),
+    onTurnNotificationClick: vi.fn(),
     setUpdateChannel: vi.fn(),
     setThemeSource: vi.fn(),
     onUpdateStatus: vi.fn(),

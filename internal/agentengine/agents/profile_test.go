@@ -221,13 +221,14 @@ func TestManagerStartupProfileSkipsDetectionWhenDisabled(t *testing.T) {
 	}
 }
 
-func TestProfileDefaultsPersistAfterProfileUpdate(t *testing.T) {
+func TestProfileUpdatePreservesLastCreationDefaults(t *testing.T) {
 	dir := t.TempDir()
 	statePath := filepath.Join(dir, "state.json")
 	svc, err := NewController(config.ModelConfig{}, config.ServerConfig{}, "manager-image:test", statePath)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
+	svc.profileDefaults = normalizeProfile(AgentProfile{Provider: ProviderCSGHubLite, ModelID: "last-created"}, "", "")
 	svc.agents[ManagerUserID] = Agent{
 		ID:          ManagerUserID,
 		Name:        ManagerName,
@@ -250,8 +251,8 @@ func TestProfileDefaultsPersistAfterProfileUpdate(t *testing.T) {
 	if err := json.Unmarshal(data, &state); err != nil {
 		t.Fatalf("Unmarshal() error = %v", err)
 	}
-	if state.ProfileDefaults.Provider != ProviderCSGHubLite || state.ProfileDefaults.ModelID != "qwen-default" {
-		t.Fatalf("profile_defaults = %+v, want csghub_lite qwen-default", state.ProfileDefaults)
+	if state.ProfileDefaults.Provider != ProviderCSGHubLite || state.ProfileDefaults.ModelID != "last-created" {
+		t.Fatalf("profile_defaults = %+v, want unchanged csghub_lite last-created", state.ProfileDefaults)
 	}
 }
 

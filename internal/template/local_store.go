@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"csgclaw/internal/agentworkspace"
@@ -32,7 +33,7 @@ var (
 	ErrTemplateNotFound       = errors.New("hub template not found")
 	ErrTemplateIDRequired     = errors.New("hub template id is required")
 	ErrTemplateNameRequired   = errors.New("hub template name is required")
-	ErrTemplateNameInvalid    = errors.New("hub template name must start with an English letter, be at most 24 characters long, and contain only English letters, numbers, underscores, or hyphens")
+	ErrTemplateNameInvalid    = errors.New("hub template name must start with an English letter, be at most 32 characters long, and contain only English letters, numbers, underscores, or hyphens")
 	ErrTemplateAlreadyExists  = errors.New("hub template already exists")
 	ErrTemplateSensitiveInfo  = errors.New("template contains sensitive information")
 	ErrRuntimeKindRequired    = errors.New("hub runtime kind is required")
@@ -101,6 +102,7 @@ func (s *LocalStore) Get(_ context.Context, id string) (Template, error) {
 		ID:             id,
 		Name:           manifest.Name,
 		DisplayName:    manifest.DisplayName,
+		Avatar:         manifest.Avatar,
 		Description:    manifest.Description,
 		Role:           TemplateRoleWorker,
 		RuntimeKind:    normalizeTemplateRuntimeKind(manifest.RuntimeKind),
@@ -265,6 +267,7 @@ func (s *LocalStore) writeManifest(path string, spec PublishSpec) error {
 	manifest := templateManifest{
 		Name:        spec.Name,
 		DisplayName: spec.DisplayName,
+		Avatar:      spec.Avatar,
 		Description: spec.Description,
 		RuntimeKind: normalizeTemplateRuntimeKind(spec.RuntimeKind),
 		Version:     spec.Version,
@@ -372,4 +375,47 @@ func validateLocalTemplateID(id string) error {
 		return ErrWorkspacePathUnsafe
 	}
 	return nil
+}
+
+var localTemplateReplaceMu sync.Mutex
+
+// Replace writes a fresh snapshot before swapping out the previous local template.
+func (s *LocalStore) Replace(ctx context.Context, id string, spec PublishSpec) (Template, error) {
+	localTemplateReplaceMu.Lock()
+	defer localTemplateReplaceMu.Unlock()
+	current, err := s.Get(ctx, id)
+	if err != nil {
+		return Template{}, err
+	}
+	if spec.Name != current.Name {
+		return Template{}, fmt.Errorf("replacement must retain the template name")
+	}
+	spec.ID = id
+	stagingRoot, err := os.MkdirTemp(s.root, ".template-replace-")
+	if err != nil {
+		return Template{}, err
+	}
+	cleanup := true
+	defer func() {
+		if cleanup {
+			_ = os.RemoveAll(stagingRoot)
+		}
+	}()
+	staging := NewLocalStore(stagingRoot)
+	if _, err := staging.Publish(ctx, spec); err != nil {
+		return Template{}, err
+	}
+	original := s.templateRoot(id)
+	backup := filepath.Join(stagingRoot, "previous")
+	if err := os.Rename(original, backup); err != nil {
+		return Template{}, err
+	}
+	if err := os.Rename(staging.templateRoot(id), original); err != nil {
+		if restoreErr := os.Rename(backup, original); restoreErr != nil {
+			cleanup = false
+			return Template{}, fmt.Errorf("replace failed: %w; restore failed: %v; backup retained at %s", err, restoreErr, backup)
+		}
+		return Template{}, err
+	}
+	return s.Get(ctx, id)
 }

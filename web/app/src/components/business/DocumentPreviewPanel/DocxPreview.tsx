@@ -11,12 +11,12 @@ export default function DocxPreview({
   scale: number;
   t: (key: string) => string;
 }) {
-  const [html, setHTML] = useState("");
+  const [html, setHTML] = useState<string | null>(null);
   const [error, setError] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
-    setHTML("");
+    setHTML(null);
     setError(false);
     void import("mammoth")
       .then((mammoth) =>
@@ -47,7 +47,7 @@ export default function DocxPreview({
   if (error) {
     return <div className="document-preview-status is-error">{t("attachmentPreviewFailed")}</div>;
   }
-  if (!html) {
+  if (html === null) {
     return <div className="document-preview-status">{t("attachmentPreviewLoading")}</div>;
   }
   return (

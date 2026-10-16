@@ -42,7 +42,7 @@ import {
   updateAgentRequest,
 } from "@/api/agents";
 import { createUserRequest } from "@/api/im";
-import { publishAgentTemplateRequest } from "@/api/hub";
+import { publishAgentTemplateRequest, publishHubTemplateToCommunityRequest } from "@/api/hub";
 import { fetchAgentMCPServerSourceStatus } from "@/api/mcp";
 import { patchCsgclawUserRequest } from "@/api/participants";
 import { fetchSkills } from "@/api/skills";
@@ -149,6 +149,7 @@ vi.mock("@/api/hub", async () => {
   return {
     ...actual,
     publishAgentTemplateRequest: vi.fn(),
+    publishHubTemplateToCommunityRequest: vi.fn(),
   };
 });
 
@@ -246,7 +247,6 @@ function useAgentControllerHarness(
     refreshedBootstrapConfig?: RuntimeBootstrapConfig | null;
     refreshMCPServers?: () => Promise<unknown>;
     refreshWorkspaceModelProviders?: () => Promise<ModelProviderCatalog | null>;
-    setHubPublishError?: (message: string) => void;
     t?: TranslateFn;
   } = {},
 ) {
@@ -334,7 +334,6 @@ function useAgentControllerHarness(
     setManagerProfileData: (value) => {
       setManagerProfile((current) => (typeof value === "function" ? value(current) : value));
     },
-    setHubPublishError: options.setHubPublishError,
     setSelectedHubTemplateId: setSelectedHubTemplateIdRef.current,
     t: options.t ?? t,
   });
@@ -405,13 +404,13 @@ describe("useAgentController", () => {
     vi.mocked(updateAgentRequest).mockReset();
     vi.mocked(patchCsgclawUserRequest).mockReset();
     vi.mocked(publishAgentTemplateRequest).mockReset();
+    vi.mocked(publishHubTemplateToCommunityRequest).mockReset();
     navigationBlockerMock.current = {
       proceed: vi.fn(),
       reset: vi.fn(),
       state: "unblocked",
     };
     window.localStorage.removeItem(feishuRegistrationStorageKey);
-    window.localStorage.removeItem("csgclaw.im.lastCreatedAgentModel");
     vi.mocked(fetchAgent).mockResolvedValueOnce(oldAgent).mockResolvedValueOnce(latestAgent);
     vi.mocked(fetchAgentProfile).mockResolvedValue(profile);
     vi.mocked(fetchAgentProfileDefaults).mockResolvedValue(profile);
@@ -530,7 +529,6 @@ describe("useAgentController", () => {
 
   afterEach(() => {
     window.localStorage.removeItem(feishuRegistrationStorageKey);
-    window.localStorage.removeItem("csgclaw.im.lastCreatedAgentModel");
   });
 
   it("keeps background model authentication failures inline until the user retries", async () => {
@@ -1332,103 +1330,164 @@ describe("useAgentController", () => {
     expect(result.current.agentViewProps.saveBillingURL).toBe("");
   });
 
-  it("opens the published template when community deployment is waiting for review", async () => {
-    const setHubPublishError = vi.fn();
+  it("saves a local snapshot before publishing that template to agentic hub", async () => {
     const worker: AgentLike = {
       ...oldAgent,
       id: "u-worker",
-      name: "reviewer",
+      name: "Reviewer",
       role: "worker",
+      avatar: "avatars/custom.png",
       runtime_kind: "codex",
     };
-    vi.mocked(publishAgentTemplateRequest).mockRejectedValueOnce({
-      status: 409,
-      code: "AGENT-ERR-22",
-      message: "sensitive-content review is still pending",
-      publishedTemplateId: "alice/reviewer",
-    } satisfies ApiError);
+    const local = { id: "local.Reviewer", name: "Reviewer" };
+    const remote = { id: "alice/Reviewer", name: "Reviewer" };
+    vi.mocked(publishAgentTemplateRequest).mockResolvedValue(local);
+    vi.mocked(publishHubTemplateToCommunityRequest).mockImplementation(async () => {
+      expect(publishAgentTemplateRequest).toHaveBeenCalledWith(
+        "u-worker",
+        "local",
+        "Reviewer",
+        "Reviews changes",
+        true,
+        "审查助手",
+        "avatars/custom.png",
+        "",
+      );
+      return remote;
+    });
+    const agents = [worker];
     const { result } = renderHook(
       () =>
         useAgentControllerHarness({
           activePane: { type: WorkspacePaneTypes.agent, id: "u-worker" },
-          agents: [worker],
+          agents,
           openCSGAuthenticated: true,
-          setHubPublishError,
         }),
       { wrapper: createWrapper() },
     );
-
-    let published = false;
     await act(async () => {
-      published =
-        (await result.current.controller.agentViewProps.onPublish?.(
-          "official_deploy",
-          "reviewer",
+      expect(
+        await result.current.controller.agentViewProps.onPublish?.(
+          "official",
+          "Reviewer",
           "Reviews changes",
-          false,
-          "中文助手",
-        )) ?? false;
+          true,
+          "审查助手",
+        ),
+      ).toBe(true);
     });
-
-    expect(published).toBe(true);
-    expect(result.current.refreshHubTemplates).toHaveBeenCalledOnce();
-    expect(result.current.setSelectedHubTemplateId).toHaveBeenCalledWith("alice/reviewer");
-    expect(setHubPublishError).toHaveBeenCalledWith("sensitive-content review is still pending");
-    expect(result.current.navigatePane).toHaveBeenCalledWith(
-      { type: WorkspacePaneTypes.hub, id: "alice/reviewer", resourceType: "template" },
-      [],
-    );
+    expect(publishHubTemplateToCommunityRequest).toHaveBeenCalledWith(local.id, true);
+    expect(result.current.setSelectedHubTemplateId).toHaveBeenCalledWith(remote.id);
   });
 
-  it.each([
-    ["RESOURCE-ERR-1", "deployment resource is unavailable"],
-    ["template_deploy_failed", "template deployment failed"],
-  ])("opens the published template after partial deployment failure %s", async (code, message) => {
-    const setHubPublishError = vi.fn();
-    const worker: AgentLike = {
-      ...oldAgent,
-      id: "u-worker",
-      name: "reviewer",
-      role: "worker",
-      runtime_kind: "codex",
-    };
-    vi.mocked(publishAgentTemplateRequest).mockRejectedValueOnce({
-      status: 502,
-      code,
-      message,
-      publishedTemplateId: "alice/reviewer",
-    } satisfies ApiError);
+  it.each([false, true])(
+    "refreshes edited workspace files before retrying publication (changed metadata: %s)",
+    async (changed) => {
+      const publicationTranslator = ((key: string, values?: Record<string, unknown>) =>
+        key === "agentTemplateSavedPublishFailed" ? `Saved locally: ${values?.reason}` : key) as TranslateFn;
+      const worker: AgentLike = {
+        ...oldAgent,
+        id: "u-worker",
+        name: "Reviewer",
+        role: "worker",
+        runtime_kind: "codex",
+      };
+      let workspaceInstructions = "original instructions";
+      let snapshotInstructions = "";
+      vi.mocked(publishAgentTemplateRequest).mockImplementation(async () => {
+        snapshotInstructions = workspaceInstructions;
+        return { id: "local.Reviewer", name: "Reviewer" };
+      });
+      vi.mocked(publishHubTemplateToCommunityRequest)
+        .mockRejectedValueOnce(new Error("Hub unavailable"))
+        .mockResolvedValueOnce({ id: "alice/Reviewer", name: "Reviewer" });
+      const agents = [worker];
+      const { result } = renderHook(
+        () =>
+          useAgentControllerHarness({
+            activePane: { type: WorkspacePaneTypes.agent, id: "u-worker" },
+            agents,
+            openCSGAuthenticated: true,
+            t: publicationTranslator,
+          }),
+        { wrapper: createWrapper() },
+      );
+      await act(async () => {
+        expect(
+          await result.current.controller.agentViewProps.onPublish?.(
+            "official",
+            "Reviewer",
+            "Reviews",
+            false,
+            "审查助手",
+          ),
+        ).toBe(false);
+      });
+      expect(result.current.controller.agentViewProps.publishError).toBe("Saved locally: Hub unavailable");
+      expect(result.current.refreshHubTemplates).toHaveBeenCalledOnce();
+      workspaceInstructions = "corrected AGENTS.md instructions";
+      await act(async () => {
+        expect(
+          await result.current.controller.agentViewProps.onPublish?.(
+            "official",
+            "Reviewer",
+            changed ? "Updated description" : "Reviews",
+            changed,
+            changed ? "新展示名" : "审查助手",
+          ),
+        ).toBe(true);
+      });
+      expect(publishAgentTemplateRequest).toHaveBeenCalledTimes(2);
+      expect(publishAgentTemplateRequest).toHaveBeenLastCalledWith(
+        "u-worker",
+        "local",
+        "Reviewer",
+        changed ? "Updated description" : "Reviews",
+        changed,
+        changed ? "新展示名" : "审查助手",
+        "",
+        "local.Reviewer",
+      );
+      expect(snapshotInstructions).toBe("corrected AGENTS.md instructions");
+      expect(publishHubTemplateToCommunityRequest).toHaveBeenCalledTimes(2);
+    },
+  );
+
+  it("allows local saving without login and blocks save-and-publish before any writes", async () => {
+    const worker: AgentLike = { ...oldAgent, id: "u-worker", name: "Reviewer", role: "worker", runtime_kind: "codex" };
+    vi.mocked(publishAgentTemplateRequest).mockResolvedValue({ id: "local.Reviewer", name: "Reviewer" });
+    const agents = [worker];
+    const authGuard = { ...openCSGAuthGuardStub(false), requireAuthentication: vi.fn(() => false) };
     const { result } = renderHook(
       () =>
         useAgentControllerHarness({
           activePane: { type: WorkspacePaneTypes.agent, id: "u-worker" },
-          agents: [worker],
-          openCSGAuthenticated: true,
-          setHubPublishError,
+          agents,
+          openCSGAuthGuard: authGuard,
         }),
       { wrapper: createWrapper() },
     );
-
-    let published = false;
     await act(async () => {
-      published =
-        (await result.current.controller.agentViewProps.onPublish?.(
-          "official_deploy",
-          "reviewer",
-          "Reviews changes",
+      expect(
+        await result.current.controller.agentViewProps.onPublish?.(
+          "official",
+          "Reviewer",
+          "Reviews",
           false,
-          "中文助手",
-        )) ?? false;
+          "审查助手",
+        ),
+      ).toBe(false);
     });
-
-    expect(published).toBe(true);
-    expect(result.current.refreshHubTemplates).toHaveBeenCalledOnce();
-    expect(result.current.setSelectedHubTemplateId).toHaveBeenCalledWith("alice/reviewer");
-    expect(setHubPublishError).toHaveBeenCalledWith(message);
-    expect(result.current.navigatePane).toHaveBeenCalledWith(
-      { type: WorkspacePaneTypes.hub, id: "alice/reviewer", resourceType: "template" },
-      [],
-    );
+    expect(publishAgentTemplateRequest).not.toHaveBeenCalled();
+    act(() => result.current.controller.agentViewProps.onPublishLogin?.());
+    expect(authGuard.requireAuthentication).toHaveBeenCalledTimes(2);
+    await act(async () => {
+      expect(
+        await result.current.controller.agentViewProps.onPublish?.("local", "Reviewer", "Reviews", false, "审查助手"),
+      ).toBe(true);
+    });
+    expect(publishAgentTemplateRequest).toHaveBeenCalledOnce();
+    expect(publishHubTemplateToCommunityRequest).not.toHaveBeenCalled();
   });
 
   it("does not wait for bootstrap or skill refresh after saving only the selected agent model", async () => {
@@ -2653,6 +2712,56 @@ describe("useAgentController", () => {
     }
   });
 
+  it.each(["pending", "missing", "network"])(
+    "refreshes actual Feishu bindings when registration is %s",
+    async (outcome) => {
+      vi.useFakeTimers();
+      const openSpy = vi.spyOn(window, "open").mockImplementation(() => null);
+      const workerAgent: AgentLike = { ...oldAgent, id: "u-dev", name: "dev", role: "worker" };
+      const connectedWorker: AgentLike = {
+        ...workerAgent,
+        participants: [{ agent_id: "u-dev", channel: "feishu", channel_user_kind: "app_id", id: "dev", type: "agent" }],
+      };
+      if (outcome === "pending") {
+        vi.mocked(finalizeFeishuRegistrationRequest).mockResolvedValue({ status: "pending", agent_id: "u-dev" });
+      } else {
+        vi.mocked(finalizeFeishuRegistrationRequest).mockRejectedValue({ status: outcome === "missing" ? 404 : 502 });
+      }
+      try {
+        const { result } = renderHook(
+          () =>
+            useAgentControllerHarness({
+              activePane: { type: WorkspacePaneTypes.agent, id: "u-dev" },
+              agents: [workerAgent],
+            }).controller,
+          { wrapper: createWrapper() },
+        );
+        await act(async () => {
+          await result.current.agentViewProps.onStartFeishuConnect?.(workerAgent);
+        });
+        // Simulate completion elsewhere after the page loaded its disconnected agent.
+        vi.mocked(fetchAgent).mockReset();
+        vi.mocked(fetchAgent).mockResolvedValue(connectedWorker);
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(1_000);
+        });
+        expect(result.current.agentViewProps.item?.participants?.[0]?.channel).toBe("feishu");
+        expect(Boolean(result.current.agentViewProps.feishuPendingRegistration)).toBe(outcome !== "missing");
+        // A still-pending reconnect must continue polling after synchronization.
+        if (outcome === "pending") {
+          const calls = vi.mocked(finalizeFeishuRegistrationRequest).mock.calls.length;
+          await act(async () => {
+            await vi.advanceTimersByTimeAsync(1_000);
+          });
+          expect(vi.mocked(finalizeFeishuRegistrationRequest).mock.calls.length).toBeGreaterThan(calls);
+        }
+      } finally {
+        openSpy.mockRestore();
+        vi.useRealTimers();
+      }
+    },
+  );
+
   it("automatically finalizes a Feishu reconnect for an already connected agent", async () => {
     vi.useFakeTimers();
     const openSpy = vi.spyOn(window, "open").mockImplementation(() => null);
@@ -2867,10 +2976,6 @@ describe("useAgentController", () => {
       model_provider_id: "opencsg",
       model_id: "production-model",
     });
-    window.localStorage.setItem(
-      "csgclaw.im.lastCreatedAgentModel",
-      JSON.stringify({ providerID: "opencsg", modelID: "production-model" }),
-    );
     const productionCatalog = catalog("production-model");
     const stagingCatalog = catalog("staging-model");
     const refreshCatalog = async () => stagingCatalog;
@@ -3349,6 +3454,7 @@ describe("useAgentController", () => {
     const { result } = renderHook(
       () =>
         useAgentControllerHarness({
+          openCSGAuthenticated: true,
           bootstrapConfig: {
             manager_runtime: {
               name: "codex",
@@ -3374,6 +3480,89 @@ describe("useAgentController", () => {
       provider: "csghub",
       model_provider_id: "opencsg",
       model_id: "deepseek-v4",
+    });
+  });
+  it("prefills and submits the last successful conversation, image and video choices", async () => {
+    const models = normalizeModelProviderCatalog({
+      providers: [
+        {
+          id: "service",
+          status: "connected",
+          models: ["chat", "another"],
+          image_models: ["image-first", "image-last"],
+          video_models: ["video-first", "video-last"],
+        },
+      ],
+    });
+    vi.mocked(fetchAgentProfileDefaults).mockResolvedValue({
+      provider: "api",
+      model_provider_id: "service",
+      model_id: "another",
+      image_generation: { provider_id: "service", model_id: "image-last" },
+      video_generation: { provider_id: "service", model_id: "video-last" },
+    });
+    const { result } = renderHook(
+      () => useAgentControllerHarness({ modelProviders: models, modelProvidersLoaded: true }).controller,
+      { wrapper: createWrapper() },
+    );
+    await act(async () => {
+      await result.current.computerViewProps.onCreateAgent({
+        id: "builtin.codex-worker",
+        name: "new-worker",
+        runtime_kind: "codex",
+      });
+    });
+    expect(result.current.agentProfileModalProps?.agentDraft).toMatchObject({
+      model_provider_id: "service",
+      model_id: "another",
+      image_generation: { provider_id: "service", model_id: "image-last" },
+      video_generation: { provider_id: "service", model_id: "video-last" },
+    });
+    await act(async () => {
+      await result.current.agentProfileModalProps?.onSave();
+    });
+    expect(createBotRequest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agent_profile: expect.objectContaining({
+          model_provider_id: "service",
+          model_id: "another",
+          image_generation: { provider_id: "service", model_id: "image-last" },
+          video_generation: { provider_id: "service", model_id: "video-last" },
+        }),
+      }),
+    );
+  });
+
+  it("fills each missing generation model and replaces disconnected remembered models", async () => {
+    const models = normalizeModelProviderCatalog({
+      providers: [
+        { id: "service", status: "connected", models: ["chat"], image_models: ["image"], video_models: ["video"] },
+        {
+          id: "failed",
+          status: "failed",
+          models: ["old"],
+          image_models: ["stale-image"],
+          video_models: ["stale-video"],
+        },
+      ],
+    });
+    vi.mocked(fetchAgentProfileDefaults).mockResolvedValue({
+      model_provider_id: "failed",
+      model_id: "old",
+      image_generation: { provider_id: "failed", model_id: "stale-image" },
+    });
+    const { result } = renderHook(
+      () => useAgentControllerHarness({ modelProviders: models, modelProvidersLoaded: true }).controller,
+      { wrapper: createWrapper() },
+    );
+    await act(async () => {
+      await result.current.computerViewProps.onCreateAgent();
+    });
+    expect(result.current.agentProfileModalProps?.agentDraft).toMatchObject({
+      model_provider_id: "service",
+      model_id: "chat",
+      image_generation: { provider_id: "service", model_id: "image" },
+      video_generation: { provider_id: "service", model_id: "video" },
     });
   });
 });

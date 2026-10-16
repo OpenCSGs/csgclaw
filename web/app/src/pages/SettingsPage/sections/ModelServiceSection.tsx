@@ -2,7 +2,6 @@ import { Plus } from "lucide-react";
 import { Button } from "@/components/ui";
 import { ModelProviderSettings } from "@/components/business/ModelProviderSettings";
 import { useWorkspaceControllerContext } from "@/hooks/workspace";
-import { ModelDefaultsPanel } from "./ModelDefaultsPanel";
 import { SettingsRow } from "./SettingsRow";
 import styles from "../SettingsPage.module.css";
 
@@ -26,7 +25,6 @@ export function ModelServiceSection() {
         </Button>
       }
     >
-      <ModelDefaultsPanel />
       <ModelProviderSettings embedded />
     </SettingsRow>
   );

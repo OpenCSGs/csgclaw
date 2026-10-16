@@ -176,39 +176,47 @@ export function SkillUploadDialog({
         <DialogHeader>
           <div>
             <DialogTitle>{t("resourcesSkillUpload")}</DialogTitle>
-            <DialogDescription>{t("resourcesSkillUploadSubtitle")}</DialogDescription>
+            <DialogDescription>
+              {t(zipOnly ? "resourcesSkillUploadZipSubtitle" : "resourcesSkillUploadSubtitle")}
+            </DialogDescription>
           </div>
           <DialogCloseButton label={t("close")} size="md" variant="tertiaryGray" />
         </DialogHeader>
         <DialogBody className={styles.body}>
-          <div hidden={zipOnly} className={styles.mode} role="tablist" aria-label={t("resourcesSkillUpload")}>
-            <button
-              type="button"
-              className={styles.modeTab}
-              aria-selected={mode === "zip"}
-              role="tab"
-              onClick={() => setMode("zip")}
-            >
-              <UploadCloud size={15} strokeWidth={2} aria-hidden="true" />
-              {t("resourcesSkillUploadZipTab")}
-            </button>
-            <button
-              type="button"
-              className={styles.modeTab}
-              aria-selected={mode === "remote"}
-              role="tab"
-              onClick={() => {
-                if (mode === "remote") {
-                  onRemoteVisibleChange?.(true);
-                  return;
-                }
-                setMode("remote");
-              }}
-            >
-              <CloudDownload size={15} strokeWidth={2} aria-hidden="true" />
-              {t("resourcesSkillRemoteInstallTab")}
-            </button>
-          </div>
+          {!zipOnly ? (
+            <div className={styles.mode} role="tablist" aria-label={t("resourcesSkillUpload")}>
+              <button
+                type="button"
+                className={styles.modeTab}
+                aria-selected={mode === "zip"}
+                id={`${tabsId}-zip`}
+                aria-controls={`${tabsId}-panel`}
+                role="tab"
+                onClick={() => setMode("zip")}
+              >
+                <UploadCloud size={15} strokeWidth={2} aria-hidden="true" />
+                {t("resourcesSkillUploadZipTab")}
+              </button>
+              <button
+                type="button"
+                className={styles.modeTab}
+                aria-selected={mode === "remote"}
+                id={`${tabsId}-remote`}
+                aria-controls={`${tabsId}-panel`}
+                role="tab"
+                onClick={() => {
+                  if (mode === "remote") {
+                    onRemoteVisibleChange?.(true);
+                    return;
+                  }
+                  setMode("remote");
+                }}
+              >
+                <CloudDownload size={15} strokeWidth={2} aria-hidden="true" />
+                {t("resourcesSkillRemoteInstallTab")}
+              </button>
+            </div>
+          ) : null}
           <input
             ref={inputRef}
             className={styles.fileInput}
@@ -218,9 +226,10 @@ export function SkillUploadDialog({
           />
           <div
             className={styles.body}
-            role="tabpanel"
+            role={zipOnly ? "group" : "tabpanel"}
             id={`${tabsId}-panel`}
-            aria-labelledby={`${tabsId}-${mode}`}
+            aria-labelledby={zipOnly ? undefined : `${tabsId}-${mode}`}
+            aria-label={zipOnly ? t("resourcesSkillUploadZipTab") : undefined}
             tabIndex={0}
           >
             {mode === "zip" ? (

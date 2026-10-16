@@ -27,6 +27,8 @@ import type { SystemNotificationPermission } from "../useAgentTurnNotifications"
 
 export type WorkspaceSidebarProps = {
   turnNotificationMode?: TurnNotificationMode;
+  turnNotificationSound?: boolean;
+  onTurnNotificationSoundChange?: (enabled: boolean) => void;
   turnNotificationPermission?: SystemNotificationPermission;
   onRequestTurnNotificationPermission?: () => Promise<SystemNotificationPermission>;
   onTurnNotificationModeChange?: (mode: TurnNotificationMode) => Promise<void>;
@@ -59,7 +61,9 @@ export type WorkspaceSidebarProps = {
   onCollapseSidebar: () => void;
   onAuthEnvironmentChange: (environment: AuthEnvironmentDraft) => void;
   onCreateAgent: () => void | Promise<void>;
-  onCreateModelProvider?: () => void | Promise<void>;
+  onCreateModelProvider?: (
+    options?: import("../useModelProviderCreation").ModelProviderCreationOptions,
+  ) => void | Promise<void>;
   onCreateTeam: (payload: CreateTeamPayload) => Promise<void>;
   onOpenCreateTeam: () => void | Promise<void>;
   onOpenCreateTask: () => void | Promise<void>;

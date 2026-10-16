@@ -7,6 +7,7 @@ import (
 	"csgclaw/internal/apitypes"
 	csgclawchannel "csgclaw/internal/channel/csgclaw"
 	"csgclaw/internal/channel/feishu"
+	"csgclaw/internal/config"
 	"csgclaw/internal/im"
 	"csgclaw/internal/participant"
 	agentruntime "csgclaw/internal/runtime"
@@ -22,6 +23,7 @@ import (
 
 func TestCreateCSGClawAgentParticipantViaAPI(t *testing.T) {
 	agentSvc, _ := mustNewSeededServiceWithPath(t, nil)
+	agentSvc.Models().SetLLMConfig(config.LLMConfig{Default: "service.chat", Providers: map[string]config.ProviderConfig{"service": {BaseURL: "https://model.example/v1", APIKey: "test-key", Models: []string{"chat"}, ImageModels: []string{"image"}, VideoModels: []string{"video"}}}})
 	imSvc := im.NewService()
 	participantSvc := participant.NewService(
 		participant.NewMemoryStore(nil),
@@ -50,6 +52,7 @@ func TestCreateCSGClawAgentParticipantViaAPI(t *testing.T) {
 				"role": "worker",
 				"runtime_kind": "picoclaw_sandbox",
 				"image": "agent-image:test",
+                "model_config": {"model_provider_id":"service","model_id":"chat","image_generation":{"provider_id":"service","model_id":"image"},"video_generation":{"provider_id":"service","model_id":"video"}},
 				"avatar": "avatar/3D-5.png"
 			}
 		}
@@ -76,6 +79,15 @@ func TestCreateCSGClawAgentParticipantViaAPI(t *testing.T) {
 	if !ok {
 		t.Fatal("agent agent-qa was not created")
 	}
+	profile := createdAgent.AgentProfile
+	if profile.ImageGeneration == nil || profile.ImageGeneration.ModelID != "image" || profile.VideoGeneration == nil || profile.VideoGeneration.ModelID != "video" {
+		t.Fatalf("participant creation discarded generation models: %+v", profile)
+	}
+	defaults := agentSvc.Models().ProfileDefaultsView()
+	if defaults.ImageGeneration == nil || defaults.ImageGeneration.ModelID != "image" || defaults.VideoGeneration == nil || defaults.VideoGeneration.ModelID != "video" {
+		t.Fatalf("creation did not remember all model choices: %+v", defaults)
+	}
+
 	if createdAgent.Avatar != "" {
 		t.Fatalf("agent avatar = %q, want empty", createdAgent.Avatar)
 	}

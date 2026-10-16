@@ -270,6 +270,7 @@ export type UseAgentControllerArgs = {
   modelProvidersLoaded?: boolean;
   openCSGAuthGuard: OpenCSGAuthGuard;
   onAgentDeleted?: (item: AgentLike) => void;
+  onTemplatePublished?: (template: HubTemplate) => void;
   profileDetailAgentID?: string;
   redirectToIncompleteManagerProfile?: boolean;
   refreshMCPServers?: () => Promise<unknown>;
@@ -290,7 +291,6 @@ export type UseAgentControllerArgs = {
   setAgentsData: WorkspaceQuerySetter<AgentLike[]>;
   setBootstrapData: WorkspaceQuerySetter<IMData | null>;
   setManagerProfileData: WorkspaceQuerySetter<AgentProfileLike | null>;
-  setHubPublishError?: (message: string) => void;
   setSelectedHubTemplateId: WorkspaceUiState["setSelectedHubTemplateId"];
   t: TranslateFn;
 };

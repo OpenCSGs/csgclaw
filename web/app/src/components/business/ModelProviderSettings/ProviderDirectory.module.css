@@ -1,0 +1,48 @@
+.directory {
+  margin-top: 24px;
+}
+.directory h2 {
+  font-size: 15px;
+  color: var(--text);
+  margin: 0 0 12px;
+}
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(250px, 100%), 1fr));
+  gap: 12px;
+}
+.card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  text-align: left;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+  color: var(--text);
+  cursor: pointer;
+  min-width: 0;
+}
+.card:hover,
+.card:focus-visible {
+  border-color: var(--primary);
+  background: var(--panel-soft);
+}
+.card img {
+  width: 40px;
+  height: 40px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+.card > span:nth-child(2) {
+  flex: 1;
+  min-width: 0;
+}
+.card small {
+  display: block;
+  color: var(--muted);
+  line-height: 1.6;
+  margin-top: 4px;
+  overflow-wrap: anywhere;
+}

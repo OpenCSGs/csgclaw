@@ -94,6 +94,38 @@ describe("useProfileModelOptions", () => {
     expect(fetchAgentProfileModels).not.toHaveBeenCalled();
   });
 
+  it("probes a catalog provider by ID without requiring connection details in the agent draft", async () => {
+    vi.mocked(fetchAgentProfileModels).mockResolvedValue({ models: ["catalog-model"] });
+    const { result } = renderHook(
+      () => useProfileModelOptions({ draft: apiDraft({ model_provider_id: "catalog-provider" }) }),
+      { wrapper: createWrapper() },
+    );
+    await waitFor(() => expect(result.current.models).toEqual(["catalog-model"]));
+    expect(fetchAgentProfileModels).toHaveBeenCalledWith(
+      expect.objectContaining({ model_provider_id: "catalog-provider", base_url: "", api_key: "" }),
+    );
+  });
+
+  it("ignores an old provider's response after switching to another catalog provider", async () => {
+    let resolvePrevious!: (value: { models: string[] }) => void;
+    vi.mocked(fetchAgentProfileModels).mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolvePrevious = resolve;
+      }),
+    );
+    vi.mocked(fetchAgentProfileModels).mockResolvedValue({ models: ["new-provider-model"] });
+    const { result, rerender } = renderHook(({ draft }) => useProfileModelOptions({ draft }), {
+      initialProps: { draft: apiDraft({ model_provider_id: "previous" }) },
+      wrapper: createWrapper(),
+    });
+    await waitFor(() => expect(fetchAgentProfileModels).toHaveBeenCalledTimes(1));
+    rerender({ draft: apiDraft({ model_provider_id: "next" }) });
+    expect(result.current.models).toEqual([]);
+    await waitFor(() => expect(result.current.models).toEqual(["new-provider-model"]));
+    await act(async () => resolvePrevious({ models: ["previous-provider-model"] }));
+    expect(result.current.models).toEqual(["new-provider-model"]);
+  });
+
   it("probes API provider models with the latest draft and selects the first returned model", async () => {
     vi.mocked(fetchAgentProfileModels).mockResolvedValue({ models: ["gpt-auto"] });
 

@@ -157,10 +157,6 @@ func (s *Controller) UpdateAgentProfile(id string, profile AgentProfile) (AgentP
 		current.Status = string(sandbox.StateStopped)
 	}
 	s.putAgentLocked(key, current)
-	if normalized.ProfileComplete {
-		s.profileDefaults = profileDefaultsSnapshot(normalized)
-		s.detectionResults = nil
-	}
 	if err := s.saveLocked(); err != nil {
 		s.mu.Unlock()
 		return AgentProfileView{}, err
@@ -514,10 +510,6 @@ func (s *Controller) updateWithManagedRuntimeOptions(ctx context.Context, id str
 			}
 		}
 	}
-	if runtimeAffectingUpdate && current.ProfileComplete {
-		s.profileDefaults = profileDefaultsSnapshot(current.AgentProfile)
-		s.detectionResults = nil
-	}
 	if runtimeProvisionUpdated {
 		previousCredentials, _ := previous.RuntimeProvision()
 		runtimeImpl, err := s.runtimeForKind(runtimeKind)
@@ -799,6 +791,7 @@ func runtimeConfigSnapshotForAgent(profile AgentProfile, options map[string]any)
 		Profile: agentruntime.RuntimeProfileConfig{
 			ModelMetadata:   profile.ModelMetadata,
 			AutoCompact:     autoCompact,
+			APIProtocol:     profile.APIProtocol,
 			Provider:        strings.TrimSpace(profile.Provider),
 			BaseURL:         profileBaseURL(profile),
 			APIKey:          profileAPIKey(profile),
@@ -1326,6 +1319,8 @@ func (s *Controller) profileForCreateRequest(ctx context.Context, spec *CreateAg
 			if strings.TrimSpace(profile.ReasoningEffort) != "" {
 				selected.ReasoningEffort = profile.ReasoningEffort
 			}
+			selected.ImageGeneration = profile.ImageGeneration
+			selected.VideoGeneration = profile.VideoGeneration
 			selected.EnableFastMode = profile.EnableFastMode
 			selected.RequestOptions = profile.RequestOptions
 			selected.Env = profile.Env

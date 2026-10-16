@@ -488,6 +488,7 @@ type NullableAgentDraftFields = {
 export type AgentDraftSource = AgentLike & NullableAgentDraftFields;
 
 export type AgentTemplateLike = {
+  avatar?: string | null;
   display_name?: string | null;
   description?: string | null;
   id?: string | null;

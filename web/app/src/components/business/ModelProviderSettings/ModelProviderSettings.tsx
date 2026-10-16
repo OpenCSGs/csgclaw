@@ -1,3 +1,5 @@
+import { useModelProviderPresets } from "@/hooks/useModelProviderPresets";
+import directoryStyles from "./ProviderDirectory.module.css";
 import { ModelMetadataFields } from "./ModelMetadataFields";
 import { modelOverridesEqual, type ModelOverride } from "@/models/modelMetadata";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -15,13 +17,14 @@ import {
 import { errorMessage } from "@/api/client";
 import { checkModelProvider, deleteModelProvider, updateModelProvider } from "@/api/modelProviders";
 import { APIKeyField, ModelProviderModelList } from "@/components/business/ProfileControls";
-import { TextInput } from "@/components/ui";
+import { TextInput, Select } from "@/components/ui";
 import {
   Button,
   DismissibleAlert,
   DialogBody,
   DialogCloseButton,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogRoot,
   DialogFooter,
@@ -44,6 +47,7 @@ import { WorkspacePaneTypes } from "@/models/routing";
 import "./ModelProviderSettings.css";
 
 type ProviderDraft = {
+  apiProtocol: string;
   modelOverrides: Record<string, ModelOverride>;
   apiKey: string;
   baseURL: string;
@@ -59,6 +63,7 @@ type ProviderCheckState = {
 
 function providerToDraft(provider: ModelProvider | null | undefined): ProviderDraft {
   return {
+    apiProtocol: provider?.api_protocol || "",
     modelOverrides: provider?.model_overrides || {},
     apiKey: "",
     baseURL: provider?.base_url || "",
@@ -93,6 +98,8 @@ export function ModelProviderSettings({ embedded = false }: { embedded?: boolean
   const providerBaseURL = provider?.base_url || "";
   const providerLastCheckedAt = provider?.last_checked_at;
   const providerMessage = provider?.message;
+  const providerApiKeySet = Boolean(provider?.api_key_set);
+  const providerModelCount = provider?.models.length ?? 0;
   const providerStatus = provider?.status || "unknown";
   const [draft, setDraft] = useState<ProviderDraft>(() => providerToDraft(provider));
   const [savedDraft, setSavedDraft] = useState<ProviderDraft>(() => providerToDraft(provider));
@@ -101,8 +108,10 @@ export function ModelProviderSettings({ embedded = false }: { embedded?: boolean
   const [saveStatus, setSaveStatus] = useState("");
   const [checkFeedback, setCheckFeedback] = useState("");
   const [error, setError] = useState("");
-  const [deleteSuccess, setDeleteSuccess] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
   const [providerSearch, setProviderSearch] = useState("");
+  const directory = useModelProviderPresets();
   const [detailOpen, setDetailOpen] = useState(false);
   const isBuiltinCLI = provider?.id === "codex" || provider?.id === "claude_code";
   const isOpenCSG = provider?.id === MODEL_PROVIDER_IDS.OpenCSG;
@@ -122,6 +131,8 @@ export function ModelProviderSettings({ embedded = false }: { embedded?: boolean
       }
       try {
         const result = await checkModelProvider(providerID, {
+          connect: options.showError || undefined,
+          api_protocol: draft.apiProtocol || undefined,
           base_url: baseURL,
           api_key: apiKey,
         });
@@ -149,7 +160,7 @@ export function ModelProviderSettings({ embedded = false }: { embedded?: boolean
         }
       }
     },
-    [providerID, refreshWorkspaceModelProviders, t],
+    [providerID, refreshWorkspaceModelProviders, t, draft.apiProtocol],
   );
 
   useEffect(() => {
@@ -191,6 +202,10 @@ export function ModelProviderSettings({ embedded = false }: { embedded?: boolean
     if (isOpenCSG && (!opencsgAuthenticatedForCheck || opencsgModelsLoaded)) {
       return;
     }
+    // Leave empty providers unconfigured until the user supplies a connection or checks explicitly.
+    if (!isOpenCSG && !isBuiltinCLI && !providerApiKeySet && providerModelCount === 0) {
+      return;
+    }
     void runCheckForDraft(providerBaseURL, "", { showError: true });
   }, [
     providerCheckActive,
@@ -198,6 +213,9 @@ export function ModelProviderSettings({ embedded = false }: { embedded?: boolean
     opencsgAuthenticatedForCheck,
     opencsgModelsLoaded,
     providerBaseURL,
+    isBuiltinCLI,
+    providerApiKeySet,
+    providerModelCount,
     providerID,
     runCheckForDraft,
   ]);
@@ -256,7 +274,8 @@ export function ModelProviderSettings({ embedded = false }: { embedded?: boolean
   const authBusy = Boolean(controller.sidebarProps?.authBusy);
   const authPending = Boolean(controller.sidebarProps?.authPending);
   const opencsgSignedIn = isOpenCSG ? isAuthenticated(authStatus) : true;
-  const effectiveTone = isOpenCSG && !opencsgSignedIn ? "warning" : providerStatusTone(checkState.status, provider);
+  const effectiveStatus = checkState.status === "unknown" && !providerModelCount ? "unconfigured" : checkState.status;
+  const effectiveTone = isOpenCSG && !opencsgSignedIn ? "warning" : providerStatusTone(effectiveStatus, provider);
   const providerSubtitle = isBuiltinCLI ? provider.kind : provider.base_url || draft.baseURL || provider.kind;
   const imageModels = new Set(provider.imageModels || []);
   const videoModels = new Set(provider.videoModels || []);
@@ -266,6 +285,7 @@ export function ModelProviderSettings({ embedded = false }: { embedded?: boolean
     provider.videoModels,
   );
   const dirty =
+    draft.apiProtocol !== savedDraft.apiProtocol ||
     draft.apiKey !== savedDraft.apiKey ||
     draft.baseURL !== savedDraft.baseURL ||
     draft.displayName !== savedDraft.displayName ||
@@ -273,7 +293,7 @@ export function ModelProviderSettings({ embedded = false }: { embedded?: boolean
 
   const showOpenCSGSignIn = isOpenCSG && !opencsgSignedIn;
   const checkMessage =
-    showOpenCSGSignIn || !checkState.status
+    showOpenCSGSignIn || !checkState.status || effectiveStatus === "unconfigured"
       ? ""
       : modelProviderMessageLabel(checkState, t) ||
         (checkState.status === "connected" ? t("modelProviderConnected") : t("modelProviderCheck"));
@@ -282,7 +302,7 @@ export function ModelProviderSettings({ embedded = false }: { embedded?: boolean
       ? t("csghubNotSignedIn")
       : checkState.status === "connected" || effectiveTone === "online"
         ? t("modelProviderConnected")
-        : modelProviderStatusLabel(checkState.status, provider, t);
+        : modelProviderStatusLabel(effectiveStatus, provider, t);
 
   async function runCheck() {
     setCheckFeedback("");
@@ -312,6 +332,7 @@ export function ModelProviderSettings({ embedded = false }: { embedded?: boolean
           ? { model_overrides: draft.modelOverrides }
           : {
               display_name: provider.builtin ? undefined : draft.displayName,
+              api_protocol: draft.apiProtocol || undefined,
               base_url: draft.baseURL,
               api_key: draft.apiKey,
               models: parseModelProviderModelsText(draft.modelsText),
@@ -330,29 +351,24 @@ export function ModelProviderSettings({ embedded = false }: { embedded?: boolean
   }
 
   async function removeProvider() {
-    if (!provider || provider.builtin) {
+    if (!provider || provider.builtin || busy) {
       return;
     }
     setBusy("delete");
-    setError("");
-    setSaveStatus("");
+    setDeleteError("");
     try {
       await deleteModelProvider(provider.id);
-      setDeleteSuccess(true);
+      setDeleteConfirmOpen(false);
+      void refreshWorkspaceModelProviders();
+      if (embedded) {
+        setLocalProviderID("");
+        setDetailOpen(false);
+      } else controller.sidebarProps?.onSelectComputer?.();
     } catch (err) {
-      setError(errorMessage(err, t("modelProviderDeleteFailed")));
+      setDeleteError(errorMessage(err, t("modelProviderDeleteFailed")));
     } finally {
       setBusy("");
     }
-  }
-
-  function dismissDeleteSuccess() {
-    setDeleteSuccess(false);
-    void refreshWorkspaceModelProviders();
-    if (embedded) {
-      setLocalProviderID("");
-      setDetailOpen(false);
-    } else controller.sidebarProps?.onSelectComputer?.();
   }
 
   return (
@@ -387,12 +403,17 @@ export function ModelProviderSettings({ embedded = false }: { embedded?: boolean
         <section className="model-provider-list-section" aria-label={t("resourcesModelProvidersSection")}>
           <div className="model-provider-provider-grid">
             {filteredProviderCards.map((item) => {
-              const itemTone = providerStatusTone(item.status || "unknown", item);
+              const signedOut = item.id === MODEL_PROVIDER_IDS.OpenCSG && !isAuthenticated(authStatus);
+              const itemStatus =
+                signedOut || (item.status === "unknown" && !item.models.length) ? "unconfigured" : item.status;
+              const itemTone = providerStatusTone(itemStatus, item);
+              const itemStatusLabel = signedOut
+                ? t("csghubNotSignedIn")
+                : modelProviderStatusLabel(itemStatus, item, t);
               const active = (!embedded || detailOpen) && item.id === provider.id;
               const itemModelCount = item.models.length;
               const itemMetaParts = [
                 itemModelCount ? t("modelProviderModelCount", { count: itemModelCount }) : t("modelProviderNoModels"),
-                modelProviderMessageLabel(item, t) || (item.status === "connected" ? t("modelProviderConnected") : ""),
               ].filter(Boolean);
               return (
                 <button
@@ -433,13 +454,53 @@ export function ModelProviderSettings({ embedded = false }: { embedded?: boolean
                       {itemMetaParts.join(" · ") || item.kind || item.base_url || t("resourcesModelProvidersSection")}
                     </span>
                   </span>
-                  <span className={`model-provider-provider-status ${itemTone}`} aria-hidden="true">
-                    <span className={`workspace-status-dot ${itemTone}`}></span>
-                  </span>
+                  <span className={`model-provider-card-status ${itemTone}`}>{itemStatusLabel}</span>
                 </button>
               );
             })}
           </div>
+        </section>
+        <section className={directoryStyles.directory} aria-label={t("modelConnectAvailable")}>
+          <h2>{t("modelConnectAvailable")}</h2>
+          <div className={directoryStyles.grid}>
+            {(directory.data?.presets ?? [])
+              .filter(
+                (preset, index, all) =>
+                  all.findIndex((p) => p.brand === preset.brand) === index &&
+                  all.some(
+                    (p) =>
+                      p.brand === preset.brand &&
+                      `${p.brand_name} ${p.name} ${p.aliases.join(" ")}`
+                        .toLowerCase()
+                        .includes(providerSearch.toLowerCase()),
+                  ),
+              )
+              .map((preset) => (
+                <button
+                  type="button"
+                  key={preset.brand}
+                  className={directoryStyles.card}
+                  onClick={() => void controller.sidebarProps?.onCreateModelProvider?.({ preset: preset.id })}
+                >
+                  <img src={preset.avatar} alt="" />
+                  <span>
+                    <strong>{preset.brand_name}</strong>
+                    <small>
+                      {(directory.data?.presets ?? [])
+                        .filter((p) => p.brand === preset.brand)
+                        .map((p) => p.name)
+                        .join(" · ")}
+                    </small>
+                  </span>
+                  <span aria-hidden="true">+</span>
+                </button>
+              ))}
+          </div>
+          {directory.isError ? (
+            <Button variant="secondaryGray" onClick={directory.refetch}>
+              {t("retry")}
+            </Button>
+          ) : null}
         </section>
       </section>
 
@@ -455,6 +516,18 @@ export function ModelProviderSettings({ embedded = false }: { embedded?: boolean
             <div className="model-provider-header-main">
               <DialogTitle>{provider.display_name || provider.id}</DialogTitle>
               <p>{providerSubtitle}</p>
+              {provider.model_source ? (
+                <p>
+                  {t("modelConnectModelSource")}:{" "}
+                  {t(
+                    provider.model_source === "preset"
+                      ? "modelConnectSourcePreset"
+                      : provider.model_source === "manual"
+                        ? "modelConnectSourceManual"
+                        : "modelConnectSourceUpstream",
+                  )}
+                </p>
+              ) : null}
             </div>
             <div className={`model-provider-status-pill ${effectiveTone}`}>
               <span className={`workspace-status-dot ${effectiveTone}`} aria-hidden="true"></span>
@@ -542,6 +615,22 @@ export function ModelProviderSettings({ embedded = false }: { embedded?: boolean
                             placeholder="https://api.openai.com/v1"
                           />
                         </label>
+                        {!provider.builtin ? (
+                          <label className="field">
+                            <span>{t("modelConnectProtocol")}</span>
+                            <Select
+                              value={draft.apiProtocol}
+                              onValueChange={(apiProtocol) => setDraft((current) => ({ ...current, apiProtocol }))}
+                              options={[
+                                { value: "", label: "Auto" },
+                                { value: "responses", label: "OpenAI Responses" },
+                                { value: "chat_completions", label: "OpenAI Chat Completions" },
+                                { value: "anthropic_messages", label: "Anthropic Messages" },
+                              ]}
+                              triggerProps={{ "aria-label": t("modelConnectProtocol") }}
+                            />
+                          </label>
+                        ) : null}
                         <APIKeyField
                           t={t}
                           value={draft.apiKey}
@@ -651,7 +740,10 @@ export function ModelProviderSettings({ embedded = false }: { embedded?: boolean
                   <Button
                     variant="outlineDanger"
                     aria-label={t("agentDelete")}
-                    onClick={removeProvider}
+                    onClick={() => {
+                      setDeleteError("");
+                      setDeleteConfirmOpen(true);
+                    }}
                     disabled={Boolean(busy)}
                   >
                     <Trash2 size={16} aria-hidden="true" />
@@ -720,33 +812,36 @@ export function ModelProviderSettings({ embedded = false }: { embedded?: boolean
       </DialogRoot>
 
       <DialogRoot
-        open={deleteSuccess}
+        open={deleteConfirmOpen}
         onOpenChange={(open) => {
-          if (!open) {
-            dismissDeleteSuccess();
-          }
+          if (busy !== "delete") setDeleteConfirmOpen(open);
         }}
       >
-        <DialogContent
-          className="model-provider-delete-success-dialog"
-          overlayClassName="model-provider-delete-success-backdrop"
-        >
-          <DialogHeader className="model-provider-delete-success-header">
-            <div className="model-provider-delete-success-copy">
-              <DialogTitle>{t("modelProviderDeleteSuccess")}</DialogTitle>
+        <DialogContent className="model-provider-delete-dialog">
+          <DialogHeader>
+            <div>
+              <DialogTitle>{t("modelProviderDeleteTitle")}</DialogTitle>
+              <DialogDescription>
+                {t("modelProviderDeleteConfirm", { name: provider.display_name || provider.id })}
+              </DialogDescription>
             </div>
-            <DialogCloseButton label={t("close")} size="sm" variant="tertiaryGray" />
+            <DialogCloseButton label={t("close")} size="sm" variant="tertiaryGray" disabled={busy === "delete"} />
           </DialogHeader>
-          <div className="model-provider-delete-success-actions">
-            <Button
-              className="model-provider-delete-success-button"
-              variant="primary"
-              size="sm"
-              onClick={dismissDeleteSuccess}
-            >
-              {t("modelProviderDeleteSuccessDismiss")}
+          {deleteError ? (
+            <DialogBody>
+              <p className="form-error" role="alert">
+                {deleteError}
+              </p>
+            </DialogBody>
+          ) : null}
+          <DialogFooter>
+            <Button variant="secondaryGray" onClick={() => setDeleteConfirmOpen(false)} disabled={busy === "delete"}>
+              {t("cancel")}
             </Button>
-          </div>
+            <Button variant="danger" onClick={() => void removeProvider()} loading={busy === "delete"}>
+              {t("agentDelete")}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </DialogRoot>
     </Fragment>

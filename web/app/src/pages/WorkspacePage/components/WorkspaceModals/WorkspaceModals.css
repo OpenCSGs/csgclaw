@@ -1,6 +1,5 @@
 /* Ordered legacy feature styles. Component-library skins are local CSS Modules. */
 @import "./styles/ModalFrame.css";
-@import "./styles/CreateModelProviderModal.css";
 @import "./styles/CreateRoomModal.css";
 @import "./styles/InviteMembersModal.css";
 @import "./styles/ProfileLayout.css";

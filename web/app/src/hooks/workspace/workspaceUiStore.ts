@@ -2,7 +2,12 @@ import { readCollapsedWorkspaceGroups, readSidebarCollapsed } from "@/shared/sto
 import { create } from "zustand";
 import { detectInitialLocale } from "@/shared/i18n";
 import { detectInitialTheme } from "@/shared/theme/theme";
-import { readStoredTurnNotificationMode, writeStoredTurnNotificationMode } from "@/shared/storage/turnNotifications";
+import {
+  readStoredTurnNotificationMode,
+  writeStoredTurnNotificationMode,
+  readStoredTurnNotificationSound,
+  writeStoredTurnNotificationSound,
+} from "@/shared/storage/turnNotifications";
 import { HUB_RESOURCE_TYPE_STORAGE_KEY } from "@/shared/storage/keys";
 import { WorkspacePaneTypes, paneFromLocation, workspaceTabForPane } from "@/models/routing";
 import type { LocaleCode } from "@/models/conversations";
@@ -62,6 +67,7 @@ export type WorkspaceUiState = {
   showToolCalls: boolean;
   theme: ThemeMode;
   turnNotificationMode: TurnNotificationMode;
+  turnNotificationSound: boolean;
   workspaceTab: WorkspaceTab;
   setActiveConversationId: (activeConversationId: string) => void;
   setCollapsedWorkspaceGroups: (value: MaybeUpdater<CollapsedWorkspaceGroups>) => void;
@@ -78,6 +84,7 @@ export type WorkspaceUiState = {
   setShowToolCalls: (value: MaybeUpdater<boolean>) => void;
   setTheme: (theme: ThemeMode) => void;
   setTurnNotificationMode: (mode: TurnNotificationMode) => void;
+  setTurnNotificationSound: (enabled: boolean) => void;
   setWorkspaceTab: (workspaceTab: WorkspaceTab) => void;
 };
 
@@ -87,6 +94,7 @@ export const useWorkspaceUiStore = create<WorkspaceUiState>((set) => ({
   locale: detectInitialLocale(),
   theme: detectInitialTheme(),
   turnNotificationMode: readStoredTurnNotificationMode(),
+  turnNotificationSound: readStoredTurnNotificationSound(),
   showToolCalls: false,
   isSidebarCollapsed: readSidebarCollapsed(),
   collapsedWorkspaceGroups: readCollapsedWorkspaceGroups(),
@@ -106,6 +114,10 @@ export const useWorkspaceUiStore = create<WorkspaceUiState>((set) => ({
   setTurnNotificationMode: (turnNotificationMode) => {
     writeStoredTurnNotificationMode(turnNotificationMode);
     set({ turnNotificationMode });
+  },
+  setTurnNotificationSound: (turnNotificationSound) => {
+    writeStoredTurnNotificationSound(turnNotificationSound);
+    set({ turnNotificationSound });
   },
   setFloatingChatOpen: (value) =>
     set((state) => ({

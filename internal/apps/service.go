@@ -27,13 +27,14 @@ type record struct {
 }
 
 type entry struct {
-	record        record
-	generation    uint64
-	connection    *connection
-	pendingCancel context.CancelFunc
-	recovery      *connectionRecovery
-	recoveryDelay time.Duration
-	connectedAt   time.Time
+	resourceHealth *resourceHealth
+	record         record
+	generation     uint64
+	connection     *connection
+	pendingCancel  context.CancelFunc
+	recovery       *connectionRecovery
+	recoveryDelay  time.Duration
+	connectedAt    time.Time
 }
 
 type gateway struct {
@@ -45,16 +46,17 @@ type gateway struct {
 }
 
 type Service struct {
-	mu            sync.Mutex
-	path          string
-	dataRoot      string
-	ephemeralData bool
-	options       Options
-	packages      map[string]pluginPackage
-	entries       map[string]*entry
-	gateways      map[string]*gateway
-	ctx           context.Context
-	cancel        context.CancelFunc
+	credentialGeneration uint64
+	mu                   sync.Mutex
+	path                 string
+	dataRoot             string
+	ephemeralData        bool
+	options              Options
+	packages             map[string]pluginPackage
+	entries              map[string]*entry
+	gateways             map[string]*gateway
+	ctx                  context.Context
+	cancel               context.CancelFunc
 }
 
 func NewService(statePath string, options Options) (*Service, error) {
@@ -551,6 +553,9 @@ func (s *Service) DeleteAgent(ctx context.Context, agentID string) error {
 }
 
 func (s *Service) Probe(ctx context.Context, agentID string, in ProbeRequest) (ProbeResult, error) {
+	s.mu.Lock()
+	credentialGeneration := s.credentialGeneration
+	s.mu.Unlock()
 	if in.InstallationID != "" {
 		s.mu.Lock()
 		e, err := s.findLocked(agentID, in.InstallationID)
@@ -591,6 +596,11 @@ func (s *Service) Probe(ctx context.Context, agentID string, in ProbeRequest) (P
 		return ProbeResult{}, err
 	}
 	defer conn.close()
+	result.credentialService = s
+	result.credentialGeneration = credentialGeneration
+	if in.Config.AuthMode == "connector" {
+		result.credentialConnectorID = in.Config.ConnectorID
+	}
 	return *result, nil
 }
 
@@ -627,6 +637,10 @@ func (s *Service) RestoreAll(ctx context.Context) error {
 // Connector credentials are copied into HTTP transports, so those transports
 // must never survive a credential rotation or disconnect.
 func (s *Service) InvalidateConnector(connectorID string) {
+	s.invalidateConnector(connectorID, nil)
+}
+
+func (s *Service) invalidateConnector(connectorID string, probe *ProbeResult) {
 	connectorID = strings.TrimSpace(connectorID)
 	if connectorID == "" {
 		return
@@ -637,8 +651,20 @@ func (s *Service) InvalidateConnector(connectorID string) {
 	var connections []detached
 	revisions := map[string]uint64{}
 	s.mu.Lock()
+	previousGeneration := s.credentialGeneration
+	s.credentialGeneration++
+	// Carry forward only the validation for this save, never a result already
+	// invalidated by another rotation. RecordResourceProbe checks later rotations.
+	if probe != nil && probe.Connected && probe.credentialService == s &&
+		probe.credentialGeneration == previousGeneration && probe.credentialConnectorID == connectorID {
+		probe.credentialGeneration = s.credentialGeneration
+	}
 	for id, e := range s.entries {
-		if e.record.AgentID == "" || e.record.Config.AuthMode != "connector" || !strings.EqualFold(strings.TrimSpace(e.record.Config.ConnectorID), connectorID) {
+		if e.record.Config.AuthMode != "connector" || !strings.EqualFold(strings.TrimSpace(e.record.Config.ConnectorID), connectorID) {
+			continue
+		}
+		if e.record.AgentID == "" {
+			e.resourceHealth = nil
 			continue
 		}
 		conn := e.connection
@@ -669,7 +695,13 @@ func (s *Service) InvalidateConnector(connectorID string) {
 // RefreshConnector invalidates cached transports and reconnects every App that
 // was configured to stay connected, across all Agents.
 func (s *Service) RefreshConnector(ctx context.Context, connectorID string) error {
-	s.InvalidateConnector(connectorID)
+	return s.RefreshConnectorAfterProbe(ctx, connectorID, nil)
+}
+
+// RefreshConnectorAfterProbe preserves a matching save-time validation across
+// this credential rotation while retaining invalidation by any other rotation.
+func (s *Service) RefreshConnectorAfterProbe(ctx context.Context, connectorID string, probe *ProbeResult) error {
+	s.invalidateConnector(connectorID, probe)
 	type target struct{ agentID, id string }
 	var targets []target
 	s.mu.Lock()

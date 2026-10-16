@@ -867,3 +867,11 @@ func stubEnsureStateDeps(t *testing.T) func() {
 		EnsureIMBootstrapState = origEnsureIMBootstrapState
 	}
 }
+
+func TestOnboardKeepsProviderServiceTransport(t *testing.T) {
+	cfg := config.Config{Models: config.LLMConfig{Default: "claude-api.model", Providers: map[string]config.ProviderConfig{"claude-api": {Preset: "claude-api", Region: "global", APIProtocol: "anthropic_messages", BaseURL: "https://api.anthropic.com/v1", APIKey: "test-key", Models: []string{"model"}}}}}
+	resolved := effectiveLLMConfig(cfg)
+	if resolved.Providers["claude-api"].APIProtocol != "anthropic_messages" || resolved.Providers["claude-api"].Region != "global" {
+		t.Fatal("onboard discarded service transport")
+	}
+}

@@ -207,6 +207,8 @@ default = "openai.gpt-4.1"
 
 [models.providers.openai]
 display_name = "Team OpenAI"
+region = "global"
+api_protocol = "responses"
 base_url = "https://api.openai.example/v1"
 api_key = "sk-team"
 headers_json = "{\"X-CSG-Trace\":\"dev\",\"X-Org\":\"eng\"}"
@@ -263,6 +265,9 @@ reasoning_effort = "high"
 		t.Fatal("LoadModels() ok = false, want true")
 	}
 	savedProvider := savedModels.Providers["openai"]
+	if savedProvider.Region != "global" || savedProvider.APIProtocol != "responses" || cfg.Model.APIProtocol != "responses" {
+		t.Fatal("provider region or protocol was lost during load/save")
+	}
 	if got, want := savedProvider.DisplayName, "Team OpenAI"; got != want {
 		t.Fatalf("saved DisplayName = %q, want %q", got, want)
 	}

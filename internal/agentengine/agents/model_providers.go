@@ -14,6 +14,7 @@ import (
 	"unicode"
 
 	"csgclaw/internal/config"
+	"csgclaw/internal/modelpreset"
 	"csgclaw/internal/modelprovider"
 )
 
@@ -51,6 +52,11 @@ type ModelProviderCatalog struct {
 }
 
 type ModelProviderSummary struct {
+	ServiceName     string                              `json:"service_name,omitempty"`
+	Region          string                              `json:"region,omitempty"`
+	APIProtocol     string                              `json:"api_protocol,omitempty"`
+	Avatar          string                              `json:"avatar,omitempty"`
+	ModelSource     string                              `json:"model_source,omitempty"`
 	ModelDefaults   map[string]modelcap.Resolved        `json:"model_defaults"`
 	ModelMetadata   map[string]modelcap.Resolved        `json:"model_metadata"`
 	ModelOverrides  map[string]modelcap.Metadata        `json:"model_overrides"`
@@ -76,6 +82,8 @@ type ModelProviderSummary struct {
 }
 
 type ModelProviderCheckResult struct {
+	ModelSource     string                              `json:"model_source,omitempty"`
+	ErrorCode       string                              `json:"error_code,omitempty"`
 	ModelMetadata   map[string]modelcap.Metadata        `json:"model_metadata,omitempty"`
 	VideoMetadata   map[string]modelcap.VideoGeneration `json:"video_metadata,omitempty"`
 	ImageModels     []string                            `json:"image_models"`
@@ -90,11 +98,15 @@ type ModelProviderCheckResult struct {
 }
 
 type ModelProviderCheckInput struct {
-	ID      string
-	BaseURL string
-	APIKey  string
-	Headers map[string]string
-	Models  []string
+	Preset      string
+	Region      string
+	APIProtocol string
+	Verify      bool
+	ID          string
+	BaseURL     string
+	APIKey      string
+	Headers     map[string]string
+	Models      []string
 }
 
 type ModelProviderCheckFunc func(context.Context, ModelProviderCheckInput) ModelProviderCheckResult
@@ -299,6 +311,11 @@ func customProviderSummary(id string, provider config.ProviderConfig) ModelProvi
 		ModelOverrides:  modelcap.Clone(provider.ModelOverrides),
 		DisplayName:     displayName,
 		Preset:          effectiveModelProviderPreset(id, provider),
+		Region:          provider.Region,
+		APIProtocol:     provider.APIProtocol,
+		Avatar:          modelProviderAvatar(provider),
+		ServiceName:     modelProviderServiceName(provider),
+		ModelSource:     provider.ModelSource,
 		Builtin:         false,
 		BaseURL:         provider.BaseURL,
 		APIKeySet:       strings.TrimSpace(provider.APIKey) != "",
@@ -400,6 +417,25 @@ func CheckModelProvider(ctx context.Context, input ModelProviderCheckInput) Mode
 	default:
 		baseURL := strings.TrimRight(strings.TrimSpace(input.BaseURL), "/")
 		apiKey := strings.TrimSpace(input.APIKey)
+		if input.Preset != "" || input.APIProtocol != "" {
+			checked, checkErr := modelprovider.CheckService(ctx, modelprovider.ServiceConnection{BaseURL: baseURL, APIKey: apiKey, Protocol: input.APIProtocol, Preset: input.Preset, Headers: input.Headers, Models: input.Models}, input.Verify)
+			result.ResolvedBaseURL = baseURL
+			result.Models = checked.Models
+			result.ImageModels = checked.ImageModels
+			result.VideoModels = checked.VideoModels
+			result.VisionModels = checked.VisionModels
+			result.ModelMetadata = checked.ModelMetadata
+			result.VideoMetadata = checked.VideoMetadata
+			result.ModelSource = checked.Source
+			if checkErr != nil {
+				result.Message = checkErr.Error()
+				result.ErrorCode = modelprovider.ConnectionErrorCode(checkErr)
+				return result
+			}
+			result.Status = ModelProviderStatusConnected
+			result.Message = "connected"
+			return result
+		}
 		var directory modelprovider.ModelDiscoveryResult
 		directory, err = modelprovider.ListOpenAIModelDirectoryWithClient(ctx, &http.Client{Timeout: 3 * time.Second}, baseURL, apiKey, input.Headers)
 		models, images, videos, visions = directory.Models, directory.ImageModels, directory.VideoModels, directory.VisionModels
@@ -435,11 +471,14 @@ func RefreshModelProviderCatalog(ctx context.Context, llm config.LLMConfig, chec
 		}
 		existing := cfg.Providers[id].Resolved()
 		result := check(ctx, ModelProviderCheckInput{
-			ID:      id,
-			BaseURL: existing.BaseURL,
-			APIKey:  existing.APIKey,
-			Headers: existing.Headers,
-			Models:  existing.Models,
+			ID:          id,
+			Preset:      existing.Preset,
+			Region:      existing.Region,
+			APIProtocol: existing.APIProtocol,
+			BaseURL:     existing.BaseURL,
+			APIKey:      existing.APIKey,
+			Headers:     existing.Headers,
+			Models:      existing.Models,
 		})
 		if result.ID == "" {
 			result.ID = id
@@ -511,6 +550,7 @@ func ClearModelProviderCachedState(llm config.LLMConfig, id string) (config.LLMC
 func providerConfigWithCheckResult(id string, existing config.ProviderConfig, result ModelProviderCheckResult) config.ProviderConfig {
 	out := existing.Resolved()
 	out.Status = providerStatusOrUnknown(result.Status)
+	out.ModelSource = result.ModelSource
 	out.Message = strings.TrimSpace(result.Message)
 	out.LastCheckedAt = strings.TrimSpace(result.LastCheckedAt)
 	if result.Status == ModelProviderStatusConnected {
@@ -544,7 +584,7 @@ func providerConfigWithCheckResult(id string, existing config.ProviderConfig, re
 func providerConfigsEqual(left, right config.ProviderConfig) bool {
 	left = left.Resolved()
 	right = right.Resolved()
-	if !reflect.DeepEqual(left.ModelMetadata, right.ModelMetadata) || !reflect.DeepEqual(left.VideoMetadata, right.VideoMetadata) || !reflect.DeepEqual(left.ModelOverrides, right.ModelOverrides) || left.DisplayName != right.DisplayName ||
+	if left.APIProtocol != right.APIProtocol || left.Region != right.Region || left.ModelSource != right.ModelSource || !reflect.DeepEqual(left.ModelMetadata, right.ModelMetadata) || !reflect.DeepEqual(left.VideoMetadata, right.VideoMetadata) || !reflect.DeepEqual(left.ModelOverrides, right.ModelOverrides) || left.DisplayName != right.DisplayName ||
 		left.BaseURL != right.BaseURL ||
 		left.APIKey != right.APIKey ||
 		left.ReasoningEffort != right.ReasoningEffort ||
@@ -912,4 +952,18 @@ func resolvedProviderMetadata(id string, provider config.ProviderConfig) map[str
 func automaticProviderMetadata(id string, provider config.ProviderConfig) map[string]modelcap.Resolved {
 	provider.ModelOverrides = nil
 	return resolvedProviderMetadata(id, provider)
+}
+
+func modelProviderAvatar(p config.ProviderConfig) string {
+	if preset, ok := modelpreset.Find(p.Preset); ok {
+		return preset.Avatar
+	}
+	return "model-providers/customize.svg"
+}
+
+func modelProviderServiceName(p config.ProviderConfig) string {
+	if preset, ok := modelpreset.Find(p.Preset); ok {
+		return preset.Name
+	}
+	return ""
 }

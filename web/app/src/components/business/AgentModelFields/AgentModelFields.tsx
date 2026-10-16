@@ -8,7 +8,7 @@ import {
 } from "@/models/modelProviders";
 import type { AgentDraft } from "@/models/agents";
 import type { TranslateFn } from "@/models/conversations";
-import { ModelPicker } from "./ModelPicker";
+import { ConnectedModelPicker } from "@/components/business/ConnectedModelPicker";
 
 export type AgentModelFieldsProps = {
   providerOptions: Readonly<ReturnType<typeof modelProviderSelectOptionsFromCatalog>>;
@@ -77,14 +77,16 @@ export function AgentModelFields({
         />
       </Field>
       <Field required label={t("profileModel")}>
-        <ModelPicker
+        <ConnectedModelPicker
+          selectionLabel="model"
+          providers={selectedProvider ? [{ ...selectedProvider, models: [...models] }] : []}
           providerID={providerID}
-          value={modelID}
-          models={models}
-          disabled={!providerID || !models.length}
-          required
-          placeholder={providerID ? t("profileSelectModel") : t("profileProviderSelectFirst")}
-          onChange={(value) => onPatch({ model_id: value })}
+          modelID={modelID}
+          disabled={busy || !selectedProvider || selectedProvider.disabled || !models.length}
+          onChoose={(id, model) => {
+            if (id === MODEL_PROVIDER_IDS.OpenCSG && !onRequireOpenCSGAuth()) return;
+            onPatch({ provider: providerNameForProviderID(id), model_provider_id: id, model_id: model });
+          }}
           t={t}
         />
       </Field>

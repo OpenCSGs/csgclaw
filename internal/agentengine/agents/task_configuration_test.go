@@ -16,7 +16,7 @@ func TestTaskModelSelectionUsesCatalogWithoutMutatingAgent(t *testing.T) {
 	if err := os.WriteFile(state, data, 0600); err != nil {
 		t.Fatal(err)
 	}
-	svc, err := NewControllerWithLLM(config.LLMConfig{Default: "openai.first", Providers: map[string]config.ProviderConfig{"openai": {BaseURL: "https://models.example/v1", APIKey: "test-key", Models: []string{"first", "qwen3.7-plus"}}}}, config.ServerConfig{ListenAddr: "127.0.0.1:18080"}, "manager:test", state)
+	svc, err := NewControllerWithLLM(config.LLMConfig{Default: "openai.first", Providers: map[string]config.ProviderConfig{"openai": {APIProtocol: "chat_completions", BaseURL: "https://models.example/v1", APIKey: "test-key", Models: []string{"first", "qwen3.7-plus"}}}}, config.ServerConfig{ListenAddr: "127.0.0.1:18080"}, "manager:test", state)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -25,7 +25,7 @@ func TestTaskModelSelectionUsesCatalogWithoutMutatingAgent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if resolved.ModelID != "qwen3.7-plus" || resolved.APIKey != "test-key" || resolved.Name != "test" || resolved.ReasoningEffort != "high" || resolved.Env["PROJECT_OPTION"] != "enabled" {
+	if resolved.APIProtocol != "chat_completions" || resolved.ModelID != "qwen3.7-plus" || resolved.APIKey != "test-key" || resolved.Name != "test" || resolved.ReasoningEffort != "high" || resolved.Env["PROJECT_OPTION"] != "enabled" {
 		t.Fatal("task profile was not hydrated")
 	}
 	execution, err := svc.TaskRuntimeProfile("agent-test", "room-one", cfg)

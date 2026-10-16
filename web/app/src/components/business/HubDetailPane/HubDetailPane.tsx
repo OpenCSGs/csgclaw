@@ -1,3 +1,6 @@
+import { templateInGroup, templateSourceLabelKey, type TemplateGroup } from "@/models/templateGroups";
+import { AgentAvatarImage } from "@/components/business/AgentAvatar";
+import { agenticHubCreateAgentURL } from "@/models/agenticHub";
 import { parseMCPServerDocument } from "@/models/mcpServerDocument";
 import { GlobalAppsPanel } from "@/components/business/Apps";
 import { ResourceListCard } from "@/components/business/ResourceListCard";
@@ -48,7 +51,6 @@ import {
 } from "@/models/mcp";
 import type { MCPProbeResult, MCPServerPayload, MCPServerSourceStatus, RemoteMCPServer } from "@/models/mcp";
 import { WorkspaceFilePreview, WorkspaceFileTree } from "@/components/business/WorkspaceFileTree";
-import { localizeTemplateSourceTag } from "@/shared/i18n";
 import { WorkspaceTemplatesIcon } from "@/components/ui/Icons";
 import {
   Button,
@@ -92,7 +94,7 @@ const EMPTY_WORKSPACE_ENTRIES: readonly WorkspaceEntry[] = [];
 type TemplateDetailTabID = "profile" | "instructions" | "memory" | "skills" | "mcp";
 type MCPCreateMode = "manual" | "remote";
 type SkillFilterTabID = "all" | "remote" | "local";
-type TemplateFilterTabID = SkillFilterTabID | "builtin";
+type TemplateFilterTabID = TemplateGroup;
 type KnowledgeFilterTabID = "all" | "available" | "added";
 
 type TemplateSkillSummary = {
@@ -282,16 +284,10 @@ function skillFilterLabel(filter: SkillFilterTabID, t: TranslateFn): string {
 }
 
 function templateFilterLabel(filter: TemplateFilterTabID, t: TranslateFn): string {
-  switch (filter) {
-    case "remote":
-      return t("resourcesSkillRemoteFilter");
-    case "local":
-      return t("resourcesSkillLocalFilter");
-    case "builtin":
-      return t("resourcesTemplateBuiltinFilter");
-    default:
-      return t("resourcesSkillAllFilter");
-  }
+  if (filter === "official") return t("taskEntryOverview_official");
+  if (filter === "mine") return t("taskEntryOverview_personal");
+  if (filter === "public") return t("resourcesPublicTemplates");
+  return t("resourcesSkillAllFilter");
 }
 
 function templateMatchesQuery(template: HubTemplate, query: string): boolean {
@@ -315,22 +311,6 @@ function templateMatchesQuery(template: HubTemplate, query: string): boolean {
       .toLocaleLowerCase()
       .includes(normalizedQuery),
   );
-}
-
-function templateMatchesFilter(template: HubTemplate, filter: TemplateFilterTabID): boolean {
-  if (filter === "all") {
-    return true;
-  }
-  const sourceKind = String(template.source?.kind || "")
-    .trim()
-    .toLocaleLowerCase();
-  if (filter === "local") {
-    return sourceKind === "local";
-  }
-  if (filter === "builtin") {
-    return sourceKind === "builtin";
-  }
-  return sourceKind === "remote";
 }
 
 function mcpMatchesQuery(server: MCPServer, query: string): boolean {
@@ -575,14 +555,14 @@ type HubDetailPaneHub = {
     onClearMCPProbe?: () => void;
     onDeleteMCP?: (item: MCPServer | null | undefined) => Promise<boolean> | boolean;
     onDeleteTemplate?: (item: HubTemplate | null | undefined) => unknown;
+    publishedTemplate?: HubTemplate | null;
+    onDismissPublishedTemplate?: () => void;
     onPublishTemplate?: (
       item: HubTemplate | null | undefined,
-      deploy?: boolean,
       includeMemory?: boolean,
     ) =>
-      | Promise<{ status: "success" } | { status: "partial"; message: string } | null>
-      | { status: "success" }
-      | { status: "partial"; message: string }
+      | Promise<{ status: "success"; template?: HubTemplate } | null>
+      | { status: "success"; template?: HubTemplate }
       | null;
     onSelectMCP?: (name: string | null | undefined) => void;
     onProbeMCP?: (payload: MCPServerPayload) => Promise<MCPProbeResult | null> | MCPProbeResult | null;
@@ -981,6 +961,9 @@ function HubPreviewEmptyIcon() {
 }
 
 export type HubDetailPaneProps = {
+  agenticHubSiteURL?: string;
+  templateUsername?: string;
+  onTemplateLogin?: () => void;
   hub?: HubDetailPaneHub;
   inlineTemplateDetail?: boolean;
   locale?: LocaleCode;
@@ -989,6 +972,9 @@ export type HubDetailPaneProps = {
 };
 
 export function HubDetailPane({
+  agenticHubSiteURL = "",
+  templateUsername = "",
+  onTemplateLogin,
   t = (key) => key,
   locale = "en",
   hub,
@@ -1072,6 +1058,8 @@ export function HubDetailPane({
     onUpdateMCP,
     onUpdateTemplateInstructions,
     deleteBusy = false,
+    publishedTemplate,
+    onDismissPublishedTemplate,
     publishBusy = false,
     publishDisabled = false,
     publishError = "",
@@ -1080,6 +1068,7 @@ export function HubDetailPane({
   const canDeleteTemplate = isDeletableHubTemplate(selectedTemplate);
   const canPublishTemplate = canPublishHubTemplateToCommunity(selectedTemplate);
   const templateReview = hubTemplateReviewState(selectedTemplate);
+
   const activeResourceType = useMemo(() => {
     if (selectedResourceType === "knowledge") {
       return "knowledge";
@@ -1106,7 +1095,12 @@ export function HubDetailPane({
   }, [mcpServers.length, selectedResourceType, skills.length, templates.length]);
   const [deleteSkillDialogOpen, setDeleteSkillDialogOpen] = useState(false);
   const [publishSuccessDialogOpen, setPublishSuccessDialogOpen] = useState(false);
-  const [publishPartialMessage, setPublishPartialMessage] = useState("");
+  const [publishedTemplateID, setPublishedTemplateID] = useState("");
+  const publishSuccessURL = agenticHubCreateAgentURL(agenticHubSiteURL, publishedTemplate?.id || publishedTemplateID);
+  const dismissPublishSuccess = () => {
+    setPublishSuccessDialogOpen(false);
+    onDismissPublishedTemplate?.();
+  };
   const [publishChoiceDialogOpen, setPublishChoiceDialogOpen] = useState(false);
   const [publishTemplateIncludeMemory, setPublishTemplateIncludeMemory] = useState(false);
   const [mcpDeleteDialogOpen, setMCPDeleteDialogOpen] = useState(false);
@@ -1196,7 +1190,7 @@ export function HubDetailPane({
   );
   const templateFilterTabs = useMemo(
     () =>
-      (["all", "remote", "local", "builtin"] as const).map((id) => ({
+      (["all", "official", "mine", "public"] as const).map((id) => ({
         id,
         label: templateFilterLabel(id, t),
       })),
@@ -1213,9 +1207,10 @@ export function HubDetailPane({
   const filteredTemplates = useMemo(
     () =>
       templates.filter(
-        (template) => templateMatchesFilter(template, templateFilter) && templateMatchesQuery(template, templateSearch),
+        (template) =>
+          templateInGroup(template, templateFilter, templateUsername) && templateMatchesQuery(template, templateSearch),
       ),
-    [templateFilter, templateSearch, templates],
+    [templateFilter, templateSearch, templateUsername, templates],
   );
   const filteredMCPServers = useMemo(
     () => mcpServers.filter((server) => mcpMatchesFilter(server, mcpFilter) && mcpMatchesQuery(server, mcpSearch)),
@@ -1436,14 +1431,10 @@ export function HubDetailPane({
     }
   }
 
-  async function handlePublishTemplate(deploy = false) {
-    const result = await onPublishTemplate?.(selectedTemplate, deploy, publishTemplateIncludeMemory);
+  async function handlePublishTemplate() {
+    const result = await onPublishTemplate?.(selectedTemplate, publishTemplateIncludeMemory);
     if (result?.status === "success") {
-      setPublishPartialMessage("");
-      setPublishChoiceDialogOpen(false);
-      setPublishSuccessDialogOpen(true);
-    } else if (result?.status === "partial") {
-      setPublishPartialMessage(result.message);
+      setPublishedTemplateID(String(result.template?.id || ""));
       setPublishChoiceDialogOpen(false);
       setPublishSuccessDialogOpen(true);
     }
@@ -1825,6 +1816,14 @@ export function HubDetailPane({
                   </DismissibleAlert>
                 ) : null}
 
+                {templateFilter === "mine" && !templateUsername ? (
+                  <div className="flex items-center gap-2 text-sm text-[var(--muted)]">
+                    <span>{t("resourcesMyTemplatesLoginHint")}</span>
+                    <Button variant="secondaryGray" size="sm" disabled={!onTemplateLogin} onClick={onTemplateLogin}>
+                      {t("csghubSignIn")}
+                    </Button>
+                  </div>
+                ) : null}
                 {filteredTemplates.length ? (
                   <div className={moduleClassNames("hub-skill-card-grid")}>
                     {filteredTemplates.map((template) => {
@@ -1841,9 +1840,15 @@ export function HubDetailPane({
                           )}
                           onClick={() => openTemplateDetail(template)}
                         >
-                          <ResourceFeaturedIcon>
-                            <WorkspaceTemplatesIcon />
-                          </ResourceFeaturedIcon>
+                          {template.avatar ? (
+                            <span className={moduleClassNames("hub-template-avatar")} aria-hidden="true">
+                              <AgentAvatarImage avatar={template.avatar} />
+                            </span>
+                          ) : (
+                            <ResourceFeaturedIcon>
+                              <WorkspaceTemplatesIcon />
+                            </ResourceFeaturedIcon>
+                          )}
                           <span className={moduleClassNames("hub-skill-card-copy")}>
                             <span className={moduleClassNames("hub-skill-card-title")}>
                               {hubTemplateFullName(template)}
@@ -1856,10 +1861,12 @@ export function HubDetailPane({
                                 : template.description || template.id}
                             </span>
                           </span>
-                          <span className={moduleClassNames("hub-template-source-badge")} aria-hidden="true">
-                            <span className={moduleClassNames("hub-template-source-badge-dot")}></span>
-                            {localizeTemplateSourceTag(template.source?.name, locale)}
-                          </span>
+                          {!(templateFilter === "mine" && !templateUsername) ? (
+                            <span className={moduleClassNames("hub-template-source-badge")} aria-hidden="true">
+                              <span className={moduleClassNames("hub-template-source-badge-dot")}></span>
+                              {t(templateSourceLabelKey(template, templateUsername))}
+                            </span>
+                          ) : null}
                         </button>
                       );
                     })}
@@ -1883,7 +1890,11 @@ export function HubDetailPane({
                     <div className={moduleClassNames("hub-inspector-copy")}>
                       <div className={moduleClassNames("hub-inspector-title-row")}>
                         <span className={moduleClassNames("hub-inspector-title-icon")} aria-hidden="true">
-                          <WorkspaceTemplatesIcon />
+                          {selectedTemplate.avatar ? (
+                            <AgentAvatarImage avatar={selectedTemplate.avatar} />
+                          ) : (
+                            <WorkspaceTemplatesIcon />
+                          )}
                         </span>
                         <h2>{hubTemplateFullName(selectedTemplate)}</h2>
                         <div className={moduleClassNames("hub-inspector-badge-row")}>
@@ -1897,7 +1908,7 @@ export function HubDetailPane({
                           </span>
                           <span className={moduleClassNames("mini-badge template-source-badge")}>
                             <span className={moduleClassNames("template-source-badge-dot")} aria-hidden="true"></span>
-                            {localizeTemplateSourceTag(selectedTemplate.source?.name, locale)}
+                            {t(templateSourceLabelKey(selectedTemplate, templateUsername))}
                           </span>
                         </div>
                       </div>
@@ -2010,7 +2021,7 @@ export function HubDetailPane({
                       <label className={moduleClassNames("field")}>
                         <span>{t("resourcesSourceLabel")}</span>
                         <input
-                          value={localizeTemplateSourceTag(selectedTemplate.source?.name, locale)}
+                          value={t(templateSourceLabelKey(selectedTemplate, templateUsername))}
                           readOnly
                           disabled
                         />
@@ -2806,6 +2817,8 @@ export function HubDetailPane({
           !inlineTemplateDetail &&
           activeResourceType === "template" &&
           templateDetailDialogOpen &&
+          !publishedTemplate &&
+          !publishSuccessDialogOpen &&
           Boolean(selectedTemplate)
         }
         onOpenChange={(open) => {
@@ -2883,7 +2896,7 @@ export function HubDetailPane({
                         <label className={moduleClassNames("field")}>
                           <span>{t("resourcesSourceLabel")}</span>
                           <input
-                            value={localizeTemplateSourceTag(selectedTemplate.source?.name, locale)}
+                            value={t(templateSourceLabelKey(selectedTemplate, templateUsername))}
                             readOnly
                             disabled
                           />
@@ -3410,23 +3423,31 @@ export function HubDetailPane({
           </DialogFooter>
         </DialogContent>
       </DialogRoot>
-      <DialogRoot open={publishSuccessDialogOpen} onOpenChange={setPublishSuccessDialogOpen}>
+      <DialogRoot
+        open={publishSuccessDialogOpen || Boolean(publishedTemplate)}
+        onOpenChange={(open) => {
+          if (!open) dismissPublishSuccess();
+        }}
+      >
         <DialogContent className={moduleClassNames("hub-skill-delete-dialog")}>
           <DialogHeader className={moduleClassNames("hub-skill-delete-dialog-header")}>
             <div className={moduleClassNames("hub-skill-delete-dialog-copy")}>
-              <DialogTitle>
-                {publishPartialMessage
-                  ? t("resourcesPublishCommunityDeployFailedTitle")
-                  : t("resourcesPublishCommunitySuccessTitle")}
-              </DialogTitle>
-              <DialogDescription className={moduleClassNames(publishPartialMessage && "hub-publish-partial-message")}>
-                {publishPartialMessage ? publishPartialMessage : t("resourcesPublishCommunitySuccessMessage")}
-              </DialogDescription>
+              <DialogTitle>{t("resourcesPublishCommunitySuccessTitle")}</DialogTitle>
+              <DialogDescription>{t("resourcesPublishCommunitySuccessMessage")}</DialogDescription>
             </div>
             <DialogCloseButton label={t("close")} size="sm" variant="tertiaryGray" />
           </DialogHeader>
           <DialogFooter className={moduleClassNames("hub-skill-delete-dialog-actions")}>
-            <Button variant="primary" size="sm" onClick={() => setPublishSuccessDialogOpen(false)}>
+            {publishSuccessURL ? (
+              <Button
+                variant="secondaryGray"
+                size="sm"
+                onClick={() => window.open(publishSuccessURL, "_blank", "noopener,noreferrer")}
+              >
+                {t("agentTemplateCreateInHub")}
+              </Button>
+            ) : null}
+            <Button variant="primary" size="sm" onClick={dismissPublishSuccess}>
               {t("resourcesPublishCommunitySuccessDismiss")}
             </Button>
           </DialogFooter>
@@ -3475,24 +3496,14 @@ export function HubDetailPane({
               {t("cancel")}
             </Button>
             <Button
-              variant="secondaryGray"
-              size="md"
-              loading={publishBusy}
-              loadingLabel={t("agentPublishing")}
-              disabled={publishBusy}
-              onClick={() => void handlePublishTemplate(false)}
-            >
-              {t("agentPublishCommunityTemplateOnly")}
-            </Button>
-            <Button
               variant="primary"
               size="md"
               loading={publishBusy}
               loadingLabel={t("agentPublishing")}
               disabled={publishBusy}
-              onClick={() => void handlePublishTemplate(true)}
+              onClick={() => void handlePublishTemplate()}
             >
-              {t("agentPublishCommunityAndDeploy")}
+              {t("agentPublishCommunityTemplateOnly")}
             </Button>
           </DialogFooter>
         </DialogContent>

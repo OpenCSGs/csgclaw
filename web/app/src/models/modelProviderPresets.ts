@@ -1,45 +1,22 @@
-export const MODEL_PROVIDER_PRESETS = {
-  openai: {
-    avatar: "model-providers/openai-api.svg",
-    defaultBaseURL: "https://api.openai.com/v1",
-    defaultDisplayName: "OpenAI API",
-  },
-  zhipu: {
-    avatar: "model-providers/zhipu.svg",
-    defaultBaseURL: "https://open.bigmodel.cn/api/paas/v4",
-    defaultDisplayName: "Zhipu API",
-  },
-  deepseek: {
-    avatar: "model-providers/deepseek.svg",
-    defaultBaseURL: "https://api.deepseek.com/v1",
-    defaultDisplayName: "DeepSeek API",
-  },
-  custom: {
-    avatar: "model-providers/customize.svg",
-    defaultBaseURL: "",
-    defaultDisplayName: "Custom API",
-  },
-} as const;
-
-export type ModelProviderPreset = keyof typeof MODEL_PROVIDER_PRESETS;
-
-export function normalizeModelProviderPreset(value: unknown): ModelProviderPreset {
-  switch (
+export type ModelProviderPreset = string;
+export type ModelAPIProtocol = "responses" | "chat_completions" | "anthropic_messages";
+export type ModelProviderRegion = { id: string; name: string; base_url: string; key_url: string };
+export type ModelServicePreset = {
+  id: string;
+  brand: string;
+  brand_name: string;
+  name: string;
+  avatar: string;
+  aliases: string[];
+  api_protocol: ModelAPIProtocol;
+  docs_url: string;
+  regions: ModelProviderRegion[];
+  models: string[];
+};
+export function normalizeModelProviderPreset(value: unknown): string {
+  return (
     String(value ?? "")
       .trim()
-      .toLowerCase()
-  ) {
-    case "openai":
-      return "openai";
-    case "zhipu":
-      return "zhipu";
-    case "deepseek":
-      return "deepseek";
-    default:
-      return "custom";
-  }
-}
-
-export function modelProviderPresetMeta(value: unknown) {
-  return MODEL_PROVIDER_PRESETS[normalizeModelProviderPreset(value)];
+      .toLowerCase() || "custom"
+  );
 }

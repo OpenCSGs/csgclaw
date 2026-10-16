@@ -193,8 +193,10 @@ func TestAppsServiceBundledCodexLifecycleE2E(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !detached.Disconnected || detached.CredentialsSet["token"] {
-		t.Fatal("disconnect retained authorization")
+	// Disconnect revokes this binding's tools, while the shared Connector keeps
+	// its credentials for other Agents and a later reconnect.
+	if !detached.Disconnected || detached.Status != "disconnected" || len(detached.Tools) != 0 {
+		t.Fatal("disconnected App retained active tools")
 	}
 	if err := rt.Prompt(ctx, handle.RuntimeID, thread, "List the currently available tools."); err != nil {
 		t.Fatal(err)
@@ -202,10 +204,7 @@ func TestAppsServiceBundledCodexLifecycleE2E(t *testing.T) {
 	if upstreamCalls.Load() != 1 {
 		t.Fatal("disconnected App was invoked")
 	}
-	credentials := apps.Credentials{Token: appToken}
-	if _, err := service.Update(ctx, agentID, installation.InstallationID, apps.UpdateRequest{Credentials: &credentials}); err != nil {
-		t.Fatal(err)
-	}
+	// Reconnect reuses the protected credentials on the shared Connector.
 	if _, err := service.Connect(ctx, agentID, installation.InstallationID); err != nil {
 		t.Fatal(err)
 	}

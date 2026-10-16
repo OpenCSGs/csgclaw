@@ -1,4 +1,4 @@
-import { Button, Select } from "@/components/ui";
+import { Button, Select, Switch } from "@/components/ui";
 import { useWorkspaceControllerContext } from "@/hooks/workspace";
 import { classNames } from "@/shared/lib/classNames";
 import {
@@ -30,49 +30,54 @@ export function NotificationsSection() {
 
   return (
     <SettingsRow title={t("notificationSettings")} description={t("settingsNotificationDescription")}>
-      <div className={styles.formGrid}>
-        <label className="field">
-          <span>{t("turnCompletionNotifications")}</span>
-          <Select
-            contentClassName={styles.notificationSelectContent}
-            options={turnNotificationOptions}
-            selectedLabel={selectedTurnNotificationLabel}
-            triggerClassName={styles.notificationSelectTrigger}
-            triggerProps={{ "aria-label": t("turnCompletionNotifications") }}
-            value={turnNotificationMode}
-            onValueChange={(value) => void sidebar.onTurnNotificationModeChange?.(normalizeTurnNotificationMode(value))}
+      <div className={styles.notificationControls}>
+        <Select
+          size="sm"
+          contentClassName={styles.notificationSelectContent}
+          options={turnNotificationOptions}
+          selectedLabel={selectedTurnNotificationLabel}
+          triggerClassName={styles.notificationSelectTrigger}
+          triggerProps={{ "aria-label": t("turnCompletionNotifications") }}
+          value={turnNotificationMode}
+          onValueChange={(value) => void sidebar.onTurnNotificationModeChange?.(normalizeTurnNotificationMode(value))}
+        />
+        <label className={styles.notificationSoundControl} title={t("turnNotificationSoundHint")}>
+          <span>{t("turnNotificationSound")}</span>
+          <Switch
+            aria-label={t("turnNotificationSound")}
+            aria-description={t("turnNotificationSoundHint")}
+            checked={sidebar.turnNotificationSound ?? true}
+            onCheckedChange={(enabled) => sidebar.onTurnNotificationSoundChange?.(enabled)}
           />
         </label>
-        <div className="field">
-          <span>{t("notificationPermission")}</span>
-          <div className={styles.notificationPermissionControls}>
-            <span
-              className={classNames(
-                styles.permissionStatus,
-                turnNotificationPermission === "granted" && styles.permissionGranted,
-                turnNotificationPermission === "denied" && styles.permissionDenied,
-              )}
+        <div className={styles.notificationPermissionControls}>
+          <span
+            role="status"
+            aria-label={`${t("notificationPermission")}: ${t(`notificationPermission${permissionLabelSuffix(turnNotificationPermission)}`)}`}
+            title={
+              turnNotificationPermission === "denied"
+                ? t("notificationPermissionDeniedHint")
+                : t("notificationPermission")
+            }
+            className={classNames(
+              styles.permissionStatus,
+              turnNotificationPermission === "granted" && styles.permissionGranted,
+              turnNotificationPermission === "denied" && styles.permissionDenied,
+            )}
+          >
+            <span aria-hidden="true" />
+            {t(`notificationPermission${permissionLabelSuffix(turnNotificationPermission)}`)}
+          </span>
+          {turnNotificationPermission === "default" ? (
+            <Button
+              variant="secondaryGray"
+              size="sm"
+              onClick={() => void sidebar.onRequestTurnNotificationPermission?.()}
             >
-              <span aria-hidden="true" />
-              {t(`notificationPermission${permissionLabelSuffix(turnNotificationPermission)}`)}
-            </span>
-            {turnNotificationPermission === "default" ? (
-              <Button
-                className={styles.designButton}
-                variant="secondaryGray"
-                size="md"
-                onClick={() => void sidebar.onRequestTurnNotificationPermission?.()}
-              >
-                {t("notificationPermissionEnable")}
-              </Button>
-            ) : null}
-          </div>
+              {t("notificationPermissionEnable")}
+            </Button>
+          ) : null}
         </div>
-        {turnNotificationPermission === "denied" ? (
-          <p className={classNames(styles.notificationPermissionHint, styles.spanAll)}>
-            {t("notificationPermissionDeniedHint")}
-          </p>
-        ) : null}
       </div>
     </SettingsRow>
   );

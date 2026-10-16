@@ -1,13 +1,39 @@
 import {
   authEnvironmentDisplayLabel,
+  agenticHubKnowledgeCreateURL,
   authEnvironmentDraftFromPreset,
   authEnvironmentDraftFromStatus,
   authEnvironmentLoginReady,
   authEnvironmentLoginPayload,
   normalizeAuthEnvironmentDraft,
 } from "@/models/authEnvironment";
+import { emptyAuthStatus } from "@/models/auth";
 
 describe("auth environment model", () => {
+  it.each([
+    ["https://opencsg.com", "https://opencsg.com/agentichub?view=resources&subview=rag"],
+    ["https://opencsg-stg.com", "https://opencsg-stg.com/agentichub?view=resources&subview=rag"],
+    ["https://east.example/site/", "https://east.example/site/agentichub?view=resources&subview=rag"],
+  ])("links knowledge creation to the signed-in site %s", (base, expected) => {
+    expect(agenticHubKnowledgeCreateURL({ ...emptyAuthStatus(), authenticated: true, opencsg_base_url: base })).toBe(
+      expected,
+    );
+  });
+
+  it("uses the selected site before login and production when no valid site is available", () => {
+    expect(agenticHubKnowledgeCreateURL(emptyAuthStatus(), authEnvironmentDraftFromPreset("stage"))).toBe(
+      "https://opencsg-stg.com/agentichub?view=resources&subview=rag",
+    );
+    expect(agenticHubKnowledgeCreateURL(null)).toBe("https://opencsg.com/agentichub?view=resources&subview=rag");
+    expect(
+      agenticHubKnowledgeCreateURL(null, {
+        preset: "custom",
+        opencsgBaseURL: "javascript:alert(1)",
+        csgHubBaseURL: "",
+        aiGatewayBaseURL: "",
+      }),
+    ).toBe("https://opencsg.com/agentichub?view=resources&subview=rag");
+  });
   it("builds the stage login payload", () => {
     expect(authEnvironmentLoginPayload(authEnvironmentDraftFromPreset("stage"))).toEqual({
       opencsg_base_url: "https://opencsg-stg.com",

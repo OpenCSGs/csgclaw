@@ -6,6 +6,7 @@ import (
 )
 
 type RuntimeProfileConfig struct {
+	APIProtocol     string
 	ModelMetadata   modelcap.Resolved
 	AutoCompact     *bool
 	Provider        string

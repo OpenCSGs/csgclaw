@@ -38,8 +38,11 @@ import type {
   FetchAgentsOptions,
 } from "@/api/agents";
 import { patchCsgclawUserRequest } from "@/api/participants";
-import { publishAgentTemplateRequest, type AgentTemplatePublishTarget } from "@/api/hub";
-import { HubTemplateErrorCodes, hubTemplateErrorCode, upsertHubTemplateReviewState } from "@/models/hubWorkspace";
+import {
+  publishAgentTemplateRequest,
+  publishHubTemplateToCommunityRequest,
+  type AgentTemplatePublishTarget,
+} from "@/api/hub";
 import type { HubTemplate } from "@/models/hubWorkspace";
 import { createUserRequest, joinAgentToRoomRequest } from "@/api/im";
 import { fetchSkills } from "@/api/skills";
@@ -59,7 +62,7 @@ import { ACTION_REBUILD_MANAGER } from "@/shared/constants/messages";
 import { selectUnusedAgentAvatar } from "@/shared/avatarOptions";
 import { AGENT_CREATION_WARNINGS_STORAGE_KEY, FEISHU_REGISTRATIONS_STORAGE_KEY } from "@/shared/storage/keys";
 import { localizeAPIError } from "@/shared/i18n";
-import { LAST_CREATED_AGENT_MODEL_STORAGE_KEY } from "@/shared/storage/keys";
+import { agentDraftWithAvailableModels } from "@/models/agentCreationModels";
 import {
   applyTemplateToDraft,
   advanceAgentProgress,
@@ -125,9 +128,7 @@ import {
   modelProviderCatalogWithModels,
   modelProviderConfigUsesOpenCSG,
   modelProviderOptionsFromCatalog,
-  providerNameForProviderID,
 } from "@/models/modelProviders";
-import type { ModelProviderOption } from "@/models/modelProviders";
 import { WorkspacePaneTypes } from "@/models/routing";
 import { useCLIProxyAuthStatuses } from "./useCLIProxyAuthStatuses";
 import { workspaceQueryKeys } from "./workspaceQueries";
@@ -156,11 +157,6 @@ function hasUnavailableSandboxRuntimeChoice(config: RuntimeBootstrapConfig | nul
 }
 
 type AgentCreateMode = "template" | "custom";
-
-type LastCreatedAgentModelPreference = {
-  modelID: string;
-  providerID: string;
-};
 
 type AgentWithProfile = {
   agent: AgentLike;
@@ -421,104 +417,6 @@ function saveFeishuPendingRegistrations(registrations: Record<string, FeishuPend
   }
 }
 
-function loadLastCreatedAgentModelPreference(): LastCreatedAgentModelPreference | null {
-  if (typeof window === "undefined") {
-    return null;
-  }
-  try {
-    const raw = window.localStorage.getItem(LAST_CREATED_AGENT_MODEL_STORAGE_KEY);
-    if (!raw) {
-      return null;
-    }
-    const decoded = JSON.parse(raw);
-    const providerID = String((decoded as { providerID?: unknown })?.providerID || "").trim();
-    const modelID = String((decoded as { modelID?: unknown })?.modelID || "").trim();
-    if (!providerID || !modelID) {
-      return null;
-    }
-    return { providerID, modelID };
-  } catch {
-    return null;
-  }
-}
-
-function saveLastCreatedAgentModelPreference(draft: Partial<AgentDraft> | null | undefined): void {
-  if (typeof window === "undefined") {
-    return;
-  }
-  const providerID = String(draft?.model_provider_id || "").trim();
-  const modelID = String(draft?.model_id || "").trim();
-  if (!providerID || !modelID) {
-    return;
-  }
-  try {
-    window.localStorage.setItem(
-      LAST_CREATED_AGENT_MODEL_STORAGE_KEY,
-      JSON.stringify({
-        providerID,
-        modelID,
-      }),
-    );
-  } catch {
-    // Best-effort only; fallback defaults still work.
-  }
-}
-
-function draftWithModelProviderFallback(draft: AgentDraft, options: readonly ModelProviderOption[]): AgentDraft {
-  const preference = loadLastCreatedAgentModelPreference();
-  if (preference?.providerID && preference?.modelID) {
-    const exactMatch = options.find(
-      (item) => item.providerID === preference.providerID && item.modelID === preference.modelID,
-    );
-    if (exactMatch) {
-      return {
-        ...draft,
-        provider: providerNameForProviderID(preference.providerID),
-        model_provider_id: preference.providerID,
-        model_id: preference.modelID,
-      };
-    }
-    const providerMatch = options.find((item) => item.providerID === preference.providerID && item.modelID);
-    if (providerMatch) {
-      return {
-        ...draft,
-        provider: providerNameForProviderID(preference.providerID),
-        model_provider_id: preference.providerID,
-        model_id: providerMatch.modelID,
-      };
-    }
-  }
-  const providerID = String(draft.model_provider_id || "").trim();
-  const modelID = String(draft.model_id || "").trim();
-  if (providerID && modelID && options.some((item) => item.providerID === providerID && item.modelID === modelID)) {
-    return draft;
-  }
-  let option = options.find((item) => {
-    if (!item.providerID || !item.modelID) {
-      return false;
-    }
-    if (providerID) {
-      return item.providerID === providerID;
-    }
-    if (modelID) {
-      return item.modelID === modelID;
-    }
-    return true;
-  });
-  if (!option) {
-    option = options.find((item) => item.providerID && item.modelID);
-  }
-  if (!option) {
-    return { ...draft, model_id: "" };
-  }
-  return {
-    ...draft,
-    provider: providerNameForProviderID(option.providerID),
-    model_provider_id: option.providerID,
-    model_id: option.modelID,
-  };
-}
-
 export function shouldReturnToAgentOverviewAfterAgentMissing(
   activePane: { type?: string; id?: string | undefined } | null | undefined,
 ) {
@@ -562,6 +460,7 @@ export function useAgentController({
   modelProvidersLoaded = false,
   openCSGAuthGuard,
   onAgentDeleted,
+  onTemplatePublished,
   profileDetailAgentID = "",
   redirectToIncompleteManagerProfile = true,
   refreshMCPServers = async () => null,
@@ -582,7 +481,6 @@ export function useAgentController({
   setAgentsData,
   setBootstrapData,
   setManagerProfileData,
-  setHubPublishError = () => undefined,
   setSelectedHubTemplateId,
   t,
 }: UseAgentControllerArgs) {
@@ -625,6 +523,7 @@ export function useAgentController({
   const [agentPageSavedDraft, setAgentPageSavedDraft] = useState<AgentDraft | null>(null);
   const [agentPageBusy, setAgentPageBusy] = useState(false);
   const [agentPagePublishBusy, setAgentPagePublishBusy] = useState(false);
+  const pendingTemplatePublications = useRef(new Map<string, string>());
   const [agentPagePublishError, setAgentPagePublishError] = useState("");
   const [agentPageError, setAgentPageError] = useState("");
   const [agentPageBillingURL, setAgentPageBillingURL] = useState("");
@@ -1597,11 +1496,9 @@ export function useAgentController({
     ]);
     const effectiveBootstrapConfig = refreshedBootstrapConfig || bootstrapConfig;
     const effectiveHubTemplates = refreshedHubTemplates.length ? refreshedHubTemplates : hubTemplates;
-    const createModelOptions = modelProviderOptionsFromCatalog(
-      modelProviderCatalogForAgentAvailability(refreshedModelProviders, {
-        codexAvailable: effectiveBootstrapConfig?.manager_runtime?.installed !== false,
-      }),
-    );
+    const createModelCatalog = modelProviderCatalogForAgentAvailability(refreshedModelProviders, {
+      codexAvailable: effectiveBootstrapConfig?.manager_runtime?.installed !== false,
+    });
     setAgentModalBootstrapConfig(effectiveBootstrapConfig);
     const createWorkerTemplates = createAgentSelectableTemplates(effectiveHubTemplates);
     const preferredRuntimeKind = "codex";
@@ -1629,7 +1526,7 @@ export function useAgentController({
         agent_profile: defaults,
       });
       draft = applyTemplateToDraft(draft, selectedTemplate, effectiveBootstrapConfig, managerAgent?.image || "");
-      draft = draftWithModelProviderFallback(draft, createModelOptions);
+      draft = agentDraftWithAvailableModels(draft, createModelCatalog, openCSGAuthenticated);
       setAgentDraft(draft);
       setShowAgentModal(true);
     } catch (_) {
@@ -1651,7 +1548,7 @@ export function useAgentController({
         agent_profile: managerProfile,
       });
       draft = applyTemplateToDraft(draft, selectedTemplate, effectiveBootstrapConfig, managerAgent?.image || "");
-      draft = draftWithModelProviderFallback(draft, createModelOptions);
+      draft = agentDraftWithAvailableModels(draft, createModelCatalog, openCSGAuthenticated);
       setAgentDraft(draft);
       setShowAgentModal(true);
     }
@@ -2023,16 +1920,45 @@ export function useAgentController({
     if (target !== "local" && !canPublishCommunityTemplateRuntime(agentRuntimeKind(selectedAgentForPage))) {
       return false;
     }
+    const publicationKey = JSON.stringify([selectedAgentForPage.id, name]);
+    const pendingPublication =
+      target === "official" ? pendingTemplatePublications.current.get(publicationKey) : undefined;
+    let localTemplateID = pendingPublication;
     setAgentPagePublishBusy(true);
     try {
-      const published = await publishAgentTemplateRequest(
-        selectedAgentForPage.id,
-        target,
-        name,
-        description,
-        includeMemory,
-        displayName,
-      );
+      let published: HubTemplate;
+      if (target === "local") {
+        published = await publishAgentTemplateRequest(
+          selectedAgentForPage.id,
+          "local",
+          name,
+          description,
+          includeMemory,
+          displayName,
+          resolveAgentAvatarSource(selectedAgentForPage, usersById) ||
+            String(agents.find((item) => item.id === selectedAgentForPage.id)?.avatar || ""),
+        );
+      } else {
+        // Always refresh the snapshot: workspace files can change independently of the form.
+        const local = await publishAgentTemplateRequest(
+          selectedAgentForPage.id,
+          "local",
+          name,
+          description,
+          includeMemory,
+          displayName,
+          resolveAgentAvatarSource(selectedAgentForPage, usersById) ||
+            String(agents.find((item) => item.id === selectedAgentForPage.id)?.avatar || ""),
+          localTemplateID || "",
+        );
+        localTemplateID = String(local.id || "").trim();
+        if (!localTemplateID) throw new Error("Local template response is missing its ID");
+        pendingTemplatePublications.current.set(publicationKey, localTemplateID);
+        published = await publishHubTemplateToCommunityRequest(localTemplateID, includeMemory);
+        onTemplatePublished?.(published);
+        pendingTemplatePublications.current.delete(publicationKey);
+        localTemplateID = undefined;
+      }
       await refreshHubTemplates();
       if (published?.id) {
         setSelectedHubTemplateId(published.id);
@@ -2042,35 +1968,14 @@ export function useAgentController({
       }
       return true;
     } catch (err) {
-      if (target !== "local" && handleOpenCSGAuthenticationError(err)) {
+      if (localTemplateID) {
+        await refreshHubTemplates().catch(() => undefined);
+      }
+      if (target !== "local" && handleOpenCSGAuthenticationError(err) && !localTemplateID) {
         return false;
       }
-      const errorCode = hubTemplateErrorCode(err);
-      const deploySensitiveCheckFailed = errorCode === HubTemplateErrorCodes.reviewFailed;
-      const deployReviewPending = errorCode === HubTemplateErrorCodes.reviewPending;
-      const publishedTemplateID = String((err as ApiError | null)?.publishedTemplateId ?? "").trim();
-      const message = errorMessage(err, t("agentActionFailed"));
-      if (target === "official_deploy" && publishedTemplateID) {
-        await refreshHubTemplates();
-        if (deploySensitiveCheckFailed || deployReviewPending) {
-          queryClient.setQueryData<HubTemplate[]>(workspaceQueryKeys.hubTemplates(), (templates) =>
-            upsertHubTemplateReviewState(
-              templates,
-              publishedTemplateID,
-              deployReviewPending ? "Pending" : "Fail",
-              deployReviewPending ? "" : message,
-              agentRuntimeKind(selectedAgentForPage),
-            ),
-          );
-        }
-        // Publishing succeeded, but deployment did not. Keep the upstream
-        // result visible after navigating to the newly published template,
-        // including the common case where review is still pending.
-        setHubPublishError(message);
-        setSelectedHubTemplateId(publishedTemplateID);
-        navigatePane({ type: WorkspacePaneTypes.hub, id: publishedTemplateID, resourceType: "template" }, rooms);
-        return true;
-      }
+      const reason = errorMessage(err, t("agentActionFailed"));
+      const message = localTemplateID ? t("agentTemplateSavedPublishFailed", { reason }) : reason;
       setAgentPagePublishError(message);
       setAgentPageSaveError(message);
       return false;
@@ -2233,7 +2138,6 @@ export function useAgentController({
         await queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.agentMCPServers(editingAgentID) });
       }
       if (isCreate) {
-        saveLastCreatedAgentModelPreference(agentDraft);
         const skippedResources = Array.isArray(saved.skipped_resources) ? saved.skipped_resources : [];
         if (saved.id && skippedResources.length > 0) {
           const resourceLines = skippedResources.map((resource) =>
@@ -2417,6 +2321,9 @@ export function useAgentController({
             ...current,
             [agentID]: nextPending,
           }));
+          // Registration progress can lag behind a binding completed in another window.
+          // Keep the channel view synchronized without discarding an active reconnect.
+          await refreshAgentStateRef.current(agentID);
           if (options.showPendingNotice) {
             showAgentPageNotice(t("feishuConnectPending"), "warning", 5000, agentID);
           }
@@ -2453,6 +2360,9 @@ export function useAgentController({
             return next;
           });
         }
+        // The server may have saved the binding before the response was lost,
+        // or another client may already have consumed the registration.
+        await refreshAgentStateRef.current(agentID);
         if (!background) {
           setAgentPageSaveError(errorMessage(err, t("feishuConnectFailed")));
         }
@@ -3078,6 +2988,9 @@ export function useAgentController({
         }
       },
       onPublish: publishAgentPage,
+      onPublishLogin: () => {
+        requireOpenCSGAuthentication();
+      },
       onProviderLogin: loginCLIProxyProvider,
       onRequireOpenCSGAuth: requireOpenCSGAuthentication,
       onStart: (item: AgentLike | null | undefined) => runAgentAction(item, "start"),

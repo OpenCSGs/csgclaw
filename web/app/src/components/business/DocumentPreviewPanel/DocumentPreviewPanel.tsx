@@ -374,7 +374,7 @@ export function DocumentPreviewPanel({
               size="sm"
               variant="tertiaryGray"
               aria-label={t("attachmentPreviewFit")}
-              onClick={() => setScale(0.85)}
+              onClick={() => setScale(1)}
             >
               <Expand aria-hidden="true" size={15} />
             </Button>

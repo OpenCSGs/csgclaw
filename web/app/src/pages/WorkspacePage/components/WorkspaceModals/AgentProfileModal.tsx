@@ -1,4 +1,4 @@
-import { AgentModelFields } from "@/components/business/AgentModelFields";
+import { AgentModelConfiguration } from "@/components/business/AgentModelConfiguration";
 import { BOT_TYPE_NORMAL, DEFAULT_RUNTIME_KIND } from "@/shared/constants/agents";
 import { useEffect, useMemo, useRef, useState, type SetStateAction } from "react";
 import {
@@ -9,7 +9,6 @@ import {
   isBlank,
   MCPServersPanel,
   NotifierControls,
-  ReasoningControls,
   requiredFieldLabel,
   RuntimeOptionsFields,
 } from "@/components/business/ProfileControls";
@@ -692,37 +691,17 @@ export function AgentProfileModal({
                 </div>
                 <div className="agent-section-form">
                   <div className="agent-section-form-content agent-model-form-content">
-                    <div className="profile-runtime-grid agent-model-config-grid">
-                      <AgentModelFields
-                        providerOptions={providerOptions}
-                        providerID={selectedProviderID}
-                        modelID={selectedModelValue}
-                        models={selectedProviderModels}
-                        busy={agentModelBusy}
-                        onPatch={(patch) => onAgentDraftChange({ ...agentDraft, ...patch })}
-                        onRequireOpenCSGAuth={onRequireOpenCSGAuth}
-                        t={t}
-                      />
-                      <ReasoningControls
-                        value={agentDraft.reasoning_effort}
-                        onChange={(value) => onAgentDraftChange({ ...agentDraft, reasoning_effort: value })}
-                        t={t}
-                      />
-                      <div className="field agent-fast-mode-field">
-                        <span>{t("profileFastMode")}</span>
-                        <label className="selection-item compact-toggle-row agent-fast-mode-toggle">
-                          <input
-                            type="checkbox"
-                            checked={agentDraft.enable_fast_mode}
-                            aria-label={t("profileFastMode")}
-                            onChange={() =>
-                              onAgentDraftChange({ ...agentDraft, enable_fast_mode: !agentDraft.enable_fast_mode })
-                            }
-                          />
-                          <small className="agent-fast-mode-help">{t("profileFastModeHelp")}</small>
-                        </label>
-                      </div>
-                    </div>
+                    <AgentModelConfiguration
+                      draft={agentDraft}
+                      providerOptions={providerOptions}
+                      providerID={selectedProviderID}
+                      modelID={selectedModelValue}
+                      models={selectedProviderModels}
+                      busy={agentModelBusy || agentBusy}
+                      onPatch={(patch) => onAgentDraftChange({ ...agentDraft, ...patch })}
+                      onRequireOpenCSGAuth={onRequireOpenCSGAuth}
+                      t={t}
+                    />
                   </div>
                 </div>
               </section>

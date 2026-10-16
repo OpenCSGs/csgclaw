@@ -6,6 +6,7 @@ import type { DesktopBridge } from "@/shared/platform/desktopBridge";
 
 type NotificationRecord = {
   body: string;
+  silent: boolean;
   close: ReturnType<typeof vi.fn>;
   notification: FakeNotification;
   tag: string;
@@ -25,6 +26,7 @@ class FakeNotification {
   constructor(title: string, options: NotificationOptions = {}) {
     notificationRecords.push({
       body: options.body ?? "",
+      silent: options.silent ?? false,
       close: this.closeMock,
       notification: this,
       tag: options.tag ?? "",
@@ -78,7 +80,7 @@ function workEvent(overrides: Partial<NonNullable<IMServerEvent["work"]>> = {}):
 
 function renderNotifications(
   mode: TurnNotificationMode = TurnNotificationModes.whenUnfocused,
-  options: { isDirect?: boolean; roomTitle?: string } = {},
+  options: { isDirect?: boolean; roomTitle?: string; soundEnabled?: boolean } = {},
 ) {
   const onSelectConversation = vi.fn();
   const users = [
@@ -90,6 +92,7 @@ function renderNotifications(
       agents: [{ id: "agent-worker", name: "Research Agent", user_id: "user-worker" }],
       currentUserID: "user-admin",
       mode,
+      soundEnabled: options.soundEnabled,
       onSelectConversation,
       rooms: [
         {
@@ -101,6 +104,7 @@ function renderNotifications(
               content: "The report is ready.",
               id: "reply-1",
               sender_id: "user-worker",
+              metadata: { codex: { delivery_kind: "final", request_id: "message-1" } },
             },
           ],
           title: options.roomTitle ?? "Research room",
@@ -121,6 +125,8 @@ function desktopBridge(showWindow: DesktopBridge["showWindow"]): DesktopBridge {
     installDownloadedUpdate: vi.fn(),
     restartSidecar: vi.fn(),
     showWindow,
+    showTurnNotification: vi.fn().mockResolvedValue(undefined),
+    onTurnNotificationClick: vi.fn(() => vi.fn()),
     setUpdateChannel: vi.fn(),
     setThemeSource: vi.fn(),
     onUpdateStatus: vi.fn(),
@@ -160,7 +166,7 @@ describe("useAgentTurnNotifications", () => {
     expect(notificationRecords).toHaveLength(1);
     expect(notificationRecords[0]).toMatchObject({
       body: "Research room: The report is ready.",
-      tag: buildTurnNotificationTag("turn:message-1"),
+      tag: buildTurnNotificationTag(JSON.stringify(["room-1", "agent-worker", "turn:message-1"])),
       title: "Research Agent finished replying",
     });
 
@@ -173,46 +179,75 @@ describe("useAgentTurnNotifications", () => {
     expect(onSelectConversation).toHaveBeenCalledWith("room-1");
   });
 
-  it("shows and focuses the desktop window before selecting the room", async () => {
-    let finishShowingWindow: (() => void) | undefined;
-    const showWindow = vi.fn(
-      () =>
-        new Promise<void>((resolve) => {
-          finishShowingWindow = resolve;
-        }),
-    );
-    window.csgclawDesktop = desktopBridge(showWindow);
-    const { result, onSelectConversation } = renderNotifications();
-
+  it("uses the native desktop notification and selects its room on click", async () => {
+    const bridge = desktopBridge(vi.fn());
+    window.csgclawDesktop = bridge;
+    const { result, onSelectConversation } = renderNotifications(TurnNotificationModes.always);
     act(() => result.current.handleRealtimeEvent(workEvent({ reason: "released", revision: 2, state: "idle" })));
-
-    let click: Promise<unknown> | undefined;
-    act(() => {
-      click = notificationRecords[0]?.notification.onclick?.call(
-        notificationRecords[0].notification as unknown as Notification,
-        new Event("click"),
-      ) as Promise<unknown> | undefined;
-    });
-
-    expect(showWindow).toHaveBeenCalledTimes(1);
-    expect(window.focus).not.toHaveBeenCalled();
-    expect(onSelectConversation).not.toHaveBeenCalled();
-
-    finishShowingWindow?.();
-    await act(async () => {
-      await click;
-    });
-
+    expect(bridge.showTurnNotification).toHaveBeenCalledWith(
+      expect.objectContaining({
+        body: "Research room: The report is ready.",
+        roomID: "room-1",
+        title: "Research Agent finished replying",
+      }),
+    );
+    expect(notificationRecords).toHaveLength(0);
+    const listener = vi.mocked(bridge.onTurnNotificationClick).mock.calls[0]?.[0];
+    act(() => listener?.("room-1"));
     expect(onSelectConversation).toHaveBeenCalledWith("room-1");
   });
 
-  it("uses a visible reply as a fallback for agents without work lease events", () => {
+  it.each([true, false])("always notifies the focused desktop and respects sound=%s", (soundEnabled) => {
+    vi.mocked(document.hasFocus).mockReturnValue(true);
+    const bridge = desktopBridge(vi.fn());
+    window.csgclawDesktop = bridge;
+    const { result } = renderNotifications(TurnNotificationModes.always, { soundEnabled });
+    act(() => result.current.handleRealtimeEvent(workEvent({ reason: "released", state: "idle" })));
+    expect(bridge.showTurnNotification).toHaveBeenCalledWith(
+      expect.objectContaining({
+        silent: !soundEnabled,
+        title: "Research Agent finished replying",
+        body: "Research room: The report is ready.",
+      }),
+    );
+  });
+
+  it("keeps browser notification banners when sounds are disabled", () => {
+    const { result } = renderNotifications(TurnNotificationModes.always, { soundEnabled: false });
+    act(() => result.current.handleRealtimeEvent(workEvent({ reason: "released", state: "idle" })));
+    expect(notificationRecords).toHaveLength(1);
+    expect(notificationRecords[0]?.silent).toBe(true);
+  });
+
+  it("uses the shared notification permission API on desktop", async () => {
+    FakeNotification.permission = "denied";
+    const bridge = desktopBridge(vi.fn());
+    window.csgclawDesktop = bridge;
+    const { result } = renderNotifications(TurnNotificationModes.always);
+    expect(result.current.permission).toBe("denied");
+    act(() => result.current.handleRealtimeEvent(workEvent({ reason: "released", state: "idle" })));
+    expect(bridge.showTurnNotification).not.toHaveBeenCalled();
+    FakeNotification.requestPermission.mockImplementationOnce(async () => {
+      FakeNotification.permission = "granted";
+      return "granted";
+    });
+    await act(async () => {
+      await expect(result.current.requestPermission()).resolves.toBe("granted");
+    });
+    act(() => result.current.handleRealtimeEvent(workEvent({ reason: "released", state: "idle" })));
+    expect(bridge.showTurnNotification).toHaveBeenCalledOnce();
+    expect(result.current.permission).toBe("granted");
+    expect(FakeNotification.requestPermission).toHaveBeenCalledOnce();
+  });
+
+  it("uses an explicit final reply for agents without work lease events", () => {
     const { result } = renderNotifications(TurnNotificationModes.always);
 
     act(() =>
       result.current.handleRealtimeEvent({
         message: {
           content: "Fallback reply",
+          metadata: { codex: { delivery_kind: "final" } },
           id: "reply-2",
           sender_id: "user-worker",
         },
@@ -225,7 +260,7 @@ describe("useAgentTurnNotifications", () => {
     expect(notificationRecords[0]?.body).toBe("Research room: Fallback reply");
   });
 
-  it("uses the friendly runtime error in desktop notifications", () => {
+  it("does not describe a runtime failure as a completed reply", () => {
     const { result } = renderNotifications(TurnNotificationModes.always);
 
     act(() =>
@@ -241,11 +276,7 @@ describe("useAgentTurnNotifications", () => {
       }),
     );
 
-    expect(notificationRecords).toHaveLength(1);
-    expect(notificationRecords[0]?.body).toBe(
-      "Research room: The model service is temporarily unavailable. Try again later.",
-    );
-    expect(notificationRecords[0]?.body).not.toMatch(/Unknown error|127\.0\.0\.1/);
+    expect(notificationRecords).toHaveLength(0);
   });
 
   it("keeps the visible final reply fallback after observing work and deduplicates the release", () => {
@@ -271,7 +302,7 @@ describe("useAgentTurnNotifications", () => {
     expect(notificationRecords).toHaveLength(1);
     expect(notificationRecords[0]).toMatchObject({
       body: "Research room: Fallback after reconnect",
-      tag: buildTurnNotificationTag("turn:message-1"),
+      tag: buildTurnNotificationTag(JSON.stringify(["room-1", "agent-worker", "turn:message-1"])),
     });
   });
 
@@ -288,8 +319,11 @@ describe("useAgentTurnNotifications", () => {
     act(() => result.current.handleRealtimeEvent(released));
 
     expect(notificationRecords).toHaveLength(1);
-    expect(notificationRecords[0]?.tag).toBe(buildTurnNotificationTag(`turn:${scheduledRequestID}`));
+    expect(notificationRecords[0]?.tag).toBe(
+      buildTurnNotificationTag(JSON.stringify(["room-1", "agent-worker", `turn:${scheduledRequestID}`])),
+    );
     expect(notificationRecords[0]?.tag).toHaveLength(24);
+    expect(notificationRecords[0]?.body).toBe("Room: Research room");
 
     act(() => {
       notificationRecords[0]?.notification.onerror?.call(
@@ -309,6 +343,81 @@ describe("useAgentTurnNotifications", () => {
     act(() => result.current.handleRealtimeEvent(workEvent()));
     act(() => result.current.handleRealtimeEvent(workEvent({ reason: "released", revision: 2, state: "idle" })));
 
+    expect(notificationRecords).toHaveLength(0);
+  });
+
+  it("ignores the initial zero-width progress message and notifies on its final update", () => {
+    const { result } = renderNotifications(TurnNotificationModes.always);
+    const message = (status: string, content: string): IMServerEvent => ({
+      type: "message.created",
+      room_id: "room-1",
+      message: {
+        id: "same-message",
+        sender_id: "user-worker",
+        content,
+        metadata: {
+          codex: { request_id: "message-1", delivery_kind: status === "succeeded" ? "final" : "activity" },
+          csgclaw: {
+            turn_progress: {
+              id: "turn-1",
+              revision: status === "running" ? 1 : 2,
+              status,
+              started_at: "2026-10-15T00:00:00Z",
+              items: [],
+            },
+          },
+        },
+      },
+    });
+    act(() => result.current.handleRealtimeEvent(message("running", "\u200b")));
+    act(() => result.current.handleRealtimeEvent(message("waiting", "Still working")));
+    expect(notificationRecords).toHaveLength(0);
+    act(() => result.current.handleRealtimeEvent(message("succeeded", "Current final reply")));
+    act(() => result.current.handleRealtimeEvent(workEvent({ reason: "released", state: "idle" })));
+    expect(notificationRecords).toHaveLength(1);
+    expect(notificationRecords[0]?.body).toBe("Research room: Current final reply");
+  });
+
+  it.each(["thought", "activity", "task_reported", "turn_stopped", undefined])(
+    "does not label %s messages as completed turns",
+    (deliveryKind) => {
+      const { result } = renderNotifications(TurnNotificationModes.always);
+      act(() =>
+        result.current.handleRealtimeEvent({
+          type: "message.created",
+          room_id: "room-1",
+          message: {
+            id: "nonfinal",
+            sender_id: "user-worker",
+            content: "Agent-authored notification or intermediate output",
+            metadata: { codex: { delivery_kind: deliveryKind } },
+          },
+        }),
+      );
+      expect(notificationRecords).toHaveLength(0);
+    },
+  );
+
+  it.each(["failed", "cancelled"])("does not notify completion after a %s turn is released", (status) => {
+    const { result } = renderNotifications(TurnNotificationModes.always);
+    act(() =>
+      result.current.handleRealtimeEvent({
+        type: "message.created",
+        room_id: "room-1",
+        message: {
+          id: "nonfinal",
+          sender_id: "user-worker",
+          content: "\u200b",
+          metadata: {
+            codex: { request_id: "message-1", delivery_kind: "activity" },
+            csgclaw: {
+              turn_progress: { id: "turn-1", revision: 2, status, started_at: "2026-10-15T00:00:00Z", items: [] },
+            },
+          },
+        },
+      }),
+    );
+    act(() => result.current.handleRealtimeEvent(workEvent({ reason: "released", state: "idle" })));
     expect(notificationRecords).toHaveLength(0);
   });
 

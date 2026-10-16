@@ -134,6 +134,11 @@ func (s *Service) viewLocked(e *entry) Installation {
 	item.ResourceEnabled = e.record.Enabled
 	item.Status = "not_connected"
 	item.LastError, item.LastErrorCode, item.LastErrorHTTPStatus = "", "", 0
+	if health := e.resourceHealth; health != nil && health.version.Equal(e.record.UpdatedAt) {
+		item.Status = health.status.Status
+		item.LastError, item.LastErrorCode, item.LastErrorHTTPStatus = health.status.LastError, health.status.LastErrorCode, health.status.LastErrorHTTPStatus
+		item.Tools = copyJSON(health.tools)
+	}
 	if item.Config.CredentialSource == "feishu_channel" {
 		item.Status = "needs_configuration"
 	}
@@ -141,7 +146,6 @@ func (s *Service) viewLocked(e *entry) Installation {
 		item.Status = "disabled"
 	}
 	item.Bindings = []BindingSummary{}
-	var statusUpdatedAt time.Time
 	for _, bound := range s.entries {
 		if bound.record.ResourceID != e.record.InstallationID {
 			continue
@@ -150,38 +154,10 @@ func (s *Service) viewLocked(e *entry) Installation {
 		if !bound.record.active() {
 			b.Status = "disabled"
 		}
-		// A failing binding must remain visible even if another Agent is healthy.
-		priority := resourceConnectionStatusPriority(b.Status)
-		currentPriority := resourceConnectionStatusPriority(item.Status)
-		if item.Enabled && bound.record.active() && priority > 0 &&
-			(priority > currentPriority || (priority == currentPriority && b.UpdatedAt.After(statusUpdatedAt))) {
-			item.Status = b.Status
-			item.LastError, item.LastErrorCode, item.LastErrorHTTPStatus = b.LastError, b.LastErrorCode, b.LastErrorHTTPStatus
-			statusUpdatedAt = b.UpdatedAt
-		}
-		// Reuse an active binding's discovered catalog for resource settings.
-		if len(item.Tools) == 0 && bound.record.active() && b.Status == "connected" {
-			item.Tools = b.Tools
-		}
 		item.Bindings = append(item.Bindings, BindingSummary{InstallationID: b.InstallationID, AgentID: b.AgentID, Enabled: b.Enabled, Status: b.Status, ToolCount: len(b.Tools)})
 	}
 	sort.Slice(item.Bindings, func(i, j int) bool { return item.Bindings[i].AgentID < item.Bindings[j].AgentID })
 	return item
-}
-
-func resourceConnectionStatusPriority(status string) int {
-	switch status {
-	case "authorization_required":
-		return 4
-	case "error":
-		return 3
-	case "connecting":
-		return 2
-	case "connected":
-		return 1
-	default:
-		return 0
-	}
 }
 
 func (s *Service) Bind(ctx context.Context, agentID string, in BindRequest) (Installation, error) {
@@ -364,15 +340,19 @@ func (s *Service) deleteResource(ctx context.Context, id string) error {
 // ProbeResourceUpdate validates the exact merged draft without exposing saved secrets.
 // UpdateResourceAt rejects concurrent changes so untested credentials cannot be saved.
 func (s *Service) ProbeResourceUpdate(ctx context.Context, id string, expected time.Time, in UpdateRequest) error {
+	_, err := s.ProbeResourceUpdateResult(ctx, id, expected, in)
+	return err
+}
+func (s *Service) ProbeResourceUpdateResult(ctx context.Context, id string, expected time.Time, in UpdateRequest) (ProbeResult, error) {
 	s.mu.Lock()
 	e, err := s.findLocked("", id)
 	if err != nil {
 		s.mu.Unlock()
-		return err
+		return ProbeResult{}, err
 	}
 	if !e.record.UpdatedAt.Equal(expected) {
 		s.mu.Unlock()
-		return ErrChanged
+		return ProbeResult{}, ErrChanged
 	}
 	r := copyJSON(e.record)
 	s.mu.Unlock()
@@ -387,8 +367,7 @@ func (s *Service) ProbeResourceUpdate(ctx context.Context, id string, expected t
 	if in.Credentials != nil {
 		r.Credentials = mergeCredentials(r.Credentials, *in.Credentials)
 	}
-	_, err = s.Probe(ctx, "", ProbeRequest{AppID: r.AppID, Config: r.Config, Credentials: r.Credentials})
-	return err
+	return s.Probe(ctx, "", ProbeRequest{AppID: r.AppID, Config: r.Config, Credentials: r.Credentials})
 }
 func (s *Service) UpdateResourceAt(ctx context.Context, id string, in UpdateRequest, expected time.Time) (Installation, error) {
 	return s.updateResource(ctx, id, in, expected)

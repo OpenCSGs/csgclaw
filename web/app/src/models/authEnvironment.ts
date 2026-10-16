@@ -50,6 +50,19 @@ export function defaultAuthEnvironmentDraft(): AuthEnvironmentDraft {
   return authEnvironmentDraftFromPreset(DEFAULT_PRESET.id);
 }
 
+export function agenticHubKnowledgeCreateURL(
+  status: AuthStatus | null | undefined,
+  fallback: AuthEnvironmentDraft = defaultAuthEnvironmentDraft(),
+): string {
+  const environment = authEnvironmentDraftFromStatus(status, fallback);
+  const base = authEnvironmentLoginReady(environment) ? environment.opencsgBaseURL : DEFAULT_PRESET.opencsgBaseURL;
+  const url = new URL(base);
+  url.pathname = `${url.pathname.replace(/\/+$/, "")}/agentichub`;
+  url.search = "view=resources&subview=rag";
+  url.hash = "";
+  return url.toString();
+}
+
 export function authEnvironmentDraftFromPreset(id: AuthEnvironmentPresetID): AuthEnvironmentDraft {
   const preset = AUTH_ENVIRONMENT_PRESETS.find((item) => item.id === id) || DEFAULT_PRESET;
   return {

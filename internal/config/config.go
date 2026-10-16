@@ -35,6 +35,7 @@ type ServerConfig struct {
 }
 
 type ModelConfig struct {
+	APIProtocol     string
 	Provider        string
 	BaseURL         string
 	APIKey          string
@@ -677,6 +678,10 @@ func Load(path string) (Config, error) {
 				case "preset":
 					rawProvider.Preset = parseRawStringValue(rawValue)
 					provider.Preset = value
+				case "region":
+					provider.Region = value
+				case "api_protocol":
+					provider.APIProtocol = value
 				case "base_url":
 					rawProvider.BaseURL = parseRawStringValue(rawValue)
 					provider.BaseURL = value
@@ -923,6 +928,7 @@ func modelsProviderSectionName(section string) (string, bool) {
 func SingleProfileLLM(model ModelConfig) LLMConfig {
 	model = model.Resolved()
 	provider := ProviderConfig{
+		APIProtocol:     model.APIProtocol,
 		BaseURL:         model.BaseURL,
 		APIKey:          model.APIKey,
 		ReasoningEffort: model.ReasoningEffort,

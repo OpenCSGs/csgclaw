@@ -1,3 +1,4 @@
+import type { ModelServicePreset } from "@/models/modelProviderPresets";
 import type { ModelOverride } from "@/models/modelMetadata";
 import { del, get, post, put } from "@/api/client";
 import { normalizeModelProviderCatalog, type ModelProvider, type ModelProviderCatalog } from "@/models/modelProviders";
@@ -7,6 +8,9 @@ export type ModelProviderPayload = {
   id?: string;
   display_name?: string;
   preset?: string;
+  region?: string;
+  api_protocol?: string;
+  connect?: boolean;
   base_url?: string;
   api_key?: string;
   headers?: Record<string, unknown>;
@@ -44,4 +48,8 @@ export function checkModelProvider(
   payload: ModelProviderPayload = {},
 ): Promise<ModelProviderCheckResult> {
   return post(`api/v1/model-providers/${encodeURIComponent(providerID)}/check`, payload);
+}
+
+export function fetchModelProviderPresets(signal?: AbortSignal): Promise<{ presets: ModelServicePreset[] }> {
+  return get("api/v1/model-provider-presets", { signal });
 }

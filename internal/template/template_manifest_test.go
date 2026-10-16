@@ -3,6 +3,7 @@ package template
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"csgclaw/internal/runtime"
@@ -78,12 +79,12 @@ func TestValidateImageEnvRejectsSecretDefault(t *testing.T) {
 }
 
 func TestValidatePublishTemplateName(t *testing.T) {
-	for _, name := range []string{"ReviewBot", "review_bot_2", "review-bot", "A1", "a23456789012345678901234"} {
+	for _, name := range []string{"ReviewBot", "review_bot_2", "review-bot", "A1", strings.Repeat("a", 32)} {
 		if err := ValidatePublishTemplateName(name); err != nil {
 			t.Errorf("ValidatePublishTemplateName(%q) error = %v", name, err)
 		}
 	}
-	for _, name := range []string{"", "2review", "中文模板", "review bot", "a234567890123456789012345"} {
+	for _, name := range []string{"", "2review", "中文模板", "review bot", strings.Repeat("a", 33)} {
 		if err := ValidatePublishTemplateName(name); err == nil {
 			t.Errorf("ValidatePublishTemplateName(%q) error = nil, want rejection", name)
 		}

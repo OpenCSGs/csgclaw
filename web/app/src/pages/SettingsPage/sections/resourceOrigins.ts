@@ -6,6 +6,9 @@ export function mcpOriginLabel(server: MCPServer, t: TranslateFn): string {
   if (origin === "builtin") {
     return t("iaMCPBadgeBuiltin");
   }
+  if (origin === "knowledge") {
+    return t("iaSettingsCardKnowledge");
+  }
   return origin === "market" ? t("iaMCPBadgeMarket") : t("iaMCPBadgeManual");
 }
 export function skillOriginLabel(skill: SkillSummary, t: TranslateFn): string {

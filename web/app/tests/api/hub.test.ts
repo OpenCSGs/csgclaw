@@ -84,25 +84,31 @@ describe("hub API", () => {
     );
   });
 
-  it("publishes and deploys an agent through the official registry", async () => {
+  it("includes the avatar only when saving locally", async () => {
     const fetchMock = mockFetch();
-
-    await publishAgentTemplateRequest("agent-alice", "official_deploy", "ReviewBot_2", "Reviews changes");
-
-    expect(fetchMock).toHaveBeenCalledWith(
-      "api/v1/hub/templates",
-      expect.objectContaining({
-        body: JSON.stringify({
-          agent_id: "agent-alice",
-          registry: "official",
-          name: "ReviewBot_2",
-          display_name: "ReviewBot_2",
-          description: "Reviews changes",
-          deploy: true,
-        }),
-        method: "POST",
-      }),
+    await publishAgentTemplateRequest(
+      "agent-alice",
+      "local",
+      "ReviewBot",
+      "Review",
+      false,
+      "助手",
+      "data:image/png;base64,aGVsbG8=",
     );
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      "api/v1/hub/templates",
+      expect.objectContaining({ body: expect.stringContaining('"avatar":"data:image/png;base64,aGVsbG8="') }),
+    );
+    await publishAgentTemplateRequest(
+      "agent-alice",
+      "official",
+      "ReviewBot",
+      "Review",
+      false,
+      "助手",
+      "data:image/png;base64,aGVsbG8=",
+    );
+    expect(JSON.parse(fetchMock.mock.calls.at(-1)![1]!.body as string)).not.toHaveProperty("avatar");
   });
 
   it("includes agent memory only after explicit opt-in", async () => {
@@ -133,24 +139,10 @@ describe("hub API", () => {
     );
   });
 
-  it("publishes and deploys a local template through the official registry", async () => {
-    const fetchMock = mockFetch();
-
-    await publishHubTemplateToCommunityRequest("local.review-bot", true);
-
-    expect(fetchMock).toHaveBeenCalledWith(
-      "api/v1/hub/templates",
-      expect.objectContaining({
-        body: JSON.stringify({ template_id: "local.review-bot", registry: "official", deploy: true }),
-        method: "POST",
-      }),
-    );
-  });
-
   it("includes local template memory only after explicit opt-in", async () => {
     const fetchMock = mockFetch();
 
-    await publishHubTemplateToCommunityRequest("local.review-bot", false, true);
+    await publishHubTemplateToCommunityRequest("local.review-bot", true);
 
     expect(fetchMock).toHaveBeenCalledWith(
       "api/v1/hub/templates",

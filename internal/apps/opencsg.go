@@ -108,8 +108,12 @@ func clearReferencedPlatformCredentials(config Config, credentials *Credentials)
 // or disabled instances are never revived by a global account change.
 func (s *Service) RefreshPlatformCredentials(ctx context.Context) error {
 	s.mu.Lock()
+	s.credentialGeneration++
 	var refs [][2]string
 	for id, e := range s.entries {
+		if e.record.AgentID == "" && e.record.Config.PlatformCredentialSource == "opencsg_login" {
+			e.resourceHealth = nil
+		}
 		if e.record.Config.PlatformCredentialSource == "opencsg_login" && e.record.active() && !e.record.Disconnected && e.record.ConnectRequested {
 			refs = append(refs, [2]string{e.record.AgentID, id})
 		}

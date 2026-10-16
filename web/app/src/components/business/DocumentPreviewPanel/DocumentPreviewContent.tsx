@@ -2,6 +2,7 @@ import { lazy, Suspense, useMemo } from "react";
 import { FileText } from "lucide-react";
 import type { AttachmentPreviewItem } from "@/models/attachments";
 import { MarkdownPreview } from "./MarkdownPreview";
+import { ImagePreview } from "./ImagePreview";
 import { documentPreviewKind, formatPreviewText } from "./previewTypes";
 import { syntaxLanguageForFile } from "./syntaxLanguages";
 
@@ -65,17 +66,7 @@ export function DocumentPreviewContent({
     );
   }
   if (kind === "image") {
-    return (
-      <div className="document-preview-image-stage">
-        <img
-          className="document-preview-image"
-          src={objectURL}
-          alt={item.name}
-          onError={onError}
-          style={{ transform: `scale(${scale})` }}
-        />
-      </div>
-    );
+    return <ImagePreview name={item.name} objectURL={objectURL} onError={onError} scale={scale} />;
   }
   if (kind === "markdown") {
     return <MarkdownPreview scale={scale} text={text} t={t} />;

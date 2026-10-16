@@ -13,7 +13,7 @@ import (
 
 const currentAgentFileSchemaVersion = "agentfile/v1"
 
-var publishTemplateNamePattern = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_-]{0,23}$`)
+var publishTemplateNamePattern = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_-]{0,31}$`)
 
 func ValidatePublishTemplateName(name string) error {
 	name = strings.TrimSpace(name)
@@ -29,6 +29,7 @@ func ValidatePublishTemplateName(name string) error {
 type templateManifest struct {
 	SchemaVersion  string               `toml:"schema_version,omitempty"`
 	Name           string               `toml:"name"`
+	Avatar         string               `toml:"avatar,omitempty"`
 	DisplayName    string               `toml:"display_name,omitempty"`
 	Description    string               `toml:"description,omitempty"`
 	RuntimeKind    string               `toml:"runtime_kind"`

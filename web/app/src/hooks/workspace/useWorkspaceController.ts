@@ -60,6 +60,8 @@ export function useWorkspaceController(): WorkspaceController {
   const theme = useWorkspaceUiStore((state) => state.theme);
   const setTheme = useWorkspaceUiStore((state) => state.setTheme);
   const turnNotificationMode = useWorkspaceUiStore((state) => state.turnNotificationMode);
+  const turnNotificationSound = useWorkspaceUiStore((state) => state.turnNotificationSound);
+  const setTurnNotificationSound = useWorkspaceUiStore((state) => state.setTurnNotificationSound);
   const setTurnNotificationMode = useWorkspaceUiStore((state) => state.setTurnNotificationMode);
   const showToolCalls = useWorkspaceUiStore((state) => state.showToolCalls);
   const setShowToolCalls = useWorkspaceUiStore((state) => state.setShowToolCalls);
@@ -259,6 +261,7 @@ export function useWorkspaceController(): WorkspaceController {
     modelProvidersLoaded,
     openCSGAuthGuard,
     onAgentDeleted: handleAgentDeleted,
+    onTemplatePublished: hub.showPublishedTemplate,
     profileDetailAgentID: conversationProfileDetailAgentID,
     refreshMCPServers: hub.refetchMCPServers,
     refreshHubTemplates,
@@ -278,7 +281,6 @@ export function useWorkspaceController(): WorkspaceController {
     setAgentsData,
     setBootstrapData,
     setManagerProfileData,
-    setHubPublishError: hub.setPublishError,
     setSelectedHubTemplateId,
     t,
   });
@@ -352,6 +354,7 @@ export function useWorkspaceController(): WorkspaceController {
     agents,
     currentUserID: displayData?.current_user_id ?? "",
     mode: turnNotificationMode,
+    soundEnabled: turnNotificationSound,
     onSelectConversation: selectConversation,
     rooms,
     t,
@@ -861,6 +864,8 @@ export function useWorkspaceController(): WorkspaceController {
       onThemeChange: setTheme,
       turnNotificationMode,
       turnNotificationPermission,
+      turnNotificationSound,
+      onTurnNotificationSoundChange: setTurnNotificationSound,
       onRequestTurnNotificationPermission: requestTurnNotificationPermission,
       onTurnNotificationModeChange: changeTurnNotificationMode,
       locale,
@@ -973,6 +978,11 @@ export function useWorkspaceController(): WorkspaceController {
         }
       : null,
     hubViewProps: {
+      templateUsername: openCSGAuthGuard.authenticated ? auth.status.user_id : "",
+      onTemplateLogin: () => {
+        openCSGAuthGuard.requireAuthentication();
+      },
+      agenticHubSiteURL: openCSGAuthGuard.authenticated ? auth.status.opencsg_base_url || auth.status.base_url : "",
       t,
       locale,
       hub: hubViewHub,

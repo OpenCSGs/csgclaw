@@ -88,6 +88,10 @@ export default function PdfPreview({ data, scale, t }: { data: ArrayBuffer; scal
 
   function handleScroll(event: UIEvent<HTMLDivElement>) {
     const container = event.currentTarget;
+    if (container.scrollTop > 0 && container.scrollHeight - container.clientHeight - container.scrollTop <= 1) {
+      setPage(pageCount);
+      return;
+    }
     const containerTop = container.getBoundingClientRect().top;
     let closestPage = page;
     let closestDistance = Number.POSITIVE_INFINITY;

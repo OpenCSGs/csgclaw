@@ -2,6 +2,7 @@ package config
 
 import (
 	"csgclaw/internal/modelcap"
+	"csgclaw/internal/modelpreset"
 	"errors"
 	"fmt"
 	"strings"
@@ -17,6 +18,9 @@ type ProviderConfig struct {
 	ModelMetadata   map[string]modelcap.Metadata        `json:"model_metadata,omitempty"`
 	ModelOverrides  map[string]modelcap.Metadata        `json:"model_overrides,omitempty"`
 	DisplayName     string                              `json:"display_name,omitempty"`
+	Region          string                              `json:"region,omitempty"`
+	APIProtocol     string                              `json:"api_protocol,omitempty"`
+	ModelSource     string                              `json:"model_source,omitempty"`
 	Preset          string                              `json:"preset,omitempty"`
 	BaseURL         string                              `json:"base_url,omitempty"`
 	APIKey          string                              `json:"api_key,omitempty"`
@@ -127,6 +131,11 @@ func (c ProviderConfig) Resolved() ProviderConfig {
 	out.ModelOverrides = modelcap.Clone(c.ModelOverrides)
 	out.DisplayName = strings.TrimSpace(out.DisplayName)
 	out.Preset = strings.ToLower(strings.TrimSpace(out.Preset))
+	out.Region = strings.TrimSpace(out.Region)
+	out.APIProtocol = strings.ToLower(strings.TrimSpace(out.APIProtocol))
+	if preset, ok := modelpreset.Find(out.Preset); ok && out.APIProtocol == "" {
+		out.APIProtocol = preset.Protocol
+	}
 	out.BaseURL = strings.TrimRight(strings.TrimSpace(out.BaseURL), "/")
 	out.APIKey = strings.TrimSpace(out.APIKey)
 	out.Headers = normalizeHeaderMap(out.Headers)
@@ -158,6 +167,9 @@ func (c ProviderConfig) MissingFields() []string {
 }
 
 func (c ProviderConfig) Validate() error {
+	if !modelpreset.ValidProtocol(c.APIProtocol) {
+		return fmt.Errorf("invalid api_protocol %q", c.APIProtocol)
+	}
 	cfg := c.Resolved()
 	if missing := cfg.MissingFields(); len(missing) > 0 {
 		return &ModelValidationError{
@@ -172,6 +184,7 @@ func (c ProviderConfig) modelConfig(modelID string) ModelConfig {
 	cfg := c.Resolved()
 	return ModelConfig{
 		Provider:        ProviderLLMAPI,
+		APIProtocol:     cfg.APIProtocol,
 		BaseURL:         cfg.BaseURL,
 		APIKey:          cfg.APIKey,
 		ModelID:         strings.TrimSpace(modelID),

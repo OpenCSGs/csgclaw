@@ -2,42 +2,6 @@
   container-type: inline-size;
 }
 
-.agent-detail-pane .agent-model-config-grid {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  align-items: start;
-}
-
-.agent-detail-pane .agent-model-config-grid > .field,
-.agent-detail-pane .agent-media-model-group > .field {
-  display: grid;
-  gap: 8px;
-  min-width: 0;
-}
-
-.agent-detail-pane .agent-media-model-group {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--space-3);
-  align-items: start;
-  min-width: 0;
-}
-
-.agent-detail-pane .agent-image-model-group {
-  grid-column: 1 / 3;
-}
-
-.agent-detail-pane .agent-video-model-group {
-  grid-column: 3 / 5;
-}
-
-.agent-detail-pane .agent-media-model-help {
-  grid-column: 1 / -1;
-  display: grid;
-  gap: 8px;
-  color: var(--text-muted);
-  font-weight: normal;
-}
-
 .agent-detail-pane .agent-model-load-error {
   grid-column: 1 / -1;
   display: grid;
@@ -122,26 +86,7 @@
   min-width: 0;
 }
 
-@container (max-width: 760px) {
-  .agent-detail-pane .agent-model-config-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .agent-detail-pane .agent-image-model-group,
-  .agent-detail-pane .agent-video-model-group {
-    grid-column: 1 / -1;
-  }
-}
-
 @container (max-width: 460px) {
-  .agent-detail-pane .agent-model-config-grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .agent-detail-pane .agent-media-model-group {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
   .agent-detail-pane .agent-model-load-error {
     grid-template-columns: auto minmax(0, 1fr);
   }
@@ -152,42 +97,12 @@
   }
 }
 
-.agent-detail-pane .agent-model-config-grid .csg-select-trigger,
-.agent-detail-pane .agent-model-config-grid .agent-fast-mode-toggle {
-  width: 100%;
-  min-width: 0;
-  max-width: 100%;
-  box-sizing: border-box;
-}
-
-.agent-detail-pane .agent-model-config-grid .csg-select-trigger {
-  align-items: center;
-}
-
-.agent-detail-pane .agent-model-config-grid .csg-select-value {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-}
-
-.agent-detail-pane .agent-model-config-grid .csg-select-value,
-.agent-detail-pane .agent-model-config-grid .csg-select-value > span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .agent-detail-pane .agent-fast-mode-field .compact-toggle-row {
   align-self: stretch;
   align-items: center;
   gap: 12px;
   min-height: 42px;
   padding: 10px 14px;
-}
-
-.agent-detail-pane .agent-model-config-grid .agent-fast-mode-field .compact-toggle-row {
-  padding: 10px 14px;
-  box-shadow: var(--input-shadow);
 }
 
 .agent-detail-pane .agent-fast-mode-toggle input[type="checkbox"] {

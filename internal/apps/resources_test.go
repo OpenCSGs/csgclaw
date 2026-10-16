@@ -39,7 +39,7 @@ func TestGlobalResourceBindingsRefreshAndRevokeIndependently(t *testing.T) {
 	if _, err = s.Bind(ctx, "a", BindRequest{ResourceID: resource.InstallationID}); err != ErrConflict {
 		t.Fatal("duplicate binding accepted")
 	}
-	current, err := s.Get(ctx, "", resource.InstallationID)
+	current, err := s.CheckResource(ctx, resource.InstallationID, false)
 	if err != nil || len(current.Tools) != 1 || current.Tools[0].Name != "inspect" {
 		t.Fatal("global resource omitted discovered tools")
 	}
@@ -352,7 +352,7 @@ func TestFeishuViewShowsAppIDWithoutSecrets(t *testing.T) {
 	}
 }
 
-func TestGlobalResourceReflectsLiveBindingFailures(t *testing.T) {
+func TestGlobalResourceHealthIgnoresBindingFailures(t *testing.T) {
 	ctx := t.Context()
 	s := newTestService(t, Options{})
 	upstream := upstreamServer(t)
@@ -371,7 +371,10 @@ func TestGlobalResourceReflectsLiveBindingFailures(t *testing.T) {
 		}
 		return current
 	}
-	check("not_connected", "")
+	if _, err := s.CheckResource(ctx, resource.InstallationID, true); err != nil {
+		t.Fatal(err)
+	}
+	check("connected", "")
 	a, err := s.Bind(ctx, "alpha", BindRequest{ResourceID: resource.InstallationID, Connect: true})
 	if err != nil {
 		t.Fatal(err)
@@ -385,9 +388,9 @@ func TestGlobalResourceReflectsLiveBindingFailures(t *testing.T) {
 	conn := s.entries[a.InstallationID].connection
 	s.mu.Unlock()
 	s.failConnectionDetail("alpha", a.InstallationID, conn, connectionError("app_mcp_network_error", "Cannot reach the MCP service", 0, false))
-	failed := check("error", "app_mcp_network_error")
-	if failed.LastError != "Cannot reach the MCP service" || len(failed.Bindings) != 2 {
-		t.Fatal("global resource hid a binding failure")
+	failed := check("connected", "")
+	if failed.LastError != "" || len(failed.Bindings) != 2 {
+		t.Fatal("binding failure changed independent resource health")
 	}
 	if _, err = s.Disconnect(ctx, "alpha", a.InstallationID); err != nil {
 		t.Fatal(err)
@@ -397,11 +400,11 @@ func TestGlobalResourceReflectsLiveBindingFailures(t *testing.T) {
 	conn = s.entries[b.InstallationID].connection
 	s.mu.Unlock()
 	s.failConnectionDetail("beta", b.InstallationID, conn, connectionError("app_platform_token_expired", "The platform token has expired", 401, true))
-	check("authorization_required", "app_platform_token_expired")
+	check("connected", "")
 	if _, err = s.Disconnect(ctx, "beta", b.InstallationID); err != nil {
 		t.Fatal(err)
 	}
-	check("not_connected", "")
+	check("connected", "")
 	if _, err = s.Connect(ctx, "beta", b.InstallationID); err != nil {
 		t.Fatal(err)
 	}
@@ -410,7 +413,7 @@ func TestGlobalResourceReflectsLiveBindingFailures(t *testing.T) {
 	if _, err = s.Update(ctx, "beta", b.InstallationID, UpdateRequest{Enabled: &disabled}); err != nil {
 		t.Fatal(err)
 	}
-	check("not_connected", "")
+	check("connected", "")
 	resource, err = s.Update(ctx, "", resource.InstallationID, UpdateRequest{Enabled: &disabled})
 	if err != nil {
 		t.Fatal(err)

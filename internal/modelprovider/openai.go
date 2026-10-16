@@ -15,7 +15,8 @@ import (
 )
 
 type openAIModelsResponse struct {
-	Data []struct {
+	HasMore bool `json:"has_more"`
+	Data    []struct {
 		ID            string `json:"id"`
 		ContextWindow int64  `json:"context_window"`
 		ContextLength int64  `json:"context_length"`
@@ -139,6 +140,10 @@ func listOpenAIModelDirectoryWithClient(ctx context.Context, client *http.Client
 		return ModelDiscoveryResult{}, &UpstreamRequestError{Operation: "decode models response", BaseURL: baseURL, Err: err}
 	}
 
+	return openAIModelDirectoryFromResponse(payload, baseURL, includePluralTasks)
+}
+
+func openAIModelDirectoryFromResponse(payload openAIModelsResponse, baseURL string, includePluralTasks bool) (ModelDiscoveryResult, error) {
 	metadata := make(map[string]modelcap.Metadata)
 	models := make([]string, 0, len(payload.Data))
 	imageModels := []string{}

@@ -371,6 +371,14 @@ export function mcpServerOrigin(server: MCPServer | null | undefined): MCPServer
   if (source === "system" || source === "builtin") {
     return "builtin";
   }
+  const meta = isJSONRecord(server?.config?._meta) ? server.config._meta : null;
+  const managed = meta && isJSONRecord(meta["com.opencsg/mcp"]) ? meta["com.opencsg/mcp"] : null;
+  if (managed?.type === "llm_wiki") {
+    return "knowledge";
+  }
+  if ((meta && isJSONRecord(meta["com.opencsg/marketplace"])) || managed?.type === "agentichub_mcp") {
+    return "market";
+  }
   if (source === "market" || source === "official") {
     return "market";
   }
@@ -381,4 +389,4 @@ export function isBuiltinMCPServer(server: MCPServer | null | undefined): boolea
   return mcpServerOrigin(server) === "builtin";
 }
 
-export type MCPServerOrigin = "builtin" | "market" | "manual";
+export type MCPServerOrigin = "builtin" | "market" | "manual" | "knowledge";

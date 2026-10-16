@@ -25,6 +25,11 @@ const labels: Record<string, string> = {
   modelProviderCheck: "Check",
   modelProviderConfiguration: "Configuration",
   modelProviderConnected: "Connected",
+  modelProviderDeleteTitle: "Delete model provider",
+  modelProviderDeleteConfirm: "Delete model provider {name}?",
+  modelProviderStatusUnconfigured: "Not configured",
+  cancel: "Cancel",
+  close: "Close",
   modelContextRestoreDefaults: "Restore defaults",
   modelProviderCustomSettings: "OpenAI-compatible provider settings",
   modelProviderOpenCSGSettings: "OpenCSG built-in models are served by AI Gateway.",
@@ -110,6 +115,46 @@ function renderModelProviderPage(
 }
 
 describe("ModelProviderPage", () => {
+  it("shows a labeled status badge and keeps diagnostics in the detail", () => {
+    const { container } = renderModelProviderPage(createCatalog({ message: "diagnostic detail" }));
+    const card = container.querySelector(".model-provider-provider-card")!;
+    expect(within(card as HTMLElement).getByText("Connected")).toBeVisible();
+    expect(within(card as HTMLElement).queryByText("diagnostic detail")).not.toBeInTheDocument();
+  });
+
+  it("shows an unconfigured badge for a provider with no models and no check yet", () => {
+    const { container } = renderModelProviderPage(createCatalog({ models: [], status: "unknown", api_key_set: false }));
+    expect(within(container).getByText("Not configured")).toBeVisible();
+    expect(checkModelProvider).not.toHaveBeenCalled();
+  });
+
+  it.each(["Close", "Cancel"])("does not delete when the confirmation is dismissed with %s", async (action) => {
+    const user = userEvent.setup();
+    renderModelProviderPage();
+    await user.click(screen.getByRole("button", { name: "Delete" }));
+    const confirmation = screen.getByRole("dialog", { name: "Delete model provider" });
+    expect(deleteModelProvider).not.toHaveBeenCalled();
+    await user.click(within(confirmation).getByRole("button", { name: action }));
+    expect(deleteModelProvider).not.toHaveBeenCalled();
+    expect(screen.queryByRole("dialog", { name: "Delete model provider" })).not.toBeInTheDocument();
+  });
+
+  it("deletes only after confirmation and keeps a failed deletion open for retry", async () => {
+    const user = userEvent.setup();
+    vi.mocked(deleteModelProvider).mockRejectedValueOnce(new Error("Delete unavailable"));
+    const { refreshWorkspaceModelProviders } = renderModelProviderPage();
+    await user.click(screen.getByRole("button", { name: "Delete" }));
+    const confirmation = screen.getByRole("dialog", { name: "Delete model provider" });
+    await user.click(within(confirmation).getByRole("button", { name: "Delete" }));
+    expect(await within(confirmation).findByRole("alert")).toHaveTextContent("Delete unavailable");
+    await user.click(within(confirmation).getByRole("button", { name: "Delete" }));
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog", { name: "Delete model provider" })).not.toBeInTheDocument(),
+    );
+    expect(deleteModelProvider).toHaveBeenCalledTimes(2);
+    expect(deleteModelProvider).toHaveBeenLastCalledWith("openai");
+    expect(refreshWorkspaceModelProviders).toHaveBeenCalled();
+  });
   beforeEach(() => {
     vi.mocked(checkModelProvider).mockResolvedValue({
       id: "openai",
@@ -153,10 +198,13 @@ describe("ModelProviderPage", () => {
     renderModelProviderPage();
 
     await waitFor(() =>
-      expect(checkModelProvider).toHaveBeenCalledWith("openai", {
-        api_key: "",
-        base_url: "https://api.openai.com/v1",
-      }),
+      expect(checkModelProvider).toHaveBeenCalledWith(
+        "openai",
+        expect.objectContaining({
+          api_key: "",
+          base_url: "https://api.openai.com/v1",
+        }),
+      ),
     );
   });
 
@@ -513,10 +561,13 @@ describe("ModelProviderPage", () => {
     );
 
     await waitFor(() =>
-      expect(checkModelProvider).toHaveBeenCalledWith("opencsg", {
-        api_key: "",
-        base_url: "https://aigateway.opencsg-stg.com/v1",
-      }),
+      expect(checkModelProvider).toHaveBeenCalledWith(
+        "opencsg",
+        expect.objectContaining({
+          api_key: "",
+          base_url: "https://aigateway.opencsg-stg.com/v1",
+        }),
+      ),
     );
     expect(await screen.findByText("stage-model")).toBeInTheDocument();
   });

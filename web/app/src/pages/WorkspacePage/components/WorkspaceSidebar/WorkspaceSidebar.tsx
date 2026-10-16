@@ -489,7 +489,7 @@ function LegacyWorkspaceSidebar({
                   className={styles.contextAction}
                   aria-label={contextCreateAction.label}
                   data-tooltip={contextCreateAction.label}
-                  onClick={contextCreateAction.onClick}
+                  onClick={() => void contextCreateAction.onClick()}
                 >
                   <Plus size={16} strokeWidth={2.2} aria-hidden="true" />
                 </button>

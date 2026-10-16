@@ -12,6 +12,7 @@
 |---|---|---|---|
 | `schema_version` | `agent.toml` 的格式版本。目前发布模板时会写入 `agentfile/v1`，但读取时尚未校验 | 否 | ✅ |
 | `name` | 模板名称，用于模板展示；创建 Agent 时可作为默认名称 | 是 | ✅ |
+| `avatar` | 本地模板保存的智能体头像，支持内置头像路径和上传头像的数据 URL；旧模板未设置时使用默认图标 | 否 | ✅ |
 | `description` | 模板说明；创建 Agent 时可作为 Agent 的默认描述 | 否 | ✅ |
 | `role` | 模板角色，旧格式只支持 `manager` 或 `worker` | 否，已移除 | ❌ |
 | `runtime_kind` | Agent 运行时类型，只支持 `codex`、`picoclaw` 或 `openclaw` | 是 | ✅ |
