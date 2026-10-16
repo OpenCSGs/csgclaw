@@ -119,8 +119,8 @@ describe("Agent Apps", () => {
     expect(screen.queryByLabelText("Token / API key")).not.toBeInTheDocument();
   });
 
-  it("disconnects explicitly and never reconnects when the list is fetched again", async () => {
-    const fetch = mockServer([installation]);
+  it("only shows reconnection when the app is disconnected", async () => {
+    mockServer([installation]);
     const user = userEvent.setup();
     const view = render(<Harness />);
     await screen.findByText("Work GitLab");
@@ -128,13 +128,14 @@ describe("Agent Apps", () => {
     const manageLink = screen.getByRole("link", { name: t("appManageResource") });
     expect(manageLink).toHaveAttribute("href", "#/connectors/resource-1");
     expect(manageLink).toHaveClass(buttonStyles.btn, buttonStyles["btn-primary"], buttonStyles["btn-md"]);
-    await user.click(screen.getByRole("button", { name: "Disconnect" }));
-    await waitFor(() => expect(screen.getByRole("dialog")).toHaveTextContent("Disconnected"));
+    expect(screen.queryByRole("button", { name: "Disconnect" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Reconnect" })).not.toBeInTheDocument();
     view.unmount();
+    mockServer([{ ...installation, disconnected: true, status: "disconnected" }]);
     render(<Harness />);
     await user.click(await screen.findByRole("button", { name: /Work GitLab/ }));
     await screen.findByText("Manually disconnected. Reconnect explicitly to restore access.");
-    expect(fetch.mock.calls.some(([url]) => url.endsWith("/connect"))).toBe(false);
+    expect(screen.getByRole("button", { name: "Reconnect" })).toBeEnabled();
   });
 
   it.each([false, true])(

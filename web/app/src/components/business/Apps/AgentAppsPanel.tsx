@@ -276,23 +276,14 @@ export function AgentAppsPanel({
                   {t("appManageResource")}
                   <ArrowUpRight size={14} />
                 </LinkButton>
-                {selected.kind !== "cli" ? (
+                {selected.kind !== "cli" && (selected.disconnected || selected.status !== "connected") ? (
                   <Button
                     size="md"
                     disabled={!!controller.busyID || !selected.enabled || selected.resource_enabled === false}
                     onClick={() => void run(() => controller.connect(selected.installation_id))}
                   >
                     <RefreshCw size={14} />
-                    {selected.status === "connected" ? t("appReconnect") : t("appConnect")}
-                  </Button>
-                ) : null}
-                {selected.kind !== "cli" ? (
-                  <Button
-                    size="md"
-                    disabled={!!controller.busyID || selected.disconnected}
-                    onClick={() => void run(() => controller.disconnect(selected.installation_id))}
-                  >
-                    {t("appDisconnect")}
+                    {t("appReconnect")}
                   </Button>
                 ) : null}
               </div>
