@@ -56,13 +56,15 @@ function Harness({ agentID = "agent-1", mode = "apps" }: { agentID?: string; mod
   );
 }
 
-function mockServer(initial: AppInstallation[] = []) {
+function mockServer(
+  initial: AppInstallation[] = [],
+  resources: AppInstallation[] = [{ ...installation, installation_id: "resource-1", agent_id: "", bindings: [] }],
+) {
   let items = initial;
   const fetch = vi.fn(async (url: string, init?: RequestInit) => {
     const path = String(url);
     if (path === "api/v1/connectors/catalog") return Response.json({ items: [definition] });
-    if (path === "api/v1/connectors/resources")
-      return Response.json({ items: [{ ...installation, installation_id: "resource-1", agent_id: "", bindings: [] }] });
+    if (path === "api/v1/connectors/resources") return Response.json({ items: resources });
     if (init?.method === "POST" && path.endsWith("connectors:probe"))
       return Response.json({ connected: true, tools: installation.tools });
     if (init?.method === "POST" && path.endsWith("/disconnect")) {
@@ -98,6 +100,27 @@ describe("Agent Apps", () => {
     await user.click(await screen.findByRole("button", { name: /Feishu/ }));
 
     expect(screen.getByRole("dialog")).toBeVisible();
+  });
+
+  it("falls back to the global Feishu resource for runtime status and skills", async () => {
+    const binding = { ...feishuInstallation, resource_id: "feishu-resource", skills: undefined };
+    const resource = {
+      ...feishuInstallation,
+      installation_id: "feishu-resource",
+      resource_id: "feishu-resource",
+      agent_id: "",
+      runtime_status: "loaded",
+      skills: [{ skill_name: "lark-doc", bundle_version: "1", content_digest: "digest", managed: true }],
+      bindings: [],
+    };
+    mockServer([binding], [resource]);
+    const user = userEvent.setup();
+    render(<Harness />);
+
+    await user.click(await screen.findByRole("button", { name: /Feishu/ }));
+
+    expect(screen.getByText(t("feishuCLILoadedRuntime"))).toBeVisible();
+    expect(screen.getByText(`lark-doc · ${t("feishuCLIManagedSkill")}`)).toBeVisible();
   });
 
   it("binds a global resource without asking for or copying credentials", async () => {

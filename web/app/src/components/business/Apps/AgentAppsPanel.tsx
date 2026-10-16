@@ -57,6 +57,11 @@ export function AgentAppsPanel({
   const [error, setError] = useState<unknown>(null);
   const feishu = controller.items.find((app) => app.kind === "cli" && app.app_id === "feishu");
   const selected = controller.items.find((app) => app.installation_id === selectedID);
+  const selectedResource = selected?.resource_id
+    ? controller.resources.find((resource) => resource.installation_id === selected.resource_id)
+    : undefined;
+  const selectedCLISkills = selected?.skills?.length ? selected.skills : (selectedResource?.skills ?? []);
+  const selectedCLIRuntimeStatus = selected?.runtime_status || selectedResource?.runtime_status;
   const available = controller.resources.filter(
     (resource) =>
       !controller.items.some((item) => item.resource_id === resource.installation_id) &&
@@ -244,14 +249,14 @@ export function AgentAppsPanel({
                 {selected.disconnected ? <p className={styles.hint}>{t("appDisconnectedHint")}</p> : null}
                 {selected.kind === "cli" ? (
                   <div>
-                    {selected.runtime_status === "configured" ? (
+                    {selectedCLIRuntimeStatus === "configured" ? (
                       <p>{t("feishuCLIConfiguredRuntime")}</p>
-                    ) : selected.runtime_status === "loaded" ? (
+                    ) : selectedCLIRuntimeStatus === "loaded" ? (
                       <p>{t("feishuCLILoadedRuntime")}</p>
                     ) : null}
                     {selected.app_id === "feishu" ? <p className={styles.hint}>{t("feishuCLISkillsSource")}</p> : null}
                     <ul>
-                      {selected.skills?.map((skill) => (
+                      {selectedCLISkills.map((skill) => (
                         <li key={skill.skill_name}>
                           {skill.skill_name} · {t(skill.managed ? "feishuCLIManagedSkill" : "feishuCLIUserSkill")}
                         </li>
