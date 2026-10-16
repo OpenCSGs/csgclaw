@@ -603,13 +603,7 @@ func (s *Service) performCLI(ctx context.Context, id string) error {
 		return s.applyCLIWorkers(ctx, id)
 	}
 	if op.Action != "disconnect" {
-		install := func(ctx context.Context, root string, progress func(string)) (connectorcli.Package, error) {
-			return (connectorcli.Installer{Root: root, Spec: r.Package.CLI.Install}).Install(ctx, progress)
-		}
-		if s.options.CLI != nil && s.options.CLI.Install != nil {
-			install = s.options.CLI.Install
-		}
-		pkg, err := install(ctx, filepath.Join(s.dataRoot, id, "package"), func(stage string) {
+		pkg, err := s.installCLI(ctx, filepath.Join(s.dataRoot, id, "package"), r.Package.CLI.Install, func(stage string) {
 			_ = s.editCLI(id, func(r *record) error { r.CLI.Operation.Stage = stage; return nil })
 		})
 		if err != nil {

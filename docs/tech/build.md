@@ -30,6 +30,30 @@ Useful targets:
 
 Override the local bundle destination with `SANDBOX_BUNDLE_TOOLS_DIR=/path make build-sandbox-cli`.
 
+## 镜像内预装 CLI 连接器
+
+镜像构建可以通过服务端的内部命令生成完整安装包：
+
+```bash
+csgclaw _prepare-connector --id feishu --directory /opt/csgclaw/connector-packages
+chmod -R a+rX /opt/csgclaw/connector-packages
+```
+
+命令使用当前内置连接器声明和通用安装器，下载并校验对应平台的 CLI、Skills，
+生成 `<directory>/<executable>/<version>/{bin,skills,package.json}`，
+标准输出为可执行文件的绝对路径。构建阶段需要下载权限，命令不创建连接器资源或账号配置。
+
+运行服务时设置 `CSGCLAW_CONNECTOR_PACKAGES_DIR`，值为上述预装目录。
+普通连接和旧配置迁移共用安装流程：有效的资源安装直接复用；需要安装时，
+匹配版本的预装包复制到资源目录中的临时目录，通过现有校验后完成目录替换。
+最终位置仍为 `~/.csgclaw/apps/<resource-id>/package/<version>/`。
+预装目录可以只读，账号配置继续位于资源的 `config/` 中。
+
+未设置预装目录、缺少对应版本，或者 Skills 版本不匹配时，继续在线下载。
+已匹配但内容损坏的预装包返回错误，保留现有资源文件。
+独立升级 CSGClaw 后，需要镜像提供新的匹配包才能继续离线安装。
+该目录应由部署管理员提供，包含可信的可执行文件；复制流程拒绝符号链接和特殊文件。
+
 ## Windows without make
 
 On Windows hosts that do not have `make`, use the PowerShell build script:

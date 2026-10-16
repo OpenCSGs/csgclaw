@@ -12,7 +12,6 @@ import (
 	"path/filepath"
 	"sort"
 
-	"csgclaw/internal/connectorcli"
 	"csgclaw/internal/larkcli"
 	"csgclaw/internal/localstore"
 	agentruntime "csgclaw/internal/runtime"
@@ -401,13 +400,7 @@ func (s *Service) prepareMigrationGlobal(ctx context.Context) error {
 	if s.options.CLI != nil {
 		options = *s.options.CLI
 	}
-	install := options.Install
-	if install == nil {
-		install = func(ctx context.Context, root string, progress func(string)) (connectorcli.Package, error) {
-			return (connectorcli.Installer{Root: root, Spec: s.packages["feishu"].CLI.Install}).Install(ctx, progress)
-		}
-	}
-	pkg, err := install(ctx, filepath.Join(s.dataRoot, m.ResourceID, "package"), nil)
+	pkg, err := s.installCLI(ctx, filepath.Join(s.dataRoot, m.ResourceID, "package"), s.packages["feishu"].CLI.Install, nil)
 	if err != nil {
 		return err
 	}

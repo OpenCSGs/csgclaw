@@ -34,9 +34,10 @@ type Package struct {
 	VersionArgs   []string
 }
 type Installer struct {
-	Spec   InstallSpec
-	Root   string
-	Client *http.Client
+	Spec            InstallSpec
+	Root            string
+	Client          *http.Client
+	PreinstalledDir string
 }
 
 func (i Installer) Install(ctx context.Context, progress func(string)) (Package, error) {
@@ -73,40 +74,21 @@ func (i Installer) Install(ctx context.Context, progress func(string)) (Package,
 		return Package{}, err
 	}
 	defer os.RemoveAll(stage)
-	report("downloading_cli")
-	data, err := i.download(ctx, release.URL, release.SHA256, 128<<20)
-	if err != nil {
-		return Package{}, err
-	}
-	binary, err := extractBinary(data, name, suffix)
-	if err != nil {
-		return Package{}, err
-	}
 	staged := Package{Executable: filepath.Join(stage, "bin", name), SkillsDir: filepath.Join(stage, "skills"), Version: i.Spec.Version, SkillsVersion: i.Spec.Skills.Version, VersionArgs: i.Spec.VersionArgs}
-	if err := os.MkdirAll(filepath.Dir(staged.Executable), 0700); err != nil {
+	imported, err := i.importPreinstalled(ctx, stage)
+	if err != nil {
 		return Package{}, err
 	}
-	if err := os.WriteFile(staged.Executable, binary, 0700); err != nil {
-		return Package{}, err
-	}
-	if err := os.MkdirAll(staged.SkillsDir, 0700); err != nil {
-		return Package{}, err
-	}
-	if i.Spec.Skills.URL != "" {
-		report("installing_skills")
-		data, err = i.download(ctx, i.Spec.Skills.URL, i.Spec.Skills.SHA256, 64<<20)
-		if err != nil {
+	if !imported {
+		if err := i.downloadPackage(ctx, staged, release, suffix, report); err != nil {
 			return Package{}, err
 		}
-		if err := installSkills(staged.SkillsDir, data, i.Spec.Skills.Prefix); err != nil {
-			return Package{}, err
-		}
-	}
-	if err := writePackageManifest(staged); err != nil {
-		return Package{}, err
 	}
 	report("verifying_installation")
 	if err := verifyPackage(ctx, staged); err != nil {
+		return Package{}, err
+	}
+	if err := ctx.Err(); err != nil {
 		return Package{}, err
 	}
 	// 已损坏的同版本目录保留供检查，其他版本保持原状。
@@ -126,6 +108,38 @@ func (i Installer) Install(ctx context.Context, progress func(string)) (Package,
 	_ = os.RemoveAll(backup)
 	report("completed")
 	return pkg, nil
+}
+
+func (i Installer) downloadPackage(ctx context.Context, staged Package, release Archive, suffix string, report func(string)) error {
+	report("downloading_cli")
+	data, err := i.download(ctx, release.URL, release.SHA256, 128<<20)
+	if err != nil {
+		return err
+	}
+	binary, err := extractBinary(data, filepath.Base(staged.Executable), suffix)
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(staged.Executable), 0700); err != nil {
+		return err
+	}
+	if err := os.WriteFile(staged.Executable, binary, 0700); err != nil {
+		return err
+	}
+	if err := os.MkdirAll(staged.SkillsDir, 0700); err != nil {
+		return err
+	}
+	if i.Spec.Skills.URL != "" {
+		report("installing_skills")
+		data, err = i.download(ctx, i.Spec.Skills.URL, i.Spec.Skills.SHA256, 64<<20)
+		if err != nil {
+			return err
+		}
+		if err := installSkills(staged.SkillsDir, data, i.Spec.Skills.Prefix); err != nil {
+			return err
+		}
+	}
+	return writePackageManifest(staged)
 }
 
 func verifyPackage(ctx context.Context, p Package) error {
