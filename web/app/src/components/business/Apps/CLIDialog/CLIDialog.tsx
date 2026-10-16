@@ -12,6 +12,7 @@ import {
 } from "@/api/apps";
 import {
   Button,
+  LinkButton,
   DialogRoot,
   DialogContent,
   DialogHeader,
@@ -270,23 +271,24 @@ export function CLIDialog({ definition, existing, t, onClose, onChanged }: Props
                     {current && operation?.authorization_url ? (
                       <span className={styles.authorizationStepActions}>
                         {feishu ? (
-                          <button
-                            type="button"
-                            className="btn btn-tertiary-gray btn-sm"
+                          <Button
+                            variant="linkGray"
+                            size="sm"
                             aria-expanded={showQRCode}
                             onClick={() => setShowQRCode((visible) => !visible)}
                           >
                             {t(showQRCode ? "feishuCLIHideQRCode" : "feishuCLIShowQRCode")}
-                          </button>
+                          </Button>
                         ) : null}
-                        <a
+                        <LinkButton
                           href={operation.authorization_url}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="btn btn-primary btn-sm"
+                          variant="primary"
+                          size="sm"
                         >
                           {t(identity === "bot" ? "feishuCLIAuthorizeBot" : "feishuCLIAuthorizeUser")}
-                        </a>
+                        </LinkButton>
                       </span>
                     ) : null}
                   </div>
