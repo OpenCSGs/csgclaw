@@ -61,17 +61,14 @@
 .titleGroup h2 {
   margin: 0;
   color: var(--text);
-  font-size: 17px;
-  font-weight: 750;
-  line-height: 24px;
+  font: var(--text-md-semibold);
 }
 
 .titleGroup p {
   margin: 3px 0 0;
   overflow: hidden;
   color: var(--muted);
-  font-size: 12px;
-  line-height: 18px;
+  font: var(--text-xs-normal);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -128,8 +125,7 @@
   gap: 6px;
   color: var(--muted);
   background: color-mix(in srgb, var(--field) 82%, transparent);
-  font-size: 12px;
-  font-weight: 650;
+  font: var(--text-xs-medium);
   white-space: nowrap;
 }
 
@@ -143,35 +139,6 @@
 
 .sortControl {
   flex: 0 0 auto;
-  height: 32px;
-  padding: 2px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  display: inline-flex;
-  background: var(--field);
-}
-
-.sortButton {
-  min-width: 0;
-  height: 26px;
-  padding: 0 8px;
-  border: 0;
-  border-radius: 5px;
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  color: var(--muted);
-  background: transparent;
-  font: inherit;
-  font-size: 11px;
-  font-weight: 650;
-  cursor: pointer;
-}
-
-.sortButton.active {
-  color: var(--text);
-  background: var(--surface);
-  box-shadow: 0 1px 3px color-mix(in srgb, var(--gray-900) 12%, transparent);
 }
 
 .filterButton {
@@ -182,14 +149,14 @@
 }
 
 .filterButton strong {
-  min-width: 16px;
-  height: 16px;
+  min-width: 18px;
+  height: 18px;
   border-radius: 999px;
   display: grid;
   place-items: center;
   color: var(--surface);
   background: var(--primary);
-  font-size: 10px;
+  font: var(--text-xs-semibold);
 }
 
 .filterButton.active {
@@ -253,7 +220,7 @@
 
 .filterCount {
   color: var(--muted);
-  font-size: 11px;
+  font: var(--text-xs-normal);
 }
 
 .density {
@@ -320,8 +287,6 @@
 .actorChip {
   min-height: 28px;
   padding: 0 10px;
-  font: inherit;
-  font-size: 12px;
   cursor: grab;
   scroll-snap-align: start;
   transition:
@@ -406,9 +371,9 @@
   color: var(--activity-color);
   background: color-mix(in srgb, var(--activity-color) 14%, transparent);
   font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 11px;
-  font-weight: 750;
-  line-height: 18px;
+  font-size: var(--text-xs-size);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--text-xs-line-height);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -419,8 +384,8 @@
   overflow: hidden;
   color: var(--text);
   font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 12px;
-  line-height: 20px;
+  font-size: var(--text-xs-size);
+  line-height: var(--text-xs-line-height);
   text-align: left;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -457,7 +422,7 @@
 .sequence,
 .time {
   color: var(--muted);
-  font-size: 11px;
+  font: var(--text-xs-normal);
   white-space: nowrap;
 }
 
@@ -483,7 +448,7 @@
   overflow: auto;
   color: var(--text);
   background: color-mix(in srgb, var(--field) 72%, transparent);
-  font-size: 12px;
+  font: var(--text-xs-normal);
 }
 
 .detailSection + .detailSection {
@@ -496,7 +461,7 @@
   display: block;
   margin-bottom: 5px;
   color: var(--muted);
-  font-size: 10px;
+  font: var(--text-xs-semibold);
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
@@ -518,7 +483,7 @@
   border-radius: 10px;
   color: var(--muted);
   text-align: center;
-  font-size: 13px;
+  font: var(--text-sm-normal);
 }
 
 .loadError {
@@ -543,7 +508,7 @@
     display: none;
   }
 
-  .sortButton span {
+  .sortLabel {
     display: none;
   }
 

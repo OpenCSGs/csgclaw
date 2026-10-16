@@ -1200,6 +1200,14 @@ button.composer-working-item:active {
   color: var(--muted);
 }
 
+.message-file-type-icon {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .attachment-draft-meta {
   min-width: 0;
   display: grid;

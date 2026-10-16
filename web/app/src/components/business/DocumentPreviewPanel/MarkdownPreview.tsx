@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { renderMarkdown } from "@/components/business/MessageContent/markdown";
+import { SegmentedControl } from "@/components/ui";
 
 export function MarkdownPreview({ scale, text, t }: { scale: number; text: string; t: (key: string) => string }) {
   const [mode, setMode] = useState<"preview" | "source">("preview");
@@ -7,25 +8,18 @@ export function MarkdownPreview({ scale, text, t }: { scale: number; text: strin
   return (
     <div className="document-preview-markdown-shell">
       <div className="document-preview-markdown-main">
-        <div className="document-preview-mode-switch" role="tablist" aria-label={t("attachmentPreviewViewMode")}>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={mode === "preview"}
-            className={mode === "preview" ? "active" : ""}
-            onClick={() => setMode("preview")}
-          >
-            {t("workspacePreviewPreviewTab")}
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={mode === "source"}
-            className={mode === "source" ? "active" : ""}
-            onClick={() => setMode("source")}
-          >
-            {t("workspacePreviewCodeTab")}
-          </button>
+        <div className="document-preview-mode-switch">
+          <SegmentedControl
+            label={t("attachmentPreviewViewMode")}
+            size="sm"
+            variant="text"
+            value={mode}
+            onChange={setMode}
+            options={[
+              { value: "preview", label: t("workspacePreviewPreviewTab") },
+              { value: "source", label: t("workspacePreviewCodeTab") },
+            ]}
+          />
         </div>
         {mode === "preview" ? (
           <article

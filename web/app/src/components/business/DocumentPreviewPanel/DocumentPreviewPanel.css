@@ -100,29 +100,39 @@
 
 .document-preview-title-group {
   min-width: 0;
-  flex: 1 1 auto;
+  flex: 1 1 0;
   display: grid;
   gap: 1px;
 }
 
 .document-preview-title-group strong {
-  overflow: hidden;
-  text-overflow: ellipsis;
+  min-width: 0;
+  display: flex;
   white-space: nowrap;
-  font-size: 14px;
+  font: var(--text-sm-semibold);
 }
 
-.document-preview-title-group span,
+.document-preview-title-base {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.document-preview-title-extension {
+  flex: 0 0 auto;
+}
+
+.document-preview-title-group > span,
 .document-preview-toolbar > span {
   color: var(--muted);
-  font-size: 11px;
+  font: var(--text-xs-normal);
   white-space: nowrap;
 }
 
 .document-preview-toolbar {
   min-width: 0;
-  max-width: 100%;
-  flex: 0 1 auto;
+  max-width: calc(100% - 80px);
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   justify-content: flex-start;
@@ -148,20 +158,10 @@
 
 .document-preview-icon-link {
   width: 32px;
+  min-width: 32px;
   height: 32px;
-  border-radius: var(--radius-md);
-  display: grid;
-  place-items: center;
-  color: var(--muted);
-  text-decoration: none;
-}
-
-.document-preview-icon-link:hover,
-.document-preview-icon-link:focus-visible {
-  background: var(--field);
-  color: var(--text);
-  outline: none;
-  box-shadow: var(--focus-ring);
+  min-height: 32px;
+  padding: 0;
 }
 
 .document-preview-body {
@@ -186,6 +186,29 @@
 
 .document-preview-status.is-error {
   color: var(--danger);
+}
+
+.document-preview-error-state {
+  gap: 0;
+}
+
+.document-preview-panel.is-embedded:has(.document-preview-error-state) {
+  height: 100%;
+}
+
+.document-preview-error-state > h2 {
+  max-width: 352px;
+}
+
+.document-preview-error-state > p {
+  max-width: 352px;
+  margin-top: 4px;
+  color: var(--muted);
+  font: var(--text-sm-light);
+}
+
+.document-preview-error-actions {
+  margin-top: 16px;
 }
 
 .document-preview-image-viewport {
@@ -291,27 +314,11 @@
   position: sticky;
   z-index: 2;
   top: 0;
-  padding: 7px 10px;
+  padding: 3px 10px;
   display: flex;
   justify-content: flex-end;
-  gap: 4px;
   border-bottom: 1px solid var(--line);
   background: var(--panel);
-}
-
-.document-preview-mode-switch button {
-  padding: 5px 10px;
-  border: 1px solid transparent;
-  border-radius: var(--radius-md);
-  background: transparent;
-  color: var(--muted);
-  cursor: pointer;
-}
-
-.document-preview-mode-switch button.active {
-  border-color: var(--primary);
-  background: var(--primary-soft);
-  color: var(--primary-strong);
 }
 
 .document-preview-text {
@@ -351,6 +358,7 @@
   border-radius: var(--radius-md);
   background: transparent;
   color: var(--muted);
+  font: var(--text-xs-medium);
   cursor: pointer;
 }
 
@@ -462,29 +470,18 @@
   border-top: 1px solid var(--line);
   background: var(--panel);
   color: var(--muted);
-  font-size: 12px;
+  font: var(--text-xs-normal);
 }
 
-.document-preview-page-controls button {
-  width: 28px;
-  height: 28px;
-  border: 0;
-  border-radius: var(--radius-md);
-  display: grid;
-  place-items: center;
-  background: transparent;
-  color: inherit;
-  cursor: pointer;
+.document-preview-page-editor {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
 }
 
-.document-preview-page-controls button:hover:not(:disabled) {
-  background: var(--field);
-  color: var(--text);
-}
-
-.document-preview-page-controls button:disabled {
-  opacity: 0.35;
-  cursor: default;
+.document-preview-page-input {
+  width: 64px;
+  text-align: center;
 }
 
 .document-preview-ppt-stage {
@@ -527,22 +524,6 @@
 
   .document-preview-shiki .shiki {
     padding: 18px 16px 48px;
-  }
-}
-
-.document-preview-reference {
-  opacity: 0;
-  pointer-events: none;
-}
-.document-preview-header:hover .document-preview-reference,
-.document-preview-header:focus-within .document-preview-reference {
-  opacity: 1;
-  pointer-events: auto;
-}
-@media (hover: none) {
-  .document-preview-reference {
-    opacity: 1;
-    pointer-events: auto;
   }
 }
 

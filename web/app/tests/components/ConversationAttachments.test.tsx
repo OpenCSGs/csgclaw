@@ -72,4 +72,26 @@ describe("MessageAttachments", () => {
       base.remove();
     }
   });
+
+  it("uses the shared file-type icon on PDF message cards", async () => {
+    const user = userEvent.setup();
+    const onPreviewAttachment = vi.fn();
+    const attachment: MessageAttachment = {
+      created_at: "2026-10-16T00:00:00Z",
+      download_url: "/api/v1/attachments/report",
+      id: "report",
+      kind: "file",
+      media_type: "application/pdf",
+      name: "report.pdf",
+      sha256: "sha",
+      size_bytes: 1024,
+    };
+    render(<MessageAttachments attachments={[attachment]} onPreviewAttachment={onPreviewAttachment} t={t} />);
+
+    const card = screen.getByRole("button", { name: "Preview attachment: report.pdf" });
+    expect(card.querySelector(".message-file-type-icon img")?.getAttribute("src")).toMatch(/^data:image\/svg\+xml,/);
+    expect(card.querySelector(".message-file-type-icon")).toHaveTextContent("PDF");
+    await user.click(card);
+    expect(onPreviewAttachment).toHaveBeenCalledWith(expect.objectContaining({ index: 0, anchor: card }));
+  });
 });

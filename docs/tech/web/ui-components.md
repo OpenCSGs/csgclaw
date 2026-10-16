@@ -44,6 +44,10 @@ If a page needs a new highly customized UI, start with a page-private component.
 
 Use `Button` or `IconButton` for commands and `LinkButton` for navigation. `LinkButton` renders a native anchor, preserves `href`, `target`, `rel` and keyboard activation, and shares Button's scoped variant, size, content and focus styles. Do not recreate a button by adding global `btn` classes to native elements.
 
+## Breadcrumb
+
+`Breadcrumb` is a semantic navigation pattern in the shared UI library; Radix Primitives does not provide a dedicated breadcrumb primitive. Use the `home` item for the home/root action and `items` for path segments. Mark the current segment with `current`, and provide either `href` or `onClick` for navigable segments. Long paths collapse their middle segments into the shared Radix Dropdown Menu; `maxVisibleItems` and `overflowLabel` allow callers to adapt the layout and localization.
+
 ## Overlay Layers
 
 Layer values are shared design tokens. Local component stacking such as `z-index: 1` or `2` is acceptable inside a contained stacking context, but cross-component overlays must use these tokens:
@@ -95,6 +99,8 @@ Provider metadata, authentication guards, model discovery and retained unavailab
 TextInput and TextArea own their local, data-marked styles. Legacy input and workspace selectors exclude all `data-csg-control` elements. Compound native forms remain in `shared/styles/inputs.css` during the scoped migration; the managed Field has local label/hint/error styles. Use `size="sm"` for compact text inputs and `variant="plain"` when a composed search container owns the border/background. Avoid overrides with `!important`.
 
 PanelHeader composes content and an optional actions slot, EmptyState displays a title/description/actions, and SegmentedControl provides a named single-choice group with keyboard navigation. Business copy and persistence remain with callers.
+Use `size="sm"` for compact segmented controls in toolbars or preview headers.
+Use `variant="text"` when a compact switch should have no surrounding border or selected fill; its selected text uses the accent color.
 
 Semantic tokens own menu surfaces, hover/selected states, tooltip colors and dialog backdrops. Add a theme role in `shared/styles/tokens.css` when a primitive needs a new color relationship. Component CSS consumes the role without repeating light/dark branches.
 

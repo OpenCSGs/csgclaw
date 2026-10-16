@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import DOMPurify from "dompurify";
+import { SegmentedControl } from "@/components/ui";
 import { SyntaxHighlightedText } from "./SyntaxHighlightedText";
 
 const htmlPreviewCSP = [
@@ -112,25 +113,18 @@ export default function HtmlPreview({ scale, text, t }: { scale: number; text: s
 
   return (
     <div className="document-preview-html-shell">
-      <div className="document-preview-mode-switch" role="tablist" aria-label={t("attachmentPreviewViewMode")}>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={mode === "preview"}
-          className={mode === "preview" ? "active" : ""}
-          onClick={() => setMode("preview")}
-        >
-          {t("workspacePreviewPreviewTab")}
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={mode === "source"}
-          className={mode === "source" ? "active" : ""}
-          onClick={() => setMode("source")}
-        >
-          {t("workspacePreviewCodeTab")}
-        </button>
+      <div className="document-preview-mode-switch">
+        <SegmentedControl
+          label={t("attachmentPreviewViewMode")}
+          size="sm"
+          variant="text"
+          value={mode}
+          onChange={setMode}
+          options={[
+            { value: "preview", label: t("workspacePreviewPreviewTab") },
+            { value: "source", label: t("workspacePreviewCodeTab") },
+          ]}
+        />
       </div>
       {mode === "preview" ? (
         <div className="document-preview-html-frame-wrap">

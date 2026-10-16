@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type UIEvent } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import { Button } from "@/components/ui";
 import { copyPreviewBuffer } from "./previewBuffer";
 import { normalizePowerPointPreview } from "./normalizePowerPoint";
 
@@ -119,23 +120,29 @@ export default function PowerPointPreview({
       </div>
       {slideCount > 0 ? (
         <div className="document-preview-page-controls">
-          <button
-            type="button"
+          <Button
+            iconOnly
+            size="sm"
+            variant="tertiaryGray"
             aria-label={t("attachmentsScrollPrevious")}
+            title={t("attachmentsScrollPrevious")}
             disabled={slide <= 1}
             onClick={() => goToSlide(slide - 1)}
           >
             <ChevronLeft aria-hidden="true" size={16} />
-          </button>
+          </Button>
           <span>{t("attachmentPreviewSlideCount", { page: slide, count: slideCount })}</span>
-          <button
-            type="button"
+          <Button
+            iconOnly
+            size="sm"
+            variant="tertiaryGray"
             aria-label={t("attachmentsScrollNext")}
+            title={t("attachmentsScrollNext")}
             disabled={slide >= slideCount}
             onClick={() => goToSlide(slide + 1)}
           >
             <ChevronRight aria-hidden="true" size={16} />
-          </button>
+          </Button>
         </div>
       ) : null}
     </div>

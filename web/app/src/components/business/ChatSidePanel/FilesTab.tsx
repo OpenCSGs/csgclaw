@@ -1,11 +1,12 @@
 import { WorkspacePathActions } from "./WorkspacePathActions";
 import { useRoomFileReader } from "./useRoomFileReader";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowUp, AtSign, File, Folder, RefreshCw } from "lucide-react";
+import { AtSign, RefreshCw } from "lucide-react";
 import { attachmentCapability, fetchWorkspaceDirectory, filePreviewItem } from "@/api/chatFiles";
 import { errorMessage } from "@/api/client";
-import { Button, Select, Tooltip } from "@/components/ui";
+import { Breadcrumb, Button, Select, TextInput, Tooltip } from "@/components/ui";
+import { FileTypeIcon } from "@/components/business/FileTypeIcon";
 import { formatAttachmentSize, type AttachmentPreviewItem } from "@/models/attachments";
 import type { ComposerFileReference } from "@/models/fileReferences";
 import type { TranslateFn } from "@/models/conversations";
@@ -31,15 +32,38 @@ export function FilesTab({
   const [visibleCount, setVisibleCount] = useState(100);
   const queryClient = useQueryClient();
   const reader = useRoomFileReader(scope);
+  const refreshTranscript = reader.refresh;
+  const attachmentIDs = JSON.stringify(
+    [...(scope.messages ?? []), ...(scope.retainedMessages ?? [])]
+      .flatMap((message) => (message.attachments ?? []).map((attachment) => attachment.id))
+      .sort(),
+  );
+  const observedAttachments = useRef({ roomID: scope.roomID, ids: attachmentIDs });
+  useEffect(() => {
+    const previous = observedAttachments.current;
+    observedAttachments.current = { roomID: scope.roomID, ids: attachmentIDs };
+    if (previous.roomID !== scope.roomID || previous.ids === attachmentIDs) return;
+    void Promise.resolve(refreshTranscript()).then(() =>
+      queryClient.invalidateQueries({ queryKey: ["chat-room-files", scope.roomID] }),
+    );
+  }, [attachmentIDs, scope.roomID, refreshTranscript, queryClient]);
   const agentID = scope.agents.some((agent) => agent.id === controller.state.agentID)
     ? controller.state.agentID
     : scope.defaultAgentID;
   const directory = controller.state.directory;
+  const directorySegments = directory.split("/").filter(Boolean);
+  const rootWorkspace = useQuery({
+    queryKey: ["chat-workspace", scope.roomID, agentID, ""],
+    queryFn: ({ signal }) => fetchWorkspaceDirectory(agentID, "", signal, scope.roomID),
+    enabled: Boolean(agentID),
+  });
   const workspace = useQuery({
     queryKey: ["chat-workspace", scope.roomID, agentID, directory],
     queryFn: ({ signal }) => fetchWorkspaceDirectory(agentID, directory, signal, scope.roomID),
     enabled: Boolean(agentID),
   });
+  const workspaceRootName =
+    rootWorkspace.data?.absolute_path?.split(/[\\/]/).filter(Boolean).at(-1) || t("chatWorkspaceFiles");
   const attachments = useInfiniteQuery({
     queryKey: ["chat-room-files", scope.roomID, query],
     queryFn: ({ pageParam, signal }) => reader.read(query, pageParam, signal),
@@ -95,7 +119,7 @@ export function FilesTab({
           title={reference.label}
         >
           <span className="chat-file-glyph">
-            <File size={18} />
+            <FileTypeIcon name={name} mediaType={mediaType} />
           </span>
           <span className="chat-file-name">{name}</span>
           <small>{formatAttachmentSize(size)}</small>
@@ -157,21 +181,19 @@ export function FilesTab({
               }}
             />
           ) : null}
-          <div className="chat-files-path">
-            <Button
-              iconOnly
-              size="sm"
-              variant="tertiaryGray"
-              aria-label={t("chatParentDirectory")}
-              disabled={!directory}
-              onClick={() => changeDirectory(directory.split("/").slice(0, -1).join("/"))}
-            >
-              <ArrowUp size={16} />
-            </Button>
-            <span title={workspace.data?.absolute_path || directory || "/"}>
-              {workspace.data?.absolute_path || directory || "/"}
-            </span>
-          </div>
+          <Breadcrumb
+            className="chat-files-path"
+            aria-label={t("chatWorkspaceFiles")}
+            overflowLabel={t("chatBreadcrumbShowEarlier")}
+            items={[
+              { label: workspaceRootName, current: directorySegments.length === 0, onClick: () => changeDirectory("") },
+              ...directorySegments.map((segment, index) => ({
+                label: segment,
+                current: index === directorySegments.length - 1,
+                onClick: () => changeDirectory(directorySegments.slice(0, index + 1).join("/")),
+              })),
+            ]}
+          />
           <WorkspacePathActions
             agentID={agentID}
             roomID={scope.roomID}
@@ -189,17 +211,19 @@ export function FilesTab({
           />
         </div>
       ) : null}
-      <input
-        className="chat-files-search"
-        type="search"
-        placeholder={t("chatSearchFiles")}
-        aria-label={t("chatSearchFiles")}
-        value={query}
-        onChange={(event) => {
-          setQuery(event.target.value);
-          setVisibleCount(100);
-        }}
-      />
+      <div className="chat-files-search-wrap">
+        <TextInput
+          size="sm"
+          type="search"
+          placeholder={t("chatSearchFiles")}
+          aria-label={t("chatSearchFiles")}
+          value={query}
+          onChange={(event) => {
+            setQuery(event.target.value);
+            setVisibleCount(100);
+          }}
+        />
+      </div>
       <div className="chat-files-list">
         {loading ? (
           <div className="chat-side-status" role="status">
@@ -221,8 +245,8 @@ export function FilesTab({
               entry.type === "dir" ? (
                 <div className="chat-files-row" key={entry.path}>
                   <button className="chat-files-open" type="button" onClick={() => changeDirectory(entry.path)}>
-                    <span className="chat-file-glyph is-folder">
-                      <Folder size={18} />
+                    <span className="chat-file-glyph">
+                      <FileTypeIcon isFolder />
                     </span>
                     <span className="chat-file-name">{entry.name}</span>
                   </button>

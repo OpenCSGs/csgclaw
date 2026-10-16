@@ -31,6 +31,7 @@ import {
   DropdownMenuRoot,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
+  SegmentedControl,
   Tooltip,
 } from "@/components/ui";
 import type { AgentLike } from "@/models/agents";
@@ -429,26 +430,35 @@ export function ConversationActivityPanel({
             </MetaChip>
           </div>
           <div className={styles.controls}>
-            <div className={styles.sortControl} role="group" aria-label={t("agentActivitySortLabel")}>
-              <button
-                type="button"
-                className={classNames(styles.sortButton, sortMode === "chronological" && styles.active)}
-                aria-pressed={sortMode === "chronological"}
-                onClick={() => setSortMode("chronological")}
-              >
-                <ArrowDownNarrowWide aria-hidden="true" size={14} />
-                <span>{t("agentActivityChronological")}</span>
-              </button>
-              <button
-                type="button"
-                className={classNames(styles.sortButton, sortMode === "newest_first" && styles.active)}
-                aria-pressed={sortMode === "newest_first"}
-                onClick={() => setSortMode("newest_first")}
-              >
-                <ArrowUpNarrowWide aria-hidden="true" size={14} />
-                <span>{t("agentActivityNewestFirst")}</span>
-              </button>
-            </div>
+            <SegmentedControl
+              className={styles.sortControl}
+              label={t("agentActivitySortLabel")}
+              size="sm"
+              value={sortMode}
+              onChange={setSortMode}
+              options={[
+                {
+                  value: "chronological",
+                  accessibleName: t("agentActivityChronological"),
+                  label: (
+                    <>
+                      <ArrowDownNarrowWide aria-hidden="true" size={14} />
+                      <span className={styles.sortLabel}>{t("agentActivityChronological")}</span>
+                    </>
+                  ),
+                },
+                {
+                  value: "newest_first",
+                  accessibleName: t("agentActivityNewestFirst"),
+                  label: (
+                    <>
+                      <ArrowUpNarrowWide aria-hidden="true" size={14} />
+                      <span className={styles.sortLabel}>{t("agentActivityNewestFirst")}</span>
+                    </>
+                  ),
+                },
+              ]}
+            />
             <ActivityFilterMenu
               options={filterOptions}
               selected={selectedTypes}

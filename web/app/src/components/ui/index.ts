@@ -1,6 +1,7 @@
 export * from "./AppLayout";
 export * from "./DismissibleAlert";
 export * from "./Button";
+export * from "./Breadcrumb";
 export * from "./Checkbox";
 export * from "./Dialog";
 export * from "./DropdownMenu";

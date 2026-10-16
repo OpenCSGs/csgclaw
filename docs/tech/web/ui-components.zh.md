@@ -44,6 +44,10 @@
 
 执行操作使用 `Button` 或 `IconButton`，页面导航使用 `LinkButton`。`LinkButton` 渲染原生链接，保留 `href`、`target`、`rel` 和键盘激活行为，与 Button 共用局部的变体、尺寸、内容及焦点样式。不要通过给原生元素添加全局 `btn` 类来复刻按钮。
 
+## Breadcrumb
+
+`Breadcrumb` 是组件库中的语义化导航样式；Radix Primitives 没有专门的面包屑 primitive。使用 `home` 表示首页/根目录操作，使用 `items` 表示路径层级；当前层级设置 `current`，可跳转层级提供 `href` 或 `onClick`。路径过长时，中间层级会折叠到共享的 Radix Dropdown Menu 中；调用方可通过 `maxVisibleItems` 调整折叠阈值，并通过 `overflowLabel` 提供本地化的无障碍名称。
+
 ## 浮层层级
 
 层级值是共享设计 token。组件内部局部 stacking context 里的 `z-index: 1` 或 `2` 可以接受，但跨组件浮层必须使用这些 token：

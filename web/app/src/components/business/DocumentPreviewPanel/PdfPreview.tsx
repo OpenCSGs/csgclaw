@@ -1,6 +1,7 @@
 import { useCallback, useLayoutEffect, useMemo, useRef, useState, type UIEvent } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Document, Page, pdfjs } from "react-pdf";
+import { Button, TextInput } from "@/components/ui";
 import pdfWorkerURL from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import { copyPreviewBuffer } from "./previewBuffer";
 import "react-pdf/dist/Page/AnnotationLayer.css";
@@ -43,15 +44,25 @@ function LazyPdfPage({
 
 export default function PdfPreview({ data, scale, t }: { data: ArrayBuffer; scale: number; t: Translate }) {
   const scrollRootRef = useRef<HTMLDivElement | null>(null);
+  const pageInputRef = useRef<HTMLInputElement | null>(null);
   const [pageCount, setPageCount] = useState(0);
   const [page, setPage] = useState(1);
+  const [editingPage, setEditingPage] = useState(false);
+  const [pageDraft, setPageDraft] = useState("");
   const [fittedPageWidth, setFittedPageWidth] = useState(612);
   const file = useMemo(() => ({ data: new Uint8Array(copyPreviewBuffer(data)) }), [data]);
   const handleLoadSuccess = useCallback((pdf: { numPages: number }) => {
     setPageCount(pdf.numPages);
     setPage(1);
+    setEditingPage(false);
   }, []);
   const pageWidth = fittedPageWidth * scale;
+
+  useLayoutEffect(() => {
+    if (!editingPage) return;
+    pageInputRef.current?.focus();
+    pageInputRef.current?.select();
+  }, [editingPage]);
 
   useLayoutEffect(() => {
     const container = scrollRootRef.current;
@@ -84,6 +95,11 @@ export default function PdfPreview({ data, scale, t }: { data: ArrayBuffer; scal
     scrollRootRef.current
       ?.querySelector<HTMLElement>(`.document-preview-pdf-page[data-page-number="${boundedPage}"]`)
       ?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function finishPageEdit(save: boolean) {
+    if (save && /^\d+$/.test(pageDraft.trim())) goToPage(Number(pageDraft.trim()));
+    setEditingPage(false);
   }
 
   function handleScroll(event: UIEvent<HTMLDivElement>) {
@@ -134,23 +150,68 @@ export default function PdfPreview({ data, scale, t }: { data: ArrayBuffer; scal
       </div>
       {pageCount > 0 ? (
         <div className="document-preview-page-controls">
-          <button
-            type="button"
+          <Button
+            iconOnly
+            size="sm"
+            variant="tertiaryGray"
             aria-label={t("attachmentsScrollPrevious")}
+            title={t("attachmentsScrollPrevious")}
             disabled={page <= 1}
             onClick={() => goToPage(page - 1)}
           >
             <ChevronLeft aria-hidden="true" size={16} />
-          </button>
-          <span>{t("attachmentPreviewPageCount", { page, count: pageCount })}</span>
-          <button
-            type="button"
+          </Button>
+          {editingPage ? (
+            <span className="document-preview-page-editor">
+              <TextInput
+                ref={pageInputRef}
+                className="document-preview-page-input"
+                size="sm"
+                type="number"
+                inputMode="numeric"
+                min={1}
+                max={pageCount}
+                step={1}
+                aria-label={t("attachmentPreviewPageInput")}
+                value={pageDraft}
+                onChange={(event) => setPageDraft(event.target.value)}
+                onBlur={() => finishPageEdit(true)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    finishPageEdit(true);
+                  } else if (event.key === "Escape") {
+                    event.preventDefault();
+                    finishPageEdit(false);
+                  }
+                }}
+              />
+              <span>{t("attachmentPreviewPageTotal", { count: pageCount })}</span>
+            </span>
+          ) : (
+            <Button
+              size="sm"
+              variant="tertiaryGray"
+              title={t("attachmentPreviewJumpToPage")}
+              onClick={() => {
+                setPageDraft(String(page));
+                setEditingPage(true);
+              }}
+            >
+              {t("attachmentPreviewPageCount", { page, count: pageCount })}
+            </Button>
+          )}
+          <Button
+            iconOnly
+            size="sm"
+            variant="tertiaryGray"
             aria-label={t("attachmentsScrollNext")}
+            title={t("attachmentsScrollNext")}
             disabled={page >= pageCount}
             onClick={() => goToPage(page + 1)}
           >
             <ChevronRight aria-hidden="true" size={16} />
-          </button>
+          </Button>
         </div>
       ) : null}
     </div>

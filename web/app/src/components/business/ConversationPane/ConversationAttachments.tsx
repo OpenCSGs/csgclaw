@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type WheelEvent } from "react
 import { ChevronLeft, ChevronRight, FileText, X } from "lucide-react";
 import { resolveRequestPath } from "@/api/client";
 import type { DocumentPreviewRequest } from "@/components/business/DocumentPreviewPanel";
+import { FileTypeIcon } from "@/components/business/FileTypeIcon";
 import { Button, Tooltip } from "@/components/ui";
 import {
   formatAttachmentSize,
@@ -288,8 +289,8 @@ export function MessageAttachments({
                   aria-label={t("previewAttachmentNamed", { name: attachment.name })}
                   onClick={(event) => onPreviewAttachment?.({ anchor: event.currentTarget, index, items })}
                 >
-                  <span className="attachment-file-icon" aria-hidden="true">
-                    <FileText size={18} />
+                  <span className="message-file-type-icon" aria-hidden="true">
+                    <FileTypeIcon name={attachment.name} mediaType={attachment.media_type} />
                   </span>
                   <AttachmentMeta
                     name={attachment.name || t("attachment")}

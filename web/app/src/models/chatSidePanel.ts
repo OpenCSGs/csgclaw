@@ -16,6 +16,7 @@ export type ChatSideTab =
       mediaType: string;
       reference?: ComposerFileReference;
       draft?: AttachmentPreviewItem;
+      originTabID?: "files";
     }
   | { id: string; kind: "thread"; rootID: string }
   | {
@@ -61,11 +62,14 @@ export function replaceChatSideTab(state: ChatSideState, previousID: string, tab
 
 export function closeChatSideTab(state: ChatSideState, id: string): ChatSideState {
   const index = state.tabs.findIndex((tab) => tab.id === id);
+  const closingTab = state.tabs[index];
   const tabs = state.tabs.filter((tab) => tab.id !== id);
+  const originTab = closingTab?.kind === "file" ? tabs.find((tab) => tab.id === closingTab.originTabID) : undefined;
   return {
     ...state,
     tabs,
-    activeID: state.activeID === id ? (tabs[Math.min(index, tabs.length - 1)]?.id ?? "") : state.activeID,
+    activeID:
+      state.activeID === id ? (originTab?.id ?? tabs[Math.min(index, tabs.length - 1)]?.id ?? "") : state.activeID,
   };
 }
 
@@ -128,6 +132,7 @@ export function restoreChatSideState(value: string | null): ChatSideState {
               sizeBytes: tab.sizeBytes,
               mediaType: tab.mediaType,
               reference: ref,
+              ...(tab.originTabID === "files" ? { originTabID: "files" as const } : {}),
             });
       }
     }

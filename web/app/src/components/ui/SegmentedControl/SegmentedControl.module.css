@@ -10,6 +10,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: var(--space-1);
   min-width: 44px;
   min-height: 36px;
   padding: var(--space-2) var(--space-3);
@@ -20,14 +21,43 @@
   font: var(--text-sm-medium);
   cursor: pointer;
 }
+.csg-segmented-control[data-size="sm"] {
+  gap: var(--space-0-5);
+  padding: var(--space-0-5);
+}
+.csg-segmented-control[data-size="sm"] .csg-segmented-control-item {
+  min-width: 32px;
+  min-height: 26px;
+  padding: 0 var(--space-2);
+  font: var(--text-xs-medium);
+}
 .csg-segmented-control-item[aria-checked="true"] {
   border-color: color-mix(in srgb, var(--primary) 36%, transparent);
   background: var(--panel);
   color: var(--primary-strong);
   box-shadow: var(--shadow-soft);
 }
+.csg-segmented-control[data-variant="text"] {
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+.csg-segmented-control[data-variant="text"] .csg-segmented-control-item {
+  border: 0;
+}
+.csg-segmented-control[data-variant="text"] .csg-segmented-control-item[aria-checked="true"] {
+  background: transparent;
+  color: var(--accent-text);
+  box-shadow: none;
+}
 .csg-segmented-control-item:hover:not(:disabled, [aria-checked="true"]) {
   color: var(--text);
+}
+.csg-segmented-control[data-variant="text"] .csg-segmented-control-item:hover:not(:disabled, [aria-checked="true"]) {
+  color: var(--muted);
+}
+.csg-segmented-control[data-variant="text"] .csg-segmented-control-item:active:not(:disabled) {
+  color: var(--accent-text);
 }
 .csg-segmented-control-item:focus-visible {
   outline: none;

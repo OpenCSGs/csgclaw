@@ -34,7 +34,7 @@ export function WorkspacePathActions({
   const query = useQuery({
     queryKey: ["chat-workspace-location", roomID, agentID, path],
     queryFn: ({ signal }) => fetchWorkspaceLocation(agentID, roomID, path, signal),
-    enabled: !location && active,
+    enabled: false,
     retry: false,
   });
   const current = location ?? query.data;
@@ -62,7 +62,7 @@ export function WorkspacePathActions({
     <div className={styles.actions}>
       <DropdownMenuRoot
         onOpenChange={(opened) => {
-          if (opened && !location) void query.refetch();
+          if (opened && active && !location) void query.refetch();
         }}
       >
         <DropdownMenuTrigger asChild>
@@ -82,6 +82,11 @@ export function WorkspacePathActions({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent>
+          {query.isFetching && !location ? (
+            <DropdownMenuItem disabled>{t("chatWorkspaceLocationLoading")}</DropdownMenuItem>
+          ) : query.isError && !location ? (
+            <DropdownMenuItem disabled>{t("chatWorkspaceLocationFailed")}</DropdownMenuItem>
+          ) : null}
           {targets.map((target) => (
             <DropdownMenuItem key={target} onSelect={() => void open(target)}>
               {labels[target] ?? target}
@@ -103,10 +108,6 @@ export function WorkspacePathActions({
       {error ? (
         <span className={styles.error} role="alert">
           {error}
-        </span>
-      ) : query.error ? (
-        <span className={styles.error} role="alert">
-          {t("attachmentPreviewFailed")}
         </span>
       ) : null}
     </div>

@@ -70,7 +70,7 @@ function Harness({
         locale="en"
         t={t}
         onReference={tools.onReference}
-        onPreview={(item) => tools.openPreview({ items: [item], index: 0 })}
+        onPreview={(item) => tools.openPreview({ items: [item], index: 0 }, "files")}
         onSources={tools.openSources}
         onCollapse={tools.collapse}
         onThreadSelect={() => {}}
@@ -106,11 +106,13 @@ function MentionHarness() {
 }
 
 describe("shared chat sidebar", () => {
-  it("hides Agent selection in a direct chat, displays the absolute directory and opens it through the menu", async () => {
+  it("hides Agent selection in a direct chat, displays the workspace breadcrumb and opens its path through the menu", async () => {
     const user = userEvent.setup();
     render(<Harness />, { wrapper: createQueryWrapper().wrapper });
     await user.click(screen.getByRole("button", { name: "Files" }));
-    await screen.findByText("/workspace/Alice");
+    expect(
+      within(await screen.findByRole("navigation", { name: "Workspace files" })).getByText("Alice"),
+    ).toBeInTheDocument();
     expect(screen.queryByRole("combobox", { name: "Workspace agent" })).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Open file or directory" }));
     await user.click(screen.getByRole("menuitem", { name: "Open in file manager" }));
@@ -121,6 +123,37 @@ describe("shared chat sidebar", () => {
     await waitFor(() =>
       expect(openWorkspaceLocation).toHaveBeenCalledWith("alice", "sidebar-test", "README.md", "vscode"),
     );
+  });
+
+  it("uses the workspace root name as the first breadcrumb and returns to it from a directory", async () => {
+    const user = userEvent.setup();
+    let releaseNested = () => {};
+    const nestedGate = new Promise<void>((resolve) => {
+      releaseNested = resolve;
+    });
+    vi.mocked(fetchWorkspaceDirectory).mockImplementation(async (_agent, path) => {
+      if (path) await nestedGate;
+      return {
+        absolute_path: `/workspace/Alice${path ? `/${path}` : ""}`,
+        open_targets: [],
+        entries: path
+          ? [{ path: "docs/guide.md", name: "guide.md", type: "file" }]
+          : [{ path: "docs", name: "docs", type: "dir" }],
+      };
+    });
+    render(<Harness />, { wrapper: createQueryWrapper().wrapper });
+    await user.click(screen.getByRole("button", { name: "Files" }));
+    const breadcrumb = await screen.findByRole("navigation", { name: "Workspace files" });
+    expect(within(breadcrumb).getByText("Alice")).toHaveAttribute("aria-current", "page");
+    expect(breadcrumb.querySelector("img")).not.toBeInTheDocument();
+
+    await user.click(await screen.findByRole("button", { name: "docs" }));
+    expect(within(breadcrumb).getByRole("button", { name: "Alice" })).toBeInTheDocument();
+    expect(within(breadcrumb).getByText("docs")).toHaveAttribute("aria-current", "page");
+    releaseNested();
+    await screen.findByRole("button", { name: /^guide.md/ });
+    await user.click(within(breadcrumb).getByRole("button", { name: "Alice" }));
+    expect(within(breadcrumb).getByText("Alice")).toHaveAttribute("aria-current", "page");
   });
 
   it("keeps Agent selection available in a room", async () => {
@@ -212,7 +245,7 @@ describe("shared chat sidebar", () => {
       "href",
       "https://example.org/",
     );
-    await user.click(screen.getByRole("button", { name: "Open" }));
+    await user.keyboard("{Enter}");
     expect(screen.getByTitle("Browser")).toHaveAttribute("src", "https://example.org/");
     expect(screen.getByRole("tab", { name: "example.org" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getAllByRole("link", { name: "Open in external browser" })).toHaveLength(2);
@@ -277,6 +310,11 @@ describe("shared chat sidebar", () => {
     await user.click(screen.getByRole("button", { name: "Files" }));
     await screen.findByRole("button", { name: /^README.md/ });
     const panel = screen.getByRole("complementary");
+    expect(within(panel).getByRole("tab", { name: "Files" }).querySelector(".chat-side-folder-icon")).toHaveAttribute(
+      "aria-hidden",
+      "true",
+    );
+    expect(within(panel).getByRole("searchbox", { name: "Search files" })).toHaveAttribute("data-size", "sm");
     await user.click(within(panel).getByRole("tab", { name: "Conversation attachments" }));
     await screen.findByRole("button", { name: /^report.pdf/ });
     await user.click(within(panel).getByRole("button", { name: "Collapse sidebar" }));
@@ -286,11 +324,11 @@ describe("shared chat sidebar", () => {
     await user.click(screen.getByRole("button", { name: "Browser" }));
     const address = screen.getByRole("textbox", { name: "Web address" });
     await user.type(address, "javascript:alert(1)");
-    await user.click(screen.getByRole("button", { name: "Open" }));
+    await user.keyboard("{Enter}");
     expect(screen.getByRole("alert")).toHaveTextContent("Enter a valid HTTP or HTTPS URL");
     await user.clear(address);
     await user.type(address, "https://example.org/");
-    await user.click(screen.getByRole("button", { name: "Open" }));
+    await user.keyboard("{Enter}");
     expect(screen.getByTitle("Browser")).toHaveAttribute("sandbox", "allow-scripts allow-forms");
     const stored = Object.keys(localStorage)
       .filter((key) => key.includes("chatSidePanel.v1"))
@@ -302,6 +340,84 @@ describe("shared chat sidebar", () => {
     expect(screen.getByRole("tab", { name: "example.org" })).toHaveAttribute("aria-selected", "true");
     await user.click(screen.getByRole("button", { name: "Close tab example.org" }));
     expect(screen.getByRole("tab", { name: "Files" })).toHaveAttribute("aria-selected", "true");
+  });
+  it("updates conversation attachments when a message adds a file without refetching for text-only messages", async () => {
+    const user = userEvent.setup();
+    const initialMessage = {
+      id: "message",
+      sender_id: "admin",
+      content: "",
+      created_at: "2026-10-14T00:00:00Z",
+      attachments: [
+        {
+          id: "attachment-id",
+          name: "report.pdf",
+          media_type: "application/pdf",
+          size_bytes: 30,
+          kind: "file",
+          created_at: "2026-10-14T00:00:00Z",
+          sha256: "test",
+          download_url: "/api/v1/attachments/attachment-id?token=test-capability",
+        },
+      ],
+    };
+    const textMessage = {
+      id: "text-message",
+      sender_id: "admin",
+      content: "Hello",
+      created_at: "2026-10-14T00:01:00Z",
+      attachments: [],
+    };
+    const uploadedMessage = {
+      id: "upload-message",
+      sender_id: "admin",
+      content: "",
+      created_at: "2026-10-14T00:02:00Z",
+      attachments: [
+        {
+          id: "new-attachment-id",
+          name: "new-image.svg",
+          media_type: "image/svg+xml",
+          size_bytes: 42,
+          kind: "file",
+          created_at: "2026-10-14T00:02:00Z",
+          sha256: "new-test",
+          download_url: "/api/v1/attachments/new-attachment-id?token=new-capability",
+        },
+      ],
+    };
+    vi.mocked(fetchRoomFileMessages).mockResolvedValue([initialMessage]);
+    const view = render(<Harness room={{ ...conversation, messages: [initialMessage] }} />, {
+      wrapper: createQueryWrapper().wrapper,
+    });
+    await user.click(screen.getByRole("button", { name: "Files" }));
+    await user.click(screen.getByRole("tab", { name: "Conversation attachments" }));
+    await screen.findByRole("button", { name: /^report.pdf/ });
+    const initialFetches = vi.mocked(fetchRoomFileMessages).mock.calls.length;
+
+    view.rerender(<Harness room={{ ...conversation, messages: [initialMessage, textMessage] }} />);
+    expect(fetchRoomFileMessages).toHaveBeenCalledTimes(initialFetches);
+
+    vi.mocked(fetchRoomFileMessages).mockResolvedValue([initialMessage, textMessage, uploadedMessage]);
+    view.rerender(<Harness room={{ ...conversation, messages: [initialMessage, textMessage, uploadedMessage] }} />);
+    await screen.findByRole("button", { name: /^new-image.svg/ });
+    expect(vi.mocked(fetchRoomFileMessages).mock.calls.length).toBeGreaterThan(initialFetches);
+  });
+  it("returns to the file directory after closing a file preview beside a browser tab", async () => {
+    const user = userEvent.setup();
+    render(<Harness />, { wrapper: createQueryWrapper().wrapper });
+    await user.click(screen.getByRole("button", { name: "Files" }));
+    await screen.findByRole("button", { name: /^README.md/ });
+    await user.click(screen.getByRole("button", { name: "Browser" }));
+    await user.click(screen.getByRole("tab", { name: "Files" }));
+    await user.click(screen.getByRole("button", { name: /^README.md/ }));
+    expect(screen.getByRole("tab", { name: "README.md" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: "README.md" }).querySelector(".chat-side-file-icon")).toBeInTheDocument();
+    const closePreview = screen.getByRole("button", { name: "Close tab README.md" });
+    expect(closePreview).toHaveAttribute("data-csg-control", "button");
+    await user.click(closePreview);
+    expect(screen.getByRole("tab", { name: "Files" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("button", { name: /^README.md/ })).toBeVisible();
   });
   it("inserts a source-bound file reference at the saved caret without losing surrounding text", async () => {
     const user = userEvent.setup();

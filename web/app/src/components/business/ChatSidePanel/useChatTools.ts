@@ -101,7 +101,7 @@ export function useChatTools({ conversation, currentUserID, agents, editorRef, t
   );
 
   const openPreview = useCallback(
-    (request: DocumentPreviewRequest) => {
+    (request: DocumentPreviewRequest, originTabID?: "files") => {
       const item = request.items[request.index] ?? request.items[0];
       if (!item) return;
       triggerRef.current = request.anchor ?? null;
@@ -114,6 +114,7 @@ export function useChatTools({ conversation, currentUserID, agents, editorRef, t
         mediaType: item.mediaType,
         reference,
         draft: item.file ? item : undefined,
+        originTabID,
       });
     },
     [openTab],
