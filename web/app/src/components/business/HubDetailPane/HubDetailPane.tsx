@@ -3641,6 +3641,7 @@ export function HubDetailPane({
                   value={mcpDraftDocument}
                   onChange={handleMCPDraftDocumentChange}
                   invalid={Boolean(mcpFormError)}
+                  lineWrapping={false}
                   minRows={12}
                   t={t}
                 />
@@ -3959,6 +3960,7 @@ export function MCPServerCreateDialog({
                 value={document}
                 onChange={changeDocument}
                 invalid={Boolean(parseError)}
+                lineWrapping={false}
                 minRows={12}
                 t={t}
               />
