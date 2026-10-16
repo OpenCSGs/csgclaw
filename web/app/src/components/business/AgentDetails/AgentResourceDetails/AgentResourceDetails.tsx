@@ -147,7 +147,7 @@ export function AgentResourceDetails({
           ) : null}
         </DialogBody>
         <DialogFooter>
-          <Button variant="outlineDanger" disabled={busy} onClick={onDelete}>
+          <Button variant={server ? "danger" : "outlineDanger"} disabled={busy} onClick={onDelete}>
             {t(skill ? "agentDeleteSkill" : "agentDeleteMCP")}
           </Button>
         </DialogFooter>

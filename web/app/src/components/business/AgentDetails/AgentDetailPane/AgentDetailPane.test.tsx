@@ -9,6 +9,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AgentDraft, AgentLike } from "@/models/agents";
 import type { TranslateFn } from "@/models/conversations";
 import { normalizeModelProviderCatalog } from "@/models/modelProviders";
+import buttonStyles from "@/components/ui/Button/Button.module.css";
 import { AgentDetailPane } from "./AgentDetailPane";
 import type { AgentDetailPaneHandle, AgentDetailPaneProps } from "./AgentDetailPane";
 
@@ -513,7 +514,9 @@ describe("AgentDetailPane MCP snapshots", () => {
     expect(screen.getByText("agentKnowledgeMCPSourceDeleted")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "agentMCPUpdateConfig" })).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: new RegExp(mcpServer.description) }));
-    expect(within(screen.getByRole("dialog")).getByRole("button", { name: "agentDeleteMCP" })).toBeEnabled();
+    const deleteButton = within(screen.getByRole("dialog")).getByRole("button", { name: "agentDeleteMCP" });
+    expect(deleteButton).toBeEnabled();
+    expect(deleteButton).toHaveClass(buttonStyles["btn-danger"]);
   });
 
   it("keeps source-check failures silent while the saved MCP remains usable", async () => {
