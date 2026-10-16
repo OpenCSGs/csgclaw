@@ -320,11 +320,17 @@ fieldset.fields {
   flex: 1;
   min-height: 0;
   flex-direction: column;
+  height: 100%;
+  max-height: 100%;
+  overflow: hidden;
 }
 .toolsFillAvailableHeight ul {
   max-height: none;
+  height: 0;
   min-height: 0;
   flex: 1;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 .tools li {
   padding: 9px 12px;
