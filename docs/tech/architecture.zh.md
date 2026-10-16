@@ -6,7 +6,7 @@ English: [architecture.md](architecture.md)
 
 本文描述截至 2026-09-05 的 Agent Engine 解耦实现及后续修复。
 [Agent Engine](agent-engine-decoupling.zh.md) 说明资源语义与并发规则。
-[托管飞书](channel/agent-engine-channel-integration.zh.md)和 [lark-cli](channel/feishu-lark-cli-document-tool-design.zh.md) 分别说明消息渠道和可选 Runtime 扩展。
+[托管飞书](channel/agent-engine-channel-integration.zh.md)和 [lark-cli](channel/feishu-lark-cli-document-tool-design.zh.md) 分别说明消息渠道和 CLI + Skills 连接器。
 
 ## 所有权与执行路径
 
@@ -137,9 +137,8 @@ Recreate 在 Runtime 启动前恢复期望 Extension。
 更换 Runtime 时保留 Extension 期望资源，启动失败或新 Adapter 返回 `extension_unsupported` 也不会删除资源。
 正在删除的资源不再阻止 ready，清理触发的 reload 成功与其他 Extension 是否 ready 分开判断。
 
-飞书的 `feishu-lark-cli` 是 optional Extension，不阻止 Channel 连接。
-UI 读取 Engine 状态，包括 Runtime 是否实际加载当前 generation。
-产品只开放固定 init/cleanup action，不开放任意 payload 或 shell 命令接口。
+飞书的 `feishu-lark-cli` Extension 根据 Agent binding 加载全局 CLI 连接器配置。连接器管理协调共享配置更新与 Runtime 生命周期，消息渠道独立管理连接。
+UI 提供固定的连接器管理操作，以及各 worker 的开启开关。
 
 ## 持久化与安全
 

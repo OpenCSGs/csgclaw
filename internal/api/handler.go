@@ -244,7 +244,6 @@ type agentResponse struct {
 	ParticipantIDs       []string                           `json:"participant_ids,omitempty"`
 	ParticipantNames     []string                           `json:"participant_names,omitempty"`
 	Participants         []apitypes.Participant             `json:"participants,omitempty"`
-	LarkCLI              *apitypes.AgentLarkCLIStatus       `json:"lark_cli,omitempty"`
 	SkippedResources     []mcp.SkippedTemplateResource      `json:"skipped_resources,omitempty"`
 }
 
@@ -279,7 +278,6 @@ func (r *agentResponse) UnmarshalJSON(data []byte) error {
 		ParticipantIDs:   apiAgent.ParticipantIDs,
 		ParticipantNames: apiAgent.ParticipantNames,
 		Participants:     apiAgent.Participants,
-		LarkCLI:          apiAgent.LarkCLI,
 	}
 	if len(apiAgent.Runtime.OptionSchemas) > 0 {
 		data, err := json.Marshal(apiAgent.Runtime.OptionSchemas)
@@ -928,7 +926,7 @@ func (h *Handler) configureRuntimeExtensionSources() {
 	if err != nil {
 		return
 	}
-	if err := registrar.RegisterRuntimeExtensionSource("feishu-participant", source); err != nil {
+	if err := registrar.RegisterRuntimeExtensionSource("feishu-participant", legacyConnectorSource{h: h, source: source}); err != nil {
 		if !strings.Contains(err.Error(), "already registered") {
 			return
 		}
@@ -3415,7 +3413,6 @@ func (h *Handler) presentAgentResponse(item agent.Agent) agentResponse {
 		resp.MemorySupported = h.svc.SupportsMemory(item.RuntimeKind)
 	}
 	resp.Runtime.OptionSchemas = runtimeOptionSchemasForAPI(resp.RuntimeOptionSchemas)
-	resp.LarkCLI = h.agentLarkCLIStatus(item)
 	return resp
 }
 

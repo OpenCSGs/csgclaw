@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAgentResourceLists } from "./useAgentResourceLists";
 import { useAgentResourceEnablement } from "./useAgentResourceEnablement";
 import { useBlocker } from "react-router-dom";
-import { apiErrorBillingURL, apiErrorCode, errorMessage as apiErrorMessage, type ApiError } from "@/api/client";
+import { apiErrorBillingURL, apiErrorCode, errorMessage as apiErrorMessage } from "@/api/client";
 import { loginCLIProxyProviderRequest } from "@/api/cliproxy";
 import {
   batchAddAgentMCPServersRequest,
@@ -22,8 +22,6 @@ import {
   fetchAgentMCPServers,
   fetchAgentSkillSummaries,
   finalizeFeishuRegistrationRequest,
-  initAgentLarkCLIRequest,
-  cleanupAgentLarkCLIRequest,
   patchNotificationBotRequest,
   runAgentActionRequest,
   startFeishuRegistrationRequest,
@@ -202,60 +200,19 @@ function savePersistentAgentCreationWarnings(notices: Record<string, AgentPageNo
     // Storage may be unavailable in a hardened browser; the in-memory notice still works.
   }
 }
-type LarkCLIDialogState = {
-  kind: "message" | "install";
-  message: string;
-  title: string;
-};
 type AgentActionBusyEntry = {
   busyKey: string;
   visible: boolean;
 };
 type AgentActionBusyState = Record<string, AgentActionBusyEntry>;
-type FeishuActionKind = "connect" | "disconnect" | "finalize" | "lark-cli";
+type FeishuActionKind = "connect" | "disconnect" | "finalize";
 
 export function feishuRegistrationFinalizeNotice(result: FeishuRegistrationFinalizeResult | null | undefined): {
-  kind: "success" | "unavailable" | "bind_failed" | "error" | "warnings";
+  kind: "success" | "warnings";
   warnings: string[];
 } {
-  const code = String(result?.lark_cli_error?.code || "").trim();
-  if (code === "lark_cli_unavailable") {
-    return { kind: "unavailable", warnings: [] };
-  }
-  if (code === "lark_cli_bind_failed") {
-    return { kind: "bind_failed", warnings: [] };
-  }
-  if (code) {
-    return { kind: "error", warnings: [] };
-  }
   const warnings = (result?.warnings || []).map((warning) => String(warning || "").trim()).filter(Boolean);
   return { kind: warnings.length > 0 ? "warnings" : "success", warnings };
-}
-
-export type LarkCLIInitErrorKind =
-  | "missing_bot"
-  | "install"
-  | "app_conflict"
-  | "source_unavailable"
-  | "bind_failed"
-  | "generic";
-
-export function larkCLIInitErrorKind(code: string | null | undefined): LarkCLIInitErrorKind {
-  switch (String(code || "").trim()) {
-    case "feishu_bot_not_configured":
-      return "missing_bot";
-    case "lark_cli_unavailable":
-      return "install";
-    case "feishu_bot_app_id_conflict":
-      return "app_conflict";
-    case "lark_cli_source_unavailable":
-      return "source_unavailable";
-    case "lark_cli_bind_failed":
-    case "lark_cli_config_failed":
-      return "bind_failed";
-    default:
-      return "generic";
-  }
 }
 
 const AGENT_RUNTIME_SYNC_INTERVAL_MS = 2_000;
@@ -512,7 +469,6 @@ export function useAgentController({
   const [agentBillingURL, setAgentBillingURL] = useState("");
   const [agentProgress, setAgentProgress] = useState<AgentCreateProgressState | null>(null);
   const [agentActionBusyByAgent, setAgentActionBusyByAgent] = useState<AgentActionBusyState>({});
-  const [larkCLIDialog, setLarkCLIDialog] = useState<LarkCLIDialogState | null>(null);
   const agentActionBusyByAgentRef = useRef<AgentActionBusyState>({});
   const [messageActionBusy, setMessageActionBusy] = useState("");
   const [messageActionFeedback, setMessageActionFeedback] = useState<MessageActionFeedback>({
@@ -2336,13 +2292,7 @@ export function useAgentController({
         });
         await refreshAgentStateRef.current(agentID);
         const finalizeNotice = feishuRegistrationFinalizeNotice(result);
-        if (finalizeNotice.kind === "unavailable") {
-          showAgentPageNotice(t("feishuConnectConfiguredLarkCLIUnavailable"), "warning", 8000, agentID);
-        } else if (finalizeNotice.kind === "bind_failed") {
-          showAgentPageNotice(t("feishuConnectConfiguredLarkCLIBindFailed"), "warning", 8000, agentID);
-        } else if (finalizeNotice.kind === "error") {
-          showAgentPageNotice(t("feishuConnectConfiguredLarkCLIError"), "warning", 8000, agentID);
-        } else if (finalizeNotice.kind === "warnings") {
+        if (finalizeNotice.kind === "warnings") {
           showAgentPageNotice(
             t("feishuConnectConfiguredWithWarnings", { warnings: finalizeNotice.warnings.join("; ") }),
             "warning",
@@ -2460,7 +2410,7 @@ export function useAgentController({
   async function disconnectFeishu(item: AgentLike | null | undefined): Promise<void> {
     const agentID = String(item?.id || "").trim();
     const participantID = String(feishuAgentParticipant(item)?.id || "").trim();
-    if (!agentID || (!participantID && !item?.lark_cli?.cleanup_pending) || isAgentActionBusy(agentID)) {
+    if (!agentID || !participantID || isAgentActionBusy(agentID)) {
       return;
     }
     const busyKey = feishuActionKey(agentID, "disconnect");
@@ -2469,11 +2419,7 @@ export function useAgentController({
     }
     setAgentPageSaveError("");
     try {
-      if (participantID) {
-        await deleteFeishuParticipantRequest(participantID);
-      } else {
-        await cleanupAgentLarkCLIRequest(agentID);
-      }
+      await deleteFeishuParticipantRequest(participantID);
       updateFeishuPendingRegistrations((current) => {
         const next = { ...current };
         delete next[agentID];
@@ -2487,78 +2433,6 @@ export function useAgentController({
     } finally {
       releaseAgentAction(agentID, busyKey);
     }
-  }
-
-  async function initAgentLarkCLI(item: AgentLike | null | undefined): Promise<void> {
-    const agentID = String(item?.id || "").trim();
-    if (!agentID || isAgentActionBusy(agentID)) {
-      return;
-    }
-    const busyKey = feishuActionKey(agentID, "lark-cli");
-    if (!claimAgentAction(agentID, busyKey)) {
-      return;
-    }
-    setAgentPageSaveError("");
-    try {
-      const result = await initAgentLarkCLIRequest(agentID);
-      await refreshAgentStateRef.current(agentID);
-      showAgentPageNotice(
-        t(result.runtime_loaded === false ? "larkCLIConfiguredPendingLoad" : "larkCLIConfigured"),
-        "success",
-        5000,
-        agentID,
-      );
-      if (result?.restart_error) {
-        setAgentPageSaveError(`${t("larkCLIRestartFailed")} ${result.restart_error}`);
-      } else if (result.warning) {
-        setAgentPageSaveError(result.warning);
-      }
-    } catch (err) {
-      const apiError = err as ApiError | null;
-      const errorKind = larkCLIInitErrorKind(apiError?.code);
-      if (errorKind === "missing_bot") {
-        setLarkCLIDialog({
-          kind: "message",
-          title: t("larkCLINoFeishuBotTitle"),
-          message: t("larkCLINoFeishuBotMessage"),
-        });
-      } else if (errorKind === "install") {
-        showLarkCLIInstall(item);
-      } else if (errorKind === "app_conflict") {
-        setLarkCLIDialog({
-          kind: "message",
-          title: t("larkCLIAppConflictTitle"),
-          message: [t("larkCLIAppConflictMessage"), apiErrorMessage(err, "")].filter(Boolean).join("\n\n"),
-        });
-      } else if (errorKind === "source_unavailable") {
-        setLarkCLIDialog({
-          kind: "message",
-          title: t("larkCLISourceUnavailableTitle"),
-          message: [t("larkCLISourceUnavailableMessage"), apiErrorMessage(err, "")].filter(Boolean).join("\n\n"),
-        });
-      } else if (errorKind === "bind_failed") {
-        setLarkCLIDialog({
-          kind: "message",
-          title: t("larkCLIBindFailedTitle"),
-          message: [t("larkCLIBindFailedMessage"), apiErrorMessage(err, "")].filter(Boolean).join("\n\n"),
-        });
-      } else {
-        setAgentPageSaveError(errorMessage(err, t("larkCLIInitFailed")));
-      }
-    } finally {
-      releaseAgentAction(agentID, busyKey);
-    }
-  }
-
-  function showLarkCLIInstall(item: AgentLike | null | undefined): void {
-    if (!String(item?.id || "").trim()) {
-      return;
-    }
-    setLarkCLIDialog({
-      kind: "install",
-      title: t("larkCLIInstallTitle"),
-      message: t("larkCLIInstallMessage"),
-    });
   }
 
   async function deletePreviewBot(item: AgentLike | null | undefined) {
@@ -2921,7 +2795,6 @@ export function useAgentController({
       notice: selectedAgentPageNotice?.message || "",
       noticeTone: selectedAgentPageNotice?.tone || "warning",
       onDismissNotice: () => clearAgentPageNotice(selectedAgentOwnedNotice ? selectedAgentForPage?.id : null),
-      larkCLIDialog,
       feishuConnectBusy: selectedAgentActionBusy.includes(`:${FEISHU_CHANNEL_ACTION}:`) ? selectedAgentActionBusy : "",
       feishuPendingRegistration: selectedFeishuPendingRegistration,
       authStatuses: cliproxyAuthStatuses,
@@ -2939,6 +2812,7 @@ export function useAgentController({
           void agentSkillsQuery.refetch();
         }
       },
+      onRefreshSkills: resourceLists.skills.query.refetch,
       skillContinuation: resourceLists.skills.continuation,
       mcpContinuation: resourceLists.mcp.continuation,
       mcpListError: resourceLists.mcp.query.error
@@ -3003,9 +2877,6 @@ export function useAgentController({
       onStartFeishuConnect: startFeishuConnect,
       onFinalizeFeishuConnect: finalizeFeishuConnect,
       onDisconnectFeishu: disconnectFeishu,
-      onInitLarkCLI: initAgentLarkCLI,
-      onShowLarkCLIInstall: showLarkCLIInstall,
-      onDismissLarkCLIDialog: () => setLarkCLIDialog(null),
       onAddSkills: batchAddAgentSkills,
       onDeleteSkill: deleteAgentSkill,
       onInstallMCPServers: installAgentMCPServers,

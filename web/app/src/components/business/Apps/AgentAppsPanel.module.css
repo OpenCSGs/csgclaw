@@ -455,27 +455,52 @@ fieldset.fields {
   outline-offset: 4px;
   border-radius: 4px;
 }
-.resourceConnectorCard {
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 8px;
-  padding: 8px;
+.connectorToggle {
+  display: inline-flex;
 }
-.resourceConnectorOpen {
-  display: grid;
+.resourceConnectorCard {
   grid-template-columns: 32px minmax(0, 1fr) auto;
-  align-items: center;
   gap: 16px;
-  min-width: 0;
-  padding: 4px;
-  border: 0;
-  background: transparent;
-  color: inherit;
   text-align: left;
   cursor: pointer;
 }
-.resourceConnectorOpen:focus-visible {
+.resourceConnectorRow {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 6px;
+}
+.resourceConnectorRow:hover,
+.resourceConnectorRow:focus-within {
+  background: var(--gray-100);
+}
+.resourceConnectorRow > .resourceConnectorCard {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr);
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+}
+.resourceConnectorRow > button[aria-haspopup="menu"] {
+  opacity: 0;
+  pointer-events: none;
+}
+.resourceConnectorRow:hover > button[aria-haspopup="menu"],
+.resourceConnectorRow:focus-within > button[aria-haspopup="menu"],
+.resourceConnectorRow > button[aria-haspopup="menu"][data-state="open"] {
+  opacity: 1;
+  pointer-events: auto;
+}
+.resourceConnectorCard:focus-visible {
   outline: 2px solid var(--brand-600);
-  outline-offset: 2px;
+  outline-offset: 4px;
   border-radius: 4px;
 }
 .connectorIcon {
@@ -485,7 +510,14 @@ fieldset.fields {
   width: 32px;
   height: 32px;
   flex: 0 0 32px;
+  overflow: hidden;
+  border-radius: 8px;
   color: var(--brand-600);
+}
+.connectorIcon > img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 .gitlabIcon {
   color: var(--warning-500);
@@ -514,6 +546,13 @@ fieldset.fields {
 :global(:root[data-theme="dark"]) .connectorCard:hover,
 :global(:root[data-theme="dark"]) .connectorCard:focus-within {
   background: var(--gray-800);
+}
+:global(:root[data-theme="dark"]) .resourceConnectorRow:hover,
+:global(:root[data-theme="dark"]) .resourceConnectorRow:focus-within {
+  background: var(--gray-800);
+}
+:global(:root[data-theme="dark"]) .resourceConnectorRow > .resourceConnectorCard {
+  background: transparent;
 }
 :global(:root[data-theme="dark"]) .connectorTitle {
   color: var(--gray-100);
@@ -571,6 +610,160 @@ fieldset.fields {
   padding-top: 12px;
   border-top: 1px solid var(--line);
 }
+.cliStatus {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.cliStatus > [role="status"] {
+  margin: 0;
+}
+.cliFooter {
+  justify-content: space-between;
+}
+.cliFooterActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-left: auto;
+}
+.cliFooterActions a {
+  text-decoration: none;
+}
+.cliConnectAction {
+  margin-left: auto;
+}
+.authorizationSteps {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel-soft);
+}
+.authorizationStepsHeader strong {
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+}
+.authorizationStepsHeader p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.authorizationStep {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 52px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+}
+.authorizationStepNumber {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 1.5px solid var(--gray-200);
+  background: var(--white);
+}
+.authorizationStepNumber img {
+  display: block;
+}
+.authorizationStepCopy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.authorizationStepCopy strong {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 500;
+}
+.authorizationStepCopy span {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.authorizationStepState {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  gap: 4px;
+  padding: 2px 6px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 18px;
+  white-space: nowrap;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.05);
+}
+.authorizationStep[data-state="completed"] .authorizationStepState,
+.authorizationStep[data-state="current"] .authorizationStepState {
+  border-color: var(--gray-300);
+  background: var(--white);
+  color: var(--gray-700);
+}
+.authorizationStep[data-state="completed"] .authorizationStepState::before,
+.authorizationStep[data-state="current"] .authorizationStepState::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--brand-500);
+}
+.authorizationStep[data-state="completed"] .authorizationStepState::before {
+  background: var(--success-500);
+}
+.authorizationStepActions {
+  display: flex;
+  grid-column: 3;
+  grid-row: 1 / span 2;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 16px;
+}
+.authorizationStepActions a {
+  text-decoration: none;
+}
+.authorizationStep[data-state="completed"] .authorizationStepNumber {
+  border: 0;
+  background: var(--brand-50);
+}
+:global(:root[data-theme="dark"]) .authorizationStep .authorizationStepState {
+  border-color: var(--gray-600);
+  background: var(--gray-900);
+  color: var(--gray-100);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.24);
+}
+:global(:root[data-theme="dark"]) .authorizationStep[data-state="pending"] .authorizationStepNumber {
+  border-color: var(--gray-600);
+  background: var(--gray-900);
+}
+.authorizationStep[data-state="current"] {
+  border-color: var(--brand-500);
+}
+.authorizationStep[data-state="current"] .authorizationStepNumber {
+  border-color: var(--brand-600);
+  background: var(--brand-600);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--brand-500) 24%, transparent);
+}
 .secretInput {
   --input-padding-md: 10px 42px 10px 14px;
   display: flex;
@@ -617,6 +810,28 @@ fieldset.fields {
   flex-shrink: 0;
   margin-top: 2px;
 }
+.cliError {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  gap: 8px;
+  padding: 10px 13px;
+  border-color: color-mix(in oklab, var(--warning-700) 30%, var(--line));
+  border-radius: 12px;
+  background: var(--warning-50);
+  color: var(--warning-700);
+  font-size: 13px;
+  font-weight: 680;
+  line-height: 18px;
+}
+.resourceError {
+  width: 100%;
+}
+:global(:root[data-theme="dark"]) .cliError {
+  border-color: color-mix(in oklab, var(--warning-700) 38%, var(--line));
+  background: color-mix(in oklab, var(--warning-700) 14%, transparent);
+  color: color-mix(in oklab, var(--warning-700) 78%, var(--text));
+}
 @media (max-width: 1100px) {
   .applicationGrid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -635,7 +850,6 @@ fieldset.fields {
 :global(:root[data-theme="dark"]) .probeError {
   color: var(--warning-300);
 }
-
 .authSection {
   display: flex;
   flex-direction: column;

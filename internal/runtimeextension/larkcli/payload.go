@@ -12,12 +12,13 @@ const (
 // Runtime-owned lark-cli Driver. AppSecret deliberately remains behind the
 // exec provider and is never copied into this payload.
 type Payload struct {
-	AgentID       string `json:"agent_id"`
-	ParticipantID string `json:"participant_id"`
-	AppID         string `json:"app_id"`
-	BaseURL       string `json:"base_url"`
-	AccessToken   string `json:"access_token"`
-	HelperPath    string `json:"helper_path"`
+	Legacy        *LegacyProjection `json:"legacy,omitempty"`
+	AgentID       string            `json:"agent_id"`
+	ParticipantID string            `json:"participant_id"`
+	AppID         string            `json:"app_id"`
+	BaseURL       string            `json:"base_url"`
+	AccessToken   string            `json:"access_token"`
+	HelperPath    string            `json:"helper_path"`
 }
 
 func Encode(payload Payload) (json.RawMessage, error) {

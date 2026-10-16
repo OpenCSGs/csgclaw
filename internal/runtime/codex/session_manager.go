@@ -10,9 +10,11 @@ import (
 	"time"
 
 	agentruntime "csgclaw/internal/runtime"
+	larkextension "csgclaw/internal/runtimeextension/larkcli"
 )
 
 type liveSession struct {
+	stopErr               error
 	telemetry             *nativeTelemetry
 	compactingThreads     map[string]bool
 	contextUsage          map[string]modelcap.ContextUsage
@@ -102,6 +104,7 @@ func buildSessionEnv(spec SessionSpec) []string {
 		envMap["HOME"] = homeDir
 	}
 	envMap["CODEX_HOME"] = spec.CodexHomeDir
+	envMap["LARKSUITE_CLI_CONFIG_DIR"] = larkextension.DisabledConfigDir(spec.CodexHomeDir)
 	if apiKey := spec.Profile.APIKey; apiKey != "" {
 		envMap["OPENAI_API_KEY"] = apiKey
 	}
@@ -134,6 +137,9 @@ func buildSessionEnv(spec SessionSpec) []string {
 }
 
 func shouldOmitInheritedSessionEnvKey(key string) bool {
+	if larkextension.IsConfigurationEnv(key) {
+		return true
+	}
 	switch strings.ToUpper(strings.TrimSpace(key)) {
 	case "CSGCLAW_ACCESS_TOKEN", "CSGCLAW_CONNECTOR_CAPABILITY", "OPENAI_API_KEY", "ZDOTDIR", "BASH_ENV", "ENV", "LARKSUITE_CLI_CONFIG_DIR", "LARK_CHANNEL", "LARK_CHANNEL_HOME", "LARK_CHANNEL_PROFILE", "LARK_CHANNEL_CONFIG":
 		return true
@@ -143,6 +149,9 @@ func shouldOmitInheritedSessionEnvKey(key string) bool {
 }
 
 func isReservedSessionEnvKey(key string) bool {
+	if larkextension.IsConfigurationEnv(key) {
+		return true
+	}
 	switch strings.ToUpper(strings.TrimSpace(key)) {
 	case "CSGCLAW_ACCESS_TOKEN", "CSGCLAW_CONNECTOR_CAPABILITY", "HOME", "CODEX_HOME", "OPENAI_BASE_URL", "OPENAI_API_KEY", "OPENAI_MODEL", "LARKSUITE_CLI_CONFIG_DIR", "LARK_CHANNEL", "LARK_CHANNEL_HOME", "LARK_CHANNEL_PROFILE", "LARK_CHANNEL_CONFIG":
 		return true

@@ -2186,7 +2186,7 @@ func stopProcess(pid int) error {
 	// returns ERROR_INVALID_PARAMETER once that PID no longer exists. Treat an
 	// already-exited process as a successful, idempotent stop.
 	if !processAlive(pid) {
-		return nil
+		return stopProcessTree(pid)
 	}
 	proc, err := os.FindProcess(pid)
 	if err != nil {

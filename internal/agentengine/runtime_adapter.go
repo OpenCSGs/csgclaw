@@ -40,7 +40,12 @@ func New(controller *agent.Controller) *Engine {
 	}
 	backend := runtimeBackend{agents: controller, repository: &controller.Repository, lifecycle: controller.LifecycleCoordinator(), registry: controller.RuntimeRegistry(), restart: controller.ReloadRuntimeIfRunning, stop: controller.Stop}
 	extensions := newRuntimeExtensionManager(backend)
-	backend.ready = extensions.RuntimeReady
+	backend.ready = func(id string) error {
+		if err := controller.RuntimeConfigurationReady(id); err != nil {
+			return err
+		}
+		return extensions.RuntimeReady(id)
+	}
 	engine.runtimes = backend
 	engine.extensions = extensions
 	controller.AttachEngine(files, &engine.interactions, extensions)

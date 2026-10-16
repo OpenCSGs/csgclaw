@@ -50,7 +50,7 @@ App CLI 无需额外登录，服务地址通过 `CSGCLAW_BASE_URL` 指定。
 也可选择手动填写平台 Token；已过期的手动 Token 会明确提示更新或切换登录引用。
 退出登录后引用连接需要重新授权，登录后会刷新未停用、未手动断开的引用连接。
 前端分别显示平台 401/403、未登录、环境不匹配、飞书 Token 获取失败、MCP 地址错误或后端休眠/不可用，并保留 HTTP 状态信息。
-## 飞书远端 Passthrough 服务
+## 已有 HTTP 飞书资源
 
 HTTP 飞书连接器填写 MCP URL 及其独立的 App ID/App Secret。
 Connector 复用飞书 Token 获取实现，按连接实例缓存 tenant access token，并在有效期结束前按需重新获取。
@@ -138,14 +138,22 @@ CSGClaw 内置 MCP 入口被标记为必需服务，Codex 在启动及工具刷�
 只读 Agent 只能发现和调用标记为只读的工具。
 工具搜索由 Codex 提供，含工具定义或工具历史的请求不会静默降级到纯文本 Chat Completions。
 
-内部包使用根目录 `plugin.json` 和 `apps.json`，三个内置 App 不需要 `mcp.json`。
-凭据保存在私有本地状态中，每个 stdio 安装实例拥有独立的 `HOME`、`PLUGIN_DATA` 和 `PLUGIN_ROOT` 目录。
-插件市场、任意包导入、Skills/Hooks 执行和浏览器 OAuth2 不属于当前版本的 App 流程。
+连接器包以 `plugin.json` 为入口，声明包版本、`kind`、`mcp` 或 `cli` 配置引用，以及可选的 `skills` 目录。MCP 包通过 `mcp.json` 的 `mcpServers` 定义一个服务；CLI 包通过 `cli.json` 定义程序安装、授权命令、状态检查、退出授权和运行环境。
+
+内置连接器和 `Options.Packages` 提供的目录使用同一个加载器。MCP 与 CLI 共用全局资源、worker 绑定和 Skills 管理流程。历史 `plugin.json + apps.json` 服务引用继续受支持，已有手动 MCP JSON 配置保持独立运行。当前界面尚未提供连接器包上传入口。
+
+CLI 安装支持按平台声明原生程序的下载地址、SHA256 和版本检查参数。CLI 自行保存凭据，`${CONFIG_DIR}` 表示全局资源的私有目录。飞书的应用初始化、设备码授权、权限参数、状态检查、退出登录和配置清理由 `cli.json` 声明，通用 CLI 模块负责执行。`LARKSUITE_CLI_CONFIG_DIR` 保留在插件的 `environment` 中。命令步骤可以通过 `when`、`unless` 和 JSON 条件检查已有授权；设备码任务支持取消和重启恢复。状态接口仅返回 `status_fields` 指定的字段。旧频道配置继续使用迁移导入功能。CLI 程序支持 Codex 和 DSH 的主机运行环境。
+
+完整字段与示例参见 [Connector packages](apps.md#connector-packages)。
+
+取消操作会完成已经保存的授权状态对应的 worker 配置更新，并按照当前启停设置恢复 worker。迁移或清理失败时，页面提供“断开连接”。后端停止全部相关旧 worker，清理 CLI 授权、运行配置、受管理 Skills 和迁移恢复数据，保留资源 ID、绑定关系和 worker 开关设置。原来运行中的 worker 使用未配置连接器的环境恢复运行，原来停止的 worker 保持停止。
+
+清理失败时可以重试断开连接；完成清理前阻止重新连接。服务重启后继续未完成的断开操作。断开成功后显示“连接飞书”，重新授权并配置已开启的绑定。CLI 管理操作包括 `connect`、`login`、`logout`、`disconnect` 和 `check`。
 
 ## 安装默认值与设置表单
 
 新增 App 表单读取目录中 `config_schema.properties.*.default` 声明的非秘密连接默认值。
-GitLab 预填 `https://u-agentichub-gitlab-mcp-1qq.public.opencsg.com/mcp`；飞书预填 `https://u-agentichub-lark-mcp-passthrough-1qr.public.opencsg.com/mcp`。
+GitLab 预填 `https://u-agentichub-gitlab-mcp-1qq.public.opencsg.com/mcp`；飞书使用 CLI 授权窗口。
 连接时使用与服务地址匹配的 OpenCSG 登录环境。
 llm-wiki 暂时预填本地测试服务 `http://127.0.0.1:19093/mcp`，可以手动替换地址或通过知识库选择器填写。
 本机地址指运行 CSGClaw 的机器。

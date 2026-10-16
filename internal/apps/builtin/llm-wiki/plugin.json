@@ -4,7 +4,8 @@
   "description": "Connect to an existing llm-wiki knowledge base MCP service.",
   "author": {"name": "OpenCSG"},
   "keywords": ["knowledge-base", "llm-wiki"],
-  "apps": "./apps.json",
+  "kind": "mcp",
+  "mcp": "./mcp.json",
   "interface": {
     "displayName": "llm-wiki",
     "shortDescription": "Search your authorized knowledge bases",

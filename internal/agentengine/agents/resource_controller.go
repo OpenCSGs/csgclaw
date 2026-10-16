@@ -1090,6 +1090,10 @@ func (f *Controller) convert(selected Agent) (contract.Agent, error) {
 		}
 	}
 	message := ""
+	if err := f.RuntimeConfigurationReady(selected.ID); err != nil {
+		ready = false
+		message = err.Error()
+	}
 	if f.extensions != nil {
 		if err := f.extensions.RuntimeReady(selected.ID); err != nil {
 			ready = false

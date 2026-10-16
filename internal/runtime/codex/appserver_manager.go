@@ -6,6 +6,7 @@ import (
 	"csgclaw/internal/agentengine/contract"
 	"csgclaw/internal/diagnostics"
 	"csgclaw/internal/modelprovider"
+	"csgclaw/internal/processgroup"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -124,17 +125,28 @@ func (m *appServerManager) Start(ctx context.Context, spec SessionSpec) (*Sessio
 			telemetry.close()
 		}
 	}()
-	cmd, err := appServerCommandContext(ctx, spec.BinaryPath, append(appServerOverrides(spec), telemetry.overrides()...))
-	if err != nil {
-		_ = stderrFile.Close()
-		return nil, fmt.Errorf("prepare codex app-server command: %w", err)
-	}
-	cmd.Dir = spec.WorkspaceDir
 	environment, extensionDigests, err := buildSessionEnvironment(spec)
 	if err != nil {
 		_ = stderrFile.Close()
 		return nil, fmt.Errorf("prepare Runtime extension environment: %w", err)
 	}
+	overrides := append(appServerOverrides(spec), telemetry.overrides()...)
+	if len(extensionDigests) > 0 && spec.ExecutionMode != ExecutionModeReadOnly {
+		// Keep managed commands independent of login scripts and shell snapshots.
+		overrides = append(overrides, "--config", "allow_login_shell=false")
+		for _, entry := range environment {
+			key, value, _ := strings.Cut(entry, "=")
+			if canonical := agentruntime.CanonicalEnvironmentKey(key); canonical == "PATH" || canonical == "LARKSUITE_CLI_CONFIG_DIR" {
+				overrides = append(overrides, "--config", "shell_environment_policy.set."+key+"="+tomlQuotedKey(value))
+			}
+		}
+	}
+	cmd, err := appServerCommandContext(ctx, spec.BinaryPath, overrides)
+	if err != nil {
+		_ = stderrFile.Close()
+		return nil, fmt.Errorf("prepare codex app-server command: %w", err)
+	}
+	cmd.Dir = spec.WorkspaceDir
 	cmd.Env = environment
 	if telemetry != nil {
 		// Keep completed-turn exports timely; this does not block the turn itself.
@@ -155,7 +167,7 @@ func (m *appServerManager) Start(ctx context.Context, spec SessionSpec) (*Sessio
 		_ = stderrFile.Close()
 		return nil, fmt.Errorf("codex app-server stdout pipe: %w", err)
 	}
-	if err := cmd.Start(); err != nil {
+	if err := processgroup.Start(cmd); err != nil {
 		_ = stderrFile.Close()
 		return nil, fmt.Errorf("start codex app-server: %w", err)
 	}
@@ -316,7 +328,10 @@ func (m *appServerManager) Stop(ctx context.Context, handle SessionHandle) error
 	defer timeout.Stop()
 	select {
 	case <-live.done:
-		return nil
+		live.mu.Lock()
+		stopErr := live.stopErr
+		live.mu.Unlock()
+		return stopErr
 	case <-ctx.Done():
 		return ctx.Err()
 	case <-timeout.C:
@@ -2135,6 +2150,10 @@ func (m *appServerManager) readAppServerStdout(runtimeID string, live *liveSessi
 
 func (m *appServerManager) waitAppServerSession(runtimeID string, live *liveSession) {
 	err := live.cmd.Wait()
+	cleanupErr := stopProcessTree(live.cmd.Process.Pid)
+	live.mu.Lock()
+	live.stopErr = cleanupErr
+	live.mu.Unlock()
 	live.telemetry.close()
 	exitCode := 0
 	if err != nil {
@@ -2152,9 +2171,14 @@ func (m *appServerManager) waitAppServerSession(runtimeID string, live *liveSess
 		)
 		live.appClient.closeAllPending(fmt.Errorf("codex app-server exited with code %d", exitCode))
 	}
-	isCurrent := m.detachSession(runtimeID, live)
+	isCurrent := false
+	if cleanupErr == nil {
+		isCurrent = m.detachSession(runtimeID, live)
+	}
 	if live.session != nil {
-		live.session.ProcessID = 0
+		if cleanupErr == nil {
+			live.session.ProcessID = 0
+		}
 		if isCurrent && m.deps.OnExit != nil {
 			m.deps.OnExit(live.session, exitCode)
 		}

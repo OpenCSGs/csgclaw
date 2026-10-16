@@ -30,6 +30,7 @@ import styles from "./AgentAppsPanel.module.css";
 
 type Props = {
   agentID: string;
+  cliSupported?: boolean;
   children?: ReactNode;
   onAddTools?: () => void;
   controller: AgentAppsController;
@@ -41,6 +42,7 @@ type Props = {
 };
 
 export function AgentAppsPanel({
+  cliSupported = true,
   controller,
   t,
   portalContainer,
@@ -53,6 +55,7 @@ export function AgentAppsPanel({
   const [adding, setAdding] = useState(false);
   const [removing, setRemoving] = useState<AppInstallation | null>(null);
   const [error, setError] = useState<unknown>(null);
+  const feishu = controller.items.find((app) => app.kind === "cli" && app.app_id === "feishu");
   const selected = controller.items.find((app) => app.installation_id === selectedID);
   const available = controller.resources.filter(
     (resource) =>
@@ -114,29 +117,68 @@ export function AgentAppsPanel({
         </p>
       ) : null}
       <div className={styles.agentGrid}>
-        {controller.items.map((app) => (
-          <button
-            key={app.installation_id}
-            type="button"
-            className={`${styles.connectorCard} ${styles.connectorOpen}`}
-            onClick={() => onSelect(app.installation_id)}
+        <article
+          className={`${styles.connectorCard} ${feishu ? styles.connectorOpen : ""}`}
+          role={feishu ? "button" : undefined}
+          tabIndex={feishu ? 0 : undefined}
+          onClick={() => feishu && onSelect(feishu.installation_id)}
+          onKeyDown={(event) => {
+            if (!feishu || (event.key !== "Enter" && event.key !== " ")) return;
+            event.preventDefault();
+            onSelect(feishu.installation_id);
+          }}
+        >
+          <span className={styles.connectorIcon}>
+            <AppIcon appID="feishu" />
+          </span>
+          <span className={styles.connectorCopy}>
+            <span className={styles.connectorTitle}>{appName("feishu", t)}</span>
+            <span className={styles.connectorDescription}>
+              {!cliSupported ? t("feishuCLIUnsupported") : feishu ? appStatus(feishu, t) : t("feishuCLIWorkerHint")}
+            </span>
+          </span>
+          <span
+            className={styles.connectorToggle}
+            onClick={(event) => event.stopPropagation()}
+            onKeyDown={(event) => event.stopPropagation()}
           >
-            <span className={styles.connectorIcon}>
-              <AppIcon appID={app.app_id} />
-            </span>
-            <span className={styles.connectorCopy}>
-              <span className={styles.connectorTitle} title={app.name}>
-                {app.name}
+            <Switch
+              aria-label={t("feishuCLIWorkerSwitch")}
+              checked={Boolean(feishu?.enabled)}
+              disabled={!cliSupported || Boolean(controller.busyID) || feishu?.status === "applying"}
+              onCheckedChange={(enabled) =>
+                void run(() =>
+                  feishu ? controller.update(feishu.installation_id, { enabled }) : controller.bindFeishu(),
+                )
+              }
+            />
+          </span>
+        </article>
+        {controller.items
+          .filter((app) => app.kind !== "cli" || app.app_id !== "feishu")
+          .map((app) => (
+            <button
+              key={app.installation_id}
+              type="button"
+              className={`${styles.connectorCard} ${styles.connectorOpen}`}
+              onClick={() => onSelect(app.installation_id)}
+            >
+              <span className={styles.connectorIcon}>
+                <AppIcon appID={app.app_id} />
               </span>
-              <span className={styles.connectorDescription}>
-                {appName(app.app_id, t)} · {app.config.url || app.config.command}
+              <span className={styles.connectorCopy}>
+                <span className={styles.connectorTitle} title={app.name}>
+                  {app.name}
+                </span>
+                <span className={styles.connectorDescription}>
+                  {appName(app.app_id, t)} · {app.config.url || app.config.command}
+                </span>
               </span>
-            </span>
-            <span className={styles.status} data-status={app.enabled ? app.status : "disabled"}>
-              {appStatus(app, t)}
-            </span>
-          </button>
-        ))}
+              <span className={styles.status} data-status={app.enabled ? app.status : "disabled"}>
+                {appStatus(app, t)}
+              </span>
+            </button>
+          ))}
       </div>
       {!controller.items.length && !controller.loading ? <p className={styles.hint}>{t("appEmptyTitle")}</p> : null}
       {children}
@@ -167,7 +209,25 @@ export function AgentAppsPanel({
                 ) : null}
                 {selected.last_error ? <p className={styles.cardError}>{appConnectionError(selected, t)}</p> : null}
                 {selected.disconnected ? <p className={styles.hint}>{t("appDisconnectedHint")}</p> : null}
-                <AppToolList tools={selected.tools} t={t} />
+                {selected.kind === "cli" ? (
+                  <div>
+                    {selected.runtime_status === "configured" ? (
+                      <p>{t("feishuCLIConfiguredRuntime")}</p>
+                    ) : selected.runtime_status === "loaded" ? (
+                      <p>{t("feishuCLILoadedRuntime")}</p>
+                    ) : null}
+                    {selected.app_id === "feishu" ? <p className={styles.hint}>{t("feishuCLISkillsSource")}</p> : null}
+                    <ul>
+                      {selected.skills?.map((skill) => (
+                        <li key={skill.skill_name}>
+                          {skill.skill_name} · {t(skill.managed ? "feishuCLIManagedSkill" : "feishuCLIUserSkill")}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : (
+                  <AppToolList tools={selected.tools} t={t} />
+                )}
                 <div className={styles.settingsActions}>
                   <div className={styles.settingsActionGroup}>
                     <LinkButton
@@ -178,14 +238,16 @@ export function AgentAppsPanel({
                       {t("appManageResource")}
                       <ArrowUpRight size={14} />
                     </LinkButton>
-                    <Button
-                      size="sm"
-                      disabled={!!controller.busyID || !selected.enabled || selected.resource_enabled === false}
-                      onClick={() => void run(() => controller.connect(selected.installation_id))}
-                    >
-                      <RefreshCw size={14} />
-                      {selected.status === "connected" ? t("appReconnect") : t("appConnect")}
-                    </Button>
+                    {selected.kind !== "cli" ? (
+                      <Button
+                        size="sm"
+                        disabled={!!controller.busyID || !selected.enabled || selected.resource_enabled === false}
+                        onClick={() => void run(() => controller.connect(selected.installation_id))}
+                      >
+                        <RefreshCw size={14} />
+                        {selected.status === "connected" ? t("appReconnect") : t("appConnect")}
+                      </Button>
+                    ) : null}
                     <Button
                       size="sm"
                       disabled={!!controller.busyID}
@@ -195,22 +257,26 @@ export function AgentAppsPanel({
                     >
                       {selected.enabled ? t("appDisable") : t("appEnable")}
                     </Button>
+                    {selected.kind !== "cli" ? (
+                      <Button
+                        size="sm"
+                        disabled={!!controller.busyID || selected.disconnected}
+                        onClick={() => void run(() => controller.disconnect(selected.installation_id))}
+                      >
+                        {t("appDisconnect")}
+                      </Button>
+                    ) : null}
+                  </div>
+                  {selected.kind !== "cli" ? (
                     <Button
                       size="sm"
-                      disabled={!!controller.busyID || selected.disconnected}
-                      onClick={() => void run(() => controller.disconnect(selected.installation_id))}
+                      variant="outlineDanger"
+                      disabled={!!controller.busyID}
+                      onClick={() => setRemoving(selected)}
                     >
-                      {t("appDisconnect")}
+                      {t("appRemove")}
                     </Button>
-                  </div>
-                  <Button
-                    size="sm"
-                    variant="outlineDanger"
-                    disabled={!!controller.busyID}
-                    onClick={() => setRemoving(selected)}
-                  >
-                    {t("appRemove")}
-                  </Button>
+                  ) : null}
                 </div>
               </>
             ) : null}
@@ -237,7 +303,7 @@ export function AgentAppsPanel({
               <Button
                 key={resource.installation_id}
                 className={styles.catalogItem}
-                disabled={!resource.enabled || !!controller.busyID}
+                disabled={!resource.enabled || !!controller.busyID || (resource.kind === "cli" && !cliSupported)}
                 onClick={() =>
                   void run(() => controller.bind(resource.installation_id)).then((ok) => {
                     if (ok) closePicker();
@@ -324,7 +390,8 @@ export function AppManagedMCPRows({
 }: Pick<Props, "controller" | "t" | "onSelect" | "portalContainer"> & { disabled?: boolean }) {
   const [detailID, setDetailID] = useState("");
   const [error, setError] = useState<unknown>(null);
-  const selected = controller.items.find((app) => app.installation_id === detailID);
+  const items = controller.items.filter((app) => app.kind !== "cli");
+  const selected = items.find((app) => app.installation_id === detailID);
   async function toggle(app: AppInstallation) {
     setError(null);
     try {
@@ -339,11 +406,11 @@ export function AppManagedMCPRows({
       {localizeAPIError(error, t, t("agentResourceApplyFailed"))}
     </p>
   ) : null;
-  return controller.items.length ? (
+  return items.length ? (
     <>
       {selected ? null : feedback}
       <ResourceList>
-        {controller.items.map((app) => (
+        {items.map((app) => (
           <ResourceListCard
             key={app.installation_id}
             title={app.name}

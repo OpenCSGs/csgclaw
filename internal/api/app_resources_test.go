@@ -213,7 +213,7 @@ func TestGlobalConnectorNamesAreUniqueAcrossApplicationTypes(t *testing.T) {
 	h, _, _, _, _ := newAppPlatformAuthFixture(t)
 	create := func(appID, name string) *httptest.ResponseRecorder {
 		t.Helper()
-		body, err := json.Marshal(apps.CreateRequest{AppID: appID, Name: name, Config: apps.Config{URL: upstream.URL, AuthMode: "none"}})
+		body, err := json.Marshal(apps.CreateRequest{Kind: apps.KindMCP, AppID: appID, Name: name, Config: apps.Config{URL: upstream.URL, AuthMode: "none"}})
 		if err != nil {
 			t.Fatal(err)
 		}

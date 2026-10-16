@@ -207,8 +207,7 @@ func (h *Handler) handleParticipantByIDPath(w http.ResponseWriter, r *http.Reque
 	}
 }
 
-// Both UI registration and manual Participant/CLI writes share the same Agent
-// lease. A changed source token becomes invalid before any new Runtime runs.
+// Registration and Participant writes share the Agent lifecycle lease.
 func (h *Handler) mutateFeishuBot(ctx context.Context, agentID, appID string, write func(context.Context) error) error {
 	if strings.TrimSpace(agentID) == "" {
 		return feishubind.WithExclusiveBotAppID(h.participant, agentID, appID, func() error { return write(ctx) })
@@ -226,11 +225,6 @@ func (h *Handler) mutateFeishuBot(ctx context.Context, agentID, appID string, wr
 		target, ok := h.svc.Agent(agentID)
 		if !ok {
 			return fmt.Errorf("agent %q not found", agentID)
-		}
-		if supportsAgentLarkCLI(target.RuntimeKind) && appID != "" {
-			// Optional tool errors are exposed in Engine status, not as failure
-			// of the successfully saved Channel credentials.
-			_, _ = h.configureAgentLarkCLILocked(ctx, target)
 		}
 		_, _, err := h.refreshAgentChannel(ctx, target, participant.ChannelFeishu)
 		return err
@@ -276,9 +270,6 @@ func (h *Handler) deactivateFeishuAgentAfterDisconnect(ctx context.Context, dele
 		if _, _, err := h.refreshAgentChannel(ctx, target, participant.ChannelFeishu); err != nil {
 			errs = append(errs, fmt.Errorf("reconcile feishu binding for agent %q after disconnecting participant %q: %w", agentID, deleted.ID, err))
 		}
-	}
-	if err := h.clearAgentLarkCLIState(ctx, agentID); err != nil {
-		errs = append(errs, fmt.Errorf("clear lark-cli state for agent %q after disconnecting participant %q: %w", agentID, deleted.ID, err))
 	}
 	return errors.Join(errs...)
 }

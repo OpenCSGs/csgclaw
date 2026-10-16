@@ -221,6 +221,7 @@ type Controller struct {
 	startupProfileDetectOff       bool
 	connectorCapabilityKey        []byte
 	agentResourceCleanup          func(context.Context, string) error
+	runtimeConfigurationGuard     func(context.Context, string) error
 
 	// gatewayWorkPhase is set by createGatewayBox for bootstrap progress logs (best-effort if concurrent).
 	gatewayWorkPhase atomic.Uint32

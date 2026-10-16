@@ -125,6 +125,18 @@ describe("AgentDetailPane metadata editing", () => {
     );
   });
 
+  it("refreshes skills when entering the tab and returning from connectors", async () => {
+    const user = userEvent.setup();
+    const onRefreshSkills = vi.fn().mockResolvedValue(undefined);
+    render(<Harness workspaceSupported onRefreshSkills={onRefreshSkills} />);
+    expect(onRefreshSkills).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: /agentProfileSkillsTab/ }));
+    await waitFor(() => expect(onRefreshSkills).toHaveBeenCalledTimes(1));
+    await user.click(screen.getByRole("button", { name: "agentAppsTab" }));
+    await user.click(screen.getByRole("button", { name: /agentProfileSkillsTab/ }));
+    await waitFor(() => expect(onRefreshSkills).toHaveBeenCalledTimes(2));
+  });
+
   it("preserves the skill list while applying an enablement change", async () => {
     const skills = [{ name: "reviewer", description: "Review", enabled: true }];
     const view = render(<Harness workspaceSupported skills={skills} />);
@@ -136,25 +148,6 @@ describe("AgentDetailPane metadata editing", () => {
     view.rerender(<Harness workspaceSupported skills={[{ ...skills[0], enabled: false }]} />);
     expect(screen.getByRole("button", { name: /reviewer/ })).toBe(entry);
     expect(screen.getByRole("switch", { name: "reviewer" })).not.toBeChecked();
-  });
-
-  it("offers tool cleanup after Feishu disconnect without showing a connected Bot", async () => {
-    const user = userEvent.setup();
-    const onDisconnectFeishu = vi.fn();
-    render(
-      <Harness
-        item={{
-          ...agent,
-          lark_cli: { state: "mismatch", bound: false, available: true, runtime_loaded: false, cleanup_pending: true },
-        }}
-        onDisconnectFeishu={onDisconnectFeishu}
-      />,
-    );
-    await user.click(screen.getByRole("button", { name: "agentChannelsTitle" }));
-    expect(screen.getByText("feishuDisconnected")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "feishuDisconnect" })).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "feishuCleanupRetry" }));
-    expect(onDisconnectFeishu).toHaveBeenCalledTimes(1);
   });
 
   it("places a dismiss button on the right side of a notice", async () => {
@@ -389,6 +382,35 @@ describe("AgentDetailPane memory", () => {
 });
 
 describe("AgentDetailPane MCP snapshots", () => {
+  it.each([
+    { runtimeKind: "dsh", sandbox: false, supported: true },
+    { runtimeKind: "openclaw_sandbox", sandbox: true, supported: false },
+  ])("shows the Feishu connector for $runtimeKind", async ({ runtimeKind, sandbox, supported }) => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () => new Response(JSON.stringify({ items: [] }), { headers: { "content-type": "application/json" } }),
+      ),
+    );
+    render(
+      <Harness
+        draft={{ ...savedDraft, runtime_kind: runtimeKind, sandbox_enabled: sandbox }}
+        item={{
+          ...agent,
+          runtime_kind: runtimeKind,
+          runtime: { kind: runtimeKind, name: runtimeKind, sandbox_enabled: sandbox, state: "running" },
+        }}
+        requestedProfileTab="apps"
+      />,
+    );
+    const toggle = await screen.findByRole("switch", { name: "feishuCLIWorkerSwitch" });
+    if (supported) expect(toggle).toBeEnabled();
+    else {
+      expect(toggle).toBeDisabled();
+      expect(screen.getByText("feishuCLIUnsupported")).toBeVisible();
+    }
+  });
+
   it("distinguishes manually added MCP servers from app-managed services", async () => {
     vi.stubGlobal(
       "fetch",

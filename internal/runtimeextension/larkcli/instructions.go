@@ -35,3 +35,8 @@ func ManagedInstructions(commandTool string) string {
 	}
 	return strings.ReplaceAll(managedInstructionsTemplate, "{{command_tool}}", commandTool)
 }
+
+func HistoricalAttachmentInstructions() string {
+	index := strings.Index(managedInstructionsTemplate, "### Feishu Historical Attachment Recovery")
+	return managedInstructionsTemplate[index:]
+}

@@ -1,8 +1,8 @@
 import type { ComponentProps } from "react";
-import { render, screen, within, waitFor } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { MemoryRouter, Routes, Route } from "react-router-dom";
+import { MemoryRouter, Routes, Route, useNavigate } from "react-router-dom";
 import { createTranslator } from "@/shared/i18n";
 import { GlobalAppsPanel } from "./GlobalAppsPanel";
 import { AppSettingsDialog } from "./AppSettingsDialog";
@@ -21,6 +21,53 @@ const definition: AppDefinition = {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("Global Apps", () => {
+  it("loads the selected CLI resource when navigating between authorization dialogs", async () => {
+    const definitions = ["first", "second"].map((id) => ({
+      ...definition,
+      app_id: id,
+      name: id,
+      kind: "cli" as const,
+    }));
+    const resources = definitions.map((item, index) => ({
+      installation_id: item.app_id,
+      app_id: item.app_id,
+      name: item.name,
+      kind: "cli",
+      enabled: true,
+      authorized: index === 0,
+      status: index === 0 ? "connected" : "needs_configuration",
+      config: {},
+      credentials_set: {},
+      tools: [],
+    }));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (String(url).endsWith("catalog")) return Response.json({ items: definitions });
+        const resource = resources.find((item) => String(url).endsWith(`/resources/${item.installation_id}`));
+        return Response.json(resource ?? { items: resources });
+      }),
+    );
+    let navigate!: ReturnType<typeof useNavigate>;
+    function Harness() {
+      navigate = useNavigate();
+      return <GlobalAppsPanel t={t} />;
+    }
+    render(
+      <MemoryRouter initialEntries={["/connectors/first"]}>
+        <Routes>
+          <Route path="/connectors/:resourceId" element={<Harness />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    const first = within(await screen.findByRole("dialog"));
+    expect(first.getByRole("button", { name: "Disconnect" })).toBeVisible();
+    await act(async () => navigate("/connectors/second"));
+    const second = within(await screen.findByRole("dialog", { name: "second" }));
+    expect(await second.findByRole("button", { name: "Connect" })).toBeVisible();
+    expect(second.queryByRole("button", { name: "Disconnect" })).not.toBeInTheDocument();
+  });
+
   it("replaces a saved environment error with the current successful probe", async () => {
     const user = userEvent.setup();
     const resource = {
@@ -134,8 +181,7 @@ describe("Global Apps", () => {
     expect(close).not.toHaveBeenCalled();
     expect(save.mock.calls[0][0].config.credential_source).toBe("manual");
   });
-  it("shows affected agents before deleting a global resource", async () => {
-    let removed = false;
+  it("opens global connector settings when its card is activated", async () => {
     const resource = {
       installation_id: "global-1",
       resource_id: "global-1",
@@ -158,13 +204,9 @@ describe("Global Apps", () => {
         },
       ],
     };
-    const fetch = vi.fn(async (url: string, init?: RequestInit) => {
+    const fetch = vi.fn(async (url: string) => {
       if (String(url) === "api/v1/connectors/catalog") return Response.json({ items: [definition] });
-      if (init?.method === "DELETE") {
-        removed = true;
-        return new Response(null, { status: 204 });
-      }
-      return Response.json({ items: removed ? [] : [resource] });
+      return Response.json({ items: [resource] });
     });
     vi.stubGlobal("fetch", fetch);
     const user = userEvent.setup();
@@ -172,17 +214,18 @@ describe("Global Apps", () => {
       <MemoryRouter initialEntries={["/connectors"]}>
         <Routes>
           <Route path="/connectors" element={<GlobalAppsPanel t={t} />} />
+          <Route path="/connectors/:resourceId" element={<GlobalAppsPanel t={t} />} />
         </Routes>
       </MemoryRouter>,
     );
     await screen.findByText("Team Feishu");
     await user.click(screen.getByRole("button", { name: "Actions for Team Feishu" }));
-    await user.click(screen.getByRole("menuitem", { name: "Remove" }));
-    const dialog = screen.getByRole("dialog");
-    expect(within(dialog).getByText("Manager")).toBeVisible();
-    expect(removed).toBe(false);
-    await user.click(within(dialog).getByRole("button", { name: "Remove" }));
-    await waitFor(() => expect(removed).toBe(true));
+    expect(screen.getByRole("menuitem", { name: "Settings" })).toBeVisible();
+    expect(screen.getByRole("menuitem", { name: "Disable" })).toBeVisible();
+    expect(screen.getByRole("menuitem", { name: "Remove" })).toBeVisible();
+    await user.keyboard("{Escape}");
+    await user.click(screen.getByRole("button", { name: /^Team Feishu/ }));
+    expect(screen.getByRole("dialog")).toHaveTextContent("Team Feishu");
   });
 });
 
@@ -283,6 +326,11 @@ it("shows live connection states and the actual failure in global connector card
       last_error: "MCP connection closed; reconnect the App",
       last_error_code: "app_mcp_connection_closed",
     },
+    {
+      name: "Connecting",
+      status: "connecting",
+      last_error: "Stale error from a previous attempt",
+    },
     { name: "Unused", status: "not_connected" },
   ].map((item, index) => ({
     ...item,
@@ -307,5 +355,7 @@ it("shows live connection states and the actual failure in global connector card
   expect(screen.getByText(t("appStatusError"))).toBeVisible();
   expect(screen.getByText("Not connected")).toBeVisible();
   expect(screen.getByText(t("errors.app_mcp_connection_closed"))).toBeVisible();
+  expect(screen.getAllByText(t("appStatusConnecting")).length).toBeGreaterThanOrEqual(2);
+  expect(screen.queryByText("Stale error from a previous attempt")).not.toBeInTheDocument();
   expect(screen.queryByText("Configured")).not.toBeInTheDocument();
 });

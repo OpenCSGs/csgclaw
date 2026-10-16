@@ -11,18 +11,31 @@ import (
 	"strings"
 	"time"
 
+	"csgclaw/internal/agentengine"
 	agent "csgclaw/internal/agentengine/agents"
 	"csgclaw/internal/apps"
 	"csgclaw/internal/connectors"
 	agentruntime "csgclaw/internal/runtime"
 	runtimecodex "csgclaw/internal/runtime/codex"
 	runtimedsh "csgclaw/internal/runtime/dsh"
+	cliprojection "csgclaw/internal/runtimeextension/connectorcli"
 )
 
 // EnableConnectors wires the same installation service into HTTP administration and
 // the Agent-scoped MCP endpoint. Call before accepting requests.
 func (h *Handler) EnableConnectors(statePath string) error {
 	service, err := apps.NewService(statePath, apps.Options{
+		Runtime: connectorRuntime{h: h},
+		CLI: &apps.CLIOptions{LegacySecret: func(ctx context.Context, id, appID string) (string, error) {
+			info, err := h.feishuBotAppInfoForAgent(id)
+			if err != nil {
+				return "", err
+			}
+			if info.AppID != appID {
+				return "", fmt.Errorf("legacy application identity changed")
+			}
+			return info.AppSecret, nil
+		}},
 		ReadOnly: h.connectorReadOnlyAgent,
 		ResolveConnectorHTTP: func(ctx context.Context, agentID string, appID string, cfg apps.Config) (apps.ConnectorHTTPConfig, error) {
 			if appID != "gitlab" || h.connectors == nil || strings.TrimSpace(cfg.ConnectorID) != connectors.ProviderGitLab {
@@ -61,6 +74,17 @@ func (h *Handler) EnableConnectors(statePath string) error {
 		return err
 	}
 	h.apps = service
+	if registrar, ok := h.agentEngine.(interface {
+		RegisterRuntimeExtensionSource(string, agentengine.RuntimeExtensionSource) error
+	}); ok {
+		if err := registrar.RegisterRuntimeExtensionSource(cliprojection.SourceProvider, connectorCLISource{service: service, h: h}); err != nil {
+			_ = service.Close()
+			return err
+		}
+	}
+	if owner, ok := h.agentEngine.(interface{ SetRuntimeConfigurationGuard(func(string) error) }); ok {
+		owner.SetRuntimeConfigurationGuard(service.CheckCLIReady)
+	}
 	h.appPlatformAgents = make(map[string]string)
 	for _, rt := range h.connectorAgentMCPRuntimes() {
 		rt.SetAgentMCPRevisionSource(service.Revision)
@@ -211,6 +235,9 @@ func (h *Handler) handleAgentConnectors(w http.ResponseWriter, r *http.Request) 
 			writeConnectorError(w, err)
 			return
 		}
+		for i := range items {
+			items[i] = h.connectorResourceView(items[i])
+		}
 		writeJSON(w, http.StatusOK, map[string]any{"items": items})
 		return
 	}
@@ -239,7 +266,7 @@ func (h *Handler) handleAgentConnectors(w http.ResponseWriter, r *http.Request) 
 		writeConnectorError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusCreated, item)
+	writeJSON(w, http.StatusCreated, h.connectorResourceView(item))
 }
 
 func (h *Handler) handleAgentConnectorBinding(w http.ResponseWriter, r *http.Request) {
@@ -279,7 +306,7 @@ func (h *Handler) handleAgentConnectorBinding(w http.ResponseWriter, r *http.Req
 		writeConnectorError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, item)
+	writeJSON(w, http.StatusOK, h.connectorResourceView(item))
 }
 
 func (h *Handler) lockGitLabConnectorSettings(appID string, config apps.Config, credentials *apps.Credentials) func() {
@@ -353,8 +380,13 @@ func (h *Handler) handleConnectorOAuthStart(w http.ResponseWriter, r *http.Reque
 	if !ok {
 		return
 	}
-	if _, err := h.apps.Get(r.Context(), agentID, pathValue(r, "installation_id")); err != nil {
+	item, err := h.apps.Get(r.Context(), agentID, pathValue(r, "installation_id"))
+	if err != nil {
 		writeConnectorError(w, err)
+		return
+	}
+	if item.Kind == apps.KindCLI {
+		writeJSON(w, http.StatusOK, map[string]string{"resource_id": item.ResourceID, "connector_url": "#/connectors/" + item.ResourceID})
 		return
 	}
 	writeConnectorError(w, apps.ErrUnsupportedOAuth)
@@ -466,6 +498,16 @@ func (h *Handler) handleConnectorResources(w http.ResponseWriter, r *http.Reques
 			return
 		}
 		req.Connect = false
+		definition, definitionErr := h.apps.Definition(req.AppID)
+		if definitionErr != nil {
+			writeConnectorError(w, definitionErr)
+			return
+		}
+		if definition.Kind == apps.KindCLI && req.Kind != apps.KindMCP {
+			result, err = h.apps.Create(r.Context(), "", req)
+			status = http.StatusCreated
+			break
+		}
 		unlockConnector := h.lockGitLabConnectorSettings(req.AppID, req.Config, &req.Credentials)
 		defer unlockConnector()
 		probe, probeErr := h.apps.Probe(r.Context(), "", apps.ProbeRequest{AppID: req.AppID, Config: req.Config, Credentials: req.Credentials})
@@ -603,7 +645,13 @@ func (h *Handler) connectorResourceView(item apps.Installation) apps.Installatio
 	if h.svc == nil {
 		return item
 	}
+	if item.Kind == apps.KindCLI && item.AgentID != "" {
+		item.RuntimeStatus = h.connectorRuntimeStatus(item.AgentID, item.ResourceID)
+	}
 	for i, binding := range item.Bindings {
+		if item.Kind == apps.KindCLI {
+			item.Bindings[i].RuntimeStatus = h.connectorRuntimeStatus(binding.AgentID, item.InstallationID)
+		}
 		if a, ok := h.svc.Agent(binding.AgentID); ok {
 			item.Bindings[i].AgentName = a.Name
 		}

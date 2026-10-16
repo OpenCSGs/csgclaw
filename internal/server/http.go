@@ -128,6 +128,10 @@ func Run(opts Options) error {
 			return fmt.Errorf("initialize Apps: %w", err)
 		}
 		defer handler.CloseConnectors()
+		if err := handler.PrepareConnectorMigration(runCtx); err != nil {
+			_ = listener.Close()
+			return fmt.Errorf("prepare connector migration: %w", err)
+		}
 	}
 	handler.SetEventStreamShutdown(streamCtx.Done())
 	if err := handler.RecoverRoomTasks(); err != nil {
@@ -239,12 +243,23 @@ func Run(opts Options) error {
 		}(endpoint)
 	}
 
-	if opts.OnReady != nil {
-		go opts.OnReady(handler, router)
-	}
-	if opts.AppsStatePath != "" {
-		go handler.RestoreConnectors(runCtx)
-	}
+	go func() {
+		if err := handler.RestoreConnectorMigration(runCtx); err != nil && runCtx.Err() == nil {
+			slog.Warn("restore connector migration", "error", err)
+		}
+		if runCtx.Err() != nil {
+			return
+		}
+		if opts.AppsStatePath != "" {
+			handler.RestoreConnectors(runCtx)
+		}
+		if runCtx.Err() != nil {
+			return
+		}
+		if opts.OnReady != nil {
+			opts.OnReady(handler, router)
+		}
+	}()
 
 	firstErr := <-errCh
 	cancelRun()

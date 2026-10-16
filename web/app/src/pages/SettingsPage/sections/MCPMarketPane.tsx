@@ -145,10 +145,10 @@ export function MCPMarketPane({
             <ResourceListCard
               key={item.id}
               title={item.name}
+              titleBadge={installed ? <span className={styles.marketInstalled}>{t("iaMCPTabInstalled")}</span> : null}
               description={item.description || item.url || item.name}
               badge={
                 <MCPMarketItemFeedback
-                  installed={installed}
                   error={hub?.remoteMCPInstallFailure?.id === item.id ? hub.remoteMCPInstallFailure.message : ""}
                   t={t}
                 />
@@ -217,11 +217,11 @@ export function MCPMarketPane({
 }
 
 function MCPMarketItemFeedback({
-  installed,
+  installed = false,
   error,
   t,
 }: {
-  installed: boolean;
+  installed?: boolean;
   error: string;
   t: (key: string) => string;
 }) {

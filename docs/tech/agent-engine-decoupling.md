@@ -201,18 +201,11 @@ If projections cannot be safely removed from a live Runtime, it is stopped and c
 
 ## Feishu integration
 
-The fixed optional binding is `feishu-lark-cli / lark-cli / feishu-participant / <participant-id>`.
-Registration and manual Participant writes serialize credential updates with Apply.
-AppID exclusivity remains in `feishubind`.
-Missing lark-cli does not prevent connecting Feishu; the UI shows installation/retry guidance.
-Disconnect deletes the Participant first, invalidating old source tokens, then removes the Extension.
-Partial cleanup has a dedicated retry action that refuses to remove a newly connected Bot.
+The Feishu CLI connector uses `feishu-lark-cli / connector-cli / connector-cli / <resource-id>` with `block_runtime` failure policy. One global resource owns the official CLI installation, shared configuration and authorization sessions; Agent bindings own enablement and managed Skills metadata.
 
-Source tokens bind Agent, Participant, purpose and credential revision, also in no-auth mode.
-App Secret stays in Participant storage.
-The Codex Driver owns bind, private configuration, reserved environment and instructions.
-CSGClaw does not install or upgrade lark-cli.
-No general-purpose HTTP payload/command Apply endpoint exists.
+Global configuration changes stop affected runtimes before invoking the CLI. Engine coordinates configuration application and restores only previously running workers. Channel registration and Participant changes manage IM connections independently. The `feishu-participant` source remains available for migration recovery.
+
+See [Feishu CLI + Skills](channel/feishu-lark-cli-document-tool-design.zh.md) for installation, migration and verification.
 
 ## Verification and limits
 

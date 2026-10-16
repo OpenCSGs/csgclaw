@@ -8,6 +8,7 @@ import (
 
 	agentruntime "csgclaw/internal/runtime"
 	"csgclaw/internal/runtime/extensionstate"
+	cliextension "csgclaw/internal/runtimeextension/connectorcli"
 	larkextension "csgclaw/internal/runtimeextension/larkcli"
 )
 
@@ -39,6 +40,12 @@ func managedExtensionInstructions(home string) ([]string, error) {
 }
 
 func (r *Runtime) RuntimeExtensionDriver(kind string) (agentruntime.ExtensionDriver, bool) {
+	if r != nil && kind == cliextension.Kind {
+		return cliextension.Driver{ResolveHome: r.resolveCodexHomeDir, RuntimeLoaded: func(agentID string, p agentruntime.ExtensionProjection) bool {
+			session, err := r.SessionManager().LiveSession(SessionHandle{RuntimeID: "rt-" + canonicalRuntimeAgentID(agentID)})
+			return err == nil && session != nil && session.ProcessID > 0 && session.ExtensionDigests[p.Name] == p.Digest
+		}}, true
+	}
 	if r == nil || strings.TrimSpace(kind) != larkextension.Kind {
 		return nil, false
 	}

@@ -1,0 +1,16 @@
+{
+  "auth_methods": [
+    "none",
+    "bearer",
+    "header",
+    "env"
+  ],
+  "mcpServers": {
+    "llm-wiki": {
+      "transport": "http",
+      "url": "http://127.0.0.1:19093/mcp",
+      "auth_mode": "bearer",
+      "token_prefix": "Bearer "
+    }
+  }
+}

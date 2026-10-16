@@ -13,6 +13,9 @@ type RuntimeExtensionsController interface {
 }
 
 func (s *Controller) prepareExtensions(ctx context.Context, id string) error {
+	if err := s.checkRuntimeConfiguration(ctx, id); err != nil {
+		return err
+	}
 	if s.extensions == nil {
 		return nil
 	}

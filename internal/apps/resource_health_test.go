@@ -17,7 +17,7 @@ func TestResourceHealthWithoutAgentAndAcrossRestart(t *testing.T) {
 		t.Run(appID, func(t *testing.T) {
 			upstream := upstreamServer(t)
 			s := newTestService(t, Options{})
-			resource, err := s.Create(t.Context(), "", CreateRequest{AppID: appID, Name: "Independent", Config: Config{URL: upstream.URL, AuthMode: "bearer"}, Credentials: Credentials{Token: "fixture"}})
+			resource, err := s.Create(t.Context(), "", CreateRequest{Kind: KindMCP, AppID: appID, Name: "Independent", Config: Config{URL: upstream.URL, AuthMode: "bearer"}, Credentials: Credentials{Token: "fixture"}})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -55,6 +55,24 @@ func TestResourceHealthWithoutAgentAndAcrossRestart(t *testing.T) {
 				t.Fatalf("failed health = %+v; err=%v", checked, err)
 			}
 		})
+	}
+}
+
+func TestCLIResourceHealthUsesAuthorizationState(t *testing.T) {
+	s, _, id := newCLIFixture(t)
+	op := startCLITest(t, s, id, "connect", "health-connect")
+	if got := waitCLIOperation(t, s, id, op); got.Status != "completed" {
+		t.Fatalf("operation=%+v", got)
+	}
+	checked, err := s.CheckResource(t.Context(), id, true)
+	if err != nil || checked.Status != "connected" || !checked.Authorized {
+		t.Fatalf("health=%+v err=%v", checked, err)
+	}
+	s.mu.Lock()
+	health := s.entries[id].resourceHealth
+	s.mu.Unlock()
+	if health != nil {
+		t.Fatal("CLI resource was passed to MCP discovery")
 	}
 }
 

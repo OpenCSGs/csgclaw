@@ -1,6 +1,7 @@
 import { del, get, patch, post } from "@/api/client";
 
 export type AppDefinition = {
+  kind?: "mcp" | "cli";
   app_id: string;
   name: string;
   description: string;
@@ -43,6 +44,23 @@ export type AppCredentials = {
 
 export type AppTool = { name: string; title?: string; description?: string; inputSchema?: Record<string, unknown> };
 export type AppInstallation = {
+  runtime_status?: string;
+  checked_at?: string;
+  kind?: "mcp" | "cli";
+  migration?: {
+    status: string;
+    workers: { agent_id: string; phase: string; error_code?: string; verification_pending: boolean }[] | null;
+  };
+  requested_scopes?: string;
+  revision?: number;
+  applied_revision?: number;
+  package_version?: string;
+  skill_version?: string;
+  authorized?: boolean;
+  auth_status?: { appId: string; defaultAs: string; identities: { bot: CLIIdentity; user: CLIIdentity } };
+  operation?: CLIOperation;
+  skills?: { skill_name: string; bundle_version: string; content_digest: string; managed: boolean }[];
+
   feishu_app_id?: string;
   resource_id?: string;
   resource_enabled?: boolean;
@@ -55,6 +73,7 @@ export type AppInstallation = {
   disconnected: boolean;
   status:
     | "not_connected"
+    | "applying"
     | "configured"
     | "needs_configuration"
     | "connecting"
@@ -85,7 +104,7 @@ export type AppProbeResult = {
   server_info?: { name: string; version: string };
   protocol_version?: string;
 };
-export type AppCreateRequest = AppProbeRequest & { name: string; connect: boolean };
+export type AppCreateRequest = AppProbeRequest & { name: string; connect: boolean; kind?: "mcp" | "cli" };
 export type AppUpdateRequest = { name?: string; enabled?: boolean; config?: AppConfig; credentials?: AppCredentials };
 
 function agentAppsPath(agentID: string): string {
@@ -138,6 +157,7 @@ function normalizeInstallation(value: AppInstallation): AppInstallation {
 }
 
 export type AppBindingSummary = {
+  runtime_status?: string;
   agent_name?: string;
   installation_id: string;
   agent_id: string;
@@ -167,5 +187,59 @@ export async function probeAppResource(payload: AppProbeRequest): Promise<AppPro
 export async function bindAgentApp(agentID: string, resourceID: string): Promise<AppInstallation> {
   return normalizeInstallation(
     await post<AppInstallation>(agentAppsPath(agentID), { resource_id: resourceID, connect: true }),
+  );
+}
+
+export type CLIIdentity = {
+  available: boolean;
+  status: string;
+  verified?: boolean;
+  appName?: string;
+  userName?: string;
+  openId?: string;
+  scope?: string;
+  tokenStatus?: string;
+};
+export type CLIAction = "connect" | "login" | "logout" | "disconnect" | "check";
+export type CLIOperation = {
+  operation_id: string;
+  session_id: string;
+  resource_id: string;
+  resource_revision: number;
+  action: CLIAction;
+  stage: string;
+  status: string;
+  authorization_url?: string;
+  expires_at?: string;
+  error_code?: string;
+};
+export function ensureFeishuResource(): Promise<AppInstallation> {
+  return createAppResource({
+    app_id: "feishu",
+    kind: "cli",
+    name: "Feishu",
+    connect: false,
+    config: {},
+    credentials: {},
+  });
+}
+export async function fetchAppResource(id: string, signal?: AbortSignal): Promise<AppInstallation> {
+  return normalizeInstallation(
+    await get<AppInstallation>(`/api/v1/connectors/resources/${encodeURIComponent(id)}`, { signal }),
+  );
+}
+export function startCLIOperation(
+  resource: AppInstallation,
+  action: CLIAction,
+  operationID: string,
+): Promise<CLIOperation> {
+  return post(`/api/v1/connectors/resources/${encodeURIComponent(resource.installation_id)}/cli/${action}`, {
+    operation_id: operationID,
+    resource_revision: resource.revision,
+  });
+}
+export function cancelCLIOperation(resourceID: string, sessionID: string): Promise<CLIOperation> {
+  return del(
+    `/api/v1/connectors/resources/${encodeURIComponent(resourceID)}/cli/sessions/${encodeURIComponent(sessionID)}`,
   );
 }

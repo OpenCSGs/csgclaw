@@ -206,18 +206,11 @@ Delete 先记录删除意图，移除 Runtime 投影后才删除 desired resourc
 
 ## 飞书集成
 
-固定绑定为 `feishu-lark-cli / lark-cli / feishu-participant / <participant-id>`，策略为 optional。
-注册连接和手动 Participant 写入都将凭据更新与 Apply 串行化。
-AppID 独占仍由 `feishubind` 负责。
-缺少 lark-cli 不阻止连接飞书，UI 提供安装和重试指引。
-断开时先删除 Participant 使 source token 失效，再删除 Extension。
-部分清理失败提供独立重试入口，并拒绝清理新连接的 Bot。
+飞书 CLI 连接器使用 `feishu-lark-cli / connector-cli / connector-cli / <resource-id>`，策略为 `block_runtime`。全局资源负责官方 CLI 安装、共享配置与授权会话；Agent binding 保存开启状态和 Skills 来源。
 
-Source token 绑定 Agent、Participant、purpose 和 credential revision，no-auth 模式也要求有效 token。
-App Secret 只保存在 Participant Store。
-Codex Driver 拥有 bind、私有配置、保留环境变量和 instructions。
-CSGClaw 不安装或升级 lark-cli。
-不存在接收任意 payload/命令的通用 HTTP Apply API。
+全局配置更新会停止受影响的 Runtime，随后执行 CLI 操作。Engine 协调配置更新，并恢复原来运行的 worker。渠道注册及 Participant 更新独立管理 IM 连接。`feishu-participant` Source 支持历史迁移恢复。
+
+安装、迁移及验证说明见[飞书 CLI + Skills](channel/feishu-lark-cli-document-tool-design.zh.md)。
 
 ## 验证与限制
 

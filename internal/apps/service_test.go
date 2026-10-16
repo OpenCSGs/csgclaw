@@ -437,7 +437,7 @@ func TestFeishuStdioCredentialRotationAndManualDisconnect(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	item, err := s.Create(context.Background(), "agent", CreateRequest{AppID: "feishu", Name: "Feishu", Config: Config{Transport: "stdio", Command: executable, Args: []string{"-test.run=^TestAppStdioHelper$"}, AuthMode: "feishu", CredentialSource: "manual", Env: map[string]string{"CSGCLAW_APP_TEST_HELPER": "1"}}, Credentials: value, Connect: true})
+	item, err := s.Create(context.Background(), "agent", CreateRequest{Kind: KindMCP, AppID: "feishu", Name: "Feishu", Config: Config{Transport: "stdio", Command: executable, Args: []string{"-test.run=^TestAppStdioHelper$"}, AuthMode: "feishu", CredentialSource: "manual", Env: map[string]string{"CSGCLAW_APP_TEST_HELPER": "1"}}, Credentials: value, Connect: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -667,7 +667,7 @@ func TestGlobalResourceNameUniquenessUnderConcurrentWrites(t *testing.T) {
 			if i%2 != 0 {
 				appID = "feishu"
 			}
-			_, err := s.Create(ctx, "", CreateRequest{AppID: appID, Name: " Shared workspace "})
+			_, err := s.Create(ctx, "", CreateRequest{Kind: KindMCP, AppID: appID, Name: " Shared workspace "})
 			results <- err
 		}(i)
 	}
@@ -688,7 +688,7 @@ func TestGlobalResourceNameUniquenessUnderConcurrentWrites(t *testing.T) {
 	if err != nil || len(items) != 1 || items[0].Name != "Shared workspace" {
 		t.Fatalf("resources = %+v, err = %v", items, err)
 	}
-	other, err := s.Create(ctx, "", CreateRequest{AppID: "feishu", Name: "Other workspace"})
+	other, err := s.Create(ctx, "", CreateRequest{Kind: KindMCP, AppID: "feishu", Name: "Other workspace"})
 	if err != nil {
 		t.Fatal(err)
 	}

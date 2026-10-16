@@ -12,6 +12,7 @@ import (
 	agentruntime "csgclaw/internal/runtime"
 	"csgclaw/internal/runtime/extensionstate"
 	runtimeinstructions "csgclaw/internal/runtime/instructions"
+	cliextension "csgclaw/internal/runtimeextension/connectorcli"
 	larkextension "csgclaw/internal/runtimeextension/larkcli"
 )
 
@@ -68,6 +69,12 @@ func (r *Runtime) resolveDSHHomeDir(agentID string) (string, error) {
 }
 
 func (r *Runtime) RuntimeExtensionDriver(kind string) (agentruntime.ExtensionDriver, bool) {
+	if r != nil && kind == cliextension.Kind {
+		return cliextension.Driver{ResolveHome: r.resolveDSHHomeDir, RuntimeLoaded: func(agentID string, p agentruntime.ExtensionProjection) bool {
+			proc, err := r.process("rt-" + identity.CanonicalAgentID(agentID))
+			return err == nil && proc.extensionDigests[p.Name] == p.Digest
+		}}, true
+	}
 	if r == nil || strings.TrimSpace(kind) != larkextension.Kind {
 		return nil, false
 	}

@@ -57,7 +57,7 @@ type fakeCompatRuntime struct {
 }
 
 func (f fakeCompatRuntime) RuntimeExtensionDriver(kind string) (agentruntime.ExtensionDriver, bool) {
-	if !supportsAgentLarkCLI(f.kind) || kind != larkextension.Kind {
+	if (f.kind != agent.RuntimeKindCodex && f.kind != agent.RuntimeKindDSH) || kind != larkextension.Kind {
 		return nil, false
 	}
 	return fakeLarkCLIExtensionDriver{runtimeKind: f.Kind()}, true
@@ -68,6 +68,7 @@ type fakeLarkCLIExtensionDriver struct {
 }
 
 var larkCLICommandContext = exec.CommandContext
+var larkCLILookPath = exec.LookPath
 
 func (fakeLarkCLIExtensionDriver) ObserveExtension(ctx context.Context, _ string, _ agentruntime.ExtensionDesired) (agentruntime.ExtensionResult, error) {
 	if _, err := testLarkCLIPath(ctx); err != nil {
@@ -8637,6 +8638,10 @@ func TestPublishParticipantEventStartsStoppedWorker(t *testing.T) {
 		}
 	case <-time.After(time.Second):
 		t.Fatal("timed out waiting for missed worker start")
+	}
+	// Runtime Start returns before the lifecycle operation persists the running state.
+	if err := svc.WithAgentLifecycle(t.Context(), "u-worker", func(context.Context) error { return nil }); err != nil {
+		t.Fatal(err)
 	}
 }
 

@@ -1,0 +1,13 @@
+{
+  "auth_methods": [
+    "connector"
+  ],
+  "mcpServers": {
+    "gitlab": {
+      "transport": "http",
+      "url": "https://u-agentichub-gitlab-mcp-1qq.public.opencsg.com/mcp",
+      "auth_mode": "bearer",
+      "token_prefix": "Bearer "
+    }
+  }
+}

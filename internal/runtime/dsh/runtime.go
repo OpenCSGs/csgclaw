@@ -4,6 +4,7 @@ import (
 	"context"
 	"csgclaw/internal/diagnostics"
 	"csgclaw/internal/modelcap"
+	"csgclaw/internal/processgroup"
 	"csgclaw/internal/runtime/conversationconfig"
 	skill "csgclaw/internal/skill/state"
 	"csgclaw/internal/taskconfig"
@@ -27,6 +28,7 @@ import (
 	agentruntime "csgclaw/internal/runtime"
 	runtimeinstructions "csgclaw/internal/runtime/instructions"
 	"csgclaw/internal/runtime/sandboxgateway"
+	larkextension "csgclaw/internal/runtimeextension/larkcli"
 	templateembed "csgclaw/internal/template/embed"
 )
 
@@ -86,6 +88,7 @@ type Runtime struct {
 }
 
 type process struct {
+	cleanupErr           error
 	contextUsage         map[string]modelcap.ContextUsage
 	cmd                  *exec.Cmd
 	stdin                io.WriteCloser
@@ -487,7 +490,7 @@ func (r *Runtime) launch(ctx context.Context, root, workspace, binary string, pr
 		stderr.Close()
 		return nil, err
 	}
-	if err := cmd.Start(); err != nil {
+	if err := processgroup.Start(cmd); err != nil {
 		stderr.Close()
 		return nil, fmt.Errorf("start DSH ACP process: %w", err)
 	}
@@ -571,16 +574,17 @@ func buildEnvironment(profile agentruntime.Profile, home, permissionMode string)
 		if !found {
 			continue
 		}
-		if !blocked[agentruntime.CanonicalEnvironmentKey(key)] {
+		if !blocked[agentruntime.CanonicalEnvironmentKey(key)] && !larkextension.IsConfigurationEnv(key) {
 			values[key] = value
 		}
 	}
 	for key, value := range profile.Env {
 		key = strings.TrimSpace(key)
-		if key != "" && !blocked[agentruntime.CanonicalEnvironmentKey(key)] {
+		if key != "" && !blocked[agentruntime.CanonicalEnvironmentKey(key)] && !larkextension.IsConfigurationEnv(key) {
 			values[key] = value
 		}
 	}
+	values["LARKSUITE_CLI_CONFIG_DIR"] = larkextension.DisabledConfigDir(home)
 	values["DSH_HOME"] = home
 	values["DSH_AGENTS_HOME"] = filepath.Join(home, "agents")
 	values[llmAPIKeyEnvName] = profile.APIKey
@@ -603,13 +607,19 @@ func buildEnvironmentWithExtensions(profile agentruntime.Profile, home, permissi
 
 func (r *Runtime) waitProcess(proc *process) {
 	_ = proc.cmd.Wait()
+	cleanupErr := terminateProcessTree(proc.cmd.Process.Pid, true)
+	proc.mu.Lock()
+	proc.cleanupErr = cleanupErr
+	proc.mu.Unlock()
 	_ = proc.stderr.Close()
 	_ = proc.updateMetadata(func(meta *runtimeMetadata) {
-		meta.PID = 0
+		if cleanupErr == nil {
+			meta.PID = 0
+		}
 		meta.State = agentruntime.StateExited
 	})
 	r.mu.Lock()
-	if r.processes[proc.meta.RuntimeID] == proc {
+	if cleanupErr == nil && r.processes[proc.meta.RuntimeID] == proc {
 		delete(r.processes, proc.meta.RuntimeID)
 	}
 	r.mu.Unlock()
@@ -622,6 +632,27 @@ func (r *Runtime) Stop(ctx context.Context, h agentruntime.Handle) (agentruntime
 	proc := r.processes[runtimeID]
 	r.mu.Unlock()
 	if proc == nil {
+		root, err := r.rootFor(h)
+		if err != nil {
+			return agentruntime.StateUnknown, err
+		}
+		meta, err := readMetadata(root)
+		if errors.Is(err, os.ErrNotExist) {
+			return agentruntime.StateStopped, nil
+		}
+		if err != nil {
+			return agentruntime.StateUnknown, err
+		}
+		if meta.PID > 0 {
+			if err := terminateProcessTree(meta.PID, true); err != nil {
+				return agentruntime.StateUnknown, err
+			}
+			meta.PID = 0
+			meta.State = agentruntime.StateStopped
+			if err := writeMetadata(root, meta); err != nil {
+				return agentruntime.StateUnknown, err
+			}
+		}
 		return agentruntime.StateStopped, nil
 	}
 	_ = proc.stdin.Close()
@@ -650,6 +681,9 @@ func (r *Runtime) Stop(ctx context.Context, h agentruntime.Handle) (agentruntime
 	}
 	if !exited {
 		return agentruntime.StateUnknown, fmt.Errorf("DSH process tree did not exit")
+	}
+	if err := terminateProcessTree(proc.cmd.Process.Pid, true); err != nil {
+		return agentruntime.StateUnknown, err
 	}
 	if err := proc.updateMetadata(func(meta *runtimeMetadata) {
 		meta.PID = 0

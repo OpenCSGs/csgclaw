@@ -822,11 +822,6 @@ describe("agent action visibility", () => {
       <AgentDetailPane
         item={{
           ...worker,
-          lark_cli: {
-            available: true,
-            bound: true,
-            state: "bound",
-          },
           participants: [
             {
               agent_id: worker.id,
@@ -876,103 +871,12 @@ describe("agent action visibility", () => {
     const channelActionButtons = Array.from(document.querySelectorAll(".agent-channel-actions .btn"));
     expect(channelActionButtons.map((button) => button.textContent?.trim())).toEqual([
       "Reconnect Feishu",
-      "Channel tool configured",
       "Disconnect Feishu",
     ]);
     const disconnectButton = screen.getByRole("button", { name: "Disconnect Feishu" });
     expect(disconnectButton).toHaveClass(buttonStyles["btn-outline-danger"]);
     await user.click(disconnectButton);
     expect(onDisconnectFeishu).toHaveBeenCalledWith(expect.objectContaining({ id: worker.id }));
-  });
-
-  it("shows user-managed lark-cli installation guidance and retries configuration on demand", async () => {
-    const user = userEvent.setup();
-    const onDismissLarkCLIDialog = vi.fn();
-    const onInitLarkCLI = vi.fn();
-    const onShowLarkCLIInstall = vi.fn();
-    const unavailableWorker = {
-      ...worker,
-      lark_cli: {
-        available: false,
-        bound: false,
-        state: "unavailable",
-      },
-      participants: [
-        {
-          agent_id: worker.id,
-          channel: "feishu",
-          channel_user_kind: "app_id",
-          id: "worker-feishu",
-          type: "agent",
-        },
-      ],
-    };
-    const draft = agentToDraft(unavailableWorker);
-    const paneProps = {
-      activeRoom: null,
-      authBusyProvider: "",
-      authStatuses: {},
-      busyKey: "",
-      draft,
-      error: "",
-      item: unavailableWorker,
-      modelBusy: false,
-      models: [],
-      notifierWebhookPublicOrigin: "http://127.0.0.1:18080",
-      onDelete: vi.fn(),
-      onDisconnectFeishu: vi.fn(),
-      onDismissLarkCLIDialog,
-      onDraftChange: vi.fn(),
-      onInitLarkCLI,
-      onInvite: vi.fn(),
-      onOpenDM: vi.fn(),
-      onProviderLogin: vi.fn(),
-      onPublish: vi.fn(),
-      onRecreate: vi.fn(),
-      onSave: vi.fn(),
-      onShowLarkCLIInstall,
-      onStart: vi.fn(),
-      onStartFeishuConnect: vi.fn(),
-      onStop: vi.fn(),
-      onUpgrade: vi.fn(),
-      publishBusy: false,
-      saveError: "",
-      savedDraft: draft,
-      saving: false,
-      t,
-    };
-    const { rerender } = render(<AgentDetailPane {...paneProps} />);
-
-    await user.click(screen.getByRole("button", { name: "Channels" }));
-    await user.click(screen.getByRole("button", { name: "View installation steps" }));
-    expect(onShowLarkCLIInstall).toHaveBeenCalledWith(expect.objectContaining({ id: worker.id }));
-    expect(onInitLarkCLI).not.toHaveBeenCalled();
-
-    rerender(
-      <AgentDetailPane
-        {...paneProps}
-        larkCLIDialog={{
-          kind: "install",
-          title: "Install the Feishu channel tool",
-          message: "CSGClaw does not download or upgrade lark-cli automatically.",
-        }}
-      />,
-    );
-
-    expect(screen.getByRole("dialog", { name: "Install the Feishu channel tool" })).toBeInTheDocument();
-    expect(screen.getByText("npm install -g @larksuite/cli@latest")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Download Node.js LTS" })).toHaveAttribute(
-      "href",
-      "https://nodejs.org/en/download",
-    );
-    expect(screen.getByRole("link", { name: "View native binaries" })).toHaveAttribute(
-      "href",
-      "https://github.com/larksuite/cli/releases/latest",
-    );
-
-    await user.click(screen.getByRole("button", { name: "Detect and configure" }));
-    expect(onDismissLarkCLIDialog).toHaveBeenCalledOnce();
-    expect(onInitLarkCLI).toHaveBeenCalledWith(expect.objectContaining({ id: worker.id }));
   });
 
   it("shows pending Feishu authorization without requiring a manual completion action", async () => {

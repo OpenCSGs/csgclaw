@@ -29,6 +29,9 @@ func (s *Controller) ReloadRuntimeIfRunning(ctx context.Context, id string) (Age
 // reloadRuntimeLocked 复用已有运行环境重新加载配置；调用方持有 lifecycle。
 func (s *Controller) reloadRuntimeLocked(ctx context.Context, selected Agent) (Agent, error) {
 	id := selected.ID
+	if err := s.checkRuntimeConfiguration(ctx, id); err != nil {
+		return Agent{}, err
+	}
 	rt, err := s.runtimeForKind(selected.RuntimeKind)
 	if err != nil {
 		return Agent{}, err

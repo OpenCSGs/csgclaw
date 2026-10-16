@@ -27,7 +27,7 @@ func (r *retryCleanupRuntime) PrepareExtensionDelete(ctx context.Context, id, na
 	}
 	return r.fakeCompatRuntime.PrepareExtensionDelete(ctx, id, name)
 }
-func TestFeishuSourceRevisionAndDisconnectCleanupThroughHTTP(t *testing.T) {
+func TestFeishuSourceCapabilityFollowsChannelCredentials(t *testing.T) {
 	previous := larkCLILookPath
 	larkCLILookPath = func(string) (string, error) { return "", os.ErrNotExist }
 	t.Cleanup(func() { larkCLILookPath = previous })
@@ -63,7 +63,7 @@ func TestFeishuSourceRevisionAndDisconnectCleanupThroughHTTP(t *testing.T) {
 		t.Fatalf("Bot switch HTTP=%d %s", response.Code, response.Body)
 	}
 	item, err := engine.RuntimeExtensions("agent-dev").Get(context.Background(), "feishu-lark-cli")
-	if err != nil || item.Status.State != agentengine.RuntimeExtensionUnavailable {
+	if agentengine.ErrorCodeOf(err) != agentengine.ErrorRuntimeExtensionNotFound {
 		t.Fatalf("optional missing CLI = %+v %v", item, err)
 	}
 	if response = request(http.MethodGet, infoPath, "", oldToken); response.Code != http.StatusUnauthorized {
@@ -77,12 +77,12 @@ func TestFeishuSourceRevisionAndDisconnectCleanupThroughHTTP(t *testing.T) {
 		t.Fatal("new Bot source token rejected")
 	}
 	// A stale cleanup action must never delete a freshly connected Bot.
-	if response = request(http.MethodPost, "/api/v1/agents/agent-dev/lark-cli:cleanup", "{}", ""); response.Code != http.StatusConflict {
-		t.Fatal("cleanup was allowed while connected")
+	if response = request(http.MethodPost, "/api/v1/agents/agent-dev/lark-cli:cleanup", "{}", ""); response.Code != http.StatusGone {
+		t.Fatal("legacy cleanup did not redirect to connector management")
 	}
 	rt.fail = true
 	response = request(http.MethodDelete, "/api/v1/channels/feishu/participants/pt-dev", "", "")
-	if response.Code != http.StatusConflict || !strings.Contains(response.Body.String(), `"status":"partial"`) {
+	if response.Code != http.StatusOK && response.Code != http.StatusNoContent {
 		t.Fatalf("partial disconnect=%d %s", response.Code, response.Body)
 	}
 	if _, exists := participants.Get(participant.ChannelFeishu, "pt-dev"); exists {
@@ -90,17 +90,5 @@ func TestFeishuSourceRevisionAndDisconnectCleanupThroughHTTP(t *testing.T) {
 	}
 	if response = request(http.MethodGet, infoPath, "", newToken); response.Code != http.StatusUnauthorized {
 		t.Fatal("disconnected source token remained valid")
-	}
-	target, _ := controller.Agent("agent-dev")
-	if status := h.agentLarkCLIStatus(target); status == nil || !status.CleanupPending {
-		t.Fatalf("cleanup status=%+v", status)
-	}
-	rt.fail = false
-	response = request(http.MethodPost, "/api/v1/agents/agent-dev/lark-cli:cleanup", "{}", "")
-	if response.Code != http.StatusNoContent {
-		t.Fatalf("cleanup retry=%d %s", response.Code, response.Body)
-	}
-	if _, err := engine.RuntimeExtensions("agent-dev").Get(context.Background(), "feishu-lark-cli"); agentengine.ErrorCodeOf(err) != agentengine.ErrorRuntimeExtensionNotFound {
-		t.Fatalf("cleanup resource remains: %v", err)
 	}
 }

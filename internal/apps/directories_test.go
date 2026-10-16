@@ -36,7 +36,7 @@ func directoryDescription(t *testing.T, item Installation) map[string]string {
 func TestAppInstanceDirectoriesArePrivatePersistentAndRemoved(t *testing.T) {
 	s := newTestService(t, Options{})
 	create := func(name string) Installation {
-		item, err := s.Create(context.Background(), "agent", CreateRequest{AppID: "feishu", Name: name, Config: stdioDirectoryFixture(t), Connect: true})
+		item, err := s.Create(context.Background(), "agent", CreateRequest{Kind: KindMCP, AppID: "feishu", Name: name, Config: stdioDirectoryFixture(t), Connect: true})
 		if err != nil || item.Status != "connected" {
 			t.Fatalf("create: %v %s", err, item.LastError)
 		}

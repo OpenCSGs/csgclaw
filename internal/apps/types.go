@@ -4,8 +4,10 @@ package apps
 
 import (
 	"context"
+	skill "csgclaw/internal/skill/state"
 	"encoding/json"
 	"errors"
+	"io/fs"
 	"net/http"
 	"time"
 
@@ -39,6 +41,9 @@ type Interface struct {
 }
 
 type Manifest struct {
+	Kind        string            `json:"kind,omitempty"`
+	MCP         string            `json:"mcp,omitempty"`
+	CLI         string            `json:"cli,omitempty"`
 	Name        string            `json:"name"`
 	Version     string            `json:"version,omitempty"`
 	Description string            `json:"description,omitempty"`
@@ -49,9 +54,7 @@ type Manifest struct {
 	Keywords    []string          `json:"keywords,omitempty"`
 	Apps        string            `json:"apps,omitempty"`
 	Interface   Interface         `json:"interface"`
-	MCPServers  json.RawMessage   `json:"mcpServers,omitempty"`
-	Skills      json.RawMessage   `json:"skills,omitempty"`
-	Hooks       json.RawMessage   `json:"hooks,omitempty"`
+	Skills      string            `json:"skills,omitempty"`
 }
 
 type AppReference struct {
@@ -60,6 +63,7 @@ type AppReference struct {
 }
 
 type Definition struct {
+	Kind           string         `json:"kind"`
 	AppID          string         `json:"app_id"`
 	Name           string         `json:"name"`
 	Description    string         `json:"description"`
@@ -107,6 +111,19 @@ type Credentials struct {
 func (Credentials) String() string { return "[redacted]" }
 
 type Installation struct {
+	Authorized      bool                 `json:"authorized,omitempty"`
+	RuntimeStatus   string               `json:"runtime_status,omitempty"`
+	Migration       *CLIMigrationStatus  `json:"migration,omitempty"`
+	RequestedScopes string               `json:"requested_scopes,omitempty"`
+	Kind            string               `json:"kind"`
+	Revision        uint64               `json:"revision,omitempty"`
+	AppliedRevision uint64               `json:"applied_revision,omitempty"`
+	PackageVersion  string               `json:"package_version,omitempty"`
+	SkillVersion    string               `json:"skill_version,omitempty"`
+	AuthStatus      json.RawMessage      `json:"auth_status,omitempty"`
+	Skills          []skill.ManagedSkill `json:"skills,omitempty"`
+	Operation       *CLIOperation        `json:"operation,omitempty"`
+	CheckedAt       time.Time            `json:"checked_at,omitempty"`
 	// FeishuAppID is displayable identity metadata; secrets remain write-only.
 	FeishuAppID         string           `json:"feishu_app_id,omitempty"`
 	ResourceID          string           `json:"resource_id,omitempty"`
@@ -130,6 +147,7 @@ type Installation struct {
 }
 
 type CreateRequest struct {
+	Kind        string      `json:"kind,omitempty"`
 	AppID       string      `json:"app_id"`
 	Name        string      `json:"name"`
 	Config      Config      `json:"config"`
@@ -170,7 +188,19 @@ type ConnectorHTTPConfig struct {
 	Headers     http.Header
 }
 
+type ConnectorRuntime interface {
+	State(context.Context, string, string) (bool, error)
+	Update(context.Context, string, bool, func(context.Context) error) error
+	Configure(context.Context, string, string, *CLIProjection) error
+	PlanSkills(string, string, string, []skill.ManagedSkill, bool) (skill.SkillPlan, error)
+	ApplySkills(context.Context, string, skill.SkillPlan) error
+}
+
 type Options struct {
+	Runtime  ConnectorRuntime
+	Packages fs.FS
+
+	CLI                  *CLIOptions
 	OpenCSGCredentials   func(context.Context) (OpenCSGCredentials, error)
 	FeishuTokenSource    func(string, string) feishutransport.TenantTokenSource
 	ReadOnly             func(string) bool
@@ -180,6 +210,7 @@ type Options struct {
 
 // BindingSummary describes use of a global resource without exposing credentials.
 type BindingSummary struct {
+	RuntimeStatus  string `json:"runtime_status,omitempty"`
 	AgentName      string `json:"agent_name,omitempty"`
 	InstallationID string `json:"installation_id"`
 	AgentID        string `json:"agent_id"`

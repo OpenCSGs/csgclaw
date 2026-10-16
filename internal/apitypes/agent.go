@@ -87,32 +87,31 @@ type ProfileDetectionResult struct {
 }
 
 type Agent struct {
-	ID               string              `json:"id"`
-	Name             string              `json:"name"`
-	Description      string              `json:"description,omitempty"`
-	Instructions     string              `json:"instructions,omitempty"`
-	MemorySupported  bool                `json:"memory_supported,omitempty"`
-	Runtime          AgentRuntime        `json:"runtime,omitempty"`
-	RuntimeID        string              `json:"-"`
-	RuntimeKind      string              `json:"-"`
-	RuntimeName      string              `json:"runtime_name,omitempty"`
-	SandboxEnabled   bool                `json:"sandbox_enabled,omitempty"`
-	MCPServers       map[string]any      `json:"mcpServers,omitempty"`
-	Image            string              `json:"image,omitempty"`
-	Avatar           string              `json:"-"`
-	BoxID            string              `json:"-"`
-	Role             string              `json:"role"`
-	Status           string              `json:"-"`
-	CreatedAt        time.Time           `json:"created_at"`
-	UpdatedAt        time.Time           `json:"updated_at,omitempty"`
-	Profile          string              `json:"-"`
-	ProfileConfig    AgentProfile        `json:"model_config,omitempty"`
-	UserID           string              `json:"user_id,omitempty"`
-	UserName         string              `json:"user_name,omitempty"`
-	ParticipantIDs   []string            `json:"participant_ids,omitempty"`
-	ParticipantNames []string            `json:"participant_names,omitempty"`
-	Participants     []Participant       `json:"participants,omitempty"`
-	LarkCLI          *AgentLarkCLIStatus `json:"lark_cli,omitempty"`
+	ID               string         `json:"id"`
+	Name             string         `json:"name"`
+	Description      string         `json:"description,omitempty"`
+	Instructions     string         `json:"instructions,omitempty"`
+	MemorySupported  bool           `json:"memory_supported,omitempty"`
+	Runtime          AgentRuntime   `json:"runtime,omitempty"`
+	RuntimeID        string         `json:"-"`
+	RuntimeKind      string         `json:"-"`
+	RuntimeName      string         `json:"runtime_name,omitempty"`
+	SandboxEnabled   bool           `json:"sandbox_enabled,omitempty"`
+	MCPServers       map[string]any `json:"mcpServers,omitempty"`
+	Image            string         `json:"image,omitempty"`
+	Avatar           string         `json:"-"`
+	BoxID            string         `json:"-"`
+	Role             string         `json:"role"`
+	Status           string         `json:"-"`
+	CreatedAt        time.Time      `json:"created_at"`
+	UpdatedAt        time.Time      `json:"updated_at,omitempty"`
+	Profile          string         `json:"-"`
+	ProfileConfig    AgentProfile   `json:"model_config,omitempty"`
+	UserID           string         `json:"user_id,omitempty"`
+	UserName         string         `json:"user_name,omitempty"`
+	ParticipantIDs   []string       `json:"participant_ids,omitempty"`
+	ParticipantNames []string       `json:"participant_names,omitempty"`
+	Participants     []Participant  `json:"participants,omitempty"`
 }
 
 func (a *Agent) UnmarshalJSON(data []byte) error {

@@ -21,6 +21,8 @@ const installationsSection = "app_installations"
 
 type record struct {
 	Installation
+	CLI              *cliRecord    `json:"cli_state,omitempty"`
+	CLIApply         *cliBinding   `json:"cli_apply,omitempty"`
 	Package          pluginPackage `json:"package"`
 	Credentials      Credentials   `json:"credentials"`
 	ConnectRequested bool          `json:"connect_requested"`
@@ -47,6 +49,13 @@ type gateway struct {
 
 type Service struct {
 	credentialGeneration uint64
+	cliMigration         *cliMigration
+	cliWorkMu            sync.Mutex
+	cliCancel            context.CancelFunc
+	cliCancelSession     string
+	cliWake              chan struct{}
+	cliDrain             chan chan struct{}
+	cliWG                sync.WaitGroup
 	mu                   sync.Mutex
 	path                 string
 	dataRoot             string
@@ -69,8 +78,20 @@ func NewService(statePath string, options Options) (*Service, error) {
 	if err != nil {
 		return nil, err
 	}
+	if options.Packages != nil {
+		custom, loadErr := readPackages(options.Packages)
+		if loadErr != nil {
+			return nil, loadErr
+		}
+		for id, pkg := range custom {
+			if _, exists := packages[id]; exists {
+				return nil, fmt.Errorf("duplicate connector %s", id)
+			}
+			packages[id] = pkg
+		}
+	}
 	ctx, cancel := context.WithCancel(context.Background())
-	s := &Service{path: statePath, options: options, packages: packages, entries: map[string]*entry{}, gateways: map[string]*gateway{}, ctx: ctx, cancel: cancel}
+	s := &Service{path: statePath, options: options, packages: packages, cliWake: make(chan struct{}, 1), cliDrain: make(chan chan struct{}), entries: map[string]*entry{}, gateways: map[string]*gateway{}, ctx: ctx, cancel: cancel}
 	if statePath != "" {
 		s.dataRoot, err = filepath.Abs(filepath.Join(filepath.Dir(statePath), "apps"))
 	} else {
@@ -91,10 +112,26 @@ func NewService(statePath string, options Options) (*Service, error) {
 		return nil, err
 	}
 
+	var migrations map[string]*cliMigration
+	if _, err := localstore.ReadSection(statePath, cliMigrationSection, &migrations); err != nil {
+		cancel()
+		return nil, err
+	}
+	s.cliMigration = migrations["v1"]
+	s.cliWG.Add(1)
+	go s.runConnectorWork()
 	return s, nil
 }
 
 func (s *Service) persistLocked(id string, r *record) error {
+	if r != nil && r.Kind == KindMCP && r.AgentID != "" && len(r.Package.SkillFiles) > 0 {
+		old := s.entries[id]
+		if old == nil || old.record.Enabled != r.Enabled || old.record.Disconnected != r.Disconnected {
+			queueMCPSkills(r)
+			s.scheduleConnectorWork()
+		}
+	}
+
 	return localstore.UpdateObjectSection(s.path, installationsSection, func(values map[string]json.RawMessage) error {
 		if r == nil {
 			delete(values, id)
@@ -123,6 +160,13 @@ func view(e *entry) Installation {
 	result := copyJSON(e.record.Installation)
 	if result.AppID == "feishu" {
 		result.FeishuAppID = e.record.Credentials.AppID
+		if result.Kind == KindCLI {
+			var status struct {
+				AppID string `json:"appId"`
+			}
+			_ = json.Unmarshal(result.AuthStatus, &status)
+			result.FeishuAppID = status.AppID
+		}
 	}
 	result.Tools = []*mcp.Tool{}
 	if e.connection != nil {
@@ -259,6 +303,17 @@ func clearConnectorOwnedCredentials(config Config, credentials *Credentials) {
 // Create is a convenience for creating a resource and optionally binding it.
 // Public Agent management uses Bind so it cannot implicitly change shared resources.
 func (s *Service) Create(ctx context.Context, agentID string, in CreateRequest) (Installation, error) {
+	if pkg, ok := s.packages[in.AppID]; ok && in.Kind != "" && in.Kind != pkg.Manifest.Kind && !(in.AppID == "feishu" && in.Kind == KindMCP) {
+		return Installation{}, ErrInvalid
+	}
+
+	if pkg, ok := s.packages[in.AppID]; ok && pkg.Manifest.Kind == KindCLI && in.Kind != KindMCP {
+		resource, err := s.ensureCLI(ctx, in.AppID)
+		if err != nil || agentID == "" {
+			return resource, err
+		}
+		return s.Bind(ctx, agentID, BindRequest{ResourceID: resource.InstallationID, Connect: in.Connect})
+	}
 	if agentID != "" {
 		s.mu.Lock()
 		err := s.uniqueNameLocked(agentID, strings.TrimSpace(in.Name), "")
@@ -278,8 +333,18 @@ func (s *Service) Create(ctx context.Context, agentID string, in CreateRequest) 
 	if !ok {
 		return Installation{}, ErrNotFound
 	}
+	if pkg.CLI != nil {
+		// Explicit MCP requests preserve the legacy service-reference package.
+		pkg = copyJSON(pkg)
+		pkg.Manifest.Kind = KindMCP
+		pkg.Manifest.CLI = ""
+		pkg.Manifest.Apps = "./apps.json"
+		pkg.Manifest.Skills = ""
+		pkg.CLI = nil
+		pkg.Apps = map[string]AppReference{in.AppID: {ID: in.AppID, Required: true}}
+	}
 	in.Name = strings.TrimSpace(in.Name)
-	in.Config = normalizeConfig(in.Config, in.AppID, in.Credentials)
+	in.Config = s.packageConfig(in.AppID, in.Config, in.Credentials)
 	clearConnectorOwnedCredentials(in.Config, &in.Credentials)
 	protect(&in.Config, &in.Credentials)
 	clearReferencedPlatformCredentials(in.Config, &in.Credentials)
@@ -293,7 +358,7 @@ func (s *Service) Create(ctx context.Context, agentID string, in CreateRequest) 
 		return Installation{}, err
 	}
 	now := time.Now().UTC()
-	r := record{Installation: Installation{InstallationID: id, AgentID: agentID, ResourceEnabled: true, AppID: in.AppID, Name: in.Name, Enabled: true, Status: "needs_configuration", Config: in.Config, CreatedAt: now, UpdatedAt: now}, Package: pkg, Credentials: in.Credentials}
+	r := record{Installation: Installation{Kind: KindMCP, Revision: 1, SkillVersion: pkg.Manifest.Version, InstallationID: id, AgentID: agentID, ResourceEnabled: true, AppID: in.AppID, Name: in.Name, Enabled: true, Status: "needs_configuration", Config: in.Config, CreatedAt: now, UpdatedAt: now}, Package: pkg, Credentials: in.Credentials}
 	s.mu.Lock()
 	if err := s.uniqueNameLocked(agentID, in.Name, ""); err != nil {
 		s.mu.Unlock()
@@ -311,6 +376,12 @@ func (s *Service) Create(ctx context.Context, agentID string, in CreateRequest) 
 }
 
 func (s *Service) Update(ctx context.Context, agentID, id string, in UpdateRequest) (Installation, error) {
+	if s.isCLI(agentID, id) {
+		if agentID == "" || in.Enabled == nil || in.Config != nil || in.Credentials != nil {
+			return Installation{}, ErrInvalid
+		}
+		return s.SetCLIEnabled(ctx, agentID, id, *in.Enabled)
+	}
 	if agentID == "" {
 		return s.updateResource(ctx, id, in)
 	}
@@ -357,6 +428,9 @@ func (s *Service) Update(ctx context.Context, agentID, id string, in UpdateReque
 }
 
 func (s *Service) Connect(ctx context.Context, agentID, id string) (Installation, error) {
+	if s.isCLI(agentID, id) {
+		return s.SetCLIEnabled(ctx, agentID, id, true)
+	}
 	return s.connect(ctx, agentID, id, true)
 }
 
@@ -382,6 +456,12 @@ func (s *Service) connectWithRecovery(ctx context.Context, agentID, id string, e
 		out := s.viewLocked(e)
 		s.mu.Unlock()
 		return out, connectionError("app_resource_disabled", "This App is disabled in global resources.", 0, false)
+	}
+	if e.record.Kind == KindCLI {
+		out := s.viewLocked(e)
+		s.mu.Unlock()
+		s.scheduleConnectorWork()
+		return out, nil
 	}
 	if !explicit && (e.record.Disconnected || !e.record.active() || !e.record.ConnectRequested) {
 		out := s.viewLocked(e)
@@ -480,7 +560,13 @@ func (s *Service) connectWithRecovery(ctx context.Context, agentID, id string, e
 	return out, nil
 }
 
-func (s *Service) Disconnect(_ context.Context, agentID, id string) (Installation, error) {
+func (s *Service) Disconnect(ctx context.Context, agentID, id string) (Installation, error) {
+	if s.isCLI(agentID, id) {
+		if agentID == "" {
+			return Installation{}, ErrInvalid
+		}
+		return s.SetCLIEnabled(ctx, agentID, id, false)
+	}
 	s.mu.Lock()
 	e, err := s.findLocked(agentID, id)
 	if err != nil {
@@ -511,9 +597,19 @@ func (s *Service) Disconnect(_ context.Context, agentID, id string) (Installatio
 }
 
 func (s *Service) Delete(ctx context.Context, agentID, id string) error {
+	if s.isCLI(agentID, id) {
+		return s.deleteCLIBinding(ctx, agentID, id)
+	}
 	if agentID == "" {
 		return s.deleteResource(ctx, id)
 	}
+	if handled, err := s.removeMCPSkills(ctx, agentID, id); handled || err != nil {
+		return err
+	}
+	return s.removeBinding(agentID, id)
+}
+
+func (s *Service) removeBinding(agentID, id string) error {
 	s.mu.Lock()
 	e, err := s.findLocked(agentID, id)
 	if err != nil {
@@ -536,11 +632,20 @@ func (s *Service) Delete(ctx context.Context, agentID, id string) error {
 func (s *Service) DeleteAgent(ctx context.Context, agentID string) error {
 	items, _ := s.List(ctx, agentID)
 	for _, item := range items {
-		if err := s.Delete(ctx, agentID, item.InstallationID); err != nil {
+		if err := s.removeBinding(agentID, item.InstallationID); err != nil {
 			return err
 		}
 	}
 	s.mu.Lock()
+	if s.cliMigration != nil && s.cliMigration.Workers[agentID] != nil {
+		migration := copyJSON(s.cliMigration)
+		delete(migration.Workers, agentID)
+		if err := s.saveMigrationLocked(migration); err != nil {
+			s.mu.Unlock()
+			return err
+		}
+		s.cliMigration = migration
+	}
 	g := s.gateways[agentID]
 	delete(s.gateways, agentID)
 	s.mu.Unlock()
@@ -574,7 +679,7 @@ func (s *Service) Probe(ctx context.Context, agentID string, in ProbeRequest) (P
 	if _, ok := s.packages[in.AppID]; !ok {
 		return ProbeResult{}, ErrNotFound
 	}
-	in.Config = normalizeConfig(in.Config, in.AppID, in.Credentials)
+	in.Config = s.packageConfig(in.AppID, in.Config, in.Credentials)
 	protect(&in.Config, &in.Credentials)
 	if err := validateConfig(in.Config, in.AppID); err != nil {
 		return ProbeResult{}, err
@@ -629,6 +734,26 @@ func (s *Service) RestoreAll(ctx context.Context) error {
 		if err := s.Restore(ctx, agentID); err != nil {
 			errs = append(errs, err)
 		}
+	}
+	done := make(chan struct{})
+	select {
+	case s.cliDrain <- done:
+	case <-ctx.Done():
+		return errors.Join(append(errs, ctx.Err())...)
+	case <-s.ctx.Done():
+		return errors.Join(append(errs, s.ctx.Err())...)
+	}
+	select {
+	case <-done:
+		for agentID := range agents {
+			if err := s.CheckCLIReady(agentID); err != nil {
+				errs = append(errs, fmt.Errorf("restore connectors for %s: %w", agentID, err))
+			}
+		}
+	case <-ctx.Done():
+		errs = append(errs, ctx.Err())
+	case <-s.ctx.Done():
+		errs = append(errs, s.ctx.Err())
 	}
 	return errors.Join(errs...)
 }
@@ -723,6 +848,7 @@ func (s *Service) RefreshConnectorAfterProbe(ctx context.Context, connectorID st
 
 func (s *Service) Close() error {
 	s.cancel()
+	s.cliWG.Wait()
 	s.mu.Lock()
 	connections := []*connection{}
 	servers := []*mcp.Server{}

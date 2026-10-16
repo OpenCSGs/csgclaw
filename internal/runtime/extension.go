@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -146,6 +148,26 @@ func MergeExtensionEnvironment(base []string, profile map[string]string, project
 			effectiveKeys[canonical] = key
 		}
 		digests[projection.Name] = projection.Digest
+	}
+	for _, projection := range projections {
+		if projection.Executable != "" {
+			pathKey := effectiveKeys["PATH"]
+			if pathKey == "" {
+				pathKey = "PATH"
+			}
+			dir := filepath.Dir(projection.Executable)
+			parts := filepath.SplitList(values[pathKey])
+			found := false
+			for _, part := range parts {
+				if filepath.Clean(part) == dir {
+					found = true
+					break
+				}
+			}
+			if !found {
+				values[pathKey] = dir + string(os.PathListSeparator) + values[pathKey]
+			}
+		}
 	}
 	keys := make([]string, 0, len(values))
 	for key := range values {

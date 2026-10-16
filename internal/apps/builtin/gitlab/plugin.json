@@ -4,7 +4,8 @@
   "description": "Connect to an existing GitLab MCP service.",
   "author": {"name": "OpenCSG"},
   "keywords": ["gitlab"],
-  "apps": "./apps.json",
+  "kind": "mcp",
+  "mcp": "./mcp.json",
   "interface": {
     "displayName": "GitLab",
     "shortDescription": "Access your authorized GitLab resources",

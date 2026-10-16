@@ -18,7 +18,7 @@ type resourceHealth struct {
 	tools     []*mcp.Tool
 }
 
-// CheckResource validates the resource's own credentials without an Agent binding.
+// CheckResource reports CLI authorization or validates MCP credentials without an Agent binding.
 // Results are cached briefly; no persistent MCP session is retained by this check.
 func (s *Service) CheckResource(ctx context.Context, id string, force bool) (Installation, error) {
 	s.mu.Lock()
@@ -27,7 +27,7 @@ func (s *Service) CheckResource(ctx context.Context, id string, force bool) (Ins
 		s.mu.Unlock()
 		return Installation{}, err
 	}
-	if !e.record.Enabled {
+	if e.record.Kind == KindCLI || !e.record.Enabled {
 		out := s.viewLocked(e)
 		s.mu.Unlock()
 		return out, nil

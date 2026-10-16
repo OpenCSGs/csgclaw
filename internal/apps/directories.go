@@ -5,8 +5,10 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 type processDirs struct{ Home, Data, Plugin, Temp string }
@@ -54,13 +56,30 @@ func prepareProcessDirs(root string, pkg pluginPackage) (processDirs, error) {
 			return processDirs{}, err
 		}
 	}
-	for filename, value := range map[string]any{"plugin.json": pkg.Manifest, "apps.json": map[string]any{"apps": pkg.Apps}} {
+	files := map[string]any{"plugin.json": pkg.Manifest}
+	if pkg.Manifest.Apps != "" {
+		files[strings.TrimPrefix(pkg.Manifest.Apps, "./")] = map[string]any{"apps": pkg.Apps}
+	}
+	if pkg.Manifest.MCP != "" {
+		files[strings.TrimPrefix(pkg.Manifest.MCP, "./")] = pkg.MCP
+	}
+	if pkg.Manifest.CLI != "" {
+		files[strings.TrimPrefix(pkg.Manifest.CLI, "./")] = pkg.CLI
+	}
+	for filename, value := range files {
+		if !fs.ValidPath(filename) || strings.Contains(filename, "\\") {
+			return processDirs{}, fmt.Errorf("invalid package snapshot path")
+		}
+
 		data, err := json.MarshalIndent(value, "", "  ")
 		if err != nil {
 			return processDirs{}, fmt.Errorf("encode App package snapshot")
 		}
 		data = append(data, '\n')
 		file := filepath.Join(dirs.Plugin, filename)
+		if err := privatePackageDirectory(dirs.Plugin, filepath.Dir(filename)); err != nil {
+			return processDirs{}, err
+		}
 		if info, err := os.Lstat(file); err == nil {
 			if !info.Mode().IsRegular() {
 				return processDirs{}, fmt.Errorf("App snapshot is not a regular file")
@@ -75,6 +94,28 @@ func prepareProcessDirs(root string, pkg pluginPackage) (processDirs, error) {
 			return processDirs{}, fmt.Errorf("write App package snapshot")
 		}
 	}
+	if len(pkg.SkillFiles) > 0 {
+		ref := pkg.Manifest.Skills
+		ref = strings.TrimPrefix(ref, "./")
+		if !fs.ValidPath(ref) || ref == "." || strings.Contains(ref, "\\") {
+			return processDirs{}, fmt.Errorf("invalid Skills directory")
+		}
+		for name, data := range pkg.SkillFiles {
+			if !fs.ValidPath(name) || strings.Contains(name, "\\") {
+				return processDirs{}, fmt.Errorf("invalid Skills file")
+			}
+			target := filepath.Join(dirs.Plugin, ref, filepath.FromSlash(name))
+			if err := privatePackageDirectory(dirs.Plugin, filepath.Dir(filepath.Join(ref, filepath.FromSlash(name)))); err != nil {
+				return processDirs{}, err
+			}
+			if info, err := os.Lstat(target); err == nil && !info.Mode().IsRegular() {
+				return processDirs{}, fmt.Errorf("Skills file is not regular")
+			}
+			if err := os.WriteFile(target, data, 0600); err != nil {
+				return processDirs{}, err
+			}
+		}
+	}
 	return dirs, nil
 }
 
@@ -85,6 +126,19 @@ func (s *Service) removeInstallationData(id string) error {
 	}
 	if err := os.RemoveAll(root); err != nil {
 		return fmt.Errorf("remove App installation data")
+	}
+	return nil
+}
+
+func privatePackageDirectory(root, relative string) error {
+	if relative == "." {
+		return nil
+	}
+	for _, part := range strings.Split(relative, string(filepath.Separator)) {
+		root = filepath.Join(root, part)
+		if err := privateDirectory(root); err != nil {
+			return err
+		}
 	}
 	return nil
 }

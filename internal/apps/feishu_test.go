@@ -85,7 +85,7 @@ func TestFeishuAppObtainsAndRefreshesTenantToken(t *testing.T) {
 				}
 				return source
 			}})
-			item, err := service.Create(context.Background(), "agent", CreateRequest{AppID: "feishu", Name: "Feishu", Config: Config{URL: server.URL, AuthMode: "feishu", CredentialSource: "manual"}, Credentials: Credentials{AppID: "cli-real-app", AppSecret: "app-secret", Token: "platform-test", Headers: map[string]string{"X-Lark-Token-Type": "user_access_token", "lark-access-token": "stale-user-token"}}, Connect: true})
+			item, err := service.Create(context.Background(), "agent", CreateRequest{Kind: KindMCP, AppID: "feishu", Name: "Feishu", Config: Config{URL: server.URL, AuthMode: "feishu", CredentialSource: "manual"}, Credentials: Credentials{AppID: "cli-real-app", AppSecret: "app-secret", Token: "platform-test", Headers: map[string]string{"X-Lark-Token-Type": "user_access_token", "lark-access-token": "stale-user-token"}}, Connect: true})
 			if err != nil || item.Status != "connected" {
 				t.Fatalf("connection: %v", err)
 			}
@@ -156,11 +156,11 @@ func TestFeishuGlobalCredentialsRotationReplacesPrivateTokenSource(t *testing.T)
 		created.Add(1)
 		return &fakeTenantSource{prefix: id, generation: 1}
 	}})
-	item, err := service.Create(context.Background(), "agent", CreateRequest{AppID: "feishu", Name: "Channel", Config: Config{URL: server.URL, AuthMode: "feishu", CredentialSource: "manual"}, Credentials: credentials, Connect: true})
+	item, err := service.Create(context.Background(), "agent", CreateRequest{Kind: KindMCP, AppID: "feishu", Name: "Channel", Config: Config{URL: server.URL, AuthMode: "feishu", CredentialSource: "manual"}, Credentials: credentials, Connect: true})
 	if err != nil {
 		t.Fatal(err)
 	}
-	other, err := service.Create(context.Background(), "agent", CreateRequest{AppID: "feishu", Name: "Manual", Config: Config{URL: server.URL, AuthMode: "feishu"}, Credentials: Credentials{AppID: "manual", AppSecret: "manual-secret"}, Connect: true})
+	other, err := service.Create(context.Background(), "agent", CreateRequest{Kind: KindMCP, AppID: "feishu", Name: "Manual", Config: Config{URL: server.URL, AuthMode: "feishu"}, Credentials: Credentials{AppID: "manual", AppSecret: "manual-secret"}, Connect: true})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -13,6 +13,7 @@ import (
 	appscmd "csgclaw/cli/apps"
 	"csgclaw/cli/command"
 	completioncmd "csgclaw/cli/completion"
+	"csgclaw/cli/connectorpackage"
 	"csgclaw/cli/member"
 	"csgclaw/cli/message"
 	modelcmd "csgclaw/cli/model"
@@ -96,6 +97,7 @@ func (a *App) registerDefaultCommands() {
 		servecmd.NewInternalServeCmd(),
 		servecmd.NewDesktopServeCmd(),
 		servecmd.NewInternalRestartCmd(),
+		connectorpackage.NewPrepareCmd(),
 	)
 }
 

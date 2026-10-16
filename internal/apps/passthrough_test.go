@@ -39,7 +39,7 @@ func TestFeishuPassthroughPreservesBothAuthenticationLayers(t *testing.T) {
 			}))
 			t.Cleanup(server.Close)
 			service := newTestService(t, Options{})
-			item, err := service.Create(context.Background(), "agent", CreateRequest{AppID: "feishu", Name: "Passthrough", Config: Config{URL: server.URL, AuthMode: "bearer", Headers: map[string]string{"X-Lark-Token-Type": tokenType}}, Credentials: Credentials{Token: "fake-opencsg-token", Headers: map[string]string{"lark-access-token": "fake-lark-token"}}, Connect: true})
+			item, err := service.Create(context.Background(), "agent", CreateRequest{Kind: KindMCP, AppID: "feishu", Name: "Passthrough", Config: Config{URL: server.URL, AuthMode: "bearer", Headers: map[string]string{"X-Lark-Token-Type": tokenType}}, Credentials: Credentials{Token: "fake-opencsg-token", Headers: map[string]string{"lark-access-token": "fake-lark-token"}}, Connect: true})
 			if err != nil || item.Status != "connected" {
 				t.Fatalf("connect: %v", err)
 			}

@@ -6,7 +6,7 @@
 
 This document describes the Agent Engine consolidation and its follow-up fixes as of 2026-09-05.
 [Agent Engine](agent-engine-decoupling.md) specifies resource semantics and concurrency.
-[Hosted Feishu](channel/agent-engine-channel-integration.zh.md) and [lark-cli](channel/feishu-lark-cli-document-tool-design.zh.md) describe the channel and its optional Runtime extension.
+[Hosted Feishu](channel/agent-engine-channel-integration.zh.md) and [lark-cli](channel/feishu-lark-cli-document-tool-design.zh.md) describe the channel and the CLI + Skills connector.
 
 ## Ownership and execution
 
@@ -137,9 +137,8 @@ A required Extension that is not configured and loaded prevents readiness.
 Runtime replacement retains Extension desired resources, including when startup fails or the new Adapter reports `extension_unsupported`.
 Resources being deleted no longer gate readiness, and a successful cleanup reload is independent of unrelated Extension readiness.
 
-Feishu's optional `feishu-lark-cli` Extension does not gate channel connection.
-The UI reads its Engine status, including whether the Runtime actually loaded the generation.
-The product exposes fixed init/cleanup actions, not an arbitrary payload or shell-command API.
+Feishu's `feishu-lark-cli` Extension loads the global CLI connector configuration through each Agent binding. Connector management coordinates shared configuration changes with Runtime lifecycle updates. Channel connections remain independent.
+The UI exposes fixed connector actions and per-worker enablement.
 
 ## Persistence and security
 

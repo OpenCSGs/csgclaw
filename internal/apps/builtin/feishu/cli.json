@@ -1,0 +1,514 @@
+{
+  "install": {
+    "version": "1.0.97",
+    "executable": "lark-cli",
+    "version_args": [
+      "-v"
+    ],
+    "releases": {
+      "darwin-amd64": {
+        "url": "https://github.com/larksuite/cli/releases/download/v1.0.97/lark-cli-1.0.97-darwin-amd64.tar.gz",
+        "sha256": "1f5d3899138bc058662a027d0034ed69d21287d83322993afc01fee559b78de0"
+      },
+      "darwin-arm64": {
+        "url": "https://github.com/larksuite/cli/releases/download/v1.0.97/lark-cli-1.0.97-darwin-arm64.tar.gz",
+        "sha256": "64e856a05c8dfdac5dbecd316766e4b05299f230f54833b674a623df3ac13f1c"
+      },
+      "linux-amd64": {
+        "url": "https://github.com/larksuite/cli/releases/download/v1.0.97/lark-cli-1.0.97-linux-amd64.tar.gz",
+        "sha256": "7ce11848724f0b0bc8204012140adbf76fe7c1fc8abd41c1878bc97b7228126b"
+      },
+      "linux-arm64": {
+        "url": "https://github.com/larksuite/cli/releases/download/v1.0.97/lark-cli-1.0.97-linux-arm64.tar.gz",
+        "sha256": "2dec3e362ecce05b535854a0205035bb4ccdb72dbbed9a321890c2089da16bc5"
+      },
+      "linux-riscv64": {
+        "url": "https://github.com/larksuite/cli/releases/download/v1.0.97/lark-cli-1.0.97-linux-riscv64.tar.gz",
+        "sha256": "497641f0a4bd53952a36bca9b452018df2259bdf32902d1f3de7803385516913"
+      },
+      "windows-amd64": {
+        "url": "https://github.com/larksuite/cli/releases/download/v1.0.97/lark-cli-1.0.97-windows-amd64.zip",
+        "sha256": "88ee81ec73be12432b2297df010098b5069e5ff0403123e1cd308ad0061f1397"
+      },
+      "windows-arm64": {
+        "url": "https://github.com/larksuite/cli/releases/download/v1.0.97/lark-cli-1.0.97-windows-arm64.zip",
+        "sha256": "4fef85e999fc54de1234b0bb622766f096870db2b86a396545e01a4156abfb3b"
+      }
+    },
+    "skills": {
+      "version": "9067ec079bfa0b1ae2266cd91d1c1ee4a1ce824d",
+      "url": "https://codeload.github.com/larksuite/cli/tar.gz/9067ec079bfa0b1ae2266cd91d1c1ee4a1ce824d",
+      "sha256": "cdec7200b1ae9cc3c0ebc8a27428f359bf7236ef0b709e7c1c0206aab0185faa",
+      "prefix": "lark-"
+    }
+  },
+  "environment": {
+    "LARKSUITE_CLI_CONFIG_DIR": "${CONFIG_DIR}"
+  },
+  "authorization_domains": [
+    "feishu.cn",
+    "larksuite.com"
+  ],
+  "init": [
+    {
+      "args": [
+        "config",
+        "init",
+        "--new",
+        "--brand",
+        "feishu",
+        "--lang",
+        "zh"
+      ],
+      "stage": "app_authorization",
+      "unless": {
+        "args": [
+          "auth",
+          "status",
+          "--json"
+        ],
+        "match_json": [
+          {
+            "/identities/bot/available": true
+          }
+        ],
+        "unavailable_json": [
+          {
+            "/error/subtype": "not_configured"
+          }
+        ]
+      },
+      "url_rewrite": {
+        "path": "/page/launcher",
+        "query": {
+          "from": "sdk",
+          "source": "csgclaw",
+          "tp": "sdk"
+        },
+        "gzip_query": {
+          "addons": {
+            "preset": false,
+            "scopes": {
+              "tenant": [
+                "application:application:self_manage",
+                "base:app:copy",
+                "base:app:create",
+                "base:app:read",
+                "base:app:update",
+                "base:dashboard:create",
+                "base:dashboard:delete",
+                "base:dashboard:read",
+                "base:dashboard:update",
+                "base:field:create",
+                "base:field:delete",
+                "base:field:read",
+                "base:field:update",
+                "base:form:create",
+                "base:form:delete",
+                "base:form:read",
+                "base:form:update",
+                "base:history:read",
+                "base:record:create",
+                "base:record:delete",
+                "base:record:read",
+                "base:record:update",
+                "base:role:create",
+                "base:role:delete",
+                "base:role:read",
+                "base:role:update",
+                "base:table:create",
+                "base:table:delete",
+                "base:table:read",
+                "base:table:update",
+                "base:view:read",
+                "base:view:write_only",
+                "base:workflow:create",
+                "base:workflow:read",
+                "base:workflow:update",
+                "board:whiteboard:node:create",
+                "board:whiteboard:node:read",
+                "contact:contact.base:readonly",
+                "contact:user.base:readonly",
+                "docs:document.comment:create",
+                "docs:document.comment:delete",
+                "docs:document.comment:read",
+                "docs:document.comment:update",
+                "docs:document.comment:write_only",
+                "docs:document.content:read",
+                "docs:document.media:download",
+                "docs:document.media:upload",
+                "docs:document:copy",
+                "docs:document:export",
+                "docs:document:import",
+                "docs:permission.member:auth",
+                "docs:permission.member:create",
+                "docs:permission.member:delete",
+                "docs:permission.member:retrieve",
+                "docs:permission.member:transfer",
+                "docs:permission.setting:read",
+                "docs:permission.setting:write_only",
+                "docx:document:create",
+                "docx:document:readonly",
+                "docx:document:write_only",
+                "drive:drive.metadata:readonly",
+                "drive:file:download",
+                "drive:file:upload",
+                "drive:file:view_record:readonly",
+                "im:chat.managers:write_only",
+                "im:chat.members:read",
+                "im:chat.members:write_only",
+                "im:chat.moderation:read",
+                "im:chat:create",
+                "im:chat:moderation:write_only",
+                "im:chat:read",
+                "im:chat:update",
+                "im:message",
+                "im:message.group_msg",
+                "im:message.p2p_msg:readonly",
+                "im:message.pins:read",
+                "im:message.pins:write_only",
+                "im:message.reactions:read",
+                "im:message.reactions:write_only",
+                "im:message:readonly",
+                "im:message:send_as_bot",
+                "im:message:update",
+                "im:resource",
+                "minutes:minutes.artifacts:read",
+                "minutes:minutes.search:read",
+                "sheets:spreadsheet.meta:read",
+                "sheets:spreadsheet.meta:write_only",
+                "sheets:spreadsheet:create",
+                "sheets:spreadsheet:read",
+                "sheets:spreadsheet:write_only",
+                "slides:presentation:create",
+                "slides:presentation:read",
+                "slides:presentation:update",
+                "slides:presentation:write_only",
+                "space:document:delete",
+                "space:document:move",
+                "space:document:shortcut",
+                "space:folder:create",
+                "task:attachment:write",
+                "task:comment:write",
+                "task:custom_field:read",
+                "task:custom_field:write",
+                "task:section:read",
+                "task:section:write",
+                "task:task:read",
+                "task:tasklist:read",
+                "vc:meeting.search:read",
+                "vc:note:read",
+                "wiki:member:create",
+                "wiki:member:retrieve",
+                "wiki:member:update",
+                "wiki:node:copy",
+                "wiki:node:create",
+                "wiki:node:move",
+                "wiki:node:read",
+                "wiki:node:retrieve",
+                "wiki:space:read",
+                "wiki:space:retrieve",
+                "wiki:space:write_only"
+              ],
+              "user": [
+                "approval:instance:read",
+                "approval:instance:write",
+                "approval:task:read",
+                "approval:task:write",
+                "base:app:copy",
+                "base:app:create",
+                "base:app:read",
+                "base:app:update",
+                "base:dashboard:create",
+                "base:dashboard:delete",
+                "base:dashboard:read",
+                "base:dashboard:update",
+                "base:field:create",
+                "base:field:delete",
+                "base:field:read",
+                "base:field:update",
+                "base:form:create",
+                "base:form:delete",
+                "base:form:read",
+                "base:form:update",
+                "base:history:read",
+                "base:record:create",
+                "base:record:delete",
+                "base:record:read",
+                "base:record:update",
+                "base:role:create",
+                "base:role:delete",
+                "base:role:read",
+                "base:role:update",
+                "base:table:create",
+                "base:table:delete",
+                "base:table:read",
+                "base:table:update",
+                "base:view:read",
+                "base:view:write_only",
+                "base:workflow:create",
+                "base:workflow:read",
+                "base:workflow:update",
+                "board:whiteboard:node:create",
+                "board:whiteboard:node:read",
+                "contact:user:search",
+                "docs:document.comment:create",
+                "docs:document.comment:delete",
+                "docs:document.comment:read",
+                "docs:document.comment:update",
+                "docs:document.comment:write_only",
+                "docs:document.content:read",
+                "docs:document.media:download",
+                "docs:document.media:upload",
+                "docs:document:copy",
+                "docs:document:export",
+                "docs:document:import",
+                "docs:permission.member:apply",
+                "docs:permission.member:auth",
+                "docs:permission.member:create",
+                "docs:permission.member:delete",
+                "docs:permission.member:retrieve",
+                "docs:permission.member:transfer",
+                "docs:permission.setting:read",
+                "docs:permission.setting:write_only",
+                "docs:secure_label:write_only",
+                "docx:document:create",
+                "docx:document:readonly",
+                "docx:document:write_only",
+                "drive:drive.metadata:readonly",
+                "drive:file:download",
+                "drive:file:upload",
+                "drive:file:view_record:readonly",
+                "drive:quota_detail:read_one",
+                "im:chat.managers:write_only",
+                "im:chat.members:read",
+                "im:chat.members:write_only",
+                "im:chat.moderation:read",
+                "im:chat.nickname:read",
+                "im:chat.nickname:write",
+                "im:chat.user_setting:read",
+                "im:chat.user_setting:write",
+                "im:chat:moderation:write_only",
+                "im:chat:read",
+                "im:chat:update",
+                "im:feed.flag:read",
+                "im:feed.flag:write",
+                "im:message",
+                "im:message.group_msg:get_as_user",
+                "im:message.p2p_msg:get_as_user",
+                "im:message.pins:read",
+                "im:message.pins:write_only",
+                "im:message.reactions:read",
+                "im:message.reactions:write_only",
+                "im:message:readonly",
+                "im:message:update",
+                "im:resource",
+                "mail:user_mailbox.message:modify",
+                "mail:user_mailbox:readonly",
+                "minutes:minutes.artifacts:read",
+                "minutes:minutes.search:read",
+                "minutes:minutes.upload:write",
+                "sheets:spreadsheet.meta:read",
+                "sheets:spreadsheet.meta:write_only",
+                "sheets:spreadsheet:create",
+                "sheets:spreadsheet:read",
+                "sheets:spreadsheet:write_only",
+                "slides:presentation:create",
+                "slides:presentation:read",
+                "slides:presentation:update",
+                "slides:presentation:write_only",
+                "space:document:delete",
+                "space:document:move",
+                "space:document:shortcut",
+                "space:folder:create",
+                "spark:app:read",
+                "spark:app:write",
+                "task:attachment:write",
+                "task:comment:write",
+                "task:custom_field:read",
+                "task:custom_field:write",
+                "task:section:read",
+                "task:section:write",
+                "task:task:read",
+                "task:tasklist:read",
+                "vc:meeting.search:read",
+                "vc:note:read",
+                "wiki:member:create",
+                "wiki:member:retrieve",
+                "wiki:member:update",
+                "wiki:node:copy",
+                "wiki:node:create",
+                "wiki:node:move",
+                "wiki:node:read",
+                "wiki:node:retrieve",
+                "wiki:space:read",
+                "wiki:space:retrieve",
+                "wiki:space:write_only"
+              ]
+            }
+          }
+        }
+      }
+    }
+  ],
+  "auth": [
+    {
+      "args": [
+        "auth",
+        "login",
+        "--no-wait",
+        "--json",
+        "--scope",
+        "${REQUESTED_SCOPES}"
+      ],
+      "stage": "user_authorization",
+      "device_flow": {
+        "code_field": "/device_code",
+        "url_field": "/verification_url",
+        "expires_in_field": "/expires_in",
+        "poll_args": [
+          "auth",
+          "login",
+          "--device-code",
+          "${DEVICE_CODE}",
+          "--json"
+        ],
+        "accept_error_json": [
+          {
+            "/event": "authorization_complete",
+            "/warning/type": "missing_scope"
+          }
+        ]
+      },
+      "unless": {
+        "args": [
+          "auth",
+          "status",
+          "--json",
+          "--verify"
+        ],
+        "match_json": [
+          {
+            "/identities/user/available": true,
+            "/identities/user/verified": true
+          }
+        ],
+        "unavailable_json": [
+          {
+            "/error/subtype": "not_configured"
+          }
+        ]
+      }
+    },
+    {
+      "args": [
+        "auth",
+        "status",
+        "--json",
+        "--verify"
+      ],
+      "match_json": [
+        {
+          "/identities/user/available": true,
+          "/identities/user/verified": true
+        }
+      ]
+    },
+    {
+      "args": [
+        "config",
+        "strict-mode",
+        "off",
+        "--global"
+      ]
+    },
+    {
+      "args": [
+        "config",
+        "strict-mode",
+        "off"
+      ]
+    },
+    {
+      "args": [
+        "config",
+        "default-as",
+        "auto"
+      ]
+    }
+  ],
+  "status": [
+    "auth",
+    "status",
+    "--json",
+    "--verify"
+  ],
+  "status_match_json": [
+    {
+      "/identities/bot/available": true,
+      "/identities/bot/verified": true
+    },
+    {
+      "/identities/user/available": true,
+      "/identities/user/verified": true
+    }
+  ],
+  "status_fields": [
+    "/appId",
+    "/defaultAs",
+    "/identities/bot/status",
+    "/identities/bot/available",
+    "/identities/bot/verified",
+    "/identities/bot/openId",
+    "/identities/bot/appName",
+    "/identities/bot/userName",
+    "/identities/bot/scope",
+    "/identities/bot/tokenStatus",
+    "/identities/user/status",
+    "/identities/user/available",
+    "/identities/user/verified",
+    "/identities/user/openId",
+    "/identities/user/appName",
+    "/identities/user/userName",
+    "/identities/user/scope",
+    "/identities/user/tokenStatus"
+  ],
+  "requested_scopes": "approval:instance:read approval:instance:write approval:task:read approval:task:write base:app:copy base:app:create base:app:read base:app:update base:dashboard:create base:dashboard:delete base:dashboard:read base:dashboard:update base:field:create base:field:delete base:field:read base:field:update base:form:create base:form:delete base:form:read base:form:update base:history:read base:record:create base:record:delete base:record:read base:record:update base:role:create base:role:delete base:role:read base:role:update base:table:create base:table:delete base:table:read base:table:update base:view:read base:view:write_only base:workflow:create base:workflow:read base:workflow:update board:whiteboard:node:create board:whiteboard:node:read contact:user:search docs:document.comment:create docs:document.comment:delete docs:document.comment:read docs:document.comment:update docs:document.comment:write_only docs:document.content:read docs:document.media:download docs:document.media:upload docs:document:copy docs:document:export docs:document:import docs:permission.member:apply docs:permission.member:auth docs:permission.member:create docs:permission.member:delete docs:permission.member:retrieve docs:permission.member:transfer docs:permission.setting:read docs:permission.setting:write_only docs:secure_label:write_only docx:document:create docx:document:readonly docx:document:write_only drive:drive.metadata:readonly drive:file:download drive:file:upload drive:file:view_record:readonly drive:quota_detail:read_one im:chat.managers:write_only im:chat.members:read im:chat.members:write_only im:chat.moderation:read im:chat.nickname:read im:chat.nickname:write im:chat.user_setting:read im:chat.user_setting:write im:chat:moderation:write_only im:chat:read im:chat:update im:feed.flag:read im:feed.flag:write im:message im:message.group_msg:get_as_user im:message.p2p_msg:get_as_user im:message.pins:read im:message.pins:write_only im:message.reactions:read im:message.reactions:write_only im:message:readonly im:message:update im:resource mail:user_mailbox.message:modify mail:user_mailbox:readonly minutes:minutes.artifacts:read minutes:minutes.search:read minutes:minutes.upload:write sheets:spreadsheet.meta:read sheets:spreadsheet.meta:write_only sheets:spreadsheet:create sheets:spreadsheet:read sheets:spreadsheet:write_only slides:presentation:create slides:presentation:read slides:presentation:update slides:presentation:write_only space:document:delete space:document:move space:document:shortcut space:folder:create spark:app:read spark:app:write task:attachment:write task:comment:write task:custom_field:read task:custom_field:write task:section:read task:section:write task:task:read task:tasklist:read vc:meeting.search:read vc:note:read wiki:member:create wiki:member:retrieve wiki:member:update wiki:node:copy wiki:node:create wiki:node:move wiki:node:read wiki:node:retrieve wiki:space:read wiki:space:retrieve wiki:space:write_only",
+  "un_auth": [
+    {
+      "args": [
+        "auth",
+        "logout"
+      ],
+      "accept_error_json": [
+        {
+          "/error/subtype": "not_configured"
+        }
+      ]
+    }
+  ],
+  "disconnect": [
+    {
+      "args": [
+        "config",
+        "remove"
+      ],
+      "accept_error_json": [
+        {
+          "/error/subtype": "not_configured"
+        }
+      ]
+    }
+  ],
+  "status_unavailable_json": [
+    {
+      "/error/subtype": "not_configured"
+    }
+  ],
+  "exclude_environment": [
+    "LARK_*",
+    "LARKSUITE_*",
+    "OPENCLAW_*",
+    "HERMES_*"
+  ]
+}

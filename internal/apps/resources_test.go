@@ -189,7 +189,7 @@ func TestGlobalFeishuResourceUsesItsOwnIdentityForEveryAgent(t *testing.T) {
 	s := newTestService(t, Options{FeishuTokenSource: func(appID, secret string) feishutransport.TenantTokenSource {
 		return &fakeTenantSource{prefix: appID, generation: 1}
 	}})
-	resource, err := s.Create(ctx, "", CreateRequest{AppID: "feishu", Name: "Team Feishu", Config: Config{URL: server.URL, AuthMode: "feishu", CredentialSource: "manual"}, Credentials: Credentials{AppID: "shared-app", AppSecret: "global-feishu-secret"}})
+	resource, err := s.Create(ctx, "", CreateRequest{Kind: KindMCP, AppID: "feishu", Name: "Team Feishu", Config: Config{URL: server.URL, AuthMode: "feishu", CredentialSource: "manual"}, Credentials: Credentials{AppID: "shared-app", AppSecret: "global-feishu-secret"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -333,7 +333,7 @@ func TestDraftProbeUsesCurrentCredentialsWithoutSaving(t *testing.T) {
 
 func TestFeishuViewShowsAppIDWithoutSecrets(t *testing.T) {
 	s := newTestService(t, Options{})
-	item, err := s.Create(t.Context(), "", CreateRequest{AppID: "feishu", Name: "Feishu", Config: Config{URL: "https://example.com/mcp", AuthMode: "feishu"}, Credentials: Credentials{AppID: "cli_visible_id", AppSecret: "private-app-secret", Token: "private-token"}})
+	item, err := s.Create(t.Context(), "", CreateRequest{Kind: KindMCP, AppID: "feishu", Name: "Feishu", Config: Config{URL: "https://example.com/mcp", AuthMode: "feishu"}, Credentials: Credentials{AppID: "cli_visible_id", AppSecret: "private-app-secret", Token: "private-token"}})
 	if err != nil {
 		t.Fatal(err)
 	}

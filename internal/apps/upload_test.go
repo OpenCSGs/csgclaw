@@ -201,7 +201,7 @@ func TestAppUploadRejectsStdio(t *testing.T) {
 		t.Fatal(err)
 	}
 	s := newTestService(t, Options{})
-	item, err := s.Create(context.Background(), "agent", CreateRequest{AppID: "feishu", Name: "Stdio", Config: Config{Transport: "stdio", Command: executable, Args: []string{"-test.run=^TestAppStdioHelper$"}, AuthMode: "none", Env: map[string]string{"CSGCLAW_APP_TEST_HELPER": "1"}}, Connect: true})
+	item, err := s.Create(context.Background(), "agent", CreateRequest{Kind: KindMCP, AppID: "feishu", Name: "Stdio", Config: Config{Transport: "stdio", Command: executable, Args: []string{"-test.run=^TestAppStdioHelper$"}, AuthMode: "none", Env: map[string]string{"CSGCLAW_APP_TEST_HELPER": "1"}}, Connect: true})
 	if err != nil || item.Status != "connected" {
 		t.Fatalf("stdio setup failed: %v %s", err, item.LastError)
 	}

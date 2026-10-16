@@ -3,7 +3,6 @@ import { WorkspacePaneTypes } from "@/models/routing";
 import {
   agentSelectionAfterDelete,
   feishuRegistrationFinalizeNotice,
-  larkCLIInitErrorKind,
   shouldReturnToAgentOverviewAfterAgentMissing,
 } from "./useAgentController";
 
@@ -31,17 +30,6 @@ describe("shouldReturnToAgentOverviewAfterAgentMissing", () => {
   });
 });
 
-describe("larkCLIInitErrorKind", () => {
-  it("maps actionable backend errors to focused user guidance", () => {
-    expect(larkCLIInitErrorKind("feishu_bot_not_configured")).toBe("missing_bot");
-    expect(larkCLIInitErrorKind("lark_cli_unavailable")).toBe("install");
-    expect(larkCLIInitErrorKind("feishu_bot_app_id_conflict")).toBe("app_conflict");
-    expect(larkCLIInitErrorKind("lark_cli_source_unavailable")).toBe("source_unavailable");
-    expect(larkCLIInitErrorKind("lark_cli_bind_failed")).toBe("bind_failed");
-    expect(larkCLIInitErrorKind("unexpected")).toBe("generic");
-  });
-});
-
 describe("agentSelectionAfterDelete", () => {
   const manager = { id: "u-manager", name: "Manager", role: "manager" };
   const alpha = { id: "u-alpha", name: "Alpha", role: "worker" };
@@ -61,15 +49,6 @@ describe("agentSelectionAfterDelete", () => {
 });
 
 describe("feishuRegistrationFinalizeNotice", () => {
-  it("surfaces structured lark-cli failures as warnings", () => {
-    expect(
-      feishuRegistrationFinalizeNotice({
-        lark_cli_status: "error",
-        lark_cli_error: { code: "lark_cli_bind_failed" },
-      }),
-    ).toEqual({ kind: "bind_failed", warnings: [] });
-  });
-
   it("keeps backward-compatible warnings visible", () => {
     expect(feishuRegistrationFinalizeNotice({ warnings: [" first ", "", "second"] })).toEqual({
       kind: "warnings",

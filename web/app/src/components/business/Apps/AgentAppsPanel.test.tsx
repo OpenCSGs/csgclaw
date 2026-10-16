@@ -36,6 +36,14 @@ const installation: AppInstallation = {
   created_at: "",
   updated_at: "",
 };
+const feishuInstallation: AppInstallation = {
+  ...installation,
+  installation_id: "feishu-1",
+  app_id: "feishu",
+  kind: "cli",
+  name: "Feishu",
+  status: "configured",
+};
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -82,6 +90,16 @@ function mockServer(initial: AppInstallation[] = []) {
 }
 
 describe("Agent Apps", () => {
+  it("opens Feishu settings when its card is activated", async () => {
+    mockServer([feishuInstallation]);
+    const user = userEvent.setup();
+    render(<Harness />);
+
+    await user.click(await screen.findByRole("button", { name: /Feishu/ }));
+
+    expect(screen.getByRole("dialog")).toBeVisible();
+  });
+
   it("binds a global resource without asking for or copying credentials", async () => {
     const fetch = mockServer();
     const user = userEvent.setup();

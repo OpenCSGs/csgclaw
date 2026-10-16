@@ -12,7 +12,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log/slog"
 	"net/http"
 	"net/url"
 	"os"
@@ -63,13 +62,6 @@ type feishuRegistrationResponse struct {
 
 type feishuRegistrationFinalizeResponse struct {
 	feishubind.Result
-	LarkCLIStatus string                          `json:"lark_cli_status,omitempty"`
-	LarkCLIError  *feishuRegistrationLarkCLIError `json:"lark_cli_error,omitempty"`
-}
-
-type feishuRegistrationLarkCLIError struct {
-	Code    string `json:"code"`
-	Message string `json:"message"`
 }
 
 func (h *Handler) createFeishuRegistration(w http.ResponseWriter, r *http.Request) {
@@ -217,8 +209,6 @@ func (h *Handler) finalizeFeishuRegistration(w http.ResponseWriter, r *http.Requ
 		}
 	}
 	var result feishubind.Result
-	var larkCLIStatus string
-	var larkCLIError *feishuRegistrationLarkCLIError
 	if h.agentRuntime == nil {
 		http.Error(w, "Agent lifecycle coordinator is unavailable", http.StatusServiceUnavailable)
 		return
@@ -233,15 +223,6 @@ func (h *Handler) finalizeFeishuRegistration(w http.ResponseWriter, r *http.Requ
 		result, bindErr = feishubind.BindBot(ctx, h.agentEngine, h.participant, state.AgentID, appID, appSecret)
 		if bindErr != nil {
 			return bindErr
-		}
-		if supportsAgentLarkCLI(target.RuntimeKind) {
-			if _, applyErr := h.configureAgentLarkCLILocked(ctx, target); applyErr != nil {
-				larkCLIStatus, larkCLIError = feishuRegistrationLarkCLIWarning(applyErr)
-				result.Warnings = append(result.Warnings, larkCLIError.Message)
-				slog.Warn("configure lark-cli after Feishu connection failed", "agent_id", target.ID, "error", applyErr)
-			} else {
-				larkCLIStatus = "configured"
-			}
 		}
 		// Keep the fact update and native Runtime activation under the same
 		// Agent lease so a concurrent Bot switch cannot be activated out of order.
@@ -265,28 +246,8 @@ func (h *Handler) finalizeFeishuRegistration(w http.ResponseWriter, r *http.Requ
 	}
 	_ = h.deleteFeishuRegistration(state.RegistrationID)
 	writeJSON(w, http.StatusOK, feishuRegistrationFinalizeResponse{
-		Result:        result,
-		LarkCLIStatus: larkCLIStatus,
-		LarkCLIError:  larkCLIError,
+		Result: result,
 	})
-}
-
-func feishuRegistrationLarkCLIWarning(err error) (string, *feishuRegistrationLarkCLIError) {
-	code := "lark_cli_config_failed"
-	message := "lark-cli automatic configuration failed; retry from the worker profile"
-	status := "error"
-	var configureErr *larkCLIConfigureError
-	if errors.As(err, &configureErr) && strings.TrimSpace(configureErr.code) != "" {
-		code = strings.TrimSpace(configureErr.code)
-	}
-	switch code {
-	case "lark_cli_unavailable":
-		status = "unavailable"
-		message = "lark-cli is not installed or cannot be started on the host; install or repair it, then initialize from the worker profile"
-	case "lark_cli_bind_failed":
-		message = "lark-cli config bind failed; check the installed lark-cli version and retry from the worker profile"
-	}
-	return status, &feishuRegistrationLarkCLIError{Code: code, Message: message}
 }
 
 func feishuRegistrationBindsAdmin(target agent.Agent) bool {

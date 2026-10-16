@@ -5,7 +5,6 @@ import { ResourceLoadMore } from "../ResourceLoadMore";
 import type { ResourceContinuation } from "@/hooks/workspace/useInfiniteAgentResources";
 import { mcpManagedKnowledgeBaseSource } from "@/models/mcp";
 import {
-  AlertCircle,
   Check,
   CheckCircle2,
   CircleDashed,
@@ -21,7 +20,6 @@ import {
   Save,
   Server,
   Square,
-  Terminal,
   Trash2,
   Unlink2,
   UploadCloud,
@@ -126,15 +124,7 @@ type VoidOrPromise = void | Promise<void>;
 type AgentActionHandler = (item: AgentLike) => VoidOrPromise;
 type AgentMetadataSavePatch = Pick<Partial<AgentDraft>, "description" | "name">;
 type AgentNoticeTone = "info" | "warning" | "success";
-type LarkCLIDialogView = {
-  kind: "message" | "install";
-  message?: string;
-  title?: string;
-} | null;
-const LARK_CLI_INSTALL_COMMAND = "npm install -g @larksuite/cli@latest";
-const LARK_CLI_INSTALL_DOCS_URL = "https://github.com/larksuite/cli#installation--quick-start";
-const LARK_CLI_RELEASES_URL = "https://github.com/larksuite/cli/releases/latest";
-const NODEJS_DOWNLOAD_URL = "https://nodejs.org/en/download";
+
 const AGENT_PROFILE_TAB_IDS = ["profile", "channels", "instructions", "memory", "skills", "apps", "mcp"] as const;
 type AgentProfileTabID = (typeof AGENT_PROFILE_TAB_IDS)[number];
 type UpdateAgentDraft = (patch: Partial<AgentDraft>) => void;
@@ -166,7 +156,6 @@ export type AgentDetailPaneProps = {
   feishuPendingRegistration?: FeishuPendingRegistrationView;
   hasUnsavedChanges?: boolean;
   item: AgentLike;
-  larkCLIDialog?: LarkCLIDialogView;
   modelBusy?: boolean;
   modelError?: unknown;
   modelOptions?: ModelProviderOption[];
@@ -199,9 +188,6 @@ export type AgentDetailPaneProps = {
   onStop: AgentActionHandler;
   onFinalizeFeishuConnect?: AgentActionHandler;
   onDisconnectFeishu?: AgentActionHandler;
-  onDismissLarkCLIDialog?: () => void;
-  onInitLarkCLI?: AgentActionHandler;
-  onShowLarkCLIInstall?: AgentActionHandler;
   onUpgrade?: AgentActionHandler;
   publishBusy?: boolean;
   publishDisabled?: boolean;
@@ -239,6 +225,7 @@ export type AgentDetailPaneProps = {
   mcpContinuation?: ResourceContinuation;
   mcpListError?: string;
   onLoadSkillCandidates?: () => void;
+  onRefreshSkills?: () => void | Promise<unknown>;
   skills?: SlashSkillOption[];
   skillsError?: string;
   skillsLoading?: boolean;
@@ -272,7 +259,6 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
     error = "",
     feishuConnectBusy = "",
     feishuPendingRegistration = null,
-    larkCLIDialog = null,
     draft,
     savedDraft = null,
     hasUnsavedChanges: hasUnsavedChangesProp = undefined,
@@ -304,6 +290,7 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
     mcpContinuation,
     mcpListError = "",
     onLoadSkillCandidates,
+    onRefreshSkills,
     skillCandidates = [],
     skillCandidatesLoading = false,
     skillCandidatesError = "",
@@ -334,9 +321,6 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
     onMemoryChange,
     onStartFeishuConnect,
     onDisconnectFeishu,
-    onDismissLarkCLIDialog,
-    onInitLarkCLI,
-    onShowLarkCLIInstall,
     onUpgrade,
     onDelete,
     onInvite,
@@ -569,7 +553,7 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
   const showMCPServers = Boolean(
     draft && !isNotifierDraft && supportsMCPServers(draft.runtime_kind || item.runtime_kind),
   );
-  const showApps = ["codex", "dsh"].includes(runtimeKind) && !isNotifierDraft;
+  const showApps = !isNotifierDraft && (showMCPServers || ["codex", "dsh"].includes(runtimeKind));
   const profileTabs = useMemo(
     () =>
       draft
@@ -613,6 +597,9 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
   const visibleActiveProfileTab = profileTabs.some((tab) => tab.id === selectedProfileTab)
     ? selectedProfileTab
     : profileTabs[0]?.id;
+  useEffect(() => {
+    if (visibleActiveProfileTab === "skills" && workspaceSupported) void onRefreshSkills?.();
+  }, [item.id, visibleActiveProfileTab, workspaceSupported, onRefreshSkills]);
   const appsController = useAgentApps(
     String(item.id || ""),
     showApps && (visibleActiveProfileTab === "apps" || visibleActiveProfileTab === "mcp"),
@@ -1101,8 +1088,6 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
                 pendingRegistration={feishuPendingRegistration}
                 onStartFeishuConnect={onStartFeishuConnect}
                 onDisconnectFeishu={onDisconnectFeishu}
-                onInitLarkCLI={onInitLarkCLI}
-                onShowLarkCLIInstall={onShowLarkCLIInstall}
               />
             ) : null}
 
@@ -1153,6 +1138,7 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
               <AgentAppsPanel
                 key={String(item.id)}
                 agentID={String(item.id || "")}
+                cliSupported={!agentSandboxEnabled(item) && ["codex", "dsh"].includes(runtimeKind)}
                 controller={appsController}
                 t={t}
                 portalContainer={dialogPortalContainer}
@@ -1201,89 +1187,6 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
           }}
         />
       ) : null}
-      <DialogRoot
-        open={Boolean(larkCLIDialog?.message)}
-        onOpenChange={(open) => {
-          if (!open) {
-            onDismissLarkCLIDialog?.();
-          }
-        }}
-      >
-        <DialogContent
-          className={larkCLIDialog?.kind === "install" ? "lark-cli-install-dialog" : undefined}
-          portalContainer={dialogPortalContainer}
-        >
-          <DialogHeader>
-            <div className="lark-cli-dialog-copy">
-              <DialogTitle>{larkCLIDialog?.title || t("larkCLIInitFailed")}</DialogTitle>
-              <DialogDescription>{larkCLIDialog?.message || ""}</DialogDescription>
-            </div>
-            <DialogCloseButton label={t("close")} size="sm" variant="tertiaryGray" />
-          </DialogHeader>
-          {larkCLIDialog?.kind === "install" ? (
-            <DialogBody className="lark-cli-install-dialog-body">
-              <div className="lark-cli-install-step">
-                <strong>{t("larkCLIInstallNodeTitle")}</strong>
-                <span>{t("larkCLIInstallNodeDescription")}</span>
-                <a href={NODEJS_DOWNLOAD_URL} target="_blank" rel="noreferrer">
-                  {t("larkCLIInstallNodeLink")}
-                  <ExternalLink aria-hidden="true" size={14} strokeWidth={2} />
-                </a>
-              </div>
-              <div className="lark-cli-install-step">
-                <strong>{t("larkCLIInstallCommandTitle")}</strong>
-                <div className="lark-cli-install-command">
-                  <code>{LARK_CLI_INSTALL_COMMAND}</code>
-                  <ClipboardCopyButton
-                    className="lark-cli-install-copy"
-                    label={t("larkCLIInstallCopyCommand")}
-                    text={LARK_CLI_INSTALL_COMMAND}
-                  />
-                </div>
-                <span>{t("larkCLIInstallCommandHint")}</span>
-              </div>
-              <div className="lark-cli-install-alternative">
-                <span>{t("larkCLIInstallNativeDescription")}</span>
-                <a href={LARK_CLI_RELEASES_URL} target="_blank" rel="noreferrer">
-                  {t("larkCLIInstallReleasesLink")}
-                  <ExternalLink aria-hidden="true" size={14} strokeWidth={2} />
-                </a>
-              </div>
-              <p className="lark-cli-install-retry-hint">{t("larkCLIInstallRetryHint")}</p>
-            </DialogBody>
-          ) : null}
-          <DialogFooter>
-            {larkCLIDialog?.kind === "install" ? (
-              <>
-                <a
-                  className="lark-cli-install-docs-link"
-                  href={LARK_CLI_INSTALL_DOCS_URL}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  {t("larkCLIInstallDocsLink")}
-                  <ExternalLink aria-hidden="true" size={14} strokeWidth={2} />
-                </a>
-                <Button
-                  variant="primary"
-                  size="sm"
-                  onClick={() => {
-                    onDismissLarkCLIDialog?.();
-                    void onInitLarkCLI?.(item);
-                  }}
-                >
-                  <RefreshCw aria-hidden="true" size={15} strokeWidth={2} />
-                  {t("larkCLIRetryConfigure")}
-                </Button>
-              </>
-            ) : (
-              <Button variant="primary" size="sm" onClick={() => onDismissLarkCLIDialog?.()}>
-                {t("confirm")}
-              </Button>
-            )}
-          </DialogFooter>
-        </DialogContent>
-      </DialogRoot>
       <DialogRoot open={addSkillsDialogOpen} onOpenChange={setAddSkillsDialogOpen}>
         <DialogContent className="agent-skills-dialog" portalContainer={dialogPortalContainer}>
           <DialogHeader className="agent-skills-dialog-header">
@@ -2381,8 +2284,6 @@ type AgentChannelsSectionProps = {
   busyKey: string;
   item: AgentLike;
   onDisconnectFeishu?: AgentActionHandler;
-  onInitLarkCLI?: AgentActionHandler;
-  onShowLarkCLIInstall?: AgentActionHandler;
   onStartFeishuConnect?: AgentActionHandler;
   pendingRegistration?: FeishuPendingRegistrationView;
   t: TranslateFn;
@@ -2394,8 +2295,6 @@ function AgentChannelsSection({
   busyKey,
   pendingRegistration = null,
   onDisconnectFeishu,
-  onInitLarkCLI,
-  onShowLarkCLIInstall,
   onStartFeishuConnect,
 }: AgentChannelsSectionProps) {
   const connected = hasConnectedAgentChannel(item, "feishu");
@@ -2403,7 +2302,6 @@ function AgentChannelsSection({
   const actionBusy = Boolean(busyKey);
   const connectBusy = busyKey.endsWith(":feishu:connect") || busyKey.endsWith(":feishu:finalize");
   const disconnectBusy = busyKey.endsWith(":feishu:disconnect");
-  const larkCLIInitBusy = busyKey.endsWith(":feishu:lark-cli");
   const statusLabel = connected ? t("feishuConnected") : pending ? t("feishuPending") : t("feishuDisconnected");
   const statusIcon = connected ? (
     <CheckCircle2 aria-hidden="true" size={16} strokeWidth={2.2} />
@@ -2414,27 +2312,9 @@ function AgentChannelsSection({
   );
   const connectLabel = connected ? t("feishuReconnect") : t("feishuConnect");
   const canStart = Boolean(onStartFeishuConnect);
-  const cleanupPending = !connected && Boolean(item.lark_cli?.cleanup_pending);
-  const disconnectLabel = cleanupPending ? t("feishuCleanupRetry") : t("feishuDisconnect");
-  const canDisconnect = (connected || cleanupPending) && Boolean(onDisconnectFeishu);
+  const disconnectLabel = t("feishuDisconnect");
+  const canDisconnect = connected && Boolean(onDisconnectFeishu);
   const connectURL = String(pendingRegistration?.connect_url || "").trim();
-  const larkCLIState = String(item.lark_cli?.state || "")
-    .trim()
-    .toLowerCase();
-  const larkCLIUnavailable = larkCLIState === "unavailable";
-  const larkCLIMismatch = larkCLIState === "mismatch";
-  const larkCLIBound = Boolean(item.lark_cli?.bound) && !larkCLIUnavailable && !larkCLIMismatch;
-  const larkCLIPendingLoad = larkCLIBound && item.lark_cli?.runtime_loaded === false;
-  const canInitLarkCLI = larkCLIUnavailable ? Boolean(onShowLarkCLIInstall) : Boolean(onInitLarkCLI);
-  const larkCLIButtonLabel = larkCLIUnavailable
-    ? t("larkCLIInstallRequiredAction")
-    : larkCLIMismatch
-      ? t("larkCLIReinit")
-      : larkCLIPendingLoad
-        ? t("larkCLIConfiguredPendingLoadAction")
-        : larkCLIBound
-          ? t("larkCLIConfiguredAction")
-          : t("larkCLIInit");
 
   return (
     <section
@@ -2490,30 +2370,6 @@ function AgentChannelsSection({
             {connectLabel}
           </Button>
           {connected ? (
-            <Button
-              variant="secondaryGray"
-              size="sm"
-              type="button"
-              loading={larkCLIInitBusy}
-              loadingLabel={larkCLIButtonLabel}
-              disabled={!canInitLarkCLI || actionBusy}
-              onClick={() => (larkCLIUnavailable ? onShowLarkCLIInstall?.(item) : onInitLarkCLI?.(item))}
-            >
-              {larkCLIUnavailable ? (
-                <AlertCircle aria-hidden="true" size={15} strokeWidth={2} />
-              ) : larkCLIMismatch ? (
-                <RefreshCw aria-hidden="true" size={15} strokeWidth={2} />
-              ) : larkCLIPendingLoad ? (
-                <CircleDashed aria-hidden="true" size={15} strokeWidth={2} />
-              ) : larkCLIBound ? (
-                <CheckCircle2 aria-hidden="true" size={15} strokeWidth={2} />
-              ) : (
-                <Terminal aria-hidden="true" size={15} strokeWidth={2} />
-              )}
-              {larkCLIButtonLabel}
-            </Button>
-          ) : null}
-          {connected || cleanupPending ? (
             <Button
               variant="outlineDanger"
               size="sm"

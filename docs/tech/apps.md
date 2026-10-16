@@ -52,7 +52,7 @@ Credentials are restricted to matching OpenCSG HTTPS environments; they are not 
 Manual platform tokens remain supported, with explicit expiry messages and a linkable choice to use the current login.
 Logout requires reauthorization; login refreshes opted-in connections while preserving explicit disconnects and disabled Apps.
 Connection errors distinguish platform 401/403, missing login, environment mismatch, Feishu token issuance, missing endpoints, and unavailable/sleeping backends, with the HTTP status retained.
-## Remote Feishu passthrough services
+## Existing HTTP Feishu resources
 
 For HTTP Feishu connectors, enter the MCP URL and the connector's own App ID/App Secret.
 The Connector reuses Feishu token issuance with a private per-connection cache and refreshes the tenant token on demand before expiry.
@@ -141,14 +141,139 @@ Disabling, disconnecting, or removing an App immediately blocks subsequent calls
 Read-only Agents receive and can call only tools annotated as read-only.
 Tool search belongs to Codex; requests containing tool definitions or tool history cannot silently fall back to text-only Chat Completions.
 
-Internal packages use root-level `plugin.json` and `apps.json`; the three built-ins do not require `mcp.json`.
-Credentials remain in private local state, and each stdio installation receives independent `HOME`, `PLUGIN_DATA`, and `PLUGIN_ROOT` directories.
-Plugin markets, arbitrary package imports, Skills/Hooks execution, and browser OAuth2 are outside this version's App flow.
+## Connector packages
+
+Built-in connectors and `Options.Packages` use the same directory loader. The optional
+`fs.FS` contains one directory per connector. This is the integration boundary for
+package import; the Web UI currently has no package upload action. Existing manual
+MCP JSON configuration remains available independently.
+
+```text
+example/
+  plugin.json
+  mcp.json                 # kind=mcp
+  cli.json                 # kind=cli
+  skills/example/SKILL.md  # optional
+```
+
+Each package selects one kind. `plugin.json` contains a stable `name`, package
+`version`, display metadata, `kind`, and a relative `mcp` or `cli` reference. An
+optional `skills` string references a directory of named Skills. For example:
+
+```json
+{
+  "name": "example",
+  "version": "1.0.0",
+  "kind": "mcp",
+  "mcp": "./mcp.json",
+  "skills": "./skills",
+  "interface": { "displayName": "Example" }
+}
+```
+
+`mcp.json` declares one server using the existing connector configuration fields:
+
+```json
+{
+  "mcpServers": {
+    "example": {
+      "transport": "http",
+      "url": "https://example.com/mcp",
+      "auth_mode": "bearer"
+    }
+  }
+}
+```
+
+Users configure credentials on the global resource. Package defaults supply the
+endpoint, transport, command, arguments, and credential field names; actual secrets
+must not be embedded in the package. Each stdio binding keeps independent `HOME`,
+`PLUGIN_DATA`, and `PLUGIN_ROOT` directories. Legacy `plugin.json` + `apps.json`
+service references remain readable, and saved resource configurations are retained.
+
+`cli.json` contains the native executable distribution and command arguments:
+
+- `install.version`, `install.executable`, and `install.version_args` identify and
+  verify the program. `install.releases` maps `GOOS-GOARCH` to HTTPS `url` and
+  `sha256`. Distributions are tar.gz archives on Unix and ZIP archives on Windows.
+- `environment` supplies the CLI environment. `${CONFIG_DIR}` resolves to the
+  resource's private directory. The CLI owns its credential storage.
+- `init`, `auth`, `un_auth`, and optional `disconnect` contain command steps.
+  A single argument array remains valid, for example `"auth": ["auth", "login"]`.
+  Multiple steps use objects with `args` and an optional progress `stage`.
+  Connection executes `init`, then `auth`, then `status`. Logout executes `un_auth`;
+  disconnect also executes `disconnect`. Commands run directly using the installed
+  executable. The CLI owns configuration and credential changes.
+- A step's `accept_error_json` accepts explicitly matched nonzero-exit JSON responses, such as an already absent configuration during cleanup. Cancellation and other errors remain failures.
+- A step's `when` or `unless` contains read-only `args` and `match_json` conditions.
+  Checks use JSON pointers: fields in one object must all match; multiple objects
+  are alternatives. `unavailable_json` identifies an expected nonzero response
+  for an unconfigured CLI. Other command failures stop the operation.
+- `status` is a read-only argument array. `status_match_json` uses the same JSON
+  conditions; `status_match` supports text regular expressions. Optional
+  `status_unavailable_json` recognizes an unconfigured CLI. Status checks never
+  invoke authorization. `status_fields` selects the JSON fields exposed in the
+  resource response; other output is not persisted or returned.
+- `authorization_domains` lists the HTTPS domains allowed in authorization links.
+  A step can set `url_rewrite.path`, string `query` values, and `gzip_query` JSON
+  values encoded as gzip plus unpadded base64url. Existing query parameters remain.
+- A `device_flow` step declares JSON pointers for `code_field`, `url_field`, and
+  `expires_in_field`, then runs `poll_args` with `${DEVICE_CODE}`. A private pending
+  device code survives restart until expiry. Its fingerprint includes the command
+  and requested scopes. `accept_error_json` can recognize a documented successful
+  authorization event accompanying a nonzero exit; subsequent verification steps
+  still run. Cancellation stops the active command process group.
+- `requested_scopes` supplies `${REQUESTED_SCOPES}` in command arguments and the
+  permission list shown in the dialog. A step's `match_json` requires a successful
+  command's output to satisfy the declared condition.
+- `exclude_environment` contains glob patterns for inherited variables to remove.
+  Explicit `environment` values are applied afterwards.
+- Skills can be packaged using `plugin.json.skills`, or downloaded using
+  `install.skills` with a `url`, `sha256`, `version`, and optional name `prefix`.
+  The Skills tar.gz archive contains `<root>/skills/<name>/SKILL.md`.
+
+For example, a command can reuse an existing authorization:
+
+```json
+{
+  "args": ["auth", "login"],
+  "unless": {
+    "args": ["auth", "status", "--json"],
+    "match_json": [{"/loggedIn": true}]
+  }
+}
+```
+
+The [Feishu package](../../internal/apps/builtin/feishu/cli.json) declares its
+installation, application registration, personal device authorization, identity
+policy, status checks, logout, and configuration removal through these fields.
+`LARKSUITE_CLI_CONFIG_DIR` remains in its `environment` configuration. Both Codex
+and DSH receive the generic CLI runtime extension. Failed or cancelled commands
+are followed by a status check, preserving completed CLI changes and reporting
+actual authorization. Historical channel migration retains its import support.
+Cancellation completes worker updates for committed authorization state and honors
+each worker's current desired state. If migration or cleanup fails, the dialog
+keeps Disconnect available. Disconnect stops every affected legacy worker, removes
+CLI authorization, runtime configuration, and managed Skills, and clears migration
+recovery data. Resource IDs, bindings, and worker enablement are retained. Running
+workers resume without the connector; stopped workers stay stopped. Cleanup failures
+remain retryable through Disconnect and block reconnection until cleanup succeeds.
+An interrupted disconnect resumes on startup without importing old credentials.
+After success, Connect starts a fresh authorization and configures enabled bindings.
+The supported CLI actions are `connect`, `login`, `logout`, `disconnect`, and `check`.
+The catalog's version is the connector package version; `package_version` on a CLI
+resource reports the installed executable version.
+
+Both kinds apply Skills through the same worker lifecycle and ownership checks.
+Disabling or removing a binding removes its unchanged managed Skills; edited or
+user-owned files retain the existing protection rules. CLI resources supply separate
+runtime extensions, so changing one connector does not remove another connector's
+configuration. CLI execution supports Codex and DSH host runtimes.
 
 ## Installation defaults and settings
 
 New App forms read non-secret connection defaults from the catalog's `config_schema.properties.*.default` values.
-GitLab prefills `https://u-agentichub-gitlab-mcp-1qq.public.opencsg.com/mcp`; Feishu prefills `https://u-agentichub-lark-mcp-passthrough-1qr.public.opencsg.com/mcp`.
+GitLab prefills `https://u-agentichub-gitlab-mcp-1qq.public.opencsg.com/mcp`. Feishu uses its CLI authorization dialog.
 Each uses the matching OpenCSG login environment.
 llm-wiki currently prefills the local test service at `http://127.0.0.1:19093/mcp`; the address can be replaced manually or filled by the knowledge-base picker.
 Loopback addresses refer to the machine running CSGClaw.

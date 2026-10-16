@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   connectAgentApp,
+  ensureFeishuResource,
   bindAgentApp,
   fetchAppResources,
   deleteAgentApp,
@@ -72,7 +73,7 @@ export function useAgentApps(agentID: string, active: boolean) {
     void reload(controller.signal);
     const interval = window.setInterval(() => {
       if (!document.hidden) void reload(controller.signal, true);
-    }, 15000);
+    }, 2500);
     return () => {
       controller.abort();
       requestSequence.current += 1;
@@ -99,6 +100,11 @@ export function useAgentApps(agentID: string, active: boolean) {
     error,
     busyID,
     reload: () => reload(),
+    bindFeishu: () =>
+      mutate("feishu", async () => {
+        const resource = await ensureFeishuResource();
+        return bindAgentApp(agentID, resource.installation_id);
+      }),
     bind: (resourceID: string) => mutate(resourceID, () => bindAgentApp(agentID, resourceID)),
     update: (id: string, payload: Pick<AppUpdateRequest, "enabled">) =>
       mutate(id, () => updateAgentApp(agentID, id, payload)),

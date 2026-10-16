@@ -131,21 +131,6 @@ export type AgentRuntimeAvailabilityLike = {
   reason?: string | null;
 };
 
-export type AgentLarkCLIStatus = {
-  cleanup_pending?: boolean;
-  bound?: boolean | null;
-  available?: boolean | null;
-  state?: string | null;
-  error?: string | null;
-  app_id?: string | null;
-  generation?: number | null;
-  observed_generation?: number | null;
-  runtime_loaded?: boolean | null;
-  reason?: string | null;
-  checked_at?: string | null;
-  bound_at?: string | null;
-};
-
 export type AgentLike = AgentProfileLike & {
   skipped_resources?: Array<{ type?: "mcp" | "knowledge_base" | string; name?: string }> | null;
   agent_profile?: AgentProfileLike | null;
@@ -173,7 +158,6 @@ export type AgentLike = AgentProfileLike & {
   template_name?: string | null;
   user_id?: string | null;
   user_name?: string | null;
-  lark_cli?: AgentLarkCLIStatus | null;
   participants?:
     | {
         agent_id?: string | null;
