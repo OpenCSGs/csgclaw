@@ -115,12 +115,7 @@ export function FileTypeIcon({
   mediaType?: string;
   isFolder?: boolean;
 }) {
-  if (isFolder)
-    return (
-      <span className="chat-file-type-icon is-folder" aria-hidden="true">
-        <img src={assets["/src/assets/file-types/folder.svg"]} width={24} height={24} alt="" />
-      </span>
-    );
+  if (isFolder) return <span className="chat-file-type-icon is-folder" aria-hidden="true" />;
 
   const filename = name.replaceAll("\\", "/").split("/").pop() ?? "";
   const extension = filename.includes(".") ? filename.slice(filename.lastIndexOf(".") + 1).toLowerCase() : "";

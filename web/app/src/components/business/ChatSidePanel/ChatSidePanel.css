@@ -351,9 +351,13 @@
 .chat-file-type-icon.is-folder {
   transform: none;
 }
-.chat-file-type-icon.is-folder > img:first-child {
-  width: 24px;
-  height: 24px;
+.chat-file-type-icon.is-folder::before {
+  content: "";
+  width: 28px;
+  height: 28px;
+  background: var(--primary-strong);
+  -webkit-mask: url("../../../assets/file-types/folder.svg") center / contain no-repeat;
+  mask: url("../../../assets/file-types/folder.svg") center / contain no-repeat;
 }
 .chat-file-type-icon > span:not(.chat-file-type-mark) {
   position: absolute;

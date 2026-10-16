@@ -6,9 +6,8 @@ describe("FileTypeIcon", () => {
   it("uses the Figma folder icon without a document page or generic mark", () => {
     render(<FileTypeIcon isFolder />);
 
-    expect(document.querySelector(".chat-file-type-icon.is-folder > img")).toHaveAttribute("src");
-    expect(document.querySelector(".chat-file-type-icon.is-folder > img")).toHaveAttribute("width", "24");
-    expect(document.querySelector(".chat-file-type-icon.is-folder > img")).toHaveAttribute("height", "24");
+    expect(document.querySelector(".chat-file-type-icon.is-folder")).toBeInTheDocument();
+    expect(document.querySelector(".chat-file-type-icon.is-folder > img")).not.toBeInTheDocument();
     expect(document.querySelector(".chat-file-type-mark")).not.toBeInTheDocument();
   });
 
