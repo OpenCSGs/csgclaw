@@ -217,7 +217,17 @@ export function AgentAppsPanel({
               <DialogTitle>{selected?.name}</DialogTitle>
               <DialogDescription>{selected ? appStatus(selected, t) : ""}</DialogDescription>
             </div>
-            <DialogCloseButton label={t("close")} size="sm" variant="tertiaryGray" iconOnly />
+            <div className="flex shrink-0 items-center gap-4">
+              <Switch
+                aria-label={selected?.name || t("appEnable")}
+                checked={Boolean(selected?.enabled)}
+                disabled={Boolean(controller.busyID) || (!selected?.enabled && selected?.resource_enabled === false)}
+                onCheckedChange={(enabled) =>
+                  selected ? void run(() => controller.update(selected.installation_id, { enabled })) : undefined
+                }
+              />
+              <DialogCloseButton label={t("close")} size="sm" variant="tertiaryGray" iconOnly />
+            </div>
           </DialogHeader>
           <DialogBody className={styles.settingsBody}>
             {error ? (
@@ -275,15 +285,6 @@ export function AgentAppsPanel({
                     {selected.status === "connected" ? t("appReconnect") : t("appConnect")}
                   </Button>
                 ) : null}
-                <Button
-                  size="md"
-                  disabled={!!controller.busyID}
-                  onClick={() =>
-                    void run(() => controller.update(selected.installation_id, { enabled: !selected.enabled }))
-                  }
-                >
-                  {selected.enabled ? t("appDisable") : t("appEnable")}
-                </Button>
                 {selected.kind !== "cli" ? (
                   <Button
                     size="md"
