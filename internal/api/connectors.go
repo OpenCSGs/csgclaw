@@ -291,6 +291,10 @@ func (h *Handler) lockGitLabConnectorSettings(appID string, config apps.Config, 
 }
 
 func (h *Handler) saveGitLabConnectorSettings(ctx context.Context, agentID, appID string, config apps.Config, credentials *apps.Credentials) (func(), error) {
+	return h.saveGitLabConnectorSettingsWithProbe(ctx, agentID, appID, config, credentials, nil)
+}
+
+func (h *Handler) saveGitLabConnectorSettingsWithProbe(ctx context.Context, agentID, appID string, config apps.Config, credentials *apps.Credentials, probe *apps.ProbeResult) (func(), error) {
 	noop := func() {}
 	if appID != "gitlab" || (config.AuthMode != "connector" && config.AuthMode != "oauth2") || credentials == nil || strings.TrimSpace(credentials.Token) == "" {
 		return noop, nil
@@ -308,7 +312,7 @@ func (h *Handler) saveGitLabConnectorSettings(ctx context.Context, agentID, appI
 		return noop, err
 	}
 	if h.apps != nil {
-		if err := h.apps.RefreshConnector(ctx, connectors.ProviderGitLab); err != nil {
+		if err := h.apps.RefreshConnectorAfterProbe(ctx, connectors.ProviderGitLab, probe); err != nil {
 			slog.Warn("refresh GitLab Apps after Connector update", "agent_id", agentID, "error", err)
 		}
 	}
@@ -469,7 +473,7 @@ func (h *Handler) handleConnectorResources(w http.ResponseWriter, r *http.Reques
 			writeConnectorError(w, probeErr)
 			return
 		}
-		rollbackConnector, saveErr := h.saveGitLabConnectorSettings(r.Context(), "", req.AppID, req.Config, &req.Credentials)
+		rollbackConnector, saveErr := h.saveGitLabConnectorSettingsWithProbe(r.Context(), "", req.AppID, req.Config, &req.Credentials, &probe)
 		if saveErr != nil {
 			writeConnectorError(w, saveErr)
 			return
@@ -509,7 +513,7 @@ func (h *Handler) handleConnectorResources(w http.ResponseWriter, r *http.Reques
 			}
 			validated = &probe
 		}
-		rollbackConnector, saveErr := h.saveGitLabConnectorSettings(r.Context(), "", current.AppID, config, req.Credentials)
+		rollbackConnector, saveErr := h.saveGitLabConnectorSettingsWithProbe(r.Context(), "", current.AppID, config, req.Credentials, validated)
 		if saveErr != nil {
 			writeConnectorError(w, saveErr)
 			return

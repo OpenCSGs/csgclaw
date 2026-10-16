@@ -1,9 +1,15 @@
 package apps
 
 import (
+	"bytes"
+	"context"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/http/httputil"
+	"net/url"
 	"testing"
+	"time"
 )
 
 func TestResourceHealthWithoutAgentAndAcrossRestart(t *testing.T) {
@@ -117,6 +123,88 @@ func TestSaveProbeCannotRestoreHealthAfterCredentialsChange(t *testing.T) {
 			checked, err := s.RecordResourceProbe(savedAfterChange, fresh)
 			if err != nil || checked.Status != "connected" {
 				t.Fatalf("fresh probe rejected: %s %v", checked.Status, err)
+			}
+		})
+	}
+}
+
+func TestResourceHealthHonorsConfiguredTimeouts(t *testing.T) {
+	for _, method := range []string{"initialize", "tools/list"} {
+		t.Run(method, func(t *testing.T) {
+			t.Parallel()
+			upstream := upstreamServer(t)
+			target, err := url.Parse(upstream.URL)
+			if err != nil {
+				t.Fatal(err)
+			}
+			proxy := httputil.NewSingleHostReverseProxy(target)
+			delayed := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Method == http.MethodPost {
+					body, err := io.ReadAll(r.Body)
+					if err != nil {
+						t.Error(err)
+						return
+					}
+					r.Body = io.NopCloser(bytes.NewReader(body))
+					if bytes.Contains(body, []byte(`"method":"`+method+`"`)) {
+						select {
+						case <-time.After(11 * time.Second):
+						case <-r.Context().Done():
+							return
+						}
+					}
+				}
+				proxy.ServeHTTP(w, r)
+			}))
+			defer delayed.Close()
+			s := newTestService(t, Options{})
+			resource, err := s.Create(t.Context(), "", CreateRequest{AppID: "gitlab", Name: "Slow service", Config: Config{URL: delayed.URL, AuthMode: "bearer", StartupTimeoutSec: 30, ToolTimeoutSec: 30}, Credentials: Credentials{Token: "fixture"}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			checked, err := s.CheckResource(t.Context(), resource.InstallationID, false)
+			if err != nil || checked.Status != "connected" || len(checked.Tools) == 0 {
+				t.Fatalf("configured timeout ignored: status=%s tools=%d err=%v", checked.Status, len(checked.Tools), err)
+			}
+		})
+	}
+}
+
+func TestSaveProbeSurvivesOnlyItsOwnConnectorRotation(t *testing.T) {
+	for _, rotation := range []string{"own", "before", "after", "other-connector"} {
+		t.Run(rotation, func(t *testing.T) {
+			upstream := upstreamServer(t)
+			s := newTestService(t, Options{ResolveConnectorHTTP: func(context.Context, string, string, Config) (ConnectorHTTPConfig, error) {
+				return ConnectorHTTPConfig{Endpoint: upstream.URL, Token: "fixture", TokenHeader: "Authorization", TokenPrefix: "Bearer "}, nil
+			}})
+			cfg := Config{URL: upstream.URL, AuthMode: "connector", ConnectorID: "gitlab", GitLabBaseURL: "https://gitlab.example.test"}
+			resource, err := s.Create(t.Context(), "", CreateRequest{AppID: "gitlab", Name: "Managed", Config: cfg})
+			if err != nil {
+				t.Fatal(err)
+			}
+			probe, err := s.Probe(t.Context(), "", ProbeRequest{AppID: "gitlab", Config: cfg})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if rotation == "before" {
+				s.InvalidateConnector("gitlab")
+			}
+			connectorID := "gitlab"
+			if rotation == "other-connector" {
+				connectorID = "feishu"
+			}
+			if err := s.RefreshConnectorAfterProbe(t.Context(), connectorID, &probe); err != nil {
+				t.Fatal(err)
+			}
+			if rotation == "after" {
+				s.InvalidateConnector("gitlab")
+			}
+			checked, err := s.RecordResourceProbe(resource, probe)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if (checked.Status == "connected") != (rotation == "own") {
+				t.Fatalf("rotation=%s status=%s", rotation, checked.Status)
 			}
 		})
 	}

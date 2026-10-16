@@ -42,9 +42,8 @@ func (s *Service) CheckResource(ctx context.Context, id string, force bool) (Ins
 	health := &resourceHealth{version: r.UpdatedAt, checking: true, status: Installation{Status: "connecting"}}
 	e.resourceHealth = health
 	s.mu.Unlock()
-	probeCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	defer cancel()
-	result, probeErr := s.Probe(probeCtx, "", ProbeRequest{AppID: r.AppID, Config: r.Config, Credentials: r.Credentials})
+	// Probe enforces the configured startup and tool-discovery timeouts.
+	result, probeErr := s.Probe(ctx, "", ProbeRequest{AppID: r.AppID, Config: r.Config, Credentials: r.Credentials})
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	current, err := s.findLocked("", id)

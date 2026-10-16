@@ -293,3 +293,39 @@ func TestGlobalResourceAPIReportsActualConnectionState(t *testing.T) {
 	}
 	check("connected")
 }
+
+func TestGitLabResourceSaveRetainsValidatedHealth(t *testing.T) {
+	upstream := appSaveMCPServer(t)
+	gitlab := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v4/user" || r.Header.Get("PRIVATE-TOKEN") == "" {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"id": 1, "username": "fixture"})
+	}))
+	defer gitlab.Close()
+	h, _, _, _, _ := newAppPlatformAuthFixture(t)
+	h.SetConnectorService(connectors.NewService(connectors.NewStore(filepath.Join(t.TempDir(), "state.json"))))
+	payload, _ := json.Marshal(apps.CreateRequest{AppID: "gitlab", Name: "Managed", Config: apps.Config{URL: upstream.URL, AuthMode: "connector", GitLabBaseURL: gitlab.URL}, Credentials: apps.Credentials{Token: "initial-fixture"}})
+	created := appAuthRequest(t, h, http.MethodPost, "/api/v1/connectors/resources", string(payload), "", nil)
+	if created.Code != http.StatusCreated {
+		t.Fatalf("create status=%d %s", created.Code, created.Body)
+	}
+	var resource apps.Installation
+	if err := json.Unmarshal(created.Body.Bytes(), &resource); err != nil {
+		t.Fatal(err)
+	}
+	if resource.Status != "connected" || len(resource.Tools) == 0 {
+		t.Fatalf("save discarded validation: status=%s tools=%d", resource.Status, len(resource.Tools))
+	}
+	updated := appAuthRequest(t, h, http.MethodPatch, "/api/v1/connectors/resources/"+resource.InstallationID, `{"credentials":{"token":"updated-fixture"}}`, "", nil)
+	if updated.Code != http.StatusOK {
+		t.Fatalf("update status=%d %s", updated.Code, updated.Body)
+	}
+	if err := json.Unmarshal(updated.Body.Bytes(), &resource); err != nil {
+		t.Fatal(err)
+	}
+	if resource.Status != "connected" || len(resource.Tools) == 0 {
+		t.Fatalf("update discarded validation: status=%s tools=%d", resource.Status, len(resource.Tools))
+	}
+}
