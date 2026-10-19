@@ -2,6 +2,7 @@ import {
   MODEL_PROVIDER_IDS,
   modelProviderConfigUsesOpenCSG,
   modelProviderDisplayNameExists,
+  nextAvailableModelProviderDisplayName,
   modelProviderCatalogForAgentAvailability,
   modelProviderCatalogWithModels,
   modelProviderCatalogForOpenCSGState,
@@ -264,6 +265,18 @@ describe("model provider catalog helpers", () => {
 
     expect(modelProviderDisplayNameExists(catalog, " openai   api ")).toBe(true);
     expect(modelProviderDisplayNameExists(catalog, "Codex")).toBe(true);
+  });
+
+  it.each([
+    { names: [], expected: "Test API" },
+    { names: ["test api"], expected: "Test API 2" },
+    { names: [" Test  API ", "test api 2", "Test API 4"], expected: "Test API 3" },
+  ])("chooses an available default display name for $names", ({ names, expected }) => {
+    const catalog = normalizeModelProviderCatalog({
+      providers: names.map((display_name, index) => ({ id: `provider-${index}`, display_name, models: [] })),
+    });
+    expect(nextAvailableModelProviderDisplayName(catalog, "Test API")).toBe(expected);
+    expect(nextAvailableModelProviderDisplayName(null, " Test API ")).toBe("Test API");
   });
 
   it("parses model text from comma and newline separated input", () => {

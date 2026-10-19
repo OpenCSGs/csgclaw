@@ -62,6 +62,25 @@
   line-height: 1.5;
   overflow-wrap: anywhere;
 }
+.providerHeading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+.basic {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4);
+}
+.basic > [data-csg-field],
+.advanced > [data-csg-field] {
+  min-width: 0;
+  margin-top: 0;
+}
+.fullWidth {
+  grid-column: 1 / -1;
+}
 .identity {
   display: flex;
   align-items: center;
@@ -76,16 +95,12 @@
   margin: 4px 0 0;
   color: var(--muted);
 }
-.keyHeading {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  gap: 8px 12px;
-  font-size: 14px;
+.keyField {
+  grid-template-columns: minmax(0, 1fr) auto;
 }
-.keyHeading > span:first-child {
-  white-space: nowrap;
+.keyField > .secret,
+.keyField > small {
+  grid-column: 1 / -1;
 }
 .keyLinks {
   display: flex;
@@ -119,12 +134,6 @@
   flex: 1;
   min-width: 0;
 }
-.hint {
-  margin: -8px 0 0;
-  color: var(--muted);
-  font-size: 12px;
-  line-height: 1.6;
-}
 .advancedToggle {
   color: var(--text);
   background: transparent;
@@ -151,8 +160,9 @@
   gap: 12px;
 }
 @media (max-width: 480px) {
-  .brands {
-    grid-template-columns: 1fr;
+  .brands,
+  .basic {
+    grid-template-columns: minmax(0, 1fr);
   }
   .header {
     padding: 20px 16px 16px;
@@ -166,5 +176,5 @@
 }
 
 .back {
-  align-self: flex-start;
+  flex-shrink: 0;
 }

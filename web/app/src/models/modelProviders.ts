@@ -491,6 +491,18 @@ export function modelProviderDisplayNameExists(
   );
 }
 
+export function nextAvailableModelProviderDisplayName(
+  catalog: ModelProviderCatalog | null | undefined,
+  baseName: string,
+): string {
+  const base = baseName.trim();
+  let name = base;
+  for (let suffix = 2; modelProviderDisplayNameExists(catalog, name); suffix++) {
+    name = `${base} ${suffix}`;
+  }
+  return name;
+}
+
 export function parseModelProviderModelsText(value: string): string[] {
   const seen = new Set<string>();
   const models: string[] = [];

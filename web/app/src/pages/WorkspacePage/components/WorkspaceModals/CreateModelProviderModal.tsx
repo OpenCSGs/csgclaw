@@ -15,6 +15,7 @@ import {
 import { useModelProviderPresets } from "@/hooks/useModelProviderPresets";
 import {
   modelProviderDisplayNameExists,
+  nextAvailableModelProviderDisplayName,
   parseModelProviderModelsText,
   type ModelProviderCatalog,
 } from "@/models/modelProviders";
@@ -56,24 +57,29 @@ export function CreateModelProviderModal({
   const [visible, setVisible] = useState(false);
   const [advanced, setAdvanced] = useState(false);
   const [openSelect, setOpenSelect] = useState("");
-  const [name, setName] = useState("");
+  const [nameDraft, setName] = useState<string>();
   const [baseURL, setBaseURL] = useState<string>();
   const [protocol, setProtocol] = useState("");
   const [headers, setHeaders] = useState("");
   const [models, setModels] = useState("");
   const [localError, setLocalError] = useState("");
   const preset = presets.find((item) => item.id === selected);
+  const defaultName = nextAvailableModelProviderDisplayName(modelProviders, preset?.name ?? "");
+  const name = nameDraft ?? defaultName;
   const activeBrand = preset?.brand || brand;
   const region = preset?.regions.find((item) => item.id === regionID) ?? preset?.regions[0];
   const brandPresets = presets.filter((item) => item.brand === activeBrand);
   const brands = presets.filter((item, index) => presets.findIndex((other) => other.brand === item.brand) === index);
   const duplicateName = Boolean(name.trim()) && modelProviderDisplayNameExists(modelProviders, name);
+  const canConnect = Boolean(
+    preset && name.trim() && apiKey.trim() && (baseURL ?? region?.base_url ?? "").trim() && !duplicateName,
+  );
   const cn = locale === "zh";
   const reset = () => {
     onClearError?.();
     setKey("");
     setVisible(false);
-    setName("");
+    setName(undefined);
     setBaseURL(undefined);
     setProtocol("");
     setHeaders("");
@@ -87,11 +93,15 @@ export function CreateModelProviderModal({
   };
   const close = () => {
     if (busy) return;
-    if ((apiKey || name || headers || models) && !window.confirm(t("modelProviderDiscardConfirm"))) return;
+    if (
+      (apiKey || (nameDraft !== undefined && nameDraft !== defaultName) || headers || models) &&
+      !window.confirm(t("modelProviderDiscardConfirm"))
+    )
+      return;
     onClose();
   };
   function connect() {
-    if (busy || !preset || duplicateName) return;
+    if (busy || !preset || !canConnect) return;
     setLocalError("");
     let customHeaders: Record<string, string> | undefined;
     try {
@@ -116,7 +126,7 @@ export function CreateModelProviderModal({
       api_protocol: protocol || preset.api_protocol,
       api_key: apiKey.trim(),
       base_url: (baseURL ?? region?.base_url ?? "").trim(),
-      display_name: name.trim() || undefined,
+      display_name: name.trim(),
       headers: customHeaders,
       models: parseModelProviderModelsText(models),
       connect: true,
@@ -213,101 +223,150 @@ export function CreateModelProviderModal({
             </>
           ) : (
             <>
-              <Button
-                variant="tertiaryGray"
-                className={styles.back}
-                size="sm"
-                disabled={busy}
-                onClick={() => {
-                  setSelected("");
-                  setBrand("");
-                  reset();
-                }}
-              >
-                {t("modelConnectChooseBrand")}
-              </Button>
-              <div className={styles.identity}>
-                <img src={preset.avatar} alt="" />
-                <div>
-                  <strong>{preset.brand_name}</strong>
-                  <p>{preset.name}</p>
+              <div className={styles.providerHeading}>
+                <div className={styles.identity}>
+                  <img src={preset.avatar} alt="" />
+                  <div>
+                    <strong>{preset.brand_name}</strong>
+                    <p>{preset.name}</p>
+                  </div>
                 </div>
-              </div>
-              <Field label={t("modelConnectService")}>
-                <Select
-                  open={openSelect === "service"}
-                  onOpenChange={(open) => setOpenSelect(open ? "service" : "")}
-                  value={preset.id}
-                  disabled={busy}
-                  onValueChange={selectService}
-                  options={brandPresets.map((p) => ({ value: p.id, label: p.name }))}
-                  triggerProps={{ "aria-label": t("modelConnectService") }}
-                />
-              </Field>
-              {preset.regions.length > 1 ? (
-                <Field label={t("modelConnectRegion")}>
-                  <Select
-                    open={openSelect === "region"}
-                    onOpenChange={(open) => setOpenSelect(open ? "region" : "")}
-                    value={region?.id}
-                    disabled={busy}
-                    onValueChange={(id) => {
-                      setRegion(id);
-                      reset();
-                    }}
-                    options={preset.regions.map((r) => ({ value: r.id, label: r.name }))}
-                    triggerProps={{ "aria-label": t("modelConnectRegion") }}
-                  />
-                </Field>
-              ) : null}
-              <div className={styles.keyHeading}>
-                <span>{t("profileAPIKey")} *</span>
-                <span className={styles.keyLinks}>
-                  {region?.key_url ? (
-                    <a href={region.key_url} target="_blank" rel="noreferrer">
-                      {t("modelConnectGetKey")}
-                      <ExternalLink size={13} aria-hidden="true" />
-                    </a>
-                  ) : null}
-                  {preset.docs_url ? (
-                    <a href={preset.docs_url} target="_blank" rel="noreferrer">
-                      {t("modelConnectDocs")}
-                      <ExternalLink size={13} aria-hidden="true" />
-                    </a>
-                  ) : null}
-                </span>
-              </div>
-              <div className={styles.secret}>
-                <TextInput
-                  autoFocus
-                  type={visible ? "text" : "password"}
-                  autoComplete="off"
-                  value={apiKey}
-                  disabled={busy}
-                  onChange={(event) => {
-                    setKey(event.target.value);
-                    onClearError?.();
-                  }}
-                  aria-label={t("profileAPIKey")}
-                  placeholder={t("profileAPIKeyNewPlaceholder")}
-                />
                 <Button
                   variant="tertiaryGray"
+                  className={styles.back}
                   size="sm"
-                  aria-pressed={visible}
-                  aria-label={t(visible ? "modelProviderHideSecret" : "modelProviderShowSecret")}
-                  onClick={() => setVisible(!visible)}
+                  disabled={busy}
+                  onClick={() => {
+                    setSelected("");
+                    setBrand("");
+                    reset();
+                  }}
                 >
-                  {t(visible ? "modelProviderHideSecret" : "modelProviderShowSecret")}
+                  {t("modelConnectChooseBrand")}
                 </Button>
               </div>
-              <p className={styles.hint}>
-                {t(
-                  preset.id.includes("plan") || preset.id.includes("coding") || preset.id.includes("agent")
-                    ? "modelConnectPlanHint"
-                    : "modelProviderAPIKeyHint",
-                )}
-              </p>
+              <div className={styles.basic}>
+                <Field
+                  className={styles.fullWidth}
+                  label={t("modelProviderDisplayName")}
+                  required
+                  error={duplicateName ? t("modelProviderDuplicateDisplayName") : undefined}
+                >
+                  <TextInput
+                    autoFocus
+                    required
+                    value={name}
+                    disabled={busy}
+                    onChange={(event) => {
+                      setName(event.target.value);
+                      onClearError?.();
+                    }}
+                  />
+                </Field>
+                <Field label={t("modelConnectService")} required>
+                  <Select
+                    open={openSelect === "service"}
+                    onOpenChange={(open) => setOpenSelect(open ? "service" : "")}
+                    value={preset.id}
+                    disabled={busy}
+                    onValueChange={selectService}
+                    options={brandPresets.map((p) => ({ value: p.id, label: p.name }))}
+                    triggerProps={{ "aria-label": t("modelConnectService") }}
+                  />
+                </Field>
+                {preset.regions.length > 1 ? (
+                  <Field label={t("modelConnectRegion")} required>
+                    <Select
+                      open={openSelect === "region"}
+                      onOpenChange={(open) => setOpenSelect(open ? "region" : "")}
+                      value={region?.id}
+                      disabled={busy}
+                      onValueChange={(id) => {
+                        setRegion(id);
+                        reset();
+                      }}
+                      options={preset.regions.map((r) => ({ value: r.id, label: r.name }))}
+                      triggerProps={{ "aria-label": t("modelConnectRegion") }}
+                    />
+                  </Field>
+                ) : null}
+                <Field
+                  className={preset.regions.length > 1 ? styles.fullWidth : undefined}
+                  label={t("modelConnectProtocol")}
+                  required
+                >
+                  <Select
+                    open={openSelect === "protocol"}
+                    onOpenChange={(open) => setOpenSelect(open ? "protocol" : "")}
+                    value={protocol || preset.api_protocol}
+                    disabled={busy}
+                    onValueChange={setProtocol}
+                    options={[
+                      { value: "responses", label: "OpenAI Responses" },
+                      { value: "chat_completions", label: "OpenAI Chat Completions" },
+                      { value: "anthropic_messages", label: "Anthropic Messages" },
+                    ]}
+                    triggerProps={{ "aria-label": t("modelConnectProtocol") }}
+                  />
+                </Field>
+                <Field className={styles.fullWidth} label={t("profileBaseURL")} required>
+                  <TextInput
+                    required
+                    value={baseURL ?? region?.base_url ?? ""}
+                    disabled={busy}
+                    onChange={(event) => setBaseURL(event.target.value)}
+                  />
+                </Field>
+                <Field
+                  className={`${styles.keyField} ${styles.fullWidth}`}
+                  label={t("profileAPIKey")}
+                  required
+                  hint={t(
+                    preset.id.includes("plan") || preset.id.includes("coding") || preset.id.includes("agent")
+                      ? "modelConnectPlanHint"
+                      : "modelProviderAPIKeyHint",
+                  )}
+                >
+                  <div className={styles.keyLinks}>
+                    {region?.key_url ? (
+                      <a href={region.key_url} target="_blank" rel="noreferrer">
+                        {t("modelConnectGetKey")}
+                        <ExternalLink size={13} aria-hidden="true" />
+                      </a>
+                    ) : null}
+                    {preset.docs_url ? (
+                      <a href={preset.docs_url} target="_blank" rel="noreferrer">
+                        {t("modelConnectDocs")}
+                        <ExternalLink size={13} aria-hidden="true" />
+                      </a>
+                    ) : null}
+                  </div>
+                  <div className={styles.secret}>
+                    <TextInput
+                      required
+                      type={visible ? "text" : "password"}
+                      autoComplete="off"
+                      value={apiKey}
+                      disabled={busy}
+                      onChange={(event) => {
+                        setKey(event.target.value);
+                        onClearError?.();
+                      }}
+                      aria-label={t("profileAPIKey")}
+                      placeholder={t("profileAPIKeyNewPlaceholder")}
+                    />
+                    <Button
+                      variant="tertiaryGray"
+                      size="sm"
+                      aria-pressed={visible}
+                      aria-label={t(visible ? "modelProviderHideSecret" : "modelProviderShowSecret")}
+                      onClick={() => setVisible(!visible)}
+                    >
+                      {t(visible ? "modelProviderHideSecret" : "modelProviderShowSecret")}
+                    </Button>
+                  </div>
+                </Field>
+              </div>
               <button
                 type="button"
                 className={styles.advancedToggle}
@@ -316,41 +375,8 @@ export function CreateModelProviderModal({
               >
                 {advanced ? "▾" : "▸"} {t("modelConnectAdvanced")}
               </button>
-              {advanced || preset.id === "custom" ? (
+              {advanced ? (
                 <div className={styles.advanced}>
-                  <Field
-                    label={t("modelProviderDisplayName")}
-                    error={duplicateName ? t("modelProviderDuplicateDisplayName") : undefined}
-                  >
-                    <TextInput
-                      value={name}
-                      disabled={busy}
-                      onChange={(event) => setName(event.target.value)}
-                      placeholder={preset.name}
-                    />
-                  </Field>
-                  <Field label={t("profileBaseURL")}>
-                    <TextInput
-                      value={baseURL ?? region?.base_url ?? ""}
-                      disabled={busy}
-                      onChange={(event) => setBaseURL(event.target.value)}
-                    />
-                  </Field>
-                  <Field label={t("modelConnectProtocol")}>
-                    <Select
-                      open={openSelect === "protocol"}
-                      onOpenChange={(open) => setOpenSelect(open ? "protocol" : "")}
-                      value={protocol || preset.api_protocol}
-                      disabled={busy}
-                      onValueChange={setProtocol}
-                      options={[
-                        { value: "responses", label: "OpenAI Responses" },
-                        { value: "chat_completions", label: "OpenAI Chat Completions" },
-                        { value: "anthropic_messages", label: "Anthropic Messages" },
-                      ]}
-                      triggerProps={{ "aria-label": t("modelConnectProtocol") }}
-                    />
-                  </Field>
                   <Field label={t("profileHeaders")}>
                     <TextArea
                       value={headers}
@@ -381,12 +407,7 @@ export function CreateModelProviderModal({
           <Button variant="secondaryGray" disabled={busy} onClick={close}>
             {t("cancel")}
           </Button>
-          <Button
-            variant="primary"
-            loading={busy}
-            disabled={!preset || !apiKey.trim() || !(baseURL ?? region?.base_url) || duplicateName}
-            onClick={connect}
-          >
+          <Button variant="primary" loading={busy} disabled={!canConnect} onClick={connect}>
             {t("modelConnectAction")}
           </Button>
         </footer>

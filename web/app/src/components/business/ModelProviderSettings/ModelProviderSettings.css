@@ -418,6 +418,10 @@
   gap: 6px;
 }
 
+.model-provider-form-grid .model-provider-name-field {
+  grid-column: 1 / -1;
+}
+
 .model-provider-form-grid .field input,
 .model-provider-form-grid .field textarea {
   min-height: 40px;

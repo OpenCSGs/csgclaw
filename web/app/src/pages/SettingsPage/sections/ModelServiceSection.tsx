@@ -1,5 +1,3 @@
-import { Plus } from "lucide-react";
-import { Button } from "@/components/ui";
 import { ModelProviderSettings } from "@/components/business/ModelProviderSettings";
 import { useWorkspaceControllerContext } from "@/hooks/workspace";
 import { SettingsRow } from "./SettingsRow";
@@ -18,12 +16,6 @@ export function ModelServiceSection() {
         </span>
       }
       description={controller.t("iaSettingsCardModelsHint")}
-      actions={
-        <Button variant="primary" size="md" onClick={() => void controller.sidebarProps?.onCreateModelProvider?.()}>
-          <Plus size={14} strokeWidth={2.2} aria-hidden="true" />
-          {controller.t("modelProviderAdd")}
-        </Button>
-      }
     >
       <ModelProviderSettings embedded />
     </SettingsRow>

@@ -16,6 +16,7 @@ vi.mock("@/api/modelProviders", () => ({
 const labels: Record<string, string> = {
   agentDelete: "Delete",
   agentName: "Name",
+  modelProviderDisplayName: "Display name",
   agentUpdateSave: "Save",
   csghubLoginPending: "Waiting for sign-in",
   csghubNotSignedIn: "Not signed in",
@@ -115,6 +116,22 @@ function renderModelProviderPage(
 }
 
 describe("ModelProviderPage", () => {
+  it("requires a nonempty display name before saving", async () => {
+    renderModelProviderPage();
+    const user = userEvent.setup();
+    const name = screen.getByRole("textbox", { name: "Display name" });
+    expect(name).toBeRequired();
+    const inputs = within(screen.getByRole("dialog")).getAllByRole("textbox");
+    expect(inputs[0]).toBe(name);
+    await user.clear(name);
+    await user.type(name, "   ");
+    expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    expect(updateModelProvider).not.toHaveBeenCalled();
+    await user.type(name, "Team OpenAI");
+    expect(screen.getByRole("button", { name: "Save" })).toBeEnabled();
+  });
+
   it("shows a labeled status badge and keeps diagnostics in the detail", () => {
     const { container } = renderModelProviderPage(createCatalog({ message: "diagnostic detail" }));
     const card = container.querySelector(".model-provider-provider-card")!;
@@ -274,8 +291,8 @@ describe("ModelProviderPage", () => {
     const user = userEvent.setup();
     renderModelProviderPage();
 
-    await user.clear(screen.getByLabelText("Name"));
-    await user.type(screen.getByLabelText("Name"), "Team OpenAI");
+    await user.clear(screen.getByRole("textbox", { name: "Display name" }));
+    await user.type(screen.getByRole("textbox", { name: "Display name" }), "Team OpenAI");
     await user.clear(screen.getByLabelText("Base URL"));
     await user.type(screen.getByLabelText("Base URL"), "http://127.0.0.1:4000/v1");
     await user.type(screen.getByLabelText("API Key"), "sk-test");
@@ -301,8 +318,8 @@ describe("ModelProviderPage", () => {
     const user = userEvent.setup();
     const { rerenderWithCatalog } = renderModelProviderPage();
 
-    await user.clear(screen.getByLabelText("Name"));
-    await user.type(screen.getByLabelText("Name"), "Team OpenAI");
+    await user.clear(screen.getByRole("textbox", { name: "Display name" }));
+    await user.type(screen.getByRole("textbox", { name: "Display name" }), "Team OpenAI");
     await user.clear(screen.getByLabelText("Base URL"));
     await user.type(screen.getByLabelText("Base URL"), "http://127.0.0.1:4000/v1");
     await user.type(screen.getByLabelText("API Key"), "sk-unsaved");
@@ -315,7 +332,7 @@ describe("ModelProviderPage", () => {
       }),
     );
 
-    expect(screen.getByLabelText("Name")).toHaveValue("Team OpenAI");
+    expect(screen.getByRole("textbox", { name: "Display name" })).toHaveValue("Team OpenAI");
     expect(screen.getByLabelText("Base URL")).toHaveValue("http://127.0.0.1:4000/v1");
     expect(screen.getByLabelText("API Key")).toHaveValue("sk-unsaved");
   });

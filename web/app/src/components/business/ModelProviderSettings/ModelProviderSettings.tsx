@@ -17,7 +17,7 @@ import {
 import { errorMessage } from "@/api/client";
 import { checkModelProvider, deleteModelProvider, updateModelProvider } from "@/api/modelProviders";
 import { APIKeyField, ModelProviderModelList } from "@/components/business/ProfileControls";
-import { TextInput, Select } from "@/components/ui";
+import { Field, TextInput, Select } from "@/components/ui";
 import {
   Button,
   DismissibleAlert,
@@ -318,7 +318,7 @@ export function ModelProviderSettings({ embedded = false }: { embedded?: boolean
   }
 
   async function saveProvider() {
-    if (!provider) {
+    if (!provider || (!provider.builtin && !draft.displayName.trim())) {
       return;
     }
     setBusy("save");
@@ -331,7 +331,7 @@ export function ModelProviderSettings({ embedded = false }: { embedded?: boolean
         isOpenCSG
           ? { model_overrides: draft.modelOverrides }
           : {
-              display_name: provider.builtin ? undefined : draft.displayName,
+              display_name: provider.builtin ? undefined : draft.displayName.trim(),
               api_protocol: draft.apiProtocol || undefined,
               base_url: draft.baseURL,
               api_key: draft.apiKey,
@@ -591,16 +591,16 @@ export function ModelProviderSettings({ embedded = false }: { embedded?: boolean
                 ) : (
                   <div className="model-provider-form-grid">
                     {!provider.builtin ? (
-                      <label className="field">
-                        <span>{t("agentName")}</span>
-                        <input
+                      <Field className="model-provider-name-field" label={t("modelProviderDisplayName")} required>
+                        <TextInput
+                          required
                           value={draft.displayName}
                           onInput={(event) => {
                             const value = event.currentTarget.value;
                             setDraft((current) => ({ ...current, displayName: value }));
                           }}
                         />
-                      </label>
+                      </Field>
                     ) : null}
                     {canEditEndpoint ? (
                       <>
@@ -786,7 +786,7 @@ export function ModelProviderSettings({ embedded = false }: { embedded?: boolean
             <Button
               variant="primary"
               onClick={saveProvider}
-              disabled={Boolean(busy) || showOpenCSGSignIn}
+              disabled={Boolean(busy) || showOpenCSGSignIn || (!provider.builtin && !draft.displayName.trim())}
               loading={busy === "save"}
               loadingLabel={t("modelContextSaving")}
             >
