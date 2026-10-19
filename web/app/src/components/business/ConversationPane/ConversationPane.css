@@ -279,7 +279,18 @@
 }
 
 .chat-header-main {
+  flex: 1 1 auto;
   min-width: 0;
+  width: 100%;
+}
+
+.chat-header .chat-title-bar {
+  width: 100%;
+}
+
+.chat-header .chat-title-actions {
+  justify-content: flex-end;
+  margin-left: auto;
 }
 
 .messages {

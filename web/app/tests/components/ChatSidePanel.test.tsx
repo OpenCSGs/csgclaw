@@ -53,10 +53,7 @@ function Harness({
   });
   return (
     <main className="chat-panel">
-      <header className="chat-header">
-        {tools.toolbar}
-        {tools.toggle}
-      </header>
+      <header className="chat-header">{tools.toolbar}</header>
       <div className="messages" />
       <footer className="composer">
         <div ref={editorRef} role="textbox" contentEditable suppressContentEditableWarning />
@@ -228,7 +225,7 @@ describe("shared chat sidebar", () => {
     const user = userEvent.setup();
     const wrapper = createQueryWrapper().wrapper;
     const view = render(<Harness />, { wrapper });
-    await user.click(screen.getByRole("button", { name: "Expand sidebar" }));
+    await user.click(screen.getByRole("button", { name: "Files" }));
     const panel = screen.getByRole("complementary");
     await user.click(within(panel).getByRole("button", { name: "New tab" }));
     expect(screen.queryByRole("menu")).not.toBeInTheDocument();
@@ -238,17 +235,31 @@ describe("shared chat sidebar", () => {
     expect(screen.getByRole("tab", { name: "New tab" })).toHaveAttribute("aria-selected", "true");
     await user.click(screen.getByRole("button", { name: /^Browser.*Enter/ }));
     expect(screen.queryByRole("tab", { name: "New tab" })).not.toBeInTheDocument();
-    expect(screen.getAllByRole("tab")).toHaveLength(1);
+    expect(screen.getAllByRole("tab")).toHaveLength(2);
     const address = screen.getByRole("textbox", { name: "Web address" });
     await user.type(address, "example.org");
-    expect(screen.getByRole("link", { name: "Open in external browser" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Open in system browser" })).toHaveAttribute(
       "href",
       "https://example.org/",
     );
     await user.keyboard("{Enter}");
     expect(screen.getByTitle("Browser")).toHaveAttribute("src", "https://example.org/");
     expect(screen.getByRole("tab", { name: "example.org" })).toHaveAttribute("aria-selected", "true");
-    expect(screen.getAllByRole("link", { name: "Open in external browser" })).toHaveLength(2);
+    expect(screen.getAllByRole("link")).toHaveLength(2);
+  });
+
+  it("places close all beside the new tab action and returns to the tool picker", async () => {
+    const user = userEvent.setup();
+    render(<Harness />, { wrapper: createQueryWrapper().wrapper });
+    await user.click(screen.getByRole("button", { name: "Files" }));
+    const panel = screen.getByRole("complementary");
+    const actions = panel.querySelector(".chat-side-leading-actions");
+    expect(actions?.nextElementSibling).toHaveClass("chat-side-tabs");
+    expect(actions?.querySelectorAll("button")[0]).toHaveAttribute("aria-label", "New tab");
+    expect(actions?.querySelectorAll("button")[1]).toHaveAttribute("aria-label", "Close all tabs");
+    await user.click(within(panel).getByRole("button", { name: "Close all tabs" }));
+    expect(within(panel).queryAllByRole("tab")).toHaveLength(0);
+    expect(within(panel).getByRole("button", { name: /Workspace files/ })).toBeVisible();
   });
 
   beforeEach(() => {
@@ -319,7 +330,7 @@ describe("shared chat sidebar", () => {
     await screen.findByRole("button", { name: /^report.pdf/ });
     await user.click(within(panel).getByRole("button", { name: "Collapse sidebar" }));
     expect(panel).not.toBeVisible();
-    await user.click(screen.getByRole("button", { name: "Expand sidebar" }));
+    await user.click(screen.getByRole("button", { name: "Files" }));
     expect(within(panel).getByRole("tab", { name: "Files" })).toHaveAttribute("aria-selected", "true");
     await user.click(screen.getByRole("button", { name: "Browser" }));
     const address = screen.getByRole("textbox", { name: "Web address" });
@@ -461,7 +472,7 @@ describe("shared chat sidebar", () => {
   it("supports application maximum size and gives Escape precedence to restoring layout", async () => {
     const user = userEvent.setup();
     render(<Harness />, { wrapper: createQueryWrapper().wrapper });
-    await user.click(screen.getByRole("button", { name: "Expand sidebar" }));
+    await user.click(screen.getByRole("button", { name: "Files" }));
     const panel = screen.getByRole("complementary");
     await user.click(within(panel).getByRole("button", { name: "Maximize sidebar" }));
     expect(panel).toHaveClass("is-maximized");

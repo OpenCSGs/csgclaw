@@ -265,7 +265,6 @@ export function FloatingChatPanel({ agentName, chatProps, headerAccessory, onPic
         conversation={conversation}
         conversationMembers={conversationMembers}
         description={description}
-        headerTrailingAccessory={tools.toggle}
         headerAccessory={
           <>
             {headerAccessory}

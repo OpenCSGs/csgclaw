@@ -500,7 +500,6 @@ function ConversationPaneContent({
         conversation={conversation}
         conversationMembers={conversationMembers}
         description={description}
-        headerTrailingAccessory={tools.toggle}
         headerAccessory={
           <>
             {taskHeader}

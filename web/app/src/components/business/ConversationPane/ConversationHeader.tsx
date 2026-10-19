@@ -17,7 +17,6 @@ export type ConversationHeaderProps = {
   conversationMembers: IMUser[];
   description?: string;
   headerAccessory?: ReactNode;
-  headerTrailingAccessory?: ReactNode;
   inviteActionLabel: string;
   agents?: AgentLike[];
   memberMenuRef?: RefObject<HTMLDivElement | null>;
@@ -44,7 +43,6 @@ export const ConversationHeader = memo(function ConversationHeader({
   conversationMembers,
   description,
   headerAccessory,
-  headerTrailingAccessory,
   inviteActionLabel,
   agents = [],
   memberMenuRef,
@@ -212,7 +210,6 @@ export const ConversationHeader = memo(function ConversationHeader({
                 </Button>
               </Tooltip>
             ) : null}
-            {headerTrailingAccessory}
           </div>
         </div>
         {description ? <div className="chat-subtitle">{description}</div> : null}

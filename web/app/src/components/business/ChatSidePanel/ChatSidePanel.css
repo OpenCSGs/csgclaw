@@ -84,7 +84,7 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 8px 10px;
+  padding: 10px;
   border-bottom: 1px solid var(--line);
   background: var(--panel);
 }
@@ -198,9 +198,12 @@
   outline: 2px solid var(--accent-text);
   outline-offset: -2px;
 }
-.chat-side-new {
+.chat-side-leading-actions {
+  display: flex;
   flex-shrink: 0;
+  gap: 2px;
 }
+
 .chat-side-layout-actions {
   margin-left: auto;
   display: flex;
@@ -489,11 +492,10 @@
   gap: 8px 12px;
   border-bottom: 1px solid var(--line);
 }
-.chat-browser-embed-hint a {
+.chat-browser-embed-hint .csg-button {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  color: var(--primary);
   white-space: nowrap;
 }
 

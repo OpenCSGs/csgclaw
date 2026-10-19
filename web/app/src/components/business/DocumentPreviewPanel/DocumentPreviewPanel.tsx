@@ -13,7 +13,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Download,
-  Expand,
   Maximize2,
   Minimize2,
   Minus,
@@ -378,17 +377,6 @@ export function DocumentPreviewPanel({
               onClick={() => setScale(1)}
             >
               <RotateCcw aria-hidden="true" size={15} />
-            </Button>
-          </Tooltip>
-          <Tooltip content={t("attachmentPreviewFit")} contentProps={{ side: "bottom" }}>
-            <Button
-              iconOnly
-              size="sm"
-              variant="tertiaryGray"
-              aria-label={t("attachmentPreviewFit")}
-              onClick={() => setScale(1)}
-            >
-              <Expand aria-hidden="true" size={15} />
             </Button>
           </Tooltip>
           {mode !== "embedded" ? (

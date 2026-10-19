@@ -23,9 +23,19 @@
   content: "";
   width: 24px;
   height: 24px;
+}
+
+.folder::before,
+.folderIcon {
+  display: block;
   background: var(--primary-strong);
   -webkit-mask: url("../../../assets/file-types/folder.svg") center / contain no-repeat;
   mask: url("../../../assets/file-types/folder.svg") center / contain no-repeat;
+}
+
+.folderIcon {
+  flex: 0 0 auto;
+  background: currentColor;
 }
 
 .icon > span:not(.mark) {

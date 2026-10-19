@@ -73,7 +73,6 @@ const t = (key: string, params?: Record<string, string | number>) => {
   const labels: Record<string, string> = {
     attachmentPreview: "Attachment preview",
     attachmentPreviewFailed: "Preview failed",
-    attachmentPreviewFit: "Fit",
     attachmentPreviewFullscreen: "Fullscreen",
     attachmentPreviewHtmlDocument: "HTML preview document",
     attachmentPreviewExitFullscreen: "Exit fullscreen",
@@ -807,7 +806,7 @@ describe("image preview sizing", () => {
       await userEvent.click(screen.getByRole("button", { name: "Zoom in" }));
       expect(parseFloat(image.style.width)).toBeCloseTo(fittedWidth * 1.1);
       expect(parseFloat(image.style.height)).toBeCloseTo(fittedHeight * 1.1);
-      await userEvent.click(screen.getByRole("button", { name: "Fit" }));
+      await userEvent.click(screen.getByRole("button", { name: "Reset zoom" }));
       expect(parseFloat(image.style.width)).toBe(fittedWidth);
       expect(parseFloat(image.style.height)).toBe(fittedHeight);
     } finally {

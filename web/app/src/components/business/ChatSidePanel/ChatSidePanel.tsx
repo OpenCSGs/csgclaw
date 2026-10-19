@@ -16,6 +16,7 @@ import {
   X,
 } from "lucide-react";
 import { Button, Tooltip } from "@/components/ui";
+import { FolderIcon } from "@/components/business/FileTypeIcon";
 import { DocumentPreviewPanel, documentPreviewKind } from "@/components/business/DocumentPreviewPanel";
 import { ConversationActivityPanel } from "@/components/business/ConversationActivityPanel";
 import { CitationSources } from "@/components/business/MessageContent";
@@ -263,6 +264,32 @@ export function ChatSidePanel({
         />
       ) : null}
       <header className="chat-side-header">
+        <div className="chat-side-leading-actions">
+          <Tooltip content={t("chatSideNew")} contentProps={{ side: "bottom" }}>
+            <Button
+              className="chat-side-new"
+              iconOnly
+              size="sm"
+              variant="tertiaryGray"
+              aria-label={t("chatSideNew")}
+              onClick={() => openTab({ id: crypto.randomUUID(), kind: "new" })}
+            >
+              <Plus size={18} />
+            </Button>
+          </Tooltip>
+          <Tooltip content={t("chatSideCloseAll")} contentProps={{ side: "bottom" }}>
+            <Button
+              iconOnly
+              size="sm"
+              variant="tertiaryGray"
+              aria-label={t("chatSideCloseAll")}
+              disabled={!state.tabs.length}
+              onClick={() => patch({ tabs: [], activeID: "" })}
+            >
+              <X size={17} />
+            </Button>
+          </Tooltip>
+        </div>
         <div
           className="chat-side-tabs"
           role="tablist"
@@ -329,18 +356,6 @@ export function ChatSidePanel({
           })}
         </div>
         <div className="chat-side-layout-actions">
-          <Tooltip content={t("chatSideNew")} contentProps={{ side: "bottom" }}>
-            <Button
-              className="chat-side-new"
-              iconOnly
-              size="sm"
-              variant="tertiaryGray"
-              aria-label={t("chatSideNew")}
-              onClick={() => openTab({ id: crypto.randomUUID(), kind: "new" })}
-            >
-              <Plus size={18} />
-            </Button>
-          </Tooltip>
           <Tooltip content={t(maximized ? "chatSideRestore" : "chatSideMaximize")} contentProps={{ side: "bottom" }}>
             <Button
               iconOnly
@@ -441,7 +456,7 @@ function WelcomeTab({ t, onSelect }: { t: TranslateFn; onSelect: (kind: "files" 
   return (
     <div className="chat-side-welcome">
       {(["files", "browser", "activity"] as const).map((kind) => {
-        const Icon = kind === "files" ? Folder : kind === "browser" ? Globe : Activity;
+        const Icon = kind === "files" ? FolderIcon : kind === "browser" ? Globe : Activity;
         return (
           <button key={kind} type="button" onClick={() => onSelect(kind)}>
             <Icon size={24} />

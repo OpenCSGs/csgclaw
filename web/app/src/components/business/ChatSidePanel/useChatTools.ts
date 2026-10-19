@@ -10,7 +10,7 @@ import { conversationActivityAgents } from "@/components/business/ConversationAc
 import type { DocumentPreviewRequest } from "@/components/business/DocumentPreviewPanel";
 import type { CitationSelection } from "@/components/business/MessageContent";
 import { parseCitationDocument } from "@/models/citations";
-import { ChatSideToggle, ChatToolsToolbar } from "./ChatToolsToolbar";
+import { ChatToolsToolbar } from "./ChatToolsToolbar";
 import { useChatSidePanel } from "./useChatSidePanel";
 
 type ChatToolsOptions = {
@@ -146,7 +146,5 @@ export function useChatTools({ conversation, currentUserID, agents, editorRef, t
     t,
   });
 
-  const toggle = createElement(ChatSideToggle, { controller, onCollapse: collapse, triggerRef, t });
-
-  return { toggle, controller, fileScope, onReference, openPreview, openActivity, openSources, collapse, toolbar };
+  return { controller, fileScope, onReference, openPreview, openActivity, openSources, collapse, toolbar };
 }

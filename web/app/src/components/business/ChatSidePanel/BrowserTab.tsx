@@ -1,8 +1,7 @@
 import { useNativeBrowser } from "./useNativeBrowser";
-import { writeTextToClipboard } from "@/shared/lib/clipboard";
 import { useEffect, useRef, useState } from "react";
-import { ArrowLeft, ArrowRight, Copy, ExternalLink, RefreshCw } from "lucide-react";
-import { Button, EmptyState, TextInput, Tooltip } from "@/components/ui";
+import { ArrowLeft, ArrowRight, ExternalLink, RefreshCw } from "lucide-react";
+import { Button, EmptyState, LinkButton, TextInput, Tooltip } from "@/components/ui";
 import { normalizeBrowserURL } from "@/models/fileReferences";
 import type { TranslateFn } from "@/models/conversations";
 
@@ -22,8 +21,6 @@ export function BrowserTab({
   const [address, setAddress] = useState(url);
   const [reload, setReload] = useState(0);
   const [invalid, setInvalid] = useState(false);
-  const [copied, setCopied] = useState(false);
-  const [copyError, setCopyError] = useState(false);
   const [history, setHistory] = useState(() => ({ urls: url ? [url] : [], index: url ? 0 : -1 }));
   const previousURL = useRef(url);
   useEffect(() => {
@@ -51,8 +48,6 @@ export function BrowserTab({
           const next = normalizeBrowserURL(address);
           setInvalid(!next);
           if (next) {
-            setCopied(false);
-            setCopyError(false);
             if (!native.available && next !== url) {
               setHistory((current) => ({
                 urls: [...current.urls.slice(0, current.index + 1), next],
@@ -141,45 +136,20 @@ export function BrowserTab({
           }}
           aria-invalid={invalid}
         />
-        <Tooltip content={t(copied ? "chatCopied" : "chatCopyURL")} contentProps={{ side: "bottom" }}>
-          <span className="inline-flex">
-            <Button
-              type="button"
-              iconOnly
-              size="sm"
-              variant="tertiaryGray"
-              aria-label={t("chatCopyURL")}
-              disabled={!url}
-              onClick={() => {
-                void writeTextToClipboard(url).then((ok) => {
-                  setCopied(ok);
-                  setCopyError(!ok);
-                });
-              }}
-            >
-              <Copy size={16} />
-            </Button>
-          </span>
-        </Tooltip>
         {externalURL ? (
-          <Tooltip content={t("chatBrowserExternal")} contentProps={{ side: "bottom" }}>
+          <Tooltip content={t("chatBrowserSystem")} contentProps={{ side: "bottom" }}>
             <a
               className="chat-browser-external"
               href={externalURL}
               target="_blank"
               rel="noopener noreferrer"
-              aria-label={t("chatBrowserExternal")}
+              aria-label={t("chatBrowserSystem")}
             >
               <ExternalLink size={16} />
             </a>
           </Tooltip>
         ) : null}
       </form>
-      {copyError ? (
-        <div className="chat-browser-hint" role="alert">
-          {t("copyTextFailed")}
-        </div>
-      ) : null}
       {invalid ? (
         <div className="chat-browser-hint" role="alert">
           {t("chatBrowserInvalid")}
@@ -200,10 +170,10 @@ export function BrowserTab({
         <>
           <div className="chat-browser-hint chat-browser-embed-hint">
             <span>{t("chatBrowserEmbedHint")}</span>
-            <a href={externalURL} target="_blank" rel="noopener noreferrer">
+            <LinkButton href={externalURL} target="_blank" rel="noopener noreferrer" size="sm" variant="linkColor">
               <ExternalLink size={14} />
-              {t("chatBrowserExternal")}
-            </a>
+              {t("chatBrowserSystem")}
+            </LinkButton>
           </div>
           <iframe
             key={`${url}:${reload}`}

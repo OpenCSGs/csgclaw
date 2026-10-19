@@ -1,5 +1,6 @@
 import type { RefObject } from "react";
-import { Activity, Folder, Globe, PanelRight } from "lucide-react";
+import { Activity, Globe } from "lucide-react";
+import { FolderIcon } from "@/components/business/FileTypeIcon";
 import { Button, Tooltip } from "@/components/ui";
 import type { TranslateFn } from "@/models/conversations";
 import type { useChatSidePanel } from "./useChatSidePanel";
@@ -20,7 +21,7 @@ export function ChatToolsToolbar({
     {
       id: "files",
       label: t("chatFiles"),
-      icon: Folder,
+      icon: FolderIcon,
       action: () => controller.openTab({ id: "files", kind: "files" }),
     },
     {
@@ -63,40 +64,5 @@ export function ChatToolsToolbar({
         </Tooltip>
       ))}
     </div>
-  );
-}
-
-export function ChatSideToggle({
-  controller,
-  onCollapse,
-  triggerRef,
-  t,
-}: {
-  controller: ReturnType<typeof useChatSidePanel>;
-  onCollapse: () => void;
-  triggerRef: RefObject<HTMLElement | null>;
-  t: TranslateFn;
-}) {
-  return (
-    <Tooltip
-      content={t(controller.state.open ? "chatSideCollapse" : "chatSideExpand")}
-      contentProps={{ side: "bottom" }}
-    >
-      <Button
-        className="chat-side-toggle"
-        iconOnly
-        size="lg"
-        variant="secondaryGray"
-        aria-label={t(controller.state.open ? "chatSideCollapse" : "chatSideExpand")}
-        aria-expanded={controller.state.open}
-        onClick={(event) => {
-          triggerRef.current = event.currentTarget;
-          if (controller.state.open) onCollapse();
-          else controller.patch({ open: true });
-        }}
-      >
-        <PanelRight size={19} />
-      </Button>
-    </Tooltip>
   );
 }
