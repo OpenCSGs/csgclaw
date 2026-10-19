@@ -1,4 +1,7 @@
-import { render, screen } from "@testing-library/react";
+import { useState } from "react";
+import { render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { DialogRoot, DialogContent, DialogTitle, Button } from "@/components/ui";
 import { UpgradeModal } from "@/pages/WorkspacePage/components/WorkspaceModals/UpgradeModal";
 import type { UpgradeStatus } from "@/models/upgradeStatus";
 
@@ -43,6 +46,43 @@ const manualUpgradeStatus: UpgradeStatus = {
 };
 
 describe("UpgradeModal", () => {
+  it("opens above settings with usable confirm, close and Escape actions", async () => {
+    const onApply = vi.fn();
+    function Harness() {
+      const [open, setOpen] = useState(false);
+      return (
+        <DialogRoot open>
+          <DialogContent aria-describedby={undefined}>
+            <DialogTitle>Settings</DialogTitle>
+            <Button onClick={() => setOpen(true)}>Update</Button>
+            {open ? (
+              <UpgradeModal
+                onApply={onApply}
+                onClose={() => setOpen(false)}
+                t={t}
+                upgradePhase="idle"
+                upgradeStatus={{ ...manualUpgradeStatus, auto_upgrade_supported: true }}
+              />
+            ) : null}
+          </DialogContent>
+        </DialogRoot>
+      );
+    }
+    const user = userEvent.setup();
+    render(<Harness />);
+    await user.click(screen.getByRole("button", { name: "Update" }));
+    const dialog = screen.getByRole("dialog", { name: "New version available" });
+    await user.click(within(dialog).getByRole("button", { name: "upgradeConfirm" }));
+    expect(onApply).toHaveBeenCalledOnce();
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog", { name: "New version available" })).not.toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "Settings" })).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Update" }));
+    await user.click(
+      within(screen.getByRole("dialog", { name: "New version available" })).getByRole("button", { name: "Close" }),
+    );
+    expect(screen.getByRole("dialog", { name: "Settings" })).toBeVisible();
+  });
   it("uses manual upgrade copy for non-official installs", () => {
     render(
       <UpgradeModal

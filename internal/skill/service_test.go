@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"csgclaw/internal/config"
+	"csgclaw/internal/skill/installstate"
 )
 
 func singleRegistryConfig(baseURL string) config.SkillConfig {
@@ -196,6 +197,14 @@ func TestServiceInstall(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(skillsRoot, "demo-skill", "SKILL.md")); err != nil {
 		t.Fatalf("installed skill missing: %v", err)
+	}
+	records, err := installstate.Read(skillsRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	record := records["demo-skill"]
+	if record.SourceURL != srv.URL+"/api/v1/skills/demo-skill" || record.Registry != "" {
+		t.Fatalf("installation record = %+v, want the full catalog URL without split origin fields", record)
 	}
 }
 

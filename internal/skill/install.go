@@ -3,13 +3,13 @@ package skill
 import (
 	"archive/zip"
 	"bytes"
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"csgclaw/internal/skill/installstate"
 )
 
 func extractSkillZip(archive []byte, dstDir string, maxBytes int64) (string, error) {
@@ -83,7 +83,7 @@ func extractSkillZip(archive []byte, dstDir string, maxBytes int64) (string, err
 	if !hasSKILLMD {
 		return "", ErrSKILLMDMissing
 	}
-	return bundleSHA256(dstDir)
+	return installstate.BundleSHA256(dstDir)
 }
 
 func writeZipFile(file *zip.File, target string) error {
@@ -110,41 +110,6 @@ func writeZipFile(file *zip.File, target string) error {
 		return fmt.Errorf("close skill file %q: %w", target, err)
 	}
 	return nil
-}
-
-func bundleSHA256(root string) (string, error) {
-	hasher := sha256.New()
-	err := filepath.WalkDir(root, func(path string, d os.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		if d.IsDir() {
-			return nil
-		}
-		rel, err := filepath.Rel(root, path)
-		if err != nil {
-			return err
-		}
-		rel = filepath.ToSlash(rel)
-		if _, err := hasher.Write([]byte(rel)); err != nil {
-			return err
-		}
-		if _, err := hasher.Write([]byte{0}); err != nil {
-			return err
-		}
-		data, err := os.ReadFile(path)
-		if err != nil {
-			return err
-		}
-		if _, err := hasher.Write(data); err != nil {
-			return err
-		}
-		return nil
-	})
-	if err != nil {
-		return "", fmt.Errorf("hash skill bundle: %w", err)
-	}
-	return hex.EncodeToString(hasher.Sum(nil)), nil
 }
 
 func validateArchiveRelativePath(rel string) error {

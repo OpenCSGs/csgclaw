@@ -57,7 +57,9 @@ func TestSkillListUpdateRestartsRunningCodex(t *testing.T) {
 					}
 					names := make([]string, 0, len(entries))
 					for _, entry := range entries {
-						names = append(names, entry.Name())
+						if entry.IsDir() {
+							names = append(names, entry.Name())
+						}
 					}
 					if !reflect.DeepEqual(names, tc.skills) {
 						t.Fatalf("启动前的技能列表：%v，预期 %v", names, tc.skills)

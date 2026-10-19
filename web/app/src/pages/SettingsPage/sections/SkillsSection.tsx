@@ -1,4 +1,4 @@
-import { skillOriginLabel as originLabel } from "./resourceOrigins";
+import { skillOriginHint, skillOriginLabel as originLabel } from "./resourceOrigins";
 import { useEffect, useMemo, useState } from "react";
 import { LoaderCircle, Plus } from "lucide-react";
 import { Button } from "@/components/ui";
@@ -191,7 +191,7 @@ export function SkillsSection() {
 
 function OriginPill({ skill, t }: { skill: SkillSummary; t: TranslateFn }) {
   return (
-    <span className={styles.tag}>
+    <span className={styles.tag} title={skillOriginHint(skill, t)}>
       <span className={styles.tagDot} aria-hidden="true" />
       {originLabel(skill, t)}
     </span>

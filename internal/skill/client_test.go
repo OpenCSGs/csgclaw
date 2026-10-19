@@ -74,6 +74,9 @@ func TestClientGetSkill(t *testing.T) {
 	if detail.LatestVersion == nil || detail.LatestVersion.Version != "1.0.0" {
 		t.Fatalf("detail = %#v", detail)
 	}
+	if detail.SourceURL != srv.URL+"/api/v1/skills/demo-skill" {
+		t.Fatalf("source URL = %q, want the catalog request URL", detail.SourceURL)
+	}
 }
 
 func TestClientDownloadPathFallback(t *testing.T) {

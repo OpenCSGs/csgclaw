@@ -2,7 +2,8 @@ package skill
 
 import (
 	"encoding/json"
-	"time"
+
+	"csgclaw/internal/skill/installstate"
 )
 
 type SearchResult struct {
@@ -53,6 +54,7 @@ type SkillModeration struct {
 }
 
 type SkillGetResponse struct {
+	SourceURL     string           `json:"-"` // Actual catalog URL used by the client.
 	Skill         SkillSummary     `json:"skill"`
 	LatestVersion *SkillVersion    `json:"latestVersion"`
 	Versions      []SkillVersion   `json:"versions"`
@@ -64,13 +66,7 @@ type SkillVersionGetResponse struct {
 	Version SkillVersion `json:"version"`
 }
 
-type InstallRecord struct {
-	Registry    RegistryID `json:"registry,omitempty"`
-	Slug        string     `json:"slug"`
-	Version     string     `json:"version"`
-	InstalledAt time.Time  `json:"installed_at"`
-	SHA256      string     `json:"sha256,omitempty"`
-}
+type InstallRecord = installstate.Record
 
 type InstallResult struct {
 	Registry  RegistryID

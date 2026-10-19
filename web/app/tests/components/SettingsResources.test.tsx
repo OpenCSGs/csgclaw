@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { WorkspaceControllerProvider } from "@/hooks/workspace";
@@ -133,6 +133,32 @@ describe("settings resource actions", () => {
     });
     await userEvent.setup().click(screen.getByRole("button", { name: "测试连接" }));
     expect(await screen.findByRole("alert")).toHaveTextContent(t("resourcesMCPTestFailed"));
+    await userEvent.setup().click(within(screen.getByRole("alert")).getByRole("button", { name: "关闭" }));
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("keeps installed knowledge-base actions visible while its MCP catalog loads", () => {
+    render(
+      <KnowledgeBaseDetailDialog
+        target={{
+          variant: "installed",
+          kb: {
+            id: "999",
+            contentID: "not-loaded",
+            name: "旅游知识库",
+            description: "Long description ".repeat(200),
+            availability: "available",
+            configuredMCPName: "not-loaded",
+          },
+        }}
+        t={t}
+        onOpenChange={vi.fn()}
+      />,
+      { wrapper: wrapper() },
+    );
+    expect(screen.getByRole("button", { name: "测试连接" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "删除" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "重试" })).toBeEnabled();
   });
 
   it("shows pending and successful tool discovery and ignores completion after switching targets", async () => {

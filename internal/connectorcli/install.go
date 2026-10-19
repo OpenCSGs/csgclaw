@@ -169,6 +169,10 @@ func verifyPackage(ctx context.Context, p Package) error {
 		return errors.New("Skills are missing")
 	}
 	for _, entry := range entries {
+		// Root metadata files are already checked by the package digest.
+		if !entry.IsDir() {
+			continue
+		}
 		if _, err := skilllocal.ResolveDir(p.SkillsDir, entry.Name()); err != nil {
 			return err
 		}

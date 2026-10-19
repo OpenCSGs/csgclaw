@@ -116,6 +116,10 @@ Returns `503 Service Unavailable` if the upgrade manager is not configured.
 
 ## Skill API
 
+### `GET /api/v1/skills/tree` and `GET /api/v1/skills/file`
+
+Read installed Skill files using the existing `path` parameter. For market previews, pass `remote_path` and optionally `ref` instead: the tree endpoint lists that remote repository, while the file endpoint also takes a repository-relative `path`, such as `SKILL.md`. These read-only requests use the same Hub environment and matching user credentials as remote installation, without installing or changing local Skills.
+
 ### `GET /api/v1/skills/remote`
 
 Lists remote Skills from the effective OpenCSG Hub. The browser only calls CSGClaw; the server resolves the Hub using the current login environment or an explicitly configured official Hub URL. When the user is signed in, CSGClaw forwards the current OpenCSG access token to the matching Hub so the catalog can include private Skills visible to that user. Signed-out requests remain anonymous and list only public Skills.
@@ -162,7 +166,13 @@ Installs one remote Skill from the same effective OpenCSG Hub. For a signed-in u
 }
 ```
 
-Returns `201 Created` with the installed local Skill summary. A duplicate without `replace` returns `409 Conflict`.
+Returns `201 Created` with the installed local Skill summary, including `source: "market"`. Installation records are kept in `.skillhub-lock.json` under the skills root, shared with CLI installs, and include the complete `source_url`, ref/version, skill content SHA256, and installation/update times. Web installs save the skill page URL; CLI installs save the catalog URL used to resolve the skill. Readers use the stored URL directly. New records do not write split origin fields. The original CLI `registry` field is retained to identify older market installations, without guessing a missing full URL. `GET /api/v1/skills` reads these records; ZIP uploads use `source: "local"`, and untracked installations use `source: "unknown"`. Older CLI records containing a registry are also recognized as market installs. The UI labels untracked installations as “Local”, with a hint that the original installation channel was not recorded. Replacing or deleting a Skill also updates its installation record. A cross-process OS lock on `.skillhub-lock.json.lock` covers reads and the entire update, file operation, and rollback, so concurrent CLI and Web operations cannot overwrite each other’s records. The lock file remains on disk; closing the handle or exiting the process releases the OS lock. A duplicate without `replace` returns `409 Conflict`.
+
+## Knowledge Base Configuration API
+
+### `GET /api/v1/knowledge-bases/remote/{id}/mcp-config`
+
+Reads the current user's authorized knowledge-base MCP configuration without modifying local connections. It also works for installed knowledge bases and returns the existing local server name, preserving its identity when refreshing the configuration. Persist the returned configuration through the MCP create or update API.
 
 ## Participant API
 

@@ -1,6 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Mock } from "vitest";
-import { fetchRemoteSkillsPage, fetchSkills, installRemoteSkillRequest } from "@/api/skills";
+import {
+  fetchRemoteSkillsPage,
+  fetchSkillFile,
+  fetchSkills,
+  fetchSkillTree,
+  installRemoteSkillRequest,
+} from "@/api/skills";
 
 function mockFetch(handler: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>) {
   const fetchMock = vi.fn<typeof fetch>(handler);
@@ -20,6 +26,21 @@ describe("skills API", () => {
     await fetchSkills();
 
     expect(fetchMock).toHaveBeenCalledWith("api/v1/skills", expect.any(Object));
+  });
+
+  it("keeps local and remote file requests separate", async () => {
+    const fetchMock = mockFetch(async () => new Response("{}", { status: 200 }));
+    await fetchSkillTree("demo");
+    await fetchSkillFile("demo/SKILL.md");
+    const remote = { remotePath: "team/demo", remoteRef: "feature/preview" };
+    await fetchSkillTree("", remote);
+    await fetchSkillFile("scripts/run.py", remote);
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
+      "api/v1/skills/tree?path=demo",
+      "api/v1/skills/file?path=demo%2FSKILL.md",
+      "api/v1/skills/tree?remote_path=team%2Fdemo&ref=feature%2Fpreview",
+      "api/v1/skills/file?remote_path=team%2Fdemo&ref=feature%2Fpreview&path=scripts%2Frun.py",
+    ]);
   });
 
   it("loads and normalizes remote skills through the CSGClaw API", async () => {

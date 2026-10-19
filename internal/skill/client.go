@@ -80,9 +80,11 @@ func (c *Client) Get(ctx context.Context, slug string) (SkillGetResponse, error)
 		return SkillGetResponse{}, fmt.Errorf("skill slug is required")
 	}
 	var payload SkillGetResponse
-	if err := c.getJSON(ctx, c.apiURL("skills/"+url.PathEscape(slug), nil), &payload); err != nil {
+	endpoint := c.apiURL("skills/"+url.PathEscape(slug), nil)
+	if err := c.getJSON(ctx, endpoint, &payload); err != nil {
 		return SkillGetResponse{}, err
 	}
+	payload.SourceURL = endpoint
 	return payload, nil
 }
 

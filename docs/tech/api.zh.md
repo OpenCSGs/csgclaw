@@ -116,6 +116,10 @@ ok
 
 ## Skill API
 
+### `GET /api/v1/skills/tree` 和 `GET /api/v1/skills/file`
+
+通过原有的 `path` 参数读取已安装 Skill 文件。预览市场技能时传入 `remote_path` 和可选的 `ref`：tree 接口列出远端仓库文件，file 接口还需传入仓库内相对路径 `path`（如 `SKILL.md`）。只读预览复用远端安装的 Hub 环境与匹配的用户凭据，不安装或修改本地 Skill。
+
 ### `GET /api/v1/skills/remote`
 
 从有效的 OpenCSG Hub 列出远端 Skill。浏览器只请求 CSGClaw；Server 按当前登录环境或显式配置的 official Hub URL 解析 Hub 地址。用户已登录时，CSGClaw 会把当前 OpenCSG Access Token 传给匹配的 Hub，因此 catalog 可以包含该用户有权查看的私有 Skill；未登录请求仍保持匿名，只列出公开 Skill。
@@ -162,7 +166,13 @@ Server 保持当前 Hub catalog 的排序，并返回归一化后的 Skill 摘�
 }
 ```
 
-成功返回 `201 Created` 和已安装的本地 Skill 摘要；未设置 `replace` 时同名冲突返回 `409 Conflict`。
+成功返回 `201 Created` 和已安装的本地 Skill 摘要，包含 `source: "market"`。安装记录统一保存在技能根目录的 `.skillhub-lock.json`，与 CLI 安装共用，直接记录完整的 `source_url`、ref/版本、技能内容 SHA256 及安装/更新时间。Web 安装保存技能页面地址，CLI 安装保存解析技能时实际使用的目录接口地址；读取时直接使用已保存的 URL。新记录不再写入分段来源字段，仅保留原有 CLI 的 `registry` 字段用于识别旧市场安装记录，不猜测缺失的完整地址。`GET /api/v1/skills` 读取该清单；ZIP 上传使用 `source: "local"`，没有记录的安装使用 `source: "unknown"`；包含 registry 的旧 CLI 记录也识别为市场安装；无记录的历史技能在界面显示为“本地”，提示原始安装渠道未记录。替换或删除技能时同步维护安装记录。通过 `.skillhub-lock.json.lock` 上的跨进程系统锁保护读取及完整的更新、文件操作和回滚过程，防止 CLI 与 Web 并发操作覆盖彼此的记录。锁文件保留在磁盘上，关闭句柄或进程退出时释放系统锁。未设置 `replace` 时同名冲突返回 `409 Conflict`。
+
+## 知识库配置 API
+
+### `GET /api/v1/knowledge-bases/remote/{id}/mcp-config`
+
+读取当前用户有权访问的知识库 MCP 配置，不修改本地连接。已安装的知识库也可读取，返回值使用已有本地服务名称，刷新配置时保留其身份。通过 MCP 创建或更新接口保存返回的配置。
 
 ## Participant API
 

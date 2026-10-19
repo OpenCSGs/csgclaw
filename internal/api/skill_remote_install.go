@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strings"
 
+	skillinstall "csgclaw/internal/skill/installstate"
 	skilllocal "csgclaw/internal/skill/local"
 	skillremote "csgclaw/internal/skill/remote"
 )
@@ -130,11 +131,20 @@ func (h *Handler) handleSkillInstall(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadGateway)
 		return
 	}
+	sourceURL, err := skillremote.AgenticHubSkillWebURL(h.currentOpenCSGEnvironment(r).OpenCSGBaseURL, remotePath)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 	item, err := skilllocal.InstallArchiveWithOptions(
 		root,
 		skillremote.AgenticHubSkillArchiveName(remotePath),
 		archive,
-		skilllocal.InstallArchiveOptions{Replace: req.Replace},
+		skilllocal.InstallArchiveOptions{Replace: req.Replace, Origin: skillinstall.Record{
+			Source:    skillinstall.SourceMarket,
+			SourceURL: sourceURL,
+			Ref:       ref,
+		}},
 	)
 	if err != nil {
 		writeSkillInstallError(w, err)
@@ -164,6 +174,30 @@ func (h *Handler) remoteSkillsHubConnection(r *http.Request) (string, string, er
 		return "", "", err
 	}
 	return baseURL, strings.TrimSpace(token), nil
+}
+
+func (h *Handler) handleRemoteSkillBrowse(w http.ResponseWriter, r *http.Request, file bool) {
+	baseURL, token, err := h.remoteSkillsHubConnection(r)
+	if err != nil {
+		writeRemoteSkillsHubError(w, err)
+		return
+	}
+	query := r.URL.Query()
+	var value any
+	if file {
+		value, err = skillremote.ReadAgenticHubSkillFile(r.Context(), baseURL, token, query.Get("remote_path"), query.Get("ref"), query.Get("path"))
+	} else {
+		value, err = skillremote.ListAgenticHubSkillFiles(r.Context(), baseURL, token, query.Get("remote_path"), query.Get("ref"))
+	}
+	if err != nil {
+		if skillremote.IsInvalidAgenticHubRequest(err) {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+		} else {
+			http.Error(w, err.Error(), http.StatusBadGateway)
+		}
+		return
+	}
+	writeJSON(w, http.StatusOK, value)
 }
 
 func writeRemoteSkillsHubError(w http.ResponseWriter, err error) {

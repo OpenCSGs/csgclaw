@@ -91,7 +91,7 @@ function skillNameFromPath(value: unknown): string {
   );
 }
 
-export function skillOriginKind(skill: SkillSummary | null | undefined): "builtin" | "market" | "local" {
+export function skillOriginKind(skill: SkillSummary | null | undefined): "builtin" | "market" | "local" | "unknown" {
   const source = normalizeSkillSource(skill?.source);
   if (source === SKILL_SOURCE_BUILTIN || source === SKILL_SOURCE_SYSTEM) {
     return "builtin";
@@ -104,7 +104,7 @@ export function skillOriginKind(skill: SkillSummary | null | undefined): "builti
   ) {
     return "market";
   }
-  return "local";
+  return source === SKILL_SOURCE_LOCAL ? "local" : "unknown";
 }
 
 export const SKILL_SOURCE_MARKET = "market";
