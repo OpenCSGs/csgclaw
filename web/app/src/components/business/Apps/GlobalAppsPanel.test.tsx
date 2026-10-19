@@ -22,6 +22,56 @@ const definition: AppDefinition = {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("Global Apps", () => {
+  it("reenables a disabled global connector from its details header", async () => {
+    const user = userEvent.setup();
+    let resource = {
+      installation_id: "global-disabled",
+      app_id: "gitlab",
+      name: "Disabled GitLab",
+      kind: "mcp",
+      enabled: false,
+      status: "disabled",
+      config: {},
+      credentials_set: {},
+      tools: [],
+    };
+    let finishUpdate!: () => void;
+    const fetch = vi.fn(async (url: string, init?: RequestInit) => {
+      if (init?.method === "PATCH") {
+        await new Promise<void>((resolve) => {
+          finishUpdate = resolve;
+        });
+        resource = { ...resource, ...JSON.parse(String(init.body)), status: "configured" };
+        return Response.json(resource);
+      }
+      return Response.json({
+        items: String(url).endsWith("catalog")
+          ? [{ ...definition, app_id: "gitlab", name: "GitLab", kind: "mcp" }]
+          : [resource],
+      });
+    });
+    vi.stubGlobal("fetch", fetch);
+    render(
+      <MemoryRouter initialEntries={["/connectors/global-disabled"]}>
+        <Routes>
+          <Route path="/connectors/:resourceId" element={<GlobalAppsPanel t={t} />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    const dialog = within(await screen.findByRole("dialog"));
+    const toggle = dialog.getByRole("switch", { name: "Enable" });
+    expect(toggle).not.toBeChecked();
+    await user.click(toggle);
+    expect(toggle).toBeDisabled();
+    expect(fetch).toHaveBeenCalledWith(
+      "api/v1/connectors/resources/global-disabled",
+      expect.objectContaining({ method: "PATCH", body: JSON.stringify({ enabled: true }) }),
+    );
+    await act(async () => finishUpdate());
+    expect(toggle).toBeChecked();
+    expect(toggle).toBeEnabled();
+  });
+
   it("loads the selected CLI resource when navigating between authorization dialogs", async () => {
     const definitions = ["first", "second"].map((id) => ({
       ...definition,
@@ -159,9 +209,12 @@ describe("Global Apps", () => {
     await user.click(screen.getByRole("button", { name: "Test connection" }));
     expect(await screen.findByRole("status")).toHaveTextContent("Connected · 1 tools");
     expect(screen.queryByText("Current settings tested successfully. Not saved yet.")).not.toBeInTheDocument();
-    expect(screen.getByText("Long tool details should not appear")).not.toBeVisible();
+    expect(screen.getByText("Long tool details should not appear")).toBeVisible();
     const tools = screen.getByText("Available tools (1)").closest("details");
+    expect(tools).toHaveAttribute("open");
+    await user.click(screen.getByText("Available tools (1)"));
     expect(tools).not.toHaveAttribute("open");
+    expect(screen.getByText("Long tool details should not appear")).not.toBeVisible();
     await user.click(screen.getByText("Available tools (1)"));
     expect(screen.getByText("Long tool details should not appear")).toBeVisible();
     expect(probe.mock.calls[0][0].credentials.app_secret).toBe("test-secret");

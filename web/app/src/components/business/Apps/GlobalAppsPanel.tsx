@@ -22,6 +22,7 @@ import {
   DialogBody,
   DialogCloseButton,
   DismissibleAlert,
+  Switch,
 } from "@/components/ui";
 import { localizeAPIError } from "@/shared/i18n";
 import { errorMessage } from "@/api/client";
@@ -292,6 +293,18 @@ export function GlobalAppsPanel({
           showCancel={editing?.kind === "cli" || !editing}
           definition={definition}
           existing={adding ? null : editing}
+          headerActions={
+            editing && !adding ? (
+              <Switch
+                aria-label={t("appEnable")}
+                checked={editing.enabled}
+                disabled={busy}
+                onCheckedChange={(enabled) =>
+                  void mutate(() => updateAppResource(editing.installation_id, { enabled }))
+                }
+              />
+            ) : undefined
+          }
           savedConnectionStatus={
             editing && !adding ? (
               <div className={styles.resourceDetails}>

@@ -32,6 +32,7 @@ import styles from "./AgentAppsPanel.module.css";
 
 type Props = {
   definition: AppDefinition;
+  headerActions?: ReactNode;
   resourceDetails?: ReactNode;
   savedConnectionStatus?: ReactNode;
   globalResource?: boolean;
@@ -47,6 +48,7 @@ type Props = {
 
 export function AppSettingsDialog({
   definition,
+  headerActions,
   resourceDetails,
   savedConnectionStatus,
   globalResource = false,
@@ -430,7 +432,10 @@ export function AppSettingsDialog({
                 : t("appAddTitle", { name: appName(definition.app_id, t, definition.name) })}
             </DialogTitle>
           </div>
-          <DialogCloseButton label={t("close")} disabled={Boolean(busy)} size="sm" variant="tertiaryGray" iconOnly />
+          <div className="flex shrink-0 items-center gap-4">
+            {headerActions}
+            <DialogCloseButton label={t("close")} disabled={Boolean(busy)} size="sm" variant="tertiaryGray" iconOnly />
+          </div>
         </DialogHeader>
         <DialogBody className={`${styles.settingsBody} ${styles.scrollableSettingsBody}`}>
           <fieldset className={styles.fields} disabled={Boolean(busy)}>
