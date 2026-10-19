@@ -213,6 +213,13 @@ func TestTurnProgressBrowserFixture(t *testing.T) {
 				t.Error(err)
 				return
 			}
+			if r.URL.Query().Get("delay_progress") == "1" {
+				select {
+				case <-time.After(3 * time.Second):
+				case <-turnCtx.Done():
+					return
+				}
+			}
 			if err := renderer.Start(ctx, turn); err != nil {
 				t.Error(err)
 				return

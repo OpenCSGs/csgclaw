@@ -1,6 +1,7 @@
+import { PendingTurnReplies } from "./PendingTurnReplies";
 import { TaskConversationControls } from "../TaskConversationControls/TaskConversationControls";
 import { WorkingTurnControls } from "@/components/business/ConversationPane/WorkingTurnControls";
-import { workingParticipantForProgress } from "@/models/turnWorkingParticipant";
+import { workingParticipantForProgress, workingParticipantForTurnMessage } from "@/models/turnWorkingParticipant";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { errorMessage } from "@/api/client";
 import {
@@ -336,19 +337,22 @@ function ConversationPaneContent({
     const threadMessages =
       threadVisible && activeThreadView?.root ? [activeThreadView.root, ...(activeThreadView.replies ?? [])] : [];
     for (const message of [...visibleMessages, ...threadMessages]) {
+      const represented = workingParticipantForTurnMessage(message, conversation.id, workingParticipantsWithActivity);
+      if (represented) moved.add(represented);
       const participant = workingParticipantForProgress(message, conversation.id, workingParticipantsWithActivity);
-      if (
-        !message.id ||
-        !participant ||
-        !(participant.showContextUsage || participant.contextUsage || (participant.canStop && onStopWorkingTurn))
-      )
-        continue;
-      byMessage.set(message.id, participant);
-      moved.add(participant);
+      if (!message.id || !participant) continue;
+      if (participant.showContextUsage || participant.contextUsage || (participant.canStop && onStopWorkingTurn)) {
+        byMessage.set(message.id, participant);
+      }
     }
     return {
       byMessage,
-      composerParticipants: workingParticipantsWithActivity.filter((participant) => !moved.has(participant)),
+      pendingReplies: workingParticipantsWithActivity.filter(
+        (participant) => !moved.has(participant) && !participant.threadRootID,
+      ),
+      composerParticipants: workingParticipantsWithActivity.filter(
+        (participant) => !moved.has(participant) && participant.threadRootID,
+      ),
     };
   }, [
     activeThreadRootID,
@@ -524,6 +528,16 @@ function ConversationPaneContent({
       />
 
       <Conversation.MessageList
+        footerSlot={
+          <PendingTurnReplies
+            participants={messageControls.pendingReplies}
+            agents={agents}
+            usersById={usersById}
+            t={t}
+            onAction={handleOpenActivityPanel}
+            onStop={onStopWorkingTurn}
+          />
+        }
         renderTurnControls={renderTurnControls}
         renderMessageFooter={taskFooter}
         agents={agents}

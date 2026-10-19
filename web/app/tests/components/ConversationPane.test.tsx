@@ -20,7 +20,8 @@ vi.mock("@/api/im", async (importOriginal) => {
   return { ...actual, fetchMessagesRequest: vi.fn(async () => []) };
 });
 
-vi.mock("@/shared/realtime/imEvents", () => ({
+vi.mock("@/shared/realtime/imEvents", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/shared/realtime/imEvents")>()),
   subscribeIMEvents: vi.fn(() => () => undefined),
 }));
 
@@ -213,6 +214,8 @@ function renderThreadPane({
   usersByIdOverride = usersById,
   statefulThreads = false,
   onRestoreThread = vi.fn(),
+  workingParticipants = [],
+  onStopWorkingTurn = vi.fn(),
 }: {
   agents?: NonNullable<ConversationPaneProps["agents"]>;
   agentDetailPanelProps?: ConversationPaneProps["agentDetailPanelProps"];
@@ -240,6 +243,8 @@ function renderThreadPane({
   usersByIdOverride?: ConversationPaneProps["usersById"];
   statefulThreads?: boolean;
   onRestoreThread?: (rootID: string) => void;
+  workingParticipants?: ConversationPaneProps["workingParticipants"];
+  onStopWorkingTurn?: ConversationPaneProps["onStopWorkingTurn"];
 } = {}) {
   const root = {
     content: "Hi! How can I help you today?",
@@ -281,6 +286,8 @@ function renderThreadPane({
         activeThreadRootID={threadRootID}
         activeThreadView={{ ...thread, root: timelineMessages.find((message) => message.id === threadRootID) ?? root }}
         agents={agents}
+        workingParticipants={workingParticipants}
+        onStopWorkingTurn={onStopWorkingTurn}
         authBusyProvider=""
         authStatuses={{}}
         channelToolsRef={createRef<HTMLDivElement>()}
@@ -359,6 +366,68 @@ function renderThreadPane({
 }
 
 describe("ConversationPane", () => {
+  it("shows the pending reply beside the agent avatar before its progress message arrives", async () => {
+    const participant = {
+      id: "u-manager",
+      name: "manager",
+      participantID: "pt-manager",
+      roomID: "room-1",
+      requestID: "request-pending",
+      leaseID: "lease-pending",
+      canStop: true,
+    };
+    const onStopWorkingTurn = vi.fn();
+    const { container } = renderThreadPane({ workingParticipants: [participant], onStopWorkingTurn });
+    const pending = screen.getByText("Preparing a reply").closest(".message-row");
+    expect(pending).not.toBeNull();
+    expect(pending?.querySelector(".avatar")).toBeInTheDocument();
+    expect(container.querySelector(".composer > .composer-working")).not.toBeInTheDocument();
+    await userEvent.click(within(pending as HTMLElement).getByRole("button", { name: "conversationWorkingStopAria" }));
+    expect(onStopWorkingTurn).toHaveBeenCalledWith(expect.objectContaining(participant));
+  });
+
+  it.each(["running", "succeeded", "canceled"])(
+    "replaces the pending reply with a matching %s message without duplicating controls",
+    (status) => {
+      const participant = {
+        id: "u-manager",
+        name: "manager",
+        participantID: "pt-manager",
+        roomID: "room-1",
+        requestID: "request-pending",
+        leaseID: "lease-pending",
+        canStop: true,
+      };
+      const { container } = renderThreadPane({
+        workingParticipants: [participant],
+        messages: [
+          {
+            id: "progress-message",
+            sender_id: "u-manager",
+            content: status === "running" ? "\u200b" : "Done",
+            metadata: {
+              csgclaw: {
+                request_id: "request-pending",
+                turn_progress: {
+                  id: "turn-pending",
+                  revision: 1,
+                  status,
+                  started_at: "2026-10-19T00:00:00Z",
+                  items: [],
+                },
+              },
+            },
+          },
+        ],
+      });
+      expect(container.querySelector("[data-work-lease-id]")).not.toBeInTheDocument();
+      expect(container.querySelector(".composer > .composer-working")).not.toBeInTheDocument();
+      expect(container.querySelectorAll(".message-row .composer-working-stop")).toHaveLength(
+        status === "running" ? 1 : 0,
+      );
+    },
+  );
+
   beforeEach(() => {
     window.localStorage.clear();
   });
@@ -1167,8 +1236,9 @@ describe("ConversationPane", () => {
 
     const view = render(<Harness />);
 
-    expect(screen.getByRole("status")).toHaveTextContent("AtlasPreparing a reply");
-    expect(screen.getByRole("status")).toHaveTextContent("BramPreparing a reply");
+    const pendingRows = screen.getAllByRole("status").map((status) => status.closest(".message-row"));
+    expect(pendingRows[0]).toHaveTextContent("AtlasPreparing a reply");
+    expect(pendingRows[1]).toHaveTextContent("BramPreparing a reply");
     expect(screen.queryByRole("button", { name: "View activity" })).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "View Atlas's activity: Preparing a reply" }));
 

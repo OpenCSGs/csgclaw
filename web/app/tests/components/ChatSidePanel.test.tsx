@@ -55,13 +55,14 @@ function Harness({
     editorRef,
     t,
   });
+  const { openTab } = tools.controller;
   const openedThread = useRef(false);
   useEffect(() => {
     if (initialThread && !openedThread.current) {
       openedThread.current = true;
-      tools.controller.openTab({ id: "thread", kind: "thread", rootID: "thread-root" });
+      openTab({ id: "thread", kind: "thread", rootID: "thread-root" });
     }
-  }, [initialThread, tools.controller.openTab]);
+  }, [initialThread, openTab]);
   return (
     <main className="chat-panel">
       <header className="chat-header">{tools.toolbar}</header>

@@ -1,0 +1,20 @@
+.avatar:global(.avatar) {
+  position: relative;
+  flex: 0 0 40px;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+}
+.status {
+  font: var(--text-sm-normal);
+}
+.status :global(.composer-working-item) {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.status :global(.composer-working-verb) {
+  color: var(--muted);
+}

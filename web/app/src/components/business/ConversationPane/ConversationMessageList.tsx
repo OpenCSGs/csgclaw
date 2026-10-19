@@ -50,6 +50,7 @@ export type ConversationMessageListProps = {
   currentUserID?: string;
   emptyStateSlot?: ReactNode;
   headerSlot?: ReactNode;
+  footerSlot?: ReactNode;
   renderTurnControls?: (message: IMMessage) => ProgressControlSlots | null;
   renderMessageFooter?: (message: IMMessage) => ReactNode;
   locale: LocaleCode;
@@ -97,6 +98,7 @@ const MessageListContent = memo(function MessageListContent({
   currentUserID = "",
   emptyStateSlot,
   headerSlot,
+  footerSlot,
   renderMessageFooter,
   renderTurnControls,
   locale,
@@ -301,6 +303,7 @@ const MessageListContent = memo(function MessageListContent({
             </Fragment>
           );
         })}
+        {footerSlot}
       </section>
       <MessageTimeline key={conversation.id} items={timelineItems} scrollRef={messageListRef} t={t} />
     </div>
