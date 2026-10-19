@@ -217,7 +217,9 @@ func (p *progressState) finish(ctx context.Context, result agentengine.TurnResul
 	}
 	p.snapshot.Status = string(result.Status)
 	p.snapshot.EndedAt = time.Now().UTC().Format(time.RFC3339Nano)
-	if result.Error != nil {
+	// A canceled runtime call can carry context.Canceled as its cause. Keep the
+	// stopped state and interrupted tools without presenting a runtime failure.
+	if result.Status == agentengine.TurnFailed && result.Error != nil {
 		p.snapshot.Error = result.Error.Message
 		p.snapshot.ErrorCode = string(result.Error.Code)
 	}

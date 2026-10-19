@@ -91,7 +91,7 @@ func (r *progressBrowserRuntime) Run(ctx context.Context, req agentengine.TurnRe
 		for waiting {
 			select {
 			case <-ctx.Done():
-				return agentengine.TurnResult{Status: agentengine.TurnCanceled}
+				return agentengine.TurnResult{Status: agentengine.TurnCanceled, Error: &agentengine.TurnError{Code: agentengine.ErrorRuntimeFailed, Message: context.Canceled.Error()}}
 			case <-gate:
 				waiting = false
 			case <-ticker.C:
@@ -108,7 +108,7 @@ func (r *progressBrowserRuntime) Run(ctx context.Context, req agentengine.TurnRe
 	emit(agentengine.TurnEvent{Kind: agentengine.TurnEventTextDelta, ItemID: "answer", Phase: phase, Text: "，命令执行成功。"})
 	select {
 	case <-ctx.Done():
-		return agentengine.TurnResult{Status: agentengine.TurnCanceled}
+		return agentengine.TurnResult{Status: agentengine.TurnCanceled, Error: &agentengine.TurnError{Code: agentengine.ErrorRuntimeFailed, Message: context.Canceled.Error()}}
 	case <-gate:
 	}
 	if strings.HasPrefix(id, "failed") {

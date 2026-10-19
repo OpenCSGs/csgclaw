@@ -169,6 +169,28 @@ func TestProgressUnphasedSegmentationAndCancellation(t *testing.T) {
 		})
 	}
 }
+func TestCanceledProgressDoesNotPresentRuntimeFailure(t *testing.T) {
+	renderer, service, turn := progressFixture(t)
+	ctx := context.Background()
+	if err := renderer.Emit(ctx, turn, agentengine.TurnEvent{Sequence: 1, Kind: agentengine.TurnEventToolCallStart, Tool: &agentengine.ToolActivity{ID: "cancel-tool", Kind: "custom_tool", Status: "started"}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := renderer.Complete(ctx, turn, agentengine.TurnResult{
+		Status: agentengine.TurnCanceled,
+		Error:  &agentengine.TurnError{Code: agentengine.ErrorRuntimeFailed, Message: context.Canceled.Error()},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	msg, progress := progressMessage(t, service)
+	metadata := msg.Metadata["csgclaw"].(map[string]any)
+	if progress.Status != "canceled" || progress.Error != "" || progress.ErrorCode != "" || metadata["runtime_error"] != nil || metadata["error_detail"] != nil {
+		t.Fatalf("cancellation presented as failure: progress=%+v metadata=%+v", progress, metadata)
+	}
+	if len(progress.Items) != 1 || progress.Items[0].Tool.Status != "interrupted" || !im.IsAgentActivityMessage(msg) {
+		t.Fatalf("cancellation lost interrupted activity: message=%+v progress=%+v", msg, progress)
+	}
+}
+
 func TestProgressCoalescesReasoningAndFlushesTail(t *testing.T) {
 	renderer, service, turn := progressFixture(t)
 	ctx := context.Background()

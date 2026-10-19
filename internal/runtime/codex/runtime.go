@@ -2195,6 +2195,7 @@ func stopProcess(pid int) error {
 		}
 		return err
 	}
+	defer proc.Release()
 	_ = proc.Signal(os.Interrupt)
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {

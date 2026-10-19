@@ -1968,6 +1968,15 @@ func (m *appServerManager) waitAppServerTurn(ctx context.Context, live *liveSess
 			return PromptResponse{}, m.failTimedOutAppServerTurn(live, waiter, "maximum turn duration", maximumDuration)
 		case <-ctx.Done():
 			return m.stopCanceledAppServerTurn(ctx, live, waiter, "prompt context canceled")
+		case <-live.done:
+			// A terminal notification can arrive just before process exit.
+			if _, completed := waiter.terminalResult(); completed {
+				continue
+			}
+			if err := ctx.Err(); err != nil {
+				return PromptResponse{StopReason: StopReasonInterrupted}, err
+			}
+			return PromptResponse{}, fmt.Errorf("codex app-server exited during turn: runtime_id=%s thread_id=%s", live.spec.RuntimeID, waiter.threadID)
 		}
 	}
 }

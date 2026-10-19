@@ -176,4 +176,38 @@ describe("useParticipantWorkStatus", () => {
       }),
     );
   });
+  it("keeps an active turn stoppable across ordinary participant updates", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(startedAt);
+    const { result } = renderHook(() =>
+      useParticipantWorkStatus({ agents: [], users: [{ id: "user-worker", name: "Worker" }] }),
+    );
+    act(() => result.current.handleRealtimeEvent(workEvent({ capabilities: ["turn_stop_v1"] })));
+    act(() =>
+      result.current.handleRealtimeEvent({
+        type: "participant.updated",
+        participant: { id: "pt-worker", user_id: "user-worker", metadata: { display_name: "Updated Worker" } },
+      }),
+    );
+    expect(result.current.workingParticipantsForRoom("room-1")).toEqual([
+      expect.objectContaining({ canStop: true, leaseID: "lease-1", requestID: "message-1" }),
+    ]);
+  });
+
+  it("removes an active turn when its participant is deleted", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(startedAt);
+    const { result } = renderHook(() =>
+      useParticipantWorkStatus({ agents: [], users: [{ id: "user-worker", name: "Worker" }] }),
+    );
+    act(() => result.current.handleRealtimeEvent(workEvent({ capabilities: ["turn_stop_v1"] })));
+    act(() =>
+      result.current.handleRealtimeEvent({
+        type: "participant.deleted",
+        participant: { id: "pt-worker", user_id: "user-worker" },
+      }),
+    );
+    expect(result.current.workingParticipantsForRoom("room-1")).toEqual([]);
+    expect(result.current.hasObservedWorkLease("pt-worker")).toBe(false);
+  });
 });
