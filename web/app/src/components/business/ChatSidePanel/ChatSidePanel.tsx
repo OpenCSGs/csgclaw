@@ -167,6 +167,11 @@ export function ChatSidePanel({
         ?.focus({ preventScroll: true }),
     );
   }
+  function closeAll() {
+    const hasThread = state.tabs.some((tab) => tab.kind === "thread");
+    patch({ tabs: [], activeID: "" });
+    if (hasThread) onThreadClose();
+  }
   function persistWidth(next: number) {
     setWidth(next);
     try {
@@ -284,7 +289,7 @@ export function ChatSidePanel({
               variant="tertiaryGray"
               aria-label={t("chatSideCloseAll")}
               disabled={!state.tabs.length}
-              onClick={() => patch({ tabs: [], activeID: "" })}
+              onClick={closeAll}
             >
               <X size={17} />
             </Button>

@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useFileMentions } from "@/components/business/ConversationPane/FileMentionPicker/useFileMentions";
@@ -38,9 +38,13 @@ const conversation: IMConversation = {
 function Harness({
   room = conversation,
   availableAgents = agents,
+  initialThread = false,
+  onThreadClose = () => {},
 }: {
   room?: IMConversation;
   availableAgents?: typeof agents;
+  initialThread?: boolean;
+  onThreadClose?: () => void;
 }) {
   const editorRef = useRef<HTMLDivElement>(null);
   const tools = useChatTools({
@@ -51,6 +55,13 @@ function Harness({
     editorRef,
     t,
   });
+  const openedThread = useRef(false);
+  useEffect(() => {
+    if (initialThread && !openedThread.current) {
+      openedThread.current = true;
+      tools.controller.openTab({ id: "thread", kind: "thread", rootID: "thread-root" });
+    }
+  }, [initialThread, tools.controller.openTab]);
   return (
     <main className="chat-panel">
       <header className="chat-header">{tools.toolbar}</header>
@@ -71,7 +82,7 @@ function Harness({
         onSources={tools.openSources}
         onCollapse={tools.collapse}
         onThreadSelect={() => {}}
-        onThreadClose={() => {}}
+        onThreadClose={onThreadClose}
       />
     </main>
   );
@@ -260,6 +271,17 @@ describe("shared chat sidebar", () => {
     await user.click(within(panel).getByRole("button", { name: "Close all tabs" }));
     expect(within(panel).queryAllByRole("tab")).toHaveLength(0);
     expect(within(panel).getByRole("button", { name: /Workspace files/ })).toBeVisible();
+  });
+
+  it("clears the selected thread lifecycle when closing all tabs", async () => {
+    const user = userEvent.setup();
+    const onThreadClose = vi.fn();
+    render(<Harness initialThread onThreadClose={onThreadClose} />, { wrapper: createQueryWrapper().wrapper });
+    const panel = screen.getByRole("complementary");
+    await screen.findByRole("tab", { name: "Thread" });
+    await user.click(within(panel).getByRole("button", { name: "Close all tabs" }));
+    expect(onThreadClose).toHaveBeenCalledOnce();
+    expect(within(panel).queryAllByRole("tab")).toHaveLength(0);
   });
 
   beforeEach(() => {
