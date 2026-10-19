@@ -190,7 +190,7 @@ func (s *Service) ChatCompletionsStream(ctx context.Context, botID string, body 
 	if err != nil {
 		return nil, err
 	}
-	return s.forwardRemoteChat(ctx, profile, body)
+	return s.forwardRemoteChat(withModelRequestContext(ctx, botID, profile, body), profile, body)
 }
 
 func (s *Service) Responses(ctx context.Context, botID string, body []byte) (*UpstreamResponse, error) {
@@ -198,7 +198,7 @@ func (s *Service) Responses(ctx context.Context, botID string, body []byte) (*Up
 	if err != nil {
 		return nil, err
 	}
-	return s.forwardRemoteResponses(ctx, profile, body)
+	return s.forwardRemoteResponses(withModelRequestContext(ctx, botID, profile, body), profile, body)
 }
 
 func (s *Service) ResponsesWebsocket(w http.ResponseWriter, r *http.Request, botID string) error {
@@ -618,12 +618,14 @@ func compactUpstreamErrorStreamFromBody(resp *http.Response, body []byte, billin
 	rawBody := append([]byte(nil), body...)
 	body, contentType := compactUpstreamErrorResponse(resp.StatusCode, body, billingURL)
 	code := modelprovider.UpstreamErrorCodeForResponse(resp.StatusCode, rawBody)
-	slog.Error("model upstream request failed",
+	attrs := []any{
 		"status", resp.StatusCode,
 		"code", code,
 		"upstream_request_id", upstreamRequestID(resp.Header),
 		"response_body", upstreamErrorBodyForLog(rawBody),
-	)
+	}
+	attrs = append(attrs, modelRequestLogAttrs(resp.Request)...)
+	slog.Error("model upstream request failed", attrs...)
 	header := resp.Header.Clone()
 	header.Del("Content-Length")
 	header.Del("Content-Encoding")

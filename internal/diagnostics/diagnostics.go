@@ -348,6 +348,15 @@ func (r *Record) RuntimeInfo(kind, model string) {
 	r.data.Model = Redact(model)
 	r.mu.Unlock()
 }
+
+func (r *Record) requestModel(model string) {
+	if r == nil || model == "" {
+		return
+	}
+	r.mu.Lock()
+	r.data.Model = Redact(model)
+	r.mu.Unlock()
+}
 func (r *Record) RuntimeStart() {
 	if r == nil {
 		return

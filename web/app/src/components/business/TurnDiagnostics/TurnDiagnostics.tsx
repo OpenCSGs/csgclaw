@@ -1,4 +1,5 @@
 import { useTurnDiagnostics } from "./useTurnDiagnostics";
+import { localizeAgentLogTimestamps } from "@/models/agentLogs";
 import { flattenMentionText } from "@/components/business/MessageContent";
 import { DiagnosticTimeline } from "./DiagnosticTimeline";
 import { DiagnosticBreakdown, DiagnosticCalls, DiagnosticSpanFields } from "./DiagnosticAnalysis";
@@ -393,7 +394,9 @@ export function TurnDiagnostics({ room, source = "", turn, agents = [], t, onClo
             <section className={styles.logPanel}>
               <h3>{t("diagAgentLogs", { name: activeAgentName })}</h3>
               <p className={styles.hint}>{t("diagAgentLogsScope")}</p>
-              <pre className={styles.raw}>{logsLoading ? t("agentLogsLoading") : logs || t("agentLogsEmpty")}</pre>
+              <pre className={styles.raw}>
+                {logsLoading ? t("agentLogsLoading") : localizeAgentLogTimestamps(logs) || t("agentLogsEmpty")}
+              </pre>
             </section>
           ) : (
             <>

@@ -216,6 +216,14 @@ type nativeLookup struct {
 }
 type nativeLookupKey struct{}
 
+type requestModelKey struct{}
+
+// WithRequestModel records the selected upstream model, independent of a
+// runtime's cached model name or an upstream response's deployment alias.
+func WithRequestModel(ctx context.Context, model string) context.Context {
+	return context.WithValue(ctx, requestModelKey{}, model)
+}
+
 func WithNativeLookup(ctx context.Context, store *Store, agent, session, turn string) context.Context {
 	return context.WithValue(ctx, nativeLookupKey{}, nativeLookup{store, agent, session, turn})
 }
@@ -258,6 +266,8 @@ func ObserveRequest(ctx context.Context, operation string) (func(int, *float64),
 	var mu sync.Mutex
 	started := time.Now()
 	record := Resolve(ctx)
+	model, _ := ctx.Value(requestModelKey{}).(string)
+	record.requestModel(model)
 	id := record.Start("llm.request", "llm", "")
 	details := SpanDetails{Label: operation}
 	record.Annotate(id, details)
@@ -289,6 +299,7 @@ func ObserveRequest(ctx context.Context, operation string) (func(int, *float64),
 		} else {
 			record.End(id, status)
 		}
+		record.requestModel(model)
 		record.store.schedule(record)
 	}
 	return update, finish

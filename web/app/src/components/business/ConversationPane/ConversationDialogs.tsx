@@ -12,6 +12,7 @@ import {
   Tooltip,
 } from "@/components/ui";
 import type { TranslateFn } from "@/models/conversations";
+import { localizeAgentLogTimestamps } from "@/models/agentLogs";
 import type { VoidOrPromise } from "./types";
 
 export type ConversationRoomDangerConfirmDialogProps = {
@@ -93,7 +94,7 @@ export function ConversationAgentLogsDialog({
   onRefresh,
 }: ConversationAgentLogsDialogProps) {
   const logsViewerRef = useRef<HTMLPreElement | null>(null);
-  const displayContent = content || (loading ? t("agentLogsLoading") : t("agentLogsEmpty"));
+  const displayContent = localizeAgentLogTimestamps(content) || (loading ? t("agentLogsLoading") : t("agentLogsEmpty"));
 
   useLayoutEffect(() => {
     const viewer = logsViewerRef.current;

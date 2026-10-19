@@ -15,8 +15,13 @@ import (
 // streaming bodies and retries. This is client-observed LLM service latency,
 // including network/gateway time, not pure model compute or first-token time.
 func (s *Service) modelRequest(req *http.Request) (*http.Response, error) {
+	logModelRequest(req)
 	if !diagnostics.Enabled(req.Context()) {
-		return s.client.Do(req)
+		resp, err := s.client.Do(req)
+		if err != nil {
+			logModelTransportFailure(req, err)
+		}
+		return resp, err
 	}
 	operation := "responses"
 	if strings.HasSuffix(req.URL.Path, "/chat/completions") {
@@ -26,6 +31,7 @@ func (s *Service) modelRequest(req *http.Request) (*http.Response, error) {
 	start := time.Now()
 	resp, err := s.client.Do(req)
 	if err != nil {
+		logModelTransportFailure(req, err)
 		finish("failed")
 		return resp, err
 	}

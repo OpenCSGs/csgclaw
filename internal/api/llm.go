@@ -207,9 +207,6 @@ func writeLLMError(w http.ResponseWriter, err error) {
 // Requests without that contract (including current DSH and WebSockets) remain
 // explicitly unmeasured rather than being assigned by Agent identity alone.
 func (h *Handler) withLLMDiagnostic(r *http.Request, agentID string) *http.Request {
-	if h.im == nil {
-		return r
-	}
 	raw := r.Header.Get("X-Codex-Turn-Metadata")
 	if len(raw) > 8192 || raw == "" {
 		return r
@@ -226,6 +223,10 @@ func (h *Handler) withLLMDiagnostic(r *http.Request, agentID string) *http.Reque
 		meta.Thread = meta.Session
 	}
 	if meta.Thread == "" || meta.Turn == "" || len(meta.Thread) > 256 || len(meta.Turn) > 256 {
+		return r
+	}
+	r = r.WithContext(llm.WithNativeRequestMetadata(r.Context(), meta.Thread, meta.Turn))
+	if h.im == nil {
 		return r
 	}
 	return r.WithContext(diagnostics.WithNativeLookup(r.Context(), h.im.Diagnostics(), agentID, meta.Thread, meta.Turn))

@@ -390,6 +390,7 @@ func (m *appServerManager) Prompt(ctx context.Context, handle SessionHandle, req
 	}
 
 	diagnostics.From(ctx).RuntimeInfo("codex", live.spec.Profile.ModelID)
+	live.appClient.logInfo("model request configuration", "model", live.spec.Profile.ModelID, "runtime_id", runtimeID, "thread_id", sessionID)
 	waiter, err := live.registerAppServerTurnWaiter(sessionID)
 	if err != nil {
 		m.publishAppServerEvent(promptFailedEvent(runtimeID, sessionID, err))

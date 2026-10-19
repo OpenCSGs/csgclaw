@@ -1,6 +1,7 @@
 package diagnostics
 
 import (
+	"context"
 	"encoding/json"
 	"strings"
 	"testing"
@@ -51,5 +52,24 @@ func TestNativeLookupRejectsCompletedTurn(t *testing.T) {
 	record.Finish("canceled")
 	if store.Native("a", "session", "native") != nil {
 		t.Fatal("stale HTTP request attached to a completed turn")
+	}
+}
+
+func TestRequestModelSurvivesLateNativeBinding(t *testing.T) {
+	store := New("")
+	record := store.Begin("room", "source", "", "agent", "turn")
+	record.Running()
+	record.RuntimeInfo("codex", "old-model")
+	ctx := WithNativeLookup(WithRequestModel(context.Background(), "glm-5.3-flash"), store, "agent", "session", "native-turn")
+	update, finish := ObserveRequest(ctx, "responses")
+	update(400, nil)
+	record.RuntimeRef("session", "native-turn", "")
+	finish("failed")
+	snapshot := record.Snapshot()
+	if snapshot.Runtime != "codex" || snapshot.Model != "glm-5.3-flash" {
+		t.Fatalf("wrong execution identity: %+v", snapshot)
+	}
+	if len(snapshot.Spans) == 0 || snapshot.Spans[len(snapshot.Spans)-1].Details.HTTPStatus != 400 {
+		t.Fatalf("lost delayed request observation: %+v", snapshot.Spans)
 	}
 }
