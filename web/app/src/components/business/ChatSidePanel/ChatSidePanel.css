@@ -243,7 +243,27 @@
   background: var(--panel);
   border-color: var(--primary);
 }
-.chat-side-welcome > button > span {
+.chat-side-welcome-icon {
+  display: grid;
+  flex: 0 0 32px;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border-radius: var(--radius-md);
+}
+.chat-side-welcome-files .chat-side-welcome-icon {
+  color: var(--orange-500);
+  background: color-mix(in srgb, var(--orange-500) 14%, var(--panel));
+}
+.chat-side-welcome-browser .chat-side-welcome-icon {
+  color: var(--primary);
+  background: var(--primary-soft);
+}
+.chat-side-welcome-activity .chat-side-welcome-icon {
+  color: var(--success-text);
+  background: var(--success-background);
+}
+.chat-side-welcome-content {
   display: grid;
   gap: 4px;
 }

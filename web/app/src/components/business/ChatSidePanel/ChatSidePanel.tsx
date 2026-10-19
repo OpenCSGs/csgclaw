@@ -458,9 +458,11 @@ function WelcomeTab({ t, onSelect }: { t: TranslateFn; onSelect: (kind: "files" 
       {(["files", "browser", "activity"] as const).map((kind) => {
         const Icon = kind === "files" ? FolderIcon : kind === "browser" ? Globe : Activity;
         return (
-          <button key={kind} type="button" onClick={() => onSelect(kind)}>
-            <Icon size={24} />
-            <span>
+          <button key={kind} className={`chat-side-welcome-${kind}`} type="button" onClick={() => onSelect(kind)}>
+            <span className="chat-side-welcome-icon">
+              <Icon size={18} />
+            </span>
+            <span className="chat-side-welcome-content">
               <strong>
                 {t(
                   kind === "files"
