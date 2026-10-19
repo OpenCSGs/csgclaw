@@ -20,7 +20,7 @@ function t(key: string, params: Record<string, string | number> = {}) {
   const messages: Record<string, string> = {
     cancel: "Cancel",
     close: "Close",
-    createAgent: "Create",
+    iaTemplateCreateAgent: "Create agent",
     agentPublishCommunity: "Publish to community",
     resourcesTemplatePublished: "Published",
     resourcesTemplatePublishedOnHub: "Published on AgenticHub",
@@ -791,7 +791,7 @@ describe("HubDetailPane", () => {
     }
     render(<Harness />);
     expect(screen.getByRole("dialog")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Create" }));
+    await user.click(screen.getByRole("button", { name: "Create agent" }));
     const name = await screen.findByRole("textbox", { name: "Agent name" });
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(onCreate).toHaveBeenCalledWith(selectedTemplate);
@@ -1194,7 +1194,7 @@ describe("HubDetailPane", () => {
       },
     });
     await openTemplateDetail(user, /generic-assistant-openclaw/i);
-    expect(screen.queryByRole("button", { name: "Create" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Create agent" })).not.toBeInTheDocument();
   });
 
   it("allows agent creation for remote OpenClaw templates", async () => {
@@ -1209,7 +1209,7 @@ describe("HubDetailPane", () => {
     });
 
     await openTemplateDetail(user, /feishu-assistant/i);
-    expect(screen.getByRole("button", { name: "Create" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Create agent" })).toBeInTheDocument();
   });
 
   it.each([false, true])("groups template details into working tabs (inline: %s)", async (inlineTemplateDetail) => {

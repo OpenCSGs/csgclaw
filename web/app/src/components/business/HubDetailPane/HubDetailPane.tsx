@@ -1965,8 +1965,13 @@ export function HubDetailPane({
                     </div>
                   </div>
                   <div className={moduleClassNames("hub-template-actions")}>
-                    <Button variant="primary" size="md" onClick={() => onCreateFromTemplate?.(selectedTemplate)}>
-                      <span>{t("createAgent")}</span>
+                    <Button
+                      variant="primary"
+                      size="md"
+                      title={t("iaTemplateCreateAgentHint")}
+                      onClick={() => onCreateFromTemplate?.(selectedTemplate)}
+                    >
+                      <span>{t("iaTemplateCreateAgent")}</span>
                     </Button>
                     {hasCloudTemplateWithSameName && templatesURL ? (
                       <LinkButton
@@ -3215,12 +3220,13 @@ export function HubDetailPane({
                   <Button
                     variant="primary"
                     size="md"
+                    title={t("iaTemplateCreateAgentHint")}
                     onClick={() => {
                       setTemplateDetailDialogOpen(false);
                       void onCreateFromTemplate?.(selectedTemplate);
                     }}
                   >
-                    {t("createAgent")}
+                    {t("iaTemplateCreateAgent")}
                   </Button>
                 ) : null}
               </DialogFooter>

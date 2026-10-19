@@ -271,6 +271,7 @@ export type UseAgentControllerArgs = {
   modelProvidersLoaded?: boolean;
   openCSGAuthGuard: OpenCSGAuthGuard;
   onAgentDeleted?: (item: AgentLike) => void;
+  onBrowseTemplates?: () => void;
   onTemplatePublished?: (template: HubTemplate) => void;
   profileDetailAgentID?: string;
   redirectToIncompleteManagerProfile?: boolean;
@@ -279,7 +280,6 @@ export type UseAgentControllerArgs = {
   refreshWorkspaceAgents: (options?: FetchAgentsOptions) => Promise<AgentLike[]>;
   refreshWorkspaceBootstrap: () => Promise<IMData | null>;
   refreshWorkspaceBootstrapConfig: () => Promise<RuntimeBootstrapConfig | null>;
-  refreshWorkspaceHubTemplates?: () => Promise<HubTemplate[]>;
   refreshWorkspaceManagerProfile: () => Promise<AgentProfileLike | null>;
   refreshWorkspaceModelProviders?: () => Promise<ModelProviderCatalog | null>;
   rooms: IMConversation[];

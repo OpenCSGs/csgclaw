@@ -1,6 +1,6 @@
 import { AgentModelConfiguration } from "@/components/business/AgentModelConfiguration";
 import { BOT_TYPE_NORMAL, DEFAULT_RUNTIME_KIND } from "@/shared/constants/agents";
-import { useEffect, useMemo, useRef, useState, type SetStateAction } from "react";
+import { useEffect, useState, type SetStateAction } from "react";
 import {
   AgentCreateProgress,
   type AgentCreateProgressProps,
@@ -13,29 +13,23 @@ import {
   RuntimeOptionsFields,
 } from "@/components/business/ProfileControls";
 import { Button, Select } from "@/components/ui";
-import { AgentAvatarPicker } from "@/components/business/AgentAvatar";
+import { AgentAvatarContent, AgentAvatarPicker } from "@/components/business/AgentAvatar";
 import { RuntimeInstallProgress } from "@/components/business/RuntimeInstallProgress";
 import type { AgentRuntimeInstallation } from "@/api/agentRuntimes";
 import {
   agentRuntimeKind,
   agentDraftMissingRequiredEnv,
   agentCreateTemplateLocked,
-  applyTemplateToDraft,
   agentTemplateDisplayName,
   composeLegacyRuntimeKind,
-  createAgentSelectableTemplates,
   formatRuntimeKindLabel,
-  isBuiltinOpenClawWorkerTemplate,
   isNotificationBotDraftContext,
   normalizeRuntimeKind,
   normalizeRuntimeName,
-  normalizeTemplateSelection,
   notifierFormIsComplete,
-  pickDefaultAgentTemplate,
   defaultWorkerImageForRuntime,
   runtimeOptionSchemasForAgent,
   supportsMCPServers,
-  templateMatchesRuntime,
 } from "@/models/agents";
 import type { AgentDraft, AgentLike, RuntimeBootstrapConfig } from "@/models/agents";
 import {
@@ -50,7 +44,10 @@ import {
 import type { TranslateFn } from "@/models/conversations";
 import type { LocaleCode } from "@/models/conversations";
 import type { HubTemplate } from "@/models/hubWorkspace";
+import type { AgentCreationResources } from "@/models/agentCreation";
+import { AgentCreateWizard } from "./AgentCreateWizard";
 import { ModalCloseButton } from "./ModalCloseButton";
+import styles from "./AgentProfileModal.module.css";
 
 type AgentModalMode = "create" | "edit";
 type AgentCreateMode = "template" | "custom";
@@ -59,8 +56,11 @@ type VoidOrPromise = void | Promise<void>;
 
 export type AgentProfileModalProps = {
   agentBusy?: boolean;
+  agentInitializing?: boolean;
   agentCreateBotKind: string;
   agentCreateMode?: AgentCreateMode;
+  creationWizard?: boolean;
+  openCSGAuthenticated?: boolean;
   agentDraft: AgentDraft;
   agentError?: string;
   agentBillingURL?: string;
@@ -81,14 +81,14 @@ export type AgentProfileModalProps = {
   managerAgent?: AgentLike | null;
   notifierWebhookPublicOrigin?: string;
   onAgentCreateBotKindChange: (kind: string) => void;
-  onAgentCreateModeChange?: (mode: AgentCreateMode) => void;
+  onBrowseTemplates?: () => void;
   onAgentDraftChange: (update: AgentDraftUpdate) => void;
   onAgentModelsReset: () => void;
   onClose: () => void;
   onProviderLogin?: (provider: string) => VoidOrPromise;
   onRequireOpenCSGAuth?: () => boolean;
   onInstallRuntime?: (name: string) => VoidOrPromise;
-  onSave: () => VoidOrPromise;
+  onSave: (resources?: AgentCreationResources) => VoidOrPromise;
   locale: LocaleCode;
   t: TranslateFn;
 };
@@ -97,10 +97,12 @@ export function AgentProfileModal({
   t,
   agentModalMode,
   agentCreateBotKind,
-  agentCreateMode = "template",
+  agentCreateMode = "custom",
+  creationWizard = false,
+  openCSGAuthenticated = false,
   editingAgent,
   agentDraft,
-  onAgentCreateModeChange = () => {},
+  onBrowseTemplates,
   onAgentDraftChange,
   onAgentModelsReset,
   hubTemplates = [],
@@ -115,6 +117,7 @@ export function AgentProfileModal({
   agentBillingURL = "",
   agentProgress = null,
   agentBusy = false,
+  agentInitializing = false,
   runtimeInstallBusy = false,
   runtimeInstallError = "",
   runtimeInstallation = null,
@@ -124,8 +127,8 @@ export function AgentProfileModal({
   onInstallRuntime = () => {},
   onSave,
 }: AgentProfileModalProps) {
+  const [wizardPortal, setWizardPortal] = useState<HTMLDivElement | null>(null);
   const [mcpServersInvalid, setMCPServersInvalid] = useState(false);
-  const lastTemplateIDRef = useRef("");
   const createBotKind = agentModalMode === "create" ? agentCreateBotKind : undefined;
   const isNotificationContext = isNotificationBotDraftContext(agentDraft, editingAgent, createBotKind);
   const isWorkerCreate = agentModalMode === "create" && !isNotificationContext;
@@ -173,17 +176,9 @@ export function AgentProfileModal({
   const selectedProvider = providerOptions.find((option) => option.id === selectedProviderID) ?? null;
   const selectedProviderModels = modelIDsForProviderSelection(selectedProviderID, selectedProvider?.models ?? []);
   const selectedModelValue = agentDraft.model_id || "";
-  const workerTemplates = useMemo(() => {
-    const selectableTemplates = createAgentSelectableTemplates(hubTemplates);
-    const selectedBuiltinOpenClawTemplate = hubTemplates.find(
-      (item) =>
-        item.id === (agentDraft.from_template || lastTemplateIDRef.current) && isBuiltinOpenClawWorkerTemplate(item),
-    );
-    return selectedBuiltinOpenClawTemplate
-      ? [selectedBuiltinOpenClawTemplate, ...selectableTemplates]
-      : selectableTemplates;
-  }, [agentDraft.from_template, hubTemplates]);
-  const selectedWorkerTemplate = workerTemplates.find((item) => item.id === agentDraft.from_template) ?? null;
+  const selectedWorkerTemplate = hubTemplates.find((item) => item.id === agentDraft.from_template) ?? null;
+  const selectedTemplateName =
+    agentTemplateDisplayName(selectedWorkerTemplate) || agentDraft.template_name || agentDraft.from_template;
   const isCSGHubSandboxProvider =
     String(bootstrapConfig?.sandbox_provider || "")
       .trim()
@@ -261,42 +256,6 @@ export function AgentProfileModal({
     </div>
   ) : null;
 
-  function defaultCustomWorkerDraft(baseDraft: AgentDraft): AgentDraft {
-    const codexAvailable = isCSGHubSandboxProvider || codexChoice?.installed !== false;
-    const runtimeName = codexAvailable ? "codex" : defaultSandboxRuntimeName;
-    const nextSandboxEnabled = !codexAvailable;
-    const runtimeKind = composeLegacyRuntimeKind(runtimeName, nextSandboxEnabled) || DEFAULT_RUNTIME_KIND;
-    return {
-      ...baseDraft,
-      bot_type: BOT_TYPE_NORMAL,
-      description: "",
-      envRows: [],
-      name: "",
-      sandbox_enabled: nextSandboxEnabled,
-      runtime_name: runtimeName,
-      runtime_kind: runtimeKind,
-      image: nextSandboxEnabled
-        ? defaultWorkerImageForRuntime(
-            hubTemplates,
-            runtimeKind,
-            bootstrapConfig,
-            baseDraft.default_image || managerAgent?.image || "",
-          )
-        : "",
-      from_template: "",
-      template_name: "",
-    };
-  }
-
-  useEffect(() => {
-    if (isTemplateCreate) {
-      const nextTemplateID = String(agentDraft.from_template || "").trim();
-      if (nextTemplateID) {
-        lastTemplateIDRef.current = nextTemplateID;
-      }
-    }
-  }, [agentDraft.from_template, isTemplateCreate]);
-
   function setSandboxEnabled(nextSandboxEnabled: boolean) {
     if (!isWorkerCreate) {
       return;
@@ -346,52 +305,339 @@ export function AgentProfileModal({
     }
   }, [showMCPServers]);
 
-  function switchCreateMode(nextMode: AgentCreateMode) {
-    if (!isWorkerCreate || nextMode === agentCreateMode) {
-      return;
-    }
-    onAgentCreateModeChange(nextMode);
-    if (nextMode === "template") {
-      const nextTemplate = normalizeTemplateSelection(
-        workerTemplates.find((item) => item.id === lastTemplateIDRef.current) ||
-          workerTemplates.find((item) => item.id === agentDraft.from_template) ||
-          pickDefaultAgentTemplate(workerTemplates, "codex", bootstrapConfig) ||
-          null,
-      );
-      onAgentDraftChange((current) => {
-        const next = current
-          ? applyTemplateToDraft(current, nextTemplate, bootstrapConfig, managerAgent?.image || "")
-          : current;
-        return next;
-      });
-      return;
-    }
-    onAgentDraftChange((current) => (current ? defaultCustomWorkerDraft(current) : current));
-  }
+  const useWizard = creationWizard && isCustomCreate;
+  const saveDisabled =
+    agentBusy ||
+    agentInitializing ||
+    mcpServersInvalid ||
+    isBlank(agentDraft.name) ||
+    (isNotificationContext
+      ? !notifierFormIsComplete(agentDraft, editingAgent)
+      : isTemplateCreate
+        ? !agentDraft.from_template ||
+          !agentDraft.model_provider_id ||
+          !agentDraft.model_id ||
+          missingRequiredEnv ||
+          selectedRuntimeUnavailable
+        : !agentDraft.model_provider_id || !agentDraft.model_id || selectedRuntimeUnavailable);
 
-  useEffect(() => {
-    if (!isTemplateCreate || agentDraft.from_template || !workerTemplates.length) {
-      return;
-    }
-    const nextTemplate = normalizeTemplateSelection(
-      pickDefaultAgentTemplate(workerTemplates, "codex", bootstrapConfig),
+  const editor = (
+    <div className={useWizard ? styles.wizardProfile : "profile-editor-shell"}>
+      {agentInitializing ? <p role="status">{t("agentWizardLoadingConfiguration")}</p> : null}
+      <section className="profile-section agent-identity-section">
+        {!isNotificationContext ? (
+          <div className="profile-section-heading">
+            <div className="profile-section-title">{t("profileBasics")}</div>
+            <p className="profile-section-description">{t("profileBasicsDescription")}</p>
+          </div>
+        ) : null}
+        <div className="agent-section-form">
+          <div className="agent-section-form-content agent-basics-form-content">
+            <div className="agent-identity-layout">
+              <div className="field agent-avatar-field">
+                <span className="field-label">{t("agentAvatar")}</span>
+                <AgentAvatarPicker
+                  value={agentDraft.avatar}
+                  t={t}
+                  mode="edit"
+                  portalContainer={useWizard ? wizardPortal : undefined}
+                  onChange={(avatar) => onAgentDraftChange({ ...agentDraft, avatar })}
+                />
+              </div>
+              <label className="field agent-name-field">
+                {requiredFieldLabel(t("agentName"))}
+                <input
+                  value={agentDraft.name}
+                  required
+                  aria-required="true"
+                  onInput={(event) => onAgentDraftChange({ ...agentDraft, name: event.currentTarget.value })}
+                  placeholder={t("agentNamePlaceholder")}
+                />
+              </label>
+              <label className="field agent-description-field">
+                <span>{t("agentDescription")}</span>
+                <textarea
+                  className="compact-textarea"
+                  value={agentDraft.description}
+                  onInput={(event) => onAgentDraftChange({ ...agentDraft, description: event.currentTarget.value })}
+                />
+              </label>
+            </div>
+            {isCustomCreate && onBrowseTemplates ? (
+              <div className={styles.browseTemplates}>
+                <span>{t("iaCreateAgentBrowseTemplatesHint")}</span>
+                <Button variant="secondaryGray" size="sm" onClick={onBrowseTemplates} disabled={agentBusy}>
+                  {t("iaCreateAgentBrowseTemplates")}
+                </Button>
+              </div>
+            ) : null}
+          </div>
+        </div>
+      </section>
+      {isTemplateCreate ? (
+        <section className="profile-section">
+          <div className="profile-section-heading">
+            <div className="profile-section-title">{t("createAgentTemplateSectionTitle")}</div>
+            <p className="profile-section-description">{t("createAgentTemplateSectionDescription")}</p>
+          </div>
+          <div className="agent-section-form">
+            <div className="profile-grid profile-grid-compact agent-basics-grid">
+              <div className="field span-2">
+                <span>{t("templateLabel")}</span>
+                <div className={styles.templateCard}>
+                  <span className={styles.templateAvatar} aria-hidden="true">
+                    <AgentAvatarContent
+                      avatar={selectedWorkerTemplate?.avatar}
+                      fallback={selectedTemplateName?.slice(0, 1)}
+                    />
+                  </span>
+                  <span className={styles.templateCopy}>
+                    <strong>{selectedTemplateName}</strong>
+                    <small>{selectedWorkerTemplate?.description}</small>
+                  </span>
+                  {onBrowseTemplates ? (
+                    <Button variant="secondaryGray" size="sm" onClick={onBrowseTemplates} disabled={agentBusy}>
+                      {t("iaCreateAgentSwitchTemplate")}
+                    </Button>
+                  ) : null}
+                </div>
+                <small className="field-hint">{t("templateHelp")}</small>
+              </div>
+              {runtimeAvailabilityNotice}
+              {selectedWorkerTemplate?.image_env?.length ? (
+                <div className="field span-2">
+                  <span>{t("profileEnv")}</span>
+                  <EnvKeyValueEditor
+                    rows={agentDraft.envRows}
+                    t={t}
+                    onChange={(rows) => onAgentDraftChange({ ...agentDraft, envRows: rows })}
+                  />
+                </div>
+              ) : null}
+            </div>
+          </div>
+        </section>
+      ) : null}
+      {!isNotificationContext && !isTemplateCreate ? (
+        <section className="profile-section">
+          <div className="profile-section-heading">
+            <div className="profile-section-title">{t("profileRuntimeSection")}</div>
+            <p className="profile-section-description">{t("profileRuntimeSectionDescription")}</p>
+          </div>
+          <div className="agent-section-form">
+            <div className="profile-grid profile-grid-compact agent-basics-grid">
+              {isWorkerCreate && !isCSGHubSandboxProvider ? (
+                <div className="field span-2 agent-fast-mode-field agent-sandbox-field">
+                  <div className="field-label-with-help">
+                    <span>{t("profileSandboxEnabled")}</span>
+                    <FieldHelpTooltip detail={t("profileSandboxEnabledHelp")} />
+                  </div>
+                  <label className="selection-item compact-toggle-row agent-fast-mode-toggle agent-sandbox-toggle">
+                    <input
+                      type="checkbox"
+                      checked={sandboxEnabled}
+                      aria-label={t("profileSandboxEnabled")}
+                      onChange={() => setSandboxEnabled(!sandboxEnabled)}
+                    />
+                    <span className="agent-sandbox-copy">
+                      <strong>{sandboxEnabled ? t("statusEnabled") : t("statusDisabled")}</strong>
+                    </span>
+                  </label>
+                </div>
+              ) : null}
+              {isWorkerCreate ? (
+                <div className="agent-runtime-image-row">
+                  <label className="field">
+                    <span>{t("profileRuntimeKind")}</span>
+                    {!sandboxEnabled ? (
+                      <Select
+                        value={selectedRuntimeName || "codex"}
+                        onValueChange={(value) => {
+                          onAgentDraftChange({
+                            ...agentDraft,
+                            bot_type: BOT_TYPE_NORMAL,
+                            sandbox_enabled: false,
+                            runtime_name: normalizeRuntimeName(value) || "codex",
+                            runtime_kind: composeLegacyRuntimeKind(value, false) || "codex",
+                            image: "",
+                            from_template: "",
+                            template_name: "",
+                          });
+                        }}
+                        triggerProps={{ "aria-label": t("profileRuntimeKind") }}
+                        options={hostRuntimeChoices.map((option) => ({
+                          value: normalizeRuntimeName(option.name) || "",
+                          label: option.label || normalizeRuntimeName(option.name) || "",
+                          disabled: option.installed === false && option.installable !== true,
+                        }))}
+                      />
+                    ) : templateLocked ? (
+                      <input
+                        value={formatRuntimeKindLabel(normalizeRuntimeKind(agentDraft.runtime_kind), t)}
+                        readOnly
+                        disabled
+                      />
+                    ) : (
+                      <Select
+                        value={
+                          selectedRuntimeName || normalizeRuntimeName(sandboxRuntimeChoices[0]?.name || "openclaw")
+                        }
+                        onValueChange={(value) => {
+                          const runtimeName = normalizeRuntimeName(value);
+                          const runtimeKind = composeLegacyRuntimeKind(runtimeName, true) || DEFAULT_RUNTIME_KIND;
+                          const nextDraft: AgentDraft = {
+                            ...agentDraft,
+                            bot_type: BOT_TYPE_NORMAL,
+                            role: "worker",
+                            sandbox_enabled: true,
+                            runtime_name: runtimeName,
+                            runtime_kind: runtimeKind,
+                            from_template: "",
+                            template_name: "",
+                            image: defaultWorkerImageForRuntime(
+                              hubTemplates,
+                              runtimeKind,
+                              bootstrapConfig,
+                              agentDraft.default_image || managerAgent?.image || "",
+                            ),
+                          };
+                          onAgentDraftChange(nextDraft);
+                          onAgentModelsReset();
+                        }}
+                        triggerProps={{ "aria-label": t("profileRuntimeKind") }}
+                        options={sandboxRuntimeChoices.map((option) => ({
+                          value: normalizeRuntimeName(option.name) || "",
+                          label: option.label || normalizeRuntimeName(option.name) || "",
+                          disabled: option.installed === false,
+                        }))}
+                      />
+                    )}
+                  </label>
+                  {runtimeAvailabilityNotice}
+                </div>
+              ) : agentModalMode === "edit" ? (
+                <label className="field span-2">
+                  <span>{t("profileRuntimeKind")}</span>
+                  <input value={formatRuntimeKindLabel(agentRuntimeKind(editingAgent), t)} readOnly disabled />
+                </label>
+              ) : null}
+              {runtimeOptionSchemas.length > 0 ? (
+                <RuntimeOptionsFields
+                  draft={agentDraft}
+                  locale={locale}
+                  schemas={runtimeOptionSchemas}
+                  onDraftChange={onAgentDraftChange}
+                  directoryPickerAvailable={bootstrapConfig?.directory_picker_available !== false}
+                  embedded
+                />
+              ) : null}
+              {showMCPServers ? (
+                <MCPServersPanel
+                  draft={agentDraft}
+                  t={t}
+                  onDraftChange={onAgentDraftChange}
+                  onInvalidChange={setMCPServersInvalid}
+                />
+              ) : null}
+            </div>
+          </div>
+        </section>
+      ) : null}
+      {isNotificationContext ? (
+        <NotifierControls
+          agentID={agentModalMode === "edit" ? editingAgent?.id || "" : ""}
+          draft={agentDraft}
+          hideHeading
+          t={t}
+          webhookPublicOrigin={notifierWebhookPublicOrigin}
+          onPatch={(patch) => onAgentDraftChange({ ...agentDraft, ...patch })}
+        />
+      ) : (
+        <section className="profile-section">
+          <div className="profile-section-heading">
+            <div className="profile-section-title">{t("profileModelSection")}</div>
+            <p className="profile-section-description">{t("profileModelSectionDescription")}</p>
+          </div>
+          <div className="agent-section-form">
+            <div className="agent-section-form-content agent-model-form-content">
+              <AgentModelConfiguration
+                draft={agentDraft}
+                providerOptions={providerOptions}
+                providerID={selectedProviderID}
+                modelID={selectedModelValue}
+                models={selectedProviderModels}
+                busy={agentModelBusy || agentBusy}
+                onPatch={(patch) => onAgentDraftChange({ ...agentDraft, ...patch })}
+                onRequireOpenCSGAuth={onRequireOpenCSGAuth}
+                t={t}
+              />
+            </div>
+          </div>
+        </section>
+      )}
+      {!isNotificationContext && !isTemplateCreate ? (
+        <>
+          {!useWizard ? (
+            <section className="profile-section agent-instructions-section">
+              <div className="profile-grid-compact">
+                <label className="field span-2">
+                  <span>{t("agentInstructions")}</span>
+                  <textarea
+                    className="compact-textarea"
+                    value={agentDraft.instructions || ""}
+                    placeholder={t("agentInstructionsPlaceholder")}
+                    onInput={(event) => onAgentDraftChange({ ...agentDraft, instructions: event.currentTarget.value })}
+                  />
+                </label>
+              </div>
+            </section>
+          ) : null}
+          <details className="profile-section agent-advanced-section">
+            <summary className="profile-section-title agent-advanced-summary">{t("profileAdvanced")}</summary>
+            <div className="profile-advanced-grid">
+              <div className="field">
+                <span>{t("profileEnv")}</span>
+                <EnvKeyValueEditor
+                  rows={agentDraft.envRows}
+                  t={t}
+                  onChange={(rows) => onAgentDraftChange({ ...agentDraft, envRows: rows })}
+                />
+              </div>
+            </div>
+          </details>
+        </>
+      ) : null}
+    </div>
+  );
+  if (useWizard)
+    return (
+      <AgentCreateWizard
+        profile={editor}
+        onPortalContainer={setWizardPortal}
+        instructions={agentDraft.instructions || ""}
+        onInstructionsChange={(instructions) => onAgentDraftChange({ ...agentDraft, instructions })}
+        valid={!saveDisabled}
+        busy={agentBusy}
+        error={
+          agentError ? (
+            <>
+              {agentError}
+              {agentBillingURL ? (
+                <a href={agentBillingURL} target="_blank" rel="noopener noreferrer">
+                  {t("rechargeAccount")}
+                </a>
+              ) : null}
+            </>
+          ) : undefined
+        }
+        progress={agentProgress}
+        authenticated={openCSGAuthenticated}
+        onRequireAuth={onRequireOpenCSGAuth}
+        onClose={onClose}
+        onSave={onSave}
+        t={t}
+      />
     );
-    if (!nextTemplate) {
-      return;
-    }
-    onAgentDraftChange((current) =>
-      current && !current.from_template
-        ? applyTemplateToDraft(current, nextTemplate, bootstrapConfig, managerAgent?.image || "")
-        : current,
-    );
-  }, [
-    agentDraft.from_template,
-    bootstrapConfig,
-    isTemplateCreate,
-    managerAgent?.image,
-    onAgentDraftChange,
-    workerTemplates,
-  ]);
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
@@ -411,333 +657,7 @@ export function AgentProfileModal({
           </div>
           <ModalCloseButton label={t("close")} onClose={onClose} />
         </div>
-        <div className="profile-editor-shell">
-          <section className="profile-section agent-identity-section">
-            {!isNotificationContext ? (
-              <div className="profile-section-heading">
-                <div className="profile-section-title">{t("profileBasics")}</div>
-                <p className="profile-section-description">{t("profileBasicsDescription")}</p>
-              </div>
-            ) : null}
-            <div className="agent-section-form">
-              <div className="agent-section-form-content agent-basics-form-content">
-                {isWorkerCreate ? (
-                  <div
-                    className="workspace-tabbar agent-create-kind-tabbar"
-                    role="tablist"
-                    aria-label={t("createAgentModeTabAriaLabel")}
-                  >
-                    <Button
-                      className="workspace-tab"
-                      active={isTemplateCreate}
-                      role="tab"
-                      aria-selected={isTemplateCreate}
-                      onClick={() => switchCreateMode("template")}
-                    >
-                      <span className="workspace-tab-copy">
-                        <strong>{t("createAgentModeTemplate")}</strong>
-                        <small>{t("createAgentModeTemplateDescription")}</small>
-                      </span>
-                    </Button>
-                    <Button
-                      className="workspace-tab"
-                      active={isCustomCreate}
-                      role="tab"
-                      aria-selected={isCustomCreate}
-                      onClick={() => switchCreateMode("custom")}
-                    >
-                      <span className="workspace-tab-copy">
-                        <strong>{t("createAgentModeCustom")}</strong>
-                        <small>{t("createAgentModeCustomDescription")}</small>
-                      </span>
-                    </Button>
-                  </div>
-                ) : null}
-                {!isTemplateCreate ? (
-                  <div className="agent-identity-layout">
-                    <div className="field agent-avatar-field">
-                      <span className="field-label">{t("agentAvatar")}</span>
-                      <AgentAvatarPicker
-                        value={agentDraft.avatar}
-                        t={t}
-                        mode="edit"
-                        onChange={(avatar) => onAgentDraftChange({ ...agentDraft, avatar })}
-                      />
-                    </div>
-                    <label className="field agent-name-field">
-                      {requiredFieldLabel(t("agentName"))}
-                      <input
-                        value={agentDraft.name}
-                        required
-                        aria-required="true"
-                        onInput={(event) => onAgentDraftChange({ ...agentDraft, name: event.currentTarget.value })}
-                        placeholder={t("agentNamePlaceholder")}
-                      />
-                    </label>
-                    <label className="field agent-description-field">
-                      <span>{t("agentDescription")}</span>
-                      <textarea
-                        className="compact-textarea"
-                        value={agentDraft.description}
-                        onInput={(event) =>
-                          onAgentDraftChange({ ...agentDraft, description: event.currentTarget.value })
-                        }
-                      />
-                    </label>
-                  </div>
-                ) : null}
-              </div>
-            </div>
-          </section>
-          {isTemplateCreate ? (
-            <section className="profile-section">
-              <div className="profile-section-heading">
-                <div className="profile-section-title">{t("createAgentTemplateSectionTitle")}</div>
-                <p className="profile-section-description">{t("createAgentTemplateSectionDescription")}</p>
-              </div>
-              <div className="agent-section-form">
-                <div className="profile-grid profile-grid-compact agent-basics-grid">
-                  <label className="field span-2">
-                    <span>{t("templateLabel")}</span>
-                    <Select
-                      value={agentDraft.from_template || ""}
-                      onValueChange={(value) => {
-                        const nextTemplate = normalizeTemplateSelection(
-                          workerTemplates.find((item) => item.id === value) || null,
-                        );
-                        onAgentDraftChange((current) =>
-                          current
-                            ? applyTemplateToDraft(current, nextTemplate, bootstrapConfig, managerAgent?.image || "")
-                            : current,
-                        );
-                      }}
-                      triggerProps={{ "aria-label": t("templateLabel") }}
-                      emptyLabel={t("templateEmptyOptions")}
-                      options={workerTemplates
-                        .filter((item) => item.id)
-                        .map((item) => ({
-                          value: item.id || "",
-                          label: agentTemplateDisplayName(item) || item.id || "",
-                          description: String(item.description || "").trim() || undefined,
-                        }))}
-                    />
-                    <small className="field-hint">{t("templateHelp")}</small>
-                  </label>
-                  {runtimeAvailabilityNotice}
-                  {selectedWorkerTemplate?.image_env?.length ? (
-                    <div className="field span-2">
-                      <span>{t("profileEnv")}</span>
-                      <EnvKeyValueEditor
-                        rows={agentDraft.envRows}
-                        t={t}
-                        onChange={(rows) => onAgentDraftChange({ ...agentDraft, envRows: rows })}
-                      />
-                    </div>
-                  ) : null}
-                </div>
-              </div>
-            </section>
-          ) : null}
-          {!isNotificationContext && !isTemplateCreate ? (
-            <section className="profile-section">
-              <div className="profile-section-heading">
-                <div className="profile-section-title">{t("profileRuntimeSection")}</div>
-                <p className="profile-section-description">{t("profileRuntimeSectionDescription")}</p>
-              </div>
-              <div className="agent-section-form">
-                <div className="profile-grid profile-grid-compact agent-basics-grid">
-                  {isWorkerCreate && !isCSGHubSandboxProvider ? (
-                    <div className="field span-2 agent-fast-mode-field agent-sandbox-field">
-                      <div className="field-label-with-help">
-                        <span>{t("profileSandboxEnabled")}</span>
-                        <FieldHelpTooltip detail={t("profileSandboxEnabledHelp")} />
-                      </div>
-                      <label className="selection-item compact-toggle-row agent-fast-mode-toggle agent-sandbox-toggle">
-                        <input
-                          type="checkbox"
-                          checked={sandboxEnabled}
-                          aria-label={t("profileSandboxEnabled")}
-                          onChange={() => setSandboxEnabled(!sandboxEnabled)}
-                        />
-                        <span className="agent-sandbox-copy">
-                          <strong>{sandboxEnabled ? t("statusEnabled") : t("statusDisabled")}</strong>
-                        </span>
-                      </label>
-                    </div>
-                  ) : null}
-                  {isWorkerCreate ? (
-                    <div className="agent-runtime-image-row">
-                      <label className="field">
-                        <span>{t("profileRuntimeKind")}</span>
-                        {!sandboxEnabled ? (
-                          <Select
-                            value={selectedRuntimeName || "codex"}
-                            onValueChange={(value) => {
-                              onAgentDraftChange({
-                                ...agentDraft,
-                                bot_type: BOT_TYPE_NORMAL,
-                                sandbox_enabled: false,
-                                runtime_name: normalizeRuntimeName(value) || "codex",
-                                runtime_kind: composeLegacyRuntimeKind(value, false) || "codex",
-                                image: "",
-                                from_template: "",
-                                template_name: "",
-                              });
-                            }}
-                            triggerProps={{ "aria-label": t("profileRuntimeKind") }}
-                            options={hostRuntimeChoices.map((option) => ({
-                              value: normalizeRuntimeName(option.name) || "",
-                              label: option.label || normalizeRuntimeName(option.name) || "",
-                              disabled: option.installed === false && option.installable !== true,
-                            }))}
-                          />
-                        ) : templateLocked ? (
-                          <input
-                            value={formatRuntimeKindLabel(normalizeRuntimeKind(agentDraft.runtime_kind), t)}
-                            readOnly
-                            disabled
-                          />
-                        ) : (
-                          <Select
-                            value={
-                              selectedRuntimeName || normalizeRuntimeName(sandboxRuntimeChoices[0]?.name || "openclaw")
-                            }
-                            onValueChange={(value) => {
-                              const runtimeName = normalizeRuntimeName(value);
-                              const runtimeKind = composeLegacyRuntimeKind(runtimeName, true) || DEFAULT_RUNTIME_KIND;
-                              const currentTemplate = normalizeTemplateSelection(
-                                workerTemplates.find((item) => item.id === agentDraft.from_template) || null,
-                              );
-                              const nextTemplate = templateMatchesRuntime(currentTemplate, runtimeKind)
-                                ? currentTemplate
-                                : pickDefaultAgentTemplate(workerTemplates, runtimeKind, bootstrapConfig);
-                              let nextDraft: AgentDraft = {
-                                ...agentDraft,
-                                bot_type: BOT_TYPE_NORMAL,
-                                role: "worker",
-                                sandbox_enabled: true,
-                                runtime_name: runtimeName,
-                                runtime_kind: runtimeKind,
-                                image: defaultWorkerImageForRuntime(
-                                  hubTemplates,
-                                  runtimeKind,
-                                  bootstrapConfig,
-                                  agentDraft.default_image || managerAgent?.image || "",
-                                ),
-                              };
-                              nextDraft = applyTemplateToDraft(
-                                nextDraft,
-                                nextTemplate,
-                                bootstrapConfig,
-                                managerAgent?.image || "",
-                              );
-                              onAgentDraftChange(nextDraft);
-                              onAgentModelsReset();
-                            }}
-                            triggerProps={{ "aria-label": t("profileRuntimeKind") }}
-                            options={sandboxRuntimeChoices.map((option) => ({
-                              value: normalizeRuntimeName(option.name) || "",
-                              label: option.label || normalizeRuntimeName(option.name) || "",
-                              disabled: option.installed === false,
-                            }))}
-                          />
-                        )}
-                      </label>
-                      {runtimeAvailabilityNotice}
-                    </div>
-                  ) : agentModalMode === "edit" ? (
-                    <label className="field span-2">
-                      <span>{t("profileRuntimeKind")}</span>
-                      <input value={formatRuntimeKindLabel(agentRuntimeKind(editingAgent), t)} readOnly disabled />
-                    </label>
-                  ) : null}
-                  {runtimeOptionSchemas.length > 0 ? (
-                    <RuntimeOptionsFields
-                      draft={agentDraft}
-                      locale={locale}
-                      schemas={runtimeOptionSchemas}
-                      onDraftChange={onAgentDraftChange}
-                      directoryPickerAvailable={bootstrapConfig?.directory_picker_available !== false}
-                      embedded
-                    />
-                  ) : null}
-                  {showMCPServers ? (
-                    <MCPServersPanel
-                      draft={agentDraft}
-                      t={t}
-                      onDraftChange={onAgentDraftChange}
-                      onInvalidChange={setMCPServersInvalid}
-                    />
-                  ) : null}
-                </div>
-              </div>
-            </section>
-          ) : null}
-          {isNotificationContext ? (
-            <NotifierControls
-              agentID={agentModalMode === "edit" ? editingAgent?.id || "" : ""}
-              draft={agentDraft}
-              hideHeading
-              t={t}
-              webhookPublicOrigin={notifierWebhookPublicOrigin}
-              onPatch={(patch) => onAgentDraftChange({ ...agentDraft, ...patch })}
-            />
-          ) : (
-            <section className="profile-section">
-              <div className="profile-section-heading">
-                <div className="profile-section-title">{t("profileModelSection")}</div>
-                <p className="profile-section-description">{t("profileModelSectionDescription")}</p>
-              </div>
-              <div className="agent-section-form">
-                <div className="agent-section-form-content agent-model-form-content">
-                  <AgentModelConfiguration
-                    draft={agentDraft}
-                    providerOptions={providerOptions}
-                    providerID={selectedProviderID}
-                    modelID={selectedModelValue}
-                    models={selectedProviderModels}
-                    busy={agentModelBusy || agentBusy}
-                    onPatch={(patch) => onAgentDraftChange({ ...agentDraft, ...patch })}
-                    onRequireOpenCSGAuth={onRequireOpenCSGAuth}
-                    t={t}
-                  />
-                </div>
-              </div>
-            </section>
-          )}
-          {!isNotificationContext && !isTemplateCreate ? (
-            <>
-              <section className="profile-section agent-instructions-section">
-                <div className="profile-grid-compact">
-                  <label className="field span-2">
-                    <span>{t("agentInstructions")}</span>
-                    <textarea
-                      className="compact-textarea"
-                      value={agentDraft.instructions || ""}
-                      placeholder={t("agentInstructionsPlaceholder")}
-                      onInput={(event) =>
-                        onAgentDraftChange({ ...agentDraft, instructions: event.currentTarget.value })
-                      }
-                    />
-                  </label>
-                </div>
-              </section>
-              <details className="profile-section agent-advanced-section">
-                <summary className="profile-section-title agent-advanced-summary">{t("profileAdvanced")}</summary>
-                <div className="profile-advanced-grid">
-                  <div className="field">
-                    <span>{t("profileEnv")}</span>
-                    <EnvKeyValueEditor
-                      rows={agentDraft.envRows}
-                      t={t}
-                      onChange={(rows) => onAgentDraftChange({ ...agentDraft, envRows: rows })}
-                    />
-                  </div>
-                </div>
-              </details>
-            </>
-          ) : null}
-        </div>
+        {editor}
         {agentError ? (
           <div className="form-error">
             {agentError}
@@ -756,26 +676,7 @@ export function AgentProfileModal({
           <Button variant="secondaryGray" size="md" onClick={onClose}>
             {t("cancel")}
           </Button>
-          <Button
-            variant="primary"
-            size="md"
-            disabled={
-              agentBusy ||
-              mcpServersInvalid ||
-              isBlank(agentDraft.name) ||
-              (isNotificationContext
-                ? !notifierFormIsComplete(agentDraft, editingAgent)
-                : isTemplateCreate
-                  ? !agentDraft.from_template ||
-                    !agentDraft.model_provider_id ||
-                    !agentDraft.model_id ||
-                    missingRequiredEnv ||
-                    selectedRuntimeUnavailable
-                  : !agentDraft.model_provider_id || !agentDraft.model_id || selectedRuntimeUnavailable)
-            }
-            loading={agentBusy}
-            onClick={onSave}
-          >
+          <Button variant="primary" size="md" disabled={saveDisabled} loading={agentBusy} onClick={() => void onSave()}>
             {agentModalMode === "create" ? t("agentCreateSave") : t("agentUpdateSave")}
           </Button>
         </div>

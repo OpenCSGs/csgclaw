@@ -1,0 +1,231 @@
+.dialog[role="dialog"] {
+  width: min(1000px, calc(100vw - 32px));
+  max-width: none;
+  height: min(760px, calc(100dvh - 40px));
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+}
+.header {
+  flex-shrink: 0;
+  padding: 24px 48px 20px 24px;
+  border-bottom: 1px solid var(--line);
+}
+.body {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+.navigation {
+  width: 190px;
+  flex-shrink: 0;
+  padding: 16px 12px;
+  border-right: 1px solid var(--line);
+  background: var(--panel-soft);
+  overflow-y: auto;
+}
+.navigation ol,
+.resourceList {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.navigation button {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 12px 10px;
+  border: 0;
+  border-radius: var(--radius-md);
+  color: var(--text);
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  text-align: left;
+}
+.navigation button[aria-current="step"],
+.navigation button:hover {
+  background: var(--primary-soft);
+}
+.navigation button:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+.navigation small {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 11px;
+}
+.stepMark {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+}
+.panel {
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  padding: 20px 24px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+.fields {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+.instructions,
+.resources {
+  display: grid;
+  gap: 16px;
+}
+.instructions textarea {
+  resize: vertical;
+}
+.resourceRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+}
+.resourceGroup {
+  display: grid;
+  gap: 12px;
+}
+.resourceGroup h4 {
+  margin: 0;
+  font-size: 14px;
+}
+.resourceGroup p {
+  margin: 0;
+  color: var(--muted);
+}
+.resourceList {
+  display: grid;
+  gap: 8px;
+}
+.resourceList:empty {
+  display: none;
+}
+.resourceError {
+  color: var(--danger);
+}
+.skeletonRow {
+  display: flex;
+  gap: 12px;
+  padding: 16px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+}
+.skeletonCheckbox,
+.skeletonTitle,
+.skeletonDescription {
+  display: block;
+  border-radius: var(--radius-sm);
+  background: var(--panel-soft);
+  animation: skeletonPulse 1.5s ease-in-out infinite alternate;
+}
+.skeletonCheckbox {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+.skeletonContent {
+  display: grid;
+  flex: 1;
+  gap: 8px;
+}
+.skeletonTitle {
+  width: 38%;
+  height: 16px;
+  margin-bottom: 4px;
+}
+.skeletonDescription {
+  width: 90%;
+  height: 12px;
+}
+.skeletonDescription:last-child {
+  width: 66%;
+}
+@keyframes skeletonPulse {
+  to {
+    opacity: 0.45;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .skeletonRow span {
+    animation: none;
+  }
+}
+.resourceRow > span {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+.resourceRow small {
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.footer {
+  display: flex;
+  flex-shrink: 0;
+  gap: 8px;
+  padding: 16px 24px;
+  border-top: 1px solid var(--line);
+}
+.footer > span {
+  flex: 1;
+}
+.error {
+  padding: 8px 24px;
+  color: var(--danger);
+}
+@media (max-width: 680px) {
+  .body {
+    flex-direction: column;
+  }
+  .navigation {
+    width: auto;
+    padding: 6px;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+  .navigation ol {
+    display: flex;
+  }
+  .navigation button {
+    min-width: max-content;
+    flex-wrap: nowrap;
+  }
+  .navigation small {
+    display: none;
+  }
+  .panel {
+    margin: 0;
+    border: 0;
+    padding: 16px;
+  }
+  .footer {
+    padding: 12px;
+  }
+}

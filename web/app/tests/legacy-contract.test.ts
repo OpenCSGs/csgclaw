@@ -58,10 +58,7 @@ describe("legacy UI contract", () => {
     expect(source).toContain('return "官方";');
     expect(source).toContain("localizeTemplateSourceTag(item.source?.name, locale)");
     expect(source).toContain("templateSourceLabelKey(selectedTemplate, templateUsername)");
-    expect(source).toContain('pickDefaultAgentTemplate(workerTemplates, "codex", bootstrapConfig)');
-    expect(source).toContain('applyTemplateToDraft(current, nextTemplate, bootstrapConfig, managerAgent?.image || "")');
     expect(source).toContain("function templateMatchesRuntime(template, runtimeKind)");
-    expect(source).toContain("pickDefaultAgentTemplate(workerTemplates, runtimeKind, bootstrapConfig)");
   });
 
   it("keeps channel-scoped participant and notification frontend contracts", () => {
