@@ -272,7 +272,6 @@ export function FloatingChatPanel({ agentName, chatProps, headerAccessory, onPic
           </>
         }
         inviteActionLabel={inviteActionLabel}
-        agents={agents}
         memberMenuRef={memberMenuRef}
         selectedMessageCount={selectedMessageCount}
         selectedVisibleMessageCount={floatingVisibleMessages.length}

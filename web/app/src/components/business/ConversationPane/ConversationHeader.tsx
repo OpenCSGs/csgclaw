@@ -1,12 +1,10 @@
-import { DiagnosticHeaderAction } from "@/components/business/TurnDiagnostics";
 import { memo } from "react";
 import type { ReactNode, RefObject } from "react";
 import { AgentAvatarContent } from "@/components/business/AgentAvatar";
 import { Button, Tooltip, PanelHeader } from "@/components/ui";
 import { AddUserIcon, TrashIcon, UsersIcon, WrenchIcon } from "@/components/ui/Icons";
-import type { AgentLike } from "@/models/agents";
 import type { IMConversation, IMUser, TranslateFn } from "@/models/conversations";
-import { isDirectConversation, resolveAgentForUser } from "@/models/conversations";
+import { isDirectConversation } from "@/models/conversations";
 import { avatarFallbackText } from "@/shared/avatar";
 import { localizeRole } from "@/shared/i18n";
 import type { BooleanStateSetter } from "./types";
@@ -18,7 +16,6 @@ export type ConversationHeaderProps = {
   description?: string;
   headerAccessory?: ReactNode;
   inviteActionLabel: string;
-  agents?: AgentLike[];
   memberMenuRef?: RefObject<HTMLDivElement | null>;
   onClearMessages: () => void;
   onDeleteRoom: () => void;
@@ -44,7 +41,6 @@ export const ConversationHeader = memo(function ConversationHeader({
   description,
   headerAccessory,
   inviteActionLabel,
-  agents = [],
   memberMenuRef,
   selectedMessageCount,
   selectedVisibleMessageCount,
@@ -139,13 +135,6 @@ export const ConversationHeader = memo(function ConversationHeader({
           </div>
           <div className="chat-title-actions">
             {headerAccessory}
-            <DiagnosticHeaderAction
-              room={conversation.id}
-              agents={conversationMembers
-                .map((user) => resolveAgentForUser(agents, user))
-                .filter((agent): agent is AgentLike => Boolean(agent))}
-              t={t}
-            />
             <div ref={channelToolsRef} className="header-menu tools-menu">
               <Tooltip content={t("channelTools")} contentProps={{ side: "bottom" }}>
                 <Button

@@ -7,6 +7,8 @@ type Options = {
   room: string;
   source: string;
   turn?: string;
+  initialSource?: string;
+  initialTurn?: string;
   agent: string;
   status: string;
   cursor: string;
@@ -15,10 +17,23 @@ type Options = {
   t: TranslateFn;
 };
 
-export function useTurnDiagnostics({ room, source, turn, agent, status, cursor, revision, enabled, t }: Options) {
+export function useTurnDiagnostics({
+  room,
+  source,
+  turn,
+  initialSource,
+  initialTurn,
+  agent,
+  status,
+  cursor,
+  revision,
+  enabled,
+  t,
+}: Options) {
   const [page, setPage] = useState<DiagnosticList>({ items: [], next_cursor: "", agents: [], total: 0 });
   const [selected, setSelected] = useState("");
   const selection = useRef("");
+  const focusedTurn = useRef(initialTurn);
   const [detail, setDetail] = useState<TurnDiagnostic | null>(null);
   const [listError, setListError] = useState("");
   const [detailError, setDetailError] = useState("");
@@ -40,9 +55,16 @@ export function useTurnDiagnostics({ room, source, turn, agent, status, cursor, 
         );
         if (controller.signal.aborted) return;
         setPage(response);
-        const id = source
-          ? selectDiagnostic(response.items, selection.current, turn, response.source?.primary_agent_id)
-          : response.items.find((item) => item.id === selection.current)?.id || response.items[0]?.id || "";
+        const requestedTurn = source ? turn : focusedTurn.current;
+        const requestedSource = source || initialSource;
+        const id = selectDiagnostic(
+          response.items,
+          selection.current,
+          requestedTurn,
+          response.source?.primary_agent_id,
+          requestedSource,
+        );
+        if (id && !source) focusedTurn.current = undefined;
         selection.current = id;
         setSelected(id);
         setListError("");
@@ -60,7 +82,7 @@ export function useTurnDiagnostics({ room, source, turn, agent, status, cursor, 
       controller.abort();
       if (timer) clearTimeout(timer);
     };
-  }, [room, source, turn, agent, status, cursor, revision, enabled, t]);
+  }, [room, source, turn, initialSource, agent, status, cursor, revision, enabled, t]);
 
   useEffect(() => {
     if (!enabled) return;
@@ -86,6 +108,7 @@ export function useTurnDiagnostics({ room, source, turn, agent, status, cursor, 
   }, [room, selected, summary, page, revision, enabled, t]);
 
   const select = (id: string) => {
+    focusedTurn.current = undefined;
     selection.current = id;
     setSelected(id);
   };

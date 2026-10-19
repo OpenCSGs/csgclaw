@@ -2,7 +2,7 @@ import userEvent from "@testing-library/user-event";
 // @vitest-environment jsdom
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { TurnDiagnostics } from "./TurnDiagnostics";
+import { DiagnosticMessageAction, TurnDiagnostics } from "./TurnDiagnostics";
 import { fetchDiagnostic, fetchDiagnostics } from "@/api/diagnostics";
 vi.mock("@/api/diagnostics", () => ({ fetchDiagnostic: vi.fn(), fetchDiagnostics: vi.fn() }));
 vi.mock("@/api/agents", () => ({ fetchAgentLogsRequest: vi.fn().mockResolvedValue("runtime log") }));
@@ -138,6 +138,40 @@ it("keeps the triggering message visible while simplifying a single execution an
   await userEvent.click(screen.getByRole("button", { name: "diagBackToRecords" }));
   expect(await screen.findByRole("heading", { name: "diagAgentExecutionmanager" })).toBeInTheDocument();
   view.unmount();
+});
+
+it("opens a message diagnostic in the full conversation list focused on its execution", async () => {
+  const earlier = {
+    ...record,
+    id: "earlier",
+    source_id: "earlier-source",
+    turn_id: "earlier-turn",
+    started_at: "2026-09-25T00:00:00Z",
+  };
+  vi.mocked(fetchDiagnostics).mockResolvedValue({
+    items: [record, earlier],
+    next_cursor: "",
+    total: 2,
+    agents: [{ id: record.agent_id, name: "manager" }],
+  });
+  vi.mocked(fetchDiagnostic).mockResolvedValue(record);
+  render(
+    <DiagnosticMessageAction
+      iconOnly
+      metadata={{ diagnostics: { room_id: record.room_id, source_id: record.source_id, turn_id: record.turn_id } }}
+      t={(key) => key}
+    />,
+  );
+  await userEvent.click(screen.getByRole("button", { name: "diagExecutionAction" }));
+  await waitFor(() =>
+    expect(fetchDiagnostics).toHaveBeenCalledWith(
+      record.room_id,
+      expect.objectContaining({ source_id: "", turn_id: "" }),
+      expect.any(AbortSignal),
+    ),
+  );
+  expect(await screen.findByRole("complementary", { name: "diagTurns" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { pressed: true })).toHaveTextContent(record.agent_id);
 });
 
 it("does not replace a missing exact execution with another available turn", async () => {

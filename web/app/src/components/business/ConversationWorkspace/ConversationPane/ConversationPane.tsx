@@ -507,7 +507,6 @@ function ConversationPaneContent({
           </>
         }
         inviteActionLabel={inviteActionLabel}
-        agents={agents}
         selectedMessageCount={selectedMessageCount}
         selectedVisibleMessageCount={visibleMessages.length}
         showChannelTools={showChannelTools}

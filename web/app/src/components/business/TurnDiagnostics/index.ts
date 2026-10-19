@@ -1,1 +1,1 @@
-export { DiagnosticMessageAction, DiagnosticHeaderAction, TurnDiagnostics } from "./TurnDiagnostics";
+export { DiagnosticMessageAction, TurnDiagnostics } from "./TurnDiagnostics";

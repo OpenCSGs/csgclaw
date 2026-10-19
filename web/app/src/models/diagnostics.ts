@@ -7,8 +7,9 @@ export function selectDiagnostic(
   selected: string,
   turn?: string,
   primaryAgent?: string,
+  source?: string,
 ): string {
-  if (turn) return items.find((item) => item.turn_id === turn)?.id || "";
+  if (turn) return items.find((item) => item.turn_id === turn && (!source || item.source_id === source))?.id || "";
   if (items.some((item) => item.id === selected)) return selected;
   const primary = items.filter((item) => item.agent_id === primaryAgent);
   const candidates = primary.length ? primary : items;
