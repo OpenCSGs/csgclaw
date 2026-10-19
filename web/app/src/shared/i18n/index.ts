@@ -143,3 +143,15 @@ function isChineseTranslator(t: TranslateFn): boolean {
 function isLikelyEnglishDiagnostic(value: string): boolean {
   return /[A-Za-z]/.test(value) && !/[\u4e00-\u9fff]/.test(value);
 }
+
+// Publishing diagnostics are needed to resolve remote failures, including untranslated ones.
+export function localizeTemplatePublishError(error: unknown, t: TranslateFn, fallback = ""): string {
+  const summary = localizeAPIError(error, t, fallback);
+  if (!error || typeof error !== "object") return summary;
+  const value = error as { code?: unknown; message?: unknown; status?: unknown };
+  const message = typeof value.message === "string" ? value.message.trim() : "";
+  const code = typeof value.code === "string" ? value.code.trim() : "";
+  const status = typeof value.status === "number" ? `HTTP ${value.status}` : "";
+  const context = [status, code].filter(Boolean).join(" · ");
+  return [summary, context, message && message !== summary ? message : ""].filter(Boolean).join("\n");
+}

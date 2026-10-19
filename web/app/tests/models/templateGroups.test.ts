@@ -1,4 +1,9 @@
-import { isOfficialTemplate, templateInGroup, templateSourceLabelKey } from "@/models/templateGroups";
+import {
+  hasSameNamedCloudTemplate,
+  isOfficialTemplate,
+  templateInGroup,
+  templateSourceLabelKey,
+} from "@/models/templateGroups";
 import type { HubTemplate } from "@/models/hubWorkspace";
 
 const official: HubTemplate = { id: "agentichub/a", name: "a", namespace: "agentichub", source: { kind: "remote" } };
@@ -27,11 +32,19 @@ describe("template groups", () => {
 
 it("labels ownership independently of the remote registry name", () => {
   expect(templateSourceLabelKey({ ...own, source: { kind: "remote", name: "official" } }, "alice")).toBe(
-    "taskEntryOverview_personal",
+    "iaTemplateCloudTag",
   );
   expect(templateSourceLabelKey({ ...publicTemplate, source: { kind: "remote", name: "official" } }, "alice")).toBe(
     "resourcesPublicTemplates",
   );
   expect(templateSourceLabelKey(official, "alice")).toBe("taskEntryOverview_official");
   expect(templateSourceLabelKey(local, "alice")).toBe("resourcesSkillLocalFilter");
+});
+
+it("matches cloud names only in the current user's namespace", () => {
+  expect(hasSameNamedCloudTemplate(local, [own], "alice")).toBe(true);
+  expect(hasSameNamedCloudTemplate(local, [own], "bob")).toBe(false);
+  expect(hasSameNamedCloudTemplate(local, [own])).toBe(false);
+  expect(hasSameNamedCloudTemplate(local, [{ ...own, name: "other" }], "alice")).toBe(false);
+  expect(hasSameNamedCloudTemplate(local, [local], "alice")).toBe(false);
 });

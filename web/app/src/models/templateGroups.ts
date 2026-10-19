@@ -36,8 +36,22 @@ export function templateSourceLabelKey(template: HubTemplate, username = ""): st
   if (template.source?.kind === "local") return "resourcesSkillLocalFilter";
   if (template.source?.kind === "remote") {
     return username.trim() && templateNamespace(template) === username.trim().toLowerCase()
-      ? "taskEntryOverview_personal"
+      ? "iaTemplateCloudTag"
       : "resourcesPublicTemplates";
   }
   return "resourcesSkillAllFilter";
+}
+
+export function hasSameNamedCloudTemplate(
+  template: HubTemplate,
+  templates: readonly HubTemplate[],
+  username = "",
+): boolean {
+  if (template.source?.kind !== "local" || !template.name?.trim() || !username.trim()) return false;
+  return templates.some(
+    (remote) =>
+      remote.source?.kind === "remote" &&
+      templateNamespace(remote) === username.trim().toLowerCase() &&
+      remote.name === template.name,
+  );
 }

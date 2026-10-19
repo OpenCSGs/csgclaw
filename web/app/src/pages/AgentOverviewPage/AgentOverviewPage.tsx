@@ -1,13 +1,15 @@
 import { resolveTeamAvatarMembers } from "@/models/tasks";
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { ChevronRight, List, LoaderCircle, Plus, Search } from "lucide-react";
+import { ChevronRight, ExternalLink, List, LoaderCircle, Plus, Search } from "lucide-react";
 import { Button, PanelHeader, EmptyState, TextInput } from "@/components/ui";
 import { AgentAvatarContent } from "@/components/business/AgentAvatar";
 import { RoomAvatar } from "@/components/business/RoomAvatar";
 import { useWorkspaceControllerContext } from "@/hooks/workspace";
 import { useWorkspaceHubTemplatesQuery } from "@/hooks/workspace/workspaceQueries";
 import { isVisibleInHubTemplateList } from "@/models/hubWorkspace";
+import { agenticHubTemplatesURL } from "@/models/agenticHub";
+import { templateInGroup } from "@/models/templateGroups";
 import { agentRoleLabel, type AgentLike } from "@/models/agents";
 
 import styles from "./AgentOverviewPage.module.css";
@@ -67,12 +69,14 @@ export function AgentOverviewPage() {
   const matches = (name: string) => name.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase());
   const agents = props.workerAgentItems.filter((agent) => matches(agent.name || agent.id || ""));
   const teams = props.teams.filter((team) => matches(team.title));
+  const templateUsername = props.authStatus?.authenticated ? props.authStatus.user_id : "";
+  const templatesURL = agenticHubTemplatesURL(
+    props.authStatus?.authenticated ? props.authStatus.opencsg_base_url || props.authStatus.base_url : "",
+  );
   const shownTemplates = templates.filter(
     (item) =>
       matches([item.name, item.id, item.description, item.runtime_kind].filter(Boolean).join(" ")) &&
-      (templateFilter === "official"
-        ? item.source?.name === "official" || item.source?.kind === "builtin"
-        : item.source?.name !== "official" && item.source?.kind !== "builtin"),
+      templateInGroup(item, templateFilter === "official" ? "official" : "mine", templateUsername),
   );
   const templatesLoading = templatesQuery.isLoading && !templates.length;
   const templatesFailed = templatesQuery.isError && !templates.length;
@@ -206,12 +210,28 @@ export function AgentOverviewPage() {
                     }}
                   >
                     <span className={styles.identity}>
-                      <strong>{item.name}</strong>
+                      <span className={styles.templateName}>
+                        <strong>{item.name}</strong>{" "}
+                        {templateFilter === "personal" && item.source?.kind === "remote" ? (
+                          <span className={styles.cloudTag}>{t("iaTemplateCloudTag")}</span>
+                        ) : null}
+                      </span>
                       <small>{item.description}</small>
                     </span>
                     <ChevronRight size={14} />
                   </button>
                 ))}
+                {templateFilter === "personal" && templatesURL ? (
+                  <a
+                    className={styles.manageTemplatesLink}
+                    href={templatesURL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <ExternalLink size={13} />
+                    {t("iaTemplateManageOnHub")}
+                  </a>
+                ) : null}
                 {!templatesQuery.isLoading && !templatesQuery.isError && !shownTemplates.length ? (
                   <p className={styles.emptyList}>{templateEmptyTitle}</p>
                 ) : null}

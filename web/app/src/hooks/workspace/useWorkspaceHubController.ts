@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { errorMessage as apiErrorMessage } from "@/api/client";
 import { deleteHubTemplateRequest, publishHubTemplateToCommunityRequest } from "@/api/hub";
@@ -7,7 +7,7 @@ import { isDeletableHubTemplate, isVisibleInHubTemplateList } from "@/models/hub
 import type { HubTemplate } from "@/models/hubWorkspace";
 import { isReadonlySkill } from "@/models/skillhub";
 import type { SkillSummary } from "@/models/skillhub";
-import { localizeAPIError } from "@/shared/i18n";
+import { localizeAPIError, localizeTemplatePublishError } from "@/shared/i18n";
 import { workspaceQueryKeys } from "./workspaceQueries";
 import { useWorkspaceHubSelection } from "./useWorkspaceHubSelection";
 import type { UseWorkspaceHubControllerArgs } from "./types";
@@ -87,6 +87,7 @@ export type WorkspaceHubController = {
       publishedTemplate: HubTemplate | null;
       onDismissPublishedTemplate: () => void;
       publishError: string;
+      onResetPublishError: () => void;
       onDeleteSkill: DeleteSkill;
       skillDeleteBusy: boolean;
     };
@@ -121,7 +122,12 @@ export function useWorkspaceHubController({
   const [deletingTemplateID, setDeletingTemplateID] = useState("");
   const [publishedTemplate, setPublishedTemplate] = useState<HubTemplate | null>(null);
   const [resourcesPublishBusy, setResourcesPublishBusy] = useState(false);
-  const [resourcesPublishError, setResourcesPublishError] = useState("");
+  const [publishFailure, setPublishFailure] = useState<{ templateID: string; message: string } | null>(null);
+  const publishRequestVersion = useRef(0);
+  const resetPublishError = useCallback(() => {
+    publishRequestVersion.current += 1;
+    setPublishFailure(null);
+  }, []);
   const [skillDeleteBusy, setSkillDeleteBusy] = useState(false);
   const [skillDeleteError, setSkillDeleteError] = useState("");
   const [resourcesUploadBusy, setResourcesUploadBusy] = useState(false);
@@ -166,6 +172,12 @@ export function useWorkspaceHubController({
     setSelectedHubSkillPath,
     setSelectedHubTemplateId,
   } = hub;
+  useEffect(() => {
+    resetPublishError();
+  }, [hub.selectedHubTemplateId, resetPublishError]);
+  const resourcesPublishError =
+    publishFailure && publishFailure.templateID === hub.selectedHubTemplateId ? publishFailure.message : "";
+
   const mutationError = workspaceHubMutationError(
     hub.selectedHubResourceType,
     resourcesDeleteError,
@@ -176,12 +188,12 @@ export function useWorkspaceHubController({
   useEffect(() => {
     if (hub.selectedHubResourceType !== "template") {
       setResourcesDeleteError("");
-      setResourcesPublishError("");
+      resetPublishError();
     }
     if (hub.selectedHubResourceType !== "skill") {
       setSkillDeleteError("");
     }
-  }, [hub.selectedHubResourceType]);
+  }, [hub.selectedHubResourceType, resetPublishError]);
 
   const deleteHubTemplate = useCallback(
     async (template: HubTemplate | null | undefined): Promise<boolean> => {
@@ -259,34 +271,30 @@ export function useWorkspaceHubController({
         return null;
       }
       setResourcesPublishBusy(true);
-      setResourcesPublishError("");
+      const requestVersion = ++publishRequestVersion.current;
+      setPublishFailure(null);
       try {
         const published = await publishHubTemplateToCommunityRequest(template.id, includeMemory);
         await refreshHubTemplates();
-        if (published.id) {
-          setSelectedHubTemplateId(published.id);
-        }
+        queryClient.setQueryData<HubTemplate[]>(workspaceQueryKeys.hubTemplates(), (current) =>
+          current?.some((item) => item.id === published.id) ? current : [...(current ?? []), published],
+        );
         setPublishedTemplate(published);
         return { status: "success", template: published };
       } catch (err) {
         if (handleOpenCSGAuthenticationError(err)) {
           return null;
         }
-        const message = errorMessage(err, t("resourcesPublishCommunityFailed"));
-        setResourcesPublishError(message);
+        const message = localizeTemplatePublishError(err, t, t("resourcesPublishCommunityFailed"));
+        if (requestVersion === publishRequestVersion.current) {
+          setPublishFailure({ templateID: template.id, message });
+        }
         return null;
       } finally {
         setResourcesPublishBusy(false);
       }
     },
-    [
-      errorMessage,
-      handleOpenCSGAuthenticationError,
-      requireOpenCSGAuthentication,
-      refreshHubTemplates,
-      setSelectedHubTemplateId,
-      t,
-    ],
+    [handleOpenCSGAuthenticationError, requireOpenCSGAuthentication, refreshHubTemplates, queryClient, t],
   );
 
   const uploadSkill = useCallback(
@@ -368,7 +376,7 @@ export function useWorkspaceHubController({
       publishBusy: resourcesPublishBusy,
       publishHubTemplate,
       showPublishedTemplate: setPublishedTemplate,
-      setPublishError: setResourcesPublishError,
+      setPublishError: (message) => setPublishFailure({ templateID: hub.selectedHubTemplateId, message }),
       deleteSkill,
       installRemoteSkill,
       remoteInstallBusy: resourcesRemoteInstallBusy,
@@ -388,6 +396,7 @@ export function useWorkspaceHubController({
         publishedTemplate,
         onDismissPublishedTemplate: () => setPublishedTemplate(null),
         publishError: resourcesPublishError,
+        onResetPublishError: resetPublishError,
         onDeleteSkill: deleteSkill,
         skillDeleteBusy,
       },

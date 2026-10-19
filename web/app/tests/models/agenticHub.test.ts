@@ -1,4 +1,4 @@
-import { agenticHubCreateAgentURL } from "@/models/agenticHub";
+import { agenticHubCreateAgentURL, agenticHubTemplatesURL } from "@/models/agenticHub";
 
 describe("agenticHubCreateAgentURL", () => {
   it.each(["https://opencsg.com", "https://opencsg-stg.com", "https://custom.example:8443/login"])(
@@ -24,5 +24,17 @@ describe("agenticHubCreateAgentURL", () => {
   });
   it("requires a template ID", () => {
     expect(agenticHubCreateAgentURL("https://opencsg.com", "")).toBe("");
+  });
+});
+
+describe("agenticHubTemplatesURL", () => {
+  it.each(["https://opencsg.com/account", "https://qa.opencsg.com", "https://custom.example:8443"])(
+    "uses the current site %s",
+    (site) => {
+      expect(agenticHubTemplatesURL(site)).toBe(`${new URL(site).origin}/agentichub?view=resources&subview=template`);
+    },
+  );
+  it.each(["", "bad url", "javascript:alert(1)"])("rejects invalid site %s", (site) => {
+    expect(agenticHubTemplatesURL(site)).toBe("");
   });
 });
