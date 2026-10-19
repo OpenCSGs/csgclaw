@@ -616,7 +616,7 @@ it.each(["skill", "mcp"])("%s 更新期间保留其他资源状态并标记当�
   expect(onSetResourceEnabled).not.toHaveBeenCalled();
 });
 
-it("disables failed CLI providers even when stale models remain", async () => {
+it("hides failed CLI providers even when stale models remain", async () => {
   const user = userEvent.setup();
   render(
     <Harness
@@ -631,8 +631,8 @@ it("disables failed CLI providers even when stale models remain", async () => {
     { wrapper: createQueryWrapper().wrapper },
   );
   await user.click(screen.getByRole("combobox", { name: "profileModelProvider" }));
-  expect(screen.getByRole("option", { name: /Codex/ })).toHaveAttribute("aria-disabled", "true");
-  expect(screen.getByRole("option", { name: /Claude Code/ })).toHaveAttribute("aria-disabled", "true");
+  expect(screen.queryByRole("option", { name: /Codex/ })).not.toBeInTheDocument();
+  expect(screen.queryByRole("option", { name: /Claude Code/ })).not.toBeInTheDocument();
   expect(screen.getByRole("option", { name: /Available API/ })).not.toHaveAttribute("aria-disabled", "true");
 });
 

@@ -12,6 +12,7 @@ type Repository struct {
 	state                     string
 	agents                    map[string]Agent
 	runtimeRecords            map[string]RuntimeRecord
+	creationDefaults          *CreationModelDefaults
 	profileDefaults           AgentProfile
 	detectionResults          []ProfileDetectionResult
 	normalizeProfileReference func(AgentProfile) AgentProfile

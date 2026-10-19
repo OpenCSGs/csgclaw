@@ -30,9 +30,7 @@ describe("model provider catalog helpers", () => {
     ];
     const refreshed = modelProviderCatalogWithModels(catalog, id, ["discovered-model"]);
     expect(modelProviderOptionsFromCatalog(refreshed)).toEqual([]);
-    expect(modelProviderSelectOptionsFromCatalog(refreshed, staleOptions)).toMatchObject([
-      { id, disabled: true, models: [], imageModels: [] },
-    ]);
+    expect(modelProviderSelectOptionsFromCatalog(refreshed, staleOptions)).toEqual([]);
     const recovered = normalizeModelProviderCatalog({
       providers: [{ id, builtin: true, status: "connected", models: ["available-model"] }],
     });
@@ -59,6 +57,7 @@ describe("model provider catalog helpers", () => {
           builtin: true,
           display_name: "OpenCSG",
           base_url: "https://ai.space.opencsg.com/v1",
+          status: "connected",
           models: ["opencsg/deepseek-v4"],
         },
         {
@@ -66,6 +65,7 @@ describe("model provider catalog helpers", () => {
           kind: "openai_compatible",
           display_name: "Team OpenAI",
           api_key_set: true,
+          status: "connected",
           models: ["gpt-4.1"],
         },
         {
@@ -73,8 +73,8 @@ describe("model provider catalog helpers", () => {
           kind: "codex",
           builtin: true,
           display_name: "Codex",
-          models: ["gpt-5.5"],
           status: "connected",
+          models: ["gpt-5.5"],
         },
         {
           id: "csghub-lite",
@@ -82,6 +82,7 @@ describe("model provider catalog helpers", () => {
           builtin: true,
           display_name: "CSGHub Lite",
           base_url: "http://127.0.0.1:11435/v1",
+          status: "connected",
           models: ["qwen3"],
         },
         {
@@ -89,6 +90,7 @@ describe("model provider catalog helpers", () => {
           kind: "claude_code",
           builtin: true,
           display_name: "Claude Code",
+          status: "connected",
           models: ["claude-sonnet"],
         },
       ],
@@ -119,6 +121,7 @@ describe("model provider catalog helpers", () => {
           kind: "codex",
           builtin: true,
           display_name: "Codex",
+          status: "connected",
           models: ["gpt-5.5"],
         },
       ],
@@ -145,6 +148,7 @@ describe("model provider catalog helpers", () => {
           kind: "codex",
           builtin: true,
           display_name: "Codex",
+          status: "connected",
           models: ["gpt-5.5"],
         },
         {
@@ -152,6 +156,7 @@ describe("model provider catalog helpers", () => {
           kind: "opencsg",
           builtin: true,
           display_name: "OpenCSG",
+          status: "connected",
           models: ["deepseek-v4"],
         },
       ],
@@ -173,8 +178,8 @@ describe("model provider catalog helpers", () => {
           builtin: true,
           display_name: "OpenCSG",
           base_url: "https://ai.space.opencsg.com/v1",
-          models: ["prod-model"],
           status: "connected",
+          models: ["prod-model"],
           message: "connected",
           last_checked_at: "2026-07-16T09:00:00Z",
         },
@@ -199,7 +204,9 @@ describe("model provider catalog helpers", () => {
 
   it("maps OpenCSG aliases and avatar as a built-in provider", () => {
     const catalog = normalizeModelProviderCatalog({
-      providers: [{ id: "open-csg", display_name: "OpenCSG", builtin: true, models: ["deepseek-v4"] }],
+      providers: [
+        { status: "connected", id: "open-csg", display_name: "OpenCSG", builtin: true, models: ["deepseek-v4"] },
+      ],
     });
 
     expect(catalog.providers[0]).toMatchObject({
@@ -221,6 +228,7 @@ describe("model provider catalog helpers", () => {
           id: "智谱",
           display_name: "智谱",
           base_url: "https://open.bigmodel.cn/api/paas/v4",
+          status: "connected",
           models: ["glm-5.2"],
         },
       ],
@@ -289,7 +297,7 @@ describe("model provider catalog helpers", () => {
 
   it("merges discovered model options into catalog providers that have no persisted models yet", () => {
     const catalog = normalizeModelProviderCatalog({
-      providers: [{ id: "codex", display_name: "Codex", builtin: true, models: [] }],
+      providers: [{ status: "connected", id: "codex", display_name: "Codex", builtin: true, models: [] }],
     });
 
     const options = modelProviderSelectOptionsFromCatalog(catalog, [
@@ -314,6 +322,7 @@ describe("model provider catalog helpers", () => {
           id: "csghub-lite",
           display_name: "CSGHub Lite",
           builtin: true,
+          status: "connected",
           models: ["stale-model"],
         },
         { id: "codex", display_name: "Codex", builtin: true, models: ["gpt-5.5"] },
@@ -331,3 +340,21 @@ describe("model provider catalog helpers", () => {
     expect(refreshed?.providers.find((provider) => provider.id === "codex")?.models).toEqual(["gpt-5.5"]);
   });
 });
+
+it.each([null, normalizeModelProviderCatalog({ providers: [] })])(
+  "does not infer connected services from stale fallback options: %j",
+  (catalog) => {
+    expect(
+      modelProviderSelectOptionsFromCatalog(catalog, [
+        {
+          value: "missing.stale",
+          label: "stale",
+          providerID: "missing",
+          providerDisplayName: "Missing",
+          providerAvatar: "",
+          modelID: "stale",
+        },
+      ]),
+    ).toEqual([]);
+  },
+);

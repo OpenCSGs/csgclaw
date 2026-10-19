@@ -78,7 +78,7 @@ const worker = {
 };
 
 describe("AgentProfileModal", () => {
-  it("disables failed CLI providers and keeps an existing selection read-only", async () => {
+  it("hides failed CLI providers and keeps an existing selection read-only", async () => {
     const user = userEvent.setup();
     const draft = { ...agentToDraft(worker), provider: "codex", model_provider_id: "codex", model_id: "saved-model" };
     render(
@@ -118,8 +118,8 @@ describe("AgentProfileModal", () => {
     expect(screen.getByRole("combobox", { name: /^Model$/ })).toBeDisabled();
     expect(screen.getByRole("combobox", { name: /^Model$/ })).toHaveTextContent("saved-model");
     await user.click(screen.getByRole("combobox", { name: "profileModelProvider" }));
-    expect(screen.getByRole("option", { name: /Codex/ })).toHaveAttribute("aria-disabled", "true");
-    expect(screen.getByRole("option", { name: /Claude Code/ })).toHaveAttribute("aria-disabled", "true");
+    expect(screen.queryByRole("option", { name: /Codex/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: /Claude Code/ })).not.toBeInTheDocument();
   });
 
   it("does not preselect an avatar in create mode", () => {

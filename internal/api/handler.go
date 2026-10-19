@@ -1484,15 +1484,35 @@ func (h *Handler) handleAgentProfileModels(w http.ResponseWriter, r *http.Reques
 }
 
 func (h *Handler) handleAgentProfileDefaults(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
 	if h.svc == nil {
 		http.Error(w, "agent service is not configured", http.StatusServiceUnavailable)
 		return
 	}
-	writeJSON(w, http.StatusOK, profileResponseFromAgentView(h.agentModels.ProfileDefaultsView()))
+	switch r.Method {
+	case http.MethodGet:
+		writeJSON(w, http.StatusOK, profileResponseFromAgentView(h.agentModels.CreationDefaultsView()))
+	case http.MethodPatch:
+		var request agent.CreationModelDefaultRequest
+		decoder := json.NewDecoder(r.Body)
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&request); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]any{"error": map[string]string{"code": "invalid_request_error", "message": err.Error()}})
+			return
+		}
+		view, err := h.agentModels.SetCreationDefault(request)
+		if err != nil {
+			status, code := http.StatusInternalServerError, "internal_error"
+			var validation *config.ModelValidationError
+			if errors.As(err, &validation) {
+				status, code = http.StatusBadRequest, "model_default_unavailable"
+			}
+			writeJSON(w, status, map[string]any{"error": map[string]string{"code": code, "message": err.Error()}})
+			return
+		}
+		writeJSON(w, http.StatusOK, profileResponseFromAgentView(view))
+	default:
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	}
 }
 
 func (h *Handler) handleAgentStart(w http.ResponseWriter, r *http.Request, id string) {

@@ -22,7 +22,7 @@ export function AgentMediaModelFields({
   const imageProviderID = draft.image_generation?.provider_id || "";
   const imageModelID = draft.image_generation?.model_id || "";
   const imageProviders = providerOptions.filter(
-    (provider) => (!provider.disabled && (provider.imageModels?.length ?? 0) > 0) || provider.id === imageProviderID,
+    (provider) => !provider.disabled && (provider.imageModels?.length ?? 0) > 0,
   );
   const selectedImageProvider = imageProviders.find((provider) => provider.id === imageProviderID);
   const imageModels = selectedImageProvider?.imageModels ?? [];
@@ -35,7 +35,7 @@ export function AgentMediaModelFields({
   const videoProviderID = draft.video_generation?.provider_id || "";
   const videoModelID = draft.video_generation?.model_id || "";
   const videoProviders = providerOptions.filter(
-    (provider) => (!provider.disabled && (provider.videoModels?.length ?? 0) > 0) || provider.id === videoProviderID,
+    (provider) => !provider.disabled && (provider.videoModels?.length ?? 0) > 0,
   );
   const selectedVideoProvider = videoProviders.find((provider) => provider.id === videoProviderID);
   const videoModels = selectedVideoProvider?.videoModels ?? [];
@@ -67,16 +67,13 @@ export function AgentMediaModelFields({
               }}
               triggerProps={{ "aria-label": t("profileImageModelProvider") }}
               options={[
-                { value: "", label: t("profileImageModelNone") },
+                { value: "", label: t("modelDefaultNone") },
                 ...imageProviders.map((provider) => ({
                   value: provider.id,
                   disabled: provider.disabled,
                   label: <ModelOptionLabel avatar={provider.avatar} model={provider.displayName} />,
                   textValue: provider.displayName,
                 })),
-                ...(imageProviderID && !selectedImageProvider
-                  ? [{ value: imageProviderID, label: imageProviderLabel, textValue: imageProviderID }]
-                  : []),
               ]}
             />
           </label>
@@ -88,7 +85,7 @@ export function AgentMediaModelFields({
               disabled={busy || selectedImageProvider?.disabled || !imageProviderID || !imageModels.length}
               label={t("profileImageModel")}
               unavailableLabel={t("profileImageModelUnavailable")}
-              placeholder={imageProviderID ? t("profileSelectModel") : t("profileProviderSelectFirst")}
+              placeholder={t(imageModels.length ? "profileSelectModel" : "modelDefaultNone")}
               onChange={(value) =>
                 updateDraft({ image_generation: value ? { provider_id: imageProviderID, model_id: value } : null })
               }
@@ -122,16 +119,13 @@ export function AgentMediaModelFields({
               }}
               triggerProps={{ "aria-label": t("profileVideoModelProvider") }}
               options={[
-                { value: "", label: t("profileVideoModelNone") },
+                { value: "", label: t("modelDefaultNone") },
                 ...videoProviders.map((provider) => ({
                   value: provider.id,
                   disabled: provider.disabled,
                   label: <ModelOptionLabel avatar={provider.avatar} model={provider.displayName} />,
                   textValue: provider.displayName,
                 })),
-                ...(videoProviderID && !selectedVideoProvider
-                  ? [{ value: videoProviderID, label: videoProviderLabel, textValue: videoProviderID }]
-                  : []),
               ]}
             />
           </label>
@@ -142,7 +136,7 @@ export function AgentMediaModelFields({
               models={videoModels}
               disabled={busy || selectedVideoProvider?.disabled || !videoProviderID || !videoModels.length}
               label={t("profileVideoModel")}
-              placeholder={videoProviderID ? t("profileSelectModel") : t("profileProviderSelectFirst")}
+              placeholder={t(videoModels.length ? "profileSelectModel" : "modelDefaultNone")}
               onChange={(value) =>
                 updateDraft({ video_generation: value ? { provider_id: videoProviderID, model_id: value } : null })
               }

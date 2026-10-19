@@ -24,7 +24,6 @@ export function ModelPicker({
   required,
   placeholder,
   label,
-  unavailableLabel,
   onChange,
   t,
 }: ModelPickerProps) {
@@ -59,17 +58,6 @@ export function ModelPicker({
           description: isAuto(model) ? t("modelProviderAutoDescription") : undefined,
           separatorAfter: isAuto(model),
         })),
-        ...(value && !uniqueModels.includes(value)
-          ? [
-              {
-                value,
-                label: modelLabel(value),
-                textValue: modelSearchText(value),
-                disabled: true,
-                description: unavailableLabel ?? t("profileModelCurrentSelectionRetained"),
-              },
-            ]
-          : []),
       ]}
     />
   );

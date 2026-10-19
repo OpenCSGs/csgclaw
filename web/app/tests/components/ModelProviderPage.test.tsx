@@ -1,3 +1,8 @@
+vi.mock("@/api/agents", () => ({
+  fetchAgentProfileDefaults: vi.fn(async () => ({})),
+  updateAgentProfileDefaults: vi.fn(),
+}));
+
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { checkModelProvider, deleteModelProvider, updateModelProvider } from "@/api/modelProviders";

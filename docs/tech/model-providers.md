@@ -57,12 +57,18 @@ Official logos ship locally, with provenance recorded in `web/app/public/model-p
 
 ## Agent creation defaults
 
-The separate default-model settings form has been removed.
-A successful Agent creation remembers its conversation, image-generation, and video-generation selections on the backend, so the next creation can reuse them after a browser refresh or server restart.
-Editing an existing Agent, cancelling creation, or failing to create an Agent does not replace those selections.
-For each model category, creation validates the remembered selection against the current provider catalog, then falls back to an available model from the same service or another available service.
-Disconnected services and unavailable model categories are excluded; a category with no usable models stays empty.
-Custom creation and Agent settings share the image and video selectors.
+The model settings page provides conversation, image-generation, and video-generation defaults for new Agents.
+Only connected services contribute selectable models, and image and video choices use the corresponding advertised capabilities.
+Without an explicit choice, conversation defaults prefer OpenCSG's `auto` model; image and video defaults prefer the first advertised OpenCSG model for that capability.
+If OpenCSG is unavailable, the first available model is used; categories without available models display **Unspecified**.
+Explicit choices, including **Unspecified**, persist across refreshes, server restarts, and later Agent creations.
+An explicit model that becomes unavailable falls back to the recommendation for that category without overwriting the saved reference.
+
+`GET /api/v1/agent-profile-defaults` returns effective defaults and `PATCH` updates one category at a time, rejecting disconnected providers and mismatched capabilities.
+Explicit selections are stored in `agents.creation_defaults` in the local state file, without provider credentials.
+Unchanged categories continue to use recommendations, and changing one category does not overwrite another category’s saved preference.
+The existing remembered profile remains separate from these explicit selections.
+Custom creation and Agent settings share the filtered image and video selectors.
 
 ## Changing models
 

@@ -1482,7 +1482,7 @@ export function useAgentController({
         agent_profile: defaults,
       });
       draft = applyTemplateToDraft(draft, selectedTemplate, effectiveBootstrapConfig, managerAgent?.image || "");
-      draft = agentDraftWithAvailableModels(draft, createModelCatalog, openCSGAuthenticated);
+      draft = agentDraftWithAvailableModels(draft, createModelCatalog, openCSGAuthenticated, false);
       setAgentDraft(draft);
       setShowAgentModal(true);
     } catch (_) {
@@ -1501,7 +1501,7 @@ export function useAgentController({
         sandbox_enabled: initialRuntime.sandbox_enabled,
         runtime_kind: initialRuntime.runtime_kind,
         bot_type: BOT_TYPE_NORMAL,
-        agent_profile: managerProfile,
+        agent_profile: {},
       });
       draft = applyTemplateToDraft(draft, selectedTemplate, effectiveBootstrapConfig, managerAgent?.image || "");
       draft = agentDraftWithAvailableModels(draft, createModelCatalog, openCSGAuthenticated);

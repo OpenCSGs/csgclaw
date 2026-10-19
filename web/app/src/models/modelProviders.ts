@@ -330,9 +330,10 @@ export function modelProviderOptionsFromCatalog(
   const options: ModelProviderOption[] = [];
   const seen = new Set<string>();
   for (const provider of catalog?.providers ?? []) {
-    if (cliProviderCheckFailed(provider)) continue;
+    if (provider.status !== "connected") continue;
     const providerAvatar = modelProviderAvatarPath(provider);
     for (const modelID of provider.models) {
+      if (provider.imageModels?.includes(modelID) || provider.videoModels?.includes(modelID)) continue;
       const value = selectorForProviderModel(provider.id, modelID);
       if (!value || seen.has(value)) {
         continue;
@@ -367,7 +368,7 @@ export function modelProviderCatalogWithModels(
   }
   let matched = false;
   const providers = catalog.providers.map((provider) => {
-    if (provider.id !== normalizedProviderID || cliProviderCheckFailed(provider)) {
+    if (provider.id !== normalizedProviderID || provider.status !== "connected") {
       return provider;
     }
     matched = true;
@@ -414,64 +415,28 @@ export function modelProviderSelectOptionsFromCatalog(
   catalog: ModelProviderCatalog | null | undefined,
   modelOptions: readonly ModelProviderOption[] = [],
 ): ModelProviderSelectOption[] {
-  const mergeModelOption = (providers: Map<string, ModelProviderSelectOption>, option: ModelProviderOption) => {
-    const providerID = normalizeModelProviderID(option.providerID);
-    if (!providerID) {
-      return;
-    }
-    const existing = providers.get(providerID);
-    if (existing) {
-      if (existing.disabled) return;
-      if (option.modelID && !existing.models.includes(option.modelID)) {
-        existing.models.push(option.modelID);
-      }
-      return;
-    }
-    providers.set(providerID, {
-      avatar: option.providerAvatar || modelProviderAvatarPath(providerID),
-      builtin: option.builtin,
-      displayName: option.providerDisplayName || providerID,
-      id: providerID,
-      models: option.modelID ? [option.modelID] : [],
-      value: providerID,
-    });
-  };
-
-  if (catalog?.providers?.length) {
-    const providers = new Map<string, ModelProviderSelectOption>();
-    for (const provider of catalog.providers) {
-      const disabled = cliProviderCheckFailed(provider);
-      providers.set(provider.id, {
-        avatar: modelProviderAvatarPath(provider),
-        builtin: provider.builtin || undefined,
-        displayName: provider.display_name || provider.id,
-        serviceName: provider.service_name,
-        id: provider.id,
-        disabled: disabled || provider.status === "failed" || undefined,
-        models: disabled ? [] : [...provider.models],
-        imageModels: disabled ? [] : (provider.imageModels ?? []),
-        videoModels: disabled ? [] : (provider.videoModels ?? []),
-        value: provider.id,
-      });
-    }
-    for (const option of modelOptions) {
-      mergeModelOption(providers, option);
-    }
-    return [...providers.values()];
-  }
-
   const providers = new Map<string, ModelProviderSelectOption>();
+  for (const provider of catalog?.providers ?? []) {
+    if (provider.status !== "connected") continue;
+    providers.set(provider.id, {
+      avatar: modelProviderAvatarPath(provider),
+      builtin: provider.builtin || undefined,
+      displayName: provider.display_name || provider.id,
+      serviceName: provider.service_name,
+      id: provider.id,
+      models: modelIDsForProviderSelection(provider.id, provider.models),
+      imageModels: provider.imageModels ?? [],
+      videoModels: provider.videoModels ?? [],
+      value: provider.id,
+    });
+  }
   for (const option of modelOptions) {
-    mergeModelOption(providers, option);
+    const provider = providers.get(normalizeModelProviderID(option.providerID));
+    if (provider && option.modelID && !provider.models.includes(option.modelID)) {
+      provider.models.push(option.modelID);
+    }
   }
   return [...providers.values()];
-}
-
-function cliProviderCheckFailed(provider: ModelProvider): boolean {
-  return (
-    (provider.id === MODEL_PROVIDER_IDS.Codex || provider.id === MODEL_PROVIDER_IDS.ClaudeCode) &&
-    provider.status === "failed"
-  );
 }
 
 export function modelProviderDisplayNameExists(

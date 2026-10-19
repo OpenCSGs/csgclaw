@@ -659,7 +659,7 @@ describe("useAgentController", () => {
     }
   });
 
-  it("discovers live models for the selected agent when the provider catalog cache is empty", async () => {
+  it("keeps failed providers hidden even after live discovery", async () => {
     const csghubLiteAgent: AgentLike = {
       id: "u-manager",
       name: "manager",
@@ -711,12 +711,7 @@ describe("useAgentController", () => {
       expect(fetchAgentProfileModels).toHaveBeenCalledWith(expect.objectContaining({ provider: "csghub_lite" })),
     );
     await waitFor(() => expect(result.current.agentViewProps.draft?.model_id).toBe("Qwen/Qwen3-0.6B-GGUF"));
-    expect(result.current.agentViewProps.modelOptions).toEqual([
-      expect.objectContaining({
-        providerID: "csghub-lite",
-        modelID: "Qwen/Qwen3-0.6B-GGUF",
-      }),
-    ]);
+    expect(result.current.agentViewProps.modelOptions).toEqual([]);
     expect(result.current.agentViewProps.modelError).toBeNull();
   });
 
@@ -2970,7 +2965,7 @@ describe("useAgentController", () => {
 
   it("uses the refreshed environment catalog when opening template creation", async () => {
     const catalog = (model: string) =>
-      normalizeModelProviderCatalog({ providers: [{ id: "opencsg", models: [model] }] });
+      normalizeModelProviderCatalog({ providers: [{ id: "opencsg", status: "connected", models: [model] }] });
     vi.mocked(fetchAgentProfileDefaults).mockResolvedValueOnce({
       provider: "csghub",
       model_provider_id: "opencsg",
@@ -3033,7 +3028,7 @@ describe("useAgentController", () => {
         await result.current.computerViewProps.onCreateAgent();
       });
       expect(result.current.agentProfileModalProps?.agentDraft).toMatchObject({
-        model_provider_id: "opencsg",
+        model_provider_id: "",
         model_id: "",
       });
     },
@@ -3105,16 +3100,25 @@ describe("useAgentController", () => {
     expect(patchCsgclawUserRequest).toHaveBeenCalledWith("user-worker", { avatar: selectedAvatar });
   });
 
-  it("requires OpenCSG login before creating a template worker that uses OpenCSG models", async () => {
+  it("uses another available provider when OpenCSG is signed out", async () => {
     vi.mocked(fetchAgentProfileDefaults).mockResolvedValue({
       model_provider_id: "opencsg",
       model_id: "deepseek-v4",
       profile_complete: true,
       provider: "csghub",
     });
-    const { result } = renderHook(() => useAgentControllerHarness().controller, {
-      wrapper: createWrapper(),
-    });
+    const { result } = renderHook(
+      () =>
+        useAgentControllerHarness({
+          modelProviders: normalizeModelProviderCatalog({
+            providers: [{ id: "custom", status: "connected", models: ["chat"] }],
+          }),
+          modelProvidersLoaded: true,
+        }).controller,
+      {
+        wrapper: createWrapper(),
+      },
+    );
 
     await act(async () => {
       await result.current.computerViewProps.onCreateAgent();
@@ -3125,8 +3129,11 @@ describe("useAgentController", () => {
       await result.current.agentProfileModalProps?.onSave();
     });
 
-    expect(createBotRequest).not.toHaveBeenCalled();
-    expect(result.current.agentProfileModalProps).not.toBeNull();
+    expect(createBotRequest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agent_profile: expect.objectContaining({ model_provider_id: "custom", model_id: "chat" }),
+      }),
+    );
   });
 
   it("keeps a migrated worker avatar after saving through its canonical IM user", async () => {
@@ -3393,7 +3400,7 @@ describe("useAgentController", () => {
   });
 
   it("initializes create agent drafts from the first available model provider when defaults are empty", async () => {
-    vi.mocked(fetchAgentProfileDefaults).mockResolvedValueOnce({});
+    vi.mocked(fetchAgentProfileDefaults).mockRejectedValueOnce(new Error("unavailable"));
     const modelProviders = normalizeModelProviderCatalog({
       providers: [
         {
@@ -3401,6 +3408,7 @@ describe("useAgentController", () => {
           kind: "codex",
           builtin: true,
           display_name: "Codex",
+          status: "connected",
           models: ["gpt-5.5"],
         },
       ],
@@ -3440,6 +3448,7 @@ describe("useAgentController", () => {
           kind: "codex",
           builtin: true,
           display_name: "Codex",
+          status: "connected",
           models: ["gpt-5.5"],
         },
         {
@@ -3447,6 +3456,7 @@ describe("useAgentController", () => {
           kind: "opencsg",
           builtin: true,
           display_name: "OpenCSG",
+          status: "connected",
           models: ["deepseek-v4"],
         },
       ],
@@ -3533,7 +3543,7 @@ describe("useAgentController", () => {
     );
   });
 
-  it("fills each missing generation model and replaces disconnected remembered models", async () => {
+  it("replaces disconnected defaults while retaining an unassigned video model", async () => {
     const models = normalizeModelProviderCatalog({
       providers: [
         { id: "service", status: "connected", models: ["chat"], image_models: ["image"], video_models: ["video"] },
@@ -3562,7 +3572,7 @@ describe("useAgentController", () => {
       model_provider_id: "service",
       model_id: "chat",
       image_generation: { provider_id: "service", model_id: "image" },
-      video_generation: { provider_id: "service", model_id: "video" },
+      video_generation: null,
     });
   });
 });

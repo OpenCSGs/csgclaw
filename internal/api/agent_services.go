@@ -35,6 +35,8 @@ type AgentWorkspace interface {
 type AgentModels interface {
 	ListModelsForRequest(context.Context, agent.ProfileModelRequest) ([]string, error)
 	ProfileDefaultsView() agent.AgentProfileView
+	CreationDefaultsView() agent.AgentProfileView
+	SetCreationDefault(agent.CreationModelDefaultRequest) (agent.AgentProfileView, error)
 	SetLLMConfig(config.LLMConfig)
 }
 type AgentRuntimeSupport interface {

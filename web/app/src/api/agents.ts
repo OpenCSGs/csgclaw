@@ -255,6 +255,14 @@ export function fetchAgentProfileDefaults(): Promise<AgentProfileLike> {
   return get("api/v1/agent-profile-defaults");
 }
 
+export function updateAgentProfileDefaults(payload: {
+  kind: "agent" | "image" | "video";
+  provider_id: string;
+  model_id: string;
+}): Promise<AgentProfileLike> {
+  return patch("api/v1/agent-profile-defaults", payload);
+}
+
 export function fetchAgentProfile(agentID: string): Promise<AgentProfileLike> {
   return get(`api/v1/agents/${encodeURIComponent(agentID)}/profile`);
 }

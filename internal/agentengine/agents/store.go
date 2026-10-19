@@ -18,6 +18,7 @@ import (
 )
 
 type persistedState struct {
+	CreationDefaults *CreationModelDefaults   `json:"creation_defaults,omitempty"`
 	ProfileDefaults  AgentProfile             `json:"profile_defaults,omitempty"`
 	DetectionResults []ProfileDetectionResult `json:"detection_results,omitempty"`
 	Agents           []persistedAgent         `json:"agents"`
@@ -26,6 +27,7 @@ type persistedState struct {
 }
 
 type rootAgentsState struct {
+	CreationDefaults *CreationModelDefaults   `json:"creation_defaults,omitempty"`
 	ProfileDefaults  AgentProfile             `json:"model_defaults,omitempty"`
 	DetectionResults []ProfileDetectionResult `json:"detection_results,omitempty"`
 	Items            []persistedAgent         `json:"items"`
@@ -33,6 +35,7 @@ type rootAgentsState struct {
 
 func (s *rootAgentsState) UnmarshalJSON(data []byte) error {
 	type rootAgentsStateJSON struct {
+		CreationDefaults *CreationModelDefaults   `json:"creation_defaults,omitempty"`
 		ModelDefaults    AgentProfile             `json:"model_defaults,omitempty"`
 		ProfileDefaults  AgentProfile             `json:"profile_defaults,omitempty"`
 		DetectionResults []ProfileDetectionResult `json:"detection_results,omitempty"`
@@ -47,6 +50,7 @@ func (s *rootAgentsState) UnmarshalJSON(data []byte) error {
 		defaults = decoded.ProfileDefaults
 	}
 	*s = rootAgentsState{
+		CreationDefaults: cloneCreationDefaults(decoded.CreationDefaults),
 		ProfileDefaults:  cloneProfile(defaults),
 		DetectionResults: append([]ProfileDetectionResult(nil), decoded.DetectionResults...),
 		Items:            decoded.Items,
@@ -55,7 +59,7 @@ func (s *rootAgentsState) UnmarshalJSON(data []byte) error {
 }
 
 func (s persistedState) isObject() bool {
-	return s.Agents != nil || s.Runtimes != nil || s.Workers != nil || s.ProfileDefaults.Provider != "" || len(s.DetectionResults) > 0
+	return s.CreationDefaults != nil || s.Agents != nil || s.Runtimes != nil || s.Workers != nil || s.ProfileDefaults.Provider != "" || len(s.DetectionResults) > 0
 }
 
 type legacyWorker struct {
@@ -405,7 +409,7 @@ func (w legacyWorker) toAgent() Agent {
 func (s *Repository) Reload() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	candidate := &Repository{state: s.state, profileDefaults: cloneProfile(s.profileDefaults), normalizeProfileReference: s.normalizeProfileReference}
+	candidate := &Repository{creationDefaults: cloneCreationDefaults(s.creationDefaults), state: s.state, profileDefaults: cloneProfile(s.profileDefaults), normalizeProfileReference: s.normalizeProfileReference}
 	agents, err := candidate.readState()
 	if err != nil {
 		return err
@@ -413,6 +417,7 @@ func (s *Repository) Reload() error {
 	s.agents = agents
 	s.runtimeRecords = candidate.runtimeRecords
 	s.profileDefaults = candidate.profileDefaults
+	s.creationDefaults = candidate.creationDefaults
 	s.detectionResults = candidate.detectionResults
 	if s.runtimeRecords == nil {
 		s.runtimeRecords = make(map[string]RuntimeRecord)
@@ -442,6 +447,7 @@ func (s *Repository) readState() (map[string]Agent, error) {
 
 	var state persistedState
 	if err := json.Unmarshal(data, &state); err == nil && state.isObject() {
+		s.creationDefaults = cloneCreationDefaults(state.CreationDefaults)
 		if strings.TrimSpace(state.ProfileDefaults.Provider) != "" || strings.TrimSpace(state.ProfileDefaults.ModelID) != "" || strings.TrimSpace(state.ProfileDefaults.BaseURL) != "" {
 			s.profileDefaults = profileDefaultsSnapshot(s.catalogReferenceForLoadedProfile(normalizeProfile(state.ProfileDefaults, "", "")))
 		}
@@ -536,6 +542,7 @@ func (s *Repository) readRootAgentsState() (rootAgentsState, bool, error) {
 }
 
 func (s *Repository) agentsFromRootState(root rootAgentsState) (map[string]Agent, error) {
+	s.creationDefaults = cloneCreationDefaults(root.CreationDefaults)
 	agents := make(map[string]Agent)
 	if strings.TrimSpace(root.ProfileDefaults.Provider) != "" ||
 		strings.TrimSpace(root.ProfileDefaults.ModelProviderID) != "" ||
@@ -582,6 +589,7 @@ func (s *Repository) saveLocked() error {
 	}
 
 	data, err := json.MarshalIndent(persistedState{
+		CreationDefaults: cloneCreationDefaults(s.creationDefaults),
 		ProfileDefaults:  cloneProfile(s.profileDefaults),
 		DetectionResults: append([]ProfileDetectionResult(nil), s.detectionResults...),
 		Agents:           persistedAgentsFromMap(s.agents),
@@ -615,6 +623,7 @@ func (s *Repository) rootAgentsStateLocked() rootAgentsState {
 		}
 	}
 	return rootAgentsState{
+		CreationDefaults: cloneCreationDefaults(s.creationDefaults),
 		ProfileDefaults:  compactPersistedProfileDefaults(s.profileDefaults),
 		DetectionResults: append([]ProfileDetectionResult(nil), s.detectionResults...),
 		Items:            items,

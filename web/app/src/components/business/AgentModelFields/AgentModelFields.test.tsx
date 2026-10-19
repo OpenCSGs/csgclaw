@@ -99,7 +99,7 @@ test.each([
   expect(screen.getByRole("combobox", { name: t("profileModel") })).toBeDisabled();
 });
 
-test("a removed saved model is retained with an explanation and cannot be selected again", async () => {
+test("a removed saved model stays visible on the trigger but is absent from choices", async () => {
   const user = userEvent.setup();
   const onChange = vi.fn();
   render(
@@ -107,13 +107,24 @@ test("a removed saved model is retained with an explanation and cannot be select
   );
   expect(screen.getByRole("combobox")).toHaveTextContent("removed");
   await user.click(screen.getByRole("combobox"));
-  const saved = screen.getByRole("option", { name: /removed/ });
-  expect(saved).toHaveAttribute("aria-disabled", "true");
-  expect(saved).toHaveTextContent(t("profileModelCurrentSelectionRetained"));
-  await user.click(saved);
-  expect(onChange).not.toHaveBeenCalled();
+  expect(screen.queryByRole("option", { name: /removed/ })).not.toBeInTheDocument();
   expect(screen.getAllByRole("option", { name: "current" })).toHaveLength(1);
   expect(screen.queryByRole("option", { name: "Choose" })).not.toBeInTheDocument();
   await user.click(screen.getByRole("option", { name: "current" }));
   expect(onChange).toHaveBeenCalledWith("current");
+});
+
+test("empty model fields display unspecified without exposing an encoded selection", () => {
+  render(
+    <AgentModelFields
+      providerOptions={[]}
+      providerID=""
+      modelID=""
+      models={[]}
+      onPatch={vi.fn()}
+      onRequireOpenCSGAuth={() => true}
+      t={t}
+    />,
+  );
+  for (const control of screen.getAllByRole("combobox")) expect(control).toHaveTextContent(t("modelDefaultNone"));
 });

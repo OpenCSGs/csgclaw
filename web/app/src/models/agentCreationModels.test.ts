@@ -64,7 +64,7 @@ it("replaces unavailable choices independently and never selects media as the ch
   expect(agentDraftWithAvailableModels(draft, catalog)).toMatchObject({
     model_provider_id: "other",
     model_id: "other-chat",
-    image_generation: { provider_id: "service", model_id: "image-first" },
+    image_generation: { provider_id: "other", model_id: "other-image" },
     video_generation: { provider_id: "other", model_id: "other-video" },
   });
 });

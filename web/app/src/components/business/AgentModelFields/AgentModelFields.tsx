@@ -31,6 +31,11 @@ export function AgentModelFields({
   onRequireOpenCSGAuth,
   t,
 }: AgentModelFieldsProps) {
+  providerOptions = providerOptions.filter(
+    (option) =>
+      !option.disabled &&
+      option.models.some((model) => !option.imageModels?.includes(model) && !option.videoModels?.includes(model)),
+  );
   const selectedProvider = providerOptions.find((option) => option.id === providerID);
   return (
     <>
@@ -38,7 +43,9 @@ export function AgentModelFields({
         <Select
           value={providerID}
           required
-          placeholder={busy ? t("profileLoadingModels") : t("profileProviderSelect")}
+          placeholder={
+            busy ? t("profileLoadingModels") : t(providerOptions.length ? "profileProviderSelect" : "modelDefaultNone")
+          }
           selectedLabel={
             selectedProvider ? (
               <ModelOptionLabel avatar={selectedProvider.avatar} model={selectedProvider.displayName} />

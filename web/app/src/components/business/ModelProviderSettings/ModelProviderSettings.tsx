@@ -1,4 +1,5 @@
 import { useModelProviderPresets } from "@/hooks/useModelProviderPresets";
+import { DefaultModelSettings } from "./DefaultModelSettings";
 import directoryStyles from "./ProviderDirectory.module.css";
 import { ModelMetadataFields } from "./ModelMetadataFields";
 import { modelOverridesEqual, type ModelOverride } from "@/models/modelMetadata";
@@ -387,6 +388,8 @@ export function ModelProviderSettings({ embedded = false }: { embedded?: boolean
             {t("modelProviderAdd")}
           </Button>
         </header>
+
+        <DefaultModelSettings catalog={modelProviders} t={t} />
 
         <label className="model-provider-search">
           <span className="sr-only">{t("modelProviderSearchPlaceholder")}</span>

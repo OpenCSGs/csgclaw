@@ -47,24 +47,26 @@ export function ConnectedModelPicker({
       ? `${provider.serviceName} · ${provider.displayName}`
       : provider.displayName;
   const current = providers.find((provider) => provider.id === providerID);
-  const options: ComboboxOption[] = providers.flatMap((provider) =>
-    provider.models
-      .filter((model) => !provider.imageModels?.includes(model) && !provider.videoModels?.includes(model))
-      .map((model) => ({
-        value: encode(provider.id, model),
-        textValue: `${model} ${detail(provider)} ${isOpenCSGAutoModel(provider.id, model) ? t("modelProviderAutoName") : ""}`,
-        description: isOpenCSGAutoModel(provider.id, model) ? t("modelProviderAutoDescription") : undefined,
-        label: (
-          <ModelOptionLabel
-            avatar={provider.avatar}
-            model={isOpenCSGAutoModel(provider.id, model) ? t("modelProviderAutoName") : model}
-            badge={isOpenCSGAutoModel(provider.id, model) ? t("modelProviderAutoBadge") : undefined}
-            provider={detail(provider)}
-          />
-        ),
-        disabled: provider.disabled,
-      })),
-  );
+  const options: ComboboxOption[] = providers
+    .filter((provider) => !provider.disabled)
+    .flatMap((provider) =>
+      provider.models
+        .filter((model) => !provider.imageModels?.includes(model) && !provider.videoModels?.includes(model))
+        .map((model) => ({
+          value: encode(provider.id, model),
+          textValue: `${model} ${detail(provider)} ${isOpenCSGAutoModel(provider.id, model) ? t("modelProviderAutoName") : ""}`,
+          description: isOpenCSGAutoModel(provider.id, model) ? t("modelProviderAutoDescription") : undefined,
+          label: (
+            <ModelOptionLabel
+              avatar={provider.avatar}
+              model={isOpenCSGAutoModel(provider.id, model) ? t("modelProviderAutoName") : model}
+              badge={isOpenCSGAutoModel(provider.id, model) ? t("modelProviderAutoBadge") : undefined}
+              provider={detail(provider)}
+            />
+          ),
+          disabled: provider.disabled,
+        })),
+    );
   if (onFollowDefault)
     options.unshift({
       value: "",
@@ -72,14 +74,7 @@ export function ConnectedModelPicker({
       label: <ModelOptionLabel model={t("iaModelFollowAgent")} provider={modelID} />,
       disabled: false,
     });
-  const selected = followDefault ? "" : encode(providerID, modelID);
-  if (modelID && !followDefault && !options.some((option) => option.value === selected))
-    options.unshift({
-      value: selected,
-      textValue: modelID,
-      label: <ModelOptionLabel model={modelID} provider={t("profileModelCurrentSelectionRetained")} />,
-      disabled: true,
-    });
+  const selected = followDefault || !modelID ? "" : encode(providerID, modelID);
   const connected = controller?.modelProviders?.providers ?? [];
   const failed = connected.filter((p) => p.status === "failed" && !p.builtin);
   async function choose(value: string) {
@@ -106,7 +101,7 @@ export function ConnectedModelPicker({
         disabled={disabled || saving}
         searchPlaceholder={t("modelProviderModelSearch")}
         emptyLabel={t("modelConnectNoMatch")}
-        placeholder={t("profileSelectModel")}
+        placeholder={t(options.length ? "profileSelectModel" : "modelDefaultNone")}
         selectedLabel={
           followDefault ? (
             compact ? (
