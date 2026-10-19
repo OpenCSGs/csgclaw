@@ -8,6 +8,7 @@ import { AgentAppsPanel, AppManagedMCPRows } from "./AgentAppsPanel";
 import { AppSettingsDialog } from "./AppSettingsDialog";
 import { useAgentApps } from "./useAgentApps";
 import buttonStyles from "@/components/ui/Button/Button.module.css";
+import { GlobalNoticeProvider } from "@/components/ui";
 
 const t = createTranslator("en");
 const definition: AppDefinition = {
@@ -77,6 +78,15 @@ function mockServer(
       }));
       return Response.json(items[0]);
     }
+    if (init?.method === "PATCH" && path.includes("/connectors/")) {
+      const body = JSON.parse(String(init.body));
+      const id = path.split("/").at(-1);
+      const updated = items.find((app) => app.installation_id === id);
+      if (!updated) throw new Error(`Unknown connector ${id}`);
+      const next = { ...updated, enabled: Boolean(body.enabled), status: body.enabled ? updated.status : "disabled" };
+      items = items.map((app) => (app.installation_id === id ? next : app));
+      return Response.json(next);
+    }
     if (init?.method === "POST" && path.endsWith("/connectors")) {
       const body = JSON.parse(String(init.body));
       const saved = { ...installation, resource_id: body.resource_id };
@@ -100,6 +110,20 @@ describe("Agent Apps", () => {
     await user.click(await screen.findByRole("button", { name: /Feishu/ }));
 
     expect(screen.getByRole("dialog")).toBeVisible();
+  });
+
+  it("reports the connector state returned after a toggle", async () => {
+    mockServer([installation]);
+    const user = userEvent.setup();
+    render(
+      <GlobalNoticeProvider>
+        <Harness />
+      </GlobalNoticeProvider>,
+    );
+
+    await user.click(await screen.findByRole("switch", { name: "Work GitLab" }));
+
+    expect(await screen.findByText('Disabled "Work GitLab"')).toBeVisible();
   });
 
   it("falls back to the global Feishu resource for runtime status and skills", async () => {

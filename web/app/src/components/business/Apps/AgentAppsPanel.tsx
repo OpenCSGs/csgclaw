@@ -17,6 +17,7 @@ import {
   DialogBody,
   DialogFooter,
   DialogCloseButton,
+  useGlobalNotice,
 } from "@/components/ui";
 import { errorMessage } from "@/api/client";
 import { localizeAPIError } from "@/shared/i18n";
@@ -55,6 +56,7 @@ export function AgentAppsPanel({
   const [adding, setAdding] = useState(false);
   const [removing, setRemoving] = useState<AppInstallation | null>(null);
   const [error, setError] = useState<unknown>(null);
+  const { showNotice } = useGlobalNotice();
   const feishu = controller.items.find((app) => app.kind === "cli" && app.app_id === "feishu");
   const selected = controller.items.find((app) => app.installation_id === selectedID);
   const selectedResource = selected?.resource_id
@@ -80,6 +82,18 @@ export function AgentAppsPanel({
     } catch (e) {
       setError(e);
       return false;
+    }
+  }
+  async function toggleConnector(app: AppInstallation | undefined, enabled: boolean, name: string) {
+    setError(null);
+    try {
+      const updated = app ? await controller.update(app.installation_id, { enabled }) : await controller.bindFeishu();
+      showNotice({
+        message: t(updated.enabled ? "resourceEnabledNotice" : "resourceDisabledNotice", { name }),
+        closeLabel: t("close"),
+      });
+    } catch (failure) {
+      setError(failure);
     }
   }
   const closePicker = () => {
@@ -160,11 +174,7 @@ export function AgentAppsPanel({
               checked={Boolean(feishu?.enabled)}
               size="sm"
               disabled={!cliSupported || Boolean(controller.busyID) || feishu?.status === "applying"}
-              onCheckedChange={(enabled) =>
-                void run(() =>
-                  feishu ? controller.update(feishu.installation_id, { enabled }) : controller.bindFeishu(),
-                )
-              }
+              onCheckedChange={(enabled) => void toggleConnector(feishu, enabled, appName("feishu", t))}
             />
           </span>
         </article>
@@ -202,7 +212,7 @@ export function AgentAppsPanel({
                   checked={app.enabled}
                   size="sm"
                   disabled={Boolean(controller.busyID) || (!app.enabled && app.resource_enabled === false)}
-                  onCheckedChange={(enabled) => void run(() => controller.update(app.installation_id, { enabled }))}
+                  onCheckedChange={(enabled) => void toggleConnector(app, enabled, app.name)}
                 />
               </span>
             </article>
@@ -228,7 +238,7 @@ export function AgentAppsPanel({
                 checked={Boolean(selected?.enabled)}
                 disabled={Boolean(controller.busyID) || (!selected?.enabled && selected?.resource_enabled === false)}
                 onCheckedChange={(enabled) =>
-                  selected ? void run(() => controller.update(selected.installation_id, { enabled })) : undefined
+                  selected ? void toggleConnector(selected, enabled, selected.name) : undefined
                 }
               />
               <DialogCloseButton label={t("close")} size="sm" variant="tertiaryGray" iconOnly />
@@ -414,12 +424,17 @@ export function AppManagedMCPRows({
 }: Pick<Props, "controller" | "t" | "onSelect" | "portalContainer"> & { disabled?: boolean }) {
   const [detailID, setDetailID] = useState("");
   const [error, setError] = useState<unknown>(null);
+  const { showNotice } = useGlobalNotice();
   const items = controller.items.filter((app) => app.kind !== "cli");
   const selected = items.find((app) => app.installation_id === detailID);
   async function toggle(app: AppInstallation) {
     setError(null);
     try {
-      await controller.update(app.installation_id, { enabled: !app.enabled });
+      const updated = await controller.update(app.installation_id, { enabled: !app.enabled });
+      showNotice({
+        message: t(updated.enabled ? "resourceEnabledNotice" : "resourceDisabledNotice", { name: updated.name }),
+        closeLabel: t("close"),
+      });
     } catch (failure) {
       setError(failure);
     }
