@@ -1331,67 +1331,20 @@ describe("ConversationPane", () => {
     expect(within(threadPanel).getByText("1 replies")).toBeInTheDocument();
   });
 
-  it("confirms before clearing room messages from the tools menu", async () => {
-    const user = userEvent.setup();
-    const onClearRoomMessages = vi.fn();
-    const onDeleteRoom = vi.fn();
-    renderThreadPane({ isDirect: false, onClearRoomMessages, onDeleteRoom });
+  it("keeps direct-chat header actions to activity, files, and browser while rooms retain member management", () => {
+    const direct = renderThreadPane({ isDirect: true });
+    expect(screen.getByRole("button", { name: "Activity records" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "chatFiles" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "chatBrowser" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Invite" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "channelTools" })).not.toBeInTheDocument();
+    direct.unmount();
 
-    await user.click(screen.getByRole("button", { name: "channelTools" }));
-    await user.click(screen.getByRole("button", { name: "clearRoomMessages" }));
-
-    expect(onClearRoomMessages).not.toHaveBeenCalled();
-    expect(screen.getByRole("dialog")).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "clearRoomMessagesConfirm" }));
-
-    expect(onClearRoomMessages).toHaveBeenCalledWith("room-1");
-    expect(onDeleteRoom).not.toHaveBeenCalled();
-  });
-
-  it("does not offer a notify-every-agent override for free rooms", async () => {
-    const user = userEvent.setup();
     renderThreadPane({ isDirect: false });
-
-    await user.click(screen.getByRole("button", { name: "channelTools" }));
-    expect(screen.queryByRole("switch", { name: /notifyAllAgents/ })).not.toBeInTheDocument();
-  });
-
-  it("confirms before deleting a room from the tools menu", async () => {
-    const user = userEvent.setup();
-    const onClearRoomMessages = vi.fn();
-    const onDeleteRoom = vi.fn();
-    renderThreadPane({ isDirect: false, onClearRoomMessages, onDeleteRoom });
-
-    await user.click(screen.getByRole("button", { name: "channelTools" }));
-    await user.click(screen.getByRole("button", { name: "deleteRoom" }));
-
-    expect(onDeleteRoom).not.toHaveBeenCalled();
-    expect(screen.getByRole("dialog")).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "deleteRoomConfirm" }));
-
-    expect(onDeleteRoom).toHaveBeenCalledWith("room-1");
-    expect(onClearRoomMessages).not.toHaveBeenCalled();
-  });
-
-  it("keeps the delete dialog open and shows a localized error when deletion is blocked", async () => {
-    const user = userEvent.setup();
-    const onDeleteRoom = vi.fn().mockRejectedValue({
-      status: 409,
-      code: "room_has_active_tasks",
-      message: "finish or stop active room tasks before deleting the room",
-    });
-    renderThreadPane({ isDirect: false, onDeleteRoom });
-
-    await user.click(screen.getByRole("button", { name: "channelTools" }));
-    await user.click(screen.getByRole("button", { name: "deleteRoom" }));
-    await user.click(screen.getByRole("button", { name: "deleteRoomConfirm" }));
-
-    expect(await screen.findByRole("alert")).toHaveTextContent(
-      "当前房间仍有未完成的任务。请先停止或完成任务，再删除房间。",
-    );
-    expect(screen.getByRole("dialog")).toBeInTheDocument();
-    expect(onDeleteRoom).toHaveBeenCalledWith("room-1");
+    expect(screen.getByRole("button", { name: "Invite" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Activity records" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "chatFiles" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "chatBrowser" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "channelTools" })).not.toBeInTheDocument();
   });
 });

@@ -466,14 +466,15 @@
 
 @container chat-tools-layout (max-width: 440px) {
   .chat-header .chat-title-bar {
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
   }
   .chat-header .chat-title-row {
-    flex-basis: 100%;
+    flex: 1 1 auto;
+    min-width: 0;
   }
   .chat-header .chat-title-actions {
-    flex-wrap: wrap;
-    max-width: 100%;
+    flex: 0 0 auto;
+    flex-wrap: nowrap;
     margin-left: auto;
     gap: 4px;
   }
