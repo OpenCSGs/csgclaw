@@ -1036,11 +1036,7 @@ func TestAppServerManagerPromptCancellationReturnsConfirmedStop(t *testing.T) {
 	}
 }
 
-func TestAppServerManagerPromptCancellationDoesNotConfirmFailedStop(t *testing.T) {
-	originalStopTimeout := appServerStopTimeout
-	appServerStopTimeout = 10 * time.Millisecond
-	t.Cleanup(func() { appServerStopTimeout = originalStopTimeout })
-
+func TestAppServerManagerPromptCancellationPreservesRuntimeOnWriteFailure(t *testing.T) {
 	manager := newAppServerManager(testAppServerManagerDeps())
 	live := &liveSession{
 		spec:      SessionSpec{RuntimeID: "runtime-1"},
@@ -1057,8 +1053,11 @@ func TestAppServerManagerPromptCancellationDoesNotConfirmFailedStop(t *testing.T
 	cancel()
 
 	response, err := manager.stopCanceledAppServerTurn(ctx, live, waiter, "prompt context canceled")
-	if response.StopReason != "" || err == nil || !strings.Contains(err.Error(), "stop app-server") {
-		t.Fatalf("stopCanceledAppServerTurn() response = %#v, error = %v; want unconfirmed stop failure", response, err)
+	if response.StopReason != "" || err == nil || !strings.Contains(err.Error(), "worker preserved") {
+		t.Fatalf("stopCanceledAppServerTurn() response = %#v, error = %v; want unconfirmed cancellation with worker preserved", response, err)
+	}
+	if !errors.Is(err, context.Canceled) || manager.sessions[live.spec.RuntimeID] != live {
+		t.Fatalf("cancellation lost context or detached runtime: %v", err)
 	}
 }
 
@@ -3434,7 +3433,7 @@ func TestAppServerManagerHelperProcess(t *testing.T) {
 				return nil, false
 			}
 		})
-	case "prompt-cancel-no-active-turn", "prompt-cancel-invalid-request", "prompt-cancel-turn-mismatch", "prompt-cancel-interrupt-error":
+	case "prompt-cancel-no-active-turn", "prompt-cancel-invalid-request", "prompt-cancel-turn-mismatch", "prompt-cancel-interrupt-error", "prompt-cancel-interrupt-timeout", "prompt-cancel-completion-timeout":
 		turnStarts := 0
 		runAppServerHelper(t, func(index int, msg map[string]any) (map[string]any, bool) {
 			switch msg["method"] {
@@ -3449,6 +3448,12 @@ func TestAppServerManagerHelperProcess(t *testing.T) {
 				return rpcResult(msg["id"], map[string]any{"turnId": "turn-cancel"}), true
 			case "turn/interrupt":
 				assertTurnInterruptParams(t, msg, "main-thread", "turn-cancel")
+				if mode == "prompt-cancel-interrupt-timeout" {
+					return nil, false // Keep reading requests without answering this RPC.
+				}
+				if mode == "prompt-cancel-completion-timeout" {
+					return rpcResult(msg["id"], map[string]any{}), true
+				}
 				code, message := appServerRPCInvalidRequest, "no active turn to interrupt"
 				if mode == "prompt-cancel-invalid-request" {
 					message = "interrupt request is invalid"

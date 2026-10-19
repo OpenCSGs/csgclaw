@@ -13,7 +13,7 @@ func TestDefaultSystemSkillNamesExcludeManagerOnlyDemo(t *testing.T) {
 	if slices.Contains(names, "csgclaw-interactive-output-demo") {
 		t.Fatalf("defaultSystemSkillNames() = %#v, want Manager-only demo excluded", names)
 	}
-	for _, name := range []string{"skill-creator", "skill-installer"} {
+	for _, name := range []string{"skill-creator", "skill-installer", "csgclaw-self-diagnosis"} {
 		if !slices.Contains(names, name) {
 			t.Fatalf("defaultSystemSkillNames() = %#v, want %s", names, name)
 		}

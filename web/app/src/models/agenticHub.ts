@@ -11,3 +11,16 @@ export function agenticHubCreateAgentURL(siteURL: string, templateID: string): s
     return "";
   }
 }
+
+export function agenticHubTemplatesURL(siteURL: string): string {
+  try {
+    const site = new URL(siteURL);
+    if (site.protocol !== "https:" && site.protocol !== "http:") return "";
+    const destination = new URL("/agentichub", site.origin);
+    destination.searchParams.set("view", "resources");
+    destination.searchParams.set("subview", "template");
+    return destination.toString();
+  } catch {
+    return "";
+  }
+}

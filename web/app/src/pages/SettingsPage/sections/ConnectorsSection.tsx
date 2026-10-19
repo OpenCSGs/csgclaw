@@ -78,7 +78,14 @@ export function ConnectorsSection() {
           </DropdownMenuTrigger>
           <DropdownMenuContent>
             <DropdownMenuItem onSelect={() => setCreateOpen(true)}>{t("resourcesMCPCreateTitle")}</DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => setAppCatalogOpen(true)}>{t("appAdd")}</DropdownMenuItem>
+            <DropdownMenuItem
+              onSelect={() => {
+                setTab("installed");
+                setAppCatalogOpen(true);
+              }}
+            >
+              {t("appAdd")}
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenuRoot>
       }

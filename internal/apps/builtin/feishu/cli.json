@@ -15,11 +15,11 @@
         "sha256": "64e856a05c8dfdac5dbecd316766e4b05299f230f54833b674a623df3ac13f1c"
       },
       "linux-amd64": {
-        "url": "https://github.com/larksuite/cli/releases/download/v1.0.97/lark-cli-1.0.97-linux-amd64.tar.gz",
+        "url": "https://registry.npmmirror.com/-/binary/lark-cli/v1.0.97/lark-cli-1.0.97-linux-amd64.tar.gz",
         "sha256": "7ce11848724f0b0bc8204012140adbf76fe7c1fc8abd41c1878bc97b7228126b"
       },
       "linux-arm64": {
-        "url": "https://github.com/larksuite/cli/releases/download/v1.0.97/lark-cli-1.0.97-linux-arm64.tar.gz",
+        "url": "https://registry.npmmirror.com/-/binary/lark-cli/v1.0.97/lark-cli-1.0.97-linux-arm64.tar.gz",
         "sha256": "2dec3e362ecce05b535854a0205035bb4ccdb72dbbed9a321890c2089da16bc5"
       },
       "linux-riscv64": {
@@ -37,7 +37,7 @@
     },
     "skills": {
       "version": "9067ec079bfa0b1ae2266cd91d1c1ee4a1ce824d",
-      "url": "https://codeload.github.com/larksuite/cli/tar.gz/9067ec079bfa0b1ae2266cd91d1c1ee4a1ce824d",
+      "url": "https://ghfast.top/https://github.com/larksuite/cli/archive/9067ec079bfa0b1ae2266cd91d1c1ee4a1ce824d.tar.gz",
       "sha256": "cdec7200b1ae9cc3c0ebc8a27428f359bf7236ef0b709e7c1c0206aab0185faa",
       "prefix": "lark-"
     }

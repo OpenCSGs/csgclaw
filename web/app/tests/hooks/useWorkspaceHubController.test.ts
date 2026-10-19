@@ -2,7 +2,7 @@ import { createElement, type ReactNode } from "react";
 import { act, renderHook } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { UseQueryResult } from "@tanstack/react-query";
-import { deleteHubTemplateRequest } from "@/api/hub";
+import { deleteHubTemplateRequest, publishHubTemplateToCommunityRequest } from "@/api/hub";
 import { workspaceQueryKeys } from "@/hooks/workspace/workspaceQueries";
 import { deleteSkillRequest, installRemoteSkillRequest } from "@/api/skills";
 import {
@@ -19,6 +19,7 @@ import { openCSGAuthGuardStub } from "../helpers/openCSGAuthGuard";
 vi.mock("@/api/hub", async () => ({
   ...(await vi.importActual<typeof import("@/api/hub")>("@/api/hub")),
   deleteHubTemplateRequest: vi.fn(),
+  publishHubTemplateToCommunityRequest: vi.fn(),
 }));
 
 vi.mock("@/api/skills", async () => {
@@ -219,3 +220,139 @@ describe("useWorkspaceHubController template deletion", () => {
     },
   );
 });
+
+it("clears publishing errors when selecting a different template", async () => {
+  const queryClient = new QueryClient();
+  const selection = {
+    detailPaneProps: { error: "" },
+    error: "",
+    selectedHubResourceType: "template",
+    selectedHubTemplateId: "local.first",
+    skills: [],
+  } as unknown as ReturnType<typeof useWorkspaceHubSelection>;
+  vi.mocked(useWorkspaceHubSelection).mockReturnValue(selection);
+  const wrapper = ({ children }: { children: ReactNode }) =>
+    createElement(QueryClientProvider, { client: queryClient }, children);
+  const { result, rerender } = renderHook(
+    () =>
+      useWorkspaceHubController({
+        activePane: { type: "hub", resourceType: "template", id: "local.first" },
+        hubLoaded: true,
+        hubTemplates: [],
+        hubTemplatesQuery: {} as UseQueryResult<HubTemplate[]>,
+        openCSGAuthGuard: openCSGAuthGuardStub(),
+        refreshWorkspaceHubTemplates: async () => [],
+        t: (key) => key,
+      }),
+    { wrapper },
+  );
+  act(() => result.current.hub.setPublishError("Previous template failed"));
+  expect(result.current.hub.detailPaneProps.publishError).toBe("Previous template failed");
+  vi.mocked(useWorkspaceHubSelection).mockReturnValue({ ...selection, selectedHubTemplateId: "local.second" });
+  rerender();
+  expect(result.current.hub.detailPaneProps.publishError).toBe("");
+  expect(result.current.hub.error).toBe("");
+  act(() => result.current.hub.setPublishError("New attempt failed"));
+  act(() => result.current.hub.detailPaneProps.onResetPublishError());
+  expect(result.current.hub.detailPaneProps.publishError).toBe("");
+  queryClient.clear();
+});
+
+it.each(["switch", "reopen"] as const)("ignores a late publishing failure after %s", async (action) => {
+  const queryClient = new QueryClient();
+  const selection = {
+    detailPaneProps: { error: "" },
+    error: "",
+    selectedHubResourceType: "template",
+    selectedHubTemplateId: "local.first",
+    skills: [],
+  } as unknown as ReturnType<typeof useWorkspaceHubSelection>;
+  vi.mocked(useWorkspaceHubSelection).mockReturnValue(selection);
+  let rejectPublish!: (error: Error) => void;
+  vi.mocked(publishHubTemplateToCommunityRequest).mockReturnValue(
+    new Promise((_resolve, reject) => {
+      rejectPublish = reject;
+    }),
+  );
+  const wrapper = ({ children }: { children: ReactNode }) =>
+    createElement(QueryClientProvider, { client: queryClient }, children);
+  const { result, rerender } = renderHook(
+    () =>
+      useWorkspaceHubController({
+        activePane: { type: "hub", resourceType: "template", id: "local.first" },
+        hubLoaded: true,
+        hubTemplates: [],
+        hubTemplatesQuery: {} as UseQueryResult<HubTemplate[]>,
+        openCSGAuthGuard: openCSGAuthGuardStub(),
+        refreshWorkspaceHubTemplates: async () => [],
+        t: (key) => key,
+      }),
+    { wrapper },
+  );
+  let request!: ReturnType<typeof result.current.hub.publishHubTemplate>;
+  act(() => {
+    request = result.current.hub.publishHubTemplate({ id: "local.first", source: { kind: "local" } });
+  });
+  if (action === "switch") {
+    vi.mocked(useWorkspaceHubSelection).mockReturnValue({ ...selection, selectedHubTemplateId: "local.second" });
+    rerender();
+  } else {
+    act(() => result.current.hub.detailPaneProps.onResetPublishError());
+  }
+  await act(async () => {
+    rejectPublish(new Error("Old request failed"));
+    await request;
+  });
+  expect(result.current.hub.detailPaneProps.publishError).toBe("");
+  expect(result.current.hub.error).toBe("");
+  queryClient.clear();
+});
+
+it.each(["Pending", "Fail", "missing"] as const)(
+  "preserves refreshed template details and fills missing publication results (%s)",
+  async (status) => {
+    const queryClient = new QueryClient();
+    const local: HubTemplate = { id: "local.first", name: "first", source: { kind: "local" } };
+    const published: HubTemplate = { id: "alice/first", name: "first", source: { kind: "remote" } };
+    const refreshed: HubTemplate = {
+      ...published,
+      description: "Full refreshed details",
+      metadata: { sensitive_check: { status, failure_details: [{ path: "MEMORY.md" }] } },
+    };
+    vi.mocked(useWorkspaceHubSelection).mockReturnValue({
+      detailPaneProps: { error: "" },
+      error: "",
+      selectedHubResourceType: "template",
+      selectedHubTemplateId: local.id,
+      skills: [],
+    } as unknown as ReturnType<typeof useWorkspaceHubSelection>);
+    vi.mocked(publishHubTemplateToCommunityRequest).mockResolvedValue(published);
+    const wrapper = ({ children }: { children: ReactNode }) =>
+      createElement(QueryClientProvider, { client: queryClient }, children);
+    const { result } = renderHook(
+      () =>
+        useWorkspaceHubController({
+          activePane: { type: "hub", resourceType: "template", id: "local.first" },
+          hubLoaded: true,
+          hubTemplates: [local],
+          hubTemplatesQuery: {} as UseQueryResult<HubTemplate[]>,
+          openCSGAuthGuard: openCSGAuthGuardStub(),
+          refreshWorkspaceHubTemplates: async () => {
+            const items = status === "missing" ? [local] : [local, refreshed];
+            queryClient.setQueryData(workspaceQueryKeys.hubTemplates(), items);
+            return items;
+          },
+          t: (key) => key,
+        }),
+      { wrapper },
+    );
+    await act(async () => {
+      expect(await result.current.hub.publishHubTemplate(local)).toEqual({ status: "success", template: published });
+    });
+    expect(queryClient.getQueryData(workspaceQueryKeys.hubTemplates())).toEqual([
+      local,
+      status === "missing" ? published : refreshed,
+    ]);
+    queryClient.clear();
+  },
+);

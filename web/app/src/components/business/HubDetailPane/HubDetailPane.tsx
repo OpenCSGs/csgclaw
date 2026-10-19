@@ -1,6 +1,11 @@
-import { templateInGroup, templateSourceLabelKey, type TemplateGroup } from "@/models/templateGroups";
+import {
+  hasSameNamedCloudTemplate,
+  templateInGroup,
+  templateSourceLabelKey,
+  type TemplateGroup,
+} from "@/models/templateGroups";
 import { AgentAvatarImage } from "@/components/business/AgentAvatar";
-import { agenticHubCreateAgentURL } from "@/models/agenticHub";
+import { agenticHubCreateAgentURL, agenticHubTemplatesURL } from "@/models/agenticHub";
 import { parseMCPServerDocument } from "@/models/mcpServerDocument";
 import { GlobalAppsPanel } from "@/components/business/Apps";
 import { ResourceListCard } from "@/components/business/ResourceListCard";
@@ -54,6 +59,7 @@ import { WorkspaceFilePreview, WorkspaceFileTree } from "@/components/business/W
 import { WorkspaceTemplatesIcon } from "@/components/ui/Icons";
 import {
   Button,
+  LinkButton,
   DropdownMenuRoot,
   DropdownMenuTrigger,
   DropdownMenuContent,
@@ -646,6 +652,7 @@ type HubDetailPaneHub = {
     publishBusy?: boolean;
     publishDisabled?: boolean;
     publishError?: string;
+    onResetPublishError?: () => void;
     skills: readonly SkillSummary[];
     skillTree: SkillTree | null;
     skillTreeError: string;
@@ -1079,9 +1086,14 @@ export function HubDetailPane({
     publishBusy = false,
     publishDisabled = false,
     publishError = "",
+    onResetPublishError,
     skillDeleteBusy = false,
   } = hub?.detailPaneProps ?? EMPTY_HUB_DETAIL_PROPS;
   const canDeleteTemplate = isDeletableHubTemplate(selectedTemplate);
+  const templatesURL = agenticHubTemplatesURL(agenticHubSiteURL);
+  const hasCloudTemplateWithSameName = Boolean(
+    templateUsername && selectedTemplate && hasSameNamedCloudTemplate(selectedTemplate, templates, templateUsername),
+  );
   const canPublishTemplate = canPublishHubTemplateToCommunity(selectedTemplate);
   const templateReview = hubTemplateReviewState(selectedTemplate);
 
@@ -1935,6 +1947,17 @@ export function HubDetailPane({
                     <Button variant="primary" size="md" onClick={() => onCreateFromTemplate?.(selectedTemplate)}>
                       <span>{t("createAgent")}</span>
                     </Button>
+                    {hasCloudTemplateWithSameName && templatesURL ? (
+                      <LinkButton
+                        variant="secondaryGray"
+                        size="md"
+                        href={templatesURL}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        {t("iaTemplateSameNameOnHub")} <ExternalLink size={14} />
+                      </LinkButton>
+                    ) : null}
                     {canPublishTemplate ? (
                       <Button
                         variant="secondaryGray"
@@ -1943,6 +1966,7 @@ export function HubDetailPane({
                         disabled={publishBusy || publishDisabled}
                         title={publishDisabled ? t("agentPublishLoginRequired") : undefined}
                         onClick={() => {
+                          onResetPublishError?.();
                           setPublishTemplateIncludeMemory(false);
                           setPublishChoiceDialogOpen(true);
                         }}
@@ -3134,6 +3158,17 @@ export function HubDetailPane({
                     {t("resourcesDeleteTemplate")}
                   </Button>
                 ) : null}
+                {hasCloudTemplateWithSameName && templatesURL ? (
+                  <LinkButton
+                    variant="secondaryGray"
+                    size="md"
+                    href={templatesURL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    {t("iaTemplateSameNameOnHub")} <ExternalLink size={14} />
+                  </LinkButton>
+                ) : null}
                 {canPublishTemplate ? (
                   <Button
                     variant="secondaryGray"
@@ -3142,6 +3177,7 @@ export function HubDetailPane({
                     disabled={publishBusy || publishDisabled}
                     title={publishDisabled ? t("agentPublishLoginRequired") : undefined}
                     onClick={() => {
+                      onResetPublishError?.();
                       setPublishTemplateIncludeMemory(false);
                       setPublishChoiceDialogOpen(true);
                     }}
@@ -3501,7 +3537,11 @@ export function HubDetailPane({
               </label>
             </DialogBody>
           ) : null}
-          {publishError ? <div className={moduleClassNames("form-error")}>{publishError}</div> : null}
+          {publishError ? (
+            <div className={moduleClassNames("form-error")} role="alert">
+              <span className="whitespace-pre-wrap break-words">{publishError}</span>
+            </div>
+          ) : null}
           <DialogFooter>
             <Button
               variant="secondaryGray"

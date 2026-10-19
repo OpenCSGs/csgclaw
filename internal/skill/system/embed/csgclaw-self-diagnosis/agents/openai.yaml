@@ -1,0 +1,4 @@
+interface:
+  display_name: "CSGClaw Self-Diagnosis"
+  short_description: "Diagnose CSGClaw using logs and matching GitHub source"
+  default_prompt: "Use $csgclaw-self-diagnosis to diagnose the current CSGClaw problem using runtime evidence and matching GitHub source."

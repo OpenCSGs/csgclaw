@@ -34,7 +34,9 @@ export function ResourceListCard({
         </span>
         <span className={styles.copy}>
           <span className={styles.titleRow}>
-            <span className={styles.title} title={title}>{title}</span>
+            <span className={styles.title} title={title}>
+              {title}
+            </span>
             {titleBadge}
           </span>
           <span className={styles.description}>{description || title}</span>

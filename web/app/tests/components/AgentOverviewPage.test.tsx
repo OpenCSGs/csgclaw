@@ -31,12 +31,17 @@ function queryState(patch: Partial<UseQueryResult<HubTemplate[]>> = {}): UseQuer
   } as UseQueryResult<HubTemplate[]>;
 }
 
-function Page({ route = "/agents?tab=templates" }: { route?: string }) {
+function Page({ route = "/agents?tab=templates", username = "" }: { route?: string; username?: string }) {
   const controller = {
     ready: true,
     activePane: { type: "agents", id: "" },
     sidebarProps: {
       t: createTranslator("zh"),
+      authStatus: {
+        authenticated: Boolean(username),
+        user_id: username,
+        opencsg_base_url: "https://qa.opencsg.com/account",
+      },
       workerAgentItems: [],
       teams: [],
     },
@@ -108,4 +113,40 @@ describe("agent overview guidance and template loading", () => {
     expect(screen.getByRole("button", { name: "新建智能体" })).toBeInTheDocument();
     expect(screen.getByText("点左侧任意一行，右边就是它的管理页")).toBeInTheDocument();
   });
+});
+
+it("moves the signed-in user's community templates to My templates with a cloud tag", async () => {
+  const remote = (namespace: string): HubTemplate => ({
+    id: `${namespace}/worker`,
+    name: `${namespace} worker`,
+    namespace,
+    source: { name: "official", kind: "remote" },
+  });
+  vi.mocked(useWorkspaceHubTemplatesQuery).mockReturnValue(
+    queryState({
+      data: [
+        template,
+        remote("agentichub"),
+        remote("alice"),
+        remote("bob"),
+        { id: "local.worker", name: "Local worker", role: "worker", source: { kind: "local" } },
+      ],
+    }),
+  );
+  const view = render(<Page username="alice" />);
+  expect(screen.getByRole("button", { name: /agentichub worker/ })).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: /alice worker/ })).not.toBeInTheDocument();
+  await userEvent.setup().click(screen.getByRole("button", { name: "我的模板" }));
+  expect(screen.getByRole("button", { name: /alice worker 云端/ })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Local worker" })).toBeInTheDocument();
+  expect(screen.getAllByText("云端")).toHaveLength(1);
+  expect(screen.getByRole("link", { name: "在 AgenticHub 上管理我的模板" })).toHaveAttribute(
+    "href",
+    "https://qa.opencsg.com/agentichub?view=resources&subview=template",
+  );
+  expect(screen.queryByRole("button", { name: /bob worker|agentichub worker|Codex worker/ })).not.toBeInTheDocument();
+  view.rerender(<Page />);
+  expect(screen.queryByRole("button", { name: /alice worker/ })).not.toBeInTheDocument();
+  expect(screen.queryByText("云端")).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Local worker" })).toBeInTheDocument();
 });

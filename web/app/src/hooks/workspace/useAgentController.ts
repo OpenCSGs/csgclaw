@@ -59,7 +59,7 @@ import {
 import { ACTION_REBUILD_MANAGER } from "@/shared/constants/messages";
 import { selectUnusedAgentAvatar } from "@/shared/avatarOptions";
 import { AGENT_CREATION_WARNINGS_STORAGE_KEY, FEISHU_REGISTRATIONS_STORAGE_KEY } from "@/shared/storage/keys";
-import { localizeAPIError } from "@/shared/i18n";
+import { localizeAPIError, localizeTemplatePublishError } from "@/shared/i18n";
 import { agentDraftWithAvailableModels } from "@/models/agentCreationModels";
 import {
   applyTemplateToDraft,
@@ -1930,7 +1930,10 @@ export function useAgentController({
       if (target !== "local" && handleOpenCSGAuthenticationError(err) && !localTemplateID) {
         return false;
       }
-      const reason = errorMessage(err, t("agentActionFailed"));
+      const reason =
+        target === "local"
+          ? errorMessage(err, t("agentActionFailed"))
+          : localizeTemplatePublishError(err, t, t("agentActionFailed"));
       const message = localTemplateID ? t("agentTemplateSavedPublishFailed", { reason }) : reason;
       setAgentPagePublishError(message);
       setAgentPageSaveError(message);

@@ -93,16 +93,18 @@ func TestAppServerManagerHTTPDisconnectKeepsRuntime(t *testing.T) {
 
 func TestAppServerManagerCancellationInterruptErrorCode(t *testing.T) {
 	for _, tc := range []struct {
-		name    string
-		mode    string
-		stopped bool
-		message string
+		name        string
+		mode        string
+		unconfirmed bool
+		message     string
 	}{
 		{"interrupt_succeeds", "prompt-cancel-confirmed", false, ""},
 		{"no_active_turn", "prompt-cancel-no-active-turn", false, "no active turn to interrupt"},
 		{"invalid_request_other_message", "prompt-cancel-invalid-request", true, "interrupt request is invalid"},
 		{"active_turn_id_mismatch", "prompt-cancel-turn-mismatch", true, "expected active turn id turn-cancel but found turn-active"},
 		{"other_code_same_message", "prompt-cancel-interrupt-error", true, "no active turn to interrupt"},
+		{"interrupt_timeout", "prompt-cancel-interrupt-timeout", true, "context deadline exceeded"},
+		{"completion_timeout", "prompt-cancel-completion-timeout", true, "context deadline exceeded"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			withAppServerHelperCommand(t, tc.mode)
@@ -114,7 +116,7 @@ func TestAppServerManagerCancellationInterruptErrorCode(t *testing.T) {
 				t.Fatal(err)
 			}
 			t.Cleanup(func() { _ = manager.Stop(context.Background(), SessionHandle{RuntimeID: spec.RuntimeID}) })
-			// Persist running metadata so Info can also observe the dead process.
+			// Persist metadata as in a real worker session.
 			if err := writeJSONFile(os.WriteFile, filepath.Join(spec.RuntimeDir, runtimeFileName), sessionToRuntimeMetadata(session)); err != nil {
 				t.Fatal(err)
 			}
@@ -152,31 +154,23 @@ func TestAppServerManagerCancellationInterruptErrorCode(t *testing.T) {
 				if !errors.Is(err, context.Canceled) {
 					t.Fatalf("Prompt error=%v", err)
 				}
-			case <-time.After(5 * time.Second):
+				if tc.unconfirmed && !strings.Contains(err.Error(), "worker preserved") {
+					t.Fatalf("missing unconfirmed cancellation error: %v", err)
+				}
+			case <-time.After(8 * time.Second):
 				t.Fatal("cancellation did not finish")
 			}
 			after, err := rt.Info(context.Background(), handle)
 			if err != nil {
 				t.Fatal(err)
 			}
-			if tc.stopped {
-				if processAlive(session.ProcessID) || after.State == agentruntime.StateRunning {
-					t.Fatalf("runtime survived: %+v", after)
-				}
+			if after.State != agentruntime.StateRunning || !processAlive(session.ProcessID) {
+				t.Fatalf("interrupt stopped runtime: %+v", after)
+			}
+			if tc.mode != "prompt-cancel-confirmed" {
 				log, err := os.ReadFile(spec.StderrPath)
 				if err != nil || !strings.Contains(string(log), tc.message) {
-					t.Fatalf("log=%s err=%v", log, err)
-				}
-				if !strings.Contains(string(log), "codex app-server process exited") || !strings.Contains(string(log), "exit_code=") {
-					t.Fatalf("missing process exit log: %s", log)
-				}
-			} else if after.State != agentruntime.StateRunning {
-				t.Fatalf("healthy interrupt stopped runtime: %+v", after)
-			}
-			if !tc.stopped && tc.mode != "prompt-cancel-confirmed" {
-				log, err := os.ReadFile(spec.StderrPath)
-				if err != nil || !strings.Contains(string(log), "preserving runtime") || !strings.Contains(string(log), "rpc_code=-32600") {
-					t.Fatalf("missing ignored interrupt log: %s err=%v", log, err)
+					t.Fatalf("missing interrupt diagnostic: %s err=%v", log, err)
 				}
 				live := manager.liveSession(spec.RuntimeID)
 				if live == nil || live.appServerTurnWaiter(session.SessionID) != nil {

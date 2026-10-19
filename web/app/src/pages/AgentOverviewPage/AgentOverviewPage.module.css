@@ -302,3 +302,27 @@
     background: color-mix(in srgb, var(--gray-900) 26%, transparent);
   }
 }
+
+.templateName {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.cloudTag {
+  flex-shrink: 0;
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-size: 10px;
+  color: var(--primary);
+  background: var(--primary-soft);
+}
+
+.manageTemplatesLink {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 16px 10px;
+  color: var(--primary);
+  font-size: 12px;
+}

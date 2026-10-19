@@ -3,6 +3,7 @@ import {
   buildTurnNotificationTag,
   DEFAULT_TURN_NOTIFICATION_MODE,
   formatTurnNotificationBody,
+  formatTurnNotificationPreview,
   isCompletedAgentTurnEvent,
   normalizeTurnNotificationMode,
   resolveTurnNotificationRoomLabel,
@@ -24,6 +25,29 @@ const t: TranslateFn = (key, params = {}) => {
 };
 
 describe("turn notifications", () => {
+  it.each([
+    ["## 🌤️ **上海今日天气**\n根据中国天气网的数据：\n| 项目 | 内容 |", "🌤️ 上海今日天气……"],
+    ["- **完成**，查看[报告](https://example.com/report)", "完成，查看报告"],
+    ["> 1. [x] **任务已完成**\r\n详细结果", "任务已完成……"],
+    ["标题\r后续内容", "标题……"],
+    ["\u200b\n\n### *摘要*\n正文", "摘要……"],
+    ["**加粗**、_斜体_、~~删除线~~、`代码`、![图片说明](image.png)", "加粗、斜体、删除线、代码、图片说明"],
+    ["版本 v1.2.3，文件 my_file-name.ts，温度 -5°C，C#", "版本 v1.2.3，文件 my_file-name.ts，温度 -5°C，C#"],
+    ["\\# 原样符号 \\*", "# 原样符号 *"],
+    ["完整单行消息", "完整单行消息"],
+    ["\u200b", ""],
+    ["---\n正文", ""],
+    [null, ""],
+  ])("formats a plain-text first-line preview for %j", (content, expected) => {
+    expect(formatTurnNotificationPreview(content)).toBe(expected);
+  });
+
+  it("bounds long first lines without splitting emoji", () => {
+    expect(formatTurnNotificationPreview("😀".repeat(161))).toBe(`${"😀".repeat(158)}……`);
+    expect(formatTurnNotificationPreview("字".repeat(160))).toBe("字".repeat(160));
+    expect(formatTurnNotificationPreview(`${"字".repeat(160)}\n详情`)).toBe(`${"字".repeat(158)}……`);
+  });
+
   it("normalizes stored modes and defaults to unfocused notifications", () => {
     expect(normalizeTurnNotificationMode(TurnNotificationModes.off)).toBe(TurnNotificationModes.off);
     expect(normalizeTurnNotificationMode(TurnNotificationModes.always)).toBe(TurnNotificationModes.always);

@@ -1,4 +1,9 @@
-import { createTranslator, localizeAPIError, localizeTemplateSourceTag } from "@/shared/i18n";
+import {
+  createTranslator,
+  localizeAPIError,
+  localizeTemplatePublishError,
+  localizeTemplateSourceTag,
+} from "@/shared/i18n";
 import { messages } from "@/shared/i18n/messages";
 
 describe("i18n messages", () => {
@@ -152,5 +157,33 @@ describe("i18n messages", () => {
       "智能体运行文件仍被占用。请启动 Docker 并等待其运行正常后重新删除；若 Docker 已启动，请重启 CSGClaw 后再试。",
     );
     expect(localizeAPIError(error, createTranslator("en"))).not.toContain("/Users/example");
+  });
+});
+
+describe("template publishing diagnostics", () => {
+  it.each(["zh", "en"] as const)("retains remote diagnostic context in %s", (locale) => {
+    const message = "create remote hub template: remote hub request failed with status 500: repository unavailable";
+    const formatted = localizeTemplatePublishError(
+      { status: 502, code: "template_publish_failed", message },
+      createTranslator(locale),
+    );
+    expect(formatted).toContain(message);
+    expect(formatted).toContain("HTTP 502 · template_publish_failed");
+    if (locale === "zh") expect(formatted).toContain("模板发布失败，请稍后重试。");
+    expect(formatted.split(message)).toHaveLength(2);
+  });
+  it("keeps details for translated remote error codes", () => {
+    expect(
+      localizeTemplatePublishError(
+        { code: "SYS-ERR-4", message: "template already exists: alice/guide" },
+        createTranslator("zh"),
+      ),
+    ).toContain("template already exists: alice/guide");
+  });
+  it("handles missing diagnostics", () => {
+    expect(localizeTemplatePublishError(null, createTranslator("zh"), "发布失败")).toBe("发布失败");
+    expect(localizeTemplatePublishError(new Error("connection refused"), createTranslator("zh"))).toContain(
+      "connection refused",
+    );
   });
 });
