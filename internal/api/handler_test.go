@@ -4937,8 +4937,8 @@ func TestHandleSkillsListsGlobalSkillsAndBrowsesFiles(t *testing.T) {
 	if err := json.NewDecoder(rec.Body).Decode(&skills); err != nil {
 		t.Fatalf("decode skills response: %v", err)
 	}
-	if len(skills) != 5 {
-		t.Fatalf("len(skills) = %d, want 5", len(skills))
+	if len(skills) != 6 {
+		t.Fatalf("len(skills) = %d, want 6", len(skills))
 	}
 	skillsByName := map[string]skillsystem.SkillSummary{}
 	for _, item := range skills {
@@ -4955,6 +4955,9 @@ func TestHandleSkillsListsGlobalSkillsAndBrowsesFiles(t *testing.T) {
 	}
 	if got := skillsByName["skill-creator"]; got.Name != "skill-creator" || got.Source != skillsystem.SkillSourceSystem || !got.Readonly {
 		t.Fatalf("skill-creator = %+v, want read-only system skill", got)
+	}
+	if got := skillsByName["csgclaw-self-diagnosis"]; got.Name != "csgclaw-self-diagnosis" || got.Description == "" || got.Source != skillsystem.SkillSourceSystem || !got.Readonly {
+		t.Fatalf("self-diagnosis = %+v, want read-only system skill with description", got)
 	}
 	if got := skillsByName["csgclaw-interactive-output-demo"]; got.Name != "csgclaw-interactive-output-demo" || got.Source != skillsystem.SkillSourceSystem || !got.Readonly {
 		t.Fatalf("interactive output demo = %+v, want read-only system skill", got)
@@ -5090,6 +5093,40 @@ func TestHandleSkillsListsGlobalSkillsAndBrowsesFiles(t *testing.T) {
 	}
 	if !strings.Contains(file.Content, "::csgclaw-output::") {
 		t.Fatalf("demo emitter content = %q, want structured output record", file.Content)
+	}
+}
+
+func TestHandleSelfDiagnosisSkillBundle(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	source, err := skillsystem.ResolveSource("csgclaw-self-diagnosis")
+	if err != nil {
+		t.Fatal(err)
+	}
+	routes := (&Handler{}).Routes()
+	for _, path := range []string{"SKILL.md", "references/runtime-map.md", "agents/openai.yaml"} {
+		t.Run(path, func(t *testing.T) {
+			file, err := source.FS.Open(source.RootPath + "/" + path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer file.Close()
+			want, err := io.ReadAll(file)
+			if err != nil {
+				t.Fatal(err)
+			}
+			rec := httptest.NewRecorder()
+			routes.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/skills/file?path=csgclaw-self-diagnosis/"+path, nil))
+			if rec.Code != http.StatusOK {
+				t.Fatalf("file status = %d; body=%s", rec.Code, rec.Body.String())
+			}
+			var got apitypes.WorkspaceFile
+			if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
+				t.Fatal(err)
+			}
+			if got.Content != string(want) {
+				t.Fatalf("served skill file differs from embedded %s", path)
+			}
+		})
 	}
 }
 

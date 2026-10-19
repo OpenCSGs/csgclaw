@@ -18,7 +18,7 @@ import (
 
 func assertDefaultSystemSkills(t *testing.T, root string) {
 	t.Helper()
-	for _, name := range []string{"skill-creator", "skill-installer"} {
+	for _, name := range []string{"skill-creator", "skill-installer", "csgclaw-self-diagnosis"} {
 		source, err := skillsystem.ResolveSource(name)
 		if err != nil {
 			t.Fatal(err)
@@ -178,7 +178,7 @@ func TestHostRuntimeUpdatesPreserveSkillSelection(t *testing.T) {
 					spec := contract.AgentSpec{Model: modelFromService(item.AgentProfile)}
 					spec.Model.Env = map[string]string{"SKILL_TEST_CONFIG": "updated"}
 					mask := []string{"model"}
-					want := []string{"skill-creator"}
+					want := []string{"csgclaw-self-diagnosis", "skill-creator"}
 					if combined {
 						spec.Skills = []string{"skill-installer"}
 						mask = append(mask, "skills")

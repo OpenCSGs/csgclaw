@@ -18,6 +18,9 @@ func TestNamesReadsEmbeddedDirectory(t *testing.T) {
 	if !slicesContains(got, "skill-creator") {
 		t.Fatalf("Names() = %#v, want embedded skill-creator", got)
 	}
+	if !slicesContains(got, "csgclaw-self-diagnosis") {
+		t.Fatalf("Names() = %#v, want embedded self-diagnosis skill", got)
+	}
 	if !slicesContains(got, "csgclaw-interactive-output-demo") {
 		t.Fatalf("Names() = %#v, want embedded interactive output demo", got)
 	}
@@ -31,7 +34,7 @@ func TestDefaultNamesExcludeManagerOnlyDemo(t *testing.T) {
 	if slicesContains(got, "csgclaw-interactive-output-demo") {
 		t.Fatalf("DefaultNames() = %#v, want Manager-only demo excluded", got)
 	}
-	for _, name := range []string{"skill-creator", "skill-installer"} {
+	for _, name := range []string{"skill-creator", "skill-installer", "csgclaw-self-diagnosis"} {
 		if !slicesContains(got, name) {
 			t.Fatalf("DefaultNames() = %#v, want %s", got, name)
 		}
