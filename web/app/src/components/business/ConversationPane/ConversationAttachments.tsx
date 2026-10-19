@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type WheelEvent } from "react";
-import { ChevronLeft, ChevronRight, FileText, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, X } from "lucide-react";
 import { resolveRequestPath } from "@/api/client";
 import type { DocumentPreviewRequest } from "@/components/business/DocumentPreviewPanel";
 import { FileTypeIcon } from "@/components/business/FileTypeIcon";
@@ -196,7 +196,7 @@ function AttachmentDraftItem({
           <img className="attachment-draft-preview" src={previewURL} alt="" />
         ) : (
           <span className="attachment-file-icon" aria-hidden="true">
-            <FileText size={18} />
+            <FileTypeIcon name={draft.name} mediaType={draft.mediaType} />
           </span>
         )}
         <AttachmentMeta name={draft.name} size={size} filename={filename} />

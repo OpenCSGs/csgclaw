@@ -608,6 +608,15 @@
   gap: 8px;
 }
 
+.hub-json-editor.is-fill-available-height {
+  grid-template-rows: minmax(0, 1fr);
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+  max-height: 100%;
+  overflow: hidden;
+}
+
 .hub-json-editor-label {
   color: var(--text);
   font-size: 13px;
@@ -641,6 +650,14 @@
   border: 1px solid var(--hub-json-editor-border);
   border-radius: var(--radius-lg);
   background: var(--hub-json-editor-bg);
+}
+
+.hub-json-editor.is-fill-available-height .hub-json-editor-shell,
+.hub-json-editor.is-fill-available-height .hub-json-editor-shell :global(.cm-editor),
+.hub-json-editor.is-fill-available-height .hub-json-editor-shell :global(.cm-scroller) {
+  min-height: 0;
+  height: 100%;
+  max-height: 100%;
 }
 
 :root[data-theme="dark"] .hub-json-editor-shell {
@@ -686,13 +703,21 @@
 }
 
 .mcp-dialog {
-  width: min(960px, calc(100vw - 48px));
-  max-width: 960px;
+  display: flex;
+  flex-direction: column;
+  width: min(640px, calc(100vw - 32px));
+  height: min(640px, calc(100dvh - 32px));
+  max-width: none;
+  overflow: hidden;
 }
 
 .mcp-form {
-  display: grid;
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
   gap: 14px;
+  overflow: hidden;
 }
 
 .mcp-form-mode {

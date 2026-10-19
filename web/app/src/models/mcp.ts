@@ -197,17 +197,16 @@ export function mcpServerDescription(config: JSONRecord | null | undefined): str
   if (explicit) {
     return explicit;
   }
-  const command = String(config.command ?? "").trim();
-  const args = Array.isArray(config.args) ? config.args.map((item) => String(item ?? "").trim()).filter(Boolean) : [];
-  if (command) {
-    return [command, ...args].join(" ");
+  const name = String(config.display_name ?? "")
+    .trim()
+    .toLowerCase();
+  if (name === "computer-use") {
+    return "Control desktop apps and browsers.";
   }
-  const url = String(config.url ?? "").trim();
-  if (url) {
-    return url;
+  if (name === "node_repl") {
+    return "Run JavaScript for browser and desktop automation.";
   }
-  const transport = String(config.transport ?? config.type ?? "").trim();
-  return transport;
+  return "";
 }
 
 export function mcpProbeResultFromResponse(response: unknown): MCPProbeResult | null {

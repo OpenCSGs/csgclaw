@@ -35,10 +35,12 @@ type Props = {
   resourceDetails?: ReactNode;
   savedConnectionStatus?: ReactNode;
   globalResource?: boolean;
+  showCancel?: boolean;
   existing: AppInstallation | null;
   t: TranslateFn;
   portalContainer?: HTMLElement | null;
   onClose: () => void;
+  onRemove?: () => void;
   onProbe: (payload: ReturnType<typeof appFormPayload>) => Promise<AppProbeResult>;
   onSave: (payload: ReturnType<typeof appFormPayload>, connect: boolean) => Promise<unknown>;
 };
@@ -48,10 +50,12 @@ export function AppSettingsDialog({
   resourceDetails,
   savedConnectionStatus,
   globalResource = false,
+  showCancel = true,
   existing,
   t,
   portalContainer,
   onClose,
+  onRemove,
   onProbe,
   onSave,
 }: Props) {
@@ -428,7 +432,7 @@ export function AppSettingsDialog({
           </div>
           <DialogCloseButton label={t("close")} disabled={Boolean(busy)} size="sm" variant="tertiaryGray" iconOnly />
         </DialogHeader>
-        <DialogBody className={styles.settingsBody}>
+        <DialogBody className={`${styles.settingsBody} ${styles.scrollableSettingsBody}`}>
           <fieldset className={styles.fields} disabled={Boolean(busy)}>
             {connectionOptions}
             <details className={styles.advanced}>
@@ -490,12 +494,26 @@ export function AppSettingsDialog({
             />
           </div>
         </DialogBody>
-        <DialogFooter className={styles.footer}>
-          <Button variant="secondaryGray" disabled={Boolean(busy)} onClick={onClose}>
-            {t("cancel")}
-          </Button>
+        <DialogFooter className={`${styles.footer} ${onRemove ? styles.footerWithRemove : ""}`.trim()}>
+          {showCancel ? (
+            <Button size="md" variant="secondaryGray" disabled={Boolean(busy)} onClick={onClose}>
+              {t("cancel")}
+            </Button>
+          ) : null}
+          {onRemove ? (
+            <Button
+              className={styles.removeButton}
+              size="md"
+              variant="danger"
+              disabled={Boolean(busy)}
+              onClick={onRemove}
+            >
+              {t("appRemove")}
+            </Button>
+          ) : null}
           {!globalResource ? (
             <Button
+              size="md"
               disabled={Boolean(busy) || !requiredFieldsFilled || oauthUnsupported}
               loading={busy === "save"}
               onClick={() => void execute("save")}
@@ -504,6 +522,7 @@ export function AppSettingsDialog({
             </Button>
           ) : null}
           <Button
+            size="md"
             variant="secondaryGray"
             disabled={Boolean(busy) || !requiredFieldsFilled || oauthUnsupported}
             loading={busy === "probe"}
@@ -512,6 +531,7 @@ export function AppSettingsDialog({
             {t("appTestConnection")}
           </Button>
           <Button
+            size="md"
             variant="primary"
             disabled={Boolean(busy) || !requiredFieldsFilled || !tested || oauthUnsupported}
             loading={busy === (globalResource ? "save" : "connect")}

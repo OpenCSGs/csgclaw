@@ -162,6 +162,18 @@ describe("ConversationComposer attachments", () => {
     expect(onSendMessage).toHaveBeenCalledTimes(1);
   });
 
+  it("uses the matching file-type icon for non-image draft attachments", () => {
+    const attachmentDrafts = createAttachmentDrafts([
+      new File(["pdf"], "Dex Shenzhen Hiring.pdf", { type: "application/pdf" }),
+    ]);
+    const { container } = renderComposer({ attachmentDrafts });
+
+    const icon = container.querySelector(".attachment-file-icon");
+    expect(icon).toBeInTheDocument();
+    expect(within(icon as HTMLElement).getByText("PDF")).toBeInTheDocument();
+    expect(icon?.querySelector("img")).toBeInTheDocument();
+  });
+
   it("offers mouse, keyboard, and wheel navigation when attachments overflow", async () => {
     const user = userEvent.setup();
     const attachmentDrafts = createAttachmentDrafts([

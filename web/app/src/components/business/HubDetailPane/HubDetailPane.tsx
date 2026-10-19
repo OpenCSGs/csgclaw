@@ -824,7 +824,7 @@ function createJsonSyntaxLinter(t: TranslateFn) {
   };
 }
 
-function jsonEditorExtensions(t: TranslateFn): Extension[] {
+function jsonEditorExtensions(t: TranslateFn, lineWrapping = true): Extension[] {
   return [
     lineNumbers(),
     highlightActiveLineGutter(),
@@ -835,25 +835,31 @@ function jsonEditorExtensions(t: TranslateFn): Extension[] {
     linter(createJsonSyntaxLinter(t), { delay: 250 }),
     keymap.of([indentWithTab, ...defaultKeymap, ...historyKeymap]),
     EditorState.tabSize.of(2),
-    EditorView.lineWrapping,
+    ...(lineWrapping ? [EditorView.lineWrapping] : []),
     jsonEditorTheme,
   ];
 }
 
 export function JSONConfigEditor({
+  fillAvailableHeight = false,
   hideLabel = false,
   invalid = false,
   label,
+  lineWrapping = true,
   minRows = 12,
   onChange,
+  readOnly = false,
   t,
   value,
 }: {
+  fillAvailableHeight?: boolean;
   hideLabel?: boolean;
   invalid?: boolean;
   label: string;
+  lineWrapping?: boolean;
   minRows?: number;
   onChange: (value: string) => void;
+  readOnly?: boolean;
   t: TranslateFn;
   value: string;
 }) {
@@ -862,7 +868,14 @@ export function JSONConfigEditor({
   const editorViewRef = useRef<EditorView | null>(null);
   const initialValueRef = useRef(value);
   const onChangeRef = useRef(onChange);
-  const editorExtensions = useMemo(() => jsonEditorExtensions(t), [t]);
+  const editorExtensions = useMemo(
+    () => [
+      ...jsonEditorExtensions(t, lineWrapping),
+      EditorState.readOnly.of(readOnly),
+      EditorView.editable.of(!readOnly),
+    ],
+    [lineWrapping, readOnly, t],
+  );
   const minHeight = `${Math.max(minRows, 6) * 19.2 + 28}px`;
 
   useEffect(() => {
@@ -880,6 +893,7 @@ export function JSONConfigEditor({
           ...editorExtensions,
           EditorView.contentAttributes.of({
             "aria-label": label,
+            ...(readOnly ? { "aria-readonly": "true" } : {}),
             id: editorId,
           }),
           EditorView.updateListener.of((update) => {
@@ -896,7 +910,7 @@ export function JSONConfigEditor({
       editorViewRef.current = null;
       view.destroy();
     };
-  }, [editorExtensions, editorId, label]);
+  }, [editorExtensions, editorId, label, readOnly]);
 
   useEffect(() => {
     const view = editorViewRef.current;
@@ -918,7 +932,9 @@ export function JSONConfigEditor({
 
   return (
     <div
-      className={moduleClassNames(`hub-json-editor${invalid ? " is-invalid" : ""}`)}
+      className={moduleClassNames(
+        `hub-json-editor${invalid ? " is-invalid" : ""}${fillAvailableHeight ? " is-fill-available-height" : ""}`,
+      )}
       style={{ "--hub-json-editor-min-height": minHeight } as CSSProperties}
     >
       <label className={moduleClassNames(`hub-json-editor-label${hideLabel ? " sr-only" : ""}`)} htmlFor={editorId}>
@@ -3619,11 +3635,13 @@ export function HubDetailPane({
             {mcpCreateMode === "manual" ? (
               <>
                 <JSONConfigEditor
+                  fillAvailableHeight
                   hideLabel
                   label={t("resourcesMCPServerDocumentJSONLabel")}
                   value={mcpDraftDocument}
                   onChange={handleMCPDraftDocumentChange}
                   invalid={Boolean(mcpFormError)}
+                  lineWrapping={false}
                   minRows={12}
                   t={t}
                 />
@@ -3653,11 +3671,11 @@ export function HubDetailPane({
             )}
           </DialogBody>
           <DialogFooter className={moduleClassNames("hub-skill-delete-dialog-actions")}>
-            <Button variant="secondaryGray" size="sm" disabled={mcpMutationBusy} onClick={closeMCPFormDialog}>
+            <Button variant="secondaryGray" size="md" disabled={mcpMutationBusy} onClick={closeMCPFormDialog}>
               {t("cancel")}
             </Button>
             {mcpCreateMode === "manual" ? (
-              <Button variant="primary" size="sm" loading={mcpMutationBusy} onClick={handleSaveMCP}>
+              <Button variant="primary" size="md" loading={mcpMutationBusy} onClick={handleSaveMCP}>
                 {mcpMutationBusy ? t("resourcesMCPCreating") : t("resourcesMCPCreateAction")}
               </Button>
             ) : null}
@@ -3936,11 +3954,13 @@ export function MCPServerCreateDialog({
           {activeMode === "manual" ? (
             <>
               <JSONConfigEditor
+                fillAvailableHeight
                 hideLabel
                 label={t("resourcesMCPServerDocumentJSONLabel")}
                 value={document}
                 onChange={changeDocument}
                 invalid={Boolean(parseError)}
+                lineWrapping={false}
                 minRows={12}
                 t={t}
               />
@@ -3968,11 +3988,11 @@ export function MCPServerCreateDialog({
           )}
         </DialogBody>
         <DialogFooter className={moduleClassNames("hub-skill-delete-dialog-actions")}>
-          <Button variant="secondaryGray" size="sm" disabled={busy} onClick={close}>
+          <Button variant="secondaryGray" size="md" disabled={busy} onClick={close}>
             {t("cancel")}
           </Button>
           {activeMode === "manual" ? (
-            <Button variant="primary" size="sm" loading={busy} onClick={save}>
+            <Button variant="primary" size="md" loading={busy} onClick={save}>
               {busy ? t("resourcesMCPCreating") : t("resourcesMCPCreateAction")}
             </Button>
           ) : null}

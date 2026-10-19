@@ -206,13 +206,21 @@
 }
 .settingsDialog {
   width: min(640px, calc(100vw - 32px));
+  height: min(640px, calc(100vh - 32px));
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 .settingsBody {
-  overflow-y: auto;
-  max-height: min(70vh, 760px);
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   gap: 18px;
+}
+.scrollableSettingsBody {
+  overflow-y: auto;
 }
 .settingsActions {
   display: flex;
@@ -222,6 +230,16 @@
   flex-wrap: wrap;
   padding-top: 14px;
   border-top: 1px solid var(--line);
+}
+.settingsFooter {
+  flex-wrap: wrap;
+}
+.settingsRemoveButton {
+  order: -1;
+  margin-right: auto;
+}
+.settingsPrimaryAction {
+  order: 1;
 }
 .settingsActionGroup {
   display: flex;
@@ -300,6 +318,32 @@ fieldset.fields {
   max-height: 260px;
   overflow-y: auto;
 }
+.toolsFillAvailableHeight {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.toolsHeading {
+  flex: none;
+  margin: 0;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 500;
+}
+.toolsScrollViewport {
+  flex: 1 1 0;
+  min-height: 0;
+  margin-top: 10px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.toolsScrollViewport ul {
+  margin: 0;
+  max-height: none;
+  overflow: visible;
+}
 .tools li {
   padding: 9px 12px;
   border-radius: 8px;
@@ -365,6 +409,12 @@ fieldset.fields {
 }
 .footer > button {
   flex: 1;
+}
+.footerWithRemove > button {
+  flex: 0 0 auto;
+}
+.footerWithRemove .removeButton {
+  margin-right: auto;
 }
 @media (max-width: 600px) {
   .formSection {

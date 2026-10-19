@@ -29,4 +29,9 @@ describe("Switch", () => {
     expect(control).toBeChecked();
     expect(onChange).not.toHaveBeenCalled();
   });
+
+  it("renders the compact size when requested", () => {
+    render(<Switch aria-label="Compact switch" checked size="sm" />);
+    expect(screen.getByRole("switch", { name: "Compact switch" })).toHaveAttribute("data-size", "sm");
+  });
 });

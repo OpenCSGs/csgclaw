@@ -122,4 +122,4 @@ Use `size="sm"` on `DropdownMenuContent` for compact menus. Section headings use
 
 ## Switch
 
-`Switch` wraps the `Switch` namespace from `radix-ui` for boolean settings. Use `checked`, `onCheckedChange`, and `disabled` for controlled updates, and provide an accessible name through `aria-label` or `aria-labelledby`. The shared styles support keyboard focus, disabled states, and reduced motion.
+`Switch` wraps the `Switch` namespace from `radix-ui` for boolean settings. Use `checked`, `onCheckedChange`, and `disabled` for controlled updates, and provide an accessible name through `aria-label` or `aria-labelledby`. Use `size="sm"` where a compact switch is needed; the default is `md`. The shared styles support keyboard focus, disabled states, and reduced motion.

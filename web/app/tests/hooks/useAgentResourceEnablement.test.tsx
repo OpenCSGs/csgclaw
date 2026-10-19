@@ -5,6 +5,11 @@ import { useAgentResourceEnablement } from "@/hooks/workspace/useAgentResourceEn
 import { createQueryWrapper } from "../helpers/queryClient";
 
 vi.mock("@/api/agents", () => ({ setAgentResourceEnabled: vi.fn() }));
+const { showNotice } = vi.hoisted(() => ({ showNotice: vi.fn() }));
+vi.mock("@/components/ui", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/components/ui")>()),
+  useGlobalNotice: () => ({ showNotice }),
+}));
 
 function deferred() {
   let resolve!: () => void;
@@ -15,7 +20,26 @@ function deferred() {
 }
 
 describe("资源启用状态", () => {
-  beforeEach(() => vi.mocked(setAgentResourceEnabled).mockReset());
+  beforeEach(() => {
+    vi.mocked(setAgentResourceEnabled).mockReset();
+    showNotice.mockReset();
+  });
+
+  it("uses the enabled state returned by the server in the completion notice", async () => {
+    vi.mocked(setAgentResourceEnabled).mockResolvedValue({ enabled: false } as Awaited<
+      ReturnType<typeof setAgentResourceEnabled>
+    >);
+    const onChanged = vi.fn().mockResolvedValue(undefined);
+    const { result } = renderHook(() => useAgentResourceEnablement("agent-a", (key) => key, onChanged), {
+      wrapper: createQueryWrapper().wrapper,
+    });
+
+    await act(async () => {
+      await result.current.setEnabled("mcp", "search", true);
+    });
+
+    expect(showNotice).toHaveBeenCalledWith({ message: "resourceDisabledNotice", closeLabel: "close" });
+  });
 
   it("切换 Agent 后完成请求，再次打开原 Agent 时结束加载状态", async () => {
     const request = deferred();
