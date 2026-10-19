@@ -3880,7 +3880,7 @@ func TestImagePromptPolicyAppliesToStartedAndResumedThreads(t *testing.T) {
 func withoutContextUsage(events []SessionEvent) []SessionEvent {
 	out := make([]SessionEvent, 0, len(events))
 	for _, event := range events {
-		if string(event.Kind) != "context_usage" {
+		if string(event.Kind) != "context_usage" && string(event.Kind) != "token_usage" {
 			out = append(out, event)
 		}
 	}

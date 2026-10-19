@@ -7,6 +7,7 @@ import (
 	"csgclaw/internal/apitypes"
 	"csgclaw/internal/channel"
 	"csgclaw/internal/im"
+	"csgclaw/internal/modelusage"
 	"encoding/json"
 	"fmt"
 	"path/filepath"
@@ -40,6 +41,7 @@ func TestLargeProgressPersistsWithoutBlockingOtherRooms(t *testing.T) {
 			}
 			turn := channel.TurnContext{AgentID: "agent", RoomID: "room", ParticipantID: "participant", TurnID: "turn-csgclaw-large", ConversationKey: "room"}
 			progress := activity.TurnProgress{ID: string(turn.TurnID), Status: "running", Items: []activity.ProgressItem{}}
+			progress.Usage = &modelusage.Usage{Known: true, ModelID: "auto", Input: 1000, Output: 220, Total: 1220}
 			if err := store.DeliverTurnProgress(context.Background(), turn, progress, "", true, nil); err != nil {
 				t.Fatal(err)
 			}
@@ -88,6 +90,32 @@ func progressFixture(t *testing.T) (*TranscriptRenderer, *im.Service, channel.Tu
 		t.Fatal(err)
 	}
 	return NewTranscriptRenderer(store), service, channel.TurnContext{AgentID: "agent", RoomID: "room", ParticipantID: "participant", TurnID: "turn", ConversationKey: "room", Locale: "en"}
+}
+
+func TestProgressUsageReplacesSnapshotsAndRetainsPartialFailure(t *testing.T) {
+	for _, status := range []agentengine.TurnStatus{agentengine.TurnSucceeded, agentengine.TurnCanceled} {
+		t.Run(string(status), func(t *testing.T) {
+			renderer, service, turn := progressFixture(t)
+			ctx := context.Background()
+			for _, input := range []int64{100, 300, 300} {
+				u := modelusage.Usage{Known: true, ModelID: "selected-model", Input: input, Output: 20, Total: input + 20}
+				// The HTTP client decodes arbitrary activity payloads into maps.
+				encoded, _ := json.Marshal(u)
+				var payload map[string]any
+				_ = json.Unmarshal(encoded, &payload)
+				if err := renderer.Emit(ctx, turn, agentengine.TurnEvent{Kind: agentengine.TurnEventActivityUpdate, Activity: &agentengine.ActivityUpdate{Kind: modelusage.Kind, Payload: payload}}); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if err := renderer.Complete(ctx, turn, agentengine.TurnResult{Status: status, Output: "done"}); err != nil {
+				t.Fatal(err)
+			}
+			_, p := progressMessage(t, service)
+			if p.Usage == nil || p.Usage.Total != 320 || p.Usage.ModelID != "selected-model" || p.Usage.Partial != (status != agentengine.TurnSucceeded) {
+				t.Fatalf("usage=%+v", p.Usage)
+			}
+		})
+	}
 }
 func progressMessage(t *testing.T, service *im.Service) (im.Message, activity.TurnProgress) {
 	t.Helper()

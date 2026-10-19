@@ -3,6 +3,7 @@ package llm
 import (
 	"bytes"
 	"csgclaw/internal/diagnostics"
+	"csgclaw/internal/modelusage"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -21,6 +22,7 @@ func (s *Service) modelRequest(req *http.Request) (*http.Response, error) {
 		if err != nil {
 			logModelTransportFailure(req, err)
 		}
+		observeResponseUsage(resp, modelusage.RequestObserver(req.Context()))
 		return resp, err
 	}
 	operation := "responses"
@@ -36,6 +38,7 @@ func (s *Service) modelRequest(req *http.Request) (*http.Response, error) {
 		return resp, err
 	}
 	update(resp.StatusCode, nil)
+	observeResponseUsage(resp, modelusage.RequestObserver(req.Context()))
 	resp.Body = &observedModelBody{ReadCloser: resp.Body, started: start, status: resp.StatusCode, stream: strings.HasPrefix(strings.ToLower(resp.Header.Get("Content-Type")), "text/event-stream"), update: update, finish: finish}
 	return resp, nil
 }

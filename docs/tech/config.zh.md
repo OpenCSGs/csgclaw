@@ -54,6 +54,8 @@ show_upgrade = true
 这适用于当前登录的 OpenCSG 提供方，以及指向生产或 stg AIGateway 的自定义提供方。
 已明确选择的模型会保留；如果目录中没有 `auto`，则使用第一个可用模型。
 
+回复底部显示[本轮 token 消耗](token-usage.zh.md)；选择 `auto` 时隐藏模型名称。
+
 ### 本地 CSGHub-lite
 
 ```toml

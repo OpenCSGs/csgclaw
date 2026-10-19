@@ -4,6 +4,7 @@ import (
 	"context"
 	"csgclaw/internal/diagnostics"
 	"csgclaw/internal/modelcap"
+	"csgclaw/internal/modelusage"
 	"csgclaw/internal/processgroup"
 	"csgclaw/internal/runtime/conversationconfig"
 	skill "csgclaw/internal/skill/state"
@@ -114,6 +115,8 @@ type process struct {
 }
 
 type activeTurn struct {
+	tokenUsage       modelusage.Usage
+	tokenRequests    map[string]bool
 	diagnostic       *diagnostics.Record
 	contextExceeded  bool
 	compactionFailed bool

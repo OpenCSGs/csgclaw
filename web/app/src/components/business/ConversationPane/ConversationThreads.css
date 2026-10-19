@@ -109,6 +109,26 @@
   gap: 12px;
 }
 
+.message-action-controls.has-token-usage {
+  position: static;
+  opacity: 1;
+  flex-wrap: wrap;
+  margin-top: 6px;
+}
+
+.message-token-usage {
+  flex: 1;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.message-token-usage:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
 .message-row:not(.own) .message-hover-actions {
   right: auto;
   justify-content: flex-start;

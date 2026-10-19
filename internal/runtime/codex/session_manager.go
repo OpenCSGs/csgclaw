@@ -2,6 +2,7 @@ package codex
 
 import (
 	"csgclaw/internal/modelcap"
+	"csgclaw/internal/modelusage"
 	"io"
 	"os"
 	"os/exec"
@@ -18,6 +19,7 @@ type liveSession struct {
 	telemetry             *nativeTelemetry
 	compactingThreads     map[string]bool
 	contextUsage          map[string]modelcap.ContextUsage
+	tokenTotals           map[string]modelusage.Usage
 	mu                    sync.Mutex
 	conversationResumeMu  sync.Mutex
 	conversationPersistMu sync.Mutex

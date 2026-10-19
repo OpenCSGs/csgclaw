@@ -13,6 +13,11 @@ export function apply(ctx) {
     }
   });
   ctx.on('session/event', (session, event) => {
+    if (event.type === 'assistant/message' || event.type === 'compaction/summary') {
+      const params = { sessionId: session.header.id, update: { sessionUpdate: 'token_usage', requestId: String(event.seq), usage: event.data.usage ?? null, interrupted: Boolean(event.data.interrupted) } };
+      process.stdout.write(JSON.stringify({ jsonrpc: '2.0', method: 'csgclaw/context', params }) + '\n');
+      return;
+    }
     if (event.type !== 'compaction/start' && event.type !== 'compaction/end') return;
     const compacting = event.type === 'compaction/start';
     const params = { sessionId: session.header.id, update: { sessionUpdate: 'context_compaction', compacting, failed: Boolean(event.data.error) } };

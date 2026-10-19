@@ -16,6 +16,7 @@ func TestTransientTurnProgressIsReadableButNotPersisted(t *testing.T) {
 		t.Fatal(err)
 	}
 	metadata := map[string]any{"csgclaw": map[string]any{"delivery_kind": "activity", "turn_progress": map[string]any{"id": "turn", "revision": float64(1), "status": "running", "started_at": "2026-09-26T00:00:00Z", "updated_at": "2026-09-26T00:00:02Z", "items": []any{}}}}
+	messageTurnProgress(Message{Metadata: metadata})["usage"] = map[string]any{"known": true, "model_id": "auto", "input_tokens": float64(100), "output_tokens": float64(20), "total_tokens": float64(120)}
 	req := DeliverMessageRequest{RoomID: "room", SenderID: "agent", MessageID: "turn-final", Content: "partial", Metadata: metadata, Transient: true}
 	if _, err := svc.DeliverMessage(req); err != nil {
 		t.Fatal(err)
@@ -40,6 +41,10 @@ func TestTransientTurnProgressIsReadableButNotPersisted(t *testing.T) {
 	p := messageTurnProgress(restartedRoom.Messages[0])
 	if p["status"] != "interrupted" || p["ended_at"] != p["updated_at"] {
 		t.Fatalf("restart keeps stale running state: %+v", p)
+	}
+	usage, _ := p["usage"].(map[string]any)
+	if usage["total_tokens"] != float64(120) || usage["partial"] != true {
+		t.Fatalf("restart lost partial consumption: %+v", usage)
 	}
 	req.Metadata = nil
 	req.Transient = true

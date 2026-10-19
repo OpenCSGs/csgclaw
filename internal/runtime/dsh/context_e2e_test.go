@@ -6,6 +6,7 @@ import (
 	"csgclaw/internal/diagnostics"
 	"csgclaw/internal/dshcli"
 	"csgclaw/internal/modelcap"
+	"csgclaw/internal/modelusage"
 	agentruntime "csgclaw/internal/runtime"
 	"encoding/json"
 	"fmt"
@@ -84,6 +85,7 @@ func testContextNativeDSH(t *testing.T, mode string) {
 		turns = 5
 	}
 	for i := 0; i < turns; i++ {
+		var consumption modelusage.Usage
 		if mode == "cold_resume" && i == 1 {
 			previousSession = snapshot.SessionID
 			if _, err := rt.Stop(ctx, h); err != nil {
@@ -108,7 +110,11 @@ func testContextNativeDSH(t *testing.T, mode string) {
 			diagnostic.Running()
 			ctx = diagnostics.WithRecord(ctx, diagnostic)
 		}
+		callsBefore := requests.Load()
 		result := rt.Conversation(h.RuntimeID).Run(ctx, contract.TurnRequest{ID: contract.TurnID(fmt.Sprintf("turn-%d", i)), ConversationKey: "room:test", Input: input}, contract.EventSinkFunc(func(_ context.Context, e contract.TurnEvent) error {
+			if e.Activity != nil && e.Activity.Kind == modelusage.Kind {
+				consumption, _ = e.Activity.Payload.(modelusage.Usage)
+			}
 			if e.Activity != nil && e.Activity.Kind == modelcap.ContextUsageKind {
 				u := e.Activity.Payload.(modelcap.ContextUsage)
 				sawCompaction = sawCompaction || u.Compacting
@@ -136,6 +142,12 @@ func testContextNativeDSH(t *testing.T, mode string) {
 		if result.Status != contract.TurnSucceeded || snapshot == nil || snapshot.ContextWindow != profile.ModelMetadata.ContextWindow {
 			log, _ := os.ReadFile(filepath.Join(root, "agent", hostStateDirName, stderrFileName))
 			t.Fatalf("result=%+v usage=%+v\n%s", result, snapshot, log)
+		}
+		if mode == "usage" || mode == "cold_resume" || mode == "auto_compact" {
+			calls := requests.Load() - callsBefore
+			if !consumption.Known || consumption.Partial || consumption.Input != 1000*calls || consumption.Output != 20*calls || consumption.Total != 1020*calls {
+				t.Fatalf("native DSH calls=%d consumption=%+v", calls, consumption)
+			}
 		}
 	}
 	if (mode == "auto_compact" || mode == "overflow") && !sawCompaction {

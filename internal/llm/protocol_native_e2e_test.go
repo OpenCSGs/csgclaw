@@ -2,9 +2,11 @@ package llm
 
 import (
 	"context"
+	"csgclaw/internal/activity"
 	agent "csgclaw/internal/agentengine/agents"
 	"csgclaw/internal/config"
 	"csgclaw/internal/modelpreset"
+	"csgclaw/internal/modelusage"
 	agentruntime "csgclaw/internal/runtime"
 	"csgclaw/internal/runtime/codex"
 	"encoding/json"
@@ -123,11 +125,28 @@ func TestBundledCodexProtocolSwitchE2E(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, protocol := range []string{modelpreset.ChatCompletions, modelpreset.AnthropicMessages, modelpreset.Responses} {
+		events, unsubscribe := rt.SubscribeSession(handle.RuntimeID, thread)
 		reader.mu.Lock()
 		reader.p.APIProtocol = protocol
 		reader.mu.Unlock()
 		if err := rt.Prompt(ctx, handle.RuntimeID, thread, "TURN_HISTORY_SENTINEL Reply done."); err != nil {
 			t.Fatalf("%s: %v", protocol, err)
+		}
+		var usage modelusage.Usage
+	drain:
+		for {
+			select {
+			case event := <-events:
+				if event.Kind == activity.RuntimeEventTokenUsage {
+					usage, _ = event.Payload.(modelusage.Usage)
+				}
+			default:
+				break drain
+			}
+		}
+		unsubscribe()
+		if !usage.Known || usage.Input != 100 || usage.Output != 10 || usage.Total != 110 {
+			t.Fatalf("%s usage=%+v", protocol, usage)
 		}
 	}
 	mu.Lock()

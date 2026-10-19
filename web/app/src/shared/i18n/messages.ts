@@ -2364,6 +2364,12 @@ export const messages = {
     modelProviderModelsHint: "检查提供方后会刷新可用模型列表。",
     modelProviderModelSearch: "搜索模型",
     modelProviderAutoName: "智能优选（Auto）",
+    turnTokenUsage: "本轮消耗 {count} tokens",
+    turnTokenUsageModel: "模型 {model}",
+    turnTokenUsageUnavailable: "本轮消耗暂不可用",
+    turnTokenUsagePartial: "（部分统计）",
+    turnTokenUsageDetails:
+      "输入：{input} tokens；输出：{output} tokens；其中缓存输入：{cached}，推理输出：{reasoning}。缓存和推理已计入总量。",
     modelProviderAutoBadge: "推荐",
     modelProviderAutoDescription: "自动匹配合适的文本模型，兼顾效果与成本",
     modelProviderAutoRouteHint: "实际使用的模型由 OpenCSG AI Gateway 动态选择，可能随请求变化。",
@@ -5313,6 +5319,12 @@ export const messages = {
     modelProviderModelsHint: "Checking the provider refreshes the available model list.",
     modelProviderModelSearch: "Search models",
     modelProviderAutoName: "Auto",
+    turnTokenUsage: "This turn: {count} tokens",
+    turnTokenUsageModel: "Model {model}",
+    turnTokenUsageUnavailable: "Token usage unavailable",
+    turnTokenUsagePartial: "(partial)",
+    turnTokenUsageDetails:
+      "Input: {input} tokens; output: {output} tokens; cached input: {cached}; reasoning output: {reasoning}. Cache and reasoning are included in the total.",
     modelProviderAutoBadge: "Default",
     modelProviderAutoDescription: "Automatically selects a suitable text model to balance quality and cost",
     modelProviderAutoRouteHint:

@@ -3,6 +3,7 @@ package dsh
 import (
 	"context"
 	"csgclaw/internal/modelcap"
+	"csgclaw/internal/modelusage"
 	"encoding/json"
 	"fmt"
 	"regexp"
@@ -49,6 +50,29 @@ func (r *Runtime) handleNotification(proc *process, note notification) {
 	kind, _ := params.Update["sessionUpdate"].(string)
 	event := contract.TurnEvent{TurnID: turn.request.ID}
 	switch kind {
+	case "token_usage":
+		id, _ := params.Update["requestId"].(string)
+		if id == "" || turn.tokenRequests[id] {
+			proc.mu.Unlock()
+			return
+		}
+		if turn.tokenRequests == nil {
+			turn.tokenRequests = make(map[string]bool)
+		}
+		turn.tokenRequests[id] = true
+		raw, _ := params.Update["usage"].(map[string]any)
+		usage := modelusage.Parse(raw, proc.profile.ModelID)
+		if usage == nil {
+			turn.tokenUsage.Partial = true
+		} else {
+			turn.tokenUsage.Add(*usage)
+		}
+		if interrupted, _ := params.Update["interrupted"].(bool); interrupted {
+			turn.tokenUsage.Partial = true
+		}
+		turn.tokenUsage.ModelID = proc.profile.ModelID
+		event.Kind = contract.TurnEventActivityUpdate
+		event.Activity = &contract.ActivityUpdate{ID: params.SessionID, Kind: modelusage.Kind, Payload: turn.tokenUsage}
 	case "agent_message_chunk", "agent_thought_chunk":
 		content, _ := params.Update["content"].(map[string]any)
 		contentType, _ := content["type"].(string)

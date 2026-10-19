@@ -6,6 +6,7 @@ import (
 	"csgclaw/internal/agentengine/contract"
 	"csgclaw/internal/diagnostics"
 	"csgclaw/internal/modelprovider"
+	"csgclaw/internal/modelusage"
 	"csgclaw/internal/processgroup"
 	"encoding/json"
 	"errors"
@@ -462,6 +463,7 @@ func (m *appServerManager) Prompt(ctx context.Context, handle SessionHandle, req
 			"last_activity", waiter.currentLastActivity(),
 			"error", err,
 		)
+		m.publishTokenUsage(runtimeID, live, sessionID, waiter.currentTurnID(), nil, "snapshot")
 		m.publishAppServerEvent(promptFailedEvent(runtimeID, sessionID, err))
 		return resp, err
 	}
@@ -472,6 +474,7 @@ func (m *appServerManager) Prompt(ctx context.Context, handle SessionHandle, req
 		"duration", time.Since(waitStartAt),
 		"stop_reason", strings.TrimSpace(resp.StopReason),
 	)
+	m.publishTokenUsage(runtimeID, live, sessionID, waiter.currentTurnID(), nil, "snapshot")
 	m.publishAppServerEvent(promptCompletedEvent(runtimeID, sessionID, resp))
 	m.maybeCreateMemoryCheckpoint(live, sessionID)
 	return resp, nil
@@ -1475,6 +1478,10 @@ func (m *appServerManager) persistedThreadID(spec SessionSpec) string {
 }
 
 type appServerTurnWaiter struct {
+	// Guarded by liveSession.mu, alongside the thread's cumulative counters.
+	tokenBaseline            *modelusage.Usage
+	tokenUsage               modelusage.Usage
+	missingUsageTurns        map[string]bool
 	diagnostic               *diagnostics.Record
 	diagnosticEnds           map[string]time.Time
 	visibleActivity          bool
@@ -1519,6 +1526,10 @@ func (s *liveSession) registerAppServerTurnWaiter(threadID string) (*appServerTu
 		threadID:     threadID,
 		ch:           make(chan appServerTurnResult, 8),
 		lastActivity: "turn/start",
+	}
+	waiter.tokenUsage.ModelID = s.spec.Profile.ModelID
+	if total, ok := s.tokenTotals[threadID]; ok {
+		waiter.tokenBaseline = &total
 	}
 	s.turnWaiters[threadID] = waiter
 	return waiter, nil

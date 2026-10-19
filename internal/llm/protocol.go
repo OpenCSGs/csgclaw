@@ -37,6 +37,17 @@ func (s *Service) forwardProtocol(ctx context.Context, profile agent.AgentProfil
 	stream := payloadBool(payload["stream"])
 	// Claude translators aggregate SSE for non-streaming callers as well.
 	encoded := translator.TranslateRequest(from, to, profile.ModelID, original, stream || to == translator.FormatClaude)
+	if stream && to == translator.FormatOpenAI {
+		var translated map[string]any
+		if err := json.Unmarshal(encoded, &translated); err != nil {
+			return nil, err
+		}
+		includeStreamUsage(translated)
+		encoded, err = json.Marshal(translated)
+		if err != nil {
+			return nil, err
+		}
+	}
 	base, key, err := s.agentProfileTarget(ctx, profile)
 	if err != nil {
 		return nil, err

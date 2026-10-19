@@ -12,6 +12,9 @@ func interruptSavedTurnProgress(messages []Message) {
 		switch progress["status"] {
 		case "running", "waiting":
 			progress["status"] = "interrupted"
+			if usage, ok := progress["usage"].(map[string]any); ok {
+				usage["partial"] = true
+			}
 			progress["ended_at"] = progress["updated_at"]
 			items, _ := progress["items"].([]any)
 			for _, raw := range items {
