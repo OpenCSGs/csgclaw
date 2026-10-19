@@ -227,6 +227,7 @@ describe("model provider catalog helpers", () => {
         {
           id: "智谱",
           display_name: "智谱",
+          brand_name: "智谱 GLM",
           base_url: "https://open.bigmodel.cn/api/paas/v4",
           status: "connected",
           models: ["glm-5.2"],
@@ -239,7 +240,9 @@ describe("model provider catalog helpers", () => {
       id: "智谱",
       display_name: "智谱",
       preset: "zhipu",
+      brand_name: "智谱 GLM",
     });
+    expect(modelProviderSelectOptionsFromCatalog(catalog)[0].brandName).toBe("智谱 GLM");
   });
 
   it("infers custom provider presets from persisted metadata and base URLs", () => {

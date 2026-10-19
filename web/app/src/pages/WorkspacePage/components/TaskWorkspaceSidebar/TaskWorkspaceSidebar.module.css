@@ -73,8 +73,7 @@
   background: transparent;
   color: inherit;
   text-align: left;
-  font-size: 14px;
-  font-weight: 500;
+  font: var(--text-sm-medium);
   cursor: pointer;
 }
 
@@ -100,7 +99,7 @@
   border: 1px solid var(--line);
   border-radius: 999px;
   color: var(--muted);
-  font-size: 12px;
+  font: var(--text-xs-normal);
 }
 
 .history {

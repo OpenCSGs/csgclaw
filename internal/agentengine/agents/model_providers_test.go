@@ -13,6 +13,17 @@ import (
 	"csgclaw/internal/modelprovider"
 )
 
+func TestModelProviderSummaryUsesBrandForPresetConnections(t *testing.T) {
+	summary := customProviderSummary("team-zhipu", config.ProviderConfig{Preset: "zhipu", DisplayName: "Team API"})
+	if got, want := summary.BrandName, "智谱 GLM"; got != want {
+		t.Fatalf("brand name = %q, want %q", got, want)
+	}
+	custom := customProviderSummary("team-custom", config.ProviderConfig{Preset: ModelProviderPresetCustom, DisplayName: "Personal"})
+	if custom.BrandName != "" {
+		t.Fatalf("custom brand name = %q, want empty fallback", custom.BrandName)
+	}
+}
+
 func TestRefreshModelProviderCatalogUpdatesBuiltinAndPreservesDefaults(t *testing.T) {
 	got, results, changed := RefreshModelProviderCatalog(context.Background(), config.LLMConfig{}, func(_ context.Context, input ModelProviderCheckInput) ModelProviderCheckResult {
 		if input.ID != ModelProviderIDCSGHubLite {

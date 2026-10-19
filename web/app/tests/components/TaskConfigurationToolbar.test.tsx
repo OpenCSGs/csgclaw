@@ -10,7 +10,7 @@ function setup(configuration: TaskConfiguration = {}, onChange = vi.fn(), direct
   const controller = {
     ready: true,
     t: (key: string) => key,
-    sidebarProps: { locale: "en" },
+    sidebarProps: { locale: "en", onCreateModelProvider: vi.fn() },
     modelProviders: {
       providers: [
         {
@@ -87,7 +87,8 @@ describe("task configuration", () => {
     fireEvent.click(screen.getByRole("button", { name: "iaReasoningFollowAgent" }));
     await waitFor(() => expect(onChange).toHaveBeenLastCalledWith({ workspace_dir: "/project", reasoning_effort: "" }));
     await waitFor(() => expect(screen.getByRole("button", { name: "iaReasoningFollowAgent" })).toBeDisabled());
-    expect(slider).toHaveAttribute("aria-valuetext", "profileReasoningAuto");
+    expect(screen.getByText("iaReasoningFollowing")).toBeInTheDocument();
+    expect(screen.getByRole("slider")).toHaveAttribute("aria-valuetext", "profileReasoningAuto");
   });
   it("keeps model default separate from following the agent", async () => {
     const { onChange } = setup({ reasoning_effort: "high" });
@@ -98,7 +99,28 @@ describe("task configuration", () => {
       expect(screen.getByRole("button", { name: "profileReasoningAuto" })).toHaveAttribute("aria-pressed", "true"),
     );
     expect(screen.getByRole("button", { name: "iaReasoningFollowAgent" })).toBeEnabled();
-    expect(screen.getByRole("slider")).toHaveAttribute("aria-valuetext", "profileReasoningAuto");
+    const slider = screen.getByRole("slider");
+    expect(slider).toHaveAttribute("aria-valuetext", "profileReasoningAuto");
+    fireEvent.keyDown(slider, { key: "ArrowRight" });
+    await waitFor(() => expect(onChange).toHaveBeenLastCalledWith({ reasoning_effort: "high" }));
+    expect(screen.queryByRole("button", { name: "iaReasoningCustom" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "iaReasoningInfo" })).toBeInTheDocument();
+  });
+  it("opens custom model provider setup without connection actions in the picker", async () => {
+    const { controller } = setup();
+    fireEvent.click(screen.getByRole("combobox", { name: "iaModelTitle" }));
+    expect(screen.getByRole("combobox", { name: "modelProviderModelSearch" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "modelConnectAdd" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "modelConnectRetry" })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "iaModelConfigure" }));
+
+    await waitFor(() =>
+      expect(controller.sidebarProps?.onCreateModelProvider).toHaveBeenCalledWith(
+        expect.objectContaining({ preset: "custom", onConnected: expect.any(Function) }),
+      ),
+    );
+    expect(screen.queryByRole("combobox", { name: "modelProviderModelSearch" })).not.toBeInTheDocument();
   });
   it("locks the directory in an existing conversation", () => {
     setup({ workspace_dir: "/project" }, vi.fn(), true);

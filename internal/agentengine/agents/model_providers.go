@@ -52,6 +52,7 @@ type ModelProviderCatalog struct {
 }
 
 type ModelProviderSummary struct {
+	BrandName       string                              `json:"brand_name,omitempty"`
 	ServiceName     string                              `json:"service_name,omitempty"`
 	Region          string                              `json:"region,omitempty"`
 	APIProtocol     string                              `json:"api_protocol,omitempty"`
@@ -284,6 +285,7 @@ func builtinModelProviderSummary(id string, provider config.ProviderConfig) Mode
 	if provider.DisplayName != "" && !IsBuiltinModelProviderID(id) {
 		summary.DisplayName = provider.DisplayName
 	}
+	summary.BrandName = summary.DisplayName
 	if provider.APIKey != "" {
 		summary.APIKeySet = true
 		summary.APIKeyPreview = apiKeyPreview(provider.APIKey)
@@ -310,6 +312,7 @@ func customProviderSummary(id string, provider config.ProviderConfig) ModelProvi
 		ModelDefaults:   automaticProviderMetadata(id, provider),
 		ModelOverrides:  modelcap.Clone(provider.ModelOverrides),
 		DisplayName:     displayName,
+		BrandName:       modelProviderBrandName(effectiveModelProviderPreset(id, provider)),
 		Preset:          effectiveModelProviderPreset(id, provider),
 		Region:          provider.Region,
 		APIProtocol:     provider.APIProtocol,
@@ -964,6 +967,13 @@ func modelProviderAvatar(p config.ProviderConfig) string {
 func modelProviderServiceName(p config.ProviderConfig) string {
 	if preset, ok := modelpreset.Find(p.Preset); ok {
 		return preset.Name
+	}
+	return ""
+}
+
+func modelProviderBrandName(presetID string) string {
+	if preset, ok := modelpreset.Find(presetID); ok && preset.ID != ModelProviderPresetCustom {
+		return preset.BrandName
 	}
 	return ""
 }

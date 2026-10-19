@@ -73,6 +73,28 @@
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--space-4);
 }
+.sectionTitle {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--text);
+  font: var(--text-sm-medium);
+}
+.checkNote {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: 0;
+  padding: var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--panel-soft);
+  color: var(--muted);
+  font: var(--text-xs-normal);
+}
+.checkNote strong {
+  color: var(--text);
+  font: var(--text-sm-medium);
+}
 .basic > [data-csg-field],
 .advanced > [data-csg-field] {
   min-width: 0;

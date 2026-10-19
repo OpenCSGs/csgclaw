@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Check, ChevronDown, Folder, Gauge, Settings2, ShieldCheck } from "lucide-react";
-import { Button, PopoverRoot, PopoverTrigger, PopoverContent, TextInput } from "@/components/ui";
+import { Button, PopoverClose, PopoverRoot, PopoverTrigger, PopoverContent, TextInput } from "@/components/ui";
 import { ReasoningEffortPicker } from "@/components/business/ReasoningEffortPicker";
 import { reasoningEffortLabel } from "@/components/business/ProfileControls";
 import { useOptionalWorkspaceControllerContext } from "@/hooks/workspace";
@@ -89,10 +89,6 @@ export function TaskConfigurationToolbar({
     await change({ reasoning_effort: value }, true);
     setReasoningPreview(undefined);
   }
-  const editAgent = () => {
-    setOpen("");
-    if (agent && controller?.ready) void controller.openAgentSettings?.(agent);
-  };
   const hint = (
     <p className={styles.hint}>{t(editable ? "taskConfigurationSessionOnly" : "taskConfigurationUnsupported")}</p>
   );
@@ -222,20 +218,38 @@ export function TaskConfigurationToolbar({
             followDefault={!configuration.model_id}
             disabled={blocked || !editable}
             compact
+            showConnectionActions={false}
             onFollowDefault={() => change({ model_provider_id: "", model_id: "", reasoning_effort: "" })}
             onChoose={(id, model) => change({ model_provider_id: id, model_id: model, reasoning_effort: "auto" })}
             t={controller?.t || ((key) => t(key))}
             footer={
-              <>
+              <div className={styles.modelFooter}>
                 {errorMessage}
-                {hint}
-                {agent && controller?.ready ? (
-                  <Button variant="tertiaryGray" size="sm" onClick={editAgent}>
-                    <Settings2 size={15} />
-                    {t("taskRuntimeEditAgent")}
-                  </Button>
+                {controller?.ready && controller.sidebarProps.onCreateModelProvider ? (
+                  <PopoverClose asChild>
+                    <Button
+                      variant="linkColor"
+                      size="sm"
+                      onClick={() =>
+                        controller.sidebarProps.onCreateModelProvider?.({
+                          preset: "custom",
+                          onConnected: (provider) => {
+                            if (provider.models[0])
+                              void change({
+                                model_provider_id: provider.id,
+                                model_id: provider.models[0],
+                                reasoning_effort: "auto",
+                              });
+                          },
+                        })
+                      }
+                    >
+                      <Settings2 size={15} />
+                      {t("iaModelConfigure")}
+                    </Button>
+                  </PopoverClose>
                 ) : null}
-              </>
+              </div>
             }
           />
           <PopoverRoot open={open === "reasoning"} onOpenChange={(value) => toggle("reasoning", value)}>
@@ -251,12 +265,12 @@ export function TaskConfigurationToolbar({
                 value={reasoningPreview ?? configuration.reasoning_effort ?? ""}
                 agentEffort={profile?.reasoning_effort ?? undefined}
                 disabled={!editable || blocked}
+                scopeNote={t(editable ? "taskConfigurationSessionOnly" : "taskConfigurationUnsupported")}
                 onValueChange={setReasoningPreview}
                 onValueCommit={(value) => void commitReasoning(value)}
                 t={t}
               />
               {errorMessage}
-              {hint}
             </PopoverContent>
           </PopoverRoot>
         </div>

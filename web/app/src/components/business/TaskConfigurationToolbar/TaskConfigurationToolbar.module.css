@@ -38,6 +38,17 @@
   gap: 6px;
   margin-left: auto;
 }
+.modelFooter {
+  display: grid;
+  gap: var(--space-2);
+}
+.modelFooter .error {
+  margin: 0;
+  font: var(--text-xs-normal);
+}
+.modelFooter > button {
+  justify-self: center;
+}
 .popover {
   width: min(330px, calc(100vw - 24px));
   padding: 4px;

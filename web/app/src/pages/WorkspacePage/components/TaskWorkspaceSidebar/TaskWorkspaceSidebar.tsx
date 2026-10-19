@@ -128,6 +128,7 @@ export function TaskWorkspaceSidebar(props: WorkspaceSidebarProps & { entry: Tas
             usersById={usersById}
             t={t}
             onSelect={props.onSelectConversation}
+            onArchiveCurrent={() => navigate("/new")}
             onNewWith={(room) => {
               const agent = agentForRoom(room);
               if (agent?.id)

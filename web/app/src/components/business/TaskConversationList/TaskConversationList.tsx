@@ -5,8 +5,14 @@ import {
   Button,
   Tooltip,
   Select,
+  Checkbox,
+  TextInput,
   DialogRoot,
+  DialogHeader,
+  DialogBody,
+  DialogFooter,
   DialogContent,
+  DialogDescription,
   DialogTitle,
   DropdownMenuRoot,
   DropdownMenuTrigger,
@@ -37,6 +43,7 @@ type Props = {
   usersById: UsersById;
   t: TranslateFn;
   onSelect: (id: string) => void;
+  onArchiveCurrent?: () => void;
   onNewWith?: (room: IMConversation) => void;
   onEditAgent?: (room: IMConversation) => void;
 };
@@ -51,6 +58,7 @@ export function TaskConversationList({
   usersById,
   t,
   onSelect,
+  onArchiveCurrent,
   onNewWith,
   onEditAgent,
 }: Props) {
@@ -107,7 +115,10 @@ export function TaskConversationList({
       setError(t("taskEntryBusyRoom"));
       return;
     }
-    if (skipArchive) void run(() => entry.patch(room.id, { archived: true }));
+    if (skipArchive)
+      void run(() => entry.patch(room.id, { archived: true })).then((completed) => {
+        if (completed && room.id === activeID) onArchiveCurrent?.();
+      });
     else {
       setDontAsk(false);
       setDialog({ kind: "archive", room });
@@ -125,6 +136,7 @@ export function TaskConversationList({
         : entry.patch(dialog.room.id, dialog.kind === "rename" ? { title: title.trim() } : { archived: true }),
     );
     if (completed && dialog.kind === "archive" && dontAsk) setSkipArchive(true);
+    if (completed && dialog.kind === "archive" && dialog.room.id === activeID) onArchiveCurrent?.();
   }
 
   return (
@@ -144,6 +156,7 @@ export function TaskConversationList({
           <Select
             size="sm"
             triggerClassName={styles.directory}
+            contentClassName={styles.directoryMenu}
             triggerProps={{
               "aria-label": t("iaSessionDirectoryFilter"),
               title: directory || t("iaSessionDirectoryAll"),
@@ -160,7 +173,11 @@ export function TaskConversationList({
                     .replace(/[\\/]+$/, "")
                     .split(/[\\/]/)
                     .at(-1) || path,
-                description: path,
+                description: (
+                  <span className={styles.directoryPath} title={path}>
+                    {path}
+                  </span>
+                ),
               })),
             ]}
           />
@@ -232,7 +249,9 @@ export function TaskConversationList({
                   </time>
                 ) : null}
                 {working ? <span className={styles.workingDot} title={t("taskEntryRunning")} /> : null}
-                {room.pinned ? <Pin size={13} aria-label={t("taskEntryPinned")} /> : null}
+                {room.pinned ? (
+                  <Pin className={styles.pinnedIndicator} size={13} aria-label={t("taskEntryPinned")} />
+                ) : null}
               </button>
               <div className={styles.actions}>
                 <DropdownMenuRoot>
@@ -266,7 +285,6 @@ export function TaskConversationList({
                       </DropdownMenuItem>
                     ) : (
                       <DropdownMenuItem disabled={disabled || working} onSelect={() => requestArchive(room)}>
-                        <Archive size={14} />
                         {t("taskEntryArchive")}
                       </DropdownMenuItem>
                     )}
@@ -297,7 +315,10 @@ export function TaskConversationList({
                 </DropdownMenuRoot>
                 {compact && !archived ? (
                   <>
-                    <Tooltip content={working ? t("taskEntryBusyRoom") : t("taskEntryArchive")}>
+                    <Tooltip
+                      content={working ? t("taskEntryBusyRoom") : t("taskEntryArchive")}
+                      contentProps={{ side: "bottom" }}
+                    >
                       <button
                         type="button"
                         className={styles.more}
@@ -308,7 +329,10 @@ export function TaskConversationList({
                         <Archive size={16} aria-hidden="true" />
                       </button>
                     </Tooltip>
-                    <Tooltip content={t(room.pinned ? "taskEntryUnpin" : "taskEntryPin")}>
+                    <Tooltip
+                      content={t(room.pinned ? "taskEntryUnpin" : "taskEntryPin")}
+                      contentProps={{ side: "bottom" }}
+                    >
                       <button
                         type="button"
                         className={styles.more}
@@ -355,49 +379,63 @@ export function TaskConversationList({
           if (!open && !entry.busyID) setDialog(null);
         }}
       >
-        <DialogContent className={styles.dialog} aria-describedby={undefined}>
-          <DialogTitle>
-            {t(
-              dialog?.kind === "rename"
-                ? "taskEntryRename"
-                : dialog?.kind === "delete"
-                  ? "taskEntryDelete"
-                  : "taskEntryArchive",
+        <DialogContent className={styles.dialog}>
+          <DialogHeader>
+            <div>
+              <DialogTitle>
+                {t(
+                  dialog?.kind === "rename"
+                    ? "taskEntryRename"
+                    : dialog?.kind === "delete"
+                      ? "taskEntryDelete"
+                      : "taskEntryArchive",
+                )}
+              </DialogTitle>
+              <DialogDescription>{dialog?.room.title}</DialogDescription>
+            </div>
+          </DialogHeader>
+          <DialogBody className={styles.dialogBody}>
+            {error ? (
+              <p role="alert" className={styles.error}>
+                {error}
+              </p>
+            ) : null}
+            {dialog?.kind === "rename" ? (
+              <TextInput
+                autoFocus
+                className={styles.dialogInput}
+                aria-label={t("taskEntryRename")}
+                value={title}
+                onChange={(event) => setTitle(event.target.value)}
+              />
+            ) : (
+              <p className={styles.dialogMessage}>
+                {t(dialog?.kind === "delete" ? "taskEntryDeleteWarning" : "taskEntryArchiveHint")}
+              </p>
             )}
-          </DialogTitle>
-          <p>{dialog?.room.title}</p>
-          {error ? (
-            <p role="alert" className={styles.error}>
-              {error}
-            </p>
-          ) : null}
-          {dialog?.kind === "rename" ? (
-            <input
-              autoFocus
-              aria-label={t("taskEntryRename")}
-              value={title}
-              onChange={(event) => setTitle(event.target.value)}
-            />
-          ) : (
-            <p>{t(dialog?.kind === "delete" ? "taskEntryDeleteWarning" : "taskEntryArchiveHint")}</p>
-          )}
-          {dialog?.kind === "archive" ? (
-            <label>
-              <input type="checkbox" checked={dontAsk} onChange={(event) => setDontAsk(event.target.checked)} />
-              {t("taskEntryDontAsk")}
-            </label>
-          ) : null}
-          <div className={styles.dialogActions}>
+            {dialog?.kind === "archive" ? (
+              <label className={styles.dialogCheckbox}>
+                <Checkbox
+                  checked={dontAsk}
+                  aria-label={t("taskEntryDontAsk")}
+                  onCheckedChange={(checked) => setDontAsk(checked === true)}
+                />
+                <span>{t("taskEntryDontAsk")}</span>
+              </label>
+            ) : null}
+          </DialogBody>
+          <DialogFooter>
             <Button variant="secondaryGray" disabled={Boolean(entry.busyID)} onClick={() => setDialog(null)}>
               {t("cancel")}
             </Button>
             <Button
+              variant={dialog?.kind === "delete" ? "danger" : "primary"}
               disabled={Boolean(entry.busyID) || (dialog?.kind === "rename" && !title.trim())}
               onClick={() => void confirm()}
             >
               {t("confirm")}
             </Button>
-          </div>
+          </DialogFooter>
         </DialogContent>
       </DialogRoot>
     </div>

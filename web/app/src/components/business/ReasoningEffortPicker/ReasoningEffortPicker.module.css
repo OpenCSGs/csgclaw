@@ -3,7 +3,7 @@
 }
 
 .body {
-  padding: var(--space-3) var(--space-4);
+  padding: var(--space-3);
 }
 
 .heading {
@@ -14,9 +14,39 @@
   min-height: 22px;
 }
 
+.headingLabel {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
 .title {
+  color: var(--text);
+  font: var(--text-sm-medium);
+}
+
+.info {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: transparent;
   color: var(--muted);
-  font-size: 12px;
+  cursor: help;
+}
+
+.info:hover {
+  color: var(--text);
+  background: var(--panel-soft);
+}
+
+.info:focus-visible {
+  outline: 2px solid var(--input-border-focus);
+  outline-offset: 2px;
 }
 
 .badge {
@@ -24,24 +54,20 @@
   border-radius: var(--radius-full);
   background: var(--panel-soft);
   color: var(--muted);
-  font-size: 10px;
-  line-height: 16px;
+  font: var(--text-xs-normal);
 }
 
 .value {
   margin-top: var(--space-2);
   color: var(--text);
-  font-size: 20px;
-  font-weight: 600;
-  line-height: 28px;
+  font: var(--text-sm-medium);
 }
 
 .description {
   min-height: 36px;
-  margin: var(--space-1) 0 var(--space-2);
+  margin: var(--space-2) 0;
   color: var(--muted);
-  font-size: 12px;
-  line-height: 18px;
+  font: var(--text-xs-normal);
 }
 
 .endpoints {
@@ -49,8 +75,7 @@
   justify-content: space-between;
   gap: var(--space-2);
   color: var(--muted);
-  font-size: 11px;
-  line-height: 18px;
+  font: var(--text-xs-normal);
 }
 
 .actions {

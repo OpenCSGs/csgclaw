@@ -44,6 +44,7 @@ export type ModelProvider = {
   model_defaults?: Record<string, ModelMetadata>;
   model_overrides?: Record<string, ModelOverride>;
   id: string;
+  brand_name?: string;
   kind: string;
   display_name: string;
   preset: ModelProviderPreset;
@@ -83,6 +84,7 @@ export type ModelProviderOption = {
 };
 
 export type ModelProviderSelectOption = {
+  brandName?: string;
   serviceName?: string;
   avatar: string;
   builtin?: boolean;
@@ -208,6 +210,7 @@ function normalizeModelProvider(raw: unknown): ModelProvider {
     id,
     kind,
     avatar: String(record.avatar || "") || undefined,
+    brand_name: String(record.brand_name || "") || undefined,
     service_name: String(record.service_name || "") || undefined,
     region: String(record.region || "") || undefined,
     api_protocol: String(record.api_protocol || "") || undefined,
@@ -420,6 +423,7 @@ export function modelProviderSelectOptionsFromCatalog(
     if (provider.status !== "connected") continue;
     providers.set(provider.id, {
       avatar: modelProviderAvatarPath(provider),
+      brandName: provider.brand_name,
       builtin: provider.builtin || undefined,
       displayName: provider.display_name || provider.id,
       serviceName: provider.service_name,

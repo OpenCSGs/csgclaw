@@ -185,6 +185,12 @@ it.each(["test-api", "custom"])(
     const protocol = screen.getByRole("combobox", { name: t("modelConnectProtocol") });
     const baseURL = screen.getByRole("textbox", { name: t("profileBaseURL") });
     const key = screen.getByLabelText(t("profileAPIKey"));
+    if (initialPreset === "custom") {
+      expect(screen.getByRole("heading", { name: t("modelProviderCreateCustomTitle") })).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: t("modelProviderCreateIdentityTitle") })).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: t("modelProviderCreateConnectionTitle") })).toBeInTheDocument();
+      expect(screen.getByText(t("modelProviderCreateCheckHint"))).toBeInTheDocument();
+    }
     expect(toggle).toHaveAttribute("aria-expanded", "false");
     expect(baseURL).toBeVisible();
     expect(baseURL).toBeRequired();

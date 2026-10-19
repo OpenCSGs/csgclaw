@@ -1,6 +1,6 @@
 import { useId } from "react";
-import { Check, RotateCcw, Sparkles } from "lucide-react";
-import { Button, Slider } from "@/components/ui";
+import { Check, Info, RotateCcw, Sparkles } from "lucide-react";
+import { Button, Slider, Tooltip } from "@/components/ui";
 import { reasoningEffortLabel } from "@/components/business/ProfileControls";
 import { reasoningSliderIndex } from "@/models/reasoning";
 import type { TranslateFn } from "@/models/conversations";
@@ -21,6 +21,7 @@ export function ReasoningEffortPicker({
   value,
   agentEffort,
   disabled,
+  scopeNote,
   onValueChange,
   onValueCommit,
   t,
@@ -28,6 +29,7 @@ export function ReasoningEffortPicker({
   value: string;
   agentEffort?: string;
   disabled?: boolean;
+  scopeNote?: string;
   onValueChange: (value: string) => void;
   onValueCommit: (value: string) => void;
   t: TranslateFn;
@@ -36,16 +38,44 @@ export function ReasoningEffortPicker({
   const effective = value || agentEffort || "auto";
   const index = reasoningSliderIndex(effective);
   const label = reasoningEffortLabel(t, effective);
+  const custom = Boolean(value && value !== "auto");
+  const mode = !value ? "follow" : custom ? "custom" : "auto";
   return (
     <div className={styles.root}>
       <div className={styles.body}>
         <div className={styles.heading}>
-          <span className={styles.title}>{t("iaReasoningTitle")}</span>
-          {!value ? <span className={styles.badge}>{t("iaReasoningFollowing")}</span> : null}
+          <div className={styles.headingLabel}>
+            <span className={styles.title}>{t("iaReasoningTitle")}</span>
+            <Tooltip
+              content={scopeNote ?? t("taskConfigurationSessionOnly")}
+              contentProps={{ side: "top", sideOffset: 6 }}
+            >
+              <button type="button" className={styles.info} aria-label={t("iaReasoningInfo")}>
+                <Info size={14} aria-hidden="true" />
+              </button>
+            </Tooltip>
+          </div>
+          <span className={styles.badge}>
+            {t(
+              mode === "follow"
+                ? "iaReasoningFollowing"
+                : mode === "auto"
+                  ? "profileReasoningAuto"
+                  : "iaReasoningCustom",
+            )}
+          </span>
         </div>
-        <div className={styles.value}>{label}</div>
+        {custom ? <div className={styles.value}>{label}</div> : null}
         <p className={styles.description} id={descriptionId}>
-          {t(index === null ? "iaReasoningHintAuto" : hintMessageKeys[REASONING_SLIDER_STEPS[index]])}
+          {t(
+            mode === "follow"
+              ? "iaReasoningHintFollowAgent"
+              : mode === "auto"
+                ? "iaReasoningHintAuto"
+                : index === null
+                  ? "iaReasoningHintAuto"
+                  : hintMessageKeys[REASONING_SLIDER_STEPS[index]],
+          )}
         </p>
         <Slider
           value={index ?? REASONING_SLIDER_STEPS.indexOf("medium")}
@@ -55,7 +85,7 @@ export function ReasoningEffortPicker({
           valueText={label}
           describedBy={descriptionId}
           disabled={disabled}
-          neutral={index === null}
+          neutral={!custom}
           onValueChange={(next) => onValueChange(REASONING_SLIDER_STEPS[next])}
           onValueCommit={(next) => onValueCommit(REASONING_SLIDER_STEPS[next])}
         />
@@ -68,26 +98,26 @@ export function ReasoningEffortPicker({
         <Button
           variant="tertiaryGray"
           size="sm"
-          active={value === "auto"}
-          aria-pressed={value === "auto"}
-          disabled={disabled || value === "auto"}
+          active={mode === "auto"}
+          aria-pressed={mode === "auto"}
+          disabled={disabled || mode === "auto"}
           onClick={() => onValueCommit("auto")}
         >
           <Sparkles size={14} aria-hidden="true" />
           {t("profileReasoningAuto")}
-          {value === "auto" ? <Check size={14} aria-hidden="true" /> : null}
+          {mode === "auto" ? <Check size={14} aria-hidden="true" /> : null}
         </Button>
         <Button
           variant="tertiaryGray"
           size="sm"
-          active={!value}
-          aria-pressed={!value}
-          disabled={disabled || !value}
+          active={mode === "follow"}
+          aria-pressed={mode === "follow"}
+          disabled={disabled || mode === "follow"}
           onClick={() => onValueCommit("")}
         >
           <RotateCcw size={14} aria-hidden="true" />
           {t("iaReasoningFollowAgent")}
-          {!value ? <Check size={14} aria-hidden="true" /> : null}
+          {mode === "follow" ? <Check size={14} aria-hidden="true" /> : null}
         </Button>
       </div>
     </div>

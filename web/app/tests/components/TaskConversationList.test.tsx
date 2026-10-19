@@ -12,7 +12,7 @@ function Preference() {
   const [skip] = useArchiveConfirmation();
   return <output data-testid="preference">{String(skip)}</output>;
 }
-function setup(working = false, archived = false, compact = false) {
+function setup(working = false, archived = false, compact = false, activeID?: string, onArchiveCurrent?: () => void) {
   vi.mocked(fetchTaskConversations).mockResolvedValue({ rooms: [room], total: 1, has_more: false });
   const patch = vi.fn().mockResolvedValue(undefined);
   const remove = vi.fn().mockResolvedValue(undefined);
@@ -23,11 +23,13 @@ function setup(working = false, archived = false, compact = false) {
       <TaskConversationList
         archived={archived}
         compact={compact}
+        activeID={activeID}
         entry={entry}
         currentUserID="user-admin"
         usersById={usersById}
         t={(key) => key}
         onSelect={vi.fn()}
+        onArchiveCurrent={onArchiveCurrent}
       />
       <Preference />
     </>,
@@ -83,6 +85,7 @@ describe("TaskConversationList archive management", () => {
     await waitFor(() => expect(patch).toHaveBeenCalledWith("r1", { pinned: true }));
     await user.click(screen.getByRole("button", { name: "taskEntryArchive · Review" }));
     expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "confirm" })).toHaveClass("btn-primary");
     await user.click(screen.getByRole("button", { name: "cancel" }));
     expect(patch).toHaveBeenCalledTimes(1);
   });
@@ -105,6 +108,28 @@ describe("TaskConversationList archive management", () => {
     await user.click(screen.getByRole("button", { name: "confirm" }));
     await waitFor(() => expect(patch).toHaveBeenCalledWith("r1", { archived: true }));
     await waitFor(() => expect(screen.getByTestId("preference")).toHaveTextContent("true"));
+  });
+
+  it("opens the start panel after archiving the current conversation", async () => {
+    const user = userEvent.setup();
+    const onArchiveCurrent = vi.fn();
+    const { patch } = setup(false, false, true, "r1", onArchiveCurrent);
+    await user.click(await screen.findByRole("button", { name: "taskEntryMore · Review" }));
+    await user.click(screen.getByRole("menuitem", { name: "taskEntryArchive" }));
+    await user.click(screen.getByRole("button", { name: "confirm" }));
+    await waitFor(() => expect(patch).toHaveBeenCalledWith("r1", { archived: true }));
+    expect(onArchiveCurrent).toHaveBeenCalledOnce();
+  });
+
+  it("opens the start panel when the current conversation skips archive confirmation", async () => {
+    window.localStorage.setItem("csgclaw.task-entry.skip-archive-confirmation", "true");
+    const user = userEvent.setup();
+    const onArchiveCurrent = vi.fn();
+    const { patch } = setup(false, false, true, "r1", onArchiveCurrent);
+    await user.click(await screen.findByRole("button", { name: "taskEntryMore · Review" }));
+    await user.click(screen.getByRole("menuitem", { name: "taskEntryArchive" }));
+    await waitFor(() => expect(patch).toHaveBeenCalledWith("r1", { archived: true }));
+    expect(onArchiveCurrent).toHaveBeenCalledOnce();
   });
   it("keeps archive errors visible in the dialog and does not save the preference on failure", async () => {
     const user = userEvent.setup();

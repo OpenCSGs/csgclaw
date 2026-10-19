@@ -220,6 +220,12 @@
   object-fit: contain;
 }
 
+span.model-option-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .model-option-copy {
   flex: 1 1 auto;
   min-width: 0;

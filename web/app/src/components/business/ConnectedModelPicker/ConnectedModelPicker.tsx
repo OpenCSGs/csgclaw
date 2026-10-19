@@ -20,6 +20,7 @@ export function ConnectedModelPicker({
   onFollowDefault,
   t,
   compact = false,
+  showConnectionActions = true,
   selectionLabel = "full",
   footer,
 }: {
@@ -28,6 +29,7 @@ export function ConnectedModelPicker({
   modelID: string;
   disabled?: boolean;
   compact?: boolean;
+  showConnectionActions?: boolean;
   selectionLabel?: "model" | "full";
   footer?: import("react").ReactNode;
   followDefault?: boolean;
@@ -40,38 +42,46 @@ export function ConnectedModelPicker({
   const [error, setError] = useState("");
   const [retrying, setRetrying] = useState("");
   const [showConnect, setShowConnect] = useState(false);
-  const directory = useModelProviderPresets(showConnect);
+  const directory = useModelProviderPresets(showConnectionActions && showConnect);
   const encode = (p: string, m: string) => JSON.stringify([p, m]);
   const detail = (provider: ModelProviderSelectOption) =>
     provider.serviceName && provider.serviceName !== provider.displayName
       ? `${provider.serviceName} · ${provider.displayName}`
       : provider.displayName;
   const current = providers.find((provider) => provider.id === providerID);
-  const options: ComboboxOption[] = providers
-    .filter((provider) => !provider.disabled)
-    .flatMap((provider) =>
+  const providerGroups = new Map<string, ModelProviderSelectOption[]>();
+  for (const provider of providers) {
+    if (provider.disabled) continue;
+    const name = provider.brandName || provider.displayName;
+    const group = providerGroups.get(name) ?? [];
+    group.push(provider);
+    providerGroups.set(name, group);
+  }
+  const options: ComboboxOption[] = [...providerGroups].flatMap(([group, connections]) =>
+    connections.flatMap((provider) =>
       provider.models
         .filter((model) => !provider.imageModels?.includes(model) && !provider.videoModels?.includes(model))
         .map((model) => ({
           value: encode(provider.id, model),
-          textValue: `${model} ${detail(provider)} ${isOpenCSGAutoModel(provider.id, model) ? t("modelProviderAutoName") : ""}`,
+          group,
+          textValue: `${model} ${detail(provider)} ${group} ${isOpenCSGAutoModel(provider.id, model) ? t("modelProviderAutoName") : ""}`,
           description: isOpenCSGAutoModel(provider.id, model) ? t("modelProviderAutoDescription") : undefined,
           label: (
             <ModelOptionLabel
               avatar={provider.avatar}
               model={isOpenCSGAutoModel(provider.id, model) ? t("modelProviderAutoName") : model}
               badge={isOpenCSGAutoModel(provider.id, model) ? t("modelProviderAutoBadge") : undefined}
-              provider={detail(provider)}
+              provider={provider.serviceName && provider.serviceName !== group ? provider.serviceName : undefined}
             />
           ),
-          disabled: provider.disabled,
         })),
-    );
+    ),
+  );
   if (onFollowDefault)
     options.unshift({
       value: "",
       textValue: t("iaModelFollowAgent"),
-      label: <ModelOptionLabel model={t("iaModelFollowAgent")} provider={modelID} />,
+      label: <ModelOptionLabel avatar={current?.avatar} model={t("iaModelFollowAgent")} provider={modelID} />,
       disabled: false,
     });
   const selected = followDefault || !modelID ? "" : encode(providerID, modelID);
@@ -107,7 +117,7 @@ export function ConnectedModelPicker({
             compact ? (
               modelID || t("iaModelFollowAgent")
             ) : (
-              t("iaModelFollowAgent")
+              <ModelOptionLabel avatar={current?.avatar} model={t("iaModelFollowAgent")} />
             )
           ) : modelID ? (
             <ModelOptionLabel
@@ -121,7 +131,7 @@ export function ConnectedModelPicker({
         triggerClassName={compact ? styles.compact : undefined}
         footer={
           <div className={styles.actions}>
-            {controller?.ready ? (
+            {showConnectionActions && controller?.ready ? (
               <Button
                 size="sm"
                 variant="tertiaryGray"
@@ -131,7 +141,7 @@ export function ConnectedModelPicker({
                 {t("modelConnectAdd")}
               </Button>
             ) : null}
-            {showConnect && controller?.ready ? (
+            {showConnectionActions && showConnect && controller?.ready ? (
               <div className={styles.services}>
                 {(directory.data?.presets ?? [])
                   .filter((preset, index, all) => all.findIndex((p) => p.brand === preset.brand) === index)
@@ -162,32 +172,34 @@ export function ConnectedModelPicker({
                 ) : null}
               </div>
             ) : null}
-            {failed.map((provider) => (
-              <div key={provider.id} className={styles.retry}>
-                <span>{provider.display_name}</span>
-                <Button
-                  variant="tertiaryGray"
-                  size="sm"
-                  disabled={disabled || Boolean(retrying)}
-                  onClick={async () => {
-                    setRetrying(provider.id);
-                    setError("");
-                    try {
-                      const result = await checkModelProvider(provider.id, { connect: true });
-                      if (result.status !== "connected") setError(result.message || t("modelProviderCheckFailed"));
-                      await controller?.refreshWorkspaceModelProviders();
-                    } catch (cause) {
-                      setError(errorMessage(cause, t("modelProviderCheckFailed")));
-                    } finally {
-                      setRetrying("");
-                    }
-                  }}
-                >
-                  {t("modelConnectRetry")}
-                </Button>
-              </div>
-            ))}
-            {error ? (
+            {showConnectionActions
+              ? failed.map((provider) => (
+                  <div key={provider.id} className={styles.retry}>
+                    <span>{provider.display_name}</span>
+                    <Button
+                      variant="tertiaryGray"
+                      size="sm"
+                      disabled={disabled || Boolean(retrying)}
+                      onClick={async () => {
+                        setRetrying(provider.id);
+                        setError("");
+                        try {
+                          const result = await checkModelProvider(provider.id, { connect: true });
+                          if (result.status !== "connected") setError(result.message || t("modelProviderCheckFailed"));
+                          await controller?.refreshWorkspaceModelProviders();
+                        } catch (cause) {
+                          setError(errorMessage(cause, t("modelProviderCheckFailed")));
+                        } finally {
+                          setRetrying("");
+                        }
+                      }}
+                    >
+                      {t("modelConnectRetry")}
+                    </Button>
+                  </div>
+                ))
+              : null}
+            {showConnectionActions && error ? (
               <p className={styles.error} role="alert">
                 {error}
               </p>

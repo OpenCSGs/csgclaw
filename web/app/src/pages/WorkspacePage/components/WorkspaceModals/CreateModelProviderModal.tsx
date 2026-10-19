@@ -151,7 +151,9 @@ export function CreateModelProviderModal({
       >
         <header className={styles.header}>
           <div>
-            <DialogTitle>{t("modelProviderCreateTitle")}</DialogTitle>
+            <DialogTitle>
+              {t(selected === "custom" ? "modelProviderCreateCustomTitle" : "modelProviderCreateTitle")}
+            </DialogTitle>
             <DialogDescription>{t("modelConnectSubtitle")}</DialogDescription>
           </div>
           <ModalCloseButton label={t("close")} onClose={close} />
@@ -246,6 +248,9 @@ export function CreateModelProviderModal({
                 </Button>
               </div>
               <div className={styles.basic}>
+                {selected === "custom" ? (
+                  <h3 className={styles.sectionTitle}>{t("modelProviderCreateIdentityTitle")}</h3>
+                ) : null}
                 <Field
                   className={styles.fullWidth}
                   label={t("modelProviderDisplayName")}
@@ -263,6 +268,9 @@ export function CreateModelProviderModal({
                     }}
                   />
                 </Field>
+                {selected === "custom" ? (
+                  <h3 className={styles.sectionTitle}>{t("modelProviderCreateConnectionTitle")}</h3>
+                ) : null}
                 <Field label={t("modelConnectService")} required>
                   <Select
                     open={openSelect === "service"}
@@ -394,6 +402,12 @@ export function CreateModelProviderModal({
                     />
                   </Field>
                 </div>
+              ) : null}
+              {selected === "custom" ? (
+                <p className={styles.checkNote}>
+                  <strong>{t("modelProviderCheck")}</strong>
+                  <span>{t("modelProviderCreateCheckHint")}</span>
+                </p>
               ) : null}
             </>
           )}

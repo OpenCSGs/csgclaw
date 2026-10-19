@@ -160,6 +160,31 @@ test("group separators and long labels preserve keyboard selection and search", 
   expect(screen.getByRole("option")).toHaveAttribute("aria-selected", "true");
 });
 
+test("group headings stay non-selectable while keyboard navigation crosses groups", async () => {
+  const user = userEvent.setup();
+  const changed = vi.fn();
+  render(
+    <Combobox
+      options={[
+        { value: "auto", label: "Follow agent" },
+        { value: "qwen", label: "Qwen", group: "OpenCSG" },
+        { value: "claude", label: "Claude", group: "Claude Code" },
+      ]}
+      searchPlaceholder="Find model"
+      onValueChange={changed}
+    />,
+  );
+  await user.click(screen.getByRole("combobox"));
+  expect(screen.getAllByRole("option")).toHaveLength(3);
+  expect(screen.getByRole("option", { name: "Qwen" })).toHaveClass("pl-8");
+  expect(screen.getByRole("group", { name: "OpenCSG" })).toContainElement(screen.getByRole("option", { name: "Qwen" }));
+  expect(screen.getByRole("group", { name: "Claude Code" })).toContainElement(
+    screen.getByRole("option", { name: "Claude" }),
+  );
+  await user.keyboard("{ArrowDown}{ArrowDown}{Enter}");
+  expect(changed).toHaveBeenCalledWith("claude");
+});
+
 test("Tab and Shift+Tab leave a portalled picker within the containing dialog", async () => {
   const user = userEvent.setup();
   render(

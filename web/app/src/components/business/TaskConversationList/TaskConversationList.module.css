@@ -70,15 +70,14 @@
   flex: 1;
 }
 .text strong {
-  font-size: 13px;
-  font-weight: 500;
+  font: var(--text-xs-medium);
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
 }
 .text small {
   color: var(--muted);
-  font-size: 11px;
+  font: var(--text-xs-normal);
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
@@ -93,43 +92,44 @@
 .error,
 .dialog .error {
   color: var(--danger);
-  font-size: 12px;
+  font: var(--text-xs-normal);
   margin: 0;
 }
 .root > .error {
   margin-inline: var(--task-conversation-inline-padding, 0px);
 }
 .empty {
-  font-size: 12px;
+  font: var(--text-xs-normal);
   color: var(--muted);
   padding: 12px 4px;
 }
 .dialog {
   width: min(440px, calc(100vw - 32px));
-  display: grid;
-  gap: 16px;
-  padding: 24px;
 }
-.dialog p {
+
+.dialogBody {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.dialogMessage {
   margin: 0;
   color: var(--muted);
+  font: var(--text-sm-normal);
+  line-height: 20px;
 }
-.dialog label {
+
+.dialogCheckbox {
   display: flex;
   gap: 8px;
   align-items: center;
+  color: var(--text);
+  font: var(--text-sm-normal);
+  cursor: pointer;
 }
-.dialog input:not([type="checkbox"]) {
-  border: 1px solid var(--input-border);
-  border-radius: var(--radius-md);
-  padding: 10px;
-  background: var(--input-background);
-  color: var(--input-text);
-}
-.dialogActions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
+
+.dialogInput {
+  width: 100%;
 }
 
 .compact .row {
@@ -148,10 +148,6 @@
 .compact .avatar img {
   width: 22px;
   height: 22px;
-}
-.compact .text strong {
-  font-size: 13px;
-  font-weight: 560;
 }
 .compact .text small {
   display: none;
@@ -188,15 +184,18 @@
   outline: 2px solid var(--focus-ring);
   outline-offset: -2px;
 }
-.compact .row:is(:hover, :focus-within, :has([data-state="open"])) .actions {
+.compact .row:is(:hover, :has([data-state="open"]), :has(.more:focus-visible)) .actions {
   opacity: 1;
   pointer-events: auto;
 }
-.compact .row:is(:hover, :focus-within, :has([data-state="open"])) .timestamp {
+.compact .row:is(:hover, :has([data-state="open"]), :has(.more:focus-visible)) .timestamp {
   display: none;
 }
-.compact .row:is(:hover, :focus-within, :has([data-state="open"])) .text {
+.compact .row:is(:hover, :has([data-state="open"]), :has(.more:focus-visible)) .text {
   padding-right: 78px;
+}
+.compact .row:is(:hover, :has([data-state="open"]), :has(.more:focus-visible)) .pinnedIndicator {
+  visibility: hidden;
 }
 @media (hover: none) {
   .compact .actions {
@@ -209,10 +208,13 @@
   .compact .text {
     padding-right: 78px;
   }
+  .compact .pinnedIndicator {
+    visibility: hidden;
+  }
 }
 .timestamp {
   color: var(--muted);
-  font-size: 11px;
+  font: var(--text-xs-normal);
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
@@ -233,7 +235,7 @@
 .root .searchBar .search {
   min-width: 0;
   width: 100%;
-  font-size: 12px;
+  font: var(--text-xs-normal);
   padding: 7px 10px;
   height: 34px;
   min-height: 34px;
@@ -244,11 +246,24 @@
   width: 92px;
   padding: 6px 8px;
   flex-shrink: 0;
-  font-size: 11px;
+  font: var(--text-xs-normal);
   background: var(--input-background);
   color: var(--text);
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
+}
+
+.directoryMenu {
+  width: min(320px, calc(100vw - 24px));
+  min-width: min(320px, calc(100vw - 24px));
+}
+
+.directoryPath {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .searchField {

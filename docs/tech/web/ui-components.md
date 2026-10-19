@@ -86,6 +86,8 @@ When adding a Radix component with a portal, expose a container escape hatch whe
 
 `Combobox` composes the shared Popover and TextInput with a single input-focus model. Arrow keys skip disabled options, Enter confirms, Escape closes the picker, and Tab/Shift+Tab leave it in form order. IME confirmation must not select an option. `value`/`open` may be controlled; `defaultValue`/`defaultOpen` support uncontrolled use. Use `textValue` for JSX labels, and supply translated search, empty and loading labels.
 
+Options may set `group` to show a non-selectable, accessible section heading. Filtering keeps only headings with matching options, and keyboard navigation continues across groups.
+
 Empty business values remain `""`; a hidden native select preserves `name`/`required` submission. Filtering does not change the selected value, and a saved value remains visible when options are missing or loading. Disabling an option prevents selection. Loading prevents confirmation. Callers clear selection by setting `value` to `""` or providing an explicit empty option.
 
 Content portals to the document body to escape scroll-container clipping. Inside a Dialog it uses a nested modal focus scope; Escape leaves the parent dialog open and Tab returns to its next field. `contentProps.portalContainer` remains an escape hatch for a suitable unclipped host. Keep collision detection enabled and verify long lists and narrow viewports in UI Lab.
