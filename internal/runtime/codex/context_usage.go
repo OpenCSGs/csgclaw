@@ -6,7 +6,6 @@ import (
 
 	"csgclaw/internal/activity"
 	"csgclaw/internal/modelcap"
-	"csgclaw/internal/modelusage"
 )
 
 func (m *appServerManager) publishContextUsage(runtimeID string, live *liveSession, threadID string, params map[string]any, method string) {
@@ -55,57 +54,20 @@ func (m *appServerManager) publishContextUsage(runtimeID string, live *liveSessi
 	m.publishAppServerEvent(SessionEvent{RuntimeID: runtimeID, SessionID: threadID, TurnID: turnID, Kind: activity.RuntimeEventContextUsage, Payload: usage})
 }
 
-// Codex total is a thread-lifetime counter; last is one model request, not one
-// user turn. Subtract the admitted turn's baseline so tools and retries count
-// once, while duplicate notifications simply replace the same snapshot.
+// Native counters describe context occupancy and historical consumption. Reply
+// consumption comes only from upstream responses scoped to this exact turn.
 func (m *appServerManager) publishTokenUsage(runtimeID string, live *liveSession, threadID, turnID string, params map[string]any, method string) {
 	live.mu.Lock()
 	waiter := live.turnWaiters[threadID]
-	if waiter == nil {
+	if waiter == nil || turnID == "" || waiter.currentTurnID() != turnID {
 		live.mu.Unlock()
 		return
 	}
-	if method != "snapshot" {
-		if turnID == "" {
-			live.mu.Unlock()
-			return
-		}
-		raw, _ := params["tokenUsage"].(map[string]any)
-		totalRaw, _ := raw["total"].(map[string]any)
-		lastRaw, _ := raw["last"].(map[string]any)
-		total := modelusage.Parse(totalRaw, live.spec.Profile.ModelID)
-		last := modelusage.Parse(lastRaw, live.spec.Profile.ModelID)
-		if total == nil {
-			live.mu.Unlock()
-			return
-		}
-		if waiter.tokenBaseline == nil {
-			if last == nil {
-				live.mu.Unlock()
-				return
-			}
-			baseline := total.Sub(*last)
-			if !baseline.Valid() {
-				live.mu.Unlock()
-				return
-			}
-			waiter.tokenBaseline = &baseline
-		}
-		current := total.Sub(*waiter.tokenBaseline)
-		if !current.Valid() {
-			live.mu.Unlock()
-			return
-		}
-		current.Partial = current.Partial || waiter.tokenUsage.Partial
-		waiter.tokenUsage = current
-		if live.tokenTotals == nil {
-			live.tokenTotals = make(map[string]modelusage.Usage)
-		}
-		live.tokenTotals[threadID] = *total
+	if pending, ok := waiter.pendingUsage[turnID]; ok {
+		waiter.tokenUsage.Add(pending)
 	}
-	if turnID != "" && waiter.missingUsageTurns[turnID] {
-		waiter.tokenUsage.Partial = true
-	}
+	// Once the turn is confirmed, pending observations for other IDs are stale.
+	waiter.pendingUsage = nil
 	usage := waiter.tokenUsage
 	live.mu.Unlock()
 	m.publishAppServerEvent(SessionEvent{RuntimeID: runtimeID, SessionID: threadID, TurnID: turnID, Kind: activity.RuntimeEventTokenUsage, Payload: usage})

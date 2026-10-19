@@ -295,7 +295,7 @@ func (s *Service) forwardRemoteChatWithAuthRefresh(ctx context.Context, profile 
 		return nil, &HTTPError{Status: http.StatusInternalServerError, Message: fmt.Sprintf("build upstream request: %v", err)}
 	}
 
-	resp, err := s.modelRequest(req)
+	resp, err := s.modelRequest(req, payloadBool(payload["stream"]))
 	if err != nil {
 		return nil, &HTTPError{Status: http.StatusBadGateway, Message: fmt.Sprintf("send upstream request: %v", err)}
 	}
@@ -361,7 +361,7 @@ func (s *Service) forwardRemoteResponsesWithAuthRefresh(ctx context.Context, pro
 		if err != nil {
 			return nil, &HTTPError{Status: http.StatusInternalServerError, Message: fmt.Sprintf("build upstream request: %v", err)}
 		}
-		resp, err := s.modelRequest(req)
+		resp, err := s.modelRequest(req, payloadBool(payload["stream"]))
 		if err != nil {
 			return nil, &HTTPError{Status: http.StatusBadGateway, Message: fmt.Sprintf("send upstream request: %v", err)}
 		}
@@ -544,7 +544,7 @@ func (s *Service) forwardResponsesViaChat(ctx context.Context, profile agent.Age
 	if err != nil {
 		return nil, &HTTPError{Status: http.StatusInternalServerError, Message: fmt.Sprintf("build chat fallback request: %v", err)}
 	}
-	resp, err := s.modelRequest(req)
+	resp, err := s.modelRequest(req, payloadBool(chatPayload["stream"]))
 	if err != nil {
 		return nil, &HTTPError{Status: http.StatusBadGateway, Message: fmt.Sprintf("send chat fallback request: %v", err)}
 	}

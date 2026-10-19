@@ -12,11 +12,16 @@ import (
 
 // Observe the upstream wire format before translation can synthesize zero
 // counters. Observation never changes response bytes or delays streaming.
-func observeResponseUsage(resp *http.Response, observer func(bool)) {
+func observeResponseUsage(resp *http.Response, requestedStream bool, observer func(*modelusage.Usage)) {
 	if observer == nil || resp == nil || resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return
 	}
-	resp.Body = &usageObservedBody{ReadCloser: resp.Body, stream: strings.HasPrefix(strings.ToLower(resp.Header.Get("Content-Type")), "text/event-stream"), observer: observer}
+	contentType := strings.TrimSpace(resp.Header.Get("Content-Type"))
+	stream := strings.HasPrefix(strings.ToLower(contentType), "text/event-stream")
+	if contentType == "" {
+		stream = requestedStream
+	}
+	resp.Body = &usageObservedBody{ReadCloser: resp.Body, stream: stream, observer: observer}
 }
 
 type usageObservedBody struct {
@@ -26,10 +31,10 @@ type usageObservedBody struct {
 	stream       bool
 	line, data   []byte
 	skipping     bool
-	valid        bool
+	usage        *modelusage.Usage
 	messageUsage map[string]any
 	messageDelta bool
-	observer     func(bool)
+	observer     func(*modelusage.Usage)
 }
 
 func (b *usageObservedBody) Read(p []byte) (int, error) {
@@ -43,9 +48,9 @@ func (b *usageObservedBody) Read(p []byte) (int, error) {
 			b.consumeLine()
 			b.consumeEvent()
 		} else {
-			b.valid = validReportedUsage(b.data)
+			b.usage = reportedUsage(b.data)
 		}
-		b.report(err == io.EOF && b.valid)
+		b.report(err == io.EOF && b.usage != nil)
 	}
 	b.mu.Unlock()
 	return n, err
@@ -59,7 +64,15 @@ func (b *usageObservedBody) Close() error {
 	return err
 }
 
-func (b *usageObservedBody) report(complete bool) { b.once.Do(func() { b.observer(complete) }) }
+func (b *usageObservedBody) report(complete bool) {
+	b.once.Do(func() {
+		if complete {
+			b.observer(b.usage)
+		} else {
+			b.observer(nil)
+		}
+	})
+}
 
 func (b *usageObservedBody) inspect(chunk []byte) {
 	if !b.stream {
@@ -109,7 +122,7 @@ func (b *usageObservedBody) consumeEvent() {
 		return
 	}
 	if bytes.Equal(b.data, []byte("[DONE]")) {
-		b.report(b.valid)
+		b.report(b.usage != nil)
 		return
 	}
 	var event map[string]any
@@ -132,28 +145,31 @@ func (b *usageObservedBody) consumeEvent() {
 			_, b.messageDelta = modelusage.Number(usage["output_tokens"])
 		}
 	case "message_stop":
-		b.valid = b.messageDelta && modelusage.Parse(b.messageUsage, "") != nil
-		b.report(b.valid)
+		b.usage = modelusage.Parse(b.messageUsage, "")
+		if !b.messageDelta {
+			b.usage = nil
+		}
+		b.report(b.usage != nil)
 	case "response.completed", "response.incomplete":
-		b.valid = validReportedUsage(b.data)
-		b.report(b.valid)
+		b.usage = reportedUsage(b.data)
+		b.report(b.usage != nil)
 	case "error", "response.failed":
 		b.report(false)
 	default:
 		if usage, ok := event["usage"].(map[string]any); ok {
-			b.valid = modelusage.Parse(usage, "") != nil
+			b.usage = modelusage.Parse(usage, "")
 		}
 	}
 }
 
-func validReportedUsage(raw []byte) bool {
+func reportedUsage(raw []byte) *modelusage.Usage {
 	var response map[string]any
 	if json.Unmarshal(raw, &response) != nil {
-		return false
+		return nil
 	}
 	if nested, ok := response["response"].(map[string]any); ok {
 		response = nested
 	}
 	usage, _ := response["usage"].(map[string]any)
-	return modelusage.Parse(usage, "") != nil
+	return modelusage.Parse(usage, "")
 }

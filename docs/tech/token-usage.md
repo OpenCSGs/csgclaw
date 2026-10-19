@@ -16,17 +16,18 @@ added on top. This is consumption, not a monetary cost calculation.
 
 ## Accounting sources
 
-- Codex reports `thread/tokenUsage/updated` with `tokenUsage.total` (thread
-  lifetime) and `tokenUsage.last` (one model step). The adapter subtracts the
-  admitted turn's baseline, replacing snapshots instead of adding duplicate
-  events. For a cold restored thread, the first total minus last establishes
-  the historical baseline. A context-recovery continuation keeps the original
-  baseline. Background memory sessions are excluded from user reply delivery.
-  The HTTP LLM Bridge also checks each successful upstream attempt's final
-  usage before protocol conversion. A missing or invalid usage marks that exact
-  native Agent/thread/turn as partial, even when other calls returned counts.
-  Auth/protocol rejection retries are excluded. The flag survives later valid
-  counters and recovery continuations, and resets for the next user turn.
+- Codex reply consumption is collected by the HTTP LLM Bridge from each
+  successful upstream response before protocol conversion. Each HTTP attempt
+  reports once, including final streaming usage. Counts are normalized across
+  Chat Completions, Responses and Messages and summed by exact Agent/thread/turn.
+  Native cumulative counters are used for context display only; they never
+  contribute to reply consumption. Cold-restored historical counters therefore
+  cannot charge a previous request to the new turn.
+  Missing or invalid usage marks the turn as partial. Auth/protocol rejection
+  retries are excluded. Recovery continuations retain collected counts, while
+  the next user turn starts fresh. Background memory sessions are excluded.
+  Requests without bridge observation or native turn identity have unavailable
+  usage rather than inferred consumption from historical counters.
 - DSH's managed context bridge forwards committed `assistant/message` and
   `compaction/summary` usage, including automatic summarization model calls.
   The adapter sums distinct event sequence IDs inside the active session turn.
@@ -103,4 +104,5 @@ estimated context occupancy, including after a cold session restore.
 Automatic compaction was also exercised: turns issuing two model calls report
 2,040 tokens, counting both the reply and its summary. Native Codex HTTP tests
 cover complete usage, a missing first or last call, all calls missing usage,
-and an independent complete next turn.
+an independent complete next turn, and cold restores with a missing first call
+or all calls missing after a prior 110-token turn.

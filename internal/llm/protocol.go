@@ -57,7 +57,7 @@ func (s *Service) forwardProtocol(ctx context.Context, profile agent.AgentProfil
 	if err != nil {
 		return nil, err
 	}
-	resp, err := s.modelRequest(req)
+	resp, err := s.modelRequest(req, stream || to == translator.FormatClaude)
 	if err != nil {
 		return nil, &HTTPError{Status: 502, Message: "Cannot reach the model service"}
 	}

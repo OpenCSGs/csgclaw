@@ -59,8 +59,11 @@ func (m *appServerManager) recoverContext(ctx context.Context, live *liveSession
 	}
 	newWaiter := func() error {
 		live.mu.Lock()
-		baseline, usage, missing := (*waiter).tokenBaseline, (*waiter).tokenUsage, (*waiter).missingUsageTurns
-		usage.Partial = usage.Partial || missing[(*waiter).currentTurnID()]
+		usage, pending := (*waiter).tokenUsage, (*waiter).pendingUsage
+		if current, ok := pending[(*waiter).currentTurnID()]; ok {
+			usage.Add(current)
+			delete(pending, (*waiter).currentTurnID())
+		}
 		live.mu.Unlock()
 		live.removeAppServerTurnWaiter(threadID, *waiter)
 		next, err := live.registerAppServerTurnWaiter(threadID)
@@ -68,7 +71,7 @@ func (m *appServerManager) recoverContext(ctx context.Context, live *liveSession
 			return err
 		}
 		live.mu.Lock()
-		next.tokenBaseline, next.tokenUsage, next.missingUsageTurns = baseline, usage, missing
+		next.tokenUsage, next.pendingUsage = usage, pending
 		live.mu.Unlock()
 		next.mu.Lock()
 		next.diagnostic = diagnostics.From(ctx)

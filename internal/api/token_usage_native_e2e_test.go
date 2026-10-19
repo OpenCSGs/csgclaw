@@ -45,23 +45,30 @@ func TestNativeCodexUsageCompletenessThroughBridge(t *testing.T) {
 	for _, tc := range []struct {
 		name     string
 		reported [2]bool
+		cold     bool
 	}{
-		{"complete", [2]bool{true, true}},
-		{"missing-last", [2]bool{true, false}},
-		{"missing-first", [2]bool{false, true}},
-		{"all-missing", [2]bool{false, false}},
+		{"complete", [2]bool{true, true}, false},
+		{"missing-last", [2]bool{true, false}, false},
+		{"missing-first", [2]bool{false, true}, false},
+		{"all-missing", [2]bool{false, false}, false},
+		{"cold-missing-first", [2]bool{false, true}, true},
+		{"cold-all-missing", [2]bool{false, false}, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			home := t.TempDir()
 			t.Setenv("HOME", home)
 			t.Setenv("CODEX_HOME", filepath.Join(home, "host"))
 			var calls atomic.Int64
+			var seed atomic.Bool
 			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				if r.URL.Path != "/v1/responses" {
 					http.NotFound(w, r)
 					return
 				}
 				n := calls.Add(1)
+				if seed.Load() {
+					n = 3
+				}
 				w.Header().Set("Content-Type", "text/event-stream")
 				emit := func(value any) { raw, _ := json.Marshal(value); fmt.Fprintf(w, "data: %s\n\n", raw) }
 				emit(map[string]any{"type": "response.created", "response": map[string]any{"id": fmt.Sprint(n)}})
@@ -113,6 +120,22 @@ func TestNativeCodexUsageCompletenessThroughBridge(t *testing.T) {
 						return usage
 					}
 				}
+			}
+			if tc.cold {
+				seed.Store(true)
+				prior := prompt()
+				if !prior.Known || prior.Partial || prior.Total != 110 {
+					t.Fatalf("prior=%+v", prior)
+				}
+				if _, err := rt.Stop(ctx, handle); err != nil {
+					t.Fatal(err)
+				}
+				resumed, err := rt.EnsureEngineSession(ctx, handle.RuntimeID, "usage-test")
+				if err != nil || resumed != thread {
+					t.Fatalf("cold resume=%q err=%v", resumed, err)
+				}
+				seed.Store(false)
+				calls.Store(0)
 			}
 			usage := prompt()
 			knownCalls := int64(0)

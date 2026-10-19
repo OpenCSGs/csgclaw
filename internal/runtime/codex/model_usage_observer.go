@@ -2,15 +2,13 @@ package codex
 
 import (
 	"csgclaw/internal/activity"
+	"csgclaw/internal/modelusage"
 	"strings"
 )
 
-// ObserveModelResponseUsage records completeness only; consumption still comes
-// from native cumulative counters. Never assign a response by Agent alone.
-func (r *Runtime) ObserveModelResponseUsage(agentID, threadID, turnID string, reported bool) {
-	if reported {
-		return
-	}
+// ObserveModelResponseUsage aggregates each upstream HTTP response exactly once.
+// Native cumulative counters must never contribute to reply consumption.
+func (r *Runtime) ObserveModelResponseUsage(agentID, threadID, turnID string, usage *modelusage.Usage) {
 	threadID, turnID = strings.TrimSpace(threadID), strings.TrimSpace(turnID)
 	if threadID == "" || turnID == "" || len(threadID) > 256 || len(turnID) > 256 {
 		return
@@ -19,10 +17,10 @@ func (r *Runtime) ObserveModelResponseUsage(agentID, threadID, turnID string, re
 	if err != nil {
 		return
 	}
-	manager.observeModelResponseUsage(live, threadID, turnID)
+	manager.observeModelResponseUsage(live, threadID, turnID, usage)
 }
 
-func (m *appServerManager) observeModelResponseUsage(live *liveSession, threadID, turnID string) {
+func (m *appServerManager) observeModelResponseUsage(live *liveSession, threadID, turnID string, reported *modelusage.Usage) {
 	live.mu.Lock()
 	waiter := live.turnWaiters[threadID]
 	if waiter == nil {
@@ -34,20 +32,30 @@ func (m *appServerManager) observeModelResponseUsage(live *liveSession, threadID
 		live.mu.Unlock()
 		return
 	}
-	if waiter.missingUsageTurns == nil {
-		waiter.missingUsageTurns = make(map[string]bool)
+	usage := modelusage.Usage{Partial: true}
+	if reported != nil && reported.Known && reported.Valid() {
+		usage = *reported
 	}
-	// A response can beat turn/start's RPC reply. Retain its exact identity,
-	// applying it only after a start notification or reply establishes the turn.
-	if len(waiter.missingUsageTurns) < 64 {
-		waiter.missingUsageTurns[turnID] = true
-	}
+	// Preserve the configured selection, including auto, rather than the upstream model.
+	usage.ModelID = live.spec.Profile.ModelID
 	if expected == "" {
+		if waiter.pendingUsage == nil {
+			waiter.pendingUsage = make(map[string]modelusage.Usage)
+		}
+		if _, exists := waiter.pendingUsage[turnID]; exists || len(waiter.pendingUsage) < 64 {
+			pending := waiter.pendingUsage[turnID]
+			pending.Add(usage)
+			waiter.pendingUsage[turnID] = pending
+		}
 		live.mu.Unlock()
 		return
 	}
-	waiter.tokenUsage.Partial = true
-	usage := waiter.tokenUsage
+	if pending, ok := waiter.pendingUsage[turnID]; ok {
+		waiter.tokenUsage.Add(pending)
+	}
+	waiter.pendingUsage = nil
+	waiter.tokenUsage.Add(usage)
+	snapshot := waiter.tokenUsage
 	live.mu.Unlock()
-	m.publishAppServerEvent(SessionEvent{RuntimeID: live.spec.RuntimeID, SessionID: threadID, TurnID: turnID, Kind: activity.RuntimeEventTokenUsage, Payload: usage})
+	m.publishAppServerEvent(SessionEvent{RuntimeID: live.spec.RuntimeID, SessionID: threadID, TurnID: turnID, Kind: activity.RuntimeEventTokenUsage, Payload: snapshot})
 }

@@ -231,7 +231,9 @@ func (h *Handler) withLLMDiagnostic(r *http.Request, agentID string) *http.Reque
 		ctx = diagnostics.WithNativeLookup(ctx, h.im.Diagnostics(), agentID, meta.Thread, meta.Turn)
 	}
 	if runtime := h.connectorCodexRuntime(); runtime != nil {
-		ctx = modelusage.WithRequestObserver(ctx, func(reported bool) { runtime.ObserveModelResponseUsage(agentID, meta.Thread, meta.Turn, reported) })
+		ctx = modelusage.WithRequestObserver(ctx, func(usage *modelusage.Usage) {
+			runtime.ObserveModelResponseUsage(agentID, meta.Thread, meta.Turn, usage)
+		})
 	}
 	return r.WithContext(ctx)
 }

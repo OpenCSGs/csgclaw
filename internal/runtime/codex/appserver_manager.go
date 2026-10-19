@@ -1479,9 +1479,8 @@ func (m *appServerManager) persistedThreadID(spec SessionSpec) string {
 
 type appServerTurnWaiter struct {
 	// Guarded by liveSession.mu, alongside the thread's cumulative counters.
-	tokenBaseline            *modelusage.Usage
 	tokenUsage               modelusage.Usage
-	missingUsageTurns        map[string]bool
+	pendingUsage             map[string]modelusage.Usage
 	diagnostic               *diagnostics.Record
 	diagnosticEnds           map[string]time.Time
 	visibleActivity          bool
@@ -1528,9 +1527,6 @@ func (s *liveSession) registerAppServerTurnWaiter(threadID string) (*appServerTu
 		lastActivity: "turn/start",
 	}
 	waiter.tokenUsage.ModelID = s.spec.Profile.ModelID
-	if total, ok := s.tokenTotals[threadID]; ok {
-		waiter.tokenBaseline = &total
-	}
 	s.turnWaiters[threadID] = waiter
 	return waiter, nil
 }
