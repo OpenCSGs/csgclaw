@@ -31,12 +31,6 @@ const appVendorModulePaths = [
   "zustand/",
 ];
 
-function manualChunks(id: string): string | undefined {
-  return appVendorModulePaths.some((modulePath) => id.includes(`/node_modules/${modulePath}`))
-    ? "vendor-app"
-    : undefined;
-}
-
 export default defineConfig(({ command }) => ({
   plugins: [
     tailwindcss(),
@@ -74,10 +68,24 @@ export default defineConfig(({ command }) => ({
         "sse-shared-worker": path.resolve(__dirname, "src/shared/realtime/sseSharedWorker.ts"),
       },
       output: {
+        // ECharts registers chart types through order-sensitive module side effects.
+        strictExecutionOrder: true,
         entryFileNames: (chunk) => (chunk.name === "sse-shared-worker" ? "[name].js" : "assets/[name]-[hash].js"),
         chunkFileNames: "assets/[name]-[hash].js",
         assetFileNames: "assets/[name]-[hash][extname]",
-        manualChunks,
+        codeSplitting: {
+          groups: [
+            {
+              name: "vendor-app",
+              test: (id) => appVendorModulePaths.some((modulePath) => id.includes(`/node_modules/${modulePath}`)),
+            },
+            {
+              name: "vendor-pptx-charts",
+              test: /[\\/]node_modules[\\/](?:echarts|zrender)[\\/]/,
+              maxSize: 600_000,
+            },
+          ],
+        },
       },
     },
   },
