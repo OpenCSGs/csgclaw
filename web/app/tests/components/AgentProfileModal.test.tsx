@@ -469,7 +469,7 @@ describe("AgentProfileModal", () => {
     expect(screen.getAllByText("Environment").length).toBeGreaterThan(0);
     expect(screen.getByText("Basics")).toBeInTheDocument();
     expect(screen.queryByRole("textbox", { name: "Name" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("combobox", { name: "Provider" })).not.toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "profileModelProvider" })).toBeInTheDocument();
 
     await user.click(screen.getByRole("tab", { name: /Custom/i }));
 
@@ -1866,3 +1866,59 @@ describe("AgentProfileModal", () => {
     expect(screen.getByText("notifierDeliveryMode")).toBeInTheDocument();
   });
 });
+
+it.each(["template", "custom"] as const)(
+  "requires an explicit model choice for %s creation without defaults",
+  async (mode) => {
+    const user = userEvent.setup();
+    const save = vi.fn();
+    function Harness() {
+      const [draft, setDraft] = useState<AgentDraft>({
+        ...agentToDraft({ name: "New worker", runtime_kind: "codex" }),
+        from_template: mode === "template" ? "builtin.codex-worker" : "",
+      });
+      return (
+        <AgentProfileModal
+          t={t}
+          agentModalMode="create"
+          agentCreateMode={mode}
+          agentCreateBotKind="worker"
+          onAgentCreateBotKindChange={vi.fn()}
+          editingAgent={null}
+          agentDraft={draft}
+          onAgentDraftChange={(update) =>
+            setDraft((current) => (typeof update === "function" ? update(current) : update) ?? current)
+          }
+          onAgentModelsReset={vi.fn()}
+          hubTemplates={[{ id: "builtin.codex-worker", name: "New worker", role: "worker", runtime_kind: "codex" }]}
+          modelProviders={normalizeModelProviderCatalog({
+            providers: [{ id: "fixture", display_name: "Fixture", status: "connected", models: ["first", "chosen"] }],
+          })}
+          bootstrapConfig={{ worker_runtime_choices: [{ name: "codex", sandbox_enabled: false, installed: true }] }}
+          locale="en"
+          onClose={vi.fn()}
+          onSave={() => save(draft)}
+        />
+      );
+    }
+    render(<Harness />);
+    expect(screen.getByRole("button", { name: "Create" })).toBeDisabled();
+    const provider = screen.getByRole("combobox", { name: "profileModelProvider" });
+    expect(provider).toHaveTextContent("profileProviderSelect");
+    expect(screen.getByRole("combobox", { name: "Model" })).toHaveTextContent("profileProviderSelectFirst");
+    await user.click(provider);
+    await user.click(screen.getByRole("option", { name: /Fixture/ }));
+    await user.click(screen.getByRole("combobox", { name: "Model" }));
+    await user.click(screen.getByRole("option", { name: /chosen/ }));
+    expect(screen.getByRole("button", { name: "Create" })).toBeEnabled();
+    await user.click(screen.getByRole("button", { name: "Create" }));
+    expect(save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        model_provider_id: "fixture",
+        model_id: "chosen",
+        image_generation: null,
+        video_generation: null,
+      }),
+    );
+  },
+);

@@ -682,29 +682,31 @@ export function AgentProfileModal({
               webhookPublicOrigin={notifierWebhookPublicOrigin}
               onPatch={(patch) => onAgentDraftChange({ ...agentDraft, ...patch })}
             />
-          ) : !isTemplateCreate ? (
+          ) : (
+            <section className="profile-section">
+              <div className="profile-section-heading">
+                <div className="profile-section-title">{t("profileModelSection")}</div>
+                <p className="profile-section-description">{t("profileModelSectionDescription")}</p>
+              </div>
+              <div className="agent-section-form">
+                <div className="agent-section-form-content agent-model-form-content">
+                  <AgentModelConfiguration
+                    draft={agentDraft}
+                    providerOptions={providerOptions}
+                    providerID={selectedProviderID}
+                    modelID={selectedModelValue}
+                    models={selectedProviderModels}
+                    busy={agentModelBusy || agentBusy}
+                    onPatch={(patch) => onAgentDraftChange({ ...agentDraft, ...patch })}
+                    onRequireOpenCSGAuth={onRequireOpenCSGAuth}
+                    t={t}
+                  />
+                </div>
+              </div>
+            </section>
+          )}
+          {!isNotificationContext && !isTemplateCreate ? (
             <>
-              <section className="profile-section">
-                <div className="profile-section-heading">
-                  <div className="profile-section-title">{t("profileModelSection")}</div>
-                  <p className="profile-section-description">{t("profileModelSectionDescription")}</p>
-                </div>
-                <div className="agent-section-form">
-                  <div className="agent-section-form-content agent-model-form-content">
-                    <AgentModelConfiguration
-                      draft={agentDraft}
-                      providerOptions={providerOptions}
-                      providerID={selectedProviderID}
-                      modelID={selectedModelValue}
-                      models={selectedProviderModels}
-                      busy={agentModelBusy || agentBusy}
-                      onPatch={(patch) => onAgentDraftChange({ ...agentDraft, ...patch })}
-                      onRequireOpenCSGAuth={onRequireOpenCSGAuth}
-                      t={t}
-                    />
-                  </div>
-                </div>
-              </section>
               <section className="profile-section agent-instructions-section">
                 <div className="profile-grid-compact">
                   <label className="field span-2">

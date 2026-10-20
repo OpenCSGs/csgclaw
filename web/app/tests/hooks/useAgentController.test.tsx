@@ -3424,8 +3424,15 @@ describe("useAgentController", () => {
     expect(result.current.agentViewProps.draft?.avatar).toBe(nextAvatar);
   });
 
-  it("initializes create agent drafts from the first available model provider when defaults are empty", async () => {
-    vi.mocked(fetchAgentProfileDefaults).mockRejectedValueOnce(new Error("unavailable"));
+  it.each(["unspecified", "unavailable"])("requires model selection when defaults are %s", async (state) => {
+    if (state === "unavailable") vi.mocked(fetchAgentProfileDefaults).mockRejectedValue(new Error("unavailable"));
+    else
+      vi.mocked(fetchAgentProfileDefaults).mockResolvedValue({
+        model_id: "",
+        model_provider_id: "",
+        image_generation: null,
+        video_generation: null,
+      });
     const modelProviders = normalizeModelProviderCatalog({
       providers: [
         {
@@ -3453,10 +3460,22 @@ describe("useAgentController", () => {
 
     await waitFor(() => expect(result.current.agentProfileModalProps).not.toBeNull());
     expect(result.current.agentProfileModalProps?.agentDraft).toMatchObject({
-      provider: "codex",
-      model_provider_id: "codex",
-      model_id: "gpt-5.5",
+      model_provider_id: "",
+      model_id: "",
+      image_generation: null,
+      video_generation: null,
     });
+    act(() =>
+      result.current.agentProfileModalProps?.onAgentDraftChange({
+        ...result.current.agentProfileModalProps!.agentDraft,
+        model_provider_id: "codex",
+        model_id: "gpt-5.5",
+      }),
+    );
+    await act(async () => {
+      await result.current.computerViewProps.onCreateAgent();
+    });
+    expect(result.current.agentProfileModalProps?.agentDraft).toMatchObject({ model_provider_id: "", model_id: "" });
   });
 
   it("does not offer Codex model provider for agent creation when Codex CLI is unavailable", async () => {

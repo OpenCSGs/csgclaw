@@ -21,6 +21,7 @@ export function ConnectedModelPicker({
   t,
   compact = false,
   selectionLabel = "full",
+  placeholder,
   footer,
 }: {
   providers: readonly ModelProviderSelectOption[];
@@ -29,6 +30,7 @@ export function ConnectedModelPicker({
   disabled?: boolean;
   compact?: boolean;
   selectionLabel?: "model" | "full";
+  placeholder?: string;
   footer?: import("react").ReactNode;
   followDefault?: boolean;
   onChoose: (providerID: string, modelID: string) => void | Promise<void>;
@@ -101,7 +103,7 @@ export function ConnectedModelPicker({
         disabled={disabled || saving}
         searchPlaceholder={t("modelProviderModelSearch")}
         emptyLabel={t("modelConnectNoMatch")}
-        placeholder={t(options.length ? "profileSelectModel" : "modelDefaultNone")}
+        placeholder={placeholder ?? t(options.length ? "profileSelectModel" : "modelDefaultNone")}
         selectedLabel={
           followDefault ? (
             compact ? (

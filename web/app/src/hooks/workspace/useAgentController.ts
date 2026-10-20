@@ -1504,7 +1504,7 @@ export function useAgentController({
         agent_profile: {},
       });
       draft = applyTemplateToDraft(draft, selectedTemplate, effectiveBootstrapConfig, managerAgent?.image || "");
-      draft = agentDraftWithAvailableModels(draft, createModelCatalog, openCSGAuthenticated);
+      draft = agentDraftWithAvailableModels(draft, createModelCatalog, openCSGAuthenticated, false);
       setAgentDraft(draft);
       setShowAgentModal(true);
     }

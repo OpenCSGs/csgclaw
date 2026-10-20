@@ -2447,7 +2447,7 @@ export const messages = {
     agentRuntimeServiceUnavailable: "智能体服务暂时不可用",
     createAgent: "创建",
     createAgentTitle: "创建智能体",
-    createAgentSubtitle: "创建执行智能体，并沿用上次创建时的模型选择。",
+    createAgentSubtitle: "从模板创建执行智能体，或自定义配置。",
     createAgentSubtitleNotifier: "创建一个通知智能体（推送 Webhook 或拉取收件箱），可与执行智能体一样绑定飞书并进群。",
     createAgentKindTabAriaLabel: "创建智能体类型",
     createAgentKindWorker: "执行智能体",
@@ -5424,7 +5424,7 @@ export const messages = {
     agentRuntimeServiceUnavailable: "Agent service is temporarily unavailable",
     createAgent: "Create",
     createAgentTitle: "Create Agent",
-    createAgentSubtitle: "Create an agent with the model choices from your last creation.",
+    createAgentSubtitle: "Create an agent from a template or configure it yourself.",
     createAgentSubtitleNotifier:
       "Create a notification agent (push webhook or pull inbox). Can bind Feishu and join groups like workers.",
     createAgentKindTabAriaLabel: "Create agent kind",

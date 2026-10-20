@@ -43,9 +43,7 @@ export function AgentModelFields({
         <Select
           value={providerID}
           required
-          placeholder={
-            busy ? t("profileLoadingModels") : t(providerOptions.length ? "profileProviderSelect" : "modelDefaultNone")
-          }
+          placeholder={busy ? t("profileLoadingModels") : t("profileProviderSelect")}
           selectedLabel={
             selectedProvider ? (
               <ModelOptionLabel avatar={selectedProvider.avatar} model={selectedProvider.displayName} />
@@ -86,6 +84,7 @@ export function AgentModelFields({
       <Field required label={t("profileModel")}>
         <ConnectedModelPicker
           selectionLabel="model"
+          placeholder={t(providerID ? "profileSelectModel" : "profileProviderSelectFirst")}
           providers={selectedProvider ? [{ ...selectedProvider, models: [...models] }] : []}
           providerID={providerID}
           modelID={modelID}

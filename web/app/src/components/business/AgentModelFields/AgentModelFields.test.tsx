@@ -114,7 +114,7 @@ test("a removed saved model stays visible on the trigger but is absent from choi
   expect(onChange).toHaveBeenCalledWith("current");
 });
 
-test("empty model fields display unspecified without exposing an encoded selection", () => {
+test("empty required model fields prompt for a provider before selecting a model", () => {
   render(
     <AgentModelFields
       providerOptions={[]}
@@ -126,5 +126,8 @@ test("empty model fields display unspecified without exposing an encoded selecti
       t={t}
     />,
   );
-  for (const control of screen.getAllByRole("combobox")) expect(control).toHaveTextContent(t("modelDefaultNone"));
+  expect(screen.getByRole("combobox", { name: t("profileModelProvider") })).toHaveTextContent(
+    t("profileProviderSelect"),
+  );
+  expect(screen.getByRole("combobox", { name: t("profileModel") })).toHaveTextContent(t("profileProviderSelectFirst"));
 });
