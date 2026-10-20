@@ -12,6 +12,32 @@ import (
 	"csgclaw/internal/agentengine/contract"
 )
 
+func TestRuntimeOutputMediaTypeRecognizesSVG(t *testing.T) {
+	tests := []struct {
+		name, requested, filename, body string
+		want, errorText                 string
+	}{
+		{name: "explicit SVG", requested: "image/svg+xml", filename: "chart.svg", body: `<svg xmlns="http://www.w3.org/2000/svg"></svg>`, want: "image/svg+xml"},
+		{name: "SVG extension", filename: "chart.svg", body: `<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg"></svg>`, want: "image/svg+xml"},
+		{name: "disguised HTML", requested: "image/svg+xml", filename: "chart.svg", body: `<html><script>alert(1)</script></html>`, errorText: "does not match"},
+		{name: "DTD", requested: "image/svg+xml", filename: "chart.svg", body: `<!DOCTYPE svg><svg></svg>`, errorText: "does not match"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got, err := runtimeOutputMediaType(test.requested, test.filename, []byte(test.body))
+			if test.errorText != "" {
+				if err == nil || !strings.Contains(err.Error(), test.errorText) {
+					t.Fatalf("media type = %q, error = %v", got, err)
+				}
+				return
+			}
+			if err != nil || got != test.want {
+				t.Fatalf("media type = %q, error = %v; want %q", got, err, test.want)
+			}
+		})
+	}
+}
+
 func TestStructuredQuestionPreservesReadableOutput(t *testing.T) {
 	adapter := &ConversationAdapter{}
 	var events []contract.TurnEvent

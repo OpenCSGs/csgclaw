@@ -3,11 +3,13 @@ package api
 import (
 	"context"
 	"crypto/rand"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"mime"
 	"net/http"
 	"regexp"
 	"strings"
@@ -19,6 +21,7 @@ import (
 )
 
 const agentSessionResponseBodyLimit = 1024 * 1024
+const agentSessionInlineImageLimit = 2 * 1024 * 1024
 
 const (
 	agentSessionExtraTypePlainText   = "plain_text"
@@ -224,6 +227,22 @@ func (h *Handler) createAgentSessionResponse(w http.ResponseWriter, r *http.Requ
 		h.writeSessionTurnError(w, runCtx, result)
 		return
 	}
+	imageMarkdown, err := h.sessionInlineImages(runCtx, selected.ID, result.Files)
+	if err != nil {
+		if eventStream != nil {
+			eventStream.writeFailure(response, err)
+			return
+		}
+		writeAgentSessionError(w, http.StatusBadGateway, "output_file_unavailable", err.Error(), nil)
+		return
+	}
+	output := result.Output
+	if imageMarkdown != "" {
+		if strings.TrimSpace(output) != "" {
+			output += "\n\n"
+		}
+		output += imageMarkdown
+	}
 
 	completedAtUnix := time.Now().UTC().Unix()
 	response.CompletedAt = &completedAtUnix
@@ -235,15 +254,50 @@ func (h *Handler) createAgentSessionResponse(w http.ResponseWriter, r *http.Requ
 		Role:   "assistant",
 		Content: []agentSessionResponseContent{{
 			Type:        "output_text",
-			Text:        result.Output,
+			Text:        output,
 			Annotations: []any{},
 		}},
 	}}
 	if eventStream != nil {
-		_ = eventStream.writeCompleted(result.Output)
+		_ = eventStream.writeCompleted(result.Output, strings.TrimPrefix(output, result.Output))
 		return
 	}
 	writeJSON(w, http.StatusOK, response)
+}
+
+// The Runtime publishes immutable files; encoding them here avoids making the
+// model retype Base64 one token at a time. Only supported images are inlined.
+func (h *Handler) sessionInlineImages(ctx context.Context, agentID string, files []agentengine.OutputFile) (string, error) {
+	var images []string
+	for _, file := range files {
+		mediaType, _, err := mime.ParseMediaType(file.MediaType)
+		if err != nil || !sessionInlineImageType(mediaType) {
+			continue
+		}
+		if file.SizeBytes > agentSessionInlineImageLimit {
+			return "", fmt.Errorf("published image exceeds the inline response size limit")
+		}
+		content, err := h.agentEngine.Conversations(agentID).Files().Get(ctx, file.ID)
+		if err != nil {
+			return "", fmt.Errorf("read published image: %w", err)
+		}
+		data, readErr := io.ReadAll(io.LimitReader(content.Content, agentSessionInlineImageLimit+1))
+		closeErr := content.Content.Close()
+		if readErr != nil || closeErr != nil || len(data) > agentSessionInlineImageLimit {
+			return "", fmt.Errorf("read published image: content is unavailable or too large")
+		}
+		images = append(images, "![图片](data:"+mediaType+";base64,"+base64.StdEncoding.EncodeToString(data)+")")
+	}
+	return strings.Join(images, "\n\n"), nil
+}
+
+func sessionInlineImageType(mediaType string) bool {
+	switch mediaType {
+	case "image/svg+xml", "image/png", "image/jpeg", "image/gif", "image/webp":
+		return true
+	default:
+		return false
+	}
 }
 
 func (h *Handler) cancelAgentSessionResponse(w http.ResponseWriter, r *http.Request) {
@@ -667,7 +721,7 @@ func (s *agentSessionEventStream) closeTextBlock() error {
 	return nil
 }
 
-func (s *agentSessionEventStream) writeCompleted(text string) error {
+func (s *agentSessionEventStream) writeCompleted(text, suffix string) error {
 	s.stopHeartbeat()
 	streamedText := s.text.String()
 	switch {
@@ -679,6 +733,9 @@ func (s *agentSessionEventStream) writeCompleted(text string) error {
 		if err := s.writeDelta(strings.TrimPrefix(text, streamedText)); err != nil {
 			return err
 		}
+	}
+	if err := s.writeDelta(suffix); err != nil {
+		return err
 	}
 	if err := s.closeTextBlock(); err != nil {
 		return err

@@ -8,6 +8,7 @@ import (
 	"csgclaw/internal/agentengine/contract"
 	"csgclaw/internal/diagnostics"
 	"encoding/hex"
+	"encoding/xml"
 	"errors"
 	"fmt"
 	"io"
@@ -330,6 +331,9 @@ func openRuntimeOutputSource(root *os.Root, relativePath string) (*os.File, os.F
 
 func runtimeOutputMediaType(requested, name string, prefix []byte) (string, error) {
 	detected := http.DetectContentType(prefix)
+	if isSVGPrefix(prefix) {
+		detected = "image/svg+xml"
+	}
 	mediaType := strings.TrimSpace(requested)
 	if mediaType != "" {
 		parsed, _, err := mime.ParseMediaType(mediaType)
@@ -347,6 +351,24 @@ func runtimeOutputMediaType(requested, name string, prefix []byte) (string, erro
 		return "", fmt.Errorf("Runtime output content does not match image MIME type %q", mediaType)
 	}
 	return mediaType, nil
+}
+
+// DetectContentType reports SVG as text, so recognize its XML root before
+// applying the normal image/content-type mismatch check.
+func isSVGPrefix(prefix []byte) bool {
+	decoder := xml.NewDecoder(strings.NewReader(string(prefix)))
+	for {
+		token, err := decoder.Token()
+		if err != nil {
+			return false
+		}
+		switch value := token.(type) {
+		case xml.Directive:
+			return false
+		case xml.StartElement:
+			return value.Name.Local == "svg" && (value.Name.Space == "" || value.Name.Space == "http://www.w3.org/2000/svg")
+		}
+	}
 }
 
 func (a *ConversationAdapter) handleInteraction(ctx context.Context, policy contract.InteractionPolicy, interaction contract.InteractionRequest, sink contract.EventSink) *contract.TurnResult {

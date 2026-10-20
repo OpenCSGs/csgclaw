@@ -9,6 +9,7 @@ import (
 	"csgclaw/internal/agentsession"
 	"csgclaw/internal/config"
 	"csgclaw/internal/im"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -107,6 +108,71 @@ func TestAgentSessionResponsesUsesEngineWithoutCreatingIMEntities(t *testing.T) 
 	after := imSvc.Bootstrap()
 	if len(after.Rooms) != len(before.Rooms) || len(after.Users) != len(before.Users) {
 		t.Fatalf("IM changed: before=%+v after=%+v", before, after)
+	}
+}
+
+func TestAgentSessionResponsesInlinePublishedSVGInOneDelta(t *testing.T) {
+	svg := []byte(`<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"></svg>`)
+	engine := &fakeSessionEngine{}
+	engine.run = func(ctx context.Context, agentID string, _ agentengine.TurnRequest, sink agentengine.EventSink) agentengine.TurnResult {
+		file, err := engine.client.Conversations(agentID).Files().Create(ctx, agentengine.FileCreateRequest{
+			Name: "chart.svg", MIMEType: "image/svg+xml", SizeBytes: int64(len(svg)),
+		}, bytes.NewReader(svg))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if sink != nil {
+			if err := sink.Emit(ctx, agentengine.TurnEvent{Kind: agentengine.TurnEventTextDelta, Text: "已生成图表"}); err != nil {
+				t.Fatal(err)
+			}
+		}
+		return agentengine.TurnResult{Status: agentengine.TurnSucceeded, Output: "已生成图表", Files: []agentengine.OutputFile{file}}
+	}
+	handler, _, _, _ := newAgentSessionTestHandler(t, []agent.Agent{sessionCodexAgent("agent-alpha", "Alpha")}, engine, "")
+	wantImage := "![图片](data:image/svg+xml;base64," + base64.StdEncoding.EncodeToString(svg) + ")"
+
+	recorder := performAgentSessionRequest(t, handler, "agent-alpha", "published-svg-json", map[string]any{"input": "绘图"})
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("JSON status = %d, body = %s", recorder.Code, recorder.Body.String())
+	}
+	var response agentSessionResponse
+	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	if got := response.Output[0].Content[0].Text; got != "已生成图表\n\n"+wantImage {
+		t.Fatalf("JSON output = %q", got)
+	}
+
+	recorder = performAgentSessionRequest(t, handler, "agent-alpha", "published-svg-sse", map[string]any{"input": "绘图", "stream": true})
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("SSE status = %d, body = %s", recorder.Code, recorder.Body.String())
+	}
+	var imageDeltas int
+	for _, event := range strings.Split(recorder.Body.String(), "\n\n") {
+		if !strings.Contains(event, "event: content_block_delta") {
+			continue
+		}
+		var delta struct {
+			Delta struct {
+				Text string `json:"text"`
+			} `json:"delta"`
+		}
+		for _, line := range strings.Split(event, "\n") {
+			if strings.HasPrefix(line, "data: ") {
+				if err := json.Unmarshal([]byte(strings.TrimPrefix(line, "data: ")), &delta); err != nil {
+					t.Fatal(err)
+				}
+			}
+		}
+		if strings.Contains(delta.Delta.Text, "data:image/svg+xml;base64,") {
+			imageDeltas++
+			if delta.Delta.Text != "\n\n"+wantImage {
+				t.Fatalf("image delta = %q", delta.Delta.Text)
+			}
+		}
+	}
+	if imageDeltas != 1 || !strings.Contains(recorder.Body.String(), "event: message_stop") {
+		t.Fatalf("image deltas = %d, SSE body = %s", imageDeltas, recorder.Body.String())
 	}
 }
 
