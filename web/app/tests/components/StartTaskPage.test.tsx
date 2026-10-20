@@ -111,6 +111,11 @@ describe("StartTaskPage task preparation", () => {
     }
   });
 
+  it("focuses the task prompt when starting a task with the selected agent", () => {
+    setup("/new?agent=u-worker");
+    expect(screen.getByRole("textbox", { name: "taskEntryPrompt" })).toHaveFocus();
+  });
+
   it.each(["opencsg", "codex"])(
     "checks %s authentication for the selected room model before the first prompt",
     async (provider) => {

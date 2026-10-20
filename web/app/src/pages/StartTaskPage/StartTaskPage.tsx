@@ -277,6 +277,7 @@ function StartTaskForm({
                 ))}
                 <textarea
                   ref={editorRef}
+                  autoFocus
                   className={styles.input}
                   aria-label={t("taskEntryPrompt")}
                   placeholder={t("iaStartComposerPlaceholder")}
