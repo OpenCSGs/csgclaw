@@ -844,6 +844,34 @@ describe("useConversationController", () => {
     expect(result.current.conversationViewProps.threadError).toBe("conversationAgentOffline");
   });
 
+  it.each(["failed", "unknown", "exited", "profile_incomplete"])(
+    "submits pending offline Codex %s to backend recovery",
+    async (state) => {
+      apiMocks.sendMessageRequest.mockResolvedValue({ id: "recovery-message", content: "hi", sender_id: "u-admin" });
+      const { result } = renderConversationController({
+        agents: [
+          {
+            id: "u-demo",
+            name: "demo",
+            role: "worker",
+            runtime: { kind: "codex", state },
+            model_config: { model_provider_id: "fixture", model_id: "test-model", env_restart_required: true },
+          },
+        ],
+      });
+      const editor = document.createElement("div");
+      editor.textContent = "hi";
+      act(() => {
+        result.current.conversationViewProps.editorRef.current = editor;
+        result.current.conversationViewProps.onSyncComposer();
+      });
+      await act(async () => {
+        await result.current.conversationViewProps.onSendMessage();
+      });
+      expect(apiMocks.sendMessageRequest).toHaveBeenCalledOnce();
+    },
+  );
+
   it("queues a message when a running gateway is temporarily degraded", async () => {
     apiMocks.sendMessageRequest.mockResolvedValue({
       id: "msg-user",

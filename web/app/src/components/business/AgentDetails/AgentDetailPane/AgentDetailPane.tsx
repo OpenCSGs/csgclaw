@@ -323,6 +323,7 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
     onStartFeishuConnect,
     onDisconnectFeishu,
     onUpgrade,
+    onRecreate,
     onDelete,
     onInvite,
     onDismissNotice,
@@ -338,6 +339,7 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
   },
   ref,
 ) {
+  const [recreateTarget, setRecreateTarget] = useState<AgentLike | null>(null);
   const [isEditingDescription, setIsEditingDescription] = useState(false);
   const [isEditingName, setIsEditingName] = useState(false);
   const [activeProfileTab, setActiveProfileTab] = useState<AgentProfileTabID>(() => readAgentProfileActiveTab());
@@ -843,7 +845,16 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
                 <span className="status-pill profile-state-pill warn">{t("profileUpgradeRequired")}</span>
               ) : null}
               {restartNeeded ? (
-                <span className="status-pill profile-state-pill warn">{t("profileRestartRequired")}</span>
+                <Button
+                  variant="secondaryGray"
+                  size="sm"
+                  className="status-pill profile-state-pill profile-recreate-button warn"
+                  title={t("agentRecreate")}
+                  disabled={saving || busyKey.startsWith(busyPrefix) || isNotificationBotAgent(item)}
+                  onClick={() => setRecreateTarget(item)}
+                >
+                  {t("profileRestartRequired")}
+                </Button>
               ) : null}
             </div>
             {draft ? (
@@ -1190,6 +1201,36 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
           }}
         />
       ) : null}
+      <DialogRoot open={recreateTarget !== null} onOpenChange={(open) => !open && setRecreateTarget(null)}>
+        <DialogContent portalContainer={dialogPortalContainer}>
+          <DialogHeader>
+            <div>
+              <DialogTitle>
+                {t("agentRecreateConfirmTitle", { name: recreateTarget?.name || recreateTarget?.id || "" })}
+              </DialogTitle>
+              <DialogDescription>{t("agentRecreateConfirmMessage")}</DialogDescription>
+            </div>
+            <DialogCloseButton label={t("close")} size="sm" variant="tertiaryGray" />
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="secondaryGray" onClick={() => setRecreateTarget(null)}>
+              {t("cancel")}
+            </Button>
+            <Button
+              variant="primary"
+              disabled={!recreateTarget || saving || busyKey.startsWith(`${recreateTarget.id}:`)}
+              onClick={() => {
+                if (!recreateTarget) return;
+                const target = recreateTarget;
+                setRecreateTarget(null);
+                void onRecreate(target);
+              }}
+            >
+              {t("agentRecreate")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </DialogRoot>
       <DialogRoot open={addSkillsDialogOpen} onOpenChange={setAddSkillsDialogOpen}>
         <DialogContent className="agent-skills-dialog" portalContainer={dialogPortalContainer}>
           <DialogHeader className="agent-skills-dialog-header">

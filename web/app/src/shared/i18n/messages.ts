@@ -2552,6 +2552,9 @@ export const messages = {
     agentStart: "启动",
     agentStop: "停止",
     agentRecreate: "重建",
+    agentRecreateConfirmTitle: "重建智能体“{name}”？",
+    agentRecreateConfirmMessage:
+      "将按已保存的配置重建运行环境。智能体配置和聊天记录会保留，正在执行的任务会中断。未保存的修改不会应用。",
     agentUpgrade: "升级",
     agentDelete: "删除",
     agentDeleteConfirmMessage: "确认删除智能体“{name}”？",
@@ -5565,6 +5568,9 @@ export const messages = {
     agentStart: "Start",
     agentStop: "Stop",
     agentRecreate: "Recreate",
+    agentRecreateConfirmTitle: 'Recreate agent "{name}"?',
+    agentRecreateConfirmMessage:
+      "The runtime will be recreated using saved settings. Agent settings and chat history are retained. Running tasks will be interrupted. Unsaved changes will not be applied.",
     agentUpgrade: "Upgrade",
     agentDelete: "Delete",
     agentDeleteConfirmMessage: 'Delete agent "{name}"?',

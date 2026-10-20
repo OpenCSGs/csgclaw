@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"time"
 
 	agentruntime "csgclaw/internal/runtime"
+	"csgclaw/internal/sandbox"
 )
 
 func (s *Controller) SetRuntimeConfigurationGuard(guard func(context.Context, string) error) {
@@ -40,7 +42,9 @@ func (s *Controller) UpdateRuntimeConfiguration(ctx context.Context, id string, 
 		return err
 	}
 	handle := runtimeHandleForAgent(selected)
-	if _, err := rt.Stop(ctx, handle); err != nil {
+	// A connector may be configured or removed before an Agent has ever
+	// started. An absent runtime is already stopped; configuration must settle.
+	if _, err := rt.Stop(ctx, handle); err != nil && !sandbox.IsNotFound(err) && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
 	selected, err = s.updateRuntimeState(id, agentruntime.Info{HandleID: handle.HandleID, State: agentruntime.StateStopped})

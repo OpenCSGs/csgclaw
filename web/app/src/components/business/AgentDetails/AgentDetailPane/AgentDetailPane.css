@@ -2645,3 +2645,7 @@
   background: var(--panel-strong);
   color: var(--gray-300);
 }
+
+.agent-detail-pane .profile-recreate-button {
+  border-radius: var(--radius-full);
+}

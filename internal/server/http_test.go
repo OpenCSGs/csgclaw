@@ -404,7 +404,9 @@ func TestRunDesktopServesRendererAndSandboxOnSeparateListeners(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Run() error = %v", err)
 		}
-	case <-time.After(5 * time.Second):
+	// Allow the shutdown hook and HTTP grace period to finish before
+	// declaring shutdown stuck. The HTTP grace period alone is five seconds.
+	case <-time.After(45 * time.Second):
 		t.Fatal("desktop server did not stop")
 	}
 	select {

@@ -717,6 +717,9 @@ func (s *Repository) normalizeLoadedAgent(a Agent) (Agent, error) {
 	if isManagerAgent(a) {
 		a.ID = ManagerUserID
 		a.Role = RoleManager
+		if strings.TrimSpace(a.DesiredState) == "" {
+			a.DesiredState = DesiredStateRunning
+		}
 		if strings.TrimSpace(a.RuntimeID) == "" || strings.TrimSpace(a.RuntimeID) == "rt-u-manager" || strings.TrimSpace(a.RuntimeID) == "rt-manager" {
 			a.RuntimeID = runtimeIDForAgentID(ManagerUserID)
 		}

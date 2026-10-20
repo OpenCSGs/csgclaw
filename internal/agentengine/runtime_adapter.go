@@ -322,6 +322,21 @@ func (a runtimeBackend) conversationRuntime(ctx context.Context, agentID string)
 		return nil, nil, &TurnError{Code: ErrorAgentUnavailable, Message: getErr.Error()}
 	}
 	diagnostics.From(ctx).AgentName(selected.Spec.Name)
+	if runtimeNeedsPendingRecovery(selected) {
+		release()
+		if err := a.recoverPendingRuntime(ctx, agentID); err != nil {
+			return nil, nil, &TurnError{Code: ErrorAgentUnavailable, Message: err.Error()}
+		}
+		release, err = a.lifecycle.Execution(ctx, agent.CanonicalID(agentID))
+		if err != nil {
+			return nil, nil, &TurnError{Code: ErrorAgentUnavailable, Message: err.Error()}
+		}
+		selected, getErr = a.agents.Get(ctx, agentID, AgentGetOptions{ProbeRuntime: true})
+		if getErr != nil {
+			release()
+			return nil, nil, &TurnError{Code: ErrorAgentUnavailable, Message: getErr.Error()}
+		}
+	}
 	if a.ready != nil {
 		if err := a.ready(selected.ID); err != nil {
 			release()
