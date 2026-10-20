@@ -895,6 +895,36 @@ describe("ConversationPane", () => {
     expect(onOpenDM).toHaveBeenCalledWith(expect.objectContaining({ id: "u-manager" }));
   });
 
+  it.each([true, false])(
+    "guards new-task navigation from the agent drawer when closing is allowed: %s",
+    async (allowed) => {
+      const onNewTask = vi.fn();
+      const onOpenDM = vi.fn();
+      const onClose = vi.fn(() => allowed);
+      const item = { id: "agent-dev", name: "Developer", role: "worker" };
+      renderThreadPane({
+        agentDetailPanelProps: {
+          item,
+          t,
+          onClose,
+          onNewTask,
+          onOpenDM,
+          onDelete: vi.fn(),
+          onInvite: vi.fn(),
+          onRecreate: vi.fn(),
+          onStart: vi.fn(),
+          onStop: vi.fn(),
+        },
+      });
+      const dialog = screen.getByRole("dialog", { name: "agentDetailPanel" });
+      expect(within(dialog).queryByRole("button", { name: "openDM" })).not.toBeInTheDocument();
+      await userEvent.setup().click(within(dialog).getByRole("button", { name: "agentStartTask" }));
+      expect(onClose).toHaveBeenCalledWith(false, { skipUnsavedCheck: true });
+      expect(onNewTask).toHaveBeenCalledTimes(allowed ? 1 : 0);
+      if (allowed) expect(onNewTask).toHaveBeenCalledWith(item);
+      expect(onOpenDM).not.toHaveBeenCalled();
+    },
+  );
   it("keeps avatar editing interactive inside the agent detail drawer", async () => {
     const user = userEvent.setup();
     const onDraftChange = vi.fn();

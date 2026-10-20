@@ -36,6 +36,7 @@ export function TaskConversationControls({
         t={t}
         agent={agent}
         showModel={Boolean(agent)}
+        showDirectory={Boolean(conversation.is_direct)}
         configuration={conversation.configuration}
         directoryLocked
         disabled={entry?.isWorking(conversation.id) || entry?.busyID === conversation.id}

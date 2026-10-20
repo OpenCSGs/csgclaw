@@ -336,6 +336,7 @@ function StartTaskForm({
                   directoryLocked={Boolean(created.current)}
                   agent={selectedAgent || manager}
                   showModel={Boolean(selectedAgent)}
+                  showDirectory={Boolean(selectedAgent)}
                   disabled={busy}
                 />
                 <Button

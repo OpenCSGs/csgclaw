@@ -7,14 +7,16 @@ export function bindAgentViews({
   activeRoom,
   detailAgentID,
   onClose,
+  onNewTask,
 }: {
   props: ReturnType<typeof useAgentController>["agentViewProps"];
   activeRoom: IMConversation | null;
   detailAgentID: string;
   onClose: AgentDetailSidePanelProps["onClose"];
+  onNewTask?: AgentDetailSidePanelProps["onNewTask"];
 }) {
   return {
-    agentViewProps: { ...props, activeRoom },
+    agentViewProps: { ...props, activeRoom, onNewTask },
     detailPanelProps:
       detailAgentID && props.item?.id === detailAgentID
         ? {
@@ -22,6 +24,7 @@ export function bindAgentViews({
             activeRoom,
             item: props.item,
             onClose,
+            onNewTask,
           }
         : null,
   };

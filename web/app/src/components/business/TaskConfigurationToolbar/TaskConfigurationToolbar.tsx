@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { Check, ChevronDown, Folder, Gauge, Settings2, ShieldCheck } from "lucide-react";
-import { Button, PopoverRoot, PopoverTrigger, PopoverContent, TextInput } from "@/components/ui";
+import { Check, ChevronDown, Gauge, ShieldCheck } from "lucide-react";
+import { PopoverRoot, PopoverTrigger, PopoverContent } from "@/components/ui";
 import { ReasoningEffortPicker } from "@/components/business/ReasoningEffortPicker";
 import { reasoningEffortLabel } from "@/components/business/ProfileControls";
 import { useOptionalWorkspaceControllerContext } from "@/hooks/workspace";
@@ -14,15 +14,16 @@ import {
   type AgentLike,
 } from "@/models/agents";
 import { modelProviderSelectOptionsFromCatalog } from "@/models/modelProviders";
-import { ConnectedModelPicker } from "@/components/business/ConnectedModelPicker";
+import { TaskModelPicker } from "./TaskModelPicker";
+import { TaskDirectoryPicker } from "./TaskDirectoryPicker";
 import { supportsTaskConfiguration, type TaskConfiguration } from "@/models/taskConfiguration";
-import { pickLocalDirectoryPath } from "@/components/business/ProfileControls/runtimeOptionDirectoryPicker";
 import styles from "./TaskConfigurationToolbar.module.css";
 
-type Menu = "" | "directory" | "model" | "reasoning" | "mode";
+type Menu = "" | "reasoning" | "mode";
 export function TaskConfigurationToolbar({
   agent,
   showModel = true,
+  showDirectory = true,
   disabled = false,
   configuration = {},
   directoryLocked = false,
@@ -31,6 +32,7 @@ export function TaskConfigurationToolbar({
 }: {
   agent?: AgentLike;
   showModel?: boolean;
+  showDirectory?: boolean;
   disabled?: boolean;
   configuration?: TaskConfiguration;
   directoryLocked?: boolean;
@@ -41,9 +43,7 @@ export function TaskConfigurationToolbar({
   const t = translate || controller?.t || ((key: string) => key);
   const profile = agentProfileConfig(agent);
   const options = agentRuntimeOptions(agent);
-  const directory = configuration.workspace_dir ?? String(options.local_workspace_dir || "");
   const reasoning = configuration.reasoning_effort || profile?.reasoning_effort || "auto";
-  const [query, setQuery] = useState("");
   const [open, setOpen] = useState<Menu>("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -67,11 +67,10 @@ export function TaskConfigurationToolbar({
     value === "auto" ? t("iaReasoningDefault") : reasoningEffortLabel(t, value);
   const toggle = (kind: Menu, value: boolean) => {
     setOpen(value ? kind : "");
-    setQuery("");
     setError("");
     setReasoningPreview(undefined);
   };
-  async function change(patch: TaskConfiguration, keepOpen = false) {
+  async function change(patch: TaskConfiguration, keepOpen = false, propagateError = false) {
     if (!editable || blocked) return;
     setSaving(true);
     setError("");
@@ -79,6 +78,7 @@ export function TaskConfigurationToolbar({
       await onChange?.({ ...configuration, ...patch });
       if (!keepOpen) setOpen("");
     } catch (cause) {
+      if (propagateError) throw cause;
       setError(cause instanceof Error ? cause.message : t("sendFailed"));
     } finally {
       setSaving(false);
@@ -89,10 +89,6 @@ export function TaskConfigurationToolbar({
     await change({ reasoning_effort: value }, true);
     setReasoningPreview(undefined);
   }
-  const editAgent = () => {
-    setOpen("");
-    if (agent && controller?.ready) void controller.openAgentSettings?.(agent);
-  };
   const hint = (
     <p className={styles.hint}>{t(editable ? "taskConfigurationSessionOnly" : "taskConfigurationUnsupported")}</p>
   );
@@ -128,68 +124,17 @@ export function TaskConfigurationToolbar({
     );
   }
   return (
-    <div className={styles.root}>
-      <PopoverRoot open={open === "directory"} onOpenChange={(value) => toggle("directory", value)}>
-        <PopoverTrigger asChild>
-          <button type="button" disabled={blocked} className={styles.trigger} aria-label={t("iaWorkdirTitle")}>
-            <Folder size={16} />
-            <span title={directory}>
-              {directory
-                ? directory
-                    .replace(/[\\/]+$/, " ")
-                    .trim()
-                    .split(/[\\/]/)
-                    .at(-1)
-                : t("iaWorkdirDefault")}
-            </span>
-            <ChevronDown size={12} />
-          </button>
-        </PopoverTrigger>
-        <PopoverContent className={styles.popover} side="top" aria-label={t("iaWorkdirTitle")}>
-          <p className={styles.hint}>{directory || t("iaWorkdirDefaultHint")}</p>
-          {directoryLocked ? (
-            <p className={styles.hint}>{t("taskConfigurationDirectoryLocked")}</p>
-          ) : (
-            <>
-              <label className={styles.directoryInput}>
-                {t("iaWorkdirTitle")}
-                <TextInput
-                  size="sm"
-                  aria-label={t("taskConfigurationDirectoryPath")}
-                  placeholder="/path/to/workspace"
-                  value={query}
-                  disabled={!editable || blocked}
-                  onChange={(event) => setQuery(event.target.value)}
-                />
-              </label>
-              <Button
-                size="sm"
-                disabled={!editable || blocked || !query.trim()}
-                onClick={() => void change({ workspace_dir: query.trim() })}
-              >
-                {t("taskConfigurationApply")}
-              </Button>
-              <Button
-                variant="tertiaryGray"
-                size="sm"
-                disabled={!editable || blocked}
-                onClick={() => {
-                  void pickLocalDirectoryPath()
-                    .then((path) => {
-                      if (path) return change({ workspace_dir: path });
-                    })
-                    .catch((cause) => setError(String(cause)));
-                }}
-              >
-                {t("taskConfigurationChooseDirectory")}
-              </Button>
-              {row(t("iaWorkdirDefault"), !configuration.workspace_dir, () => void change({ workspace_dir: "" }))}
-            </>
-          )}
-          {errorMessage}
-          {hint}
-        </PopoverContent>
-      </PopoverRoot>
+    <div className={styles.root} title={!editable ? t("taskConfigurationUnsupported") : undefined}>
+      {showDirectory ? (
+        <TaskDirectoryPicker
+          value={configuration.workspace_dir || ""}
+          defaultDirectory={String(options.local_workspace_dir || "")}
+          locked={directoryLocked}
+          disabled={blocked || !editable}
+          onChoose={(path) => change({ workspace_dir: path }, false, true)}
+          t={t}
+        />
+      ) : null}
       {showModel && schema ? (
         <PopoverRoot open={open === "mode"} onOpenChange={(value) => toggle("mode", value)}>
           <PopoverTrigger asChild>
@@ -215,39 +160,31 @@ export function TaskConfigurationToolbar({
       ) : null}
       {showModel ? (
         <div className={styles.modelGroup}>
-          <ConnectedModelPicker
+          <TaskModelPicker
             providers={providers}
             providerID={configuration.model_provider_id || profile?.model_provider_id || ""}
             modelID={configuration.model_id || profile?.model_id || ""}
+            agentModelID={profile?.model_id || ""}
+            agentProviderID={profile?.model_provider_id || ""}
             followDefault={!configuration.model_id}
             disabled={blocked || !editable}
-            compact
-            onFollowDefault={() => change({ model_provider_id: "", model_id: "", reasoning_effort: "" })}
-            onChoose={(id, model) => change({ model_provider_id: id, model_id: model, reasoning_effort: "auto" })}
-            t={controller?.t || ((key) => t(key))}
-            footer={
-              <>
-                {errorMessage}
-                {hint}
-                {agent && controller?.ready ? (
-                  <Button variant="tertiaryGray" size="sm" onClick={editAgent}>
-                    <Settings2 size={15} />
-                    {t("taskRuntimeEditAgent")}
-                  </Button>
-                ) : null}
-              </>
+            onFollowDefault={() => change({ model_provider_id: "", model_id: "", reasoning_effort: "" }, false, true)}
+            onChoose={(id, model) =>
+              change({ model_provider_id: id, model_id: model, reasoning_effort: "auto" }, false, true)
             }
+            t={t}
           />
           <PopoverRoot open={open === "reasoning"} onOpenChange={(value) => toggle("reasoning", value)}>
             <PopoverTrigger asChild>
               <button type="button" disabled={blocked} className={styles.trigger} aria-label={t("iaReasoningTitle")}>
                 <Gauge size={15} />
-                <span>{labelForReasoning(reasoning)}</span>
+                <span>{labelForReasoning(configuration.reasoning_effort ? reasoning : "auto")}</span>
                 <ChevronDown size={12} />
               </button>
             </PopoverTrigger>
             <PopoverContent className={styles.popover} side="top" align="end" aria-label={t("iaReasoningTitle")}>
               <ReasoningEffortPicker
+                compact
                 value={reasoningPreview ?? configuration.reasoning_effort ?? ""}
                 agentEffort={profile?.reasoning_effort ?? undefined}
                 disabled={!editable || blocked}
@@ -256,7 +193,6 @@ export function TaskConfigurationToolbar({
                 t={t}
               />
               {errorMessage}
-              {hint}
             </PopoverContent>
           </PopoverRoot>
         </div>

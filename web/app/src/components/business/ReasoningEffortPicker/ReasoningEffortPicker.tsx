@@ -18,6 +18,7 @@ const hintMessageKeys = {
 } as const;
 
 export function ReasoningEffortPicker({
+  compact = false,
   value,
   agentEffort,
   disabled,
@@ -25,6 +26,7 @@ export function ReasoningEffortPicker({
   onValueCommit,
   t,
 }: {
+  compact?: boolean;
   value: string;
   agentEffort?: string;
   disabled?: boolean;
@@ -37,32 +39,40 @@ export function ReasoningEffortPicker({
   const index = reasoningSliderIndex(effective);
   const label = reasoningEffortLabel(t, effective);
   return (
-    <div className={styles.root}>
+    <div className={`${styles.root} ${compact ? styles.compact : ""}`}>
       <div className={styles.body}>
         <div className={styles.heading}>
           <span className={styles.title}>{t("iaReasoningTitle")}</span>
+          {compact ? <strong className={styles.compactValue}>{label}</strong> : null}
           {!value ? <span className={styles.badge}>{t("iaReasoningFollowing")}</span> : null}
         </div>
-        <div className={styles.value}>{label}</div>
-        <p className={styles.description} id={descriptionId}>
+        {!compact ? <div className={styles.value}>{label}</div> : null}
+        <p hidden={compact} className={styles.description} id={descriptionId}>
           {t(index === null ? "iaReasoningHintAuto" : hintMessageKeys[REASONING_SLIDER_STEPS[index]])}
         </p>
-        <Slider
-          value={index ?? REASONING_SLIDER_STEPS.indexOf("medium")}
-          max={REASONING_SLIDER_STEPS.length - 1}
-          marks={marks}
-          label={t("iaReasoningTitle")}
-          valueText={label}
-          describedBy={descriptionId}
-          disabled={disabled}
-          neutral={index === null}
-          onValueChange={(next) => onValueChange(REASONING_SLIDER_STEPS[next])}
-          onValueCommit={(next) => onValueCommit(REASONING_SLIDER_STEPS[next])}
-        />
-        <div className={styles.endpoints} aria-hidden="true">
-          <span>{t("iaReasoningFaster")}</span>
-          <span>{t("iaReasoningSmarter")}</span>
+        <div className={compact ? styles.sliderRow : undefined}>
+          {compact ? <span>{t("iaReasoningFaster")}</span> : null}
+          <Slider
+            className={compact ? styles.compactSlider : undefined}
+            value={index ?? REASONING_SLIDER_STEPS.indexOf("medium")}
+            max={REASONING_SLIDER_STEPS.length - 1}
+            marks={marks}
+            label={t("iaReasoningTitle")}
+            valueText={label}
+            describedBy={descriptionId}
+            disabled={disabled}
+            neutral={index === null}
+            onValueChange={(next) => onValueChange(REASONING_SLIDER_STEPS[next])}
+            onValueCommit={(next) => onValueCommit(REASONING_SLIDER_STEPS[next])}
+          />
+          {compact ? <span>{t("iaReasoningSmarter")}</span> : null}
         </div>
+        {!compact ? (
+          <div className={styles.endpoints} aria-hidden="true">
+            <span>{t("iaReasoningFaster")}</span>
+            <span>{t("iaReasoningSmarter")}</span>
+          </div>
+        ) : null}
       </div>
       <div className={styles.actions}>
         <Button

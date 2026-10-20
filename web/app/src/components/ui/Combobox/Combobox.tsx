@@ -17,6 +17,8 @@ export type ComboboxOption = {
   description?: ReactNode;
   disabled?: boolean;
   separatorAfter?: boolean;
+  group?: string;
+  alwaysVisible?: boolean;
 };
 
 export type ComboboxProps = {
@@ -99,7 +101,11 @@ export function Combobox({
   const filtered = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase();
     return normalized
-      ? options.filter((option) => option.value !== "" && searchText(option).toLocaleLowerCase().includes(normalized))
+      ? options.filter(
+          (option) =>
+            option.alwaysVisible ||
+            (option.value !== "" && searchText(option).toLocaleLowerCase().includes(normalized)),
+        )
       : options;
   }, [options, query]);
   const enabled = loading ? [] : filtered.filter((option) => !option.disabled);
@@ -332,6 +338,11 @@ export function Combobox({
           ) : filtered.length ? (
             filtered.map((option, index) => (
               <Fragment key={option.value}>
+                {option.group && option.group !== filtered[index - 1]?.group ? (
+                  <div className={styles["csg-combobox-group"]} role="presentation">
+                    {option.group}
+                  </div>
+                ) : null}
                 <div
                   id={`${listId}-${index}`}
                   role="option"

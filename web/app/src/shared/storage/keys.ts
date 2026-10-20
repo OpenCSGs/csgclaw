@@ -19,5 +19,6 @@ export const TURN_NOTIFICATION_MODE_STORAGE_KEY = "csgclaw.im.turnNotificationMo
 export const HUB_RESOURCE_TYPE_STORAGE_KEY = "csgclaw.im.hubResourceType" as const;
 
 export const TASK_EXAMPLES_HIDDEN_STORAGE_KEY = "csgclaw.taskEntry.examplesHidden" as const;
+export const TASK_DIRECTORIES_STORAGE_KEY = "csgclaw.taskEntry.directories" as const;
 export const CHAT_SIDE_PANEL_STORAGE_KEY = "csgclaw.im.chatSidePanel.v1" as const;
 export const CHAT_SIDE_PANEL_WIDTH_STORAGE_KEY = "csgclaw.im.chatSidePanelWidth" as const;

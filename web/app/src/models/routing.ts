@@ -104,6 +104,10 @@ export function pathForNewAgentTask(agentID: string): string {
   return `/new?${new URLSearchParams({ agent: agentID })}`;
 }
 
+export function pathForNewTeamTask(teamID: string): string {
+  return `/new?${new URLSearchParams({ team: teamID })}`;
+}
+
 export function paneFromLocation(pathname = window.location.pathname): WorkspacePane {
   const parts = String(pathname || "/")
     .split("/")

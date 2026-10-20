@@ -52,7 +52,7 @@ function hasBlockingAgentDetailChangesAfterMetadataCommit(
   return JSON.stringify(normalizedDraft) !== JSON.stringify(props.savedDraft);
 }
 
-function AgentDetailSidePanel({ onClose, onOpenDM, ...props }: AgentDetailSidePanelProps) {
+function AgentDetailSidePanel({ onClose, onOpenDM, onNewTask, ...props }: AgentDetailSidePanelProps) {
   const [dialogPortalContainer, setDialogPortalContainer] = useState<HTMLDivElement | null>(null);
   const detailPaneRef = useRef<AgentDetailPaneHandle | null>(null);
   const initialFocusRef = useRef<HTMLButtonElement | null>(null);
@@ -108,6 +108,13 @@ function AgentDetailSidePanel({ onClose, onOpenDM, ...props }: AgentDetailSidePa
             {...props}
             dialogPortalContainer={dialogPortalContainer}
             onOpenDM={handleOpenDM}
+            onNewTask={
+              onNewTask
+                ? (item) => {
+                    if (requestClose(false) !== false) onNewTask(item);
+                  }
+                : undefined
+            }
           />
         </div>
       </DialogContent>

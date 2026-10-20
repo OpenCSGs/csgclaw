@@ -33,6 +33,20 @@ describe("task conversation controls", () => {
     expect(screen.queryByRole("button", { name: "taskEntryNew" })).not.toBeInTheDocument();
   });
 
+  it("hides directory, model, reasoning and execution mode controls in collaboration", () => {
+    render(
+      <TaskConversationControls
+        conversation={{ ...conversation, is_direct: false }}
+        agents={[agent]}
+        participants={[]}
+        t={t}
+      />,
+    );
+    expect(screen.queryByLabelText("iaWorkdirTitle")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("iaModelTitle")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("iaReasoningTitle")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("iaRunModeTitle")).not.toBeInTheDocument();
+  });
   it("does not count room events as a chat", () => {
     render(
       <TaskConversationControls

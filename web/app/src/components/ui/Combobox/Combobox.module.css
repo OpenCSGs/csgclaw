@@ -46,6 +46,12 @@
   opacity: 0;
   pointer-events: none;
 }
+.csg-combobox-group {
+  padding: var(--space-2);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
 
 .csg-combobox-search[data-invalid="true"] {
   border-color: var(--input-border-error);
