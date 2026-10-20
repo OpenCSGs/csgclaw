@@ -1,0 +1,19 @@
+.dialog {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  max-height: calc(100dvh - 40px);
+}
+
+.header,
+.footer {
+  flex-shrink: 0;
+}
+
+.body {
+  display: grid;
+  gap: var(--space-4);
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
