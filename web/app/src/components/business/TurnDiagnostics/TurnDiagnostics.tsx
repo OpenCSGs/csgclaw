@@ -230,7 +230,9 @@ export function TurnDiagnostics({
   }));
   const showAgentFilter = agentOptions.length > 1;
   const showList = !source || page.total > 1 || Boolean(cursor || nextCursor);
-  const emptyLabel = t(diagnosticEmptyKey(page.source, Boolean(agent || status), turn));
+  const emptyLabel = t(
+    diagnosticEmptyKey(page.source, Boolean(agent || status), turn || (!selected ? initialTurn : undefined)),
+  );
   const activeAgent = logAgent || detail?.agent_id || agentOptions[0]?.value || "";
   const activeAgentName = agentOptions.find((item) => item.value === activeAgent)?.label || activeAgent;
   const [logsLoading, setLogsLoading] = useState(false);
@@ -467,11 +469,7 @@ export function TurnDiagnostics({
                   </>
                 ) : (
                   <p className={styles.empty}>
-                    {loadError
-                      ? t("diagDetailUnavailable")
-                      : loading || items.length
-                        ? t("agentLogsLoading")
-                        : emptyLabel}
+                    {loadError ? t("diagDetailUnavailable") : loading || selected ? t("agentLogsLoading") : emptyLabel}
                   </p>
                 )}
               </main>

@@ -510,7 +510,7 @@ function ConversationPaneContent({
         selectedMessageCount={selectedMessageCount}
         selectedVisibleMessageCount={visibleMessages.length}
         showChannelTools={showChannelTools}
-        showChannelToolsAction={false}
+        showChannelToolsAction={true}
         showInviteAction={!conversation.is_direct}
         showMemberListAction={false}
         showToolCalls={showToolCalls}

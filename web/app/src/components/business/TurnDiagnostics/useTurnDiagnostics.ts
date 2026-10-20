@@ -33,7 +33,7 @@ export function useTurnDiagnostics({
   const [page, setPage] = useState<DiagnosticList>({ items: [], next_cursor: "", agents: [], total: 0 });
   const [selected, setSelected] = useState("");
   const selection = useRef("");
-  const focusedTurn = useRef(initialTurn);
+  const focus = useRef({ source: initialSource, turn: initialTurn });
   const [detail, setDetail] = useState<TurnDiagnostic | null>(null);
   const [listError, setListError] = useState("");
   const [detailError, setDetailError] = useState("");
@@ -48,23 +48,34 @@ export function useTurnDiagnostics({
     setLoading(true);
     const refresh = async () => {
       try {
-        const response = await fetchDiagnostics(
+        let response = await fetchDiagnostics(
           room,
           { source_id: source, turn_id: turn || "", agent_id: agent, status, cursor },
           controller.signal,
         );
         if (controller.signal.aborted) return;
-        setPage(response);
-        const requestedTurn = source ? turn : focusedTurn.current;
-        const requestedSource = source || initialSource;
-        const id = selectDiagnostic(
+        const requestedTurn = source ? turn : focus.current.turn;
+        const requestedSource = source || focus.current.source;
+        let id = selectDiagnostic(
           response.items,
           selection.current,
           requestedTurn,
           response.source?.primary_agent_id,
           requestedSource,
         );
-        if (id && !source) focusedTurn.current = undefined;
+        // Resolve message focus independently of the conversation's current page.
+        if (!source && requestedSource && !id) {
+          const target = await fetchDiagnostics(
+            room,
+            { source_id: requestedSource, turn_id: requestedTurn || "", agent_id: agent, status },
+            controller.signal,
+          );
+          if (controller.signal.aborted) return;
+          id = selectDiagnostic(target.items, "", requestedTurn, target.source?.primary_agent_id, requestedSource);
+          const item = target.items.find((item) => item.id === id);
+          response = { ...response, items: item ? [...response.items, item] : response.items, source: target.source };
+        }
+        setPage(response);
         selection.current = id;
         setSelected(id);
         setListError("");
@@ -108,7 +119,7 @@ export function useTurnDiagnostics({
   }, [room, selected, summary, page, revision, enabled, t]);
 
   const select = (id: string) => {
-    focusedTurn.current = undefined;
+    focus.current = { source: undefined, turn: undefined };
     selection.current = id;
     setSelected(id);
   };

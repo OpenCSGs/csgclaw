@@ -239,3 +239,44 @@ it("recovers a failed execution detail request on refresh without clearing its s
   );
   view.unmount();
 });
+
+it.each([record.turn_id, undefined])("resolves a message outside the newest page (turn: %s)", async (turn) => {
+  const newer = { ...record, id: "newer", source_id: "other", turn_id: "other-turn" };
+  vi.mocked(fetchDiagnostics).mockImplementation(async (_room, filters) => ({
+    items: filters.source_id ? [record] : [newer],
+    next_cursor: filters.source_id ? "" : "older-page",
+    total: filters.source_id ? 1 : 51,
+    agents: [],
+  }));
+  vi.mocked(fetchDiagnostic).mockResolvedValue(record);
+  const view = render(
+    <TurnDiagnostics room="r" initialSource="s" initialTurn={turn} t={(key) => key} onClose={() => {}} />,
+  );
+  expect(await screen.findByText("upstream_failure")).toBeInTheDocument();
+  expect(fetchDiagnostics).toHaveBeenCalledWith(
+    "r",
+    expect.objectContaining({ source_id: "s", turn_id: turn || "" }),
+    expect.any(AbortSignal),
+  );
+  expect(screen.getAllByRole("button", { pressed: false }).length).toBeGreaterThan(0);
+  expect(screen.getByRole("button", { pressed: true })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "diagOlder" })).toBeInTheDocument();
+  view.unmount();
+});
+
+it("shows a waiting source instead of selecting an unrelated execution", async () => {
+  vi.mocked(fetchDiagnostics).mockImplementation(async (_room, filters) => ({
+    items: filters.source_id ? [] : [{ ...record, source_id: "other" }],
+    source: filters.source_id
+      ? { id: "s", content: "Pending", sender_name: "User", created_at: record.started_at, state: "waiting" }
+      : undefined,
+    next_cursor: "",
+    total: 1,
+    agents: [],
+  }));
+  const view = render(<TurnDiagnostics room="r" initialSource="s" t={(key) => key} onClose={() => {}} />);
+  expect(await screen.findByText("diagWaitingExecution")).toBeInTheDocument();
+  expect(fetchDiagnostic).not.toHaveBeenCalled();
+  expect(screen.queryByRole("button", { pressed: true })).not.toBeInTheDocument();
+  view.unmount();
+});

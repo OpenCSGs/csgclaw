@@ -1331,13 +1331,13 @@ describe("ConversationPane", () => {
     expect(within(threadPanel).getByText("1 replies")).toBeInTheDocument();
   });
 
-  it("keeps direct-chat header actions to activity, files, and browser while rooms retain member management", () => {
+  it("preserves conversation tools alongside side-panel actions and room member management", () => {
     const direct = renderThreadPane({ isDirect: true });
     expect(screen.getByRole("button", { name: "Activity records" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "chatFiles" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "chatBrowser" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Invite" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "channelTools" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "channelTools" })).toBeInTheDocument();
     direct.unmount();
 
     renderThreadPane({ isDirect: false });
@@ -1345,6 +1345,6 @@ describe("ConversationPane", () => {
     expect(screen.getByRole("button", { name: "Activity records" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "chatFiles" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "chatBrowser" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "channelTools" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "channelTools" })).toBeInTheDocument();
   });
 });
