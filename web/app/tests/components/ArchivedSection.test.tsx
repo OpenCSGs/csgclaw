@@ -50,7 +50,7 @@ it("uses the full archive total across pagination and search, and refreshes it a
   await user.type(screen.getByRole("textbox", { name: "搜索任务标题和历史消息" }), "Review");
   await waitFor(() => expect(fetchTaskConversations).toHaveBeenCalledWith("Review", true, 0));
   expect(screen.getByText("51 条")).toBeVisible();
-  await user.click(screen.getByRole("button", { name: /Review.*更多|更多.*Review/ }));
+  await user.click(await screen.findByRole("button", { name: /Review.*更多|更多.*Review/ }));
   await user.click(screen.getByRole("menuitem", { name: "取消归档" }));
   expect(await screen.findByText("50 条")).toBeVisible();
 });
