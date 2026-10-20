@@ -1480,6 +1480,7 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
               <span>{t("agentPublishTemplateDisplayName")}</span>
               <input
                 value={publishTemplateDisplayName}
+                maxLength={32}
                 aria-label={t("agentPublishTemplateDisplayName")}
                 onChange={(event) => setPublishTemplateDisplayName(event.target.value)}
               />

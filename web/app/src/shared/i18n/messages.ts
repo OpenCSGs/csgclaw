@@ -235,6 +235,8 @@ export const messages = {
     iaTemplateCloudCollapse: "收起 AgenticHub 上的模板",
     iaTemplateManageOnHub: "在 AgenticHub 上管理我的模板",
     iaTemplateSameNameOnHub: "云端存在同名模板",
+    resourcesTemplatePublished: "已发布",
+    resourcesTemplatePublishedOnHub: "已发布到 AgenticHub",
     iaTemplateCloudTag: "云端",
     iaTemplateCloudSignIn: "登录后查看云端模板",
     iaTemplateCloudSignInHint: "你在 AgenticHub 上的模板，登录后才能列出来。",
@@ -2564,7 +2566,7 @@ export const messages = {
     agentPublishTemplateCommunitySubtitle: "填写模板信息，保存到本地模板库并发布到 agentic hub。",
     agentPublishTemplateName: "模板名称",
     agentPublishTemplateDisplayName: "展示名称",
-    agentPublishTemplateDisplayNameHint: "支持中文，留空时使用模板名称。",
+    agentPublishTemplateDisplayNameHint: "最多 32 个字符，支持中文，留空时使用模板名称。",
     agentPublishTemplateNameHint: "必须以英文字母开头，最多 32 个字符，仅支持英文字母、数字、下划线和短横线。",
     agentPublishTemplateNameInvalid:
       "模板名称必须以英文字母开头，最多 32 个字符，且只能包含英文字母、数字、下划线和短横线。",
@@ -3141,6 +3143,8 @@ export const messages = {
     iaTemplateCloudCollapse: "Hide AgenticHub templates",
     iaTemplateManageOnHub: "Manage my templates on AgenticHub",
     iaTemplateSameNameOnHub: "Same-name template on AgenticHub",
+    resourcesTemplatePublished: "Published",
+    resourcesTemplatePublishedOnHub: "Published on AgenticHub",
     iaTemplateCloudTag: "Cloud",
     iaTemplateCloudSignIn: "Sign in to see cloud templates",
     iaTemplateCloudSignInHint: "Templates in your AgenticHub can only be listed after signing in.",
@@ -5551,7 +5555,7 @@ export const messages = {
     agentPublishTemplateCommunitySubtitle: "Enter template details, save a local copy, and publish it to agentic hub.",
     agentPublishTemplateName: "Template name",
     agentPublishTemplateDisplayName: "Display name",
-    agentPublishTemplateDisplayNameHint: "Supports Chinese. Uses the template name when empty.",
+    agentPublishTemplateDisplayNameHint: "Up to 32 characters. Supports Chinese. Uses the template name when empty.",
     agentPublishTemplateNameHint:
       "Start with an English letter; use up to 32 English letters, numbers, underscores, or hyphens.",
     agentPublishTemplateNameInvalid:
