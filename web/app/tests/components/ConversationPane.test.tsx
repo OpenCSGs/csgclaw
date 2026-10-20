@@ -717,7 +717,19 @@ describe("ConversationPane", () => {
     expect(container.querySelector(".messages .message-thread-actions")).not.toBeInTheDocument();
   });
 
-  it("shows visible and total message counts when some messages are filtered", () => {
+  it.each(["worker", "agent", "manager", "Worker"])("shows the %s name above the direct task title", (role) => {
+    const { container } = renderThreadPane({
+      conversationTitle: "Investigate login",
+      conversationMembers: [users[0], { ...users[1], name: "测试工程师 Linda", role }],
+    });
+
+    expect(container.querySelector(".chat-kicker")).toHaveTextContent("测试工程师 Linda");
+    expect(container.querySelector(".chat-kicker strong")).not.toBeInTheDocument();
+    expect(container.querySelector(".chat-title")).toHaveTextContent("Investigate login");
+    expect(screen.queryByText("Direct Messages")).not.toBeInTheDocument();
+  });
+
+  it("shows visible and total room message counts when some messages are filtered", () => {
     const messages = [
       {
         content: "visible answer",
@@ -733,7 +745,7 @@ describe("ConversationPane", () => {
       },
     ];
 
-    renderThreadPane({ messages, visibleMessages: [messages[0]] });
+    renderThreadPane({ isDirect: false, messages, visibleMessages: [messages[0]] });
 
     expect(screen.getByText("1/2")).toBeInTheDocument();
   });

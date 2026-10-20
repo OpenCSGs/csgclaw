@@ -4,7 +4,7 @@ import { AgentAvatarContent } from "@/components/business/AgentAvatar";
 import { Button, Tooltip, PanelHeader } from "@/components/ui";
 import { AddUserIcon, TrashIcon, UsersIcon, WrenchIcon } from "@/components/ui/Icons";
 import type { IMConversation, IMUser, TranslateFn } from "@/models/conversations";
-import { isDirectConversation } from "@/models/conversations";
+import { isDirectConversation, normalizeComparable } from "@/models/conversations";
 import { avatarFallbackText } from "@/shared/avatar";
 import { localizeRole } from "@/shared/i18n";
 import type { BooleanStateSetter } from "./types";
@@ -65,6 +65,11 @@ export const ConversationHeader = memo(function ConversationHeader({
   const visibleCount = selectedVisibleMessageCount ?? selectedMessageCount;
   const messageCountLabel =
     visibleCount === selectedMessageCount ? String(selectedMessageCount) : `${visibleCount}/${selectedMessageCount}`;
+  const directAgentName = isDirectConversation(conversation)
+    ? conversationMembers
+        .find((user) => ["worker", "agent", "manager"].includes(normalizeComparable(user.role)))
+        ?.name?.trim()
+    : "";
 
   return (
     <PanelHeader className="chat-header">
@@ -73,10 +78,18 @@ export const ConversationHeader = memo(function ConversationHeader({
           <div className="chat-title-row">
             <div className="chat-title-group">
               <div className="chat-kicker">
-                <span>{isDirectConversation(conversation) ? t("directMessagesSection") : t("iaRoomsTab")}</span>
-                <Tooltip content={messageCountLabel}>
-                  <strong>{messageCountLabel}</strong>
-                </Tooltip>
+                {directAgentName ? (
+                  <span className="truncate" title={directAgentName}>
+                    {directAgentName}
+                  </span>
+                ) : (
+                  <>
+                    <span>{isDirectConversation(conversation) ? t("directMessagesSection") : t("iaRoomsTab")}</span>
+                    <Tooltip content={messageCountLabel}>
+                      <strong>{messageCountLabel}</strong>
+                    </Tooltip>
+                  </>
+                )}
               </div>
               <Tooltip
                 content={conversation.title}
