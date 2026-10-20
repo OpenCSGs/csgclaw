@@ -93,6 +93,25 @@ function Page({ route = "/agents?tab=templates", username = "" }: { route?: stri
 }
 
 describe("agent overview guidance and template loading", () => {
+  it.each(["local", "remote"])("displays and searches %s template display names", async (kind) => {
+    const user = userEvent.setup();
+    const saved: HubTemplate = {
+      id: kind === "local" ? "local.internal-worker" : "alice/internal-worker",
+      name: "internal-worker",
+      role: "worker",
+      display_name: "测试中文名",
+      namespace: kind === "remote" ? "alice" : undefined,
+      source: { kind },
+    };
+    vi.mocked(useWorkspaceHubTemplatesQuery).mockReturnValue(queryState({ data: [saved] }));
+    render(<Page route="/agents?tab=templates&filter=personal" username="alice" />);
+    expect(screen.getByRole("button", { name: /测试中文名/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /internal-worker/ })).not.toBeInTheDocument();
+    await user.type(screen.getByRole("textbox"), "测试中文");
+    await user.click(screen.getByRole("button", { name: /测试中文名/ }));
+    expect(await screen.findByRole("region", { name: "Template detail" })).toHaveTextContent(saved.id!);
+  });
+
   it("opens My templates and selects the saved template after asynchronous loading", async () => {
     const local: HubTemplate = { id: "local.中文助手", name: "中文助手", role: "worker", source: { kind: "local" } };
     const scroll = vi.spyOn(HTMLElement.prototype, "scrollIntoView");

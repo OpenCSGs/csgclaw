@@ -94,7 +94,7 @@ export function AgentOverviewPage() {
   );
   const shownTemplates = templates.filter(
     (item) =>
-      matches([item.name, item.id, item.description, item.runtime_kind].filter(Boolean).join(" ")) &&
+      matches([item.display_name, item.name, item.id, item.description, item.runtime_kind].filter(Boolean).join(" ")) &&
       templateInGroup(item, templateFilter === "official" ? "official" : "mine", templateUsername),
   );
   const templatesLoading = templatesQuery.isLoading && !templates.length;
@@ -244,7 +244,7 @@ export function AgentOverviewPage() {
                   >
                     <span className={styles.identity}>
                       <span className={styles.templateName}>
-                        <strong>{item.name}</strong>{" "}
+                        <strong>{item.display_name?.trim() || item.name || item.id}</strong>{" "}
                         {templateFilter === "personal" && item.source?.kind === "remote" ? (
                           <span className={styles.cloudTag}>{t("iaTemplateCloudTag")}</span>
                         ) : null}

@@ -1892,7 +1892,7 @@ export function HubDetailPane({
                           )}
                           <span className={moduleClassNames("hub-skill-card-copy")}>
                             <span className={moduleClassNames("hub-skill-card-title")}>
-                              {hubTemplateFullName(template)}
+                              {template.display_name?.trim() || hubTemplateFullName(template)}
                               {isPublished ? (
                                 <span className={moduleClassNames("mini-badge")}>
                                   {t("resourcesTemplatePublished")}
@@ -1961,7 +1961,7 @@ export function HubDetailPane({
                           ) : null}
                         </div>
                       </div>
-                      <p>{selectedTemplate.description || selectedTemplate.id}</p>
+                      {selectedTemplate.description ? <p>{selectedTemplate.description}</p> : null}
                     </div>
                   </div>
                   <div className={moduleClassNames("hub-template-actions")}>
@@ -2898,7 +2898,7 @@ export function HubDetailPane({
                       <span className={moduleClassNames("mini-badge")}>{t("resourcesTemplatePublished")}</span>
                     ) : null}
                   </DialogTitle>
-                  <DialogDescription>{selectedTemplate.description || selectedTemplate.id}</DialogDescription>
+                  <DialogDescription>{selectedTemplate.description || ""}</DialogDescription>
                 </div>
                 <DialogCloseButton label={t("close")} size="md" variant="tertiaryGray" />
               </DialogHeader>

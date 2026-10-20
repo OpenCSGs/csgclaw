@@ -13,6 +13,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"maps"
 	"net/http"
 	"strings"
@@ -75,6 +76,17 @@ func (h *Handler) handleParticipants(w http.ResponseWriter, r *http.Request) {
 			err = create(r.Context())
 		}
 		if err != nil {
+			attrs := []slog.Attr{
+				slog.String("channel", channelName),
+				slog.String("participant_id", req.ID),
+				slog.String("binding_mode", req.AgentBinding.Mode),
+				slog.String("agent_id", req.AgentBinding.AgentID),
+			}
+			if spec := req.AgentBinding.Agent; spec != nil {
+				attrs = append(attrs, slog.String("requested_agent_id", spec.ID), slog.String("template", spec.FromTemplate))
+			}
+			attrs = append(attrs, agentOperationDiagnosticAttrs(err)...)
+			slog.LogAttrs(r.Context(), slog.LevelWarn, "create participant failed", attrs...)
 			if errors.Is(err, feishubind.ErrBotAppIDConflict) {
 				h.writeFeishuBotAppInfoError(w, err)
 				return
