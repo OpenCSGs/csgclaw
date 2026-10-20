@@ -31,6 +31,12 @@ const appVendorModulePaths = [
   "zustand/",
 ];
 
+function manualChunks(id: string): string | undefined {
+  return appVendorModulePaths.some((modulePath) => id.includes(`/node_modules/${modulePath}`))
+    ? "vendor-app"
+    : undefined;
+}
+
 export default defineConfig(({ command }) => ({
   plugins: [
     tailwindcss(),
@@ -61,31 +67,18 @@ export default defineConfig(({ command }) => ({
     emptyOutDir: true,
     assetsDir: "assets",
     sourcemap: false,
-    chunkSizeWarningLimit: 800,
+    // Allow the existing PPT preview bundle without changing module execution order.
+    chunkSizeWarningLimit: 1500,
     rolldownOptions: {
       input: {
         app: path.resolve(__dirname, "index.html"),
         "sse-shared-worker": path.resolve(__dirname, "src/shared/realtime/sseSharedWorker.ts"),
       },
       output: {
-        // ECharts registers chart types through order-sensitive module side effects.
-        strictExecutionOrder: true,
         entryFileNames: (chunk) => (chunk.name === "sse-shared-worker" ? "[name].js" : "assets/[name]-[hash].js"),
         chunkFileNames: "assets/[name]-[hash].js",
         assetFileNames: "assets/[name]-[hash][extname]",
-        codeSplitting: {
-          groups: [
-            {
-              name: "vendor-app",
-              test: (id) => appVendorModulePaths.some((modulePath) => id.includes(`/node_modules/${modulePath}`)),
-            },
-            {
-              name: "vendor-pptx-charts",
-              test: /[\\/]node_modules[\\/](?:echarts|zrender)[\\/]/,
-              maxSize: 600_000,
-            },
-          ],
-        },
+        manualChunks,
       },
     },
   },
