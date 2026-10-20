@@ -390,7 +390,7 @@ type serveOptions struct {
 	Listener        net.Listener
 	SandboxListener net.Listener
 	Desktop         *server.DesktopOptions
-	OnReady         func()
+	OnListening     func()
 }
 
 func serveForegroundWithConfigPath(ctx context.Context, run *command.Context, cfg config.Config, configPath string, output string, opts ...serveOptions) error {
@@ -802,12 +802,10 @@ func startServerWithConfigPath(ctx context.Context, run *command.Context, cfg co
 		Desktop:            serveOpts.Desktop,
 		Context:            ctx,
 		BeforeShutdown:     beforeShutdown,
+		OnListening:        serveOpts.OnListening,
 		OnReady: func(handler *api.Handler, router chi.Router) {
 			deliver := channelwiring.WireNotificationParticipantPull(ctx, participantSvc, imSvc, apiURL, cfg.Server.AccessToken)
 			handler.SetNotificationDeliver(deliver)
-			if serveOpts.OnReady != nil {
-				serveOpts.OnReady()
-			}
 			if serveOpts.OpenBrowser && output != "json" && run != nil {
 				waitForHealthy := WaitForHealthy
 				openBrowser := OpenBrowser
@@ -1379,6 +1377,7 @@ func newCSGClawAdapterSource(
 	adapterOptions := []execution.Option{
 		execution.WithDiagnostics(imSvc.Diagnostics()),
 		execution.WithRoomContextProvider(participantBridge.RoomContext),
+		execution.WithResourceInputProvider(participantBridge.ResourceInput),
 		execution.WithTaskRooms(imSvc.Room),
 		execution.WithAttachmentResolver(attachmentResolver),
 		execution.WithParticipantWorkReporter(workReporter),

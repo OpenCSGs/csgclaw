@@ -54,6 +54,8 @@ OpenCSG AIGateway uses `auto` as the initial model choice when the gateway adver
 This applies to the signed-in OpenCSG provider and custom providers pointing to the production or staging AIGateway.
 An explicitly selected model remains selected; when `auto` is unavailable, CSGClaw uses the first available model.
 
+Reply footers show [per-turn token consumption](token-usage.md); `auto` hides the model name.
+
 ### Local CSGHub-lite
 
 ```toml

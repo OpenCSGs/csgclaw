@@ -11,6 +11,7 @@ import { isVisibleInHubTemplateList } from "@/models/hubWorkspace";
 import { agenticHubTemplatesURL } from "@/models/agenticHub";
 import { templateInGroup } from "@/models/templateGroups";
 import { agentRoleLabel, type AgentLike } from "@/models/agents";
+import { agentTemplatesSearch } from "@/models/routing";
 
 import styles from "./AgentOverviewPage.module.css";
 import { useAgentViewBindings } from "@/hooks/workspace/useAgentViewBindings";
@@ -34,12 +35,13 @@ export function AgentOverviewPage() {
   const agentViewProps = useAgentViewBindings();
   const location = useLocation();
   const navigate = useNavigate();
-  const requestedTab = new URLSearchParams(location.search).get("tab");
+  const searchParams = new URLSearchParams(location.search);
+  const requestedTab = searchParams.get("tab");
   const templatesTab = requestedTab === "templates" || requestedTab === "market";
+  const requestedTemplateID = templatesTab ? searchParams.get("template") || "" : "";
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState("all");
-  const [templateFilter, setTemplateFilter] = useState("official");
-  const [hasSelectedTemplate, setHasSelectedTemplate] = useState(false);
+  const templateFilter = searchParams.get("filter") === "personal" ? "personal" : "official";
   const [listOpen, setListOpen] = useState(false);
   const listToggleRef = useRef<HTMLButtonElement>(null);
   const closeList = () => {
@@ -62,10 +64,27 @@ export function AgentOverviewPage() {
     () => (templatesQuery.data ?? []).filter(isVisibleInHubTemplateList),
     [templatesQuery.data],
   );
+  const hubViewProps = controller.ready ? controller.hubViewProps : undefined;
+  const currentTemplateID = hubViewProps?.hub.detailPaneProps.selectedTemplateId;
+  const currentResourceType = hubViewProps?.hub.detailPaneProps.selectedResourceType;
+  const onSelectTemplateInPlace = hubViewProps?.onSelectTemplateInPlace;
+  const selectedTemplateRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (!requestedTemplateID || (requestedTemplateID === currentTemplateID && currentResourceType === "template"))
+      return;
+    const template = templates.find((item) => item.id === requestedTemplateID);
+    if (template) onSelectTemplateInPlace?.(template);
+  }, [requestedTemplateID, currentTemplateID, currentResourceType, templates, onSelectTemplateInPlace]);
+  useEffect(() => {
+    setQuery("");
+  }, [requestedTemplateID]);
+  useEffect(() => {
+    selectedTemplateRef.current?.scrollIntoView({ block: "nearest" });
+  }, [requestedTemplateID, templates, query]);
   if (!controller.ready || !controller.sidebarProps) return null;
   const props = controller.sidebarProps;
   const { t } = props;
-  const selectedTemplateID = hasSelectedTemplate ? controller.hubViewProps?.hub.detailPaneProps.selectedTemplateId : "";
+  const selectedTemplateID = requestedTemplateID;
   const matches = (name: string) => name.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase());
   const agents = props.workerAgentItems.filter((agent) => matches(agent.name || agent.id || ""));
   const teams = props.teams.filter((team) => matches(team.title));
@@ -89,8 +108,11 @@ export function AgentOverviewPage() {
   const activeID = controller.activePane.id;
   function selectTab(value: string) {
     const params = new URLSearchParams(location.search);
-    if (value === "mine") params.delete("tab");
-    else params.set("tab", "templates");
+    if (value === "mine") {
+      params.delete("tab");
+      params.delete("filter");
+      params.delete("template");
+    } else params.set("tab", "templates");
     navigate({ search: params.toString() });
     setQuery("");
     setFilter("all");
@@ -163,7 +185,16 @@ export function AgentOverviewPage() {
                   key={value}
                   type="button"
                   aria-pressed={(templatesTab ? templateFilter : filter) === value}
-                  onClick={() => (templatesTab ? setTemplateFilter(value) : setFilter(value))}
+                  onClick={() => {
+                    if (!templatesTab) {
+                      setFilter(value);
+                      return;
+                    }
+                    const params = new URLSearchParams(location.search);
+                    params.set("filter", value);
+                    params.delete("template");
+                    navigate({ search: params.toString() });
+                  }}
                 >
                   {t(`taskEntryOverview_${value}`)}
                 </button>
@@ -202,10 +233,12 @@ export function AgentOverviewPage() {
                   <button
                     type="button"
                     key={item.id}
+                    ref={selectedTemplateID === item.id ? selectedTemplateRef : undefined}
+                    aria-current={selectedTemplateID === item.id ? "true" : undefined}
                     className={`${styles.row} ${selectedTemplateID === item.id ? styles.active : ""}`}
                     onClick={() => {
                       controller.hubViewProps?.onSelectTemplateInPlace(item);
-                      setHasSelectedTemplate(true);
+                      navigate({ search: agentTemplatesSearch(item.id || "", templateFilter) });
                       closeList();
                     }}
                   >
@@ -287,7 +320,7 @@ export function AgentOverviewPage() {
         </aside>
         <div className={styles.detail}>
           {templatesTab ? (
-            selectedTemplateID ? (
+            selectedTemplateID && selectedTemplateID === currentTemplateID && currentResourceType === "template" ? (
               <Suspense fallback={null}>
                 <HubDetailPane {...controller.hubViewProps} inlineTemplateDetail />
               </Suspense>

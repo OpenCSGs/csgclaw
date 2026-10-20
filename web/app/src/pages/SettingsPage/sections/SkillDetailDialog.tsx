@@ -1,7 +1,6 @@
-import { skillOriginLabel as originLabel } from "./resourceOrigins";
+import { skillOriginHint, skillOriginLabel as originLabel } from "./resourceOrigins";
 import { useEffect, useState } from "react";
 import { Plus, RefreshCw, Trash2 } from "lucide-react";
-import { WorkspaceFilePreview, WorkspaceFileTree } from "@/components/business/WorkspaceFileTree";
 import {
   Button,
   DialogBody,
@@ -16,6 +15,7 @@ import {
 } from "@/components/ui";
 import { useWorkspaceControllerContext } from "@/hooks/workspace";
 import { isReadonlySkill } from "@/models/skillhub";
+import { SkillDetailFiles } from "./SkillDetailFiles";
 import styles from "./SkillDetailDialog.module.css";
 import pageStyles from "../SettingsPage.module.css";
 import type { SkillSummary } from "@/models/skillhub";
@@ -54,8 +54,6 @@ export function SkillDetailDialog({
 }) {
   const controller = useWorkspaceControllerContext();
   const hub = controller.hubViewProps?.hub;
-  const detail = hub?.detailPaneProps;
-  const selectedSkillPath = hub?.selectedHubSkillPath || "";
   const skill = target?.skill ?? null;
   const variant = target?.variant ?? "installed";
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -68,8 +66,7 @@ export function SkillDetailDialog({
       setDeleteError("");
       return;
     }
-    detail?.onSelectSkillInPlace?.(skill.name);
-  }, [detail, skill]);
+  }, [skill]);
 
   const canDelete = allowDelete && variant === "installed" && Boolean(skill) && !isReadonlySkill(skill);
 
@@ -98,7 +95,7 @@ export function SkillDetailDialog({
                 <div>
                   <div className={styles.titleRow}>
                     <DialogTitle>{skill.name}</DialogTitle>
-                    <span className={pageStyles.tag}>
+                    <span className={pageStyles.tag} title={skillOriginHint(skill, t)}>
                       <span className={pageStyles.tagDot} aria-hidden="true" />
                       {originLabel(skill, t)}
                     </span>
@@ -118,33 +115,11 @@ export function SkillDetailDialog({
                 </div>
               </DialogHeader>
               <DialogBody className={styles.body}>
-                <div className={styles.panels}>
-                  <WorkspaceFileTree
-                    className={styles.tree}
-                    entries={hub?.skillTree?.entries ?? []}
-                    loading={Boolean(hub?.skillTreeLoading)}
-                    loadingText={t("resourcesSkillFilesLoading")}
-                    emptyText={hub?.skillTreeError || t("resourcesSkillPreviewHint")}
-                    selectedPath={selectedSkillPath}
-                    onSelectFile={(path) => detail?.onSelectSkillFile?.(path)}
-                  />
-                  <WorkspaceFilePreview
-                    className={styles.preview}
-                    file={hub?.skillFile ?? null}
-                    loading={Boolean(hub?.skillFileLoading)}
-                    error={hub?.skillFileError || ""}
-                    loadingText={t("resourcesWorkspaceFileLoading")}
-                    emptyTitle={t("resourcesSkillPreviewTitle")}
-                    emptyHint={hub?.skillTreeError || t("resourcesSkillPreviewHint")}
-                    binaryText={t("resourcesWorkspaceBinary")}
-                    emptyFileText={t("resourcesWorkspaceEmptyFile")}
-                    previewText={t("workspacePreviewPreviewTab")}
-                    codeText={t("workspacePreviewCodeTab")}
-                    viewToggleLabel={t("workspacePreviewViewMode")}
-                    closeText={t("close")}
-                    truncatedText={t("workspacePreviewTruncated")}
-                  />
-                </div>
+                <SkillDetailFiles
+                  key={JSON.stringify([variant, skill.name, skill.remotePath, skill.remoteRef])}
+                  target={{ skill, variant }}
+                  t={t}
+                />
               </DialogBody>
               {canDelete || removeAction || (variant === "market" && market) ? (
                 <DialogFooter className={styles.footer}>

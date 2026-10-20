@@ -1,6 +1,8 @@
 package im
 
 import (
+	"context"
+	"csgclaw/internal/apitypes"
 	"csgclaw/internal/roomtask"
 	"csgclaw/internal/taskmeta"
 	"encoding/json"
@@ -10,12 +12,13 @@ import (
 )
 
 type ParticipantBridge struct {
-	mu          sync.Mutex
-	roomContext roomtask.TurnContextProvider
-	subscribers map[string]map[chan ParticipantEvent]struct{}
-	pending     map[string][]ParticipantEvent
-	inflight    map[string]map[string]ParticipantEvent
-	seen        map[string]map[string]struct{}
+	resourceInput func(context.Context, string, string, *apitypes.ResourceSelection) (string, string, error)
+	mu            sync.Mutex
+	roomContext   roomtask.TurnContextProvider
+	subscribers   map[string]map[chan ParticipantEvent]struct{}
+	pending       map[string][]ParticipantEvent
+	inflight      map[string]map[string]ParticipantEvent
+	seen          map[string]map[string]struct{}
 }
 
 // SetRoomContextProvider installs a server-owned context reader. Read it when
@@ -38,26 +41,46 @@ func (b *ParticipantBridge) RoomContext(request roomtask.TurnContextRequest) (ro
 
 const maxPendingParticipantEventsPerParticipant = 64
 
+func (b *ParticipantBridge) SetResourceInputProvider(provider func(context.Context, string, string, *apitypes.ResourceSelection) (string, string, error)) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.resourceInput = provider
+}
+
+func (b *ParticipantBridge) ResourceInput(ctx context.Context, agentID, content string, selection *apitypes.ResourceSelection) (string, string, error) {
+	b.mu.Lock()
+	provider := b.resourceInput
+	b.mu.Unlock()
+	if provider == nil {
+		if selection != nil {
+			return "", "", fmt.Errorf("资源输入服务不可用")
+		}
+		return content, "", nil
+	}
+	return provider(ctx, agentID, content, selection)
+}
+
 type ParticipantEvent struct {
-	RoomManager   bool                      `json:"room_manager,omitempty"`
-	TaskAttempt   int                       `json:"task_attempt,omitempty"`
-	TaskID        string                    `json:"task_id,omitempty"`
-	MessageID     string                    `json:"message_id"`
-	RoomID        string                    `json:"room_id"`
-	Locale        string                    `json:"locale,omitempty"`
-	Channel       string                    `json:"channel,omitempty"`
-	ChatID        string                    `json:"chat_id,omitempty"`
-	ChatType      string                    `json:"chat_type"`
-	Sender        ParticipantSender         `json:"sender"`
-	SenderID      string                    `json:"sender_id,omitempty"`
-	Text          string                    `json:"text"`
-	Attachments   []MessageAttachment       `json:"attachments,omitempty"`
-	Timestamp     string                    `json:"timestamp"`
-	Mentions      []string                  `json:"mentions,omitempty"`
-	Mentioned     bool                      `json:"mentioned,omitempty"`
-	ThreadRootID  string                    `json:"thread_root_id,omitempty"`
-	ThreadContext *ParticipantThreadContext `json:"thread_context,omitempty"`
-	Context       ParticipantMessageContext `json:"context,omitempty"`
+	ResourceSelection *apitypes.ResourceSelection `json:"resource_selection,omitempty"`
+	RoomManager       bool                        `json:"room_manager,omitempty"`
+	TaskAttempt       int                         `json:"task_attempt,omitempty"`
+	TaskID            string                      `json:"task_id,omitempty"`
+	MessageID         string                      `json:"message_id"`
+	RoomID            string                      `json:"room_id"`
+	Locale            string                      `json:"locale,omitempty"`
+	Channel           string                      `json:"channel,omitempty"`
+	ChatID            string                      `json:"chat_id,omitempty"`
+	ChatType          string                      `json:"chat_type"`
+	Sender            ParticipantSender           `json:"sender"`
+	SenderID          string                      `json:"sender_id,omitempty"`
+	Text              string                      `json:"text"`
+	Attachments       []MessageAttachment         `json:"attachments,omitempty"`
+	Timestamp         string                      `json:"timestamp"`
+	Mentions          []string                    `json:"mentions,omitempty"`
+	Mentioned         bool                        `json:"mentioned,omitempty"`
+	ThreadRootID      string                      `json:"thread_root_id,omitempty"`
+	ThreadContext     *ParticipantThreadContext   `json:"thread_context,omitempty"`
+	Context           ParticipantMessageContext   `json:"context,omitempty"`
 }
 
 type ParticipantSender struct {
@@ -455,16 +478,17 @@ func messageEventForParticipant(room Room, sender User, message Message, partici
 	text := textForParticipantEvent(message, participantID)
 	attempt := taskmeta.Attempt(message.Metadata)
 	return ParticipantEvent{
-		RoomManager:  room.IsOnDemand() && canonicalIMUserID(participantID) == canonicalIMUserID(room.ManagerID),
-		TaskAttempt:  attempt,
-		TaskID:       roomExecutionTaskID(room, message),
-		MessageID:    message.ID,
-		RoomID:       room.ID,
-		Locale:       room.Locale,
-		Channel:      "csgclaw",
-		ChatID:       room.ID,
-		ChatType:     chatType,
-		ThreadRootID: threadRootID,
+		ResourceSelection: apitypes.ResourceSelectionFromMetadata(message.Metadata),
+		RoomManager:       room.IsOnDemand() && canonicalIMUserID(participantID) == canonicalIMUserID(room.ManagerID),
+		TaskAttempt:       attempt,
+		TaskID:            roomExecutionTaskID(room, message),
+		MessageID:         message.ID,
+		RoomID:            room.ID,
+		Locale:            room.Locale,
+		Channel:           "csgclaw",
+		ChatID:            room.ID,
+		ChatType:          chatType,
+		ThreadRootID:      threadRootID,
 		Sender: ParticipantSender{
 			ID:          sender.ID,
 			Username:    sender.Name,

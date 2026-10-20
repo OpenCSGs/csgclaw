@@ -148,6 +148,10 @@ func TestAppServerLifecycleHelperProcess(t *testing.T) {
 			complete("turn-1", "completed")
 			return rpcResult(msg["id"], map[string]any{}), true
 		case "turn/start":
+			if mode == "exit-active" {
+				writeRPCNotification(t, "turn/started", map[string]any{"threadId": "main-thread", "turnId": "turn-exit"})
+				return rpcResult(msg["id"], map[string]any{"turnId": "turn-exit"}), true
+			}
 			turns++
 			if mode == "terminal-boundary" {
 				if active {
@@ -197,4 +201,61 @@ func TestAppServerLifecycleHelperProcess(t *testing.T) {
 			return nil, false
 		}
 	})
+}
+
+func TestAppServerPromptEndsAfterWorkerProcessExit(t *testing.T) {
+	manager, spec := startLifecycleAppServer(t, "exit-active")
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	accepted := make(chan struct{})
+	finished := make(chan error, 1)
+	go func() {
+		_, err := manager.Prompt(ctx, SessionHandle{RuntimeID: spec.RuntimeID}, PromptRequest{
+			SessionID: "main-thread", Prompt: []PromptContentBlock{TextBlock("wait for worker")},
+			OnAccepted: func() { close(accepted) },
+		})
+		finished <- err
+	}()
+	select {
+	case <-accepted:
+	case err := <-finished:
+		t.Fatalf("prompt ended before acceptance: %v", err)
+	case <-ctx.Done():
+		t.Fatal("worker did not accept the prompt")
+	}
+	live := manager.liveSession(spec.RuntimeID)
+	if err := live.cmd.Process.Kill(); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case err := <-finished:
+		if err == nil || !strings.Contains(err.Error(), "app-server exited during turn") {
+			t.Fatalf("worker exit did not reach caller: %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("prompt kept waiting after the worker exited")
+	}
+}
+
+func TestAppServerTurnReturnsWhenProcessExits(t *testing.T) {
+	for _, completed := range []bool{false, true} {
+		t.Run(fmt.Sprint(completed), func(t *testing.T) {
+			live := &liveSession{done: make(chan struct{}), spec: SessionSpec{RuntimeID: "exited-runtime"}}
+			waiter := &appServerTurnWaiter{threadID: "thread", turnID: "turn", ch: make(chan appServerTurnResult, 1)}
+			if completed {
+				waiter.terminalResults = map[string]appServerTurnResult{"turn": {turnID: "turn", success: true, stopReason: StopReasonEndTurn}}
+			}
+			close(live.done)
+			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+			defer cancel()
+			response, err := (&appServerManager{}).waitAppServerTurn(ctx, live, waiter)
+			if completed {
+				if err != nil || response.StopReason != StopReasonEndTurn {
+					t.Fatalf("completed turn lost at process exit: %+v %v", response, err)
+				}
+			} else if err == nil || !strings.Contains(err.Error(), "app-server exited during turn") {
+				t.Fatalf("process exit did not end pending turn: %v", err)
+			}
+		})
+	}
 }

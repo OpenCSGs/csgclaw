@@ -1,10 +1,24 @@
+import { useQueryClient } from "@tanstack/react-query";
+import { workspaceQueryKeys } from "./workspaceQueries";
+import { normalizeSlashShorthandForPayload } from "@/models/slashCommands";
+export { normalizeSlashShorthandForPayload, slashSkillCommandText } from "@/models/slashCommands";
+import {
+  resourcesMatchAgent,
+  addResources,
+  canSendComposer,
+  canSendResources,
+  resourceMessageInput,
+  resourceSegment,
+  type ResourceReference,
+  type ResourceSnapshot,
+} from "@/models/conversationResources";
 import { effectiveConversationProfile } from "@/models/taskConfiguration";
 import { composerFileReferences } from "@/models/composer";
 import { useSlashSelection } from "./useSlashSelection";
 import { useSearchMessageNavigation } from "./useSearchMessageNavigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent } from "react";
-import { errorMessage } from "@/api/client";
+import { apiErrorCode, errorMessage } from "@/api/client";
 import {
   clearRoomMessagesRequest,
   createRoomRequest,
@@ -53,6 +67,7 @@ import {
   normalizeComposerSegmentsForDisplay,
   removeAdjacentMentionToken,
   renderComposerSegments,
+  updateComposerResourceLabels,
   replaceComposerSlashWithSegments,
   replaceMentionQueryWithToken,
   segmentsToPlainText,
@@ -65,6 +80,7 @@ import {
   agentProfileConfig,
   agentRuntimeState,
   isAgentLifecycleRunning,
+  agentRuntimeKind,
   normalizeAuthProviderName,
   providerNeedsAuth,
   type AgentLike,
@@ -142,8 +158,16 @@ function newClientMessageID(): string {
   return `client-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
-function messageFingerprint(content: string, attachments: readonly AttachmentDraft[]): string {
-  return JSON.stringify([content, attachments.map(({ file }) => [file.name, file.size, file.lastModified, file.type])]);
+function messageFingerprint(
+  content: string,
+  attachments: readonly AttachmentDraft[],
+  refs: readonly ResourceReference[] = [],
+): string {
+  return JSON.stringify([
+    content,
+    refs,
+    attachments.map(({ file }) => [file.name, file.size, file.lastModified, file.type]),
+  ]);
 }
 
 type OpenCreateRoomOptions = {
@@ -448,6 +472,7 @@ export function useConversationController({
     handleRuntimeAuthenticationError: handleOpenCSGRuntimeAuthenticationError,
     requireAuthentication: requireOpenCSGAuthentication,
   } = openCSGAuthGuard;
+  const queryClient = useQueryClient();
   const [draftsByConversationId, setDraftsByConversationId] = useState<DraftsByConversationId>({});
   const [threadDraftsByKey, setThreadDraftsByKey] = useState<DraftsByThreadKey>({});
   const [attachmentDraftsByConversationId, setAttachmentDraftsByConversationId] = useState<AttachmentDraftsByKey>({});
@@ -780,8 +805,17 @@ export function useConversationController({
   );
   const composerSendState = composerSendStatesByConversationId[activeConversationId] ?? idleComposerSendState;
   const removedAttachment = removedAttachmentsByConversationId[activeConversationId];
+  const resourceAgentID =
+    isDirectConversation(activeConversation) && ["codex", "dsh"].includes(agentRuntimeKind(logAgent))
+      ? activeConversationAgentId
+      : "";
   const slashPickerEnabled = Boolean((hasActiveConversationAgent || logAgent?.id) && !slashPickerDismissed);
-  const mainSkills = useInfiniteAgentSkills(activeConversationAgentId, composerSlashQuery, slashPickerEnabled);
+  const mainSkills = useInfiniteAgentSkills(
+    activeConversationAgentId,
+    composerSlashQuery,
+    slashPickerEnabled,
+    Boolean(resourceAgentID),
+  );
   const skillOptions = mainSkills.items;
   const slashPickerLoading = mainSkills.loading;
   const slashPickerState = useMemo(
@@ -823,6 +857,7 @@ export function useConversationController({
     activeConversationAgentId,
     threadSlashQuery,
     threadSlashPickerEnabled && !threadSlashPickerDismissed,
+    Boolean(resourceAgentID),
   );
   const threadSlashPickerState = useMemo(
     () =>
@@ -1067,11 +1102,12 @@ export function useConversationController({
     if (!editor) {
       return;
     }
+    updateComposerResourceLabels(editor, t("remove"));
     if (!areComposerSegmentsEqual(parseComposerSegments(editor), draftSegments)) {
-      renderComposerSegments(editor, draftSegments);
+      renderComposerSegments(editor, draftSegments, t("remove"));
     }
     setComposerMentionState(null);
-  }, [activeConversationId, draftSegments]);
+  }, [activeConversationId, draftSegments, t]);
 
   useEffect(() => {
     if (!activeConversationId || showCreateRoom || showInvite) {
@@ -1096,7 +1132,11 @@ export function useConversationController({
       setComposerError(eligibilityError);
       return;
     }
-    if (!data?.current_user_id || !activeConversation || (!draftText.trim() && attachmentDrafts.length === 0)) {
+    if (!data?.current_user_id || !activeConversation || !canSendComposer(draftSegments, attachmentDrafts.length)) {
+      return;
+    }
+    if (!resourcesMatchAgent(draftSegments, resourceAgentID)) {
+      setComposerError(t("resourceAgentChanged"));
       return;
     }
     if (composerSendState.status === "sending") {
@@ -1116,10 +1156,14 @@ export function useConversationController({
     const senderID = data.current_user_id;
     const attachments = attachmentDrafts.map((draft) => draft.file);
     const serializedDraft = serializeComposerSegments(draftSegments);
-    const content = normalizeSlashShorthandForPayload(serializedDraft);
+    const { content, resource_refs } =
+      resourceAgentID || draftSegments.some((segment) => segment.type === "resource")
+        ? resourceMessageInput(draftSegments, serializedDraft)
+        : { content: normalizeSlashShorthandForPayload(serializedDraft), resource_refs: [] };
     const fingerprint = messageFingerprint(
       content + JSON.stringify(composerFileReferences(draftSegments)),
       attachmentDrafts,
+      resource_refs,
     );
     if (sendLocksRef.current[roomID]) {
       return;
@@ -1142,6 +1186,7 @@ export function useConversationController({
           room_id: roomID,
           sender_id: senderID,
           content,
+          resource_refs,
           file_references: composerFileReferences(draftSegments),
           client_message_id: clientMessage.id,
           locale,
@@ -1177,7 +1222,7 @@ export function useConversationController({
         }));
         return;
       }
-      const message = isAbortError(err) ? t("sendStopped") : errorMessage(err, t("sendFailed"));
+      const message = isAbortError(err) ? t("sendStopped") : messageSendFailure(err);
       setComposerError(message, roomID);
       setComposerSendStatesByConversationId((current) => ({
         ...current,
@@ -1305,6 +1350,16 @@ export function useConversationController({
     setBootstrapData((current) => applyThreadToData(current, selection.roomID, view));
   }
 
+  function messageSendFailure(error: unknown): string {
+    const code = apiErrorCode(error);
+    if (code.startsWith("resource_") || code === "invalid_resource_reference") {
+      void queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.agentSkills(resourceAgentID) });
+      void queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.agentMCPServers(resourceAgentID) });
+      return localizeAPIError(error, t, errorMessage(error, t("sendFailed")));
+    }
+    return errorMessage(error, t("sendFailed"));
+  }
+
   async function sendThreadReply(): Promise<void> {
     const eligibilityError =
       recipientConfigurationError(activeThreadDraftSegments) || recipientAuthenticationError(activeThreadDraftSegments);
@@ -1312,11 +1367,19 @@ export function useConversationController({
       setThreadError(eligibilityError);
       return;
     }
-    if (!activeThreadDraft.trim() && activeThreadAttachmentDrafts.length === 0) {
+    if (!canSendComposer(activeThreadDraftSegments, activeThreadAttachmentDrafts.length)) {
+      return;
+    }
+    if (!resourcesMatchAgent(activeThreadDraftSegments, resourceAgentID)) {
+      setThreadError(t("resourceAgentChanged"));
       return;
     }
     const serializedDraft = serializeComposerSegments(activeThreadDraftSegments);
-    const text = normalizeSlashShorthandForPayload(serializedDraft);
+    const input =
+      resourceAgentID || activeThreadDraftSegments.some((segment) => segment.type === "resource")
+        ? resourceMessageInput(activeThreadDraftSegments, serializedDraft)
+        : { content: normalizeSlashShorthandForPayload(serializedDraft), resource_refs: [] };
+    const text = input.content;
     const selection = activeThreadSelectionRef.current;
     if (
       !data?.current_user_id ||
@@ -1325,7 +1388,7 @@ export function useConversationController({
       !selection ||
       selection.roomID !== activeConversation.id ||
       selection.rootID !== activeThreadRootID ||
-      (!text.trim() && activeThreadAttachmentDrafts.length === 0)
+      !canSendResources(text, input.resource_refs, activeThreadAttachmentDrafts.length)
     ) {
       return;
     }
@@ -1347,6 +1410,7 @@ export function useConversationController({
     const fingerprint = messageFingerprint(
       text + JSON.stringify(composerFileReferences(activeThreadDraftSegments)),
       activeThreadAttachmentDrafts,
+      input.resource_refs,
     );
     const pending = pendingClientMessagesRef.current[threadSendKey];
     const clientMessage = pending?.fingerprint === fingerprint ? pending : { fingerprint, id: newClientMessageID() };
@@ -1357,6 +1421,7 @@ export function useConversationController({
         room_id: activeConversation.id,
         sender_id: data.current_user_id,
         content: text,
+        resource_refs: input.resource_refs,
         file_references: composerFileReferences(activeThreadDraftSegments),
         client_message_id: clientMessage.id,
         locale,
@@ -1382,7 +1447,7 @@ export function useConversationController({
         return;
       }
       if (activeThreadSelectionRef.current === selection) {
-        setThreadError(errorMessage(err, t("sendFailed")));
+        setThreadError(messageSendFailure(err));
       }
     } finally {
       delete sendLocksRef.current[threadSendKey];
@@ -1581,7 +1646,13 @@ export function useConversationController({
     if (!skillName || !activeConversationId) {
       return;
     }
-    const nextSegments = slashCommandInputSegments(skillName);
+    const nextSegments: ComposerSegment[] =
+      resourceAgentID && ![...builtinSlashCommandNames, ...suggestedSlashCommandNames].includes(skillName)
+        ? [
+            resourceSegment({ source: "skill", id: skillName, name: skillName, type: "skill" }, resourceAgentID),
+            { type: "text", text: " " },
+          ]
+        : slashCommandInputSegments(skillName);
     applySlashSuggestionToComposer(editor ?? editorRef.current, nextSegments, (committedSegments) =>
       setDraftsByConversationId((current) => updateDrafts(current, activeConversationId, committedSegments)),
     );
@@ -1594,7 +1665,13 @@ export function useConversationController({
     if (!skillName || !activeThreadDraftKey) {
       return;
     }
-    const nextSegments = slashCommandInputSegments(skillName);
+    const nextSegments: ComposerSegment[] =
+      resourceAgentID && ![...builtinSlashCommandNames, ...suggestedSlashCommandNames].includes(skillName)
+        ? [
+            resourceSegment({ source: "skill", id: skillName, name: skillName, type: "skill" }, resourceAgentID),
+            { type: "text", text: " " },
+          ]
+        : slashCommandInputSegments(skillName);
     applySlashSuggestionToComposer(editor, nextSegments, (committedSegments) => {
       setThreadDraftsByKey((current) => updateDrafts(current, activeThreadDraftKey, committedSegments));
     });
@@ -1611,8 +1688,8 @@ export function useConversationController({
       onCommit(segments);
       return;
     }
-    if (!replaceComposerSlashWithSegments(editor, segments)) {
-      renderComposerSegments(editor, segments);
+    if (!replaceComposerSlashWithSegments(editor, segments, t("remove"))) {
+      renderComposerSegments(editor, segments, t("remove"));
       placeCaretAtEnd(editor);
     }
     editor.focus();
@@ -1932,6 +2009,23 @@ export function useConversationController({
       authStatuses,
       authBusyProvider,
       onProviderLogin,
+      resourceAgentID,
+      onPickResources: (resources: ResourceSnapshot[]) =>
+        setDraftsByConversationId((current) =>
+          updateDrafts(
+            current,
+            activeConversationId,
+            addResources(current[activeConversationId] ?? [], resources, resourceAgentID),
+          ),
+        ),
+      onPickThreadResources: (resources: ResourceSnapshot[]) =>
+        setThreadDraftsByKey((current) =>
+          updateDrafts(
+            current,
+            activeThreadDraftKey,
+            addResources(current[activeThreadDraftKey] ?? [], resources, resourceAgentID),
+          ),
+        ),
       draftSegments,
       draftText,
       attachmentDrafts,
@@ -2114,20 +2208,6 @@ export function slashPickerQueryForDraft(draftText: string): string | null {
   return /\s/.test(query) ? null : query.toLowerCase();
 }
 
-export function slashSkillCommandText(skillName: string): string {
-  return slashSkillCommandTextWithBody(skillName, "");
-}
-
-function slashSkillCommandTextWithBody(skillName: string, body = ""): string {
-  const skillArg = escapeXMLAttribute(String(skillName || "").trim());
-  const base = `<slash-command name="use-skill" arg="${skillArg}"></slash-command>`;
-  const normalizedBody = String(body ?? "").trim();
-  if (!normalizedBody) {
-    return base;
-  }
-  return `${base} ${normalizedBody}`;
-}
-
 export function slashCommandInputText(skillName: string): string {
   return `/${String(skillName || "").trim()} `;
 }
@@ -2141,65 +2221,6 @@ function slashCommandInputSegments(skillName: string): ComposerSegment[] {
   ];
 }
 
-export function normalizeSlashShorthandForPayload(text: string): string {
-  const shorthand = parseSlashShorthandToPayload(text);
-  if (!shorthand) {
-    return text;
-  }
-  if (shorthand.name === "new") {
-    return slashNewConversationCommandTextWithBody(shorthand.body);
-  }
-  return slashSkillCommandTextWithBody(shorthand.arg, shorthand.body);
-}
-
-function slashNewConversationCommandTextWithBody(body = ""): string {
-  const base = '<slash-command name="new" arg="conversation"></slash-command>';
-  const normalizedBody = String(body ?? "").trim();
-  if (!normalizedBody) {
-    return base;
-  }
-  return `${base} ${normalizedBody}`;
-}
-
-function parseSlashShorthandToPayload(text: string): { arg: string; body: string; name: "new" | "use-skill" } | null {
-  const trimmed = text.trimStart();
-  if (!trimmed.startsWith("/") || trimmed.startsWith("//")) {
-    return null;
-  }
-
-  const afterSlash = trimmed.slice(1).replace(/^\s+/, "");
-  if (!afterSlash) {
-    return null;
-  }
-  let arg = afterSlash;
-  let body = "";
-  for (let index = 0; index < afterSlash.length; index++) {
-    if (/\s/u.test(afterSlash[index])) {
-      arg = afterSlash.slice(0, index);
-      body = afterSlash.slice(index);
-      break;
-    }
-  }
-  if (!arg) {
-    return null;
-  }
-  if (arg.toLowerCase() === "new") {
-    return {
-      arg: "conversation",
-      body: body.trim(),
-      name: "new",
-    };
-  }
-  if (!isValidSkillSlug(arg)) {
-    return null;
-  }
-  return {
-    arg,
-    body: body.trim(),
-    name: "use-skill",
-  };
-}
-
 function isAbortError(error: unknown): boolean {
   return (
     (error instanceof DOMException && error.name === "AbortError") ||
@@ -2210,17 +2231,6 @@ function isAbortError(error: unknown): boolean {
       "name" in error &&
       String((error as { name?: unknown }).name) === "AbortError")
   );
-}
-
-function isValidSkillSlug(value: string): boolean {
-  if (!value || value === "." || value === ".." || /[/\\]/u.test(value)) {
-    return false;
-  }
-  return /^[A-Za-z0-9._-]+$/u.test(value);
-}
-
-function escapeXMLAttribute(value: string): string {
-  return value.replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
 }
 
 function fuzzySkillMatch(name: string, query: string): boolean {

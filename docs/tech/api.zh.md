@@ -116,6 +116,10 @@ ok
 
 ## Skill API
 
+### `GET /api/v1/skills/tree` 和 `GET /api/v1/skills/file`
+
+通过原有的 `path` 参数读取已安装 Skill 文件。预览市场技能时传入 `remote_path` 和可选的 `ref`：tree 接口列出远端仓库文件，file 接口还需传入仓库内相对路径 `path`（如 `SKILL.md`）。只读预览复用远端安装的 Hub 环境与匹配的用户凭据，不安装或修改本地 Skill。
+
 ### `GET /api/v1/skills/remote`
 
 从有效的 OpenCSG Hub 列出远端 Skill。浏览器只请求 CSGClaw；Server 按当前登录环境或显式配置的 official Hub URL 解析 Hub 地址。用户已登录时，CSGClaw 会把当前 OpenCSG Access Token 传给匹配的 Hub，因此 catalog 可以包含该用户有权查看的私有 Skill；未登录请求仍保持匿名，只列出公开 Skill。
@@ -162,7 +166,13 @@ Server 保持当前 Hub catalog 的排序，并返回归一化后的 Skill 摘�
 }
 ```
 
-成功返回 `201 Created` 和已安装的本地 Skill 摘要；未设置 `replace` 时同名冲突返回 `409 Conflict`。
+成功返回 `201 Created` 和已安装的本地 Skill 摘要，包含 `source: "market"`。安装记录统一保存在技能根目录的 `.skillhub-lock.json`，与 CLI 安装共用，直接记录完整的 `source_url`、ref/版本、技能内容 SHA256 及安装/更新时间。Web 安装保存技能页面地址，CLI 安装保存解析技能时实际使用的目录接口地址；读取时直接使用已保存的 URL。新记录不再写入分段来源字段，仅保留原有 CLI 的 `registry` 字段用于识别旧市场安装记录，不猜测缺失的完整地址。`GET /api/v1/skills` 读取该清单；ZIP 上传使用 `source: "local"`，没有记录的安装使用 `source: "unknown"`；包含 registry 的旧 CLI 记录也识别为市场安装；无记录的历史技能在界面显示为“本地”，提示原始安装渠道未记录。替换或删除技能时同步维护安装记录。通过 `.skillhub-lock.json.lock` 上的跨进程系统锁保护读取及完整的更新、文件操作和回滚过程，防止 CLI 与 Web 并发操作覆盖彼此的记录。锁文件保留在磁盘上，关闭句柄或进程退出时释放系统锁。未设置 `replace` 时同名冲突返回 `409 Conflict`。
+
+## 知识库配置 API
+
+### `GET /api/v1/knowledge-bases/remote/{id}/mcp-config`
+
+读取当前用户有权访问的知识库 MCP 配置，不修改本地连接。已安装的知识库也可读取，返回值使用已有本地服务名称，刷新配置时保留其身份。通过 MCP 创建或更新接口保存返回的配置。
 
 ## Participant API
 
@@ -474,6 +484,16 @@ Runtime 尚未生成文档时，`ready` 为 `false`。
 该接口只读展示自动生成的 memory 内容，不提供人工编辑能力。
 
 ### Agent MCP server 接口
+
+#### `GET /api/v1/agents/{id}/resources`
+
+查询当前 DSH 或 Codex Agent 已挂载的聊天资源。`type` 必填，取值为 `skill`、`connector`、`knowledge_base`。`pagination` 必填，使用现有 `cursor` 或 `page` 参数、`search`、`enabled`、`exclude` 和 `list_revision`；两种分页模式的参数不可混用。`exclude` 使用重复的 `source:id` 值。
+
+响应使用 `{items, total, list_revision, has_more, next_cursor?}`，page 模式包含 `page`、`per`。每项包含 `source`（`skill`、`mcp`、`app`）、`id`、`type`、`name`、可选 `description`、`enabled`、`available` 和可选 `unavailable_reason`。空列表返回 `[]`，响应使用 `Cache-Control: no-store`。
+
+技能通过现有 SkillQuery 选择成员后读取当前页的 metadata。MCP 使用配置 key，App 使用 installation ID；名称用于展示与搜索。知识库包含 managed MCP 和 `llm-wiki` App。App 可用性包含挂载开关、全局开关、连接状态及当前 Agent 的可调用工具目录。响应不包含凭证、连接配置或 SKILL.md 正文。
+
+过滤发生在分页之前，结果按稳定身份排序。参数无效返回 `400 invalid_resource_query`，成员集合或查询范围变化返回 `409 resource_list_changed`。依赖读取失败返回 `503 resource_service_unavailable`，未启用 Apps 时继续查询技能和 MCP。
 
 #### `GET /api/v1/agents/{id}/mcp-servers`
 
@@ -1086,6 +1106,29 @@ Multipart 示例：
 payload={"room_id":"room-1","sender_id":"manager","content":""}
 files=@diagram.png;type=image/png
 ```
+
+#### 消息资源引用
+
+DSH、Codex 私信及其讨论支持可选 `resource_refs`，最多 16 项：
+
+```json
+{
+  "room_id": "room-dm",
+  "sender_id": "user-admin",
+  "content": "检查这个 MR",
+  "resource_refs": [
+    {"source": "skill", "id": "review"},
+    {"source": "app", "id": "installation-id"},
+    {"source": "mcp", "id": "engineering-guidelines"}
+  ]
+}
+```
+
+`source` 和 `id` 表示资源身份；服务端去除 ID 首尾空白，校验归属及状态，去重并保留选择顺序。正文、附件或恰好一个有效 skill 满足发送条件。仅 MCP、App 或多个资源的空正文请求需要附件。群聊和 `/new` 命令不接受资源选择。
+
+multipart 的 `payload` 使用相同字段。客户端只提交引用，服务端在 `metadata.csgclaw.resource_selection` 保存 `{version: 1, agent_id, refs: [{source, id, type, name}]}`。客户端提供的同名 metadata 被清理。历史展示使用发送时快照，执行前按照当前 Agent 和资源状态重新解析；每条消息独立声明选择。旧客户端的技能输入由入口转换为相同引用格式。
+
+`client_message_id` 的成功重试返回 `201` 与原 Message，资源变化不影响已成功请求的重试。修改选择属于新的逻辑提交，应生成新的 ID。无效引用返回 `400 invalid_resource_reference`，不满足消息规则返回 `400 invalid_request`，资源已解绑返回 `409 resource_not_attached`，停用返回 `409 resource_disabled`，连接、授权或工具不可用返回 `409 resource_unavailable`，依赖服务不可用返回 `503 resource_service_unavailable`。消息保存后的验证失败通过原有执行结果展示。
 
 ### 房间附件检索与下载
 

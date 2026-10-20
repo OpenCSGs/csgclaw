@@ -2,8 +2,11 @@ package source
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"reflect"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -12,6 +15,7 @@ import (
 	"csgclaw/internal/agentengine"
 	"csgclaw/internal/apitypes"
 	"csgclaw/internal/channel"
+	"csgclaw/internal/channel/csgclaw/conv"
 	"csgclaw/internal/im"
 	"csgclaw/internal/participant"
 )
@@ -421,5 +425,59 @@ func TestSourceDrainsBridgePendingAfterRetryBackpressure(t *testing.T) {
 		case <-deadline:
 			t.Fatalf("successfully submitted messages = %d, want %d; pending events remained stranded", len(seen), messageCount)
 		}
+	}
+}
+
+func TestBotEventPreservesResourceSelection(t *testing.T) {
+	selection := &apitypes.ResourceSelection{Version: 1, AgentID: "agent", Refs: []apitypes.ResourceSnapshot{{ResourceReference: apitypes.ResourceReference{Source: "app", ID: "installation"}, Type: "connector", Name: "研发搜索"}}}
+	event := botEvent(channel.Binding{ParticipantID: "participant"}, im.ParticipantEvent{RoomID: "room", MessageID: "message", ResourceSelection: selection})
+	selection.Refs[0].Name = "changed"
+	if event.ResourceSelection == nil || event.ResourceSelection.AgentID != "agent" || event.ResourceSelection.Refs[0].Name != "研发搜索" {
+		t.Fatalf("事件未保留选择快照：%+v", event)
+	}
+}
+
+func TestBotThreadContextPreservesHistoricalResources(t *testing.T) {
+	selection := &apitypes.ResourceSelection{Version: 1, AgentID: "agent", Refs: []apitypes.ResourceSnapshot{
+		{ResourceReference: apitypes.ResourceReference{Source: "skill", ID: "review"}, Type: "skill", Name: "Code review"},
+		{ResourceReference: apitypes.ResourceReference{Source: "app", ID: "installation"}, Type: "connector", Name: "GitLab"},
+		{ResourceReference: apitypes.ResourceReference{Source: "mcp", ID: "guidelines"}, Type: "knowledge_base", Name: "Engineering \"guidelines\"\n2026"},
+	}}
+	for _, test := range []struct {
+		name    string
+		content string
+		refs    []apitypes.ResourceSnapshot
+	}{
+		{name: "skill-only root", refs: selection.Refs[:1]},
+		{name: "mixed resources", content: "Check the project", refs: selection.Refs},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			selection := &apitypes.ResourceSelection{Version: 1, AgentID: "agent", Refs: test.refs}
+			root := im.Message{ID: "root", SenderID: "user", Content: test.content, Metadata: apitypes.WithResourceSelection(nil, selection)}
+			binding := channel.Binding{ID: "binding", ParticipantID: "participant", AgentID: "agent"}
+			event := botEvent(binding, im.ParticipantEvent{
+				MessageID: "reply", RoomID: "room", ChatType: "p2p", ThreadRootID: "root", Text: "Continue",
+				ThreadContext: &im.ParticipantThreadContext{RootMessageID: "root", Context: []im.Message{root}},
+			})
+			if event.ThreadContext == nil || len(event.ThreadContext.Context) != 1 {
+				t.Fatalf("missing root context: %+v", event)
+			}
+			got := event.ThreadContext.Context[0].ResourceSelection
+			if !reflect.DeepEqual(got, selection) || event.ResourceSelection != nil {
+				t.Fatalf("historical selection must remain separate from the current turn: %+v", event)
+			}
+			encoded, _ := json.Marshal(selection)
+			var prompt strings.Builder
+			for _, part := range conv.TextInput(binding, event) {
+				prompt.WriteString(part.Text)
+			}
+			if !strings.Contains(prompt.String(), "[root]") || !strings.Contains(prompt.String(), string(encoded)) || !strings.Contains(prompt.String(), "context only") {
+				t.Fatalf("missing historical resource context: %s", prompt.String())
+			}
+			got.Refs[0].Name = "changed"
+			if apitypes.ResourceSelectionFromMetadata(root.Metadata).Refs[0].Name != "Code review" {
+				t.Fatal("thread context modified the stored snapshot")
+			}
+		})
 	}
 }

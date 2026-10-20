@@ -42,6 +42,9 @@ export function FloatingChatPanel({ agentName, chatProps, headerAccessory, onPic
     conversation,
     conversationMembers,
     currentUserID = "",
+    resourceAgentID,
+    onPickResources,
+    onPickThreadResources,
     draftSegments,
     draftText,
     attachmentDrafts,
@@ -170,7 +173,7 @@ export function FloatingChatPanel({ agentName, chatProps, headerAccessory, onPic
     [t],
   );
 
-  useConversationDraftEditorSync(editorRef, draftSegments);
+  useConversationDraftEditorSync(editorRef, draftSegments, t("remove"));
 
   useEffect(() => {
     setClearMessagesDialogOpen(false);
@@ -223,6 +226,8 @@ export function FloatingChatPanel({ agentName, chatProps, headerAccessory, onPic
 
   const threadPanel = activeThreadRootID ? (
     <Conversation.ThreadPanel
+      resourceAgentID={resourceAgentID}
+      onPickResources={onPickThreadResources}
       thread={activeThreadView}
       loading={threadLoading}
       error={threadError}
@@ -314,6 +319,8 @@ export function FloatingChatPanel({ agentName, chatProps, headerAccessory, onPic
         <AgentQuestionComposer mode={questionMode} t={floatingComposerT} usersById={usersById} />
       ) : (
         <Conversation.Composer
+          resourceAgentID={resourceAgentID}
+          onPickResources={onPickResources}
           fileScope={tools.fileScope}
           authBusyProvider={authBusyProvider}
           authStatuses={authStatuses}

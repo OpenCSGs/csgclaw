@@ -66,8 +66,11 @@ type Options struct {
 	InternalBaseURL    string
 	Desktop            *DesktopOptions
 	Context            context.Context
-	OnReady            func(h *api.Handler, router chi.Router)
-	BeforeShutdown     func(context.Context) error
+	// OnListening runs when HTTP endpoints can serve requests, before connector restoration.
+	OnListening func()
+	// OnReady runs after connector restoration so workers can use their restored configuration.
+	OnReady        func(h *api.Handler, router chi.Router)
+	BeforeShutdown func(context.Context) error
 }
 
 func newHandler(opts Options) *api.Handler {
@@ -133,6 +136,7 @@ func Run(opts Options) error {
 			return fmt.Errorf("prepare connector migration: %w", err)
 		}
 	}
+	handler.EnableConversationResources()
 	handler.SetEventStreamShutdown(streamCtx.Done())
 	if err := handler.RecoverRoomTasks(); err != nil {
 		return fmt.Errorf("recover room tasks: %w", err)
@@ -243,7 +247,13 @@ func Run(opts Options) error {
 		}(endpoint)
 	}
 
+	if opts.OnListening != nil && runCtx.Err() == nil {
+		opts.OnListening()
+	}
 	go func() {
+		if runCtx.Err() != nil {
+			return
+		}
 		if err := handler.RestoreConnectorMigration(runCtx); err != nil && runCtx.Err() == nil {
 			slog.Warn("restore connector migration", "error", err)
 		}

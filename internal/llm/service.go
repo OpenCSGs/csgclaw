@@ -12,6 +12,7 @@ import (
 	"csgclaw/internal/modelcap"
 	"csgclaw/internal/modelpreset"
 	"csgclaw/internal/modelprovider"
+	"csgclaw/internal/modelusage"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -294,7 +295,7 @@ func (s *Service) forwardRemoteChatWithAuthRefresh(ctx context.Context, profile 
 		return nil, &HTTPError{Status: http.StatusInternalServerError, Message: fmt.Sprintf("build upstream request: %v", err)}
 	}
 
-	resp, err := s.modelRequest(req)
+	resp, err := s.modelRequest(req, payloadBool(payload["stream"]))
 	if err != nil {
 		return nil, &HTTPError{Status: http.StatusBadGateway, Message: fmt.Sprintf("send upstream request: %v", err)}
 	}
@@ -360,7 +361,7 @@ func (s *Service) forwardRemoteResponsesWithAuthRefresh(ctx context.Context, pro
 		if err != nil {
 			return nil, &HTTPError{Status: http.StatusInternalServerError, Message: fmt.Sprintf("build upstream request: %v", err)}
 		}
-		resp, err := s.modelRequest(req)
+		resp, err := s.modelRequest(req, payloadBool(payload["stream"]))
 		if err != nil {
 			return nil, &HTTPError{Status: http.StatusBadGateway, Message: fmt.Sprintf("send upstream request: %v", err)}
 		}
@@ -543,7 +544,7 @@ func (s *Service) forwardResponsesViaChat(ctx context.Context, profile agent.Age
 	if err != nil {
 		return nil, &HTTPError{Status: http.StatusInternalServerError, Message: fmt.Sprintf("build chat fallback request: %v", err)}
 	}
-	resp, err := s.modelRequest(req)
+	resp, err := s.modelRequest(req, payloadBool(chatPayload["stream"]))
 	if err != nil {
 		return nil, &HTTPError{Status: http.StatusBadGateway, Message: fmt.Sprintf("send chat fallback request: %v", err)}
 	}
@@ -1105,7 +1106,7 @@ func completedResponsesPayload(id, model string, created int64, text string, usa
 		"output_text": text,
 	}
 	if len(usage) > 0 {
-		response["usage"] = usage
+		response["usage"] = modelusage.Responses(usage)
 	}
 	return response
 }
@@ -1137,6 +1138,7 @@ func writeChatCompletionStreamAsResponse(w io.Writer, r io.Reader, fallbackModel
 	var text strings.Builder
 	started := false
 	completed := false
+	var usage map[string]any
 
 	ensureStarted := func() error {
 		if started {
@@ -1211,7 +1213,7 @@ func writeChatCompletionStreamAsResponse(w io.Writer, r io.Reader, fallbackModel
 		}
 		return writeSSE(w, "response.completed", map[string]any{
 			"type":     "response.completed",
-			"response": completedResponsesPayload(responseIDValue, model, created, fullText, nil),
+			"response": completedResponsesPayload(responseIDValue, model, created, fullText, usage),
 		})
 	}
 
@@ -1238,13 +1240,17 @@ func writeChatCompletionStreamAsResponse(w io.Writer, r io.Reader, fallbackModel
 			return writeSSE(w, "error", map[string]any{"type": "error", "code": code, "message": message, "param": nil})
 		}
 		var chunk struct {
-			ID      string       `json:"id"`
-			Created int64        `json:"created"`
-			Model   string       `json:"model"`
-			Choices []chatChoice `json:"choices"`
+			ID      string         `json:"id"`
+			Created int64          `json:"created"`
+			Model   string         `json:"model"`
+			Choices []chatChoice   `json:"choices"`
+			Usage   map[string]any `json:"usage"`
 		}
 		if err := json.Unmarshal([]byte(data), &chunk); err != nil {
 			return err
+		}
+		if chunk.Usage != nil {
+			usage = chunk.Usage
 		}
 		if chunk.ID != "" && strings.HasPrefix(responseIDValue, "resp_csgclaw_") {
 			responseIDValue = responseID(chunk.ID)
@@ -1273,11 +1279,8 @@ func writeChatCompletionStreamAsResponse(w io.Writer, r io.Reader, fallbackModel
 					return err
 				}
 			}
-			if choice.FinishReason != nil {
-				if err := complete(); err != nil {
-					return err
-				}
-			}
+			// A usage-only chunk can follow finish_reason; finalize on [DONE]
+			// or EOF so the response includes the final accounting snapshot.
 		}
 	}
 	if err := scanner.Err(); err != nil {
@@ -1386,8 +1389,20 @@ func applyReasoningEffortDefault(payload map[string]any, defaultEffort string) {
 	payload["reasoning_effort"] = defaultEffort
 }
 
+func includeStreamUsage(payload map[string]any) {
+	if payloadBool(payload["stream"]) {
+		options, _ := payload["stream_options"].(map[string]any)
+		if options == nil {
+			options = map[string]any{}
+		}
+		options["include_usage"] = true
+		payload["stream_options"] = options
+	}
+}
+
 func mergeProfilePayload(payload map[string]any, profile agent.AgentProfile) {
 	payload["model"] = strings.TrimSpace(profile.ModelID)
+	includeStreamUsage(payload)
 	applyReasoningEffortDefault(payload, profile.ReasoningEffort)
 	for key, value := range profile.RequestOptions {
 		key = strings.TrimSpace(key)

@@ -1,3 +1,4 @@
+import { messageResources } from "@/models/conversationResources";
 import { useEventCallback } from "@/hooks/useEventCallback";
 import { emptyCompletedProgress } from "@/models/turnProgress";
 import { DiagnosticMessageAction } from "@/components/business/TurnDiagnostics";
@@ -50,6 +51,7 @@ export type ConversationMessageListProps = {
   currentUserID?: string;
   emptyStateSlot?: ReactNode;
   headerSlot?: ReactNode;
+  footerSlot?: ReactNode;
   renderTurnControls?: (message: IMMessage) => ProgressControlSlots | null;
   renderMessageFooter?: (message: IMMessage) => ReactNode;
   locale: LocaleCode;
@@ -97,6 +99,7 @@ const MessageListContent = memo(function MessageListContent({
   currentUserID = "",
   emptyStateSlot,
   headerSlot,
+  footerSlot,
   renderMessageFooter,
   renderTurnControls,
   locale,
@@ -213,7 +216,8 @@ const MessageListContent = memo(function MessageListContent({
                     <span className="message-author">{user.name}</span>
                     <MessageTimestamp parts={timestampParts} />
                   </div>
-                  {message.content && !message.metadata?.image_generation ? (
+                  {(message.content || messageResources(message.metadata).length > 0) &&
+                  !message.metadata?.image_generation ? (
                     <div className="message-bubble">
                       <MessageContent
                         key={`${message.id}:${theme}`}
@@ -301,6 +305,7 @@ const MessageListContent = memo(function MessageListContent({
             </Fragment>
           );
         })}
+        {footerSlot}
       </section>
       <MessageTimeline key={conversation.id} items={timelineItems} scrollRef={messageListRef} t={t} />
     </div>

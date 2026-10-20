@@ -24,6 +24,8 @@ import { ModelPicker } from "@/components/business/AgentModelFields";
 import { ReasoningEffortPicker } from "@/components/business/ReasoningEffortPicker";
 import { FieldHelpTooltip } from "@/components/business/ProfileControls";
 import { ConversationSection } from "@/components/business/ConversationWorkspace/ConversationSection";
+import { ConversationMessageActions } from "@/components/business/ConversationPane/ConversationMessageActions";
+import "@/components/business/ConversationPane/ConversationThreads.css";
 import { createTranslator } from "@/shared/i18n";
 import type { ResolvedThemeMode } from "@/shared/theme/theme";
 import styles from "./UiLab.module.css";
@@ -72,6 +74,35 @@ export function UiLab() {
           <p className={styles.intro}>
             Production components, semantic tokens and keyboard interactions. No backend or account is required.
           </p>
+          <section className={styles.card}>
+            <h2>Turn token consumption</h2>
+            {["qwen3.7-plus", "auto", "a-very-long-selected-model-name-for-narrow-screen-layout"].map((model) => (
+              <div key={model} className="message-row">
+                <div className="message-card">
+                  <p>这是一轮已完成的回复。</p>
+                  <ConversationMessageActions
+                    className="message-hover-actions"
+                    content="这是一轮已完成的回复。"
+                    t={createTranslator("zh")}
+                    metadata={{
+                      csgclaw: {
+                        turn_progress: {
+                          status: "succeeded",
+                          usage: {
+                            known: true,
+                            model_id: model,
+                            input_tokens: 1000,
+                            output_tokens: 220,
+                            total_tokens: 1220,
+                          },
+                        },
+                      },
+                    }}
+                  />
+                </div>
+              </div>
+            ))}
+          </section>
           <section className={styles.card}>
             <h2>Buttons and fields</h2>
             <div className={styles.row}>

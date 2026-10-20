@@ -33,7 +33,8 @@ func TestOpenWorkspaceFileBoundsAndStableHandle(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer file.Close()
-	if err := os.Remove(filepath.Join(root, "docs", "a.md")); err != nil {
+	// Renaming permits path replacement while the original handle remains open on Windows.
+	if err := os.Rename(filepath.Join(root, "docs", "a.md"), filepath.Join(root, "docs", "original.md")); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(root, "docs", "a.md"), []byte("replacement"), 0600); err != nil {

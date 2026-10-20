@@ -91,7 +91,7 @@ func (r *progressBrowserRuntime) Run(ctx context.Context, req agentengine.TurnRe
 		for waiting {
 			select {
 			case <-ctx.Done():
-				return agentengine.TurnResult{Status: agentengine.TurnCanceled}
+				return agentengine.TurnResult{Status: agentengine.TurnCanceled, Error: &agentengine.TurnError{Code: agentengine.ErrorRuntimeFailed, Message: context.Canceled.Error()}}
 			case <-gate:
 				waiting = false
 			case <-ticker.C:
@@ -108,7 +108,7 @@ func (r *progressBrowserRuntime) Run(ctx context.Context, req agentengine.TurnRe
 	emit(agentengine.TurnEvent{Kind: agentengine.TurnEventTextDelta, ItemID: "answer", Phase: phase, Text: "，命令执行成功。"})
 	select {
 	case <-ctx.Done():
-		return agentengine.TurnResult{Status: agentengine.TurnCanceled}
+		return agentengine.TurnResult{Status: agentengine.TurnCanceled, Error: &agentengine.TurnError{Code: agentengine.ErrorRuntimeFailed, Message: context.Canceled.Error()}}
 	case <-gate:
 	}
 	if strings.HasPrefix(id, "failed") {
@@ -212,6 +212,13 @@ func TestTurnProgressBrowserFixture(t *testing.T) {
 			if _, _, err := workRegistry.UpdateStatus(ctx, "pt-e2e", leaseID, apitypes.ParticipantWorkStatusPatchRequest{Sequence: 1, Phase: "working", Stage: "generating_reply", Capabilities: []string{"turn_stop_v1", "work_stage_v1"}, ContextUsage: &modelcap.ContextUsage{SessionID: id, ModelID: "fixture-model", UsedTokens: &used, ContextWindow: 131072, ContextSource: "default", AutoCompact: true, CompactThreshold: 98304, UpdatedAt: time.Now().UTC().Format(time.RFC3339Nano)}}); err != nil {
 				t.Error(err)
 				return
+			}
+			if r.URL.Query().Get("delay_progress") == "1" {
+				select {
+				case <-time.After(3 * time.Second):
+				case <-turnCtx.Done():
+					return
+				}
 			}
 			if err := renderer.Start(ctx, turn); err != nil {
 				t.Error(err)

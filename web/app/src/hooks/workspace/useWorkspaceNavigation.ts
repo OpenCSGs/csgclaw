@@ -20,12 +20,16 @@ export function useWorkspaceNavigation({
   const navigatePane = useCallback(
     (pane: WorkspacePane, roomList = rooms, options: NavigatePaneOptions = {}) => {
       const nextPath = pathForPane(pane, roomList);
-      if (!nextPath || location.pathname === nextPath) {
+      const nextSearch = options.search || "";
+      if (
+        !nextPath ||
+        (location.pathname === nextPath && (options.search === undefined || location.search === nextSearch))
+      ) {
         return;
       }
-      navigate(nextPath, { replace: Boolean(options.replace) });
+      navigate({ pathname: nextPath, search: nextSearch }, { replace: Boolean(options.replace) });
     },
-    [location.pathname, navigate, rooms],
+    [location.pathname, location.search, navigate, rooms],
   );
 
   const selectConversation = useCallback(

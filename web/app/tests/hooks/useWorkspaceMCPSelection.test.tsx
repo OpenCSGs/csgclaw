@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { act, renderHook } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { createMCPServerRequest, installRemoteMCPServerRequest } from "@/api/mcp";
+import { createMCPServerRequest, installRemoteMCPServerRequest, updateMCPServerRequest } from "@/api/mcp";
 import { useWorkspaceMCPSelection } from "@/hooks/workspace/useWorkspaceMCPSelection";
 import { workspaceQueryKeys } from "@/hooks/workspace/workspaceQueries";
 import { openCSGAuthGuardStub } from "../helpers/openCSGAuthGuard";
@@ -10,6 +10,7 @@ vi.mock("@/api/mcp", async () => ({
   ...(await vi.importActual<typeof import("@/api/mcp")>("@/api/mcp")),
   createMCPServerRequest: vi.fn(),
   installRemoteMCPServerRequest: vi.fn(),
+  updateMCPServerRequest: vi.fn(),
 }));
 
 function setup(authGuard = openCSGAuthGuardStub()) {
@@ -89,6 +90,17 @@ describe("remote MCP installation feedback", () => {
 });
 
 describe("MCP creation source", () => {
+  it("keeps settings knowledge-base discovery enabled when creating or updating in place", async () => {
+    vi.mocked(createMCPServerRequest).mockResolvedValue({ mcpServers: {} });
+    vi.mocked(updateMCPServerRequest).mockResolvedValue({ mcpServers: {} });
+    const { result, client, selectType } = setup();
+    await act(async () => {
+      expect(await result.current.createMCPServer(payload, { preserveSelection: true })).toBe(true);
+      expect(await result.current.updateMCPServer(payload.name, payload, { preserveSelection: true })).toBe(true);
+    });
+    expect(selectType).not.toHaveBeenCalled();
+    client.clear();
+  });
   it("keeps knowledge base creation on knowledge and refreshes the list after saving", async () => {
     vi.mocked(createMCPServerRequest).mockResolvedValue({ mcpServers: {} });
     const { result, client, invalidate, selectType, selectMCP } = setup();

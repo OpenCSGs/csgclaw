@@ -58,11 +58,21 @@ func (m *appServerManager) recoverContext(ctx context.Context, live *liveSession
 		return PromptResponse{}, &contextWindowError{}
 	}
 	newWaiter := func() error {
+		live.mu.Lock()
+		usage, pending := (*waiter).tokenUsage, (*waiter).pendingUsage
+		if current, ok := pending[(*waiter).currentTurnID()]; ok {
+			usage.Add(current)
+			delete(pending, (*waiter).currentTurnID())
+		}
+		live.mu.Unlock()
 		live.removeAppServerTurnWaiter(threadID, *waiter)
 		next, err := live.registerAppServerTurnWaiter(threadID)
 		if err != nil {
 			return err
 		}
+		live.mu.Lock()
+		next.tokenUsage, next.pendingUsage = usage, pending
+		live.mu.Unlock()
 		next.mu.Lock()
 		next.diagnostic = diagnostics.From(ctx)
 		next.mu.Unlock()

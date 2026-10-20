@@ -118,7 +118,7 @@ func (desktopServeCmd) Run(parent context.Context, run *command.Context, args []
 			ServerAccessToken: cfg.Server.AccessToken,
 			ServerAccessHosts: desktopServerAccessHosts(sandboxManagerBaseURL, sandboxListener.Addr()),
 		},
-		OnReady: func() {
+		OnListening: func() {
 			if err := json.NewEncoder(run.Stdout).Encode(ready); err != nil {
 				cancel()
 			}

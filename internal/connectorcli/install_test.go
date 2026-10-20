@@ -96,6 +96,20 @@ func TestInstalledPackageDetectsModifiedSkills(t *testing.T) {
 	if err := verifyPackage(context.Background(), p); err != nil {
 		t.Fatal(err)
 	}
+	recordPath := filepath.Join(p.SkillsDir, ".skillhub-lock.json")
+	record, err := os.ReadFile(recordPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(recordPath, append(record, '\n'), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := verifyPackage(context.Background(), p); err == nil {
+		t.Fatal("modified installation records were accepted")
+	}
+	if err := os.WriteFile(recordPath, record, 0600); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.WriteFile(filepath.Join(p.SkillsDir, "lark-test", "SKILL.md"), []byte("changed"), 0600); err != nil {
 		t.Fatal(err)
 	}

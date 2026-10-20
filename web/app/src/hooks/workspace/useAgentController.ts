@@ -127,7 +127,7 @@ import {
   modelProviderConfigUsesOpenCSG,
   modelProviderOptionsFromCatalog,
 } from "@/models/modelProviders";
-import { WorkspacePaneTypes } from "@/models/routing";
+import { agentTemplatesSearch, WorkspacePaneTypes } from "@/models/routing";
 import { useCLIProxyAuthStatuses } from "./useCLIProxyAuthStatuses";
 import { workspaceQueryKeys } from "./workspaceQueries";
 import type { MessageAction, MessageActionFeedback, MessageLike } from "@/components/business/MessageContent/types";
@@ -1510,7 +1510,7 @@ export function useAgentController({
         agent_profile: {},
       });
       draft = applyTemplateToDraft(draft, selectedTemplate, effectiveBootstrapConfig, managerAgent?.image || "");
-      draft = agentDraftWithAvailableModels(draft, createModelCatalog, openCSGAuthenticated);
+      draft = agentDraftWithAvailableModels(draft, createModelCatalog, openCSGAuthenticated, false);
       setAgentDraft(draft);
       setShowAgentModal(true);
     }
@@ -1924,7 +1924,9 @@ export function useAgentController({
       await refreshHubTemplates();
       if (published?.id) {
         setSelectedHubTemplateId(published.id);
-        navigatePane({ type: WorkspacePaneTypes.hub, id: published.id, resourceType: "template" }, rooms);
+        navigatePane({ type: WorkspacePaneTypes.agent, id: "" }, rooms, {
+          search: agentTemplatesSearch(published.id),
+        });
       } else {
         selectHub();
       }
@@ -1943,6 +1945,13 @@ export function useAgentController({
       const message = localTemplateID ? t("agentTemplateSavedPublishFailed", { reason }) : reason;
       setAgentPagePublishError(message);
       setAgentPageSaveError(message);
+      if (localTemplateID) {
+        setSelectedHubTemplateId(localTemplateID);
+        navigatePane({ type: WorkspacePaneTypes.agent, id: "" }, rooms, {
+          search: agentTemplatesSearch(localTemplateID),
+        });
+        showNotice({ message, closeLabel: t("close"), tone: "warning" });
+      }
       return false;
     } finally {
       setAgentPagePublishBusy(false);

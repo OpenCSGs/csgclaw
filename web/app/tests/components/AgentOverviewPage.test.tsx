@@ -1,6 +1,7 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter } from "react-router-dom";
+import { useState } from "react";
+import { MemoryRouter, useLocation, useNavigate } from "react-router-dom";
 import type { UseQueryResult } from "@tanstack/react-query";
 import { WorkspaceControllerProvider, type WorkspaceController } from "@/hooks/workspace";
 import { useWorkspaceHubTemplatesQuery } from "@/hooks/workspace/workspaceQueries";
@@ -11,6 +12,20 @@ import { createTranslator } from "@/shared/i18n";
 vi.mock("@/hooks/workspace/workspaceQueries", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/hooks/workspace/workspaceQueries")>()),
   useWorkspaceHubTemplatesQuery: vi.fn(),
+}));
+
+vi.mock("@/components/business/HubDetailPane", () => ({
+  HubDetailPane: ({
+    hub,
+    inlineTemplateDetail,
+  }: {
+    hub: { detailPaneProps: { selectedTemplateId: string } };
+    inlineTemplateDetail?: boolean;
+  }) => (
+    <section aria-label="Template detail" data-inline={inlineTemplateDetail}>
+      {hub.detailPaneProps.selectedTemplateId}
+    </section>
+  ),
 }));
 
 const template: HubTemplate = {
@@ -31,6 +46,21 @@ function queryState(patch: Partial<UseQueryResult<HubTemplate[]>> = {}): UseQuer
   } as UseQueryResult<HubTemplate[]>;
 }
 
+function NavigationState() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  return (
+    <>
+      <output aria-label="Current URL">
+        {location.pathname}
+        {location.search}
+      </output>
+      <button onClick={() => navigate(-1)}>Back</button>
+      <button onClick={() => navigate(1)}>Forward</button>
+    </>
+  );
+}
+
 function Page({
   route = "/agents?tab=templates",
   username = "",
@@ -40,6 +70,7 @@ function Page({
   username?: string;
   onCreateCustomAgent?: () => void;
 }) {
+  const [selectedTemplateId, setSelectedTemplateId] = useState("");
   const controller = {
     ready: true,
     activePane: { type: "agents", id: "" },
@@ -55,11 +86,16 @@ function Page({
       onCreateCustomAgent,
     },
     agentViewProps: { item: null },
+    hubViewProps: {
+      hub: { detailPaneProps: { selectedTemplateId, selectedResourceType: "template" } },
+      onSelectTemplateInPlace: (template: HubTemplate) => setSelectedTemplateId(template.id || ""),
+    },
   } as unknown as WorkspaceController;
   return (
     <MemoryRouter initialEntries={[route]}>
       <WorkspaceControllerProvider controller={controller}>
         <AgentOverviewPage />
+        <NavigationState />
       </WorkspaceControllerProvider>
     </MemoryRouter>
   );
@@ -73,6 +109,46 @@ describe("agent overview guidance and template loading", () => {
     await userEvent.setup().click(screen.getByRole("button", { name: "新建智能体" }));
     expect(onCreateCustomAgent).toHaveBeenCalledOnce();
   });
+  it("opens My templates and selects the saved template after asynchronous loading", async () => {
+    const local: HubTemplate = { id: "local.中文助手", name: "中文助手", role: "worker", source: { kind: "local" } };
+    const scroll = vi.spyOn(HTMLElement.prototype, "scrollIntoView");
+    const route = "/agents?tab=templates&filter=personal&template=local.%E4%B8%AD%E6%96%87%E5%8A%A9%E6%89%8B";
+    vi.mocked(useWorkspaceHubTemplatesQuery).mockReturnValue(queryState({ isLoading: true }));
+    const view = render(<Page route={route} />);
+    expect(screen.getByRole("button", { name: "我的模板" })).toHaveAttribute("aria-pressed", "true");
+    vi.mocked(useWorkspaceHubTemplatesQuery).mockReturnValue(queryState({ data: [template, local] }));
+    view.rerender(<Page route={route} />);
+    expect(await screen.findByRole("region", { name: "Template detail" })).toHaveTextContent(local.id!);
+    expect(screen.getByRole("region", { name: "Template detail" })).toHaveAttribute("data-inline", "true");
+    expect(screen.getByRole("button", { name: "中文助手" })).toHaveAttribute("aria-current", "true");
+    expect(screen.queryByRole("button", { name: "Codex worker" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(scroll).toHaveBeenCalledWith({ block: "nearest" });
+    scroll.mockRestore();
+  });
+
+  it("restores the selected template with browser back and forward", async () => {
+    const locals: HubTemplate[] = [
+      { id: "local.first", name: "First", role: "worker", source: { kind: "local" } },
+      { id: "local.second", name: "Second", role: "worker", source: { kind: "local" } },
+    ];
+    vi.mocked(useWorkspaceHubTemplatesQuery).mockReturnValue(queryState({ data: locals }));
+    render(<Page route="/agents?tab=templates&filter=personal&template=local.first" />);
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Second" }));
+    expect(await screen.findByRole("region", { name: "Template detail" })).toHaveTextContent("local.second");
+    await user.click(screen.getByRole("button", { name: "Back" }));
+    await waitFor(() =>
+      expect(screen.getByRole("region", { name: "Template detail" })).toHaveTextContent("local.first"),
+    );
+    expect(screen.getByRole("button", { name: "First" })).toHaveAttribute("aria-current", "true");
+    await user.click(screen.getByRole("button", { name: "Forward" }));
+    await waitFor(() =>
+      expect(screen.getByRole("region", { name: "Template detail" })).toHaveTextContent("local.second"),
+    );
+    expect(screen.getByRole("button", { name: "Second" })).toHaveAttribute("aria-current", "true");
+  });
+
   it("waits for templates before showing selection guidance", () => {
     vi.mocked(useWorkspaceHubTemplatesQuery).mockReturnValue(queryState({ isLoading: true, isFetching: true }));
     const view = render(<Page />);

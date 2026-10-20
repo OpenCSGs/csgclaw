@@ -1,9 +1,9 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { fetchRemoteKnowledgeBaseMCPConfig } from "@/api/knowledgeBases";
 import { workspaceQueryKeys } from "@/hooks/workspace/workspaceQueries";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { BookOpen, LoaderCircle, LogIn, Plus, RefreshCw } from "lucide-react";
-import { Button, Tooltip } from "@/components/ui";
+import { Button, DismissibleAlert, Tooltip } from "@/components/ui";
 import { ResourceList, ResourceListCard } from "@/components/business/ResourceListCard";
 import { useWorkspaceControllerContext } from "@/hooks/workspace";
 import { isAuthenticated } from "@/models/auth";
@@ -18,7 +18,7 @@ export function KnowledgeBasesSection() {
   const controller = useWorkspaceControllerContext();
   const queryClient = useQueryClient();
   const [connectingID, setConnectingID] = useState("");
-  const [connectError, setConnectError] = useState("");
+  const [connectFailure, setConnectFailure] = useState<{ id: string; message: string } | null>(null);
   const hub = controller.hubViewProps?.hub;
   const detail = hub?.detailPaneProps;
   const knowledgeBases = detail?.knowledgeBases;
@@ -26,26 +26,31 @@ export function KnowledgeBasesSection() {
   const [tab, setTab] = useState<KnowledgeTabID>("installed");
   const [query, setQuery] = useState("");
   const [detailTarget, setDetailTarget] = useState<KnowledgeBaseDetailTarget | null>(null);
+  const setKnowledgeBasesVisible = hub?.setKnowledgeBasesVisible;
+  useEffect(() => {
+    setKnowledgeBasesVisible?.(true);
+    return () => setKnowledgeBasesVisible?.(false);
+  }, [setKnowledgeBasesVisible]);
 
   async function connectAndReveal(kb: RemoteKnowledgeBase) {
     if (connectingID) return;
     setConnectingID(kb.id);
-    setConnectError("");
+    setConnectFailure(null);
     try {
       const payload = await fetchRemoteKnowledgeBaseMCPConfig(kb.id);
       const currentName = kb.configuredMCPName?.trim();
       const connected = currentName
-        ? await detail?.onUpdateMCP?.(currentName, payload)
+        ? await detail?.onUpdateMCPInPlace?.(currentName, payload)
         : await detail?.onCreateMCPInPlace?.(payload);
       if (connected) {
         await queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.knowledgeBasesScope() });
         setDetailTarget(null);
         setTab("installed");
       } else {
-        setConnectError(t("resourcesKnowledgeBaseConfigFailed"));
+        setConnectFailure({ id: kb.id, message: t("resourcesKnowledgeBaseConfigFailed") });
       }
     } catch {
-      setConnectError(t("resourcesKnowledgeBaseConfigFailed"));
+      setConnectFailure({ id: kb.id, message: t("resourcesKnowledgeBaseConfigFailed") });
     } finally {
       setConnectingID("");
     }
@@ -79,10 +84,10 @@ export function KnowledgeBasesSection() {
       }
       description={t("iaSettingsCardKnowledgeHint")}
     >
-      {connectError ? (
-        <p role="alert" className="form-error">
-          {connectError}
-        </p>
+      {connectFailure && !detailTarget ? (
+        <DismissibleAlert className="form-error" messageKey={connectFailure.message} closeLabel={t("close")}>
+          <span role="alert">{connectFailure.message}</span>
+        </DismissibleAlert>
       ) : null}
       <ResourceFilterTabs label={t("iaSettingsCardKnowledge")} tabs={tabs} value={tab} onChange={setTab} />
 
@@ -158,11 +163,16 @@ export function KnowledgeBasesSection() {
 
       <KnowledgeBaseDetailDialog
         target={detailTarget}
-        connectError={connectError}
+        connectError={connectFailure?.id === detailTarget?.kb.id ? connectFailure?.message : ""}
         connecting={Boolean(connectingID)}
         t={t}
         onConnect={(kb) => void connectAndReveal(kb)}
-        onOpenChange={(open) => (open ? undefined : setDetailTarget(null))}
+        onOpenChange={(open) => {
+          if (!open) {
+            setDetailTarget(null);
+            setConnectFailure(null);
+          }
+        }}
       />
     </SettingsRow>
   );

@@ -68,7 +68,9 @@ An explicit model that becomes unavailable falls back to the recommendation for 
 Explicit selections are stored in `agents.creation_defaults` in the local state file, without provider credentials.
 Unchanged categories continue to use recommendations, and changing one category does not overwrite another category’s saved preference.
 The existing remembered profile remains separate from these explicit selections.
-Custom creation and Agent settings share the filtered image and video selectors.
+Template creation, custom creation, and Agent settings share the filtered model selectors.
+When a default is **Unspecified**, creation requires a manual conversation-model choice and leaves optional image and video models empty.
+Previous creation choices are not restored, including when loading defaults fails.
 
 ## Changing models
 

@@ -1,5 +1,6 @@
 import { isDirectConversation } from "@/models/conversations";
 import type { IMConversation } from "@/models/conversations";
+import type { ResourceType } from "@/models/agentResources";
 
 type ValueOf<T> = T[keyof T];
 
@@ -94,6 +95,14 @@ export type WorkspacePane = {
 };
 
 export type CollapsedWorkspaceGroups = Record<string, boolean>;
+
+export function agentTemplatesSearch(templateID: string, filter: "official" | "personal" = "personal"): string {
+  return `?${new URLSearchParams({ tab: "templates", filter, template: templateID })}`;
+}
+
+export function pathForNewAgentTask(agentID: string): string {
+  return `/new?${new URLSearchParams({ agent: agentID })}`;
+}
 
 export function paneFromLocation(pathname = window.location.pathname): WorkspacePane {
   const parts = String(pathname || "/")
@@ -274,5 +283,10 @@ export function workspaceShowsFloatingChat(pane: WorkspacePane | null | undefine
 }
 
 export function pathForAgentApps(agentID: string): string {
-  return `${pathForPane({ type: WorkspacePaneTypes.agent, id: agentID })}?tab=connectors`;
+  return pathForAgentResources(agentID, "connector");
+}
+
+export function pathForAgentResources(agentID: string, resourceType: ResourceType): string {
+  const tab = resourceType === "skill" ? "skills" : "connectors";
+  return `${pathForPane({ type: WorkspacePaneTypes.agent, id: agentID })}?tab=${tab}`;
 }

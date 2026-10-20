@@ -7,21 +7,22 @@ type MessageAttachment = apitypes.MessageAttachment
 // Event is the transport-neutral message delivered from a Channel source to a
 // Binding-scoped ingress worker.
 type Event struct {
-	RoomManager   bool                `json:"room_manager,omitempty"`
-	TaskAttempt   int                 `json:"task_attempt,omitempty"`
-	TaskID        string              `json:"task_id,omitempty"`
-	Channel       string              `json:"channel,omitempty"`
-	ParticipantID string              `json:"participant_id,omitempty"`
-	MessageID     string              `json:"message_id"`
-	RoomID        string              `json:"room_id"`
-	Locale        string              `json:"locale,omitempty"`
-	ChatType      string              `json:"chat_type"`
-	Text          string              `json:"text"`
-	Attachments   []MessageAttachment `json:"attachments,omitempty"`
-	Mentions      []string            `json:"mentions,omitempty"`
-	Mentioned     bool                `json:"mentioned,omitempty"`
-	ThreadRootID  string              `json:"thread_root_id,omitempty"`
-	ThreadContext *ThreadContext      `json:"thread_context,omitempty"`
+	ResourceSelection *apitypes.ResourceSelection `json:"resource_selection,omitempty"`
+	RoomManager       bool                        `json:"room_manager,omitempty"`
+	TaskAttempt       int                         `json:"task_attempt,omitempty"`
+	TaskID            string                      `json:"task_id,omitempty"`
+	Channel           string                      `json:"channel,omitempty"`
+	ParticipantID     string                      `json:"participant_id,omitempty"`
+	MessageID         string                      `json:"message_id"`
+	RoomID            string                      `json:"room_id"`
+	Locale            string                      `json:"locale,omitempty"`
+	ChatType          string                      `json:"chat_type"`
+	Text              string                      `json:"text"`
+	Attachments       []MessageAttachment         `json:"attachments,omitempty"`
+	Mentions          []string                    `json:"mentions,omitempty"`
+	Mentioned         bool                        `json:"mentioned,omitempty"`
+	ThreadRootID      string                      `json:"thread_root_id,omitempty"`
+	ThreadContext     *ThreadContext              `json:"thread_context,omitempty"`
 }
 
 type ThreadContext struct {
@@ -31,11 +32,12 @@ type ThreadContext struct {
 }
 
 type ThreadContextMessage struct {
-	ID          string              `json:"id,omitempty"`
-	SenderID    string              `json:"sender_id,omitempty"`
-	Content     string              `json:"content,omitempty"`
-	CreatedAt   string              `json:"created_at,omitempty"`
-	Attachments []MessageAttachment `json:"attachments,omitempty"`
+	ResourceSelection *apitypes.ResourceSelection `json:"resource_selection,omitempty"`
+	ID                string                      `json:"id,omitempty"`
+	SenderID          string                      `json:"sender_id,omitempty"`
+	Content           string                      `json:"content,omitempty"`
+	CreatedAt         string                      `json:"created_at,omitempty"`
+	Attachments       []MessageAttachment         `json:"attachments,omitempty"`
 }
 
 type ThreadContextSummary struct {

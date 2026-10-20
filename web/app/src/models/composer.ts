@@ -1,5 +1,8 @@
+import { resourceKey, resourceLabel, isResourceSnapshot, type ResourceSnapshot } from "./agentResources";
 import { fileReferenceKey, type ComposerFileReference, type FileReference } from "./fileReferences";
+
 export type ComposerSegment =
+  | { type: "resource"; text: string; resource: ResourceSnapshot; agentID?: string }
   | { type: "file"; reference: ComposerFileReference; text: string }
   | {
       text: string;
@@ -103,12 +106,66 @@ export function createSlashTokenElement(value: unknown): HTMLSpanElement {
   return token;
 }
 
+export function createResourceTokenElement(
+  resource: ResourceSnapshot,
+  agentID?: string,
+  removeLabel?: string,
+): HTMLSpanElement {
+  const token = document.createElement("span");
+  token.className = "resource-tag";
+  token.dataset.resourceType = resource.type;
+  token.dataset.composerResource = JSON.stringify(resource);
+  if (agentID) token.dataset.resourceAgentId = agentID;
+  token.contentEditable = "false";
+  token.title = `${resource.source}:${resource.id}`;
+  const label = document.createElement("span");
+  label.className = "resource-tag-label";
+  label.textContent = resourceLabel(resource);
+  token.append(label);
+  if (removeLabel) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "resource-tag-remove";
+    button.dataset.composerResourceRemove = "true";
+    button.setAttribute("aria-label", `${removeLabel} ${resourceLabel(resource)}`);
+    token.append(button);
+  }
+  return token;
+}
+
+export function updateComposerResourceLabels(root: HTMLElement, removeLabel: string): void {
+  for (const token of root.querySelectorAll<HTMLElement>("[data-composer-resource]")) {
+    const button = token.querySelector("[data-composer-resource-remove]");
+    const name = token.querySelector(".resource-tag-label")?.textContent ?? "";
+    button?.setAttribute("aria-label", `${removeLabel} ${name}`);
+  }
+}
+
+export function removeComposerResourceToken(root: HTMLElement | null | undefined, target: EventTarget | null): boolean {
+  const button = target instanceof Element ? target.closest("[data-composer-resource-remove]") : null;
+  const token = button?.closest("[data-composer-resource]");
+  if (!root || !token || !root.contains(token)) return false;
+  const range = document.createRange();
+  range.setStartBefore(token);
+  range.collapse(true);
+  token.remove();
+  root.focus();
+  const selection = window.getSelection();
+  selection?.removeAllRanges();
+  selection?.addRange(range);
+  return true;
+}
+
 export function normalizeComposerSegmentsForDisplay(
   segments: readonly (ComposerSegment | null | undefined)[] | null | undefined,
 ): ComposerSegment[] {
   const normalized: ComposerSegment[] = [];
   for (const segment of segments ?? []) {
     if (!segment) {
+      continue;
+    }
+    if (segment.type === "resource") {
+      normalized.push(segment);
       continue;
     }
     if (segment.type === "mention") {
@@ -131,12 +188,17 @@ export function normalizeComposerSegmentsForDisplay(
 export function appendComposerSegments(
   parent: ParentNode | null | undefined,
   segments: readonly (ComposerSegment | null | undefined)[] | null | undefined,
+  resourceRemoveLabel?: string,
 ): void {
   if (!parent) {
     return;
   }
   for (const segment of segments ?? []) {
     if (!segment) {
+      continue;
+    }
+    if (segment.type === "resource") {
+      parent.append(createResourceTokenElement(segment.resource, segment.agentID, resourceRemoveLabel));
       continue;
     }
     if (segment.type === "mention") {
@@ -171,12 +233,13 @@ export function appendComposerSegments(
 export function renderComposerSegments(
   root: HTMLElement | null | undefined,
   segments: readonly (ComposerSegment | null | undefined)[] | null | undefined,
+  resourceRemoveLabel?: string,
 ): void {
   if (!root) {
     return;
   }
   root.replaceChildren();
-  appendComposerSegments(root, segments);
+  appendComposerSegments(root, segments, resourceRemoveLabel);
 }
 
 export function parseComposerSegments(root: Node | null | undefined): ComposerSegment[] {
@@ -198,6 +261,21 @@ export function collectComposerSegments(node: Node, segments: ComposerSegment[])
       return;
     }
     const element = child as HTMLElement;
+    if (element.dataset?.composerResource) {
+      try {
+        const resource: unknown = JSON.parse(element.dataset.composerResource);
+        if (isResourceSnapshot(resource))
+          segments.push({
+            type: "resource",
+            text: resource.name,
+            resource,
+            ...(element.dataset.resourceAgentId ? { agentID: element.dataset.resourceAgentId } : {}),
+          });
+      } catch {
+        /* 忽略已损坏的编辑器标签。 */
+      }
+      return;
+    }
     if (element.dataset?.composerFile) {
       try {
         const reference = JSON.parse(element.dataset.composerFile) as ComposerFileReference;
@@ -251,6 +329,16 @@ export function normalizeComposerSegments(
         continue;
       }
       normalized.push(segment);
+      continue;
+    }
+    if (segment.type === "resource") {
+      if (
+        !normalized.some(
+          (existing) =>
+            existing.type === "resource" && resourceKey(existing.resource) === resourceKey(segment.resource),
+        )
+      )
+        normalized.push(segment);
       continue;
     }
     if (segment.type === "file") {
@@ -311,6 +399,13 @@ export function areComposerSegmentsEqual(
     if (!other || segment.type !== other.type) {
       return false;
     }
+    if (segment.type === "resource") {
+      return (
+        other.type === "resource" &&
+        segment.agentID === other.agentID &&
+        JSON.stringify(segment.resource) === JSON.stringify(other.resource)
+      );
+    }
     if (segment.type === "mention") {
       if (other.type !== "mention") {
         return false;
@@ -362,6 +457,7 @@ export function updateDrafts(
 export function serializeComposerSegments(segments: readonly ComposerSegment[] | null | undefined): string {
   return (segments ?? [])
     .map((segment) => {
+      if (segment.type === "resource") return "";
       if (segment.type === "mention") {
         const userID = segment.userId || "";
         const userName = segment.userName || userID;
@@ -563,7 +659,9 @@ export function getComposerSlashQueryAtSelection(root: HTMLElement | null | unde
   const prefixRange = document.createRange();
   prefixRange.selectNodeContents(root);
   prefixRange.setEnd(state.textNode, state.startOffset);
-  if (prefixRange.toString().trim()) {
+  const prefix = prefixRange.cloneContents();
+  prefix.querySelectorAll("[data-composer-resource]").forEach((element) => element.remove());
+  if (prefix.textContent?.trim()) {
     return null;
   }
   return state.query.toLowerCase();
@@ -658,6 +756,7 @@ function hasComposerContent(node: Node): boolean {
       element.tagName === "BR" ||
       element.dataset?.userId ||
       element.dataset?.composerSlashToken ||
+      element.dataset?.composerResource ||
       element.dataset?.composerFile
     ) {
       return true;
@@ -704,6 +803,7 @@ export function insertComposerSegmentsAtSelection(segments: readonly ComposerSeg
 export function replaceComposerSlashWithSegments(
   root: HTMLElement | null | undefined,
   segments: readonly ComposerSegment[] | null | undefined,
+  resourceRemoveLabel?: string,
 ): boolean {
   const slashState = getComposerSlashState(root);
   if (!slashState) {
@@ -724,7 +824,7 @@ export function replaceComposerSlashWithSegments(
 
   const marker = document.createTextNode("");
   const fragment = document.createDocumentFragment();
-  appendComposerSegments(fragment, segments);
+  appendComposerSegments(fragment, segments, resourceRemoveLabel);
   fragment.append(marker);
   range.insertNode(fragment);
 
@@ -818,7 +918,12 @@ function isComposerTokenNode(node: Node | null | undefined): node is HTMLElement
     return false;
   }
   const element = node as HTMLElement;
-  return Boolean(element.dataset?.userId || element.dataset?.composerSlashToken || element.dataset?.composerFile);
+  return Boolean(
+    element.dataset?.userId ||
+    element.dataset?.composerSlashToken ||
+    element.dataset?.composerResource ||
+    element.dataset?.composerFile,
+  );
 }
 
 function getAdjacentSlashTokenContext(node: Node, offset: number): { element: HTMLElement; textNode: Text } | null {

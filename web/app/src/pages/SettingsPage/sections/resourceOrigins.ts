@@ -16,5 +16,12 @@ export function skillOriginLabel(skill: SkillSummary, t: TranslateFn): string {
   if (kind === "builtin") {
     return t("resourcesSkillSystemBadge");
   }
+  if (kind === "unknown") {
+    return t("iaSkillsBadgeUnknown");
+  }
   return kind === "market" ? t("iaSkillsBadgeMarket") : t("iaSkillsBadgeLocal");
+}
+
+export function skillOriginHint(skill: SkillSummary, t: TranslateFn): string | undefined {
+  return skillOriginKind(skill) === "unknown" ? t("iaSkillsBadgeUntrackedHint") : undefined;
 }

@@ -282,9 +282,9 @@ func TestRuntimeRunsACPConversation(t *testing.T) {
 	}
 	mu.Lock()
 	defer mu.Unlock()
-	if len(events) != 5 || events[0].Kind != contract.TurnEventActivityUpdate || events[1].Kind != contract.TurnEventThoughtDelta ||
-		events[2].Kind != contract.TurnEventToolCallStart || events[3].Kind != contract.TurnEventToolCallUpdate ||
-		events[4].Kind != contract.TurnEventTextDelta {
+	if len(events) != 6 || events[0].Kind != contract.TurnEventActivityUpdate || events[1].Activity == nil || events[1].Activity.Kind != "token_usage" || events[2].Kind != contract.TurnEventThoughtDelta ||
+		events[3].Kind != contract.TurnEventToolCallStart || events[4].Kind != contract.TurnEventToolCallUpdate ||
+		events[5].Kind != contract.TurnEventTextDelta {
 		t.Fatalf("events = %+v", events)
 	}
 	for index, event := range events {

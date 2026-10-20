@@ -6,6 +6,7 @@ import (
 	"csgclaw/internal/agentengine/contract"
 	"csgclaw/internal/diagnostics"
 	"csgclaw/internal/modelprovider"
+	"csgclaw/internal/modelusage"
 	"csgclaw/internal/processgroup"
 	"encoding/json"
 	"errors"
@@ -462,6 +463,7 @@ func (m *appServerManager) Prompt(ctx context.Context, handle SessionHandle, req
 			"last_activity", waiter.currentLastActivity(),
 			"error", err,
 		)
+		m.publishTokenUsage(runtimeID, live, sessionID, waiter.currentTurnID(), nil, "snapshot")
 		m.publishAppServerEvent(promptFailedEvent(runtimeID, sessionID, err))
 		return resp, err
 	}
@@ -472,6 +474,7 @@ func (m *appServerManager) Prompt(ctx context.Context, handle SessionHandle, req
 		"duration", time.Since(waitStartAt),
 		"stop_reason", strings.TrimSpace(resp.StopReason),
 	)
+	m.publishTokenUsage(runtimeID, live, sessionID, waiter.currentTurnID(), nil, "snapshot")
 	m.publishAppServerEvent(promptCompletedEvent(runtimeID, sessionID, resp))
 	m.maybeCreateMemoryCheckpoint(live, sessionID)
 	return resp, nil
@@ -1475,6 +1478,9 @@ func (m *appServerManager) persistedThreadID(spec SessionSpec) string {
 }
 
 type appServerTurnWaiter struct {
+	// Guarded by liveSession.mu, alongside the thread's cumulative counters.
+	tokenUsage               modelusage.Usage
+	pendingUsage             map[string]modelusage.Usage
 	diagnostic               *diagnostics.Record
 	diagnosticEnds           map[string]time.Time
 	visibleActivity          bool
@@ -1520,6 +1526,7 @@ func (s *liveSession) registerAppServerTurnWaiter(threadID string) (*appServerTu
 		ch:           make(chan appServerTurnResult, 8),
 		lastActivity: "turn/start",
 	}
+	waiter.tokenUsage.ModelID = s.spec.Profile.ModelID
 	s.turnWaiters[threadID] = waiter
 	return waiter, nil
 }
@@ -1968,6 +1975,15 @@ func (m *appServerManager) waitAppServerTurn(ctx context.Context, live *liveSess
 			return PromptResponse{}, m.failTimedOutAppServerTurn(live, waiter, "maximum turn duration", maximumDuration)
 		case <-ctx.Done():
 			return m.stopCanceledAppServerTurn(ctx, live, waiter, "prompt context canceled")
+		case <-live.done:
+			// A terminal notification can arrive just before process exit.
+			if _, completed := waiter.terminalResult(); completed {
+				continue
+			}
+			if err := ctx.Err(); err != nil {
+				return PromptResponse{StopReason: StopReasonInterrupted}, err
+			}
+			return PromptResponse{}, fmt.Errorf("codex app-server exited during turn: runtime_id=%s thread_id=%s", live.spec.RuntimeID, waiter.threadID)
 		}
 	}
 }

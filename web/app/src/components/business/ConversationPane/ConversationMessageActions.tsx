@@ -1,6 +1,8 @@
+import { resourceMessageText } from "@/models/conversationResources";
 import { writeTextToClipboard } from "@/shared/lib/clipboard";
 import { DiagnosticMessageAction } from "@/components/business/TurnDiagnostics";
 import { diagnosticReference } from "@/models/diagnostics";
+import { messageTokenUsage, tokenCountLabel, visibleUsageModel } from "@/models/tokenUsage";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Check, Copy, MessageSquareReply } from "lucide-react";
 import { resolveRequestPath } from "@/api/client";
@@ -33,9 +35,11 @@ export function ConversationMessageActions({
   const [copying, setCopying] = useState(false);
   const [copyError, setCopyError] = useState("");
   const copiedTimerRef = useRef<number | null>(null);
-  const copyText = flattenMentionText(renderSlashCommandPreviewText(content));
+  const copyText = flattenMentionText(resourceMessageText(renderSlashCommandPreviewText(content), metadata));
   const imageURL = image?.download_url || image?.preview_url || "";
   const canCopy = Boolean(imageURL || copyText.replace(/\u200b/g, ""));
+  const usage = messageTokenUsage(metadata);
+  const usageModel = usage ? visibleUsageModel(usage.model_id) : "";
   const copyLabel = copied
     ? t("copiedToClipboard")
     : copying && imageURL
@@ -80,12 +84,14 @@ export function ConversationMessageActions({
     }, 2000);
   }
 
-  if (!canCopy && !onOpenThread && !leading && !diagnosticReference(metadata)) {
+  if (!canCopy && !onOpenThread && !leading && !diagnosticReference(metadata) && !usage) {
     return null;
   }
 
   return (
-    <div className={`message-action-controls ${className} ${leading ? "has-leading" : ""}`.trim()}>
+    <div
+      className={`message-action-controls ${className} ${leading ? "has-leading" : ""} ${usage ? "has-token-usage" : ""}`.trim()}
+    >
       {leading ? <span className="message-action-leading">{leading}</span> : null}
       <DiagnosticMessageAction metadata={metadata} t={t} iconOnly />
       {canCopy ? (
@@ -117,6 +123,28 @@ export function ConversationMessageActions({
         >
           <MessageSquareReply aria-hidden="true" />
         </button>
+      ) : null}
+      {usage ? (
+        <span
+          className="message-token-usage"
+          tabIndex={0}
+          title={
+            usage.known
+              ? t("turnTokenUsageDetails", {
+                  input: usage.input_tokens,
+                  output: usage.output_tokens,
+                  cached: usage.cached_input_tokens,
+                  reasoning: usage.reasoning_tokens,
+                })
+              : t("turnTokenUsageUnavailable")
+          }
+        >
+          {usage.known
+            ? t("turnTokenUsage", { count: tokenCountLabel(usage.total_tokens) })
+            : t("turnTokenUsageUnavailable")}
+          {usage.known && usage.partial ? ` ${t("turnTokenUsagePartial")}` : ""}
+          {usageModel ? ` · ${t("turnTokenUsageModel", { model: usageModel })}` : ""}
+        </span>
       ) : null}
     </div>
   );

@@ -1,16 +1,19 @@
 package activity
 
+import "csgclaw/internal/modelusage"
+
 // TurnProgress is the Web presentation snapshot of one Engine turn.
 // It contains display data only; it never controls execution or permissions.
 type TurnProgress struct {
-	ID        string         `json:"id"`
-	Revision  uint64         `json:"revision"`
-	Status    string         `json:"status"`
-	StartedAt string         `json:"started_at"`
-	UpdatedAt string         `json:"updated_at"`
-	EndedAt   string         `json:"ended_at,omitempty"`
-	Items     []ProgressItem `json:"items"`
-	Error     string         `json:"error,omitempty"`
+	Usage     *modelusage.Usage `json:"usage,omitempty"`
+	ID        string            `json:"id"`
+	Revision  uint64            `json:"revision"`
+	Status    string            `json:"status"`
+	StartedAt string            `json:"started_at"`
+	UpdatedAt string            `json:"updated_at"`
+	EndedAt   string            `json:"ended_at,omitempty"`
+	Items     []ProgressItem    `json:"items"`
+	Error     string            `json:"error,omitempty"`
 	// ErrorCode is passed to the presentation store; its public form lives in message metadata.
 	ErrorCode string `json:"-"`
 }

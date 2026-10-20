@@ -1,6 +1,7 @@
 package conv
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/url"
 	"strings"
@@ -150,7 +151,12 @@ func formatThreadContext(thread *channel.ThreadContext) string {
 	}
 	for _, message := range thread.Context {
 		content := strings.Join(strings.Fields(strings.TrimSpace(message.Content)), " ")
-		if content == "" && len(message.Attachments) == 0 {
+		var resources string
+		if selection := message.ResourceSelection; selection != nil && selection.Version == 1 && len(selection.Refs) > 0 {
+			data, _ := json.Marshal(selection)
+			resources = string(data)
+		}
+		if content == "" && len(message.Attachments) == 0 && resources == "" {
 			continue
 		}
 		out.WriteString("- ")
@@ -171,6 +177,10 @@ func formatThreadContext(thread *channel.ThreadContext) string {
 				out.WriteByte(' ')
 			}
 			out.WriteString(formatAttachmentSummary(message.Attachments))
+		}
+		if resources != "" {
+			out.WriteString("\n  Historical resources (context only; current-turn selections are provided separately): ")
+			out.WriteString(resources)
 		}
 		out.WriteByte('\n')
 	}

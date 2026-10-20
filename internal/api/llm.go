@@ -2,6 +2,7 @@ package api
 
 import (
 	"csgclaw/internal/diagnostics"
+	"csgclaw/internal/modelusage"
 	"encoding/json"
 	"errors"
 	"io"
@@ -204,8 +205,8 @@ func writeLLMError(w http.ResponseWriter, err error) {
 }
 
 // Codex includes stable session and turn IDs on each HTTP model request.
-// Requests without that contract (including current DSH and WebSockets) remain
-// explicitly unmeasured rather than being assigned by Agent identity alone.
+// Bind diagnostics and usage completeness only with that exact identity.
+// Requests without it are never assigned by Agent identity alone.
 func (h *Handler) withLLMDiagnostic(r *http.Request, agentID string) *http.Request {
 	raw := r.Header.Get("X-Codex-Turn-Metadata")
 	if len(raw) > 8192 || raw == "" {
@@ -225,9 +226,14 @@ func (h *Handler) withLLMDiagnostic(r *http.Request, agentID string) *http.Reque
 	if meta.Thread == "" || meta.Turn == "" || len(meta.Thread) > 256 || len(meta.Turn) > 256 {
 		return r
 	}
-	r = r.WithContext(llm.WithNativeRequestMetadata(r.Context(), meta.Thread, meta.Turn))
-	if h.im == nil {
-		return r
+	ctx := llm.WithNativeRequestMetadata(r.Context(), meta.Thread, meta.Turn)
+	if h.im != nil {
+		ctx = diagnostics.WithNativeLookup(ctx, h.im.Diagnostics(), agentID, meta.Thread, meta.Turn)
 	}
-	return r.WithContext(diagnostics.WithNativeLookup(r.Context(), h.im.Diagnostics(), agentID, meta.Thread, meta.Turn))
+	if runtime := h.connectorCodexRuntime(); runtime != nil {
+		ctx = modelusage.WithRequestObserver(ctx, func(usage *modelusage.Usage) {
+			runtime.ObserveModelResponseUsage(agentID, meta.Thread, meta.Turn, usage)
+		})
+	}
+	return r.WithContext(ctx)
 }

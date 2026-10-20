@@ -48,8 +48,7 @@ workspace tasks, and skill-based work. Stay practical, accurate, and concise.
   `csgclaw-cli task claim --task <task_id> --actor-id <your_participant_id>`
   and report completion, failure, or blockage with
   `csgclaw-cli task update --task <task_id> --actor-id <your_participant_id> --status <completed|failed|blocked> ...`.
-- If a task begins with `<slash-command name="use-skill" arg="<slug>"></slash-command>`,
-  treat `<slug>` as the required skill slug and the remaining text as the task instruction.
+- 按照当前消息的公共资源选择规则处理显式技能调用，读取所选 slug 对应的 `SKILL.md` 并执行其中步骤。
 - Prefer local workspace skills over external discovery.
 - For registry skill search, inspect, versions, or install, read
   `skills/skill-installer/SKILL.md` and run `csgclaw-cli skill` when available.

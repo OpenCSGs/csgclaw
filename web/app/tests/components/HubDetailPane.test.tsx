@@ -22,7 +22,8 @@ function t(key: string, params: Record<string, string | number> = {}) {
     close: "Close",
     createAgent: "Create",
     agentPublishCommunity: "Publish to community",
-    iaTemplateSameNameOnHub: "Same-name template on AgenticHub",
+    resourcesTemplatePublished: "Published",
+    resourcesTemplatePublishedOnHub: "Published on AgenticHub",
     agentPublishCommunityAndDeploy: "Publish and deploy",
     agentPublishCommunityTemplateOnly: "Publish template only",
     agentPublishLoginRequired: "Sign in first",
@@ -719,6 +720,25 @@ async function openMCPDetail(user: ReturnType<typeof userEvent.setup>, name = /g
 }
 
 describe("HubDetailPane", () => {
+  it.each(["local", "remote"] as const)("reveals a selected %s template in My templates", (kind) => {
+    const selected = {
+      ...template,
+      id: kind === "local" ? "local.saved" : "alice/saved",
+      name: "saved",
+      source: { kind },
+    };
+    renderHubDetailPane("template", {
+      selectedTemplate: selected,
+      templateUsername: "alice",
+      templates: [selected, template],
+    });
+    expect(screen.getByRole("tab", { name: "taskEntryOverview_personal", hidden: true })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(document.querySelector('button[aria-current="true"]')).toHaveTextContent("saved");
+  });
+
   it.each(["local", "remote"])("keeps %s template details closed while creating an agent", async (kind) => {
     const user = userEvent.setup();
     const selectedTemplate: HubTemplate = {
@@ -977,7 +997,7 @@ describe("HubDetailPane", () => {
   });
 
   it.each([false, true])(
-    "keeps publishing available with a same-name cloud template (inline: %s)",
+    "marks same-name cloud templates as published and hides publishing (inline: %s)",
     async (inlineTemplateDetail) => {
       const localTemplate = {
         ...template,
@@ -996,11 +1016,12 @@ describe("HubDetailPane", () => {
         ],
       });
       if (!inlineTemplateDetail) await openTemplateDetail(userEvent.setup());
-      expect(screen.getByRole("link", { name: "Same-name template on AgenticHub" })).toHaveAttribute(
+      expect(screen.getByRole("link", { name: "Published on AgenticHub" })).toHaveAttribute(
         "href",
         "https://custom.example:8443/agentichub?view=resources&subview=template",
       );
-      expect(screen.getByRole("button", { name: "Publish to community" })).toBeEnabled();
+      expect(screen.queryByRole("button", { name: "Publish to community" })).not.toBeInTheDocument();
+      expect(screen.getAllByText("Published").length).toBeGreaterThan(0);
     },
   );
 
@@ -1040,14 +1061,16 @@ describe("HubDetailPane", () => {
         { ...localTemplate, id: "alice/demo-template", namespace: "alice", source: { kind: "remote" } },
       ],
     });
-    expect(screen.getByRole("link", { name: "Same-name template on AgenticHub" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Published on AgenticHub" })).toHaveAttribute(
       "href",
       "https://qa.opencsg.com/agentichub?view=resources&subview=template",
     );
-    expect(screen.getByRole("button", { name: "Publish to community" })).toBeEnabled();
+    expect(screen.queryByRole("button", { name: "Publish to community" })).not.toBeInTheDocument();
+    expect(screen.getAllByText("Published").length).toBeGreaterThan(0);
     view.rerenderOptions({ templates: [localTemplate] });
-    expect(screen.queryByRole("link", { name: "Same-name template on AgenticHub" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Published on AgenticHub" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Publish to community" })).toBeEnabled();
+    expect(screen.queryByText("Published")).not.toBeInTheDocument();
   });
 
   it("publishes a local DSH template to the community", async () => {

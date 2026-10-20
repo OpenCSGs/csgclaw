@@ -10,6 +10,7 @@ import (
 	"csgclaw/internal/activity"
 	"csgclaw/internal/agentengine"
 	"csgclaw/internal/channel"
+	"csgclaw/internal/modelusage"
 )
 
 type turnProgressStore interface {
@@ -159,7 +160,14 @@ func (p *progressState) observe(ctx context.Context, event agentengine.TurnEvent
 			immediate = true
 		}
 	case agentengine.TurnEventActivityUpdate:
-		if event.Activity != nil && (event.Activity.Kind == string(activity.RuntimeEventActionDecision) || event.Activity.Kind == string(activity.RuntimeEventUserInputResolved)) {
+		if event.Activity != nil && event.Activity.Kind == modelusage.Kind {
+			usage := modelusage.Decode(event.Activity.Payload)
+			if usage == nil {
+				return nil
+			}
+			p.snapshot.Usage = usage
+			immediate = true
+		} else if event.Activity != nil && (event.Activity.Kind == string(activity.RuntimeEventActionDecision) || event.Activity.Kind == string(activity.RuntimeEventUserInputResolved)) {
 			p.snapshot.Status = "running"
 			immediate = true
 		} else {
@@ -216,8 +224,15 @@ func (p *progressState) finish(ctx context.Context, result agentengine.TurnResul
 		p.timer = nil
 	}
 	p.snapshot.Status = string(result.Status)
+	if p.snapshot.Usage != nil && result.Status != agentengine.TurnSucceeded {
+		usage := *p.snapshot.Usage
+		usage.Partial = true
+		p.snapshot.Usage = &usage
+	}
 	p.snapshot.EndedAt = time.Now().UTC().Format(time.RFC3339Nano)
-	if result.Error != nil {
+	// A canceled runtime call can carry context.Canceled as its cause. Keep the
+	// stopped state and interrupted tools without presenting a runtime failure.
+	if result.Status == agentengine.TurnFailed && result.Error != nil {
 		p.snapshot.Error = result.Error.Message
 		p.snapshot.ErrorCode = string(result.Error.Code)
 	}

@@ -1,6 +1,7 @@
+import { PendingTurnReplies } from "./PendingTurnReplies";
 import { TaskConversationControls } from "../TaskConversationControls/TaskConversationControls";
 import { WorkingTurnControls } from "@/components/business/ConversationPane/WorkingTurnControls";
-import { workingParticipantForProgress } from "@/models/turnWorkingParticipant";
+import { workingParticipantForProgress, workingParticipantForTurnMessage } from "@/models/turnWorkingParticipant";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { errorMessage } from "@/api/client";
 import {
@@ -50,7 +51,7 @@ function hasBlockingAgentDetailChangesAfterMetadataCommit(
   return JSON.stringify(normalizedDraft) !== JSON.stringify(props.savedDraft);
 }
 
-function AgentDetailSidePanel({ onClose, onOpenDM, ...props }: AgentDetailSidePanelProps) {
+function AgentDetailSidePanel({ onClose, onOpenDM, onNewTask, ...props }: AgentDetailSidePanelProps) {
   const [dialogPortalContainer, setDialogPortalContainer] = useState<HTMLDivElement | null>(null);
   const detailPaneRef = useRef<AgentDetailPaneHandle | null>(null);
   const initialFocusRef = useRef<HTMLButtonElement | null>(null);
@@ -70,6 +71,13 @@ function AgentDetailSidePanel({ onClose, onOpenDM, ...props }: AgentDetailSidePa
       await onOpenDM(...args);
     },
     [onOpenDM, requestClose],
+  );
+  const handleNewTask = useCallback(
+    async (...args: Parameters<NonNullable<typeof onNewTask>>) => {
+      if (requestClose(false) === false) return;
+      await onNewTask?.(...args);
+    },
+    [onNewTask, requestClose],
   );
 
   return (
@@ -106,6 +114,7 @@ function AgentDetailSidePanel({ onClose, onOpenDM, ...props }: AgentDetailSidePa
             {...props}
             dialogPortalContainer={dialogPortalContainer}
             onOpenDM={handleOpenDM}
+            onNewTask={onNewTask ? handleNewTask : undefined}
           />
         </div>
       </DialogContent>
@@ -240,6 +249,9 @@ function ConversationPaneContent({
   authStatuses,
   authBusyProvider,
   onProviderLogin,
+  resourceAgentID,
+  onPickResources,
+  onPickThreadResources,
   draftSegments,
   draftText,
   attachmentDrafts,
@@ -336,19 +348,22 @@ function ConversationPaneContent({
     const threadMessages =
       threadVisible && activeThreadView?.root ? [activeThreadView.root, ...(activeThreadView.replies ?? [])] : [];
     for (const message of [...visibleMessages, ...threadMessages]) {
+      const represented = workingParticipantForTurnMessage(message, conversation.id, workingParticipantsWithActivity);
+      if (represented) moved.add(represented);
       const participant = workingParticipantForProgress(message, conversation.id, workingParticipantsWithActivity);
-      if (
-        !message.id ||
-        !participant ||
-        !(participant.showContextUsage || participant.contextUsage || (participant.canStop && onStopWorkingTurn))
-      )
-        continue;
-      byMessage.set(message.id, participant);
-      moved.add(participant);
+      if (!message.id || !participant) continue;
+      if (participant.showContextUsage || participant.contextUsage || (participant.canStop && onStopWorkingTurn)) {
+        byMessage.set(message.id, participant);
+      }
     }
     return {
       byMessage,
-      composerParticipants: workingParticipantsWithActivity.filter((participant) => !moved.has(participant)),
+      pendingReplies: workingParticipantsWithActivity.filter(
+        (participant) => !moved.has(participant) && !participant.threadRootID,
+      ),
+      composerParticipants: workingParticipantsWithActivity.filter(
+        (participant) => !moved.has(participant) && participant.threadRootID,
+      ),
     };
   }, [
     activeThreadRootID,
@@ -377,7 +392,7 @@ function ConversationPaneContent({
     [messageControls.byMessage, onStopWorkingTurn, t],
   );
 
-  useConversationDraftEditorSync(editorRef, draftSegments);
+  useConversationDraftEditorSync(editorRef, draftSegments, t("remove"));
 
   useEffect(() => {
     setClearMessagesDialogOpen(false);
@@ -453,6 +468,8 @@ function ConversationPaneContent({
 
   const threadPanel = activeThreadRootID ? (
     <Conversation.ThreadPanel
+      resourceAgentID={resourceAgentID}
+      onPickResources={onPickThreadResources}
       renderTurnControls={renderTurnControls}
       agents={agents}
       thread={activeThreadView}
@@ -524,6 +541,16 @@ function ConversationPaneContent({
       />
 
       <Conversation.MessageList
+        footerSlot={
+          <PendingTurnReplies
+            participants={messageControls.pendingReplies}
+            agents={agents}
+            usersById={usersById}
+            t={t}
+            onAction={handleOpenActivityPanel}
+            onStop={onStopWorkingTurn}
+          />
+        }
         renderTurnControls={renderTurnControls}
         renderMessageFooter={taskFooter}
         agents={agents}
@@ -551,6 +578,8 @@ function ConversationPaneContent({
         <AgentQuestionComposer mode={questionMode} t={t} usersById={usersById} />
       ) : (
         <Conversation.Composer
+          resourceAgentID={resourceAgentID}
+          onPickResources={onPickResources}
           fileScope={tools.fileScope}
           authBusyProvider={authBusyProvider}
           authStatuses={authStatuses}

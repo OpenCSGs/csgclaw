@@ -501,17 +501,43 @@ func TestRunRestoresConnectorsBeforeOnReady(t *testing.T) {
 				t.Fatal(err)
 			}
 			restoring.Store(true)
+			listener, err := net.Listen("tcp", "127.0.0.1:0")
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer listener.Close()
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
+			listening := make(chan struct{})
 			ready := make(chan struct{}, 1)
 			done := make(chan error, 1)
 			go func() {
-				done <- Run(Options{ListenAddr: "127.0.0.1:0", Context: ctx, AppsStatePath: statePath, OnReady: func(*api.Handler, chi.Router) { ready <- struct{}{} }})
+				done <- Run(Options{
+					Listener:      listener,
+					Context:       ctx,
+					AppsStatePath: statePath,
+					OnListening:   func() { close(listening) },
+					OnReady:       func(*api.Handler, chi.Router) { ready <- struct{}{} },
+				})
 			}()
 			select {
 			case <-entered:
 			case <-time.After(5 * time.Second):
 				t.Fatal("connector restoration did not begin")
+			}
+			select {
+			case <-listening:
+			case <-time.After(time.Second):
+				t.Fatal("HTTP readiness waited for connector restoration")
+			}
+			client := &http.Client{Timeout: time.Second}
+			response, err := client.Get("http://" + listener.Addr().String() + "/healthz")
+			if err != nil {
+				t.Fatal(err)
+			}
+			response.Body.Close()
+			if response.StatusCode != http.StatusOK {
+				t.Fatalf("HTTP status during connector restoration = %d, want 200", response.StatusCode)
 			}
 			select {
 			case <-ready:
@@ -544,5 +570,23 @@ func TestRunRestoresConnectorsBeforeOnReady(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestRunDoesNotReportListeningAfterCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	listening := make(chan struct{}, 1)
+	if err := Run(Options{
+		ListenAddr:  "127.0.0.1:0",
+		Context:     ctx,
+		OnListening: func() { listening <- struct{}{} },
+	}); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-listening:
+		t.Fatal("HTTP readiness was reported after cancellation")
+	default:
 	}
 }

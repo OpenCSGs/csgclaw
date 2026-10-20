@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import { useInfiniteQuery } from "@tanstack/react-query";
 import { Archive, MoreHorizontal, Pin, PinOff, Search, X } from "lucide-react";
 import {
   Button,
@@ -22,7 +21,7 @@ import {
 } from "@/components/ui";
 import { AgentAvatarContent } from "@/components/business/AgentAvatar";
 import { RoomAvatar } from "@/components/business/RoomAvatar";
-import { fetchTaskConversations } from "@/api/taskConversations";
+import { useTaskConversationPages } from "@/hooks/workspace/useTaskConversationPages";
 import { errorMessage } from "@/api/client";
 import { uniqueTaskConversations } from "@/models/taskConversations";
 import { resolveConversationUser } from "@/models/conversations";
@@ -124,13 +123,7 @@ export function TaskConversationList({
     const timer = window.setTimeout(() => setQuery(search), 250);
     return () => window.clearTimeout(timer);
   }, [search]);
-  const list = useInfiniteQuery({
-    queryKey: ["task-conversations", archived, query],
-    initialPageParam: 0,
-    queryFn: ({ pageParam }) => fetchTaskConversations(query, archived, pageParam),
-    getNextPageParam: (last, pages) =>
-      last.has_more ? pages.reduce((count, page) => count + page.rooms.length, 0) : undefined,
-  });
+  const list = useTaskConversationPages(archived, query);
   const allRooms = uniqueTaskConversations(list.data?.pages ?? []);
   const directoryPaths = Array.from(
     new Set([
@@ -450,7 +443,7 @@ export function TaskConversationList({
           </p>
         ) : null}
         {!list.isPending && !list.isError && !rooms.length ? (
-          <p className={styles.empty}>{t(archived ? "taskEntryNoArchived" : "taskEntryNoHistory")}</p>
+          <p className={styles.empty}>{t(archived ? "archivedEmpty" : "taskEntryNoHistory")}</p>
         ) : null}
         {list.hasNextPage ? (
           <Button

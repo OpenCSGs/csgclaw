@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"csgclaw/internal/config"
+	skillinstall "csgclaw/internal/skill/installstate"
 
 	"gopkg.in/yaml.v3"
 )
@@ -23,6 +24,7 @@ type SkillSummary struct {
 	Name        string `json:"name"`
 	Description string `json:"description,omitempty"`
 	Error       string `json:"error,omitempty"`
+	Source      string `json:"source,omitempty"`
 }
 
 func SkillsRoot() (string, error) {
@@ -39,6 +41,10 @@ func List(root string) ([]SkillSummary, error) {
 		return nil, fmt.Errorf("skills root is required")
 	}
 	entries, err := os.ReadDir(root)
+	if err != nil {
+		return nil, err
+	}
+	records, err := skillinstall.Read(root)
 	if err != nil {
 		return nil, err
 	}
@@ -65,6 +71,7 @@ func List(root string) ([]SkillSummary, error) {
 		items = append(items, SkillSummary{
 			Name:        entry.Name(),
 			Description: description,
+			Source:      records[entry.Name()].SourceKind(),
 		})
 	}
 	slices.SortFunc(items, func(left, right SkillSummary) int {
@@ -82,11 +89,13 @@ func Delete(root, name string) error {
 	if err != nil {
 		return err
 	}
-	skillDir, err := ResolveDir(root, cleanName)
-	if err != nil {
-		return err
-	}
-	return os.RemoveAll(skillDir)
+	return skillinstall.Update(root, cleanName, nil, func() error {
+		skillDir, err := ResolveDir(root, cleanName)
+		if err != nil {
+			return err
+		}
+		return os.RemoveAll(skillDir)
+	})
 }
 
 func NormalizeName(name string) (string, error) {

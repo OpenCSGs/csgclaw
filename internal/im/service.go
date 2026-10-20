@@ -2039,6 +2039,26 @@ func (s *Service) UpdateUser(req UpdateUserRequest) (User, bool, error) {
 	return user, true, nil
 }
 
+func (s *Service) MessageByClientID(roomID, senderID, clientMessageID string) (Message, bool) {
+	if strings.TrimSpace(clientMessageID) == "" {
+		return Message{}, false
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	senderID = s.resolveUserIDLocked(strings.TrimSpace(senderID))
+	if _, ok := s.users[senderID]; !ok {
+		return Message{}, false
+	}
+	if room := s.rooms[strings.TrimSpace(roomID)]; room != nil {
+		for _, existing := range room.Messages {
+			if existing.SenderID == senderID && existing.ClientMessageID == strings.TrimSpace(clientMessageID) {
+				return s.presentMessageLocked(*room, existing, ""), true
+			}
+		}
+	}
+	return Message{}, false
+}
+
 func (s *Service) CreateMessage(req CreateMessageRequest) (Message, error) {
 	message, _, err := s.CreateMessageOnce(req)
 	return message, err
@@ -2057,26 +2077,14 @@ func (s *Service) CreateMessageOnce(req CreateMessageRequest) (Message, bool, er
 	if senderID == "" {
 		return Message{}, false, fmt.Errorf("sender_id is required")
 	}
-	if content == "" && len(req.Attachments) == 0 && req.ResolveAttachments == nil {
+	if content == "" && len(req.Attachments) == 0 && req.ResolveAttachments == nil && !req.ResourceSelection.SingleSkill() {
 		return Message{}, false, fmt.Errorf("content is required")
 	}
 
 	// A completed retry does not need to reopen or copy its attachment sources.
 	// The locked check below still resolves retries racing with an initial send.
-	if clientMessageID != "" {
-		s.mu.RLock()
-		senderUserID := s.resolveUserIDLocked(senderID)
-		_, knownSender := s.users[senderUserID]
-		if room := s.rooms[roomID]; knownSender && room != nil {
-			for _, existing := range room.Messages {
-				if existing.SenderID == senderUserID && existing.ClientMessageID == clientMessageID {
-					message := s.presentMessageLocked(*room, existing, "")
-					s.mu.RUnlock()
-					return message, false, nil
-				}
-			}
-		}
-		s.mu.RUnlock()
+	if message, found := s.MessageByClientID(roomID, senderID, clientMessageID); found {
+		return message, false, nil
 	}
 
 	if req.ResolveAttachments != nil {
@@ -2141,7 +2149,7 @@ func (s *Service) CreateMessageOnce(req CreateMessageRequest) (Message, bool, er
 
 	message := s.newMessage("", senderID, MessageKindMessage, content)
 	message.ClientMessageID = clientMessageID
-	message.Metadata = utils.CloneAnyMap(req.Metadata)
+	message.Metadata = utils.CloneAnyMap(apitypes.WithResourceSelection(req.Metadata, req.ResourceSelection))
 	if !req.DiagnosticStart.IsZero() {
 		if message.Metadata == nil {
 			message.Metadata = map[string]any{}
@@ -2973,6 +2981,9 @@ func cloneMessages(messages []Message) []Message {
 
 func cloneMessage(message Message) Message {
 	cloned := message
+	if selection := apitypes.ResourceSelectionFromMetadata(message.Metadata); selection != nil {
+		cloned.Metadata = apitypes.WithResourceSelection(message.Metadata, selection)
+	}
 	cloned.Mentions = append([]Mention(nil), message.Mentions...)
 	cloned.Attachments = cloneMessageAttachments(message.Attachments)
 	cloned.Event = cloneEventPayload(message.Event)

@@ -1,4 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { QueryClientContext } from "@tanstack/react-query";
+import { workspaceQueryKeys } from "@/hooks/workspace/workspaceQueries";
+import { useContext, useCallback, useEffect, useRef, useState } from "react";
 import {
   connectAgentApp,
   ensureFeishuResource,
@@ -15,6 +17,7 @@ import {
 } from "@/api/apps";
 
 export function useAgentApps(agentID: string, active: boolean) {
+  const queryClient = useContext(QueryClientContext);
   const [snapshot, setSnapshot] = useState<{
     agentID: string;
     items: AppInstallation[];
@@ -86,6 +89,7 @@ export function useAgentApps(agentID: string, active: boolean) {
     try {
       const result = await operation();
       await reload();
+      await queryClient?.invalidateQueries({ queryKey: workspaceQueryKeys.agentMCPServers(agentID) });
       return result;
     } finally {
       if (currentAgent.current === agentID) setBusyID("");

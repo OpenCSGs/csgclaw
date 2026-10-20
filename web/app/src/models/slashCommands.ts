@@ -190,3 +190,89 @@ export type SkillContinuation = {
 
 export const builtinSlashCommandNames = ["new"];
 export const suggestedSlashCommandNames = suggestedActionCommands.map((command) => command.name);
+
+export function slashSkillCommandText(skillName: string): string {
+  return slashSkillCommandTextWithBody(skillName, "");
+}
+
+function slashSkillCommandTextWithBody(skillName: string, body = ""): string {
+  const skillArg = escapeXMLAttribute(String(skillName || "").trim());
+  const base = `<slash-command name="use-skill" arg="${skillArg}"></slash-command>`;
+  const normalizedBody = String(body ?? "").trim();
+  if (!normalizedBody) {
+    return base;
+  }
+  return `${base} ${normalizedBody}`;
+}
+
+export function normalizeSlashShorthandForPayload(text: string): string {
+  const shorthand = parseSlashShorthandToPayload(text);
+  if (!shorthand) {
+    return text;
+  }
+  if (shorthand.name === "new") {
+    return slashNewConversationCommandTextWithBody(shorthand.body);
+  }
+  return slashSkillCommandTextWithBody(shorthand.arg, shorthand.body);
+}
+
+function slashNewConversationCommandTextWithBody(body = ""): string {
+  const base = '<slash-command name="new" arg="conversation"></slash-command>';
+  const normalizedBody = String(body ?? "").trim();
+  if (!normalizedBody) {
+    return base;
+  }
+  return `${base} ${normalizedBody}`;
+}
+
+export function parseSlashShorthandToPayload(
+  text: string,
+): { arg: string; body: string; name: "new" | "use-skill" } | null {
+  const trimmed = text.trimStart();
+  if (!trimmed.startsWith("/") || trimmed.startsWith("//")) {
+    return null;
+  }
+
+  const afterSlash = trimmed.slice(1).replace(/^\s+/, "");
+  if (!afterSlash) {
+    return null;
+  }
+  let arg = afterSlash;
+  let body = "";
+  for (let index = 0; index < afterSlash.length; index++) {
+    if (/\s/u.test(afterSlash[index])) {
+      arg = afterSlash.slice(0, index);
+      body = afterSlash.slice(index);
+      break;
+    }
+  }
+  if (!arg) {
+    return null;
+  }
+  if (arg.toLowerCase() === "new") {
+    return {
+      arg: "conversation",
+      body: body.trim(),
+      name: "new",
+    };
+  }
+  if (!isValidSkillSlug(arg)) {
+    return null;
+  }
+  return {
+    arg,
+    body: body.trim(),
+    name: "use-skill",
+  };
+}
+
+function isValidSkillSlug(value: string): boolean {
+  if (!value || value === "." || value === ".." || /[/\\]/u.test(value)) {
+    return false;
+  }
+  return /^[A-Za-z0-9._-]+$/u.test(value);
+}
+
+function escapeXMLAttribute(value: string): string {
+  return value.replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
+}

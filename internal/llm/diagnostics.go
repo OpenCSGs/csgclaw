@@ -3,6 +3,7 @@ package llm
 import (
 	"bytes"
 	"csgclaw/internal/diagnostics"
+	"csgclaw/internal/modelusage"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -14,13 +15,14 @@ import (
 // Measure every upstream attempt through response consumption, including
 // streaming bodies and retries. This is client-observed LLM service latency,
 // including network/gateway time, not pure model compute or first-token time.
-func (s *Service) modelRequest(req *http.Request) (*http.Response, error) {
+func (s *Service) modelRequest(req *http.Request, stream bool) (*http.Response, error) {
 	logModelRequest(req)
 	if !diagnostics.Enabled(req.Context()) {
 		resp, err := s.client.Do(req)
 		if err != nil {
 			logModelTransportFailure(req, err)
 		}
+		observeResponseUsage(resp, stream, modelusage.RequestObserver(req.Context()))
 		return resp, err
 	}
 	operation := "responses"
@@ -36,6 +38,7 @@ func (s *Service) modelRequest(req *http.Request) (*http.Response, error) {
 		return resp, err
 	}
 	update(resp.StatusCode, nil)
+	observeResponseUsage(resp, stream, modelusage.RequestObserver(req.Context()))
 	resp.Body = &observedModelBody{ReadCloser: resp.Body, started: start, status: resp.StatusCode, stream: strings.HasPrefix(strings.ToLower(resp.Header.Get("Content-Type")), "text/event-stream"), update: update, finish: finish}
 	return resp, nil
 }

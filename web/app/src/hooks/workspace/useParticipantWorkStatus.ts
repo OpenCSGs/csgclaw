@@ -69,7 +69,11 @@ export function useParticipantWorkStatus({ agents, users }: UseParticipantWorkSt
         event.participant.user_id,
       ].filter((value): value is string => Boolean(value));
       participantIDs.forEach((id) => observedLeaseIdentitiesRef.current.delete(id));
-      dispatch({ participantIDs, type: "participantLifecycle" });
+      // Profile/status updates may reset legacy detection, but do not end an
+      // authoritative work lease or discard its stop control.
+      if (event.type === "participant.deleted") {
+        dispatch({ participantIDs, type: "participantLifecycle" });
+      }
       return;
     }
     if (event?.type === "room.deleted") {

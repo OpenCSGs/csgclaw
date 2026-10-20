@@ -1,11 +1,18 @@
+import "@/components/business/ResourceTag";
+import {
+  ConversationResourcePicker,
+  useComposerResourcePicker,
+  type ComposerResourceProps,
+} from "@/components/business/ConversationResourcePicker";
 import { ComposerAddMenu } from "./ComposerAddMenu";
+import { canSendComposer, selectedResources } from "@/models/conversationResources";
 import type { ChatFileScope } from "@/components/business/ChatSidePanel/types";
 import { useFileMentions } from "./FileMentionPicker";
 import type { SkillContinuation } from "@/models/slashCommands";
-import { WorkingTurnControls } from "./WorkingTurnControls";
+import { WorkingTurnStatus } from "./WorkingTurnStatus";
 import { memo, useId, useMemo, useRef } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent, RefObject, ReactNode } from "react";
-import { ArrowUp, ChevronRight, RotateCcw, Square, Undo2 } from "lucide-react";
+import { ArrowUp, RotateCcw, Square, Undo2 } from "lucide-react";
 import { CLIProxyAuthControl } from "@/components/business/ProfileControls";
 import type { DocumentPreviewRequest } from "@/components/business/DocumentPreviewPanel";
 import { Button, Tooltip } from "@/components/ui";
@@ -17,6 +24,7 @@ import {
   insertComposerSegmentsAtSelection,
   insertPlainTextAtSelection,
   normalizeTextMentions,
+  removeComposerResourceToken,
   type ComposerMentionUser,
   type ComposerSegment,
 } from "@/models/composer";
@@ -27,15 +35,13 @@ import { SlashPicker } from "./SlashPicker";
 import { AttachmentDraftStrip } from "./ConversationAttachments";
 import { dataTransferHasFiles, filesFromDataTransfer } from "./attachmentFiles";
 import {
-  ConversationWorkingActions,
   type ComposerSendStatus,
-  type ConversationWorkingAction,
   type ConversationWorkingParticipant,
   type MentionPickerUser,
   type VoidOrPromise,
 } from "./types";
 
-export type ConversationComposerProps = {
+export type ConversationComposerProps = ComposerResourceProps & {
   fileScope?: ChatFileScope;
   authBusyProvider: string;
   authStatuses: CLIProxyAuthStatusMap;
@@ -84,6 +90,8 @@ export type ConversationComposerProps = {
 };
 
 export const ConversationComposer = memo(function ConversationComposer({
+  resourceAgentID,
+  onPickResources,
   fileScope,
   authBusyProvider,
   authStatuses,
@@ -147,7 +155,15 @@ export const ConversationComposer = memo(function ConversationComposer({
   const composerHelpId = useId();
   const isSending = sendStatus === "sending";
   const interactionDisabled = composerDisabled || isSending;
-  const sendDisabled = interactionDisabled || (!draftText.trim() && attachmentDrafts.length === 0);
+  const resourcePicker = useComposerResourcePicker({
+    resourceAgentID,
+    onPickResources,
+    editorRef,
+    selected: selectedResources(draftSegments),
+    disabled: interactionDisabled,
+  });
+  const sendDisabled =
+    interactionDisabled || resourcePicker.active || !canSendComposer(draftSegments, attachmentDrafts.length);
   const actionSuggestions = useMemo(() => composerActionSuggestions(draftText), [draftText]);
 
   function handleFiles(files: File[]) {
@@ -159,7 +175,7 @@ export const ConversationComposer = memo(function ConversationComposer({
 
   return (
     <footer className={`composer${workingParticipants.length > 0 ? " has-working-status" : ""}`}>
-      {slashPickerOpen ? (
+      {!resourcePicker.active && slashPickerOpen ? (
         <SlashPicker
           candidates={slashCandidates}
           activeIndex={slashIndex}
@@ -169,7 +185,7 @@ export const ConversationComposer = memo(function ConversationComposer({
           onSelect={(name) => onApplySlashCandidate(name)}
         />
       ) : null}
-      {fileScope ? (
+      {resourcePicker.active ? null : fileScope ? (
         fileMentions.picker
       ) : mentionCandidates.length > 0 ? (
         <MentionPicker users={mentionCandidates} activeIndex={mentionIndex} t={t} onSelect={onApplyMention} />
@@ -220,7 +236,14 @@ export const ConversationComposer = memo(function ConversationComposer({
           onPreviewAttachment={onPreviewAttachment}
           onRemove={onRemoveAttachment}
         />
-        <div className="composer-editor-wrap">
+        {resourcePicker.pickerProps ? (
+          <ConversationResourcePicker
+            key={`${resourceAgentID}:${resourcePicker.pickerProps.kind}`}
+            {...resourcePicker.pickerProps}
+            t={t}
+          />
+        ) : null}
+        <div className="composer-editor-wrap" hidden={resourcePicker.active}>
           {draftSegments.length === 0 ? (
             <div className="composer-placeholder" aria-hidden="true">
               {composerDisabled ? composerDisabledReason || t("profileIncomplete") : t("inputPlaceholder")}
@@ -238,8 +261,12 @@ export const ConversationComposer = memo(function ConversationComposer({
             aria-describedby={composerHelpId}
             aria-disabled={interactionDisabled}
             onInput={sync}
-            onClick={sync}
+            onClick={(event) => {
+              if (!interactionDisabled) removeComposerResourceToken(event.currentTarget, event.target);
+              sync();
+            }}
             onKeyDown={(event) => {
+              if (event.target instanceof Element && event.target.closest("[data-composer-resource-remove]")) return;
               if (!fileMentions.handleKeyDown(event)) onComposerKeyDown(event);
             }}
             onCompositionStart={onComposerCompositionStart}
@@ -267,7 +294,7 @@ export const ConversationComposer = memo(function ConversationComposer({
             }}
           />
         </div>
-        {actionSuggestions.length > 0 ? (
+        {!resourcePicker.active && actionSuggestions.length > 0 ? (
           <div className="composer-action-suggestions" aria-label={t("suggestedActions")}>
             <span>{t("suggestedActions")}</span>
             {actionSuggestions.map((suggestion) => (
@@ -285,7 +312,12 @@ export const ConversationComposer = memo(function ConversationComposer({
           </div>
         ) : null}
         <div className="composer-toolbar">
-          <ComposerAddMenu disabled={interactionDisabled} t={t} onAddFiles={() => fileInputRef.current?.click()} />
+          <ComposerAddMenu
+            onOpenResourcePicker={resourcePicker.open}
+            disabled={interactionDisabled}
+            t={t}
+            onAddFiles={() => fileInputRef.current?.click()}
+          />
           <input
             ref={fileInputRef}
             className="sr-only"
@@ -384,7 +416,7 @@ function ComposerWorkingIndicator({
     <div className="composer-working">
       <div className="composer-working-status" role="status" aria-live="polite">
         {participants.map((participant) => (
-          <ComposerWorkingTurn
+          <WorkingTurnStatus
             key={participant.leaseID || participant.id || participant.name}
             participant={participant}
             hideContextUsage={hideContextUsage}
@@ -396,118 +428,4 @@ function ComposerWorkingIndicator({
       </div>
     </div>
   );
-}
-
-function ComposerWorkingTurn({
-  hideContextUsage,
-  participant,
-  t,
-  onAction,
-  onStop,
-}: {
-  participant: ConversationWorkingParticipant;
-  hideContextUsage?: boolean;
-  t: TranslateFn;
-  onAction?: (participant?: ConversationWorkingParticipant) => void;
-  onStop?: (participant: ConversationWorkingParticipant) => VoidOrPromise;
-}) {
-  const action =
-    participant.activity?.action ||
-    (participant.thinkingText?.trim()
-      ? ConversationWorkingActions.thinking
-      : ConversationWorkingActions.preparingReply);
-  const toolName =
-    participant.stopping || participant.stopSending ? "" : (participant.activity?.toolName?.trim() ?? "");
-  const actionLabel = participant.stopping
-    ? t("conversationWorkingStopping")
-    : participant.stopSending
-      ? t("conversationWorkingStopSending")
-      : toolName || workingActionLabel(action, t);
-  const summary = participant.activity?.summary?.trim() || "";
-  const thinkingText = participant.thinkingText;
-  const thinkingLatestLine = thinkingText === undefined ? "" : latestThinkingLine(thinkingText);
-  const content = (
-    <>
-      <span className="composer-working-dots" aria-hidden="true">
-        <span />
-        <span />
-        <span />
-      </span>
-      <strong className="composer-working-name">{participant.name}</strong>
-      <span className={`composer-working-verb${toolName ? " is-tool" : ""}`}>
-        {actionLabel}
-        {toolName && summary ? <ChevronRight aria-hidden="true" size={12} strokeWidth={2} /> : null}
-      </span>
-      {summary ? <span className="composer-working-summary">{summary}</span> : null}
-    </>
-  );
-
-  return (
-    <div className={`composer-working-turn${participant.stopping ? " is-stopping" : ""}`}>
-      <div className="composer-working-row">
-        {onAction ? (
-          <button
-            type="button"
-            className="composer-working-item"
-            data-working-action={action}
-            aria-label={t("conversationWorkingOpenActivity", {
-              detail: summary || actionLabel,
-              name: participant.name,
-            })}
-            title={summary || actionLabel}
-            onClick={() => onAction(participant)}
-          >
-            {content}
-          </button>
-        ) : (
-          <div className="composer-working-item" data-working-action={action}>
-            {content}
-          </div>
-        )}
-        <WorkingTurnControls participant={participant} t={t} onStop={onStop} hideContextUsage={hideContextUsage} />
-        {participant.contextUsage?.compacting || thinkingLatestLine ? (
-          <span className="composer-thinking-latest">
-            {participant.contextUsage?.compacting ? t("contextCompacting") : thinkingLatestLine}
-          </span>
-        ) : null}
-      </div>
-      {participant.stopError ? <div className="composer-working-error">{participant.stopError}</div> : null}
-    </div>
-  );
-}
-
-function latestThinkingLine(text: string): string {
-  const lines = text.replace(/\r\n?/g, "\n").split("\n");
-  for (let index = lines.length - 1; index >= 0; index -= 1) {
-    const line = lines[index].trim();
-    if (line) {
-      return line;
-    }
-  }
-  return "";
-}
-
-function workingActionLabel(action: ConversationWorkingAction, t: TranslateFn): string {
-  switch (action) {
-    case ConversationWorkingActions.editing:
-      return t("conversationWorkingEditing");
-    case ConversationWorkingActions.generatingReply:
-      return t("conversationWorkingGeneratingReply");
-    case ConversationWorkingActions.preparingReply:
-      return t("conversationWorkingPreparingReply");
-    case ConversationWorkingActions.reading:
-      return t("conversationWorkingReading");
-    case ConversationWorkingActions.replying:
-      return t("conversationWorkingReplying");
-    case ConversationWorkingActions.running:
-      return t("conversationWorkingRunning");
-    case ConversationWorkingActions.searching:
-      return t("conversationWorkingSearching");
-    case ConversationWorkingActions.usingTool:
-      return t("conversationWorkingUsingTool");
-    case ConversationWorkingActions.waiting:
-      return t("conversationWorkingWaiting");
-    default:
-      return t("conversationWorkingThinking");
-  }
 }

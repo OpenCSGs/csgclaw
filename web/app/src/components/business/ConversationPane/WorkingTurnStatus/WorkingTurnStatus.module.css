@@ -1,0 +1,3 @@
+.withoutName:global(.composer-working-item) {
+  grid-template-columns: auto auto minmax(0, 1fr);
+}

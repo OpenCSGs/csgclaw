@@ -1094,7 +1094,7 @@ export function HubDetailPane({
   const hasCloudTemplateWithSameName = Boolean(
     templateUsername && selectedTemplate && hasSameNamedCloudTemplate(selectedTemplate, templates, templateUsername),
   );
-  const canPublishTemplate = canPublishHubTemplateToCommunity(selectedTemplate);
+  const canPublishTemplate = canPublishHubTemplateToCommunity(selectedTemplate) && !hasCloudTemplateWithSameName;
   const templateReview = hubTemplateReviewState(selectedTemplate);
 
   const activeResourceType = useMemo(() => {
@@ -1185,6 +1185,14 @@ export function HubDetailPane({
     if (selectedSkill) setSkillDetailDialogOpen(true);
   }, [selectedSkill]);
   const selectedTemplateID = selectedTemplate?.id;
+  const selectedTemplateIsMine = Boolean(
+    selectedTemplate && templateInGroup(selectedTemplate, "mine", templateUsername),
+  );
+  useEffect(() => {
+    if (!selectedTemplateID) return;
+    setTemplateSearch("");
+    setTemplateFilter(selectedTemplateIsMine ? "mine" : "all");
+  }, [selectedTemplateID, selectedTemplateIsMine]);
   useEffect(() => {
     // Refreshing the same template must not reopen details over the agent creation form.
     setTemplateDetailDialogOpen(Boolean(selectedTemplateID));
@@ -1857,9 +1865,14 @@ export function HubDetailPane({
                     {filteredTemplates.map((template) => {
                       const active = selectedTemplate?.id === template.id;
                       const review = hubTemplateReviewState(template);
+                      const isPublished = hasSameNamedCloudTemplate(template, templates, templateUsername);
                       return (
                         <button
                           key={template.id}
+                          ref={(element) => {
+                            if (active) element?.scrollIntoView?.({ block: "nearest" });
+                          }}
+                          aria-current={active ? "true" : undefined}
                           type="button"
                           className={moduleClassNames(
                             "hub-skill-list-card",
@@ -1880,6 +1893,11 @@ export function HubDetailPane({
                           <span className={moduleClassNames("hub-skill-card-copy")}>
                             <span className={moduleClassNames("hub-skill-card-title")}>
                               {hubTemplateFullName(template)}
+                              {isPublished ? (
+                                <span className={moduleClassNames("mini-badge")}>
+                                  {t("resourcesTemplatePublished")}
+                                </span>
+                              ) : null}
                             </span>
                             <span className={moduleClassNames("hub-skill-card-description")}>
                               {review
@@ -1938,6 +1956,9 @@ export function HubDetailPane({
                             <span className={moduleClassNames("template-source-badge-dot")} aria-hidden="true"></span>
                             {t(templateSourceLabelKey(selectedTemplate, templateUsername))}
                           </span>
+                          {hasCloudTemplateWithSameName ? (
+                            <span className={moduleClassNames("mini-badge")}>{t("resourcesTemplatePublished")}</span>
+                          ) : null}
                         </div>
                       </div>
                       <p>{selectedTemplate.description || selectedTemplate.id}</p>
@@ -1955,7 +1976,7 @@ export function HubDetailPane({
                         target="_blank"
                         rel="noopener noreferrer"
                       >
-                        {t("iaTemplateSameNameOnHub")} <ExternalLink size={14} />
+                        {t("resourcesTemplatePublishedOnHub")} <ExternalLink size={14} />
                       </LinkButton>
                     ) : null}
                     {canPublishTemplate ? (
@@ -2871,7 +2892,12 @@ export function HubDetailPane({
             <>
               <DialogHeader>
                 <div>
-                  <DialogTitle>{hubTemplateFullName(selectedTemplate)}</DialogTitle>
+                  <DialogTitle>
+                    {hubTemplateFullName(selectedTemplate)}
+                    {hasCloudTemplateWithSameName ? (
+                      <span className={moduleClassNames("mini-badge")}>{t("resourcesTemplatePublished")}</span>
+                    ) : null}
+                  </DialogTitle>
                   <DialogDescription>{selectedTemplate.description || selectedTemplate.id}</DialogDescription>
                 </div>
                 <DialogCloseButton label={t("close")} size="md" variant="tertiaryGray" />
@@ -3166,7 +3192,7 @@ export function HubDetailPane({
                     target="_blank"
                     rel="noopener noreferrer"
                   >
-                    {t("iaTemplateSameNameOnHub")} <ExternalLink size={14} />
+                    {t("resourcesTemplatePublishedOnHub")} <ExternalLink size={14} />
                   </LinkButton>
                 ) : null}
                 {canPublishTemplate ? (

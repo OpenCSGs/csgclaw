@@ -2,9 +2,11 @@ package llm
 
 import (
 	"context"
+	"csgclaw/internal/activity"
 	agent "csgclaw/internal/agentengine/agents"
 	"csgclaw/internal/config"
 	"csgclaw/internal/modelpreset"
+	"csgclaw/internal/modelusage"
 	agentruntime "csgclaw/internal/runtime"
 	"csgclaw/internal/runtime/codex"
 	"encoding/json"
@@ -35,7 +37,7 @@ func (p *switchingProtocolProfile) ResolvedAgentProfile(string) (agent.AgentProf
 	return p.p, nil
 }
 
-// This opt-in test runs the bundled Codex process through the actual LLM bridge
+// This opt-in test runs the bundled Codex process through the LLM service bridge
 // and changes the upstream wire protocol between turns in the same native thread.
 func TestBundledCodexProtocolSwitchE2E(t *testing.T) {
 	binary := os.Getenv("CSGCLAW_TEST_CODEX_BINARY")
@@ -81,9 +83,35 @@ func TestBundledCodexProtocolSwitchE2E(t *testing.T) {
 	defer upstream.Close()
 	reader := &switchingProtocolProfile{p: agent.AgentProfile{Provider: agent.ProviderAPI, ModelID: "fixture-model", BaseURL: upstream.URL + "/v1", APIKey: "fixture-key", ProfileComplete: true}}
 	svc := NewService(config.ModelConfig{}, reader)
+	var rt *codex.Runtime
 	bridge := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
-		resp, err := svc.Responses(r.Context(), "alice", body)
+		// Mirror the production handler's exact native identity binding. This
+		// package cannot import api without a cycle; usage must be observed
+		// before protocol translation, rather than reconstructed from counters.
+		var meta struct {
+			Thread  string `json:"thread_id"`
+			Session string `json:"session_id"`
+			Turn    string `json:"turn_id"`
+		}
+		if err := json.Unmarshal([]byte(r.Header.Get("X-Codex-Turn-Metadata")), &meta); err != nil {
+			t.Errorf("decode native turn metadata: %v", err)
+			http.Error(w, "invalid native turn metadata", http.StatusBadRequest)
+			return
+		}
+		if meta.Thread == "" {
+			meta.Thread = meta.Session
+		}
+		if meta.Thread == "" || meta.Turn == "" {
+			t.Error("native request lacks thread/turn metadata")
+			http.Error(w, "missing native turn metadata", http.StatusBadRequest)
+			return
+		}
+		ctx := WithNativeRequestMetadata(r.Context(), meta.Thread, meta.Turn)
+		ctx = modelusage.WithRequestObserver(ctx, func(usage *modelusage.Usage) {
+			rt.ObserveModelResponseUsage("alice", meta.Thread, meta.Turn, usage)
+		})
+		resp, err := svc.Responses(ctx, "alice", body)
 		if err != nil {
 			t.Error(err)
 			http.Error(w, err.Error(), 502)
@@ -108,7 +136,7 @@ func TestBundledCodexProtocolSwitchE2E(t *testing.T) {
 	}))
 	defer bridge.Close()
 	profile := agentruntime.Profile{Provider: "api", BaseURL: bridge.URL + "/v1", APIKey: "local", ModelID: "fixture-model"}
-	rt := codex.New(codex.Dependencies{BinaryProvider: nativeProtocolBinary(binary), EventSink: codex.NewEventSink(), AgentHome: func(string) (string, error) { return filepath.Join(home, "agent"), nil }, ResolveAgent: func(agentruntime.Handle) (codex.AgentRef, error) {
+	rt = codex.New(codex.Dependencies{BinaryProvider: nativeProtocolBinary(binary), EventSink: codex.NewEventSink(), AgentHome: func(string) (string, error) { return filepath.Join(home, "agent"), nil }, ResolveAgent: func(agentruntime.Handle) (codex.AgentRef, error) {
 		return codex.AgentRef{ID: "alice", Name: "alice", Profile: profile, RuntimeOptions: map[string]any{"memory_mode": "disabled"}}, nil
 	}})
 	defer rt.Close()
@@ -123,11 +151,28 @@ func TestBundledCodexProtocolSwitchE2E(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, protocol := range []string{modelpreset.ChatCompletions, modelpreset.AnthropicMessages, modelpreset.Responses} {
+		events, unsubscribe := rt.SubscribeSession(handle.RuntimeID, thread)
 		reader.mu.Lock()
 		reader.p.APIProtocol = protocol
 		reader.mu.Unlock()
 		if err := rt.Prompt(ctx, handle.RuntimeID, thread, "TURN_HISTORY_SENTINEL Reply done."); err != nil {
 			t.Fatalf("%s: %v", protocol, err)
+		}
+		var usage modelusage.Usage
+	drain:
+		for {
+			select {
+			case event := <-events:
+				if event.Kind == activity.RuntimeEventTokenUsage {
+					usage, _ = event.Payload.(modelusage.Usage)
+				}
+			default:
+				break drain
+			}
+		}
+		unsubscribe()
+		if !usage.Known || usage.Partial || usage.ModelID != "fixture-model" || usage.Input != 100 || usage.Output != 10 || usage.Total != 110 {
+			t.Fatalf("%s usage=%+v", protocol, usage)
 		}
 	}
 	mu.Lock()

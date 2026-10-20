@@ -1,3 +1,4 @@
+import { ResourceTag } from "@/components/business/ResourceTag";
 import {
   effectiveConversationProfile,
   supportsTaskConfiguration,
@@ -17,8 +18,19 @@ import { taskConversationTitle } from "@/models/taskConversations";
 import type { IMConversation } from "@/models/conversations";
 import styles from "./StartTaskPage.module.css";
 import { TargetPicker, SOLO_TEAM_ID } from "./components/TargetPicker";
-import { TaskResourcePicker } from "./components/TaskResourcePicker";
-import { ComposerAddMenu, type TaskResourceKind } from "@/components/business/ConversationPane/ComposerAddMenu";
+import {
+  ConversationResourcePicker,
+  useComposerResourcePicker,
+} from "@/components/business/ConversationResourcePicker";
+import { ComposerAddMenu } from "@/components/business/ConversationPane/ComposerAddMenu";
+import {
+  resourceMessageInput,
+  resourceSegment,
+  canSendResources,
+  uniqueResources,
+  resourceKey,
+  type ResourceSnapshot,
+} from "@/models/conversationResources";
 import { TaskConfigurationToolbar } from "@/components/business/TaskConfigurationToolbar";
 import { useWorkspaceDialogs } from "@/hooks/workspace/useWorkspaceDialogs";
 import { TASK_EXAMPLES_HIDDEN_STORAGE_KEY } from "@/shared/storage/keys";
@@ -52,7 +64,7 @@ function StartTaskForm({
   const { openSettings } = useWorkspaceDialogs();
   const [configuration, setConfiguration] = useState<TaskConfiguration>(initialConfiguration || {});
   const [target, setTarget] = useState(initialTarget);
-  const [resourceKind, setResourceKind] = useState<TaskResourceKind | null>(null);
+  const [resources, setResources] = useState<ResourceSnapshot[]>([]);
   const [examplesHidden, setExamplesHidden] = useState(() => {
     try {
       return localStorage.getItem(TASK_EXAMPLES_HIDDEN_STORAGE_KEY) === "true";
@@ -69,16 +81,25 @@ function StartTaskForm({
   const sendID = useRef({ fingerprint: "", id: "" });
   const inFlight = useRef(false);
   const fileInput = useRef<HTMLInputElement>(null);
+  const editorRef = useRef<HTMLTextAreaElement>(null);
   const sidebar = controller.ready ? controller.sidebarProps : null;
   const agents = useMemo(() => sidebar?.workerAgentItems ?? [], [sidebar?.workerAgentItems]);
   const teams = useMemo(() => sidebar?.teams ?? [], [sidebar?.teams]);
   const manager = agents.find((agent) => agent.role === "manager");
   const selected = target || `agent:${manager?.id || agents[0]?.id || ""}`;
+  const selectedAgent = agents.find((agent) => selected === `agent:${agent.id}`);
+  const resourceAgentID = supportsTaskConfiguration(selectedAgent) ? selectedAgent?.id || undefined : undefined;
+  const resourcePicker = useComposerResourcePicker({
+    resourceAgentID,
+    onPickResources: (items) => setResources((current) => uniqueResources([...current, ...items])),
+    editorRef,
+    selected: resources,
+    disabled: busy,
+  });
   if (!controller.ready || !sidebar || !controller.taskEntry) return null;
   const readySidebar = sidebar;
   const { t } = sidebar;
   const entry = controller.taskEntry;
-  const selectedAgent = agents.find((agent) => selected === `agent:${agent.id}`);
   const selectedTeam = teams.find((team) => selected === `team:${team.id}`);
   const recipient = selectedAgent || manager;
   const selectedProfile = recipient
@@ -87,8 +108,19 @@ function StartTaskForm({
   const modelMissing = recipient && (selectedProfile?.profile_complete === false || !selectedProfile?.model_id);
   const targetName = selectedAgent?.name || selectedTeam?.title || t("taskEntrySolo");
 
+  function messageInput(prompt: string) {
+    return supportsTaskConfiguration(selectedAgent)
+      ? resourceMessageInput(
+          resources.map((resource) => resourceSegment(resource)),
+          prompt.trim(),
+        )
+      : { content: prompt.trim(), resource_refs: [] };
+  }
+  const draftInput = messageInput(draft);
+
   async function start(empty = false, prompt = draft) {
-    if (inFlight.current || (!empty && !prompt.trim() && !files.length)) return;
+    const input = messageInput(prompt);
+    if (inFlight.current || (!empty && !canSendResources(input.content, input.resource_refs, files.length))) return;
     if (!selectedAgent && !selectedTeam && selected !== "solo") {
       setError(t("taskEntryMissingTarget"));
       return;
@@ -137,12 +169,17 @@ function StartTaskForm({
         if (room.configuration) setConfiguration(room.configuration);
       }
       if (!empty) {
-        const fingerprint = JSON.stringify([prompt, files.map((file) => [file.name, file.size, file.lastModified])]);
+        const fingerprint = JSON.stringify([
+          input.content,
+          input.resource_refs,
+          files.map((file) => [file.name, file.size, file.lastModified]),
+        ]);
         if (sendID.current.fingerprint !== fingerprint) sendID.current = { fingerprint, id: crypto.randomUUID() };
         await sendMessageRequest({
           room_id: room.id,
           sender_id: readySidebar.currentUserID,
-          content: prompt.trim(),
+          content: input.content,
+          resource_refs: input.resource_refs,
           attachments: files,
           client_message_id: sendID.current.id,
           locale: readySidebar.locale,
@@ -189,8 +226,8 @@ function StartTaskForm({
                   }
             }
             onChange={(value) => {
+              setResources([]);
               setTarget(value.id === SOLO_TEAM_ID ? "solo" : `${value.kind}:${value.id}`);
-              setResourceKind(null);
               setConfiguration({});
             }}
             locked={busy || Boolean(created.current)}
@@ -214,44 +251,47 @@ function StartTaskForm({
             </div>
           ) : null}
           <div className={styles.composerGroup}>
-            {resourceKind && selectedAgent?.id ? (
-              <TaskResourcePicker
-                agentID={selectedAgent.id}
-                kind={resourceKind}
-                t={t}
-                onClose={() => setResourceKind(null)}
-                onManage={() => {
-                  setResourceKind(null);
-                  void controller.openAgentSettings(selectedAgent);
-                }}
-                onPick={(names) => {
-                  const label = t(
-                    resourceKind === "skill"
-                      ? "composerResourceSkill"
-                      : resourceKind === "connector"
-                        ? "composerResourceConnector"
-                        : "composerResourceKnowledge",
-                  );
-                  setDraft((value) => `${value}${value ? "\n" : ""}${label}: ${names.join(", ")}`);
-                  setResourceKind(null);
-                }}
-              />
-            ) : null}
             <div className={styles.composer}>
-              <textarea
-                className={styles.input}
-                aria-label={t("taskEntryPrompt")}
-                placeholder={t("iaStartComposerPlaceholder")}
-                value={draft}
-                onChange={(event) => setDraft(event.target.value)}
-                disabled={busy}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
-                    event.preventDefault();
-                    void start();
-                  }
-                }}
-              />
+              {resourcePicker.pickerProps ? (
+                <ConversationResourcePicker
+                  key={`${resourceAgentID}:${resourcePicker.pickerProps.kind}`}
+                  {...resourcePicker.pickerProps}
+                  t={t}
+                  className={styles.resourceSearch}
+                />
+              ) : null}
+              <div className={styles.draft} hidden={resourcePicker.active}>
+                {resources.map((resource) => (
+                  <ResourceTag
+                    key={resourceKey(resource)}
+                    resource={resource}
+                    removal={{
+                      label: t("remove"),
+                      disabled: busy,
+                      onRemove: () =>
+                        setResources((current) =>
+                          current.filter((item) => resourceKey(item) !== resourceKey(resource)),
+                        ),
+                    }}
+                  />
+                ))}
+                <textarea
+                  ref={editorRef}
+                  autoFocus
+                  className={styles.input}
+                  aria-label={t("taskEntryPrompt")}
+                  placeholder={t("iaStartComposerPlaceholder")}
+                  value={draft}
+                  onChange={(event) => setDraft(event.target.value)}
+                  disabled={busy}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
+                      event.preventDefault();
+                      void start();
+                    }
+                  }}
+                />
+              </div>
               {files.length ? (
                 <ul className={styles.files}>
                   {files.map((file, index) => (
@@ -282,10 +322,10 @@ function StartTaskForm({
                   }}
                 />
                 <ComposerAddMenu
+                  onOpenResourcePicker={resourcePicker.open}
                   disabled={busy}
                   t={t}
                   onAddFiles={() => fileInput.current?.click()}
-                  onOpenResourcePicker={selectedAgent ? setResourceKind : undefined}
                 />
                 <TaskConfigurationToolbar
                   configuration={configuration}
@@ -303,7 +343,12 @@ function StartTaskForm({
                   iconOnly
                   size="sm"
                   aria-label={t("taskEntryStart")}
-                  disabled={busy || (!draft.trim() && !files.length) || Boolean(modelMissing)}
+                  disabled={
+                    busy ||
+                    resourcePicker.active ||
+                    !canSendResources(draftInput.content, draftInput.resource_refs, files.length) ||
+                    Boolean(modelMissing)
+                  }
                   onClick={() => void start()}
                 >
                   <ArrowUp size={17} />

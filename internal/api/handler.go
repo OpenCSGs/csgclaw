@@ -17,6 +17,7 @@ import (
 	"csgclaw/internal/codexcli"
 	"csgclaw/internal/config"
 	"csgclaw/internal/connectors"
+	"csgclaw/internal/conversationresource"
 	"csgclaw/internal/dshcli"
 	"csgclaw/internal/im"
 	"csgclaw/internal/llm"
@@ -51,6 +52,8 @@ import (
 )
 
 type Handler struct {
+	resourcesOnce              sync.Once
+	resources                  *conversationresource.Service
 	svc                        AgentRecords
 	participant                *participant.Service
 	im                         *im.Service
@@ -795,6 +798,7 @@ func bootstrapRuntimeKind(runtime string) string {
 }
 
 type createMessageRequest struct {
+	ResourceRefs    []apitypes.ResourceReference `json:"resource_refs,omitempty"`
 	FileReferences  []FileReference              `json:"file_references,omitempty"`
 	RoomID          string                       `json:"room_id"`
 	ClientMessageID string                       `json:"client_message_id,omitempty"`
@@ -3028,6 +3032,12 @@ func (h *Handler) handleCreateMessage(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	if h.im != nil {
+		if existing, found := h.im.MessageByClientID(serviceReq.RoomID, serviceReq.SenderID, serviceReq.ClientMessageID); found {
+			writeJSON(w, http.StatusCreated, existing)
+			return
+		}
+	}
 	var releaseReferences = func() {}
 	defer func() { releaseReferences() }()
 	if len(req.FileReferences) > 0 {
@@ -3036,6 +3046,12 @@ func (h *Handler) handleCreateMessage(w http.ResponseWriter, r *http.Request) {
 			releaseReferences = release
 			return uploads, err
 		}
+	}
+	if err := h.prepareMessageResources(r.Context(), &serviceReq, req.ResourceRefs); err != nil {
+		if !writeConversationResourceError(w, err) {
+			writeAPIError(w, err, http.StatusBadRequest)
+		}
+		return
 	}
 	message, created, err := channel.SendMessageOnce(serviceReq)
 	if err != nil {

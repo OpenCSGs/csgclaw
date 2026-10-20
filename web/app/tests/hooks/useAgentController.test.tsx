@@ -1373,6 +1373,9 @@ describe("useAgentController", () => {
     });
     expect(publishHubTemplateToCommunityRequest).toHaveBeenCalledWith(local.id, true);
     expect(result.current.setSelectedHubTemplateId).toHaveBeenCalledWith(remote.id);
+    expect(result.current.navigatePane).toHaveBeenCalledWith({ type: WorkspacePaneTypes.agent, id: "" }, [], {
+      search: "?tab=templates&filter=personal&template=alice%2FReviewer",
+    });
   });
 
   it.each([false, true])(
@@ -1420,6 +1423,10 @@ describe("useAgentController", () => {
       });
       expect(result.current.controller.agentViewProps.publishError).toBe("Saved locally: Hub unavailable");
       expect(result.current.refreshHubTemplates).toHaveBeenCalledOnce();
+      expect(result.current.setSelectedHubTemplateId).toHaveBeenCalledWith("local.Reviewer");
+      expect(result.current.navigatePane).toHaveBeenCalledWith({ type: WorkspacePaneTypes.agent, id: "" }, [], {
+        search: "?tab=templates&filter=personal&template=local.Reviewer",
+      });
       workspaceInstructions = "corrected AGENTS.md instructions";
       await act(async () => {
         expect(
@@ -1474,6 +1481,7 @@ describe("useAgentController", () => {
       ).toBe(false);
     });
     expect(publishAgentTemplateRequest).not.toHaveBeenCalled();
+    expect(result.current.navigatePane).not.toHaveBeenCalled();
     act(() => result.current.controller.agentViewProps.onPublishLogin?.());
     expect(authGuard.requireAuthentication).toHaveBeenCalledTimes(2);
     await act(async () => {
@@ -1483,6 +1491,23 @@ describe("useAgentController", () => {
     });
     expect(publishAgentTemplateRequest).toHaveBeenCalledOnce();
     expect(publishHubTemplateToCommunityRequest).not.toHaveBeenCalled();
+    expect(result.current.setSelectedHubTemplateId).toHaveBeenCalledWith("local.Reviewer");
+    expect(result.current.navigatePane).toHaveBeenCalledWith({ type: WorkspacePaneTypes.agent, id: "" }, [], {
+      search: "?tab=templates&filter=personal&template=local.Reviewer",
+    });
+  });
+
+  it("stays on the agent form when saving the local template fails", async () => {
+    vi.mocked(publishAgentTemplateRequest).mockRejectedValueOnce(new Error("Could not save template"));
+    const { result } = renderHook(() => useAgentControllerHarness(), { wrapper: createWrapper() });
+    await act(async () => {
+      expect(
+        await result.current.controller.agentViewProps.onPublish?.("local", "Reviewer", "Reviews", false, "审查助手"),
+      ).toBe(false);
+    });
+    expect(result.current.controller.agentViewProps.publishError).toBe("Could not save template");
+    expect(result.current.navigatePane).not.toHaveBeenCalled();
+    expect(result.current.setSelectedHubTemplateId).not.toHaveBeenCalled();
   });
 
   it("does not wait for bootstrap or skill refresh after saving only the selected agent model", async () => {
@@ -3399,8 +3424,15 @@ describe("useAgentController", () => {
     expect(result.current.agentViewProps.draft?.avatar).toBe(nextAvatar);
   });
 
-  it("initializes create agent drafts from the first available model provider when defaults are empty", async () => {
-    vi.mocked(fetchAgentProfileDefaults).mockRejectedValueOnce(new Error("unavailable"));
+  it.each(["unspecified", "unavailable"])("requires model selection when defaults are %s", async (state) => {
+    if (state === "unavailable") vi.mocked(fetchAgentProfileDefaults).mockRejectedValue(new Error("unavailable"));
+    else
+      vi.mocked(fetchAgentProfileDefaults).mockResolvedValue({
+        model_id: "",
+        model_provider_id: "",
+        image_generation: null,
+        video_generation: null,
+      });
     const modelProviders = normalizeModelProviderCatalog({
       providers: [
         {
@@ -3428,10 +3460,22 @@ describe("useAgentController", () => {
 
     await waitFor(() => expect(result.current.agentProfileModalProps).not.toBeNull());
     expect(result.current.agentProfileModalProps?.agentDraft).toMatchObject({
-      provider: "codex",
-      model_provider_id: "codex",
-      model_id: "gpt-5.5",
+      model_provider_id: "",
+      model_id: "",
+      image_generation: null,
+      video_generation: null,
     });
+    act(() =>
+      result.current.agentProfileModalProps?.onAgentDraftChange({
+        ...result.current.agentProfileModalProps!.agentDraft,
+        model_provider_id: "codex",
+        model_id: "gpt-5.5",
+      }),
+    );
+    await act(async () => {
+      await result.current.computerViewProps.onCreateAgent();
+    });
+    expect(result.current.agentProfileModalProps?.agentDraft).toMatchObject({ model_provider_id: "", model_id: "" });
   });
 
   it("does not offer Codex model provider for agent creation when Codex CLI is unavailable", async () => {

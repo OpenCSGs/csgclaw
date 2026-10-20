@@ -1,7 +1,7 @@
 import type { TaskConfiguration } from "@/models/taskConfiguration";
 import type { FileReference } from "@/models/fileReferences";
 import { trackDiagnosticSubmission } from "@/shared/diagnostics/renderTiming";
-import { del, get, post, resolveRequestPath, type ApiError } from "@/api/client";
+import { apiErrorFromText, del, get, post, resolveRequestPath, type ApiError } from "@/api/client";
 import type {
   IMConversation,
   IMMessage,
@@ -12,7 +12,10 @@ import type {
   ThreadView,
 } from "@/models/conversations";
 
+import type { ResourceReference } from "@/models/conversationResources";
+
 export type SendMessagePayload = {
+  resource_refs?: ResourceReference[];
   file_references?: FileReference[];
   attachments?: File[];
   client_message_id?: string;
@@ -130,10 +133,7 @@ function postMessageFormDataWithProgress(formData: FormData, options: SendMessag
     request.addEventListener("load", () => {
       options.signal?.removeEventListener("abort", abortRequest);
       if (request.status < 200 || request.status >= 300) {
-        reject({
-          status: request.status,
-          message: request.responseText.trim() || request.statusText,
-        } satisfies ApiError);
+        reject(apiErrorFromText(request.status, request.responseText.trim() || request.statusText));
         return;
       }
       try {

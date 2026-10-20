@@ -11,6 +11,17 @@ export function workingParticipantForProgress(
 ): ConversationWorkingParticipant | undefined {
   const progress = parseTurnProgress(message);
   if (!progress || !progressActive(progress)) return undefined;
+  return workingParticipantForTurnMessage(message, roomID, participants);
+}
+
+// A terminal message also replaces its pending row while the work lease is
+// being released, but must never acquire a stop control for a later request.
+export function workingParticipantForTurnMessage(
+  message: IMMessage,
+  roomID: string,
+  participants: readonly ConversationWorkingParticipant[],
+): ConversationWorkingParticipant | undefined {
+  if (!parseTurnProgress(message)) return undefined;
   let requestID = "";
   for (const key of ["csgclaw", "codex", "openclaw"]) {
     const metadata = message.metadata?.[key];

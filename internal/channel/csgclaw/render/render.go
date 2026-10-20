@@ -253,21 +253,26 @@ func (r *TurnRenderer) publicPromptError() PublicPromptError {
 	}
 	// Structured context failures take precedence over incidental HTTP statuses.
 	switch r.promptErrorCode {
-	case "context_length_exceeded", "context_compaction_failed":
+	case "context_length_exceeded", "context_compaction_failed", "invalid_resource_reference", "resource_not_attached", "resource_disabled", "resource_unavailable", "resource_service_unavailable":
 		code = r.promptErrorCode
 	}
 	zh := strings.HasPrefix(strings.ToLower(strings.TrimSpace(r.locale)), "zh") || strings.TrimSpace(r.locale) == ""
 	messages := map[string][2]string{
-		"context_length_exceeded":   {"本次内容超过模型容量，请拆分输入、检查模型容量设置或选择容量更大的模型。已有对话已保留。", "This request exceeds the model context capacity. Split the input, check the context settings, or choose a model with a larger context window. Your conversation has been preserved."},
-		"context_compaction_failed": {"暂时无法整理对话，已有记录已保留。请重试或选择容量更大的模型。", "The conversation could not be compacted. Your history has been preserved. Retry or choose a model with a larger context window."},
-		"invalid_request":           {"请求内容无效，请检查后重试。", "The request is invalid. Check it and try again."},
-		"authentication_error":      {"模型服务认证失败，请联系管理员检查配置。", "Model service authentication failed. Contact an administrator."},
-		"insufficient_balance":      {"模型服务余额不足，请充值或联系管理员后重试。", "The model service balance is insufficient. Add funds or contact an administrator."},
-		"forbidden":                 {"当前账号无权访问模型服务，请联系管理员。", "The account cannot access the model service. Contact an administrator."},
-		"not_found":                 {"请求的模型服务不存在，请联系管理员检查配置。", "The requested model service was not found. Contact an administrator."},
-		"rate_limit_exceeded":       {"请求过于频繁，请稍后重试。", "Too many requests. Try again later."},
-		"upstream_unavailable":      {"模型服务暂时不可用，请稍后重试。", "The model service is temporarily unavailable. Try again later."},
-		"internal_error":            {"消息处理失败，请稍后重试或前往「活动记录」查看具体原因。", "An error occurred while processing the message. Try again later."},
+		"invalid_resource_reference":   {"资源选择无效，请重新选择后发送。", "The resource selection is invalid. Select resources again."},
+		"resource_not_attached":        {"所选资源已经移除，请检查 Agent 资源。", "A selected resource was removed. Check the Agent resources."},
+		"resource_disabled":            {"所选资源已经停用，请检查 Agent 资源。", "A selected resource is disabled. Check the Agent resources."},
+		"resource_service_unavailable": {"资源服务暂时不可用，请稍后重试。", "The resource service is unavailable. Try again later."},
+		"resource_unavailable":         {"所选资源暂时不可用，请检查连接或授权。", "A selected resource is unavailable. Check its connection or authorization."},
+		"context_length_exceeded":      {"本次内容超过模型容量，请拆分输入、检查模型容量设置或选择容量更大的模型。已有对话已保留。", "This request exceeds the model context capacity. Split the input, check the context settings, or choose a model with a larger context window. Your conversation has been preserved."},
+		"context_compaction_failed":    {"暂时无法整理对话，已有记录已保留。请重试或选择容量更大的模型。", "The conversation could not be compacted. Your history has been preserved. Retry or choose a model with a larger context window."},
+		"invalid_request":              {"请求内容无效，请检查后重试。", "The request is invalid. Check it and try again."},
+		"authentication_error":         {"模型服务认证失败，请联系管理员检查配置。", "Model service authentication failed. Contact an administrator."},
+		"insufficient_balance":         {"模型服务余额不足，请充值或联系管理员后重试。", "The model service balance is insufficient. Add funds or contact an administrator."},
+		"forbidden":                    {"当前账号无权访问模型服务，请联系管理员。", "The account cannot access the model service. Contact an administrator."},
+		"not_found":                    {"请求的模型服务不存在，请联系管理员检查配置。", "The requested model service was not found. Contact an administrator."},
+		"rate_limit_exceeded":          {"请求过于频繁，请稍后重试。", "Too many requests. Try again later."},
+		"upstream_unavailable":         {"模型服务暂时不可用，请稍后重试。", "The model service is temporarily unavailable. Try again later."},
+		"internal_error":               {"消息处理失败，请稍后重试或前往「活动记录」查看具体原因。", "An error occurred while processing the message. Try again later."},
 	}
 	pair := messages[code]
 	message := pair[1]

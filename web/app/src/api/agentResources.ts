@@ -45,3 +45,16 @@ function batchPath(agentID: string, resource: string, cursor: string, request: R
   for (const name of request.exclude ?? []) params.append("exclude", name);
   return `api/v1/agents/${encodeURIComponent(agentID)}/${resource}?${params}`;
 }
+
+export function fetchConversationResourceBatch(
+  agentID: string,
+  type: import("@/models/conversationResources").ResourceType,
+  cursor: string,
+  request: ResourceRequest = {},
+  signal?: AbortSignal,
+) {
+  return get<ResourceBatch<import("@/models/conversationResources").AgentResourceSummary>>(
+    `${batchPath(agentID, "resources", cursor, request)}&type=${type}`,
+    { signal },
+  );
+}

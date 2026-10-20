@@ -233,7 +233,7 @@ func (a *ConversationAdapter) handleEvent(ctx context.Context, request contract.
 		return emit(contract.TurnEvent{Kind: contract.TurnEventToolCallStart, Tool: toolActivity(event)})
 	case activity.RuntimeEventToolCallUpdate:
 		return emit(contract.TurnEvent{Kind: contract.TurnEventToolCallUpdate, Tool: toolActivity(event)})
-	case activity.RuntimeEventContextUsage, activity.RuntimeEventPlanUpdate, activity.RuntimeEventActionDecision, activity.RuntimeEventUserInputResolved:
+	case activity.RuntimeEventTokenUsage, activity.RuntimeEventContextUsage, activity.RuntimeEventPlanUpdate, activity.RuntimeEventActionDecision, activity.RuntimeEventUserInputResolved:
 		return emit(contract.TurnEvent{Kind: contract.TurnEventActivityUpdate, Activity: &contract.ActivityUpdate{
 			ID: event.ActionID + event.UserInputID, Kind: string(event.Kind), Status: event.ActionStatus + event.UserInputStatus, Payload: event.Payload,
 		}})

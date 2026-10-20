@@ -16,6 +16,21 @@
   padding: 20px 24px;
 }
 
+.header {
+  flex: 0 0 auto;
+}
+
+.headerCopy {
+  flex: 1;
+  min-width: 0;
+}
+
+.description {
+  max-height: 96px;
+  overflow: auto;
+  overflow-wrap: anywhere;
+}
+
 .card {
   display: grid;
   gap: 10px;
@@ -74,6 +89,7 @@
 }
 
 .footer {
+  flex: 0 0 auto;
   justify-content: flex-end;
 }
 

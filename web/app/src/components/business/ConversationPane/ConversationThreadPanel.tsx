@@ -1,3 +1,12 @@
+import "@/components/business/ResourceTag";
+import { messageResources, resourceMessageText } from "@/models/conversationResources";
+import {
+  ConversationResourcePicker,
+  useComposerResourcePicker,
+  type ComposerResourceProps,
+} from "@/components/business/ConversationResourcePicker";
+import { ComposerAddMenu } from "./ComposerAddMenu";
+import { canSendComposer, selectedResources } from "@/models/conversationResources";
 import type { ChatFileScope } from "@/components/business/ChatSidePanel/types";
 import { useFileMentions } from "./FileMentionPicker";
 import type { SkillContinuation } from "@/models/slashCommands";
@@ -6,7 +15,7 @@ import { messageListScrollKey, useMessageListAutoScroll } from "@/hooks/workspac
 import { DiagnosticMessageAction } from "@/components/business/TurnDiagnostics";
 import { isImageAttachment } from "@/models/attachments";
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Paperclip, X } from "lucide-react";
+import { X } from "lucide-react";
 import { AgentAvatarContent } from "@/components/business/AgentAvatar";
 import { ImageGenerationStatus } from "./ImageGenerationStatus";
 import { MessageContent, MessagePreviewText } from "@/components/business/MessageContent";
@@ -31,7 +40,9 @@ import {
   parseComposerSegments,
   placeCaretAtEnd,
   removeAdjacentMentionToken,
+  removeComposerResourceToken,
   renderComposerSegments,
+  updateComposerResourceLabels,
   replaceMentionQueryWithToken,
   segmentsToPlainText,
   type ComposerSegment,
@@ -73,7 +84,7 @@ type ThreadMentionState = {
   textNode?: Node;
 };
 
-export type ConversationThreadPanelProps = {
+export type ConversationThreadPanelProps = ComposerResourceProps & {
   fileScope?: ChatFileScope;
   renderTurnControls?: (message: IMMessage) => ProgressControlSlots | null;
   agents?: AgentLike[];
@@ -112,6 +123,8 @@ export type ConversationThreadPanelProps = {
 };
 
 export function ConversationThreadPanel({
+  resourceAgentID,
+  onPickResources,
   fileScope,
   renderTurnControls,
   thread,
@@ -151,6 +164,13 @@ export function ConversationThreadPanel({
   const threadBodyRef = useRef<HTMLDivElement | null>(null);
   const threadEditorRef = useRef<HTMLDivElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const resourcePicker = useComposerResourcePicker({
+    resourceAgentID,
+    onPickResources,
+    editorRef: threadEditorRef,
+    selected: selectedResources(draftSegments),
+    disabled,
+  });
   const [mentionState, setMentionState] = useState<ThreadMentionState | null>(null);
   const [mentionIndex, setMentionIndex] = useState(0);
   const root = thread?.root ?? null;
@@ -220,17 +240,18 @@ export function ConversationThreadPanel({
     if (!editor) {
       return;
     }
+    updateComposerResourceLabels(editor, t("remove"));
     const currentSegments = parseComposerSegments(editor);
     if (!areComposerSegmentsEqual(currentSegments, displayDraftSegments)) {
       const currentText = segmentsToPlainText(currentSegments);
       const nextText = segmentsToPlainText(displayDraftSegments);
       const selectionOffset = getCollapsedSelectionTextOffset(editor);
-      renderComposerSegments(editor, displayDraftSegments);
+      renderComposerSegments(editor, displayDraftSegments, t("remove"));
       if (currentText === nextText && selectionOffset === currentText.length) {
         placeCaretAtEnd(editor);
       }
     }
-  }, [displayDraftSegments]);
+  }, [displayDraftSegments, t]);
 
   function syncThreadDraft(target = threadEditorRef.current) {
     if (!target) {
@@ -319,7 +340,7 @@ export function ConversationThreadPanel({
               <MessagePreviewText
                 content={
                   thread?.summary?.context_summary?.root_excerpt ||
-                  visibleRoot.content ||
+                  resourceMessageText(visibleRoot.content, visibleRoot.metadata) ||
                   visibleRoot.attachments?.[0]?.name ||
                   t("attachment")
                 }
@@ -406,7 +427,7 @@ export function ConversationThreadPanel({
             handleFiles(files);
           }}
         >
-          {threadSlashPickerOpen ? (
+          {!resourcePicker.active && threadSlashPickerOpen ? (
             <SlashPicker
               candidates={threadSlashCandidates}
               activeIndex={threadSlashIndex}
@@ -417,7 +438,7 @@ export function ConversationThreadPanel({
               onSelect={(name) => onApplyThreadSlashCandidate(name)}
             />
           ) : null}
-          {fileScope ? (
+          {resourcePicker.active ? null : fileScope ? (
             fileMentions.picker
           ) : threadMentionCandidates.length > 0 ? (
             <MentionPicker
@@ -437,6 +458,7 @@ export function ConversationThreadPanel({
           />
           <div
             ref={threadEditorRef}
+            hidden={resourcePicker.active}
             contentEditable={!disabled}
             suppressContentEditableWarning={true}
             role="textbox"
@@ -445,9 +467,20 @@ export function ConversationThreadPanel({
             className={`thread-composer-editor ${disabled ? "disabled" : ""}`}
             data-placeholder={disabled ? t("profileIncomplete") : t("threadComposerPlaceholder")}
             onInput={(event) => syncThreadDraft(event.currentTarget)}
-            onClick={(event) => syncThreadQueryState(event.currentTarget)}
+            onClick={(event) => {
+              if (!disabled && removeComposerResourceToken(event.currentTarget, event.target)) {
+                syncThreadDraft(event.currentTarget);
+              } else {
+                syncThreadQueryState(event.currentTarget);
+              }
+            }}
             onKeyDown={(event) => {
-              if (disabled || isComposerKeyboardEventComposing(event) || fileMentions.handleKeyDown(event)) {
+              if (
+                disabled ||
+                isComposerKeyboardEventComposing(event) ||
+                (event.target instanceof Element && event.target.closest("[data-composer-resource-remove]")) ||
+                fileMentions.handleKeyDown(event)
+              ) {
                 return;
               }
               if (event.key === "Backspace" && removeAdjacentMentionToken(threadEditorRef.current, "backward")) {
@@ -543,6 +576,13 @@ export function ConversationThreadPanel({
               syncThreadDraft(threadEditorRef.current);
             }}
           />
+          {resourcePicker.pickerProps ? (
+            <ConversationResourcePicker
+              key={`${resourceAgentID}:${resourcePicker.pickerProps.kind}`}
+              {...resourcePicker.pickerProps}
+              t={t}
+            />
+          ) : null}
           <input
             ref={fileInputRef}
             className="sr-only"
@@ -554,24 +594,16 @@ export function ConversationThreadPanel({
               event.currentTarget.value = "";
             }}
           />
-          <Tooltip content={t("addAttachment")}>
-            <span>
-              <Button
-                className="thread-attach-button"
-                aria-label={t("addAttachment")}
-                disabled={disabled}
-                iconOnly
-                variant="tertiaryGray"
-                onClick={() => fileInputRef.current?.click()}
-              >
-                <Paperclip aria-hidden="true" size={18} />
-              </Button>
-            </span>
-          </Tooltip>
+          <ComposerAddMenu
+            onOpenResourcePicker={resourcePicker.open}
+            disabled={disabled}
+            t={t}
+            onAddFiles={() => fileInputRef.current?.click()}
+          />
           <Button
             variant="primary"
             className="thread-send-button"
-            disabled={disabled || (!segmentsToPlainText(draftSegments || []).trim() && attachmentDrafts.length === 0)}
+            disabled={disabled || resourcePicker.active || !canSendComposer(draftSegments, attachmentDrafts.length)}
             onClick={onSend}
           >
             <span aria-hidden="true">{IconImage("send")}</span>
@@ -656,7 +688,7 @@ function ThreadMessage({
           <span className="message-author">{name}</span>
           <MessageTimestamp parts={timestampParts} />
         </div>
-        {message.content && !message.metadata?.image_generation ? (
+        {(message.content || messageResources(message.metadata).length > 0) && !message.metadata?.image_generation ? (
           <div className="thread-message-bubble">
             <MessageContent
               key={`${message.id}:${theme}`}

@@ -201,7 +201,7 @@ export function useWorkspaceHubController({
         return false;
       }
       const label = template.name || template.id;
-      if (!window.confirm(`${t("resourcesDeleteConfirm")} ${label}?`)) {
+      if (!window.confirm(`${t("resourcesDeleteConfirm")} ${label}?\n\n${t("resourcesDeleteLocalOnlyNotice")}`)) {
         return false;
       }
       setResourcesDeleteBusy(true);

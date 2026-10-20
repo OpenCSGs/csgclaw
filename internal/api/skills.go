@@ -79,6 +79,10 @@ func (h *Handler) handleSkillTree(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+	if r.URL.Query().Has("remote_path") {
+		h.handleRemoteSkillBrowse(w, r, false)
+		return
+	}
 	path := r.URL.Query().Get("path")
 	rootPath, err := isSkillRootPath(path)
 	if err != nil {
@@ -141,6 +145,10 @@ func (h *Handler) handleSkillByName(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) handleSkillFile(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodGet && r.URL.Query().Has("remote_path") {
+		h.handleRemoteSkillBrowse(w, r, true)
+		return
+	}
 	h.handleSkillBrowse(
 		w,
 		r,
@@ -222,7 +230,7 @@ func listSkills(root string) ([]skillsystem.SkillSummary, error) {
 			itemsByName[item.Name] = skillsystem.SkillSummary{
 				Name:        item.Name,
 				Description: item.Description,
-				Source:      skillsystem.SkillSourceLocal,
+				Source:      item.Source,
 			}
 		}
 	}

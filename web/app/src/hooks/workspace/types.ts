@@ -27,6 +27,7 @@ export type WorkspaceQuerySetter<T> = (value: WorkspaceQueryData<T>) => void;
 export type NavigatePaneOptions = {
   replace?: boolean;
   rooms?: IMConversation[];
+  search?: string;
 };
 
 export type UseWorkspaceNavigationArgs = {

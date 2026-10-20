@@ -48,8 +48,10 @@ export async function fetchRemoteSkillsPage(page = 1, search = ""): Promise<Remo
   };
 }
 
-export function fetchSkillTree(path = ""): Promise<SkillTree> {
-  const params = new URLSearchParams();
+type RemoteSkillFiles = Pick<SkillSummary, "remotePath" | "remoteRef">;
+
+export function fetchSkillTree(path = "", remote?: RemoteSkillFiles): Promise<SkillTree> {
+  const params = skillFileParams(remote);
   if (path.trim()) {
     params.set("path", path.trim());
   }
@@ -57,9 +59,19 @@ export function fetchSkillTree(path = ""): Promise<SkillTree> {
   return get<SkillTree>(`${SKILLS_PATH}/tree${query ? `?${query}` : ""}`);
 }
 
-export function fetchSkillFile(path: string): Promise<SkillFile> {
-  const params = new URLSearchParams({ path });
+export function fetchSkillFile(path: string, remote?: RemoteSkillFiles): Promise<SkillFile> {
+  const params = skillFileParams(remote);
+  params.set("path", path);
   return get<SkillFile>(`${SKILLS_PATH}/file?${params.toString()}`);
+}
+
+function skillFileParams(remote?: RemoteSkillFiles): URLSearchParams {
+  const params = new URLSearchParams();
+  if (remote) {
+    params.set("remote_path", remote.remotePath || "");
+    if (remote.remoteRef) params.set("ref", remote.remoteRef);
+  }
+  return params;
 }
 
 export function deleteSkillRequest(name: string): Promise<void> {

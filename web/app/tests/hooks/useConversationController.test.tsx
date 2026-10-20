@@ -5,6 +5,8 @@ import { useConversationController } from "@/hooks/workspace/useConversationCont
 import { WorkspacePaneTypes } from "@/models/routing";
 import { openCSGAuthGuardStub } from "../helpers/openCSGAuthGuard";
 import { MAX_ATTACHMENT_FILE_BYTES } from "@/models/attachments";
+import { renderComposerSegments, type ComposerSegment } from "@/models/composer";
+import { resourceSegment } from "@/models/conversationResources";
 import {
   RoomTypes,
   type IMConversation,
@@ -228,6 +230,103 @@ describe("useConversationController", () => {
     apiMocks.deleteRoomRequest.mockReset();
     apiMocks.fetchThreadRequest.mockReset();
     apiMocks.sendMessageRequest.mockReset();
+  });
+
+  it.each(["composer", "thread"])("%s 保留失败选择，重试复用请求身份，成功后清空资源", async (scope) => {
+    const root = { id: "root", content: "任务", sender_id: "u-admin" };
+    const { result } = renderConversationController({
+      data: dataWithMessages([root]),
+      agents: [{ id: "u-demo", name: "demo", role: "worker", runtime_kind: "codex", status: "running" }],
+    });
+    const selected = [{ source: "skill" as const, id: "review", type: "skill" as const, name: "review" }];
+    if (scope === "thread") {
+      await act(async () => result.current.conversationViewProps.onOpenThread(root));
+      act(() => result.current.conversationViewProps.onPickThreadResources(selected));
+    } else {
+      act(() => result.current.conversationViewProps.onPickResources(selected));
+    }
+    const send = () =>
+      scope === "thread"
+        ? result.current.conversationViewProps.onSendThreadReply()
+        : result.current.conversationViewProps.onSendMessage();
+    const segments = () =>
+      scope === "thread"
+        ? result.current.conversationViewProps.threadDraftSegments
+        : result.current.conversationViewProps.draftSegments;
+    apiMocks.sendMessageRequest.mockRejectedValueOnce({ code: "resource_disabled", message: "资源停用" });
+    await act(async () => {
+      await send();
+    });
+    expect(segments()).toEqual([expect.objectContaining({ type: "resource", agentID: "u-demo" })]);
+    const first = apiMocks.sendMessageRequest.mock.calls[0][0];
+    expect(first).toMatchObject({ content: "", resource_refs: [{ source: "skill", id: "review" }] });
+    if (scope === "thread") expect(first.relates_to).toEqual({ rel_type: "m.thread", event_id: "root" });
+    apiMocks.sendMessageRequest.mockResolvedValueOnce(successfulMessage(""));
+    apiMocks.fetchThreadRequest.mockResolvedValue({ root, replies: [] });
+    await act(async () => {
+      await send();
+    });
+    expect(apiMocks.sendMessageRequest.mock.calls[1][0].client_message_id).toBe(first.client_message_id);
+    expect(segments()).toEqual([]);
+    act(() =>
+      scope === "thread"
+        ? result.current.conversationViewProps.onPickThreadResources([{ ...selected[0], id: "other" }])
+        : result.current.conversationViewProps.onPickResources([{ ...selected[0], id: "other" }]),
+    );
+    apiMocks.sendMessageRequest.mockResolvedValueOnce(successfulMessage(""));
+    await act(async () => {
+      await send();
+    });
+    expect(apiMocks.sendMessageRequest.mock.calls[2][0].client_message_id).not.toBe(first.client_message_id);
+  });
+
+  it.each(["composer", "thread"])("keeps file and resource identities in %s sends and retries", async (scope) => {
+    const root = { id: "root", content: "Review", sender_id: "u-admin" };
+    const { result } = renderConversationController({
+      data: dataWithMessages([root]),
+      agents: [{ id: "u-demo", name: "demo", role: "worker", runtime_kind: "codex", status: "running" }],
+    });
+    if (scope === "thread") await act(async () => result.current.conversationViewProps.onOpenThread(root));
+    const editor = document.createElement("div");
+    const setDraft = (path: string, id: string) => {
+      const segments: ComposerSegment[] = [
+        resourceSegment({ source: "mcp", id, type: "connector", name: "Search" }, "u-demo"),
+        {
+          type: "file",
+          text: "@notes.md",
+          reference: { source: "workspace", agent_id: "u-demo", path, label: "notes.md" },
+        },
+      ];
+      act(() => {
+        if (scope === "thread") result.current.conversationViewProps.onThreadDraftChange(segments);
+        else {
+          result.current.conversationViewProps.editorRef.current = editor;
+          renderComposerSegments(editor, segments);
+          result.current.conversationViewProps.onSyncComposer();
+        }
+      });
+    };
+    const send = async () => {
+      await act(async () => {
+        if (scope === "thread") await result.current.conversationViewProps.onSendThreadReply();
+        else await result.current.conversationViewProps.onSendMessage();
+      });
+      return apiMocks.sendMessageRequest.mock.lastCall![0];
+    };
+    apiMocks.sendMessageRequest.mockRejectedValue({ message: "Temporary failure" });
+    setDraft("docs/notes.md", "search");
+    const first = await send();
+    expect(first).toMatchObject({
+      resource_refs: [{ source: "mcp", id: "search" }],
+      file_references: [{ source: "workspace", agent_id: "u-demo", path: "docs/notes.md" }],
+    });
+    expect((await send()).client_message_id).toBe(first.client_message_id);
+    setDraft("other/notes.md", "search");
+    const changedFile = await send();
+    expect(changedFile.content).toBe(first.content);
+    expect(changedFile.client_message_id).not.toBe(first.client_message_id);
+    setDraft("other/notes.md", "other-search");
+    expect((await send()).client_message_id).not.toBe(changedFile.client_message_id);
   });
 
   it.each(["composer", "thread"])(

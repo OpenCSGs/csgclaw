@@ -14,6 +14,7 @@ import {
 import { useWorkspaceHubSelection } from "@/hooks/workspace/useWorkspaceHubSelection";
 import type { HubTemplate } from "@/models/hubWorkspace";
 import type { SkillSummary } from "@/models/skillhub";
+import { createTranslator } from "@/shared/i18n";
 import { openCSGAuthGuardStub } from "../helpers/openCSGAuthGuard";
 
 vi.mock("@/api/hub", async () => ({
@@ -206,13 +207,16 @@ describe("useWorkspaceHubController template deletion", () => {
               if (refreshFails) throw new Error("offline");
               return [remaining];
             },
-            t: (key) => key,
+            t: createTranslator("zh"),
           }),
         { wrapper },
       );
       await act(async () => {
         await expect(result.current.hub.deleteHubTemplate(template)).resolves.toBe(true);
       });
+      expect(confirm).toHaveBeenCalledWith(
+        `删除模板 ${template.id}?\n\n只删除本地模板，AgenticHub 上的模板不会删除。如需彻底删除，请前往 AgenticHub 下架。`,
+      );
       expect(queryClient.getQueryData(workspaceQueryKeys.hubTemplates())).toEqual([remaining]);
       expect(queryClient.getQueryData(workspaceQueryKeys.hubTemplate(template.id))).toBeUndefined();
       confirm.mockRestore();

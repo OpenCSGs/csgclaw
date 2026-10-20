@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	skillinstall "csgclaw/internal/skill/installstate"
 	skillsystem "csgclaw/internal/skill/system"
 )
 
@@ -25,6 +26,7 @@ var (
 
 type InstallArchiveOptions struct {
 	Replace bool
+	Origin  skillinstall.Record
 }
 
 func InstallArchive(root, filename string, archive []byte) (SkillSummary, error) {
@@ -68,25 +70,36 @@ func InstallArchiveWithOptions(root, filename string, archive []byte, options In
 	if skillsystem.IsName(summary.Name) {
 		return SkillSummary{}, fmt.Errorf("%w: %s", ErrSkillAlreadyExists, summary.Name)
 	}
+	record := options.Origin
+	if record.Source != skillinstall.SourceMarket {
+		record = skillinstall.Record{Source: skillinstall.SourceLocal}
+	}
+	record.SHA256, err = skillinstall.BundleSHA256(skillDir)
+	if err != nil {
+		return SkillSummary{}, err
+	}
+	summary.Source = record.Source
 
 	destDir := filepath.Join(root, summary.Name)
 	if err := ensurePathInsideRoot(root, destDir); err != nil {
 		return SkillSummary{}, err
 	}
-	if _, err := os.Stat(destDir); err == nil {
-		if !options.Replace {
-			return SkillSummary{}, fmt.Errorf("%w: %s", ErrSkillAlreadyExists, summary.Name)
+	err = skillinstall.Update(root, summary.Name, &record, func() error {
+		if _, err := os.Stat(destDir); err == nil {
+			if !options.Replace {
+				return fmt.Errorf("%w: %s", ErrSkillAlreadyExists, summary.Name)
+			}
+			return replaceDir(skillDir, destDir, root)
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("stat skill destination %q: %w", destDir, err)
 		}
-		if err := replaceDir(skillDir, destDir, root); err != nil {
-			return SkillSummary{}, err
+		if err := copyDir(skillDir, destDir); err != nil {
+			_ = os.RemoveAll(destDir)
+			return err
 		}
-		return summary, nil
-	} else if !errors.Is(err, os.ErrNotExist) {
-		return SkillSummary{}, fmt.Errorf("stat skill destination %q: %w", destDir, err)
-	}
-
-	if err := copyDir(skillDir, destDir); err != nil {
-		_ = os.RemoveAll(destDir)
+		return nil
+	})
+	if err != nil {
 		return SkillSummary{}, err
 	}
 	return summary, nil
@@ -121,9 +134,8 @@ func replaceDir(srcDir, dstDir, root string) error {
 		_ = os.RemoveAll(tempDest)
 		return fmt.Errorf("replace skill destination %q: %w", dstDir, err)
 	}
-	if err := os.RemoveAll(backupDir); err != nil {
-		return fmt.Errorf("remove replaced skill backup %q: %w", backupDir, err)
-	}
+	// Replacement has committed; cleanup failure must not restore the old record.
+	_ = os.RemoveAll(backupDir)
 	return nil
 }
 

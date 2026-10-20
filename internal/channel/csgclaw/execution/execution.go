@@ -4,8 +4,10 @@ import (
 	"context"
 	"crypto/sha256"
 	"csgclaw/internal/apitypes"
+	"csgclaw/internal/conversationresource"
 	"csgclaw/internal/diagnostics"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -38,15 +40,16 @@ type idGenerator func() (agentengine.TurnID, error)
 
 // Adapter converts built-in IM events into runtime-neutral Agent Engine turns.
 type Adapter struct {
-	room        func(string) (apitypes.Room, bool)
-	diagnostics *diagnostics.Store
-	engine      Engine
-	attachments files.Resolver
-	renderer    delivery.Renderer
-	newTurnID   idGenerator
-	work        workOptions
-	roomContext roomtask.TurnContextProvider
-	projector   *roomtask.ContextProjector
+	resourceInput func(context.Context, string, string, *apitypes.ResourceSelection) (string, string, error)
+	room          func(string) (apitypes.Room, bool)
+	diagnostics   *diagnostics.Store
+	engine        Engine
+	attachments   files.Resolver
+	renderer      delivery.Renderer
+	newTurnID     idGenerator
+	work          workOptions
+	roomContext   roomtask.TurnContextProvider
+	projector     *roomtask.ContextProjector
 }
 
 // builtInIMAdmissionPolicy deliberately preserves queued, in-order delivery
@@ -55,6 +58,10 @@ type Adapter struct {
 const builtInIMAdmissionPolicy = agentengine.AdmissionWait
 
 type Option func(*Adapter)
+
+func WithResourceInputProvider(provider func(context.Context, string, string, *apitypes.ResourceSelection) (string, string, error)) Option {
+	return func(a *Adapter) { a.resourceInput = provider }
+}
 
 func WithTaskRooms(reader func(string) (apitypes.Room, bool)) Option {
 	return func(a *Adapter) { a.room = reader }
@@ -132,10 +139,10 @@ func Classify(event channel.Event) string {
 
 func classifyInbound(event channel.Event) inboundKind {
 	text := strings.TrimSpace(event.Text)
-	if cmd, ok, err := slashcommand.Parse(text); err == nil && ok && slashcommand.IsNewConversationCommand(cmd) {
+	if cmd, ok, err := slashcommand.Parse(text); err == nil && ok && slashcommand.IsNewConversationCommand(cmd) && event.ResourceSelection == nil {
 		return inboundReset
 	}
-	if text == "" && len(event.Attachments) == 0 {
+	if text == "" && len(event.Attachments) == 0 && event.ResourceSelection == nil {
 		return inboundSkip
 	}
 	return inboundRun
@@ -272,8 +279,13 @@ func (a *Adapter) Run(ctx context.Context, binding channel.Binding, event channe
 		defer release()
 	}
 	if inputErr != nil {
-		record.Failure(string(agentengine.ErrorFileUnavailable), "input.prepare", inputErr.Error())
-		result := failed(agentengine.ErrorFileUnavailable, inputErr.Error())
+		code := agentengine.ErrorFileUnavailable
+		var resourceErr *conversationresource.Error
+		if errors.As(inputErr, &resourceErr) {
+			code = contract.ErrorCode(resourceErr.Code)
+		}
+		record.Failure(string(code), "input.prepare", inputErr.Error())
+		result := failed(code, inputErr.Error())
 		return a.complete(ctx, turn, result)
 	}
 	if len(input) == 0 {
@@ -363,7 +375,23 @@ func (a *Adapter) input(ctx context.Context, binding channel.Binding, event chan
 			}
 		}
 	}
+	var resourcePrompt string
+	if event.ChatType != "p2p" && event.ResourceSelection != nil {
+		return nil, nil, &conversationresource.Error{Code: conversationresource.InvalidRequest}
+	}
+	if a.resourceInput != nil && event.ChatType == "p2p" {
+		var err error
+		event.Text, resourcePrompt, err = a.resourceInput(ctx, binding.AgentID, event.Text, event.ResourceSelection)
+		if err != nil {
+			return nil, nil, err
+		}
+	} else if event.ResourceSelection != nil {
+		return nil, nil, &conversationresource.Error{Code: conversationresource.ResourceUnavailable}
+	}
 	input := conv.TextInput(binding, event)
+	if resourcePrompt != "" {
+		input = append(input, agentengine.InputPart{Kind: agentengine.InputPartText, Text: resourcePrompt})
+	}
 	for _, attachment := range attachments {
 		file, release, err := a.attachments.Resolve(ctx, binding, event, attachment)
 		if err != nil {

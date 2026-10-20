@@ -927,7 +927,7 @@ func (m *appServerManager) publishAppServerEvent(event SessionEvent) {
 		compacting := live.compactingThreads[event.SessionID]
 		waiter := live.turnWaiters[event.SessionID]
 		live.mu.Unlock()
-		if compacting && event.Kind != activitypkg.RuntimeEventContextUsage {
+		if compacting && event.Kind != activitypkg.RuntimeEventContextUsage && event.Kind != activitypkg.RuntimeEventTokenUsage {
 			return
 		}
 		if waiter != nil && contextVisibleEvent(event.Kind) {

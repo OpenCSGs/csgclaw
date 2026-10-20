@@ -25,6 +25,37 @@ function createWrapper() {
 }
 
 describe("useWorkspaceKnowledgeBaseSelection", () => {
+  it("searches existing knowledge bases by Chinese text and clears the filter", async () => {
+    vi.mocked(fetchRemoteKnowledgeBases).mockImplementation(async (search = "") => ({
+      items:
+        search && search !== "旅游"
+          ? []
+          : [{ id: "142", contentID: "tourism", name: "旅游知识库", availability: "available" as const }],
+      page: 1,
+      per: 50,
+      total: search && search !== "旅游" ? 0 : 1,
+    }));
+    const { result } = renderHook(
+      () =>
+        useWorkspaceKnowledgeBaseSelection({
+          enabled: true,
+          openCSGAuthGuard: openCSGAuthGuardStub(),
+          openCreateMCPDialog: vi.fn(),
+          selectedKnowledgeBaseID: "",
+          setSelectedKnowledgeBaseID: vi.fn(),
+          t: (key) => key,
+        }),
+      { wrapper: createWrapper() },
+    );
+    await waitFor(() => expect(result.current.discoveryItems).toHaveLength(1));
+    act(() => result.current.setSearch(" 旅游 "));
+    await waitFor(() => expect(fetchRemoteKnowledgeBases).toHaveBeenCalledWith("旅游", 1));
+    expect(result.current.discoveryItems[0]?.name).toBe("旅游知识库");
+    act(() => result.current.setSearch("missing"));
+    await waitFor(() => expect(result.current.discoveryItems).toHaveLength(0));
+    act(() => result.current.setSearch(""));
+    await waitFor(() => expect(result.current.discoveryItems).toHaveLength(1));
+  });
   beforeEach(() => {
     vi.mocked(fetchRemoteKnowledgeBaseMCPConfig).mockReset();
     vi.mocked(fetchRemoteKnowledgeBases).mockReset();

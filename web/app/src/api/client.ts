@@ -170,6 +170,10 @@ export async function readResponseText(response: Response | null | undefined): P
 
 async function apiErrorFromResponse(response: Response): Promise<ApiError> {
   const raw = (await readResponseText(response)) || response.statusText;
+  return apiErrorFromText(response.status, raw);
+}
+
+export function apiErrorFromText(status: number, raw: string): ApiError {
   try {
     const payload = JSON.parse(raw) as {
       error?: {
@@ -184,7 +188,7 @@ async function apiErrorFromResponse(response: Response): Promise<ApiError> {
     const billingURL = typeof payload?.error?.billing_url === "string" ? payload.error.billing_url.trim() : "";
     if (code || message) {
       const error: ApiError = {
-        status: response.status,
+        status,
         code: code || undefined,
         message: message || code,
       };
@@ -200,5 +204,5 @@ async function apiErrorFromResponse(response: Response): Promise<ApiError> {
   } catch {
     // Preserve legacy text error responses.
   }
-  return { status: response.status, message: raw };
+  return { status, message: raw };
 }

@@ -1077,16 +1077,29 @@ func TestConfigureServeLoggerSetsDebugLevel(t *testing.T) {
 	}
 }
 
-func TestServeForegroundStartsConfiguredAgentsOnReady(t *testing.T) {
+func TestServeForegroundReportsListeningBeforeStartingAgents(t *testing.T) {
 	restore := stubServeDependencies(t)
 	defer restore()
 
+	listeningCalls := 0
 	started := make(chan struct{})
 	StartConfiguredAgents = func(context.Context, *agent.Controller) error {
 		close(started)
 		return nil
 	}
 	RunServer = func(opts server.Options) error {
+		if opts.OnListening == nil {
+			return fmt.Errorf("OnListening is nil")
+		}
+		opts.OnListening()
+		if listeningCalls != 1 {
+			return fmt.Errorf("listening callback calls = %d, want 1 before worker startup", listeningCalls)
+		}
+		select {
+		case <-started:
+			return fmt.Errorf("configured agents started before connector restoration")
+		default:
+		}
 		if opts.OnReady == nil {
 			return fmt.Errorf("OnReady is nil")
 		}
@@ -1094,13 +1107,18 @@ func TestServeForegroundStartsConfiguredAgentsOnReady(t *testing.T) {
 		return nil
 	}
 
-	if err := serveForeground(context.Background(), testContext(), config.Config{Server: config.ServerConfig{ListenAddr: "127.0.0.1:18080"}}, "json"); err != nil {
+	if err := serveForegroundWithConfigPath(context.Background(), testContext(), config.Config{
+		Server: config.ServerConfig{ListenAddr: "127.0.0.1:18080"},
+	}, "", "json", serveOptions{OnListening: func() { listeningCalls++ }}); err != nil {
 		t.Fatalf("serveForeground() error = %v", err)
 	}
 	select {
 	case <-started:
 	case <-time.After(time.Second):
 		t.Fatal("StartConfiguredAgents was not called from OnReady")
+	}
+	if listeningCalls != 1 {
+		t.Fatalf("listening callback calls = %d, want 1 after worker startup", listeningCalls)
 	}
 }
 

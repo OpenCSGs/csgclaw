@@ -676,6 +676,7 @@
 
 .composer-box {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   position: relative;
   z-index: 1;
   border: 1px solid var(--line);

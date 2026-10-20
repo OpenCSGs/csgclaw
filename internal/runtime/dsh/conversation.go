@@ -4,6 +4,7 @@ import (
 	"context"
 	"csgclaw/internal/diagnostics"
 	"csgclaw/internal/modelcap"
+	"csgclaw/internal/modelusage"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -52,6 +53,7 @@ func (c *conversation) Run(ctx context.Context, request contract.TurnRequest, si
 	diagnostics.From(ctx).RuntimeRef(sessionID, "", "")
 	finishPrepare()
 	turn := &activeTurn{diagnostic: diagnostics.From(ctx), request: request, sink: sink, tools: make(map[string]contract.ToolActivity)}
+	turn.tokenUsage = modelusage.Usage{ModelID: proc.profile.ModelID}
 	proc.mu.Lock()
 	proc.active[sessionID] = turn
 	metadata := proc.profile.ModelMetadata.Normalized()
@@ -61,9 +63,17 @@ func (c *conversation) Run(ctx context.Context, request contract.TurnRequest, si
 	}
 	turn.seq++
 	initial := contract.TurnEvent{TurnID: request.ID, Sequence: turn.seq, Kind: contract.TurnEventActivityUpdate, Activity: &contract.ActivityUpdate{ID: sessionID, Kind: modelcap.ContextUsageKind, Payload: usage}}
+	turn.seq++
+	initialUsage := contract.TurnEvent{TurnID: request.ID, Sequence: turn.seq, Kind: contract.TurnEventActivityUpdate, Activity: &contract.ActivityUpdate{ID: sessionID, Kind: modelusage.Kind, Payload: turn.tokenUsage}}
 	proc.mu.Unlock()
 	if sink != nil {
 		if err := sink.Emit(ctx, initial); err != nil {
+			proc.mu.Lock()
+			delete(proc.active, sessionID)
+			proc.mu.Unlock()
+			return failed(err)
+		}
+		if err := sink.Emit(ctx, initialUsage); err != nil {
 			proc.mu.Lock()
 			delete(proc.active, sessionID)
 			proc.mu.Unlock()

@@ -13,6 +13,7 @@ func (m *appServerManager) publishContextUsage(runtimeID string, live *liveSessi
 	if waiter := live.appServerTurnWaiter(threadID); waiter != nil && turnID != "" && !waiter.matchesTurn(turnID) {
 		return
 	}
+	m.publishTokenUsage(runtimeID, live, threadID, turnID, params, method)
 	metadata := live.spec.Profile.ModelMetadata.Normalized()
 	live.mu.Lock()
 	if live.contextUsage == nil {
@@ -51,6 +52,25 @@ func (m *appServerManager) publishContextUsage(runtimeID string, live *liveSessi
 	live.contextUsage[threadID] = usage
 	live.mu.Unlock()
 	m.publishAppServerEvent(SessionEvent{RuntimeID: runtimeID, SessionID: threadID, TurnID: turnID, Kind: activity.RuntimeEventContextUsage, Payload: usage})
+}
+
+// Native counters describe context occupancy and historical consumption. Reply
+// consumption comes only from upstream responses scoped to this exact turn.
+func (m *appServerManager) publishTokenUsage(runtimeID string, live *liveSession, threadID, turnID string, params map[string]any, method string) {
+	live.mu.Lock()
+	waiter := live.turnWaiters[threadID]
+	if waiter == nil || turnID == "" || waiter.currentTurnID() != turnID {
+		live.mu.Unlock()
+		return
+	}
+	if pending, ok := waiter.pendingUsage[turnID]; ok {
+		waiter.tokenUsage.Add(pending)
+	}
+	// Once the turn is confirmed, pending observations for other IDs are stale.
+	waiter.pendingUsage = nil
+	usage := waiter.tokenUsage
+	live.mu.Unlock()
+	m.publishAppServerEvent(SessionEvent{RuntimeID: runtimeID, SessionID: threadID, TurnID: turnID, Kind: activity.RuntimeEventTokenUsage, Payload: usage})
 }
 
 func contextTokenNumber(v any) (int64, bool) {

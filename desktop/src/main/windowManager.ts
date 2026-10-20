@@ -146,6 +146,10 @@ export class WindowManager {
   }
 
   showAndFocus(): void {
+    if (!this.allowedOrigin || !this.authToken) {
+      // AppLifecycle opens the window after the sidecar reports its connection.
+      return;
+    }
     const window = this.mainWindow;
     if (!window || window.isDestroyed()) {
       void this.open().catch(this.options.onLoadFailure);

@@ -106,6 +106,7 @@ type MessageAttachmentUpload struct {
 }
 
 type CreateMessageRequest struct {
+	ResourceSelection *ResourceSelection `json:"-"`
 	// ResolveAttachments lazily opens referenced files after completed-send deduplication.
 	ResolveAttachments func() ([]MessageAttachmentUpload, error) `json:"-"`
 	DiagnosticStart    time.Time                                 `json:"-"`
