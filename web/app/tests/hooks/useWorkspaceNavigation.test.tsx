@@ -40,6 +40,16 @@ function NavigationHarness() {
       <button type="button" onClick={() => navigation.selectAgentApps("agent-1")}>
         Open agent apps
       </button>
+      <button
+        type="button"
+        onClick={() =>
+          navigation.navigatePane({ type: "agent", id: "" }, rooms, {
+            search: "?tab=templates&filter=personal&template=local.worker",
+          })
+        }
+      >
+        Open saved template
+      </button>
       <button type="button" onClick={() => navigation.selectApps("gitlab")}>
         Configure GitLab app
       </button>
@@ -57,6 +67,20 @@ function NavigationHarness() {
 }
 
 describe("useWorkspaceNavigation", () => {
+  it("opens the saved template even when the agent overview pathname is already selected", async () => {
+    window.history.replaceState({}, "", "/agents?tab=templates");
+    render(
+      <BrowserRouter>
+        <NavigationHarness />
+      </BrowserRouter>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Open saved template" }));
+    await waitFor(() =>
+      expect(screen.getByTestId("search")).toHaveTextContent("?tab=templates&filter=personal&template=local.worker"),
+    );
+    expect(screen.getByTestId("path")).toHaveTextContent("/agents");
+  });
+
   it("opens the Apps section even when the target agent page is already selected", async () => {
     window.history.replaceState({}, "", "/agents/agent-1?tab=profile");
     render(

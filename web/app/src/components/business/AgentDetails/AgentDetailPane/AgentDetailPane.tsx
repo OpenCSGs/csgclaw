@@ -169,6 +169,7 @@ export type AgentDetailPaneProps = {
   onInvite: AgentActionHandler;
   onDismissNotice?: () => void;
   onOpenDM: AgentActionHandler;
+  onNewTask?: AgentActionHandler;
   onRetryModels?: () => void | Promise<unknown>;
   onProviderLogin?: (provider: string) => VoidOrPromise;
   onRequireOpenCSGAuth?: () => boolean;
@@ -326,6 +327,7 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
     onInvite,
     onDismissNotice,
     onOpenDM,
+    onNewTask,
     onAddSkills,
     onDeleteSkill,
     onInstallMCPServers,
@@ -888,12 +890,13 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
           </div>
           <div className="entity-toolbar">
             <Button
-              variant="secondaryGray"
+              variant={onNewTask ? "primary" : "secondaryGray"}
               size="md"
               disabled={busyKey.startsWith(busyPrefix)}
-              onClick={() => onOpenDM(item)}
+              title={onNewTask ? t("agentStartTaskHint") : undefined}
+              onClick={() => (onNewTask ? onNewTask(item) : onOpenDM(item))}
             >
-              {t("openDM")}
+              {t(onNewTask ? "agentStartTask" : "openDM")}
             </Button>
             {onUpgrade && upgradeNeeded ? (
               <Button

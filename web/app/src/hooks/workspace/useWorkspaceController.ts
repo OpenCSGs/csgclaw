@@ -24,7 +24,7 @@ import {
 } from "@/models/conversations";
 import { isAgentRunning, resolveAgentAvatarFallback } from "@/models/agents";
 import { MANAGER_AGENT_NAME } from "@/shared/constants/agents";
-import { WorkspacePaneTypes, WorkspaceTabs, paneFromLocation } from "@/models/routing";
+import { agentTemplatesSearch, WorkspacePaneTypes, WorkspaceTabs, paneFromLocation } from "@/models/routing";
 import { MODEL_PROVIDER_IDS, modelProviderCatalogForOpenCSGState } from "@/models/modelProviders";
 import { useWorkspaceUiStore } from "./workspaceUiStore";
 import { useWorkspaceData } from "./useWorkspaceData";
@@ -199,6 +199,18 @@ export function useWorkspaceController(): WorkspaceController {
   );
   const navigateBeforeTemplateDelete = useCallback(
     (templateID: string) => {
+      const params = new URLSearchParams(location.search);
+      if (
+        activePane.type === WorkspacePaneTypes.agent &&
+        params.get("tab") === "templates" &&
+        params.get("template") === templateID
+      ) {
+        navigatePane({ type: WorkspacePaneTypes.agent, id: "" }, rooms, {
+          replace: true,
+          search: agentTemplatesSearch("", params.get("filter") === "personal" ? "personal" : "official"),
+        });
+        return;
+      }
       if (
         activePane.type === WorkspacePaneTypes.hub &&
         activePane.resourceType === "template" &&
@@ -207,7 +219,7 @@ export function useWorkspaceController(): WorkspaceController {
         navigatePane({ type: WorkspacePaneTypes.hub, id: "", resourceType: "template" }, rooms, { replace: true });
       }
     },
-    [activePane, navigatePane, rooms],
+    [activePane, location.search, navigatePane, rooms],
   );
   const { hub, refreshHubTemplates } = useWorkspaceHubController({
     activePane,

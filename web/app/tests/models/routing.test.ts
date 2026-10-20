@@ -1,5 +1,7 @@
 import {
   DefaultWorkspacePaneIds,
+  agentTemplatesSearch,
+  pathForNewAgentTask,
   WorkspacePaneTypes,
   WorkspaceTabs,
   paneFromLocation,
@@ -22,6 +24,18 @@ describe("task routing", () => {
 
   it("keeps connector navigation consistent with agent resource management", () => {
     expect(pathForAgentApps("agent-one")).toBe(pathForAgentResources("agent-one", "connector"));
+  });
+
+  it("encodes the saved template and personal filter in the agent overview URL", () => {
+    const params = new URLSearchParams(agentTemplatesSearch("local.中文 & template"));
+    expect(params.get("tab")).toBe("templates");
+    expect(params.get("filter")).toBe("personal");
+    expect(params.get("template")).toBe("local.中文 & template");
+    expect(new URLSearchParams(agentTemplatesSearch("agentichub/demo", "official")).get("filter")).toBe("official");
+  });
+
+  it("preselects the agent when opening a new task", () => {
+    expect(pathForNewAgentTask("agent/one")).toBe("/new?agent=agent%2Fone");
   });
 
   it("uses the conversation pane as the default workspace pane", () => {

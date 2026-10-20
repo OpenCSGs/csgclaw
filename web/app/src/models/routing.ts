@@ -96,6 +96,14 @@ export type WorkspacePane = {
 
 export type CollapsedWorkspaceGroups = Record<string, boolean>;
 
+export function agentTemplatesSearch(templateID: string, filter: "official" | "personal" = "personal"): string {
+  return `?${new URLSearchParams({ tab: "templates", filter, template: templateID })}`;
+}
+
+export function pathForNewAgentTask(agentID: string): string {
+  return `/new?${new URLSearchParams({ agent: agentID })}`;
+}
+
 export function paneFromLocation(pathname = window.location.pathname): WorkspacePane {
   const parts = String(pathname || "/")
     .split("/")

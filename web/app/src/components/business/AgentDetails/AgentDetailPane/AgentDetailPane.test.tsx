@@ -96,6 +96,19 @@ function Harness({
 }
 
 describe("AgentDetailPane metadata editing", () => {
+  it("offers a primary new-task action for the current agent", async () => {
+    const onNewTask = vi.fn();
+    const onOpenDM = vi.fn();
+    render(<Harness onNewTask={onNewTask} onOpenDM={onOpenDM} />);
+    const button = screen.getByRole("button", { name: "agentStartTask" });
+    expect(button).toHaveClass(buttonStyles["btn-primary"]);
+    expect(button).toHaveAttribute("title", "agentStartTaskHint");
+    expect(screen.queryByRole("button", { name: "openDM" })).not.toBeInTheDocument();
+    await userEvent.setup().click(button);
+    expect(onNewTask).toHaveBeenCalledWith(agent);
+    expect(onOpenDM).not.toHaveBeenCalled();
+  });
+
   it("writes an inferred model provider back to the draft so the change can be saved", async () => {
     const onDraftChange = vi.fn();
     render(

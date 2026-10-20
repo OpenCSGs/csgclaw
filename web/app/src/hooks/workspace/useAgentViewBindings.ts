@@ -1,5 +1,7 @@
 import { useLocation, useNavigate } from "react-router-dom";
 import { useWorkspaceControllerContext } from "./useWorkspaceControllerContext";
+import { pathForNewAgentTask } from "@/models/routing";
+import type { AgentLike } from "@/models/agents";
 
 export function useAgentViewBindings() {
   const controller = useWorkspaceControllerContext();
@@ -10,6 +12,9 @@ export function useAgentViewBindings() {
   return {
     ...controller.agentViewProps,
     item: controller.agentViewProps.item,
+    onNewTask: (item: AgentLike | null | undefined) => {
+      if (item?.id) void navigate(pathForNewAgentTask(item.id));
+    },
     requestedProfileTab: search.get("tab") === "connectors" ? "apps" : search.get("tab") || undefined,
     requestedAppID: search.get("connector") || undefined,
     requestedAddAppID: search.get("add_connector") || undefined,
