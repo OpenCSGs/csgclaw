@@ -100,3 +100,35 @@ func (s *Service) RecordResourceProbe(resource Installation, probe ProbeResult) 
 	}
 	return s.viewLocked(e), nil
 }
+
+// ListResources returns saved resources immediately; discovery belongs to the
+// service lifecycle so a completed HTTP request cannot cancel its checks.
+func (s *Service) ListResources(ctx context.Context) ([]Installation, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	items, err := s.List(ctx, "")
+	if err != nil {
+		return nil, err
+	}
+	select {
+	case s.healthWake <- struct{}{}:
+	default:
+	}
+	return items, nil
+}
+
+func (s *Service) runResourceHealth() {
+	defer s.cliWG.Done()
+	for {
+		select {
+		case <-s.ctx.Done():
+			return
+		case <-s.healthWake:
+			if s.ctx.Err() != nil {
+				return
+			}
+			_, _ = s.CheckResources(s.ctx)
+		}
+	}
+}

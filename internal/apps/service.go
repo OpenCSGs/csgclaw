@@ -53,6 +53,7 @@ type Service struct {
 	cliWorkMu            sync.Mutex
 	cliCancel            context.CancelFunc
 	cliCancelSession     string
+	healthWake           chan struct{}
 	cliWake              chan struct{}
 	cliDrain             chan chan struct{}
 	cliWG                sync.WaitGroup
@@ -91,7 +92,7 @@ func NewService(statePath string, options Options) (*Service, error) {
 		}
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	s := &Service{path: statePath, options: options, packages: packages, cliWake: make(chan struct{}, 1), cliDrain: make(chan chan struct{}), entries: map[string]*entry{}, gateways: map[string]*gateway{}, ctx: ctx, cancel: cancel}
+	s := &Service{path: statePath, options: options, packages: packages, healthWake: make(chan struct{}, 1), cliWake: make(chan struct{}, 1), cliDrain: make(chan chan struct{}), entries: map[string]*entry{}, gateways: map[string]*gateway{}, ctx: ctx, cancel: cancel}
 	if statePath != "" {
 		s.dataRoot, err = filepath.Abs(filepath.Join(filepath.Dir(statePath), "apps"))
 	} else {
@@ -118,7 +119,8 @@ func NewService(statePath string, options Options) (*Service, error) {
 		return nil, err
 	}
 	s.cliMigration = migrations["v1"]
-	s.cliWG.Add(1)
+	s.cliWG.Add(2)
+	go s.runResourceHealth()
 	go s.runConnectorWork()
 	return s, nil
 }

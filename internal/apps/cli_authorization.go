@@ -83,10 +83,16 @@ func (s *Service) authorizeCLI(ctx context.Context, id string, r record) (bool, 
 		if r.CLI.Executable == "" || r.Disconnected {
 			return false, nil, nil
 		}
+		if err := stage("revoking_authorization"); err != nil {
+			return false, nil, err
+		}
 		if err := workflow.Run(ctx, spec.UnAuth); err != nil {
 			return false, nil, err
 		}
 		if r.CLI.Operation.Action == "disconnect" {
+			if err := stage("removing_configuration"); err != nil {
+				return false, nil, err
+			}
 			if err := workflow.Run(ctx, spec.Disconnect); err != nil {
 				return false, nil, err
 			}

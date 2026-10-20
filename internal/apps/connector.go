@@ -343,6 +343,7 @@ func reservedHeader(name string) bool {
 type feishuCallTokenKey struct{}
 
 type headerTransport struct {
+	lifetime      context.Context
 	failureMu     sync.Mutex
 	failure       *ConnectionError
 	platformToken func(context.Context) (string, error)
@@ -354,6 +355,11 @@ type headerTransport struct {
 }
 
 func (t *headerTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	// The SDK detaches cancellation notifications from the request context.
+	// Once the connection has ended, do not open another HTTP request for them.
+	if t.lifetime != nil && t.lifetime.Err() != nil {
+		return nil, t.lifetime.Err()
+	}
 	cloned := req.Clone(req.Context())
 	cloned.Header = req.Header.Clone()
 	if cloned.URL.Scheme+"://"+cloned.URL.Host != t.origin {
@@ -444,6 +450,9 @@ func (s *Service) open(ctx context.Context, agentID, appID string, c Config, cre
 	}
 	s.bindTransportPlatformLogin(c, transport)
 	lifetime, cancel := context.WithCancel(s.ctx)
+	if auth := transportHTTPAuth(transport); auth != nil {
+		auth.lifetime = lifetime
+	}
 	stopRequest := context.AfterFunc(ctx, cancel)
 	timer := time.AfterFunc(time.Duration(c.StartupTimeoutSec)*time.Second, cancel)
 	client := mcp.NewClient(&mcp.Implementation{Name: "csgclaw-app", Version: "1.0.0"}, &mcp.ClientOptions{

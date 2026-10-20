@@ -528,6 +528,7 @@ func (s *Service) executeCLI(id string) {
 			op := r.CLI.Operation
 			op.Settled = settled
 			op.Status = "failed"
+			op.FailureStage = op.Stage
 			op.ErrorCode = "cli_operation_failed"
 			var commandErr *connectorcli.OperationError
 			if errors.As(err, &commandErr) {
@@ -599,6 +600,9 @@ func (s *Service) performCLI(ctx context.Context, id string) error {
 		return err
 	}
 	if op.Action == "disconnect" {
+		if err = s.editCLI(id, func(r *record) error { r.CLI.Operation.Stage = "stopping_workers"; return nil }); err != nil {
+			return err
+		}
 		if err = s.prepareMigrationDisconnect(ctx, id); err != nil {
 			return err
 		}

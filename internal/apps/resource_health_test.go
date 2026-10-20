@@ -3,6 +3,7 @@ package apps
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -225,5 +226,121 @@ func TestSaveProbeSurvivesOnlyItsOwnConnectorRotation(t *testing.T) {
 				t.Fatalf("rotation=%s status=%s", rotation, checked.Status)
 			}
 		})
+	}
+}
+
+func TestListResourcesDoesNotWaitForDiscovery(t *testing.T) {
+	upstream := upstreamServer(t)
+	target, err := url.Parse(upstream.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	proxy := httputil.NewSingleHostReverseProxy(target)
+	started := make(chan struct{}, 1)
+	release := make(chan struct{})
+	delayed := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case started <- struct{}{}:
+		default:
+		}
+		select {
+		case <-release:
+			proxy.ServeHTTP(w, r)
+		case <-r.Context().Done():
+		}
+	}))
+	defer delayed.Close()
+	defer close(release)
+	s := newTestService(t, Options{})
+	resource, err := s.Create(t.Context(), "", CreateRequest{AppID: "gitlab", Name: "Slow discovery", Config: Config{URL: delayed.URL, AuthMode: "bearer"}, Credentials: Credentials{Token: "fixture"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	request, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	done := make(chan error, 1)
+	go func() {
+		items, err := s.ListResources(request)
+		if err == nil && (len(items) != 1 || items[0].InstallationID != resource.InstallationID) {
+			err = fmt.Errorf("saved resource missing: %+v", items)
+		}
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("list waited for discovery")
+	}
+	select {
+	case <-started:
+	case <-time.After(time.Second):
+		t.Fatal("background discovery did not start")
+	}
+	cancel() // The HTTP request is finished; the service still owns discovery.
+	// Closing the service must cancel discovery without waiting for the upstream.
+	closed := make(chan struct{})
+	go func() { _ = s.Close(); close(closed) }()
+	select {
+	case <-closed:
+	case <-time.After(2 * time.Second):
+		t.Fatal("service close did not cancel discovery")
+	}
+}
+
+func TestResourceDiscoverySurvivesListRequest(t *testing.T) {
+	upstream := upstreamServer(t)
+	target, err := url.Parse(upstream.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	proxy := httputil.NewSingleHostReverseProxy(target)
+	started := make(chan struct{}, 1)
+	release := make(chan struct{})
+	delayed := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case started <- struct{}{}:
+		default:
+		}
+		<-release
+		proxy.ServeHTTP(w, r)
+	}))
+	defer delayed.Close()
+	s := newTestService(t, Options{})
+	resource, err := s.Create(t.Context(), "", CreateRequest{AppID: "gitlab", Name: "Background discovery", Config: Config{URL: delayed.URL, AuthMode: "bearer"}, Credentials: Credentials{Token: "fixture"}})
+	if err != nil {
+		close(release)
+		t.Fatal(err)
+	}
+	request, cancel := context.WithCancel(t.Context())
+	if _, err := s.ListResources(request); err != nil {
+		close(release)
+		cancel()
+		t.Fatal(err)
+	}
+	select {
+	case <-started:
+	case <-time.After(time.Second):
+		close(release)
+		cancel()
+		t.Fatal("discovery did not start")
+	}
+	cancel()
+	close(release)
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		item, err := s.Get(t.Context(), "", resource.InstallationID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if item.Status == "connected" {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("request cancellation stopped discovery: status=%s", item.Status)
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 }

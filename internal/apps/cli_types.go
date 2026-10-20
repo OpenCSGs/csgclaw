@@ -31,17 +31,18 @@ type CLIRequest struct {
 }
 
 type CLIOperation struct {
-	ID         string    `json:"operation_id"`
-	SessionID  string    `json:"session_id"`
-	ResourceID string    `json:"resource_id"`
-	Revision   uint64    `json:"resource_revision"`
-	Action     string    `json:"action"`
-	Stage      string    `json:"stage"`
-	Status     string    `json:"status"`
-	URL        string    `json:"authorization_url,omitempty"`
-	ExpiresAt  time.Time `json:"expires_at,omitempty"`
-	ErrorCode  string    `json:"error_code,omitempty"`
-	UpdatedAt  time.Time `json:"updated_at"`
+	ID           string    `json:"operation_id"`
+	SessionID    string    `json:"session_id"`
+	ResourceID   string    `json:"resource_id"`
+	Revision     uint64    `json:"resource_revision"`
+	Action       string    `json:"action"`
+	Stage        string    `json:"stage"`
+	Status       string    `json:"status"`
+	URL          string    `json:"authorization_url,omitempty"`
+	ExpiresAt    time.Time `json:"expires_at,omitempty"`
+	FailureStage string    `json:"failure_stage,omitempty"`
+	ErrorCode    string    `json:"error_code,omitempty"`
+	UpdatedAt    time.Time `json:"updated_at"`
 }
 
 type cliOperation struct {

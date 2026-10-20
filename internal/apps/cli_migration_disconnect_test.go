@@ -171,6 +171,10 @@ func TestCLIMigrationDisconnectFailureCanRetry(t *testing.T) {
 			if op.Status != "failed" || op.ErrorCode != "cleanup_pending" {
 				t.Fatalf("operation=%+v", op)
 			}
+			wantStage := map[string]string{"stop": "stopping_workers", "logout": "revoking_authorization", "configure": "applying"}[failure]
+			if op.FailureStage != wantStage {
+				t.Fatalf("failure stage=%q, want %q", op.FailureStage, wantStage)
+			}
 			if s.migrationSnapshot().Status != "disconnecting" || s.CheckCLIReady("running") == nil {
 				t.Fatal("unfinished disconnect allowed worker startup")
 			}
