@@ -120,15 +120,42 @@ func (s *Service) ListResources(ctx context.Context) ([]Installation, error) {
 
 func (s *Service) runResourceHealth() {
 	defer s.cliWG.Done()
+	var workers sync.WaitGroup
+	defer workers.Wait()
+	pending := map[string]bool{}
+	completed := make(chan string)
 	for {
 		select {
 		case <-s.ctx.Done():
 			return
+		case id := <-completed:
+			delete(pending, id)
 		case <-s.healthWake:
 			if s.ctx.Err() != nil {
 				return
 			}
-			_, _ = s.CheckResources(s.ctx)
+			items, err := s.List(s.ctx, "")
+			if err != nil {
+				continue
+			}
+			for _, item := range items {
+				if pending[item.InstallationID] || item.Kind == KindCLI || !item.Enabled {
+					continue
+				}
+				id := item.InstallationID
+				pending[id] = true
+				workers.Add(1)
+				go func() {
+					defer workers.Done()
+					// CheckResource reserves checking under s.mu and reuses
+					// fresh results, including checks started by other callers.
+					_, _ = s.CheckResource(s.ctx, id, false)
+					select {
+					case completed <- id:
+					case <-s.ctx.Done():
+					}
+				}()
+			}
 		}
 	}
 }

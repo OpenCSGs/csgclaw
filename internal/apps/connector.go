@@ -354,12 +354,39 @@ type headerTransport struct {
 	origin        string
 }
 
+const mcpSessionCleanupTimeout = 5 * time.Second
+
+type cleanupResponseBody struct {
+	io.ReadCloser
+	cancel context.CancelFunc
+}
+
+func (b *cleanupResponseBody) Close() error {
+	defer b.cancel()
+	return b.ReadCloser.Close()
+}
+
 func (t *headerTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	// The SDK detaches cancellation notifications from the request context.
-	// Once the connection has ended, do not open another HTTP request for them.
+	if req.Method == http.MethodDelete {
+		// Session termination must survive connection cancellation, but may not
+		// hold shutdown indefinitely. Keep authentication and origin checks.
+		ctx, cancel := context.WithTimeout(context.WithoutCancel(req.Context()), mcpSessionCleanupTimeout)
+		response, err := t.roundTrip(req.WithContext(ctx))
+		if err != nil {
+			cancel()
+			return nil, err
+		}
+		response.Body = &cleanupResponseBody{ReadCloser: response.Body, cancel: cancel}
+		return response, nil
+	}
+	// Do not start detached SDK cancellation notifications after shutdown.
 	if t.lifetime != nil && t.lifetime.Err() != nil {
 		return nil, t.lifetime.Err()
 	}
+	return t.roundTrip(req)
+}
+
+func (t *headerTransport) roundTrip(req *http.Request) (*http.Response, error) {
 	cloned := req.Clone(req.Context())
 	cloned.Header = req.Header.Clone()
 	if cloned.URL.Scheme+"://"+cloned.URL.Host != t.origin {
