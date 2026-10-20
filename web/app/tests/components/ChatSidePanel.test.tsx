@@ -39,11 +39,13 @@ function Harness({
   room = conversation,
   availableAgents = agents,
   initialThread = false,
+  hasRoomTasks = false,
   onThreadClose = () => {},
 }: {
   room?: IMConversation;
   availableAgents?: typeof agents;
   initialThread?: boolean;
+  hasRoomTasks?: boolean;
   onThreadClose?: () => void;
 }) {
   const editorRef = useRef<HTMLDivElement>(null);
@@ -53,6 +55,7 @@ function Harness({
     agents: availableAgents,
     usersById,
     editorRef,
+    hasRoomTasks,
     t,
   });
   const { openTab } = tools.controller;
@@ -84,6 +87,7 @@ function Harness({
         onCollapse={tools.collapse}
         onThreadSelect={() => {}}
         onThreadClose={onThreadClose}
+        roomTasksPanel={hasRoomTasks ? <div>Current room task board</div> : undefined}
       />
     </main>
   );
@@ -115,6 +119,26 @@ function MentionHarness() {
 }
 
 describe("shared chat sidebar", () => {
+  it("opens room tasks as a singleton tab and restores it after other tools", async () => {
+    const user = userEvent.setup();
+    render(<Harness room={{ ...conversation, id: "room-task-panel", is_direct: false }} hasRoomTasks />, {
+      wrapper: createQueryWrapper().wrapper,
+    });
+    await user.click(screen.getByRole("button", { name: "Room tasks" }));
+    expect(screen.getByRole("tabpanel", { name: "Room tasks" })).toHaveTextContent("Current room task board");
+    await user.click(screen.getByRole("button", { name: "Browser" }));
+    await user.click(screen.getByRole("button", { name: "Room tasks" }));
+    expect(screen.getAllByRole("tab", { name: "Room tasks" })).toHaveLength(1);
+    expect(screen.getByRole("tab", { name: "Room tasks" })).toHaveAttribute("aria-selected", "true");
+    await user.click(screen.getByRole("button", { name: "Close tab Room tasks" }));
+    expect(screen.queryByRole("tab", { name: "Room tasks" })).not.toBeInTheDocument();
+  });
+
+  it("keeps room tasks unavailable for chats without a room task panel", () => {
+    render(<Harness />, { wrapper: createQueryWrapper().wrapper });
+    expect(screen.queryByRole("button", { name: "Room tasks" })).not.toBeInTheDocument();
+  });
+
   it("hides Agent selection in a direct chat, displays the workspace breadcrumb and opens its path through the menu", async () => {
     const user = userEvent.setup();
     render(<Harness />, { wrapper: createQueryWrapper().wrapper });

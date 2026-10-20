@@ -176,6 +176,9 @@ export function CLIDialog({ definition, existing, t, onClose, onChanged }: Props
     user_authorization: "feishuCLIUserAuthorization",
     applying: "feishuCLIApplying",
     completed: "feishuCLICompleted",
+    stopping_workers: "cliStoppingWorkers",
+    revoking_authorization: "cliRevokingAuthorization",
+    removing_configuration: "cliRemovingConfiguration",
   };
   const errorLabels: Record<string, string> = {
     authorization_expired: "feishuCLIExpired",
@@ -227,12 +230,17 @@ export function CLIDialog({ definition, existing, t, onClose, onChanged }: Props
             <p role="status" aria-live="polite">
               {active
                 ? t(stages[operation?.stage ?? ""] ?? "feishuCLIPreparing")
-                : resource
-                  ? appStatus(resource, t)
-                  : t("appStatusNeedsConfiguration")}
+                : cleanupPending
+                  ? t("cliCleanupRequired")
+                  : resource
+                    ? appStatus(resource, t)
+                    : t("appStatusNeedsConfiguration")}
             </p>
           </div>
-          {feishu ? (
+          {cleanupPending && !active && operation?.failure_stage && stages[operation.failure_stage] ? (
+            <p className={styles.hint}>{t("cliCleanupFailedStage", { stage: t(stages[operation.failure_stage]) })}</p>
+          ) : null}
+          {feishu && !cleanupPending ? (
             <section className={styles.authorizationSteps} aria-label={t("feishuCLIAuthorizationSteps")}>
               <div className={styles.authorizationStepsHeader}>
                 <strong>{t("feishuCLIAuthorizationSteps")}</strong>
@@ -394,7 +402,7 @@ export function CLIDialog({ definition, existing, t, onClose, onChanged }: Props
                     </Button>
                   ) : null}
                   <Button variant="danger" disabled={actionPending} onClick={() => void run("disconnect")}>
-                    {t("appDisconnect")}
+                    {t(cleanupPending ? "cliRetryCleanup" : "appDisconnect")}
                   </Button>
                 </div>
               ) : null}

@@ -7,6 +7,7 @@ export type ChatSideTab =
   | { id: string; kind: "new" }
   | { id: string; kind: "files" }
   | { id: string; kind: "activity"; entryID?: string }
+  | { id: string; kind: "tasks" }
   | { id: string; kind: "browser"; url: string }
   | {
       id: string;
@@ -103,7 +104,7 @@ export function restoreChatSideState(value: string | null): ChatSideState {
       )
         continue;
       const tab = entry as ChatSideTab;
-      if (tab.kind === "new" || tab.kind === "files" || tab.kind === "activity") tabs.push(tab);
+      if (tab.kind === "new" || tab.kind === "files" || tab.kind === "activity" || tab.kind === "tasks") tabs.push(tab);
       else if (tab.kind === "browser" && typeof tab.url === "string") {
         const url = tab.url ? normalizeBrowserURL(tab.url) : "";
         if (url !== null) tabs.push({ ...tab, url });

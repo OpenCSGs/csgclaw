@@ -195,8 +195,8 @@
 }
 .more:focus-visible,
 .open:focus-visible {
-  outline: 2px solid var(--focus-ring);
-  outline-offset: -2px;
+  outline: none;
+  box-shadow: var(--focus-ring);
 }
 .compact .row:is(:hover, :has([data-state="open"]), :has(.more:focus-visible)) .actions {
   opacity: 1;

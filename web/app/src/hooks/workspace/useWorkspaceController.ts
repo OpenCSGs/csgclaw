@@ -21,10 +21,8 @@ import {
   upsertUserInData,
   mergeRoomMetadataUpdateInData,
   removeConversationFromData,
-  localIdentitiesMatch,
 } from "@/models/conversations";
-import { isAgentRunning, resolveAgentAvatarFallback, resolveAgentChannelUserID } from "@/models/agents";
-import { teamMemberIDs } from "@/models/tasks";
+import { isAgentRunning, resolveAgentAvatarFallback } from "@/models/agents";
 import { MANAGER_AGENT_NAME } from "@/shared/constants/agents";
 import { agentTemplatesSearch, WorkspacePaneTypes, WorkspaceTabs, paneFromLocation } from "@/models/routing";
 import { MODEL_PROVIDER_IDS, modelProviderCatalogForOpenCSGState } from "@/models/modelProviders";
@@ -917,7 +915,7 @@ export function useWorkspaceController(): WorkspaceController {
       collapsedWorkspaceGroups,
       showUpgradeControls: bootstrapConfig?.show_upgrade !== false,
       onToggleWorkspaceGroup: shell.toggleWorkspaceGroup,
-      onCreateRoom: () => conversation.openCreateRoomModal(),
+      onCreateRoom: () => navigate("/new"),
       onCreateAgent: agent.openCreateAgentModal,
       onCreateCustomAgent: agent.openCreateCustomAgentModal,
       onCreateModelProvider: modelProviderCreation.open,
@@ -938,7 +936,7 @@ export function useWorkspaceController(): WorkspaceController {
       onSelectTeamSection: selectTeamSection,
       onSelectTask: selectTasks,
       onSelectTaskBoardView: task.setTaskBoardView,
-      onOpenCreateTask: () => conversation.openCreateRoomModal(),
+      onOpenCreateTask: () => navigate("/new"),
       onOpenCreateScheduledTask: task.openCreateScheduledTaskModal,
       onViewTaskDetails: task.openParentTaskDetail,
       onSelectTeam: selectTeam,
@@ -1035,6 +1033,14 @@ export function useWorkspaceController(): WorkspaceController {
     },
     conversationViewProps: {
       ...conversation.conversationViewProps,
+      memberPanelProps: conversation.conversationViewProps.memberPanelProps
+        ? {
+            ...conversation.conversationViewProps.memberPanelProps,
+            onPreviewUser: profilePreview.openParticipantPreview,
+            onManageExternalMessages: () =>
+              navigate({ search: settingsDialogSearch(location.search, "external") }, { replace: true }),
+          }
+        : null,
       onNewTask: (agentID?: string, configuration?: TaskConfiguration) =>
         navigate(agentID ? `/new?agent=${encodeURIComponent(agentID)}` : "/new", { state: { configuration } }),
       agents: agent.agentItems,
@@ -1045,7 +1051,7 @@ export function useWorkspaceController(): WorkspaceController {
     },
     taskViewProps: {
       ...task.taskViewProps,
-      onOpenCreateTaskModal: () => conversation.openCreateRoomModal(),
+      onOpenCreateTaskModal: () => navigate("/new"),
     },
     teamViewProps: {
       t,
@@ -1057,23 +1063,12 @@ export function useWorkspaceController(): WorkspaceController {
       teamActionBusy: agent.agentViewProps.teamActionBusy,
       teamActionError: agent.agentViewProps.teamActionError,
       onManageMembers: agent.openManageTeamMembers,
-      onCreateCollaborationSpace: (team) =>
-        conversation.openCreateRoomModal({
-          preselectedMemberIDs: [
-            displayData?.current_user_id || "",
-            ...teamMemberIDs(team).map(
-              (id) => resolveAgentChannelUserID(agents.find((item) => localIdentitiesMatch(item.id, id))) || id,
-            ),
-          ].filter(Boolean),
-        }),
       onDeleteTeam: agent.deleteTeam,
       onSelectAgent: selectAgent,
       onSelectTask: selectTasks,
     },
     profilePreviewProps: profilePreview.profilePreviewProps,
-    createRoomModalProps: conversation.createRoomModalProps,
     createTeamModalProps: agent.createTeamModalProps,
-    inviteMembersModalProps: conversation.inviteMembersModalProps,
     upgradeModalProps: upgrade.upgradeModalProps,
     configModalProps: configSettings.configModalProps,
     createModelProviderModalProps: modelProviderCreation.modalProps,

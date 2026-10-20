@@ -276,6 +276,9 @@ function renderThreadPane({
     const restoreCount = useRef(0);
     const [showChannelTools, setShowChannelTools] = useState(false);
     const [showMemberList, setShowMemberList] = useState(false);
+    const [memberPanelOpen, setMemberPanelOpen] = useState(false);
+    const [inviteUserIDs, setInviteUserIDs] = useState<string[]>([]);
+    const [showTools, setShowTools] = useState(showToolCalls);
     const [threadDraftSegments, setThreadDraftSegments] = useState<ComposerSegment[]>([]);
     const [agentDetailOpen, setAgentDetailOpen] = useState(Boolean(agentDetailPanelProps));
     if (agentDetailPanelStateRef) {
@@ -320,7 +323,7 @@ function renderThreadPane({
         onComposerCompositionStart={() => {}}
         onComposerKeyDown={() => {}}
         onDeleteRoom={onDeleteRoom}
-        onInviteAction={() => {}}
+        onInviteAction={() => setMemberPanelOpen((open) => !open)}
         onMessageAction={() => {}}
         onOpenAgentDetail={onOpenAgentDetail}
         onPreserveMessageAnchor={onPreserveMessageAnchor}
@@ -344,12 +347,32 @@ function renderThreadPane({
         onSyncComposer={() => {}}
         onToggleChannelTools={setShowChannelTools}
         onToggleMemberList={setShowMemberList}
-        onToggleToolCalls={() => {}}
+        onToggleToolCalls={setShowTools}
         selectedMessageCount={timelineMessages.length}
         agentDetailPanelProps={agentDetailOpen ? agentDetailPanelProps : null}
+        memberPanelProps={
+          memberPanelOpen && !isDirect
+            ? {
+                agents,
+                candidates: [],
+                currentUserID: "u-admin",
+                inviteUserIDs,
+                members: conversationMembers,
+                memberActionBusyID,
+                memberActionError,
+                onRemoveMember,
+                onExternalMembershipChange: () => {},
+                onClose: () => setMemberPanelOpen(false),
+                onInvite: () => {},
+                onInviteUserIDsChange: setInviteUserIDs,
+                onPreviewUser,
+                t,
+              }
+            : null
+        }
         showChannelTools={showChannelTools}
         showMemberList={showMemberList}
-        showToolCalls={showToolCalls}
+        showToolCalls={showTools}
         t={t}
         theme="light"
         threadDraftSegments={threadDraftSegments}
@@ -1416,67 +1439,170 @@ describe("ConversationPane", () => {
     expect(within(threadPanel).getByText("1 replies")).toBeInTheDocument();
   });
 
-  it("confirms before clearing room messages from the tools menu", async () => {
+  it("toggles tool-call visibility through direct conversation tools", async () => {
     const user = userEvent.setup();
-    const onClearRoomMessages = vi.fn();
-    const onDeleteRoom = vi.fn();
-    renderThreadPane({ isDirect: false, onClearRoomMessages, onDeleteRoom });
+    renderThreadPane({ isDirect: true });
 
     await user.click(screen.getByRole("button", { name: "channelTools" }));
+    await user.click(screen.getByRole("button", { name: /toggleToolCallsShow/ }));
+    expect(screen.getByRole("button", { name: /toggleToolCallsHide/ })).toBeInTheDocument();
+  });
+
+  it("成员管理与工具侧栏互相切换并保留已经打开的话题", async () => {
+    const bounds = vi
+      .spyOn(HTMLElement.prototype, "getBoundingClientRect")
+      .mockReturnValue(new DOMRect(0, 0, 1200, 900));
+    try {
+      const user = userEvent.setup();
+      const onCloseThread = vi.fn();
+      renderThreadPane({ isDirect: false, onCloseThread });
+      await user.click(screen.getByRole("button", { name: "Activity records" }));
+      expect(screen.getByRole("tab", { name: "Activity records" })).toHaveAttribute("aria-selected", "true");
+
+      await user.click(screen.getByRole("button", { name: "Invite" }));
+      expect(screen.getByRole("complementary", { name: "memberManagementTitle" })).toBeInTheDocument();
+      expect(screen.queryByRole("complementary", { name: "chatSidePanel" })).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Invite" })).toHaveAttribute("aria-pressed", "true");
+      expect(screen.getByRole("button", { name: "Activity records" })).toHaveAttribute("aria-pressed", "false");
+
+      await user.click(screen.getByRole("button", { name: "Activity records" }));
+      expect(screen.queryByRole("complementary", { name: "memberManagementTitle" })).not.toBeInTheDocument();
+      expect(screen.getByRole("tab", { name: "Activity records" })).toHaveAttribute("aria-selected", "true");
+      await user.click(screen.getByRole("tab", { name: "Thread" }));
+      expect(screen.getByRole("complementary", { name: "Thread" })).toHaveTextContent("Hi! How can I help you today?");
+      expect(onCloseThread).not.toHaveBeenCalled();
+    } finally {
+      bounds.mockRestore();
+    }
+  });
+
+  it("切换成员侧栏时保留浏览器地址草稿并恢复工具按钮状态", async () => {
+    const bounds = vi
+      .spyOn(HTMLElement.prototype, "getBoundingClientRect")
+      .mockReturnValue(new DOMRect(0, 0, 1200, 900));
+    try {
+      const user = userEvent.setup();
+      renderThreadPane({ isDirect: false });
+      const browserButton = screen.getByRole("button", { name: "chatBrowser" });
+      await user.click(browserButton);
+      const address = screen.getByRole("textbox", { name: "chatBrowserAddress" });
+      await user.type(address, "https://example.com/release");
+      const memberButton = screen.getByRole("button", { name: "Invite" });
+      await user.click(memberButton);
+      expect(screen.queryByRole("textbox", { name: "chatBrowserAddress" })).not.toBeInTheDocument();
+      expect(browserButton).toHaveAttribute("aria-pressed", "false");
+      await user.click(memberButton);
+      expect(screen.getByRole("textbox", { name: "chatBrowserAddress" })).toHaveValue("https://example.com/release");
+      expect(browserButton).toHaveAttribute("aria-pressed", "true");
+      expect(memberButton).toHaveAttribute("aria-pressed", "false");
+    } finally {
+      bounds.mockRestore();
+    }
+  });
+
+  it("keeps a running thread stoppable while its panel is suspended for member management", async () => {
+    const bounds = vi
+      .spyOn(HTMLElement.prototype, "getBoundingClientRect")
+      .mockReturnValue(new DOMRect(0, 0, 1200, 900));
+    try {
+      const user = userEvent.setup();
+      const participant = {
+        id: "u-manager",
+        name: "manager",
+        participantID: "pt-manager",
+        roomID: "room-1",
+        requestID: "request-thread",
+        leaseID: "lease-thread",
+        threadRootID: "msg-root",
+        canStop: true,
+      };
+      const onStopWorkingTurn = vi.fn();
+      renderThreadPane({
+        isDirect: false,
+        workingParticipants: [participant],
+        onStopWorkingTurn,
+        replies: [
+          {
+            id: "thread-progress",
+            sender_id: "u-manager",
+            content: "\u200b",
+            relates_to: { rel_type: "m.thread", event_id: "msg-root" },
+            metadata: {
+              csgclaw: {
+                request_id: "request-thread",
+                turn_progress: {
+                  id: "turn-thread",
+                  revision: 1,
+                  status: "running",
+                  started_at: "2026-10-19T00:00:00Z",
+                  items: [],
+                },
+              },
+            },
+          },
+        ],
+      });
+      await user.click(screen.getByRole("button", { name: "Invite" }));
+      expect(screen.queryByRole("complementary", { name: "Thread" })).not.toBeInTheDocument();
+      await user.click(screen.getByRole("button", { name: "conversationWorkingStopAria" }));
+      expect(onStopWorkingTurn).toHaveBeenCalledWith(expect.objectContaining(participant));
+    } finally {
+      bounds.mockRestore();
+    }
+  });
+
+  it("成员侧栏打开时通过消息的话题入口切换到所选话题", async () => {
+    const bounds = vi
+      .spyOn(HTMLElement.prototype, "getBoundingClientRect")
+      .mockReturnValue(new DOMRect(0, 0, 1200, 900));
+    try {
+      const user = userEvent.setup();
+      renderThreadPane({
+        isDirect: false,
+        statefulThreads: true,
+        messages: [
+          { id: "msg-root", content: "Thread A", sender_id: "u-manager" },
+          { id: "thread-b", content: "Thread B", sender_id: "u-manager" },
+        ],
+      });
+      await user.click(screen.getByRole("button", { name: "Invite" }));
+      const row = screen.getByText("Thread B").closest(".message-row") as HTMLElement;
+      await user.hover(row);
+      await user.click(row.querySelector(".thread-hover-button") as HTMLButtonElement);
+      expect(screen.queryByRole("complementary", { name: "memberManagementTitle" })).not.toBeInTheDocument();
+      expect(screen.getByRole("complementary", { name: "Thread" })).toHaveTextContent("Thread B");
+    } finally {
+      bounds.mockRestore();
+    }
+  });
+
+  it("直接会话保留消息管理入口并隐藏成员管理入口", async () => {
+    const user = userEvent.setup();
+    const onClearRoomMessages = vi.fn();
+    renderThreadPane({ isDirect: true, onClearRoomMessages });
+    expect(screen.queryByRole("button", { name: "Invite" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "membersTitle" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "channelTools" }));
+    expect(screen.queryByRole("button", { name: "deleteRoom" })).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "clearRoomMessages" }));
-
-    expect(onClearRoomMessages).not.toHaveBeenCalled();
-    expect(screen.getByRole("dialog")).toBeInTheDocument();
-
     await user.click(screen.getByRole("button", { name: "clearRoomMessagesConfirm" }));
-
     expect(onClearRoomMessages).toHaveBeenCalledWith("room-1");
-    expect(onDeleteRoom).not.toHaveBeenCalled();
   });
 
-  it("does not offer a notify-every-agent override for free rooms", async () => {
-    const user = userEvent.setup();
+  it("preserves direct conversation tools and room member management alongside side-panel actions", () => {
+    const direct = renderThreadPane({ isDirect: true });
+    expect(screen.getByRole("button", { name: "Activity records" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "chatFiles" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "chatBrowser" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Invite" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "channelTools" })).toBeInTheDocument();
+    direct.unmount();
+
     renderThreadPane({ isDirect: false });
-
-    await user.click(screen.getByRole("button", { name: "channelTools" }));
-    expect(screen.queryByRole("switch", { name: /notifyAllAgents/ })).not.toBeInTheDocument();
-  });
-
-  it("confirms before deleting a room from the tools menu", async () => {
-    const user = userEvent.setup();
-    const onClearRoomMessages = vi.fn();
-    const onDeleteRoom = vi.fn();
-    renderThreadPane({ isDirect: false, onClearRoomMessages, onDeleteRoom });
-
-    await user.click(screen.getByRole("button", { name: "channelTools" }));
-    await user.click(screen.getByRole("button", { name: "deleteRoom" }));
-
-    expect(onDeleteRoom).not.toHaveBeenCalled();
-    expect(screen.getByRole("dialog")).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "deleteRoomConfirm" }));
-
-    expect(onDeleteRoom).toHaveBeenCalledWith("room-1");
-    expect(onClearRoomMessages).not.toHaveBeenCalled();
-  });
-
-  it("keeps the delete dialog open and shows a localized error when deletion is blocked", async () => {
-    const user = userEvent.setup();
-    const onDeleteRoom = vi.fn().mockRejectedValue({
-      status: 409,
-      code: "room_has_active_tasks",
-      message: "finish or stop active room tasks before deleting the room",
-    });
-    renderThreadPane({ isDirect: false, onDeleteRoom });
-
-    await user.click(screen.getByRole("button", { name: "channelTools" }));
-    await user.click(screen.getByRole("button", { name: "deleteRoom" }));
-    await user.click(screen.getByRole("button", { name: "deleteRoomConfirm" }));
-
-    expect(await screen.findByRole("alert")).toHaveTextContent(
-      "当前房间仍有未完成的任务。请先停止或完成任务，再删除房间。",
-    );
-    expect(screen.getByRole("dialog")).toBeInTheDocument();
-    expect(onDeleteRoom).toHaveBeenCalledWith("room-1");
+    expect(screen.getByRole("button", { name: "Invite" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Activity records" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "chatFiles" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "chatBrowser" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "channelTools" })).not.toBeInTheDocument();
   });
 });

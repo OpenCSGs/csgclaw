@@ -6,6 +6,8 @@ Completed conversation and thread replies show the selected model and total
 reported token consumption. A selected model ID of `auto` hides the model name,
 including the actual upstream routing target. Hovering or focusing the count
 shows exact input/output counters and available cache/reasoning subsets.
+When the action row is too narrow, usage collapses to an information icon;
+hovering or focusing it still reveals the total, selected model and exact counters.
 
 One turn includes all model steps needed for that Agent's reply, including tool
 round trips. Input includes the context actually sent on every request: system

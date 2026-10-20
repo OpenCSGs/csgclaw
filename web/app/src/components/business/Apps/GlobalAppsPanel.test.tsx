@@ -22,6 +22,30 @@ const definition: AppDefinition = {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("Global Apps", () => {
+  it("shows connector loading until the resource response arrives", async () => {
+    let finish!: (response: Response) => void;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((url: string) =>
+        String(url).endsWith("catalog")
+          ? Promise.resolve(Response.json({ items: [] }))
+          : new Promise<Response>((resolve) => {
+              finish = resolve;
+            }),
+      ),
+    );
+    render(
+      <MemoryRouter>
+        <GlobalAppsPanel t={t} />
+      </MemoryRouter>,
+    );
+    expect(screen.getByRole("status")).toHaveTextContent("Loading connectors…");
+    expect(screen.queryByText(t("appEmptyTitle"))).not.toBeInTheDocument();
+    await act(async () => finish(Response.json({ items: [] })));
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    expect(screen.getByText(t("appEmptyTitle"))).toBeVisible();
+  });
+
   it("reenables a disabled global connector from its details header", async () => {
     const user = userEvent.setup();
     let resource = {

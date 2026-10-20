@@ -29,6 +29,7 @@ import styles from "./SettingsPage.module.css";
 /** Settings uses query parameters so opening and closing preserve the workspace and its draft. */
 export function SettingsPage() {
   const dialogRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLElement | null>(null);
   const controller = useWorkspaceControllerContext();
   const location = useLocation();
   const navigate = useNavigate();
@@ -82,6 +83,13 @@ export function SettingsPage() {
         ref={dialogRef}
         className={styles.dialog}
         aria-describedby={undefined}
+        onOpenAutoFocus={() => {
+          triggerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+        }}
+        onCloseAutoFocus={(event) => {
+          event.preventDefault();
+          if (triggerRef.current?.isConnected) triggerRef.current.focus({ preventScroll: true });
+        }}
         onEscapeKeyDown={(event) => {
           // A newly opened nested portal can receive focus before Radix updates its layer order.
           if (

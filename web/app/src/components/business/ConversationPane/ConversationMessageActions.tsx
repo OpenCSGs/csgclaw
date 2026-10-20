@@ -2,14 +2,16 @@ import { resourceMessageText } from "@/models/conversationResources";
 import { writeTextToClipboard } from "@/shared/lib/clipboard";
 import { DiagnosticMessageAction } from "@/components/business/TurnDiagnostics";
 import { diagnosticReference } from "@/models/diagnostics";
-import { messageTokenUsage, tokenCountLabel, visibleUsageModel } from "@/models/tokenUsage";
+import { messageTokenUsage } from "@/models/tokenUsage";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Check, Copy, MessageSquareReply } from "lucide-react";
+import { Check } from "lucide-react";
 import { resolveRequestPath } from "@/api/client";
 import type { MessageAttachment } from "@/models/attachments";
 import { flattenMentionText } from "@/components/business/MessageContent";
 import type { TranslateFn } from "@/models/conversations";
 import { renderSlashCommandPreviewText } from "@/models/slashCommands";
+import { CopyMessageIcon, ReplyMessageIcon } from "./MessageActionIcons";
+import { MessageTokenUsage } from "./MessageTokenUsage/MessageTokenUsage";
 import type { VoidOrPromise } from "./types";
 
 export type ConversationMessageActionsProps = {
@@ -39,7 +41,6 @@ export function ConversationMessageActions({
   const imageURL = image?.download_url || image?.preview_url || "";
   const canCopy = Boolean(imageURL || copyText.replace(/\u200b/g, ""));
   const usage = messageTokenUsage(metadata);
-  const usageModel = usage ? visibleUsageModel(usage.model_id) : "";
   const copyLabel = copied
     ? t("copiedToClipboard")
     : copying && imageURL
@@ -104,7 +105,7 @@ export function ConversationMessageActions({
           disabled={copying}
           onClick={() => void copyMessage()}
         >
-          {copied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
+          {copied ? <Check aria-hidden="true" /> : <CopyMessageIcon />}
         </button>
       ) : null}
       {copyError ? (
@@ -121,31 +122,10 @@ export function ConversationMessageActions({
           data-tooltip-side="top"
           onClick={() => void onOpenThread()}
         >
-          <MessageSquareReply aria-hidden="true" />
+          <ReplyMessageIcon />
         </button>
       ) : null}
-      {usage ? (
-        <span
-          className="message-token-usage"
-          tabIndex={0}
-          title={
-            usage.known
-              ? t("turnTokenUsageDetails", {
-                  input: usage.input_tokens,
-                  output: usage.output_tokens,
-                  cached: usage.cached_input_tokens,
-                  reasoning: usage.reasoning_tokens,
-                })
-              : t("turnTokenUsageUnavailable")
-          }
-        >
-          {usage.known
-            ? t("turnTokenUsage", { count: tokenCountLabel(usage.total_tokens) })
-            : t("turnTokenUsageUnavailable")}
-          {usage.known && usage.partial ? ` ${t("turnTokenUsagePartial")}` : ""}
-          {usageModel ? ` · ${t("turnTokenUsageModel", { model: usageModel })}` : ""}
-        </span>
-      ) : null}
+      {usage ? <MessageTokenUsage usage={usage} t={t} /> : null}
     </div>
   );
 }

@@ -484,7 +484,7 @@ func (h *Handler) handleConnectorResources(w http.ResponseWriter, r *http.Reques
 	case http.MethodGet:
 		if id == "" {
 			var items []apps.Installation
-			items, err = h.apps.CheckResources(r.Context())
+			items, err = h.apps.ListResources(r.Context())
 			for i := range items {
 				items[i] = h.connectorResourceView(items[i])
 			}

@@ -26,6 +26,8 @@ const subscribeIMEventsMock = vi.fn();
 const apiMocks = vi.hoisted(() => ({
   deleteRoomRequest: vi.fn(),
   fetchThreadRequest: vi.fn(),
+  inviteRoomUsersRequest: vi.fn(),
+  removeRoomUserRequest: vi.fn(),
   sendMessageRequest: vi.fn(),
 }));
 
@@ -39,6 +41,8 @@ vi.mock("@/api/im", async () => {
     ...actual,
     deleteRoomRequest: apiMocks.deleteRoomRequest,
     fetchThreadRequest: apiMocks.fetchThreadRequest,
+    inviteRoomUsersRequest: apiMocks.inviteRoomUsersRequest,
+    removeRoomUserRequest: apiMocks.removeRoomUserRequest,
     sendMessageRequest: apiMocks.sendMessageRequest,
   };
 });
@@ -229,6 +233,8 @@ describe("useConversationController", () => {
     subscribeIMEventsMock.mockReturnValue(() => {});
     apiMocks.deleteRoomRequest.mockReset();
     apiMocks.fetchThreadRequest.mockReset();
+    apiMocks.inviteRoomUsersRequest.mockReset();
+    apiMocks.removeRoomUserRequest.mockReset();
     apiMocks.sendMessageRequest.mockReset();
   });
 
@@ -1282,7 +1288,7 @@ describe("useConversationController", () => {
     expect(result.current.conversationViewProps.composerError).toBe("Docker is not running");
   });
 
-  it("opens create-room modal from a direct message", () => {
+  it("keeps member management unavailable in direct messages", () => {
     const { result } = renderConversationController();
 
     expect(result.current.conversationViewProps.inviteActionLabel).toBe("memberManagement");
@@ -1291,11 +1297,87 @@ describe("useConversationController", () => {
       result.current.conversationViewProps.onInviteAction();
     });
 
-    expect(result.current.createRoomModalProps).toMatchObject({
-      roomMemberIDs: ["u-admin", "u-demo"],
-      lockedRoomMemberIDs: ["u-admin", "u-demo"],
+    expect(result.current.conversationViewProps.memberPanelProps).toBeNull();
+  });
+
+  it("keeps external membership changes in the current room member panel", async () => {
+    const conversation = { ...directConversation, is_direct: false, members: ["u-admin", "u-dev"] };
+    const data = groupConversationData(conversation);
+    const setBootstrapData = vi.fn();
+    const updated = { ...conversation, members: [...conversation.members, "source"] };
+    apiMocks.inviteRoomUsersRequest.mockResolvedValue(updated);
+    apiMocks.removeRoomUserRequest.mockResolvedValue(conversation);
+    const { result } = renderConversationController({ data, setBootstrapData });
+    act(() => result.current.conversationViewProps.onInviteAction());
+    await act(async () => {
+      await result.current.conversationViewProps.memberPanelProps?.onExternalMembershipChange("source", true);
     });
-    expect(result.current.inviteMembersModalProps).toBeNull();
+    expect(apiMocks.inviteRoomUsersRequest).toHaveBeenCalledWith({
+      room_id: conversation.id,
+      inviter_id: "u-admin",
+      user_ids: ["source"],
+      locale: "en",
+    });
+    expect(setBootstrapData).toHaveBeenCalled();
+    expect(result.current.conversationViewProps.memberPanelProps).not.toBeNull();
+    await act(async () => {
+      await result.current.conversationViewProps.memberPanelProps?.onExternalMembershipChange("source", false);
+    });
+    expect(apiMocks.removeRoomUserRequest).toHaveBeenCalledWith({
+      room_id: conversation.id,
+      inviter_id: "u-admin",
+      member_id: "source",
+      locale: "en",
+    });
+    expect(result.current.conversationViewProps.memberPanelProps).not.toBeNull();
+  });
+
+  it("retains invitation selection after failure and prevents duplicate submissions", async () => {
+    const conversation = { ...directConversation, is_direct: false, members: ["u-admin", "u-dev"] };
+    const request = deferred<IMConversation>();
+    apiMocks.inviteRoomUsersRequest.mockReturnValue(request.promise);
+    const { result } = renderConversationController({ data: groupConversationData(conversation) });
+    act(() => result.current.conversationViewProps.onInviteAction());
+    act(() => result.current.conversationViewProps.memberPanelProps?.onInviteUserIDsChange(["u-qa"]));
+    let pending: Promise<void> | undefined;
+    act(() => {
+      pending = result.current.conversationViewProps.memberPanelProps?.onInvite();
+      void result.current.conversationViewProps.memberPanelProps?.onInvite();
+    });
+    expect(apiMocks.inviteRoomUsersRequest).toHaveBeenCalledOnce();
+    expect(result.current.conversationViewProps.memberPanelProps?.inviteBusy).toBe(true);
+    await act(async () => {
+      request.reject(new Error("Invitation failed"));
+      await pending;
+    });
+    expect(result.current.conversationViewProps.memberPanelProps).toMatchObject({
+      inviteUserIDs: ["u-qa"],
+      inviteBusy: false,
+      submitError: "Invitation failed",
+    });
+  });
+
+  it("closes member management when changing rooms and ignores the previous room's request error", async () => {
+    const conversation = { ...directConversation, is_direct: false, members: ["u-admin", "u-dev"] };
+    const nextConversation = { ...conversation, id: "room-next" };
+    const data = { ...groupConversationData(conversation), rooms: [conversation, nextConversation] };
+    const request = deferred<IMConversation>();
+    apiMocks.inviteRoomUsersRequest.mockReturnValue(request.promise);
+    const { result, rerender } = renderConversationController({ data });
+    act(() => result.current.conversationViewProps.onInviteAction());
+    let pending: Promise<void> | undefined;
+    act(() => {
+      pending = result.current.conversationViewProps.memberPanelProps?.onExternalMembershipChange("source", true);
+    });
+    rerender({ activeConversationId: "room-next", data, messageListActive: true });
+    expect(result.current.conversationViewProps.memberPanelProps).toBeNull();
+    act(() => result.current.conversationViewProps.onInviteAction());
+    expect(result.current.conversationViewProps.memberPanelProps?.memberActionBusyID).toBe("source");
+    await act(async () => {
+      request.reject(new Error("Old room request failed"));
+      await pending;
+    });
+    expect(result.current.conversationViewProps.memberPanelProps?.memberActionError).toBe("");
   });
 
   it("does not mark a participant working from message send or activity", async () => {

@@ -66,7 +66,11 @@ export function ExternalMessagesSection() {
   }, []);
 
   // Room participants come from the cached workspace bootstrap.
-  const refreshWorkspace = () => queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.bootstrap() });
+  const refreshWorkspace = () =>
+    Promise.all([
+      queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.bootstrap() }),
+      queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.agents() }),
+    ]);
 
   async function handleDelete(item: ParticipantLike) {
     if (!item.id || busyID) {

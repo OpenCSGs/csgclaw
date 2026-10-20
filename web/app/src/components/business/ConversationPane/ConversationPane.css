@@ -212,56 +212,6 @@
   line-height: 1.4;
 }
 
-.member-management-modal .field {
-  gap: 14px;
-}
-
-.member-management-section + .member-management-section {
-  padding-top: 8px;
-}
-
-.member-management-row {
-  grid-template-columns: 40px minmax(0, 1fr) 34px;
-  gap: 10px;
-  align-items: center;
-}
-
-.member-management-row .avatar {
-  width: 40px;
-  height: 40px;
-  flex-basis: 40px;
-  border-radius: 50%;
-  font-size: 13px;
-}
-
-.member-management-row .create-room-member-copy {
-  min-width: 0;
-}
-
-.member-management-row .create-room-member-copy small {
-  display: block;
-}
-
-.member-role-badge {
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.member-row-remove {
-  justify-self: end;
-  min-width: 34px;
-  width: 34px;
-  height: 34px;
-  padding: 0;
-  border-radius: 8px;
-}
-
-.member-row-remove .btn-content {
-  width: 14px;
-  height: 14px;
-}
-
 .chat-panel {
   --chat-content-max-width: 1120px;
   --chat-transcript-bg: var(--bg);
@@ -365,7 +315,7 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  margin: 14px 0;
+  margin: 22px 0;
   color: var(--muted);
   font-size: 12px;
   font-weight: 650;
@@ -2564,8 +2514,8 @@ button.message-file-attachment {
   max-width: min(100%, 1120px);
 }
 
-.message-row:not(.own) + .message-row:not(.own) {
-  margin-top: 24px;
+.message-row + .message-row {
+  margin-top: 36px;
 }
 
 .message-row > .avatar.avatar-button {

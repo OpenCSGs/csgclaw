@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { ComponentProps, ReactNode } from "react";
-import { Bot, CalendarClock, ChevronDown, Pencil, Play, Trash2, Users } from "lucide-react";
+import { Bot, CalendarClock, ChevronDown, Pencil, Play, Trash2 } from "lucide-react";
 import {
   Button,
   Tooltip,
@@ -13,7 +13,7 @@ import {
   DialogRoot,
   DialogTitle,
 } from "@/components/ui";
-import { TaskStatusPill, TaskSubtaskIndicator } from "@/components/business";
+import { TaskStatusPill } from "@/components/business";
 import type { CreateWorkspaceTaskPayload } from "@/api/tasks";
 import type { CreateScheduledTaskPayload, UpdateScheduledTaskPayload } from "@/api/scheduledTasks";
 import type { AgentLike } from "@/models/agents";
@@ -24,22 +24,28 @@ import {
   type WorkspaceScheduledTaskRun,
 } from "@/models/scheduledTasks";
 import {
-  TASK_BOARD_STATUSES,
   displayTaskAssignedAgent,
-  displayTaskAssignmentTarget,
   displayTaskClaimedAgent,
   displayTaskRoomTitle,
   displayTeam,
   formatTaskUpdatedAt,
-  formatTaskUpdatedRelative,
-  resolveTaskSidebarPhase,
   rootTaskForTask,
   rootTasks,
   taskChildren,
   taskExecutionRoomID,
   taskStatusLabel,
 } from "@/models/tasks";
-import type { TaskSidebarPhase, WorkspaceTask, WorkspaceTeam, WorkspaceTeamEvent } from "@/models/tasks";
+import type { WorkspaceTask, WorkspaceTeam, WorkspaceTeamEvent } from "@/models/tasks";
+import { TaskBoard } from "@/components/business/TaskBoard";
+import {
+  agentNameLookup,
+  displayAgentByID,
+  displayTaskClaimedAgentName,
+  displayTaskWorkerName,
+  displayTaskAssignmentTargetName,
+  taskActiveWorker,
+  type TaskActiveWorker,
+} from "@/models/taskBoard";
 import { classNames } from "@/shared/lib/classNames";
 import { ScheduledTaskCreateDialog } from "./ScheduledTaskCreateDialog";
 import { ScheduledTaskFormFields } from "./ScheduledTaskFormFields";
@@ -156,26 +162,6 @@ function scheduledTaskAgentOptions(agents: readonly AgentLike[]) {
     label: displayAgent(agent),
     description: String(agent.id || ""),
   }));
-}
-
-function agentNameLookup(agents: readonly AgentLike[]): ReadonlyMap<string, string> {
-  const lookup = new Map<string, string>();
-  agents.forEach((agent) => {
-    const name = displayAgent(agent);
-    const ids = [agent.id, agent.user_id].map((value) => String(value || "").trim()).filter(Boolean);
-    ids.forEach((id) => {
-      if (name && !lookup.has(id)) {
-        lookup.set(id, name);
-      }
-    });
-  });
-  return lookup;
-}
-
-function displayAgentByID(agentID: string, lookup: ReadonlyMap<string, string>, fallbackName?: string): string {
-  const id = String(agentID || "").trim();
-  const name = String(fallbackName || "").trim();
-  return id ? name || lookup.get(id) || id : name;
 }
 
 function todayInputValue(now = new Date()): string {
@@ -422,7 +408,6 @@ export function TasksView({
     () => (parentDialogTask ? taskChildren(taskBoardTasks, parentDialogTask.id) : []),
     [parentDialogTask, taskBoardTasks],
   );
-  const parentColumns = useMemo(() => boardColumnsForParentTasks(parentTasks), [parentTasks]);
   const [createDraft, setCreateDraft] = useState<TaskCreateDraft>(emptyCreateDraft);
   const [createFieldErrors, setCreateFieldErrors] = useState<TaskCreateFieldErrors>({});
   const [scheduledDraft, setScheduledDraft] = useState<ScheduledTaskFormDraft>(emptyScheduledTaskDraft);
@@ -698,51 +683,14 @@ export function TasksView({
             <div className={styles.taskContentLayout}>
               <div className={styles.taskContentMain}>
                 {activeView === "tasks" ? (
-                  <div className={styles.tasksKanbanScroll} role="region" aria-label={t("mainTaskBoardTitle")}>
-                    <div className={styles.tasksKanban}>
-                      {parentColumns.map((column) => (
-                        <section
-                          key={column.status}
-                          className={classNames(
-                            styles.taskBoardColumn,
-                            moduleSuffixStyle("taskBoardColumn", column.status),
-                          )}
-                        >
-                          <header className={classNames(styles.headerRow, styles.taskBoardColumnHead)}>
-                            <span className={styles.taskBoardColumnTitle}>
-                              <TaskBoardStatusIcon status={column.status} />
-                              <span>{taskStatusLabel(column.status, t)}</span>
-                              <strong>{column.tasks.length}</strong>
-                            </span>
-                          </header>
-                          <div className={styles.taskBoardColumnBody}>
-                            {column.tasks.length ? (
-                              column.tasks.map((task) => {
-                                const children = taskChildren(taskBoardTasks, task.id);
-                                const phase = resolveTaskSidebarPhase(task, children, {
-                                  planningTaskID,
-                                  startingTaskID,
-                                });
-                                return (
-                                  <ParentTaskBoardCard
-                                    key={task.id}
-                                    task={task}
-                                    children={children}
-                                    agentNames={agentNames}
-                                    phase={phase}
-                                    t={t}
-                                    onSelect={() => openRootTaskDetail(task)}
-                                  />
-                                );
-                              })
-                            ) : (
-                              <div className={styles.taskBoardEmpty}>{t("taskBoardColumnEmpty")}</div>
-                            )}
-                          </div>
-                        </section>
-                      ))}
-                    </div>
-                  </div>
+                  <TaskBoard
+                    tasks={taskBoardTasks}
+                    agentNames={agentNames}
+                    planningTaskID={planningTaskID}
+                    startingTaskID={startingTaskID}
+                    t={t}
+                    onSelectTask={openRootTaskDetail}
+                  />
                 ) : (
                   <div className={styles.scheduledTaskLayout}>
                     <section className={styles.scheduledTaskList} aria-label={t("scheduledTasksTab")}>
@@ -1163,70 +1111,6 @@ function TaskToolbarButton({
   );
 }
 
-function TaskBoardStatusIcon({ status }: { status: string }) {
-  const progress = taskBoardStatusProgress(status);
-
-  return (
-    <svg className={styles.taskBoardStatusIcon} viewBox="0 0 14 14" fill="none" aria-hidden="true">
-      <TaskBoardProgressCircle progress={progress}>
-        {progress === 1 ? (
-          <path
-            d="M10.951 4.24896C11.283 4.58091 11.283 5.11909 10.951 5.45104L5.95104 10.451C5.61909 10.783 5.0809 10.783 4.74896 10.451L2.74896 8.45104C2.41701 8.11909 2.41701 7.5809 2.74896 7.24896C3.0809 6.91701 3.61909 6.91701 3.95104 7.24896L5.35 8.64792L9.74896 4.24896C10.0809 3.91701 10.6191 3.91701 10.951 4.24896Z"
-            fill="white"
-            stroke="none"
-          />
-        ) : status === "failed" || status === "cancelled" || status === "canceled" ? (
-          <path d="M5 5 L9 9 M9 5 L5 9" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" />
-        ) : null}
-      </TaskBoardProgressCircle>
-    </svg>
-  );
-}
-
-function TaskBoardProgressCircle({ progress, children }: { progress: number; children?: ReactNode }) {
-  return (
-    <>
-      <circle cx={7} cy={7} r={6} fill="none" stroke="currentColor" strokeWidth={1.5} />
-      {progress === 1 ? (
-        <circle cx={7} cy={7} r={6} fill="currentColor" />
-      ) : progress > 0 ? (
-        <path d={taskBoardPiePath(7, 7, 3.5, progress)} fill="currentColor" />
-      ) : null}
-      {children}
-    </>
-  );
-}
-
-function taskBoardPiePath(cx: number, cy: number, radius: number, progress: number): string {
-  const angle = 2 * Math.PI * progress;
-  const endX = cx + radius * Math.sin(angle);
-  const endY = cy - radius * Math.cos(angle);
-  const largeArc = progress > 0.5 ? 1 : 0;
-  return `M${cx},${cy} L${cx},${cy - radius} A${radius},${radius} 0 ${largeArc},1 ${endX},${endY} Z`;
-}
-
-function taskBoardStatusProgress(status: string): number {
-  if (status === "completed" || status === "done") {
-    return 1;
-  }
-  if (status === "blocked" || status === "in_review") {
-    return 0.75;
-  }
-  if (status === "in_progress" || status === "running") {
-    return 0.5;
-  }
-  return 0;
-}
-
-type ParentTaskBoardCardProps = {
-  agentNames: ReadonlyMap<string, string>;
-  children: WorkspaceTask[];
-  onSelect: () => void;
-  phase: TaskSidebarPhase;
-  t: TranslateFn;
-  task: WorkspaceTask;
-};
-
 function RoomTaskSummary({ task, t }: { task: WorkspaceTask; t: TranslateFn }) {
   if (task.assignment_type !== "room" || task.parent_id || !["completed", "failed", "cancelled"].includes(task.status))
     return null;
@@ -1237,54 +1121,6 @@ function RoomTaskSummary({ task, t }: { task: WorkspaceTask; t: TranslateFn }) {
       {task.report ? <p className="whitespace-pre-wrap">{task.report}</p> : null}
       {task.report_status === "pending" ? <p>{t("roomTaskReportPending")}</p> : null}
     </section>
-  );
-}
-
-function ParentTaskBoardCard({ task, children, agentNames, phase, t, onSelect }: ParentTaskBoardCardProps) {
-  const description = task.body || task.plan_summary || task.result || task.error || t("tasksDetailPlaceholder");
-  const activeWorker = taskActiveWorker(task, children, t, agentNames);
-  const updatedRelative = formatTaskUpdatedRelative(task.updated_at, document.documentElement.lang);
-  const updatedLabel = updatedRelative === "-" ? "" : t("taskCardUpdatedAt", { time: updatedRelative });
-  const assignmentTarget = displayTaskAssignmentTargetName(task, agentNames);
-
-  return (
-    <Tooltip content={`${task.id} ${task.title}`}>
-      <button type="button" className={classNames(styles.taskBoardCard, styles.parentTaskBoardCard)} onClick={onSelect}>
-        <span className={styles.taskBoardCardTopline}>
-          <span className={styles.taskBoardCardId}>{task.id}</span>
-          <span className={styles.taskBoardCardActions}>
-            {activeWorker ? (
-              <Tooltip content={`${activeWorker.name} ${activeWorker.label}`}>
-                <span className={styles.taskBoardCardWorkerBadge}>
-                  <Bot size={12} strokeWidth={1.9} aria-hidden="true" />
-                  <span>{activeWorker.label}</span>
-                </span>
-              </Tooltip>
-            ) : null}
-            <TaskSubtaskIndicator subtasks={children} phase={phase} t={t} compact />
-          </span>
-        </span>
-        <strong className={classNames(styles.lineClampText, styles.taskBoardCardTitle)}>{task.title}</strong>
-        <span className={classNames(styles.lineClampText, styles.taskBoardCardDescription)}>{description}</span>
-        <span className={styles.taskBoardCardFooter}>
-          {assignmentTarget ? (
-            <Tooltip content={assignmentTarget}>
-              <span className={styles.taskBoardCardTeam}>
-                <span className={styles.taskBoardCardTeamIcon} aria-hidden="true">
-                  {task.assignment_type === "agent" ? (
-                    <Bot size={13} strokeWidth={1.8} />
-                  ) : (
-                    <Users size={13} strokeWidth={1.8} />
-                  )}
-                </span>
-                <span>{assignmentTarget}</span>
-              </span>
-            </Tooltip>
-          ) : null}
-          {updatedLabel ? <span className={styles.taskBoardCardUpdated}>{updatedLabel}</span> : null}
-        </span>
-      </button>
-    </Tooltip>
   );
 }
 
@@ -1511,12 +1347,6 @@ function TaskDetailDialog({
     </DialogRoot>
   );
 }
-
-type TaskActiveWorker = {
-  label: string;
-  name: string;
-  tone: "working";
-};
 
 function TaskActiveWorkerBadge({ worker }: { worker: TaskActiveWorker }) {
   return (
@@ -1787,85 +1617,6 @@ function isActiveTaskStatus(status: string): boolean {
   return ["pending", "assigned", "in_progress", "running", "blocked"].includes(status);
 }
 
-function taskActiveWorker(
-  task: WorkspaceTask,
-  childTasks: readonly WorkspaceTask[],
-  t: TranslateFn,
-  agentNames: ReadonlyMap<string, string>,
-): TaskActiveWorker | null {
-  const activeChild = childTasks
-    .filter((child) => !isTerminalTaskStatus(child.status))
-    .filter((child) => taskWorkerName(child, agentNames))
-    .sort(
-      (left, right) =>
-        activeWorkerStatusRank(left.status) - activeWorkerStatusRank(right.status) ||
-        right.updated_at.localeCompare(left.updated_at),
-    )[0];
-  if (activeChild) {
-    const workerName = taskWorkerName(activeChild, agentNames);
-    if (!workerName) {
-      return null;
-    }
-    return {
-      name: workerName,
-      label: t("taskActiveWorkerWorking"),
-      tone: "working",
-    };
-  }
-  const parentWorkerName = taskWorkerName(task, agentNames);
-  if (parentWorkerName && !isTerminalTaskStatus(task.status)) {
-    return { name: parentWorkerName, label: t("taskActiveWorkerWorking"), tone: "working" };
-  }
-  return null;
-}
-
-function activeWorkerStatusRank(status: string): number {
-  if (status === "in_progress" || status === "running") {
-    return 0;
-  }
-  if (status === "assigned") {
-    return 1;
-  }
-  if (status === "pending") {
-    return 2;
-  }
-  return 3;
-}
-
-function taskWorkerName(task: WorkspaceTask, agentNames: ReadonlyMap<string, string>): string {
-  const name = displayTaskWorkerName(task, agentNames);
-  return isDisplayableWorkerName(name) ? name : "";
-}
-
-function displayTaskAssignedAgentName(task: WorkspaceTask, agentNames: ReadonlyMap<string, string>): string {
-  const assignedID = task.assigned_to || (task.assignment_type === "agent" ? task.assignment_id : "");
-  return task.assigned_to_agent_name || displayAgentByID(assignedID, agentNames);
-}
-
-function displayTaskClaimedAgentName(task: WorkspaceTask, agentNames: ReadonlyMap<string, string>): string {
-  return task.claimed_by_agent_name || displayAgentByID(task.claimed_by, agentNames);
-}
-
-function displayTaskWorkerName(task: WorkspaceTask, agentNames: ReadonlyMap<string, string>): string {
-  return displayTaskClaimedAgentName(task, agentNames) || displayTaskAssignedAgentName(task, agentNames);
-}
-
-function displayTaskAssignmentTargetName(task: WorkspaceTask, agentNames: ReadonlyMap<string, string>): string {
-  if (task.parent_id || task.assignment_type === "agent") {
-    return displayTaskAssignedAgentName(task, agentNames);
-  }
-  return displayTaskAssignmentTarget(task);
-}
-
-function isDisplayableWorkerName(name: string): boolean {
-  const normalized = name.trim().toLowerCase();
-  return Boolean(normalized) && !["manager", "planner", "u-manager"].includes(normalized);
-}
-
-function isTerminalTaskStatus(status: string): boolean {
-  return ["completed", "done", "failed", "cancelled", "canceled"].includes(status);
-}
-
 function taskDependencyLevels(tasks: readonly WorkspaceTask[]): WorkspaceTask[][] {
   const tasksByID = new Map(tasks.map((task) => [task.id, task]));
   const depthCache = new Map<string, number>();
@@ -1948,17 +1699,6 @@ function taskMetaTags(
   addTag("depends_on", t("taskDependsOnLabel"), task.depends_on.length ? task.depends_on.join(", ") : "");
 
   return tags;
-}
-
-function boardColumnsForParentTasks(tasks: readonly WorkspaceTask[]) {
-  const defaultStatuses: readonly string[] = TASK_BOARD_STATUSES;
-  const extraStatuses = Array.from(
-    new Set(tasks.map((task) => task.status).filter((status) => !defaultStatuses.includes(status))),
-  ).sort();
-  return [...TASK_BOARD_STATUSES, ...extraStatuses].map((status) => ({
-    status,
-    tasks: tasks.filter((task) => task.status === status),
-  }));
 }
 
 function taskEventsForDetail(

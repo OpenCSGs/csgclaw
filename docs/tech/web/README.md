@@ -12,6 +12,7 @@ This directory documents the CSGClaw frontend under `web/app`.
 - `architecture.zh.md`: Chinese companion to `architecture.md`. It explains the same architecture diagram in Chinese.
 
 - `task-workspace.md`: Session configuration, runtime isolation, and task navigation contracts.
+- `room-collaboration.md`: Unified navigation, room task boards, member management, component ownership, and interaction verification.
 
 ## Reading Order
 

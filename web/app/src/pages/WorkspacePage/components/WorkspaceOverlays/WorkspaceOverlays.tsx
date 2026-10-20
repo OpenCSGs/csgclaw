@@ -9,9 +9,7 @@ import { ProfilePreviewPopover } from "../ProfilePreviewPopover";
 import {
   AgentProfileModal,
   CreateModelProviderModal,
-  CreateRoomModal,
   CreateTeamModal,
-  InviteMembersModal,
   UpgradeModal,
   ConfigSettingsModal,
 } from "../WorkspaceModals";
@@ -43,12 +41,10 @@ export function WorkspaceOverlays() {
       ) : null}
       {showFloatingChat && controller.floatingChatProps ? <FloatingChat {...controller.floatingChatProps} /> : null}
       {controller.profilePreviewProps ? <ProfilePreviewPopover {...controller.profilePreviewProps} /> : null}
-      {controller.createRoomModalProps ? <CreateRoomModal {...controller.createRoomModalProps} /> : null}
       {controller.createModelProviderModalProps ? (
         <CreateModelProviderModal {...controller.createModelProviderModalProps} />
       ) : null}
       {controller.createTeamModalProps ? <CreateTeamModal {...controller.createTeamModalProps} /> : null}
-      {controller.inviteMembersModalProps ? <InviteMembersModal {...controller.inviteMembersModalProps} /> : null}
       {controller.upgradeModalProps ? <UpgradeModal {...controller.upgradeModalProps} /> : null}
       {controller.configModalProps ? <ConfigSettingsModal {...controller.configModalProps} /> : null}
       {controller.agentProfileModalProps ? <AgentProfileModal {...controller.agentProfileModalProps} /> : null}

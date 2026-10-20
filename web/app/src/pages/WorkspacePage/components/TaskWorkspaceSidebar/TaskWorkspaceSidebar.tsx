@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { TaskConversationList } from "@/components/business/TaskConversationList";
 import { resolveAgentChannelUserID, agentRuntimeOptions } from "@/models/agents";
 import { resolveConversationUser, agentMatchesUser } from "@/models/conversations";
-import { WorkspacePaneTypes } from "@/models/routing";
+import { pathForPane, WorkspacePaneTypes } from "@/models/routing";
 import { Tooltip } from "@/components/ui";
 import type { WorkspaceSidebarProps } from "@/hooks/workspace/contracts/sidebar";
 import type { TaskEntryController } from "@/hooks/workspace/useTaskEntry";
@@ -64,6 +64,10 @@ export function TaskWorkspaceSidebar(props: WorkspaceSidebarProps & { entry: Tas
       (agent) => agentMatchesUser(agent, other) || room.members.includes(resolveAgentChannelUserID(agent)),
     );
   }
+  function selectDestination(action: () => void) {
+    action();
+    if (!isSidebarCollapsed && window.innerWidth <= 720) props.onCollapseSidebar();
+  }
   const links = [
     {
       label: t("taskEntryNew"),
@@ -74,13 +78,16 @@ export function TaskWorkspaceSidebar(props: WorkspaceSidebarProps & { entry: Tas
     {
       label: t("agentsTab"),
       icon: AgentNavigationIcon,
-      active: props.activePane.type === WorkspacePaneTypes.agent || props.activePane.type === WorkspacePaneTypes.team,
-      action: () => navigate("/agents"),
+      active:
+        props.activePane.type === WorkspacePaneTypes.agent ||
+        props.activePane.type === WorkspacePaneTypes.team ||
+        props.activePane.type === WorkspacePaneTypes.notifications,
+      action: () => navigate(pathForPane({ type: WorkspacePaneTypes.agent })),
     },
     {
       label: t("scheduledTasksTab"),
       icon: ScheduledTaskNavigationIcon,
-      active: props.activePane.type === WorkspacePaneTypes.task,
+      active: props.activePane.type === WorkspacePaneTypes.task && props.activeTaskBoardView === "scheduled",
       action: () => {
         props.onSelectTaskBoardView?.("scheduled");
         props.onSelectTask();
@@ -126,7 +133,7 @@ export function TaskWorkspaceSidebar(props: WorkspaceSidebarProps & { entry: Tas
               aria-label={label}
               aria-current={active ? "page" : undefined}
               className={`${index === 0 ? styles.newTask : ""} ${active ? styles.active : ""}`}
-              onClick={action}
+              onClick={() => selectDestination(action)}
             >
               <Icon size={20} aria-hidden="true" />
               {isSidebarCollapsed ? null : (
@@ -149,25 +156,31 @@ export function TaskWorkspaceSidebar(props: WorkspaceSidebarProps & { entry: Tas
             compact
             directories={directories}
             entry={entry}
-            activeID={props.activePane.id}
+            activeID={props.activePane.type === WorkspacePaneTypes.conversation ? props.activePane.id : undefined}
             currentUserID={currentUserID}
             usersById={usersById}
             t={t}
-            onSelect={(id, match) => {
-              if (match?.id && props.onSelectSearchMatch) props.onSelectSearchMatch(id, match);
-              else props.onSelectConversation(id);
-            }}
+            onSelect={(id, match) =>
+              selectDestination(() => {
+                if (match?.id && props.onSelectSearchMatch) props.onSelectSearchMatch(id, match);
+                else props.onSelectConversation(id);
+              })
+            }
             onArchiveCurrent={() => navigate("/new")}
             onNewWith={(room) => {
               const agent = agentForRoom(room);
-              if (agent?.id)
-                navigate(`/new?agent=${encodeURIComponent(agent.id)}`, {
-                  state: { configuration: room.configuration },
-                });
+              if (agent?.id) {
+                const agentID = agent.id;
+                selectDestination(() =>
+                  navigate(`/new?agent=${encodeURIComponent(agentID)}`, {
+                    state: { configuration: room.configuration },
+                  }),
+                );
+              }
             }}
             onEditAgent={(room) => {
               const agent = agentForRoom(room);
-              if (agent) props.onSelectAgent(agent);
+              if (agent) selectDestination(() => props.onSelectAgent(agent));
             }}
           />
         </div>
@@ -186,9 +199,9 @@ export function TaskWorkspaceSidebar(props: WorkspaceSidebarProps & { entry: Tas
           presentation={isSidebarCollapsed ? "icon" : "row"}
           onThemeChange={props.onThemeChange}
           onLocaleChange={props.onLocaleChange}
-          onOpenSettings={props.onOpenSettings}
-          onOpenProfile={() => openProfile(currentUserID)}
-          onOpenCSGLogin={() => openSettings("account")}
+          onOpenSettings={() => selectDestination(props.onOpenSettings)}
+          onOpenProfile={() => selectDestination(() => openProfile(currentUserID))}
+          onOpenCSGLogin={() => selectDestination(() => openSettings("account"))}
           onOpenCSGLogout={() => void props.onLogout()}
         />
       </footer>

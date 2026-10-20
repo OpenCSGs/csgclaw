@@ -16,14 +16,15 @@ import type { DocumentPreviewRequest } from "@/components/business/DocumentPrevi
 import { ChatSidePanel, useChatTools } from "@/components/business/ChatSidePanel";
 import { type CitationSelection } from "@/components/business/MessageContent";
 import { AgentView, type AgentDetailPaneHandle } from "@/components/business/AgentDetails";
-import { Button, DialogCloseButton, DialogContent, DialogRoot, DialogTitle } from "@/components/ui";
+import { DialogCloseButton, DialogContent, DialogRoot, DialogTitle } from "@/components/ui";
 import { normalizeAuthProviderName } from "@/models/agents";
 import { getConversationDescription, isDirectConversation, isOnDemandConversation } from "@/models/conversations";
 import type { AgentDetailSidePanelProps } from "@/hooks/workspace/types";
 import { RoomTaskDialog, RoomTaskReference } from "../RoomTaskDialog";
+import { RoomTaskPanel } from "../RoomTaskPanel";
+import { RoomMembersPanel } from "@/components/business/RoomMembersPanel";
 import type { ReactNode } from "react";
 import { useSearchParams } from "react-router-dom";
-import { ListTodo } from "lucide-react";
 import { type IMMessage } from "@/models/conversations";
 import { roomTaskParent, roomTaskMessageAnchors } from "@/models/roomTasks";
 import { localizeAPIError } from "@/shared/i18n";
@@ -122,7 +123,7 @@ function AgentDetailSidePanel({ onClose, onOpenDM, onNewTask, ...props }: AgentD
   );
 }
 
-type RoomTaskSlots = { taskHeader?: ReactNode; taskDialog?: ReactNode; taskFooter?: (message: IMMessage) => ReactNode };
+type RoomTaskSlots = { taskPanel?: ReactNode; taskDialog?: ReactNode; taskFooter?: (message: IMMessage) => ReactNode };
 export function ConversationPane(props: ConversationPaneProps) {
   if (isOnDemandConversation(props.conversation) && !props.conversation.is_direct) {
     return <RoomTaskConversation key={props.conversation.id} {...props} />;
@@ -174,16 +175,22 @@ function RoomTaskConversation(props: ConversationPaneProps) {
     <ConversationPaneContent
       {...props}
       taskFooter={footer}
-      taskHeader={
-        <Button
-          size="lg"
-          variant="secondaryGray"
-          iconOnly
-          aria-label={t("roomTasksOpen")}
-          onClick={(event) => open("list", event.currentTarget)}
-        >
-          <ListTodo size={20} />
-        </Button>
+      taskPanel={
+        <RoomTaskPanel
+          roomID={conversation.id}
+          tasks={tasks}
+          loading={query.isLoading}
+          refreshing={query.isFetching}
+          error={query.isError ? localizeAPIError(query.error, t, t("tasksLoadFailed")) : ""}
+          onRefresh={() => {
+            void query.refetch();
+          }}
+          onSelectTask={open}
+          agents={props.agents ?? []}
+          usersById={props.usersById}
+          locale={props.locale}
+          t={t}
+        />
       }
       taskDialog={
         <RoomTaskDialog
@@ -192,7 +199,7 @@ function RoomTaskConversation(props: ConversationPaneProps) {
           taskID={selected}
           tasks={tasks}
           loading={query.isLoading}
-          error={query.isError ? errorMessage(query.error, t("tasksLoadFailed")) : ""}
+          error={query.isError ? localizeAPIError(query.error, t, t("tasksLoadFailed")) : ""}
           onClose={close}
           onRestoreFocus={() => trigger.current?.focus({ preventScroll: true })}
           t={t}
@@ -293,13 +300,24 @@ function ConversationPaneContent({
   onAddThreadAttachments,
   onRemoveThreadAttachment,
   agentDetailPanelProps,
-  taskHeader,
+  memberPanelProps,
+  taskPanel,
   taskDialog,
   taskFooter,
 }: ConversationPaneProps & RoomTaskSlots) {
   const description = getConversationDescription(conversation, currentUserID, usersById, locale, t);
   const managerProvider = normalizeAuthProviderName(managerProfile?.provider);
-  const tools = useChatTools({ conversation, currentUserID, agents, usersById, editorRef, t });
+  const tools = useChatTools({
+    conversation,
+    currentUserID,
+    agents,
+    usersById,
+    editorRef,
+    t,
+    hasRoomTasks: Boolean(taskPanel),
+    onOpenTool: memberPanelProps?.onClose,
+    suspended: Boolean(memberPanelProps),
+  });
   const { openPreview, openActivity, openSources } = tools;
   const { openTab, closeTab, state: sideState } = tools.controller;
   const [clearMessagesDialogOpen, setClearMessagesDialogOpen] = useState(false);
@@ -343,6 +361,7 @@ function ConversationPaneContent({
     const threadVisible =
       activeThreadRootID &&
       !agentDetailPanelProps &&
+      !memberPanelProps &&
       tools.controller.state.open &&
       tools.controller.state.activeID === "thread";
     const threadMessages =
@@ -369,6 +388,7 @@ function ConversationPaneContent({
     activeThreadRootID,
     activeThreadView,
     agentDetailPanelProps,
+    memberPanelProps,
     tools.controller.state.open,
     tools.controller.state.activeID,
     conversation.id,
@@ -404,9 +424,10 @@ function ConversationPaneContent({
   const handleOpenActivityPanel = useCallback(
     (participant?: ConversationWorkingParticipant) => {
       onToggleChannelTools(false);
+      memberPanelProps?.onClose();
       openActivity(participant?.activity?.entryID);
     },
-    [onToggleChannelTools, openActivity],
+    [onToggleChannelTools, openActivity, memberPanelProps],
   );
 
   const handlePreviewAttachment = useCallback(
@@ -414,9 +435,10 @@ function ConversationPaneContent({
       if (agentDetailPanelProps?.onClose(false) === false) return;
       onPreserveMessageAnchor(request.anchor);
       onToggleChannelTools(false);
+      memberPanelProps?.onClose();
       openPreview(request, originTabID);
     },
-    [agentDetailPanelProps, onPreserveMessageAnchor, onToggleChannelTools, openPreview],
+    [agentDetailPanelProps, onPreserveMessageAnchor, onToggleChannelTools, openPreview, memberPanelProps],
   );
 
   const previousThreadRoot = useRef<string | undefined>(undefined);
@@ -437,9 +459,10 @@ function ConversationPaneContent({
       if (agentDetailPanelProps?.onClose(false) === false) return;
       onPreserveMessageAnchor(selection.anchor);
       onToggleChannelTools(false);
+      memberPanelProps?.onClose();
       openSources(selection);
     },
-    [agentDetailPanelProps, onPreserveMessageAnchor, onToggleChannelTools, openSources],
+    [agentDetailPanelProps, onPreserveMessageAnchor, onToggleChannelTools, openSources, memberPanelProps],
   );
 
   const handleOpenClearMessagesDialog = useCallback(() => {
@@ -513,28 +536,25 @@ function ConversationPaneContent({
     <>
       {taskDialog}
       <Conversation.Header
+        agents={agents}
         channelToolsRef={channelToolsRef}
         conversation={conversation}
         conversationMembers={conversationMembers}
         description={description}
-        headerAccessory={
-          <>
-            {taskHeader}
-            {tools.toolbar}
-          </>
-        }
+        headerAccessory={tools.toolbar}
         inviteActionLabel={inviteActionLabel}
-        agents={agents}
         selectedMessageCount={selectedMessageCount}
         selectedVisibleMessageCount={visibleMessages.length}
         showChannelTools={showChannelTools}
-        showInviteAction={true}
+        showInviteAction={!isDirectConversation(conversation)}
+        showChannelToolsAction={isDirectConversation(conversation)}
+        memberManagementOpen={Boolean(memberPanelProps)}
         showMemberListAction={false}
         showToolCalls={showToolCalls}
         t={t}
         onClearMessages={handleOpenClearMessagesDialog}
         onDeleteRoom={handleOpenDeleteRoomDialog}
-        onInviteAction={onInviteAction}
+        onInviteAction={memberPanelProps?.onClose ?? onInviteAction}
         onPreviewUser={onPreviewUser}
         onToggleChannelTools={onToggleChannelTools}
         onToggleToolCalls={onToggleToolCalls}
@@ -567,7 +587,10 @@ function ConversationPaneContent({
         visibleMessages={visibleMessages}
         onMessageAction={onMessageAction}
         onOpenAgentDetail={onOpenAgentDetail}
-        onOpenThread={onOpenThread}
+        onOpenThread={(message) => {
+          memberPanelProps?.onClose();
+          return onOpenThread(message);
+        }}
         onPreviewUser={onPreviewUser}
         onPreviewAttachment={handlePreviewAttachment}
         onQuestionSelect={questionMode.select}
@@ -636,6 +659,7 @@ function ConversationPaneContent({
         />
       )}
       {agentDetailPanel}
+      {memberPanelProps ? <RoomMembersPanel {...memberPanelProps} /> : null}
       <ChatSidePanel
         key={conversation.id}
         controller={tools.controller}
@@ -651,6 +675,8 @@ function ConversationPaneContent({
         onCollapse={tools.collapse}
         activeThreadRootID={activeThreadRootID}
         threadPanel={threadPanel}
+        roomTasksPanel={taskPanel}
+        suspended={Boolean(memberPanelProps)}
         onThreadSelect={(rootID) => {
           if (onRestoreThread) {
             void onRestoreThread(rootID);

@@ -477,14 +477,17 @@ export function groupTasksByParent(tasks: readonly WorkspaceTask[]): WorkspaceTa
 }
 
 export function boardColumnsForTask(tasks: readonly WorkspaceTask[], parentID: string): WorkspaceTaskColumn[] {
-  const children = taskChildren(tasks, parentID);
+  return boardColumnsForTasks(taskChildren(tasks, parentID));
+}
+
+export function boardColumnsForTasks(tasks: readonly WorkspaceTask[]): WorkspaceTaskColumn[] {
   const defaultStatuses: readonly string[] = TASK_BOARD_STATUSES;
   const extraStatuses = Array.from(
-    new Set(children.map((task) => task.status).filter((status) => !defaultStatuses.includes(status))),
+    new Set(tasks.map((task) => task.status).filter((status) => !defaultStatuses.includes(status))),
   ).sort();
   return [...TASK_BOARD_STATUSES, ...extraStatuses].map((status) => ({
     status,
-    tasks: children.filter((task) => task.status === status),
+    tasks: tasks.filter((task) => task.status === status),
   }));
 }
 

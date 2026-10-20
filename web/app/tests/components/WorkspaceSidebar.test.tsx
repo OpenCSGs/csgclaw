@@ -1,10 +1,31 @@
 import { fireEvent, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { MemoryRouter, useLocation } from "react-router-dom";
+import { fetchTaskConversations } from "@/api/taskConversations";
 import { emptyAuthStatus } from "@/models/auth";
 import { defaultAuthEnvironmentDraft } from "@/models/authEnvironment";
 import { WorkspacePaneTypes, WorkspaceTabs } from "@/models/routing";
 import { WorkspaceSidebar } from "@/pages/WorkspacePage/components/WorkspaceSidebar";
 import type { WorkspaceSidebarProps } from "@/hooks/workspace/contracts/sidebar";
 import type { TranslateFn } from "@/models/conversations";
+import { createQueryWrapper } from "../helpers/queryClient";
+
+vi.mock("@/api/taskConversations", () => ({ fetchTaskConversations: vi.fn() }));
+
+function CurrentPath() {
+  return <output data-testid="current-path">{useLocation().pathname}</output>;
+}
+
+function taskEntry() {
+  return {
+    create: vi.fn(),
+    patch: vi.fn(),
+    remove: vi.fn(),
+    open: vi.fn(),
+    isWorking: () => false,
+    busyID: "",
+  };
+}
 
 const labels: Record<string, string> = {
   activeNow: "active",
@@ -176,11 +197,129 @@ function renderSidebar(overrides: Partial<WorkspaceSidebarProps> = {}) {
 
   return {
     props,
-    ...render(<WorkspaceSidebar {...props} />),
+    ...render(
+      <MemoryRouter initialEntries={["/rooms/collaboration"]}>
+        <WorkspaceSidebar {...props} />
+        <CurrentPath />
+      </MemoryRouter>,
+      { wrapper: createQueryWrapper().wrapper },
+    ),
   };
 }
 
 describe("WorkspaceSidebar", () => {
+  beforeEach(() => {
+    vi.mocked(fetchTaskConversations).mockResolvedValue({ rooms: [], total: 0, has_more: false });
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  it.each([390, 1280])("shows destinations after choosing navigation at %ipx", (width) => {
+    vi.stubGlobal("innerWidth", width);
+    const { props } = renderSidebar({ taskEntry: taskEntry() });
+
+    fireEvent.click(screen.getByRole("button", { name: "taskEntryNew" }));
+    expect(screen.getByTestId("current-path")).toHaveTextContent("/new");
+    fireEvent.click(screen.getByRole("button", { name: "Agents" }));
+    expect(screen.getByTestId("current-path")).toHaveTextContent("/agents");
+    fireEvent.click(screen.getByRole("button", { name: "Scheduled" }));
+    expect(props.onSelectTaskBoardView).toHaveBeenCalledWith("scheduled");
+    expect(props.onSelectTask).toHaveBeenCalledOnce();
+    expect(props.onCollapseSidebar).toHaveBeenCalledTimes(width === 390 ? 3 : 0);
+  });
+
+  it.each([390, 1280])("shows the selected conversation at %ipx, including its current route", async (width) => {
+    vi.stubGlobal("innerWidth", width);
+    vi.mocked(fetchTaskConversations).mockResolvedValue({
+      rooms: [{ id: "collaboration", title: "Release review", members: [], messages: [], is_direct: false }],
+      total: 1,
+      has_more: false,
+    });
+    const { props } = renderSidebar({
+      activePane: { type: WorkspacePaneTypes.conversation, id: "collaboration" },
+      taskEntry: taskEntry(),
+    });
+
+    fireEvent.click(await screen.findByRole("button", { name: "Release review" }));
+
+    expect(props.onSelectConversation).toHaveBeenCalledWith("collaboration");
+    expect(props.onCollapseSidebar).toHaveBeenCalledTimes(width === 390 ? 1 : 0);
+  });
+
+  it("shows mobile destinations chosen from the conversation menu", async () => {
+    vi.stubGlobal("innerWidth", 390);
+    const user = userEvent.setup();
+    const agent = { id: "agent-1", user_id: "worker", name: "Worker" };
+    vi.mocked(fetchTaskConversations).mockResolvedValue({
+      rooms: [{ id: "direct", title: "Review", members: ["user-1", "worker"], messages: [], is_direct: true }],
+      total: 1,
+      has_more: false,
+    });
+    const { props } = renderSidebar({ workerAgentItems: [agent], taskEntry: taskEntry() });
+
+    await user.click(await screen.findByRole("button", { name: "taskEntryMore · Review" }));
+    await user.click(screen.getByRole("menuitem", { name: "taskEntryNewWithAgent" }));
+    expect(screen.getByTestId("current-path")).toHaveTextContent("/new");
+    expect(props.onCollapseSidebar).toHaveBeenCalledOnce();
+    await user.click(screen.getByRole("button", { name: "taskEntryMore · Review" }));
+    await user.click(screen.getByRole("menuitem", { name: "taskEntryEditAgent" }));
+    expect(props.onSelectAgent).toHaveBeenCalledWith(agent);
+    expect(props.onCollapseSidebar).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([390, 1280])("keeps the destination visible after opening account settings at %ipx", async (width) => {
+    vi.stubGlobal("innerWidth", width);
+    const user = userEvent.setup();
+    const { props } = renderSidebar({ taskEntry: taskEntry() });
+
+    await user.click(screen.getByRole("button", { name: "iaUserMenuLabel" }));
+    await user.click(screen.getByRole("menuitem", { name: "Settings" }));
+
+    expect(props.onOpenSettings).toHaveBeenCalledOnce();
+    expect(props.onCollapseSidebar).toHaveBeenCalledTimes(width === 390 ? 1 : 0);
+  });
+
+  it.each([
+    WorkspacePaneTypes.agent,
+    WorkspacePaneTypes.team,
+    WorkspacePaneTypes.notifications,
+    WorkspacePaneTypes.conversation,
+  ])("keeps one unified sidebar when opening the %s pane", (type) => {
+    renderSidebar({
+      activePane: { type, id: "existing-item" },
+      taskEntry: taskEntry(),
+    });
+
+    expect(screen.getAllByRole("complementary")).toHaveLength(1);
+    expect(screen.getByRole("complementary", { name: "taskEntryNavigation" })).toBeInTheDocument();
+    expect(screen.queryByRole("searchbox", { name: "Search" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "taskEntryNew" })).toBeInTheDocument();
+  });
+
+  it("opens task preparation from the unified new-task entry", () => {
+    renderSidebar({ taskEntry: taskEntry() });
+
+    fireEvent.click(screen.getByRole("button", { name: "taskEntryNew" }));
+
+    expect(screen.getByTestId("current-path")).toHaveTextContent("/new");
+  });
+
+  it("selects Scheduled only for the scheduled task view", () => {
+    const { unmount } = renderSidebar({
+      activePane: { type: WorkspacePaneTypes.task, id: "task-1" },
+      activeTaskBoardView: "tasks",
+      taskEntry: taskEntry(),
+    });
+    expect(screen.getByRole("button", { name: "Scheduled" })).not.toHaveAttribute("aria-current");
+    unmount();
+
+    renderSidebar({
+      activePane: { type: WorkspacePaneTypes.task, id: "" },
+      activeTaskBoardView: "scheduled",
+      taskEntry: taskEntry(),
+    });
+    expect(screen.getByRole("button", { name: "Scheduled" })).toHaveAttribute("aria-current", "page");
+  });
+
   it("keeps room creation only in the Rooms section", () => {
     const onCreateRoom = vi.fn();
 

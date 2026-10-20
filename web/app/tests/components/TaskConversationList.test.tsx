@@ -121,6 +121,43 @@ describe("TaskConversationList archive management", () => {
       expect(onSelect).toHaveBeenCalledWith("r1", expect.objectContaining({ id: "matched-message" }));
     },
   );
+  it("opens direct and collaboration conversations from the same list", async () => {
+    const user = userEvent.setup();
+    const onSelect = vi.fn();
+    vi.mocked(fetchTaskConversations).mockResolvedValue({
+      rooms: [room, { ...room, id: "collaboration", title: "Release review", is_direct: false }],
+      total: 2,
+      has_more: false,
+    });
+    render(
+      <TaskConversationList
+        compact
+        activeID="collaboration"
+        entry={{
+          create: vi.fn(),
+          patch: vi.fn(),
+          remove: vi.fn(),
+          open: vi.fn(),
+          isWorking: () => false,
+          busyID: "",
+        }}
+        currentUserID="user-admin"
+        usersById={new Map()}
+        t={(key) => key}
+        onSelect={onSelect}
+      />,
+      { wrapper: createQueryWrapper().wrapper },
+    );
+
+    const collaboration = await screen.findByRole("button", { name: "Release review" });
+    expect(collaboration).toHaveAttribute("aria-current", "page");
+    await user.click(collaboration);
+    await user.click(screen.getByRole("button", { name: "Review" }));
+    expect(onSelect.mock.calls).toEqual([
+      ["collaboration", undefined],
+      ["r1", undefined],
+    ]);
+  });
 
   it("filters by the session directory instead of another task using the same Agent", async () => {
     const user = userEvent.setup();

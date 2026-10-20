@@ -320,7 +320,7 @@ describe("Feishu CLI authorization", () => {
     );
     expect(screen.queryByRole("button", { name: "Connect Feishu" })).not.toBeInTheDocument();
     const user = userEvent.setup();
-    await user.click(screen.getByRole("button", { name: "Disconnect" }));
+    await user.click(screen.getByRole("button", { name: "Retry cleanup" }));
     expect(startCLIOperation).toHaveBeenCalledWith(failed, "disconnect", expect.any(String));
 
     const disconnected: AppInstallation = {
@@ -339,7 +339,7 @@ describe("Feishu CLI authorization", () => {
       window.dispatchEvent(new Event("focus"));
     });
     expect(await screen.findByRole("button", { name: "Connect Feishu" })).toBeEnabled();
-    expect(screen.queryByRole("button", { name: "Disconnect" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Retry cleanup" })).not.toBeInTheDocument();
     vi.mocked(startCLIOperation).mockResolvedValue(resource.operation!);
     await user.click(screen.getByRole("button", { name: "Connect Feishu" }));
     expect(startCLIOperation).toHaveBeenLastCalledWith(disconnected, "connect", expect.any(String));
@@ -351,7 +351,12 @@ describe("Feishu CLI authorization", () => {
       disconnected: !authorized,
       status: "error",
       last_error_code: "cleanup_pending",
-      operation: { ...resource.operation!, action: "disconnect", status: "failed" },
+      operation: {
+        ...resource.operation!,
+        action: "disconnect",
+        status: "failed",
+        failure_stage: "revoking_authorization",
+      },
       auth_status: {
         appId: "cli_test",
         defaultAs: "auto",
@@ -368,7 +373,10 @@ describe("Feishu CLI authorization", () => {
       "Cleanup is incomplete. Retry disconnecting, then connect again.",
     );
     expect(screen.queryByRole("button", { name: "Connect Feishu" })).not.toBeInTheDocument();
-    await userEvent.setup().click(screen.getByRole("button", { name: "Disconnect" }));
+    expect(screen.getByRole("status")).toHaveTextContent("Connection cleanup required");
+    expect(screen.getByText("Cleanup did not finish during: Signing out")).toBeVisible();
+    expect(screen.queryByRole("region", { name: "Authorization progress" })).not.toBeInTheDocument();
+    await userEvent.setup().click(screen.getByRole("button", { name: "Retry cleanup" }));
     expect(startCLIOperation).toHaveBeenCalledWith(failed, "disconnect", expect.any(String));
   });
   it("hides an expired authorization error after a new authorization starts", async () => {

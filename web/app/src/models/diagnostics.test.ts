@@ -303,6 +303,13 @@ describe("diagnostic entry scope", () => {
     expect(selectDiagnostic([other], "", "missing-turn")).toBe("");
     expect(selectDiagnostic([other, record], other.id, record.turn_id)).toBe(record.id);
   });
+  it("restricts source-only focus before retaining selection or choosing an agent", () => {
+    const target = { ...record, id: "target", source_id: "target-source" };
+    const other = { ...record, id: "other", source_id: "other-source" };
+    expect(selectDiagnostic([other, target], other.id, undefined, undefined, "target-source")).toBe(target.id);
+    expect(selectDiagnostic([other], other.id, undefined, undefined, "target-source")).toBe("");
+    expect(selectDiagnostic([other, target], "", target.turn_id, undefined, "target-source")).toBe(target.id);
+  });
   it("prefers the direct manager response and otherwise the first dispatched execution", () => {
     const manager = { ...record, id: "manager", agent_id: "manager", dispatch_ms: 5 };
     const worker = { ...record, id: "worker", agent_id: "worker", dispatch_ms: 10 };

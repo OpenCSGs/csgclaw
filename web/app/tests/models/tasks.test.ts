@@ -1,5 +1,6 @@
 import {
   boardColumnsForTask,
+  boardColumnsForTasks,
   displayTaskAssignedAgent,
   displayTaskAssignmentTarget,
   displayTaskClaimedAgent,
@@ -20,6 +21,28 @@ import {
 } from "@/models/tasks";
 
 describe("tasks model", () => {
+  it("保留默认状态顺序并展示房间任务的额外状态", () => {
+    const tasks = normalizeTaskList([
+      { id: "task-1", assignment_type: "room", assignment_id: "room-1", status: "queued" },
+      { id: "task-2", assignment_type: "room", assignment_id: "room-1", status: "pending_review" },
+      { id: "task-3", assignment_type: "room", assignment_id: "room-1", status: "in_progress" },
+    ]);
+    const columns = boardColumnsForTasks(tasks);
+    expect(columns.map(({ status }) => status)).toEqual([
+      "pending",
+      "assigned",
+      "in_progress",
+      "blocked",
+      "completed",
+      "failed",
+      "pending_review",
+      "queued",
+    ]);
+    expect(columns.flatMap(({ tasks: items }) => items)).toHaveLength(tasks.length);
+    expect(columns.find(({ status }) => status === "pending_review")?.tasks[0].id).toBe("task-2");
+    expect(columns.find(({ status }) => status === "completed")?.tasks).toEqual([]);
+  });
+
   it("keeps room ownership and separates execution from manager assessment", () => {
     const task = normalizeTask({
       id: "task-1",

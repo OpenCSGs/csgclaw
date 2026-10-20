@@ -20,9 +20,21 @@ type ChatToolsOptions = {
   usersById: UsersById;
   editorRef: RefObject<HTMLDivElement | null>;
   t: TranslateFn;
+  hasRoomTasks?: boolean;
+  onOpenTool?: () => void;
+  suspended?: boolean;
 };
 
-export function useChatTools({ conversation, currentUserID, agents, editorRef, t }: ChatToolsOptions) {
+export function useChatTools({
+  conversation,
+  currentUserID,
+  agents,
+  editorRef,
+  t,
+  hasRoomTasks,
+  onOpenTool,
+  suspended,
+}: ChatToolsOptions) {
   const controller = useChatSidePanel(currentUserID, conversation.id);
   const direct = isDirectConversation(conversation);
   const triggerRef = useRef<HTMLElement | null>(null);
@@ -142,6 +154,9 @@ export function useChatTools({ conversation, currentUserID, agents, editorRef, t
   const toolbar = createElement(ChatToolsToolbar, {
     controller,
     onActivity: openActivity,
+    hasRoomTasks,
+    onOpenTool,
+    suspended,
     triggerRef,
     t,
   });

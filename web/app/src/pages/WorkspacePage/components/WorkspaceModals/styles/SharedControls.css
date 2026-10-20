@@ -1,0 +1,109 @@
+.agent-create-progress {
+  display: grid;
+  gap: var(--space-2);
+  margin-top: 14px;
+  padding: var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: color-mix(in oklab, var(--surface) 88%, var(--panel));
+}
+
+.agent-create-progress-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  font-size: 13px;
+  font-weight: var(--font-weight-semibold);
+}
+
+.agent-create-progress-header strong {
+  font-size: var(--text-xs-size);
+  color: var(--muted);
+}
+
+.agent-create-progress-track {
+  height: 7px;
+  overflow: hidden;
+  border-radius: var(--radius-full);
+  background: color-mix(in oklab, var(--line) 52%, transparent);
+}
+
+.agent-create-progress-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--primary);
+  transition: width 360ms ease;
+}
+
+.agent-create-progress-steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.agent-create-progress-steps span {
+  padding: 3px 7px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-full);
+  background: var(--panel);
+}
+
+.agent-create-progress-steps span.active {
+  color: var(--text);
+  border-color: color-mix(in oklab, var(--primary) 56%, var(--line));
+}
+
+.agent-create-progress-steps span.complete {
+  color: var(--on-primary);
+  border-color: transparent;
+  background: var(--primary);
+}
+
+.agent-create-progress.failed {
+  border-color: color-mix(in oklab, var(--danger) 42%, var(--line));
+}
+
+.agent-create-progress.failed .agent-create-progress-fill {
+  background: var(--danger);
+}
+
+.selection-list {
+  display: grid;
+  gap: 10px;
+}
+
+.selection-item {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: var(--space-3);
+  align-items: center;
+  padding: var(--space-3) 16px;
+  border: 1px solid var(--line);
+}
+
+.selection-all-item {
+  border-color: color-mix(in oklab, var(--primary) 34%, var(--line));
+  background:
+    linear-gradient(90deg, color-mix(in oklab, var(--primary) 13%, transparent), transparent 72%), var(--field);
+}
+
+.profile-backdrop {
+  z-index: var(--z-page-popover);
+}
+
+.profile-backdrop.nonblocking {
+  pointer-events: none;
+  place-items: end;
+  background: transparent;
+}
+
+.profile-backdrop.nonblocking .profile-modal {
+  pointer-events: auto;
+  width: min(820px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+  margin-right: 16px;
+  box-shadow: var(--shadow);
+}

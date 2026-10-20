@@ -100,7 +100,7 @@ export function GlobalAppsPanel({
     void reload(abort.signal);
     const interval = setInterval(() => {
       if (!document.hidden) void reload(abort.signal);
-    }, 15000);
+    }, 2500);
     return () => {
       abort.abort();
       seq.current += 1;
@@ -184,7 +184,7 @@ export function GlobalAppsPanel({
       ) : null}
       {!loaded ? (
         <p role="status" className={styles.hint}>
-          {t("loading")}
+          {t("connectorsLoading")}
         </p>
       ) : null}
       {loaded && !filteredItems.length && !definitions.some((d) => d.kind === "cli") ? (

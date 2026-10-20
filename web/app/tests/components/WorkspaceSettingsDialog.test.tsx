@@ -64,4 +64,9 @@ it("opens Settings over the current page and closes it without changing its tab 
   expect(screen.getByTestId("location")).toHaveTextContent("/agents/agent-1?tab=connectors");
   expect(screen.getByRole("textbox", { name: "Unsent draft" })).toHaveValue("keep this draft");
   expect(load).toHaveBeenCalledTimes(1);
+  await waitFor(() => expect(screen.getByRole("button", { name: "Open settings" })).toHaveFocus());
+  await user.click(screen.getByRole("button", { name: "Open settings" }));
+  await user.keyboard("{Escape}");
+  await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+  await waitFor(() => expect(screen.getByRole("button", { name: "Open settings" })).toHaveFocus());
 });

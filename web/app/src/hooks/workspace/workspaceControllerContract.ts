@@ -69,8 +69,11 @@ export type WorkspaceControllerReady = WorkspaceControllerBase & {
     onAvatarChange: (avatar: string) => Promise<void>;
     onDescriptionSave: (description: string) => Promise<void>;
   };
-  conversationViewProps: ConversationController["conversationViewProps"] &
-    Pick<ConversationPaneProps, "onNewTask" | "onOpenAgentDetail" | "onOpenThread" | "onPreviewUser"> & {
+  conversationViewProps: Omit<ConversationController["conversationViewProps"], "memberPanelProps"> &
+    Pick<
+      ConversationPaneProps,
+      "memberPanelProps" | "onNewTask" | "onOpenAgentDetail" | "onOpenThread" | "onPreviewUser"
+    > & {
       agents: AgentLike[];
       agentDetailPanelProps: AgentDetailSidePanelProps | null;
     };
@@ -88,9 +91,7 @@ export type WorkspaceControllerReady = WorkspaceControllerBase & {
     onOpenChange: (open: boolean) => void;
   };
   profilePreviewProps: ReturnType<typeof useProfilePreviewController>["profilePreviewProps"];
-  createRoomModalProps: ConversationController["createRoomModalProps"];
   createTeamModalProps: AgentController["createTeamModalProps"];
-  inviteMembersModalProps: ConversationController["inviteMembersModalProps"];
   upgradeModalProps: ReturnType<typeof useUpgradeController>["upgradeModalProps"];
   configModalProps: ConfigController["configModalProps"];
   createModelProviderModalProps: ModelProviderCreationProps | null;

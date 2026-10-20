@@ -118,14 +118,14 @@ describe("legacy UI contract", () => {
     expect(source).not.toContain('className="thread-context"');
     expect(source).not.toContain('t("threadContext")');
     expect(styles).toContain(".message-row:hover .message-hover-actions");
-    expect(messageActionControlsRule).toContain("gap: 12px;");
+    expect(messageActionControlsRule).toContain("gap: 0 8px;");
     expect(messageHoverActionsRule).toContain("top: 100%;");
     expect(messageHoverActionsRule).toContain("left: 0;");
-    expect(messageHoverActionsRule).toContain("padding-top: 2px;");
+    expect(messageHoverActionsRule).toContain("padding-top: 8px;");
     expect(messageHoverActionsRule).toContain("pointer-events: auto;");
     expect(threadMessageActionsRule).toContain("top: 100%;");
     expect(threadMessageActionsRule).toContain("left: 0;");
-    expect(threadMessageActionsRule).toContain("padding-top: 2px;");
+    expect(threadMessageActionsRule).toContain("padding-top: 8px;");
     expect(threadMessageActionsRule).toContain("pointer-events: auto;");
     expect(styles).toContain(".message-hover-actions:hover");
     expect(styles).toContain(".thread-message-actions:hover");

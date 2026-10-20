@@ -277,11 +277,11 @@ export function FloatingChatPanel({ agentName, chatProps, headerAccessory, onPic
           </>
         }
         inviteActionLabel={inviteActionLabel}
-        agents={agents}
         memberMenuRef={memberMenuRef}
         selectedMessageCount={selectedMessageCount}
         selectedVisibleMessageCount={floatingVisibleMessages.length}
         showChannelTools={showChannelTools}
+        showChannelToolsAction={true}
         showInviteAction={false}
         showMemberList={showMemberList}
         showToolCalls={showToolCalls}

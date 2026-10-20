@@ -60,13 +60,7 @@ export function WorkspaceLayout() {
   const sidebarProps = controller.ready ? controller.sidebarProps : null;
   const isSidebarCollapsed = sidebarProps?.isSidebarCollapsed ?? false;
   const showSidebarContext =
-    controller.ready &&
-    workspaceHasContextSidebar(controller.activePane) &&
-    (!controller.taskEntry ||
-      (controller.activePane.type !== "conversation" &&
-        controller.activePane.type !== "agent" &&
-        controller.activePane.type !== "team" &&
-        controller.activePane.type !== "settings"));
+    controller.ready && !sidebarProps?.taskEntry && workspaceHasContextSidebar(controller.activePane);
   const autoPrimarySidebarWidth = useMemo(
     () =>
       sidebarProps

@@ -26,6 +26,14 @@ const reference = {
 };
 
 describe("chat sidebar state", () => {
+  it("persists the room task tab and restores it alongside other tools", () => {
+    let state = openChatSideTab(initialChatSideState(), { id: "tasks", kind: "tasks" });
+    state = openChatSideTab(state, { id: "activity", kind: "activity" });
+    state = openChatSideTab(state, { id: "tasks", kind: "tasks" });
+    expect(state.tabs).toHaveLength(2);
+    expect(restoreChatSideState(serializeChatSideState(state))).toEqual(state);
+  });
+
   it("deduplicates by identity and activates a neighbor when closing", () => {
     let state = openChatSideTab(initialChatSideState(), { id: "files", kind: "files" });
     state = openChatSideTab(state, {

@@ -51,13 +51,9 @@ const WORKSPACE_NAVIGATION_ICONS = {
 
 export function WorkspaceSidebar(props: WorkspaceSidebarProps) {
   if (!props.taskEntry) return <LegacyWorkspaceSidebar {...props} />;
-  const hideContext =
-    props.activePane.type === WorkspacePaneTypes.conversation ||
-    (props.activePane.type === WorkspacePaneTypes.agent && !props.activePane.id) ||
-    props.activePane.type === WorkspacePaneTypes.settings;
   return (
     <>
-      <LegacyWorkspaceSidebar {...props} hidePrimaryNavigation hideContextSidebar={hideContext} />
+      <LegacyWorkspaceSidebar {...props} hidePrimaryNavigation hideContextSidebar />
       <TaskWorkspaceSidebar {...props} entry={props.taskEntry} />
     </>
   );

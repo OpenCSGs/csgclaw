@@ -6,6 +6,7 @@ import type { Dispatch, KeyboardEvent as ReactKeyboardEvent, RefObject, SetState
 import type { CLIProxyAuthStatusMap } from "@/hooks/workspace/useCLIProxyAuthStatuses";
 import type { AgentDetailSidePanelProps } from "@/hooks/workspace/types";
 import type { DocumentPreviewRequest } from "@/components/business/DocumentPreviewPanel";
+import type { RoomMembersPanelProps } from "@/components/business/RoomMembersPanel";
 import type { AgentLike, AgentProfileLike } from "@/models/agents";
 import type { AttachmentDraft } from "@/models/attachments";
 import type { ComposerMentionUser, ComposerSegment } from "@/models/composer";
@@ -72,6 +73,7 @@ export type ConversationWorkingParticipant = {
 };
 
 export type ConversationPaneProps = {
+  memberPanelProps?: RoomMembersPanelProps | null;
   activeThreadRootID?: string;
   activeThreadView?: ThreadView | null;
   agents?: AgentLike[];

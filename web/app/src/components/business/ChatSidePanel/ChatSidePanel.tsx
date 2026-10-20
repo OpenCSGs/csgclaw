@@ -8,6 +8,7 @@ import {
   Folder,
   Globe,
   LayoutGrid,
+  ListTodo,
   Maximize2,
   MessageSquare,
   Minimize2,
@@ -48,15 +49,19 @@ export type ChatSidePanelProps = {
   onCollapse: () => void;
   activeThreadRootID?: string;
   threadPanel?: ReactNode;
+  roomTasksPanel?: ReactNode;
+  suspended?: boolean;
   onThreadSelect: (rootID: string) => void;
   onThreadClose: () => void;
 };
 
+const DEFAULT_PANEL_WIDTH = 496;
+
 function readWidth() {
   try {
-    return Number(localStorage.getItem(CHAT_SIDE_PANEL_WIDTH_STORAGE_KEY)) || 560;
+    return Number(localStorage.getItem(CHAT_SIDE_PANEL_WIDTH_STORAGE_KEY)) || DEFAULT_PANEL_WIDTH;
   } catch {
-    return 560;
+    return DEFAULT_PANEL_WIDTH;
   }
 }
 
@@ -74,6 +79,8 @@ export function ChatSidePanel({
   onCollapse,
   activeThreadRootID,
   threadPanel,
+  roomTasksPanel,
+  suspended = false,
   onThreadSelect,
   onThreadClose,
 }: ChatSidePanelProps) {
@@ -84,6 +91,7 @@ export function ChatSidePanel({
   const [resizing, setResizing] = useState(false);
   const drag = useRef<{ pointerID: number; x: number; width: number } | null>(null);
   const { state, patch, openTab, closeTab, replaceTab } = controller;
+  const visible = state.open && !suspended;
   const overlay = containerWidth < 680;
   useEffect(() => {
     setMaximized(false);
@@ -94,11 +102,11 @@ export function ChatSidePanel({
   const actualWidth = clampChatSideWidth(width, containerWidth);
   const active = state.tabs.find((tab) => tab.id === state.activeID);
   useEffect(() => {
-    if (state.open)
+    if (visible)
       panelRef.current
         ?.querySelector('[role="tab"][aria-selected="true"]')
         ?.scrollIntoView({ block: "nearest", inline: "nearest" });
-  }, [state.open, state.activeID, actualWidth, containerWidth, overlay, maximized]);
+  }, [visible, state.activeID, actualWidth, containerWidth, overlay, maximized]);
   useEffect(() => {
     const parent = panelRef.current?.parentElement;
     if (!parent) return;
@@ -127,7 +135,7 @@ export function ChatSidePanel({
   }, [state.open, threadRoot, onThreadSelect, activeThreadRootID, conversation.id]);
 
   useEffect(() => {
-    if (!state.open) return;
+    if (!visible) return;
     const parent = panelRef.current?.parentElement;
     const siblings = Array.from(parent?.children ?? []).filter(
       (node): node is HTMLElement => node instanceof HTMLElement && node !== panelRef.current,
@@ -157,7 +165,7 @@ export function ChatSidePanel({
       window.removeEventListener("keydown", handle);
       siblings.forEach((node) => (node.inert = false));
     };
-  }, [state.open, maximized, overlay, onCollapse]);
+  }, [visible, maximized, overlay, onCollapse]);
   function close(tab: ChatSideTab) {
     closeTab(tab.id);
     if (tab.kind === "thread") onThreadClose();
@@ -180,7 +188,7 @@ export function ChatSidePanel({
       /* Width remains usable without storage. */
     }
   }
-  function newTab(kind: "files" | "activity" | "browser", previousID?: string) {
+  function newTab(kind: "files" | "activity" | "browser" | "tasks", previousID?: string) {
     const tab: ChatSideTab =
       kind === "browser" ? { id: previousID ?? crypto.randomUUID(), kind, url: "" } : { id: kind, kind };
     if (previousID) replaceTab(tab, previousID);
@@ -195,13 +203,15 @@ export function ChatSidePanel({
           ? Globe
           : tab.kind === "activity"
             ? Activity
-            : tab.kind === "thread"
-              ? MessageSquare
-              : tab.kind === "sources"
-                ? BookOpen
-                : documentPreviewKind({ name: tab.name, mediaType: tab.mediaType }) === "html"
-                  ? Globe
-                  : FileText;
+            : tab.kind === "tasks"
+              ? ListTodo
+              : tab.kind === "thread"
+                ? MessageSquare
+                : tab.kind === "sources"
+                  ? BookOpen
+                  : documentPreviewKind({ name: tab.name, mediaType: tab.mediaType }) === "html"
+                    ? Globe
+                    : FileText;
   const labelFor = (tab: ChatSideTab) =>
     tab.kind === "new"
       ? t("chatSideNewTitle")
@@ -209,19 +219,21 @@ export function ChatSidePanel({
         ? t("chatFiles")
         : tab.kind === "activity"
           ? t("conversationActivityOpen")
-          : tab.kind === "thread"
-            ? t("threadPanelTitle")
-            : tab.kind === "sources"
-              ? t("citationDrawerTitle")
-              : tab.kind === "file"
-                ? tab.name
-                : tab.url
-                  ? new URL(tab.url).hostname
-                  : t("chatBrowser");
+          : tab.kind === "tasks"
+            ? t("roomTasksOpen")
+            : tab.kind === "thread"
+              ? t("threadPanelTitle")
+              : tab.kind === "sources"
+                ? t("citationDrawerTitle")
+                : tab.kind === "file"
+                  ? tab.name
+                  : tab.url
+                    ? new URL(tab.url).hostname
+                    : t("chatBrowser");
   return (
     <aside
       ref={panelRef}
-      hidden={!state.open}
+      hidden={!visible}
       className={`chat-side-panel${overlay ? " is-overlay" : ""}${maximized ? " is-maximized" : ""}${resizing ? " is-resizing" : ""}`}
       style={{ "--chat-side-width": `${actualWidth}px` } as CSSProperties}
       aria-label={t("chatSidePanel")}
@@ -260,7 +272,7 @@ export function ChatSidePanel({
               event.preventDefault();
               persistWidth(
                 clampChatSideWidth(
-                  event.key === "Home" ? 560 : actualWidth + (event.key === "ArrowLeft" ? 24 : -24),
+                  event.key === "Home" ? DEFAULT_PANEL_WIDTH : actualWidth + (event.key === "ArrowLeft" ? 24 : -24),
                   containerWidth,
                 ),
               );
@@ -389,11 +401,13 @@ export function ChatSidePanel({
         </div>
       </header>
       <div className="chat-side-content">
-        {!state.tabs.length ? <WelcomeTab t={t} onSelect={newTab} /> : null}
+        {!state.tabs.length ? <WelcomeTab t={t} onSelect={newTab} hasRoomTasks={Boolean(roomTasksPanel)} /> : null}
         {state.tabs.map((tab) => (
-          <TabBody key={tab.id} tab={tab} active={tab.id === state.activeID && state.open}>
+          <TabBody key={tab.id} tab={tab} active={tab.id === state.activeID && visible}>
             {tab.kind === "new" ? (
-              <WelcomeTab t={t} onSelect={(kind) => newTab(kind, tab.id)} />
+              <WelcomeTab t={t} onSelect={(kind) => newTab(kind, tab.id)} hasRoomTasks={Boolean(roomTasksPanel)} />
+            ) : tab.kind === "tasks" ? (
+              roomTasksPanel
             ) : tab.kind === "files" ? (
               <FilesTab
                 scope={fileScope}
@@ -405,7 +419,7 @@ export function ChatSidePanel({
             ) : tab.kind === "browser" ? (
               <BrowserTab
                 url={tab.url}
-                active={tab.id === state.activeID && state.open}
+                active={tab.id === state.activeID && visible}
                 onNavigate={(url) => replaceTab({ ...tab, url })}
                 onPopup={(url) => openTab({ id: crypto.randomUUID(), kind: "browser", url })}
                 t={t}
@@ -427,7 +441,7 @@ export function ChatSidePanel({
                 tab={tab}
                 roomID={conversation.id}
                 fileScope={fileScope}
-                active={tab.id === state.activeID && state.open}
+                active={tab.id === state.activeID && visible}
                 t={t}
                 onClose={() => close(tab)}
                 onReference={onReference}
@@ -457,11 +471,21 @@ export function ChatSidePanel({
   );
 }
 
-function WelcomeTab({ t, onSelect }: { t: TranslateFn; onSelect: (kind: "files" | "browser" | "activity") => void }) {
+function WelcomeTab({
+  t,
+  onSelect,
+  hasRoomTasks,
+}: {
+  t: TranslateFn;
+  onSelect: (kind: "files" | "browser" | "activity" | "tasks") => void;
+  hasRoomTasks?: boolean;
+}) {
+  const kinds = ["files", "browser", "activity", ...(hasRoomTasks ? ["tasks" as const] : [])] as const;
   return (
     <div className="chat-side-welcome">
-      {(["files", "browser", "activity"] as const).map((kind) => {
-        const Icon = kind === "files" ? FolderIcon : kind === "browser" ? Globe : Activity;
+      {kinds.map((kind) => {
+        const Icon =
+          kind === "files" ? FolderIcon : kind === "browser" ? Globe : kind === "tasks" ? ListTodo : Activity;
         return (
           <button key={kind} className={`chat-side-welcome-${kind}`} type="button" onClick={() => onSelect(kind)}>
             <span className="chat-side-welcome-icon">
@@ -474,11 +498,21 @@ function WelcomeTab({ t, onSelect }: { t: TranslateFn; onSelect: (kind: "files" 
                     ? "chatWorkspaceFiles"
                     : kind === "browser"
                       ? "chatBrowser"
-                      : "conversationActivityOpen",
+                      : kind === "tasks"
+                        ? "roomTasksOpen"
+                        : "conversationActivityOpen",
                 )}
               </strong>
               <small>
-                {t(kind === "files" ? "chatFilesHint" : kind === "browser" ? "chatBrowserEmpty" : "chatActivityHint")}
+                {t(
+                  kind === "files"
+                    ? "chatFilesHint"
+                    : kind === "browser"
+                      ? "chatBrowserEmpty"
+                      : kind === "tasks"
+                        ? "roomTasksPanelHint"
+                        : "chatActivityHint",
+                )}
               </small>
             </span>
           </button>

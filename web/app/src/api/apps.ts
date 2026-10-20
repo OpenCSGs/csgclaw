@@ -212,6 +212,7 @@ export type CLIOperation = {
   authorization_url?: string;
   expires_at?: string;
   error_code?: string;
+  failure_stage?: string;
 };
 export function ensureFeishuResource(): Promise<AppInstallation> {
   return createAppResource({

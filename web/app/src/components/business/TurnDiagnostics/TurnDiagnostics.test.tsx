@@ -2,7 +2,7 @@ import userEvent from "@testing-library/user-event";
 // @vitest-environment jsdom
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { TurnDiagnostics } from "./TurnDiagnostics";
+import { DiagnosticMessageAction, TurnDiagnostics } from "./TurnDiagnostics";
 import { fetchDiagnostic, fetchDiagnostics } from "@/api/diagnostics";
 vi.mock("@/api/diagnostics", () => ({ fetchDiagnostic: vi.fn(), fetchDiagnostics: vi.fn() }));
 vi.mock("@/api/agents", () => ({ fetchAgentLogsRequest: vi.fn().mockResolvedValue("runtime log") }));
@@ -140,6 +140,40 @@ it("keeps the triggering message visible while simplifying a single execution an
   view.unmount();
 });
 
+it("opens a message diagnostic in the full conversation list focused on its execution", async () => {
+  const earlier = {
+    ...record,
+    id: "earlier",
+    source_id: "earlier-source",
+    turn_id: "earlier-turn",
+    started_at: "2026-09-25T00:00:00Z",
+  };
+  vi.mocked(fetchDiagnostics).mockResolvedValue({
+    items: [record, earlier],
+    next_cursor: "",
+    total: 2,
+    agents: [{ id: record.agent_id, name: "manager" }],
+  });
+  vi.mocked(fetchDiagnostic).mockResolvedValue(record);
+  render(
+    <DiagnosticMessageAction
+      iconOnly
+      metadata={{ diagnostics: { room_id: record.room_id, source_id: record.source_id, turn_id: record.turn_id } }}
+      t={(key) => key}
+    />,
+  );
+  await userEvent.click(screen.getByRole("button", { name: "diagExecutionAction" }));
+  await waitFor(() =>
+    expect(fetchDiagnostics).toHaveBeenCalledWith(
+      record.room_id,
+      expect.objectContaining({ source_id: "", turn_id: "" }),
+      expect.any(AbortSignal),
+    ),
+  );
+  expect(await screen.findByRole("complementary", { name: "diagTurns" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { pressed: true })).toHaveTextContent(record.agent_id);
+});
+
 it("does not replace a missing exact execution with another available turn", async () => {
   vi.mocked(fetchDiagnostics).mockResolvedValue({
     items: [],
@@ -203,5 +237,46 @@ it("recovers a failed execution detail request on refresh without clearing its s
     expect.objectContaining({ source_id: "s", turn_id: record.turn_id }),
     expect.any(AbortSignal),
   );
+  view.unmount();
+});
+
+it.each([record.turn_id, undefined])("resolves a message outside the newest page (turn: %s)", async (turn) => {
+  const newer = { ...record, id: "newer", source_id: "other", turn_id: "other-turn" };
+  vi.mocked(fetchDiagnostics).mockImplementation(async (_room, filters) => ({
+    items: filters.source_id ? [record] : [newer],
+    next_cursor: filters.source_id ? "" : "older-page",
+    total: filters.source_id ? 1 : 51,
+    agents: [],
+  }));
+  vi.mocked(fetchDiagnostic).mockResolvedValue(record);
+  const view = render(
+    <TurnDiagnostics room="r" initialSource="s" initialTurn={turn} t={(key) => key} onClose={() => {}} />,
+  );
+  expect(await screen.findByText("upstream_failure")).toBeInTheDocument();
+  expect(fetchDiagnostics).toHaveBeenCalledWith(
+    "r",
+    expect.objectContaining({ source_id: "s", turn_id: turn || "" }),
+    expect.any(AbortSignal),
+  );
+  expect(screen.getAllByRole("button", { pressed: false }).length).toBeGreaterThan(0);
+  expect(screen.getByRole("button", { pressed: true })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "diagOlder" })).toBeInTheDocument();
+  view.unmount();
+});
+
+it("shows a waiting source instead of selecting an unrelated execution", async () => {
+  vi.mocked(fetchDiagnostics).mockImplementation(async (_room, filters) => ({
+    items: filters.source_id ? [] : [{ ...record, source_id: "other" }],
+    source: filters.source_id
+      ? { id: "s", content: "Pending", sender_name: "User", created_at: record.started_at, state: "waiting" }
+      : undefined,
+    next_cursor: "",
+    total: 1,
+    agents: [],
+  }));
+  const view = render(<TurnDiagnostics room="r" initialSource="s" t={(key) => key} onClose={() => {}} />);
+  expect(await screen.findByText("diagWaitingExecution")).toBeInTheDocument();
+  expect(fetchDiagnostic).not.toHaveBeenCalled();
+  expect(screen.queryByRole("button", { pressed: true })).not.toBeInTheDocument();
   view.unmount();
 });

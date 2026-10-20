@@ -285,9 +285,14 @@ export function TaskConversationList({
                 content={room.title || t("taskEntryUntitled")}
                 contentProps={{ side: "right", className: styles.titleTooltip }}
               >
-                <button type="button" className={styles.open} onClick={() => onSelect(room.id, searchMatch)}>
+                <button
+                  type="button"
+                  className={styles.open}
+                  aria-current={activeID === room.id ? "page" : undefined}
+                  onClick={() => onSelect(room.id, searchMatch)}
+                >
                   {!managerDM ? (
-                    <span className={styles.avatar}>
+                    <span className={styles.avatar} aria-hidden="true">
                       {room.is_direct ? (
                         <AgentAvatarContent avatar={other?.avatar} fallback={other?.name?.slice(0, 1) || "A"} />
                       ) : (

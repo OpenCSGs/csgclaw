@@ -281,7 +281,7 @@ export function TargetPicker({
             }}
           >
             <Plus aria-hidden="true" size={15} strokeWidth={1.9} />
-            <span>{t("taskEntryCreateAgent")}</span>
+            <span>{t("iaTargetCreateAgent")}</span>
           </button>
           <button
             type="button"
@@ -292,7 +292,7 @@ export function TargetPicker({
             }}
           >
             <Plus aria-hidden="true" size={15} strokeWidth={1.9} />
-            <span>{t("taskEntryCreateTeam")}</span>
+            <span>{t("iaTargetCreateTeam")}</span>
           </button>
         </div>
       </PopoverContent>

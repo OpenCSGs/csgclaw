@@ -218,31 +218,19 @@ describe("FloatingChat manager guide", () => {
 });
 
 describe("FloatingChat manager prompts", () => {
-  it("keeps the delete dialog open when room deletion is blocked", async () => {
-    const user = userEvent.setup();
-    const onDeleteRoom = vi.fn().mockRejectedValue({
-      status: 409,
-      code: "room_has_active_tasks",
-      message: "finish or stop active room tasks before deleting the room",
+  it("preserves the floating conversation tools menu alongside side-panel actions", () => {
+    renderOpenManagerFloatingChat({
+      id: "manager-chat",
+      is_direct: true,
+      members: users.map((item) => item.id),
+      messages: [],
+      title: "Manager",
     });
-    renderOpenManagerFloatingChat(
-      {
-        id: "room-managed",
-        is_direct: false,
-        members: users.map((item) => item.id),
-        messages: [],
-        title: "Managed room",
-      },
-      { onDeleteRoom, showChannelTools: true },
-    );
 
-    await user.click(screen.getByRole("button", { name: "Delete room" }));
-    await user.click(screen.getByRole("button", { name: "Confirm delete" }));
-
-    expect(await screen.findByRole("alert")).toHaveTextContent(
-      "This room still has unfinished tasks. Stop or complete them before deleting the room.",
-    );
-    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "conversationActivityOpen" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "chatFiles" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "chatBrowser" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Channel tools" })).toBeInTheDocument();
   });
 
   it("keeps the floating chat attachment menu free of legacy connectors", async () => {

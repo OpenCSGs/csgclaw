@@ -1,0 +1,74 @@
+.panel {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+  min-width: 0;
+  padding: var(--space-5) var(--space-6) var(--space-3);
+}
+
+.board {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xl);
+  background: var(--surface);
+}
+
+.header {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: 18px var(--space-5) 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.header h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 650;
+  line-height: 1.25;
+}
+
+.message {
+  margin: 0;
+  padding: var(--space-4);
+  color: var(--muted);
+  font-size: var(--text-xs-size);
+  overflow-wrap: anywhere;
+}
+
+.message[role="alert"] {
+  color: var(--danger);
+}
+
+.issuesStatus {
+  display: inline-flex;
+  align-items: flex-start;
+  justify-self: start;
+  gap: var(--space-1);
+  max-width: 100%;
+  min-width: 0;
+  padding: 3px 6px;
+  border-radius: var(--radius-sm);
+  background: var(--notice-warning-background);
+  color: var(--warning-text);
+  font-size: var(--text-xs-size);
+  line-height: 16px;
+}
+
+.issuesStatus svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.issuesStatus > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
