@@ -43,6 +43,8 @@ import {
 } from "@/api/hub";
 import type { HubTemplate } from "@/models/hubWorkspace";
 import { createUserRequest, joinAgentToRoomRequest } from "@/api/im";
+import { applyAgentCreationResources } from "@/api/agentCreation";
+import type { AgentCreationResources } from "@/models/agentCreation";
 import { fetchSkills } from "@/api/skills";
 import { createTeamRequest, deleteTeamRequest, fetchTeams, updateTeamRequest } from "@/api/tasks";
 import type { CreateTeamPayload } from "@/api/tasks";
@@ -76,7 +78,6 @@ import {
   isAgentProfileDraftComplete,
   isAgentProfileMarkedComplete,
   canPublishCommunityTemplateRuntime,
-  createAgentSelectableTemplates,
   defaultWorkerImageForRuntime,
   draftMCPServersForSave,
   draftRuntimeOptionsForSave,
@@ -96,7 +97,6 @@ import {
   normalizeAuthProviderName,
   normalizeTemplateSelection,
   partitionWorkspaceAgentItems,
-  pickDefaultAgentTemplate,
   resolveAgentAvatarSource,
   resolveAgentAvatarUserID,
   normalizeRuntimeKind,
@@ -228,7 +228,6 @@ const FEISHU_REGISTRATION_MIN_POLL_SECONDS = 1;
 const FEISHU_REGISTRATION_MAX_POLL_SECONDS = 30;
 const AGENT_CREATE_NAME_RETRY_LIMIT = 20;
 const noopRefreshWorkspaceModelProviders = async (): Promise<null> => null;
-const noopRefreshWorkspaceHubTemplates = async (): Promise<HubTemplate[]> => [];
 const noopSelectModelProvider = (): void => undefined;
 
 function feishuActionKey(agentID: string, action: FeishuActionKind): string {
@@ -417,6 +416,7 @@ export function useAgentController({
   modelProvidersLoaded = false,
   openCSGAuthGuard,
   onAgentDeleted,
+  onBrowseTemplates,
   onTemplatePublished,
   profileDetailAgentID = "",
   redirectToIncompleteManagerProfile = true,
@@ -425,7 +425,6 @@ export function useAgentController({
   refreshWorkspaceAgents,
   refreshWorkspaceBootstrap,
   refreshWorkspaceBootstrapConfig,
-  refreshWorkspaceHubTemplates = noopRefreshWorkspaceHubTemplates,
   refreshWorkspaceManagerProfile,
   refreshWorkspaceModelProviders = noopRefreshWorkspaceModelProviders,
   rooms,
@@ -455,10 +454,17 @@ export function useAgentController({
   const [cliproxyAuthBusy, setCLIProxyAuthBusy] = useState("");
   const [agentsError, setAgentsError] = useState("");
   const [showAgentModal, setShowAgentModal] = useState(false);
+  const [agentInitializing, setAgentInitializing] = useState(false);
+  const agentModalRequestRef = useRef(0);
+  useEffect(
+    () => () => {
+      agentModalRequestRef.current += 1;
+    },
+    [],
+  );
   const [agentModalMode, setAgentModalMode] = useState<AgentModalMode>("create");
   const [agentCreateBotKind, setAgentCreateBotKind] = useState(BOT_CREATE_KIND_WORKER);
-  const [agentCreateMode, setAgentCreateMode] = useState<AgentCreateMode>("template");
-  const [hideAgentCreateMode, setHideAgentCreateMode] = useState(false);
+  const [agentCreateMode, setAgentCreateMode] = useState<AgentCreateMode>("custom");
   const [editingAgent, setEditingAgent] = useState<AgentLike | null>(null);
   const [agentDraft, setAgentDraft] = useState<AgentDraft | null>(null);
   const [agentModalBootstrapConfig, setAgentModalBootstrapConfig] = useState<RuntimeBootstrapConfig | null>(null);
@@ -878,7 +884,7 @@ export function useAgentController({
       handleOpenCSGAuthenticationError(agentPageModelError, { openDialog: false });
     }
   }, [agentPageDraft, agentPageModelError, handleOpenCSGAuthenticationError]);
-  const agentModelBusy = Boolean(showAgentModal && !modelProvidersLoaded);
+  const agentModelBusy = Boolean(showAgentModal && (agentInitializing || !modelProvidersLoaded));
   const agentPageModelBusy = Boolean(selectedAgentForPage && (!modelProvidersLoaded || agentPageModelProbeBusy));
   const resetAgentModels = useCallback(() => {
     void refreshWorkspaceModelProviders();
@@ -1075,6 +1081,7 @@ export function useAgentController({
   useEffect(() => {
     if (
       !showAgentModal ||
+      agentInitializing ||
       agentModalMode !== "create" ||
       agentCreateBotKind !== BOT_CREATE_KIND_WORKER ||
       !hasUnavailableSandboxRuntimeChoice(agentModalBootstrapConfig || bootstrapConfig)
@@ -1091,6 +1098,7 @@ export function useAgentController({
     return () => window.clearInterval(timer);
   }, [
     agentCreateBotKind,
+    agentInitializing,
     agentModalMode,
     agentModalBootstrapConfig,
     bootstrapConfig,
@@ -1414,7 +1422,15 @@ export function useAgentController({
     await queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.agentSkills(id) });
   }
 
+  function closeAgentModal(): void {
+    agentModalRequestRef.current += 1;
+    setAgentInitializing(false);
+    setShowAgentModal(false);
+  }
+
   async function openCreateNotificationParticipantModal(): Promise<void> {
+    agentModalRequestRef.current += 1;
+    setAgentInitializing(false);
     setAgentModalMode("create");
     setAgentCreateBotKind(BOT_CREATE_KIND_NOTIFICATION);
     setAgentCreateMode("custom");
@@ -1436,83 +1452,83 @@ export function useAgentController({
     setShowAgentModal(true);
   }
 
-  async function openCreateAgentModal(
-    template: AgentTemplateLike | null | undefined = undefined,
-    customOnly = false,
-  ): Promise<void> {
+  async function openCreateAgentModal(template: AgentTemplateLike | null | undefined = undefined): Promise<void> {
+    const requestID = ++agentModalRequestRef.current;
+    const selectedTemplate = template ? normalizeTemplateSelection(template) : null;
     setAgentModalMode("create");
     setAgentCreateBotKind(BOT_CREATE_KIND_WORKER);
-    setAgentCreateMode(customOnly ? "custom" : "template");
-    setHideAgentCreateMode(customOnly);
+    setAgentCreateMode(selectedTemplate ? "template" : "custom");
     setEditingAgent(null);
     setAgentError("");
     setRuntimeInstallError("");
     setRuntimeInstallation(null);
     setAgentBillingURL("");
     setAgentProgress(null);
-    const [refreshedBootstrapConfig, refreshedModelProviders, refreshedHubTemplates] = await Promise.all([
-      refreshWorkspaceBootstrapConfig(),
-      refreshWorkspaceModelProviders(),
-      refreshWorkspaceHubTemplates(),
-    ]);
-    const effectiveBootstrapConfig = refreshedBootstrapConfig || bootstrapConfig;
-    const effectiveHubTemplates = refreshedHubTemplates.length ? refreshedHubTemplates : hubTemplates;
-    const createModelCatalog = modelProviderCatalogForAgentAvailability(refreshedModelProviders, {
-      codexAvailable: effectiveBootstrapConfig?.manager_runtime?.installed !== false,
-    });
-    setAgentModalBootstrapConfig(effectiveBootstrapConfig);
-    const createWorkerTemplates = createAgentSelectableTemplates(effectiveHubTemplates);
     const preferredRuntimeKind = "codex";
-    const selectedTemplate = customOnly
-      ? null
-      : template === undefined
-        ? pickDefaultAgentTemplate(createWorkerTemplates, preferredRuntimeKind, effectiveBootstrapConfig)
-        : normalizeTemplateSelection(template);
-    try {
-      const defaults = await fetchAgentProfileDefaults();
-      const initialRuntime = resolveRuntimeSelection({
-        runtime_kind: selectedTemplate?.runtime_kind || preferredRuntimeKind,
-      });
-      let draft = agentToDraft({
+    const initialRuntime = resolveRuntimeSelection({
+      runtime_kind: selectedTemplate?.runtime_kind || preferredRuntimeKind,
+    });
+    const initialDraft = applyTemplateToDraft(
+      agentToDraft({
         avatar: selectUnusedAgentAvatar(createParticipantAvatarSources),
         image: defaultWorkerImageForRuntime(
-          effectiveHubTemplates,
+          hubTemplates,
           initialRuntime.runtime_kind,
-          effectiveBootstrapConfig,
+          bootstrapConfig,
           managerAgent?.image || "",
         ),
-        runtime_name: initialRuntime.runtime_name,
-        sandbox_enabled: initialRuntime.sandbox_enabled,
-        runtime_kind: initialRuntime.runtime_kind,
-        bot_type: BOT_TYPE_NORMAL,
-        agent_profile: defaults,
-      });
-      draft = applyTemplateToDraft(draft, selectedTemplate, effectiveBootstrapConfig, managerAgent?.image || "");
-      draft = agentDraftWithAvailableModels(draft, createModelCatalog, openCSGAuthenticated, false);
-      setAgentDraft(draft);
-      setShowAgentModal(true);
-    } catch (_) {
-      const initialRuntime = resolveRuntimeSelection({
-        runtime_kind: selectedTemplate?.runtime_kind || preferredRuntimeKind,
-      });
-      let draft = agentToDraft({
-        avatar: selectUnusedAgentAvatar(createParticipantAvatarSources),
-        image: defaultWorkerImageForRuntime(
-          effectiveHubTemplates,
-          initialRuntime.runtime_kind,
-          effectiveBootstrapConfig,
-          managerAgent?.image || "",
-        ),
-        runtime_name: initialRuntime.runtime_name,
-        sandbox_enabled: initialRuntime.sandbox_enabled,
-        runtime_kind: initialRuntime.runtime_kind,
+        ...initialRuntime,
         bot_type: BOT_TYPE_NORMAL,
         agent_profile: {},
+      }),
+      selectedTemplate,
+      bootstrapConfig,
+      managerAgent?.image || "",
+    );
+    setAgentModalBootstrapConfig(bootstrapConfig);
+    setAgentDraft(initialDraft);
+    setAgentInitializing(true);
+    setShowAgentModal(true);
+    try {
+      const [config, providers, defaults] = await Promise.allSettled([
+        refreshWorkspaceBootstrapConfig(),
+        refreshWorkspaceModelProviders(),
+        fetchAgentProfileDefaults(),
+      ]);
+      if (agentModalRequestRef.current !== requestID) return;
+      const effectiveBootstrapConfig = (config.status === "fulfilled" && config.value) || bootstrapConfig;
+      const createModelCatalog = modelProviderCatalogForAgentAvailability(
+        providers.status === "fulfilled" ? providers.value : null,
+        { codexAvailable: effectiveBootstrapConfig?.manager_runtime?.installed !== false },
+      );
+      setAgentModalBootstrapConfig(effectiveBootstrapConfig);
+      let draft = agentToDraft({
+        avatar: initialDraft.avatar,
+        image: defaultWorkerImageForRuntime(
+          hubTemplates,
+          initialRuntime.runtime_kind,
+          effectiveBootstrapConfig,
+          managerAgent?.image || "",
+        ),
+        runtime_name: initialRuntime.runtime_name,
+        sandbox_enabled: initialRuntime.sandbox_enabled,
+        runtime_kind: initialRuntime.runtime_kind,
+        bot_type: BOT_TYPE_NORMAL,
+        agent_profile: defaults.status === "fulfilled" ? defaults.value : {},
       });
       draft = applyTemplateToDraft(draft, selectedTemplate, effectiveBootstrapConfig, managerAgent?.image || "");
-      draft = agentDraftWithAvailableModels(draft, createModelCatalog, openCSGAuthenticated, false);
-      setAgentDraft(draft);
-      setShowAgentModal(true);
+      const readyDraft = agentDraftWithAvailableModels(draft, createModelCatalog, openCSGAuthenticated, false);
+      setAgentDraft((current) => {
+        if (!current || agentModalRequestRef.current !== requestID) return current;
+        const next = { ...current };
+        // Hydrate only untouched fields while the user fills the already-open form.
+        for (const key of Object.keys(readyDraft) as (keyof AgentDraft)[]) {
+          if (Object.is(current[key], initialDraft[key])) Object.assign(next, { [key]: readyDraft[key] });
+        }
+        return next;
+      });
+    } finally {
+      if (agentModalRequestRef.current === requestID) setAgentInitializing(false);
     }
   }
 
@@ -1571,6 +1587,8 @@ export function useAgentController({
   }
 
   async function openEditAgentModal(item: AgentLike): Promise<void> {
+    agentModalRequestRef.current += 1;
+    setAgentInitializing(false);
     setAgentModalMode("edit");
     setAgentCreateBotKind(isNotificationBotAgent(item) ? BOT_CREATE_KIND_NOTIFICATION : BOT_CREATE_KIND_WORKER);
     setAgentCreateMode("custom");
@@ -1958,8 +1976,8 @@ export function useAgentController({
     }
   }
 
-  async function saveAgent(): Promise<void> {
-    if (!agentDraft) {
+  async function saveAgent(resources?: AgentCreationResources): Promise<void> {
+    if (!agentDraft || agentInitializing) {
       return;
     }
     const remoteTemplate = hubTemplates.some(
@@ -2106,6 +2124,17 @@ export function useAgentController({
             ...(payload.runtime_options !== undefined ? { runtime_options: payload.runtime_options } : {}),
             ...(payload.mcpServers !== undefined ? { mcpServers: payload.mcpServers } : {}),
           });
+      if (isCreate && resources && saved.id) {
+        const failedResources = await applyAgentCreationResources(saved.id, resources);
+        if (failedResources.length)
+          showAgentPageNotice(
+            t("agentWizardResourcesFailed", { names: failedResources.join(", ") }),
+            "warning",
+            0,
+            saved.id,
+            true,
+          );
+      }
       syncManagerProfileFromAgent(saved);
       await saveLinkedAgentUserAvatar(saved?.participants?.length ? saved : editingAgent || saved, agentDraft.avatar);
       if (!isCreate && mcpServersChanged) {
@@ -2770,7 +2799,7 @@ export function useAgentController({
     openAgentDirectMessage,
     notificationAgentItems,
     openCreateAgentModal,
-    openCreateCustomAgentModal: () => openCreateAgentModal(null, true),
+    openCreateCustomAgentModal: () => openCreateAgentModal(null),
     openCreateTeamModal,
     openManageTeamMembers,
     openCreateNotificationParticipantModal,
@@ -2922,8 +2951,9 @@ export function useAgentController({
             agentModalMode,
             agentCreateBotKind,
             agentCreateMode,
-            hideAgentCreateMode,
-            onAgentCreateModeChange: setAgentCreateMode,
+            agentInitializing,
+            creationWizard: true,
+            openCSGAuthenticated,
             onAgentCreateBotKindChange: setAgentCreateBotKind,
             editingAgent,
             agentDraft,
@@ -2948,7 +2978,13 @@ export function useAgentController({
             runtimeInstallBusy,
             runtimeInstallError,
             runtimeInstallation,
-            onClose: () => setShowAgentModal(false),
+            onClose: closeAgentModal,
+            onBrowseTemplates: onBrowseTemplates
+              ? () => {
+                  closeAgentModal();
+                  onBrowseTemplates();
+                }
+              : undefined,
             onInstallRuntime: installRuntimeFromAgentModal,
             onSave: saveAgent,
           }

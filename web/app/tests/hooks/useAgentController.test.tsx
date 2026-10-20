@@ -241,10 +241,12 @@ function useAgentControllerHarness(
     modelProviders?: ModelProviderCatalog | null;
     modelProvidersLoaded?: boolean;
     onAgentDeleted?: (item: AgentLike) => void;
+    onBrowseTemplates?: () => void;
     openCSGAuthenticated?: boolean;
     openCSGAuthGuard?: OpenCSGAuthGuard;
     bootstrapConfig?: RuntimeBootstrapConfig | null;
     refreshedBootstrapConfig?: RuntimeBootstrapConfig | null;
+    refreshWorkspaceBootstrapConfig?: () => Promise<RuntimeBootstrapConfig | null>;
     refreshMCPServers?: () => Promise<unknown>;
     refreshWorkspaceModelProviders?: () => Promise<ModelProviderCatalog | null>;
     t?: TranslateFn;
@@ -255,7 +257,9 @@ function useAgentControllerHarness(
   const agentsPropRef = useRef<AgentLike[] | null>(options.agents ?? null);
   const refreshWorkspaceAgentsRef = useRef(vi.fn(async () => options.agents ?? [oldAgent]));
   const refreshWorkspaceBootstrapRef = useRef(vi.fn(async () => null));
-  const refreshWorkspaceBootstrapConfigRef = useRef(vi.fn(async () => options.refreshedBootstrapConfig ?? null));
+  const refreshWorkspaceBootstrapConfigRef = useRef(
+    options.refreshWorkspaceBootstrapConfig ?? vi.fn(async () => options.refreshedBootstrapConfig ?? null),
+  );
   const refreshWorkspaceManagerProfileRef = useRef(vi.fn(async () => null));
   const refreshWorkspaceModelProvidersRef = useRef(
     options.refreshWorkspaceModelProviders ?? (async () => options.modelProviders ?? null),
@@ -313,6 +317,7 @@ function useAgentControllerHarness(
     modelProviders: options.modelProviders ?? null,
     modelProvidersLoaded: options.modelProvidersLoaded ?? false,
     onAgentDeleted: options.onAgentDeleted,
+    onBrowseTemplates: options.onBrowseTemplates,
     openCSGAuthGuard: options.openCSGAuthGuard ?? openCSGAuthGuard,
     refreshMCPServers: options.refreshMCPServers ?? vi.fn(async () => null),
     refreshHubTemplates: refreshHubTemplatesRef.current,
@@ -1635,7 +1640,7 @@ describe("useAgentController", () => {
     );
   });
 
-  it("refreshes bootstrap config before opening the worker create modal", async () => {
+  it("refreshes bootstrap config in the worker create modal", async () => {
     const staleConfig: RuntimeBootstrapConfig = {
       worker_runtime_choices: [
         { name: "codex", sandbox_enabled: false, installed: true, label: "Codex CLI" },
@@ -1672,6 +1677,194 @@ describe("useAgentController", () => {
     expect(result.current.controller.agentProfileModalProps?.bootstrapConfig).toBe(refreshedConfig);
   });
 
+  it("opens immediately, loads configuration in parallel, and keeps edits made while requests are pending", async () => {
+    let resolveConfig!: (value: RuntimeBootstrapConfig) => void;
+    let resolveProviders!: (value: ModelProviderCatalog) => void;
+    let resolveDefaults!: (value: AgentProfileLike) => void;
+    const config = new Promise<RuntimeBootstrapConfig>((resolve) => {
+      resolveConfig = resolve;
+    });
+    const providers = new Promise<ModelProviderCatalog>((resolve) => {
+      resolveProviders = resolve;
+    });
+    const defaults = new Promise<AgentProfileLike>((resolve) => {
+      resolveDefaults = resolve;
+    });
+    const refreshConfig = vi.fn(() => config);
+    const refreshProviders = vi.fn(() => providers);
+    vi.mocked(fetchAgentProfileDefaults).mockReturnValueOnce(defaults);
+    const { result } = renderHook(
+      () =>
+        useAgentControllerHarness({
+          activePane: { type: WorkspacePaneTypes.agent, id: "" },
+          refreshWorkspaceBootstrapConfig: refreshConfig,
+          refreshWorkspaceModelProviders: refreshProviders,
+        }).controller,
+      { wrapper: createWrapper() },
+    );
+    let opening!: Promise<void>;
+    act(() => {
+      opening = result.current.openCreateAgentModal();
+    });
+    expect(result.current.agentProfileModalProps?.agentInitializing).toBe(true);
+    expect(refreshConfig).toHaveBeenCalledOnce();
+    expect(refreshProviders).toHaveBeenCalledOnce();
+    expect(fetchAgentProfileDefaults).toHaveBeenCalledOnce();
+    act(() => {
+      const draft = result.current.agentProfileModalProps!.agentDraft;
+      result.current.agentProfileModalProps!.onAgentDraftChange({
+        ...draft,
+        name: "My agent",
+        description: "My description",
+        instructions: "Keep these instructions",
+      });
+    });
+    await act(async () => {
+      await result.current.agentProfileModalProps?.onSave();
+    });
+    expect(createBotRequest).not.toHaveBeenCalled();
+    const freshConfig = { manager_runtime: { installed: true } };
+    await act(async () => {
+      resolveConfig(freshConfig);
+      resolveProviders(
+        normalizeModelProviderCatalog({
+          providers: [{ id: "local-api", status: "connected", models: ["fresh-model"] }],
+        }),
+      );
+      resolveDefaults({ model_provider_id: "local-api", model_id: "fresh-model" });
+      await opening;
+    });
+    expect(result.current.agentProfileModalProps?.agentInitializing).toBe(false);
+    expect(result.current.agentProfileModalProps?.bootstrapConfig).toBe(freshConfig);
+    expect(result.current.agentProfileModalProps?.agentDraft).toMatchObject({
+      name: "My agent",
+      description: "My description",
+      instructions: "Keep these instructions",
+      model_id: "fresh-model",
+      model_provider_id: "local-api",
+    });
+  });
+
+  it("does not reopen the modal when defaults arrive after it was closed", async () => {
+    let resolveDefaults!: (value: AgentProfileLike) => void;
+    vi.mocked(fetchAgentProfileDefaults).mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveDefaults = resolve;
+      }),
+    );
+    const { result } = renderHook(() => useAgentControllerHarness().controller, { wrapper: createWrapper() });
+    let opening!: Promise<void>;
+    act(() => {
+      opening = result.current.openCreateAgentModal();
+    });
+    act(() => result.current.agentProfileModalProps!.onClose());
+    await act(async () => {
+      resolveDefaults(profile);
+      await opening;
+    });
+    expect(result.current.agentProfileModalProps).toBeNull();
+  });
+
+  it("ignores an earlier initialization while a new template dialog is still loading", async () => {
+    let resolveFirst!: (value: AgentProfileLike) => void;
+    let resolveSecond!: (value: AgentProfileLike) => void;
+    vi.mocked(fetchAgentProfileDefaults)
+      .mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolveFirst = resolve;
+        }),
+      )
+      .mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolveSecond = resolve;
+        }),
+      );
+    const { result } = renderHook(() => useAgentControllerHarness().controller, { wrapper: createWrapper() });
+    let first!: Promise<void>;
+    let second!: Promise<void>;
+    act(() => {
+      first = result.current.openCreateAgentModal();
+    });
+    act(() => {
+      second = result.current.openCreateAgentModal({ id: "local.reviewer", name: "Reviewer", runtime_kind: "codex" });
+    });
+    await act(async () => {
+      resolveFirst(profile);
+      await first;
+    });
+    expect(result.current.agentProfileModalProps?.agentInitializing).toBe(true);
+    expect(result.current.agentProfileModalProps?.agentDraft).toMatchObject({
+      name: "Reviewer",
+      from_template: "local.reviewer",
+      model_id: "",
+    });
+    await act(async () => {
+      resolveSecond({});
+      await second;
+    });
+    expect(result.current.agentProfileModalProps?.agentInitializing).toBe(false);
+    expect(result.current.agentProfileModalProps?.agentDraft.from_template).toBe("local.reviewer");
+  });
+
+  it("keeps the form open and usable when configuration refreshes fail", async () => {
+    vi.mocked(fetchAgentProfileDefaults).mockRejectedValueOnce(new Error("offline"));
+    const { result } = renderHook(
+      () =>
+        useAgentControllerHarness({
+          activePane: { type: WorkspacePaneTypes.agent, id: "" },
+          refreshWorkspaceBootstrapConfig: async () => {
+            throw new Error("offline");
+          },
+          refreshWorkspaceModelProviders: async () => {
+            throw new Error("offline");
+          },
+        }).controller,
+      { wrapper: createWrapper() },
+    );
+    await act(async () => {
+      await result.current.openCreateAgentModal();
+    });
+    expect(result.current.agentProfileModalProps?.agentInitializing).toBe(false);
+    expect(result.current.agentProfileModalProps?.agentDraft.name).toBe("");
+  });
+
+  it.each([false, true])(
+    "starts ordinary creation from a blank custom draft (defaults fail: %s)",
+    async (defaultsFail) => {
+      if (defaultsFail) vi.mocked(fetchAgentProfileDefaults).mockRejectedValueOnce(new Error("unavailable"));
+      const onBrowseTemplates = vi.fn();
+      const { result } = renderHook(
+        () =>
+          useAgentControllerHarness({
+            onBrowseTemplates,
+            hubTemplates: [
+              {
+                id: "builtin.codex-worker",
+                name: "Preset worker",
+                runtime_kind: "codex",
+                description: "Preset description",
+              },
+            ],
+          }).controller,
+        { wrapper: createWrapper() },
+      );
+      await act(async () => {
+        await result.current.openCreateAgentModal();
+      });
+      expect(result.current.agentProfileModalProps?.agentCreateMode).toBe("custom");
+      expect(result.current.agentProfileModalProps?.agentDraft).toMatchObject({
+        name: "",
+        description: "",
+        from_template: "",
+        template_name: "",
+        runtime_kind: "codex",
+      });
+      act(() => result.current.agentProfileModalProps?.onBrowseTemplates?.());
+      expect(onBrowseTemplates).toHaveBeenCalledOnce();
+      expect(result.current.agentProfileModalProps).toBeNull();
+    },
+  );
+
   it("preserves the builtin OpenClaw template when it is passed explicitly from Hub", async () => {
     const codexTemplate: AgentTemplateLike = {
       id: "builtin.codex-worker",
@@ -1702,6 +1895,7 @@ describe("useAgentController", () => {
       from_template: "builtin.openclaw-worker",
       runtime_kind: "openclaw_sandbox",
     });
+    expect(result.current.agentProfileModalProps?.agentCreateMode).toBe("template");
   });
 
   it("initializes the profile modal MCP editor from the dedicated desired server map", async () => {
