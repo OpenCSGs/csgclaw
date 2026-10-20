@@ -104,6 +104,10 @@ func Alive(pid int) (bool, error) {
 	if job, ok := jobs.handles[pid]; ok {
 		return active(job)
 	}
+	return processAlive(pid)
+}
+
+func processAlive(pid int) (bool, error) {
 	handle, err := windows.OpenProcess(windows.SYNCHRONIZE, false, uint32(pid))
 	if errors.Is(err, windows.ERROR_INVALID_PARAMETER) {
 		return false, nil
@@ -125,12 +129,12 @@ func Stop(pid int, force bool) error {
 	if !ok {
 		err := exec.Command("taskkill", "/PID", strconv.Itoa(pid), "/T", "/F").Run()
 		if err != nil {
-			handle, openErr := windows.OpenProcess(windows.SYNCHRONIZE, false, uint32(pid))
-			if errors.Is(openErr, windows.ERROR_INVALID_PARAMETER) {
+			// An exited process can still be opened while another caller owns
+			// a handle to it. Runtime shutdown and the exit watcher both stop
+			// the tree, so inspect its wait state before treating taskkill's
+			// "process not found" error as a failed stop.
+			if running, probeErr := processAlive(pid); probeErr == nil && !running {
 				return nil
-			}
-			if openErr == nil {
-				windows.CloseHandle(handle)
 			}
 			return err
 		}
