@@ -1594,6 +1594,8 @@ export const messages = {
     resourcesLoadFailed: "资源模板加载失败，请稍后重试。",
     resourcesDeleteTemplate: "删除模板",
     resourcesDeleteConfirm: "删除模板",
+    resourcesDeleteLocalOnlyNotice:
+      "只删除本地模板，AgenticHub 上的模板不会删除。如需彻底删除，请前往 AgenticHub 下架。",
     resourcesDeleteFailed: "模板删除失败，请稍后重试。",
     resourcesDeleteSkill: "删除",
     resourcesDeleteSkillConfirmAction: "删除",
@@ -4547,6 +4549,8 @@ export const messages = {
     resourcesLoadFailed: "Failed to load resource templates. Please try again later.",
     resourcesDeleteTemplate: "Delete template",
     resourcesDeleteConfirm: "Delete template",
+    resourcesDeleteLocalOnlyNotice:
+      "Only the local template will be deleted. The template on AgenticHub will remain available. To remove it entirely, unpublish it on AgenticHub.",
     resourcesDeleteFailed: "Failed to delete the template. Please try again later.",
     resourcesDeleteSkill: "Delete",
     resourcesDeleteSkillConfirmAction: "Delete",
