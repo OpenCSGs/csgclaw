@@ -1,0 +1,39 @@
+.usage {
+  position: relative;
+  display: inline-flex;
+  min-width: 0;
+  max-width: 100%;
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.trigger.trigger {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  max-width: 100%;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.trigger:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+.measure {
+  position: absolute;
+  width: max-content;
+  height: 0;
+  visibility: hidden;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.tooltip {
+  max-width: min(360px, calc(100vw - 24px));
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}

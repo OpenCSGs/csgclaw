@@ -1,3 +1,4 @@
+import { ExecutionDiagnosticIcon } from "../ConversationPane/MessageActionIcons";
 import { useTurnDiagnostics } from "./useTurnDiagnostics";
 import { localizeAgentLogTimestamps } from "@/models/agentLogs";
 import { flattenMentionText } from "@/components/business/MessageContent";
@@ -93,7 +94,7 @@ export function DiagnosticMessageAction({
           data-tooltip-side="top"
           onClick={() => setOpen(true)}
         >
-          <Activity aria-hidden="true" />
+          <ExecutionDiagnosticIcon />
         </button>
       ) : meta?.runtime_error ? (
         <InlineDiagnosticError room={ref.room} source={ref.source} turn={ref.turn} t={t} onOpen={() => setOpen(true)} />
