@@ -1,6 +1,7 @@
 import { effectiveConversationProfile } from "@/models/taskConfiguration";
 import { composerFileReferences } from "@/models/composer";
 import { useSlashSelection } from "./useSlashSelection";
+import { useSearchMessageNavigation } from "./useSearchMessageNavigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import { errorMessage } from "@/api/client";
@@ -1288,6 +1289,13 @@ export function useConversationController({
     }
   }
 
+  const navigateToSearchMatch = useSearchMessageNavigation({
+    active: messageListActive && activePane.type === WorkspacePaneTypes.conversation && Boolean(activeConversation),
+    roomID: activeConversationId,
+    messageListRef,
+    openThread: restoreThread,
+  });
+
   async function refreshThreadView(selection: ThreadSelection) {
     const view = await fetchThreadRequest(selection.roomID, selection.rootID);
     if (activeThreadSelectionRef.current !== selection) {
@@ -1859,6 +1867,10 @@ export function useConversationController({
     directMessages,
     handleRealtimeEvent,
     openThreadInConversation,
+    navigateToSearchMatch: (roomID: string, message: IMMessage) => {
+      if (isToolCallMessage(message)) setShowToolCalls(true);
+      navigateToSearchMatch(roomID, message);
+    },
     roomCount,
     selectedConversation,
     selectedMessageCount,

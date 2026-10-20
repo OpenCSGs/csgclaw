@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"net/http"
 	"slices"
 	"sort"
@@ -29,9 +30,30 @@ func (h *Handler) allowRoomManagement(w http.ResponseWriter, roomID string) bool
 }
 
 type taskConversationPage struct {
-	Rooms   []im.Room `json:"rooms"`
-	Total   int       `json:"total"`
-	HasMore bool      `json:"has_more"`
+	Rooms   []taskConversationRoom `json:"rooms"`
+	Total   int                    `json:"total"`
+	HasMore bool                   `json:"has_more"`
+}
+
+type taskConversationRoom struct {
+	im.Room
+	SearchMatch *im.Message `json:"search_match,omitempty"`
+}
+
+func (room *taskConversationRoom) UnmarshalJSON(data []byte) error {
+	var stored im.Room
+	if err := json.Unmarshal(data, &stored); err != nil {
+		return err
+	}
+	var result struct {
+		SearchMatch *im.Message `json:"search_match,omitempty"`
+	}
+	if err := json.Unmarshal(data, &result); err != nil {
+		return err
+	}
+	room.Room = stored
+	room.SearchMatch = result.SearchMatch
+	return nil
 }
 
 func conversationActivity(room im.Room) time.Time {
@@ -60,6 +82,30 @@ func conversationMatches(room im.Room, terms []string) bool {
 		}
 	}
 	return true
+}
+
+func conversationSearchMatch(room im.Room, terms []string) *im.Message {
+	if len(terms) == 0 {
+		return nil
+	}
+	bestIndex, bestScore := -1, 0
+	for index := range room.Messages {
+		content := strings.ToLower(room.Messages[index].Content)
+		score := 0
+		for _, term := range terms {
+			if strings.Contains(content, term) {
+				score++
+			}
+		}
+		if score > bestScore || (score == bestScore && score > 0 && (bestIndex < 0 || room.Messages[index].CreatedAt.After(room.Messages[bestIndex].CreatedAt))) {
+			bestIndex, bestScore = index, score
+		}
+	}
+	if bestIndex < 0 {
+		return nil
+	}
+	match := room.Messages[bestIndex]
+	return &match
 }
 
 // Search reads the stored history before pagination, including unloaded messages.
@@ -119,12 +165,15 @@ func (h *Handler) listTaskConversations(w http.ResponseWriter, r *http.Request) 
 		offset = total
 	}
 	end := offset + min(limit, total-offset)
-	page := rooms[offset:end]
-	for i := range page {
-		if len(page[i].Messages) > 1 {
-			page[i].Messages = page[i].Messages[len(page[i].Messages)-1:]
+	page := make([]taskConversationRoom, 0, end-offset)
+	for _, storedRoom := range rooms[offset:end] {
+		room := storedRoom
+		match := conversationSearchMatch(room, terms)
+		if len(room.Messages) > 1 {
+			room.Messages = room.Messages[len(room.Messages)-1:]
 		}
-		page[i].Threads = nil
+		room.Threads = nil
+		page = append(page, taskConversationRoom{Room: room, SearchMatch: match})
 	}
 	writeJSON(w, http.StatusOK, taskConversationPage{Rooms: page, Total: total, HasMore: end < total})
 }

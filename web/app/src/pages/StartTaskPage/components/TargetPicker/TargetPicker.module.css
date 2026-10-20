@@ -123,7 +123,7 @@
 }
 
 .groupLabel {
-  padding: 6px 8px 2px;
+  padding: 6px 8px 2px 31px;
   color: var(--muted);
   font-size: 10px;
   font-weight: 600;
@@ -138,12 +138,13 @@
 }
 
 .row {
+  position: relative;
   width: 100%;
   min-height: 36px;
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 5px 8px;
+  padding: 5px 8px 5px 31px;
   border: 0;
   border-radius: 7px;
   background: transparent;
@@ -199,7 +200,8 @@
 }
 
 .rowCheck {
-  flex: 0 0 auto;
+  position: absolute;
+  left: 8px;
   color: var(--primary);
 }
 

@@ -1765,6 +1765,10 @@ button.message-file-attachment {
   letter-spacing: 0;
 }
 
+.chat-kicker .chat-kicker-agent-name {
+  text-transform: none;
+}
+
 .chat-title {
   grid-area: title;
   font-family: var(--font-display);

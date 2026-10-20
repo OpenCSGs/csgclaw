@@ -137,7 +137,8 @@
   margin: 0;
 }
 .compact .open {
-  padding: 10px 10px 10px 12px;
+  min-height: 42px;
+  padding: 8px 10px 8px 12px;
   gap: 8px;
 }
 .compact .avatar {
@@ -151,6 +152,15 @@
 }
 .compact .text small {
   display: none;
+}
+.compact .text .searchMatch {
+  display: block;
+}
+.searchHighlight {
+  padding: 0 1px;
+  border-radius: 2px;
+  background: var(--control-selected-background);
+  color: var(--text);
 }
 .actions {
   display: flex;
@@ -254,16 +264,31 @@
 }
 
 .directoryMenu {
-  width: min(320px, calc(100vw - 24px));
-  min-width: min(320px, calc(100vw - 24px));
+  width: min(208px, calc(100vw - 16px));
+  max-width: calc(100vw - 16px);
+  min-width: 0;
 }
 
 .directoryPath {
-  display: block;
+  display: flex;
+  min-width: 0;
   max-width: 100%;
+  white-space: nowrap;
+}
+
+.directoryPrefix,
+.directoryCurrent {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
+}
+
+.directoryPrefix {
+  flex: 0 1000 auto;
+}
+
+.directoryCurrent {
+  flex: 0 1 auto;
 }
 
 .searchField {
@@ -281,6 +306,29 @@
 }
 .root .searchBar .search {
   padding-left: 32px;
+  padding-right: 32px;
+}
+
+.clearSearch {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.clearSearch:hover {
+  color: var(--text);
+  background: var(--input-background);
 }
 
 .compact .noAvatar .actions {

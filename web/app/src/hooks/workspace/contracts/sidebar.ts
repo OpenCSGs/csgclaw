@@ -61,6 +61,7 @@ export type WorkspaceSidebarProps = {
   onCollapseSidebar: () => void;
   onAuthEnvironmentChange: (environment: AuthEnvironmentDraft) => void;
   onCreateAgent: () => void | Promise<void>;
+  onCreateCustomAgent: () => void | Promise<void>;
   onCreateModelProvider?: (
     options?: import("../useModelProviderCreation").ModelProviderCreationOptions,
   ) => void | Promise<void>;
@@ -84,6 +85,7 @@ export type WorkspaceSidebarProps = {
   onSelectAgent: (item: AgentLike | null | undefined) => void;
   onSelectComputer: () => void;
   onSelectConversation: (id: string) => void;
+  onSelectSearchMatch?: (id: string, message: IMMessage) => void;
   onSelectHuman: (user: IMUser | null | undefined) => void;
   onSelectHub: () => void;
   onSelectKnowledgeBase?: (item: RemoteKnowledgeBase | null | undefined) => void;

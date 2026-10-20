@@ -39,6 +39,82 @@ function setup(working = false, archived = false, compact = false, activeID?: st
 }
 describe("TaskConversationList archive management", () => {
   beforeEach(() => window.localStorage.clear());
+  it("clears the search and restores the unfiltered list", async () => {
+    const user = userEvent.setup();
+    setup(false, false, true);
+    const input = screen.getByRole("textbox", { name: "taskEntrySearchHistory" });
+    expect(screen.queryByRole("button", { name: "taskEntryClearSearch" })).not.toBeInTheDocument();
+    await user.type(input, "needle");
+    await waitFor(() => expect(fetchTaskConversations).toHaveBeenLastCalledWith("needle", false, 0));
+    await user.click(screen.getByRole("button", { name: "taskEntryClearSearch" }));
+    expect(input).toHaveValue("");
+    expect(input).toHaveFocus();
+    expect(screen.queryByRole("button", { name: "taskEntryClearSearch" })).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText("Review")).toBeInTheDocument());
+  });
+  it.each([
+    {
+      historicalMessage:
+        "This beginning is intentionally long enough to overflow the available sidebar preview before the ending Needle",
+      query: "needle",
+      matchedText: "Needle",
+    },
+    {
+      historicalMessage: "请搜索网页了解 OpenAI 最新公开文档里关于 Codex 的说明，并总结一句。",
+      query: "总结一句",
+      matchedText: "总结一句",
+    },
+  ])(
+    "shows the matching historical message below the task title",
+    async ({ historicalMessage, query, matchedText }) => {
+      const user = userEvent.setup();
+      const onSelect = vi.fn();
+      vi.mocked(fetchTaskConversations).mockImplementation(async (query) => ({
+        rooms: [
+          {
+            ...room,
+            messages: [{ content: "Most recent message" }],
+            search_match: query
+              ? { id: "matched-message", content: historicalMessage, created_at: "2026-10-10T10:00:00Z" }
+              : undefined,
+          },
+        ],
+        total: 1,
+        has_more: false,
+      }));
+      render(
+        <TaskConversationList
+          compact
+          entry={
+            {
+              patch: vi.fn(),
+              remove: vi.fn(),
+              isWorking: () => false,
+              busyID: "",
+            } as unknown as TaskEntryController
+          }
+          currentUserID="user-admin"
+          usersById={new Map()}
+          t={(key) => key}
+          onSelect={onSelect}
+        />,
+        { wrapper: createQueryWrapper().wrapper },
+      );
+
+      await user.type(screen.getByRole("textbox", { name: "taskEntrySearchHistory" }), query);
+      const match = await screen.findByText(matchedText, { exact: true });
+      expect(match.tagName).toBe("MARK");
+      expect(match.closest("small")).toHaveTextContent(/^…/);
+      expect(match.closest("small")).toHaveTextContent(matchedText);
+      expect(match.closest("small")).not.toHaveTextContent("This beginning");
+      expect(match.closest("small")).toHaveAttribute("title", historicalMessage);
+      expect(match.closest("small")?.querySelector("time")).toBeNull();
+      expect(fetchTaskConversations).toHaveBeenLastCalledWith(query, false, 0);
+      await user.click(match);
+      expect(onSelect).toHaveBeenCalledWith("r1", expect.objectContaining({ id: "matched-message" }));
+    },
+  );
+
   it("filters by the session directory instead of another task using the same Agent", async () => {
     const user = userEvent.setup();
     vi.mocked(fetchTaskConversations).mockResolvedValue({

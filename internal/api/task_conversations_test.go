@@ -38,6 +38,9 @@ func TestTaskConversationSearchPaginationAndArchive(t *testing.T) {
 	if first.Total != 2 || len(first.Rooms[0].Messages) != 1 || !first.HasMore || len(first.Rooms) != 1 || first.Rooms[0].ID != "older" {
 		t.Fatalf("first = %+v", first)
 	}
+	if first.Rooms[0].SearchMatch == nil || first.Rooms[0].SearchMatch.Content != "needle in history" {
+		t.Fatalf("search match = %+v", first.Rooms[0].SearchMatch)
+	}
 	if stored, _ := svc.Room("older"); len(stored.Messages) != 2 {
 		t.Fatal("pagination mutated stored history")
 	}

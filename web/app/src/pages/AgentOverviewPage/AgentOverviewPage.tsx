@@ -129,7 +129,7 @@ export function AgentOverviewPage() {
               <Plus size={14} />
               {t("taskEntryCreateTeam")}
             </Button>
-            <Button size="sm" onClick={() => void props.onCreateAgent()}>
+            <Button size="sm" onClick={() => void props.onCreateCustomAgent()}>
               <Plus size={14} />
               {t("iaAgentsCreateAgent")}
             </Button>

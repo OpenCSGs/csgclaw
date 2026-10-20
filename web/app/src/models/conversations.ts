@@ -169,6 +169,7 @@ export type IMConversation = {
   locale?: string | null;
   members: string[];
   messages: IMMessage[];
+  search_match?: IMMessage | null;
   notify_all_agents?: boolean | null;
   threads?: ThreadState[] | null;
   title?: string | null;

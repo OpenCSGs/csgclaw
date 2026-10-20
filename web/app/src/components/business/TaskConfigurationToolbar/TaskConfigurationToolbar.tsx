@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Check, ChevronDown, Folder, Gauge, Settings2, ShieldCheck } from "lucide-react";
+import { Check, ChevronDown, Folder, FolderPlus, Gauge, Home, Search, Settings2, ShieldCheck } from "lucide-react";
 import { Button, PopoverClose, PopoverRoot, PopoverTrigger, PopoverContent, TextInput } from "@/components/ui";
 import { ReasoningEffortPicker } from "@/components/business/ReasoningEffortPicker";
 import { reasoningEffortLabel } from "@/components/business/ProfileControls";
@@ -20,6 +20,15 @@ import { pickLocalDirectoryPath } from "@/components/business/ProfileControls/ru
 import styles from "./TaskConfigurationToolbar.module.css";
 
 type Menu = "" | "directory" | "model" | "reasoning" | "mode";
+const RECENT_DIRECTORIES_KEY = "csgclaw.recent-work-directories";
+function readRecentDirectories(): string[] {
+  try {
+    const value: unknown = JSON.parse(localStorage.getItem(RECENT_DIRECTORIES_KEY) || "[]");
+    return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string" && !!item) : [];
+  } catch {
+    return [];
+  }
+}
 export function TaskConfigurationToolbar({
   agent,
   showModel = true,
@@ -44,10 +53,19 @@ export function TaskConfigurationToolbar({
   const directory = configuration.workspace_dir ?? String(options.local_workspace_dir || "");
   const reasoning = configuration.reasoning_effort || profile?.reasoning_effort || "auto";
   const [query, setQuery] = useState("");
+  const [recentDirectories, setRecentDirectories] = useState(readRecentDirectories);
+  const [addingDirectory, setAddingDirectory] = useState(false);
+  const [directoryDraft, setDirectoryDraft] = useState("");
   const [open, setOpen] = useState<Menu>("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [reasoningPreview, setReasoningPreview] = useState<string>();
+  const availableDirectories = configuration.workspace_dir
+    ? [configuration.workspace_dir, ...recentDirectories.filter((path) => path !== configuration.workspace_dir)]
+    : recentDirectories;
+  const matchingDirectories = availableDirectories.filter((path) =>
+    path.toLowerCase().includes(query.trim().toLowerCase()),
+  );
   const editable = supportsTaskConfiguration(agent) && Boolean(onChange);
   const blocked = disabled || saving;
   const providers = modelProviderSelectOptionsFromCatalog(controller?.modelProviders);
@@ -68,6 +86,8 @@ export function TaskConfigurationToolbar({
   const toggle = (kind: Menu, value: boolean) => {
     setOpen(value ? kind : "");
     setQuery("");
+    setAddingDirectory(false);
+    setDirectoryDraft(directory);
     setError("");
     setReasoningPreview(undefined);
   };
@@ -77,6 +97,18 @@ export function TaskConfigurationToolbar({
     setError("");
     try {
       await onChange?.({ ...configuration, ...patch });
+      if (patch.workspace_dir) {
+        const next = [
+          patch.workspace_dir,
+          ...readRecentDirectories().filter((path) => path !== patch.workspace_dir),
+        ].slice(0, 20);
+        setRecentDirectories(next);
+        try {
+          localStorage.setItem(RECENT_DIRECTORIES_KEY, JSON.stringify(next));
+        } catch {
+          /* Storage may be unavailable. */
+        }
+      }
       if (!keepOpen) setOpen("");
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : t("sendFailed"));
@@ -141,49 +173,117 @@ export function TaskConfigurationToolbar({
             <ChevronDown size={12} />
           </button>
         </PopoverTrigger>
-        <PopoverContent className={styles.popover} side="top" aria-label={t("iaWorkdirTitle")}>
-          <p className={styles.hint}>{directory || t("iaWorkdirDefaultHint")}</p>
+        <PopoverContent
+          className={`${styles.popover} ${styles.directoryPopover}`}
+          side="top"
+          aria-label={t("iaWorkdirTitle")}
+        >
           {directoryLocked ? (
-            <p className={styles.hint}>{t("taskConfigurationDirectoryLocked")}</p>
+            <>
+              <p className={styles.hint}>{directory || t("iaWorkdirDefaultHint")}</p>
+              <p className={styles.hint}>{t("taskConfigurationDirectoryLocked")}</p>
+            </>
           ) : (
             <>
-              <label className={styles.directoryInput}>
-                {t("iaWorkdirTitle")}
+              <div className={styles.directorySearch}>
+                <Search size={16} aria-hidden="true" />
                 <TextInput
                   size="sm"
-                  aria-label={t("taskConfigurationDirectoryPath")}
-                  placeholder="/path/to/workspace"
+                  aria-label={t("taskDirectorySearch")}
+                  placeholder={t("taskDirectorySearch")}
                   value={query}
-                  disabled={!editable || blocked}
                   onChange={(event) => setQuery(event.target.value)}
                 />
-              </label>
-              <Button
-                size="sm"
-                disabled={!editable || blocked || !query.trim()}
-                onClick={() => void change({ workspace_dir: query.trim() })}
-              >
-                {t("taskConfigurationApply")}
-              </Button>
-              <Button
-                variant="tertiaryGray"
-                size="sm"
-                disabled={!editable || blocked}
-                onClick={() => {
-                  void pickLocalDirectoryPath()
-                    .then((path) => {
-                      if (path) return change({ workspace_dir: path });
-                    })
-                    .catch((cause) => setError(String(cause)));
-                }}
-              >
-                {t("taskConfigurationChooseDirectory")}
-              </Button>
-              {row(t("iaWorkdirDefault"), !configuration.workspace_dir, () => void change({ workspace_dir: "" }))}
+              </div>
+              {(!query || t("iaWorkdirDefault").toLowerCase().includes(query.toLowerCase())) && (
+                <button
+                  type="button"
+                  className={`${styles.directoryOption} ${!configuration.workspace_dir ? styles.active : ""}`}
+                  disabled={!editable || blocked}
+                  onClick={() => void change({ workspace_dir: "" })}
+                >
+                  <Home size={16} aria-hidden="true" />
+                  <span>
+                    <strong>{t("iaWorkdirDefault")}</strong>
+                    <small>{t("iaWorkdirDefaultHint")}</small>
+                  </span>
+                  {!configuration.workspace_dir && <Check size={16} aria-hidden="true" />}
+                </button>
+              )}
+              {matchingDirectories.length > 0 && (
+                <div className={styles.directoryList}>
+                  <div className={styles.directoryGroupTitle}>{t("taskDirectoryRecent")}</div>
+                  {matchingDirectories.map((path) => (
+                    <button
+                      key={path}
+                      type="button"
+                      className={`${styles.directoryOption} ${configuration.workspace_dir === path ? styles.active : ""}`}
+                      title={path}
+                      disabled={!editable || blocked}
+                      onClick={() => void change({ workspace_dir: path })}
+                    >
+                      <Folder size={16} aria-hidden="true" />
+                      <span>
+                        <strong>
+                          {path
+                            .replace(/[\\/]+$/, "")
+                            .split(/[\\/]/)
+                            .at(-1) || path}
+                        </strong>
+                        <small>{path}</small>
+                      </span>
+                      {configuration.workspace_dir === path && <Check size={16} aria-hidden="true" />}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {addingDirectory && (
+                <>
+                  <label className={styles.directoryInput}>
+                    {t("taskConfigurationDirectoryPath")}
+                    <TextInput
+                      size="sm"
+                      aria-label={t("taskConfigurationDirectoryPath")}
+                      placeholder="/path/to/workspace"
+                      value={directoryDraft}
+                      onChange={(event) => setDirectoryDraft(event.target.value)}
+                    />
+                  </label>
+                  <div className={styles.directoryActions}>
+                    <Button
+                      variant="secondaryGray"
+                      size="sm"
+                      disabled={!editable || blocked}
+                      onClick={() => {
+                        void pickLocalDirectoryPath()
+                          .then((path) => {
+                            if (path) return change({ workspace_dir: path });
+                          })
+                          .catch((cause) => setError(String(cause)));
+                      }}
+                    >
+                      {t("taskConfigurationChooseDirectory")}
+                    </Button>
+                    <Button
+                      size="sm"
+                      disabled={!editable || blocked || !directoryDraft.trim()}
+                      onClick={() => void change({ workspace_dir: directoryDraft.trim() })}
+                    >
+                      {t("taskConfigurationApply")}
+                    </Button>
+                  </div>
+                </>
+              )}
+              <div className={styles.directoryFooter}>
+                <button type="button" disabled={!editable || blocked} onClick={() => setAddingDirectory(true)}>
+                  <FolderPlus size={16} aria-hidden="true" />
+                  {t("taskDirectoryAdd")}
+                </button>
+              </div>
             </>
           )}
           {errorMessage}
-          {hint}
+          {directoryLocked ? hint : null}
         </PopoverContent>
       </PopoverRoot>
       {showModel && schema ? (

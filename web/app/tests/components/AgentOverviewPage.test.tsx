@@ -31,7 +31,15 @@ function queryState(patch: Partial<UseQueryResult<HubTemplate[]>> = {}): UseQuer
   } as UseQueryResult<HubTemplate[]>;
 }
 
-function Page({ route = "/agents?tab=templates", username = "" }: { route?: string; username?: string }) {
+function Page({
+  route = "/agents?tab=templates",
+  username = "",
+  onCreateCustomAgent = vi.fn(),
+}: {
+  route?: string;
+  username?: string;
+  onCreateCustomAgent?: () => void;
+}) {
   const controller = {
     ready: true,
     activePane: { type: "agents", id: "" },
@@ -44,6 +52,7 @@ function Page({ route = "/agents?tab=templates", username = "" }: { route?: stri
       },
       workerAgentItems: [],
       teams: [],
+      onCreateCustomAgent,
     },
     agentViewProps: { item: null },
   } as unknown as WorkspaceController;
@@ -57,6 +66,13 @@ function Page({ route = "/agents?tab=templates", username = "" }: { route?: stri
 }
 
 describe("agent overview guidance and template loading", () => {
+  it("opens custom creation directly from the agent overview", async () => {
+    vi.mocked(useWorkspaceHubTemplatesQuery).mockReturnValue(queryState({ data: [] }));
+    const onCreateCustomAgent = vi.fn();
+    render(<Page route="/agents" onCreateCustomAgent={onCreateCustomAgent} />);
+    await userEvent.setup().click(screen.getByRole("button", { name: "新建智能体" }));
+    expect(onCreateCustomAgent).toHaveBeenCalledOnce();
+  });
   it("waits for templates before showing selection guidance", () => {
     vi.mocked(useWorkspaceHubTemplatesQuery).mockReturnValue(queryState({ isLoading: true, isFetching: true }));
     const view = render(<Page />);

@@ -61,6 +61,7 @@ export type AgentProfileModalProps = {
   agentBusy?: boolean;
   agentCreateBotKind: string;
   agentCreateMode?: AgentCreateMode;
+  hideAgentCreateMode?: boolean;
   agentDraft: AgentDraft;
   agentError?: string;
   agentBillingURL?: string;
@@ -98,6 +99,7 @@ export function AgentProfileModal({
   agentModalMode,
   agentCreateBotKind,
   agentCreateMode = "template",
+  hideAgentCreateMode = false,
   editingAgent,
   agentDraft,
   onAgentCreateModeChange = () => {},
@@ -421,7 +423,7 @@ export function AgentProfileModal({
             ) : null}
             <div className="agent-section-form">
               <div className="agent-section-form-content agent-basics-form-content">
-                {isWorkerCreate ? (
+                {isWorkerCreate && !hideAgentCreateMode ? (
                   <div
                     className="workspace-tabbar agent-create-kind-tabbar"
                     role="tablist"

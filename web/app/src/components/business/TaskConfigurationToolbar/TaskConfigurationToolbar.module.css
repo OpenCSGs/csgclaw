@@ -47,7 +47,7 @@
   font: var(--text-xs-normal);
 }
 .modelFooter > button {
-  justify-self: center;
+  justify-self: start;
 }
 .popover {
   width: min(330px, calc(100vw - 24px));
@@ -171,6 +171,123 @@
   padding: 8px;
   color: var(--muted);
   font-size: 12px;
+}
+.directoryPopover {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  max-height: min(520px, var(--radix-popover-content-available-height));
+  overflow-y: auto;
+}
+.directorySearch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 8px;
+  border: 1px solid var(--input-border);
+  border-radius: var(--radius-md);
+  color: var(--muted);
+}
+.directorySearch:focus-within {
+  border-color: var(--input-border-focus);
+  box-shadow: var(--input-shadow-focus);
+}
+.directorySearch input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  box-shadow: none;
+  background: transparent;
+}
+.directoryOption {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px;
+  border: 0;
+  border-radius: var(--radius-md);
+  color: var(--text);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+.directoryOption:hover {
+  background: var(--panel-soft);
+}
+.directoryOption.active {
+  background: var(--primary-soft);
+}
+.directoryOption > svg {
+  flex: none;
+  color: var(--muted);
+}
+.directoryOption > svg:last-child {
+  color: var(--primary);
+}
+.directoryOption > span {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+.directoryOption strong {
+  font: var(--text-sm-medium);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.directoryOption small {
+  font: var(--text-xs-normal);
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.directoryList {
+  border-top: 1px solid var(--line);
+  max-height: 280px;
+  overflow-y: auto;
+}
+.directoryGroupTitle {
+  padding: 10px 8px 4px;
+  color: var(--muted);
+  font: var(--text-xs-normal);
+}
+.directoryFooter {
+  border-top: 1px solid var(--line);
+  padding-top: 4px;
+}
+.directoryFooter button {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--primary);
+  padding: 10px 8px;
+  cursor: pointer;
+  font: var(--text-sm-normal);
+  text-align: left;
+}
+.directoryFooter button:hover {
+  background: var(--primary-soft);
+}
+.directoryPopover .hint,
+.directoryPopover .directoryInput {
+  padding: 0;
+}
+.directoryActions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+.directoryDefault {
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--line);
 }
 .error {
   margin: 8px;

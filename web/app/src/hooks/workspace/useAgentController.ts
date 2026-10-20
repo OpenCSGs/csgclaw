@@ -458,6 +458,7 @@ export function useAgentController({
   const [agentModalMode, setAgentModalMode] = useState<AgentModalMode>("create");
   const [agentCreateBotKind, setAgentCreateBotKind] = useState(BOT_CREATE_KIND_WORKER);
   const [agentCreateMode, setAgentCreateMode] = useState<AgentCreateMode>("template");
+  const [hideAgentCreateMode, setHideAgentCreateMode] = useState(false);
   const [editingAgent, setEditingAgent] = useState<AgentLike | null>(null);
   const [agentDraft, setAgentDraft] = useState<AgentDraft | null>(null);
   const [agentModalBootstrapConfig, setAgentModalBootstrapConfig] = useState<RuntimeBootstrapConfig | null>(null);
@@ -1435,10 +1436,14 @@ export function useAgentController({
     setShowAgentModal(true);
   }
 
-  async function openCreateAgentModal(template: AgentTemplateLike | null | undefined = undefined): Promise<void> {
+  async function openCreateAgentModal(
+    template: AgentTemplateLike | null | undefined = undefined,
+    customOnly = false,
+  ): Promise<void> {
     setAgentModalMode("create");
     setAgentCreateBotKind(BOT_CREATE_KIND_WORKER);
-    setAgentCreateMode("template");
+    setAgentCreateMode(customOnly ? "custom" : "template");
+    setHideAgentCreateMode(customOnly);
     setEditingAgent(null);
     setAgentError("");
     setRuntimeInstallError("");
@@ -1458,8 +1463,9 @@ export function useAgentController({
     setAgentModalBootstrapConfig(effectiveBootstrapConfig);
     const createWorkerTemplates = createAgentSelectableTemplates(effectiveHubTemplates);
     const preferredRuntimeKind = "codex";
-    const selectedTemplate =
-      template === undefined
+    const selectedTemplate = customOnly
+      ? null
+      : template === undefined
         ? pickDefaultAgentTemplate(createWorkerTemplates, preferredRuntimeKind, effectiveBootstrapConfig)
         : normalizeTemplateSelection(template);
     try {
@@ -2755,6 +2761,7 @@ export function useAgentController({
     openAgentDirectMessage,
     notificationAgentItems,
     openCreateAgentModal,
+    openCreateCustomAgentModal: () => openCreateAgentModal(null, true),
     openCreateTeamModal,
     openManageTeamMembers,
     openCreateNotificationParticipantModal,
@@ -2906,6 +2913,7 @@ export function useAgentController({
             agentModalMode,
             agentCreateBotKind,
             agentCreateMode,
+            hideAgentCreateMode,
             onAgentCreateModeChange: setAgentCreateMode,
             onAgentCreateBotKindChange: setAgentCreateBotKind,
             editingAgent,

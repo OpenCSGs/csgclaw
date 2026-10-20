@@ -629,6 +629,7 @@ function ThreadMessage({
   return (
     <div
       className={`thread-message ${compact ? "compact" : ""} ${message.metadata?.image_generation || isVideoGeneration ? "image-generation-message" : ""}`.trim()}
+      data-message-id={message.id || undefined}
     >
       {user ? (
         <button

@@ -109,6 +109,7 @@ function renderSidebar(overrides: Partial<WorkspaceSidebarProps> = {}) {
     onCollapseSidebar: vi.fn(),
     onAuthEnvironmentChange: vi.fn(),
     onCreateAgent: vi.fn(),
+    onCreateCustomAgent: vi.fn(),
     onCreateModelProvider: vi.fn(),
     onCreateNotificationParticipant: vi.fn(),
     onCreateRoom: vi.fn(),

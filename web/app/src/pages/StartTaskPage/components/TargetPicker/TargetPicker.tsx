@@ -185,6 +185,9 @@ export function TargetPicker({
                         className={classNames(styles.row, active && styles.rowActive)}
                         onClick={() => pick({ kind: "agent", id })}
                       >
+                        {active ? (
+                          <Check aria-hidden="true" className={styles.rowCheck} size={15} strokeWidth={2.4} />
+                        ) : null}
                         <span className={classNames("iaAvatarFrame", styles.rowIcon)} aria-hidden="true">
                           <AgentAvatarContent avatar={item.avatar} fallback={String(item.name || id).slice(0, 1)} />
                         </span>
@@ -193,9 +196,6 @@ export function TargetPicker({
                         </span>
                         {}
                         <span className={styles.rowBadge}>{agentRoleLabel(item, t)}</span>
-                        {active ? (
-                          <Check aria-hidden="true" className={styles.rowCheck} size={15} strokeWidth={2.4} />
-                        ) : null}
                       </button>
                     </li>
                   );
@@ -220,6 +220,9 @@ export function TargetPicker({
                       )}
                       onClick={() => pick({ kind: "team", id: SOLO_TEAM_ID })}
                     >
+                      {value.kind === "team" && value.id === SOLO_TEAM_ID ? (
+                        <Check aria-hidden="true" className={styles.rowCheck} size={15} strokeWidth={2.4} />
+                      ) : null}
                       <span className={classNames("iaAvatarFrame", styles.rowIcon)} aria-hidden="true">
                         <AgentAvatarContent
                           avatar={managerAgent?.avatar}
@@ -229,9 +232,6 @@ export function TargetPicker({
                       <span className={styles.rowText}>
                         <span className={styles.rowName}>{t("iaStartRoomSolo")}</span>
                       </span>
-                      {value.kind === "team" && value.id === SOLO_TEAM_ID ? (
-                        <Check aria-hidden="true" className={styles.rowCheck} size={15} strokeWidth={2.4} />
-                      ) : null}
                     </button>
                   </li>
                 ) : null}
@@ -244,6 +244,9 @@ export function TargetPicker({
                         className={classNames(styles.row, active && styles.rowActive)}
                         onClick={() => pick({ kind: "team", id: team.id })}
                       >
+                        {active ? (
+                          <Check aria-hidden="true" className={styles.rowCheck} size={15} strokeWidth={2.4} />
+                        ) : null}
                         <span className={classNames("iaAvatarFrame", styles.rowIcon)} aria-hidden="true">
                           <RoomAvatar
                             count={team.member_agent_ids.length}
@@ -258,9 +261,6 @@ export function TargetPicker({
                         <span className={styles.rowBadge}>
                           {t("iaTargetTeamMembers", { count: team.member_agent_ids.length })}
                         </span>
-                        {active ? (
-                          <Check aria-hidden="true" className={styles.rowCheck} size={15} strokeWidth={2.4} />
-                        ) : null}
                       </button>
                     </li>
                   );
@@ -281,7 +281,7 @@ export function TargetPicker({
             }}
           >
             <Plus aria-hidden="true" size={15} strokeWidth={1.9} />
-            <span>{t("createAgent")}</span>
+            <span>{t("taskEntryCreateAgent")}</span>
           </button>
           <button
             type="button"

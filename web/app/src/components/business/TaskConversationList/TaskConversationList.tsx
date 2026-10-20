@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
-import { Archive, MoreHorizontal, Pin, PinOff, Search } from "lucide-react";
+import { Archive, MoreHorizontal, Pin, PinOff, Search, X } from "lucide-react";
 import {
   Button,
   Tooltip,
@@ -26,12 +26,49 @@ import { fetchTaskConversations } from "@/api/taskConversations";
 import { errorMessage } from "@/api/client";
 import { uniqueTaskConversations } from "@/models/taskConversations";
 import { resolveConversationUser } from "@/models/conversations";
-import type { IMConversation, TranslateFn, UsersById } from "@/models/conversations";
+import type { IMConversation, IMMessage, TranslateFn, UsersById } from "@/models/conversations";
 import type { TaskEntryController } from "@/hooks/workspace/useTaskEntry";
 import { useArchiveConfirmation } from "@/hooks/workspace/useArchiveConfirmation";
 import { MANAGER_AGENT_ID, MANAGER_PARTICIPANT_ID } from "@/shared/constants/agents";
 import { localizeAPIError } from "@/shared/i18n";
 import styles from "./TaskConversationList.module.css";
+
+function highlightedSearchText(text: string, query: string) {
+  const terms = Array.from(new Set(query.trim().split(/\s+/).filter(Boolean))).sort((a, b) => b.length - a.length);
+  if (!terms.length) return text;
+  const escaped = terms.map((term) => term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  const pattern = new RegExp(`(${escaped.join("|")})`, "gi");
+  const matches = new Set(terms.map((term) => term.toLocaleLowerCase()));
+  return text.split(pattern).map((part, index) =>
+    matches.has(part.toLocaleLowerCase()) ? (
+      <mark key={`${part}-${index}`} className={styles.searchHighlight}>
+        {part}
+      </mark>
+    ) : (
+      part
+    ),
+  );
+}
+
+function searchExcerpt(text: string, query: string, maxLength = 64, leadingContext = 4) {
+  const terms = Array.from(new Set(query.trim().split(/\s+/).filter(Boolean)));
+  const lowerText = text.toLocaleLowerCase();
+  const ranges = terms
+    .map((term) => {
+      const start = lowerText.indexOf(term.toLocaleLowerCase());
+      return start < 0 ? null : { start, end: start + term.length };
+    })
+    .filter((range): range is { start: number; end: number } => range !== null);
+  if (!ranges.length) return text.length > maxLength ? `${text.slice(0, maxLength)}…` : text;
+
+  const firstMatch = Math.min(...ranges.map((range) => range.start));
+  const lastMatch = Math.max(...ranges.map((range) => range.end));
+  const context = Array.from(text.slice(0, firstMatch)).slice(-leadingContext).join("");
+  let start = firstMatch - context.length;
+  if (lastMatch - start > maxLength) start = Math.max(0, lastMatch - maxLength);
+  const end = Math.min(text.length, start + maxLength);
+  return `${start > 0 ? "…" : ""}${text.slice(start, end)}${end < text.length ? "…" : ""}`;
+}
 
 type Props = {
   archived?: boolean;
@@ -42,7 +79,7 @@ type Props = {
   currentUserID: string;
   usersById: UsersById;
   t: TranslateFn;
-  onSelect: (id: string) => void;
+  onSelect: (id: string, match?: IMMessage | null) => void;
   onArchiveCurrent?: () => void;
   onNewWith?: (room: IMConversation) => void;
   onEditAgent?: (room: IMConversation) => void;
@@ -63,6 +100,9 @@ export function TaskConversationList({
   onEditAgent,
 }: Props) {
   const [search, setSearch] = useState("");
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const searchBarRef = useRef<HTMLDivElement>(null);
+  const [searchBarWidth, setSearchBarWidth] = useState<number>();
   const [directory, setDirectory] = useState("");
   const [query, setQuery] = useState("");
   const [error, setError] = useState("");
@@ -70,6 +110,16 @@ export function TaskConversationList({
   const [title, setTitle] = useState("");
   const [dontAsk, setDontAsk] = useState(false);
   const [skipArchive, setSkipArchive] = useArchiveConfirmation();
+  useEffect(() => {
+    const element = searchBarRef.current;
+    if (!element) return;
+    const updateWidth = () => setSearchBarWidth(element.getBoundingClientRect().width);
+    updateWidth();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(updateWidth);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
   useEffect(() => {
     const timer = window.setTimeout(() => setQuery(search), 250);
     return () => window.clearTimeout(timer);
@@ -141,16 +191,32 @@ export function TaskConversationList({
 
   return (
     <div className={`${styles.root} ${compact ? styles.compact : ""}`}>
-      <div className={styles.searchBar}>
+      <div ref={searchBarRef} className={styles.searchBar}>
         <div className={styles.searchField}>
           <Search size={15} aria-hidden="true" />
           <input
+            ref={searchInputRef}
             className={styles.search}
             aria-label={t("taskEntrySearchHistory")}
             placeholder={t(compact ? "iaSessionSearchPlaceholder" : "taskEntrySearchHistory")}
             value={search}
             onChange={(event) => setSearch(event.target.value)}
           />
+          {search && (
+            <button
+              type="button"
+              className={styles.clearSearch}
+              aria-label={t("taskEntryClearSearch")}
+              title={t("taskEntryClearSearch")}
+              onClick={() => {
+                setSearch("");
+                setQuery("");
+                searchInputRef.current?.focus();
+              }}
+            >
+              <X size={14} aria-hidden="true" />
+            </button>
+          )}
         </div>
         {compact ? (
           <Select
@@ -161,24 +227,31 @@ export function TaskConversationList({
               "aria-label": t("iaSessionDirectoryFilter"),
               title: directory || t("iaSessionDirectoryAll"),
             }}
-            contentProps={{ align: "end", collisionPadding: 8 }}
+            contentProps={{
+              align: "end",
+              collisionPadding: 8,
+              style: searchBarWidth ? { width: searchBarWidth } : undefined,
+            }}
             value={directory}
             onValueChange={setDirectory}
             options={[
               { value: "", label: t("iaSessionDirectoryAll") },
-              ...directoryPaths.map((path) => ({
-                value: path,
-                label:
-                  path
-                    .replace(/[\\/]+$/, "")
-                    .split(/[\\/]/)
-                    .at(-1) || path,
-                description: (
-                  <span className={styles.directoryPath} title={path}>
-                    {path}
-                  </span>
-                ),
-              })),
+              ...directoryPaths.map((path) => {
+                const trimmed = path.replace(/[\\/]+$/, "");
+                const separator = Math.max(trimmed.lastIndexOf("/"), trimmed.lastIndexOf("\\"));
+                const prefix = separator >= 0 ? trimmed.slice(0, separator + 1) : "";
+                const current = separator >= 0 ? trimmed.slice(separator + 1) : trimmed;
+                return {
+                  value: path,
+                  label: current || path,
+                  description: (
+                    <span className={styles.directoryPath} title={path}>
+                      <span className={styles.directoryPrefix}>{prefix}</span>
+                      <span className={styles.directoryCurrent}>{current}</span>
+                    </span>
+                  ),
+                };
+              }),
             ]}
           />
         ) : null}
@@ -203,7 +276,11 @@ export function TaskConversationList({
         {rooms.map((room) => {
           const other = resolveConversationUser(room, currentUserID, usersById);
           const managerDM = room.is_direct && (other?.id === MANAGER_PARTICIPANT_ID || other?.id === MANAGER_AGENT_ID);
-          const timestamp = room.messages.at(-1)?.created_at || room.created_at;
+          const searchMatch = query ? room.search_match : undefined;
+          const preview = searchMatch || room.messages.at(-1);
+          const fullPreviewText = preview?.content?.replace(/<[^>]+>/g, " ") || "";
+          const previewText = searchMatch ? searchExcerpt(fullPreviewText, query) : fullPreviewText.slice(0, 64);
+          const timestamp = preview?.created_at || room.messages.at(-1)?.created_at || room.created_at;
           const working = entry.isWorking(room.id);
           const disabled = entry.busyID === room.id;
           return (
@@ -211,7 +288,7 @@ export function TaskConversationList({
               key={room.id}
               className={`${styles.row} ${managerDM ? styles.noAvatar : ""} ${activeID === room.id ? styles.active : ""}`}
             >
-              <button type="button" className={styles.open} onClick={() => onSelect(room.id)}>
+              <button type="button" className={styles.open} onClick={() => onSelect(room.id, searchMatch)}>
                 {!managerDM ? (
                   <span className={styles.avatar}>
                     {room.is_direct ? (
@@ -227,18 +304,22 @@ export function TaskConversationList({
                 ) : null}
                 <span className={styles.text}>
                   <strong>{room.title || t("taskEntryUntitled")}</strong>
-                  <small>
-                    {timestamp ? (
-                      <time dateTime={timestamp} title={new Date(timestamp).toLocaleString()}>
-                        {new Date(timestamp).toLocaleDateString()} ·{" "}
-                      </time>
-                    ) : null}
-                    {working
-                      ? t("taskEntryRunning")
-                      : room.messages
-                          .at(-1)
-                          ?.content?.replace(/<[^>]+>/g, " ")
-                          .slice(0, 64)}
+                  <small
+                    className={searchMatch ? styles.searchMatch : undefined}
+                    title={searchMatch ? fullPreviewText : undefined}
+                  >
+                    {searchMatch ? (
+                      highlightedSearchText(previewText, query)
+                    ) : (
+                      <>
+                        {timestamp ? (
+                          <time dateTime={timestamp} title={new Date(timestamp).toLocaleString()}>
+                            {new Date(timestamp).toLocaleDateString()} ·{" "}
+                          </time>
+                        ) : null}
+                        {working ? t("taskEntryRunning") : previewText}
+                      </>
+                    )}
                   </small>
                 </span>
                 {compact && timestamp ? (

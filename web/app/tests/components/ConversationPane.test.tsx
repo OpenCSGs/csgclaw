@@ -363,6 +363,19 @@ describe("ConversationPane", () => {
     window.localStorage.clear();
   });
 
+  it("shows the direct conversation agent above the task title", () => {
+    const { container } = renderThreadPane({ conversationTitle: "今天吃什么" });
+    expect(container.querySelector(".chat-kicker")).toHaveTextContent("manager");
+    expect(container.querySelector(".chat-kicker strong")).toBeNull();
+    expect(container.querySelector(".chat-title")).toHaveTextContent("今天吃什么");
+  });
+
+  it("keeps the room label and message count for group conversations", () => {
+    const { container } = renderThreadPane({ isDirect: false });
+    expect(container.querySelector(".chat-kicker")).toHaveTextContent("1");
+    expect(container.querySelector(".chat-kicker strong")).toBeInTheDocument();
+  });
+
   it("switches from thread A to B without restoring A again", async () => {
     const user = userEvent.setup();
     const onRestoreThread = vi.fn();

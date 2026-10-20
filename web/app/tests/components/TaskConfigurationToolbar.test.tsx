@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { useState } from "react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { TaskConfigurationToolbar } from "@/components/business/TaskConfigurationToolbar";
 import { WorkspaceControllerProvider } from "@/hooks/workspace";
 import type { WorkspaceController } from "@/hooks/workspace";
@@ -47,6 +47,32 @@ function setup(configuration: TaskConfiguration = {}, onChange = vi.fn(), direct
 }
 
 describe("task configuration", () => {
+  beforeEach(() => localStorage.removeItem("csgclaw.recent-work-directories"));
+  it("shows the current directory in the input and resets unsaved edits when reopened", async () => {
+    const { onChange } = setup({ workspace_dir: "/project" });
+    fireEvent.click(screen.getByRole("button", { name: "iaWorkdirTitle" }));
+    fireEvent.click(screen.getByRole("button", { name: "taskDirectoryAdd" }));
+    const input = screen.getByRole("textbox", { name: "taskConfigurationDirectoryPath" });
+    expect(input).toHaveValue("/project");
+    fireEvent.change(input, { target: { value: "/new-project" } });
+    fireEvent.click(screen.getByRole("button", { name: "taskConfigurationApply" }));
+    await waitFor(() => expect(onChange).toHaveBeenCalledWith({ workspace_dir: "/new-project" }));
+    await waitFor(() =>
+      expect(screen.queryByRole("textbox", { name: "taskConfigurationDirectoryPath" })).not.toBeInTheDocument(),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "iaWorkdirTitle" }));
+    expect(screen.getByText("/new-project")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "taskDirectoryAdd" }));
+    expect(screen.getByRole("textbox", { name: "taskConfigurationDirectoryPath" })).toHaveValue("/new-project");
+  });
+  it("filters previously added directories", () => {
+    localStorage.setItem("csgclaw.recent-work-directories", JSON.stringify(["/work/notes", "/work/demo"]));
+    setup();
+    fireEvent.click(screen.getByRole("button", { name: "iaWorkdirTitle" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "taskDirectorySearch" }), { target: { value: "notes" } });
+    expect(screen.getByText("/work/notes")).toBeInTheDocument();
+    expect(screen.queryByText("/work/demo")).not.toBeInTheDocument();
+  });
   it("applies a model to this session and keeps the working directory", async () => {
     const { onChange, controller } = setup({ workspace_dir: "/project" });
     fireEvent.click(screen.getByRole("combobox", { name: "iaModelTitle" }));
@@ -126,6 +152,7 @@ describe("task configuration", () => {
     setup({ workspace_dir: "/project" }, vi.fn(), true);
     fireEvent.click(screen.getByRole("button", { name: "iaWorkdirTitle" }));
     expect(screen.getByText("taskConfigurationDirectoryLocked")).toBeInTheDocument();
+    expect(screen.getByText("/project")).toBeInTheDocument();
     expect(screen.queryByRole("textbox", { name: "taskConfigurationDirectoryPath" })).not.toBeInTheDocument();
   });
 });
