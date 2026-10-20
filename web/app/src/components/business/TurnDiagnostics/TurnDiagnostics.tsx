@@ -6,7 +6,7 @@ import { DiagnosticTimeline } from "./DiagnosticTimeline";
 import { DiagnosticBreakdown, DiagnosticCalls, DiagnosticSpanFields } from "./DiagnosticAnalysis";
 import { observeDiagnosticRender } from "@/shared/diagnostics/renderTiming";
 import { useEffect, useRef, useState } from "react";
-import { Activity, AlertCircle, ChevronDown, Clock, Copy, Download, RefreshCw } from "lucide-react";
+import { AlertCircle, ChevronDown, Clock, Copy, Download, RefreshCw } from "lucide-react";
 import {
   Button,
   DropdownMenuRoot,
