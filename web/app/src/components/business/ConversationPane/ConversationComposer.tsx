@@ -323,7 +323,7 @@ export const ConversationComposer = memo(function ConversationComposer({
                 </Button>
               </Tooltip>
             ) : null}
-            <Tooltip content={isSending ? t("stopSending") : t("send")}>
+            <Tooltip content={isSending ? t("stopSending") : t("send")} contentProps={{ side: "top" }}>
               <span>
                 <Button
                   variant="primary"

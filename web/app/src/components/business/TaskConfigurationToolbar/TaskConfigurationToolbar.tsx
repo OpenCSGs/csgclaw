@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Check, ChevronDown, Folder, FolderPlus, Gauge, Home, Search, Settings2, ShieldCheck } from "lucide-react";
-import { Button, PopoverClose, PopoverRoot, PopoverTrigger, PopoverContent, TextInput } from "@/components/ui";
+import { Button, PopoverClose, PopoverRoot, PopoverTrigger, PopoverContent, TextInput, Tooltip } from "@/components/ui";
 import { ReasoningEffortPicker } from "@/components/business/ReasoningEffortPicker";
 import { reasoningEffortLabel } from "@/components/business/ProfileControls";
 import { useOptionalWorkspaceControllerContext } from "@/hooks/workspace";
@@ -54,8 +54,6 @@ export function TaskConfigurationToolbar({
   const reasoning = configuration.reasoning_effort || profile?.reasoning_effort || "auto";
   const [query, setQuery] = useState("");
   const [recentDirectories, setRecentDirectories] = useState(readRecentDirectories);
-  const [addingDirectory, setAddingDirectory] = useState(false);
-  const [directoryDraft, setDirectoryDraft] = useState("");
   const [open, setOpen] = useState<Menu>("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -86,8 +84,6 @@ export function TaskConfigurationToolbar({
   const toggle = (kind: Menu, value: boolean) => {
     setOpen(value ? kind : "");
     setQuery("");
-    setAddingDirectory(false);
-    setDirectoryDraft(directory);
     setError("");
     setReasoningPreview(undefined);
   };
@@ -177,6 +173,7 @@ export function TaskConfigurationToolbar({
           className={`${styles.popover} ${styles.directoryPopover}`}
           side="top"
           aria-label={t("iaWorkdirTitle")}
+          onOpenAutoFocus={(event) => event.preventDefault()}
         >
           {directoryLocked ? (
             <>
@@ -213,69 +210,51 @@ export function TaskConfigurationToolbar({
               {matchingDirectories.length > 0 && (
                 <div className={styles.directoryList}>
                   <div className={styles.directoryGroupTitle}>{t("taskDirectoryRecent")}</div>
-                  {matchingDirectories.map((path) => (
-                    <button
-                      key={path}
-                      type="button"
-                      className={`${styles.directoryOption} ${configuration.workspace_dir === path ? styles.active : ""}`}
-                      title={path}
-                      disabled={!editable || blocked}
-                      onClick={() => void change({ workspace_dir: path })}
-                    >
-                      <Folder size={16} aria-hidden="true" />
-                      <span>
-                        <strong>
-                          {path
-                            .replace(/[\\/]+$/, "")
-                            .split(/[\\/]/)
-                            .at(-1) || path}
-                        </strong>
-                        <small>{path}</small>
-                      </span>
-                      {configuration.workspace_dir === path && <Check size={16} aria-hidden="true" />}
-                    </button>
-                  ))}
+                  {matchingDirectories.map((path) => {
+                    const trimmed = path.replace(/[\\/]+$/, "");
+                    const separator = Math.max(trimmed.lastIndexOf("/"), trimmed.lastIndexOf("\\"));
+                    const prefix = separator >= 0 ? trimmed.slice(0, separator + 1) : "";
+                    const current = separator >= 0 ? trimmed.slice(separator + 1) : trimmed;
+                    return (
+                      <Tooltip key={path} content={path}>
+                        <button
+                          type="button"
+                          className={`${styles.directoryOption} ${configuration.workspace_dir === path ? styles.active : ""}`}
+                          disabled={!editable || blocked}
+                          onClick={() => void change({ workspace_dir: path })}
+                        >
+                          <Folder size={16} aria-hidden="true" />
+                          <span>
+                            <strong>
+                              {path
+                                .replace(/[\\/]+$/, "")
+                                .split(/[\\/]/)
+                                .at(-1) || path}
+                            </strong>
+                            <small className={styles.directoryPath}>
+                              <span className={styles.directoryPrefix}>{prefix}</span>
+                              <span className={styles.directoryCurrent}>{current || path}</span>
+                            </small>
+                          </span>
+                          {configuration.workspace_dir === path && <Check size={16} aria-hidden="true" />}
+                        </button>
+                      </Tooltip>
+                    );
+                  })}
                 </div>
               )}
-              {addingDirectory && (
-                <>
-                  <label className={styles.directoryInput}>
-                    {t("taskConfigurationDirectoryPath")}
-                    <TextInput
-                      size="sm"
-                      aria-label={t("taskConfigurationDirectoryPath")}
-                      placeholder="/path/to/workspace"
-                      value={directoryDraft}
-                      onChange={(event) => setDirectoryDraft(event.target.value)}
-                    />
-                  </label>
-                  <div className={styles.directoryActions}>
-                    <Button
-                      variant="secondaryGray"
-                      size="sm"
-                      disabled={!editable || blocked}
-                      onClick={() => {
-                        void pickLocalDirectoryPath()
-                          .then((path) => {
-                            if (path) return change({ workspace_dir: path });
-                          })
-                          .catch((cause) => setError(String(cause)));
-                      }}
-                    >
-                      {t("taskConfigurationChooseDirectory")}
-                    </Button>
-                    <Button
-                      size="sm"
-                      disabled={!editable || blocked || !directoryDraft.trim()}
-                      onClick={() => void change({ workspace_dir: directoryDraft.trim() })}
-                    >
-                      {t("taskConfigurationApply")}
-                    </Button>
-                  </div>
-                </>
-              )}
               <div className={styles.directoryFooter}>
-                <button type="button" disabled={!editable || blocked} onClick={() => setAddingDirectory(true)}>
+                <button
+                  type="button"
+                  disabled={!editable || blocked}
+                  onClick={() => {
+                    void pickLocalDirectoryPath()
+                      .then((path) => {
+                        if (path) return change({ workspace_dir: path });
+                      })
+                      .catch((cause) => setError(cause instanceof Error ? cause.message : String(cause)));
+                  }}
+                >
                   <FolderPlus size={16} aria-hidden="true" />
                   {t("taskDirectoryAdd")}
                 </button>

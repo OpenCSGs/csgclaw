@@ -69,6 +69,7 @@ export const ConversationHeader = memo(function ConversationHeader({
     ? conversationMembers.map((member) => resolveAgentForUser(agents, member)?.name).find(Boolean) ||
       conversationMembers.find((member) => member.role === "worker")?.name
     : undefined;
+  const headerName = isDirectConversation(conversation) ? directAgentName : conversation.title;
 
   return (
     <PanelHeader className="chat-header">
@@ -77,11 +78,11 @@ export const ConversationHeader = memo(function ConversationHeader({
           <div className="chat-title-row">
             <div className="chat-title-group">
               <div className="chat-kicker">
-                <span className={directAgentName ? "chat-kicker-agent-name" : undefined}>
-                  {directAgentName ||
+                <span className={headerName ? "chat-kicker-agent-name" : undefined}>
+                  {headerName ||
                     (isDirectConversation(conversation) ? t("directMessagesSection") : t("conversationLabel"))}
                 </span>
-                {!directAgentName ? (
+                {!headerName ? (
                   <Tooltip content={messageCountLabel}>
                     <strong>{messageCountLabel}</strong>
                   </Tooltip>

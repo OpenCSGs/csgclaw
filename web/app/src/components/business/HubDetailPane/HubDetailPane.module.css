@@ -1819,7 +1819,7 @@
   overflow-x: auto;
   overflow-y: hidden;
   border-bottom: 1px solid var(--line);
-  background: var(--panel);
+  background: transparent;
   scrollbar-width: none;
 }
 
@@ -2527,7 +2527,6 @@
 
 :root[data-theme="dark"] .hub-template-section-nav {
   border-bottom-color: var(--line);
-  background: var(--panel);
 }
 
 :root[data-theme="dark"] .hub-template-section-tab {

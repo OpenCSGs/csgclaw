@@ -146,7 +146,7 @@
 }
 
 .agent-detail-pane .entity-header {
-  grid-template-columns: 48px minmax(0, 1fr) auto;
+  grid-template-columns: 48px minmax(0, 1fr);
   align-items: center;
   gap: var(--space-3);
   padding: 14px 16px;
@@ -154,6 +154,11 @@
   border-radius: var(--radius-2xl);
   background: var(--surface);
   box-shadow: var(--shadow-xs);
+}
+
+.agent-detail-pane .entity-toolbar {
+  grid-column: 1 / -1;
+  justify-content: flex-start;
 }
 
 .agent-profile-section-nav {
@@ -2347,15 +2352,6 @@
 }
 
 @media (max-width: 1100px) {
-  .agent-detail-pane .entity-header {
-    grid-template-columns: 48px minmax(0, 1fr);
-  }
-
-  .agent-detail-pane .entity-toolbar {
-    grid-column: 1 / -1;
-    justify-content: flex-start;
-  }
-
   .agent-detail-pane .profile-runtime-grid,
   .agent-detail-pane .profile-grid-compact,
   .agent-detail-pane .profile-api-grid,

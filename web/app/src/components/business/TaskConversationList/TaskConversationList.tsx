@@ -288,52 +288,61 @@ export function TaskConversationList({
               key={room.id}
               className={`${styles.row} ${managerDM ? styles.noAvatar : ""} ${activeID === room.id ? styles.active : ""}`}
             >
-              <button type="button" className={styles.open} onClick={() => onSelect(room.id, searchMatch)}>
-                {!managerDM ? (
-                  <span className={styles.avatar}>
-                    {room.is_direct ? (
-                      <AgentAvatarContent avatar={other?.avatar} fallback={other?.name?.slice(0, 1) || "A"} />
-                    ) : (
-                      <RoomAvatar
-                        members={room.members.map((id) => usersById.get(id)).filter((user) => user !== undefined)}
-                        size={26}
-                        showCountBadge={false}
-                      />
-                    )}
+              <Tooltip
+                content={room.title || t("taskEntryUntitled")}
+                contentProps={{ side: "right", className: styles.titleTooltip }}
+              >
+                <button type="button" className={styles.open} onClick={() => onSelect(room.id, searchMatch)}>
+                  {!managerDM ? (
+                    <span className={styles.avatar}>
+                      {room.is_direct ? (
+                        <AgentAvatarContent avatar={other?.avatar} fallback={other?.name?.slice(0, 1) || "A"} />
+                      ) : (
+                        <RoomAvatar
+                          members={room.members.map((id) => usersById.get(id)).filter((user) => user !== undefined)}
+                          size={26}
+                          showCountBadge={false}
+                        />
+                      )}
+                    </span>
+                  ) : null}
+                  <span className={styles.text}>
+                    <strong>{room.title || t("taskEntryUntitled")}</strong>
+                    <small
+                      className={searchMatch ? styles.searchMatch : undefined}
+                      title={searchMatch ? fullPreviewText : undefined}
+                    >
+                      {searchMatch ? (
+                        highlightedSearchText(previewText, query)
+                      ) : (
+                        <>
+                          {timestamp ? (
+                            <time dateTime={timestamp} title={new Date(timestamp).toLocaleString()}>
+                              {new Date(timestamp).toLocaleDateString()} ·{" "}
+                            </time>
+                          ) : null}
+                          {working ? t("taskEntryRunning") : previewText}
+                        </>
+                      )}
+                    </small>
                   </span>
-                ) : null}
-                <span className={styles.text}>
-                  <strong>{room.title || t("taskEntryUntitled")}</strong>
-                  <small
-                    className={searchMatch ? styles.searchMatch : undefined}
-                    title={searchMatch ? fullPreviewText : undefined}
-                  >
-                    {searchMatch ? (
-                      highlightedSearchText(previewText, query)
-                    ) : (
-                      <>
-                        {timestamp ? (
-                          <time dateTime={timestamp} title={new Date(timestamp).toLocaleString()}>
-                            {new Date(timestamp).toLocaleDateString()} ·{" "}
-                          </time>
-                        ) : null}
-                        {working ? t("taskEntryRunning") : previewText}
-                      </>
-                    )}
-                  </small>
-                </span>
-                {compact && timestamp ? (
-                  <time className={styles.timestamp} dateTime={timestamp} title={new Date(timestamp).toLocaleString()}>
-                    {new Date(timestamp).toDateString() === new Date().toDateString()
-                      ? new Date(timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-                      : new Date(timestamp).toLocaleDateString([], { month: "numeric", day: "numeric" })}
-                  </time>
-                ) : null}
-                {working ? <span className={styles.workingDot} title={t("taskEntryRunning")} /> : null}
-                {room.pinned ? (
-                  <Pin className={styles.pinnedIndicator} size={13} aria-label={t("taskEntryPinned")} />
-                ) : null}
-              </button>
+                  {compact && timestamp ? (
+                    <time
+                      className={styles.timestamp}
+                      dateTime={timestamp}
+                      title={new Date(timestamp).toLocaleString()}
+                    >
+                      {new Date(timestamp).toDateString() === new Date().toDateString()
+                        ? new Date(timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+                        : new Date(timestamp).toLocaleDateString([], { month: "numeric", day: "numeric" })}
+                    </time>
+                  ) : null}
+                  {working ? <span className={styles.workingDot} title={t("taskEntryRunning")} /> : null}
+                  {room.pinned ? (
+                    <Pin className={styles.pinnedIndicator} size={13} aria-label={t("taskEntryPinned")} />
+                  ) : null}
+                </button>
+              </Tooltip>
               <div className={styles.actions}>
                 <DropdownMenuRoot>
                   <DropdownMenuTrigger asChild>

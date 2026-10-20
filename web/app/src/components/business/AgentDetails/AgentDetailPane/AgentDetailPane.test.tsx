@@ -96,6 +96,12 @@ function Harness({
 }
 
 describe("AgentDetailPane metadata editing", () => {
+  it("opens the existing direct-message flow from the new task button", async () => {
+    const onOpenDM = vi.fn();
+    render(<Harness onOpenDM={onOpenDM} />);
+    await userEvent.setup().click(screen.getByRole("button", { name: "agentStartTask" }));
+    expect(onOpenDM).toHaveBeenCalledWith(agent);
+  });
   it("writes an inferred model provider back to the draft so the change can be saved", async () => {
     const onDraftChange = vi.fn();
     render(

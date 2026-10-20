@@ -12,7 +12,7 @@
 }
 
 .teamDetailHeader {
-  grid-template-columns: 48px minmax(0, 1fr) auto;
+  grid-template-columns: 48px minmax(0, 1fr);
   align-items: center;
   gap: 20px;
   padding: 18px 22px;
@@ -24,9 +24,10 @@
 
 .teamDetailToolbar {
   display: flex;
+  grid-column: 1 / -1;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: flex-start;
   gap: 8px;
   min-width: 0;
 }
@@ -464,15 +465,6 @@
 }
 
 @media (max-width: 1100px) {
-  .teamDetailHeader {
-    grid-template-columns: 48px minmax(0, 1fr);
-  }
-
-  .teamDetailToolbar {
-    grid-column: 1 / -1;
-    justify-content: flex-start;
-  }
-
   .teamDetailLayout {
     grid-template-columns: 1fr;
   }

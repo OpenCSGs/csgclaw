@@ -17,6 +17,12 @@ const team: WorkspaceTeam = {
 };
 
 describe("TeamDetailPane", () => {
+  it("starts collaboration space creation for the selected team", async () => {
+    const onCreateCollaborationSpace = vi.fn();
+    render(<TeamDetailPane team={team} t={t} onCreateCollaborationSpace={onCreateCollaborationSpace} />);
+    await userEvent.setup().click(screen.getByRole("button", { name: "teamCreateCollaborationSpace" }));
+    expect(onCreateCollaborationSpace).toHaveBeenCalledWith(team);
+  });
   it("confirms team deletion in-app without opening a native browser dialog", async () => {
     const user = userEvent.setup();
     const onDeleteTeam = vi.fn().mockResolvedValue(true);

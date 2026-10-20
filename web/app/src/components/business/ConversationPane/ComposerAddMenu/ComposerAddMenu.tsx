@@ -15,7 +15,7 @@ export function ComposerAddMenu({
 }) {
   return (
     <PopoverRoot>
-      <Tooltip content={t("composerAddContent")}>
+      <Tooltip content={t("composerAddContent")} contentProps={{ side: "top" }}>
         <PopoverTrigger asChild>
           <Button
             aria-label={t("composerAddContent")}

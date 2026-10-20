@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { ReactNode } from "react";
 import { AgentAvatarContent, RoomAvatar } from "@/components/business";
-import { ListChecks, Trash2, UserPlus, Users } from "lucide-react";
+import { ListChecks, Plus, Trash2, UserPlus, Users } from "lucide-react";
 import { TaskSubtaskIndicator } from "@/components/business";
 import {
   Button,
@@ -39,6 +39,7 @@ export type TeamDetailPaneProps = {
   agents?: AgentLike[];
   onDeleteTeam?: (team: WorkspaceTeam) => void | Promise<boolean>;
   onManageMembers?: (team: WorkspaceTeam) => void;
+  onCreateCollaborationSpace?: (team: WorkspaceTeam) => void;
   onSelectAgent?: (agent: AgentLike) => void;
   onSelectTask?: (taskID: string) => void;
   teamActionBusy?: boolean;
@@ -63,6 +64,7 @@ export function TeamDetailPane({
   teamActionError = "",
   onDeleteTeam = () => {},
   onManageMembers = () => {},
+  onCreateCollaborationSpace = () => {},
   onSelectAgent = () => {},
   onSelectTask = () => {},
 }: TeamDetailPaneProps) {
@@ -114,6 +116,16 @@ export function TeamDetailPane({
           <p className={styles.teamDetailSubtitle}>{t("teamDetailSubtitle")}</p>
         </div>
         <div className={classNames("entity-toolbar", styles.teamDetailToolbar)} aria-label={t("teamPanelManage")}>
+          <Button
+            className={styles.teamDetailToolbarButton}
+            variant="primary"
+            size="md"
+            disabled={teamActionBusy}
+            onClick={() => onCreateCollaborationSpace(team)}
+          >
+            <Plus size={16} aria-hidden="true" />
+            {t("teamCreateCollaborationSpace")}
+          </Button>
           <Button
             className={styles.teamDetailToolbarButton}
             variant="secondaryGray"

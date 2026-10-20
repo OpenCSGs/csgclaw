@@ -165,13 +165,6 @@
   background: transparent;
   opacity: 0.55;
 }
-.directoryInput {
-  display: grid;
-  gap: 6px;
-  padding: 8px;
-  color: var(--muted);
-  font-size: 12px;
-}
 .directoryPopover {
   display: grid;
   gap: var(--space-2);
@@ -180,24 +173,18 @@
   overflow-y: auto;
 }
 .directorySearch {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 0 8px;
-  border: 1px solid var(--input-border);
-  border-radius: var(--radius-md);
+  position: relative;
   color: var(--muted);
 }
-.directorySearch:focus-within {
-  border-color: var(--input-border-focus);
-  box-shadow: var(--input-shadow-focus);
+.directorySearch > svg {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
 }
-.directorySearch input {
-  flex: 1;
-  min-width: 0;
-  border: 0;
-  box-shadow: none;
-  background: transparent;
+.directorySearch input[data-csg-control] {
+  padding-left: 34px;
 }
 .directoryOption {
   display: flex;
@@ -244,10 +231,29 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.directoryOption .directoryPath {
+  display: flex;
+  min-width: 0;
+}
+.directoryPrefix,
+.directoryCurrent {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.directoryPrefix {
+  flex: 0 1000 auto;
+}
+.directoryCurrent {
+  flex: 0 1 auto;
+}
 .directoryList {
   border-top: 1px solid var(--line);
   max-height: 280px;
   overflow-y: auto;
+}
+.directoryList .directoryOption + .directoryOption {
+  margin-top: var(--space-1);
 }
 .directoryGroupTitle {
   padding: 10px 8px 4px;
@@ -275,15 +281,8 @@
 .directoryFooter button:hover {
   background: var(--primary-soft);
 }
-.directoryPopover .hint,
-.directoryPopover .directoryInput {
+.directoryPopover .hint {
   padding: 0;
-}
-.directoryActions {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: var(--space-2);
 }
 .directoryDefault {
   padding-top: var(--space-2);

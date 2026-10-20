@@ -188,6 +188,10 @@
 .more:disabled {
   opacity: 0.45;
   cursor: not-allowed;
+  background: transparent;
+}
+.more:disabled:hover {
+  background: var(--line);
 }
 .more:focus-visible,
 .open:focus-visible {
@@ -333,4 +337,23 @@
 
 .compact .noAvatar .actions {
   right: 6px;
+}
+.compact .row:has(.workingDot) .actions {
+  right: 52px;
+}
+.compact .noAvatar:has(.workingDot) .actions {
+  right: 20px;
+}
+.compact .row:has(.workingDot):is(:hover, :has([data-state="open"]), :has(.more:focus-visible)) .text {
+  padding-right: 92px;
+}
+@media (hover: none) {
+  .compact .row:has(.workingDot) .text {
+    padding-right: 92px;
+  }
+}
+.titleTooltip {
+  max-width: min(360px, calc(100vw - 24px));
+  white-space: normal;
+  overflow-wrap: anywhere;
 }

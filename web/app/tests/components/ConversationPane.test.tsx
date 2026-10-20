@@ -370,10 +370,10 @@ describe("ConversationPane", () => {
     expect(container.querySelector(".chat-title")).toHaveTextContent("今天吃什么");
   });
 
-  it("keeps the room label and message count for group conversations", () => {
-    const { container } = renderThreadPane({ isDirect: false });
-    expect(container.querySelector(".chat-kicker")).toHaveTextContent("1");
-    expect(container.querySelector(".chat-kicker strong")).toBeInTheDocument();
+  it("shows the collaboration space name above the title for group conversations", () => {
+    const { container } = renderThreadPane({ isDirect: false, conversationTitle: "测试空间" });
+    expect(container.querySelector(".chat-kicker")).toHaveTextContent("测试空间");
+    expect(container.querySelector(".chat-kicker strong")).toBeNull();
   });
 
   it("switches from thread A to B without restoring A again", async () => {
@@ -638,7 +638,7 @@ describe("ConversationPane", () => {
     expect(container.querySelector(".messages .message-thread-actions")).not.toBeInTheDocument();
   });
 
-  it("shows visible and total message counts when some messages are filtered", () => {
+  it("does not show message counts when some messages are filtered", () => {
     const messages = [
       {
         content: "visible answer",
@@ -656,7 +656,7 @@ describe("ConversationPane", () => {
 
     renderThreadPane({ messages, visibleMessages: [messages[0]] });
 
-    expect(screen.getByText("1/2")).toBeInTheDocument();
+    expect(screen.queryByText("1/2")).not.toBeInTheDocument();
   });
 
   it("shows the complete room title on hover and keyboard focus", async () => {
@@ -799,7 +799,7 @@ describe("ConversationPane", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
 
     onClose.mockClear();
-    await user.click(within(dialog).getByRole("button", { name: "openDM" }));
+    await user.click(within(dialog).getByRole("button", { name: "agentStartTask" }));
     expect(onClose).toHaveBeenCalledWith(false, { skipUnsavedCheck: true });
     expect(onOpenDM).toHaveBeenCalledWith(expect.objectContaining({ id: "u-manager" }));
   });
@@ -844,7 +844,7 @@ describe("ConversationPane", () => {
     expect(screen.getByRole("dialog", { name: "agentDetailPanel" })).toBeInTheDocument();
   });
 
-  it("keeps agent details open when unsaved changes block direct-message navigation", async () => {
+  it("keeps agent details open when unsaved changes block new-task navigation", async () => {
     const user = userEvent.setup();
     const onClose = vi.fn(() => false);
     const onOpenDM = vi.fn();
@@ -867,7 +867,7 @@ describe("ConversationPane", () => {
     });
 
     await user.click(
-      within(screen.getByRole("dialog", { name: "agentDetailPanel" })).getByRole("button", { name: "openDM" }),
+      within(screen.getByRole("dialog", { name: "agentDetailPanel" })).getByRole("button", { name: "agentStartTask" }),
     );
 
     expect(onClose).toHaveBeenCalledWith(false, { skipUnsavedCheck: true });

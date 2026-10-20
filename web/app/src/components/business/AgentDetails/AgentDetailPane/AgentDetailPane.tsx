@@ -888,12 +888,12 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
           </div>
           <div className="entity-toolbar">
             <Button
-              variant="secondaryGray"
+              variant="primary"
               size="md"
               disabled={busyKey.startsWith(busyPrefix)}
               onClick={() => onOpenDM(item)}
             >
-              {t("openDM")}
+              {t("agentStartTask")}
             </Button>
             {onUpgrade && upgradeNeeded ? (
               <Button

@@ -5,6 +5,11 @@ import { TaskConfigurationToolbar } from "@/components/business/TaskConfiguratio
 import { WorkspaceControllerProvider } from "@/hooks/workspace";
 import type { WorkspaceController } from "@/hooks/workspace";
 import type { TaskConfiguration } from "@/models/taskConfiguration";
+import { pickLocalDirectoryPath } from "@/components/business/ProfileControls/runtimeOptionDirectoryPicker";
+
+vi.mock("@/components/business/ProfileControls/runtimeOptionDirectoryPicker", () => ({
+  pickLocalDirectoryPath: vi.fn(),
+}));
 
 function setup(configuration: TaskConfiguration = {}, onChange = vi.fn(), directoryLocked = false) {
   const controller = {
@@ -48,30 +53,43 @@ function setup(configuration: TaskConfiguration = {}, onChange = vi.fn(), direct
 
 describe("task configuration", () => {
   beforeEach(() => localStorage.removeItem("csgclaw.recent-work-directories"));
-  it("shows the current directory in the input and resets unsaved edits when reopened", async () => {
+  it("does not focus the directory search when opening the picker", () => {
+    setup();
+    const trigger = screen.getByRole("button", { name: "iaWorkdirTitle" });
+    trigger.focus();
+    fireEvent.click(trigger);
+    const search = screen.getByRole("textbox", { name: "taskDirectorySearch" });
+    expect(search).not.toHaveFocus();
+    search.focus();
+    expect(search).toHaveFocus();
+  });
+  it("opens the directory picker and applies the selected directory", async () => {
+    vi.mocked(pickLocalDirectoryPath).mockResolvedValueOnce("/new-project");
     const { onChange } = setup({ workspace_dir: "/project" });
     fireEvent.click(screen.getByRole("button", { name: "iaWorkdirTitle" }));
     fireEvent.click(screen.getByRole("button", { name: "taskDirectoryAdd" }));
-    const input = screen.getByRole("textbox", { name: "taskConfigurationDirectoryPath" });
-    expect(input).toHaveValue("/project");
-    fireEvent.change(input, { target: { value: "/new-project" } });
-    fireEvent.click(screen.getByRole("button", { name: "taskConfigurationApply" }));
+    expect(pickLocalDirectoryPath).toHaveBeenCalledOnce();
     await waitFor(() => expect(onChange).toHaveBeenCalledWith({ workspace_dir: "/new-project" }));
-    await waitFor(() =>
-      expect(screen.queryByRole("textbox", { name: "taskConfigurationDirectoryPath" })).not.toBeInTheDocument(),
-    );
+    await waitFor(() => expect(screen.queryByRole("button", { name: "taskDirectoryAdd" })).not.toBeInTheDocument());
     fireEvent.click(screen.getByRole("button", { name: "iaWorkdirTitle" }));
-    expect(screen.getByText("/new-project")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /new-project.*\/new-project/ })).toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: "taskConfigurationDirectoryPath" })).not.toBeInTheDocument();
+  });
+  it("does not change the directory when selection is canceled", async () => {
+    vi.mocked(pickLocalDirectoryPath).mockResolvedValueOnce(null);
+    const { onChange } = setup({ workspace_dir: "/project" });
+    fireEvent.click(screen.getByRole("button", { name: "iaWorkdirTitle" }));
     fireEvent.click(screen.getByRole("button", { name: "taskDirectoryAdd" }));
-    expect(screen.getByRole("textbox", { name: "taskConfigurationDirectoryPath" })).toHaveValue("/new-project");
+    await waitFor(() => expect(pickLocalDirectoryPath).toHaveBeenCalled());
+    expect(onChange).not.toHaveBeenCalled();
   });
   it("filters previously added directories", () => {
     localStorage.setItem("csgclaw.recent-work-directories", JSON.stringify(["/work/notes", "/work/demo"]));
     setup();
     fireEvent.click(screen.getByRole("button", { name: "iaWorkdirTitle" }));
     fireEvent.change(screen.getByRole("textbox", { name: "taskDirectorySearch" }), { target: { value: "notes" } });
-    expect(screen.getByText("/work/notes")).toBeInTheDocument();
-    expect(screen.queryByText("/work/demo")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /notes.*\/work\/notes/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /demo.*\/work\/demo/ })).not.toBeInTheDocument();
   });
   it("applies a model to this session and keeps the working directory", async () => {
     const { onChange, controller } = setup({ workspace_dir: "/project" });

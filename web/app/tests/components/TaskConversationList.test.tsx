@@ -39,6 +39,13 @@ function setup(working = false, archived = false, compact = false, activeID?: st
 }
 describe("TaskConversationList archive management", () => {
   beforeEach(() => window.localStorage.clear());
+  it("exposes the full task title on hover", async () => {
+    setup(false, false, true);
+    const title = await screen.findByText("Review");
+    await userEvent.setup().hover(title);
+    expect(await screen.findByRole("tooltip")).toHaveTextContent("Review");
+    expect(title).not.toHaveAttribute("title");
+  });
   it("clears the search and restores the unfiltered list", async () => {
     const user = userEvent.setup();
     setup(false, false, true);

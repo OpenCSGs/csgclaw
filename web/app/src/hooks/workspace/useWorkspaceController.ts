@@ -21,8 +21,10 @@ import {
   upsertUserInData,
   mergeRoomMetadataUpdateInData,
   removeConversationFromData,
+  localIdentitiesMatch,
 } from "@/models/conversations";
-import { isAgentRunning, resolveAgentAvatarFallback } from "@/models/agents";
+import { isAgentRunning, resolveAgentAvatarFallback, resolveAgentChannelUserID } from "@/models/agents";
+import { teamMemberIDs } from "@/models/tasks";
 import { MANAGER_AGENT_NAME } from "@/shared/constants/agents";
 import { WorkspacePaneTypes, WorkspaceTabs, paneFromLocation } from "@/models/routing";
 import { MODEL_PROVIDER_IDS, modelProviderCatalogForOpenCSGState } from "@/models/modelProviders";
@@ -820,7 +822,12 @@ export function useWorkspaceController(): WorkspaceController {
   }
 
   const agentViews = bindAgentViews({
-    props: agent.agentViewProps,
+    props: {
+      ...agent.agentViewProps,
+      onOpenDM: async (item) => {
+        if (item?.id) navigate(`/new?agent=${encodeURIComponent(item.id)}`);
+      },
+    },
     activeRoom: conversation.activeChannel,
     detailAgentID: conversationProfileDetailAgentID,
     onClose: closeConversationAgentDetail,
@@ -1040,6 +1047,15 @@ export function useWorkspaceController(): WorkspaceController {
       teamActionBusy: agent.agentViewProps.teamActionBusy,
       teamActionError: agent.agentViewProps.teamActionError,
       onManageMembers: agent.openManageTeamMembers,
+      onCreateCollaborationSpace: (team) =>
+        conversation.openCreateRoomModal({
+          preselectedMemberIDs: [
+            displayData?.current_user_id || "",
+            ...teamMemberIDs(team).map(
+              (id) => resolveAgentChannelUserID(agents.find((item) => localIdentitiesMatch(item.id, id))) || id,
+            ),
+          ].filter(Boolean),
+        }),
       onDeleteTeam: agent.deleteTeam,
       onSelectAgent: selectAgent,
       onSelectTask: selectTasks,
