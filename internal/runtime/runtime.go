@@ -154,11 +154,13 @@ func normalizeInputModalities(values []string) []string {
 }
 
 type Spec struct {
-	RuntimeID string
-	AgentID   string
-	AgentName string
-	Image     string
-	Profile   Profile
+	// The Controller has selected the skill directory; adapters must not import additional defaults.
+	PreserveSkills bool
+	RuntimeID      string
+	AgentID        string
+	AgentName      string
+	Image          string
+	Profile        Profile
 }
 
 type LogOptions struct {

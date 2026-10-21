@@ -248,6 +248,7 @@ func (m *appServerManager) Start(ctx context.Context, spec SessionSpec) (*Sessio
 
 	now := time.Now().UTC()
 	session := &Session{
+		PreserveSkills:                 spec.PreserveSkills,
 		RuntimeID:                      spec.RuntimeID,
 		AgentID:                        spec.AgentID,
 		AgentName:                      spec.AgentName,

@@ -2354,11 +2354,12 @@ func (s *Controller) createWorker(ctx context.Context, spec CreateAgentSpec, rep
 		}
 	}
 	handle, err := runtimeImpl.New(ctx, agentruntime.Spec{
-		RuntimeID: runtimeIDForAgentID(id),
-		AgentID:   id,
-		AgentName: name,
-		Image:     image,
-		Profile:   runtimeProfile,
+		PreserveSkills: spec.Skills != nil,
+		RuntimeID:      runtimeIDForAgentID(id),
+		AgentID:        id,
+		AgentName:      name,
+		Image:          image,
+		Profile:        runtimeProfile,
 	})
 	if err != nil {
 		return Agent{}, fmt.Errorf("create worker box: %w", err)
