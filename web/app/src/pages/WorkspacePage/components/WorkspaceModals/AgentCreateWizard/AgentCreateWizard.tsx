@@ -92,11 +92,11 @@ export function AgentCreateWizard({
       >
         <header className={styles.header}>
           <DialogCloseButton className={styles.close} label={t("close")} disabled={busy} />
-          <DialogTitle>{t("createAgentTitle")}</DialogTitle>
+          <DialogTitle>{t("taskEntryCreateAgent")}</DialogTitle>
           <DialogDescription>{t("createAgentWizardSubtitle")}</DialogDescription>
         </header>
         <div className={styles.body}>
-          <nav className={styles.navigation} aria-label={t("createAgentTitle")}>
+          <nav className={styles.navigation} aria-label={t("taskEntryCreateAgent")}>
             <ol>
               {steps.map((item, index) => (
                 <li key={item.label}>
@@ -110,8 +110,10 @@ export function AgentCreateWizard({
                     <span className={styles.stepMark} aria-hidden="true">
                       {index === 0 && valid ? <Check size={14} /> : index + 1}
                     </span>
-                    <span>{item.label}</span>
-                    <small>
+                    <span className={styles.stepLabel} title={item.label}>
+                      {item.label}
+                    </span>
+                    <small className={index === 0 && !valid ? styles.requiredHint : undefined}>
                       {index === 0
                         ? valid
                           ? ""

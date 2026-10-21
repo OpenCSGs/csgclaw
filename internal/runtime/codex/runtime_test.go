@@ -340,7 +340,8 @@ func TestRestartRequiredReturnsTrueWhenLocalWorkspaceDirChanges(t *testing.T) {
 	}
 }
 
-func TestRestartRequiredIgnoresStoredExecutionModeChanges(t *testing.T) {
+func TestRestartRequiredForStoredExecutionModeChanges(t *testing.T) {
+	t.Setenv("CSGCLAW_EXECUTION_MODE", "")
 	rt := &Runtime{}
 	got, err := rt.RestartRequired(agentruntime.RuntimeConfigChange{
 		Previous: agentruntime.RuntimeConfigSnapshot{Options: map[string]any{"execution_mode": ExecutionModeStandard}},
@@ -349,8 +350,8 @@ func TestRestartRequiredIgnoresStoredExecutionModeChanges(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RestartRequired() error = %v", err)
 	}
-	if got {
-		t.Fatal("RestartRequired() = true, want false for stored execution_mode")
+	if !got {
+		t.Fatal("RestartRequired() = false, want true for stored execution_mode")
 	}
 }
 
@@ -630,10 +631,11 @@ func TestDecodeRuntimeOptionsExecutionMode(t *testing.T) {
 		wantErr bool
 	}{
 		{name: "empty defaults standard", want: ExecutionModeStandard},
-		{name: "stored read only defaults standard", raw: map[string]any{"execution_mode": "read_only"}, want: ExecutionModeStandard},
+		{name: "stored read only", raw: map[string]any{"execution_mode": "read_only"}, want: ExecutionModeReadOnly},
 		{name: "read only", env: " read_only ", want: ExecutionModeReadOnly},
 		{name: "read only overrides stored standard", env: "read_only", raw: map[string]any{"execution_mode": "standard"}, want: ExecutionModeReadOnly},
-		{name: "standard overrides stored read only", env: "standard", raw: map[string]any{"execution_mode": "read_only"}, want: ExecutionModeStandard},
+		{name: "standard server permits stored read only", env: "standard", raw: map[string]any{"execution_mode": "read_only"}, want: ExecutionModeReadOnly},
+		{name: "invalid stored mode", raw: map[string]any{"execution_mode": "dangerous"}, wantErr: true},
 		{name: "invalid", env: "dangerous", wantErr: true},
 	}
 	for _, tt := range tests {
@@ -656,16 +658,13 @@ func TestDecodeRuntimeOptionsExecutionMode(t *testing.T) {
 	}
 }
 
-func TestRuntimeStartUsesEnvironmentExecutionMode(t *testing.T) {
+func TestRuntimeStartUsesAgentAndServerExecutionMode(t *testing.T) {
 	for _, mode := range []string{"", ExecutionModeStandard, ExecutionModeReadOnly} {
 		t.Run("mode="+mode, func(t *testing.T) {
 			t.Setenv("CSGCLAW_EXECUTION_MODE", mode)
-			want := mode
-			if want == "" {
-				want = ExecutionModeStandard
-			}
+			want := ExecutionModeReadOnly
 			stored := ExecutionModeReadOnly
-			if want == ExecutionModeReadOnly {
+			if mode == ExecutionModeReadOnly {
 				stored = ExecutionModeStandard
 			}
 			rt := newTestCodexRuntime(t.TempDir(), func(h agentruntime.Handle) (AgentRef, error) {

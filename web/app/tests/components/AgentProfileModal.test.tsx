@@ -441,12 +441,13 @@ describe("AgentProfileModal", () => {
       />,
       { wrapper: createQueryWrapper().wrapper },
     );
-    expect(screen.getByRole("navigation", { name: "createAgentTitle" })).toBeInTheDocument();
+    expect(screen.getByRole("navigation", { name: "taskEntryCreateAgent" })).toBeInTheDocument();
     expect(screen.getByRole("status")).toHaveTextContent("agentWizardLoadingConfiguration");
     expect(screen.getByRole("textbox", { name: "Name" })).toBeEnabled();
     expect(screen.getByRole("button", { name: "agentWizardNext" })).toBeDisabled();
     expect(screen.queryByRole("tablist", { name: "createAgentModeTabAriaLabel" })).not.toBeInTheDocument();
     expect(screen.queryByRole("combobox", { name: "Template" })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("MCP Servers")).not.toBeInTheDocument();
     const identity = screen.getByRole("dialog").querySelector(".agent-identity-layout");
     const browse = screen.getByRole("button", { name: "Browse agent templates" });
     expect(identity?.compareDocumentPosition(browse)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);

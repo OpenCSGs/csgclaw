@@ -135,8 +135,9 @@ export function AgentProfileModal({
   const isTemplateCreate = isWorkerCreate && agentCreateMode === "template";
   const missingRequiredEnv = isTemplateCreate && agentDraftMissingRequiredEnv(agentDraft);
   const isCustomCreate = isWorkerCreate && agentCreateMode === "custom";
+  const useWizard = creationWizard && isCustomCreate;
   const templateLocked = agentCreateTemplateLocked(agentDraft, agentModalMode);
-  const showMCPServers = !isNotificationContext && supportsMCPServers(agentDraft.runtime_kind);
+  const showMCPServers = !useWizard && !isNotificationContext && supportsMCPServers(agentDraft.runtime_kind);
   const runtimeOptionSchemas = isNotificationContext
     ? []
     : runtimeOptionSchemasForAgent(
@@ -305,7 +306,6 @@ export function AgentProfileModal({
     }
   }, [showMCPServers]);
 
-  const useWizard = creationWizard && isCustomCreate;
   const saveDisabled =
     agentBusy ||
     agentInitializing ||
@@ -426,25 +426,6 @@ export function AgentProfileModal({
           </div>
           <div className="agent-section-form">
             <div className="profile-grid profile-grid-compact agent-basics-grid">
-              {isWorkerCreate && !isCSGHubSandboxProvider ? (
-                <div className="field span-2 agent-fast-mode-field agent-sandbox-field">
-                  <div className="field-label-with-help">
-                    <span>{t("profileSandboxEnabled")}</span>
-                    <FieldHelpTooltip detail={t("profileSandboxEnabledHelp")} />
-                  </div>
-                  <label className="selection-item compact-toggle-row agent-fast-mode-toggle agent-sandbox-toggle">
-                    <input
-                      type="checkbox"
-                      checked={sandboxEnabled}
-                      aria-label={t("profileSandboxEnabled")}
-                      onChange={() => setSandboxEnabled(!sandboxEnabled)}
-                    />
-                    <span className="agent-sandbox-copy">
-                      <strong>{sandboxEnabled ? t("statusEnabled") : t("statusDisabled")}</strong>
-                    </span>
-                  </label>
-                </div>
-              ) : null}
               {isWorkerCreate ? (
                 <div className="agent-runtime-image-row">
                   <label className="field">
@@ -513,6 +494,25 @@ export function AgentProfileModal({
                       />
                     )}
                   </label>
+                  {!isCSGHubSandboxProvider ? (
+                    <div className="field agent-fast-mode-field agent-sandbox-field">
+                      <div className="field-label-with-help">
+                        <span>{t("profileSandboxEnabled")}</span>
+                        <FieldHelpTooltip detail={t("profileSandboxEnabledHelp")} />
+                      </div>
+                      <label className="selection-item compact-toggle-row agent-fast-mode-toggle agent-sandbox-toggle">
+                        <input
+                          type="checkbox"
+                          checked={sandboxEnabled}
+                          aria-label={t("profileSandboxEnabled")}
+                          onChange={() => setSandboxEnabled(!sandboxEnabled)}
+                        />
+                        <span className="agent-sandbox-copy">
+                          <strong>{sandboxEnabled ? t("statusEnabled") : t("statusDisabled")}</strong>
+                        </span>
+                      </label>
+                    </div>
+                  ) : null}
                   {runtimeAvailabilityNotice}
                 </div>
               ) : agentModalMode === "edit" ? (
@@ -528,6 +528,7 @@ export function AgentProfileModal({
                   schemas={runtimeOptionSchemas}
                   onDraftChange={onAgentDraftChange}
                   directoryPickerAvailable={bootstrapConfig?.directory_picker_available !== false}
+                  showExecutionMode={useWizard}
                   embedded
                 />
               ) : null}

@@ -1,12 +1,28 @@
-import { useState } from "react";
-import { Button, Checkbox, TextInput } from "@/components/ui";
-import { mcpManagedKnowledgeBaseSource, mcpServersFromMap } from "@/models/mcp";
+import { useRef, useState } from "react";
+import { Button, Checkbox, TextInput, Tooltip } from "@/components/ui";
+import { AppIcon, appStatus } from "@/components/business/Apps";
+import { mcpManagedKnowledgeBaseSource, mcpServerDisplayName, mcpServersFromCatalogResponse } from "@/models/mcp";
 import { mergeRemoteKnowledgeBasePages } from "@/models/knowledgeBases";
 import type { AgentCreationResources } from "@/models/agentCreation";
 import type { TranslateFn } from "@/models/conversations";
 import { localizeAPIError } from "@/shared/i18n";
 import type { useAgentCreationResourceQueries } from "./useAgentCreationResourceQueries";
 import styles from "./AgentCreateWizard.module.css";
+
+function ResourceDescription({ text }: { text: string }) {
+  const ref = useRef<HTMLElement>(null);
+  const [open, setOpen] = useState(false);
+  return (
+    <Tooltip
+      content={text}
+      open={open}
+      onOpenChange={(next) => setOpen(next && !!ref.current && ref.current.scrollWidth > ref.current.clientWidth)}
+      contentProps={{ className: styles.descriptionTooltip, side: "top" }}
+    >
+      <small ref={ref}>{text}</small>
+    </Tooltip>
+  );
+}
 
 type Props = {
   step: number;
@@ -29,6 +45,7 @@ export function AgentCreationResourcesPicker({
 }: Props) {
   const [search, setSearch] = useState("");
   const { skills, mcp, apps, knowledge } = queries;
+  const knowledgeItems = mergeRemoteKnowledgeBasePages(knowledge.data?.pages ?? []);
   const toggle = (kind: "skills" | "connectors" | "apps", key: string, checked: boolean) =>
     onChange({ ...value, [kind]: checked ? [...value[kind], key] : value[kind].filter((item) => item !== key) });
   const groups =
@@ -54,7 +71,8 @@ export function AgentCreationResourcesPicker({
               items: (apps.data ?? []).map((item) => ({
                 key: item.installation_id,
                 name: item.name,
-                description: item.last_error,
+                description: `${t("appManagedMCP")} · ${appStatus(item, t)}`,
+                appID: item.app_id,
                 disabled: item.resource_enabled === false || item.status !== "connected",
               })),
               selected: value.apps,
@@ -63,11 +81,11 @@ export function AgentCreationResourcesPicker({
             {
               label: t("iaConnectorsGroupTools"),
               query: mcp,
-              items: mcpServersFromMap(mcp.data ?? null)
+              items: mcpServersFromCatalogResponse(mcp.data ?? null)
                 .filter((item) => !mcpManagedKnowledgeBaseSource(item.config))
                 .map((item) => ({
                   key: item.name,
-                  name: item.name,
+                  name: mcpServerDisplayName(item),
                   description: item.description,
                   disabled: item.config.disabled === true,
                 })),
@@ -79,7 +97,7 @@ export function AgentCreationResourcesPicker({
             {
               label: t("resourcesKnowledgeBasesLabel"),
               query: knowledge,
-              items: mergeRemoteKnowledgeBasePages(knowledge.data?.pages ?? []).map((item) => ({
+              items: knowledgeItems.map((item) => ({
                 key: item.id,
                 name: item.name,
                 description: item.description,
@@ -87,7 +105,7 @@ export function AgentCreationResourcesPicker({
               })),
               selected: value.knowledgeBases.map((item) => item.id),
               toggle: (key: string, checked: boolean) => {
-                const item = mergeRemoteKnowledgeBasePages(knowledge.data?.pages ?? []).find((item) => item.id === key);
+                const item = knowledgeItems.find((item) => item.id === key);
                 if (item)
                   onChange({
                     ...value,
@@ -109,6 +127,8 @@ export function AgentCreationResourcesPicker({
     );
   return (
     <div className={styles.resources}>
+      {step === 2 ? <p className={styles.resourceIntro}>{t("agentWizardSkillsDescription")}</p> : null}
+      {step === 4 ? <p className={styles.resourceIntro}>{t("agentWizardKnowledgeDescription")}</p> : null}
       <TextInput
         aria-label={t("search")}
         placeholder={t("search")}
@@ -151,17 +171,28 @@ export function AgentCreationResourcesPicker({
             <ul className={styles.resourceList}>
               {items.map((item) => (
                 <li key={item.key}>
-                  <label className={styles.resourceRow}>
+                  <label
+                    className={`${styles.resourceRow} ${step === 2 ? styles.skillRow : ""} ${step === 3 || step === 4 ? styles.connectorRow : ""}`}
+                  >
                     <Checkbox
                       checked={group.selected.includes(item.key)}
                       disabled={"disabled" in item && item.disabled === true}
                       onCheckedChange={(checked) => group.toggle(item.key, checked === true)}
                     />
+                    {"appID" in item && typeof item.appID === "string" ? (
+                      <span className={styles.resourceIcon} aria-hidden="true">
+                        <AppIcon appID={item.appID} />
+                      </span>
+                    ) : null}
                     <span>
                       <strong>{item.name}</strong>
-                      <small>
-                        {"disabled" in item && item.disabled ? t("agentWizardResourceUnavailable") : item.description}
-                      </small>
+                      <ResourceDescription
+                        text={
+                          ("disabled" in item && item.disabled
+                            ? t("agentWizardResourceUnavailable")
+                            : item.description) || ""
+                        }
+                      />
                     </span>
                   </label>
                 </li>

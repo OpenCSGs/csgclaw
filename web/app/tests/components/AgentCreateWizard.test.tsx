@@ -59,12 +59,14 @@ describe("AgentCreateWizard", () => {
     await user.click(screen.getByRole("button", { name: "agentWizardNext" }));
     await user.type(screen.getByRole("textbox", { name: "agentInstructions" }), "Write reports");
     await user.click(screen.getByRole("button", { name: "agentWizardNext" }));
+    expect(screen.getByText("agentWizardSkillsDescription")).toBeVisible();
     await user.click(await screen.findByRole("checkbox", { name: /Research/ }));
     await user.click(screen.getByRole("button", { name: /agentProfileTab/ }));
     expect(screen.getByRole("textbox", { name: "Name" })).toHaveValue("Worker renamed");
     await user.click(screen.getByRole("button", { name: /agentInstructions/ }));
     expect(screen.getByRole("textbox", { name: "agentInstructions" })).toHaveValue("Write reports");
     await user.click(screen.getByRole("button", { name: /resourcesKnowledgeBasesLabel/ }));
+    expect(screen.queryByText("agentWizardSkillsDescription")).not.toBeInTheDocument();
     expect(screen.getByText("iaKnowledgeLoginRequired")).toBeVisible();
     expect(save).not.toHaveBeenCalled();
     await user.click(screen.getByRole("button", { name: "agentCreateSave" }));
@@ -88,10 +90,14 @@ describe("AgentCreateWizard", () => {
         resolveSkills = resolve;
       }),
     );
-    vi.mocked(fetchMCPServers).mockResolvedValue({ Docs: { command: "docs" } });
+    vi.mocked(fetchMCPServers).mockResolvedValue({
+      mcpServers: { Docs: { command: "docs", description: "Search documentation" } },
+    });
     const user = userEvent.setup();
     setup(true, true);
     expect(screen.getByRole("textbox", { name: "Name" })).toBeEnabled();
+    await user.click(screen.getByRole("button", { name: /resourcesKnowledgeBasesLabel/ }));
+    expect(screen.getByText("agentWizardKnowledgeDescription")).toBeVisible();
     await waitFor(() => {
       expect(fetchSkills).toHaveBeenCalledOnce();
       expect(fetchMCPServers).toHaveBeenCalledOnce();
@@ -106,6 +112,8 @@ describe("AgentCreateWizard", () => {
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "agentAppsTab" }));
     expect(screen.getByRole("checkbox", { name: /^Docs/ })).toBeVisible();
+    expect(screen.getByText("Search documentation")).toBeVisible();
+    expect(screen.queryByText("mcpServers")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "resourcesKnowledgeBasesLabel" }));
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "agentProfileSkillsTab" }));
@@ -183,7 +191,7 @@ it("keeps the nested avatar editor inside the wizard focus scope", async () => {
   await user.click(within(editor).getAllByRole("radio")[0]);
   await user.click(within(editor).getByRole("button", { name: "confirm" }));
   expect(screen.queryByRole("dialog", { name: "editAvatar" })).not.toBeInTheDocument();
-  expect(screen.getByRole("dialog", { name: "createAgentTitle" })).toBeInTheDocument();
+  expect(screen.getByRole("dialog", { name: "taskEntryCreateAgent" })).toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: /editAvatar/ }));
   editor = screen.getByRole("dialog", { name: "editAvatar" });
   within(editor).getByRole("button", { name: "confirm" }).focus();

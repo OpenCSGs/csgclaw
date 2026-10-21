@@ -37,11 +37,19 @@
   padding: 0;
   list-style: none;
 }
+.navigation ol {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-1);
+}
+.navigation li {
+  min-width: 0;
+}
 .navigation button {
   width: 100%;
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 8px;
   padding: 12px 10px;
   border: 0;
@@ -63,8 +71,19 @@
 }
 .navigation small {
   margin-left: auto;
+  flex-shrink: 0;
   color: var(--muted);
   font-size: 11px;
+}
+.stepLabel {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.navigation small.requiredHint {
+  color: var(--warning-400);
 }
 .stepMark {
   width: 20px;
@@ -98,6 +117,11 @@
 .instructions textarea {
   resize: vertical;
 }
+.resourceIntro {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+}
 .resourceRow {
   display: flex;
   align-items: flex-start;
@@ -105,6 +129,10 @@
   padding: 12px;
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
+}
+.resourceRow:hover {
+  background: var(--button-neutral-hover-background);
+  border-color: var(--button-neutral-hover-border);
 }
 .resourceGroup {
   display: grid;
@@ -175,13 +203,60 @@
     animation: none;
   }
 }
-.resourceRow > span {
+.resourceRow > span:not(.resourceIcon) {
   min-width: 0;
   display: grid;
   gap: 4px;
 }
+.skillRow > span:not(.resourceIcon) {
+  gap: 2px;
+}
+.connectorRow > span:not(.resourceIcon) {
+  gap: 0;
+}
+.resourceIcon {
+  display: flex;
+  flex: 0 0 32px;
+  align-items: center;
+  justify-content: center;
+}
+.resourceIcon img {
+  border-radius: var(--radius-md);
+}
+.resourceRow > button {
+  margin-top: 3px;
+}
+.skillRow > button {
+  align-self: center;
+  margin-top: 0;
+}
+.connectorRow {
+  align-items: center;
+}
+.connectorRow > button {
+  margin-top: 0;
+}
+.resourceRow strong {
+  overflow: hidden;
+  color: var(--text);
+  font-size: var(--text-sm-size);
+  font-weight: 500;
+  line-height: 22px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .resourceRow small {
+  overflow: hidden;
   color: var(--muted);
+  font-size: 14px;
+  font-weight: 300;
+  line-height: 22px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.descriptionTooltip {
+  max-width: min(480px, calc(100vw - 24px));
+  white-space: normal;
   overflow-wrap: anywhere;
 }
 .footer {
