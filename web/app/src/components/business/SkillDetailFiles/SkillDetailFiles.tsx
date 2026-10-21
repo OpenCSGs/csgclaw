@@ -6,12 +6,20 @@ import { WorkspaceFilePreview, WorkspaceFileTree } from "@/components/business/W
 import { Button } from "@/components/ui";
 import { workspaceQueryKeys } from "@/hooks/workspace/workspaceQueries";
 import type { TranslateFn } from "@/models/conversations";
-import type { SkillDetailTarget } from "./SkillDetailDialog";
-import styles from "./SkillDetailDialog.module.css";
+import type { SkillSummary } from "@/models/skillhub";
+import styles from "./SkillDetailFiles.module.css";
 
-export function SkillDetailFiles({ target, t }: { target: SkillDetailTarget; t: TranslateFn }) {
-  const remote = target.variant === "market" ? target.skill : undefined;
-  const root = remote ? "" : target.skill.name;
+export function SkillDetailFiles({
+  skill,
+  market = false,
+  t,
+}: {
+  skill: SkillSummary;
+  market?: boolean;
+  t: TranslateFn;
+}) {
+  const remote = market ? skill : undefined;
+  const root = remote ? "" : skill.name;
   const [selectedPath, setSelectedPath] = useState(root ? `${root}/SKILL.md` : "SKILL.md");
   const tree = useQuery({
     // Keep remote previews inside the existing login-environment cache reset scope.
@@ -50,7 +58,6 @@ export function SkillDetailFiles({ target, t }: { target: SkillDetailTarget; t: 
       ) : null}
       <div className={styles.panels}>
         <WorkspaceFileTree
-          className={styles.tree}
           entries={tree.data?.entries ?? []}
           loading={tree.isFetching}
           loadingText={t("resourcesSkillFilesLoading")}
@@ -59,7 +66,6 @@ export function SkillDetailFiles({ target, t }: { target: SkillDetailTarget; t: 
           onSelectFile={setSelectedPath}
         />
         <WorkspaceFilePreview
-          className={styles.preview}
           file={file.data ?? null}
           loading={file.isFetching}
           loadingText={t("resourcesWorkspaceFileLoading")}

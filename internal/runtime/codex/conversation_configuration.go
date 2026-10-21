@@ -102,6 +102,9 @@ func (r *Runtime) conversationSkillStates(home, mode string, states map[string]s
 }
 
 func (r *Runtime) seedAgentWorkspaceSkills(spec SessionSpec) error {
+	if spec.PreserveSkills {
+		return nil
+	}
 	ref, err := r.deps.ResolveAgent(agentruntime.Handle{RuntimeID: spec.RuntimeID})
 	if err != nil {
 		return err

@@ -252,6 +252,7 @@ Participant 是 channel-scoped identity，用于房间、消息、mention、通�
 - `name` 必填
 - 实际 channel 由路由路径决定，而不是由请求体决定
 - `agent` participant 可通过 `agent_binding` 创建或复用 Agent
+- 创建 Agent 时，`agent_binding.agent.instructions` 中填写的非空指令优先于模板指令；显式传入 `skills` 列表会替换模板技能选择（`[]` 表示不选择技能），省略则保留模板默认值。
 - `human` 与 `notification` participant 不创建 runtime agent
 - 上面的示例中，`qa` 是 participant ID；`u-qa` 只作为本地 channel user ref 和生成的 backing agent ID。
 - 对 `csgclaw` 来说，`channel_user.ref` 是本地 IM user ID
@@ -516,6 +517,8 @@ Runtime 尚未生成文档时，`ready` 为 `false`。
 #### `POST /api/v1/agents/{id}/mcp-servers:batchAdd`
 
 接收 `{ "names": ["..."] }`，将 MCP catalog 中同名 server 的定义合并到该 Agent 托管的 MCP server。响应与 `GET` 一样。
+
+可选 boolean 字段 `enabled` 在同一次更新中设置这些定义在 Agent 内的启用状态。省略时保留 catalog 中各定义的状态。Profile 添加资源时传入 `enabled: true`，全局 catalog 保持原状态。
 
 #### `POST /api/v1/agents/{id}/mcp-servers:batchDelete`
 

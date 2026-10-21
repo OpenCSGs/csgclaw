@@ -1077,7 +1077,9 @@ func (s *Controller) resolveTemplateCreateSpecWithService(
 			instructionsPath := filepath.Join(workspace.Path, "AGENTS.md")
 			if data, readErr := os.ReadFile(instructionsPath); readErr == nil {
 				spec.TemplateInstructions = string(data)
-				spec.Instructions = runtimeinstructions.ExtractUserInstructionsFromAgentsDocument(spec.TemplateInstructions)
+				if strings.TrimSpace(spec.Instructions) == "" {
+					spec.Instructions = runtimeinstructions.ExtractUserInstructionsFromAgentsDocument(spec.TemplateInstructions)
+				}
 				if removeErr := os.Remove(instructionsPath); removeErr != nil {
 					return CreateAgentSpec{}, cleanup, fmt.Errorf("separate host runtime template instructions: %w", removeErr)
 				}
@@ -2345,13 +2347,19 @@ func (s *Controller) createWorker(ctx context.Context, spec CreateAgentSpec, rep
 		if err := s.installDefaultSystemSkills(id, runtimeKind); err != nil {
 			return Agent{}, fmt.Errorf("install worker system skills: %w", err)
 		}
+		if spec.Skills != nil {
+			if err := s.ReplaceSkills(ctx, id, spec.Skills); err != nil {
+				return Agent{}, fmt.Errorf("apply worker skill selection: %w", err)
+			}
+		}
 	}
 	handle, err := runtimeImpl.New(ctx, agentruntime.Spec{
-		RuntimeID: runtimeIDForAgentID(id),
-		AgentID:   id,
-		AgentName: name,
-		Image:     image,
-		Profile:   runtimeProfile,
+		PreserveSkills: spec.Skills != nil,
+		RuntimeID:      runtimeIDForAgentID(id),
+		AgentID:        id,
+		AgentName:      name,
+		Image:          image,
+		Profile:        runtimeProfile,
 	})
 	if err != nil {
 		return Agent{}, fmt.Errorf("create worker box: %w", err)

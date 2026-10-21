@@ -74,6 +74,18 @@ export function mcpServersFromCatalogResponse(response: unknown): MCPServer[] {
   return mcpServersFromMap(mcpServerMapFromCatalogResponse(response));
 }
 
+export function createdMCPServerName(response: unknown, payload: MCPServerPayload): string {
+  const source = mcpManagedKnowledgeBaseSource(payload.config);
+  const matches = mcpServersFromCatalogResponse(response).filter((server) => {
+    if (source) {
+      const candidate = mcpManagedKnowledgeBaseSource(server.config);
+      return candidate?.resourceID === source.resourceID && candidate.contentID === source.contentID;
+    }
+    return mcpServerDisplayName(server) === payload.name.trim();
+  });
+  return matches.length === 1 ? matches[0].name : "";
+}
+
 export function mcpServersFromMap(servers: unknown): MCPServer[] {
   if (!isJSONRecord(servers)) {
     return [];

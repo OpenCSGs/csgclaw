@@ -119,6 +119,48 @@ func (s *ModelConfiguration) CreationDefaultsView() AgentProfileView {
 	return s.creationDefaultsViewLocked()
 }
 
+// Resolve a model-only creation request before profile normalization gives an
+// omitted provider the local Lite identity. CLI and MCP callers may supply just
+// a model ID, while the UI already supplies the complete catalog reference.
+func (s *ModelConfiguration) resolveCreateModelReference(profile AgentProfile) (AgentProfile, error) {
+	if strings.TrimSpace(profile.ModelProviderID) != "" ||
+		strings.TrimSpace(profile.Provider) != "" || strings.TrimSpace(profile.BaseURL) != "" ||
+		strings.TrimSpace(profile.APIKey) != "" || len(profile.Headers) > 0 {
+		return profile, nil
+	}
+	s.mu.RLock()
+	catalog := ModelProviderCatalogFromLLM(s.llm)
+	preferred := resolveCreationDefaults(s.creationDefaults, catalog)
+	choices := creationModelChoices(catalog)[0]
+	s.mu.RUnlock()
+	if strings.TrimSpace(profile.ModelID) == "" {
+		if preferred.ModelProviderID != "" {
+			profile.ModelProviderID = preferred.ModelProviderID
+			profile.Provider = preferred.Provider
+			profile.ModelID = preferred.ModelID
+		}
+		return profile, nil
+	}
+	var selected ModelDefaultRef
+	for _, choice := range choices {
+		if !strings.EqualFold(choice.ModelID, strings.TrimSpace(profile.ModelID)) {
+			continue
+		}
+		if selected.ProviderID == "" || choice.ProviderID == preferred.ModelProviderID {
+			selected = choice
+		}
+		if choice.ProviderID == preferred.ModelProviderID {
+			break
+		}
+	}
+	if selected.ProviderID == "" {
+		return AgentProfile{}, &config.ModelValidationError{Message: fmt.Sprintf("model %q is not available from a connected model provider", profile.ModelID)}
+	}
+	profile.ModelProviderID = selected.ProviderID
+	profile.Provider = ProfileProviderForModelProviderID(selected.ProviderID)
+	return profile, nil
+}
+
 func (s *ModelConfiguration) SetCreationDefault(request CreationModelDefaultRequest) (AgentProfileView, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

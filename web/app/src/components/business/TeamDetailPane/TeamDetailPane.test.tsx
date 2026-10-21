@@ -1,6 +1,6 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { TeamDetailPane } from "@/components/business/TeamDetailPane";
+import { TeamDetailPane } from "./TeamDetailPane";
 import type { TranslateFn } from "@/models/conversations";
 import type { WorkspaceTeam } from "@/models/tasks";
 
@@ -31,11 +31,15 @@ describe("TeamDetailPane", () => {
     await user.keyboard("{Escape}");
     expect(onUpdateDescription).toHaveBeenCalledTimes(1);
   });
-  it("shows the team description only when provided", () => {
-    const { rerender } = render(<TeamDetailPane team={{ ...team, description: "发布协调团队" }} t={t} />);
-    expect(screen.getByText("发布协调团队")).toBeInTheDocument();
-    rerender(<TeamDetailPane team={team} t={t} />);
-    expect(screen.queryByText("发布协调团队")).not.toBeInTheDocument();
+  it("shows only the saved team description and leaves missing descriptions blank", () => {
+    const view = render(<TeamDetailPane team={{ ...team, description: "Review releases together." }} t={t} />);
+    expect(screen.getByText("Review releases together.")).toBeVisible();
+
+    view.rerender(<TeamDetailPane team={{ ...team, description: "  " }} t={t} />);
+    expect(screen.queryByText("Review releases together.")).not.toBeInTheDocument();
+    expect(screen.queryByText("teamDetailSubtitle")).not.toBeInTheDocument();
+
+    view.rerender(<TeamDetailPane team={team} t={t} />);
     expect(screen.queryByText("teamDetailSubtitle")).not.toBeInTheDocument();
   });
   it("starts collaboration with the current team", async () => {

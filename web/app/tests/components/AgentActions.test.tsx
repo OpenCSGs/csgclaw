@@ -1,5 +1,5 @@
 import { createQueryWrapper } from "../helpers/queryClient";
-import { render, screen, within } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { AgentRow } from "@/pages/AgentPage/components";
@@ -12,6 +12,9 @@ import buttonStyles from "@/components/ui/Button/Button.module.css";
 const labels: Record<string, string> = {
   agentActivityTab: "Activity",
   agentDelete: "Delete",
+  agentDeleteBlockedTitle: "This agent cannot be deleted yet",
+  agentDeleteChecking: "Checking dependencies…",
+  agentDeleteResolve: "Go to team",
   agentDeleteBoundChannels: "This agent is bound to {channels}.",
   agentDeleteCascadeNote: "Deleting the agent will also disconnect it from those channels.",
   agentDeleteConfirmMessage: 'Delete agent "{name}"?',
@@ -179,6 +182,7 @@ it.each(["codex", "dsh"])("opens the managed connector catalog for a %s Agent", 
 
 describe("agent action visibility", () => {
   beforeEach(() => {
+    vi.unstubAllGlobals();
     window.localStorage.removeItem(AGENT_PROFILE_ACTIVE_TAB_STORAGE_KEY);
   });
 
@@ -1339,6 +1343,16 @@ describe("agent action visibility", () => {
       description: "npx",
     };
 
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) =>
+        Response.json(
+          String(url).includes("/agents/")
+            ? { servers: { existing: existingMCP.config } }
+            : { mcpServers: { context7: context7MCP.config } },
+        ),
+      ),
+    );
     render(
       <AgentDetailPane
         item={item}
@@ -1356,7 +1370,6 @@ describe("agent action visibility", () => {
         authBusyProvider=""
         workspaceSupported
         mcpServers={[existingMCP]}
-        mcpCandidates={[context7MCP]}
         notifierWebhookPublicOrigin="http://127.0.0.1:18080"
         onDraftChange={vi.fn()}
         onSave={vi.fn()}
@@ -1380,7 +1393,7 @@ describe("agent action visibility", () => {
       within(navigation)
         .getAllByRole("button")
         .map((button) => button.textContent),
-    ).toEqual(["Profile", "Instructions", "Skills0", "Connectors", "Channels"]);
+    ).toEqual(["Profile", "Instructions", "Skills0", "Connectors", "profileKnowledgeTitle0", "Channels"]);
 
     await user.click(within(navigation).getByRole("button", { name: "Connectors" }));
 
@@ -1388,7 +1401,7 @@ describe("agent action visibility", () => {
     expect(screen.getByText("node")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Add MCP" }));
-    await user.click(screen.getByLabelText(/context7/));
+    await user.click(await screen.findByRole("checkbox", { name: /context7/ }));
     await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Add MCP" }));
 
     expect(onInstallMCPServers).toHaveBeenCalledWith(["context7"]);
@@ -1501,6 +1514,20 @@ describe("agent action visibility", () => {
     const user = userEvent.setup();
     const onAddSkills = vi.fn().mockResolvedValue(true);
     const draft = agentToDraft(worker);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) =>
+        Response.json(
+          String(url).includes("/agents/")
+            ? [{ name: "alpha" }]
+            : [
+                { name: "alpha" },
+                { name: "beta", description: "Beta candidate" },
+                { name: "gamma", description: "Gamma candidate" },
+              ],
+        ),
+      ),
+    );
     render(
       <AgentDetailPane
         item={worker}
@@ -1520,10 +1547,6 @@ describe("agent action visibility", () => {
         notifierWebhookPublicOrigin="http://127.0.0.1:18080"
         workspaceSupported
         skills={[{ name: "alpha", description: "Alpha installed" }]}
-        skillCandidates={[
-          { name: "beta", description: "Beta candidate" },
-          { name: "gamma", description: "Gamma candidate" },
-        ]}
         onDraftChange={vi.fn()}
         onSave={vi.fn()}
         onPublish={vi.fn()}
@@ -1536,12 +1559,13 @@ describe("agent action visibility", () => {
         onOpenDM={vi.fn()}
         onAddSkills={onAddSkills}
       />,
+      { wrapper: createQueryWrapper().wrapper },
     );
 
     await user.click(screen.getByRole("button", { name: /^skills/i }));
     await user.click(screen.getByRole("button", { name: "Add skill" }));
-    expect(screen.getByText("Candidates come from global skills.")).toBeInTheDocument();
-    expect(screen.getByText("Beta candidate")).toBeInTheDocument();
+    expect(screen.getByText("profileSkillPickerHint")).toBeInTheDocument();
+    expect(await screen.findByText("Beta candidate")).toBeInTheDocument();
     expect(screen.getByText("Gamma candidate")).toBeInTheDocument();
     expect(screen.queryByRole("checkbox", { name: /alpha/i })).not.toBeInTheDocument();
 
@@ -1550,7 +1574,7 @@ describe("agent action visibility", () => {
     await user.click(addButtons[addButtons.length - 1]);
 
     expect(onAddSkills).toHaveBeenCalledWith(["beta"]);
-    expect(screen.queryByText("Candidates come from global skills.")).not.toBeInTheDocument();
+    expect(screen.queryByText("profileSkillPickerHint")).not.toBeInTheDocument();
   });
 
   it("shows a confirmation dialog before deleting an installed skill", async () => {
@@ -1680,6 +1704,45 @@ describe("agent action visibility", () => {
 
     expect(screen.getByRole("button", { name: "Save changes" })).toBeInTheDocument();
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  });
+
+  it("checks deletion dependencies and offers team editing instead of deletion", async () => {
+    const user = userEvent.setup();
+    const onDelete = vi.fn();
+    const onResolve = vi.fn();
+    let finishCheck!: (value: { message: string; onResolve: () => void }) => void;
+    const onCheckDelete = vi.fn(
+      () =>
+        new Promise<{ message: string; onResolve: () => void }>((resolve) => {
+          finishCheck = resolve;
+        }),
+    );
+    render(
+      <AgentView
+        item={worker}
+        t={t}
+        onDelete={onDelete}
+        onCheckDelete={onCheckDelete}
+        onInvite={vi.fn()}
+        onOpenDM={vi.fn()}
+        onRecreate={vi.fn()}
+        onStart={vi.fn()}
+        onStop={vi.fn()}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: "More" }));
+    await user.click(screen.getByRole("menuitem", { name: "Delete" }));
+    expect(within(screen.getByRole("dialog")).getByRole("button", { name: "Delete" })).toBeDisabled();
+    await act(async () => {
+      finishCheck({ message: "Remove the agent from its team first.", onResolve });
+    });
+    const dialog = screen.getByRole("dialog", { name: "This agent cannot be deleted yet" });
+    expect(dialog).toHaveTextContent("Remove the agent from its team first.");
+    expect(within(dialog).queryByRole("button", { name: "Delete" })).not.toBeInTheDocument();
+    await user.click(within(dialog).getByRole("button", { name: "Go to team" }));
+    expect(onResolve).toHaveBeenCalledOnce();
+    expect(onDelete).not.toHaveBeenCalled();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
   it("opens a styled delete confirmation dialog for a Feishu-connected agent", async () => {
@@ -1815,6 +1878,7 @@ describe("agent action visibility", () => {
       "Instructions",
       "Skills0",
       "Connectors",
+      "profileKnowledgeTitle0",
       "Channels",
     ]);
     expect(tabs[0]).toHaveAttribute("aria-current", "location");

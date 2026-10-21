@@ -3,6 +3,7 @@ package api
 import (
 	"csgclaw/internal/agentengine"
 	agent "csgclaw/internal/agentengine/agents"
+	"csgclaw/internal/knowledgebase"
 	"csgclaw/internal/mcp"
 	"csgclaw/internal/mcpschema"
 	"csgclaw/internal/resourcequery"
@@ -15,7 +16,8 @@ import (
 )
 
 type batchAddAgentMCPServersRequest struct {
-	Names []string `json:"names"`
+	Names   []string `json:"names"`
+	Enabled *bool    `json:"enabled,omitempty"`
 }
 
 type batchDeleteAgentMCPServersRequest struct {
@@ -48,11 +50,24 @@ func (h *Handler) handleAgentMCPServersByID(w http.ResponseWriter, r *http.Reque
 	}
 	w.Header().Set("ETag", strconv.Quote(current.ResourceVersion))
 	if query != nil {
+		kind := r.URL.Query().Get("kind")
+		if kind != "" && kind != "mcp" && kind != "knowledge" {
+			writeResourceQueryError(w, resourcequery.ErrInvalid)
+			return
+		}
 		entries := make([]resourcequery.Entry, 0, len(current.Spec.MCPServers))
 		for name, config := range current.Spec.MCPServers {
+			_, isKnowledge := knowledgebase.ManagedMetadataFromServer(map[string]any(config))
+			if kind != "" && (kind == "knowledge") != isKnowledge {
+				continue
+			}
 			entries = append(entries, resourcequery.Entry{Name: name, Enabled: config["enabled"] != false})
 		}
-		names, meta, err := resourcequery.Select(entries, *query, id)
+		scope := id
+		if kind != "" {
+			scope += ":" + kind
+		}
+		names, meta, err := resourcequery.Select(entries, *query, scope)
 		if err != nil {
 			writeResourceQueryError(w, err)
 			return
@@ -136,6 +151,9 @@ func (h *Handler) handleBatchAddAgentMCPServers(w http.ResponseWriter, r *http.R
 			if normalizeErr != nil {
 				err = normalizeErr
 				break
+			}
+			if req.Enabled != nil {
+				server["enabled"] = *req.Enabled
 			}
 			current.Spec.MCPServers[name] = server
 		}

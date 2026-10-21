@@ -1,4 +1,4 @@
-import { forwardRef, useEffect, useState } from "react";
+import { forwardRef, useEffect, useRef, useState } from "react";
 import {
   Button,
   DialogCloseButton,
@@ -16,22 +16,45 @@ import { NotificationParticipantDetailPane } from "../NotificationParticipantDet
 
 export const AgentView = forwardRef<AgentDetailPaneHandle, AgentDetailPaneProps>(function AgentView(props, ref) {
   const [deletePendingAgent, setDeletePendingAgent] = useState<AgentLike | null>(null);
+  const [deleteBlock, setDeleteBlock] = useState<{ message: string; onResolve?: () => void } | null>(null);
+  const [deleteChecking, setDeleteChecking] = useState(false);
+  const deleteRequest = useRef(0);
   const deleteConfirmMessage = deletePendingAgent ? agentDeleteConfirmationMessage(deletePendingAgent, props.t) : "";
 
   useEffect(() => {
     setDeletePendingAgent(null);
+    deleteRequest.current += 1;
+    setDeleteBlock(null);
+    setDeleteChecking(false);
   }, [props.item?.id]);
 
-  function requestDelete(item: AgentLike) {
+  function closeDelete() {
+    deleteRequest.current += 1;
+    setDeletePendingAgent(null);
+  }
+
+  async function requestDelete(item: AgentLike) {
+    const request = ++deleteRequest.current;
     setDeletePendingAgent(item);
+    setDeleteBlock(null);
+    setDeleteChecking(Boolean(props.onCheckDelete));
+    if (!props.onCheckDelete) return;
+    try {
+      const block = await props.onCheckDelete(item);
+      if (request === deleteRequest.current) setDeleteBlock(block);
+    } catch {
+      if (request === deleteRequest.current) setDeleteBlock({ message: props.t("agentDeleteCheckFailed") });
+    } finally {
+      if (request === deleteRequest.current) setDeleteChecking(false);
+    }
   }
 
   async function confirmDelete() {
     const item = deletePendingAgent;
-    if (!item) {
+    if (!item || deleteChecking || deleteBlock) {
       return;
     }
-    setDeletePendingAgent(null);
+    closeDelete();
     await Promise.resolve(props.onDelete(item));
   }
 
@@ -51,7 +74,7 @@ export const AgentView = forwardRef<AgentDetailPaneHandle, AgentDetailPaneProps>
         open={Boolean(deletePendingAgent)}
         onOpenChange={(open) => {
           if (!open) {
-            setDeletePendingAgent(null);
+            closeDelete();
           }
         }}
       >
@@ -62,23 +85,42 @@ export const AgentView = forwardRef<AgentDetailPaneHandle, AgentDetailPaneProps>
         >
           <DialogHeader className="agent-delete-header">
             <div className="agent-delete-copy">
-              <DialogTitle>{props.t("agentDelete")}</DialogTitle>
-              <DialogDescription className="agent-delete-description">{deleteConfirmMessage}</DialogDescription>
+              <DialogTitle>{props.t(deleteBlock ? "agentDeleteBlockedTitle" : "agentDelete")}</DialogTitle>
+              <DialogDescription className="agent-delete-description">
+                {deleteChecking ? props.t("agentDeleteChecking") : deleteBlock?.message || deleteConfirmMessage}
+              </DialogDescription>
             </div>
             <DialogCloseButton label={props.t("close")} size="sm" variant="tertiaryGray" />
           </DialogHeader>
           <div className="agent-delete-actions">
-            <Button
-              className="agent-delete-button"
-              variant="secondaryGray"
-              size="sm"
-              onClick={() => setDeletePendingAgent(null)}
-            >
+            <Button className="agent-delete-button" variant="secondaryGray" size="sm" onClick={closeDelete}>
               {props.t("cancel")}
             </Button>
-            <Button className="agent-delete-button" variant="danger" size="sm" onClick={confirmDelete}>
-              {props.t("agentDelete")}
-            </Button>
+            {deleteBlock ? (
+              deleteBlock.onResolve && (
+                <Button
+                  className="agent-delete-button"
+                  variant="primary"
+                  size="sm"
+                  onClick={() => {
+                    closeDelete();
+                    deleteBlock.onResolve?.();
+                  }}
+                >
+                  {props.t("agentDeleteResolve")}
+                </Button>
+              )
+            ) : (
+              <Button
+                className="agent-delete-button"
+                variant="danger"
+                size="sm"
+                disabled={deleteChecking}
+                onClick={confirmDelete}
+              >
+                {props.t("agentDelete")}
+              </Button>
+            )}
           </div>
         </DialogContent>
       </DialogRoot>

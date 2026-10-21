@@ -12,6 +12,8 @@ With `pagination=page`, parameters are `page` (default 1), `per` (default 20, ma
 
 With `pagination=cursor`, parameters are `limit` (default 20, maximum 100), optional `cursor`, `search`, `enabled`, and repeated `exclude`. Responses contain `items`, `total`, `list_revision`, `next_cursor` when more results exist, and `has_more`. Page and cursor parameters cannot be mixed. Invalid requests return `invalid_resource_query` with HTTP 400.
 
+Paginated MCP requests also accept `kind=mcp` or `kind=knowledge`. The handler uses managed knowledge-base metadata to filter before pagination, so each Profile tab has its own total and cursor scope. Omitting `kind` includes all MCP definitions. Complete membership requests remain shared across both categories.
+
 Filtering precedes deterministic ascending resource-name ordering and selection. Search uses case-insensitive name subsequence matching. The revision identifies the matching resource membership and query scope, independently of descriptions and MCP configuration contents. A mismatched revision or cursor returns `resource_list_changed` with HTTP 409. Both Profile and chat restart the cursor sequence. Descriptions and configuration always reflect the current query, rather than a historical snapshot.
 
 `internal/resourcequery` owns filtering, ordering, range selection, and cursor validation. HTTP handlers own query parsing and response envelopes. Skill queries go through Agent Engine and WorkspaceService; the local skill reader enumerates valid membership before reading metadata only for selected entries. Directory enumeration remains proportional to the total number of skills. MCP configuration remains a complete stored map; pagination bounds its response and source status requests for loaded entries.

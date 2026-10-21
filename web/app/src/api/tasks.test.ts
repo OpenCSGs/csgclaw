@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Mock } from "vitest";
-import { createTeamRequest, deleteTeamRequest, updateTeamRequest } from "@/api/tasks";
+import { createTeamRequest, deleteTeamRequest, updateTeamRequest } from "./tasks";
 
 function mockFetch(): Mock<typeof fetch> {
   const fetchMock = vi.fn<typeof fetch>(
@@ -76,6 +76,16 @@ describe("tasks API", () => {
       member_agent_ids: ["u-worker", "u-qa"],
       description: "",
     });
+  });
+
+  it("sends descriptions on creation and distinguishes omitted from cleared descriptions on update", async () => {
+    const fetchMock = mockFetch();
+    await createTeamRequest({ title: "QA", description: "Regression testing" });
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toMatchObject({ description: "Regression testing" });
+    await updateTeamRequest("team-1", { title: "QA team" });
+    expect(JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body))).not.toHaveProperty("description");
+    await updateTeamRequest("team-1", { description: "" });
+    expect(JSON.parse(String(fetchMock.mock.calls[2]?.[1]?.body))).toEqual({ description: "" });
   });
 
   it("deletes teams by team id", async () => {

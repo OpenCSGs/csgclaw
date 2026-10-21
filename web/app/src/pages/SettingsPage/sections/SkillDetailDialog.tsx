@@ -15,7 +15,7 @@ import {
 } from "@/components/ui";
 import { useWorkspaceControllerContext } from "@/hooks/workspace";
 import { isReadonlySkill } from "@/models/skillhub";
-import { SkillDetailFiles } from "./SkillDetailFiles";
+import { SkillDetailFiles } from "@/components/business/SkillDetailFiles";
 import styles from "./SkillDetailDialog.module.css";
 import pageStyles from "../SettingsPage.module.css";
 import type { SkillSummary } from "@/models/skillhub";
@@ -117,7 +117,8 @@ export function SkillDetailDialog({
               <DialogBody className={styles.body}>
                 <SkillDetailFiles
                   key={JSON.stringify([variant, skill.name, skill.remotePath, skill.remoteRef])}
-                  target={{ skill, variant }}
+                  skill={skill}
+                  market={variant === "market"}
                   t={t}
                 />
               </DialogBody>

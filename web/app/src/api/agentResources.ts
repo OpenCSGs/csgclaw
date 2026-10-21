@@ -26,9 +26,10 @@ export async function fetchAgentMCPBatch(
   agentID: string,
   cursor: string,
   signal?: AbortSignal,
+  kind?: "mcp" | "knowledge",
 ): Promise<ResourceBatch<MCPServer>> {
   const result = await get<ResourceBatch<{ name: string; config: JSONRecord }>>(
-    batchPath(agentID, "mcp-servers", cursor),
+    `${batchPath(agentID, "mcp-servers", cursor)}${kind ? `&kind=${kind}` : ""}`,
     { signal },
   );
   return {

@@ -1,0 +1,41 @@
+.status {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: 6px;
+  height: 24px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--panel);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+}
+.status::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.status[data-status="enabled"] {
+  color: var(--success-700);
+}
+.status[data-status="error"] {
+  color: var(--error-700);
+}
+.status[data-status="pending"] {
+  color: var(--warning-700);
+}
+:global(:root[data-theme="dark"]) .status[data-status="enabled"] {
+  color: var(--success-300);
+}
+:global(:root[data-theme="dark"]) .status[data-status="error"] {
+  color: var(--error-300);
+}
+:global(:root[data-theme="dark"]) .status[data-status="pending"] {
+  color: var(--warning-300);
+}

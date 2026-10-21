@@ -196,7 +196,7 @@ export function TeamDetailPane({
             onClick={() => onManageMembers(team)}
           >
             <UserPlus size={16} aria-hidden="true" />
-            {t("teamManageMembers")}
+            {t("teamEdit")}
           </Button>
           <Button
             className={styles.teamDetailToolbarButton}

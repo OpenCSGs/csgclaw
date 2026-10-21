@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  createdMCPServerName,
   formatMCPServerDocument,
   hasMCPServerName,
   mcpServerDisplayName,
@@ -17,6 +18,67 @@ import {
 } from "@/models/mcp";
 
 describe("MCP catalog helpers", () => {
+  it.each(["local-tools", "Team tools", "团队工具"])("resolves the created key for display name %s", (name) => {
+    expect(
+      createdMCPServerName(
+        {
+          mcpServers: {
+            [name]: { display_name: "Renamed server", command: "old" },
+            mcp_created: { display_name: name, command: "node" },
+          },
+        },
+        { name: ` ${name} `, config: { command: "node" } },
+      ),
+    ).toBe("mcp_created");
+  });
+
+  it.each([
+    ["kb-1", "wiki-1", "mcp_knowledge"],
+    ["kb-2", "wiki-1", ""],
+    ["kb-1", "wiki-2", ""],
+  ])("resolves created knowledge identity %s/%s", (resourceID, contentID, expected) => {
+    const config = {
+      _meta: {
+        "com.opencsg/mcp": {
+          type: "llm_wiki",
+          resource_id: "kb-1",
+          content_id: "wiki-1",
+          auth_type: "csghub_access_token",
+        },
+      },
+    };
+    expect(
+      createdMCPServerName(
+        {
+          mcpServers: {
+            Engineering: { command: "old" },
+            mcp_knowledge: {
+              ...config,
+              display_name: "Knowledge",
+              _meta: {
+                "com.opencsg/mcp": {
+                  ...config._meta["com.opencsg/mcp"],
+                  resource_id: resourceID,
+                  content_id: contentID,
+                },
+              },
+            },
+          },
+        },
+        { name: "Engineering", config },
+      ),
+    ).toBe(expected);
+  });
+
+  it.each([
+    null,
+    {},
+    { mcpServers: { tools: { display_name: "Renamed", command: "old" } } },
+    { mcpServers: { first: { display_name: "tools" }, second: { display_name: "tools" } } },
+  ])("rejects missing or ambiguous created MCP identities", (response) => {
+    expect(createdMCPServerName(response, { name: "tools", config: { command: "node" } })).toBe("");
+  });
+
   it("splits state mcpServers into individual sorted server entries", () => {
     expect(
       mcpServersFromCatalogResponse({

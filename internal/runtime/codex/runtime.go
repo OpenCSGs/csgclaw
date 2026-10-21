@@ -74,6 +74,7 @@ type AgentRef struct {
 }
 
 type SessionSpec struct {
+	PreserveSkills                 bool
 	MCPCatalogRevision             uint64
 	RuntimeID                      string
 	AgentID                        string
@@ -98,6 +99,7 @@ type SessionHandle struct {
 }
 
 type Session struct {
+	PreserveSkills                 bool
 	ExtensionDigests               map[string]string
 	RuntimeID                      string
 	AgentID                        string
@@ -428,6 +430,7 @@ func (r *Runtime) New(ctx context.Context, spec agentruntime.Spec) (agentruntime
 		return agentruntime.Handle{}, fmt.Errorf("read persisted codex conversations: %w", readErr)
 	}
 	session, err := r.ensureSession(ctx, SessionSpec{
+		PreserveSkills:              spec.PreserveSkills,
 		RuntimeID:                   strings.TrimSpace(spec.RuntimeID),
 		AgentID:                     strings.TrimSpace(spec.AgentID),
 		AgentName:                   strings.TrimSpace(spec.AgentName),
@@ -776,6 +779,11 @@ func (r *Runtime) ensureSession(ctx context.Context, spec SessionSpec, copyHostS
 	if strings.TrimSpace(spec.AgentName) == "" || strings.TrimSpace(spec.AgentID) == "" {
 		return nil, fmt.Errorf("agent name and id are required")
 	}
+	if meta, err := r.readRuntimeMetadata(runtimeID); err == nil {
+		spec.PreserveSkills = spec.PreserveSkills || meta.PreserveSkills
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return nil, err
+	}
 	spec.AgentID = canonicalRuntimeAgentID(spec.AgentID)
 	spec.Profile = spec.Profile.Normalized()
 	spec.ConversationProfileFingerprint = conversationProfileFingerprint(spec.Profile.Provider, spec.Profile.BaseURL, spec.Profile.ModelID)
@@ -827,7 +835,7 @@ func (r *Runtime) ensureSession(ctx context.Context, spec SessionSpec, copyHostS
 	if err := r.seedCodexHomeConfig(spec.CodexHomeDir, spec.WorkspaceDir, spec.Profile, agentRef.RuntimeOptions, spec.MCPServers); err != nil {
 		return nil, err
 	}
-	if copyHostSkills || (spec.ExecutionMode == ExecutionModeReadOnly && r.deps.ResolveRoomProfile == nil) {
+	if !spec.PreserveSkills && (copyHostSkills || (spec.ExecutionMode == ExecutionModeReadOnly && r.deps.ResolveRoomProfile == nil)) {
 		if err := r.seedCodexHomeSkillsForExecutionMode(spec.CodexHomeDir, spec.ExecutionMode); err != nil {
 			return nil, err
 		}
@@ -862,6 +870,7 @@ func (r *Runtime) ensureSession(ctx context.Context, spec SessionSpec, copyHostS
 	if err != nil {
 		return nil, err
 	}
+	session.PreserveSkills = spec.PreserveSkills
 	session.ConversationProfileFingerprint = spec.ConversationProfileFingerprint
 	if err := writeJSONFile(r.writeFile, filepath.Join(spec.RuntimeDir, sessionFileName), sessionToSessionMetadata(session)); err != nil {
 		return nil, err
@@ -911,6 +920,7 @@ func (r *Runtime) hydratePersistedSession(ctx context.Context, manager *appServe
 		return nil, fmt.Errorf("resolve codex binary: %w", err)
 	}
 	spec := SessionSpec{
+		PreserveSkills:                 meta.PreserveSkills,
 		RuntimeID:                      runtimeID,
 		AgentID:                        agentID,
 		AgentName:                      firstNonEmpty(agentRef.Name, meta.AgentName),
@@ -954,7 +964,7 @@ func (r *Runtime) hydratePersistedSession(ctx context.Context, manager *appServe
 	if err := r.seedCodexHomeConfig(spec.CodexHomeDir, spec.WorkspaceDir, spec.Profile, agentRef.RuntimeOptions, spec.MCPServers); err != nil {
 		return nil, err
 	}
-	if spec.ExecutionMode == ExecutionModeReadOnly && r.deps.ResolveRoomProfile == nil {
+	if !spec.PreserveSkills && spec.ExecutionMode == ExecutionModeReadOnly && r.deps.ResolveRoomProfile == nil {
 		if err := r.seedCodexHomeSkillsForExecutionMode(spec.CodexHomeDir, spec.ExecutionMode); err != nil {
 			return nil, err
 		}
@@ -985,6 +995,7 @@ func (r *Runtime) hydratePersistedSession(ctx context.Context, manager *appServe
 	if !meta.CreatedAt.IsZero() {
 		session.CreatedAt = meta.CreatedAt.UTC()
 	}
+	session.PreserveSkills = spec.PreserveSkills
 	if err := r.writeSessionMetadata(sessionToSessionMetadata(session)); err != nil {
 		return nil, err
 	}
@@ -2017,17 +2028,18 @@ type runtimeDirs struct {
 }
 
 type runtimeMetadata struct {
-	RuntimeID  string             `json:"runtime_id"`
-	AgentID    string             `json:"agent_id"`
-	AgentName  string             `json:"agent_name"`
-	BinaryPath string             `json:"binary_path"`
-	SessionID  string             `json:"session_id,omitempty"`
-	ProcessID  int                `json:"pid,omitempty"`
-	State      agentruntime.State `json:"state,omitempty"`
-	CreatedAt  time.Time          `json:"created_at,omitempty"`
-	StartedAt  time.Time          `json:"started_at,omitempty"`
-	StoppedAt  time.Time          `json:"stopped_at,omitempty"`
-	ExitCode   int                `json:"exit_code,omitempty"`
+	PreserveSkills bool               `json:"preserve_skills,omitempty"`
+	RuntimeID      string             `json:"runtime_id"`
+	AgentID        string             `json:"agent_id"`
+	AgentName      string             `json:"agent_name"`
+	BinaryPath     string             `json:"binary_path"`
+	SessionID      string             `json:"session_id,omitempty"`
+	ProcessID      int                `json:"pid,omitempty"`
+	State          agentruntime.State `json:"state,omitempty"`
+	CreatedAt      time.Time          `json:"created_at,omitempty"`
+	StartedAt      time.Time          `json:"started_at,omitempty"`
+	StoppedAt      time.Time          `json:"stopped_at,omitempty"`
+	ExitCode       int                `json:"exit_code,omitempty"`
 }
 
 // Increment whenever the engine-facing dynamic tool set or schema changes.
@@ -2050,15 +2062,16 @@ type sessionMetadata struct {
 
 func sessionToRuntimeMetadata(session *Session) runtimeMetadata {
 	return normalizeRuntimeMetadata(runtimeMetadata{
-		RuntimeID:  session.RuntimeID,
-		AgentID:    session.AgentID,
-		AgentName:  session.AgentName,
-		BinaryPath: session.BinaryPath,
-		SessionID:  session.SessionID,
-		ProcessID:  session.ProcessID,
-		State:      agentruntime.StateRunning,
-		CreatedAt:  session.CreatedAt,
-		StartedAt:  session.StartedAt,
+		PreserveSkills: session.PreserveSkills,
+		RuntimeID:      session.RuntimeID,
+		AgentID:        session.AgentID,
+		AgentName:      session.AgentName,
+		BinaryPath:     session.BinaryPath,
+		SessionID:      session.SessionID,
+		ProcessID:      session.ProcessID,
+		State:          agentruntime.StateRunning,
+		CreatedAt:      session.CreatedAt,
+		StartedAt:      session.StartedAt,
 	})
 }
 

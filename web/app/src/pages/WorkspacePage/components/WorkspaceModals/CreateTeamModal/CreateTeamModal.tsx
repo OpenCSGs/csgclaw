@@ -25,10 +25,10 @@ type CreateTeamModalProps = {
   candidates: AgentLike[];
   mode?: "create" | "edit";
   lockedTeamMemberIDs?: string[];
+  teamDescription: string;
+  onTeamDescriptionChange: (value: string) => void;
   teamTitle: string;
   onTeamTitleChange: (value: string) => void;
-  teamDescription?: string;
-  onTeamDescriptionChange?: (value: string) => void;
   teamMemberIDs: string[];
   onTeamMemberIDsChange: Dispatch<SetStateAction<string[]>>;
   submitError: string;
@@ -43,9 +43,9 @@ export function CreateTeamModal({
   mode = "create",
   lockedTeamMemberIDs = [],
   teamTitle,
-  onTeamTitleChange,
-  teamDescription = "",
+  teamDescription,
   onTeamDescriptionChange,
+  onTeamTitleChange,
   teamMemberIDs,
   onTeamMemberIDsChange,
   submitError,
@@ -78,8 +78,8 @@ export function CreateTeamModal({
       >
         <DialogHeader className={styles.header}>
           <div>
-            <DialogTitle>{editing ? t("teamManageMembers") : t("teamCreate")}</DialogTitle>
-            <DialogDescription>{editing ? t("teamManageMembersSubtitle") : t("teamMembersSubtitle")}</DialogDescription>
+            <DialogTitle>{editing ? t("teamEdit") : t("teamCreate")}</DialogTitle>
+            <DialogDescription>{editing ? t("teamEditSubtitle") : t("teamMembersSubtitle")}</DialogDescription>
           </div>
           <DialogCloseButton label={t("close")} variant="tertiaryGray" size="sm" disabled={teamActionBusy} />
         </DialogHeader>
@@ -94,17 +94,15 @@ export function CreateTeamModal({
             />
           </Field>
 
-          {!editing ? (
-            <Field label={t("teamDescriptionLabel")}>
-              <TextArea
-                value={teamDescription}
-                disabled={teamActionBusy}
-                onChange={(event) => onTeamDescriptionChange?.(event.currentTarget.value)}
-                placeholder={t("teamDescriptionPlaceholder")}
-                rows={3}
-              />
-            </Field>
-          ) : null}
+          <Field label={t("teamDescriptionLabel")}>
+            <TextArea
+              value={teamDescription}
+              disabled={teamActionBusy}
+              rows={3}
+              onChange={(event) => onTeamDescriptionChange(event.currentTarget.value)}
+              placeholder={t("teamDescriptionPlaceholder")}
+            />
+          </Field>
 
           <div className="field">
             <span>{t("teamMembersLabel")}</span>
@@ -177,7 +175,7 @@ export function CreateTeamModal({
             disabled={teamActionBusy || (!editing && teamMemberIDs.length === 0)}
             onClick={onCreate}
           >
-            {editing ? t("teamSaveMembers") : t("teamCreate")}
+            {editing ? t("save") : t("teamCreate")}
           </Button>
         </DialogFooter>
       </DialogContent>

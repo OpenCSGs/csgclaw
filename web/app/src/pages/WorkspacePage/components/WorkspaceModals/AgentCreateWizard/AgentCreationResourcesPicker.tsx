@@ -168,35 +168,39 @@ export function AgentCreationResourcesPicker({
                 </div>
               </div>
             ) : null}
-            <ul className={styles.resourceList}>
-              {items.map((item) => (
-                <li key={item.key}>
-                  <label
-                    className={`${styles.resourceRow} ${step === 2 ? styles.skillRow : ""} ${step === 3 || step === 4 ? styles.connectorRow : ""}`}
-                  >
-                    <Checkbox
-                      checked={group.selected.includes(item.key)}
-                      disabled={"disabled" in item && item.disabled === true}
-                      onCheckedChange={(checked) => group.toggle(item.key, checked === true)}
-                    />
-                    {"appID" in item && typeof item.appID === "string" ? (
-                      <span className={styles.resourceIcon} aria-hidden="true">
-                        <AppIcon appID={item.appID} />
+            <ul
+              className={`${styles.resourceList} ${items.length > 5 ? styles.scrollableResourceList : ""}`}
+              aria-label={group.label}
+              tabIndex={items.length > 5 ? 0 : undefined}
+            >
+              {items.map((item) => {
+                const description =
+                  "disabled" in item && item.disabled ? t("agentWizardResourceUnavailable") : item.description;
+                return (
+                  <li key={item.key}>
+                    <label
+                      className={`${styles.resourceRow} ${step === 2 ? styles.skillRow : ""} ${step === 3 || step === 4 ? styles.connectorRow : ""} ${"appID" in item ? styles.appRow : ""}`}
+                    >
+                      <span className={styles.resourceCheckbox}>
+                        <Checkbox
+                          checked={group.selected.includes(item.key)}
+                          disabled={"disabled" in item && item.disabled === true}
+                          onCheckedChange={(checked) => group.toggle(item.key, checked === true)}
+                        />
                       </span>
-                    ) : null}
-                    <span>
-                      <strong>{item.name}</strong>
-                      <ResourceDescription
-                        text={
-                          ("disabled" in item && item.disabled
-                            ? t("agentWizardResourceUnavailable")
-                            : item.description) || ""
-                        }
-                      />
-                    </span>
-                  </label>
-                </li>
-              ))}
+                      {"appID" in item && typeof item.appID === "string" ? (
+                        <span className={styles.resourceIcon} aria-hidden="true">
+                          <AppIcon appID={item.appID} />
+                        </span>
+                      ) : null}
+                      <span className={styles.resourceCopy}>
+                        <strong>{item.name}</strong>
+                        {description ? <ResourceDescription text={description} /> : null}
+                      </span>
+                    </label>
+                  </li>
+                );
+              })}
             </ul>
             {!items.length && !loading && !group.query.isError ? <p>{t("iaListSearchEmpty")}</p> : null}
           </section>

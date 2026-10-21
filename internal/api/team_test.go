@@ -1361,3 +1361,50 @@ func TestTeamRoutesPhase3bPOCScenario(t *testing.T) {
 		t.Fatalf("room history missing human summary message")
 	}
 }
+
+func TestTeamDescriptionLifecycle(t *testing.T) {
+	store, err := team.NewStore(filepath.Join(t.TempDir(), "state.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := &Handler{teamSvc: team.NewService(team.WithStore(store))}
+	request := func(method, path, body string, wantStatus int) apitypes.Team {
+		t.Helper()
+		rec := httptest.NewRecorder()
+		h.Routes().ServeHTTP(rec, httptest.NewRequest(method, path, strings.NewReader(body)))
+		if rec.Code != wantStatus {
+			t.Fatalf("%s %s: status %d, want %d: %s", method, path, rec.Code, wantStatus, rec.Body.String())
+		}
+		var result apitypes.Team
+		if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+			t.Fatal(err)
+		}
+		return result
+	}
+	created := request(http.MethodPost, "/api/v1/teams", `{"title":"QA","description":"  Regression testing  ","lead_agent_id":"u-manager"}`, http.StatusCreated)
+	path := "/api/v1/teams/" + created.ID
+	if created.Description != "Regression testing" {
+		t.Fatalf("created description = %q", created.Description)
+	}
+	h.teamSvc = team.NewService(team.WithStore(store))
+	if got := request(http.MethodGet, path, "", http.StatusOK); got.Description != created.Description {
+		t.Fatalf("reloaded description = %q", got.Description)
+	}
+	if got := request(http.MethodPatch, path, `{"title":"QA team"}`, http.StatusOK); got.Description != created.Description {
+		t.Fatalf("omitted description was changed: %q", got.Description)
+	}
+	if got := request(http.MethodPatch, path, `{"description":"  Release verification  "}`, http.StatusOK); got.Description != "Release verification" {
+		t.Fatalf("updated description = %q", got.Description)
+	}
+	h.teamSvc = team.NewService(team.WithStore(store))
+	if got := request(http.MethodGet, path, "", http.StatusOK); got.Description != "Release verification" {
+		t.Fatalf("persisted description = %q", got.Description)
+	}
+	if got := request(http.MethodPatch, path, `{"description":""}`, http.StatusOK); got.Description != "" {
+		t.Fatalf("cleared description = %q", got.Description)
+	}
+	h.teamSvc = team.NewService(team.WithStore(store))
+	if got := request(http.MethodGet, path, "", http.StatusOK); got.Description != "" {
+		t.Fatalf("cleared description after reload = %q", got.Description)
+	}
+}

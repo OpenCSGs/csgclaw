@@ -3,18 +3,19 @@ import { useQueryClient } from "@tanstack/react-query";
 import { createRoomRequest, deleteRoomRequest } from "@/api/im";
 import type { CreateRoomPayload } from "@/api/im";
 import { updateConversationMetadata, type ConversationMetadataPatch } from "@/api/taskConversations";
-import type { IMConversation } from "@/models/conversations";
+import type { IMConversation, IMMessage } from "@/models/conversations";
 
 type Args = {
   currentUserID: string;
   rooms: readonly IMConversation[];
   onUpdate: (room: IMConversation) => void;
+  onMessage: (roomID: string, message: IMMessage) => void;
   onDelete: (id: string) => void;
   onOpen: (room: IMConversation) => void;
   isWorking: (id: string) => boolean;
 };
 
-export function useTaskEntry({ currentUserID, rooms, onUpdate, onDelete, onOpen, isWorking }: Args) {
+export function useTaskEntry({ currentUserID, rooms, onUpdate, onMessage, onDelete, onOpen, isWorking }: Args) {
   const client = useQueryClient();
   const [busyID, setBusyID] = useState("");
   const refreshTimer = useRef<number | null>(null);
@@ -57,7 +58,7 @@ export function useTaskEntry({ currentUserID, rooms, onUpdate, onDelete, onOpen,
       setBusyID("");
     }
   }
-  return { create, patch, remove, open: onOpen, isWorking, busyID };
+  return { create, patch, remove, onMessage, open: onOpen, isWorking, busyID };
 }
 
 export type TaskEntryController = ReturnType<typeof useTaskEntry>;

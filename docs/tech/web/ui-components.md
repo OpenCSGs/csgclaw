@@ -100,7 +100,7 @@ Provider metadata, authentication guards, model discovery and retained unavailab
 
 TextInput and TextArea own their local, data-marked styles. Legacy input and workspace selectors exclude all `data-csg-control` elements. Compound native forms remain in `shared/styles/inputs.css` during the scoped migration; the managed Field has local label/hint/error styles. Use `size="sm"` for compact text inputs and `variant="plain"` when a composed search container owns the border/background. Avoid overrides with `!important`.
 
-PanelHeader composes content and an optional actions slot, EmptyState displays a title/description/actions, and SegmentedControl provides a named single-choice group with keyboard navigation. Business copy and persistence remain with callers.
+PanelHeader composes content and an optional actions slot, EmptyState displays a title/description/actions, and SegmentedControl provides a named single-choice group with keyboard navigation. SegmentedControl supports `default`, `text`, and `underline` presentations. DialogDescription supports `sm` and `md` text sizes. Business copy and persistence remain with callers.
 Use `size="sm"` for compact segmented controls in toolbars or preview headers.
 Use `variant="text"` when a compact switch should have no surrounding border or selected fill; its selected text uses the accent color.
 

@@ -1,0 +1,106 @@
+.dialog {
+  width: min(640px, calc(100vw - 40px));
+  max-height: calc(100dvh - 40px);
+}
+.headerCopy {
+  display: grid;
+  gap: 4px;
+  max-width: 440px;
+}
+.close {
+  display: flex;
+  justify-content: center;
+  flex: 0 0 64px;
+}
+.body {
+  display: grid;
+  gap: 12px;
+  padding: 20px 22px;
+  min-height: 0;
+}
+.list {
+  display: grid;
+  gap: 10px;
+  max-height: 420px;
+  overflow: auto;
+  padding-right: 4px;
+}
+.row {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+}
+.row > :first-child {
+  justify-self: center;
+  margin-top: 3px;
+}
+.copy {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  font: inherit;
+}
+button.copy {
+  cursor: pointer;
+}
+button.copy:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+.copy > strong {
+  color: var(--gray-700);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 22px;
+}
+.copy > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--gray-600);
+  font-size: 14px;
+  font-weight: 300;
+  line-height: 22px;
+}
+:global(:root[data-theme="dark"]) .copy > strong {
+  color: var(--gray-100);
+}
+:global(:root[data-theme="dark"]) .copy > span {
+  color: var(--gray-300);
+}
+.footer {
+  gap: 8px;
+  padding: 16px 22px 22px;
+}
+.links {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 14px;
+}
+.links {
+  padding: 6px 0 10px;
+}
+@media (max-width: 600px) {
+  .row {
+    grid-template-columns: 24px minmax(0, 1fr);
+  }
+  .row > :last-child:not(.copy) {
+    grid-column: 2;
+    justify-self: start;
+  }
+  .copy > span {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+}

@@ -113,7 +113,9 @@ export function AgentCreateWizard({
                     <span className={styles.stepLabel} title={item.label}>
                       {item.label}
                     </span>
-                    <small className={index === 0 && !valid ? styles.requiredHint : undefined}>
+                    <small
+                      className={index === 0 && !valid ? styles.required : item.count ? styles.selected : undefined}
+                    >
                       {index === 0
                         ? valid
                           ? ""

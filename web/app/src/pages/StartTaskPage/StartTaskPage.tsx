@@ -67,7 +67,7 @@ function StartTaskForm({
   const [resources, setResources] = useState<ResourceSnapshot[]>([]);
   const [examplesHidden, setExamplesHidden] = useState(() => {
     try {
-      return localStorage.getItem(TASK_EXAMPLES_HIDDEN_STORAGE_KEY) === "true";
+      return sessionStorage.getItem(TASK_EXAMPLES_HIDDEN_STORAGE_KEY) === "true";
     } catch {
       return false;
     }
@@ -175,7 +175,7 @@ function StartTaskForm({
           files.map((file) => [file.name, file.size, file.lastModified]),
         ]);
         if (sendID.current.fingerprint !== fingerprint) sendID.current = { fingerprint, id: crypto.randomUUID() };
-        await sendMessageRequest({
+        const message = await sendMessageRequest({
           room_id: room.id,
           sender_id: readySidebar.currentUserID,
           content: input.content,
@@ -184,6 +184,7 @@ function StartTaskForm({
           client_message_id: sendID.current.id,
           locale: readySidebar.locale,
         });
+        entry.onMessage(room.id, message);
       }
       entry.open(room);
     } catch (cause) {
@@ -402,7 +403,7 @@ function StartTaskForm({
               onClick={() => {
                 setExamplesHidden(true);
                 try {
-                  localStorage.setItem(TASK_EXAMPLES_HIDDEN_STORAGE_KEY, "true");
+                  sessionStorage.setItem(TASK_EXAMPLES_HIDDEN_STORAGE_KEY, "true");
                 } catch {
                   /* Storage may be unavailable. */
                 }

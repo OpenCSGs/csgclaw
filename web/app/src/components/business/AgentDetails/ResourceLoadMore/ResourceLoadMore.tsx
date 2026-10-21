@@ -4,7 +4,15 @@ import type { TranslateFn } from "@/models/conversations";
 import type { ResourceContinuation } from "@/hooks/workspace/useInfiniteAgentResources";
 import styles from "./ResourceLoadMore.module.css";
 
-export function ResourceLoadMore({ continuation, t }: { continuation?: ResourceContinuation; t: TranslateFn }) {
+export function ResourceLoadMore({
+  continuation,
+  showSummary = true,
+  t,
+}: {
+  continuation?: ResourceContinuation;
+  showSummary?: boolean;
+  t: TranslateFn;
+}) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const element = ref.current;
@@ -26,6 +34,13 @@ export function ResourceLoadMore({ continuation, t }: { continuation?: ResourceC
     return () => observer.disconnect();
   }, [continuation]);
   if (!continuation) return null;
+  if (!showSummary && !continuation.loading && !continuation.failed && !continuation.hasMore) {
+    return (
+      <span className="sr-only" role="status">
+        {t("resourceAllLoaded", { total: continuation.total })}
+      </span>
+    );
+  }
   return (
     <div ref={ref} className={styles.root} aria-live="polite">
       {continuation.loading ? (

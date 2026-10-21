@@ -8,7 +8,6 @@ import type { MessageAction, MessageActionFeedback, MessageLike } from "@/compon
 import type { AgentLike, AgentProfileLike, RuntimeBootstrapConfig } from "@/models/agents";
 import type { IMConversation, IMData, IMUser, LocaleCode, TranslateFn, UsersById } from "@/models/conversations";
 import type { HubTemplate } from "@/models/hubWorkspace";
-import type { MCPServer } from "@/models/mcp";
 import type { ModelProviderCatalog } from "@/models/modelProviders";
 import type { CollapsedWorkspaceGroups, WorkspacePane, WorkspaceTab } from "@/models/routing";
 import type { SkillSummary } from "@/models/skillhub";
@@ -254,6 +253,7 @@ export type UseConversationControllerArgs = {
 };
 
 export type UseAgentControllerArgs = {
+  workingParticipantsForRoom?: ParticipantWorkStatus["workingParticipantsForRoom"];
   activeConversationId: string;
   activePane: WorkspacePane;
   agents: AgentLike[];
@@ -261,9 +261,6 @@ export type UseAgentControllerArgs = {
   agentsQuery: UseQueryResult<AgentLike[]>;
   bootstrapConfig: RuntimeBootstrapConfig | null;
   data: IMData | null;
-  catalogMCPServers?: MCPServer[];
-  catalogMCPServersError?: string;
-  catalogMCPServersLoading?: boolean;
   hubTemplates: HubTemplate[];
   locale: LocaleCode;
   managerProfile: AgentProfileLike | null;
@@ -275,7 +272,6 @@ export type UseAgentControllerArgs = {
   onTemplatePublished?: (template: HubTemplate) => void;
   profileDetailAgentID?: string;
   redirectToIncompleteManagerProfile?: boolean;
-  refreshMCPServers?: () => Promise<unknown>;
   refreshHubTemplates: () => Promise<void>;
   refreshWorkspaceAgents: (options?: FetchAgentsOptions) => Promise<AgentLike[]>;
   refreshWorkspaceBootstrap: () => Promise<IMData | null>;

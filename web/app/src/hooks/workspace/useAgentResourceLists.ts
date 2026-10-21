@@ -9,9 +9,14 @@ export function useAgentResourceLists(agentID: string) {
     Boolean(agentID),
   );
   const mcp = useInfiniteAgentResources(
-    [...workspaceQueryKeys.agentMCPServers(agentID), "cursor", "profile"],
-    (cursor, signal) => fetchAgentMCPBatch(agentID, cursor, signal),
+    [...workspaceQueryKeys.agentMCPServers(agentID), "cursor", "profile", "mcp"],
+    (cursor, signal) => fetchAgentMCPBatch(agentID, cursor, signal, "mcp"),
     Boolean(agentID),
   );
-  return { skills, mcp };
+  const knowledge = useInfiniteAgentResources(
+    [...workspaceQueryKeys.agentMCPServers(agentID), "cursor", "profile", "knowledge"],
+    (cursor, signal) => fetchAgentMCPBatch(agentID, cursor, signal, "knowledge"),
+    Boolean(agentID),
+  );
+  return { skills, mcp, knowledge };
 }

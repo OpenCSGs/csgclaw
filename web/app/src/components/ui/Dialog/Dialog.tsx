@@ -144,13 +144,16 @@ export const DialogTitle = forwardRef<ComponentRef<typeof RadixDialog.Title>, Di
   );
 });
 
-export type DialogDescriptionProps = ComponentPropsWithoutRef<typeof RadixDialog.Description>;
+export type DialogDescriptionProps = ComponentPropsWithoutRef<typeof RadixDialog.Description> & {
+  size?: "sm" | "md";
+};
 
 export const DialogDescription = forwardRef<ComponentRef<typeof RadixDialog.Description>, DialogDescriptionProps>(
-  function DialogDescription({ className, ...props }, ref) {
+  function DialogDescription({ className, size = "sm", ...props }, ref) {
     return (
       <RadixDialog.Description
         ref={ref}
+        data-size={size}
         className={classNames(classNames(styles["csg-dialog-description"], "csg-dialog-description"), className)}
         {...props}
       />

@@ -56,14 +56,7 @@ export function MessageTokenUsage({ t, usage }: MessageTokenUsageProps) {
   return (
     <div ref={usageRef} className={styles.usage}>
       <Tooltip content={tooltip} contentProps={{ className: styles.tooltip, side: "top", sideOffset: 6 }}>
-        <Button
-          variant="linkGray"
-          size="sm"
-          type="button"
-          className={styles.trigger}
-          aria-label={details}
-          title={counters || details}
-        >
+        <Button variant="linkGray" size="sm" type="button" className={styles.trigger} aria-label={details}>
           {compact ? <Info aria-hidden="true" size={16} /> : <span>{details}</span>}
         </Button>
       </Tooltip>

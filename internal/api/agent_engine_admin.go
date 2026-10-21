@@ -26,6 +26,7 @@ func engineSpecFromCreate(spec agent.CreateAgentSpec) agentengine.AgentSpec {
 		Name:         spec.Name,
 		Description:  spec.Description,
 		Instructions: spec.Instructions,
+		Skills:       slices.Clone(spec.Skills),
 		Role:         engineRole(spec.Role),
 		Runtime: agentengine.RuntimeSpec{
 			Adapter:     runtimeConfig.Name,

@@ -428,6 +428,42 @@ describe("AgentDetailPane memory", () => {
 });
 
 describe("AgentDetailPane MCP snapshots", () => {
+  it("opens knowledge deep links and keeps knowledge separate from tool connectors", async () => {
+    const user = userEvent.setup();
+    const knowledge = {
+      name: "engineering",
+      config: {
+        url: "https://example.test/wiki",
+        _meta: {
+          "com.opencsg/mcp": {
+            type: "llm_wiki",
+            resource_id: "kb-1",
+            content_id: "wiki-1",
+            auth_type: "csghub_access_token",
+          },
+        },
+      },
+    };
+    const tool = { name: "filesystem", config: { command: "node" } };
+    const onSetResourceEnabled = vi.fn().mockResolvedValue(undefined);
+    const { rerender } = render(
+      <Harness
+        requestedProfileTab="knowledge"
+        mcpServers={[tool]}
+        knowledgeServers={[knowledge]}
+        onSetResourceEnabled={onSetResourceEnabled}
+      />,
+    );
+    expect(screen.getByRole("switch", { name: "engineering" })).toBeVisible();
+    expect(screen.queryByText("filesystem")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("switch", { name: "engineering" }));
+    expect(onSetResourceEnabled).toHaveBeenCalledWith("mcp", "engineering", false);
+    rerender(<Harness requestedProfileTab="connectors" mcpServers={[tool]} knowledgeServers={[knowledge]} />);
+    expect(screen.getByRole("switch", { name: "filesystem" })).toBeVisible();
+    expect(screen.queryByText("engineering")).not.toBeInTheDocument();
+    rerender(<Harness requestedProfileTab="connectors" mcpServers={[knowledge]} knowledgeServers={[]} />);
+    expect(screen.getByRole("switch", { name: "engineering" })).toBeVisible();
+  });
   it.each([
     { runtimeKind: "dsh", sandbox: false, supported: true },
     { runtimeKind: "openclaw_sandbox", sandbox: true, supported: false },
@@ -517,8 +553,7 @@ describe("AgentDetailPane MCP snapshots", () => {
       />,
     );
 
-    await user.click(screen.getByRole("button", { name: "agentAppsTab" }));
-    expect(screen.getByText("agentKnowledgeMCPBadge")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /profileKnowledgeTitle/ }));
     expect(screen.getByText("agentKnowledgeMCPUpdateAvailable")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "agentMCPUpdateConfig" }));
@@ -555,7 +590,7 @@ describe("AgentDetailPane MCP snapshots", () => {
       { wrapper: createQueryWrapper().wrapper },
     );
 
-    await user.click(screen.getByRole("button", { name: "agentAppsTab" }));
+    await user.click(screen.getByRole("button", { name: /profileKnowledgeTitle/ }));
     expect(screen.getByText("agentKnowledgeMCPSourceDeleted")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "agentMCPUpdateConfig" })).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: new RegExp(mcpServer.description) }));
@@ -583,7 +618,7 @@ describe("AgentDetailPane MCP snapshots", () => {
     };
     render(<Harness workspaceSupported mcpServers={[mcpServer]} />, { wrapper: createQueryWrapper().wrapper });
 
-    await user.click(screen.getByRole("button", { name: "agentAppsTab" }));
+    await user.click(screen.getByRole("button", { name: /profileKnowledgeTitle/ }));
     expect(screen.queryByText("agentKnowledgeMCPSourceDeleted")).not.toBeInTheDocument();
     expect(screen.queryByText("agentKnowledgeMCPUpdateAvailable")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: new RegExp(mcpServer.description) }));

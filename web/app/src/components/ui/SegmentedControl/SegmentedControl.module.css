@@ -67,3 +67,39 @@
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+.csg-segmented-control[data-variant="underline"] {
+  display: flex;
+  gap: 12px;
+  padding: 0;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+  height: 32px;
+}
+.csg-segmented-control[data-variant="underline"] .csg-segmented-control-item {
+  position: relative;
+  min-height: 32px;
+  padding: 0 4px 10px;
+  margin-bottom: -1px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 22px;
+}
+.csg-segmented-control[data-variant="underline"] .csg-segmented-control-item[aria-checked="true"] {
+  color: var(--primary);
+}
+.csg-segmented-control[data-variant="underline"] .csg-segmented-control-item[aria-checked="true"]::after {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 1px;
+  background: var(--primary);
+  content: "";
+}

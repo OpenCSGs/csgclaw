@@ -2,6 +2,14 @@
 
 Profile 的 Skill 与 MCP 使用资源页面的 `ResourceListCard`：宽屏两列，每项横向排列图标、名称、说明与操作按钮；窄屏使用一列。点击内容打开详情弹框，点击启用或禁用按钮提交配置。Skill 详情按需读取完整目录和文件，MCP 详情隐藏凭据值。来源更新、删除确认和 App 设置沿用现有功能。
 
+## 添加资源
+
+- Skills 支持选择全局技能、上传 ZIP、搜索市场并安装启用，弹窗提供全局管理入口。
+- Connectors 分别提供 App 和 MCP 添加入口。App 使用现有全局资源绑定流程；MCP 支持全局资源、手动配置和市场安装。
+- Knowledge bases 使用独立页签，支持启用已连接的知识库，以及连接并启用有权限的 AgenticHub 知识库。知识库继续使用现有 MCP 配置和来源同步流程。
+
+`AgentResourcePicker` 与 `useAgentResourcePicker` 共用资源查询、安装和绑定流程，复用 `SkillUploadDialog`、`MCPServerCreateDialog` 及现有 API。全局安装成功后，将服务端返回的资源名称交给 Agent controller 添加；绑定失败时，弹窗保留安装结果，重试继续添加资源。MCP 添加请求通过 `enabled: true` 在同一次 Agent 更新中启用资源，全局资源状态保持原值。
+
 ## 数据与模块
 
 - `AgentSpec.SkillStates`、Agent 持久记录的 `skill_states` 保存每个已安装 Skill 的状态。未配置状态时默认启用。删除 Skill 同时移除状态，禁用保留文件。

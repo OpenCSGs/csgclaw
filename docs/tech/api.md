@@ -254,6 +254,7 @@ Notes:
 - `name` is required
 - The effective channel comes from the route path rather than the request body
 - `agent` participants can create or reuse an Agent through `agent_binding`
+- For Agent creation, non-empty `agent_binding.agent.instructions` takes precedence over template instructions. An explicit `skills` list replaces the template skill selection (`[]` selects none); omitting it retains template defaults.
 - `human` and `notification` participants do not create runtime agents
 - In the example above, `qa` is the participant ID; `u-qa` is used only as the local channel user ref and generated backing agent ID.
 - For `csgclaw`, `channel_user.ref` is a local IM user ID
@@ -530,6 +531,10 @@ this endpoint does not redact configured token values.
 Accepts `{ "names": ["..."] }` and merges the named server definitions from
 the MCP catalog into the agent's managed MCP servers. The response has the same
 shape as the `GET` endpoint.
+
+An optional `enabled` boolean sets the copied definitions' Agent enablement in
+the same update. Omitting it preserves each catalog definition's state. Profile
+passes `enabled: true` when adding resources; the global catalog is unchanged.
 
 #### `POST /api/v1/agents/{id}/mcp-servers:batchDelete`
 

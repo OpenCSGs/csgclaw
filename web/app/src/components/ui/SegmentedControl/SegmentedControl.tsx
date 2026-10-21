@@ -26,7 +26,7 @@ export function SegmentedControl<Value extends string>({
   label: string;
   className?: string;
   size?: "sm" | "md";
-  variant?: "default" | "text";
+  variant?: "default" | "text" | "underline";
 }) {
   return (
     <ToggleGroup.Root

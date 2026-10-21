@@ -13,6 +13,7 @@ import (
 	"encoding/base32"
 	"fmt"
 	"maps"
+	"slices"
 	"strings"
 	"time"
 	"unicode"
@@ -941,6 +942,7 @@ func participantEngineCreateRequest(spec agent.CreateAgentSpec) agentengine.Agen
 			Name:         spec.Name,
 			Description:  spec.Description,
 			Instructions: spec.Instructions,
+			Skills:       slices.Clone(spec.Skills),
 			Role:         role,
 			Runtime: agentengine.RuntimeSpec{
 				Adapter:     runtimeConfig.Name,

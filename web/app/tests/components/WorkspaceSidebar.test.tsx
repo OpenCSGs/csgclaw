@@ -19,6 +19,7 @@ function CurrentPath() {
 function taskEntry() {
   return {
     create: vi.fn(),
+    onMessage: vi.fn(),
     patch: vi.fn(),
     remove: vi.fn(),
     open: vi.fn(),

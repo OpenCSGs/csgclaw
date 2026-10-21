@@ -5,6 +5,7 @@ import { ResourceLoadMore } from "../ResourceLoadMore";
 import type { ResourceContinuation } from "@/hooks/workspace/useInfiniteAgentResources";
 import { mcpManagedKnowledgeBaseSource } from "@/models/mcp";
 import {
+  BookOpen,
   Check,
   CheckCircle2,
   CircleDashed,
@@ -27,8 +28,13 @@ import {
   X,
 } from "lucide-react";
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
-import type { ReactNode } from "react";
-import { ResourceList, ResourceListCard } from "@/components/business/ResourceListCard";
+import {
+  ResourceList,
+  ResourceListCard,
+  ResourceFeaturedIcon,
+  ResourceStatus,
+} from "@/components/business/ResourceListCard";
+import { AgentResourcePicker } from "../AgentResourcePicker";
 import { AgentResourceDetails } from "../AgentResourceDetails";
 import type { AgentResourceKind } from "@/api/agents";
 import { errorMessage } from "@/api/client";
@@ -89,14 +95,11 @@ import type { IMConversation, TranslateFn } from "@/models/conversations";
 import type { LocaleCode } from "@/models/conversations";
 import { mcpServerDisplayName } from "@/models/mcp";
 import type { MCPServer } from "@/models/mcp";
-import { skillSourceBadgeName } from "@/models/skillhub";
-import type { SkillSummary } from "@/models/skillhub";
 import type { SlashSkillOption } from "@/models/slashCommands";
 import { AgentAvatarContent, AgentAvatarPicker } from "@/components/business/AgentAvatar";
 import { renderMarkdown } from "@/components/business/MessageContent/markdown";
 import "@/components/business/MessageContent/MessageContent.css";
 import { avatarFallbackText } from "@/shared/avatar";
-import { localizeTemplateSourceTag } from "@/shared/i18n";
 import type { AgentTemplatePublishTarget } from "@/api/hub";
 import {
   Button,
@@ -125,7 +128,16 @@ type AgentActionHandler = (item: AgentLike) => VoidOrPromise;
 type AgentMetadataSavePatch = Pick<Partial<AgentDraft>, "description" | "name">;
 type AgentNoticeTone = "info" | "warning" | "success";
 
-const AGENT_PROFILE_TAB_IDS = ["profile", "channels", "instructions", "memory", "skills", "apps", "mcp"] as const;
+const AGENT_PROFILE_TAB_IDS = [
+  "profile",
+  "channels",
+  "instructions",
+  "memory",
+  "skills",
+  "apps",
+  "mcp",
+  "knowledge",
+] as const;
 type AgentProfileTabID = (typeof AGENT_PROFILE_TAB_IDS)[number];
 type UpdateAgentDraft = (patch: Partial<AgentDraft>) => void;
 type RuntimeOptionSchemaList = ReturnType<typeof runtimeOptionSchemasForAgent>;
@@ -165,6 +177,7 @@ export type AgentDetailPaneProps = {
   noticeTone?: AgentNoticeTone;
   notifierWebhookPublicOrigin?: string;
   onDelete: AgentActionHandler;
+  onCheckDelete?: (item: AgentLike) => Promise<{ message: string; onResolve?: () => void } | null>;
   onDraftChange?: (draft: AgentDraft) => void;
   onInvite: AgentActionHandler;
   onDismissNotice?: () => void;
@@ -205,15 +218,11 @@ export type AgentDetailPaneProps = {
   onSetResourceEnabled?: (kind: AgentResourceKind, name: string, enabled: boolean) => Promise<void>;
   skillAddBusy?: boolean;
   skillAddError?: string;
-  skillCandidates?: SkillSummary[];
-  skillCandidatesError?: string;
-  skillCandidatesLoading?: boolean;
   skillDeleteBusy?: boolean;
   skillDeleteError?: string;
-  mcpCandidates?: MCPServer[];
-  mcpCandidatesError?: string;
-  mcpCandidatesLoading?: boolean;
   mcpServers?: MCPServer[];
+  knowledgeServers?: MCPServer[];
+  resourceAuthenticated?: boolean;
   mcpSourceBusyNames?: ReadonlySet<string>;
   mcpSourceUnavailableNames?: ReadonlySet<string>;
   mcpSourceSyncBusyName?: string;
@@ -224,8 +233,9 @@ export type AgentDetailPaneProps = {
   mcpDeleteError?: string;
   skillContinuation?: ResourceContinuation;
   mcpContinuation?: ResourceContinuation;
+  knowledgeContinuation?: ResourceContinuation;
+  knowledgeListError?: string;
   mcpListError?: string;
-  onLoadSkillCandidates?: () => void;
   onRefreshSkills?: () => void | Promise<unknown>;
   skills?: SlashSkillOption[];
   skillsError?: string;
@@ -238,7 +248,6 @@ export type AgentDetailPaneProps = {
   onInstallMCPServers?: (serverNames: string[]) => Promise<boolean> | boolean;
   onUpdateMCPServer?: (server: MCPServer | string) => Promise<boolean> | boolean;
   onDeleteMCPServer?: (server: MCPServer | string) => Promise<boolean> | boolean;
-  onRetryMCPServers?: () => void | Promise<unknown>;
 };
 
 export type AgentDetailPaneHandle = {
@@ -289,20 +298,17 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
     skillsError = "",
     skillContinuation,
     mcpContinuation,
+    knowledgeContinuation,
+    knowledgeListError = "",
     mcpListError = "",
-    onLoadSkillCandidates,
     onRefreshSkills,
-    skillCandidates = [],
-    skillCandidatesLoading = false,
-    skillCandidatesError = "",
     skillAddBusy = false,
     skillAddError = "",
     skillDeleteBusy = false,
     skillDeleteError = "",
-    mcpCandidates = [],
-    mcpCandidatesError = "",
-    mcpCandidatesLoading = false,
     mcpServers = [],
+    knowledgeServers: providedKnowledgeServers,
+    resourceAuthenticated = true,
     mcpSourceBusyNames = new Set<string>(),
     mcpSourceUnavailableNames = new Set<string>(),
     mcpSourceSyncBusyName = "",
@@ -334,11 +340,12 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
     onInstallMCPServers,
     onUpdateMCPServer,
     onDeleteMCPServer,
-    onRetryMCPServers,
     onRequireOpenCSGAuth = () => true,
   },
   ref,
 ) {
+  const knowledgeServers =
+    providedKnowledgeServers ?? mcpServers.filter((server) => mcpManagedKnowledgeBaseSource(server.config));
   const [recreateTarget, setRecreateTarget] = useState<AgentLike | null>(null);
   const [isEditingDescription, setIsEditingDescription] = useState(false);
   const [isEditingName, setIsEditingName] = useState(false);
@@ -356,7 +363,7 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
       : undefined;
   const detailMCP =
     resourceDetail && resourceDetail.agentID === item?.id && resourceDetail.kind === "mcp"
-      ? mcpServers.find((server) => server.name === resourceDetail.name)
+      ? [...mcpServers, ...knowledgeServers].find((server) => server.name === resourceDetail.name)
       : undefined;
   const openResourceDetail = (kind: AgentResourceKind, name: string) =>
     setResourceDetail({ agentID: String(item?.id || ""), kind, name });
@@ -364,13 +371,21 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
     resourceBusy || skillAddBusy || skillDeleteBusy || mcpAddBusy || mcpDeleteBusy || mcpSourceSyncBusyName || saving,
   );
   const [addSkillsDialogOpen, setAddSkillsDialogOpen] = useState(false);
-  const [selectedSkillNames, setSelectedSkillNames] = useState<string[]>([]);
   const [deleteSkillDialogOpen, setDeleteSkillDialogOpen] = useState(false);
   const [skillPendingDelete, setSkillPendingDelete] = useState<SlashSkillOption | null>(null);
   const [addMCPDialogOpen, setAddMCPDialogOpen] = useState(false);
-  const [selectedMCPServerNames, setSelectedMCPServerNames] = useState<string[]>([]);
   const [deleteMCPDialogOpen, setDeleteMCPDialogOpen] = useState(false);
+  const [addKnowledgeDialogOpen, setAddKnowledgeDialogOpen] = useState(false);
+  const toolServers = providedKnowledgeServers
+    ? mcpServers
+    : mcpServers.filter((server) => !mcpManagedKnowledgeBaseSource(server.config));
   const [mcpPendingDelete, setMCPPendingDelete] = useState<MCPServer | null>(null);
+  useEffect(() => {
+    setAddSkillsDialogOpen(false);
+    setAddMCPDialogOpen(false);
+    setAddKnowledgeDialogOpen(false);
+  }, [item.id]);
+
   const [publishTarget, setPublishTarget] = useState<AgentTemplatePublishTarget | null>(null);
   const [publishTemplateDisplayName, setPublishTemplateDisplayName] = useState("");
   const [publishTemplateName, setPublishTemplateName] = useState("");
@@ -576,6 +591,15 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
               : []),
             ...(showApps ? [{ id: "apps" as const, label: t("agentAppsTab") }] : []),
             ...(!showApps && showMCPServers ? [{ id: "mcp" as const, label: t("agentAppsTab") }] : []),
+            ...(showMCPServers
+              ? [
+                  {
+                    id: "knowledge" as const,
+                    label: t("profileKnowledgeTitle"),
+                    count: knowledgeContinuation?.total ?? knowledgeServers.length,
+                  },
+                ]
+              : []),
             ...(!isNotificationBotAgent(item) ? [{ id: "channels" as const, label: t("agentChannelsTitle") }] : []),
           ]
         : [],
@@ -586,6 +610,8 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
       showApps,
       showMCPServers,
       skills.length,
+      knowledgeServers.length,
+      knowledgeContinuation?.total,
       skillContinuation?.total,
       t,
       workspaceSupported,
@@ -593,7 +619,7 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
   );
   const requestedTab = requestedProfileTab || activeProfileTab;
   const selectedProfileTab =
-    showApps && requestedTab === "mcp"
+    showApps && (requestedTab === "mcp" || requestedTab === "connectors")
       ? "apps"
       : !showApps && showMCPServers && requestedTab === "apps"
         ? "mcp"
@@ -643,20 +669,9 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
   }, [isEditingDescription]);
 
   useEffect(() => {
-    if (!addSkillsDialogOpen) {
-      setSelectedSkillNames([]);
-    }
-  }, [addSkillsDialogOpen]);
-
-  useEffect(() => {
-    if (!addMCPDialogOpen) {
-      setSelectedMCPServerNames([]);
-    }
-  }, [addMCPDialogOpen]);
-
-  useEffect(() => {
     if (!showMCPServers) {
       setAddMCPDialogOpen(false);
+      setAddKnowledgeDialogOpen(false);
       setDeleteMCPDialogOpen(false);
       setMCPPendingDelete(null);
       setResourceDetail(null);
@@ -683,16 +698,6 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
     }, 700);
   }
 
-  async function handleAddSkillsConfirm(): Promise<void> {
-    if (!selectedSkillNames.length) {
-      return;
-    }
-    const added = await onAddSkills?.(selectedSkillNames);
-    if (added) {
-      setAddSkillsDialogOpen(false);
-    }
-  }
-
   async function handleDeleteSkillConfirm(): Promise<void> {
     if (!skillPendingDelete) {
       return;
@@ -702,16 +707,6 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
       setDeleteSkillDialogOpen(false);
       setSkillPendingDelete(null);
       setResourceDetail(null);
-    }
-  }
-
-  async function handleAddMCPConfirm(): Promise<void> {
-    if (!selectedMCPServerNames.length) {
-      return;
-    }
-    const installed = await onInstallMCPServers?.(selectedMCPServerNames);
-    if (installed) {
-      setAddMCPDialogOpen(false);
     }
   }
 
@@ -749,7 +744,7 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
       addBusy={mcpAddBusy}
       addError={mcpAddError}
       deleteError={mcpDeleteError}
-      servers={mcpServers}
+      servers={toolServers}
       hasManagedApps={appsController.items.length > 0}
       sourceBusyNames={mcpSourceBusyNames}
       sourceUnavailableNames={mcpSourceUnavailableNames}
@@ -1113,7 +1108,7 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
               <AgentMemoryPanel agentID={String(item.id || "")} onMemoryChange={onMemoryChange} t={t} />
             ) : null}
 
-            {["skills", "mcp", "apps"].includes(visibleActiveProfileTab) && resourceError ? (
+            {["skills", "mcp", "apps", "knowledge"].includes(visibleActiveProfileTab) && resourceError ? (
               <div className="form-error" role="alert">
                 {resourceError}
                 {onRetryResource ? (
@@ -1142,9 +1137,35 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
                 skillsLoading={skillsLoading}
                 t={t}
                 onOpenAddSkills={() => {
-                  onLoadSkillCandidates?.();
                   setAddSkillsDialogOpen(true);
                 }}
+              />
+            ) : null}
+
+            {showMCPServers && visibleActiveProfileTab === "knowledge" ? (
+              <AgentMCPPanel
+                kind="knowledge"
+                continuation={knowledgeContinuation}
+                toggleBusyName={resourceBusy.startsWith("mcp:") ? resourceBusy.slice(4) : ""}
+                listError={knowledgeListError}
+                onOpenDetail={(server) => openResourceDetail("mcp", server.name)}
+                onToggle={
+                  canToggleResources && onSetResourceEnabled
+                    ? (server) => onSetResourceEnabled("mcp", server.name, server.config.enabled === false)
+                    : undefined
+                }
+                mutationBusy={resourceMutationBusy}
+                addBusy={mcpAddBusy}
+                addError={mcpAddError}
+                deleteError={mcpDeleteError}
+                servers={knowledgeServers}
+                sourceBusyNames={mcpSourceBusyNames}
+                sourceUnavailableNames={mcpSourceUnavailableNames}
+                sourceSyncBusyName={mcpSourceSyncBusyName}
+                updateAvailableNames={mcpUpdateAvailableNames}
+                t={t}
+                onOpenAddMCP={() => setAddKnowledgeDialogOpen(true)}
+                onUpdateMCP={onUpdateMCPServer}
               />
             ) : null}
 
@@ -1159,7 +1180,6 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
                 selectedID={onProfileTabChange ? requestedAppID : requestedAppID || appSettingsID}
                 addAppID={requestedAddAppID}
                 onSelect={selectAppSettings}
-                onAddTools={showMCPServers ? () => setAddMCPDialogOpen(true) : undefined}
               >
                 {showMCPServers ? toolConnectors : null}
               </AgentAppsPanel>
@@ -1231,74 +1251,34 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
           </DialogFooter>
         </DialogContent>
       </DialogRoot>
-      <DialogRoot open={addSkillsDialogOpen} onOpenChange={setAddSkillsDialogOpen}>
-        <DialogContent className="agent-skills-dialog" portalContainer={dialogPortalContainer}>
-          <DialogHeader className="agent-skills-dialog-header">
-            <div className="agent-skills-dialog-copy">
-              <DialogTitle>{t("agentSkillAdd")}</DialogTitle>
-              <DialogDescription>{t("agentSkillAddSubtitle")}</DialogDescription>
-            </div>
-            <DialogCloseButton label={t("close")} size="sm" variant="tertiaryGray" />
-          </DialogHeader>
-          <div className="agent-skills-dialog-body">
-            {skillCandidatesError ? <div className="form-error">{skillCandidatesError}</div> : null}
-            {skillAddError ? <div className="form-error">{skillAddError}</div> : null}
-            {skillCandidatesLoading ? (
-              <div className="agent-skills-empty">{t("agentSkillsLoading")}</div>
-            ) : !skillCandidates.length ? (
-              <div className="agent-skills-empty">{t("agentSkillAddEmpty")}</div>
-            ) : (
-              <div className="agent-skill-candidates-list" role="list">
-                {skillCandidates.map((skill) => {
-                  const checked = selectedSkillNames.includes(skill.name);
-                  const sourceBadgeName = skillSourceBadgeName(skill);
-                  return (
-                    <label key={skill.name} className={`agent-skill-candidate ${checked ? "selected" : ""}`.trim()}>
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        onChange={(event) => {
-                          const nextChecked = event.currentTarget.checked;
-                          setSelectedSkillNames((current) =>
-                            nextChecked ? [...current, skill.name] : current.filter((name) => name !== skill.name),
-                          );
-                        }}
-                      />
-                      <span className="agent-skill-candidate-copy">
-                        <span className="agent-skill-name">
-                          {skill.name}
-                          {sourceBadgeName ? ` · ${localizeTemplateSourceTag(sourceBadgeName, locale)}` : ""}
-                        </span>
-                        <span className="agent-skill-description">{skill.description || "-"}</span>
-                      </span>
-                    </label>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-          <div className="agent-skills-dialog-actions">
-            <Button
-              variant="secondaryGray"
-              size="sm"
-              disabled={skillAddBusy}
-              onClick={() => setAddSkillsDialogOpen(false)}
-            >
-              {t("cancel")}
-            </Button>
-            <Button
-              variant="primary"
-              size="sm"
-              loading={skillAddBusy}
-              loadingLabel={t("agentSkillAdd")}
-              disabled={!selectedSkillNames.length || skillCandidatesLoading}
-              onClick={handleAddSkillsConfirm}
-            >
-              {t("agentSkillAdd")}
-            </Button>
-          </div>
-        </DialogContent>
-      </DialogRoot>
+      {addSkillsDialogOpen && onAddSkills ? (
+        <AgentResourcePicker
+          key={`${item.id}:skill`}
+          agentID={String(item.id)}
+          kind="skill"
+          authenticated={resourceAuthenticated}
+          error={skillAddError}
+          onAdd={onAddSkills}
+          onClose={() => setAddSkillsDialogOpen(false)}
+          onLogin={onRequireOpenCSGAuth}
+          portalContainer={dialogPortalContainer}
+          t={t}
+        />
+      ) : null}
+      {addKnowledgeDialogOpen && onInstallMCPServers ? (
+        <AgentResourcePicker
+          key={`${item.id}:knowledge`}
+          agentID={String(item.id)}
+          kind="knowledge"
+          authenticated={resourceAuthenticated}
+          error={mcpAddError}
+          onAdd={onInstallMCPServers}
+          onClose={() => setAddKnowledgeDialogOpen(false)}
+          onLogin={onRequireOpenCSGAuth}
+          portalContainer={dialogPortalContainer}
+          t={t}
+        />
+      ) : null}
       <DialogRoot
         open={deleteSkillDialogOpen}
         onOpenChange={(open) => {
@@ -1345,85 +1325,20 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
           </div>
         </DialogContent>
       </DialogRoot>
-      <DialogRoot open={addMCPDialogOpen} onOpenChange={setAddMCPDialogOpen}>
-        <DialogContent className="agent-skills-dialog agent-mcp-dialog" portalContainer={dialogPortalContainer}>
-          <DialogHeader className="agent-skills-dialog-header">
-            <div className="agent-skills-dialog-copy">
-              <DialogTitle>{t("agentMCPAdd")}</DialogTitle>
-              <DialogDescription>{t("agentMCPAddSubtitle")}</DialogDescription>
-            </div>
-            <DialogCloseButton label={t("close")} size="sm" variant="tertiaryGray" />
-          </DialogHeader>
-          <div className="agent-skills-dialog-body">
-            {mcpAddError ? <div className="form-error">{mcpAddError}</div> : null}
-            {mcpCandidatesError ? (
-              <div className="form-error">
-                <span>{mcpCandidatesError}</span>
-                {onRetryMCPServers ? (
-                  <Button
-                    variant="secondaryGray"
-                    size="sm"
-                    disabled={mcpCandidatesLoading}
-                    onClick={() => {
-                      void onRetryMCPServers();
-                    }}
-                  >
-                    {t("retry")}
-                  </Button>
-                ) : null}
-              </div>
-            ) : mcpCandidatesLoading && !mcpCandidates.length ? (
-              <div className="agent-skills-empty">{t("resourcesMCPLoading")}</div>
-            ) : !mcpCandidates.length ? (
-              <div className="agent-skills-empty">{t("agentMCPAddEmpty")}</div>
-            ) : (
-              <div className="agent-skill-candidates-list" role="list">
-                {mcpCandidates.map((server) => {
-                  const checked = selectedMCPServerNames.includes(server.name);
-                  return (
-                    <label key={server.name} className={`agent-skill-candidate ${checked ? "selected" : ""}`.trim()}>
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        onChange={(event) => {
-                          const nextChecked = event.currentTarget.checked;
-                          setSelectedMCPServerNames((current) =>
-                            nextChecked ? [...current, server.name] : current.filter((name) => name !== server.name),
-                          );
-                        }}
-                      />
-                      <span className="agent-skill-candidate-copy">
-                        <span className="agent-skill-name">{mcpServerDisplayName(server)}</span>
-                        <span className="agent-skill-description">{server.description || "-"}</span>
-                      </span>
-                    </label>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-          <div className="agent-skills-dialog-actions">
-            <Button variant="secondaryGray" size="sm" onClick={() => setAddMCPDialogOpen(false)}>
-              {t("cancel")}
-            </Button>
-            <Button
-              variant="primary"
-              size="sm"
-              loading={mcpAddBusy}
-              loadingLabel={t("agentMCPAdd")}
-              disabled={
-                !selectedMCPServerNames.length ||
-                mcpAddBusy ||
-                Boolean(mcpCandidatesError) ||
-                (mcpCandidatesLoading && !mcpCandidates.length)
-              }
-              onClick={handleAddMCPConfirm}
-            >
-              {t("agentMCPAdd")}
-            </Button>
-          </div>
-        </DialogContent>
-      </DialogRoot>
+      {addMCPDialogOpen && onInstallMCPServers ? (
+        <AgentResourcePicker
+          key={`${item.id}:mcp`}
+          agentID={String(item.id)}
+          kind="mcp"
+          authenticated={resourceAuthenticated}
+          error={mcpAddError}
+          onAdd={onInstallMCPServers}
+          onClose={() => setAddMCPDialogOpen(false)}
+          onLogin={onRequireOpenCSGAuth}
+          portalContainer={dialogPortalContainer}
+          t={t}
+        />
+      ) : null}
       <DialogRoot
         open={deleteMCPDialogOpen}
         onOpenChange={(open) => {
@@ -1704,6 +1619,7 @@ function AgentRuntimePanel({
 }
 
 type AgentMCPPanelProps = {
+  kind?: "mcp" | "knowledge";
   embedded?: boolean;
   toggleBusyName: string;
   continuation?: ResourceContinuation;
@@ -1726,6 +1642,7 @@ type AgentMCPPanelProps = {
 };
 
 function AgentMCPPanel({
+  kind = "mcp",
   embedded = false,
   toggleBusyName,
   continuation,
@@ -1748,7 +1665,7 @@ function AgentMCPPanel({
 }: AgentMCPPanelProps) {
   return (
     <section
-      id="agent-profile-mcp"
+      id={kind === "knowledge" ? "agent-profile-knowledge" : "agent-profile-mcp"}
       className={
         embedded
           ? "agent-skills-section agent-mcp-section"
@@ -1757,27 +1674,35 @@ function AgentMCPPanel({
     >
       <div className="agent-skills-summary-heading">
         <div className="profile-section-heading">
-          <div className="profile-section-title">{t(embedded ? "connectorsTools" : "agentAppsTab")}</div>
-          {!embedded ? <p className="profile-section-description">{t("profileMCPServersHubHint")}</p> : null}
+          <div className="profile-section-title">
+            {t(kind === "knowledge" ? "profileKnowledgeTitle" : "connectorsTools")}
+          </div>
+          <p className="profile-section-description">
+            {t(kind === "knowledge" ? "profileKnowledgeHint" : "profileMCPHint")}
+          </p>
         </div>
         <div className="agent-skills-summary-actions">
           <span className="agent-skills-summary-count">
-            {t("agentMCPCount", { count: continuation?.total ?? servers.length })}
+            {t(kind === "knowledge" ? "profileKnowledgeCount" : "agentMCPCount", {
+              count: continuation?.total ?? servers.length,
+            })}
           </span>
-          <Tooltip content={t("agentMCPAdd")}>
-            <span>
-              <Button
-                className="agent-skill-add-button"
-                variant="secondaryGray"
-                size="sm"
-                aria-label={t("agentMCPAdd")}
-                disabled={mutationBusy || addBusy}
-                onClick={onOpenAddMCP}
-              >
-                <Plus aria-hidden="true" size={16} strokeWidth={2.2} />
-              </Button>
-            </span>
-          </Tooltip>
+          {servers.length > 0 ? (
+            <Tooltip content={t(kind === "knowledge" ? "agentKnowledgeAdd" : "agentMCPAdd")}>
+              <span>
+                <Button
+                  className="agent-skill-add-button"
+                  variant="secondaryGray"
+                  size="sm"
+                  aria-label={t(kind === "knowledge" ? "agentKnowledgeAdd" : "agentMCPAdd")}
+                  disabled={mutationBusy || addBusy}
+                  onClick={onOpenAddMCP}
+                >
+                  <Plus aria-hidden="true" size={16} strokeWidth={2.2} />
+                </Button>
+              </span>
+            </Tooltip>
+          ) : null}
         </div>
       </div>
       {addError ? <div className="form-error">{addError}</div> : null}
@@ -1795,15 +1720,19 @@ function AgentMCPPanel({
       {!continuation?.loading && !listError && !servers.length ? (
         <div className="agent-skills-summary-empty">
           <span className="agent-skills-summary-icon" aria-hidden="true">
-            <Server size={18} strokeWidth={1.8} />
+            {kind === "knowledge" ? <BookOpen size={18} /> : <Server size={18} strokeWidth={1.8} />}
           </span>
           <div className="agent-skills-summary-empty-copy">
-            <strong>{t(hasManagedApps ? "appManualMCPEmpty" : "agentMCPEmpty")}</strong>
-            <p>{t("agentMCPEmptyHint")}</p>
+            <strong>
+              {t(
+                kind === "knowledge" ? "profileKnowledgeEmpty" : hasManagedApps ? "appManualMCPEmpty" : "agentMCPEmpty",
+              )}
+            </strong>
+            <p>{t(kind === "knowledge" ? "profileKnowledgeHint" : "agentMCPEmptyHint")}</p>
           </div>
           <Button variant="secondaryGray" size="sm" disabled={mutationBusy || addBusy} onClick={onOpenAddMCP}>
             <Plus aria-hidden="true" size={15} strokeWidth={2.2} />
-            {t("agentMCPAdd")}
+            {t(kind === "knowledge" ? "agentKnowledgeAdd" : "agentMCPAdd")}
           </Button>
         </div>
       ) : null}
@@ -1819,14 +1748,13 @@ function AgentMCPPanel({
                 title={mcpServerDisplayName(server)}
                 description={server.description}
                 icon={
-                  <AgentProfileFeaturedIcon>
-                    <SidebarMcpIcon size={16} />
-                  </AgentProfileFeaturedIcon>
+                  <ResourceFeaturedIcon>
+                    {kind === "knowledge" ? <BookOpen size={16} /> : <SidebarMcpIcon size={16} />}
+                  </ResourceFeaturedIcon>
                 }
                 onOpen={() => onOpenDetail(server)}
                 badge={
                   <>
-                    {mcpManagedKnowledgeBaseSource(server.config) ? <span>{t("agentKnowledgeMCPBadge")}</span> : null}
                     {sourceUnavailable ? (
                       <span>{t("agentKnowledgeMCPSourceDeleted")}</span>
                     ) : updateAvailable ? (
@@ -1836,16 +1764,9 @@ function AgentMCPPanel({
                 }
                 actions={
                   <>
-                    <span className="agent-connector-source-badge">
-                      {t(
-                        server.config.url ||
-                          String(server.config.type || server.config.transport || "")
-                            .toLowerCase()
-                            .includes("remote")
-                          ? "resourcesSkillRemoteFilter"
-                          : "resourcesSkillLocalFilter",
-                      )}
-                    </span>
+                    <ResourceStatus status={server.config.enabled === false ? "disabled" : "enabled"}>
+                      {t(server.config.enabled === false ? "appStatusDisabled" : "profileResourceEnabled")}
+                    </ResourceStatus>
                     {updateAvailable && !sourceUnavailable && onUpdateMCP ? (
                       <Button
                         size="sm"
@@ -1873,7 +1794,7 @@ function AgentMCPPanel({
           })}
         </ResourceList>
       ) : null}
-      <ResourceLoadMore continuation={continuation} t={t} />
+      <ResourceLoadMore continuation={continuation} showSummary={false} t={t} />
     </section>
   );
 }
@@ -2247,12 +2168,9 @@ function AgentSkillsPanel({
               onOpen={() => onOpenDetail(skill)}
               actions={
                 <>
-                  <span
-                    className="hub-template-source-badge agent-skill-status-badge"
-                    data-enabled={skill.enabled !== false}
-                  >
+                  <ResourceStatus status={skill.enabled === false ? "disabled" : "enabled"}>
                     {skill.enabled === false ? t("appStatusDisabled") : t("resourcesSkillEnabled")}
-                  </span>
+                  </ResourceStatus>
                   <Switch
                     aria-busy={toggleBusyName === skill.name}
                     className="agent-skill-card-switch-sm"
@@ -2267,25 +2185,16 @@ function AgentSkillsPanel({
           ))}
         </div>
       ) : null}
-      <ResourceLoadMore continuation={continuation} t={t} />
+      <ResourceLoadMore continuation={continuation} showSummary={false} t={t} />
     </section>
   );
 }
 
 function AgentSkillFeaturedIcon() {
   return (
-    <AgentProfileFeaturedIcon>
+    <ResourceFeaturedIcon>
       <SidebarPuzzlePiece02Icon size={16} aria-hidden="true" />
-    </AgentProfileFeaturedIcon>
-  );
-}
-
-function AgentProfileFeaturedIcon({ children }: { children: ReactNode }) {
-  return (
-    <span className="hub-skill-featured-icon" aria-hidden="true">
-      <span className="hub-skill-featured-icon-shadow"></span>
-      <span className="hub-skill-featured-icon-glass">{children}</span>
-    </span>
+    </ResourceFeaturedIcon>
   );
 }
 

@@ -1,4 +1,4 @@
-import { resolveTeamAvatarMembers } from "@/models/tasks";
+import { resolveTeamAvatarMembers, teamMemberIDs, teamStatusLabel } from "@/models/tasks";
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { ChevronRight, ExternalLink, List, LoaderCircle, Plus, Search } from "lucide-react";
@@ -10,7 +10,7 @@ import { useWorkspaceHubTemplatesQuery } from "@/hooks/workspace/workspaceQuerie
 import { isVisibleInHubTemplateList } from "@/models/hubWorkspace";
 import { agenticHubTemplatesURL } from "@/models/agenticHub";
 import { templateInGroup } from "@/models/templateGroups";
-import { agentRoleLabel, type AgentLike } from "@/models/agents";
+import { agentAvailabilityStatusLabel, agentRoleLabel, isAgentAvailable, type AgentLike } from "@/models/agents";
 import { agentTemplatesSearch } from "@/models/routing";
 
 import styles from "./AgentOverviewPage.module.css";
@@ -41,6 +41,13 @@ export function AgentOverviewPage() {
   const requestedTemplateID = templatesTab ? searchParams.get("template") || "" : "";
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState("all");
+  const activeType = controller.ready ? controller.activePane.type : "";
+  const activeID = controller.ready ? controller.activePane.id : "";
+  useEffect(() => {
+    if (!activeID || (activeType !== "agent" && activeType !== "team")) return;
+    setFilter(activeType === "team" ? "teams" : "agents");
+    setQuery("");
+  }, [activeID, activeType]);
   const templateFilter = searchParams.get("filter") === "personal" ? "personal" : "official";
   const [listOpen, setListOpen] = useState(false);
   const listToggleRef = useRef<HTMLButtonElement>(null);
@@ -89,6 +96,13 @@ export function AgentOverviewPage() {
   const agents = props.workerAgentItems.filter((agent) => matches(agent.name || agent.id || ""));
   const teams = props.teams.filter((team) => matches(team.title));
   const templateUsername = props.authStatus?.authenticated ? props.authStatus.user_id : "";
+  const filterCounts: Record<string, number> = {
+    all: props.workerAgentItems.length + props.teams.length,
+    agents: props.workerAgentItems.length,
+    teams: props.teams.length,
+    official: templates.filter((item) => templateInGroup(item, "official", templateUsername)).length,
+    personal: templates.filter((item) => templateInGroup(item, "mine", templateUsername)).length,
+  };
   const templatesURL = agenticHubTemplatesURL(
     props.authStatus?.authenticated ? props.authStatus.opencsg_base_url || props.authStatus.base_url : "",
   );
@@ -105,7 +119,6 @@ export function AgentOverviewPage() {
   const templateEmptyHint = query.trim()
     ? t("iaTemplatesSearchHint")
     : t(templateFilter === "official" ? "iaTemplatesOfficialEmptyHint" : "iaTemplatesPersonalEmptyHint");
-  const activeID = controller.activePane.id;
   function selectTab(value: string) {
     const params = new URLSearchParams(location.search);
     if (value === "mine") {
@@ -138,22 +151,21 @@ export function AgentOverviewPage() {
         </Button>
         <div className={styles.tabs} role="tablist" aria-label={t("agentsTab")}>
           <button role="tab" aria-selected={!templatesTab} onClick={() => selectTab("mine")}>
-            {t("iaAgentsMineTab")}
-            <small>{props.workerAgentItems.length + props.teams.length}</small>
+            {t("iaAgentsMineTab")} <small>{props.workerAgentItems.length + props.teams.length}</small>
           </button>
           <button role="tab" aria-selected={templatesTab} onClick={() => selectTab("templates")}>
-            {t("iaAgentsMarketTab")}
+            {t("iaAgentsMarketTab")} {templatesQuery.data !== undefined ? <small>{templates.length}</small> : null}
           </button>
         </div>
         {!templatesTab ? (
           <div className={styles.actions}>
-            <Button variant="secondaryGray" size="sm" onClick={props.onOpenCreateTeam}>
-              <Plus size={14} />
-              {t("taskEntryCreateTeam")}
-            </Button>
             <Button variant="secondaryGray" size="sm" onClick={() => void props.onCreateCustomAgent()}>
               <Plus size={14} />
               {t("iaAgentsCreateAgent")}
+            </Button>
+            <Button variant="secondaryGray" size="sm" onClick={props.onOpenCreateTeam}>
+              <Plus size={14} />
+              {t("taskEntryCreateTeam")}
             </Button>
           </div>
         ) : null}
@@ -196,7 +208,8 @@ export function AgentOverviewPage() {
                     navigate({ search: params.toString() });
                   }}
                 >
-                  {t(`taskEntryOverview_${value}`)}
+                  {t(`taskEntryOverview_${value}`)}{" "}
+                  {!templatesTab || templatesQuery.data !== undefined ? <small>{filterCounts[value]}</small> : null}
                 </button>
               ))}
             </nav>
@@ -283,7 +296,16 @@ export function AgentOverviewPage() {
                           <AgentAvatarContent avatar={item.avatar} fallback={item.name?.slice(0, 1) || "A"} />
                         </span>
                         <span className={styles.identity}>
-                          <strong>{item.name}</strong>
+                          <span className={styles.rowName}>
+                            <strong>{item.name}</strong>
+                            <span
+                              className={styles.agentStatus}
+                              data-available={isAgentAvailable(item)}
+                              role="img"
+                              aria-label={agentAvailabilityStatusLabel(item, t)}
+                              title={agentAvailabilityStatusLabel(item, t)}
+                            />
+                          </span>
                           <small>{agentRoleLabel(item, t)}</small>
                         </span>
                         <ChevronRight size={14} />
@@ -307,8 +329,16 @@ export function AgentOverviewPage() {
                           showCountBadge={false}
                         />
                         <span className={styles.identity}>
-                          <strong>{item.title}</strong>
-                          <small>{t("taskEntryTeamMembers", { count: item.member_agent_ids.length })}</small>
+                          <span className={styles.rowName}>
+                            <strong>{item.title}</strong>
+                            <span className={styles.teamBadge}>{t("iaAgentsTeamBadge")}</span>
+                          </span>
+                          <small>
+                            {t("iaAgentsTeamSummary", {
+                              count: teamMemberIDs(item).length,
+                              status: teamStatusLabel(item.status, t),
+                            })}
+                          </small>
                         </span>
                         <ChevronRight size={14} />
                       </button>

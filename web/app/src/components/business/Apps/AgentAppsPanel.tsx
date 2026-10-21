@@ -1,13 +1,14 @@
-import { ResourceList, ResourceListCard } from "@/components/business/ResourceListCard";
+import {
+  ResourceList,
+  ResourceListCard,
+  ResourceFeaturedIcon,
+  ResourceStatus,
+} from "@/components/business/ResourceListCard";
 import { useState, type ReactNode } from "react";
-import { ArrowRight, ArrowUpRight, BookOpen, Plus, RefreshCw, ChevronDown, Server } from "lucide-react";
+import { ArrowUpRight, BookOpen, GitBranch, Plus, RefreshCw } from "lucide-react";
 import {
   Button,
   LinkButton,
-  DropdownMenuRoot,
-  DropdownMenuTrigger,
-  DropdownMenuContent,
-  DropdownMenuItem,
   Switch,
   DialogRoot,
   DialogContent,
@@ -29,12 +30,17 @@ import { appStatus, appConnectionError } from "./appStatus";
 import { AppToolList } from "./AppToolList";
 import type { AgentAppsController } from "./useAgentApps";
 import styles from "./AgentAppsPanel.module.css";
+import {
+  ResourcePicker,
+  ResourcePickerList,
+  ResourcePickerRow,
+  ResourcePickerCopy,
+} from "@/components/business/ResourcePicker";
 
 type Props = {
   agentID: string;
   cliSupported?: boolean;
   children?: ReactNode;
-  onAddTools?: () => void;
   controller: AgentAppsController;
   t: TranslateFn;
   portalContainer?: HTMLElement | null;
@@ -52,7 +58,6 @@ export function AgentAppsPanel({
   addAppID,
   onSelect,
   children,
-  onAddTools,
 }: Props) {
   const [adding, setAdding] = useState(false);
   const [removing, setRemoving] = useState<AppInstallation | null>(null);
@@ -66,15 +71,14 @@ export function AgentAppsPanel({
     : undefined;
   const selectedCLISkills = selected?.skills?.length ? selected.skills : (selectedResource?.skills ?? []);
   const selectedCLIRuntimeStatus = selected?.runtime_status || selectedResource?.runtime_status;
-  const available = controller.resources.filter(
-    (resource) =>
-      !controller.items.some((item) => item.resource_id === resource.installation_id) &&
-      (!addAppID || resource.app_id === addAppID),
-  );
+  const available = controller.resources.filter((resource) => !addAppID || resource.app_id === addAppID);
   const manageResourcesHref = addAppID ? `#/connectors?add_connector=${encodeURIComponent(addAppID)}` : "#/connectors";
   const connectorDescription = (app: AppInstallation) => {
     const definition = controller.definitions.find((item) => item.app_id === app.app_id);
-    return definition ? appDescription(definition, t) : "";
+    if (app.kind === "cli") return definition ? appDescription(definition, t) : "";
+    return [definition ? "" : app.app_id, app.tools?.length ? t("iaMCPServerTools", { count: app.tools.length }) : ""]
+      .filter(Boolean)
+      .join(" · ");
   };
   async function run(operation: () => Promise<unknown>) {
     setError(null);
@@ -106,30 +110,21 @@ export function AgentAppsPanel({
     <section id="agent-profile-apps" className={`profile-section ${styles.panel}`}>
       <div className={styles.heading}>
         <div>
-          <div className="profile-section-title">{t("agentAppsTab")}</div>
-          <p className={styles.hint}>{t("appBindingDescription")}</p>
+          <div className="profile-section-title">{t("profileAppConnectors")}</div>
+          <p className="profile-section-description">{t("profileAppConnectorHint")}</p>
         </div>
-        <DropdownMenuRoot>
-          <DropdownMenuTrigger asChild>
-            <Button variant="primary" size="sm">
-              <Plus size={16} />
-              {t("connectorsAdd")}
-              <ChevronDown size={14} />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent portalContainer={portalContainer}>
-            <DropdownMenuItem onSelect={() => setAdding(true)}>
-              <ConnectorBoxesIcon size={16} />
-              {t("appAddFromResources")}
-            </DropdownMenuItem>
-            {onAddTools ? (
-              <DropdownMenuItem onSelect={onAddTools}>
-                <Server size={16} />
-                {t("agentMCPAdd")}
-              </DropdownMenuItem>
-            ) : null}
-          </DropdownMenuContent>
-        </DropdownMenuRoot>
+        <div className="flex items-center gap-3">
+          <span className={styles.hint}>{t("profileAppConnectorCount", { count: controller.items.length })}</span>
+          <Button
+            variant="secondaryGray"
+            size="sm"
+            iconOnly
+            aria-label={t("profileAppConnectorAdd")}
+            onClick={() => setAdding(true)}
+          >
+            <Plus size={16} />
+          </Button>
+        </div>
       </div>
       {error || controller.error ? (
         <div role="alert" className="form-error">
@@ -141,85 +136,50 @@ export function AgentAppsPanel({
           {t("loading")}
         </p>
       ) : null}
-      <div className={styles.agentGrid}>
-        <article
-          className={`${styles.connectorCard} ${feishu ? styles.connectorOpen : ""}`}
-          role={feishu ? "button" : undefined}
-          tabIndex={feishu ? 0 : undefined}
-          onClick={() => feishu && onSelect(feishu.installation_id)}
-          onKeyDown={(event) => {
-            if (!feishu || (event.key !== "Enter" && event.key !== " ")) return;
-            event.preventDefault();
-            onSelect(feishu.installation_id);
-          }}
-        >
-          <span className={styles.connectorIcon}>
-            <AppIcon appID="feishu" />
-          </span>
-          <span className={styles.connectorCopy}>
-            <span className={styles.connectorTitle}>{appName("feishu", t)}</span>
-            <span className={styles.connectorDescription}>
-              {!cliSupported
-                ? t("feishuCLIUnsupported")
-                : feishu
-                  ? connectorDescription(feishu)
-                  : t("feishuCLIWorkerHint")}
-            </span>
-          </span>
-          <span
-            className={styles.connectorToggle}
-            onClick={(event) => event.stopPropagation()}
-            onKeyDown={(event) => event.stopPropagation()}
-          >
-            <Switch
-              aria-label={t("feishuCLIWorkerSwitch")}
-              checked={Boolean(feishu?.enabled)}
-              size="sm"
-              disabled={!cliSupported || Boolean(controller.busyID) || feishu?.status === "applying"}
-              onCheckedChange={(enabled) => void toggleConnector(feishu, enabled, appName("feishu", t))}
-            />
-          </span>
-        </article>
+      <ResourceList>
+        <ResourceListCard
+          disabled={!feishu}
+          title={appName("feishu", t)}
+          description={
+            !cliSupported ? t("feishuCLIUnsupported") : feishu ? connectorDescription(feishu) : t("feishuCLIWorkerHint")
+          }
+          icon={<ProfileAppIcon appID="feishu" />}
+          onOpen={() => feishu && onSelect(feishu.installation_id)}
+          actions={
+            <>
+              {feishu ? <ResourceStatus status={resourceStatus(feishu)}>{appStatus(feishu, t)}</ResourceStatus> : null}
+              <Switch
+                aria-label={t("feishuCLIWorkerSwitch")}
+                checked={Boolean(feishu?.enabled)}
+                disabled={!cliSupported || Boolean(controller.busyID) || feishu?.status === "applying"}
+                onCheckedChange={(enabled) => void toggleConnector(feishu, enabled, appName("feishu", t))}
+              />
+            </>
+          }
+        />
         {controller.items
           .filter((app) => app.kind !== "cli" || app.app_id !== "feishu")
           .map((app) => (
-            <article
+            <ResourceListCard
               key={app.installation_id}
-              className={`${styles.connectorCard} ${styles.connectorOpen}`}
-              role="button"
-              tabIndex={0}
-              onClick={() => onSelect(app.installation_id)}
-              onKeyDown={(event) => {
-                if (event.key !== "Enter" && event.key !== " ") return;
-                event.preventDefault();
-                onSelect(app.installation_id);
-              }}
-            >
-              <span className={styles.connectorIcon}>
-                <AppIcon appID={app.app_id} />
-              </span>
-              <span className={styles.connectorCopy}>
-                <span className={styles.connectorTitle} title={app.name}>
-                  {app.name}
-                </span>
-                <span className={styles.connectorDescription}>{connectorDescription(app)}</span>
-              </span>
-              <span
-                className={styles.connectorToggle}
-                onClick={(event) => event.stopPropagation()}
-                onKeyDown={(event) => event.stopPropagation()}
-              >
-                <Switch
-                  aria-label={app.name}
-                  checked={app.enabled}
-                  size="sm"
-                  disabled={Boolean(controller.busyID) || (!app.enabled && app.resource_enabled === false)}
-                  onCheckedChange={(enabled) => void toggleConnector(app, enabled, app.name)}
-                />
-              </span>
-            </article>
+              title={app.name}
+              description={connectorDescription(app)}
+              icon={<ProfileAppIcon appID={app.app_id} />}
+              onOpen={() => onSelect(app.installation_id)}
+              actions={
+                <>
+                  <ResourceStatus status={resourceStatus(app)}>{appStatus(app, t)}</ResourceStatus>
+                  <Switch
+                    aria-label={app.name}
+                    checked={app.enabled}
+                    disabled={Boolean(controller.busyID) || (!app.enabled && app.resource_enabled === false)}
+                    onCheckedChange={(enabled) => void toggleConnector(app, enabled, app.name)}
+                  />
+                </>
+              }
+            />
           ))}
-      </div>
+      </ResourceList>
       {!controller.items.length && !controller.loading ? <p className={styles.hint}>{t("appEmptyTitle")}</p> : null}
       {children}
       <DialogRoot
@@ -326,61 +286,70 @@ export function AgentAppsPanel({
           else setAdding(true);
         }}
       >
-        <DialogContent portalContainer={portalContainer} className={styles.catalogDialog}>
-          <DialogHeader>
-            <div>
-              <DialogTitle>{t("appAddFromResources")}</DialogTitle>
-              <DialogDescription>{t("appBindingDescription")}</DialogDescription>
-            </div>
-            <DialogCloseButton label={t("close")} size="sm" variant="tertiaryGray" iconOnly />
-          </DialogHeader>
-          <DialogBody className={styles.catalog}>
-            {available.map((resource) => (
-              <Button
-                key={resource.installation_id}
-                className={styles.catalogItem}
-                disabled={!resource.enabled || !!controller.busyID || (resource.kind === "cli" && !cliSupported)}
-                onClick={() =>
-                  void run(() => controller.bind(resource.installation_id)).then((ok) => {
-                    if (ok) closePicker();
-                  })
-                }
-              >
-                <span className={styles.catalogIcon}>
-                  <AppIcon appID={resource.app_id} />
-                </span>
-                <span className={styles.catalogCopy}>
-                  <strong>{resource.name}</strong>
-                  <span className={styles.catalogDescription}>
-                    {appName(resource.app_id, t)} · {resource.config.url || resource.config.command}
-                  </span>
-                </span>
-              </Button>
-            ))}
-            {!available.length ? (
-              <div className={styles.catalogEmpty}>
-                <span className={styles.catalogEmptyIcon} aria-hidden="true">
-                  <ConnectorBoxesIcon size={18} />
-                </span>
-                <div className={styles.catalogEmptyCopy}>
-                  <strong>{t("appNoAvailableResourcesTitle")}</strong>
-                  <p>{t("appNoAvailableResources")}</p>
-                </div>
-                <LinkButton size="sm" className={styles.catalogManageAction} href={manageResourcesHref}>
-                  <ConnectorBoxesIcon size={16} />
-                  {t("appManageResources")}
-                  <ArrowRight size={14} />
-                </LinkButton>
-              </div>
-            ) : (
-              <LinkButton size="sm" className={styles.catalogManageAction} href={manageResourcesHref}>
-                <ConnectorBoxesIcon size={16} />
+        <ResourcePicker
+          title={t("profileAppConnectorAdd")}
+          description={t("profileAppConnectorHint")}
+          closeLabel={t("close")}
+          busy={Boolean(controller.busyID)}
+          portalContainer={portalContainer}
+          actions={
+            <>
+              <LinkButton size="sm" variant="linkColor" href={manageResourcesHref}>
                 {t("appManageResources")}
-                <ArrowRight size={14} />
               </LinkButton>
-            )}
-          </DialogBody>
-        </DialogContent>
+            </>
+          }
+          footer={
+            <Button size="sm" disabled={Boolean(controller.busyID)} onClick={closePicker}>
+              {t("close")}
+            </Button>
+          }
+        >
+          {error || controller.error ? (
+            <div className="form-error" role="alert">
+              {localizeAPIError(error || controller.error, t) || errorMessage(error || controller.error)}
+            </div>
+          ) : null}
+          <ResourcePickerList>
+            {available.map((resource) => {
+              const bound = controller.items.some((item) => item.resource_id === resource.installation_id);
+              return (
+                <ResourcePickerRow key={resource.installation_id}>
+                  <ProfileAppIcon appID={resource.app_id} />
+                  <ResourcePickerCopy
+                    name={resource.name}
+                    description={bound ? t("profileResourceEnabled") : appStatus(resource, t)}
+                  />
+                  <Button
+                    size="sm"
+                    variant="primary"
+                    disabled={
+                      bound || !resource.enabled || !!controller.busyID || (resource.kind === "cli" && !cliSupported)
+                    }
+                    onClick={() =>
+                      void run(() => controller.bind(resource.installation_id)).then((ok) => {
+                        if (ok) closePicker();
+                      })
+                    }
+                  >
+                    {t(bound ? "profileResourceEnabled" : "appEnable")}
+                  </Button>
+                </ResourcePickerRow>
+              );
+            })}
+          </ResourcePickerList>
+          {!available.length ? (
+            <div className={styles.catalogEmpty}>
+              <span className={styles.catalogEmptyIcon} aria-hidden="true">
+                <ConnectorBoxesIcon size={18} />
+              </span>
+              <div className={styles.catalogEmptyCopy}>
+                <strong>{t("appNoAvailableResourcesTitle")}</strong>
+                <p>{t("appNoAvailableResources")}</p>
+              </div>
+            </div>
+          ) : null}
+        </ResourcePicker>
       </DialogRoot>
       <DialogRoot
         open={!!removing}
@@ -525,4 +494,19 @@ export function AppIcon({ appID }: { appID: string }) {
   if (appID === "github") return <img src="icons/github.svg" width={28} height={28} alt="" />;
   if (appID === "llm-wiki") return <BookOpen size={22} aria-hidden="true" />;
   return <ConnectorBoxesIcon size={22} aria-hidden="true" />;
+}
+
+function ProfileAppIcon({ appID }: { appID: string }) {
+  return (
+    <ResourceFeaturedIcon>
+      {appID === "gitlab" ? <GitBranch size={16} /> : <ConnectorBoxesIcon size={16} />}
+    </ResourceFeaturedIcon>
+  );
+}
+
+function resourceStatus(app: AppInstallation): "enabled" | "disabled" | "error" | "pending" {
+  if (!app.enabled || app.resource_enabled === false) return "disabled";
+  if (app.status === "connected") return "enabled";
+  if (app.status === "error") return "error";
+  return "pending";
 }

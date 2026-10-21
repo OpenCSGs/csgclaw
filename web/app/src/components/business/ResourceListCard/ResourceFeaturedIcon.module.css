@@ -1,0 +1,33 @@
+.icon {
+  position: relative;
+  display: inline-flex;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
+}
+.shadow {
+  position: absolute;
+  top: -4px;
+  left: 4px;
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  background: var(--brand-700);
+  transform: rotate(15deg);
+}
+.glass {
+  position: absolute;
+  inset: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0.75px solid rgb(255 255 255 / 0.6);
+  border-radius: 6px;
+  background: rgb(255 255 255 / 0.6);
+  color: var(--white);
+  backdrop-filter: blur(8px);
+}
+.glass svg {
+  width: 16px;
+  height: 16px;
+}

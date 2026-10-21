@@ -81,6 +81,7 @@ export type AgentUpdatePayload = {
   description?: string;
   field_mask?: string[];
   instructions?: string;
+  skills?: string[];
   image?: string;
   model_config?: JSONRecord;
   mcpServers?: JSONRecord | null;
@@ -221,8 +222,15 @@ export function fetchAgentMCPServers(agentID: string): Promise<AgentMCPServersVi
   return get(`api/v1/agents/${encodeURIComponent(agentID)}/mcp-servers`);
 }
 
-export function batchAddAgentMCPServersRequest(agentID: string, serverNames: string[]): Promise<AgentMCPServersView> {
-  return post(`api/v1/agents/${encodeURIComponent(agentID)}/mcp-servers:batchAdd`, { names: serverNames });
+export function batchAddAgentMCPServersRequest(
+  agentID: string,
+  serverNames: string[],
+  enabled?: boolean,
+): Promise<AgentMCPServersView> {
+  return post(`api/v1/agents/${encodeURIComponent(agentID)}/mcp-servers:batchAdd`, {
+    names: serverNames,
+    ...(enabled === undefined ? {} : { enabled }),
+  });
 }
 
 export function batchDeleteAgentMCPServersRequest(
@@ -348,6 +356,7 @@ export async function createBotRequest(payload: CreateBotPayload): Promise<Agent
         role: payload.role,
         description: payload.description,
         instructions: payload.instructions,
+        skills: payload.skills,
         image: payload.image,
         runtime: {
           name: runtimeSelection.runtime_name,

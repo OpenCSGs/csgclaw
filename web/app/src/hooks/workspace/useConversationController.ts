@@ -1,3 +1,4 @@
+import { useConversationMessageSync } from "./useConversationMessageSync";
 import { useQueryClient } from "@tanstack/react-query";
 import { workspaceQueryKeys } from "./workspaceQueries";
 import { normalizeSlashShorthandForPayload } from "@/models/slashCommands";
@@ -611,6 +612,11 @@ export function useConversationController({
   const activeChannel =
     selectedConversation && !isDirectConversation(selectedConversation) ? selectedConversation : null;
   const selectedConversationID = selectedConversation?.id ?? "";
+  const invalidateMessageSync = useConversationMessageSync(
+    messageListActive ? selectedConversationID : "",
+    setBootstrapData,
+    selectedConversation,
+  );
   const selectedMessageCount = selectedConversation?.messages?.length ?? 0;
   const authoritativeWorkingParticipants = useMemo(
     () => workingParticipantsForRoom(selectedConversationID),
@@ -913,42 +919,56 @@ export function useConversationController({
     }
   }, [activeConversationId, resetThread]);
 
-  const handleRealtimeEvent = useCallback((payload: IMServerEvent) => {
-    const selection = activeThreadSelectionRef.current;
-    if (!selection) {
-      return;
-    }
-    if (payload.type === "room.attachment_deleted" && payload.room_id === selection.roomID && payload.attachment_id) {
-      const attachmentID = payload.attachment_id;
-      setActiveThreadView((current) => removeAttachmentFromThreadView(current, attachmentID));
-    }
-    if (payload.type === "connection.open") {
-      void fetchThreadRequest(selection.roomID, selection.rootID)
-        .then((view) => {
-          if (
-            activeThreadSelectionRef.current?.rootID === selection.rootID &&
-            activeThreadSelectionRef.current?.roomID === selection.roomID
-          )
-            setActiveThreadView((current) => {
-              let merged = view;
-              for (const message of current?.replies || []) merged = appendReplyToThreadView(merged, message) || merged;
-              return merged;
-            });
-        })
-        .catch(() => undefined);
-    }
-    const selectedKey = threadKey(selection.roomID, selection.rootID);
-    if ((payload?.type === "thread.created" || payload?.type === "thread.updated") && payload.thread) {
-      if (threadViewKey(payload.thread) === selectedKey) {
-        setActiveThreadView(payload.thread);
+  const handleRealtimeEvent = useCallback(
+    (payload: IMServerEvent) => {
+      if (payload.type === "user.deleted") invalidateMessageSync();
+      if (
+        payload.type === "room.messages_cleared" ||
+        payload.type === "room.attachment_deleted" ||
+        payload.type === "thread.created" ||
+        payload.type === "thread.updated"
+      ) {
+        const roomID = payload.room_id || payload.room?.id || payload.thread?.room_id;
+        if (roomID) invalidateMessageSync(roomID);
       }
-    }
-    if (payload?.type === "message.created" && payload.message) {
-      if (threadMessageKey(payload.room_id, payload.message) === selectedKey) {
-        setActiveThreadView((current) => appendReplyToThreadView(current, payload.message) ?? null);
+      const selection = activeThreadSelectionRef.current;
+      if (!selection) {
+        return;
       }
-    }
-  }, []);
+      if (payload.type === "room.attachment_deleted" && payload.room_id === selection.roomID && payload.attachment_id) {
+        const attachmentID = payload.attachment_id;
+        setActiveThreadView((current) => removeAttachmentFromThreadView(current, attachmentID));
+      }
+      if (payload.type === "connection.open") {
+        void fetchThreadRequest(selection.roomID, selection.rootID)
+          .then((view) => {
+            if (
+              activeThreadSelectionRef.current?.rootID === selection.rootID &&
+              activeThreadSelectionRef.current?.roomID === selection.roomID
+            )
+              setActiveThreadView((current) => {
+                let merged = view;
+                for (const message of current?.replies || [])
+                  merged = appendReplyToThreadView(merged, message) || merged;
+                return merged;
+              });
+          })
+          .catch(() => undefined);
+      }
+      const selectedKey = threadKey(selection.roomID, selection.rootID);
+      if ((payload?.type === "thread.created" || payload?.type === "thread.updated") && payload.thread) {
+        if (threadViewKey(payload.thread) === selectedKey) {
+          setActiveThreadView(payload.thread);
+        }
+      }
+      if (payload?.type === "message.created" && payload.message) {
+        if (threadMessageKey(payload.room_id, payload.message) === selectedKey) {
+          setActiveThreadView((current) => appendReplyToThreadView(current, payload.message) ?? null);
+        }
+      }
+    },
+    [invalidateMessageSync],
+  );
 
   useEffect(() => {
     setMentionIndex(0);
@@ -1591,6 +1611,7 @@ export function useConversationController({
       return;
     }
 
+    invalidateMessageSync(roomID);
     setBootstrapData((current) => upsertConversationInData(current, clearedRoom));
     setThreadDraftsByKey((current) => clearThreadDraftsForConversation(current, roomID));
     setThreadAttachmentDraftsByKey((current) => clearAttachmentDraftsForConversation(current, roomID));

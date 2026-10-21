@@ -7,6 +7,7 @@ import { WorkspaceControllerProvider, type WorkspaceController } from "@/hooks/w
 import { sendMessageRequest } from "@/api/im";
 import { StartTaskPage } from "@/pages/StartTaskPage/StartTaskPage";
 import type { IMConversation } from "@/models/conversations";
+import { TASK_EXAMPLES_HIDDEN_STORAGE_KEY } from "@/shared/storage/keys";
 
 vi.mock("@/api/agentResources", () => ({ fetchConversationResourceBatch: vi.fn() }));
 vi.mock("@/api/im", () => ({ sendMessageRequest: vi.fn() }));
@@ -37,6 +38,7 @@ function setup(
 ) {
   const create = vi.fn().mockResolvedValue(room);
   const open = vi.fn();
+  const onMessage = vi.fn();
   const onCreateAgent = vi.fn();
   const requireAuth = vi.fn(() => options.authenticated ?? true);
   const controller = {
@@ -44,7 +46,7 @@ function setup(
     t: (key: string) => key,
     openAgentSettings: vi.fn(),
     agentViewProps: { authStatuses: { codex: { authenticated: options.authenticated ?? true } } },
-    taskEntry: { create, open },
+    taskEntry: { create, open, onMessage },
     sidebarProps: {
       t: (key: string) => key,
       locale: "zh",
@@ -57,11 +59,12 @@ function setup(
       ],
       teams: [{ id: "team-1", title: "Team", lead_agent_id: "u-manager", member_agent_ids: ["u-worker"] }],
       onCreateAgent,
+      onCreateCustomAgent: onCreateAgent,
       onOpenCreateTeam: vi.fn(),
       onSelectAgent: vi.fn(),
     },
   } as unknown as WorkspaceController;
-  render(
+  const view = render(
     <MemoryRouter
       initialEntries={[
         {
@@ -78,8 +81,40 @@ function setup(
     </MemoryRouter>,
     { wrapper: createQueryWrapper().wrapper },
   );
-  return { create, open, onCreateAgent, requireAuth };
+  return { create, open, onMessage, onCreateAgent, requireAuth, unmount: view.unmount };
 }
+
+describe("task example visibility", () => {
+  beforeEach(() => {
+    localStorage.removeItem(TASK_EXAMPLES_HIDDEN_STORAGE_KEY);
+    sessionStorage.removeItem(TASK_EXAMPLES_HIDDEN_STORAGE_KEY);
+  });
+  afterEach(() => {
+    localStorage.removeItem(TASK_EXAMPLES_HIDDEN_STORAGE_KEY);
+    sessionStorage.removeItem(TASK_EXAMPLES_HIDDEN_STORAGE_KEY);
+  });
+
+  it("keeps dismissal in the current tab and restores examples in a new session", () => {
+    const first = setup();
+    fireEvent.click(screen.getByRole("button", { name: "iaStartExamplesHide" }));
+    expect(screen.queryByRole("button", { name: "iaStartExamplesHide" })).not.toBeInTheDocument();
+    first.unmount();
+
+    const sameTab = setup();
+    expect(screen.queryByRole("button", { name: "iaStartExamplesHide" })).not.toBeInTheDocument();
+    sameTab.unmount();
+
+    sessionStorage.removeItem(TASK_EXAMPLES_HIDDEN_STORAGE_KEY);
+    setup();
+    expect(screen.getByRole("button", { name: "iaStartExamplesHide" })).toBeVisible();
+  });
+
+  it("ignores a dismissal saved permanently by older versions", () => {
+    localStorage.setItem(TASK_EXAMPLES_HIDDEN_STORAGE_KEY, "true");
+    setup();
+    expect(screen.getByRole("button", { name: "iaStartExamplesHide" })).toBeVisible();
+  });
+});
 
 describe("StartTaskPage task preparation", () => {
   beforeEach(() => vi.mocked(sendMessageRequest).mockReset());
@@ -153,6 +188,16 @@ describe("StartTaskPage task preparation", () => {
     expect(create).toHaveBeenCalledTimes(1);
     const sends = vi.mocked(sendMessageRequest).mock.calls;
     expect(sends[0][0].client_message_id).toBe(sends[1][0].client_message_id);
+  });
+  it("stores the accepted first message before opening the conversation", async () => {
+    const message = { id: "first", sender_id: "user-admin", content: "hello" };
+    vi.mocked(sendMessageRequest).mockResolvedValue(message);
+    const { open, onMessage } = setup();
+    fireEvent.change(screen.getByRole("textbox", { name: "taskEntryPrompt" }), { target: { value: "hello" } });
+    fireEvent.click(screen.getByRole("button", { name: "taskEntryStart" }));
+    await waitFor(() => expect(open).toHaveBeenCalledWith(room));
+    expect(onMessage).toHaveBeenCalledWith(room.id, message);
+    expect(onMessage.mock.invocationCallOrder[0]).toBeLessThan(open.mock.invocationCallOrder[0]);
   });
   it("creates and opens a task for the selected worker instead of Manager", async () => {
     vi.mocked(sendMessageRequest).mockResolvedValue({} as never);

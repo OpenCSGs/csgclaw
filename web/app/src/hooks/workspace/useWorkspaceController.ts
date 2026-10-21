@@ -21,6 +21,7 @@ import {
   resolveConversationUser,
   upsertUserInData,
   mergeRoomMetadataUpdateInData,
+  appendMessageToData,
   removeConversationFromData,
 } from "@/models/conversations";
 import { isAgentRunning, resolveAgentAvatarFallback } from "@/models/agents";
@@ -255,7 +256,9 @@ export function useWorkspaceController(): WorkspaceController {
     refreshWorkspaceAppVersion,
     t,
   });
+  const participantWork = useParticipantWorkStatus({ agents, users: displayData?.users ?? [] });
   const agent = useAgentController({
+    workingParticipantsForRoom: participantWork.workingParticipantsForRoom,
     redirectToIncompleteManagerProfile: false,
     activeConversationId,
     activePane,
@@ -264,9 +267,6 @@ export function useWorkspaceController(): WorkspaceController {
     agentsQuery,
     bootstrapConfig,
     data: displayData,
-    catalogMCPServers: hub.mcpServers,
-    catalogMCPServersError: hub.mcpStateError,
-    catalogMCPServersLoading: hub.mcpServersLoading,
     hubTemplates,
     locale,
     managerProfile,
@@ -277,7 +277,6 @@ export function useWorkspaceController(): WorkspaceController {
     onBrowseTemplates: () => navigate("/agents?tab=templates"),
     onTemplatePublished: hub.showPublishedTemplate,
     profileDetailAgentID: conversationProfileDetailAgentID,
-    refreshMCPServers: hub.refetchMCPServers,
     refreshHubTemplates,
     refreshWorkspaceAgents,
     refreshWorkspaceModelProviders,
@@ -327,7 +326,6 @@ export function useWorkspaceController(): WorkspaceController {
     () => resolveManagerDirectConversation(rooms, displayData?.current_user_id ?? "", agent.managerAgent),
     [agent.managerAgent, displayData?.current_user_id, rooms],
   );
-  const participantWork = useParticipantWorkStatus({ agents, users: displayData?.users ?? [] });
   const conversation = useConversationController({
     activeConversationId,
     activePane,
@@ -810,6 +808,7 @@ export function useWorkspaceController(): WorkspaceController {
     currentUserID: displayData?.current_user_id ?? "",
     rooms,
     onUpdate: (room) => setBootstrapData((current) => mergeRoomMetadataUpdateInData(current, room)),
+    onMessage: (roomID, message) => setBootstrapData((current) => appendMessageToData(current, roomID, message)),
     onDelete: (id) => {
       setBootstrapData((current) => removeConversationFromData(current, id));
       if (activePane.type === WorkspacePaneTypes.conversation && activePane.id === id) navigate("/new");

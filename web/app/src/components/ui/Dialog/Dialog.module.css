@@ -59,6 +59,11 @@
   font-size: 12px;
   line-height: 16px;
 }
+.csg-dialog-description[data-size="md"] {
+  margin-top: 6px;
+  font-size: 14px;
+  line-height: 21px;
+}
 
 .csg-dialog-close {
   width: 36px;

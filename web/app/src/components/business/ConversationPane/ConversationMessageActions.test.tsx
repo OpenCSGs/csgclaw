@@ -21,10 +21,7 @@ describe("message consumption footer", () => {
   });
   it("shows consumption and the selected model, then hides the name for auto", () => {
     const { rerender } = render(<ConversationMessageActions metadata={metadata("gpt-test")} content="Answer" t={t} />);
-    expect(screen.getByRole("button", { name: "本轮消耗 1.22 K tokens · 模型 gpt-test" })).toHaveAttribute(
-      "title",
-      expect.stringContaining("输入：1000"),
-    );
+    expect(screen.getByRole("button", { name: "本轮消耗 1.22 K tokens · 模型 gpt-test" })).not.toHaveAttribute("title");
     rerender(<ConversationMessageActions metadata={metadata("auto")} content="Answer" t={t} />);
     expect(screen.getByRole("button", { name: "本轮消耗 1.22 K tokens" })).toBeVisible();
     expect(screen.queryByText(/模型/)).toBeNull();

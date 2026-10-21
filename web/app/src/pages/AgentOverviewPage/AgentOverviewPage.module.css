@@ -116,6 +116,11 @@
   background: var(--panel-soft);
   color: var(--text);
 }
+.filters small {
+  margin-left: 6px;
+  font-size: inherit;
+  font-variant-numeric: tabular-nums;
+}
 .row {
   width: 100%;
   display: flex;
@@ -157,6 +162,34 @@
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
+}
+.rowName {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.rowName strong {
+  min-width: 0;
+}
+.agentStatus {
+  width: 7px;
+  height: 7px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--muted);
+}
+.agentStatus[data-available="true"] {
+  background: var(--success-text);
+}
+.teamBadge {
+  flex-shrink: 0;
+  padding: 1px 5px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-full);
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 14px;
 }
 .avatar {
   width: 28px;

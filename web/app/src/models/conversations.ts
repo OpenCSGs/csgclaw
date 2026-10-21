@@ -1091,6 +1091,56 @@ export function isAgentRosterEvent(event: IMServerEvent | null | undefined): boo
   return false;
 }
 
+// HTTP snapshots carry the server's transcript order. Messages received over SSE
+// after the snapshot was taken remain at the end, with newer progress preserved.
+export function mergeConversationMessageSnapshot(
+  current: IMData | null,
+  roomID: string,
+  snapshot: readonly IMMessage[],
+  baseline?: readonly IMMessage[],
+): IMData | null {
+  if (!current) return current;
+  const room = current.rooms.find((item) => item.id === roomID);
+  if (!room) return current;
+  const existing = new Map(room.messages.map((message) => [message.id, message]));
+  const beforeRequest = new Map(baseline?.map((message) => [message.id, message]));
+  const seen = new Set<string | undefined>();
+  const messages: IMMessage[] = [];
+  for (const message of snapshot) {
+    if (isThreadReply(message) || (message.id && seen.has(message.id))) continue;
+    if (message.id) seen.add(message.id);
+    const previous = message.id ? existing.get(message.id) : undefined;
+    let merged = previous ? newerProgressMessage(previous, message) : message;
+    // Progress revisions do not version thread summaries or attachments. Accept
+    // the server values unless that field changed locally while fetching.
+    const before = beforeRequest.get(message.id);
+    const thread = baseline && previous && previous.thread !== before?.thread ? previous.thread : message.thread;
+    const attachments =
+      baseline && previous && previous.attachments !== before?.attachments ? previous.attachments : message.attachments;
+    if (thread !== merged.thread || attachments !== merged.attachments) merged = { ...merged, thread, attachments };
+    messages.push(previous && JSON.stringify(previous) === JSON.stringify(merged) ? previous : merged);
+  }
+  // A missing baseline message was removed on the server. Retain only local
+  // additions made during the request (or all unseen messages without a baseline).
+  messages.push(
+    ...room.messages.filter(
+      (message) =>
+        (!message.id || !seen.has(message.id)) &&
+        (!baseline || (message.id ? !beforeRequest.has(message.id) : !baseline.includes(message))),
+    ),
+  );
+  if (
+    messages.length === room.messages.length &&
+    messages.every((message, index) => message === room.messages[index])
+  ) {
+    return current;
+  }
+  return {
+    ...current,
+    rooms: sortConversations(current.rooms.map((item) => (item.id === roomID ? { ...item, messages } : item))),
+  };
+}
+
 export function appendMessageToData<T extends IMData | null | undefined>(
   current: T,
   conversationID: string | null | undefined,
