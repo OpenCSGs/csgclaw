@@ -119,7 +119,7 @@ export function TeamDetailPane({
           {onStartCollaboration ? (
             <Button
               className={styles.teamDetailToolbarButton}
-              variant="secondaryGray"
+              variant="primary"
               size="md"
               disabled={teamActionBusy}
               onClick={() => onStartCollaboration(team)}
