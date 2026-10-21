@@ -778,6 +778,7 @@ func (s *Controller) newCodexManagerAgent(name, description, instructions, avata
 		BoxID:            strings.TrimSpace(handleID),
 		Role:             RoleManager,
 		Status:           status,
+		DesiredState:     DesiredStateRunning,
 		CreatedAt:        createdAt,
 		UpdatedAt:        now,
 		Profile:          profileSelector(prof),

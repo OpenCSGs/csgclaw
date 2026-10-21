@@ -73,13 +73,6 @@ function AgentDetailSidePanel({ onClose, onOpenDM, onNewTask, ...props }: AgentD
     },
     [onOpenDM, requestClose],
   );
-  const handleNewTask = useCallback(
-    async (...args: Parameters<NonNullable<typeof onNewTask>>) => {
-      if (requestClose(false) === false) return;
-      await onNewTask?.(...args);
-    },
-    [onNewTask, requestClose],
-  );
 
   return (
     <DialogRoot open onOpenChange={(open) => (!open ? requestClose() : undefined)}>
@@ -115,7 +108,13 @@ function AgentDetailSidePanel({ onClose, onOpenDM, onNewTask, ...props }: AgentD
             {...props}
             dialogPortalContainer={dialogPortalContainer}
             onOpenDM={handleOpenDM}
-            onNewTask={onNewTask ? handleNewTask : undefined}
+            onNewTask={
+              onNewTask
+                ? (item) => {
+                    if (requestClose(false) !== false) onNewTask(item);
+                  }
+                : undefined
+            }
           />
         </div>
       </DialogContent>
@@ -536,7 +535,6 @@ function ConversationPaneContent({
     <>
       {taskDialog}
       <Conversation.Header
-        agents={agents}
         channelToolsRef={channelToolsRef}
         conversation={conversation}
         conversationMembers={conversationMembers}

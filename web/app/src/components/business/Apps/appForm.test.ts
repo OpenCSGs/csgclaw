@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { AppDefinition, AppInstallation } from "@/api/apps";
-import { appFormPayload, appStatus, initialAppForm } from "./appForm";
+import { appFormPayload, initialAppForm } from "./appForm";
 
 const definition: AppDefinition = {
   app_id: "gitlab",
@@ -85,12 +85,6 @@ describe("App settings payload", () => {
   it("does not restore persisted secret values into an editing form", () => {
     const existing = installation;
     expect(initialAppForm(definition, existing).credentials).toEqual({});
-  });
-
-  it("shows a persisted disconnect or disable intent ahead of old connection status", () => {
-    const existing = { ...installation, disconnected: true };
-    expect(appStatus(existing, (key) => key)).toBe("appStatusDisconnected");
-    expect(appStatus({ ...existing, enabled: false }, (key) => key)).toBe("appStatusDisabled");
   });
 });
 

@@ -96,6 +96,38 @@ function Harness({
 }
 
 describe("AgentDetailPane metadata editing", () => {
+  it.each(["agent-1", "agent-manager"])("confirms recreation from the pending badge for %s", async (id) => {
+    const user = userEvent.setup();
+    const onRecreate = vi.fn();
+    const item = {
+      ...agent,
+      id,
+      name: id === "agent-manager" ? "manager" : agent.name,
+      agent_profile: { ...agent.agent_profile, env_restart_required: true },
+    };
+    render(<Harness item={item} onRecreate={onRecreate} />);
+    const badge = screen.getByRole("button", { name: "profileRestartRequired" });
+    await user.click(badge);
+    expect(screen.getByRole("dialog")).toHaveTextContent("agentRecreateConfirmMessage");
+    expect(onRecreate).not.toHaveBeenCalled();
+    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "cancel" }));
+    expect(onRecreate).not.toHaveBeenCalled();
+    await user.click(badge);
+    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "agentRecreate" }));
+    expect(onRecreate).toHaveBeenCalledExactlyOnceWith(item);
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("disables the recreation badge while an agent action is running", () => {
+    render(
+      <Harness
+        busyKey="agent-1:recreate"
+        item={{ ...agent, agent_profile: { ...agent.agent_profile, env_restart_required: true } }}
+      />,
+    );
+    expect(screen.getByRole("button", { name: "profileRestartRequired" })).toBeDisabled();
+  });
+
   it("offers a primary new-task action for the current agent", async () => {
     const onNewTask = vi.fn();
     const onOpenDM = vi.fn();

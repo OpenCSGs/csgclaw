@@ -32,7 +32,8 @@ import { pathForPane } from "@/models/routing";
 import { CLIDialog } from "./CLIDialog";
 import { AppSettingsDialog } from "./AppSettingsDialog";
 import { AppIcon } from "./AgentAppsPanel";
-import { appName, appStatus, appDescription, appConnectionError } from "./appForm";
+import { appName, appDescription } from "./appForm";
+import { appStatus, appConnectionError, appConnectionPending, appAuthorizationSummary } from "./appStatus";
 import styles from "./AgentAppsPanel.module.css";
 
 export function GlobalAppsPanel({
@@ -108,6 +109,7 @@ export function GlobalAppsPanel({
     };
   }, [reload]);
   const editing = items.find((item) => item.installation_id === (resourceId ?? localEditingID)) || null;
+  const editingError = editing ? appConnectionError(editing, t) : "";
   const availableDefinitions = definitions.filter(
     (definition) =>
       definition.app_id !== "llm-wiki" &&
@@ -149,12 +151,9 @@ export function GlobalAppsPanel({
     return entry ? appDescription(entry, t) : item.config.url || item.config.command || appName(item.app_id, t);
   };
   const description = (item: AppInstallation) => {
-    const operationInProgress =
-      item.status === "connecting" ||
-      item.status === "applying" ||
-      item.operation?.status === "running" ||
-      item.operation?.status === "pending";
-    return operationInProgress ? appStatus(item, t) : item.last_error ? appConnectionError(item, t) : describe(item);
+    return appConnectionPending(item)
+      ? appStatus(item, t)
+      : appConnectionError(item, t) || appAuthorizationSummary(item, t) || describe(item);
   };
   const filteredItems = items.filter((item) =>
     matches(item.name, `${appName(item.app_id, t)} ${describe(item)} ${item.config.url || item.config.command || ""}`),
@@ -314,9 +313,9 @@ export function GlobalAppsPanel({
             editing && !adding ? (
               <div className={styles.resourceDetails}>
                 <p className={styles.hint}>{appStatus(editing, t)}</p>
-                {editing.last_error ? (
+                {editingError ? (
                   <p role="alert" className={styles.cardError}>
-                    {appConnectionError(editing, t)}
+                    {editingError}
                   </p>
                 ) : null}
               </div>

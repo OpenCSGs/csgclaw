@@ -1075,9 +1075,12 @@ func (s *RemoteStore) requestAccept(ctx context.Context, method, endpoint, accep
 		req.Header.Set("Authorization", "Bearer "+s.token)
 	}
 	req.Header.Set("Accept", accept)
+	started := time.Now()
 
 	resp, err := s.httpClient.Do(req)
 	if err != nil {
+		slog.WarnContext(ctx, "remote template request failed", "method", method, "url", s.remoteLogURL(req.URL),
+			"accept", accept, "duration", time.Since(started), "error", s.remoteLogText(err.Error()))
 		return nil, 0, fmt.Errorf("remote hub request %s %s: %w", method, endpoint, err)
 	}
 	defer resp.Body.Close()
@@ -1087,6 +1090,26 @@ func (s *RemoteStore) requestAccept(ctx context.Context, method, endpoint, accep
 		reader = io.LimitReader(resp.Body, maxBody)
 	}
 	body, err := io.ReadAll(reader)
+	if err == nil && resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		return body, resp.StatusCode, nil
+	}
+	attrs := []slog.Attr{
+		slog.String("method", method), slog.String("url", s.remoteLogURL(req.URL)), slog.String("accept", accept),
+		slog.Int("status", resp.StatusCode), slog.Duration("duration", time.Since(started)),
+		slog.String("request_id", s.remoteLogText(resp.Header.Get("X-Request-ID"))),
+		slog.String("content_type", resp.Header.Get("Content-Type")), slog.Int("response_bytes", len(body)),
+		slog.Bool("response_read_limit_reached", maxBody > 0 && int64(len(body)) >= maxBody),
+	}
+	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		// Even a partial successful response may contain encoded file contents.
+		attrs = append(attrs, slog.String("response_body", "[successful response body omitted]"))
+	} else {
+		attrs = append(attrs, slog.String("response_body", s.remoteLogBody(body)))
+	}
+	if err != nil {
+		attrs = append(attrs, slog.String("error", s.remoteLogText(err.Error())))
+	}
+	slog.LogAttrs(ctx, slog.LevelWarn, "remote template request failed", attrs...)
 	if err != nil {
 		return nil, resp.StatusCode, fmt.Errorf("read remote hub response: %w", err)
 	}

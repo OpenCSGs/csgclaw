@@ -26,7 +26,7 @@ import {
 import type { TranslateFn } from "@/models/conversations";
 import { localizeAPIError } from "@/shared/i18n";
 import { errorMessage } from "@/api/client";
-import { appStatus } from "../appForm";
+import { appStatus, appConnectionError, appAuthorizationSummary, cliIdentityAuthorized } from "../appStatus";
 import styles from "../AgentAppsPanel.module.css";
 import stepPending from "./assets/step-pending.svg";
 import stepCurrent from "./assets/step-current.svg";
@@ -156,10 +156,6 @@ export function CLIDialog({ definition, existing, t, onClose, onChanged }: Props
     (operation?.action === "disconnect" && operation.status === "failed"),
   );
   const canDisconnect = ready || cleanupPending;
-  const identityAuthorized = (identity: "bot" | "user") => {
-    const value = resource?.auth_status?.identities[identity];
-    return Boolean(value?.available && value.verified === true);
-  };
   const activeIdentity =
     operation?.stage === "app_authorization" ? "bot" : operation?.stage === "user_authorization" ? "user" : undefined;
   const stages: Record<string, string> = {
@@ -180,16 +176,8 @@ export function CLIDialog({ definition, existing, t, onClose, onChanged }: Props
     revoking_authorization: "cliRevokingAuthorization",
     removing_configuration: "cliRemovingConfiguration",
   };
-  const errorLabels: Record<string, string> = {
-    authorization_expired: "feishuCLIExpired",
-    authorization_denied: "feishuCLIDenied",
-    permission_denied: "feishuCLIPermissionDenied",
-    cleanup_pending: "feishuCLICleanupPending",
-    migration_failed: "feishuCLIMigrationFailed",
-  };
   const requestError = error ? localizeAPIError(error, t) || errorMessage(error) : "";
-  const storedError =
-    resource?.last_error_code && !active ? t(errorLabels[resource.last_error_code] ?? "feishuCLIReconnectHint") : "";
+  const storedError = resource ? appConnectionError(resource, t) : "";
   return (
     <DialogRoot
       open
@@ -233,7 +221,7 @@ export function CLIDialog({ definition, existing, t, onClose, onChanged }: Props
                 : cleanupPending
                   ? t("cliCleanupRequired")
                   : resource
-                    ? appStatus(resource, t)
+                    ? appAuthorizationSummary(resource, t) || appStatus(resource, t)
                     : t("appStatusNeedsConfiguration")}
             </p>
           </div>
@@ -248,7 +236,7 @@ export function CLIDialog({ definition, existing, t, onClose, onChanged }: Props
               </div>
               {(["bot", "user"] as const).map((identity) => {
                 const info = resource?.auth_status?.identities[identity];
-                const completed = identityAuthorized(identity);
+                const completed = cliIdentityAuthorized(info);
                 const current = active && !completed && activeIdentity === identity;
                 const state = completed ? "completed" : current ? "current" : "pending";
                 const label = t(identity === "bot" ? "feishuCLIBot" : "feishuCLIUser");
@@ -332,7 +320,7 @@ export function CLIDialog({ definition, existing, t, onClose, onChanged }: Props
                     {worker.agent_id} ·{" "}
                     {t(
                       worker.error_code
-                        ? "feishuCLIMigrationFailed"
+                        ? "errors.migration_failed"
                         : worker.verification_pending
                           ? "feishuCLIVerificationPending"
                           : worker.phase === "completed"
@@ -396,7 +384,10 @@ export function CLIDialog({ definition, existing, t, onClose, onChanged }: Props
             <>
               {canDisconnect ? (
                 <div className={styles.cliFooterActions}>
-                  {ready && !cleanupPending && feishu && resource?.auth_status?.identities.user.verified !== true ? (
+                  {ready &&
+                  !cleanupPending &&
+                  feishu &&
+                  !cliIdentityAuthorized(resource?.auth_status?.identities.user) ? (
                     <Button disabled={actionPending} onClick={() => void run("login")}>
                       {t("feishuCLILogin")}
                     </Button>

@@ -108,7 +108,9 @@ func NormalizeLegacy(content string, refs []apitypes.ResourceReference) (Normali
 
 type ResolvedResource struct {
 	apitypes.ResourceSnapshot
-	ToolNames []string `json:"tool_names,omitempty"`
+	AppKind    string   `json:"app_kind,omitempty"`
+	ToolNames  []string `json:"tool_names,omitempty"`
+	SkillNames []string `json:"skill_names,omitempty"`
 }
 type ResolvedSelection struct {
 	AgentID   string             `json:"-"`

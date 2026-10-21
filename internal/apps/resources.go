@@ -122,6 +122,8 @@ func (s *Service) loadResources(stored map[string]record) error {
 		r.Tools, r.CredentialsSet, r.Bindings = nil, nil, nil
 		if r.Kind != KindCLI {
 			r.LastError, r.LastErrorCode, r.LastErrorHTTPStatus = "", "", 0
+		} else if repairCancelledCLIError(&r) {
+			converted = true
 		}
 		r.Status = "needs_configuration"
 		if r.Disconnected {

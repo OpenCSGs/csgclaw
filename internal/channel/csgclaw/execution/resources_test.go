@@ -37,7 +37,7 @@ func TestResourceInputUsesExistingTurnAndRevalidates(t *testing.T) {
 			}
 			binding := channel.Binding{ID: "binding", ParticipantID: "participant", AgentID: "agent"}
 			selection := &apitypes.ResourceSelection{Version: 1, AgentID: "agent", Refs: []apitypes.ResourceSnapshot{{ResourceReference: apitypes.ResourceReference{Source: "skill", ID: "review"}, Type: "skill", Name: "review"}}}
-			event := channel.Event{MessageID: "selected", RoomID: "room", ChatType: "p2p", ResourceSelection: selection}
+			event := channel.Event{MessageID: "selected", RoomID: "room", ChatType: "direct", ResourceSelection: selection}
 			if _, err = adapter.Handle(t.Context(), binding, event); err != nil {
 				t.Fatal(err)
 			}

@@ -13,11 +13,12 @@ import { nextFocusTarget } from "./focus";
 export type ComboboxOption = {
   value: string;
   label: ReactNode;
-  group?: string;
   textValue?: string;
   description?: ReactNode;
   disabled?: boolean;
   separatorAfter?: boolean;
+  group?: string;
+  alwaysVisible?: boolean;
 };
 
 export type ComboboxProps = {
@@ -100,7 +101,11 @@ export function Combobox({
   const filtered = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase();
     return normalized
-      ? options.filter((option) => option.value !== "" && searchText(option).toLocaleLowerCase().includes(normalized))
+      ? options.filter(
+          (option) =>
+            option.alwaysVisible ||
+            (option.value !== "" && searchText(option).toLocaleLowerCase().includes(normalized)),
+        )
       : options;
   }, [options, query]);
   const groups = useMemo(() => {
@@ -398,7 +403,7 @@ export function Combobox({
             </div>
           )}
         </div>
-        {footer ? <div className={styles["csg-combobox-footer"]}>{footer}</div> : null}
+        {footer}
       </PopoverContent>
     </PopoverRoot>
   );

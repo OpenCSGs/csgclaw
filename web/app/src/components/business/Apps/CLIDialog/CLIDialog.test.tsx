@@ -195,6 +195,44 @@ describe("Feishu CLI authorization", () => {
     await waitFor(() => expect(cancelCLIOperation).toHaveBeenCalledWith("global-cli", "session-1"));
     expect(screen.queryByRole("link", { name: "Authorize account" })).not.toBeInTheDocument();
   });
+  it.each(["user_authorization", "applying"])(
+    "shows the remaining authorization after cancelling %s",
+    async (stage) => {
+      const zh = createTranslator("zh");
+      const progress: AppInstallation = {
+        ...resource,
+        operation: { ...resource.operation!, stage },
+        auth_status: {
+          appId: "cli_test",
+          defaultAs: "auto",
+          identities: {
+            bot: { available: true, verified: true, status: "ready" },
+            user: { available: stage === "applying", verified: stage === "applying", status: "pending" },
+          },
+        },
+      };
+      const cancelled: AppInstallation = {
+        ...progress,
+        authorized: true,
+        status: "connected",
+        operation: { ...progress.operation!, status: "cancelled", authorization_url: undefined },
+      };
+      vi.mocked(fetchAppResource).mockResolvedValue(progress);
+      vi.mocked(cancelCLIOperation).mockImplementation(async () => {
+        vi.mocked(fetchAppResource).mockResolvedValue(cancelled);
+        return cancelled.operation!;
+      });
+      const changed = vi.fn().mockResolvedValue(undefined);
+      render(<CLIDialog definition={definition} existing={progress} t={zh} onClose={vi.fn()} onChanged={changed} />);
+      await userEvent.setup().click(screen.getByRole("button", { name: zh("cancel") }));
+      await waitFor(() => expect(changed).toHaveBeenCalledOnce());
+      expect(screen.getByRole("status")).toHaveTextContent(
+        stage === "applying" ? "机器人：已授权 · 个人账号：已授权" : "机器人：已授权 · 个人账号：待授权",
+      );
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: zh("appDisconnect") })).toBeEnabled();
+    },
+  );
   it.each([false, true])(
     "refreshes cancelled authorization before the regular polling tick (pending=%s)",
     async (pending) => {
@@ -391,9 +429,7 @@ describe("Feishu CLI authorization", () => {
     vi.mocked(startCLIOperation).mockResolvedValue(resource.operation!);
     render(<CLIDialog definition={definition} existing={expired} t={t} onClose={vi.fn()} onChanged={vi.fn()} />);
 
-    expect(await screen.findByRole("alert")).toHaveTextContent(
-      "Authorization expired. Authorize again; the bot configuration is preserved.",
-    );
+    expect(await screen.findByRole("alert")).toHaveTextContent("Authorization expired. Authorize again.");
     await userEvent
       .setup()
       .click(within(screen.getByRole("alert").parentElement!).getByRole("button", { name: "Close" }));

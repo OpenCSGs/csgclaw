@@ -75,6 +75,10 @@ import {
 import { WorkspacePaneTypes } from "@/models/routing";
 import {
   agentOfflineReasonLabel,
+  isAgentRestartNeeded,
+  agentSandboxEnabled,
+  isAgentProfileDraftComplete,
+  agentToDraft,
   agentProfileConfig,
   agentRuntimeState,
   isAgentLifecycleRunning,
@@ -717,7 +721,17 @@ export function useConversationController({
   }
   function activeConversationAgentOfflineMessage(segments: readonly ComposerSegment[]): string {
     const recipients = recipientAgentsForSegments(segments);
-    if (recipients.length === 0 || recipients.some(isAgentLifecycleRunning)) return "";
+    // Let the backend reconcile pending Codex configuration under its lifecycle
+    // gate. It still owns explicit-stop intent and connector readiness checks.
+    const canRecover = recipients.some(
+      (agent) =>
+        agentRuntimeKind(agent) === "codex" &&
+        !agentSandboxEnabled(agent) &&
+        isAgentRestartNeeded(agent) &&
+        isAgentProfileDraftComplete(agentToDraft(agent)) &&
+        ["failed", "stopped", "exited", "unknown", "profile_incomplete"].includes(agentRuntimeState(agent)),
+    );
+    if (recipients.length === 0 || recipients.some(isAgentLifecycleRunning) || canRecover) return "";
     const agent = recipients[0];
     const name = String(agent.name || agent.id || "").trim();
     const reason = agentOfflineReasonLabel(agentRuntimeState(agent), t);
@@ -2088,7 +2102,8 @@ export function buildSlashPickerState(input: SlashPickerStateInput): SlashPicker
     active: true,
     candidates: [
       ...builtinSlashCommandNames
-        .filter((name) => fuzzySkillMatch(name, query ?? ""))
+        // Keep /new parsing and execution available without suggesting the legacy entry point.
+        .filter((name) => name !== "new" && fuzzySkillMatch(name, query ?? ""))
         .map((name) => ({ description: slashCommandDescription(name), name, type: "command" as const })),
       ...input.skillOptions
         .filter(

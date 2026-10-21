@@ -627,6 +627,10 @@ func TestCLICancelAfterAuthorizationCommitRestoresWorkers(t *testing.T) {
 				if got.Status != "failed" || got.ErrorCode != "cleanup_pending" {
 					t.Fatalf("failed recovery=%+v", got)
 				}
+				item, err := s.CheckResource(t.Context(), id, true)
+				if err != nil || item.Status != "error" || item.LastErrorCode != "cleanup_pending" || item.LastError == "" {
+					t.Fatalf("cleanup error: status=%s code=%q message=%q err=%v", item.Status, item.LastErrorCode, item.LastError, err)
+				}
 				if err := s.CheckCLIReady("running"); err == nil {
 					t.Fatal("worker startup was allowed after failed recovery")
 				}
@@ -640,11 +644,25 @@ func TestCLICancelAfterAuthorizationCommitRestoresWorkers(t *testing.T) {
 			if got.Status != "cancelled" || got.ErrorCode != "" {
 				t.Fatalf("cancelled operation=%+v", got)
 			}
+			status := "connected"
+			if scenario.action == "disconnect" {
+				status = "needs_configuration"
+			}
+			assertCancelledCLIResource(t, s, id, status)
 			for _, worker := range []string{"running", "stopped"} {
 				if err := s.CheckCLIReady(worker); err != nil {
 					t.Fatalf("worker %s cannot start: %v", worker, err)
 				}
 			}
+			if err := s.Close(); err != nil {
+				t.Fatal(err)
+			}
+			restored, err := NewService(s.path, s.options)
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { _ = restored.Close() })
+			assertCancelledCLIResource(t, restored, id, status)
 			f.runtime.mu.Lock()
 			defer f.runtime.mu.Unlock()
 			if !f.runtime.running["running"] || f.runtime.running["stopped"] {

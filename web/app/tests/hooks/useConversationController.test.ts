@@ -161,7 +161,7 @@ describe("useConversationController slash skill helpers", () => {
     expect(slashPickerQueryForDraft("hello /skill-creator")).toBeNull();
   });
 
-  it("includes builtin slash commands before workspace skills", () => {
+  it("hides the legacy new command while retaining skills and other suggestions", () => {
     expect(
       buildSlashPickerState({
         draftText: "/",
@@ -169,7 +169,6 @@ describe("useConversationController slash skill helpers", () => {
         skillOptions: [{ name: "skill-creator", description: "Create useful skills" }, { name: "new" }],
       }).candidates,
     ).toEqual([
-      { description: "Start a new conversation", name: "new", type: "command" },
       { description: "Create useful skills", name: "skill-creator", type: "skill" },
       { description: "建议创建智能体，不会自动执行", name: "创建智能体", type: "command" },
       { description: "建议创建房间，不会自动执行", name: "创建房间", type: "command" },
@@ -180,7 +179,7 @@ describe("useConversationController slash skill helpers", () => {
         enabled: true,
         skillOptions: [{ name: "skill-creator" }],
       }).candidates,
-    ).toEqual([{ description: "Start a new conversation", name: "new", type: "command" }]);
+    ).toEqual([]);
     expect(
       buildSlashPickerState({
         draftText: "/existing prompt",
@@ -189,7 +188,6 @@ describe("useConversationController slash skill helpers", () => {
         skillOptions: [{ name: "skill-creator" }],
       }).candidates,
     ).toEqual([
-      { description: "Start a new conversation", name: "new", type: "command" },
       { description: undefined, name: "skill-creator", type: "skill" },
       { description: "建议创建智能体，不会自动执行", name: "创建智能体", type: "command" },
       { description: "建议创建房间，不会自动执行", name: "创建房间", type: "command" },

@@ -3,9 +3,8 @@ import type { ReactNode, RefObject } from "react";
 import { AgentAvatarContent } from "@/components/business/AgentAvatar";
 import { Button, Tooltip, PanelHeader } from "@/components/ui";
 import { AddUserIcon, TrashIcon, UsersIcon, WrenchIcon } from "@/components/ui/Icons";
-import type { AgentLike } from "@/models/agents";
 import type { IMConversation, IMUser, TranslateFn } from "@/models/conversations";
-import { isDirectConversation, resolveAgentForUser } from "@/models/conversations";
+import { isDirectConversation, normalizeComparable } from "@/models/conversations";
 import { avatarFallbackText } from "@/shared/avatar";
 import { localizeRole } from "@/shared/i18n";
 import type { BooleanStateSetter } from "./types";
@@ -17,7 +16,6 @@ export type ConversationHeaderProps = {
   description?: string;
   headerAccessory?: ReactNode;
   inviteActionLabel: string;
-  agents?: AgentLike[];
   memberMenuRef?: RefObject<HTMLDivElement | null>;
   onClearMessages: () => void;
   onDeleteRoom: () => void;
@@ -45,7 +43,6 @@ export const ConversationHeader = memo(function ConversationHeader({
   description,
   headerAccessory,
   inviteActionLabel,
-  agents = [],
   memberMenuRef,
   selectedMessageCount,
   selectedVisibleMessageCount,
@@ -69,9 +66,10 @@ export const ConversationHeader = memo(function ConversationHeader({
   const messageCountLabel =
     visibleCount === selectedMessageCount ? String(selectedMessageCount) : `${visibleCount}/${selectedMessageCount}`;
   const directAgentName = isDirectConversation(conversation)
-    ? conversationMembers.map((member) => resolveAgentForUser(agents, member)?.name).find(Boolean) ||
-      conversationMembers.find((member) => member.role === "worker")?.name
-    : undefined;
+    ? conversationMembers
+        .find((user) => ["worker", "agent", "manager"].includes(normalizeComparable(user.role)))
+        ?.name?.trim()
+    : "";
   const headerName = isDirectConversation(conversation) ? directAgentName : conversation.title;
 
   return (
@@ -81,14 +79,18 @@ export const ConversationHeader = memo(function ConversationHeader({
           <div className="chat-title-row">
             <div className="chat-title-group">
               <div className="chat-kicker">
-                <span className={headerName ? "chat-kicker-agent-name" : undefined}>
-                  {headerName || (isDirectConversation(conversation) ? t("directMessagesSection") : t("iaRoomsTab"))}
-                </span>
-                {!headerName ? (
-                  <Tooltip content={messageCountLabel}>
-                    <strong>{messageCountLabel}</strong>
-                  </Tooltip>
-                ) : null}
+                {headerName ? (
+                  <span className="truncate" title={headerName}>
+                    {headerName}
+                  </span>
+                ) : (
+                  <>
+                    <span>{isDirectConversation(conversation) ? t("directMessagesSection") : t("iaRoomsTab")}</span>
+                    <Tooltip content={messageCountLabel}>
+                      <strong>{messageCountLabel}</strong>
+                    </Tooltip>
+                  </>
+                )}
               </div>
               <Tooltip
                 content={conversation.title}

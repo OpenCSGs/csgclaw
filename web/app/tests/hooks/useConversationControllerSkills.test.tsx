@@ -234,10 +234,15 @@ describe("useConversationController skill loading", () => {
     const picker = screen.getByRole("listbox");
     const alpha = within(picker).getByRole("option", { name: /alpha/i });
     const beta = within(picker).getByRole("option", { name: /beta/i });
+    expect(within(picker).queryByRole("option", { name: /new/i })).not.toBeInTheDocument();
+    expect(within(picker).getByRole("option", { name: /创建智能体/ })).toHaveAttribute("aria-selected", "true");
     expect(alpha).toHaveAttribute("aria-selected", "false");
     expect(beta).toHaveAttribute("aria-selected", "false");
 
-    await user.keyboard("{Control>}n{/Control}");
+    await user.keyboard("{Control>}p{/Control}");
+    expect(beta).toHaveAttribute("aria-selected", "true");
+
+    await user.keyboard("{Control>}p{/Control}");
     expect(alpha).toHaveAttribute("aria-selected", "true");
 
     await user.keyboard("{Control>}n{/Control}");
@@ -286,12 +291,12 @@ describe("useConversationController skill loading", () => {
     await user.keyboard("/");
 
     const picker = await screen.findByRole("listbox");
-    const newConversation = within(picker).getByRole("option", { name: /new/i });
-    expect(newConversation).toBeInTheDocument();
+    expect(within(picker).queryByRole("option", { name: /new/i })).not.toBeInTheDocument();
+    const createRoom = within(picker).getByRole("option", { name: /创建房间/ });
     expect(editor).toHaveTextContent("/existing prompt");
 
-    await user.click(newConversation);
-    expect(editor.querySelector('[data-composer-slash-token="true"]')).toHaveTextContent("/new");
-    expect(editor).toHaveTextContent("/new existing prompt");
+    await user.click(createRoom);
+    expect(editor.querySelector('[data-composer-slash-token="true"]')).toHaveTextContent("/创建房间");
+    expect(editor).toHaveTextContent("/创建房间 existing prompt");
   });
 });

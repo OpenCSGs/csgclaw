@@ -1,5 +1,4 @@
 import type { AppConfig, AppCredentials, AppDefinition, AppInstallation } from "@/api/apps";
-import { localizeAPIError } from "@/shared/i18n";
 import type { TranslateFn } from "@/models/conversations";
 
 export type AppValueRow = { key: string; value: string };
@@ -24,24 +23,6 @@ export function appDescription(app: AppDefinition, t: TranslateFn): string {
     app.app_id
   ];
   return key ? t(key) : app.interface?.shortDescription || app.description;
-}
-
-export function appStatus(app: AppInstallation, t: TranslateFn): string {
-  if (!app.enabled || app.resource_enabled === false) return t("appStatusDisabled");
-  if (app.disconnected) return t(app.kind === "cli" ? "appStatusNeedsConfiguration" : "appStatusDisconnected");
-  const keys = {
-    not_connected: "appStatusNotConnected",
-    applying: "feishuCLIApplying",
-    configured: "appStatusConfigured",
-    needs_configuration: "appStatusNeedsConfiguration",
-    connecting: "appStatusConnecting",
-    connected: "appStatusConnected",
-    error: "appStatusError",
-    authorization_required: "appStatusAuthorizationRequired",
-    disconnected: "appStatusDisconnected",
-    disabled: "appStatusDisabled",
-  };
-  return t(keys[app.status] ?? "appStatusNeedsConfiguration");
 }
 
 // Only connection settings may become defaults. Credentials never come from a catalog.
@@ -214,11 +195,4 @@ function rowsToValues(rows: AppValueRow[]): Record<string, string> {
   return Object.fromEntries(
     rows.filter((row) => row.key.trim() && row.value).map((row) => [row.key.trim(), row.value]),
   );
-}
-
-export function appConnectionError(app: AppInstallation, t: TranslateFn): string {
-  const message = localizeAPIError({ code: app.last_error_code, message: app.last_error }, t);
-  return app.last_error_code && app.last_error_http_status
-    ? `${message} (HTTP ${app.last_error_http_status})`
-    : message;
 }

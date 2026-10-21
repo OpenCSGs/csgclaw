@@ -24,7 +24,8 @@ import { localizeAPIError } from "@/shared/i18n";
 import type { AppInstallation } from "@/api/apps";
 import type { TranslateFn } from "@/models/conversations";
 import { ConnectorBoxesIcon, ConnectorGitLabIcon } from "@/components/ui/Icons";
-import { appName, appStatus, appConnectionError, appDescription } from "./appForm";
+import { appName, appDescription } from "./appForm";
+import { appStatus, appConnectionError } from "./appStatus";
 import { AppToolList } from "./AppToolList";
 import type { AgentAppsController } from "./useAgentApps";
 import styles from "./AgentAppsPanel.module.css";
@@ -59,6 +60,7 @@ export function AgentAppsPanel({
   const { showNotice } = useGlobalNotice();
   const feishu = controller.items.find((app) => app.kind === "cli" && app.app_id === "feishu");
   const selected = controller.items.find((app) => app.installation_id === selectedID);
+  const selectedError = selected ? appConnectionError(selected, t) : "";
   const selectedResource = selected?.resource_id
     ? controller.resources.find((resource) => resource.installation_id === selected.resource_id)
     : undefined;
@@ -255,7 +257,7 @@ export function AgentAppsPanel({
                 {selected.resource_enabled === false ? (
                   <p className={styles.hint}>{t("appGlobalDisabledHint")}</p>
                 ) : null}
-                {selected.last_error ? <p className={styles.cardError}>{appConnectionError(selected, t)}</p> : null}
+                {selectedError ? <p className={styles.cardError}>{selectedError}</p> : null}
                 {selected.disconnected ? <p className={styles.hint}>{t("appDisconnectedHint")}</p> : null}
                 {selected.kind === "cli" ? (
                   <div>

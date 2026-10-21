@@ -456,7 +456,7 @@ func TestBotThreadContextPreservesHistoricalResources(t *testing.T) {
 			root := im.Message{ID: "root", SenderID: "user", Content: test.content, Metadata: apitypes.WithResourceSelection(nil, selection)}
 			binding := channel.Binding{ID: "binding", ParticipantID: "participant", AgentID: "agent"}
 			event := botEvent(binding, im.ParticipantEvent{
-				MessageID: "reply", RoomID: "room", ChatType: "p2p", ThreadRootID: "root", Text: "Continue",
+				MessageID: "reply", RoomID: "room", ChatType: "direct", ThreadRootID: "root", Text: "Continue",
 				ThreadContext: &im.ParticipantThreadContext{RootMessageID: "root", Context: []im.Message{root}},
 			})
 			if event.ThreadContext == nil || len(event.ThreadContext.Context) != 1 {

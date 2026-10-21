@@ -1,11 +1,12 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { pickLocalDirectoryPath } from "@/components/business/ProfileControls/runtimeOptionDirectoryPicker";
+import { TASK_DIRECTORIES_STORAGE_KEY } from "@/shared/storage/keys";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { useState } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { TaskConfigurationToolbar } from "@/components/business/TaskConfigurationToolbar";
 import { WorkspaceControllerProvider } from "@/hooks/workspace";
 import type { WorkspaceController } from "@/hooks/workspace";
 import type { TaskConfiguration } from "@/models/taskConfiguration";
-import { pickLocalDirectoryPath } from "@/components/business/ProfileControls/runtimeOptionDirectoryPicker";
 
 vi.mock("@/components/business/ProfileControls/runtimeOptionDirectoryPicker", () => ({
   pickLocalDirectoryPath: vi.fn(),
@@ -52,44 +53,9 @@ function setup(configuration: TaskConfiguration = {}, onChange = vi.fn(), direct
 }
 
 describe("task configuration", () => {
-  beforeEach(() => localStorage.removeItem("csgclaw.recent-work-directories"));
-  it("does not focus the directory search when opening the picker", () => {
-    setup();
-    const trigger = screen.getByRole("button", { name: "iaWorkdirTitle" });
-    trigger.focus();
-    fireEvent.click(trigger);
-    const search = screen.getByRole("textbox", { name: "taskDirectorySearch" });
-    expect(search).not.toHaveFocus();
-    search.focus();
-    expect(search).toHaveFocus();
-  });
-  it("opens the directory picker and applies the selected directory", async () => {
-    vi.mocked(pickLocalDirectoryPath).mockResolvedValueOnce("/new-project");
-    const { onChange } = setup({ workspace_dir: "/project" });
-    fireEvent.click(screen.getByRole("button", { name: "iaWorkdirTitle" }));
-    fireEvent.click(screen.getByRole("button", { name: "taskDirectoryAdd" }));
-    expect(pickLocalDirectoryPath).toHaveBeenCalledOnce();
-    await waitFor(() => expect(onChange).toHaveBeenCalledWith({ workspace_dir: "/new-project" }));
-    await waitFor(() => expect(screen.queryByRole("button", { name: "taskDirectoryAdd" })).not.toBeInTheDocument());
-    fireEvent.click(screen.getByRole("button", { name: "iaWorkdirTitle" }));
-    expect(screen.getByRole("button", { name: /new-project.*\/new-project/ })).toBeInTheDocument();
-    expect(screen.queryByRole("textbox", { name: "taskConfigurationDirectoryPath" })).not.toBeInTheDocument();
-  });
-  it("does not change the directory when selection is canceled", async () => {
-    vi.mocked(pickLocalDirectoryPath).mockResolvedValueOnce(null);
-    const { onChange } = setup({ workspace_dir: "/project" });
-    fireEvent.click(screen.getByRole("button", { name: "iaWorkdirTitle" }));
-    fireEvent.click(screen.getByRole("button", { name: "taskDirectoryAdd" }));
-    await waitFor(() => expect(pickLocalDirectoryPath).toHaveBeenCalled());
-    expect(onChange).not.toHaveBeenCalled();
-  });
-  it("filters previously added directories", () => {
-    localStorage.setItem("csgclaw.recent-work-directories", JSON.stringify(["/work/notes", "/work/demo"]));
-    setup();
-    fireEvent.click(screen.getByRole("button", { name: "iaWorkdirTitle" }));
-    fireEvent.change(screen.getByRole("textbox", { name: "taskDirectorySearch" }), { target: { value: "notes" } });
-    expect(screen.getByRole("button", { name: /notes.*\/work\/notes/ })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /demo.*\/work\/demo/ })).not.toBeInTheDocument();
+  beforeEach(() => {
+    localStorage.clear();
+    vi.mocked(pickLocalDirectoryPath).mockReset();
   });
   it("applies a model to this session and keeps the working directory", async () => {
     const { onChange, controller } = setup({ workspace_dir: "/project" });
@@ -131,8 +97,7 @@ describe("task configuration", () => {
     fireEvent.click(screen.getByRole("button", { name: "iaReasoningFollowAgent" }));
     await waitFor(() => expect(onChange).toHaveBeenLastCalledWith({ workspace_dir: "/project", reasoning_effort: "" }));
     await waitFor(() => expect(screen.getByRole("button", { name: "iaReasoningFollowAgent" })).toBeDisabled());
-    expect(screen.getByText("iaReasoningFollowing")).toBeInTheDocument();
-    expect(screen.getByRole("slider")).toHaveAttribute("aria-valuetext", "profileReasoningAuto");
+    expect(slider).toHaveAttribute("aria-valuetext", "profileReasoningAuto");
   });
   it("keeps model default separate from following the agent", async () => {
     const { onChange } = setup({ reasoning_effort: "high" });
@@ -143,34 +108,77 @@ describe("task configuration", () => {
       expect(screen.getByRole("button", { name: "profileReasoningAuto" })).toHaveAttribute("aria-pressed", "true"),
     );
     expect(screen.getByRole("button", { name: "iaReasoningFollowAgent" })).toBeEnabled();
-    const slider = screen.getByRole("slider");
-    expect(slider).toHaveAttribute("aria-valuetext", "profileReasoningAuto");
-    fireEvent.keyDown(slider, { key: "ArrowRight" });
-    await waitFor(() => expect(onChange).toHaveBeenLastCalledWith({ reasoning_effort: "high" }));
-    expect(screen.queryByRole("button", { name: "iaReasoningCustom" })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "iaReasoningInfo" })).toBeInTheDocument();
+    expect(screen.getByRole("slider")).toHaveAttribute("aria-valuetext", "profileReasoningAuto");
   });
-  it("opens custom model provider setup without connection actions in the picker", async () => {
-    const { controller } = setup();
+  it("groups chat models, keeps the agent default searchable and restores it without changing the agent", async () => {
+    const { onChange } = setup({ model_provider_id: "codex", model_id: "gpt-test", reasoning_effort: "high" });
     fireEvent.click(screen.getByRole("combobox", { name: "iaModelTitle" }));
-    expect(screen.getByRole("combobox", { name: "modelProviderModelSearch" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "modelConnectAdd" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "modelConnectRetry" })).not.toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: "iaModelConfigure" }));
-
+    expect(screen.getByText("Codex")).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: /iaModelFollowAgent/ })).toHaveTextContent("default-model");
+    expect(screen.queryByRole("option", { name: /image-test/ })).not.toBeInTheDocument();
+    fireEvent.change(screen.getByRole("combobox", { name: "iaModelSearch" }), { target: { value: "no match" } });
+    fireEvent.click(screen.getByRole("option", { name: /iaModelFollowAgent/ }));
     await waitFor(() =>
-      expect(controller.sidebarProps?.onCreateModelProvider).toHaveBeenCalledWith(
-        expect.objectContaining({ preset: "custom", onConnected: expect.any(Function) }),
-      ),
+      expect(onChange).toHaveBeenLastCalledWith({ model_provider_id: "", model_id: "", reasoning_effort: "" }),
     );
-    expect(screen.queryByRole("combobox", { name: "modelProviderModelSearch" })).not.toBeInTheDocument();
+  });
+  it("opens custom provider creation directly and keeps the conversation on completion", async () => {
+    const { controller, onChange } = setup();
+    fireEvent.click(screen.getByRole("combobox", { name: "iaModelTitle" }));
+    fireEvent.click(screen.getByRole("button", { name: "iaModelConfigure" }));
+    expect(controller.sidebarProps?.onCreateModelProvider).toHaveBeenCalledWith({
+      preset: "custom",
+      onConnected: expect.any(Function),
+    });
+    const request = vi.mocked(controller.sidebarProps!.onCreateModelProvider!).mock.calls[0][0];
+    act(() => request?.onConnected?.(controller.modelProviders!.providers[0]));
+    expect(screen.getByRole("listbox", { name: "iaModelTitle" })).toBeInTheDocument();
+    expect(onChange).not.toHaveBeenCalled();
+    expect(controller.openAgentSettings).not.toHaveBeenCalled();
+  });
+  it("searches remembered directories and keeps the default available", async () => {
+    localStorage.setItem(TASK_DIRECTORIES_STORAGE_KEY, JSON.stringify(["/work/frontend", "/work/backend"]));
+    const { onChange } = setup();
+    fireEvent.click(screen.getByRole("combobox", { name: "iaWorkdirTitle" }));
+    fireEvent.change(screen.getByRole("combobox", { name: "iaWorkdirSearch" }), { target: { value: "backend" } });
+    expect(screen.queryByRole("option", { name: /frontend/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("option", { name: /iaWorkdirDefault/ })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("option", { name: /backend/ }));
+    await waitFor(() => expect(onChange).toHaveBeenCalledWith({ workspace_dir: "/work/backend" }));
+  });
+  it("adds a native directory only after its configuration is saved", async () => {
+    vi.mocked(pickLocalDirectoryPath).mockResolvedValue("/work/new-project");
+    const { onChange } = setup();
+    fireEvent.click(screen.getByRole("combobox", { name: "iaWorkdirTitle" }));
+    fireEvent.click(screen.getByRole("button", { name: "iaWorkdirAdd" }));
+    await waitFor(() => expect(onChange).toHaveBeenCalledWith({ workspace_dir: "/work/new-project" }));
+    await waitFor(() =>
+      expect(JSON.parse(localStorage.getItem(TASK_DIRECTORIES_STORAGE_KEY)!)).toEqual(["/work/new-project"]),
+    );
+  });
+  it("keeps the saved model and reports errors when a session update fails", async () => {
+    const save = vi.fn().mockRejectedValue(new Error("still running"));
+    setup({}, save);
+    fireEvent.click(screen.getByRole("combobox", { name: "iaModelTitle" }));
+    fireEvent.click(screen.getByRole("option", { name: /gpt-test/ }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("still running");
+    expect(screen.getByRole("option", { name: /iaModelFollowAgent/ })).toHaveAttribute("aria-selected", "true");
+  });
+  it("does not remember a directory after a canceled or rejected selection", async () => {
+    const save = vi.fn().mockRejectedValue(new Error("invalid directory"));
+    vi.mocked(pickLocalDirectoryPath).mockResolvedValueOnce(null).mockResolvedValueOnce("/invalid");
+    setup({}, save);
+    fireEvent.click(screen.getByRole("combobox", { name: "iaWorkdirTitle" }));
+    fireEvent.click(screen.getByRole("button", { name: "iaWorkdirAdd" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "iaWorkdirAdd" })).toBeEnabled());
+    expect(save).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "iaWorkdirAdd" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("invalid directory");
+    expect(localStorage.getItem(TASK_DIRECTORIES_STORAGE_KEY)).toBeNull();
   });
   it("locks the directory in an existing conversation", () => {
     setup({ workspace_dir: "/project" }, vi.fn(), true);
-    fireEvent.click(screen.getByRole("button", { name: "iaWorkdirTitle" }));
-    expect(screen.getByText("taskConfigurationDirectoryLocked")).toBeInTheDocument();
-    expect(screen.getByText("/project")).toBeInTheDocument();
-    expect(screen.queryByRole("textbox", { name: "taskConfigurationDirectoryPath" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("combobox", { name: "iaWorkdirTitle" })).not.toBeInTheDocument();
+    expect(screen.getByLabelText("iaWorkdirTitle")).toHaveAttribute("title", "/project · iaWorkdirLocked");
   });
 });

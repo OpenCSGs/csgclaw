@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { ReactNode } from "react";
 import { AgentAvatarContent, RoomAvatar } from "@/components/business";
-import { ListChecks, Plus, Trash2, UserPlus, Users } from "lucide-react";
+import { ListChecks, MessageSquarePlus, Trash2, UserPlus, Users } from "lucide-react";
 import { TaskSubtaskIndicator } from "@/components/business";
 import {
   Button,
@@ -38,8 +38,8 @@ type UsersLookup = UsersById | Record<string, IMUser | undefined>;
 export type TeamDetailPaneProps = {
   agents?: AgentLike[];
   onDeleteTeam?: (team: WorkspaceTeam) => void | Promise<boolean>;
+  onStartCollaboration?: (team: WorkspaceTeam) => void;
   onManageMembers?: (team: WorkspaceTeam) => void;
-  onCreateCollaborationSpace?: (team: WorkspaceTeam) => void;
   onSelectAgent?: (agent: AgentLike) => void;
   onSelectTask?: (taskID: string) => void;
   teamActionBusy?: boolean;
@@ -62,9 +62,9 @@ export function TeamDetailPane({
   tasks = [],
   teamActionBusy = false,
   teamActionError = "",
+  onStartCollaboration,
   onDeleteTeam = () => {},
   onManageMembers = () => {},
-  onCreateCollaborationSpace = () => {},
   onSelectAgent = () => {},
   onSelectTask = () => {},
 }: TeamDetailPaneProps) {
@@ -116,16 +116,18 @@ export function TeamDetailPane({
           <p className={styles.teamDetailSubtitle}>{t("teamDetailSubtitle")}</p>
         </div>
         <div className={classNames("entity-toolbar", styles.teamDetailToolbar)} aria-label={t("teamPanelManage")}>
-          <Button
-            className={styles.teamDetailToolbarButton}
-            variant="primary"
-            size="md"
-            disabled={teamActionBusy}
-            onClick={() => onCreateCollaborationSpace(team)}
-          >
-            <Plus size={16} aria-hidden="true" />
-            {t("teamCreateCollaborationSpace")}
-          </Button>
+          {onStartCollaboration ? (
+            <Button
+              className={styles.teamDetailToolbarButton}
+              variant="secondaryGray"
+              size="md"
+              disabled={teamActionBusy}
+              onClick={() => onStartCollaboration(team)}
+            >
+              <MessageSquarePlus size={16} aria-hidden="true" />
+              {t("teamStartCollaboration")}
+            </Button>
+          ) : null}
           <Button
             className={styles.teamDetailToolbarButton}
             variant="secondaryGray"

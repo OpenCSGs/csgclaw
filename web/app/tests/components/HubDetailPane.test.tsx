@@ -720,6 +720,27 @@ async function openMCPDetail(user: ReturnType<typeof userEvent.setup>, name = /g
 }
 
 describe("HubDetailPane", () => {
+  it("shows the template display name in the list and omits the ID subtitle", async () => {
+    const user = userEvent.setup();
+    const selected: HubTemplate = {
+      ...template,
+      id: "local.internal-template-id",
+      name: "internal-template-id",
+      display_name: "展示名称",
+      namespace: "alice",
+      description: "",
+      source: { kind: "local" },
+    };
+    renderHubDetailPane("template", { selectedTemplate: selected, templates: [selected] });
+    await user.click(screen.getByRole("button", { name: "Close" }));
+    const card = screen.getByRole("button", { name: /展示名称/ });
+    expect(card).not.toHaveTextContent("alice/展示名称");
+    await user.click(card);
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByRole("heading", { name: "alice/展示名称" })).toBeInTheDocument();
+    expect(within(dialog).queryByText("local.internal-template-id")).not.toBeInTheDocument();
+  });
+
   it.each(["local", "remote"] as const)("reveals a selected %s template in My templates", (kind) => {
     const selected = {
       ...template,

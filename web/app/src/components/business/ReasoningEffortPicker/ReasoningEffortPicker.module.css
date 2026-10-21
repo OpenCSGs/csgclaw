@@ -86,3 +86,32 @@
   padding: var(--space-2) var(--space-1);
   border-top: 1px solid var(--line);
 }
+.compact .heading {
+  justify-content: flex-start;
+  margin-bottom: var(--space-3);
+}
+.compactValue {
+  color: var(--text);
+  font-size: 14px;
+}
+.compact .badge {
+  margin-left: auto;
+}
+.compact .body {
+  padding: var(--space-3);
+}
+.compact .actions {
+  padding: var(--space-1);
+}
+.sliderRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+.compactSlider {
+  flex: 1;
+  min-width: 0;
+}

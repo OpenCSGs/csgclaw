@@ -293,3 +293,82 @@
   color: var(--danger);
   font-size: 12px;
 }
+.directoryLabel,
+.lockedDirectory {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.directoryLabel > svg,
+.lockedDirectory > svg {
+  flex-shrink: 0;
+  color: var(--muted);
+}
+.directoryLabel > span,
+.lockedDirectory > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.directoryLabel small {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.directoryTrigger,
+.modelTrigger {
+  width: auto;
+  max-width: 240px;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: transparent;
+  box-shadow: none;
+  color: var(--muted);
+  font-size: 12px;
+}
+.directoryTrigger:hover,
+.modelTrigger:hover {
+  background: var(--panel-soft);
+  color: var(--text);
+}
+.lockedDirectory {
+  padding: 5px 8px;
+  max-width: 240px;
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.directoryMenu,
+.modelMenu {
+  width: min(330px, calc(100vw - 24px));
+}
+.directoryMenu [role="option"],
+.modelMenu [role="option"] {
+  padding-left: var(--space-2);
+  padding-right: var(--space-8);
+}
+.directoryMenu [role="option"] > svg,
+.modelMenu [role="option"] > svg {
+  left: auto;
+  right: var(--space-2);
+}
+.menuFooter {
+  margin-top: var(--space-1);
+  padding: var(--space-1);
+  border-top: 1px solid var(--line);
+}
+.menuFooter .configureButton {
+  width: 100%;
+  justify-content: flex-start;
+  color: var(--primary);
+}
+@media (max-width: 600px) {
+  .modelTrigger,
+  .directoryTrigger,
+  .lockedDirectory {
+    max-width: 160px;
+  }
+}

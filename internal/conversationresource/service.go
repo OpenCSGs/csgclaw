@@ -130,13 +130,13 @@ func (s *Service) Resolve(ctx context.Context, agentID string, refs []apitypes.R
 	for _, item := range mcpSummaries(agent) {
 		candidates[item.ResourceReference] = item
 	}
-	toolNames := map[string][]string{}
+	appResources := map[string]ResolvedResource{}
 	if slices.ContainsFunc(input.Refs, func(ref apitypes.ResourceReference) bool { return ref.Source == apitypes.ResourceSourceApp }) {
-		items, names, err := s.appSummaries(ctx, agentID)
+		items, resources, err := s.appSummaries(ctx, agentID)
 		if err != nil {
 			return result, readError(err)
 		}
-		toolNames = names
+		appResources = resources
 		for _, item := range items {
 			candidates[item.ResourceReference] = item
 		}
@@ -154,7 +154,10 @@ func (s *Service) Resolve(ctx context.Context, agentID string, refs []apitypes.R
 		}
 		resolved := ResolvedResource{ResourceSnapshot: item.ResourceSnapshot}
 		if ref.Source == apitypes.ResourceSourceApp {
-			resolved.ToolNames = append([]string(nil), toolNames[ref.ID]...)
+			resolved = appResources[ref.ID]
+			resolved.SkillNames = slices.DeleteFunc(resolved.SkillNames, func(name string) bool {
+				return !slices.Contains(agent.Spec.Skills, name) || !skillstate.Enabled(agent.Spec.SkillStates, name)
+			})
 		}
 		result.Resources = append(result.Resources, resolved)
 	}
@@ -186,11 +189,11 @@ func mcpSummaries(agent contract.Agent) []apitypes.AgentResourceSummary {
 	return result
 }
 
-func (s *Service) appSummaries(ctx context.Context, agentID string) ([]apitypes.AgentResourceSummary, map[string][]string, error) {
+func (s *Service) appSummaries(ctx context.Context, agentID string) ([]apitypes.AgentResourceSummary, map[string]ResolvedResource, error) {
 	result := []apitypes.AgentResourceSummary{}
-	names := map[string][]string{}
+	resources := map[string]ResolvedResource{}
 	if s.apps == nil {
-		return result, names, nil
+		return result, resources, nil
 	}
 	items, err := s.apps.List(ctx, agentID)
 	if err != nil {
@@ -202,6 +205,7 @@ func (s *Service) appSummaries(ctx context.Context, agentID string) ([]apitypes.
 			kind = apitypes.ResourceTypeKnowledgeBase
 		}
 		item := resourceSummary(apitypes.ResourceSourceApp, app.InstallationID, kind, app.Name, app.AppID, app.Enabled && app.ResourceEnabled)
+		resolved := ResolvedResource{ResourceSnapshot: item.ResourceSnapshot, AppKind: app.Kind}
 		if item.Enabled {
 			item.Available = false
 			switch {
@@ -212,13 +216,25 @@ func (s *Service) appSummaries(ctx context.Context, agentID string) ([]apitypes.
 				if item.UnavailableReason == "" || item.UnavailableReason == "error" {
 					item.UnavailableReason = "connection_error"
 				}
+			case app.Kind == apps.KindCLI:
+				switch {
+				case !app.Authorized:
+					item.UnavailableReason = "authorization_required"
+				case app.Revision == 0 || app.AppliedRevision != app.Revision:
+					item.UnavailableReason = "connecting"
+				default:
+					item.Available = true
+					for _, skill := range app.Skills {
+						resolved.SkillNames = append(resolved.SkillNames, skill.Name)
+					}
+				}
 			default:
 				tools, err := s.apps.CallableTools(ctx, agentID, app.InstallationID)
 				if err != nil {
 					return nil, nil, readError(err)
 				}
 				for _, tool := range tools {
-					names[app.InstallationID] = append(names[app.InstallationID], tool.Name)
+					resolved.ToolNames = append(resolved.ToolNames, tool.Name)
 				}
 				item.Available = len(tools) > 0
 				if !item.Available {
@@ -227,6 +243,7 @@ func (s *Service) appSummaries(ctx context.Context, agentID string) ([]apitypes.
 			}
 		}
 		result = append(result, item)
+		resources[app.InstallationID] = resolved
 	}
-	return result, names, nil
+	return result, resources, nil
 }

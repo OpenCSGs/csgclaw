@@ -376,10 +376,10 @@ func (a *Adapter) input(ctx context.Context, binding channel.Binding, event chan
 		}
 	}
 	var resourcePrompt string
-	if event.ChatType != "p2p" && event.ResourceSelection != nil {
+	if event.ChatType != "direct" && event.ResourceSelection != nil {
 		return nil, nil, &conversationresource.Error{Code: conversationresource.InvalidRequest}
 	}
-	if a.resourceInput != nil && event.ChatType == "p2p" {
+	if a.resourceInput != nil && event.ChatType == "direct" {
 		var err error
 		event.Text, resourcePrompt, err = a.resourceInput(ctx, binding.AgentID, event.Text, event.ResourceSelection)
 		if err != nil {

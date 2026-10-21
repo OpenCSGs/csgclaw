@@ -455,19 +455,6 @@ describe("ConversationPane", () => {
     window.localStorage.clear();
   });
 
-  it("shows the direct conversation agent above the task title", () => {
-    const { container } = renderThreadPane({ conversationTitle: "今天吃什么" });
-    expect(container.querySelector(".chat-kicker")).toHaveTextContent("manager");
-    expect(container.querySelector(".chat-kicker strong")).toBeNull();
-    expect(container.querySelector(".chat-title")).toHaveTextContent("今天吃什么");
-  });
-
-  it("shows the collaboration space name above the title for group conversations", () => {
-    const { container } = renderThreadPane({ isDirect: false, conversationTitle: "测试空间" });
-    expect(container.querySelector(".chat-kicker")).toHaveTextContent("测试空间");
-    expect(container.querySelector(".chat-kicker strong")).toBeNull();
-  });
-
   it("switches from thread A to B without restoring A again", async () => {
     const user = userEvent.setup();
     const onRestoreThread = vi.fn();
@@ -730,7 +717,19 @@ describe("ConversationPane", () => {
     expect(container.querySelector(".messages .message-thread-actions")).not.toBeInTheDocument();
   });
 
-  it("does not show message counts when some messages are filtered", () => {
+  it.each(["worker", "agent", "manager", "Worker"])("shows the %s name above the direct task title", (role) => {
+    const { container } = renderThreadPane({
+      conversationTitle: "Investigate login",
+      conversationMembers: [users[0], { ...users[1], name: "测试工程师 Linda", role }],
+    });
+
+    expect(container.querySelector(".chat-kicker")).toHaveTextContent("测试工程师 Linda");
+    expect(container.querySelector(".chat-kicker strong")).not.toBeInTheDocument();
+    expect(container.querySelector(".chat-title")).toHaveTextContent("Investigate login");
+    expect(screen.queryByText("Direct Messages")).not.toBeInTheDocument();
+  });
+
+  it("shows the space name without message counts when some messages are filtered", () => {
     const messages = [
       {
         content: "visible answer",
@@ -746,9 +745,15 @@ describe("ConversationPane", () => {
       },
     ];
 
-    renderThreadPane({ messages, visibleMessages: [messages[0]] });
+    const { container } = renderThreadPane({
+      isDirect: false,
+      conversationTitle: "测试空间",
+      messages,
+      visibleMessages: [messages[0]],
+    });
 
     expect(screen.queryByText("1/2")).not.toBeInTheDocument();
+    expect(container.querySelector(".chat-kicker")).toHaveTextContent("测试空间");
   });
 
   it("shows the complete room title on hover and keyboard focus", async () => {
@@ -862,7 +867,6 @@ describe("ConversationPane", () => {
         onDelete: vi.fn(),
         onInvite: vi.fn(),
         onOpenDM,
-        onNewTask: onOpenDM,
         onRecreate: vi.fn(),
         onStart: vi.fn(),
         onStop: vi.fn(),
@@ -892,11 +896,41 @@ describe("ConversationPane", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
 
     onClose.mockClear();
-    await user.click(within(dialog).getByRole("button", { name: "agentStartTask" }));
+    await user.click(within(dialog).getByRole("button", { name: "openDM" }));
     expect(onClose).toHaveBeenCalledWith(false, { skipUnsavedCheck: true });
     expect(onOpenDM).toHaveBeenCalledWith(expect.objectContaining({ id: "u-manager" }));
   });
 
+  it.each([true, false])(
+    "guards new-task navigation from the agent drawer when closing is allowed: %s",
+    async (allowed) => {
+      const onNewTask = vi.fn();
+      const onOpenDM = vi.fn();
+      const onClose = vi.fn(() => allowed);
+      const item = { id: "agent-dev", name: "Developer", role: "worker" };
+      renderThreadPane({
+        agentDetailPanelProps: {
+          item,
+          t,
+          onClose,
+          onNewTask,
+          onOpenDM,
+          onDelete: vi.fn(),
+          onInvite: vi.fn(),
+          onRecreate: vi.fn(),
+          onStart: vi.fn(),
+          onStop: vi.fn(),
+        },
+      });
+      const dialog = screen.getByRole("dialog", { name: "agentDetailPanel" });
+      expect(within(dialog).queryByRole("button", { name: "openDM" })).not.toBeInTheDocument();
+      await userEvent.setup().click(within(dialog).getByRole("button", { name: "agentStartTask" }));
+      expect(onClose).toHaveBeenCalledWith(false, { skipUnsavedCheck: true });
+      expect(onNewTask).toHaveBeenCalledTimes(allowed ? 1 : 0);
+      if (allowed) expect(onNewTask).toHaveBeenCalledWith(item);
+      expect(onOpenDM).not.toHaveBeenCalled();
+    },
+  );
   it("keeps avatar editing interactive inside the agent detail drawer", async () => {
     const user = userEvent.setup();
     const onDraftChange = vi.fn();
@@ -937,7 +971,7 @@ describe("ConversationPane", () => {
     expect(screen.getByRole("dialog", { name: "agentDetailPanel" })).toBeInTheDocument();
   });
 
-  it("keeps agent details open when unsaved changes block new-task navigation", async () => {
+  it("keeps agent details open when unsaved changes block direct-message navigation", async () => {
     const user = userEvent.setup();
     const onClose = vi.fn(() => false);
     const onOpenDM = vi.fn();
@@ -953,7 +987,6 @@ describe("ConversationPane", () => {
         onDelete: vi.fn(),
         onInvite: vi.fn(),
         onOpenDM,
-        onNewTask: onOpenDM,
         onRecreate: vi.fn(),
         onStart: vi.fn(),
         onStop: vi.fn(),
@@ -961,7 +994,7 @@ describe("ConversationPane", () => {
     });
 
     await user.click(
-      within(screen.getByRole("dialog", { name: "agentDetailPanel" })).getByRole("button", { name: "agentStartTask" }),
+      within(screen.getByRole("dialog", { name: "agentDetailPanel" })).getByRole("button", { name: "openDM" }),
     );
 
     expect(onClose).toHaveBeenCalledWith(false, { skipUnsavedCheck: true });

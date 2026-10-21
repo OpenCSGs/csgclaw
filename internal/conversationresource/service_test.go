@@ -46,15 +46,17 @@ func (f *agentFixture) Get(_ context.Context, _ string, options contract.AgentGe
 }
 
 type appFixture struct {
-	items []apps.Installation
-	tools map[string][]apps.CallableTool
-	err   error
+	items     []apps.Installation
+	tools     map[string][]apps.CallableTool
+	toolCalls []string
+	err       error
 }
 
 func (f *appFixture) List(context.Context, string) ([]apps.Installation, error) {
 	return f.items, f.err
 }
 func (f *appFixture) CallableTools(_ context.Context, _ string, id string) ([]apps.CallableTool, error) {
+	f.toolCalls = append(f.toolCalls, id)
 	return f.tools[id], f.err
 }
 

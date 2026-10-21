@@ -4,7 +4,7 @@ import { Plus } from "lucide-react";
 import { Button } from "@/components/ui";
 import { ContextUsageRing, type ConversationWorkingParticipant } from "@/components/business/ConversationPane";
 import { resolveAgentChannelUserID, type AgentLike } from "@/models/agents";
-import type { IMConversation, TranslateFn } from "@/models/conversations";
+import { isEventMessage, isToolCallMessage, type IMConversation, type TranslateFn } from "@/models/conversations";
 import styles from "./TaskConversationControls.module.css";
 import { TaskConfigurationToolbar } from "@/components/business/TaskConfigurationToolbar";
 
@@ -26,6 +26,9 @@ export function TaskConversationControls({
   const agent = conversation.is_direct
     ? agents.find((item) => conversation.members.includes(resolveAgentChannelUserID(item)))
     : undefined;
+  const hasChatMessages = conversation.messages.some(
+    (message) => !isEventMessage(message) && !isToolCallMessage(message),
+  );
   return (
     <div className={styles.controls}>
       <TaskConfigurationToolbar
@@ -33,12 +36,13 @@ export function TaskConversationControls({
         t={t}
         agent={agent}
         showModel={Boolean(agent)}
+        showDirectory={Boolean(conversation.is_direct)}
         configuration={conversation.configuration}
         directoryLocked
         disabled={entry?.isWorking(conversation.id) || entry?.busyID === conversation.id}
         onChange={entry ? (value) => entry.patch(conversation.id, { configuration: value }) : undefined}
       />
-      {onNewTask ? (
+      {onNewTask && hasChatMessages ? (
         <Button
           variant="tertiaryGray"
           size="sm"

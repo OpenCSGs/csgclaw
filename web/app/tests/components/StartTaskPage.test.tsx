@@ -168,6 +168,9 @@ describe("StartTaskPage task preparation", () => {
   it("creates collaboration using a team member snapshot and on-demand delivery", async () => {
     vi.mocked(sendMessageRequest).mockResolvedValue({} as never);
     const { create, open } = setup("/new?team=team-1");
+    expect(screen.queryByLabelText("iaWorkdirTitle")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("iaModelTitle")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("iaReasoningTitle")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "taskEntryEmptyRoom" }));
     await waitFor(() => expect(open).toHaveBeenCalled());
     expect(create).toHaveBeenCalledWith(

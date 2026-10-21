@@ -6,7 +6,7 @@ import { MemoryRouter, Routes, Route, useNavigate } from "react-router-dom";
 import { createTranslator } from "@/shared/i18n";
 import { GlobalAppsPanel } from "./GlobalAppsPanel";
 import { AppSettingsDialog } from "./AppSettingsDialog";
-import type { AppDefinition } from "@/api/apps";
+import type { AppDefinition, AppInstallation } from "@/api/apps";
 import buttonStyles from "@/components/ui/Button/Button.module.css";
 const t = createTranslator("en");
 const definition: AppDefinition = {
@@ -448,4 +448,123 @@ it("shows live connection states and the actual failure in global connector card
   expect(screen.getAllByText(t("appStatusConnecting")).length).toBeGreaterThanOrEqual(2);
   expect(screen.queryByText("Stale error from a previous attempt")).not.toBeInTheDocument();
   expect(screen.queryByText("Configured")).not.toBeInTheDocument();
+});
+
+describe.each(["en", "zh"] as const)("CLI connector status in %s", (locale) => {
+  const translate = createTranslator(locale);
+  const cliDefinition: AppDefinition = { ...definition, kind: "cli" };
+  const connected: AppInstallation = {
+    installation_id: "feishu-cli",
+    agent_id: "",
+    app_id: "feishu",
+    name: "Feishu",
+    kind: "cli",
+    enabled: true,
+    disconnected: false,
+    authorized: true,
+    status: "connected",
+    config: {},
+    credentials_set: {},
+    tools: [],
+    created_at: "",
+    updated_at: "",
+    auth_status: {
+      appId: "cli_test",
+      defaultAs: "auto",
+      identities: {
+        bot: { available: true, verified: true, status: "ready" },
+        user: { available: false, status: "pending" },
+      },
+    },
+  };
+  afterEach(() => vi.useRealTimers());
+
+  it.each([false, true])("keeps cancelled authorization consistent after refresh (user=%s)", async (userAuthorized) => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    let current: AppInstallation = {
+      ...connected,
+      last_error: "CLI connector operation could not be completed; retry the operation.",
+      operation: {
+        operation_id: "connect",
+        session_id: "session",
+        resource_id: connected.installation_id,
+        resource_revision: 1,
+        action: "connect",
+        stage: userAuthorized ? "applying" : "user_authorization",
+        status: "cancelled",
+      },
+      auth_status: {
+        ...connected.auth_status!,
+        identities: {
+          ...connected.auth_status!.identities,
+          user: { available: userAuthorized, verified: userAuthorized, status: userAuthorized ? "ready" : "pending" },
+        },
+      },
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (String(url).endsWith("catalog")) return Response.json({ items: [cliDefinition] });
+        if (String(url).endsWith(`/resources/${current.installation_id}`)) return Response.json(current);
+        return Response.json({ items: [current] });
+      }),
+    );
+    const panel = (
+      <MemoryRouter>
+        <GlobalAppsPanel embedded t={translate} />
+      </MemoryRouter>
+    );
+    const view = render(panel);
+    const summary = translate("feishuCLIAuthorizationSummary", {
+      bot: translate("feishuCLIAvailable"),
+      user: translate(userAuthorized ? "feishuCLIAvailable" : "feishuCLIUnauthorized"),
+    });
+    const card = within(await screen.findByRole("article"));
+    expect(card.getByText(summary)).toBeVisible();
+    expect(card.getByText(translate("appStatusConnected"))).toBeVisible();
+    expect(screen.queryByText(translate("errors.unknown_api_error"))).not.toBeInTheDocument();
+    await userEvent.setup().click(card.getByRole("button"));
+    const dialog = within(await screen.findByRole("dialog"));
+    expect(dialog.getByRole("status")).toHaveTextContent(summary);
+    expect(dialog.queryByRole("alert")).not.toBeInTheDocument();
+    if (!userAuthorized) expect(dialog.getByRole("button", { name: translate("feishuCLILogin") })).toBeEnabled();
+
+    current = { ...current, last_error: undefined };
+    await act(async () => {
+      window.dispatchEvent(new Event("focus"));
+      await vi.advanceTimersByTimeAsync(2500);
+    });
+    expect(dialog.getByRole("status")).toHaveTextContent(summary);
+    expect(dialog.queryByRole("alert")).not.toBeInTheDocument();
+    view.unmount();
+    render(panel);
+    expect(await screen.findByText(summary)).toBeVisible();
+    expect(screen.queryByText(translate("errors.unknown_api_error"))).not.toBeInTheDocument();
+  });
+
+  it.each(["authorization_expired", "cleanup_pending", "migration_failed"])(
+    "shows the same actionable %s error in the card and dialog",
+    async (code) => {
+      const failed = { ...connected, status: "error", last_error_code: code };
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (url: string) => {
+          if (String(url).endsWith("catalog")) return Response.json({ items: [cliDefinition] });
+          if (String(url).endsWith(`/resources/${failed.installation_id}`)) return Response.json(failed);
+          return Response.json({ items: [failed] });
+        }),
+      );
+      render(
+        <MemoryRouter>
+          <GlobalAppsPanel embedded t={translate} />
+        </MemoryRouter>,
+      );
+      const card = within(await screen.findByRole("article"));
+      const message = translate(`errors.${code}`);
+      expect(card.getByText(message)).toBeVisible();
+      await userEvent.setup().click(card.getByRole("button"));
+      const dialog = within(await screen.findByRole("dialog"));
+      expect(dialog.getByRole("alert")).toHaveTextContent(message);
+    },
+  );
 });

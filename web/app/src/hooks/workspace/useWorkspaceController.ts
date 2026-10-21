@@ -1,3 +1,4 @@
+import { pathForNewAgentTask, pathForNewTeamTask } from "@/models/routing";
 import { bindAgentViews } from "./bindings/agent";
 import {
   initialsForIdentity,
@@ -833,12 +834,12 @@ export function useWorkspaceController(): WorkspaceController {
 
   const agentViews = bindAgentViews({
     props: agent.agentViewProps,
-    onNewTask: async (item) => {
-      if (item?.id) navigate(`/new?agent=${encodeURIComponent(item.id)}`);
-    },
     activeRoom: conversation.activeChannel,
     detailAgentID: conversationProfileDetailAgentID,
     onClose: closeConversationAgentDetail,
+    onNewTask: (item) => {
+      if (item?.id) navigate(pathForNewAgentTask(item.id));
+    },
   });
   const mainPanelHasThread = Boolean(conversation.activeThreadRootID && conversation.selectedConversation);
 
@@ -1062,6 +1063,7 @@ export function useWorkspaceController(): WorkspaceController {
       tasks: selectedTeamTasks,
       teamActionBusy: agent.agentViewProps.teamActionBusy,
       teamActionError: agent.agentViewProps.teamActionError,
+      onStartCollaboration: (team) => navigate(pathForNewTeamTask(team.id)),
       onManageMembers: agent.openManageTeamMembers,
       onDeleteTeam: agent.deleteTeam,
       onSelectAgent: selectAgent,

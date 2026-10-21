@@ -17,11 +17,11 @@ const team: WorkspaceTeam = {
 };
 
 describe("TeamDetailPane", () => {
-  it("starts collaboration space creation for the selected team", async () => {
-    const onCreateCollaborationSpace = vi.fn();
-    render(<TeamDetailPane team={team} t={t} onCreateCollaborationSpace={onCreateCollaborationSpace} />);
-    await userEvent.setup().click(screen.getByRole("button", { name: "teamCreateCollaborationSpace" }));
-    expect(onCreateCollaborationSpace).toHaveBeenCalledWith(team);
+  it("starts collaboration with the current team", async () => {
+    const onStartCollaboration = vi.fn();
+    render(<TeamDetailPane team={team} t={t} onStartCollaboration={onStartCollaboration} />);
+    await userEvent.setup().click(screen.getByRole("button", { name: "teamStartCollaboration" }));
+    expect(onStartCollaboration).toHaveBeenCalledExactlyOnceWith(team);
   });
   it("confirms team deletion in-app without opening a native browser dialog", async () => {
     const user = userEvent.setup();

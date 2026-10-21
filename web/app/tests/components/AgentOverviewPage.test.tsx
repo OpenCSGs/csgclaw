@@ -61,15 +61,7 @@ function NavigationState() {
   );
 }
 
-function Page({
-  route = "/agents?tab=templates",
-  username = "",
-  onCreateCustomAgent = vi.fn(),
-}: {
-  route?: string;
-  username?: string;
-  onCreateCustomAgent?: () => void;
-}) {
+function Page({ route = "/agents?tab=templates", username = "" }: { route?: string; username?: string }) {
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
   const controller = {
     ready: true,
@@ -83,7 +75,6 @@ function Page({
       },
       workerAgentItems: [],
       teams: [],
-      onCreateCustomAgent,
     },
     agentViewProps: { item: null },
     hubViewProps: {
@@ -102,13 +93,25 @@ function Page({
 }
 
 describe("agent overview guidance and template loading", () => {
-  it("opens custom creation directly from the agent overview", async () => {
-    vi.mocked(useWorkspaceHubTemplatesQuery).mockReturnValue(queryState({ data: [] }));
-    const onCreateCustomAgent = vi.fn();
-    render(<Page route="/agents" onCreateCustomAgent={onCreateCustomAgent} />);
-    await userEvent.setup().click(screen.getByRole("button", { name: "新建智能体" }));
-    expect(onCreateCustomAgent).toHaveBeenCalledOnce();
+  it.each(["local", "remote"])("displays and searches %s template display names", async (kind) => {
+    const user = userEvent.setup();
+    const saved: HubTemplate = {
+      id: kind === "local" ? "local.internal-worker" : "alice/internal-worker",
+      name: "internal-worker",
+      role: "worker",
+      display_name: "测试中文名",
+      namespace: kind === "remote" ? "alice" : undefined,
+      source: { kind },
+    };
+    vi.mocked(useWorkspaceHubTemplatesQuery).mockReturnValue(queryState({ data: [saved] }));
+    render(<Page route="/agents?tab=templates&filter=personal" username="alice" />);
+    expect(screen.getByRole("button", { name: /测试中文名/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /internal-worker/ })).not.toBeInTheDocument();
+    await user.type(screen.getByRole("textbox"), "测试中文");
+    await user.click(screen.getByRole("button", { name: /测试中文名/ }));
+    expect(await screen.findByRole("region", { name: "Template detail" })).toHaveTextContent(saved.id!);
   });
+
   it("opens My templates and selects the saved template after asynchronous loading", async () => {
     const local: HubTemplate = { id: "local.中文助手", name: "中文助手", role: "worker", source: { kind: "local" } };
     const scroll = vi.spyOn(HTMLElement.prototype, "scrollIntoView");
