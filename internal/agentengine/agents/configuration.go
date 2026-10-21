@@ -165,7 +165,7 @@ func (s *Controller) UpdateAgentProfile(id string, profile AgentProfile) (AgentP
 	if err := s.reconcileRuntimeConfig(context.Background(), previous, current); err != nil {
 		return AgentProfileView{}, err
 	}
-	if restartRequired && runtimeRunning && isHostRuntimeKind(runtimeKind) {
+	if restartRequired && (runtimeRunning || previous.DesiredState == DesiredStateRunning) && isHostRuntimeKind(runtimeKind) {
 		if _, err := s.restartRuntime(context.Background(), id); err != nil {
 			return AgentProfileView{}, err
 		}
@@ -559,7 +559,7 @@ func (s *Controller) updateWithManagedRuntimeOptions(ctx context.Context, id str
 			}
 		}
 	}
-	if restartRequired && runtimeRunning && isHostRuntimeKind(runtimeKind) {
+	if restartRequired && (runtimeRunning || previous.DesiredState == DesiredStateRunning) && isHostRuntimeKind(runtimeKind) {
 		if _, err := s.restartRuntime(ctx, id); err != nil {
 			return Agent{}, err
 		}

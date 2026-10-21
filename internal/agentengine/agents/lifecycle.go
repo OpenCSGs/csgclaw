@@ -20,6 +20,15 @@ func (s *Controller) restartRuntime(ctx context.Context, id string) (Agent, erro
 		return Agent{}, err
 	}
 	defer release()
+	got, ok := s.Agent(id)
+	if !ok {
+		return Agent{}, fmt.Errorf("agent %q not found", strings.TrimSpace(id))
+	}
+	// Configuration saves also start runtimes that were never launched. Recheck
+	// the latest intent and resolved model under the lifecycle gate before doing so.
+	if got.DesiredState == DesiredStateStopped || !s.hydrateProfileFromCatalog(got.AgentProfile).ProfileComplete {
+		return got, nil
+	}
 	return s.restartRuntimeLocked(ctx, id)
 }
 
