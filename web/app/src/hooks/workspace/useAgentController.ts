@@ -525,6 +525,7 @@ export function useAgentController({
   const [showCreateTeamModal, setShowCreateTeamModal] = useState(false);
   const [editingTeam, setEditingTeam] = useState<WorkspaceTeam | null>(null);
   const [createTeamTitle, setCreateTeamTitle] = useState("");
+  const [createTeamDescription, setCreateTeamDescription] = useState("");
   const [createTeamMemberIDs, setCreateTeamMemberIDs] = useState<string[]>([]);
   const claimAgentAction = useCallback((agentID: string, busyKey: string, visible = true): boolean => {
     const normalizedAgentID = String(agentID || "").trim();
@@ -1570,6 +1571,7 @@ export function useAgentController({
   function openCreateTeamModal(): void {
     setEditingTeam(null);
     setCreateTeamTitle("");
+    setCreateTeamDescription("");
     setCreateTeamMemberIDs(managerTeamMemberID ? [managerTeamMemberID] : []);
     setTeamActionError("");
     setShowCreateTeamModal(true);
@@ -1587,6 +1589,7 @@ export function useAgentController({
     }
     setEditingTeam(item);
     setCreateTeamTitle(displayTeam(item));
+    setCreateTeamDescription(item.description || "");
     setCreateTeamMemberIDs(teamSelectionMemberIDs(item, createTeamCandidateIDs));
     setTeamActionError("");
     setShowCreateTeamModal(true);
@@ -2596,6 +2599,7 @@ export function useAgentController({
   async function createTeam(): Promise<void> {
     await createAgentTeam({
       title: createTeamTitle.trim() || t("teamNewFallbackTitle"),
+      description: createTeamDescription.trim(),
       lead_agent_id: MANAGER_AGENT_ID,
       member_agent_ids: createTeamMemberIDs,
     });
@@ -2611,6 +2615,7 @@ export function useAgentController({
     try {
       await updateTeamRequest(editingTeam.id, {
         title: createTeamTitle.trim() || editingTeam.title,
+        description: createTeamDescription.trim(),
         member_agent_ids: createTeamMemberIDs.filter(
           (memberID) => !localIdentitiesMatch(memberID, editingTeam.lead_agent_id),
         ),
@@ -3041,6 +3046,8 @@ export function useAgentController({
           lockedTeamMemberIDs: lockedTeamMemberID ? [lockedTeamMemberID] : [],
           teamTitle: createTeamTitle,
           onTeamTitleChange: setCreateTeamTitle,
+          teamDescription: createTeamDescription,
+          onTeamDescriptionChange: setCreateTeamDescription,
           teamMemberIDs: createTeamMemberIDs,
           onTeamMemberIDsChange: setCreateTeamMemberIDs,
           submitError: teamActionError,

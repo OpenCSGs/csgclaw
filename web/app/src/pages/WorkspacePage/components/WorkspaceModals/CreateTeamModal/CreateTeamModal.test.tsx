@@ -9,6 +9,7 @@ const t: TranslateFn = (key) => key;
 describe("CreateTeamModal", () => {
   it("forwards Windows and IME-compatible team name change events", () => {
     const onTeamTitleChange = vi.fn();
+    const onTeamDescriptionChange = vi.fn();
     render(
       <CreateTeamModal
         candidates={[]}
@@ -20,6 +21,8 @@ describe("CreateTeamModal", () => {
         t={t}
         teamActionBusy={false}
         teamMemberIDs={[]}
+        teamDescription=""
+        onTeamDescriptionChange={onTeamDescriptionChange}
         teamTitle=""
       />,
     );
@@ -29,6 +32,8 @@ describe("CreateTeamModal", () => {
     });
 
     expect(onTeamTitleChange).toHaveBeenCalledWith("Windows 测试团队");
+    fireEvent.change(screen.getByRole("textbox", { name: "teamDescriptionLabel" }), { target: { value: "回归测试" } });
+    expect(onTeamDescriptionChange).toHaveBeenCalledWith("回归测试");
   });
 
   it("uses a named modal, focuses the name, traps keyboard focus and closes with Escape", async () => {
@@ -37,6 +42,8 @@ describe("CreateTeamModal", () => {
     render(
       <CreateTeamModal
         candidates={[{ id: "worker", name: "Worker", role: "worker" }]}
+        teamDescription=""
+        onTeamDescriptionChange={vi.fn()}
         teamTitle="Team"
         onTeamTitleChange={vi.fn()}
         teamMemberIDs={["worker"]}
@@ -66,6 +73,8 @@ describe("CreateTeamModal", () => {
     render(
       <CreateTeamModal
         candidates={[{ id: "worker", name: "Worker", role: "worker" }]}
+        teamDescription=""
+        onTeamDescriptionChange={vi.fn()}
         teamTitle="Team"
         onTeamTitleChange={vi.fn()}
         teamMemberIDs={["worker"]}
@@ -78,6 +87,7 @@ describe("CreateTeamModal", () => {
       />,
     );
     expect(screen.getByRole("textbox", { name: "teamNameLabel" })).toBeDisabled();
+    expect(screen.getByRole("textbox", { name: "teamDescriptionLabel" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "cancel" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "close" })).toBeDisabled();
     expect(screen.getAllByRole("checkbox").every((checkbox) => checkbox.hasAttribute("disabled"))).toBe(true);
@@ -103,6 +113,8 @@ describe("CreateTeamModal", () => {
           t={t}
           teamActionBusy={false}
           teamMemberIDs={teamMemberIDs}
+          teamDescription=""
+          onTeamDescriptionChange={vi.fn()}
           teamTitle="Team"
         />
       );

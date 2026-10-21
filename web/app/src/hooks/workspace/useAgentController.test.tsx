@@ -46,11 +46,11 @@ import { publishAgentTemplateRequest, publishHubTemplateToCommunityRequest } fro
 import { fetchAgentMCPServerSourceStatus } from "@/api/mcp";
 import { patchCsgclawUserRequest } from "@/api/participants";
 import { fetchSkills } from "@/api/skills";
-import { openCSGAuthGuardStub } from "../helpers/openCSGAuthGuard";
+import { openCSGAuthGuardStub } from "../../../tests/helpers/openCSGAuthGuard";
 import { useOpenCSGAuthGuard, type OpenCSGAuthGuard } from "@/hooks/workspace/useOpenCSGAuthGuard";
 import { emptyAuthStatus } from "@/models/auth";
 import { createTeamRequest, deleteTeamRequest, fetchTeams, updateTeamRequest } from "@/api/tasks";
-import { useAgentController } from "@/hooks/workspace/useAgentController";
+import { useAgentController } from "./useAgentController";
 import type { UseAgentControllerArgs } from "@/hooks/workspace/types";
 import { WorkspacePaneTypes } from "@/models/routing";
 import type { WorkspacePane } from "@/models/routing";
@@ -2666,6 +2666,7 @@ describe("useAgentController", () => {
       lead_agent_id: "u-manager",
       member_agent_ids: ["u-manager"],
       title: "teamNewFallbackTitle",
+      description: "",
     });
   });
 
@@ -2699,7 +2700,10 @@ describe("useAgentController", () => {
       expect(result.current.controller.createTeamModalProps?.lockedTeamMemberIDs).toEqual(["agent-manager"]);
     });
 
-    act(() => result.current.controller.createTeamModalProps?.onTeamTitleChange("Renamed team"));
+    act(() => {
+      result.current.controller.createTeamModalProps?.onTeamTitleChange("Renamed team");
+      result.current.controller.createTeamModalProps?.onTeamDescriptionChange("  Release verification  ");
+    });
     await act(async () => {
       await result.current.controller.createTeamModalProps?.onCreate();
     });
@@ -2707,6 +2711,7 @@ describe("useAgentController", () => {
     expect(updateTeamRequest).toHaveBeenCalledWith("team-1", {
       member_agent_ids: ["agent-worker"],
       title: "Renamed team",
+      description: "Release verification",
     });
   });
 

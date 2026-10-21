@@ -46,6 +46,7 @@ type Service struct {
 }
 
 type CreateTeamInput struct {
+	Description    string
 	ID             string
 	Title          string
 	LeadAgentID    string
@@ -54,6 +55,7 @@ type CreateTeamInput struct {
 }
 
 type UpdateTeamInput struct {
+	Description       *string
 	TeamID            string
 	Title             string
 	LeadAgentID       string
@@ -313,6 +315,7 @@ func (s *Service) CreateTeam(input CreateTeamInput) (TeamMeta, error) {
 	meta := TeamMeta{
 		ID:             id,
 		Title:          strings.TrimSpace(input.Title),
+		Description:    strings.TrimSpace(input.Description),
 		LeadAgentID:    leadAgentID,
 		MemberAgentIDs: memberAgentIDs,
 		Status:         status,
@@ -367,6 +370,13 @@ func (s *Service) UpdateTeam(input UpdateTeamInput) (TeamMeta, error) {
 	if title := strings.TrimSpace(input.Title); title != "" && title != meta.Title {
 		meta.Title = title
 		changed = true
+	}
+	if input.Description != nil {
+		description := strings.TrimSpace(*input.Description)
+		if description != meta.Description {
+			meta.Description = description
+			changed = true
+		}
 	}
 	if status := strings.TrimSpace(input.Status); status != "" && status != meta.Status {
 		meta.Status = status

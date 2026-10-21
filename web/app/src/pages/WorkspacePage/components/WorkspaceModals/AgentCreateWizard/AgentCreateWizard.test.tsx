@@ -1,14 +1,14 @@
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import { useState } from "react";
 import userEvent from "@testing-library/user-event";
-import { AgentCreateWizard } from "@/pages/WorkspacePage/components/WorkspaceModals/AgentCreateWizard";
+import { AgentCreateWizard } from "./AgentCreateWizard";
 import { AgentAvatarPicker } from "@/components/business/AgentAvatar";
 import { fetchSkills } from "@/api/skills";
 import { fetchMCPServers } from "@/api/mcp";
 import { fetchAppResources } from "@/api/apps";
 import { fetchRemoteKnowledgeBases } from "@/api/knowledgeBases";
 import { workspaceQueryKeys } from "@/hooks/workspace/workspaceQueries";
-import { createQueryWrapper } from "../helpers/queryClient";
+import { createQueryWrapper } from "../../../../../../tests/helpers/queryClient";
 vi.mock("@/api/skills", () => ({ fetchSkills: vi.fn() }));
 vi.mock("@/api/mcp", () => ({ fetchMCPServers: vi.fn() }));
 vi.mock("@/api/apps", () => ({ fetchAppResources: vi.fn() }));
@@ -217,7 +217,7 @@ it("keeps the nested avatar editor inside the wizard focus scope", async () => {
   await user.click(within(editor).getAllByRole("radio")[0]);
   await user.click(within(editor).getByRole("button", { name: "confirm" }));
   expect(screen.queryByRole("dialog", { name: "editAvatar" })).not.toBeInTheDocument();
-  expect(screen.getByRole("dialog", { name: "createAgentTitle" })).toBeInTheDocument();
+  expect(screen.getByRole("dialog", { name: "createAgentWizardTitle" })).toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: /editAvatar/ }));
   editor = screen.getByRole("dialog", { name: "editAvatar" });
   within(editor).getByRole("button", { name: "confirm" }).focus();

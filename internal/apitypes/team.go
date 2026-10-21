@@ -5,6 +5,7 @@ import "time"
 type Team struct {
 	ID             string    `json:"id"`
 	Title          string    `json:"title"`
+	Description    string    `json:"description,omitempty"`
 	LeadAgentID    string    `json:"lead_agent_id"`
 	LeadAgentName  string    `json:"lead_agent_name,omitempty"`
 	MemberAgentIDs []string  `json:"member_agent_ids,omitempty"`
@@ -98,6 +99,7 @@ type TeamEvent struct {
 }
 
 type CreateTeamRequest struct {
+	Description          string   `json:"description,omitempty"`
 	Title                string   `json:"title,omitempty"`
 	LeadAgentID          string   `json:"lead_agent_id,omitempty"`
 	LeadParticipantID    string   `json:"lead_participant_id,omitempty"`
@@ -106,6 +108,7 @@ type CreateTeamRequest struct {
 }
 
 type PatchTeamRequest struct {
+	Description    *string  `json:"description,omitempty"`
 	Title          string   `json:"title,omitempty"`
 	LeadAgentID    string   `json:"lead_agent_id,omitempty"`
 	MemberAgentIDs []string `json:"member_agent_ids,omitempty"`

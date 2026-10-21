@@ -136,7 +136,8 @@ export function AgentProfileModal({
   const missingRequiredEnv = isTemplateCreate && agentDraftMissingRequiredEnv(agentDraft);
   const isCustomCreate = isWorkerCreate && agentCreateMode === "custom";
   const templateLocked = agentCreateTemplateLocked(agentDraft, agentModalMode);
-  const showMCPServers = !isNotificationContext && supportsMCPServers(agentDraft.runtime_kind);
+  const useWizard = creationWizard && isCustomCreate;
+  const showMCPServers = !useWizard && !isNotificationContext && supportsMCPServers(agentDraft.runtime_kind);
   const runtimeOptionSchemas = isNotificationContext
     ? []
     : runtimeOptionSchemasForAgent(
@@ -305,7 +306,6 @@ export function AgentProfileModal({
     }
   }, [showMCPServers]);
 
-  const useWizard = creationWizard && isCustomCreate;
   const saveDisabled =
     agentBusy ||
     agentInitializing ||
@@ -425,9 +425,17 @@ export function AgentProfileModal({
             <p className="profile-section-description">{t("profileRuntimeSectionDescription")}</p>
           </div>
           <div className="agent-section-form">
-            <div className="profile-grid profile-grid-compact agent-basics-grid">
+            <div
+              className={useWizard ? styles.wizardRuntimeGrid : "profile-grid profile-grid-compact agent-basics-grid"}
+            >
               {isWorkerCreate && !isCSGHubSandboxProvider ? (
-                <div className="field span-2 agent-fast-mode-field agent-sandbox-field">
+                <div
+                  className={
+                    useWizard
+                      ? `field ${styles.wizardSandbox}`
+                      : "field span-2 agent-fast-mode-field agent-sandbox-field"
+                  }
+                >
                   <div className="field-label-with-help">
                     <span>{t("profileSandboxEnabled")}</span>
                     <FieldHelpTooltip detail={t("profileSandboxEnabledHelp")} />
@@ -446,7 +454,7 @@ export function AgentProfileModal({
                 </div>
               ) : null}
               {isWorkerCreate ? (
-                <div className="agent-runtime-image-row">
+                <div className={useWizard ? styles.wizardRuntimeSelector : "agent-runtime-image-row"}>
                   <label className="field">
                     <span>{t("profileRuntimeKind")}</span>
                     {!sandboxEnabled ? (

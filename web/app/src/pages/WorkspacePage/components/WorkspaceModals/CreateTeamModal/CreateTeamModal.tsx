@@ -11,6 +11,7 @@ import {
   DialogFooter,
   Field,
   TextInput,
+  TextArea,
 } from "@/components/ui";
 import { useRef } from "react";
 import styles from "./CreateTeamModal.module.css";
@@ -24,6 +25,8 @@ type CreateTeamModalProps = {
   candidates: AgentLike[];
   mode?: "create" | "edit";
   lockedTeamMemberIDs?: string[];
+  teamDescription: string;
+  onTeamDescriptionChange: (value: string) => void;
   teamTitle: string;
   onTeamTitleChange: (value: string) => void;
   teamMemberIDs: string[];
@@ -40,6 +43,8 @@ export function CreateTeamModal({
   mode = "create",
   lockedTeamMemberIDs = [],
   teamTitle,
+  teamDescription,
+  onTeamDescriptionChange,
   onTeamTitleChange,
   teamMemberIDs,
   onTeamMemberIDsChange,
@@ -73,8 +78,8 @@ export function CreateTeamModal({
       >
         <DialogHeader className={styles.header}>
           <div>
-            <DialogTitle>{editing ? t("teamManageMembers") : t("teamCreate")}</DialogTitle>
-            <DialogDescription>{editing ? t("teamManageMembersSubtitle") : t("teamMembersSubtitle")}</DialogDescription>
+            <DialogTitle>{editing ? t("teamEdit") : t("teamCreate")}</DialogTitle>
+            <DialogDescription>{editing ? t("teamEditSubtitle") : t("teamMembersSubtitle")}</DialogDescription>
           </div>
           <DialogCloseButton label={t("close")} variant="tertiaryGray" size="sm" disabled={teamActionBusy} />
         </DialogHeader>
@@ -86,6 +91,16 @@ export function CreateTeamModal({
               disabled={teamActionBusy}
               onChange={(event) => onTeamTitleChange(event.currentTarget.value)}
               placeholder={t("teamNamePlaceholder")}
+            />
+          </Field>
+
+          <Field label={t("teamDescriptionLabel")}>
+            <TextArea
+              value={teamDescription}
+              disabled={teamActionBusy}
+              rows={3}
+              onChange={(event) => onTeamDescriptionChange(event.currentTarget.value)}
+              placeholder={t("teamDescriptionPlaceholder")}
             />
           </Field>
 
@@ -160,7 +175,7 @@ export function CreateTeamModal({
             disabled={teamActionBusy || (!editing && teamMemberIDs.length === 0)}
             onClick={onCreate}
           >
-            {editing ? t("teamSaveMembers") : t("teamCreate")}
+            {editing ? t("save") : t("teamCreate")}
           </Button>
         </DialogFooter>
       </DialogContent>

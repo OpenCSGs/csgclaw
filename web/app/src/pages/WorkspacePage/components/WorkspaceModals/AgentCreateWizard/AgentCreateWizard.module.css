@@ -1,7 +1,7 @@
 .dialog[role="dialog"] {
   width: min(1000px, calc(100vw - 32px));
   max-width: none;
-  height: min(760px, calc(100dvh - 40px));
+  height: min(880px, calc(100dvh - 40px));
   padding: 0;
   display: flex;
   flex-direction: column;
@@ -24,7 +24,7 @@
   min-height: 0;
 }
 .navigation {
-  width: 190px;
+  width: 210px;
   flex-shrink: 0;
   padding: 16px 12px;
   border-right: 1px solid var(--line);
@@ -72,8 +72,15 @@
   flex-shrink: 0;
   display: grid;
   place-items: center;
-  border: 1px solid var(--line);
-  border-radius: 50%;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.navigation .required {
+  color: var(--warning-text);
+  font-weight: 600;
+}
+.navigation .selected {
+  color: var(--primary);
 }
 .panel {
   min-width: 0;
@@ -99,8 +106,12 @@
   resize: vertical;
 }
 .resourceRow {
-  display: flex;
-  align-items: flex-start;
+  min-height: 76px;
+  box-sizing: border-box;
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  align-items: start;
+  align-content: center;
   gap: 12px;
   padding: 12px;
   border: 1px solid var(--line);
@@ -121,6 +132,16 @@
 .resourceList {
   display: grid;
   gap: 8px;
+}
+.scrollableResourceList {
+  max-height: min(412px, 50dvh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+.scrollableResourceList:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
 }
 .resourceList:empty {
   display: none;
@@ -175,10 +196,18 @@
     animation: none;
   }
 }
-.resourceRow > span {
+.resourceCopy {
   min-width: 0;
   display: grid;
   gap: 4px;
+}
+.resourceCheckbox {
+  display: grid;
+  place-items: center;
+  height: 24px;
+}
+.resourceCopy strong {
+  line-height: 24px;
 }
 .resourceRow small {
   color: var(--muted);

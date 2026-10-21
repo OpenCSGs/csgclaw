@@ -1,11 +1,11 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
-import { AgentProfileModal } from "@/pages/WorkspacePage/components";
+import { AgentProfileModal } from "./AgentProfileModal";
 import { normalizeModelProviderCatalog } from "@/models/modelProviders";
 import { agentToDraft, type AgentDraft } from "@/models/agents";
 import * as directoryPicker from "@/components/business/ProfileControls/runtimeOptionDirectoryPicker";
-import { createQueryWrapper } from "../helpers/queryClient";
+import { createQueryWrapper } from "../../../../../tests/helpers/queryClient";
 
 vi.mock("@/api/skills", () => ({ fetchSkills: vi.fn().mockResolvedValue([]) }));
 vi.mock("@/api/mcp", () => ({ fetchMCPServers: vi.fn().mockResolvedValue({}) }));
@@ -441,7 +441,8 @@ describe("AgentProfileModal", () => {
       />,
       { wrapper: createQueryWrapper().wrapper },
     );
-    expect(screen.getByRole("navigation", { name: "createAgentTitle" })).toBeInTheDocument();
+    expect(screen.getByRole("navigation", { name: "createAgentWizardTitle" })).toBeInTheDocument();
+    expect(screen.queryByLabelText("MCP Servers")).not.toBeInTheDocument();
     expect(screen.getByRole("status")).toHaveTextContent("agentWizardLoadingConfiguration");
     expect(screen.getByRole("textbox", { name: "Name" })).toBeEnabled();
     expect(screen.getByRole("button", { name: "agentWizardNext" })).toBeDisabled();
@@ -483,7 +484,7 @@ describe("AgentProfileModal", () => {
         locale="en"
       />,
     );
-    expect(screen.queryByRole("navigation", { name: "createAgentTitle" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("navigation", { name: "createAgentWizardTitle" })).not.toBeInTheDocument();
     expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
     expect(screen.queryByRole("combobox", { name: "Template" })).not.toBeInTheDocument();
     expect(screen.getByText("Reviewer")).toBeInTheDocument();

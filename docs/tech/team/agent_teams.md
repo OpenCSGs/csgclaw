@@ -11,7 +11,7 @@ Team = 可复用成员池
 子任务 = 继承主任务执行房间的工作项
 ```
 
-Team 不再绑定固定 channel 或固定 room。Team 只保存 `lead_agent_id` 和 `member_agent_ids`。每次创建主任务时，调用方选择执行通道，系统在该通道创建执行房间，并把 `execution_channel + room_id` 写到主任务上。
+Team 不再绑定固定 channel 或固定 room。Team 保存名称、可选的 `description`（团队介绍）、`lead_agent_id` 和 `member_agent_ids`。每次创建主任务时，调用方选择执行通道，系统在该通道创建执行房间，并把 `execution_channel + room_id` 写到主任务上。
 
 旧的 room-bound Team 数据不兼容，需要重新创建。
 
@@ -291,3 +291,7 @@ Tasks 页面第一层是主任务列表和主任务看板。
 6. 任务派发、领取、完成、阻塞、审批事件投影到主任务执行房间。
 7. `FindTeamByRoom(channel, room_id)` 能通过主任务执行房间反查 Team 和主任务。
 8. 用户能在看板、详情和执行房间里看懂当前进度。
+
+### 团队介绍
+
+`POST /api/v1/teams` 可传 `description`，创建后随团队元数据持久保存，并由团队查询接口返回。`PATCH /api/v1/teams/{team_id}` 不传该字段时保留原介绍，传入空字符串时清空；保存时去除首尾空白。界面的“编辑团队”入口可一起修改名称、介绍和成员。

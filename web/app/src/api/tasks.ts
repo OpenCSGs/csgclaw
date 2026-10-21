@@ -10,12 +10,14 @@ import {
 import type { WorkspaceTask, WorkspaceTeam, WorkspaceTeamEvent } from "@/models/tasks";
 
 export type CreateTeamPayload = {
+  description?: string;
   lead_agent_id?: string;
   member_agent_ids?: string[];
   title?: string;
 };
 
 export type UpdateTeamPayload = {
+  description?: string;
   lead_agent_id?: string;
   member_agent_ids?: string[];
   status?: string;
@@ -88,6 +90,9 @@ export async function createTeamRequest(payload: CreateTeamPayload): Promise<Wor
   const request: Record<string, unknown> = {
     title: payload.title,
   };
+  if (payload.description !== undefined) {
+    request.description = payload.description;
+  }
   if (payload.lead_agent_id !== undefined) {
     request.lead_agent_id = payload.lead_agent_id;
   }
@@ -110,6 +115,9 @@ export async function updateTeamRequest(teamID: string, payload: UpdateTeamPaylo
   const request: Record<string, unknown> = {};
   if (payload.title !== undefined) {
     request.title = payload.title;
+  }
+  if (payload.description !== undefined) {
+    request.description = payload.description;
   }
   if (payload.lead_agent_id !== undefined) {
     request.lead_agent_id = payload.lead_agent_id;

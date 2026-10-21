@@ -49,6 +49,7 @@ func (h *Handler) handleCreateTeam(w http.ResponseWriter, r *http.Request) {
 	}
 	created, err := svc.CreateTeamWithMembers(team.CreateTeamWithMembersInput{
 		Title:          strings.TrimSpace(req.Title),
+		Description:    req.Description,
 		LeadAgentID:    leadAgentID,
 		MemberAgentIDs: memberAgentIDs,
 	})
@@ -163,6 +164,7 @@ func (h *Handler) handleUpdateTeam(w http.ResponseWriter, r *http.Request) {
 	}
 	updated, err := svc.UpdateTeam(team.UpdateTeamInput{
 		TeamID:            pathValue(r, "team_id"),
+		Description:       req.Description,
 		Title:             strings.TrimSpace(req.Title),
 		LeadAgentID:       leadAgentID,
 		MemberAgentIDs:    memberAgentIDs,

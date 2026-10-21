@@ -148,24 +148,32 @@ export function AgentCreationResourcesPicker({
                 </div>
               </div>
             ) : null}
-            <ul className={styles.resourceList}>
-              {items.map((item) => (
-                <li key={item.key}>
-                  <label className={styles.resourceRow}>
-                    <Checkbox
-                      checked={group.selected.includes(item.key)}
-                      disabled={"disabled" in item && item.disabled === true}
-                      onCheckedChange={(checked) => group.toggle(item.key, checked === true)}
-                    />
-                    <span>
-                      <strong>{item.name}</strong>
-                      <small>
-                        {"disabled" in item && item.disabled ? t("agentWizardResourceUnavailable") : item.description}
-                      </small>
-                    </span>
-                  </label>
-                </li>
-              ))}
+            <ul
+              className={`${styles.resourceList} ${items.length > 5 ? styles.scrollableResourceList : ""}`}
+              aria-label={group.label}
+              tabIndex={items.length > 5 ? 0 : undefined}
+            >
+              {items.map((item) => {
+                const description =
+                  "disabled" in item && item.disabled ? t("agentWizardResourceUnavailable") : item.description;
+                return (
+                  <li key={item.key}>
+                    <label className={styles.resourceRow}>
+                      <span className={styles.resourceCheckbox}>
+                        <Checkbox
+                          checked={group.selected.includes(item.key)}
+                          disabled={"disabled" in item && item.disabled === true}
+                          onCheckedChange={(checked) => group.toggle(item.key, checked === true)}
+                        />
+                      </span>
+                      <span className={styles.resourceCopy}>
+                        <strong>{item.name}</strong>
+                        {description ? <small>{description}</small> : null}
+                      </span>
+                    </label>
+                  </li>
+                );
+              })}
             </ul>
             {!items.length && !loading && !group.query.isError ? <p>{t("iaListSearchEmpty")}</p> : null}
           </section>
