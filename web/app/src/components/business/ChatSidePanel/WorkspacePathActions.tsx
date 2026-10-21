@@ -48,7 +48,7 @@ export function WorkspacePathActions({
     setBusy(true);
     setError("");
     try {
-      await openFileLocation(roomID, reference, target);
+      await openFileLocation(roomID, reference, target, token);
     } catch {
       setError(t("chatOpenFailed"));
     } finally {

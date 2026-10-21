@@ -35,7 +35,10 @@ func (h *Handler) handleRoomAttachmentLocation(w http.ResponseWriter, r *http.Re
 }
 
 func (h *Handler) handleRoomAttachmentOpen(w http.ResponseWriter, r *http.Request) {
-	if !h.authorizeRoomAttachments(w, r) {
+	// Browser previews carry a file capability rather than a management token.
+	// Only this local, same-origin action may use it for a native application handoff.
+	capability := r.Method == http.MethodPost && h.workspaceOpenRequestAllowed(r) && h.validRoomAttachmentCapability(r)
+	if !h.authorizeRoomAttachmentAccess(w, r, capability) {
 		return
 	}
 	h.handleWorkspaceOpen(w, r, func(string) (workspaceLocation, error) { return h.resolveAttachmentLocation(r) })

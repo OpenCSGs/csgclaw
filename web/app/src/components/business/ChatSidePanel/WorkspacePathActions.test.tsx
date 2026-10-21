@@ -82,6 +82,7 @@ test("renders the file's associated apps and opens the selected app", async () =
     "room-1",
     expect.objectContaining({ source: "workspace" }),
     "app:/Applications/Preview.app",
+    "",
   );
   expect(screen.queryByText("iTerm2")).not.toBeInTheDocument();
 });
@@ -108,5 +109,5 @@ test("resolves an attachment capability and opens the attachment by ID", async (
   await user.click(screen.getByRole("button", { name: "chatOpenPath" }));
   await user.click(await screen.findByRole("menuitem", { name: "chatOpenSystem" }));
   expect(api.fetchFileLocation).toHaveBeenCalledWith("room-1", reference, "capability", expect.any(AbortSignal));
-  expect(api.openFileLocation).toHaveBeenCalledWith("room-1", reference, "system");
+  expect(api.openFileLocation).toHaveBeenCalledWith("room-1", reference, "system", "capability");
 });

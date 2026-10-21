@@ -1184,11 +1184,12 @@ csgclaw room attachments delete --room-id <room> --attachment-id <id>
 Content-addressed attachments receive a separate named local copy so native applications can identify the original extension.
 Editing the copy does not change the published attachment; reopening preserves edits to the copy.
 The copy is collected when the attachment loses its final live reference.
-The endpoint uses attachment read authorization; a valid download capability can resolve that attachment's location but cannot launch applications.
+The endpoint uses attachment read authorization; a valid download capability can resolve that attachment's location.
 Remote clients and scoped Agent callers cannot use local opening actions.
 
 `POST /api/v1/rooms/{id}/attachments/{attachment_id}/open` accepts `{ "target": "system" }` and returns `204` after application handoff.
-It uses the workspace opener's authorization, same-origin JSON and target checks, and revalidates the live room attachment on every call.
+It uses the workspace opener's local-client, same-origin JSON and target checks, and revalidates the live room attachment on every call.
+A local same-origin browser may pass the attachment's valid download capability as `?token=...`; this grants no listing, deletion, remote opening, or access to another attachment.
 
 `DELETE /api/v1/rooms/{id}/attachments/{attachment_id}` removes that attachment ID from the room's messages and retained thread context, returning `204 No Content`.
 Message text and separately saved workspace copies are preserved; shared file bytes are collected only when no remaining attachment references need them.

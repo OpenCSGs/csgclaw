@@ -154,6 +154,7 @@ describe("shared chat sidebar", () => {
         "sidebar-test",
         expect.objectContaining({ source: "workspace", agent_id: "alice", path: "" }),
         "system",
+        "",
       ),
     );
     await user.click(screen.getByRole("button", { name: /^README.md/ }));
@@ -164,6 +165,7 @@ describe("shared chat sidebar", () => {
         "sidebar-test",
         expect.objectContaining({ source: "workspace", agent_id: "alice", path: "README.md" }),
         "app:/Applications/Code.app",
+        "",
       ),
     );
   });

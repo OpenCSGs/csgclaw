@@ -115,11 +115,16 @@ export function fetchFileLocation(
   );
 }
 
-export function openFileLocation(roomID: string, reference: ComposerFileReference, target: string): Promise<void> {
+export function openFileLocation(
+  roomID: string,
+  reference: ComposerFileReference,
+  target: string,
+  token = "",
+): Promise<void> {
   return post(
     reference.source === "workspace"
       ? `api/v1/agents/${encodeURIComponent(reference.agent_id)}/workspace/open?${new URLSearchParams({ room_id: roomID })}`
-      : `api/v1/rooms/${encodeURIComponent(roomID)}/attachments/${encodeURIComponent(reference.attachment_id)}/open`,
+      : `api/v1/rooms/${encodeURIComponent(roomID)}/attachments/${encodeURIComponent(reference.attachment_id)}/open${token ? `?${new URLSearchParams({ token })}` : ""}`,
     { ...(reference.source === "workspace" ? { path: reference.path } : {}), target },
   );
 }

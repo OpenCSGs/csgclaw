@@ -114,13 +114,24 @@ func (h *Handler) handleAgentWorkspaceOpen(w http.ResponseWriter, r *http.Reques
 	h.handleWorkspaceOpen(w, r, func(path string) (workspaceLocation, error) { return h.resolveWorkspaceLocation(r, path) })
 }
 
+// Application launches require a local peer, an allowed host, and either a
+// management credential or an exact same-origin browser request.
+func (h *Handler) workspaceOpenRequestAllowed(r *http.Request) bool {
+	if len(h.workspaceOpenTargets(r, "", true)) == 0 {
+		return false
+	}
+	if h.validWorkspaceOpenCredential(r.Header.Get("Authorization")) {
+		return true
+	}
+	origin, err := url.Parse(r.Header.Get("Origin"))
+	return err == nil && (origin.Scheme == "http" || origin.Scheme == "https") && origin.Host == r.Host
+}
+
 func (h *Handler) handleWorkspaceOpen(w http.ResponseWriter, r *http.Request, resolve func(string) (workspaceLocation, error)) {
 	// Browser requests require an exact same-origin JSON POST. Origin is a CSRF
 	// boundary here, in addition to the loopback-only execution boundary; it never
 	// grants attachment reads or overrides an explicit invalid/scoped credential.
-	origin, err := url.Parse(r.Header.Get("Origin"))
-	authenticated := h.validWorkspaceOpenCredential(r.Header.Get("Authorization"))
-	if len(h.workspaceOpenTargets(r, "", true)) == 0 || (!authenticated && (err != nil || (origin.Scheme != "http" && origin.Scheme != "https") || origin.Host != r.Host)) {
+	if !h.workspaceOpenRequestAllowed(r) {
 		writeCodedAPIError(w, http.StatusForbidden, "workspace_open_denied", "Local workspace opening is unavailable")
 		return
 	}

@@ -33,8 +33,10 @@ func TestGeneratedAttachmentLocalOpening(t *testing.T) {
 	}
 	h := &Handler{im: svc, serverNoAuth: true}
 	var opened string
+	launches := 0
 	h.workspaceOpener = func(_ context.Context, path, target string, directory bool) error {
 		opened = path
+		launches++
 		if directory || target != "system" {
 			t.Fatal("invalid launch")
 		}
@@ -82,7 +84,7 @@ func TestGeneratedAttachmentLocalOpening(t *testing.T) {
 		t.Fatalf("opened %q", opened)
 	}
 
-	// Resolve through a file capability without granting native launch authority.
+	// Browser attachment actions retain the live file capability and local Origin boundary.
 	h.serverNoAuth = false
 	h.serverAccessToken = "management-token"
 	download, _ := url.Parse(message.Attachments[0].DownloadURL)
@@ -92,10 +94,43 @@ func TestGeneratedAttachmentLocalOpening(t *testing.T) {
 		t.Fatalf("capability location: %d %s", w.Code, w.Body.String())
 	}
 	w = request("POST", prefix+"/open?"+url.Values{"token": {capability}}.Encode(), `{"target":"system"}`, "127.0.0.1:1", "http://127.0.0.1:18080", "")
-	if w.Code != 401 {
-		t.Fatalf("capability launched application: %d", w.Code)
+	if w.Code != 204 {
+		t.Fatalf("local capability open: %d %s", w.Code, w.Body.String())
 	}
-	h.serverNoAuth = true
+
+	protected := prefix + "/open?" + url.Values{"token": {capability}}.Encode()
+	other, err := svc.CreateMessage(im.CreateMessageRequest{RoomID: room.ID, SenderID: "user-admin", Attachments: []im.MessageAttachmentUpload{{Name: "other.json", Data: []byte(`{"other":true}`)}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		name, method, path, peer, origin, auth, body string
+		status                                       int
+	}{
+		{"missing capability", "POST", prefix + "/open", "127.0.0.1:1", "http://127.0.0.1:18080", "", `{"target":"system"}`, 401},
+		{"wrong capability", "POST", prefix + "/open?token=invalid", "127.0.0.1:1", "http://127.0.0.1:18080", "", `{"target":"system"}`, 401},
+		{"invalid credential overrides capability", "POST", protected, "127.0.0.1:1", "http://127.0.0.1:18080", "Bearer invalid", `{"target":"system"}`, 401},
+		{"scoped credential", "POST", protected, "127.0.0.1:1", "http://127.0.0.1:18080", "Bearer agent.invalid", `{"target":"system"}`, 401},
+		{"remote capability", "POST", protected, "192.0.2.1:1", "http://127.0.0.1:18080", "", `{"target":"system"}`, 401},
+		{"cross-site capability", "POST", protected, "127.0.0.1:1", "https://evil.example", "", `{"target":"system"}`, 401},
+		{"capability without origin", "POST", protected, "127.0.0.1:1", "", "", `{"target":"system"}`, 401},
+		{"sandboxed origin", "POST", protected, "127.0.0.1:1", "null", "", `{"target":"system"}`, 401},
+		{"invented app with capability", "POST", protected, "127.0.0.1:1", "http://127.0.0.1:18080", "", `{"target":"app:/bin/sh"}`, 403},
+		{"another attachment", "POST", "/api/v1/rooms/" + room.ID + "/attachments/" + other.Attachments[0].ID + "/open?" + url.Values{"token": {capability}}.Encode(), "127.0.0.1:1", "http://127.0.0.1:18080", "", `{"target":"system"}`, 401},
+		{"listing remains protected", "GET", "/api/v1/rooms/" + room.ID + "/attachments?" + url.Values{"token": {capability}}.Encode(), "127.0.0.1:1", "", "", "", 401},
+		{"deletion remains protected", "DELETE", prefix + "?" + url.Values{"token": {capability}}.Encode(), "127.0.0.1:1", "http://127.0.0.1:18080", "", "", 401},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			before := launches
+			w := request(tc.method, tc.path, tc.body, tc.peer, tc.origin, tc.auth)
+			if w.Code != tc.status {
+				t.Fatalf("%d: %s", w.Code, w.Body.String())
+			}
+			if launches != before {
+				t.Fatal("denied request launched an application")
+			}
+		})
+	}
 	if runtime.GOOS == "darwin" {
 		var app string
 		for _, target := range location.OpenTargets {
@@ -117,7 +152,7 @@ func TestGeneratedAttachmentLocalOpening(t *testing.T) {
 		t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 		h.workspaceOpener = nil
 		body, _ := json.Marshal(map[string]string{"target": app})
-		w = request("POST", prefix+"/open", string(body), "127.0.0.1:1", "http://127.0.0.1:18080", "")
+		w = request("POST", protected, string(body), "127.0.0.1:1", "http://127.0.0.1:18080", "")
 		if w.Code != 204 {
 			t.Fatalf("native handoff: %d %s", w.Code, w.Body.String())
 		}
@@ -132,8 +167,8 @@ func TestGeneratedAttachmentLocalOpening(t *testing.T) {
 	if _, err := os.Stat(location.AbsolutePath); !os.IsNotExist(err) {
 		t.Fatalf("local copy survived deletion: %v", err)
 	}
-	w = request("POST", prefix+"/open", `{"target":"system"}`, "127.0.0.1:1", "http://127.0.0.1:18080", "")
-	if w.Code != 400 {
+	w = request("POST", protected, `{"target":"system"}`, "127.0.0.1:1", "http://127.0.0.1:18080", "")
+	if w.Code != 401 {
 		t.Fatalf("deleted open: %d", w.Code)
 	}
 }

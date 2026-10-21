@@ -11,7 +11,11 @@ import (
 )
 
 func (h *Handler) authorizeRoomAttachments(w http.ResponseWriter, r *http.Request) bool {
-	if appRequestAgentID(r) == "" && !h.validateServerAccessToken(r.Header.Get("Authorization")) && !h.authorizeRoomAttachmentCapability(r) {
+	return h.authorizeRoomAttachmentAccess(w, r, h.authorizeRoomAttachmentCapability(r))
+}
+
+func (h *Handler) authorizeRoomAttachmentAccess(w http.ResponseWriter, r *http.Request, capability bool) bool {
+	if appRequestAgentID(r) == "" && !h.validateServerAccessToken(r.Header.Get("Authorization")) && !capability {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return false
 	}
@@ -39,7 +43,12 @@ func (h *Handler) authorizeRoomAttachments(w http.ResponseWriter, r *http.Reques
 
 // A file capability grants only that live attachment, never a room listing or mutation.
 func (h *Handler) authorizeRoomAttachmentCapability(r *http.Request) bool {
-	if r.Method != http.MethodGet || r.Header.Get("Authorization") != "" || r.Header.Get("X-CSGClaw-Caller-Agent") != "" || h.im == nil {
+	return r.Method == http.MethodGet && h.validRoomAttachmentCapability(r)
+}
+
+// A capability authorizes one live file; the caller must enforce its operation's policy.
+func (h *Handler) validRoomAttachmentCapability(r *http.Request) bool {
+	if r.Header.Get("Authorization") != "" || r.Header.Get("X-CSGClaw-Caller-Agent") != "" || h.im == nil {
 		return false
 	}
 	id := pathValue(r, "attachment_id")
