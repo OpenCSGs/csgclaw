@@ -2565,7 +2565,7 @@ export const messages = {
     agentUpgrade: "升级",
     agentDelete: "删除",
     agentDeleteBlockedTitle: "暂时无法删除该智能体",
-    agentDeleteTeamBlocked: "该智能体仍被团队使用，请先在团队中移除它，然后再删除。",
+    agentDeleteTeamBlocked: "该智能体仍被 {count} 个团队使用，请先在团队中移除它，然后再删除。",
     agentDeleteWorkingBlocked: "该智能体有任务正在执行，请等待任务结束或停止任务后再删除。",
     agentDeleteCheckFailed: "暂时无法检查该智能体的关联状态，请稍后重试。",
     agentDeleteChecking: "正在检查关联状态…",
@@ -5601,7 +5601,7 @@ export const messages = {
     agentUpgrade: "Upgrade",
     agentDelete: "Delete",
     agentDeleteBlockedTitle: "This agent cannot be deleted yet",
-    agentDeleteTeamBlocked: "This agent is still used by a team. Remove it from the team before deleting it.",
+    agentDeleteTeamBlocked: "Teams using this agent: {count}. Remove it from these teams before deleting it.",
     agentDeleteWorkingBlocked:
       "This agent has a task in progress. Wait for it to finish or stop it before deleting the agent.",
     agentDeleteCheckFailed: "Unable to check this agent's dependencies. Please try again later.",

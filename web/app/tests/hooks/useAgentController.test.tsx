@@ -63,6 +63,7 @@ import type { WorkspaceTeam } from "@/models/tasks";
 import type { ApiError } from "@/api/client";
 import { AGENT_AVATAR_OPTIONS } from "@/shared/avatarOptions";
 import { ACTION_REBUILD_MANAGER } from "@/shared/constants/messages";
+import { createTranslator } from "@/shared/i18n";
 
 const navigationBlockerMock = vi.hoisted(() => ({
   current: {
@@ -1183,7 +1184,10 @@ describe("useAgentController", () => {
     expect(onAgentDeleted).toHaveBeenCalledWith(oldAgent);
   });
 
-  it.each(["lead", "member"])("blocks deleting a team %s and navigates without its editor", async (role) => {
+  it.each([
+    { role: "lead", count: 1 },
+    { role: "member", count: 2 },
+  ])("shows $count team references for a $role", async ({ role, count }) => {
     const worker: AgentLike = {
       ...oldAgent,
       id: "agent-worker",
@@ -1200,15 +1204,23 @@ describe("useAgentController", () => {
       created_at: "",
       updated_at: "",
     };
-    const { result } = renderHook(() => useAgentControllerHarness({ agents: [oldAgent, worker] }), {
+    const translate = createTranslator("zh");
+    const { result } = renderHook(() => useAgentControllerHarness({ agents: [oldAgent, worker], t: translate }), {
       wrapper: createWrapper(),
     });
     await waitFor(() => expect(result.current.controller.teamsLoading).toBe(false));
     // The team was created after this view loaded; cached teams must not allow deletion.
-    vi.mocked(fetchTeams).mockResolvedValue([team]);
+    const otherTeam = {
+      ...team,
+      id: "team-2",
+      lead_agent_id: "u-manager",
+      member_agent_ids: ["u-worker", "user-worker"],
+    };
+    const unrelatedTeam = { ...team, id: "unrelated", lead_agent_id: "u-manager", member_agent_ids: [] };
+    vi.mocked(fetchTeams).mockResolvedValue(count === 2 ? [team, otherTeam, unrelatedTeam] : [team, unrelatedTeam]);
     await act(async () => {
       const block = await result.current.controller.agentViewProps.onCheckDelete(worker);
-      expect(block?.message).toBe("agentDeleteTeamBlocked");
+      expect(block?.message).toBe(`该智能体仍被 ${count} 个团队使用，请先在团队中移除它，然后再删除。`);
       block?.onResolve?.();
     });
     expect(result.current.navigatePane).toHaveBeenCalledWith({ type: WorkspacePaneTypes.team, id: team.id });

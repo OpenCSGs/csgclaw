@@ -2193,12 +2193,13 @@ export function useAgentController({
     try {
       const result = await teamsQuery.refetch();
       if (result.error) throw result.error;
-      const team = result.data?.find((candidate) =>
+      const referencedTeams = (result.data ?? []).filter((candidate) =>
         teamMemberIDs(candidate).some((id) => agentIdentityMatchesUser(item, { id })),
       );
+      const team = referencedTeams[0];
       if (team) {
         return {
-          message: t("agentDeleteTeamBlocked"),
+          message: t("agentDeleteTeamBlocked", { count: referencedTeams.length }),
           onResolve: () => {
             navigatePane({ type: WorkspacePaneTypes.team, id: team.id });
           },
