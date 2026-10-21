@@ -4,6 +4,7 @@ import "strings"
 
 type CreateTeamWithMembersInput struct {
 	Title          string
+	Description    string
 	LeadAgentID    string
 	MemberAgentIDs []string
 }
@@ -20,6 +21,7 @@ func (s *Service) CreateTeamWithMembers(input CreateTeamWithMembersInput) (TeamM
 
 	return s.CreateTeam(CreateTeamInput{
 		Title:          strings.TrimSpace(input.Title),
+		Description:    strings.TrimSpace(input.Description),
 		LeadAgentID:    leadAgentID,
 		MemberAgentIDs: memberAgentIDs,
 	})

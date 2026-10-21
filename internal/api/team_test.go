@@ -36,7 +36,7 @@ func TestTeamRoutesCreateAndTaskFlow(t *testing.T) {
 	teamSvc := team.NewService(team.WithProjector(newTestTeamProjector(adapter)))
 	h := &Handler{teamSvc: teamSvc, teamAdapters: newTestTeamAdapterRegistry(adapter)}
 
-	createReq := httptest.NewRequest(http.MethodPost, "/api/v1/teams", strings.NewReader(`{"title":"release","lead_agent_id":"u-manager","member_agent_ids":["u-worker"]}`))
+	createReq := httptest.NewRequest(http.MethodPost, "/api/v1/teams", strings.NewReader(`{"title":"release","description":"  Release planning  ","lead_agent_id":"u-manager","member_agent_ids":["u-worker"]}`))
 	createRec := httptest.NewRecorder()
 	h.Routes().ServeHTTP(createRec, createReq)
 	if createRec.Code != http.StatusCreated {
@@ -49,6 +49,20 @@ func TestTeamRoutesCreateAndTaskFlow(t *testing.T) {
 	}
 	if created.ID == "" || created.LeadAgentID != agent.ManagerUserID {
 		t.Fatalf("created team = %+v, want team id and lead agent", created)
+	}
+	if created.Description != "Release planning" {
+		t.Fatalf("created description = %q", created.Description)
+	}
+	stored, found := teamSvc.GetTeam(created.ID)
+	if !found || stored.Description != "Release planning" {
+		t.Fatalf("stored team description = %q, found = %v", stored.Description, found)
+	}
+	patchReq := httptest.NewRequest(http.MethodPatch, "/api/v1/teams/"+created.ID, strings.NewReader(`{"description":""}`))
+	patchRec := httptest.NewRecorder()
+	h.Routes().ServeHTTP(patchRec, patchReq)
+	stored, found = teamSvc.GetTeam(created.ID)
+	if patchRec.Code != http.StatusOK || !found || stored.Description != "" {
+		t.Fatalf("clear team description: status=%d, team=%+v", patchRec.Code, stored)
 	}
 
 	batchReq := httptest.NewRequest(http.MethodPost, "/api/v1/teams/"+created.ID+"/tasks/batch", strings.NewReader(`{"created_by":"manager","tasks":[{"id_ref":"draft","title":"Draft release note","assign_to":"worker","priority":9}]}`))

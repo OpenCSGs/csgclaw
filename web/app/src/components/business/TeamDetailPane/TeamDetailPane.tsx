@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { AgentAvatarContent, RoomAvatar } from "@/components/business";
-import { ListChecks, MessageSquarePlus, Trash2, UserPlus, Users } from "lucide-react";
+import { Edit3, ListChecks, MessageSquarePlus, Trash2, UserPlus, Users } from "lucide-react";
 import { TaskSubtaskIndicator } from "@/components/business";
 import {
   Button,
@@ -40,6 +40,7 @@ export type TeamDetailPaneProps = {
   onDeleteTeam?: (team: WorkspaceTeam) => void | Promise<boolean>;
   onStartCollaboration?: (team: WorkspaceTeam) => void;
   onManageMembers?: (team: WorkspaceTeam) => void;
+  onUpdateDescription?: (team: WorkspaceTeam, description: string) => Promise<boolean>;
   onSelectAgent?: (agent: AgentLike) => void;
   onSelectTask?: (taskID: string) => void;
   teamActionBusy?: boolean;
@@ -65,11 +66,24 @@ export function TeamDetailPane({
   onStartCollaboration,
   onDeleteTeam = () => {},
   onManageMembers = () => {},
+  onUpdateDescription,
   onSelectAgent = () => {},
   onSelectTask = () => {},
 }: TeamDetailPaneProps) {
   const [activeTab, setActiveTab] = useState<ActiveTeamTab>("members");
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [editingDescription, setEditingDescription] = useState(false);
+  const [descriptionDraft, setDescriptionDraft] = useState("");
+  const descriptionRef = useRef<HTMLTextAreaElement>(null);
+  const cancelDescriptionRef = useRef(false);
+
+  useEffect(() => {
+    setEditingDescription(false);
+    setDescriptionDraft(team?.description ?? "");
+  }, [team?.id, team?.description]);
+  useEffect(() => {
+    if (editingDescription) descriptionRef.current?.focus();
+  }, [editingDescription]);
 
   async function handleDeleteTeam(): Promise<void> {
     if (!team) {
@@ -113,7 +127,53 @@ export function TeamDetailPane({
               {teamStatusLabel(team.status, t)}
             </span>
           </div>
-          <p className={styles.teamDetailSubtitle}>{t("teamDetailSubtitle")}</p>
+          {onUpdateDescription ? (
+            editingDescription ? (
+              <textarea
+                ref={descriptionRef}
+                className={styles.descriptionInput}
+                aria-label={t("teamDescriptionLabel")}
+                placeholder={t("teamDescriptionPlaceholder")}
+                value={descriptionDraft}
+                onChange={(event) => setDescriptionDraft(event.currentTarget.value)}
+                onBlur={() => {
+                  setEditingDescription(false);
+                  if (cancelDescriptionRef.current) {
+                    cancelDescriptionRef.current = false;
+                    return;
+                  }
+                  const next = descriptionDraft.trim();
+                  if (next !== (team.description ?? "")) {
+                    void onUpdateDescription(team, next).then((saved) => {
+                      if (!saved) setDescriptionDraft(team.description ?? "");
+                    });
+                  }
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === "Escape") {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    cancelDescriptionRef.current = true;
+                    setDescriptionDraft(team.description ?? "");
+                    event.currentTarget.blur();
+                  }
+                }}
+              />
+            ) : (
+              <button
+                type="button"
+                className={styles.descriptionDisplay}
+                aria-label={t("editDescription")}
+                disabled={teamActionBusy}
+                onClick={() => setEditingDescription(true)}
+              >
+                <span>{descriptionDraft || t("teamDescriptionLabel")}</span>
+                <Edit3 size={16} aria-hidden="true" />
+              </button>
+            )
+          ) : team.description?.trim() ? (
+            <p className={styles.teamDetailSubtitle}>{team.description}</p>
+          ) : null}
         </div>
         <div className={styles.teamDetailToolbar} aria-label={t("teamPanelManage")}>
           {onStartCollaboration ? (

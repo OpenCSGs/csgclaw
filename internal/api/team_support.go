@@ -132,6 +132,7 @@ func apiTeam(item team.TeamMeta) apitypes.Team {
 	return apitypes.Team{
 		ID:             item.ID,
 		Title:          item.Title,
+		Description:    item.Description,
 		LeadAgentID:    item.LeadAgentID,
 		MemberAgentIDs: append([]string(nil), item.MemberAgentIDs...),
 		Status:         item.Status,

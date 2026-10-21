@@ -17,6 +17,27 @@ const team: WorkspaceTeam = {
 };
 
 describe("TeamDetailPane", () => {
+  it("saves and clears descriptions on blur and cancels with Escape", async () => {
+    const user = userEvent.setup();
+    const onUpdateDescription = vi.fn().mockResolvedValue(true);
+    render(<TeamDetailPane team={team} t={t} onUpdateDescription={onUpdateDescription} />);
+    await user.click(screen.getByRole("button", { name: "editDescription" }));
+    const input = screen.getByRole("textbox", { name: "teamDescriptionLabel" });
+    await user.type(input, "Team introduction");
+    await user.tab();
+    expect(onUpdateDescription).toHaveBeenCalledWith(team, "Team introduction");
+    await user.click(screen.getByRole("button", { name: "editDescription" }));
+    await user.clear(screen.getByRole("textbox", { name: "teamDescriptionLabel" }));
+    await user.keyboard("{Escape}");
+    expect(onUpdateDescription).toHaveBeenCalledTimes(1);
+  });
+  it("shows the team description only when provided", () => {
+    const { rerender } = render(<TeamDetailPane team={{ ...team, description: "发布协调团队" }} t={t} />);
+    expect(screen.getByText("发布协调团队")).toBeInTheDocument();
+    rerender(<TeamDetailPane team={team} t={t} />);
+    expect(screen.queryByText("发布协调团队")).not.toBeInTheDocument();
+    expect(screen.queryByText("teamDetailSubtitle")).not.toBeInTheDocument();
+  });
   it("starts collaboration with the current team", async () => {
     const onStartCollaboration = vi.fn();
     render(<TeamDetailPane team={team} t={t} onStartCollaboration={onStartCollaboration} />);

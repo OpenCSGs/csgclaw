@@ -11,6 +11,7 @@ import {
   DialogFooter,
   Field,
   TextInput,
+  TextArea,
 } from "@/components/ui";
 import { useRef } from "react";
 import styles from "./CreateTeamModal.module.css";
@@ -26,6 +27,8 @@ type CreateTeamModalProps = {
   lockedTeamMemberIDs?: string[];
   teamTitle: string;
   onTeamTitleChange: (value: string) => void;
+  teamDescription?: string;
+  onTeamDescriptionChange?: (value: string) => void;
   teamMemberIDs: string[];
   onTeamMemberIDsChange: Dispatch<SetStateAction<string[]>>;
   submitError: string;
@@ -41,6 +44,8 @@ export function CreateTeamModal({
   lockedTeamMemberIDs = [],
   teamTitle,
   onTeamTitleChange,
+  teamDescription = "",
+  onTeamDescriptionChange,
   teamMemberIDs,
   onTeamMemberIDsChange,
   submitError,
@@ -88,6 +93,18 @@ export function CreateTeamModal({
               placeholder={t("teamNamePlaceholder")}
             />
           </Field>
+
+          {!editing ? (
+            <Field label={t("teamDescriptionLabel")}>
+              <TextArea
+                value={teamDescription}
+                disabled={teamActionBusy}
+                onChange={(event) => onTeamDescriptionChange?.(event.currentTarget.value)}
+                placeholder={t("teamDescriptionPlaceholder")}
+                rows={3}
+              />
+            </Field>
+          ) : null}
 
           <div className="field">
             <span>{t("teamMembersLabel")}</span>

@@ -70,7 +70,7 @@ export const ConversationHeader = memo(function ConversationHeader({
         .find((user) => ["worker", "agent", "manager"].includes(normalizeComparable(user.role)))
         ?.name?.trim()
     : "";
-  const headerName = isDirectConversation(conversation) ? directAgentName : conversation.title;
+  const headerName = isDirectConversation(conversation) ? directAgentName : t("iaRoomsTab");
 
   return (
     <PanelHeader className="chat-header">

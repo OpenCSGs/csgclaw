@@ -34,6 +34,7 @@ describe("tasks API", () => {
       lead_agent_id: "u-manager",
       member_agent_ids: ["u-worker"],
       title: "release",
+      description: "Release team",
     });
 
     expect(fetchMock).toHaveBeenCalledWith(
@@ -48,6 +49,7 @@ describe("tasks API", () => {
       lead_agent_id: "u-manager",
       member_agent_ids: ["u-worker"],
       title: "release",
+      description: "Release team",
     });
     expect(body).not.toHaveProperty("channel");
     expect(body).not.toHaveProperty("room_id");
@@ -60,6 +62,7 @@ describe("tasks API", () => {
 
     await updateTeamRequest("team-1", {
       member_agent_ids: ["u-worker", "u-qa"],
+      description: "",
     });
 
     expect(fetchMock).toHaveBeenCalledWith(
@@ -71,6 +74,7 @@ describe("tasks API", () => {
     const init = fetchMock.mock.calls[0]?.[1];
     expect(JSON.parse(String(init?.body))).toMatchObject({
       member_agent_ids: ["u-worker", "u-qa"],
+      description: "",
     });
   });
 

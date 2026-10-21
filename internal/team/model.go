@@ -53,6 +53,7 @@ const (
 type TeamMeta struct {
 	ID             string    `json:"id"`
 	Title          string    `json:"title"`
+	Description    string    `json:"description,omitempty"`
 	LeadAgentID    string    `json:"lead_agent_id"`
 	MemberAgentIDs []string  `json:"member_agent_ids,omitempty"`
 	Status         string    `json:"status"`

@@ -7,6 +7,27 @@ import type { TranslateFn } from "@/models/conversations";
 const t: TranslateFn = (key) => key;
 
 describe("CreateTeamModal", () => {
+  it("forwards the optional team description", () => {
+    const onTeamDescriptionChange = vi.fn();
+    render(
+      <CreateTeamModal
+        candidates={[]}
+        onClose={() => {}}
+        onCreate={async () => {}}
+        onTeamMemberIDsChange={() => {}}
+        onTeamTitleChange={() => {}}
+        onTeamDescriptionChange={onTeamDescriptionChange}
+        submitError=""
+        t={t}
+        teamActionBusy={false}
+        teamMemberIDs={[]}
+        teamTitle=""
+      />,
+    );
+    fireEvent.change(screen.getByPlaceholderText("teamDescriptionPlaceholder"), { target: { value: "发布团队" } });
+    expect(onTeamDescriptionChange).toHaveBeenCalledWith("发布团队");
+  });
+
   it("forwards Windows and IME-compatible team name change events", () => {
     const onTeamTitleChange = vi.fn();
     render(

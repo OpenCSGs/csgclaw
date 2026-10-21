@@ -729,7 +729,7 @@ describe("ConversationPane", () => {
     expect(screen.queryByText("Direct Messages")).not.toBeInTheDocument();
   });
 
-  it("shows the space name without message counts when some messages are filtered", () => {
+  it("shows the collaboration space label without message counts when some messages are filtered", () => {
     const messages = [
       {
         content: "visible answer",
@@ -753,7 +753,8 @@ describe("ConversationPane", () => {
     });
 
     expect(screen.queryByText("1/2")).not.toBeInTheDocument();
-    expect(container.querySelector(".chat-kicker")).toHaveTextContent("测试空间");
+    expect(container.querySelector(".chat-kicker")).toHaveTextContent("iaRoomsTab");
+    expect(container.querySelector(".chat-title")).toHaveTextContent("测试空间");
   });
 
   it("shows the complete room title on hover and keyboard focus", async () => {

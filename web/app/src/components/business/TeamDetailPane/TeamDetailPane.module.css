@@ -84,6 +84,30 @@
   font-size: 13px;
   line-height: 1.55;
 }
+.descriptionDisplay {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+  padding: 0;
+  color: var(--muted);
+  text-align: left;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+.descriptionDisplay svg {
+  flex-shrink: 0;
+  opacity: 0;
+}
+.descriptionDisplay:hover svg,
+.descriptionDisplay:focus-visible svg {
+  opacity: 1;
+}
+.descriptionInput {
+  width: 100%;
+  min-height: 60px;
+}
 
 .teamDetailAvatar {
   flex-shrink: 0;

@@ -2565,7 +2565,12 @@ describe("useAgentController", () => {
       lead_agent_id: "u-manager",
       member_agent_ids: ["u-manager"],
       title: "teamNewFallbackTitle",
+      description: "",
     });
+    expect(result.current.navigatePane).toHaveBeenCalledWith(
+      { type: WorkspacePaneTypes.team, id: "team-1" },
+      expect.anything(),
+    );
   });
 
   it("locks the team lead and restores existing members across compatible agent ids", async () => {
