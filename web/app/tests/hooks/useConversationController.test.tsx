@@ -8,6 +8,7 @@ import { MAX_ATTACHMENT_FILE_BYTES } from "@/models/attachments";
 import { renderComposerSegments, type ComposerSegment } from "@/models/composer";
 import { resourceSegment } from "@/models/conversationResources";
 import {
+  applyIMEvent,
   RoomTypes,
   type IMConversation,
   type IMData,
@@ -26,6 +27,7 @@ const subscribeIMEventsMock = vi.fn();
 const apiMocks = vi.hoisted(() => ({
   deleteRoomRequest: vi.fn(),
   fetchThreadRequest: vi.fn(),
+  fetchMessagesRequest: vi.fn(),
   inviteRoomUsersRequest: vi.fn(),
   removeRoomUserRequest: vi.fn(),
   sendMessageRequest: vi.fn(),
@@ -41,6 +43,7 @@ vi.mock("@/api/im", async () => {
     ...actual,
     deleteRoomRequest: apiMocks.deleteRoomRequest,
     fetchThreadRequest: apiMocks.fetchThreadRequest,
+    fetchMessagesRequest: apiMocks.fetchMessagesRequest,
     inviteRoomUsersRequest: apiMocks.inviteRoomUsersRequest,
     removeRoomUserRequest: apiMocks.removeRoomUserRequest,
     sendMessageRequest: apiMocks.sendMessageRequest,
@@ -228,12 +231,95 @@ function renderConversationController(
 }
 
 describe("useConversationController", () => {
+  it("does not restore a deleted attachment from a late poll when no thread is open", async () => {
+    const original: IMMessage = {
+      id: "with-file",
+      sender_id: "u-admin",
+      content: "File",
+      attachments: [{ id: "file", name: "file.txt", url: "file.txt", size: 1, content_type: "text/plain" }],
+    };
+    let data = dataWithMessages([original]);
+    const snapshot = deferred<IMMessage[]>();
+    apiMocks.fetchMessagesRequest.mockReturnValueOnce(snapshot.promise);
+    const { result } = renderConversationController({
+      data,
+      setBootstrapData: (updater) => {
+        data = typeof updater === "function" ? (updater as (current: IMData) => IMData)(data) : data;
+      },
+    });
+    expect(apiMocks.fetchMessagesRequest).toHaveBeenCalledWith(directConversation.id);
+    const event = { type: "room.attachment_deleted", room_id: directConversation.id, attachment_id: "file" };
+    act(() => {
+      data = applyIMEvent(data, event);
+      result.current.handleRealtimeEvent(event);
+    });
+    await act(async () => {
+      snapshot.resolve([original]);
+    });
+    expect(data.rooms[0].messages[0].attachments).toEqual([]);
+  });
+
+  it.each(["thread.created", "thread.updated"])(
+    "invalidates an in-flight snapshot on %s without an open thread",
+    async (type) => {
+      const root = successfulMessage("Question");
+      let data = dataWithMessages([root]);
+      const snapshot = deferred<IMMessage[]>();
+      apiMocks.fetchMessagesRequest.mockReturnValueOnce(snapshot.promise);
+      const { result } = renderConversationController({
+        data,
+        setBootstrapData: (updater) => {
+          data = typeof updater === "function" ? (updater as (current: IMData) => IMData)(data) : data;
+        },
+      });
+      const event = {
+        type,
+        thread: { room_id: directConversation.id, root, summary: { root_id: root.id, reply_count: 1 } },
+      };
+      act(() => {
+        data = applyIMEvent(data, event);
+        result.current.handleRealtimeEvent(event);
+      });
+      await act(async () => {
+        snapshot.resolve([root, { ...root, id: "stale" }]);
+      });
+      expect(data.rooms[0].messages.map((message) => message.id)).toEqual([root.id]);
+      expect(data.rooms[0].messages[0].thread?.reply_count).toBe(1);
+    },
+  );
+
+  it("invalidates snapshots for every room when a user is deleted", async () => {
+    const root = successfulMessage("Question");
+    const removed = { id: "removed", sender_id: "u-demo", content: "Reply" };
+    let data = dataWithMessages([root, removed]);
+    data.rooms[0].members = ["u-admin", "u-demo", "u-other"];
+    const snapshot = deferred<IMMessage[]>();
+    apiMocks.fetchMessagesRequest.mockReturnValueOnce(snapshot.promise);
+    const { result } = renderConversationController({
+      data,
+      setBootstrapData: (updater) => {
+        data = typeof updater === "function" ? (updater as (current: IMData) => IMData)(data) : data;
+      },
+    });
+    const event = { type: "user.deleted", user: { id: "u-demo" } };
+    act(() => {
+      data = applyIMEvent(data, event);
+      result.current.handleRealtimeEvent(event);
+    });
+    await act(async () => {
+      snapshot.resolve([root, removed]);
+    });
+    expect(data.rooms).toHaveLength(1);
+    expect(data.rooms[0].messages.map((message) => message.id)).toEqual([root.id]);
+  });
+
   beforeEach(() => {
     localStorage.clear();
     subscribeIMEventsMock.mockReset();
     subscribeIMEventsMock.mockReturnValue(() => {});
     apiMocks.deleteRoomRequest.mockReset();
     apiMocks.fetchThreadRequest.mockReset();
+    apiMocks.fetchMessagesRequest.mockReset().mockRejectedValue(new Error("No snapshot configured"));
     apiMocks.inviteRoomUsersRequest.mockReset();
     apiMocks.removeRoomUserRequest.mockReset();
     apiMocks.sendMessageRequest.mockReset();

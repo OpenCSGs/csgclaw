@@ -181,6 +181,7 @@ describe("TaskConversationList archive management", () => {
         activeID="collaboration"
         entry={{
           create: vi.fn(),
+          onMessage: vi.fn(),
           patch: vi.fn(),
           remove: vi.fn(),
           open: vi.fn(),
@@ -221,6 +222,7 @@ describe("TaskConversationList archive management", () => {
         directories={[{ path: "/projects/first", agentIDs: ["manager"] }]}
         entry={{
           create: vi.fn().mockResolvedValue(room),
+          onMessage: vi.fn(),
           patch: vi.fn().mockResolvedValue(undefined),
           remove: vi.fn().mockResolvedValue(undefined),
           open: vi.fn(),

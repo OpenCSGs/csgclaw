@@ -21,6 +21,7 @@ import {
   resolveConversationUser,
   upsertUserInData,
   mergeRoomMetadataUpdateInData,
+  appendMessageToData,
   removeConversationFromData,
 } from "@/models/conversations";
 import { isAgentRunning, resolveAgentAvatarFallback } from "@/models/agents";
@@ -811,6 +812,7 @@ export function useWorkspaceController(): WorkspaceController {
     currentUserID: displayData?.current_user_id ?? "",
     rooms,
     onUpdate: (room) => setBootstrapData((current) => mergeRoomMetadataUpdateInData(current, room)),
+    onMessage: (roomID, message) => setBootstrapData((current) => appendMessageToData(current, roomID, message)),
     onDelete: (id) => {
       setBootstrapData((current) => removeConversationFromData(current, id));
       if (activePane.type === WorkspacePaneTypes.conversation && activePane.id === id) navigate("/new");

@@ -38,6 +38,7 @@ function setup(
 ) {
   const create = vi.fn().mockResolvedValue(room);
   const open = vi.fn();
+  const onMessage = vi.fn();
   const onCreateAgent = vi.fn();
   const requireAuth = vi.fn(() => options.authenticated ?? true);
   const controller = {
@@ -45,7 +46,7 @@ function setup(
     t: (key: string) => key,
     openAgentSettings: vi.fn(),
     agentViewProps: { authStatuses: { codex: { authenticated: options.authenticated ?? true } } },
-    taskEntry: { create, open },
+    taskEntry: { create, open, onMessage },
     sidebarProps: {
       t: (key: string) => key,
       locale: "zh",
@@ -80,7 +81,7 @@ function setup(
     </MemoryRouter>,
     { wrapper: createQueryWrapper().wrapper },
   );
-  return { create, open, onCreateAgent, requireAuth, unmount: view.unmount };
+  return { create, open, onMessage, onCreateAgent, requireAuth, unmount: view.unmount };
 }
 
 describe("task example visibility", () => {
@@ -187,6 +188,16 @@ describe("StartTaskPage task preparation", () => {
     expect(create).toHaveBeenCalledTimes(1);
     const sends = vi.mocked(sendMessageRequest).mock.calls;
     expect(sends[0][0].client_message_id).toBe(sends[1][0].client_message_id);
+  });
+  it("stores the accepted first message before opening the conversation", async () => {
+    const message = { id: "first", sender_id: "user-admin", content: "hello" };
+    vi.mocked(sendMessageRequest).mockResolvedValue(message);
+    const { open, onMessage } = setup();
+    fireEvent.change(screen.getByRole("textbox", { name: "taskEntryPrompt" }), { target: { value: "hello" } });
+    fireEvent.click(screen.getByRole("button", { name: "taskEntryStart" }));
+    await waitFor(() => expect(open).toHaveBeenCalledWith(room));
+    expect(onMessage).toHaveBeenCalledWith(room.id, message);
+    expect(onMessage.mock.invocationCallOrder[0]).toBeLessThan(open.mock.invocationCallOrder[0]);
   });
   it("creates and opens a task for the selected worker instead of Manager", async () => {
     vi.mocked(sendMessageRequest).mockResolvedValue({} as never);

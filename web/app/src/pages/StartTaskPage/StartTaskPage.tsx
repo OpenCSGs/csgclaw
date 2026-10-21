@@ -175,7 +175,7 @@ function StartTaskForm({
           files.map((file) => [file.name, file.size, file.lastModified]),
         ]);
         if (sendID.current.fingerprint !== fingerprint) sendID.current = { fingerprint, id: crypto.randomUUID() };
-        await sendMessageRequest({
+        const message = await sendMessageRequest({
           room_id: room.id,
           sender_id: readySidebar.currentUserID,
           content: input.content,
@@ -184,6 +184,7 @@ function StartTaskForm({
           client_message_id: sendID.current.id,
           locale: readySidebar.locale,
         });
+        entry.onMessage(room.id, message);
       }
       entry.open(room);
     } catch (cause) {
