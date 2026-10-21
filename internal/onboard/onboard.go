@@ -164,6 +164,7 @@ func createManagerParticipant(ctx context.Context, agentsPath, imStatePath strin
 		runtimewiring.WithDSHRuntime(),
 		agent.WithBootstrapDefaultTemplates(cfg.Bootstrap),
 		agent.WithHubService(hubSvc),
+		agent.WithDeferredManagerRuntimeStart(),
 	)
 	switch bootstrapDefaults.ManagerRuntimeKind {
 	case agent.RuntimeKindPicoClawSandbox, agent.RuntimeKindOpenClawSandbox:

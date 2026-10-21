@@ -219,6 +219,7 @@ type Controller struct {
 	agentLifecycleMu              sync.Mutex
 	lifecycle                     *lifecycle.Coordinator
 	startupProfileDetectOff       bool
+	deferManagerRuntimeStart      bool
 	connectorCapabilityKey        []byte
 	agentResourceCleanup          func(context.Context, string) error
 	runtimeConfigurationGuard     func(context.Context, string) error
@@ -330,6 +331,19 @@ func (s *Controller) SetStartupProfileDetectionDisabled(disabled bool) {
 	s.mu.Lock()
 	s.startupProfileDetectOff = disabled
 	s.mu.Unlock()
+}
+
+// WithDeferredManagerRuntimeStart keeps bootstrap limited to persisted state.
+// The serving Controller starts the Manager after its required HTTP MCP
+// endpoint is available.
+func WithDeferredManagerRuntimeStart() ControllerOption {
+	return func(s *Controller) error {
+		if s == nil {
+			return fmt.Errorf("agent service is required")
+		}
+		s.deferManagerRuntimeStart = true
+		return nil
+	}
 }
 
 // WithGatewayRuntime sets picoclaw vs openclaw gateway behavior (from [bootstrap] or image inference).
@@ -520,6 +534,11 @@ func (s *Controller) ensureCodexManager(ctx context.Context, forceRecreate bool)
 		manager := s.newCodexManagerAgent(managerDisplayName, managerDescription, managerInstructions, managerAvatar, managerCreatedAt, "", agentruntime.StateUnknown, "profile_incomplete", startProfile, detectionResults)
 		applyManagerMCPServers(&manager, managerMCPServers)
 		manager.ProfileComplete = false
+		return s.persistManagerAgent(ctx, manager, false)
+	}
+	if s.deferManagerRuntimeStart {
+		manager := s.newCodexManagerAgent(managerDisplayName, managerDescription, managerInstructions, managerAvatar, managerCreatedAt, "", agentruntime.StateStopped, string(agentruntime.StateStopped), startProfile, detectionResults)
+		applyManagerMCPServers(&manager, managerMCPServers)
 		return s.persistManagerAgent(ctx, manager, false)
 	}
 

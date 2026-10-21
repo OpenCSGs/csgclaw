@@ -273,6 +273,52 @@ models = ["gpt-test"]
 	}
 }
 
+func TestCreateManagerParticipantDefersRuntimeAndPreservesStoppedManager(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	cfg := defaultConfig()
+	cfg.Model = config.ModelConfig{Provider: config.ProviderLLMAPI, BaseURL: "https://model.example/v1", APIKey: "test-key", ModelID: "test-model"}
+	agentsPath, imStatePath, err := bootstrapPaths()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := im.EnsureBootstrapState(imStatePath); err != nil {
+		t.Fatal(err)
+	}
+	manager, err := createManagerParticipant(context.Background(), agentsPath, imStatePath, cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if manager.ID != agent.ManagerParticipantID || manager.AgentID != agent.ManagerUserID {
+		t.Fatalf("unexpected Manager participant: id=%s agent=%s", manager.ID, manager.AgentID)
+	}
+	controller, err := agent.NewControllerWithLLM(effectiveLLMConfig(cfg), cfg.Server, "manager:test", agentsPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	record, ok := controller.Agent(agent.ManagerUserID)
+	if !ok || !record.ProfileComplete || record.AgentProfile.ModelID != "test-model" || record.BoxID != "" || record.DesiredState != agent.DesiredStateRunning {
+		t.Fatalf("bootstrap lost configured Manager: found=%v complete=%v model=%s handle=%s desired=%s", ok, record.ProfileComplete, record.AgentProfile.ModelID, record.BoxID, record.DesiredState)
+	}
+	if _, err := controller.SetDesiredState(agent.ManagerUserID, agent.DesiredStateStopped, false); err != nil {
+		t.Fatal(err)
+	}
+	if err := controller.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := createManagerParticipant(context.Background(), agentsPath, imStatePath, cfg); err != nil {
+		t.Fatal(err)
+	}
+	controller, err = agent.NewControllerWithLLM(effectiveLLMConfig(cfg), cfg.Server, "manager:test", agentsPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = controller.Close() }()
+	record, ok = controller.Agent(agent.ManagerUserID)
+	if !ok || record.DesiredState != agent.DesiredStateStopped || record.AgentProfile.ModelID != "test-model" {
+		t.Fatalf("bootstrap changed stopped Manager: found=%v desired=%s model=%s", ok, record.DesiredState, record.AgentProfile.ModelID)
+	}
+}
+
 func TestEnsureStateCreatesBackupBeforeMigratingExistingConfig(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
