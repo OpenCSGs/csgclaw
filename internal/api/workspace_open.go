@@ -42,49 +42,39 @@ func (h *Handler) validWorkspaceOpenCredential(header string) bool {
 	return false
 }
 
-func (h *Handler) workspaceOpenTargets(r *http.Request) []string {
+func (h *Handler) workspaceOpenTargets(r *http.Request, path string, directory bool) []workspaceOpenTarget {
 	if !localWorkspaceClient(r) || appRequestAgentID(r) != "" || r.Header.Get("X-CSGClaw-Caller-Agent") != "" || strings.HasPrefix(r.Header.Get("Authorization"), "Bearer agent.") {
-		return []string{}
+		return []workspaceOpenTarget{}
 	}
 	if header := r.Header.Get("Authorization"); header != "" && !h.validWorkspaceOpenCredential(header) {
-		return []string{}
+		return []workspaceOpenTarget{}
 	}
-	targets := []string{}
+	targets := []workspaceOpenTarget{}
 	switch runtime.GOOS {
 	case "darwin":
-		targets = append(targets, "system", "terminal")
-		for _, app := range []struct{ id, name string }{{"vscode", "Visual Studio Code"}, {"sublime", "Sublime Text"}, {"iterm", "iTerm"}} {
-			for _, dir := range []string{"/Applications", filepath.Join(os.Getenv("HOME"), "Applications")} {
-				if _, err := os.Stat(filepath.Join(dir, app.name+".app")); err == nil {
-					targets = append(targets, app.id)
-					break
-				}
-			}
-		}
+		targets = append(targets, workspaceOpenTarget{ID: "system"}, workspaceOpenTarget{ID: "terminal"})
 	case "windows":
-		targets = append(targets, "system", "notepad")
+		targets = append(targets, workspaceOpenTarget{ID: "system"})
 		if _, err := exec.LookPath("wt.exe"); err == nil {
-			targets = append(targets, "terminal")
+			targets = append(targets, workspaceOpenTarget{ID: "terminal"})
 		}
 	case "linux":
 		if linuxDisplayAvailable(os.Getenv, connectDisplay) {
 			if _, err := exec.LookPath("xdg-open"); err == nil {
-				targets = append(targets, "system")
+				targets = append(targets, workspaceOpenTarget{ID: "system"})
 			}
 		}
 	}
-	if runtime.GOOS != "darwin" {
-		if _, err := exec.LookPath("code"); err == nil && runtime.GOOS != "windows" {
-			targets = append(targets, "vscode")
-		}
+	if !directory && len(targets) > 0 {
+		targets = append(targets, associatedWorkspaceApplications(r.Context(), path)...)
 	}
 	return targets
 }
 
 type workspaceLocation struct {
-	AbsolutePath string   `json:"absolute_path"`
-	Directory    bool     `json:"directory"`
-	OpenTargets  []string `json:"open_targets"`
+	AbsolutePath string                `json:"absolute_path"`
+	Directory    bool                  `json:"directory"`
+	OpenTargets  []workspaceOpenTarget `json:"open_targets"`
 }
 
 func (h *Handler) resolveWorkspaceLocation(r *http.Request, relative string) (workspaceLocation, error) {
@@ -108,7 +98,7 @@ func (h *Handler) resolveWorkspaceLocation(r *http.Request, relative string) (wo
 	if err != nil {
 		return workspaceLocation{}, err
 	}
-	return workspaceLocation{absolute, info.IsDir(), h.workspaceOpenTargets(r)}, nil
+	return workspaceLocation{absolute, info.IsDir(), h.workspaceOpenTargets(r, absolute, info.IsDir())}, nil
 }
 
 func (h *Handler) handleAgentWorkspaceLocation(w http.ResponseWriter, r *http.Request) {
@@ -121,12 +111,16 @@ func (h *Handler) handleAgentWorkspaceLocation(w http.ResponseWriter, r *http.Re
 }
 
 func (h *Handler) handleAgentWorkspaceOpen(w http.ResponseWriter, r *http.Request) {
+	h.handleWorkspaceOpen(w, r, func(path string) (workspaceLocation, error) { return h.resolveWorkspaceLocation(r, path) })
+}
+
+func (h *Handler) handleWorkspaceOpen(w http.ResponseWriter, r *http.Request, resolve func(string) (workspaceLocation, error)) {
 	// Browser requests require an exact same-origin JSON POST. Origin is a CSRF
 	// boundary here, in addition to the loopback-only execution boundary; it never
 	// grants attachment reads or overrides an explicit invalid/scoped credential.
 	origin, err := url.Parse(r.Header.Get("Origin"))
 	authenticated := h.validWorkspaceOpenCredential(r.Header.Get("Authorization"))
-	if !localWorkspaceClient(r) || (!authenticated && (err != nil || (origin.Scheme != "http" && origin.Scheme != "https") || origin.Host != r.Host)) {
+	if len(h.workspaceOpenTargets(r, "", true)) == 0 || (!authenticated && (err != nil || (origin.Scheme != "http" && origin.Scheme != "https") || origin.Host != r.Host)) {
 		writeCodedAPIError(w, http.StatusForbidden, "workspace_open_denied", "Local workspace opening is unavailable")
 		return
 	}
@@ -142,14 +136,14 @@ func (h *Handler) handleAgentWorkspaceOpen(w http.ResponseWriter, r *http.Reques
 		writeCodedAPIError(w, http.StatusBadRequest, "invalid_request", "Invalid workspace open request")
 		return
 	}
-	location, err := h.resolveWorkspaceLocation(r, input.Path)
+	location, err := resolve(input.Path)
 	if err != nil {
 		writeCodedAPIError(w, http.StatusBadRequest, "workspace_file_unavailable", "Workspace path is unavailable")
 		return
 	}
 	allowed := false
 	for _, target := range location.OpenTargets {
-		if target == input.Target {
+		if target.ID == input.Target {
 			allowed = true
 		}
 	}
@@ -184,14 +178,11 @@ func workspaceOpenCommand(goos, path, target string, directory bool) (string, []
 				return "open", []string{"-a", "Finder", path}, nil
 			}
 			return "open", []string{"-R", path}, nil
-		case "vscode":
-			return "open", []string{"-a", "Visual Studio Code", path}, nil
-		case "sublime":
-			return "open", []string{"-a", "Sublime Text", path}, nil
 		case "terminal":
 			return "open", []string{"-a", "Terminal", parent}, nil
-		case "iterm":
-			return "open", []string{"-a", "iTerm", parent}, nil
+		}
+		if strings.HasPrefix(target, "app:") && filepath.IsAbs(strings.TrimPrefix(target, "app:")) {
+			return "open", []string{"-a", strings.TrimPrefix(target, "app:"), path}, nil
 		}
 	case "windows":
 		switch target {
@@ -200,23 +191,19 @@ func workspaceOpenCommand(goos, path, target string, directory bool) (string, []
 				return "explorer.exe", []string{path}, nil
 			}
 			return "explorer.exe", []string{"/select," + path}, nil
-		case "notepad":
-			if !directory {
-				return "notepad.exe", []string{path}, nil
-			}
-		case "vscode":
-			return "code", []string{path}, nil
+		case "default":
+			return "rundll32.exe", []string{"url.dll,FileProtocolHandler", path}, nil
 		case "terminal":
 			// wt.exe parses command separators inside each argv element and decodes
 			// \; back to a literal semicolon after splitting its command list.
 			return "wt.exe", []string{"-d", strings.ReplaceAll(parent, ";", `\;`)}, nil
 		}
 	case "linux":
+		if target == "default" {
+			return "xdg-open", []string{path}, nil
+		}
 		if target == "system" {
 			return "xdg-open", []string{parent}, nil
-		}
-		if target == "vscode" {
-			return "code", []string{path}, nil
 		}
 	}
 	return "", nil, errors.New("unsupported workspace application")

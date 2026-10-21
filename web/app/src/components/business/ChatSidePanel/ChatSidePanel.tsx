@@ -610,11 +610,11 @@ function FileTab({
       t={t}
       onClose={onClose}
       toolbarAccessory={
-        tab.reference?.source === "workspace" ? (
+        tab.reference ? (
           <WorkspacePathActions
-            agentID={tab.reference.agent_id}
             roomID={roomID}
-            path={tab.reference.path}
+            reference={tab.reference}
+            token={resolved ? attachmentCapability(resolved) : ""}
             active={active}
             t={t}
           />

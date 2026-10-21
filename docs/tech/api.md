@@ -1180,6 +1180,16 @@ csgclaw room attachments download --room-id <room> --attachment-id <id> --output
 csgclaw room attachments delete --room-id <room> --attachment-id <id>
 ```
 
+`GET /api/v1/rooms/{id}/attachments/{attachment_id}/location` returns `{absolute_path, directory, open_targets}` for local users.
+Content-addressed attachments receive a separate named local copy so native applications can identify the original extension.
+Editing the copy does not change the published attachment; reopening preserves edits to the copy.
+The copy is collected when the attachment loses its final live reference.
+The endpoint uses attachment read authorization; a valid download capability can resolve that attachment's location but cannot launch applications.
+Remote clients and scoped Agent callers cannot use local opening actions.
+
+`POST /api/v1/rooms/{id}/attachments/{attachment_id}/open` accepts `{ "target": "system" }` and returns `204` after application handoff.
+It uses the workspace opener's authorization, same-origin JSON and target checks, and revalidates the live room attachment on every call.
+
 `DELETE /api/v1/rooms/{id}/attachments/{attachment_id}` removes that attachment ID from the room's messages and retained thread context, returning `204 No Content`.
 Message text and separately saved workspace copies are preserved; shared file bytes are collected only when no remaining attachment references need them.
 Missing references return 404 and non-member Agent credentials receive 403.
@@ -1726,12 +1736,15 @@ Directories are expanded on demand by the chat file browser.
 Both workspace listing and content accept an optional `room_id`.
 The Agent must belong to that room; configured direct tasks use the room's locked working directory instead of the Agent default.
 
-The response also includes `absolute_path` for display and copying, and `open_targets` for locally available applications.
+The response also includes `absolute_path` for display and copying, and `open_targets` for locally available opening actions.
 These host paths are never used as Agent file references.
 
 ### `GET /api/v1/agents/{id}/workspace/location?path=...&room_id=...`
 
 Resolves an existing regular file or directory to `{absolute_path, directory, open_targets}` using the same room workspace and bounded path validation as previews.
+Each `open_targets` item contains `id`, an optional application `label`, and an optional `default` flag.
+macOS returns installed applications associated with the file; Windows and Linux return the file type's default application.
+Directories offer the file manager and an available terminal.
 Remote clients receive an empty `open_targets` list.
 
 ### `POST /api/v1/agents/{id}/workspace/open?room_id=...`
@@ -1740,7 +1753,7 @@ Accepts `{ "path": "docs/report.md", "target": "system" }` and returns `204` aft
 Only loopback clients using a literal loopback host may invoke native applications.
 Browser callers must send an exact same-origin JSON request; authenticated local callers may omit Origin.
 Explicit invalid credentials and scoped Agent callers cannot invoke this operation.
-Targets are server-defined identifiers for installed applications, never executable paths or shell commands.
+Targets must match an `id` in the file's current `open_targets`; arbitrary applications and shell commands are rejected.
 `system` reveals a file or opens its directory in the file manager; editor targets open the file or directory, and terminal targets open the current directory or a file's parent.
 Errors use `workspace_open_denied`, `workspace_file_unavailable`, or `workspace_open_failed`.
 

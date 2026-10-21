@@ -712,6 +712,9 @@ func cleanupAssetFilesForState(statePath string, rooms []Room) error {
 	}
 
 	live, liveSHA := liveAttachmentRefs(rooms)
+	if err := cleanupLocalAttachmentFiles(statePath, live); err != nil {
+		return err
+	}
 	canSweepBlobs := true
 	for _, entry := range entries {
 		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".json") {

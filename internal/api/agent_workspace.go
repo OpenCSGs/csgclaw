@@ -74,9 +74,9 @@ func (h *Handler) handleAgentWorkspaceListing(w http.ResponseWriter, r *http.Req
 	}
 	writeJSON(w, http.StatusOK, struct {
 		apitypes.WorkspaceListing
-		AbsolutePath string   `json:"absolute_path"`
-		OpenTargets  []string `json:"open_targets"`
-	}{listing, absolutePath, h.workspaceOpenTargets(r)})
+		AbsolutePath string                `json:"absolute_path"`
+		OpenTargets  []workspaceOpenTarget `json:"open_targets"`
+	}{listing, absolutePath, h.workspaceOpenTargets(r, absolutePath, true)})
 }
 
 func (h *Handler) handleAgentWorkspaceFileRead(w http.ResponseWriter, r *http.Request, resolveRoot func(string) (string, error)) {

@@ -1,5 +1,5 @@
 import { get, post, resolveRequestPath } from "./client";
-import type { WorkspaceListing } from "@/models/workspace";
+import type { WorkspaceListing, FileOpenTarget } from "@/models/workspace";
 import type { AttachmentPreviewItem } from "@/models/attachments";
 import type { ComposerFileReference } from "@/models/fileReferences";
 import type { IMMessage } from "@/models/conversations";
@@ -99,23 +99,27 @@ export function filePreviewItem(
   };
 }
 
-export type WorkspaceLocation = { absolute_path: string; directory: boolean; open_targets: string[] };
+export type WorkspaceLocation = { absolute_path: string; directory: boolean; open_targets: FileOpenTarget[] };
 
-export function fetchWorkspaceLocation(
-  agentID: string,
+export function fetchFileLocation(
   roomID: string,
-  path: string,
+  reference: ComposerFileReference,
+  token = "",
   signal?: AbortSignal,
 ): Promise<WorkspaceLocation> {
   return get(
-    `api/v1/agents/${encodeURIComponent(agentID)}/workspace/location?${new URLSearchParams({ room_id: roomID, path })}`,
+    reference.source === "workspace"
+      ? `api/v1/agents/${encodeURIComponent(reference.agent_id)}/workspace/location?${new URLSearchParams({ room_id: roomID, path: reference.path })}`
+      : `api/v1/rooms/${encodeURIComponent(roomID)}/attachments/${encodeURIComponent(reference.attachment_id)}/location${token ? `?${new URLSearchParams({ token })}` : ""}`,
     { signal },
   );
 }
 
-export function openWorkspaceLocation(agentID: string, roomID: string, path: string, target: string): Promise<void> {
+export function openFileLocation(roomID: string, reference: ComposerFileReference, target: string): Promise<void> {
   return post(
-    `api/v1/agents/${encodeURIComponent(agentID)}/workspace/open?${new URLSearchParams({ room_id: roomID })}`,
-    { path, target },
+    reference.source === "workspace"
+      ? `api/v1/agents/${encodeURIComponent(reference.agent_id)}/workspace/open?${new URLSearchParams({ room_id: roomID })}`
+      : `api/v1/rooms/${encodeURIComponent(roomID)}/attachments/${encodeURIComponent(reference.attachment_id)}/open`,
+    { ...(reference.source === "workspace" ? { path: reference.path } : {}), target },
   );
 }

@@ -1168,6 +1168,16 @@ Worker 的服务端任务上下文包含 `request_source_message_id`，由父任
 清空消息和删除房间沿用现有附件引用清理规则，显式下载的工作区副本仍是普通本地文件。
 该接口不开放智能体未发布的工作区文件，也不提供文档正文搜索。
 
+`GET /api/v1/rooms/{id}/attachments/{attachment_id}/location` 为本机用户返回 `{absolute_path, directory, open_targets}`。
+附件以内容哈希存储，因此接口按附件原文件名创建独立的本地打开副本，保留扩展名供系统识别。
+外部编辑器修改副本不会改变已发布附件的原始内容；再次打开保留该副本中的修改。
+副本随附件最后一个有效引用的删除而清理。
+接口沿用附件读取权限；有效下载凭证可以读取此附件的位置，但不能启动应用。
+远程客户端和 Agent 范围调用不能使用本机打开能力。
+
+`POST /api/v1/rooms/{id}/attachments/{attachment_id}/open` 接受 `{ "target": "system" }`，并在交给应用后返回 `204`。
+权限、同源 JSON 校验和目标校验与工作区打开接口相同，每次调用仍校验房间内的有效附件引用。
+
 `DELETE /api/v1/rooms/{id}/attachments/{attachment_id}` 按附件 ID 移除该房间消息和保留线程上下文中的引用，成功返回 `204 No Content`。
 删除保留消息文本以及独立保存到工作目录的副本，仅在没有其他附件引用时回收共享文件数据。
 附件不存在时返回 404，非房间成员的 Agent 凭据返回 403。
@@ -1682,12 +1692,15 @@ tools、instructions、非 user role、attachments 和未知请求字段都会�
 工作区列表和原始内容接口均支持可选的 `room_id`。
 Agent 必须属于该房间；已配置的私聊任务使用该房间锁定的工作目录，其他会话使用 Agent 默认工作区。
 
-响应还包含用于展示和复制的 `absolute_path`，以及本机可用应用标识 `open_targets`。
+响应还包含用于展示和复制的 `absolute_path`，以及本机可用打开方式列表 `open_targets`。
 宿主机绝对路径不用于 Agent 文件引用。
 
 ### `GET /api/v1/agents/{id}/workspace/location?path=...&room_id=...`
 
 按会话工作区和预览相同的路径边界校验，解析普通文件或目录，返回 `{absolute_path, directory, open_targets}`。
+`open_targets` 的每项包含 `id`、可选的应用名 `label` 和默认应用标记 `default`。
+macOS 按文件的系统关联返回已安装应用；Windows 和 Linux 返回该类型的默认应用。
+目录提供文件管理器和可用的终端入口。
 远程客户端的 `open_targets` 为空。
 
 ### `POST /api/v1/agents/{id}/workspace/open?room_id=...`
@@ -1696,7 +1709,7 @@ Agent 必须属于该房间；已配置的私聊任务使用该房间锁定的�
 仅允许使用 localhost 或回环 IP 作为 Host 的回环客户端调用本机应用。
 浏览器必须发送严格同源的 JSON 请求，已认证的本机客户端可不发送 Origin。
 显式无效凭据和 Agent 范围凭据不能调用此操作。
-目标必须是服务端定义的已安装应用标识，不能传入可执行路径或 shell 命令。
+目标必须与该文件最新 `open_targets` 中的 `id` 匹配，不能指定未推荐的应用或 shell 命令。
 `system` 在文件管理器中定位文件或打开目录；编辑器打开文件或目录，终端打开当前目录或文件所在目录。
 错误码为 `workspace_open_denied`、`workspace_file_unavailable` 或 `workspace_open_failed`。
 

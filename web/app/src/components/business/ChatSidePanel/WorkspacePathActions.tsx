@@ -10,21 +10,22 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
 } from "@/components/ui";
-import { fetchWorkspaceLocation, openWorkspaceLocation, type WorkspaceLocation } from "@/api/chatFiles";
+import { fetchFileLocation, openFileLocation, type WorkspaceLocation } from "@/api/chatFiles";
 import { writeTextToClipboard } from "@/shared/lib/clipboard";
+import type { ComposerFileReference } from "@/models/fileReferences";
 import type { TranslateFn } from "@/models/conversations";
 
 export function WorkspacePathActions({
-  agentID,
   roomID,
-  path,
+  reference,
+  token = "",
   location,
   active = true,
   t,
 }: {
-  agentID: string;
   roomID: string;
-  path: string;
+  reference: ComposerFileReference;
+  token?: string;
   location?: WorkspaceLocation;
   active?: boolean;
   t: TranslateFn;
@@ -32,26 +33,22 @@ export function WorkspacePathActions({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const query = useQuery({
-    queryKey: ["chat-workspace-location", roomID, agentID, path],
-    queryFn: ({ signal }) => fetchWorkspaceLocation(agentID, roomID, path, signal),
+    queryKey: ["chat-file-location", roomID, reference, token],
+    queryFn: ({ signal }) => fetchFileLocation(roomID, reference, token, signal),
     enabled: false,
     retry: false,
   });
   const current = location ?? query.data;
-  const targets = (current?.open_targets ?? []).filter((target) => target !== "notepad" || !current?.directory);
+  const targets = current?.open_targets ?? [];
   const labels: Record<string, string> = {
     system: t("chatOpenSystem"),
     terminal: t("chatOpenTerminal"),
-    vscode: "Visual Studio Code",
-    sublime: "Sublime Text",
-    iterm: "iTerm2",
-    notepad: "Notepad",
   };
   async function open(target: string) {
     setBusy(true);
     setError("");
     try {
-      await openWorkspaceLocation(agentID, roomID, path, target);
+      await openFileLocation(roomID, reference, target);
     } catch {
       setError(t("chatOpenFailed"));
     } finally {
@@ -81,15 +78,16 @@ export function WorkspacePathActions({
             </span>
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent>
+        <DropdownMenuContent className={styles.menu}>
           {query.isFetching && !location ? (
             <DropdownMenuItem disabled>{t("chatWorkspaceLocationLoading")}</DropdownMenuItem>
           ) : query.isError && !location ? (
             <DropdownMenuItem disabled>{t("chatWorkspaceLocationFailed")}</DropdownMenuItem>
           ) : null}
           {targets.map((target) => (
-            <DropdownMenuItem key={target} onSelect={() => void open(target)}>
-              {labels[target] ?? target}
+            <DropdownMenuItem key={target.id} onSelect={() => void open(target.id)}>
+              {labels[target.id] ?? target.label ?? target.id}
+              {target.default ? ` (${t("chatOpenDefault")})` : ""}
             </DropdownMenuItem>
           ))}
           {targets.length ? <DropdownMenuSeparator /> : null}

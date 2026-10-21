@@ -247,7 +247,7 @@ func TestWorkspaceOpenCommandKeepsPathsAsArguments(t *testing.T) {
 		args                []string
 	}{
 		{"darwin", "system", "open", []string{"-R", path}},
-		{"darwin", "vscode", "open", []string{"-a", "Visual Studio Code", path}},
+		{"darwin", "app:/Applications/Visual Studio Code.app", "open", []string{"-a", "/Applications/Visual Studio Code.app", path}},
 		{"darwin", "terminal", "open", []string{"-a", "Terminal", "/workspace"}},
 		{"windows", "system", "explorer.exe", []string{"/select," + path}},
 		{"linux", "system", "xdg-open", []string{"/workspace"}},

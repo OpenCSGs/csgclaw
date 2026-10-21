@@ -220,6 +220,8 @@ func (h *Handler) registerCoreRoutes(router chi.Router) {
 				r.Post("/diagnostics/timings", h.reportDiagnosticTiming)
 				r.Get("/attachments", h.handleRoomAttachments)
 				r.Get("/attachments/{attachment_id}", h.handleRoomAttachmentDownload)
+				r.Get("/attachments/{attachment_id}/location", h.handleRoomAttachmentLocation)
+				r.Post("/attachments/{attachment_id}/open", h.handleRoomAttachmentOpen)
 				r.Delete("/attachments/{attachment_id}", h.handleRoomAttachmentDelete)
 				r.Get("/tasks", h.handleListRoomTasks)
 				r.Get("/tasks/{task_id}", h.handleGetRoomTask)

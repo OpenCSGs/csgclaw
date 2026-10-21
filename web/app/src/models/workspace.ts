@@ -8,10 +8,12 @@ export type WorkspaceEntry = {
   type: "dir" | "file" | string;
 };
 
+export type FileOpenTarget = { id: string; label?: string; default?: boolean };
+
 export type WorkspaceListing = {
   entries?: WorkspaceEntry[];
   absolute_path?: string;
-  open_targets?: string[];
+  open_targets?: FileOpenTarget[];
   kind?: string | null;
   path?: string | null;
 };

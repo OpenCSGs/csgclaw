@@ -195,9 +195,8 @@ export function FilesTab({
             ]}
           />
           <WorkspacePathActions
-            agentID={agentID}
             roomID={scope.roomID}
-            path={directory}
+            reference={{ source: "workspace", agent_id: agentID, path: directory, name: directory, label: directory }}
             location={
               workspace.data?.absolute_path
                 ? {

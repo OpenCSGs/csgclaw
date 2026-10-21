@@ -9,8 +9,8 @@ import {
   fetchRoomFileMessages,
   fetchRoomFiles,
   fetchWorkspaceDirectory,
-  fetchWorkspaceLocation,
-  openWorkspaceLocation,
+  fetchFileLocation,
+  openFileLocation,
 } from "@/api/chatFiles";
 import type { IMConversation } from "@/models/conversations";
 import { createQueryWrapper } from "../helpers/queryClient";
@@ -20,8 +20,8 @@ vi.mock("@/api/chatFiles", async (importOriginal) => ({
   fetchRoomFiles: vi.fn(),
   fetchRoomFileMessages: vi.fn(),
   fetchWorkspaceDirectory: vi.fn(),
-  fetchWorkspaceLocation: vi.fn(),
-  openWorkspaceLocation: vi.fn(),
+  fetchFileLocation: vi.fn(),
+  openFileLocation: vi.fn(),
 }));
 vi.mock("@/shared/realtime/imEvents", () => ({ subscribeIMEvents: vi.fn(() => () => {}) }));
 const t = createTranslator("en");
@@ -149,12 +149,22 @@ describe("shared chat sidebar", () => {
     expect(screen.queryByRole("combobox", { name: "Workspace agent" })).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Open file or directory" }));
     await user.click(screen.getByRole("menuitem", { name: "Open in file manager" }));
-    await waitFor(() => expect(openWorkspaceLocation).toHaveBeenCalledWith("alice", "sidebar-test", "", "system"));
+    await waitFor(() =>
+      expect(openFileLocation).toHaveBeenCalledWith(
+        "sidebar-test",
+        expect.objectContaining({ source: "workspace", agent_id: "alice", path: "" }),
+        "system",
+      ),
+    );
     await user.click(screen.getByRole("button", { name: /^README.md/ }));
     await user.click(screen.getByRole("button", { name: "Open file or directory" }));
     await user.click(await screen.findByRole("menuitem", { name: "Visual Studio Code" }));
     await waitFor(() =>
-      expect(openWorkspaceLocation).toHaveBeenCalledWith("alice", "sidebar-test", "README.md", "vscode"),
+      expect(openFileLocation).toHaveBeenCalledWith(
+        "sidebar-test",
+        expect.objectContaining({ source: "workspace", agent_id: "alice", path: "README.md" }),
+        "app:/Applications/Code.app",
+      ),
     );
   });
 
@@ -311,15 +321,15 @@ describe("shared chat sidebar", () => {
 
   beforeEach(() => {
     localStorage.clear();
-    vi.mocked(fetchWorkspaceLocation).mockResolvedValue({
+    vi.mocked(fetchFileLocation).mockResolvedValue({
       absolute_path: "/workspace/Alice/README.md",
       directory: false,
-      open_targets: ["system", "vscode"],
+      open_targets: [{ id: "system" }, { id: "app:/Applications/Code.app", label: "Visual Studio Code" }],
     });
-    vi.mocked(openWorkspaceLocation).mockResolvedValue(undefined);
+    vi.mocked(openFileLocation).mockResolvedValue(undefined);
     vi.mocked(fetchWorkspaceDirectory).mockResolvedValue({
       absolute_path: "/workspace/Alice",
-      open_targets: ["system", "terminal"],
+      open_targets: [{ id: "system" }, { id: "terminal" }],
       entries: [
         { path: "docs", name: "docs", type: "dir" },
         { path: "README.md", name: "README.md", type: "file", size: 10 },
