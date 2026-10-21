@@ -31,16 +31,21 @@ export function NotificationsSection() {
   return (
     <SettingsRow title={t("notificationSettings")} description={t("settingsNotificationDescription")}>
       <div className={styles.notificationControls}>
-        <Select
-          size="sm"
-          contentClassName={styles.notificationSelectContent}
-          options={turnNotificationOptions}
-          selectedLabel={selectedTurnNotificationLabel}
-          triggerClassName={styles.notificationSelectTrigger}
-          triggerProps={{ "aria-label": t("turnCompletionNotifications") }}
-          value={turnNotificationMode}
-          onValueChange={(value) => void sidebar.onTurnNotificationModeChange?.(normalizeTurnNotificationMode(value))}
-        />
+        <div className={styles.notificationModeControl}>
+          <Select
+            size="sm"
+            contentClassName={styles.notificationSelectContent}
+            options={turnNotificationOptions}
+            selectedLabel={selectedTurnNotificationLabel}
+            triggerClassName={styles.notificationSelectTrigger}
+            triggerProps={{ "aria-label": t("turnCompletionNotifications") }}
+            value={turnNotificationMode}
+            onValueChange={(value) =>
+              void sidebar.onTurnNotificationModeChange?.(normalizeTurnNotificationMode(value))
+            }
+          />
+          <p className={styles.notificationModeHint}>{t("notificationPermissionDeniedHint")}</p>
+        </div>
         <label className={styles.notificationSoundControl} title={t("turnNotificationSoundHint")}>
           <span>{t("turnNotificationSound")}</span>
           <Switch

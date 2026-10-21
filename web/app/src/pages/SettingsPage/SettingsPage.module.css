@@ -150,6 +150,10 @@
   align-items: start;
 }
 
+.formGrid.accountFormGrid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .formGrid :global(.field) {
   margin-top: 0;
 }
@@ -198,6 +202,54 @@
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.knowledgeEmptyState {
+  display: flex;
+  min-height: 220px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  padding: 32px 24px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--panel-soft);
+  text-align: center;
+}
+
+.knowledgeEmptyText {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  max-width: 420px;
+}
+
+.knowledgeEmptyText h3 {
+  margin: 0;
+  color: var(--text);
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 24px;
+}
+
+.knowledgeEmptyText p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 22px;
+}
+
+.knowledgeEmptyActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 20px;
 }
 
 .loginGate {
@@ -533,6 +585,20 @@
 
 .notificationControls .notificationSelectTrigger {
   width: 196px;
+}
+
+.notificationModeControl {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+}
+
+.notificationModeHint {
+  max-width: 260px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 18px;
 }
 
 .notificationSoundControl {
@@ -1038,6 +1104,10 @@
 }
 
 @media (max-width: 640px) {
+  .formGrid.accountFormGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .header {
     padding: 14px 18px;
   }

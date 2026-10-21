@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { submitFeedback } from "@/api/feedback";
 import type { TranslateFn } from "@/models/conversations";
-import { feedbackImagesValid } from "@/models/feedback";
+import { feedbackImagesValid, MAX_FEEDBACK_IMAGES } from "@/models/feedback";
 import { localizeAPIError } from "@/shared/i18n";
 
 export function useFeedback(t: TranslateFn, accountScope = "") {
@@ -64,13 +64,14 @@ export function useFeedback(t: TranslateFn, accountScope = "") {
 
   function changeImages(value: File[]) {
     if (inFlight.current) return;
-    if (!feedbackImagesValid(value)) {
+    const nextImages = value.slice(0, MAX_FEEDBACK_IMAGES);
+    if (!feedbackImagesValid(nextImages)) {
       setError(t("feedbackImageLimit"));
       return;
     }
     setError("");
     setSuccess(false);
-    setImages(value);
+    setImages(nextImages);
   }
 
   return {

@@ -6,6 +6,9 @@
   flex-direction: column;
   gap: 12px;
 }
+.archived {
+  --task-conversation-inline-padding: 8px;
+}
 .search {
   width: 100%;
   border: 1px solid var(--input-border);
@@ -32,6 +35,18 @@
   gap: 4px;
   border-radius: var(--radius-md);
   margin: 3px 0;
+}
+.archived .row {
+  padding-inline: 4px;
+}
+.archived .open {
+  padding-inline: 8px;
+}
+.archivedMore {
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
+  padding: 0;
 }
 .row:hover,
 .active {

@@ -1,4 +1,4 @@
-import { Button } from "@/components/ui";
+import { Button, Select } from "@/components/ui";
 import { useWorkspaceControllerContext } from "@/hooks/workspace";
 import { AgentRuntimeSection } from "@/components/business/AgentRuntimeSection";
 import { useAgentRuntimes } from "@/components/business/AgentRuntimeSection/useAgentRuntimes";
@@ -37,17 +37,15 @@ export function RuntimeSection() {
         <div className={styles.formGrid}>
           <label className="field">
             <span>{t("configSettingsSandboxProvider")}</span>
-            <select
+            <Select
+              options={providerOptions.map((provider) => ({
+                value: provider,
+                label: sandboxProviderLabel(provider, t),
+              }))}
+              triggerProps={{ "aria-label": t("configSettingsSandboxProvider"), disabled }}
               value={config.draft.sandbox_provider}
-              disabled={disabled}
-              onChange={(event) => config.onDraftChange({ sandbox_provider: event.currentTarget.value })}
-            >
-              {providerOptions.map((provider) => (
-                <option key={provider} value={provider}>
-                  {sandboxProviderLabel(provider, t)}
-                </option>
-              ))}
-            </select>
+              onValueChange={(value) => config.onDraftChange({ sandbox_provider: value })}
+            />
           </label>
           <label className="field">
             <span>{t("configSettingsHubLocalPath")}</span>
@@ -65,17 +63,15 @@ export function RuntimeSection() {
           </label>
           <label className="field">
             <span>{t("configSettingsWorkerTemplate")}</span>
-            <select
+            <Select
+              options={workerTemplateOptions}
+              triggerProps={{
+                "aria-label": t("configSettingsWorkerTemplate"),
+                disabled: disabled || workerTemplateOptions.length === 0,
+              }}
               value={config.draft.default_worker_template}
-              disabled={disabled || workerTemplateOptions.length === 0}
-              onChange={(event) => config.onDraftChange({ default_worker_template: event.currentTarget.value })}
-            >
-              {workerTemplateOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
+              onValueChange={(value) => config.onDraftChange({ default_worker_template: value })}
+            />
           </label>
           {config.error ? <p className="form-error">{config.error}</p> : null}
           <div className={`${styles.formActions} ${styles.spanAll}`}>

@@ -1,6 +1,11 @@
 .dialog {
   width: min(560px, calc(100vw - 32px));
 }
+.header {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
 .body {
   display: grid;
   gap: 12px;
@@ -8,6 +13,23 @@
 .label {
   display: grid;
   gap: 8px;
+}
+.fileInput {
+  display: none;
+}
+.chooseFilesButton {
+  justify-self: start;
+  width: fit-content;
+}
+.chooseFilesTooltipTarget {
+  display: inline-flex;
+  justify-self: start;
+}
+.imageHint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 18px;
 }
 .label textarea {
   width: 100%;
@@ -25,9 +47,22 @@
   gap: 12px;
 }
 .image {
+  position: relative;
   display: grid;
   gap: 8px;
   width: 120px;
+}
+.removeImage {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  z-index: 1;
+  width: 28px;
+  min-width: 28px;
+  height: 28px;
+  min-height: 28px;
+  padding: 0;
+  border-radius: 999px;
 }
 .image img {
   width: 120px;

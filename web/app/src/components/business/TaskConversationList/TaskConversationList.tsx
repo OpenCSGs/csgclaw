@@ -187,7 +187,7 @@ export function TaskConversationList({
   }
 
   return (
-    <div className={`${styles.root} ${compact ? styles.compact : ""}`}>
+    <div className={`${styles.root} ${compact ? styles.compact : ""} ${archived ? styles.archived : ""}`}>
       <div ref={searchBarRef} className={styles.searchBar}>
         <div className={styles.searchField}>
           <Search size={15} aria-hidden="true" />
@@ -348,9 +348,26 @@ export function TaskConversationList({
               <div className={styles.actions}>
                 <DropdownMenuRoot>
                   <DropdownMenuTrigger asChild>
-                    <button type="button" className={styles.more} aria-label={`${t("taskEntryMore")} · ${room.title}`}>
-                      <MoreHorizontal size={17} />
-                    </button>
+                    {archived ? (
+                      <Button
+                        type="button"
+                        variant="tertiaryGray"
+                        size="sm"
+                        iconOnly
+                        className={styles.archivedMore}
+                        aria-label={`${t("taskEntryMore")} · ${room.title}`}
+                      >
+                        <MoreHorizontal size={17} aria-hidden="true" />
+                      </Button>
+                    ) : (
+                      <button
+                        type="button"
+                        className={styles.more}
+                        aria-label={`${t("taskEntryMore")} · ${room.title}`}
+                      >
+                        <MoreHorizontal size={17} />
+                      </button>
+                    )}
                   </DropdownMenuTrigger>
                   <DropdownMenuContent>
                     <DropdownMenuItem

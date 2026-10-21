@@ -3,7 +3,7 @@ import { fetchRemoteKnowledgeBaseMCPConfig } from "@/api/knowledgeBases";
 import { workspaceQueryKeys } from "@/hooks/workspace/workspaceQueries";
 import { useEffect, useMemo, useState } from "react";
 import { BookOpen, LoaderCircle, LogIn, Plus, RefreshCw } from "lucide-react";
-import { Button, DismissibleAlert, Tooltip } from "@/components/ui";
+import { Button, DismissibleAlert, LinkButton, Tooltip } from "@/components/ui";
 import { ResourceList, ResourceListCard } from "@/components/business/ResourceListCard";
 import { useWorkspaceControllerContext } from "@/hooks/workspace";
 import { isAuthenticated } from "@/models/auth";
@@ -268,13 +268,7 @@ function MarketPane({
 
   if (items.length === 0) {
     return (
-      <>
-        <p className={styles.listNotice}>
-          {t("resourcesKnowledgeBasesEmpty")}
-          <span className={styles.hintInline}>{t("resourcesKnowledgeBasesEmptyHint")}</span>
-        </p>
-        <CreateKnowledgeHint t={t} />
-      </>
+      <KnowledgeEmptyState t={t} />
     );
   }
 
@@ -345,6 +339,25 @@ function MarketPane({
 
       <CreateKnowledgeHint t={t} />
     </>
+  );
+}
+
+function KnowledgeEmptyState({ t }: { t: (key: string, vars?: Record<string, string | number>) => string }) {
+  const { sidebarProps } = useWorkspaceControllerContext();
+  const createURL = agenticHubKnowledgeCreateURL(sidebarProps?.authStatus, sidebarProps?.authEnvironment);
+  return (
+    <div className={styles.knowledgeEmptyState}>
+      <div className={styles.knowledgeEmptyText}>
+        <h3>{t("resourcesKnowledgeBasesEmpty")}</h3>
+        <p>{t("resourcesKnowledgeBasesEmptyHint")}</p>
+      </div>
+      <div className={styles.knowledgeEmptyActions}>
+        <LinkButton href={createURL} target="_blank" rel="noreferrer" variant="primary" size="md">
+          <Plus size={16} strokeWidth={2} aria-hidden="true" />
+          {t("iaKnowledgeCreateAction")}
+        </LinkButton>
+      </div>
+    </div>
   );
 }
 
