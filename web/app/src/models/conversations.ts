@@ -1120,7 +1120,15 @@ export function mergeConversationMessageSnapshot(
     if (thread !== merged.thread || attachments !== merged.attachments) merged = { ...merged, thread, attachments };
     messages.push(previous && JSON.stringify(previous) === JSON.stringify(merged) ? previous : merged);
   }
-  messages.push(...room.messages.filter((message) => !message.id || !seen.has(message.id)));
+  // A missing baseline message was removed on the server. Retain only local
+  // additions made during the request (or all unseen messages without a baseline).
+  messages.push(
+    ...room.messages.filter(
+      (message) =>
+        (!message.id || !seen.has(message.id)) &&
+        (!baseline || (message.id ? !beforeRequest.has(message.id) : !baseline.includes(message))),
+    ),
+  );
   if (
     messages.length === room.messages.length &&
     messages.every((message, index) => message === room.messages[index])

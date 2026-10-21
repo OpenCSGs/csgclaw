@@ -9461,3 +9461,49 @@ func (templateCodexTestRuntime) MCPServersRestartRequired(agentruntime.MCPServer
 func (templateCodexTestRuntime) ReconcileMCPServers(context.Context, agentruntime.Handle, agentruntime.MCPServersChange) error {
 	return nil
 }
+
+func TestHandleMessagesReadsLiveStateWithoutReloadingWorkspace(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), "state.json")
+	initial := im.Bootstrap{
+		CurrentUserID: "u-admin",
+		Users:         []im.User{{ID: "u-admin", Name: "admin", Role: "admin"}},
+		Rooms:         []im.Room{{ID: "room-1", Members: []string{"u-admin"}, Messages: []im.Message{{ID: "msg-1", SenderID: "u-admin", Content: "hello"}}}},
+	}
+	if err := im.SaveBootstrap(statePath, initial); err != nil {
+		t.Fatal(err)
+	}
+	service, err := im.NewServiceFromPath(statePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// An unrelated unreadable workspace must not break polling of a loaded room.
+	if err := os.WriteFile(statePath, []byte("invalid JSON"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	srv := &Handler{im: service}
+	for _, cleared := range []bool{false, true} {
+		if cleared {
+			if _, err := service.ClearRoomMessages("room-1"); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(statePath, []byte("invalid JSON"), 0600); err != nil {
+				t.Fatal(err)
+			}
+		}
+		rec := httptest.NewRecorder()
+		srv.Routes().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/messages?room_id=room-1", nil))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d; body=%s", rec.Code, rec.Body.String())
+		}
+		var got []im.Message
+		if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
+			t.Fatal(err)
+		}
+		if cleared && len(got) != 0 {
+			t.Fatalf("cleared messages = %+v", got)
+		}
+		if !cleared && (len(got) != 1 || got[0].ID != "msg-1") {
+			t.Fatalf("messages = %+v, want msg-1", got)
+		}
+	}
+}

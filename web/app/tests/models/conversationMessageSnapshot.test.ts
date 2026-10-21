@@ -130,3 +130,12 @@ it("preserves attachment deletion received during the request", () => {
   const next = mergeConversationMessageSnapshot(data([updated]), "room", [before], [before]);
   expect(next?.rooms[0].messages[0].attachments).toEqual([]);
 });
+
+it("drops baseline messages absent from an authoritative snapshot while retaining concurrent additions", () => {
+  const baseline = [message("cleared")];
+  const current = data([...baseline, message("live")]);
+  const next = mergeConversationMessageSnapshot(current, "room", [], baseline);
+  expect(next?.rooms[0].messages.map((item) => item.id)).toEqual(["live"]);
+  const converged = mergeConversationMessageSnapshot(next, "room", [], next?.rooms[0].messages);
+  expect(converged?.rooms[0].messages).toEqual([]);
+});

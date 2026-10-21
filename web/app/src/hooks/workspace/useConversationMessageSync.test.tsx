@@ -35,7 +35,16 @@ it("recovers the first prompt and later replies without SSE, preserving messages
   const { result, unmount } = setup();
   await act(async () => {});
   expect(result.current.data?.rooms[0].messages.map((item) => item.id)).toEqual(["prompt"]);
-  vi.mocked(fetchMessagesRequest).mockResolvedValueOnce([message("prompt"), message("reply")]);
+  let finish!: (messages: IMMessage[]) => void;
+  vi.mocked(fetchMessagesRequest).mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(2000);
+  });
   act(() =>
     result.current.setData(
       (data) =>
@@ -48,7 +57,7 @@ it("recovers the first prompt and later replies without SSE, preserving messages
     ),
   );
   await act(async () => {
-    await vi.advanceTimersByTimeAsync(2000);
+    finish([message("prompt"), message("reply")]);
   });
   expect(result.current.data?.rooms[0].messages.map((item) => item.id)).toEqual(["prompt", "reply", "live"]);
   unmount();
@@ -215,4 +224,20 @@ it("globally invalidates old snapshots on participant deletion and resumes with 
     await vi.advanceTimersByTimeAsync(2000);
   });
   expect(result.current.data?.rooms[0].messages.map((item) => item.id)).toEqual(["remaining-user-message"]);
+});
+
+it("converges to an empty transcript after missing a room clear event", async () => {
+  vi.mocked(fetchMessagesRequest).mockResolvedValueOnce([message("old")]);
+  const { result } = setup();
+  await act(async () => {});
+  expect(result.current.data?.rooms[0].messages).toHaveLength(1);
+  vi.mocked(fetchMessagesRequest).mockResolvedValue([]);
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(2000);
+  });
+  expect(result.current.data?.rooms[0].messages).toEqual([]);
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(2000);
+  });
+  expect(result.current.data?.rooms[0].messages).toEqual([]);
 });

@@ -2249,10 +2249,8 @@ func (h *Handler) handleMessages(w http.ResponseWriter, r *http.Request) {
 	}
 	switch r.Method {
 	case http.MethodGet:
-		if err := h.reloadIM(); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
+		// Transcript polling reads the live room projection. Reloading here would
+		// read every session and hold the global IM write lock on every poll.
 		roomID, err := roomIDFromQuery(r)
 		if err != nil {
 			writeAPIError(w, err, http.StatusBadRequest)
