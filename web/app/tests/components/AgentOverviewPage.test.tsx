@@ -8,6 +8,7 @@ import { useWorkspaceHubTemplatesQuery } from "@/hooks/workspace/workspaceQuerie
 import type { HubTemplate } from "@/models/hubWorkspace";
 import { AgentOverviewPage } from "@/pages/AgentOverviewPage/AgentOverviewPage";
 import { createTranslator } from "@/shared/i18n";
+import { paneFromLocation } from "@/models/routing";
 
 vi.mock("@/hooks/workspace/workspaceQueries", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/hooks/workspace/workspaceQueries")>()),
@@ -91,6 +92,71 @@ function Page({ route = "/agents?tab=templates", username = "" }: { route?: stri
     </MemoryRouter>
   );
 }
+
+function TeamNavigationContents() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const activePane = paneFromLocation(location.pathname);
+  const t = createTranslator("zh");
+  const agents = [{ id: "agent-worker", name: "测试智能体", role: "worker" }];
+  const teams = ["1", "2"].map((id) => ({
+    id: `team-${id}`,
+    title: `回归团队 ${id}`,
+    lead_agent_id: "agent-worker",
+    member_agent_ids: ["agent-worker"],
+    status: "active",
+    created_at: "",
+    updated_at: "",
+  }));
+  const controller = {
+    ready: true,
+    activePane,
+    sidebarProps: { t, workerAgentItems: agents, teams },
+    agentViewProps: { item: null },
+    teamViewProps: { t, agents, team: teams.find((team) => team.id === activePane.id) },
+  } as unknown as WorkspaceController;
+  return (
+    <WorkspaceControllerProvider controller={controller}>
+      <AgentOverviewPage />
+      <button onClick={() => navigate("/teams/team-1")}>Go to referenced team</button>
+    </WorkspaceControllerProvider>
+  );
+}
+
+describe("agent overview team navigation", () => {
+  beforeEach(() => vi.mocked(useWorkspaceHubTemplatesQuery).mockReturnValue(queryState()));
+
+  it.each(["/agents", "/teams/team-2"])(
+    "switches the list to teams and clears the agent search when navigating from %s",
+    async (route) => {
+      render(
+        <MemoryRouter initialEntries={[route]}>
+          <TeamNavigationContents />
+        </MemoryRouter>,
+      );
+      const user = userEvent.setup();
+      await user.click(screen.getByRole("button", { name: "我的智能体" }));
+      await user.type(screen.getByRole("textbox", { name: "搜索智能体和团队" }), "测试智能体");
+      await user.click(screen.getByRole("button", { name: "Go to referenced team" }));
+      expect(await screen.findByRole("heading", { name: "回归团队 1", level: 1 })).toBeVisible();
+      expect(screen.getByRole("button", { name: "团队" })).toHaveAttribute("aria-pressed", "true");
+      expect(screen.getByRole("button", { name: "我的智能体" })).toHaveAttribute("aria-pressed", "false");
+      expect(screen.getByRole("textbox", { name: "搜索智能体和团队" })).toHaveValue("");
+      expect(screen.getByRole("button", { name: /回归团队 1/ })).toBeVisible();
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    },
+  );
+
+  it("selects the team filter when opening a team directly", async () => {
+    render(
+      <MemoryRouter initialEntries={["/teams/team-1"]}>
+        <TeamNavigationContents />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByRole("heading", { name: "回归团队 1", level: 1 })).toBeVisible();
+    expect(screen.getByRole("button", { name: "团队" })).toHaveAttribute("aria-pressed", "true");
+  });
+});
 
 describe("agent overview guidance and template loading", () => {
   it.each(["local", "remote"])("displays and searches %s template display names", async (kind) => {

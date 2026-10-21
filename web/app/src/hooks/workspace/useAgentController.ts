@@ -2201,7 +2201,6 @@ export function useAgentController({
           message: t("agentDeleteTeamBlocked"),
           onResolve: () => {
             navigatePane({ type: WorkspacePaneTypes.team, id: team.id });
-            openManageTeamMembers(team);
           },
         };
       }

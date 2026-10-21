@@ -1183,7 +1183,7 @@ describe("useAgentController", () => {
     expect(onAgentDeleted).toHaveBeenCalledWith(oldAgent);
   });
 
-  it.each(["lead", "member"])("blocks deleting a team %s and opens its member editor", async (role) => {
+  it.each(["lead", "member"])("blocks deleting a team %s and navigates without its editor", async (role) => {
     const worker: AgentLike = {
       ...oldAgent,
       id: "agent-worker",
@@ -1212,7 +1212,7 @@ describe("useAgentController", () => {
       block?.onResolve?.();
     });
     expect(result.current.navigatePane).toHaveBeenCalledWith({ type: WorkspacePaneTypes.team, id: team.id });
-    expect(result.current.controller.createTeamModalProps?.mode).toBe("edit");
+    expect(result.current.controller.createTeamModalProps).toBeNull();
     await act(async () => {
       await result.current.controller.agentViewProps.onDelete(worker);
     });

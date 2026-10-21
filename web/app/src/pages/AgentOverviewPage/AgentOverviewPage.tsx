@@ -41,6 +41,13 @@ export function AgentOverviewPage() {
   const requestedTemplateID = templatesTab ? searchParams.get("template") || "" : "";
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState("all");
+  const activeType = controller.ready ? controller.activePane.type : "";
+  const activeID = controller.ready ? controller.activePane.id : "";
+  useEffect(() => {
+    if (!activeID || (activeType !== "agent" && activeType !== "team")) return;
+    setFilter(activeType === "team" ? "teams" : "agents");
+    setQuery("");
+  }, [activeID, activeType]);
   const templateFilter = searchParams.get("filter") === "personal" ? "personal" : "official";
   const [listOpen, setListOpen] = useState(false);
   const listToggleRef = useRef<HTMLButtonElement>(null);
@@ -105,7 +112,6 @@ export function AgentOverviewPage() {
   const templateEmptyHint = query.trim()
     ? t("iaTemplatesSearchHint")
     : t(templateFilter === "official" ? "iaTemplatesOfficialEmptyHint" : "iaTemplatesPersonalEmptyHint");
-  const activeID = controller.activePane.id;
   function selectTab(value: string) {
     const params = new URLSearchParams(location.search);
     if (value === "mine") {
