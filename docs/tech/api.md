@@ -254,6 +254,7 @@ Notes:
 - `name` is required
 - The effective channel comes from the route path rather than the request body
 - `agent` participants can create or reuse an Agent through `agent_binding`
+- For Agent creation, non-empty `agent_binding.agent.instructions` takes precedence over template instructions. An explicit `skills` list replaces the template skill selection (`[]` selects none); omitting it retains template defaults.
 - `human` and `notification` participants do not create runtime agents
 - In the example above, `qa` is the participant ID; `u-qa` is used only as the local channel user ref and generated backing agent ID.
 - For `csgclaw`, `channel_user.ref` is a local IM user ID

@@ -1,15 +1,9 @@
 import { applyAgentCreationResources } from "./agentCreation";
-import {
-  batchAddAgentMCPServersRequest,
-  batchAddAgentSkillsRequest,
-  fetchAgentMCPServers,
-  updateAgentRequest,
-} from "./agents";
+import { batchAddAgentMCPServersRequest, fetchAgentMCPServers, updateAgentRequest } from "./agents";
 import { bindAgentApp } from "./apps";
 import { fetchRemoteKnowledgeBaseMCPConfig } from "./knowledgeBases";
 vi.mock("./agents", () => ({
   batchAddAgentMCPServersRequest: vi.fn(),
-  batchAddAgentSkillsRequest: vi.fn(),
   fetchAgentMCPServers: vi.fn(),
   updateAgentRequest: vi.fn(),
 }));
@@ -17,8 +11,7 @@ vi.mock("./apps", () => ({ bindAgentApp: vi.fn() }));
 vi.mock("./knowledgeBases", () => ({ fetchRemoteKnowledgeBaseMCPConfig: vi.fn() }));
 
 it("applies selected resources while preserving existing connectors and reports partial failures", async () => {
-  vi.mocked(batchAddAgentSkillsRequest).mockRejectedValue(new Error("unavailable"));
-  vi.mocked(batchAddAgentMCPServersRequest).mockResolvedValue({});
+  vi.mocked(batchAddAgentMCPServersRequest).mockRejectedValue(new Error("unavailable"));
   vi.mocked(bindAgentApp).mockResolvedValue({
     installation_id: "bound",
     agent_id: "created",
@@ -42,7 +35,6 @@ it("applies selected resources while preserving existing connectors and reports 
   });
   vi.mocked(updateAgentRequest).mockResolvedValue({ id: "created" });
   const failed = await applyAgentCreationResources("created", {
-    skills: ["research"],
     connectors: ["tool"],
     apps: ["app1"],
     knowledgeBases: [
@@ -50,7 +42,7 @@ it("applies selected resources while preserving existing connectors and reports 
       { id: "kb2", name: "Connected KB", configuredMCPName: "saved-kb" },
     ],
   });
-  expect(failed).toEqual(["research"]);
+  expect(failed).toEqual(["tool, saved-kb"]);
   expect(batchAddAgentMCPServersRequest).toHaveBeenCalledWith("created", ["tool", "saved-kb"]);
   expect(bindAgentApp).toHaveBeenCalledWith("created", "app1");
   expect(updateAgentRequest).toHaveBeenCalledWith("created", {

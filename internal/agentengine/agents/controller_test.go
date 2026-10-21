@@ -8395,7 +8395,6 @@ func TestResolveCodexTemplateCreateSpecSeparatesBaseFromProfileInstructions(t *t
 
 	resolved, cleanup, err := svc.resolveTemplateCreateSpec(context.Background(), CreateAgentSpec{
 		Name:         "alice",
-		Instructions: "must not be installed during template creation",
 		FromTemplate: "local.codex-worker",
 	})
 	if cleanup != nil {

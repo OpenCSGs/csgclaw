@@ -236,6 +236,7 @@ type CreateAgentSpec struct {
 	Name                 string            `json:"name"`
 	Description          string            `json:"description,omitempty"`
 	Instructions         string            `json:"instructions,omitempty"`
+	Skills               []string          `json:"skills,omitempty"`
 	Image                string            `json:"image,omitempty"`
 	Avatar               string            `json:"-"`
 	RuntimeKind          string            `json:"-"`
@@ -277,13 +278,14 @@ func (s *CreateAgentSpec) SetRuntimeConfig(cfg agentruntime.RuntimeConfig) {
 
 func (s CreateAgentSpec) MarshalJSON() ([]byte, error) {
 	type createAgentSpecJSON struct {
-		ID             string `json:"id,omitempty"`
-		Name           string `json:"name"`
-		Description    string `json:"description,omitempty"`
-		Instructions   string `json:"instructions,omitempty"`
-		Image          string `json:"image,omitempty"`
-		RuntimeName    string `json:"runtime_name,omitempty"`
-		SandboxEnabled bool   `json:"sandbox_enabled,omitempty"`
+		ID             string    `json:"id,omitempty"`
+		Name           string    `json:"name"`
+		Description    string    `json:"description,omitempty"`
+		Instructions   string    `json:"instructions,omitempty"`
+		Skills         *[]string `json:"skills,omitempty"`
+		Image          string    `json:"image,omitempty"`
+		RuntimeName    string    `json:"runtime_name,omitempty"`
+		SandboxEnabled bool      `json:"sandbox_enabled,omitempty"`
 		Runtime        *struct {
 			Name           string         `json:"name,omitempty"`
 			SandboxEnabled bool           `json:"sandbox_enabled,omitempty"`
@@ -306,6 +308,10 @@ func (s CreateAgentSpec) MarshalJSON() ([]byte, error) {
 			return nil, err
 		}
 		mcpServers = encoded
+	}
+	var skills *[]string
+	if s.Skills != nil {
+		skills = &s.Skills
 	}
 	runtimeName := strings.TrimSpace(s.RuntimeName)
 	sandboxEnabled := s.SandboxEnabled
@@ -336,6 +342,7 @@ func (s CreateAgentSpec) MarshalJSON() ([]byte, error) {
 		Name:           s.Name,
 		Description:    s.Description,
 		Instructions:   s.Instructions,
+		Skills:         skills,
 		Image:          s.Image,
 		RuntimeName:    runtimeName,
 		SandboxEnabled: sandboxEnabled,
@@ -358,6 +365,7 @@ func (s *CreateAgentSpec) UnmarshalJSON(data []byte) error {
 		Name           string          `json:"name"`
 		Description    string          `json:"description,omitempty"`
 		Instructions   string          `json:"instructions,omitempty"`
+		Skills         []string        `json:"skills,omitempty"`
 		Image          string          `json:"image,omitempty"`
 		Avatar         string          `json:"-"`
 		RuntimeName    string          `json:"runtime_name,omitempty"`
@@ -383,6 +391,7 @@ func (s *CreateAgentSpec) UnmarshalJSON(data []byte) error {
 		Name:           decoded.Name,
 		Description:    decoded.Description,
 		Instructions:   decoded.Instructions,
+		Skills:         slices.Clone(decoded.Skills),
 		Image:          decoded.Image,
 		RuntimeName:    decoded.RuntimeName,
 		FromTemplate:   decoded.FromTemplate,

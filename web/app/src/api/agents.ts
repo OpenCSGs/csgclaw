@@ -81,6 +81,7 @@ export type AgentUpdatePayload = {
   description?: string;
   field_mask?: string[];
   instructions?: string;
+  skills?: string[];
   image?: string;
   model_config?: JSONRecord;
   mcpServers?: JSONRecord | null;
@@ -348,6 +349,7 @@ export async function createBotRequest(payload: CreateBotPayload): Promise<Agent
         role: payload.role,
         description: payload.description,
         instructions: payload.instructions,
+        skills: payload.skills,
         image: payload.image,
         runtime: {
           name: runtimeSelection.runtime_name,

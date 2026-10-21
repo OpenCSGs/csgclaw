@@ -1077,7 +1077,9 @@ func (s *Controller) resolveTemplateCreateSpecWithService(
 			instructionsPath := filepath.Join(workspace.Path, "AGENTS.md")
 			if data, readErr := os.ReadFile(instructionsPath); readErr == nil {
 				spec.TemplateInstructions = string(data)
-				spec.Instructions = runtimeinstructions.ExtractUserInstructionsFromAgentsDocument(spec.TemplateInstructions)
+				if strings.TrimSpace(spec.Instructions) == "" {
+					spec.Instructions = runtimeinstructions.ExtractUserInstructionsFromAgentsDocument(spec.TemplateInstructions)
+				}
 				if removeErr := os.Remove(instructionsPath); removeErr != nil {
 					return CreateAgentSpec{}, cleanup, fmt.Errorf("separate host runtime template instructions: %w", removeErr)
 				}

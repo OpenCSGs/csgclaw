@@ -113,7 +113,7 @@ export function TeamDetailPane({
               {teamStatusLabel(team.status, t)}
             </span>
           </div>
-          <p className={styles.teamDetailSubtitle}>{team.description || t("teamDetailSubtitle")}</p>
+          {team.description?.trim() ? <p className={styles.teamDetailSubtitle}>{team.description}</p> : null}
         </div>
         <div className={styles.teamDetailToolbar} aria-label={t("teamPanelManage")}>
           {onStartCollaboration ? (

@@ -1,6 +1,6 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { TeamDetailPane } from "@/components/business/TeamDetailPane";
+import { TeamDetailPane } from "./TeamDetailPane";
 import type { TranslateFn } from "@/models/conversations";
 import type { WorkspaceTeam } from "@/models/tasks";
 
@@ -17,6 +17,17 @@ const team: WorkspaceTeam = {
 };
 
 describe("TeamDetailPane", () => {
+  it("shows only the saved team description and leaves missing descriptions blank", () => {
+    const view = render(<TeamDetailPane team={{ ...team, description: "Review releases together." }} t={t} />);
+    expect(screen.getByText("Review releases together.")).toBeVisible();
+
+    view.rerender(<TeamDetailPane team={{ ...team, description: "  " }} t={t} />);
+    expect(screen.queryByText("Review releases together.")).not.toBeInTheDocument();
+    expect(screen.queryByText("teamDetailSubtitle")).not.toBeInTheDocument();
+
+    view.rerender(<TeamDetailPane team={team} t={t} />);
+    expect(screen.queryByText("teamDetailSubtitle")).not.toBeInTheDocument();
+  });
   it("starts collaboration with the current team", async () => {
     const onStartCollaboration = vi.fn();
     render(<TeamDetailPane team={team} t={t} onStartCollaboration={onStartCollaboration} />);

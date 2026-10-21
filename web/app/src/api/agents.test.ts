@@ -1,8 +1,34 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { deleteAgentLikeRequest } from "./agents";
+import { createBotRequest, deleteAgentLikeRequest } from "./agents";
 
 afterEach(() => {
   vi.unstubAllGlobals();
+});
+
+describe("createBotRequest", () => {
+  it.each([{ skills: ["reviewer"] }, { skills: [] }])(
+    "preserves instructions and explicit skills ($skills)",
+    async ({ skills }) => {
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(new Response(JSON.stringify({ id: "pt-created", agent_id: "created" })))
+        .mockResolvedValueOnce(new Response(JSON.stringify({ id: "created", instructions: "Review carefully." })));
+      vi.stubGlobal("fetch", fetchMock);
+
+      await createBotRequest({
+        name: "Reviewer",
+        runtime_name: "codex",
+        instructions: "Review carefully.",
+        skills,
+      });
+
+      const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+      expect(body.agent_binding.agent).toMatchObject({
+        instructions: "Review carefully.",
+        skills,
+      });
+    },
+  );
 });
 
 describe("deleteAgentLikeRequest", () => {

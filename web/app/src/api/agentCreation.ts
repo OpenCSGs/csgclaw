@@ -1,24 +1,15 @@
-import {
-  batchAddAgentMCPServersRequest,
-  batchAddAgentSkillsRequest,
-  fetchAgentMCPServers,
-  updateAgentRequest,
-} from "./agents";
+import { batchAddAgentMCPServersRequest, fetchAgentMCPServers, updateAgentRequest } from "./agents";
 import { bindAgentApp } from "./apps";
 import { fetchRemoteKnowledgeBaseMCPConfig } from "./knowledgeBases";
 import type { AgentCreationResources } from "@/models/agentCreation";
 
-// Resource failures must not turn a successful creation into a second create attempt.
+// Skills are saved with the create request. Failures in the remaining bindings
+// must not turn a successful creation into a second create attempt.
 export async function applyAgentCreationResources(
   agentID: string,
-  resources: AgentCreationResources,
+  resources: Omit<AgentCreationResources, "skills">,
 ): Promise<string[]> {
   const operations: { name: string; run: () => Promise<unknown> }[] = [];
-  if (resources.skills.length)
-    operations.push({
-      name: resources.skills.join(", "),
-      run: () => batchAddAgentSkillsRequest(agentID, resources.skills),
-    });
   const names = [
     ...resources.connectors,
     ...resources.knowledgeBases.flatMap((item) => (item.configuredMCPName ? [item.configuredMCPName] : [])),
