@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Button, Checkbox, TextInput } from "@/components/ui";
-import { mcpManagedKnowledgeBaseSource, mcpServersFromMap } from "@/models/mcp";
+import { mcpManagedKnowledgeBaseSource, mcpServerDisplayName, mcpServersFromCatalogResponse } from "@/models/mcp";
 import { mergeRemoteKnowledgeBasePages } from "@/models/knowledgeBases";
 import type { AgentCreationResources } from "@/models/agentCreation";
 import type { TranslateFn } from "@/models/conversations";
@@ -63,11 +63,11 @@ export function AgentCreationResourcesPicker({
             {
               label: t("iaConnectorsGroupTools"),
               query: mcp,
-              items: mcpServersFromMap(mcp.data ?? null)
+              items: mcpServersFromCatalogResponse(mcp.data)
                 .filter((item) => !mcpManagedKnowledgeBaseSource(item.config))
                 .map((item) => ({
                   key: item.name,
-                  name: item.name,
+                  name: mcpServerDisplayName(item),
                   description: item.description,
                   disabled: item.config.disabled === true,
                 })),

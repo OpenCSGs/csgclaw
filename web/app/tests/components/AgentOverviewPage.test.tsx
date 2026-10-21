@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { MemoryRouter, useLocation, useNavigate } from "react-router-dom";
@@ -6,6 +6,8 @@ import type { UseQueryResult } from "@tanstack/react-query";
 import { WorkspaceControllerProvider, type WorkspaceController } from "@/hooks/workspace";
 import { useWorkspaceHubTemplatesQuery } from "@/hooks/workspace/workspaceQueries";
 import type { HubTemplate } from "@/models/hubWorkspace";
+import type { AgentLike } from "@/models/agents";
+import type { WorkspaceTeam } from "@/models/tasks";
 import { AgentOverviewPage } from "@/pages/AgentOverviewPage/AgentOverviewPage";
 import { createTranslator } from "@/shared/i18n";
 import { paneFromLocation } from "@/models/routing";
@@ -62,7 +64,17 @@ function NavigationState() {
   );
 }
 
-function Page({ route = "/agents?tab=templates", username = "" }: { route?: string; username?: string }) {
+function Page({
+  route = "/agents?tab=templates",
+  username = "",
+  agents = [],
+  teams = [],
+}: {
+  route?: string;
+  username?: string;
+  agents?: AgentLike[];
+  teams?: WorkspaceTeam[];
+}) {
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
   const controller = {
     ready: true,
@@ -74,8 +86,8 @@ function Page({ route = "/agents?tab=templates", username = "" }: { route?: stri
         user_id: username,
         opencsg_base_url: "https://qa.opencsg.com/account",
       },
-      workerAgentItems: [],
-      teams: [],
+      workerAgentItems: agents,
+      teams,
     },
     agentViewProps: { item: null },
     hubViewProps: {
@@ -135,12 +147,12 @@ describe("agent overview team navigation", () => {
         </MemoryRouter>,
       );
       const user = userEvent.setup();
-      await user.click(screen.getByRole("button", { name: "我的智能体" }));
+      await user.click(screen.getByRole("button", { name: "我的智能体 1" }));
       await user.type(screen.getByRole("textbox", { name: "搜索智能体和团队" }), "测试智能体");
       await user.click(screen.getByRole("button", { name: "Go to referenced team" }));
       expect(await screen.findByRole("heading", { name: "回归团队 1", level: 1 })).toBeVisible();
-      expect(screen.getByRole("button", { name: "团队" })).toHaveAttribute("aria-pressed", "true");
-      expect(screen.getByRole("button", { name: "我的智能体" })).toHaveAttribute("aria-pressed", "false");
+      expect(screen.getByRole("button", { name: "团队 2" })).toHaveAttribute("aria-pressed", "true");
+      expect(screen.getByRole("button", { name: "我的智能体 1" })).toHaveAttribute("aria-pressed", "false");
       expect(screen.getByRole("textbox", { name: "搜索智能体和团队" })).toHaveValue("");
       expect(screen.getByRole("button", { name: /回归团队 1/ })).toBeVisible();
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
@@ -154,7 +166,7 @@ describe("agent overview team navigation", () => {
       </MemoryRouter>,
     );
     expect(await screen.findByRole("heading", { name: "回归团队 1", level: 1 })).toBeVisible();
-    expect(screen.getByRole("button", { name: "团队" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "团队 2" })).toHaveAttribute("aria-pressed", "true");
   });
 });
 
@@ -184,7 +196,7 @@ describe("agent overview guidance and template loading", () => {
     const route = "/agents?tab=templates&filter=personal&template=local.%E4%B8%AD%E6%96%87%E5%8A%A9%E6%89%8B";
     vi.mocked(useWorkspaceHubTemplatesQuery).mockReturnValue(queryState({ isLoading: true }));
     const view = render(<Page route={route} />);
-    expect(screen.getByRole("button", { name: "我的模板" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "我的" })).toHaveAttribute("aria-pressed", "true");
     vi.mocked(useWorkspaceHubTemplatesQuery).mockReturnValue(queryState({ data: [template, local] }));
     view.rerender(<Page route={route} />);
     expect(await screen.findByRole("region", { name: "Template detail" })).toHaveTextContent(local.id!);
@@ -257,7 +269,7 @@ describe("agent overview guidance and template loading", () => {
     render(<Page />);
     expect(screen.getByRole("heading", { name: "暂无官方模板" })).toBeInTheDocument();
     const user = userEvent.setup();
-    await user.click(screen.getByRole("button", { name: "我的模板" }));
+    await user.click(screen.getByRole("button", { name: "我的 0" }));
     expect(screen.getByRole("heading", { name: "还没有自己的模板" })).toBeInTheDocument();
     await user.type(screen.getByRole("textbox", { name: "搜索模板名称、用途说明或来源" }), "missing");
     expect(
@@ -297,7 +309,7 @@ it("moves the signed-in user's community templates to My templates with a cloud 
   const view = render(<Page username="alice" />);
   expect(screen.getByRole("button", { name: /agentichub worker/ })).toBeInTheDocument();
   expect(screen.queryByRole("button", { name: /alice worker/ })).not.toBeInTheDocument();
-  await userEvent.setup().click(screen.getByRole("button", { name: "我的模板" }));
+  await userEvent.setup().click(screen.getByRole("button", { name: "我的 2" }));
   expect(screen.getByRole("button", { name: /alice worker 云端/ })).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Local worker" })).toBeInTheDocument();
   expect(screen.getAllByText("云端")).toHaveLength(1);
@@ -310,4 +322,108 @@ it("moves the signed-in user's community templates to My templates with a cloud 
   expect(screen.queryByRole("button", { name: /alice worker/ })).not.toBeInTheDocument();
   expect(screen.queryByText("云端")).not.toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Local worker" })).toBeInTheDocument();
+});
+
+describe("agent overview list summaries", () => {
+  beforeEach(() => vi.mocked(useWorkspaceHubTemplatesQuery).mockReturnValue(queryState()));
+
+  const agents: AgentLike[] = [
+    { id: "online", name: "在线助手", status: "running" },
+    { id: "offline", name: "离线助手", status: "stopped" },
+    {
+      id: "degraded",
+      name: "网关异常助手",
+      runtime: { state: "running", availability: { state: "degraded" } },
+    },
+  ];
+  const teams: WorkspaceTeam[] = ["active", "paused", "archived"].map((status) => ({
+    id: status,
+    title: `${status} team`,
+    lead_agent_id: "online",
+    member_agent_ids: ["u-online", "offline", "offline"],
+    status,
+    created_at: "",
+    updated_at: "",
+  }));
+
+  it("counts agents and teams without changing category totals when searching", async () => {
+    render(<Page route="/agents" agents={agents} teams={teams} />);
+    expect(screen.getByRole("button", { name: "全部 6" })).toHaveAttribute("aria-pressed", "true");
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "我的智能体 3" }));
+    expect(screen.getByRole("button", { name: /在线助手/ })).toBeVisible();
+    expect(screen.queryByRole("button", { name: /active team/ })).not.toBeInTheDocument();
+    await user.type(screen.getByRole("textbox"), "active");
+    await user.click(screen.getByRole("button", { name: "团队 3" }));
+    expect(screen.getByRole("button", { name: /active team/ })).toBeVisible();
+    expect(screen.queryByRole("button", { name: /paused team/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "全部 6" })).toBeVisible();
+  });
+
+  it("shows availability rather than treating a running but degraded runtime as online", () => {
+    const view = render(<Page route="/agents" agents={agents} />);
+    expect(within(screen.getByRole("button", { name: /在线助手/ })).getByRole("img", { name: "在线" })).toHaveAttribute(
+      "data-available",
+      "true",
+    );
+    for (const name of ["离线助手", "网关异常助手"]) {
+      expect(
+        within(screen.getByRole("button", { name: new RegExp(name) })).getByRole("img", { name: "离线" }),
+      ).toHaveAttribute("data-available", "false");
+    }
+    view.rerender(<Page route="/agents" agents={[{ ...agents[1], status: "running" }]} />);
+    expect(within(screen.getByRole("button", { name: /离线助手/ })).getByRole("img", { name: "在线" })).toHaveAttribute(
+      "data-available",
+      "true",
+    );
+  });
+
+  it("labels teams and summarizes their deduplicated membership and persisted status", () => {
+    render(<Page route="/agents" agents={agents} teams={teams} />);
+    for (const [index, status] of ["活跃", "已暂停", "已归档"].entries()) {
+      const row = within(screen.getByRole("button", { name: new RegExp(teams[index].title) }));
+      expect(row.getByText("团队")).toBeVisible();
+      expect(row.getByText(`2 个成员 · ${status}`)).toBeVisible();
+    }
+  });
+
+  it("counts visible templates by official and owned groups, excluding hidden builtins", async () => {
+    const remote = (namespace: string): HubTemplate => ({
+      id: `${namespace}/worker`,
+      name: `${namespace} worker`,
+      namespace,
+      source: { kind: "remote" },
+    });
+    vi.mocked(useWorkspaceHubTemplatesQuery).mockReturnValue(
+      queryState({
+        data: [
+          template,
+          { id: "builtin.manager", name: "Manager template", role: "manager", source: { kind: "builtin" } },
+          remote("agentichub"),
+          remote("alice"),
+          remote("bob"),
+          { id: "local.worker", name: "Local worker", role: "worker", source: { kind: "local" } },
+        ],
+      }),
+    );
+    render(<Page username="alice" />);
+    expect(screen.getByRole("tab", { name: "智能体模板 5" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "官方 2" })).toHaveAttribute("aria-pressed", "true");
+    await userEvent.setup().click(screen.getByRole("button", { name: "我的 2" }));
+    expect(screen.getByRole("button", { name: /alice worker/ })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Local worker" })).toBeVisible();
+    expect(screen.queryByRole("button", { name: /Manager template/ })).not.toBeInTheDocument();
+  });
+
+  it("does not claim zero templates while the initial request is pending", () => {
+    vi.mocked(useWorkspaceHubTemplatesQuery).mockReturnValue(queryState({ isLoading: true }));
+    const view = render(<Page />);
+    expect(screen.getByRole("tab", { name: "智能体模板" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "官方" })).toBeVisible();
+    vi.mocked(useWorkspaceHubTemplatesQuery).mockReturnValue(queryState({ data: [] }));
+    view.rerender(<Page />);
+    expect(screen.getByRole("tab", { name: "智能体模板 0" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "官方 0" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "我的 0" })).toBeVisible();
+  });
 });

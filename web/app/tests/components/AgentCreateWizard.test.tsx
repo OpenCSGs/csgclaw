@@ -17,7 +17,7 @@ vi.mock("@/api/knowledgeBases", () => ({ fetchRemoteKnowledgeBases: vi.fn() }));
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(fetchSkills).mockResolvedValue([{ name: "Research", description: "Research skill" }]);
-  vi.mocked(fetchMCPServers).mockResolvedValue({});
+  vi.mocked(fetchMCPServers).mockResolvedValue({ mcpServers: {} });
   vi.mocked(fetchAppResources).mockResolvedValue([]);
   vi.mocked(fetchRemoteKnowledgeBases).mockResolvedValue({ items: [], page: 1, per: 50, total: 0 });
 });
@@ -88,7 +88,7 @@ describe("AgentCreateWizard", () => {
         resolveSkills = resolve;
       }),
     );
-    vi.mocked(fetchMCPServers).mockResolvedValue({ Docs: { command: "docs" } });
+    vi.mocked(fetchMCPServers).mockResolvedValue({ mcpServers: { Docs: { command: "docs" } } });
     const user = userEvent.setup();
     setup(true, true);
     expect(screen.getByRole("textbox", { name: "Name" })).toBeEnabled();
@@ -121,6 +121,40 @@ describe("AgentCreateWizard", () => {
     await user.click(screen.getByRole("button", { name: "resourcesKnowledgeBasesLabel" }));
     expect(screen.getByText("iaKnowledgeLoginRequired")).toBeVisible();
     expect(fetchRemoteKnowledgeBases).not.toHaveBeenCalled();
+  });
+
+  it("lists catalog connectors by display name and binds selected connector identities", async () => {
+    vi.mocked(fetchMCPServers).mockResolvedValue({
+      mcpServers: {
+        bing: { display_name: "必应搜索中文", description: "搜索网页", url: "https://example.test/bing" },
+        fetch: { command: "fetch" },
+        disabled: { display_name: "已停用工具", command: "tool", disabled: true },
+        knowledge: {
+          display_name: "知识库工具",
+          _meta: {
+            "com.opencsg/mcp": {
+              type: "llm_wiki",
+              resource_id: "143",
+              content_id: "kb",
+              auth_type: "csghub_access_token",
+            },
+          },
+        },
+      },
+    });
+    const user = userEvent.setup();
+    const save = setup();
+    await user.click(screen.getByRole("button", { name: "agentAppsTab" }));
+    const bing = await screen.findByRole("checkbox", { name: /必应搜索中文/ });
+    expect(screen.getByRole("checkbox", { name: "fetch" })).toBeVisible();
+    expect(screen.getByRole("checkbox", { name: /已停用工具/ })).toBeDisabled();
+    expect(screen.queryByRole("checkbox", { name: /mcpServers|知识库工具/ })).not.toBeInTheDocument();
+    await user.type(screen.getByRole("textbox", { name: "search" }), "必应");
+    expect(screen.queryByRole("checkbox", { name: "fetch" })).not.toBeInTheDocument();
+    await user.click(bing);
+    await user.click(screen.getByRole("button", { name: "resourcesKnowledgeBasesLabel" }));
+    await user.click(screen.getByRole("button", { name: "agentCreateSave" }));
+    expect(save).toHaveBeenCalledWith({ skills: [], connectors: ["bing"], apps: [], knowledgeBases: [] });
   });
 
   it("keeps cached rows available while refreshing and supports retry after a resource failure", async () => {
