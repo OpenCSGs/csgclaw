@@ -310,6 +310,9 @@
   align-items: center;
   gap: 8px;
 }
+.chat-files-path > ol > li {
+  gap: 0;
+}
 .chat-files-search-wrap {
   margin: 12px;
   min-width: 0;
