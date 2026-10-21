@@ -165,6 +165,7 @@ export type AgentDetailPaneProps = {
   noticeTone?: AgentNoticeTone;
   notifierWebhookPublicOrigin?: string;
   onDelete: AgentActionHandler;
+  onCheckDelete?: (item: AgentLike) => Promise<{ message: string; onResolve?: () => void } | null>;
   onDraftChange?: (draft: AgentDraft) => void;
   onInvite: AgentActionHandler;
   onDismissNotice?: () => void;

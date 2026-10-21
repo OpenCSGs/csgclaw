@@ -255,7 +255,9 @@ export function useWorkspaceController(): WorkspaceController {
     refreshWorkspaceAppVersion,
     t,
   });
+  const participantWork = useParticipantWorkStatus({ agents, users: displayData?.users ?? [] });
   const agent = useAgentController({
+    workingParticipantsForRoom: participantWork.workingParticipantsForRoom,
     redirectToIncompleteManagerProfile: false,
     activeConversationId,
     activePane,
@@ -327,7 +329,6 @@ export function useWorkspaceController(): WorkspaceController {
     () => resolveManagerDirectConversation(rooms, displayData?.current_user_id ?? "", agent.managerAgent),
     [agent.managerAgent, displayData?.current_user_id, rooms],
   );
-  const participantWork = useParticipantWorkStatus({ agents, users: displayData?.users ?? [] });
   const conversation = useConversationController({
     activeConversationId,
     activePane,

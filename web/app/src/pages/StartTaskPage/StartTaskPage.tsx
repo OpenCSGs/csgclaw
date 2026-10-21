@@ -67,7 +67,7 @@ function StartTaskForm({
   const [resources, setResources] = useState<ResourceSnapshot[]>([]);
   const [examplesHidden, setExamplesHidden] = useState(() => {
     try {
-      return localStorage.getItem(TASK_EXAMPLES_HIDDEN_STORAGE_KEY) === "true";
+      return sessionStorage.getItem(TASK_EXAMPLES_HIDDEN_STORAGE_KEY) === "true";
     } catch {
       return false;
     }
@@ -402,7 +402,7 @@ function StartTaskForm({
               onClick={() => {
                 setExamplesHidden(true);
                 try {
-                  localStorage.setItem(TASK_EXAMPLES_HIDDEN_STORAGE_KEY, "true");
+                  sessionStorage.setItem(TASK_EXAMPLES_HIDDEN_STORAGE_KEY, "true");
                 } catch {
                   /* Storage may be unavailable. */
                 }

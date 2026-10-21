@@ -1,5 +1,5 @@
 import { createQueryWrapper } from "../helpers/queryClient";
-import { render, screen, within } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { AgentRow } from "@/pages/AgentPage/components";
@@ -12,6 +12,9 @@ import buttonStyles from "@/components/ui/Button/Button.module.css";
 const labels: Record<string, string> = {
   agentActivityTab: "Activity",
   agentDelete: "Delete",
+  agentDeleteBlockedTitle: "This agent cannot be deleted yet",
+  agentDeleteChecking: "Checking dependencies…",
+  agentDeleteResolve: "Go to team",
   agentDeleteBoundChannels: "This agent is bound to {channels}.",
   agentDeleteCascadeNote: "Deleting the agent will also disconnect it from those channels.",
   agentDeleteConfirmMessage: 'Delete agent "{name}"?',
@@ -1680,6 +1683,45 @@ describe("agent action visibility", () => {
 
     expect(screen.getByRole("button", { name: "Save changes" })).toBeInTheDocument();
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  });
+
+  it("checks deletion dependencies and offers team editing instead of deletion", async () => {
+    const user = userEvent.setup();
+    const onDelete = vi.fn();
+    const onResolve = vi.fn();
+    let finishCheck!: (value: { message: string; onResolve: () => void }) => void;
+    const onCheckDelete = vi.fn(
+      () =>
+        new Promise<{ message: string; onResolve: () => void }>((resolve) => {
+          finishCheck = resolve;
+        }),
+    );
+    render(
+      <AgentView
+        item={worker}
+        t={t}
+        onDelete={onDelete}
+        onCheckDelete={onCheckDelete}
+        onInvite={vi.fn()}
+        onOpenDM={vi.fn()}
+        onRecreate={vi.fn()}
+        onStart={vi.fn()}
+        onStop={vi.fn()}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: "More" }));
+    await user.click(screen.getByRole("menuitem", { name: "Delete" }));
+    expect(within(screen.getByRole("dialog")).getByRole("button", { name: "Delete" })).toBeDisabled();
+    await act(async () => {
+      finishCheck({ message: "Remove the agent from its team first.", onResolve });
+    });
+    const dialog = screen.getByRole("dialog", { name: "This agent cannot be deleted yet" });
+    expect(dialog).toHaveTextContent("Remove the agent from its team first.");
+    expect(within(dialog).queryByRole("button", { name: "Delete" })).not.toBeInTheDocument();
+    await user.click(within(dialog).getByRole("button", { name: "Go to team" }));
+    expect(onResolve).toHaveBeenCalledOnce();
+    expect(onDelete).not.toHaveBeenCalled();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
   it("opens a styled delete confirmation dialog for a Feishu-connected agent", async () => {
