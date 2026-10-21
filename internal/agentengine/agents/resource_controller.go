@@ -104,7 +104,8 @@ func (f *Controller) Create(ctx context.Context, request contract.AgentCreateReq
 			}
 		}
 	}
-	if spec.Skills != nil {
+	// Host workers apply the selection before their first Runtime startup.
+	if spec.Skills != nil && !(created.Role == RoleWorker && isHostRuntimeKind(created.RuntimeKind)) {
 		if err := f.ReplaceSkills(ctx, created.ID, spec.Skills); err != nil {
 			if createdByCall {
 				_ = f.DeleteRecord(context.Background(), created.ID)
@@ -731,6 +732,7 @@ func createAgentSpec(spec contract.AgentSpec) CreateAgentSpec {
 		Name:               strings.TrimSpace(spec.Name),
 		Description:        strings.TrimSpace(spec.Description),
 		Instructions:       strings.TrimSpace(spec.Instructions),
+		Skills:             slices.Clone(spec.Skills),
 		Image:              strings.TrimSpace(spec.Runtime.Image),
 		Role:               string(spec.Role),
 		RuntimeOptions:     utils.CloneAnyMap(spec.Runtime.Options),

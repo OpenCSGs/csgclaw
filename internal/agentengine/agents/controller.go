@@ -2347,6 +2347,11 @@ func (s *Controller) createWorker(ctx context.Context, spec CreateAgentSpec, rep
 		if err := s.installDefaultSystemSkills(id, runtimeKind); err != nil {
 			return Agent{}, fmt.Errorf("install worker system skills: %w", err)
 		}
+		if spec.Skills != nil {
+			if err := s.ReplaceSkills(ctx, id, spec.Skills); err != nil {
+				return Agent{}, fmt.Errorf("apply worker skill selection: %w", err)
+			}
+		}
 	}
 	handle, err := runtimeImpl.New(ctx, agentruntime.Spec{
 		RuntimeID: runtimeIDForAgentID(id),
