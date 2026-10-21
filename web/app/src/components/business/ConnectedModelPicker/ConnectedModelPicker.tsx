@@ -73,7 +73,7 @@ export function ConnectedModelPicker({
               avatar={provider.avatar}
               model={isOpenCSGAutoModel(provider.id, model) ? t("modelProviderAutoName") : model}
               badge={isOpenCSGAutoModel(provider.id, model) ? t("modelProviderAutoBadge") : undefined}
-              provider={provider.serviceName && provider.serviceName !== group ? provider.serviceName : undefined}
+              provider={detail(provider)}
             />
           ),
         })),

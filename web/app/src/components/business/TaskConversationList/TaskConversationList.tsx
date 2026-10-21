@@ -153,6 +153,10 @@ export function TaskConversationList({
       return false;
     }
   }
+  const activeIDRef = useRef(activeID);
+  const archiveCurrentRef = useRef(onArchiveCurrent);
+  activeIDRef.current = activeID;
+  archiveCurrentRef.current = onArchiveCurrent;
   function requestArchive(room: IMConversation) {
     if (entry.isWorking(room.id)) {
       setError(t("taskEntryBusyRoom"));
@@ -160,7 +164,7 @@ export function TaskConversationList({
     }
     if (skipArchive)
       void run(() => entry.patch(room.id, { archived: true })).then((completed) => {
-        if (completed && room.id === activeID) onArchiveCurrent?.();
+        if (completed && room.id === activeIDRef.current) archiveCurrentRef.current?.();
       });
     else {
       setDontAsk(false);
@@ -179,7 +183,7 @@ export function TaskConversationList({
         : entry.patch(dialog.room.id, dialog.kind === "rename" ? { title: title.trim() } : { archived: true }),
     );
     if (completed && dialog.kind === "archive" && dontAsk) setSkipArchive(true);
-    if (completed && dialog.kind === "archive" && dialog.room.id === activeID) onArchiveCurrent?.();
+    if (completed && dialog.kind === "archive" && dialog.room.id === activeIDRef.current) archiveCurrentRef.current?.();
   }
 
   return (

@@ -1,5 +1,6 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useState } from "react";
 import { TaskConversationList } from "@/components/business/TaskConversationList";
 import { fetchTaskConversations } from "@/api/taskConversations";
 import { useArchiveConfirmation } from "@/hooks/workspace/useArchiveConfirmation";
@@ -39,6 +40,51 @@ function setup(working = false, archived = false, compact = false, activeID?: st
 }
 describe("TaskConversationList archive management", () => {
   beforeEach(() => window.localStorage.clear());
+  it.each([false, true])(
+    "does not navigate away from a newly selected task after archive completes (skip=%s)",
+    async (skip) => {
+      if (skip) localStorage.setItem("csgclaw.task-entry.skip-archive-confirmation", "true");
+      vi.mocked(fetchTaskConversations).mockResolvedValue({ rooms: [room], total: 1, has_more: false });
+      let finish!: () => void;
+      const patch = vi.fn(
+        () =>
+          new Promise<void>((resolve) => {
+            finish = resolve;
+          }),
+      );
+      const onArchiveCurrent = vi.fn();
+      function Harness() {
+        const [activeID, setActiveID] = useState("r1");
+        return (
+          <>
+            <button onClick={() => setActiveID("r2")}>Switch task</button>
+            <TaskConversationList
+              compact
+              activeID={activeID}
+              entry={{ patch, remove: vi.fn(), isWorking: () => false, busyID: "" } as unknown as TaskEntryController}
+              currentUserID="user-admin"
+              usersById={new Map()}
+              t={(key) => key}
+              onSelect={vi.fn()}
+              onArchiveCurrent={onArchiveCurrent}
+            />
+          </>
+        );
+      }
+      render(<Harness />, { wrapper: createQueryWrapper().wrapper });
+      const user = userEvent.setup();
+      await user.click(await screen.findByRole("button", { name: "taskEntryArchive · Review" }));
+      if (!skip) await user.click(screen.getByRole("button", { name: "confirm" }));
+      await waitFor(() => expect(patch).toHaveBeenCalled());
+      // Change the active task while the archive request is still pending.
+      if (!skip) {
+        fireEvent.click(screen.getByRole("button", { name: "Switch task", hidden: true }));
+      } else await user.click(screen.getByRole("button", { name: "Switch task" }));
+      await act(async () => finish());
+      await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+      expect(onArchiveCurrent).not.toHaveBeenCalled();
+    },
+  );
   it("exposes the full task title on hover", async () => {
     setup(false, false, true);
     const title = await screen.findByText("Review");

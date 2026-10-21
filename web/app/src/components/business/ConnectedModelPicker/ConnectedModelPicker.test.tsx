@@ -50,6 +50,23 @@ it("retains the saved model when a session update fails", async () => {
   expect(await screen.findByRole("alert")).toHaveTextContent("Conversation is busy");
   expect(screen.getByRole("combobox", { name: "Model" })).toHaveTextContent("Team API");
 });
+it("shows connection names when brand, service and model are identical", async () => {
+  const user = userEvent.setup();
+  const choose = vi.fn();
+  render(
+    <ConnectedModelPicker
+      providers={providers.map((provider) => ({ ...provider, serviceName: "GLM API" }))}
+      providerID="api"
+      modelID="shared-model"
+      onChoose={choose}
+      t={t}
+    />,
+  );
+  await user.click(screen.getByRole("combobox", { name: "Model" }));
+  expect(screen.getByRole("option", { name: /shared-model.*Team API/ })).toBeVisible();
+  await user.click(screen.getByRole("option", { name: /shared-model.*Personal/ }));
+  expect(choose).toHaveBeenCalledWith("plan", "shared-model");
+});
 it("blocks changes while the caller is working", async () => {
   render(
     <ConnectedModelPicker

@@ -57,6 +57,33 @@ describe("task configuration", () => {
     localStorage.clear();
     vi.mocked(pickLocalDirectoryPath).mockReset();
   });
+  it("applies a manually entered server directory without a native picker", async () => {
+    const { onChange } = setup();
+    fireEvent.click(screen.getByRole("combobox", { name: "iaWorkdirTitle" }));
+    fireEvent.click(screen.getByRole("button", { name: "iaWorkdirManual" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "taskConfigurationDirectoryPath" }), {
+      target: { value: "/srv/projects/remote" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "taskConfigurationApply" }));
+    await waitFor(() => expect(onChange).toHaveBeenCalledWith({ workspace_dir: "/srv/projects/remote" }));
+    expect(pickLocalDirectoryPath).not.toHaveBeenCalled();
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+  });
+  it("keeps a failed manual directory edit available for retry", async () => {
+    const onChange = vi.fn().mockRejectedValueOnce(new Error("Directory unavailable")).mockResolvedValueOnce(undefined);
+    setup({ workspace_dir: "/project" }, onChange);
+    fireEvent.click(screen.getByRole("combobox", { name: "iaWorkdirTitle" }));
+    fireEvent.click(screen.getByRole("button", { name: "iaWorkdirManual" }));
+    const input = screen.getByRole("textbox", { name: "taskConfigurationDirectoryPath" });
+    expect(input).toHaveValue("/project");
+    fireEvent.change(input, { target: { value: "/srv/project" } });
+    fireEvent.click(screen.getByRole("button", { name: "taskConfigurationApply" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Directory unavailable");
+    expect(input).toHaveValue("/srv/project");
+    fireEvent.click(screen.getByRole("button", { name: "taskConfigurationApply" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(onChange).toHaveBeenCalledTimes(2);
+  });
   it("applies a model to this session and keeps the working directory", async () => {
     const { onChange, controller } = setup({ workspace_dir: "/project" });
     fireEvent.click(screen.getByRole("combobox", { name: "iaModelTitle" }));
