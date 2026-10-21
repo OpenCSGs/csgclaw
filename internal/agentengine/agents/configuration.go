@@ -1327,6 +1327,11 @@ func (s *Controller) profileForCreateRequest(ctx context.Context, spec *CreateAg
 			profile = selected
 		}
 	}
+	var err error
+	profile, err = s.resolveCreateModelReference(profile)
+	if err != nil {
+		return AgentProfile{}, err
+	}
 	rk := strings.TrimSpace(spec.RuntimeKind)
 	if isGatewayRuntimeKind(rk) {
 		if strings.TrimSpace(profile.Provider) == "" || strings.TrimSpace(profile.ModelID) == "" {
