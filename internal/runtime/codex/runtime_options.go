@@ -37,23 +37,11 @@ func DecodeRuntimeOptions(raw map[string]any) (RuntimeOptions, error) {
 		}
 		opts.LocalWorkspaceDir = strings.TrimSpace(text)
 	}
-	if value, ok := raw[executionModeOptionKey]; ok && value != nil {
-		text, ok := value.(string)
-		if !ok {
-			return RuntimeOptions{}, fmt.Errorf("%s must be a string", executionModeOptionKey)
-		}
-		switch mode := strings.ToLower(strings.TrimSpace(text)); mode {
-		case "", ExecutionModeStandard:
-		case ExecutionModeReadOnly:
-			opts.ExecutionMode = mode
-		default:
-			return RuntimeOptions{}, fmt.Errorf("%s must be %q or %q", executionModeOptionKey, ExecutionModeStandard, ExecutionModeReadOnly)
-		}
-	}
-	// The server can enforce read-only mode for every agent.
+	// Execution mode is owned by the server process, including restored agents.
 	mode := strings.ToLower(strings.TrimSpace(os.Getenv("CSGCLAW_EXECUTION_MODE")))
 	switch mode {
 	case "", ExecutionModeStandard:
+		opts.ExecutionMode = ExecutionModeStandard
 	case ExecutionModeReadOnly:
 		opts.ExecutionMode = ExecutionModeReadOnly
 	default:

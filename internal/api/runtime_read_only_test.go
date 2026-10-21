@@ -11,7 +11,8 @@ func TestReadOnlyRuntimeSupportsCodexAndDSH(t *testing.T) {
 		want    bool
 	}{
 		{name: "Codex read only", kind: "codex", env: "read_only", options: map[string]any{"execution_mode": "read_only"}, want: true},
-		{name: "Codex agent read only", kind: "codex", options: map[string]any{"execution_mode": "read_only"}, want: true},
+		{name: "Codex stored read only ignored", kind: "codex", options: map[string]any{"execution_mode": "read_only"}},
+		{name: "Codex standard overrides stored read only", kind: "codex", env: "standard", options: map[string]any{"execution_mode": "read_only"}},
 		{name: "Codex server read only", kind: "codex", env: "read_only", options: map[string]any{"execution_mode": "standard"}, want: true},
 		{name: "Codex standard", kind: "codex", options: map[string]any{"execution_mode": "standard"}},
 		{name: "DSH read only", kind: "dsh", options: map[string]any{"permission_mode": "read-only"}, want: true},

@@ -429,8 +429,6 @@ span.model-option-avatar {
 
 .execution-mode-tooltip {
   max-width: min(720px, calc(100vw - 24px));
-  max-height: min(600px, calc(100dvh - 24px));
-  overflow: auto;
   white-space: normal;
 }
 

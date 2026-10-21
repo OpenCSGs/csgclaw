@@ -536,7 +536,6 @@ export function AgentProfileModal({
                   schemas={runtimeOptionSchemas}
                   onDraftChange={onAgentDraftChange}
                   directoryPickerAvailable={bootstrapConfig?.directory_picker_available !== false}
-                  showExecutionMode={useWizard}
                   embedded
                 />
               ) : null}

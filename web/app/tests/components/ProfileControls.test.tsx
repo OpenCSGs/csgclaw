@@ -29,38 +29,6 @@ function t(key: string): string {
 }
 
 describe("ProfileControls", () => {
-  it("allows selecting an execution mode when enabled", async () => {
-    const onDraftChange = vi.fn();
-    const draft = agentToDraft(null);
-    render(
-      <RuntimeOptionsFields
-        draft={draft}
-        locale="en"
-        showExecutionMode
-        schemas={[
-          {
-            key: "execution_mode",
-            path: "execution_mode",
-            type: "select",
-            label: "Execution Mode",
-            options: ["standard", "read_only"],
-            default_value: "standard",
-          },
-        ]}
-        onDraftChange={onDraftChange}
-      />,
-    );
-    const user = userEvent.setup();
-    await user.hover(screen.getByRole("button", { name: "View execution mode permissions" }));
-    expect(await screen.findByRole("tooltip")).toHaveTextContent("Read workspace or system files");
-    await user.click(screen.getByRole("combobox", { name: "Execution Mode" }));
-    await user.click(screen.getByRole("option", { name: "read_only" }));
-    expect(onDraftChange).toHaveBeenCalledWith({
-      ...draft,
-      runtime_options: { ...draft.runtime_options, execution_mode: "read_only" },
-    });
-  });
-
   it("hides execution mode while retaining other runtime settings", () => {
     render(
       <RuntimeOptionsFields
