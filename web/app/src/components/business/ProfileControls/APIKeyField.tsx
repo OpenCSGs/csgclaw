@@ -1,6 +1,7 @@
 import type { FocusEventHandler, FormEventHandler } from "react";
 import { useId, useState } from "react";
-import { TextInput } from "@/components/ui";
+import { Eye, EyeOff } from "lucide-react";
+import { Button, TextInput } from "@/components/ui";
 import type { APIKeyProfile, Translator } from "./types";
 import { requiredFieldLabel } from "./requiredFieldLabel";
 import { isBlank } from "./utils";
@@ -32,6 +33,7 @@ export function APIKeyField({
   const inputID = `${generatedID}-api-key`;
   const labelID = `${generatedID}-api-key-label`;
   const [focused, setFocused] = useState(false);
+  const [visible, setVisible] = useState(false);
   const stored = Boolean(profile?.api_key_set);
   const preview = String(profile?.api_key_preview || "").trim();
   const showStoredMask = stored && !focused && isBlank(value);
@@ -45,6 +47,7 @@ export function APIKeyField({
           id={inputID}
           aria-labelledby={labelID}
           aria-required={required ? "true" : undefined}
+          type={visible ? "text" : "password"}
           value={value}
           onFocus={(event) => {
             setFocused(true);
@@ -65,6 +68,17 @@ export function APIKeyField({
             {preview || "••••••••"}
           </div>
         ) : null}
+        <Button
+          className="api-key-visibility-toggle"
+          variant="tertiaryGray"
+          size="sm"
+          type="button"
+          aria-label={t(visible ? "connectorsHideSecret" : "connectorsShowSecret")}
+          aria-pressed={visible}
+          onClick={() => setVisible((current) => !current)}
+        >
+          {visible ? <EyeOff size={16} aria-hidden="true" /> : <Eye size={16} aria-hidden="true" />}
+        </Button>
       </div>
       {stored && unchangedHint ? <small className="field-hint">{unchangedHint}</small> : null}
     </label>

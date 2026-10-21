@@ -1,7 +1,7 @@
 import styles from "./Dialog.module.css";
 import { Dialog as RadixDialog } from "radix-ui";
 import { X } from "lucide-react";
-import { forwardRef } from "react";
+import { forwardRef, useEffect } from "react";
 import type { ComponentPropsWithoutRef, ComponentRef, HTMLAttributes } from "react";
 import { Button } from "@/components/ui/Button";
 import { Tooltip } from "@/components/ui/Tooltip";
@@ -16,6 +16,50 @@ const dialogFocusableSelector = [
   '[contenteditable="true"]',
   '[tabindex]:not([tabindex="-1"])',
 ].join(",");
+
+let dialogLayerObserver: MutationObserver | undefined;
+let dialogLayerObserverUsers = 0;
+
+function syncDialogLayers() {
+  // Radix appends each portal in open order, so the DOM order represents the modal stack.
+  const overlays = document.querySelectorAll<HTMLElement>(".csg-dialog-overlay");
+  const contents = document.querySelectorAll<HTMLElement>(".csg-dialog-content");
+  overlays.forEach((overlay, index) => {
+    overlay.style.zIndex = `calc(var(--z-modal) + ${index * 2})`;
+  });
+  contents.forEach((content, index) => {
+    content.style.zIndex = `calc(var(--z-modal) + ${index * 2 + 1})`;
+  });
+}
+
+function isDialogLayerNode(node: Node) {
+  return (
+    node instanceof HTMLElement &&
+    (node.matches(".csg-dialog-overlay, .csg-dialog-content") ||
+      Boolean(node.querySelector(".csg-dialog-overlay, .csg-dialog-content")))
+  );
+}
+
+function observeDialogLayers() {
+  if (typeof document === "undefined" || !document.body) return () => undefined;
+  dialogLayerObserverUsers += 1;
+  if (!dialogLayerObserver) {
+    syncDialogLayers();
+    dialogLayerObserver = new MutationObserver((records) => {
+      if (records.some((record) => [...record.addedNodes, ...record.removedNodes].some(isDialogLayerNode))) {
+        syncDialogLayers();
+      }
+    });
+    dialogLayerObserver.observe(document.body, { childList: true, subtree: true });
+  }
+  return () => {
+    dialogLayerObserverUsers -= 1;
+    if (dialogLayerObserverUsers === 0) {
+      dialogLayerObserver?.disconnect();
+      dialogLayerObserver = undefined;
+    }
+  };
+}
 
 export type DialogRootProps = ComponentPropsWithoutRef<typeof RadixDialog.Root>;
 
@@ -40,11 +84,12 @@ export function DialogPortal(props: DialogPortalProps) {
 export type DialogOverlayProps = ComponentPropsWithoutRef<typeof RadixDialog.Overlay>;
 
 export const DialogOverlay = forwardRef<ComponentRef<typeof RadixDialog.Overlay>, DialogOverlayProps>(
-  function DialogOverlay({ className, ...props }, ref) {
+  function DialogOverlay({ className, style, ...props }, ref) {
     return (
       <RadixDialog.Overlay
         ref={ref}
         className={classNames(classNames(styles["csg-dialog-overlay"], "csg-dialog-overlay"), className)}
+        style={style}
         {...props}
       />
     );
@@ -58,9 +103,10 @@ export type DialogContentProps = ComponentPropsWithoutRef<typeof RadixDialog.Con
 
 export const DialogContent = forwardRef<ComponentRef<typeof RadixDialog.Content>, DialogContentProps>(
   function DialogContent(
-    { children, className, onOpenAutoFocus, overlayClassName, portalContainer, tabIndex = -1, ...props },
+    { children, className, onOpenAutoFocus, overlayClassName, portalContainer, style, tabIndex = -1, ...props },
     ref,
   ) {
+    useEffect(() => observeDialogLayers(), []);
     return (
       <DialogPortal container={portalContainer}>
         <DialogOverlay className={overlayClassName} />
@@ -82,6 +128,7 @@ export const DialogContent = forwardRef<ComponentRef<typeof RadixDialog.Content>
             content?.focus();
           }}
           {...props}
+          style={style}
         >
           {children}
         </RadixDialog.Content>

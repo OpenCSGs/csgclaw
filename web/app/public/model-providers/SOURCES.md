@@ -2,6 +2,15 @@
 
 Retrieved on 2026-10-15 from the corresponding official websites and their linked CDNs.
 
+The following replacement marks were supplied by the user from Figma/browser references on 2026-10-21:
+
+- `aliyun-bailian.svg`: user-supplied Alibaba Cloud Bailian SVG.
+- `kimi-mark.svg`: user-supplied Kimi SVG.
+- `minimax-mark.svg`: user-supplied MiniMax SVG.
+- `mimo-mark.svg`: user-supplied `/Users/shenyongfan/Downloads/xiaomimimo.svg`.
+- `zhipu-figma.svg`: exported from Figma node `56224:27918` in the Portal file.
+- `volcengine-mark.svg`: user-supplied Volcengine Ark SVG.
+
 - `kimi.png`: https://www.kimi.com/pwa-192.png
 - `mimo.png`: https://mimo.mi.com/favicon.png
 - `aliyun.svg`: https://img.alicdn.com/imgextra/i1/O1CN01BEqugB1KebzCRyIJl_!!6000000001189-55-tps-48-48.svg

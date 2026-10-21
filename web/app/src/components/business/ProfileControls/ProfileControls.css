@@ -300,7 +300,19 @@ span.model-option-avatar {
 .api-key-input-shell input {
   position: relative;
   z-index: 1;
-  padding-right: 56px;
+  padding-right: 44px;
+}
+
+.api-key-input-shell .api-key-visibility-toggle {
+  position: absolute;
+  z-index: 3;
+  top: 50%;
+  right: 6px;
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
+  padding: 0;
+  transform: translateY(-50%);
 }
 
 .api-key-mask {
@@ -310,7 +322,7 @@ span.model-option-avatar {
   display: flex;
   align-items: center;
   min-width: 0;
-  padding: 9px 56px 9px 11px;
+  padding: 9px 44px 9px 11px;
   color: var(--input-text);
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 13px;
