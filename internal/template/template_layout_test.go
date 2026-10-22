@@ -10,6 +10,71 @@ import (
 	agentruntime "csgclaw/internal/runtime"
 )
 
+func TestLocalStorePublishOmitsSkillInstallLock(t *testing.T) {
+	for _, runtimeKind := range []string{agentruntime.KindCodex, agentruntime.KindDSH, agentruntime.NameOpenClaw} {
+		for _, separateSkills := range []bool{false, true} {
+			name := runtimeKind + "/workspace-skills"
+			if separateSkills {
+				name = runtimeKind + "/separate-skills"
+			}
+			t.Run(name, func(t *testing.T) {
+				workspaceRoot := t.TempDir()
+				skillsRoot := filepath.Join(workspaceRoot, "skills")
+				workspace := WorkspaceRef{Kind: WorkspaceKindDir, Path: workspaceRoot}
+				if separateSkills {
+					skillsRoot = t.TempDir()
+					workspace.SkillsPath = skillsRoot
+				}
+				files := map[string]string{
+					".skillhub-lock.json.lock": "",
+					".skillhub-lock.json":      `{"skills":{"custom":{"source":"market","slug":"custom","version":"1.0.0"}}}`,
+					"custom/SKILL.md":          "# Custom skill\n",
+					"custom/package-lock.json": "{}\n",
+					"custom/data.lock":         "skill resource\n",
+					"custom/empty.txt":         "",
+				}
+				for path, content := range files {
+					source := filepath.Join(skillsRoot, filepath.FromSlash(path))
+					if err := os.MkdirAll(filepath.Dir(source), 0o755); err != nil {
+						t.Fatal(err)
+					}
+					if err := os.WriteFile(source, []byte(content), 0o644); err != nil {
+						t.Fatal(err)
+					}
+				}
+				store := NewLocalStore(t.TempDir())
+				created, err := store.Publish(context.Background(), PublishSpec{
+					Name: "custom", RuntimeKind: runtimeKind, Image: "worker:test", WorkspaceRef: workspace,
+				})
+				if err != nil {
+					t.Fatalf("Publish() error = %v", err)
+				}
+				restored, err := store.FetchWorkspace(context.Background(), created.ID)
+				if err != nil {
+					t.Fatalf("FetchWorkspace() error = %v", err)
+				}
+				defer os.RemoveAll(restored.Path)
+				for path, want := range files {
+					source := filepath.Join(skillsRoot, filepath.FromSlash(path))
+					if data, err := os.ReadFile(source); err != nil || string(data) != want {
+						t.Errorf("source %s = %q, error = %v, want %q", path, data, err, want)
+					}
+					for _, root := range []string{store.templateRoot(created.ID), restored.Path} {
+						target := filepath.Join(root, "skills", filepath.FromSlash(path))
+						if path == ".skillhub-lock.json.lock" {
+							if _, err := os.Stat(target); !errors.Is(err, os.ErrNotExist) {
+								t.Errorf("template contains skill install lock %s: %v", target, err)
+							}
+						} else if data, err := os.ReadFile(target); err != nil || string(data) != want {
+							t.Errorf("template file %s = %q, error = %v, want %q", target, data, err, want)
+						}
+					}
+				}
+			})
+		}
+	}
+}
+
 func TestLocalStoreCodexTemplateDoesNotRoundTripWorkspaceMemory(t *testing.T) {
 	workspaceRoot := t.TempDir()
 	if err := os.WriteFile(filepath.Join(workspaceRoot, "AGENTS.md"), []byte("# Instructions\n"), 0o644); err != nil {

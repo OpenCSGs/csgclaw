@@ -171,6 +171,12 @@ func TestRemoteStorePublishUploadsArchiveAndCreatesTemplateCode(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(workspace, "skills", "custom", "SKILL.md"), []byte("custom skill\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.WriteFile(filepath.Join(workspace, "skills", ".skillhub-lock.json.lock"), nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(workspace, "skills", ".skillhub-lock.json"), []byte(`{"skills":{}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.WriteFile(filepath.Join(workspace, "skills", ".system", "openai-docs", "references", "internal.md"), []byte("system skill\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -310,13 +316,16 @@ func TestRemoteStorePublishUploadsArchiveAndCreatesTemplateCode(t *testing.T) {
 			}
 		}
 	}
-	for _, want := range []string{"agent.toml", "instructions/AGENTS.md"} {
+	for _, want := range []string{"agent.toml", "instructions/AGENTS.md", "skills/.skillhub-lock.json"} {
 		if !names[want] {
 			t.Errorf("uploaded archive missing %q; names = %#v", want, names)
 		}
 	}
 	if !names["skills/custom/SKILL.md"] {
 		t.Errorf("uploaded archive missing custom skill; names = %#v", names)
+	}
+	if names["skills/.skillhub-lock.json.lock"] {
+		t.Error("uploaded archive contains local skill install lock")
 	}
 	for name := range names {
 		if strings.HasPrefix(name, "skills/.system/") {
