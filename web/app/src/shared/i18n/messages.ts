@@ -2867,6 +2867,7 @@ export const messages = {
       file_reference_unavailable: "引用文件不可用，请检查文件是否存在以及来源 Agent 是否仍在会话中。",
       workspace_file_unavailable: "工作区文件不可用。",
 
+      feedback_access_denied: "无法验证本地服务访问权限，请通过本机页面或 CSGClaw App 提交反馈。",
       feedback_login_required: "请登录 OpenCSG 后提交反馈。",
       feedback_invalid: "请检查反馈文字和图片的格式、数量及大小。",
       feedback_unavailable: "暂时无法确认提交结果，已保留填写内容。重新提交可能产生重复反馈。",
@@ -5971,6 +5972,8 @@ export const messages = {
         "Referenced file is unavailable. Check that it exists and its source agent is still in this conversation.",
       workspace_file_unavailable: "Workspace file is unavailable.",
 
+      feedback_access_denied:
+        "Local service access could not be verified. Submit feedback from the local page or CSGClaw App.",
       feedback_login_required: "Sign in to OpenCSG to submit feedback.",
       feedback_invalid: "Check the feedback text and image format, count, and size.",
       feedback_unavailable:

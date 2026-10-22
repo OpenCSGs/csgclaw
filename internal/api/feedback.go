@@ -4,7 +4,11 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
+	"net/url"
+	"strconv"
+	"strings"
 
 	"csgclaw/internal/auth"
 	"csgclaw/internal/feedback"
@@ -13,8 +17,8 @@ import (
 )
 
 func (h *Handler) handleFeedback(w http.ResponseWriter, r *http.Request) {
-	if !h.validateServerAccessToken(r.Header.Get("Authorization")) {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+	if !h.validateServerAccessToken(r.Header.Get("Authorization")) && !feedbackBrowserRequestAllowed(r) {
+		writeCodedAPIError(w, http.StatusUnauthorized, "feedback_access_denied", "Feedback access requires a local same-origin browser or a valid server credential")
 		return
 	}
 	record, found, err := auth.Default().Store.Load()
@@ -75,4 +79,42 @@ func (h *Handler) handleFeedback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, result)
+}
+
+func feedbackBrowserRequestAllowed(r *http.Request) bool {
+	if len(r.Header.Values("Authorization")) != 0 || appRequestAgentID(r) != "" || r.Header.Get("X-CSGClaw-Caller-Agent") != "" {
+		return false
+	}
+	peer, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil || !net.ParseIP(peer).IsLoopback() {
+		return false
+	}
+	origins := r.Header.Values("Origin")
+	if len(origins) != 1 {
+		return false
+	}
+	scheme := "http"
+	if r.TLS != nil {
+		scheme = "https"
+	}
+	origin, err := url.Parse(origins[0])
+	// A browser Origin contains only the scheme and authority, including the port.
+	if err != nil || origin.Scheme != scheme || origin.Host != r.Host || origins[0] != scheme+"://"+origin.Host {
+		return false
+	}
+	host := origin.Hostname()
+	if host != "localhost" && !net.ParseIP(host).IsLoopback() {
+		return false
+	}
+	authority := host
+	if strings.Contains(host, ":") {
+		authority = "[" + host + "]"
+	}
+	if port := origin.Port(); port != "" {
+		if _, err := strconv.ParseUint(port, 10, 16); err != nil {
+			return false
+		}
+		authority = net.JoinHostPort(host, port)
+	}
+	return origin.Host == authority
 }
