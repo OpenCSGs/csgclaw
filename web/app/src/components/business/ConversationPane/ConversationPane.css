@@ -269,7 +269,8 @@
 
 .message-list-new-messages:hover {
   border-color: var(--primary);
-  background: var(--primary-soft);
+  background: var(--primary);
+  color: var(--on-primary);
 }
 
 .message-row {
