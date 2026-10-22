@@ -2095,7 +2095,7 @@ describe("useConversationController", () => {
     expect(messageList.scrollTop).toBe(120);
   });
 
-  it("follows an outgoing message even when the user has scrolled away from the bottom", async () => {
+  it("preserves history position when the user sends while scrolled away from the bottom", async () => {
     const firstMessage: IMMessage = {
       id: "msg-1",
       content: "hello",
@@ -2136,8 +2136,23 @@ describe("useConversationController", () => {
     await act(async () => {
       await result.current.conversationViewProps.onSendMessage();
     });
+    rerender({
+      data: dataWithMessages([
+        firstMessage,
+        {
+          id: "msg-user",
+          content: "my reply",
+          created_at: "2026-06-16T10:01:00Z",
+          sender_id: "u-admin",
+        },
+      ]),
+      messageListActive: true,
+    });
 
-    await waitFor(() => expect(messageList.scrollTop).toBe(1120));
+    await waitFor(() => {
+      expect(messageList.scrollTop).toBe(120);
+      expect(result.current.conversationViewProps.hasNewMessages).toBe(true);
+    });
   });
 
   it("keeps a single message-list scroll listener across data rerenders", () => {

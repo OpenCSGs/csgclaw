@@ -1223,7 +1223,6 @@ export function useConversationController({
         },
       );
       setBootstrapData((current) => appendMessageToData(current, roomID, created));
-      messageListAutoScroll.follow();
       clearComposer(roomID);
       delete pendingClientMessagesRef.current[roomID];
       setComposerSendStatesByConversationId((current) => ({
