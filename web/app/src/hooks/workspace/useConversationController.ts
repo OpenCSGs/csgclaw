@@ -1367,6 +1367,10 @@ export function useConversationController({
   }
 
   function messageSendFailure(error: unknown): string {
+    const rawMessage = errorMessage(error, "");
+    if (/\b(failed to fetch|networkerror|network request failed|load failed|fetch failed)\b/i.test(rawMessage)) {
+      return t("sendNetworkError");
+    }
     const code = apiErrorCode(error);
     if (code.startsWith("resource_") || code === "invalid_resource_reference") {
       void queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.agentSkills(resourceAgentID) });
