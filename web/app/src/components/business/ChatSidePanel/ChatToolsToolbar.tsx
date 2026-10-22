@@ -1,3 +1,4 @@
+import { createUUID } from "@/shared/lib/uuid";
 import type { RefObject } from "react";
 import { Activity, Globe, ListTodo } from "lucide-react";
 import { FolderIcon } from "@/components/business/FileTypeIcon";
@@ -47,7 +48,7 @@ export function ChatToolsToolbar({
       action: () => {
         const browser = controller.state.tabs.find((tab) => tab.kind === "browser");
         if (browser) controller.patch({ open: true, activeID: browser.id });
-        else controller.openTab({ id: crypto.randomUUID(), kind: "browser", url: "" });
+        else controller.openTab({ id: createUUID(), kind: "browser", url: "" });
       },
     },
   ];

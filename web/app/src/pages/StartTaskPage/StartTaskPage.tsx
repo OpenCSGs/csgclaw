@@ -1,3 +1,4 @@
+import { createUUID } from "@/shared/lib/uuid";
 import { ResourceTag } from "@/components/business/ResourceTag";
 import {
   effectiveConversationProfile,
@@ -77,7 +78,7 @@ function StartTaskForm({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const created = useRef<IMConversation | null>(null);
-  const requestID = useRef(crypto.randomUUID());
+  const requestID = useRef(createUUID());
   const sendID = useRef({ fingerprint: "", id: "" });
   const inFlight = useRef(false);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -174,7 +175,7 @@ function StartTaskForm({
           input.resource_refs,
           files.map((file) => [file.name, file.size, file.lastModified]),
         ]);
-        if (sendID.current.fingerprint !== fingerprint) sendID.current = { fingerprint, id: crypto.randomUUID() };
+        if (sendID.current.fingerprint !== fingerprint) sendID.current = { fingerprint, id: createUUID() };
         const message = await sendMessageRequest({
           room_id: room.id,
           sender_id: readySidebar.currentUserID,

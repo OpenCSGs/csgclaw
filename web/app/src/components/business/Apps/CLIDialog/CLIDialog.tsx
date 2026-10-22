@@ -1,3 +1,4 @@
+import { createUUID } from "@/shared/lib/uuid";
 import { useEffect, useRef, useState } from "react";
 import { CircleAlert } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
@@ -116,10 +117,7 @@ export function CLIDialog({ definition, existing, t, onClose, onChanged }: Props
       if (retry.current?.action !== action || retry.current.revision !== current.revision) {
         retry.current = {
           action,
-          id:
-            typeof crypto.randomUUID === "function"
-              ? crypto.randomUUID()
-              : `cli-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`,
+          id: createUUID(),
           revision: current.revision,
         };
       }

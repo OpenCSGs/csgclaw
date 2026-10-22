@@ -312,51 +312,58 @@ it.each(["switch", "reopen"] as const)("ignores a late publishing failure after 
   queryClient.clear();
 });
 
-it.each(["Pending", "Fail", "missing"] as const)(
-  "preserves refreshed template details and fills missing publication results (%s)",
-  async (status) => {
-    const queryClient = new QueryClient();
-    const local: HubTemplate = { id: "local.first", name: "first", source: { kind: "local" } };
-    const published: HubTemplate = { id: "alice/first", name: "first", source: { kind: "remote" } };
-    const refreshed: HubTemplate = {
-      ...published,
-      description: "Full refreshed details",
-      metadata: { sensitive_check: { status, failure_details: [{ path: "MEMORY.md" }] } },
-    };
-    vi.mocked(useWorkspaceHubSelection).mockReturnValue({
-      detailPaneProps: { error: "" },
-      error: "",
-      selectedHubResourceType: "template",
-      selectedHubTemplateId: local.id,
-      skills: [],
-    } as unknown as ReturnType<typeof useWorkspaceHubSelection>);
-    vi.mocked(publishHubTemplateToCommunityRequest).mockResolvedValue(published);
-    const wrapper = ({ children }: { children: ReactNode }) =>
-      createElement(QueryClientProvider, { client: queryClient }, children);
-    const { result } = renderHook(
-      () =>
-        useWorkspaceHubController({
-          activePane: { type: "hub", resourceType: "template", id: "local.first" },
-          hubLoaded: true,
-          hubTemplates: [local],
-          hubTemplatesQuery: {} as UseQueryResult<HubTemplate[]>,
-          openCSGAuthGuard: openCSGAuthGuardStub(),
-          refreshWorkspaceHubTemplates: async () => {
-            const items = status === "missing" ? [local] : [local, refreshed];
-            queryClient.setQueryData(workspaceQueryKeys.hubTemplates(), items);
-            return items;
-          },
-          t: (key) => key,
-        }),
-      { wrapper },
-    );
-    await act(async () => {
+it.each(
+  (["agent", "template"] as const).flatMap((entry) =>
+    (["Pending", "Fail", "missing", "refresh-failed"] as const).map((status) => ({ entry, status })),
+  ),
+)("preserves refreshed details and includes published templates from $entry ($status)", async ({ entry, status }) => {
+  const queryClient = new QueryClient();
+  const local: HubTemplate = { id: "local.first", name: "first", source: { kind: "local" } };
+  const published: HubTemplate = { id: "alice/first", name: "first", source: { kind: "remote" } };
+  const refreshed: HubTemplate = {
+    ...published,
+    description: "Full refreshed details",
+    metadata: { sensitive_check: { status, failure_details: [{ path: "MEMORY.md" }] } },
+  };
+  vi.mocked(useWorkspaceHubSelection).mockReturnValue({
+    detailPaneProps: { error: "" },
+    error: "",
+    selectedHubResourceType: "template",
+    selectedHubTemplateId: local.id,
+    skills: [],
+  } as unknown as ReturnType<typeof useWorkspaceHubSelection>);
+  vi.mocked(publishHubTemplateToCommunityRequest).mockResolvedValue(published);
+  const wrapper = ({ children }: { children: ReactNode }) =>
+    createElement(QueryClientProvider, { client: queryClient }, children);
+  const { result } = renderHook(
+    () =>
+      useWorkspaceHubController({
+        activePane: { type: "hub", resourceType: "template", id: "local.first" },
+        hubLoaded: true,
+        hubTemplates: [local],
+        hubTemplatesQuery: {} as UseQueryResult<HubTemplate[]>,
+        openCSGAuthGuard: openCSGAuthGuardStub(),
+        refreshWorkspaceHubTemplates: async () => {
+          if (status === "refresh-failed") throw new Error("Listing unavailable");
+          const items = status === "missing" ? [local] : [local, refreshed];
+          queryClient.setQueryData(workspaceQueryKeys.hubTemplates(), items);
+          return items;
+        },
+        t: (key) => key,
+      }),
+    { wrapper },
+  );
+  queryClient.setQueryData(workspaceQueryKeys.hubTemplates(), [local]);
+  await act(async () => {
+    if (entry === "agent") {
+      await result.current.refreshHubTemplates(published);
+    } else {
       expect(await result.current.hub.publishHubTemplate(local)).toEqual({ status: "success", template: published });
-    });
-    expect(queryClient.getQueryData(workspaceQueryKeys.hubTemplates())).toEqual([
-      local,
-      status === "missing" ? published : refreshed,
-    ]);
-    queryClient.clear();
-  },
-);
+    }
+  });
+  expect(queryClient.getQueryData(workspaceQueryKeys.hubTemplates())).toEqual([
+    local,
+    status === "missing" || status === "refresh-failed" ? published : refreshed,
+  ]);
+  queryClient.clear();
+});

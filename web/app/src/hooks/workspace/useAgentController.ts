@@ -1904,7 +1904,7 @@ export function useAgentController({
         pendingTemplatePublications.current.delete(publicationKey);
         localTemplateID = undefined;
       }
-      await refreshHubTemplates();
+      await refreshHubTemplates(published);
       if (published?.id) {
         setSelectedHubTemplateId(published.id);
         navigatePane({ type: WorkspacePaneTypes.agent, id: "" }, rooms, {

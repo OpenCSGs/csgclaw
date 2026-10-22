@@ -1,3 +1,4 @@
+import { createUUID } from "@/shared/lib/uuid";
 import { WorkspacePathActions } from "./WorkspacePathActions";
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -190,7 +191,7 @@ export function ChatSidePanel({
   }
   function newTab(kind: "files" | "activity" | "browser" | "tasks", previousID?: string) {
     const tab: ChatSideTab =
-      kind === "browser" ? { id: previousID ?? crypto.randomUUID(), kind, url: "" } : { id: kind, kind };
+      kind === "browser" ? { id: previousID ?? createUUID(), kind, url: "" } : { id: kind, kind };
     if (previousID) replaceTab(tab, previousID);
     else openTab(tab);
   }
@@ -289,7 +290,7 @@ export function ChatSidePanel({
               size="sm"
               variant="tertiaryGray"
               aria-label={t("chatSideNew")}
-              onClick={() => openTab({ id: crypto.randomUUID(), kind: "new" })}
+              onClick={() => openTab({ id: createUUID(), kind: "new" })}
             >
               <Plus size={18} />
             </Button>
@@ -421,7 +422,7 @@ export function ChatSidePanel({
                 url={tab.url}
                 active={tab.id === state.activeID && visible}
                 onNavigate={(url) => replaceTab({ ...tab, url })}
-                onPopup={(url) => openTab({ id: crypto.randomUUID(), kind: "browser", url })}
+                onPopup={(url) => openTab({ id: createUUID(), kind: "browser", url })}
                 t={t}
               />
             ) : tab.kind === "activity" ? (

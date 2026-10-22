@@ -272,7 +272,7 @@ export type UseAgentControllerArgs = {
   onTemplatePublished?: (template: HubTemplate) => void;
   profileDetailAgentID?: string;
   redirectToIncompleteManagerProfile?: boolean;
-  refreshHubTemplates: () => Promise<void>;
+  refreshHubTemplates: (published?: HubTemplate) => Promise<void>;
   refreshWorkspaceAgents: (options?: FetchAgentsOptions) => Promise<AgentLike[]>;
   refreshWorkspaceBootstrap: () => Promise<IMData | null>;
   refreshWorkspaceBootstrapConfig: () => Promise<RuntimeBootstrapConfig | null>;

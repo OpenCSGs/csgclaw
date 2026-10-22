@@ -92,7 +92,7 @@ export type WorkspaceHubController = {
       skillDeleteBusy: boolean;
     };
   };
-  refreshHubTemplates: () => Promise<void>;
+  refreshHubTemplates: (published?: HubTemplate) => Promise<void>;
 };
 
 export function useWorkspaceHubController({
@@ -135,14 +135,24 @@ export function useWorkspaceHubController({
   const [resourcesRemoteInstallBusy, setResourcesRemoteInstallBusy] = useState("");
   const [resourcesRemoteInstallError, setResourcesRemoteInstallError] = useState("");
 
-  const refreshHubTemplates = useCallback(async (): Promise<void> => {
-    try {
-      await refreshWorkspaceHubTemplates();
-      setResourcesManualError("");
-    } catch (_) {
-      setResourcesManualError(t("resourcesLoadFailed"));
-    }
-  }, [refreshWorkspaceHubTemplates, t]);
+  const refreshHubTemplates = useCallback(
+    async (published?: HubTemplate): Promise<void> => {
+      try {
+        await refreshWorkspaceHubTemplates();
+        setResourcesManualError("");
+      } catch (_) {
+        setResourcesManualError(t("resourcesLoadFailed"));
+      }
+      // Community listings may lag behind a successful publication.
+      // Keep refreshed metadata when present, otherwise include the returned template.
+      if (published?.id) {
+        queryClient.setQueryData<HubTemplate[]>(workspaceQueryKeys.hubTemplates(), (current) =>
+          current?.some((item) => item.id === published.id) ? current : [...(current ?? []), published],
+        );
+      }
+    },
+    [refreshWorkspaceHubTemplates, queryClient, t],
+  );
 
   useEffect(() => {
     if (hubTemplatesQuery.isSuccess) {
@@ -275,10 +285,7 @@ export function useWorkspaceHubController({
       setPublishFailure(null);
       try {
         const published = await publishHubTemplateToCommunityRequest(template.id, includeMemory);
-        await refreshHubTemplates();
-        queryClient.setQueryData<HubTemplate[]>(workspaceQueryKeys.hubTemplates(), (current) =>
-          current?.some((item) => item.id === published.id) ? current : [...(current ?? []), published],
-        );
+        await refreshHubTemplates(published);
         setPublishedTemplate(published);
         return { status: "success", template: published };
       } catch (err) {
@@ -294,7 +301,7 @@ export function useWorkspaceHubController({
         setResourcesPublishBusy(false);
       }
     },
-    [handleOpenCSGAuthenticationError, requireOpenCSGAuthentication, refreshHubTemplates, queryClient, t],
+    [handleOpenCSGAuthenticationError, requireOpenCSGAuthentication, refreshHubTemplates, t],
   );
 
   const uploadSkill = useCallback(

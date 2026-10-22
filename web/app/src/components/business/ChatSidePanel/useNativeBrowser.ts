@@ -1,3 +1,4 @@
+import { createUUID } from "@/shared/lib/uuid";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { getDesktopBridge, type DesktopBrowserState } from "@/shared/platform/desktopBridge";
 
@@ -13,7 +14,7 @@ export function useNativeBrowser({
   onPopup: (url: string) => void;
 }) {
   const bridge = getDesktopBridge();
-  const [id] = useState(() => crypto.randomUUID());
+  const [id] = useState(() => createUUID());
   const hostRef = useRef<HTMLDivElement>(null);
   const [state, setState] = useState<DesktopBrowserState | null>(null);
   const currentPageURL = useRef("");

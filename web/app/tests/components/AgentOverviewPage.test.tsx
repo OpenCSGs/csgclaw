@@ -208,6 +208,22 @@ describe("agent overview guidance and template loading", () => {
     scroll.mockRestore();
   });
 
+  it("selects and highlights a newly published community template alongside its local snapshot", async () => {
+    const local: HubTemplate = { id: "local.中文助手", name: "中文助手", role: "worker", source: { kind: "local" } };
+    const published: HubTemplate = { ...local, id: "alice/中文助手", source: { kind: "remote" } };
+    const route = "/agents?tab=templates&filter=personal&template=alice%2F%E4%B8%AD%E6%96%87%E5%8A%A9%E6%89%8B";
+    vi.mocked(useWorkspaceHubTemplatesQuery).mockReturnValue(queryState({ data: [template, local] }));
+    const view = render(<Page route={route} username="alice" />);
+    vi.mocked(useWorkspaceHubTemplatesQuery).mockReturnValue(queryState({ data: [template, local, published] }));
+    view.rerender(<Page route={route} username="alice" />);
+    expect(await screen.findByRole("region", { name: "Template detail" })).toHaveTextContent(published.id!);
+    const rows = screen.getAllByRole("button", { name: /中文助手/ });
+    expect(rows).toHaveLength(2);
+    const selected = rows.find((row) => row.getAttribute("aria-current") === "true");
+    expect(selected).toHaveTextContent("云端");
+    expect(rows.filter((row) => row.getAttribute("aria-current") === "true")).toHaveLength(1);
+  });
+
   it("restores the selected template with browser back and forward", async () => {
     const locals: HubTemplate[] = [
       { id: "local.first", name: "First", role: "worker", source: { kind: "local" } },

@@ -118,6 +118,26 @@ describe("task example visibility", () => {
 
 describe("StartTaskPage task preparation", () => {
   beforeEach(() => vi.mocked(sendMessageRequest).mockReset());
+  it("renders and sends the first task on HTTP without crypto.randomUUID", async () => {
+    const getRandomValues = globalThis.crypto.getRandomValues.bind(globalThis.crypto);
+    vi.stubGlobal("crypto", { getRandomValues });
+    try {
+      vi.mocked(sendMessageRequest).mockResolvedValue({} as never);
+      const { create, open } = setup();
+      fireEvent.change(screen.getByRole("textbox", { name: "taskEntryPrompt" }), { target: { value: "hello" } });
+      fireEvent.click(screen.getByRole("button", { name: "taskEntryStart" }));
+      await waitFor(() => expect(open).toHaveBeenCalledWith(room));
+      expect(create).toHaveBeenCalledOnce();
+      expect(sendMessageRequest).toHaveBeenCalledWith(
+        expect.objectContaining({
+          content: "hello",
+          client_message_id: expect.stringMatching(/^[0-9a-f-]{36}$/),
+        }),
+      );
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
   it.each([
     ["/", "u-manager"],
     ["/new?agent=u-worker", "u-worker"],
