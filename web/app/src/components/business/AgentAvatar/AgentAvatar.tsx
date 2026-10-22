@@ -1,10 +1,9 @@
-import { Tooltip } from "@/components/ui";
+import { DialogContent, DialogDescription, DialogRoot, DialogTitle, Tooltip } from "@/components/ui";
 import { AgentIcon } from "@/components/ui/Icons";
 import { AGENT_AVATAR_GROUPS, AGENT_AVATAR_OPTIONS, normalizeAgentAvatarPath } from "@/shared/avatarOptions";
 import { Edit3, ImagePlus, UploadCloud, X, ZoomIn, ZoomOut } from "lucide-react";
 import type { ChangeEvent, DragEvent, PointerEvent as ReactPointerEvent, ReactNode } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 
 type TranslateFn = (key: string) => string;
 type AvatarEditorTab = "builtin" | "upload";
@@ -50,7 +49,6 @@ export function AgentAvatarPicker({
   t,
   onChange,
   mode = "default",
-  portalContainer = null,
 }: {
   disabled?: boolean;
   fallback?: ReactNode;
@@ -58,7 +56,6 @@ export function AgentAvatarPicker({
   t: TranslateFn;
   onChange: (value: string) => void;
   mode?: "default" | "edit";
-  portalContainer?: HTMLElement | null;
 }) {
   const selected = normalizeAgentAvatarPath(value);
   const [open, setOpen] = useState(false);
@@ -95,7 +92,7 @@ export function AgentAvatarPicker({
   }, [mode]);
 
   useEffect(() => {
-    if (!open) {
+    if (!open || mode === "edit") {
       return;
     }
     function handlePointerDown(event: PointerEvent) {
@@ -105,7 +102,7 @@ export function AgentAvatarPicker({
     }
     document.addEventListener("pointerdown", handlePointerDown);
     return () => document.removeEventListener("pointerdown", handlePointerDown);
-  }, [closeEditor, open]);
+  }, [closeEditor, mode, open]);
 
   useEffect(() => {
     if (open) {
@@ -131,20 +128,6 @@ export function AgentAvatarPicker({
     });
     return () => window.cancelAnimationFrame(frame);
   }, [uploadSource, uploadImageSize, uploadZoom]);
-
-  useEffect(() => {
-    if (!open || mode !== "edit") {
-      return;
-    }
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        closeEditor();
-      }
-    }
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [closeEditor, open, mode]);
 
   function handleTriggerPointerLeave() {
     setSuppressTriggerHover(false);
@@ -311,145 +294,143 @@ export function AgentAvatarPicker({
           ) : null}
         </button>
       </Tooltip>
-      {open && mode === "edit" && !disabled
-        ? createPortal(
-            <div className="agent-avatar-editor-backdrop" role="presentation" onPointerDown={closeEditor}>
-              <div
-                className="agent-avatar-editor-modal"
-                role="dialog"
-                aria-modal="true"
-                aria-labelledby="agent-avatar-editor-title"
-                onPointerDown={(event) => event.stopPropagation()}
-              >
-                <div className="agent-avatar-editor-header">
-                  <div className="agent-avatar-editor-heading">
-                    <h2 id="agent-avatar-editor-title">{t("editAvatar")}</h2>
-                    <p>{t("editAvatarSubtitle")}</p>
-                  </div>
+      {open && mode === "edit" && !disabled ? (
+        <DialogRoot
+          open
+          onOpenChange={(nextOpen) => {
+            if (!nextOpen) closeEditor();
+          }}
+        >
+          <DialogContent
+            className="agent-avatar-editor-modal"
+            overlayClassName="agent-avatar-editor-backdrop"
+            onCloseAutoFocus={(event) => {
+              event.preventDefault();
+              triggerRef.current?.focus();
+            }}
+          >
+            <div className="agent-avatar-editor-header">
+              <div className="agent-avatar-editor-heading">
+                <DialogTitle>{t("editAvatar")}</DialogTitle>
+                <DialogDescription>{t("editAvatarSubtitle")}</DialogDescription>
+              </div>
+              <button className="agent-avatar-editor-close" type="button" aria-label={t("close")} onClick={closeEditor}>
+                <X aria-hidden="true" size={24} strokeWidth={1.8} />
+              </button>
+            </div>
+            <div className="agent-avatar-editor-body">
+              <div className="agent-avatar-editor-tabs" role="tablist" aria-label={t("editAvatar")}>
+                {[
+                  ["builtin", t("avatarBuiltinTab")],
+                  ["upload", t("avatarUploadTab")],
+                ].map(([tab, label]) => (
                   <button
-                    className="agent-avatar-editor-close"
+                    aria-selected={activeTab === tab}
+                    className={`agent-avatar-editor-tab ${activeTab === tab ? "active" : ""}`}
+                    key={tab}
+                    role="tab"
                     type="button"
-                    aria-label={t("close")}
-                    onClick={closeEditor}
+                    onClick={() => setActiveTab(tab as AvatarEditorTab)}
                   >
-                    <X aria-hidden="true" size={24} strokeWidth={1.8} />
+                    {label}
                   </button>
-                </div>
-                <div className="agent-avatar-editor-body">
-                  <div className="agent-avatar-editor-tabs" role="tablist" aria-label={t("editAvatar")}>
-                    {[
-                      ["builtin", t("avatarBuiltinTab")],
-                      ["upload", t("avatarUploadTab")],
-                    ].map(([tab, label]) => (
-                      <button
-                        aria-selected={activeTab === tab}
-                        className={`agent-avatar-editor-tab ${activeTab === tab ? "active" : ""}`}
-                        key={tab}
-                        role="tab"
-                        type="button"
-                        onClick={() => setActiveTab(tab as AvatarEditorTab)}
-                      >
-                        {label}
-                      </button>
-                    ))}
-                  </div>
-                  {activeTab === "builtin" ? (
-                    <div className="agent-avatar-editor-grid" role="radiogroup" aria-label={t("avatarBuiltinTab")}>
-                      {AGENT_AVATAR_OPTIONS.map((option) =>
-                        renderAvatarOption(option, draftValue || selected, () => setDraftValue(option.value)),
-                      )}
-                    </div>
-                  ) : (
-                    <div className="agent-avatar-upload-pane" role="tabpanel" aria-label={t("avatarUploadTab")}>
-                      {uploadSource ? (
-                        <div className="agent-avatar-cropper">
-                          <div
-                            className="agent-avatar-cropper-stage"
-                            ref={cropStageRef}
-                            onPointerDown={handleCropPointerDown}
-                            onPointerMove={handleCropPointerMove}
-                            onPointerUp={stopCropDrag}
-                            onPointerCancel={stopCropDrag}
-                          >
-                            <img
-                              className="agent-avatar-cropper-image"
-                              src={uploadSource}
-                              alt={t("avatarUploadPreviewAlt")}
-                              draggable={false}
-                              style={{
-                                transform: `translate(calc(-50% + ${uploadOffset.x}px), calc(-50% + ${uploadOffset.y}px)) scale(${uploadZoom})`,
-                              }}
-                            />
-                            <div className="agent-avatar-cropper-frame" aria-hidden="true">
-                              <span />
-                              <span />
-                              <span />
-                              <span />
-                            </div>
-                            <div
-                              className="agent-avatar-zoom-controls"
-                              aria-label={t("avatarZoomControls")}
-                              onPointerDown={(event) => event.stopPropagation()}
-                            >
-                              <button type="button" aria-label={t("avatarZoomOut")} onClick={() => updateZoom("out")}>
-                                <ZoomOut aria-hidden="true" size={20} strokeWidth={1.8} />
-                              </button>
-                              <button type="button" aria-label={t("avatarZoomIn")} onClick={() => updateZoom("in")}>
-                                <ZoomIn aria-hidden="true" size={20} strokeWidth={1.8} />
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-                      ) : (
-                        <button
-                          className={`agent-avatar-upload-dropzone ${uploadError ? "error" : ""}`}
-                          type="button"
-                          onClick={() => fileInputRef.current?.click()}
-                          onDragEnter={preventDefaultDrag}
-                          onDragOver={preventDefaultDrag}
-                          onDrop={handleDrop}
-                        >
-                          <span className="agent-avatar-upload-icon" aria-hidden="true">
-                            <UploadCloud size={20} strokeWidth={1.8} />
-                          </span>
-                          <span className="agent-avatar-upload-copy">
-                            <span>
-                              <strong>{t("avatarUploadClick")}</strong>
-                              {t("avatarUploadDrop")}
-                            </span>
-                            <small>{t("avatarUploadHelp")}</small>
-                          </span>
-                          {uploadError ? <span className="agent-avatar-upload-error">{uploadError}</span> : null}
-                        </button>
-                      )}
-                      <input
-                        ref={fileInputRef}
-                        className="agent-avatar-upload-input"
-                        type="file"
-                        accept="image/svg+xml,image/png,image/jpeg,image/gif"
-                        onChange={handleFileChange}
-                      />
-                    </div>
+                ))}
+              </div>
+              {activeTab === "builtin" ? (
+                <div className="agent-avatar-editor-grid" role="radiogroup" aria-label={t("avatarBuiltinTab")}>
+                  {AGENT_AVATAR_OPTIONS.map((option) =>
+                    renderAvatarOption(option, draftValue || selected, () => setDraftValue(option.value)),
                   )}
                 </div>
-                <div className="agent-avatar-editor-actions">
-                  <button className="agent-avatar-editor-button secondary" type="button" onClick={closeEditor}>
-                    {t("cancel")}
-                  </button>
-                  <button
-                    className="agent-avatar-editor-button primary"
-                    type="button"
-                    disabled={activeTab === "upload" && !uploadSource}
-                    onClick={() => void confirmDraft()}
-                  >
-                    {t("confirm")}
-                  </button>
+              ) : (
+                <div className="agent-avatar-upload-pane" role="tabpanel" aria-label={t("avatarUploadTab")}>
+                  {uploadSource ? (
+                    <div className="agent-avatar-cropper">
+                      <div
+                        className="agent-avatar-cropper-stage"
+                        ref={cropStageRef}
+                        onPointerDown={handleCropPointerDown}
+                        onPointerMove={handleCropPointerMove}
+                        onPointerUp={stopCropDrag}
+                        onPointerCancel={stopCropDrag}
+                      >
+                        <img
+                          className="agent-avatar-cropper-image"
+                          src={uploadSource}
+                          alt={t("avatarUploadPreviewAlt")}
+                          draggable={false}
+                          style={{
+                            transform: `translate(calc(-50% + ${uploadOffset.x}px), calc(-50% + ${uploadOffset.y}px)) scale(${uploadZoom})`,
+                          }}
+                        />
+                        <div className="agent-avatar-cropper-frame" aria-hidden="true">
+                          <span />
+                          <span />
+                          <span />
+                          <span />
+                        </div>
+                        <div
+                          className="agent-avatar-zoom-controls"
+                          aria-label={t("avatarZoomControls")}
+                          onPointerDown={(event) => event.stopPropagation()}
+                        >
+                          <button type="button" aria-label={t("avatarZoomOut")} onClick={() => updateZoom("out")}>
+                            <ZoomOut aria-hidden="true" size={20} strokeWidth={1.8} />
+                          </button>
+                          <button type="button" aria-label={t("avatarZoomIn")} onClick={() => updateZoom("in")}>
+                            <ZoomIn aria-hidden="true" size={20} strokeWidth={1.8} />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      className={`agent-avatar-upload-dropzone ${uploadError ? "error" : ""}`}
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      onDragEnter={preventDefaultDrag}
+                      onDragOver={preventDefaultDrag}
+                      onDrop={handleDrop}
+                    >
+                      <span className="agent-avatar-upload-icon" aria-hidden="true">
+                        <UploadCloud size={20} strokeWidth={1.8} />
+                      </span>
+                      <span className="agent-avatar-upload-copy">
+                        <span>
+                          <strong>{t("avatarUploadClick")}</strong>
+                          {t("avatarUploadDrop")}
+                        </span>
+                        <small>{t("avatarUploadHelp")}</small>
+                      </span>
+                      {uploadError ? <span className="agent-avatar-upload-error">{uploadError}</span> : null}
+                    </button>
+                  )}
+                  <input
+                    ref={fileInputRef}
+                    className="agent-avatar-upload-input"
+                    type="file"
+                    accept="image/svg+xml,image/png,image/jpeg,image/gif"
+                    onChange={handleFileChange}
+                  />
                 </div>
-              </div>
-            </div>,
-            portalContainer ?? document.body,
-          )
-        : null}
+              )}
+            </div>
+            <div className="agent-avatar-editor-actions">
+              <button className="agent-avatar-editor-button secondary" type="button" onClick={closeEditor}>
+                {t("cancel")}
+              </button>
+              <button
+                className="agent-avatar-editor-button primary"
+                type="button"
+                disabled={activeTab === "upload" && !uploadSource}
+                onClick={() => void confirmDraft()}
+              >
+                {t("confirm")}
+              </button>
+            </div>
+          </DialogContent>
+        </DialogRoot>
+      ) : null}
       {open && mode !== "edit" && !disabled ? (
         <div className="agent-avatar-picker-panel" role="radiogroup" aria-label={t("agentAvatar")}>
           {AGENT_AVATAR_GROUPS.map((group) => (

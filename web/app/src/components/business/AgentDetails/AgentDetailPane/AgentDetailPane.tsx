@@ -771,7 +771,6 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
                 value={draft.avatar || item.avatar}
                 t={t}
                 mode="edit"
-                portalContainer={dialogPortalContainer}
                 onChange={(avatar) => updateDraft({ avatar })}
               />
             </div>

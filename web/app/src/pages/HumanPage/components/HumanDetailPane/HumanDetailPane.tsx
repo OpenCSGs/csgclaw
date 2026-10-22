@@ -9,7 +9,6 @@ import type { IMUser, LocaleCode, TranslateFn } from "@/models/conversations";
 type VoidOrPromise = void | Promise<void>;
 
 export type HumanDetailPaneProps = {
-  avatarPortalContainer?: HTMLElement | null;
   avatarBusy?: boolean;
   avatarError?: string;
   descriptionBusy?: boolean;
@@ -22,7 +21,6 @@ export type HumanDetailPaneProps = {
 };
 
 export function HumanDetailPane({
-  avatarPortalContainer,
   avatarBusy = false,
   avatarError = "",
   descriptionBusy = false,
@@ -97,7 +95,6 @@ export function HumanDetailPane({
               value={user.avatar}
               t={t}
               mode="edit"
-              portalContainer={avatarPortalContainer}
               onChange={(avatar) => void onAvatarChange(avatar)}
             />
           </div>

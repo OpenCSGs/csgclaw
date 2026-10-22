@@ -188,24 +188,14 @@ describe("AgentCreateWizard", () => {
   });
 });
 
-it("keeps the nested avatar editor inside the wizard focus scope", async () => {
+it("keeps the wizard open while editing its avatar in a nested dialog", async () => {
   const user = userEvent.setup();
   const close = vi.fn();
   function AvatarHarness() {
-    const [portal, setPortal] = useState<HTMLDivElement | null>(null);
     const [avatar, setAvatar] = useState("");
     return (
       <AgentCreateWizard
-        profile={
-          <AgentAvatarPicker
-            value={avatar}
-            onChange={setAvatar}
-            mode="edit"
-            portalContainer={portal}
-            t={(key) => key}
-          />
-        }
-        onPortalContainer={setPortal}
+        profile={<AgentAvatarPicker value={avatar} onChange={setAvatar} mode="edit" t={(key) => key} />}
         instructions=""
         onInstructionsChange={vi.fn()}
         valid

@@ -127,7 +127,6 @@ export function AgentProfileModal({
   onInstallRuntime = () => {},
   onSave,
 }: AgentProfileModalProps) {
-  const [wizardPortal, setWizardPortal] = useState<HTMLDivElement | null>(null);
   const [mcpServersInvalid, setMCPServersInvalid] = useState(false);
   const createBotKind = agentModalMode === "create" ? agentCreateBotKind : undefined;
   const isNotificationContext = isNotificationBotDraftContext(agentDraft, editingAgent, createBotKind);
@@ -340,7 +339,6 @@ export function AgentProfileModal({
                   value={agentDraft.avatar}
                   t={t}
                   mode="edit"
-                  portalContainer={useWizard ? wizardPortal : undefined}
                   onChange={(avatar) => onAgentDraftChange({ ...agentDraft, avatar })}
                 />
               </div>
@@ -621,7 +619,6 @@ export function AgentProfileModal({
     return (
       <AgentCreateWizard
         profile={editor}
-        onPortalContainer={setWizardPortal}
         instructions={agentDraft.instructions || ""}
         onInstructionsChange={(instructions) => onAgentDraftChange({ ...agentDraft, instructions })}
         valid={!saveDisabled}
