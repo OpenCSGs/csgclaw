@@ -55,13 +55,16 @@ it("fits the popup above its actual anchor within desktop and clipping boundarie
       { wrapper },
     );
     const popup = screen.getByRole("region", { name: "composerResourceConnector" });
-    expect(popup).toHaveStyle({ maxHeight: "172px" });
+    expect(popup).toHaveStyle({ maxHeight: "148px" });
     bottom = 220;
     fireEvent(window, new Event("resize"));
-    await waitFor(() => expect(popup).toHaveStyle({ maxHeight: "112px" }));
+    await waitFor(() => expect(popup).toHaveStyle({ maxHeight: "88px" }));
     screen.getByTestId("clipping-container").style.overflowY = "visible";
     fireEvent(window, new Event("resize"));
-    await waitFor(() => expect(popup).toHaveStyle({ maxHeight: "164px" }));
+    await waitFor(() => expect(popup).toHaveStyle({ maxHeight: "140px" }));
+    document.documentElement.style.removeProperty("--app-overlay-top-inset");
+    fireEvent(window, new Event("resize"));
+    await waitFor(() => expect(popup).toHaveStyle({ maxHeight: "212px" }));
   } finally {
     bounds.mockRestore();
     document.documentElement.style.removeProperty("--app-overlay-top-inset");

@@ -72,10 +72,9 @@ export function ConversationResourcePicker({
     const ancestors: HTMLElement[] = [];
     for (let parent = picker.parentElement; parent; parent = parent.parentElement) ancestors.push(parent);
     const updatePickerMaxHeight = () => {
-      let top = Math.max(
-        window.visualViewport?.offsetTop ?? 0,
-        parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--app-overlay-top-inset")) || 0,
-      );
+      const desktopInset =
+        parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--app-overlay-top-inset")) || 0;
+      let top = Math.max(window.visualViewport?.offsetTop ?? 0, desktopInset);
       for (const parent of ancestors) {
         if (/(auto|scroll|hidden|clip)/.test(getComputedStyle(parent).overflowY)) {
           top = Math.max(top, parent.getBoundingClientRect().top + parent.clientTop);
@@ -83,7 +82,8 @@ export function ConversationResourcePicker({
       }
       // The popup is positioned above its containing block, which can differ
       // from the search field when attachments are present.
-      setPickerMaxHeight(Math.max(0, Math.min(352, picker.getBoundingClientRect().bottom - top - 8)));
+      const topClearance = desktopInset > 0 ? 32 : 8;
+      setPickerMaxHeight(Math.max(0, Math.min(352, picker.getBoundingClientRect().bottom - top - topClearance)));
     };
     updatePickerMaxHeight();
     const observer = new ResizeObserver(updatePickerMaxHeight);
