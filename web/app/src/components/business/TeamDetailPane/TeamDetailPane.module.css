@@ -12,7 +12,7 @@
 }
 
 .teamDetailHeader {
-  grid-template-columns: 48px minmax(0, 1fr);
+  grid-template-columns: 48px minmax(0, 1fr) auto;
   align-items: center;
   gap: 20px;
   padding: 18px 22px;
@@ -24,12 +24,23 @@
 
 .teamDetailToolbar {
   display: flex;
-  grid-column: 1 / -1;
+  grid-column: auto;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: flex-start;
+  justify-content: flex-end;
   gap: 8px;
   min-width: 0;
+}
+
+@media (max-width: 760px) {
+  .teamDetailHeader {
+    grid-template-columns: 48px minmax(0, 1fr);
+  }
+
+  .teamDetailToolbar {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+  }
 }
 
 .teamDetailToolbarButton {

@@ -89,8 +89,14 @@
 .actions {
   display: flex;
   align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
   gap: 4px;
-  padding: 4px 10px 10px;
+  padding: 4px 10px 8px;
+}
+.addButton {
+  flex: 0 0 auto;
+  align-self: center;
 }
 .page .actions .send {
   border-radius: 50%;

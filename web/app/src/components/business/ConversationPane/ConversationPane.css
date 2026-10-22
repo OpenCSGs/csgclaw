@@ -1510,7 +1510,7 @@ button.message-file-attachment {
   min-height: var(--composer-add-control-size);
   padding: 0;
   border-radius: 50%;
-  color: var(--text);
+  color: var(--muted);
 }
 
 .composer-add-button svg {
@@ -1525,7 +1525,7 @@ button.message-file-attachment {
 
 .composer-add-button:hover:not(:disabled),
 .btn.composer-add-button:hover:not(:disabled) {
-  background: var(--field);
+  background: var(--panel-soft);
   color: var(--text);
 }
 
@@ -1584,6 +1584,10 @@ button.message-file-attachment {
 .composer-add-menu-item:focus-visible {
   outline: none;
   background: var(--field);
+}
+
+:root:not([data-theme="dark"]) .composer-add-menu-item:is(:hover, :focus-visible) {
+  background: var(--panel-soft);
 }
 
 .mention-picker {

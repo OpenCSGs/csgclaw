@@ -31,7 +31,7 @@ export function HumanPage() {
         }}
       >
         <DialogHeader>
-          <DialogTitle>{controller.t("humanSection")}</DialogTitle>
+          <DialogTitle>{controller.t("profileLabel")}</DialogTitle>
           <DialogCloseButton label={controller.t("close")} />
         </DialogHeader>
         {content}

@@ -1,6 +1,7 @@
-import { useId, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { BookOpen, Boxes, Wrench } from "lucide-react";
 import { Button, LinkButton, TextInput } from "@/components/ui";
+import { ConnectorGitLabIcon } from "@/components/ui/Icons";
 import { useConversationResources } from "@/hooks/workspace/useConversationResources";
 import { isComposerKeyboardEventComposing } from "@/models/composer";
 import { maxResourceReferences, resourceKey, type ResourceSnapshot } from "@/models/conversationResources";
@@ -38,6 +39,8 @@ export function ConversationResourcePicker({
 }) {
   const [query, setQuery] = useState("");
   const [activeKey, setActiveKey] = useState<string | null>(null);
+  const [pickerMaxHeight, setPickerMaxHeight] = useState(352);
+  const searchRef = useRef<HTMLDivElement>(null);
   const activeRef = useRef<HTMLButtonElement>(null);
   const listID = useId();
   const resourceType = kind === "knowledge" ? "knowledge_base" : kind;
@@ -62,8 +65,24 @@ export function ConversationResourcePicker({
     activeRef.current?.scrollIntoView({ block: "nearest" });
   }, [activeKey, activeIndex]);
 
+  useEffect(() => {
+    const updatePickerMaxHeight = () => {
+      const top = searchRef.current?.getBoundingClientRect().top;
+      if (top === undefined) return;
+      setPickerMaxHeight(Math.max(0, Math.min(352, top - 16)));
+    };
+    updatePickerMaxHeight();
+    window.addEventListener("resize", updatePickerMaxHeight);
+    window.addEventListener("scroll", updatePickerMaxHeight, true);
+    return () => {
+      window.removeEventListener("resize", updatePickerMaxHeight);
+      window.removeEventListener("scroll", updatePickerMaxHeight, true);
+    };
+  }, []);
+
   return (
     <div
+      ref={searchRef}
       className={`${styles.search} ${className ?? ""}`.trim()}
       onBlur={(event) => {
         if (!event.currentTarget.contains(event.relatedTarget)) onClose(false);
@@ -76,7 +95,7 @@ export function ConversationResourcePicker({
         }
       }}
     >
-      <section className={styles.picker} aria-label={label}>
+      <section className={styles.picker} style={{ maxHeight: `min(352px, ${pickerMaxHeight}px)` }} aria-label={label}>
         <div id={listID} role="listbox" aria-label={label} aria-busy={resource.loading} className={styles.list}>
           {resource.items.map((item, index) => {
             const key = resourceKey(item);
@@ -99,7 +118,13 @@ export function ConversationResourcePicker({
                 }}
                 onClick={() => onPick(item)}
               >
-                <Icon size={18} strokeWidth={1.8} aria-hidden="true" />
+                {kind === "connector" && item.source === "app" && item.description === "feishu" ? (
+                  <img className={styles.productIcon} src="icons/feishu.png" width={18} height={18} alt="" />
+                ) : kind === "connector" && item.source === "app" && item.description === "gitlab" ? (
+                  <ConnectorGitLabIcon size={18} aria-hidden="true" />
+                ) : (
+                  <Icon size={18} strokeWidth={1.8} aria-hidden="true" />
+                )}
                 <span className={styles.copy}>
                   <strong>{item.name}</strong>
                   {item.description ? <span className={styles.description}>{item.description}</span> : null}

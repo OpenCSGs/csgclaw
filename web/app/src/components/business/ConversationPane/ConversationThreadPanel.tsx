@@ -15,14 +15,14 @@ import { messageListScrollKey, useMessageListAutoScroll } from "@/hooks/workspac
 import { DiagnosticMessageAction } from "@/components/business/TurnDiagnostics";
 import { isImageAttachment } from "@/models/attachments";
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
-import { X } from "lucide-react";
+import { ArrowUp, X } from "lucide-react";
+import { avatarFallbackText } from "@/shared/avatar";
 import { AgentAvatarContent } from "@/components/business/AgentAvatar";
 import { ImageGenerationStatus } from "./ImageGenerationStatus";
 import { MessageContent, MessagePreviewText } from "@/components/business/MessageContent";
 import type { CitationSelectHandler, ProgressControlSlots } from "@/components/business/MessageContent/types";
 import type { DocumentPreviewRequest } from "@/components/business/DocumentPreviewPanel";
 import { Button, Tooltip } from "@/components/ui";
-import { IconImage } from "@/components/ui/Icons";
 import { resolveAgentAvatarFallback, type AgentLike } from "@/models/agents";
 import type { AttachmentDraft } from "@/models/attachments";
 import {
@@ -49,7 +49,6 @@ import {
 } from "@/models/composer";
 import {
   formatMessageTimestampParts,
-  formatThreadReplyCount,
   groupVideoGenerationMessages,
   isToolCallMessage,
   resolveAgentForUser,
@@ -85,6 +84,7 @@ type ThreadMentionState = {
 };
 
 export type ConversationThreadPanelProps = ComposerResourceProps & {
+  currentUserID?: string;
   fileScope?: ChatFileScope;
   renderTurnControls?: (message: IMMessage) => ProgressControlSlots | null;
   agents?: AgentLike[];
@@ -128,6 +128,7 @@ export function ConversationThreadPanel({
   fileScope,
   renderTurnControls,
   thread,
+  currentUserID,
   agents = [],
   loading,
   error,
@@ -365,6 +366,7 @@ export function ConversationThreadPanel({
           <div className="thread-root">
             <ThreadMessage
               message={visibleRoot}
+              currentUserID={currentUserID}
               progressControls={renderTurnControls?.(visibleRoot)}
               agents={agents}
               usersById={usersById}
@@ -381,12 +383,12 @@ export function ConversationThreadPanel({
           </div>
         ) : null}
         <div className="thread-replies">
-          <div className="thread-section-title">{formatThreadReplyCount(displayReplies.length, t)}</div>
           {displayReplies.length > 0 ? (
             displayReplies.map((message) => (
               <ThreadMessage
                 key={message.id}
                 message={message}
+                currentUserID={currentUserID}
                 progressControls={renderTurnControls?.(message)}
                 agents={agents}
                 usersById={usersById}
@@ -450,165 +452,171 @@ export function ConversationThreadPanel({
               onSelect={insertThreadMention}
             />
           ) : null}
-          <AttachmentDraftStrip
-            drafts={attachmentDrafts}
-            t={t}
-            onPreviewAttachment={onPreviewAttachment}
-            onRemove={onRemoveAttachment}
-          />
-          <div
-            ref={threadEditorRef}
-            hidden={resourcePicker.active}
-            contentEditable={!disabled}
-            suppressContentEditableWarning={true}
-            role="textbox"
-            aria-placeholder={disabled ? t("profileIncomplete") : t("threadComposerPlaceholder")}
-            aria-label={t("threadComposerPlaceholder")}
-            className={`thread-composer-editor ${disabled ? "disabled" : ""}`}
-            data-placeholder={disabled ? t("profileIncomplete") : t("threadComposerPlaceholder")}
-            onInput={(event) => syncThreadDraft(event.currentTarget)}
-            onClick={(event) => {
-              if (!disabled && removeComposerResourceToken(event.currentTarget, event.target)) {
-                syncThreadDraft(event.currentTarget);
-              } else {
-                syncThreadQueryState(event.currentTarget);
-              }
-            }}
-            onKeyDown={(event) => {
-              if (
-                disabled ||
-                isComposerKeyboardEventComposing(event) ||
-                (event.target instanceof Element && event.target.closest("[data-composer-resource-remove]")) ||
-                fileMentions.handleKeyDown(event)
-              ) {
-                return;
-              }
-              if (event.key === "Backspace" && removeAdjacentMentionToken(threadEditorRef.current, "backward")) {
-                event.preventDefault();
-                syncThreadDraft(event.currentTarget);
-                return;
-              }
-              if (event.key === "Delete" && removeAdjacentMentionToken(threadEditorRef.current, "forward")) {
-                event.preventDefault();
-                syncThreadDraft(event.currentTarget);
-                return;
-              }
-              if (
-                handleSlashPickerNavigation({
-                  event,
-                  candidates: threadSlashCandidates,
-                  activeIndex: threadSlashIndex,
-                  pickerOpen: threadSlashPickerOpen,
-                  continuation: threadSlashContinuation,
-                  onIndexChange: (value) => onSetThreadSlashIndex(value),
-                  onApply: (value) => onApplyThreadSlashCandidate(value),
-                  onDismiss: () => {
-                    onDismissThreadSlashPicker();
-                    setMentionState(null);
-                    setMentionIndex(0);
-                  },
-                  onPrepareNavigation: () => {
-                    setMentionState(null);
-                    setMentionIndex(0);
-                  },
-                })
-              ) {
-                return;
-              }
-              if (threadMentionCandidates.length > 0) {
-                if (event.key === "ArrowDown") {
-                  event.preventDefault();
-                  setMentionIndex((value) => (value + 1) % threadMentionCandidates.length);
+          <div className="thread-composer-box">
+            <AttachmentDraftStrip
+              drafts={attachmentDrafts}
+              t={t}
+              onPreviewAttachment={onPreviewAttachment}
+              onRemove={onRemoveAttachment}
+            />
+            <div
+              ref={threadEditorRef}
+              hidden={resourcePicker.active}
+              contentEditable={!disabled}
+              suppressContentEditableWarning={true}
+              role="textbox"
+              aria-placeholder={disabled ? t("profileIncomplete") : t("threadComposerPlaceholder")}
+              aria-label={t("threadComposerPlaceholder")}
+              className={`thread-composer-editor ${disabled ? "disabled" : ""}`}
+              data-placeholder={disabled ? t("profileIncomplete") : t("threadComposerPlaceholder")}
+              onInput={(event) => syncThreadDraft(event.currentTarget)}
+              onClick={(event) => {
+                if (!disabled && removeComposerResourceToken(event.currentTarget, event.target)) {
+                  syncThreadDraft(event.currentTarget);
+                } else {
+                  syncThreadQueryState(event.currentTarget);
+                }
+              }}
+              onKeyDown={(event) => {
+                if (
+                  disabled ||
+                  isComposerKeyboardEventComposing(event) ||
+                  (event.target instanceof Element && event.target.closest("[data-composer-resource-remove]")) ||
+                  fileMentions.handleKeyDown(event)
+                ) {
                   return;
                 }
-                if (event.key === "ArrowUp") {
+                if (event.key === "Backspace" && removeAdjacentMentionToken(threadEditorRef.current, "backward")) {
                   event.preventDefault();
-                  setMentionIndex(
-                    (value) => (value - 1 + threadMentionCandidates.length) % threadMentionCandidates.length,
-                  );
+                  syncThreadDraft(event.currentTarget);
+                  return;
+                }
+                if (event.key === "Delete" && removeAdjacentMentionToken(threadEditorRef.current, "forward")) {
+                  event.preventDefault();
+                  syncThreadDraft(event.currentTarget);
+                  return;
+                }
+                if (
+                  handleSlashPickerNavigation({
+                    event,
+                    candidates: threadSlashCandidates,
+                    activeIndex: threadSlashIndex,
+                    pickerOpen: threadSlashPickerOpen,
+                    continuation: threadSlashContinuation,
+                    onIndexChange: (value) => onSetThreadSlashIndex(value),
+                    onApply: (value) => onApplyThreadSlashCandidate(value),
+                    onDismiss: () => {
+                      onDismissThreadSlashPicker();
+                      setMentionState(null);
+                      setMentionIndex(0);
+                    },
+                    onPrepareNavigation: () => {
+                      setMentionState(null);
+                      setMentionIndex(0);
+                    },
+                  })
+                ) {
+                  return;
+                }
+                if (threadMentionCandidates.length > 0) {
+                  if (event.key === "ArrowDown") {
+                    event.preventDefault();
+                    setMentionIndex((value) => (value + 1) % threadMentionCandidates.length);
+                    return;
+                  }
+                  if (event.key === "ArrowUp") {
+                    event.preventDefault();
+                    setMentionIndex(
+                      (value) => (value - 1 + threadMentionCandidates.length) % threadMentionCandidates.length,
+                    );
+                    return;
+                  }
+                  if (event.key === "Enter" && !event.shiftKey) {
+                    event.preventDefault();
+                    insertThreadMention(threadMentionCandidates[mentionIndex]);
+                    return;
+                  }
+                  if (event.key === "Escape") {
+                    event.preventDefault();
+                    setMentionState(null);
+                    setMentionIndex(0);
+                    return;
+                  }
+                }
+                if (event.key === "Enter" && event.shiftKey) {
+                  event.preventDefault();
+                  insertComposerLineBreak(threadEditorRef.current);
+                  syncThreadDraft(threadEditorRef.current);
                   return;
                 }
                 if (event.key === "Enter" && !event.shiftKey) {
                   event.preventDefault();
-                  insertThreadMention(threadMentionCandidates[mentionIndex]);
-                  return;
+                  onSend();
                 }
-                if (event.key === "Escape") {
+              }}
+              onKeyUp={(event) => syncThreadQueryState(event.currentTarget)}
+              onPaste={(event) => {
+                const files = filesFromDataTransfer(event.clipboardData);
+                const pasted = event.clipboardData?.getData("text/plain") ?? "";
+                if (files.length > 0) {
                   event.preventDefault();
-                  setMentionState(null);
-                  setMentionIndex(0);
-                  return;
+                  handleFiles(files);
+                  if (!pasted) {
+                    return;
+                  }
+                } else {
+                  event.preventDefault();
                 }
-              }
-              if (event.key === "Enter" && event.shiftKey) {
-                event.preventDefault();
-                insertComposerLineBreak(threadEditorRef.current);
+                const segments = normalizeTextMentions([{ type: "text", text: pasted }], mentionableUsersByName);
+                if (segments.some((segment) => segment.type === "mention")) {
+                  insertComposerSegmentsAtSelection(segments);
+                } else {
+                  insertPlainTextAtSelection(pasted);
+                }
                 syncThreadDraft(threadEditorRef.current);
-                return;
-              }
-              if (event.key === "Enter" && !event.shiftKey) {
-                event.preventDefault();
-                onSend();
-              }
-            }}
-            onKeyUp={(event) => syncThreadQueryState(event.currentTarget)}
-            onPaste={(event) => {
-              const files = filesFromDataTransfer(event.clipboardData);
-              const pasted = event.clipboardData?.getData("text/plain") ?? "";
-              if (files.length > 0) {
-                event.preventDefault();
-                handleFiles(files);
-                if (!pasted) {
-                  return;
-                }
-              } else {
-                event.preventDefault();
-              }
-              const segments = normalizeTextMentions([{ type: "text", text: pasted }], mentionableUsersByName);
-              if (segments.some((segment) => segment.type === "mention")) {
-                insertComposerSegmentsAtSelection(segments);
-              } else {
-                insertPlainTextAtSelection(pasted);
-              }
-              syncThreadDraft(threadEditorRef.current);
-            }}
-            onCompositionEnd={() => {
-              syncThreadDraft(threadEditorRef.current);
-            }}
-          />
-          {resourcePicker.pickerProps ? (
-            <ConversationResourcePicker
-              key={`${resourceAgentID}:${resourcePicker.pickerProps.kind}`}
-              {...resourcePicker.pickerProps}
-              t={t}
+              }}
+              onCompositionEnd={() => {
+                syncThreadDraft(threadEditorRef.current);
+              }}
             />
-          ) : null}
-          <input
-            ref={fileInputRef}
-            className="sr-only"
-            type="file"
-            multiple
-            aria-label={t("addAttachment")}
-            onChange={(event) => {
-              handleFiles(Array.from(event.currentTarget.files || []));
-              event.currentTarget.value = "";
-            }}
-          />
-          <ComposerAddMenu
-            onOpenResourcePicker={resourcePicker.open}
-            disabled={disabled}
-            t={t}
-            onAddFiles={() => fileInputRef.current?.click()}
-          />
-          <Button
-            variant="primary"
-            className="thread-send-button"
-            disabled={disabled || resourcePicker.active || !canSendComposer(draftSegments, attachmentDrafts.length)}
-            onClick={onSend}
-          >
-            <span aria-hidden="true">{IconImage("send")}</span>
-            <span>{t("send")}</span>
-          </Button>
+            {resourcePicker.pickerProps ? (
+              <ConversationResourcePicker
+                key={`${resourceAgentID}:${resourcePicker.pickerProps.kind}`}
+                {...resourcePicker.pickerProps}
+                t={t}
+              />
+            ) : null}
+            <input
+              ref={fileInputRef}
+              className="sr-only"
+              type="file"
+              multiple
+              aria-label={t("addAttachment")}
+              onChange={(event) => {
+                handleFiles(Array.from(event.currentTarget.files || []));
+                event.currentTarget.value = "";
+              }}
+            />
+            <div className="thread-composer-toolbar">
+              <ComposerAddMenu
+                onOpenResourcePicker={resourcePicker.open}
+                disabled={disabled}
+                t={t}
+                onAddFiles={() => fileInputRef.current?.click()}
+              />
+              <Button
+                variant="primary"
+                className="composer-send-button"
+                iconOnly
+                size="lg"
+                aria-label={t("send")}
+                disabled={disabled || resourcePicker.active || !canSendComposer(draftSegments, attachmentDrafts.length)}
+                onClick={onSend}
+              >
+                <ArrowUp aria-hidden="true" size={22} strokeWidth={1.5} />
+              </Button>
+            </div>
+          </div>
         </div>
       )}
     </aside>
@@ -616,6 +624,7 @@ export function ConversationThreadPanel({
 }
 
 type ThreadMessageProps = {
+  currentUserID?: string;
   progressControls?: ProgressControlSlots | null;
   agents?: AgentLike[];
   compact?: boolean;
@@ -633,6 +642,7 @@ type ThreadMessageProps = {
 };
 
 function ThreadMessage({
+  currentUserID,
   progressControls,
   message,
   agents = [],
@@ -653,14 +663,15 @@ function ThreadMessage({
   const fallbackName = message.sender_id || "";
   const fallbackAvatar = fallbackName.slice(0, 1).toUpperCase();
   const avatar = user?.avatar || messageAgent?.avatar || fallbackAvatar;
-  const fallback = messageAgent ? resolveAgentAvatarFallback(messageAgent, usersById) : avatar;
+  const own = Boolean(currentUserID && (user?.id === currentUserID || message.sender_id === currentUserID));
+  const fallback = messageAgent ? resolveAgentAvatarFallback(messageAgent, usersById) : avatarFallbackText(avatar, user?.name, user?.id);
   const name = user?.name || fallbackName;
   const timestampParts = formatMessageTimestampParts(message.created_at, locale, t);
   const isVideoGeneration = Boolean(message.metadata?.video_generation);
 
   return (
     <div
-      className={`thread-message ${compact ? "compact" : ""} ${message.metadata?.image_generation || isVideoGeneration ? "image-generation-message" : ""}`.trim()}
+      className={`thread-message ${own ? "own" : ""} ${compact ? "compact" : ""} ${message.metadata?.image_generation || isVideoGeneration ? "image-generation-message" : ""}`.trim()}
       data-message-id={message.id || undefined}
     >
       {user ? (

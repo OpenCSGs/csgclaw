@@ -12,7 +12,7 @@
   z-index: var(--z-page-popover);
   display: flex;
   flex-direction: column;
-  max-height: min(352px, calc(100dvh - 240px));
+  max-height: min(352px, calc(100dvh - 32px));
   padding: 8px;
   border: 1px solid var(--line);
   border-radius: 14px;
@@ -52,6 +52,11 @@
 
 .option > svg {
   flex-shrink: 0;
+}
+
+.productIcon {
+  flex-shrink: 0;
+  object-fit: contain;
 }
 
 .option:is([aria-selected="true"], :hover):not(:disabled) {

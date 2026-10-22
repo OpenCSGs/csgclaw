@@ -59,7 +59,6 @@ export function TaskModelPicker({
         {
           value: "",
           alwaysVisible: true,
-          separatorAfter: true,
           textValue: t("iaModelFollowAgent"),
           label: (
             <ModelOptionLabel

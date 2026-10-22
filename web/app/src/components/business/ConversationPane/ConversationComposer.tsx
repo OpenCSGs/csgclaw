@@ -369,7 +369,7 @@ export const ConversationComposer = memo(function ConversationComposer({
                   {isSending ? (
                     <Square aria-hidden="true" size={16} fill="currentColor" />
                   ) : (
-                    <ArrowUp aria-hidden="true" size={22} strokeWidth={2.25} />
+                    <ArrowUp aria-hidden="true" size={22} strokeWidth={1.5} />
                   )}
                 </Button>
               </span>

@@ -327,6 +327,7 @@ function StartTaskForm({
                   onOpenResourcePicker={resourcePicker.open}
                   disabled={busy}
                   t={t}
+                  buttonClassName={styles.addButton}
                   onAddFiles={() => fileInput.current?.click()}
                 />
                 <TaskConfigurationToolbar

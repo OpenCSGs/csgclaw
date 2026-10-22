@@ -490,6 +490,7 @@ function ConversationPaneContent({
 
   const threadPanel = activeThreadRootID ? (
     <Conversation.ThreadPanel
+      currentUserID={currentUserID}
       resourceAgentID={resourceAgentID}
       onPickResources={onPickThreadResources}
       renderTurnControls={renderTurnControls}
@@ -545,7 +546,7 @@ function ConversationPaneContent({
         selectedVisibleMessageCount={visibleMessages.length}
         showChannelTools={showChannelTools}
         showInviteAction={!isDirectConversation(conversation)}
-        showChannelToolsAction={isDirectConversation(conversation)}
+        showChannelToolsAction={false}
         memberManagementOpen={Boolean(memberPanelProps)}
         showMemberListAction={false}
         showToolCalls={showToolCalls}

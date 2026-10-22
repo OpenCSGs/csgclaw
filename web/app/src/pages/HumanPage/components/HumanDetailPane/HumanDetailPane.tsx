@@ -59,10 +59,17 @@ export function HumanDetailPane({
     );
   }
 
-  const displayName = user.name || user.id;
+  const displayName = user.id === "user-admin" ? t("iaMembersPanelYou") : user.name || user.id;
   const role = localizeRole(user.role || "admin", t);
   const online = user.is_online !== false;
   const currentDescription = String(user.description || "");
+  const defaultAdminDescription =
+    "Human operator. Agents can @admin to ask clarifying questions, request confirmation, and double-check important decisions before continuing.";
+  const localizedDefaultAdminDescription = t("humanDefaultAdminDescription");
+  const displayDescription =
+    user.id === "user-admin" && currentDescription === defaultAdminDescription
+      ? localizedDefaultAdminDescription
+      : currentDescription;
   const descriptionChanged = descriptionDraft.trim() !== currentDescription.trim();
   const saveDescriptionIfChanged = (description: string) => {
     if (skipDescriptionAutosaveRef.current) {
@@ -134,7 +141,7 @@ export function HumanDetailPane({
                 onClick={() => setIsEditingDescription(true)}
               >
                 <span className="entity-description-display-copy">
-                  {descriptionDraft || t("humanDescriptionLabel")}
+                  {displayDescription || t("humanDescriptionLabel")}
                 </span>
                 <span className="entity-description-display-icon" aria-hidden="true">
                   <Edit3 size={16} strokeWidth={1.8} />

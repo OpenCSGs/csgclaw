@@ -113,11 +113,18 @@
 
 .message-action-controls.has-token-usage {
   position: static;
-  opacity: 1;
+  opacity: 0;
+  pointer-events: none;
   width: 100%;
   box-sizing: border-box;
   flex-wrap: nowrap;
   margin-top: 6px;
+}
+
+.message-row:hover .message-hover-actions.has-token-usage,
+.message-row:focus-within .message-hover-actions.has-token-usage {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .message-row:not(.own) .message-hover-actions {
@@ -384,7 +391,7 @@
   padding: 16px;
   display: grid;
   align-content: start;
-  gap: 16px;
+  gap: 20px;
 }
 
 .thread-root,
@@ -398,10 +405,43 @@
   grid-template-columns: 30px minmax(0, 1fr);
   gap: 10px;
   align-items: start;
+  padding-bottom: 28px;
 }
 
 .thread-message.compact {
   opacity: 0.86;
+}
+
+.thread-message.own {
+  grid-template-columns: minmax(0, 1fr) 40px;
+}
+.thread-message.own .thread-message-avatar {
+  grid-column: 2;
+  grid-row: 1;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  font-size: 13px;
+}
+.thread-message.own .thread-message-main {
+  grid-column: 1;
+  grid-row: 1;
+  display: grid;
+  justify-items: end;
+}
+.thread-message.own .message-meta {
+  justify-content: flex-end;
+}
+.thread-message.own .thread-message-bubble {
+  padding: 10px 14px;
+  border: 0;
+  border-radius: var(--radius-md) 0 var(--radius-md) var(--radius-md);
+  background: color-mix(in oklab, var(--gray-100) 72%, var(--gray-200));
+  color: var(--gray-900);
+}
+:root[data-theme="dark"] .thread-message.own .thread-message-bubble {
+  background: var(--panel-soft);
+  color: var(--text);
 }
 
 .thread-message-avatar {
@@ -435,6 +475,7 @@ button.thread-message-avatar:focus-visible {
 }
 
 .thread-message-actions {
+  justify-content: flex-start;
   position: absolute;
   top: 100%;
   left: 0;
@@ -443,14 +484,26 @@ button.thread-message-avatar:focus-visible {
   z-index: 2;
   padding-top: 8px;
   opacity: 0;
-  pointer-events: auto;
+  pointer-events: none;
   transition: opacity 140ms ease;
+}
+
+.thread-message-actions.has-token-usage {
+  position: absolute;
+  margin-top: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.thread-message.own .thread-message-actions {
+  justify-content: flex-end;
 }
 
 .thread-message:hover .thread-message-actions,
 .thread-message:focus-within .thread-message-actions,
 .thread-message-actions:hover {
   opacity: 1;
+  pointer-events: auto;
 }
 
 .thread-message-bubble {
@@ -478,6 +531,11 @@ button.thread-message-avatar:focus-visible {
 }
 
 .thread-composer {
+  --composer-add-control-size: 40px;
+  --composer-add-icon-size: 22px;
+  --composer-send-control-size: 44px;
+  --composer-send-icon-size: 20px;
+
   position: relative;
   padding: 14px;
   border-top: 1px solid var(--line);
@@ -496,15 +554,15 @@ button.thread-message-avatar:focus-visible {
 }
 
 .thread-composer-editor {
-  min-height: 84px;
-  max-height: 160px;
+  min-height: 52px;
+  max-height: 168px;
   overflow: auto;
-  padding: 11px 12px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-md);
-  background: var(--field);
+  padding: 12px 14px 6px;
+  border: 0;
+  background: transparent;
   color: var(--text);
   font: inherit;
+  font-size: 14px;
   line-height: 1.5;
   outline: none;
   white-space: pre-wrap;
@@ -526,7 +584,7 @@ button.thread-message-avatar:focus-visible {
   outline: none;
 }
 
-.thread-composer-editor:focus-visible {
+.thread-composer-box:focus-within {
   outline: none;
   border-color: var(--brand-500);
   box-shadow: var(--focus-ring);
@@ -555,16 +613,23 @@ button.thread-message-avatar:focus-visible {
   height: 14px;
 }
 
-.thread-composer {
-  grid-template-columns: minmax(0, 1fr) auto auto;
+.thread-composer-box {
+  position: relative;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--field);
 }
 
-.thread-composer .attachment-draft-strip-shell {
-  grid-column: 1 / -1;
-}
-
-.thread-composer-editor {
-  grid-column: 1;
+.thread-composer-toolbar {
+  display: flex;
+  min-height: calc(var(--composer-send-control-size) + 8px);
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 2px 6px 6px;
 }
 
 .thread-attach-button,
