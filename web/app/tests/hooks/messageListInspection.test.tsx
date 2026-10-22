@@ -65,7 +65,9 @@ function atBottom() {
 }
 describe("transcript scrolling while inspecting statistics", () => {
   it("shows the new reply notice only after the reply finishes", async () => {
-    const view = render(<Harness active={false} inspecting={false} latestMessageIsReply waitingForReply revision={1} />);
+    const view = render(
+      <Harness active={false} inspecting={false} latestMessageIsReply waitingForReply revision={1} />,
+    );
     const chat = atBottom();
     view.rerender(<Harness inspecting={false} latestMessageIsReply waitingForReply revision={1} />);
     await act(() => new Promise((resolve) => setTimeout(resolve, 40)));

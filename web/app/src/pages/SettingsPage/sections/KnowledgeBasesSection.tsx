@@ -267,9 +267,7 @@ function MarketPane({
   }
 
   if (items.length === 0) {
-    return (
-      <KnowledgeEmptyState t={t} />
-    );
+    return <KnowledgeEmptyState t={t} />;
   }
 
   return (

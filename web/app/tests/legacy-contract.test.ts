@@ -123,7 +123,9 @@ describe("legacy UI contract", () => {
     expect(threadMessageActionsRule).toContain("top: 100%;");
     expect(threadMessageActionsRule).toContain("left: 0;");
     expect(threadMessageActionsRule).toContain("padding-top: 8px;");
-    expect(threadMessageActionsRule).toContain("pointer-events: auto;");
+    expect(threadMessageActionsRule).toContain("pointer-events: none;");
+    expect(styleRule(".thread-message-actions:hover")).toContain("pointer-events: auto;");
+    expect(styles).toContain(".thread-message:focus-within .thread-message-actions");
     expect(styles).toContain(".message-hover-actions:hover");
     expect(styles).toContain(".thread-message-actions:hover");
     expect(styles).not.toMatch(

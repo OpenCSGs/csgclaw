@@ -1,8 +1,4 @@
-import {
-  ResourceList,
-  ResourceListCard,
-  ResourceStatus,
-} from "@/components/business/ResourceListCard";
+import { ResourceList, ResourceListCard, ResourceStatus } from "@/components/business/ResourceListCard";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { ArrowUpRight, BookOpen, Plus, RefreshCw } from "lucide-react";

@@ -57,7 +57,9 @@ export function FeedbackDialog(props: Props) {
             />
           </label>
           <div className={styles.label}>
-            <span>{t("feedbackImages")} ({images.length}/{MAX_FEEDBACK_IMAGES})</span>
+            <span>
+              {t("feedbackImages")} ({images.length}/{MAX_FEEDBACK_IMAGES})
+            </span>
             <input
               ref={imageInputRef}
               className={styles.fileInput}

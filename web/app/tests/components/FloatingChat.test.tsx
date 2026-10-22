@@ -243,7 +243,7 @@ describe("FloatingChat manager prompts", () => {
     }
   });
 
-  it("preserves the floating conversation tools menu alongside side-panel actions", () => {
+  it("hides the floating conversation tools menu and preserves side-panel actions", () => {
     renderOpenManagerFloatingChat({
       id: "manager-chat",
       is_direct: true,
@@ -255,7 +255,7 @@ describe("FloatingChat manager prompts", () => {
     expect(screen.getByRole("button", { name: "conversationActivityOpen" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "chatFiles" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "chatBrowser" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Channel tools" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Channel tools" })).not.toBeInTheDocument();
   });
 
   it("keeps the floating chat attachment menu free of legacy connectors", async () => {

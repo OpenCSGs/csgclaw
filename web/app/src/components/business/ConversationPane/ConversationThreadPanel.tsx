@@ -664,7 +664,9 @@ function ThreadMessage({
   const fallbackAvatar = fallbackName.slice(0, 1).toUpperCase();
   const avatar = user?.avatar || messageAgent?.avatar || fallbackAvatar;
   const own = Boolean(currentUserID && (user?.id === currentUserID || message.sender_id === currentUserID));
-  const fallback = messageAgent ? resolveAgentAvatarFallback(messageAgent, usersById) : avatarFallbackText(avatar, user?.name, user?.id);
+  const fallback = messageAgent
+    ? resolveAgentAvatarFallback(messageAgent, usersById)
+    : avatarFallbackText(avatar, user?.name, user?.id);
   const name = user?.name || fallbackName;
   const timestampParts = formatMessageTimestampParts(message.created_at, locale, t);
   const isVideoGeneration = Boolean(message.metadata?.video_generation);
