@@ -6,7 +6,7 @@ import {
 } from "@/models/taskConfiguration";
 import { useMemo, useRef, useState } from "react";
 import { useSearchParams, useLocation } from "react-router-dom";
-import { ArrowUp, FileText, FolderGit2, Terminal, Users, X } from "lucide-react";
+import { ArrowUp, BookOpen, ClipboardCheck, FileText, Presentation, Search, Users, X } from "lucide-react";
 import { Button } from "@/components/ui";
 import { useWorkspaceControllerContext } from "@/hooks/workspace";
 import { sendMessageRequest } from "@/api/im";
@@ -197,14 +197,14 @@ function StartTaskForm({
 
   const examples = selectedAgent
     ? [
-        { key: "read", icon: FolderGit2 },
-        { key: "run", icon: Terminal },
-        { key: "document", icon: FileText },
+        { key: "knowledgeCard", icon: BookOpen },
+        { key: "meetingNotes", icon: FileText },
+        { key: "aiTrends", icon: Presentation },
       ]
     : [
-        { key: "review", icon: Users },
-        { key: "research", icon: FolderGit2 },
-        { key: "plan", icon: FileText },
+        { key: "members", icon: Users },
+        { key: "research", icon: Search },
+        { key: "review", icon: ClipboardCheck },
       ];
   return (
     <section className={styles.page}>

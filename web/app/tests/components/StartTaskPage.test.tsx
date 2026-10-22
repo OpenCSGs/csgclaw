@@ -6,7 +6,8 @@ import { MemoryRouter, useNavigate } from "react-router-dom";
 import { WorkspaceControllerProvider, type WorkspaceController } from "@/hooks/workspace";
 import { sendMessageRequest } from "@/api/im";
 import { StartTaskPage } from "@/pages/StartTaskPage/StartTaskPage";
-import type { IMConversation } from "@/models/conversations";
+import type { IMConversation, LocaleCode } from "@/models/conversations";
+import { createTranslator } from "@/shared/i18n";
 import { TASK_EXAMPLES_HIDDEN_STORAGE_KEY } from "@/shared/storage/keys";
 
 vi.mock("@/api/agentResources", () => ({ fetchConversationResourceBatch: vi.fn() }));
@@ -34,6 +35,7 @@ function setup(
     provider?: string;
     authenticated?: boolean;
     configuration?: { model_provider_id: string; model_id: string };
+    locale?: LocaleCode;
   } = {},
 ) {
   const create = vi.fn().mockResolvedValue(room);
@@ -41,15 +43,16 @@ function setup(
   const onMessage = vi.fn();
   const onCreateAgent = vi.fn();
   const requireAuth = vi.fn(() => options.authenticated ?? true);
+  const t = options.locale ? createTranslator(options.locale) : (key: string) => key;
   const controller = {
     ready: true,
-    t: (key: string) => key,
+    t,
     openAgentSettings: vi.fn(),
     agentViewProps: { authStatuses: { codex: { authenticated: options.authenticated ?? true } } },
     taskEntry: { create, open, onMessage },
     sidebarProps: {
-      t: (key: string) => key,
-      locale: "zh",
+      t,
+      locale: options.locale || "zh",
       currentUserID: "user-admin",
       onRequireOpenCSGAuthentication: requireAuth,
       usersById: new Map(),
@@ -113,6 +116,63 @@ describe("task example visibility", () => {
     localStorage.setItem(TASK_EXAMPLES_HIDDEN_STORAGE_KEY, "true");
     setup();
     expect(screen.getByRole("button", { name: "iaStartExamplesHide" })).toBeVisible();
+  });
+});
+
+describe("task presets", () => {
+  beforeEach(() => {
+    sessionStorage.removeItem(TASK_EXAMPLES_HIDDEN_STORAGE_KEY);
+    vi.mocked(sendMessageRequest)
+      .mockReset()
+      .mockResolvedValue({} as never);
+  });
+
+  it.each([
+    ["/new", "knowledgeCard", "把资料变成易懂图文知识卡", "咖啡冲煮入门", ["manager"]],
+    ["/new?agent=u-worker", "meetingNotes", "编写项目会议纪要模板", "版本上线复盘会", ["worker"]],
+    ["/new", "aiTrends", "生成“近一年 AI 趋势”情报简报式PPT", "近 12 个月", ["manager"]],
+    ["/new?team=team-1", "members", "查看协作空间成员并列出职责", "不要推测或编造", ["manager", "worker"]],
+    ["/new?team=team-1", "research", "调研 Agent 落地现状", "\n1.产品与厂商", ["manager", "worker"]],
+    ["/new?team=team-1", "review", "公告改动评审", "\n“我们很高兴地宣布", ["manager", "worker"]],
+  ] as const)("starts %s with the full %s preset", async (path, key, title, content, members) => {
+    const { create, open } = setup(path, "test-model", { locale: "zh" });
+    const prompt = createTranslator("zh")(`iaStartExample_${key}_prompt`);
+    const user = userEvent.setup();
+
+    expect(create).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: title }));
+
+    await waitFor(() => expect(open).toHaveBeenCalledWith(room));
+    expect(prompt).toContain(content);
+    expect(sendMessageRequest).toHaveBeenCalledWith(expect.objectContaining({ content: prompt }));
+    expect(create).toHaveBeenCalledWith(
+      expect.objectContaining({ member_ids: members, is_direct: !path.includes("team=") }),
+    );
+  });
+
+  it.each([
+    [
+      "/new",
+      [
+        "Turn materials into a visual knowledge card",
+        "Write a project meeting notes template",
+        "Create an AI trends briefing presentation",
+      ],
+      "List workspace members and responsibilities",
+    ],
+    [
+      "/new?team=team-1",
+      [
+        "List workspace members and responsibilities",
+        "Research real-world Agent adoption",
+        "Review a launch announcement",
+      ],
+      "Turn materials into a visual knowledge card",
+    ],
+  ] as const)("shows localized presets for %s", (path, titles, otherTargetTitle) => {
+    setup(path, "test-model", { locale: "en" });
+    for (const title of titles) expect(screen.getByRole("button", { name: title })).toBeVisible();
+    expect(screen.queryByRole("button", { name: otherTargetTitle })).not.toBeInTheDocument();
   });
 });
 
