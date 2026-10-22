@@ -1663,6 +1663,9 @@ button.message-file-attachment {
 }
 
 .composer-error {
+  display: flex;
+  align-items: center;
+  gap: 12px;
   margin-top: 12px;
 }
 

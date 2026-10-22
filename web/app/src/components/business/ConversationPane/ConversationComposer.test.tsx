@@ -61,6 +61,17 @@ function renderConversationComposer(overrideProps: Partial<React.ComponentProps<
 }
 
 describe("ConversationComposer working activity", () => {
+  it("shows composer errors in the standard dismissible error style", async () => {
+    const user = userEvent.setup();
+    const { container } = renderConversationComposer({ composerError: "Failed to fetch" });
+
+    expect(screen.getByRole("alert")).toHaveTextContent("Failed to fetch");
+    expect(container.querySelector(".composer-error")).toHaveClass("form-error");
+
+    await user.click(screen.getByRole("button", { name: "关闭" }));
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
   it("shows the latest activity instead of a generic working label and opens that activity", async () => {
     const user = userEvent.setup();
     const participant: ConversationWorkingParticipant = {
