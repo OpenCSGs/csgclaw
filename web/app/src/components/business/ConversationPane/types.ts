@@ -109,6 +109,7 @@ export type ConversationPaneProps = {
   messageActionBusy: string;
   messageActionFeedback: MessageActionFeedback;
   messageListRef: RefObject<HTMLElement | null>;
+  hasNewMessages?: boolean;
   memberActionBusyID?: string;
   memberActionError?: string;
   onApplyMention: (user: MentionPickerUser) => void;
@@ -128,6 +129,7 @@ export type ConversationPaneProps = {
   onNewTask?: (agentID?: string, configuration?: TaskConfiguration) => void;
   onMessageAction: (action: MessageAction, message?: MessageLike | null) => VoidOrPromise;
   onPreserveMessageAnchor?: (anchor?: HTMLElement | null) => void;
+  onFollowLatest?: () => void;
   onOpenAgentDetail?: (agent: AgentLike, anchor: HTMLElement) => VoidOrPromise;
   onRestoreThread?: (rootID: string) => VoidOrPromise;
   onOpenThread: (message: IMMessage) => VoidOrPromise;

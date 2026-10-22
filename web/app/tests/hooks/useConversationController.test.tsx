@@ -166,6 +166,8 @@ function renderConversationController(
     managerProfile?: AgentProfileLike | null;
     managerProfileIncomplete?: boolean;
     authStatuses?: Parameters<typeof useConversationController>[0]["authStatuses"];
+    locale?: "en" | "zh";
+    t?: TranslateFn;
     managerRuntimeUnavailable?: boolean;
     managerRuntimeWarning?: string;
     messageListActive?: boolean;
@@ -195,7 +197,7 @@ function renderConversationController(
         authBusyProvider: "",
         authStatuses: options.authStatuses ?? {},
         data,
-        locale: "en",
+        locale: options.locale ?? "en",
         managerProfile: options.managerProfile ?? null,
         managerProfileIncomplete: options.managerProfileIncomplete ?? false,
         managerRuntimeUnavailable: options.managerRuntimeUnavailable,
@@ -215,7 +217,7 @@ function renderConversationController(
         setBootstrapData: options.setBootstrapData ?? vi.fn(),
         setShowToolCalls: vi.fn(),
         showToolCalls: false,
-        t,
+        t: options.t ?? t,
         theme: "light",
         workingParticipantsForRoom: options.workingParticipantsForRoom ?? (() => []),
       }),
@@ -231,6 +233,30 @@ function renderConversationController(
 }
 
 describe("useConversationController", () => {
+  it.each([
+    ["zh", "网络连接失败，请检查网络后重试。"],
+    ["en", "The network request failed. Check your connection and try again."],
+  ] as const)("localizes fetch failures in %s", async (locale, expectedMessage) => {
+    const { result } = renderConversationController({
+      data: dataWithMessages([]),
+      locale,
+      t: (key) => (key === "sendNetworkError" ? expectedMessage : key),
+    });
+    apiMocks.sendMessageRequest.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+    const editor = document.createElement("div");
+    editor.textContent = "hello";
+
+    act(() => {
+      result.current.conversationViewProps.editorRef.current = editor;
+      result.current.conversationViewProps.onSyncComposer();
+    });
+    await act(async () => {
+      await result.current.conversationViewProps.onSendMessage();
+    });
+
+    expect(result.current.conversationViewProps.composerError).toBe(expectedMessage);
+  });
+
   it("does not restore a deleted attachment from a late poll when no thread is open", async () => {
     const original: IMMessage = {
       id: "with-file",
@@ -2095,7 +2121,7 @@ describe("useConversationController", () => {
     expect(messageList.scrollTop).toBe(120);
   });
 
-  it("follows an outgoing message even when the user has scrolled away from the bottom", async () => {
+  it("preserves history position without announcing the user's own message", async () => {
     const firstMessage: IMMessage = {
       id: "msg-1",
       content: "hello",
@@ -2136,8 +2162,23 @@ describe("useConversationController", () => {
     await act(async () => {
       await result.current.conversationViewProps.onSendMessage();
     });
+    rerender({
+      data: dataWithMessages([
+        firstMessage,
+        {
+          id: "msg-user",
+          content: "my reply",
+          created_at: "2026-06-16T10:01:00Z",
+          sender_id: "u-admin",
+        },
+      ]),
+      messageListActive: true,
+    });
 
-    await waitFor(() => expect(messageList.scrollTop).toBe(1120));
+    await waitFor(() => {
+      expect(messageList.scrollTop).toBe(120);
+      expect(result.current.conversationViewProps.hasNewMessages).toBe(false);
+    });
   });
 
   it("keeps a single message-list scroll listener across data rerenders", () => {

@@ -66,6 +66,8 @@ export function FloatingChatPanel({ agentName, chatProps, headerAccessory, onPic
     messageActionBusy,
     messageActionFeedback,
     messageListRef,
+    hasNewMessages,
+    onFollowLatest,
     onApplyMention,
     onApplySlashCandidate = (_name) => {},
     onApplyThreadSlashCandidate = (_name) => {},
@@ -304,6 +306,8 @@ export function FloatingChatPanel({ agentName, chatProps, headerAccessory, onPic
         messageActionBusy={messageActionBusy}
         messageActionFeedback={messageActionFeedback}
         messageListRef={messageListRef}
+        hasNewMessages={hasNewMessages}
+        onFollowLatest={onFollowLatest}
         t={t}
         theme={theme}
         usersById={usersById}

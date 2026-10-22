@@ -225,6 +225,8 @@ function ConversationPaneContent({
   onToggleToolCalls,
   channelToolsRef,
   messageListRef,
+  hasNewMessages,
+  onFollowLatest,
   editorRef,
   onPreviewUser,
   onDeleteRoom,
@@ -580,6 +582,8 @@ function ConversationPaneContent({
         messageActionBusy={messageActionBusy}
         messageActionFeedback={messageActionFeedback}
         messageListRef={messageListRef}
+        hasNewMessages={hasNewMessages}
+        onFollowLatest={onFollowLatest}
         t={t}
         theme={theme}
         usersById={usersById}

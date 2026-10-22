@@ -15,7 +15,7 @@ import type { KeyboardEvent as ReactKeyboardEvent, RefObject, ReactNode } from "
 import { ArrowUp, RotateCcw, Square, Undo2 } from "lucide-react";
 import { CLIProxyAuthControl } from "@/components/business/ProfileControls";
 import type { DocumentPreviewRequest } from "@/components/business/DocumentPreviewPanel";
-import { Button, Tooltip } from "@/components/ui";
+import { Button, DismissibleAlert, Tooltip } from "@/components/ui";
 import type { CLIProxyAuthStatusMap } from "@/hooks/workspace/useCLIProxyAuthStatuses";
 import type { AgentProfileLike } from "@/models/agents";
 import type { AttachmentDraft } from "@/models/attachments";
@@ -391,9 +391,13 @@ export const ConversationComposer = memo(function ConversationComposer({
         </div>
       ) : null}
       {composerError || sendError ? (
-        <div className="form-error composer-error" role="alert">
-          {sendError || composerError}
-        </div>
+        <DismissibleAlert
+          className="form-error composer-error"
+          messageKey={sendError || composerError}
+          closeLabel={t("close")}
+        >
+          <span role="alert">{sendError || composerError}</span>
+        </DismissibleAlert>
       ) : null}
     </footer>
   );

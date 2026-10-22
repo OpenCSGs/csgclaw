@@ -1110,7 +1110,11 @@ export function useConversationController({
   const messageListAutoScroll = useMessageListAutoScroll({
     active: messageListActive && activePane.type === WorkspacePaneTypes.conversation && Boolean(selectedConversationID),
     conversationId: activeConversationId,
+    deferNewMessageNotice: true,
+    latestMessageIsReply:
+      visibleMessages.length > 0 && visibleMessages[visibleMessages.length - 1].sender_id !== data?.current_user_id,
     messageListRef,
+    waitingForReply: workingParticipants.length > 0,
     visibleMessagesKey: visibleMessageScrollKey,
   });
 
@@ -1223,7 +1227,6 @@ export function useConversationController({
         },
       );
       setBootstrapData((current) => appendMessageToData(current, roomID, created));
-      messageListAutoScroll.follow("smooth");
       clearComposer(roomID);
       delete pendingClientMessagesRef.current[roomID];
       setComposerSendStatesByConversationId((current) => ({
@@ -1368,6 +1371,10 @@ export function useConversationController({
   }
 
   function messageSendFailure(error: unknown): string {
+    const rawMessage = errorMessage(error, "");
+    if (/\b(failed to fetch|networkerror|network request failed|load failed|fetch failed)\b/i.test(rawMessage)) {
+      return t("sendNetworkError");
+    }
     const code = apiErrorCode(error);
     if (code.startsWith("resource_") || code === "invalid_resource_reference") {
       void queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.agentSkills(resourceAgentID) });
@@ -1992,6 +1999,8 @@ export function useConversationController({
       memberMenuRef,
       channelToolsRef,
       messageListRef,
+      hasNewMessages: messageListAutoScroll.hasNewMessages,
+      onFollowLatest: () => messageListAutoScroll.follow(),
       editorRef,
       onDeleteRoom: deleteRoom,
       onClearRoomMessages: clearRoomMessages,
