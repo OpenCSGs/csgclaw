@@ -226,6 +226,7 @@ export function FloatingChatPanel({ agentName, chatProps, headerAccessory, onPic
 
   const threadPanel = activeThreadRootID ? (
     <Conversation.ThreadPanel
+      currentUserID={currentUserID}
       resourceAgentID={resourceAgentID}
       onPickResources={onPickThreadResources}
       thread={activeThreadView}
@@ -281,7 +282,7 @@ export function FloatingChatPanel({ agentName, chatProps, headerAccessory, onPic
         selectedMessageCount={selectedMessageCount}
         selectedVisibleMessageCount={floatingVisibleMessages.length}
         showChannelTools={showChannelTools}
-        showChannelToolsAction={true}
+        showChannelToolsAction={false}
         showInviteAction={false}
         showMemberList={showMemberList}
         showToolCalls={showToolCalls}

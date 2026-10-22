@@ -22,7 +22,7 @@ export function HumanPage() {
     >
       <DialogContent style={{ width: "min(900px, calc(100vw - 48px))", padding: 0 }} aria-describedby={undefined}>
         <DialogHeader>
-          <DialogTitle>{controller.t("humanSection")}</DialogTitle>
+          <DialogTitle>{controller.t("profileLabel")}</DialogTitle>
           <DialogCloseButton label={controller.t("close")} />
         </DialogHeader>
         {content}

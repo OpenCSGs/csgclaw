@@ -1,12 +1,11 @@
 import {
   ResourceList,
   ResourceListCard,
-  ResourceFeaturedIcon,
   ResourceStatus,
 } from "@/components/business/ResourceListCard";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { ArrowUpRight, BookOpen, GitBranch, Plus, RefreshCw } from "lucide-react";
+import { ArrowUpRight, BookOpen, Plus, RefreshCw } from "lucide-react";
 import {
   Button,
   Switch,
@@ -173,7 +172,7 @@ export function AgentAppsPanel({
           description={
             !cliSupported ? t("feishuCLIUnsupported") : feishu ? connectorDescription(feishu) : t("feishuCLIWorkerHint")
           }
-          icon={<ProfileAppIcon appID="feishu" />}
+          icon={<AppIcon appID="feishu" />}
           onOpen={() => feishu && onSelect(feishu.installation_id)}
           actions={
             <>
@@ -194,7 +193,7 @@ export function AgentAppsPanel({
               key={app.installation_id}
               title={app.name}
               description={connectorDescription(app)}
-              icon={<ProfileAppIcon appID={app.app_id} />}
+              icon={<AppIcon appID={app.app_id} />}
               onOpen={() => onSelect(app.installation_id)}
               actions={
                 <>
@@ -356,7 +355,9 @@ export function AgentAppsPanel({
               const bound = controller.items.some((item) => item.resource_id === resource.installation_id);
               return (
                 <ResourcePickerRow key={resource.installation_id}>
-                  <ProfileAppIcon appID={resource.app_id} />
+                  <span className={styles.catalogIcon}>
+                    <AppIcon appID={resource.app_id} />
+                  </span>
                   <ResourcePickerCopy
                     name={resource.name}
                     description={bound ? t("profileResourceEnabled") : appStatus(resource, t)}
@@ -531,14 +532,6 @@ export function AppIcon({ appID }: { appID: string }) {
   if (appID === "github") return <img src="icons/github.svg" width={28} height={28} alt="" />;
   if (appID === "llm-wiki") return <BookOpen size={22} aria-hidden="true" />;
   return <ConnectorBoxesIcon size={22} aria-hidden="true" />;
-}
-
-function ProfileAppIcon({ appID }: { appID: string }) {
-  return (
-    <ResourceFeaturedIcon>
-      {appID === "gitlab" ? <GitBranch size={16} /> : <ConnectorBoxesIcon size={16} />}
-    </ResourceFeaturedIcon>
-  );
 }
 
 function resourceStatus(app: AppInstallation): "enabled" | "disabled" | "error" | "pending" {

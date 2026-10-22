@@ -28,7 +28,7 @@
 .row {
   display: grid;
   grid-template-columns: 36px minmax(0, 1fr) auto;
-  align-items: start;
+  align-items: center;
   gap: 12px;
   padding: 12px 14px;
   border: 1px solid var(--line);
@@ -37,7 +37,6 @@
 }
 .row > :first-child {
   justify-self: center;
-  margin-top: 3px;
 }
 .copy {
   display: grid;

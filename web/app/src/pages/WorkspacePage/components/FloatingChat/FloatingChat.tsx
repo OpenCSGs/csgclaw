@@ -425,7 +425,10 @@ export function FloatingChat({
   const headerAccessory = (
     <Tooltip content={t("floatingChatCollapse")}>
       <Button
-        className={classNames("icon-button", styles.collapseButton)}
+        className={styles.collapseButton}
+        iconOnly
+        size="lg"
+        variant="secondaryGray"
         aria-label={t("floatingChatCollapse")}
         onClick={() => onOpenChange(false)}
       >

@@ -16,11 +16,13 @@ export function ComposerAddMenu({
   t,
   onAddFiles,
   onOpenResourcePicker,
+  buttonClassName = "composer-add-button",
 }: {
   disabled: boolean;
   t: TranslateFn;
   onAddFiles: () => void;
   onOpenResourcePicker?: (kind: TaskResourceKind) => void;
+  buttonClassName?: string;
 }) {
   const [open, setOpen] = useState(false);
   const openingResourcePicker = useRef(false);
@@ -30,13 +32,13 @@ export function ComposerAddMenu({
         <PopoverTrigger asChild>
           <Button
             aria-label={t("composerAddContent")}
-            className="composer-add-button"
+            className={buttonClassName}
             disabled={disabled}
             iconOnly
             size="sm"
             variant="tertiaryGray"
           >
-            <Plus size={18} />
+            <Plus size={18} strokeWidth={1.5} />
           </Button>
         </PopoverTrigger>
       </Tooltip>

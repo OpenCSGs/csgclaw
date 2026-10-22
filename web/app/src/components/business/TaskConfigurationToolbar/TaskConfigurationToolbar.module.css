@@ -328,11 +328,29 @@
   box-shadow: none;
   color: var(--muted);
   font-size: 12px;
+  font-weight: var(--font-weight-normal);
 }
 .directoryTrigger:hover,
 .modelTrigger:hover {
   background: var(--panel-soft);
   color: var(--text);
+}
+.modelTrigger :global(.model-option-model) {
+  color: inherit;
+  font: inherit;
+}
+.directoryTrigger {
+  justify-content: center;
+}
+.directoryTrigger :global(.csg-select-value) {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 1 auto;
+  text-align: center;
+}
+.directoryTrigger .directoryLabel {
+  justify-content: center;
 }
 .lockedDirectory {
   padding: 5px 8px;

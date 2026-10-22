@@ -12,7 +12,7 @@
   z-index: var(--z-page-popover);
   display: flex;
   flex-direction: column;
-  max-height: min(352px, calc(100dvh - 240px));
+  max-height: min(352px, calc(100dvh - 32px));
   padding: 8px;
   border: 1px solid var(--line);
   border-radius: 14px;
