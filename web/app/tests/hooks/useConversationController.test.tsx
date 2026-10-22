@@ -2121,7 +2121,7 @@ describe("useConversationController", () => {
     expect(messageList.scrollTop).toBe(120);
   });
 
-  it("preserves history position when the user sends while scrolled away from the bottom", async () => {
+  it("preserves history position without announcing the user's own message", async () => {
     const firstMessage: IMMessage = {
       id: "msg-1",
       content: "hello",
@@ -2177,7 +2177,7 @@ describe("useConversationController", () => {
 
     await waitFor(() => {
       expect(messageList.scrollTop).toBe(120);
-      expect(result.current.conversationViewProps.hasNewMessages).toBe(true);
+      expect(result.current.conversationViewProps.hasNewMessages).toBe(false);
     });
   });
 

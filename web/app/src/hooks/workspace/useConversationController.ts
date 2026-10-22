@@ -1110,7 +1110,11 @@ export function useConversationController({
   const messageListAutoScroll = useMessageListAutoScroll({
     active: messageListActive && activePane.type === WorkspacePaneTypes.conversation && Boolean(selectedConversationID),
     conversationId: activeConversationId,
+    deferNewMessageNotice: true,
+    latestMessageIsReply:
+      visibleMessages.length > 0 && visibleMessages[visibleMessages.length - 1].sender_id !== data?.current_user_id,
     messageListRef,
+    waitingForReply: workingParticipants.length > 0,
     visibleMessagesKey: visibleMessageScrollKey,
   });
 

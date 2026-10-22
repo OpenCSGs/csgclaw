@@ -3,13 +3,28 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-libra
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useMessageListAutoScroll } from "@/hooks/workspace/useMessageListAutoScroll";
 import { MESSAGE_LIST_NAVIGATE_EVENT } from "@/shared/constants/workspace";
-function Harness({ inspecting, revision }: { inspecting: boolean; revision: number }) {
+function Harness({
+  active = true,
+  inspecting,
+  latestMessageIsReply = false,
+  revision,
+  waitingForReply = false,
+}: {
+  active?: boolean;
+  inspecting: boolean;
+  latestMessageIsReply?: boolean;
+  revision: number;
+  waitingForReply?: boolean;
+}) {
   const ref = useRef<HTMLElement>(null);
   const [expanded, setExpanded] = useState(false);
-  const { follow } = useMessageListAutoScroll({
-    active: true,
+  const { follow, hasNewMessages } = useMessageListAutoScroll({
+    active,
     conversationId: "room",
+    deferNewMessageNotice: true,
+    latestMessageIsReply,
     messageListRef: ref,
+    waitingForReply,
     visibleMessagesKey: String(revision),
   });
   return (
@@ -21,6 +36,7 @@ function Harness({ inspecting, revision }: { inspecting: boolean; revision: numb
         {expanded ? <div>Expanded progress</div> : null}
       </div>
       <button onClick={() => follow()}>Follow</button>
+      {hasNewMessages ? <span>New messages</span> : null}
       <button type="button" data-preserve-scroll={inspecting ? "true" : undefined}>
         Statistics
       </button>
@@ -48,6 +64,22 @@ function atBottom() {
   return chat;
 }
 describe("transcript scrolling while inspecting statistics", () => {
+  it("shows the new reply notice only after the reply finishes", async () => {
+    const view = render(<Harness active={false} inspecting={false} latestMessageIsReply waitingForReply revision={1} />);
+    const chat = atBottom();
+    view.rerender(<Harness inspecting={false} latestMessageIsReply waitingForReply revision={1} />);
+    await act(() => new Promise((resolve) => setTimeout(resolve, 40)));
+    chat.scrollTop = 200;
+    fireEvent.scroll(chat);
+    await act(() => new Promise((resolve) => setTimeout(resolve, 40)));
+
+    view.rerender(<Harness inspecting={false} latestMessageIsReply waitingForReply revision={2} />);
+    expect(screen.queryByText("New messages")).not.toBeInTheDocument();
+
+    view.rerender(<Harness inspecting={false} latestMessageIsReply revision={2} waitingForReply={false} />);
+    await waitFor(() => expect(screen.getByText("New messages")).toBeInTheDocument());
+  });
+
   it("resumes following through the latest action even when already at the bottom", () => {
     const view = render(<Harness inspecting={false} revision={1} />);
     const chat = atBottom();
