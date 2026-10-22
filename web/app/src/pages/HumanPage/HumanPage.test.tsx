@@ -20,12 +20,13 @@ vi.mock("@/hooks/workspace/useWorkspaceDialogs", () => ({
 }));
 afterEach(() => vi.clearAllMocks());
 
-it("edits the personal avatar inside the profile dialog without closing the profile", async () => {
+it("edits the personal avatar above the profile dialog without closing the profile", async () => {
   const user = userEvent.setup();
   render(<HumanPage />);
-  const profile = screen.getByRole("dialog", { name: "humanSection" });
+  const profile = screen.getByRole("dialog", { name: "profileLabel" });
   await user.click(within(profile).getByRole("button", { name: "editAvatar" }));
-  const editor = within(profile).getByRole("dialog", { name: "editAvatar" });
+  const editor = screen.getByRole("dialog", { name: "editAvatar" });
+  expect(profile).not.toContainElement(editor);
   await user.click(within(editor).getAllByRole("radio")[0]);
   await user.click(within(editor).getByRole("button", { name: "confirm" }));
   expect(onAvatarChange).toHaveBeenCalledOnce();
@@ -44,6 +45,21 @@ it("keeps the profile open when Escape closes the avatar editor", async () => {
   expect(within(editor).getByRole("tab", { name: "avatarUploadTab" })).toHaveAttribute("aria-selected", "true");
   await user.keyboard("{Escape}");
   expect(screen.queryByRole("dialog", { name: "editAvatar" })).not.toBeInTheDocument();
-  expect(screen.getByRole("dialog", { name: "humanSection" })).toBeVisible();
+  expect(screen.getByRole("dialog", { name: "profileLabel" })).toBeVisible();
+  expect(close).not.toHaveBeenCalled();
+});
+
+it("traps avatar editor focus and returns it to the profile when canceled", async () => {
+  const user = userEvent.setup();
+  render(<HumanPage />);
+  const trigger = screen.getByRole("button", { name: "editAvatar" });
+  await user.click(trigger);
+  const editor = screen.getByRole("dialog", { name: "editAvatar" });
+  within(editor).getByRole("button", { name: "confirm" }).focus();
+  await user.tab();
+  expect(editor).toContainElement(document.activeElement as HTMLElement);
+  await user.click(within(editor).getByRole("button", { name: "cancel" }));
+  expect(trigger).toHaveFocus();
+  expect(onAvatarChange).not.toHaveBeenCalled();
   expect(close).not.toHaveBeenCalled();
 });

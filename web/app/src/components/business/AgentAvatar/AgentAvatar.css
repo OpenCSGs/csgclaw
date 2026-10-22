@@ -249,12 +249,6 @@
 }
 
 .agent-avatar-editor-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: calc(var(--z-modal) + 1);
-  display: grid;
-  place-items: center;
-  padding: 24px;
   background: rgba(12, 17, 29, 0.56);
 }
 
@@ -263,13 +257,15 @@
   backdrop-filter: blur(8px);
 }
 
-.agent-avatar-editor-modal {
+.agent-avatar-editor-modal.csg-dialog-content {
   display: flex;
   flex-direction: column;
   width: min(480px, calc(100vw - 32px));
   height: min(527px, calc(100dvh - 48px));
   max-height: calc(100dvh - 48px);
   overflow: hidden;
+  padding: 0;
+  border: 0;
   border-radius: 12px;
   background: var(--white);
   box-shadow:
