@@ -218,6 +218,31 @@ describe("FloatingChat manager guide", () => {
 });
 
 describe("FloatingChat manager prompts", () => {
+  it.each([false, true])("shows the new-message notice only when pending: %s", async (hasNewMessages) => {
+    const user = userEvent.setup();
+    const onFollowLatest = vi.fn();
+    renderOpenManagerFloatingChat(
+      {
+        id: "manager-chat",
+        is_direct: true,
+        members: users.map((item) => item.id),
+        messages: [{ id: "reply", sender_id: "manager", content: "New reply", created_at: "2026-10-22T10:00:00Z" }],
+        title: "Manager",
+      },
+      { hasNewMessages, onFollowLatest },
+    );
+
+    const notice = screen.queryByRole("button", { name: "newMessages · progressLatest" });
+    if (hasNewMessages) {
+      expect(notice).toBeVisible();
+      await user.click(notice!);
+      expect(onFollowLatest).toHaveBeenCalledOnce();
+    } else {
+      expect(notice).not.toBeInTheDocument();
+      expect(onFollowLatest).not.toHaveBeenCalled();
+    }
+  });
+
   it("preserves the floating conversation tools menu alongside side-panel actions", () => {
     renderOpenManagerFloatingChat({
       id: "manager-chat",
