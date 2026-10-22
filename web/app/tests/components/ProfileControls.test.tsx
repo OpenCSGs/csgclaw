@@ -166,8 +166,8 @@ describe("ProfileControls", () => {
       <APIKeyField profile={{ api_key_set: false }} required t={t} value="" onInput={() => {}} />,
     );
 
-    expect(screen.getByRole("textbox", { name: /API key/ })).toHaveAttribute("placeholder", "Enter API key");
-    expect(screen.getByRole("textbox", { name: /API key/ })).toBeRequired();
+    expect(screen.getByLabelText(/API key/)).toHaveAttribute("placeholder", "Enter API key");
+    expect(screen.getByLabelText(/API key/)).toBeRequired();
     expect(container.querySelector(".field-required-star")).toHaveTextContent("*");
   });
 

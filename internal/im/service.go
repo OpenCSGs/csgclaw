@@ -448,13 +448,19 @@ func ensureBootstrapDirs(path string) error {
 }
 
 func writePersistedBootstrap(path string, persisted persistedBootstrap) error {
+	// Activity order is derived from session messages on read. Keep the index
+	// stable so unchanged metadata does not need another disk commit.
+	persisted.Rooms = slices.Clone(persisted.Rooms)
+	slices.SortFunc(persisted.Rooms, func(a, b persistedRoom) int { return strings.Compare(a.ID, b.ID) })
+	persisted.Users = slices.Clone(persisted.Users)
+	slices.SortFunc(persisted.Users, func(a, b User) int { return strings.Compare(a.ID, b.ID) })
 	data, err := json.MarshalIndent(persisted, "", "  ")
 	if err != nil {
 		return fmt.Errorf("encode im bootstrap: %w", err)
 	}
 	data = append(data, '\n')
 
-	if err := atomicWriteFile(path, data, 0o600); err != nil {
+	if err := writeFileIfChanged(path, data, 0o600); err != nil {
 		return fmt.Errorf("write im bootstrap: %w", err)
 	}
 	return nil
@@ -664,7 +670,7 @@ func saveRoomThreadsForState(statePath string, room Room) error {
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 			return fmt.Errorf("create im thread context dir: %w", err)
 		}
-		if err := os.WriteFile(path, data, 0o600); err != nil {
+		if err := writeFileIfChanged(path, data, 0o600); err != nil {
 			return fmt.Errorf("write im thread context: %w", err)
 		}
 	}

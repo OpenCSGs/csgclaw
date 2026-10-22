@@ -40,9 +40,7 @@ export function NotificationsSection() {
             triggerClassName={styles.notificationSelectTrigger}
             triggerProps={{ "aria-label": t("turnCompletionNotifications") }}
             value={turnNotificationMode}
-            onValueChange={(value) =>
-              void sidebar.onTurnNotificationModeChange?.(normalizeTurnNotificationMode(value))
-            }
+            onValueChange={(value) => void sidebar.onTurnNotificationModeChange?.(normalizeTurnNotificationMode(value))}
           />
           <p className={styles.notificationModeHint}>{t("notificationPermissionDeniedHint")}</p>
         </div>

@@ -1471,16 +1471,19 @@ describe("ConversationPane", () => {
     const threadPanel = screen.getByRole("complementary", { name: "Thread" });
     expect(within(threadPanel).queryByText("hidden shell output")).not.toBeInTheDocument();
     expect(within(threadPanel).getByText("Visible answer")).toBeInTheDocument();
-    expect(within(threadPanel).getByText("1 replies")).toBeInTheDocument();
+    expect(threadPanel.querySelector(".thread-section-title")).toBeNull();
   });
 
-  it("toggles tool-call visibility through direct conversation tools", async () => {
-    const user = userEvent.setup();
-    renderThreadPane({ isDirect: true });
+  it("shows tool-call replies when enabled without exposing direct conversation tools", () => {
+    renderThreadPane({
+      isDirect: true,
+      showToolCalls: true,
+      replies: [{ id: "tool-reply", sender_id: "u-manager", content: toolActivityContent("visible shell output") }],
+    });
 
-    await user.click(screen.getByRole("button", { name: "channelTools" }));
-    await user.click(screen.getByRole("button", { name: /toggleToolCallsShow/ }));
-    expect(screen.getByRole("button", { name: /toggleToolCallsHide/ })).toBeInTheDocument();
+    const threadPanel = screen.getByRole("complementary", { name: "Thread" });
+    expect(within(threadPanel).getByText("visible shell output")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "channelTools" })).not.toBeInTheDocument();
   });
 
   it("成员管理与工具侧栏互相切换并保留已经打开的话题", async () => {
@@ -1611,26 +1614,24 @@ describe("ConversationPane", () => {
     }
   });
 
-  it("直接会话保留消息管理入口并隐藏成员管理入口", async () => {
-    const user = userEvent.setup();
+  it("直接会话隐藏通道工具与成员管理入口", () => {
     const onClearRoomMessages = vi.fn();
     renderThreadPane({ isDirect: true, onClearRoomMessages });
     expect(screen.queryByRole("button", { name: "Invite" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "membersTitle" })).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "channelTools" }));
+    expect(screen.queryByRole("button", { name: "channelTools" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "deleteRoom" })).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "clearRoomMessages" }));
-    await user.click(screen.getByRole("button", { name: "clearRoomMessagesConfirm" }));
-    expect(onClearRoomMessages).toHaveBeenCalledWith("room-1");
+    expect(screen.queryByRole("button", { name: "clearRoomMessages" })).not.toBeInTheDocument();
+    expect(onClearRoomMessages).not.toHaveBeenCalled();
   });
 
-  it("preserves direct conversation tools and room member management alongside side-panel actions", () => {
+  it("hides direct conversation tools and preserves room member management alongside side-panel actions", () => {
     const direct = renderThreadPane({ isDirect: true });
     expect(screen.getByRole("button", { name: "Activity records" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "chatFiles" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "chatBrowser" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Invite" })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "channelTools" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "channelTools" })).not.toBeInTheDocument();
     direct.unmount();
 
     renderThreadPane({ isDirect: false });

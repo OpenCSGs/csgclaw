@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -86,7 +87,7 @@ func TestBootstrapCorruptionPreservesDataAndExplainsRecovery(t *testing.T) {
 				t.Fatal(err)
 			}
 			err := EnsureBootstrapState(path)
-			if err == nil || !strings.Contains(err.Error(), path) || !strings.Contains(err.Error(), "do not delete") {
+			if err == nil || !strings.Contains(err.Error(), strconv.Quote(path)) || !strings.Contains(err.Error(), "do not delete") {
 				t.Fatalf("expected actionable error, got %v", err)
 			}
 			got, err := os.ReadFile(path)

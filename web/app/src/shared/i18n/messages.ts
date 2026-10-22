@@ -2383,7 +2383,8 @@ export const messages = {
     humanDetailMissingHint: "请选择侧边栏里的人类成员。",
     humanIdentitySection: "身份信息",
     humanDescriptionLabel: "描述",
-    humanDefaultAdminDescription: "人类操作员。智能体可以通过 @admin 提出澄清问题、请求确认，并在继续前再次核对重要决定。",
+    humanDefaultAdminDescription:
+      "人类操作员。智能体可以通过 @admin 提出澄清问题、请求确认，并在继续前再次核对重要决定。",
     humanDescriptionSave: "保存描述",
     humanDescriptionSaveFailed: "描述保存失败，请重试。",
     humanChannelsSection: "通道",
@@ -5456,7 +5457,8 @@ export const messages = {
     humanDetailMissingHint: "Select a human member from the sidebar.",
     humanIdentitySection: "Identity",
     humanDescriptionLabel: "Description",
-    humanDefaultAdminDescription: "Human operator. Agents can @admin to ask clarifying questions, request confirmation, and double-check important decisions before continuing.",
+    humanDefaultAdminDescription:
+      "Human operator. Agents can @admin to ask clarifying questions, request confirmation, and double-check important decisions before continuing.",
     humanDescriptionSave: "Save description",
     humanDescriptionSaveFailed: "Failed to save description.",
     humanChannelsSection: "Channels",
