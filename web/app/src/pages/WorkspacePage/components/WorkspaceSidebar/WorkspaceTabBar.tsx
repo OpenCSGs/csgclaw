@@ -5,7 +5,7 @@ import type { WorkspaceSidebarProps } from "@/hooks/workspace/contracts/sidebar"
 
 type WorkspaceTabBarProps = Pick<
   WorkspaceSidebarProps,
-  "onSelectHub" | "onWorkspaceTabChange" | "roomCount" | "showHubNewBadge" | "t" | "taskCount" | "workspaceTab"
+  "onSelectHub" | "onWorkspaceTabChange" | "roomCount" | "showHubNewBadge" | "t" | "scheduledTaskCount" | "workspaceTab"
 > & {
   agentCount: number;
   variant?: "default" | "rail";
@@ -14,7 +14,7 @@ type WorkspaceTabBarProps = Pick<
 export function WorkspaceTabBar({
   workspaceTab,
   onWorkspaceTabChange,
-  taskCount = 0,
+  scheduledTaskCount = 0,
   roomCount,
   agentCount,
   onSelectHub,
@@ -70,13 +70,13 @@ export function WorkspaceTabBar({
           ) : null}
         </Button>
       </Tooltip>
-      <Tooltip content={t("tasksTab")}>
+      <Tooltip content={t("scheduledTasksTab")}>
         <Button
           className={`workspace-tab ${rail ? "workspace-tab-rail" : ""}`}
           active={workspaceTab === WorkspaceTabs.tasks}
           role="tab"
           aria-selected={workspaceTab === WorkspaceTabs.tasks}
-          aria-label={t("tasksTab")}
+          aria-label={t("scheduledTasksTab")}
           onClick={() => onWorkspaceTabChange(WorkspaceTabs.tasks)}
         >
           <span className="workspace-tab-icon" aria-hidden="true">
@@ -84,8 +84,8 @@ export function WorkspaceTabBar({
           </span>
           {!rail ? (
             <span className="workspace-tab-copy">
-              <strong>{t("tasksTab")}</strong>
-              <small>{taskCount}</small>
+              <strong>{t("scheduledTasksTab")}</strong>
+              <small>{scheduledTaskCount}</small>
             </span>
           ) : null}
         </Button>

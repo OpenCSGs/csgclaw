@@ -224,7 +224,7 @@ describe("WorkspaceSidebar", () => {
     expect(screen.getByTestId("current-path")).toHaveTextContent("/agents");
     fireEvent.click(screen.getByRole("button", { name: "Scheduled" }));
     expect(props.onSelectTaskBoardView).toHaveBeenCalledWith("scheduled");
-    expect(props.onSelectTask).toHaveBeenCalledOnce();
+    expect(props.onSelectTask).not.toHaveBeenCalled();
     expect(props.onCollapseSidebar).toHaveBeenCalledTimes(width === 390 ? 3 : 0);
   });
 
@@ -601,7 +601,7 @@ describe("WorkspaceSidebar", () => {
     fireEvent.click(screen.getByRole("button", { name: "Scheduled" }));
 
     expect(onSelectTaskBoardView).toHaveBeenCalledWith("scheduled");
-    expect(onSelectTask).toHaveBeenCalledTimes(1);
+    expect(onSelectTask).not.toHaveBeenCalled();
   });
 
   it("renders the selected Human section as entity rows without a nested Human group", () => {

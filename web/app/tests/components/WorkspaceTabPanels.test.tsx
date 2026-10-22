@@ -340,8 +340,8 @@ describe("WorkspaceTabPanels", () => {
     );
 
     const panel = screen.getByRole("tabpanel", { name: "Tasks" });
-    expect(screen.getByRole("button", { name: /Tasks3/ })).toBeInTheDocument();
-    expect(within(panel).getByRole("button", { name: /Normal tasks1/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Tasks2/ })).toBeInTheDocument();
+    expect(within(panel).queryByRole("button", { name: /Normal tasks/ })).not.toBeInTheDocument();
     expect(within(panel).getByRole("button", { name: /Scheduled2/ })).toBeInTheDocument();
     expect(within(panel).queryByText("Build blog")).not.toBeInTheDocument();
 

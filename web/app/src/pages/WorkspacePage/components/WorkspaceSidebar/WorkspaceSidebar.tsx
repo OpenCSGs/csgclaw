@@ -256,19 +256,6 @@ function LegacyWorkspaceSidebar({
         items: [
           {
             active: isPrimaryNavigationActive(
-              activePane.type === WorkspacePaneTypes.task && activeTaskBoardView !== "scheduled",
-            ),
-            groupId: WorkspaceContextSectionIds.tasks,
-            icon: navigationIcon(WORKSPACE_NAVIGATION_ICONS.tasks),
-            id: "tasks",
-            label: t("tasksTab"),
-            onSelect: () => {
-              onSelectTaskBoardView?.("tasks");
-              onSelectTask();
-            },
-          },
-          {
-            active: isPrimaryNavigationActive(
               activePane.type === WorkspacePaneTypes.task && activeTaskBoardView === "scheduled",
             ),
             groupId: WorkspaceContextSectionIds.tasks,
@@ -277,7 +264,6 @@ function LegacyWorkspaceSidebar({
             label: t("scheduledTasksTab"),
             onSelect: () => {
               onSelectTaskBoardView?.("scheduled");
-              onSelectTask();
             },
           },
         ],
@@ -356,7 +342,6 @@ function LegacyWorkspaceSidebar({
       onSelectModelProvider,
       onSelectApps,
       onSelectNotificationSection,
-      onSelectTask,
       onSelectTaskBoardView,
       onSelectTeam,
       onSelectTeamSection,
@@ -743,7 +728,6 @@ function contextBadgeCountForSection({
   modelProviders,
   notificationAgentItems,
   scheduledTaskCount = 0,
-  taskCount,
   teams,
   workerAgentItems,
 }: {
@@ -788,20 +772,18 @@ function contextBadgeCountForSection({
     return modelProviders?.providers.length ?? 0;
   }
   if (activeContextSectionId === WorkspaceContextSectionIds.tasks) {
-    return taskCount + scheduledTaskCount;
+    return scheduledTaskCount;
   }
   return null;
 }
 
 function contextCreateActionForSection({
-  activeTaskBoardView,
   activeContextSectionId,
   hub,
   onCreateAgent,
   onCreateNotificationParticipant,
   onCreateModelProvider,
   onOpenCreateTeam,
-  onOpenCreateTask,
   onOpenCreateScheduledTask,
   openKnowledgeBaseDiscovery,
   setSkillUploadOpen,
@@ -841,16 +823,13 @@ function contextCreateActionForSection({
     };
   }
   if (activeContextSectionId === WorkspaceContextSectionIds.tasks) {
-    if (activeTaskBoardView === "scheduled" && onOpenCreateScheduledTask) {
+    if (onOpenCreateScheduledTask) {
       return {
         label: t("scheduledTaskCreate"),
         onClick: onOpenCreateScheduledTask,
       };
     }
-    return {
-      label: t("taskCreate"),
-      onClick: onOpenCreateTask,
-    };
+    return null;
   }
   if (activeContextSectionId === WorkspaceContextSectionIds.hubSkills) {
     return {

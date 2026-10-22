@@ -37,6 +37,12 @@ function NavigationHarness() {
         {activePane.type}:{activePane.id}
       </div>
       <div data-testid="conversation">{activeConversationId}</div>
+      <button type="button" onClick={() => navigation.selectTasks()}>
+        Open scheduled tasks
+      </button>
+      <button type="button" onClick={() => navigation.selectTasks("task-1")}>
+        Open task detail
+      </button>
       <button type="button" onClick={() => navigation.selectAgentApps("agent-1")}>
         Open agent apps
       </button>
@@ -67,6 +73,19 @@ function NavigationHarness() {
 }
 
 describe("useWorkspaceNavigation", () => {
+  it("keeps task details addressable and returns to scheduled tasks without the retired board", async () => {
+    window.history.replaceState({}, "", "/");
+    render(
+      <BrowserRouter>
+        <NavigationHarness />
+      </BrowserRouter>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Open task detail" }));
+    await waitFor(() => expect(screen.getByTestId("path")).toHaveTextContent("/tasks/task-1"));
+    fireEvent.click(screen.getByRole("button", { name: "Open scheduled tasks" }));
+    await waitFor(() => expect(screen.getByTestId("path")).toHaveTextContent("/scheduled-tasks"));
+  });
+
   it("opens the saved template even when the agent overview pathname is already selected", async () => {
     window.history.replaceState({}, "", "/agents?tab=templates");
     render(

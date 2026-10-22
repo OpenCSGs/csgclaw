@@ -139,6 +139,10 @@
 
   工作区 pane 和 sidebar tab 都从 URL 推导。React Router 拥有 route location；
   Zustand 只保留非路由工作区状态。
+  /scheduled-tasks 显示定时任务；/tasks/:taskId 保留任务详情深链接。
+  已移除的 /tasks 看板跳转首页，会话内任务面板保留在 RoomTaskPanel。
+  任务视图由路由决定，刷新及浏览器前进、后退均保留对应视图。
+
 
   用户点击
       |

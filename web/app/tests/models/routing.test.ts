@@ -14,6 +14,15 @@ import {
 } from "@/models/routing";
 
 describe("task routing", () => {
+  it("round trips scheduled task navigation independently of ordinary task routes", () => {
+    const pane = paneFromLocation("/scheduled-tasks");
+    expect(pane).toEqual({ type: WorkspacePaneTypes.task, id: "", taskBoardView: "scheduled" });
+    expect(pathForPane(pane)).toBe("/scheduled-tasks");
+    expect(workspaceTabForPane(pane)).toBe(WorkspaceTabs.tasks);
+    expect(paneFromLocation("/tasks")).toEqual({ type: WorkspacePaneTypes.conversation, id: "" });
+    expect(pathForPane({ type: WorkspacePaneTypes.task, id: "task/one" })).toBe("/tasks/task%2Fone");
+  });
+
   it.each([
     ["skill", "skills"],
     ["connector", "connectors"],
@@ -74,7 +83,7 @@ describe("task routing", () => {
 
   it("builds the tasks route from a task pane", () => {
     expect(pathForPane({ type: WorkspacePaneTypes.task, id: "task-7" })).toBe("/tasks/task-7");
-    expect(pathForPane({ type: WorkspacePaneTypes.task })).toBe("/tasks");
+    expect(pathForPane({ type: WorkspacePaneTypes.task })).toBe("/scheduled-tasks");
   });
 
   it("parses and builds the settings route as an independent page", () => {
