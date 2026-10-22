@@ -25,6 +25,49 @@ const item = (id: string, available = true): AgentResourceSummary => ({
   available,
 });
 
+it("fits the popup above its actual anchor within desktop and clipping boundaries", async () => {
+  vi.mocked(fetchConversationResourceBatch).mockResolvedValue({
+    items: [item("first")],
+    total: 1,
+    list_revision: "revision",
+    has_more: false,
+  });
+  let bottom = 280;
+  const original = HTMLElement.prototype.getBoundingClientRect;
+  const bounds = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    if (this.tagName === "SECTION" && this.getAttribute("aria-label") === "composerResourceConnector") {
+      return { ...original.call(this), bottom } as DOMRect;
+    }
+    if (this.dataset.testid === "clipping-container") {
+      return { ...original.call(this), top: 100 } as DOMRect;
+    }
+    return original.call(this);
+  });
+  document.documentElement.style.setProperty("--app-overlay-top-inset", "48px");
+  try {
+    const { wrapper } = createQueryWrapper();
+    render(
+      <div data-testid="clipping-container" style={{ overflowY: "hidden" }}>
+        <ConversationResourcePicker agentID="agent" kind="connector" t={t} onClose={() => {}} onPick={() => {}} />
+      </div>,
+      { wrapper },
+    );
+    const popup = screen.getByRole("region", { name: "composerResourceConnector" });
+    expect(popup).toHaveStyle({ maxHeight: "172px" });
+    bottom = 220;
+    fireEvent(window, new Event("resize"));
+    await waitFor(() => expect(popup).toHaveStyle({ maxHeight: "112px" }));
+    screen.getByTestId("clipping-container").style.overflowY = "visible";
+    fireEvent(window, new Event("resize"));
+    await waitFor(() => expect(popup).toHaveStyle({ maxHeight: "164px" }));
+  } finally {
+    bounds.mockRestore();
+    document.documentElement.style.removeProperty("--app-overlay-top-inset");
+  }
+});
+
 function Composer({ agentID = "agent", disabled = false }: { agentID?: string; disabled?: boolean }) {
   const editorRef = useRef<HTMLTextAreaElement>(null);
   const [draft, setDraft] = useState("Existing draft");

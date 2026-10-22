@@ -1,4 +1,4 @@
-import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { useId, useLayoutEffect, useRef, useState } from "react";
 import { BookOpen, Boxes, Wrench } from "lucide-react";
 import { Button, LinkButton, TextInput } from "@/components/ui";
 import { ConnectorGitLabIcon } from "@/components/ui/Icons";
@@ -41,6 +41,7 @@ export function ConversationResourcePicker({
   const [activeKey, setActiveKey] = useState<string | null>(null);
   const [pickerMaxHeight, setPickerMaxHeight] = useState(352);
   const searchRef = useRef<HTMLDivElement>(null);
+  const pickerRef = useRef<HTMLElement>(null);
   const activeRef = useRef<HTMLButtonElement>(null);
   const listID = useId();
   const resourceType = kind === "knowledge" ? "knowledge_base" : kind;
@@ -65,18 +66,39 @@ export function ConversationResourcePicker({
     activeRef.current?.scrollIntoView({ block: "nearest" });
   }, [activeKey, activeIndex]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
+    const picker = pickerRef.current;
+    if (!picker) return;
+    const ancestors: HTMLElement[] = [];
+    for (let parent = picker.parentElement; parent; parent = parent.parentElement) ancestors.push(parent);
     const updatePickerMaxHeight = () => {
-      const top = searchRef.current?.getBoundingClientRect().top;
-      if (top === undefined) return;
-      setPickerMaxHeight(Math.max(0, Math.min(352, top - 16)));
+      let top = Math.max(
+        window.visualViewport?.offsetTop ?? 0,
+        parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--app-overlay-top-inset")) || 0,
+      );
+      for (const parent of ancestors) {
+        if (/(auto|scroll|hidden|clip)/.test(getComputedStyle(parent).overflowY)) {
+          top = Math.max(top, parent.getBoundingClientRect().top + parent.clientTop);
+        }
+      }
+      // The popup is positioned above its containing block, which can differ
+      // from the search field when attachments are present.
+      setPickerMaxHeight(Math.max(0, Math.min(352, picker.getBoundingClientRect().bottom - top - 8)));
     };
     updatePickerMaxHeight();
+    const observer = new ResizeObserver(updatePickerMaxHeight);
+    observer.observe(picker);
+    ancestors.forEach((parent) => observer.observe(parent));
     window.addEventListener("resize", updatePickerMaxHeight);
     window.addEventListener("scroll", updatePickerMaxHeight, true);
+    window.visualViewport?.addEventListener("resize", updatePickerMaxHeight);
+    window.visualViewport?.addEventListener("scroll", updatePickerMaxHeight);
     return () => {
+      observer.disconnect();
       window.removeEventListener("resize", updatePickerMaxHeight);
       window.removeEventListener("scroll", updatePickerMaxHeight, true);
+      window.visualViewport?.removeEventListener("resize", updatePickerMaxHeight);
+      window.visualViewport?.removeEventListener("scroll", updatePickerMaxHeight);
     };
   }, []);
 
@@ -95,7 +117,7 @@ export function ConversationResourcePicker({
         }
       }}
     >
-      <section className={styles.picker} style={{ maxHeight: `min(352px, ${pickerMaxHeight}px)` }} aria-label={label}>
+      <section ref={pickerRef} className={styles.picker} style={{ maxHeight: pickerMaxHeight }} aria-label={label}>
         <div id={listID} role="listbox" aria-label={label} aria-busy={resource.loading} className={styles.list}>
           {resource.items.map((item, index) => {
             const key = resourceKey(item);
