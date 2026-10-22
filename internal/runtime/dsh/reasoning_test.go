@@ -22,7 +22,10 @@ func TestSelectReasoningEffort(t *testing.T) {
 	}{
 		{name: "minimal lifts to low", desired: "minimal", available: []string{"off", "low", "high", "max"}, want: "low"},
 		{name: "medium lifts to high", desired: "medium", available: []string{"off", "low", "high", "max"}, want: "high"},
-		{name: "xhigh lifts to max", desired: "xhigh", available: []string{"off", "low", "high", "max"}, want: "max"},
+		{name: "xhigh falls back to high instead of max", desired: "xhigh", available: []string{"off", "low", "high", "max"}, want: "high"},
+		{name: "xhigh uses next common level", desired: "xhigh", available: []string{"off", "medium", "max"}, want: "medium"},
+		{name: "xhigh cannot infer a max alias", desired: "xhigh", available: []string{"off", "max"}},
+		{name: "explicit native max", desired: "max", available: []string{"off", "low", "high", "max"}, want: "max"},
 		{name: "supported low", desired: "low", available: []string{"off", "low", "high", "max"}, want: "low"},
 		{name: "supported high", desired: "high", available: []string{"off", "low", "high", "max"}, want: "high"},
 		{name: "supported xhigh", desired: "xhigh", available: []string{"high", "xhigh", "max"}, want: "xhigh"},
@@ -31,7 +34,7 @@ func TestSelectReasoningEffort(t *testing.T) {
 		{name: "lower when closer", desired: "medium", available: []string{"low", "max"}, want: "low"},
 		{name: "highest when no higher", desired: "xhigh", available: []string{"off", "low", "high"}, want: "high"},
 		{name: "single positive level", desired: "minimal", available: []string{"off", "high"}, want: "high"},
-		{name: "normalized profile", desired: " XHIGH ", available: []string{"off", "low", "high", "max"}, want: "max"},
+		{name: "normalized profile", desired: " XHIGH ", available: []string{"off", "low", "high", "max"}, want: "high"},
 		{name: "disable alias", desired: "none", available: []string{"off", "low"}, want: "off"},
 		{name: "native none", desired: "off", available: []string{"none", "low"}, want: "none"},
 		{name: "never enable disabled reasoning", desired: "none", available: []string{"low", "high"}},
@@ -49,9 +52,9 @@ func TestSelectReasoningEffort(t *testing.T) {
 	}
 
 	t.Run("grouped opaque values", func(t *testing.T) {
-		options := []json.RawMessage{json.RawMessage(`{"id":"reasoning_effort","options":[{"group":"thinking","options":[{"value":"budget-low","name":"Low"},{"value":"budget-max","name":"Max"}]}]}`)}
-		if got, ok := selectReasoningEffort(options, "xhigh"); !ok || got != "budget-max" {
-			t.Fatalf("selectReasoningEffort() = %q, %v; want budget-max", got, ok)
+		options := []json.RawMessage{json.RawMessage(`{"id":"reasoning_effort","options":[{"group":"thinking","options":[{"value":"budget-low","name":"Low"},{"value":"budget-high","name":"High"},{"value":"budget-max","name":"Max"}]}]}`)}
+		if got, ok := selectReasoningEffort(options, "xhigh"); !ok || got != "budget-high" {
+			t.Fatalf("selectReasoningEffort() = %q, %v; want budget-high", got, ok)
 		}
 	})
 }
@@ -65,7 +68,7 @@ func TestSessionMapsReasoningEffortOnNewAndResume(t *testing.T) {
 		for _, test := range []struct{ effort, want string }{
 			{effort: "minimal", want: "low"},
 			{effort: "medium", want: "high"},
-			{effort: "xhigh", want: "max"},
+			{effort: "xhigh", want: "high"},
 			{effort: "high", want: "high"},
 			{effort: "none", want: "off"},
 			{effort: "auto"},
@@ -126,7 +129,7 @@ func TestConfigureSessionReasoningOptions(t *testing.T) {
 		want    string
 		wantErr bool
 	}{
-		{name: "legacy empty response uses initial options", want: "max"},
+		{name: "legacy empty response uses initial options", want: "high"},
 		{name: "selected model has no reasoning selector", updated: modelOptions(), wantErr: true},
 		{name: "selected model has no positive effort", updated: append(modelOptions(), reasoningOptions("off")...), wantErr: true},
 	} {

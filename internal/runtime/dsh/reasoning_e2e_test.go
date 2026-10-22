@@ -26,7 +26,7 @@ func TestReasoningEffortNativeDSHE2E(t *testing.T) {
 		{effort: "low", want: "low", thinking: "enabled"},
 		{effort: "medium", want: "high", thinking: "enabled"},
 		{effort: "high", want: "high", thinking: "enabled"},
-		{effort: "xhigh", want: "max", thinking: "enabled"},
+		{effort: "xhigh", want: "high", thinking: "enabled"},
 		{effort: "none", thinking: "disabled"},
 		{effort: "auto", want: "high", thinking: "enabled"},
 	} {
