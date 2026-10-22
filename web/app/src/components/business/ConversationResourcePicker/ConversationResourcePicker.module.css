@@ -54,6 +54,11 @@
   flex-shrink: 0;
 }
 
+.productIcon {
+  flex-shrink: 0;
+  object-fit: contain;
+}
+
 .option:is([aria-selected="true"], :hover):not(:disabled) {
   background: var(--button-tertiary-hover-background);
 }

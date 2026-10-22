@@ -1,6 +1,7 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { BookOpen, Boxes, Wrench } from "lucide-react";
 import { Button, LinkButton, TextInput } from "@/components/ui";
+import { ConnectorGitLabIcon } from "@/components/ui/Icons";
 import { useConversationResources } from "@/hooks/workspace/useConversationResources";
 import { isComposerKeyboardEventComposing } from "@/models/composer";
 import { maxResourceReferences, resourceKey, type ResourceSnapshot } from "@/models/conversationResources";
@@ -117,7 +118,13 @@ export function ConversationResourcePicker({
                 }}
                 onClick={() => onPick(item)}
               >
-                <Icon size={18} strokeWidth={1.8} aria-hidden="true" />
+                {kind === "connector" && item.source === "app" && item.description === "feishu" ? (
+                  <img className={styles.productIcon} src="icons/feishu.png" width={18} height={18} alt="" />
+                ) : kind === "connector" && item.source === "app" && item.description === "gitlab" ? (
+                  <ConnectorGitLabIcon size={18} aria-hidden="true" />
+                ) : (
+                  <Icon size={18} strokeWidth={1.8} aria-hidden="true" />
+                )}
                 <span className={styles.copy}>
                   <strong>{item.name}</strong>
                   {item.description ? <span className={styles.description}>{item.description}</span> : null}
