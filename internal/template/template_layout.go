@@ -291,11 +291,11 @@ func materializeWorkspaceMemoryFS(srcFS fs.FS, templateRoot, workspaceRoot strin
 }
 
 func copyTemplateSkills(source, target, runtimeKind string) error {
-	if normalizeTemplateRuntimeKind(runtimeKind) != agentruntime.KindCodex {
-		return copyWorkspaceTree(source, target)
-	}
+	isCodex := normalizeTemplateRuntimeKind(runtimeKind) == agentruntime.KindCodex
 	return copyWorkspaceTreeWithFilter(source, target, func(path string, _ fs.DirEntry) bool {
-		return filepath.ToSlash(filepath.Clean(path)) == codexSystemSkillsDirName
+		path = filepath.ToSlash(filepath.Clean(path))
+		// The persistent process lock belongs to the local installation, not the template.
+		return path == ".skillhub-lock.json.lock" || (isCodex && path == codexSystemSkillsDirName)
 	})
 }
 
