@@ -278,7 +278,7 @@ func saveMessagesJSONL(path, roomID string, messages []Message) error {
 		data.WriteByte('\n')
 	}
 
-	if err := atomicWriteFile(path, data.Bytes(), 0o600); err != nil {
+	if err := writeFileIfChanged(path, data.Bytes(), 0o600); err != nil {
 		return fmt.Errorf("write im session: %w", err)
 	}
 	if err := cleanupRoomSessionBlobs(blobDir, keepBlobs); err != nil {
@@ -288,7 +288,7 @@ func saveMessagesJSONL(path, roomID string, messages []Message) error {
 }
 
 func truncateSessionJSONL(path string) error {
-	if err := atomicWriteFile(path, nil, 0o600); err != nil {
+	if err := writeFileIfChanged(path, nil, 0o600); err != nil {
 		return fmt.Errorf("write empty im session: %w", err)
 	}
 	return nil
@@ -338,7 +338,7 @@ func encodeSessionMessageLine(sessionsRoot, roomID string, message Message) ([]b
 		return nil, "", fmt.Errorf("encode im session message: metadata exceeds %d bytes for message %s", maxSessionJSONLLineBytes, message.ID)
 	}
 	blobPath := filepath.Join(sessionsRoot, filepath.FromSlash(relativeRef))
-	if err := atomicWriteFile(blobPath, blobData, 0o600); err != nil {
+	if err := writeFileIfChanged(blobPath, blobData, 0o600); err != nil {
 		return nil, "", fmt.Errorf("write im session blob: %w", err)
 	}
 	return data, relativeRef, nil
