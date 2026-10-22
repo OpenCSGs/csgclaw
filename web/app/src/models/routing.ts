@@ -62,6 +62,7 @@ export const WorkspaceRouteSegments = {
   apps: "connectors",
   knowledgeBases: "knowledge-bases",
   tasks: "tasks",
+  scheduledTasks: "scheduled-tasks",
   channels: "channels",
   channel: "channel",
   dms: "dms",
@@ -91,6 +92,7 @@ const conversationRouteSegments = new Set<string>([
 export type WorkspacePane = {
   type: WorkspacePaneType;
   id?: string;
+  taskBoardView?: "tasks" | "scheduled";
   resourceType?: "knowledge" | "mcp" | "skill" | "template";
 };
 
@@ -168,8 +170,11 @@ export function paneFromLocation(pathname = window.location.pathname): Workspace
   if (section === WorkspaceRouteSegments.knowledgeBases) {
     return { type: WorkspacePaneTypes.hub, id, resourceType: "knowledge" };
   }
+  if (section === WorkspaceRouteSegments.scheduledTasks) {
+    return { type: WorkspacePaneTypes.task, id: "", taskBoardView: "scheduled" };
+  }
   if (section === WorkspaceRouteSegments.tasks) {
-    return { type: WorkspacePaneTypes.task, id };
+    return id ? { type: WorkspacePaneTypes.task, id } : { type: WorkspacePaneTypes.conversation, id: "" };
   }
   if (section === WorkspaceRouteSegments.settings) {
     return { type: WorkspacePaneTypes.settings, id: "" };
@@ -224,10 +229,13 @@ export function pathForPane(
     return `/${WorkspaceRouteSegments.resources}`;
   }
   if (pane.type === WorkspacePaneTypes.task) {
+    if (pane.taskBoardView === "scheduled") {
+      return `/${WorkspaceRouteSegments.scheduledTasks}`;
+    }
     if (pane.id) {
       return `/${WorkspaceRouteSegments.tasks}/${encodeURIComponent(pane.id)}`;
     }
-    return `/${WorkspaceRouteSegments.tasks}`;
+    return `/${WorkspaceRouteSegments.scheduledTasks}`;
   }
   if (pane.type === WorkspacePaneTypes.settings) {
     return `/${WorkspaceRouteSegments.settings}`;

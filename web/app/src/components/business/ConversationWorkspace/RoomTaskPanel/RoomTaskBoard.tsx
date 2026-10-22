@@ -15,38 +15,32 @@ import {
   type WorkspaceTask,
 } from "@/models/tasks";
 import { classNames } from "@/shared/lib/classNames";
-import styles from "./TaskBoard.module.css";
+import styles from "./RoomTaskBoard.module.css";
 
-type TaskBoardProps = {
+type RoomTaskBoardProps = {
   tasks: readonly WorkspaceTask[];
   agentNames: ReadonlyMap<string, string>;
   onSelectTask: (task: WorkspaceTask, anchor: HTMLButtonElement) => void;
   renderTaskStatus?: (task: WorkspaceTask) => ReactNode;
   planningTaskID?: string;
   startingTaskID?: string;
-  layout?: "columns" | "responsive";
   locale?: string;
   t: TranslateFn;
 };
 
-export function TaskBoard({
+export function RoomTaskBoard({
   tasks,
   agentNames,
   onSelectTask,
   renderTaskStatus,
   planningTaskID,
   startingTaskID,
-  layout = "columns",
   locale,
   t,
-}: TaskBoardProps) {
+}: RoomTaskBoardProps) {
   const columns = useMemo(() => boardColumnsForTasks(rootTasks(tasks)), [tasks]);
   return (
-    <div
-      className={classNames(styles.tasksKanbanScroll, layout === "responsive" && styles.responsive)}
-      role="region"
-      aria-label={t("mainTaskBoardTitle")}
-    >
+    <div className={styles.tasksKanbanScroll} role="region" aria-label={t("mainTaskBoardTitle")}>
       <div className={styles.tasksKanban}>
         {columns.map((column) => (
           <section

@@ -90,7 +90,6 @@ export function TaskWorkspaceSidebar(props: WorkspaceSidebarProps & { entry: Tas
       active: props.activePane.type === WorkspacePaneTypes.task && props.activeTaskBoardView === "scheduled",
       action: () => {
         props.onSelectTaskBoardView?.("scheduled");
-        props.onSelectTask();
       },
     },
   ];

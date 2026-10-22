@@ -232,7 +232,6 @@ export function WorkspaceTabPanels({
   contextQuery = "",
   contextSectionId,
   workspaceTab,
-  taskCount = 0,
   scheduledTaskCount = 0,
   activeTaskBoardView = "tasks",
   teams = [],
@@ -251,7 +250,6 @@ export function WorkspaceTabPanels({
   onCreateAgent,
   onCreateNotificationParticipant,
   onOpenCreateTeam,
-  onOpenCreateTask,
   onOpenCreateScheduledTask,
   hub,
   onSelectHubTemplate,
@@ -274,7 +272,6 @@ export function WorkspaceTabPanels({
   onSelectComputer,
   onCreateModelProvider,
   onSelectTaskBoardView = () => {},
-  onSelectTask,
   onSkillUploadOpenChange,
 }: WorkspaceTabPanelsProps) {
   const normalizedContextQuery = normalizeSearchQuery(contextQuery);
@@ -1175,40 +1172,13 @@ export function WorkspaceTabPanels({
           <WorkspaceGroup
             id="tasks"
             title={t("tasksTab")}
-            count={taskCount + scheduledTaskCount}
+            count={scheduledTaskCount}
             collapsed={Boolean(collapsedWorkspaceGroups.tasks)}
             onToggle={() => onToggleWorkspaceGroup("tasks")}
-            onAdd={
-              activeTaskBoardView === "scheduled" && onOpenCreateScheduledTask
-                ? onOpenCreateScheduledTask
-                : onOpenCreateTask
-            }
-            addLabel={
-              activeTaskBoardView === "scheduled" && onOpenCreateScheduledTask
-                ? t("scheduledTaskCreate")
-                : t("taskCreate")
-            }
+            onAdd={onOpenCreateScheduledTask}
+            addLabel={t("scheduledTaskCreate")}
             addIcon={<Plus size={15} strokeWidth={2.2} aria-hidden="true" />}
           >
-            {matchesSearch(normalizedContextQuery, t("normalTasksTab")) ? (
-              <button
-                type="button"
-                className={classNames(
-                  rowStyles.row,
-                  styles.taskSectionRow,
-                  activeTaskBoardView === "tasks" && rowStyles.active,
-                )}
-                onClick={() => {
-                  onSelectTaskBoardView("tasks");
-                  onSelectTask();
-                }}
-              >
-                <span className={rowStyles.main}>
-                  <span className={classNames(rowStyles.title, "truncate")}>{t("normalTasksTab")}</span>
-                </span>
-                <span className={rowStyles.rowCount}>{taskCount}</span>
-              </button>
-            ) : null}
             {matchesSearch(normalizedContextQuery, t("scheduledTasksTab")) ? (
               <button
                 type="button"
@@ -1219,7 +1189,6 @@ export function WorkspaceTabPanels({
                 )}
                 onClick={() => {
                   onSelectTaskBoardView("scheduled");
-                  onSelectTask();
                 }}
               >
                 <span className={rowStyles.main}>
@@ -1228,7 +1197,7 @@ export function WorkspaceTabPanels({
                 <span className={rowStyles.rowCount}>{scheduledTaskCount}</span>
               </button>
             ) : null}
-            {!matchesSearch(normalizedContextQuery, t("normalTasksTab"), t("scheduledTasksTab")) ? (
+            {!matchesSearch(normalizedContextQuery, t("scheduledTasksTab")) ? (
               <div className={styles.empty}>{t("workspaceSearchNoResults")}</div>
             ) : null}
           </WorkspaceGroup>

@@ -9,12 +9,13 @@ const labels: Record<string, string> = {
   messagesTab: "Messages",
   newBadge: "NEW",
   tasksTab: "Tasks",
+  scheduledTasksTab: "Scheduled",
 };
 
 const t: TranslateFn = (key) => labels[key] ?? key;
 
 describe("WorkspaceTabBar", () => {
-  it("exposes the tasks shortcut in the sidebar rail", () => {
+  it("exposes the scheduled tasks shortcut in the sidebar rail", () => {
     render(
       <WorkspaceTabBar
         variant="rail"
@@ -22,7 +23,7 @@ describe("WorkspaceTabBar", () => {
         onWorkspaceTabChange={() => {}}
         roomCount={2}
         agentCount={1}
-        taskCount={0}
+        scheduledTaskCount={0}
         onSelectHub={() => {}}
         showHubNewBadge
         t={t}
@@ -33,7 +34,7 @@ describe("WorkspaceTabBar", () => {
 
     expect(within(tablist).getByRole("tab", { name: "Messages" })).toBeInTheDocument();
     expect(within(tablist).getByRole("tab", { name: "Agents" })).toBeInTheDocument();
-    expect(within(tablist).getByRole("tab", { name: "Tasks" })).toBeInTheDocument();
+    expect(within(tablist).getByRole("tab", { name: "Scheduled" })).toBeInTheDocument();
     expect(within(tablist).getByRole("tab", { name: "Resources" })).toBeInTheDocument();
   });
 
@@ -44,7 +45,7 @@ describe("WorkspaceTabBar", () => {
         onWorkspaceTabChange={() => {}}
         roomCount={2}
         agentCount={1}
-        taskCount={0}
+        scheduledTaskCount={0}
         onSelectHub={() => {}}
         showHubNewBadge={false}
         t={t}

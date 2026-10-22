@@ -1,10 +1,10 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { fetchGlobalTasks, fetchTeamEvents, fetchTeams } from "@/api/tasks";
 import { fetchScheduledTaskRuns, fetchScheduledTasks, runScheduledTaskNow } from "@/api/scheduledTasks";
 import { useTaskController } from "@/hooks/workspace/useTaskController";
-import { WorkspacePaneTypes } from "@/models/routing";
+import { paneFromLocation, WorkspacePaneTypes } from "@/models/routing";
 import type { WorkspacePane } from "@/models/routing";
 import type { TranslateFn } from "@/models/conversations";
 import type { WorkspaceTask } from "@/models/tasks";
@@ -52,14 +52,17 @@ function createWrapper(queryClient: QueryClient) {
 
 function renderTaskController(queryClient: QueryClient, activePane: WorkspacePane) {
   return renderHook(
-    ({ pane }: { pane: WorkspacePane }) =>
-      useTaskController({
-        activePane: pane,
+    ({ pane }: { pane: WorkspacePane }) => {
+      const [view, setView] = useState(pane.taskBoardView);
+      return useTaskController({
+        activePane: { ...pane, taskBoardView: view },
+        onSelectTaskBoardView: setView,
         agents: [],
         onSelectConversation: vi.fn(),
         onSelectTask: vi.fn(),
         t,
-      }),
+      });
+    },
     {
       initialProps: { pane: activePane },
       wrapper: createWrapper(queryClient),
@@ -129,6 +132,34 @@ function scheduledRun(overrides: Partial<WorkspaceScheduledTaskRun> = {}): Works
 }
 
 describe("useTaskController", () => {
+  it("restores the scheduled view on mount and follows route changes without remounting", () => {
+    const queryClient = createQueryClient();
+    const onSelectTaskBoardView = vi.fn();
+    const { result, rerender, unmount } = renderHook(
+      ({ pathname }) =>
+        useTaskController({
+          activePane: paneFromLocation(pathname),
+          agents: [],
+          t,
+          onSelectConversation: vi.fn(),
+          onSelectTask: vi.fn(),
+          onSelectTaskBoardView,
+        }),
+      { initialProps: { pathname: "/scheduled-tasks" }, wrapper: createWrapper(queryClient) },
+    );
+    expect(result.current.taskViewProps.activeView).toBe("scheduled");
+    rerender({ pathname: "/tasks/task-1" });
+    expect(result.current.taskViewProps.activeView).toBe("tasks");
+    expect(result.current.taskViewProps.selectedTaskID).toBe("task-1");
+    rerender({ pathname: "/scheduled-tasks" });
+    expect(result.current.taskViewProps.activeView).toBe("scheduled");
+    expect(result.current.taskViewProps.selectedTaskID).toBe("");
+    act(() => result.current.setTaskBoardView("tasks"));
+    expect(onSelectTaskBoardView).toHaveBeenCalledWith("tasks");
+    unmount();
+    queryClient.clear();
+  });
+
   beforeEach(() => {
     vi.mocked(fetchGlobalTasks).mockReset();
     vi.mocked(fetchTeamEvents).mockReset();

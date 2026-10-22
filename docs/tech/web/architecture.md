@@ -140,6 +140,10 @@ Chinese companion: `architecture.zh.md`.
   Workspace pane and sidebar tab selection are derived from the URL. React Router owns the route
   location; Zustand keeps only non-route workspace state.
 
+  /scheduled-tasks shows scheduled tasks; /tasks/:taskId retains task detail deep links.
+  The retired /tasks board redirects home. Conversation task boards stay inside RoomTaskPanel.
+  The task board view comes from the route and survives reloads and browser history navigation.
+
   User click
       |
       v

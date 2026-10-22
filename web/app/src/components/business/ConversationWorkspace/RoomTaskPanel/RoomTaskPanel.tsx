@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui";
-import { TaskBoard } from "@/components/business/TaskBoard";
+import { RoomTaskBoard } from "./RoomTaskBoard";
 import type { AgentLike } from "@/models/agents";
 import type { TranslateFn, UsersById } from "@/models/conversations";
 import { roomTaskGroups, roomTaskState } from "@/models/roomTasks";
@@ -69,10 +69,9 @@ export function RoomTaskPanel({
           </p>
         ) : null}
         {!loading ? (
-          <TaskBoard
+          <RoomTaskBoard
             tasks={scopedTasks}
             agentNames={agentNames}
-            layout="responsive"
             locale={locale}
             t={t}
             renderTaskStatus={(task) =>

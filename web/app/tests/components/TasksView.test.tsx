@@ -233,7 +233,7 @@ function scheduledTaskRun(overrides: Partial<WorkspaceScheduledTaskRun> = {}): W
 }
 
 describe("TasksView", () => {
-  it("shows parent tasks first and opens a parent-task dialog with grouped activity", async () => {
+  it("opens the selected task detail with grouped activity without the retired board", async () => {
     const tasks = [
       task({ id: "task-1", title: "Build blog", status: "pending" }),
       task({
@@ -300,17 +300,8 @@ describe("TasksView", () => {
 
     render(<TasksView tasks={tasks} taskEvents={taskEvents} selectedTask={tasks[0]} t={t} />);
 
-    expect(screen.getByRole("heading", { name: "Task board" })).toBeInTheDocument();
-    const parentCard = screen.getByText("Build blog").closest("button");
-    expect(parentCard).toHaveTextContent("1/2");
-    expect(parentCard).toHaveTextContent("te-team");
-    expect(parentCard).toHaveTextContent(/Updated/);
-    expect(parentCard).not.toHaveTextContent(/\d{4}\.\d{2}\.\d{2}/);
-    expect(screen.queryByRole("button", { name: "View details" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Open execution room" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("dialog", { name: "Build blog" })).not.toBeInTheDocument();
-
-    fireEvent.click(parentCard!);
+    expect(screen.queryByRole("heading", { name: "Task board" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Task board" })).not.toBeInTheDocument();
 
     expect(screen.getByRole("dialog", { name: "Build blog" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Build blog" })).toBeInTheDocument();
@@ -354,9 +345,7 @@ describe("TasksView", () => {
       claimed_by_agent_name: "",
     });
 
-    render(<TasksView tasks={[parent]} t={t} />);
-
-    fireEvent.click(screen.getByText("Build blog").closest("button")!);
+    render(<TasksView tasks={[parent]} selectedTask={parent} t={t} />);
 
     const metadata = screen.getByRole("complementary", { name: "Task info" });
     expect(within(metadata).queryByText("Assignee")).not.toBeInTheDocument();
@@ -463,43 +452,26 @@ describe("TasksView", () => {
     );
   });
 
-  it("keeps the task board visible when there are no tasks", () => {
-    render(<TasksView tasks={[]} t={t} />);
-
-    expect(screen.getByRole("heading", { name: "Task board" })).toBeInTheDocument();
-    expect(screen.getAllByText("No tasks").length).toBeGreaterThan(0);
-    expect(screen.queryByText("tasksEmpty")).not.toBeInTheDocument();
+  it("does not render the retired board on task detail routes", () => {
+    render(<TasksView activeView="tasks" tasks={[]} t={t} />);
+    expect(screen.queryByRole("heading", { name: "Task board" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Task board" })).not.toBeInTheDocument();
+    expect(screen.queryByText("No tasks")).not.toBeInTheDocument();
   });
 
-  it("uses the active task view for the toolbar create action", () => {
+  it("keeps the scheduled task create action without the ordinary board action", () => {
     const onOpenCreateTaskModal = vi.fn();
     const onOpenCreateScheduledTaskModal = vi.fn();
-
-    const { rerender } = render(
+    render(
       <TasksView
         onOpenCreateTaskModal={onOpenCreateTaskModal}
         onOpenCreateScheduledTaskModal={onOpenCreateScheduledTaskModal}
         t={t}
       />,
     );
-
-    fireEvent.click(screen.getByRole("button", { name: "New task" }));
-
-    expect(onOpenCreateTaskModal).toHaveBeenCalledTimes(1);
-    expect(screen.queryByRole("button", { name: "New scheduled task" })).not.toBeInTheDocument();
-
-    rerender(
-      <TasksView
-        activeView="scheduled"
-        onOpenCreateTaskModal={onOpenCreateTaskModal}
-        onOpenCreateScheduledTaskModal={onOpenCreateScheduledTaskModal}
-        t={t}
-      />,
-    );
-
     fireEvent.click(screen.getByRole("button", { name: "New scheduled task" }));
-
     expect(onOpenCreateScheduledTaskModal).toHaveBeenCalledTimes(1);
+    expect(onOpenCreateTaskModal).not.toHaveBeenCalled();
     expect(screen.queryByRole("button", { name: "New task" })).not.toBeInTheDocument();
   });
 
@@ -645,8 +617,6 @@ describe("TasksView", () => {
     ];
 
     render(<TasksView tasks={tasks} selectedTask={tasks[0]} t={t} />);
-
-    fireEvent.click(screen.getByText("Build blog").closest("button")!);
 
     expect(screen.getByRole("dialog", { name: "Build blog" })).toBeInTheDocument();
     expect(screen.queryByTitle("planner done")).not.toBeInTheDocument();

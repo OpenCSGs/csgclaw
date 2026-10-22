@@ -39,7 +39,8 @@ const scheduledTaskRunsAllQueryKey = (taskIDsKey: string) =>
 export type TaskBoardView = "tasks" | "scheduled";
 
 type UseTaskControllerArgs = {
-  activePane: { type?: string; id?: string };
+  activePane: { type?: string; id?: string; taskBoardView?: TaskBoardView };
+  onSelectTaskBoardView: (view: TaskBoardView) => void;
   agents: AgentLike[];
   rooms?: readonly Pick<IMConversation, "id">[];
   t: TranslateFn;
@@ -54,11 +55,12 @@ export function useTaskController({
   t,
   onSelectConversation,
   onSelectTask,
+  onSelectTaskBoardView: setTaskBoardView,
 }: UseTaskControllerArgs) {
   const queryClient = useQueryClient();
   const [showCreateTaskModal, setShowCreateTaskModal] = useState(false);
   const [showCreateScheduledTaskModal, setShowCreateScheduledTaskModal] = useState(false);
-  const [taskBoardView, setTaskBoardView] = useState<TaskBoardView>("tasks");
+  const taskBoardView = activePane.taskBoardView ?? "tasks";
   const [editingScheduledTaskID, setEditingScheduledTaskID] = useState("");
   const [createTaskBusy, setCreateTaskBusy] = useState(false);
   const [createTaskError, setCreateTaskError] = useState("");
@@ -566,7 +568,6 @@ export function useTaskController({
       t,
       agents,
       tasks,
-      taskBoardTasks: boardTasks,
       taskEvents,
       teams,
       scheduledTasks,

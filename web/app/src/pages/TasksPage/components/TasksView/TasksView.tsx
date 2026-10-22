@@ -30,13 +30,11 @@ import {
   displayTeam,
   formatTaskUpdatedAt,
   rootTaskForTask,
-  rootTasks,
   taskChildren,
   taskExecutionRoomID,
   taskStatusLabel,
 } from "@/models/tasks";
 import type { WorkspaceTask, WorkspaceTeam, WorkspaceTeamEvent } from "@/models/tasks";
-import { TaskBoard } from "@/components/business/TaskBoard";
 import {
   agentNameLookup,
   displayAgentByID,
@@ -302,7 +300,6 @@ export type TasksViewProps = {
   startingTaskID?: string;
   taskActionError?: string;
   taskEvents?: WorkspaceTeamEvent[];
-  taskBoardTasks?: WorkspaceTask[];
   tasks?: WorkspaceTask[];
   activeView?: TaskBoardView;
   t?: TranslateFn;
@@ -321,7 +318,6 @@ export function TasksView({
   t = (key) => key,
   agents = EMPTY_AGENTS,
   tasks = [],
-  taskBoardTasks = tasks,
   taskEvents = [],
   teams = [],
   loading = false,
@@ -337,16 +333,15 @@ export function TasksView({
   editScheduledTaskError = "",
   showCreateTaskModal = false,
   showCreateScheduledTaskModal = false,
-  activeView = "tasks",
+  activeView = "scheduled",
   editingScheduledTaskID = "",
   scheduledTasks = [],
   scheduledTaskRuns = [],
   selectedScheduledTaskID = "",
   scheduledTaskActionID = "",
   scheduledTaskActionError = "",
+  selectedTask = null,
   parentDetailTaskID = "",
-  planningTaskID = "",
-  startingTaskID = "",
   rooms,
   onCloseCreateScheduledTaskModal,
   onCloseCreateTaskModal,
@@ -357,7 +352,6 @@ export function TasksView({
   onCreateScheduledTask,
   onDeleteScheduledTask,
   onEditScheduledTask,
-  onOpenCreateTaskModal,
   onOpenCreateScheduledTaskModal,
   onRefresh = () => {},
   onRunScheduledTask = () => {},
@@ -367,7 +361,6 @@ export function TasksView({
   onOpenEditScheduledTaskModal,
   onOpenConversation = () => {},
 }: TasksViewProps) {
-  const parentTasks = useMemo(() => rootTasks(taskBoardTasks), [taskBoardTasks]);
   const assignmentOptions = useMemo(() => taskAssignmentOptions(teams, agents, t), [agents, t, teams]);
   const scheduledAgentOptions = useMemo(() => scheduledTaskAgentOptions(agents), [agents]);
   const agentNames = useMemo(() => agentNameLookup(agents), [agents]);
@@ -391,22 +384,14 @@ export function TasksView({
     }
     return false;
   }, [scheduledTaskRuns, tasks]);
-  const [parentDialogTaskID, setParentDialogTaskID] = useState("");
-  const dialogStateRootTask = useMemo(
-    () => (parentDialogTaskID ? (parentTasks.find((item) => item.id === parentDialogTaskID) ?? null) : null),
-    [parentDialogTaskID, parentTasks],
-  );
   const parentDetailTask = useMemo(() => {
-    if (!parentDetailTaskID) {
-      return null;
-    }
-    const task = taskBoardTasks.find((item) => item.id === parentDetailTaskID) ?? null;
-    return rootTaskForTask(taskBoardTasks, task) ?? task;
-  }, [parentDetailTaskID, taskBoardTasks]);
-  const parentDialogTask = parentDetailTask ?? dialogStateRootTask;
+    const task = parentDetailTaskID ? (tasks.find((item) => item.id === parentDetailTaskID) ?? null) : selectedTask;
+    return rootTaskForTask(tasks, task) ?? task;
+  }, [parentDetailTaskID, selectedTask, tasks]);
+  const parentDialogTask = parentDetailTask;
   const parentDialogChildTasks = useMemo(
-    () => (parentDialogTask ? taskChildren(taskBoardTasks, parentDialogTask.id) : []),
-    [parentDialogTask, taskBoardTasks],
+    () => (parentDialogTask ? taskChildren(tasks, parentDialogTask.id) : []),
+    [parentDialogTask, tasks],
   );
   const [createDraft, setCreateDraft] = useState<TaskCreateDraft>(emptyCreateDraft);
   const [createFieldErrors, setCreateFieldErrors] = useState<TaskCreateFieldErrors>({});
@@ -605,13 +590,7 @@ export function TasksView({
     });
   }
 
-  function openRootTaskDetail(task: WorkspaceTask) {
-    setParentDialogTaskID(task.id);
-    setConversationOpenError("");
-  }
-
   function closeRootTaskDetail() {
-    setParentDialogTaskID("");
     setConversationOpenError("");
     onCloseParentTaskDetail?.();
     void onCloseTaskDetails?.();
@@ -660,12 +639,12 @@ export function TasksView({
       {conversationOpenError ? (
         <div className={classNames("form-error", styles.tasksActionError)}>{conversationOpenError}</div>
       ) : null}
-      {!error ? (
+      {!error && activeView === "scheduled" ? (
         <div className={styles.tasksBoardWorkbench} aria-busy={loading}>
           <div className={styles.tasksBoardPanel}>
             <div className={classNames(styles.headerRow, styles.justifyEnd, styles.tasksBoardHead)}>
               <div className={styles.tasksBoardHeading}>
-                <h1>{t("mainTaskBoardTitle")}</h1>
+                <h1>{t("scheduledTasksTab")}</h1>
               </div>
               <TaskActionStrip
                 t={t}
@@ -675,181 +654,168 @@ export function TasksView({
                 canStartTask={false}
                 planTaskBusy={planTaskBusy}
                 startTaskBusy={startTaskBusy}
-                onCreateTask={activeView === "tasks" ? onOpenCreateTaskModal : undefined}
-                onCreateScheduledTask={activeView === "scheduled" ? onOpenCreateScheduledTaskModal : undefined}
+                onCreateScheduledTask={onOpenCreateScheduledTaskModal}
                 onRefresh={onRefresh}
               />
             </div>
             <div className={styles.taskContentLayout}>
               <div className={styles.taskContentMain}>
-                {activeView === "tasks" ? (
-                  <TaskBoard
-                    tasks={taskBoardTasks}
-                    agentNames={agentNames}
-                    planningTaskID={planningTaskID}
-                    startingTaskID={startingTaskID}
-                    t={t}
-                    onSelectTask={openRootTaskDetail}
-                  />
-                ) : (
-                  <div className={styles.scheduledTaskLayout}>
-                    <section className={styles.scheduledTaskList} aria-label={t("scheduledTasksTab")}>
-                      <div className={styles.scheduledTaskListHead}>
-                        <strong>{t("scheduledTasksTab")}</strong>
-                      </div>
-                      {scheduledTasks.length ? (
-                        scheduledTasks.map((item) => (
-                          <button
-                            key={item.id}
-                            type="button"
-                            className={styles.scheduledTaskRow}
-                            data-active={selectedScheduledTask?.id === item.id ? true : undefined}
-                            onClick={() => selectScheduledTask(item.id)}
-                          >
-                            <span>
-                              <CalendarClock size={15} aria-hidden="true" />
-                              <strong>{item.title}</strong>
-                            </span>
-                            <small>
-                              {scheduledTaskRecurrenceLabel(item.recurrence, t)} ·{" "}
-                              {formatTaskUpdatedAt(item.next_run_at)}
-                            </small>
-                          </button>
-                        ))
-                      ) : (
-                        <div className={styles.taskBoardEmpty}>{t("scheduledTasksEmpty")}</div>
-                      )}
-                    </section>
-                    <section className={styles.scheduledTaskDetail} aria-label={t("scheduledTaskDetailTitle")}>
-                      {selectedScheduledTask ? (
-                        <>
-                          <div className={styles.scheduledTaskDetailHead}>
-                            <div>
-                              <h2>{selectedScheduledTask.title}</h2>
-                              <p>{scheduledTaskRecurrenceLabel(selectedScheduledTask.recurrence, t)}</p>
-                            </div>
-                            <div className={styles.scheduledTaskActions}>
+                <div className={styles.scheduledTaskLayout}>
+                  <section className={styles.scheduledTaskList} aria-label={t("scheduledTasksTab")}>
+                    <div className={styles.scheduledTaskListHead}>
+                      <strong>{t("scheduledTasksTab")}</strong>
+                    </div>
+                    {scheduledTasks.length ? (
+                      scheduledTasks.map((item) => (
+                        <button
+                          key={item.id}
+                          type="button"
+                          className={styles.scheduledTaskRow}
+                          data-active={selectedScheduledTask?.id === item.id ? true : undefined}
+                          onClick={() => selectScheduledTask(item.id)}
+                        >
+                          <span>
+                            <CalendarClock size={15} aria-hidden="true" />
+                            <strong>{item.title}</strong>
+                          </span>
+                          <small>
+                            {scheduledTaskRecurrenceLabel(item.recurrence, t)} · {formatTaskUpdatedAt(item.next_run_at)}
+                          </small>
+                        </button>
+                      ))
+                    ) : (
+                      <div className={styles.taskBoardEmpty}>{t("scheduledTasksEmpty")}</div>
+                    )}
+                  </section>
+                  <section className={styles.scheduledTaskDetail} aria-label={t("scheduledTaskDetailTitle")}>
+                    {selectedScheduledTask ? (
+                      <>
+                        <div className={styles.scheduledTaskDetailHead}>
+                          <div>
+                            <h2>{selectedScheduledTask.title}</h2>
+                            <p>{scheduledTaskRecurrenceLabel(selectedScheduledTask.recurrence, t)}</p>
+                          </div>
+                          <div className={styles.scheduledTaskActions}>
+                            <Button
+                              variant="secondaryGray"
+                              size="sm"
+                              disabled={scheduledTaskActionID === selectedScheduledTask.id}
+                              onClick={() => onOpenEditScheduledTaskModal?.(selectedScheduledTask.id)}
+                            >
+                              <Pencil size={14} aria-hidden="true" />
+                              {t("scheduledTaskEdit")}
+                            </Button>
+                            <Button
+                              variant="outlineDanger"
+                              size="sm"
+                              disabled={scheduledTaskActionID === selectedScheduledTask.id}
+                              onClick={() => setDeletingScheduledTask(selectedScheduledTask)}
+                            >
+                              <Trash2 size={14} aria-hidden="true" />
+                              {t("scheduledTaskDelete")}
+                            </Button>
+                            {selectedScheduledTask.enabled || selectedScheduledTask.next_run_at ? (
                               <Button
                                 variant="secondaryGray"
                                 size="sm"
                                 disabled={scheduledTaskActionID === selectedScheduledTask.id}
-                                onClick={() => onOpenEditScheduledTaskModal?.(selectedScheduledTask.id)}
+                                onClick={() =>
+                                  onToggleScheduledTask(selectedScheduledTask.id, !selectedScheduledTask.enabled)
+                                }
                               >
-                                <Pencil size={14} aria-hidden="true" />
-                                {t("scheduledTaskEdit")}
+                                {selectedScheduledTask.enabled ? t("scheduledTaskDisable") : t("scheduledTaskEnable")}
                               </Button>
-                              <Button
-                                variant="outlineDanger"
-                                size="sm"
-                                disabled={scheduledTaskActionID === selectedScheduledTask.id}
-                                onClick={() => setDeletingScheduledTask(selectedScheduledTask)}
-                              >
-                                <Trash2 size={14} aria-hidden="true" />
-                                {t("scheduledTaskDelete")}
-                              </Button>
-                              {selectedScheduledTask.enabled || selectedScheduledTask.next_run_at ? (
-                                <Button
-                                  variant="secondaryGray"
-                                  size="sm"
-                                  disabled={scheduledTaskActionID === selectedScheduledTask.id}
-                                  onClick={() =>
-                                    onToggleScheduledTask(selectedScheduledTask.id, !selectedScheduledTask.enabled)
-                                  }
-                                >
-                                  {selectedScheduledTask.enabled ? t("scheduledTaskDisable") : t("scheduledTaskEnable")}
-                                </Button>
-                              ) : (
-                                <Button variant="secondaryGray" size="sm" disabled>
-                                  {t("scheduledTaskCompleted")}
-                                </Button>
-                              )}
-                              <Button
-                                variant="primary"
-                                size="sm"
-                                disabled={scheduledTaskActionID === selectedScheduledTask.id || hasActiveGeneratedTask}
-                                onClick={() => onRunScheduledTask(selectedScheduledTask.id)}
-                              >
-                                <Play size={14} aria-hidden="true" />
-                                {hasActiveGeneratedTask ? t("scheduledTaskActiveTask") : t("scheduledTaskRunNow")}
-                              </Button>
-                            </div>
-                          </div>
-                          <dl className={styles.scheduledTaskMeta}>
-                            <div>
-                              <dt>{t("scheduledTaskAgentLabel")}</dt>
-                              <Tooltip content={selectedScheduledTask.agent_id}>
-                                <dd>
-                                  {displayAgentByID(
-                                    selectedScheduledTask.agent_id,
-                                    agentNames,
-                                    selectedScheduledTask.agent_name,
-                                  )}
-                                </dd>
-                              </Tooltip>
-                            </div>
-                            <div>
-                              <dt>{t("scheduledTaskNextRunLabel")}</dt>
-                              <dd>{formatTaskUpdatedAt(selectedScheduledTask.next_run_at)}</dd>
-                            </div>
-                            <div>
-                              <dt>{t("scheduledTaskLastRunLabel")}</dt>
-                              <dd>
-                                {selectedScheduledTask.last_run_at
-                                  ? formatTaskUpdatedAt(selectedScheduledTask.last_run_at)
-                                  : "-"}
-                              </dd>
-                            </div>
-                          </dl>
-                          <div className={styles.scheduledTaskPrompt}>{selectedScheduledTask.prompt}</div>
-                          <div className={styles.scheduledTaskRuns}>
-                            <h3>{t("scheduledTaskRunsTitle")}</h3>
-                            {scheduledTaskRuns.length ? (
-                              <div className={styles.scheduledTaskRunList}>
-                                {scheduledTaskRuns.map((run) => (
-                                  <div key={run.id} className={styles.scheduledTaskRunRow}>
-                                    <span>{formatTaskUpdatedAt(run.triggered_at)}</span>
-                                    <strong>
-                                      {run.status === "failed"
-                                        ? t("scheduledTaskRunFailedStatus")
-                                        : t("scheduledTaskRunTriggeredStatus")}
-                                    </strong>
-                                    {run.task_id ? (
-                                      <button
-                                        type="button"
-                                        data-active={selectedGeneratedTaskID === run.task_id ? true : undefined}
-                                        onClick={() => openRunTask(run.task_id)}
-                                      >
-                                        {run.task_id}
-                                      </button>
-                                    ) : null}
-                                    {run.error ? (
-                                      <Tooltip content={run.error}>
-                                        <small>{scheduledTaskRunErrorLabel(run.error, t)}</small>
-                                      </Tooltip>
-                                    ) : null}
-                                  </div>
-                                ))}
-                              </div>
                             ) : (
-                              <div className={styles.taskBoardEmpty}>{t("scheduledTaskRunsEmpty")}</div>
+                              <Button variant="secondaryGray" size="sm" disabled>
+                                {t("scheduledTaskCompleted")}
+                              </Button>
                             )}
+                            <Button
+                              variant="primary"
+                              size="sm"
+                              disabled={scheduledTaskActionID === selectedScheduledTask.id || hasActiveGeneratedTask}
+                              onClick={() => onRunScheduledTask(selectedScheduledTask.id)}
+                            >
+                              <Play size={14} aria-hidden="true" />
+                              {hasActiveGeneratedTask ? t("scheduledTaskActiveTask") : t("scheduledTaskRunNow")}
+                            </Button>
                           </div>
-                          <GeneratedTaskInlineDetail
-                            task={selectedGeneratedTask}
-                            childTasks={selectedGeneratedChildTasks}
-                            agentNames={agentNames}
-                            teams={teams}
-                            taskEvents={taskEvents}
-                            t={t}
-                            onOpenConversation={openTaskConversation}
-                          />
-                        </>
-                      ) : (
-                        <div className={styles.taskBoardEmpty}>{t("scheduledTasksEmpty")}</div>
-                      )}
-                    </section>
-                  </div>
-                )}
+                        </div>
+                        <dl className={styles.scheduledTaskMeta}>
+                          <div>
+                            <dt>{t("scheduledTaskAgentLabel")}</dt>
+                            <Tooltip content={selectedScheduledTask.agent_id}>
+                              <dd>
+                                {displayAgentByID(
+                                  selectedScheduledTask.agent_id,
+                                  agentNames,
+                                  selectedScheduledTask.agent_name,
+                                )}
+                              </dd>
+                            </Tooltip>
+                          </div>
+                          <div>
+                            <dt>{t("scheduledTaskNextRunLabel")}</dt>
+                            <dd>{formatTaskUpdatedAt(selectedScheduledTask.next_run_at)}</dd>
+                          </div>
+                          <div>
+                            <dt>{t("scheduledTaskLastRunLabel")}</dt>
+                            <dd>
+                              {selectedScheduledTask.last_run_at
+                                ? formatTaskUpdatedAt(selectedScheduledTask.last_run_at)
+                                : "-"}
+                            </dd>
+                          </div>
+                        </dl>
+                        <div className={styles.scheduledTaskPrompt}>{selectedScheduledTask.prompt}</div>
+                        <div className={styles.scheduledTaskRuns}>
+                          <h3>{t("scheduledTaskRunsTitle")}</h3>
+                          {scheduledTaskRuns.length ? (
+                            <div className={styles.scheduledTaskRunList}>
+                              {scheduledTaskRuns.map((run) => (
+                                <div key={run.id} className={styles.scheduledTaskRunRow}>
+                                  <span>{formatTaskUpdatedAt(run.triggered_at)}</span>
+                                  <strong>
+                                    {run.status === "failed"
+                                      ? t("scheduledTaskRunFailedStatus")
+                                      : t("scheduledTaskRunTriggeredStatus")}
+                                  </strong>
+                                  {run.task_id ? (
+                                    <button
+                                      type="button"
+                                      data-active={selectedGeneratedTaskID === run.task_id ? true : undefined}
+                                      onClick={() => openRunTask(run.task_id)}
+                                    >
+                                      {run.task_id}
+                                    </button>
+                                  ) : null}
+                                  {run.error ? (
+                                    <Tooltip content={run.error}>
+                                      <small>{scheduledTaskRunErrorLabel(run.error, t)}</small>
+                                    </Tooltip>
+                                  ) : null}
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className={styles.taskBoardEmpty}>{t("scheduledTaskRunsEmpty")}</div>
+                          )}
+                        </div>
+                        <GeneratedTaskInlineDetail
+                          task={selectedGeneratedTask}
+                          childTasks={selectedGeneratedChildTasks}
+                          agentNames={agentNames}
+                          teams={teams}
+                          taskEvents={taskEvents}
+                          t={t}
+                          onOpenConversation={openTaskConversation}
+                        />
+                      </>
+                    ) : (
+                      <div className={styles.taskBoardEmpty}>{t("scheduledTasksEmpty")}</div>
+                    )}
+                  </section>
+                </div>
               </div>
             </div>
           </div>

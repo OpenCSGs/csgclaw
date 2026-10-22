@@ -522,6 +522,7 @@ export function useWorkspaceController(): WorkspaceController {
     t,
     onSelectConversation: selectConversation,
     onSelectTask: selectTasks,
+    onSelectTaskBoardView: (view) => navigatePane({ type: WorkspacePaneTypes.task, taskBoardView: view }, rooms),
   });
   const selectedTeamID = activePane.type === WorkspacePaneTypes.team ? String(activePane.id || "") : "";
   const selectedTeam = agent.teams.find((item) => item.id === selectedTeamID) ?? null;
