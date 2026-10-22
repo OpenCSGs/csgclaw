@@ -219,8 +219,9 @@ func configureSession(ctx context.Context, proc *process, sessionID string, opti
 }
 
 // selectReasoningEffort uses the selected model's advertised values. Missing
-// positive efforts map to the nearest supported level, preferring higher on a
-// tie. Disabling reasoning requires an explicit off/none option.
+// positive efforts map to the nearest supported common level, preferring higher
+// on a tie. Runtime-specific max requires an explicit request; it is not an alias
+// for xhigh. Disabling reasoning requires an explicit off/none option.
 func selectReasoningEffort(options []json.RawMessage, desired string) (string, bool) {
 	desired = config.NormalizeReasoningEffort(desired)
 	if desired == config.ReasoningEffortNone {
@@ -231,7 +232,7 @@ func selectReasoningEffort(options []json.RawMessage, desired string) (string, b
 	if value, ok := selectOption(options, "reasoning_effort", desired); ok {
 		return value, true
 	}
-	levels := append(config.CommonReasoningEfforts(), "max")
+	levels := config.CommonReasoningEfforts()
 	requested := -1
 	for i, level := range levels {
 		if level == desired {
