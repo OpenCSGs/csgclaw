@@ -1667,6 +1667,12 @@
   padding: 16px 2px 4px;
 }
 
+.agent-skills-error {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
 .agent-skills-dialog .form-error {
   margin: 0;
 }

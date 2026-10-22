@@ -1,17 +1,18 @@
 .csg-dialog-overlay {
   position: fixed;
   z-index: var(--z-modal);
-  inset: 0;
+  inset: var(--app-overlay-top-inset, 0px) 0 0;
   background: var(--dialog-backdrop);
 }
 
 .csg-dialog-content {
   position: fixed;
   z-index: calc(var(--z-modal) + 1);
-  top: 50%;
+  top: calc(50% + var(--app-overlay-top-inset, 0px) / 2);
   left: 50%;
   width: min(560px, calc(100vw - 40px));
-  max-height: calc(100vh - 40px);
+  max-height: calc(100dvh - var(--app-overlay-top-inset, 0px) - 40px);
+  -webkit-app-region: no-drag;
   overflow: auto;
   overscroll-behavior: contain;
   border: 1px solid var(--line);
