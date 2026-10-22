@@ -6,6 +6,7 @@ import { workspaceShowsFloatingChat } from "@/models/routing";
 import { AuthLoginNotice } from "../AuthLoginNotice";
 import { FloatingChat } from "../FloatingChat";
 import { ProfilePreviewPopover } from "../ProfilePreviewPopover";
+import { OnboardingGuide } from "./OnboardingGuide";
 import {
   AgentProfileModal,
   CreateModelProviderModal,
@@ -27,6 +28,7 @@ export function WorkspaceOverlays() {
 
   return (
     <>
+      <OnboardingGuide />
       <Suspense fallback={null}>
         {current === "settings" ? <SettingsPage /> : null}
         {current === "profile" ? <HumanPage /> : null}
