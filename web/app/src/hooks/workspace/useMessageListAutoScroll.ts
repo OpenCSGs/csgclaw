@@ -1,5 +1,5 @@
 import { parseTurnProgress } from "@/models/turnProgress";
-import { useCallback, useEffect, useLayoutEffect, useRef, type RefObject } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import type { IMMessage } from "@/models/conversations";
 import { MESSAGE_LIST_BOTTOM_THRESHOLD, MESSAGE_LIST_NAVIGATE_EVENT } from "@/shared/constants/workspace";
 
@@ -14,6 +14,7 @@ export type UseMessageListAutoScrollArgs = {
 
 export type MessageListAutoScrollController = {
   follow: (behavior?: MessageListScrollBehavior) => void;
+  hasNewMessages: boolean;
   preserveAnchor: (anchor?: HTMLElement | null) => void;
 };
 
@@ -66,7 +67,10 @@ export function useMessageListAutoScroll({
   messageListRef,
   visibleMessagesKey,
 }: UseMessageListAutoScrollArgs): MessageListAutoScrollController {
+  const [hasNewMessages, setHasNewMessages] = useState(false);
   const shouldAutoScrollRef = useRef(true);
+  const previousConversationRef = useRef(conversationId);
+  const previousMessagesKeyRef = useRef(visibleMessagesKey);
   const pendingInitialFollowRef = useRef(active && Boolean(conversationId));
   const autoScrollConversationRef = useRef(conversationId);
   const autoScrollStateFrameRef = useRef<number | null>(null);
@@ -84,6 +88,7 @@ export function useMessageListAutoScroll({
 
   const handleMessageNavigation = useCallback((event: Event) => {
     shouldAutoScrollRef.current = event instanceof CustomEvent && event.detail === "follow";
+    if (shouldAutoScrollRef.current) setHasNewMessages(false);
     pendingInitialFollowRef.current = false;
     preservingAnchorRef.current = false;
     messageListAnchorVersionRef.current += 1;
@@ -100,6 +105,7 @@ export function useMessageListAutoScroll({
     }
     const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
     shouldAutoScrollRef.current = distanceFromBottom <= MESSAGE_LIST_BOTTOM_THRESHOLD;
+    if (shouldAutoScrollRef.current) setHasNewMessages(false);
   }, []);
 
   const scheduleAutoScrollStateUpdate = useCallback(() => {
@@ -289,6 +295,7 @@ export function useMessageListAutoScroll({
       cancelBrowserAnimationFrame(messageListAnchorFrameRef.current);
       messageListAnchorFrameRef.current = null;
       shouldAutoScrollRef.current = true;
+      setHasNewMessages(false);
       pendingInitialFollowRef.current = !scrollToBottomAfterLayout(behavior);
     },
     [scrollToBottomAfterLayout],
@@ -301,6 +308,21 @@ export function useMessageListAutoScroll({
     autoScrollConversationRef.current = conversationId;
     follow();
   }, [active, conversationId, follow]);
+
+  useLayoutEffect(() => {
+    const conversationChanged = previousConversationRef.current !== conversationId;
+    const messagesChanged = previousMessagesKeyRef.current !== visibleMessagesKey;
+    previousConversationRef.current = conversationId;
+    previousMessagesKeyRef.current = visibleMessagesKey;
+
+    if (conversationChanged) {
+      setHasNewMessages(false);
+      return;
+    }
+    if (active && messagesChanged && !shouldAutoScrollRef.current) {
+      setHasNewMessages(true);
+    }
+  }, [active, conversationId, visibleMessagesKey]);
 
   useEffect(() => {
     if (!active) {
@@ -317,5 +339,5 @@ export function useMessageListAutoScroll({
     scrollToBottomAfterLayout("auto");
   }, [active, conversationId, messageListRef, scrollToBottomAfterLayout, visibleMessagesKey]);
 
-  return { follow, preserveAnchor };
+  return { follow, hasNewMessages, preserveAnchor };
 }

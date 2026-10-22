@@ -251,6 +251,27 @@
   overscroll-behavior: contain;
 }
 
+.message-list-new-messages {
+  position: absolute;
+  bottom: 16px;
+  left: 50%;
+  z-index: var(--z-page-popover);
+  transform: translateX(-50%);
+  padding: 8px 14px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow-soft);
+  font: inherit;
+  cursor: pointer;
+}
+
+.message-list-new-messages:hover {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+}
+
 .message-row {
   display: flex;
   align-items: flex-start;

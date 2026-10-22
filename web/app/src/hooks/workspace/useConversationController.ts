@@ -1223,7 +1223,7 @@ export function useConversationController({
         },
       );
       setBootstrapData((current) => appendMessageToData(current, roomID, created));
-      messageListAutoScroll.follow("smooth");
+      messageListAutoScroll.follow();
       clearComposer(roomID);
       delete pendingClientMessagesRef.current[roomID];
       setComposerSendStatesByConversationId((current) => ({
@@ -1992,6 +1992,8 @@ export function useConversationController({
       memberMenuRef,
       channelToolsRef,
       messageListRef,
+      hasNewMessages: messageListAutoScroll.hasNewMessages,
+      onFollowLatest: () => messageListAutoScroll.follow(),
       editorRef,
       onDeleteRoom: deleteRoom,
       onClearRoomMessages: clearRoomMessages,

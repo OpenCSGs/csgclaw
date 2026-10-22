@@ -52,6 +52,7 @@ export type ConversationMessageListProps = {
   emptyStateSlot?: ReactNode;
   headerSlot?: ReactNode;
   footerSlot?: ReactNode;
+  hasNewMessages?: boolean;
   renderTurnControls?: (message: IMMessage) => ProgressControlSlots | null;
   renderMessageFooter?: (message: IMMessage) => ReactNode;
   locale: LocaleCode;
@@ -61,6 +62,7 @@ export type ConversationMessageListProps = {
   onOpenAgentDetail?: (agent: AgentLike, anchor: HTMLElement) => VoidOrPromise;
   onMessageAction: (action: MessageAction, message?: MessageLike | null) => VoidOrPromise;
   onOpenThread: (message: IMMessage) => VoidOrPromise;
+  onFollowLatest?: () => void;
   onPreviewUser: (user: IMUser, anchor: HTMLElement) => void;
   onPreviewAttachment?: (request: DocumentPreviewRequest) => void;
   onQuestionSelect?: (activityID: string, questionID?: string, optionIndex?: number) => void;
@@ -100,6 +102,7 @@ const MessageListContent = memo(function MessageListContent({
   emptyStateSlot,
   headerSlot,
   footerSlot,
+  hasNewMessages,
   renderMessageFooter,
   renderTurnControls,
   locale,
@@ -113,6 +116,7 @@ const MessageListContent = memo(function MessageListContent({
   onOpenAgentDetail,
   onMessageAction,
   onOpenThread,
+  onFollowLatest,
   onPreviewUser,
   onPreviewAttachment,
   onQuestionSelect,
@@ -307,6 +311,11 @@ const MessageListContent = memo(function MessageListContent({
         })}
         {footerSlot}
       </section>
+      {hasNewMessages ? (
+        <button type="button" className="message-list-new-messages" onClick={onFollowLatest}>
+          {t("newMessages")} · {t("progressLatest")}
+        </button>
+      ) : null}
       <MessageTimeline key={conversation.id} items={timelineItems} scrollRef={messageListRef} t={t} />
     </div>
   );
