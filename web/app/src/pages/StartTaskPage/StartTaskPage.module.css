@@ -95,6 +95,8 @@
   padding: 4px 10px 8px;
 }
 .addButton {
+  --composer-add-control-size: 36px;
+  --composer-add-icon-size: 16px;
   flex: 0 0 auto;
   align-self: center;
 }

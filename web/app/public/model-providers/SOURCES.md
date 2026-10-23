@@ -5,10 +5,11 @@ Retrieved on 2026-10-15 from the corresponding official websites and their linke
 The following replacement marks were supplied by the user from Figma/browser references on 2026-10-21:
 
 - `aliyun-bailian.svg`: user-supplied Alibaba Cloud Bailian SVG.
-- `kimi-mark.svg`: user-supplied Kimi SVG.
+- `kimi-mark.svg`: user-supplied white-background Kimi SVG on 2026-10-23.
 - `minimax-mark.svg`: user-supplied MiniMax SVG.
 - `mimo-mark.svg`: user-supplied `/Users/shenyongfan/Downloads/xiaomimimo.svg`.
-- `zhipu-figma.svg`: exported from Figma node `56224:27918` in the Portal file.
+- `zhipu-figma.svg`: user-supplied replacement SVG on 2026-10-23 for the provider directory.
+- `zhipu.svg`: user-supplied SVG on 2026-10-23, replacing the previous Zhipu mark.
 - `volcengine-mark.svg`: user-supplied Volcengine Ark SVG.
 
 - `kimi.png`: https://www.kimi.com/pwa-192.png
@@ -19,11 +20,14 @@ The following replacement marks were supplied by the user from Figma/browser ref
 - `zhipu.png`: https://docs.bigmodel.cn/mintlify-assets/_mintlify/favicons/zhipu-ef7018ed/uX_6lYCPLvdOcSdM/_generated/favicon/android-chrome-192x192.png
 
 The following existing vector marks are retained and checked against their official sites.
-Claude API shares the Claude brand mark with Claude Code.
+Claude API uses the user-supplied white-background SVG from 2026-10-23; Claude Code retains its existing mark.
 
 - `openai-api.svg`: https://openai.com/brand/
-- `claude-api.svg` and `claude-code.svg`: https://www.claude.com/
-- `deepseek.svg`: https://api-docs.deepseek.com/img/logo-mark-light.svg
+- `claude-api.svg`: user-supplied SVG on 2026-10-23.
+- `claude-code.svg`: https://www.claude.com/
+- `deepseek.svg`: user-supplied SVG on 2026-10-23, replacing the mark from https://api-docs.deepseek.com/img/logo-mark-light.svg
 
 Raster files retain their original official pixels and provide at least 192 pixels for the 40-pixel brand cards.
 SVG files retain their viewBox and are displayed with contain sizing.
+
+`customize.svg` uses a square white background so the shared 6px image radius controls its corners.

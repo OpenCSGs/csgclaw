@@ -412,3 +412,23 @@ it("removes a selected resource while preserving the task text", async () => {
     expect.objectContaining({ content: "Check project", resource_refs: [] }),
   );
 });
+
+it("hides the empty-draft placeholder while a resource is attached and restores it after removal", async () => {
+  vi.mocked(fetchConversationResourceBatch).mockResolvedValue({
+    items: [{ source: "skill", id: "review", name: "Review", type: "skill", enabled: true, available: true }],
+    total: 1,
+    list_revision: "r",
+    has_more: false,
+  });
+  setup();
+  const user = userEvent.setup();
+  const editor = screen.getByRole("textbox", { name: "taskEntryPrompt" });
+  expect(editor).toHaveAttribute("placeholder", "iaStartComposerPlaceholder");
+  await user.click(screen.getByRole("button", { name: "composerAddContent" }));
+  await user.click(screen.getByRole("button", { name: "composerResourceSkill" }));
+  await user.click(await screen.findByTitle("skill:review"));
+  expect(editor).toHaveAttribute("placeholder", "");
+  await waitFor(() => expect(editor).toHaveFocus());
+  await user.click(screen.getByRole("button", { name: "remove /Review" }));
+  expect(editor).toHaveAttribute("placeholder", "iaStartComposerPlaceholder");
+});

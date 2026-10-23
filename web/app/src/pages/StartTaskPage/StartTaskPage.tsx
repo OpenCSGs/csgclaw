@@ -282,7 +282,7 @@ function StartTaskForm({
                   autoFocus
                   className={styles.input}
                   aria-label={t("taskEntryPrompt")}
-                  placeholder={t("iaStartComposerPlaceholder")}
+                  placeholder={resources.length || files.length || draft.length ? "" : t("iaStartComposerPlaceholder")}
                   value={draft}
                   onChange={(event) => setDraft(event.target.value)}
                   disabled={busy}
@@ -327,7 +327,7 @@ function StartTaskForm({
                   onOpenResourcePicker={resourcePicker.open}
                   disabled={busy}
                   t={t}
-                  buttonClassName={styles.addButton}
+                  buttonClassName={`composer-add-button ${styles.addButton}`}
                   onAddFiles={() => fileInput.current?.click()}
                 />
                 <TaskConfigurationToolbar

@@ -61,6 +61,14 @@ export function ConversationResourcePicker({
   const searchLabel = t("composerResourceSearchPlaceholder", { kind: label });
   const manageLabel = t("composerResourceManage", { kind: label });
   const Icon = kind === "skill" ? Wrench : kind === "connector" ? Boxes : BookOpen;
+  useEffect(() => {
+    const handlePointerDown = (event: PointerEvent) => {
+      if (event.target instanceof Node && !searchRef.current?.contains(event.target)) onClose(false);
+    };
+    document.addEventListener("pointerdown", handlePointerDown, true);
+    return () => document.removeEventListener("pointerdown", handlePointerDown, true);
+  }, [onClose]);
+
   useLayoutEffect(() => {
     activeRef.current?.scrollIntoView({ block: "nearest" });
   }, [activeKey, activeIndex]);
@@ -85,7 +93,7 @@ export function ConversationResourcePicker({
       ref={searchRef}
       className={`${styles.search} ${className ?? ""}`.trim()}
       onBlur={(event) => {
-        if (!event.currentTarget.contains(event.relatedTarget)) onClose(false);
+        if (event.relatedTarget && !event.currentTarget.contains(event.relatedTarget)) onClose(false);
       }}
       onKeyDown={(event) => {
         if (event.key === "Escape" && !isComposerKeyboardEventComposing(event)) {
@@ -155,7 +163,11 @@ export function ConversationResourcePicker({
             variant="tertiaryGray"
             size="sm"
             disabled={resource.continuation.loading}
-            onClick={() => void resource.continuation.loadMore()}
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={() => {
+              searchRef.current?.querySelector("input")?.focus();
+              void resource.continuation.loadMore();
+            }}
           >
             {t(resource.continuation.loading ? "loading" : "taskEntryLoadMore")}
           </Button>
