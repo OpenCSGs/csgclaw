@@ -1,0 +1,14 @@
+<!doctype html><html><head><meta charset="utf-8"><style>
+body{margin:0;background:#fff;font:17px/1.7 Helvetica,sans-serif;color:#111}
+.hero{position:relative;height:420px}
+.plate{position:absolute;inset:0;background:#0E2A3B}
+.hero h1{position:relative;color:#fff;font:800 64px/1.1 Helvetica;padding:60px;margin:0}
+.hero p{position:relative;color:#E8EEF2;padding:0 60px;margin:0}
+figcaption{font-size:13px;color:#555}
+</style></head><body>
+<div class="hero"><div class="plate"></div><h1>白字压在兄弟层的深色底板上</h1><p>这一段白色正文压在绝对定位的深色底板上，对比度其实非常好，不该报红灯。</p></div>
+<figure><svg viewBox="0 0 200 100" width="1200" height="600"><text x="10" y="20" font-size="8">放大六倍后的图表刻度文字</text><text x="10" y="40" font-size="8">放大六倍后的另一行图表说明文字</text><text x="10" y="60" font-size="8">第三行</text></svg>
+<figcaption>图注：这是一段十三像素的图注文字，属于标签而不是正文，不应按正文字号判红。</figcaption></figure>
+<button style="background:#123B2A;color:#fff;border:0;padding:12px 20px;font-size:16px">自带深色底的白字按钮</button>
+<p>这里是一段正常的十七像素正文，写得足够长，用来确认正常正文不会被误报为低于下限。</p>
+</body></html>

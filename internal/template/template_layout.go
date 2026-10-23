@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	agentruntime "csgclaw/internal/runtime"
+	"csgclaw/internal/skill/installstate"
 )
 
 const requiredInstructionsFile = "AGENTS.md"
@@ -294,8 +295,10 @@ func copyTemplateSkills(source, target, runtimeKind string) error {
 	isCodex := normalizeTemplateRuntimeKind(runtimeKind) == agentruntime.KindCodex
 	return copyWorkspaceTreeWithFilter(source, target, func(path string, _ fs.DirEntry) bool {
 		path = filepath.ToSlash(filepath.Clean(path))
-		// The persistent process lock belongs to the local installation, not the template.
-		return path == ".skillhub-lock.json.lock" || (isCodex && path == codexSystemSkillsDirName)
+		// Installation locks, activation journals and staging trees belong to the
+		// local installation. Skill resources with similar names remain intact.
+		top, _, _ := strings.Cut(path, "/")
+		return path == ".skillhub-lock.json.lock" || installstate.IsBuiltinArtifact(top) || (isCodex && path == codexSystemSkillsDirName)
 	})
 }
 

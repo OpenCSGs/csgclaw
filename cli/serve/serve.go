@@ -2,6 +2,7 @@ package serve
 
 import (
 	"context"
+	skillbuiltin "csgclaw/internal/skill/builtin"
 	"errors"
 	"fmt"
 	"io"
@@ -342,6 +343,9 @@ func (c internalServeCmd) Run(ctx context.Context, run *command.Context, args []
 	}
 
 	printEffectiveConfig(run, cfg, globals.Output)
+	if err := skillbuiltin.SyncLocal(); err != nil {
+		slog.Warn("bundled skills unavailable; continuing startup (retry on next start)", "error", err)
+	}
 	imBus := im.NewBus()
 	feishuProvider, feishuSvc, err := buildFeishuComponents()
 	if err != nil {
