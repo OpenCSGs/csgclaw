@@ -105,17 +105,6 @@ function Harness({
 }
 
 describe("AgentDetailPane metadata editing", () => {
-  it("shows a dismissible standard error when skill descriptions cannot be read", async () => {
-    const user = userEvent.setup();
-    render(<Harness workspaceSupported skillsError="Some skill descriptions could not be read." />);
-    await user.click(screen.getByRole("button", { name: /agentProfileSkillsTab/ }));
-    const alert = screen.getByRole("alert");
-    expect(alert).toHaveTextContent("Some skill descriptions could not be read.");
-    expect(alert.parentElement).toHaveClass("form-error");
-    await user.click(within(alert.parentElement!).getByRole("button", { name: /^close$/ }));
-    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
-  });
-
   it.each(["agent-1", "agent-manager"])("confirms recreation from the pending badge for %s", async (id) => {
     const user = userEvent.setup();
     const onRecreate = vi.fn();

@@ -247,7 +247,7 @@
 .csg-dialog-content.agent-detail-side-panel {
   position: fixed;
   z-index: calc(var(--z-page-overlay) + 1);
-  inset: calc(12px + var(--app-overlay-top-inset, 0px)) 12px 12px auto;
+  inset: 12px 12px 12px auto;
   width: min(1120px, calc(100vw - 32px));
   max-height: none;
   min-width: 0;
@@ -312,14 +312,6 @@
   gap: 10px;
   align-items: center;
   background: color-mix(in srgb, var(--surface) 94%, var(--panel-strong) 6%);
-}
-
-:root:has([data-desktop-platform]) .agent-detail-side-panel-close {
-  width: 40px;
-  min-width: 40px;
-  height: 40px;
-  min-height: 40px;
-  -webkit-app-region: no-drag;
 }
 
 .agent-detail-side-panel-title {
@@ -730,7 +722,7 @@ button.thread-message-avatar:focus-visible {
   }
 
   .csg-dialog-content.agent-detail-side-panel {
-    inset: var(--app-overlay-top-inset, 0px) 0 0;
+    inset: 0;
     width: 100%;
     border-width: 0;
     border-radius: 0;

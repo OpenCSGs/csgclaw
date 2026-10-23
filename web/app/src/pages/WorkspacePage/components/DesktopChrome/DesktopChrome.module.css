@@ -1,7 +1,3 @@
-:global(:root):has(.frame) {
-  --app-overlay-top-inset: 48px;
-}
-
 .frame {
   --desktop-titlebar-height: 48px;
   --desktop-workspace-inset: 8px;

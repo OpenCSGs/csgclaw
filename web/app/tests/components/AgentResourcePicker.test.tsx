@@ -177,14 +177,12 @@ describe("Agent skill market preview", () => {
     await screen.findByRole("button", { name: "Review" });
     expect(screen.queryByRole("button", { name: t("profileResourceEnabled") })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: t("iaSkillsUpdate") })).toBeEnabled();
-    expect(screen.getByRole("button", { name: t("iaSkillsUpdate") })).toHaveClass("btn-secondary-gray");
     await user.click(screen.getByRole("button", { name: "Review" }));
     const preview = within(screen.getByRole("dialog", { name: "Review" }));
     await preview.findByText("Review instructions");
-    expect(preview.getByRole("button", { name: t("iaSkillsUpdate") })).toHaveClass("btn-secondary-gray");
     await user.click(preview.getByRole("button", { name: t("iaSkillsUpdate") }));
     await waitFor(() => expect(onAdd).toHaveBeenCalledExactlyOnceWith(["review"], { replace: true }));
-    expect(onClose).not.toHaveBeenCalled();
+    expect(onClose).toHaveBeenCalledOnce();
     expect(fetch.mock.calls.find(([path]) => String(path) === "api/v1/skills:install")?.[1]?.body).toBe(
       JSON.stringify({ remote_path: "team/review", ref: "main", replace: true }),
     );
@@ -195,7 +193,6 @@ describe("Agent skill market preview", () => {
     await user.click(screen.getByRole("radio", { name: t("profileSkillMarket") }));
     await screen.findByRole("button", { name: "Review" });
     expect(screen.getByRole("button", { name: t("iaSkillsUpdate") })).toBeEnabled();
-    expect(screen.getByRole("button", { name: t("iaSkillsUpdate") })).toHaveClass("btn-secondary-gray");
     await user.click(screen.getByRole("button", { name: "Review" }));
     const preview = within(screen.getByRole("dialog", { name: "Review" }));
     await user.click(preview.getByRole("button", { name: t("iaSkillsUpdate") }));
@@ -231,7 +228,7 @@ describe("Agent skill market preview", () => {
     const preview = within(screen.getByRole("dialog", { name: "Review" }));
     await user.click(preview.getByRole("button", { name: t("iaSkillsUpdate") }));
     await waitFor(() => expect(onAdd).toHaveBeenCalledTimes(2));
-    expect(onClose).not.toHaveBeenCalled();
+    expect(onClose).toHaveBeenCalledOnce();
     expect(fetch.mock.calls.filter(([path]) => String(path) === "api/v1/skills:install")).toHaveLength(1);
   });
 
@@ -271,11 +268,11 @@ describe("Agent skill market preview", () => {
     await preview.findByText("Review instructions");
     await user.click(preview.getByRole("button", { name: t("resourcesSkillRemoteInstallAction") }));
     await waitFor(() => expect(onAdd).toHaveBeenCalledWith(["custom-review"], { replace: true }));
-    expect(onClose).not.toHaveBeenCalled();
+    expect(onClose).toHaveBeenCalledOnce();
   });
 
   it("keeps the row install action independent of preview and retries file failures", async () => {
-    const { onAdd, onClose, t, user } = setup("en", true);
+    const { onAdd, t, user } = setup("en", true);
     await user.click(screen.getByRole("radio", { name: t("profileSkillMarket") }));
     await user.click(await screen.findByRole("button", { name: "Review" }));
     const preview = within(screen.getByRole("dialog", { name: "Review" }));
@@ -286,8 +283,5 @@ describe("Agent skill market preview", () => {
     await user.click(screen.getByRole("button", { name: t("resourcesSkillRemoteInstallAction") }));
     await waitFor(() => expect(onAdd).toHaveBeenCalledWith(["review"], { replace: true }));
     expect(screen.queryByRole("dialog", { name: "Review" })).not.toBeInTheDocument();
-    expect(onClose).not.toHaveBeenCalled();
-    expect(screen.getByRole("radio", { name: t("profileSkillMarket") })).toBeChecked();
-    expect(screen.getByRole("button", { name: t("iaSkillsUpdate") })).toHaveClass("btn-secondary-gray");
   });
 });

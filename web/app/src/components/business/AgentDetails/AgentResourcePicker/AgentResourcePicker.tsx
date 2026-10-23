@@ -97,7 +97,6 @@ export function AgentResourcePicker({
           description: skill.description,
           installed: false,
           actionLabel: skillActionLabel(skill),
-          update: picker.skillAction(skill) === "replace",
           unavailable: false,
           add: () => picker.installSkill(skill),
         }))
@@ -308,9 +307,7 @@ export function AgentResourcePicker({
                         <ResourcePickerCopy name={item.name} description={item.description} onOpen={item.open} />
                         <Button
                           size="sm"
-                          variant={
-                            kind === "knowledge" || ("update" in item && item.update) ? "secondaryGray" : "primary"
-                          }
+                          variant={kind === "knowledge" ? "secondaryGray" : "primary"}
                           loading={picker.busy === item.id}
                           disabled={
                             busy ||
@@ -319,7 +316,7 @@ export function AgentResourcePicker({
                             picker.libraryLoading ||
                             Boolean(picker.libraryError)
                           }
-                          onClick={() => void (kind === "skill" ? item.add() : finish(item.add()))}
+                          onClick={() => void finish(item.add())}
                         >
                           {item.actionLabel ||
                             t(
@@ -362,12 +359,11 @@ export function AgentResourcePicker({
           t={t}
           busy={busy}
           actionLabel={skillActionLabel(preview)}
-          update={picker.skillAction(preview) === "replace"}
           installDisabled={picker.libraryLoading || Boolean(picker.libraryError)}
           error={failure}
           onClose={() => setPreview(null)}
           onAfterClose={() => previewTrigger.current?.focus()}
-          onInstall={() => void picker.installSkill(preview)}
+          onInstall={() => void finish(picker.installSkill(preview))}
           portalContainer={portalContainer}
         />
       ) : null}
