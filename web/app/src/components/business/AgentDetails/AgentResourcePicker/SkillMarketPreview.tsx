@@ -20,6 +20,7 @@ export function SkillMarketPreview({
   t,
   busy,
   actionLabel,
+  update,
   installDisabled,
   error,
   onClose,
@@ -31,6 +32,7 @@ export function SkillMarketPreview({
   t: TranslateFn;
   busy: boolean;
   actionLabel: string;
+  update: boolean;
   installDisabled: boolean;
   error?: string;
   onClose: () => void;
@@ -77,7 +79,13 @@ export function SkillMarketPreview({
           />
         </DialogBody>
         <DialogFooter className={styles.footer}>
-          <Button size="sm" variant="primary" loading={busy} disabled={busy || installDisabled} onClick={onInstall}>
+          <Button
+            size="sm"
+            variant={update ? "secondaryGray" : "primary"}
+            loading={busy}
+            disabled={busy || installDisabled}
+            onClick={onInstall}
+          >
             <Plus size={15} aria-hidden="true" />
             {actionLabel}
           </Button>

@@ -113,6 +113,7 @@ import {
   DialogHeader,
   DialogRoot,
   DialogTitle,
+  DismissibleAlert,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuRoot,
@@ -2125,14 +2126,14 @@ function AgentSkillsPanel({
         </div>
       </div>
       {skillsError ? (
-        <div className="form-error">
-          {skillsError}{" "}
+        <DismissibleAlert className="form-error agent-skills-error" messageKey={skillsError} closeLabel={t("close")}>
+          <span role="alert">{skillsError}</span>
           {continuation ? (
             <Button size="sm" onClick={continuation.retry}>
               {t("retry")}
             </Button>
           ) : null}
-        </div>
+        </DismissibleAlert>
       ) : null}
       {skillAddError ? <div className="form-error">{skillAddError}</div> : null}
       {skillDeleteError ? <div className="form-error">{skillDeleteError}</div> : null}
