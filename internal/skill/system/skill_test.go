@@ -26,6 +26,18 @@ func TestNamesReadsEmbeddedDirectory(t *testing.T) {
 	}
 }
 
+func TestListReadsEmbeddedDescriptions(t *testing.T) {
+	items, err := List()
+	if err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+	for _, item := range items {
+		if strings.TrimSpace(item.Description) == "" {
+			t.Errorf("List() skill %q has an empty description", item.Name)
+		}
+	}
+}
+
 func TestDefaultNamesExcludeManagerOnlyDemo(t *testing.T) {
 	got, err := DefaultNames()
 	if err != nil {
@@ -105,6 +117,19 @@ func TestListRejectsEmbeddedDirectoryWithoutSkillFile(t *testing.T) {
 	}, "embed")
 	if err == nil || !strings.Contains(err.Error(), "SKILL.md") {
 		t.Fatalf("listFS() error = %v, want missing SKILL.md error", err)
+	}
+}
+
+func TestSkillDescriptionBytesAcceptsLFAndCRLF(t *testing.T) {
+	for _, lineEnding := range []string{"\n", "\r\n"} {
+		content := strings.Join([]string{"---", "description: Test skill", "---", "# Test", ""}, lineEnding)
+		description, err := skillDescriptionBytes([]byte(content), "SKILL.md")
+		if err != nil {
+			t.Fatalf("skillDescriptionBytes() with %q line endings error = %v", lineEnding, err)
+		}
+		if description != "Test skill" {
+			t.Fatalf("skillDescriptionBytes() with %q line endings = %q, want %q", lineEnding, description, "Test skill")
+		}
 	}
 }
 
