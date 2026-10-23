@@ -181,6 +181,16 @@ func TestRemoteStorePublishUploadsArchiveAndCreatesTemplateCode(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	for _, path := range skillActivationArtifactPaths {
+		target := filepath.Join(workspace, "skills", filepath.FromSlash(path))
+		if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(target, []byte("local transaction must not upload"), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
 	var uploadedArchive []byte
 	var created remoteCreateCodeRequest
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -326,6 +336,11 @@ func TestRemoteStorePublishUploadsArchiveAndCreatesTemplateCode(t *testing.T) {
 	}
 	if names["skills/.skillhub-lock.json.lock"] {
 		t.Error("uploaded archive contains local skill install lock")
+	}
+	for _, path := range skillActivationArtifactPaths {
+		if names["skills/"+path] {
+			t.Errorf("uploaded archive contains local skill state %s", path)
+		}
 	}
 	for name := range names {
 		if strings.HasPrefix(name, "skills/.system/") {

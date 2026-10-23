@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><style>
+  body { width:1920px; height:1080px; margin:0; font-family: Arial, sans-serif; }
+  .slide { position:relative; width:1920px; height:1080px; padding:80px; box-sizing:border-box; }
+  .badge { display:inline-flex; align-items:center; gap:8px; font-size:32px; }
+  .label { font-size:24px; text-transform:uppercase; letter-spacing:2px; }
+  .ghost { width:600px; height:4px; background:#000; opacity:0.05; }
+  .faded { font-size:28px; opacity:0.5; color:#000; }
+</style></head><body>
+<div class="slide">
+  <div class="badge"><svg width="24" height="24" viewBox="0 0 10 10"><circle cx="5" cy="5" r="4" fill="red"/></svg>Open Source</div>
+  <div class="badge"><svg width="24" height="24" viewBox="0 0 10 10"><path d="M5 2L8 7H2Z" fill="green"/></svg>+7.5 vs baseline</div>
+  <div><div style="width:40px;height:40px;background:#ccc"></div>Text after block child</div>
+  <p>Plain paragraph (control)</p>
+  <div class="label">uppercase label</div>
+  <div class="ghost"></div>
+  <div class="faded">half opacity text</div>
+</div>
+</body></html>

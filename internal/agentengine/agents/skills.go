@@ -2,8 +2,10 @@ package agents
 
 import (
 	"context"
+	skillbuiltin "csgclaw/internal/skill/builtin"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"slices"
@@ -304,4 +306,16 @@ func defaultSystemSkillNames() ([]string, error) {
 	}
 	slices.Sort(names)
 	return names, nil
+}
+
+// syncManagerBundledSkills must run after preserved skills and their origins have
+// been restored, so a generated default cannot replace a user-owned name.
+func (s *Controller) syncManagerBundledSkills() {
+	root, err := s.agentSkillsRoot(ManagerUserID, RuntimeKindCodex)
+	if err == nil {
+		err = skillbuiltin.Sync(root)
+	}
+	if err != nil {
+		slog.Warn("bundled manager skills unavailable; continuing runtime setup", "error", err)
+	}
 }

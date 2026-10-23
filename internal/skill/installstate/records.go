@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"maps"
 	"os"
 	"path/filepath"
@@ -147,6 +148,50 @@ func UpdateMany(skillsRoot string, records map[string]*Record, apply func() erro
 	if err != nil {
 		return err
 	}
+	rollback, finish, err := cancelActivations(skillsRoot, records)
+	if err != nil {
+		return err
+	}
+	if err := updateManyLocked(skillsRoot, payload, records, apply); err != nil {
+		return errors.Join(err, rollback())
+	}
+	if err := finish(); err != nil {
+		// Cancellation is already durable. Retry artifact cleanup on the next sync.
+		slog.Warn("cleanup cancelled skill activation", "error", err)
+	}
+	return nil
+}
+
+// Reconcile computes file and origin changes while holding the installation lock.
+// Files are activated before origin records are committed. Callers must provide
+// crash recovery for file changes; the callback must not call installstate functions.
+func Reconcile(root string, prepare func(map[string]Record) (map[string]*Record, func() error, error)) error {
+	installRecordsMu.Lock()
+	defer installRecordsMu.Unlock()
+	lock, err := acquireRecordsLock(root, true)
+	if err != nil {
+		return err
+	}
+	defer lock.Close()
+	payload, err := readLockFile(root)
+	if err != nil {
+		return err
+	}
+	records, apply, err := prepare(maps.Clone(payload.Skills))
+	if err != nil {
+		return err
+	}
+	// Reconcile callers must journal file changes so an interrupted record commit
+	// can be recovered. Never advertise a new version before activating its files.
+	if apply != nil {
+		if err := apply(); err != nil {
+			return err
+		}
+	}
+	return updateManyLocked(root, payload, records, nil)
+}
+
+func updateManyLocked(skillsRoot string, payload lockFile, records map[string]*Record, apply func() error) error {
 	previous := maps.Clone(payload.Skills)
 	changed := false
 	for name, record := range records {

@@ -10,6 +10,15 @@ import (
 	agentruntime "csgclaw/internal/runtime"
 )
 
+var skillActivationArtifactPaths = []string{
+	".builtin-pdf.json",
+	".builtin-docx.json.cancelled",
+	".builtin-journal-interrupted",
+	".builtin-staging/.builtin-stage-current/SKILL.md",
+	".builtin-staging/.builtin-stage-old.previous/SKILL.md",
+	".builtin-stage-legacy.previous/SKILL.md",
+}
+
 func TestLocalStorePublishOmitsSkillInstallLock(t *testing.T) {
 	for _, runtimeKind := range []string{agentruntime.KindCodex, agentruntime.KindDSH, agentruntime.NameOpenClaw} {
 		for _, separateSkills := range []bool{false, true} {
@@ -32,6 +41,14 @@ func TestLocalStorePublishOmitsSkillInstallLock(t *testing.T) {
 					"custom/package-lock.json": "{}\n",
 					"custom/data.lock":         "skill resource\n",
 					"custom/empty.txt":         "",
+				}
+				// The same names inside a skill are resources, not local transactions.
+				files["custom/.builtin-pdf.json"] = "skill resource"
+				files["custom/.builtin-staging/data.txt"] = "skill resource"
+				omitted := map[string]bool{".skillhub-lock.json.lock": true}
+				for _, path := range skillActivationArtifactPaths {
+					files[path] = "local transaction must not be exported"
+					omitted[path] = true
 				}
 				for path, content := range files {
 					source := filepath.Join(skillsRoot, filepath.FromSlash(path))
@@ -61,9 +78,9 @@ func TestLocalStorePublishOmitsSkillInstallLock(t *testing.T) {
 					}
 					for _, root := range []string{store.templateRoot(created.ID), restored.Path} {
 						target := filepath.Join(root, "skills", filepath.FromSlash(path))
-						if path == ".skillhub-lock.json.lock" {
+						if omitted[path] {
 							if _, err := os.Stat(target); !errors.Is(err, os.ErrNotExist) {
-								t.Errorf("template contains skill install lock %s: %v", target, err)
+								t.Errorf("template contains local skill state %s: %v", target, err)
 							}
 						} else if data, err := os.ReadFile(target); err != nil || string(data) != want {
 							t.Errorf("template file %s = %q, error = %v, want %q", target, data, err, want)

@@ -6,6 +6,7 @@ import (
 	"csgclaw/internal/agentengine/contract"
 	"csgclaw/internal/agentengine/interactionstate"
 	"csgclaw/internal/agentengine/registry"
+	skillbuiltin "csgclaw/internal/skill/builtin"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -525,6 +526,20 @@ func validateCodexManagerRuntimeOverride(runtimeOverride string) error {
 }
 
 func (s *Controller) ensureCodexManager(ctx context.Context, forceRecreate bool) (_ Agent, err error) {
+	if err := skillbuiltin.SyncLocal(); err != nil {
+		slog.Warn("bundled skill catalog unavailable; continuing manager bootstrap", "error", err)
+	}
+	// Bootstrap can run before a Codex runtime adapter has been registered.
+	// The local catalog is ready already; release workspace copies once available.
+	if _, runtimeErr := s.registry.Get(RuntimeKindCodex); runtimeErr == nil {
+		root, err := s.agentSkillsRoot(ManagerUserID, RuntimeKindCodex)
+		if err != nil {
+			return Agent{}, err
+		}
+		if err := skillbuiltin.Sync(root); err != nil {
+			slog.Warn("bundled manager skills unavailable; continuing bootstrap", "error", err)
+		}
+	}
 	managerDisplayName, managerDescription, managerInstructions, managerAvatar, managerCreatedAt := s.managerMetadata()
 	managerMCPServers := s.managerMCPServers()
 	startProfile, detectionResults := s.managerStartupProfile(ctx)
@@ -673,6 +688,9 @@ func (s *Controller) ensureCodexManager(ctx context.Context, forceRecreate bool)
 			return Agent{}, fmt.Errorf("restore manager runtime skills: %w", err)
 		}
 	}
+	// Restore user skills before filling optional defaults. The preservation
+	// transaction must retain their original contents and installation origins.
+	s.syncManagerBundledSkills()
 	if err := s.observeStartedExtensions(ctx, ManagerUserID); err != nil {
 		return Agent{}, err
 	}
