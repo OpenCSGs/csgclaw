@@ -8,6 +8,7 @@ import { useFeedback } from "../useFeedback";
 import { SettingsRow } from "./SettingsRow";
 import { useAuthLoginDialog } from "./useAuthLoginDialog";
 import styles from "../SettingsPage.module.css";
+import { openOnboardingGuide } from "@/shared/lib/onboardingGuide";
 
 export function FeedbackSection() {
   const controller = useWorkspaceControllerContext();
@@ -57,6 +58,14 @@ export function FeedbackSection() {
           <a className={styles.linkButton} href={feedbackURL} target="_blank" rel="noreferrer">
             {t("settingsFeedbackGithubAction")}
           </a>
+        </div>
+      </SettingsRow>
+
+      <SettingsRow title={t("onboardingGuideTitle")} description={t("onboardingGuideDescription")}>
+        <div className={`${styles.formActions} ${styles.spanAll}`}>
+          <Button variant="secondaryGray" size="md" onClick={openOnboardingGuide}>
+            {t("onboardingGuideReplay")}
+          </Button>
         </div>
       </SettingsRow>
 
