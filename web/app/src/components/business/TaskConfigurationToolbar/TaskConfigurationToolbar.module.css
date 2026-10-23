@@ -340,7 +340,11 @@
   font: inherit;
 }
 .directoryTrigger {
+  height: 36px;
+  padding-block: 0;
+  align-items: center;
   justify-content: center;
+  line-height: 16px;
 }
 .directoryTrigger :global(.csg-select-value) {
   display: flex;
@@ -350,6 +354,8 @@
   text-align: center;
 }
 .directoryTrigger .directoryLabel {
+  height: 16px;
+  align-items: center;
   justify-content: center;
 }
 .lockedDirectory {

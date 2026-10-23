@@ -188,3 +188,42 @@ it("prevents selecting resources beyond the reference limit", async () => {
   await userEvent.setup().keyboard("{Enter}");
   expect(pick).not.toHaveBeenCalled();
 });
+
+it("keeps the picker open through pagination and dismisses on a non-focusable outside target", async () => {
+  let finishPage!: (page: Awaited<ReturnType<typeof fetchConversationResourceBatch>>) => void;
+  vi.mocked(fetchConversationResourceBatch).mockImplementation(async (_agent, _type, cursor) =>
+    cursor
+      ? new Promise((resolve) => {
+          finishPage = resolve;
+        })
+      : {
+          items: [item("first")],
+          total: 2,
+          list_revision: "r",
+          has_more: true,
+          next_cursor: "next",
+        },
+  );
+  const { wrapper } = createQueryWrapper();
+  render(
+    <>
+      <Composer />
+      <div data-testid="outside-surface">Outside surface</div>
+    </>,
+    { wrapper },
+  );
+  const user = userEvent.setup();
+  await user.click(screen.getByRole("button", { name: "composerAddContent" }));
+  await user.click(screen.getByRole("button", { name: "composerResourceSkill" }));
+  await screen.findByTitle("app:first");
+  await user.click(screen.getByRole("button", { name: "taskEntryLoadMore" }));
+  expect(screen.getByRole("combobox")).toHaveFocus();
+  expect(screen.getByRole("button", { name: "loading" })).toBeDisabled();
+  fireEvent.blur(screen.getByRole("combobox"), { relatedTarget: null });
+  expect(screen.getByRole("listbox")).toBeInTheDocument();
+  finishPage({ items: [item("second")], total: 2, list_revision: "r", has_more: false });
+  await screen.findByTitle("app:second");
+  expect(screen.getByTitle("app:first")).toBeInTheDocument();
+  await user.click(screen.getByTestId("outside-surface"));
+  expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+});
