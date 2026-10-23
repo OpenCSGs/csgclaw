@@ -1883,22 +1883,21 @@ describe("useAgentController", () => {
     act(() => {
       second = result.current.openCreateAgentModal({ id: "local.reviewer", name: "Reviewer", runtime_kind: "codex" });
     });
+    expect(result.current.agentProfileModalProps).toBeNull();
     await act(async () => {
       resolveFirst(profile);
       await first;
     });
-    expect(result.current.agentProfileModalProps?.agentInitializing).toBe(true);
-    expect(result.current.agentProfileModalProps?.agentDraft).toMatchObject({
-      name: "Reviewer",
-      from_template: "local.reviewer",
-      model_id: "",
-    });
+    expect(result.current.agentProfileModalProps).toBeNull();
     await act(async () => {
-      resolveSecond({});
+      resolveSecond(profile);
       await second;
     });
     expect(result.current.agentProfileModalProps?.agentInitializing).toBe(false);
-    expect(result.current.agentProfileModalProps?.agentDraft.from_template).toBe("local.reviewer");
+    expect(result.current.agentProfileModalProps?.agentDraft).toMatchObject({
+      name: "Reviewer",
+      from_template: "local.reviewer",
+    });
   });
 
   it("keeps the form open and usable when configuration refreshes fail", async () => {
