@@ -1451,7 +1451,9 @@ export function useAgentController({
     setAgentModalBootstrapConfig(bootstrapConfig);
     setAgentDraft(initialDraft);
     setAgentInitializing(true);
-    setShowAgentModal(true);
+    // Template forms depend on refreshed runtime and model configuration. Open
+    // them only after hydration so the provisional layout never becomes visible.
+    setShowAgentModal(!selectedTemplate);
     try {
       const [config, providers, defaults] = await Promise.allSettled([
         refreshWorkspaceBootstrapConfig(),
@@ -1491,7 +1493,10 @@ export function useAgentController({
         return next;
       });
     } finally {
-      if (agentModalRequestRef.current === requestID) setAgentInitializing(false);
+      if (agentModalRequestRef.current === requestID) {
+        setAgentInitializing(false);
+        if (selectedTemplate) setShowAgentModal(true);
+      }
     }
   }
 
