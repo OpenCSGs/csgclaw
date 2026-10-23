@@ -211,14 +211,12 @@ func pathJoin(parts ...string) string {
 
 func extractFrontmatter(data []byte) ([]byte, bool) {
 	data = bytes.TrimPrefix(data, []byte{0xEF, 0xBB, 0xBF})
+	data = bytes.ReplaceAll(data, []byte("\r\n"), []byte("\n"))
 	if !bytes.HasPrefix(data, []byte("---\n")) {
 		return nil, false
 	}
 	rest := data[len("---\n"):]
 	end := bytes.Index(rest, []byte("\n---\n"))
-	if end < 0 {
-		end = bytes.Index(rest, []byte("\n---\r\n"))
-	}
 	if end < 0 {
 		return nil, false
 	}

@@ -51,6 +51,19 @@ func TestListParsesBlockScalarDescription(t *testing.T) {
 	}
 }
 
+func TestListParsesCRLFDescription(t *testing.T) {
+	root := t.TempDir()
+	mustWriteFile(t, filepath.Join(root, "alpha", "SKILL.md"), "---\r\ndescription: Windows skill\r\n---\r\n# Alpha\r\n")
+
+	got, err := List(root)
+	if err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+	if len(got) != 1 || got[0].Description != "Windows skill" {
+		t.Fatalf("List() = %+v, want one skill with CRLF description", got)
+	}
+}
+
 func TestDeleteRemovesSkillDirectory(t *testing.T) {
 	root := t.TempDir()
 	mustWriteFile(t, filepath.Join(root, "alpha", "SKILL.md"), "# Alpha\n")
