@@ -95,7 +95,7 @@ func RecoverBuiltinActivation(root, name string, record Record) (Record, bool, e
 	} else if err != nil {
 		return record, false, err
 	} else if info.IsDir() {
-		hash, err := BundleSHA256(dst)
+		hash, err := BuiltinBundleSHA256(dst)
 		if err != nil {
 			return record, false, err
 		}

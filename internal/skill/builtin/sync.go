@@ -93,7 +93,7 @@ func syncSkill(root, name, hash string) error {
 			if record.Version == hash {
 				return nil, nil, nil
 			}
-			current, err := installstate.BundleSHA256(dst)
+			current, err := installstate.BuiltinBundleSHA256(dst)
 			if err != nil {
 				return nil, nil, err
 			}
