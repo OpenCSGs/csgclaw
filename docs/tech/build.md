@@ -144,6 +144,8 @@ Desktop installers use names such as `csgclaw-desktop_v0.4.3_darwin_arm64.dmg`. 
 
 Local desktop outputs are kept under `desktop/out/`: backend inputs in `input/`, raw Forge artifacts in `make/`, and OSS release files and manifests in `oss/`. The repository-root `dist/` remains the Go release and CI runner staging directory.
 
+Failed GitHub `Release` runs are handled by `.github/workflows/release-retry.yml` after each attempt completes. It re-runs only failed jobs and their dependent jobs, retaining successful platform builds and artifacts. Each release run gets at most three total attempts (the initial execution plus two automatic retries); cancellation stops automatic retries, and failures at the limit remain visible for manual investigation. Manual re-runs count toward the same limit. The retry workflow must be merged into the default branch before it takes effect.
+
 ## Related docs
 
 - [Configuration](config.md)

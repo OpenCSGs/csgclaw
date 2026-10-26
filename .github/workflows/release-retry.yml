@@ -1,0 +1,82 @@
+name: Release retry
+
+on:
+  workflow_run:
+    workflows: [Release]
+    types: [completed]
+  pull_request:
+    paths:
+      - .github/workflows/release-retry.yml
+      - scripts/release-retry.test.mjs
+
+permissions: {}
+
+jobs:
+  test:
+    if: ${{ github.event_name == 'pull_request' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: desktop/package.json
+      - run: node --test scripts/release-retry.test.mjs
+
+  retry:
+    if: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'failure' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+    concurrency:
+      group: release-retry-${{ github.event.workflow_run.id }}
+      cancel-in-progress: false
+    steps:
+      # No checkout: this privileged job only calls the Actions API.
+      - name: Retry failed jobs (three total attempts)
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const maxAttempts = 3; // Initial execution plus at most two retries.
+            const eventRun = context.payload.workflow_run;
+            const parameters = { ...context.repo, run_id: eventRun.id };
+            const { data: run } = await github.rest.actions.getWorkflowRun(parameters);
+
+            if (
+              run.path !== '.github/workflows/release.yml' ||
+              !['push', 'workflow_dispatch'].includes(run.event) ||
+              run.head_repository?.full_name !== `${context.repo.owner}/${context.repo.repo}`
+            ) {
+              core.info("Skipping a run outside this repository's Release workflow.");
+              return;
+            }
+
+            // Ignore delayed/duplicate events and releases already restarted manually.
+            if (
+              run.status !== 'completed' ||
+              run.conclusion !== 'failure' ||
+              run.run_attempt !== eventRun.run_attempt
+            ) {
+              core.info('Skipping a stale event or a run that is no longer failed.');
+              return;
+            }
+
+            if (run.run_attempt >= maxAttempts) {
+              const message = `Release run ${run.id} is still failing after ${run.run_attempt} attempts; automatic retries stopped.`;
+              core.warning(message);
+              await core.summary.addHeading('Release retry limit reached')
+                .addLink('Release run', run.html_url)
+                .addRaw(`\n\n${message}\n`).write();
+              return;
+            }
+
+            // Equivalent to "Re-run failed jobs": preserve successful matrix jobs
+            // and resume the failed jobs and their dependent release/publish jobs.
+            await github.rest.actions.reRunWorkflowFailedJobs(parameters);
+            const message = `Requested attempt ${run.run_attempt + 1}/${maxAttempts} for failed Release jobs.`;
+            core.info(message);
+            await core.summary.addHeading('Release retry requested')
+              .addLink('Release run', run.html_url)
+              .addRaw(`\n\n${message}\n`).write();
