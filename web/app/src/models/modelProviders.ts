@@ -1,3 +1,4 @@
+import { normalizeReasoningEfforts } from "@/models/reasoning";
 import {
   normalizeModelMetadataMap,
   normalizeModelOverrides,
@@ -40,6 +41,7 @@ const builtinRank = new Map<string, number>(BUILTIN_MODEL_PROVIDER_IDS.map((id, 
 export type ModelProviderStatus = "unknown" | "connected" | "failed" | string;
 
 export type ModelProvider = {
+  reasoning_efforts?: Record<string, string[]>;
   model_metadata?: Record<string, ModelMetadata>;
   model_defaults?: Record<string, ModelMetadata>;
   model_overrides?: Record<string, ModelOverride>;
@@ -84,6 +86,7 @@ export type ModelProviderOption = {
 };
 
 export type ModelProviderSelectOption = {
+  reasoningEfforts?: Record<string, string[]>;
   brandName?: string;
   serviceName?: string;
   avatar: string;
@@ -218,6 +221,7 @@ function normalizeModelProvider(raw: unknown): ModelProvider {
     imageModels: normalizeModelIDs(record.image_models),
     videoModels: normalizeModelIDs(record.video_models),
     model_metadata: normalizeModelMetadataMap(record.model_metadata),
+    reasoning_efforts: normalizeReasoningEfforts(record.reasoning_efforts),
     model_defaults: normalizeModelMetadataMap(record.model_defaults),
     model_overrides: normalizeModelOverrides(record.model_overrides),
     display_name: displayName,
@@ -429,6 +433,7 @@ export function modelProviderSelectOptionsFromCatalog(
       serviceName: provider.service_name,
       id: provider.id,
       models: modelIDsForProviderSelection(provider.id, provider.models),
+      ...(provider.reasoning_efforts ? { reasoningEfforts: provider.reasoning_efforts } : {}),
       imageModels: provider.imageModels ?? [],
       videoModels: provider.videoModels ?? [],
       value: provider.id,
@@ -624,4 +629,16 @@ function inferModelProviderPreset(id: unknown, baseURL: unknown): ModelProviderP
     return "deepseek";
   }
   return "custom";
+}
+
+// An unverified Codex model must not inherit the generic manual-override list.
+export function modelReasoningEfforts(
+  providers: readonly ModelProviderSelectOption[],
+  providerID: string,
+  modelID: string,
+): readonly string[] | undefined {
+  return (
+    providers.find((provider) => provider.id === providerID)?.reasoningEfforts?.[modelID] ??
+    (providerID === MODEL_PROVIDER_IDS.Codex ? [] : undefined)
+  );
 }

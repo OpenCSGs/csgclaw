@@ -41,6 +41,18 @@ An unset or empty value uses `standard`. Invalid values fail server startup. Thi
 CSGCLAW_EXECUTION_MODE=read_only csgclaw serve
 ```
 
+### Model reasoning capabilities
+
+Reasoning choices are derived from the selected model's capabilities and exposed in the provider catalog as `reasoning_efforts`.
+The native Codex model catalog and Web UI use the same supported levels.
+Codex models use verified, model-specific levels, including dated snapshots.
+GPT-5.6 and GPT-6 Sol/Luna support `none`, `low`, `medium`, `high`, `xhigh` and `max`.
+GPT-6 Astra and GPT-6.1 Sol support `low` through `max`, without `none` or `minimal`.
+GPT-5.4 and GPT-5.5 support `none` through `xhigh`, without `minimal` or `max`.
+Unknown Codex models expose model default only until their capabilities are verified.
+Changing the selected model resets the reasoning choice to model default.
+Stored or explicitly requested efforts are never silently converted to another level, and unsupported requests may fail upstream.
+
 ## Server Address
 
 `listen_addr` is the address that the local HTTP server binds to.

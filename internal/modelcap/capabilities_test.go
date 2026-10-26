@@ -47,3 +47,30 @@ func TestKnownVisionModelsDeclareImageInput(t *testing.T) {
 		t.Fatalf("text-only input modalities = %v, want text", got)
 	}
 }
+
+func TestCodexReasoningCapabilities(t *testing.T) {
+	for _, test := range []struct {
+		models []string
+		levels []string
+	}{
+		{[]string{"gpt-6.1-sol", "gpt-6-astra"}, []string{"low", "medium", "high", "xhigh", "max"}},
+		{[]string{"gpt-6-sol", "gpt-6-luna", "gpt-5.6", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"}, []string{"none", "low", "medium", "high", "xhigh", "max"}},
+		{[]string{"gpt-5.5", "gpt-5.4", "gpt-5.4-mini"}, []string{"none", "low", "medium", "high", "xhigh"}},
+		{[]string{"gpt-5.3-codex-spark"}, []string{"low", "medium", "high", "xhigh"}},
+		{[]string{"unknown", "gpt-5.60", "gpt-6-future", "my-gpt-5.6-luna"}, []string{}},
+	} {
+		for _, model := range test.models {
+			for _, id := range []string{model, model + "-2026-10-26"} {
+				caps := ForProviderModel("codex", id)
+				if !slices.Equal(caps.SupportedReasoningEfforts, test.levels) || caps.SupportsReasoningEffort != (len(test.levels) > 0) {
+					t.Errorf("%s: got %v, want %v", id, caps, test.levels)
+				}
+				for _, level := range test.levels {
+					if caps.ReasoningEffortMap[level] != level {
+						t.Errorf("%s/%s mapping", id, level)
+					}
+				}
+			}
+		}
+	}
+}

@@ -12,6 +12,7 @@ const labels: Record<string, string> = {
   profileReasoningMedium: "Medium",
   profileReasoningMinimal: "Minimal",
   profileReasoningXHigh: "Extra high",
+  profileReasoningMax: "Maximum",
 };
 
 function t(key: string): string {
@@ -33,4 +34,32 @@ describe("ReasoningControls", () => {
     rerender(<ReasoningControls value="none" onChange={onChange} t={t} />);
     expect(screen.getByRole("combobox", { name: "Reasoning strategy" })).toHaveTextContent("Off");
   });
+});
+
+it("offers only the selected model's reasoning levels", async () => {
+  const user = userEvent.setup();
+  const onChange = vi.fn();
+  render(
+    <ReasoningControls
+      value="minimal"
+      supportedEfforts={["none", "low", "medium", "high", "xhigh", "max"]}
+      onChange={onChange}
+      t={t}
+    />,
+  );
+  const selector = screen.getByRole("combobox", { name: "Reasoning strategy" });
+  expect(selector).not.toHaveTextContent("Low");
+  expect(onChange).not.toHaveBeenCalled();
+  await user.click(selector);
+  expect(screen.queryByRole("option", { name: "Minimal" })).not.toBeInTheDocument();
+  await user.click(screen.getByRole("option", { name: "Maximum" }));
+  expect(onChange).toHaveBeenCalledWith("max");
+});
+
+it("does not invent levels for a model with no advertised reasoning support", async () => {
+  const user = userEvent.setup();
+  render(<ReasoningControls value="auto" supportedEfforts={[]} onChange={vi.fn()} t={t} />);
+  await user.click(screen.getByRole("combobox", { name: "Reasoning strategy" }));
+  expect(screen.getAllByRole("option")).toHaveLength(1);
+  expect(screen.getByRole("option", { name: "Model default" })).toBeInTheDocument();
 });

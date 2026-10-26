@@ -3921,3 +3921,16 @@ func TestGenerateImageToolFollowsCurrentExecutionMode(t *testing.T) {
 		t.Fatalf("generation called %d times, want two standard-mode calls", calls)
 	}
 }
+
+func TestThreadSearchModeMatchesReasoningAndResetsOnResume(t *testing.T) {
+	for _, test := range []struct{ effort, mode, want string }{{"minimal", ExecutionModeStandard, "cached"}, {"low", ExecutionModeStandard, "cached"}, {"high", ExecutionModeStandard, "cached"}, {"high", ExecutionModeReadOnly, "disabled"}} {
+		profile := agentruntime.Profile{Provider: "codex", ModelID: "gpt-5.5", ReasoningEffort: test.effort}
+		spec := SessionSpec{Profile: profile, ExecutionMode: test.mode}
+		for _, params := range []map[string]any{appServerThreadStartParams(spec, false), appServerThreadResumeParams(spec, "existing-thread")} {
+			config := params["config"].(map[string]any)
+			if config["web_search"] != test.want || config["model_reasoning_effort"] != test.effort {
+				t.Fatalf("thread config: %v", config)
+			}
+		}
+	}
+}

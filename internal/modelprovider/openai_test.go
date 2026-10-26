@@ -581,3 +581,12 @@ func TestOpenCSGModelDirectoryReadsPluralTasksWithoutChangingGenericProviders(t 
 		t.Fatalf("OpenCSG vision models = %v, want plural tasks recognized", opencsg.VisionModels)
 	}
 }
+
+func TestMinimalWebSearchErrorRetainsSafeActionableCause(t *testing.T) {
+	body := []byte(`{"error":{"code":null,"message":"The following tools cannot be used with reasoning.effort 'minimal': web_search. Secret: fixture-secret","param":"tools","type":"invalid_request_error"}}`)
+	code := UpstreamErrorCodeForResponse(400, body)
+	message := FriendlyUpstreamErrorMessage(400, code)
+	if code != ToolReasoningUnsupported || !strings.Contains(message, "low reasoning") || strings.Contains(message, "fixture-secret") {
+		t.Fatalf("unsafe or generic error: %s %s", code, message)
+	}
+}

@@ -41,6 +41,18 @@ Agent 尚无 MCP 配置快照时，会导入旧原生配置，并转换超时单
 CSGCLAW_EXECUTION_MODE=read_only csgclaw serve
 ```
 
+### 模型推理能力
+
+推理选项按所选模型的能力生成，并通过服务商目录中的 `reasoning_efforts` 字段下发。
+原生 Codex 模型目录与 Web UI 使用同一套受支持档位。
+Codex 模型使用经过核对的专属档位，带日期的模型快照使用相同能力。
+GPT-5.6 和 GPT-6 Sol/Luna 支持 `none`、`low`、`medium`、`high`、`xhigh` 和 `max`。
+GPT-6 Astra 和 GPT-6.1 Sol 支持 `low` 到 `max`，不支持 `none` 或 `minimal`。
+GPT-5.4 和 GPT-5.5 支持 `none` 到 `xhigh`，不支持 `minimal` 或 `max`。
+未知 Codex 模型在能力确认前只显示模型默认选项。
+切换模型时，推理选项重置为模型默认。
+已有配置或显式请求的档位不会被静默转换为其他档位，不受支持的请求可能被上游拒绝。
+
 ## Server 地址
 
 `listen_addr` 是本地 HTTP server 监听的地址。

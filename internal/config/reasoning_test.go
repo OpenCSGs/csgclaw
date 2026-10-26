@@ -17,4 +17,12 @@ func TestNormalizeReasoningEffortUsesNoneAsTheDisabledValue(t *testing.T) {
 	if !HasExplicitReasoningEffort("high") {
 		t.Fatal("high should be treated as an explicit enabled effort")
 	}
+	if !HasExplicitReasoningEffort("max") {
+		t.Fatal("max should be accepted when explicitly configured")
+	}
+	for _, effort := range CommonReasoningEfforts() {
+		if effort == ReasoningEffortMax {
+			t.Fatal("model-specific max must not become an implicit common fallback")
+		}
+	}
 }

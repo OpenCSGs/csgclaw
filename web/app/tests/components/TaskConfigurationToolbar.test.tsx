@@ -23,6 +23,7 @@ function setup(configuration: TaskConfiguration = {}, onChange = vi.fn(), direct
           id: "codex",
           display_name: "Codex",
           models: ["gpt-test", "image-test"],
+          reasoning_efforts: { "gpt-test": ["none", "low", "medium", "high", "xhigh"] },
           imageModels: ["image-test"],
           status: "connected",
         },

@@ -1,6 +1,7 @@
 import { AgentModelFields, type AgentModelFieldsProps } from "@/components/business/AgentModelFields";
 import { AgentMediaModelFields } from "@/components/business/AgentMediaModelFields";
 import { ReasoningControls } from "@/components/business/ProfileControls";
+import { modelReasoningEfforts } from "@/models/modelProviders";
 import type { AgentDraft } from "@/models/agents";
 import styles from "./AgentModelConfiguration.module.css";
 
@@ -15,9 +16,18 @@ export function AgentModelConfiguration({ draft, ...props }: AgentModelConfigura
       <fieldset>
         <legend>{t("profileConversationModelGroup")}</legend>
         <div className={styles.fields}>
-          <AgentModelFields {...props} />
+          <AgentModelFields
+            {...props}
+            onPatch={(patch) => {
+              const changedModel =
+                (patch.model_id !== undefined && patch.model_id !== props.modelID) ||
+                (patch.model_provider_id !== undefined && patch.model_provider_id !== props.providerID);
+              onPatch(changedModel ? { ...patch, reasoning_effort: "auto" } : patch);
+            }}
+          />
           <ReasoningControls
             value={draft.reasoning_effort}
+            supportedEfforts={modelReasoningEfforts(providerOptions, props.providerID, props.modelID)}
             onChange={(value) => onPatch({ reasoning_effort: value })}
             t={t}
           />

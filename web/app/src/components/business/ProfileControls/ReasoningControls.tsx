@@ -1,16 +1,16 @@
 import { Select } from "@/components/ui";
-import { REASONING_OPTIONS } from "@/shared/constants/agents";
-import { normalizeReasoningEffort } from "@/models/reasoning";
+import { normalizeReasoningEffort, reasoningSteps } from "@/models/reasoning";
 import type { TranslateFn } from "@/models/conversations";
-import { reasoningOptionMessageKeys } from "./reasoningLabels";
+import { reasoningEffortLabel } from "./reasoningLabels";
 
 export type ReasoningControlsProps = {
   onChange: (value: string) => void;
   t: TranslateFn;
   value: string;
+  supportedEfforts?: readonly string[];
 };
 
-export function ReasoningControls({ onChange, t, value }: ReasoningControlsProps) {
+export function ReasoningControls({ onChange, t, value, supportedEfforts }: ReasoningControlsProps) {
   return (
     <div className="field reasoning-controls-field">
       <span>{t("profileReasoning")}</span>
@@ -18,9 +18,9 @@ export function ReasoningControls({ onChange, t, value }: ReasoningControlsProps
         value={normalizeReasoningEffort(value)}
         onValueChange={onChange}
         triggerProps={{ "aria-label": t("profileReasoningEffort") }}
-        options={REASONING_OPTIONS.map((option) => ({
+        options={["auto", ...reasoningSteps(supportedEfforts)].map((option) => ({
           value: option,
-          label: t(reasoningOptionMessageKeys[option]),
+          label: reasoningEffortLabel(t, option),
         }))}
       />
     </div>

@@ -13,7 +13,7 @@ import {
   localizedRuntimeOptionChoiceLabel,
   type AgentLike,
 } from "@/models/agents";
-import { modelProviderSelectOptionsFromCatalog } from "@/models/modelProviders";
+import { modelProviderSelectOptionsFromCatalog, modelReasoningEfforts } from "@/models/modelProviders";
 import { TaskModelPicker } from "./TaskModelPicker";
 import { TaskDirectoryPicker } from "./TaskDirectoryPicker";
 import { supportsTaskConfiguration, type TaskConfiguration } from "@/models/taskConfiguration";
@@ -51,6 +51,9 @@ export function TaskConfigurationToolbar({
   const editable = supportsTaskConfiguration(agent) && Boolean(onChange);
   const blocked = disabled || saving;
   const providers = modelProviderSelectOptionsFromCatalog(controller?.modelProviders);
+  const effectiveProvider = configuration.model_provider_id || profile?.model_provider_id || "";
+  const effectiveModel = configuration.model_id || profile?.model_id || "";
+  const supportedEfforts = modelReasoningEfforts(providers, effectiveProvider, effectiveModel);
   const schema = runtimeOptionSchemasForAgent(agentRuntimeKind(agent), agent).find(
     (option) =>
       option.type === "select" && ["execution_mode", "permission_mode"].includes(String(option.path || option.key)),
@@ -187,6 +190,7 @@ export function TaskConfigurationToolbar({
                 compact
                 value={reasoningPreview ?? configuration.reasoning_effort ?? ""}
                 agentEffort={profile?.reasoning_effort ?? undefined}
+                supportedEfforts={supportedEfforts}
                 disabled={!editable || blocked}
                 onValueChange={setReasoningPreview}
                 onValueCommit={(value) => void commitReasoning(value)}

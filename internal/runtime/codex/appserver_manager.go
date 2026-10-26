@@ -839,7 +839,7 @@ func appServerThreadStartParams(spec SessionSpec, publishFiles bool) map[string]
 	if spec.Profile.ModelID != "" {
 		params["model"] = spec.Profile.ModelID
 	}
-	if config := appServerThreadConfig(spec.Profile); len(config) > 0 {
+	if config := appServerThreadConfig(spec.Profile, spec.ExecutionMode); len(config) > 0 {
 		params["config"] = config
 	}
 	if spec.ExecutionMode == ExecutionModeReadOnly {
@@ -902,7 +902,7 @@ func appServerThreadResumeParams(spec SessionSpec, threadID string) map[string]a
 	if spec.Profile.ModelID != "" {
 		params["model"] = spec.Profile.ModelID
 	}
-	if config := appServerThreadConfig(spec.Profile); len(config) > 0 {
+	if config := appServerThreadConfig(spec.Profile, spec.ExecutionMode); len(config) > 0 {
 		params["config"] = config
 	}
 	if spec.ExecutionMode == ExecutionModeReadOnly {
@@ -2270,12 +2270,16 @@ func appServerGenerateVideoToolSpec() map[string]any {
 }
 
 // Explicit per-thread values override settings retained by cold-resumed threads.
-func appServerThreadConfig(profile agentruntime.Profile) map[string]any {
+func appServerThreadConfig(profile agentruntime.Profile, executionMode string) map[string]any {
 	values := appServerReasoningConfig(profile.ReasoningEffort)
 	if values == nil {
 		values = make(map[string]any)
 	}
 	values["model_context_window"] = profile.ModelMetadata.Normalized().ContextWindow
 	values["model_auto_compact_token_limit"] = profile.ModelMetadata.CompactThreshold()
+	values["web_search"] = "cached"
+	if executionMode == ExecutionModeReadOnly {
+		values["web_search"] = "disabled"
+	}
 	return values
 }

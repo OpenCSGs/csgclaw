@@ -75,7 +75,7 @@ func (s *ModelConfiguration) ValidateTaskConfiguration(agentID string, cfg taskc
 		return cfg, err
 	}
 	switch cfg.ReasoningEffort {
-	case "", "auto", "none", "minimal", "low", "medium", "high", "xhigh":
+	case "", "auto", "none", "minimal", "low", "medium", "high", "xhigh", "max":
 	default:
 		return cfg, fmt.Errorf("invalid reasoning effort")
 	}

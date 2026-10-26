@@ -8,10 +8,35 @@ import {
   modelProviderCatalogForOpenCSGState,
   modelProviderOptionsFromCatalog,
   modelProviderSelectOptionsFromCatalog,
+  modelReasoningEfforts,
   normalizeModelProviderCatalog,
   parseModelProviderModelsText,
   providerStatusTone,
 } from "@/models/modelProviders";
+
+it("preserves advertised reasoning levels and offers no guesses for unknown Codex models", () => {
+  const catalog = normalizeModelProviderCatalog({
+    providers: [
+      {
+        id: "codex",
+        status: "connected",
+        models: ["gpt-5.6-luna", "unknown"],
+        reasoning_efforts: { "gpt-5.6-luna": ["none", "low", "medium", "high", "xhigh", "max"], unknown: [] },
+      },
+    ],
+  });
+  const providers = modelProviderSelectOptionsFromCatalog(catalog);
+  expect(modelReasoningEfforts(providers, "codex", "gpt-5.6-luna")).toEqual([
+    "none",
+    "low",
+    "medium",
+    "high",
+    "xhigh",
+    "max",
+  ]);
+  expect(modelReasoningEfforts(providers, "codex", "unknown")).toEqual([]);
+  expect(modelReasoningEfforts(providers, "codex", "new-model")).toEqual([]);
+});
 
 describe("model provider catalog helpers", () => {
   it.each(["codex", "claude_code"])("keeps failed %s unavailable despite cached or discovered models", (id) => {

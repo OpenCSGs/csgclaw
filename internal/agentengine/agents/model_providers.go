@@ -52,34 +52,35 @@ type ModelProviderCatalog struct {
 }
 
 type ModelProviderSummary struct {
-	BrandName       string                              `json:"brand_name,omitempty"`
-	ServiceName     string                              `json:"service_name,omitempty"`
-	Region          string                              `json:"region,omitempty"`
-	APIProtocol     string                              `json:"api_protocol,omitempty"`
-	Avatar          string                              `json:"avatar,omitempty"`
-	ModelSource     string                              `json:"model_source,omitempty"`
-	ModelDefaults   map[string]modelcap.Resolved        `json:"model_defaults"`
-	ModelMetadata   map[string]modelcap.Resolved        `json:"model_metadata"`
-	ModelOverrides  map[string]modelcap.Metadata        `json:"model_overrides"`
-	ImageModels     []string                            `json:"image_models"`
-	VideoModels     []string                            `json:"video_models"`
-	VideoMetadata   map[string]modelcap.VideoGeneration `json:"video_metadata,omitempty"`
-	VisionModels    []string                            `json:"vision_models"`
-	ID              string                              `json:"id"`
-	Kind            string                              `json:"kind"`
-	DisplayName     string                              `json:"display_name"`
-	Preset          string                              `json:"preset,omitempty"`
-	Builtin         bool                                `json:"builtin"`
-	BaseURL         string                              `json:"base_url,omitempty"`
-	APIKey          string                              `json:"api_key,omitempty"`
-	APIKeySet       bool                                `json:"api_key_set"`
-	APIKeyPreview   string                              `json:"api_key_preview,omitempty"`
-	Headers         map[string]string                   `json:"headers,omitempty"`
-	Models          []string                            `json:"models"`
-	ReasoningEffort string                              `json:"reasoning_effort,omitempty"`
-	Status          string                              `json:"status"`
-	Message         string                              `json:"message,omitempty"`
-	LastCheckedAt   string                              `json:"last_checked_at,omitempty"`
+	ReasoningEfforts map[string][]string                 `json:"reasoning_efforts,omitempty"`
+	BrandName        string                              `json:"brand_name,omitempty"`
+	ServiceName      string                              `json:"service_name,omitempty"`
+	Region           string                              `json:"region,omitempty"`
+	APIProtocol      string                              `json:"api_protocol,omitempty"`
+	Avatar           string                              `json:"avatar,omitempty"`
+	ModelSource      string                              `json:"model_source,omitempty"`
+	ModelDefaults    map[string]modelcap.Resolved        `json:"model_defaults"`
+	ModelMetadata    map[string]modelcap.Resolved        `json:"model_metadata"`
+	ModelOverrides   map[string]modelcap.Metadata        `json:"model_overrides"`
+	ImageModels      []string                            `json:"image_models"`
+	VideoModels      []string                            `json:"video_models"`
+	VideoMetadata    map[string]modelcap.VideoGeneration `json:"video_metadata,omitempty"`
+	VisionModels     []string                            `json:"vision_models"`
+	ID               string                              `json:"id"`
+	Kind             string                              `json:"kind"`
+	DisplayName      string                              `json:"display_name"`
+	Preset           string                              `json:"preset,omitempty"`
+	Builtin          bool                                `json:"builtin"`
+	BaseURL          string                              `json:"base_url,omitempty"`
+	APIKey           string                              `json:"api_key,omitempty"`
+	APIKeySet        bool                                `json:"api_key_set"`
+	APIKeyPreview    string                              `json:"api_key_preview,omitempty"`
+	Headers          map[string]string                   `json:"headers,omitempty"`
+	Models           []string                            `json:"models"`
+	ReasoningEffort  string                              `json:"reasoning_effort,omitempty"`
+	Status           string                              `json:"status"`
+	Message          string                              `json:"message,omitempty"`
+	LastCheckedAt    string                              `json:"last_checked_at,omitempty"`
 }
 
 type ModelProviderCheckResult struct {
@@ -291,6 +292,7 @@ func builtinModelProviderSummary(id string, provider config.ProviderConfig) Mode
 		summary.APIKeyPreview = apiKeyPreview(provider.APIKey)
 	}
 	summary.ModelMetadata = resolvedProviderMetadata(id, provider)
+	summary.ReasoningEfforts = providerReasoningEfforts(id, provider)
 	summary.ModelDefaults = automaticProviderMetadata(id, provider)
 	summary.ModelOverrides = modelcap.Clone(provider.ModelOverrides)
 	summary.Headers = cloneStringMap(provider.Headers)
@@ -306,33 +308,34 @@ func customProviderSummary(id string, provider config.ProviderConfig) ModelProvi
 		displayName = id
 	}
 	return ModelProviderSummary{
-		ID:              id,
-		Kind:            ModelProviderKindOpenAICompatible,
-		ModelMetadata:   resolvedProviderMetadata(id, provider),
-		ModelDefaults:   automaticProviderMetadata(id, provider),
-		ModelOverrides:  modelcap.Clone(provider.ModelOverrides),
-		DisplayName:     displayName,
-		BrandName:       modelProviderBrandName(effectiveModelProviderPreset(id, provider)),
-		Preset:          effectiveModelProviderPreset(id, provider),
-		Region:          provider.Region,
-		APIProtocol:     provider.APIProtocol,
-		Avatar:          modelProviderAvatar(provider),
-		ServiceName:     modelProviderServiceName(provider),
-		ModelSource:     provider.ModelSource,
-		Builtin:         false,
-		BaseURL:         provider.BaseURL,
-		APIKeySet:       strings.TrimSpace(provider.APIKey) != "",
-		APIKeyPreview:   apiKeyPreview(provider.APIKey),
-		Headers:         cloneStringMap(provider.Headers),
-		Models:          prioritizeOpenCSGAutoModel(id, provider.BaseURL, provider.Models),
-		ImageModels:     imageModels(id, provider.Models, provider.ImageModels),
-		VideoModels:     videoModels(id, provider.Models, provider.VideoModels),
-		VideoMetadata:   modelcap.CloneVideoGeneration(provider.VideoMetadata),
-		VisionModels:    append([]string(nil), provider.VisionModels...),
-		ReasoningEffort: provider.ReasoningEffort,
-		Status:          providerStatusOrUnknown(provider.Status),
-		Message:         provider.Message,
-		LastCheckedAt:   provider.LastCheckedAt,
+		ID:               id,
+		Kind:             ModelProviderKindOpenAICompatible,
+		ModelMetadata:    resolvedProviderMetadata(id, provider),
+		ReasoningEfforts: providerReasoningEfforts(id, provider),
+		ModelDefaults:    automaticProviderMetadata(id, provider),
+		ModelOverrides:   modelcap.Clone(provider.ModelOverrides),
+		DisplayName:      displayName,
+		BrandName:        modelProviderBrandName(effectiveModelProviderPreset(id, provider)),
+		Preset:           effectiveModelProviderPreset(id, provider),
+		Region:           provider.Region,
+		APIProtocol:      provider.APIProtocol,
+		Avatar:           modelProviderAvatar(provider),
+		ServiceName:      modelProviderServiceName(provider),
+		ModelSource:      provider.ModelSource,
+		Builtin:          false,
+		BaseURL:          provider.BaseURL,
+		APIKeySet:        strings.TrimSpace(provider.APIKey) != "",
+		APIKeyPreview:    apiKeyPreview(provider.APIKey),
+		Headers:          cloneStringMap(provider.Headers),
+		Models:           prioritizeOpenCSGAutoModel(id, provider.BaseURL, provider.Models),
+		ImageModels:      imageModels(id, provider.Models, provider.ImageModels),
+		VideoModels:      videoModels(id, provider.Models, provider.VideoModels),
+		VideoMetadata:    modelcap.CloneVideoGeneration(provider.VideoMetadata),
+		VisionModels:     append([]string(nil), provider.VisionModels...),
+		ReasoningEffort:  provider.ReasoningEffort,
+		Status:           providerStatusOrUnknown(provider.Status),
+		Message:          provider.Message,
+		LastCheckedAt:    provider.LastCheckedAt,
 	}
 }
 
@@ -950,6 +953,21 @@ func resolvedProviderMetadata(id string, provider config.ProviderConfig) map[str
 		out[model] = modelcap.Resolve(id, provider.BaseURL, model, provider.ModelMetadata[model], provider.ModelOverrides[model])
 	}
 	return out
+}
+
+func providerReasoningEfforts(id string, provider config.ProviderConfig) map[string][]string {
+	var result map[string][]string
+	for _, model := range provider.Models {
+		caps := modelcap.ForProviderModel(ProfileProviderForModelProviderID(id), model)
+		if len(caps.SupportedReasoningEfforts) == 0 && ProfileProviderForModelProviderID(id) != ProviderCodex {
+			continue
+		}
+		if result == nil {
+			result = make(map[string][]string)
+		}
+		result[model] = slices.Clone(caps.SupportedReasoningEfforts)
+	}
+	return result
 }
 
 func automaticProviderMetadata(id string, provider config.ProviderConfig) map[string]modelcap.Resolved {

@@ -9,6 +9,7 @@ export const reasoningOptionMessageKeys = {
   medium: "profileReasoningMedium",
   high: "profileReasoningHigh",
   xhigh: "profileReasoningXHigh",
+  max: "profileReasoningMax",
 } as const;
 
 export function reasoningEffortLabel(t: TranslateFn, value: unknown): string {
