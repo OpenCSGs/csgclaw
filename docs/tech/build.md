@@ -146,6 +146,8 @@ Local desktop outputs are kept under `desktop/out/`: backend inputs in `input/`,
 
 Failed GitHub `Release` runs are handled by `.github/workflows/release-retry.yml` after each attempt completes. It re-runs only failed jobs and their dependent jobs, retaining successful platform builds and artifacts. Each release run gets at most three total attempts (the initial execution plus two automatic retries); cancellation stops automatic retries, and failures at the limit remain visible for manual investigation. Manual re-runs count toward the same limit. The retry workflow must be merged into the default branch before it takes effect.
 
+The CI and local signed macOS packaging paths share `scripts/macos-stapler.mjs` for app/DMG ticket stapling and validation. Each command has a three-minute timeout and up to three total attempts for transient network errors, with 30-second and 90-second delays. Retries reuse the existing artifact; signature/ticket errors fail immediately, and exhausted network retries still fail the job. This command-level recovery runs before the existing workflow-level retry fallback.
+
 ## Related docs
 
 - [Configuration](config.md)

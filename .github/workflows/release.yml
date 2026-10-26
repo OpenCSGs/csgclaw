@@ -381,7 +381,7 @@ jobs:
             exit 1
           fi
           codesign --verify --deep --strict --verbose=2 "${app_path}"
-          xcrun stapler validate "${app_path}"
+          node scripts/macos-stapler.mjs validate "${app_path}"
 
           dmg_paths="$(find desktop/out/make -type f -name '*.dmg' -print)"
           dmg_count="$(printf '%s\n' "${dmg_paths}" | awk 'NF { count += 1 } END { print count + 0 }')"
@@ -400,8 +400,8 @@ jobs:
             --password "${APPLE_PASSWORD}" \
             --team-id "${APPLE_TEAM_ID}" \
             --wait
-          xcrun stapler staple "${dmg_path}"
-          xcrun stapler validate "${dmg_path}"
+          node scripts/macos-stapler.mjs staple "${dmg_path}"
+          node scripts/macos-stapler.mjs validate "${dmg_path}"
           hdiutil verify "${dmg_path}"
           spctl --assess --type open --context context:primary-signature --verbose=4 "${dmg_path}"
 

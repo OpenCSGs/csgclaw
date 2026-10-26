@@ -124,6 +124,8 @@ OSS 桌面发布命令的完整说明见 [Electron Desktop OSS 发布](desktop/e
 
 GitHub `Release` 每次执行结束后，失败的 run 由 `.github/workflows/release-retry.yml` 自动处理：只重跑失败 job 及其依赖的后续 job，复用已经成功的平台构建和产物。每个发布 run 最多执行三次（首次执行加两次自动重试）；取消后不会自动重试，达到上限仍失败时保留失败状态供人工排查。手动重跑也计入同一上限。重试 workflow 合入默认分支后生效。
 
+CI 和本地 macOS 签名打包共用 `scripts/macos-stapler.mjs` 处理 App/DMG 的贴票与票据验证。每条命令超时为三分钟；遇到临时网络错误时最多执行三次，两次等待分别为 30 秒、90 秒。重试复用现有产物，签名或票据错误立即失败，网络重试耗尽仍使 job 失败。命令级恢复失败后，继续由现有 workflow 级重试兜底。
+
 ## 相关文档
 
 - [配置](config.zh.md)
