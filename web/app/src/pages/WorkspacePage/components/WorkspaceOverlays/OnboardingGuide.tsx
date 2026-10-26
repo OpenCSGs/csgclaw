@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { Button } from "@/components/ui";
 import { useWorkspaceControllerContext } from "@/hooks/workspace";
 import { OPEN_ONBOARDING_GUIDE_EVENT } from "@/shared/lib/onboardingGuide";
 import styles from "./OnboardingGuide.module.css";
@@ -58,11 +59,27 @@ export function OnboardingGuide() {
   const title = locale === "en" ? "CSGClaw onboarding guide" : "CSGClaw 新手引导";
 
   return (
-    <div className={styles.overlay} role="dialog" aria-modal="true" aria-label={title}>
+    <div
+      className={styles.overlay}
+      role="dialog"
+      aria-modal="true"
+      aria-label={title}
+      onKeyDown={(event) => {
+        if (event.key === "Escape") {
+          event.stopPropagation();
+          setOpen(false);
+        }
+      }}
+    >
+      <div className={styles.close}>
+        <Button variant="secondaryGray" size="sm" onClick={() => setOpen(false)}>
+          {controller.t("onboardingGuideExit")}
+        </Button>
+      </div>
       <iframe
         ref={frameRef}
         className={styles.frame}
-        src={`onboarding-guide/index.html?locale=${locale}`}
+        src={`onboarding-guide/guide.html?locale=${locale}&embedded=1`}
         title={title}
         onLoad={() => {
           frameRef.current?.focus();

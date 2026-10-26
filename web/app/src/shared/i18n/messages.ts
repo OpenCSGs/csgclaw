@@ -136,6 +136,7 @@ export const messages = {
     onboardingGuideTitle: "CSGClaw 新手引导",
     onboardingGuideDescription: "重新了解 CSGClaw 的核心工作方式",
     onboardingGuideReplay: "重放引导",
+    onboardingGuideExit: "退出导览",
     iaSettingsCardArchived: "已归档",
     iaSettingsCardArchivedHint: "归档过的任务与协作空间，可恢复或彻底删除",
     archivedDescription: "这些会话从侧栏移走了，内容都还在。取消归档让它回到列表，或者彻底删掉。",
@@ -3129,6 +3130,7 @@ export const messages = {
     onboardingGuideTitle: "CSGClaw onboarding guide",
     onboardingGuideDescription: "Revisit how CSGClaw works",
     onboardingGuideReplay: "Replay guide",
+    onboardingGuideExit: "Exit guide",
     iaSettingsCardArchived: "Archived",
     iaSettingsCardArchivedHint: "Archived tasks and collaboration spaces — restore or delete them",
     archivedDescription:

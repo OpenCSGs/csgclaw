@@ -48,6 +48,34 @@ func TestDesktopSecurityHeadersAllowOnlyHashedInlineBootstrap(t *testing.T) {
 	}
 }
 
+func TestDesktopRendererOnlyAllowsSameOriginGuideEmbedding(t *testing.T) {
+	handler, err := desktopRendererSecurityHandler(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}), &net.TCPAddr{IP: net.ParseIP("127.0.0.1"), Port: 59842}, DesktopOptions{
+		BaseURL: "http://127.0.0.1:59842", SessionToken: strings.Repeat("s", 43),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, route := range []string{"/", "/onboarding-guide/guide.html?locale=en", "/onboarding-guide/guide.js", "/api/v1/agents", "/onboarding-guide/other.html"} {
+		t.Run(route, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "http://127.0.0.1:59842"+route, nil))
+			wantAncestor, wantFrame := "frame-ancestors 'none'", "DENY"
+			if strings.HasPrefix(route, "/onboarding-guide/guide.html?") {
+				wantAncestor, wantFrame = "frame-ancestors 'self'", "SAMEORIGIN"
+			}
+			csp := rec.Header().Get("Content-Security-Policy")
+			if !strings.Contains(csp, wantAncestor) || rec.Header().Get("X-Frame-Options") != wantFrame {
+				t.Fatalf("unexpected embedding policy: CSP=%q X-Frame-Options=%q", csp, rec.Header().Get("X-Frame-Options"))
+			}
+			if !strings.Contains(csp, "script-src 'self' "+documentBootstrapCSPHash) || strings.Contains(csp, "script-src 'self' 'unsafe-inline'") {
+				t.Fatalf("script policy must remain restricted: %q", csp)
+			}
+		})
+	}
+}
+
 func TestDesktopSecuritySeparatesRendererAndSandboxAuthentication(t *testing.T) {
 	const (
 		rendererHost = "127.0.0.1:59842"

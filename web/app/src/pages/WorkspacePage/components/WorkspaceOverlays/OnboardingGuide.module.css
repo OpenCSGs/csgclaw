@@ -13,3 +13,10 @@
   border: 0;
   pointer-events: auto;
 }
+
+.close {
+  position: absolute;
+  top: 16px;
+  right: max(18px, calc((100vw - 1210px) / 2));
+  z-index: 1;
+}

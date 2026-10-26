@@ -48,6 +48,12 @@ func desktopRendererSecurityHandler(next http.Handler, listenerAddr net.Addr, op
 	expectedOrigin := baseURL.Scheme + "://" + baseURL.Host
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		setDesktopSecurityHeaders(w.Header())
+		// Only the bundled guide may be embedded by the same-origin renderer.
+		if r.URL.Path == "/onboarding-guide/guide.html" {
+			csp := w.Header().Get("Content-Security-Policy")
+			w.Header().Set("Content-Security-Policy", strings.Replace(csp, "frame-ancestors 'none'", "frame-ancestors 'self'", 1))
+			w.Header().Set("X-Frame-Options", "SAMEORIGIN")
+		}
 		requestHost := strings.ToLower(strings.TrimSpace(r.Host))
 		origin := strings.TrimSpace(r.Header.Get("Origin"))
 

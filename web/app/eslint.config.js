@@ -11,6 +11,12 @@ export default tseslint.config(
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
+    files: ["public/onboarding-guide/*.js"],
+    languageOptions: {
+      globals: { ...globals.browser, ...globals.es2026 },
+    },
+  },
+  {
     files: ["**/*.{ts,tsx}"],
     languageOptions: {
       globals: {

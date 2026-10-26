@@ -3,10 +3,31 @@ package webui
 import (
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"regexp"
 	"strings"
 	"testing"
 )
+
+func TestOnboardingGuideServesWithoutRedirectAndUsesExternalScript(t *testing.T) {
+	assets := os.DirFS("app/public")
+	handler := spaHandler{fsys: assets, files: http.FileServer(http.FS(assets))}
+	for _, route := range []string{"/onboarding-guide/guide.html?locale=en&embedded=1", "/onboarding-guide/guide.js"} {
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, route, nil))
+		if rec.Code != http.StatusOK || rec.Header().Get("Location") != "" {
+			t.Fatalf("%s: status=%d location=%q", route, rec.Code, rec.Header().Get("Location"))
+		}
+		if strings.Contains(route, ".html") {
+			body := rec.Body.String()
+			if !strings.Contains(body, `<script src="guide.js"></script>`) || strings.Contains(body, "<script>") {
+				t.Fatal("guide must load its interactions from a same-origin external script")
+			}
+		} else if !strings.Contains(rec.Body.String(), "function exitGuide()") {
+			t.Fatal("guide script did not contain the exit handler")
+		}
+	}
+}
 
 func TestHandlerServesIndexForSPARoutes(t *testing.T) {
 	requireBuiltWebAssets(t)
