@@ -122,6 +122,8 @@ OSS 桌面发布命令的完整说明见 [Electron Desktop OSS 发布](desktop/e
 
 本地桌面构建文件统一维护在 `desktop/out/`：`input/` 是后端 bundle 中间件，`make/` 是 Forge 原始产物，`oss/` 是可上传版本、外部导入包和 channel manifest。仓库根 `dist/` 继续作为 Go release 与 CI runner 的临时平铺汇总目录。
 
+GitHub `Release` 每次执行结束后，失败的 run 由 `.github/workflows/release-retry.yml` 自动处理：只重跑失败 job 及其依赖的后续 job，复用已经成功的平台构建和产物。每个发布 run 最多执行三次（首次执行加两次自动重试）；取消后不会自动重试，达到上限仍失败时保留失败状态供人工排查。手动重跑也计入同一上限。重试 workflow 合入默认分支后生效。
+
 ## 相关文档
 
 - [配置](config.zh.md)
