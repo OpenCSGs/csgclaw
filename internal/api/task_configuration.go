@@ -37,7 +37,7 @@ func (h *Handler) validateTaskConfiguration(room apitypes.Room, configuration *t
 		return nil, nil
 	}
 	if !room.IsDirect {
-		return nil, fmt.Errorf("session configuration requires a direct conversation")
+		return validateCollaborationConfiguration(room, configuration)
 	}
 	models, ok := h.agentModels.(taskModelService)
 	if !ok {
@@ -74,7 +74,7 @@ func (h *Handler) taskLLMContext(w http.ResponseWriter, r *http.Request, agentID
 		return r, false
 	}
 	room, ok := h.im.Room(roomID)
-	if !ok || room.Configuration == nil || !room.IsDirect {
+	if !ok || room.Configuration == nil {
 		http.NotFound(w, r)
 		return r, false
 	}

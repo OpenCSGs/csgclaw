@@ -11,6 +11,7 @@ import type { WorkspaceTask, WorkspaceTeam, WorkspaceTeamEvent } from "@/models/
 
 export type CreateTeamPayload = {
   description?: string;
+  collaboration_guide?: string;
   lead_agent_id?: string;
   member_agent_ids?: string[];
   title?: string;
@@ -18,6 +19,7 @@ export type CreateTeamPayload = {
 
 export type UpdateTeamPayload = {
   description?: string;
+  collaboration_guide?: string;
   lead_agent_id?: string;
   member_agent_ids?: string[];
   status?: string;
@@ -90,6 +92,7 @@ export async function createTeamRequest(payload: CreateTeamPayload): Promise<Wor
   const request: Record<string, unknown> = {
     title: payload.title,
   };
+  if (payload.collaboration_guide !== undefined) request.collaboration_guide = payload.collaboration_guide;
   if (payload.description !== undefined) {
     request.description = payload.description;
   }
@@ -113,6 +116,7 @@ export async function updateTeamRequest(teamID: string, payload: UpdateTeamPaylo
     throw new Error("Team ID is required");
   }
   const request: Record<string, unknown> = {};
+  if (payload.collaboration_guide !== undefined) request.collaboration_guide = payload.collaboration_guide;
   if (payload.description !== undefined) {
     request.description = payload.description;
   }

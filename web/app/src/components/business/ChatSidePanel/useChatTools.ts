@@ -60,13 +60,23 @@ export function useChatTools({
     () => ({
       roomID: conversation.id,
       direct,
+      sharedWorkspace: !direct && Boolean(conversation.configuration?.workspace_dir),
       userID: currentUserID,
       agents: fileAgents.map(({ id, name }) => ({ id, name })),
       defaultAgentID,
       retainedMessages: conversation.threads?.flatMap((thread) => thread.context ?? []),
       messages: conversation.messages,
     }),
-    [conversation.id, conversation.threads, conversation.messages, currentUserID, fileAgents, defaultAgentID, direct],
+    [
+      conversation.configuration?.workspace_dir,
+      conversation.id,
+      conversation.threads,
+      conversation.messages,
+      currentUserID,
+      fileAgents,
+      defaultAgentID,
+      direct,
+    ],
   );
   const { openTab, patch } = controller;
   useEffect(() => {

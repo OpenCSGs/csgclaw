@@ -24,7 +24,9 @@ func (h *Handler) handleAgentWorkspace(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) handleAgentWorkspaceFile(w http.ResponseWriter, r *http.Request) {
-	h.handleAgentWorkspaceFileRead(w, r, h.agentWorkspaceRoot)
+	h.handleAgentWorkspaceFileRead(w, r, func(id string) (string, error) {
+		return h.conversationWorkspaceRoot(id, r.URL.Query().Get("room_id"))
+	})
 }
 
 func (h *Handler) handleAgentSkills(w http.ResponseWriter, r *http.Request) {
@@ -141,7 +143,7 @@ func (h *Handler) conversationWorkspaceRoot(agentID, roomID string) (string, err
 	if !member {
 		return "", errors.New("agent is not a conversation member")
 	}
-	if room.IsDirect && room.Configuration != nil && room.Configuration.WorkspaceDir != "" {
+	if room.Configuration != nil && room.Configuration.WorkspaceDir != "" {
 		return room.Configuration.WorkspaceDir, nil
 	}
 	return root, nil

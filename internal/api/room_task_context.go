@@ -44,7 +44,7 @@ func (h *Handler) roomContextFacts(meta roomtask.Roster) map[string]any {
 		}
 		members = append(members, item)
 	}
-	return map[string]any{"room_id": room.ID, "manager_id": meta.ManagerID, "members": members, "assignable_worker_ids": meta.WorkerIDs}
+	return map[string]any{"workspace_dir": roomWorkspaceDir(room), "source_team_id": room.SourceTeamID, "collaboration_guide": room.CollaborationGuide, "room_id": room.ID, "manager_id": meta.ManagerID, "members": members, "assignable_worker_ids": meta.WorkerIDs}
 }
 
 // roomExecutionContext is read after the per-conversation ingress queue admits
@@ -136,6 +136,9 @@ func (h *Handler) roomExecutionContext(request roomtask.TurnContextRequest) (roo
 	if attempt := h.roomTaskAttemptForSource(roomID, sourceID); attempt > 0 {
 		turn["task_attempt"] = attempt
 	}
+	scope["workspace_dir"], scope["source_team_id"] = roomWorkspaceDir(room), room.SourceTeamID
+	// Repeat the saved guide on every turn, independently of compacted history.
+	delete(scope, "collaboration_guide")
 	policyID := roomtask.TurnPolicyID(role)
 	if policyID == "" {
 		return roomtask.PrivateTurnContext{}, fmt.Errorf("collaboration instructions unavailable")
@@ -155,6 +158,7 @@ func (h *Handler) roomExecutionContext(request roomtask.TurnContextRequest) (roo
 	return roomtask.PrivateTurnContext{
 		Role: role, PolicyID: policyID,
 		ScopeJSON: string(scopeJSON), SnapshotJSON: string(snapshotJSON), TurnJSON: string(turnJSON),
+		CollaborationGuide: room.CollaborationGuide,
 	}, nil
 }
 

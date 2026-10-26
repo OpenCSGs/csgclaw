@@ -51,14 +51,15 @@ const (
 
 // TeamMeta is a reusable pool of agents that can execute tasks in any supported channel.
 type TeamMeta struct {
-	ID             string    `json:"id"`
-	Title          string    `json:"title"`
-	Description    string    `json:"description,omitempty"`
-	LeadAgentID    string    `json:"lead_agent_id"`
-	MemberAgentIDs []string  `json:"member_agent_ids,omitempty"`
-	Status         string    `json:"status"`
-	CreatedAt      time.Time `json:"created_at"`
-	UpdatedAt      time.Time `json:"updated_at"`
+	ID                 string    `json:"id"`
+	Title              string    `json:"title"`
+	Description        string    `json:"description,omitempty"`
+	CollaborationGuide string    `json:"collaboration_guide,omitempty"`
+	LeadAgentID        string    `json:"lead_agent_id"`
+	MemberAgentIDs     []string  `json:"member_agent_ids,omitempty"`
+	Status             string    `json:"status"`
+	CreatedAt          time.Time `json:"created_at"`
+	UpdatedAt          time.Time `json:"updated_at"`
 }
 
 // MemberPresence captures runtime state derived from room members plus participant identity.

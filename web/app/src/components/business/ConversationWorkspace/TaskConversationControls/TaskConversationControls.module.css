@@ -29,3 +29,12 @@
   font-size: 11px;
   color: var(--muted);
 }
+
+.guide {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-width: 40rem;
+  max-height: 20rem;
+  overflow: auto;
+  font: inherit;
+}

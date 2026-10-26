@@ -40,6 +40,7 @@ export type StartThreadPayload = {
 };
 
 export type CreateRoomPayload = {
+  source_team_id?: string;
   configuration?: TaskConfiguration;
   is_direct?: boolean;
   task_session?: boolean;

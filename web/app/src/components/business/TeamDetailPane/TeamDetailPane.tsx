@@ -5,6 +5,7 @@ import { Edit3, ListChecks, MessageSquarePlus, Trash2, UserPlus, Users } from "l
 import { TaskSubtaskIndicator } from "@/components/business";
 import {
   Button,
+  TextArea,
   DialogBody,
   DialogCloseButton,
   DialogContent,
@@ -40,6 +41,7 @@ export type TeamDetailPaneProps = {
   onDeleteTeam?: (team: WorkspaceTeam) => void | Promise<boolean>;
   onStartCollaboration?: (team: WorkspaceTeam) => void;
   onManageMembers?: (team: WorkspaceTeam) => void;
+  onUpdateGuide?: (team: WorkspaceTeam, guide: string) => Promise<boolean>;
   onUpdateDescription?: (team: WorkspaceTeam, description: string) => Promise<boolean>;
   onSelectAgent?: (agent: AgentLike) => void;
   onSelectTask?: (taskID: string) => void;
@@ -52,7 +54,7 @@ export type TeamDetailPaneProps = {
   usersById?: UsersLookup;
 };
 
-type ActiveTeamTab = "members" | "records";
+type ActiveTeamTab = "members" | "records" | "guide";
 
 export function TeamDetailPane({
   t = (key) => key,
@@ -67,10 +69,15 @@ export function TeamDetailPane({
   onDeleteTeam = () => {},
   onManageMembers = () => {},
   onUpdateDescription,
+  onUpdateGuide,
   onSelectAgent = () => {},
   onSelectTask = () => {},
 }: TeamDetailPaneProps) {
   const [activeTab, setActiveTab] = useState<ActiveTeamTab>("members");
+  const [guideDraft, setGuideDraft] = useState("");
+  useEffect(() => {
+    setGuideDraft(team?.collaboration_guide ?? "");
+  }, [team?.id, team?.collaboration_guide]);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [editingDescription, setEditingDescription] = useState(false);
   const [descriptionDraft, setDescriptionDraft] = useState("");
@@ -307,8 +314,52 @@ export function TeamDetailPane({
               <ListChecks size={15} aria-hidden="true" />
               {t("teamRecordsTab")}
             </button>
+            <button
+              type="button"
+              role="tab"
+              id="team-detail-tab-guide"
+              aria-controls="team-detail-panel-guide"
+              className={activeTab === "guide" ? styles.active : ""}
+              aria-selected={activeTab === "guide"}
+              onClick={() => setActiveTab("guide")}
+            >
+              {t("teamGuideTab")}
+            </button>
           </div>
           <div className={styles.teamDetailPanels}>
+            {activeTab === "guide" ? (
+              <section
+                className={styles.teamDetailPanel}
+                role="tabpanel"
+                id="team-detail-panel-guide"
+                aria-labelledby="team-detail-tab-guide"
+              >
+                <div className={styles.teamDetailPanelHead}>
+                  <div>
+                    <h2>{t("teamGuideTab")}</h2>
+                    <p>{t("teamGuideHint")}</p>
+                  </div>
+                </div>
+                <TextArea
+                  aria-label={t("teamGuideTab")}
+                  rows={12}
+                  value={guideDraft}
+                  placeholder={t("teamGuidePlaceholder")}
+                  disabled={teamActionBusy || !onUpdateGuide}
+                  onChange={(event) => setGuideDraft(event.currentTarget.value)}
+                />
+                {onUpdateGuide ? (
+                  <Button
+                    variant="primary"
+                    size="md"
+                    disabled={teamActionBusy || guideDraft === (team.collaboration_guide ?? "")}
+                    onClick={() => void onUpdateGuide(team, guideDraft)}
+                  >
+                    {t("save")}
+                  </Button>
+                ) : null}
+              </section>
+            ) : null}
             {activeTab === "members" ? (
               <section
                 className={classNames(styles.panelSurface, styles.teamDetailPanel)}

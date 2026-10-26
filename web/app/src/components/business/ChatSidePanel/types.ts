@@ -5,6 +5,7 @@ export type ChatFileAgent = { id: string; name: string };
 export type ChatFileScope = {
   roomID: string;
   direct?: boolean;
+  sharedWorkspace?: boolean;
   userID: string;
   agents: ChatFileAgent[];
   defaultAgentID: string;

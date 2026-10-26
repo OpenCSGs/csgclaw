@@ -17,6 +17,16 @@ const team: WorkspaceTeam = {
 };
 
 describe("TeamDetailPane", () => {
+  it("edits a separate collaboration guide and saves only on confirmation", async () => {
+    const user = userEvent.setup();
+    const onUpdateGuide = vi.fn().mockResolvedValue(true);
+    render(<TeamDetailPane team={team} t={t} onUpdateGuide={onUpdateGuide} />);
+    await user.click(screen.getByRole("tab", { name: "teamGuideTab" }));
+    await user.type(screen.getByRole("textbox", { name: "teamGuideTab" }), "Review docs/ before handing off.");
+    expect(onUpdateGuide).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "save" }));
+    expect(onUpdateGuide).toHaveBeenCalledWith(team, "Review docs/ before handing off.");
+  });
   it("saves and clears descriptions on blur and cancels with Escape", async () => {
     const user = userEvent.setup();
     const onUpdateDescription = vi.fn().mockResolvedValue(true);

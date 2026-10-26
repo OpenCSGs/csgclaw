@@ -20,7 +20,7 @@ func TestPrivateRoomContextTracksDurableWorkWithoutDiscovery(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	room, err := messages.CreateRoom(im.CreateRoomRequest{Title: "Room", CreatorID: "admin", MemberIDs: []string{"dev", "qa"}, Type: apitypes.RoomTypeOnDemand})
+	room, err := messages.CreateRoom(im.CreateRoomRequest{Title: "Room", CreatorID: "admin", MemberIDs: []string{"dev"}, Type: apitypes.RoomTypeOnDemand, CollaborationGuide: "Keep deliverables in docs/"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -42,6 +42,9 @@ func TestPrivateRoomContextTracksDurableWorkWithoutDiscovery(t *testing.T) {
 		})
 		if err != nil {
 			t.Fatal(err)
+		}
+		if current.CollaborationGuide != "Keep deliverables in docs/" {
+			t.Fatal("participant lost the room guide", actor, current)
 		}
 		text, err := projector.Project(key, current)
 		if err != nil {
@@ -70,6 +73,10 @@ func TestPrivateRoomContextTracksDurableWorkWithoutDiscovery(t *testing.T) {
 	freeContext, err := h.participantBridge.RoomContext(roomtask.TurnContextRequest{ConversationID: "free", RoomID: freeRoom.ID, ParticipantID: "manager", SourceID: "source-free"})
 	if got, projectErr := projector.Project("free", freeContext); err != nil || projectErr != nil || got != "" {
 		t.Fatalf("free room context = %q, provider error %v, projection error %v; want no room workflow instructions", got, err, projectErr)
+	}
+	// A member added after creation receives the same room-owned guide.
+	if _, err := messages.AddRoomMembers(im.AddRoomMembersRequest{RoomID: room.ID, InviterID: "admin", UserIDs: []string{"qa"}}); err != nil {
+		t.Fatal(err)
 	}
 	root, err := h.roomTaskSvc.Create(room.ID, "source", "admin", "Build", "Parent goal")
 	if err != nil {
@@ -154,5 +161,11 @@ func TestPrivateRoomContextTracksDurableWorkWithoutDiscovery(t *testing.T) {
 	}
 	if got := contextFor("manager", ""); !strings.Contains(got, `"tasks":[]`) || strings.Contains(got, "page.html accepted output") {
 		t.Fatal("closed history injected on unrelated wake", got)
+	}
+	if _, err := messages.RemoveRoomMembers(im.AddRoomMembersRequest{RoomID: room.ID, InviterID: "admin", UserIDs: []string{"qa"}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.participantBridge.RoomContext(roomtask.TurnContextRequest{RoomID: room.ID, ParticipantID: "pt-qa", TaskID: qa.ID, SourceID: "source"}); err == nil {
+		t.Fatal("removed worker still received room context")
 	}
 }
