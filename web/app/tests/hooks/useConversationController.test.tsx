@@ -182,7 +182,7 @@ function renderConversationController(
       name: "demo",
       role: "worker",
       avatar: "GI",
-      runtime_kind: "picoclaw_sandbox",
+      runtime_kind: "codex",
       status: "running",
     },
   ];
@@ -936,7 +936,7 @@ describe("useConversationController", () => {
           id: "u-demo",
           name: "demo",
           role: "worker",
-          runtime_kind: "picoclaw_sandbox",
+          runtime_kind: "codex",
           status: "runtime_unavailable",
         },
       ],
@@ -998,7 +998,7 @@ describe("useConversationController", () => {
           id: "u-demo",
           name: "demo",
           role: "worker",
-          runtime_kind: "picoclaw_sandbox",
+          runtime_kind: "codex",
           status: "running",
           runtime: {
             state: "running",
@@ -1631,7 +1631,7 @@ describe("useConversationController", () => {
           id: "msg-tool",
           content: '📄 Web Fetch: from https://example.com {"url":"https://example.com"}',
           created_at: "2026-06-16T10:00:10Z",
-          metadata: { openclaw: { delivery_kind: "tool", request_id: "msg-user" } },
+          metadata: { codex: { delivery_kind: "tool", request_id: "msg-user" } },
           sender_id: "u-demo",
         },
       });
@@ -1930,45 +1930,13 @@ describe("useConversationController", () => {
           id: "msg-tool",
           content: '📄 Web Fetch: from https://example.com {"url":"https://example.com"}',
           created_at: new Date().toISOString(),
-          metadata: { openclaw: { delivery_kind: "tool", request_id: "msg-user" } },
+          metadata: { codex: { delivery_kind: "tool", request_id: "msg-user" } },
           sender_id: "u-demo",
         },
       ]),
     });
 
     expect(result.current.conversationViewProps.workingParticipants).toEqual([]);
-  });
-
-  it("temporarily derives working participants for historical OpenClaw images", async () => {
-    const { result } = renderConversationController({
-      agents: [
-        {
-          id: "u-demo",
-          name: "demo",
-          role: "worker",
-          runtime_kind: "openclaw_sandbox",
-          status: "running",
-        },
-      ],
-      data: dataWithMessages([
-        {
-          id: "msg-user",
-          content: "hi",
-          created_at: new Date().toISOString(),
-          sender_id: "u-admin",
-        },
-      ]),
-    });
-
-    await waitFor(() => {
-      expect(result.current.conversationViewProps.workingParticipants).toEqual([
-        expect.objectContaining({
-          id: "u-demo",
-          name: "demo",
-          requestID: "msg-user",
-        }),
-      ]);
-    });
   });
 
   it("uses the participant work lease selector as the authoritative working source", () => {

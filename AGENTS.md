@@ -17,7 +17,7 @@ cli/                    command flows and user-facing output
 internal/agent/         agent runtime, storage, BoxLite wiring
 internal/config/        config defaults, load/save
 internal/api/           HTTP handlers and router
-internal/im/            IM service and PicoClaw bridge
+internal/im/            IM service and channel integration
 internal/server/        HTTP server and UI wiring
 web/app/                Web UI development source and Vite project
 web/static-dist/        generated Web UI assets for Go embed; run make web-build

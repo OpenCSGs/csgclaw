@@ -394,7 +394,7 @@ func (w legacyWorker) toAgent() Agent {
 		Name:        w.Name,
 		Description: w.Description,
 		RuntimeID:   runtimeIDForAgentID(w.ID),
-		RuntimeKind: RuntimeKindPicoClawSandbox,
+		RuntimeKind: RuntimeKindCodex,
 		Image:       "",
 		Role:        RoleWorker,
 		Status:      w.Status,

@@ -29,7 +29,6 @@ flowchart TB
     Extensions --> Registry
     Registry --> Runtime["Runtime Adapter"]
     Runtime --> Codex["Codex app-server"]
-    Runtime --> Sandbox["OpenClaw / PicoClaw gateway"]
     IM --> Bridge["原生 gateway bridge"]
     Bridge --> Sandbox
     NativeFeishu["沙箱原生飞书连接"] --> Sandbox
@@ -42,7 +41,7 @@ flowchart TB
 托管对话只走 `Channel / Session -> Agent Engine -> Runtime Adapter`。
 Agent 管理和 RuntimeExtension 变更使用同一个 Engine、同一个 Agent 生命周期协调器。
 生产代码不再包含 `agent.Service`、Agent facade、旧 Codex bridge，API/Channel 不再访问原生 Codex broker。
-Engine 不导入具体 Codex/PicoClaw/OpenClaw 实现，也不导入 IM、Participant 或 Channel 包。
+Engine 不导入具体 Codex/DSH 实现，也不导入 IM、Participant 或 Channel 包。
 Runtime Adapter 依赖中性的 `agentengine/contract` 契约包。
 
 ## 资源与模块
@@ -78,7 +77,6 @@ Channel Binding Manager 独立拥有 Worker。
 Agent Stop、Recreate 和 Runtime reload 不删除 Binding 或 transcript，也不关闭 Channel Worker。
 凭据变化和显式断开才对对应 Binding 进行重建或删除。
 以上 Worker 规则适用于托管 Codex Channel。
-OpenClaw 和 PicoClaw 保留既有沙箱原生 Channel，绑定变化通过 `Agents().Recreate` 重建 Runtime，使当前凭据生效或被清除。
 
 ## 对话与交互
 
@@ -108,12 +106,8 @@ detached continuation 保留既有的模型输入脱敏行为。
 | --- | --- | --- | --- |
 | Local Codex | 支持 | Run、Cancel、Reset、Resolve、文件 | `lark-cli` |
 | Local DSH | 支持 | Run、Cancel、Reset、Resolve、文件 | `lark-cli` |
-| PicoClaw Sandbox | 支持 | 尚无注册的 Engine Conversation 实现 | 不支持 |
-| OpenClaw Sandbox | 支持 | 尚无注册的 Engine Conversation 实现 | 不支持 |
 
 沙箱原生 gateway 协议不等于 Engine Conversation Adapter。
-OpenClaw 和 PicoClaw 继续通过这些原生 gateway 协议提供支持。
-内置 Channel 向 OpenClaw 发送 `/new`、向 PicoClaw 发送 `/clear`，Codex 则通过 Engine Conversation 重置。
 托管 CSGClaw 和飞书 Binding Manager 选择 Local Codex Agent。
 缺少 Conversation Adapter 或 Extension Driver 时返回明确的不支持状态，不选择旧执行路径。
 

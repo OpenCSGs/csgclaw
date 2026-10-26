@@ -237,7 +237,7 @@ func TestMaterializeAttachmentsForParticipantResolvesAgentByID(t *testing.T) {
 		ID:          "agent-resume",
 		Name:        "resume-scorer",
 		Role:        agent.RoleWorker,
-		RuntimeKind: agent.RuntimeKindOpenClawSandbox,
+		RuntimeKind: agent.RuntimeKindDSH,
 	}})
 	workspaceRoot, err := agentSvc.WorkspaceRootByID("agent-resume")
 	if err != nil {

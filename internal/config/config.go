@@ -2,6 +2,7 @@ package config
 
 import (
 	"bufio"
+	"csgclaw/internal/migrations/retiredclaws"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -68,11 +69,6 @@ func (c BootstrapConfig) ResolvedDefaultWorkerTemplate() string {
 	}
 	return DefaultBootstrapWorkerTemplate
 }
-
-const (
-	RuntimeKindPicoClawSandbox = "picoclaw_sandbox"
-	RuntimeKindOpenClawSandbox = "openclaw_sandbox"
-)
 
 func (b BootstrapConfig) Validate() error {
 	if strings.TrimSpace(b.ResolvedDefaultManagerTemplate()) == "" {
@@ -281,6 +277,7 @@ type rawConfigValues struct {
 type rawBootstrapConfigMeta struct {
 	LegacyManagerTemplateSlash bool
 	LegacyWorkerTemplateSlash  bool
+	RewriteRequired            bool
 }
 
 type rawProviderConfig struct {
@@ -565,6 +562,10 @@ func Load(path string) (Config, error) {
 				modelsCfg.Default = value
 			}
 		case section == "bootstrap":
+			if retiredclaws.ObsoleteBootstrapKey(key) {
+				cfg.raw.bootstrapMeta.RewriteRequired = true
+				continue
+			}
 			switch key {
 			case "default_manager_template":
 				raw := parseRawStringValue(rawValue)
@@ -576,9 +577,6 @@ func Load(path string) (Config, error) {
 				cfg.raw.bootstrap.DefaultWorkerTemplate = normalizeBootstrapTemplateRef(raw)
 				cfg.raw.bootstrapMeta.LegacyWorkerTemplateSlash = bootstrapTemplateRefUsesLegacySlash(raw)
 				cfg.Bootstrap.DefaultWorkerTemplate = normalizeBootstrapTemplateRef(value)
-			case "manager_image_override", "manager_image", "runtime_kind":
-				// Keep loading legacy bootstrap keys for compatibility, but do not
-				// surface them in the public config model anymore.
 			}
 		case section == "sandbox":
 			switch key {
@@ -715,6 +713,10 @@ func Load(path string) (Config, error) {
 	if err := scanner.Err(); err != nil {
 		return Config{}, fmt.Errorf("scan config: %w", err)
 	}
+	cfg.raw.bootstrapMeta.RewriteRequired = retiredclaws.BootstrapDefaults(
+		&cfg.Bootstrap.DefaultManagerTemplate, &cfg.Bootstrap.DefaultWorkerTemplate,
+		&cfg.raw.bootstrap.DefaultManagerTemplate, &cfg.raw.bootstrap.DefaultWorkerTemplate,
+	) || cfg.raw.bootstrapMeta.RewriteRequired
 
 	if cfg.Server.ListenAddr == "" {
 		cfg.Server.ListenAddr = DefaultListenAddr()
@@ -878,11 +880,9 @@ base_url = %q
 }
 
 func (c Config) NeedsMigrationRewrite() bool {
-	// Transitional compatibility for legacy slash-separated bootstrap template refs.
-	// After old configs are no longer supported in the field, remove this rewrite
-	// trigger together with the slash-to-dot normalization path.
 	return c.raw.bootstrapMeta.LegacyManagerTemplateSlash ||
 		c.raw.bootstrapMeta.LegacyWorkerTemplateSlash ||
+		c.raw.bootstrapMeta.RewriteRequired ||
 		hasRemoteHubRegistryURLRewrite(c.raw.hub.Registries) ||
 		strings.TrimSpace(c.raw.modelsDefault) != "" ||
 		len(c.raw.models) > 0
@@ -1367,20 +1367,11 @@ func normalizeBootstrapTemplateRef(value string) string {
 		left, right, _ := strings.Cut(value, "/")
 		value = strings.TrimSpace(left) + "." + strings.TrimSpace(right)
 	}
-	if value == "builtin.picoclaw-worker" {
-		return DefaultBootstrapWorkerTemplate
-	}
 	return value
 }
 
 func normalizeManagerBootstrapTemplateRef(value string) string {
-	value = normalizeBootstrapTemplateRef(value)
-	switch value {
-	case "builtin.picoclaw-manager", "builtin.openclaw-manager":
-		return DefaultBootstrapManagerTemplate
-	default:
-		return value
-	}
+	return normalizeBootstrapTemplateRef(value)
 }
 
 func bootstrapTemplateRefUsesLegacySlash(value string) bool {

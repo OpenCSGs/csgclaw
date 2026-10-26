@@ -1,10 +1,10 @@
 import {
-  isOpenClawToolDeliveryMessage,
+  isToolDeliveryMessage,
   isToolActivityMessage,
-  openClawDeliveryKind,
-  openClawToolCallID,
+  activityDeliveryKind,
+  activityToolCallID,
   parseAgentActivity,
-  parseOpenClawDeliveryCommand,
+  parseDeliveryCommand,
   parsePlainAgentCommand,
 } from "@/models/agentActivity";
 import { AgentActivityKinds, AgentActivityMsgTypes, CSGCLAW_AGENT_ACTIVITY_TYPE } from "@/shared/constants/messages";
@@ -43,7 +43,7 @@ describe("agent activity model", () => {
     expect(activity?.version).toBe(1);
   });
 
-  it("parses OpenClaw structured command output fields", () => {
+  it("parses Codex structured command output fields", () => {
     const activity = parseAgentActivity(
       JSON.stringify({
         type: CSGCLAW_AGENT_ACTIVITY_TYPE,
@@ -111,7 +111,7 @@ describe("agent activity model", () => {
     expect(isToolActivityMessage(tool)).toBe(true);
   });
 
-  it("parses OpenClaw plain text command messages with structured output", () => {
+  it("parses Codex plain text command messages with structured output", () => {
     const command = parsePlainAgentCommand(
       '🔎 Web Search: for "上海天气" (top 5) {"query":"上海天气","provider":"duckduckgo","count":5}',
     );
@@ -133,9 +133,9 @@ describe("agent activity model", () => {
     });
   });
 
-  it("classifies OpenClaw progress lines as exec command activity", () => {
-    expect(parsePlainAgentCommand("📖 Read: from ~/.openclaw/workspace/skills/gitlab/SKILL.md")).toMatchObject({
-      command: "Read: from ~/.openclaw/workspace/skills/gitlab/SKILL.md",
+  it("classifies Codex progress lines as exec command activity", () => {
+    expect(parsePlainAgentCommand("📖 Read: from ~/.codex/workspace/skills/gitlab/SKILL.md")).toMatchObject({
+      command: "Read: from ~/.codex/workspace/skills/gitlab/SKILL.md",
       kind: AgentActivityKinds.execCommand,
       title: "Read",
     });
@@ -151,7 +151,7 @@ describe("agent activity model", () => {
     });
   });
 
-  it("splits OpenClaw inline script result text from the command", () => {
+  it("splits Codex inline script result text from the command", () => {
     expect(parsePlainAgentCommand("run python3 inline script\nok")).toMatchObject({
       command: "run python3 inline script",
       kind: AgentActivityKinds.execCommand,
@@ -159,9 +159,9 @@ describe("agent activity model", () => {
       signature: "run python3 inline script",
     });
     expect(
-      parseOpenClawDeliveryCommand({
+      parseDeliveryCommand({
         content: "run python3 inline script === v0.6.4 迭代内你的 Open Issues: 13 ===",
-        metadata: { openclaw: { delivery_kind: "tool" } },
+        metadata: { codex: { delivery_kind: "tool" } },
       }),
     ).toMatchObject({
       command: "run python3 inline script",
@@ -171,13 +171,13 @@ describe("agent activity model", () => {
     });
   });
 
-  it("splits OpenClaw first-line command output from tool progress text", () => {
+  it("splits Codex first-line command output from tool progress text", () => {
     expect(
       parsePlainAgentCommand(
-        "📖 Read: from ~/.openclaw/workspace/skills/gitlab-csgclaw/scripts/create_issue.py\n#!/usr/bin/env python3",
+        "📖 Read: from ~/.codex/workspace/skills/gitlab-csgclaw/scripts/create_issue.py\n#!/usr/bin/env python3",
       ),
     ).toMatchObject({
-      command: "Read: from ~/.openclaw/workspace/skills/gitlab-csgclaw/scripts/create_issue.py",
+      command: "Read: from ~/.codex/workspace/skills/gitlab-csgclaw/scripts/create_issue.py",
       kind: AgentActivityKinds.execCommand,
       output: "#!/usr/bin/env python3",
     });
@@ -192,7 +192,7 @@ describe("agent activity model", () => {
     });
   });
 
-  it("classifies OpenClaw message receipts as other activity", () => {
+  it("classifies Codex message receipts as other activity", () => {
     expect(
       parsePlainAgentCommand(`📩 Message
 {"channel":"csgclaw","to":"csgclaw:room:room-1","result":{"ok":true}}`),
@@ -203,11 +203,11 @@ describe("agent activity model", () => {
     });
   });
 
-  it("uses OpenClaw delivery metadata for tool activity classification", () => {
+  it("uses Codex delivery metadata for tool activity classification", () => {
     const message = {
       content: "Inspect workspace state",
       metadata: {
-        openclaw: {
+        codex: {
           delivery_info: {
             futureField: { nested: true },
             kind: "tool",
@@ -219,38 +219,38 @@ describe("agent activity model", () => {
       },
     };
 
-    expect(openClawDeliveryKind(message)).toBe("tool");
-    expect(openClawToolCallID(message)).toBe("tool-call-1");
-    expect(isOpenClawToolDeliveryMessage(message)).toBe(true);
-    expect(parseOpenClawDeliveryCommand(message)).toMatchObject({
+    expect(activityDeliveryKind(message)).toBe("tool");
+    expect(activityToolCallID(message)).toBe("tool-call-1");
+    expect(isToolDeliveryMessage(message)).toBe(true);
+    expect(parseDeliveryCommand(message)).toMatchObject({
       command: "Inspect workspace state",
       kind: AgentActivityKinds.execCommand,
-      signature: "openclaw-tool:tool-call-1",
+      signature: "runtime-tool:tool-call-1",
       title: "Inspect workspace",
     });
     expect(
-      parseOpenClawDeliveryCommand({
+      parseDeliveryCommand({
         content: "Final answer",
-        metadata: { openclaw: { delivery_kind: "final" } },
+        metadata: { codex: { delivery_kind: "final" } },
       }),
     ).toBeNull();
     expect(
-      parseOpenClawDeliveryCommand({
+      parseDeliveryCommand({
         content: "Tool progress without marker",
         metadata: { delivery_info: { kind: "tool", toolCallId: "flat-tool-1" }, delivery_kind: "tool" },
       }),
     ).toMatchObject({
       command: "Tool progress without marker",
-      signature: "openclaw-tool:flat-tool-1",
+      signature: "runtime-tool:flat-tool-1",
     });
     expect(
-      parseOpenClawDeliveryCommand({
+      parseDeliveryCommand({
         content: "Inspect workspace state",
         metadata: { codex: { delivery_kind: "tool", tool_call_id: "codex-tool-1" } },
       }),
     ).toMatchObject({
       command: "Inspect workspace state",
-      signature: "openclaw-tool:codex-tool-1",
+      signature: "runtime-tool:codex-tool-1",
     });
   });
 

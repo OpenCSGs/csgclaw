@@ -48,8 +48,7 @@ const labels: Record<string, string> = {
   profileSandboxEnabled: "Sandbox",
   profileSandboxEnabledHelp:
     "When enabled, the agent runs tasks in an isolated environment. When disabled, it uses the local runtime.",
-  runtimeOpenclaw: "OpenClaw",
-  runtimePicoclaw: "PicoClaw",
+  runtimeDSH: "DeepSeek Harness",
   runtimeCodexCLI: "Codex CLI",
   runtimeSandboxUnavailable: "Current sandbox is unavailable: {reason}",
   runtimeSandboxUnavailableReason: "Check the current sandbox configuration.",
@@ -73,7 +72,7 @@ const worker = {
   id: "worker-1",
   name: "Worker",
   role: "worker",
-  runtime_kind: "picoclaw_sandbox",
+  runtime_kind: "codex",
   status: "running",
   provider: "api",
   model_id: "gpt-test",
@@ -388,39 +387,6 @@ describe("AgentProfileModal", () => {
     expect(screen.queryByRole("option", { name: "完全访问" })).not.toBeInTheDocument();
   });
 
-  it("shows sandbox help text in worker create mode", () => {
-    render(
-      <AgentProfileModal
-        t={t}
-        agentModalMode="create"
-        editingAgent={null}
-        agentDraft={agentToDraft(worker)}
-        onAgentDraftChange={vi.fn()}
-        onAgentModelsReset={vi.fn()}
-        hubTemplates={[]}
-        bootstrapConfig={{}}
-        managerAgent={null}
-        agentModels={[]}
-        agentModelBusy={false}
-        locale="en"
-        authStatuses={{}}
-        authBusyProvider=""
-        agentCreateBotKind="worker"
-        agentCreateMode="custom"
-        onAgentCreateBotKindChange={vi.fn()}
-        notifierWebhookPublicOrigin="http://127.0.0.1:18080"
-        onProviderLogin={vi.fn()}
-        agentError=""
-        agentProgress={null}
-        agentBusy={false}
-        onClose={vi.fn()}
-        onSave={vi.fn()}
-      />,
-    );
-
-    expect(screen.getByText("Enabled")).toBeInTheDocument();
-  });
-
   it("opens custom creation without mode tabs and offers the template library below identity fields", async () => {
     const onBrowseTemplates = vi.fn();
     render(
@@ -499,68 +465,6 @@ describe("AgentProfileModal", () => {
     expect(onBrowseTemplates).toHaveBeenCalledOnce();
   });
 
-  it("warns when the selected sandbox runtime is unavailable", () => {
-    render(
-      <AgentProfileModal
-        t={t}
-        agentModalMode="create"
-        editingAgent={null}
-        agentDraft={{
-          ...agentToDraft(worker),
-          from_template: "builtin.picoclaw-worker",
-          template_name: "PicoClaw Worker",
-          runtime_kind: "picoclaw_sandbox",
-          runtime_name: "picoclaw",
-          sandbox_enabled: true,
-          model_provider_id: "provider-1",
-          model_id: "gpt-test",
-        }}
-        onAgentDraftChange={vi.fn()}
-        onAgentModelsReset={vi.fn()}
-        hubTemplates={[
-          {
-            id: "builtin.picoclaw-worker",
-            name: "PicoClaw Worker",
-            role: "worker",
-            runtime_kind: "picoclaw_sandbox",
-            description: "Sandbox template.",
-          },
-        ]}
-        bootstrapConfig={{
-          worker_runtime_choices: [
-            { name: "codex", sandbox_enabled: false, installed: true, label: "Codex CLI" },
-            {
-              name: "picoclaw",
-              sandbox_enabled: true,
-              installed: false,
-              label: "PicoClaw",
-              message: "boxlite missing",
-            },
-          ],
-        }}
-        managerAgent={null}
-        agentModels={[]}
-        agentModelBusy={false}
-        locale="en"
-        authStatuses={{}}
-        authBusyProvider=""
-        agentCreateBotKind="worker"
-        agentCreateMode="template"
-        onAgentCreateBotKindChange={vi.fn()}
-        notifierWebhookPublicOrigin="http://127.0.0.1:18080"
-        onProviderLogin={vi.fn()}
-        agentError=""
-        agentProgress={null}
-        agentBusy={false}
-        onClose={vi.fn()}
-        onSave={vi.fn()}
-      />,
-    );
-
-    expect(screen.getByText("Current sandbox is unavailable: boxlite missing")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Create" })).toBeDisabled();
-  });
-
   it("hides env inputs in template mode when the template has no image env", () => {
     render(
       <AgentProfileModal
@@ -569,7 +473,7 @@ describe("AgentProfileModal", () => {
         editingAgent={null}
         agentDraft={{
           ...agentToDraft(worker),
-          from_template: "builtin.picoclaw-worker",
+          from_template: "builtin.codex-worker",
           template_name: "Worker",
           name: "Worker",
         }}
@@ -577,10 +481,10 @@ describe("AgentProfileModal", () => {
         onAgentModelsReset={vi.fn()}
         hubTemplates={[
           {
-            id: "builtin.picoclaw-worker",
+            id: "builtin.codex-worker",
             name: "Worker",
             role: "worker",
-            runtime_kind: "picoclaw_sandbox",
+            runtime_kind: "codex",
             description: "Handles coding tasks.",
           },
         ]}
@@ -676,72 +580,6 @@ describe("AgentProfileModal", () => {
     expect(createButton).toBeEnabled();
   });
 
-  it("allows toggling sandbox in custom mode and exposes only OpenClaw sandbox runtime", async () => {
-    const user = userEvent.setup();
-
-    function TestModal() {
-      const [draft, setDraft] = useState<AgentDraft>({
-        ...agentToDraft(worker),
-        sandbox_enabled: false,
-        runtime_name: "codex",
-        runtime_kind: "codex",
-      });
-      return (
-        <AgentProfileModal
-          t={t}
-          agentModalMode="create"
-          editingAgent={null}
-          agentDraft={draft}
-          onAgentDraftChange={(update) =>
-            setDraft((current) => {
-              const next = typeof update === "function" ? update(current) : update;
-              return next ?? current;
-            })
-          }
-          onAgentModelsReset={vi.fn()}
-          hubTemplates={[]}
-          bootstrapConfig={{
-            worker_runtime_choices: [
-              { name: "codex", sandbox_enabled: false, installed: true, label: "Codex CLI" },
-              { name: "openclaw", sandbox_enabled: true, installed: true, label: "OpenClaw" },
-              { name: "picoclaw", sandbox_enabled: true, installed: true, label: "PicoClaw" },
-            ],
-          }}
-          managerAgent={null}
-          agentModels={[]}
-          agentModelBusy={false}
-          locale="en"
-          authStatuses={{}}
-          authBusyProvider=""
-          agentCreateBotKind="worker"
-          agentCreateMode="custom"
-          onAgentCreateBotKindChange={vi.fn()}
-          notifierWebhookPublicOrigin="http://127.0.0.1:18080"
-          onProviderLogin={vi.fn()}
-          agentError=""
-          agentProgress={null}
-          agentBusy={false}
-          onClose={vi.fn()}
-          onSave={vi.fn()}
-        />
-      );
-    }
-
-    render(<TestModal />);
-
-    const toggle = screen.getByRole("checkbox", { name: "Sandbox" });
-    expect(toggle).not.toBeDisabled();
-    expect(screen.getByRole("combobox", { name: "Runtime" })).toHaveTextContent("Codex CLI");
-
-    await user.click(toggle);
-
-    expect(screen.getByText("Enabled")).toBeInTheDocument();
-    await user.click(screen.getByRole("combobox", { name: "Runtime" }));
-    expect(screen.getByRole("option", { name: "OpenClaw" })).toBeInTheDocument();
-    expect(screen.queryByRole("option", { name: "PicoClaw" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("option", { name: "Codex CLI" })).not.toBeInTheDocument();
-  });
-
   it("hides sandbox controls and exposes host runtimes for CSGHub custom creation", async () => {
     const user = userEvent.setup();
     render(
@@ -752,8 +590,8 @@ describe("AgentProfileModal", () => {
         agentDraft={{
           ...agentToDraft(worker),
           sandbox_enabled: true,
-          runtime_name: "openclaw",
-          runtime_kind: "openclaw_sandbox",
+          runtime_name: "codex",
+          runtime_kind: "dsh",
         }}
         onAgentDraftChange={vi.fn()}
         onAgentModelsReset={vi.fn()}
@@ -854,99 +692,13 @@ describe("AgentProfileModal", () => {
     expect(onInstallRuntime).toHaveBeenCalledWith("dsh");
   });
 
-  it("uses the matching worker template image when switching blank drafts to OpenClaw", async () => {
-    const user = userEvent.setup();
-    const onAgentDraftChange = vi.fn();
-    function TestModal() {
-      const [draft, setDraft] = useState<AgentDraft>({
-        ...agentToDraft(worker),
-        from_template: "",
-        image: "picoclaw:current",
-      });
-      return (
-        <AgentProfileModal
-          t={t}
-          agentModalMode="create"
-          editingAgent={null}
-          agentDraft={draft}
-          onAgentDraftChange={(update) => {
-            onAgentDraftChange(update);
-            setDraft((current) => {
-              const next = typeof update === "function" ? update(current) : update;
-              return next ?? current;
-            });
-          }}
-          onAgentModelsReset={vi.fn()}
-          hubTemplates={[
-            {
-              id: "builtin.picoclaw-worker",
-              name: "PicoClaw Worker",
-              role: "worker",
-              runtime_kind: "picoclaw_sandbox",
-              image: "picoclaw:worker",
-            },
-            {
-              id: "builtin.openclaw-worker",
-              name: "OpenClaw Worker",
-              role: "worker",
-              runtime_kind: "openclaw_sandbox",
-              image: "openclaw:worker",
-            },
-          ]}
-          bootstrapConfig={{
-            default_worker_template: "builtin.picoclaw-worker",
-            runtime_default_images: {
-              picoclaw_sandbox: "picoclaw:worker",
-            },
-            runtime_kind: "picoclaw_sandbox",
-            worker_runtime_choices: [
-              { name: "codex", sandbox_enabled: false, installed: true, label: "Codex CLI" },
-              { name: "openclaw", sandbox_enabled: true, installed: true, label: "OpenClaw" },
-              { name: "picoclaw", sandbox_enabled: true, installed: true, label: "PicoClaw" },
-            ],
-          }}
-          managerAgent={{ ...worker, image: "picoclaw:manager" }}
-          agentModels={[]}
-          agentModelBusy={false}
-          locale="en"
-          authStatuses={{}}
-          authBusyProvider=""
-          agentCreateBotKind="worker"
-          agentCreateMode="custom"
-          onAgentCreateBotKindChange={vi.fn()}
-          notifierWebhookPublicOrigin="http://127.0.0.1:18080"
-          onProviderLogin={vi.fn()}
-          agentError=""
-          agentProgress={null}
-          agentBusy={false}
-          onClose={vi.fn()}
-          onSave={vi.fn()}
-        />
-      );
-    }
-    render(<TestModal />);
-
-    await user.click(screen.getByRole("combobox", { name: "Runtime" }));
-    await user.click(screen.getByRole("option", { name: "OpenClaw" }));
-
-    expect(onAgentDraftChange).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        from_template: "",
-        image: "openclaw:worker",
-        runtime_kind: "openclaw_sandbox",
-        runtime_name: "openclaw",
-        sandbox_enabled: true,
-      }),
-    );
-  });
-
   it("edits MCP servers for supported agent drafts", async () => {
     const user = userEvent.setup();
     const onAgentDraftChange = vi.fn();
-    const openclawDraft = {
-      ...agentToDraft({ ...worker, runtime_kind: "openclaw_sandbox" }),
+    const codexDraft = {
+      ...agentToDraft({ ...worker, runtime_kind: "dsh" }),
       model_provider_id: "api",
-      runtime_kind: "openclaw_sandbox",
+      runtime_kind: "dsh",
       runtime_options: {
         local_workspace_dir: "/tmp/project",
       },
@@ -962,7 +714,7 @@ describe("AgentProfileModal", () => {
         t={t}
         agentModalMode="create"
         editingAgent={null}
-        agentDraft={openclawDraft}
+        agentDraft={codexDraft}
         locale="en"
         onAgentDraftChange={onAgentDraftChange}
         onAgentModelsReset={vi.fn()}
@@ -1025,9 +777,9 @@ describe("AgentProfileModal", () => {
         agentModalMode="create"
         editingAgent={null}
         agentDraft={{
-          ...openclawDraft,
+          ...codexDraft,
           mcpServers: {},
-          runtime_kind: "picoclaw_sandbox",
+          runtime_kind: "codex",
         }}
         locale="en"
         onAgentDraftChange={onAgentDraftChange}
@@ -1056,16 +808,16 @@ describe("AgentProfileModal", () => {
     expect(screen.getByLabelText("MCP Servers")).toHaveValue("{}");
   });
 
-  it("preserves MCP servers when switching from OpenClaw to Codex", async () => {
+  it("preserves MCP servers when switching from Codex to DSH", async () => {
     const user = userEvent.setup();
     const onAgentDraftChange = vi.fn();
-    const openclawDraft: AgentDraft = {
-      ...agentToDraft({ ...worker, runtime_kind: "openclaw_sandbox" }),
+    const codexDraft: AgentDraft = {
+      ...agentToDraft({ ...worker, runtime_kind: "codex" }),
       from_template: "",
       model_provider_id: "api",
-      runtime_name: "openclaw",
-      runtime_kind: "openclaw_sandbox",
-      sandbox_enabled: true,
+      runtime_name: "codex",
+      runtime_kind: "codex",
+      sandbox_enabled: false,
       runtime_options: {
         local_workspace_dir: "/tmp/project",
       },
@@ -1077,7 +829,7 @@ describe("AgentProfileModal", () => {
     };
 
     function TestModal() {
-      const [draft, setDraft] = useState<AgentDraft>(openclawDraft);
+      const [draft, setDraft] = useState<AgentDraft>(codexDraft);
       return (
         <AgentProfileModal
           t={t}
@@ -1097,8 +849,7 @@ describe("AgentProfileModal", () => {
           bootstrapConfig={{
             worker_runtime_choices: [
               { name: "codex", sandbox_enabled: false, installed: true, label: "Codex CLI" },
-              { name: "openclaw", sandbox_enabled: true, installed: true, label: "OpenClaw" },
-              { name: "picoclaw", sandbox_enabled: true, installed: true, label: "PicoClaw" },
+              { name: "dsh", sandbox_enabled: false, installed: true, label: "DeepSeek Harness" },
             ],
           }}
           managerAgent={null}
@@ -1124,12 +875,13 @@ describe("AgentProfileModal", () => {
 
     expect(screen.getByLabelText("MCP Servers")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("checkbox", { name: "Sandbox" }));
+    await user.click(screen.getByRole("combobox", { name: "Runtime" }));
+    await user.click(screen.getByRole("option", { name: "DeepSeek Harness" }));
 
     const nextDraft = onAgentDraftChange.mock.calls.at(-1)?.[0] as AgentDraft;
     expect(nextDraft.sandbox_enabled).toBe(false);
-    expect(nextDraft.runtime_name).toBe("codex");
-    expect(nextDraft.runtime_kind).toBe("codex");
+    expect(nextDraft.runtime_name).toBe("dsh");
+    expect(nextDraft.runtime_kind).toBe("dsh");
     expect(nextDraft.runtime_options).toEqual({ local_workspace_dir: "/tmp/project" });
     expect(nextDraft.mcpServers).toEqual({
       context7: {

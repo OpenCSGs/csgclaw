@@ -26,7 +26,6 @@ import (
 	"csgclaw/internal/participant"
 	"csgclaw/internal/roomtask"
 	agentruntime "csgclaw/internal/runtime"
-	"csgclaw/internal/runtime/picoclawsandbox"
 	"csgclaw/internal/runtimecatalog"
 	"csgclaw/internal/sandbox"
 	"csgclaw/internal/sandboxproviders"
@@ -203,13 +202,6 @@ type managerRuntimeResponse struct {
 	Message         string `json:"message,omitempty"`
 	MessageCode     string `json:"message_code,omitempty"`
 }
-
-const sandboxRuntimeChoiceAvailabilityTimeout = 2 * time.Second
-
-var (
-	sandboxProviderAvailability = sandboxproviders.Availability
-	sandboxProviderForRuntime   = sandboxproviders.Provider
-)
 
 type updateBootstrapConfigRequest struct {
 	DefaultManagerTemplate *string `json:"default_manager_template,omitempty"`
@@ -436,17 +428,10 @@ func (h *Handler) handleBootstrapConfig(w http.ResponseWriter, r *http.Request) 
 		}
 		if h.svc != nil {
 			if req.DefaultManagerTemplate != nil || req.DefaultWorkerTemplate != nil {
-				defaults, err := hub.ResolveBootstrapDefaults(r.Context(), cfg.Bootstrap, h.hub)
+				_, err := hub.ResolveBootstrapDefaults(r.Context(), cfg.Bootstrap, h.hub)
 				if err != nil {
 					http.Error(w, err.Error(), http.StatusBadRequest)
 					return
-				}
-				switch defaults.ManagerRuntimeKind {
-				case agent.RuntimeKindPicoClawSandbox, agent.RuntimeKindOpenClawSandbox:
-					if err := h.agentRuntime.SetGatewayRuntime(defaults.ManagerRuntimeKind, defaults.ManagerImage); err != nil {
-						http.Error(w, err.Error(), http.StatusBadRequest)
-						return
-					}
 				}
 			}
 		}
@@ -568,14 +553,12 @@ func bootstrapConfigView(ctx context.Context, cfg config.Config, hubSvc *hub.Ser
 		AdvertiseBaseURL:         config.ResolveAdvertiseBaseURL(cfg.Server),
 		ManagerRuntime:           managerRuntimeReadiness(),
 		SupportedRuntimeKinds: []string{
-			agentruntime.RuntimeConfigForKind(agent.RuntimeKindPicoClawSandbox).Kind(),
-			agentruntime.RuntimeConfigForKind(agent.RuntimeKindOpenClawSandbox).Kind(),
 			agentruntime.RuntimeConfigForKind(agent.RuntimeKindCodex).Kind(),
 			agentruntime.RuntimeConfigForKind(agent.RuntimeKindDSH).Kind(),
 		},
 		RuntimeDefaultImages: map[string]string{},
 		RuntimeOptionSchemas: runtimeOptionSchemas,
-		WorkerRuntimeChoices: workerRuntimeChoices(ctx, cfg),
+		WorkerRuntimeChoices: workerRuntimeChoices(ctx),
 	}
 	defaults, err := hub.ResolveBootstrapDefaults(ctx, cfg.Bootstrap, hubSvc)
 	if err != nil {
@@ -590,7 +573,6 @@ func bootstrapConfigView(ctx context.Context, cfg config.Config, hubSvc *hub.Ser
 	if defaults.WorkerRuntimeKind != "" && defaults.WorkerImage != "" {
 		resp.RuntimeDefaultImages[bootstrapRuntimeKind(defaults.WorkerRuntimeKind)] = defaults.WorkerImage
 	}
-	fillBuiltinWorkerRuntimeDefaultImages(ctx, &resp, hubSvc)
 	return resp
 }
 
@@ -618,15 +600,7 @@ func codexInstallGuidance(_ string) string {
 	return "Codex CLI is bundled with CSGClaw. Reinstall CSGClaw if the bundled executable is missing."
 }
 
-func workerRuntimeChoices(ctx context.Context, cfg config.Config) []workerRuntimeChoiceResponse {
-	sandboxInstalled := true
-	sandboxMessage := ""
-	sandboxMessageCode := ""
-	if err := sandboxRuntimeAvailability(ctx, cfg.Sandbox); err != nil {
-		sandboxInstalled = false
-		sandboxMessage = friendlySandboxRuntimeMessage(cfg.Sandbox, err)
-		sandboxMessageCode = sandboxRuntimeMessageCode(cfg.Sandbox, err)
-	}
+func workerRuntimeChoices(ctx context.Context) []workerRuntimeChoiceResponse {
 	choices := []workerRuntimeChoiceResponse{
 		{
 			Name:           agent.RuntimeNameCodex,
@@ -639,22 +613,6 @@ func workerRuntimeChoices(ctx context.Context, cfg config.Config) []workerRuntim
 			Label:          "DeepSeek Harness",
 			SandboxEnabled: false,
 			Installable:    true,
-		},
-		{
-			Name:           agent.RuntimeNameOpenClaw,
-			Label:          "OpenClaw",
-			SandboxEnabled: true,
-			Installed:      sandboxInstalled,
-			Message:        sandboxMessage,
-			MessageCode:    sandboxMessageCode,
-		},
-		{
-			Name:           agent.RuntimeNamePicoClaw,
-			Label:          "PicoClaw",
-			SandboxEnabled: true,
-			Installed:      sandboxInstalled,
-			Message:        sandboxMessage,
-			MessageCode:    sandboxMessageCode,
 		},
 	}
 	if _, err := locateCodexCLI(); err != nil {
@@ -669,110 +627,14 @@ func workerRuntimeChoices(ctx context.Context, cfg config.Config) []workerRuntim
 	} else {
 		choices[1].Installed = true
 	}
-	if strings.EqualFold(strings.TrimSpace(cfg.Sandbox.Provider), config.CSGHubProvider) {
-		return choices[:2]
-	}
+
 	return choices
 }
 
-func sandboxRuntimeMessageCode(cfg config.SandboxConfig, err error) string {
-	if !strings.EqualFold(strings.TrimSpace(cfg.Resolved().Provider), config.DockerProvider) {
-		return ""
-	}
-	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
-		return "docker_availability_timeout"
-	}
-	if sandbox.IsUnavailable(err) {
-		return "docker_unavailable"
-	}
-	return ""
-}
-
-func sandboxRuntimeAvailability(ctx context.Context, cfg config.SandboxConfig) error {
-	if err := sandboxProviderAvailability(cfg); err != nil {
-		return err
-	}
-	provider, err := sandboxProviderForRuntime(cfg)
-	if err != nil {
-		return err
-	}
-	checker, ok := provider.(sandbox.AvailabilityChecker)
-	if !ok {
-		return nil
-	}
-	probeCtx, cancel := context.WithTimeout(ctx, sandboxRuntimeChoiceAvailabilityTimeout)
-	defer cancel()
-	return checker.CheckAvailability(probeCtx)
-}
-
-func friendlySandboxRuntimeMessage(cfg config.SandboxConfig, err error) string {
-	if strings.EqualFold(strings.TrimSpace(cfg.Resolved().Provider), config.DockerProvider) {
-		if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
-			return "Docker availability check timed out. Make sure Docker Desktop or Docker Engine is running."
-		}
-		if sandbox.IsUnavailable(err) {
-			return "Docker is not running or cannot be reached. Start Docker Desktop or Docker Engine and try again."
-		}
-	}
-	return err.Error()
-}
-
 func (h *Handler) defaultWorkerCreateSpec(agentID, name string) agent.CreateAgentSpec {
-	spec := agent.CreateAgentSpec{
-		ID:             agentID,
-		Name:           name,
-		Role:           agent.RoleWorker,
-		RuntimeName:    agent.RuntimeNameCodex,
-		SandboxEnabled: false,
-		RuntimeKind:    agent.RuntimeKindCodex,
-	}
-	if _, err := locateCodexCLI(); err == nil {
-		return spec
-	}
-	if h == nil || h.svc == nil {
-		return spec
-	}
-	runtimeKind := h.agentRuntime.GatewayRuntime()
-	spec.RuntimeKind = runtimeKind
-	spec.RuntimeName = agent.RuntimeNamePicoClaw
-	spec.SandboxEnabled = true
-	switch runtimeKind {
-	case agent.RuntimeKindOpenClawSandbox:
-		spec.RuntimeName = agent.RuntimeNameOpenClaw
-	case agent.RuntimeKindPicoClawSandbox:
-		spec.RuntimeName = agent.RuntimeNamePicoClaw
-	}
-	return spec
-}
-
-func fillBuiltinWorkerRuntimeDefaultImages(ctx context.Context, resp *bootstrapConfigResponse, hubSvc *hub.Service) {
-	if resp == nil {
-		return
-	}
-	if resp.RuntimeDefaultImages == nil {
-		resp.RuntimeDefaultImages = map[string]string{}
-	}
-	resp.RuntimeDefaultImages[agentruntime.RuntimeConfigForKind(agent.RuntimeKindPicoClawSandbox).Kind()] = picoclawsandbox.DefaultImage
-	if hubSvc == nil {
-		return
-	}
-	builtinWorkerTemplates := map[string]string{
-		agentruntime.RuntimeConfigForKind(agent.RuntimeKindOpenClawSandbox).Kind(): "builtin.openclaw-worker",
-	}
-	for runtimeKind, templateID := range builtinWorkerTemplates {
-		if strings.TrimSpace(resp.RuntimeDefaultImages[runtimeKind]) != "" {
-			continue
-		}
-		item, err := hubSvc.Get(ctx, templateID)
-		if err != nil {
-			continue
-		}
-		if bootstrapRuntimeKind(item.RuntimeKind) != runtimeKind {
-			continue
-		}
-		if image := strings.TrimSpace(item.Image); image != "" {
-			resp.RuntimeDefaultImages[runtimeKind] = image
-		}
+	return agent.CreateAgentSpec{
+		ID: agentID, Name: name, Role: agent.RoleWorker,
+		RuntimeName: agent.RuntimeNameCodex, RuntimeKind: agent.RuntimeKindCodex,
 	}
 }
 
@@ -780,8 +642,6 @@ func (h *Handler) bootstrapConfigView(ctx context.Context, cfg config.Config) bo
 	var schemas map[string][]agentruntime.RuntimeOptionSchema
 	if h != nil {
 		schemas = h.runtimeOptionSchemasByKind([]string{
-			agent.RuntimeKindPicoClawSandbox,
-			agent.RuntimeKindOpenClawSandbox,
 			agent.RuntimeKindCodex,
 			agent.RuntimeKindDSH,
 		})
@@ -790,11 +650,10 @@ func (h *Handler) bootstrapConfigView(ctx context.Context, cfg config.Config) bo
 }
 
 func bootstrapRuntimeKind(runtime string) string {
-	cfg := agentruntime.RuntimeConfigForKind(runtime)
-	if kind := cfg.Kind(); kind != "" {
+	if kind := agentruntime.RuntimeConfigForKind(runtime).Kind(); kind != "" {
 		return kind
 	}
-	return agentruntime.RuntimeConfigForKind(agent.RuntimeKindPicoClawSandbox).Kind()
+	return agent.RuntimeKindCodex
 }
 
 type createMessageRequest struct {

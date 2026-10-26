@@ -1,136 +1,15 @@
 package agents
 
 import (
-	"encoding/json"
 	"errors"
 	"net"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
 	"csgclaw/internal/config"
-	"csgclaw/internal/runtime/picoclawsandbox"
 )
-
-func TestRenderManagerSecurityConfig(t *testing.T) {
-	got := renderManagerSecurityConfig(config.ServerConfig{
-		AccessToken: "shared-token",
-	}, config.ModelConfig{
-		ModelID: "minimax-m2.7",
-		APIKey:  "sk-1234567890",
-	})
-
-	for _, want := range []string{
-		"model_list:\n",
-		"  minimax-m2.7:0:\n",
-		"    api_keys:\n",
-		"      - shared-token\n",
-		"channels: {}\n",
-		"web: {}\n",
-		"skills: {}\n",
-	} {
-		if !strings.Contains(got, want) {
-			t.Fatalf("renderManagerSecurityConfig() missing %q in:\n%s", want, got)
-		}
-	}
-}
-
-func TestRenderAgentPicoClawConfigUsesBridgeModelEndpoint(t *testing.T) {
-	localIPv4Resolver = func() string { return "10.0.0.8" }
-	defer func() { localIPv4Resolver = localIPv4 }()
-
-	data, err := renderAgentPicoClawConfig("u-ux", config.ServerConfig{
-		ListenAddr:  "0.0.0.0:18080",
-		AccessToken: "shared-token",
-	}, config.ModelConfig{
-		Provider: config.ProviderLLMAPI,
-		ModelID:  "gpt-5.4",
-		BaseURL:  "https://cloud.infini-ai.com/maas/v1",
-		APIKey:   "sk-upstream",
-	})
-	if err != nil {
-		t.Fatalf("renderAgentPicoClawConfig() error = %v", err)
-	}
-
-	text := string(data)
-	for _, want := range []string{
-		`"model_name": "gpt-5.4"`,
-		`"model": "openai/gpt-5.4"`,
-		`"api_base": "http://10.0.0.8:18080/api/v1/agents/u-ux/llm"`,
-		`"api_key": "shared-token"`,
-		`"participant_id": "u-ux"`,
-		`"enabled": true`,
-	} {
-		if !strings.Contains(text, want) {
-			t.Fatalf("renderAgentPicoClawConfig() missing %q in:\n%s", want, text)
-		}
-	}
-	if strings.Contains(text, "cloud.infini-ai.com") {
-		t.Fatalf("renderAgentPicoClawConfig() leaked upstream base URL:\n%s", text)
-	}
-	if strings.Contains(text, `"bot_id"`) {
-		t.Fatalf("renderAgentPicoClawConfig() still emitted bot_id:\n%s", text)
-	}
-	var rendered map[string]any
-	if err := json.Unmarshal(data, &rendered); err != nil {
-		t.Fatalf("renderAgentPicoClawConfig() produced invalid JSON: %v", err)
-	}
-	tools, ok := rendered["tools"].(map[string]any)
-	if !ok {
-		t.Fatalf("renderAgentPicoClawConfig() missing tools in:\n%s", text)
-	}
-	execTool, ok := tools["exec"].(map[string]any)
-	if !ok {
-		t.Fatalf("renderAgentPicoClawConfig() missing tools.exec in:\n%s", text)
-	}
-	if got, want := execTool["timeout_seconds"], float64(600); got != want {
-		t.Fatalf("tools.exec.timeout_seconds = %v, want %v", got, want)
-	}
-	session, ok := rendered["session"].(map[string]any)
-	if !ok {
-		t.Fatalf("renderAgentPicoClawConfig() missing session in:\n%s", text)
-	}
-	dimensions, ok := session["dimensions"].([]any)
-	if !ok {
-		t.Fatalf("session.dimensions = %T, want array in:\n%s", session["dimensions"], text)
-	}
-	if got, want := stringifyJSONList(dimensions), []string{"chat", "topic"}; !stringSlicesEqual(got, want) {
-		t.Fatalf("session.dimensions = %v, want %v", got, want)
-	}
-}
-
-func TestRenderManagerPicoClawConfigUsesSeparateParticipantAndAgentIDs(t *testing.T) {
-	localIPv4Resolver = func() string { return "10.0.0.8" }
-	defer func() { localIPv4Resolver = localIPv4 }()
-
-	data, err := renderManagerPicoClawConfig(config.ServerConfig{
-		ListenAddr:  "0.0.0.0:18080",
-		AccessToken: "shared-token",
-	}, config.ModelConfig{
-		ModelID: "gpt-5.5",
-	})
-	if err != nil {
-		t.Fatalf("renderManagerPicoClawConfig() error = %v", err)
-	}
-
-	text := string(data)
-	for _, want := range []string{
-		`"participant_id": "` + ManagerParticipantID + `"`,
-		`"api_base": "http://10.0.0.8:18080/api/v1/agents/` + ManagerUserID + `/llm"`,
-	} {
-		if !strings.Contains(text, want) {
-			t.Fatalf("renderManagerPicoClawConfig() missing %q in:\n%s", want, text)
-		}
-	}
-	if strings.Contains(text, `"api_base": "http://10.0.0.8:18080/api/v1/agents/`+ManagerParticipantID+`/llm"`) {
-		t.Fatalf("renderManagerPicoClawConfig() used participant ID for LLM bridge:\n%s", text)
-	}
-	if strings.Contains(text, `"bot_id"`) {
-		t.Fatalf("renderManagerPicoClawConfig() still emitted bot_id:\n%s", text)
-	}
-}
 
 func TestResolveManagerBaseURLForDockerUsesHostAliasWhenAdvertiseURLIsImplicit(t *testing.T) {
 	origDockerHostAliasEnabled := dockerHostAliasEnabled
@@ -237,50 +116,6 @@ func stringSlicesEqual(a, b []string) bool {
 		}
 	}
 	return true
-}
-
-func TestPicoclawBridgeModelIDPrefixesOpenAIForSlashModelNames(t *testing.T) {
-	if got, want := picoclawBridgeModelID("Qwen/Qwen3-0.6B-GGUF"), "openai/Qwen/Qwen3-0.6B-GGUF"; got != want {
-		t.Fatalf("picoclawBridgeModelID() = %q, want %q", got, want)
-	}
-	if got, want := picoclawBridgeModelID("openai/gpt-5.4"), "openai/gpt-5.4"; got != want {
-		t.Fatalf("picoclawBridgeModelID() = %q, want %q", got, want)
-	}
-}
-
-func TestEnsureAgentPicoClawConfigUsesRuntimeRoot(t *testing.T) {
-	homeDir := t.TempDir()
-	t.Setenv("HOME", homeDir)
-
-	root, err := ensureAgentPicoClawConfig("ux", "u-ux", config.ServerConfig{
-		ListenAddr:  "0.0.0.0:18080",
-		AccessToken: "shared-token",
-	}, config.ModelConfig{
-		ModelID: "gpt-5.4",
-	})
-	if err != nil {
-		t.Fatalf("ensureAgentPicoClawConfig() error = %v", err)
-	}
-
-	wantRoot := filepath.Join(homeDir, config.AppDirName, managerAgentsDirName, "agent-ux", picoclawsandbox.HostDir)
-	if root != wantRoot {
-		t.Fatalf("ensureAgentPicoClawConfig() = %q, want %q", root, wantRoot)
-	}
-	if info, err := os.Stat(root); err != nil {
-		t.Fatalf("os.Stat(root) error = %v", err)
-	} else if !info.IsDir() {
-		t.Fatalf("config root %q is not a directory", root)
-	}
-	for _, path := range []string{
-		filepath.Join(root, picoclawsandbox.HostConfig),
-		filepath.Join(root, picoclawsandbox.HostSecurity),
-	} {
-		if info, err := os.Stat(path); err != nil {
-			t.Fatalf("os.Stat(%q) error = %v", path, err)
-		} else if info.IsDir() {
-			t.Fatalf("config artifact %q is unexpectedly a directory", path)
-		}
-	}
 }
 
 func TestEnsureManagerWorkspaceCopiesEmbeddedTemplate(t *testing.T) {

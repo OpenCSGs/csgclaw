@@ -201,7 +201,7 @@ access_token = "your_access_token"
 
 [bootstrap]
 default_manager_template = "builtin.manager-codex"
-default_worker_template = "builtin.picoclaw-worker"
+default_worker_template = "builtin.codex-worker"
 
 [sandbox]
 provider = "boxlite"
@@ -337,7 +337,7 @@ access_token = "your_access_token"
 
 [bootstrap]
 default_manager_template = "builtin.manager-codex"
-default_worker_template = "builtin.picoclaw-worker"
+default_worker_template = "builtin.codex-worker"
 
 [sandbox]
 provider = "boxlite"
@@ -413,7 +413,7 @@ access_token = "your_access_token"
 
 [bootstrap]
 default_manager_template = "builtin.manager-codex"
-default_worker_template = "builtin.picoclaw-worker"
+default_worker_template = "builtin.codex-worker"
 
 [sandbox]
 provider = "boxlite"
@@ -634,7 +634,7 @@ access_token = "custom-token"
 no_auth = false
 
 [bootstrap]
-default_manager_template = "builtin/picoclaw-manager"
+default_manager_template = "builtin/manager-codex"
 default_worker_template = "local/review-worker"
 
 [sandbox]
@@ -750,7 +750,7 @@ no_auth = false
 
 [bootstrap]
 default_manager_template = "builtin.manager-codex"
-default_worker_template = "builtin.picoclaw-worker"
+default_worker_template = "builtin.codex-worker"
 
 [sandbox]
 provider = "boxlite"
@@ -821,7 +821,7 @@ no_auth = false
 
 [bootstrap]
 default_manager_template = "builtin.manager-codex"
-default_worker_template = "builtin.picoclaw-worker"
+default_worker_template = "builtin.codex-worker"
 
 [sandbox]
 provider = "boxlite"

@@ -68,8 +68,8 @@ csgclaw-cli team task update --team <team_id> --task <task_id> --actor-id <worke
 
 ## Working Rules
 
-- For any team task that creates, inspects, or updates a project, use `~/.openclaw/workspace/projects/{name}` as the shared project directory. Check there first before creating a new project path.
-- Keep project artifacts, notes, and generated files under the same `~/.openclaw/workspace/projects/{name}` tree so managers and workers can inspect the same content.
+- For any team task that creates, inspects, or updates a project, use `~/.csgclaw/projects/{name}` as the shared project directory. Check there first before creating a new project path.
+- Keep project artifacts, notes, and generated files under the same `~/.csgclaw/projects/{name}` tree so managers and workers can inspect the same content.
 - Claim before you execute. Do not start speculative work on pending tasks.
 - Complete/fail/block through the same `<team_id>/<task_id>` that you claimed; do not finish with only a chat message.
 - When blocked by a command or external action, update the task to `blocked` and explain the reason clearly.

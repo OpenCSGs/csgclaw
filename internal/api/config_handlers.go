@@ -46,8 +46,6 @@ func (h *Handler) handleServerConfig(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		previousManager := cfg.Bootstrap.ResolvedDefaultManagerTemplate()
-		previousWorker := cfg.Bootstrap.ResolvedDefaultWorkerTemplate()
 		accessToken := strings.TrimSpace(req.AccessToken)
 		if accessToken == "" {
 			accessToken = cfg.Server.AccessToken
@@ -66,32 +64,18 @@ func (h *Handler) handleServerConfig(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		var bootstrapDefaults *hub.BootstrapDefaults
 		if h.hub != nil {
-			defaults, err := hub.ResolveBootstrapDefaults(r.Context(), cfg.Bootstrap, h.hub)
+			_, err := hub.ResolveBootstrapDefaults(r.Context(), cfg.Bootstrap, h.hub)
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusBadRequest)
 				return
 			}
-			bootstrapDefaults = &defaults
 		}
 		if err := cfg.Save(path); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		if h.svc != nil && bootstrapDefaults != nil {
-			managerChanged := cfg.Bootstrap.ResolvedDefaultManagerTemplate() != previousManager
-			workerChanged := cfg.Bootstrap.ResolvedDefaultWorkerTemplate() != previousWorker
-			if managerChanged || workerChanged {
-				switch bootstrapDefaults.ManagerRuntimeKind {
-				case agent.RuntimeKindPicoClawSandbox, agent.RuntimeKindOpenClawSandbox:
-					if err := h.agentRuntime.SetGatewayRuntime(bootstrapDefaults.ManagerRuntimeKind, bootstrapDefaults.ManagerImage); err != nil {
-						http.Error(w, err.Error(), http.StatusBadRequest)
-						return
-					}
-				}
-			}
-		}
+
 		writeJSON(w, http.StatusOK, h.serverConfigView(r, path, cfg))
 	default:
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)

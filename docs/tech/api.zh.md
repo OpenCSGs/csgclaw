@@ -239,8 +239,8 @@ Participant 是 channel-scoped identity，用于房间、消息、mention、通�
     "agent": {
       "name": "QA",
       "role": "worker",
-      "runtime_kind": "picoclaw_sandbox",
-      "from_template": "builtin.openclaw-worker"
+      "runtime_kind": "codex",
+      "from_template": "builtin.codex-worker"
     }
   }
 }
@@ -387,19 +387,19 @@ Participant 是 channel-scoped identity，用于房间、消息、mention、通�
 - `field_mask` 用于替换时只覆盖指定字段
 - `agent_profile.api_key` 只在写入时使用，读取时会被脱敏
 
-OpenClaw、PicoClaw 和 Codex CLI agent 通过顶层 `mcpServers` 字段配置 MCP server。该字段的值是所有已支持 runtime 共用的、从 server 名称到 server 配置的直接映射：
+Codex CLI 和 DSH agent 通过顶层 `mcpServers` 字段配置 MCP server。该字段的值是所有已支持 runtime 共用的、从 server 名称到 server 配置的直接映射：
 
 ```json
 {
   "name": "alice",
-  "runtime_kind": "openclaw_sandbox",
+  "runtime_kind": "codex",
   "mcpServers": {
     "workspace-filesystem": {
       "command": "npx",
       "args": [
         "-y",
         "@modelcontextprotocol/server-filesystem",
-        "/home/node/.openclaw/workspace"
+        "/path/to/workspace"
       ]
     }
   },
@@ -409,8 +409,6 @@ OpenClaw、PicoClaw 和 Codex CLI agent 通过顶层 `mcpServers` 字段配置 M
 
 各 runtime adapter 的映射关系：
 
-- OpenClaw：`mcpServers` -> `openclaw.json` 的 `mcp.servers`
-- PicoClaw：`mcpServers` -> PicoClaw 配置的 `tools.mcp.servers`
 - Codex CLI：`mcpServers` -> 隔离 Codex home `config.toml` 中由 CSGClaw 管理的 `[mcp_servers."<name>"]` 块
 
 注意：MCP command 在目标 runtime 环境内执行，filesystem server 的目录参数也必须是该 runtime 可见路径。`runtime_options` 中的 MCP 形态值（包括 `mcp` 与 `mcpServers`）会被拒绝；请使用顶层 `mcpServers` 字段。
@@ -452,7 +450,7 @@ OpenClaw、PicoClaw 和 Codex CLI agent 通过顶层 `mcpServers` 字段配置 M
 - Codex Worker 支持 `runtime_options.execution_mode`，取值为 `standard` 或 `read_only`；字段省略或为空时默认使用 `standard`
 - 正在运行的 Codex Worker 切换运行模式后会自动重启，使新的命令、沙盒和审批策略生效
 - `mcpServers` 一旦提交就是整个映射替换；传 `null` 可清除 CSGClaw 托管的 server 集合
-- OpenClaw、PicoClaw 或 Codex CLI agent 的 MCP server 变更可能触发该 agent runtime recreate，使原生配置生效
+- Codex CLI 或 DSH agent 的 MCP server 变更可能触发该 agent runtime recreate，使原生配置生效
 - `agent_profile.api_key` 如果传空，服务端会保留原有密钥
 - 如果 `agent_profile.env` 发生变化，响应中的 `env_restart_required` 可能为 `true`
 
@@ -503,7 +501,7 @@ Runtime 尚未生成文档时，`ready` 为 `false`。
 ```json
 {
   "agent_id": "u-alice",
-  "runtime_kind": "openclaw_sandbox",
+  "runtime_kind": "codex",
   "servers": {
     "context7": {
       "command": "uvx",
@@ -1422,7 +1420,7 @@ data: {"message_id":"msg-1","room_id":"room-1","channel":"csgclaw","chat_id":"ro
 
 对于 thread replies，`thread_root_id` 是 root message ID，`thread_context`
 携带 thread 开启时记录的确定性隐藏上下文。Runtime/LLM bridge 会把它作为
-prompt context 使用；它不是 thread reply 列表。PicoClaw 原生 client 可以把
+prompt context 使用；它不是 thread reply 列表。Participant client 可以把
 `context.topic_id` 当作同一个 thread/session 标识。
 
 事件可以包含 `attachments` 数组，字段与 message API 返回的附件元数据一致。
@@ -1452,7 +1450,7 @@ prompt context 使用；它不是 thread reply 列表。PicoClaw 原生 client �
 
 使用 `payload` JSON part 传 participant 消息字段，并用一个或多个 `files` part 传生成的文件。
 
-也接受 PicoClaw outbound message 形态：
+也接受 Participant outbound message 形态：
 
 ```json
 {

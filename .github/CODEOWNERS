@@ -83,8 +83,6 @@
 # Runtime modules and implementations.
 # /internal/runtime/ @TODO-owner
 # /internal/runtime/codex/ @TODO-owner
-/internal/runtime/openclawsandbox/ @jialudev
-# /internal/runtime/picoclawsandbox/ @TODO-owner
 # /internal/runtime/sandboxgateway/ @TODO-owner
 
 # Sandbox modules and implementations.

@@ -414,10 +414,9 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
   const profile = agentProfileConfig(item);
   const provider = item.provider || profile?.provider || providerNameForProviderID(profile?.model_provider_id || "");
   const runtimeKind = agentRuntimeKind(item);
-  const canPublishLocal =
-    !isManager && (runtimeKind === "codex" || runtimeKind === "dsh" || runtimeKind === "openclaw_sandbox");
+  const canPublishLocal = !isManager && (runtimeKind === "codex" || runtimeKind === "dsh");
   const canPublishCommunity = !isManager && canPublishCommunityTemplateRuntime(runtimeKind);
-  const supportsTemplateMemory = ["codex", "dsh", "openclaw_sandbox"].includes(runtimeKind);
+  const supportsTemplateMemory = ["codex", "dsh"].includes(runtimeKind);
   const hasUnsavedChanges =
     hasUnsavedChangesProp ?? Boolean(draft && savedDraft && JSON.stringify(draft) !== JSON.stringify(savedDraft));
   const saveDisabled = agentProfilePageSaveDisabled(draft, item, { saving, savedDraft });

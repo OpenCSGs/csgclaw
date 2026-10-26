@@ -367,14 +367,15 @@ func newRealContractEngine(t testing.TB, seeded []agentengine.Agent, behavior en
 	t.Helper()
 	root := t.TempDir()
 	codexWorkspace := filepath.Join(root, "workspace")
-	openClawWorkspace := filepath.Join(root, "openclaw-workspace")
-	for _, workspace := range []string{codexWorkspace, openClawWorkspace} {
+	unsupportedWorkspace := filepath.Join(root, "unsupported-workspace")
+	for _, workspace := range []string{codexWorkspace, unsupportedWorkspace} {
 		if err := os.MkdirAll(workspace, 0o700); err != nil {
 			t.Fatal(err)
 		}
 	}
 	codexRuntime := newContractRuntime(runtime.KindCodex, codexWorkspace, behavior)
-	openClawRuntime := newContractRuntime(runtime.KindOpenClawSandbox, openClawWorkspace, behavior)
+	unsupportedRuntime := newContractRuntime("unsupported", unsupportedWorkspace, behavior)
+	dshRuntime := newContractRuntime(runtime.KindDSH, unsupportedWorkspace, behavior)
 	stored := make([]agent.Agent, 0, len(seeded))
 	for _, item := range seeded {
 		runtimeKind := strings.TrimSpace(item.Spec.Runtime.Adapter)
@@ -396,7 +397,7 @@ func newRealContractEngine(t testing.TB, seeded []agentengine.Agent, behavior en
 		if runtimeKind == agent.RuntimeKindCodex {
 			codexRuntime.setState(item.Status.RuntimeID, runtime.State(item.Status.State))
 		} else {
-			openClawRuntime.setState(item.Status.RuntimeID, runtime.State(item.Status.State))
+			unsupportedRuntime.setState(item.Status.RuntimeID, runtime.State(item.Status.State))
 		}
 	}
 	statePath := filepath.Join(root, "agents.json")
@@ -409,7 +410,7 @@ func newRealContractEngine(t testing.TB, seeded []agentengine.Agent, behavior en
 	}
 	service, err := agent.NewController(
 		config.ModelConfig{}, config.ServerConfig{}, "manager:test", statePath,
-		agent.WithRuntime(codexRuntime), agent.WithRuntime(openClawRuntime),
+		agent.WithRuntime(codexRuntime), agent.WithRuntime(dshRuntime), agent.WithRuntime(unsupportedRuntime),
 	)
 	if err != nil {
 		t.Fatal(err)

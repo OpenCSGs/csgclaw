@@ -20,7 +20,7 @@ func WithCodexRuntime() agent.ControllerOption {
 			return err
 		}
 
-		host := s.PicoClawRuntimeHost()
+		host := s.RuntimeHost()
 		events := runtimecodex.NewEventSink()
 		permissions := runtimecodex.NewPermissionBroker(events)
 		userInputs := runtimecodex.NewUserInputBroker(events)

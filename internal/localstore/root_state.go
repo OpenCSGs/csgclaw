@@ -14,6 +14,14 @@ const RootStateFileName = "state.json"
 
 var rootStateMu sync.Mutex
 
+// WithRootStateLock serializes a startup migration with section updates.
+// The callback must not call section readers or writers that take the same lock.
+func WithRootStateLock(update func() error) error {
+	rootStateMu.Lock()
+	defer rootStateMu.Unlock()
+	return update()
+}
+
 func IsRootStatePath(path string) bool {
 	path = strings.TrimSpace(path)
 	if path == "" || filepath.Base(path) != RootStateFileName {

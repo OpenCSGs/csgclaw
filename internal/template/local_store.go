@@ -317,8 +317,8 @@ func normalizePublishSpec(spec PublishSpec) (PublishSpec, error) {
 	if !spec.IncludeMemory || ((spec.RuntimeKind == runtime.KindCodex || spec.RuntimeKind == runtime.KindDSH) && spec.RuntimeOptions["memory_mode"] == "disabled") {
 		spec.WorkspaceRef.MemoryPath = ""
 	}
-	if spec.RuntimeKind == "" {
-		return PublishSpec{}, ErrRuntimeKindRequired
+	if !isSupportedTemplateRuntimeKind(spec.RuntimeKind) {
+		return PublishSpec{}, fmt.Errorf("%w: %s", ErrRuntimeKindRequired, spec.RuntimeKind)
 	}
 	if requiresTemplateImage(spec.RuntimeKind) && spec.Image == "" {
 		return PublishSpec{}, fmt.Errorf("image.ref is required for runtime_kind %q", spec.RuntimeKind)

@@ -23,7 +23,7 @@ describe("agent session API", () => {
                 name: "Stopped",
                 runtime: { name: "codex", state: "stopped" },
               },
-              { id: "agent-openclaw", name: "OpenClaw", runtime: { name: "openclaw", state: "running" } },
+              { id: "agent-dsh", name: "DSH", runtime: { name: "dsh", state: "running" } },
             ]),
             { status: 200 },
           ),

@@ -192,7 +192,7 @@ func TestServeRunAutoBootstrapsWhenStateIncomplete(t *testing.T) {
 			Config: config.Config{
 				Bootstrap: config.BootstrapConfig{
 					DefaultManagerTemplate: "builtin.manager-codex",
-					DefaultWorkerTemplate:  "builtin.picoclaw-worker",
+					DefaultWorkerTemplate:  "builtin.codex-worker",
 				},
 			},
 		}, nil
@@ -929,7 +929,7 @@ func TestServeForegroundPassesContextToServer(t *testing.T) {
 		}),
 		Bootstrap: config.BootstrapConfig{
 			DefaultManagerTemplate: "builtin.manager-codex",
-			DefaultWorkerTemplate:  "builtin.picoclaw-worker",
+			DefaultWorkerTemplate:  "builtin.codex-worker",
 		},
 	}
 
@@ -1468,8 +1468,8 @@ func TestLoadConfigRewritesLegacyBootstrapTemplateRefs(t *testing.T) {
 listen_addr = "127.0.0.1:18080"
 
 [bootstrap]
-default_manager_template = "builtin/picoclaw-manager"
-default_worker_template = "builtin/picoclaw-worker"
+default_manager_template = "builtin/manager-codex"
+default_worker_template = "builtin/codex-worker"
 
 [models]
 default = "default.gpt-test"
@@ -1520,8 +1520,8 @@ func TestLoadConfigCreatesBackupBeforeMigrationRewrite(t *testing.T) {
 listen_addr = "127.0.0.1:18080"
 
 [bootstrap]
-default_manager_template = "builtin/picoclaw-manager"
-default_worker_template = "builtin/picoclaw-worker"
+default_manager_template = "builtin/manager-codex"
+default_worker_template = "builtin/codex-worker"
 
 [models]
 default = "default.gpt-test"
@@ -1568,7 +1568,7 @@ func TestFormatEffectiveConfigFormatsSectionsWithoutExtraWhitespace(t *testing.T
 		}),
 		Bootstrap: config.BootstrapConfig{
 			DefaultManagerTemplate: "builtin.manager-codex",
-			DefaultWorkerTemplate:  "builtin.openclaw-worker",
+			DefaultWorkerTemplate:  "builtin.dsh-worker",
 		},
 		Sandbox: config.SandboxConfig{
 			Provider: config.BoxLiteProvider,
@@ -1603,7 +1603,7 @@ show_upgrade = true
 
 [bootstrap]
 default_manager_template = "builtin.manager-codex"
-default_worker_template = "builtin.openclaw-worker"
+default_worker_template = "builtin.dsh-worker"
 
 [sandbox]
 provider = "boxlite"
@@ -1655,7 +1655,7 @@ func TestFormatEffectiveConfigIncludesDefaultHubRegistriesWhenOmitted(t *testing
 		},
 		Bootstrap: config.BootstrapConfig{
 			DefaultManagerTemplate: "builtin.manager-codex",
-			DefaultWorkerTemplate:  "builtin.picoclaw-worker",
+			DefaultWorkerTemplate:  "builtin.codex-worker",
 		},
 		Sandbox: config.SandboxConfig{
 			Provider: config.BoxLiteProvider,
@@ -1796,7 +1796,7 @@ func csgHubLiteServeConfig(baseURL string) config.Config {
 		},
 		Bootstrap: config.BootstrapConfig{
 			DefaultManagerTemplate: "builtin.manager-codex",
-			DefaultWorkerTemplate:  "builtin.picoclaw-worker",
+			DefaultWorkerTemplate:  "builtin.codex-worker",
 		},
 	}
 }
@@ -2211,5 +2211,66 @@ func TestRefreshStartupModelProvidersSkipsCSGHub(t *testing.T) {
 	_, results, err := refreshStartupModelProviders(context.Background(), cfg, filepath.Join(t.TempDir(), "missing", "config.toml"), nil)
 	if err != nil || len(results) != 0 {
 		t.Fatalf("results = %v, error = %v", results, err)
+	}
+}
+
+func TestLoadConfigMigratesRetiredRuntimeBeforeResolvingTemplates(t *testing.T) {
+	home := t.TempDir()
+	root := filepath.Join(home, ".csgclaw")
+	if err := os.MkdirAll(root, 0755); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(root, "config.toml")
+	original := `[server]
+listen_addr = "127.0.0.1:19081"
+[bootstrap]
+default_manager_template = "builtin.picoclaw-manager"
+default_worker_template = "builtin.openclaw-worker"
+runtime_kind = "openclaw_sandbox"
+manager_image_override = "retired-image"
+`
+	if err := os.WriteFile(path, []byte(original), 0600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := loadConfig(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Bootstrap.ResolvedDefaultWorkerTemplate() != config.DefaultBootstrapWorkerTemplate {
+		t.Fatalf("wrong worker default: %+v", cfg.Bootstrap)
+	}
+	backups := findStoreBackups(t, home)
+	if len(backups) != 1 {
+		t.Fatalf("backups = %v, want one", backups)
+	}
+	before, err := os.ReadFile(filepath.Join(home, backups[0], "config.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(before) != original {
+		t.Fatal("backup did not preserve original config")
+	}
+	saved, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, old := range []string{"openclaw", "picoclaw", "runtime_kind", "manager_image_override"} {
+		if strings.Contains(string(saved), old) {
+			t.Fatalf("retired config %q retained", old)
+		}
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := loadConfig(path); err != nil {
+		t.Fatal(err)
+	}
+	next, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !info.ModTime().Equal(next.ModTime()) || len(findStoreBackups(t, home)) != 1 {
+		t.Fatal("second load rewrote or backed up migrated config")
 	}
 }

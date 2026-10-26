@@ -94,7 +94,7 @@ describe("legacy UI contract", () => {
     expect(source).toContain('onSelect={() => onPublish?.("official")}');
     expect(source).toContain("const canPublishLocal =");
     expect(source).toContain('runtimeKind === "dsh"');
-    expect(source).toContain('runtimeKind === "openclaw_sandbox"');
+    expect(source).toContain('runtimeKind === "dsh"');
     expect(source).toContain("canPublishCommunityTemplateRuntime(runtimeKind)");
   });
 

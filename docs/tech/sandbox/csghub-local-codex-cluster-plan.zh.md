@@ -20,8 +20,6 @@ Codex CLI，以及把未指定模板的新 worker 默认切到内建 Codex。然
 和默认模板，运行行为与个人电脑部署一致。`runtime_kind=codex` 不会进入
 sandbox gateway，也不会为 manager/worker 调 CSGHub `Create`。
 
-旧 PicoClaw/OpenClaw sandbox capability 保留，但不是这个 server 镜像的默认
-manager/worker 路径。
 
 ## 改动清单
 
@@ -61,7 +59,7 @@ Codex 下载必须在镜像构建期完成；缺失的内置 CLI 会使 Codex ru
 
 这次 Dockerfile 改动不触及以下兼容层：
 
-- UID/GID 1000 和 `/home/picoclaw/.csgclaw` PVC 布局；
+- UID/GID 1000 和 `/home/csgclaw/.csgclaw` PVC 布局；
 - supervisor、tini、Python sandbox :8888；
 - `CSGCLAW_AGENT_TEMPLATE_IMAGE`、hub 模板的 image 替换；
 - `csgclaw-agent` 相关构建能力。
@@ -81,8 +79,7 @@ default_worker_template = "builtin.codex-worker"
 `default_worker_template` 也不改变已有 worker，更不改变用户显式选择的模板。它只在
 创建请求没有 `from_template` 时被 `templateRefForCreateSpec` 作为 worker 默认模板
 （`internal/agent/service.go:1028-1045`）使用。当前 server 镜像写的是
-`local/picoclaw-worker`，所以普通“新建 worker”会默认走 PicoClaw sandbox；改成
-`builtin.codex-worker` 才使这个默认操作走容器内 Codex。
+`builtin.codex-worker`，普通“新建 worker”使用容器内 Codex。
 
 若前端/API 始终显式传 `from_template = "builtin.codex-worker"`，则连这一个
 `config.toml` 改动也不需要。
@@ -100,9 +97,7 @@ provider = "csghub"
 不能将 `advertise_base_url` 固定为 `127.0.0.1`。当前 CSGClaw 同时用它：
 
 - 给 Codex profile 构造 CSGClaw LLM bridge URL；
-- 给独立 sandbox 中的 OpenClaw/PicoClaw 生成 `CSGCLAW_BASE_URL` 回调地址。
 
-OpenClaw/PicoClaw 若在另一个容器，`127.0.0.1` 是它自己的 loopback，无法回调
 server。最小方案沿用 CSGBot 注入的外部可达 Gateway URL；Codex 也通过这个已有地址
 访问 CSGClaw LLM bridge。
 
@@ -141,7 +136,6 @@ CI 从已提交的 `csgclaw-agent-sandbox.env` 读取兼容模板使用的 agent
 | `csgbot/` | 继续创建外层 server sandbox，并继续提供当前的环境变量、PVC、健康检查和旧 sandbox 配置。 |
 | `csgclaw-server/docker-entrypoint.sh` | 当前配置复制和环境变量校验可继续使用。 |
 | `csgclaw-server/hub/` | 默认路径改为 builtin Codex template，不需要修改 local hub。 |
-| `csgclaw-agent/` | 保留旧 OpenClaw/PicoClaw sandbox capability；默认 Codex 路径不会启动它。 |
 
 ## 验收
 
@@ -151,7 +145,7 @@ CI 从已提交的 `csgclaw-agent-sandbox.env` 读取兼容模板使用的 agent
    再以 `--entrypoint /usr/local/bin/codex` 运行 `codex --version`，确认 CLI 在最终镜像
    可执行。
 2. 使用现有 CSGBot 创建 CSGClaw server sandbox，确认容器用户可写
-   `/home/picoclaw/.csgclaw`。
+   `/home/csgclaw/.csgclaw`。
 3. 确认 manager 为 `runtime_kind=codex`；未显式选择模板的新建 worker 也为
    `runtime_kind=codex`（若未改 worker 默认模板，则显式选择 `builtin.codex-worker`）。
 4. 观察 CSGHub 审计：创建上述 manager/worker 时不应产生新的 sandbox `Create`；

@@ -1,7 +1,7 @@
 import { Lexer, type Token, type Tokens } from "marked";
 import { formatMessagePreviewText, isDirectConversation, normalizeComparable } from "@/models/conversations";
 import type { IMMessage, IMServerEvent, TranslateFn } from "@/models/conversations";
-import { openClawDeliveryKind } from "@/models/agentActivity";
+import { activityDeliveryKind } from "@/models/agentActivity";
 import { parseTurnProgress } from "@/models/turnProgress";
 
 export const TurnNotificationModes = {
@@ -54,7 +54,7 @@ export function isCompletedAgentTurnMessage(message: IMMessage): boolean {
     return progress.status === "succeeded";
   }
   const metadata = message.metadata as { csgclaw?: { delivery_kind?: unknown } } | undefined;
-  return (metadata?.csgclaw?.delivery_kind ?? openClawDeliveryKind(message)) === "final";
+  return (metadata?.csgclaw?.delivery_kind ?? activityDeliveryKind(message)) === "final";
 }
 
 export function buildTurnNotificationTag(eventKey: string): string {

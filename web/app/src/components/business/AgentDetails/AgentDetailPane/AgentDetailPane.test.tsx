@@ -236,8 +236,8 @@ describe("AgentDetailPane metadata editing", () => {
           ...agent,
           status: "running",
           runtime: {
-            kind: "openclaw_sandbox",
-            name: "openclaw",
+            kind: "dsh",
+            name: "codex",
             state: "running",
             availability: {
               state: "degraded",
@@ -486,7 +486,7 @@ describe("AgentDetailPane MCP snapshots", () => {
   });
   it.each([
     { runtimeKind: "dsh", sandbox: false, supported: true },
-    { runtimeKind: "openclaw_sandbox", sandbox: true, supported: false },
+    { runtimeKind: "codex", sandbox: false, supported: true },
   ])("shows the Feishu connector for $runtimeKind", async ({ runtimeKind, sandbox, supported }) => {
     vi.stubGlobal(
       "fetch",

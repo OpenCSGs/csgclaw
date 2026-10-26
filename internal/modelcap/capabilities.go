@@ -2,14 +2,8 @@ package modelcap
 
 import "strings"
 
-const (
-	OpenClawAPIChatCompletions = "openai-completions"
-	OpenClawAPICodexResponses  = "openai-codex-responses"
-)
-
 type Capabilities struct {
 	SupportsSearchTool              bool
-	OpenClawAPI                     string
 	InputModalities                 []string
 	SupportsReasoningEffort         bool
 	SupportedReasoningEfforts       []string
@@ -52,7 +46,6 @@ func isKnownVisionModel(model string) bool {
 
 func conservativeCapabilities() Capabilities {
 	return Capabilities{
-		OpenClawAPI:               OpenClawAPIChatCompletions,
 		InputModalities:           []string{"text"},
 		SupportedReasoningEfforts: []string{},
 		ReasoningEffortMap:        map[string]string{},
@@ -61,7 +54,6 @@ func conservativeCapabilities() Capabilities {
 
 func codexCapabilities() Capabilities {
 	return Capabilities{
-		OpenClawAPI:                     OpenClawAPICodexResponses,
 		InputModalities:                 []string{"text", "image"},
 		SupportsReasoningEffort:         true,
 		SupportedReasoningEfforts:       []string{"minimal", "low", "medium", "high", "xhigh"},

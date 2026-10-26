@@ -12,7 +12,7 @@ This plan keeps the two requirements separate:
 Non-goals:
 
 - UI chat cleanup does not delete the room, members, users, participants, or agents.
-- UI chat cleanup does not directly delete PicoClaw, OpenClaw, or Codex internal memory, sessions, workspace memory, or files.
+- UI chat cleanup does not directly delete Codex or DSH internal memory, sessions, workspace memory, or files.
 - Agent slash cleanup does not clear IM room messages in reverse, unless a combined operation is designed separately later.
 
 ## Chapter 1: Current IM Message Storage, Write Timing, and UI Room Chat Cleanup

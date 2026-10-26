@@ -23,7 +23,7 @@ export function workingParticipantForTurnMessage(
 ): ConversationWorkingParticipant | undefined {
   if (!parseTurnProgress(message)) return undefined;
   let requestID = "";
-  for (const key of ["csgclaw", "codex", "openclaw"]) {
+  for (const key of ["csgclaw", "codex"]) {
     const metadata = message.metadata?.[key];
     if (
       metadata &&

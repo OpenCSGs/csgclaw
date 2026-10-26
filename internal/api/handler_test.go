@@ -8,7 +8,6 @@ import (
 	agent "csgclaw/internal/agentengine/agents"
 	"csgclaw/internal/agentengine/enginetest"
 	"csgclaw/internal/apitypes"
-	"csgclaw/internal/app/runtimewiring"
 	"csgclaw/internal/auth"
 	"csgclaw/internal/channel/feishu"
 	"csgclaw/internal/config"
@@ -21,12 +20,9 @@ import (
 	agentruntime "csgclaw/internal/runtime"
 	codexruntime "csgclaw/internal/runtime/codex"
 	runtimeinstructions "csgclaw/internal/runtime/instructions"
-	"csgclaw/internal/runtime/openclawsandbox"
-	"csgclaw/internal/runtime/picoclawsandbox"
 	larkextension "csgclaw/internal/runtimeextension/larkcli"
 	"csgclaw/internal/sandbox"
 	"csgclaw/internal/sandbox/sandboxtest"
-	"csgclaw/internal/sandboxproviders"
 	"csgclaw/internal/skill/installstate"
 	skillsystem "csgclaw/internal/skill/system"
 	hub "csgclaw/internal/template"
@@ -109,6 +105,17 @@ type getErrorAgents struct {
 
 func (a getErrorAgents) Get(context.Context, string, agentengine.AgentGetOptions) (agentengine.Agent, error) {
 	return agentengine.Agent{}, a.err
+}
+
+type completedAgentUpdate struct {
+	agentengine.AgentInterface
+	done chan error
+}
+
+func (a completedAgentUpdate) Update(ctx context.Context, id string, req agentengine.AgentUpdateRequest) (agentengine.Agent, error) {
+	item, err := a.AgentInterface.Update(ctx, id, req)
+	a.done <- err
+	return item, err
 }
 
 type fakeSandboxAvailabilityProvider struct {
@@ -304,10 +311,8 @@ func (f failingMCPServersListRuntime) ListMCPServers(context.Context, agentrunti
 func init() {
 	locateCodexCLI = func() (string, error) { return "/opt/csgclaw/bin/codex", nil }
 	_ = agent.TestOnlySetDefaultControllerOption(func(s *agent.Controller) error {
-		if err := runtimewiring.WithPicoClawSandboxRuntime(nil)(s); err != nil {
-			return err
-		}
-		if err := runtimewiring.WithOpenClawSandboxRuntime(nil)(s); err != nil {
+
+		if err := agent.WithRuntime(templateCodexTestRuntime{fakeCompatRuntime{kind: agent.RuntimeKindDSH}})(s); err != nil {
 			return err
 		}
 		return agent.WithRuntime(templateCodexTestRuntime{fakeCompatRuntime{kind: agent.RuntimeKindCodex}})(s)
@@ -332,25 +337,11 @@ func (f fakeCompatRuntime) Kind() string {
 	if strings.TrimSpace(f.kind) != "" {
 		return strings.TrimSpace(f.kind)
 	}
-	return agent.RuntimeKindPicoClawSandbox
+	return agent.RuntimeKindCodex
 }
 
 func (f fakeCompatRuntime) Layout(agentHome string) agentruntime.Layout {
 	switch f.Kind() {
-	case agent.RuntimeKindPicoClawSandbox:
-		workspace := filepath.Join(picoclawsandbox.Root(agentHome), picoclawsandbox.HostWorkspaceDir)
-		return agentruntime.Layout{
-			WorkspaceRoot: workspace,
-			SkillsRoot:    filepath.Join(workspace, "skills"),
-			HostLogPaths:  []string{picoclawsandbox.HostGatewayLogPath(agentHome)},
-		}
-	case agent.RuntimeKindOpenClawSandbox:
-		workspace := filepath.Join(openclawsandbox.Root(agentHome), openclawsandbox.HostWorkspaceDir)
-		return agentruntime.Layout{
-			WorkspaceRoot: workspace,
-			SkillsRoot:    filepath.Join(workspace, "skills"),
-			HostLogPaths:  []string{openclawsandbox.HostGatewayLogPath(agentHome)},
-		}
 	case agent.RuntimeKindCodex:
 		return agentruntime.Layout{
 			WorkspaceRoot: filepath.Join(agentHome, ".codex", "workspace"),
@@ -721,84 +712,6 @@ func TestBootstrapConfigViewReportsMissingManagerCodexCLI(t *testing.T) {
 	}
 }
 
-func TestBootstrapConfigViewReportsUnavailableSandboxRuntimeChoices(t *testing.T) {
-	t.Cleanup(sandboxproviders.LookPathForTest(func(string) (string, error) {
-		return "", os.ErrNotExist
-	}))
-	t.Cleanup(sandboxproviders.StatPathForTest(func(string) (os.FileInfo, error) {
-		return nil, os.ErrNotExist
-	}))
-
-	got := bootstrapConfigView(context.Background(), config.Config{
-		Sandbox: config.SandboxConfig{Provider: config.BoxLiteProvider},
-	}, nil, nil)
-
-	for _, choice := range got.WorkerRuntimeChoices {
-		if !choice.SandboxEnabled {
-			continue
-		}
-		if choice.Installed {
-			t.Fatalf("sandbox choice %q Installed = true, want false: %+v", choice.Name, choice)
-		}
-		if !strings.Contains(strings.ToLower(choice.Message), "boxlite") {
-			t.Fatalf("sandbox choice %q Message = %q, want boxlite warning", choice.Name, choice.Message)
-		}
-	}
-}
-
-func TestBootstrapConfigViewReportsStoppedDockerRuntimeChoices(t *testing.T) {
-	origAvailability := sandboxProviderAvailability
-	origProvider := sandboxProviderForRuntime
-	sandboxProviderAvailability = func(config.SandboxConfig) error {
-		return nil
-	}
-	sandboxProviderForRuntime = func(config.SandboxConfig) (sandbox.Provider, error) {
-		return fakeSandboxAvailabilityProvider{
-			name: config.DockerProvider,
-			err:  fmt.Errorf("%w: docker engine stopped", sandbox.ErrUnavailable),
-		}, nil
-	}
-	t.Cleanup(func() {
-		sandboxProviderAvailability = origAvailability
-		sandboxProviderForRuntime = origProvider
-	})
-
-	got := bootstrapConfigView(context.Background(), config.Config{
-		Sandbox: config.SandboxConfig{Provider: config.DockerProvider},
-	}, nil, nil)
-
-	for _, choice := range got.WorkerRuntimeChoices {
-		if !choice.SandboxEnabled {
-			continue
-		}
-		if choice.Installed {
-			t.Fatalf("sandbox choice %q Installed = true, want false: %+v", choice.Name, choice)
-		}
-		if !strings.Contains(choice.Message, "Docker is not running") {
-			t.Fatalf("sandbox choice %q Message = %q, want Docker startup guidance", choice.Name, choice.Message)
-		}
-		if choice.MessageCode != "docker_unavailable" {
-			t.Fatalf("sandbox choice %q MessageCode = %q, want docker_unavailable", choice.Name, choice.MessageCode)
-		}
-		if strings.Contains(strings.ToLower(choice.Message), "gateway") {
-			t.Fatalf("sandbox choice %q Message = %q, should not mention gateway", choice.Name, choice.Message)
-		}
-	}
-}
-
-func TestFriendlySandboxRuntimeMessageReportsDockerTimeout(t *testing.T) {
-	got := friendlySandboxRuntimeMessage(
-		config.SandboxConfig{Provider: config.DockerProvider},
-		fmt.Errorf("docker command canceled: %w", context.DeadlineExceeded),
-	)
-	if !strings.Contains(got, "Docker availability check timed out") {
-		t.Fatalf("friendlySandboxRuntimeMessage() = %q, want Docker timeout guidance", got)
-	}
-	if strings.Contains(strings.ToLower(got), "deadline exceeded") {
-		t.Fatalf("friendlySandboxRuntimeMessage() leaks implementation detail: %q", got)
-	}
-}
-
 func TestHandlerBootstrapConfigIncludesRuntimeOptionSchemas(t *testing.T) {
 	statePath := filepath.Join(t.TempDir(), "agents.json")
 	svc, err := agent.NewController(
@@ -863,23 +776,6 @@ func TestHandlerBootstrapConfigIncludesRuntimeOptionSchemas(t *testing.T) {
 	}
 	if got.RuntimeOptionSchemas[agent.RuntimeKindDSH][0].Path != "permission_mode" {
 		t.Fatalf("DSH schema path = %q, want permission_mode", got.RuntimeOptionSchemas[agent.RuntimeKindDSH][0].Path)
-	}
-}
-
-func TestBootstrapConfigIncludesBuiltinOpenClawRuntimeDefaultImage(t *testing.T) {
-	hubSvc, err := hub.NewService(config.HubConfig{Registries: []config.HubRegistryConfig{{Name: config.DefaultOfficialHubRegistryName, Kind: config.HubRegistryKindRemote, Enabled: false}}}, hub.DefaultStoreFactory)
-	if err != nil {
-		t.Fatalf("hub.NewService() error = %v", err)
-	}
-
-	got := bootstrapConfigView(context.Background(), config.Config{}, hubSvc, nil)
-
-	openclawImage := got.RuntimeDefaultImages[agent.RuntimeNameOpenClaw]
-	if openclawImage == "" {
-		t.Fatalf("RuntimeDefaultImages[%q] = empty; defaults=%#v", agent.RuntimeNameOpenClaw, got.RuntimeDefaultImages)
-	}
-	if !strings.Contains(openclawImage, "/opencsghq/openclaw:") {
-		t.Fatalf("RuntimeDefaultImages[%q] = %q, want builtin OpenClaw image", agent.RuntimeNameOpenClaw, openclawImage)
 	}
 }
 
@@ -1206,7 +1102,7 @@ func TestHandleAgentsListReturnsUnifiedAgents(t *testing.T) {
 
 func TestHandleAgentDeleteRemovesBoundParticipants(t *testing.T) {
 	svc := mustNewSeededService(t, []agent.Agent{
-		{ID: "agent-qa", Name: "qa", Role: agent.RoleWorker, RuntimeKind: agent.RuntimeKindPicoClawSandbox},
+		{ID: "agent-qa", Name: "qa", Role: agent.RoleWorker, RuntimeKind: agent.RuntimeKindCodex},
 	})
 	imSvc := im.NewServiceFromBootstrap(im.Bootstrap{
 		CurrentUserID: im.AdminUserID,
@@ -1381,52 +1277,6 @@ func TestHandleAgentResponsesExposeLinkedLocalUserWithoutCSGClawParticipant(t *t
 	}
 }
 
-func TestHandleAgentsListHydratesStatusFromSandboxInfo(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
-	dir := t.TempDir()
-	statePath := filepath.Join(dir, "agents.json")
-	runtimeHome := filepath.Join(dir, "agents", "agent-alice", config.RuntimeHomeDirName)
-	provider := sandboxtest.NewProvider()
-	rt := sandboxtest.NewRuntime()
-	rt.Instances["box-stored"] = sandboxtest.NewInstance(sandbox.Info{
-		ID:        "box-live",
-		Name:      "alice",
-		State:     sandbox.StateRunning,
-		CreatedAt: time.Date(2026, 3, 28, 10, 0, 0, 0, time.UTC),
-	})
-	provider.Runtimes[runtimeHome] = rt
-
-	if err := writeSeededAgents(statePath, []agent.Agent{
-		{ID: "u-alice", Name: "alice", BoxID: "box-stored", Role: agent.RoleWorker, Status: "stale", CreatedAt: time.Date(2026, 3, 28, 10, 0, 0, 0, time.UTC)},
-	}); err != nil {
-		t.Fatalf("writeSeededAgents() error = %v", err)
-	}
-	svc, err := agent.NewController(config.ModelConfig{}, config.ServerConfig{}, "manager-image:test", statePath, agent.WithSandboxProvider(provider))
-	if err != nil {
-		t.Fatalf("agent.NewService() error = %v", err)
-	}
-
-	srv := &Handler{svc: svc, agentEngine: agentengine.New(svc), workspace: svc.Workspace(), agentModels: svc.Models(), agentRuntime: svc}
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/agents", nil)
-	rec := httptest.NewRecorder()
-
-	srv.Routes().ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
-	}
-	var got []agent.Agent
-	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-	if len(got) != 1 {
-		t.Fatalf("len(agents) = %d, want 1", len(got))
-	}
-	if got[0].Status != string(sandbox.StateRunning) || got[0].BoxID != "box-live" {
-		t.Fatalf("agent = %+v, want live running status and refreshed box id", got[0])
-	}
-}
-
 func TestHandleAgentsGetByIDReturnsAgent(t *testing.T) {
 	svc := mustNewSeededService(t, []agent.Agent{
 		{ID: "u-alice", Name: "alice", Role: agent.RoleWorker, CreatedAt: time.Date(2026, 3, 28, 10, 0, 0, 0, time.UTC)},
@@ -1533,237 +1383,6 @@ func TestHandleAgentsListReportsConfiguredStartupPending(t *testing.T) {
 	}
 }
 
-func TestHandleAgentsGetByIDSeparatesGatewayAvailabilityFromLifecycle(t *testing.T) {
-	var probes int
-	svc := mustNewSeededServiceWithOptions(t, []agent.Agent{
-		{
-			ID:          "u-alice",
-			Name:        "alice",
-			Role:        agent.RoleWorker,
-			RuntimeKind: agent.RuntimeKindPicoClawSandbox,
-			BoxID:       "box-alice",
-			Status:      string(agentruntime.StateRunning),
-			CreatedAt:   time.Date(2026, 3, 28, 10, 0, 0, 0, time.UTC),
-		},
-	}, agent.WithRuntime(fakeReadinessCompatRuntime{
-		fakeCompatRuntime: fakeCompatRuntime{kind: agent.RuntimeKindPicoClawSandbox},
-		readiness: func(context.Context, agentruntime.Handle) error {
-			probes++
-			return errors.New("gateway connection refused")
-		},
-	}))
-
-	srv := &Handler{svc: svc, agentEngine: agentengine.New(svc), workspace: svc.Workspace(), agentModels: svc.Models(), agentRuntime: svc}
-	rec := httptest.NewRecorder()
-	srv.Routes().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/agents/u-alice", nil))
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
-	}
-	if probes != 1 {
-		t.Fatalf("readiness probes = %d, want 1", probes)
-	}
-	var got struct {
-		Runtime struct {
-			State        string `json:"state"`
-			Availability struct {
-				State     string    `json:"state"`
-				ExpiresAt time.Time `json:"expires_at"`
-				Reason    string    `json:"reason"`
-			} `json:"availability"`
-		} `json:"runtime"`
-	}
-	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-	if got.Runtime.State != string(agentruntime.StateRunning) {
-		t.Fatalf("runtime.state = %q, want running", got.Runtime.State)
-	}
-	if got.Runtime.Availability.State != "degraded" || got.Runtime.Availability.Reason != "readiness_failed" {
-		t.Fatalf("runtime.availability = %+v, want degraded readiness_failed", got.Runtime.Availability)
-	}
-	if got.Runtime.Availability.ExpiresAt.IsZero() {
-		t.Fatal("runtime.availability.expires_at = zero, want expiry time")
-	}
-}
-
-func TestHandleAgentUpgradeUsesLatestDefaultImage(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
-	hubSvc := mustNewLocalTemplateHubServiceWithoutWorkspace(t, "frontend-worker", hub.Template{
-		ID:          "frontend-worker",
-		Name:        "frontend-worker",
-		Description: "frontend worker",
-		Role:        hub.TemplateRoleWorker,
-		RuntimeKind: agent.RuntimeNamePicoClaw,
-		Version:     "0.2.0",
-		Image:       "registry.example/picoclaw-worker:0.2.0",
-	})
-	statePath := filepath.Join(t.TempDir(), "agents.json")
-	if err := writeSeededAgents(statePath, []agent.Agent{
-		{
-			ID:           "u-alice",
-			Name:         "alice",
-			RuntimeID:    "rt-u-alice",
-			RuntimeKind:  agent.RuntimeKindPicoClawSandbox,
-			Image:        "custom.example/alice-worker:2026.05.27",
-			BoxID:        "box-alice-old",
-			Role:         agent.RoleWorker,
-			Status:       string(agentruntime.StateRunning),
-			AgentProfile: agent.AgentProfile{Name: "alice", Provider: agent.ProviderCodex, ModelID: "gpt-5.5", ProfileComplete: true},
-			CreatedAt:    time.Date(2026, 5, 27, 12, 0, 0, 0, time.UTC),
-		},
-	}); err != nil {
-		t.Fatalf("writeSeededAgents() error = %v", err)
-	}
-	var newImage string
-	svc, err := agent.NewController(
-		config.ModelConfig{},
-		config.ServerConfig{},
-		"manager-image:test",
-		statePath,
-		agent.WithHubService(hubSvc),
-		agent.WithBootstrapDefaultTemplates(config.BootstrapConfig{DefaultWorkerTemplate: "local/frontend-worker"}),
-		agent.WithRuntime(fakeCompatRuntime{
-			new: func(_ context.Context, spec agentruntime.Spec) (agentruntime.Handle, error) {
-				newImage = spec.Image
-				return agentruntime.Handle{RuntimeID: spec.RuntimeID, HandleID: "box-alice-new"}, nil
-			},
-		}),
-	)
-	if err != nil {
-		t.Fatalf("NewService() error = %v", err)
-	}
-
-	srv := &Handler{svc: svc, agentEngine: agentengine.New(svc), workspace: svc.Workspace(), agentModels: svc.Models(), agentRuntime: svc}
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/agents/u-alice/upgrade", nil)
-	rec := httptest.NewRecorder()
-
-	srv.Routes().ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
-	}
-	if newImage != "registry.example/picoclaw-worker:0.2.0" {
-		t.Fatalf("runtime New() image = %q, want latest default image", newImage)
-	}
-	var got agent.Agent
-	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-	if got.Image != "registry.example/picoclaw-worker:0.2.0" {
-		t.Fatalf("response Image = %q, want latest default image", got.Image)
-	}
-}
-
-func TestHandleAgentsListReportsImageUpgradeRequiredByTemplateVersion(t *testing.T) {
-	tests := []struct {
-		name         string
-		currentImage string
-		latestImage  string
-		version      string
-		wantRequired bool
-	}{
-		{
-			name:         "older template version requires upgrade",
-			currentImage: "registry.example/picoclaw-worker:0.1.0",
-			latestImage:  "registry.example/picoclaw-worker:0.2.0",
-			version:      "0.2.0",
-			wantRequired: true,
-		},
-		{
-			name:         "legacy worker base image requires upgrade to template wrapper",
-			currentImage: "registry.example/picoclaw:2026.5.27",
-			latestImage:  "registry.example/picoclaw-worker:0.2.0",
-			version:      "0.2.0",
-			wantRequired: true,
-		},
-		{
-			name:         "newer template version does not require upgrade",
-			currentImage: "registry.example/picoclaw-worker:0.3.0",
-			latestImage:  "registry.example/picoclaw-worker:0.2.0",
-			version:      "0.2.0",
-			wantRequired: false,
-		},
-		{
-			name:         "dev image does not require upgrade",
-			currentImage: "registry.example/picoclaw-worker:dev",
-			latestImage:  "registry.example/picoclaw-worker:0.2.0",
-			version:      "0.2.0",
-			wantRequired: false,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Setenv("HOME", t.TempDir())
-			provider := sandboxtest.NewProvider()
-			provider.Images = []string{"registry.example/picoclaw-worker:9.9.9"}
-			hubSvc := mustNewLocalTemplateHubServiceWithoutWorkspace(t, "frontend-worker", hub.Template{
-				ID:          "frontend-worker",
-				Name:        "frontend-worker",
-				Description: "frontend worker",
-				Role:        hub.TemplateRoleWorker,
-				RuntimeKind: agent.RuntimeNamePicoClaw,
-				Version:     tt.version,
-				Image:       tt.latestImage,
-			})
-			statePath := filepath.Join(t.TempDir(), "agents.json")
-			if err := writeSeededAgents(statePath, []agent.Agent{
-				{
-					ID:           "u-alice",
-					Name:         "alice",
-					RuntimeID:    "rt-u-alice",
-					RuntimeKind:  agent.RuntimeKindPicoClawSandbox,
-					Image:        tt.currentImage,
-					BoxID:        "box-alice",
-					Role:         agent.RoleWorker,
-					Status:       string(agentruntime.StateRunning),
-					AgentProfile: agent.AgentProfile{Name: "alice", Provider: agent.ProviderCodex, ModelID: "gpt-5.5", ProfileComplete: true},
-					CreatedAt:    time.Date(2026, 5, 27, 12, 0, 0, 0, time.UTC),
-				},
-			}); err != nil {
-				t.Fatalf("writeSeededAgents() error = %v", err)
-			}
-			svc, err := agent.NewController(
-				config.ModelConfig{},
-				config.ServerConfig{},
-				"manager-image:test",
-				statePath,
-				agent.WithSandboxProvider(provider),
-				agent.WithHubService(hubSvc),
-				agent.WithBootstrapDefaultTemplates(config.BootstrapConfig{DefaultWorkerTemplate: "local/frontend-worker"}),
-				agent.WithRuntime(fakeCompatRuntime{
-					info: func(_ context.Context, h agentruntime.Handle) (agentruntime.Info, error) {
-						return agentruntime.Info{HandleID: h.HandleID, State: agentruntime.StateRunning}, nil
-					},
-				}),
-			)
-			if err != nil {
-				t.Fatalf("NewService() error = %v", err)
-			}
-
-			srv := &Handler{svc: svc, agentEngine: agentengine.New(svc), workspace: svc.Workspace(), agentModels: svc.Models(), agentRuntime: svc}
-			req := httptest.NewRequest(http.MethodGet, "/api/v1/agents", nil)
-			rec := httptest.NewRecorder()
-
-			srv.Routes().ServeHTTP(rec, req)
-
-			if rec.Code != http.StatusOK {
-				t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
-			}
-			var got []agentResponse
-			if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
-				t.Fatalf("decode response: %v", err)
-			}
-			if len(got) != 1 {
-				t.Fatalf("len(agents) = %d, want 1", len(got))
-			}
-			if got[0].AgentProfile.ImageUpgradeRequired != tt.wantRequired {
-				t.Fatalf("image_upgrade_required = %t, want %t; response=%+v", got[0].AgentProfile.ImageUpgradeRequired, tt.wantRequired, got[0])
-			}
-		})
-	}
-}
-
 func TestHandleManagerGetIgnoresLocalTemplatePublishedFromManager(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -1774,29 +1393,29 @@ func TestHandleManagerGetIgnoresLocalTemplatePublishedFromManager(t *testing.T) 
 	}{
 		{
 			name:         "older local template version is ignored",
-			currentImage: "registry.example/opencsghq/picoclaw-manager:0.1.0",
-			latestImage:  "registry.example/opencsghq/picoclaw-manager:0.2.0",
+			currentImage: "registry.example/opencsghq/codex-manager:0.1.0",
+			latestImage:  "registry.example/opencsghq/codex-manager:0.2.0",
 			version:      "0.2.0",
 			wantRequired: false,
 		},
 		{
 			name:         "legacy manager base image is ignored",
-			currentImage: "registry.example/opencsghq/picoclaw:2026.5.27",
-			latestImage:  "registry.example/opencsghq/picoclaw-manager:0.2.0",
+			currentImage: "registry.example/opencsghq/codex:2026.5.27",
+			latestImage:  "registry.example/opencsghq/codex-manager:0.2.0",
 			version:      "0.2.0",
 			wantRequired: false,
 		},
 		{
 			name:         "newer manager version does not require upgrade",
-			currentImage: "registry.example/opencsghq/picoclaw-manager:0.3.0",
-			latestImage:  "registry.example/opencsghq/picoclaw-manager:0.2.0",
+			currentImage: "registry.example/opencsghq/codex-manager:0.3.0",
+			latestImage:  "registry.example/opencsghq/codex-manager:0.2.0",
 			version:      "0.2.0",
 			wantRequired: false,
 		},
 		{
 			name:         "dev manager tag does not require upgrade",
-			currentImage: "registry.example/opencsghq/picoclaw-manager:dev",
-			latestImage:  "registry.example/opencsghq/picoclaw-manager:0.2.0",
+			currentImage: "registry.example/opencsghq/codex-manager:dev",
+			latestImage:  "registry.example/opencsghq/codex-manager:0.2.0",
 			version:      "0.2.0",
 			wantRequired: false,
 		},
@@ -1811,7 +1430,7 @@ func TestHandleManagerGetIgnoresLocalTemplatePublishedFromManager(t *testing.T) 
 					ID:           agent.ManagerUserID,
 					Name:         agent.ManagerName,
 					RuntimeID:    "rt-manager",
-					RuntimeKind:  agent.RuntimeKindPicoClawSandbox,
+					RuntimeKind:  agent.RuntimeKindCodex,
 					Image:        tt.currentImage,
 					BoxID:        "box-manager",
 					Role:         agent.RoleManager,
@@ -1822,12 +1441,12 @@ func TestHandleManagerGetIgnoresLocalTemplatePublishedFromManager(t *testing.T) 
 			}); err != nil {
 				t.Fatalf("writeSeededAgents() error = %v", err)
 			}
-			hubSvc := mustNewLocalTemplateHubServiceWithoutWorkspace(t, "picoclaw-manager", hub.Template{
-				ID:          "picoclaw-manager",
-				Name:        "picoclaw-manager",
+			hubSvc := mustNewLocalTemplateHubServiceWithoutWorkspace(t, "codex-manager", hub.Template{
+				ID:          "codex-manager",
+				Name:        "codex-manager",
 				Description: "manager",
 				Role:        hub.TemplateRoleManager,
-				RuntimeKind: agent.RuntimeNamePicoClaw,
+				RuntimeKind: agent.RuntimeNameCodex,
 				Version:     tt.version,
 				Image:       tt.latestImage,
 			})
@@ -1837,7 +1456,7 @@ func TestHandleManagerGetIgnoresLocalTemplatePublishedFromManager(t *testing.T) 
 				"manager-image:unused",
 				statePath,
 				agent.WithHubService(hubSvc),
-				agent.WithBootstrapDefaultTemplates(config.BootstrapConfig{DefaultManagerTemplate: "local/picoclaw-manager"}),
+				agent.WithBootstrapDefaultTemplates(config.BootstrapConfig{DefaultManagerTemplate: "local/codex-manager"}),
 				agent.WithRuntime(fakeCompatRuntime{
 					info: func(_ context.Context, h agentruntime.Handle) (agentruntime.Info, error) {
 						return agentruntime.Info{HandleID: h.HandleID, State: agentruntime.StateRunning}, nil
@@ -1868,124 +1487,21 @@ func TestHandleManagerGetIgnoresLocalTemplatePublishedFromManager(t *testing.T) 
 	}
 }
 
-func TestHandleAgentUpgradeClearsOutdatedImageFlag(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
-	provider := sandboxtest.NewProvider()
-	provider.Images = []string{"registry.example/picoclaw-worker:0.1.0"}
-	hubSvc := mustNewLocalTemplateHubServiceWithoutWorkspace(t, "frontend-worker", hub.Template{
-		ID:          "frontend-worker",
-		Name:        "frontend-worker",
-		Description: "frontend worker",
-		Role:        hub.TemplateRoleWorker,
-		RuntimeKind: agent.RuntimeNamePicoClaw,
-		Version:     "0.2.0",
-		Image:       "registry.example/picoclaw-worker:0.2.0",
-	})
-	statePath := filepath.Join(t.TempDir(), "agents.json")
-	if err := writeSeededAgents(statePath, []agent.Agent{
-		{
-			ID:           "u-alice",
-			Name:         "alice",
-			RuntimeID:    "rt-u-alice",
-			RuntimeKind:  agent.RuntimeKindPicoClawSandbox,
-			Image:        "registry.example/picoclaw-worker:0.1.0",
-			BoxID:        "box-alice-old",
-			Role:         agent.RoleWorker,
-			Status:       string(agentruntime.StateRunning),
-			AgentProfile: agent.AgentProfile{Name: "alice", Provider: agent.ProviderCodex, ModelID: "gpt-5.5", ProfileComplete: true},
-			CreatedAt:    time.Date(2026, 5, 27, 12, 0, 0, 0, time.UTC),
-		},
-	}); err != nil {
-		t.Fatalf("writeSeededAgents() error = %v", err)
-	}
-	var newImage string
-	svc, err := agent.NewController(
-		config.ModelConfig{},
-		config.ServerConfig{},
-		"manager-image:test",
-		statePath,
-		agent.WithSandboxProvider(provider),
-		agent.WithHubService(hubSvc),
-		agent.WithBootstrapDefaultTemplates(config.BootstrapConfig{DefaultWorkerTemplate: "local/frontend-worker"}),
-		agent.WithRuntime(fakeCompatRuntime{
-			new: func(_ context.Context, spec agentruntime.Spec) (agentruntime.Handle, error) {
-				newImage = spec.Image
-				return agentruntime.Handle{RuntimeID: spec.RuntimeID, HandleID: "box-alice-new"}, nil
-			},
-			info: func(_ context.Context, h agentruntime.Handle) (agentruntime.Info, error) {
-				return agentruntime.Info{HandleID: h.HandleID, State: agentruntime.StateRunning, CreatedAt: time.Date(2026, 6, 3, 10, 0, 0, 0, time.UTC)}, nil
-			},
-		}),
-	)
-	if err != nil {
-		t.Fatalf("NewService() error = %v", err)
-	}
-
-	srv := &Handler{svc: svc, agentEngine: agentengine.New(svc), workspace: svc.Workspace(), agentModels: svc.Models(), agentRuntime: svc}
-	beforeReq := httptest.NewRequest(http.MethodGet, "/api/v1/agents/u-alice", nil)
-	beforeRec := httptest.NewRecorder()
-	srv.Routes().ServeHTTP(beforeRec, beforeReq)
-	if beforeRec.Code != http.StatusOK {
-		t.Fatalf("pre-upgrade status = %d, want %d; body=%s", beforeRec.Code, http.StatusOK, beforeRec.Body.String())
-	}
-	var before agentResponse
-	if err := json.NewDecoder(beforeRec.Body).Decode(&before); err != nil {
-		t.Fatalf("decode pre-upgrade response: %v", err)
-	}
-	if !before.AgentProfile.ImageUpgradeRequired {
-		t.Fatalf("pre-upgrade image_upgrade_required = false, want true; response=%+v", before)
-	}
-
-	upgradeReq := httptest.NewRequest(http.MethodPost, "/api/v1/agents/u-alice/upgrade", nil)
-	upgradeRec := httptest.NewRecorder()
-	srv.Routes().ServeHTTP(upgradeRec, upgradeReq)
-	if upgradeRec.Code != http.StatusOK {
-		t.Fatalf("upgrade status = %d, want %d; body=%s", upgradeRec.Code, http.StatusOK, upgradeRec.Body.String())
-	}
-	if newImage != "registry.example/picoclaw-worker:0.2.0" {
-		t.Fatalf("runtime New() image = %q, want latest default image", newImage)
-	}
-	var upgraded agentResponse
-	if err := json.NewDecoder(upgradeRec.Body).Decode(&upgraded); err != nil {
-		t.Fatalf("decode upgrade response: %v", err)
-	}
-	if upgraded.Image != "registry.example/picoclaw-worker:0.2.0" {
-		t.Fatalf("upgrade response Image = %q, want latest default image", upgraded.Image)
-	}
-	if upgraded.AgentProfile.ImageUpgradeRequired {
-		t.Fatalf("upgrade response image_upgrade_required = true, want false; response=%+v", upgraded)
-	}
-
-	afterReq := httptest.NewRequest(http.MethodGet, "/api/v1/agents/u-alice", nil)
-	afterRec := httptest.NewRecorder()
-	srv.Routes().ServeHTTP(afterRec, afterReq)
-	if afterRec.Code != http.StatusOK {
-		t.Fatalf("post-upgrade status = %d, want %d; body=%s", afterRec.Code, http.StatusOK, afterRec.Body.String())
-	}
-	var after agentResponse
-	if err := json.NewDecoder(afterRec.Body).Decode(&after); err != nil {
-		t.Fatalf("decode post-upgrade response: %v", err)
-	}
-	if after.Image != "registry.example/picoclaw-worker:0.2.0" || after.AgentProfile.ImageUpgradeRequired {
-		t.Fatalf("post-upgrade response = %+v, want latest image and no image upgrade flag", after)
-	}
-}
-
 func TestHandleManagerUpgradeUsesDefaultTemplateVersionWhenLocalImageListIsStale(t *testing.T) {
 	t.Skip("manager is Codex-only; sandbox manager image upgrades are obsolete")
 	t.Setenv("HOME", t.TempDir())
 	provider := sandboxtest.NewProvider()
 	provider.Images = []string{
-		"opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw-manager:0.1.0",
+		"opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/codex-manager:0.1.0",
 	}
-	hubSvc := mustNewLocalTemplateHubServiceWithoutWorkspace(t, "picoclaw-manager", hub.Template{
-		ID:          "picoclaw-manager",
-		Name:        "picoclaw-manager",
+	hubSvc := mustNewLocalTemplateHubServiceWithoutWorkspace(t, "codex-manager", hub.Template{
+		ID:          "codex-manager",
+		Name:        "codex-manager",
 		Description: "manager",
 		Role:        hub.TemplateRoleManager,
-		RuntimeKind: agent.RuntimeNamePicoClaw,
+		RuntimeKind: agent.RuntimeNameCodex,
 		Version:     "0.2.0",
-		Image:       "opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw-manager:0.2.0",
+		Image:       "opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/codex-manager:0.2.0",
 	})
 	statePath := filepath.Join(t.TempDir(), "agents.json")
 	if err := writeSeededAgents(statePath, []agent.Agent{
@@ -1993,8 +1509,8 @@ func TestHandleManagerUpgradeUsesDefaultTemplateVersionWhenLocalImageListIsStale
 			ID:           agent.ManagerUserID,
 			Name:         agent.ManagerName,
 			RuntimeID:    "rt-manager",
-			RuntimeKind:  agent.RuntimeKindPicoClawSandbox,
-			Image:        "opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw:2026.5.27",
+			RuntimeKind:  agent.RuntimeKindCodex,
+			Image:        "opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/codex:2026.5.27",
 			BoxID:        "box-manager-old",
 			Role:         agent.RoleManager,
 			Status:       string(agentruntime.StateRunning),
@@ -2012,7 +1528,7 @@ func TestHandleManagerUpgradeUsesDefaultTemplateVersionWhenLocalImageListIsStale
 		statePath,
 		agent.WithSandboxProvider(provider),
 		agent.WithHubService(hubSvc),
-		agent.WithBootstrapDefaultTemplates(config.BootstrapConfig{DefaultManagerTemplate: "local/picoclaw-manager"}),
+		agent.WithBootstrapDefaultTemplates(config.BootstrapConfig{DefaultManagerTemplate: "local/codex-manager"}),
 		agent.WithRuntime(fakeCompatRuntime{
 			new: func(_ context.Context, spec agentruntime.Spec) (agentruntime.Handle, error) {
 				newImage = spec.Image
@@ -2067,7 +1583,7 @@ func TestHandleManagerUpgradeUsesDefaultTemplateVersionWhenLocalImageListIsStale
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("POST upgrade status = %d, want %d; body=%s", resp.StatusCode, http.StatusOK, string(body))
 	}
-	wantImage := "opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw-manager:0.2.0"
+	wantImage := "opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/codex-manager:0.2.0"
 	if newImage != wantImage {
 		t.Fatalf("runtime New() image = %q, want %q", newImage, wantImage)
 	}
@@ -2315,156 +1831,6 @@ func TestHandleAgentsGetByIDNotFound(t *testing.T) {
 	}
 }
 
-func TestHandleAgentLogsStreamsGatewayLog(t *testing.T) {
-	t.Cleanup(agent.TestOnlySetSandboxProvider(sandboxtest.NewProvider()))
-
-	agentSvc := mustNewSeededService(t, []agent.Agent{
-		{ID: "u-alice", Name: "alice", BoxID: "box-123", Role: agent.RoleWorker, CreatedAt: time.Date(2026, 3, 28, 10, 0, 0, 0, time.UTC)},
-	})
-
-	var gotBoxID string
-	var gotCmd string
-	var gotArgs []string
-	agent.TestOnlySetGetBoxHook(func(_ *agent.Controller, _ context.Context, _ sandbox.Runtime, idOrName string) (sandbox.Instance, error) {
-		gotBoxID = idOrName
-		return sandboxtest.NewInstance(sandbox.Info{ID: idOrName, Name: "alice"}), nil
-	})
-	agent.TestOnlySetRunBoxCommandHook(func(_ *agent.Controller, _ context.Context, _ sandbox.Instance, name string, args []string, w io.Writer) (int, error) {
-		gotCmd = name
-		gotArgs = append([]string(nil), args...)
-		_, _ = io.WriteString(w, "hello\nworld\n")
-		return 0, nil
-	})
-	defer func() {
-		agent.TestOnlySetGetBoxHook(nil)
-		agent.TestOnlySetRunBoxCommandHook(nil)
-	}()
-
-	srv := &Handler{svc: agentSvc, agentEngine: agentengine.New(agentSvc), workspace: agentSvc.Workspace(), agentModels: agentSvc.Models(), agentRuntime: agentSvc}
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/agents/u-alice/logs?lines=80", nil)
-	rec := httptest.NewRecorder()
-
-	srv.Routes().ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
-	}
-	if gotBoxID != "box-123" {
-		t.Fatalf("getBox() idOrName = %q, want %q", gotBoxID, "box-123")
-	}
-	if gotCmd != "tail" {
-		t.Fatalf("command = %q, want %q", gotCmd, "tail")
-	}
-	if strings.Join(gotArgs, " ") != "-n 80 "+picoclawsandbox.BoxGatewayLogPath {
-		t.Fatalf("args = %q", gotArgs)
-	}
-	if rec.Body.String() != "hello\nworld\n" {
-		t.Fatalf("body = %q, want streamed logs", rec.Body.String())
-	}
-}
-
-func TestHandleAgentLogsReloadsStateBeforeStreaming(t *testing.T) {
-	t.Cleanup(agent.TestOnlySetSandboxProvider(sandboxtest.NewProvider()))
-
-	agentSvc, statePath := mustNewSeededServiceWithPath(t, []agent.Agent{
-		{ID: "u-alice", Name: "alice", BoxID: "box-old", Role: agent.RoleWorker, CreatedAt: time.Date(2026, 3, 28, 10, 0, 0, 0, time.UTC)},
-	})
-	if err := writeSeededAgents(statePath, []agent.Agent{
-		{ID: "u-alice", Name: "alice", BoxID: "box-new", Role: agent.RoleWorker, CreatedAt: time.Date(2026, 3, 28, 10, 0, 0, 0, time.UTC)},
-	}); err != nil {
-		t.Fatalf("writeSeededAgents() error = %v", err)
-	}
-
-	var gotBoxID string
-	agent.TestOnlySetGetBoxHook(func(_ *agent.Controller, _ context.Context, _ sandbox.Runtime, idOrName string) (sandbox.Instance, error) {
-		gotBoxID = idOrName
-		return sandboxtest.NewInstance(sandbox.Info{ID: idOrName, Name: "alice"}), nil
-	})
-	agent.TestOnlySetRunBoxCommandHook(func(_ *agent.Controller, _ context.Context, _ sandbox.Instance, _ string, _ []string, w io.Writer) (int, error) {
-		_, _ = io.WriteString(w, "line-1\n")
-		return 0, nil
-	})
-	defer func() {
-		agent.TestOnlySetGetBoxHook(nil)
-		agent.TestOnlySetRunBoxCommandHook(nil)
-	}()
-
-	srv := &Handler{svc: agentSvc, agentEngine: agentengine.New(agentSvc), workspace: agentSvc.Workspace(), agentModels: agentSvc.Models(), agentRuntime: agentSvc}
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/agents/u-alice/logs", nil)
-	rec := httptest.NewRecorder()
-
-	srv.Routes().ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
-	}
-	if gotBoxID != "box-new" {
-		t.Fatalf("getBox() idOrName = %q, want %q", gotBoxID, "box-new")
-	}
-}
-
-func TestHandleAgentStartStartsExistingBox(t *testing.T) {
-	t.Cleanup(agent.TestOnlySetSandboxProvider(sandboxtest.NewProvider()))
-
-	agentSvc, statePath := mustNewSeededServiceWithPath(t, []agent.Agent{
-		{ID: "u-alice", Name: "alice", BoxID: "box-old", Role: agent.RoleWorker, Status: "stopped", CreatedAt: time.Date(2026, 3, 28, 10, 0, 0, 0, time.UTC)},
-	})
-	if err := writeSeededAgents(statePath, []agent.Agent{
-		{ID: "u-alice", Name: "alice", BoxID: "box-new", Role: agent.RoleWorker, Status: "stopped", CreatedAt: time.Date(2026, 3, 28, 10, 0, 0, 0, time.UTC)},
-	}); err != nil {
-		t.Fatalf("writeSeededAgents() error = %v", err)
-	}
-
-	var gotBoxID string
-	var startCalls int
-	agent.TestOnlySetGetBoxHook(func(_ *agent.Controller, _ context.Context, _ sandbox.Runtime, idOrName string) (sandbox.Instance, error) {
-		gotBoxID = idOrName
-		return sandboxtest.NewInstance(sandbox.Info{ID: idOrName, Name: "alice", State: sandbox.StateStopped}), nil
-	})
-	agent.TestOnlySetStartBoxHook(func(_ *agent.Controller, _ context.Context, _ sandbox.Instance) error {
-		startCalls++
-		return nil
-	})
-	agent.TestOnlySetBoxInfoHook(func(_ *agent.Controller, _ context.Context, _ sandbox.Instance) (sandbox.Info, error) {
-		state := sandbox.StateStopped
-		if startCalls > 0 {
-			state = sandbox.StateRunning
-		}
-		return sandbox.Info{ID: "box-new", Name: "alice", State: state}, nil
-	})
-	defer func() {
-		agent.TestOnlySetGetBoxHook(nil)
-		agent.TestOnlySetStartBoxHook(nil)
-		agent.TestOnlySetBoxInfoHook(nil)
-	}()
-
-	srv := &Handler{svc: agentSvc, agentEngine: agentengine.New(agentSvc), workspace: agentSvc.Workspace(), agentModels: agentSvc.Models(), agentRuntime: agentSvc}
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/agents/u-alice/start", nil)
-	rec := httptest.NewRecorder()
-
-	srv.Routes().ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
-	}
-	if gotBoxID != "box-new" {
-		t.Fatalf("getBox() idOrName = %q, want %q", gotBoxID, "box-new")
-	}
-	if startCalls != 1 {
-		t.Fatalf("startBox() calls = %d, want 1", startCalls)
-	}
-	var got agentResponse
-	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-	if got.Status != "running" || got.BoxID != "box-new" {
-		t.Fatalf("agent = %+v, want running box-new", got)
-	}
-	if got.Runtime.SandboxProvider != "fake" {
-		t.Fatalf("runtime sandbox provider = %q, want fake", got.Runtime.SandboxProvider)
-	}
-}
-
 func TestHandleAgentStartEnsuresCodexBridge(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	t.Cleanup(agent.TestOnlySetSandboxProvider(sandboxtest.NewProvider()))
@@ -2568,64 +1934,6 @@ func TestHandleAgentApplyBindingsDefaultsLegacyRequestToFeishu(t *testing.T) {
 	}
 	if len(bridge.refreshCalls) != 1 || bridge.refreshCalls[0].agent.ID != agent.ManagerUserID || bridge.refreshCalls[0].channel != feishu.ChannelID {
 		t.Fatalf("RefreshAgentChannel() calls = %+v, want manager feishu once", bridge.refreshCalls)
-	}
-}
-
-func TestHandleAgentStopStopsExistingBox(t *testing.T) {
-	t.Cleanup(agent.TestOnlySetSandboxProvider(sandboxtest.NewProvider()))
-
-	agentSvc, statePath := mustNewSeededServiceWithPath(t, []agent.Agent{
-		{ID: "u-alice", Name: "alice", BoxID: "box-old", Role: agent.RoleWorker, Status: "running", CreatedAt: time.Date(2026, 3, 28, 10, 0, 0, 0, time.UTC)},
-	})
-	if err := writeSeededAgents(statePath, []agent.Agent{
-		{ID: "u-alice", Name: "alice", BoxID: "box-new", Role: agent.RoleWorker, Status: "running", CreatedAt: time.Date(2026, 3, 28, 10, 0, 0, 0, time.UTC)},
-	}); err != nil {
-		t.Fatalf("writeSeededAgents() error = %v", err)
-	}
-
-	var gotBoxID string
-	var stopCalls int
-	agent.TestOnlySetGetBoxHook(func(_ *agent.Controller, _ context.Context, _ sandbox.Runtime, idOrName string) (sandbox.Instance, error) {
-		gotBoxID = idOrName
-		return sandboxtest.NewInstance(sandbox.Info{ID: idOrName, Name: "alice", State: sandbox.StateRunning}), nil
-	})
-	agent.TestOnlySetStopBoxHook(func(_ *agent.Controller, _ context.Context, _ sandbox.Instance, opts sandbox.StopOptions) error {
-		stopCalls++
-		if opts != (sandbox.StopOptions{}) {
-			t.Fatalf("Stop() opts = %+v, want zero value", opts)
-		}
-		return nil
-	})
-	agent.TestOnlySetBoxInfoHook(func(_ *agent.Controller, _ context.Context, _ sandbox.Instance) (sandbox.Info, error) {
-		return sandbox.Info{ID: "box-new", Name: "alice", State: sandbox.StateStopped}, nil
-	})
-	defer func() {
-		agent.TestOnlySetGetBoxHook(nil)
-		agent.TestOnlySetStopBoxHook(nil)
-		agent.TestOnlySetBoxInfoHook(nil)
-	}()
-
-	srv := &Handler{svc: agentSvc, agentEngine: agentengine.New(agentSvc), workspace: agentSvc.Workspace(), agentModels: agentSvc.Models(), agentRuntime: agentSvc}
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/agents/u-alice/stop", nil)
-	rec := httptest.NewRecorder()
-
-	srv.Routes().ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
-	}
-	if gotBoxID != "box-new" {
-		t.Fatalf("getBox() idOrName = %q, want %q", gotBoxID, "box-new")
-	}
-	if stopCalls != 1 {
-		t.Fatalf("stopBox() calls = %d, want 1", stopCalls)
-	}
-	var got agent.Agent
-	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-	if got.Status != "stopped" || got.BoxID != "box-new" {
-		t.Fatalf("agent = %+v, want stopped box-new", got)
 	}
 }
 
@@ -2957,186 +2265,6 @@ func TestHandleAgentsCreateCodexWorkerEnsuresCodexBridge(t *testing.T) {
 	}
 }
 
-func TestHandleAgentsMCPServersClosedLoopForSupportedRuntimes(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
-	t.Cleanup(agent.TestOnlySetSandboxProvider(sandboxtest.NewProvider()))
-
-	codexRoot := t.TempDir()
-	codexHomes := map[string]string{}
-	statePath := filepath.Join(t.TempDir(), "agents.json")
-	codexManager := &apiFakeCodexManager{}
-	t.Cleanup(codexManager.close)
-	codexRT := codexruntime.New(codexruntime.Dependencies{
-		BinaryProvider: apiFakeCodexBinaryProvider{},
-		AgentHome: func(agentID string) (string, error) {
-			home := filepath.Join(codexRoot, agentID)
-			codexHomes[agentID] = home
-			return home, nil
-		},
-		ResolveAgent: func(h agentruntime.Handle) (codexruntime.AgentRef, error) {
-			return codexAgentRefFromStateFile(statePath, h.RuntimeID, agentruntime.Profile{
-				Provider: agent.ProviderAPI,
-				BaseURL:  "https://llm.example/v1",
-				APIKey:   "sk-test",
-				ModelID:  "model-1",
-			})
-		},
-		Manager: codexManager,
-	})
-
-	svc, err := agent.NewController(
-		config.ModelConfig{
-			Provider: config.ProviderLLMAPI,
-			BaseURL:  "https://llm.example/v1",
-			APIKey:   "sk-default",
-			ModelID:  "model-default",
-		},
-		config.ServerConfig{
-			ListenAddr:       "127.0.0.1:18080",
-			AdvertiseBaseURL: "http://127.0.0.1:18080",
-			AccessToken:      "shared-token",
-		},
-		"manager-image:test",
-		statePath,
-		agent.WithRuntime(codexRT),
-	)
-	if err != nil {
-		t.Fatalf("NewService() error = %v", err)
-	}
-	srv := &Handler{svc: svc, im: im.NewService(), agentEngine: agentengine.New(svc), workspace: svc.Workspace(), agentModels: svc.Models(), agentRuntime: svc}
-
-	mcpServers := map[string]any{
-		"context7": map[string]any{
-			"command": "uvx",
-			"args":    []any{"context7-mcp"},
-			"env": map[string]any{
-				"CONTEXT7_API_KEY": "secret",
-			},
-		},
-		"remote": map[string]any{
-			"url":                  "https://mcp.example.com/mcp",
-			"bearer_token_env_var": "MCP_TOKEN",
-		},
-	}
-
-	tests := []struct {
-		name        string
-		id          string
-		agentName   string
-		runtimeKind string
-		image       string
-		assertFile  func(t *testing.T, created agentResponse)
-	}{
-		{
-			name:        "openclaw",
-			id:          "u-openclawmcp",
-			agentName:   "openclawmcp",
-			runtimeKind: agent.RuntimeKindOpenClawSandbox,
-			image:       "openclaw-image:test",
-			assertFile: func(t *testing.T, created agentResponse) {
-				t.Helper()
-				home := testAgentHomeFromStatePath(statePath, created.ID)
-				cfg := readJSONMap(t, filepath.Join(openclawsandbox.Root(home), openclawsandbox.HostConfig))
-				mcpRoot, ok := cfg["mcp"].(map[string]any)
-				if !ok {
-					t.Fatalf("openclaw config missing mcp object: %+v", cfg["mcp"])
-				}
-				assertPersistedMCPServers(t, mcpRoot["servers"])
-			},
-		},
-		{
-			name:        "picoclaw",
-			id:          "u-picoclawmcp",
-			agentName:   "picoclawmcp",
-			runtimeKind: agent.RuntimeKindPicoClawSandbox,
-			image:       "picoclaw-image:test",
-			assertFile: func(t *testing.T, created agentResponse) {
-				t.Helper()
-				home := testAgentHomeFromStatePath(statePath, created.ID)
-				cfg := readJSONMap(t, filepath.Join(picoclawsandbox.Root(home), picoclawsandbox.HostConfig))
-				tools, ok := cfg["tools"].(map[string]any)
-				if !ok {
-					t.Fatalf("picoclaw config missing tools object: %+v", cfg["tools"])
-				}
-				mcpRoot, ok := tools["mcp"].(map[string]any)
-				if !ok {
-					t.Fatalf("picoclaw config missing tools.mcp object: %+v", tools["mcp"])
-				}
-				if enabled, _ := mcpRoot["enabled"].(bool); !enabled {
-					t.Fatalf("picoclaw tools.mcp.enabled = %v, want true", mcpRoot["enabled"])
-				}
-				assertPersistedMCPServers(t, mcpRoot["servers"])
-			},
-		},
-		{
-			name:        "codex",
-			id:          "u-codexmcp",
-			agentName:   "codexmcp",
-			runtimeKind: agent.RuntimeKindCodex,
-			assertFile: func(t *testing.T, created agentResponse) {
-				t.Helper()
-				home := codexHomes[agent.CanonicalID(created.ID)]
-				if strings.TrimSpace(home) == "" {
-					t.Fatalf("codex agent home for %s was not resolved", created.ID)
-				}
-				configPath := filepath.Join(home, ".codex", "home", "config.toml")
-				raw, err := os.ReadFile(configPath)
-				if err != nil {
-					t.Fatalf("read codex config %s: %v", configPath, err)
-				}
-				configText := string(raw)
-				for _, want := range []string{
-					`# BEGIN csgclaw-managed mcp`,
-					`[mcp_servers."context7"]`,
-					`command = "uvx"`,
-					`args = ["context7-mcp"]`,
-					`env = { "CONTEXT7_API_KEY" = "secret" }`,
-					`[mcp_servers."remote"]`,
-					`url = "https://mcp.example.com/mcp"`,
-					`bearer_token_env_var = "MCP_TOKEN"`,
-					`# END csgclaw-managed mcp`,
-				} {
-					if !strings.Contains(configText, want) {
-						t.Fatalf("codex config missing %q:\n%s", want, configText)
-					}
-				}
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			createBody := map[string]any{
-				"id":           tt.id,
-				"name":         tt.agentName,
-				"role":         agent.RoleWorker,
-				"runtime_kind": tt.runtimeKind,
-				"agent_profile": map[string]any{
-					"model_provider_id": "e2e-api",
-					"base_url":          "https://llm.example/v1",
-					"api_key":           "sk-test",
-					"model_id":          "model-1",
-				},
-			}
-			if tt.image != "" {
-				createBody["image"] = tt.image
-			}
-			created := doAgentJSON(t, srv, http.MethodPost, "/api/v1/agents", createBody, http.StatusCreated)
-			wantRuntime := agentruntime.RuntimeConfigForKind(tt.runtimeKind)
-			if created.RuntimeName != wantRuntime.Name || created.SandboxEnabled != wantRuntime.Sandboxed {
-				t.Fatalf("created runtime = %q/%t, want %q/%t", created.RuntimeName, created.SandboxEnabled, wantRuntime.Name, wantRuntime.Sandboxed)
-			}
-
-			updated := doAgentJSON(t, srv, http.MethodPatch, "/api/v1/agents/"+created.ID, map[string]any{
-				"field_mask": []string{"mcpServers"},
-				"mcpServers": mcpServers,
-			}, http.StatusOK)
-			assertMCPServersResponse(t, updated.MCPServers)
-			tt.assertFile(t, updated)
-		})
-	}
-}
-
 func TestAgentMCPServersResponsesRedactSecrets(t *testing.T) {
 	svc, _ := mustNewSeededServiceWithPath(t, nil)
 	srv := &Handler{svc: svc, agentEngine: agentengine.New(svc), workspace: svc.Workspace(), agentModels: svc.Models(), agentRuntime: svc}
@@ -3156,8 +2284,8 @@ func TestAgentMCPServersResponsesRedactSecrets(t *testing.T) {
 		"id":           "u-mcp-secrets",
 		"name":         "mcp-secrets",
 		"role":         agent.RoleWorker,
-		"runtime_kind": agent.RuntimeKindPicoClawSandbox,
-		"image":        "picoclaw-image:test",
+		"runtime_kind": agent.RuntimeKindCodex,
+		"image":        "codex-image:test",
 		"agent_profile": map[string]any{
 			"profile_complete": true,
 		},
@@ -3633,7 +2761,7 @@ func TestHandleAgentsCreateManagerRejectsNonCodexRuntime(t *testing.T) {
 
 	svc := mustNewService(t)
 	srv := &Handler{svc: svc, agentEngine: agentengine.New(svc), workspace: svc.Workspace(), agentModels: svc.Models(), agentRuntime: svc}
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/agents", strings.NewReader(`{"id":"manager","name":"manager","runtime_kind":"openclaw_sandbox"}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/agents", strings.NewReader(`{"id":"manager","name":"manager","runtime_kind":"dsh"}`))
 	rec := httptest.NewRecorder()
 
 	srv.Routes().ServeHTTP(rec, req)
@@ -3677,7 +2805,7 @@ func TestHandleAgentsCreateReplaceUsesUnifiedServiceEntry(t *testing.T) {
 	t.Cleanup(agent.TestOnlySetSandboxProvider(sandboxtest.NewProvider()))
 
 	svc := mustNewService(t)
-	if err := agent.WithBootstrapDefaultTemplates(config.BootstrapConfig{DefaultWorkerTemplate: "builtin.openclaw-worker"})(svc); err != nil {
+	if err := agent.WithBootstrapDefaultTemplates(config.BootstrapConfig{DefaultWorkerTemplate: "builtin.dsh-worker"})(svc); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := svc.CreateRecord(context.Background(), agent.CreateRequest{
@@ -3706,8 +2834,8 @@ func TestHandleAgentsCreateReplaceUsesUnifiedServiceEntry(t *testing.T) {
 	if got.ID != "agent-alice" || got.Name != "alice-v2" || got.Role != agent.RoleWorker {
 		t.Fatalf("agent = %+v, want replaced worker", got)
 	}
-	if got.RuntimeKind != agent.RuntimeKindOpenClawSandbox {
-		t.Fatalf("agent runtime kind = %q, want %q", got.RuntimeKind, agent.RuntimeKindOpenClawSandbox)
+	if got.RuntimeKind != agent.RuntimeKindDSH {
+		t.Fatalf("agent runtime kind = %q, want %q", got.RuntimeKind, agent.RuntimeKindDSH)
 	}
 }
 
@@ -3716,7 +2844,7 @@ func TestHandleAgentsCreateReplaceFieldMaskMergesInService(t *testing.T) {
 	t.Cleanup(agent.TestOnlySetSandboxProvider(sandboxtest.NewProvider()))
 
 	svc := mustNewService(t)
-	if err := agent.WithBootstrapDefaultTemplates(config.BootstrapConfig{DefaultWorkerTemplate: "builtin.openclaw-worker"})(svc); err != nil {
+	if err := agent.WithBootstrapDefaultTemplates(config.BootstrapConfig{DefaultWorkerTemplate: "builtin.dsh-worker"})(svc); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := svc.CreateRecord(context.Background(), agent.CreateRequest{
@@ -3744,7 +2872,7 @@ func TestHandleAgentsCreateReplaceFieldMaskMergesInService(t *testing.T) {
 	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if got.ID != "agent-alice" || got.Name != "alice-v2" || got.Description != "worker" || got.Image != "agent-image:v1" {
+	if got.ID != "agent-alice" || got.Name != "alice-v2" || got.Description != "worker" || got.Image != "" {
 		t.Fatalf("agent = %+v, want masked replace preserving unmasked fields", got)
 	}
 
@@ -3767,7 +2895,7 @@ func TestHandleAgentsCreateReplaceIDOnlyRecreatesWithoutClearingSpec(t *testing.
 	createCalls := 0
 	created := agent.Agent{
 		ID: "agent-alice", Name: "alice", Description: "keep description", Instructions: "keep instructions",
-		Image: "agent-image:v1", Role: agent.RoleWorker, RuntimeKind: agent.RuntimeKindPicoClawSandbox,
+		Image: "agent-image:v1", Role: agent.RoleWorker, RuntimeKind: agent.RuntimeKindCodex,
 		RuntimeID: "rt-agent-alice", BoxID: "box-alice-existing", Status: string(agentruntime.StateRunning),
 		AgentProfile: agent.AgentProfile{
 			Provider: agent.ProviderAPI, BaseURL: "http://127.0.0.1:4000", APIKey: "secret", ModelID: "model-a", ProfileComplete: true,
@@ -3775,7 +2903,7 @@ func TestHandleAgentsCreateReplaceIDOnlyRecreatesWithoutClearingSpec(t *testing.
 		ProfileComplete: true, CreatedAt: time.Date(2026, 8, 28, 0, 0, 0, 0, time.UTC),
 	}
 	svc := mustNewSeededServiceWithOptions(t, []agent.Agent{created}, agent.WithRuntime(fakeCompatRuntime{
-		kind: agent.RuntimeKindPicoClawSandbox,
+		kind: agent.RuntimeKindCodex,
 		new: func(_ context.Context, spec agentruntime.Spec) (agentruntime.Handle, error) {
 			createCalls++
 			return agentruntime.Handle{RuntimeID: spec.RuntimeID, HandleID: fmt.Sprintf("box-alice-%d", createCalls)}, nil
@@ -3786,7 +2914,7 @@ func TestHandleAgentsCreateReplaceIDOnlyRecreatesWithoutClearingSpec(t *testing.
 	handler := &Handler{
 		svc: svc,
 		hub: mustNewLocalTemplateHubServiceWithoutWorkspace(t, "unused", hub.Template{
-			Name: "unused", Role: hub.TemplateRoleWorker, RuntimeKind: agent.RuntimeNamePicoClaw, Image: "unused:test",
+			Name: "unused", Role: hub.TemplateRoleWorker, RuntimeKind: agent.RuntimeNameCodex, Image: "unused:test",
 		}), agentEngine: agentengine.New(svc), workspace: svc.Workspace(), agentModels: svc.Models(), agentRuntime: svc,
 	}
 	recorder := httptest.NewRecorder()
@@ -3972,19 +3100,17 @@ func TestFilterHubTemplatesForConfiguredProvider(t *testing.T) {
 	items := []hub.Template{
 		{ID: "codex-worker", Role: hub.TemplateRoleWorker, RuntimeKind: agent.RuntimeKindCodex, Source: hub.RegistryRef{Kind: hub.RegistryKindRemote}},
 		{ID: "codex-manager", Role: hub.TemplateRoleManager, RuntimeKind: agent.RuntimeKindCodex, Source: hub.RegistryRef{Kind: hub.RegistryKindBuiltin}},
-		{ID: "dsh-worker", Role: hub.TemplateRoleWorker, RuntimeKind: agent.RuntimeKindDSH, Source: hub.RegistryRef{Kind: hub.RegistryKindBuiltin}},
-		{ID: "openclaw-worker", Role: hub.TemplateRoleWorker, RuntimeKind: "openclaw", Source: hub.RegistryRef{Kind: hub.RegistryKindRemote}},
+		{ID: "dsh-worker", Role: hub.TemplateRoleWorker, RuntimeKind: "dsh", Source: hub.RegistryRef{Kind: hub.RegistryKindRemote}},
 		{ID: "local-codex-worker", Role: hub.TemplateRoleWorker, RuntimeKind: agent.RuntimeKindCodex, Source: hub.RegistryRef{Kind: hub.RegistryKindLocal}},
-		{ID: "local-openclaw-worker", Role: hub.TemplateRoleWorker, RuntimeKind: "openclaw", Source: hub.RegistryRef{Kind: hub.RegistryKindLocal}},
-		{ID: "picoclaw-worker", Role: hub.TemplateRoleWorker, RuntimeKind: agent.RuntimeKindPicoClawSandbox, Source: hub.RegistryRef{Kind: hub.RegistryKindBuiltin}},
+		{ID: "local-dsh-worker", Role: hub.TemplateRoleWorker, RuntimeKind: "dsh", Source: hub.RegistryRef{Kind: hub.RegistryKindLocal}},
 	}
 	tests := []struct {
 		name     string
 		provider string
 		wantIDs  []string
 	}{
-		{name: "csghub lists only host runtime workers including local templates", provider: config.CSGHubProvider, wantIDs: []string{"codex-worker", "dsh-worker", "local-codex-worker"}},
-		{name: "other providers are unchanged", provider: config.DockerProvider, wantIDs: []string{"codex-worker", "codex-manager", "dsh-worker", "openclaw-worker", "local-codex-worker", "local-openclaw-worker", "picoclaw-worker"}},
+		{name: "csghub lists only host runtime workers including local templates", provider: config.CSGHubProvider, wantIDs: []string{"codex-worker", "dsh-worker", "local-codex-worker", "local-dsh-worker"}},
+		{name: "other providers are unchanged", provider: config.DockerProvider, wantIDs: []string{"codex-worker", "codex-manager", "dsh-worker", "local-codex-worker", "local-dsh-worker"}},
 	}
 
 	for _, tt := range tests {
@@ -4141,7 +3267,7 @@ func TestHandleAgentWorkspaceFileReturnsContent(t *testing.T) {
 		Spec: agent.CreateAgentSpec{
 			Name:        "alice",
 			Role:        agent.RoleWorker,
-			RuntimeKind: agent.RuntimeKindPicoClawSandbox,
+			RuntimeKind: agent.RuntimeKindCodex,
 			Image:       "worker-image:test",
 			AgentProfile: agent.AgentProfile{
 				ProfileComplete: true,
@@ -4802,14 +3928,14 @@ func newAgentMCPManagementTestServer(t *testing.T) (*Handler, *agent.Controller,
 	t.Setenv("HOME", t.TempDir())
 	t.Cleanup(agent.TestOnlySetSandboxProvider(sandboxtest.NewProvider()))
 
-	hubSvc := mustNewLocalTemplateHubServiceWithoutWorkspace(t, "picoclaw-worker", hub.Template{
-		ID:          "picoclaw-worker",
-		Name:        "picoclaw-worker",
-		Description: "PicoClaw worker",
+	hubSvc := mustNewLocalTemplateHubServiceWithoutWorkspace(t, "codex-worker", hub.Template{
+		ID:          "codex-worker",
+		Name:        "codex-worker",
+		Description: "Codex worker",
 		Role:        hub.TemplateRoleWorker,
-		RuntimeKind: agent.RuntimeNamePicoClaw,
+		RuntimeKind: agent.RuntimeNameCodex,
 		Version:     "test",
-		Image:       "picoclaw-image:test",
+		Image:       "codex-image:test",
 	})
 	mcpSvc := mcp.NewService()
 
@@ -4821,7 +3947,7 @@ func newAgentMCPManagementTestServer(t *testing.T) (*Handler, *agent.Controller,
 	}, config.ServerConfig{ListenAddr: "127.0.0.1:18080", AccessToken: "test-server-token"}, "manager-image:test", "",
 		agent.WithHubService(hubSvc),
 		agent.WithBootstrapDefaultTemplates(config.BootstrapConfig{
-			DefaultWorkerTemplate: "local/picoclaw-worker",
+			DefaultWorkerTemplate: "local/codex-worker",
 		}),
 	)
 	if err != nil {
@@ -4832,8 +3958,8 @@ func newAgentMCPManagementTestServer(t *testing.T) (*Handler, *agent.Controller,
 		Spec: agent.CreateAgentSpec{
 			Name:        "mcp-agent",
 			Role:        agent.RoleWorker,
-			RuntimeKind: agent.RuntimeKindPicoClawSandbox,
-			Image:       "picoclaw-image:test",
+			RuntimeKind: agent.RuntimeKindCodex,
+			Image:       "codex-image:test",
 			AgentProfile: agent.AgentProfile{
 				ProfileComplete: true,
 			},
@@ -5801,7 +4927,7 @@ func TestHandleHubTemplatesPublishesAgentSnapshot(t *testing.T) {
 			ID:          "u-alice",
 			Name:        "alice",
 			Description: "review worker",
-			RuntimeKind: agent.RuntimeKindPicoClawSandbox,
+			RuntimeKind: agent.RuntimeKindCodex,
 			Image:       "worker-image:1",
 		},
 	})
@@ -6053,7 +5179,7 @@ func TestHandleHubTemplatesRequiresOpenCSGLoginForOfficialPublish(t *testing.T) 
 func TestHandleHubTemplatesRejectsInvalidPublishName(t *testing.T) {
 	svc := mustNewService(t)
 	created, err := svc.CreateRecord(context.Background(), agent.CreateRequest{Spec: agent.CreateAgentSpec{
-		ID: "u-alice", Name: "alice", RuntimeKind: agent.RuntimeKindPicoClawSandbox, Image: "worker-image:1",
+		ID: "u-alice", Name: "alice", RuntimeKind: agent.RuntimeKindCodex, Image: "worker-image:1",
 	}})
 	if err != nil {
 		t.Fatalf("Create() error = %v", err)
@@ -6094,10 +5220,6 @@ func TestValidateAgentTemplatePublishTarget(t *testing.T) {
 	}{
 		{name: "Codex to community", runtimeKind: agent.RuntimeKindCodex, registry: "official"},
 		{name: "Codex to local", runtimeKind: agent.RuntimeKindCodex, registry: "local"},
-		{name: "DSH to community", runtimeKind: agent.RuntimeKindDSH, registry: "official"},
-		{name: "DSH to local", runtimeKind: agent.RuntimeKindDSH, registry: "local"},
-		{name: "OpenClaw to local", runtimeKind: agent.RuntimeKindOpenClawSandbox, registry: "local"},
-		{name: "OpenClaw to community", runtimeKind: agent.RuntimeKindOpenClawSandbox, registry: "official", wantErr: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -6119,7 +5241,7 @@ func TestHandleHubTemplatesPublishesAgentSnapshotToDefaultRegistryWhenOmitted(t 
 			ID:          "u-alice",
 			Name:        "alice",
 			Description: "review worker",
-			RuntimeKind: agent.RuntimeKindPicoClawSandbox,
+			RuntimeKind: agent.RuntimeKindCodex,
 			Image:       "worker-image:1",
 		},
 	})
@@ -6290,7 +5412,7 @@ func TestHandleAgentsCreateReplaceManagerRejectsNonCodexRuntime(t *testing.T) {
 	}
 
 	srv := &Handler{svc: svc, agentEngine: agentengine.New(svc), workspace: svc.Workspace(), agentModels: svc.Models(), agentRuntime: svc}
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/agents", strings.NewReader(`{"id":"u-manager","name":"manager","replace":true,"runtime_name":"openclaw","sandbox_enabled":true}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/agents", strings.NewReader(`{"id":"u-manager","name":"manager","replace":true,"runtime_name":"dsh","sandbox_enabled":true}`))
 	rec := httptest.NewRecorder()
 
 	srv.Routes().ServeHTTP(rec, req)
@@ -6346,7 +5468,7 @@ func TestHandleAgentsPatchManagerRejectsNonCodexRuntime(t *testing.T) {
 	}
 
 	srv := &Handler{svc: svc, agentEngine: agentengine.New(svc), workspace: svc.Workspace(), agentModels: svc.Models(), agentRuntime: svc}
-	req := httptest.NewRequest(http.MethodPatch, "/api/v1/agents/u-manager", strings.NewReader(`{"runtime":{"name":"openclaw","sandbox_enabled":true}}`))
+	req := httptest.NewRequest(http.MethodPatch, "/api/v1/agents/u-manager", strings.NewReader(`{"runtime":{"name":"dsh","sandbox_enabled":true}}`))
 	rec := httptest.NewRecorder()
 
 	srv.Routes().ServeHTTP(rec, req)
@@ -6377,9 +5499,9 @@ func TestHandleAgentsCreateReplaceManagerIgnoresImageAndUsesRuntimeTemplate(t *t
 	if err != nil {
 		t.Fatalf("hub.NewService() error = %v", err)
 	}
-	openClawTemplate, err := hubSvc.Get(context.Background(), "builtin.openclaw-manager")
+	runtimeTemplate, err := hubSvc.Get(context.Background(), "builtin.manager-codex")
 	if err != nil {
-		t.Fatalf("Get(openclaw-manager) error = %v", err)
+		t.Fatalf("Get(dsh-manager) error = %v", err)
 	}
 
 	srv := httptest.NewServer((&Handler{svc: svc, agentEngine: agentengine.New(svc), workspace: svc.Workspace(), agentModels: svc.Models(), agentRuntime: svc}).Routes())
@@ -6388,7 +5510,7 @@ func TestHandleAgentsCreateReplaceManagerIgnoresImageAndUsesRuntimeTemplate(t *t
 	resp, err := http.Post(
 		srv.URL+"/api/v1/agents",
 		"application/json",
-		strings.NewReader(`{"id":"u-manager","name":"manager","replace":true,"runtime_name":"openclaw","sandbox_enabled":true,"image":"client:must-not-win"}`),
+		strings.NewReader(`{"id":"u-manager","name":"manager","replace":true,"runtime_name":"dsh","sandbox_enabled":true,"image":"client:must-not-win"}`),
 	)
 	if err != nil {
 		t.Fatalf("POST /api/v1/agents error = %v", err)
@@ -6405,11 +5527,11 @@ func TestHandleAgentsCreateReplaceManagerIgnoresImageAndUsesRuntimeTemplate(t *t
 	if err := json.Unmarshal(body, &got); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if got.RuntimeKind != agent.RuntimeKindOpenClawSandbox {
-		t.Fatalf("runtime_kind = %q, want %q", got.RuntimeKind, agent.RuntimeKindOpenClawSandbox)
+	if got.RuntimeKind != agent.RuntimeKindDSH {
+		t.Fatalf("runtime_kind = %q, want %q", got.RuntimeKind, agent.RuntimeKindDSH)
 	}
-	if got.Image != openClawTemplate.Image {
-		t.Fatalf("image = %q, want runtime template image %q", got.Image, openClawTemplate.Image)
+	if got.Image != runtimeTemplate.Image {
+		t.Fatalf("image = %q, want runtime template image %q", got.Image, runtimeTemplate.Image)
 	}
 }
 
@@ -6746,11 +5868,11 @@ func TestHandleUsersCreateWithParticipantServiceCreatesWorkerAgent(t *testing.T)
 	if created.Name != "qa" || created.Role != agent.RoleWorker {
 		t.Fatalf("agent = %+v, want qa worker", created)
 	}
-	if created.RuntimeKind != agent.RuntimeKindPicoClawSandbox {
-		t.Fatalf("agent runtime kind = %q, want %q", created.RuntimeKind, agent.RuntimeKindPicoClawSandbox)
+	if created.RuntimeKind != agent.RuntimeKindCodex {
+		t.Fatalf("agent runtime kind = %q, want %q", created.RuntimeKind, agent.RuntimeKindCodex)
 	}
-	if strings.TrimSpace(created.Image) == "" {
-		t.Fatal("agent Image = empty, want default sandbox image")
+	if created.Image != "" {
+		t.Fatal("host runtime has an unexpected sandbox image")
 	}
 
 	participants := participantSvc.List(participant.ListOptions{Channel: participant.ChannelCSGClaw, Type: participant.TypeAgent})
@@ -8089,7 +7211,7 @@ func TestHandleParticipantSendMessagePreservesMetadata(t *testing.T) {
 				"source_message_id": "msg-user",
 				"payload_flags": {"reasoning": true}
 			},
-			"openclaw": {
+			"dsh": {
 				"delivery_kind": "tool",
 				"request_id": "msg-user",
 				"source_message_id": "msg-user",
@@ -8123,88 +7245,20 @@ func TestHandleParticipantSendMessagePreservesMetadata(t *testing.T) {
 	if reply.ID == "" {
 		t.Fatalf("sent message %q not found in room messages", sent.MessageID)
 	}
-	openclaw, ok := reply.Metadata["openclaw"].(map[string]any)
+	dsh, ok := reply.Metadata["dsh"].(map[string]any)
 	if !ok {
-		t.Fatalf("reply.Metadata = %#v, want openclaw object", reply.Metadata)
+		t.Fatalf("reply.Metadata = %#v, want dsh object", reply.Metadata)
 	}
-	if openclaw["delivery_kind"] != "tool" || openclaw["request_id"] != "msg-user" {
-		t.Fatalf("openclaw metadata = %#v, want tool delivery for msg-user", openclaw)
+	if dsh["delivery_kind"] != "tool" || dsh["request_id"] != "msg-user" {
+		t.Fatalf("dsh metadata = %#v, want tool delivery for msg-user", dsh)
 	}
 	codex, ok := reply.Metadata["codex"].(map[string]any)
 	if !ok || codex["delivery_kind"] != "tool" || codex["request_id"] != "msg-user" {
 		t.Fatalf("codex metadata = %#v, want tool delivery for msg-user", reply.Metadata["codex"])
 	}
-	flags, ok := openclaw["payload_flags"].(map[string]any)
+	flags, ok := dsh["payload_flags"].(map[string]any)
 	if !ok || flags["reasoning"] != true {
-		t.Fatalf("payload_flags = %#v, want reasoning=true", openclaw["payload_flags"])
-	}
-}
-
-func TestHandleBotSendMessageAcceptsPicoClawThreadContext(t *testing.T) {
-	now := time.Now().UTC()
-	imSvc := im.NewServiceFromBootstrap(im.Bootstrap{
-		CurrentUserID: "u-admin",
-		Users: []im.User{
-			{ID: "u-admin", Name: "admin"},
-			{ID: "manager", Name: "manager"},
-		},
-		Rooms: []im.Room{
-			{
-				ID:       "room-1",
-				IsDirect: true,
-				Members:  []string{"u-admin", "manager"},
-				Messages: []im.Message{
-					{ID: "msg-root", SenderID: "manager", Content: "How can I help?", CreatedAt: now},
-				},
-			},
-		},
-	})
-	if _, _, err := imSvc.StartThread(im.StartThreadRequest{RoomID: "room-1", RootMessageID: "msg-root"}); err != nil {
-		t.Fatalf("StartThread() error = %v", err)
-	}
-
-	srv := &Handler{im: imSvc, participantBridge: im.NewParticipantBridge(""), serverNoAuth: true}
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/channels/csgclaw/participants/manager/messages", strings.NewReader(`{
-		"chat_id": "room-1",
-		"content": "direct PicoClaw thread answer",
-		"context": {
-			"channel": "csgclaw",
-			"chat_id": "room-1",
-			"chat_type": "direct",
-			"topic_id": "msg-root"
-		}
-	}`))
-	rec := httptest.NewRecorder()
-	srv.Routes().ServeHTTP(rec, req)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
-	}
-
-	var sent struct {
-		MessageID string `json:"message_id"`
-	}
-	if err := json.NewDecoder(rec.Body).Decode(&sent); err != nil {
-		t.Fatalf("decode send response: %v", err)
-	}
-	messages, err := imSvc.ListMessagesWithOptions("room-1", im.ListMessagesOptions{IncludeThreadReplies: true})
-	if err != nil {
-		t.Fatalf("ListMessagesWithOptions() error = %v", err)
-	}
-	var reply im.Message
-	for _, message := range messages {
-		if message.ID == sent.MessageID {
-			reply = message
-			break
-		}
-	}
-	if reply.ID == "" {
-		t.Fatalf("sent message %q not found in room messages", sent.MessageID)
-	}
-	if reply.Content != "direct PicoClaw thread answer" {
-		t.Fatalf("reply.Content = %q, want direct PicoClaw thread answer", reply.Content)
-	}
-	if reply.RelatesTo == nil || reply.RelatesTo.RelType != im.RelationTypeThread || reply.RelatesTo.EventID != "msg-root" {
-		t.Fatalf("reply.RelatesTo = %+v, want m.thread -> msg-root", reply.RelatesTo)
+		t.Fatalf("payload_flags = %#v, want reasoning=true", dsh["payload_flags"])
 	}
 }
 
@@ -8598,7 +7652,10 @@ func TestPublishParticipantEventReensuresRunningWorkerLifecycle(t *testing.T) {
 		t.Fatalf("room = %+v, want one message", room)
 	}
 
-	srv := &Handler{svc: svc, im: imSvc, participantBridge: im.NewParticipantBridge(""), agentEngine: agentengine.New(svc), workspace: svc.Workspace(), agentModels: svc.Models(), agentRuntime: svc}
+	engine := agentengine.New(svc)
+	completed := make(chan error, 1)
+	t.Cleanup(func() { _ = svc.Close() })
+	srv := &Handler{svc: svc, im: imSvc, participantBridge: im.NewParticipantBridge(""), agentEngine: getErrorEngine{Interface: engine, agents: completedAgentUpdate{AgentInterface: engine.Agents(), done: completed}}, workspace: svc.Workspace(), agentModels: svc.Models(), agentRuntime: svc}
 	srv.PublishParticipantEvent(im.Event{
 		Type:    im.EventTypeMessageCreated,
 		RoomID:  "room-1",
@@ -8616,6 +7673,16 @@ func TestPublishParticipantEventReensuresRunningWorkerLifecycle(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("timed out waiting for running worker lifecycle recovery")
 	}
+	// Wait for persistence after the Runtime callback, before TempDir cleanup.
+	select {
+	case err := <-completed:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("participant recovery did not finish persisting state")
+	}
+
 }
 
 func TestPublishParticipantEventStartsStoppedWorker(t *testing.T) {
@@ -8681,7 +7748,10 @@ func TestPublishParticipantEventStartsStoppedWorker(t *testing.T) {
 		t.Fatalf("room = %+v, want one message", room)
 	}
 
-	srv := &Handler{svc: svc, im: imSvc, participantBridge: im.NewParticipantBridge(""), agentEngine: agentengine.New(svc), workspace: svc.Workspace(), agentModels: svc.Models(), agentRuntime: svc}
+	engine := agentengine.New(svc)
+	completed := make(chan error, 1)
+	t.Cleanup(func() { _ = svc.Close() })
+	srv := &Handler{svc: svc, im: imSvc, participantBridge: im.NewParticipantBridge(""), agentEngine: getErrorEngine{Interface: engine, agents: completedAgentUpdate{AgentInterface: engine.Agents(), done: completed}}, workspace: svc.Workspace(), agentModels: svc.Models(), agentRuntime: svc}
 	srv.PublishParticipantEvent(im.Event{
 		Type:    im.EventTypeMessageCreated,
 		RoomID:  "room-1",
@@ -8701,6 +7771,16 @@ func TestPublishParticipantEventStartsStoppedWorker(t *testing.T) {
 	if err := svc.WithAgentLifecycle(t.Context(), "u-worker", func(context.Context) error { return nil }); err != nil {
 		t.Fatal(err)
 	}
+	// Wait for persistence after the Runtime callback, before TempDir cleanup.
+	select {
+	case err := <-completed:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("participant recovery did not finish persisting state")
+	}
+
 }
 
 func TestHandleBotEventsRequeuesWhenSSEWriteFails(t *testing.T) {
@@ -9374,7 +8454,7 @@ func normalizeSeededAgents(agents []agent.Agent) []agent.Agent {
 		case agent.RoleManager:
 			out[i].RuntimeKind = agent.RuntimeKindCodex
 		case agent.RoleWorker:
-			out[i].RuntimeKind = agent.RuntimeKindPicoClawSandbox
+			out[i].RuntimeKind = agent.RuntimeKindCodex
 			if strings.TrimSpace(out[i].Image) == "" {
 				out[i].Image = "manager-image:test"
 			}
@@ -9504,6 +8584,36 @@ func TestHandleMessagesReadsLiveStateWithoutReloadingWorkspace(t *testing.T) {
 		}
 		if !cleared && (len(got) != 1 || got[0].ID != "msg-1") {
 			t.Fatalf("messages = %+v, want msg-1", got)
+		}
+	}
+}
+
+func (f templateCodexTestRuntime) Provision(ctx context.Context, req agentruntime.ProvisionRequest) error {
+	if f.Kind() != agent.RuntimeKindCodex {
+		return nil
+	}
+	return codexruntime.New(codexruntime.Dependencies{AgentHome: func(id string) (string, error) {
+		home, err := os.UserHomeDir()
+		return filepath.Join(home, ".csgclaw", "agents", id), err
+	}}).Provision(ctx, req)
+}
+
+func TestBootstrapConfigExposesOnlyHostRuntimes(t *testing.T) {
+	for _, provider := range []string{config.BoxLiteProvider, config.DockerProvider, config.CSGHubProvider} {
+		got := bootstrapConfigView(context.Background(), config.Config{Sandbox: config.SandboxConfig{Provider: provider}}, nil, nil)
+		if !slices.Equal(got.SupportedRuntimeKinds, []string{"codex", "dsh"}) {
+			t.Fatalf("supported runtimes: %v", got.SupportedRuntimeKinds)
+		}
+		if len(got.WorkerRuntimeChoices) != 2 {
+			t.Fatalf("worker runtimes: %+v", got.WorkerRuntimeChoices)
+		}
+		for i, name := range []string{"codex", "dsh"} {
+			if choice := got.WorkerRuntimeChoices[i]; choice.Name != name || choice.SandboxEnabled {
+				t.Fatalf("worker runtime: %+v", choice)
+			}
+		}
+		if len(got.RuntimeDefaultImages) != 0 {
+			t.Fatalf("unexpected runtime images: %v", got.RuntimeDefaultImages)
 		}
 	}
 }

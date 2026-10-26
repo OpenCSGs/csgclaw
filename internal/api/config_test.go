@@ -123,7 +123,7 @@ func TestHandleServerConfigGetPut(t *testing.T) {
 		SandboxProvider:        "docker",
 		HubLocalPath:           "/tmp/team-hub",
 		DefaultManagerTemplate: "builtin.manager-codex",
-		DefaultWorkerTemplate:  "builtin.picoclaw-worker",
+		DefaultWorkerTemplate:  "builtin.codex-worker",
 	})
 	if err != nil {
 		t.Fatalf("marshal PUT body: %v", err)
@@ -291,7 +291,7 @@ func TestHandleServerConfigValidatesBootstrapWithHubBeforeSave(t *testing.T) {
 		ShowUpgrade:            false,
 		SandboxProvider:        "docker",
 		DefaultManagerTemplate: "builtin.manager-codex",
-		DefaultWorkerTemplate:  "builtin.picoclaw-worker",
+		DefaultWorkerTemplate:  "builtin.codex-worker",
 	})
 	if err != nil {
 		t.Fatalf("marshal PUT body: %v", err)

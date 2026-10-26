@@ -817,27 +817,27 @@ describe("ConversationPane", () => {
     const user = userEvent.setup();
     const weatherUser: IMUser = {
       avatar: "O",
-      id: "user-openclaw-weather",
-      name: "openclaw-weather",
+      id: "user-codex-weather",
+      name: "codex-weather",
       role: "worker",
     };
     const userAliases = new Map<string, IMUser>([
       ...usersById,
       [weatherUser.id, weatherUser],
-      ["openclaw-weather", weatherUser],
+      ["codex-weather", weatherUser],
     ]);
     const onOpenAgentDetail = vi.fn();
     const onPreviewUser = vi.fn();
 
     renderThreadPane({
-      agents: [{ id: "openclaw-weather", name: "OpenClaw weather", role: "worker" }],
+      agents: [{ id: "codex-weather", name: "Codex weather", role: "worker" }],
       conversationMembers: [users[0], weatherUser],
       messages: [
         {
           content: "Weather report",
           created_at: "2026-05-25T08:13:00Z",
           id: "msg-weather",
-          sender_id: "openclaw-weather",
+          sender_id: "codex-weather",
         },
       ],
       onOpenAgentDetail,
@@ -845,10 +845,10 @@ describe("ConversationPane", () => {
       usersByIdOverride: userAliases,
     });
 
-    const avatar = screen.getByRole("button", { name: "agentDetailPanel openclaw-weather" });
+    const avatar = screen.getByRole("button", { name: "agentDetailPanel codex-weather" });
     await user.click(avatar);
 
-    expect(onOpenAgentDetail).toHaveBeenCalledWith(expect.objectContaining({ id: "openclaw-weather" }), avatar);
+    expect(onOpenAgentDetail).toHaveBeenCalledWith(expect.objectContaining({ id: "codex-weather" }), avatar);
     expect(onPreviewUser).not.toHaveBeenCalled();
   });
 

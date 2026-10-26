@@ -15,7 +15,6 @@ import {
   agentRuntimePollSettled,
   agentRuntimeStatusDetailLabel,
   isAgentGatewayDegraded,
-  isAgentGatewayAvailabilityUnknown,
   isAgentRuntimeStartupPending,
   agentStatusLabel,
   agentDraftMissingRequiredEnv,
@@ -36,7 +35,6 @@ import {
   agentPageLLMProfileChanged,
   agentProfilePageSaveDisabled,
   isAgentProfileDraftComplete,
-  isBuiltinOpenClawWorkerTemplate,
   isAgentRunning,
   mergeAgentIntoList,
   isNotificationBotAgent,
@@ -53,7 +51,6 @@ import {
   notificationPushWebhookPathForBot,
   parseJSONMap,
   pickDefaultAgentTemplate,
-  createAgentSelectableTemplates,
   providerNeedsAuth,
   resolvedNotifierWebhookOrigin,
   resolveRuntimeSelection,
@@ -91,7 +88,7 @@ describe("agent model helpers", () => {
       instructions: "keep answers short",
       name: "Worker",
       role: "worker",
-      runtime_kind: "openclaw_sandbox",
+      runtime_kind: "dsh",
     });
 
     expect(draft).toMatchObject({
@@ -104,7 +101,7 @@ describe("agent model helpers", () => {
       name: "Worker",
       provider: "api",
       reasoning_effort: "auto",
-      runtime_kind: "openclaw_sandbox",
+      runtime_kind: "dsh",
     });
     expect(draft.envRows).toEqual([
       { key: "alpha", value: "two" },
@@ -171,7 +168,7 @@ describe("agent model helpers", () => {
         [
           {
             id: "u-manager",
-            image: "registry.example/opencsghq/picoclaw:2026.05.22",
+            image: "registry.example/opencsghq/codex:2026.05.22",
             agent_profile: {
               image_upgrade_required: true,
               model_id: "gpt-5.5",
@@ -182,7 +179,7 @@ describe("agent model helpers", () => {
         ],
         {
           id: "u-manager",
-          image: "registry.example/opencsghq/picoclaw:2026.06.03",
+          image: "registry.example/opencsghq/codex:2026.06.03",
           agent_profile: {
             image_upgrade_required: false,
           },
@@ -191,7 +188,7 @@ describe("agent model helpers", () => {
     ).toEqual([
       {
         id: "u-manager",
-        image: "registry.example/opencsghq/picoclaw:2026.06.03",
+        image: "registry.example/opencsghq/codex:2026.06.03",
         agent_profile: {
           image_upgrade_required: false,
           model_id: "gpt-5.5",
@@ -215,19 +212,19 @@ describe("agent model helpers", () => {
     ).toBe(false);
     expect(
       isAgentUpgradeNeeded({
-        id: "worker-picoclaw",
-        runtime_kind: "picoclaw_sandbox",
+        id: "worker-dsh",
+        runtime_kind: "dsh",
         image_upgrade_required: true,
       }),
-    ).toBe(true);
+    ).toBe(false);
   });
 
   it("syncs readonly runtime fields from a fresh action response into the agent page draft", () => {
     const draft = agentToDraft({
       id: "u-manager",
-      image: "registry.example/opencsghq/picoclaw:2026.05.22",
+      image: "registry.example/opencsghq/codex:2026.05.22",
       name: "manager",
-      runtime_kind: "picoclaw_sandbox",
+      runtime_kind: "codex",
       agent_profile: {
         model_id: "gpt-5.5",
         provider: "codex",
@@ -237,28 +234,28 @@ describe("agent model helpers", () => {
     expect(
       agentDraftWithRuntimeFieldsFromAgent(draft, {
         id: "u-manager",
-        image: "registry.example/opencsghq/picoclaw:2026.06.03",
-        runtime_kind: "picoclaw_sandbox",
+        image: "registry.example/opencsghq/codex:2026.06.03",
+        runtime_kind: "codex",
       }),
     ).toMatchObject({
       agent_id: "u-manager",
-      image: "registry.example/opencsghq/picoclaw:2026.06.03",
-      default_image: "registry.example/opencsghq/picoclaw:2026.06.03",
+      image: "registry.example/opencsghq/codex:2026.06.03",
+      default_image: "registry.example/opencsghq/codex:2026.06.03",
       model_id: "gpt-5.5",
       provider: "codex",
-      runtime_kind: "picoclaw_sandbox",
+      runtime_kind: "codex",
     });
   });
 
   it("resolves split runtime fields from legacy runtime kind", () => {
-    expect(runtimeConfigFromSelection({ runtime_kind: "openclaw_sandbox" })).toEqual({
-      name: "openclaw",
-      sandboxed: true,
+    expect(runtimeConfigFromSelection({ runtime_kind: "dsh" })).toEqual({
+      name: "dsh",
+      sandboxed: false,
     });
-    expect(resolveRuntimeSelection({ runtime_kind: "openclaw_sandbox" })).toEqual({
-      runtime_kind: "openclaw_sandbox",
-      runtime_name: "openclaw",
-      sandbox_enabled: true,
+    expect(resolveRuntimeSelection({ runtime_kind: "dsh" })).toEqual({
+      runtime_kind: "dsh",
+      runtime_name: "dsh",
+      sandbox_enabled: false,
     });
     expect(agentRuntimeName({ runtime_kind: "codex" })).toBe("codex");
     expect(agentSandboxEnabled({ runtime_kind: "codex" })).toBe(false);
@@ -287,16 +284,16 @@ describe("agent model helpers", () => {
     const draft = applyTemplateToDraft(
       {
         ...agentToDraft({
-          runtime_kind: "picoclaw_sandbox",
-          runtime_name: "picoclaw",
+          runtime_kind: "codex",
+          runtime_name: "codex",
           sandbox_enabled: true,
           role: "worker",
         }),
         default_image: "worker:default",
       },
       {
-        id: "builtin.openclaw-worker",
-        runtime_kind: "openclaw_sandbox",
+        id: "builtin.dsh-worker",
+        runtime_kind: "dsh",
         role: "worker",
       },
       null,
@@ -304,9 +301,9 @@ describe("agent model helpers", () => {
     );
 
     expect(draft).toMatchObject({
-      runtime_kind: "openclaw_sandbox",
-      runtime_name: "openclaw",
-      sandbox_enabled: true,
+      runtime_kind: "dsh",
+      runtime_name: "dsh",
+      sandbox_enabled: false,
     });
   });
 
@@ -457,7 +454,7 @@ describe("agent model helpers", () => {
         provider: "csghub_lite",
         reasoning_effort: "",
         requestOptionsText: '{"top_p":0.9}',
-        runtime_kind: "picoclaw_sandbox",
+        runtime_kind: "codex",
       }),
     ).toMatchObject({
       enable_fast_mode: true,
@@ -504,7 +501,7 @@ describe("agent model helpers", () => {
         provider: "csghub",
         reasoning_effort: "medium",
         requestOptionsText: "{}",
-        runtime_kind: "picoclaw_sandbox",
+        runtime_kind: "codex",
       }),
     ).toMatchObject({
       base_url: "",
@@ -633,8 +630,8 @@ describe("agent model helpers", () => {
     expect(parseMCPServersText("")).toEqual({ ok: true, value: null });
     expect(parseMCPServersText("[1]")).toEqual({ ok: false, error: "object_required" });
     expect(parseMCPServersText("{")).toEqual({ ok: false, error: "invalid_json" });
-    expect(supportsMCPServers("openclaw_sandbox")).toBe(true);
-    expect(supportsMCPServers("picoclaw_sandbox")).toBe(true);
+    expect(supportsMCPServers("dsh")).toBe(true);
+    expect(supportsMCPServers("codex")).toBe(true);
     expect(supportsMCPServers("codex")).toBe(true);
 
     const mcpServers = setMCPServers({ context7: { command: "npx" } });
@@ -657,135 +654,63 @@ describe("agent model helpers", () => {
 
   it("selects runtime-specific templates and images", () => {
     const templates = [
-      { id: "builtin.manager-codex", name: "manager-codex", role: "manager", runtime_kind: "codex" },
-      { id: "builtin.codex-worker", name: "generic-assistant-codex", role: "worker", runtime_kind: "codex" },
-      { id: "custom/worker", name: "custom-worker", runtime_kind: "picoclaw_sandbox" },
-      { id: "builtin.openclaw-worker", name: "openclaw-worker", runtime_kind: "openclaw_sandbox" },
-      { id: "builtin.picoclaw-worker", name: "picoclaw-worker", runtime_kind: "picoclaw_sandbox" },
+      { id: "builtin.codex-worker", role: "worker", runtime_kind: "codex" },
+      { id: "builtin.dsh-worker", role: "worker", runtime_kind: "dsh" },
     ];
-    const bootstrapConfig = {
-      default_worker_template: "custom/worker",
-      effective_manager_image: "manager:effective",
-      runtime_default_images: {
-        openclaw_sandbox: "openclaw:worker",
-        picoclaw_sandbox: "picoclaw:worker",
-      },
-      runtime_kind: "openclaw_sandbox",
-    };
-
-    expect(pickDefaultAgentTemplate(templates, "picoclaw_sandbox", bootstrapConfig)?.id).toBe("custom/worker");
-    expect(pickDefaultAgentTemplate(templates, "openclaw_sandbox", bootstrapConfig)?.id).toBe(
-      "builtin.openclaw-worker",
-    );
-    expect(pickDefaultAgentTemplate(templates, "notification", bootstrapConfig)).toBeNull();
-    expect(pickDefaultAgentTemplate(templates, "codex", bootstrapConfig)?.id).toBe("builtin.codex-worker");
-    expect(runtimeImageForKind("openclaw_sandbox", bootstrapConfig, "fallback:worker")).toBe("openclaw:worker");
-    expect(defaultWorkerImageForRuntime(templates, "openclaw_sandbox", bootstrapConfig, "fallback:worker")).toBe(
-      "openclaw:worker",
-    );
-    expect(runtimeImageForKind("codex", bootstrapConfig, "fallback:worker")).toBe("");
-    expect(runtimeImageForKind("notification", bootstrapConfig, "fallback:worker")).toBe("");
-
-    expect(
-      applyTemplateToDraft(
-        {
-          api_key: "",
-          api_key_preview: "",
-          api_key_set: false,
-          base_url: "",
-          enable_fast_mode: false,
-          envRows: [],
-          headersText: "{}",
-          model_id: "",
-          provider: "csghub_lite",
-          reasoning_effort: "medium",
-          requestOptionsText: "{}",
-          runtime_kind: "picoclaw_sandbox",
-        },
-        templates[3],
-        bootstrapConfig,
-      ),
-    ).toMatchObject({
-      from_template: "builtin.openclaw-worker",
-      image: "openclaw:worker",
-      runtime_kind: "openclaw_sandbox",
-      template_name: "openclaw-worker",
-    });
+    for (const runtime of ["codex", "dsh"]) {
+      expect(pickDefaultAgentTemplate(templates, runtime)?.id).toBe(`builtin.${runtime}-worker`);
+      expect(runtimeImageForKind(runtime, null, "unused-image")).toBe("");
+      expect(defaultWorkerImageForRuntime(templates, runtime, null, "unused-image")).toBe("unused-image");
+    }
+    expect(pickDefaultAgentTemplate(templates, "notification")).toBeNull();
   });
 
   it("falls back to matching worker template images when runtime bootstrap image defaults are stale", () => {
     const templates = [
       {
-        id: "builtin.picoclaw-worker",
-        name: "picoclaw-worker",
+        id: "builtin.codex-worker",
+        name: "codex-worker",
         role: "worker",
-        runtime_kind: "picoclaw_sandbox",
-        image: "picoclaw:worker",
+        runtime_kind: "codex",
+        image: "codex:worker",
       },
       {
-        id: "builtin.openclaw-worker",
-        name: "openclaw-worker",
+        id: "builtin.dsh-worker",
+        name: "codex-worker",
         role: "worker",
-        runtime_kind: "openclaw_sandbox",
-        image: "openclaw:worker",
+        runtime_kind: "dsh",
+        image: "codex:worker",
       },
     ];
 
     expect(
       defaultWorkerImageForRuntime(
         templates,
-        "openclaw_sandbox",
+        "dsh",
         {
-          default_worker_template: "builtin.picoclaw-worker",
+          default_worker_template: "builtin.codex-worker",
           runtime_default_images: {
-            picoclaw_sandbox: "picoclaw:worker",
+            codex: "codex:worker",
           },
-          runtime_kind: "picoclaw_sandbox",
+          runtime_kind: "codex",
         },
-        "picoclaw:current",
+        "codex:current",
       ),
-    ).toBe("openclaw:worker");
+    ).toBe("codex:worker");
   });
 
   it("excludes manager templates from worker template choices", () => {
     const templates = [
       { id: "builtin.manager-codex", name: "manager-codex", role: "manager", runtime_kind: "codex" },
-      { id: "builtin.picoclaw-worker", name: "picoclaw-worker", role: "worker", runtime_kind: "picoclaw_sandbox" },
-      { id: "custom/roleless", name: "roleless", runtime_kind: "picoclaw_sandbox" },
+      { id: "builtin.codex-worker", name: "codex-worker", role: "worker", runtime_kind: "codex" },
+      { id: "custom/roleless", name: "roleless", runtime_kind: "codex" },
     ];
 
     expect(workerSelectableTemplates(templates).map((item) => item.id)).toEqual([
-      "builtin.picoclaw-worker",
+      "builtin.codex-worker",
       "custom/roleless",
     ]);
-    expect(pickDefaultAgentTemplate(templates, "picoclaw_sandbox", null)?.id).toBe("builtin.picoclaw-worker");
-  });
-
-  it("excludes only the builtin OpenClaw template from create-agent template choices", () => {
-    const templates = [
-      { id: "builtin.codex-worker", name: "generic-assistant-codex", role: "worker", runtime_kind: "codex" },
-      {
-        id: "builtin.openclaw-worker",
-        name: "generic-assistant-openclaw",
-        role: "worker",
-        runtime_kind: "openclaw_sandbox",
-      },
-      {
-        id: "Agentic/feishu-assistant",
-        name: "feishu-assistant",
-        role: "worker",
-        runtime_kind: "openclaw_sandbox",
-      },
-      { id: "local.review-worker", name: "review-worker", role: "worker", runtime_kind: "codex" },
-    ];
-
-    expect(createAgentSelectableTemplates(templates).map((item) => item.id)).toEqual([
-      "builtin.codex-worker",
-      "Agentic/feishu-assistant",
-      "local.review-worker",
-    ]);
-    expect(isBuiltinOpenClawWorkerTemplate(templates[1])).toBe(true);
-    expect(isBuiltinOpenClawWorkerTemplate(templates[2])).toBe(false);
+    expect(pickDefaultAgentTemplate(templates, "codex", null)?.id).toBe("builtin.codex-worker");
   });
 
   it("applies template image_env contracts to draft env rows", () => {
@@ -803,12 +728,12 @@ describe("agent model helpers", () => {
           provider: "csghub_lite",
           reasoning_effort: "medium",
           requestOptionsText: "{}",
-          runtime_kind: "picoclaw_sandbox",
+          runtime_kind: "codex",
         },
         {
           id: "custom/gitlab",
           name: "gitlab-assistant",
-          runtime_kind: "picoclaw_sandbox",
+          runtime_kind: "codex",
           image_env: [
             { name: "GITLAB_TOKEN", required: true, secret: true },
             { name: "GITLAB_URL", default: "https://gitlab.example.com" },
@@ -829,7 +754,7 @@ describe("agent model helpers", () => {
   it("uses Codex as the only manager runtime option", () => {
     expect(
       availableManagerRuntimeOptions({
-        supported_runtime_kinds: ["picoclaw_sandbox", "openclaw_sandbox", "codex", "notifier", "picoclaw_sandbox"],
+        supported_runtime_kinds: ["codex", "dsh", "codex", "notifier", "codex"],
       }).map((option) => option.value),
     ).toEqual(["codex"]);
 
@@ -919,10 +844,10 @@ describe("agent model helpers", () => {
         image: "",
       },
       {
-        id: "builtin.openclaw-worker",
+        id: "builtin.dsh-worker",
         role: "worker",
-        runtime_kind: "openclaw_sandbox",
-        image: "openclaw:worker",
+        runtime_kind: "dsh",
+        image: "codex:worker",
       },
       {
         id: "duplicate.manager-codex",
@@ -936,7 +861,7 @@ describe("agent model helpers", () => {
     expect(
       availableManagerRebuildRuntimeOptions(
         variants,
-        { supported_runtime_kinds: ["codex", "picoclaw_sandbox"] },
+        { supported_runtime_kinds: ["codex", "codex"] },
         "custom_sandbox",
       ).map((option) => option.value),
     ).toEqual(["codex"]);
@@ -944,8 +869,8 @@ describe("agent model helpers", () => {
       defaultManagerRebuildImageForRuntime(
         variants,
         "codex",
-        { runtime_default_images: { picoclaw_sandbox: "picoclaw:latest" } },
-        "picoclaw:old",
+        { runtime_default_images: { codex: "codex:latest" } },
+        "codex:old",
       ),
     ).toBe("");
     expect(
@@ -953,9 +878,9 @@ describe("agent model helpers", () => {
         [],
         "codex",
         {
-          effective_manager_image: "picoclaw:effective-manager",
-          runtime_default_images: { picoclaw_sandbox: "picoclaw:worker" },
-          runtime_kind: "picoclaw_sandbox",
+          effective_manager_image: "codex:effective-manager",
+          runtime_default_images: { codex: "codex:worker" },
+          runtime_kind: "codex",
         },
         "fallback:manager",
       ),
@@ -978,8 +903,8 @@ describe("agent model helpers", () => {
   it("allows Codex and DSH templates to publish to the community", () => {
     expect(canPublishCommunityTemplateRuntime("codex")).toBe(true);
     expect(canPublishCommunityTemplateRuntime("dsh")).toBe(true);
-    expect(canPublishCommunityTemplateRuntime("openclaw_sandbox")).toBe(false);
-    expect(canPublishCommunityTemplateRuntime("picoclaw")).toBe(false);
+    expect(canPublishCommunityTemplateRuntime("unsupported")).toBe(false);
+    expect(canPublishCommunityTemplateRuntime("")).toBe(false);
   });
 
   it("advances agent creation progress toward each step target", () => {
@@ -1134,26 +1059,6 @@ describe("agent model helpers", () => {
     );
   });
 
-  it("does not show an unknown sandbox availability gap as online", () => {
-    const checkingGateway = {
-      status: "running",
-      runtime_kind: "openclaw_sandbox",
-      runtime: {
-        kind: "openclaw_sandbox",
-        state: "running",
-        availability: {
-          state: "unknown",
-          expires_at: "2099-01-01T00:00:00Z",
-        },
-      },
-    };
-    expect(isAgentGatewayAvailabilityUnknown(checkingGateway)).toBe(true);
-    expect(isAgentRunning(checkingGateway)).toBe(true);
-    expect(isAgentAvailable(checkingGateway)).toBe(false);
-    expect(isAgentLifecycleRunning(checkingGateway)).toBe(true);
-    expect(agentAvailabilityStatusLabel(checkingGateway, (key) => key)).toBe("agentStatusChecking");
-  });
-
   it("waits for manager runtime only when profile save may bootstrap sandbox", () => {
     const runningManager = {
       id: "u-manager",
@@ -1256,8 +1161,8 @@ describe("agent model helpers", () => {
 
   it("locks runtime and image on create when a template is selected", () => {
     expect(agentCreateTemplateLocked({ from_template: "" }, "create")).toBe(false);
-    expect(agentCreateTemplateLocked({ from_template: "builtin.picoclaw-worker" }, "create")).toBe(true);
-    expect(agentCreateTemplateLocked({ from_template: "builtin.picoclaw-worker" }, "edit")).toBe(false);
+    expect(agentCreateTemplateLocked({ from_template: "builtin.codex-worker" }, "create")).toBe(true);
+    expect(agentCreateTemplateLocked({ from_template: "builtin.codex-worker" }, "edit")).toBe(false);
   });
 
   it("builds notifier pull subscriptions and route previews", () => {

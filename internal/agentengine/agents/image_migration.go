@@ -145,11 +145,11 @@ func (s *Controller) defaultManagerImageForRuntime(ctx context.Context, runtimeK
 	hubSvc := s.hub
 	managerTemplate := strings.TrimSpace(s.defaultManagerTemplate)
 	managerImage := strings.TrimSpace(s.managerImage)
-	gatewayRuntime := s.gatewayRuntimeKind()
+	managerRuntime := RuntimeKindCodex
 	s.mu.RUnlock()
 
 	if runtimeKind == "" {
-		runtimeKind = gatewayRuntime
+		runtimeKind = managerRuntime
 	}
 	if managerTemplate != "" && hubSvc != nil {
 		item, err := hubSvc.Get(ctx, managerTemplate)
@@ -167,7 +167,7 @@ func (s *Controller) defaultManagerImageForRuntime(ctx context.Context, runtimeK
 			return candidate, true
 		}
 	}
-	if managerImage != "" && (runtimeKind == "" || runtimeKind == gatewayRuntime) {
+	if managerImage != "" && (runtimeKind == "" || runtimeKind == managerRuntime) {
 		return defaultAgentImage{image: managerImage}, true
 	}
 	return defaultAgentImage{}, false

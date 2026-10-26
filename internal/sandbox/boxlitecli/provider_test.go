@@ -85,11 +85,11 @@ func TestCreateBuildsRunCLIArgs(t *testing.T) {
 func TestListImagesBuildsCLIArgsAndParsesJSON(t *testing.T) {
 	runner := &fakeRunner{
 		results: []fakeResult{{result: CommandResult{Stdout: []byte(`[
-			{"Repository":"registry.example/picoclaw","Tag":"2026.5.27"},
-			{"repository":"registry.example/picoclaw","tag":"2026.5.22"},
+			{"Repository":"registry.example/codex","Tag":"2026.5.27"},
+			{"repository":"registry.example/codex","tag":"2026.5.22"},
 			{"Reference":"registry.example/custom:dev"},
 			{"repository":"<none>","tag":"<none>"},
-			{"Repository":"registry.example/picoclaw","Tag":"2026.5.27"}
+			{"Repository":"registry.example/codex","Tag":"2026.5.27"}
 		]`)}}},
 	}
 
@@ -105,8 +105,8 @@ func TestListImagesBuildsCLIArgsAndParsesJSON(t *testing.T) {
 		t.Fatalf("ListImages() error = %v", err)
 	}
 	wantImages := []string{
-		"registry.example/picoclaw:2026.5.27",
-		"registry.example/picoclaw:2026.5.22",
+		"registry.example/codex:2026.5.27",
+		"registry.example/codex:2026.5.22",
 		"registry.example/custom:dev",
 	}
 	if !reflect.DeepEqual(got, wantImages) {

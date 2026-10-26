@@ -2362,8 +2362,8 @@ func TestRuntimeCreateInstallsManagerTemplate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read feishu manager skill: %v", err)
 	}
-	if strings.Contains(string(feishuRaw), "/home/picoclaw") {
-		t.Fatalf("feishu manager skill contains PicoClaw absolute path:\n%s", string(feishuRaw))
+	if strings.Contains(string(feishuRaw), "/home/codex") {
+		t.Fatalf("feishu manager skill contains Codex absolute path:\n%s", string(feishuRaw))
 	}
 
 }

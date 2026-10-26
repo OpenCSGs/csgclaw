@@ -121,7 +121,6 @@ Mutation context 可重入，业务事实更新和嵌套 Extension Apply 使用�
 Channel Binding Manager 独立拥有 Worker 生命周期。
 Runtime Stop/Recreate/reload 不删除 Binding、transcript，也不停止 Channel Worker。
 业务凭据变化显式触发 Channel Binding 对账。
-OpenClaw/PicoClaw 保留原生 gateway Channel 和命令协议。
 其绑定配置变化通过既有 Runtime Adapter 执行 Engine 管理的 Recreate；托管 Codex Worker 则继续独立于 Runtime 生命周期。
 
 ## RuntimeExtension 契约

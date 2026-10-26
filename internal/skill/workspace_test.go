@@ -35,3 +35,19 @@ func TestResolveSkillsRootFromWorkspace(t *testing.T) {
 		t.Fatalf("got = %q, want %q", got, skills)
 	}
 }
+
+func TestResolveSkillsRootUsesRuntimeHome(t *testing.T) {
+	for _, key := range []string{"DSH_HOME", "CODEX_HOME"} {
+		t.Run(key, func(t *testing.T) {
+			t.Setenv("CSGCLAW_SKILLS_DIR", "")
+			t.Setenv("DSH_HOME", "")
+			t.Setenv("CODEX_HOME", "")
+			home := filepath.Join(t.TempDir(), "new-runtime-home")
+			t.Setenv(key, home)
+			got, err := ResolveSkillsRoot("")
+			if err != nil || got != filepath.Join(home, "skills") {
+				t.Fatalf("skills root = %q, %v", got, err)
+			}
+		})
+	}
+}

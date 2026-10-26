@@ -1,0 +1,44 @@
+# OpenClaw and PicoClaw retirement migration
+
+This directory owns every rule specific to retiring OpenClaw and PicoClaw.
+It contains the migration implementation and its tests.
+Business packages call this module at their existing load boundaries and do not define retired runtime names, paths, manifest conversions or message envelopes.
+
+## Entry points
+
+| Entry point | Caller | Purpose |
+| --- | --- | --- |
+| `BootstrapDefaults`, `ObsoleteBootstrapKey` | `internal/config` | Clear retired defaults and request a config rewrite while preserving raw environment references. |
+| `MigrateAgents` | `cli/serve` | Convert stored Agents before services load them; retain workspaces, import native MCP and memory, and stop migrated workers. |
+| `GeneratedBackupEntry` | `cli/serve`, `internal/onboard` | Allow backup errors only for old generated container plugin copies. |
+| `LocalTemplates` | `internal/template` store factory | Back up and upgrade writable local registries. |
+| `TemplateManifest` | Local and remote manifest readers | Adapt existing read-only and remote templates without writing remote data. |
+| `InstructionFile`, `CopiedInstructions` | Template materialization | Convert the old singular instruction filename in copied workspaces. |
+| `MessageMetadata` | `internal/im` session and message readers | Normalize historical activity envelopes without mutating the source snapshot. |
+
+`MigrateAgents` must run under the application instance lock before serving requests.
+It uses the storage owner's shared root-state lock so section updates cannot race the migration.
+Generic backup, locking, typed-ID migration and JSON-preservation mechanics remain in their owning packages.
+
+## Retention policy
+
+Migrated workers use Codex and remain explicitly stopped until the user starts them.
+Agent identity, model configuration, MCP selections, custom Skills, messages and user files are retained.
+Existing MCP snapshots and current Codex memory take precedence over retired native files.
+Remote templates and user-authored script contents are not rewritten remotely.
+Completed on-disk migrations are idempotent.
+
+## Removing the migration
+
+Keep the module until the supported upgrade window no longer includes these runtime records and old remote templates have been republished.
+Message and read-only template adapters remain read-time compatibility hooks.
+Before removing them, rewrite all retained session lines, thread histories and spillover blobs that still use old envelopes, including inactive conversations.
+Agent migration completion alone does not prove that historical messages are ready for removing the adapter.
+Remove this directory and remove its business integration calls in the same change.
+Locate every integration with `rg 'migrations/retiredclaws|retiredclaws\.' cli internal --glob '*.go'`.
+Remove the retired-bootstrap branch and its `RewriteRequired` assignment in the config loader.
+Use the required instruction filename directly when removing the template instruction helpers.
+Pass no retired-cache predicate to generic backup and typed-ID migration helpers.
+Remove the retired-config hookup test in `cli/serve/serve_test.go` with the integration it exercises.
+Keep generic fixes for state-section preservation, standalone config backups, stopped host status and instructions-only templates.
+Run `go test ./...`, build the application, and verify startup and current Codex/DSH workflows.

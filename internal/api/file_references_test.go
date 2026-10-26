@@ -92,7 +92,7 @@ func referenceTestHandler(t *testing.T) (*Handler, string, string, string, strin
 	svc := mustNewService(t)
 	var ids, roots []string
 	for _, name := range []string{"alice", "bob"} {
-		item, err := svc.CreateRecord(context.Background(), agent.CreateRequest{Spec: agent.CreateAgentSpec{Name: name, Role: agent.RoleWorker, RuntimeKind: agent.RuntimeKindPicoClawSandbox, Image: "worker:test"}})
+		item, err := svc.CreateRecord(context.Background(), agent.CreateRequest{Spec: agent.CreateAgentSpec{Name: name, Role: agent.RoleWorker, RuntimeKind: agent.RuntimeKindCodex, Image: "worker:test"}})
 		if err != nil {
 			t.Fatal(err)
 		}

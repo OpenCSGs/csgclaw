@@ -229,29 +229,34 @@ export function questionOptions(question: AgentActivityQuestionItem): AgentActiv
   return [...question.options];
 }
 
-export function openClawDeliveryKind(message: IMMessage | null | undefined): string {
-  const openclaw = openClawMetadata(message);
-  const deliveryInfo = openClawDeliveryInfo(openclaw);
-  return stringValue(openclaw?.delivery_kind, openclaw?.deliveryKind, openclaw?.kind, deliveryInfo?.kind).toLowerCase();
-}
-
-export function isOpenClawToolDeliveryMessage(message: IMMessage | null | undefined): boolean {
-  return openClawDeliveryKind(message) === "tool";
-}
-
-export function openClawToolCallID(message: IMMessage | null | undefined): string {
-  const openclaw = openClawMetadata(message);
-  const deliveryInfo = openClawDeliveryInfo(openclaw);
+export function activityDeliveryKind(message: IMMessage | null | undefined): string {
+  const runtimeMetadata = activityMetadata(message);
+  const deliveryInfo = activityDeliveryInfo(runtimeMetadata);
   return stringValue(
-    openclaw?.tool_call_id,
-    openclaw?.toolCallId,
+    runtimeMetadata?.delivery_kind,
+    runtimeMetadata?.deliveryKind,
+    runtimeMetadata?.kind,
+    deliveryInfo?.kind,
+  ).toLowerCase();
+}
+
+export function isToolDeliveryMessage(message: IMMessage | null | undefined): boolean {
+  return activityDeliveryKind(message) === "tool";
+}
+
+export function activityToolCallID(message: IMMessage | null | undefined): string {
+  const runtimeMetadata = activityMetadata(message);
+  const deliveryInfo = activityDeliveryInfo(runtimeMetadata);
+  return stringValue(
+    runtimeMetadata?.tool_call_id,
+    runtimeMetadata?.toolCallId,
     deliveryInfo?.toolCallId,
     deliveryInfo?.tool_call_id,
   );
 }
 
-export function parseOpenClawDeliveryCommand(message: IMMessage | null | undefined): AgentActivityCommand | null {
-  if (!isOpenClawToolDeliveryMessage(message)) {
+export function parseDeliveryCommand(message: IMMessage | null | undefined): AgentActivityCommand | null {
+  if (!isToolDeliveryMessage(message)) {
     return null;
   }
 
@@ -259,7 +264,7 @@ export function parseOpenClawDeliveryCommand(message: IMMessage | null | undefin
   if (parsed) {
     return {
       ...parsed,
-      signature: openClawCommandSignature(message, parsed.command),
+      signature: deliveryCommandSignature(message, parsed.command),
     };
   }
 
@@ -276,17 +281,17 @@ export function parseOpenClawDeliveryCommand(message: IMMessage | null | undefin
     command,
     kind: AgentActivityKinds.execCommand,
     output: split.output,
-    signature: openClawCommandSignature(message, command),
+    signature: deliveryCommandSignature(message, command),
     title: plainCommandTitle(firstLine),
   };
 }
 
 export function parseMessageActivityCommand(message: IMMessage | null | undefined): AgentActivityCommand | null {
-  const openClawCommand = parseOpenClawDeliveryCommand(message);
-  if (openClawCommand) {
-    return openClawCommand;
+  const deliveryCommand = parseDeliveryCommand(message);
+  if (deliveryCommand) {
+    return deliveryCommand;
   }
-  if (openClawDeliveryKind(message)) {
+  if (activityDeliveryKind(message)) {
     return null;
   }
   return parseLegacyToolActivityCommand(message?.content);
@@ -433,7 +438,7 @@ export function agentActivityToolMergeKeys(tool: AgentActivityTool | null | unde
 }
 
 export function agentActivityMessageToolMergeKey(message: IMMessage | null | undefined): string {
-  const toolCallID = openClawToolCallID(message);
+  const toolCallID = activityToolCallID(message);
   return toolCallID ? `tool_call:${stripToolItemPrefix(toolCallID)}` : "";
 }
 
@@ -630,13 +635,13 @@ function recordValue(value: unknown): UnknownRecord | null {
   return isRecord(value) ? value : null;
 }
 
-function openClawMetadata(message: IMMessage | null | undefined): UnknownRecord | null {
+function activityMetadata(message: IMMessage | null | undefined): UnknownRecord | null {
   const metadata = recordValue(message?.metadata);
-  return recordValue(metadata?.openclaw) ?? recordValue(metadata?.codex) ?? metadata;
+  return recordValue(metadata?.codex) ?? recordValue(metadata?.csgclaw) ?? metadata;
 }
 
-function openClawDeliveryInfo(openclaw: UnknownRecord | null): UnknownRecord | null {
-  return recordValue(openclaw?.delivery_info) ?? recordValue(openclaw?.deliveryInfo);
+function activityDeliveryInfo(runtimeMetadata: UnknownRecord | null): UnknownRecord | null {
+  return recordValue(runtimeMetadata?.delivery_info) ?? recordValue(runtimeMetadata?.deliveryInfo);
 }
 
 function stringValue(...values: unknown[]): string {
@@ -844,9 +849,9 @@ function isPlainMessageReceipt(command: string): boolean {
   return commandSignature(command) === "message";
 }
 
-function openClawCommandSignature(message: IMMessage | null | undefined, command: string): string {
-  const toolCallID = openClawToolCallID(message);
-  return toolCallID ? `openclaw-tool:${toolCallID}` : commandSignature(command);
+function deliveryCommandSignature(message: IMMessage | null | undefined, command: string): string {
+  const toolCallID = activityToolCallID(message);
+  return toolCallID ? `runtime-tool:${toolCallID}` : commandSignature(command);
 }
 
 function isKnownPlainCommand(command: string): boolean {

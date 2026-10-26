@@ -1,7 +1,7 @@
 # Model context management
 
 CSGClaw resolves model context capacity per provider and model.
-Codex and DSH consume this metadata; this feature does not change OpenClaw configuration.
+Codex and DSH consume this metadata..
 
 ## Configuration
 

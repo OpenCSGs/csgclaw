@@ -2,6 +2,8 @@ package serve
 
 import (
 	"context"
+	"csgclaw/internal/migrations"
+	"csgclaw/internal/migrations/retiredclaws"
 	skillbuiltin "csgclaw/internal/skill/builtin"
 	"errors"
 	"fmt"
@@ -916,8 +918,6 @@ func configureFeishuService(feishuSvc *feishu.Service, svc *agent.Controller) {
 		slog.Warn("skip feishu runtime wiring: provider is not configured")
 		return
 	}
-	runtimewiring.UpdatePicoClawFeishuProvider(svc, provider)
-	runtimewiring.UpdateOpenClawFeishuProvider(svc, provider)
 }
 
 func preflightDefaultModelProvider(ctx context.Context, cfg config.Config) error {
@@ -1163,11 +1163,8 @@ func loadConfig(path string) (config.Config, error) {
 		return config.Config{}, err
 	}
 	if cfg.NeedsMigrationRewrite() {
-		root := filepath.Dir(path)
-		if filepath.Base(root) == config.AppDirName {
-			if _, err := localstore.CreateSiblingBackup(root, time.Now()); err != nil {
-				return config.Config{}, fmt.Errorf("backup config dir: %w", err)
-			}
+		if err := migrations.BackupConfig(path, retiredclaws.GeneratedBackupEntry); err != nil {
+			return config.Config{}, fmt.Errorf("backup config before migration: %w", err)
 		}
 		if err := cfg.Save(path); err != nil {
 			return config.Config{}, err
@@ -1231,16 +1228,11 @@ func newAgentService(cfg config.Config, feishuProvider feishu.AgentCredentialPro
 		return nil, err
 	}
 	opts = append(opts,
-		runtimewiring.WithPicoClawSandboxRuntime(feishuProvider),
-		runtimewiring.WithOpenClawSandboxRuntime(feishuProvider),
 		runtimewiring.WithCodexRuntime(),
 		runtimewiring.WithDSHRuntime(),
 		agent.WithBootstrapDefaultTemplates(cfg.Bootstrap),
 	)
-	switch bootstrapDefaults.ManagerRuntimeKind {
-	case agent.RuntimeKindPicoClawSandbox, agent.RuntimeKindOpenClawSandbox:
-		opts = append(opts, agent.WithGatewayRuntime(bootstrapDefaults.ManagerRuntimeKind))
-	}
+
 	if hubSvc != nil {
 		opts = append(opts, agent.WithHubService(hubSvc))
 	}
@@ -1418,12 +1410,15 @@ func migrateLocalStore() error {
 		return err
 	}
 	if localstore.NeedsTypedIDMigration(root) {
-		if _, err := localstore.MigrateTypedIDs(localstore.MigrateOptions{Root: root}); err != nil {
+		if _, err := localstore.MigrateTypedIDs(localstore.MigrateOptions{Root: root, IgnoreBackupError: retiredclaws.GeneratedBackupEntry}); err != nil {
 			return fmt.Errorf("migrate local store: %w", err)
 		}
 	}
 	if err := localstore.ReconcileTypedAgentDirs(root); err != nil {
 		return fmt.Errorf("reconcile local store agent dirs: %w", err)
+	}
+	if err := retiredclaws.MigrateAgents(root); err != nil {
+		return fmt.Errorf("migrate retired runtime agents: %w", err)
 	}
 	if err := localstore.MigrateMCPIdentities(filepath.Join(root, localstore.RootStateFileName)); err != nil {
 		return fmt.Errorf("migrate MCP identities: %w", err)

@@ -9,40 +9,40 @@ import (
 
 func TestResolveRuntimeSelection(t *testing.T) {
 	t.Run("normalizes runtime config from legacy kind", func(t *testing.T) {
-		cfg, err := agentruntime.RuntimeConfigFromSelection(RuntimeKindOpenClawSandbox, "", false)
+		cfg, err := agentruntime.RuntimeConfigFromSelection(RuntimeKindDSH, "", false)
 		if err != nil {
 			t.Fatalf("RuntimeConfigFromSelection() error = %v", err)
 		}
-		if cfg != (agentruntime.RuntimeConfig{Name: RuntimeNameOpenClaw, Sandboxed: true}) {
-			t.Fatalf("RuntimeConfigFromSelection() = %#v, want %#v", cfg, agentruntime.RuntimeConfig{Name: RuntimeNameOpenClaw, Sandboxed: true})
+		if cfg != (agentruntime.RuntimeConfig{Name: RuntimeNameDSH, Sandboxed: false}) {
+			t.Fatalf("RuntimeConfigFromSelection() = %#v, want %#v", cfg, agentruntime.RuntimeConfig{Name: RuntimeNameDSH, Sandboxed: false})
 		}
-		if cfg.LegacyKind() != RuntimeKindOpenClawSandbox {
-			t.Fatalf("LegacyKind() = %q, want %q", cfg.LegacyKind(), RuntimeKindOpenClawSandbox)
+		if cfg.LegacyKind() != RuntimeKindDSH {
+			t.Fatalf("LegacyKind() = %q, want %q", cfg.LegacyKind(), RuntimeKindDSH)
 		}
 	})
 
-	t.Run("derives sandbox runtime from legacy kind", func(t *testing.T) {
-		kind, name, sandboxEnabled, err := resolveRuntimeSelection(RuntimeKindOpenClawSandbox, "", false)
+	t.Run("derives host runtime from legacy kind", func(t *testing.T) {
+		kind, name, sandboxEnabled, err := resolveRuntimeSelection(RuntimeKindDSH, "", false)
 		if err != nil {
 			t.Fatalf("resolveRuntimeSelection() error = %v", err)
 		}
-		if kind != RuntimeKindOpenClawSandbox || name != RuntimeNameOpenClaw || !sandboxEnabled {
-			t.Fatalf("resolveRuntimeSelection() = %q/%q/%t, want %q/%q/%t", kind, name, sandboxEnabled, RuntimeKindOpenClawSandbox, RuntimeNameOpenClaw, true)
+		if kind != RuntimeKindDSH || name != RuntimeNameDSH || sandboxEnabled {
+			t.Fatalf("resolveRuntimeSelection() = %q/%q/%t, want %q/%q/%t", kind, name, sandboxEnabled, RuntimeKindDSH, RuntimeNameDSH, false)
 		}
 	})
 
 	t.Run("derives legacy kind from split runtime fields", func(t *testing.T) {
-		kind, name, sandboxEnabled, err := resolveRuntimeSelection("", RuntimeNamePicoClaw, true)
+		kind, name, sandboxEnabled, err := resolveRuntimeSelection("", RuntimeNameCodex, false)
 		if err != nil {
 			t.Fatalf("resolveRuntimeSelection() error = %v", err)
 		}
-		if kind != RuntimeKindPicoClawSandbox || name != RuntimeNamePicoClaw || !sandboxEnabled {
-			t.Fatalf("resolveRuntimeSelection() = %q/%q/%t, want %q/%q/%t", kind, name, sandboxEnabled, RuntimeKindPicoClawSandbox, RuntimeNamePicoClaw, true)
+		if kind != RuntimeKindCodex || name != RuntimeNameCodex || sandboxEnabled {
+			t.Fatalf("resolveRuntimeSelection() = %q/%q/%t, want %q/%q/%t", kind, name, sandboxEnabled, RuntimeKindCodex, RuntimeNameCodex, false)
 		}
 	})
 
 	t.Run("rejects conflicting runtime kind and name", func(t *testing.T) {
-		_, _, _, err := resolveRuntimeSelection(RuntimeKindOpenClawSandbox, RuntimeNamePicoClaw, true)
+		_, _, _, err := resolveRuntimeSelection(RuntimeKindDSH, RuntimeNameCodex, false)
 		if err == nil || !strings.Contains(err.Error(), "conflicts") {
 			t.Fatalf("resolveRuntimeSelection() error = %v, want conflict error", err)
 		}
@@ -55,9 +55,9 @@ func TestAgentRuntimeConfigRoundTrip(t *testing.T) {
 		t.Fatalf("RuntimeConfig() = %#v, want %#v", got, agentruntime.RuntimeConfig{Name: RuntimeNameCodex, Sandboxed: false})
 	}
 
-	item.SetRuntimeConfig(agentruntime.RuntimeConfig{Name: RuntimeNamePicoClaw, Sandboxed: true})
-	if item.RuntimeKind != RuntimeKindPicoClawSandbox || item.RuntimeName != RuntimeNamePicoClaw || !item.SandboxEnabled {
-		t.Fatalf("SetRuntimeConfig() runtime = %q/%q/%t, want %q/%q/%t", item.RuntimeKind, item.RuntimeName, item.SandboxEnabled, RuntimeKindPicoClawSandbox, RuntimeNamePicoClaw, true)
+	item.SetRuntimeConfig(agentruntime.RuntimeConfig{Name: RuntimeNameCodex, Sandboxed: false})
+	if item.RuntimeKind != RuntimeKindCodex || item.RuntimeName != RuntimeNameCodex || item.SandboxEnabled {
+		t.Fatalf("SetRuntimeConfig() runtime = %q/%q/%t, want %q/%q/%t", item.RuntimeKind, item.RuntimeName, item.SandboxEnabled, RuntimeKindCodex, RuntimeNameCodex, false)
 	}
 }
 
@@ -65,21 +65,21 @@ func TestMergeReplaceSpecNormalizesRuntimeFields(t *testing.T) {
 	existing := Agent{
 		ID:             "agent-alice",
 		Name:           "alice",
-		RuntimeKind:    RuntimeKindPicoClawSandbox,
-		RuntimeName:    RuntimeNamePicoClaw,
-		SandboxEnabled: true,
+		RuntimeKind:    RuntimeKindCodex,
+		RuntimeName:    RuntimeNameCodex,
+		SandboxEnabled: false,
 		Role:           RoleWorker,
 		Status:         "running",
 	}
 
 	merged, err := mergeReplaceSpec(existing, CreateAgentSpec{
-		RuntimeKind: RuntimeKindOpenClawSandbox,
+		RuntimeKind: RuntimeKindDSH,
 	}, []string{"runtime_kind"})
 	if err != nil {
 		t.Fatalf("mergeReplaceSpec() error = %v", err)
 	}
-	if merged.RuntimeKind != RuntimeKindOpenClawSandbox || merged.RuntimeName != RuntimeNameOpenClaw || !merged.SandboxEnabled {
-		t.Fatalf("mergeReplaceSpec() runtime = %q/%q/%t, want %q/%q/%t", merged.RuntimeKind, merged.RuntimeName, merged.SandboxEnabled, RuntimeKindOpenClawSandbox, RuntimeNameOpenClaw, true)
+	if merged.RuntimeKind != RuntimeKindDSH || merged.RuntimeName != RuntimeNameDSH || merged.SandboxEnabled {
+		t.Fatalf("mergeReplaceSpec() runtime = %q/%q/%t, want %q/%q/%t", merged.RuntimeKind, merged.RuntimeName, merged.SandboxEnabled, RuntimeKindDSH, RuntimeNameDSH, false)
 	}
 
 	merged, err = mergeReplaceSpec(existing, CreateAgentSpec{

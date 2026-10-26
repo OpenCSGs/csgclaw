@@ -487,7 +487,7 @@ default_publish_registry = "local"
 
 [bootstrap]
 default_manager_template = "builtin.manager-codex"
-default_worker_template = "builtin.openclaw-worker"
+default_worker_template = "builtin.dsh-worker"
 
 [[hub.registries]]
 name = "builtin"
@@ -531,7 +531,7 @@ models = ["minimax-m2.7"]
 	if got, want := cfg.Bootstrap.ResolvedDefaultManagerTemplate(), "builtin.manager-codex"; got != want {
 		t.Fatalf("cfg.Bootstrap.ResolvedDefaultManagerTemplate() = %q, want %q", got, want)
 	}
-	if got, want := cfg.Bootstrap.ResolvedDefaultWorkerTemplate(), "builtin.openclaw-worker"; got != want {
+	if got, want := cfg.Bootstrap.ResolvedDefaultWorkerTemplate(), "builtin.dsh-worker"; got != want {
 		t.Fatalf("cfg.Bootstrap.ResolvedDefaultWorkerTemplate() = %q, want %q", got, want)
 	}
 	if got, want := len(cfg.Hub.Registries), 4; got != want {
@@ -569,7 +569,7 @@ listen_addr = "127.0.0.1:18080"
 
 [bootstrap]
 default_manager_template = "builtin.manager-codex"
-default_worker_template = "builtin.picoclaw-worker"
+default_worker_template = "builtin.codex-worker"
 
 [[hub.registries]]
 name = "official"
@@ -688,7 +688,7 @@ listen_addr = "127.0.0.1:18080"
 
 [bootstrap]
 default_manager_template = "builtin.manager-codex"
-default_worker_template = "builtin.picoclaw-worker"
+default_worker_template = "builtin.codex-worker"
 
 [hub]
 default_registry = "builtin"
@@ -737,7 +737,7 @@ listen_addr = "127.0.0.1:18080"
 
 [bootstrap]
 default_manager_template = "builtin.manager-codex"
-default_worker_template = "builtin.picoclaw-worker"
+default_worker_template = "builtin.codex-worker"
 
 [[hub.registries]]
 name = "team"
@@ -780,7 +780,7 @@ func TestLoadLegacyBootstrapTemplateRefsAndSaveMigratesThem(t *testing.T) {
 listen_addr = "127.0.0.1:18080"
 
 [bootstrap]
-default_manager_template = "builtin/picoclaw-manager"
+default_manager_template = "builtin/manager-codex"
 default_worker_template = "local/review-worker"
 
 [models]
@@ -815,7 +815,7 @@ models = ["gpt-test"]
 		t.Fatalf("ReadFile() error = %v", err)
 	}
 	saved := string(data)
-	if strings.Contains(saved, "builtin/picoclaw-manager") || strings.Contains(saved, "local/review-worker") {
+	if strings.Contains(saved, "builtin/manager-codex") || strings.Contains(saved, "local/review-worker") {
 		t.Fatalf("saved config should not contain legacy slash template refs:\n%s", saved)
 	}
 	for _, want := range []string{
@@ -1392,7 +1392,7 @@ func TestSaveFormatsTopLevelSectionsWithoutExtraWhitespace(t *testing.T) {
 		LLM:    models,
 		Bootstrap: BootstrapConfig{
 			DefaultManagerTemplate: "builtin.manager-codex",
-			DefaultWorkerTemplate:  "builtin.openclaw-worker",
+			DefaultWorkerTemplate:  "builtin.dsh-worker",
 		},
 		Sandbox: SandboxConfig{
 			Provider: BoxLiteProvider,
@@ -1419,7 +1419,7 @@ show_upgrade = true
 
 [bootstrap]
 default_manager_template = "builtin.manager-codex"
-default_worker_template = "builtin.openclaw-worker"
+default_worker_template = "builtin.dsh-worker"
 
 [sandbox]
 provider = "boxlite"
@@ -1482,7 +1482,7 @@ func TestSaveWritesHubConfig(t *testing.T) {
 		},
 		Bootstrap: BootstrapConfig{
 			DefaultManagerTemplate: "builtin.manager-codex",
-			DefaultWorkerTemplate:  "builtin.openclaw-worker",
+			DefaultWorkerTemplate:  "builtin.dsh-worker",
 		},
 		Models: SingleProfileLLM(ModelConfig{
 			BaseURL: "http://127.0.0.1:4000",
@@ -1503,7 +1503,7 @@ func TestSaveWritesHubConfig(t *testing.T) {
 	for _, want := range []string{
 		"[bootstrap]",
 		`default_manager_template = "builtin.manager-codex"`,
-		`default_worker_template = "builtin.openclaw-worker"`,
+		`default_worker_template = "builtin.dsh-worker"`,
 		"[hub]",
 		`default_registry = "builtin"`,
 		`default_publish_registry = "team"`,
@@ -1811,7 +1811,7 @@ func TestSavePreservesEnvPlaceholdersAfterLoad(t *testing.T) {
 	t.Setenv("PORT", "18080")
 	t.Setenv("ACCESS_TOKEN", "your_access_token")
 	t.Setenv("MANAGER_TEMPLATE", "builtin.manager-codex")
-	t.Setenv("WORKER_TEMPLATE", "builtin.openclaw-worker")
+	t.Setenv("WORKER_TEMPLATE", "builtin.dsh-worker")
 	t.Setenv("SANDBOX_PROVIDER", BoxLiteProvider)
 	t.Setenv("HUB_DEFAULT_REGISTRY", "team")
 	t.Setenv("HUB_PUBLISH_REGISTRY", "local")
@@ -2161,7 +2161,7 @@ func TestDefaultWorkerTemplateIsCodex(t *testing.T) {
 			t.Fatalf("default worker template = %q", got)
 		}
 	}
-	if got := (BootstrapConfig{DefaultWorkerTemplate: "builtin.openclaw-worker"}).ResolvedDefaultWorkerTemplate(); got != "builtin.openclaw-worker" {
+	if got := (BootstrapConfig{DefaultWorkerTemplate: "builtin.dsh-worker"}).ResolvedDefaultWorkerTemplate(); got != "builtin.dsh-worker" {
 		t.Fatalf("explicit template changed to %q", got)
 	}
 }

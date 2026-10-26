@@ -4,7 +4,7 @@
 
 本文按 2026-09-04 工作区实现描述 CSGClaw 托管的飞书直连 Worker。
 平台所有权见[整体架构](../architecture.zh.md)，Engine 资源和当前解耦边界见[Agent Engine 与 RuntimeExtension](../agent-engine-decoupling.zh.md)。
-当前 Binding Manager 只为非沙箱 Codex Agent 创建直连 Worker；PicoClaw、OpenClaw 以及沙箱 Runtime 内原生渠道不在本文范围内。
+当前 Binding Manager 为非沙箱 Codex 和 DSH Agent 创建直连 Worker。
 
 当前实现遵循以下边界：
 

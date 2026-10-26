@@ -37,7 +37,7 @@ import {
 } from "lucide-react";
 import { ConnectorBoxesIcon, SidebarMcpIcon, SidebarPuzzlePiece02Icon } from "@/components/ui/Icons";
 import { KnowledgeBaseDiscoveryDialog } from "@/components/business/KnowledgeBaseDiscoveryDialog";
-import { formatRuntimeKindLabel, isBuiltinOpenClawWorkerTemplate } from "@/models/agents";
+import { formatRuntimeKindLabel } from "@/models/agents";
 import {
   canPublishHubTemplateToCommunity,
   formatHubDateTime,
@@ -3216,7 +3216,7 @@ export function HubDetailPane({
                     {t("agentPublishCommunity")}
                   </Button>
                 ) : null}
-                {!isBuiltinOpenClawWorkerTemplate(selectedTemplate) ? (
+                {
                   <Button
                     variant="primary"
                     size="md"
@@ -3228,7 +3228,7 @@ export function HubDetailPane({
                   >
                     {t("iaTemplateCreateAgent")}
                   </Button>
-                ) : null}
+                }
               </DialogFooter>
             </>
           ) : null}

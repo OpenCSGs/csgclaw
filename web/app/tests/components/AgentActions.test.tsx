@@ -148,7 +148,7 @@ const worker = {
   name: "Worker",
   description: "Agent description",
   role: "worker",
-  runtime_kind: "openclaw_sandbox",
+  runtime_kind: "dsh",
   status: "running",
   provider: "api",
   model_id: "gpt-test",
@@ -195,67 +195,6 @@ describe("agent action visibility", () => {
   beforeEach(() => {
     vi.unstubAllGlobals();
     window.localStorage.removeItem(AGENT_PROFILE_ACTIVE_TAB_STORAGE_KEY);
-  });
-
-  it("allows OpenClaw agents to save local templates but not publish to the community", async () => {
-    const user = userEvent.setup();
-    const onPublish = vi.fn().mockResolvedValue(true);
-    render(
-      <AgentDetailPane
-        item={worker}
-        t={t}
-        busyKey=""
-        draft={null}
-        models={[]}
-        onDelete={vi.fn()}
-        onDraftChange={vi.fn()}
-        onInvite={vi.fn()}
-        onOpenDM={vi.fn()}
-        onPublish={onPublish}
-        onRecreate={vi.fn()}
-        onStart={vi.fn()}
-        onStop={vi.fn()}
-      />,
-    );
-
-    await user.click(screen.getByRole("button", { name: "More" }));
-    const saveLocal = screen.getByRole("menuitem", { name: "Save as local template" });
-    expect(saveLocal).not.toHaveAttribute("aria-disabled", "true");
-    await user.click(saveLocal);
-    expect(screen.getByRole("dialog", { name: "Save as local template" })).toBeInTheDocument();
-    expect(screen.queryByText(labels.agentTemplateHubGuidance)).not.toBeInTheDocument();
-    expect(screen.queryByText(labels.agentTemplateHubManagementHint)).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Go to agentic hub" })).not.toBeInTheDocument();
-    expect((screen.getByRole("textbox", { name: "Template name" }) as HTMLInputElement).value).toMatch(
-      new RegExp(`^${worker.id}-[a-z0-9]+$`),
-    );
-    expect(screen.getByRole("textbox", { name: "Display name" })).toHaveValue("Worker");
-    expect(screen.getByRole("textbox", { name: "Template description" })).toHaveValue("Agent description");
-    expect(screen.getByRole("checkbox", { name: "Include agent memory" })).not.toBeChecked();
-    await user.click(screen.getByRole("button", { name: "Save as local template" }));
-    expect(onPublish).toHaveBeenCalledWith(
-      "local",
-      expect.stringMatching(new RegExp(`^${worker.id}-[a-z0-9]+$`)),
-      "Agent description",
-      false,
-      "Worker",
-    );
-    expect(screen.queryByRole("dialog", { name: "Save as local template" })).not.toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "More" }));
-    await user.click(screen.getByRole("menuitem", { name: "Save as local template" }));
-    await user.click(screen.getByRole("checkbox", { name: "Include agent memory" }));
-    await user.click(screen.getByRole("button", { name: "Save as local template" }));
-    expect(onPublish).toHaveBeenLastCalledWith(
-      "local",
-      expect.stringMatching(new RegExp(`^${worker.id}-[a-z0-9]+$`)),
-      "Agent description",
-      true,
-      "Worker",
-    );
-
-    await user.click(screen.getByRole("button", { name: "More" }));
-    expect(screen.queryByRole("menuitem", { name: "Save and publish to agentic hub" })).not.toBeInTheDocument();
   });
 
   it.each(["codex", "dsh"] as const)(
@@ -482,93 +421,6 @@ describe("agent action visibility", () => {
     expect(screen.getByText("Recreate required")).toBeInTheDocument();
     expect(screen.getByText("Complete")).toHaveClass("ready");
     expect(screen.queryByRole("button", { name: "Upgrade", hidden: true })).not.toBeInTheDocument();
-  });
-
-  it("shows an upgrade warning when only the agent image is outdated", () => {
-    render(
-      <AgentRow
-        item={{ ...worker, image_upgrade_required: true }}
-        t={t}
-        activeRoom={null}
-        busyKey=""
-        onEdit={vi.fn()}
-        onStart={vi.fn()}
-        onStop={vi.fn()}
-        onRecreate={vi.fn()}
-        onUpgrade={vi.fn()}
-        onDelete={vi.fn()}
-        onInvite={vi.fn()}
-      />,
-    );
-
-    expect(screen.getByText("Upgrade required")).toBeInTheDocument();
-    expect(screen.queryByText("Recreate required")).not.toBeInTheDocument();
-  });
-
-  it("shows upgrade and recreate for outdated worker rows even when lifecycle actions are hidden", async () => {
-    const user = userEvent.setup();
-    const onUpgrade = vi.fn();
-    render(
-      <AgentRow
-        item={{ ...worker, image_upgrade_required: true }}
-        t={t}
-        activeRoom={null}
-        busyKey=""
-        onEdit={vi.fn()}
-        onStart={vi.fn()}
-        onStop={vi.fn()}
-        onRecreate={vi.fn()}
-        onUpgrade={onUpgrade}
-        onDelete={vi.fn()}
-        onInvite={vi.fn()}
-      />,
-    );
-
-    await user.click(screen.getByRole("button", { name: "Upgrade", hidden: true }));
-    expect(onUpgrade).toHaveBeenCalledWith(expect.objectContaining({ id: worker.id }));
-    expect(screen.getByRole("button", { name: "Recreate", hidden: true })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Stop" })).not.toBeInTheDocument();
-  });
-
-  it("详情页保留升级操作", async () => {
-    const user = userEvent.setup();
-    const onUpgrade = vi.fn();
-    render(
-      <AgentDetailPane
-        item={{ ...worker, image_upgrade_required: true }}
-        t={t}
-        activeRoom={null}
-        busyKey=""
-        error=""
-        draft={null}
-        models={[]}
-        modelBusy={false}
-        saving={false}
-        publishBusy={false}
-        saveError=""
-        authStatuses={{}}
-        authBusyProvider=""
-        notifierWebhookPublicOrigin="http://127.0.0.1:18080"
-        onDraftChange={vi.fn()}
-        onSave={vi.fn()}
-        onPublish={vi.fn()}
-        onProviderLogin={vi.fn()}
-        onStart={vi.fn()}
-        onStop={vi.fn()}
-        onRecreate={vi.fn()}
-        onUpgrade={onUpgrade}
-        onDelete={vi.fn()}
-        onInvite={vi.fn()}
-        onOpenDM={vi.fn()}
-      />,
-    );
-
-    await user.click(screen.getByRole("button", { name: "Upgrade" }));
-    expect(onUpgrade).toHaveBeenCalledWith(expect.objectContaining({ id: worker.id }));
-    await user.click(screen.getByRole("button", { name: "More" }));
-    expect(screen.queryByRole("menuitem", { name: "Recreate" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("menuitem", { name: "Upgrade" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Stop" })).not.toBeInTheDocument();
   });
 
   it("shows the recharge action beside an Agent page save error", () => {
@@ -1077,42 +929,6 @@ describe("agent action visibility", () => {
     expect(screen.getByRole("status")).toHaveTextContent("Create manager first");
   });
 
-  it("shows upgrade required in worker detail panes when only the agent image is outdated", () => {
-    render(
-      <AgentDetailPane
-        item={{ ...worker, image_upgrade_required: true }}
-        t={t}
-        activeRoom={null}
-        busyKey=""
-        error=""
-        draft={null}
-        models={[]}
-        modelBusy={false}
-        saving={false}
-        publishBusy={false}
-        saveError=""
-        authStatuses={{}}
-        authBusyProvider=""
-        notifierWebhookPublicOrigin="http://127.0.0.1:18080"
-        onDraftChange={vi.fn()}
-        onSave={vi.fn()}
-        onPublish={vi.fn()}
-        onProviderLogin={vi.fn()}
-        onStart={vi.fn()}
-        onStop={vi.fn()}
-        onRecreate={vi.fn()}
-        onUpgrade={vi.fn()}
-        onDelete={vi.fn()}
-        onInvite={vi.fn()}
-        onOpenDM={vi.fn()}
-      />,
-    );
-
-    expect(screen.getByText("Upgrade required")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Upgrade" })).toBeInTheDocument();
-    expect(screen.queryByText("Recreate required")).not.toBeInTheDocument();
-  });
-
   it("hides upgrade controls for codex agents without images", () => {
     render(
       <AgentDetailPane
@@ -1283,7 +1099,7 @@ describe("agent action visibility", () => {
   });
 
   it("does not show the image field in the merged agent profile runtime section", () => {
-    const image = "opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw:2026.6.8";
+    const image = "opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/codex:2026.6.8";
     const { container } = render(
       <AgentDetailPane
         item={{
@@ -1329,7 +1145,7 @@ describe("agent action visibility", () => {
     const onDeleteMCPServer = vi.fn(() => true);
     const item = {
       ...worker,
-      runtime_kind: "openclaw_sandbox",
+      runtime_kind: "dsh",
       runtime_options: {
         local_workspace_dir: "/tmp/project",
       },
@@ -1430,7 +1246,7 @@ describe("agent action visibility", () => {
     const user = userEvent.setup();
     const item = {
       ...worker,
-      runtime_kind: "openclaw_sandbox",
+      runtime_kind: "dsh",
       runtime_options: {},
       mcpServers: {
         existing: {

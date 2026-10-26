@@ -29,7 +29,6 @@ flowchart TB
     Extensions --> Registry
     Registry --> Runtime["Runtime Adapter"]
     Runtime --> Codex["Codex app-server"]
-    Runtime --> Sandbox["OpenClaw / PicoClaw gateway"]
     IM --> Bridge["Native gateway bridge"]
     Bridge --> Sandbox
     NativeFeishu["Sandbox-native Feishu connection"] --> Sandbox
@@ -42,7 +41,7 @@ flowchart TB
 Hosted execution follows `Channel / Session -> Agent Engine -> Runtime Adapter`.
 Agent administration and RuntimeExtension changes use the same Engine and per-Agent lifecycle coordinator.
 There is no production `agent.Service`, Agent facade, Codex bridge, or API/Channel access to native Codex brokers.
-The Engine imports neither concrete Codex/PicoClaw/OpenClaw implementations nor IM, Participant, or Channel packages.
+The Engine imports neither concrete Codex/DSH implementations nor IM, Participant, or Channel packages.
 Runtime adapters depend on the runtime-neutral `agentengine/contract` package.
 
 ## Resources and modules
@@ -78,7 +77,6 @@ Channel Binding Managers own their workers independently.
 Agent Stop, Recreate and Runtime reload do not remove a Binding or transcript and do not stop a Channel worker.
 Credential changes and explicit disconnect reconcile the affected Binding.
 These worker rules describe hosted Codex channels.
-OpenClaw and PicoClaw retain their existing sandbox-native channels; binding changes recreate their Runtime through `Agents().Recreate` so current credentials are loaded or removed.
 
 ## Conversations and interactions
 
@@ -108,12 +106,8 @@ Detached continuations preserve the existing redacted model-input behavior.
 | --- | --- | --- | --- |
 | Local Codex | Supported | Run, Cancel, Reset, Resolve and files | `lark-cli` |
 | Local DSH | Supported | Run, Cancel, Reset, Resolve and files | `lark-cli` |
-| PicoClaw Sandbox | Supported | No registered Engine conversation implementation | Unsupported |
-| OpenClaw Sandbox | Supported | No registered Engine conversation implementation | Unsupported |
 
 This table does not describe sandbox-native gateway protocols as Engine conversation implementations.
-OpenClaw and PicoClaw remain supported through those native gateway protocols.
-The built-in channel sends `/new` to OpenClaw and `/clear` to PicoClaw, while Codex resets use Engine conversations.
 Hosted CSGClaw and Feishu Binding Managers select local Codex Agents.
 A missing conversation adapter or Extension driver returns an explicit unsupported status/error; Engine never chooses a legacy execution route.
 

@@ -19,10 +19,10 @@ func TestLoadManifestImageEnv(t *testing.T) {
 name = "gitlab-assistant"
 description = "GitLab assistant"
 role = "manager"
-runtime_kind = "picoclaw"
+runtime_kind = "codex"
 
 [image]
-ref = "picoclaw:test"
+ref = "codex:test"
 digest = "sha256:legacy"
 platforms = ["linux/amd64"]
 
@@ -49,14 +49,14 @@ placeholder = "https://gitlab.example.com"
 	if err != nil {
 		t.Fatalf("Get() error = %v", err)
 	}
-	if got.RuntimeKind != runtime.NamePicoClaw {
-		t.Fatalf("RuntimeKind = %q, want %q", got.RuntimeKind, runtime.NamePicoClaw)
+	if got.RuntimeKind != runtime.NameCodex {
+		t.Fatalf("RuntimeKind = %q, want %q", got.RuntimeKind, runtime.NameCodex)
 	}
 	if got.Role != TemplateRoleWorker {
 		t.Fatalf("Role = %q, want legacy manifest role ignored and worker derived", got.Role)
 	}
-	if got.Image != "picoclaw:test" {
-		t.Fatalf("Image = %q, want picoclaw:test", got.Image)
+	if got.Image != "codex:test" {
+		t.Fatalf("Image = %q, want codex:test", got.Image)
 	}
 	if len(got.ImageEnv) != 2 {
 		t.Fatalf("ImageEnv = %#v, want 2 entries", got.ImageEnv)
@@ -119,7 +119,7 @@ func TestNormalizeTemplateRuntimeOptions(t *testing.T) {
 		runtimeKind string
 		options     map[string]any
 	}{
-		"non codex":      {runtimeKind: runtime.NameOpenClaw, options: map[string]any{"execution_mode": "read_only"}},
+		"non codex":      {runtimeKind: runtime.NameDSH, options: map[string]any{"execution_mode": "read_only"}},
 		"unknown option": {runtimeKind: runtime.KindCodex, options: map[string]any{"local_workspace_dir": "/tmp/project"}},
 		"invalid mode":   {runtimeKind: runtime.KindCodex, options: map[string]any{"execution_mode": "unsafe"}},
 		"invalid memory": {runtimeKind: runtime.KindCodex, options: map[string]any{"memory_mode": "sometimes"}},

@@ -16,6 +16,7 @@ import (
 	"csgclaw/internal/config"
 	"csgclaw/internal/connectors"
 	agentruntime "csgclaw/internal/runtime"
+
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -33,7 +34,7 @@ func newAppPlatformAuthFixture(t *testing.T) (*Handler, agent.Agent, agent.Agent
 		if err != nil {
 			t.Fatal(err)
 		}
-		profile, err := svc.PicoClawRuntimeHost().ResolveRuntimeProfile(agentruntime.Handle{RuntimeID: item.RuntimeID})
+		profile, err := svc.RuntimeHost().ResolveRuntimeProfile(agentruntime.Handle{RuntimeID: item.RuntimeID})
 		if err != nil {
 			t.Fatal(err)
 		}

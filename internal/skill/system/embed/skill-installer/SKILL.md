@@ -5,7 +5,7 @@ description: Search, inspect, and install ClawHub-compatible skills with csgclaw
 
 # Skill Installer (`csgclaw-cli skill`)
 
-Use this skill for **all** registry skill search and install work. Do **not** use PicoClaw `find_skills` or `install_skill` (disabled).
+Use this skill for **all** registry skill search and install work.
 
 Run commands via `exec` inside the current agent container.
 
@@ -35,7 +35,7 @@ Flags may appear before or after the query/slug (for example `skill search gitla
 
 ## Install (this sandbox)
 
-Default install path: `~/.picoclaw/workspace/skills/` (PicoClaw) or `~/.openclaw/workspace/skills/` (OpenClaw).
+Use `CSGCLAW_SKILLS_DIR` when set, otherwise `${CODEX_HOME:-$HOME/.codex}/skills`.
 
 ```bash
 csgclaw-cli skill install AIWizards--gitlab-fullstack-pro --registry opencsg

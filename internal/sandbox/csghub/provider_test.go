@@ -198,7 +198,7 @@ func TestRuntimeCreateBuildsRequestAndMapsMounts(t *testing.T) {
 		Mounts: []sandbox.Mount{
 			{
 				HostPath:  "/opt/csgclaw/tenant-a/projects",
-				GuestPath: "/home/picoclaw/.picoclaw/workspace/projects",
+				GuestPath: "/home/codex/.codex/workspace/projects",
 			},
 		},
 	})
@@ -295,7 +295,7 @@ func TestRuntimeOpenWithPVCMountPathOverridesEnvMountPath(t *testing.T) {
 		Mounts: []sandbox.Mount{
 			{
 				HostPath:  "/shared/csgclaw/tenant-a/projects",
-				GuestPath: "/home/picoclaw/.picoclaw/workspace/projects",
+				GuestPath: "/home/codex/.codex/workspace/projects",
 			},
 		},
 	})
@@ -350,7 +350,7 @@ func TestRuntimeOpenWithPVCMountSubpathPrefix(t *testing.T) {
 		Mounts: []sandbox.Mount{
 			{
 				HostPath:  "/opt/csgclaw/agents/manager/workspace",
-				GuestPath: "/home/picoclaw/.picoclaw/workspace",
+				GuestPath: "/home/codex/.codex/workspace",
 			},
 		},
 	})
@@ -404,7 +404,7 @@ func TestRuntimeOpenReadsPVCSubpathPrefixFromEnv(t *testing.T) {
 		Mounts: []sandbox.Mount{
 			{
 				HostPath:  "/opt/csgclaw/agents/manager/workspace",
-				GuestPath: "/home/picoclaw/.picoclaw/workspace",
+				GuestPath: "/home/codex/.codex/workspace",
 			},
 		},
 	})

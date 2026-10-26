@@ -53,7 +53,7 @@ func TestChatCompletionsLLMAPIOverridesModelAndProxiesUpstream(t *testing.T) {
 			Name:        agent.ManagerName,
 			Role:        agent.RoleManager,
 			Profile:     config.DefaultLLMProfile,
-			RuntimeKind: agent.RuntimeKindPicoClawSandbox,
+			RuntimeKind: agent.RuntimeKindCodex,
 			AgentProfile: agent.AgentProfile{
 				Name:            agent.ManagerName,
 				Provider:        agent.ProviderAPI,
@@ -164,7 +164,7 @@ func TestChatCompletionsUsesCSGHubAIGatewayAuthStore(t *testing.T) {
 			ID:          agent.ManagerUserID,
 			Name:        agent.ManagerName,
 			Role:        agent.RoleManager,
-			RuntimeKind: agent.RuntimeKindPicoClawSandbox,
+			RuntimeKind: agent.RuntimeKindCodex,
 			AgentProfile: agent.AgentProfile{
 				Name:            agent.ManagerName,
 				Provider:        agent.ProviderCSGHub,
@@ -266,7 +266,7 @@ func TestResponsesRefreshesOpenCSGAIGatewayKeyAfterUnauthorized(t *testing.T) {
 			ID:          agent.ManagerUserID,
 			Name:        agent.ManagerName,
 			Role:        agent.RoleManager,
-			RuntimeKind: agent.RuntimeKindPicoClawSandbox,
+			RuntimeKind: agent.RuntimeKindCodex,
 			AgentProfile: agent.AgentProfile{
 				Name:            agent.ManagerName,
 				Provider:        agent.ProviderCSGHub,
@@ -345,7 +345,7 @@ func TestChatCompletionsLLMAPIDoesNotOverrideRequestReasoningEffort(t *testing.T
 			Name:        agent.ManagerName,
 			Role:        agent.RoleManager,
 			Profile:     config.DefaultLLMProfile,
-			RuntimeKind: agent.RuntimeKindPicoClawSandbox,
+			RuntimeKind: agent.RuntimeKindCodex,
 			AgentProfile: agent.AgentProfile{
 				Name:            agent.ManagerName,
 				Provider:        agent.ProviderAPI,
@@ -1334,7 +1334,7 @@ func TestModelsReturnsConservativeMetadataForOpenAICompatibleProvider(t *testing
 			Name:        agent.ManagerName,
 			Role:        agent.RoleManager,
 			Profile:     config.DefaultLLMProfile,
-			RuntimeKind: agent.RuntimeKindPicoClawSandbox,
+			RuntimeKind: agent.RuntimeKindCodex,
 			AgentProfile: agent.AgentProfile{
 				Name:            agent.ManagerName,
 				Provider:        agent.ProviderAPI,
@@ -1472,7 +1472,7 @@ func mustSeededAgentService(t *testing.T, llmCfg config.LLMConfig, agents []agen
 
 	for i := range agents {
 		if strings.TrimSpace(agents[i].RuntimeKind) == "" {
-			agents[i].RuntimeKind = agent.RuntimeKindPicoClawSandbox
+			agents[i].RuntimeKind = agent.RuntimeKindCodex
 		}
 	}
 

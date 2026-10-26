@@ -12,17 +12,9 @@ import (
 )
 
 // ResetText preserves the command protocol consumed by each supported channel.
-// Host Codex ingress handles the canonical command through Engine.Reset, while
-// sandbox gateways consume their native reset commands on the existing bridge.
+// Host Codex ingress handles the canonical command through Engine.Reset.
 func ResetText(adapter string, sandboxed bool, reason string) (string, error) {
-	if sandboxed {
-		switch adapter {
-		case agentruntime.NameOpenClaw:
-			return "/new", nil
-		case agentruntime.NamePicoClaw:
-			return "/clear", nil
-		}
-	}
+
 	if adapter != agentruntime.NameCodex || sandboxed {
 		return "", fmt.Errorf("runtime %q does not support conversation reset", adapter)
 	}

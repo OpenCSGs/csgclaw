@@ -307,7 +307,7 @@ func TestDeleteRemovesLocalTemplate(t *testing.T) {
 	if _, err := store.Publish(context.Background(), PublishSpec{
 		ID:          "review-bot",
 		Name:        "review-bot",
-		RuntimeKind: "picoclaw",
+		RuntimeKind: "codex",
 		Image:       "agent-image:test",
 	}); err != nil {
 		t.Fatalf("Publish() error = %v", err)
@@ -341,7 +341,7 @@ func TestDeleteRejectsBuiltinRegistry(t *testing.T) {
 		"builtin": stubStore{},
 	})
 
-	err := svc.Delete(context.Background(), "builtin.picoclaw-worker")
+	err := svc.Delete(context.Background(), "builtin.codex-worker")
 	if !errors.Is(err, ErrRegistryNotDeletable) {
 		t.Fatalf("Delete() error = %v, want ErrRegistryNotDeletable", err)
 	}

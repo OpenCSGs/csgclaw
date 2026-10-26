@@ -98,49 +98,16 @@ type RuntimeView struct {
 	LogsSupported bool
 }
 
-type gatewayBoxFactory interface {
-	CreateGatewayBox(ctx context.Context, rt sandbox.Runtime, image, name, botID string, profile agentruntime.Profile) (sandbox.Instance, sandbox.Info, error)
-	GatewayCreateSpec(image, name, botID string, profile agentruntime.Profile) (sandbox.CreateSpec, error)
-}
-
-type PicoClawRuntimeHost struct {
-	SandboxProviderName   func() string
-	EnsureRuntime         func(agentID string) (sandbox.Runtime, error)
+type RuntimeHost struct {
 	AgentHome             func(agentID string) (string, error)
-	RuntimeHome           func(agentID string) (string, error)
-	CloseRuntime          func(homeDir string, rt sandbox.Runtime) error
-	ResolveBox            func(ctx context.Context, rt sandbox.Runtime, got Agent) (sandbox.Instance, string, error)
-	CreateBox             func(ctx context.Context, rt sandbox.Runtime, spec sandbox.CreateSpec) (sandbox.Instance, error)
-	StartBox              func(ctx context.Context, box sandbox.Instance) error
-	StopBox               func(ctx context.Context, box sandbox.Instance, opts sandbox.StopOptions) error
-	BoxInfo               func(ctx context.Context, box sandbox.Instance) (sandbox.Info, error)
-	ForceRemoveBox        func(ctx context.Context, rt sandbox.Runtime, idOrName string) error
-	CloseBox              func(box sandbox.Instance) error
-	RunBoxCommand         func(ctx context.Context, box sandbox.Instance, name string, args []string, w io.Writer) (int, error)
 	ResolveAgent          func(h agentruntime.Handle) (Agent, error)
 	ResolveRuntimeProfile func(h agentruntime.Handle) (agentruntime.Profile, error)
-	SyncHandle            func(h agentruntime.Handle) error
-	StreamLogs            func(ctx context.Context, agentID string, follow bool, lines int, w io.Writer) error
 }
 
-func (s *Controller) PicoClawRuntimeHost() PicoClawRuntimeHost {
-	return PicoClawRuntimeHost{
-		SandboxProviderName: s.sandboxProviderName,
-		EnsureRuntime:       s.ensureRuntime,
-		AgentHome:           s.agentHomeDir,
-		RuntimeHome:         s.sandboxRuntimeHome,
-		CloseRuntime:        s.closeRuntime,
-		ResolveBox: func(ctx context.Context, rt sandbox.Runtime, got Agent) (sandbox.Instance, string, error) {
-			return s.resolveAgentBox(ctx, rt, got)
-		},
-		CreateBox:      s.createBox,
-		StartBox:       s.startBox,
-		StopBox:        s.stopBox,
-		BoxInfo:        s.boxInfo,
-		ForceRemoveBox: s.forceRemoveBox,
-		CloseBox:       s.closeBox,
-		RunBoxCommand:  s.runBoxCommand,
-		ResolveAgent:   s.gatewayRuntimeAgent,
+func (s *Controller) RuntimeHost() RuntimeHost {
+	return RuntimeHost{
+		AgentHome:    s.agentHomeDir,
+		ResolveAgent: s.gatewayRuntimeAgent,
 		ResolveRuntimeProfile: func(h agentruntime.Handle) (agentruntime.Profile, error) {
 			got, err := s.gatewayRuntimeAgent(h)
 			if err != nil {
@@ -148,13 +115,7 @@ func (s *Controller) PicoClawRuntimeHost() PicoClawRuntimeHost {
 			}
 			return s.runtimeProfileForAgent(got), nil
 		},
-		SyncHandle: s.syncRuntimeHandle,
-		StreamLogs: s.streamRuntimeHostLogs,
 	}
-}
-
-func (s *Controller) OpenClawRuntimeHost() PicoClawRuntimeHost {
-	return s.PicoClawRuntimeHost()
 }
 
 func (s *Controller) sandboxProviderName() string {
@@ -169,13 +130,6 @@ func (s *Controller) SandboxProviderName() string {
 	return s.sandboxProviderName()
 }
 
-func (s *Controller) setGatewayWorkPhase(p uint32) {
-	if s == nil {
-		return
-	}
-	s.gatewayWorkPhase.Store(p)
-}
-
 func (s *Controller) runtimeForKind(kind string) (agentruntime.Runtime, error) {
 	if s == nil {
 		return nil, fmt.Errorf("agent service is required")
@@ -188,16 +142,6 @@ func (s *Controller) runtimeForKind(kind string) (agentruntime.Runtime, error) {
 		kind = resolved
 	}
 	return s.runtimeRegistry.Get(kind)
-}
-
-func (s *Controller) gatewayRuntimeKind() string {
-	if s == nil {
-		return RuntimeKindPicoClawSandbox
-	}
-	if kind := runtimeKindForGatewayRuntime(s.gatewayRuntime); kind != "" {
-		return kind
-	}
-	return RuntimeKindPicoClawSandbox
 }
 
 func (s *Controller) runtimeProfileForAgent(a Agent) agentruntime.Profile {
@@ -283,18 +227,6 @@ func runtimeHandleForAgent(a Agent) agentruntime.Handle {
 		RuntimeID: normalizeRuntimeID(a.RuntimeID, a.ID),
 		HandleID:  strings.TrimSpace(a.BoxID),
 	}
-}
-
-func (s *Controller) gatewayBoxFactory() (gatewayBoxFactory, error) {
-	rt, err := s.runtimeForKind(s.gatewayRuntimeKind())
-	if err != nil {
-		return nil, err
-	}
-	factory, ok := rt.(gatewayBoxFactory)
-	if !ok {
-		return nil, fmt.Errorf("runtime %q does not support gateway box creation", rt.Kind())
-	}
-	return factory, nil
 }
 
 func (s *Controller) syncRuntimeHandle(h agentruntime.Handle) error {
@@ -696,19 +628,6 @@ func supportsRuntimeLogs(rt agentruntime.Runtime) bool {
 	return ok
 }
 
-func (s *Controller) createGatewayBox(ctx context.Context, rt sandbox.Runtime, image, name, botID string, profile AgentProfile) (sandbox.Instance, sandbox.Info, error) {
-	if testCreateGatewayBoxHook != nil {
-		return testCreateGatewayBoxHook(s, ctx, rt, image, name, botID, profile)
-	}
-	factory, err := s.gatewayBoxFactory()
-	if err != nil {
-		return nil, sandbox.Info{}, err
-	}
-	s.setGatewayWorkPhase(gatewayBoxPhaseCreating)
-	defer s.setGatewayWorkPhase(gatewayBoxPhaseIdle)
-	return factory.CreateGatewayBox(ctx, rt, image, name, botID, runtimeProfileFromAgent(profile))
-}
-
 func (s *Controller) forceRemoveBox(ctx context.Context, rt sandbox.Runtime, idOrName string) error {
 	if testForceRemoveBoxHook != nil {
 		return testForceRemoveBoxHook(s, ctx, rt, idOrName)
@@ -717,42 +636,6 @@ func (s *Controller) forceRemoveBox(ctx context.Context, rt sandbox.Runtime, idO
 		return fmt.Errorf("invalid sandbox runtime")
 	}
 	return rt.Remove(ctx, idOrName, sandbox.RemoveOptions{Force: true})
-}
-
-func (s *Controller) gatewayCreateSpec(image, name, botID string, profile AgentProfile) (sandbox.CreateSpec, error) {
-	factory, err := s.gatewayBoxFactory()
-	if err != nil {
-		return sandbox.CreateSpec{}, err
-	}
-	return factory.GatewayCreateSpec(image, name, botID, runtimeProfileFromAgent(profile))
-}
-
-func addProfileEnvVars(envVars map[string]string, profileEnv map[string]string) {
-	if len(profileEnv) == 0 {
-		return
-	}
-	for key, value := range profileEnv {
-		key = strings.TrimSpace(key)
-		if key == "" || isReservedSandboxEnvKey(key) {
-			continue
-		}
-		envVars[key] = value
-	}
-}
-
-func isReservedSandboxEnvKey(key string) bool {
-	upper := strings.ToUpper(strings.TrimSpace(key))
-	if upper == "HOME" || upper == "OPENAI_BASE_URL" || upper == "OPENAI_API_KEY" || upper == "OPENAI_MODEL" {
-		return true
-	}
-	return strings.HasPrefix(upper, "CSGCLAW_") || strings.HasPrefix(upper, "PICOCLAW_")
-}
-
-func gatewayStartCommand(debug bool) ([]string, []string) {
-	if debug {
-		return []string{"sleep"}, []string{"infinity"}
-	}
-	return []string{"tini"}, []string{"--", "picoclaw", "gateway", "-d"}
 }
 
 func ensureAgentProjectsRoot() (string, error) {
@@ -774,17 +657,6 @@ func ProjectsRoot() (string, error) {
 func llmBridgeBaseURL(managerBaseURL, agentID string) string {
 	managerBaseURL = strings.TrimRight(strings.TrimSpace(managerBaseURL), "/")
 	return managerBaseURL + "/api/v1/agents/" + strings.TrimSpace(agentID) + "/llm"
-}
-
-func bridgeLLMEnvVars(llmBaseURL, accessToken, modelID string) map[string]string {
-	return map[string]string{
-		"CSGCLAW_LLM_BASE_URL": llmBaseURL,
-		"CSGCLAW_LLM_API_KEY":  accessToken,
-		"CSGCLAW_LLM_MODEL_ID": modelID,
-		"OPENAI_BASE_URL":      llmBaseURL,
-		"OPENAI_API_KEY":       accessToken,
-		"OPENAI_MODEL":         modelID,
-	}
 }
 
 func runtimeProfileFromAgent(profile AgentProfile) agentruntime.Profile {

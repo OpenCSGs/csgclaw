@@ -4,6 +4,30 @@ English | [中文](config.zh.md)
 
 `csgclaw serve` uses the local config file for server access, bootstrap image selection, sandbox isolation, and optional channels, and it auto-creates missing local state on first run. Agent LLM provider profiles are stored in agent state and managed from the Web UI.
 
+## Upgrading retired runtimes
+
+Startup migrates stored OpenClaw and PicoClaw configuration before resolving templates or loading Agents.
+Removed builtin template defaults fall back to the current Codex defaults, and obsolete bootstrap runtime/image keys are removed when the configuration is saved.
+Existing custom template selections, supported runtimes, credentials and unrelated settings are preserved.
+
+Old Agent records migrate to Codex with their identities, model configuration, resources and chat history intact.
+Migrated workers remain stopped until explicitly started because their previous sandbox has been replaced by a host process.
+Their existing workspace is retained and selected through `local_workspace_dir`, including user files and custom Skills.
+Old sandbox handles, images, runtime-specific options and runtime-specific environment variables are removed from active Agent state.
+When no Agent MCP snapshot exists, native MCP settings are imported with timeout units and workspace paths converted.
+Existing explicit MCP selections take precedence.
+Readable personal memory is imported into Codex only when no current Codex memory document exists.
+
+Local templates are backed up and upgraded on disk; existing remote manifests and read-only registries are adapted on read.
+New templates can use only `codex` or `dsh`.
+Historical activity metadata is normalized while loading messages so tool records retain their activity semantics.
+
+State and configuration rewrites create sibling `.csgclaw_backup_<date>_<index>` backups before saving.
+A custom `--config` file outside the application data directory receives a sibling file backup.
+Local registry backups use the same naming pattern beside the registry directory.
+Unreadable container-generated plugin copies can be omitted from backups; user workspaces remain strict backup inputs.
+Repeated startup does not rewrite completed on-disk migrations.
+
 ## Codex Execution Mode
 
 Set `CSGCLAW_EXECUTION_MODE` on the CSGClaw server process before startup:
@@ -29,7 +53,7 @@ When it is set, the Web UI login flow also uses it as the trusted public base fo
 
 When the sandbox provider is `docker` on Docker Desktop, an empty `advertise_base_url` resolves to `http://host.docker.internal:<port>` for generated manager and worker runtime config. Set `advertise_base_url` explicitly when you need a different Docker callback URL.
 
-`access_token` protects authenticated API routes, including the PicoClaw participant bridge routes. When authentication is enabled, clients must send `Authorization: Bearer <access_token>`.
+`access_token` protects authenticated API routes, including participant channel routes. When authentication is enabled, clients must send `Authorization: Bearer <access_token>`.
 
 `no_auth` controls whether CSGClaw skips the bearer-token check. The default is `false`. Set it to `true` only for trusted local or development environments.
 
@@ -76,7 +100,7 @@ models = ["Qwen/Qwen3-0.6B-GGUF"]
 
 [bootstrap]
 manager_image_override = ""
-runtime_kind = "picoclaw_sandbox"
+runtime_kind = "codex"
 
 [sandbox]
 provider = "boxlite"
@@ -102,7 +126,7 @@ models = ["gpt-5.4"]
 
 [bootstrap]
 manager_image_override = ""
-runtime_kind = "picoclaw_sandbox"
+runtime_kind = "codex"
 
 [sandbox]
 provider = "boxlite"
@@ -133,7 +157,7 @@ show_upgrade = true
 
 [bootstrap]
 manager_image_override = ""
-runtime_kind = "picoclaw_sandbox"
+runtime_kind = "codex"
 
 [sandbox]
 provider = "boxlite"
@@ -141,10 +165,12 @@ provider = "boxlite"
 
 Codex and Claude Code profiles are configured in agent state through the Web UI. CSGClaw starts an embedded CLIProxyAPI on a private localhost port at serve time, so static CLIProxy base URLs are not required.
 
-Workers can also select an explicit runtime kind when they are created. The default runtime kind is `picoclaw_sandbox`. To create a sandboxed OpenClaw worker, use `csgclaw agent create --runtime openclaw_sandbox ...`; to create a Codex worker, use `csgclaw agent create --runtime codex ...`. The API accepts the same values through `runtime_kind` on `POST /api/v1/agents`.
+Workers support the `codex` and `dsh` runtime kinds.
+The Manager uses the bundled Codex CLI.
+Select a worker runtime with `csgclaw agent create --runtime codex ...` or `--runtime dsh`.
+The API accepts the same values when creating an agent.
 
 Leave `[bootstrap].manager_image_override` empty to use the built-in default manager image. Set it only when you need to override that default.
-The bootstrap manager currently runs on `picoclaw_sandbox`; `openclaw_sandbox` is supported for workers, not as the manager runtime.
 
 Auth is also managed locally:
 
@@ -182,24 +208,6 @@ When an in-use model provider's base URL, API key, or headers change, CSGClaw ch
 The raw upstream API key is not written to this file; it is injected into the runtime environment through `env_key = "OPENAI_API_KEY"`.
 
 When a worker uses the Codex runtime, CSGClaw launches the Codex CLI bundled next to the CSGClaw executable with `codex app-server --listen stdio://`. It does not use `PATH`, `CSGCLAW_CODEX_PATH`, or `CSGCLAW_CODEX_ACP_PATH`; reinstall CSGClaw if that bundled executable is missing.
-
-## OpenClaw Runtime
-
-CSGClaw defaults to PicoClaw for the bootstrap manager. To create a sandboxed OpenClaw worker, set the worker runtime explicitly:
-
-```bash
-csgclaw agent create --name alice --runtime openclaw_sandbox
-```
-
-The recommended image shape is a slim OpenClaw base image with CSGClaw-managed plugins baked under `/home/node/openclaw-plugins` (for example, `csgclaw-extension` and external channel plugins). Runtime state still comes from `~/.csgclaw/agents/<agent>/.openclaw/openclaw.json`; do not mount an empty host directory over `/home/node/openclaw-plugins`, because that hides baked plugins.
-
-Generated OpenClaw bridge models use conservative metadata for plain OpenAI-compatible profiles.
-They default to `openai-completions`, `input: ["text"]`, no reasoning effort support, and no `agents.defaults.thinkingDefault` value.
-This prevents OpenClaw from sending image or reasoning payloads to providers that have not advertised those capabilities through CSGClaw.
-Agent profiles persist one `reasoning_effort` strategy: `auto`, `none`, `minimal`, `low`, `medium`, `high`, or `xhigh`. Missing legacy values normalize to `auto`; existing explicit values remain unchanged.
-For OpenClaw, `auto` omits `thinkingDefault`, explicit efforts set it, and `none` maps it to `off`. CSGClaw also sets `reasoningDefault: "stream"` unless reasoning is disabled so the channel plugin receives public reasoning callbacks; models that emit no reasoning continue through the normal reply flow.
-With a Codex profile, CSGClaw declares the bridge model as `openai-codex-responses`, enables `input: ["text", "image"]`, writes the `minimal`, `low`, `medium`, `high`, and `xhigh` reasoning levels, and adds streaming usage compatibility metadata.
-The Codex `reasoningEffortMap` passes these levels through by name.
 
 ## Sandbox Providers
 

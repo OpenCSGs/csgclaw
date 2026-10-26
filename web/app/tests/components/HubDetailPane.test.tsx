@@ -189,12 +189,12 @@ const template = {
     },
   ],
   role: "manager",
-  runtime_kind: "openclaw_sandbox",
+  runtime_kind: "dsh",
   source: { name: "builtin" },
   updated_at: "2026-05-29T03:10:23Z",
   workspace: {
     entries: [{ name: "README.md", path: "README.md", type: "file" }],
-    kind: "openclaw_sandbox",
+    kind: "dsh",
   },
 };
 
@@ -1194,31 +1194,7 @@ describe("HubDetailPane", () => {
     expect(publish).toHaveAttribute("title", "Sign in first");
   });
 
-  it("does not show community publishing for a local OpenClaw template", () => {
-    const localOpenClawTemplate = {
-      ...template,
-      id: "local.openclaw-template",
-      source: { name: "local", kind: "local" },
-    };
-    renderHubDetailPane("template", { selectedTemplate: localOpenClawTemplate });
-
-    expect(screen.queryByRole("button", { name: "Publish to community" })).not.toBeInTheDocument();
-  });
-
-  it("does not offer agent creation for the builtin OpenClaw worker template", async () => {
-    const user = userEvent.setup();
-    renderHubDetailPane("template", {
-      selectedTemplate: {
-        ...template,
-        id: "builtin.openclaw-worker",
-        name: "generic-assistant-openclaw",
-      },
-    });
-    await openTemplateDetail(user, /generic-assistant-openclaw/i);
-    expect(screen.queryByRole("button", { name: "Create agent" })).not.toBeInTheDocument();
-  });
-
-  it("allows agent creation for remote OpenClaw templates", async () => {
+  it("allows agent creation for remote Codex templates", async () => {
     const user = userEvent.setup();
     renderHubDetailPane("template", {
       selectedTemplate: {

@@ -60,12 +60,12 @@
 .wizardRuntimeGrid {
   padding: var(--space-4);
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr);
   align-items: start;
   gap: 16px;
 }
 
-.wizardRuntimeGrid > :not(.wizardRuntimeSelector):not(.wizardSandbox) {
+.wizardRuntimeGrid > :not(.wizardRuntimeSelector) {
   grid-column: 1 / -1;
 }
 
@@ -77,16 +77,6 @@
   gap: 8px;
 }
 
-.wizardSandbox {
-  grid-column: 2;
-  grid-row: 1;
-}
-
-.wizardSandbox label {
-  width: fit-content;
-  min-width: 0;
-}
-
 @media (max-width: 680px) {
   .wizardRuntimeGrid {
     grid-template-columns: minmax(0, 1fr);
@@ -94,9 +84,5 @@
 
   .wizardRuntimeGrid > * {
     grid-column: 1;
-  }
-
-  .wizardSandbox {
-    grid-row: 2;
   }
 }

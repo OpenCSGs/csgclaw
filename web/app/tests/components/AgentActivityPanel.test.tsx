@@ -457,31 +457,31 @@ describe("AgentActivityPanel", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  it("folds OpenClaw plain command output under the command row", async () => {
+  it("folds Codex plain command output under the command row", async () => {
     const user = userEvent.setup();
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(
         JSON.stringify([
           {
             id: "search-start",
-            sender_id: "openclaw-weather",
+            sender_id: "codex-weather",
             created_at: "2026-07-01T10:00:00Z",
             content: '🔎 Web Search: for "上海天气" (top 5)',
-            metadata: { openclaw: { delivery_kind: "tool", request_id: "msg-user" } },
+            metadata: { codex: { delivery_kind: "tool", request_id: "msg-user" } },
           },
           {
             id: "search-result",
-            sender_id: "openclaw-weather",
+            sender_id: "codex-weather",
             created_at: "2026-07-01T10:00:01Z",
             content: '🔎 Web Search: for "上海天气" (top 5) {"query":"上海天气","count":5,"status":"ok"}',
-            metadata: { openclaw: { delivery_kind: "tool", request_id: "msg-user" } },
+            metadata: { codex: { delivery_kind: "tool", request_id: "msg-user" } },
           },
           {
             id: "reply-1",
-            sender_id: "openclaw-weather",
+            sender_id: "codex-weather",
             created_at: "2026-07-01T10:00:02Z",
             content: "上海这周多云。",
-            metadata: { openclaw: { delivery_kind: "final", request_id: "msg-user" } },
+            metadata: { codex: { delivery_kind: "final", request_id: "msg-user" } },
           },
         ]),
         { headers: { "Content-Type": "application/json" }, status: 200 },
@@ -492,14 +492,14 @@ describe("AgentActivityPanel", () => {
     renderWithClient(
       <AgentActivityPanel
         item={{
-          id: "agent-openclaw-weather",
-          name: "openclaw-weather",
+          id: "agent-codex-weather",
+          name: "codex-weather",
           role: "worker",
           participants: [
             {
               channel: "csgclaw",
-              channel_user_ref: "openclaw-weather",
-              id: "openclaw-weather",
+              channel_user_ref: "codex-weather",
+              id: "codex-weather",
             },
           ],
         }}
@@ -508,7 +508,7 @@ describe("AgentActivityPanel", () => {
           {
             id: "room-weather",
             title: "天气查询小队",
-            members: ["openclaw-weather", "admin"],
+            members: ["codex-weather", "admin"],
             messages: [{ id: "root", sender_id: "admin", content: "查天气" }],
           },
         ]}
@@ -532,7 +532,7 @@ describe("AgentActivityPanel", () => {
     expect(screen.getByText("上海这周多云。")).toBeInTheDocument();
   });
 
-  it("folds OpenClaw metadata tool result text under the command row", async () => {
+  it("folds Codex metadata tool result text under the command row", async () => {
     const user = userEvent.setup();
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(
@@ -542,21 +542,21 @@ describe("AgentActivityPanel", () => {
             sender_id: "glab-opencsg",
             created_at: "2026-07-01T10:00:00Z",
             content: "run python3 inline script",
-            metadata: { openclaw: { delivery_kind: "tool", request_id: "msg-user" } },
+            metadata: { codex: { delivery_kind: "tool", request_id: "msg-user" } },
           },
           {
             id: "script-result",
             sender_id: "glab-opencsg",
             created_at: "2026-07-01T10:00:01Z",
             content: "run python3 inline script\nok",
-            metadata: { openclaw: { delivery_kind: "tool", request_id: "msg-user" } },
+            metadata: { codex: { delivery_kind: "tool", request_id: "msg-user" } },
           },
           {
             id: "reply-1",
             sender_id: "glab-opencsg",
             created_at: "2026-07-01T10:00:02Z",
             content: "已完成。",
-            metadata: { openclaw: { delivery_kind: "final", request_id: "msg-user" } },
+            metadata: { codex: { delivery_kind: "final", request_id: "msg-user" } },
           },
         ]),
         { headers: { "Content-Type": "application/json" }, status: 200 },
@@ -593,7 +593,7 @@ describe("AgentActivityPanel", () => {
     expect(screen.getByText("已完成。")).toBeInTheDocument();
   });
 
-  it("allows OpenClaw command-only rows to expand and show the full command", async () => {
+  it("allows Codex command-only rows to expand and show the full command", async () => {
     const user = userEvent.setup();
     const longCommand =
       'export GLAB_TELEMETRY_DISABLED=1 REPO="product/agentichub/requirements" IID=2768 ACTION=issue_update ASSIGNEE=jared';
@@ -605,7 +605,7 @@ describe("AgentActivityPanel", () => {
             sender_id: "glab-opencsg",
             created_at: "2026-07-01T10:00:00Z",
             content: longCommand,
-            metadata: { openclaw: { delivery_kind: "tool", request_id: "msg-user" } },
+            metadata: { codex: { delivery_kind: "tool", request_id: "msg-user" } },
           },
         ]),
         { headers: { "Content-Type": "application/json" }, status: 200 },
@@ -646,7 +646,7 @@ describe("AgentActivityPanel", () => {
     expect(screen.getAllByText(longCommand).length).toBeGreaterThanOrEqual(1);
   });
 
-  it("merges OpenClaw structured command output activity into one expandable command row", async () => {
+  it("merges Codex structured command output activity into one expandable command row", async () => {
     const user = userEvent.setup();
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(
@@ -657,8 +657,8 @@ describe("AgentActivityPanel", () => {
             created_at: "2026-07-01T10:00:00Z",
             content: JSON.stringify({
               type: CSGCLAW_AGENT_ACTIVITY_TYPE,
-              channel: "openclaw",
-              sender: "openclaw",
+              channel: "codex",
+              sender: "codex",
               content: {
                 msgtype: AgentActivityMsgTypes.tool,
                 body: "run python3 inline script · running",
@@ -672,7 +672,7 @@ describe("AgentActivityPanel", () => {
                 },
               },
             }),
-            metadata: { openclaw: { activity_kind: "item", delivery_kind: "tool" } },
+            metadata: { codex: { activity_kind: "item", delivery_kind: "tool" } },
           },
           {
             id: "command-end",
@@ -680,8 +680,8 @@ describe("AgentActivityPanel", () => {
             created_at: "2026-07-01T10:00:01Z",
             content: JSON.stringify({
               type: CSGCLAW_AGENT_ACTIVITY_TYPE,
-              channel: "openclaw",
-              sender: "openclaw",
+              channel: "codex",
+              sender: "codex",
               content: {
                 msgtype: AgentActivityMsgTypes.tool,
                 body: "created issue",
@@ -700,7 +700,7 @@ describe("AgentActivityPanel", () => {
                 },
               },
             }),
-            metadata: { openclaw: { activity_kind: "command_output", delivery_kind: "tool" } },
+            metadata: { codex: { activity_kind: "command_output", delivery_kind: "tool" } },
           },
         ]),
         { headers: { "Content-Type": "application/json" }, status: 200 },
@@ -736,19 +736,19 @@ describe("AgentActivityPanel", () => {
     expect(screen.getByText("created issue")).toBeInTheDocument();
   });
 
-  it("coalesces OpenClaw tool item, command item, and command output for one exec call", async () => {
+  it("coalesces Codex tool item, command item, and command output for one exec call", async () => {
     const user = userEvent.setup();
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(
         JSON.stringify([
           {
             id: "tool-start",
-            sender_id: "dev-openclaw",
+            sender_id: "dev-codex",
             created_at: "2026-07-01T10:00:00Z",
             content: JSON.stringify({
               type: CSGCLAW_AGENT_ACTIVITY_TYPE,
-              channel: "openclaw",
-              sender: "openclaw",
+              channel: "codex",
+              sender: "codex",
               content: {
                 msgtype: AgentActivityMsgTypes.tool,
                 body: "exec csgclaw-cli --version · running",
@@ -763,23 +763,23 @@ describe("AgentActivityPanel", () => {
                 },
               },
             }),
-            metadata: { openclaw: { activity_kind: "item", delivery_kind: "tool", request_id: "msg-user" } },
+            metadata: { codex: { activity_kind: "item", delivery_kind: "tool", request_id: "msg-user" } },
           },
           {
             id: "plain-command",
-            sender_id: "dev-openclaw",
+            sender_id: "dev-codex",
             created_at: "2026-07-01T10:00:00.500Z",
             content: "🛠️ csgclaw-cli --version",
-            metadata: { openclaw: { delivery_kind: "tool", request_id: "msg-user" } },
+            metadata: { codex: { delivery_kind: "tool", request_id: "msg-user" } },
           },
           {
             id: "command-end",
-            sender_id: "dev-openclaw",
+            sender_id: "dev-codex",
             created_at: "2026-07-01T10:00:01Z",
             content: JSON.stringify({
               type: CSGCLAW_AGENT_ACTIVITY_TYPE,
-              channel: "openclaw",
-              sender: "openclaw",
+              channel: "codex",
+              sender: "codex",
               content: {
                 msgtype: AgentActivityMsgTypes.tool,
                 body: "csgclaw-cli available, version v0.3.16.",
@@ -796,16 +796,16 @@ describe("AgentActivityPanel", () => {
                 },
               },
             }),
-            metadata: { openclaw: { activity_kind: "item", delivery_kind: "tool", request_id: "msg-user" } },
+            metadata: { codex: { activity_kind: "item", delivery_kind: "tool", request_id: "msg-user" } },
           },
           {
             id: "command-output",
-            sender_id: "dev-openclaw",
+            sender_id: "dev-codex",
             created_at: "2026-07-01T10:00:02Z",
             content: JSON.stringify({
               type: CSGCLAW_AGENT_ACTIVITY_TYPE,
-              channel: "openclaw",
-              sender: "openclaw",
+              channel: "codex",
+              sender: "codex",
               content: {
                 msgtype: AgentActivityMsgTypes.tool,
                 body: "csgclaw-cli available, version v0.3.16.",
@@ -823,7 +823,7 @@ describe("AgentActivityPanel", () => {
                 },
               },
             }),
-            metadata: { openclaw: { activity_kind: "command_output", delivery_kind: "tool", request_id: "msg-user" } },
+            metadata: { codex: { activity_kind: "command_output", delivery_kind: "tool", request_id: "msg-user" } },
           },
         ]),
         { headers: { "Content-Type": "application/json" }, status: 200 },
@@ -834,17 +834,17 @@ describe("AgentActivityPanel", () => {
     renderWithClient(
       <AgentActivityPanel
         item={{
-          id: "agent-dev-openclaw",
-          name: "dev-openclaw",
+          id: "agent-dev-codex",
+          name: "dev-codex",
           role: "worker",
-          participants: [{ channel: "csgclaw", channel_user_ref: "dev-openclaw", id: "dev-openclaw" }],
+          participants: [{ channel: "csgclaw", channel_user_ref: "dev-codex", id: "dev-codex" }],
         }}
         locale="zh-CN"
         rooms={[
           {
-            id: "room-dev-openclaw",
-            title: "dev-openclaw",
-            members: ["dev-openclaw", "admin"],
+            id: "room-dev-codex",
+            title: "dev-codex",
+            members: ["dev-codex", "admin"],
             messages: [{ id: "root", sender_id: "admin", content: "运行一下 csgclaw cli" }],
           },
         ]}
@@ -863,37 +863,37 @@ describe("AgentActivityPanel", () => {
     expect(screen.getByText("csgclaw-cli available, version v0.3.16.")).toBeInTheDocument();
   });
 
-  it("deduplicates equivalent OpenClaw command wrapper lines for the same command", async () => {
+  it("deduplicates equivalent Codex command wrapper lines for the same command", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(
         JSON.stringify([
           {
             id: "help-wrapper",
-            sender_id: "dev-openclaw",
+            sender_id: "dev-codex",
             created_at: "2026-07-01T10:00:00Z",
             content: "command csgclaw-cli --help",
-            metadata: { openclaw: { delivery_kind: "tool", request_id: "msg-user" } },
+            metadata: { codex: { delivery_kind: "tool", request_id: "msg-user" } },
           },
           {
             id: "help-command",
-            sender_id: "dev-openclaw",
+            sender_id: "dev-codex",
             created_at: "2026-07-01T10:00:00Z",
             content: "csgclaw-cli --help",
-            metadata: { openclaw: { delivery_kind: "tool", request_id: "msg-user" } },
+            metadata: { codex: { delivery_kind: "tool", request_id: "msg-user" } },
           },
           {
             id: "version-wrapper",
-            sender_id: "dev-openclaw",
+            sender_id: "dev-codex",
             created_at: "2026-07-01T10:00:05Z",
             content: "command csgclaw-cli --version",
-            metadata: { openclaw: { delivery_kind: "tool", request_id: "msg-user" } },
+            metadata: { codex: { delivery_kind: "tool", request_id: "msg-user" } },
           },
           {
             id: "version-command",
-            sender_id: "dev-openclaw",
+            sender_id: "dev-codex",
             created_at: "2026-07-01T10:00:05Z",
             content: "csgclaw-cli --version",
-            metadata: { openclaw: { delivery_kind: "tool", request_id: "msg-user" } },
+            metadata: { codex: { delivery_kind: "tool", request_id: "msg-user" } },
           },
         ]),
         { headers: { "Content-Type": "application/json" }, status: 200 },
@@ -904,17 +904,17 @@ describe("AgentActivityPanel", () => {
     renderWithClient(
       <AgentActivityPanel
         item={{
-          id: "agent-dev-openclaw",
-          name: "dev-openclaw",
+          id: "agent-dev-codex",
+          name: "dev-codex",
           role: "worker",
-          participants: [{ channel: "csgclaw", channel_user_ref: "dev-openclaw", id: "dev-openclaw" }],
+          participants: [{ channel: "csgclaw", channel_user_ref: "dev-codex", id: "dev-codex" }],
         }}
         locale="zh-CN"
         rooms={[
           {
-            id: "room-dev-openclaw",
-            title: "dev-openclaw",
-            members: ["dev-openclaw", "admin"],
+            id: "room-dev-codex",
+            title: "dev-codex",
+            members: ["dev-codex", "admin"],
             messages: [{ id: "root", sender_id: "admin", content: "运行一下 csgclaw cli" }],
           },
         ]}
@@ -930,23 +930,23 @@ describe("AgentActivityPanel", () => {
     expect(screen.queryByText("command csgclaw-cli --version")).not.toBeInTheDocument();
   });
 
-  it("deduplicates repeated OpenClaw command deliveries for the same request", async () => {
+  it("deduplicates repeated Codex command deliveries for the same request", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(
         JSON.stringify([
           {
             id: "version-start",
-            sender_id: "dev-openclaw",
+            sender_id: "dev-codex",
             created_at: "2026-07-01T10:00:00Z",
             content: "csgclaw-cli --version",
-            metadata: { openclaw: { delivery_kind: "tool", request_id: "msg-user" } },
+            metadata: { codex: { delivery_kind: "tool", request_id: "msg-user" } },
           },
           {
             id: "version-repeat",
-            sender_id: "dev-openclaw",
+            sender_id: "dev-codex",
             created_at: "2026-07-01T10:00:04Z",
             content: "csgclaw-cli --version",
-            metadata: { openclaw: { delivery_kind: "tool", request_id: "msg-user" } },
+            metadata: { codex: { delivery_kind: "tool", request_id: "msg-user" } },
           },
         ]),
         { headers: { "Content-Type": "application/json" }, status: 200 },
@@ -957,17 +957,17 @@ describe("AgentActivityPanel", () => {
     renderWithClient(
       <AgentActivityPanel
         item={{
-          id: "agent-dev-openclaw",
-          name: "dev-openclaw",
+          id: "agent-dev-codex",
+          name: "dev-codex",
           role: "worker",
-          participants: [{ channel: "csgclaw", channel_user_ref: "dev-openclaw", id: "dev-openclaw" }],
+          participants: [{ channel: "csgclaw", channel_user_ref: "dev-codex", id: "dev-codex" }],
         }}
         locale="zh-CN"
         rooms={[
           {
-            id: "room-dev-openclaw",
-            title: "dev-openclaw",
-            members: ["dev-openclaw", "admin"],
+            id: "room-dev-codex",
+            title: "dev-codex",
+            members: ["dev-codex", "admin"],
             messages: [{ id: "root", sender_id: "admin", content: "运行一下 csgclaw cli" }],
           },
         ]}
@@ -980,7 +980,7 @@ describe("AgentActivityPanel", () => {
     expect(screen.getByText("csgclaw-cli --version")).toBeInTheDocument();
   });
 
-  it("shows OpenClaw progress lines as command activity instead of messages", async () => {
+  it("shows Codex progress lines as command activity instead of messages", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(
         JSON.stringify([
@@ -988,22 +988,22 @@ describe("AgentActivityPanel", () => {
             id: "read-1",
             sender_id: "glab-opencsg",
             created_at: "2026-07-01T10:00:00Z",
-            content: "📖 Read: from ~/.openclaw/workspace/skills/gitlab/SKILL.md",
-            metadata: { openclaw: { delivery_kind: "tool", request_id: "msg-user" } },
+            content: "📖 Read: from ~/.codex/workspace/skills/gitlab/SKILL.md",
+            metadata: { codex: { delivery_kind: "tool", request_id: "msg-user" } },
           },
           {
             id: "memory-1",
             sender_id: "glab-opencsg",
             created_at: "2026-07-01T10:00:01Z",
             content: '🧠 Memory Search: GitLab issues user context {"results":[]}',
-            metadata: { openclaw: { delivery_kind: "tool", request_id: "msg-user" } },
+            metadata: { codex: { delivery_kind: "tool", request_id: "msg-user" } },
           },
           {
             id: "run-1",
             sender_id: "glab-opencsg",
             created_at: "2026-07-01T10:00:02Z",
             content: "🛠️ run cd → run python3 scripts/ensure_gitlab_auth.py",
-            metadata: { openclaw: { delivery_kind: "tool", request_id: "msg-user" } },
+            metadata: { codex: { delivery_kind: "tool", request_id: "msg-user" } },
           },
           {
             id: "metadata-tool-1",
@@ -1011,7 +1011,7 @@ describe("AgentActivityPanel", () => {
             created_at: "2026-07-01T10:00:03Z",
             content: "Tool progress without a legacy marker",
             metadata: {
-              openclaw: {
+              codex: {
                 delivery_kind: "tool",
                 request_id: "msg-user",
               },
@@ -1023,7 +1023,7 @@ describe("AgentActivityPanel", () => {
             created_at: "2026-07-01T10:00:04Z",
             content: "当前 GitLab 环境缺少有效凭证，无法查询。",
             metadata: {
-              openclaw: {
+              codex: {
                 delivery_kind: "final",
                 request_id: "msg-user",
               },

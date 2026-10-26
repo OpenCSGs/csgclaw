@@ -30,10 +30,9 @@ func TestManagementEnvironmentUsesOnlyResourceConfiguration(t *testing.T) {
 	t.Setenv("LARKSUITE_CLI_CONFIG_DIR", "host-config")
 	t.Setenv("LARK_CHANNEL_CONFIG", "channel-config")
 	t.Setenv("LARKSUITE_CLI_USER_ACCESS_TOKEN", "host-token")
-	t.Setenv("OPENCLAW_HOME", "host-openclaw")
 	environment := (Client{ConfigDir: "resource-config", OperationID: "operation"}).command().Environment()
 	values := strings.Join(environment, "\n")
-	for _, forbidden := range []string{"host-config", "channel-config", "host-token", "host-openclaw"} {
+	for _, forbidden := range []string{"host-config", "channel-config", "host-token", "host-dsh"} {
 		if strings.Contains(values, forbidden) {
 			t.Fatalf("inherited configuration: %s", forbidden)
 		}

@@ -161,7 +161,7 @@ func testWorkerAgent(id, name string) agent.Agent {
 		Name:        name,
 		Description: "Test worker",
 		Role:        agent.RoleWorker,
-		RuntimeKind: agent.RuntimeKindPicoClawSandbox,
+		RuntimeKind: agent.RuntimeKindCodex,
 		RuntimeID:   "rt-" + id,
 		Image:       "agent-image:test",
 		Status:      "running",

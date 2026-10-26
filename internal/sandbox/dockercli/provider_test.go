@@ -115,11 +115,11 @@ func TestListImagesBuildsCLIArgsAndFiltersUntaggedImages(t *testing.T) {
 	runner := &fakeRunner{
 		results: []fakeResult{{
 			result: CommandResult{Stdout: []byte(strings.Join([]string{
-				"registry.example/picoclaw:2026.5.27",
+				"registry.example/codex:2026.5.27",
 				"<none>:<none>",
-				"registry.example/picoclaw:<none>",
-				"registry.example/picoclaw:2026.5.22",
-				"registry.example/picoclaw:2026.5.27",
+				"registry.example/codex:<none>",
+				"registry.example/codex:2026.5.22",
+				"registry.example/codex:2026.5.27",
 				"",
 			}, "\n"))},
 		}},
@@ -129,7 +129,7 @@ func TestListImagesBuildsCLIArgsAndFiltersUntaggedImages(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListImages() error = %v", err)
 	}
-	if want := []string{"registry.example/picoclaw:2026.5.27", "registry.example/picoclaw:2026.5.22"}; !reflect.DeepEqual(got, want) {
+	if want := []string{"registry.example/codex:2026.5.27", "registry.example/codex:2026.5.22"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("ListImages() = %#v, want %#v", got, want)
 	}
 	if want := []string{"image", "ls", "--format", "{{.Repository}}:{{.Tag}}"}; !reflect.DeepEqual(runner.requests[0].Args, want) {

@@ -22,7 +22,7 @@ const worker = (status: string): AgentLike => ({
   id: "u-worker",
   name: "worker",
   role: "worker",
-  runtime_kind: "picoclaw_sandbox",
+  runtime_kind: "codex",
   status,
 });
 

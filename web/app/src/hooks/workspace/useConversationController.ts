@@ -108,7 +108,6 @@ import {
 import { localizeAPIError } from "@/shared/i18n";
 import type { IMConversation, IMMessage, IMServerEvent, IMUser, ThreadView, TranslateFn } from "@/models/conversations";
 import type { SlashPickerCandidate } from "@/models/slashCommands";
-import { useLegacyOpenClawWorkingFallback } from "./legacyOpenClawWorking";
 import { useAttachmentWarning } from "./useAttachmentWarning";
 import type { UseConversationControllerArgs } from "./types";
 import { messageListScrollKey, useMessageListAutoScroll } from "./useMessageListAutoScroll";
@@ -457,7 +456,6 @@ export function useConversationController({
   messageActionBusy,
   messageActionFeedback,
   messageListActive = true,
-  hasObservedWorkLease,
   stopWorkingTurn,
   workingParticipantsForRoom,
 }: UseConversationControllerArgs) {
@@ -622,14 +620,7 @@ export function useConversationController({
     () => workingParticipantsForRoom(selectedConversationID),
     [selectedConversationID, workingParticipantsForRoom],
   );
-  const workingParticipants = useLegacyOpenClawWorkingFallback({
-    agents,
-    authoritative: authoritativeWorkingParticipants,
-    conversation: selectedConversation,
-    currentUserID: data?.current_user_id,
-    hasObservedWorkLease,
-    usersById,
-  });
+  const workingParticipants = authoritativeWorkingParticipants;
   const logAgent = useMemo(() => {
     if (!selectedConversation || !data?.current_user_id) {
       return null;

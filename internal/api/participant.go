@@ -459,7 +459,7 @@ func (h *Handler) requireParticipantBridgeID(w http.ResponseWriter, r *http.Requ
 		return "", false
 	}
 	if h.participantBridge == nil {
-		http.Error(w, "picoclaw integration is not configured", http.StatusServiceUnavailable)
+		http.Error(w, "agent channel integration is not configured", http.StatusServiceUnavailable)
 		return "", false
 	}
 	if !h.validateServerAccessToken(r.Header.Get("Authorization")) {

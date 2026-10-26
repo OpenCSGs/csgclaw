@@ -4,6 +4,30 @@
 
 `csgclaw serve` 会使用本地配置文件中的 server 访问方式、bootstrap 镜像、sandbox 隔离方式和可选通信通道，并在首次运行时自动补齐缺失的本地状态。
 
+## 已退役运行时的升级迁移
+
+启动时会先迁移已有的 OpenClaw、PicoClaw 配置，再解析模板、加载 Agent。
+已移除的内置模板默认值会恢复为当前 Codex 默认值，废弃的 bootstrap 运行时、镜像字段会在保存配置时删除。
+已有的自定义模板选择、受支持运行时、凭据和其他设置会保留。
+
+旧 Agent 记录会迁移到 Codex，保留身份、模型配置、资源与聊天记录。
+由于原沙箱将由本机进程替代，迁移后的 Worker 保持停止，需手动启动。
+原工作目录通过 `local_workspace_dir` 继续使用，用户文件和自定义 Skill 均保留。
+旧沙箱句柄、镜像、运行时专属选项及运行时专属环境变量会从活动 Agent 状态中清除。
+Agent 尚无 MCP 配置快照时，会导入旧原生配置，并转换超时单位及工作目录路径。
+已有显式 MCP 选择优先保留。
+可读的个人记忆仅在当前 Codex 记忆文档不存在时导入。
+
+本地模板先备份再升级落盘，已有远端模板及只读注册表在读取时适配。
+新模板仅支持 `codex` 和 `dsh`。
+历史活动元数据在加载消息时规范化，工具记录继续按活动消息处理。
+
+状态与配置重写前会创建同级 `.csgclaw_backup_<日期>_<序号>` 备份。
+应用数据目录外的独立 `--config` 文件会创建同级文件备份。
+本地注册表备份使用相同命名规则，放在注册表目录旁。
+备份可跳过容器生成且不可读的插件副本，用户工作目录仍要求完整备份成功。
+已落盘的迁移不会在重复启动时再次重写。
+
 ## Codex 运行模式
 
 在启动 CSGClaw server 前设置 `CSGCLAW_EXECUTION_MODE`：
@@ -29,7 +53,7 @@ CSGCLAW_EXECUTION_MODE=read_only csgclaw serve
 
 当 sandbox provider 是 Docker Desktop 上的 `docker` 时，空的 `advertise_base_url` 会在生成 manager 和 worker 运行时配置时解析为 `http://host.docker.internal:<port>`。如果 Docker 需要使用其它回连地址，请显式设置 `advertise_base_url`。
 
-`access_token` 用来保护需要认证的 API 路由，包括 PicoClaw participant bridge 路由。启用鉴权时，客户端必须发送 `Authorization: Bearer <access_token>`。
+`access_token` 用来保护需要认证的 API 路由，包括 participant channel 路由。启用鉴权时，客户端必须发送 `Authorization: Bearer <access_token>`。
 
 `no_auth` 控制 CSGClaw 是否跳过 bearer token 检查，默认值是 `false`。仅建议在可信的本地或开发环境中设置为 `true`。
 
@@ -76,7 +100,7 @@ models = ["Qwen/Qwen3-0.6B-GGUF"]
 
 [bootstrap]
 manager_image_override = ""
-runtime_kind = "picoclaw_sandbox"
+runtime_kind = "codex"
 
 [sandbox]
 provider = "boxlite"
@@ -102,7 +126,7 @@ models = ["gpt-5.4"]
 
 [bootstrap]
 manager_image_override = ""
-runtime_kind = "picoclaw_sandbox"
+runtime_kind = "codex"
 
 [sandbox]
 provider = "boxlite"
@@ -133,7 +157,7 @@ show_upgrade = true
 
 [bootstrap]
 manager_image_override = ""
-runtime_kind = "picoclaw_sandbox"
+runtime_kind = "codex"
 
 [sandbox]
 provider = "boxlite"
@@ -141,10 +165,12 @@ provider = "boxlite"
 
 Codex 和 Claude Code Profile 通过 Web UI 写入 agent state。CSGClaw 在 `serve` 时会嵌入启动 CLIProxyAPI，并绑定到私有 localhost 端口，因此不再需要配置固定的 CLIProxy base URL。
 
-Worker 在创建时也可以显式选择 runtime kind。默认值是 `picoclaw_sandbox`。如果要创建 sandbox 里的 OpenClaw worker，可以使用 `csgclaw agent create --runtime openclaw_sandbox ...`；如果要创建 Codex worker，可以使用 `csgclaw agent create --runtime codex ...`。API 在 `POST /api/v1/agents` 的 `runtime_kind` 中接受同样的值。
+Worker 支持 `codex` 和 `dsh` 运行时。
+Manager 使用内置 Codex CLI。
+创建 Worker 时可指定 `csgclaw agent create --runtime codex ...` 或 `--runtime dsh`。
+API 创建 Agent 时接受相同的运行时名称。
 
 `[bootstrap].manager_image_override` 留空时会使用代码内置的默认 manager image；只有在需要覆盖默认值时才设置它。
-bootstrap manager 当前固定使用 `picoclaw_sandbox`；`openclaw_sandbox` 支持用于 worker，不支持作为 manager runtime。
 
 本地鉴权由 CSGClaw 统一管理：
 
@@ -182,24 +208,6 @@ Checkpoint 和维护输出不会发送到房间，但后台提取与合并请求
 原始上游 API key 不会写入这个文件，而是通过 `env_key = "OPENAI_API_KEY"` 注入到 runtime 环境变量。
 
 当 worker 使用 Codex runtime 时，CSGClaw 会通过与 CSGClaw 可执行文件同目录打包的 Codex CLI 执行 `codex app-server --listen stdio://`。不会使用 `PATH`、`CSGCLAW_CODEX_PATH` 或 `CSGCLAW_CODEX_ACP_PATH`；如该内置文件缺失，请重新安装 CSGClaw。
-
-## OpenClaw Runtime
-
-CSGClaw 的 bootstrap manager 默认使用 PicoClaw。若要创建 sandbox 中的 OpenClaw worker，请在创建 worker 时显式指定 runtime：
-
-```bash
-csgclaw agent create --name alice --runtime openclaw_sandbox
-```
-
-推荐镜像形态是基于 OpenClaw slim 二次封装，并把 CSGClaw 管理的插件烘焙到 `/home/node/openclaw-plugins`（例如 `csgclaw-extension` 和外部 channel 插件）。运行时状态仍由 `~/.csgclaw/agents/<agent>/.openclaw/openclaw.json` 提供；不要把空的宿主机目录挂载到 `/home/node/openclaw-plugins`，否则会遮住镜像内已经烘焙好的插件。
-
-CSGClaw 为普通 OpenAI-compatible profile 生成保守的 OpenClaw bridge 模型元数据。
-默认使用 `openai-completions`、`input: ["text"]`，不声明 reasoning effort 支持，也不写入 `agents.defaults.thinkingDefault`。
-这样可以避免 OpenClaw 向未通过 CSGClaw 声明能力的 provider 发送图片或 reasoning payload。
-Agent profile 只持久化一个 `reasoning_effort` 策略：`auto`、`none`、`minimal`、`low`、`medium`、`high` 或 `xhigh`。旧 profile 缺少该字段时规范化为 `auto`，已有显式值保持不变。
-对于 OpenClaw，`auto` 不写入 `thinkingDefault`，显式强度写入对应值，`none` 映射为 `off`。未关闭推理时 CSGClaw 还会写入 `reasoningDefault: "stream"`，让 channel plugin 可以收到公开 reasoning callback；模型没有产生 reasoning 时继续使用原来的普通回复流程。
-使用 Codex profile 时，CSGClaw 会把 bridge 模型声明为 `openai-codex-responses`，启用 `input: ["text", "image"]`，写入 `minimal`、`low`、`medium`、`high`、`xhigh` reasoning 档位，并写入 streaming usage 兼容元数据。
-Codex 的 `reasoningEffortMap` 会按同名值透传这些档位。
 
 ## Sandbox Provider
 

@@ -33,7 +33,7 @@ func (*recreateExtensionObserver) RuntimeReady(string) error                    
 // Exercise the HTTP recreation path through the real Engine/Controller and an
 // in-memory container. Every failure is injected after New returns a live handle.
 func TestRecreateAPIRemovesUncommittedReplacement(t *testing.T) {
-	for _, kind := range []string{agent.RuntimeKindCodex, agent.RuntimeKindOpenClawSandbox, agent.RuntimeKindPicoClawSandbox} {
+	for _, kind := range []string{agent.RuntimeKindCodex, agent.RuntimeKindDSH, agent.RuntimeKindCodex} {
 		for _, failure := range []string{"observation", "info", "persist", "canceled", "cleanup", "none"} {
 			t.Run(kind+"/"+failure, func(t *testing.T) {
 				ctx, cancel := context.WithCancel(context.Background())

@@ -656,6 +656,8 @@ func TestAgentSessionResponsesRejectsUnsupportedRuntimeBeforeBinding(t *testing.
 		return agentengine.TurnResult{Status: agentengine.TurnSucceeded}
 	}}
 	unsupported := completeWorkerAgent("agent-alpha", "Alpha")
+	unsupported.RuntimeKind = "unsupported"
+	unsupported.RuntimeName = "unsupported"
 	handler, _, bindings, _ := newAgentSessionTestHandler(t, []agent.Agent{unsupported}, engine, "")
 	recorder := performAgentSessionRequest(t, handler, "agent-alpha", "unsupported", map[string]any{"input": "hello"})
 	if recorder.Code != http.StatusServiceUnavailable || !strings.Contains(recorder.Body.String(), "runtime_adapter_unavailable") {
@@ -745,7 +747,7 @@ func newAgentSessionTestHandler(
 	}
 	agentSvc, err := agent.NewController(
 		config.ModelConfig{}, config.ServerConfig{}, "manager:test", agentPath,
-		agent.WithRuntime(fakeCompatRuntime{kind: agent.RuntimeKindPicoClawSandbox}),
+		agent.WithRuntime(fakeCompatRuntime{kind: agent.RuntimeKindCodex}),
 		agent.WithRuntime(fakeCompatRuntime{kind: agent.RuntimeKindCodex}),
 		agent.WithRuntime(fakeCompatRuntime{kind: agent.RuntimeKindDSH}),
 	)

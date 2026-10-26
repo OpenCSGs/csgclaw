@@ -22,7 +22,7 @@ func TestScopedRuntimeCLITasksAndIdentityOverHTTP(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	profile, err := controller.PicoClawRuntimeHost().ResolveRuntimeProfile(agentruntime.Handle{RuntimeID: manager.RuntimeID})
+	profile, err := controller.RuntimeHost().ResolveRuntimeProfile(agentruntime.Handle{RuntimeID: manager.RuntimeID})
 	if err != nil {
 		t.Fatal(err)
 	}

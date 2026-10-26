@@ -30,7 +30,7 @@ func TestProductionArchitectureHasNoRuntimeOrChannelBackdoors(t *testing.T) {
 				if name == "csgclaw/internal/agent" || strings.HasPrefix(name, "csgclaw/internal/channelbridge") {
 					t.Errorf("%s imports removed owner %s", path, name)
 				}
-				if root == "." && (strings.HasPrefix(name, "csgclaw/internal/runtime/codex") || strings.HasPrefix(name, "csgclaw/internal/runtime/picoclaw") || strings.HasPrefix(name, "csgclaw/internal/runtime/openclaw") || strings.HasPrefix(name, "csgclaw/internal/channel/") || name == "csgclaw/internal/participant" || name == "csgclaw/internal/im") {
+				if root == "." && (strings.HasPrefix(name, "csgclaw/internal/runtime/codex") || strings.HasPrefix(name, "csgclaw/internal/channel/") || name == "csgclaw/internal/participant" || name == "csgclaw/internal/im") {
 					t.Errorf("%s leaks concrete Runtime or Channel dependency %s", path, name)
 				}
 			}

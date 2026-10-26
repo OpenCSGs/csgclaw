@@ -4,8 +4,8 @@ import { newerProgressMessage } from "@/models/turnProgress";
 import type { ContextUsage } from "@/models/modelMetadata";
 import { flattenMentionText } from "@/components/business/MessageContent/mentions";
 import {
-  isOpenClawToolDeliveryMessage,
-  openClawDeliveryKind,
+  isToolDeliveryMessage,
+  activityDeliveryKind,
   parseAgentActivity,
   parseLegacyToolActivityCommand,
   parseMessageActivityCommand,
@@ -144,7 +144,7 @@ export function groupVideoGenerationMessages(messages: readonly IMMessage[]): Vi
 }
 
 function videoGenerationParentMessageID(message: IMMessage): string {
-  for (const key of ["codex", "openclaw"]) {
+  for (const key of ["codex"]) {
     const metadata = message.metadata?.[key];
     if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) continue;
     const parentID = String((metadata as Record<string, unknown>).turn_message_id || "").trim();
@@ -400,10 +400,10 @@ export function isToolCallMessage(messageOrContent: IMMessage | unknown): boolea
     if (activity) {
       return activity.content.msgtype === AgentActivityMsgTypes.tool;
     }
-    if (isOpenClawToolDeliveryMessage(messageOrContent)) {
+    if (isToolDeliveryMessage(messageOrContent)) {
       return true;
     }
-    if (openClawDeliveryKind(messageOrContent)) {
+    if (activityDeliveryKind(messageOrContent)) {
       return false;
     }
     return Boolean(parseMessageActivityCommand(messageOrContent));

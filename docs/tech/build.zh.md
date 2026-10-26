@@ -15,7 +15,7 @@ make
 2. 构建 `bin/csgclaw`、宿主平台的 `bin/csgclaw-cli` 和 bundled `bin/codex`。
 3. 按当前 CPU 架构构建静态 Linux `csgclaw-cli` 到 `bin/sandbox-tools/csgclaw-cli`。
 
-`make build-all` 保留为 `make build` 的别名。CSGClaw 不再在本地构建派生的 PicoClaw/OpenClaw 镜像。
+`make build-all` 保留为 `make build` 的别名。应用内置 Codex，DeepSeek Harness 按需安装。
 
 常用 target：
 
@@ -57,17 +57,6 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build.ps1 build
 3. 构建 Linux 版 `csgclaw-cli` 到 `bin/sandbox-tools/csgclaw-cli`。
 
 本地编译的 `bin/csgclaw[.exe]` 启动沙盒时，会把相邻的 `bin/sandbox-tools/csgclaw-cli` 同步到 `~/.csgclaw/sandbox-tools/csgclaw-cli`，然后将这个托管目录只读挂载到沙盒内的 `/opt/csgclaw/bin`。正式安装器也会从已安装 bundle 完成同样的首次同步。
-
-## 运行时镜像
-
-Sandbox runtime 使用以下固定默认镜像：
-
-| Runtime | 固定镜像 |
-|---|---|
-| OpenClaw | `opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/openclaw:20260723.2-csgclaw` |
-| PicoClaw | `opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw:2026.6.10` |
-
-OpenClaw 的固定引用保存在内置 `agent.toml` 中。PicoClaw 不再提供内置模板，其引用改为 runtime 默认值。CSGClaw 不负责生成这些镜像 tag，也不在 CI 中构建这些运行时镜像。
 
 ## Web UI
 

@@ -109,7 +109,7 @@ func TestDetachedAnswerCanceledDuringTranscriptCannotComplete(t *testing.T) {
 func TestRuntimeReplacementPreservesExtensionResource(t *testing.T) {
 	rt := &projectionRuntime{fakeConversationRuntime: &fakeConversationRuntime{state: runtime.StateStopped}, root: t.TempDir()}
 	controller := newTestAgentService(t, []agent.Agent{{ID: "agent-a", Name: "A", Role: agent.RoleWorker, RuntimeKind: runtime.KindCodex, RuntimeID: "rt-agent-a", Status: "stopped", AgentProfile: agent.AgentProfile{Provider: agent.ProviderAPI, BaseURL: "https://example.com/v1", APIKey: "test-only", ModelID: "test-model", ProfileComplete: true}}}, rt)
-	other := &fakeConversationRuntime{kind: runtime.KindOpenClawSandbox, state: runtime.StateRunning}
+	other := &fakeConversationRuntime{kind: runtime.KindDSH, state: runtime.StateRunning}
 	if err := agent.WithRuntime(other)(controller); err != nil {
 		t.Fatal(err)
 	}
@@ -121,7 +121,7 @@ func TestRuntimeReplacementPreservesExtensionResource(t *testing.T) {
 	if _, err := engine.RuntimeExtensions("agent-a").Apply(ctx, projectionRequest("tool", "one")); err != nil {
 		t.Fatal(err)
 	}
-	_, err := engine.Agents().Update(ctx, "agent-a", AgentUpdateRequest{FieldMask: []string{"runtime"}, Spec: AgentSpec{Runtime: RuntimeSpec{Adapter: "openclaw", Sandboxed: true, Image: "fixture:latest"}}})
+	_, err := engine.Agents().Update(ctx, "agent-a", AgentUpdateRequest{FieldMask: []string{"runtime"}, Spec: AgentSpec{Runtime: RuntimeSpec{Adapter: "dsh"}}})
 	if err != nil {
 		t.Fatalf("runtime switch failed: %v", err)
 	}
@@ -146,7 +146,7 @@ func TestRuntimeReplacementPreservesExtensionResource(t *testing.T) {
 func TestFailedRuntimeReplacementRetainsRequiredExtension(t *testing.T) {
 	rt := &projectionRuntime{fakeConversationRuntime: &fakeConversationRuntime{state: runtime.StateStopped}, root: t.TempDir()}
 	controller := newTestAgentService(t, []agent.Agent{{ID: "agent-a", Name: "A", Role: agent.RoleWorker, RuntimeKind: runtime.KindCodex, RuntimeID: "rt-agent-a", Status: "stopped", AgentProfile: agent.AgentProfile{Provider: agent.ProviderAPI, BaseURL: "https://example.com/v1", APIKey: "test-only", ModelID: "test-model", ProfileComplete: true}}}, rt)
-	if err := agent.WithRuntime(&fakeConversationRuntime{kind: runtime.KindOpenClawSandbox})(controller); err != nil {
+	if err := agent.WithRuntime(&fakeConversationRuntime{kind: runtime.KindDSH})(controller); err != nil {
 		t.Fatal(err)
 	}
 	engine := New(controller)
@@ -159,7 +159,7 @@ func TestFailedRuntimeReplacementRetainsRequiredExtension(t *testing.T) {
 	if _, err := engine.RuntimeExtensions("agent-a").Apply(ctx, request); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := engine.Agents().Update(ctx, "agent-a", AgentUpdateRequest{FieldMask: []string{"runtime"}, Spec: AgentSpec{Runtime: RuntimeSpec{Adapter: "openclaw", Sandboxed: true, Image: "fixture:latest"}}}); err == nil {
+	if _, err := engine.Agents().Update(ctx, "agent-a", AgentUpdateRequest{FieldMask: []string{"runtime"}, Spec: AgentSpec{Runtime: RuntimeSpec{Adapter: "dsh"}}}); err == nil {
 		t.Fatal("replacement started without required extension support")
 	}
 	if err := controller.Reload(); err != nil {

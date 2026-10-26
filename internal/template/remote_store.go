@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"csgclaw/internal/migrations/retiredclaws"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -22,6 +23,7 @@ import (
 	"unicode/utf8"
 
 	"csgclaw/internal/apitypes"
+
 	toml "github.com/pelletier/go-toml/v2"
 )
 
@@ -387,6 +389,7 @@ func (s *RemoteStore) fetchManifest(ctx context.Context, id, branch string) (tem
 	if err := toml.Unmarshal(data, &manifest); err != nil {
 		return templateManifest{}, fmt.Errorf("decode remote hub manifest %q: %w", id, err)
 	}
+	retiredclaws.TemplateManifest(&manifest.RuntimeKind, &manifest.RuntimeOptions, &manifest.Image.Ref)
 	if err := validateManifest(manifest); err != nil {
 		return templateManifest{}, fmt.Errorf("validate remote hub manifest %q: %w", id, err)
 	}

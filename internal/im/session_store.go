@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"crypto/sha256"
+	"csgclaw/internal/migrations/retiredclaws"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -76,7 +77,7 @@ func sessionLineToMessage(line sessionMessageLine) (Message, error) {
 		Kind:            line.Kind,
 		Content:         line.Content,
 		Event:           line.Event,
-		Metadata:        line.Metadata,
+		Metadata:        retiredclaws.MessageMetadata(line.Metadata),
 		CreatedAt:       createdAt,
 		Mentions:        line.Mentions,
 		RelatesTo:       line.RelatesTo,
@@ -191,6 +192,7 @@ func decodeSessionMessageLine(sessionsRoot string, line []byte) (Message, error)
 		if legacyErr := json.Unmarshal(line, &legacy); legacyErr != nil {
 			return Message{}, fmt.Errorf("decode im session line: %w", err)
 		}
+		legacy.Metadata = retiredclaws.MessageMetadata(legacy.Metadata)
 		return legacy, nil
 	}
 
@@ -210,7 +212,7 @@ func decodeSessionMessageLine(sessionsRoot string, line []byte) (Message, error)
 	message.Event = blob.Event
 	// Legacy blobs keep metadata inline in the session record.
 	if blob.Metadata != nil {
-		message.Metadata = blob.Metadata
+		message.Metadata = retiredclaws.MessageMetadata(blob.Metadata)
 	}
 	message.Thread = blob.Thread
 	message.Attachments = cloneMessageAttachments(blob.Attachments)

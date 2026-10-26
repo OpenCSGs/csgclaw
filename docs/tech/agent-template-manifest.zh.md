@@ -15,10 +15,10 @@
 | `avatar` | 本地模板保存的智能体头像，支持内置头像路径和上传头像的数据 URL；旧模板未设置时使用默认图标 | 否 | ✅ |
 | `description` | 模板说明；创建 Agent 时可作为 Agent 的默认描述 | 否 | ✅ |
 | `role` | 模板角色，旧格式只支持 `manager` 或 `worker` | 否，已移除 | ❌ |
-| `runtime_kind` | Agent 运行时类型，只支持 `codex`、`picoclaw` 或 `openclaw` | 是 | ✅ |
+| `runtime_kind` | Agent 运行时类型，只支持 `codex` 或 `dsh` | 是 | ✅ |
 | `version` | 模板版本，用于模板展示及判断沙箱镜像是否需要升级 | 否 | ✅ |
 | `updated_at` | 模板更新时间，必须是 RFC 3339 时间格式，用于 Hub 展示和排序 | 否 | ✅ |
-| `image.ref` | 沙箱运行时使用的容器镜像地址 | `picoclaw`、`openclaw` 必须；`codex` 不必须 | ✅ |
+| `image.ref` | 沙箱运行时使用的容器镜像地址 | 可选，主机运行时不使用 | ✅ |
 | `image.digest` | 容器镜像摘要 | 否，已移除 | ❌ |
 | `image.platforms` | 镜像支持的平台列表 | 否，已移除 | ❌ |
 | `image.env` | 容器镜像所需的环境变量定义列表 | 否 | ✅ |
@@ -39,8 +39,8 @@
 
 - 内置模板的角色由内置模板注册表决定；本地模板和社区模板统一作为 Worker。
 - 从 Manager 保存或发布的模板仍允许创建，但保存后会作为普通 Worker 模板使用。
-- `runtime_kind` 当前只接受 `codex`、`picoclaw` 或 `openclaw`。
-- `image.ref` 对沙箱运行时 `picoclaw` 和 `openclaw` 是必填字段。
+- `runtime_kind` 当前只接受 `codex` 或 `dsh`。
+- `codex` 和 `dsh` 都是主机运行时，不要求 `image.ref`。
 - `runtime_options` 当前仅适用于 Codex Worker 模板。
 - `runtime_options.execution_mode` 当前只接受 `standard` 或 `read_only`。
 - `runtime_options.memory_mode` 当前只接受 `enabled` 或 `disabled`。

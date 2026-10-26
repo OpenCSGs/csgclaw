@@ -66,7 +66,7 @@ describe("structured message helpers", () => {
     });
   });
 
-  it("leaves legacy PicoClaw tool feedback as markdown", () => {
+  it("leaves legacy Codex tool feedback as markdown", () => {
     expect(
       parseStructuredMessage(`🔧 \`read_file\`
 \`\`\`json
