@@ -9,6 +9,7 @@ import { spawn, spawnSync } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { collectDesktopReleaseAssets } from "./collect-desktop-release-assets.mjs";
+import { runStapler } from "./macos-stapler.mjs";
 import {
   inferReleaseChannel,
   normalizeReleaseVersion,
@@ -404,11 +405,11 @@ function exactlyOne(values, description) {
   return values[0];
 }
 
-function verifyApplication(appPath, environment) {
+async function verifyApplication(appPath, environment) {
   run("codesign", ["--verify", "--deep", "--strict", "--verbose=2", appPath], {
     environment,
   });
-  run("xcrun", ["stapler", "validate", appPath], { environment });
+  await runStapler("validate", appPath, { environment });
   run("spctl", ["--assess", "--type", "execute", "--verbose=4", appPath], {
     environment,
   });
@@ -451,9 +452,9 @@ function submitDiskImageNotarization(dmgPath, environment) {
   );
 }
 
-function stapleAndVerifyDiskImage(dmgPath, environment) {
-  run("xcrun", ["stapler", "staple", dmgPath], { environment });
-  run("xcrun", ["stapler", "validate", dmgPath], { environment });
+async function stapleAndVerifyDiskImage(dmgPath, environment) {
+  await runStapler("staple", dmgPath, { environment });
+  await runStapler("validate", dmgPath, { environment });
   run(
     "spctl",
     [
@@ -469,7 +470,7 @@ function stapleAndVerifyDiskImage(dmgPath, environment) {
   );
 }
 
-function verifyUpdateArchive(zipPath, environment) {
+async function verifyUpdateArchive(zipPath, environment) {
   const temporaryDirectory = fs.mkdtempSync(
     path.join(os.tmpdir(), "csgclaw-macos-update-"),
   );
@@ -482,7 +483,7 @@ function verifyUpdateArchive(zipPath, environment) {
         .map((entry) => path.join(entry.parentPath, entry.name)),
       `signed ${appBundleName} in the update ZIP`,
     );
-    verifyApplication(appPath, environment);
+    await verifyApplication(appPath, environment);
   } finally {
     fs.rmSync(temporaryDirectory, { recursive: true, force: true });
   }
@@ -559,10 +560,14 @@ async function packageArchitecture({
   signDiskImage(dmgPath, signingIdentity, environment);
   const notarizingDiskImage = submitDiskImageNotarization(dmgPath, environment);
   console.log("Verifying the app and update ZIP while Apple notarizes the DMG.");
-  verifyApplication(appPath, environment);
-  verifyUpdateArchive(zipPath, environment);
-  await notarizingDiskImage;
-  stapleAndVerifyDiskImage(dmgPath, environment);
+  await Promise.all([
+    notarizingDiskImage,
+    (async () => {
+      await verifyApplication(appPath, environment);
+      await verifyUpdateArchive(zipPath, environment);
+    })(),
+  ]);
+  await stapleAndVerifyDiskImage(dmgPath, environment);
 
   const staged = collectDesktopReleaseAssets({
     version,

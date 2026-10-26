@@ -7,7 +7,12 @@ on:
   pull_request:
     paths:
       - .github/workflows/release-retry.yml
+      - .github/workflows/release.yml
       - scripts/release-retry.test.mjs
+      - scripts/macos-stapler.mjs
+      - scripts/macos-stapler.test.mjs
+      - scripts/macos-desktop-package.mjs
+      - scripts/macos-desktop-package.test.mjs
 
 permissions: {}
 
@@ -22,7 +27,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version-file: desktop/package.json
-      - run: node --test scripts/release-retry.test.mjs
+      - run: node --test scripts/release-retry.test.mjs scripts/macos-stapler.test.mjs scripts/macos-desktop-package.test.mjs
 
   retry:
     if: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'failure' }}
