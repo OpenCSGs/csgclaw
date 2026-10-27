@@ -175,9 +175,15 @@ func runtimeRecordForAgent(a Agent) RuntimeRecord {
 		createdAt = time.Time{}
 	}
 	runtimeOptions := a.RuntimeOptions
+	kind := a.RuntimeConfig().LegacyKind()
+	if kind == "" {
+		// A temporarily unavailable runtime must survive unrelated Agent saves
+		// so its migration can be retried on a later application startup.
+		kind = strings.TrimSpace(a.RuntimeKind)
+	}
 	return normalizeRuntimeRecord(RuntimeRecord{
 		ID:        normalizeRuntimeID(a.RuntimeID, a.ID),
-		Kind:      a.RuntimeConfig().LegacyKind(),
+		Kind:      kind,
 		State:     agentruntime.State(strings.TrimSpace(a.Status)),
 		AgentIDs:  []string{strings.TrimSpace(a.ID)},
 		SandboxID: strings.TrimSpace(a.BoxID),

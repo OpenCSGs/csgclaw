@@ -649,7 +649,7 @@ func TestAgentSessionResponsesReturnsValidationAndTimeoutErrors(t *testing.T) {
 	}
 }
 
-func TestAgentSessionResponsesRejectsUnsupportedRuntimeBeforeBinding(t *testing.T) {
+func TestAgentSessionResponsesRejectsUnavailableRuntimeBeforeBinding(t *testing.T) {
 	var calls atomic.Int32
 	engine := &fakeSessionEngine{run: func(context.Context, string, agentengine.TurnRequest, agentengine.EventSink) agentengine.TurnResult {
 		calls.Add(1)
@@ -660,7 +660,7 @@ func TestAgentSessionResponsesRejectsUnsupportedRuntimeBeforeBinding(t *testing.
 	unsupported.RuntimeName = "unsupported"
 	handler, _, bindings, _ := newAgentSessionTestHandler(t, []agent.Agent{unsupported}, engine, "")
 	recorder := performAgentSessionRequest(t, handler, "agent-alpha", "unsupported", map[string]any{"input": "hello"})
-	if recorder.Code != http.StatusServiceUnavailable || !strings.Contains(recorder.Body.String(), "runtime_adapter_unavailable") {
+	if recorder.Code != http.StatusServiceUnavailable || !strings.Contains(recorder.Body.String(), "agent_unavailable") {
 		t.Fatalf("response = %d %s", recorder.Code, recorder.Body.String())
 	}
 	if calls.Load() != 0 || len(bindings.Bindings()) != 0 {

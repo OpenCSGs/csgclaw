@@ -921,3 +921,29 @@ func TestOnboardKeepsProviderServiceTransport(t *testing.T) {
 		t.Fatal("onboard discarded service transport")
 	}
 }
+
+func TestExistingConfigMigrationWriteFailureDoesNotBlockBootstrap(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	path := filepath.Join(home, "config.toml")
+	original := "[server]\nlisten_addr=\"127.0.0.1:19091\"\n[bootstrap]\ndefault_worker_template=\"builtin.picoclaw-worker\"\n"
+	if err := os.WriteFile(path, []byte(original), 0400); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chmod(path, 0600) })
+	if f, err := os.OpenFile(path, os.O_WRONLY, 0); err == nil {
+		f.Close()
+		t.Skip("filesystem does not enforce file permissions")
+	}
+	cfg, err := ensureConfigState(path)
+	if err != nil {
+		t.Fatalf("configuration migration blocked bootstrap: %v", err)
+	}
+	if cfg.Bootstrap.ResolvedDefaultWorkerTemplate() != "builtin.codex-worker" {
+		t.Fatal("in-memory defaults were not migrated")
+	}
+	data, err := os.ReadFile(path)
+	if err != nil || string(data) != original {
+		t.Fatal("read-only source changed")
+	}
+}

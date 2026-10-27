@@ -161,3 +161,47 @@ func TestReadOnlyRetiredTemplateRegistryRemainsUsable(t *testing.T) {
 		t.Fatal("read-only template instructions lost")
 	}
 }
+
+func TestTemplateBackupFailureStillAllowsReadTimeMigration(t *testing.T) {
+	root := filepath.Join(t.TempDir(), strings.Repeat("registry", 31))
+	dir := filepath.Join(root, "templates", "reviewer")
+	if err := os.MkdirAll(filepath.Join(dir, "instructions"), 0755); err != nil {
+		t.Skipf("filesystem does not support this long registry path: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(dir, "mcps"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	manifest := filepath.Join(dir, "agent.toml")
+	original := "name=\"reviewer\"\nruntime_kind=\"picoclaw\"\n"
+	for path, text := range map[string]string{manifest: original, filepath.Join(dir, "instructions", "AGENT.md"): "# Retained", filepath.Join(dir, "mcps", "mcp.json"): "{}"} {
+		if err := os.WriteFile(path, []byte(text), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// The registry component is valid, but adding the backup suffix exceeds
+	// the filesystem's filename limit. This is not a read-only-registry error.
+	if err := retiredclaws.LocalTemplates(root); err == nil {
+		t.Skip("filesystem permits oversized backup names")
+	}
+	store, err := template.DefaultStoreFactory(config.HubRegistryConfig{Kind: template.RegistryKindLocal, Path: root})
+	if err != nil {
+		t.Fatalf("migration failure blocked registry: %v", err)
+	}
+	item, err := store.Get(context.Background(), "reviewer")
+	if err != nil || item.RuntimeKind != "codex" {
+		t.Fatalf("read-time migration failed: %+v %v", item, err)
+	}
+	data, err := os.ReadFile(manifest)
+	if err != nil || string(data) != original {
+		t.Fatal("failed migration overwrote source template")
+	}
+	workspace, err := store.FetchWorkspace(context.Background(), "reviewer")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(workspace.Path)
+	data, err = os.ReadFile(filepath.Join(workspace.Path, "AGENTS.md"))
+	if err != nil || string(data) != "# Retained" {
+		t.Fatal("read-time instructions were not retained")
+	}
+}

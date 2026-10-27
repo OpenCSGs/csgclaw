@@ -421,6 +421,10 @@ func (svc *Controller) EnsureBootstrapManager(ctx context.Context, forceRecreate
 	if svc == nil {
 		return nil
 	}
+	if existing, ok := svc.agentSnapshot(ManagerUserID); ok && strings.TrimSpace(existing.RuntimeKind) != "" && !isHostRuntimeKind(existing.RuntimeKind) {
+		slog.Warn("manager runtime is unavailable; keeping original record and continuing startup", "runtime", existing.RuntimeKind)
+		return nil
+	}
 	_, err := svc.EnsureManager(ctx, forceRecreate)
 	return err
 }
@@ -444,6 +448,9 @@ func (s *Controller) ensureManager(ctx context.Context, forceRecreate bool, runt
 	defer release()
 	if err := validateCodexManagerRuntimeOverride(runtimeOverride); err != nil {
 		return Agent{}, err
+	}
+	if existing, ok := s.agentSnapshot(ManagerUserID); ok && strings.TrimSpace(existing.RuntimeKind) != "" && !isHostRuntimeKind(existing.RuntimeKind) {
+		return Agent{}, fmt.Errorf("manager runtime %q is unavailable; retry its migration before starting it", existing.RuntimeKind)
 	}
 	return s.ensureCodexManager(ctx, forceRecreate)
 }
@@ -2738,6 +2745,10 @@ func (s *Controller) hydrateAgentStatus(ctx context.Context, a Agent) (out Agent
 
 	runtimeImpl, err := s.runtimeForKind(strings.TrimSpace(a.RuntimeKind))
 	if err != nil {
+		if strings.TrimSpace(a.RuntimeKind) != "" && !isHostRuntimeKind(a.RuntimeKind) {
+			a.Status = StatusRuntimeUnavailable
+			return a
+		}
 		return statusAfterHydrateFailure(a, "select_runtime", err)
 	}
 	info, err := s.runtimeInfo(ctx, runtimeImpl, runtimeHandleForAgent(a))

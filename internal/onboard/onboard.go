@@ -95,22 +95,14 @@ func ensureConfigState(path string) (config.Config, error) {
 	}
 	if needsSave {
 		if needsMigrationRewrite {
-			if err := backupConfigDir(path); err != nil {
-				return config.Config{}, err
-			}
+			migrations.RewriteConfigBestEffort(path, func() error { return cfg.Save(path) }, retiredclaws.GeneratedBackupEntry)
+			return cfg, nil
 		}
 		if err := cfg.Save(path); err != nil {
 			return config.Config{}, err
 		}
 	}
 	return cfg, nil
-}
-
-func backupConfigDir(path string) error {
-	if err := migrations.BackupConfig(path, retiredclaws.GeneratedBackupEntry); err != nil {
-		return fmt.Errorf("backup config dir: %w", err)
-	}
-	return nil
 }
 
 func ensureBootstrapState(ctx context.Context, cfg config.Config) error {
