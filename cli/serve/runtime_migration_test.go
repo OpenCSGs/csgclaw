@@ -168,11 +168,11 @@ func TestConfigMigrationFailureKeepsLoadedConfiguration(t *testing.T) {
 				t.Fatal(err)
 			}
 			if stage == "backup" {
-				if err := os.Chmod(home, 0555); err != nil {
+				if err := os.Chmod(root, 0555); err != nil {
 					t.Fatal(err)
 				}
-				t.Cleanup(func() { os.Chmod(home, 0755) })
-				if err := os.WriteFile(filepath.Join(home, "probe"), nil, 0600); err == nil {
+				t.Cleanup(func() { os.Chmod(root, 0755) })
+				if err := os.WriteFile(filepath.Join(root, "probe"), nil, 0600); err == nil {
 					t.Skip("filesystem does not enforce directory permissions")
 				}
 			} else {

@@ -1539,11 +1539,11 @@ models = ["gpt-test"]
 		t.Fatalf("loadConfig() error = %v", err)
 	}
 
-	backups := findStoreBackups(t, home)
+	backups := findConfigBackups(t, home)
 	if len(backups) != 1 {
 		t.Fatalf("backup count = %d, want 1; entries = %#v", len(backups), backups)
 	}
-	backupConfig, err := os.ReadFile(filepath.Join(home, backups[0], "config.toml"))
+	backupConfig, err := os.ReadFile(backups[0])
 	if err != nil {
 		t.Fatalf("read backup config: %v", err)
 	}
@@ -1630,16 +1630,16 @@ enabled = false
 	}
 }
 
-func findStoreBackups(t *testing.T, parent string) []string {
+func findConfigBackups(t *testing.T, parent string) []string {
 	t.Helper()
-	entries, err := os.ReadDir(parent)
+	entries, err := os.ReadDir(filepath.Join(parent, ".csgclaw"))
 	if err != nil {
 		t.Fatalf("ReadDir() error = %v", err)
 	}
 	var backups []string
 	for _, entry := range entries {
-		if entry.IsDir() && strings.HasPrefix(entry.Name(), ".csgclaw_backup_") {
-			backups = append(backups, entry.Name())
+		if entry.Type().IsRegular() && strings.HasPrefix(entry.Name(), "config.toml_backup_") {
+			backups = append(backups, filepath.Join(parent, ".csgclaw", entry.Name()))
 		}
 	}
 	return backups
@@ -2239,11 +2239,11 @@ manager_image_override = "retired-image"
 	if cfg.Bootstrap.ResolvedDefaultWorkerTemplate() != config.DefaultBootstrapWorkerTemplate {
 		t.Fatalf("wrong worker default: %+v", cfg.Bootstrap)
 	}
-	backups := findStoreBackups(t, home)
+	backups := findConfigBackups(t, home)
 	if len(backups) != 1 {
 		t.Fatalf("backups = %v, want one", backups)
 	}
-	before, err := os.ReadFile(filepath.Join(home, backups[0], "config.toml"))
+	before, err := os.ReadFile(backups[0])
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2270,7 +2270,7 @@ manager_image_override = "retired-image"
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !info.ModTime().Equal(next.ModTime()) || len(findStoreBackups(t, home)) != 1 {
+	if !info.ModTime().Equal(next.ModTime()) || len(findConfigBackups(t, home)) != 1 {
 		t.Fatal("second load rewrote or backed up migrated config")
 	}
 }

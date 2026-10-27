@@ -7,9 +7,6 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
-	"time"
-
-	"csgclaw/internal/localstore"
 
 	toml "github.com/pelletier/go-toml/v2"
 )
@@ -100,7 +97,7 @@ func LocalTemplates(root string) error {
 	if len(updates) == 0 {
 		return nil
 	}
-	if _, err := localstore.CreateSiblingBackup(root, time.Now(), GeneratedBackupEntry); err != nil {
+	if err := backupOnce(root); err != nil {
 		return fmt.Errorf("backup retired local templates: %w", err)
 	}
 	for _, item := range updates {

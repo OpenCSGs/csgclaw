@@ -1071,3 +1071,63 @@ func assertStringArray(t *testing.T, value any, want []string) {
 		t.Fatalf("array = %#v, want %#v", got, want)
 	}
 }
+
+func TestFailedSiblingBackupDoesNotLeavePartialDirectory(t *testing.T) {
+	root := filepath.Join(t.TempDir(), ".csgclaw")
+	writeFile(t, filepath.Join(root, "config.toml"), "config")
+	blocked := filepath.Join(root, "unreadable")
+	writeFile(t, blocked, "user data")
+	if err := os.Chmod(blocked, 0000); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chmod(blocked, 0600) })
+	if _, err := os.ReadFile(blocked); err == nil {
+		t.Skip("filesystem does not enforce file permissions")
+	}
+	for i := 0; i < 2; i++ {
+		if _, err := CreateSiblingBackup(root, time.Now()); err == nil {
+			t.Fatal("backup silently ignored unreadable user data")
+		}
+		backups, _ := filepath.Glob(root + "_backup_*")
+		if len(backups) != 0 {
+			t.Fatalf("partial backups retained: %v", backups)
+		}
+	}
+}
+
+func TestSiblingBackupCopiesReadOnlyDirectory(t *testing.T) {
+	root := filepath.Join(t.TempDir(), ".csgclaw")
+	dir := filepath.Join(root, "read-only-workspace")
+	writeFile(t, filepath.Join(dir, "notes.txt"), "user notes")
+	if err := os.Chmod(dir, 0555); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chmod(dir, 0755) })
+	backup, err := CreateSiblingBackup(root, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(filepath.Join(backup, "read-only-workspace", "notes.txt"))
+	if err != nil || string(data) != "user notes" {
+		t.Fatalf("backup lost read-only content: %s, %v", data, err)
+	}
+}
+
+func TestSiblingBackupSnapshotsLinkedConfig(t *testing.T) {
+	root := t.TempDir()
+	target := filepath.Join(root, "real.toml")
+	link := filepath.Join(root, "config.toml")
+	writeFile(t, target, "old config")
+	if err := os.Symlink(target, link); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	backup, err := CreateSiblingBackup(link, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, target, "new config")
+	data, err := os.ReadFile(backup)
+	if err != nil || string(data) != "old config" {
+		t.Fatalf("backup followed live changes: %s, %v", data, err)
+	}
+}

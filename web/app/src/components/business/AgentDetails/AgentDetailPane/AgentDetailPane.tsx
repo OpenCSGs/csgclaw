@@ -64,6 +64,7 @@ import {
   agentRuntimeStatusDetailLabel,
   agentRuntimeKind,
   canPublishCommunityTemplateRuntime,
+  canStartAgent,
   isAgentGatewayDegraded,
   isAgentAvailable,
   agentModelID,
@@ -899,6 +900,17 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
             ) : null}
           </div>
           <div className="entity-toolbar">
+            {canStartAgent(item) ? (
+              <Button
+                variant="secondaryGray"
+                size="md"
+                disabled={busyKey.startsWith(busyPrefix) || incomplete}
+                onClick={() => onStart(item)}
+              >
+                <Play aria-hidden="true" size={16} strokeWidth={2} />
+                {t("agentStart")}
+              </Button>
+            ) : null}
             <Button
               variant={onNewTask ? "primary" : "secondaryGray"}
               size="md"

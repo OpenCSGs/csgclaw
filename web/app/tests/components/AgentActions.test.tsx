@@ -1750,3 +1750,54 @@ describe("agent action visibility", () => {
     expect(screen.getByRole("region", { name: "Channels" })).toBeInTheDocument();
   });
 });
+
+describe("offline Agent recovery", () => {
+  it.each(["codex", "dsh"])("starts an offline %s Agent from its header", async (runtimeKind) => {
+    const user = userEvent.setup();
+    const onStart = vi.fn();
+    const item = { ...worker, runtime_kind: runtimeKind, status: "stopped" };
+    const props = {
+      item,
+      t,
+      busyKey: "",
+      draft: null,
+      models: [],
+      onDelete: vi.fn(),
+      onDraftChange: vi.fn(),
+      onInvite: vi.fn(),
+      onOpenDM: vi.fn(),
+      onRecreate: vi.fn(),
+      onStart,
+      onStop: vi.fn(),
+    };
+    const view = render(<AgentDetailPane {...props} />);
+    await user.click(screen.getByRole("button", { name: "Start" }));
+    expect(onStart).toHaveBeenCalledWith(item);
+    view.rerender(<AgentDetailPane {...props} busyKey={`${item.id}:start`} />);
+    expect(screen.getByRole("button", { name: "Start" })).toBeDisabled();
+  });
+  it("offers startup for an offline Manager while its More menu is hidden", async () => {
+    const user = userEvent.setup();
+    const onStart = vi.fn();
+    const item = { ...worker, id: "u-manager", role: "manager", status: "stopped" };
+    render(
+      <AgentDetailPane
+        item={item}
+        t={t}
+        busyKey=""
+        draft={null}
+        models={[]}
+        onDelete={vi.fn()}
+        onDraftChange={vi.fn()}
+        onInvite={vi.fn()}
+        onOpenDM={vi.fn()}
+        onRecreate={vi.fn()}
+        onStart={onStart}
+        onStop={vi.fn()}
+      />,
+    );
+    expect(screen.queryByRole("button", { name: "More" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Start" }));
+    expect(onStart).toHaveBeenCalledWith(item);
+  });
+});

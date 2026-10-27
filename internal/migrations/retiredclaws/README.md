@@ -26,6 +26,11 @@ Unmigrated Agents remain visible as unavailable and are not automatically starte
 Unrelated Agent saves preserve the original runtime kind and sandbox handle so a later startup can retry.
 After restoring provider access, restart CSGClaw to retry the migration.
 An Agent marked active without a sandbox identifier is left unchanged with a warning; it does not prevent the application from starting.
+Configuration rewrites back up only the configuration file, so unreadable unrelated workspaces cannot block removal of retired bootstrap keys.
+Identical configuration input reuses its complete file backup after a failed rewrite.
+Agent and local-template retirement steps reuse one completed snapshot per source root across retries.
+A receipt inside the completed snapshot identifies it; partial copies are removed and never reused.
+Existing unmarked backups are retained without alteration.
 Readable configuration remains usable in memory if its migration backup or rewrite fails.
 Local template migration errors also warn and fall back to the existing read-time adapters.
 Generic backup, locking, typed-ID migration and JSON-preservation mechanics remain in their owning packages.

@@ -1,6 +1,6 @@
-import { SHOW_AGENT_LIFECYCLE_ACTIONS } from "@/shared/constants/agents";
 import {
   agentModelID,
+  canStartAgent,
   agentProfileConfig,
   formatProviderLabel,
   isAgentIncomplete,
@@ -114,9 +114,11 @@ export function ComputerDetailPane({
                     aria-hidden="true"
                   ></span>
                 </button>
-                {SHOW_AGENT_LIFECYCLE_ACTIONS ? (
+                {canStartAgent(item) ? (
                   <Button
                     className="agent-icon-button"
+                    aria-label={t("agentStart")}
+                    title={t("agentStart")}
                     disabled={
                       actionBusyKeys.some((actionBusyKey) => actionBusyKey.startsWith(`${item.id}:`)) ||
                       isAgentIncomplete(item)
