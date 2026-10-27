@@ -669,6 +669,20 @@
   box-shadow: var(--focus-ring);
 }
 
+@supports not (color: color-mix(in srgb, black, white)) {
+  .composer-box {
+    border-color: var(--input-border);
+    background: var(--input-background);
+  }
+
+  .composer-box:focus-within,
+  :root[data-theme="dark"] .composer .composer-box:focus-within {
+    border-color: var(--input-border-focus);
+    outline: 2px solid var(--input-border-focus);
+    outline-offset: 2px;
+  }
+}
+
 .composer-working {
   min-width: 0;
   margin: 0 0 8px;
