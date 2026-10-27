@@ -1164,12 +1164,7 @@ func loadConfig(path string) (config.Config, error) {
 		return config.Config{}, err
 	}
 	if cfg.NeedsMigrationRewrite() {
-		if err := migrations.BackupConfig(path, retiredclaws.GeneratedBackupEntry); err != nil {
-			return config.Config{}, fmt.Errorf("backup config before migration: %w", err)
-		}
-		if err := cfg.Save(path); err != nil {
-			return config.Config{}, err
-		}
+		migrations.RewriteConfigBestEffort(path, func() error { return cfg.Save(path) }, retiredclaws.GeneratedBackupEntry)
 	}
 	return cfg, nil
 }
@@ -1438,7 +1433,7 @@ func migrateLocalStore(ctx context.Context, configPath string) error {
 		}
 		return provider.Open(ctx, filepath.Join(root, config.AgentsDirName, agentID, config.RuntimeHomeDirName))
 	}); err != nil {
-		return fmt.Errorf("migrate retired runtime agents: %w", err)
+		slog.Warn("retired runtime Agent migration failed; continuing startup with original records for retry", "error", err)
 	}
 	if err := localstore.MigrateMCPIdentities(filepath.Join(root, localstore.RootStateFileName)); err != nil {
 		return fmt.Errorf("migrate MCP identities: %w", err)

@@ -106,8 +106,11 @@ func TestRetiredSandboxMigrationUsesConfiguredProviderOutsideStateLock(t *testin
 			}
 			if test.rejectFirst {
 				output, err := runMigration()
-				if err == nil {
-					t.Fatalf("migration accepted failed shutdown: %s", output)
+				if err != nil {
+					t.Fatalf("migration failure blocked startup: %v\n%s", err, output)
+				}
+				if !strings.Contains(string(output), "retired runtime Agent migration failed") {
+					t.Fatalf("missing migration warning: %s", output)
 				}
 				data, readErr := os.ReadFile(path)
 				if readErr != nil || string(data) != original {
@@ -145,6 +148,53 @@ func TestRetiredSandboxMigrationUsesConfiguredProviderOutsideStateLock(t *testin
 			rt := state.Agents.Items[0].Runtime
 			if rt.Kind != "codex" || rt.State != "stopped" || rt.SandboxID != "" {
 				t.Fatalf("migration result: %s", data)
+			}
+		})
+	}
+}
+
+func TestConfigMigrationFailureKeepsLoadedConfiguration(t *testing.T) {
+	for _, stage := range []string{"backup", "rewrite"} {
+		t.Run(stage, func(t *testing.T) {
+			home := t.TempDir()
+			t.Setenv("HOME", home)
+			root := filepath.Join(home, ".csgclaw")
+			if err := os.MkdirAll(root, 0755); err != nil {
+				t.Fatal(err)
+			}
+			path := filepath.Join(root, "config.toml")
+			original := "[server]\nlisten_addr=\"127.0.0.1:19091\"\n[bootstrap]\ndefault_worker_template=\"builtin.openclaw-worker\"\nruntime_kind=\"picoclaw_sandbox\"\n"
+			if err := os.WriteFile(path, []byte(original), 0600); err != nil {
+				t.Fatal(err)
+			}
+			if stage == "backup" {
+				if err := os.Chmod(home, 0555); err != nil {
+					t.Fatal(err)
+				}
+				t.Cleanup(func() { os.Chmod(home, 0755) })
+				if err := os.WriteFile(filepath.Join(home, "probe"), nil, 0600); err == nil {
+					t.Skip("filesystem does not enforce directory permissions")
+				}
+			} else {
+				if err := os.Chmod(path, 0400); err != nil {
+					t.Fatal(err)
+				}
+				t.Cleanup(func() { os.Chmod(path, 0600) })
+				if file, err := os.OpenFile(path, os.O_WRONLY, 0); err == nil {
+					file.Close()
+					t.Skip("filesystem does not enforce file permissions")
+				}
+			}
+			cfg, err := loadConfig(path)
+			if err != nil {
+				t.Fatalf("migration %s blocked usable configuration: %v", stage, err)
+			}
+			if cfg.Server.ListenAddr != "127.0.0.1:19091" || cfg.Bootstrap.ResolvedDefaultWorkerTemplate() != "builtin.codex-worker" {
+				t.Fatalf("loaded config lost normalization: %+v", cfg.Bootstrap)
+			}
+			data, err := os.ReadFile(path)
+			if err != nil || string(data) != original {
+				t.Fatal("failed rewrite changed source configuration")
 			}
 		})
 	}

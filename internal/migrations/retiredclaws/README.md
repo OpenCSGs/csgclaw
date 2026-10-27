@@ -21,9 +21,13 @@ It uses the storage owner's shared root-state lock so section updates cannot rac
 The caller lazily opens the configured sandbox provider and the Agent's existing sandbox home when a persisted sandbox handle requires inspection.
 Every recorded sandbox is inspected through that provider, stopped if necessary, and confirmed stopped or absent before its workspace is read or its Agent record is replaced.
 Saved lifecycle state alone is not accepted as confirmation.
-If provider access, shutdown or confirmation fails, startup aborts without replacing any retired Agent records or discarding their sandbox handles.
+If provider access, shutdown, backup or confirmation fails, startup logs a warning and continues without replacing retired Agent records or discarding their sandbox handles.
+Unmigrated Agents remain visible as unavailable and are not automatically started; a pending Manager is skipped by bootstrap.
+Unrelated Agent saves preserve the original runtime kind and sandbox handle so a later startup can retry.
 After restoring provider access, restart CSGClaw to retry the migration.
-An Agent marked active without a sandbox identifier requires stopping the previous sandbox and restoring its identifier before retrying.
+An Agent marked active without a sandbox identifier is left unchanged with a warning; it does not prevent the application from starting.
+Readable configuration remains usable in memory if its migration backup or rewrite fails.
+Local template migration errors also warn and fall back to the existing read-time adapters.
 Generic backup, locking, typed-ID migration and JSON-preservation mechanics remain in their owning packages.
 
 ## Retention policy
