@@ -1616,7 +1616,8 @@ tools、instructions、非 user role、attachments 和未知请求字段都会�
 
 - 需要 Bearer Token
 - 请求体会原样读取并转发
-- 单次读取上限为 `10 MiB`
+- 请求体上限为 `128 MiB`，包含内联图片和工具输出
+- 超限返回 HTTP `413`，错误码为 `request_too_large`，不会静默截断请求体
 - 失败时可能返回普通文本错误，也可能返回：
 
 ```json
@@ -1655,6 +1656,7 @@ tools、instructions、非 user role、attachments 和未知请求字段都会�
 
 - 需要 Bearer Token
 - 请求会先转发到所选 profile 的 `base_url + /responses`
+- POST 请求体与 chat completions 共用 `128 MiB` 上限，超限返回 HTTP `413`，错误码为 `request_too_large`
 - 若上游 `/responses` 返回 `404` 或 `405`，bridge 会改为请求 `base_url + /chat/completions`
 - `model` 字段会被覆盖为 agent 已解析出的 `model_id`
 - Responses 转发不会注入 chat-only 的顶层 `reasoning_effort`

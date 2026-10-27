@@ -5,12 +5,42 @@ import (
 	"csgclaw/internal/modelusage"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
 
 	"csgclaw/internal/llm"
 )
+
+// Multimodal turns carry inline images and accumulated tool output. Keep a
+// memory bound, but reject excess bytes explicitly instead of parsing a prefix.
+const maxLLMRequestBodyBytes = 128 << 20
+
+func readLLMRequestBody(w http.ResponseWriter, r *http.Request) ([]byte, bool) {
+	tooLarge := func() {
+		writeLLMError(w, &llm.HTTPError{
+			Status:  http.StatusRequestEntityTooLarge,
+			Code:    "request_too_large",
+			Message: fmt.Sprintf("LLM request body exceeds %d MiB limit", maxLLMRequestBodyBytes>>20),
+		})
+	}
+	if r.ContentLength > maxLLMRequestBodyBytes {
+		tooLarge()
+		return nil, false
+	}
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxLLMRequestBodyBytes))
+	if err != nil {
+		var maxBytesErr *http.MaxBytesError
+		if errors.As(err, &maxBytesErr) {
+			tooLarge()
+		} else {
+			http.Error(w, "read request body", http.StatusBadRequest)
+		}
+		return nil, false
+	}
+	return body, true
+}
 
 func (h *Handler) handleAgentLLMModelsByID(w http.ResponseWriter, r *http.Request) {
 	agentID, ok := h.requireAgentLLMID(w, r)
@@ -94,9 +124,8 @@ func (h *Handler) handleBotLLMChatCompletions(w http.ResponseWriter, r *http.Req
 		http.Error(w, "llm bridge is not configured", http.StatusServiceUnavailable)
 		return
 	}
-	body, err := io.ReadAll(io.LimitReader(r.Body, 10*1024*1024))
-	if err != nil {
-		http.Error(w, "read request body", http.StatusBadRequest)
+	body, ok := readLLMRequestBody(w, r)
+	if !ok {
 		return
 	}
 	resp, callErr := h.llm.ChatCompletionsStream(r.Context(), botID, body)
@@ -114,9 +143,8 @@ func (h *Handler) handleBotLLMResponses(w http.ResponseWriter, r *http.Request, 
 		http.Error(w, "llm bridge is not configured", http.StatusServiceUnavailable)
 		return
 	}
-	body, err := io.ReadAll(io.LimitReader(r.Body, 10*1024*1024))
-	if err != nil {
-		http.Error(w, "read request body", http.StatusBadRequest)
+	body, ok := readLLMRequestBody(w, r)
+	if !ok {
 		return
 	}
 	resp, callErr := h.llm.Responses(r.Context(), botID, body)

@@ -111,3 +111,29 @@ func TestModelTransportFailureRetainsSafeRequestIdentity(t *testing.T) {
 		t.Fatal("sensitive transport data was logged")
 	}
 }
+
+func TestLargeModelRequestLogAttrs(t *testing.T) {
+	body := `{"input":"` + strings.Repeat("x", (10<<20)+1) + `","stream":true,"tools":[{"type":"function","name":"lookup"}],"max_output_tokens":1024}`
+	req, err := http.NewRequest(http.MethodPost, "http://fixture.invalid/responses", strings.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	attrs := modelRequestLogAttrs(req)
+	fields := make(map[string]any)
+	for i := 0; i < len(attrs); i += 2 {
+		fields[attrs[i].(string)] = attrs[i+1]
+	}
+	if fields["tool_count"] != 1 || fields["stream"] != true || fields["max_output_tokens"] != int64(1024) || fields["tools_sha256"] == nil {
+		t.Fatalf("large request summary missing: %v", fields)
+	}
+	if fields["request_bytes"] != int64(len(body)) {
+		t.Fatalf("request_bytes = %v, want %d", fields["request_bytes"], len(body))
+	}
+	encoded, err := json.Marshal(fields)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(encoded), "xxxxx") || strings.Contains(string(encoded), "lookup") {
+		t.Fatal("request content leaked into summary")
+	}
+}
