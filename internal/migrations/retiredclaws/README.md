@@ -18,6 +18,12 @@ Business packages call this module at their existing load boundaries and do not 
 
 `MigrateAgents` must run under the application instance lock before serving requests.
 It uses the storage owner's shared root-state lock so section updates cannot race the migration.
+The caller lazily opens the configured sandbox provider and the Agent's existing sandbox home when a persisted sandbox handle requires inspection.
+Every recorded sandbox is inspected through that provider, stopped if necessary, and confirmed stopped or absent before its workspace is read or its Agent record is replaced.
+Saved lifecycle state alone is not accepted as confirmation.
+If provider access, shutdown or confirmation fails, startup aborts without replacing any retired Agent records or discarding their sandbox handles.
+After restoring provider access, restart CSGClaw to retry the migration.
+An Agent marked active without a sandbox identifier requires stopping the previous sandbox and restoring its identifier before retrying.
 Generic backup, locking, typed-ID migration and JSON-preservation mechanics remain in their owning packages.
 
 ## Retention policy

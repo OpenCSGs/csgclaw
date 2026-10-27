@@ -1,7 +1,9 @@
 package retiredclaws
 
 import (
+	"context"
 	"csgclaw/internal/localstore"
+	"csgclaw/internal/sandbox"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -25,11 +27,11 @@ func isRetiredRuntimeKind(kind string) bool {
 // MigrateAgents runs before services load the store. User identity,
 // model settings, resources, conversations and workspace files remain intact.
 // Workers stay stopped when their retired sandbox is replaced by a host runtime.
-func MigrateAgents(root string) error {
-	return localstore.WithRootStateLock(func() error { return migrateAgents(root) })
+func MigrateAgents(ctx context.Context, root string, openSandbox func(context.Context, string) (sandbox.Runtime, error)) error {
+	return localstore.WithRootStateLock(func() error { return migrateAgents(ctx, root, openSandbox) })
 }
 
-func migrateAgents(root string) error {
+func migrateAgents(ctx context.Context, root string, openSandbox func(context.Context, string) (sandbox.Runtime, error)) error {
 	path := filepath.Join(root, localstore.RootStateFileName)
 	data, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
@@ -80,6 +82,9 @@ func migrateAgents(root string) error {
 		if id == "" || id == "." || id == ".." || strings.ContainsAny(id, "/\\") {
 			return fmt.Errorf("invalid retired runtime Agent id %q", id)
 		}
+		if err := stopRetiredSandboxes(ctx, id, agent, runtime, openSandbox); err != nil {
+			return err
+		}
 		workspace, err := retiredRuntimeWorkspace(root, id, kind)
 		if err != nil {
 			return err
@@ -103,7 +108,7 @@ func migrateAgents(root string) error {
 			return err
 		}
 		agent["desired_state"] = json.RawMessage(`"stopped"`)
-		for _, key := range []string{"runtime_kind", "runtime_name", "runtime_id", "box_id", "sandbox_enabled", "image", "runtime_options", "status"} {
+		for _, key := range []string{"runtime_kind", "runtime_name", "runtime_id", "box_id", "sandbox_id", "sandbox_enabled", "image", "runtime_options", "status"} {
 			delete(agent, key)
 		}
 		if err := cleanRetiredProfile(agent); err != nil {

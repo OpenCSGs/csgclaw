@@ -4,6 +4,7 @@ import (
 	"context"
 	"csgclaw/internal/migrations"
 	"csgclaw/internal/migrations/retiredclaws"
+	"csgclaw/internal/sandbox"
 	skillbuiltin "csgclaw/internal/skill/builtin"
 	"errors"
 	"fmt"
@@ -194,7 +195,7 @@ func (c serveCmd) Run(ctx context.Context, run *command.Context, args []string, 
 	}
 	defer restore()
 
-	if err := migrateLocalStore(); err != nil {
+	if err := migrateLocalStore(ctx, globals.Config); err != nil {
 		return err
 	}
 	if err := ensureServeBootstrapState(ctx, globals.Config, *noAuthDetect); err != nil {
@@ -340,7 +341,7 @@ func (c internalServeCmd) Run(ctx context.Context, run *command.Context, args []
 	}
 	defer restore()
 	_ = preflightDefaultModelProvider(ctx, cfg)
-	if err := migrateLocalStore(); err != nil {
+	if err := migrateLocalStore(ctx, configPath); err != nil {
 		return err
 	}
 
@@ -408,7 +409,7 @@ func serveForegroundWithConfigPath(ctx context.Context, run *command.Context, cf
 		return err
 	}
 	_ = preflightDefaultModelProvider(ctx, cfg)
-	if err := migrateLocalStore(); err != nil {
+	if err := migrateLocalStore(ctx, configPath); err != nil {
 		return err
 	}
 	imBus := im.NewBus()
@@ -1404,7 +1405,7 @@ func sandboxServiceOptions(cfg config.SandboxConfig) ([]agent.ControllerOption, 
 	return sandboxproviders.ServiceOptions(cfg)
 }
 
-func migrateLocalStore() error {
+func migrateLocalStore(ctx context.Context, configPath string) error {
 	root, err := config.DefaultDir()
 	if err != nil {
 		return err
@@ -1417,7 +1418,26 @@ func migrateLocalStore() error {
 	if err := localstore.ReconcileTypedAgentDirs(root); err != nil {
 		return fmt.Errorf("reconcile local store agent dirs: %w", err)
 	}
-	if err := retiredclaws.MigrateAgents(root); err != nil {
+	path := strings.TrimSpace(configPath)
+	if path == "" {
+		path, err = config.DefaultPath()
+		if err != nil {
+			return err
+		}
+	}
+	// Loading models reads the same root state that migration locks. Resolve
+	// configuration outside that lock, but require it only for stored sandboxes.
+	cfg, providerErr := config.Load(path)
+	var provider sandbox.Provider
+	if providerErr == nil {
+		provider, providerErr = sandboxproviders.Provider(cfg.Sandbox)
+	}
+	if err := retiredclaws.MigrateAgents(ctx, root, func(ctx context.Context, agentID string) (sandbox.Runtime, error) {
+		if providerErr != nil {
+			return nil, providerErr
+		}
+		return provider.Open(ctx, filepath.Join(root, config.AgentsDirName, agentID, config.RuntimeHomeDirName))
+	}); err != nil {
 		return fmt.Errorf("migrate retired runtime agents: %w", err)
 	}
 	if err := localstore.MigrateMCPIdentities(filepath.Join(root, localstore.RootStateFileName)); err != nil {

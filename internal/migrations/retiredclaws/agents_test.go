@@ -28,7 +28,7 @@ func TestRetiredRuntimeAgentsPreserveDataAndRequireExplicitStart(t *testing.T) {
 			original := `{"version":1,"unrelated":{"large":9007199254740993},"agents":{"extra":true,"items":[{"id":"agent-old","name":"Old","role":"worker","desired_state":"running","image":"retired-image","runtime":{"kind":"` + kind + `","state":"running","sandbox_id":"old-box","options":{"auto_compact":"disabled","native":"old"}},"model_config":{"model_provider_id":"fixture","model_id":"fixture-model","image_upgrade_required":true,"env_restart_required":true,"env":{"OPENCLAW_HOME":"old","PICOCLAW_MODE":"old","USER_SETTING":"keep"}},"mcpServers":{"test":{"command":"test"}},"skill_states":{"custom":{"enabled":false}}},{"id":"agent-current","runtime":{"kind":"dsh","state":"running","options":{"permission_mode":"bypass"}}}]},"participants":{"items":[{"id":"pt-old","agent_id":"agent-old"}]}}`
 			path := filepath.Join(root, localstore.RootStateFileName)
 			writeFile(t, path, original)
-			if err := MigrateAgents(root); err != nil {
+			if err := migrateAgentsWithMissingSandbox(t, root); err != nil {
 				t.Fatal(err)
 			}
 			data, err := os.ReadFile(path)
@@ -100,7 +100,7 @@ func TestRetiredRuntimeAgentsPreserveDataAndRequireExplicitStart(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err := MigrateAgents(root); err != nil {
+			if err := migrateAgentsWithMissingSandbox(t, root); err != nil {
 				t.Fatal(err)
 			}
 			again, err := os.Stat(path)
@@ -119,7 +119,7 @@ func TestRetiredRuntimeMigrationSupportsSplitSelectionAndNoWorkspace(t *testing.
 		root := t.TempDir()
 		path := filepath.Join(root, localstore.RootStateFileName)
 		writeFile(t, path, `{"version":1,"agents":{"items":[{"id":"agent-old",`+selection+`}]}}`)
-		if err := MigrateAgents(root); err != nil {
+		if err := migrateAgentsWithMissingSandbox(t, root); err != nil {
 			t.Fatal(err)
 		}
 		data, err := os.ReadFile(path)
@@ -137,7 +137,7 @@ func TestRetiredRuntimeMigrationRejectsCorruptStateWithoutWriting(t *testing.T) 
 		root := t.TempDir()
 		path := filepath.Join(root, localstore.RootStateFileName)
 		writeFile(t, path, data)
-		if err := MigrateAgents(root); err == nil {
+		if err := migrateAgentsWithMissingSandbox(t, root); err == nil {
 			t.Fatal("corrupt state accepted")
 		}
 		after, err := os.ReadFile(path)
@@ -153,7 +153,7 @@ func TestLegacyRuntimeRecordMigrationPreservesOtherRootSections(t *testing.T) {
 	if _, err := localstore.MigrateTypedIDs(localstore.MigrateOptions{Root: root}); err != nil {
 		t.Fatal(err)
 	}
-	if err := MigrateAgents(root); err != nil {
+	if err := migrateAgentsWithMissingSandbox(t, root); err != nil {
 		t.Fatal(err)
 	}
 	data, err := os.ReadFile(filepath.Join(root, localstore.RootStateFileName))
@@ -183,7 +183,7 @@ func TestRuntimeMigrationBackupSkipsOnlyUnreadableGeneratedPluginCopies(t *testi
 	if _, err := os.ReadFile(path); err == nil {
 		t.Skip("process can read mode-000 files")
 	}
-	if err := MigrateAgents(root); err != nil {
+	if err := migrateAgentsWithMissingSandbox(t, root); err != nil {
 		t.Fatalf("unreadable generated copy blocked migration: %v", err)
 	}
 	backups, err := filepath.Glob(filepath.Join(home, ".csgclaw_backup_*"))
@@ -215,7 +215,7 @@ func TestRetiredNativeMCPAndMemoryAreImportedWithoutReplacingExplicitSettings(t 
 			path := filepath.Join(root, localstore.RootStateFileName)
 			original := `{"version":1,"agents":{"items":[{"id":"agent-old","runtime":{"kind":"` + kind + `"}}]}}`
 			writeFile(t, path, original)
-			if err := MigrateAgents(root); err != nil {
+			if err := migrateAgentsWithMissingSandbox(t, root); err != nil {
 				t.Fatal(err)
 			}
 			var state struct {
@@ -249,7 +249,7 @@ func TestRetiredNativeMCPAndMemoryAreImportedWithoutReplacingExplicitSettings(t 
 			}
 			writeFile(t, target, "Existing current memory.")
 			writeFile(t, path, `{"version":1,"agents":{"items":[{"id":"agent-old","runtime":{"kind":"`+kind+`"},"mcpServers":{}}]}}`)
-			if err := MigrateAgents(root); err != nil {
+			if err := migrateAgentsWithMissingSandbox(t, root); err != nil {
 				t.Fatal(err)
 			}
 			data, err = os.ReadFile(path)
