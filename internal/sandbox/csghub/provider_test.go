@@ -952,3 +952,14 @@ func TestStartSandboxIdempotentDuplicateStartReturnsNotFound(t *testing.T) {
 		t.Fatalf("startSandboxIdempotent() error = %v, want sandbox not found", err)
 	}
 }
+
+func TestSandboxInfoKeepsAutomaticDeploymentStatesActive(t *testing.T) {
+	for _, status := range []string{"starting", "deploying", "creating", "pending", "created", "configured"} {
+		t.Run(status, func(t *testing.T) {
+			info := sandboxInfo(&csghubsdk.Response{State: csghubsdk.SandboxState{Status: status}})
+			if info.State != sandbox.StateStarting {
+				t.Fatalf("%s mapped to %q; deployment is still active", status, info.State)
+			}
+		})
+	}
+}

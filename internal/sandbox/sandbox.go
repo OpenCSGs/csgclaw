@@ -84,8 +84,11 @@ type Info struct {
 type State string
 
 const (
-	StateUnknown    State = "unknown"
-	StateCreated    State = "created"
+	StateUnknown State = "unknown"
+	// StateCreated is inactive until an explicit Start call.
+	StateCreated State = "created"
+	// StateStarting may become running without another explicit Start call.
+	StateStarting   State = "starting"
 	StateRunning    State = "running"
 	StatePaused     State = "paused"
 	StateRestarting State = "restarting"

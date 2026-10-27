@@ -27,7 +27,7 @@ func stopRetiredSandboxes(ctx context.Context, agentID string, agent, runtime ma
 	if len(ids) == 0 {
 		for _, raw := range []json.RawMessage{runtime["state"], agent["status"], agent["desired_state"]} {
 			switch strings.ToLower(strings.TrimSpace(migrationString(raw))) {
-			case "running", "paused", "restarting", "removing":
+			case "starting", "running", "paused", "restarting", "removing":
 				return fmt.Errorf("retired Agent %q is marked active without a sandbox identifier; stop its previous sandbox and restore its identifier before retrying the upgrade", agentID)
 			}
 		}
@@ -96,6 +96,8 @@ func stopRetiredSandbox(ctx context.Context, rt sandbox.Runtime, id string) erro
 }
 
 func retiredSandboxStopped(state sandbox.State) bool {
+	// StateCreated denotes an inactive instance, unlike StateStarting, whose
+	// deployment can still become running without an explicit Start request.
 	switch state {
 	case sandbox.StateCreated, sandbox.StateStopped, sandbox.StateExited, sandbox.StateDead:
 		return true

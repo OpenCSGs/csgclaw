@@ -101,7 +101,7 @@ func TestMigrationRetainsEveryRecordUntilAllSandboxesAreStopped(t *testing.T) {
 }
 
 func TestMigrationDoesNotDiscardUnconfirmedSandboxHandles(t *testing.T) {
-	for _, failure := range []string{"unavailable", "inspect", "stop still running", "unknown state", "active without id", "no provider"} {
+	for _, failure := range []string{"unavailable", "inspect", "stop still running", "stop still starting", "unknown state", "active without id", "starting without id", "no provider"} {
 		t.Run(failure, func(t *testing.T) {
 			root := t.TempDir()
 			path := filepath.Join(root, localstore.RootStateFileName)
@@ -117,11 +117,17 @@ func TestMigrationDoesNotDiscardUnconfirmedSandboxHandles(t *testing.T) {
 				instance.InfoFunc = func(context.Context) (sandbox.Info, error) { return sandbox.Info{}, errors.New("inspect failed") }
 			case "stop still running":
 				instance.StopFunc = func(context.Context, sandbox.StopOptions) error { return nil }
+			case "stop still starting":
+				instance.InfoValue.State = sandbox.StateStarting
+				instance.StopFunc = func(context.Context, sandbox.StopOptions) error { return nil }
 			case "unknown state":
 				instance.InfoValue.State = sandbox.StateUnknown
 				instance.StopFunc = func(context.Context, sandbox.StopOptions) error { return nil }
 			case "active without id":
 				original = strings.ReplaceAll(original, `,"sandbox_id":"old-box"`, ``)
+			case "starting without id":
+				original = strings.ReplaceAll(original, `,"sandbox_id":"old-box"`, ``)
+				original = strings.ReplaceAll(original, `"state":"running"`, `"state":"starting"`)
 			case "no provider":
 				open = nil
 			}
@@ -140,7 +146,7 @@ func TestMigrationDoesNotDiscardUnconfirmedSandboxHandles(t *testing.T) {
 }
 
 func TestRetiredSandboxHandlesIncludeLegacyFieldsAndIgnoreOnlyConfirmedMissing(t *testing.T) {
-	for _, state := range []sandbox.State{sandbox.StateCreated, sandbox.StateStopped, sandbox.StateExited, sandbox.StateDead, sandbox.StateRunning, sandbox.StatePaused, sandbox.StateRestarting, sandbox.StateRemoving} {
+	for _, state := range []sandbox.State{sandbox.StateCreated, sandbox.StateStarting, sandbox.StateStopped, sandbox.StateExited, sandbox.StateDead, sandbox.StateRunning, sandbox.StatePaused, sandbox.StateRestarting, sandbox.StateRemoving} {
 		t.Run(string(state), func(t *testing.T) {
 			root := t.TempDir()
 			path := filepath.Join(root, localstore.RootStateFileName)
@@ -153,6 +159,12 @@ func TestRetiredSandboxHandlesIncludeLegacyFieldsAndIgnoreOnlyConfirmedMissing(t
 				t.Fatal(err)
 			}
 			for _, instance := range runtime.Instances {
+				if state == sandbox.StateCreated && len(instance.StopCalls) != 0 {
+					t.Fatal("inactive created instance was stopped unnecessarily")
+				}
+				if state == sandbox.StateStarting && len(instance.StopCalls) != 1 {
+					t.Fatal("starting instance was not stopped")
+				}
 				if !retiredSandboxStopped(instance.InfoValue.State) {
 					t.Fatal("sandbox left active")
 				}
