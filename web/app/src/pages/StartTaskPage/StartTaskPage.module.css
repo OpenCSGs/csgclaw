@@ -50,10 +50,25 @@
 .composer {
   display: flex;
   flex-direction: column;
-  border: 1px solid color-mix(in srgb, var(--text) 16%, transparent);
+  border: 1px solid var(--input-border);
   border-radius: 18px;
   background: var(--input-background);
   box-shadow: var(--shadow-xs);
+}
+@supports (color: color-mix(in srgb, black, white)) {
+  .composer {
+    border-color: color-mix(in srgb, var(--text) 16%, transparent);
+  }
+}
+@supports not (color: color-mix(in srgb, black, white)) {
+  .composer:hover {
+    border-color: var(--input-border-hover);
+  }
+  .composer:focus-within {
+    border-color: var(--input-border-focus);
+    outline: 2px solid var(--input-border-focus);
+    outline-offset: 2px;
+  }
 }
 .resourceSearch {
   min-height: 148px;
