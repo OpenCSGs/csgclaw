@@ -74,7 +74,7 @@ Manager 的私聊、每个群聊分别使用不同的 ConversationKey；按需�
 
 首次空房间可直接 submit/plan。创建父任务时任务尚不存在，因此 `task submit` 需要当前 `room_id`；创建成功后，任务已经记录 `assignment_type` 和 `assignment_id`。需要完整输入或交付内容时使用 `task get --task <id>`，后续任务命令也只传全局唯一的 task ID，由 CLI 解析对应 Room、Team 或 Agent 归属。
 
-`make build` 构建 `bin/csgclaw` 及 `bin/csgclaw-cli`。运行时 `AGENTS.md` 中的按需策略使用 Profile 注入的 companion CLI 路径生成经过 shell 安全引用的命令；OpenClaw Worker 模板使用镜像内配套的 `csgclaw-cli`。
+`make build` 构建 `bin/csgclaw` 及 `bin/csgclaw-cli`。运行时 `AGENTS.md` 中的按需策略使用 Profile 注入的 companion CLI 路径生成经过 shell 安全引用的命令。
 
 任务计划使用 `task plan --task <id> --plan-file <path.json>`，也支持 `--plan-json`。认领／验收指令通过私有执行上下文传递，`task_feedback` 在聊天中显示成员身份和简短状态提示。详情在任务消息变化和打开入口时请求最新状态，并保留可见房间的兜底轮询；弹窗不提供多余的手动刷新按钮，任务接口使用 `Cache-Control: no-store`。
 

@@ -10,10 +10,11 @@ const (
 	ReasoningEffortMedium  = "medium"
 	ReasoningEffortHigh    = "high"
 	ReasoningEffortXHigh   = "xhigh"
+	ReasoningEffortMax     = "max"
 )
 
 // NormalizeReasoningEffort keeps the cross-runtime profile contract stable.
-// OpenClaw's "off" spelling is accepted at input boundaries, while profiles
+// The "off" spelling is accepted at input boundaries, while profiles
 // persist "none", which is also the native Codex spelling.
 func NormalizeReasoningEffort(value string) string {
 	value = strings.ToLower(strings.TrimSpace(value))
@@ -37,6 +38,9 @@ func HasExplicitReasoningEffort(value string) bool {
 	value = NormalizeReasoningEffort(value)
 	if value == "" || value == ReasoningEffortAuto || value == ReasoningEffortNone {
 		return false
+	}
+	if value == ReasoningEffortMax {
+		return true
 	}
 	for _, effort := range CommonReasoningEfforts() {
 		if value == effort {

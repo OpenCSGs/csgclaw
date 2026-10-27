@@ -508,7 +508,6 @@
   "exclude_environment": [
     "LARK_*",
     "LARKSUITE_*",
-    "OPENCLAW_*",
     "HERMES_*"
   ]
 }

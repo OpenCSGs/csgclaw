@@ -16,7 +16,7 @@ func WithDSHRuntime() agent.ControllerOption {
 		if s == nil {
 			return fmt.Errorf("agent service is required")
 		}
-		host := s.PicoClawRuntimeHost()
+		host := s.RuntimeHost()
 		rt := runtimedsh.New(runtimedsh.Dependencies{
 			ResolveRoomProfile: s.TaskRuntimeProfile,
 			ResolveBinary: func(ctx context.Context) (dshcli.Info, error) {

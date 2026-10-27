@@ -228,17 +228,17 @@ func TestResolverLeavesRuntimeNativeFeishuBindingsAlone(t *testing.T) {
 	agents := &testAgents{items: []agentengine.Agent{
 		hostedAgent("codex"),
 		hostedRuntimeAgent("dsh", "dsh"),
-		{ID: "picoclaw", Spec: agentengine.AgentSpec{Runtime: agentengine.RuntimeSpec{Adapter: "picoclaw", Sandboxed: true}}},
-		{ID: "openclaw", Spec: agentengine.AgentSpec{Runtime: agentengine.RuntimeSpec{Adapter: "openclaw", Sandboxed: true}}},
+		{ID: "sandbox-a", Spec: agentengine.AgentSpec{Runtime: agentengine.RuntimeSpec{Adapter: "codex", Sandboxed: true}}},
+		{ID: "sandbox-b", Spec: agentengine.AgentSpec{Runtime: agentengine.RuntimeSpec{Adapter: "dsh", Sandboxed: true}}},
 	}}
 	provider := &testProvider{entries: map[string]struct {
 		participant string
 		app         feishu.AppConfig
 	}{
-		"codex":    {participant: "bot-codex", app: feishu.AppConfig{AppID: "app-codex", AppSecret: "secret"}},
-		"dsh":      {participant: "bot-dsh", app: feishu.AppConfig{AppID: "app-dsh", AppSecret: "secret"}},
-		"picoclaw": {participant: "bot-pico", app: feishu.AppConfig{AppID: "app-pico", AppSecret: "secret"}},
-		"openclaw": {participant: "bot-open", app: feishu.AppConfig{AppID: "app-open", AppSecret: "secret"}},
+		"codex":     {participant: "bot-codex", app: feishu.AppConfig{AppID: "app-codex", AppSecret: "secret"}},
+		"dsh":       {participant: "bot-dsh", app: feishu.AppConfig{AppID: "app-dsh", AppSecret: "secret"}},
+		"sandbox-a": {participant: "bot-a", app: feishu.AppConfig{AppID: "app-pico", AppSecret: "secret"}},
+		"sandbox-b": {participant: "bot-b", app: feishu.AppConfig{AppID: "app-open", AppSecret: "secret"}},
 	}}
 	resolved, err := NewResolver(agents, provider).All(context.Background())
 	if err != nil {

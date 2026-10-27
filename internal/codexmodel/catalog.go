@@ -35,25 +35,27 @@ func Metadata(profile Profile) map[string]any {
 		config.ReasoningEffortLow,
 		config.ReasoningEffortMedium,
 		config.ReasoningEffortHigh,
-		config.ReasoningEffortXHigh:
+		config.ReasoningEffortXHigh,
+		config.ReasoningEffortMax:
 		defaultReasoningLevel = reasoningEffort
 	default:
 		defaultReasoningLevel = nil
 	}
 	baseInstructions := "You are Codex, a coding agent. Follow the user's instructions and use available tools carefully."
+	levels := modelcap.ForProviderModel(profile.Provider, modelID).SupportedReasoningEfforts
+	if len(levels) == 0 && profile.Provider != "codex" {
+		levels = []string{"none", "minimal", "low", "medium", "high", "xhigh"}
+	}
+	supported := make([]map[string]any, 0, len(levels))
+	for _, effort := range levels {
+		supported = append(supported, map[string]any{"effort": effort, "description": effort})
+	}
 	return map[string]any{
-		"slug":                    modelID,
-		"display_name":            modelID,
-		"description":             "CSGClaw OpenAI-compatible provider model",
-		"default_reasoning_level": defaultReasoningLevel,
-		"supported_reasoning_levels": []map[string]any{
-			{"effort": config.ReasoningEffortNone, "description": config.ReasoningEffortNone},
-			{"effort": config.ReasoningEffortMinimal, "description": config.ReasoningEffortMinimal},
-			{"effort": config.ReasoningEffortLow, "description": config.ReasoningEffortLow},
-			{"effort": config.ReasoningEffortMedium, "description": config.ReasoningEffortMedium},
-			{"effort": config.ReasoningEffortHigh, "description": config.ReasoningEffortHigh},
-			{"effort": config.ReasoningEffortXHigh, "description": config.ReasoningEffortXHigh},
-		},
+		"slug":                         modelID,
+		"display_name":                 modelID,
+		"description":                  "CSGClaw OpenAI-compatible provider model",
+		"default_reasoning_level":      defaultReasoningLevel,
+		"supported_reasoning_levels":   supported,
 		"shell_type":                   "default",
 		"visibility":                   "list",
 		"supported_in_api":             true,

@@ -19,7 +19,6 @@ import {
   type AgentActivityKind,
   parseAgentActivity,
   parseMessageActivityCommand,
-  parsePlainAgentCommand,
   statusLabel,
   type AgentActivityPayload,
   type AgentActivityTool,
@@ -500,7 +499,7 @@ export function activityEntriesFromRooms(
       if (plainCommand) {
         const stableToolKey = scopedActivityToolMergeKey(message, agentActivityMessageToolMergeKey(message));
         const commandKey = activityCommandMergeKey(plainCommand);
-        const semanticCommandKey = openClawRequestCommandMergeKey(message, plainCommand.command);
+        const semanticCommandKey = requestCommandMergeKey(message, plainCommand.command);
         const stableEntry = stableToolKey ? toolEntries.get(stableToolKey) : undefined;
         const semanticEntry =
           !stableToolKey && semanticCommandKey ? semanticCommandEntries.get(semanticCommandKey) : undefined;
@@ -660,8 +659,8 @@ function activityToolMergeKeys(tool: AgentActivityTool, message: IMMessage): str
 }
 
 function scopedActivityToolMergeKey(message: IMMessage, key: string): string {
-  const requestID = openClawRequestID(message);
-  return requestID && key ? `openclaw-request:${requestID}:${key}` : key;
+  const requestID = activityRequestID(message);
+  return requestID && key ? `runtime-request:${requestID}:${key}` : key;
 }
 
 function registerActivityEntry(
@@ -778,7 +777,7 @@ function mergePlainCommandIntoEntry(
 }
 
 function activityToolSemanticCommandKey(tool: AgentActivityTool, message: IMMessage): string {
-  return openClawRequestCommandMergeKey(message, activityToolCommandForMerge(tool));
+  return requestCommandMergeKey(message, activityToolCommandForMerge(tool));
 }
 
 function activityToolCommandForMerge(tool: AgentActivityTool): string {
@@ -807,19 +806,8 @@ function toolTitleCommandForMerge(title: string, kind: string): string {
 }
 
 function parseActivityCommand(message: IMMessage): AgentActivityCommand | null {
-  const command = parseMessageActivityCommand(message) ?? parsePlainOpenClawProgressCommand(message.content);
+  const command = parseMessageActivityCommand(message);
   return command ? normalizeActivityCommand(command) : null;
-}
-
-function parsePlainOpenClawProgressCommand(content: unknown): AgentActivityCommand | null {
-  if (typeof content !== "string" || !isOpenClawProgressMarker(content)) {
-    return null;
-  }
-  return parsePlainAgentCommand(content);
-}
-
-function isOpenClawProgressMarker(content: string): boolean {
-  return /^(?:🛠️?|🔎|📄|📖|🧠|✍️?|🩹|📩)\s*/u.test(content.replace(/\u200b/g, "").trim());
 }
 
 function normalizeActivityCommand(command: AgentActivityCommand): AgentActivityCommand {
@@ -830,7 +818,7 @@ function normalizeActivityCommand(command: AgentActivityCommand): AgentActivityC
   return {
     ...command,
     command: normalizedCommand,
-    signature: command.signature.startsWith("openclaw-tool:")
+    signature: command.signature.startsWith("runtime-tool:")
       ? command.signature
       : normalizeCommandSignature(normalizedCommand),
     title: commandTitleFromText(normalizedCommand),
@@ -848,8 +836,8 @@ function isDuplicateCommandStart(
   if (activityCommandMergeKey(entry.command) !== activityCommandMergeKey(command)) {
     return false;
   }
-  const entryRequestID = openClawRequestID(entry.message);
-  const messageRequestID = openClawRequestID(message);
+  const entryRequestID = activityRequestID(entry.message);
+  const messageRequestID = activityRequestID(message);
   if (entryRequestID && messageRequestID) {
     return entryRequestID === messageRequestID;
   }
@@ -857,7 +845,7 @@ function isDuplicateCommandStart(
 }
 
 function activityCommandMergeKey(command: AgentActivityCommand): string {
-  return command.signature.startsWith("openclaw-tool:")
+  return command.signature.startsWith("runtime-tool:")
     ? normalizeCommandSignature(command.command)
     : normalizeCommandSignature(command.signature || command.command);
 }
@@ -874,9 +862,9 @@ function pendingCommandMatchIndex(pending: readonly AgentActivityEntry[], messag
   if (pending.length === 0) {
     return -1;
   }
-  const messageRequestID = openClawRequestID(message);
+  const messageRequestID = activityRequestID(message);
   if (messageRequestID) {
-    const requestIndex = pending.findIndex((entry) => openClawRequestID(entry.message) === messageRequestID);
+    const requestIndex = pending.findIndex((entry) => activityRequestID(entry.message) === messageRequestID);
     if (requestIndex >= 0) {
       return requestIndex;
     }
@@ -884,25 +872,25 @@ function pendingCommandMatchIndex(pending: readonly AgentActivityEntry[], messag
   return 0;
 }
 
-function openClawRequestCommandMergeKey(message: IMMessage, command: string): string {
-  const requestID = openClawRequestID(message);
+function requestCommandMergeKey(message: IMMessage, command: string): string {
+  const requestID = activityRequestID(message);
   const commandKey = normalizeCommandSignature(command);
-  return requestID && commandKey ? `openclaw-request:${requestID}:command:${commandKey}` : "";
+  return requestID && commandKey ? `runtime-request:${requestID}:command:${commandKey}` : "";
 }
 
-function openClawRequestID(message: IMMessage | null | undefined): string {
+function activityRequestID(message: IMMessage | null | undefined): string {
   const metadata = isRecord(message?.metadata) ? message.metadata : undefined;
-  const openclaw = isRecord(metadata?.openclaw) ? metadata.openclaw : undefined;
-  const deliveryInfo = isRecord(openclaw?.delivery_info)
-    ? openclaw.delivery_info
-    : isRecord(openclaw?.deliveryInfo)
-      ? openclaw.deliveryInfo
+  const runtimeMetadata = isRecord(metadata?.codex) ? metadata.codex : undefined;
+  const deliveryInfo = isRecord(runtimeMetadata?.delivery_info)
+    ? runtimeMetadata.delivery_info
+    : isRecord(runtimeMetadata?.deliveryInfo)
+      ? runtimeMetadata.deliveryInfo
       : undefined;
   return firstNonEmpty(
-    openclaw?.request_id,
-    openclaw?.requestId,
-    openclaw?.source_message_id,
-    openclaw?.sourceMessageId,
+    runtimeMetadata?.request_id,
+    runtimeMetadata?.requestId,
+    runtimeMetadata?.source_message_id,
+    runtimeMetadata?.sourceMessageId,
     deliveryInfo?.request_id,
     deliveryInfo?.requestId,
   );

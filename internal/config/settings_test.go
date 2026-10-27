@@ -46,7 +46,7 @@ func TestApplyUserSettingsUpdatesExposedFields(t *testing.T) {
 		SandboxProvider:        DockerProvider,
 		HubLocalPath:           "/new/hub",
 		DefaultManagerTemplate: "builtin.manager-codex",
-		DefaultWorkerTemplate:  "builtin.picoclaw-worker",
+		DefaultWorkerTemplate:  "builtin.codex-worker",
 	})
 	if err != nil {
 		t.Fatalf("ApplyUserSettings() error = %v", err)

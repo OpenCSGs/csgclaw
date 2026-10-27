@@ -15,7 +15,7 @@ The default build:
 2. Builds `bin/csgclaw`, the host-platform `bin/csgclaw-cli`, and the bundled `bin/codex`.
 3. Builds a static Linux `csgclaw-cli` for the current CPU architecture into `bin/sandbox-tools/csgclaw-cli`.
 
-`make build-all` is retained as an alias of `make build`. CSGClaw no longer builds derived PicoClaw/OpenClaw images locally.
+`make build-all` is retained as an alias of `make build`. Codex is bundled with the application; DeepSeek Harness is installed on demand.
 
 Useful targets:
 
@@ -81,17 +81,6 @@ The default `build` target mirrors `make build`:
 3. Builds a Linux `csgclaw-cli` into `bin/sandbox-tools/csgclaw-cli`.
 
 When a locally built `bin/csgclaw[.exe]` starts a sandbox, it synchronizes the adjacent `bin/sandbox-tools/csgclaw-cli` into `~/.csgclaw/sandbox-tools/csgclaw-cli`, then mounts that managed directory read-only at `/opt/csgclaw/bin` inside the sandbox. Official installers perform the same initial synchronization from the installed bundle.
-
-## Runtime images
-
-Sandbox runtimes use these fixed default images:
-
-| Runtime | Fixed image |
-|---|---|
-| OpenClaw | `opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/openclaw:20260723.2-csgclaw` |
-| PicoClaw | `opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw:2026.6.10` |
-
-The OpenClaw ref is stored in its builtin `agent.toml`. PicoClaw no longer has a builtin template, so its ref is maintained as a runtime default. CSGClaw does not generate these image tags or build the runtime images in CI.
 
 ## Web UI
 

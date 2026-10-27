@@ -27,7 +27,7 @@
 npx skills add alchaincyf/huashu-design
 ```
 
-跨 agent 通用——Claude Code、Cursor、Codex、OpenClaw、Hermes 都能装。
+跨 agent 通用——Claude Code、Cursor、Codex、Hermes 都能装。
 
 > 📣 **已改为 MIT 协议。** 自 2026-05-14 起本 skill 完全开源（[MIT License](LICENSE)），个人和**商用都免费**，无需事先授权。原「个人使用免费、企业商用需授权」的条款已作废。([查看变更](#license))
 

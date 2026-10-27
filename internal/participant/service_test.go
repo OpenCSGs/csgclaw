@@ -47,7 +47,7 @@ func TestCreateAgentParticipantUsesStableParticipantIDForDefaultAgentID(t *testi
 			Agent: &agent.CreateAgentSpec{
 				Name:        "QA-Display-Name",
 				Role:        agent.RoleWorker,
-				RuntimeKind: agent.RuntimeKindPicoClawSandbox,
+				RuntimeKind: agent.RuntimeKindCodex,
 				Image:       "agent-image:test",
 			},
 		},
@@ -93,7 +93,7 @@ func TestCreateParticipantKeepsAvatarOnIMUserOnly(t *testing.T) {
 			Agent: &agent.CreateAgentSpec{
 				Name:        "QA",
 				Role:        agent.RoleWorker,
-				RuntimeKind: agent.RuntimeKindPicoClawSandbox,
+				RuntimeKind: agent.RuntimeKindCodex,
 				Image:       "agent-image:test",
 			},
 		},
@@ -135,7 +135,7 @@ func TestCreateAgentParticipantReplacesInitialsWithBuiltInAvatar(t *testing.T) {
 		AgentBinding: AgentBindingSpec{
 			Mode: BindingModeCreate,
 			Agent: &agent.CreateAgentSpec{
-				Name: "QA", Role: agent.RoleWorker, RuntimeKind: agent.RuntimeKindPicoClawSandbox, Image: "agent-image:test",
+				Name: "QA", Role: agent.RoleWorker, RuntimeKind: agent.RuntimeKindCodex, Image: "agent-image:test",
 			},
 		},
 	}); err != nil {
@@ -168,7 +168,7 @@ func TestCreateAgentParticipantCanReuseExistingAgentWithDifferentParticipantID(t
 			ID:          "u-qa",
 			Name:        "QA-Runtime",
 			Role:        agent.RoleWorker,
-			RuntimeKind: agent.RuntimeKindPicoClawSandbox,
+			RuntimeKind: agent.RuntimeKindCodex,
 			Image:       "agent-image:test",
 		},
 	}); err != nil {
@@ -237,7 +237,7 @@ func TestRepairDanglingCSGClawAgentParticipantsRemovesParticipantShells(t *testi
 			ID:          "agent-qa",
 			Name:        "qa",
 			Role:        agent.RoleWorker,
-			RuntimeKind: agent.RuntimeKindPicoClawSandbox,
+			RuntimeKind: agent.RuntimeKindCodex,
 			Image:       "agent-image:test",
 		},
 	}); err != nil {
@@ -682,7 +682,7 @@ func TestDeleteParticipantDoesNotDeleteAgentByDefault(t *testing.T) {
 			ID:          "u-qa",
 			Name:        "QA-Runtime",
 			Role:        agent.RoleWorker,
-			RuntimeKind: agent.RuntimeKindPicoClawSandbox,
+			RuntimeKind: agent.RuntimeKindCodex,
 			Image:       "agent-image:test",
 		},
 	}); err != nil {
@@ -755,7 +755,7 @@ func TestDeleteParticipantRejectsAgentCleanupWhenStillReferenced(t *testing.T) {
 			ID:          "u-qa",
 			Name:        "QA-Runtime",
 			Role:        agent.RoleWorker,
-			RuntimeKind: agent.RuntimeKindPicoClawSandbox,
+			RuntimeKind: agent.RuntimeKindCodex,
 			Image:       "agent-image:test",
 		},
 	}); err != nil {
@@ -827,7 +827,7 @@ func TestDeleteParticipantAgentCleanupKeepsSharedCSGClawUser(t *testing.T) {
 			ID:          "u-qa",
 			Name:        "QA-Runtime",
 			Role:        agent.RoleWorker,
-			RuntimeKind: agent.RuntimeKindPicoClawSandbox,
+			RuntimeKind: agent.RuntimeKindCodex,
 			Image:       "agent-image:test",
 		},
 	}); err != nil {
@@ -907,7 +907,7 @@ func mustNewAgentService(t *testing.T) *agent.Controller {
 		config.ServerConfig{},
 		"manager-image:test",
 		"",
-		agent.WithRuntime(testRuntime{kind: agent.RuntimeKindPicoClawSandbox}),
+		agent.WithRuntime(testRuntime{kind: agent.RuntimeKindCodex}),
 	)
 	if err != nil {
 		t.Fatalf("agent.NewService() error = %v", err)

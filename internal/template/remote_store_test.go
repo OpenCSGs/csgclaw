@@ -23,12 +23,12 @@ import (
 const remoteTestManifest = `name = "gitlab-assistant"
 role = "manager"
 description = "GitLab assistant"
-runtime_kind = "openclaw"
+runtime_kind = "dsh"
 version = "2026.6.16.0"
 updated_at = "2026-05-19T07:25:31Z"
 
 [image]
-ref = "registry.example.com/openclaw-glab:2026.6.16.0"
+ref = "registry.example.com/dsh-glab:2026.6.16.0"
 
 [[image.env]]
 name = "GITLAB_TOKEN"
@@ -500,12 +500,12 @@ func TestRemoteStoreListMergesOrganizationAndAgentTemplatesByNamespacePath(t *te
 func TestRemoteStorePublishRejectsRuntimeOutsideCommunityTemplateProtocol(t *testing.T) {
 	store := NewAuthenticatedRemoteStore("http://127.0.0.1", "access-token", "alice")
 	_, err := store.Publish(context.Background(), PublishSpec{
-		Name:        "openclaw-reviewer",
+		Name:        "unsupported-reviewer",
 		Description: "Reviews changes",
-		RuntimeKind: "openclaw",
-		Image:       "openclaw:latest",
+		RuntimeKind: "unsupported",
+		Image:       "dsh:latest",
 	})
-	if err == nil || !strings.Contains(err.Error(), "cannot be published to the community") {
+	if !errors.Is(err, ErrRuntimeKindRequired) {
 		t.Fatalf("Publish() error = %v, want community runtime rejection", err)
 	}
 }
@@ -770,7 +770,7 @@ func TestRemoteStoreListGetAndFetchWorkspace(t *testing.T) {
 	if got, want := items[0].ID, "agentichub/gitlab-assistant"; got != want {
 		t.Fatalf("List()[0].ID = %q, want %q", got, want)
 	}
-	if got, want := items[0].RuntimeKind, "openclaw"; got != want {
+	if got, want := items[0].RuntimeKind, "dsh"; got != want {
 		t.Fatalf("List()[0].RuntimeKind = %q, want %q", got, want)
 	}
 

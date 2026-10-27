@@ -59,7 +59,7 @@ func TestMemoryClientAgentLifecycleAndSecretRedaction(t *testing.T) {
 	if err != nil || provisioned.Spec.Runtime.Credentials != nil || provisioned.Spec.Runtime.InitShell != "test -f secrets/token" {
 		t.Fatalf("provisioned Update = %+v, %v", provisioned, err)
 	}
-	provisioned.Spec.Runtime = agentengine.RuntimeSpec{Adapter: "openclaw", Credentials: map[string]string{"token": "secret"}}
+	provisioned.Spec.Runtime = agentengine.RuntimeSpec{Adapter: "dsh", Credentials: map[string]string{"token": "secret"}}
 	if _, err := client.Agents().Update(context.Background(), created.ID, agentengine.AgentUpdateRequest{
 		Spec: provisioned.Spec, FieldMask: []string{"runtime"}, ResourceVersion: provisioned.ResourceVersion,
 	}); !hasCode(err, agentengine.ErrorUnsupportedRuntimeProvision) {

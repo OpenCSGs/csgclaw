@@ -12,7 +12,7 @@ Issue 2219 要求在 CSGClaw IM 的房间工具中支持清空聊天记录。关
 非目标：
 
 - UI 清空聊天记录不删除 room，不删除 members，不删除 users，不删除 participants 或 agents。
-- UI 清空聊天记录不直接删除 PicoClaw、OpenClaw、Codex 的内部记忆、会话、workspace memory 或文件。
+- UI 清空聊天记录不直接删除 Codex、DSH 的内部记忆、会话、workspace memory 或文件。
 - Agent slash 清理不反向清空 IM 房间消息，除非后续单独设计组合操作。
 
 ## 第一章节：当前 IM 消息记录存放位置和时机，以及 UI 工具清理房间聊天记录

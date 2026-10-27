@@ -314,7 +314,7 @@ describe("useAgentTurnNotifications", () => {
           content: "Fallback after reconnect",
           id: "reply-3",
           metadata: {
-            openclaw: { delivery_kind: "final", request_id: "message-1" },
+            codex: { delivery_kind: "final", request_id: "message-1" },
           },
           sender_id: "user-worker",
         },

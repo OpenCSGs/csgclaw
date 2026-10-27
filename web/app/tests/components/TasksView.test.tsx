@@ -333,15 +333,15 @@ describe("TasksView", () => {
   it("hides unresolved technical ids from parent task metadata", () => {
     const parent = task({
       id: "task-1",
-      assignment_id: "picoclaw",
-      team_id: "picoclaw",
+      assignment_id: "codex",
+      team_id: "codex",
       team_title: "",
-      room_id: "picoclaw",
+      room_id: "codex",
       room_title: "",
       status: "completed",
-      assigned_to: "picoclaw",
+      assigned_to: "codex",
       assigned_to_agent_name: "",
-      claimed_by: "picoclaw",
+      claimed_by: "codex",
       claimed_by_agent_name: "",
     });
 
@@ -352,7 +352,7 @@ describe("TasksView", () => {
     expect(within(metadata).queryByText("Claimed by")).not.toBeInTheDocument();
     expect(within(metadata).queryByText("Assign to")).not.toBeInTheDocument();
     expect(within(metadata).queryByText("Room")).not.toBeInTheDocument();
-    expect(within(metadata).queryByText("picoclaw")).not.toBeInTheDocument();
+    expect(within(metadata).queryByText("codex")).not.toBeInTheDocument();
   });
 
   it("creates parent tasks with the CSGClaw channel without exposing channel selection", async () => {

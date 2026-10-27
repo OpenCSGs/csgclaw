@@ -20,7 +20,7 @@ describe("hub workspace helpers", () => {
 
   it("allows deleting only local hub templates", () => {
     expect(isDeletableHubTemplate({ id: "local.gitlab-assistant", source: { kind: "local" } })).toBe(true);
-    expect(isDeletableHubTemplate({ id: "builtin.picoclaw-worker", source: { kind: "builtin" } })).toBe(false);
+    expect(isDeletableHubTemplate({ id: "builtin.codex-worker", source: { kind: "builtin" } })).toBe(false);
     expect(isDeletableHubTemplate({ id: "official.review-bot", source: { kind: "remote" } })).toBe(false);
   });
 
@@ -41,8 +41,8 @@ describe("hub workspace helpers", () => {
     ).toBe(true);
     expect(
       canPublishHubTemplateToCommunity({
-        id: "local.openclaw",
-        runtime_kind: "openclaw_sandbox",
+        id: "local.codex",
+        runtime_kind: "unsupported",
         source: { kind: "local" },
       }),
     ).toBe(false);
@@ -56,7 +56,7 @@ describe("hub workspace helpers", () => {
     expect(
       isHubTemplateMemoryEnabled({ runtime_kind: runtimeKind, runtime_options: { memory_mode: "disabled" } }),
     ).toBe(false);
-    expect(isHubTemplateMemoryEnabled({ runtime_kind: "openclaw_sandbox" })).toBe(false);
+    expect(isHubTemplateMemoryEnabled({ runtime_kind: "unsupported" })).toBe(false);
   });
 
   it("uses structured codes for community publishing errors", () => {
@@ -67,7 +67,7 @@ describe("hub workspace helpers", () => {
 
   it("shows worker templates and official remote templates in hub lists", () => {
     expect(
-      isVisibleInHubTemplateList({ id: "builtin.picoclaw-worker", role: "worker", source: { kind: "builtin" } }),
+      isVisibleInHubTemplateList({ id: "builtin.codex-worker", role: "worker", source: { kind: "builtin" } }),
     ).toBe(true);
     expect(
       isVisibleInHubTemplateList({ id: "builtin.manager-codex", role: "manager", source: { kind: "builtin" } }),

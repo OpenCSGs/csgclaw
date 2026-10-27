@@ -41,8 +41,6 @@ type AgentModels interface {
 }
 type AgentRuntimeSupport interface {
 	WithAgentLifecycle(context.Context, string, func(context.Context) error) error
-	GatewayRuntime() string
-	SetGatewayRuntime(string, string) error
 	SandboxProviderName() string
 	SetHubService(*hub.Service)
 	ResetSandboxRuntimes() error

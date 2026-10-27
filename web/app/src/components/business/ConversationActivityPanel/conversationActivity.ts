@@ -422,16 +422,8 @@ function activityMergeKeys(
 
 function activityRequestScope(message: IMMessage): string {
   const metadata = recordValue(message.metadata);
-  const openclaw = recordValue(metadata?.openclaw);
   const codex = recordValue(metadata?.codex);
-  return firstNonEmpty(
-    openclaw?.request_id,
-    openclaw?.requestId,
-    openclaw?.source_message_id,
-    codex?.request_id,
-    codex?.requestId,
-    "global",
-  );
+  return firstNonEmpty(codex?.request_id, codex?.requestId, "global");
 }
 
 function mergeActivityEntry(

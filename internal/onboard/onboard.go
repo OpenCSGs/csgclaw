@@ -7,15 +7,14 @@ import (
 	"csgclaw/internal/app/runtimewiring"
 	"csgclaw/internal/config"
 	"csgclaw/internal/im"
-	"csgclaw/internal/localstore"
+	"csgclaw/internal/migrations"
+	"csgclaw/internal/migrations/retiredclaws"
 	"csgclaw/internal/participant"
 	"csgclaw/internal/sandboxproviders"
 	hub "csgclaw/internal/template"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
-	"time"
 )
 
 var (
@@ -108,11 +107,7 @@ func ensureConfigState(path string) (config.Config, error) {
 }
 
 func backupConfigDir(path string) error {
-	root := filepath.Dir(path)
-	if filepath.Base(root) != config.AppDirName {
-		return nil
-	}
-	if _, err := localstore.CreateSiblingBackup(root, time.Now()); err != nil {
+	if err := migrations.BackupConfig(path, retiredclaws.GeneratedBackupEntry); err != nil {
 		return fmt.Errorf("backup config dir: %w", err)
 	}
 	return nil
@@ -158,18 +153,13 @@ func createManagerParticipant(ctx context.Context, agentsPath, imStatePath strin
 		return participant.Participant{}, err
 	}
 	opts = append(opts,
-		runtimewiring.WithPicoClawSandboxRuntime(nil),
-		runtimewiring.WithOpenClawSandboxRuntime(nil),
 		runtimewiring.WithCodexRuntime(),
 		runtimewiring.WithDSHRuntime(),
 		agent.WithBootstrapDefaultTemplates(cfg.Bootstrap),
 		agent.WithHubService(hubSvc),
 		agent.WithDeferredManagerRuntimeStart(),
 	)
-	switch bootstrapDefaults.ManagerRuntimeKind {
-	case agent.RuntimeKindPicoClawSandbox, agent.RuntimeKindOpenClawSandbox:
-		opts = append(opts, agent.WithGatewayRuntime(bootstrapDefaults.ManagerRuntimeKind))
-	}
+
 	if noAuthDetectFromContext(ctx) {
 		opts = append(opts, agent.WithStartupProfileDetectionDisabled())
 	}

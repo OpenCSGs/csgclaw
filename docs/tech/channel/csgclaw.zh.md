@@ -109,4 +109,3 @@ Content-Type: application/json
 - 前端解析与渲染：`web/app/src/components/business/MessageContent/MessageContent.tsx`、`web/app/src/components/business/MessageContent/structuredMessages.ts`
 - Action card 与 Notifier card 单测：`web/app/tests/legacy-contract.test.ts`、`web/app/tests/components/MessageContent/structuredMessages.test.ts`
 - 通知卡片生成：`internal/channel/csgclaw/notification/notify_card.go`、`internal/channel/csgclaw/notification/notify_webhooks.go`
-- Feishu setup 命令输出：`internal/templates/embed/runtimes/picoclaw/manager/workspace/skills/feishu/scripts/feishu_setup/csgclaw.py`

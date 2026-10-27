@@ -170,9 +170,6 @@ func (s *Controller) UpdateAgentProfile(id string, profile AgentProfile) (AgentP
 			return AgentProfileView{}, err
 		}
 	}
-	if err := s.syncGatewayAfterProfileChange(context.Background(), id, previous, normalized, restartRequired); err != nil {
-		return AgentProfileView{}, err
-	}
 	got, ok := s.Agent(id)
 	if !ok {
 		return AgentProfileView{}, fmt.Errorf("agent %q not found", id)
@@ -184,14 +181,6 @@ func profileRestartRequired(current Agent, next AgentProfile) bool {
 	return !profilesEqualEnv(current.AgentProfile, next)
 }
 
-func gatewayProfileRuntimeRestartRequired(current Agent, next AgentProfile) bool {
-	if !isGatewayRuntimeKind(strings.TrimSpace(current.RuntimeKind)) {
-		return false
-	}
-	previous := normalizeProfileForAgentRuntime(current.AgentProfile, current.RuntimeOptions, current.Name, current.Description, current.RuntimeKind, nil)
-	return !profileRuntimeInputsEqual(previous, next)
-}
-
 func profileRuntimeInputsEqual(a, b AgentProfile) bool {
 	return strings.TrimSpace(a.Provider) == strings.TrimSpace(b.Provider) &&
 		strings.TrimSpace(a.ModelProviderID) == strings.TrimSpace(b.ModelProviderID) &&
@@ -201,61 +190,6 @@ func profileRuntimeInputsEqual(a, b AgentProfile) bool {
 		strings.TrimSpace(a.ReasoningEffort) == strings.TrimSpace(b.ReasoningEffort) &&
 		reflect.DeepEqual(a.Headers, b.Headers) &&
 		reflect.DeepEqual(a.RequestOptions, b.RequestOptions)
-}
-
-func (s *Controller) syncGatewayAfterProfileChange(ctx context.Context, id string, previous Agent, normalized AgentProfile, restartRequired bool) error {
-	if s == nil || !normalized.ProfileComplete {
-		return nil
-	}
-	runtimeNormalized := s.hydrateProfileFromCatalog(normalized)
-	got, ok := s.Agent(id)
-	if !ok || !isGatewayRuntimeKind(strings.TrimSpace(got.RuntimeKind)) {
-		return nil
-	}
-	profileJustCompleted := !isAgentProfileComplete(previous) && normalized.ProfileComplete
-	boxMissing := strings.TrimSpace(got.BoxID) == ""
-	if isManagerAgent(got) && (profileJustCompleted || boxMissing) {
-		_, err := s.EnsureManager(ctx, false)
-		return err
-	}
-	if restartRequired {
-		_, err := s.RecreateRecord(ctx, id)
-		return err
-	}
-	if gatewayProfileRuntimeRestartRequired(previous, normalized) {
-		return s.syncGatewayHostConfig(ctx, got, runtimeNormalized)
-	}
-	return nil
-}
-
-func (s *Controller) syncGatewayHostConfig(ctx context.Context, got Agent, profile AgentProfile) error {
-	rt, err := s.runtimeForKind(got.RuntimeKind)
-	if err != nil {
-		return err
-	}
-	got.AgentProfile = profile
-	if reconciler, ok := rt.(agentruntime.HostConfigReconciler); ok {
-		gateway, err := s.gatewayProvisionRequest(got.RuntimeKind, got.Name, got.ID)
-		if err != nil {
-			return err
-		}
-		servers, err := s.materializeRuntimeMCPServers(ctx, got.RuntimeKind, got.MCPServers)
-		if err != nil {
-			return err
-		}
-		if err := reconciler.ReconcileHostConfig(ctx, agentruntime.ProvisionRequest{AgentID: got.ID, AgentName: got.Name, ParticipantID: participantIDForAgent(got.Name, got.ID), Profile: s.runtimeProfileForAgent(got), MCPServers: servers, Gateway: gateway}); err != nil {
-			return err
-		}
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	current, ok := s.agents[got.ID]
-	if !ok {
-		return nil
-	}
-	current.AgentProfile.EnvRestartRequired = false
-	s.putAgentLocked(got.ID, current)
-	return s.saveLocked()
 }
 
 func (s *Controller) UpdateRecord(ctx context.Context, id string, req UpdateRequest) (Agent, error) {
@@ -303,7 +237,6 @@ func (s *Controller) updateWithManagedRuntimeOptions(ctx context.Context, id str
 	runtimeKind := strings.TrimSpace(current.RuntimeKind)
 	runtimeRunning := isRuntimeRunning(current)
 	restartRequired := false
-	runtimeAffectingUpdate := false
 	fieldMask := normalizeUpdateFieldMask(req.FieldMask)
 	hasFieldMask := len(fieldMask) > 0
 	updateRequested := func(field string, legacy bool) bool {
@@ -416,7 +349,6 @@ func (s *Controller) updateWithManagedRuntimeOptions(ctx context.Context, id str
 		}
 	}
 	if agentProfileUpdated || runtimeOptionsUpdated || mcpServersUpdated {
-		runtimeAffectingUpdate = true
 		profile := current.AgentProfile
 		if agentProfileUpdated {
 			if req.AgentProfile == nil {
@@ -549,14 +481,8 @@ func (s *Controller) updateWithManagedRuntimeOptions(ctx context.Context, id str
 		return current, nil
 	}
 	if mcpServersUpdated {
-		// OpenClaw consumes MCP settings during provisioning/recreation. Writing
-		// its live config here can race the gateway process, including for an
-		// idempotent save that does not require a restart.
-		skipMCPReconcileForOpenClaw := strings.EqualFold(strings.TrimSpace(runtimeKind), RuntimeKindOpenClawSandbox)
-		if !skipMCPReconcileForOpenClaw {
-			if err := s.reconcileMCPServers(ctx, previous, current); err != nil {
-				return Agent{}, err
-			}
+		if err := s.reconcileMCPServers(ctx, previous, current); err != nil {
+			return Agent{}, err
 		}
 	}
 	if restartRequired && (runtimeRunning || previous.DesiredState == DesiredStateRunning) && isHostRuntimeKind(runtimeKind) {
@@ -572,16 +498,7 @@ func (s *Controller) updateWithManagedRuntimeOptions(ctx context.Context, id str
 	if mcpServersUpdated && restartRequired && runtimeRunning && isManagerAgent(updated) && updated.AgentProfile.EnvRestartRequired {
 		return s.RecreateRecord(ctx, id)
 	}
-	if runtimeAffectingUpdate {
-		normalized := normalizeProfileForAgentRuntime(updated.AgentProfile, updated.RuntimeOptions, updated.Name, updated.Description, updated.RuntimeKind, nil)
-		if err := s.syncGatewayAfterProfileChange(ctx, id, previous, normalized, restartRequired); err != nil {
-			return Agent{}, err
-		}
-		updated, ok = s.Agent(id)
-		if !ok {
-			return Agent{}, fmt.Errorf("agent %q not found", id)
-		}
-	}
+
 	if instructionsUpdated && !restartRequired && (isRuntimeRunning(updated) || updated.DesiredState == DesiredStateRunning) {
 		return s.reloadRuntimeLocked(ctx, updated)
 	}
@@ -1078,42 +995,6 @@ func (s *Controller) recreate(ctx context.Context, id string, imageFor func(cont
 		} else if !errors.Is(readErr, os.ErrNotExist) {
 			return Agent{}, fmt.Errorf("preserve runtime instructions: %w", readErr)
 		}
-	}
-	if testCreateGatewayBoxHook != nil {
-		rt, err := s.ensureRuntime(got.ID)
-		if err != nil {
-			return Agent{}, err
-		}
-		runtimeHome, err := s.sandboxRuntimeHome(got.ID)
-		if err != nil {
-			return Agent{}, err
-		}
-		defer func() {
-			_ = s.closeRuntime(runtimeHome, rt)
-		}()
-		if strings.TrimSpace(got.BoxID) != "" {
-			deleteErr := s.forceRemoveBox(ctx, rt, got.BoxID)
-			if deleteErr != nil && !sandbox.IsNotFound(deleteErr) {
-				return Agent{}, fmt.Errorf("remove existing agent box: %w", deleteErr)
-			}
-		}
-		box, sandboxInfo, err := s.createGatewayBox(ctx, rt, image, got.Name, got.ID, profile)
-		if err != nil {
-			return Agent{}, fmt.Errorf("create agent box: %w", err)
-		}
-		defer func() {
-			_ = s.closeBox(box)
-		}()
-		info := agentruntime.Info{
-			HandleID:  strings.TrimSpace(sandboxInfo.ID),
-			State:     agentruntime.State(sandboxInfo.State),
-			CreatedAt: sandboxInfo.CreatedAt.UTC(),
-		}
-		recreated, err := s.persistRecreatedAgent(ctx, id, image, info)
-		if err != nil {
-			return Agent{}, err
-		}
-		return recreated, nil
 	}
 
 	runtimeProfile := s.runtimeProfileForKind(runtimeKind, got.ID, got.Name, got.Description, profile)

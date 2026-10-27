@@ -47,7 +47,7 @@ func TestMigrateStoreCreatesSiblingBackupAndRootState(t *testing.T) {
 				"name":         "manager",
 				"role":         "manager",
 				"runtime_id":   "rt-u-manager",
-				"runtime_kind": "picoclaw_sandbox",
+				"runtime_kind": "codex",
 				"created_at":   "2026-06-24T01:02:03Z",
 				"agent_profile": map[string]any{
 					"provider":         "openai",
@@ -65,7 +65,7 @@ func TestMigrateStoreCreatesSiblingBackupAndRootState(t *testing.T) {
 			},
 		},
 		"runtimes": []map[string]any{
-			{"id": "rt-u-manager", "kind": "picoclaw_sandbox"},
+			{"id": "rt-u-manager", "kind": "codex"},
 			{"id": "rt-zhang", "kind": "codex"},
 		},
 	})
@@ -356,8 +356,8 @@ func TestMigrateStoreCreatesSiblingBackupAndRootState(t *testing.T) {
 func TestMigrateTypedIDsBacksUpBrokenSymlinks(t *testing.T) {
 	parent := t.TempDir()
 	root := filepath.Join(parent, ".csgclaw")
-	mustMkdir(t, filepath.Join(root, "agents", "gitlab-assistant", ".openclaw", "plugin-skills"))
-	if err := os.Symlink("/app/dist/extensions/browser/skills/browser-automation", filepath.Join(root, "agents", "gitlab-assistant", ".openclaw", "plugin-skills", "browser-automation")); err != nil {
+	mustMkdir(t, filepath.Join(root, "agents", "gitlab-assistant", ".dsh", "plugin-skills"))
+	if err := os.Symlink("/app/dist/extensions/browser/skills/browser-automation", filepath.Join(root, "agents", "gitlab-assistant", ".dsh", "plugin-skills", "browser-automation")); err != nil {
 		t.Skipf("Symlink() unsupported: %v", err)
 	}
 	writeJSON(t, filepath.Join(root, "state.json"), map[string]any{
@@ -374,7 +374,7 @@ func TestMigrateTypedIDsBacksUpBrokenSymlinks(t *testing.T) {
 	if err != nil {
 		t.Fatalf("MigrateTypedIDs() error = %v", err)
 	}
-	linkPath := filepath.Join(result.BackupPath, "agents", "gitlab-assistant", ".openclaw", "plugin-skills", "browser-automation")
+	linkPath := filepath.Join(result.BackupPath, "agents", "gitlab-assistant", ".dsh", "plugin-skills", "browser-automation")
 	got, err := os.Readlink(linkPath)
 	if err != nil {
 		t.Fatalf("Readlink(backup browser-automation) error = %v", err)
@@ -382,36 +382,6 @@ func TestMigrateTypedIDsBacksUpBrokenSymlinks(t *testing.T) {
 	if got != "/app/dist/extensions/browser/skills/browser-automation" {
 		t.Fatalf("backup symlink target = %q, want container plugin target", got)
 	}
-}
-
-func TestMigrateTypedIDsSkipsUnreadableOpenClawPluginSkillBackupEntry(t *testing.T) {
-	parent := t.TempDir()
-	root := filepath.Join(parent, ".csgclaw")
-	pluginPath := filepath.Join(root, "agents", "feishu-assi", ".openclaw", "plugin-skills", "browser-automation")
-	mustMkdir(t, filepath.Dir(pluginPath))
-	writeFile(t, pluginPath, "container plugin placeholder")
-	if err := os.Chmod(pluginPath, 0); err != nil {
-		t.Fatalf("Chmod() error = %v", err)
-	}
-	t.Cleanup(func() { _ = os.Chmod(pluginPath, 0o600) })
-	writeJSON(t, filepath.Join(root, "state.json"), map[string]any{
-		"version":         1,
-		"model_providers": map[string]any{"default_model": map[string]any{"model_provider_id": "openai", "model_id": "gpt-4.1"}, "items": map[string]any{}},
-		"agents":          map[string]any{"items": []any{}},
-		"participants":    map[string]any{"items": []any{}},
-	})
-
-	result, err := MigrateTypedIDs(MigrateOptions{
-		Root: root,
-		Now:  func() time.Time { return time.Date(2026, 6, 24, 12, 0, 0, 0, time.Local) },
-	})
-	if err != nil {
-		t.Fatalf("MigrateTypedIDs() error = %v", err)
-	}
-	if result.BackupPath == "" {
-		t.Fatal("BackupPath is empty, want backup despite unreadable volatile plugin entry")
-	}
-	assertMissing(t, filepath.Join(result.BackupPath, "agents", "feishu-assi", ".openclaw", "plugin-skills", "browser-automation"))
 }
 
 func TestMigrateTypedIDsCollapsesLegacyLocalIdentityAliases(t *testing.T) {
@@ -976,23 +946,23 @@ func TestRenameDirNoOverwriteRemovesMergedNestedSourceDirs(t *testing.T) {
 	root := t.TempDir()
 	src := filepath.Join(root, "agents", "manager")
 	dst := filepath.Join(root, "agents", "agent-manager")
-	writeFile(t, filepath.Join(src, ".picoclaw", "logs", "gateway.log"), "source log\n")
-	writeFile(t, filepath.Join(dst, ".picoclaw", "logs", "gateway.log"), "destination log\n")
-	writeFile(t, filepath.Join(src, ".picoclaw", "config.json"), `{"agent_id":"u-manager"}`)
+	writeFile(t, filepath.Join(src, ".codex", "logs", "gateway.log"), "source log\n")
+	writeFile(t, filepath.Join(dst, ".codex", "logs", "gateway.log"), "destination log\n")
+	writeFile(t, filepath.Join(src, ".codex", "config.json"), `{"agent_id":"u-manager"}`)
 
 	if err := renameDirNoOverwrite(src, dst); err != nil {
 		t.Fatalf("renameDirNoOverwrite() error = %v", err)
 	}
 	assertMissing(t, src)
 
-	data, err := os.ReadFile(filepath.Join(dst, ".picoclaw", "logs", "gateway.log"))
+	data, err := os.ReadFile(filepath.Join(dst, ".codex", "logs", "gateway.log"))
 	if err != nil {
 		t.Fatalf("read destination log: %v", err)
 	}
 	if string(data) != "destination log\n" {
 		t.Fatalf("destination log = %q, want destination preserved", data)
 	}
-	if _, err := os.Stat(filepath.Join(dst, ".picoclaw", "config.json")); err != nil {
+	if _, err := os.Stat(filepath.Join(dst, ".codex", "config.json")); err != nil {
 		t.Fatalf("unique source file was not moved: %v", err)
 	}
 }

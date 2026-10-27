@@ -2,12 +2,10 @@ import { useId } from "react";
 import { Check, RotateCcw, Sparkles } from "lucide-react";
 import { Button, Slider } from "@/components/ui";
 import { reasoningEffortLabel } from "@/components/business/ProfileControls";
-import { reasoningSliderIndex } from "@/models/reasoning";
+import { normalizeReasoningEffort, reasoningSliderIndex, reasoningSteps } from "@/models/reasoning";
 import type { TranslateFn } from "@/models/conversations";
-import { REASONING_SLIDER_STEPS } from "@/shared/constants/agents";
 import styles from "./ReasoningEffortPicker.module.css";
 
-const marks = REASONING_SLIDER_STEPS.map((_, index) => index);
 const hintMessageKeys = {
   none: "iaReasoningHintNone",
   minimal: "iaReasoningHintMinimal",
@@ -15,12 +13,14 @@ const hintMessageKeys = {
   medium: "iaReasoningHintMedium",
   high: "iaReasoningHintHigh",
   xhigh: "iaReasoningHintXHigh",
+  max: "iaReasoningHintMax",
 } as const;
 
 export function ReasoningEffortPicker({
   compact = false,
   value,
   agentEffort,
+  supportedEfforts,
   disabled,
   onValueChange,
   onValueCommit,
@@ -29,14 +29,17 @@ export function ReasoningEffortPicker({
   compact?: boolean;
   value: string;
   agentEffort?: string;
+  supportedEfforts?: readonly string[];
   disabled?: boolean;
   onValueChange: (value: string) => void;
   onValueCommit: (value: string) => void;
   t: TranslateFn;
 }) {
   const descriptionId = useId();
-  const effective = value || agentEffort || "auto";
-  const index = reasoningSliderIndex(effective);
+  const steps = reasoningSteps(supportedEfforts);
+  const marks = steps.map((_, index) => index);
+  const effective = normalizeReasoningEffort(value || agentEffort || "auto");
+  const index = reasoningSliderIndex(effective, steps);
   const label = reasoningEffortLabel(t, effective);
   return (
     <div className={`${styles.root} ${compact ? styles.compact : ""}`}>
@@ -48,26 +51,28 @@ export function ReasoningEffortPicker({
         </div>
         {!compact ? <div className={styles.value}>{label}</div> : null}
         <p hidden={compact} className={styles.description} id={descriptionId}>
-          {t(index === null ? "iaReasoningHintAuto" : hintMessageKeys[REASONING_SLIDER_STEPS[index]])}
+          {t(index === null ? "iaReasoningHintAuto" : hintMessageKeys[steps[index]])}
         </p>
-        <div className={compact ? styles.sliderRow : undefined}>
-          {compact ? <span>{t("iaReasoningFaster")}</span> : null}
-          <Slider
-            className={compact ? styles.compactSlider : undefined}
-            value={index ?? REASONING_SLIDER_STEPS.indexOf("medium")}
-            max={REASONING_SLIDER_STEPS.length - 1}
-            marks={marks}
-            label={t("iaReasoningTitle")}
-            valueText={label}
-            describedBy={descriptionId}
-            disabled={disabled}
-            neutral={index === null}
-            onValueChange={(next) => onValueChange(REASONING_SLIDER_STEPS[next])}
-            onValueCommit={(next) => onValueCommit(REASONING_SLIDER_STEPS[next])}
-          />
-          {compact ? <span>{t("iaReasoningSmarter")}</span> : null}
-        </div>
-        {!compact ? (
+        {steps.length > 0 ? (
+          <div className={compact ? styles.sliderRow : undefined}>
+            {compact ? <span>{t("iaReasoningFaster")}</span> : null}
+            <Slider
+              className={compact ? styles.compactSlider : undefined}
+              value={index ?? steps.indexOf("medium")}
+              max={steps.length - 1}
+              marks={marks}
+              label={t("iaReasoningTitle")}
+              valueText={label}
+              describedBy={descriptionId}
+              disabled={disabled}
+              neutral={index === null}
+              onValueChange={(next) => onValueChange(steps[next])}
+              onValueCommit={(next) => onValueCommit(steps[next])}
+            />
+            {compact ? <span>{t("iaReasoningSmarter")}</span> : null}
+          </div>
+        ) : null}
+        {!compact && steps.length > 0 ? (
           <div className={styles.endpoints} aria-hidden="true">
             <span>{t("iaReasoningFaster")}</span>
             <span>{t("iaReasoningSmarter")}</span>

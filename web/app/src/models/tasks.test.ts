@@ -139,8 +139,8 @@ describe("tasks model", () => {
       room_id: "room-1",
       room_title: "[task-1] Weather",
       title: "Fetch weather",
-      assigned_to: "picoclaw",
-      claimed_by: "picoclaw",
+      assigned_to: "codex",
+      claimed_by: "codex",
     });
     const child = normalizeTask({
       id: "task-2",
@@ -158,12 +158,12 @@ describe("tasks model", () => {
     const unresolved = normalizeTask({
       id: "task-3",
       assignment_type: "agent",
-      assignment_id: "picoclaw",
+      assignment_id: "codex",
       team_id: "",
-      room_id: "picoclaw",
+      room_id: "codex",
       title: "Unresolved task",
-      assigned_to: "picoclaw",
-      claimed_by: "picoclaw",
+      assigned_to: "codex",
+      claimed_by: "codex",
     });
 
     expect(parent).toBeTruthy();

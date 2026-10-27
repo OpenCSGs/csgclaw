@@ -92,7 +92,7 @@ func RunInterfaceContract(t *testing.T, factory InterfaceFactory) {
 		agents := client.Agents()
 		created, err := agents.Create(context.Background(), agentengine.AgentCreateRequest{Spec: agentengine.AgentSpec{
 			Name: "created", Role: agentengine.AgentRoleWorker,
-			Runtime: agentengine.RuntimeSpec{Adapter: "openclaw", Sandboxed: true, Image: "contract-openclaw:latest"},
+			Runtime: agentengine.RuntimeSpec{Adapter: "dsh"},
 			Model:   agentengine.ModelSpec{ProviderID: "provider-a", ModelID: "model-a"},
 			Memory:  &agentengine.MemorySpec{Enabled: false},
 		}})
@@ -167,7 +167,7 @@ func RunInterfaceContract(t *testing.T, factory InterfaceFactory) {
 			Spec: agentengine.AgentSpec{
 				Name:    "explicit",
 				Role:    agentengine.AgentRoleWorker,
-				Runtime: agentengine.RuntimeSpec{Adapter: "openclaw", Sandboxed: true, Image: "contract-openclaw:latest"},
+				Runtime: agentengine.RuntimeSpec{Adapter: "dsh"},
 				Model:   agentengine.ModelSpec{Selector: "provider-a.model-a", ProviderID: "provider-a", ModelID: "model-a"},
 			},
 		})
@@ -869,7 +869,7 @@ func RunInterfaceContract(t *testing.T, factory InterfaceFactory) {
 		client := factory(t, []agentengine.Agent{
 			contractAgent("agent-running", agentengine.AgentStateRunning, "codex"),
 			contractAgent("agent-stopped", agentengine.AgentStateStopped, "codex"),
-			contractAgent("agent-unsupported", agentengine.AgentStateRunning, "openclaw_sandbox"),
+			contractAgent("agent-unsupported", agentengine.AgentStateRunning, "unsupported"),
 		}, nil)
 		invalid := client.Conversations("agent-running").Run(context.Background(), agentengine.TurnRequest{}, nil)
 		if invalid.Error == nil || invalid.Error.Code != agentengine.ErrorInvalidRequest || invalid.Dispatched {

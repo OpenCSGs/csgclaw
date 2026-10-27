@@ -253,7 +253,7 @@ For example, when building an image-editor skill, relevant questions include:
 - "Can you give some examples of how this skill would be used?"
 - "I can imagine users asking for things like 'Remove the red-eye from this image' or 'Rotate this image'. Are there other ways you imagine this skill being used?"
 - "What would a user say that should trigger this skill?"
-- "Where should I create this skill? If you do not have a preference, I will place it in the current sandbox workspace skills directory, using `~/.openclaw/workspace/skills` or `~/.picoclaw/workspace/skills` when available, so the runtime can discover it automatically."
+- "Where should I create this skill? If you do not have a preference, I will place it in the current sandbox workspace skills directory, using `CSGCLAW_SKILLS_DIR` when set, otherwise `${CODEX_HOME:-$HOME/.codex}/skills`, so the runtime can discover it automatically."
 
 To avoid overwhelming users, avoid asking too many questions in a single message. Start with the most important questions and follow up as needed for better effectiveness.
 
@@ -289,7 +289,7 @@ At this point, it is time to actually create the skill.
 
 Skip this step only if the skill being developed already exists. In this case, continue to the next step.
 
-Before running `init_skill.py`, ask where the user wants the skill created. If they do not specify a location, default to the current sandbox workspace skills directory: use `~/.openclaw/workspace/skills` when `~/.openclaw` exists, `~/.picoclaw/workspace/skills` when `~/.picoclaw` exists, and fall back to `${CODEX_HOME:-$HOME/.codex}/skills`.
+Before running `init_skill.py`, ask where the user wants the skill created. If they do not specify a location, default to the current sandbox workspace skills directory: use `CSGCLAW_SKILLS_DIR` when set, otherwise `${CODEX_HOME:-$HOME/.codex}/skills`.
 
 When creating a new skill from scratch, always run the `init_skill.py` script. The script conveniently generates a new template skill directory that automatically includes everything a skill requires, making the skill creation process much more efficient and reliable.
 
@@ -302,8 +302,7 @@ scripts/init_skill.py <skill-name> --path <output-directory> [--resources script
 Examples:
 
 ```bash
-scripts/init_skill.py my-skill --path "$HOME/.openclaw/workspace/skills"
-scripts/init_skill.py my-skill --path "$HOME/.picoclaw/workspace/skills" --resources scripts,references
+scripts/init_skill.py my-skill --path "${CSGCLAW_SKILLS_DIR:-${CODEX_HOME:-$HOME/.codex}/skills}" --resources scripts,references
 scripts/init_skill.py my-skill --path ~/work/skills --resources scripts --examples
 ```
 

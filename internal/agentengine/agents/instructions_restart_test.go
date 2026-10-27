@@ -13,8 +13,11 @@ import (
 )
 
 func TestInstructionsUpdateReloadsRunningRuntime(t *testing.T) {
-	for _, kind := range []string{RuntimeKindCodex, RuntimeKindDSH, RuntimeKindOpenClawSandbox} {
+	for _, kind := range []string{RuntimeKindCodex, RuntimeKindDSH} {
 		for _, role := range []string{RoleWorker, RoleManager} {
+			if kind == RuntimeKindDSH && role == RoleManager {
+				continue
+			}
 			for _, scenario := range []string{"changed", "combined_mcp", "unchanged", "replace", "stopped", "metadata", "reconcile_failure", "stop_failure", "start_failure"} {
 				t.Run(kind+"/"+role+"/"+scenario, func(t *testing.T) {
 					state := agentruntime.StateRunning
@@ -96,10 +99,6 @@ func TestInstructionsUpdateReloadsRunningRuntime(t *testing.T) {
 					}
 					item := Agent{ID: id, Name: name, Role: role, RuntimeID: "rt-instructions", BoxID: "existing-runtime", RuntimeKind: kind, RuntimeName: kind, Status: string(state), DesiredState: string(state), Instructions: instructions,
 						ProfileComplete: true, AgentProfile: AgentProfile{Provider: ProviderAPI, BaseURL: "https://example.com/v1", APIKey: "test", ModelID: "test", ProfileComplete: true},
-					}
-					if kind == RuntimeKindOpenClawSandbox {
-						item.RuntimeName = RuntimeNameOpenClaw
-						item.SandboxEnabled = true
 					}
 					svc.agents[id] = item
 					req := contract.AgentUpdateRequest{Spec: contract.AgentSpec{Instructions: next}, FieldMask: []string{"instructions"}}

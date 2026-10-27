@@ -87,7 +87,7 @@ func TestSkillCreatorUsesRuntimeNeutralDefaultPath(t *testing.T) {
 		t.Fatalf("ReadFrom(skill-creator) error = %v", err)
 	}
 	content := buf.String()
-	if !strings.Contains(content, "~/.openclaw/workspace/skills") || !strings.Contains(content, "~/.picoclaw/workspace/skills") {
+	if !strings.Contains(content, "CSGCLAW_SKILLS_DIR") || !strings.Contains(content, "${CODEX_HOME:-$HOME/.codex}/skills") {
 		t.Fatalf("skill-creator content = %q, want runtime-neutral workspace skills paths", content)
 	}
 }

@@ -25,8 +25,7 @@ type MCPServersController interface {
 }
 
 // MCPServersReconciler is implemented by runtimes whose MCP configuration can
-// be safely applied to a live runtime. Runtimes such as OpenClaw apply MCP
-// configuration only as part of provisioning or recreation.
+// be safely applied to a live runtime.
 type MCPServersReconciler interface {
 	ReconcileMCPServers(ctx context.Context, h Handle, change MCPServersChange) error
 }

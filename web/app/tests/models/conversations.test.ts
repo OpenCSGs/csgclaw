@@ -232,18 +232,18 @@ describe("conversation model helpers", () => {
     expect(
       agentMatchesUser(
         {
-          id: "agent-openclaw-weather",
-          name: "openclaw-weather",
+          id: "agent-codex-weather",
+          name: "codex-weather",
           participants: [
             {
               channel: "csgclaw",
-              channel_user_ref: "openclaw-weather",
-              id: "openclaw-weather",
-              user_id: "user-openclaw-weather",
+              channel_user_ref: "codex-weather",
+              id: "codex-weather",
+              user_id: "user-codex-weather",
             },
           ],
         },
-        { id: "user-openclaw-weather", name: "openclaw-weather" },
+        { id: "user-codex-weather", name: "codex-weather" },
       ),
     ).toBe(true);
     expect(agentMatchesUser(null, { id: "u-1" })).toBe(false);
@@ -687,7 +687,7 @@ describe("conversation model helpers", () => {
   it("classifies non-message agent activity messages", () => {
     expect(isToolCallMessage("🔧 Running tool")).toBe(true);
     expect(isToolCallMessage('🔎 Web Search: for "上海天气" (top 5) {"query":"上海天气"}')).toBe(true);
-    expect(isToolCallMessage("📖 Read: from ~/.openclaw/workspace/skills/gitlab/SKILL.md")).toBe(true);
+    expect(isToolCallMessage("📖 Read: from ~/.codex/workspace/skills/gitlab/SKILL.md")).toBe(true);
     expect(isToolCallMessage("🧠 Memory Search: GitLab issues user context")).toBe(true);
     expect(isToolCallMessage("🛠️ run cd → run python3 scripts/ensure_gitlab_auth.py")).toBe(true);
     expect(isToolCallMessage('📩 Message\n{"channel":"csgclaw","result":{"ok":true}}')).toBe(true);
@@ -718,13 +718,13 @@ describe("conversation model helpers", () => {
     expect(
       isToolCallMessage({
         content: "Inspect workspace state",
-        metadata: { openclaw: { delivery_kind: "tool", request_id: "msg-user" } },
+        metadata: { codex: { delivery_kind: "tool", request_id: "msg-user" } },
       }),
     ).toBe(true);
     expect(
       isToolCallMessage({
         content: "Done.",
-        metadata: { openclaw: { delivery_kind: "final", request_id: "msg-user" } },
+        metadata: { codex: { delivery_kind: "final", request_id: "msg-user" } },
       }),
     ).toBe(false);
     expect(

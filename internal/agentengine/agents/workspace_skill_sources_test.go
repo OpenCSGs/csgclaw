@@ -22,7 +22,7 @@ import (
 )
 
 func TestWorkspaceSkillSummariesRecognizeEmbeddedSources(t *testing.T) {
-	for _, kind := range []string{RuntimeKindCodex, RuntimeKindDSH, RuntimeKindOpenClawSandbox} {
+	for _, kind := range []string{RuntimeKindCodex, RuntimeKindDSH, RuntimeKindDSH} {
 		t.Run(kind, func(t *testing.T) {
 			workspace, agent, root := newSkillSourceWorkspace(t, kind)
 			templateRoot, err := resolveRuntimeTemplateRoot(kind, RoleWorker)

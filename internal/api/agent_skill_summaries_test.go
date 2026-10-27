@@ -74,7 +74,7 @@ func TestSkillSummariesBrowserFixture(t *testing.T) {
 }
 
 func TestAgentSkillSummariesThroughEngineHTTP(t *testing.T) {
-	for _, kind := range []string{agent.RuntimeKindCodex, agent.RuntimeKindOpenClawSandbox, agent.RuntimeKindPicoClawSandbox} {
+	for _, kind := range []string{agent.RuntimeKindCodex, agent.RuntimeKindDSH, agent.RuntimeKindCodex} {
 		t.Run(kind, func(t *testing.T) {
 			item := completeWorkerAgent("agent-skills", "skills")
 			item.RuntimeKind = kind

@@ -2,6 +2,7 @@ package im
 
 import (
 	"csgclaw/internal/diagnostics"
+	"csgclaw/internal/migrations/retiredclaws"
 	"csgclaw/internal/taskconfig"
 	"encoding/json"
 	"errors"
@@ -2987,8 +2988,9 @@ func cloneMessages(messages []Message) []Message {
 
 func cloneMessage(message Message) Message {
 	cloned := message
-	if selection := apitypes.ResourceSelectionFromMetadata(message.Metadata); selection != nil {
-		cloned.Metadata = apitypes.WithResourceSelection(message.Metadata, selection)
+	cloned.Metadata = retiredclaws.MessageMetadata(message.Metadata)
+	if selection := apitypes.ResourceSelectionFromMetadata(cloned.Metadata); selection != nil {
+		cloned.Metadata = apitypes.WithResourceSelection(cloned.Metadata, selection)
 	}
 	cloned.Mentions = append([]Mention(nil), message.Mentions...)
 	cloned.Attachments = cloneMessageAttachments(message.Attachments)

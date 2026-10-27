@@ -234,7 +234,7 @@ func writeManagerAgentState(t *testing.T) error {
 					"id":           agent.ManagerUserID,
 					"name":         agent.ManagerName,
 					"role":         agent.RoleManager,
-					"runtime_kind": agent.RuntimeKindPicoClawSandbox,
+					"runtime_kind": agent.RuntimeKindCodex,
 					"image":        "manager-image:test",
 					"status":       "running",
 					"created_at":   time.Date(2026, 5, 1, 8, 0, 0, 0, time.UTC).Format(time.RFC3339Nano),

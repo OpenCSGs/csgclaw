@@ -23,7 +23,7 @@ describe("configSettings model", () => {
       hub_local_path: "/tmp/hub",
       hub_official_url_effective: "https://hub.example.com/",
       default_manager_template: "builtin.manager-codex",
-      default_worker_template: "builtin.picoclaw-worker",
+      default_worker_template: "builtin.codex-worker",
     });
     expect(got?.access_token_set).toBe(true);
     expect(got?.access_token_preview).toBe("your...");
@@ -47,7 +47,7 @@ describe("configSettings model", () => {
         sandbox_provider: "boxlite",
         hub_local_path: "/tmp/hub",
         default_manager_template: "builtin.manager-codex",
-        default_worker_template: "builtin.picoclaw-worker",
+        default_worker_template: "builtin.codex-worker",
       })!,
     );
     draft.listen_port = "19080";
@@ -58,7 +58,7 @@ describe("configSettings model", () => {
       sandbox_provider: "boxlite",
       hub_local_path: "/tmp/hub",
       default_manager_template: "builtin.manager-codex",
-      default_worker_template: "builtin.picoclaw-worker",
+      default_worker_template: "builtin.codex-worker",
     });
   });
 
@@ -71,7 +71,7 @@ describe("configSettings model", () => {
         sandbox_provider: "boxlite",
         hub_local_path: "/tmp/hub",
         default_manager_template: "builtin.manager-codex",
-        default_worker_template: "builtin.picoclaw-worker",
+        default_worker_template: "builtin.codex-worker",
       })!,
     );
     draft.advertise_base_url = "http://example.test/base/";
@@ -87,7 +87,7 @@ describe("configSettings model", () => {
         sandbox_provider: "boxlite",
         hub_local_path: "/tmp/hub",
         default_manager_template: "builtin.manager-codex",
-        default_worker_template: "builtin.picoclaw-worker",
+        default_worker_template: "builtin.codex-worker",
       })!,
     );
     expect(configAdvertiseBaseURLPlaceholder(draft)).toBe("http://192.168.1.10:18080");
@@ -99,7 +99,7 @@ describe("configSettings model", () => {
     const options = configTemplateOptions(
       [
         { id: "builtin.manager-codex", name: "Manager", role: "manager", runtime_kind: "codex" },
-        { id: "builtin.picoclaw-worker", name: "Worker", role: "worker", runtime_kind: "picoclaw_sandbox" },
+        { id: "builtin.codex-worker", name: "Worker", role: "worker", runtime_kind: "codex" },
       ],
       "manager",
       "builtin.manager-codex",
@@ -110,7 +110,7 @@ describe("configSettings model", () => {
   it("filters bootstrap templates by runtime_kind", () => {
     expect(
       isValidConfigBootstrapTemplate(
-        { id: "builtin.manager-codex", role: "manager", runtime_kind: "picoclaw_sandbox" },
+        { id: "local.unsupported", role: "manager", runtime_kind: "unsupported" },
         "manager",
       ),
     ).toBe(false);
@@ -121,65 +121,23 @@ describe("configSettings model", () => {
       ),
     ).toBe(true);
     expect(
-      isValidConfigBootstrapTemplate(
-        { id: "builtin.manager-codex", role: "manager", runtime_kind: "openclaw_sandbox" },
-        "manager",
-      ),
+      isValidConfigBootstrapTemplate({ id: "builtin.manager-codex", role: "manager", runtime_kind: "dsh" }, "manager"),
     ).toBe(false);
     expect(isValidConfigBootstrapTemplate({ id: "bad-worker", role: "worker", runtime_kind: "" }, "worker")).toBe(
       false,
     );
     expect(
-      isValidConfigBootstrapTemplate(
-        { id: "builtin.picoclaw-worker", role: "worker", runtime_kind: "picoclaw_sandbox" },
-        "worker",
-      ),
+      isValidConfigBootstrapTemplate({ id: "builtin.codex-worker", role: "worker", runtime_kind: "codex" }, "worker"),
     ).toBe(true);
 
     const workerOptions = configTemplateOptions(
       [
-        { id: "builtin.picoclaw-worker", name: "Worker", role: "worker", runtime_kind: "picoclaw_sandbox" },
+        { id: "builtin.codex-worker", name: "Worker", role: "worker", runtime_kind: "codex" },
         { id: "bad-worker", name: "Bad", role: "worker", runtime_kind: "" },
       ],
       "worker",
-      "builtin.picoclaw-worker",
+      "builtin.codex-worker",
     );
-    expect(workerOptions).toEqual([{ value: "builtin.picoclaw-worker", label: "Worker" }]);
-  });
-
-  it("excludes the builtin OpenClaw worker from default template settings", () => {
-    const templates = [
-      { id: "builtin.codex-worker", name: "Codex", role: "worker", runtime_kind: "codex" },
-      {
-        id: "builtin.openclaw-worker",
-        name: "OpenClaw",
-        role: "worker",
-        runtime_kind: "openclaw_sandbox",
-      },
-      {
-        id: "Agentic/feishu-assistant",
-        name: "Feishu",
-        role: "worker",
-        runtime_kind: "openclaw_sandbox",
-      },
-    ];
-
-    expect(configTemplateOptions(templates, "worker", "builtin.openclaw-worker")).toEqual([
-      { value: "builtin.codex-worker", label: "Codex" },
-      { value: "Agentic/feishu-assistant", label: "Feishu" },
-    ]);
-  });
-
-  it("migrates the builtin OpenClaw worker setting to Codex in the editable draft", () => {
-    const settings = normalizeConfigSettings({
-      path: "/tmp/config.toml",
-      listen_addr: "0.0.0.0:18080",
-      sandbox_provider: "boxlite",
-      hub_local_path: "/tmp/hub",
-      default_manager_template: "builtin.manager-codex",
-      default_worker_template: "builtin.openclaw-worker",
-    })!;
-
-    expect(configSettingsToDraft(settings).default_worker_template).toBe("builtin.codex-worker");
+    expect(workerOptions).toEqual([{ value: "builtin.codex-worker", label: "Worker" }]);
   });
 });

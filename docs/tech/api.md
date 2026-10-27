@@ -241,8 +241,8 @@ Example request body:
     "agent": {
       "name": "QA",
       "role": "worker",
-      "runtime_kind": "picoclaw_sandbox",
-      "from_template": "builtin.openclaw-worker"
+      "runtime_kind": "codex",
+      "from_template": "builtin.codex-worker"
     }
   }
 }
@@ -390,21 +390,21 @@ Additional notes:
 - `field_mask` limits which fields are overwritten during replacement
 - `agent_profile.api_key` is write-only and will be redacted in reads
 
-OpenClaw, PicoClaw, and Codex CLI agents configure MCP servers through the
+Codex CLI and DSH agents configure MCP servers through the
 top-level `mcpServers` field. Its value is the direct server-name-to-server-
 config map used by every supported runtime:
 
 ```json
 {
   "name": "alice",
-  "runtime_kind": "openclaw_sandbox",
+  "runtime_kind": "codex",
   "mcpServers": {
     "workspace-filesystem": {
       "command": "npx",
       "args": [
         "-y",
         "@modelcontextprotocol/server-filesystem",
-        "/home/node/.openclaw/workspace"
+        "/path/to/workspace"
       ]
     }
   },
@@ -414,8 +414,6 @@ config map used by every supported runtime:
 
 Runtime adapters map this shared input as follows:
 
-- OpenClaw: `mcpServers` -> `openclaw.json` `mcp.servers`
-- PicoClaw: `mcpServers` -> PicoClaw config `tools.mcp.servers`
 - Codex CLI: `mcpServers` -> managed `[mcp_servers."<name>"]` blocks in the isolated Codex home `config.toml`
 
 MCP commands run inside the target runtime environment, so filesystem server
@@ -461,7 +459,7 @@ Notes:
 - Changing a running Codex worker's execution mode restarts its runtime so the new command, sandbox, and approval policy takes effect
 - `mcpServers` uses whole-map replacement when submitted; send `null` to clear
   the CSGClaw-managed server set
-- Updating MCP servers on OpenClaw, PicoClaw, or Codex CLI agents may recreate
+- Updating MCP servers on Codex CLI or DSH agents may recreate
   that agent runtime so the native configuration takes effect
 - If `agent_profile.api_key` is sent empty, the server keeps the existing key
 - If `agent_profile.env` changes, `env_restart_required` may become `true` in the response
@@ -515,7 +513,7 @@ this endpoint does not redact configured token values.
 ```json
 {
   "agent_id": "u-alice",
-  "runtime_kind": "openclaw_sandbox",
+  "runtime_kind": "codex",
   "servers": {
     "context7": {
       "command": "uvx",
@@ -1453,7 +1451,7 @@ data: {"message_id":"msg-1","room_id":"room-1","channel":"csgclaw","chat_id":"ro
 For thread replies, `thread_root_id` is the root message ID and
 `thread_context` carries the deterministic hidden context captured when the
 thread was started. Runtime/LLM bridges use it as prompt context; it is not a list
-of thread replies. PicoClaw-native clients can use `context.topic_id` as the
+of thread replies. Participant clients can use `context.topic_id` as the
 same thread/session identifier.
 
 Events can include an `attachments` array with the same message attachment metadata returned by the message APIs.
@@ -1484,7 +1482,7 @@ This endpoint also accepts the same multipart attachment format as `POST /api/v1
 
 Use a `payload` JSON part for the participant message fields and one or more `files` parts for generated files.
 
-PicoClaw outbound message shape is also accepted:
+Participant outbound message shape is also accepted:
 
 ```json
 {

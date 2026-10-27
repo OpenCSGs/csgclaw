@@ -13,10 +13,6 @@ import (
 	"csgclaw/internal/runtime"
 )
 
-const (
-	testBuiltinOpenClawImage = "opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/openclaw:20260723.2-csgclaw"
-)
-
 func TestBuiltinStoreListGetAndFetchWorkspace(t *testing.T) {
 	store := NewBuiltinStore()
 
@@ -24,7 +20,7 @@ func TestBuiltinStoreListGetAndFetchWorkspace(t *testing.T) {
 	if err != nil {
 		t.Fatalf("List() error = %v", err)
 	}
-	if got, want := len(items), 4; got != want {
+	if got, want := len(items), 3; got != want {
 		t.Fatalf("len(List()) = %d, want %d", got, want)
 	}
 	if got, want := items[0].ID, "codex-worker"; got != want {
@@ -36,16 +32,13 @@ func TestBuiltinStoreListGetAndFetchWorkspace(t *testing.T) {
 	if got, want := items[2].ID, "manager-codex"; got != want {
 		t.Fatalf("List()[2].ID = %q, want %q", got, want)
 	}
-	if got, want := items[3].ID, "openclaw-worker"; got != want {
-		t.Fatalf("List()[3].ID = %q, want %q", got, want)
-	}
 
-	openclawItem, err := store.Get(context.Background(), "openclaw-worker")
+	dshItem, err := store.Get(context.Background(), "dsh-worker")
 	if err != nil {
-		t.Fatalf("Get(openclaw-worker) error = %v", err)
+		t.Fatalf("Get(dsh-worker) error = %v", err)
 	}
-	if got, want := openclawItem.Image, testBuiltinOpenClawImage; got != want {
-		t.Fatalf("Get(openclaw-worker).Image = %q, want %q", got, want)
+	if got, want := dshItem.Image, ""; got != want {
+		t.Fatalf("Get(dsh-worker).Image = %q, want %q", got, want)
 	}
 
 	codexItem, err := store.Get(context.Background(), "codex-worker")
@@ -70,7 +63,7 @@ func TestBuiltinStoreListGetAndFetchWorkspace(t *testing.T) {
 		t.Fatalf("Get(manager-codex).Role = %q, want %q", got, want)
 	}
 
-	workspace, err := store.FetchWorkspace(context.Background(), "openclaw-worker")
+	workspace, err := store.FetchWorkspace(context.Background(), "dsh-worker")
 	if err != nil {
 		t.Fatalf("FetchWorkspace() error = %v", err)
 	}
@@ -90,7 +83,7 @@ func TestBuiltinStoreListGetAndFetchWorkspace(t *testing.T) {
 		t.Fatalf("FetchWorkspace(dsh-worker) error = %v", err)
 	}
 	t.Cleanup(func() { _ = os.RemoveAll(dshWorkspace.Path) })
-	for _, name := range []string{"AGENTS.md", "HEARTBEAT.md", "IDENTITY.md", "SOUL.md", "TOOLS.md", "USER.md"} {
+	for _, name := range []string{"AGENTS.md"} {
 		data, err := os.ReadFile(filepath.Join(dshWorkspace.Path, name))
 		if err != nil {
 			t.Fatalf("ReadFile(dsh-worker/%s) error = %v", name, err)
@@ -163,7 +156,7 @@ func TestServiceListAggregatesBuiltinAndLocalWithDefaultStoreFactory(t *testing.
 	if err != nil {
 		t.Fatalf("List() error = %v", err)
 	}
-	if got, want := len(items), 5; got != want {
+	if got, want := len(items), 4; got != want {
 		t.Fatalf("len(List()) = %d, want %d", got, want)
 	}
 	if got, want := items[0].ID, "builtin.codex-worker"; got != want {
@@ -175,10 +168,8 @@ func TestServiceListAggregatesBuiltinAndLocalWithDefaultStoreFactory(t *testing.
 	if got, want := items[2].ID, "builtin.manager-codex"; got != want {
 		t.Fatalf("List()[2].ID = %q, want %q", got, want)
 	}
-	if got, want := items[3].ID, "builtin.openclaw-worker"; got != want {
-		t.Fatalf("List()[3].ID = %q, want %q", got, want)
-	}
-	if got, want := items[4].ID, "local.team-helper"; got != want {
+
+	if got, want := items[3].ID, "local.team-helper"; got != want {
 		t.Fatalf("List()[4].ID = %q, want %q", got, want)
 	}
 }

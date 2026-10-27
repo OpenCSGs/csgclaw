@@ -55,19 +55,6 @@ worklease.Registry ── participant.work.updated ──> SSE ──> Web“工
 
 Agent Engine 的接入位于 `internal/channel/csgclaw/execution/work.go`。处理 Turn 前创建租约，处理期间续租，并通过 `defer` 覆盖成功、失败和提前返回等结束路径。
 
-### OpenClaw
-
-OpenClaw 的上报逻辑位于 `openclaw-csgclaw-extension`。入站消息通过准入并记录 session 后，一个租约会包住整次 reply dispatch：
-
-- 进入实际回复流程前开始上报。
-- 使用独立定时器每 5 秒续租，不依赖 `typingMode`。
-- 正常回复、可见的失败回复和 abort 清理全部结束后，再释放租约。
-- 首次上报和续租不会阻塞回复；最终释放会等待清理请求结束。
-- 上报失败只记录日志，不会让 Agent 回复失败。
-- Runtime 通过工作状态阶段区分模型等待、真实 reasoning、工具执行、工具结果处理和正文生成；旧服务端不支持阶段字段时会自动降级到原有状态格式。
-
-当前内置 worker 模板使用 `20260717.27-csgclaw`，已经包含基于 reply dispatch 的实现。
-
 ## HTTP 接口
 
 容器内 Runtime 使用服务端 access token 调用以下接口：
@@ -104,7 +91,7 @@ POST   /api/v1/channels/csgclaw/participants/{participant_id}/work:stop
 
 阶段通过 `work_stage_v1` capability 协商；`thinking` 正文仍通过 `thinking_status_v1` 上报。显式 `thinking` 阶段必须同时携带非空正文，最后一段正文会保留到工具执行或最终回复开始。工具结束后 Runtime 只切换回无细分阶段的 `thinking` phase，Web 在下一段 reasoning 或最终回复到达前继续展示最近的具体工具调用。服务端保留原来的 `working/thinking` phase，供旧 Runtime 和旧 Web 兼容使用。
 
-停止能力通过 `turn_stop_v1` capability 协商。`POST work:stop` 只先持久化 `stop_requested`，再由 `TurnControlDispatcher` 调用 Runtime 的可选 `TurnController`：Codex bridge 取消对应 Prompt context，并由 app-server 执行 `turn/interrupt`；OpenClaw adapter 当前通过 participant SSE 投递。投递失败和超时分别上报 `stop_failed`、`stop_timed_out`，不会伪装成已经停止。
+停止能力通过 `turn_stop_v1` capability 协商。`POST work:stop` 只先持久化 `stop_requested`，再由 `TurnControlDispatcher` 调用 Runtime 的可选 `TurnController`：Codex bridge 取消对应 Prompt context，并由 app-server 执行 `turn/interrupt`。投递失败和超时分别上报 `stop_failed`、`stop_timed_out`，不会伪装成已经停止。
 
 Runtime 结束租约时，`DELETE` 可提交 `{"outcome":"released"}`、`{"outcome":"stopped"}` 或 `{"outcome":"stop_timed_out"}`。只有 Runtime 在处理停止请求后显式确认 `stopped`，服务端才发布 `stopped`；旧 Runtime 省略请求体时按普通 `released` 处理。
 

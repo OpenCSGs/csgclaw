@@ -21,8 +21,9 @@ import (
 )
 
 type MigrateOptions struct {
-	Root string
-	Now  func() time.Time
+	Root              string
+	Now               func() time.Time
+	IgnoreBackupError func(string) bool
 }
 
 type MigrateResult struct {
@@ -103,7 +104,7 @@ func MigrateTypedIDs(opts MigrateOptions) (MigrateResult, error) {
 	if opts.Now != nil {
 		now = opts.Now
 	}
-	backupPath, err := CreateSiblingBackup(root, now())
+	backupPath, err := CreateSiblingBackup(root, now(), opts.IgnoreBackupError)
 	if err != nil {
 		return MigrateResult{}, fmt.Errorf("backup store: %w", err)
 	}
@@ -461,7 +462,34 @@ func (m *typedIDMigrator) migrate() error {
 	state.ModelProviders = compactModelProvidersState(state.ModelProviders)
 	state.Agents = m.compactAgentsState(state.Agents, defaultModel)
 	state.Participants = compactParticipantsState(state.Participants)
-	if err := writeJSONFile(filepath.Join(m.root, "state.json"), state); err != nil {
+	// Preserve sections owned by other services when rewriting an older store.
+	// Raw messages also retain large integers and extension-owned JSON exactly.
+	merged := make(map[string]json.RawMessage)
+	if data, err := os.ReadFile(filepath.Join(m.root, RootStateFileName)); err == nil {
+		if err := json.Unmarshal(data, &merged); err != nil {
+			return err
+		}
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	data, err := json.Marshal(state)
+	if err != nil {
+		return err
+	}
+	var updated map[string]json.RawMessage
+	if err := json.Unmarshal(data, &updated); err != nil {
+		return err
+	}
+	if merged == nil {
+		merged = make(map[string]json.RawMessage)
+	}
+	for _, key := range []string{"version", "model_providers", "agents", "participants", "teams", "auth"} {
+		delete(merged, key)
+	}
+	for key, value := range updated {
+		merged[key] = value
+	}
+	if err := writeJSONFile(filepath.Join(m.root, "state.json"), merged); err != nil {
 		return err
 	}
 	if typedIDsNeeded {
@@ -1002,7 +1030,16 @@ func (m *typedIDMigrator) compactAgentsState(agentsState map[string]any, default
 		agentsState["items"] = []any{}
 	} else {
 		next := make([]map[string]any, 0, len(items))
+		runtimes := make(map[string]map[string]any)
+		for _, runtime := range arrayOfMaps(agentsState["runtimes"]) {
+			runtimes[stringField(runtime, "id")] = runtime
+		}
 		for _, item := range items {
+			if len(stringAnyMap(item["runtime"])) == 0 {
+				if runtime, ok := runtimes[stringField(item, "runtime_id")]; ok {
+					item["runtime"] = copyMap(runtime)
+				}
+			}
 			next = append(next, compactAgentRecord(item))
 		}
 		agentsState["items"] = next
@@ -2261,7 +2298,7 @@ func nextBackupPath(root string, now time.Time) (string, error) {
 }
 
 // CreateSiblingBackup copies root to the next timestamped sibling backup path.
-func CreateSiblingBackup(root string, now time.Time) (string, error) {
+func CreateSiblingBackup(root string, now time.Time, ignoreErrors ...func(string) bool) (string, error) {
 	root = filepath.Clean(strings.TrimSpace(root))
 	if root == "" {
 		return "", fmt.Errorf("root is required")
@@ -2273,16 +2310,16 @@ func CreateSiblingBackup(root string, now time.Time) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if err := copyDir(root, backupPath); err != nil {
+	if err := copyDir(root, backupPath, ignoreErrors...); err != nil {
 		return "", err
 	}
 	return backupPath, nil
 }
 
-func copyDir(src, dst string) error {
+func copyDir(src, dst string, ignoreErrors ...func(string) bool) error {
 	return filepath.WalkDir(src, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
-			if rel, relErr := filepath.Rel(src, path); relErr == nil && isVolatileBackupEntry(rel) {
+			if rel, relErr := filepath.Rel(src, path); relErr == nil && ignoreBackupError(rel, ignoreErrors) {
 				if d != nil && d.IsDir() {
 					return filepath.SkipDir
 				}
@@ -2304,7 +2341,7 @@ func copyDir(src, dst string) error {
 		if d.IsDir() {
 			info, err := d.Info()
 			if err != nil {
-				if isVolatileBackupEntry(rel) {
+				if ignoreBackupError(rel, ignoreErrors) {
 					return filepath.SkipDir
 				}
 				return err
@@ -2313,7 +2350,7 @@ func copyDir(src, dst string) error {
 		}
 		info, err := d.Info()
 		if err != nil {
-			if isVolatileBackupEntry(rel) {
+			if ignoreBackupError(rel, ignoreErrors) {
 				return nil
 			}
 			return err
@@ -2321,7 +2358,7 @@ func copyDir(src, dst string) error {
 		if info.Mode()&fs.ModeSymlink != 0 {
 			linkTarget, err := os.Readlink(path)
 			if err != nil {
-				if isVolatileBackupEntry(rel) {
+				if ignoreBackupError(rel, ignoreErrors) {
 					return nil
 				}
 				return err
@@ -2332,7 +2369,7 @@ func copyDir(src, dst string) error {
 			return os.Symlink(linkTarget, target)
 		}
 		if err := copyFile(path, target, info.Mode().Perm()); err != nil {
-			if isVolatileBackupEntry(rel) {
+			if ignoreBackupError(rel, ignoreErrors) {
 				return nil
 			}
 			return err
@@ -2341,16 +2378,17 @@ func copyDir(src, dst string) error {
 	})
 }
 
-func isExcludedBackupEntry(rel string) bool {
-	return strings.EqualFold(filepath.Clean(rel), runtimeLockFileName)
+func ignoreBackupError(rel string, predicates []func(string) bool) bool {
+	for _, predicate := range predicates {
+		if predicate != nil && predicate(rel) {
+			return true
+		}
+	}
+	return false
 }
 
-func isVolatileBackupEntry(rel string) bool {
-	parts := strings.Split(filepath.ToSlash(rel), "/")
-	return len(parts) >= 4 &&
-		parts[0] == "agents" &&
-		parts[2] == ".openclaw" &&
-		parts[3] == "plugin-skills"
+func isExcludedBackupEntry(rel string) bool {
+	return strings.EqualFold(filepath.Clean(rel), runtimeLockFileName)
 }
 
 func copyFile(src, dst string, mode fs.FileMode) error {

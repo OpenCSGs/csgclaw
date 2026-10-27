@@ -113,7 +113,7 @@ lark-cli config init --new --brand feishu --lang zh
 
 该命令输出浏览器地址并等待用户完成设置。后端保留子进程，提取允许的官方 HTTPS 地址供页面展示，直到命令退出；成功后读取脱敏的 CLI 状态。App Secret 由 CLI 保存，页面只显示应用名称和 App ID。应用设置不创建 Participant、不绑定渠道，也不启动渠道连接。[官方应用初始化实现](https://github.com/larksuite/cli/blob/9067ec079bfa0b1ae2266cd91d1c1ee4a1ce824d/cmd/config/init.go)
 
-上述命令使用第 7.1 节的全局配置目录。新资源在授权验证完成前保持待配置状态。执行时清除继承的 `LARK_CHANNEL` 及官方 CLI 用于识别 OpenClaw、Hermes workspace 的环境标记。已有配置通过状态检查复用。
+上述命令使用第 7.1 节的全局配置目录。新资源在授权验证完成前保持待配置状态。执行时清除继承的 `LARK_CHANNEL` 及官方 CLI 用于识别外部 workspace 的环境标记。已有配置通过状态检查复用。
 
 **个人登录**由后端在该资源的受管理 CLI 配置下执行：
 

@@ -1,8 +1,11 @@
 package template
 
 import (
+	"csgclaw/internal/migrations/retiredclaws"
 	"errors"
 	"fmt"
+	"log/slog"
+	"os"
 	"strings"
 
 	"csgclaw/internal/config"
@@ -22,6 +25,12 @@ func DefaultStoreFactory(cfg config.HubRegistryConfig) (Store, error) {
 		path := strings.TrimSpace(cfg.Path)
 		if path == "" {
 			return nil, ErrRegistryPathRequired
+		}
+		if err := retiredclaws.LocalTemplates(path); err != nil {
+			if !errors.Is(err, os.ErrPermission) {
+				return nil, err
+			}
+			slog.Warn("local template registry is read-only; adapting retired manifests in memory", "path", path)
 		}
 		return NewLocalStore(path), nil
 	case RegistryKindRemote:

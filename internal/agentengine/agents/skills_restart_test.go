@@ -27,7 +27,6 @@ func TestSkillListUpdateRestartsRunningCodex(t *testing.T) {
 		{name: "delete", kind: RuntimeKindCodex, state: agentruntime.StateRunning, desired: DesiredStateRunning, skills: []string{}, restart: true},
 		{name: "unchanged", kind: RuntimeKindCodex, state: agentruntime.StateRunning, desired: DesiredStateRunning, skills: []string{"existing"}},
 		{name: "stopped", kind: RuntimeKindCodex, state: agentruntime.StateStopped, desired: DesiredStateStopped, skills: []string{}},
-		{name: "gateway", kind: RuntimeKindOpenClawSandbox, state: agentruntime.StateRunning, desired: DesiredStateRunning, skills: []string{}},
 		{name: "restart_failure", kind: RuntimeKindCodex, state: agentruntime.StateRunning, desired: DesiredStateRunning, skills: []string{}, restart: true, fail: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -84,8 +83,8 @@ func TestSkillListUpdateRestartsRunningCodex(t *testing.T) {
 			}
 			profile := AgentProfile{Name: "alice", Provider: ProviderAPI, BaseURL: "https://api.example/v1", ModelID: "test", APIKey: "test", ProfileComplete: true}
 			item := Agent{ID: "agent-alice", Name: "alice", Role: RoleWorker, RuntimeID: "rt-agent-alice", RuntimeKind: tc.kind, RuntimeName: RuntimeNameCodex, Status: string(tc.state), DesiredState: tc.desired, ProfileComplete: true, AgentProfile: profile}
-			if tc.kind == RuntimeKindOpenClawSandbox {
-				item.RuntimeName = RuntimeNameOpenClaw
+			if tc.kind == RuntimeKindDSH {
+				item.RuntimeName = RuntimeNameDSH
 				item.SandboxEnabled = true
 			}
 			if tc.kind == RuntimeKindCodex {

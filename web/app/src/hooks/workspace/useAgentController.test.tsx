@@ -164,9 +164,9 @@ vi.mock("@/api/mcp", async () => {
   };
 });
 
-const oldImage = "registry.example/opencsghq/picoclaw:2026.5.27";
-const actionImage = "registry.example/opencsghq/picoclaw:2026.6.1";
-const latestImage = "registry.example/opencsghq/picoclaw:2026.6.8";
+const oldImage = "registry.example/opencsghq/codex:2026.5.27";
+const actionImage = "registry.example/opencsghq/codex:2026.6.1";
+const latestImage = "registry.example/opencsghq/codex:2026.6.8";
 
 const oldAgent: AgentLike = {
   agent_profile: {
@@ -183,7 +183,7 @@ const oldAgent: AgentLike = {
   profile_complete: true,
   provider: "codex",
   role: "manager",
-  runtime_kind: "picoclaw_sandbox",
+  runtime_kind: "codex",
   status: "running",
 };
 
@@ -451,7 +451,7 @@ describe("useAgentController", () => {
     vi.mocked(deleteBotRequest).mockResolvedValue(undefined);
     vi.mocked(fetchAgentMCPServers).mockResolvedValue({
       agent_id: "u-manager",
-      runtime_kind: "picoclaw_sandbox",
+      runtime_kind: "codex",
       servers: null,
     });
     vi.mocked(fetchAgentWorkspace).mockResolvedValue({ entries: [] });
@@ -513,13 +513,13 @@ describe("useAgentController", () => {
       const servers = Object.fromEntries(serverNames.map((name) => [name, { command: "uvx", args: [`${name}-mcp`] }]));
       return {
         agent_id: agentID,
-        runtime_kind: "picoclaw_sandbox",
+        runtime_kind: "codex",
         servers,
       };
     });
     vi.mocked(batchDeleteAgentMCPServersRequest).mockResolvedValue({
       agent_id: "u-manager",
-      runtime_kind: "picoclaw_sandbox",
+      runtime_kind: "codex",
       servers: {},
     });
     vi.mocked(updateAgentRequest).mockResolvedValue(latestAgent);
@@ -1627,7 +1627,7 @@ describe("useAgentController", () => {
       profile_complete: true,
       provider: "api",
       role: "worker",
-      runtime_kind: "picoclaw_sandbox",
+      runtime_kind: "codex",
       status: "running",
     };
     const savedAgent: AgentLike = {
@@ -1690,7 +1690,7 @@ describe("useAgentController", () => {
       profile_complete: true,
       provider: "codex",
       role: "worker",
-      runtime_kind: "picoclaw_sandbox",
+      runtime_kind: "codex",
       status: "running",
     };
     vi.mocked(fetchAgent).mockReset();
@@ -1740,10 +1740,10 @@ describe("useAgentController", () => {
       worker_runtime_choices: [
         { name: "codex", sandbox_enabled: false, installed: true, label: "Codex CLI" },
         {
-          name: "openclaw",
+          name: "codex",
           sandbox_enabled: true,
           installed: false,
-          label: "OpenClaw",
+          label: "Codex",
           message: "Docker 未启动或无法连接，请先启动 Docker Desktop 后重试。",
         },
       ],
@@ -1751,7 +1751,7 @@ describe("useAgentController", () => {
     const refreshedConfig: RuntimeBootstrapConfig = {
       worker_runtime_choices: [
         { name: "codex", sandbox_enabled: false, installed: true, label: "Codex CLI" },
-        { name: "openclaw", sandbox_enabled: true, installed: true, label: "OpenClaw" },
+        { name: "codex", sandbox_enabled: true, installed: true, label: "Codex" },
       ],
     };
     const { result } = renderHook(
@@ -1959,39 +1959,6 @@ describe("useAgentController", () => {
     },
   );
 
-  it("preserves the builtin OpenClaw template when it is passed explicitly from Hub", async () => {
-    const codexTemplate: AgentTemplateLike = {
-      id: "builtin.codex-worker",
-      name: "generic-assistant-codex",
-      role: "worker",
-      runtime_kind: "codex",
-    };
-    const builtinOpenClawTemplate: AgentTemplateLike = {
-      id: "builtin.openclaw-worker",
-      name: "generic-assistant-openclaw",
-      role: "worker",
-      runtime_kind: "openclaw_sandbox",
-    };
-    const { result } = renderHook(
-      () =>
-        useAgentControllerHarness({
-          hubTemplates: [codexTemplate, builtinOpenClawTemplate],
-        }).controller,
-      { wrapper: createWrapper() },
-    );
-
-    await act(async () => {
-      await result.current.openCreateAgentModal(builtinOpenClawTemplate);
-    });
-
-    await waitFor(() => expect(result.current.agentProfileModalProps).not.toBeNull());
-    expect(result.current.agentProfileModalProps?.agentDraft).toMatchObject({
-      from_template: "builtin.openclaw-worker",
-      runtime_kind: "openclaw_sandbox",
-    });
-    expect(result.current.agentProfileModalProps?.agentCreateMode).toBe("template");
-  });
-
   it("initializes the profile modal MCP editor from the dedicated desired server map", async () => {
     const workerAgent: AgentLike = {
       id: "u-worker",
@@ -2008,7 +1975,7 @@ describe("useAgentController", () => {
       profile_complete: true,
       provider: "codex",
       role: "worker",
-      runtime_kind: "picoclaw_sandbox",
+      runtime_kind: "codex",
       status: "running",
     };
     const desiredMCPServers = {
@@ -2021,7 +1988,7 @@ describe("useAgentController", () => {
     vi.mocked(fetchAgent).mockResolvedValue(workerAgent);
     vi.mocked(fetchAgentMCPServers).mockResolvedValue({
       agent_id: "u-worker",
-      runtime_kind: "picoclaw_sandbox",
+      runtime_kind: "codex",
       servers: desiredMCPServers,
     });
     vi.mocked(updateAgentRequest).mockResolvedValue({ ...workerAgent, name: "renamed worker" });
@@ -2065,7 +2032,7 @@ describe("useAgentController", () => {
       id: "u-worker",
       name: "worker",
       role: "worker",
-      runtime_kind: "picoclaw_sandbox",
+      runtime_kind: "codex",
       status: "running",
       image: "worker:latest",
       instructions: "reply briefly",
@@ -2462,7 +2429,7 @@ describe("useAgentController", () => {
   it("installs MCP catalog servers through the agent MCP server endpoint", async () => {
     const installedView = {
       agent_id: "u-manager",
-      runtime_kind: "picoclaw_sandbox",
+      runtime_kind: "codex",
       servers: {
         context7: { command: "uvx", args: ["context7-mcp"] },
       },
@@ -2470,7 +2437,7 @@ describe("useAgentController", () => {
     vi.mocked(fetchAgentMCPServers)
       .mockResolvedValueOnce({
         agent_id: "u-manager",
-        runtime_kind: "picoclaw_sandbox",
+        runtime_kind: "codex",
         servers: null,
       })
       .mockResolvedValue(installedView);
@@ -2577,7 +2544,7 @@ describe("useAgentController", () => {
       id: "agent-worker",
       name: "worker",
       role: "worker",
-      runtime_kind: "picoclaw_sandbox",
+      runtime_kind: "codex",
       status: "running",
       user_id: "u-worker",
     };
@@ -2626,7 +2593,7 @@ describe("useAgentController", () => {
         },
       ],
       role: "worker",
-      runtime_kind: "picoclaw_sandbox",
+      runtime_kind: "codex",
       status: "running",
       user_id: "user-dahym7",
     };
@@ -3414,7 +3381,7 @@ describe("useAgentController", () => {
         image: oldImage,
         name: manager ? "manager" : `worker-${index}`,
         role: manager ? "manager" : "worker",
-        runtime_kind: "picoclaw_sandbox",
+        runtime_kind: "codex",
         status: "running",
         user_id: `user-${index}`,
       };
@@ -3613,7 +3580,7 @@ describe("useAgentController", () => {
       const draft = result.current.agentProfileModalProps?.agentDraft;
       result.current.agentProfileModalProps?.onAgentDraftChange({
         ...draft!,
-        from_template: "builtin.picoclaw-worker",
+        from_template: "builtin.codex-worker",
         template_name: "Worker",
         name: "Worker",
         model_provider_id: "codex",
@@ -3675,7 +3642,7 @@ describe("useAgentController", () => {
       const draft = result.current.agentProfileModalProps?.agentDraft;
       result.current.agentProfileModalProps?.onAgentDraftChange({
         ...draft!,
-        from_template: "builtin.picoclaw-worker",
+        from_template: "builtin.codex-worker",
         template_name: "Worker",
         name: "Worker",
         model_provider_id: "codex",

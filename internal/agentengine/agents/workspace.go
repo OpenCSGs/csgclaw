@@ -29,13 +29,11 @@ func workspaceTemplateForAgent(name, botID string) (string, error) {
 	if managerGatewayMatch(name, botID) {
 		return templateembed.Resolve(RuntimeKindCodex, RoleManager)
 	}
-	return templateembed.Resolve(RuntimeKindPicoClawSandbox, RoleWorker)
+	return templateembed.Resolve(RuntimeKindCodex, RoleWorker)
 }
 
 func resolveRuntimeTemplateRoot(runtimeKind, role string) (string, error) {
-	if strings.TrimSpace(runtimeKind) == RuntimeKindPicoClawSandbox && normalizeRole(role) == RoleWorker {
-		return "", nil
-	}
+
 	return templateembed.Resolve(runtimeKind, role)
 }
 
@@ -58,6 +56,23 @@ func ensureWorkspaceAtRoot(hostRoot, template string) (string, error) {
 		return "", err
 	}
 	return hostRoot, nil
+}
+
+// Host template instructions and memory are provisioned separately. A valid
+// template can therefore leave no files to overlay into the working directory.
+func workspaceOverlayHasFiles(root string) (bool, error) {
+	hasFiles := false
+	err := filepath.WalkDir(root, func(_ string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if !entry.IsDir() {
+			hasFiles = true
+			return fs.SkipAll
+		}
+		return nil
+	})
+	return hasFiles, err
 }
 
 func copyEmbeddedTree(templateRoot, dstRoot string) error {

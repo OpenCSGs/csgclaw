@@ -81,7 +81,7 @@ func TestFinalizeFeishuRegistrationBindsWorkerParticipant(t *testing.T) {
 	withFeishuRegistrationAccountsBaseURL(t, accounts.URL)
 
 	agentSvc, _ := mustNewSeededServiceWithPathAndOptions(t, []agent.Agent{completeWorkerAgent("u-dev", "dev")},
-		agent.WithRuntime(fakeCompatRuntime{kind: agent.RuntimeKindPicoClawSandbox}),
+		agent.WithRuntime(fakeCompatRuntime{kind: agent.RuntimeKindCodex}),
 	)
 	participantSvc := participant.NewService(participant.NewMemoryStore([]apitypes.Participant{{
 		ID:              "admin",
@@ -113,7 +113,7 @@ func TestFinalizeFeishuRegistrationBindsWorkerParticipant(t *testing.T) {
 	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if result["participant_id"] != "pt-dev" || result["config_saved"] != true || result["restart_status"] != "restart_skipped" || result["activation_status"] != "runtime_recreated" {
+	if result["participant_id"] != "pt-dev" || result["config_saved"] != true || result["restart_status"] != "restart_skipped" || result["activation_status"] != "channel_refreshed" {
 		t.Fatalf("finalize result = %#v, want saved dev config and activated worker runtime", result)
 	}
 	stored, ok := participantSvc.Get(participant.ChannelFeishu, "pt-dev")
@@ -236,7 +236,7 @@ func TestFinalizeFeishuRegistrationRejectsBotAppIDUsedByAnotherWorker(t *testing
 	agentSvc, _ := mustNewSeededServiceWithPathAndOptions(t, []agent.Agent{
 		completeWorkerAgent("u-dev", "dev"),
 		completeWorkerAgent("u-qa", "qa"),
-	}, agent.WithRuntime(fakeCompatRuntime{kind: agent.RuntimeKindPicoClawSandbox}))
+	}, agent.WithRuntime(fakeCompatRuntime{kind: agent.RuntimeKindCodex}))
 	participantSvc := participant.NewService(participant.NewMemoryStore([]apitypes.Participant{{
 		ID:              "pt-dev",
 		Channel:         participant.ChannelFeishu,
@@ -285,7 +285,7 @@ func TestFinalizeFeishuRegistrationDoesNotUpdateCanonicalAdminForWorker(t *testi
 	withFeishuRegistrationAccountsBaseURL(t, accounts.URL)
 
 	agentSvc, _ := mustNewSeededServiceWithPathAndOptions(t, []agent.Agent{completeWorkerAgent("u-dev", "dev")},
-		agent.WithRuntime(fakeCompatRuntime{kind: agent.RuntimeKindPicoClawSandbox}),
+		agent.WithRuntime(fakeCompatRuntime{kind: agent.RuntimeKindCodex}),
 	)
 	participantSvc := participant.NewService(participant.NewMemoryStore([]apitypes.Participant{{
 		ID:              participant.BootstrapAdminParticipantID,
@@ -538,7 +538,7 @@ func completeWorkerAgent(id, name string) agent.Agent {
 		ID:          id,
 		Name:        name,
 		Role:        agent.RoleWorker,
-		RuntimeKind: agent.RuntimeKindPicoClawSandbox,
+		RuntimeKind: agent.RuntimeKindCodex,
 		RuntimeID:   "rt-" + id,
 		Image:       "agent-image:test",
 		Status:      string(agentruntime.StateRunning),

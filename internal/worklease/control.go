@@ -36,7 +36,7 @@ type registeredTurnController struct {
 }
 
 // TurnControlDispatcher routes a participant turn to its runtime-specific
-// controller. A fallback controller is used for runtimes, such as OpenClaw,
+// controller. A fallback controller is used for runtimes
 // whose control plane is the participant SSE connection.
 type TurnControlDispatcher struct {
 	mu          sync.RWMutex

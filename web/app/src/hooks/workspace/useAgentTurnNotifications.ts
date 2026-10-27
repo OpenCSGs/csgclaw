@@ -267,18 +267,9 @@ function notificationEventKeyForMessage(message: IMMessage, senderID: string): s
 
 function messageRequestID(message: IMMessage): string {
   const metadata = asRecord(message.metadata);
-  const openclaw = asRecord(metadata?.openclaw);
   const codex = asRecord(metadata?.codex);
   const csgclaw = asRecord(metadata?.csgclaw);
-  return firstText(
-    csgclaw?.request_id,
-    openclaw?.request_id,
-    openclaw?.requestId,
-    openclaw?.source_message_id,
-    codex?.request_id,
-    codex?.requestId,
-    codex?.source_message_id,
-  );
+  return firstText(csgclaw?.request_id, codex?.request_id, codex?.requestId, codex?.source_message_id);
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {

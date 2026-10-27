@@ -319,7 +319,7 @@ describe("MessageContent", () => {
     expect(screen.getByText("feature -> main")).toBeInTheDocument();
   });
 
-  it("keeps PicoClaw legacy tool feedback in markdown form", () => {
+  it("keeps Codex legacy tool feedback in markdown form", () => {
     render(
       <MessageContent
         content={`🔧 \`read_file\`

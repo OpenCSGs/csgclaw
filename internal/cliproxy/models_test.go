@@ -150,15 +150,19 @@ func waitForModelAuth(t *testing.T, ctx context.Context, svc *Service, model, em
 	t.Helper()
 	registry := cliproxysdk.GlobalModelRegistry()
 	for ctx.Err() == nil {
+		activeFixture := false
 		for _, auth := range svc.catalog.manager.List() {
-			if auth.FileName != "fixture.json" || (email != "" && auth.Metadata["email"] != email) {
+			if auth.FileName == "fixture.json" && !auth.Disabled {
+				activeFixture = true
+			}
+			if auth.Disabled || auth.FileName != "fixture.json" || (email != "" && auth.Metadata["email"] != email) {
 				continue
 			}
 			if present && registry.ClientSupportsModel(auth.ID, model) {
 				return
 			}
 		}
-		if !present && len(svc.catalog.manager.List()) == 0 {
+		if !present && !activeFixture {
 			if !containsString(registeredModels("codex"), model) && !containsString(registeredModels("claude"), model) {
 				return
 			}

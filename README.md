@@ -137,8 +137,8 @@ The key isn't that multiple agents exist — it's that **their collaboration is 
 
 ## Design Principles
 
-**PicoClaw by default, extensible by design.**
-CSGClaw uses PicoClaw as its lightweight default Agent Runtime, keeping the Manager fast to start and cheap to run. The runtime remains pluggable, so deployments can integrate alternatives such as OpenClaw when needed.
+**Codex and DeepSeek Harness runtimes.**
+CSGClaw uses the bundled Codex CLI for the Manager and supports Codex and DeepSeek Harness workers through a shared Agent Engine.
 
 **Docker by default, sandbox-agnostic by design.**
 Isolation is non-negotiable. Docker is the default sandbox provider for broad cross-platform availability. The deprecated BoxLite provider remains supported only for explicitly configured legacy development environments.

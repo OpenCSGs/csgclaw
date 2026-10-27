@@ -12,7 +12,7 @@ import (
 
 func (c cmd) runInstall(ctx context.Context, run *command.Context, args []string, globals command.GlobalOptions) error {
 	fs := run.NewFlagSet("skill install", run.Program+" skill install <slug> [flags]", "Install a ClawHub skill into the current workspace skills directory.")
-	skillsDir := fs.String("skills-dir", "", "workspace skills directory (default: auto-detect ~/.picoclaw/workspace/skills or ~/.openclaw/workspace/skills)")
+	skillsDir := fs.String("skills-dir", "", "workspace skills directory (default: CSGCLAW_SKILLS_DIR, DSH_HOME/skills, CODEX_HOME/skills, or ~/.codex/skills)")
 	version := fs.String("version", "", "install this semver version; default is the registry latest")
 	registry := fs.String("registry", "", "registry: opencsg or clawhub (default: opencsg first, then clawhub)")
 	force := fs.Bool("force", false, "overwrite an existing skill directory")

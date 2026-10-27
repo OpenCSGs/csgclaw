@@ -13,7 +13,7 @@
 
 <br>
 
-**Say one sentence to your agent — Claude Code, Cursor, Codex, OpenClaw, Hermes all work.**
+**Say one sentence to your agent — Claude Code, Cursor, Codex, Hermes all work.**
 
 <br>
 
@@ -78,7 +78,7 @@ Then just talk to Claude Code:
 "Run a 5-dimension expert review on this design."
 ```
 
-No buttons, no panels, no Figma plugin. Agent-agnostic — drops into Claude Code, Cursor, Trae, Hermes, OpenClaw, or any markdown-skill-capable agent.
+No buttons, no panels, no Figma plugin. Agent-agnostic — drops into Claude Code, Cursor, Trae, Hermes, or any markdown-skill-capable agent.
 
 ---
 
@@ -251,7 +251,7 @@ Positioning differences:
 | Output | Canvas + Figma export | HTML / MP4 / GIF / editable PPTX / PDF |
 | Interaction | GUI (click, drag, edit) | Conversation (tell agent, wait) |
 | Complex animation | Limited | Stage + Sprite timeline · 60fps export |
-| Agent compatibility | Claude.ai only | Claude Code / Cursor / Trae / Hermes / OpenClaw |
+| Agent compatibility | Claude.ai only | Claude Code / Cursor / Trae / Hermes |
 
 Claude Design is a **better graphics tool**. Huashu-design makes **the graphics-tool layer disappear**. Two paths, different audiences.
 

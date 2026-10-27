@@ -16,7 +16,7 @@ func TestLookupBuiltin(t *testing.T) {
 		{id: "manager-codex", runtimeKind: runtime.KindCodex, role: roleManager, root: CodexManagerRoot},
 		{id: "codex-worker", runtimeKind: runtime.KindCodex, role: roleWorker, root: CodexWorkerRoot},
 		{id: "dsh-worker", runtimeKind: runtime.KindDSH, role: roleWorker, root: DSHWorkerRoot},
-		{id: "openclaw-worker", runtimeKind: runtime.KindOpenClawSandbox, role: roleWorker, root: OpenClawWorkerRoot},
+		{id: "dsh-worker", runtimeKind: runtime.KindDSH, role: roleWorker, root: DSHWorkerRoot},
 	}
 
 	for _, tt := range tests {
@@ -38,12 +38,6 @@ func TestLookupBuiltin(t *testing.T) {
 				t.Fatalf("LookupBuiltin(%q).Root = %q, want %q", tt.id, got.Root, tt.root)
 			}
 		})
-	}
-}
-
-func TestLookupBuiltinDoesNotExposePicoClawTemplate(t *testing.T) {
-	if _, ok := LookupBuiltin("picoclaw-worker"); ok {
-		t.Fatal("LookupBuiltin(picoclaw-worker) ok = true, want removed template")
 	}
 }
 

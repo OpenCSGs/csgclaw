@@ -28,9 +28,9 @@ func TestRuntimeTemplateFSEmbedsCompleteTemplateUnits(t *testing.T) {
 			workspaceDoc: "worker/codex/instructions/AGENTS.md",
 		},
 		{
-			name:         "openclaw worker",
-			manifestPath: "worker/openclaw/agent.toml",
-			workspaceDoc: "worker/openclaw/instructions/AGENTS.md",
+			name:         "dsh worker",
+			manifestPath: "worker/dsh/agent.toml",
+			workspaceDoc: "worker/dsh/instructions/AGENTS.md",
 		},
 	}
 
@@ -52,37 +52,6 @@ func TestRuntimeTemplateFSEmbedsCompleteTemplateUnits(t *testing.T) {
 				t.Fatalf("ReadFile(%q) returned empty data", tt.workspaceDoc)
 			}
 		})
-	}
-}
-
-func TestOpenClawWorkerTemplateUsesOpenClawBootstrapFiles(t *testing.T) {
-	required := []string{
-		"AGENTS.md",
-		"SOUL.md",
-		"TOOLS.md",
-		"IDENTITY.md",
-		"USER.md",
-		"HEARTBEAT.md",
-	}
-	for _, name := range required {
-		path := "worker/openclaw/instructions/" + name
-		data, err := fs.ReadFile(templateembed.FS(), path)
-		if err != nil {
-			t.Fatalf("ReadFile(%q) error = %v", path, err)
-		}
-		if len(data) == 0 {
-			t.Fatalf("ReadFile(%q) returned empty data", path)
-		}
-	}
-
-	for _, path := range []string{
-		"worker/openclaw/instructions/AGENT.md",
-		"worker/openclaw/memories/MEMORY.md",
-		"worker/openclaw/instructions/BOOTSTRAP.md",
-	} {
-		if _, err := fs.Stat(templateembed.FS(), path); !errors.Is(err, fs.ErrNotExist) {
-			t.Fatalf("Stat(%q) error = %v, want fs.ErrNotExist", path, err)
-		}
 	}
 }
 
@@ -109,11 +78,9 @@ func TestResolveRuntimeTemplateRoot(t *testing.T) {
 		wantErr     bool
 	}{
 		{name: "codex manager", runtimeKind: RuntimeKindCodex, role: RoleManager, want: templateembed.CodexManagerRoot},
-		{name: "openclaw manager", runtimeKind: RuntimeKindOpenClawSandbox, role: RoleManager, wantErr: true},
-		{name: "picoclaw manager", runtimeKind: RuntimeKindPicoClawSandbox, role: RoleManager, wantErr: true},
+		{name: "dsh manager", runtimeKind: RuntimeKindDSH, role: RoleManager, wantErr: true},
 		{name: "codex worker", runtimeKind: RuntimeKindCodex, role: RoleWorker, want: templateembed.CodexWorkerRoot},
-		{name: "picoclaw worker", runtimeKind: RuntimeKindPicoClawSandbox, role: RoleWorker, want: ""},
-		{name: "openclaw worker", runtimeKind: RuntimeKindOpenClawSandbox, role: RoleWorker, want: templateembed.OpenClawWorkerRoot},
+		{name: "dsh worker", runtimeKind: RuntimeKindDSH, role: RoleWorker, want: templateembed.DSHWorkerRoot},
 		{name: "unknown runtime", runtimeKind: "missing", role: RoleWorker, wantErr: true},
 	}
 
@@ -145,7 +112,7 @@ func TestResolveRuntimeTemplateRoot(t *testing.T) {
 func TestEnsureWorkspaceAtRootOverlay(t *testing.T) {
 	hostRoot := t.TempDir()
 
-	gotRoot, err := ensureWorkspaceAtRoot(hostRoot, templateembed.OpenClawWorkerRoot)
+	gotRoot, err := ensureWorkspaceAtRoot(hostRoot, templateembed.DSHWorkerRoot)
 	if err != nil {
 		t.Fatalf("ensureWorkspaceAtRoot() error = %v", err)
 	}

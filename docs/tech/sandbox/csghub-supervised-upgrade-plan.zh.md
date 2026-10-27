@@ -36,7 +36,7 @@ CSGClaw 如何支持与个人电脑安装相同的“在 UI 中检查、下载�
   -> /opt/csgclaw/bin/csgclaw
 
 Supervisor
-  -> /usr/local/bin/csgclaw --config /home/picoclaw/.csgclaw/config.toml serve
+  -> /usr/local/bin/csgclaw --config /home/csgclaw/.csgclaw/config.toml serve
 ```
 
 Dockerfile 通过 marker 把 `/opt/csgclaw` 伪装成官方 bundle，以满足 release
@@ -60,7 +60,7 @@ bundle 可写。
 ## 3. 目标架构
 
 每个 server sandbox 已有一个独立 PVC subpath，挂载到
-`/home/picoclaw/.csgclaw`。该卷同时承载配置、Hub 内容和 upgrade 状态；新增
+`/home/csgclaw/.csgclaw`。该卷同时承载配置、Hub 内容和 upgrade 状态；新增
 bundle 目录后，布局为：
 
 ```text
@@ -71,7 +71,7 @@ bundle 目录后，布局为：
     bin/csgclaw_dir/csgclaw-cli
 
 每个 sandbox 的 PVC（可写、持久）
-  /home/picoclaw/.csgclaw/
+  /home/csgclaw/.csgclaw/
     config.toml
     hub/
     bundle/
@@ -83,9 +83,9 @@ bundle 目录后，布局为：
 
 固定 launcher
   /usr/local/bin/csgclaw
-    -> /home/picoclaw/.csgclaw/bundle/csgclaw/bin/csgclaw
+    -> /home/csgclaw/.csgclaw/bundle/csgclaw/bin/csgclaw
   /usr/local/bin/csgclaw-cli
-    -> /home/picoclaw/.csgclaw/bundle/csgclaw/bin/csgclaw_dir/csgclaw-cli
+    -> /home/csgclaw/.csgclaw/bundle/csgclaw/bin/csgclaw_dir/csgclaw-cli
 ```
 
 `/usr/local/bin` 中的 symlink 可以在镜像构建时创建，即使 PVC target 尚未
@@ -131,7 +131,7 @@ Supervisor 发现前台 server 退出
 均发生在可写的：
 
 ```text
-/home/picoclaw/.csgclaw/bundle/
+/home/csgclaw/.csgclaw/bundle/
 ```
 
 而不是扩大 `/opt` 的写权限。后者会使同一容器中的 UID 1000 可以替换
@@ -289,7 +289,7 @@ helper 在向旧 server 发 `SIGTERM` 后保持运行，使用 localhost health 
 ## 6. CSGBot 影响
 
 CSGBot 目前已经把每个 CSGClaw server sandbox 的独立 PVC subpath 挂载到
-`/home/picoclaw/.csgclaw`。因此本方案不需要为自升级新增卷或修改 volume
+`/home/csgclaw/.csgclaw`。因此本方案不需要为自升级新增卷或修改 volume
 subpath 算法。
 
 需要确认并补测试的契约是：

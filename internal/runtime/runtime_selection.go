@@ -6,10 +6,8 @@ import (
 )
 
 const (
-	NamePicoClaw = "picoclaw"
-	NameOpenClaw = "openclaw"
-	NameCodex    = "codex"
-	NameDSH      = "dsh"
+	NameCodex = "codex"
+	NameDSH   = "dsh"
 )
 
 // RuntimeConfig is the internal runtime selection model shared by higher-level
@@ -28,14 +26,6 @@ func (c RuntimeConfig) Normalized() RuntimeConfig {
 
 func (c RuntimeConfig) LegacyKind() string {
 	switch c.Normalized().Name {
-	case NamePicoClaw:
-		if c.Sandboxed {
-			return KindPicoClawSandbox
-		}
-	case NameOpenClaw:
-		if c.Sandboxed {
-			return KindOpenClawSandbox
-		}
 	case NameCodex:
 		if !c.Sandboxed {
 			return KindCodex
@@ -50,14 +40,6 @@ func (c RuntimeConfig) LegacyKind() string {
 
 func (c RuntimeConfig) Kind() string {
 	switch c.Normalized().Name {
-	case NamePicoClaw:
-		if c.Sandboxed {
-			return NamePicoClaw
-		}
-	case NameOpenClaw:
-		if c.Sandboxed {
-			return NameOpenClaw
-		}
 	case NameCodex:
 		if !c.Sandboxed {
 			return KindCodex
@@ -87,10 +69,6 @@ func (c RuntimeConfig) IsHostRuntime() bool {
 
 func NormalizeRuntimeName(name string) string {
 	switch strings.ToLower(strings.TrimSpace(name)) {
-	case NamePicoClaw, KindPicoClawSandbox:
-		return NamePicoClaw
-	case NameOpenClaw, KindOpenClawSandbox:
-		return NameOpenClaw
 	case NameCodex, NameDSH:
 		return strings.ToLower(strings.TrimSpace(name))
 	case "":
@@ -102,10 +80,6 @@ func NormalizeRuntimeName(name string) string {
 
 func RuntimeConfigForKind(kind string) RuntimeConfig {
 	switch NormalizeRuntimeName(kind) {
-	case NamePicoClaw:
-		return RuntimeConfig{Name: NamePicoClaw, Sandboxed: true}
-	case NameOpenClaw:
-		return RuntimeConfig{Name: NameOpenClaw, Sandboxed: true}
 	case NameCodex:
 		return RuntimeConfig{Name: NameCodex, Sandboxed: false}
 	case NameDSH:

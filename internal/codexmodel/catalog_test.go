@@ -27,3 +27,24 @@ func TestMetadataLeavesDefaultReasoningUnsetForAuto(t *testing.T) {
 		t.Fatalf("default_reasoning_level = %v, want nil", got)
 	}
 }
+
+func TestMetadataUsesTheSelectedCodexModelsReasoningLevels(t *testing.T) {
+	metadata := Metadata(Profile{Provider: "codex", ModelID: "gpt-6-luna", ReasoningEffort: "minimal"})
+	if metadata["default_reasoning_level"] != "minimal" {
+		t.Fatalf("default: %v", metadata["default_reasoning_level"])
+	}
+	var levels []string
+	for _, item := range metadata["supported_reasoning_levels"].([]map[string]any) {
+		levels = append(levels, item["effort"].(string))
+	}
+	if !reflect.DeepEqual(levels, []string{"none", "low", "medium", "high", "xhigh", "max"}) {
+		t.Fatalf("levels: %v", levels)
+	}
+}
+
+func TestUnknownCodexModelDoesNotAdvertiseGuessedLevels(t *testing.T) {
+	metadata := Metadata(Profile{Provider: "codex", ModelID: "unknown"})
+	if levels := metadata["supported_reasoning_levels"].([]map[string]any); len(levels) != 0 {
+		t.Fatalf("unverified levels: %v", levels)
+	}
+}

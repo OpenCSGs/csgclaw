@@ -54,7 +54,7 @@ func TestCreateSendsBodyAndParsesEnvelope(t *testing.T) {
 		Environments: map[string]string{"CSGCLAW_ROLE": "server"},
 		Volumes: []VolumeSpec{{
 			SandboxMountSubpath: "tenants/t1",
-			SandboxMountPath:    "/home/picoclaw/.picoclaw",
+			SandboxMountPath:    "/home/codex/.codex",
 		}},
 		Port: 8080,
 	}
@@ -80,7 +80,7 @@ func TestCreateSendsBodyAndParsesEnvelope(t *testing.T) {
 	if !strings.Contains(gotBody, `"resource_id":77`) {
 		t.Fatalf("Create() body missing resource_id: %q", gotBody)
 	}
-	if !strings.Contains(gotBody, `"sandbox_mount_path":"/home/picoclaw/.picoclaw"`) {
+	if !strings.Contains(gotBody, `"sandbox_mount_path":"/home/codex/.codex"`) {
 		t.Fatalf("Create() body missing volume mount: %q", gotBody)
 	}
 }

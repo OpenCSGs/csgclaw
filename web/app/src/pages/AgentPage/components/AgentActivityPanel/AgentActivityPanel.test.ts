@@ -14,7 +14,7 @@ function activityMessage(id: string, createdAt: string, tool: Record<string, unk
   return {
     id,
     content: JSON.stringify({
-      channel: "openclaw",
+      channel: "codex",
       content: {
         body,
         msgtype: AgentActivityMsgTypes.tool,
@@ -23,13 +23,13 @@ function activityMessage(id: string, createdAt: string, tool: Record<string, unk
       event_id: id,
       origin_server_ts: Date.parse(createdAt),
       room_id: room.id,
-      sender: "openclaw",
+      sender: "codex",
       type: CSGCLAW_AGENT_ACTIVITY_TYPE,
       version: 1,
     }),
     created_at: createdAt,
     metadata: {
-      openclaw: {
+      codex: {
         request_id: "msg-user-1",
         source_message_id: "msg-user-1",
       },
@@ -38,7 +38,7 @@ function activityMessage(id: string, createdAt: string, tool: Record<string, unk
   };
 }
 
-function openClawToolMessage(
+function toolDeliveryMessage(
   id: string,
   createdAt: string,
   toolCallID: string,
@@ -50,7 +50,7 @@ function openClawToolMessage(
     content,
     created_at: createdAt,
     metadata: {
-      openclaw: {
+      codex: {
         delivery_info: { kind: "tool", toolCallId: toolCallID },
         delivery_kind: "tool",
         request_id: requestID,
@@ -111,7 +111,7 @@ describe("activityEntriesFromRooms", () => {
         status: "running",
         title: "Command",
       }),
-      openClawToolMessage(
+      toolDeliveryMessage(
         "plain-output",
         "2026-07-10T10:00:00.500Z",
         "call-7",
@@ -172,10 +172,10 @@ describe("activityEntriesFromRooms", () => {
     });
   });
 
-  it("keeps repeated commands separate when OpenClaw provides different tool-call ids", () => {
+  it("keeps repeated commands separate when the runtime provides different tool-call ids", () => {
     const result = entries([
-      openClawToolMessage("call-one", "2026-07-10T10:00:00.000Z", "call-1", "csgclaw-cli --version"),
-      openClawToolMessage("call-two", "2026-07-10T10:00:01.000Z", "call-2", "csgclaw-cli --version"),
+      toolDeliveryMessage("call-one", "2026-07-10T10:00:00.000Z", "call-1", "csgclaw-cli --version"),
+      toolDeliveryMessage("call-two", "2026-07-10T10:00:01.000Z", "call-2", "csgclaw-cli --version"),
     ]);
 
     expect(result).toHaveLength(2);
@@ -184,8 +184,8 @@ describe("activityEntriesFromRooms", () => {
 
   it("scopes reused tool-call ids to their source request", () => {
     const result = entries([
-      openClawToolMessage("first-request", "2026-07-10T10:00:00.000Z", "call-1", "csgclaw-cli --version", "msg-user-1"),
-      openClawToolMessage(
+      toolDeliveryMessage("first-request", "2026-07-10T10:00:00.000Z", "call-1", "csgclaw-cli --version", "msg-user-1"),
+      toolDeliveryMessage(
         "second-request",
         "2026-07-10T10:01:00.000Z",
         "call-1",

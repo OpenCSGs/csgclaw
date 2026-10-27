@@ -20,7 +20,6 @@ import (
 	"slices"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -47,12 +46,6 @@ const (
 	hostWorkspaceDir     = "workspace"
 	hostProjectsDir      = "projects"
 	gatewayLogPoll       = 200 * time.Millisecond
-)
-
-const (
-	gatewayBoxPhaseIdle uint32 = iota
-	gatewayBoxPhasePreparing
-	gatewayBoxPhaseCreating
 )
 
 const agentListRuntimeProbeConcurrency = 4
@@ -200,7 +193,6 @@ type Controller struct {
 	defaultManagerTemplate string
 	defaultWorkerTemplate  string
 	managerImage           string
-	gatewayRuntime         string
 
 	sandbox sandbox.Provider
 	// mcpServersMu serializes all MCP server mutations. A catalog batch add
@@ -224,9 +216,6 @@ type Controller struct {
 	connectorCapabilityKey        []byte
 	agentResourceCleanup          func(context.Context, string) error
 	runtimeConfigurationGuard     func(context.Context, string) error
-
-	// gatewayWorkPhase is set by createGatewayBox for bootstrap progress logs (best-effort if concurrent).
-	gatewayWorkPhase atomic.Uint32
 }
 
 type ControllerOption func(*Controller) error
@@ -347,51 +336,6 @@ func WithDeferredManagerRuntimeStart() ControllerOption {
 	}
 }
 
-// WithGatewayRuntime sets picoclaw vs openclaw gateway behavior (from [bootstrap] or image inference).
-func WithGatewayRuntime(runtime string) ControllerOption {
-	return func(s *Controller) error {
-		kind := runtimeKindForGatewayRuntime(runtime)
-		if kind == "" {
-			return fmt.Errorf("gateway runtime %q is not supported", runtime)
-		}
-		s.gatewayRuntime = kind
-		return nil
-	}
-}
-
-func (s *Controller) GatewayRuntime() string {
-	if s == nil {
-		return RuntimeKindPicoClawSandbox
-	}
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	if kind := runtimeKindForGatewayRuntime(s.gatewayRuntime); kind != "" {
-		return kind
-	}
-	return RuntimeKindPicoClawSandbox
-}
-
-func (s *Controller) SetGatewayRuntime(runtime, managerImage string) error {
-	if s == nil {
-		return fmt.Errorf("agent service is required")
-	}
-	kind := runtimeKindForGatewayRuntime(runtime)
-	if kind == "" {
-		return fmt.Errorf("gateway runtime %q is not supported", runtime)
-	}
-	managerImage = strings.TrimSpace(managerImage)
-	if kind != s.gatewayRuntimeKind() && managerImage == "" {
-		return fmt.Errorf("image is required when changing gateway runtime_kind to %q", kind)
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.gatewayRuntime = kind
-	if managerImage != "" {
-		s.managerImage = managerImage
-	}
-	return nil
-}
-
 func NewController(model config.ModelConfig, server config.ServerConfig, managerImage, statePath string, opts ...ControllerOption) (*Controller, error) {
 	return NewControllerWithLLM(config.SingleProfileLLM(model), server, managerImage, statePath, opts...)
 }
@@ -482,16 +426,7 @@ func (svc *Controller) EnsureBootstrapManager(ctx context.Context, forceRecreate
 }
 
 func (s *Controller) logBootstrapManagerBoxProgress(elapsed time.Duration) {
-	wait := elapsed.Round(time.Second).String()
-	ph := s.gatewayWorkPhase.Load()
-	switch ph {
-	case gatewayBoxPhasePreparing:
-		log.Printf(`still in stage "preparing" for bootstrap manager %q [%s elapsed]: host filesystem + gateway config/skills mounts (no registry pull yet)`, ManagerName, wait)
-	case gatewayBoxPhaseCreating:
-		log.Printf(`still in stage "creating" for manager %q [%s elapsed]: boxlite provisioning the sandbox (unpack layers if needed, disk/VM shim, boot, then CMD)`, ManagerName, wait)
-	default:
-		log.Printf(`still working on bootstrap manager %q [%s elapsed], image=%q`, ManagerName, wait, s.managerImage)
-	}
+	log.Printf(`still working on bootstrap manager %q [%s elapsed]`, ManagerName, elapsed.Round(time.Second))
 }
 
 func (s *Controller) EnsureManager(ctx context.Context, forceRecreate bool) (Agent, error) {
@@ -1083,23 +1018,6 @@ func (s *Controller) resolveTemplateCreateSpecWithService(
 		}
 		return CreateAgentSpec{}, nil, err
 	}
-	if strings.TrimSpace(workspace.Path) != "" && agentruntime.RuntimeConfigForKind(item.RuntimeKind).LegacyKind() == RuntimeKindPicoClawSandbox {
-		agentsPath := filepath.Join(workspace.Path, "AGENTS.md")
-		if _, statErr := os.Stat(agentsPath); statErr == nil {
-			if err := os.Rename(agentsPath, filepath.Join(workspace.Path, "AGENT.md")); err != nil {
-				return CreateAgentSpec{}, templateWorkspaceCleanup(item.Source.Kind, workspace), fmt.Errorf("adapt template instructions for picoclaw: %w", err)
-			}
-		}
-		memoryPath := filepath.Join(workspace.Path, "MEMORY.md")
-		if _, statErr := os.Stat(memoryPath); statErr == nil {
-			if err := os.MkdirAll(filepath.Join(workspace.Path, "memory"), 0o755); err != nil {
-				return CreateAgentSpec{}, templateWorkspaceCleanup(item.Source.Kind, workspace), err
-			}
-			if err := os.Rename(memoryPath, filepath.Join(workspace.Path, "memory", "MEMORY.md")); err != nil {
-				return CreateAgentSpec{}, templateWorkspaceCleanup(item.Source.Kind, workspace), err
-			}
-		}
-	}
 
 	cleanup := templateWorkspaceCleanup(item.Source.Kind, workspace)
 	spec = applyTemplateDefaults(spec, item)
@@ -1144,6 +1062,15 @@ func (s *Controller) resolveTemplateCreateSpecWithService(
 			}
 		}
 		spec.FromTemplate = strings.TrimSpace(workspace.Path)
+		if isHostRuntimeKind(templateRuntimeKind) {
+			hasFiles, err := workspaceOverlayHasFiles(spec.FromTemplate)
+			if err != nil {
+				return CreateAgentSpec{}, cleanup, fmt.Errorf("inspect host template workspace overlay: %w", err)
+			}
+			if !hasFiles {
+				spec.FromTemplate = ""
+			}
+		}
 		if !createSpecSetsMCPServers(spec) && strings.TrimSpace(workspace.MCPServersJSON) != "" {
 			var templateMCPServers map[string]any
 			if err := json.Unmarshal([]byte(workspace.MCPServersJSON), &templateMCPServers); err != nil {
@@ -2271,8 +2198,8 @@ func (s *Controller) createWorker(ctx context.Context, spec CreateAgentSpec, rep
 	case runtimeName == "":
 		return Agent{}, fmt.Errorf("runtime_kind is required")
 	case !sandboxed && runtimeName != RuntimeNameCodex && runtimeName != RuntimeNameDSH:
-		return Agent{}, fmt.Errorf("runtime_name %q requires sandbox_enabled=true", runtimeName)
-	case sandboxed && runtimeName != RuntimeNameOpenClaw && runtimeName != RuntimeNamePicoClaw:
+		return Agent{}, fmt.Errorf("runtime_name %q is not supported", runtimeName)
+	case sandboxed:
 		return Agent{}, fmt.Errorf("runtime_name %q is not supported with sandbox_enabled=true", runtimeName)
 	}
 	if !sandboxed {
@@ -2342,31 +2269,7 @@ func (s *Controller) createWorker(ctx context.Context, spec CreateAgentSpec, rep
 	}); err != nil {
 		return Agent{}, fmt.Errorf("provision worker runtime: %w", err)
 	}
-	if testCreateGatewayBoxHook != nil && isGatewayRuntimeKind(runtimeKind) {
-		rt, err := s.ensureRuntime(id)
-		if err != nil {
-			return Agent{}, err
-		}
-		runtimeHome, err := s.sandboxRuntimeHome(id)
-		if err != nil {
-			return Agent{}, err
-		}
-		defer func() {
-			_ = s.closeRuntime(runtimeHome, rt)
-		}()
-		box, info, err := s.createGatewayBox(ctx, rt, image, name, id, runtimeResolvedProfile)
-		if err != nil {
-			return Agent{}, fmt.Errorf("create worker box: %w", err)
-		}
-		defer func() {
-			_ = s.closeBox(box)
-		}()
-		return s.persistCreatedWorker(ctx, id, name, description, instructions, image, avatar, runtimeKind, runtimeName, sandboxed, resolvedProfile, spec.RuntimeOptions, spec.MCPServers, spec.RuntimeCredentials, spec.RuntimeInitShell, agentruntime.Info{
-			HandleID:  strings.TrimSpace(info.ID),
-			State:     agentruntime.State(info.State),
-			CreatedAt: info.CreatedAt.UTC(),
-		})
-	}
+
 	if !sandboxed && !replacing {
 		if err := s.persistStartingWorker(ctx, id, name, description, instructions, image, avatar, runtimeKind, runtimeName, sandboxed, resolvedProfile, spec.RuntimeOptions, spec.MCPServers, spec.RuntimeCredentials, spec.RuntimeInitShell, false); err != nil {
 			return Agent{}, err
@@ -2576,13 +2479,7 @@ func (s *Controller) provisionRuntimeRequest(ctx context.Context, rt agentruntim
 		return err
 	}
 	req.MCPServers = servers
-	if isGatewayRuntimeKind(runtimeKind) && req.Gateway == nil {
-		gateway, err := s.gatewayProvisionRequest(runtimeKind, req.AgentName, req.AgentID)
-		if err != nil {
-			return err
-		}
-		req.Gateway = gateway
-	}
+
 	provisioner, ok := rt.(agentruntime.Provisioner)
 	if !ok {
 		return nil
@@ -2666,40 +2563,6 @@ func participantIDFromAgentID(agentID string) string {
 		}
 	}
 	return agentID
-}
-
-func (s *Controller) gatewayProvisionRequest(runtimeKind, agentName, agentID string) (*agentruntime.GatewayProvision, error) {
-	if s == nil {
-		return nil, fmt.Errorf("agent service is required")
-	}
-	agentHome, err := s.agentHomeDir(agentID)
-	if err != nil {
-		return nil, err
-	}
-	projectsRoot, err := ensureAgentProjectsRoot()
-	if err != nil {
-		return nil, err
-	}
-	role := RoleWorker
-	if managerGatewayMatch(agentName, agentID) {
-		role = RoleManager
-	}
-	templateRoot, err := resolveRuntimeTemplateRoot(runtimeKind, role)
-	if err != nil {
-		return nil, err
-	}
-	s.mu.RLock()
-	modelFallback := s.model.Resolved().ModelID
-	server := s.server
-	s.mu.RUnlock()
-	return &agentruntime.GatewayProvision{
-		ModelFallback:     modelFallback,
-		Server:            server,
-		ManagerBaseURL:    s.resolveManagerBaseURL(server),
-		AgentHome:         agentHome,
-		ProjectsRoot:      projectsRoot,
-		WorkspaceTemplate: templateRoot,
-	}, nil
 }
 
 func (s *Controller) resolveManagerBaseURL(server config.ServerConfig) string {
@@ -2901,6 +2764,12 @@ func (s *Controller) hydrateAgentStatus(ctx context.Context, a Agent) (out Agent
 }
 
 func statusAfterHydrateFailure(a Agent, stage string, err error) Agent {
+	// An explicitly stopped host Agent may not have created a process or
+	// runtime metadata yet.
+	if sandbox.IsNotFound(err) && isHostRuntimeKind(a.RuntimeKind) &&
+		a.DesiredState == DesiredStateStopped && a.Status == string(agentruntime.StateStopped) && strings.TrimSpace(a.BoxID) == "" {
+		return a
+	}
 	if status := strings.TrimSpace(a.Status); status != "" {
 		if !sandbox.IsNotFound(err) {
 			logHydrateStaleStatus(a, stage, err)

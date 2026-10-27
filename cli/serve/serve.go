@@ -2,6 +2,9 @@ package serve
 
 import (
 	"context"
+	"csgclaw/internal/migrations"
+	"csgclaw/internal/migrations/retiredclaws"
+	"csgclaw/internal/sandbox"
 	skillbuiltin "csgclaw/internal/skill/builtin"
 	"errors"
 	"fmt"
@@ -192,7 +195,7 @@ func (c serveCmd) Run(ctx context.Context, run *command.Context, args []string, 
 	}
 	defer restore()
 
-	if err := migrateLocalStore(); err != nil {
+	if err := migrateLocalStore(ctx, globals.Config); err != nil {
 		return err
 	}
 	if err := ensureServeBootstrapState(ctx, globals.Config, *noAuthDetect); err != nil {
@@ -338,7 +341,7 @@ func (c internalServeCmd) Run(ctx context.Context, run *command.Context, args []
 	}
 	defer restore()
 	_ = preflightDefaultModelProvider(ctx, cfg)
-	if err := migrateLocalStore(); err != nil {
+	if err := migrateLocalStore(ctx, configPath); err != nil {
 		return err
 	}
 
@@ -406,7 +409,7 @@ func serveForegroundWithConfigPath(ctx context.Context, run *command.Context, cf
 		return err
 	}
 	_ = preflightDefaultModelProvider(ctx, cfg)
-	if err := migrateLocalStore(); err != nil {
+	if err := migrateLocalStore(ctx, configPath); err != nil {
 		return err
 	}
 	imBus := im.NewBus()
@@ -916,8 +919,6 @@ func configureFeishuService(feishuSvc *feishu.Service, svc *agent.Controller) {
 		slog.Warn("skip feishu runtime wiring: provider is not configured")
 		return
 	}
-	runtimewiring.UpdatePicoClawFeishuProvider(svc, provider)
-	runtimewiring.UpdateOpenClawFeishuProvider(svc, provider)
 }
 
 func preflightDefaultModelProvider(ctx context.Context, cfg config.Config) error {
@@ -1163,11 +1164,8 @@ func loadConfig(path string) (config.Config, error) {
 		return config.Config{}, err
 	}
 	if cfg.NeedsMigrationRewrite() {
-		root := filepath.Dir(path)
-		if filepath.Base(root) == config.AppDirName {
-			if _, err := localstore.CreateSiblingBackup(root, time.Now()); err != nil {
-				return config.Config{}, fmt.Errorf("backup config dir: %w", err)
-			}
+		if err := migrations.BackupConfig(path, retiredclaws.GeneratedBackupEntry); err != nil {
+			return config.Config{}, fmt.Errorf("backup config before migration: %w", err)
 		}
 		if err := cfg.Save(path); err != nil {
 			return config.Config{}, err
@@ -1231,16 +1229,11 @@ func newAgentService(cfg config.Config, feishuProvider feishu.AgentCredentialPro
 		return nil, err
 	}
 	opts = append(opts,
-		runtimewiring.WithPicoClawSandboxRuntime(feishuProvider),
-		runtimewiring.WithOpenClawSandboxRuntime(feishuProvider),
 		runtimewiring.WithCodexRuntime(),
 		runtimewiring.WithDSHRuntime(),
 		agent.WithBootstrapDefaultTemplates(cfg.Bootstrap),
 	)
-	switch bootstrapDefaults.ManagerRuntimeKind {
-	case agent.RuntimeKindPicoClawSandbox, agent.RuntimeKindOpenClawSandbox:
-		opts = append(opts, agent.WithGatewayRuntime(bootstrapDefaults.ManagerRuntimeKind))
-	}
+
 	if hubSvc != nil {
 		opts = append(opts, agent.WithHubService(hubSvc))
 	}
@@ -1412,18 +1405,40 @@ func sandboxServiceOptions(cfg config.SandboxConfig) ([]agent.ControllerOption, 
 	return sandboxproviders.ServiceOptions(cfg)
 }
 
-func migrateLocalStore() error {
+func migrateLocalStore(ctx context.Context, configPath string) error {
 	root, err := config.DefaultDir()
 	if err != nil {
 		return err
 	}
 	if localstore.NeedsTypedIDMigration(root) {
-		if _, err := localstore.MigrateTypedIDs(localstore.MigrateOptions{Root: root}); err != nil {
+		if _, err := localstore.MigrateTypedIDs(localstore.MigrateOptions{Root: root, IgnoreBackupError: retiredclaws.GeneratedBackupEntry}); err != nil {
 			return fmt.Errorf("migrate local store: %w", err)
 		}
 	}
 	if err := localstore.ReconcileTypedAgentDirs(root); err != nil {
 		return fmt.Errorf("reconcile local store agent dirs: %w", err)
+	}
+	path := strings.TrimSpace(configPath)
+	if path == "" {
+		path, err = config.DefaultPath()
+		if err != nil {
+			return err
+		}
+	}
+	// Loading models reads the same root state that migration locks. Resolve
+	// configuration outside that lock, but require it only for stored sandboxes.
+	cfg, providerErr := config.Load(path)
+	var provider sandbox.Provider
+	if providerErr == nil {
+		provider, providerErr = sandboxproviders.Provider(cfg.Sandbox)
+	}
+	if err := retiredclaws.MigrateAgents(ctx, root, func(ctx context.Context, agentID string) (sandbox.Runtime, error) {
+		if providerErr != nil {
+			return nil, providerErr
+		}
+		return provider.Open(ctx, filepath.Join(root, config.AgentsDirName, agentID, config.RuntimeHomeDirName))
+	}); err != nil {
+		return fmt.Errorf("migrate retired runtime agents: %w", err)
 	}
 	if err := localstore.MigrateMCPIdentities(filepath.Join(root, localstore.RootStateFileName)); err != nil {
 		return fmt.Errorf("migrate MCP identities: %w", err)

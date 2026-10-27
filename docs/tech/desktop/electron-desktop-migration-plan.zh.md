@@ -81,7 +81,7 @@ CSGClaw Go Sidecar
     │ http://host.docker.internal:<sandbox-port>
     │ 或 http://<host-lan-ip>:<sandbox-port>
     │ server access token
-OpenClaw / PicoClaw Sandbox
+Sandbox Provider
 ```
 
 - Desktop session token 由 Electron 每次启动随机生成，只用于当前桌面会话。

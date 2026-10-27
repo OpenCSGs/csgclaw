@@ -788,7 +788,8 @@ func sandboxState(status string) sandbox.State {
 	case "running", "ready":
 		return sandbox.StateRunning
 	case "deploying", "starting", "creating", "created", "configured", "pending":
-		return sandbox.StateCreated
+		// Hub deployment is asynchronous, including its initial created state.
+		return sandbox.StateStarting
 	case "stopped", "terminated":
 		return sandbox.StateStopped
 	case "failed", "error", "errored", "crashed", "dead", "exited":

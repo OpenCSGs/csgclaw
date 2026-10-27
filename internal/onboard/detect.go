@@ -22,8 +22,6 @@ var (
 			cfg.Server,
 			managerImage,
 			path,
-			runtimewiring.WithPicoClawSandboxRuntime(nil),
-			runtimewiring.WithOpenClawSandboxRuntime(nil),
 			runtimewiring.WithCodexRuntime(),
 			runtimewiring.WithDSHRuntime(),
 			agent.WithBootstrapDefaultTemplates(cfg.Bootstrap),

@@ -3,9 +3,11 @@ package agents
 import (
 	"context"
 	"csgclaw/internal/cliproxy"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 
@@ -453,5 +455,32 @@ func TestFailedCLIProviderCheckClearsCachedCatalog(t *testing.T) {
 				t.Fatalf("catalog did not recover: %+v", got)
 			}
 		})
+	}
+}
+
+func TestProviderSummaryExposesModelReasoningCapabilities(t *testing.T) {
+	summary := builtinModelProviderSummary(ModelProviderIDCodex, config.ProviderConfig{Models: []string{"gpt-6-luna"}})
+	if !slices.Equal(summary.ReasoningEfforts["gpt-6-luna"], []string{"none", "low", "medium", "high", "xhigh", "max"}) {
+		t.Fatalf("reasoning capabilities: %v", summary.ReasoningEfforts)
+	}
+}
+
+func TestCodexCatalogPreservesEmptyUnverifiedReasoningCapabilities(t *testing.T) {
+	summary := builtinModelProviderSummary(ModelProviderIDCodex, config.ProviderConfig{Models: []string{"gpt-5.6-luna", "unknown"}})
+	data, err := json.Marshal(summary)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var payload struct {
+		Reasoning map[string][]string `json:"reasoning_efforts"`
+	}
+	if err := json.Unmarshal(data, &payload); err != nil {
+		t.Fatal(err)
+	}
+	if levels, ok := payload.Reasoning["unknown"]; !ok || levels == nil || len(levels) != 0 {
+		t.Fatalf("unknown capabilities: %s", data)
+	}
+	if slices.Contains(payload.Reasoning["gpt-5.6-luna"], "minimal") {
+		t.Fatal("unsupported effort advertised")
 	}
 }

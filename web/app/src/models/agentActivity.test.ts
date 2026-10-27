@@ -25,16 +25,16 @@ describe("parsePlainAgentCommand", () => {
     ).toBeNull();
 
     expect(parsePlainAgentCommand("csgclaw-cli is a lite CSGClaw CLI for participants.")).toBeNull();
-    expect(parsePlainAgentCommand("csgclaw-cli room list\nroom-1  dev3-openclaw")).toBeNull();
+    expect(parsePlainAgentCommand("csgclaw-cli room list\nroom-1  dev3-codex")).toBeNull();
   });
 });
 
 describe("parseMessageActivityCommand", () => {
-  it("respects explicit OpenClaw final deliveries", () => {
+  it("respects explicit Codex final deliveries", () => {
     const message: IMMessage = {
-      content: "csgclaw-cli room list\nroom-1  dev3-openclaw",
+      content: "csgclaw-cli room list\nroom-1  dev3-codex",
       metadata: {
-        openclaw: {
+        codex: {
           delivery_info: { kind: "final" },
           delivery_kind: "final",
         },
@@ -45,11 +45,11 @@ describe("parseMessageActivityCommand", () => {
     expect(isToolCallMessage(message)).toBe(false);
   });
 
-  it("keeps explicit OpenClaw final deliveries visible even when content looks like a legacy tool", () => {
+  it("keeps explicit Codex final deliveries visible even when content looks like a legacy tool", () => {
     const message: IMMessage = {
       content: '🔧 `exec`\n```\n{"command":"csgclaw-cli participant list","timeout":15}\n```',
       metadata: {
-        openclaw: {
+        codex: {
           delivery_info: { kind: "final" },
           delivery_kind: "final",
         },
@@ -62,18 +62,18 @@ describe("parseMessageActivityCommand", () => {
 
   it("keeps plain CSGClaw CLI text visible in chat", () => {
     const message: IMMessage = {
-      content: "csgclaw-cli room list\nroom-1  dev3-openclaw",
+      content: "csgclaw-cli room list\nroom-1  dev3-codex",
     };
 
     expect(parseMessageActivityCommand(message)).toBeNull();
     expect(isToolCallMessage(message)).toBe(false);
   });
 
-  it("keeps explicit OpenClaw tool deliveries hidden as tool calls", () => {
+  it("keeps explicit Codex tool deliveries hidden as tool calls", () => {
     const message: IMMessage = {
-      content: "csgclaw-cli room list\nroom-1  dev3-openclaw",
+      content: "csgclaw-cli room list\nroom-1  dev3-codex",
       metadata: {
-        openclaw: {
+        codex: {
           delivery_info: { kind: "tool" },
           delivery_kind: "tool",
         },
@@ -84,11 +84,11 @@ describe("parseMessageActivityCommand", () => {
 
     expect(command?.kind).toBe("exec_command");
     expect(command?.command).toBe("csgclaw-cli room list");
-    expect(command?.output).toBe("room-1  dev3-openclaw");
+    expect(command?.output).toBe("room-1  dev3-codex");
     expect(isToolCallMessage(message)).toBe(true);
   });
 
-  it("parses PicoClaw legacy fenced tools as activity commands", () => {
+  it("parses Codex legacy fenced tools as activity commands", () => {
     const message: IMMessage = {
       content: [
         "🔧 `exec`",

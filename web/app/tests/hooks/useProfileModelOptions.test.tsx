@@ -39,7 +39,7 @@ function apiDraft(overrides: Partial<AgentDraft> = {}): AgentDraft {
     provider: "api",
     reasoning_effort: "medium",
     requestOptionsText: "{}",
-    runtime_kind: "picoclaw_sandbox",
+    runtime_kind: "codex",
     ...overrides,
   };
 }

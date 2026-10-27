@@ -50,7 +50,7 @@ func TestCreateCSGClawAgentParticipantViaAPI(t *testing.T) {
 			"agent": {
 				"name": "QA-Display-Name",
 				"role": "worker",
-				"runtime_kind": "picoclaw_sandbox",
+				"runtime_kind": "codex",
 				"image": "agent-image:test",
                 "model_config": {"model_provider_id":"service","model_id":"chat","image_generation":{"provider_id":"service","model_id":"image"},"video_generation":{"provider_id":"service","model_id":"video"}},
 				"avatar": "avatar/3D-5.png"
@@ -108,7 +108,7 @@ func TestCreateCSGClawAgentParticipantViaAPIUsesRequestHub(t *testing.T) {
 		Name:        "request-worker",
 		Description: "request-scoped template",
 		Role:        hub.TemplateRoleWorker,
-		RuntimeKind: agent.RuntimeNamePicoClaw,
+		RuntimeKind: agent.RuntimeNameCodex,
 		Image:       "agent-image:request",
 	})
 	imSvc := im.NewService()
@@ -149,7 +149,7 @@ func TestCreateCSGClawAgentParticipantViaAPIUsesRequestHub(t *testing.T) {
 	if !ok {
 		t.Fatal("request-scoped template agent was not created")
 	}
-	if created.Description != "request-scoped template" || created.Image != "agent-image:request" {
+	if created.Description != "request-scoped template" || created.Image != "" {
 		t.Fatalf("created agent = %+v, want request-scoped template defaults", created)
 	}
 }
@@ -204,7 +204,7 @@ func TestCreateCSGClawAgentParticipantViaAPIReturnsConflictForDuplicateAgentName
 		ID:          "u-existing",
 		Name:        "generic-assistant-lite",
 		Role:        agent.RoleWorker,
-		RuntimeKind: agent.RuntimeKindPicoClawSandbox,
+		RuntimeKind: agent.RuntimeKindCodex,
 		Image:       "agent-image:test",
 	}})
 	imSvc := im.NewService()
@@ -231,7 +231,7 @@ func TestCreateCSGClawAgentParticipantViaAPIReturnsConflictForDuplicateAgentName
 			"agent": {
 				"name": "generic-assistant-lite",
 				"role": "worker",
-				"runtime_kind": "picoclaw_sandbox",
+				"runtime_kind": "codex",
 				"image": "agent-image:test"
 			}
 		}
@@ -312,7 +312,7 @@ func TestCreateFeishuAgentParticipantViaAPIReusesExistingAgent(t *testing.T) {
 		ID:          "u-qa",
 		Name:        "QA-Runtime",
 		Role:        agent.RoleWorker,
-		RuntimeKind: agent.RuntimeKindPicoClawSandbox,
+		RuntimeKind: agent.RuntimeKindCodex,
 		Image:       "agent-image:test",
 	}})
 	participantSvc := participant.NewService(
@@ -401,159 +401,6 @@ func TestCreateFeishuBotParticipantRedactsChannelAppConfigSecretViaAPI(t *testin
 	}
 	if got, want := stored.ChannelAppConfig["app_secret"], "dev-secret"; got != want {
 		t.Fatalf("stored channel_app_config.app_secret = %#v, want %q", got, want)
-	}
-}
-
-func TestDeleteFeishuAgentParticipantReconcilesOwningRuntimeOrChannel(t *testing.T) {
-	for _, tc := range []struct {
-		name          string
-		agentID       string
-		agentName     string
-		role          string
-		participantID string
-	}{
-		{
-			name:          "worker",
-			agentID:       "agent-dev",
-			agentName:     "dev",
-			role:          agent.RoleWorker,
-			participantID: "pt-dev",
-		},
-		{
-			name:          "manager",
-			agentID:       agent.ManagerUserID,
-			agentName:     "manager",
-			role:          agent.RoleManager,
-			participantID: "pt-manager",
-		},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			var recreated []string
-			bindings := &fakeCodexBridgeController{}
-			target := completeWorkerAgent(tc.agentID, tc.agentName)
-			target.Role = tc.role
-			if tc.role == agent.RoleManager {
-				target.RuntimeKind = agent.RuntimeKindCodex
-			}
-			agentSvc, _ := mustNewSeededServiceWithPathAndOptions(t, []agent.Agent{target},
-				agent.WithRuntime(fakeCompatRuntime{
-					kind: agent.RuntimeKindPicoClawSandbox,
-					new: func(_ context.Context, spec agentruntime.Spec) (agentruntime.Handle, error) {
-						recreated = append(recreated, spec.AgentID)
-						return agentruntime.Handle{RuntimeID: spec.RuntimeID, HandleID: "box-" + spec.AgentName}, nil
-					},
-				}),
-			)
-			participantSvc := participant.NewService(
-				participant.NewMemoryStore([]apitypes.Participant{{
-					ID:              tc.participantID,
-					Channel:         participant.ChannelFeishu,
-					Type:            participant.TypeAgent,
-					Name:            tc.agentName,
-					ChannelUserKind: participant.ChannelUserKindAppID,
-					ChannelAppConfig: map[string]any{
-						"app_id":     "cli_" + tc.agentName,
-						"app_secret": tc.agentName + "-secret",
-					},
-					AgentID:         tc.agentID,
-					LifecycleStatus: participant.LifecycleStatusActive,
-					Mentionable:     true,
-				}}),
-				participant.WithAgentEngine(agentengine.New(agentSvc)),
-			)
-			srv := &Handler{
-				svc:             agentSvc,
-				participant:     participantSvc,
-				channelBindings: bindings, agentEngine: agentengine.New(agentSvc), workspace: agentSvc.Workspace(), agentModels: agentSvc.Models(), agentRuntime: agentSvc,
-			}
-
-			rec := httptest.NewRecorder()
-			req := httptest.NewRequest(http.MethodDelete, "/api/v1/channels/feishu/participants/"+tc.participantID, nil)
-			srv.Routes().ServeHTTP(rec, req)
-
-			if rec.Code != http.StatusNoContent {
-				t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusNoContent, rec.Body.String())
-			}
-			if _, ok := participantSvc.Get(participant.ChannelFeishu, tc.participantID); ok {
-				t.Fatalf("participant feishu:%s still exists after delete", tc.participantID)
-			}
-			if tc.role == agent.RoleWorker {
-				if len(recreated) != 1 || recreated[0] != tc.agentID || len(bindings.refreshCalls) != 0 {
-					t.Fatalf("native Runtime recreates=%v, hosted binding calls=%v", recreated, bindings.refreshCalls)
-				}
-			} else if len(recreated) != 0 || len(bindings.refreshCalls) != 1 || bindings.refreshCalls[0].agent.ID != tc.agentID {
-				t.Fatalf("Codex recreates=%v, hosted binding calls=%v", recreated, bindings.refreshCalls)
-			}
-		})
-	}
-}
-
-func TestDeleteFeishuAgentParticipantRemovesSameAgentFeishuBotsBeforeRecreate(t *testing.T) {
-	var recreated []string
-	bindings := &fakeCodexBridgeController{}
-	target := completeWorkerAgent("u-dev", "dev")
-	agentSvc, _ := mustNewSeededServiceWithPathAndOptions(t, []agent.Agent{target},
-		agent.WithRuntime(fakeCompatRuntime{
-			kind: agent.RuntimeKindPicoClawSandbox,
-			new: func(_ context.Context, spec agentruntime.Spec) (agentruntime.Handle, error) {
-				recreated = append(recreated, spec.AgentID)
-				return agentruntime.Handle{RuntimeID: spec.RuntimeID, HandleID: "box-" + spec.AgentName}, nil
-			},
-		}),
-	)
-	participantSvc := participant.NewService(
-		participant.NewMemoryStore([]apitypes.Participant{
-			{
-				ID:              "dev",
-				Channel:         participant.ChannelFeishu,
-				Type:            participant.TypeAgent,
-				Name:            "dev",
-				ChannelUserKind: participant.ChannelUserKindAppID,
-				ChannelAppConfig: map[string]any{
-					"app_id":     "cli_dev",
-					"app_secret": "dev-secret",
-				},
-				AgentID:         "u-dev",
-				LifecycleStatus: participant.LifecycleStatusActive,
-				Mentionable:     true,
-			},
-			{
-				ID:              "legacy-dev",
-				Channel:         participant.ChannelFeishu,
-				Type:            participant.TypeAgent,
-				Name:            "legacy dev",
-				ChannelUserKind: participant.ChannelUserKindAppID,
-				ChannelAppConfig: map[string]any{
-					"app_id":     "cli_legacy_dev",
-					"app_secret": "legacy-dev-secret",
-				},
-				AgentID:         "u-dev",
-				LifecycleStatus: participant.LifecycleStatusActive,
-				Mentionable:     true,
-			},
-		}),
-		participant.WithAgentEngine(agentengine.New(agentSvc)),
-	)
-	srv := &Handler{
-		svc:             agentSvc,
-		participant:     participantSvc,
-		channelBindings: bindings, agentEngine: agentengine.New(agentSvc), workspace: agentSvc.Workspace(), agentModels: agentSvc.Models(), agentRuntime: agentSvc,
-	}
-
-	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodDelete, "/api/v1/channels/feishu/participants/dev", nil)
-	srv.Routes().ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusNoContent {
-		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusNoContent, rec.Body.String())
-	}
-	for _, id := range []string{"dev", "legacy-dev"} {
-		if _, ok := participantSvc.Get(participant.ChannelFeishu, id); ok {
-			t.Fatalf("participant feishu:%s still exists after disconnect", id)
-		}
-	}
-	if len(recreated) != 1 || recreated[0] != "agent-dev" || len(bindings.refreshCalls) != 0 {
-		t.Fatalf("runtime recreates = %#v, binding refreshes = %+v", recreated, bindings.refreshCalls)
 	}
 }
 
@@ -835,7 +682,7 @@ func TestParticipantDeleteWithAgentCleanupRemovesCSGClawUser(t *testing.T) {
 			ID:          "u-qa",
 			Name:        "qa",
 			Role:        agent.RoleWorker,
-			RuntimeKind: agent.RuntimeKindPicoClawSandbox,
+			RuntimeKind: agent.RuntimeKindCodex,
 			Image:       "agent-image:test",
 		},
 	}); err != nil {

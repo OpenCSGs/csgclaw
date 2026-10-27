@@ -83,7 +83,7 @@ export function diagnosticReference(metadata: Record<string, unknown> | null | u
 export function diagnosticFinal(metadata: Record<string, unknown> | null | undefined): boolean {
   const progress = parseTurnProgress({ metadata });
   if (progress) return !progressActive(progress);
-  const runtime = (metadata?.codex ?? metadata?.openclaw) as Record<string, unknown> | undefined;
+  const runtime = (metadata?.codex ?? metadata?.csgclaw) as Record<string, unknown> | undefined;
   return runtime?.delivery_kind === "final";
 }
 

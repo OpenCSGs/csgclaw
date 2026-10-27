@@ -272,11 +272,11 @@ func TestLocalStoreListSkipsInvalidTemplates(t *testing.T) {
 		t.Fatalf("Publish() error = %v", err)
 	}
 
-	invalidRoot := filepath.Join(registryRoot, localTemplatesDirName, "legacy-openclaw-worker")
+	invalidRoot := filepath.Join(registryRoot, localTemplatesDirName, "unsupported-worker")
 	if err := os.MkdirAll(invalidRoot, 0o755); err != nil {
 		t.Fatalf("MkdirAll() error = %v", err)
 	}
-	manifest := "name = \"legacy-openclaw-worker\"\nrole = \"worker\"\nruntime_kind = \"openclaw\"\n"
+	manifest := "name = \"unsupported-worker\"\nrole = \"worker\"\nruntime_kind = \"unsupported\"\n"
 	if err := os.WriteFile(filepath.Join(invalidRoot, localManifestFileName), []byte(manifest), 0o644); err != nil {
 		t.Fatalf("WriteFile(agent.toml) error = %v", err)
 	}
@@ -424,7 +424,7 @@ func TestLocalStoreDeleteRemovesTemplate(t *testing.T) {
 	if _, err := store.Publish(context.Background(), PublishSpec{
 		ID:          "frontend-alice",
 		Name:        "frontend-alice",
-		RuntimeKind: "picoclaw",
+		RuntimeKind: "codex",
 		Image:       "worker:latest",
 	}); err != nil {
 		t.Fatalf("Publish() error = %v", err)
@@ -508,38 +508,6 @@ func TestLocalStorePublishAllowsMissingWorkspace(t *testing.T) {
 	}
 	if workspace != (WorkspaceRef{}) {
 		t.Fatalf("FetchWorkspace() = %#v, want empty", workspace)
-	}
-}
-
-func TestLocalStorePublishRequiresImageForGatewayRuntime(t *testing.T) {
-	store := NewLocalStore(t.TempDir())
-	workspaceRoot := writeWorkspaceFile(t, "workspace", "AGENTS.md", "agent")
-
-	_, err := store.Publish(context.Background(), PublishSpec{
-		Name:         "gateway-worker",
-		RuntimeKind:  runtime.NamePicoClaw,
-		WorkspaceRef: WorkspaceRef{Kind: WorkspaceKindDir, Path: workspaceRoot},
-	})
-	if err == nil || err.Error() != `image.ref is required for runtime_kind "picoclaw"` {
-		t.Fatalf("Publish() error = %v, want missing image error", err)
-	}
-}
-
-func TestLocalStoreGetRejectsGatewayRuntimeWithoutImage(t *testing.T) {
-	registryRoot := t.TempDir()
-	templateDir := filepath.Join(registryRoot, localTemplatesDirName, "gateway-worker")
-	if err := os.MkdirAll(templateDir, 0o755); err != nil {
-		t.Fatalf("MkdirAll() error = %v", err)
-	}
-	manifest := []byte("name = \"gateway-worker\"\nrole = \"worker\"\nruntime_kind = \"picoclaw\"\n")
-	if err := os.WriteFile(filepath.Join(templateDir, localManifestFileName), manifest, 0o644); err != nil {
-		t.Fatalf("WriteFile(agent.toml) error = %v", err)
-	}
-
-	store := NewLocalStore(registryRoot)
-	_, err := store.Get(context.Background(), "gateway-worker")
-	if err == nil || err.Error() != `validate local hub manifest "gateway-worker": image.ref is required for runtime_kind "picoclaw"` {
-		t.Fatalf("Get() error = %v, want missing image validation error", err)
 	}
 }
 

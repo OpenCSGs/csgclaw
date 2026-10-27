@@ -6,7 +6,6 @@
 bin/
 bin-csghub/
 dist/
-picoclaw-build.env
 .desktop-release-oss.env
 *.test
 *.out

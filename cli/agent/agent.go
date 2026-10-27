@@ -103,7 +103,7 @@ func (c cmd) runCreate(ctx context.Context, run *command.Context, args []string,
 	description := fs.String("description", "", "agent description")
 	image := fs.String("image", "", "agent image")
 	profile := fs.String("profile", "", "agent llm profile")
-	runtimeKind := fs.String("runtime", "", "agent runtime kind (for example: picoclaw_sandbox, openclaw_sandbox, codex)")
+	runtimeKind := fs.String("runtime", "", "agent runtime kind (for example: codex, dsh)")
 	fromTemplate := fs.String("from-template", "", "template ID from template list (remote IDs use namespace/name)")
 	fs.Usage = func() {
 		fmt.Fprintln(run.Stderr, "Create an agent.")
@@ -120,7 +120,7 @@ func (c cmd) runCreate(ctx context.Context, run *command.Context, args []string,
 		fmt.Fprintln(run.Stderr, "  --description string    agent description")
 		fmt.Fprintln(run.Stderr, "  --image string          agent image")
 		fmt.Fprintln(run.Stderr, "  --profile string        agent llm profile")
-		fmt.Fprintln(run.Stderr, "  --runtime string        agent runtime kind (for example: picoclaw_sandbox, openclaw_sandbox, codex)")
+		fmt.Fprintln(run.Stderr, "  --runtime string        agent runtime kind (for example: codex, dsh)")
 		fmt.Fprintln(run.Stderr, "  --from-template string  template ID from template list (remote IDs use namespace/name)")
 	}
 	if err := fs.Parse(args); err != nil {

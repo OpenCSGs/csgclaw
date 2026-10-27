@@ -1,6 +1,7 @@
 package template
 
 import (
+	"csgclaw/internal/migrations/retiredclaws"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -61,7 +62,8 @@ func materializeLegacyTemplateWorkspace(templateRoot string) (WorkspaceRef, erro
 
 func materializeTemplateFS(srcFS fs.FS, templateRoot, runtimeKind string) (WorkspaceRef, error) {
 	instructionsRoot := filepath.ToSlash(filepath.Join(templateRoot, localInstructionsDirName))
-	if _, err := fs.Stat(srcFS, instructionsRoot+"/"+requiredInstructionsFile); err != nil {
+	instructionsFile := retiredclaws.InstructionFile(srcFS, instructionsRoot, requiredInstructionsFile)
+	if _, err := fs.Stat(srcFS, instructionsRoot+"/"+instructionsFile); err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
 			return WorkspaceRef{}, fmt.Errorf("template instructions/%s is required", requiredInstructionsFile)
 		}
@@ -78,6 +80,10 @@ func materializeTemplateFS(srcFS fs.FS, templateRoot, runtimeKind string) (Works
 	if err := copyWorkspaceTreeFS(srcFS, instructionsRoot, dstRoot, "template instructions"); err != nil {
 		return cleanup(err)
 	}
+	if err := retiredclaws.CopiedInstructions(dstRoot, instructionsFile, requiredInstructionsFile); err != nil {
+		return cleanup(err)
+	}
+
 	for _, part := range []struct{ source, target string }{
 		{localSkillsDirName, localSkillsDirName},
 	} {
@@ -278,7 +284,7 @@ func materializeWorkspaceMemoryFS(srcFS fs.FS, templateRoot, workspaceRoot strin
 		}
 		// Older CSGClaw versions flattened memory/* directly under memories/.
 		// Restore those entries under memory/ so existing templates retain the
-		// OpenClaw workspace layout expected by the runtime.
+		// workspace memory layout expected by the runtime.
 		target = filepath.Join(target, name)
 		if entry.IsDir() {
 			if err := copyWorkspaceTreeFS(srcFS, source, target, "legacy template memory"); err != nil {

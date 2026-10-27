@@ -514,13 +514,13 @@ func TestEngineAgentDesiredStateIsIndependentFromObservedRuntimeState(t *testing
 }
 
 func TestEngineCreateMemoryFailureRollsBackAgent(t *testing.T) {
-	runtimeImpl := &fakeConversationRuntime{kind: runtime.KindPicoClawSandbox, state: runtime.StateRunning}
+	runtimeImpl := &fakeConversationRuntime{kind: runtime.KindCodex, state: runtime.StateRunning}
 	service := newTestAgentService(t, nil, runtimeImpl)
 	engine := New(service)
 	_, err := engine.Agents().Create(context.Background(), AgentCreateRequest{
 		ID: "agent-memory",
 		Spec: AgentSpec{
-			Name: "memory", Role: AgentRoleWorker, Runtime: RuntimeSpec{Adapter: agent.RuntimeNamePicoClaw, Sandboxed: true, Image: "picoclaw:test"},
+			Name: "memory", Role: AgentRoleWorker, Runtime: RuntimeSpec{Adapter: agent.RuntimeNameCodex},
 			Model: ModelSpec{ProviderID: "provider-a", ModelID: "model-a"}, Memory: &MemorySpec{Enabled: false},
 		},
 	})

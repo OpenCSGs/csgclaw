@@ -267,11 +267,11 @@ func TestServiceReadsRootAgentsSection(t *testing.T) {
 				"name":         ManagerName,
 				"role":         RoleManager,
 				"runtime_id":   runtimeIDForAgentID(ManagerUserID),
-				"runtime_kind": RuntimeKindPicoClawSandbox,
+				"runtime_kind": RuntimeKindCodex,
 				"created_at":   time.Date(2026, 6, 24, 1, 2, 3, 0, time.UTC),
 				"runtime": map[string]any{
 					"id":        runtimeIDForAgentID(ManagerUserID),
-					"kind":      RuntimeKindPicoClawSandbox,
+					"kind":      RuntimeKindCodex,
 					"agent_ids": []string{ManagerUserID},
 				},
 			}},
@@ -296,7 +296,7 @@ func TestServiceReadsRootAgentsSection(t *testing.T) {
 	if !ok {
 		t.Fatalf("Agent(%q) ok=false", ManagerUserID)
 	}
-	if got.RuntimeID != runtimeIDForAgentID(ManagerUserID) || got.RuntimeKind != RuntimeKindPicoClawSandbox {
+	if got.RuntimeID != runtimeIDForAgentID(ManagerUserID) || got.RuntimeKind != RuntimeKindCodex {
 		t.Fatalf("agent runtime = %q/%q", got.RuntimeID, got.RuntimeKind)
 	}
 }
@@ -314,7 +314,7 @@ func TestRootAgentsSectionWritesModelConfigNames(t *testing.T) {
 		Name:        ManagerName,
 		Role:        RoleManager,
 		RuntimeID:   runtimeIDForAgentID(ManagerUserID),
-		RuntimeKind: RuntimeKindPicoClawSandbox,
+		RuntimeKind: RuntimeKindCodex,
 		Status:      "running",
 		CreatedAt:   createdAt,
 		AgentProfile: AgentProfile{
@@ -557,7 +557,7 @@ func TestProfileForCreateRequestUsesDefaultAPIKeyWithoutReplacingSelectedModel(t
 
 	profile, err := svc.profileForCreateRequest(context.Background(), &CreateAgentSpec{
 		Name:        "alice",
-		RuntimeKind: RuntimeKindPicoClawSandbox,
+		RuntimeKind: RuntimeKindCodex,
 		AgentProfile: AgentProfile{
 			Provider: ProviderAPI,
 			BaseURL:  "https://api.example/v1",

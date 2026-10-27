@@ -8,34 +8,19 @@ import (
 )
 
 func runtimeKindFromSelection(name string, sandboxEnabled bool) string {
-	switch strings.TrimSpace(strings.ToLower(name)) {
-	case "picoclaw":
-		if sandboxEnabled {
-			return "picoclaw"
-		}
-	case "openclaw":
-		if sandboxEnabled {
-			return "openclaw"
-		}
-	case "codex":
-		if !sandboxEnabled {
-			return "codex"
-		}
+	name = strings.ToLower(strings.TrimSpace(name))
+	if !sandboxEnabled && (name == "codex" || name == "dsh") {
+		return name
 	}
 	return ""
 }
 
 func runtimeSelectionForKind(kind string) (string, bool) {
-	switch strings.TrimSpace(strings.ToLower(kind)) {
-	case "picoclaw", "picoclaw_sandbox":
-		return "picoclaw", true
-	case "openclaw", "openclaw_sandbox":
-		return "openclaw", true
-	case "codex":
-		return "codex", false
-	default:
-		return "", false
+	kind = strings.ToLower(strings.TrimSpace(kind))
+	if kind == "codex" || kind == "dsh" {
+		return kind, false
 	}
+	return "", false
 }
 
 type AgentRuntime struct {

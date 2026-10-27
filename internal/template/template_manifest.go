@@ -134,7 +134,7 @@ func validateManifest(manifest templateManifest) error {
 
 func isSupportedTemplateRuntimeKind(kind string) bool {
 	switch normalizeTemplateRuntimeKind(kind) {
-	case runtime.NamePicoClaw, runtime.NameOpenClaw, runtime.KindCodex, runtime.KindDSH:
+	case runtime.KindCodex, runtime.KindDSH:
 		return true
 	default:
 		return false

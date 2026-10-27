@@ -173,7 +173,7 @@ python3 "$HD/scripts/learn.py" harvest <项目目录>                           
 
 ## 弱 runtime 与跨 agent
 
-本 skill 是 agent-agnostic 的（Claude Code、Codex、Cursor、Trae、OpenClaw、Hermes…），路径都相对本 skill 根目录。
+本 skill 是 agent-agnostic 的（Claude Code、Codex、Cursor、Trae、Hermes…），路径都相对本 skill 根目录。
 
 无 subagent / 非 Claude 模型 / 上下文小的 runtime，按吃紧程度逐级降级：
 1. 三方向并行 → 串行：每版开工前只读 spec 和自己那张方向卡，不参考已做的版本

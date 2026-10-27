@@ -39,6 +39,14 @@ func TestTaskModelSelectionUsesCatalogWithoutMutatingAgent(t *testing.T) {
 	if original.AgentProfile.ModelID != "first" {
 		t.Fatal("modified agent default")
 	}
+	cfg.ReasoningEffort = "max"
+	if _, err := svc.Models().ValidateTaskConfiguration("agent-test", cfg); err != nil {
+		t.Fatalf("maximum reasoning rejected by task configuration: %v", err)
+	}
+	maximum, err := svc.Models().ResolvedTaskProfile("agent-test", cfg)
+	if err != nil || maximum.ReasoningEffort != "max" {
+		t.Fatalf("maximum reasoning changed: %q, %v", maximum.ReasoningEffort, err)
+	}
 	cfg.ModelID = "missing"
 	if _, err := svc.Models().ResolvedTaskProfile("agent-test", cfg); err == nil {
 		t.Fatal("accepted model outside the catalog")

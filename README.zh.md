@@ -135,8 +135,8 @@ Manager：已记录，Bob 先修接口，字段确认后 Alice 再更新展示
 
 ## 设计取舍
 
-**默认选择 PicoClaw，同时保留运行时扩展能力。**
-CSGClaw 默认使用 PicoClaw 作为轻量化 Agent Runtime，让 Manager 启动更快、占用更低。运行时仍可插拔，需要时可以集成 OpenClaw 等其他实现。
+**支持 Codex 和 DeepSeek Harness 运行时。**
+CSGClaw 的 Manager 使用内置 Codex CLI，Worker 支持 Codex 和 DeepSeek Harness，并通过统一的 Agent Engine 管理。
 
 **默认选择 Docker，设计上不绑定单一 Sandbox。**
 隔离不是可选项。Docker 作为默认 sandbox provider 具备更广泛的跨平台可用性；BoxLite 仍然适合偏好轻量本地运行时的环境，并允许按需要显式切换不同的 sandbox provider。

@@ -2,7 +2,7 @@
 
 英文说明见 [dsh-resources.md](dsh-resources.md)。
 
-改动位于 CSGClaw 的 Web UI、DSH Runtime 和模板集成层。DSH 的连接器、知识库与飞书通道底层链路已经存在；本次补齐完整连接器入口和持久记忆，并验证原有链路。无需修改 DeepSeek Harness 或 OpenClaw 插件仓库。
+改动位于 CSGClaw 的 Web UI、DSH Runtime 和模板集成层。DSH 的连接器、知识库与飞书通道底层链路已经存在；本次补齐完整连接器入口和持久记忆，并验证原有链路。无需修改 DeepSeek Harness 仓库。
 
 ## 改动前后
 

@@ -9,6 +9,9 @@ import (
 	"strings"
 )
 
+const ToolReasoningUnsupported = "unsupported_tool_reasoning_combination"
+const ReasoningEffortUnsupported = "unsupported_reasoning_effort"
+
 type UpstreamRequestError struct {
 	Operation string
 	BaseURL   string
@@ -105,7 +108,7 @@ func UpstreamError(body []byte) (code string, ok bool) {
 	if value, exists := payload["error"]; exists && value != nil {
 		return errorCodeFromValue(value), true
 	}
-	code = strings.TrimSpace(stringValue(payload["code"]))
+	code = errorCodeFromValue(payload)
 	return code, code != ""
 }
 
@@ -113,6 +116,13 @@ func errorCodeFromValue(value any) string {
 	errObj, ok := value.(map[string]any)
 	if !ok {
 		return ""
+	}
+	message := strings.ToLower(stringValue(errObj["message"]))
+	if stringValue(errObj["param"]) == "tools" && strings.Contains(message, "reasoning.effort 'minimal'") && strings.Contains(message, "web_search") {
+		return ToolReasoningUnsupported
+	}
+	if stringValue(errObj["param"]) == "reasoning.effort" && strings.Contains(message, "not supported") {
+		return ReasoningEffortUnsupported
 	}
 	return strings.TrimSpace(stringValue(errObj["code"]))
 }
@@ -129,7 +139,7 @@ func UpstreamStatusForErrorCode(code string) int {
 		return http.StatusForbidden
 	case "model_not_found", "cluster_not_found", "not_found":
 		return http.StatusNotFound
-	case "invalid_request_error", "context_length_exceeded", "unsupported_feature", "unsupported_model", "model_task_mismatch":
+	case "invalid_request_error", "context_length_exceeded", "unsupported_feature", "unsupported_model", "model_task_mismatch", ToolReasoningUnsupported, ReasoningEffortUnsupported:
 		return http.StatusBadRequest
 	default:
 		return http.StatusServiceUnavailable
@@ -140,6 +150,10 @@ func UpstreamStatusForErrorCode(code string) int {
 // that is safe and actionable for end users.
 func FriendlyUpstreamErrorMessage(status int, code string) string {
 	switch strings.ToLower(strings.TrimSpace(code)) {
+	case ReasoningEffortUnsupported:
+		return "The selected reasoning effort is not supported by this model. Choose a supported effort or the model default."
+	case ToolReasoningUnsupported:
+		return "Web search is unavailable with minimal reasoning. Select low reasoning or higher to use web search."
 	case "insufficient_balance", "act-err-0":
 		return "The model service balance is insufficient. Add funds or contact an administrator."
 	case "payment_required":

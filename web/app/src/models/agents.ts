@@ -20,8 +20,8 @@ import type { LocaleCode } from "@/models/conversations";
 import { providerIDForProvider, providerNameForProviderID, selectorForProviderModel } from "@/models/modelProviders";
 import { normalizeReasoningEffort } from "@/models/reasoning";
 
-export type RuntimeKind = "picoclaw_sandbox" | "openclaw_sandbox" | "codex" | "dsh" | string;
-export type RuntimeName = "picoclaw" | "openclaw" | "codex" | "dsh" | string;
+export type RuntimeKind = "codex" | "dsh" | string;
+export type RuntimeName = "codex" | "dsh" | string;
 export type BotType = typeof BOT_TYPE_NORMAL | typeof BOT_TYPE_NOTIFICATION | string;
 export type ProviderName = "csghub_lite" | "csghub" | "codex" | "claude_code" | "api" | string;
 export type JSONRecord = Record<string, unknown>;
@@ -197,12 +197,6 @@ export function normalizeRuntimeName(name: unknown): RuntimeName {
     .trim()
     .toLowerCase();
   switch (value) {
-    case "picoclaw":
-    case "picoclaw_sandbox":
-      return "picoclaw";
-    case "openclaw":
-    case "openclaw_sandbox":
-      return "openclaw";
     case "codex":
       return "codex";
     case "dsh":
@@ -218,23 +212,12 @@ export function composeLegacyRuntimeKind(runtimeName: unknown, sandboxEnabled: u
   if (!sandbox) {
     return name === "codex" || name === "dsh" ? name : !name ? "codex" : "";
   }
-  switch (name) {
-    case "openclaw":
-      return "openclaw_sandbox";
-    case "picoclaw":
-      return "picoclaw_sandbox";
-    default:
-      return "";
-  }
+  return "";
 }
 
 function runtimeNameForKind(kind: unknown): RuntimeName {
   const value = normalizeRuntimeKind(kind);
   switch (value) {
-    case "openclaw_sandbox":
-      return "openclaw";
-    case "picoclaw_sandbox":
-      return "picoclaw";
     case "codex":
       return "codex";
     case "dsh":
@@ -244,9 +227,8 @@ function runtimeNameForKind(kind: unknown): RuntimeName {
   }
 }
 
-function sandboxEnabledForKind(kind: unknown): boolean {
-  const value = normalizeRuntimeKind(kind);
-  return value === "openclaw_sandbox" || value === "picoclaw_sandbox";
+function sandboxEnabledForKind(_kind: unknown): boolean {
+  return false;
 }
 
 export type RuntimeSelectionLike = {
@@ -269,9 +251,9 @@ export function runtimeConfigFromSelection(selection: RuntimeSelectionLike | nul
     };
   }
   const sandboxed = Boolean(selection?.sandbox_enabled);
-  const name = normalizeRuntimeName(selection?.runtime_name || (sandboxed ? "picoclaw" : "codex"));
+  const name = normalizeRuntimeName(selection?.runtime_name || "codex");
   return {
-    name: name || (sandboxed ? "picoclaw" : "codex"),
+    name: name || "codex",
     sandboxed,
   };
 }
@@ -696,12 +678,7 @@ function isJSONRecord(value: unknown): value is JSONRecord {
 
 export function supportsMCPServers(runtimeKind: unknown): boolean {
   const normalized = normalizeRuntimeKind(runtimeKind);
-  return (
-    normalized === "openclaw_sandbox" ||
-    normalized === "picoclaw_sandbox" ||
-    normalized === "codex" ||
-    normalized === "dsh"
-  );
+  return normalized === "codex" || normalized === "dsh";
 }
 
 export function mcpServersText(mcpServers: JSONRecord | null | undefined): string {
@@ -1535,11 +1512,7 @@ export function workerSelectableTemplates(
 export function createAgentSelectableTemplates(
   templates: readonly AgentTemplateLike[] | null | undefined,
 ): AgentTemplateLike[] {
-  return workerSelectableTemplates(templates).filter((item) => !isBuiltinOpenClawWorkerTemplate(item));
-}
-
-export function isBuiltinOpenClawWorkerTemplate(template: AgentTemplateLike | null | undefined): boolean {
-  return template?.id === "builtin.openclaw-worker";
+  return workerSelectableTemplates(templates);
 }
 
 export function pickDefaultAgentTemplate(
@@ -1568,27 +1541,11 @@ export function pickDefaultAgentTemplate(
       return configured;
     }
   }
-  if (requestedRuntime === "openclaw_sandbox") {
-    return (
-      candidates.find((item) => item.id === "builtin.openclaw-worker") ||
-      candidates.find((item) => item.name === "openclaw-worker") ||
-      candidates.find((item) => String(item.id || "").endsWith(".openclaw-worker")) ||
-      candidates[0]
-    );
-  }
-  if (requestedRuntime === "codex") {
+  if (requestedRuntime === "codex" || !requestedRuntime) {
     return (
       candidates.find((item) => item.id === "builtin.codex-worker") ||
       candidates.find((item) => item.name === "generic-assistant-codex") ||
       candidates.find((item) => String(item.id || "").endsWith(".codex-worker")) ||
-      candidates[0]
-    );
-  }
-  if (requestedRuntime === DEFAULT_RUNTIME_KIND || !requestedRuntime) {
-    return (
-      candidates.find((item) => item.id === "builtin.openclaw-worker") ||
-      candidates.find((item) => item.name === "openclaw-worker") ||
-      candidates.find((item) => String(item.id || "").endsWith(".openclaw-worker")) ||
       candidates[0]
     );
   }
@@ -2210,18 +2167,10 @@ export function normalizeRuntimeKind(kind: unknown): RuntimeKind {
     return "";
   }
   switch (value) {
-    case "openclaw":
-      return "openclaw_sandbox";
-    case "openclaw_sandbox":
-      return "openclaw_sandbox";
-    case "picoclaw":
-      return "picoclaw_sandbox";
     case "codex":
       return "codex";
     case "dsh":
       return "dsh";
-    case "picoclaw_sandbox":
-      return "picoclaw_sandbox";
     default:
       return value;
   }
@@ -2428,15 +2377,6 @@ export function agentCreateProgressSteps(runtimeKind: unknown): AgentCreateProgr
       { label: "agentCreateProgressFinishing", target: 96 },
     ];
   }
-  if (kind === "openclaw_sandbox" || kind === DEFAULT_RUNTIME_KIND) {
-    return [
-      { label: "agentCreateProgressSandboxConfig", target: 16 },
-      { label: "agentCreateProgressImage", target: 42 },
-      { label: "agentCreateProgressRuntime", target: 72 },
-      { label: "agentCreateProgressStart", target: 88 },
-      { label: "agentCreateProgressFinishing", target: 96 },
-    ];
-  }
   return [
     { label: "agentCreateProgressPreparing", target: 24 },
     { label: "agentCreateProgressRuntime", target: 66 },
@@ -2477,17 +2417,13 @@ export function advanceAgentProgress<T extends AgentCreateProgressState | null |
 export function formatRuntimeKindLabel(kind: unknown, t: TranslateFn): string {
   const runtimeKind = normalizeRuntimeKind(kind);
   if (!runtimeKind) {
-    return t("runtimePicoclaw");
+    return t("runtimeCodexCLI");
   }
   switch (runtimeKind) {
-    case "openclaw_sandbox":
-      return t("runtimeOpenclaw");
     case "codex":
       return t("runtimeCodexCLI");
     case "dsh":
       return t("runtimeDSH");
-    case "picoclaw_sandbox":
-      return t("runtimePicoclaw");
     default:
       return runtimeKind;
   }

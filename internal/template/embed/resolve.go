@@ -41,12 +41,6 @@ var builtinTemplates = []BuiltinTemplate{
 		Role:        roleWorker,
 		Root:        DSHWorkerRoot,
 	},
-	{
-		ID:          "openclaw-worker",
-		RuntimeKind: runtimepkg.KindOpenClawSandbox,
-		Role:        roleWorker,
-		Root:        OpenClawWorkerRoot,
-	},
 }
 
 func FS() fs.FS {

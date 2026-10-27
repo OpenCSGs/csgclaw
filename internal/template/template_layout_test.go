@@ -20,7 +20,7 @@ var skillActivationArtifactPaths = []string{
 }
 
 func TestLocalStorePublishOmitsSkillInstallLock(t *testing.T) {
-	for _, runtimeKind := range []string{agentruntime.KindCodex, agentruntime.KindDSH, agentruntime.NameOpenClaw} {
+	for _, runtimeKind := range []string{agentruntime.KindCodex, agentruntime.KindDSH, agentruntime.NameDSH} {
 		for _, separateSkills := range []bool{false, true} {
 			name := runtimeKind + "/workspace-skills"
 			if separateSkills {
@@ -158,8 +158,8 @@ func TestWriteTemplateLayoutKeepsWorkspaceMemoryOutOfCodexTemplates(t *testing.T
 		wantMemory    bool
 	}{
 		{name: "codex", runtimeKind: agentruntime.KindCodex, includeMemory: true, wantMemory: false},
-		{name: "openclaw default off", runtimeKind: agentruntime.NameOpenClaw, wantMemory: false},
-		{name: "openclaw explicit opt in", runtimeKind: agentruntime.NameOpenClaw, includeMemory: true, wantMemory: true},
+		{name: "dsh default off", runtimeKind: agentruntime.NameDSH, wantMemory: false},
+		{name: "dsh explicit opt in", runtimeKind: agentruntime.NameDSH, includeMemory: true, wantMemory: false},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			templateRoot := t.TempDir()
@@ -211,7 +211,7 @@ func TestWriteTemplateLayoutPublishesOnlyAllowedWorkspaceFiles(t *testing.T) {
 	}
 
 	templateRoot := t.TempDir()
-	if err := writeTemplateLayout(WorkspaceRef{Kind: WorkspaceKindDir, Path: workspaceRoot}, templateRoot, agentruntime.NameOpenClaw, nil, false); err != nil {
+	if err := writeTemplateLayout(WorkspaceRef{Kind: WorkspaceKindDir, Path: workspaceRoot}, templateRoot, agentruntime.NameDSH, nil, false); err != nil {
 		t.Fatalf("writeTemplateLayout() error = %v", err)
 	}
 	instructionsRoot := filepath.Join(templateRoot, localInstructionsDirName)
@@ -224,73 +224,6 @@ func TestWriteTemplateLayoutPublishesOnlyAllowedWorkspaceFiles(t *testing.T) {
 		if _, err := os.Stat(filepath.Join(instructionsRoot, name)); !errors.Is(err, os.ErrNotExist) {
 			t.Errorf("non-template workspace entry %q was published: %v", name, err)
 		}
-	}
-}
-
-func TestOpenClawTemplateMemoryRoundTripPreservesWorkspaceLayout(t *testing.T) {
-	workspaceRoot := t.TempDir()
-	for path, content := range map[string]string{
-		"AGENTS.md":            "# Instructions\n",
-		"MEMORY.md":            "# Durable memory\n",
-		"memory/2026-08-28.md": "dated memory\n",
-	} {
-		path = filepath.Join(workspaceRoot, filepath.FromSlash(path))
-		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	store := NewLocalStore(t.TempDir())
-	created, err := store.Publish(context.Background(), PublishSpec{
-		ID: "openclaw-memory", Name: "openclaw-memory", RuntimeKind: agentruntime.NameOpenClaw,
-		Image: "openclaw:test", IncludeMemory: true,
-		WorkspaceRef: WorkspaceRef{Kind: WorkspaceKindDir, Path: workspaceRoot},
-	})
-	if err != nil {
-		t.Fatalf("Publish() error = %v", err)
-	}
-	workspace, err := store.FetchWorkspace(context.Background(), created.ID)
-	if err != nil {
-		t.Fatalf("FetchWorkspace() error = %v", err)
-	}
-	defer os.RemoveAll(workspace.Path)
-	for path, want := range map[string]string{
-		"MEMORY.md":            "# Durable memory\n",
-		"memory/2026-08-28.md": "dated memory\n",
-	} {
-		data, readErr := os.ReadFile(filepath.Join(workspace.Path, filepath.FromSlash(path)))
-		if readErr != nil || string(data) != want {
-			t.Fatalf("restored %s = %q, error = %v, want %q", path, data, readErr, want)
-		}
-	}
-}
-
-func TestMaterializeWorkspaceMemorySupportsLegacyFlattenedEntries(t *testing.T) {
-	templateRoot := t.TempDir()
-	for path, content := range map[string]string{
-		"instructions/AGENTS.md": "# Instructions\n",
-		"memories/MEMORY.md":     "# Durable memory\n",
-		"memories/2026-08-27.md": "legacy dated memory\n",
-		"mcps/mcp.json":          "{}\n",
-	} {
-		path = filepath.Join(templateRoot, filepath.FromSlash(path))
-		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
-	workspace, err := materializeTemplateFS(os.DirFS(templateRoot), ".", agentruntime.NameOpenClaw)
-	if err != nil {
-		t.Fatalf("materializeTemplateFS() error = %v", err)
-	}
-	defer os.RemoveAll(workspace.Path)
-	if data, readErr := os.ReadFile(filepath.Join(workspace.Path, "memory", "2026-08-27.md")); readErr != nil || string(data) != "legacy dated memory\n" {
-		t.Fatalf("legacy dated memory = %q, error = %v", data, readErr)
 	}
 }
 
@@ -315,7 +248,7 @@ func TestMaterializeTemplateFSSkipsMemoryForCodex(t *testing.T) {
 		wantMemory  bool
 	}{
 		{name: "codex", runtimeKind: agentruntime.KindCodex, wantMemory: false},
-		{name: "picoclaw", runtimeKind: agentruntime.NamePicoClaw, wantMemory: true},
+		{name: "dsh", runtimeKind: agentruntime.KindDSH, wantMemory: false},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			workspace, err := materializeTemplateFS(os.DirFS(templateRoot), ".", tt.runtimeKind)
@@ -363,11 +296,11 @@ func TestCopyTemplateSkillsSkipsOnlyTopLevelCodexSystemSkills(t *testing.T) {
 		}
 	}
 
-	openClawTarget := t.TempDir()
-	if err := copyTemplateSkills(source, openClawTarget, agentruntime.NameOpenClaw); err != nil {
-		t.Fatalf("copyTemplateSkills(openclaw) error = %v", err)
+	dshTarget := t.TempDir()
+	if err := copyTemplateSkills(source, dshTarget, agentruntime.NameDSH); err != nil {
+		t.Fatalf("copyTemplateSkills(dsh) error = %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(openClawTarget, ".system", "builtin", "SKILL.md")); err != nil {
-		t.Fatalf("OpenClaw top-level .system missing: %v", err)
+	if _, err := os.Stat(filepath.Join(dshTarget, ".system", "builtin", "SKILL.md")); err != nil {
+		t.Fatalf("DSH top-level .system missing: %v", err)
 	}
 }

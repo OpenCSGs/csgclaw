@@ -22,8 +22,7 @@ const labels: Record<string, string> = {
   profileRuntimeKind: "Runtime",
   roleLabel: "Role",
   runtimeCodexCLI: "Codex CLI",
-  runtimeOpenclaw: "OpenClaw",
-  runtimePicoclaw: "PicoClaw",
+  runtimeDSH: "DeepSeek Harness",
   personProfile: "Person profile",
   status: "Status",
   userIDLabel: "User ID",
@@ -110,7 +109,7 @@ describe("ProfilePreviewPopover", () => {
           status: "running",
           provider: "api",
           model_id: "gpt-5.5",
-          runtime_kind: "picoclaw_sandbox",
+          runtime_kind: "codex",
         }}
         user={{ id: "u-manager" }}
         anchorRect={{ top: 20, right: 80, bottom: 60, left: 40 }}
@@ -135,9 +134,9 @@ describe("ProfilePreviewPopover", () => {
           name: "Builder",
           role: "worker",
           status: "running",
-          runtime_kind: "openclaw_sandbox",
+          runtime_kind: "dsh",
           runtime: {
-            kind: "openclaw_sandbox",
+            kind: "dsh",
             state: "running",
             availability: { state: "degraded", reason: "control_plane_unavailable" },
           },
@@ -152,36 +151,6 @@ describe("ProfilePreviewPopover", () => {
     );
 
     const presence = screen.getByText("Offline").closest(".preview-presence");
-    expect(presence).toBeInTheDocument();
-    expect(presence).not.toHaveClass("online");
-  });
-
-  it("shows unknown sandbox availability as checking", () => {
-    render(
-      <ProfilePreviewPopover
-        previewRef={createRef<HTMLElement>()}
-        agent={{
-          id: "agent-1",
-          name: "Builder",
-          role: "worker",
-          status: "running",
-          runtime_kind: "openclaw_sandbox",
-          runtime: {
-            kind: "openclaw_sandbox",
-            state: "running",
-            availability: { state: "unknown" },
-          },
-        }}
-        user={{ id: "u-builder" }}
-        anchorRect={{ top: 20, right: 80, bottom: 60, left: 40 }}
-        t={t}
-        onClose={vi.fn()}
-        onOpenAgent={vi.fn()}
-        onOpenDM={vi.fn()}
-      />,
-    );
-
-    const presence = screen.getByText("Checking").closest(".preview-presence");
     expect(presence).toBeInTheDocument();
     expect(presence).not.toHaveClass("online");
   });

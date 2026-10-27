@@ -2,8 +2,6 @@ package runtime
 
 import (
 	"context"
-
-	"csgclaw/internal/config"
 )
 
 // Provisioner is an optional runtime capability for host-side preparation that
@@ -15,12 +13,6 @@ import (
 // runtime handle or replace Runtime.New.
 type Provisioner interface {
 	Provision(ctx context.Context, req ProvisionRequest) error
-}
-
-// HostConfigReconciler updates configuration without reseeding a workspace,
-// reinstalling Skills or rerunning base initialization.
-type HostConfigReconciler interface {
-	ReconcileHostConfig(context.Context, ProvisionRequest) error
 }
 
 // ProvisionRequest contains the narrow, preparation-oriented inputs that a
@@ -45,17 +37,4 @@ type ProvisionRequest struct {
 	PreviousCredentials  []string
 	InitShell            string
 	WorkspaceOverlay     string
-	Gateway              *GatewayProvision
-}
-
-// GatewayProvision carries the host-side data needed by sandbox gateway
-// runtimes during Provision. These inputs are consumed once to materialize
-// config, workspace, and related host assets before Runtime.New.
-type GatewayProvision struct {
-	ModelFallback     string
-	Server            config.ServerConfig
-	ManagerBaseURL    string
-	AgentHome         string
-	ProjectsRoot      string
-	WorkspaceTemplate string
 }

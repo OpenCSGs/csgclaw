@@ -17,10 +17,8 @@ import (
 var ErrReadinessNotSupported = errors.New("runtime readiness check is not supported")
 
 const (
-	KindPicoClawSandbox = "picoclaw_sandbox"
-	KindOpenClawSandbox = "openclaw_sandbox"
-	KindCodex           = "codex"
-	KindDSH             = "dsh"
+	KindCodex = "codex"
+	KindDSH   = "dsh"
 )
 
 // Runtime owns the lightweight execution lifecycle for an agent runtime.

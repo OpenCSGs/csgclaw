@@ -115,7 +115,6 @@ Different Agents remain independent.
 Channel Binding Managers own Worker lifetime.
 Runtime Stop/Recreate/reload cannot delete a Binding or transcript or stop a Channel Worker.
 Business credential changes explicitly reconcile the Channel Binding.
-OpenClaw/PicoClaw retain their native gateway channels and command protocols.
 Their binding configuration changes use Engine-managed recreation through the existing Runtime adapters; hosted Codex workers remain independent of Runtime lifecycle.
 
 ## RuntimeExtension contract

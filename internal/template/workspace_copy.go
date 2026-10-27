@@ -1,6 +1,7 @@
 package template
 
 import (
+	"csgclaw/internal/migrations/retiredclaws"
 	"fmt"
 	"io/fs"
 	"os"
@@ -9,6 +10,7 @@ import (
 	"strings"
 
 	hubtemplates "csgclaw/internal/template/embed"
+
 	toml "github.com/pelletier/go-toml/v2"
 )
 
@@ -213,6 +215,7 @@ func loadManifestFS(srcFS fs.FS, manifestPath, label string) (string, templateMa
 	if err := toml.Unmarshal(data, &manifest); err != nil {
 		return "", templateManifest{}, fmt.Errorf("decode %s manifest %q: %w", label, id, err)
 	}
+	retiredclaws.TemplateManifest(&manifest.RuntimeKind, &manifest.RuntimeOptions, &manifest.Image.Ref)
 	if err := validateManifest(manifest); err != nil {
 		return "", templateManifest{}, fmt.Errorf("validate %s manifest %q: %w", label, id, err)
 	}

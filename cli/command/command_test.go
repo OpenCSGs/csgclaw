@@ -16,7 +16,7 @@ func TestRenderAgentsTableShowsParticipantNamesAndIDs(t *testing.T) {
 		Name:             "dev",
 		Role:             "worker",
 		Status:           "running",
-		RuntimeKind:      "picoclaw_sandbox",
+		RuntimeKind:      "codex",
 		Profile:          "openai/gpt-4.1",
 		ParticipantIDs:   []string{"pt-dev"},
 		ParticipantNames: []string{"Dev Bot"},
@@ -100,14 +100,14 @@ func TestRenderParticipantsTableAlignsUTF8Cells(t *testing.T) {
 
 func TestRenderAgentsTablePreservesWideFields(t *testing.T) {
 	var buf bytes.Buffer
-	longImage := "opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw:2026.6.23"
+	longImage := "opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/codex:2026.6.23"
 
 	err := RenderAgentsTable(&buf, []apitypes.Agent{{
 		ID:               "agent-yupvpb",
 		Name:             "测试工程师",
 		Role:             "worker",
 		Status:           "running",
-		RuntimeKind:      "picoclaw_sandbox",
+		RuntimeKind:      "codex",
 		Profile:          "codex.gpt-5.5",
 		ParticipantIDs:   []string{"pt-yupvpb", "pt-yupvpb-5905c292"},
 		ParticipantNames: []string{"测试工程师", "测试工程师"},

@@ -1,7 +1,0 @@
-model_list:
-  __MODEL_ID__:0:
-    api_keys:
-      - __API_KEY__
-channels: {}
-web: {}
-skills: {}

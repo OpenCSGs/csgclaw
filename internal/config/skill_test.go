@@ -42,7 +42,7 @@ non_suspicious_only = false
 
 [bootstrap]
 default_manager_template = "builtin.manager-codex"
-default_worker_template = "builtin.picoclaw-worker"
+default_worker_template = "builtin.codex-worker"
 
 [models]
 default = "default.minimax-m2.7"
@@ -85,7 +85,7 @@ token = "${CLAWHUB_TOKEN}"
 
 [bootstrap]
 default_manager_template = "builtin.manager-codex"
-default_worker_template = "builtin.picoclaw-worker"
+default_worker_template = "builtin.codex-worker"
 
 [models]
 default = "default.minimax-m2.7"

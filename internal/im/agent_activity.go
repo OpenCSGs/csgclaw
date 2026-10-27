@@ -16,7 +16,7 @@ func IsAgentActivityMessage(message Message) bool {
 			return true
 		}
 	}
-	for _, key := range []string{"codex", "openclaw", "csgclaw"} {
+	for _, key := range []string{"codex", "csgclaw"} {
 		if meta, ok := message.Metadata[key].(map[string]any); ok {
 			if kind, _ := meta["delivery_kind"].(string); kind == "tool" || kind == "thought" || kind == "activity" || kind == "task_reported" {
 				return true

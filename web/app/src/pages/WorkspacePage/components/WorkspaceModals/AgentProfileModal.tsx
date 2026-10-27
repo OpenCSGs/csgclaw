@@ -1,11 +1,10 @@
 import { AgentModelConfiguration } from "@/components/business/AgentModelConfiguration";
-import { BOT_TYPE_NORMAL, DEFAULT_RUNTIME_KIND } from "@/shared/constants/agents";
+import { BOT_TYPE_NORMAL } from "@/shared/constants/agents";
 import { useEffect, useState, type SetStateAction } from "react";
 import {
   AgentCreateProgress,
   type AgentCreateProgressProps,
   EnvKeyValueEditor,
-  FieldHelpTooltip,
   isBlank,
   MCPServersPanel,
   NotifierControls,
@@ -19,15 +18,12 @@ import type { AgentRuntimeInstallation } from "@/api/agentRuntimes";
 import {
   agentRuntimeKind,
   agentDraftMissingRequiredEnv,
-  agentCreateTemplateLocked,
   agentTemplateDisplayName,
   composeLegacyRuntimeKind,
   formatRuntimeKindLabel,
   isNotificationBotDraftContext,
-  normalizeRuntimeKind,
   normalizeRuntimeName,
   notifierFormIsComplete,
-  defaultWorkerImageForRuntime,
   runtimeOptionSchemasForAgent,
   supportsMCPServers,
 } from "@/models/agents";
@@ -104,10 +100,8 @@ export function AgentProfileModal({
   agentDraft,
   onBrowseTemplates,
   onAgentDraftChange,
-  onAgentModelsReset,
   hubTemplates = [],
   bootstrapConfig = null,
-  managerAgent = null,
   agentModelOptions = [],
   modelProviders = null,
   agentModels = [],
@@ -135,7 +129,6 @@ export function AgentProfileModal({
   const missingRequiredEnv = isTemplateCreate && agentDraftMissingRequiredEnv(agentDraft);
   const isCustomCreate = isWorkerCreate && agentCreateMode === "custom";
   const useWizard = creationWizard && isCustomCreate;
-  const templateLocked = agentCreateTemplateLocked(agentDraft, agentModalMode);
   const showMCPServers = !useWizard && !isNotificationContext && supportsMCPServers(agentDraft.runtime_kind);
   const runtimeOptionSchemas = isNotificationContext
     ? []
@@ -179,11 +172,7 @@ export function AgentProfileModal({
   const selectedWorkerTemplate = hubTemplates.find((item) => item.id === agentDraft.from_template) ?? null;
   const selectedTemplateName =
     agentTemplateDisplayName(selectedWorkerTemplate) || agentDraft.template_name || agentDraft.from_template;
-  const isCSGHubSandboxProvider =
-    String(bootstrapConfig?.sandbox_provider || "")
-      .trim()
-      .toLowerCase() === "csghub";
-  const sandboxEnabled = !isCSGHubSandboxProvider && Boolean(agentDraft.sandbox_enabled);
+  const sandboxEnabled = false;
   const runtimeChoices = Array.isArray(bootstrapConfig?.worker_runtime_choices)
     ? bootstrapConfig.worker_runtime_choices
     : [];
@@ -191,15 +180,7 @@ export function AgentProfileModal({
     (item) => !item?.sandbox_enabled && normalizeRuntimeName(item?.name) === "codex",
   );
   const hostRuntimeChoices = runtimeChoices.filter((item) => !item?.sandbox_enabled);
-  const sandboxRuntimeChoices = runtimeChoices.filter(
-    (item) => item?.sandbox_enabled && normalizeRuntimeName(item?.name) !== "picoclaw",
-  );
-  const defaultSandboxRuntimeName =
-    normalizeRuntimeName(sandboxRuntimeChoices.find((item) => normalizeRuntimeName(item?.name) === "openclaw")?.name) ||
-    normalizeRuntimeName(sandboxRuntimeChoices[0]?.name || "openclaw");
-  const requestedRuntimeName = normalizeRuntimeName(
-    agentDraft.runtime_name || (sandboxEnabled ? defaultSandboxRuntimeName : "codex"),
-  );
+  const requestedRuntimeName = normalizeRuntimeName(agentDraft.runtime_name || "codex");
   const selectedRuntimeName =
     !sandboxEnabled &&
     hostRuntimeChoices.length > 0 &&
@@ -255,49 +236,6 @@ export function AgentProfileModal({
       <small className="field-warning">{selectedRuntimeUnavailableMessage}</small>
     </div>
   ) : null;
-
-  function setSandboxEnabled(nextSandboxEnabled: boolean) {
-    if (!isWorkerCreate) {
-      return;
-    }
-    if (nextSandboxEnabled) {
-      const runtimeName = defaultSandboxRuntimeName;
-      const runtimeKind = composeLegacyRuntimeKind(runtimeName, true) || DEFAULT_RUNTIME_KIND;
-      onAgentDraftChange({
-        ...agentDraft,
-        bot_type: BOT_TYPE_NORMAL,
-        sandbox_enabled: true,
-        runtime_name: runtimeName,
-        runtime_kind: runtimeKind,
-        image: defaultWorkerImageForRuntime(
-          hubTemplates,
-          runtimeKind,
-          bootstrapConfig,
-          agentDraft.default_image || managerAgent?.image || "",
-        ),
-        from_template: "",
-        template_name: "",
-      });
-      onAgentModelsReset();
-      return;
-    }
-    const hostRuntimeName = hostRuntimeChoices.some(
-      (item) => normalizeRuntimeName(item?.name) === selectedRuntimeName && item?.installed !== false,
-    )
-      ? selectedRuntimeName
-      : "codex";
-    onAgentDraftChange({
-      ...agentDraft,
-      bot_type: BOT_TYPE_NORMAL,
-      sandbox_enabled: false,
-      runtime_name: hostRuntimeName,
-      runtime_kind: composeLegacyRuntimeKind(hostRuntimeName, false) || "codex",
-      image: "",
-      from_template: "",
-      template_name: "",
-    });
-    onAgentModelsReset();
-  }
 
   useEffect(() => {
     if (!showMCPServers) {
@@ -426,98 +364,31 @@ export function AgentProfileModal({
             <div
               className={useWizard ? styles.wizardRuntimeGrid : "profile-grid profile-grid-compact agent-basics-grid"}
             >
-              {isWorkerCreate && !isCSGHubSandboxProvider ? (
-                <div
-                  className={
-                    useWizard
-                      ? `field ${styles.wizardSandbox}`
-                      : "field span-2 agent-fast-mode-field agent-sandbox-field"
-                  }
-                >
-                  <div className="field-label-with-help">
-                    <span>{t("profileSandboxEnabled")}</span>
-                    <FieldHelpTooltip detail={t("profileSandboxEnabledHelp")} />
-                  </div>
-                  <label className="selection-item compact-toggle-row agent-fast-mode-toggle agent-sandbox-toggle">
-                    <input
-                      type="checkbox"
-                      checked={sandboxEnabled}
-                      aria-label={t("profileSandboxEnabled")}
-                      onChange={() => setSandboxEnabled(!sandboxEnabled)}
-                    />
-                    <span className="agent-sandbox-copy">
-                      <strong>{sandboxEnabled ? t("statusEnabled") : t("statusDisabled")}</strong>
-                    </span>
-                  </label>
-                </div>
-              ) : null}
               {isWorkerCreate ? (
                 <div className={useWizard ? styles.wizardRuntimeSelector : "agent-runtime-image-row"}>
                   <label className="field">
                     <span>{t("profileRuntimeKind")}</span>
-                    {!sandboxEnabled ? (
-                      <Select
-                        value={selectedRuntimeName || "codex"}
-                        onValueChange={(value) => {
-                          onAgentDraftChange({
-                            ...agentDraft,
-                            bot_type: BOT_TYPE_NORMAL,
-                            sandbox_enabled: false,
-                            runtime_name: normalizeRuntimeName(value) || "codex",
-                            runtime_kind: composeLegacyRuntimeKind(value, false) || "codex",
-                            image: "",
-                            from_template: "",
-                            template_name: "",
-                          });
-                        }}
-                        triggerProps={{ "aria-label": t("profileRuntimeKind") }}
-                        options={hostRuntimeChoices.map((option) => ({
-                          value: normalizeRuntimeName(option.name) || "",
-                          label: option.label || normalizeRuntimeName(option.name) || "",
-                          disabled: option.installed === false && option.installable !== true,
-                        }))}
-                      />
-                    ) : templateLocked ? (
-                      <input
-                        value={formatRuntimeKindLabel(normalizeRuntimeKind(agentDraft.runtime_kind), t)}
-                        readOnly
-                        disabled
-                      />
-                    ) : (
-                      <Select
-                        value={
-                          selectedRuntimeName || normalizeRuntimeName(sandboxRuntimeChoices[0]?.name || "openclaw")
-                        }
-                        onValueChange={(value) => {
-                          const runtimeName = normalizeRuntimeName(value);
-                          const runtimeKind = composeLegacyRuntimeKind(runtimeName, true) || DEFAULT_RUNTIME_KIND;
-                          const nextDraft: AgentDraft = {
-                            ...agentDraft,
-                            bot_type: BOT_TYPE_NORMAL,
-                            role: "worker",
-                            sandbox_enabled: true,
-                            runtime_name: runtimeName,
-                            runtime_kind: runtimeKind,
-                            from_template: "",
-                            template_name: "",
-                            image: defaultWorkerImageForRuntime(
-                              hubTemplates,
-                              runtimeKind,
-                              bootstrapConfig,
-                              agentDraft.default_image || managerAgent?.image || "",
-                            ),
-                          };
-                          onAgentDraftChange(nextDraft);
-                          onAgentModelsReset();
-                        }}
-                        triggerProps={{ "aria-label": t("profileRuntimeKind") }}
-                        options={sandboxRuntimeChoices.map((option) => ({
-                          value: normalizeRuntimeName(option.name) || "",
-                          label: option.label || normalizeRuntimeName(option.name) || "",
-                          disabled: option.installed === false,
-                        }))}
-                      />
-                    )}
+                    <Select
+                      value={selectedRuntimeName || "codex"}
+                      onValueChange={(value) => {
+                        onAgentDraftChange({
+                          ...agentDraft,
+                          bot_type: BOT_TYPE_NORMAL,
+                          sandbox_enabled: false,
+                          runtime_name: normalizeRuntimeName(value) || "codex",
+                          runtime_kind: composeLegacyRuntimeKind(value, false) || "codex",
+                          image: "",
+                          from_template: "",
+                          template_name: "",
+                        });
+                      }}
+                      triggerProps={{ "aria-label": t("profileRuntimeKind") }}
+                      options={hostRuntimeChoices.map((option) => ({
+                        value: normalizeRuntimeName(option.name) || "",
+                        label: option.label || normalizeRuntimeName(option.name) || "",
+                        disabled: option.installed === false && option.installable !== true,
+                      }))}
+                    />
                   </label>
                   {runtimeAvailabilityNotice}
                 </div>

@@ -10,14 +10,10 @@ import (
 )
 
 const (
-	RuntimeKindPicoClawSandbox = agentruntime.KindPicoClawSandbox
-	RuntimeKindOpenClawSandbox = agentruntime.KindOpenClawSandbox
-	RuntimeKindCodex           = agentruntime.KindCodex
-	RuntimeKindDSH             = agentruntime.KindDSH
-	RuntimeNamePicoClaw        = agentruntime.NamePicoClaw
-	RuntimeNameOpenClaw        = agentruntime.NameOpenClaw
-	RuntimeNameCodex           = agentruntime.NameCodex
-	RuntimeNameDSH             = agentruntime.NameDSH
+	RuntimeKindCodex = agentruntime.KindCodex
+	RuntimeKindDSH   = agentruntime.KindDSH
+	RuntimeNameCodex = agentruntime.NameCodex
+	RuntimeNameDSH   = agentruntime.NameDSH
 )
 
 type RuntimeRecord struct {
@@ -111,12 +107,7 @@ func runtimeIDLookupAliases(runtimeID string) []string {
 }
 
 func isGatewayRuntimeKind(kind string) bool {
-	switch kind {
-	case RuntimeKindPicoClawSandbox, RuntimeKindOpenClawSandbox:
-		return true
-	default:
-		return false
-	}
+	return sandboxEnabledForKind(kind)
 }
 
 func isHostRuntimeKind(kind string) bool {
@@ -146,15 +137,6 @@ func resolveRuntimeSelection(kind, name string, sandboxEnabled bool) (string, st
 		return "", "", false, err
 	}
 	return cfg.LegacyKind(), cfg.Name, cfg.Sandboxed, nil
-}
-
-func runtimeKindForGatewayRuntime(runtime string) string {
-	switch agentruntime.RuntimeConfigForKind(runtime).LegacyKind() {
-	case RuntimeKindPicoClawSandbox, RuntimeKindOpenClawSandbox:
-		return agentruntime.RuntimeConfigForKind(runtime).LegacyKind()
-	default:
-		return ""
-	}
 }
 
 func normalizeRuntimeRecord(rt RuntimeRecord) RuntimeRecord {
