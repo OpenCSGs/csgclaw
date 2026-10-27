@@ -10,7 +10,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"io"
 	"log/slog"
 	"net"
 	"net/http"
@@ -68,7 +67,7 @@ func modelRequestLogAttrs(req *http.Request) []any {
 				MaxOutputTokens     json.RawMessage   `json:"max_output_tokens"`
 				Stream              bool              `json:"stream"`
 			}
-			err = json.NewDecoder(io.LimitReader(body, 10<<20)).Decode(&input)
+			err = json.NewDecoder(body).Decode(&input)
 			body.Close()
 			if err == nil {
 				attrs = append(attrs, "tool_count", len(input.Tools), "stream", input.Stream)

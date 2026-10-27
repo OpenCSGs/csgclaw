@@ -1660,7 +1660,8 @@ Notes:
 
 - Requires Bearer Token
 - The request body is read and forwarded as-is
-- Maximum single request-body read size is `10 MiB`
+- Maximum request-body size is `128 MiB`, including inline images and tool output
+- Larger bodies return HTTP `413` with error code `request_too_large`; the body is never silently truncated
 - Failures may return either plain-text errors or a JSON error payload such as:
 
 ```json
@@ -1699,6 +1700,7 @@ Notes:
 
 - Requires Bearer Token
 - The request is first forwarded to the selected profile's `base_url + /responses`
+- POST request bodies have the same `128 MiB` limit as chat completions; larger bodies return HTTP `413` with error code `request_too_large`
 - If upstream `/responses` returns `404` or `405`, the bridge retries via `base_url + /chat/completions`
 - The `model` field is overwritten with the agent's resolved `model_id`
 - Responses forwarding does not inject the chat-only top-level `reasoning_effort`
