@@ -382,11 +382,11 @@ models = ["gpt-test"]
 		t.Fatalf("EnsureState() error = %v", err)
 	}
 
-	backups := findStoreBackups(t, home)
+	backups := findConfigBackups(t, home)
 	if len(backups) != 1 {
 		t.Fatalf("backup count = %d, want 1; entries = %#v", len(backups), backups)
 	}
-	backupConfig, err := os.ReadFile(filepath.Join(home, backups[0], "config.toml"))
+	backupConfig, err := os.ReadFile(backups[0])
 	if err != nil {
 		t.Fatalf("read backup config: %v", err)
 	}
@@ -450,7 +450,7 @@ default_publish_registry = "local"
 	if _, err := EnsureState(context.Background(), EnsureStateOptions{ConfigPath: configPath}); err != nil {
 		t.Fatalf("EnsureState() error = %v", err)
 	}
-	if backups := findStoreBackups(t, home); len(backups) != 0 {
+	if backups := findConfigBackups(t, home); len(backups) != 0 {
 		t.Fatalf("backup count = %d, want 0 for new store format; entries = %#v", len(backups), backups)
 	}
 }
@@ -878,16 +878,16 @@ models = ["gpt-test"]
 	}
 }
 
-func findStoreBackups(t *testing.T, parent string) []string {
+func findConfigBackups(t *testing.T, parent string) []string {
 	t.Helper()
-	entries, err := os.ReadDir(parent)
+	entries, err := os.ReadDir(filepath.Join(parent, ".csgclaw"))
 	if err != nil {
 		t.Fatalf("ReadDir() error = %v", err)
 	}
 	var backups []string
 	for _, entry := range entries {
-		if entry.IsDir() && strings.HasPrefix(entry.Name(), ".csgclaw_backup_") {
-			backups = append(backups, entry.Name())
+		if entry.Type().IsRegular() && strings.HasPrefix(entry.Name(), "config.toml_backup_") {
+			backups = append(backups, filepath.Join(parent, ".csgclaw", entry.Name()))
 		}
 	}
 	return backups

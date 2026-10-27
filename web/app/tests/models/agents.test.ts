@@ -32,6 +32,7 @@ import {
   isAgentIncomplete,
   isAgentAvailable,
   isAgentLifecycleRunning,
+  canStartAgent,
   agentPageLLMProfileChanged,
   agentProfilePageSaveDisabled,
   isAgentProfileDraftComplete,
@@ -1216,5 +1217,22 @@ describe("agent model helpers", () => {
     expect(resolvedNotifierWebhookOrigin({ advertise_base_url: "http://127.0.0.1:18080/" })).toBe(
       "http://127.0.0.1:18080",
     );
+  });
+});
+
+describe("manual Agent recovery", () => {
+  it.each(["stopped", "exited", "dead", "runtime_unavailable", "unknown"])("offers startup for %s Agents", (state) => {
+    expect(canStartAgent({ id: "agent-old", runtime: { state } })).toBe(true);
+  });
+  it.each(["running", "online", "starting", "stopping", "restarting", "removing"])(
+    "does not start a %s Agent twice",
+    (state) => {
+      expect(canStartAgent({ id: "agent-old", runtime: { state } })).toBe(false);
+    },
+  );
+  it("excludes missing Agents, notification bots and automatic startup in progress", () => {
+    expect(canStartAgent(null)).toBe(false);
+    expect(canStartAgent({ id: "agent-old", runtime: { state: "stopped", startup_pending: true } })).toBe(false);
+    expect(canStartAgent({ id: "notification", bot_type: "notification", status: "stopped" })).toBe(false);
   });
 });

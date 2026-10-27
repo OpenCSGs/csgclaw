@@ -1,6 +1,7 @@
 import { SHOW_AGENT_LIFECYCLE_ACTIONS } from "@/shared/constants/agents";
 import {
   agentProfileConfig,
+  canStartAgent,
   agentAvailabilityStatusLabel,
   agentGatewayUnavailableLabel,
   agentRuntimeStatusDetailLabel,
@@ -177,7 +178,7 @@ export function AgentRow({
             </span>
           </Button>
         </Tooltip>
-        {SHOW_AGENT_LIFECYCLE_ACTIONS ? (
+        {SHOW_AGENT_LIFECYCLE_ACTIONS || canStartAgent(item) ? (
           <>
             <Tooltip content={lifecycleRunning ? t("agentStop") : t("agentStart")}>
               <span>

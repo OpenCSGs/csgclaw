@@ -2303,15 +2303,32 @@ func CreateSiblingBackup(root string, now time.Time, ignoreErrors ...func(string
 	if root == "" {
 		return "", fmt.Errorf("root is required")
 	}
-	if _, err := os.Stat(root); err != nil {
+	info, err := os.Stat(root)
+	if err != nil {
 		return "", fmt.Errorf("stat store root: %w", err)
 	}
 	backupPath, err := nextBackupPath(root, now)
 	if err != nil {
 		return "", err
 	}
-	if err := copyDir(root, backupPath, ignoreErrors...); err != nil {
-		return "", err
+	if info.IsDir() {
+		// Reserve this name exclusively so failure cleanup cannot remove a
+		// backup created concurrently by another process.
+		if err := os.Mkdir(backupPath, 0o700); err != nil {
+			return "", err
+		}
+		err = copyDir(root, backupPath, ignoreErrors...)
+	} else {
+		// A linked config must be a snapshot of its contents, not another
+		// symlink that changes alongside the live configuration.
+		if err := copyFile(root, backupPath, info.Mode().Perm()); err != nil {
+			return "", err
+		}
+	}
+	if err != nil {
+		// A partial copy is not a usable backup. Leaving it behind also makes
+		// every retry allocate another full-looking sibling directory.
+		return "", errors.Join(err, os.RemoveAll(backupPath))
 	}
 	return backupPath, nil
 }
@@ -2346,7 +2363,9 @@ func copyDir(src, dst string, ignoreErrors ...func(string) bool) error {
 				}
 				return err
 			}
-			return os.MkdirAll(target, info.Mode().Perm())
+			// Populate and clean up copies even when source directories are
+			// read-only; source access checks still apply while reading them.
+			return os.MkdirAll(target, info.Mode().Perm()|0o700)
 		}
 		info, err := d.Info()
 		if err != nil {
@@ -2406,10 +2425,10 @@ func copyFile(src, dst string, mode fs.FileMode) error {
 	}
 	_, copyErr := io.Copy(out, in)
 	closeErr := out.Close()
-	if copyErr != nil {
-		return copyErr
+	if err := errors.Join(copyErr, closeErr); err != nil {
+		return errors.Join(err, os.Remove(dst))
 	}
-	return closeErr
+	return nil
 }
 
 func readJSONMapIfExists(path string) (map[string]any, error) {

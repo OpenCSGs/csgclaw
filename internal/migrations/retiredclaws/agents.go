@@ -10,7 +10,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 )
 
 // isRetiredRuntimeKind identifies persisted runtime names for one-time upgrades.
@@ -148,7 +147,7 @@ func migrateAgents(ctx context.Context, root string, openSandbox func(context.Co
 	if err != nil {
 		return err
 	}
-	if _, err := localstore.CreateSiblingBackup(root, time.Now(), GeneratedBackupEntry); err != nil {
+	if err := backupOnce(root); err != nil {
 		return fmt.Errorf("backup retired runtime state: %w", err)
 	}
 	for _, memory := range memories {

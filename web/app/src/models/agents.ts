@@ -1949,6 +1949,18 @@ export function isAgentLifecycleRunning(item: AgentLike | null | undefined): boo
   return status === "running" || status === "online";
 }
 
+export function canStartAgent(item: AgentLike | null | undefined): boolean {
+  if (
+    !item?.id ||
+    isNotificationBotAgent(item) ||
+    isAgentLifecycleRunning(item) ||
+    isAgentRuntimeStartupPending(item)
+  ) {
+    return false;
+  }
+  return !["starting", "stopping", "restarting", "removing"].includes(agentRuntimeState(item).toLowerCase());
+}
+
 // isAgentRunning is retained for existing lifecycle consumers. New callers
 // should use isAgentLifecycleRunning to make that choice explicit.
 export function isAgentRunning(item: AgentLike | null | undefined): boolean {
