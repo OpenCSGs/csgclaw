@@ -2780,8 +2780,14 @@
     <svg width="0" height="0" style="position: absolute" aria-hidden="true">
       <defs>
         <filter id="rough" x="-10%" y="-10%" width="120%" height="120%">
-          <feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="7" result="noise" />
-          <feDisplacementMap in="SourceGraphic" in2="noise" scale="2.6" xChannelSelector="R" yChannelSelector="G" />
+          <feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="7" result="noise"></feTurbulence>
+          <feDisplacementMap
+            in="SourceGraphic"
+            in2="noise"
+            scale="2.6"
+            xChannelSelector="R"
+            yChannelSelector="G"
+          ></feDisplacementMap>
         </filter>
       </defs>
     </svg>
@@ -2789,21 +2795,35 @@
     <div class="progress" id="progress" aria-hidden="true"></div>
 
     <header class="topbar">
-      <a class="brand" href="#cover" aria-label="CSGClaw 新手引导首页">
+      <a
+        class="brand"
+        href="#cover"
+        aria-label="CSGClaw 新手引导首页"
+        data-i18n-aria-label="navigation.brand.aria-label"
+      >
         <img src="assets/csgclaw-logo.svg" alt="CSGClaw" />
         <span class="slash" aria-hidden="true"></span>
-        <span class="tag">新手引导</span>
+        <span class="tag" data-i18n="navigation.tag">新手引导</span>
       </a>
-      <nav class="chapters" aria-label="章节">
-        <button type="button" data-goto="1" aria-current="true">新手篇</button>
-        <button type="button" data-goto="6">进阶篇</button>
+      <nav class="chapters" aria-label="章节" data-i18n-aria-label="navigation.chapters.aria-label">
+        <button type="button" data-goto="1" aria-current="true" data-i18n="navigation.button">新手篇</button>
+        <button type="button" data-goto="6" data-i18n="navigation.button_2">进阶篇</button>
       </nav>
       <div class="top-right">
-        <span class="counter" aria-live="polite"><b id="counterNow">开始</b> <span id="counterTotal">/ 10</span></span>
-        <button class="exit-btn" type="button" id="exitGuide" title="退出导览（Esc）">
+        <span class="counter" aria-live="polite"
+          ><b id="counterNow" data-i18n="navigation.counterNow">开始</b> <span id="counterTotal">/ 10</span></span
+        >
+        <button
+          class="exit-btn"
+          type="button"
+          id="exitGuide"
+          title="退出导览（Esc）"
+          data-i18n-html="navigation.exitGuide"
+          data-i18n-title="navigation.exitGuide.title"
+        >
           退出导览
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
-            <path d="M6 6l12 12M18 6L6 18" />
+            <path d="M6 6l12 12M18 6L6 18"></path>
           </svg>
         </button>
       </div>
@@ -2814,63 +2834,73 @@
       <section class="slide cover is-active" id="cover" data-chapter="cover">
         <div class="slide-inner">
           <div class="copy">
-            <div class="cover-kicker"><span class="rule"></span>CSGCLAW GUIDE · 2026</div>
-            <h1>把你的 AI 团队，<br /><span class="hl">装进一台电脑</span></h1>
-            <p class="cover-lead">
+            <div class="cover-kicker" data-i18n-html="cover.coverKicker">
+              <span class="rule"></span>CSGCLAW 新手引导 · 2026
+            </div>
+            <h1 data-i18n-html="cover.h1">把你的 AI 团队，<br /><span class="hl">装进一台电脑</span></h1>
+            <p class="cover-lead" data-i18n="cover.coverLead">
               CSGClaw 是跑在本机的多智能体协作平台。这份导览用 10
               个步骤，带你把第一个任务、第一次协作和第一个定时任务真正跑起来。
             </p>
             <ul class="cover-meta">
-              <li>约 8 分钟</li>
-              <li>10 个步骤</li>
+              <li data-i18n="cover.li">约 8 分钟</li>
+              <li data-i18n="cover.li_2">10 个步骤</li>
             </ul>
             <div class="actions">
-              <button class="btn btn--primary" type="button" data-next id="startGuide">
+              <button
+                class="btn btn--primary"
+                type="button"
+                data-next=""
+                id="startGuide"
+                data-i18n-html="cover.startGuide"
+              >
                 开始导览
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
-                  <path d="M5 12h14M13 6l6 6-6 6" />
+                  <path d="M5 12h14M13 6l6 6-6 6"></path>
                 </svg>
               </button>
             </div>
-            <div class="cover-foot">适用 CSGClaw 0.9+</div>
+            <div class="cover-foot" data-i18n="cover.coverFoot">适用 CSGClaw 0.9+</div>
           </div>
 
           <div class="cover-art" aria-hidden="true">
             <div class="glow"></div>
             <div class="team-card">
-              <div class="team-head"><span class="t">我的智能体</span><span class="badge">9</span></div>
+              <div class="team-head">
+                <span class="t" data-i18n="cover.t">我的智能体</span><span class="badge">9</span>
+              </div>
               <ul class="team-list">
                 <li>
                   <img src="assets/manager.png" alt="" />
                   <div>
-                    <div class="n">主理人 Manager</div>
-                    <div class="r">通用 · 拿不准就找它</div>
+                    <div class="n" data-i18n="cover.n">主理人 Manager</div>
+                    <div class="r" data-i18n="cover.r">通用 · 拿不准就找它</div>
                   </div>
-                  <span class="st">在线</span>
+                  <span class="st" data-i18n="cover.st">在线</span>
                 </li>
                 <li>
                   <img src="assets/avatar-1.png" alt="" />
                   <div>
-                    <div class="n">产品经理 Alice</div>
-                    <div class="r">需求 · 原型 · 验收</div>
+                    <div class="n" data-i18n="cover.n_2">产品经理 Alice</div>
+                    <div class="r" data-i18n="cover.r_2">需求 · 原型 · 验收</div>
                   </div>
-                  <span class="st">在线</span>
+                  <span class="st" data-i18n="cover.st_2">在线</span>
                 </li>
                 <li>
                   <img src="assets/avatar-3.png" alt="" />
                   <div>
-                    <div class="n">高级开发工程师</div>
-                    <div class="r">前端 · 接口 · 调试</div>
+                    <div class="n" data-i18n="cover.n_3">高级开发工程师</div>
+                    <div class="r" data-i18n="cover.r_3">前端 · 接口 · 调试</div>
                   </div>
-                  <span class="st">在线</span>
+                  <span class="st" data-i18n="cover.st_3">在线</span>
                 </li>
                 <li>
                   <img src="assets/avatar-2.png" alt="" />
                   <div>
-                    <div class="n">行业研究分析师</div>
-                    <div class="r">调研 · 证据 · 简报</div>
+                    <div class="n" data-i18n="cover.n_4">行业研究分析师</div>
+                    <div class="r" data-i18n="cover.r_4">调研 · 证据 · 简报</div>
                   </div>
-                  <span class="st">在线</span>
+                  <span class="st" data-i18n="cover.st_4">在线</span>
                 </li>
               </ul>
               <div class="team-row--team">
@@ -2881,13 +2911,13 @@
                   />
                 </span>
                 <div>
-                  <div class="n">软件开发 Team</div>
-                  <div class="r">5 名成员 · 可协作</div>
+                  <div class="n" data-i18n="cover.n_5">软件开发 Team</div>
+                  <div class="r" data-i18n="cover.r_5">5 名成员 · 可协作</div>
                 </div>
                 <span class="go">→</span>
               </div>
             </div>
-            <div class="float-badge">本地运行 · 文件在你手里</div>
+            <div class="float-badge" data-i18n="cover.floatBadge">本地运行 · 文件在你手里</div>
           </div>
         </div>
       </section>
@@ -2901,28 +2931,24 @@
                 class="new-task-mock"
                 role="img"
                 aria-label="CSGClaw 新建任务界面示意：选择主理人、输入任务、选择工作目录与模型"
+                data-i18n-aria-label="step-1.newTaskMock.aria-label"
               >
-                <h3 class="new-task-title" data-en="What would you like to do?">开始做什么？</h3>
-                <p
-                  class="new-task-subtitle"
-                  data-en="Choose an agent to start. Not sure? Manager is a good place to begin."
-                >
+                <h3 class="new-task-title" data-i18n="step-1.newTaskTitle">开始做什么？</h3>
+                <p class="new-task-subtitle" data-i18n="step-1.newTaskSubtitle">
                   选择一个智能体接下这件事；拿不准就选主理人 Manager —— 它是通用智能体，什么都能接。
                 </p>
                 <div class="new-task-agent-row">
                   <span class="new-task-agent-target"
                     ><span class="new-task-agent"
-                      ><img src="../avatar/manager.png" alt="" /><span data-en="Manager">主理人</span
+                      ><img src="../avatar/manager.png" alt="" /><span data-i18n="step-1.span">主理人</span
                       ><span class="new-task-chevron">⌄</span></span
                     ><svg class="new-task-ring" viewBox="0 0 140 36" aria-hidden="true">
-                      <ellipse cx="70" cy="18" rx="66" ry="14" />
-                      <ellipse cx="70" cy="18" rx="65" ry="13" /></svg
+                      <ellipse cx="70" cy="18" rx="66" ry="14"></ellipse>
+                      <ellipse cx="70" cy="18" rx="65" ry="13"></ellipse></svg
                   ></span>
                 </div>
                 <div class="new-task-prompt">
-                  <span
-                    class="new-task-prompt-copy"
-                    data-en="Describe what you want done. Add skills, connectors, or knowledge as needed."
+                  <span class="new-task-prompt-copy" data-i18n="step-1.newTaskPromptCopy"
                     >描述你想让它做的事；点 + 可以带上技能 / 连接器 / 知识库</span
                   ><span class="new-task-marker" aria-hidden="true">1</span>
                   <div class="new-task-toolbar">
@@ -2934,41 +2960,45 @@
                           stroke="currentColor"
                           stroke-width="1.2"
                           stroke-linejoin="round"
-                        /></svg
-                      ><span data-en="Default folder">默认目录</span><span class="new-task-chevron">⌄</span></span
+                        ></path></svg
+                      ><span data-i18n="step-1.span_2">默认目录</span><span class="new-task-chevron">⌄</span></span
                     >
                     <span class="new-task-spacer"></span>
                     <span class="new-task-model-target"
                       ><span class="new-task-model"
                         ><img src="../model-providers/deepseek.svg" alt="" /><span>deepseek-flash</span></span
                       ><svg class="new-task-ring" viewBox="0 0 150 36" aria-hidden="true">
-                        <ellipse cx="75" cy="18" rx="71" ry="13" />
-                        <ellipse cx="75" cy="18" rx="70" ry="12" /></svg
+                        <ellipse cx="75" cy="18" rx="71" ry="13"></ellipse>
+                        <ellipse cx="75" cy="18" rx="70" ry="12"></ellipse></svg
                     ></span>
                     <span class="new-task-tool"
-                      ><span data-en="Default">默认</span><span class="new-task-chevron">⌄</span></span
+                      ><span data-i18n="step-1.span_3">默认</span><span class="new-task-chevron">⌄</span></span
                     >
                     <span class="new-task-send" aria-hidden="true">↑</span>
                   </div>
                 </div>
                 <div class="new-task-divider"></div>
                 <div class="new-task-suggestions">
-                  <span data-en="Try these">试试这些</span
-                  ><span class="new-task-chip" data-en="Summarize my project">▧ 看一眼我的项目</span
-                  ><span class="new-task-chip" data-en="Run a quick test">› 跑一遍测试</span
-                  ><span class="new-task-chip" data-en="Organize a weekly report">▤ 整理一份周报</span><span>×</span>
+                  <span data-i18n="step-1.span_4">试试这些</span
+                  ><span class="new-task-chip" data-i18n="step-1.newTaskChip">▧ 看一眼我的项目</span
+                  ><span class="new-task-chip" data-i18n="step-1.newTaskChip_2">› 跑一遍测试</span
+                  ><span class="new-task-chip" data-i18n="step-1.newTaskChip_3">▤ 整理一份周报</span><span>×</span>
                 </div>
               </div>
             </figure>
-            <figcaption class="caption"><span>新建任务 · 选择智能体</span><span>01 / 10</span></figcaption>
+            <figcaption class="caption">
+              <span data-i18n="step-1.span_5">新建任务 · 选择智能体</span><span>01 / 10</span>
+            </figcaption>
           </div>
           <div class="copy">
-            <p class="kicker"><span class="dot"></span>新手篇 · 第 <span class="num">1</span> 步</p>
-            <h2>先选对入口：<br />任务、协作任务、定时任务</h2>
-            <p class="lead">
+            <p class="kicker" data-i18n-html="step-1.kicker">
+              <span class="dot"></span>新手篇 · 第 <span class="num">1</span> 步
+            </p>
+            <h2 data-i18n-html="step-1.h2">先选对入口：<br />任务、协作任务、定时任务</h2>
+            <p class="lead" data-i18n="step-1.lead">
               CSGClaw 只有三个开始工作的入口。跟一个智能体干，是任务；几个智能体组队，是协作任务；到点开始，是定时任务。
             </p>
-            <ul class="points">
+            <ul class="points" data-i18n-html="step-1.points">
               <li>
                 <span><b>任务</b>（单智能体）：选一个智能体，把事说清楚，回车。</span>
               </li>
@@ -2979,9 +3009,11 @@
                 <span><b>定时任务</b>：设好时间与提示词，到点自动生成一次可追踪的任务。</span>
               </li>
             </ul>
-            <blockquote class="say"><span>你可以这样说</span>“先帮我把这件事拆成三步，确认计划后再开始。”</blockquote>
+            <blockquote class="say" data-i18n-html="step-1.say">
+              <span>你可以这样说</span>“先帮我把这件事拆成三步，确认计划后再开始。”
+            </blockquote>
             <div class="actions">
-              <button class="btn btn--primary" type="button" data-next>下一步</button>
+              <button class="btn btn--primary" type="button" data-next="" data-i18n="step-1.btn">下一步</button>
             </div>
           </div>
         </div>
@@ -2991,60 +3023,64 @@
       <section class="slide" id="step-2" data-step="2" data-chapter="basic">
         <div class="slide-inner">
           <div class="visual">
-            <div class="agents-settings-mock" role="img" aria-label="CSGClaw 智能体与团队页面示意">
+            <div
+              class="agents-settings-mock"
+              role="img"
+              aria-label="CSGClaw 智能体与团队页面示意"
+              data-i18n-aria-label="step-2.agentsSettingsMock.aria-label"
+            >
               <div class="agents-mock-main">
                 <div class="agents-mock-toolbar">
-                  <span class="is-active" data-en="My agents">我的智能体</span
-                  ><span data-en="Agent templates">智能体模板</span
-                  ><button type="button" tabindex="-1" data-en="＋ New agent">＋ 新建智能体</button
-                  ><button type="button" tabindex="-1" data-en="＋ New team">＋ 新建团队</button>
+                  <span class="is-active" data-i18n="step-2.isActive">我的智能体</span
+                  ><span data-i18n="step-2.span">智能体模板</span
+                  ><button type="button" tabindex="-1" data-i18n="step-2.button">＋ 新建智能体</button
+                  ><button type="button" tabindex="-1" data-i18n="step-2.button_2">＋ 新建团队</button>
                 </div>
                 <div class="agents-mock-body">
                   <div class="agents-mock-list">
                     <div class="agents-mock-search">
-                      <span>⌕</span><span data-en="Search agents and teams">搜索智能体和团队</span>
+                      <span>⌕</span><span data-i18n="step-2.span_2">搜索智能体和团队</span>
                     </div>
                     <div class="agents-mock-filter">
-                      <span data-en="All 9">全部 9</span><span data-en="My agents 8">我的智能体 8</span
-                      ><span data-en="Teams 1">团队 1</span>
+                      <span data-i18n="step-2.span_3">全部 9</span><span data-i18n="step-2.span_4">我的智能体 8</span
+                      ><span data-i18n="step-2.span_5">团队 1</span>
                     </div>
                     <div class="agents-mock-rows">
                       <div class="agents-mock-row">
                         <img src="../avatar/manager.png" alt="" /><span class="agents-mock-row-copy"
-                          ><span data-en="Manager">主理人</span><i class="agents-mock-status"></i></span
+                          ><span data-i18n="step-2.span_6">主理人</span><i class="agents-mock-status"></i></span
                         ><span>›</span>
                       </div>
                       <div class="agents-mock-row">
                         <img src="../avatar/cartoon-2.png" alt="" /><span class="agents-mock-row-copy"
-                          ><span data-en="Research Analyst">文刀刀</span><i class="agents-mock-status"></i></span
+                          ><span data-i18n="step-2.span_7">文刀刀</span><i class="agents-mock-status"></i></span
                         ><span>›</span>
                       </div>
                       <div class="agents-mock-row">
                         <img src="../avatar/cartoon-1.png" alt="" /><span class="agents-mock-row-copy"
-                          ><span data-en="Product Manager Alice">产品经理 Alice</span
-                          ><i class="agents-mock-status"></i></span
+                          ><span data-i18n="step-2.span_8">产品经理 Alice</span><i class="agents-mock-status"></i></span
                         ><span>›</span>
                       </div>
                       <div class="agents-mock-row">
                         <img src="../avatar/cartoon-3.png" alt="" /><span class="agents-mock-row-copy"
-                          ><span data-en="Test Engineer Edward">测试工程师 Edward</span
+                          ><span data-i18n="step-2.span_9">测试工程师 Edward</span
                           ><i class="agents-mock-status"></i></span
                         ><span>›</span>
                       </div>
                       <div class="agents-mock-row">
                         <img src="../avatar/cartoon-4.png" alt="" /><span class="agents-mock-row-copy"
-                          ><span data-en="Senior Software Engineer Alex">高级开发工程师 Alex</span
+                          ><span data-i18n="step-2.span_10">高级开发工程师 Alex</span
                           ><i class="agents-mock-status"></i></span
                         ><span>›</span>
                       </div>
                       <div class="agents-mock-row">
                         <img src="../avatar/cartoon-5.png" alt="" /><span class="agents-mock-row-copy"
-                          ><span data-en="Architect Bob">架构师 Bob</span><i class="agents-mock-status"></i></span
+                          ><span data-i18n="step-2.span_11">架构师 Bob</span><i class="agents-mock-status"></i></span
                         ><span>›</span>
                       </div>
                       <div class="agents-mock-row">
                         <img src="../avatar/cartoon-6.png" alt="" /><span class="agents-mock-row-copy"
-                          ><span data-en="Travel Planner">重庆旅游</span><i class="agents-mock-status"></i></span
+                          ><span data-i18n="step-2.span_12">重庆旅游</span><i class="agents-mock-status"></i></span
                         ><span>›</span>
                       </div>
                     </div>
@@ -3054,12 +3090,12 @@
                           src="../avatar/cartoon-4.png"
                           alt="" /></span
                       ><span class="agents-team-copy"
-                        ><span data-en="Software Development Team">软件开发 Team</span
-                        ><small data-en="5 members · Ready to collaborate">5 名成员 · 可协作</small></span
+                        ><span data-i18n="step-2.span_13">软件开发 Team</span
+                        ><small data-i18n="step-2.small">5 名成员 · 可协作</small></span
                       ><span>›</span
                       ><svg class="agents-team-ring" viewBox="0 0 250 46" aria-hidden="true">
-                        <ellipse cx="125" cy="23" rx="120" ry="18" />
-                        <ellipse cx="124" cy="23" rx="119" ry="17" />
+                        <ellipse cx="125" cy="23" rx="120" ry="18"></ellipse>
+                        <ellipse cx="124" cy="23" rx="119" ry="17"></ellipse>
                       </svg>
                     </div>
                   </div>
@@ -3071,37 +3107,36 @@
                           stroke="currentColor"
                           stroke-width="1.6"
                           stroke-linecap="round"
-                        /></svg
+                        ></path></svg
                     ></span>
-                    <div class="agents-mock-empty-title" data-en="Choose an agent or team">选一个智能体或团队</div>
-                    <div
-                      class="agents-mock-empty-copy"
-                      data-en="Agents can work individually or collaborate as a team. Choose an agent to get started."
-                    >
+                    <div class="agents-mock-empty-title" data-i18n="step-2.agentsMockEmptyTitle">
+                      选一个智能体或团队
+                    </div>
+                    <div class="agents-mock-empty-copy" data-i18n="step-2.agentsMockEmptyCopy">
                       智能体可以单独工作，也可以组成团队协作。选择一个智能体开始工作。
                     </div>
                     <div class="agents-mock-tips">
-                      <div data-en="› Click any agent to open its workspace">› 点击任意智能体，右侧进入工作区</div>
-                      <div data-en="› Use the top-right buttons to create an agent or team">
-                        › 右上角「新建智能体」/ 新建团队
-                      </div>
-                      <div data-en="› Search and filter the list to find an agent quickly">
-                        › 列表上方的搜索和筛选，能快速找到目标
-                      </div>
+                      <div data-i18n="step-2.div">› 点击任意智能体，右侧进入工作区</div>
+                      <div data-i18n="step-2.div_2">› 右上角「新建智能体」/ 新建团队</div>
+                      <div data-i18n="step-2.div_3">› 列表上方的搜索和筛选，能快速找到目标</div>
                     </div>
                   </div>
                 </div>
               </div>
             </div>
-            <figcaption class="caption"><span>智能体 · 我的智能体与团队</span><span>02 / 10</span></figcaption>
+            <figcaption class="caption">
+              <span data-i18n="step-2.span_14">智能体 · 我的智能体与团队</span><span>02 / 10</span>
+            </figcaption>
           </div>
           <div class="copy">
-            <p class="kicker"><span class="dot"></span>新手篇 · 第 <span class="num">2</span> 步</p>
-            <h2>智能体不是聊天窗口，<br />是可以养成的同事</h2>
-            <p class="lead">
+            <p class="kicker" data-i18n-html="step-2.kicker">
+              <span class="dot"></span>新手篇 · 第 <span class="num">2</span> 步
+            </p>
+            <h2 data-i18n-html="step-2.h2">智能体不是聊天窗口，<br />是可以养成的同事</h2>
+            <p class="lead" data-i18n="step-2.lead">
               每个智能体都有自己的指令、模型、工作目录、技能、连接器和记忆。你把一次成功的做法留在它身上，下一次就不用从头解释。
             </p>
-            <ul class="points">
+            <ul class="points" data-i18n-html="step-2.points">
               <li>
                 <span><b>主理人 Manager</b> 是通用智能体，拿不准选谁时就选它。</span>
               </li>
@@ -3112,11 +3147,11 @@
                 <span><b>团队</b>把常用的几个智能体固定成一组，下次直接点名。</span>
               </li>
             </ul>
-            <blockquote class="say">
+            <blockquote class="say" data-i18n-html="step-2.say">
               <span>你可以这样说</span>“你是一名资深行业研究分析师，先给结论，再给证据和来源。”
             </blockquote>
             <div class="actions">
-              <button class="btn btn--primary" type="button" data-next>下一步</button>
+              <button class="btn btn--primary" type="button" data-next="" data-i18n="step-2.btn">下一步</button>
             </div>
           </div>
         </div>
@@ -3128,7 +3163,8 @@
           <div class="visual">
             <div class="demo" style="transform: rotate(-0.3deg)">
               <div class="demo-bar">
-                <span class="live"></span><b>任务说清楚的四个部分</b><span class="pill">建议模板</span>
+                <span class="live"></span><b data-i18n="step-3.b">任务说清楚的四个部分</b
+                ><span class="pill" data-i18n="step-3.pill">建议模板</span>
               </div>
               <div style="padding: 18px 20px 4px">
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px">
@@ -3141,10 +3177,11 @@
                         color: var(--teal);
                         margin-bottom: 3px;
                       "
+                      data-i18n="step-3.div"
                     >
                       01 · 目标
                     </div>
-                    <div style="font-size: 11.5px; line-height: 1.6; color: var(--ink-soft)">
+                    <div style="font-size: 11.5px; line-height: 1.6; color: var(--ink-soft)" data-i18n="step-3.div_2">
                       要解决什么问题，最后交付什么
                     </div>
                   </div>
@@ -3157,10 +3194,11 @@
                         color: var(--teal);
                         margin-bottom: 3px;
                       "
+                      data-i18n="step-3.div_3"
                     >
                       02 · 范围
                     </div>
-                    <div style="font-size: 11.5px; line-height: 1.6; color: var(--ink-soft)">
+                    <div style="font-size: 11.5px; line-height: 1.6; color: var(--ink-soft)" data-i18n="step-3.div_4">
                       看哪段时间、哪些来源、哪些不谈
                     </div>
                   </div>
@@ -3173,10 +3211,11 @@
                         color: var(--teal);
                         margin-bottom: 3px;
                       "
+                      data-i18n="step-3.div_5"
                     >
                       03 · 产出
                     </div>
-                    <div style="font-size: 11.5px; line-height: 1.6; color: var(--ink-soft)">
+                    <div style="font-size: 11.5px; line-height: 1.6; color: var(--ink-soft)" data-i18n="step-3.div_6">
                       文件、网页、PPT、表格，写清格式
                     </div>
                   </div>
@@ -3189,42 +3228,52 @@
                         color: var(--teal);
                         margin-bottom: 3px;
                       "
+                      data-i18n="step-3.div_7"
                     >
                       04 · 约束
                     </div>
-                    <div style="font-size: 11.5px; line-height: 1.6; color: var(--ink-soft)">
+                    <div style="font-size: 11.5px; line-height: 1.6; color: var(--ink-soft)" data-i18n="step-3.div_8">
                       字数、语气、来源偏好、不能做什么
                     </div>
                   </div>
                 </div>
               </div>
-              <div class="demo-prompt-example">
+              <div class="demo-prompt-example" data-i18n="step-3.demoPromptExample">
                 调研近一年企业级 AI Agent 的落地情况，重点看产品与厂商、行业案例、技术瓶颈三部分。输出一份 1500
                 字以内的简报，附来源链接；不确定的地方标注「待核实」。
               </div>
               <div class="demo-foot">
-                <span style="font-family: var(--mono); font-size: 9.5px; color: var(--faint)">PROMPT</span
-                ><span style="margin-left: auto">Enter 发送</span>
+                <span style="font-family: var(--mono); font-size: 9.5px; color: var(--faint)" data-i18n="step-3.span"
+                  >提示词</span
+                ><span style="margin-left: auto" data-i18n="step-3.span_2">Enter 发送</span>
               </div>
             </div>
-            <figcaption class="caption"><span>把目标、范围、产出、约束一次说清</span><span>03 / 10</span></figcaption>
+            <figcaption class="caption">
+              <span data-i18n="step-3.span_3">把目标、范围、产出、约束一次说清</span><span>03 / 10</span>
+            </figcaption>
           </div>
           <div class="copy">
-            <p class="kicker"><span class="dot"></span>新手篇 · 第 <span class="num">3</span> 步</p>
-            <h2>任务说清楚，<br />比选哪个模型更重要</h2>
-            <p class="lead">
+            <p class="kicker" data-i18n-html="step-3.kicker">
+              <span class="dot"></span>新手篇 · 第 <span class="num">3</span> 步
+            </p>
+            <h2 data-i18n-html="step-3.h2">任务说清楚，<br />比选哪个模型更重要</h2>
+            <p class="lead" data-i18n-html="step-3.lead">
               智能体不会读心。把<strong>目标、范围、产出、约束</strong>四件事写全，结果会稳定得多；长任务还可以先让它复述计划，再开工。
             </p>
             <ul class="points">
-              <li><span>给它一个<b>可验收的产出</b>：一份文件、一个网页、一张表，而不是“帮我看看”。</span></li>
-              <li><span>告诉它<b>不要做什么</b>，比只说要做什么更有效。</span></li>
-              <li><span>不确定的地方，要求它<b>标注出来</b>，而不是猜。</span></li>
+              <li>
+                <span data-i18n-html="step-3.span_4"
+                  >给它一个<b>可验收的产出</b>：一份文件、一个网页、一张表，而不是“帮我看看”。</span
+                >
+              </li>
+              <li><span data-i18n-html="step-3.span_5">告诉它<b>不要做什么</b>，比只说要做什么更有效。</span></li>
+              <li><span data-i18n-html="step-3.span_6">不确定的地方，要求它<b>标注出来</b>，而不是猜。</span></li>
             </ul>
-            <blockquote class="say">
+            <blockquote class="say" data-i18n-html="step-3.say">
               <span>你可以这样说</span>“先复述你的计划，我确认后再开始；不确定的地方标注出来。”
             </blockquote>
             <div class="actions">
-              <button class="btn btn--primary" type="button" data-next>下一步</button>
+              <button class="btn btn--primary" type="button" data-next="" data-i18n="step-3.btn">下一步</button>
             </div>
           </div>
         </div>
@@ -3234,76 +3283,82 @@
       <section class="slide" id="step-4" data-step="4" data-chapter="basic">
         <div class="slide-inner">
           <div class="visual">
-            <div class="skills-settings-mock" role="img" aria-label="CSGClaw 技能设置页面示意">
+            <div
+              class="skills-settings-mock"
+              role="img"
+              aria-label="CSGClaw 技能设置页面示意"
+              data-i18n-aria-label="step-4.skillsSettingsMock.aria-label"
+            >
               <aside class="skills-settings-sidebar">
-                <div class="skills-settings-title" data-en="Settings">设置</div>
+                <div class="skills-settings-title" data-i18n="step-4.skillsSettingsTitle">设置</div>
                 <div class="skills-settings-group">
-                  <div class="skills-settings-group-label" data-en="ACCOUNT">账户</div>
+                  <div class="skills-settings-group-label" data-i18n="step-4.skillsSettingsGroupLabel">账户</div>
                   <div class="skills-settings-nav">
                     <div class="skills-settings-nav-item">
                       <img class="skills-settings-nav-icon" src="../icons/workspace-humans.svg" alt="" /><span
-                        data-en="Account & sign-in"
+                        data-i18n="step-4.span"
                         >账号与登录</span
                       >
                     </div>
                   </div>
                 </div>
                 <div class="skills-settings-group">
-                  <div class="skills-settings-group-label" data-en="GLOBAL RESOURCES">全局资源</div>
+                  <div class="skills-settings-group-label" data-i18n="step-4.skillsSettingsGroupLabel_2">全局资源</div>
                   <div class="skills-settings-nav">
                     <div class="skills-settings-nav-item">
                       <img class="skills-settings-nav-icon" src="../icons/workspace-models.svg" alt="" /><span
-                        data-en="Model services"
+                        data-i18n="step-4.span_2"
                         >模型服务</span
                       >
                     </div>
                     <div class="skills-settings-nav-item">
-                      <img class="skills-settings-nav-icon" src="../icons/globe.svg" alt="" /><span data-en="Connectors"
+                      <img class="skills-settings-nav-icon" src="../icons/globe.svg" alt="" /><span
+                        data-i18n="step-4.span_3"
                         >连接器</span
                       >
                     </div>
                     <div class="skills-settings-nav-item is-active">
                       <img class="skills-settings-nav-icon" src="../icons/workspace-skills.svg" alt="" /><span
-                        data-en="Skills"
+                        data-i18n="step-4.span_4"
                         >技能</span
                       >
                     </div>
                     <div class="skills-settings-nav-item">
                       <img class="skills-settings-nav-icon" src="../icons/resources.svg" alt="" /><span
-                        data-en="Knowledge bases"
+                        data-i18n="step-4.span_5"
                         >知识库</span
                       >
                     </div>
                     <div class="skills-settings-nav-item">
                       <img class="skills-settings-nav-icon" src="../icons/workspace-messages.svg" alt="" /><span
-                        data-en="External messages"
+                        data-i18n="step-4.span_6"
                         >外部消息</span
                       >
                     </div>
                   </div>
                 </div>
                 <div class="skills-settings-group">
-                  <div class="skills-settings-group-label" data-en="THIS MACHINE">此机器</div>
+                  <div class="skills-settings-group-label" data-i18n="step-4.skillsSettingsGroupLabel_3">此机器</div>
                   <div class="skills-settings-nav">
                     <div class="skills-settings-nav-item">
                       <img class="skills-settings-nav-icon" src="../icons/workspace-computers.svg" alt="" /><span
-                        data-en="Runtime"
+                        data-i18n="step-4.span_7"
                         >运行环境</span
                       >
                     </div>
                     <div class="skills-settings-nav-item">
                       <img class="skills-settings-nav-icon" src="../icons/workspace-settings.svg" alt="" /><span
-                        data-en="Service & access"
+                        data-i18n="step-4.span_8"
                         >服务与访问</span
                       >
                     </div>
                   </div>
                 </div>
                 <div class="skills-settings-group">
-                  <div class="skills-settings-group-label" data-en="PREFERENCES">偏好</div>
+                  <div class="skills-settings-group-label" data-i18n="step-4.skillsSettingsGroupLabel_4">偏好</div>
                   <div class="skills-settings-nav-item">
                     <img class="skills-settings-nav-icon" src="../icons/workspace-settings.svg" alt="" /><span
-                      data-en="Appearance & language"
+                      data-i18n="step-4.span_9"
                       >外观与语言</span
                     >
                   </div>
@@ -3313,182 +3368,184 @@
                 <div class="skills-settings-head">
                   <div>
                     <div class="skills-settings-heading">
-                      <span data-en="Skills">技能</span><span class="skills-settings-count">14</span>
+                      <span data-i18n="step-4.span_10">技能</span><span class="skills-settings-count">14</span>
                     </div>
-                    <div class="skills-settings-hint" data-en="Local and remote skills, ready for agents to use">
+                    <div class="skills-settings-hint" data-i18n="step-4.skillsSettingsHint">
                       本机与远程技能，智能体按需调用
                     </div>
                   </div>
                   <span class="skills-upload-target">
-                    <button class="skills-upload" type="button" tabindex="-1" data-en="＋ Upload skill">
+                    <button class="skills-upload" type="button" tabindex="-1" data-i18n="step-4.skillsUpload">
                       ＋ 上传 skill
                     </button>
                     <svg class="skills-upload-ring" viewBox="0 0 140 50" aria-hidden="true">
-                      <ellipse cx="70" cy="25" rx="64" ry="20" />
-                      <ellipse cx="71" cy="25" rx="63" ry="19" />
+                      <ellipse cx="70" cy="25" rx="64" ry="20"></ellipse>
+                      <ellipse cx="71" cy="25" rx="63" ry="19"></ellipse>
                     </svg>
                   </span>
                 </div>
                 <div class="skills-settings-tabs">
-                  <span class="skills-tab-target is-active"><span data-en="Installed">已安装</span></span>
-                  <span class="skills-tab-target"><span data-en="Skill marketplace">技能市场</span></span>
+                  <span class="skills-tab-target is-active"><span data-i18n="step-4.span_11">已安装</span></span>
+                  <span class="skills-tab-target"><span data-i18n="step-4.span_12">技能市场</span></span>
                   <svg class="skills-tabs-ring" viewBox="0 0 260 54" aria-hidden="true">
-                    <ellipse cx="130" cy="27" rx="125" ry="20" />
-                    <ellipse cx="129" cy="27" rx="124" ry="19" />
+                    <ellipse cx="130" cy="27" rx="125" ry="20"></ellipse>
+                    <ellipse cx="129" cy="27" rx="124" ry="19"></ellipse>
                   </svg>
                 </div>
-                <div class="skills-search" data-en="Search installed skills">搜索已安装的技能</div>
+                <div class="skills-search" data-i18n="step-4.skillsSearch">搜索已安装的技能</div>
                 <div class="skills-card-grid">
                   <div class="skills-card">
                     <span class="skills-card-icon"><img src="../icons/workspace-skills.svg" alt="" /></span
                     ><span class="skills-card-copy"
                       ><span class="skills-card-name">csgclaw-interactive-output-demo</span
-                      ><span class="skills-card-description" data-en="Run the complete three-stage output demo"
+                      ><span class="skills-card-description" data-i18n="step-4.skillsCardDescription"
                         >运行完整的三阶段输出示例</span
                       ></span
-                    ><span class="skills-card-origin" data-en="Built-in">内置</span>
+                    ><span class="skills-card-origin" data-i18n="step-4.skillsCardOrigin">内置</span>
                   </div>
                   <div class="skills-card">
                     <span class="skills-card-icon"><img src="../icons/workspace-skills.svg" alt="" /></span
                     ><span class="skills-card-copy"
                       ><span class="skills-card-name">csgclaw-self-diagnosis</span
-                      ><span class="skills-card-description" data-en="Diagnose problems in the current environment"
+                      ><span class="skills-card-description" data-i18n="step-4.skillsCardDescription_2"
                         >诊断当前环境中的问题</span
                       ></span
-                    ><span class="skills-card-origin" data-en="Built-in">内置</span>
+                    ><span class="skills-card-origin" data-i18n="step-4.skillsCardOrigin_2">内置</span>
                   </div>
                   <div class="skills-card">
                     <span class="skills-card-icon"><img src="../icons/workspace-skills.svg" alt="" /></span
                     ><span class="skills-card-copy"
                       ><span class="skills-card-name">excel_parser_skill</span
-                      ><span class="skills-card-description" data-en="Create, edit, and analyze spreadsheets"
+                      ><span class="skills-card-description" data-i18n="step-4.skillsCardDescription_3"
                         >创建、编辑和分析电子表格</span
                       ></span
-                    ><span class="skills-card-origin" data-en="Local">本地</span>
+                    ><span class="skills-card-origin" data-i18n="step-4.skillsCardOrigin_3">本地</span>
                   </div>
                   <div class="skills-card">
                     <span class="skills-card-icon"><img src="../icons/workspace-skills.svg" alt="" /></span
                     ><span class="skills-card-copy"
                       ><span class="skills-card-name">frontend-design</span
-                      ><span class="skills-card-description" data-en="Create distinctive, production-ready interfaces"
+                      ><span class="skills-card-description" data-i18n="step-4.skillsCardDescription_4"
                         >创建有辨识度、可投入生产的界面</span
                       ></span
-                    ><span class="skills-card-origin" data-en="Local">本地</span>
+                    ><span class="skills-card-origin" data-i18n="step-4.skillsCardOrigin_4">本地</span>
                   </div>
                   <div class="skills-card">
                     <span class="skills-card-icon"><img src="../icons/workspace-skills.svg" alt="" /></span
                     ><span class="skills-card-copy"
                       ><span class="skills-card-name">frontend-slides</span
-                      ><span class="skills-card-description" data-en="Create engaging HTML presentations"
+                      ><span class="skills-card-description" data-i18n="step-4.skillsCardDescription_5"
                         >创建有吸引力的 HTML 演示文稿</span
                       ></span
-                    ><span class="skills-card-origin" data-en="Local">本地</span>
+                    ><span class="skills-card-origin" data-i18n="step-4.skillsCardOrigin_5">本地</span>
                   </div>
                   <div class="skills-card">
                     <span class="skills-card-icon"><img src="../icons/workspace-skills.svg" alt="" /></span
                     ><span class="skills-card-copy"
                       ><span class="skills-card-name">huashu-design</span
-                      ><span class="skills-card-description" data-en="Design social media graphics and layouts"
+                      ><span class="skills-card-description" data-i18n="step-4.skillsCardDescription_6"
                         >设计社交媒体图文与版式</span
                       ></span
-                    ><span class="skills-card-origin" data-en="Built-in">内置</span>
+                    ><span class="skills-card-origin" data-i18n="step-4.skillsCardOrigin_6">内置</span>
                   </div>
                   <div class="skills-card">
                     <span class="skills-card-icon"><img src="../icons/workspace-skills.svg" alt="" /></span
                     ><span class="skills-card-copy"
                       ><span class="skills-card-name">pdf_parser_skill</span
-                      ><span class="skills-card-description" data-en="Extract and summarize PDF content"
+                      ><span class="skills-card-description" data-i18n="step-4.skillsCardDescription_7"
                         >提取并总结 PDF 内容</span
                       ></span
-                    ><span class="skills-card-origin" data-en="Local">本地</span>
+                    ><span class="skills-card-origin" data-i18n="step-4.skillsCardOrigin_7">本地</span>
                   </div>
                   <div class="skills-card">
                     <span class="skills-card-icon"><img src="../icons/workspace-skills.svg" alt="" /></span
                     ><span class="skills-card-copy"
                       ><span class="skills-card-name">skill-creator</span
-                      ><span class="skills-card-description" data-en="Create effective skills"
+                      ><span class="skills-card-description" data-i18n="step-4.skillsCardDescription_8"
                         >创建有效的技能</span
                       ></span
-                    ><span class="skills-card-origin" data-en="Built-in">内置</span>
+                    ><span class="skills-card-origin" data-i18n="step-4.skillsCardOrigin_8">内置</span>
                   </div>
                   <div class="skills-card">
                     <span class="skills-card-icon"><img src="../icons/workspace-skills.svg" alt="" /></span
                     ><span class="skills-card-copy"
                       ><span class="skills-card-name">skill-installer</span
-                      ><span class="skills-card-description" data-en="Search, inspect, and install skills"
+                      ><span class="skills-card-description" data-i18n="step-4.skillsCardDescription_9"
                         >搜索、查看并安装技能</span
                       ></span
-                    ><span class="skills-card-origin" data-en="Built-in">内置</span>
+                    ><span class="skills-card-origin" data-i18n="step-4.skillsCardOrigin_9">内置</span>
                   </div>
                   <div class="skills-card">
                     <span class="skills-card-icon"><img src="../icons/workspace-skills.svg" alt="" /></span
                     ><span class="skills-card-copy"
                       ><span class="skills-card-name">token-usage-statistics</span
-                      ><span class="skills-card-description" data-en="Review model token usage"
+                      ><span class="skills-card-description" data-i18n="step-4.skillsCardDescription_10"
                         >查看模型 token 使用情况</span
                       ></span
-                    ><span class="skills-card-origin" data-en="Local">本地</span>
+                    ><span class="skills-card-origin" data-i18n="step-4.skillsCardOrigin_10">本地</span>
                   </div>
                   <div class="skills-card">
                     <span class="skills-card-icon"><img src="../icons/workspace-skills.svg" alt="" /></span
                     ><span class="skills-card-copy"
                       ><span class="skills-card-name">docx</span
-                      ><span class="skills-card-description" data-en="Create and edit Word documents"
+                      ><span class="skills-card-description" data-i18n="step-4.skillsCardDescription_11"
                         >创建和编辑 Word 文档</span
                       ></span
-                    ><span class="skills-card-origin" data-en="Built-in">内置</span>
+                    ><span class="skills-card-origin" data-i18n="step-4.skillsCardOrigin_11">内置</span>
                   </div>
                   <div class="skills-card">
                     <span class="skills-card-icon"><img src="../icons/workspace-skills.svg" alt="" /></span
                     ><span class="skills-card-copy"
                       ><span class="skills-card-name">pdf</span
-                      ><span class="skills-card-description" data-en="Read, create, and inspect PDFs"
+                      ><span class="skills-card-description" data-i18n="step-4.skillsCardDescription_12"
                         >读取、创建和检查 PDF</span
                       ></span
-                    ><span class="skills-card-origin" data-en="Built-in">内置</span>
+                    ><span class="skills-card-origin" data-i18n="step-4.skillsCardOrigin_12">内置</span>
                   </div>
                   <div class="skills-card">
                     <span class="skills-card-icon"><img src="../icons/workspace-skills.svg" alt="" /></span
                     ><span class="skills-card-copy"
                       ><span class="skills-card-name">pptx</span
-                      ><span class="skills-card-description" data-en="Create and edit presentations"
+                      ><span class="skills-card-description" data-i18n="step-4.skillsCardDescription_13"
                         >创建和编辑演示文稿</span
                       ></span
-                    ><span class="skills-card-origin" data-en="Built-in">内置</span>
+                    ><span class="skills-card-origin" data-i18n="step-4.skillsCardOrigin_13">内置</span>
                   </div>
                   <div class="skills-card">
                     <span class="skills-card-icon"><img src="../icons/workspace-skills.svg" alt="" /></span
                     ><span class="skills-card-copy"
                       ><span class="skills-card-name">ocr</span
-                      ><span class="skills-card-description" data-en="Extract text from images"
+                      ><span class="skills-card-description" data-i18n="step-4.skillsCardDescription_14"
                         >从图片中提取文字</span
                       ></span
-                    ><span class="skills-card-origin" data-en="Local">本地</span>
+                    ><span class="skills-card-origin" data-i18n="step-4.skillsCardOrigin_14">本地</span>
                   </div>
                 </div>
               </div>
             </div>
             <div class="skills-mock-caption">
-              <span data-en="Settings · Skills">设置 · 技能</span><span>04 / 10</span>
+              <span data-i18n="step-4.span_13">设置 · 技能</span><span>04 / 10</span>
             </div>
           </div>
           <div class="copy">
-            <p class="kicker"><span class="dot"></span>新手篇 · 第 <span class="num">4</span> 步</p>
-            <h2>缺什么能力，<br />就给它装什么</h2>
-            <p class="lead">
+            <p class="kicker" data-i18n-html="step-4.kicker">
+              <span class="dot"></span>新手篇 · 第 <span class="num">4</span> 步
+            </p>
+            <h2 data-i18n-html="step-4.h2">缺什么能力，<br />就给它装什么</h2>
+            <p class="lead" data-i18n-html="step-4.lead">
               <strong>技能</strong
               >是做事的方法，<strong>连接器</strong>是外部系统的入口。技能装在本机或从技能市场取用；连接器独立保存凭据，每个智能体按需启用。
             </p>
             <ul class="points">
-              <li><span>内置文档、表格、PDF、PPT、OCR、前端设计等常用技能。</span></li>
-              <li><span>飞书、知识库等外部能力，通过连接器接入。</span></li>
-              <li><span>凭据只存在连接器里，<b>不要写进提示词</b>。</span></li>
+              <li><span data-i18n="step-4.span_14">内置文档、表格、PDF、PPT、OCR、前端设计等常用技能。</span></li>
+              <li><span data-i18n="step-4.span_15">飞书、知识库等外部能力，通过连接器接入。</span></li>
+              <li><span data-i18n-html="step-4.span_16">凭据只存在连接器里，<b>不要写进提示词</b>。</span></li>
             </ul>
-            <blockquote class="say">
+            <blockquote class="say" data-i18n-html="step-4.say">
               <span>你可以这样说</span>“用 docx 技能把这份纪要整理成 Word，按公司模板排版。”
             </blockquote>
             <div class="actions">
-              <button class="btn btn--primary" type="button" data-next>下一步</button>
+              <button class="btn btn--primary" type="button" data-next="" data-i18n="step-4.btn">下一步</button>
             </div>
           </div>
         </div>
@@ -3499,14 +3556,16 @@
         <div class="slide-inner">
           <div class="visual visual--dialog">
             <figure class="shot" style="margin: 0">
-              <div class="schedule-dialog-mock" role="img" aria-label="CSGClaw 新建定时任务弹窗示意">
+              <div
+                class="schedule-dialog-mock"
+                role="img"
+                aria-label="CSGClaw 新建定时任务弹窗示意"
+                data-i18n-aria-label="step-5.scheduleDialogMock.aria-label"
+              >
                 <header class="schedule-dialog-head">
                   <div>
-                    <h3 class="schedule-dialog-title" data-en="New scheduled task">新建定时任务</h3>
-                    <p
-                      class="schedule-dialog-subtitle"
-                      data-en="Saving creates only the schedule. Each trigger generates a trackable task run."
-                    >
+                    <h3 class="schedule-dialog-title" data-i18n="step-5.scheduleDialogTitle">新建定时任务</h3>
+                    <p class="schedule-dialog-subtitle" data-i18n="step-5.scheduleDialogSubtitle">
                       保存时只创建定时计划；触发时会生成可追踪的任务执行记录。
                     </p>
                   </div>
@@ -3514,15 +3573,15 @@
                 </header>
                 <div class="schedule-dialog-form">
                   <div class="schedule-field">
-                    <span data-en="Title">标题</span>
-                    <div class="schedule-control is-placeholder" data-en="Required: e.g. Prepare Beta 1 review">
+                    <span data-i18n="step-5.span">标题</span>
+                    <div class="schedule-control is-placeholder" data-i18n="step-5.scheduleControl">
                       必填：例如准备 Beta 1 验收
                     </div>
                   </div>
                   <div class="schedule-field">
-                    <span data-en="Assign to">指派给</span>
+                    <span data-i18n="step-5.span_2">指派给</span>
                     <div class="schedule-control is-placeholder">
-                      <span data-en="Choose an agent">请选择智能体</span
+                      <span data-i18n="step-5.span_3">请选择智能体</span
                       ><svg class="schedule-control-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                         <path
                           d="m6 9 6 6 6-6"
@@ -3530,24 +3589,21 @@
                           stroke-width="1.8"
                           stroke-linecap="round"
                           stroke-linejoin="round"
-                        />
+                        ></path>
                       </svg>
                     </div>
                   </div>
                   <div class="schedule-field schedule-field--wide">
-                    <span data-en="Prompt">提示词</span>
-                    <div
-                      class="schedule-control schedule-control--textarea"
-                      data-en="Prompt sent to the agent when the schedule triggers"
-                    >
+                    <span data-i18n="step-5.span_4">提示词</span>
+                    <div class="schedule-control schedule-control--textarea" data-i18n="step-5.scheduleControl_2">
                       填写触发时发送给智能体的提示词
                     </div>
                   </div>
                   <div class="schedule-field">
-                    <span data-en="Schedule">计划</span
+                    <span data-i18n="step-5.span_5">计划</span
                     ><span class="schedule-plan-target"
                       ><span class="schedule-control"
-                        ><span data-en="Does not repeat">不重复</span
+                        ><span data-i18n="step-5.span_6">不重复</span
                         ><svg class="schedule-control-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                           <path
                             d="m6 9 6 6 6-6"
@@ -3555,90 +3611,118 @@
                             stroke-width="1.8"
                             stroke-linecap="round"
                             stroke-linejoin="round"
-                          /></svg></span
+                          ></path></svg></span
                       ><svg class="schedule-plan-ring" viewBox="0 0 240 62" aria-hidden="true">
-                        <ellipse cx="120" cy="31" rx="115" ry="25" />
-                        <ellipse cx="119" cy="31" rx="114" ry="24" /></svg
+                        <ellipse cx="120" cy="31" rx="115" ry="25"></ellipse>
+                        <ellipse cx="119" cy="31" rx="114" ry="24"></ellipse></svg
                     ></span>
                   </div>
                   <div class="schedule-field">
-                    <span data-en="Date">日期</span>
+                    <span data-i18n="step-5.span_7">日期</span>
                     <div class="schedule-control">
                       <span>2026/10/22</span
                       ><svg class="schedule-control-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                        <rect x="3.5" y="5" width="17" height="16" rx="2" stroke="currentColor" stroke-width="1.7" />
+                        <rect
+                          x="3.5"
+                          y="5"
+                          width="17"
+                          height="16"
+                          rx="2"
+                          stroke="currentColor"
+                          stroke-width="1.7"
+                        ></rect>
                         <path
                           d="M7.5 3v4M16.5 3v4M4 9h16"
                           stroke="currentColor"
                           stroke-width="1.7"
                           stroke-linecap="round"
-                        />
+                        ></path>
                       </svg>
                     </div>
                   </div>
                   <div class="schedule-field">
-                    <span data-en="Time">时间</span>
+                    <span data-i18n="step-5.span_8">时间</span>
                     <div class="schedule-control">
                       <span>09:00</span
                       ><svg class="schedule-control-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                        <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.7" />
+                        <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.7"></circle>
                         <path
                           d="M12 7v5l3 2"
                           stroke="currentColor"
                           stroke-width="1.7"
                           stroke-linecap="round"
                           stroke-linejoin="round"
-                        />
+                        ></path>
                       </svg>
                     </div>
                   </div>
                   <div class="schedule-field">
-                    <span data-en="End date (optional)">到期日期（可选）</span>
+                    <span data-i18n="step-5.span_9">到期日期（可选）</span>
                     <div class="schedule-control is-placeholder">
-                      <span data-en="YYYY / MM / DD">年 / 月 / 日</span
+                      <span data-i18n="step-5.span_10">年 / 月 / 日</span
                       ><svg class="schedule-control-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                        <rect x="3.5" y="5" width="17" height="16" rx="2" stroke="currentColor" stroke-width="1.7" />
+                        <rect
+                          x="3.5"
+                          y="5"
+                          width="17"
+                          height="16"
+                          rx="2"
+                          stroke="currentColor"
+                          stroke-width="1.7"
+                        ></rect>
                         <path
                           d="M7.5 3v4M16.5 3v4M4 9h16"
                           stroke="currentColor"
                           stroke-width="1.7"
                           stroke-linecap="round"
-                        />
+                        ></path>
                       </svg>
                     </div>
                   </div>
                 </div>
                 <footer class="schedule-dialog-footer">
-                  <button class="schedule-dialog-button" type="button" tabindex="-1" data-en="Cancel">取消</button
+                  <button
+                    class="schedule-dialog-button"
+                    type="button"
+                    tabindex="-1"
+                    data-i18n="step-5.scheduleDialogButton"
+                  >
+                    取消</button
                   ><button
                     class="schedule-dialog-button schedule-dialog-button--primary"
                     type="button"
                     tabindex="-1"
-                    data-en="Save"
+                    data-i18n="step-5.scheduleDialogButton_2"
                   >
                     保存
                   </button>
                 </footer>
               </div>
             </figure>
-            <figcaption class="caption"><span>定时任务 · 新建</span><span>05 / 10</span></figcaption>
+            <figcaption class="caption">
+              <span data-i18n="step-5.span_11">定时任务 · 新建</span><span>05 / 10</span>
+            </figcaption>
           </div>
           <div class="copy">
-            <p class="kicker"><span class="dot"></span>新手篇 · 第 <span class="num">5</span> 步</p>
-            <h2>让重复发生的事，<br />自己开始</h2>
-            <p class="lead">
+            <p class="kicker" data-i18n-html="step-5.kicker">
+              <span class="dot"></span>新手篇 · 第 <span class="num">5</span> 步
+            </p>
+            <h2 data-i18n-html="step-5.h2">让重复发生的事，<br />自己开始</h2>
+            <p class="lead" data-i18n-html="step-5.lead">
               定时任务不是提醒，而是一次真正的执行：到点把提示词发给指定智能体，并生成一条<strong>可追踪的任务记录</strong>。
             </p>
             <ul class="points">
-              <li><span>支持<b>不重复、每天、每周、每月</b>，也可以设到期日。</span></li>
-              <li><span>指派给一个智能体，写清每次要它做什么。</span></li>
-              <li><span>执行结果进入任务历史，可以回看、继续追问。</span></li>
+              <li>
+                <span data-i18n-html="step-5.span_12">支持<b>不重复、每天、每周、每月</b>，也可以设到期日。</span>
+              </li>
+              <li><span data-i18n="step-5.span_13">指派给一个智能体，写清每次要它做什么。</span></li>
+              <li><span data-i18n="step-5.span_14">执行结果进入任务历史，可以回看、继续追问。</span></li>
             </ul>
-            <blockquote class="say">
+            <blockquote class="say" data-i18n-html="step-5.say">
               <span>你可以这样说</span>“每周一 9:00，汇总上周的项目进展，输出一页周报。”
             </blockquote>
             <div class="actions">
-              <button class="btn btn--primary" type="button" data-next>进入进阶篇</button>
+              <button class="btn btn--primary" type="button" data-next="" data-i18n="step-5.btn">进入进阶篇</button>
             </div>
           </div>
         </div>
@@ -3650,74 +3734,93 @@
           <div class="visual">
             <div class="demo">
               <div class="demo-bar">
-                <span class="live"></span><b>协作任务 · 企业级 Agent 调研</b><span class="pill">进行中 3 / 4</span>
+                <span class="live"></span><b data-i18n="step-6.b">协作任务 · 企业级 Agent 调研</b
+                ><span class="pill" data-i18n="step-6.pill">进行中 3 / 4</span>
               </div>
               <div class="demo-body">
                 <div class="tree">
-                  <h4>任务</h4>
+                  <h4 data-i18n="step-6.h4">任务</h4>
                   <div class="tree-item done">
-                    <span class="no">1</span><span class="tx">产品与厂商<span class="s">4 条主线 · 已交付</span></span>
+                    <span class="no">1</span
+                    ><span class="tx" data-i18n-html="step-6.tx"
+                      >产品与厂商<span class="s">4 条主线 · 已交付</span></span
+                    >
                   </div>
                   <div class="tree-item done">
                     <span class="no">2</span
-                    ><span class="tx">行业案例与价值<span class="s">6 个场景 · 已交付</span></span>
+                    ><span class="tx" data-i18n-html="step-6.tx_2"
+                      >行业案例与价值<span class="s">6 个场景 · 已交付</span></span
+                    >
                   </div>
                   <div class="tree-item run">
-                    <span class="no">3</span><span class="tx">技术瓶颈与风险<span class="s">正在检索来源</span></span>
+                    <span class="no">3</span
+                    ><span class="tx" data-i18n-html="step-6.tx_3"
+                      >技术瓶颈与风险<span class="s">正在检索来源</span></span
+                    >
                   </div>
                   <div class="tree-item lock">
-                    <span class="no">4</span><span class="tx">汇总与冲突标注<span class="s">依赖前三项</span></span>
+                    <span class="no">4</span
+                    ><span class="tx" data-i18n-html="step-6.tx_4"
+                      >汇总与冲突标注<span class="s">依赖前三项</span></span
+                    >
                   </div>
                 </div>
                 <div class="chat">
                   <div class="msg">
                     <img src="assets/manager.png" alt="" />
                     <div>
-                      <div class="who"><b>主理人 Manager</b> · 18:02</div>
-                      <p>已拆成 4 个子任务，三路并行检索；最后统一汇总，冲突的地方单独标注。</p>
+                      <div class="who"><b data-i18n="step-6.b_2">主理人 Manager</b> · 18:02</div>
+                      <p data-i18n="step-6.p">已拆成 4 个子任务，三路并行检索；最后统一汇总，冲突的地方单独标注。</p>
                     </div>
                   </div>
                   <div class="msg">
                     <img src="assets/avatar-2.png" alt="" />
                     <div>
-                      <div class="who"><b>研究分析师</b> · 18:14</div>
-                      <p>产品线梳理完成，整理出 12 条关键发布与时间点。</p>
-                      <span class="file">▤ 产品与厂商.md</span>
+                      <div class="who"><b data-i18n="step-6.b_3">研究分析师</b> · 18:14</div>
+                      <p data-i18n="step-6.p_2">产品线梳理完成，整理出 12 条关键发布与时间点。</p>
+                      <span class="file" data-i18n="step-6.file">▤ 产品与厂商.md</span>
                     </div>
                   </div>
                   <div class="msg">
                     <img src="assets/avatar-1.png" alt="" />
                     <div>
-                      <div class="who"><b>产品经理</b> · 18:20</div>
-                      <p>发现两家厂商对“落地”的口径不一致，已记录，等待汇总时统一。</p>
+                      <div class="who"><b data-i18n="step-6.b_4">产品经理</b> · 18:20</div>
+                      <p data-i18n="step-6.p_3">发现两家厂商对“落地”的口径不一致，已记录，等待汇总时统一。</p>
                     </div>
                   </div>
-                  <div class="msg msg--user"><div class="bubble">先按这个结构继续，汇总时给我一页结论。</div></div>
+                  <div class="msg msg--user">
+                    <div class="bubble" data-i18n="step-6.bubble">先按这个结构继续，汇总时给我一页结论。</div>
+                  </div>
                 </div>
               </div>
-              <div class="demo-foot"><span class="fake-input">输入消息，@ 引用成员或文件</span><span>发送 ↑</span></div>
+              <div class="demo-foot">
+                <span class="fake-input" data-i18n="step-6.fakeInput">输入消息，@ 引用成员或文件</span
+                ><span data-i18n="step-6.span">发送 ↑</span>
+              </div>
             </div>
-            <figcaption class="caption"><span>协作任务</span><span>06 / 10</span></figcaption>
+            <figcaption class="caption"><span data-i18n="step-6.span_2">协作任务</span><span>06 / 10</span></figcaption>
           </div>
           <div class="copy">
-            <p class="kicker"><span class="dot"></span>进阶篇 · 第 <span class="num">6</span> 步</p>
-            <h2>一个人干不完的活，<br />交给一个团队</h2>
-            <p class="lead">
+            <p class="kicker" data-i18n-html="step-6.kicker">
+              <span class="dot"></span>进阶篇 · 第 <span class="num">6</span> 步
+            </p>
+            <h2 data-i18n-html="step-6.h2">一个人干不完的活，<br />交给一个团队</h2>
+            <p class="lead" data-i18n-html="step-6.lead">
               在新建任务时把一个<strong>团队</strong>选为执行者，这次任务就变成协作任务：主理人 Manager
               拆解、成员并行、结果汇总。你不需要分别开五个聊天窗口。
             </p>
             <ul class="points">
               <li>
-                <span><b>任务看板</b>显示依赖与进度，谁卡住了一眼能看到。</span>
+                <span data-i18n-html="step-6.span_3"><b>任务看板</b>显示依赖与进度，谁卡住了一眼能看到。</span>
               </li>
-              <li><span>成员各自有独立上下文，不会互相污染。</span></li>
-              <li><span>你只在关键节点做决定，其余交给主理人 Manager 推进。</span></li>
+              <li><span data-i18n="step-6.span_4">成员各自有独立上下文，不会互相污染。</span></li>
+              <li><span data-i18n="step-6.span_5">你只在关键节点做决定，其余交给主理人 Manager 推进。</span></li>
             </ul>
-            <blockquote class="say">
+            <blockquote class="say" data-i18n-html="step-6.say">
               <span>你可以这样说</span>“分三路并行调研，最后由主理人 Manager 汇总，标注冲突和不确定项。”
             </blockquote>
             <div class="actions">
-              <button class="btn btn--primary" type="button" data-next>下一步</button>
+              <button class="btn btn--primary" type="button" data-next="" data-i18n="step-6.btn">下一步</button>
             </div>
           </div>
         </div>
@@ -3727,53 +3830,59 @@
       <section class="slide" id="step-7" data-step="7" data-chapter="advanced">
         <div class="slide-inner">
           <div class="visual">
-            <div class="model-settings-mock" role="img" aria-label="CSGClaw 模型服务设置页面示意">
+            <div
+              class="model-settings-mock"
+              role="img"
+              aria-label="CSGClaw 模型服务设置页面示意"
+              data-i18n-aria-label="step-7.modelSettingsMock.aria-label"
+            >
               <aside class="skills-settings-sidebar">
-                <div class="skills-settings-title" data-en="Settings">设置</div>
+                <div class="skills-settings-title" data-i18n="step-7.skillsSettingsTitle">设置</div>
                 <div class="skills-settings-group">
-                  <div class="skills-settings-group-label" data-en="ACCOUNT">账户</div>
+                  <div class="skills-settings-group-label" data-i18n="step-7.skillsSettingsGroupLabel">账户</div>
                   <div class="skills-settings-nav">
                     <div class="skills-settings-nav-item">
                       <img class="skills-settings-nav-icon" src="../icons/workspace-humans.svg" alt="" /><span
-                        data-en="Account & sign-in"
+                        data-i18n="step-7.span"
                         >账号与登录</span
                       >
                     </div>
                   </div>
                 </div>
                 <div class="skills-settings-group">
-                  <div class="skills-settings-group-label" data-en="GLOBAL RESOURCES">全局资源</div>
+                  <div class="skills-settings-group-label" data-i18n="step-7.skillsSettingsGroupLabel_2">全局资源</div>
                   <div class="skills-settings-nav">
                     <div class="skills-settings-nav-item is-active">
                       <img class="skills-settings-nav-icon" src="../icons/workspace-models.svg" alt="" /><span
-                        ><span data-en="Model services">模型服务</span
-                        ><small data-en="Providers, API keys, available models">服务商、API Key、可用模型</small></span
+                        ><span data-i18n="step-7.span_2">模型服务</span
+                        ><small data-i18n="step-7.small">服务商、API Key、可用模型</small></span
                       >
                     </div>
                     <div class="skills-settings-nav-item">
-                      <img class="skills-settings-nav-icon" src="../icons/globe.svg" alt="" /><span data-en="Connectors"
+                      <img class="skills-settings-nav-icon" src="../icons/globe.svg" alt="" /><span
+                        data-i18n="step-7.span_3"
                         >连接器</span
                       >
                     </div>
                     <div class="skills-settings-nav-item">
                       <img class="skills-settings-nav-icon" src="../icons/workspace-skills.svg" alt="" /><span
-                        data-en="Skills"
+                        data-i18n="step-7.span_4"
                         >技能</span
                       >
                     </div>
                     <div class="skills-settings-nav-item">
                       <img class="skills-settings-nav-icon" src="../icons/resources.svg" alt="" /><span
-                        data-en="Knowledge bases"
+                        data-i18n="step-7.span_5"
                         >知识库</span
                       >
                     </div>
                   </div>
                 </div>
                 <div class="skills-settings-group">
-                  <div class="skills-settings-group-label" data-en="PREFERENCES">偏好</div>
+                  <div class="skills-settings-group-label" data-i18n="step-7.skillsSettingsGroupLabel_3">偏好</div>
                   <div class="skills-settings-nav-item">
                     <img class="skills-settings-nav-icon" src="../icons/workspace-settings.svg" alt="" /><span
-                      data-en="Appearance & language"
+                      data-i18n="step-7.span_6"
                       >外观与语言</span
                     >
                   </div>
@@ -3781,26 +3890,23 @@
               </aside>
               <div class="model-settings-content">
                 <div class="model-settings-head">
-                  <div class="model-settings-heading" data-en="Model services">模型服务</div>
-                  <div class="model-settings-hint" data-en="Configure providers, keys, and available models">
+                  <div class="model-settings-heading" data-i18n="step-7.modelSettingsHeading">模型服务</div>
+                  <div class="model-settings-hint" data-i18n="step-7.modelSettingsHint">
                     配置模型服务商、密钥与可用模型
                   </div>
                 </div>
                 <div class="model-defaults-panel">
-                  <div class="model-defaults-title" data-en="Default models">默认模型</div>
-                  <div
-                    class="model-defaults-help"
-                    data-en="Used for new agents; available OpenCSG models are recommended first."
-                  >
+                  <div class="model-defaults-title" data-i18n="step-7.modelDefaultsTitle">默认模型</div>
+                  <div class="model-defaults-help" data-i18n="step-7.modelDefaultsHelp">
                     新建智能体默认使用；优先推荐 OpenCSG 的可用模型。
                   </div>
                   <div class="model-default-row">
-                    <span data-en="Agent model">智能体模型</span>
+                    <span data-i18n="step-7.span_7">智能体模型</span>
                     <div class="model-default-select">
                       <span class="model-name-target"
                         >deepseek-flash<svg class="model-name-ring" viewBox="0 0 190 42" aria-hidden="true">
-                          <ellipse cx="95" cy="21" rx="91" ry="16" />
-                          <ellipse cx="94" cy="21" rx="90" ry="15" /></svg></span
+                          <ellipse cx="95" cy="21" rx="91" ry="16"></ellipse>
+                          <ellipse cx="94" cy="21" rx="90" ry="15"></ellipse></svg></span
                       ><span class="model-provider-meta">OpenCSG</span
                       ><svg class="schedule-control-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                         <path
@@ -3809,14 +3915,14 @@
                           stroke-width="1.8"
                           stroke-linecap="round"
                           stroke-linejoin="round"
-                        />
+                        ></path>
                       </svg>
                     </div>
                   </div>
                   <div class="model-default-row">
-                    <span data-en="Image generation">图片生成</span>
+                    <span data-i18n="step-7.span_8">图片生成</span>
                     <div class="model-default-select">
-                      <span data-en="Not set">不指定</span
+                      <span data-i18n="step-7.span_9">不指定</span
                       ><svg class="schedule-control-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                         <path
                           d="m6 9 6 6 6-6"
@@ -3824,14 +3930,14 @@
                           stroke-width="1.8"
                           stroke-linecap="round"
                           stroke-linejoin="round"
-                        />
+                        ></path>
                       </svg>
                     </div>
                   </div>
                   <div class="model-default-row">
-                    <span data-en="Video generation">视频生成</span>
+                    <span data-i18n="step-7.span_10">视频生成</span>
                     <div class="model-default-select">
-                      <span data-en="Not set">不指定</span
+                      <span data-i18n="step-7.span_11">不指定</span
                       ><svg class="schedule-control-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                         <path
                           d="m6 9 6 6 6-6"
@@ -3839,36 +3945,40 @@
                           stroke-width="1.8"
                           stroke-linecap="round"
                           stroke-linejoin="round"
-                        />
+                        ></path>
                       </svg>
                     </div>
                   </div>
                 </div>
                 <div class="model-provider-preview">
                   <span class="model-provider-mark">D</span><span>DeepSeek</span
-                  ><span class="model-provider-meta" data-en="Connected · 7 models">已连接 · 7 个模型</span>
+                  ><span class="model-provider-meta" data-i18n="step-7.modelProviderMeta">已连接 · 7 个模型</span>
                 </div>
               </div>
             </div>
-            <figcaption class="caption"><span>设置 · 模型服务</span><span>07 / 10</span></figcaption>
+            <figcaption class="caption">
+              <span data-i18n="step-7.span_12">设置 · 模型服务</span><span>07 / 10</span>
+            </figcaption>
           </div>
           <div class="copy">
-            <p class="kicker"><span class="dot"></span>进阶篇 · 第 <span class="num">7</span> 步</p>
-            <h2>模型是你的选择，<br />不是产品的绑定</h2>
-            <p class="lead">
+            <p class="kicker" data-i18n-html="step-7.kicker">
+              <span class="dot"></span>进阶篇 · 第 <span class="num">7</span> 步
+            </p>
+            <h2 data-i18n-html="step-7.h2">模型是你的选择，<br />不是产品的绑定</h2>
+            <p class="lead" data-i18n="step-7.lead">
               可以同时接入 OpenCSG、DeepSeek、Codex、Claude Code
               等服务商；每个智能体都能单独配置模型，图片与视频模型也可以分开指定。
             </p>
             <ul class="points">
-              <li><span>新智能体默认使用你设置的<b>默认模型</b>。</span></li>
-              <li><span>同一个团队里，可以让强模型做判断、快模型做整理。</span></li>
-              <li><span>切换服务商不会影响已有任务与工作目录里的文件。</span></li>
+              <li><span data-i18n-html="step-7.span_13">新智能体默认使用你设置的<b>默认模型</b>。</span></li>
+              <li><span data-i18n="step-7.span_14">同一个团队里，可以让强模型做判断、快模型做整理。</span></li>
+              <li><span data-i18n="step-7.span_15">切换服务商不会影响已有任务与工作目录里的文件。</span></li>
             </ul>
-            <blockquote class="say">
+            <blockquote class="say" data-i18n-html="step-7.say">
               <span>你可以这样说</span>“先用 deepseek-flash 跑通流程，关键评审再换更强的模型。”
             </blockquote>
             <div class="actions">
-              <button class="btn btn--primary" type="button" data-next>下一步</button>
+              <button class="btn btn--primary" type="button" data-next="" data-i18n="step-7.btn">下一步</button>
             </div>
           </div>
         </div>
@@ -3881,54 +3991,62 @@
             <div class="files">
               <div class="files-head">
                 <span class="dots"><i></i><i></i><i></i></span><b>your-project</b
-                ><span style="margin-left: auto">本机目录</span>
+                ><span style="margin-left: auto" data-i18n="step-8.span">本机目录</span>
               </div>
               <div class="files-body">
                 <div class="tree-list">
                   <div class="ln dir"><span class="ico"></span>your-project</div>
                   <div class="ln indent dir"><span class="ico"></span>src</div>
                   <div class="ln indent dir"><span class="ico"></span>docs</div>
-                  <div class="ln indent2 new"><span class="ico"></span>调研简报.md</div>
-                  <div class="ln indent2 new"><span class="ico"></span>方案对比.html</div>
+                  <div class="ln indent2 new" data-i18n-html="step-8.ln"><span class="ico"></span>调研简报.md</div>
+                  <div class="ln indent2 new" data-i18n-html="step-8.ln_2"><span class="ico"></span>方案对比.html</div>
                   <div class="ln indent"><span class="ico"></span>README.md</div>
                   <div class="ln indent"><span class="ico"></span>AGENTS.md</div>
                   <div class="ln indent dir"><span class="ico"></span>.context</div>
                 </div>
                 <div class="files-side">
-                  <div class="env-card">
+                  <div class="env-card" data-i18n-html="step-8.envCard">
                     <b>工作目录</b>任务在这里读写文件，产出直接落盘。
                     <div class="ok">✓ 默认目录</div>
                   </div>
-                  <div class="env-card">
+                  <div class="env-card" data-i18n-html="step-8.envCard_2">
                     <b>项目规则</b>放一份 AGENTS.md，让智能体先读项目约定。
                     <div class="ok">✓ 可选</div>
                   </div>
-                  <div class="env-note">文件属于你，不属于任务记录。任务结束后仍然在目录里。</div>
+                  <div class="env-note" data-i18n="step-8.envNote">
+                    文件属于你，不属于任务记录。任务结束后仍然在目录里。
+                  </div>
                 </div>
               </div>
             </div>
-            <figcaption class="caption"><span>工作目录</span><span>08 / 10</span></figcaption>
+            <figcaption class="caption"><span data-i18n="step-8.span_2">工作目录</span><span>08 / 10</span></figcaption>
           </div>
           <div class="copy">
-            <p class="kicker"><span class="dot"></span>进阶篇 · 第 <span class="num">8</span> 步</p>
-            <h2>文件留在你的电脑上，<br />产出看得见</h2>
-            <p class="lead">
+            <p class="kicker" data-i18n-html="step-8.kicker">
+              <span class="dot"></span>进阶篇 · 第 <span class="num">8</span> 步
+            </p>
+            <h2 data-i18n-html="step-8.h2">文件留在你的电脑上，<br />产出看得见</h2>
+            <p class="lead" data-i18n-html="step-8.lead">
               CSGClaw
               跑在本机，智能体在<strong>真实的工作目录</strong>里读写文件。新建任务时可以切换目录，产出直接留在项目里。
             </p>
             <ul class="points">
-              <li><span>任务输入框左下角可以切换<b>工作目录</b>。</span></li>
+              <li><span data-i18n-html="step-8.span_3">任务输入框左下角可以切换<b>工作目录</b>。</span></li>
               <li>
-                <span>运行时支持 <b>Codex CLI</b>、<b>DeepSeek Harness</b> 等，统一在设置里管理。</span>
+                <span data-i18n-html="step-8.span_4"
+                  >运行时支持 <b>Codex CLI</b>、<b>DeepSeek Harness</b> 等，统一在设置里管理。</span
+                >
               </li>
-              <li><span>产出直接落在目录里，不锁在任务记录中。</span></li>
+              <li><span data-i18n="step-8.span_5">产出直接落在目录里，不锁在任务记录中。</span></li>
               <li>
-                <span>在项目里放一份 <b>AGENTS.md</b>，给智能体一份项目规则。</span>
+                <span data-i18n-html="step-8.span_6">在项目里放一份 <b>AGENTS.md</b>，给智能体一份项目规则。</span>
               </li>
             </ul>
-            <blockquote class="say"><span>你可以这样说</span>“在这个项目目录里改，改完把改动列给我看。”</blockquote>
+            <blockquote class="say" data-i18n-html="step-8.say">
+              <span>你可以这样说</span>“在这个项目目录里改，改完把改动列给我看。”
+            </blockquote>
             <div class="actions">
-              <button class="btn btn--primary" type="button" data-next>下一步</button>
+              <button class="btn btn--primary" type="button" data-next="" data-i18n="step-8.btn">下一步</button>
             </div>
           </div>
         </div>
@@ -3940,62 +4058,73 @@
           <div class="visual">
             <div class="tpl-panel">
               <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px">
-                <span style="font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.1em; color: var(--muted)"
+                <span
+                  style="font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.1em; color: var(--muted)"
+                  data-i18n="step-9.span"
                   >智能体模板 · 12</span
                 >
                 <span style="display: flex; gap: 14px; font-size: 11.5px; color: var(--muted)"
-                  ><span style="color: var(--ink); border-bottom: 1px solid var(--teal); padding-bottom: 2px">官方</span
-                  ><span>我的</span></span
+                  ><span
+                    style="color: var(--ink); border-bottom: 1px solid var(--teal); padding-bottom: 2px"
+                    data-i18n="step-9.span_2"
+                    >官方</span
+                  ><span data-i18n="step-9.span_3">我的</span></span
                 >
               </div>
               <div class="tpl-grid">
                 <div class="tpl">
-                  <span class="tag">官方</span><img src="assets/avatar-5.png" alt="" />
-                  <div class="tn">文档处理专家</div>
-                  <div class="td">Word · PDF · 排版</div>
+                  <span class="tag" data-i18n="step-9.tag">官方</span><img src="assets/avatar-5.png" alt="" />
+                  <div class="tn" data-i18n="step-9.tn">文档处理专家</div>
+                  <div class="td" data-i18n="step-9.td">Word · PDF · 排版</div>
                 </div>
                 <div class="tpl">
-                  <span class="tag">官方</span><img src="assets/avatar-2.png" alt="" />
-                  <div class="tn">行业研究分析师</div>
-                  <div class="td">检索 · 证据 · 简报</div>
+                  <span class="tag" data-i18n="step-9.tag_2">官方</span><img src="assets/avatar-2.png" alt="" />
+                  <div class="tn" data-i18n="step-9.tn_2">行业研究分析师</div>
+                  <div class="td" data-i18n="step-9.td_2">检索 · 证据 · 简报</div>
                 </div>
                 <div class="tpl">
-                  <span class="tag">官方</span><img src="assets/avatar-3.png" alt="" />
-                  <div class="tn">前端工程师</div>
-                  <div class="td">页面 · 组件 · 调试</div>
+                  <span class="tag" data-i18n="step-9.tag_3">官方</span><img src="assets/avatar-3.png" alt="" />
+                  <div class="tn" data-i18n="step-9.tn_3">前端工程师</div>
+                  <div class="td" data-i18n="step-9.td_3">页面 · 组件 · 调试</div>
                 </div>
                 <div class="tpl">
-                  <span class="tag">我的</span><img src="assets/avatar-1.png" alt="" />
-                  <div class="tn">产品经理 Alice</div>
-                  <div class="td">需求 · 原型 · 验收</div>
+                  <span class="tag" data-i18n="step-9.tag_4">我的</span><img src="assets/avatar-1.png" alt="" />
+                  <div class="tn" data-i18n="step-9.tn_4">产品经理 Alice</div>
+                  <div class="td" data-i18n="step-9.td_4">需求 · 原型 · 验收</div>
                 </div>
                 <div class="tpl">
-                  <span class="tag">我的</span><img src="assets/avatar-4.png" alt="" />
-                  <div class="tn">测试工程师</div>
-                  <div class="td">用例 · 回归 · 报告</div>
+                  <span class="tag" data-i18n="step-9.tag_5">我的</span><img src="assets/avatar-4.png" alt="" />
+                  <div class="tn" data-i18n="step-9.tn_5">测试工程师</div>
+                  <div class="td" data-i18n="step-9.td_5">用例 · 回归 · 报告</div>
                 </div>
-                <div class="tpl add">＋ 新建模板</div>
-                <div class="tpl-note">
+                <div class="tpl add" data-i18n="step-9.tpl">＋ 新建模板</div>
+                <div class="tpl-note" data-i18n-html="step-9.tplNote">
                   <span class="arrow">↳</span>把顺手的智能体另存为模板，指令、技能和记忆摘要一起带走。
                 </div>
               </div>
             </div>
-            <figcaption class="caption"><span>智能体模板</span><span>09 / 10</span></figcaption>
+            <figcaption class="caption">
+              <span data-i18n="step-9.span_4">智能体模板</span><span>09 / 10</span>
+            </figcaption>
           </div>
           <div class="copy">
-            <p class="kicker"><span class="dot"></span>进阶篇 · 第 <span class="num">9</span> 步</p>
-            <h2>把一次成功，<br />变成下一次的起点</h2>
-            <p class="lead">
+            <p class="kicker" data-i18n-html="step-9.kicker">
+              <span class="dot"></span>进阶篇 · 第 <span class="num">9</span> 步
+            </p>
+            <h2 data-i18n-html="step-9.h2">把一次成功，<br />变成下一次的起点</h2>
+            <p class="lead" data-i18n="step-9.lead">
               智能体可以另存为模板，团队可以保留成员配置，技能可以带到下一个项目，定时任务可以复制节奏。用得越久，你的团队越像你的团队。
             </p>
-            <ul class="points">
+            <ul class="points" data-i18n-html="step-9.points">
               <li><span>官方模板可直接启用，也可以从<b>我的模板</b>开始。</span></li>
               <li><span>模板包含指令、技能与<b>只读记忆摘要</b>。</span></li>
               <li><span>团队配置可复用，不必每次重新点名。</span></li>
             </ul>
-            <blockquote class="say"><span>你可以这样说</span>“把这个智能体保存为模板，下次新项目直接启用。”</blockquote>
+            <blockquote class="say" data-i18n-html="step-9.say">
+              <span>你可以这样说</span>“把这个智能体保存为模板，下次新项目直接启用。”
+            </blockquote>
             <div class="actions">
-              <button class="btn btn--primary" type="button" data-next>最后一步</button>
+              <button class="btn btn--primary" type="button" data-next="" data-i18n="step-9.btn">最后一步</button>
             </div>
           </div>
         </div>
@@ -4005,43 +4134,54 @@
       <section class="slide final" id="step-10" data-step="10" data-chapter="advanced">
         <div class="slide-inner">
           <div class="copy">
-            <p class="kicker"><span class="dot"></span>进阶篇 · 第 <span class="num">10</span> 步</p>
-            <h2>现在，开始你的<br />第一个 30 分钟</h2>
-            <p class="lead">
+            <p class="kicker" data-i18n-html="step-10.kicker">
+              <span class="dot"></span>进阶篇 · 第 <span class="num">10</span> 步
+            </p>
+            <h2 data-i18n-html="step-10.h2">现在，开始你的<br />第一个 30 分钟</h2>
+            <p class="lead" data-i18n="step-10.lead">
               不用一次学完。按下面四步在应用里走一遍，你就掌握了 CSGClaw 的主要用法；剩下的，交给你的团队。
             </p>
             <ol class="checklist">
               <li>
                 <span class="n">01</span
-                ><span class="t"><b>让主理人 Manager 做一件小事</b>整理一份资料，或写一封邮件。</span>
+                ><span class="t" data-i18n-html="step-10.t"
+                  ><b>让主理人 Manager 做一件小事</b>整理一份资料，或写一封邮件。</span
+                >
               </li>
               <li>
-                <span class="n">02</span><span class="t"><b>装一个你常用的技能</b>docx、pdf，或者前端设计。</span>
+                <span class="n">02</span
+                ><span class="t" data-i18n-html="step-10.t_2"><b>装一个你常用的技能</b>docx、pdf，或者前端设计。</span>
               </li>
               <li>
-                <span class="n">03</span><span class="t"><b>设一个定时任务</b>每天汇总进展，或每周看一眼竞品。</span>
+                <span class="n">03</span
+                ><span class="t" data-i18n-html="step-10.t_3"
+                  ><b>设一个定时任务</b>每天汇总进展，或每周看一眼竞品。</span
+                >
               </li>
               <li>
-                <span class="n">04</span><span class="t"><b>把顺手的智能体存成模板</b>下次新项目，直接启用。</span>
+                <span class="n">04</span
+                ><span class="t" data-i18n-html="step-10.t_4"><b>把顺手的智能体存成模板</b>下次新项目，直接启用。</span>
               </li>
             </ol>
-            <p class="final-note">先从第一步开始，做完一件小事，剩下的自然会用起来。</p>
+            <p class="final-note" data-i18n="step-10.finalNote">先从第一步开始，做完一件小事，剩下的自然会用起来。</p>
           </div>
           <aside class="final-aside">
             <div class="final-card">
-              <div class="k">Your personal AI team</div>
-              <h3>团队已经在这里，<br />剩下的只是第一句话。</h3>
-              <p>回到应用后，从「新建任务」开始。拿不准选谁，就选主理人 Manager。</p>
-              <button class="btn btn--primary" type="button" data-exit>
+              <div class="k" data-i18n="step-10.k">你的专属 AI 团队</div>
+              <h3 data-i18n-html="step-10.h3">团队已经在这里，<br />剩下的只是第一句话。</h3>
+              <p data-i18n="step-10.p">回到应用后，从「新建任务」开始。拿不准选谁，就选主理人 Manager。</p>
+              <button class="btn btn--primary" type="button" data-exit="" data-i18n-html="step-10.btn">
                 退出导览
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
-                  <path d="M6 6l12 12M18 6L6 18" />
+                  <path d="M6 6l12 12M18 6L6 18"></path>
                 </svg>
               </button>
-              <div class="ghostline"><span>本地运行</span><span>文件在你手里</span></div>
+              <div class="ghostline" data-i18n-html="step-10.ghostline">
+                <span>本地运行</span><span>文件在你手里</span>
+              </div>
             </div>
             <div class="actions" style="margin-top: 18px">
-              <button class="btn btn--ghost" type="button" data-goto="0">重新看一遍</button>
+              <button class="btn btn--ghost" type="button" data-goto="0" data-i18n="step-10.btn_2">重新看一遍</button>
             </div>
           </aside>
         </div>
@@ -4051,23 +4191,42 @@
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
     <footer class="dock">
-      <div class="dock-chapter" id="dockChapter">封面 · 开始之前</div>
-      <div class="dots" id="dots" role="tablist" aria-label="步骤导航"></div>
+      <div class="dock-chapter" id="dockChapter" data-i18n="navigation.dockChapter">封面 · 开始之前</div>
+      <div
+        class="dots"
+        id="dots"
+        role="tablist"
+        aria-label="步骤导航"
+        data-i18n-aria-label="navigation.dots.aria-label"
+      ></div>
       <div class="dock-nav">
         <span class="keyhint">← →</span>
-        <button class="nav-btn" type="button" id="prevBtn" aria-label="上一步">
+        <button
+          class="nav-btn"
+          type="button"
+          id="prevBtn"
+          aria-label="上一步"
+          data-i18n-aria-label="navigation.prevBtn.aria-label"
+        >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M19 12H5M11 18l-6-6 6-6" />
+            <path d="M19 12H5M11 18l-6-6 6-6"></path>
           </svg>
         </button>
-        <button class="nav-btn" type="button" id="nextBtn" aria-label="下一步">
+        <button
+          class="nav-btn"
+          type="button"
+          id="nextBtn"
+          aria-label="下一步"
+          data-i18n-aria-label="navigation.nextBtn.aria-label"
+        >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M5 12h14M13 6l6 6-6 6" />
+            <path d="M5 12h14M13 6l6 6-6 6"></path>
           </svg>
         </button>
       </div>
     </footer>
 
+    <script src="i18n.js"></script>
     <script src="guide.js"></script>
   </body>
 </html>

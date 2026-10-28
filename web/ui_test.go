@@ -12,7 +12,7 @@ import (
 func TestOnboardingGuideServesWithoutRedirectAndUsesExternalScript(t *testing.T) {
 	assets := os.DirFS("app/public")
 	handler := spaHandler{fsys: assets, files: http.FileServer(http.FS(assets))}
-	for _, route := range []string{"/onboarding-guide/guide.html?locale=en&embedded=1", "/onboarding-guide/guide.js"} {
+	for _, route := range []string{"/onboarding-guide/guide.html?locale=en&embedded=1", "/onboarding-guide/guide.js", "/onboarding-guide/i18n.js"} {
 		rec := httptest.NewRecorder()
 		handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, route, nil))
 		if rec.Code != http.StatusOK || rec.Header().Get("Location") != "" {
@@ -23,7 +23,10 @@ func TestOnboardingGuideServesWithoutRedirectAndUsesExternalScript(t *testing.T)
 			if !strings.Contains(body, `<script src="guide.js"></script>`) || strings.Contains(body, "<script>") {
 				t.Fatal("guide must load its interactions from a same-origin external script")
 			}
-		} else if !strings.Contains(rec.Body.String(), "function exitGuide()") {
+			if strings.Index(body, `<script src="i18n.js"></script>`) < 0 || strings.Index(body, `<script src="i18n.js"></script>`) > strings.Index(body, `<script src="guide.js"></script>`) {
+				t.Fatal("guide must load translations before its interactions")
+			}
+		} else if strings.HasSuffix(route, "/guide.js") && !strings.Contains(rec.Body.String(), "function exitGuide()") {
 			t.Fatal("guide script did not contain the exit handler")
 		}
 	}
