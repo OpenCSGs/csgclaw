@@ -5,7 +5,6 @@ import { Edit3, ListChecks, MessageSquarePlus, Trash2, UserPlus, Users } from "l
 import { TaskSubtaskIndicator } from "@/components/business";
 import {
   Button,
-  TextArea,
   DialogBody,
   DialogCloseButton,
   DialogContent,
@@ -33,6 +32,7 @@ import type { WorkspaceTask, WorkspaceTeam } from "@/models/tasks";
 import { avatarFallbackText } from "@/shared/avatar";
 import { classNames } from "@/shared/lib/classNames";
 import styles from "./TeamDetailPane.module.css";
+import { TeamGuideEditor } from "./TeamGuideEditor";
 
 type UsersLookup = UsersById | Record<string, IMUser | undefined>;
 
@@ -75,7 +75,9 @@ export function TeamDetailPane({
 }: TeamDetailPaneProps) {
   const [activeTab, setActiveTab] = useState<ActiveTeamTab>("members");
   const [guideDraft, setGuideDraft] = useState("");
+  const guideTeamRef = useRef(team?.id);
   useEffect(() => {
+    guideTeamRef.current = team?.id;
     setGuideDraft(team?.collaboration_guide ?? "");
   }, [team?.id, team?.collaboration_guide]);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -100,6 +102,15 @@ export function TeamDetailPane({
     if (deleted !== false) {
       setDeleteDialogOpen(false);
     }
+  }
+
+  async function handleSaveGuide(guide: string): Promise<boolean> {
+    if (!team || !onUpdateGuide) return false;
+    const saved = await onUpdateGuide(team, guide);
+    if (saved && guideTeamRef.current === team.id) {
+      setGuideDraft((current) => (current === guide ? guide.trim() : current));
+    }
+    return saved;
   }
 
   if (!team) {
@@ -304,6 +315,17 @@ export function TeamDetailPane({
             </button>
             <button
               type="button"
+              role="tab"
+              id="team-detail-tab-guide"
+              aria-controls="team-detail-panel-guide"
+              className={activeTab === "guide" ? styles.active : ""}
+              aria-selected={activeTab === "guide"}
+              onClick={() => setActiveTab("guide")}
+            >
+              {t("teamGuideTab")}
+            </button>
+            <button
+              type="button"
               className={activeTab === "records" ? styles.active : ""}
               role="tab"
               id="team-detail-tab-records"
@@ -314,51 +336,24 @@ export function TeamDetailPane({
               <ListChecks size={15} aria-hidden="true" />
               {t("teamRecordsTab")}
             </button>
-            <button
-              type="button"
-              role="tab"
-              id="team-detail-tab-guide"
-              aria-controls="team-detail-panel-guide"
-              className={activeTab === "guide" ? styles.active : ""}
-              aria-selected={activeTab === "guide"}
-              onClick={() => setActiveTab("guide")}
-            >
-              {t("teamGuideTab")}
-            </button>
           </div>
           <div className={styles.teamDetailPanels}>
             {activeTab === "guide" ? (
-              <section
-                className={styles.teamDetailPanel}
-                role="tabpanel"
-                id="team-detail-panel-guide"
-                aria-labelledby="team-detail-tab-guide"
-              >
-                <div className={styles.teamDetailPanelHead}>
-                  <div>
-                    <h2>{t("teamGuideTab")}</h2>
-                    <p>{t("teamGuideHint")}</p>
-                  </div>
-                </div>
-                <TextArea
-                  aria-label={t("teamGuideTab")}
-                  rows={12}
-                  value={guideDraft}
-                  placeholder={t("teamGuidePlaceholder")}
-                  disabled={teamActionBusy || !onUpdateGuide}
-                  onChange={(event) => setGuideDraft(event.currentTarget.value)}
-                />
-                {onUpdateGuide ? (
-                  <Button
-                    variant="primary"
-                    size="md"
-                    disabled={teamActionBusy || guideDraft === (team.collaboration_guide ?? "")}
-                    onClick={() => void onUpdateGuide(team, guideDraft)}
-                  >
-                    {t("save")}
-                  </Button>
-                ) : null}
-              </section>
+              <TeamGuideEditor
+                key={team.id}
+                value={guideDraft}
+                savedValue={team.collaboration_guide ?? ""}
+                members={members.map((member) => ({
+                  id: member.id,
+                  name: member.name,
+                  avatar: member.avatar,
+                  role: member.agent?.role || "",
+                }))}
+                saving={teamActionBusy}
+                onChange={setGuideDraft}
+                onSave={onUpdateGuide ? handleSaveGuide : undefined}
+                t={t}
+              />
             ) : null}
             {activeTab === "members" ? (
               <section

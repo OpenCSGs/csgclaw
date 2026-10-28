@@ -42,13 +42,6 @@ export function TaskConversationControls({
         disabled={entry?.isWorking(conversation.id) || entry?.busyID === conversation.id}
         onChange={entry ? (value) => entry.patch(conversation.id, { configuration: value }) : undefined}
       />
-      {conversation.collaboration_guide ? (
-        <details>
-          <summary>{t("teamGuideTab")}</summary>
-          <p>{t("teamGuideRoomHint")}</p>
-          <pre className={styles.guide}>{conversation.collaboration_guide}</pre>
-        </details>
-      ) : null}
       {onNewTask && hasChatMessages ? (
         <Button
           variant="tertiaryGray"

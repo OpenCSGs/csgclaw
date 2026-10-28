@@ -1,0 +1,103 @@
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  min-height: 0;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.header h2 {
+  margin: 0;
+  color: var(--text);
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.header p,
+.hint {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.actions {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 10px;
+}
+
+.state {
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.body {
+  display: flex;
+  align-items: stretch;
+  gap: 12px;
+  min-width: 0;
+}
+
+.body .editor {
+  flex: 1;
+  min-width: 0;
+  min-height: 140px;
+  max-height: min(420px, 45dvh);
+  overflow-y: auto;
+  resize: none;
+  line-height: 1.75;
+}
+
+.body .mentions {
+  position: static;
+  z-index: auto;
+  flex: 0 0 220px;
+  width: 220px;
+  max-height: 420px;
+  border-radius: var(--radius-md);
+  animation: none;
+}
+
+.hint {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: 12px;
+}
+
+.error {
+  margin: 0;
+  color: var(--error-600);
+  font-size: 13px;
+}
+
+@media (max-width: 720px) {
+  .header {
+    flex-wrap: wrap;
+  }
+
+  .actions {
+    margin-left: auto;
+  }
+
+  .body {
+    flex-direction: column;
+  }
+
+  .body .mentions {
+    flex-basis: auto;
+    width: 100%;
+    max-height: 240px;
+  }
+}
