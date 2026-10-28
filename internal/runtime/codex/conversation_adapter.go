@@ -48,6 +48,14 @@ type ConversationAdapter struct {
 	runtime   ConversationBackend
 }
 
+// File tools wait for the Adapter to authorize and snapshot the source before
+// acknowledging success. Keep this receipt scoped to the originating turn.
+type filePublication struct {
+	file activity.RuntimeFile
+	ctx  context.Context
+	done chan error
+}
+
 func (a *ConversationAdapter) Run(ctx context.Context, request contract.TurnRequest, sink contract.EventSink) contract.TurnResult {
 	blocks, cleanup, inputErr := a.prepareInput(ctx, request.ID, request.Input)
 	if inputErr != nil {
@@ -207,11 +215,37 @@ func (a *ConversationAdapter) handleEvent(ctx context.Context, request contract.
 		}
 	case activity.RuntimeEventFileOutput:
 		runtimeFile, ok := event.Payload.(activity.RuntimeFile)
+		publication, _ := event.Payload.(*filePublication)
+		if publication != nil {
+			if err := publication.ctx.Err(); err != nil {
+				publication.done <- err
+				return nil
+			}
+			runtimeFile, ok = publication.file, true
+		}
 		if !ok {
 			result := failedResult(contract.ErrorRuntimeFailed, "Codex returned invalid file output")
 			return &result
 		}
-		file, fileErr := a.authorizeOutputFile(ctx, runtimeFile)
+		fileCtx := ctx
+		if publication != nil {
+			fileCtx = publication.ctx
+		}
+		file, fileErr := a.authorizeOutputFile(fileCtx, runtimeFile)
+		if publication != nil {
+			if fileErr != nil {
+				publication.done <- fileErr
+				return nil
+			}
+			if err := fileCtx.Err(); err != nil {
+				file.Cleanup()
+				publication.done <- err
+				return nil
+			}
+			*files = append(*files, file)
+			publication.done <- nil
+			return nil
+		}
 		if fileErr != nil {
 			result := contract.TurnResult{Status: contract.TurnFailed, Error: fileErr}
 			return &result

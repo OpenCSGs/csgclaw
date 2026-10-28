@@ -200,7 +200,7 @@ func TestAppServerManagerRestoresColdEngineConversationFileDelivery(t *testing.T
 	spec.FilePublishingConversations = map[string]bool{"conversation-1": true}
 	var persisted map[string]string
 	var persistedFilePublishing map[string]bool
-	sink := &recordingSink{}
+	sink := newFilePublicationTestSink(t, spec.WorkspaceDir, "generated-file.txt")
 	deps := testAppServerManagerDepsWithSink(sink)
 	deps.OnConversationSessionsChange = func(_ *Session, conversations map[string]string, filePublishing map[string]bool) error {
 		persisted = cloneConversationSessions(conversations)
@@ -232,6 +232,7 @@ func TestAppServerManagerRestoresColdEngineConversationFileDelivery(t *testing.T
 	if !filePublishing {
 		t.Fatal("cold resumed Engine thread was not marked file-capable")
 	}
+	activateFilePublicationTestTurn(t, live, threadID, "turn-cold-file")
 	response, err := manager.handleAppServerServerRequest(spec.RuntimeID, live, appServerServerRequest{
 		Method: "item/tool/call",
 		Params: mustJSONRaw(t, map[string]any{
@@ -598,7 +599,7 @@ func TestAppServerManagerPublishFileDynamicToolEndToEnd(t *testing.T) {
 	withAppServerHelperCommand(t, "prompt-publish-file")
 	dir := t.TempDir()
 	spec := testAppServerSessionSpec(dir)
-	sink := &recordingSink{}
+	sink := newFilePublicationTestSink(t, spec.WorkspaceDir, "reports/result.pdf")
 	manager := newAppServerManager(testAppServerManagerDepsWithSink(sink))
 	_, err := manager.Start(context.Background(), spec)
 	if err != nil {
@@ -2876,9 +2877,11 @@ func TestAppServerThreadStartOmitsPublishFileToolForLegacyThread(t *testing.T) {
 }
 
 func TestAppServerPublishFileDynamicToolEmitsTypedFileEvent(t *testing.T) {
-	sink := &recordingSink{}
+	spec := testAppServerSessionSpec(t.TempDir())
+	sink := newFilePublicationTestSink(t, spec.WorkspaceDir, "reports/result.pdf")
 	manager := newAppServerManager(testAppServerManagerDepsWithSink(sink))
-	live := &liveSession{spec: testAppServerSessionSpec(t.TempDir()), filePublishingThreads: map[string]bool{"thread-1": true}}
+	live := &liveSession{spec: spec, filePublishingThreads: map[string]bool{"thread-1": true}}
+	activateFilePublicationTestTurn(t, live, "thread-1", "turn-1")
 	response, err := manager.handleAppServerServerRequest("runtime-1", live, appServerServerRequest{
 		Method: "item/tool/call",
 		Params: mustJSONRaw(t, map[string]any{

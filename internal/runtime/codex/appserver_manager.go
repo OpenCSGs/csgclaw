@@ -1133,6 +1133,11 @@ func (m *appServerManager) handleAppServerDynamicToolCall(runtimeID string, live
 	if m == nil || m.deps.EventSink == nil {
 		return appServerDynamicToolResponse(false, "file delivery is unavailable"), nil
 	}
+	ctx, ok := live.appServerTurnContext(params.ThreadID, params.TurnID)
+	if !ok {
+		return appServerDynamicToolResponse(false, "file publication requires an active turn"), nil
+	}
+	publication := &filePublication{file: file, ctx: ctx, done: make(chan error, 1)}
 	m.publishAppServerEvent(SessionEvent{
 		RuntimeID:  runtimeID,
 		SessionID:  params.ThreadID,
@@ -1142,9 +1147,20 @@ func (m *appServerManager) handleAppServerDynamicToolCall(runtimeID string, live
 		ToolKind:   appServerPublishFileToolName,
 		ToolTitle:  "Publish file",
 		ToolStatus: "completed",
-		Payload:    file,
+		Payload:    publication,
 	})
-	return appServerDynamicToolResponse(true, "File publication requested."), nil
+	select {
+	case err := <-publication.done:
+		if ctx.Err() != nil {
+			return appServerDynamicToolResponse(false, "File publication canceled."), nil
+		}
+		if err != nil {
+			return appServerDynamicToolResponse(false, fmt.Sprintf("File publication failed for %q: %s. Check that the file exists and is a readable regular file inside the Runtime workspace, then retry with its workspace-relative path.", file.Path, err)), nil
+		}
+		return appServerDynamicToolResponse(true, "File snapshotted for delivery to the current conversation."), nil
+	case <-ctx.Done():
+		return appServerDynamicToolResponse(false, "File publication canceled."), nil
+	}
 }
 
 func uploadAppServerWorkspaceFile(ctx context.Context, spec SessionSpec, args appServerUploadFileArgs) error {
