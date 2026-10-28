@@ -41,4 +41,29 @@ describe("OnboardingGuide", () => {
     fireEvent.keyDown(screen.getByRole("button", { name: "退出导览" }), { key: "Escape" });
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
   });
+
+  it("synchronizes the native controls inset on frame load and platform changes", async () => {
+    const { container } = render(
+      <div data-desktop-platform="win32">
+        <OnboardingGuide />
+      </div>,
+    );
+    await screen.findByRole("dialog");
+    const frame = container.querySelector("iframe")!;
+    const postMessage = vi.spyOn(frame.contentWindow!, "postMessage");
+    frame.style.setProperty("--desktop-window-controls-width", "138px");
+    fireEvent.load(frame);
+    expect(postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "csgclaw:guide-layout", controlsWidth: 138 }),
+      window.location.origin,
+    );
+    frame.style.setProperty("--desktop-window-controls-width", "0px");
+    container.firstElementChild!.setAttribute("data-desktop-platform", "darwin");
+    await waitFor(() =>
+      expect(postMessage).toHaveBeenLastCalledWith(
+        expect.objectContaining({ type: "csgclaw:guide-layout", controlsWidth: 0 }),
+        window.location.origin,
+      ),
+    );
+  });
 });

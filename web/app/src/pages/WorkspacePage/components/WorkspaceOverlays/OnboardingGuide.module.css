@@ -16,7 +16,15 @@
 
 .close {
   position: absolute;
-  top: 16px;
-  right: max(18px, calc((100vw - 1210px) / 2));
+  top: 34px;
+  right: max(24px, 4.4vw, calc(var(--desktop-window-controls-width, 0px) + 16px));
+  transform: translateY(-50%);
   z-index: 1;
+}
+
+@media (max-width: 560px) {
+  .close {
+    top: 30px;
+    right: max(18px, calc(var(--desktop-window-controls-width, 0px) + 16px));
+  }
 }

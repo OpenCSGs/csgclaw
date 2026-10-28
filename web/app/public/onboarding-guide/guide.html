@@ -118,6 +118,7 @@
         align-items: center;
         gap: 24px;
         padding: 0 max(24px, 4.4vw);
+        padding-right: max(24px, 4.4vw, calc(var(--guide-controls-width, 0px) + 16px));
         background: color-mix(in srgb, var(--paper) 88%, transparent);
         backdrop-filter: saturate(1.2) blur(14px);
         -webkit-backdrop-filter: saturate(1.2) blur(14px);
@@ -2570,6 +2571,7 @@
         .topbar {
           height: 60px;
           padding: 0 18px;
+          padding-right: max(18px, calc(var(--guide-controls-width, 0px) + 16px));
         }
         .brand img {
           height: 20px;

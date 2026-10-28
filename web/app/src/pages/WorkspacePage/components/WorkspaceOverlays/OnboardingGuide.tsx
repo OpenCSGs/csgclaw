@@ -12,6 +12,7 @@ export function OnboardingGuide() {
   const locale = controller.sidebarProps?.locale || "zh";
   const [open, setOpen] = useState(false);
   const frameRef = useRef<HTMLIFrameElement>(null);
+  const closeRef = useRef<HTMLDivElement>(null);
   const returnFocusRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
@@ -55,6 +56,36 @@ export function OnboardingGuide() {
     return () => window.removeEventListener("message", handleMessage);
   }, [open]);
 
+  useEffect(() => {
+    if (!open) return;
+    const frame = frameRef.current;
+    const close = closeRef.current;
+    if (!frame || !close) return;
+    // Iframes do not inherit the shell's CSS variables or the host button size.
+    const syncLayout = () => {
+      frame.contentWindow?.postMessage(
+        {
+          type: "csgclaw:guide-layout",
+          controlsWidth: parseFloat(getComputedStyle(frame).getPropertyValue("--desktop-window-controls-width")) || 0,
+          exitWidth: close.getBoundingClientRect().width,
+        },
+        window.location.origin,
+      );
+    };
+    const resize = new ResizeObserver(syncLayout);
+    resize.observe(close);
+    const chrome = frame.closest("[data-desktop-platform]");
+    const platform = new MutationObserver(syncLayout);
+    if (chrome) platform.observe(chrome, { attributes: true, attributeFilter: ["data-desktop-platform"] });
+    frame.addEventListener("load", syncLayout);
+    syncLayout();
+    return () => {
+      resize.disconnect();
+      platform.disconnect();
+      frame.removeEventListener("load", syncLayout);
+    };
+  }, [open]);
+
   if (!open) return null;
   const title = locale === "en" ? "CSGClaw onboarding guide" : "CSGClaw 新手引导";
 
@@ -71,7 +102,7 @@ export function OnboardingGuide() {
         }
       }}
     >
-      <div className={styles.close}>
+      <div ref={closeRef} className={styles.close}>
         <Button variant="secondaryGray" size="sm" onClick={() => setOpen(false)}>
           {controller.t("onboardingGuideExit")}
         </Button>

@@ -592,6 +592,16 @@
 
   window.addEventListener("message", (event) => {
     if (event.source !== window.parent || event.origin !== window.location.origin) return;
+    if (window.parent !== window && event.data?.type === "csgclaw:guide-layout") {
+      const { controlsWidth, exitWidth } = event.data;
+      if (Number.isFinite(controlsWidth) && controlsWidth >= 0 && controlsWidth <= 300) {
+        document.documentElement.style.setProperty("--guide-controls-width", `${controlsWidth}px`);
+      }
+      if (Number.isFinite(exitWidth) && exitWidth > 0 && exitWidth <= 400) {
+        const exitButton = document.getElementById("exitGuide");
+        if (exitButton?.style.visibility === "hidden") exitButton.style.width = `${exitWidth}px`;
+      }
+    }
     if (event.data?.type === "csgclaw:guide-focus") {
       document.getElementById("startGuide")?.focus();
     }
