@@ -27,6 +27,7 @@ export function TaskConfigurationToolbar({
   disabled = false,
   configuration = {},
   directoryLocked = false,
+  directoryMode = "agent",
   onChange,
   t: translate,
 }: {
@@ -36,6 +37,7 @@ export function TaskConfigurationToolbar({
   disabled?: boolean;
   configuration?: TaskConfiguration;
   directoryLocked?: boolean;
+  directoryMode?: "agent" | "collaboration";
   onChange?: (value: TaskConfiguration) => void | Promise<void>;
   t?: (key: string) => string;
 }) {
@@ -131,7 +133,9 @@ export function TaskConfigurationToolbar({
       {showDirectory ? (
         <TaskDirectoryPicker
           value={configuration.workspace_dir || ""}
-          defaultDirectory={String(options.local_workspace_dir || "")}
+          defaultDirectory={directoryMode === "collaboration" ? "" : String(options.local_workspace_dir || "")}
+          defaultLabel={directoryMode === "collaboration" ? t("collaborationWorkdirAutomatic") : undefined}
+          defaultHint={directoryMode === "collaboration" ? t("collaborationWorkdirAutomaticHint") : undefined}
           locked={directoryLocked}
           disabled={blocked || !editable}
           onChoose={(path) => change({ workspace_dir: path }, false, true)}

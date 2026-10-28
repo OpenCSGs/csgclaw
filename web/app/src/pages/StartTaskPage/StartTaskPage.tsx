@@ -161,7 +161,12 @@ function StartTaskForm({
           member_ids: members,
           type: selectedAgent ? "free" : "on_demand",
           is_direct: Boolean(selectedAgent),
-          configuration: supportsTaskConfiguration(selectedAgent) ? configuration : undefined,
+          configuration: selectedAgent
+            ? supportsTaskConfiguration(selectedAgent)
+              ? configuration
+              : undefined
+            : { workspace_dir: configuration.workspace_dir },
+          source_team_id: selectedTeam?.id,
           manager_id: selectedAgent ? undefined : resolveAgentChannelUserID(manager) || manager?.id || undefined,
           client_request_id: requestID.current,
           locale: readySidebar.locale,
@@ -228,6 +233,7 @@ function StartTaskForm({
                   }
             }
             onChange={(value) => {
+              requestID.current = createUUID();
               setResources([]);
               setTarget(value.id === SOLO_TEAM_ID ? "solo" : `${value.kind}:${value.id}`);
               setConfiguration({});
@@ -334,12 +340,14 @@ function StartTaskForm({
                   configuration={configuration}
                   onChange={async (value) => {
                     if (created.current) await entry.patch(created.current.id, { configuration: value });
+                    else requestID.current = createUUID();
                     setConfiguration(value);
                   }}
                   directoryLocked={Boolean(created.current)}
+                  directoryMode={selectedAgent ? "agent" : "collaboration"}
                   agent={selectedAgent || manager}
                   showModel={Boolean(selectedAgent)}
-                  showDirectory={Boolean(selectedAgent)}
+                  showDirectory
                   disabled={busy}
                 />
                 <Button

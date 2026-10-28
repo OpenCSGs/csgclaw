@@ -3,15 +3,16 @@ package apitypes
 import "time"
 
 type Team struct {
-	ID             string    `json:"id"`
-	Title          string    `json:"title"`
-	Description    string    `json:"description,omitempty"`
-	LeadAgentID    string    `json:"lead_agent_id"`
-	LeadAgentName  string    `json:"lead_agent_name,omitempty"`
-	MemberAgentIDs []string  `json:"member_agent_ids,omitempty"`
-	Status         string    `json:"status"`
-	CreatedAt      time.Time `json:"created_at"`
-	UpdatedAt      time.Time `json:"updated_at"`
+	ID                 string    `json:"id"`
+	Title              string    `json:"title"`
+	Description        string    `json:"description,omitempty"`
+	CollaborationGuide string    `json:"collaboration_guide,omitempty"`
+	LeadAgentID        string    `json:"lead_agent_id"`
+	LeadAgentName      string    `json:"lead_agent_name,omitempty"`
+	MemberAgentIDs     []string  `json:"member_agent_ids,omitempty"`
+	Status             string    `json:"status"`
+	CreatedAt          time.Time `json:"created_at"`
+	UpdatedAt          time.Time `json:"updated_at"`
 }
 
 type TeamTask struct {
@@ -101,6 +102,7 @@ type TeamEvent struct {
 type CreateTeamRequest struct {
 	Title                string   `json:"title,omitempty"`
 	Description          string   `json:"description,omitempty"`
+	CollaborationGuide   string   `json:"collaboration_guide,omitempty"`
 	LeadAgentID          string   `json:"lead_agent_id,omitempty"`
 	LeadParticipantID    string   `json:"lead_participant_id,omitempty"`
 	MemberAgentIDs       []string `json:"member_agent_ids,omitempty"`
@@ -108,11 +110,12 @@ type CreateTeamRequest struct {
 }
 
 type PatchTeamRequest struct {
-	Title          string   `json:"title,omitempty"`
-	Description    *string  `json:"description,omitempty"`
-	LeadAgentID    string   `json:"lead_agent_id,omitempty"`
-	MemberAgentIDs []string `json:"member_agent_ids,omitempty"`
-	Status         string   `json:"status,omitempty"`
+	Title              string   `json:"title,omitempty"`
+	Description        *string  `json:"description,omitempty"`
+	CollaborationGuide *string  `json:"collaboration_guide,omitempty"`
+	LeadAgentID        string   `json:"lead_agent_id,omitempty"`
+	MemberAgentIDs     []string `json:"member_agent_ids,omitempty"`
+	Status             string   `json:"status,omitempty"`
 }
 
 type CreateTeamTaskRequest struct {

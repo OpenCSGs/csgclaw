@@ -79,6 +79,7 @@ type teamPlanMember struct {
 }
 
 type managerPlanContext struct {
+	CollaborationGuide  string                 `json:"collaboration_guide,omitempty"`
 	TeamID              string                 `json:"team_id"`
 	RoomID              string                 `json:"room_id"`
 	LeadAgentID         string                 `json:"lead_agent_id"`
@@ -181,6 +182,7 @@ func (p *ManagerPlanner) managerPlanContext(meta TeamMeta, parent TeamTask) mana
 	assignable := assignablePlanMemberIDs(meta, members)
 	leadParticipantID := participantIDForAgentID(p.directory, meta.LeadAgentID)
 	return managerPlanContext{
+		CollaborationGuide:  meta.CollaborationGuide,
 		TeamID:              meta.ID,
 		RoomID:              EventRoomID(meta, &parent),
 		LeadAgentID:         meta.LeadAgentID,

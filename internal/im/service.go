@@ -250,28 +250,32 @@ type persistedBootstrap struct {
 }
 
 type persistedRoom struct {
-	Configuration   *taskconfig.Config `json:"configuration,omitempty"`
-	Archived        bool               `json:"archived,omitempty"`
-	Pinned          bool               `json:"pinned,omitempty"`
-	CustomTitle     bool               `json:"custom_title,omitempty"`
-	TaskSession     bool               `json:"task_session,omitempty"`
-	CreatedBy       string             `json:"created_by,omitempty"`
-	ClientRequestID string             `json:"client_request_id,omitempty"`
-	CreatedAt       time.Time          `json:"created_at,omitzero"`
-	Type            apitypes.RoomType  `json:"type,omitempty"`
-	ManagerID       string             `json:"manager_id,omitempty"`
-	ID              string             `json:"id"`
-	Title           string             `json:"title"`
-	Subtitle        string             `json:"subtitle"`
-	Description     string             `json:"description,omitempty"`
-	Locale          string             `json:"locale,omitempty"`
-	SessionID       string             `json:"session_id,omitempty"`
-	SessionAgentID  string             `json:"session_agent_id,omitempty"`
-	IsDirect        bool               `json:"is_direct,omitempty"`
-	NotifyAllAgents bool               `json:"notify_all_agents,omitempty"`
-	Members         []string           `json:"members"`
-	Messages        string             `json:"messages"`
-	Threads         []persistedThread  `json:"threads,omitempty"`
+	CreationWorkspaceDir *string `json:"creation_workspace_dir,omitempty"`
+
+	SourceTeamID       string             `json:"source_team_id,omitempty"`
+	CollaborationGuide string             `json:"collaboration_guide,omitempty"`
+	Configuration      *taskconfig.Config `json:"configuration,omitempty"`
+	Archived           bool               `json:"archived,omitempty"`
+	Pinned             bool               `json:"pinned,omitempty"`
+	CustomTitle        bool               `json:"custom_title,omitempty"`
+	TaskSession        bool               `json:"task_session,omitempty"`
+	CreatedBy          string             `json:"created_by,omitempty"`
+	ClientRequestID    string             `json:"client_request_id,omitempty"`
+	CreatedAt          time.Time          `json:"created_at,omitzero"`
+	Type               apitypes.RoomType  `json:"type,omitempty"`
+	ManagerID          string             `json:"manager_id,omitempty"`
+	ID                 string             `json:"id"`
+	Title              string             `json:"title"`
+	Subtitle           string             `json:"subtitle"`
+	Description        string             `json:"description,omitempty"`
+	Locale             string             `json:"locale,omitempty"`
+	SessionID          string             `json:"session_id,omitempty"`
+	SessionAgentID     string             `json:"session_agent_id,omitempty"`
+	IsDirect           bool               `json:"is_direct,omitempty"`
+	NotifyAllAgents    bool               `json:"notify_all_agents,omitempty"`
+	Members            []string           `json:"members"`
+	Messages           string             `json:"messages"`
+	Threads            []persistedThread  `json:"threads,omitempty"`
 }
 
 type persistedThread struct {
@@ -498,14 +502,17 @@ func loadPersistedRooms(statePath string, rooms []persistedRoom) ([]Room, error)
 			return nil, err
 		}
 		loaded = append(loaded, Room{
-			Archived:        room.Archived,
-			Pinned:          room.Pinned,
-			CustomTitle:     room.CustomTitle,
-			TaskSession:     room.TaskSession,
-			Configuration:   taskconfig.Clone(room.Configuration),
-			CreatedBy:       room.CreatedBy,
-			ClientRequestID: room.ClientRequestID,
-			CreatedAt:       room.CreatedAt,
+			CreationWorkspaceDir: room.CreationWorkspaceDir,
+			Archived:             room.Archived,
+			Pinned:               room.Pinned,
+			CustomTitle:          room.CustomTitle,
+			TaskSession:          room.TaskSession,
+			Configuration:        taskconfig.Clone(room.Configuration),
+			SourceTeamID:         room.SourceTeamID,
+			CollaborationGuide:   room.CollaborationGuide,
+			CreatedBy:            room.CreatedBy,
+			ClientRequestID:      room.ClientRequestID,
+			CreatedAt:            room.CreatedAt,
 
 			Type:            apitypes.NormalizeRoomType(room.Type),
 			ManagerID:       room.ManagerID,
@@ -680,14 +687,17 @@ func saveRoomThreadsForState(statePath string, room Room) error {
 
 func persistedRoomFromRoom(room Room) persistedRoom {
 	return persistedRoom{
-		Archived:        room.Archived,
-		Pinned:          room.Pinned,
-		CustomTitle:     room.CustomTitle,
-		TaskSession:     room.TaskSession,
-		Configuration:   taskconfig.Clone(room.Configuration),
-		CreatedBy:       room.CreatedBy,
-		ClientRequestID: room.ClientRequestID,
-		CreatedAt:       room.CreatedAt,
+		CreationWorkspaceDir: room.CreationWorkspaceDir,
+		Archived:             room.Archived,
+		Pinned:               room.Pinned,
+		CustomTitle:          room.CustomTitle,
+		TaskSession:          room.TaskSession,
+		Configuration:        taskconfig.Clone(room.Configuration),
+		SourceTeamID:         room.SourceTeamID,
+		CollaborationGuide:   room.CollaborationGuide,
+		CreatedBy:            room.CreatedBy,
+		ClientRequestID:      room.ClientRequestID,
+		CreatedAt:            room.CreatedAt,
 
 		Type:            apitypes.NormalizeRoomType(room.Type),
 		ManagerID:       room.ManagerID,
@@ -1726,8 +1736,11 @@ func (s *Service) UpdateRoom(roomID string, req UpdateRoomRequest) (Room, error)
 		}
 	}
 	if req.Configuration != nil {
-		if !room.IsDirect {
-			return Room{}, fmt.Errorf("session configuration requires a direct room")
+		if !room.IsDirect && !room.IsOnDemand() {
+			return Room{}, fmt.Errorf("workspace configuration requires a task or collaboration room")
+		}
+		if !room.IsDirect && (req.Configuration.ModelID != "" || req.Configuration.ModelProviderID != "" || req.Configuration.ReasoningEffort != "" || req.Configuration.ExecutionMode != "") {
+			return Room{}, fmt.Errorf("collaboration rooms only share their working directory")
 		}
 		if room.Configuration != nil && room.Configuration.WorkspaceDir != req.Configuration.WorkspaceDir {
 			return Room{}, fmt.Errorf("the session working directory is locked; start a new task")
@@ -2411,6 +2424,7 @@ func publishRoomEvent(bus *Bus, eventType string, room Room) {
 }
 
 func (s *Service) CreateRoom(req CreateRoomRequest) (Room, error) {
+	req.SourceTeamID = strings.TrimSpace(req.SourceTeamID)
 	req.Type = apitypes.NormalizeRoomType(req.Type)
 	if req.Type != apitypes.RoomTypeFree && req.Type != apitypes.RoomTypeOnDemand {
 		return Room{}, fmt.Errorf("unsupported room type")
@@ -2457,7 +2471,7 @@ func (s *Service) CreateRoom(req CreateRoomRequest) (Room, error) {
 	if req.ClientRequestID != "" {
 		for _, existing := range s.rooms {
 			if existing.CreatedBy == creatorID && existing.ClientRequestID == req.ClientRequestID {
-				if existing.TaskSession != req.TaskSession || existing.IsDirect != req.IsDirect || existing.Type != req.Type || !sameRoomMembers(existing.Members, members) {
+				if existing.TaskSession != req.TaskSession || existing.IsDirect != req.IsDirect || existing.Type != req.Type || !sameRoomMembers(existing.Members, members) || !sameCollaborationCreation(*existing, req) {
 					return Room{}, fmt.Errorf("client_request_id already belongs to another conversation")
 				}
 				return s.presentRoomLocked(*existing, req.Locale), nil
@@ -2472,21 +2486,23 @@ func (s *Service) CreateRoom(req CreateRoomRequest) (Room, error) {
 		}
 	}
 	room := Room{
-		Type:            req.Type,
-		ManagerID:       managerID,
-		ID:              fmt.Sprintf("room-%d", time.Now().UnixNano()),
-		Title:           title,
-		Subtitle:        formatRoomSubtitle(len(members)),
-		Description:     description,
-		Locale:          messagePresentationLocale(req.Locale),
-		IsDirect:        req.IsDirect,
-		TaskSession:     req.TaskSession,
-		Configuration:   taskconfig.Clone(req.Configuration),
-		CustomTitle:     req.TaskSession,
-		CreatedBy:       creatorID,
-		ClientRequestID: req.ClientRequestID,
-		CreatedAt:       time.Now().UTC(),
-		Members:         members,
+		Type:               req.Type,
+		ManagerID:          managerID,
+		ID:                 fmt.Sprintf("room-%d", time.Now().UnixNano()),
+		Title:              title,
+		Subtitle:           formatRoomSubtitle(len(members)),
+		Description:        description,
+		Locale:             messagePresentationLocale(req.Locale),
+		IsDirect:           req.IsDirect,
+		TaskSession:        req.TaskSession,
+		Configuration:      taskconfig.Clone(req.Configuration),
+		SourceTeamID:       req.SourceTeamID,
+		CollaborationGuide: req.CollaborationGuide,
+		CustomTitle:        req.TaskSession,
+		CreatedBy:          creatorID,
+		ClientRequestID:    req.ClientRequestID,
+		CreatedAt:          time.Now().UTC(),
+		Members:            members,
 		Messages: []Message{
 			{
 				ID:       fmt.Sprintf("msg-%d", time.Now().UnixNano()),
@@ -2502,6 +2518,13 @@ func (s *Service) CreateRoom(req CreateRoomRequest) (Room, error) {
 		},
 	}
 
+	if room.IsOnDemand() {
+		requested := requestedWorkspaceDir(req.Configuration)
+		room.CreationWorkspaceDir = &requested
+	}
+	if err := s.ensureRoomWorkspace(&room); err != nil {
+		return Room{}, err
+	}
 	s.rooms[room.ID] = &room
 	if err := s.saveLocked(); err != nil {
 		delete(s.rooms, room.ID)
@@ -2962,6 +2985,10 @@ func (s *Service) presentConversationLocked(conv Conversation) Conversation {
 }
 
 func cloneRoom(room Room) Room {
+	if room.CreationWorkspaceDir != nil {
+		dir := *room.CreationWorkspaceDir
+		room.CreationWorkspaceDir = &dir
+	}
 	room.Configuration = taskconfig.Clone(room.Configuration)
 	cloned := room
 	cloned.Members = append([]string(nil), room.Members...)

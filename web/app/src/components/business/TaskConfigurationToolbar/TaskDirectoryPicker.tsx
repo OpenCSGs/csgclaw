@@ -42,6 +42,8 @@ function directoryName(path: string): string {
 export function TaskDirectoryPicker({
   value,
   defaultDirectory,
+  defaultLabel,
+  defaultHint,
   locked,
   disabled,
   onChoose,
@@ -49,6 +51,8 @@ export function TaskDirectoryPicker({
 }: {
   value: string;
   defaultDirectory: string;
+  defaultLabel?: string;
+  defaultHint?: string;
   locked: boolean;
   disabled: boolean;
   onChoose: (path: string) => Promise<void>;
@@ -62,10 +66,12 @@ export function TaskDirectoryPicker({
   const [draft, setDraft] = useState("");
   const [applying, setApplying] = useState(false);
   const effective = value || defaultDirectory;
+  const automaticLabel = defaultLabel ?? t("iaWorkdirDefault");
+  const automaticHint = defaultHint ?? t("iaWorkdirDefaultHint");
   const label = (
     <>
       <Folder size={16} aria-hidden="true" />
-      <span>{effective ? directoryName(effective) : t("iaWorkdirDefault")}</span>
+      <span>{effective ? directoryName(effective) : automaticLabel}</span>
     </>
   );
   async function choose(path: string) {
@@ -86,7 +92,7 @@ export function TaskDirectoryPicker({
       <span
         className={styles.lockedDirectory}
         aria-label={t("iaWorkdirTitle")}
-        title={`${effective || t("iaWorkdirDefaultHint")} · ${t("iaWorkdirLocked")}`}
+        title={`${effective || automaticHint} · ${t("iaWorkdirLocked")}`}
       >
         {label}
       </span>
@@ -106,7 +112,7 @@ export function TaskDirectoryPicker({
         size="sm"
         selectedLabel={<span className={styles.directoryLabel}>{label}</span>}
         triggerClassName={styles.directoryTrigger}
-        triggerProps={{ "aria-label": t("iaWorkdirTitle"), title: effective || t("iaWorkdirDefaultHint") }}
+        triggerProps={{ "aria-label": t("iaWorkdirTitle"), title: effective || automaticHint }}
         contentClassName={styles.directoryMenu}
         contentProps={{ side: "top", align: "start" }}
         searchPlaceholder={t("iaWorkdirSearch")}
@@ -116,13 +122,13 @@ export function TaskDirectoryPicker({
             value: "",
             alwaysVisible: true,
             separatorAfter: true,
-            textValue: t("iaWorkdirDefault"),
+            textValue: automaticLabel,
             label: (
               <span className={styles.directoryLabel}>
                 <House size={18} />
                 <span>
-                  {t("iaWorkdirDefault")}
-                  <small>{defaultDirectory || t("iaWorkdirDefaultHint")}</small>
+                  {automaticLabel}
+                  <small>{defaultDirectory || automaticHint}</small>
                 </span>
               </span>
             ),

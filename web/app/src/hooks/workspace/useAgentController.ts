@@ -2613,6 +2613,22 @@ export function useAgentController({
     }
   }
 
+  async function updateTeamGuide(item: WorkspaceTeam, guide: string): Promise<boolean> {
+    if (teamActionBusy) return false;
+    setTeamActionBusy(true);
+    setTeamActionError("");
+    try {
+      await updateTeamRequest(item.id, { collaboration_guide: guide });
+      await teamsQuery.refetch();
+      return true;
+    } catch (err) {
+      setTeamActionError(errorMessage(err, t("teamActionFailed")));
+      return false;
+    } finally {
+      setTeamActionBusy(false);
+    }
+  }
+
   async function deleteTeam(item: WorkspaceTeam | null | undefined): Promise<boolean> {
     const teamID = String(item?.id || "").trim();
     if (!teamID || teamActionBusy) {
@@ -2866,6 +2882,7 @@ export function useAgentController({
     teamsLoading: teamsQuery.isLoading,
     deleteTeam,
     updateTeamDescription,
+    updateTeamGuide,
     workerAgentItems,
     notifierWebhookPublicOrigin,
     agentViewProps: {

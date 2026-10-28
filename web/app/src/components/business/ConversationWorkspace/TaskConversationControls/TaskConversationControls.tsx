@@ -23,9 +23,7 @@ export function TaskConversationControls({
 }) {
   const controller = useOptionalWorkspaceControllerContext();
   const entry = controller?.taskEntry;
-  const agent = conversation.is_direct
-    ? agents.find((item) => conversation.members.includes(resolveAgentChannelUserID(item)))
-    : undefined;
+  const agent = agents.find((item) => conversation.members.includes(resolveAgentChannelUserID(item)));
   const hasChatMessages = conversation.messages.some(
     (message) => !isEventMessage(message) && !isToolCallMessage(message),
   );
@@ -35,19 +33,30 @@ export function TaskConversationControls({
         key={conversation.id}
         t={t}
         agent={agent}
-        showModel={Boolean(agent)}
-        showDirectory={Boolean(conversation.is_direct)}
+        showModel={Boolean(agent && conversation.is_direct)}
+        showDirectory={Boolean(
+          conversation.is_direct || (conversation.type === "on_demand" && conversation.configuration?.workspace_dir),
+        )}
         configuration={conversation.configuration}
         directoryLocked
         disabled={entry?.isWorking(conversation.id) || entry?.busyID === conversation.id}
         onChange={entry ? (value) => entry.patch(conversation.id, { configuration: value }) : undefined}
       />
+      {conversation.collaboration_guide ? (
+        <details>
+          <summary>{t("teamGuideTab")}</summary>
+          <p>{t("teamGuideRoomHint")}</p>
+          <pre className={styles.guide}>{conversation.collaboration_guide}</pre>
+        </details>
+      ) : null}
       {onNewTask && hasChatMessages ? (
         <Button
           variant="tertiaryGray"
           size="sm"
           aria-label={t("taskEntryNew")}
-          onClick={() => onNewTask(agent?.id || undefined, conversation.configuration)}
+          onClick={() =>
+            conversation.is_direct ? onNewTask(agent?.id || undefined, conversation.configuration) : onNewTask()
+          }
         >
           <Plus size={15} />
           {t("taskEntryNew")}

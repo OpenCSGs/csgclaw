@@ -87,6 +87,122 @@ func TestTaskWorkspaceListingPreviewAndReferenceUseLockedDirectory(t *testing.T)
 	}
 }
 
+func TestCollaborationWorkspaceListingPreviewAndReferenceUseSharedDirectory(t *testing.T) {
+	h, _, alice, defaultRoot, _ := referenceTestHandler(t)
+	taskRoot := t.TempDir()
+	for root, content := range map[string]string{defaultRoot: "DEFAULT", taskRoot: "TASK-CONTENT"} {
+		if err := os.WriteFile(filepath.Join(root, "same.md"), []byte(content), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.Mkdir(filepath.Join(taskRoot, "docs"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	room, err := h.im.CreateRoom(im.CreateRoomRequest{
+		Title: "Configured task", CreatorID: "admin", MemberIDs: []string{alice}, Type: "on_demand",
+		Configuration: &taskconfig.Config{WorkspaceDir: taskRoot},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	query := url.Values{"room_id": {room.ID}, "depth": {"1"}}
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/agents/"+alice+"/workspace?"+query.Encode(), nil)
+	rec := httptest.NewRecorder()
+	h.Routes().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK || !bytes.Contains(rec.Body.Bytes(), []byte("docs")) {
+		t.Fatalf("task listing: %d %s", rec.Code, rec.Body.String())
+	}
+	query.Set("path", "same.md")
+	contentURL := "/api/v1/agents/" + alice + "/workspace/content?" + query.Encode()
+	req = httptest.NewRequest(http.MethodGet, contentURL, nil)
+	req.Header.Set("Range", "bytes=0-3")
+	rec = httptest.NewRecorder()
+	h.Routes().ServeHTTP(rec, req)
+	if rec.Code != http.StatusPartialContent || rec.Body.String() != "TASK" {
+		t.Fatalf("task preview: %d %s", rec.Code, rec.Body.String())
+	}
+	code, message, body := postReference(t, h, room.ID, "task-reference", []FileReference{{Source: "workspace", AgentID: alice, Path: "same.md"}})
+	if code != http.StatusCreated || len(message.Attachments) != 1 {
+		t.Fatalf("task reference: %d %s", code, body)
+	}
+	stored, err := h.im.RoomAttachmentFile(room.ID, message.Attachments[0].ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(stored.Path)
+	if err != nil || string(data) != "TASK-CONTENT" {
+		t.Fatalf("wrong task snapshot: %q %v", data, err)
+	}
+	for _, invalid := range []string{"../same.md", "escape/same.md"} {
+		if invalid == "escape/same.md" {
+			if err := os.Symlink(defaultRoot, filepath.Join(taskRoot, "escape")); err != nil {
+				t.Fatal(err)
+			}
+		}
+		query.Set("path", invalid)
+		req = httptest.NewRequest(http.MethodGet, "/api/v1/agents/"+alice+"/workspace/content?"+query.Encode(), nil)
+		rec = httptest.NewRecorder()
+		h.Routes().ServeHTTP(rec, req)
+		if rec.Code == http.StatusOK || bytes.Contains(rec.Body.Bytes(), []byte("DEFAULT")) {
+			t.Fatalf("task directory escape: %d %s", rec.Code, rec.Body.String())
+		}
+	}
+	other, err := h.im.CreateRoom(im.CreateRoomRequest{Title: "Other", CreatorID: "admin"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.conversationWorkspaceRoot(alice, other.ID); err == nil {
+		t.Fatal("nonmember accessed a task workspace")
+	}
+}
+
+func TestLegacyCollaborationFilesRemainAvailableAcrossRestart(t *testing.T) {
+	h, _, alice, aliceRoot, bobRoot := referenceTestHandler(t)
+	// No state path means creation does not provision a shared directory, as in legacy data.
+	h.im = im.NewServiceFromBootstrap(h.im.Bootstrap())
+	room, err := h.im.CreateRoom(im.CreateRoomRequest{Title: "Legacy work", CreatorID: "admin", MemberIDs: []string{alice}, Type: "on_demand"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(t.TempDir(), "state.json")
+	if err := im.SaveBootstrap(path, h.im.Bootstrap()); err != nil {
+		t.Fatal(err)
+	}
+	for root, content := range map[string]string{aliceRoot: "ALICE-EXISTING", bobRoot: "BOB-PRIVATE"} {
+		if err := os.WriteFile(filepath.Join(root, "existing.md"), []byte(content), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for range 2 {
+		h.im, err = im.NewServiceFromPath(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, _ := h.im.Room(room.ID)
+		if got.Configuration != nil {
+			t.Fatalf("legacy execution received a new room directory: %+v", got.Configuration)
+		}
+		query := url.Values{"room_id": {room.ID}, "path": {"existing.md"}}
+		rec := httptest.NewRecorder()
+		h.Routes().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/agents/"+alice+"/workspace/content?"+query.Encode(), nil))
+		if rec.Code != http.StatusOK || rec.Body.String() != "ALICE-EXISTING" {
+			t.Fatalf("legacy file preview: %d %s", rec.Code, rec.Body.String())
+		}
+	}
+	code, message, body := postReference(t, h, room.ID, "legacy-file-reference", []FileReference{{Source: "workspace", AgentID: alice, Path: "existing.md"}})
+	if code != http.StatusCreated || len(message.Attachments) != 1 {
+		t.Fatalf("legacy file reference: %d %s", code, body)
+	}
+	stored, err := h.im.RoomAttachmentFile(room.ID, message.Attachments[0].ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(stored.Path)
+	if err != nil || string(data) != "ALICE-EXISTING" {
+		t.Fatalf("wrong legacy file snapshot: %q %v", data, err)
+	}
+}
+
 func referenceTestHandler(t *testing.T) (*Handler, string, string, string, string) {
 	t.Helper()
 	svc := mustNewService(t)

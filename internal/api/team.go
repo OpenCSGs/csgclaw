@@ -48,10 +48,11 @@ func (h *Handler) handleCreateTeam(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	created, err := svc.CreateTeamWithMembers(team.CreateTeamWithMembersInput{
-		Title:          strings.TrimSpace(req.Title),
-		Description:    strings.TrimSpace(req.Description),
-		LeadAgentID:    leadAgentID,
-		MemberAgentIDs: memberAgentIDs,
+		Title:              strings.TrimSpace(req.Title),
+		Description:        strings.TrimSpace(req.Description),
+		CollaborationGuide: req.CollaborationGuide,
+		LeadAgentID:        leadAgentID,
+		MemberAgentIDs:     memberAgentIDs,
 	})
 	if err != nil {
 		writeTeamError(w, err)
@@ -163,13 +164,14 @@ func (h *Handler) handleUpdateTeam(w http.ResponseWriter, r *http.Request) {
 		memberAgentIDs = canonicalAgentIDs(memberAgentIDs)
 	}
 	updated, err := svc.UpdateTeam(team.UpdateTeamInput{
-		TeamID:            pathValue(r, "team_id"),
-		Title:             strings.TrimSpace(req.Title),
-		Description:       req.Description,
-		LeadAgentID:       leadAgentID,
-		MemberAgentIDs:    memberAgentIDs,
-		SetMemberAgentIDs: req.MemberAgentIDs != nil,
-		Status:            strings.TrimSpace(req.Status),
+		TeamID:             pathValue(r, "team_id"),
+		Title:              strings.TrimSpace(req.Title),
+		Description:        req.Description,
+		CollaborationGuide: req.CollaborationGuide,
+		LeadAgentID:        leadAgentID,
+		MemberAgentIDs:     memberAgentIDs,
+		SetMemberAgentIDs:  req.MemberAgentIDs != nil,
+		Status:             strings.TrimSpace(req.Status),
 	})
 	if err != nil {
 		writeTeamError(w, err)

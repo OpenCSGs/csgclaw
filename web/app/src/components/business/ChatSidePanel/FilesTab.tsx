@@ -168,7 +168,8 @@ export function FilesTab({
       </div>
       {isWorkspace ? (
         <div className="chat-files-location">
-          {!scope.direct ? (
+          {scope.sharedWorkspace ? <span>{t("chatSharedWorkspace")}</span> : null}
+          {!scope.direct && !scope.sharedWorkspace ? (
             <Select
               triggerProps={{ "aria-label": t("chatWorkspaceAgent") }}
               triggerClassName="chat-files-agent"

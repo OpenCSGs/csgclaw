@@ -155,6 +155,8 @@ function videoGenerationParentMessageID(message: IMMessage): string {
 
 export type IMConversation = {
   configuration?: TaskConfiguration;
+  source_team_id?: string;
+  collaboration_guide?: string;
   archived?: boolean;
   pinned?: boolean;
   custom_title?: boolean;

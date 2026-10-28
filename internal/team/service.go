@@ -46,22 +46,24 @@ type Service struct {
 }
 
 type CreateTeamInput struct {
-	ID             string
-	Title          string
-	Description    string
-	LeadAgentID    string
-	MemberAgentIDs []string
-	Status         string
+	ID                 string
+	Title              string
+	Description        string
+	CollaborationGuide string
+	LeadAgentID        string
+	MemberAgentIDs     []string
+	Status             string
 }
 
 type UpdateTeamInput struct {
-	TeamID            string
-	Title             string
-	Description       *string
-	LeadAgentID       string
-	MemberAgentIDs    []string
-	SetMemberAgentIDs bool
-	Status            string
+	TeamID             string
+	Title              string
+	Description        *string
+	CollaborationGuide *string
+	LeadAgentID        string
+	MemberAgentIDs     []string
+	SetMemberAgentIDs  bool
+	Status             string
 }
 
 type CreateTaskInput struct {
@@ -313,14 +315,15 @@ func (s *Service) CreateTeam(input CreateTeamInput) (TeamMeta, error) {
 	}
 	eventStart := len(s.events[id])
 	meta := TeamMeta{
-		ID:             id,
-		Title:          strings.TrimSpace(input.Title),
-		Description:    strings.TrimSpace(input.Description),
-		LeadAgentID:    leadAgentID,
-		MemberAgentIDs: memberAgentIDs,
-		Status:         status,
-		CreatedAt:      now,
-		UpdatedAt:      now,
+		ID:                 id,
+		Title:              strings.TrimSpace(input.Title),
+		Description:        strings.TrimSpace(input.Description),
+		CollaborationGuide: strings.TrimSpace(input.CollaborationGuide),
+		LeadAgentID:        leadAgentID,
+		MemberAgentIDs:     memberAgentIDs,
+		Status:             status,
+		CreatedAt:          now,
+		UpdatedAt:          now,
 	}
 	s.teams[id] = meta
 	s.appendEventLocked(id, TeamEvent{
@@ -369,6 +372,10 @@ func (s *Service) UpdateTeam(input UpdateTeamInput) (TeamMeta, error) {
 
 	if title := strings.TrimSpace(input.Title); title != "" && title != meta.Title {
 		meta.Title = title
+		changed = true
+	}
+	if input.CollaborationGuide != nil && meta.CollaborationGuide != strings.TrimSpace(*input.CollaborationGuide) {
+		meta.CollaborationGuide = strings.TrimSpace(*input.CollaborationGuide)
 		changed = true
 	}
 	if input.Description != nil {

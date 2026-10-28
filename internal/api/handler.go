@@ -2951,8 +2951,12 @@ func (h *Handler) handleCreateRoom(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	if err := h.applyRoomTeamGuide(&req); err != nil {
+		writeAPIError(w, err, http.StatusBadRequest)
+		return
+	}
 	if req.Configuration != nil {
-		cfg, err := h.validateTaskConfiguration(apitypes.Room{IsDirect: req.IsDirect, Members: req.MemberIDs}, req.Configuration)
+		cfg, err := h.validateTaskConfiguration(apitypes.Room{IsDirect: req.IsDirect, Type: req.Type, Members: req.MemberIDs}, req.Configuration)
 		if err != nil {
 			writeAPIError(w, err, http.StatusBadRequest)
 			return

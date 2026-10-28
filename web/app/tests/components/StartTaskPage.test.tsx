@@ -34,7 +34,8 @@ function setup(
   options: {
     provider?: string;
     authenticated?: boolean;
-    configuration?: { model_provider_id: string; model_id: string };
+    configuration?: { model_provider_id?: string; model_id?: string; workspace_dir?: string };
+    managerDirectory?: string;
     locale?: LocaleCode;
   } = {},
 ) {
@@ -57,7 +58,15 @@ function setup(
       onRequireOpenCSGAuthentication: requireAuth,
       usersById: new Map(),
       workerAgentItems: [
-        { id: "u-manager", name: "Manager", role: "manager", user_id: "manager", model_config: { model_id: model } },
+        {
+          id: "u-manager",
+          name: "Manager",
+          role: "manager",
+          user_id: "manager",
+          model_config: { model_id: model },
+          runtime_kind: "codex",
+          runtime_options: { local_workspace_dir: options.managerDirectory },
+        },
         { id: "u-worker", name: "Worker", user_id: "worker", model_id: model, model_provider_id: options.provider },
       ],
       teams: [{ id: "team-1", title: "Team", lead_agent_id: "u-manager", member_agent_ids: ["u-worker"] }],
@@ -293,7 +302,7 @@ describe("StartTaskPage task preparation", () => {
   it("creates collaboration using a team member snapshot and on-demand delivery", async () => {
     vi.mocked(sendMessageRequest).mockResolvedValue({} as never);
     const { create, open } = setup("/new?team=team-1");
-    expect(screen.queryByLabelText("iaWorkdirTitle")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("iaWorkdirTitle")).toBeInTheDocument();
     expect(screen.queryByLabelText("iaModelTitle")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("iaReasoningTitle")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "taskEntryEmptyRoom" }));
@@ -304,6 +313,8 @@ describe("StartTaskPage task preparation", () => {
         type: "on_demand",
         manager_id: "manager",
         member_ids: ["manager", "worker"],
+        source_team_id: "team-1",
+        configuration: { workspace_dir: undefined },
       }),
     );
     expect(sendMessageRequest).not.toHaveBeenCalled();
@@ -431,4 +442,43 @@ it("hides the empty-draft placeholder while a resource is attached and restores 
   await waitFor(() => expect(editor).toHaveFocus());
   await user.click(screen.getByRole("button", { name: "remove /Review" }));
   expect(editor).toHaveAttribute("placeholder", "iaStartComposerPlaceholder");
+});
+
+describe("collaboration directory selection", () => {
+  it.each([undefined, "/shared-project"])(
+    "shows the directory intent submitted at creation (%s)",
+    async (workspace_dir) => {
+      const { create, open } = setup("/new?team=team-1", "test-model", {
+        managerDirectory: "/manager-private",
+        configuration: { workspace_dir },
+      });
+      expect(screen.getByLabelText("iaWorkdirTitle")).toHaveAttribute(
+        "title",
+        workspace_dir || "collaborationWorkdirAutomaticHint",
+      );
+      expect(screen.queryByTitle("/manager-private")).not.toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: "taskEntryEmptyRoom" }));
+      await waitFor(() => expect(open).toHaveBeenCalled());
+      expect(create).toHaveBeenCalledWith(expect.objectContaining({ configuration: { workspace_dir } }));
+    },
+  );
+
+  it("keeps a retry key until the requested shared directory changes", async () => {
+    const user = userEvent.setup();
+    const { create, open } = setup("/new?team=team-1", "test-model", { managerDirectory: "/manager-private" });
+    create.mockRejectedValueOnce(new Error("response lost")).mockRejectedValueOnce(new Error("response lost"));
+    await user.click(screen.getByRole("button", { name: "taskEntryEmptyRoom" }));
+    await screen.findByRole("alert");
+    await user.click(screen.getByRole("button", { name: "taskEntryEmptyRoom" }));
+    await screen.findByRole("alert");
+    expect(create.mock.calls[1][0].client_request_id).toBe(create.mock.calls[0][0].client_request_id);
+    await user.click(screen.getByRole("combobox", { name: "iaWorkdirTitle" }));
+    await user.click(screen.getByRole("button", { name: "iaWorkdirManual" }));
+    await user.type(screen.getByRole("textbox", { name: "taskConfigurationDirectoryPath" }), "/shared-project");
+    await user.click(screen.getByRole("button", { name: "taskConfigurationApply" }));
+    await user.click(screen.getByRole("button", { name: "taskEntryEmptyRoom" }));
+    await waitFor(() => expect(open).toHaveBeenCalled());
+    expect(create.mock.calls[2][0].client_request_id).not.toBe(create.mock.calls[0][0].client_request_id);
+    expect(create.mock.calls[2][0].configuration).toEqual({ workspace_dir: "/shared-project" });
+  });
 });

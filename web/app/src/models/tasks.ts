@@ -56,6 +56,7 @@ export type WorkspaceTeamEvent = {
 };
 
 export type WorkspaceTeam = {
+  collaboration_guide?: string;
   id: string;
   title: string;
   description?: string;
@@ -121,6 +122,7 @@ export function normalizeTeam(input: unknown): WorkspaceTeam | null {
     id,
     title: text(item.title),
     description: text(item.description),
+    collaboration_guide: text(item.collaboration_guide),
     lead_agent_id: text(item.lead_agent_id),
     member_agent_ids: stringArray(item.member_agent_ids),
     status: text(item.status) || "active",
