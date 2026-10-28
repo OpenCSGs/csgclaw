@@ -60,6 +60,10 @@ describe("onboarding guide localization", () => {
         original.window.close();
       }
       expect(w.document.documentElement.lang).toBe(locale === "en" ? "en" : "zh-CN");
+      expect(w.document.title).toContain(locale === "en" ? "Onboarding Guide" : "新手引导");
+      expect(w.document.querySelector('meta[name="description"]')?.getAttribute("content")).toContain(
+        locale === "en" ? "A 10-step guide" : "10 步认识",
+      );
       expect(renderedText(w)).not.toContain("undefined");
       expect(w.document.querySelector("#step-3 .lead strong")).not.toBeNull();
       const tabs = w.document.querySelectorAll<HTMLButtonElement>("#dots button");
@@ -81,7 +85,7 @@ describe("onboarding guide localization", () => {
     (reformat) => {
       const w = renderGuide("en", reformat);
       try {
-      expect(renderedText(w)).not.toMatch(/[\u4e00-\u9fff、，。；：「」]/);
+        expect(renderedText(w)).not.toMatch(/[\u4e00-\u9fff、，。；：「」]/);
         for (const e of w.document.querySelectorAll("[aria-label],[title],[alt]")) {
           for (const attribute of ["aria-label", "title", "alt"]) {
             expect(e.getAttribute(attribute) || "").not.toMatch(/[\u4e00-\u9fff]/);
