@@ -2451,7 +2451,7 @@ function AgentActionsMenu({
             <DropdownMenuSeparator />
             <DropdownMenuItem danger disabled={busy} onSelect={() => onDelete(item)}>
               <Trash2 aria-hidden="true" size={15} strokeWidth={2} />
-              <span>{t("agentDelete")}</span>
+              <span>{t(isNotificationBotAgent(item) ? "agentDelete" : "agentArchive")}</span>
             </DropdownMenuItem>
           </>
         ) : null}

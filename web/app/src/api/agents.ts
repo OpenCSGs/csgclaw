@@ -550,3 +550,20 @@ export function updateNotificationParticipantRequest(
 ): Promise<ParticipantLike> {
   return patch(`api/v1/channels/csgclaw/participants/${encodeURIComponent(participantID)}`, payload);
 }
+
+export type AgentArchiveImpact = { teams: number; rooms: number; scheduled_tasks: number };
+export function fetchAgentArchiveImpact(id: string): Promise<AgentArchiveImpact> {
+  return get(`api/v1/agents/${encodeURIComponent(id)}/archive-impact`);
+}
+export function archiveAgent(id: string): Promise<AgentLike> {
+  return post(`api/v1/agents/${encodeURIComponent(id)}/archive`, {});
+}
+export function restoreAgent(id: string): Promise<AgentLike> {
+  return post(`api/v1/agents/${encodeURIComponent(id)}/restore`, {});
+}
+export function fetchArchivedAgents(): Promise<AgentLike[]> {
+  return get("api/v1/agents?archived=true");
+}
+export function deleteArchivedAgent(id: string, name: string): Promise<void> {
+  return del(`api/v1/agents/${encodeURIComponent(id)}`, { json: { name } });
+}

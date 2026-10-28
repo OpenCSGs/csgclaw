@@ -241,6 +241,9 @@ func (f *Controller) List(ctx context.Context, options contract.AgentListOptions
 	}
 	out := make([]contract.Agent, 0, len(items))
 	for _, item := range items {
+		if item.ArchivedAt != nil && !options.IncludeArchived {
+			continue
+		}
 		converted, err := f.convert(item)
 		if err != nil {
 			return nil, err
@@ -419,6 +422,9 @@ func (f *Controller) updateDesired(ctx context.Context, agentID, resourceVersion
 		previous, ok := f.Agent(agentID)
 		if !ok {
 			return fmt.Errorf("agent %q not found", agentID)
+		}
+		if previous.ArchivedAt != nil {
+			return archivedAgentError()
 		}
 		if resourceVersion != "" && resourceVersion != resourceVersionForAgent(previous) {
 			return ErrAgentResourceVersionConflict
@@ -628,6 +634,14 @@ func (f *Controller) Delete(ctx context.Context, agentID string) error {
 		return err
 	}
 	defer release()
+	if selected, ok := f.Agent(agentID); ok {
+		if selected.Role == RoleManager || selected.ID == ManagerUserID {
+			return fmt.Errorf("manager cannot be deleted")
+		}
+		if selected.ArchivedAt == nil {
+			return fmt.Errorf("archive the agent before deleting it")
+		}
+	}
 	if f.extensions != nil {
 		if err := f.extensions.DeleteExtensions(ctx, agentID); err != nil {
 			return err
@@ -655,6 +669,9 @@ func (f *Controller) Recreate(ctx context.Context, agentID string, options contr
 		return result, err
 	}
 	defer release()
+	if selected, ok := f.Agent(agentID); ok && selected.ArchivedAt != nil {
+		return contract.Agent{}, archivedAgentError()
+	}
 	defer func() {
 		if err == nil && f.interactions != nil {
 			f.interactions.Interrupt(agentID, "", "", true)
@@ -1128,7 +1145,12 @@ func (f *Controller) convert(selected Agent) (contract.Agent, error) {
 			message = err.Error()
 		}
 	}
+	if selected.ArchivedAt != nil {
+		ready = false
+		message = "agent is archived"
+	}
 	return contract.Agent{
+		ArchivedAt:      selected.ArchivedAt,
 		ID:              selected.ID,
 		ResourceVersion: resourceVersionForAgent(selected),
 		Spec:            spec,

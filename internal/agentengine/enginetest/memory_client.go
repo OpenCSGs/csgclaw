@@ -387,11 +387,14 @@ func (a *memoryAgents) Get(ctx context.Context, agentID string, options agenteng
 	return item, nil
 }
 
-func (a *memoryAgents) List(context.Context, agentengine.AgentListOptions) ([]agentengine.Agent, error) {
+func (a *memoryAgents) List(_ context.Context, options agentengine.AgentListOptions) ([]agentengine.Agent, error) {
 	a.client.mu.Lock()
 	defer a.client.mu.Unlock()
 	out := make([]agentengine.Agent, 0, len(a.client.agents))
 	for _, item := range a.client.agents {
+		if item.ArchivedAt != nil && !options.IncludeArchived {
+			continue
+		}
 		item.Status.SkillSummaries = nil
 		out = append(out, a.client.withExtensionReadinessLocked(item))
 	}
@@ -1358,3 +1361,31 @@ func cloneAny(input any) any {
 
 var _ agentengine.Interface = (*MemoryClient)(nil)
 var _ agentengine.AgentInterface = (*memoryAgents)(nil)
+
+func (a *memoryAgents) SetArchived(ctx context.Context, id string, archived bool) (agentengine.Agent, error) {
+	a.client.mu.Lock()
+	defer a.client.mu.Unlock()
+	item, ok := a.client.agents[id]
+	if !ok {
+		return agentengine.Agent{}, fmt.Errorf("agent not found")
+	}
+	if item.Spec.Role == agentengine.AgentRoleManager {
+		return agentengine.Agent{}, fmt.Errorf("manager cannot be archived")
+	}
+	if archived {
+		if item.ArchivedAt == nil {
+			now := time.Now().UTC()
+			item.ArchivedAt = &now
+		}
+		item.Status.State = agentengine.AgentStateStopped
+		item.Status.Ready = false
+		item.Spec.DesiredState = agentengine.AgentDesiredStateStopped
+	} else {
+		item.ArchivedAt = nil
+		item.Status.State = agentengine.AgentStateRunning
+		item.Status.Ready = true
+		item.Spec.DesiredState = agentengine.AgentDesiredStateRunning
+	}
+	a.client.agents[id] = item
+	return cloneAgent(item), nil
+}

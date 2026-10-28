@@ -310,8 +310,8 @@ func TestRepairDanglingCSGClawAgentParticipantsRemovesParticipantShells(t *testi
 		t.Fatal("manager participant was deleted")
 	}
 	for _, id := range []string{"user-gitlab-worker", "user-stale-worker"} {
-		if _, ok := imSvc.User(id); ok {
-			t.Fatalf("dangling user %q still exists after repair", id)
+		if user, ok := imSvc.User(id); !ok || user.AgentState != "deleted" {
+			t.Fatalf("user %q must remain as deleted history attribution", id)
 		}
 	}
 	if _, ok := imSvc.User("user-qa"); !ok {
@@ -864,6 +864,9 @@ func TestDeleteParticipantAgentCleanupKeepsSharedCSGClawUser(t *testing.T) {
 		}
 	}
 
+	if _, err := agentSvc.SetArchived(context.Background(), "u-qa", true); err != nil {
+		t.Fatalf("archive: %v", err)
+	}
 	if _, ok, err := svc.Delete(context.Background(), ChannelCSGClaw, "qa", DeleteOptions{DeleteAgent: DeleteAgentIfUnreferenced}); err != nil || !ok {
 		t.Fatalf("Delete() ok=%v error=%v, want ok", ok, err)
 	}

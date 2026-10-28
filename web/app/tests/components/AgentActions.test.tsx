@@ -21,6 +21,8 @@ function render(ui: ReactElement, options?: RenderOptions) {
 const labels: Record<string, string> = {
   agentActivityTab: "Activity",
   agentDelete: "Delete",
+  agentArchive: "Archive agent",
+  agentArchiveConfirm: 'Archive "{name}" and retain data?',
   agentDeleteBlockedTitle: "This agent cannot be deleted yet",
   agentDeleteChecking: "Checking dependencies…",
   agentDeleteResolve: "Go to team",
@@ -1004,7 +1006,7 @@ describe("agent action visibility", () => {
     );
 
     await user.click(screen.getByRole("button", { name: "More" }));
-    expect(screen.getByRole("menuitem", { name: "Delete" })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: "Archive agent" })).toBeInTheDocument();
     expect(screen.queryByRole("menuitem", { name: "Recreate" })).not.toBeInTheDocument();
   });
 
@@ -1557,14 +1559,14 @@ describe("agent action visibility", () => {
       />,
     );
     await user.click(screen.getByRole("button", { name: "More" }));
-    await user.click(screen.getByRole("menuitem", { name: "Delete" }));
-    expect(within(screen.getByRole("dialog")).getByRole("button", { name: "Delete" })).toBeDisabled();
+    await user.click(screen.getByRole("menuitem", { name: "Archive agent" }));
+    expect(within(screen.getByRole("dialog")).getByRole("button", { name: "Archive agent" })).toBeDisabled();
     await act(async () => {
       finishCheck({ message: "Remove the agent from its team first.", onResolve });
     });
     const dialog = screen.getByRole("dialog", { name: "This agent cannot be deleted yet" });
     expect(dialog).toHaveTextContent("Remove the agent from its team first.");
-    expect(within(dialog).queryByRole("button", { name: "Delete" })).not.toBeInTheDocument();
+    expect(within(dialog).queryByRole("button", { name: "Archive agent" })).not.toBeInTheDocument();
     await user.click(within(dialog).getByRole("button", { name: "Go to team" }));
     expect(onResolve).toHaveBeenCalledOnce();
     expect(onDelete).not.toHaveBeenCalled();

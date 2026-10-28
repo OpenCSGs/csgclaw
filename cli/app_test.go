@@ -722,7 +722,7 @@ func TestExecuteAgentDeleteUsesHTTPClient(t *testing.T) {
 		}),
 	}
 
-	if err := app.Execute(context.Background(), []string{"--endpoint", "http://example.test", "agent", "delete", "u-alice"}); err != nil {
+	if err := app.Execute(context.Background(), []string{"--endpoint", "http://example.test", "agent", "delete", "--name", "alice", "u-alice"}); err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
 	if requests != 1 {
@@ -750,7 +750,7 @@ func TestExecuteAgentDeleteManagerAliasUsesManagerID(t *testing.T) {
 		}),
 	}
 
-	if err := app.Execute(context.Background(), []string{"--endpoint", "http://example.test", "agent", "delete", "manager"}); err != nil {
+	if err := app.Execute(context.Background(), []string{"--endpoint", "http://example.test", "agent", "delete", "--name", "manager", "manager"}); err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
 }
@@ -1041,8 +1041,8 @@ func TestExecuteAgentDeleteAllUsesHTTPClient(t *testing.T) {
 				if req.Method != http.MethodGet {
 					t.Fatalf("method = %q, want %q", req.Method, http.MethodGet)
 				}
-				if req.URL.String() != "http://example.test/api/v1/agents" {
-					t.Fatalf("url = %q, want %q", req.URL.String(), "http://example.test/api/v1/agents")
+				if req.URL.String() != "http://example.test/api/v1/agents?archived=true" {
+					t.Fatalf("url = %q, want %q", req.URL.String(), "http://example.test/api/v1/agents?archived=true")
 				}
 				return jsonResponse(http.StatusOK, `[{"id":"u-alice","name":"alice","role":"worker","status":"running"},{"id":"u-bob","name":"bob","role":"worker","status":"stopped"}]`), nil
 			case 2:
@@ -1081,7 +1081,7 @@ func TestExecuteAgentDeleteAllUsesHTTPClient(t *testing.T) {
 	if err := app.Execute(context.Background(), []string{"--endpoint", "http://example.test", "agent", "delete", "--all"}); err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
-	if got := stdout.String(); !strings.Contains(got, "This will remove all agents. Are you sure? [y/N] ") {
+	if got := stdout.String(); !strings.Contains(got, "This will permanently remove all archived agents. Are you sure? [y/N] ") {
 		t.Fatalf("stdout = %q, want confirmation prompt", got)
 	}
 	if got := stdout.String(); !strings.Contains(got, "deleted 2 agents") {
@@ -1109,7 +1109,7 @@ func TestExecuteAgentDeleteAllCancelledWithoutConfirmation(t *testing.T) {
 	if requests != 0 {
 		t.Fatalf("requests = %d, want 0", requests)
 	}
-	if got := stdout.String(); !strings.Contains(got, "This will remove all agents. Are you sure? [y/N] ") {
+	if got := stdout.String(); !strings.Contains(got, "This will permanently remove all archived agents. Are you sure? [y/N] ") {
 		t.Fatalf("stdout = %q, want confirmation prompt", got)
 	}
 	if got := stdout.String(); !strings.Contains(got, "cancelled deleting all agents") {
@@ -1131,8 +1131,8 @@ func TestExecuteAgentDeleteAllForceSkipsConfirmation(t *testing.T) {
 				if req.Method != http.MethodGet {
 					t.Fatalf("method = %q, want %q", req.Method, http.MethodGet)
 				}
-				if req.URL.String() != "http://example.test/api/v1/agents" {
-					t.Fatalf("url = %q, want %q", req.URL.String(), "http://example.test/api/v1/agents")
+				if req.URL.String() != "http://example.test/api/v1/agents?archived=true" {
+					t.Fatalf("url = %q, want %q", req.URL.String(), "http://example.test/api/v1/agents?archived=true")
 				}
 				return jsonResponse(http.StatusOK, `[{"id":"u-alice","name":"alice","role":"worker","status":"running"}]`), nil
 			case 2:
@@ -2069,7 +2069,7 @@ func TestAgentHelpIncludesSubcommands(t *testing.T) {
 		"csgclaw agent <subcommand> [flags]",
 		"list               List agents",
 		"create             Create an agent",
-		"delete <id>        Delete one agent",
+		"delete <id>        Delete one archived agent",
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("help = %q, want substring %q", got, want)
@@ -2118,11 +2118,11 @@ func TestAgentDeleteSubcommandHelpShowsShortAndLongFlags(t *testing.T) {
 
 	got := stderr.String()
 	for _, want := range []string{
-		"Delete one agent or all agents.",
+		"Delete archived agents. Working files and collaboration history are retained.",
 		"csgclaw agent delete <id> [flags]",
 		"csgclaw agent delete --all [flags]",
-		"-a, --all     delete all agents",
-		"-f, --force   delete all agents without confirmation",
+		"-a, --all     delete all archived agents",
+		"-f, --force   delete all archived agents without confirmation",
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("help = %q, want substring %q", got, want)

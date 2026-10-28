@@ -1139,7 +1139,10 @@ func TestHandleAgentDeleteRemovesBoundParticipants(t *testing.T) {
 	srv := &Handler{svc: svc, im: imSvc, participant: participantSvc, agentEngine: agentengine.New(svc), workspace: svc.Workspace(), agentModels: svc.Models(), agentRuntime: svc}
 
 	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodDelete, "/api/v1/agents/agent-qa", nil)
+	if _, err := svc.SetArchived(context.Background(), "agent-qa", true); err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/agents/agent-qa", strings.NewReader(`{"name":"qa"}`))
 	srv.Routes().ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusNoContent {
@@ -1159,8 +1162,8 @@ func TestHandleAgentDeleteRemovesBoundParticipants(t *testing.T) {
 			t.Fatalf("participant %s:%s still exists after agent delete", ref.channel, ref.id)
 		}
 	}
-	if _, ok := imSvc.User("user-qa"); ok {
-		t.Fatal("local agent user user-qa still exists after deleting its CSGClaw participant")
+	if user, ok := imSvc.User("user-qa"); !ok || user.AgentState != "deleted" {
+		t.Fatal("deleted identity was not retained")
 	}
 }
 
@@ -1981,7 +1984,10 @@ func TestHandleAgentsDeleteRemovesAgent(t *testing.T) {
 	})
 
 	srv := &Handler{svc: svc, agentEngine: agentengine.New(svc), workspace: svc.Workspace(), agentModels: svc.Models(), agentRuntime: svc}
-	req := httptest.NewRequest(http.MethodDelete, "/api/v1/agents/u-alice", nil)
+	if _, err := svc.SetArchived(context.Background(), "u-alice", true); err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/agents/u-alice", strings.NewReader(`{"name":"alice"}`))
 	rec := httptest.NewRecorder()
 
 	srv.Routes().ServeHTTP(rec, req)
@@ -2036,7 +2042,10 @@ func TestAgentAdministrationRoutesUseInjectedEngineWithoutHandlerService(t *test
 	}
 
 	deleted := httptest.NewRecorder()
-	handler.Routes().ServeHTTP(deleted, httptest.NewRequest(http.MethodDelete, "/api/v1/agents/agent-engine-admin", nil))
+	if _, err := svc.SetArchived(context.Background(), "agent-engine-admin", true); err != nil {
+		t.Fatal(err)
+	}
+	handler.Routes().ServeHTTP(deleted, httptest.NewRequest(http.MethodDelete, "/api/v1/agents/agent-engine-admin", strings.NewReader(`{"name":"engine-admin"}`)))
 	if deleted.Code != http.StatusNoContent {
 		t.Fatalf("DELETE /agents status = %d, want 204; body=%s", deleted.Code, deleted.Body.String())
 	}
@@ -2102,7 +2111,8 @@ func TestAgentSubresourceAdministrationUsesOnlyResourceCRUD(t *testing.T) {
 		got.Spec.Instructions != "after instructions" || got.Spec.Memory == nil || got.Spec.Memory.Enabled {
 		t.Fatalf("final Agent resource = %+v", got)
 	}
-	request(http.MethodDelete, "/api/v1/agents/agent-resource-admin", "", http.StatusNoContent)
+	request(http.MethodPost, "/api/v1/agents/agent-resource-admin/archive", "", http.StatusOK)
+	request(http.MethodDelete, "/api/v1/agents/agent-resource-admin", `{"name":"resource-admin"}`, http.StatusNoContent)
 }
 
 func TestHandleAgentsCreateDoesNotProvisionIMUser(t *testing.T) {

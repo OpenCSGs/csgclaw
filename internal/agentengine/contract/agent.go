@@ -16,6 +16,7 @@ type AgentInterface interface {
 	Get(ctx context.Context, agentID string, options AgentGetOptions) (Agent, error)
 	List(ctx context.Context, options AgentListOptions) ([]Agent, error)
 	Update(ctx context.Context, agentID string, request AgentUpdateRequest) (Agent, error)
+	SetArchived(ctx context.Context, agentID string, archived bool) (Agent, error)
 
 	// Delete removes an Agent and its Runtime-owned state.
 	Delete(ctx context.Context, agentID string) error
@@ -46,8 +47,9 @@ type AgentGetOptions struct {
 }
 
 type AgentListOptions struct {
-	Reload       bool `json:"reload,omitempty"`
-	ProbeRuntime bool `json:"probe_runtime,omitempty"`
+	IncludeArchived bool `json:"include_archived,omitempty"`
+	Reload          bool `json:"reload,omitempty"`
+	ProbeRuntime    bool `json:"probe_runtime,omitempty"`
 }
 
 type AgentUpdateRequest struct {
@@ -67,6 +69,7 @@ type AgentRecreateOptions struct {
 // Spec is desired state with Runtime credentials omitted; Status is the latest
 // observed state.
 type Agent struct {
+	ArchivedAt      *time.Time  `json:"archived_at,omitempty"`
 	ID              string      `json:"id"`
 	ResourceVersion string      `json:"resource_version"`
 	Spec            AgentSpec   `json:"spec"`

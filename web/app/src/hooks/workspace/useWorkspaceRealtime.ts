@@ -147,7 +147,12 @@ export function useWorkspaceRealtime({
 
       const participantRosterEvent = isParticipantRosterEvent(payload);
       if (participantRosterEvent || isAgentRosterEvent(payload)) {
-        scheduleRefresh({ agents: true, bootstrap: participantRosterEvent });
+        scheduleRefresh({
+          agents: true,
+          bootstrap: participantRosterEvent || payload.type === "user.updated",
+          teams: payload.type === "user.updated",
+        });
+        void current.queryClient.invalidateQueries({ queryKey: ["archived-agents"] });
       }
       if (isTeamRosterEvent(payload)) {
         scheduleRefresh({ teams: true });

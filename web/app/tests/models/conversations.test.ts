@@ -57,7 +57,7 @@ describe("conversation model helpers", () => {
   it("formats structured event messages in English and Chinese", () => {
     const usersById = new Map([
       ["u-1", { id: "u-1", name: "Alice" }],
-      ["u-2", { id: "u-2" }],
+      ["u-2", { id: "u-2", name: "Bob" }],
     ]);
 
     expect(
@@ -75,7 +75,7 @@ describe("conversation model helpers", () => {
     expect(
       formatEventMessage(
         {
-          content: "Alice 邀请 @bob 加入了房间",
+          content: "Alice invited Bob to join the room",
           event: { actor_id: "u-1", key: "room_members_added", target_ids: ["u-2"] },
           mentions: [],
           sender_id: "u-1",
@@ -83,7 +83,54 @@ describe("conversation model helpers", () => {
         usersById,
         "zh",
       ),
-    ).toBe("Alice 邀请 @bob 加入了房间");
+    ).toBe("Alice 邀请 Bob 加入了房间");
+  });
+
+  it.each([
+    ["room_created", "Alice 创建了房间", "Alice created the room"],
+    ["room_members_added", "Alice 邀请 Worker 加入了房间", "Alice invited Worker to join the room"],
+    ["room_members_removed", "Alice 将 Worker 移出了房间", "Alice removed Worker from the room"],
+    [
+      "agent_archived",
+      "Worker 因智能体归档已被移出协作空间",
+      "Worker was removed from the collaboration space because the agent was archived",
+    ],
+    ["agent_restored", "Worker 已恢复并加入协作空间", "Worker was restored and rejoined the collaboration space"],
+    [
+      "agent_deleted",
+      "Worker 因智能体删除已被移出协作空间",
+      "Worker was removed from the collaboration space because the agent was deleted",
+    ],
+  ])("localizes persisted %s events and sidebar previews in the UI language", (key, zh, en) => {
+    const usersById = new Map([
+      ["user-admin", { id: "user-admin", name: "Alice" }],
+      ["user-worker", { id: "user-worker", name: "Worker" }],
+    ]);
+    const event: IMMessage = {
+      kind: "event",
+      content: en,
+      sender_id: "user-admin",
+      event: { key, actor_id: "user-admin", target_ids: ["user-worker"] },
+    };
+    expect(formatEventMessage(event, usersById, "zh")).toBe(zh);
+    expect(formatEventMessage(event, usersById, "en")).toBe(en);
+    expect(formatEventMessage(event, usersById, "zh-CN")).toBe(zh);
+    expect(formatConversationPreview(event, null, "user-admin", usersById, "zh", t)).toBe(zh);
+    expect(event.content).toBe(en);
+  });
+
+  it("keeps unknown or incomplete system events readable and uses missing identities as labels", () => {
+    const usersById = new Map();
+    for (const event of [undefined, { key: "unknown" }, { key: "agent_archived" }, { key: "room_created" }]) {
+      expect(formatEventMessage({ content: "Saved notice", event }, usersById, "zh")).toBe("Saved notice");
+    }
+    expect(
+      formatEventMessage(
+        { content: "", event: { key: "agent_restored", target_ids: ["user-missing"] } },
+        usersById,
+        "zh",
+      ),
+    ).toBe("user-missing 已恢复并加入协作空间");
   });
 
   it("formats task assignment events from metadata instead of full task instructions", () => {

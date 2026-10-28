@@ -25,12 +25,24 @@ func (h *Handler) agentForAuthorization(header string) (string, bool) {
 	if !ok || !strings.HasPrefix(header, "Bearer ") {
 		return "", false
 	}
-	return owner.AgentIDForAccessToken(strings.TrimPrefix(header, "Bearer "))
+	id, valid := owner.AgentIDForAccessToken(strings.TrimPrefix(header, "Bearer "))
+	if valid {
+		if selected, exists := h.svc.Agent(id); !exists || selected.ArchivedAt != nil {
+			return "", false
+		}
+	}
+	return id, valid
 }
 
 func (h *Handler) authorizesAgentToken(agentID, header string) bool {
 	owner, ok := h.svc.(interface{ AuthorizesAgentAccessToken(string, string) bool })
-	return ok && strings.HasPrefix(header, "Bearer ") && owner.AuthorizesAgentAccessToken(agentID, strings.TrimPrefix(header, "Bearer "))
+	if !ok {
+		return false
+	}
+	if selected, exists := h.svc.Agent(agentID); !exists || selected.ArchivedAt != nil {
+		return false
+	}
+	return strings.HasPrefix(header, "Bearer ") && owner.AuthorizesAgentAccessToken(agentID, strings.TrimPrefix(header, "Bearer "))
 }
 
 func (h *Handler) authorizeAppPlatformRequests(next http.Handler) http.Handler {

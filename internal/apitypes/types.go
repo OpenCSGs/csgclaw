@@ -31,6 +31,7 @@ type LegacyBot struct {
 }
 
 type User struct {
+	AgentState   string        `json:"agent_state,omitempty"`
 	ID           string        `json:"id"`
 	Name         string        `json:"name"`
 	Description  string        `json:"description,omitempty"`

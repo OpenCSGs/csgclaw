@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"slices"
 	"strings"
 )
 
@@ -93,6 +94,11 @@ func (h *Handler) resolveCreateTeamAgents(req apitypes.CreateTeamRequest) (strin
 		}
 	}
 
+	for _, id := range append([]string{leadAgentID}, memberAgentIDs...) {
+		if h.agentLifecycleState(id) == "archived" {
+			return "", nil, fmt.Errorf("archived agent cannot join a team")
+		}
+	}
 	return leadAgentID, memberAgentIDs, nil
 }
 
@@ -162,6 +168,26 @@ func (h *Handler) handleUpdateTeam(w http.ResponseWriter, r *http.Request) {
 	memberAgentIDs := req.MemberAgentIDs
 	if memberAgentIDs != nil {
 		memberAgentIDs = canonicalAgentIDs(memberAgentIDs)
+	}
+
+	current, _ := svc.GetTeam(pathValue(r, "team_id"))
+	if leadAgentID != "" && leadAgentID != current.LeadAgentID && h.agentLifecycleState(leadAgentID) == "archived" {
+		http.Error(w, "archived agent cannot join a team", http.StatusConflict)
+		return
+	}
+	if req.MemberAgentIDs != nil {
+		for _, id := range memberAgentIDs {
+			if h.agentLifecycleState(id) == "archived" && !slices.Contains(current.MemberAgentIDs, id) {
+				http.Error(w, "archived agent cannot join a team", http.StatusConflict)
+				return
+			}
+		}
+		// Hidden archived members are retained when editing the visible roster.
+		for _, id := range current.MemberAgentIDs {
+			if h.agentLifecycleState(id) == "archived" && !slices.Contains(memberAgentIDs, id) {
+				memberAgentIDs = append(memberAgentIDs, id)
+			}
+		}
 	}
 	updated, err := svc.UpdateTeam(team.UpdateTeamInput{
 		TeamID:             pathValue(r, "team_id"),

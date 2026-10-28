@@ -5,6 +5,7 @@ export type WorkspaceScheduledTask = {
   title: string;
   agent_id: string;
   agent_name?: string;
+  agent_state?: string;
   prompt: string;
   recurrence: ScheduledTaskRecurrence;
   enabled: boolean;
@@ -61,6 +62,7 @@ export function normalizeScheduledTask(input: unknown): WorkspaceScheduledTask |
     title: text(item.title) || id,
     agent_id: text(item.agent_id),
     agent_name: text(item.agent_name),
+    agent_state: text(item.agent_state),
     prompt: text(item.prompt),
     recurrence: normalizeRecurrence(item.recurrence),
     enabled: booleanValue(item.enabled, true),

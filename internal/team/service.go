@@ -2647,3 +2647,27 @@ func parseCounter(raw string) (int64, error) {
 	}
 	return value, nil
 }
+
+// RemoveAgent leaves the team, tasks and events intact. An absent lead must be
+// chosen explicitly; deletion never substitutes another agent automatically.
+func (s *Service) RemoveAgent(id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for key, meta := range s.teams {
+		if meta.LeadAgentID != id && !slices.Contains(meta.MemberAgentIDs, id) {
+			continue
+		}
+		before := s.captureTeamStateLocked(key)
+		eventStart := len(s.events[key])
+		if meta.LeadAgentID == id {
+			meta.LeadAgentID = ""
+		}
+		meta.MemberAgentIDs = withoutAgentID(cloneStrings(meta.MemberAgentIDs), id)
+		meta.UpdatedAt = s.now()
+		s.teams[key] = meta
+		if err := s.persistMutationLocked(key, before, eventStart); err != nil {
+			return err
+		}
+	}
+	return nil
+}

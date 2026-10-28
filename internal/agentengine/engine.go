@@ -4,7 +4,9 @@ import (
 	"context"
 	"csgclaw/internal/activity"
 	"csgclaw/internal/agentengine/contract"
+	"csgclaw/internal/agentengine/lifecycle"
 	"csgclaw/internal/diagnostics"
+	agentidentity "csgclaw/internal/identity"
 	"fmt"
 	"log/slog"
 	"reflect"
@@ -30,6 +32,7 @@ type conversationRuntimeAdapter interface {
 // identity, pending interactions, replay-safe event delivery, and terminal
 // result idempotency.
 type Engine struct {
+	lifecycle     *lifecycle.Coordinator
 	generateImage imageGenerator
 	generateVideo videoGenerator
 	agents        AgentInterface
@@ -150,6 +153,11 @@ func (c *conversations) Run(ctx context.Context, request TurnRequest, sink Event
 		return resultFromContext(ctx, err)
 	}
 
+	if c.engine.agents != nil {
+		if selected, err := c.engine.agents.Get(ctx, c.agentID, AgentGetOptions{}); err == nil && selected.ArchivedAt != nil {
+			return failedResult(ErrorAgentUnavailable, "agent is archived")
+		}
+	}
 	identity := conversationIdentity{agentID: c.agentID, key: request.ConversationKey}
 	if replay, existing, preflightResult := c.engine.preflightTurn(identity, request); replay != nil {
 		return replayCompleted(ctx, sink, *replay)
@@ -193,6 +201,23 @@ func (c *conversations) Run(ctx context.Context, request TurnRequest, sink Event
 	}
 	slog.InfoContext(turn.ctx, "agent turn admitted", "agent_id", c.agentID, "conversation_key", request.ConversationKey)
 
+	if (request.ImageGeneration != nil || request.VideoGeneration != nil) && c.engine.lifecycle != nil {
+		release, err := c.engine.lifecycle.Execution(turn.ctx, agentidentity.CanonicalAgentID(c.agentID))
+		if err == nil {
+			defer release()
+			if selected, getErr := c.engine.agents.Get(turn.ctx, c.agentID, AgentGetOptions{}); getErr != nil {
+				err = getErr
+			} else if selected.ArchivedAt != nil {
+				err = fmt.Errorf("agent is archived")
+			}
+		}
+		if err != nil {
+			result := failedResult(ErrorAgentUnavailable, err.Error())
+			turn.cancel()
+			c.engine.complete(identity, turn, result)
+			return result
+		}
+	}
 	if request.ImageGeneration != nil {
 		if request.ImageGeneration.Model == nil && c.engine.agents != nil {
 			selected, err := c.engine.agents.Get(turn.ctx, c.agentID, AgentGetOptions{})
@@ -839,4 +864,16 @@ func (e *Engine) emitDetached(identity conversationIdentity, turn *activeTurn, s
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	_ = emitTurnEvent(ctx, sink, event)
+}
+
+// interruptAgent cancels every active conversation, including image/video generation.
+func (e *Engine) interruptAgent(agentID string) {
+	e.mu.Lock()
+	for identity, turn := range e.active {
+		if agentidentity.CanonicalAgentID(identity.agentID) == agentID {
+			turn.cancel()
+		}
+	}
+	e.mu.Unlock()
+	e.interactions.Interrupt(agentID, "", "", true)
 }

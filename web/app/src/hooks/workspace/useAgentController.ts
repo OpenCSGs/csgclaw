@@ -13,6 +13,7 @@ import {
   createManagerAgentRequest,
   createNotificationBotRequest,
   deleteAgentLikeRequest,
+  archiveAgent,
   deleteAgentSkillRequest,
   deleteBotRequest,
   deleteFeishuParticipantRequest,
@@ -117,12 +118,7 @@ import type {
   AgentTemplateLike,
   RuntimeBootstrapConfig,
 } from "@/models/agents";
-import {
-  agentIdentityMatchesUser,
-  isDirectConversation,
-  localIdentitiesMatch,
-  upsertUserInData,
-} from "@/models/conversations";
+import { isDirectConversation, localIdentitiesMatch, upsertUserInData } from "@/models/conversations";
 import type { MCPServer, MCPServerSourceStatus } from "@/models/mcp";
 import { displayTeam, teamMemberIDs } from "@/models/tasks";
 import type { WorkspaceTeam } from "@/models/tasks";
@@ -440,7 +436,6 @@ export function useAgentController({
   setManagerProfileData,
   setSelectedHubTemplateId,
   t,
-  workingParticipantsForRoom,
 }: UseAgentControllerArgs) {
   const { showNotice } = useGlobalNotice();
   const {
@@ -2157,36 +2152,8 @@ export function useAgentController({
     }
   }
 
-  async function checkAgentDelete(item: AgentLike): Promise<{ message: string; onResolve?: () => void } | null> {
-    if (isNotificationBotAgent(item)) return null;
-    try {
-      const result = await teamsQuery.refetch();
-      if (result.error) throw result.error;
-      const referencedTeams = (result.data ?? []).filter((candidate) =>
-        teamMemberIDs(candidate).some((id) => agentIdentityMatchesUser(item, { id })),
-      );
-      const team = referencedTeams[0];
-      if (team) {
-        return {
-          message: t("agentDeleteTeamBlocked", { count: referencedTeams.length }),
-          onResolve: () => {
-            navigatePane({ type: WorkspacePaneTypes.team, id: team.id });
-          },
-        };
-      }
-      if (
-        rooms.some((room) =>
-          workingParticipantsForRoom?.(room.id).some((participant) =>
-            agentIdentityMatchesUser(item, { id: participant.participantID, user_id: participant.id }),
-          ),
-        )
-      ) {
-        return { message: t("agentDeleteWorkingBlocked") };
-      }
-      return null;
-    } catch {
-      return { message: t("agentDeleteCheckFailed") };
-    }
+  async function checkAgentDelete(): Promise<{ message: string; onResolve?: () => void } | null> {
+    return null;
   }
 
   async function runAgentAction(item: AgentLike | null | undefined, action: AgentAction): Promise<void> {
@@ -2243,19 +2210,20 @@ export function useAgentController({
       let updatedAgent: AgentLike | null = null;
       const deletingNotificationBot = action === "delete" && isNotificationBotAgent(item);
       if (action === "delete") {
-        const blocked = await checkAgentDelete(item);
+        const blocked = await checkAgentDelete();
         if (blocked) {
           setAgentOperationError(item, blocked.message);
           return;
         }
-        await deleteAgentLikeRequest(item);
+        if (isNotificationBotAgent(item)) await deleteAgentLikeRequest(item);
+        else await archiveAgent(item.id);
         onAgentDeleted?.(item);
         if (activePane.type === WorkspacePaneTypes.agent && activePane.id === item.id) {
           const fallbackAgent = agentSelectionAfterDelete(agentItems, item.id);
           if (fallbackAgent) {
             selectAgent(fallbackAgent, { replace: true });
             showAgentPageNotice(
-              t("agentDeletedAndSwitched", {
+              t(isNotificationBotAgent(item) ? "agentDeletedAndSwitched" : "agentArchivedAndSwitched", {
                 deleted: String(item.name || item.id),
                 selected: String(fallbackAgent.name || fallbackAgent.id),
               }),
@@ -2269,6 +2237,7 @@ export function useAgentController({
         updatedAgent = await runAgentActionRequest(item.id, action);
       }
       await refreshAgentsWithUpdatedAgent(updatedAgent);
+      if (action === "delete") await refreshWorkspaceBootstrap();
       if (action === "delete" && !deletingNotificationBot) {
         await refreshAgentSkills(item.id);
       }

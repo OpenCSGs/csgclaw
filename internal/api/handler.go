@@ -44,6 +44,7 @@ import (
 	"net/http"
 	"os"
 	goruntime "runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -51,6 +52,7 @@ import (
 )
 
 type Handler struct {
+	agentArchiveMu             sync.Mutex
 	resourcesOnce              sync.Once
 	resources                  *conversationresource.Service
 	svc                        AgentRecords
@@ -209,6 +211,7 @@ type updateBootstrapConfigRequest struct {
 }
 
 type agentResponse struct {
+	ArchivedAt           *time.Time                         `json:"archived_at,omitempty"`
 	ID                   string                             `json:"id"`
 	Name                 string                             `json:"name"`
 	Description          string                             `json:"description,omitempty"`
@@ -248,6 +251,7 @@ func (r *agentResponse) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	*r = agentResponse{
+		ArchivedAt:       apiAgent.ArchivedAt,
 		ID:               apiAgent.ID,
 		Name:             apiAgent.Name,
 		Description:      apiAgent.Description,
@@ -705,6 +709,7 @@ func NewHandlerWithAuth(svc AgentServices, engine agentengine.Interface, imSvc *
 		serverNoAuth:      serverNoAuth,
 		upgradeApply:      upgrade.StartApplyHelper, workspace: svc.Workspace, agentModels: svc.Models, agentRuntime: svc.Runtime,
 	}
+	h.configureAgentLifecycle()
 	return h
 }
 
@@ -758,6 +763,7 @@ func (h *Handler) SetUserInputResponder(responder UserInputResponder) {
 func (h *Handler) SetAgentEngine(engine agentengine.Interface, bindings *agentsession.Store) {
 	if h != nil {
 		h.agentEngine = engine
+		h.configureAgentLifecycle()
 		h.sessionBindings = bindings
 		h.runtimeExtensionSourcesSet = false
 		h.configureRuntimeExtensionSources()
@@ -845,6 +851,10 @@ func (h *Handler) SetAgentTaskService(svc *agenttask.Service) {
 func (h *Handler) SetScheduledTaskService(svc *scheduledtask.Service) {
 	if h != nil {
 		h.scheduledTaskSvc = svc
+		if svc != nil {
+			svc.SetAgentCheck(h.availableScheduledAgent)
+			h.reconcileArchivedSchedules(svc)
+		}
 	}
 }
 
@@ -1078,10 +1088,14 @@ func (h *Handler) handleAgents(w http.ResponseWriter, r *http.Request) {
 	case http.MethodGet:
 		ctx, cancel := context.WithTimeout(r.Context(), agentRuntimeStatusTimeout)
 		defer cancel()
-		items, err := agents.List(ctx, agentengine.AgentListOptions{Reload: true, ProbeRuntime: true})
+		archived := r.URL.Query().Get("archived") == "true"
+		items, err := agents.List(ctx, agentengine.AgentListOptions{Reload: true, ProbeRuntime: !archived, IncludeArchived: archived})
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
+		}
+		if archived {
+			items = slices.DeleteFunc(items, func(item agentengine.Agent) bool { return item.ArchivedAt == nil })
 		}
 		if caller := appRequestAgentID(r); caller != "" {
 			public := []map[string]any{}
@@ -1158,6 +1172,16 @@ func (h *Handler) handleAgentByID(w http.ResponseWriter, r *http.Request) {
 		h.publishUpdatedAgentUser(serviceUpdated)
 		writeJSON(w, http.StatusOK, h.presentEngineAgentForRequest(r, updated))
 	case http.MethodDelete:
+		h.agentArchiveMu.Lock()
+		defer h.agentArchiveMu.Unlock()
+		if err := h.validateArchivedDelete(r, id); err != nil {
+			if agentengine.ErrorCodeOf(err) == agentengine.ErrorAgentNotFound {
+				writeAgentGetError(w, err)
+				return
+			}
+			writeAgentOperationError(w, err, http.StatusBadRequest)
+			return
+		}
 		var err error
 		if h.participant != nil {
 			_, err = h.participant.DeleteAgent(r.Context(), id)
@@ -1167,6 +1191,18 @@ func (h *Handler) handleAgentByID(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			writeAgentOperationError(w, err, http.StatusBadRequest)
 			return
+		}
+		if h.im != nil {
+			if err := h.im.RetireAgentUser(id); err != nil {
+				writeAgentOperationError(w, err, http.StatusInternalServerError)
+				return
+			}
+		}
+		if h.teamSvc != nil {
+			if err := h.teamSvc.RemoveAgent(id); err != nil {
+				writeAgentOperationError(w, err, http.StatusInternalServerError)
+				return
+			}
 		}
 		w.WriteHeader(http.StatusNoContent)
 	default:
@@ -3558,6 +3594,7 @@ func presentAgent(item agent.Agent) agentResponse {
 	profile := profileResponseFromAgentView(av)
 	runtimeCfg := item.RuntimeConfig()
 	return agentResponse{
+		ArchivedAt:   item.ArchivedAt,
 		ID:           item.ID,
 		Name:         item.Name,
 		Description:  item.Description,

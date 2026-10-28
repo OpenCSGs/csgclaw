@@ -477,6 +477,11 @@ func (s *Service) Delete(ctx context.Context, channel, id string, opts DeleteOpt
 		if s.agents == nil {
 			return apitypes.Participant{}, false, fmt.Errorf("agent service is required")
 		}
+		if selected, err := s.agents.Get(ctx, existing.AgentID, agentengine.AgentGetOptions{}); err != nil {
+			return apitypes.Participant{}, false, err
+		} else if selected.ArchivedAt == nil {
+			return apitypes.Participant{}, false, fmt.Errorf("archive the agent before deleting it")
+		}
 		for _, item := range s.store.List(ListOptions{AgentID: existing.AgentID}) {
 			if item.Channel == existing.Channel && item.ID == existing.ID {
 				continue
@@ -626,7 +631,11 @@ func (s *Service) deleteUnreferencedCSGClawParticipantUser(deleted apitypes.Part
 			return nil
 		}
 	}
-	if err := s.im.DeleteUser(userID); err != nil {
+	deleteUser := s.im.DeleteUser
+	if deleted.Type == TypeAgent {
+		deleteUser = s.im.RetireAgentUser
+	}
+	if err := deleteUser(userID); err != nil {
 		if strings.Contains(err.Error(), "not found") {
 			return nil
 		}
