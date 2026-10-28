@@ -111,7 +111,7 @@ describe("task conversation controls", () => {
   });
 });
 
-it("shows the saved guide and does not carry a shared workspace into an agent's private task", () => {
+it("keeps the saved guide out of composer controls and does not carry a shared workspace into a private task", () => {
   const onNewTask = vi.fn();
   render(
     <TaskConversationControls
@@ -128,9 +128,9 @@ it("shows the saved guide and does not carry a shared workspace into an agent's 
       onNewTask={onNewTask}
     />,
   );
-  fireEvent.click(screen.getByText("teamGuideTab"));
-  expect(screen.getByText("Original team rules")).toBeVisible();
-  expect(screen.getByText("teamGuideRoomHint")).toBeVisible();
+  expect(screen.queryByText("teamGuideTab")).not.toBeInTheDocument();
+  expect(screen.queryByText("Original team rules")).not.toBeInTheDocument();
+  expect(screen.getByLabelText("iaWorkdirTitle")).toHaveAttribute("title", expect.stringContaining("/project"));
   fireEvent.click(screen.getByRole("button", { name: "taskEntryNew" }));
   expect(onNewTask).toHaveBeenCalledExactlyOnceWith();
 });
