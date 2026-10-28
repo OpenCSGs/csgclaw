@@ -14,7 +14,7 @@ import {
   type DesktopUpdateChannel,
 } from "../shared/desktopBridge.types";
 import { parseDesktopThemeSource } from "../shared/desktopTheme";
-import { isSafeHTTPSURL, isTrustedMainFrame } from "./navigationPolicy";
+import { isSafeHTTPSURL, isSafeWebURL, isTrustedMainFrame } from "./navigationPolicy";
 import type { SidecarSupervisor } from "./sidecar/SidecarSupervisor";
 import type { DesktopUpdater } from "./updater";
 import { TurnNotifications } from "./turnNotifications";
@@ -133,9 +133,11 @@ function parseOAuthInput(input: unknown): DesktopOAuthInput {
   ) {
     throw new Error("OAuth purpose is invalid.");
   }
-  if (typeof source.url !== "string" || !isSafeHTTPSURL(source.url)) {
+  const allowHTTP = source.purpose === "opencsg-auth";
+  const isSafeURL = allowHTTP ? isSafeWebURL : isSafeHTTPSURL;
+  if (typeof source.url !== "string" || !isSafeURL(source.url)) {
     throw new Error(
-      "OAuth URL must be an HTTPS URL without embedded credentials.",
+      `OAuth URL must be an ${allowHTTP ? "HTTP or HTTPS" : "HTTPS"} URL without embedded credentials.`,
     );
   }
   return { purpose: source.purpose, url: source.url };
