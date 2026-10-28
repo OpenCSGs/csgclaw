@@ -307,6 +307,9 @@ Runtime-local file delivery is deliberately not encoded in this line protocol.
 The Codex app-server adapter registers the typed dynamic tool `csgclaw_publish_file` only for Engine-created threads, with `path`, optional `name`, and optional `mimeType` arguments.
 The tool produces a reliable Runtime file event rather than text that must be reparsed.
 The Runtime Adapter opens the workspace-relative path through rooted access, rejects escapes and non-regular final symlinks, and registers one immutable snapshot in the Agent-scoped Engine Artifact Store before the Turn completes.
+The publication tool waits for workspace authorization and snapshot creation before reporting success.
+Missing, unreadable, changed, or invalid files return a recoverable tool error so the model can correct the file or path and retry within the same turn.
+Acknowledged snapshots survive later source changes or removal, and cancellation stops pending publication without carrying files into a later turn.
 Agent Engine assigns an opaque random file ID independent from the content SHA-256 and returns JSON-safe metadata in `TurnResult.Files` only when the Turn succeeds.
 The visible name must be a valid UTF-8 basename with no path components or control characters and at most 255 bytes.
 Channel Adapters call `Engine.Conversations(agentID).Files().Get(fileID)` to receive authoritative metadata and an independent reader over the same snapshot without accessing the Runtime workspace.

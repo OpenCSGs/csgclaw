@@ -307,6 +307,9 @@ Runtime 本地文件投递明确不使用该行式协议编码。
 Codex app-server Adapter 只为 Engine 创建的 Thread 注册 typed dynamic tool `csgclaw_publish_file`，参数为 `path`、可选 `name` 和可选 `mimeType`。
 该工具产生可靠的 Runtime File Event，而不是需要再次解析的文本。
 Runtime Adapter 通过受 workspace 根目录约束的文件访问打开相对路径，拒绝越界路径和最终为 symlink 的非普通文件，并在 Turn 完成前把唯一不可变快照注册到 Agent-scoped Engine Artifact Store。
+发布工具会等待工作区授权校验和快照创建完成后才返回成功。
+文件缺失、不可读、发生变化或无效时返回可恢复的工具错误，让模型在同一轮中修正文件或路径后重试。
+已确认的快照不受后续源文件修改或删除影响，取消操作会终止等待中的发布，不会把文件带入后续轮次。
 Agent Engine 分配与内容 SHA-256 无关的随机 opaque File ID，并且只在 Turn 成功时通过 `TurnResult.Files` 返回 JSON-safe Metadata。
 可见名称必须是有效 UTF-8 basename，不含路径成分或控制字符，并且最多为 255 bytes。
 Channel Adapter 调用 `Engine.Conversations(agentID).Files().Get(fileID)` 获取权威 Metadata 和同一个快照上的独立 Reader，不再访问 Runtime workspace。

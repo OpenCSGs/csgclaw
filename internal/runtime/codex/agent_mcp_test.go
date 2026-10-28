@@ -143,9 +143,9 @@ func TestAgentMCPEnvironmentNeverInheritsAdminToken(t *testing.T) {
 }
 
 func TestAgentMCPFileToolRequiresExactActiveTurn(t *testing.T) {
-	sink := &recordingSink{}
-	manager := newAppServerManager(testAppServerManagerDepsWithSink(sink))
 	spec := testAppServerSessionSpec(t.TempDir())
+	sink := newFilePublicationTestSink(t, spec.WorkspaceDir, "result.txt")
+	manager := newAppServerManager(testAppServerManagerDepsWithSink(sink))
 	spec.AgentID = "agent-alice"
 	live := &liveSession{spec: spec, filePublishingThreads: map[string]bool{"thread-a": true, "thread-b": true}, conversationSessions: map[string]string{"room-a": "thread-a", "room-b": "thread-b"}}
 	manager.sessions[spec.RuntimeID] = live
