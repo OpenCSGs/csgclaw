@@ -1,32 +1,41 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui";
 import { useWorkspaceControllerContext } from "@/hooks/workspace";
 import { OPEN_ONBOARDING_GUIDE_EVENT } from "@/shared/lib/onboardingGuide";
 import styles from "./OnboardingGuide.module.css";
-
-const SEEN_GUIDE_KEY = "csgclaw:onboarding-guide:seen";
+import { GUIDE_ACKNOWLEDGED_KEY, GUIDE_REVISION, hasAcknowledgedGuide } from "./onboardingGuidePersistence";
 
 export function OnboardingGuide() {
   const controller = useWorkspaceControllerContext();
-  const version = controller.sidebarProps?.appVersion;
   const locale = controller.sidebarProps?.locale || "zh";
   const [open, setOpen] = useState(false);
   const frameRef = useRef<HTMLIFrameElement>(null);
+  const closeRef = useRef<HTMLDivElement>(null);
   const returnFocusRef = useRef<HTMLElement | null>(null);
+  const readyFrameRef = useRef<Window | null>(null);
+
+  const dismissGuide = useCallback(() => {
+    if (readyFrameRef.current && readyFrameRef.current === frameRef.current?.contentWindow) {
+      try {
+        window.localStorage.setItem(GUIDE_ACKNOWLEDGED_KEY, GUIDE_REVISION);
+      } catch {
+        // Storage failures must not prevent closing the guide.
+      }
+    }
+    setOpen(false);
+  }, []);
 
   useEffect(() => {
-    if (!controller.ready || !version) return;
-    const key = `${SEEN_GUIDE_KEY}:${version}`;
+    if (!controller.ready) return;
     try {
-      if (window.localStorage.getItem(key) === "seen") return;
-      window.localStorage.setItem(key, "seen");
+      if (hasAcknowledgedGuide(window.localStorage)) return;
     } catch {
       // Storage can be unavailable in restricted browser contexts.
     }
     const activeElement = document.activeElement;
     returnFocusRef.current = activeElement instanceof HTMLElement ? activeElement : null;
     setOpen(true);
-  }, [controller.ready, version]);
+  }, [controller.ready]);
 
   useEffect(() => {
     const handleOpen = () => {
@@ -48,12 +57,43 @@ export function OnboardingGuide() {
   useEffect(() => {
     if (!open) return;
     const handleMessage = (event: MessageEvent) => {
-      if (event.source !== frameRef.current?.contentWindow) return;
-      if (event.data?.type === "csgclaw:guide-exit") setOpen(false);
+      if (event.origin !== window.location.origin || event.source !== frameRef.current?.contentWindow) return;
+      if (event.data?.type === "csgclaw:guide-ready") readyFrameRef.current = frameRef.current?.contentWindow ?? null;
+      if (event.data?.type === "csgclaw:guide-exit") dismissGuide();
     };
     window.addEventListener("message", handleMessage);
     return () => window.removeEventListener("message", handleMessage);
-  }, [open]);
+  }, [open, dismissGuide]);
+
+  useEffect(() => {
+    if (!open) return;
+    const frame = frameRef.current;
+    const close = closeRef.current;
+    if (!frame || !close) return;
+    // Iframes do not inherit the shell's CSS variables or the host button size.
+    const syncLayout = () => {
+      frame.contentWindow?.postMessage(
+        {
+          type: "csgclaw:guide-layout",
+          controlsWidth: parseFloat(getComputedStyle(frame).getPropertyValue("--desktop-window-controls-width")) || 0,
+          exitWidth: close.getBoundingClientRect().width,
+        },
+        window.location.origin,
+      );
+    };
+    const resize = new ResizeObserver(syncLayout);
+    resize.observe(close);
+    const chrome = frame.closest("[data-desktop-platform]");
+    const platform = new MutationObserver(syncLayout);
+    if (chrome) platform.observe(chrome, { attributes: true, attributeFilter: ["data-desktop-platform"] });
+    frame.addEventListener("load", syncLayout);
+    syncLayout();
+    return () => {
+      resize.disconnect();
+      platform.disconnect();
+      frame.removeEventListener("load", syncLayout);
+    };
+  }, [open, locale]);
 
   if (!open) return null;
   const title = locale === "en" ? "CSGClaw onboarding guide" : "CSGClaw 新手引导";
@@ -67,21 +107,23 @@ export function OnboardingGuide() {
       onKeyDown={(event) => {
         if (event.key === "Escape") {
           event.stopPropagation();
-          setOpen(false);
+          dismissGuide();
         }
       }}
     >
-      <div className={styles.close}>
-        <Button variant="secondaryGray" size="sm" onClick={() => setOpen(false)}>
+      <div ref={closeRef} className={styles.close}>
+        <Button variant="secondaryGray" size="sm" onClick={dismissGuide}>
           {controller.t("onboardingGuideExit")}
         </Button>
       </div>
       <iframe
+        key={locale}
         ref={frameRef}
         className={styles.frame}
         src={`onboarding-guide/guide.html?locale=${locale}&embedded=1`}
         title={title}
         onLoad={() => {
+          readyFrameRef.current = null;
           frameRef.current?.focus();
           frameRef.current?.contentWindow?.postMessage({ type: "csgclaw:guide-focus" }, window.location.origin);
         }}
