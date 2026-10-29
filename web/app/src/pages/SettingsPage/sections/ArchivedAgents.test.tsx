@@ -18,15 +18,23 @@ function setup() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
     <QueryClientProvider client={client}>
-      <ArchivedAgents t={createTranslator("en")} />
+      <ArchivedAgents
+        t={createTranslator("en")}
+        usersById={new Map([["user-review", { id: "user-review", avatar: "avatar/3D-1.png" }]])}
+      />
     </QueryClientProvider>,
   );
   return userEvent.setup();
 }
 it("requires the exact name before permanently deleting an archived agent", async () => {
   const user = setup();
-  await user.click(await screen.findByRole("button", { name: "Delete permanently" }));
+  await screen.findByText("Review");
+  expect(document.querySelector("img")).toHaveAttribute("src", "avatar/3D-1.png");
+  await user.click(await screen.findByRole("button", { name: "Delete permanently Review" }));
   const dialog = screen.getByRole("dialog");
+  expect(dialog).toHaveTextContent("Keep collaboration messages, attachments, and the original name and avatar");
+  expect(dialog).toHaveTextContent("Keep schedules stopped");
+  expect(dialog).toHaveTextContent('Type "Review" to confirm');
   const confirm = within(dialog).getByRole("button", { name: "Delete permanently" });
   expect(confirm).toBeDisabled();
   await user.type(within(dialog).getByRole("textbox", { name: "Agent name" }), "review");

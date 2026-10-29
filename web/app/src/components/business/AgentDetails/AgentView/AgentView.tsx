@@ -131,7 +131,7 @@ export const AgentView = forwardRef<AgentDetailPaneHandle, AgentDetailPaneProps>
             ) : (
               <Button
                 className="agent-delete-button"
-                variant="danger"
+                variant={archiving ? "primary" : "danger"}
                 size="sm"
                 disabled={deleteChecking}
                 onClick={confirmDelete}

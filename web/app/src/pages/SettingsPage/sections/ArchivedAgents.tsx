@@ -1,9 +1,12 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { ArchiveRestore, Trash2 } from "lucide-react";
 import { deleteArchivedAgent, fetchArchivedAgents, restoreAgent } from "@/api/agents";
 import { errorMessage } from "@/api/client";
-import type { AgentLike } from "@/models/agents";
-import type { TranslateFn } from "@/models/conversations";
+import { resolveAgentAvatarSource, type AgentLike } from "@/models/agents";
+import type { TranslateFn, UsersById } from "@/models/conversations";
+import { AgentAvatarContent } from "@/components/business/AgentAvatar";
+import { avatarFallbackText } from "@/shared/avatar";
 import {
   Button,
   DialogRoot,
@@ -12,36 +15,51 @@ import {
   DialogTitle,
   DialogDescription,
   DialogCloseButton,
+  DialogBody,
+  DialogFooter,
+  Field,
   TextInput,
 } from "@/components/ui";
-import { SettingsRow } from "./SettingsRow";
+import styles from "../SettingsPage.module.css";
 
-export function ArchivedAgents({ t }: { t: TranslateFn }) {
+export function ArchivedAgents({
+  t,
+  usersById,
+  onCountChange,
+}: {
+  t: TranslateFn;
+  usersById?: UsersById;
+  onCountChange?: (count: number) => void;
+}) {
   const client = useQueryClient();
   const query = useQuery({ queryKey: ["archived-agents"], queryFn: fetchArchivedAgents, refetchInterval: 10000 });
   const [selection, setSelection] = useState<{ agent: AgentLike; deleting: boolean } | null>(null);
   const [name, setName] = useState("");
-  const [search, setSearch] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const items = (query.data ?? []).filter((item) =>
-    String(item.name || item.id)
-      .toLowerCase()
-      .includes(search.trim().toLowerCase()),
-  );
+  const [notice, setNotice] = useState("");
+  const items = (query.data ?? []).map((item) => ({
+    ...item,
+    avatar: resolveAgentAvatarSource(item, usersById) || item.avatar,
+  }));
+  const selectedName = String(selection?.agent.name || selection?.agent.id || "");
+  useEffect(() => {
+    onCountChange?.(query.data?.length ?? 0);
+  }, [query.data?.length, onCountChange]);
   function select(agent: AgentLike, deleting: boolean) {
     setSelection({ agent, deleting });
     setName("");
     setError("");
+    setNotice("");
   }
   async function confirm() {
-    if (!selection?.agent.id || busy) return;
+    if (!selection?.agent.id || busy || (selection.deleting && name !== selectedName)) return;
     setBusy(true);
     setError("");
     try {
-      if (selection.deleting) {
-        await deleteArchivedAgent(selection.agent.id, name);
-      } else await restoreAgent(selection.agent.id);
+      if (selection.deleting) await deleteArchivedAgent(selection.agent.id, name);
+      else await restoreAgent(selection.agent.id);
+      setNotice(t(selection.deleting ? "archivedAgentDeleted" : "archivedAgentRestored"));
       setSelection(null);
       await client.invalidateQueries();
     } catch (failure) {
@@ -51,34 +69,53 @@ export function ArchivedAgents({ t }: { t: TranslateFn }) {
     }
   }
   return (
-    <SettingsRow title={t("archivedAgents")} description={t("archivedAgentsHint")}>
-      <div className="flex flex-col gap-3">
-        <TextInput
-          aria-label={t("archivedAgentName")}
-          placeholder={t("archivedAgentName")}
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-        />
-        {query.isPending && <p>{t("loading")}</p>}
-        {query.error && <p role="alert">{errorMessage(query.error, t("agentActionFailed"))}</p>}
-        {!query.isPending && items.length === 0 && <p>{t("archivedAgentsEmpty")}</p>}
+    <>
+      {notice && (
+        <p className={styles.listNotice} role="status">
+          {notice}
+        </p>
+      )}
+      {query.isPending && <p className={styles.listNotice}>{t("loading")}</p>}
+      {query.error && <p role="alert">{errorMessage(query.error, t("agentActionFailed"))}</p>}
+      {!query.isPending && !query.error && items.length === 0 && (
+        <p className={styles.emptyState}>{t("archivedAgentsEmpty")}</p>
+      )}
+      <ul className={styles.sourceList}>
         {items.map((item) => (
-          <div key={item.id} className="flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <strong>{item.name || item.id}</strong>
-              {item.archived_at && <p className="text-xs">{new Date(item.archived_at).toLocaleString()}</p>}
+          <li key={item.id} className={styles.sourceRow}>
+            <div className={styles.sourceRowMain}>
+              <span className={styles.archivedAgentName}>
+                <span className={styles.archivedAgentAvatar} aria-hidden="true">
+                  <AgentAvatarContent
+                    avatar={item.avatar}
+                    fallback={avatarFallbackText(item.avatar, item.name, item.id)}
+                  />
+                </span>
+                <strong>{item.name || item.id}</strong>
+              </span>
+              <small>
+                <span className={styles.kindTag}>{t("archivedAgentsTab")}</span>
+                {item.archived_at && t("archivedAgentAt", { time: new Date(item.archived_at).toLocaleString() })}
+              </small>
             </div>
-            <div className="flex gap-2">
-              <Button size="sm" variant="secondaryGray" onClick={() => select(item, false)}>
-                {t("archivedAgentRestore")}
-              </Button>
-              <Button size="sm" variant="danger" onClick={() => select(item, true)}>
-                {t("archivedAgentDelete")}
-              </Button>
-            </div>
-          </div>
+            <Button size="sm" variant="secondaryGray" disabled={busy} onClick={() => select(item, false)}>
+              <ArchiveRestore size={14} aria-hidden="true" />
+              {t("archivedAgentRestore")}
+            </Button>
+            <Button
+              iconOnly
+              size="sm"
+              variant="tertiaryGray"
+              disabled={busy}
+              aria-label={`${t("archivedAgentDelete")} ${item.name || item.id}`}
+              title={t("archivedAgentDelete")}
+              onClick={() => select(item, true)}
+            >
+              <Trash2 size={15} aria-hidden="true" />
+            </Button>
+          </li>
         ))}
-      </div>
+      </ul>
       <DialogRoot
         open={Boolean(selection)}
         onOpenChange={(open) => {
@@ -88,41 +125,60 @@ export function ArchivedAgents({ t }: { t: TranslateFn }) {
         <DialogContent>
           <DialogHeader>
             <div className="min-w-0">
-              <DialogTitle>{t(selection?.deleting ? "archivedAgentDelete" : "archivedAgentRestore")}</DialogTitle>
+              <DialogTitle>
+                {t(selection?.deleting ? "archivedAgentDeleteTitle" : "archivedAgentRestore", { name: selectedName })}
+              </DialogTitle>
               <DialogDescription>
                 {t(selection?.deleting ? "archivedAgentDeleteHint" : "archivedAgentRestoreHint", {
-                  name: String(selection?.agent.name || selection?.agent.id || ""),
+                  name: selectedName,
                 })}
               </DialogDescription>
             </div>
             <DialogCloseButton label={t("close")} disabled={busy} />
           </DialogHeader>
-          <div className="flex flex-col gap-3 p-4">
+          <DialogBody className="flex flex-col gap-3">
             {selection?.deleting && (
-              <TextInput
-                aria-label={t("archivedAgentName")}
-                value={name}
-                disabled={busy}
-                onChange={(event) => setName(event.target.value)}
-                autoComplete="off"
-              />
+              <>
+                <ul className={styles.archiveImpactList}>
+                  {[
+                    "archivedAgentDeleteData",
+                    "archivedAgentDeleteChats",
+                    "archivedAgentKeepSchedules",
+                    "archivedAgentKeepHistory",
+                    "archivedAgentKeepFiles",
+                  ].map((key) => (
+                    <li key={key}>{t(key)}</li>
+                  ))}
+                </ul>
+                <Field label={t("archivedAgentConfirmName", { name: selectedName })}>
+                  <TextInput
+                    aria-label={t("archivedAgentName")}
+                    value={name}
+                    disabled={busy}
+                    onChange={(event) => setName(event.target.value)}
+                    autoComplete="off"
+                    placeholder={selectedName}
+                  />
+                </Field>
+              </>
             )}
             {error && <p role="alert">{error}</p>}
-            <div className="flex justify-end gap-2">
-              <Button variant="secondaryGray" disabled={busy} onClick={() => setSelection(null)}>
-                {t("cancel")}
-              </Button>
-              <Button
-                variant={selection?.deleting ? "danger" : "primary"}
-                disabled={busy || Boolean(selection?.deleting && name !== selection.agent.name)}
-                onClick={() => void confirm()}
-              >
-                {t(busy ? "loading" : selection?.deleting ? "archivedAgentDelete" : "archivedAgentRestore")}
-              </Button>
-            </div>
-          </div>
+          </DialogBody>
+          <DialogFooter>
+            <Button variant="secondaryGray" disabled={busy} onClick={() => setSelection(null)}>
+              {t("cancel")}
+            </Button>
+            <Button
+              variant={selection?.deleting ? "danger" : "primary"}
+              loading={busy}
+              disabled={busy || Boolean(selection?.deleting && name !== selectedName)}
+              onClick={() => void confirm()}
+            >
+              {t(selection?.deleting ? "archivedAgentDelete" : "archivedAgentRestore")}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </DialogRoot>
-    </SettingsRow>
+    </>
   );
 }
