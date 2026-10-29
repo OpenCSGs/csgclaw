@@ -590,13 +590,6 @@
   document.getElementById("exitGuide")?.addEventListener("click", exitGuide);
   document.querySelectorAll("[data-exit]").forEach((b) => b.addEventListener("click", exitGuide));
 
-  window.addEventListener("message", (event) => {
-    if (event.source !== window.parent || event.origin !== window.location.origin) return;
-    if (event.data?.type === "csgclaw:guide-focus") {
-      document.getElementById("startGuide")?.focus();
-    }
-  });
-
   // 键盘
   document.addEventListener("keydown", (e) => {
     const tag = (e.target.tagName || "").toLowerCase();
@@ -698,4 +691,22 @@
     },
     { passive: true },
   );
+  function reportReady() {
+    if (window.parent === window) return;
+    // A load event can also mean an error page; acknowledge only after this
+    // script initialized successfully and the first view had time to render.
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        window.parent.postMessage({ type: "csgclaw:guide-ready" }, window.location.origin);
+      }),
+    );
+  }
+  window.addEventListener("message", (event) => {
+    if (event.source !== window.parent || event.origin !== window.location.origin) return;
+    if (event.data?.type === "csgclaw:guide-focus") {
+      document.getElementById("startGuide")?.focus();
+      reportReady();
+    }
+  });
+  reportReady();
 })();

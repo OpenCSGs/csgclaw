@@ -19,7 +19,6 @@ export function OnboardingGuide() {
     const key = `${SEEN_GUIDE_KEY}:${version}`;
     try {
       if (window.localStorage.getItem(key) === "seen") return;
-      window.localStorage.setItem(key, "seen");
     } catch {
       // Storage can be unavailable in restricted browser contexts.
     }
@@ -48,12 +47,19 @@ export function OnboardingGuide() {
   useEffect(() => {
     if (!open) return;
     const handleMessage = (event: MessageEvent) => {
-      if (event.source !== frameRef.current?.contentWindow) return;
+      if (event.origin !== window.location.origin || event.source !== frameRef.current?.contentWindow) return;
+      if (event.data?.type === "csgclaw:guide-ready" && version) {
+        try {
+          window.localStorage.setItem(`${SEEN_GUIDE_KEY}:${version}`, "seen");
+        } catch {
+          // Storage failures must not prevent viewing or closing the guide.
+        }
+      }
       if (event.data?.type === "csgclaw:guide-exit") setOpen(false);
     };
     window.addEventListener("message", handleMessage);
     return () => window.removeEventListener("message", handleMessage);
-  }, [open]);
+  }, [open, version]);
 
   if (!open) return null;
   const title = locale === "en" ? "CSGClaw onboarding guide" : "CSGClaw 新手引导";
@@ -77,6 +83,7 @@ export function OnboardingGuide() {
         </Button>
       </div>
       <iframe
+        key={version || "pending-version"}
         ref={frameRef}
         className={styles.frame}
         src={`onboarding-guide/guide.html?locale=${locale}&embedded=1`}
