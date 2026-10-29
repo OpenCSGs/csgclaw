@@ -1,4 +1,5 @@
 (function () {
+  let initialized = false;
   if (window.parent !== window && new URLSearchParams(location.search).get("embedded") === "1") {
     const exitButton = document.getElementById("exitGuide");
     if (exitButton) exitButton.style.visibility = "hidden";
@@ -143,6 +144,7 @@
     }
     if (event.data?.type === "csgclaw:guide-focus") {
       document.getElementById("startGuide")?.focus();
+      reportReady();
     }
   });
 
@@ -247,4 +249,16 @@
     },
     { passive: true },
   );
+  function reportReady() {
+    if (!initialized || window.parent === window) return;
+    // A load event can also mean an error page. Confirm script initialization
+    // and allow the first view to render before the host can acknowledge it.
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        window.parent.postMessage({ type: "csgclaw:guide-ready" }, window.location.origin);
+      }),
+    );
+  }
+  initialized = true;
+  reportReady();
 })();
