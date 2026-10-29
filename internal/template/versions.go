@@ -71,7 +71,8 @@ func readVersionState(root string) (templateVersionState, error) {
 func (s *LocalStore) SaveAgent(ctx context.Context, spec PublishSpec) (Template, error) {
 	localTemplateReplaceMu.Lock()
 	defer localTemplateReplaceMu.Unlock()
-	if strings.TrimSpace(spec.SourceAgentID) == "" {
+	spec.SourceAgentID = strings.TrimSpace(spec.SourceAgentID)
+	if spec.SourceAgentID == "" {
 		return Template{}, fmt.Errorf("source agent id is required")
 	}
 	items, err := s.List(ctx)
@@ -88,7 +89,21 @@ func (s *LocalStore) SaveAgent(ctx context.Context, spec PublishSpec) (Template,
 			break
 		}
 	}
-	return s.commitVersion(ctx, spec, 0)
+	// Resolve the final target before checking ownership: an existing Agent
+	// association takes precedence over the requested name or ID.
+	normalized, err := normalizePublishSpec(spec)
+	if err != nil {
+		return Template{}, err
+	}
+	current, err := s.Get(ctx, normalized.ID)
+	if err == nil {
+		if current.SourceAgentID != "" && current.SourceAgentID != normalized.SourceAgentID {
+			return Template{}, fmt.Errorf("%w: template %q is associated with another agent", ErrTemplateAlreadyExists, normalized.ID)
+		}
+	} else if !errors.Is(err, ErrTemplateNotFound) && !errors.Is(err, os.ErrNotExist) {
+		return Template{}, err
+	}
+	return s.commitVersion(ctx, normalized, 0)
 }
 
 func copyVersionContent(source, target string) error {

@@ -2,10 +2,12 @@ package template
 
 import (
 	"context"
+	"csgclaw/internal/apitypes"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sync"
 	"testing"
 )
@@ -224,5 +226,80 @@ func TestInstructionEditCreatesRetainedRevision(t *testing.T) {
 	edited, err = store.Get(ctx, saved.ID)
 	if err != nil || edited.Revision != 3 {
 		t.Fatalf("edited=%+v err=%v", edited, err)
+	}
+}
+
+func TestSaveAgentRejectsAnotherAgentsTemplate(t *testing.T) {
+	for _, explicitID := range []bool{false, true} {
+		t.Run(fmt.Sprint("explicit_id_", explicitID), func(t *testing.T) {
+			ctx := context.Background()
+			store := NewLocalStore(t.TempDir())
+			first, err := store.SaveAgent(ctx, versionSpec(t, "SharedName"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			publication := apitypes.TemplatePublication{Site: "https://example.invalid", Namespace: "alice", TemplateID: "alice/SharedName", Revision: 1}
+			if err := store.recordPublication(ctx, first.ID, first.UID, publication); err != nil {
+				t.Fatal(err)
+			}
+			before, err := store.Get(ctx, first.ID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			second := versionSpec(t, "SharedName")
+			second.SourceAgentID = "agent-b"
+			if explicitID {
+				second.ID = first.ID
+				second.Name = "OtherName"
+			}
+			if err := os.WriteFile(filepath.Join(second.WorkspaceRef.Path, "AGENTS.md"), []byte("agent B"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := store.SaveAgent(ctx, second); !errors.Is(err, ErrTemplateAlreadyExists) {
+				t.Fatalf("collision error=%v", err)
+			}
+			after, err := store.Get(ctx, first.ID)
+			if err != nil || !reflect.DeepEqual(before, after) {
+				t.Fatalf("template mutated: before=%+v after=%+v err=%v", before, after, err)
+			}
+			versions, err := store.Versions(ctx, first.ID)
+			if err != nil || len(versions) != 1 {
+				t.Fatalf("versions=%+v err=%v", versions, err)
+			}
+			content, err := store.ReadWorkspaceFile(ctx, first.ID, "instructions/AGENTS.md")
+			if err != nil || content.Content != "original" {
+				t.Fatalf("content=%+v err=%v", content, err)
+			}
+			second.ID, second.Name = "", "OwnName"
+			own, err := store.SaveAgent(ctx, second)
+			if err != nil || own.UID == first.UID || own.SourceAgentID != "agent-b" || len(own.Publications) != 0 {
+				t.Fatalf("independent template=%+v err=%v", own, err)
+			}
+		})
+	}
+}
+
+func TestSaveAgentAssociationTakesPrecedenceOverAnotherAgentsName(t *testing.T) {
+	ctx := context.Background()
+	store := NewLocalStore(t.TempDir())
+	a := versionSpec(t, "TemplateA")
+	first, err := store.SaveAgent(ctx, a)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b := versionSpec(t, "TemplateB")
+	b.SourceAgentID = "agent-b"
+	other, err := store.SaveAgent(ctx, b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a.Name, a.ID = other.Name, other.ID
+	updated, err := store.SaveAgent(ctx, a)
+	if err != nil || updated.ID != first.ID || updated.UID != first.UID || updated.Revision != 2 {
+		t.Fatalf("updated=%+v err=%v", updated, err)
+	}
+	untouched, err := store.Get(ctx, other.ID)
+	if err != nil || !reflect.DeepEqual(untouched, other) {
+		t.Fatalf("other template mutated: %+v err=%v", untouched, err)
 	}
 }
