@@ -3,6 +3,8 @@ package apitypes
 import "time"
 
 type CreateHubTemplateRequest struct {
+	ExpectedRevision  *int    `json:"expected_revision,omitempty"`
+	CommitMessage     string  `json:"commit_message,omitempty"`
 	ReplaceTemplateID string  `json:"replace_template_id,omitempty"`
 	Avatar            *string `json:"avatar,omitempty"`
 	AgentID           string  `json:"agent_id,omitempty"`
@@ -21,23 +23,36 @@ type ImageEnvContract struct {
 	Default  string `json:"default,omitempty"`
 }
 
+type TemplatePublication struct {
+	Site        string    `json:"site"`
+	Namespace   string    `json:"namespace"`
+	TemplateID  string    `json:"template_id"`
+	Revision    int       `json:"revision"`
+	PublishedAt time.Time `json:"published_at"`
+}
+
 type HubTemplate struct {
-	ID             string               `json:"id"`
-	Namespace      string               `json:"namespace,omitempty"`
-	Name           string               `json:"name"`
-	Avatar         string               `json:"avatar,omitempty"`
-	DisplayName    string               `json:"display_name,omitempty"`
-	Description    string               `json:"description,omitempty"`
-	Role           string               `json:"role,omitempty"`
-	RuntimeKind    string               `json:"runtime_kind,omitempty"`
-	Version        string               `json:"version,omitempty"`
-	Image          string               `json:"image,omitempty"`
-	ImageEnv       []ImageEnvContract   `json:"image_env,omitempty"`
-	RuntimeOptions map[string]any       `json:"runtime_options,omitempty"`
-	Metadata       *HubTemplateMetadata `json:"metadata,omitempty"`
-	Source         HubTemplateSource    `json:"source"`
-	UpdatedAt      time.Time            `json:"updated_at,omitempty"`
-	Workspace      HubTemplateWorkspace `json:"workspace,omitempty"`
+	LatestRevision int                   `json:"latest_revision,omitempty"`
+	SourceAgentID  string                `json:"source_agent_id,omitempty"`
+	Publications   []TemplatePublication `json:"publications,omitempty"`
+	UID            string                `json:"uid,omitempty"`
+	Revision       int                   `json:"revision,omitempty"`
+	ID             string                `json:"id"`
+	Namespace      string                `json:"namespace,omitempty"`
+	Name           string                `json:"name"`
+	Avatar         string                `json:"avatar,omitempty"`
+	DisplayName    string                `json:"display_name,omitempty"`
+	Description    string                `json:"description,omitempty"`
+	Role           string                `json:"role,omitempty"`
+	RuntimeKind    string                `json:"runtime_kind,omitempty"`
+	Version        string                `json:"version,omitempty"`
+	Image          string                `json:"image,omitempty"`
+	ImageEnv       []ImageEnvContract    `json:"image_env,omitempty"`
+	RuntimeOptions map[string]any        `json:"runtime_options,omitempty"`
+	Metadata       *HubTemplateMetadata  `json:"metadata,omitempty"`
+	Source         HubTemplateSource     `json:"source"`
+	UpdatedAt      time.Time             `json:"updated_at,omitempty"`
+	Workspace      HubTemplateWorkspace  `json:"workspace,omitempty"`
 }
 
 type HubTemplateMetadata struct {

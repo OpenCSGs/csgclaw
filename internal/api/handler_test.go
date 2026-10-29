@@ -4921,6 +4921,7 @@ func mustZipBytes(t *testing.T, files map[string]string) []byte {
 }
 
 func TestHandleHubTemplatesPublishesAgentSnapshot(t *testing.T) {
+	defer stubAuthStatus(func(*http.Request) (auth.Status, error) { return auth.Status{}, nil })()
 	svc := mustNewService(t)
 	created, err := svc.CreateRecord(context.Background(), agent.CreateRequest{
 		Spec: agent.CreateAgentSpec{
@@ -5002,8 +5003,11 @@ func TestHandleHubTemplatesPublishesAgentSnapshot(t *testing.T) {
 	))
 	duplicateRec := httptest.NewRecorder()
 	srv.Routes().ServeHTTP(duplicateRec, duplicateReq)
-	if duplicateRec.Code != http.StatusConflict {
-		t.Fatalf("duplicate status = %d, want %d; body=%s", duplicateRec.Code, http.StatusConflict, duplicateRec.Body.String())
+	if duplicateRec.Code != http.StatusCreated {
+		t.Fatalf("duplicate save status = %d, want %d; body=%s", duplicateRec.Code, http.StatusCreated, duplicateRec.Body.String())
+	}
+	appAuthStatus = func(*http.Request) (auth.Status, error) {
+		return auth.Status{Authenticated: true, UserID: "alice", Name: "Alice"}, nil
 	}
 	replacement := httptest.NewRecorder()
 	srv.Routes().ServeHTTP(replacement, httptest.NewRequest(http.MethodPost, "/api/v1/hub/templates", strings.NewReader(
@@ -5018,6 +5022,41 @@ func TestHandleHubTemplatesPublishesAgentSnapshot(t *testing.T) {
 	}
 	if updated.ID != "local.ReviewBot_2" || updated.Description != "Updated snapshot" || updated.DisplayName != "新展示名" {
 		t.Fatalf("replacement = %+v", updated)
+	}
+	if updated.UID != got.UID || updated.Revision != 3 {
+		t.Fatalf("updated identity/version = %+v", updated)
+	}
+	history := httptest.NewRecorder()
+	srv.Routes().ServeHTTP(history, httptest.NewRequest(http.MethodGet, "/api/v1/hub/templates/local.ReviewBot_2/versions", nil))
+	if history.Code != http.StatusOK {
+		t.Fatalf("history = %d %s", history.Code, history.Body.String())
+	}
+	var versions []hub.TemplateVersion
+	if err := json.Unmarshal(history.Body.Bytes(), &versions); err != nil {
+		t.Fatal(err)
+	}
+	if len(versions) != 3 {
+		t.Fatalf("history = %+v", versions)
+	}
+	if versions[0].Author != nil || versions[2].Author == nil || versions[2].Author.Name != "Alice" {
+		t.Fatalf("version authors = %+v", versions)
+	}
+	restored := httptest.NewRecorder()
+	srv.Routes().ServeHTTP(restored, httptest.NewRequest(http.MethodPost, "/api/v1/hub/templates/local.ReviewBot_2/versions/1/restore", strings.NewReader(`{"commit_message":"restore initial"}`)))
+	if restored.Code != http.StatusOK {
+		t.Fatalf("restore = %d %s", restored.Code, restored.Body.String())
+	}
+	var restoredTemplate apitypes.HubTemplate
+	if err := json.Unmarshal(restored.Body.Bytes(), &restoredTemplate); err != nil {
+		t.Fatal(err)
+	}
+	if restoredTemplate.UID != got.UID || restoredTemplate.Revision != 1 || restoredTemplate.LatestRevision != 3 {
+		t.Fatalf("restored = %+v", restoredTemplate)
+	}
+	stale := httptest.NewRecorder()
+	srv.Routes().ServeHTTP(stale, httptest.NewRequest(http.MethodPost, "/api/v1/hub/templates", strings.NewReader(`{"template_id":"local.ReviewBot_2","registry":"local","expected_revision":3}`)))
+	if stale.Code != http.StatusConflict || !strings.Contains(stale.Body.String(), "template_version_changed") {
+		t.Fatalf("stale publication = %d %s", stale.Code, stale.Body.String())
 	}
 
 }
@@ -5133,7 +5172,11 @@ func TestHandleHubTemplatesRequiresExplicitMemoryOptIn(t *testing.T) {
 		if rec.Code != http.StatusCreated {
 			t.Fatalf("%s status = %d, want %d; body=%s", test.name, rec.Code, http.StatusCreated, rec.Body.String())
 		}
-		_, statErr := os.Stat(filepath.Join(registryRoot, "templates", test.name, "memories", "memory_summary.md"))
+		var saved apitypes.HubTemplate
+		if err := json.Unmarshal(rec.Body.Bytes(), &saved); err != nil {
+			t.Fatal(err)
+		}
+		_, statErr := os.Stat(filepath.Join(registryRoot, "templates", strings.TrimPrefix(saved.ID, "local."), "memories", "memory_summary.md"))
 		if test.wantMemory && statErr != nil {
 			t.Fatalf("%s memory missing: %v", test.name, statErr)
 		}

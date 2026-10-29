@@ -339,9 +339,12 @@ export function useWorkspaceHubTemplateQuery(templateID: string): UseQueryResult
 export function useWorkspaceHubWorkspaceQuery(
   templateID: string,
   workspacePath = "",
+  version = "",
 ): UseQueryResult<HubWorkspaceListing> {
   return useQuery<HubWorkspaceListing>({
-    queryKey: workspaceQueryKeys.hubWorkspace(templateID, workspacePath),
+    queryKey: version
+      ? [...workspaceQueryKeys.hubWorkspace(templateID, workspacePath), version]
+      : workspaceQueryKeys.hubWorkspace(templateID, workspacePath),
     queryFn: () => fetchHubWorkspace(templateID, workspacePath),
     enabled: Boolean(templateID),
   });
@@ -350,9 +353,12 @@ export function useWorkspaceHubWorkspaceQuery(
 export function useWorkspaceHubWorkspaceFileQuery(
   templateID: string,
   workspacePath: string,
+  version = "",
 ): UseQueryResult<HubWorkspaceFile> {
   return useQuery<HubWorkspaceFile>({
-    queryKey: workspaceQueryKeys.hubWorkspaceFile(templateID, workspacePath),
+    queryKey: version
+      ? [...workspaceQueryKeys.hubWorkspaceFile(templateID, workspacePath), version]
+      : workspaceQueryKeys.hubWorkspaceFile(templateID, workspacePath),
     queryFn: () => fetchHubWorkspaceFile(templateID, workspacePath),
     enabled: Boolean(templateID && workspacePath),
   });

@@ -1,3 +1,4 @@
+import type { HubTemplate } from "@/models/hubWorkspace";
 import { AgentModelPanel } from "./components/AgentModelPanel";
 import { defaultTemplateName, isValidTemplateName, TEMPLATE_NAME_MAX_LENGTH } from "@/models/templateNaming";
 import { SidebarMcpIcon } from "@/components/ui/Icons";
@@ -194,6 +195,7 @@ export type AgentDetailPaneProps = {
     description: string,
     includeMemory: boolean,
     displayName: string,
+    commitMessage?: string,
   ) => boolean | Promise<boolean>;
   onRecreate: AgentActionHandler;
   onSave?: () => VoidOrPromise;
@@ -205,6 +207,7 @@ export type AgentDetailPaneProps = {
   onFinalizeFeishuConnect?: AgentActionHandler;
   onDisconnectFeishu?: AgentActionHandler;
   onUpgrade?: AgentActionHandler;
+  linkedTemplate?: HubTemplate;
   publishBusy?: boolean;
   publishDisabled?: boolean;
   onPublishLogin?: () => void;
@@ -282,6 +285,7 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
     modelError = null,
     onRetryModels,
     saving = false,
+    linkedTemplate,
     publishBusy = false,
     publishDisabled = false,
     onPublishLogin,
@@ -392,6 +396,7 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
   const [publishTemplateDisplayName, setPublishTemplateDisplayName] = useState("");
   const [publishTemplateName, setPublishTemplateName] = useState("");
   const [publishTemplateDescription, setPublishTemplateDescription] = useState("");
+  const [publishCommitMessage, setPublishCommitMessage] = useState("");
   const [publishTemplateIncludeMemory, setPublishTemplateIncludeMemory] = useState(false);
   const [publishTemplateNameError, setPublishTemplateNameError] = useState("");
   const [publishAttempted, setPublishAttempted] = useState(false);
@@ -428,14 +433,15 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
   const openPublishDialog = useCallback(
     (target: AgentTemplatePublishTarget) => {
       setPublishTarget(target);
-      setPublishTemplateName(defaultTemplateName(String(item.id || "")));
+      setPublishTemplateName(linkedTemplate?.name || defaultTemplateName(String(item.id || "")));
       setPublishTemplateDisplayName(String(item.name || "").trim());
       setPublishTemplateDescription(String(item.description || "").trim());
+      setPublishCommitMessage("");
       setPublishTemplateIncludeMemory(false);
       setPublishTemplateNameError("");
       setPublishAttempted(false);
     },
-    [item.description, item.id, item.name],
+    [item.description, item.id, item.name, linkedTemplate?.name],
   );
   const submitPublishTemplate = useCallback(
     async (target = publishTarget) => {
@@ -455,6 +461,7 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
         publishTemplateDescription.trim(),
         publishTemplateIncludeMemory,
         publishTemplateDisplayName.trim(),
+        publishCommitMessage.trim(),
       );
       if (published) {
         setPublishTarget(null);
@@ -464,6 +471,7 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
       onPublish,
       publishTarget,
       publishTemplateDisplayName,
+      publishCommitMessage,
       publishTemplateDescription,
       publishTemplateIncludeMemory,
       publishTemplateName,
@@ -1421,6 +1429,13 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
             <DialogCloseButton label={t("close")} size="sm" variant="tertiaryGray" />
           </DialogHeader>
           <DialogBody className="agent-publish-dialog-body">
+            {linkedTemplate?.revision ? (
+              <p>
+                {t("agentTemplateNextVersion", {
+                  version: (linkedTemplate.latest_revision || linkedTemplate.revision) + 1,
+                })}
+              </p>
+            ) : null}
             {publishTarget === "official" ? (
               <div className="grid gap-2 text-sm text-[var(--muted)]">
                 <p>{t("agentTemplateHubGuidance")}</p>
@@ -1465,6 +1480,15 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
                 value={publishTemplateDescription}
                 aria-label={t("agentPublishTemplateDescription")}
                 onChange={(event) => setPublishTemplateDescription(event.target.value)}
+              />
+            </label>
+            <label className="agent-publish-field">
+              <span>{t("templateCommitMessage")}</span>
+              <textarea
+                rows={2}
+                value={publishCommitMessage}
+                aria-label={t("templateCommitMessage")}
+                onChange={(event) => setPublishCommitMessage(event.target.value)}
               />
             </label>
             {supportsTemplateMemory ? (

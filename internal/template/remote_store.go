@@ -11,7 +11,6 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"mime/multipart"
 	"net/http"
 	"net/url"
 	"os"
@@ -123,16 +122,6 @@ type remoteCodeResponse struct {
 	Data remoteCodeRepository `json:"data"`
 }
 
-type remoteUploadURLResponse struct {
-	Data remoteUploadURL `json:"data"`
-}
-
-type remoteUploadURL struct {
-	URL      string            `json:"url"`
-	FormData map[string]string `json:"formData"`
-	UUID     string            `json:"uuid"`
-}
-
 type remoteCreateCodeRequest struct {
 	Namespace     string `json:"namespace"`
 	Name          string `json:"name"`
@@ -141,7 +130,7 @@ type remoteCreateCodeRequest struct {
 	Private       bool   `json:"private"`
 	DefaultBranch string `json:"default_branch"`
 	Type          string `json:"type"`
-	CodeFile      string `json:"code_file"`
+	CodeFile      string `json:"code_file,omitempty"`
 }
 
 type remoteCodeRepository struct {
@@ -356,6 +345,8 @@ func (s *RemoteStore) getTemplate(ctx context.Context, id string, repository rem
 		Role:           TemplateRoleWorker,
 		RuntimeKind:    normalizeTemplateRuntimeKind(manifest.RuntimeKind),
 		Version:        strings.TrimSpace(manifest.Version),
+		UID:            manifest.UID,
+		Revision:       manifest.Revision,
 		Image:          manifestImageRef(manifest.Image),
 		ImageEnv:       manifestImageEnv(manifest.Image),
 		RuntimeOptions: runtimeOptions,
@@ -764,19 +755,8 @@ func (s *RemoteStore) Publish(ctx context.Context, spec PublishSpec) (Template, 
 	if !CanPublishCommunityTemplateRuntime(normalized.RuntimeKind) {
 		return Template{}, fmt.Errorf("runtime_kind %q cannot be published to the community", normalized.RuntimeKind)
 	}
-	archive, err := buildRemoteTemplateArchive(normalized)
+	files, err := buildRemoteTemplateFiles(normalized, s.maxWorkspace)
 	if err != nil {
-		return Template{}, err
-	}
-	if int64(len(archive)) > s.maxWorkspace {
-		return Template{}, fmt.Errorf("remote hub template archive exceeds %d bytes", s.maxWorkspace)
-	}
-
-	var upload remoteUploadURLResponse
-	if err := s.postJSON(ctx, s.uploadURL(), nil, &upload); err != nil {
-		return Template{}, fmt.Errorf("request remote hub upload URL: %w", err)
-	}
-	if err := s.uploadArchive(ctx, upload.Data, archive); err != nil {
 		return Template{}, err
 	}
 
@@ -788,15 +768,34 @@ func (s *RemoteStore) Publish(ctx context.Context, spec PublishSpec) (Template, 
 		Private:       true,
 		DefaultBranch: "main",
 		Type:          "template",
-		CodeFile:      strings.TrimSpace(upload.Data.UUID),
 	}
-	var created remoteCodeResponse
-	if err := s.postJSON(ctx, s.codesURL(), request, &created); err != nil {
-		return Template{}, fmt.Errorf("create remote hub template: %w", err)
+	if normalized.RemotePath != "" {
+		parts := strings.Split(normalized.RemotePath, "/")
+		if len(parts) != 2 || parts[0] != s.username || ValidatePublishTemplateName(parts[1]) != nil {
+			return Template{}, fmt.Errorf("invalid associated cloud template path")
+		}
+		request.Name = parts[1]
 	}
-	id := strings.TrimSpace(created.Data.Path)
-	if id == "" {
-		id = path.Join(s.username, normalized.Name)
+	id := path.Join(s.username, request.Name)
+	branch, exists, err := s.lookupRemoteTemplate(ctx, request.Name)
+	if err != nil {
+		return Template{}, err
+	}
+	if exists && !normalized.ReplaceRemote {
+		return Template{}, &RemoteAPIError{StatusCode: http.StatusConflict, Code: "SYS-ERR-4", Message: "Cloud template repository already exists"}
+	}
+	if !exists {
+		var created remoteCodeResponse
+		if err := s.postJSON(ctx, s.codesURL(), request, &created); err != nil {
+			return Template{}, fmt.Errorf("create remote hub template: %w", err)
+		}
+		branch = strings.TrimSpace(created.Data.DefaultBranch)
+	}
+	if branch == "" {
+		branch = "main"
+	}
+	if err := s.commitRemoteTemplate(ctx, request.Name, branch, files, exists); err != nil {
+		return Template{}, err
 	}
 	return Template{
 		ID:             id,
@@ -807,6 +806,8 @@ func (s *RemoteStore) Publish(ctx context.Context, spec PublishSpec) (Template, 
 		Role:           TemplateRoleWorker,
 		RuntimeKind:    normalized.RuntimeKind,
 		Version:        normalized.Version,
+		UID:            normalized.UID,
+		Revision:       normalized.Revision,
 		Image:          normalized.Image,
 		RuntimeOptions: cloneTemplateRuntimeOptions(normalized.RuntimeOptions),
 		WorkspaceRef:   WorkspaceRef{Kind: WorkspaceKindDir},
@@ -828,12 +829,6 @@ func (s *RemoteStore) agentTemplatesURL(page int) string {
 	query.Set("page", strconv.Itoa(page))
 	query.Set("per", strconv.Itoa(remoteAgentTemplatesPerPage))
 	return s.hubBaseURL + "/api/v1/agent/templates?" + query.Encode()
-}
-
-func (s *RemoteStore) uploadURL() string {
-	query := url.Values{}
-	query.Set("current_user", s.username)
-	return s.hubBaseURL + "/api/v1/codes/upload_url?" + query.Encode()
 }
 
 func (s *RemoteStore) codesURL() string {
@@ -960,109 +955,6 @@ func decodeRemoteAPIError(statusCode int, data []byte) *RemoteAPIError {
 		}
 	}
 	return &RemoteAPIError{StatusCode: statusCode, Message: truncateRemoteBody(data)}
-}
-
-func (s *RemoteStore) uploadArchive(ctx context.Context, upload remoteUploadURL, archive []byte) error {
-	if strings.TrimSpace(upload.URL) == "" || strings.TrimSpace(upload.UUID) == "" {
-		return fmt.Errorf("remote hub upload response is incomplete")
-	}
-	var body bytes.Buffer
-	writer := multipart.NewWriter(&body)
-	for key, value := range upload.FormData {
-		if err := writer.WriteField(key, value); err != nil {
-			return fmt.Errorf("encode remote hub upload field %q: %w", key, err)
-		}
-	}
-	part, err := writer.CreateFormFile("file", upload.UUID+".zip")
-	if err != nil {
-		return fmt.Errorf("encode remote hub upload file: %w", err)
-	}
-	if _, err := part.Write(archive); err != nil {
-		return fmt.Errorf("encode remote hub template archive: %w", err)
-	}
-	if err := writer.Close(); err != nil {
-		return fmt.Errorf("finish remote hub upload body: %w", err)
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, upload.URL, &body)
-	if err != nil {
-		return fmt.Errorf("create remote hub archive upload request: %w", err)
-	}
-	req.Header.Set("Content-Type", writer.FormDataContentType())
-	resp, err := s.httpClient.Do(req)
-	if err != nil {
-		return fmt.Errorf("upload remote hub template archive: %w", err)
-	}
-	defer resp.Body.Close()
-	responseBody, err := io.ReadAll(io.LimitReader(resp.Body, 513))
-	if err != nil {
-		return fmt.Errorf("read remote hub archive upload response: %w", err)
-	}
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("remote hub archive upload failed with status %d: %s", resp.StatusCode, truncateRemoteBody(responseBody))
-	}
-	return nil
-}
-
-func buildRemoteTemplateArchive(spec PublishSpec) ([]byte, error) {
-	tmpDir, err := os.MkdirTemp("", "csgclaw-hub-publish-*")
-	if err != nil {
-		return nil, fmt.Errorf("create remote hub template temp dir: %w", err)
-	}
-	defer func() { _ = os.RemoveAll(tmpDir) }()
-	if err := (&LocalStore{}).writeManifest(filepath.Join(tmpDir, localManifestFileName), spec); err != nil {
-		return nil, err
-	}
-	if spec.WorkspaceRef.Kind == WorkspaceKindDir {
-		if err := writeTemplateLayout(spec.WorkspaceRef, tmpDir, spec.RuntimeKind, spec.MCPServers, spec.IncludeMemory); err != nil {
-			return nil, err
-		}
-	}
-	var output bytes.Buffer
-	archive := zip.NewWriter(&output)
-	err = filepath.WalkDir(tmpDir, func(filePath string, entry os.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		if entry.IsDir() {
-			return nil
-		}
-		relative, err := filepath.Rel(tmpDir, filePath)
-		if err != nil {
-			return err
-		}
-		info, err := entry.Info()
-		if err != nil {
-			return err
-		}
-		header, err := zip.FileInfoHeader(info)
-		if err != nil {
-			return err
-		}
-		header.Name = filepath.ToSlash(relative)
-		header.Method = zip.Deflate
-		target, err := archive.CreateHeader(header)
-		if err != nil {
-			return err
-		}
-		source, err := os.Open(filePath)
-		if err != nil {
-			return err
-		}
-		_, copyErr := io.Copy(target, source)
-		closeErr := source.Close()
-		if copyErr != nil {
-			return copyErr
-		}
-		return closeErr
-	})
-	if err != nil {
-		_ = archive.Close()
-		return nil, fmt.Errorf("build remote hub template archive: %w", err)
-	}
-	if err := archive.Close(); err != nil {
-		return nil, fmt.Errorf("finish remote hub template archive: %w", err)
-	}
-	return output.Bytes(), nil
 }
 
 func (s *RemoteStore) request(ctx context.Context, method, endpoint string, maxBody int64) ([]byte, int, error) {

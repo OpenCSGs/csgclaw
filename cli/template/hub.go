@@ -98,6 +98,7 @@ func (c cmd) runPublish(ctx context.Context, run *command.Context, args []string
 	registry := fs.String("registry", "official", "template registry to publish into")
 	name := fs.String("name", "", "template name (starts with a letter; up to 24 letters, numbers, underscores, or hyphens)")
 	description := fs.String("description", "", "template description")
+	commitMessage := fs.String("message", "", "optional template version commit message")
 	includeMemory := fs.Bool("include-memory", false, "include agent memory (may contain private conversation-derived information)")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -111,6 +112,7 @@ func (c cmd) runPublish(ctx context.Context, run *command.Context, args []string
 
 	request := apitypes.CreateHubTemplateRequest{
 		AgentID:       *agentID,
+		CommitMessage: *commitMessage,
 		Registry:      *registry,
 		Name:          *name,
 		IncludeMemory: *includeMemory,

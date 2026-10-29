@@ -367,3 +367,45 @@ it.each(
   ]);
   queryClient.clear();
 });
+
+it("refreshes a cached V1 detail after a save makes V2 active", async () => {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const old: HubTemplate = { id: "local.first", revision: 1, source: { kind: "local" } };
+  const saved: HubTemplate = { ...old, revision: 2, latest_revision: 2 };
+  const fetchDetail = vi.fn().mockResolvedValueOnce(old).mockResolvedValue(saved);
+  await queryClient.fetchQuery({ queryKey: workspaceQueryKeys.hubTemplate(old.id), queryFn: fetchDetail });
+  queryClient.setQueryData(workspaceQueryKeys.hubWorkspaceFile(old.id, "agent.toml"), { content: 'version = "V1"' });
+  vi.mocked(useWorkspaceHubSelection).mockReturnValue({
+    detailPaneProps: { error: "" },
+    error: "",
+    skills: [],
+    selectedHubResourceType: "template",
+  } as unknown as ReturnType<typeof useWorkspaceHubSelection>);
+  const wrapper = ({ children }: { children: ReactNode }) =>
+    createElement(QueryClientProvider, { client: queryClient }, children);
+  const { result } = renderHook(
+    () =>
+      useWorkspaceHubController({
+        activePane: { type: "hub", resourceType: "template", id: String(old.id) },
+        hubLoaded: true,
+        hubTemplates: [old],
+        hubTemplatesQuery: {} as UseQueryResult<HubTemplate[]>,
+        openCSGAuthGuard: openCSGAuthGuardStub(),
+        refreshWorkspaceHubTemplates: async () => {
+          queryClient.setQueryData(workspaceQueryKeys.hubTemplates(), [saved]);
+          return [saved];
+        },
+        t: (key) => key,
+      }),
+    { wrapper },
+  );
+  await act(async () => {
+    await result.current.refreshHubTemplates();
+  });
+  expect(fetchDetail).toHaveBeenCalledTimes(2);
+  expect(queryClient.getQueryData(workspaceQueryKeys.hubTemplate(old.id))).toEqual(saved);
+  expect(queryClient.getQueryState(workspaceQueryKeys.hubWorkspaceFile(old.id, "agent.toml"))?.isInvalidated).toBe(
+    true,
+  );
+  queryClient.clear();
+});

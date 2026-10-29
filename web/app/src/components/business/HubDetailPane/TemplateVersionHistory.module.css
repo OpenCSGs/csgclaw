@@ -1,0 +1,297 @@
+.history {
+  grid-column: 1 / -1;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xl);
+  background: var(--panel);
+  color: var(--text);
+  container: template-history / inline-size;
+}
+.summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  cursor: pointer;
+  list-style: none;
+  font-size: var(--text-sm-size);
+  font-weight: var(--font-weight-medium);
+}
+.summary::-webkit-details-marker {
+  display: none;
+}
+.summary:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+  border-radius: var(--radius-xl);
+}
+.summaryTitle,
+.summaryEnd,
+.detailTitle,
+.versionHeading,
+.fileHeading,
+.loading {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.summaryTitle > svg,
+.disclosure {
+  color: var(--muted);
+}
+.history[open] .disclosure {
+  transform: rotate(180deg);
+}
+.content {
+  padding: 0 var(--space-4) var(--space-4);
+}
+.hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-xs-size);
+  line-height: var(--text-xs-line-height);
+}
+.layout {
+  display: grid;
+  grid-template-columns: minmax(148px, 190px) minmax(0, 1fr);
+  margin-top: var(--space-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+.versionRail {
+  min-width: 0;
+  padding: var(--space-3);
+  border-right: 1px solid var(--line);
+  background: var(--panel-strong);
+}
+.sectionLabel {
+  display: block;
+  margin: 0 var(--space-2) var(--space-2);
+  font-size: var(--text-xs-size);
+  color: var(--muted);
+}
+.versions {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 480px;
+  overflow-y: auto;
+}
+.versionButton {
+  display: grid;
+  align-items: start;
+  width: 100%;
+  height: auto;
+  padding: var(--space-3);
+  white-space: normal;
+  text-align: left;
+  justify-content: flex-start;
+}
+.versionInfo {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+  width: 100%;
+}
+.versionHeading {
+  flex-wrap: wrap;
+  justify-content: space-between;
+}
+.versionHeading strong {
+  font-size: var(--text-sm-size);
+}
+.latest {
+  font-size: var(--text-xs-size);
+  font-weight: var(--font-weight-normal);
+  color: var(--muted);
+}
+.commitMessage {
+  overflow-wrap: anywhere;
+  font-size: var(--text-xs-size);
+  font-weight: var(--font-weight-medium);
+  line-height: var(--text-xs-line-height);
+}
+.metadata {
+  color: var(--muted);
+  font-size: var(--text-xs-size);
+  line-height: var(--text-xs-line-height);
+  font-weight: var(--font-weight-normal);
+  overflow-wrap: anywhere;
+}
+.detail {
+  min-width: 0;
+}
+.detailHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  border-bottom: 1px solid var(--line);
+}
+.detail h4 {
+  margin: 0;
+  font-size: var(--text-sm-size);
+  line-height: var(--text-sm-line-height);
+  font-weight: var(--font-weight-medium);
+}
+.badge {
+  flex: 0 0 auto;
+  padding: var(--space-0-5) var(--space-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-base);
+  font-size: var(--text-xs-size);
+  line-height: var(--text-xs-line-height);
+  font-weight: var(--font-weight-medium);
+}
+.readonly {
+  font-size: var(--text-xs-size);
+  color: var(--muted);
+}
+.browser {
+  padding: 0 var(--space-4) var(--space-4);
+}
+.browserToolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  justify-content: space-between;
+  min-height: 48px;
+}
+.browserToolbar > nav {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.files {
+  display: grid;
+  gap: var(--space-1);
+  min-height: 96px;
+  align-content: start;
+}
+.fileButton {
+  display: grid;
+  width: 100%;
+  justify-content: flex-start;
+  text-align: left;
+}
+.fileRow {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--muted);
+}
+.fileRow > svg {
+  flex-shrink: 0;
+}
+.fileName {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+}
+.folderIcon {
+  color: var(--primary);
+}
+.filePreview {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-base);
+  overflow: hidden;
+}
+.fileHeading {
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--line);
+  background: var(--panel-strong);
+  color: var(--muted);
+  font-size: var(--text-xs-size);
+}
+.fileHeading > span {
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+.preview {
+  margin: 0;
+  padding: var(--space-3);
+  max-height: 280px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: var(--text-xs-size);
+  line-height: var(--text-sm-line-height);
+}
+.saveSection {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border-top: 1px solid var(--line);
+  background: var(--panel-strong);
+}
+.saveSection .hint {
+  margin-top: var(--space-1);
+}
+.saveActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  justify-content: flex-end;
+}
+.identity {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-2);
+  margin-top: var(--space-3);
+  color: var(--muted);
+  font-size: var(--text-xs-size);
+  line-height: var(--text-xs-line-height);
+}
+.identity code {
+  overflow-wrap: anywhere;
+}
+.emptyDirectory,
+.loading {
+  color: var(--muted);
+  font-size: var(--text-xs-size);
+}
+.error {
+  padding: var(--space-3);
+  border: 1px solid var(--danger);
+  border-radius: var(--radius-base);
+  color: var(--danger);
+  font-size: var(--text-xs-size);
+}
+.spinner {
+  flex-shrink: 0;
+  animation: spin 1s linear infinite;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation: none;
+  }
+}
+@container template-history (max-width: 560px) {
+  .layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .versionRail {
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .versions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    max-height: 210px;
+  }
+  .versionButton {
+    height: 100%;
+  }
+}

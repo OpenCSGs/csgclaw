@@ -1,4 +1,6 @@
-import { render as rtlRender, screen, within } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { workspaceQueryKeys } from "@/hooks/workspace/workspaceQueries";
+import { fireEvent, render as rtlRender, screen, within, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { useState, type ReactNode } from "react";
@@ -24,8 +26,21 @@ function t(key: string, params: Record<string, string | number> = {}) {
     agentPublishCommunity: "Publish to community",
     resourcesTemplatePublished: "Published",
     resourcesTemplatePublishedOnHub: "Published on AgenticHub",
+    templateCommunityVersion: "Community version {version}",
+    templateLastPublishedVersion: "Last published {version}",
+    templateViewCommunity: "View community template",
+    templateCurrentVersionPublished: "Current version published",
+    templateVersionPublished: "{version} published",
+    templateCommunityVersionDifferent: "Differs from community version",
+    templateCommunityVersionUnconfirmed: "Community version unconfirmed",
     agentPublishCommunityAndDeploy: "Publish and deploy",
     agentPublishCommunityTemplateOnly: "Publish template only",
+    templatePublishCommunitySubtitle: "Publish the latest saved local template version to the community.",
+    templatePublishVersionLabel: "Version to publish",
+    templatePublishLegacyVersion: "Legacy template (unversioned)",
+    templatePublishLatestHint:
+      "Only the active version is published; history is not included. The cloud keeps one current copy.",
+    templatePublishVersionAction: "Publish {version} to community",
     agentPublishLoginRequired: "Sign in first",
     agentPublishTemplateCommunitySubtitle: "Publish remotely",
     agentPublishTemplateTitle: "Publish agent template",
@@ -213,12 +228,13 @@ function renderHubDetailPane(
     publishDisabled?: boolean;
     publishError?: string;
     onResetPublishError?: () => void;
+    onSelectTemplate?: (item: HubTemplate | null | undefined) => void;
+    queryClient?: QueryClient;
     lazyMemory?: boolean;
     loaded?: boolean;
     inlineTemplateDetail?: boolean;
   } = {},
 ) {
-  const selectedTemplate = options.selectedTemplate ?? template;
   const workspaceFiles = {
     "instructions/AGENTS.md": {
       binary: false,
@@ -252,6 +268,7 @@ function renderHubDetailPane(
     },
   };
   function Harness() {
+    const selectedTemplate = options.selectedTemplate ?? template;
     const [selectedWorkspacePath, setSelectedWorkspacePath] = useState("instructions/AGENTS.md");
     const [workspaceEntries, setWorkspaceEntries] = useState([
       { name: "instructions", path: "instructions", type: "dir" as const, depth: 0 },
@@ -283,7 +300,7 @@ function renderHubDetailPane(
             onRetry: vi.fn(),
             onSelectSkill: vi.fn(),
             onSelectSkillFile: vi.fn(),
-            onSelectTemplate: vi.fn(),
+            onSelectTemplate: options.onSelectTemplate || vi.fn(),
             onSelectWorkspaceFile: setSelectedWorkspacePath,
             onToggleWorkspaceDir: (path) => {
               if (options.lazyMemory && path === "memories") {
@@ -336,12 +353,18 @@ function renderHubDetailPane(
       />
     );
   }
-  const view = render(<Harness />);
+  const client = options.queryClient || new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const content = () => (
+    <QueryClientProvider client={client}>
+      <Harness />
+    </QueryClientProvider>
+  );
+  const view = render(content());
   return {
     ...view,
     rerenderOptions: (patch: Partial<typeof options>) => {
       Object.assign(options, patch);
-      view.rerender(<Harness />);
+      view.rerender(content());
     },
   };
 }
@@ -1018,7 +1041,7 @@ describe("HubDetailPane", () => {
   });
 
   it.each([false, true])(
-    "marks same-name cloud templates as published and hides publishing (inline: %s)",
+    "leaves same-name cloud versions unconfirmed and allows publishing (inline: %s)",
     async (inlineTemplateDetail) => {
       const localTemplate = {
         ...template,
@@ -1037,14 +1060,158 @@ describe("HubDetailPane", () => {
         ],
       });
       if (!inlineTemplateDetail) await openTemplateDetail(userEvent.setup());
-      expect(screen.getByRole("link", { name: "Published on AgenticHub" })).toHaveAttribute(
+      expect(screen.getByRole("link", { name: "View community template" })).toHaveAttribute(
         "href",
         "https://custom.example:8443/agentichub?view=resources&subview=template",
       );
-      expect(screen.queryByRole("button", { name: "Publish to community" })).not.toBeInTheDocument();
-      expect(screen.getAllByText("Published").length).toBeGreaterThan(0);
+      expect(screen.getByRole("button", { name: "Publish to community" })).toBeEnabled();
+      expect(screen.getAllByText("Community version unconfirmed").length).toBeGreaterThan(0);
     },
   );
+
+  it.each([false, true])(
+    "shows verified community versions and rollback differences (inline: %s)",
+    async (inlineTemplateDetail) => {
+      let remoteRevision = 2;
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async () =>
+          Response.json({
+            ...template,
+            id: "alice/original",
+            uid: "identity",
+            revision: remoteRevision,
+            source: { kind: "remote" },
+          }),
+        ),
+      );
+      const localTemplate: HubTemplate = {
+        ...template,
+        id: "local.renamed",
+        name: "renamed",
+        uid: "identity",
+        revision: 3,
+        runtime_kind: "codex",
+        source: { kind: "local" },
+        publications: [
+          {
+            site: "https://hub.example",
+            namespace: "alice",
+            template_id: "alice/original",
+            revision: 1,
+            published_at: "2026-10-29T00:00:00Z",
+          },
+        ],
+      };
+      const view = renderHubDetailPane("template", {
+        selectedTemplate: localTemplate,
+        templates: [localTemplate],
+        templateUsername: "alice",
+        agenticHubSiteURL: "https://hub.example",
+        inlineTemplateDetail,
+      });
+      if (!inlineTemplateDetail) await openTemplateDetail(userEvent.setup());
+      expect(await screen.findByRole("link", { name: "Community version V2" })).toBeInTheDocument();
+      expect(screen.getByText("Differs from community version")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Publish V3 to community" })).toBeEnabled();
+      remoteRevision = 3;
+      view.rerenderOptions({ selectedTemplate: { ...localTemplate, revision: 1 } });
+      expect(await screen.findByRole("link", { name: "Community version V3" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Publish V1 to community" })).toBeEnabled();
+      expect(screen.getByText("Differs from community version")).toBeInTheDocument();
+      view.rerenderOptions({ selectedTemplate: { ...localTemplate, revision: 3 } });
+      expect(await screen.findByText("Current version published")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "V3 published" })).toBeDisabled();
+      expect(screen.queryByRole("button", { name: "Publish V3 to community" })).not.toBeInTheDocument();
+      view.rerenderOptions({ selectedTemplate: { ...localTemplate, revision: 4 } });
+      expect(await screen.findByText("Differs from community version")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Publish V4 to community" })).toBeEnabled();
+    },
+  );
+
+  it("falls back to the last published version when community lookup fails", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new Error("offline");
+      }),
+    );
+    const localTemplate: HubTemplate = {
+      ...template,
+      id: "local.demo-template",
+      uid: "identity",
+      revision: 3,
+      runtime_kind: "codex",
+      source: { kind: "local" },
+      publications: [
+        {
+          site: "https://hub.example",
+          namespace: "alice",
+          template_id: "alice/original",
+          revision: 2,
+          published_at: "2026-10-29T00:00:00Z",
+        },
+      ],
+    };
+    renderHubDetailPane("template", {
+      selectedTemplate: localTemplate,
+      templates: [localTemplate],
+      templateUsername: "alice",
+      agenticHubSiteURL: "https://hub.example",
+      inlineTemplateDetail: true,
+    });
+    expect(screen.getByRole("link", { name: "Last published V2" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Publish V3 to community" })).toBeEnabled();
+    expect(screen.queryByText("Current version published")).not.toBeInTheDocument();
+  });
+
+  it("switches versions in place without invoking template navigation or opening a detail dialog", async () => {
+    const user = userEvent.setup();
+    const localTemplate: HubTemplate = {
+      ...template,
+      id: "local.demo-template",
+      revision: 2,
+      latest_revision: 2,
+      source: { kind: "local" },
+    };
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const onSelectTemplate = vi.fn();
+    const restored = { ...localTemplate, revision: 1 };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request) => {
+        const url = String(input);
+        if (url.endsWith("/restore")) return Response.json(restored);
+        if (url.endsWith("/versions"))
+          return Response.json([
+            { revision: 1, created_at: "2026-10-29T00:00:00Z" },
+            { revision: 2, created_at: "2026-10-29T01:00:00Z" },
+          ]);
+        return Response.json({ kind: "dir", path: "", entries: [] });
+      }),
+    );
+    const view = renderHubDetailPane("template", {
+      selectedTemplate: localTemplate,
+      templates: [localTemplate],
+      inlineTemplateDetail: true,
+      onSelectTemplate,
+      queryClient: client,
+    });
+    const details = view.container.querySelector("details")!;
+    details.open = true;
+    fireEvent(details, new Event("toggle"));
+    await user.click(await screen.findByRole("button", { name: "V1" }));
+    await user.click(screen.getByRole("button", { name: "templateRestoreVersion" }));
+    await user.click(screen.getByRole("button", { name: "templateVersionRollbackConfirm" }));
+    await waitFor(() =>
+      expect(client.getQueryData(workspaceQueryKeys.hubTemplate(localTemplate.id))).toEqual(restored),
+    );
+    expect(onSelectTemplate).not.toHaveBeenCalled();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    view.rerenderOptions({ selectedTemplate: restored });
+    expect(screen.getAllByText("templateVersionActive V1").length).toBeGreaterThan(0);
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
 
   it("publishes a local template to the community", async () => {
     const user = userEvent.setup();
@@ -1052,6 +1219,8 @@ describe("HubDetailPane", () => {
     const localTemplate = {
       ...template,
       id: "local.demo-template",
+      revision: 3,
+      version: "V3",
       runtime_kind: "codex",
       source: { name: "local", kind: "local" },
       workspace: { ...template.workspace, kind: "codex" },
@@ -1064,11 +1233,18 @@ describe("HubDetailPane", () => {
     });
 
     await openTemplateDetail(user);
-    await user.click(screen.getByRole("button", { name: "Publish to community" }));
+    await user.click(screen.getByRole("button", { name: "Publish V3 to community" }));
     expect(screen.getByRole("dialog", { name: "Publish agent template" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Publish template only" })).toBeInTheDocument();
+    expect(screen.getByText("Version to publish")).toBeInTheDocument();
+    expect(screen.getByText("V3", { selector: "strong" })).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Only the active version is published; history is not included. The cloud keeps one current copy.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Publish V3 to community" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Publish and deploy" })).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Publish template only" }));
+    await user.click(screen.getByRole("button", { name: "Publish V3 to community" }));
 
     expect(onPublishTemplate).toHaveBeenCalledWith(localTemplate, false);
     expect(await screen.findByRole("dialog", { name: "Published successfully" })).toBeInTheDocument();
@@ -1082,16 +1258,16 @@ describe("HubDetailPane", () => {
         { ...localTemplate, id: "alice/demo-template", namespace: "alice", source: { kind: "remote" } },
       ],
     });
-    expect(screen.getByRole("link", { name: "Published on AgenticHub" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "View community template" })).toHaveAttribute(
       "href",
       "https://qa.opencsg.com/agentichub?view=resources&subview=template",
     );
-    expect(screen.queryByRole("button", { name: "Publish to community" })).not.toBeInTheDocument();
-    expect(screen.getAllByText("Published").length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: "Publish V3 to community" })).toBeEnabled();
+    expect(screen.getAllByText("Community version unconfirmed").length).toBeGreaterThan(0);
     view.rerenderOptions({ templates: [localTemplate] });
-    expect(screen.queryByRole("link", { name: "Published on AgenticHub" })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Publish to community" })).toBeEnabled();
-    expect(screen.queryByText("Published")).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "View community template" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Publish V3 to community" })).toBeEnabled();
+    expect(screen.queryByText("Community version unconfirmed")).not.toBeInTheDocument();
   });
 
   it("publishes a local DSH template to the community", async () => {

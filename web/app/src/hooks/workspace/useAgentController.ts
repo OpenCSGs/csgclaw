@@ -1858,6 +1858,7 @@ export function useAgentController({
     description: string,
     includeMemory: boolean,
     displayName: string,
+    commitMessage = "",
   ): Promise<boolean> {
     if (!selectedAgentForPage?.id || agentPagePublishBusy) {
       return false;
@@ -1887,6 +1888,8 @@ export function useAgentController({
           displayName,
           resolveAgentAvatarSource(selectedAgentForPage, usersById) ||
             String(agents.find((item) => item.id === selectedAgentForPage.id)?.avatar || ""),
+          "",
+          commitMessage,
         );
       } else {
         // Always refresh the snapshot: workspace files can change independently of the form.
@@ -1900,6 +1903,7 @@ export function useAgentController({
           resolveAgentAvatarSource(selectedAgentForPage, usersById) ||
             String(agents.find((item) => item.id === selectedAgentForPage.id)?.avatar || ""),
           localTemplateID || "",
+          commitMessage,
         );
         localTemplateID = String(local.id || "").trim();
         if (!localTemplateID) throw new Error("Local template response is missing its ID");
@@ -2886,6 +2890,9 @@ export function useAgentController({
     workerAgentItems,
     notifierWebhookPublicOrigin,
     agentViewProps: {
+      linkedTemplate: hubTemplates.find(
+        (template) => template.source?.kind === "local" && template.source_agent_id === selectedAgentForPage?.id,
+      ),
       item: selectedAgentForPage,
       t,
       locale,

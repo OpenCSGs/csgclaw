@@ -236,6 +236,7 @@ describe("agent action visibility", () => {
         "Agent description",
         false,
         "Worker",
+        "",
       );
 
       await user.click(screen.getByRole("button", { name: "More" }));
@@ -250,6 +251,7 @@ describe("agent action visibility", () => {
         "Agent description",
         true,
         "Worker",
+        "",
       );
     },
   );
@@ -329,6 +331,7 @@ describe("agent action visibility", () => {
       "Agent description",
       false,
       "Worker",
+      "",
     );
   });
 
@@ -367,7 +370,7 @@ describe("agent action visibility", () => {
     await user.clear(nameInput);
     await user.type(nameInput, "review-bot_2");
     await user.click(screen.getByRole("button", { name: "Save as local template" }));
-    expect(onPublish).toHaveBeenCalledWith("local", "review-bot_2", "Agent description", false, "Worker");
+    expect(onPublish).toHaveBeenCalledWith("local", "review-bot_2", "Agent description", false, "Worker", "");
   });
 
   it("keeps the publish dialog open and shows duplicate local template errors", async () => {

@@ -1447,6 +1447,7 @@ describe("useAgentController", () => {
         "审查助手",
         "avatars/custom.png",
         "",
+        "",
       );
       return remote;
     });
@@ -1549,6 +1550,7 @@ describe("useAgentController", () => {
         changed ? "新展示名" : "审查助手",
         "",
         "local.Reviewer",
+        "",
       );
       expect(snapshotInstructions).toBe("corrected AGENTS.md instructions");
       expect(publishHubTemplateToCommunityRequest).toHaveBeenCalledTimes(2);
