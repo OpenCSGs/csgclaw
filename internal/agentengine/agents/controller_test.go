@@ -8519,6 +8519,7 @@ func mustNewLocalTemplateHubServiceWithMCP(t *testing.T, id string, item hub.Tem
 		Version:        item.Version,
 		Image:          item.Image,
 		RuntimeOptions: item.RuntimeOptions,
+		ModelConfig:    item.ModelConfig,
 		WorkspaceRef:   workspaceRef,
 		MCPServers:     mcpServers,
 		UpdatedAt:      time.Date(2026, 5, 12, 9, 0, 0, 0, time.UTC),

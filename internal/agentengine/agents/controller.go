@@ -1180,6 +1180,10 @@ func validateDefaultTemplateCompatibility(expectedRole string, spec CreateAgentS
 }
 
 func applyTemplateDefaults(spec CreateAgentSpec, item hub.Template) CreateAgentSpec {
+	if item.ModelConfig != nil {
+		modelConfig := *item.ModelConfig
+		spec.TemplateModelConfig = &modelConfig
+	}
 	if strings.TrimSpace(spec.Name) == "" {
 		spec.Name = item.Name
 	}

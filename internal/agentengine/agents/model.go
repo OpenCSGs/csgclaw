@@ -1,6 +1,7 @@
 package agents
 
 import (
+	"csgclaw/internal/apitypes"
 	skill "csgclaw/internal/skill/state"
 	"encoding/json"
 	"fmt"
@@ -232,31 +233,32 @@ func (a *Agent) UnmarshalJSON(data []byte) error {
 }
 
 type CreateAgentSpec struct {
-	ID                   string            `json:"id,omitempty"`
-	Name                 string            `json:"name"`
-	Description          string            `json:"description,omitempty"`
-	Instructions         string            `json:"instructions,omitempty"`
-	Skills               []string          `json:"skills,omitempty"`
-	Image                string            `json:"image,omitempty"`
-	Avatar               string            `json:"-"`
-	RuntimeKind          string            `json:"-"`
-	RuntimeName          string            `json:"runtime_name,omitempty"`
-	SandboxEnabled       bool              `json:"sandbox_enabled,omitempty"`
-	FromTemplate         string            `json:"from_template,omitempty"`
-	TemplateInstructions string            `json:"-"`
-	TemplateMemory       string            `json:"-"`
-	TemplateMemorySet    bool              `json:"-"`
-	Role                 string            `json:"role,omitempty"`
-	Status               string            `json:"status,omitempty"`
-	CreatedAt            time.Time         `json:"created_at,omitempty"`
-	UpdatedAt            time.Time         `json:"updated_at,omitempty"`
-	Profile              string            `json:"profile,omitempty"`
-	RuntimeOptions       map[string]any    `json:"runtime_options,omitempty"`
-	MCPServers           map[string]any    `json:"mcpServers,omitempty"`
-	MCPServersSet        bool              `json:"-"`
-	RuntimeCredentials   map[string]string `json:"-"`
-	RuntimeInitShell     string            `json:"-"`
-	AgentProfile         AgentProfile      `json:"agent_profile,omitempty"`
+	ID                   string                        `json:"id,omitempty"`
+	Name                 string                        `json:"name"`
+	Description          string                        `json:"description,omitempty"`
+	Instructions         string                        `json:"instructions,omitempty"`
+	Skills               []string                      `json:"skills,omitempty"`
+	Image                string                        `json:"image,omitempty"`
+	Avatar               string                        `json:"-"`
+	RuntimeKind          string                        `json:"-"`
+	RuntimeName          string                        `json:"runtime_name,omitempty"`
+	SandboxEnabled       bool                          `json:"sandbox_enabled,omitempty"`
+	FromTemplate         string                        `json:"from_template,omitempty"`
+	TemplateInstructions string                        `json:"-"`
+	TemplateModelConfig  *apitypes.TemplateModelConfig `json:"-"`
+	TemplateMemory       string                        `json:"-"`
+	TemplateMemorySet    bool                          `json:"-"`
+	Role                 string                        `json:"role,omitempty"`
+	Status               string                        `json:"status,omitempty"`
+	CreatedAt            time.Time                     `json:"created_at,omitempty"`
+	UpdatedAt            time.Time                     `json:"updated_at,omitempty"`
+	Profile              string                        `json:"profile,omitempty"`
+	RuntimeOptions       map[string]any                `json:"runtime_options,omitempty"`
+	MCPServers           map[string]any                `json:"mcpServers,omitempty"`
+	MCPServersSet        bool                          `json:"-"`
+	RuntimeCredentials   map[string]string             `json:"-"`
+	RuntimeInitShell     string                        `json:"-"`
+	AgentProfile         AgentProfile                  `json:"agent_profile,omitempty"`
 }
 
 func (s CreateAgentSpec) RuntimeConfig() agentruntime.RuntimeConfig {
