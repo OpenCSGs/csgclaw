@@ -132,8 +132,7 @@ func ToolDetails(title, input string, payload any) SpanDetails {
 		args = input
 	}
 	if text, ok := args.(string); ok {
-		var decoded any
-		if json.Unmarshal([]byte(text), &decoded) == nil {
+		if decoded, err := decodeJSONValue([]byte(text)); err == nil {
 			args = decoded
 		} else {
 			d.Arguments = displayText(text)
@@ -149,8 +148,8 @@ func ToolDetails(title, input string, payload any) SpanDetails {
 }
 func object(value any) map[string]any {
 	if s, ok := value.(string); ok {
-		var v map[string]any
-		_ = json.Unmarshal([]byte(s), &v)
+		decoded, _ := decodeJSONValue([]byte(s))
+		v, _ := decoded.(map[string]any)
 		return v
 	}
 	v, _ := value.(map[string]any)

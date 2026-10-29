@@ -21,6 +21,14 @@ func TestToolDetailsWhitelistsAndRedactsInputs(t *testing.T) {
 	}
 }
 
+func TestToolDetailsPreservesNumericArgumentTokens(t *testing.T) {
+	arguments := `{"decimal":1.000000000000000000001,"record_id":9007199254740993}`
+	details := ToolDetails("Lookup", "", map[string]any{"arguments": arguments})
+	if details.Arguments != arguments {
+		t.Fatalf("tool argument summary changed numeric evidence: got %s, want %s", details.Arguments, arguments)
+	}
+}
+
 func TestEventFloodReservesSpaceForModelAndToolTiming(t *testing.T) {
 	store := New("")
 	r := store.Begin("r", "s", "", "a", "t")

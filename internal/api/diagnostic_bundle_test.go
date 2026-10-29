@@ -163,3 +163,76 @@ func TestDiagnosticBundleFollowsExplicitTaskRelations(t *testing.T) {
 		t.Fatal("cross-room task aggregate exposed")
 	}
 }
+
+func TestDiagnosticBundleHTTPRedactsMCPArgumentsAndPreservesEmbeddedNumbers(t *testing.T) {
+	service := im.NewServiceFromBootstrap(im.Bootstrap{CurrentUserID: im.AdminUserID, Users: []im.User{{ID: im.AdminUserID, Role: "admin"}}, Rooms: []im.Room{{ID: "room", Members: []string{im.AdminUserID}}}})
+	store := service.Diagnostics()
+	record := store.Begin("room", "source", "", "manager", "turn-review")
+	record.Running()
+	record.Capture("runtime.configuration", map[string]any{"mcp_servers": map[string]any{"tools": map[string]any{"command": "tools-server", "args": []string{"--token", "opaque-production-credential", "--api-key=opaque-inline-credential", "--port", "9000"}}}})
+	config := filepath.Join(t.TempDir(), "config.toml")
+	if err := os.WriteFile(config, []byte("[mcp_servers.tools]\ncommand = 'tools-server'\nargs = ['--client-secret', 'opaque-config-credential', '--transport', 'stdio']\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	record.CaptureRuntimeFiles(config)
+	arguments := `{"decimal":1.000000000000000000001,"record_id":9007199254740993,"token":"opaque-tool-credential"}`
+	record.Capture("model.runtime_request", map[string]any{"body": map[string]any{"tools": []any{map[string]any{"arguments": arguments}}}})
+	record.Finish("succeeded")
+	server := httptest.NewServer((&Handler{im: service}).Routes())
+	defer server.Close()
+	response, err := http.Get(server.URL + "/api/v1/rooms/room/diagnostics/" + record.Snapshot().ID + "/bundle?download=1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	body, err := io.ReadAll(response.Body)
+	if err != nil || response.StatusCode != http.StatusOK {
+		t.Fatalf("bundle response: status=%d err=%v", response.StatusCode, err)
+	}
+	t.Run("MCP credentials", func(t *testing.T) {
+		for _, secret := range []string{"opaque-production-credential", "opaque-inline-credential", "opaque-config-credential", "opaque-tool-credential"} {
+			if strings.Contains(string(body), secret) {
+				t.Errorf("credential leaked through HTTP diagnostic export: %s", secret)
+			}
+		}
+		for _, keep := range []string{"tools-server", "--port", "9000", "--transport", "stdio"} {
+			if !strings.Contains(string(body), keep) {
+				t.Errorf("non-sensitive execution configuration lost: %s", keep)
+			}
+		}
+	})
+	t.Run("embedded number precision", func(t *testing.T) {
+		var bundle struct {
+			Turns []struct {
+				Context []diagnostics.ContextEntry `json:"context"`
+			} `json:"turns"`
+		}
+		if err := json.Unmarshal(body, &bundle); err != nil {
+			t.Fatal(err)
+		}
+		for _, entry := range bundle.Turns[0].Context {
+			if entry.Kind != "model.runtime_request" {
+				continue
+			}
+			var request struct {
+				Body struct {
+					Tools []struct {
+						Arguments string `json:"arguments"`
+					} `json:"tools"`
+				} `json:"body"`
+			}
+			if err := json.Unmarshal(entry.Data, &request); err != nil {
+				t.Fatal(err)
+			}
+			if len(request.Body.Tools) != 1 {
+				t.Fatal("missing model request tool arguments")
+			}
+			expected := strings.ReplaceAll(arguments, "opaque-tool-credential", "[redacted]")
+			if request.Body.Tools[0].Arguments != expected {
+				t.Fatalf("embedded JSON changed: got %s, want %s", request.Body.Tools[0].Arguments, expected)
+			}
+			return
+		}
+		t.Fatal("model request missing from diagnostic bundle")
+	})
+}

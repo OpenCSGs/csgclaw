@@ -127,14 +127,31 @@ func Protect(value any) json.RawMessage {
 	if err != nil {
 		return json.RawMessage(`{"unavailable":"unsupported diagnostic value"}`)
 	}
-	var decoded any
-	decoder := json.NewDecoder(bytes.NewReader(raw))
-	decoder.UseNumber()
-	if decoder.Decode(&decoded) != nil {
+	decoded, err := decodeJSONValue(raw)
+	if err != nil {
 		return json.RawMessage(`null`)
 	}
 	encoded, _ := json.Marshal(protectValue(decoded, ""))
 	return encoded
+}
+
+// Preserve numeric tokens at every JSON boundary, including JSON carried in a
+// string. Require a complete value so trailing content is never discarded.
+func decodeJSONValue(raw []byte) (any, error) {
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.UseNumber()
+	var value any
+	if err := decoder.Decode(&value); err != nil {
+		return nil, err
+	}
+	var extra any
+	if err := decoder.Decode(&extra); err != io.EOF {
+		if err == nil {
+			err = errors.New("multiple JSON values")
+		}
+		return nil, err
+	}
+	return value, nil
 }
 
 func secretField(key string) bool {
@@ -173,8 +190,24 @@ func protectValue(value any, key string) any {
 		}
 		return v
 	case []any:
-		for i, item := range v {
-			v[i] = protectValue(item, "")
+		commandArguments := normalized == "args" || normalized == "argv" || normalized == "command"
+		for i := 0; i < len(v); i++ {
+			// MCP credentials can be opaque values split from their option name.
+			// Keep argument positions and public options while hiding both common
+			// flag forms: --api-key=value and --api-key value.
+			if argument, ok := v[i].(string); ok && commandArguments && strings.HasPrefix(argument, "-") {
+				option, _, assigned := strings.Cut(argument, "=")
+				if secretField(option) {
+					if assigned {
+						v[i] = option + "=[redacted]"
+					} else if i+1 < len(v) {
+						v[i+1] = "[redacted]"
+						i++
+					}
+					continue
+				}
+			}
+			v[i] = protectValue(v[i], "")
 		}
 		return v
 	case string:
@@ -185,10 +218,11 @@ func protectValue(value any, key string) any {
 			}
 		}
 		// Embedded JSON occurs in tool arguments and protocol event payloads.
-		var nested any
-		if (strings.HasPrefix(strings.TrimSpace(v), "{") || strings.HasPrefix(strings.TrimSpace(v), "[")) && json.Unmarshal([]byte(v), &nested) == nil {
-			raw, _ := json.Marshal(protectValue(nested, ""))
-			return string(raw)
+		if strings.HasPrefix(strings.TrimSpace(v), "{") || strings.HasPrefix(strings.TrimSpace(v), "[") {
+			if nested, err := decodeJSONValue([]byte(v)); err == nil {
+				raw, _ := json.Marshal(protectValue(nested, key))
+				return string(raw)
+			}
 		}
 		return ProtectText(v)
 	default:

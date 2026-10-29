@@ -3,7 +3,6 @@ package diagnostics
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"github.com/pelletier/go-toml/v2"
 	"gopkg.in/yaml.v3"
 	"io"
@@ -81,7 +80,7 @@ func (r *Record) CaptureRuntimeFiles(paths ...string) {
 		case ".yaml", ".yml":
 			parseErr = yaml.Unmarshal(data, &content)
 		case ".json":
-			parseErr = json.Unmarshal(data, &content)
+			content, parseErr = decodeJSONValue(data)
 		}
 		if parseErr != nil {
 			content = "[unavailable: configuration parse failed]"

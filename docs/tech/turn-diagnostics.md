@@ -120,6 +120,8 @@ A per-process marker, PID and byte boundaries prevent a restarted process that a
 
 Complete-context redaction preserves long text while recursively removing credential fields, authentication headers, cookies, recognized key formats, private key blocks, and configured model credentials found inside arbitrary model text.
 It does not use the timeline's 4 KiB string truncation.
+Credential-bearing command-line options are redacted in both `--token value` and `--api-key=value` forms while preserving argument order and public options.
+Embedded JSON and JSON configuration files retain exact numeric tokens, including tool argument IDs above 2^53 and high-precision decimals.
 Historical uncaptured context, expired or unavailable files/logs, incomplete streams, and running executions are listed in `collection.issues`.
 A partial bundle remains downloadable and the UI shows a brief notice.
 
