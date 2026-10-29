@@ -147,6 +147,10 @@ func (m *appServerManager) Start(ctx context.Context, spec SessionSpec) (*Sessio
 		// Keep completed-turn exports timely; this does not block the turn itself.
 		cmd.Env = append(cmd.Env, "OTEL_BSP_SCHEDULE_DELAY=1000")
 	}
+	logStartOffset := int64(0)
+	if info, err := stderrFile.Stat(); err == nil {
+		logStartOffset = info.Size()
+	}
 	cmd.Stderr = stderrFile
 	if sysProcAttr := newSessionSysProcAttr(); sysProcAttr != nil {
 		cmd.SysProcAttr = sysProcAttr
@@ -164,10 +168,14 @@ func (m *appServerManager) Start(ctx context.Context, spec SessionSpec) (*Sessio
 	}
 	if err := processgroup.Start(cmd); err != nil {
 		_ = stderrFile.Close()
+		diagnostics.ReportFailure(ctx, "runtime.process_start", err, map[string]any{"runtime_id": spec.RuntimeID, "stderr_path": spec.StderrPath})
 		return nil, fmt.Errorf("start codex app-server: %w", err)
 	}
 
-	logger := slog.New(slog.NewTextHandler(stderrFile, &slog.HandlerOptions{}))
+	diagnosticObserver := diagnostics.NewRuntimeObserver(spec.StderrPath, spec.RuntimeID, cmd.Process.Pid, logStartOffset, stderrFile)
+	diagnosticObserver.Bind(ctx)
+	defer diagnosticObserver.End(ctx)
+	logger := slog.New(diagnostics.NewServerLogHandler(stderrFile, slog.LevelInfo, nil))
 	appClient := newAppServerClient(stdin, logger)
 	conversationSessions := cloneConversationSessions(spec.ConversationSessions)
 	if conversationSessions == nil {
@@ -180,6 +188,7 @@ func (m *appServerManager) Start(ctx context.Context, spec SessionSpec) (*Sessio
 		}
 	}
 	live := &liveSession{
+		diagnosticObserver:    diagnosticObserver,
 		telemetry:             telemetry,
 		mcpCatalogRevision:    spec.MCPCatalogRevision,
 		cmd:                   cmd,
@@ -385,8 +394,12 @@ func (m *appServerManager) Prompt(ctx context.Context, handle SessionHandle, req
 		return PromptResponse{}, err
 	}
 
+	live.diagnosticObserver.Bind(ctx)
+	defer live.diagnosticObserver.End(ctx)
+	diagnostics.From(ctx).Capture("runtime.configuration", map[string]any{"runtime": "codex", "runtime_id": runtimeID, "binary": live.spec.BinaryPath, "workspace": live.spec.WorkspaceDir, "stderr_path": live.spec.StderrPath, "profile": live.spec.Profile, "mcp_servers": live.spec.MCPServers, "mcp_revision": live.spec.MCPCatalogRevision, "execution_mode": live.spec.ExecutionMode, "extension_digests": live.session.ExtensionDigests, "runtime_version": live.serverInfo})
+	diagnostics.From(ctx).CaptureRuntimeFiles(filepath.Join(live.spec.HomeDir, "AGENTS.md"), filepath.Join(live.spec.CodexHomeDir, "AGENTS.md"), filepath.Join(live.spec.WorkspaceDir, "AGENTS.md"), filepath.Join(live.spec.WorkspaceDir, "AGENTS.override.md"), filepath.Join(live.spec.CodexHomeDir, "config.toml"))
 	diagnostics.From(ctx).RuntimeInfo("codex", live.spec.Profile.ModelID)
-	live.appClient.logInfo("model request configuration", "model", live.spec.Profile.ModelID, "runtime_id", runtimeID, "thread_id", sessionID)
+	live.appClient.logInfoContext(ctx, "model request configuration", "model", live.spec.Profile.ModelID, "runtime_id", runtimeID, "thread_id", sessionID)
 	waiter, err := live.registerAppServerTurnWaiter(sessionID)
 	if err != nil {
 		m.publishAppServerEvent(promptFailedEvent(runtimeID, sessionID, err))
@@ -406,14 +419,14 @@ func (m *appServerManager) Prompt(ctx context.Context, handle SessionHandle, req
 	m.publishContextUsage(runtimeID, live, sessionID, nil, "snapshot")
 	params := appServerTurnStartParamsWithInput(live.spec, sessionID, promptInput, req.ClientUserMessageID)
 	turnStartAt := time.Now()
-	live.appClient.logDebug("codex app-server turn start request",
+	live.appClient.logDebugContext(ctx, "codex app-server turn start request",
 		"runtime_id", runtimeID,
 		"thread_id", sessionID,
 		"prompt_blocks", len(promptInput),
 	)
 	raw, err := live.appClient.request(ctx, "turn/start", params)
 	if err != nil {
-		live.appClient.logDebug("codex app-server turn start failed",
+		live.appClient.logDebugContext(ctx, "codex app-server turn start failed",
 			"runtime_id", runtimeID,
 			"thread_id", sessionID,
 			"duration", time.Since(turnStartAt),
@@ -437,7 +450,7 @@ func (m *appServerManager) Prompt(ctx context.Context, handle SessionHandle, req
 		req.OnAccepted()
 	}
 	live.trackAppServerTurn(sessionID, waiter.currentTurnID())
-	live.appClient.logDebug("codex app-server turn start accepted",
+	live.appClient.logDebugContext(ctx, "codex app-server turn start accepted",
 		"runtime_id", runtimeID,
 		"thread_id", sessionID,
 		"turn_id", waiter.currentTurnID(),
@@ -450,7 +463,7 @@ func (m *appServerManager) Prompt(ctx context.Context, handle SessionHandle, req
 		resp, err = m.recoverContext(turnCtx, live, &waiter)
 	}
 	if err != nil {
-		live.appClient.logDebug("codex app-server turn wait failed",
+		live.appClient.logDebugContext(ctx, "codex app-server turn wait failed",
 			"runtime_id", runtimeID,
 			"thread_id", sessionID,
 			"turn_id", waiter.currentTurnID(),
@@ -462,7 +475,7 @@ func (m *appServerManager) Prompt(ctx context.Context, handle SessionHandle, req
 		m.publishAppServerEvent(promptFailedEvent(runtimeID, sessionID, err))
 		return resp, err
 	}
-	live.appClient.logDebug("codex app-server turn wait completed",
+	live.appClient.logDebugContext(ctx, "codex app-server turn wait completed",
 		"runtime_id", runtimeID,
 		"thread_id", sessionID,
 		"turn_id", waiter.currentTurnID(),
@@ -758,7 +771,7 @@ func (m *appServerManager) liveSession(runtimeID string) *liveSession {
 // sends "initialized" notification. Without this handshake, the server
 // rejects subsequent requests with "Not initialized (code=-32600)".
 func (m *appServerManager) initializeHandshake(ctx context.Context, live *liveSession) error {
-	_, err := live.appClient.request(ctx, "initialize", map[string]any{
+	serverInfo, err := live.appClient.request(ctx, "initialize", map[string]any{
 		"clientInfo": map[string]any{
 			"name":    "csgclaw-agent-sdk",
 			"title":   "CSGClaw Agent SDK",
@@ -771,6 +784,7 @@ func (m *appServerManager) initializeHandshake(ctx context.Context, live *liveSe
 	if err != nil {
 		return fmt.Errorf("codex app-server initialize handshake: %w", err)
 	}
+	live.serverInfo = append(json.RawMessage(nil), serverInfo...)
 	live.appClient.notify("initialized")
 	return nil
 }
@@ -965,13 +979,18 @@ func appServerOverrides(spec SessionSpec) []string {
 	return overrides
 }
 
-func (m *appServerManager) handleAppServerServerRequest(runtimeID string, live *liveSession, req appServerServerRequest) (any, error) {
+func (m *appServerManager) handleAppServerServerRequest(runtimeID string, live *liveSession, req appServerServerRequest) (result any, resultErr error) {
 	var diagnosticParams struct {
 		ThreadID string `json:"threadId"`
 		TurnID   string `json:"turnId"`
 	}
 	if json.Unmarshal(req.Params, &diagnosticParams) == nil && live != nil {
 		if ctx, ok := live.appServerTurnContext(diagnosticParams.ThreadID, diagnosticParams.TurnID); ok {
+			diagnostics.From(ctx).Capture("runtime.callback_request", map[string]any{"method": req.Method, "params": json.RawMessage(req.Params)})
+			defer func() {
+				diagnostics.From(ctx).Capture("runtime.callback_response", map[string]any{"method": req.Method, "result": result, "failed": resultErr != nil})
+			}()
+
 			name, owner := "callback.handle", "csgclaw"
 			if strings.Contains(req.Method, "requestUserInput") {
 				name, owner = "user.wait", "user"
@@ -1492,6 +1511,8 @@ type appServerTurnWaiter struct {
 	pendingUsage             map[string]modelusage.Usage
 	diagnostic               *diagnostics.Record
 	diagnosticEnds           map[string]time.Time
+	diagnosticNotes          map[string][]json.RawMessage
+	diagnosticNoteBytes      int
 	visibleActivity          bool
 	mu                       sync.RWMutex
 	threadID                 string
@@ -1678,6 +1699,7 @@ func (w *appServerTurnWaiter) setTurnID(turnID string) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	w.turnID = turnID
+	w.flushDiagnosticNotesLocked(turnID)
 	w.diagnostic.RuntimeRef(w.threadID, turnID, "")
 	if at, ok := w.diagnosticEnds[turnID]; ok {
 		w.diagnostic.RuntimeEndAt(at)
@@ -1703,6 +1725,7 @@ func (w *appServerTurnWaiter) apply(result *appServerTurnResult) bool {
 	// A previous turn can finish while the next start response is still pending.
 	if result.started && result.turnID != "" {
 		w.turnID = result.turnID
+		w.flushDiagnosticNotesLocked(result.turnID)
 		w.diagnostic.RuntimeRef(w.threadID, result.turnID, "")
 		if at, ok := w.diagnosticEnds[w.turnID]; ok {
 			w.diagnostic.RuntimeEndAt(at)
@@ -1879,7 +1902,7 @@ func (m *appServerManager) stopAppServerTurn(live *liveSession, waiter *appServe
 	}
 	// A rejected or delayed interrupt does not establish that the process is
 	// unhealthy. Keep worker lifetime independent of individual turn failures.
-	slog.Warn("codex app-server turn interrupt failed; preserving runtime",
+	slog.WarnContext(diagnostics.WithRecord(context.Background(), waiter.diagnostic), "codex app-server turn interrupt failed; preserving runtime",
 		"runtime_id", live.spec.RuntimeID,
 		"thread_id", waiter.threadID,
 		"turn_id", waiter.currentTurnID(),
@@ -1986,6 +2009,7 @@ func (m *appServerManager) readAppServerStdout(runtimeID string, live *liveSessi
 				return
 			}
 			if live.appClient != nil {
+				live.diagnosticObserver.Observe("stdout_decode_failed", err, nil)
 				live.appClient.logDebug("codex app-server stdout decoder stopped", "runtime_id", runtimeID, "error", err)
 			}
 			return
@@ -2019,6 +2043,7 @@ func (m *appServerManager) waitAppServerSession(runtimeID string, live *liveSess
 		)
 		live.appClient.closeAllPending(fmt.Errorf("codex app-server exited with code %d", exitCode))
 	}
+	live.diagnosticObserver.Exit(exitCode, err, cleanupErr)
 	isCurrent := false
 	if cleanupErr == nil {
 		isCurrent = m.detachSession(runtimeID, live)
@@ -2131,4 +2156,36 @@ func appServerThreadConfig(profile agentruntime.Profile, executionMode string) m
 		values["web_search"] = "disabled"
 	}
 	return values
+}
+
+func (w *appServerTurnWaiter) captureDiagnosticNotification(turnID string, value any) {
+	if w == nil || turnID == "" {
+		return
+	}
+	raw := diagnostics.Protect(value)
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.turnID == turnID {
+		w.diagnostic.Capture("runtime.notification", raw)
+		return
+	}
+	if w.turnID != "" {
+		return
+	}
+	if w.diagnosticNoteBytes+len(raw) > 8<<20 {
+		w.diagnostic.Issue("early_runtime_notifications_incomplete")
+		return
+	}
+	if w.diagnosticNotes == nil {
+		w.diagnosticNotes = map[string][]json.RawMessage{}
+	}
+	w.diagnosticNotes[turnID] = append(w.diagnosticNotes[turnID], raw)
+	w.diagnosticNoteBytes += len(raw)
+}
+func (w *appServerTurnWaiter) flushDiagnosticNotesLocked(turnID string) {
+	for _, raw := range w.diagnosticNotes[turnID] {
+		w.diagnostic.Capture("runtime.notification", raw)
+	}
+	w.diagnosticNotes = nil
+	w.diagnosticNoteBytes = 0
 }

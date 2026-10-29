@@ -1256,6 +1256,33 @@ func TestAppServerEventAdapterRawTextAndToolEvents(t *testing.T) {
 	}
 }
 
+func TestAppServerMCPNotificationPreservesArgumentNumbers(t *testing.T) {
+	manager, live, sink := testAppServerEventAdapter(t)
+	manager.handleAppServerNotification("runtime-1", live, appServerNotification{
+		Method: "item/started",
+		Params: json.RawMessage(`{"threadId":"main-thread","item":{"id":"lookup","type":"mcpToolCall","server":"review","tool":"lookup","arguments":{"record_id":9007199254740993,"decimal":1.000000000000000000001}}}`),
+	})
+	events := withoutContextUsage(sink.snapshot())
+	if len(events) != 1 {
+		t.Fatalf("tool events=%d, want 1", len(events))
+	}
+	for _, number := range []string{"9007199254740993", "1.000000000000000000001"} {
+		if !strings.Contains(events[0].ToolInputSummary, number) {
+			t.Errorf("numeric argument changed in tool summary: missing %s", number)
+		}
+		payload, err := json.Marshal(events[0].Payload)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(string(payload), number) {
+			t.Errorf("numeric argument changed in event payload: missing %s", number)
+		}
+	}
+	if got := appServerRequestIDValue(json.Number("9007199254740993")); got != "9007199254740993" {
+		t.Fatalf("numeric request identity changed: %s", got)
+	}
+}
+
 func TestAppServerEventAdapterStructuredOutputRawAndLegacyRoutes(t *testing.T) {
 	t.Parallel()
 

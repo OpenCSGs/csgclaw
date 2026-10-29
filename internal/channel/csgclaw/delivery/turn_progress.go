@@ -10,6 +10,7 @@ import (
 	"csgclaw/internal/activity"
 	"csgclaw/internal/agentengine"
 	"csgclaw/internal/channel"
+	"csgclaw/internal/diagnostics"
 	"csgclaw/internal/modelusage"
 )
 
@@ -20,6 +21,7 @@ type turnProgressStore interface {
 // progressState serializes timer flushes with terminal delivery. A completed
 // snapshot can never be overwritten by a delayed streaming update.
 type progressState struct {
+	diagnostic      *diagnostics.Record
 	lastFlush       time.Time
 	pendingPersist  bool
 	mu              sync.Mutex
@@ -70,13 +72,20 @@ func (r *TranscriptRenderer) Start(ctx context.Context, turn channel.TurnContext
 	p := state.progress
 	r.mu.Unlock()
 	p.mu.Lock()
+	p.diagnostic = diagnostics.From(ctx)
 	defer p.mu.Unlock()
 	return p.flush(ctx, true, nil)
 }
 
 func (p *progressState) observe(ctx context.Context, event agentengine.TurnEvent) error {
+	wait := diagnostics.MeasureMetric(ctx, "delivery.progress_lock_wait")
 	p.mu.Lock()
-	defer p.mu.Unlock()
+	wait()
+	hold := diagnostics.MeasureMetric(ctx, "delivery.progress_lock_hold")
+	defer func() { hold(); p.mu.Unlock() }()
+	if p.diagnostic == nil {
+		p.diagnostic = diagnostics.From(ctx)
+	}
 	if p.done {
 		return nil
 	}
@@ -190,7 +199,7 @@ func (p *progressState) observe(ctx context.Context, event agentengine.TurnEvent
 			defer p.mu.Unlock()
 			p.timer = nil
 			if !p.done {
-				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				ctx, cancel := context.WithTimeout(diagnostics.WithRecord(context.Background(), p.diagnostic), 5*time.Second)
 				defer cancel()
 				p.lastErr = p.flush(ctx, p.pendingPersist, nil)
 			}

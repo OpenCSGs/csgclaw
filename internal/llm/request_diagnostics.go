@@ -14,8 +14,15 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"sync/atomic"
 )
 
+type modelExchangeKey struct{}
+type modelExchange struct {
+	recorder *diagnostics.Recorder
+	attempt  atomic.Uint64
+	id       string
+}
 type modelRequestContextKey struct{}
 type modelRequestContext struct{ id, agent, provider, model, runtimeModel string }
 type nativeRequestContextKey struct{}
@@ -38,6 +45,15 @@ func withModelRequestContext(ctx context.Context, agentID string, profile agent.
 		provider = profile.Provider
 	}
 	metadata := modelRequestContext{rand.Text(), agentID, provider, profile.ModelID, input.Model}
+	secrets := []string{profile.APIKey}
+	for key, value := range profile.Headers {
+		if strings.Contains(strings.ToLower(key), "key") || strings.Contains(strings.ToLower(key), "token") || strings.EqualFold(key, "Authorization") {
+			secrets = append(secrets, value)
+		}
+	}
+	exchange := &modelExchange{recorder: diagnostics.NewRecorder(ctx, secrets...), id: metadata.id}
+	exchange.recorder.Capture("model.runtime_request", map[string]any{"request_id": metadata.id, "ingress_request_id": diagnostics.IngressID(ctx), "agent_id": agentID, "provider": provider, "model": profile.ModelID, "body": json.RawMessage(body)})
+	ctx = context.WithValue(ctx, modelExchangeKey{}, exchange)
 	ctx = diagnostics.WithRequestModel(ctx, profile.ModelID)
 	return context.WithValue(ctx, modelRequestContextKey{}, metadata)
 }
@@ -111,4 +127,17 @@ func logModelRequest(req *http.Request) {
 	if strings.TrimSpace(metadata.agent) != "" {
 		slog.InfoContext(req.Context(), "model upstream request", attrs...)
 	}
+}
+
+func captureRuntimeResponse(ctx context.Context, response *UpstreamResponse, err error) (*UpstreamResponse, error) {
+	exchange, _ := ctx.Value(modelExchangeKey{}).(*modelExchange)
+	if exchange != nil {
+		if err != nil {
+			exchange.recorder.Capture("model.runtime_error", map[string]any{"request_id": exchange.id, "error": err.Error()})
+		}
+		if response != nil {
+			response.Body = diagnostics.ObserveBody(response.Body, exchange.recorder, "model.runtime_response", map[string]any{"request_id": exchange.id, "status": response.StatusCode}, response.Header.Get("Content-Type"))
+		}
+	}
+	return response, err
 }

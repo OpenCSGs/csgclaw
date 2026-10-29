@@ -191,7 +191,9 @@ func (s *Service) ChatCompletionsStream(ctx context.Context, botID string, body 
 	if err != nil {
 		return nil, err
 	}
-	return s.forwardRemoteChat(withModelRequestContext(ctx, botID, profile, body), profile, body)
+	ctx = withModelRequestContext(ctx, botID, profile, body)
+	response, callErr := s.forwardRemoteChat(ctx, profile, body)
+	return captureRuntimeResponse(ctx, response, callErr)
 }
 
 func (s *Service) Responses(ctx context.Context, botID string, body []byte) (*UpstreamResponse, error) {
@@ -199,7 +201,9 @@ func (s *Service) Responses(ctx context.Context, botID string, body []byte) (*Up
 	if err != nil {
 		return nil, err
 	}
-	return s.forwardRemoteResponses(withModelRequestContext(ctx, botID, profile, body), profile, body)
+	ctx = withModelRequestContext(ctx, botID, profile, body)
+	response, callErr := s.forwardRemoteResponses(ctx, profile, body)
+	return captureRuntimeResponse(ctx, response, callErr)
 }
 
 func (s *Service) ResponsesWebsocket(w http.ResponseWriter, r *http.Request, botID string) error {
@@ -237,7 +241,7 @@ func (s *Service) ResponsesWebsocket(w http.ResponseWriter, r *http.Request, bot
 	}
 	defer upstream.Close()
 
-	return proxyResponsesWebsocket(r.Context(), downstream, upstream, responsesWebsocketClientPayloadRewriter(profile))
+	return proxyResponsesWebsocket(r.Context(), downstream, upstream, responsesWebsocketClientPayloadRewriter(profile), newWebsocketDiagnostics(r.Context(), profile))
 }
 
 type taskProfileKey struct{}
@@ -1724,17 +1728,26 @@ func rewriteResponsesWebsocketClientPayload(payload []byte, profile agent.AgentP
 	return rewritten
 }
 
-func proxyResponsesWebsocket(ctx context.Context, downstream, upstream *websocket.Conn, rewriteClientPayload responsesWebsocketPayloadRewriter) error {
+func proxyResponsesWebsocket(ctx context.Context, downstream, upstream *websocket.Conn, rewriteClientPayload responsesWebsocketPayloadRewriter, diagnosticObservers ...*websocketDiagnostics) error {
 	errCh := make(chan error, 2)
-	pump := func(dst, src *websocket.Conn, rewrite responsesWebsocketPayloadRewriter) {
+	pump := func(dst, src *websocket.Conn, rewrite responsesWebsocketPayloadRewriter, upstreamDirection bool) {
 		for {
 			messageType, payload, err := src.ReadMessage()
 			if err != nil {
 				errCh <- err
 				return
 			}
+
+			original := payload
 			if rewrite != nil {
 				payload = rewrite(messageType, payload)
+			}
+			for _, observer := range diagnosticObservers {
+				if upstreamDirection {
+					observer.request(messageType, original, payload)
+				} else {
+					observer.response(messageType, payload)
+				}
 			}
 			if err := dst.WriteMessage(messageType, payload); err != nil {
 				errCh <- err
@@ -1743,8 +1756,8 @@ func proxyResponsesWebsocket(ctx context.Context, downstream, upstream *websocke
 		}
 	}
 
-	go pump(upstream, downstream, rewriteClientPayload)
-	go pump(downstream, upstream, nil)
+	go pump(upstream, downstream, rewriteClientPayload, true)
+	go pump(downstream, upstream, nil, false)
 
 	select {
 	case <-ctx.Done():

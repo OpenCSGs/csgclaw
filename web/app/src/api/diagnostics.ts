@@ -1,4 +1,4 @@
-import { request } from "./client";
+import { request, requestText } from "./client";
 
 export type DiagnosticSpan = {
   id: string;
@@ -89,4 +89,16 @@ export function reportDiagnosticTiming(
       first_text_at: firstText?.at,
     },
   });
+}
+
+export async function fetchDiagnosticBundle(room: string, id: string, download: boolean, signal?: AbortSignal) {
+  const query = new URLSearchParams({ timezone: Intl.DateTimeFormat().resolvedOptions().timeZone });
+  if (download) query.set("download", "1");
+  const text = await requestText(`${path(room)}/${encodeURIComponent(id)}/bundle?${query}`, {
+    signal,
+    headers: { Accept: "application/json" },
+    cache: "no-store",
+  });
+  const bundle = JSON.parse(text) as { schema_version: number; turn_id: string; collection: { complete: boolean } };
+  return { text, turnId: bundle.turn_id, complete: bundle.collection.complete };
 }

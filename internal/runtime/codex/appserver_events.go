@@ -1,6 +1,7 @@
 package codex
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -19,7 +20,9 @@ const (
 func (m *appServerManager) handleAppServerNotification(runtimeID string, live *liveSession, note appServerNotification) {
 	var params map[string]any
 	if len(note.Params) > 0 && string(note.Params) != "null" {
-		if err := json.Unmarshal(note.Params, &params); err != nil {
+		decoder := json.NewDecoder(bytes.NewReader(note.Params))
+		decoder.UseNumber()
+		if err := decoder.Decode(&params); err != nil {
 			if live.appClient != nil {
 				live.appClient.logDebug("ignore malformed codex app-server notification params", "method", note.Method, "error", err)
 			}
@@ -29,6 +32,11 @@ func (m *appServerManager) handleAppServerNotification(runtimeID string, live *l
 	if params == nil {
 		params = map[string]any{}
 	}
+
+	if waiter := live.appServerTurnWaiter(appServerString(params, "threadId")); waiter != nil {
+		waiter.captureDiagnosticNotification(appServerNotificationTurnID(params), map[string]any{"method": note.Method, "params": params, "received_at": note.ReceivedAt})
+	}
+
 	if note.Method == "turn/completed" {
 		at := note.ReceivedAt
 		if at.IsZero() {
@@ -81,6 +89,10 @@ func appServerRequestIDValue(value any) string {
 	switch typed := value.(type) {
 	case string:
 		return strings.TrimSpace(typed)
+	case json.Number:
+		if value, err := typed.Int64(); err == nil {
+			return fmt.Sprintf("%d", value)
+		}
 	case float64:
 		if typed == float64(int64(typed)) {
 			return fmt.Sprintf("%d", int64(typed))

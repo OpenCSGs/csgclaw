@@ -79,6 +79,7 @@ func (c *appServerClient) request(ctx context.Context, method string, params any
 	if params != nil {
 		msg["params"] = params
 	}
+	diagnostics.From(ctx).Capture("runtime.rpc_request", msg)
 	if err := c.writeJSONLine(msg, func() {
 		if method == "turn/start" {
 			diagnostics.From(ctx).RuntimeStart()
@@ -90,6 +91,7 @@ func (c *appServerClient) request(ctx context.Context, method string, params any
 
 	select {
 	case result := <-pending.ch:
+		diagnostics.From(ctx).Capture("runtime.rpc_response", map[string]any{"id": id, "method": method, "result": result.result})
 		if result.err != nil {
 			return nil, fmt.Errorf("%s: %w", method, result.err)
 		}
@@ -364,4 +366,15 @@ func cloneRawMessage(raw json.RawMessage) json.RawMessage {
 	out := make([]byte, len(raw))
 	copy(out, raw)
 	return out
+}
+
+func (c *appServerClient) logDebugContext(ctx context.Context, msg string, args ...any) {
+	if c != nil && c.logger != nil {
+		c.logger.DebugContext(ctx, msg, args...)
+	}
+}
+func (c *appServerClient) logInfoContext(ctx context.Context, msg string, args ...any) {
+	if c != nil && c.logger != nil {
+		c.logger.InfoContext(ctx, msg, args...)
+	}
 }

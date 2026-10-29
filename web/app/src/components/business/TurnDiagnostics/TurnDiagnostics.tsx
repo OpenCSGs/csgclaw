@@ -6,7 +6,7 @@ import { DiagnosticTimeline } from "./DiagnosticTimeline";
 import { DiagnosticBreakdown, DiagnosticCalls, DiagnosticSpanFields } from "./DiagnosticAnalysis";
 import { observeDiagnosticRender } from "@/shared/diagnostics/renderTiming";
 import { useEffect, useRef, useState } from "react";
-import { AlertCircle, ChevronDown, Clock, Copy, Download, RefreshCw } from "lucide-react";
+import { AlertCircle, ChevronDown, Clock, Copy, Download, FileText, RefreshCw } from "lucide-react";
 import {
   Button,
   DropdownMenuRoot,
@@ -24,7 +24,7 @@ import {
   Select,
   Tooltip,
 } from "@/components/ui";
-import { fetchDiagnostic, fetchDiagnostics, type TurnDiagnostic } from "@/api/diagnostics";
+import { fetchDiagnostic, fetchDiagnostics, fetchDiagnosticBundle, type TurnDiagnostic } from "@/api/diagnostics";
 import { fetchAgentLogsRequest } from "@/api/agents";
 import {
   diagnosticDuration,
@@ -202,6 +202,9 @@ export function TurnDiagnostics({
   const [cursor, setCursor] = useState("");
   const [revision, setRevision] = useState(0);
   const [copied, setCopied] = useState(false);
+  const [exporting, setExporting] = useState<"copy" | "download" | null>(null);
+  const [bundleIncomplete, setBundleIncomplete] = useState(false);
+  const bundleRequest = useRef<AbortController | null>(null);
 
   const {
     page,
@@ -262,24 +265,45 @@ export function TurnDiagnostics({
     };
   }, [tab, activeAgent, revision, t]);
 
+  useEffect(() => {
+    setCopied(false);
+    setBundleIncomplete(false);
+    setExporting(null);
+    return () => bundleRequest.current?.abort();
+  }, [detail?.id]);
+
   const exportJSON = async (download: boolean) => {
-    if (!detail) return;
-    const text = JSON.stringify(detail, null, 2);
-    if (!download) {
-      try {
-        await navigator.clipboard.writeText(text);
-        setCopied(true);
-      } catch {
-        setError(t("diagCopyFailed"));
+    if (!detail || exporting || loading) return;
+    bundleRequest.current?.abort();
+    const controller = new AbortController();
+    bundleRequest.current = controller;
+    setExporting(download ? "download" : "copy");
+    setError("");
+    setCopied(false);
+    try {
+      const bundle = await fetchDiagnosticBundle(room, detail.id, download, controller.signal);
+      if (controller.signal.aborted) return;
+      setBundleIncomplete(!bundle.complete);
+      if (!download) {
+        try {
+          await navigator.clipboard.writeText(bundle.text);
+          if (!controller.signal.aborted) setCopied(true);
+        } catch {
+          if (!controller.signal.aborted) setError(t("diagCopyFailed"));
+        }
+        return;
       }
-      return;
+      const url = URL.createObjectURL(new Blob([bundle.text], { type: "application/json" }));
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `csgclaw-turn-${bundle.turnId.replace(/^turn-csgclaw-/, "").replace(/[^a-zA-Z0-9._-]/g, "_")}-diagnostics.json`;
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch {
+      if (!controller.signal.aborted) setError(t("diagExportFailed"));
+    } finally {
+      if (!controller.signal.aborted) setExporting(null);
     }
-    const url = URL.createObjectURL(new Blob([text], { type: "application/json" }));
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `turn-${detail.id}.json`;
-    link.click();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
   return (
     <DialogRoot
@@ -290,16 +314,79 @@ export function TurnDiagnostics({
     >
       <DialogContent className={styles.dialog}>
         <DialogHeader className={styles.header}>
-          <div>
+          <div className={styles.heading}>
             <DialogTitle>
-              {t(source ? (turn ? "diagExecutionTitle" : "diagResponseTitle") : "diagConversation")}
+              {t(
+                turn || initialTurn
+                  ? "diagExecutionTitle"
+                  : source || initialSource
+                    ? "diagResponseTitle"
+                    : "diagConversation",
+              )}
             </DialogTitle>
             <DialogDescription>
-              {t(source ? (turn ? "diagExecutionScope" : "diagResponseScope") : "diagDescription")}
+              {t(
+                turn || initialTurn
+                  ? "diagExecutionScope"
+                  : source || initialSource
+                    ? "diagResponseScope"
+                    : "diagDescription",
+              )}
             </DialogDescription>
           </div>
-          <DialogCloseButton label={t("close")} iconOnly size="sm" variant="tertiaryGray" />
+          <div className={styles.headerControls} aria-label={t("diagActions")}>
+            <div className={styles.actionButtons}>
+              <Button
+                size="sm"
+                variant="secondaryGray"
+                disabled={!detail || loading || tab === "logs"}
+                onClick={() => {
+                  if (!detail) return;
+                  setLogAgent(detail.agent_id);
+                  setTab("logs");
+                  setError("");
+                }}
+                title={t("diagViewAgentLogs", {
+                  name: names.get(detail?.agent_id || "") || detail?.agent_name || detail?.agent_id || "",
+                })}
+              >
+                <FileText size={16} />
+                <span className={styles.actionLabel}>
+                  {t("diagViewAgentLogs", {
+                    name: names.get(detail?.agent_id || "") || detail?.agent_name || detail?.agent_id || "",
+                  })}
+                </span>
+              </Button>
+              <Button
+                size="sm"
+                variant="secondaryGray"
+                disabled={!detail || loading || Boolean(exporting)}
+                aria-busy={exporting === "copy"}
+                onClick={() => void exportJSON(false)}
+              >
+                <Copy size={16} />
+                {t(exporting === "copy" ? "diagCollecting" : copied ? "diagCopied" : "diagCopy")}
+              </Button>
+              <Button
+                size="sm"
+                variant="secondaryGray"
+                disabled={!detail || loading || Boolean(exporting)}
+                aria-busy={exporting === "download"}
+                onClick={() => void exportJSON(true)}
+              >
+                <Download size={16} />
+                {t(exporting === "download" ? "diagCollecting" : "diagExport")}
+              </Button>
+            </div>
+            <DialogCloseButton className={styles.close} label={t("close")} iconOnly size="sm" variant="tertiaryGray" />
+          </div>
         </DialogHeader>
+
+        {bundleIncomplete ? (
+          <p className={styles.bundleWarning} role="status">
+            {t("diagBundleIncomplete")}
+          </p>
+        ) : null}
         {source ? (
           <section className={styles.context} aria-label={t("diagTriggerMessage")}>
             <div className={styles.contextMeta}>
@@ -333,51 +420,52 @@ export function TurnDiagnostics({
             ) : (
               <strong>{t(source ? "diagRelatedRecords" : "diagTurns")}</strong>
             )}
+            <span className={styles.turnId} title={detail?.turn_id}>
+              Turn <code>{detail?.turn_id || t("diagNotMeasured")}</code>
+            </span>
           </div>
-          {showAgentFilter ? (
-            <Select
+          <div className={styles.filters}>
+            {showAgentFilter && tab === "turns" ? (
+              <Select
+                size="sm"
+                triggerClassName={styles.filter}
+                triggerProps={{ "aria-label": t("diagAgent") }}
+                value={agent}
+                options={[{ value: "", label: t("diagAllAgents") }, ...agentOptions]}
+                onValueChange={(value) => {
+                  setAgent(value);
+                  setCursor("");
+                  select("");
+                }}
+              />
+            ) : null}
+            {tab === "turns" ? (
+              <Select
+                size="sm"
+                triggerClassName={styles.filter}
+                triggerProps={{ "aria-label": t("diagStatus") }}
+                value={status}
+                options={["", "running", "queued", "succeeded", "failed", "canceled", "interrupted"].map((value) => ({
+                  value,
+                  label: value ? t(`diagStatus_${value}`) : t("diagAllStatuses"),
+                }))}
+                onValueChange={(value) => {
+                  setStatus(value);
+                  setCursor("");
+                  select("");
+                }}
+              />
+            ) : null}
+            <Button
+              iconOnly
               size="sm"
-              triggerClassName={styles.filter}
-              triggerProps={{ "aria-label": t("diagAgent") }}
-              value={tab === "logs" ? activeAgent : agent}
-              options={tab === "logs" ? agentOptions : [{ value: "", label: t("diagAllAgents") }, ...agentOptions]}
-              onValueChange={(value) => {
-                if (tab === "logs") {
-                  setLogAgent(value);
-                  return;
-                }
-                setAgent(value);
-                setCursor("");
-                select("");
-              }}
-            />
-          ) : null}
-          {tab === "turns" ? (
-            <Select
-              size="sm"
-              triggerClassName={styles.filter}
-              triggerProps={{ "aria-label": t("diagStatus") }}
-              value={status}
-              options={["", "running", "queued", "succeeded", "failed", "canceled", "interrupted"].map((value) => ({
-                value,
-                label: value ? t(`diagStatus_${value}`) : t("diagAllStatuses"),
-              }))}
-              onValueChange={(value) => {
-                setStatus(value);
-                setCursor("");
-                select("");
-              }}
-            />
-          ) : null}
-          <Button
-            iconOnly
-            size="sm"
-            variant="tertiaryGray"
-            aria-label={t("refreshLogs")}
-            onClick={() => setRevision((value) => value + 1)}
-          >
-            <RefreshCw size={15} />
-          </Button>
+              variant="tertiaryGray"
+              aria-label={t("refreshLogs")}
+              onClick={() => setRevision((value) => value + 1)}
+            >
+              <RefreshCw size={15} />
+            </Button>
+          </div>
         </div>
         {error || (tab === "turns" && loadError) ? (
           <div role="alert" className={`${styles.warning} ${styles.loadError}`}>
@@ -448,28 +536,6 @@ export function TurnDiagnostics({
                       agentName={names.get(detail.agent_id) || detail.agent_name || detail.agent_id}
                       t={t}
                     />
-                    <div className={styles.export}>
-                      <Button
-                        size="sm"
-                        variant="secondaryGray"
-                        onClick={() => {
-                          setLogAgent(detail.agent_id);
-                          setTab("logs");
-                        }}
-                      >
-                        {t("diagViewAgentLogs", {
-                          name: names.get(detail.agent_id) || detail.agent_name || detail.agent_id,
-                        })}
-                      </Button>
-                      <Button size="sm" variant="tertiaryGray" onClick={() => void exportJSON(false)}>
-                        <Copy size={14} />
-                        {t(copied ? "diagCopied" : "diagCopy")}
-                      </Button>
-                      <Button size="sm" variant="tertiaryGray" onClick={() => void exportJSON(true)}>
-                        <Download size={14} />
-                        {t("diagExport")}
-                      </Button>
-                    </div>
                   </>
                 ) : (
                   <p className={styles.empty}>

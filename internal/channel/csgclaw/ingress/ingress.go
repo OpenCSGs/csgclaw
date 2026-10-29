@@ -203,6 +203,7 @@ func (w *Worker) run(ctx context.Context) {
 				}
 			}
 		case item := <-w.queue:
+			item.diagnostic.Capture("performance.queue", map[string]any{"pending_scopes": len(pending), "active_scopes": len(activeScopes), "binding_queue_depth": len(w.queue)})
 			pending = append(pending, item)
 		case scope := <-completed:
 			delete(activeScopes, scope)
@@ -233,21 +234,21 @@ func (w *Worker) handle(ctx context.Context, item queuedEvent) {
 		attrs = append(attrs, "room_role", "worker")
 	}
 	if item.event.TaskID != "" {
-		slog.Info("room task Agent turn starting", attrs...)
+		slog.InfoContext(turnCtx, "room task Agent turn starting", attrs...)
 	}
 	outcome, err := w.adapter.Handle(turnCtx, w.binding, item.event)
 	attrs = append(attrs, "turn_id", outcome.Turn.TurnID, "duration", time.Since(start), "turn_status", outcome.Result.Status)
 	if item.event.TaskID != "" {
 		if err != nil {
-			slog.Error("room task Agent turn failed", append(attrs, "error", diagnostics.Redact(err.Error()))...)
+			slog.ErrorContext(turnCtx, "room task Agent turn failed", append(attrs, "error", diagnostics.Redact(err.Error()))...)
 		} else if outcome.Result.Error != nil {
-			slog.Error("room task Agent runtime failed", append(attrs, "error_code", outcome.Result.Error.Code, "error", diagnostics.Redact(outcome.Result.Error.Message))...)
+			slog.ErrorContext(turnCtx, "room task Agent runtime failed", append(attrs, "error_code", outcome.Result.Error.Code, "error", diagnostics.Redact(outcome.Result.Error.Message))...)
 		} else {
-			slog.Info("room task Agent turn finished", attrs...)
+			slog.InfoContext(turnCtx, "room task Agent turn finished", attrs...)
 		}
 	}
 	if err != nil && item.event.TaskID == "" {
-		slog.Error("handle built-in IM event failed",
+		slog.ErrorContext(turnCtx, "handle built-in IM event failed",
 			"binding_id", w.binding.StableID(),
 			"participant_id", w.binding.ParticipantID,
 			"message_id", item.event.MessageID,
