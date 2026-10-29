@@ -181,13 +181,20 @@
         flex: none;
       }
       .counter {
+        display: inline-flex;
+        align-items: baseline;
+        gap: 0.75ch;
         font-family: var(--mono);
         font-size: 12px;
         letter-spacing: 0.1em;
         color: var(--muted);
         font-variant-numeric: tabular-nums;
+        white-space: nowrap;
       }
       .counter b {
+        inline-size: 6ch;
+        flex: none;
+        text-align: right;
         color: var(--ink);
         font-weight: 500;
       }
