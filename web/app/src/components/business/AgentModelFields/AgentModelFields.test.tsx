@@ -80,6 +80,28 @@ test("model choices follow the selected provider when switching in both directio
   expect(screen.queryByRole("option", { name: /cloud-model/ })).not.toBeInTheDocument();
 });
 
+test("目录以外的模板模型保持显示并允许用户选择其他模型", async () => {
+  const user = userEvent.setup();
+  const onPatch = vi.fn();
+  render(
+    <AgentModelFields
+      providerOptions={providers}
+      providerID="custom"
+      modelID="template-model"
+      models={["first", "second"]}
+      onPatch={onPatch}
+      onRequireOpenCSGAuth={() => true}
+      t={t}
+    />,
+  );
+  const model = screen.getByRole("combobox", { name: t("profileModel") });
+  expect(model).toHaveTextContent("template-model");
+  await user.click(model);
+  expect(screen.getByRole("option", { name: /template-model/ })).toHaveAttribute("aria-selected", "true");
+  await user.click(screen.getByRole("option", { name: /second/ }));
+  expect(onPatch).toHaveBeenLastCalledWith({ provider: "api", model_provider_id: "custom", model_id: "second" });
+});
+
 test.each([
   { providerID: "custom", models: [], disabled: false },
   { providerID: "custom", models: ["first"], disabled: true },

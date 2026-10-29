@@ -1,7 +1,9 @@
 package codex
 
 import (
+	"csgclaw/internal/diagnostics"
 	"csgclaw/internal/modelcap"
+	"encoding/json"
 	"io"
 	"os"
 	"os/exec"
@@ -14,6 +16,8 @@ import (
 )
 
 type liveSession struct {
+	diagnosticObserver    *diagnostics.RuntimeObserver
+	serverInfo            json.RawMessage
 	stopErr               error
 	telemetry             *nativeTelemetry
 	compactingThreads     map[string]bool

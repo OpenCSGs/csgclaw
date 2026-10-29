@@ -6,7 +6,9 @@ import (
 	"csgclaw/internal/agentengine/contract"
 	"csgclaw/internal/diagnostics"
 	"fmt"
+	"log/slog"
 	"reflect"
+	goruntime "runtime"
 	"strings"
 	"sync"
 	"time"
@@ -177,7 +179,20 @@ func (c *conversations) Run(ctx context.Context, request TurnRequest, sink Event
 		return *admissionResult
 	}
 	turn.ctx = diagnostics.WithRecord(turn.ctx, diagnostics.From(ctx))
+
 	turn.agentID = c.agentID
+	diagnostics.From(turn.ctx).Capture("performance.load", map[string]any{"activity": diagnostics.ActivityFor(turn.ctx), "goroutines": goruntime.NumGoroutine()})
+	diagnostics.From(turn.ctx).Capture("execution.request", request)
+	diagnostics.From(turn.ctx).Capture("execution.room_configuration", request.RoomConfiguration)
+	if c.engine.agents != nil && diagnostics.From(turn.ctx) != nil {
+		if selected, err := c.engine.agents.Get(turn.ctx, c.agentID, AgentGetOptions{IncludeDocuments: true, IncludeSkillSummaries: true}); err == nil {
+			diagnostics.From(turn.ctx).Capture("execution.agent", selected)
+		} else {
+			diagnostics.From(turn.ctx).Issue("execution_agent_snapshot_unavailable")
+		}
+	}
+	slog.InfoContext(turn.ctx, "agent turn admitted", "agent_id", c.agentID, "conversation_key", request.ConversationKey)
+
 	if request.ImageGeneration != nil {
 		if request.ImageGeneration.Model == nil && c.engine.agents != nil {
 			selected, err := c.engine.agents.Get(turn.ctx, c.agentID, AgentGetOptions{})
@@ -239,7 +254,14 @@ func (c *conversations) Run(ctx context.Context, request TurnRequest, sink Event
 	orderedSink := EventSinkFunc(func(eventCtx context.Context, event TurnEvent) error {
 		return c.engine.recordAndEmit(diagnostics.WithRecord(eventCtx, diagnostics.From(turn.ctx)), turn, sink, event)
 	})
+
+	diagnostics.From(turn.ctx).Capture("runtime.input", runtimeRequest)
+	captureTurnInputFiles(turn.ctx, runtimeRequest)
 	result := runtimeAdapter.Run(turn.ctx, runtimeRequest, orderedSink)
+	for _, file := range result.RuntimeFiles {
+		captureTurnOutputFile(turn.ctx, file)
+	}
+
 	if result.Error != nil {
 		diagnostics.From(turn.ctx).Failure(string(result.Error.Code), "runtime", result.Error.Message)
 	}
@@ -586,10 +608,14 @@ func (e *Engine) recordAndEmit(ctx context.Context, turn *activeTurn, sink Event
 	}
 	turn.events = append(turn.events, cloneTurnEvent(event))
 	e.mu.Unlock()
+	diagnostics.From(ctx).Capture("execution.event", event)
 	return emitTurnEvent(ctx, sink, cloneTurnEvent(event))
 }
 
 func (e *Engine) complete(identity conversationIdentity, turn *activeTurn, result TurnResult) {
+	diagnostics.From(turn.ctx).Capture("execution.result", result)
+	slog.InfoContext(turn.ctx, "agent turn completed", "agent_id", turn.agentID, "status", result.Status)
+
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	turn.result = cloneTurnResult(result)

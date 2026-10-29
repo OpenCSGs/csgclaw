@@ -2,6 +2,7 @@ package serve
 
 import (
 	"context"
+	"csgclaw/internal/diagnostics"
 	"csgclaw/internal/migrations"
 	"csgclaw/internal/migrations/retiredclaws"
 	"csgclaw/internal/sandbox"
@@ -560,10 +561,17 @@ func configureServeLogger(w io.Writer, level string) (func(), error) {
 	}
 
 	prev := slog.Default()
-	logger := slog.New(slog.NewTextHandler(w, &slog.HandlerOptions{Level: parsedLevel}))
+	logDir, _ := config.DefaultDomainDir("diagnostic-logs")
+	journal := diagnostics.NewLogJournal(logDir)
+	restoreJournal := diagnostics.SetCurrentLogs(journal)
+	logger := slog.New(diagnostics.NewServerLogHandler(w, parsedLevel, journal))
 	slog.SetDefault(logger)
 	return func() {
 		slog.SetDefault(prev)
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = journal.Flush(ctx)
+		restoreJournal()
 	}, nil
 }
 
@@ -597,6 +605,13 @@ func startServerWithConfigPath(ctx context.Context, run *command.Context, cfg co
 	serveOpts := serveOptions{}
 	if len(opts) > 0 {
 		serveOpts = opts[0]
+	}
+	if imSvc != nil {
+		distribution := "cli"
+		if serveOpts.Desktop != nil {
+			distribution = "electron"
+		}
+		imSvc.Diagnostics().SetEnvironment(map[string]any{"distribution": distribution, "configuration": map[string]any{"listen_addr": cfg.Server.ListenAddr, "advertise_base_url": cfg.Server.AdvertiseBaseURL, "authentication_enabled": !cfg.Server.NoAuth, "config_path": configPath}})
 	}
 	restoreAuthDetect := applyNoAuthDetectEnv(serveOpts.NoAuthDetect)
 	defer restoreAuthDetect()

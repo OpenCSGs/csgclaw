@@ -23,6 +23,11 @@ type ImageEnvContract struct {
 	Default  string `json:"default,omitempty"`
 }
 
+type TemplateModelConfig struct {
+	ModelID         string `json:"model_id,omitempty" toml:"model_id,omitempty"`
+	ReasoningEffort string `json:"reasoning_effort,omitempty" toml:"reasoning_effort,omitempty"`
+}
+
 type TemplatePublication struct {
 	Site        string    `json:"site"`
 	Namespace   string    `json:"namespace"`
@@ -49,6 +54,7 @@ type HubTemplate struct {
 	Image          string                `json:"image,omitempty"`
 	ImageEnv       []ImageEnvContract    `json:"image_env,omitempty"`
 	RuntimeOptions map[string]any        `json:"runtime_options,omitempty"`
+	ModelConfig    *TemplateModelConfig  `json:"model_config,omitempty"`
 	Metadata       *HubTemplateMetadata  `json:"metadata,omitempty"`
 	Source         HubTemplateSource     `json:"source"`
 	UpdatedAt      time.Time             `json:"updated_at,omitempty"`

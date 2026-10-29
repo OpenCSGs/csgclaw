@@ -5,6 +5,7 @@ import (
 	"csgclaw/internal/activity"
 	agent "csgclaw/internal/agentengine/agents"
 	"csgclaw/internal/config"
+	"csgclaw/internal/diagnostics"
 	"csgclaw/internal/modelpreset"
 	"csgclaw/internal/modelusage"
 	agentruntime "csgclaw/internal/runtime"
@@ -83,6 +84,7 @@ func TestBundledCodexProtocolSwitchE2E(t *testing.T) {
 	defer upstream.Close()
 	reader := &switchingProtocolProfile{p: agent.AgentProfile{Provider: agent.ProviderAPI, ModelID: "fixture-model", BaseURL: upstream.URL + "/v1", APIKey: "fixture-key", ProfileComplete: true}}
 	svc := NewService(config.ModelConfig{}, reader)
+	diagnosticStore := diagnostics.New(filepath.Join(home, "diagnostics"))
 	var rt *codex.Runtime
 	bridge := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
@@ -108,6 +110,7 @@ func TestBundledCodexProtocolSwitchE2E(t *testing.T) {
 			return
 		}
 		ctx := WithNativeRequestMetadata(r.Context(), meta.Thread, meta.Turn)
+		ctx = diagnostics.WithNativeLookup(ctx, diagnosticStore, "alice", meta.Thread, meta.Turn)
 		ctx = modelusage.WithRequestObserver(ctx, func(usage *modelusage.Usage) {
 			rt.ObserveModelResponseUsage("alice", meta.Thread, meta.Turn, usage)
 		})
@@ -155,8 +158,20 @@ func TestBundledCodexProtocolSwitchE2E(t *testing.T) {
 		reader.mu.Lock()
 		reader.p.APIProtocol = protocol
 		reader.mu.Unlock()
-		if err := rt.Prompt(ctx, handle.RuntimeID, thread, "TURN_HISTORY_SENTINEL Reply done."); err != nil {
+		diagnostic := diagnosticStore.Begin("room", "source-"+protocol, "", "alice", "turn-"+protocol)
+		diagnostic.Running()
+		if err := rt.Prompt(diagnostics.WithRecord(ctx, diagnostic), handle.RuntimeID, thread, "TURN_HISTORY_SENTINEL Reply done."); err != nil {
 			t.Fatalf("%s: %v", protocol, err)
+		}
+		diagnostic.Finish("succeeded")
+		kinds := map[string]int{}
+		if err := diagnosticStore.ReadContext(ctx, diagnostic.Snapshot().ID, func(entry diagnostics.ContextEntry) error { kinds[entry.Kind]++; return nil }); err != nil {
+			t.Fatal(err)
+		}
+		for _, kind := range []string{"runtime.configuration", "runtime.notification", "model.runtime_request", "model.upstream_request", "model.upstream_response", "model.runtime_response"} {
+			if kinds[kind] == 0 {
+				t.Fatalf("%s missing complete diagnostic section %s", protocol, kind)
+			}
 		}
 		var usage modelusage.Usage
 	drain:

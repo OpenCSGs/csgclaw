@@ -3343,6 +3343,58 @@ describe("useAgentController", () => {
     );
   });
 
+  it.each([false, true])("保留目录以外的模板模型并保存用户选择：%s", async (userChangesSelection) => {
+    const catalog = normalizeModelProviderCatalog({
+      providers: [{ id: "remote", status: "connected", models: ["platform-model"] }],
+    });
+    vi.mocked(fetchAgentProfileDefaults).mockResolvedValueOnce({
+      provider: "api",
+      model_provider_id: "remote",
+      model_id: "platform-model",
+      reasoning_effort: "medium",
+    });
+    const { result } = renderHook(
+      () => useAgentControllerHarness({ modelProviders: catalog, modelProvidersLoaded: true }).controller,
+      { wrapper: createWrapper() },
+    );
+    await act(async () => {
+      await result.current.openCreateAgentModal({
+        id: "local.reviewer",
+        name: "Reviewer",
+        runtime_kind: "codex",
+        runtime_options: { execution_mode: "read_only" },
+        model_config: { model_id: "template-model", reasoning_effort: "high" },
+      });
+    });
+    expect(result.current.agentProfileModalProps?.agentDraft).toMatchObject({
+      from_template: "local.reviewer",
+      model_provider_id: "remote",
+      model_id: "template-model",
+      reasoning_effort: "high",
+      runtime_kind: "codex",
+      runtime_options: { execution_mode: "read_only" },
+    });
+    if (userChangesSelection) {
+      act(() => {
+        const modal = result.current.agentProfileModalProps!;
+        modal.onAgentDraftChange({ ...modal.agentDraft, model_id: "platform-model", reasoning_effort: "auto" });
+      });
+    }
+    await act(async () => {
+      await result.current.agentProfileModalProps?.onSave();
+    });
+    expect(createBotRequest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        from_template: "local.reviewer",
+        agent_profile: expect.objectContaining({
+          model_provider_id: "remote",
+          model_id: userChangesSelection ? "platform-model" : "template-model",
+          reasoning_effort: userChangesSelection ? "auto" : "high",
+        }),
+      }),
+    );
+  });
+
   it.each([null, normalizeModelProviderCatalog({ providers: [] })])(
     "clears stale create models when refreshing returns %j",
     async (catalog) => {

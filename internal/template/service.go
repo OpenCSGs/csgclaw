@@ -305,6 +305,7 @@ func (s *Service) PublishTemplate(ctx context.Context, id, registry string, incl
 		Version:        item.Version,
 		Image:          item.Image,
 		RuntimeOptions: cloneTemplateRuntimeOptions(item.RuntimeOptions),
+		ModelConfig:    item.ModelConfig,
 		WorkspaceRef:   workspace,
 		MCPServers:     mcpServers,
 		UpdatedAt:      item.UpdatedAt,

@@ -336,6 +336,10 @@ func (s *RemoteStore) getTemplate(ctx context.Context, id string, repository rem
 	if err != nil {
 		return Template{}, fmt.Errorf("validate remote hub manifest %q runtime options: %w", id, err)
 	}
+	modelConfig, err := normalizeTemplateModelConfig(manifest.ModelConfig)
+	if err != nil {
+		return Template{}, fmt.Errorf("validate remote hub manifest %q model config: %w", id, err)
+	}
 	return Template{
 		ID:             remoteTemplateName(id),
 		Namespace:      namespace,
@@ -350,6 +354,7 @@ func (s *RemoteStore) getTemplate(ctx context.Context, id string, repository rem
 		Image:          manifestImageRef(manifest.Image),
 		ImageEnv:       manifestImageEnv(manifest.Image),
 		RuntimeOptions: runtimeOptions,
+		ModelConfig:    modelConfig,
 		Metadata:       repository.Metadata,
 		WorkspaceRef:   WorkspaceRef{Kind: WorkspaceKindDir},
 		UpdatedAt:      updatedAt,
@@ -810,6 +815,7 @@ func (s *RemoteStore) Publish(ctx context.Context, spec PublishSpec) (Template, 
 		Revision:       normalized.Revision,
 		Image:          normalized.Image,
 		RuntimeOptions: cloneTemplateRuntimeOptions(normalized.RuntimeOptions),
+		ModelConfig:    normalized.ModelConfig,
 		WorkspaceRef:   WorkspaceRef{Kind: WorkspaceKindDir},
 		UpdatedAt:      normalized.UpdatedAt,
 	}, nil

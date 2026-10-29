@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"csgclaw/internal/apitypes"
+	"csgclaw/internal/config"
 	"csgclaw/internal/runtime"
 	runtimedsh "csgclaw/internal/runtime/dsh"
 )
@@ -27,18 +28,19 @@ func ValidatePublishTemplateName(name string) error {
 }
 
 type templateManifest struct {
-	UID            string               `toml:"template_uid,omitempty"`
-	Revision       int                  `toml:"revision,omitempty"`
-	SchemaVersion  string               `toml:"schema_version,omitempty"`
-	Name           string               `toml:"name"`
-	Avatar         string               `toml:"avatar,omitempty"`
-	DisplayName    string               `toml:"display_name,omitempty"`
-	Description    string               `toml:"description,omitempty"`
-	RuntimeKind    string               `toml:"runtime_kind"`
-	Version        string               `toml:"version,omitempty"`
-	Image          templateImageSection `toml:"image"`
-	RuntimeOptions map[string]any       `toml:"runtime_options,omitempty"`
-	UpdatedAt      string               `toml:"updated_at,omitempty"`
+	UID            string                        `toml:"template_uid,omitempty"`
+	Revision       int                           `toml:"revision,omitempty"`
+	SchemaVersion  string                        `toml:"schema_version,omitempty"`
+	Name           string                        `toml:"name"`
+	Avatar         string                        `toml:"avatar,omitempty"`
+	DisplayName    string                        `toml:"display_name,omitempty"`
+	Description    string                        `toml:"description,omitempty"`
+	RuntimeKind    string                        `toml:"runtime_kind"`
+	Version        string                        `toml:"version,omitempty"`
+	Image          templateImageSection          `toml:"image"`
+	RuntimeOptions map[string]any                `toml:"runtime_options,omitempty"`
+	ModelConfig    *apitypes.TemplateModelConfig `toml:"model_config,omitempty"`
+	UpdatedAt      string                        `toml:"updated_at,omitempty"`
 }
 
 type templateImageSection struct {
@@ -126,6 +128,9 @@ func validateManifest(manifest templateManifest) error {
 		return err
 	}
 	if _, err := normalizeTemplateRuntimeOptions(manifest.RuntimeKind, manifest.RuntimeOptions); err != nil {
+		return err
+	}
+	if _, err := normalizeTemplateModelConfig(manifest.ModelConfig); err != nil {
 		return err
 	}
 	if _, err := parseManifestUpdatedAt(manifest.UpdatedAt); err != nil {
@@ -216,6 +221,25 @@ func cloneTemplateRuntimeOptions(raw map[string]any) map[string]any {
 		out[key] = value
 	}
 	return out
+}
+
+func normalizeTemplateModelConfig(raw *apitypes.TemplateModelConfig) (*apitypes.TemplateModelConfig, error) {
+	if raw == nil {
+		return nil, nil
+	}
+	normalized := &apitypes.TemplateModelConfig{
+		ModelID:         strings.TrimSpace(raw.ModelID),
+		ReasoningEffort: config.NormalizeReasoningEffort(raw.ReasoningEffort),
+	}
+	if normalized.ModelID == "" && normalized.ReasoningEffort == "" {
+		return nil, nil
+	}
+	if !config.UsesModelReasoningDefault(normalized.ReasoningEffort) &&
+		normalized.ReasoningEffort != config.ReasoningEffortNone &&
+		!config.HasExplicitReasoningEffort(normalized.ReasoningEffort) {
+		return nil, fmt.Errorf("model_config.reasoning_effort is invalid: %q", raw.ReasoningEffort)
+	}
+	return normalized, nil
 }
 
 func requiresTemplateImage(runtimeKind string) bool {

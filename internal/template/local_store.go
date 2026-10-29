@@ -107,6 +107,10 @@ func (s *LocalStore) Get(_ context.Context, id string) (Template, error) {
 	for _, version := range state.Versions {
 		latestRevision = max(latestRevision, version.Revision)
 	}
+	modelConfig, err := normalizeTemplateModelConfig(manifest.ModelConfig)
+	if err != nil {
+		return Template{}, fmt.Errorf("validate local hub manifest %q model config: %w", id, err)
+	}
 	return Template{
 		LatestRevision: latestRevision,
 		Publications:   state.Publications,
@@ -124,6 +128,7 @@ func (s *LocalStore) Get(_ context.Context, id string) (Template, error) {
 		Image:          manifestImageRef(manifest.Image),
 		ImageEnv:       manifestImageEnv(manifest.Image),
 		RuntimeOptions: runtimeOptions,
+		ModelConfig:    modelConfig,
 		WorkspaceRef:   s.workspaceRef(id),
 		UpdatedAt:      updatedAt,
 	}, nil
@@ -313,6 +318,7 @@ func (s *LocalStore) writeManifest(path string, spec PublishSpec) error {
 			Ref: spec.Image,
 		},
 		RuntimeOptions: cloneTemplateRuntimeOptions(spec.RuntimeOptions),
+		ModelConfig:    spec.ModelConfig,
 		UpdatedAt:      spec.UpdatedAt.UTC().Format(time.RFC3339Nano),
 	}
 	data, err := toml.Marshal(manifest)
@@ -352,6 +358,11 @@ func normalizePublishSpec(spec PublishSpec) (PublishSpec, error) {
 		return PublishSpec{}, err
 	}
 	spec.RuntimeOptions = runtimeOptions
+	modelConfig, err := normalizeTemplateModelConfig(spec.ModelConfig)
+	if err != nil {
+		return PublishSpec{}, err
+	}
+	spec.ModelConfig = modelConfig
 	if !spec.IncludeMemory || ((spec.RuntimeKind == runtime.KindCodex || spec.RuntimeKind == runtime.KindDSH) && spec.RuntimeOptions["memory_mode"] == "disabled") {
 		spec.WorkspaceRef.MemoryPath = ""
 	}

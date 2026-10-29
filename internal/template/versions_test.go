@@ -303,3 +303,42 @@ func TestSaveAgentAssociationTakesPrecedenceOverAnotherAgentsName(t *testing.T) 
 		t.Fatalf("other template mutated: %+v err=%v", untouched, err)
 	}
 }
+
+func TestTemplateVersionLifecyclePreservesModelConfig(t *testing.T) {
+	ctx := context.Background()
+	store := NewLocalStore(t.TempDir())
+	spec := versionSpec(t, "ModelVersionBot")
+	initial := apitypes.TemplateModelConfig{ModelID: "model-a", ReasoningEffort: "auto"}
+	spec.ModelConfig = &initial
+	first, err := store.SaveAgent(ctx, spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertConfig := func(item Template, want apitypes.TemplateModelConfig) {
+		t.Helper()
+		if item.ModelConfig == nil || *item.ModelConfig != want {
+			t.Fatalf("model config = %+v, want %+v", item.ModelConfig, want)
+		}
+	}
+	assertConfig(first, initial)
+	if err := store.WriteWorkspaceFile(ctx, first.ID, "instructions/AGENTS.md", "edited instructions"); err != nil {
+		t.Fatal(err)
+	}
+	edited, err := store.Get(ctx, first.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertConfig(edited, initial)
+	updated := apitypes.TemplateModelConfig{ModelID: "model-b", ReasoningEffort: "high"}
+	spec.ModelConfig = &updated
+	saved, err := store.SaveAgent(ctx, spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertConfig(saved, updated)
+	restored, err := store.RestoreVersion(ctx, first.ID, 1, "restore model defaults", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertConfig(restored, initial)
+}

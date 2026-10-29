@@ -634,3 +634,20 @@ func first(a, b string) string {
 	}
 	return b
 }
+
+// DiagnosticSnapshot restricts aggregate evidence to the requested room.
+func (s *Service) DiagnosticSnapshot(room, id string) (taskcore.Snapshot, bool) {
+	if _, ok := s.Get(room, id); !ok {
+		return taskcore.Snapshot{}, false
+	}
+	snapshot, ok := s.core.DiagnosticSnapshot(id)
+	if !ok || snapshot.Root.RoomID != room {
+		return taskcore.Snapshot{}, false
+	}
+	for _, task := range snapshot.Children {
+		if task.RoomID != room {
+			return taskcore.Snapshot{}, false
+		}
+	}
+	return snapshot, true
+}

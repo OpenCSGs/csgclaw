@@ -2040,6 +2040,10 @@ func presentHubTemplate(item hub.Template) apitypes.HubTemplate {
 			Kind: item.WorkspaceRef.Kind,
 		},
 	}
+	if item.ModelConfig != nil {
+		modelConfig := *item.ModelConfig
+		presented.ModelConfig = &modelConfig
+	}
 	if item.Metadata != nil && item.Metadata.SensitiveCheck != nil {
 		check := item.Metadata.SensitiveCheck
 		failures := make([]apitypes.HubTemplateSensitiveCheckFailureDetail, 0, len(check.FailureDetails))

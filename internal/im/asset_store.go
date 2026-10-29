@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"crypto/subtle"
+	"csgclaw/internal/diagnostics"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
@@ -591,11 +592,12 @@ func readAttachmentObject(path string) (attachmentObject, error) {
 	return object, nil
 }
 
-func atomicWriteFile(path string, data []byte, perm os.FileMode) error {
-	return atomicWriteReader(path, bytes.NewReader(data), perm)
+func atomicWriteFile(path string, data []byte, perm os.FileMode, operations ...*diagnostics.Operation) error {
+	return atomicWriteReader(path, bytes.NewReader(data), perm, operations...)
 }
 
-func atomicWriteReader(path string, source io.Reader, perm os.FileMode) error {
+func atomicWriteReader(path string, source io.Reader, perm os.FileMode, operations ...*diagnostics.Operation) error {
+	operation := diagnostics.OperationArg(operations)
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return fmt.Errorf("create parent dir: %w", err)
 	}
@@ -610,7 +612,10 @@ func atomicWriteReader(path string, source io.Reader, perm os.FileMode) error {
 			_ = os.Remove(tmpName)
 		}
 	}()
-	if _, err := io.Copy(tmp, source); err != nil {
+	writeStart := time.Now()
+	written, copyErr := io.Copy(tmp, source)
+	operation.Observe("im.write", time.Since(writeStart), written, 1)
+	if err := copyErr; err != nil {
 		_ = tmp.Close()
 		return fmt.Errorf("write temp file: %w", err)
 	}
@@ -618,14 +623,20 @@ func atomicWriteReader(path string, source io.Reader, perm os.FileMode) error {
 		_ = tmp.Close()
 		return fmt.Errorf("chmod temp file: %w", err)
 	}
-	if err := tmp.Sync(); err != nil {
+	syncStart := time.Now()
+	syncErr := tmp.Sync()
+	operation.Observe("im.fsync", time.Since(syncStart), 0, 1)
+	if err := syncErr; err != nil {
 		_ = tmp.Close()
 		return fmt.Errorf("sync temp file: %w", err)
 	}
 	if err := tmp.Close(); err != nil {
 		return fmt.Errorf("close temp file: %w", err)
 	}
-	if err := os.Rename(tmpName, path); err != nil {
+	renameStart := time.Now()
+	renameErr := os.Rename(tmpName, path)
+	operation.Observe("im.rename", time.Since(renameStart), 0, 1)
+	if err := renameErr; err != nil {
 		return fmt.Errorf("rename temp file: %w", err)
 	}
 	cleanup = false

@@ -74,7 +74,10 @@ func (a *Adapter) BeginDiagnostics(binding channel.Binding, event channel.Event)
 	if a.diagnostics == nil || classifyInbound(event) != inboundRun {
 		return nil
 	}
-	return a.diagnostics.Begin(event.RoomID, event.MessageID, event.ThreadRootID, binding.AgentID, string(sourceTurnID(binding, event)))
+	record := a.diagnostics.Begin(event.RoomID, event.MessageID, event.ThreadRootID, binding.AgentID, string(SourceTurnID(binding, event)))
+	record.Task(event.TaskID, event.TaskAttempt)
+	record.Capture("channel.input", map[string]any{"binding": binding, "event": event})
+	return record
 }
 
 // WithRoomContextProvider supplies fresh private collaboration facts after the
@@ -253,6 +256,7 @@ func (a *Adapter) Run(ctx context.Context, binding channel.Binding, event channe
 		if status == "" {
 			status = "failed"
 		}
+		record.Capture("channel.result", map[string]any{"result": outcome.Result, "failed_delivery": err != nil})
 		record.Finish(status)
 	}()
 	turn, err := a.turnContext(binding, event)
@@ -262,6 +266,7 @@ func (a *Adapter) Run(ctx context.Context, binding channel.Binding, event channe
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	record.Capture("channel.turn", turn)
 	ctx, finishWork, observeWork := a.startWork(ctx, turn)
 	defer func() { finishWork(outcome.Result) }()
 	if starter, ok := a.renderer.(interface {
@@ -335,7 +340,7 @@ func (a *Adapter) turnContext(binding channel.Binding, event channel.Event) (cha
 	if err != nil {
 		return channel.TurnContext{}, err
 	}
-	turnID := sourceTurnID(binding, event)
+	turnID := SourceTurnID(binding, event)
 	if a.newTurnID != nil {
 		turnID, err = a.newTurnID()
 		if err != nil {
@@ -449,7 +454,8 @@ func failed(code agentengine.ErrorCode, message string) agentengine.TurnResult {
 	}
 }
 
-func sourceTurnID(binding channel.Binding, event channel.Event) agentengine.TurnID {
+// SourceTurnID identifies one routed message before admission or execution.
+func SourceTurnID(binding channel.Binding, event channel.Event) agentengine.TurnID {
 	identity := string(binding.StableID()) + "\x00" + strings.TrimSpace(event.MessageID)
 	sum := sha256.Sum256([]byte(identity))
 	return agentengine.TurnID("turn-csgclaw-" + hex.EncodeToString(sum[:16]))

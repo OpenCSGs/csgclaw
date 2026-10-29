@@ -16,9 +16,27 @@ import (
 // streaming bodies and retries. This is client-observed LLM service latency,
 // including network/gateway time, not pure model compute or first-token time.
 func (s *Service) modelRequest(req *http.Request, stream bool) (*http.Response, error) {
+
+	exchange, _ := req.Context().Value(modelExchangeKey{}).(*modelExchange)
+	var attempt uint64
+	if exchange != nil {
+		attempt = exchange.attempt.Add(1)
+		fields := map[string]any{"request_id": exchange.id, "attempt": attempt, "method": req.Method, "url": req.URL.String()}
+		if req.GetBody != nil {
+			if body, err := req.GetBody(); err == nil {
+				raw, readErr := io.ReadAll(io.LimitReader(body, 128<<20))
+				body.Close()
+				if readErr == nil && json.Valid(raw) {
+					fields["body"] = json.RawMessage(raw)
+				}
+			}
+		}
+		exchange.recorder.Capture("model.upstream_request", fields)
+	}
 	logModelRequest(req)
 	if !diagnostics.Enabled(req.Context()) {
 		resp, err := s.client.Do(req)
+		observeModelCapture(exchange, attempt, resp, err)
 		if err != nil {
 			logModelTransportFailure(req, err)
 		}
@@ -32,6 +50,7 @@ func (s *Service) modelRequest(req *http.Request, stream bool) (*http.Response, 
 	update, finish := diagnostics.ObserveRequest(req.Context(), operation)
 	start := time.Now()
 	resp, err := s.client.Do(req)
+	observeModelCapture(exchange, attempt, resp, err)
 	if err != nil {
 		logModelTransportFailure(req, err)
 		finish("failed")
@@ -153,4 +172,25 @@ func (b *observedModelBody) failed() bool {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	return b.status >= 400 || b.protocolFailed
+}
+
+func observeModelCapture(exchange *modelExchange, attempt uint64, resp *http.Response, err error) {
+	if exchange == nil {
+		return
+	}
+	metadata := map[string]any{"request_id": exchange.id, "attempt": attempt}
+	if err != nil {
+		metadata["error"] = err.Error()
+		exchange.recorder.Capture("model.upstream_error", metadata)
+		return
+	}
+	if resp == nil {
+		return
+	}
+	metadata["status"] = resp.StatusCode
+	metadata["upstream_request_id"] = resp.Header.Get("X-Request-Id")
+	metadata["content_type"] = resp.Header.Get("Content-Type")
+	metadata["retry_after"] = resp.Header.Get("Retry-After")
+	exchange.recorder.Capture("model.upstream_headers", metadata)
+	resp.Body = diagnostics.ObserveBody(resp.Body, exchange.recorder, "model.upstream_response", metadata, resp.Header.Get("Content-Type"))
 }
