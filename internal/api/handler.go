@@ -1193,7 +1193,7 @@ func (h *Handler) handleAgentByID(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if h.im != nil {
-			if err := h.im.RetireAgentUser(id); err != nil {
+			if err := h.im.RetireAgentUser(id, id); err != nil {
 				writeAgentOperationError(w, err, http.StatusInternalServerError)
 				return
 			}
@@ -1644,6 +1644,12 @@ func (h *Handler) handleCreateAgentWorker(w http.ResponseWriter, r *http.Request
 		return
 	}
 	createReq := agentCreateRequestFromAPI(req)
+	if h.im != nil {
+		if err := h.im.ValidateAgentUser(im.EnsureAgentUserRequest{ID: createReq.Spec.ID, Name: createReq.Spec.Name}); err != nil {
+			writeAgentOperationError(w, err, http.StatusBadRequest)
+			return
+		}
+	}
 	if h.agentEngine == nil {
 		http.Error(w, "agent service is not configured", http.StatusServiceUnavailable)
 		return
@@ -1686,6 +1692,10 @@ func writeAgentGetError(w http.ResponseWriter, err error) {
 }
 
 func writeAgentOperationErrorWithBillingURL(w http.ResponseWriter, err error, defaultStatus int, billingURL string) {
+	if errors.Is(err, im.ErrAgentIdentityDeleted) {
+		writeCodedAPIError(w, http.StatusConflict, "agent_identity_deleted", err.Error())
+		return
+	}
 	if errors.Is(err, agent.ErrHomeCleanup) {
 		writeJSON(w, http.StatusConflict, map[string]any{
 			"error": map[string]any{
@@ -2615,6 +2625,10 @@ func (h *Handler) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 	description := strings.TrimSpace(req.Description)
 	role := strings.TrimSpace(req.Role)
 	id = h.resolveCSGClawLocalUserID(id)
+	if err := h.im.ValidateAgentUser(im.EnsureAgentUserRequest{ID: id, Name: name}); err != nil {
+		writeAgentOperationError(w, err, http.StatusBadRequest)
+		return
+	}
 
 	if id == "" {
 		http.Error(w, "id is required", http.StatusBadRequest)

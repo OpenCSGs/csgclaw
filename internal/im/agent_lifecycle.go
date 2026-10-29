@@ -2,9 +2,41 @@ package im
 
 import (
 	"crypto/sha256"
+	"errors"
 	"fmt"
 	"slices"
+	"strings"
+	"time"
 )
+
+var ErrAgentIdentityDeleted = errors.New("agent identity was deleted; use a new ID")
+
+// ValidateAgentUser checks identity availability before provisioning a runtime.
+// Deleted identities remain addressable by ID for history, but do not own names.
+func (s *Service) ValidateAgentUser(req EnsureAgentUserRequest) error {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.validateAgentUserLocked(canonicalIMUserID(req.ID), strings.TrimSpace(req.Name))
+}
+
+func (s *Service) validateAgentUserLocked(id, name string) error {
+	if user, ok := s.users[id]; ok && user.AgentState == "deleted" {
+		return ErrAgentIdentityDeleted
+	}
+	if id != "" {
+		for _, user := range s.users {
+			if user.AgentState == "deleted" && user.AgentID != "" && canonicalIMUserID(user.AgentID) == id {
+				return ErrAgentIdentityDeleted
+			}
+		}
+	}
+	if name != "" {
+		if existingID, ok := s.byName[strings.ToLower(name)]; ok && existingID != id {
+			return fmt.Errorf("name %q already exists", name)
+		}
+	}
+	return nil
+}
 
 const (
 	AgentArchivedEventKey = "agent_archived"
@@ -105,7 +137,7 @@ func (s *Service) hiddenAgentRoomLocked(room Room) bool {
 
 // RetireAgentUser retains attribution and collaboration messages/attachments,
 // removes memberships, and removes direct conversations only.
-func (s *Service) RetireAgentUser(id string) error {
+func (s *Service) RetireAgentUser(id string, agentIDs ...string) error {
 	s.mu.Lock()
 	id = s.resolveUserIDLocked(id)
 	user, ok := s.users[id]
@@ -128,8 +160,18 @@ func (s *Service) RetireAgentUser(id string) error {
 		previousRooms[key] = &copy
 	}
 	user.AgentState = "deleted"
+	user.AgentID = "agent-" + strings.TrimPrefix(id, "user-")
+	if len(agentIDs) > 0 && strings.TrimSpace(agentIDs[0]) != "" {
+		user.AgentID = strings.TrimSpace(agentIDs[0])
+	}
+	now := time.Now().UTC()
+	user.DeletedAt = &now
 	user.IsOnline = false
 	s.users[id] = user
+	nameKey := strings.ToLower(strings.TrimSpace(user.Name))
+	if s.byName[nameKey] == id {
+		delete(s.byName, nameKey)
+	}
 	added := map[string]Message{}
 	for key, room := range s.rooms {
 		if !slices.Contains(room.Members, id) {
@@ -148,6 +190,7 @@ func (s *Service) RetireAgentUser(id string) error {
 	s.rebuildSessionRoomIndexLocked()
 	if err := s.saveLocked(); err != nil {
 		s.users[id] = previousUser
+		s.byName[nameKey] = id
 		s.rooms = previousRooms
 		s.rebuildSessionRoomIndexLocked()
 		s.mu.Unlock()

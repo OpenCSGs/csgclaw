@@ -185,6 +185,10 @@ func (h *Handler) newTeamIdentityPresenter() teamIdentityPresenter {
 	if h != nil && h.im != nil {
 		for _, user := range h.im.ListUsers() {
 			p.addName(user.ID, user.Name)
+			if user.AgentID != "" {
+				p.addName(user.AgentID, user.Name)
+				p.statesByID[user.AgentID] = user.AgentState
+			}
 			p.addName(agent.CanonicalID(user.ID), user.Name)
 			p.statesByID[agent.CanonicalID(user.ID)] = user.AgentState
 			p.statesByID[user.ID] = user.AgentState

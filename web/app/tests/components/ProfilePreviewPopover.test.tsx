@@ -4,6 +4,7 @@ import { ProfilePreviewPopover } from "@/pages/WorkspacePage/components/ProfileP
 
 const labels: Record<string, string> = {
   agentDelete: "Delete",
+  agentStateDeleted: "Deleted",
   agentStatusUnknown: "Unknown",
   agentStatusChecking: "Checking",
   close: "Close",
@@ -35,6 +36,26 @@ function t(key: string): string {
 }
 
 describe("ProfilePreviewPopover", () => {
+  it("shows a deleted sender's saved avatar and name without active-agent actions", () => {
+    render(
+      <ProfilePreviewPopover
+        previewRef={createRef<HTMLElement>()}
+        agent={null}
+        user={{ id: "user-old", name: "worker", avatar: "avatar/3D-1.png", agent_state: "deleted" }}
+        anchorRect={{ top: 20, right: 80, bottom: 60, left: 40 }}
+        t={t}
+        onClose={vi.fn()}
+        onOpenAgent={vi.fn()}
+        onOpenDM={vi.fn()}
+      />,
+    );
+    expect(screen.getByText("worker")).toBeVisible();
+    expect(screen.getByText("Deleted")).toBeVisible();
+    expect(document.querySelector(".preview-avatar img")).toHaveAttribute("src", "avatar/3D-1.png");
+    expect(screen.queryByRole("button", { name: "Open" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "DM" })).not.toBeInTheDocument();
+  });
+
   it("keeps the preview outside its anchor in normal viewport coordinates", () => {
     const anchorRect = { top: 120, right: 502, bottom: 152, left: 470 };
 

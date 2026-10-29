@@ -37,7 +37,9 @@ export type IMParticipantLike = {
 };
 
 export type IMUser = {
+  agent_id?: string | null;
   agent_state?: "archived" | "deleted" | "";
+  deleted_at?: string | null;
   accent_hex?: string | null;
   avatar?: string | null;
   description?: string | null;
@@ -309,6 +311,11 @@ export function participantIDForLocalIdentity(id: string | null | undefined): st
 }
 
 function addUserIdentityAliases(usersById: UsersById, user: IMUser): void {
+  if (user.agent_id) {
+    for (const alias of localIdentityAliases(user.agent_id)) {
+      addUserAlias(usersById, alias, user);
+    }
+  }
   for (const alias of localIdentityAliases(user.id)) {
     addUserAlias(usersById, alias, user);
   }
@@ -694,11 +701,17 @@ export function agentMatchesUser(
     user_id?: string | null;
   } | null,
   user:
-    | { id?: string | null; name?: string | null; participants?: IMParticipantLike[] | null; user_id?: string | null }
+    | {
+        id?: string | null;
+        name?: string | null;
+        participants?: IMParticipantLike[] | null;
+        user_id?: string | null;
+        agent_state?: string;
+      }
     | null
     | undefined,
 ): boolean {
-  if (!agent || !user) {
+  if (!agent || !user || user.agent_state === "deleted") {
     return false;
   }
   if (agentIdentityMatchesUser(agent, user)) {
@@ -718,9 +731,12 @@ export function agentIdentityMatchesUser(
     participants?: IMParticipantLike[] | null;
     user_id?: string | null;
   } | null,
-  user: { id?: string | null; participants?: IMParticipantLike[] | null; user_id?: string | null } | null | undefined,
+  user:
+    | { id?: string | null; participants?: IMParticipantLike[] | null; user_id?: string | null; agent_state?: string }
+    | null
+    | undefined,
 ): boolean {
-  if (!agent || !user) {
+  if (!agent || !user || user.agent_state === "deleted") {
     return false;
   }
   const agentAliases = localEntityAliasSet([

@@ -318,6 +318,16 @@ describe("conversation model helpers", () => {
     );
   });
 
+  it("keeps deleted identities separate from same-name replacement agents", () => {
+    const oldUser = { id: "user-old", name: "worker", agent_state: "deleted" as const, agent_id: "agent-executor" };
+    const replacement = { id: "agent-new", name: "worker", user_id: "user-new" };
+    expect(agentMatchesUser(replacement, oldUser)).toBe(false);
+    expect(resolveAgentForUser([replacement], oldUser)).toBeNull();
+    const users = buildUsersById([oldUser, { id: "user-new", name: "worker" }]);
+    expect(resolveUserByLocalIdentity("agent-executor", users)).toBe(oldUser);
+    expect(resolveUserByLocalIdentity("agent-new", users)?.id).toBe("user-new");
+  });
+
   it("resolves typed participant IDs through canonical local users", () => {
     const usersById = buildUsersById([
       { avatar: "avatar/admin.png", id: "user-admin", name: "admin" },

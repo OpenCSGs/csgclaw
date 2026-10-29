@@ -45,4 +45,23 @@ describe("useProfilePreviewController", () => {
     expect(result.current.profilePreviewProps).toBeNull();
     expect(focus).toHaveBeenCalledTimes(1);
   });
+
+  it("opens a deleted sender's own profile rather than a same-name replacement", () => {
+    const oldUser: IMUser = { id: "user-old", name: "Agent", avatar: "avatar/3D-1.png", agent_state: "deleted" };
+    const anchor = document.createElement("button");
+    document.body.append(anchor);
+    const { result } = renderHook(() =>
+      useProfilePreviewController({
+        agentItems: [agent],
+        closeConversationTools: vi.fn(),
+        openAgentDirectMessage: vi.fn(),
+        selectAgent: vi.fn(),
+        t,
+        usersById: new Map([[oldUser.id, oldUser]]),
+      }),
+    );
+    act(() => result.current.openParticipantPreview(oldUser, anchor));
+    expect(result.current.profilePreviewProps?.agent).toBeNull();
+    expect(result.current.profilePreviewProps?.user).toBe(oldUser);
+  });
 });

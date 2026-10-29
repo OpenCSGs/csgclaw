@@ -2906,6 +2906,7 @@ export const messages = {
     errors: {
       agent_archived: "该智能体已归档，请先在设置中恢复。",
       agent_delete_requires_archive_management: "请在归档管理中确认删除智能体。",
+      agent_identity_deleted: "此 ID 属于已删除的智能体，请使用新的 ID 创建。",
       invalid_resource_reference: "资源选择无效，请重新选择",
       resource_not_attached: "所选资源未挂载到当前 Agent",
       resource_disabled: "所选资源已经停用",
@@ -6063,6 +6064,7 @@ export const messages = {
     errors: {
       agent_archived: "This agent is archived. Restore it in Settings before use.",
       agent_delete_requires_archive_management: "Confirm agent deletion in archive management.",
+      agent_identity_deleted: "This ID belongs to a deleted agent. Create the agent with a new ID.",
       invalid_resource_reference: "The resource selection is invalid. Select resources again.",
       resource_not_attached: "A selected resource is not attached to the current Agent.",
       resource_disabled: "A selected resource is disabled.",

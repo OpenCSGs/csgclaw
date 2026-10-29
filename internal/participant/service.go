@@ -80,6 +80,20 @@ func (s *Service) Create(ctx context.Context, req CreateRequest) (apitypes.Parti
 	if _, ok := s.store.Get(normalized.Channel, normalized.ID); ok {
 		return apitypes.Participant{}, fmt.Errorf("participant %s:%s already exists", normalized.Channel, normalized.ID)
 	}
+	if normalized.Channel == ChannelCSGClaw && s.im != nil {
+		if err := s.im.ValidateAgentUser(im.EnsureAgentUserRequest{ID: normalized.ChannelUser.Ref, Name: normalized.Name}); err != nil {
+			return apitypes.Participant{}, err
+		}
+	}
+	if normalized.Type == TypeAgent && normalized.AgentBinding.Mode == BindingModeCreate && s.im != nil {
+		agentID := normalized.AgentBinding.AgentID
+		if agentID == "" {
+			agentID = defaultAgentID(normalized.ID)
+		}
+		if err := s.im.ValidateAgentUser(im.EnsureAgentUserRequest{ID: agentID}); err != nil {
+			return apitypes.Participant{}, err
+		}
+	}
 
 	if normalized.Type == TypeAgent {
 		agentID, err := s.ensureAgentBinding(ctx, normalized)
@@ -633,7 +647,7 @@ func (s *Service) deleteUnreferencedCSGClawParticipantUser(deleted apitypes.Part
 	}
 	deleteUser := s.im.DeleteUser
 	if deleted.Type == TypeAgent {
-		deleteUser = s.im.RetireAgentUser
+		deleteUser = func(id string) error { return s.im.RetireAgentUser(id, deleted.AgentID) }
 	}
 	if err := deleteUser(userID); err != nil {
 		if strings.Contains(err.Error(), "not found") {

@@ -1847,6 +1847,10 @@ func (s *Service) DeleteUser(userID string) error {
 		s.mu.Unlock()
 		return fmt.Errorf("cannot delete current user")
 	}
+	if user.AgentState == "deleted" {
+		s.mu.Unlock()
+		return ErrAgentIdentityDeleted
+	}
 
 	delete(s.users, userID)
 	delete(s.byName, strings.ToLower(user.Name))
@@ -1917,15 +1921,15 @@ func (s *Service) EnsureAgentUser(req EnsureAgentUserRequest) (User, *Room, erro
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	if err := s.validateAgentUserLocked(id, name); err != nil {
+		return User{}, nil, err
+	}
 	if existing, ok := s.users[id]; ok {
 		room, _ := s.ensureAdminAgentRoomLocked(id, existing.Name)
 		if err := s.saveLocked(); err != nil {
 			return User{}, nil, err
 		}
 		return existing, room, nil
-	}
-	if existingID, ok := s.byName[strings.ToLower(name)]; ok && existingID != id {
-		return User{}, nil, fmt.Errorf("name %q already exists", name)
 	}
 
 	user := User{
@@ -1967,6 +1971,9 @@ func (s *Service) UpdateAgentUser(req UpdateAgentUserRequest) (User, bool, error
 
 	id = s.resolveUserIDLocked(id)
 	user, ok := s.users[id]
+	if ok && user.AgentState == "deleted" {
+		return User{}, false, ErrAgentIdentityDeleted
+	}
 	if !ok {
 		name := strings.TrimSpace(req.Name)
 		if name == "" {
@@ -2038,6 +2045,9 @@ func (s *Service) UpdateUser(req UpdateUserRequest) (User, bool, error) {
 	user, ok := s.users[id]
 	if !ok {
 		return User{}, false, nil
+	}
+	if user.AgentState == "deleted" {
+		return User{}, false, ErrAgentIdentityDeleted
 	}
 	if req.Name != nil {
 		name := strings.TrimSpace(*req.Name)
@@ -3704,7 +3714,7 @@ func (s *Service) replaceStateLocked(state Bootstrap) {
 
 	for _, user := range users {
 		s.users[user.ID] = user
-		if name := strings.TrimSpace(user.Name); name != "" {
+		if name := strings.TrimSpace(user.Name); name != "" && user.AgentState != "deleted" {
 			s.byName[strings.ToLower(name)] = user.ID
 		}
 	}

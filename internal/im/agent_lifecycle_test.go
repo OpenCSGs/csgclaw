@@ -1,12 +1,106 @@
 package im
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
 )
+
+func TestDeletedAgentIdentityReleasesNameButPreservesHistoryAfterRestart(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "im", "state.json")
+	const avatar = "data:image/png;base64,b2xkLWF2YXRhcg=="
+	if err := SaveBootstrap(path, Bootstrap{CurrentUserID: AdminUserID, Users: []User{
+		{ID: AdminUserID, Name: "admin", Role: "admin"},
+		{ID: "user-old", Name: "Worker", Avatar: avatar, Role: "worker"},
+	}, Rooms: []Room{{ID: "group", Members: []string{AdminUserID, "user-old"},
+		Messages: []Message{{ID: "old-message", SenderID: "user-old", Content: "old result"}},
+	}}}); err != nil {
+		t.Fatal(err)
+	}
+	s, err := NewServiceFromPath(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.RetireAgentUser("user-old", "agent-executor"); err != nil {
+		t.Fatal(err)
+	}
+	old, _ := s.User("user-old")
+	if old.AgentID != "agent-executor" || old.DeletedAt == nil || old.Avatar != avatar {
+		t.Fatalf("incomplete tombstone: %+v", old)
+	}
+	for _, id := range []string{"user-old", "pt-old", "agent-old", "agent-executor"} {
+		if err := s.ValidateAgentUser(EnsureAgentUserRequest{ID: id, Name: "replacement"}); !errors.Is(err, ErrAgentIdentityDeleted) {
+			t.Fatalf("reused identity %s: %v", id, err)
+		}
+	}
+	if _, _, err := s.EnsureAgentUser(EnsureAgentUserRequest{ID: "user-old", Name: "Worker"}); !errors.Is(err, ErrAgentIdentityDeleted) {
+		t.Fatalf("deleted identity was reprovisioned: %v", err)
+	}
+	if _, _, err := s.UpdateAgentUser(UpdateAgentUserRequest{ID: "user-old", Name: "replacement"}); !errors.Is(err, ErrAgentIdentityDeleted) {
+		t.Fatalf("tombstone was modified: %v", err)
+	}
+	newName := "replacement"
+	if _, _, err := s.UpdateUser(UpdateUserRequest{ID: "user-old", Name: &newName}); !errors.Is(err, ErrAgentIdentityDeleted) {
+		t.Fatalf("tombstone was edited: %v", err)
+	}
+	if err := s.DeleteUser("user-old"); !errors.Is(err, ErrAgentIdentityDeleted) {
+		t.Fatalf("tombstone was erased: %v", err)
+	}
+	// Restart before recreating, then restart with both same-name identities.
+	for cycle := range 2 {
+		s, err = NewServiceFromPath(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if cycle == 0 {
+			if _, _, err := s.EnsureAgentUser(EnsureAgentUserRequest{ID: "user-new", Name: "worker", Avatar: "avatar/3D-5.png"}); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if got := s.ResolveUserID("@worker"); got != "user-new" {
+			t.Fatalf("name resolves to %q, want replacement", got)
+		}
+		old, _ := s.User("user-old")
+		if old.Name != "Worker" || old.Avatar != avatar || old.AgentState != "deleted" || old.AgentID != "agent-executor" || old.DeletedAt == nil {
+			t.Fatalf("tombstone changed: %+v", old)
+		}
+		group, _ := s.Room("group")
+		if group.Messages[0].SenderID != "user-old" || group.Messages[0].Content != "old result" {
+			t.Fatalf("history changed: %+v", group.Messages)
+		}
+		if _, _, err := s.EnsureAgentUser(EnsureAgentUserRequest{ID: "user-third", Name: "WORKER"}); err == nil {
+			t.Fatal("active replacement did not reserve its name")
+		}
+	}
+	if _, err := s.AddRoomMembers(AddRoomMembersRequest{RoomID: "group", InviterID: AdminUserID, UserIDs: []string{"user-new"}}); err != nil {
+		t.Fatal(err)
+	}
+	message, err := s.CreateMessage(CreateMessageRequest{RoomID: "group", SenderID: AdminUserID, Content: "@worker run"})
+	if err != nil || len(message.Mentions) != 1 || message.Mentions[0].ID != "user-new" {
+		t.Fatalf("mention must target replacement: %+v, %v", message, err)
+	}
+}
+
+func TestRetireAgentUserSaveFailureRetainsNameReservation(t *testing.T) {
+	s := NewServiceFromBootstrap(Bootstrap{CurrentUserID: AdminUserID, Users: []User{
+		{ID: AdminUserID, Name: "admin"}, {ID: "user-old", Name: "worker"},
+	}})
+	blocker := filepath.Join(t.TempDir(), "not-a-directory")
+	if err := os.WriteFile(blocker, []byte("block writes"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	s.statePath = filepath.Join(blocker, "state.json")
+	if err := s.RetireAgentUser("user-old"); err == nil {
+		t.Fatal("retirement succeeded despite failed persistence")
+	}
+	user, _ := s.User("user-old")
+	if user.AgentState != "" || user.DeletedAt != nil || s.byName["worker"] != "user-old" {
+		t.Fatalf("failed save changed identity: %+v", user)
+	}
+}
 
 func TestAgentArchiveHidesWithoutChangingMembershipOrManualArchive(t *testing.T) {
 	s := NewServiceFromBootstrap(Bootstrap{CurrentUserID: AdminUserID, Users: []User{
