@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"csgclaw/internal/apitypes"
 	"csgclaw/internal/config"
 )
 
@@ -231,6 +232,7 @@ func TestPublishTemplateRequiresExplicitMemoryOptIn(t *testing.T) {
 	sourceStore := NewLocalStore(sourceRoot)
 	if _, err := sourceStore.Publish(context.Background(), PublishSpec{
 		ID: "codex-memory", Name: "codex-memory", RuntimeKind: "codex", IncludeMemory: true,
+		ModelConfig:  &apitypes.TemplateModelConfig{ModelID: "model-a", ReasoningEffort: "auto"},
 		WorkspaceRef: WorkspaceRef{Kind: WorkspaceKindDir, Path: workspaceRoot, MemoryPath: memoryPath},
 	}); err != nil {
 		t.Fatalf("seed source template: %v", err)
@@ -249,6 +251,10 @@ func TestPublishTemplateRequiresExplicitMemoryOptIn(t *testing.T) {
 
 	if _, err := svc.PublishTemplate(context.Background(), "source.codex-memory", "target", false); err != nil {
 		t.Fatalf("PublishTemplate(default) error = %v", err)
+	}
+	copied, err := svc.Get(t.Context(), "target.codex-memory")
+	if err != nil || copied.ModelConfig == nil || copied.ModelConfig.ModelID != "model-a" || copied.ModelConfig.ReasoningEffort != "auto" {
+		t.Fatalf("copied ModelConfig = %+v, error = %v", copied.ModelConfig, err)
 	}
 	targetTemplateRoot := filepath.Join(targetRoot, localTemplatesDirName, "codex-memory")
 	for _, leakedPath := range []string{

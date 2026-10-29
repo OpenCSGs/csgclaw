@@ -17,6 +17,7 @@ import (
 	"strings"
 	"testing"
 
+	"csgclaw/internal/apitypes"
 	"csgclaw/internal/config"
 )
 
@@ -35,6 +36,10 @@ name = "GITLAB_TOKEN"
 required = true
 secret = true
 description = "GitLab personal access token"
+
+[model_config]
+model_id = "model-a"
+reasoning_effort = "high"
 `
 
 func TestRemoteTemplateMetadataPreservesSensitiveCheck(t *testing.T) {
@@ -253,6 +258,7 @@ func TestRemoteStorePublishUploadsArchiveAndCreatesTemplateCode(t *testing.T) {
 		Description:    "Reviews changes",
 		RuntimeKind:    "codex",
 		RuntimeOptions: map[string]any{"execution_mode": "read_only", "memory_mode": "disabled"},
+		ModelConfig:    &apitypes.TemplateModelConfig{ModelID: "model-a", ReasoningEffort: "auto"},
 		WorkspaceRef: WorkspaceRef{
 			Kind:             WorkspaceKindDir,
 			Path:             workspace,
@@ -271,6 +277,9 @@ func TestRemoteStorePublishUploadsArchiveAndCreatesTemplateCode(t *testing.T) {
 	}
 	if got, want := item.RuntimeOptions["memory_mode"], "disabled"; got != want {
 		t.Fatalf("Publish().RuntimeOptions[memory_mode] = %v, want %q", got, want)
+	}
+	if item.ModelConfig == nil || item.ModelConfig.ModelID != "model-a" || item.ModelConfig.ReasoningEffort != "auto" {
+		t.Fatalf("Publish().ModelConfig = %+v, want model-a with auto reasoning", item.ModelConfig)
 	}
 	if got, want := created.CodeFile, "package-uuid"; got != want {
 		t.Fatalf("create code_file = %q, want %q", got, want)
@@ -323,6 +332,11 @@ func TestRemoteStorePublishUploadsArchiveAndCreatesTemplateCode(t *testing.T) {
 				!strings.Contains(string(manifest), "execution_mode = 'read_only'") ||
 				!strings.Contains(string(manifest), "memory_mode = 'disabled'") {
 				t.Errorf("agent.toml missing runtime options: %s", manifest)
+			}
+			if !strings.Contains(string(manifest), "[model_config]") ||
+				!strings.Contains(string(manifest), "model_id = 'model-a'") ||
+				!strings.Contains(string(manifest), "reasoning_effort = 'auto'") {
+				t.Errorf("uploaded agent.toml missing model defaults: %s", manifest)
 			}
 		}
 	}
@@ -786,6 +800,11 @@ func TestRemoteStoreListGetAndFetchWorkspace(t *testing.T) {
 	}
 	if got, want := item.ImageEnv[0].Name, "GITLAB_TOKEN"; got != want {
 		t.Fatalf("Get().ImageEnv[0].Name = %q, want %q", got, want)
+	}
+	for _, modelConfig := range []*apitypes.TemplateModelConfig{items[0].ModelConfig, item.ModelConfig} {
+		if modelConfig == nil || modelConfig.ModelID != "model-a" || modelConfig.ReasoningEffort != "high" {
+			t.Fatalf("remote ModelConfig = %+v, want model-a with high reasoning", modelConfig)
+		}
 	}
 
 	listing, err := store.ListWorkspace(context.Background(), "gitlab-assistant", "")

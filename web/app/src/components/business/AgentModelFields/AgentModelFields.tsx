@@ -37,6 +37,7 @@ export function AgentModelFields({
       option.models.some((model) => !option.imageModels?.includes(model) && !option.videoModels?.includes(model)),
   );
   const selectedProvider = providerOptions.find((option) => option.id === providerID);
+  const modelChoices = modelID && !models.includes(modelID) ? [modelID, ...models] : [...models];
   return (
     <>
       <Field required label={t("profileModelProvider")}>
@@ -85,7 +86,7 @@ export function AgentModelFields({
         <ConnectedModelPicker
           selectionLabel="model"
           placeholder={t(providerID ? "profileSelectModel" : "profileProviderSelectFirst")}
-          providers={selectedProvider ? [{ ...selectedProvider, models: [...models] }] : []}
+          providers={selectedProvider ? [{ ...selectedProvider, models: modelChoices }] : []}
           providerID={providerID}
           modelID={modelID}
           disabled={busy || !selectedProvider || selectedProvider.disabled || !models.length}

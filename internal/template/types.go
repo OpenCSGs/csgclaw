@@ -28,6 +28,7 @@ type Template struct {
 	Image          string
 	ImageEnv       []apitypes.ImageEnvContract
 	RuntimeOptions map[string]any
+	ModelConfig    *apitypes.TemplateModelConfig
 	Metadata       *TemplateMetadata
 	WorkspaceRef   WorkspaceRef
 	Source         RegistryRef
@@ -76,6 +77,7 @@ type PublishSpec struct {
 	Version        string
 	Image          string
 	RuntimeOptions map[string]any
+	ModelConfig    *apitypes.TemplateModelConfig
 	WorkspaceRef   WorkspaceRef
 	MCPServers     map[string]any
 	UpdatedAt      time.Time

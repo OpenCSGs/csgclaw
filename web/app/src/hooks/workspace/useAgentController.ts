@@ -1467,7 +1467,7 @@ export function useAgentController({
         { codexAvailable: effectiveBootstrapConfig?.manager_runtime?.installed !== false },
       );
       setAgentModalBootstrapConfig(effectiveBootstrapConfig);
-      let draft = agentToDraft({
+      const draft = agentToDraft({
         avatar: initialDraft.avatar,
         image: defaultWorkerImageForRuntime(
           hubTemplates,
@@ -1481,8 +1481,12 @@ export function useAgentController({
         bot_type: BOT_TYPE_NORMAL,
         agent_profile: defaults.status === "fulfilled" ? defaults.value : {},
       });
-      draft = applyTemplateToDraft(draft, selectedTemplate, effectiveBootstrapConfig, managerAgent?.image || "");
-      const readyDraft = agentDraftWithAvailableModels(draft, createModelCatalog, openCSGAuthenticated, false);
+      const readyDraft = applyTemplateToDraft(
+        agentDraftWithAvailableModels(draft, createModelCatalog, openCSGAuthenticated, false),
+        selectedTemplate,
+        effectiveBootstrapConfig,
+        managerAgent?.image || "",
+      );
       setAgentDraft((current) => {
         if (!current || agentModalRequestRef.current !== requestID) return current;
         const next = { ...current };

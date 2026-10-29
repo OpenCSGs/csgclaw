@@ -1260,6 +1260,7 @@ func (s *Controller) profileForCreateRequest(ctx context.Context, spec *CreateAg
 		if detected.ProfileComplete {
 			detected.Name = strings.TrimSpace(spec.Name)
 			detected.Description = strings.TrimSpace(spec.Description)
+			detected = s.applyTemplateModelDefaults(detected, *spec)
 			det := normalizeProfileForAgentRuntime(detected, nil, spec.Name, spec.Description, spec.RuntimeKind, nil)
 			det.EnvRestartRequired = false
 			det.ImageUpgradeRequired = false
@@ -1273,7 +1274,32 @@ func (s *Controller) profileForCreateRequest(ctx context.Context, spec *CreateAg
 	if len(runtimeOptionsAfterPatch) > 0 {
 		spec.RuntimeOptions = utils.CloneAnyMap(runtimeOptionsAfterPatch)
 	}
-	return profile, nil
+	return s.applyTemplateModelDefaults(profile, *spec), nil
+}
+
+func (s *Controller) applyTemplateModelDefaults(profile AgentProfile, spec CreateAgentSpec) AgentProfile {
+	defaults := spec.TemplateModelConfig
+	if defaults == nil {
+		return profile
+	}
+	s.mu.RLock()
+	if referenced, ok := CatalogReferenceProfile(s.llm, profile); ok {
+		profile = referenced
+	}
+	s.mu.RUnlock()
+	if strings.TrimSpace(spec.Profile) == "" {
+		if model := strings.TrimSpace(spec.AgentProfile.ModelID); model != "" {
+			profile.ModelID = model
+		} else if defaults.ModelID != "" {
+			profile.ModelID = defaults.ModelID
+		}
+	}
+	if effort := strings.TrimSpace(spec.AgentProfile.ReasoningEffort); effort != "" {
+		profile.ReasoningEffort = effort
+	} else if defaults.ReasoningEffort != "" {
+		profile.ReasoningEffort = defaults.ReasoningEffort
+	}
+	return normalizeProfileForAgentRuntime(profile, nil, spec.Name, spec.Description, spec.RuntimeKind, spec.RuntimeOptions)
 }
 
 func runtimeOptionsAfterPatch(runtimeKind string, currentRuntimeOptions, patchRuntimeOptions map[string]any) map[string]any {
