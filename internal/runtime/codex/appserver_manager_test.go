@@ -713,19 +713,8 @@ func TestAppServerManagerQuestionRoundTripForManagerAndWorker(t *testing.T) {
 	}
 }
 
-func TestAppServerManagerPausesTurnWatchdogsWhileWaitingForUser(t *testing.T) {
+func TestAppServerManagerKeepsTurnOpenWhileWaitingForUser(t *testing.T) {
 	withAppServerHelperCommand(t, "prompt-user-input-complete")
-	originalSemantic := appServerSemanticInactivityTimeout
-	originalNoProgress := appServerFirstTurnNoProgressTimeout
-	originalMaximum := appServerMaximumTurnDuration
-	appServerSemanticInactivityTimeout = 20 * time.Millisecond
-	appServerFirstTurnNoProgressTimeout = 20 * time.Millisecond
-	appServerMaximumTurnDuration = 20 * time.Millisecond
-	t.Cleanup(func() {
-		appServerSemanticInactivityTimeout = originalSemantic
-		appServerFirstTurnNoProgressTimeout = originalNoProgress
-		appServerMaximumTurnDuration = originalMaximum
-	})
 
 	spec := testAppServerSessionSpec(t.TempDir())
 	sink := &recordingSink{}
@@ -770,34 +759,6 @@ func TestAppServerManagerPausesTurnWatchdogsWhileWaitingForUser(t *testing.T) {
 		}
 	case <-time.After(3 * time.Second):
 		t.Fatal("prompt did not finish after answer")
-	}
-}
-
-func TestAppServerTurnWaiterTracksConcurrentUserInputRequests(t *testing.T) {
-	t.Parallel()
-
-	live := &liveSession{}
-	waiter, err := live.registerAppServerTurnWaiter("thread-1")
-	if err != nil {
-		t.Fatalf("register waiter: %v", err)
-	}
-	defer live.removeAppServerTurnWaiter("thread-1", waiter)
-
-	for _, delta := range []int{1, 1, -1, -1} {
-		if !live.notifyAppServerTurn("thread-1", appServerTurnResult{userInputDelta: delta}) {
-			t.Fatal("user-input state change was not delivered")
-		}
-	}
-	wantWaiting := []bool{true, true, true, false}
-	for index, want := range wantWaiting {
-		select {
-		case result := <-waiter.ch:
-			if !result.userInputStateChanged || result.waitingForUser != want {
-				t.Fatalf("state change %d = %+v, want waiting=%v", index, result, want)
-			}
-		case <-time.After(time.Second):
-			t.Fatalf("timed out waiting for state change %d", index)
-		}
 	}
 }
 
@@ -1087,54 +1048,52 @@ func TestAppServerManagerPromptFailedTurnPublishesFailure(t *testing.T) {
 	}
 }
 
-func TestAppServerManagerPromptNoProgressTimeout(t *testing.T) {
-	withAppServerHelperCommand(t, "prompt-no-progress")
-	originalSemantic := appServerSemanticInactivityTimeout
-	originalNoProgress := appServerFirstTurnNoProgressTimeout
-	appServerSemanticInactivityTimeout = time.Second
-	appServerFirstTurnNoProgressTimeout = 25 * time.Millisecond
-	t.Cleanup(func() {
-		appServerSemanticInactivityTimeout = originalSemantic
-		appServerFirstTurnNoProgressTimeout = originalNoProgress
-	})
-
-	dir := t.TempDir()
-	spec := testAppServerSessionSpec(dir)
-	sink := &recordingSink{}
-	manager := newAppServerManager(testAppServerManagerDepsWithSink(sink))
-	session, err := manager.Start(context.Background(), spec)
-	if err != nil {
-		t.Fatalf("Start() error = %v", err)
-	}
-	t.Cleanup(func() { _ = manager.Stop(context.Background(), SessionHandle{RuntimeID: spec.RuntimeID}) })
-
-	_, err = manager.Prompt(context.Background(), SessionHandle{RuntimeID: spec.RuntimeID}, PromptRequest{
-		SessionID: session.SessionID,
-		Prompt:    []PromptContentBlock{TextBlock("hang")},
-	})
-	if err == nil ||
-		!strings.Contains(err.Error(), "Codex stopped responding after 25ms") ||
-		!strings.Contains(err.Error(), "turn was canceled") ||
-		strings.Contains(err.Error(), "stderr_tail") ||
-		strings.Contains(err.Error(), "runtime_id") {
-		t.Fatalf("Prompt() error = %v, want concise canceled-turn message", err)
-	}
-	events := withoutContextUsage(sink.snapshot())
-	if len(events) != 1 || events[0].Kind != SessionEventPromptFailed {
-		t.Fatalf("events = %#v, want one prompt failed event", events)
+func TestAppServerManagerSilentTurnWaitsForCallerCancellation(t *testing.T) {
+	for _, mode := range []string{"prompt-no-progress", "prompt-mcp-progress-hangs"} {
+		t.Run(mode, func(t *testing.T) {
+			withAppServerHelperCommand(t, mode)
+			spec := testAppServerSessionSpec(t.TempDir())
+			sink := &recordingSink{}
+			manager := newAppServerManager(testAppServerManagerDepsWithSink(sink))
+			session, err := manager.Start(context.Background(), spec)
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { _ = manager.Stop(context.Background(), SessionHandle{RuntimeID: spec.RuntimeID}) })
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			promptDone := make(chan error, 1)
+			go func() {
+				_, err := manager.Prompt(ctx, SessionHandle{RuntimeID: spec.RuntimeID}, PromptRequest{SessionID: session.SessionID, Prompt: []PromptContentBlock{TextBlock("wait quietly")}})
+				promptDone <- err
+			}()
+			waitForRuntime(t, func() bool {
+				waiter := manager.liveSession(spec.RuntimeID).appServerTurnWaiter(session.SessionID)
+				return waiter != nil && waiter.currentTurnID() != ""
+			})
+			select {
+			case err := <-promptDone:
+				t.Fatalf("silent turn ended before caller cancellation: %v", err)
+			default:
+			}
+			cancel()
+			select {
+			case err := <-promptDone:
+				if !errors.Is(err, context.Canceled) {
+					t.Fatalf("Prompt() = %v, want caller cancellation", err)
+				}
+			case <-time.After(3 * time.Second):
+				t.Fatal("silent turn did not cancel")
+			}
+			if manager.liveSession(spec.RuntimeID).appServerTurnWaiter(session.SessionID) != nil {
+				t.Fatal("canceled turn retained waiter")
+			}
+		})
 	}
 }
 
-func TestAppServerManagerReasoningCountsAsInitialActivity(t *testing.T) {
+func TestAppServerManagerDelayedReasoningCompletes(t *testing.T) {
 	withAppServerHelperCommand(t, "prompt-delayed-reasoning")
-	originalSemantic := appServerSemanticInactivityTimeout
-	originalNoProgress := appServerFirstTurnNoProgressTimeout
-	appServerSemanticInactivityTimeout = 100 * time.Millisecond
-	appServerFirstTurnNoProgressTimeout = 40 * time.Millisecond
-	t.Cleanup(func() {
-		appServerSemanticInactivityTimeout = originalSemantic
-		appServerFirstTurnNoProgressTimeout = originalNoProgress
-	})
 
 	dir := t.TempDir()
 	spec := testAppServerSessionSpec(dir)
@@ -1157,52 +1116,6 @@ func TestAppServerManagerReasoningCountsAsInitialActivity(t *testing.T) {
 	}
 }
 
-func TestAppServerManagerMCPToolCallCountsAsProgress(t *testing.T) {
-	withAppServerHelperCommand(t, "prompt-mcp-progress-hangs")
-	originalSemantic := appServerSemanticInactivityTimeout
-	originalNoProgress := appServerFirstTurnNoProgressTimeout
-	appServerSemanticInactivityTimeout = 100 * time.Millisecond
-	appServerFirstTurnNoProgressTimeout = 25 * time.Millisecond
-	t.Cleanup(func() {
-		appServerSemanticInactivityTimeout = originalSemantic
-		appServerFirstTurnNoProgressTimeout = originalNoProgress
-	})
-
-	dir := t.TempDir()
-	spec := testAppServerSessionSpec(dir)
-	sink := &recordingSink{}
-	manager := newAppServerManager(testAppServerManagerDepsWithSink(sink))
-	session, err := manager.Start(context.Background(), spec)
-	if err != nil {
-		t.Fatalf("Start() error = %v", err)
-	}
-	t.Cleanup(func() { _ = manager.Stop(context.Background(), SessionHandle{RuntimeID: spec.RuntimeID}) })
-
-	_, err = manager.Prompt(context.Background(), SessionHandle{RuntimeID: spec.RuntimeID}, PromptRequest{
-		SessionID: session.SessionID,
-		Prompt:    []PromptContentBlock{TextBlock("hang after mcp progress")},
-	})
-	if err == nil ||
-		!strings.Contains(err.Error(), "Codex stopped responding after 100ms") ||
-		!strings.Contains(err.Error(), "turn was canceled") {
-		t.Fatalf("Prompt() error = %v, want canceled turn after inactivity", err)
-	}
-
-	events := withoutContextUsage(sink.snapshot())
-	if len(events) < 2 {
-		t.Fatalf("events = %#v, want MCP tool event and prompt failure", events)
-	}
-	if events[0].Kind != SessionEventToolCallStart ||
-		events[0].ToolKind != "mcp_tool_call" ||
-		events[0].ToolCallID != "call-mcp" {
-		t.Fatalf("events[0] = %#v, want MCP tool start", events[0])
-	}
-	if events[len(events)-1].Kind != SessionEventPromptFailed ||
-		!strings.Contains(events[len(events)-1].Error, "Codex stopped responding after 100ms") {
-		t.Fatalf("last event = %#v, want semantic timeout failure", events[len(events)-1])
-	}
-}
-
 func TestAppServerItemIsProgressIncludesInteractiveToolItems(t *testing.T) {
 	for _, itemType := range []string{
 		"agentMessage",
@@ -1211,32 +1124,14 @@ func TestAppServerItemIsProgressIncludesInteractiveToolItems(t *testing.T) {
 		"mcpToolCall",
 		"dynamicToolCall",
 		"webSearch",
+		"reasoning",
+		"contextCompaction",
 	} {
 		if !appServerItemIsProgress(itemType) {
 			t.Fatalf("appServerItemIsProgress(%q) = false, want true", itemType)
 		}
 	}
-	if appServerItemIsProgress("reasoning") {
-		t.Fatalf("appServerItemIsProgress(reasoning) = true, want false")
-	}
-	if !appServerItemSignalsAssistantActivity("reasoning") {
-		t.Fatal("appServerItemSignalsAssistantActivity(reasoning) = false, want true")
-	}
-	if appServerItemSignalsAssistantActivity("userMessage") {
-		t.Fatal("appServerItemSignalsAssistantActivity(userMessage) = true, want false")
-	}
-}
 
-func TestAppServerManagerDefaultNoProgressTimeoutIsFastFail(t *testing.T) {
-	if appServerFirstTurnNoProgressTimeout <= 0 {
-		t.Fatalf("appServerFirstTurnNoProgressTimeout = %s, want positive fast-fail timeout", appServerFirstTurnNoProgressTimeout)
-	}
-	if appServerSemanticInactivityTimeout <= appServerFirstTurnNoProgressTimeout {
-		t.Fatalf("semantic timeout = %s, no-progress timeout = %s, want semantic timeout longer than no-progress timeout", appServerSemanticInactivityTimeout, appServerFirstTurnNoProgressTimeout)
-	}
-	if appServerMaximumTurnDuration != 0 {
-		t.Fatalf("maximum turn duration = %s, want disabled so active long-running turns can finish", appServerMaximumTurnDuration)
-	}
 }
 
 func TestAppServerManagerAutoAcceptsCommandApproval(t *testing.T) {

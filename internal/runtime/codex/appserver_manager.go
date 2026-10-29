@@ -42,13 +42,7 @@ const (
 	appServerMaxUploadBytes            = 50 << 20
 )
 
-var (
-	appServerStopTimeout                = 3 * time.Second
-	appServerSemanticInactivityTimeout  = 10 * time.Minute
-	appServerFirstTurnNoProgressTimeout = 5 * time.Minute
-	// Active turns are bounded by inactivity and caller cancellation, not total elapsed time.
-	appServerMaximumTurnDuration = time.Duration(0)
-)
+var appServerStopTimeout = 3 * time.Second
 
 var appServerCommandContext = codexcli.AppServerCommandContextWithOverrides
 
@@ -1329,13 +1323,11 @@ func (m *appServerManager) handleAppServerUserInputRequest(runtimeID string, liv
 		autoResolve = time.Duration(*params.AutoResolutionMS) * time.Millisecond
 	}
 	live.notifyAppServerTurn(params.ThreadID, appServerTurnResult{
-		activity:       "request_user_input:pending",
-		progress:       true,
-		userInputDelta: 1,
+		activity: "request_user_input:pending",
+		progress: true,
 	})
 	defer live.notifyAppServerTurn(params.ThreadID, appServerTurnResult{
-		activity:       "request_user_input:resolved",
-		userInputDelta: -1,
+		activity: "request_user_input:resolved",
 	})
 	decision, err := m.deps.UserInput.Request(context.Background(), PendingUserInputRequest{
 		Execution: activity.ExecutionRef{
@@ -1507,22 +1499,17 @@ type appServerTurnWaiter struct {
 	ch                       chan appServerTurnResult
 	terminalResults          map[string]appServerTurnResult
 	lastActivity             string
-	pendingInputs            int
 	structuredOutputBoundary bool
 }
 
 type appServerTurnResult struct {
-	success               bool
-	stopReason            string
-	err                   error
-	turnID                string
-	activity              string
-	started               bool
-	progress              bool
-	assistantActivity     bool
-	userInputStateChanged bool
-	waitingForUser        bool
-	userInputDelta        int
+	success    bool
+	stopReason string
+	err        error
+	turnID     string
+	activity   string
+	started    bool
+	progress   bool
 }
 
 func (s *liveSession) registerAppServerTurnWaiter(threadID string) (*appServerTurnWaiter, error) {
@@ -1649,13 +1636,7 @@ func (s *liveSession) notifyAppServerTurn(threadID string, result appServerTurnR
 	if !waiter.apply(&result) {
 		return true
 	}
-	if result.userInputStateChanged {
-		select {
-		case waiter.ch <- result:
-		case <-s.done:
-		}
-		return true
-	}
+
 	select {
 	case waiter.ch <- result:
 	default:
@@ -1741,14 +1722,7 @@ func (w *appServerTurnWaiter) apply(result *appServerTurnResult) bool {
 	if result.activity != "" {
 		w.lastActivity = strings.TrimSpace(result.activity)
 	}
-	if result.userInputDelta != 0 {
-		w.pendingInputs += result.userInputDelta
-		if w.pendingInputs < 0 {
-			w.pendingInputs = 0
-		}
-		result.userInputStateChanged = true
-		result.waitingForUser = w.pendingInputs > 0
-	}
+
 	return true
 }
 
@@ -1808,96 +1782,10 @@ func (w *appServerTurnWaiter) hasStructuredOutputBoundary() bool {
 }
 
 func (m *appServerManager) waitAppServerTurn(ctx context.Context, live *liveSession, waiter *appServerTurnWaiter) (PromptResponse, error) {
-	semanticTimeout := appServerSemanticInactivityTimeout
-	if semanticTimeout <= 0 {
-		semanticTimeout = 10 * time.Minute
-	}
-	noProgressTimeout := appServerFirstTurnNoProgressTimeout
-	if noProgressTimeout <= 0 {
-		noProgressTimeout = semanticTimeout
-	}
-	semanticTimer := time.NewTimer(semanticTimeout)
-	semanticC := semanticTimer.C
-	defer semanticTimer.Stop()
-	maximumDuration := appServerMaximumTurnDuration
-	var maximumTimer *time.Timer
-	var maximumC <-chan time.Time
-	var maximumRemaining time.Duration
-	var maximumStartedAt time.Time
-	if maximumDuration > 0 {
-		maximumTimer = time.NewTimer(maximumDuration)
-		maximumC = maximumTimer.C
-		maximumRemaining = maximumDuration
-		maximumStartedAt = time.Now()
-		defer maximumTimer.Stop()
-	}
-
-	var noProgressTimer *time.Timer
-	var noProgressC <-chan time.Time
+	// A slow model, quiet tool or context compaction is not evidence of failure.
+	// Only a terminal event, caller cancellation or process exit ends the wait.
 	waitStartedAt := time.Now()
 	lastActivityAt := waitStartedAt
-	waitingForUser := false
-	stopNoProgress := func() {
-		if noProgressTimer == nil {
-			return
-		}
-		if !noProgressTimer.Stop() {
-			select {
-			case <-noProgressTimer.C:
-			default:
-			}
-		}
-		noProgressC = nil
-	}
-	defer stopNoProgress()
-
-	resetSemantic := func() {
-		if !semanticTimer.Stop() {
-			select {
-			case <-semanticTimer.C:
-			default:
-			}
-		}
-		semanticTimer.Reset(semanticTimeout)
-		semanticC = semanticTimer.C
-	}
-	pauseSemantic := func() {
-		if !semanticTimer.Stop() {
-			select {
-			case <-semanticTimer.C:
-			default:
-			}
-		}
-		semanticC = nil
-	}
-	pauseMaximum := func(now time.Time) {
-		if maximumTimer == nil || maximumC == nil {
-			return
-		}
-		maximumRemaining -= now.Sub(maximumStartedAt)
-		if maximumRemaining < 0 {
-			maximumRemaining = 0
-		}
-		if !maximumTimer.Stop() {
-			select {
-			case <-maximumTimer.C:
-			default:
-			}
-		}
-		maximumC = nil
-	}
-	resumeMaximum := func(now time.Time) {
-		if maximumTimer == nil || maximumC != nil {
-			return
-		}
-		remaining := maximumRemaining
-		if remaining <= 0 {
-			remaining = time.Nanosecond
-		}
-		maximumStartedAt = now
-		maximumTimer.Reset(remaining)
-		maximumC = maximumTimer.C
-	}
 
 	for {
 		if result, ok := waiter.terminalResult(); ok {
@@ -1915,17 +1803,6 @@ func (m *appServerManager) waitAppServerTurn(ctx context.Context, live *liveSess
 			if !waiter.matchesTurn(result.turnID) {
 				continue
 			}
-			if result.userInputStateChanged && result.waitingForUser != waitingForUser {
-				now := time.Now()
-				waitingForUser = result.waitingForUser
-				if waitingForUser {
-					pauseSemantic()
-					pauseMaximum(now)
-				} else {
-					resetSemantic()
-					resumeMaximum(now)
-				}
-			}
 			if result.activity != "" {
 				now := time.Now()
 				if live.appClient != nil {
@@ -1942,19 +1819,6 @@ func (m *appServerManager) waitAppServerTurn(ctx context.Context, live *liveSess
 					)
 				}
 				lastActivityAt = now
-				if !waitingForUser {
-					resetSemantic()
-				}
-			}
-			if result.started && noProgressTimeout > 0 && noProgressTimer == nil {
-				noProgressTimer = time.NewTimer(noProgressTimeout)
-				noProgressC = noProgressTimer.C
-			}
-			if result.progress || result.assistantActivity {
-				stopNoProgress()
-			}
-			if result.userInputStateChanged {
-				stopNoProgress()
 			}
 			if result.err != nil {
 				return PromptResponse{}, result.err
@@ -1966,30 +1830,6 @@ func (m *appServerManager) waitAppServerTurn(ctx context.Context, live *liveSess
 				}
 				return PromptResponse{StopReason: stopReason}, nil
 			}
-		case <-noProgressC:
-			if live.appClient != nil {
-				live.appClient.logDebug("codex app-server turn no progress timeout",
-					"runtime_id", strings.TrimSpace(live.spec.RuntimeID),
-					"thread_id", strings.TrimSpace(waiter.threadID),
-					"turn_id", waiter.currentTurnID(),
-					"timeout", noProgressTimeout,
-					"last_activity", waiter.currentLastActivity(),
-				)
-			}
-			return PromptResponse{}, m.failTimedOutAppServerTurn(live, waiter, "initial assistant activity", noProgressTimeout)
-		case <-semanticC:
-			if live.appClient != nil {
-				live.appClient.logDebug("codex app-server turn semantic inactivity timeout",
-					"runtime_id", strings.TrimSpace(live.spec.RuntimeID),
-					"thread_id", strings.TrimSpace(waiter.threadID),
-					"turn_id", waiter.currentTurnID(),
-					"timeout", semanticTimeout,
-					"last_activity", waiter.currentLastActivity(),
-				)
-			}
-			return PromptResponse{}, m.failTimedOutAppServerTurn(live, waiter, "app-server inactivity", semanticTimeout)
-		case <-maximumC:
-			return PromptResponse{}, m.failTimedOutAppServerTurn(live, waiter, "maximum turn duration", maximumDuration)
 		case <-ctx.Done():
 			return m.stopCanceledAppServerTurn(ctx, live, waiter, "prompt context canceled")
 		case <-live.done:
@@ -2015,13 +1855,6 @@ func (m *appServerManager) stopCanceledAppServerTurn(
 		return PromptResponse{}, errors.Join(ctx.Err(), fmt.Errorf("cancel Codex turn unconfirmed; worker preserved: %w", err))
 	}
 	return PromptResponse{StopReason: StopReasonInterrupted}, ctx.Err()
-}
-
-func (m *appServerManager) failTimedOutAppServerTurn(live *liveSession, waiter *appServerTurnWaiter, reason string, timeout time.Duration) error {
-	if err := m.stopAppServerTurn(live, waiter, reason); err != nil {
-		return fmt.Errorf("Codex stopped responding after %s. Turn cancellation is unconfirmed; worker preserved: %w", timeout, err)
-	}
-	return fmt.Errorf("Codex stopped responding after %s. The turn was canceled; try again", timeout)
 }
 
 func (m *appServerManager) stopAppServerTurn(live *liveSession, waiter *appServerTurnWaiter, reason string) error {
