@@ -2,8 +2,9 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { OnboardingGuide } from "./OnboardingGuide";
 import { openOnboardingGuide } from "@/shared/lib/onboardingGuide";
+import { GUIDE_ACKNOWLEDGED_KEY, GUIDE_REVISION } from "./onboardingGuidePersistence";
 
-const state = vi.hoisted(() => ({ locale: "en", ready: true, version: "test" as string | undefined }));
+const state = vi.hoisted(() => ({ locale: "en", ready: true, version: "dev" as string | undefined }));
 vi.mock("@/hooks/workspace", () => ({
   useWorkspaceControllerContext: () => ({
     ready: state.ready,
@@ -12,10 +13,13 @@ vi.mock("@/hooks/workspace", () => ({
   }),
 }));
 
-const seenKey = (version = "test") => `csgclaw:onboarding-guide:seen:${version}`;
-
-function sendReady(frame: HTMLIFrameElement, origin = window.location.origin, source = frame.contentWindow) {
-  fireEvent(window, new MessageEvent("message", { origin, source, data: { type: "csgclaw:guide-ready" } }));
+function sendMessage(
+  frame: HTMLIFrameElement,
+  type = "csgclaw:guide-ready",
+  origin = window.location.origin,
+  source = frame.contentWindow,
+) {
+  fireEvent(window, new MessageEvent("message", { origin, source, data: { type } }));
 }
 
 describe("OnboardingGuide", () => {
@@ -23,103 +27,117 @@ describe("OnboardingGuide", () => {
     localStorage.clear();
     state.locale = "en";
     state.ready = true;
-    state.version = "test";
+    state.version = "dev";
   });
 
-  it("keeps the guide usable when persisting readiness fails", async () => {
-    render(<OnboardingGuide />);
-    const frame = (await screen.findByRole("dialog")).querySelector("iframe")!;
-    const save = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
-      throw new Error("Storage unavailable");
-    });
-    try {
-      sendReady(frame);
-      expect(screen.getByRole("dialog")).toBeInTheDocument();
-      fireEvent.click(screen.getByRole("button", { name: "Exit guide" }));
-      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-    } finally {
-      save.mockRestore();
-    }
-  });
-
-  it("retries next launch when the frame loaded without successfully initializing", async () => {
+  it("does not acknowledge loading or initialization without a deliberate dismissal", async () => {
     const firstLaunch = render(<OnboardingGuide />);
     const frame = (await screen.findByRole("dialog")).querySelector("iframe")!;
-    expect(localStorage.getItem(seenKey())).toBeNull();
     fireEvent.load(frame);
-    expect(localStorage.getItem(seenKey())).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Exit guide" }));
+    expect(localStorage.getItem(GUIDE_ACKNOWLEDGED_KEY)).toBeNull();
+    sendMessage(frame);
+    expect(localStorage.getItem(GUIDE_ACKNOWLEDGED_KEY)).toBeNull();
     firstLaunch.unmount();
-
     render(<OnboardingGuide />);
     expect(await screen.findByRole("dialog")).toBeInTheDocument();
   });
 
-  it("records a successful display and skips automatic replay for the same version", async () => {
-    const firstLaunch = render(<OnboardingGuide />);
-    sendReady((await screen.findByRole("dialog")).querySelector("iframe")!);
-    expect(localStorage.getItem(seenKey())).toBe("seen");
-    firstLaunch.unmount();
+  it.each(["host", "Escape", "frame"])(
+    "acknowledges %s dismissal of a ready guide across application upgrades",
+    async (method) => {
+      const firstLaunch = render(<OnboardingGuide />);
+      sendMessage((await screen.findByRole("dialog")).querySelector("iframe")!);
+      if (method === "frame") sendMessage(screen.getByRole("dialog").querySelector("iframe")!, "csgclaw:guide-exit");
+      else if (method === "Escape") fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
+      else fireEvent.click(screen.getByRole("button", { name: "Exit guide" }));
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+      expect(localStorage.getItem(GUIDE_ACKNOWLEDGED_KEY)).toBe(GUIDE_REVISION);
+      firstLaunch.unmount();
 
-    const { rerender } = render(<OnboardingGuide />);
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-    state.version = "next";
-    rerender(<OnboardingGuide />);
-    expect(await screen.findByRole("dialog")).toBeInTheDocument();
-    expect(localStorage.getItem(seenKey("next"))).toBeNull();
-  });
+      const nextLaunch = render(<OnboardingGuide />);
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+      state.version = "v2.0.0";
+      nextLaunch.rerender(<OnboardingGuide />);
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+      nextLaunch.unmount();
+      render(<OnboardingGuide />);
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    },
+  );
 
-  it("rejects readiness messages from other origins or windows", async () => {
-    render(<OnboardingGuide />);
-    const frame = (await screen.findByRole("dialog")).querySelector("iframe")!;
-    sendReady(frame, "https://example.com");
-    sendReady(frame, window.location.origin, window);
-    expect(localStorage.getItem(seenKey())).toBeNull();
-    sendReady(frame);
-    expect(localStorage.getItem(seenKey())).toBe("seen");
-  });
-
-  it("waits for workspace readiness and the actual app version before opening", async () => {
+  it("waits for the workspace but does not depend on application version loading", async () => {
     state.ready = false;
     state.version = undefined;
     const { rerender } = render(<OnboardingGuide />);
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     state.ready = true;
     rerender(<OnboardingGuide />);
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-    state.version = "";
+    const frame = (await screen.findByRole("dialog")).querySelector("iframe")!;
+    state.version = "v1.0.0";
     rerender(<OnboardingGuide />);
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-    state.version = "test";
-    rerender(<OnboardingGuide />);
-    expect(await screen.findByRole("dialog")).toBeInTheDocument();
-    expect(localStorage.getItem(seenKey("dev"))).toBeNull();
+    expect(screen.getByRole("dialog").querySelector("iframe")).toBe(frame);
   });
 
-  it("supports an actual development build version", async () => {
-    state.version = "dev";
+  it("carries over legacy app-version acknowledgments", () => {
+    localStorage.setItem("csgclaw:onboarding-guide:seen:v0.3.0", "seen");
     render(<OnboardingGuide />);
-    sendReady((await screen.findByRole("dialog")).querySelector("iframe")!);
-    expect(localStorage.getItem(seenKey("dev"))).toBe("seen");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(localStorage.getItem(GUIDE_ACKNOWLEDGED_KEY)).toBe(GUIDE_REVISION);
   });
 
-  it("allows manual replay before version loading without recording a temporary version", async () => {
-    state.version = "";
+  it("presents a changed guide revision until the user acknowledges it", async () => {
+    localStorage.setItem(GUIDE_ACKNOWLEDGED_KEY, "previous-revision");
+    localStorage.setItem("csgclaw:onboarding-guide:seen:v0.3.0", "seen");
+    const firstLaunch = render(<OnboardingGuide />);
+    sendMessage((await screen.findByRole("dialog")).querySelector("iframe")!);
+    fireEvent.click(screen.getByRole("button", { name: "Exit guide" }));
+    expect(localStorage.getItem(GUIDE_ACKNOWLEDGED_KEY)).toBe(GUIDE_REVISION);
+    firstLaunch.unmount();
+    render(<OnboardingGuide />);
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("ignores ready and exit messages from other origins or windows", async () => {
+    const firstLaunch = render(<OnboardingGuide />);
+    const frame = (await screen.findByRole("dialog")).querySelector("iframe")!;
+    sendMessage(frame, "csgclaw:guide-ready", "https://example.com");
+    sendMessage(frame, "csgclaw:guide-ready", window.location.origin, window);
+    sendMessage(frame, "csgclaw:guide-exit", "https://example.com");
+    sendMessage(frame, "csgclaw:guide-exit", window.location.origin, window);
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Exit guide" }));
+    expect(localStorage.getItem(GUIDE_ACKNOWLEDGED_KEY)).toBeNull();
+    firstLaunch.unmount();
+    render(<OnboardingGuide />);
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+  });
+
+  it("does not reuse readiness from a previous locale frame", async () => {
     const { rerender } = render(<OnboardingGuide />);
-    openOnboardingGuide();
     const oldFrame = (await screen.findByRole("dialog")).querySelector("iframe")!;
     const oldWindow = oldFrame.contentWindow;
-    sendReady(oldFrame);
-    expect(localStorage.getItem(seenKey("dev"))).toBeNull();
-
-    state.version = "test";
+    sendMessage(oldFrame);
+    state.locale = "zh";
     rerender(<OnboardingGuide />);
     const frame = screen.getByRole("dialog").querySelector("iframe")!;
     expect(frame).not.toBe(oldFrame);
-    sendReady(frame, window.location.origin, oldWindow);
-    expect(localStorage.getItem(seenKey())).toBeNull();
-    sendReady(frame);
-    expect(localStorage.getItem(seenKey())).toBe("seen");
+    sendMessage(frame, "csgclaw:guide-ready", window.location.origin, oldWindow);
+    fireEvent.click(screen.getByRole("button", { name: "退出导览" }));
+    expect(localStorage.getItem(GUIDE_ACKNOWLEDGED_KEY)).toBeNull();
+  });
+
+  it("still closes when persisting acknowledgment fails", async () => {
+    render(<OnboardingGuide />);
+    sendMessage((await screen.findByRole("dialog")).querySelector("iframe")!);
+    const save = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new Error("Storage unavailable");
+    });
+    try {
+      fireEvent.click(screen.getByRole("button", { name: "Exit guide" }));
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    } finally {
+      save.mockRestore();
+    }
   });
 
   it("can close from the host when the frame cannot load or send messages", async () => {
@@ -133,7 +151,7 @@ describe("OnboardingGuide", () => {
   });
 
   it("replays with the current locale and supports host Escape", async () => {
-    localStorage.setItem(seenKey(), "seen");
+    localStorage.setItem(GUIDE_ACKNOWLEDGED_KEY, GUIDE_REVISION);
     const { rerender } = render(<OnboardingGuide />);
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     state.locale = "zh";
@@ -145,5 +163,30 @@ describe("OnboardingGuide", () => {
     );
     fireEvent.keyDown(screen.getByRole("button", { name: "退出导览" }), { key: "Escape" });
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+  });
+
+  it("synchronizes the native controls inset on frame load and platform changes", async () => {
+    const { container } = render(
+      <div data-desktop-platform="win32">
+        <OnboardingGuide />
+      </div>,
+    );
+    await screen.findByRole("dialog");
+    const frame = container.querySelector("iframe")!;
+    const postMessage = vi.spyOn(frame.contentWindow!, "postMessage");
+    frame.style.setProperty("--desktop-window-controls-width", "138px");
+    fireEvent.load(frame);
+    expect(postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "csgclaw:guide-layout", controlsWidth: 138 }),
+      window.location.origin,
+    );
+    frame.style.setProperty("--desktop-window-controls-width", "0px");
+    container.firstElementChild!.setAttribute("data-desktop-platform", "darwin");
+    await waitFor(() =>
+      expect(postMessage).toHaveBeenLastCalledWith(
+        expect.objectContaining({ type: "csgclaw:guide-layout", controlsWidth: 0 }),
+        window.location.origin,
+      ),
+    );
   });
 });

@@ -2,6 +2,10 @@
   --app-overlay-top-inset: 48px;
 }
 
+:global(:root):has(.frame:not([data-desktop-platform="darwin"])) {
+  --desktop-window-controls-width: 138px;
+}
+
 .frame {
   --desktop-titlebar-height: 48px;
   --desktop-workspace-inset: 8px;
@@ -66,7 +70,7 @@
   flex: 0 0 0;
 }
 .frame:not([data-desktop-platform="darwin"]) .trailing {
-  flex-basis: 138px;
+  flex-basis: var(--desktop-window-controls-width);
 }
 .content {
   margin: 0 var(--desktop-workspace-inset) var(--desktop-workspace-inset);
