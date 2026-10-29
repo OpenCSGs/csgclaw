@@ -341,6 +341,12 @@ func (c internalServeCmd) Run(ctx context.Context, run *command.Context, args []
 		return err
 	}
 	defer restore()
+	serveOpts := serveOptions{OpenBrowser: *browser && !*noBrowser, NoAuthDetect: *noAuthDetect}
+	closeListener, err := prepareRuntimeListener(&cfg.Server, &serveOpts)
+	if err != nil {
+		return err
+	}
+	defer closeListener()
 	_ = preflightDefaultModelProvider(ctx, cfg)
 	if err := migrateLocalStore(ctx, configPath); err != nil {
 		return err
@@ -363,10 +369,7 @@ func (c internalServeCmd) Run(ctx context.Context, run *command.Context, args []
 	if err != nil {
 		return err
 	}
-	return startServerWithConfigPath(ctx, run, cfg, svc, imSvc, imBus, feishuSvc, configPath, globals.Output, serveOptions{
-		OpenBrowser:  *browser && !*noBrowser,
-		NoAuthDetect: *noAuthDetect,
-	})
+	return startServerWithConfigPath(ctx, run, cfg, svc, imSvc, imBus, feishuSvc, configPath, globals.Output, serveOpts)
 }
 
 func serveForeground(ctx context.Context, run *command.Context, cfg config.Config, output string) error {
@@ -401,6 +404,27 @@ type serveOptions struct {
 	OnListening     func()
 }
 
+// prepareRuntimeListener resolves callback ports before services capture the
+// server configuration. Only a listener opened here is owned by the caller.
+func prepareRuntimeListener(serverConfig *config.ServerConfig, opts *serveOptions) (func(), error) {
+	closeListener := func() {}
+	if opts.Listener == nil && config.ListenPort(serverConfig.ListenAddr) == "0" {
+		listener, err := net.Listen("tcp", serverConfig.ListenAddr)
+		if err != nil {
+			return nil, fmt.Errorf("listen on server address: %w", err)
+		}
+		closeListener = func() { _ = listener.Close() }
+		opts.Listener = listener
+	}
+	// Desktop runtimes use the sandbox listener; the renderer has its own URL.
+	if opts.SandboxListener != nil {
+		serverConfig.ListenAddr = opts.SandboxListener.Addr().String()
+	} else if opts.Listener != nil {
+		serverConfig.ListenAddr = opts.Listener.Addr().String()
+	}
+	return closeListener, nil
+}
+
 func serveForegroundWithConfigPath(ctx context.Context, run *command.Context, cfg config.Config, configPath string, output string, opts ...serveOptions) error {
 	serveOpts := serveOptions{}
 	if len(opts) > 0 {
@@ -409,6 +433,11 @@ func serveForegroundWithConfigPath(ctx context.Context, run *command.Context, cf
 	if err := validateServeInstallation(); err != nil {
 		return err
 	}
+	closeListener, err := prepareRuntimeListener(&cfg.Server, &serveOpts)
+	if err != nil {
+		return err
+	}
+	defer closeListener()
 	_ = preflightDefaultModelProvider(ctx, cfg)
 	if err := migrateLocalStore(ctx, configPath); err != nil {
 		return err
@@ -447,7 +476,7 @@ func serveForegroundWithConfigPath(ctx context.Context, run *command.Context, cf
 		fmt.Fprintf(run.Stdout, "CSGClaw IM is available at: %s\n", imURL)
 	}
 
-	return startServerWithConfigPath(ctx, run, cfg, svc, imSvc, imBus, feishuSvc, configPath, output, opts...)
+	return startServerWithConfigPath(ctx, run, cfg, svc, imSvc, imBus, feishuSvc, configPath, output, serveOpts)
 }
 
 func serveBackground(run *command.Context, cfg config.Config, globals command.GlobalOptions, logPath, pidPath, logLevel string, opts serveOptions) error {
@@ -907,7 +936,13 @@ func refreshStartupModelProviders(ctx context.Context, cfg config.Config, config
 	}
 	cfg.Models = updatedLLM
 	cfg.LLM = updatedLLM
-	if err := cfg.Save(configPath); err != nil {
+	// Only the catalog changed. Persisting the effective server configuration
+	// would save temporary listener ports or command-line endpoint overrides.
+	modelsPath, err := config.ModelsPathForConfigPath(configPath)
+	if err != nil {
+		return cfg, results, err
+	}
+	if err := config.SaveModels(modelsPath, updatedLLM); err != nil {
 		return cfg, results, err
 	}
 	if svc != nil {

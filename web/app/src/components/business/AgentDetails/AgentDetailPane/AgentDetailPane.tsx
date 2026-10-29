@@ -974,7 +974,7 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
         </header>
         {error ? <div className="form-error">{error}</div> : null}
         {saveError ? (
-          <div className="form-error">
+          <div className="form-error whitespace-pre-wrap break-words" role="alert">
             {saveError}
             {saveBillingURL ? (
               <>
