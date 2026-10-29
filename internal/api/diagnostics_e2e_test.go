@@ -7,9 +7,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -48,14 +50,14 @@ func (r *diagnosticFixtureRuntime) Run(ctx context.Context, req agentengine.Turn
 	nativeStart := time.Now()
 	time.Sleep(10 * time.Millisecond)
 	record.NativeSpan("native-fixture", "build_prompt", "prepare", "fixture-trace", "", nativeStart, time.Now())
-	if err := r.requestModel(ctx, session, native); err != nil {
+	if err := r.requestModel(ctx, session, native, req); err != nil {
 		return agentengine.TurnResult{Status: agentengine.TurnFailed, Error: &agentengine.TurnError{Code: agentengine.ErrorRuntimeFailed, Message: err.Error()}}
 	}
 	_ = sink.Emit(ctx, agentengine.TurnEvent{Kind: agentengine.TurnEventTextDelta, Text: "正在核对性能数据。"})
 	_ = sink.Emit(ctx, agentengine.TurnEvent{Kind: agentengine.TurnEventToolCallStart, Tool: &agentengine.ToolActivity{ID: "fixture-tool", Kind: "command", Title: "Read demo file", Status: "running", Payload: map[string]any{"rawInput": map[string]any{"cmd": "cat demo.txt", "workdir": "/workspace", "api_key": "fixture-sensitive-argument"}}}})
 	time.Sleep(100 * time.Millisecond)
 	_ = sink.Emit(ctx, agentengine.TurnEvent{Kind: agentengine.TurnEventToolCallUpdate, Tool: &agentengine.ToolActivity{ID: "fixture-tool", Kind: "command", Status: "completed"}})
-	if err := r.requestModel(ctx, session, native); err != nil {
+	if err := r.requestModel(ctx, session, native, req); err != nil {
 		return agentengine.TurnResult{Status: agentengine.TurnFailed, Error: &agentengine.TurnError{Code: agentengine.ErrorRuntimeFailed, Message: err.Error()}}
 	}
 	record.RuntimeEndAt(time.Now())
@@ -68,9 +70,10 @@ func (r *diagnosticFixtureRuntime) Run(ctx context.Context, req agentengine.Turn
 	return agentengine.TurnResult{Status: agentengine.TurnSucceeded, Output: "已完成本次性能检查。", Dispatched: true}
 }
 
-func (r *diagnosticFixtureRuntime) requestModel(ctx context.Context, session, turn string) error {
+func (r *diagnosticFixtureRuntime) requestModel(ctx context.Context, session, turn string, input agentengine.TurnRequest) error {
 	gateway, _ := r.gateway.Load().(string)
-	req, err := http.NewRequestWithContext(ctx, "POST", gateway+"/api/v1/agents/"+diagnostics.From(ctx).Snapshot().AgentID+"/llm/responses", strings.NewReader(`{"model":"fixture-model","input":"fixture","stream":true}`))
+	body, _ := json.Marshal(map[string]any{"model": "fixture-model", "input": []any{map[string]any{"role": "system", "content": "Fixture system instruction: " + strings.Repeat("complete diagnostic context ", 250)}, map[string]any{"role": "user", "content": input.Input}}, "tools": []any{map[string]any{"type": "function", "name": "lookup", "parameters": map[string]any{"type": "object", "properties": map[string]any{}}}}, "stream": true})
+	req, err := http.NewRequestWithContext(ctx, "POST", gateway+"/api/v1/agents/"+diagnostics.From(ctx).Snapshot().AgentID+"/llm/responses", strings.NewReader(string(body)))
 	if err != nil {
 		return err
 	}
@@ -96,6 +99,12 @@ func TestDiagnosticsBrowserFixture(t *testing.T) {
 	if ready == "" {
 		t.Skip("set CSGCLAW_DIAGNOSTICS_E2E_READY")
 	}
+	journal := diagnostics.NewLogJournal(filepath.Join(t.TempDir(), "logs"))
+	restoreJournal := diagnostics.SetCurrentLogs(journal)
+	defer restoreJournal()
+	previousLogger := slog.Default()
+	slog.SetDefault(slog.New(diagnostics.NewServerLogHandler(io.Discard, slog.LevelInfo, journal)))
+	defer slog.SetDefault(previousLogger)
 	t.Cleanup(stubAuthStatus(func(*http.Request) (auth.Status, error) { return auth.Status{}, nil }))
 	model := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(30 * time.Millisecond)

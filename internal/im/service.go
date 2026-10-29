@@ -1,6 +1,7 @@
 package im
 
 import (
+	"context"
 	"csgclaw/internal/diagnostics"
 	"csgclaw/internal/migrations/retiredclaws"
 	"csgclaw/internal/taskconfig"
@@ -408,18 +409,23 @@ func (s *Service) Reload() error {
 	return nil
 }
 
-func SaveBootstrap(path string, state Bootstrap) error {
+func SaveBootstrap(path string, state Bootstrap, operations ...*diagnostics.Operation) error {
+	operation := diagnostics.OperationArg(operations)
+	defer operation.Measure("im.persist")()
+	normalize := operation.Measure("im.normalize")
 	state = normalizeBootstrap(state)
+	normalize()
+	operation.Observe("im.rooms_saved", 0, 0, int64(len(state.Rooms)))
 
 	if err := ensureBootstrapDirs(path); err != nil {
 		return err
 	}
 
-	persisted, err := savePersistedBootstrap(path, state)
+	persisted, err := savePersistedBootstrap(path, state, operations...)
 	if err != nil {
 		return err
 	}
-	return writePersistedBootstrap(path, persisted)
+	return writePersistedBootstrap(path, persisted, operations...)
 }
 
 func ensureBootstrapDirs(path string) error {
@@ -452,20 +458,23 @@ func ensureBootstrapDirs(path string) error {
 	return nil
 }
 
-func writePersistedBootstrap(path string, persisted persistedBootstrap) error {
+func writePersistedBootstrap(path string, persisted persistedBootstrap, operations ...*diagnostics.Operation) error {
+	operation := diagnostics.OperationArg(operations)
 	// Activity order is derived from session messages on read. Keep the index
 	// stable so unchanged metadata does not need another disk commit.
 	persisted.Rooms = slices.Clone(persisted.Rooms)
 	slices.SortFunc(persisted.Rooms, func(a, b persistedRoom) int { return strings.Compare(a.ID, b.ID) })
 	persisted.Users = slices.Clone(persisted.Users)
 	slices.SortFunc(persisted.Users, func(a, b User) int { return strings.Compare(a.ID, b.ID) })
+	serialize := operation.Measure("im.serialize")
 	data, err := json.MarshalIndent(persisted, "", "  ")
+	serialize()
 	if err != nil {
 		return fmt.Errorf("encode im bootstrap: %w", err)
 	}
 	data = append(data, '\n')
 
-	if err := writeFileIfChanged(path, data, 0o600); err != nil {
+	if err := writeFileIfChanged(path, data, 0o600, operations...); err != nil {
 		return fmt.Errorf("write im bootstrap: %w", err)
 	}
 	return nil
@@ -598,15 +607,17 @@ func loadThreadContextFile(statePath, roomID, rootMessageID string) (persistedTh
 	return stored, true, nil
 }
 
-func savePersistedBootstrap(statePath string, state Bootstrap) (persistedBootstrap, error) {
+func savePersistedBootstrap(statePath string, state Bootstrap, operations ...*diagnostics.Operation) (persistedBootstrap, error) {
+	operation := diagnostics.OperationArg(operations)
 	persisted := persistedBootstrapFromState(state)
 
-	rooms, err := savePersistedRooms(statePath, state.Rooms)
+	rooms, err := savePersistedRooms(statePath, state.Rooms, operations...)
 	if err != nil {
 		return persistedBootstrap{}, err
 	}
 	persisted.Rooms = rooms
 
+	defer operation.Measure("im.cleanup")()
 	if err := cleanupSessionFiles(statePath, rooms); err != nil {
 		return persistedBootstrap{}, err
 	}
@@ -634,17 +645,17 @@ func persistedBootstrapFromState(state Bootstrap) persistedBootstrap {
 	return persisted
 }
 
-func savePersistedRooms(statePath string, rooms []Room) ([]persistedRoom, error) {
+func savePersistedRooms(statePath string, rooms []Room, operations ...*diagnostics.Operation) ([]persistedRoom, error) {
 	if len(rooms) == 0 {
 		return nil, nil
 	}
 
 	persisted := make([]persistedRoom, 0, len(rooms))
 	for _, room := range rooms {
-		if err := saveRoomMessagesForState(statePath, room); err != nil {
+		if err := saveRoomMessagesForState(statePath, room, operations...); err != nil {
 			return nil, err
 		}
-		if err := saveRoomThreadsForState(statePath, room); err != nil {
+		if err := saveRoomThreadsForState(statePath, room, operations...); err != nil {
 			return nil, err
 		}
 		persisted = append(persisted, persistedRoomFromRoom(room))
@@ -652,12 +663,13 @@ func savePersistedRooms(statePath string, rooms []Room) ([]persistedRoom, error)
 	return persisted, nil
 }
 
-func saveRoomMessagesForState(statePath string, room Room) error {
+func saveRoomMessagesForState(statePath string, room Room, operations ...*diagnostics.Operation) error {
 	relativePath := sessionRelativePath(room.ID)
-	return saveMessagesJSONL(filepath.Join(filepath.Dir(statePath), filepath.FromSlash(relativePath)), room.ID, room.Messages)
+	return saveMessagesJSONL(filepath.Join(filepath.Dir(statePath), filepath.FromSlash(relativePath)), room.ID, room.Messages, operations...)
 }
 
-func saveRoomThreadsForState(statePath string, room Room) error {
+func saveRoomThreadsForState(statePath string, room Room, operations ...*diagnostics.Operation) error {
+	operation := diagnostics.OperationArg(operations)
 	for _, thread := range room.Threads {
 		rootID := strings.TrimSpace(thread.RootMessageID)
 		if rootID == "" {
@@ -669,7 +681,9 @@ func saveRoomThreadsForState(statePath string, room Room) error {
 			Context:       cloneMessages(thread.Context),
 			Summary:       thread.Summary,
 		}
+		serialize := operation.Measure("im.serialize")
 		data, err := json.MarshalIndent(stored, "", "  ")
+		serialize()
 		if err != nil {
 			return fmt.Errorf("encode im thread context: %w", err)
 		}
@@ -678,7 +692,7 @@ func saveRoomThreadsForState(statePath string, room Room) error {
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 			return fmt.Errorf("create im thread context dir: %w", err)
 		}
-		if err := writeFileIfChanged(path, data, 0o600); err != nil {
+		if err := writeFileIfChanged(path, data, 0o600, operations...); err != nil {
 			return fmt.Errorf("write im thread context: %w", err)
 		}
 	}
@@ -2198,6 +2212,18 @@ func (s *Service) CreateMessageOnce(req CreateMessageRequest) (Message, bool, er
 }
 
 func (s *Service) DeliverMessage(req DeliverMessageRequest) (Message, error) {
+	return s.DeliverMessageContext(context.Background(), req)
+}
+func (s *Service) DeliverMessageContext(ctx context.Context, req DeliverMessageRequest) (result Message, resultErr error) {
+	operation := diagnostics.BeginOperation(ctx, "im.deliver")
+	defer func() {
+		if resultErr != nil {
+			diagnostics.ReportFailure(ctx, "im.deliver", resultErr, map[string]any{"room_id": req.RoomID, "message_id": req.MessageID})
+		}
+		operation.Attribute("failed", resultErr != nil)
+		operation.Finish()
+	}()
+
 	roomID := strings.TrimSpace(req.RoomID)
 	senderID := strings.TrimSpace(req.SenderID)
 	mentionID := strings.TrimSpace(req.MentionID)
@@ -2208,14 +2234,19 @@ func (s *Service) DeliverMessage(req DeliverMessageRequest) (Message, error) {
 	if content == "" && len(req.Attachments) == 0 && len(req.AttachmentSources) == 0 {
 		return Message{}, fmt.Errorf("text is required")
 	}
+	finishAttachments := operation.Measure("im.attachment_prepare")
 	prepared, err := s.prepareMessageAttachments(req.Attachments, req.AttachmentSources...)
+	finishAttachments()
 	if err != nil {
 		return Message{}, err
 	}
 	defer discardPreparedAttachments(prepared)
 
+	finishWait := operation.Measure("im.lock_wait")
 	s.mu.Lock()
-	defer s.mu.Unlock()
+	finishWait()
+	finishHold := operation.Measure("im.lock_hold")
+	defer func() { finishHold(); s.mu.Unlock() }()
 	if senderID == "" {
 		senderID = s.currentUserID
 	}
@@ -2273,27 +2304,40 @@ func (s *Service) DeliverMessage(req DeliverMessageRequest) (Message, error) {
 		message.CreatedAt = room.Messages[replaceIndex].CreatedAt
 		room.Messages[replaceIndex] = message
 		s.rebuildThreadStatesLocked(room)
-		if err := s.saveMessageProjectionLocked(req.Transient); err != nil {
+		if err := s.saveMessageProjectionLocked(req.Transient, operation); err != nil {
 			return Message{}, err
 		}
 		presented := s.presentMessageLocked(*room, message, "")
+		finishPublish := operation.Measure("im.publish")
 		s.publishMessageCreatedLocked(roomID, senderID, presented)
+		finishPublish()
 		return presented, nil
 	}
 	room.Messages = append(room.Messages, message)
-	if err := s.saveMessageProjectionLocked(req.Transient); err != nil {
+	if err := s.saveMessageProjectionLocked(req.Transient, operation); err != nil {
 		return Message{}, err
 	}
 	presented := s.presentMessageLocked(*room, message, "")
+	finishPublish := operation.Measure("im.publish")
 	s.publishMessageCreatedLocked(roomID, senderID, presented)
+	finishPublish()
 	return presented, nil
 }
 
 // UpdateDeliveredMessageMetadata records post-delivery results without copying
 // attachment bytes again or replacing the delivered content.
 func (s *Service) UpdateDeliveredMessageMetadata(roomID, messageID, senderID string, metadata map[string]any) (Message, error) {
+	return s.UpdateDeliveredMessageMetadataContext(context.Background(), roomID, messageID, senderID, metadata)
+}
+func (s *Service) UpdateDeliveredMessageMetadataContext(ctx context.Context, roomID, messageID, senderID string, metadata map[string]any) (Message, error) {
+	operation := diagnostics.BeginOperation(ctx, "im.metadata_update")
+	defer operation.Finish()
+
+	wait := operation.Measure("im.lock_wait")
 	s.mu.Lock()
-	defer s.mu.Unlock()
+	wait()
+	hold := operation.Measure("im.lock_hold")
+	defer func() { hold(); s.mu.Unlock() }()
 	room, ok := s.rooms[roomID]
 	if !ok {
 		return Message{}, ErrRoomNotFound
@@ -2308,7 +2352,7 @@ func (s *Service) UpdateDeliveredMessageMetadata(roomID, messageID, senderID str
 		}
 		room.Messages[i].Metadata = utils.CloneAnyMap(metadata)
 		s.rebuildThreadStatesLocked(room)
-		if err := s.saveMessageProjectionLocked(false); err != nil {
+		if err := s.saveMessageProjectionLocked(false, operation); err != nil {
 			return Message{}, err
 		}
 		presented := s.presentMessageLocked(*room, room.Messages[i], "")
@@ -3565,11 +3609,17 @@ func appendMissingMentions(base, extra []Mention) []Mention {
 	return out
 }
 
-func (s *Service) saveLocked() error {
+func (s *Service) saveLocked(operations ...*diagnostics.Operation) error {
+	operation := diagnostics.OperationArg(operations)
 	if s.statePath == "" {
+		operation.Attribute("persistence", "memory_only")
 		return nil
 	}
-	return SaveBootstrap(s.statePath, s.bootstrapLocked())
+	operation.Attribute("persistence", "disk")
+	snapshot := operation.Measure("im.snapshot")
+	state := s.bootstrapLocked()
+	snapshot()
+	return SaveBootstrap(s.statePath, state, operations...)
 }
 
 func (s *Service) saveRoomLocked(room Room) error {
@@ -3749,11 +3799,13 @@ func seedTime(hour, minute int) time.Time {
 	return time.Date(now.Year(), now.Month(), now.Day(), hour, minute, 0, 0, time.UTC)
 }
 
-func (s *Service) saveMessageProjectionLocked(transient bool) error {
+func (s *Service) saveMessageProjectionLocked(transient bool, operations ...*diagnostics.Operation) error {
+	operation := diagnostics.OperationArg(operations)
 	if transient {
+		operation.Attribute("persistence", "transient")
 		return nil
 	}
-	return s.saveLocked()
+	return s.saveLocked(operations...)
 }
 
 func sameRoomMembers(a, b []string) bool {

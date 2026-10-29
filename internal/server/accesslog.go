@@ -3,6 +3,7 @@ package server
 import (
 	"bufio"
 	"context"
+	"csgclaw/internal/diagnostics"
 	"fmt"
 	"io"
 	"log/slog"
@@ -45,6 +46,7 @@ func accessLog(logger *slog.Logger, next http.Handler) http.Handler {
 			return
 		}
 
+		r = r.WithContext(diagnostics.WithRequestLogScope(r.Context()))
 		start := time.Now()
 		lw := &loggingResponseWriter{
 			ResponseWriter: w,
@@ -232,7 +234,7 @@ func newAccessLogger(logger *slog.Logger) *slog.Logger {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	if !accessLogUsesTerminalColor() {
+	if diagnostics.CurrentLogs() != nil || !accessLogUsesTerminalColor() {
 		return logger
 	}
 	return slog.New(&accessLogTerminalHandler{

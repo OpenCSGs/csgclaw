@@ -240,6 +240,10 @@ func Resolve(ctx context.Context) *Record {
 
 // Native requires exact identity; never guess the most recent turn of an Agent.
 func (s *Store) Native(agent, session, turn string) *Record {
+	return s.native(agent, session, turn, true)
+}
+
+func (s *Store) native(agent, session, turn string, activeOnly bool) *Record {
 	if agent == "" || session == "" || turn == "" {
 		return nil
 	}
@@ -248,7 +252,7 @@ func (s *Store) Native(agent, session, turn string) *Record {
 	var found *Record
 	for _, r := range s.records {
 		r.mu.Lock()
-		matches := r.data.Status == "running" && r.data.AgentID == agent && r.data.RuntimeSessionID == session && r.data.RuntimeTurnID == turn
+		matches := (!activeOnly || r.data.Status == "running") && r.data.AgentID == agent && r.data.RuntimeSessionID == session && r.data.RuntimeTurnID == turn
 		r.mu.Unlock()
 		if matches {
 			if found != nil {

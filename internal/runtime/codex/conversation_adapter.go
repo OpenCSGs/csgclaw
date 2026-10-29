@@ -278,21 +278,22 @@ func (a *ConversationAdapter) handleEvent(ctx context.Context, request contract.
 func (a *ConversationAdapter) authorizeOutputFile(ctx context.Context, request activity.RuntimeFile) (*contract.OutputFile, *contract.TurnError) {
 	workspace, err := a.runtime.WorkspaceDir(a.runtimeID)
 	if err != nil {
-		return nil, a.runtimeFileUnavailable("resolve_workspace", err)
+		return nil, a.runtimeFileUnavailable(ctx, request.Path, "resolve_workspace", err)
 	}
 	workspace = strings.TrimSpace(workspace)
 	relativePath, err := cleanRuntimeOutputPath(request.Path)
 	if err != nil {
+		diagnostics.ReportFailure(ctx, "file.publish.validate", err, map[string]any{"runtime_id": a.runtimeID, "path": request.Path})
 		return nil, &contract.TurnError{Code: contract.ErrorFileUnavailable, Message: err.Error()}
 	}
 	root, err := os.OpenRoot(workspace)
 	if err != nil {
-		return nil, a.runtimeFileUnavailable("open_workspace", err)
+		return nil, a.runtimeFileUnavailable(ctx, request.Path, "open_workspace", err)
 	}
 	source, info, err := openRuntimeOutputSource(root, relativePath)
 	if err != nil {
 		_ = root.Close()
-		return nil, a.runtimeFileUnavailable("open_source", err)
+		return nil, a.runtimeFileUnavailable(ctx, request.Path, "open_source", err)
 	}
 	name := strings.TrimSpace(request.Name)
 	if name == "" {
@@ -305,31 +306,32 @@ func (a *ConversationAdapter) authorizeOutputFile(ctx context.Context, request a
 		if file != nil {
 			file.Cleanup()
 		}
-		return nil, a.runtimeFileUnavailable("snapshot_source", errors.Join(snapshotErr, closeErr, rootCloseErr))
+		return nil, a.runtimeFileUnavailable(ctx, request.Path, "snapshot_source", errors.Join(snapshotErr, closeErr, rootCloseErr))
 	}
 	download, err := file.Open(ctx)
 	if err != nil {
 		file.Cleanup()
-		return nil, a.runtimeFileUnavailable("verify_snapshot", err)
+		return nil, a.runtimeFileUnavailable(ctx, request.Path, "verify_snapshot", err)
 	}
 	prefix := make([]byte, 512)
 	prefixBytes, readErr := io.ReadFull(download, prefix)
 	downloadCloseErr := download.Close()
 	if readErr != nil && !errors.Is(readErr, io.EOF) && !errors.Is(readErr, io.ErrUnexpectedEOF) || downloadCloseErr != nil {
 		file.Cleanup()
-		return nil, a.runtimeFileUnavailable("read_snapshot_prefix", errors.Join(readErr, downloadCloseErr))
+		return nil, a.runtimeFileUnavailable(ctx, request.Path, "read_snapshot_prefix", errors.Join(readErr, downloadCloseErr))
 	}
 	mediaType, err := runtimeOutputMediaType(request.MIMEType, name, prefix[:prefixBytes])
 	if err != nil {
 		file.Cleanup()
+		diagnostics.ReportFailure(ctx, "file.publish.validate", err, map[string]any{"runtime_id": a.runtimeID, "path": request.Path})
 		return nil, &contract.TurnError{Code: contract.ErrorFileUnavailable, Message: err.Error()}
 	}
 	file.MediaType = mediaType
 	return file, nil
 }
 
-func (a *ConversationAdapter) runtimeFileUnavailable(stage string, err error) *contract.TurnError {
-	slog.Warn("Runtime output file unavailable", "runtime_id", strings.TrimSpace(a.runtimeID), "stage", stage, "error", err)
+func (a *ConversationAdapter) runtimeFileUnavailable(ctx context.Context, path, stage string, err error) *contract.TurnError {
+	diagnostics.ReportFailure(ctx, "file.publish."+stage, err, map[string]any{"runtime_id": strings.TrimSpace(a.runtimeID), "path": path})
 	return &contract.TurnError{Code: contract.ErrorFileUnavailable, Message: "Runtime output file is unavailable"}
 }
 

@@ -1,6 +1,6 @@
 # Turn diagnostics
 
-The Web UI exposes Performance diagnostics as an icon alongside copy and thread reply, in activity details, and through the conversation log button.
+The Web UI exposes Turn diagnostics as an icon alongside copy and thread reply, in activity details, and through the conversation log button.
 Group conversations can inspect each Agent turn independently.
 Errors offer an inline disclosure backed by the same diagnostic record.
 
@@ -62,12 +62,12 @@ Timeline truncation, interrupted restarts, and persistence failures are visibly 
 Deleting a room or clearing its messages removes its diagnostics.
 Graceful server shutdown drains pending writes for up to two seconds.
 
-Model prompts, generated content, and tool outputs are not copied into diagnostic records.
+Model prompts, generated content, and tool outputs are kept separately from the lightweight timeline in compressed, incremental context journals.
 Tool names, commands, working directories and bounded, recursively redacted arguments are recorded for diagnosis.
 Known sensitive keys and content-bearing fields are omitted from argument previews.
 Older records can recover tool display fields from the exact matching turn transcript without inventing timings.
 Error messages are limited and redact recognized credentials, bearer tokens, API keys, and URL credentials before storage.
-The copy and export actions use the same sanitized snapshot.
+The copy and export actions use the same dynamically assembled full diagnostic bundle.
 The original Agent runtime log remains a separate existing diagnostic surface.
 
 ## HTTP API
@@ -84,3 +84,80 @@ Boundary tests inject time before native invocation and after native terminal re
 Store and API tests cover restart, capacity limits, persistence failure, credential redaction, room isolation, pagination, clearing, and Agent-specific browser timings.
 Native Codex and DSH diagnostics cases run against deterministic local model endpoints using `CSGCLAW_TEST_CODEX_BINARY` and `CSGCLAW_TEST_DSH_BINARY`.
 The browser fixture uses real HTTP, IM, Channel scheduling, Engine, and transcript delivery, with a deterministic delayed Runtime replacing the external dependency.
+
+## Complete diagnostic bundles
+
+The fixed action bar provides Agent logs, Copy diagnostics, and Export diagnostics with matching button styles.
+The selected CSGClaw turn ID remains visible while viewing logs.
+`GET /api/v1/rooms/{id}/diagnostics/{diagnostic_id}/bundle` streams a schema-versioned JSON document with execution-time environment snapshots, the selected turn, explicitly related turns, context journals, exact server/runtime logs, messages, task relations and approvals, file metadata, text attachment content, current environment information, and collection issues.
+`download=1` changes only the download response header to `csgclaw-turn-{id}-diagnostics.json`.
+The filename ID omits the turn ID's existing `turn-csgclaw-` prefix.
+Both browser actions use that document, with two-space indentation and `Cache-Control: no-store`.
+The optional `timezone` query records the exporting browser's timezone; its user agent is read from the HTTP request.
+Runtime Agent credentials cannot read diagnostic bundles.
+Related turns are restricted to the same room and linked through source messages or explicit task parent/child identities, never by Agent identity or nearby timestamps.
+
+The Engine records actual runtime input, configuration, ordered progress events, results, and available text file snapshots.
+Codex additionally records native RPCs, callbacks, raw notifications before tool preview truncation, runtime configuration, startup handshake information, and explicitly named runtime instruction/config files observed at turn start.
+File observations and current server state are labeled separately from actual runtime/model input evidence.
+DSH records ACP progress and its execution configuration; model requests without exact native identity are explicitly reported as unavailable rather than assigned to a recent Agent turn.
+The model bridge captures original runtime requests, actual upstream requests and attempts, original upstream responses, and responses returned to the runtime, including protocol translation and SSE consumption.
+WebSocket collection requires per-message native identity in client metadata and associates subsequent frames through response IDs.
+Concurrent WebSocket responses without an unambiguous correlation are marked incomplete instead of being assigned by connection identity.
+Binary data URIs and binary attachments are represented by metadata rather than embedded payloads.
+Individual model events and text files exceeding 128 MiB are marked incomplete; capture queue pressure or storage failures never fail the user execution.
+
+Complete context uses an independent seven-day, 1 GiB compressed storage budget.
+Structured server logs use another seven-day, 1 GiB budget and preserve a literal `[turn_id={turn_id}]` prefix in ordinary server log output.
+Foreground, daemon, and desktop launch paths install the same logger.
+Active turns are protected from capacity eviction; rejected writes are reported as collection issues.
+Context writes are incremental gzip members, and bundle export decodes one context entry or log record at a time.
+Room deletion and message clearing also delete context journals, including queued writes racing cleanup.
+System logs include only non-turn records in each included turn's receipt-to-completion interval extended by one minute on either side, capped at export time.
+Runtime stderr includes exact turn matches and explicitly labeled context from the same process instance and time window.
+Complete field matching prevents IDs such as `turn-1` from matching `turn-10`, and lines carrying other turn IDs are excluded.
+A per-process marker, PID and byte boundaries prevent a restarted process that appends to the same file from being mistaken for the original process.
+
+Complete-context redaction preserves long text while recursively removing credential fields, authentication headers, cookies, recognized key formats, private key blocks, and configured model credentials found inside arbitrary model text.
+It does not use the timeline's 4 KiB string truncation.
+Historical uncaptured context, expired or unavailable files/logs, incomplete streams, and running executions are listed in `collection.issues`.
+A partial bundle remains downloadable and the UI shows a brief notice.
+
+## Failure evidence and collection coverage
+
+The model HTTP ingress records a generated request ID, declared content length, actual bytes read, retained bytes, the byte limit, hash scope, read completion and HTTP failure status.
+Oversized headers, chunked overflow, interrupted reads and malformed JSON are recorded before model forwarding.
+Malformed JSON includes its parser offset without retaining a potentially sensitive malformed prefix.
+Forwarding failures retain the valid original request and link it to the ingress request ID.
+Recoverable publication failures capture their exact turn, runtime ID, operation stage, path, error type, OS error code and underlying cause without changing whether the model may retry.
+
+Each turn exports a section coverage manifest in `collection.sections`.
+The manifest distinguishes `complete`, `partial`, `in_progress` and `not_applicable`, with stable reasons and expected/observed counts where meaningful.
+Every observed model request and upstream attempt must have response and terminal evidence or an explicit error; observing one successful request cannot hide a missing later exchange.
+Old records lack the new evidence version and cannot claim the new sections were collected.
+An applicable section that is absent, an unreadable or rotated runtime log, a missing known server log shard, a collector restart gap, or a failed/truncated read makes collection incomplete.
+`collection.complete` describes the required turn evidence sections, not all possible application or operating-system diagnostics.
+
+## Persistence and delivery measurements
+
+The built-in transcript path carries the turn's diagnostic context through synchronous and delayed progress delivery.
+Measurements include progress-lock wait/hold, IM-lock wait/hold, state snapshot, normalization, serialization, comparison reads, writes, file synchronization, rename, cleanup, attachment preparation and publication.
+`diagnostic.performance` aggregates count, total duration, maximum duration and relevant byte/item counters, while `performance.operation` entries preserve operation-level observations and persistence mode.
+Zero write or sync counts are valid for unchanged files, transient progress and memory-only services.
+A record without measured operations is marked missing rather than presented as zero-cost persistence.
+Lock-hold and persistence durations are inclusive of their child work and must not be added together as disjoint wall-clock durations.
+Queue observations and execution-admission load counts describe concurrency without including unrelated conversation content.
+Instrumentation preserves the existing lock ownership, synchronous writes, atomic replacement, file permissions, message publication order and unchanged-file optimization.
+
+## Runtime process evidence
+
+The Codex and DSH process observers bind active and recently completed turns to a specific runtime instance.
+Process exit records include PID, exit code, runtime identity and cleanup outcome; Codex decoder failures are recorded before pending requests are closed.
+Shared process events are labeled as process evidence and do not claim a unique turn caused the error.
+Timestamped nearby stderr, including MCP and transport errors without turn IDs, is labeled `runtime_process_window`.
+Untimed evidence within known turn byte boundaries is labeled `runtime_process_byte_range`, with timestamp uncertainty reported explicitly.
+The server log collector persists observed coverage intervals and file sizes so a quiet interval can be distinguished from an unobserved interval or a missing shard after restart.
+No standalone application diagnostic bundle is added by this feature.
+
+Failures that reach HTTP before the native `turn/start` response are buffered briefly under the exact Agent/session/turn identity and attached when that identity binds.
+This bounded failure buffer preserves the observation timestamp, never guesses the latest Agent turn, and marks dropped evidence when capacity is exceeded.

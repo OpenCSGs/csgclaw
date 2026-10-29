@@ -29,6 +29,11 @@ func (m *appServerManager) handleAppServerNotification(runtimeID string, live *l
 	if params == nil {
 		params = map[string]any{}
 	}
+
+	if waiter := live.appServerTurnWaiter(appServerString(params, "threadId")); waiter != nil {
+		waiter.captureDiagnosticNotification(appServerNotificationTurnID(params), map[string]any{"method": note.Method, "params": params, "received_at": note.ReceivedAt})
+	}
+
 	if note.Method == "turn/completed" {
 		at := note.ReceivedAt
 		if at.IsZero() {

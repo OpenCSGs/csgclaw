@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"crypto/sha256"
+	"csgclaw/internal/diagnostics"
 	"csgclaw/internal/migrations/retiredclaws"
 	"encoding/json"
 	"errors"
@@ -245,7 +246,7 @@ func loadSessionMessageBlob(sessionsRoot, relativeRef string) (sessionMessageBlo
 	return blob, nil
 }
 
-func saveMessagesJSONL(path, roomID string, messages []Message) error {
+func saveMessagesJSONL(path, roomID string, messages []Message, operations ...*diagnostics.Operation) error {
 	if err := validateSessionPathSegment(roomID); err != nil {
 		return err
 	}
@@ -255,7 +256,7 @@ func saveMessagesJSONL(path, roomID string, messages []Message) error {
 
 	sessionsRoot := filepath.Dir(path)
 	if len(messages) == 0 {
-		if err := truncateSessionJSONL(path); err != nil {
+		if err := truncateSessionJSONL(path, operations...); err != nil {
 			return err
 		}
 		return removeRoomSessionBlobs(sessionsRoot, roomID)
@@ -269,7 +270,7 @@ func saveMessagesJSONL(path, roomID string, messages []Message) error {
 	var data bytes.Buffer
 	keepBlobs := make(map[string]struct{}, len(messages))
 	for _, message := range messages {
-		line, blobRef, err := encodeSessionMessageLine(sessionsRoot, roomID, message)
+		line, blobRef, err := encodeSessionMessageLine(sessionsRoot, roomID, message, operations...)
 		if err != nil {
 			return err
 		}
@@ -280,7 +281,7 @@ func saveMessagesJSONL(path, roomID string, messages []Message) error {
 		data.WriteByte('\n')
 	}
 
-	if err := writeFileIfChanged(path, data.Bytes(), 0o600); err != nil {
+	if err := writeFileIfChanged(path, data.Bytes(), 0o600, operations...); err != nil {
 		return fmt.Errorf("write im session: %w", err)
 	}
 	if err := cleanupRoomSessionBlobs(blobDir, keepBlobs); err != nil {
@@ -289,20 +290,23 @@ func saveMessagesJSONL(path, roomID string, messages []Message) error {
 	return nil
 }
 
-func truncateSessionJSONL(path string) error {
-	if err := writeFileIfChanged(path, nil, 0o600); err != nil {
+func truncateSessionJSONL(path string, operations ...*diagnostics.Operation) error {
+	if err := writeFileIfChanged(path, nil, 0o600, operations...); err != nil {
 		return fmt.Errorf("write empty im session: %w", err)
 	}
 	return nil
 }
 
-func encodeSessionMessageLine(sessionsRoot, roomID string, message Message) ([]byte, string, error) {
+func encodeSessionMessageLine(sessionsRoot, roomID string, message Message, operations ...*diagnostics.Operation) ([]byte, string, error) {
+	operation := diagnostics.OperationArg(operations)
 	if err := validateSessionPathSegment(message.ID); err != nil {
 		return nil, "", fmt.Errorf("encode im session message: %w", err)
 	}
 
 	line := messageToSessionLine(message)
+	serializedata := operation.Measure("im.serialize")
 	data, err := json.Marshal(line)
+	serializedata()
 	if err != nil {
 		return nil, "", fmt.Errorf("encode im session message: %w", err)
 	}
@@ -317,7 +321,9 @@ func encodeSessionMessageLine(sessionsRoot, roomID string, message Message) ([]b
 		Thread:      message.Thread,
 		Attachments: message.Attachments,
 	}
+	serializeblobData := operation.Measure("im.serialize")
 	blobData, err := json.Marshal(blob)
+	serializeblobData()
 	if err != nil {
 		return nil, "", fmt.Errorf("encode im session blob: %w", err)
 	}
@@ -332,7 +338,9 @@ func encodeSessionMessageLine(sessionsRoot, roomID string, message Message) ([]b
 	line.Thread = nil
 	line.Attachments = nil
 	line.BlobRef = relativeRef
+	serializeAgain := operation.Measure("im.serialize")
 	data, err = json.Marshal(line)
+	serializeAgain()
 	if err != nil {
 		return nil, "", fmt.Errorf("encode im session message: %w", err)
 	}
@@ -340,7 +348,7 @@ func encodeSessionMessageLine(sessionsRoot, roomID string, message Message) ([]b
 		return nil, "", fmt.Errorf("encode im session message: metadata exceeds %d bytes for message %s", maxSessionJSONLLineBytes, message.ID)
 	}
 	blobPath := filepath.Join(sessionsRoot, filepath.FromSlash(relativeRef))
-	if err := writeFileIfChanged(blobPath, blobData, 0o600); err != nil {
+	if err := writeFileIfChanged(blobPath, blobData, 0o600, operations...); err != nil {
 		return nil, "", fmt.Errorf("write im session blob: %w", err)
 	}
 	return data, relativeRef, nil
