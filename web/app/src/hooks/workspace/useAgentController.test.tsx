@@ -1011,6 +1011,28 @@ describe("useAgentController", () => {
     expect(result.current.agentViewProps.noticeTone).toBe("success");
   });
 
+  it.each(["zh", "en"] as const)("keeps startup diagnostics on the selected Agent page in %s", async (locale) => {
+    const worker: AgentLike = { ...oldAgent, id: "agent-dev", name: "dev", role: "worker", runtime_kind: "codex" };
+    const message = "start codex app-server: executable file not found";
+    const translate = createTranslator(locale);
+    vi.mocked(runAgentActionRequest).mockRejectedValueOnce({ status: 400, message } satisfies ApiError);
+    const { result } = renderHook(
+      () =>
+        useAgentControllerHarness({
+          activePane: { type: WorkspacePaneTypes.agent, id: worker.id },
+          agents: [worker],
+          t: translate,
+        }).controller,
+      { wrapper: createWrapper() },
+    );
+    await act(async () => {
+      await result.current.agentViewProps.onStart(worker);
+    });
+    expect(runAgentActionRequest).toHaveBeenCalledWith(worker.id, "start");
+    expect(result.current.agentViewProps.saveError).toContain(message);
+    expect(result.current.agentViewProps.saveError).toContain("HTTP 400");
+  });
+
   it("exposes the billing URL when recreating the selected worker fails for insufficient balance", async () => {
     const worker: AgentLike = {
       ...oldAgent,
@@ -1038,7 +1060,7 @@ describe("useAgentController", () => {
       await result.current.agentViewProps.onRecreate(worker);
     });
 
-    expect(result.current.agentViewProps.saveError).toBe("Insufficient balance");
+    expect(result.current.agentViewProps.saveError).toBe("Insufficient balance\nHTTP 402 · insufficient_balance");
     expect(result.current.agentViewProps.saveBillingURL).toBe("https://opencsg-stg.com/settings/billing");
   });
 

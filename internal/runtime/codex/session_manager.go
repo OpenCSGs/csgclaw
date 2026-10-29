@@ -141,7 +141,7 @@ func buildSessionEnv(spec SessionSpec) []string {
 }
 
 func shouldOmitInheritedSessionEnvKey(key string) bool {
-	if larkextension.IsConfigurationEnv(key) {
+	if agentruntime.IsManagedAgentEnvironmentKey(key) || larkextension.IsConfigurationEnv(key) {
 		return true
 	}
 	switch strings.ToUpper(strings.TrimSpace(key)) {
