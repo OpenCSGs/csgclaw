@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"os"
 	"regexp"
@@ -42,23 +43,42 @@ func (h *Handler) getDiagnosticBundle(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusNotFound, map[string]any{"error": map[string]string{"code": "diagnostic_unavailable", "message": "Diagnostics were not collected or have expired."}})
 		return
 	}
-	messages, err := h.im.ListMessagesWithOptions(room, im.ListMessagesOptions{IncludeThreadReplies: true})
-	messageErr := err
+	messages, messageErr := h.im.ListMessagesWithOptions(room, im.ListMessagesOptions{IncludeThreadReplies: true})
+	w.Header().Set("Cache-Control", "no-store")
+	filename := "csgclaw-turn-" + diagnosticFilenameUnsafe.ReplaceAllString(strings.TrimPrefix(selected.TurnID, "turn-csgclaw-"), "_") + "-diagnostics"
+	render := func(out io.Writer) (bool, error) {
+		return h.writeDiagnosticBundle(out, r, selected, messages, messageErr)
+	}
+	var err error
+	if r.URL.Query().Get("download") == "1" {
+		w.Header().Set("Content-Type", "application/zip")
+		w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s.zip"`, filename))
+		err = writeDiagnosticZIP(w, filename+".json", selected.TurnID, render)
+	} else {
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		_, err = render(w)
+	}
+	if err != nil {
+		slog.WarnContext(r.Context(), "diagnostic bundle export failed", "turn_id", selected.TurnID, "error", err)
+		// Do not finalize a partial ZIP or append an error document to its body.
+		panic(http.ErrAbortHandler)
+	}
+}
+
+func (h *Handler) writeDiagnosticBundle(out io.Writer, r *http.Request, selected diagnostics.Snapshot, messages []im.Message, messageErr error) (bool, error) {
+	room := selected.RoomID
+	store := h.im.Diagnostics()
+	var err error
 	issues := []bundleIssue{}
 	coverage := []diagnosticCoverage{}
-	if err != nil {
+	if messageErr != nil {
 		issues = append(issues, bundleIssue{Section: "messages", Reason: "messages_unavailable"})
 	}
 	turns, tasks := h.bundleRelated(selected, messages)
 	capturedAt := time.Now().UTC()
 	windows := make([]diagnostics.LogWindow, 0, len(turns))
 	logs := diagnostics.CurrentLogs()
-	w.Header().Set("Cache-Control", "no-store")
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	if r.URL.Query().Get("download") == "1" {
-		w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="csgclaw-turn-%s-diagnostics.json"`, diagnosticFilenameUnsafe.ReplaceAllString(strings.TrimPrefix(selected.TurnID, "turn-csgclaw-"), "_")))
-	}
-	stream := &bundleStream{out: w}
+	stream := &bundleStream{out: out}
 	stream.raw("{\n")
 	stream.field("schema_version", 1, true)
 	stream.field("turn_id", selected.TurnID, true)
@@ -364,6 +384,7 @@ func (h *Handler) getDiagnosticBundle(w http.ResponseWriter, r *http.Request) {
 	stream.raw("\n  ],\n")
 	stream.field("collection", map[string]any{"scope": "required_turn_evidence_sections", "evidence_version": 2, "sections": coverage, "complete": len(issues) == 0, "issues": issues, "system_log_margin_seconds": 60, "context_retention_days": 7, "context_max_bytes": diagnostics.ContextBytes, "server_log_max_bytes": diagnostics.LogBytes, "binary_files": "metadata_only", "system_log_windows": windows}, false)
 	stream.raw("}\n")
+	return len(issues) == 0, stream.err
 }
 
 func boundedDiagnosticQuery(value string, limit int) string {

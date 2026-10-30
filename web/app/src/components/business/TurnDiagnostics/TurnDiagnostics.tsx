@@ -24,7 +24,13 @@ import {
   Select,
   Tooltip,
 } from "@/components/ui";
-import { fetchDiagnostic, fetchDiagnostics, fetchDiagnosticBundle, type TurnDiagnostic } from "@/api/diagnostics";
+import {
+  fetchDiagnostic,
+  fetchDiagnostics,
+  fetchDiagnosticBundle,
+  fetchDiagnosticArchive,
+  type TurnDiagnostic,
+} from "@/api/diagnostics";
 import { fetchAgentLogsRequest } from "@/api/agents";
 import {
   diagnosticDuration,
@@ -272,7 +278,7 @@ export function TurnDiagnostics({
     return () => bundleRequest.current?.abort();
   }, [detail?.id]);
 
-  const exportJSON = async (download: boolean) => {
+  const exportDiagnostics = async (download: boolean) => {
     if (!detail || exporting || loading) return;
     bundleRequest.current?.abort();
     const controller = new AbortController();
@@ -281,24 +287,27 @@ export function TurnDiagnostics({
     setError("");
     setCopied(false);
     try {
-      const bundle = await fetchDiagnosticBundle(room, detail.id, download, controller.signal);
-      if (controller.signal.aborted) return;
-      setBundleIncomplete(!bundle.complete);
-      if (!download) {
-        try {
-          await navigator.clipboard.writeText(bundle.text);
-          if (!controller.signal.aborted) setCopied(true);
-        } catch {
-          if (!controller.signal.aborted) setError(t("diagCopyFailed"));
-        }
+      if (download) {
+        const archive = await fetchDiagnosticArchive(room, detail.id, controller.signal);
+        if (controller.signal.aborted) return;
+        setBundleIncomplete(!archive.complete);
+        const url = URL.createObjectURL(archive.blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = archive.filename;
+        link.click();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
         return;
       }
-      const url = URL.createObjectURL(new Blob([bundle.text], { type: "application/json" }));
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = `csgclaw-turn-${bundle.turnId.replace(/^turn-csgclaw-/, "").replace(/[^a-zA-Z0-9._-]/g, "_")}-diagnostics.json`;
-      link.click();
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      const bundle = await fetchDiagnosticBundle(room, detail.id, controller.signal);
+      if (controller.signal.aborted) return;
+      setBundleIncomplete(!bundle.complete);
+      try {
+        await navigator.clipboard.writeText(bundle.text);
+        if (!controller.signal.aborted) setCopied(true);
+      } catch {
+        if (!controller.signal.aborted) setError(t("diagCopyFailed"));
+      }
     } catch {
       if (!controller.signal.aborted) setError(t("diagExportFailed"));
     } finally {
@@ -362,7 +371,7 @@ export function TurnDiagnostics({
                 variant="secondaryGray"
                 disabled={!detail || loading || Boolean(exporting)}
                 aria-busy={exporting === "copy"}
-                onClick={() => void exportJSON(false)}
+                onClick={() => void exportDiagnostics(false)}
               >
                 <Copy size={16} />
                 {t(exporting === "copy" ? "diagCollecting" : copied ? "diagCopied" : "diagCopy")}
@@ -372,7 +381,7 @@ export function TurnDiagnostics({
                 variant="secondaryGray"
                 disabled={!detail || loading || Boolean(exporting)}
                 aria-busy={exporting === "download"}
-                onClick={() => void exportJSON(true)}
+                onClick={() => void exportDiagnostics(true)}
               >
                 <Download size={16} />
                 {t(exporting === "download" ? "diagCollecting" : "diagExport")}

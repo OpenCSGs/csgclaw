@@ -90,9 +90,13 @@ The browser fixture uses real HTTP, IM, Channel scheduling, Engine, and transcri
 The fixed action bar provides Agent logs, Copy diagnostics, and Export diagnostics with matching button styles.
 The selected CSGClaw turn ID remains visible while viewing logs.
 `GET /api/v1/rooms/{id}/diagnostics/{diagnostic_id}/bundle` streams a schema-versioned JSON document with execution-time environment snapshots, the selected turn, explicitly related turns, context journals, exact server/runtime logs, messages, task relations and approvals, file metadata, text attachment content, current environment information, and collection issues.
-`download=1` changes only the download response header to `csgclaw-turn-{id}-diagnostics.json`.
+`download=1` streams an `application/zip` attachment named `csgclaw-turn-{id}-diagnostics.zip`, containing one complete `csgclaw-turn-{id}-diagnostics.json` file.
 The filename ID omits the turn ID's existing `turn-csgclaw-` prefix.
-Both browser actions use that document, with two-space indentation and `Cache-Control: no-store`.
+Both browser actions use the same fully expanded JSON structure, with two-space indentation and `Cache-Control: no-store`.
+Copy diagnostics keeps the plain JSON endpoint and clipboard contents.
+Export diagnostics compresses JSON incrementally on the server without buffering or persisting the complete export.
+The browser receives compressed ZIP bytes and reads only the archive directory and its small JSON comment (`schema_version`, `turn_id`, `complete`) to display collection status; it does not inflate or parse the diagnostic JSON entry.
+Interrupted generation does not finalize the ZIP, and the UI reports a retryable export error.
 The optional `timezone` query records the exporting browser's timezone; its user agent is read from the HTTP request.
 Runtime Agent credentials cannot read diagnostic bundles.
 Related turns are restricted to the same room and linked through source messages or explicit task parent/child identities, never by Agent identity or nearby timestamps.
