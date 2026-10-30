@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -25,7 +26,7 @@ func isRetiredRuntimeKind(kind string) bool {
 
 // MigrateAgents runs before services load the store. User identity,
 // model settings, resources, conversations and workspace files remain intact.
-// Workers stay stopped when their retired sandbox is replaced by a host runtime.
+// Migrated Agents request running so the normal startup pass starts Codex.
 func MigrateAgents(ctx context.Context, root string, openSandbox func(context.Context, string) (sandbox.Runtime, error)) error {
 	return localstore.WithRootStateLock(func() error { return migrateAgents(ctx, root, openSandbox) })
 }
@@ -56,8 +57,12 @@ func migrateAgents(ctx context.Context, root string, openSandbox func(context.Co
 		}
 	}
 	changed := false
+	forced := false
 	var memories []retiredMemoryImport
 	for _, agent := range agents {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		var runtime map[string]json.RawMessage
 		if raw := agent["runtime"]; len(raw) > 0 && string(raw) != "null" {
 			if err := json.Unmarshal(raw, &runtime); err != nil {
@@ -82,7 +87,12 @@ func migrateAgents(ctx context.Context, root string, openSandbox func(context.Co
 			return fmt.Errorf("invalid retired runtime Agent id %q", id)
 		}
 		if err := stopRetiredSandboxes(ctx, id, agent, runtime, openSandbox); err != nil {
-			return err
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			forced = true
+			slog.Warn("retired sandbox shutdown could not be confirmed; forcing Agent migration to Codex",
+				"agent_id", id, "runtime_kind", kind, "error", err)
 		}
 		workspace, err := retiredRuntimeWorkspace(root, id, kind)
 		if err != nil {
@@ -106,7 +116,7 @@ func migrateAgents(ctx context.Context, root string, openSandbox func(context.Co
 		if err != nil {
 			return err
 		}
-		agent["desired_state"] = json.RawMessage(`"stopped"`)
+		agent["desired_state"] = json.RawMessage(`"running"`)
 		for _, key := range []string{"runtime_kind", "runtime_name", "runtime_id", "box_id", "sandbox_id", "sandbox_enabled", "image", "runtime_options", "status"} {
 			delete(agent, key)
 		}
@@ -147,7 +157,18 @@ func migrateAgents(ctx context.Context, root string, openSandbox func(context.Co
 	if err != nil {
 		return err
 	}
-	if err := backupOnce(root); err != nil {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if forced {
+		snapshotMu.Lock()
+		backup, err := freshBackup(root)
+		snapshotMu.Unlock()
+		if err != nil {
+			return fmt.Errorf("backup forced retired runtime migration: %w", err)
+		}
+		slog.Info("retired runtime migration backup preserves original sandbox records", "backup_path", backup)
+	} else if err := backupOnce(root); err != nil {
 		return fmt.Errorf("backup retired runtime state: %w", err)
 	}
 	for _, memory := range memories {
