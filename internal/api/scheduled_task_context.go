@@ -27,5 +27,5 @@ func (h *Handler) handleScheduledTaskContext(w http.ResponseWriter, r *http.Requ
 		}
 	}
 	now := time.Now()
-	writeJSON(w, http.StatusOK, map[string]any{"now": now, "timezone": time.Local.String(), "recurrences": []string{"once", "daily", "weekly", "monthly"}, "agents": agents})
+	writeJSON(w, http.StatusOK, map[string]any{"now": now, "recurrences": []string{"once", "daily", "weekly", "monthly"}, "agents": agents})
 }

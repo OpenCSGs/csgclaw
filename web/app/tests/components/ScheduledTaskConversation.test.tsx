@@ -32,7 +32,7 @@ function setup(model = "test-model") {
   );
   return { ...renderHook(() => useScheduledTaskConversation(), { wrapper }), create, open, onMessage };
 }
-it("opens a new Manager direct task and sends the original request and timezone", async () => {
+it("opens a new Manager direct task and sends the original request for confirmation", async () => {
   vi.mocked(sendMessageRequest).mockResolvedValue({ id: "message-1" } as never);
   const { result, create, open, onMessage } = setup();
   await act(async () => {
@@ -44,11 +44,8 @@ it("opens a new Manager direct task and sends the original request and timezone"
   expect(sendMessageRequest).toHaveBeenCalledWith(
     expect.objectContaining({
       room_id: "new-manager-task",
-      content: expect.stringContaining("每周一10点让Manager汇总工作"),
+      content: "请帮我创建定时任务：\n每周一10点让Manager汇总工作\n请先回显时间、执行内容和执行者，确认后保存。",
     }),
-  );
-  expect(vi.mocked(sendMessageRequest).mock.calls.at(-1)?.[0].content).toContain(
-    Intl.DateTimeFormat().resolvedOptions().timeZone,
   );
   expect(onMessage).toHaveBeenCalled();
   expect(open).toHaveBeenCalledWith({ id: "new-manager-task" });

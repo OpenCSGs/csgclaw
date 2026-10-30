@@ -78,8 +78,8 @@ func TestManagerScheduledTaskCLIWithScopedCredential(t *testing.T) {
 		t.Fatalf("context agents = %+v", info.Agents)
 	}
 	var saved apitypes.ScheduledTask
-	call(schedulecmd.NewCmd(), []string{"create", "--title", "周报", "--agent-id", manager.ID, "--prompt", "汇总上周工作并输出周报", "--recurrence", "weekly", "--first-run-at", "2026-11-02T10:00:00+08:00", "--timezone", "Asia/Shanghai"}, &saved)
-	if saved.ID == "" || saved.AgentID != manager.ID || saved.Timezone != "Asia/Shanghai" {
+	call(schedulecmd.NewCmd(), []string{"create", "--title", "周报", "--agent-id", manager.ID, "--prompt", "汇总上周工作并输出周报", "--recurrence", "weekly", "--first-run-at", "2026-11-02T10:00:00+08:00"}, &saved)
+	if saved.ID == "" || saved.AgentID != manager.ID {
 		t.Fatalf("saved = %+v", saved)
 	}
 	var listed []apitypes.ScheduledTask

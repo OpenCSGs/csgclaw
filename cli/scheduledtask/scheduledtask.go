@@ -62,7 +62,6 @@ func (c cmd) Run(ctx context.Context, run *command.Context, args []string, globa
 	prompt := fs.String("prompt", "", "instructions executed at the scheduled time")
 	recurrence := fs.String("recurrence", "once", "once, daily, weekly, or monthly")
 	firstRun := fs.String("first-run-at", "", "first/next run in RFC3339 with an explicit UTC offset")
-	timezone := fs.String("timezone", "", "IANA time zone, e.g. Asia/Shanghai")
 	expires := fs.String("expires-at", "", "optional expiration in RFC3339")
 	enabled := fs.Bool("enabled", true, "enable the schedule")
 	if err := fs.Parse(args[1:]); err != nil {
@@ -74,7 +73,7 @@ func (c cmd) Run(ctx context.Context, run *command.Context, args []string, globa
 	visited := map[string]bool{}
 	fs.Visit(func(f *flag.Flag) { visited[f.Name] = true })
 	payload := map[string]any{}
-	for key, value := range map[string]string{"title": *title, "agent-id": *agentID, "prompt": *prompt, "recurrence": *recurrence, "timezone": *timezone} {
+	for key, value := range map[string]string{"title": *title, "agent-id": *agentID, "prompt": *prompt, "recurrence": *recurrence} {
 		if action == "create" || visited[key] {
 			payload[strings.ReplaceAll(key, "-", "_")] = strings.TrimSpace(value)
 		}

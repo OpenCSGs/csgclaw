@@ -11,7 +11,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-	_ "time/tzdata"
 )
 
 const schedulerCreatedBy = "scheduler"
@@ -144,7 +143,6 @@ func (s *Service) Create(input CreateInput) (Task, error) {
 		AgentID:    agentID,
 		Prompt:     prompt,
 		Recurrence: recurrence,
-		Timezone:   strings.TrimSpace(input.Timezone),
 		Enabled:    input.Enabled,
 		NextRunAt:  input.FirstRunAt,
 		ExpiresAt:  cloneTime(input.ExpiresAt),
@@ -192,9 +190,6 @@ func (s *Service) Update(input UpdateInput) (Task, error) {
 			return Task{}, fmt.Errorf("recurrence must be once, daily, weekly, or monthly")
 		}
 		item.Recurrence = normalizeRecurrence(*input.Recurrence)
-	}
-	if input.Timezone != nil {
-		item.Timezone = strings.TrimSpace(*input.Timezone)
 	}
 	if input.NextRunAt != nil {
 		item.NextRunAt = *input.NextRunAt
@@ -443,11 +438,6 @@ func indexTask(tasks []Task, id string) int {
 }
 
 func validateSchedule(item Task) error {
-	if item.Timezone != "" {
-		if _, err := time.LoadLocation(item.Timezone); err != nil {
-			return fmt.Errorf("invalid timezone %q", item.Timezone)
-		}
-	}
 	if item.Enabled && item.ExpiresAt != nil && !item.NextRunAt.IsZero() && item.ExpiresAt.Before(item.NextRunAt) {
 		return fmt.Errorf("expires_at must not be before next_run_at")
 	}
@@ -464,11 +454,6 @@ func normalizeRecurrence(value string) string {
 }
 
 func nextRunAt(item Task, from time.Time) (time.Time, bool) {
-	if item.Timezone != "" {
-		if location, err := time.LoadLocation(item.Timezone); err == nil {
-			item.NextRunAt = item.NextRunAt.In(location)
-		}
-	}
 	switch normalizeRecurrence(item.Recurrence) {
 	case RecurrenceDaily:
 		return advanceUntilAfter(item.NextRunAt, from, func(t time.Time) time.Time { return t.AddDate(0, 0, 1) }), true

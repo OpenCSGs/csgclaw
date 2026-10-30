@@ -498,41 +498,10 @@ func TestArchivedAgentSchedulesStayPausedAndCannotRun(t *testing.T) {
 	}
 }
 
-func TestRecurrenceKeepsUserTimezoneAfterReloadAndDST(t *testing.T) {
-	zone, err := time.LoadLocation("America/New_York")
-	if err != nil {
-		t.Fatal(err)
-	}
-	now := time.Date(2026, 10, 31, 9, 0, 0, 0, zone)
-	store, err := NewStore(t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
-	svc, err := NewService(store, nil, WithNowFunc(func() time.Time { return now }))
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, err = svc.Create(CreateInput{Title: "Morning check", AgentID: "u-manager", Prompt: "Report work", Recurrence: RecurrenceDaily, FirstRunAt: now, Timezone: zone.String(), Enabled: true})
-	if err != nil {
-		t.Fatal(err)
-	}
-	// Reload strips named locations from time.Time JSON. The explicit IANA zone restores calendar semantics.
-	svc, err = NewService(store, nil, WithNowFunc(func() time.Time { return now }))
-	if err != nil {
-		t.Fatal(err)
-	}
-	svc.TriggerDue(context.Background())
-	got := svc.List()[0]
-	want := time.Date(2026, 11, 1, 9, 0, 0, 0, zone)
-	if !got.NextRunAt.Equal(want) || got.NextRunAt.Sub(now) != 25*time.Hour {
-		t.Fatalf("next = %s, want %s (25 hours after DST)", got.NextRunAt, want)
-	}
-}
 func TestUnsupportedSchedulesAreRejectedWithoutSaving(t *testing.T) {
 	svc := newTestService(t, time.Now())
 	for _, input := range []CreateInput{
 		{Title: "Workdays", AgentID: "u-manager", Prompt: "Report", Recurrence: "workdays", FirstRunAt: time.Now(), Enabled: true},
-		{Title: "Bad zone", AgentID: "u-manager", Prompt: "Report", Recurrence: RecurrenceDaily, Timezone: "Mars/Olympus", FirstRunAt: time.Now(), Enabled: true},
 	} {
 		if _, err := svc.Create(input); err == nil {
 			t.Fatalf("accepted unsupported schedule: %+v", input)

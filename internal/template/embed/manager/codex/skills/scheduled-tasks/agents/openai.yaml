@@ -1,4 +1,4 @@
 interface:
   display_name: "Scheduled Tasks"
   short_description: "Create and edit scheduled tasks from natural language"
-  default_prompt: "Use $scheduled-tasks to resolve the requested time, timezone, executor and content, show the result for review, and save it through csgclaw-cli."
+  default_prompt: "Use $scheduled-tasks to resolve the requested time, executor and content, show the result for review, and save it through csgclaw-cli."

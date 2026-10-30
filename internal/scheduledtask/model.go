@@ -18,7 +18,6 @@ type Task struct {
 	AgentID    string     `json:"agent_id"`
 	Prompt     string     `json:"prompt"`
 	Recurrence string     `json:"recurrence"`
-	Timezone   string     `json:"timezone,omitempty"`
 	Enabled    bool       `json:"enabled"`
 	NextRunAt  time.Time  `json:"next_run_at"`
 	LastRunAt  *time.Time `json:"last_run_at,omitempty"`
@@ -41,7 +40,6 @@ type CreateInput struct {
 	AgentID    string
 	Prompt     string
 	Recurrence string
-	Timezone   string
 	FirstRunAt time.Time
 	ExpiresAt  *time.Time
 	Enabled    bool
@@ -53,7 +51,6 @@ type UpdateInput struct {
 	AgentID    *string
 	Prompt     *string
 	Recurrence *string
-	Timezone   *string
 	NextRunAt  *time.Time
 	ExpiresAt  **time.Time
 	Enabled    *bool

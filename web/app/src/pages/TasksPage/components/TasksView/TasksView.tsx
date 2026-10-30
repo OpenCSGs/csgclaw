@@ -562,7 +562,6 @@ export function TasksView({
       prompt: result.prompt,
       recurrence: scheduledDraft.recurrence,
       first_run_at: result.nextRunAt,
-      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
       enabled: true,
     };
     if (scheduledDraft.expiresDate) {
@@ -591,7 +590,6 @@ export function TasksView({
       prompt: result.prompt,
       recurrence: editScheduledDraft.recurrence,
       next_run_at: result.nextRunAt,
-      timezone: editingScheduledTask.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
       expires_at: editScheduledDraft.expiresDate ? localDateTimeISO(editScheduledDraft.expiresDate, "23:59") : null,
       enabled: shouldReactivateEditedSchedule ? true : editingScheduledTask.enabled,
     });

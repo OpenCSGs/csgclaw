@@ -55,7 +55,6 @@ func (h *Handler) handleCreateScheduledTask(w http.ResponseWriter, r *http.Reque
 		AgentID:    strings.TrimSpace(req.AgentID),
 		Prompt:     strings.TrimSpace(req.Prompt),
 		Recurrence: strings.TrimSpace(req.Recurrence),
-		Timezone:   req.Timezone,
 		FirstRunAt: req.FirstRunAt.In(time.Local),
 		ExpiresAt:  localTimePtr(req.ExpiresAt),
 		Enabled:    enabled,
@@ -84,7 +83,6 @@ func (h *Handler) handleUpdateScheduledTask(w http.ResponseWriter, r *http.Reque
 		AgentID:    req.AgentID,
 		Prompt:     req.Prompt,
 		Recurrence: req.Recurrence,
-		Timezone:   req.Timezone,
 		NextRunAt:  localTimeValuePtr(req.NextRunAt),
 		ExpiresAt:  localOptionalTimeDoublePtr(req.ExpiresAt),
 		Enabled:    req.Enabled,
@@ -157,7 +155,6 @@ func apiScheduledTask(item scheduledtask.Task, presenter teamIdentityPresenter) 
 		AgentName:  presenter.displayAgentName(item.AgentID),
 		Prompt:     item.Prompt,
 		Recurrence: item.Recurrence,
-		Timezone:   item.Timezone,
 		Enabled:    item.Enabled,
 		NextRunAt:  item.NextRunAt,
 		LastRunAt:  item.LastRunAt,
@@ -203,7 +200,6 @@ type patchScheduledTaskRequest struct {
 	AgentID    *string      `json:"agent_id,omitempty"`
 	Prompt     *string      `json:"prompt,omitempty"`
 	Recurrence *string      `json:"recurrence,omitempty"`
-	Timezone   *string      `json:"timezone,omitempty"`
 	NextRunAt  *time.Time   `json:"next_run_at,omitempty"`
 	ExpiresAt  optionalTime `json:"expires_at,omitempty"`
 	Enabled    *bool        `json:"enabled,omitempty"`

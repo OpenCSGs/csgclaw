@@ -990,7 +990,7 @@ func safeFunctionName(program string) string {
 }
 
 func scheduledTaskSpec() CommandSpec {
-	fields := []FlagSpec{{Name: "title", TakesValue: true}, {Name: "agent-id", TakesValue: true}, {Name: "prompt", TakesValue: true}, {Name: "recurrence", TakesValue: true}, {Name: "first-run-at", TakesValue: true}, {Name: "timezone", TakesValue: true}, {Name: "expires-at", TakesValue: true}, {Name: "enabled"}}
+	fields := []FlagSpec{{Name: "title", TakesValue: true}, {Name: "agent-id", TakesValue: true}, {Name: "prompt", TakesValue: true}, {Name: "recurrence", TakesValue: true}, {Name: "first-run-at", TakesValue: true}, {Name: "expires-at", TakesValue: true}, {Name: "enabled"}}
 	return CommandSpec{Name: "scheduled-task", Summary: "Manage scheduled agent tasks", Children: []CommandSpec{
 		{Name: "context", Summary: "Read scheduling context"},
 		{Name: "list", Summary: "List saved schedules"},

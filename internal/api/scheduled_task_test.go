@@ -149,7 +149,7 @@ func TestManagerScheduleTriggersAtDueTimeAndCanComplete(t *testing.T) {
 		t.Fatal(err)
 	}
 	h := &Handler{im: imSvc, agentTaskSvc: tasks, scheduledTaskSvc: svc}
-	request := httptest.NewRequest(http.MethodPost, "/api/v1/scheduled-tasks", strings.NewReader(`{"title":"Weekly review","agent_id":"u-manager","prompt":"Summarize last week","recurrence":"weekly","timezone":"Asia/Shanghai","first_run_at":"2026-11-02T10:00:00+08:00"}`))
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/scheduled-tasks", strings.NewReader(`{"title":"Weekly review","agent_id":"u-manager","prompt":"Summarize last week","recurrence":"weekly","first_run_at":"2026-11-02T10:00:00+08:00"}`))
 	rec := httptest.NewRecorder()
 	h.Routes().ServeHTTP(rec, request)
 	if rec.Code != http.StatusCreated {
@@ -159,7 +159,7 @@ func TestManagerScheduleTriggersAtDueTimeAndCanComplete(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
 		t.Fatal(err)
 	}
-	if created.AgentID != "agent-manager" || created.Timezone != "Asia/Shanghai" {
+	if created.AgentID != "agent-manager" {
 		t.Fatalf("created=%+v", created)
 	}
 	if runs := svc.TriggerDue(context.Background()); len(runs) != 0 {

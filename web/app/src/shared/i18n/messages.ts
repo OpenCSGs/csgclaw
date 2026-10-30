@@ -15,8 +15,7 @@ export const messages = {
     scheduledTaskTextEnterHint: "Enter 换行 · 写完后点「发给 Manager」",
     scheduledTaskTextSend: "发给 Manager",
     scheduledTaskTextReviewHint: "将在新的 Manager 对话中回显时间、执行内容和执行者，你可以修改后保存。",
-    scheduledTaskTextMessage:
-      "请帮我创建定时任务：\n{text}\n我的时区：{timezone}。请先回显时间、执行内容和执行者，确认后保存。",
+    scheduledTaskTextMessage: "请帮我创建定时任务：\n{text}\n请先回显时间、执行内容和执行者，确认后保存。",
 
     modelConnectErrorKey: "Key 无效或与服务、区域不匹配，请检查后重试。",
     modelConnectErrorPermission: "当前 Key 没有该服务或模型的使用权限。",
@@ -3138,7 +3137,7 @@ export const messages = {
     scheduledTaskTextReviewHint:
       "A new Manager conversation will show the time, instructions, and executor for you to review and save.",
     scheduledTaskTextMessage:
-      "Please create a scheduled task:\n{text}\nMy timezone: {timezone}. Show the time, instructions, and executor for review before saving.",
+      "Please create a scheduled task:\n{text}\nShow the time, instructions, and executor for review before saving.",
 
     modelConnectErrorKey: "The Key is invalid or does not match this service and region.",
     modelConnectErrorPermission: "This Key does not have access to the service or model.",

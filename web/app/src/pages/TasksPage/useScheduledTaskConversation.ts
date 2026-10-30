@@ -51,7 +51,6 @@ export function useScheduledTaskConversation() {
         sender_id: sidebar.currentUserID,
         content: t("scheduledTaskTextMessage", {
           text: text.trim(),
-          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
         }),
         client_message_id: attempt.messageID,
         locale: sidebar.locale,

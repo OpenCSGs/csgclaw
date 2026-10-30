@@ -677,7 +677,6 @@ describe("TasksView", () => {
         prompt: "Write the updated report",
         recurrence: "weekly",
         next_run_at: new Date("2026-07-08T10:15:00").toISOString(),
-        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
         expires_at: new Date("2026-08-01T23:59:00").toISOString(),
         enabled: true,
       }),
@@ -714,7 +713,6 @@ describe("TasksView", () => {
         item.id,
         expect.objectContaining({
           next_run_at: new Date("2026-07-08T10:15:00").toISOString(),
-          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
           enabled: true,
         }),
       ),

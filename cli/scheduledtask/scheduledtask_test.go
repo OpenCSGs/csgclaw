@@ -26,14 +26,14 @@ func TestCreateManagerScheduleUsesRealAPI(t *testing.T) {
 		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 			t.Fatal(err)
 		}
-		for key, want := range map[string]any{"agent_id": "u-manager", "prompt": "Summarize work", "recurrence": "weekly", "timezone": "Asia/Shanghai", "first_run_at": "2026-11-02T10:00:00+08:00", "enabled": true} {
+		for key, want := range map[string]any{"agent_id": "u-manager", "prompt": "Summarize work", "recurrence": "weekly", "first_run_at": "2026-11-02T10:00:00+08:00", "enabled": true} {
 			if payload[key] != want {
 				t.Fatalf("%s = %#v, want %#v", key, payload[key], want)
 			}
 		}
 		return &http.Response{StatusCode: 201, Body: io.NopCloser(strings.NewReader(`{"id":"scheduled-task-1","agent_id":"u-manager"}`))}, nil
 	})}
-	err := NewCmd().Run(context.Background(), run, []string{"create", "--title", "Weekly summary", "--agent-id", "u-manager", "--prompt", "Summarize work", "--recurrence", "weekly", "--first-run-at", "2026-11-02T10:00:00+08:00", "--timezone", "Asia/Shanghai"}, command.GlobalOptions{Endpoint: "http://example.test"})
+	err := NewCmd().Run(context.Background(), run, []string{"create", "--title", "Weekly summary", "--agent-id", "u-manager", "--prompt", "Summarize work", "--recurrence", "weekly", "--first-run-at", "2026-11-02T10:00:00+08:00"}, command.GlobalOptions{Endpoint: "http://example.test"})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -182,6 +182,6 @@ func TestCompleteScheduledTaskCommands(t *testing.T) {
 		got := Complete(spec, spec.Name, []string{spec.Name, "scheduled-task", ""})
 		assertContainsAll(t, got, "context", "list", "create", "update")
 		got = Complete(spec, spec.Name, []string{spec.Name, "scheduled-task", "create", "--"})
-		assertContainsAll(t, got, "--title", "--agent-id", "--prompt", "--recurrence", "--first-run-at", "--timezone")
+		assertContainsAll(t, got, "--title", "--agent-id", "--prompt", "--recurrence", "--first-run-at")
 	}
 }

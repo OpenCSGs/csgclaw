@@ -83,7 +83,7 @@ func TestScheduledTaskChangesReachEventStream(t *testing.T) {
 		t.Fatalf("event stream ended before schedule notification: %v", scanner.Err())
 	}
 	const collection = "/api/v1/scheduled-tasks"
-	const body = `{"title":"Weekly report","agent_id":"agent-manager","prompt":"Summarize last week","recurrence":"weekly","first_run_at":"2026-11-02T10:00:00+08:00","timezone":"Asia/Shanghai"}`
+	const body = `{"title":"Weekly report","agent_id":"agent-manager","prompt":"Summarize last week","recurrence":"weekly","first_run_at":"2026-11-02T10:00:00+08:00"}`
 	call(http.MethodPost, collection, `{}`, http.StatusBadRequest, false)
 	call(http.MethodPost, collection, body, http.StatusCreated, true)
 	items := svc.List()

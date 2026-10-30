@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { scheduledTaskExecutors, scheduledTaskMention, normalizeScheduledTask } from "@/models/scheduledTasks";
+import { scheduledTaskExecutors, scheduledTaskMention } from "@/models/scheduledTasks";
 
 describe("scheduled task executors", () => {
   it("includes Manager and puts it before other executors without mutating the list", () => {
@@ -17,8 +17,5 @@ describe("scheduled task executors", () => {
     ["明天下午汇总报告", 8, null],
   ])("recognizes mentions at the caret: %s", (text, caret, want) => {
     expect(scheduledTaskMention(text, caret)).toEqual(want);
-  });
-  it("preserves the server's timezone for recurrence edits", () => {
-    expect(normalizeScheduledTask({ id: "task-1", timezone: "Asia/Shanghai" })?.timezone).toBe("Asia/Shanghai");
   });
 });
