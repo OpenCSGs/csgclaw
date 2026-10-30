@@ -18,7 +18,7 @@ describe("UI Lab directory", () => {
     await user.type(search, "missing-component");
     expect(nav.getByRole("status")).toHaveTextContent("未找到匹配组件");
     await user.clear(search);
-    expect(nav.getAllByRole("link")).toHaveLength(20);
+    expect(nav.getAllByRole("link")).toHaveLength(46);
   });
 
   it("closes the compact directory after selecting a destination", async () => {

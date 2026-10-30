@@ -1,3 +1,4 @@
+import { applicationNavItems } from "../ApplicationFoundations/registry";
 export const labGroups = [
   {
     label: "设计基础",
@@ -20,6 +21,16 @@ export const labGroups = [
       { id: "slider-foundations", label: "Sliders · 滑块", zh: "滑块" },
       { id: "tooltip-foundations", label: "Tooltips · 气泡提示", zh: "气泡提示" },
       { id: "progress-foundations", label: "Progress indicators · 进度指示器", zh: "进度指示器" },
+    ],
+  },
+  {
+    label: "应用组件",
+    items: [
+      { id: "tabs-foundations", label: "Tabs · 选项卡", zh: "选项卡" },
+      { id: "footer-foundations", label: "Section footers · 区块页脚", zh: "区块页脚" },
+      { id: "pagination-foundations", label: "Pagination · 分页", zh: "分页" },
+      { id: "steps-foundations", label: "Progress steps · 步骤进度", zh: "步骤进度" },
+      ...applicationNavItems,
     ],
   },
   {

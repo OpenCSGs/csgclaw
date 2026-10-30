@@ -1,0 +1,233 @@
+.foundation {
+  min-width: 0;
+  margin-block: var(--space-6);
+  padding: var(--space-5);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xl);
+  background: var(--panel);
+}
+.foundation > p {
+  color: var(--muted);
+  line-height: 1.6;
+}
+.foundation > a {
+  color: var(--primary);
+}
+.stage {
+  --button-font-family: "PingFang SC", sans-serif;
+  --button-font-weight: 500;
+  --primary-button-background: #3250bd;
+  --primary-button-hover-background: #223b99;
+  --on-primary: #fff;
+  --button-primary-border: #3250bd;
+  --button-primary-hover-border: #223b99;
+  --button-neutral-background: #fff;
+  --button-neutral-border: #d5d7da;
+  --button-neutral-text: #414651;
+  --button-neutral-hover-background: #fafafa;
+  --button-neutral-hover-border: #d5d7da;
+  --button-neutral-hover-text: #414651;
+  --button-tertiary-text: #535862;
+  --button-tertiary-hover-text: #414651;
+  --button-tertiary-hover-background: #fafafa;
+  --radius-md: 8px;
+  min-width: 0;
+  margin-block: 24px;
+  padding: 24px;
+  border: 1px solid #e9eaeb;
+  border-radius: 8px;
+  background: white;
+  color: #414651;
+  font:
+    400 14px/20px "PingFang SC",
+    sans-serif;
+}
+.stage p {
+  color: #535862;
+}
+.tabs {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  border-bottom: 1px solid #e9eaeb;
+}
+.tab {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  padding: 0 4px 12px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: #717680;
+  font:
+    500 14px/20px "PingFang SC",
+    sans-serif;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.tab[data-state="active"] {
+  border-bottom-color: #3250bd;
+  color: #223b99;
+}
+.tab:hover {
+  color: #223b99;
+}
+.tab:focus-visible,
+.number:focus-visible {
+  outline: 2px solid #3250bd;
+  outline-offset: -2px;
+}
+.badge {
+  padding: 2px 8px;
+  border: 1px solid #e9eaeb;
+  border-radius: 9999px;
+  background: #fafafa;
+  color: #414651;
+  font:
+    400 12px/18px "PingFang SC",
+    sans-serif;
+}
+.tab[data-state="active"] .badge {
+  background: #ced8ff;
+  border-color: #99afff;
+  color: #223b99;
+}
+.tabPanel {
+  padding-top: 20px;
+}
+.field {
+  display: grid;
+  gap: 8px;
+  max-width: 360px;
+  margin-bottom: 24px;
+}
+.field input {
+  width: 100%;
+  min-width: 0;
+  padding: 10px 14px;
+  border: 1px solid #d5d7da;
+  border-radius: 8px;
+  background: white;
+  color: #414651;
+  font: inherit;
+}
+.footer {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  flex-wrap: wrap;
+  border-top: 1px solid #e9eaeb;
+  padding-top: 20px;
+}
+.actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.footer .actions {
+  margin-left: auto;
+}
+.stage .action {
+  font-family: "PingFang SC", sans-serif;
+  font-weight: 500;
+}
+.choice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.records {
+  padding-left: 20px;
+  line-height: 2;
+}
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  border-top: 1px solid #e9eaeb;
+  padding-top: 20px;
+}
+.numbers {
+  display: flex;
+  gap: 2px;
+}
+.number {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #717680;
+  font: inherit;
+  cursor: pointer;
+}
+.number[data-circle="true"] {
+  border-radius: 9999px;
+}
+.number:hover,
+.number[aria-current="page"] {
+  background: #fafafa;
+  color: #414651;
+}
+.steps {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  padding: 0;
+  margin: 0 0 24px;
+  list-style: none;
+}
+.step {
+  display: flex;
+  flex-direction: column;
+  border-top: 4px solid #e9eaeb;
+  padding-top: 12px;
+}
+.step strong {
+  font-weight: 500;
+}
+.step span {
+  color: #535862;
+}
+.step small {
+  margin-top: 8px;
+  color: #717680;
+}
+.step[data-state="current"],
+.step[data-state="complete"] {
+  border-color: #3250bd;
+}
+.step[data-state="current"] strong {
+  color: #223b99;
+}
+.step[data-state="current"] span {
+  color: #3250bd;
+}
+@media (max-width: 700px) {
+  .stage {
+    padding: 16px;
+  }
+  .steps {
+    grid-template-columns: 1fr;
+    gap: 24px;
+  }
+  .pagination {
+    justify-content: center;
+  }
+  .numbers {
+    order: -1;
+    width: 100%;
+    justify-content: center;
+  }
+  .pagination > button:last-child {
+    margin-left: auto;
+  }
+}

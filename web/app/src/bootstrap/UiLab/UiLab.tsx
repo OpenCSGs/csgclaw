@@ -1,3 +1,12 @@
+import { UiLabPanel } from "./UiLabPanel";
+import { ApplicationFoundations } from "./ApplicationFoundations/ApplicationFoundations";
+import { applicationSections } from "./ApplicationFoundations/registry";
+import {
+  TabsFoundations,
+  FooterFoundations,
+  PaginationFoundations,
+  StepsFoundations,
+} from "./NavigationFoundations/NavigationFoundations";
 import { LabLocaleProvider, useLabTranslation } from "./LabLocale";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { Plus } from "lucide-react";
@@ -126,28 +135,28 @@ function UiLabContent() {
             <p className={styles.intro}>
               {labText("Figma 原始变量名及静态参考文案保留原文；切换语言会保留当前页面和已编辑内容。")}
             </p>
-            <div className={styles.panel} hidden={active !== "design-foundations"}>
+            <UiLabPanel id="design-foundations" active={active}>
               <ColorFoundations />
-            </div>
-            <div className={styles.panel} hidden={active !== "typography-foundations"}>
+            </UiLabPanel>
+            <UiLabPanel id="typography-foundations" active={active}>
               <TypographyFoundations />
-            </div>
-            <div className={styles.panel} hidden={active !== "shadow-foundations"}>
+            </UiLabPanel>
+            <UiLabPanel id="shadow-foundations" active={active}>
               <ShadowFoundations />
-            </div>
-            <div className={styles.panel} hidden={active !== "layout-foundations"}>
+            </UiLabPanel>
+            <UiLabPanel id="layout-foundations" active={active}>
               <LayoutFoundations />
-            </div>
-            <div className={styles.panel} hidden={active !== "button-foundations"}>
+            </UiLabPanel>
+            <UiLabPanel id="button-foundations" active={active}>
               <ButtonFoundations />
-            </div>
-            <div className={styles.panel} hidden={active !== "tag-foundations"}>
+            </UiLabPanel>
+            <UiLabPanel id="tag-foundations" active={active}>
               <TagFoundations />
-            </div>
-            <div className={styles.panel} hidden={active !== "input-foundations"}>
+            </UiLabPanel>
+            <UiLabPanel id="input-foundations" active={active}>
               <InputFoundations />
-            </div>
-            <div className={styles.panel} hidden={active !== "dropdown-foundations"}>
+            </UiLabPanel>
+            <UiLabPanel id="dropdown-foundations" active={active}>
               <section className={styles.card} id="dropdown-foundations" aria-labelledby="dropdown-title">
                 <h2 id="dropdown-title">{labText("Dropdowns · 下拉菜单")}</h2>
                 <p lang={locale === "zh" ? "zh-CN" : "en"}>
@@ -157,23 +166,40 @@ function UiLabContent() {
                 </p>
                 <p className={styles.intro}>{labText("组件说明已收录，Figma 设计示例与交互演示待补充。")}</p>
               </section>
-            </div>
-            <div className={styles.panel} hidden={active !== "toggle-foundations"}>
+            </UiLabPanel>
+            <UiLabPanel id="toggle-foundations" active={active}>
               <ToggleFoundations />
-            </div>
-            <div className={styles.panel} hidden={active !== "checkbox-foundations"}>
+            </UiLabPanel>
+            <UiLabPanel id="checkbox-foundations" active={active}>
               <CheckboxFoundations />
-            </div>
-            <div className={styles.panel} hidden={active !== "tooltip-foundations"}>
+            </UiLabPanel>
+            <UiLabPanel id="tooltip-foundations" active={active}>
               <TooltipFoundations />
-            </div>
-            <div className={styles.panel} hidden={active !== "progress-foundations"}>
+            </UiLabPanel>
+            <UiLabPanel id="progress-foundations" active={active}>
               <ProgressFoundations />
-            </div>
-            <div className={styles.panel} hidden={active !== "slider-foundations"}>
+            </UiLabPanel>
+            <UiLabPanel id="slider-foundations" active={active}>
               <SliderFoundations />
-            </div>
-            <div className={styles.panel} hidden={active !== "token-consumption"}>
+            </UiLabPanel>
+            <UiLabPanel id="tabs-foundations" active={active}>
+              <TabsFoundations />
+            </UiLabPanel>
+            <UiLabPanel id="footer-foundations" active={active}>
+              <FooterFoundations />
+            </UiLabPanel>
+            <UiLabPanel id="pagination-foundations" active={active}>
+              <PaginationFoundations />
+            </UiLabPanel>
+            <UiLabPanel id="steps-foundations" active={active}>
+              <StepsFoundations />
+            </UiLabPanel>
+            {applicationSections.map(({ key }) => (
+              <UiLabPanel key={key} id={`${key}-foundations`} active={active}>
+                <ApplicationFoundations kind={key} />
+              </UiLabPanel>
+            ))}
+            <UiLabPanel id="token-consumption" active={active}>
               <section className={styles.card} id="token-consumption">
                 <h2>{labText("Turn token consumption")}</h2>
                 {["qwen3.7-plus", "auto", "a-very-long-selected-model-name-for-narrow-screen-layout"].map((model) => (
@@ -203,8 +229,8 @@ function UiLabContent() {
                   </div>
                 ))}
               </section>
-            </div>
-            <div className={styles.panel} hidden={active !== "secondary-gray"}>
+            </UiLabPanel>
+            <UiLabPanel id="secondary-gray" active={active}>
               <section className={styles.card} id="secondary-gray">
                 <h2>{labText("Secondary gray · Figma")}</h2>
                 <p className={styles.intro}>
@@ -231,8 +257,8 @@ function UiLabContent() {
                   </div>
                 ))}
               </section>
-            </div>
-            <div className={styles.panel} hidden={active !== "buttons-and-fields"}>
+            </UiLabPanel>
+            <UiLabPanel id="buttons-and-fields" active={active}>
               <section className={styles.card} id="buttons-and-fields">
                 <h2>{labText("Buttons and fields")}</h2>
                 <div className={styles.row}>
@@ -270,8 +296,8 @@ function UiLabContent() {
                   )}
                 />
               </section>
-            </div>
-            <div className={styles.panel} hidden={active !== "workspace-boundary"}>
+            </UiLabPanel>
+            <UiLabPanel id="workspace-boundary" active={active}>
               <section className={styles.card} id="workspace-boundary">
                 <h2>{labText("Workspace style boundary")}</h2>
                 <div className="profile-section">
@@ -305,8 +331,8 @@ function UiLabContent() {
                   onDelete={() => setShowDemoConversation(false)}
                 />
               </section>
-            </div>
-            <div className={styles.panel} hidden={active !== "selection-controls"}>
+            </UiLabPanel>
+            <UiLabPanel id="selection-controls" active={active}>
               <section className={styles.card} id="selection-controls">
                 <h2>{labText("Selection controls")}</h2>
                 <div className={styles.grid}>
@@ -361,8 +387,8 @@ function UiLabContent() {
                   {labText("Clear selection")}
                 </Button>
               </section>
-            </div>
-            <div className={styles.panel} hidden={active !== "reasoning-effort"}>
+            </UiLabPanel>
+            <UiLabPanel id="reasoning-effort" active={active}>
               <section className={styles.card} id="reasoning-effort">
                 <h2>{labText("Reasoning effort")}</h2>
                 <div className={styles.reasoningPreview}>
@@ -375,8 +401,8 @@ function UiLabContent() {
                   />
                 </div>
               </section>
-            </div>
-            <div className={styles.panel} hidden={active !== "dialogs-and-empty"}>
+            </UiLabPanel>
+            <UiLabPanel id="dialogs-and-empty" active={active}>
               <section className={styles.card} id="dialogs-and-empty">
                 <PanelHeader>
                   <h2>{labText("Dialog and empty state")}</h2>
@@ -388,7 +414,7 @@ function UiLabContent() {
                   actions={<Button variant="secondaryGray">{labText("Add item")}</Button>}
                 />
               </section>
-            </div>
+            </UiLabPanel>
             <DialogRoot open={dialog} onOpenChange={setDialog}>
               <DialogContent aria-describedby={undefined}>
                 <DialogHeader>

@@ -1,0 +1,14 @@
+<svg preserveAspectRatio="none" overflow="visible" style="display: block;" width="16" height="133" viewBox="0 0 16 133" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="Chart bar">
+<g clip-path="url(#clip0_0_160)">
+<path id="Series 1" d="M0 0H16V133H0V0Z" fill="#E9EAEB"/>
+<path id="Series 2" d="M0 38.7917H16V133H0V38.7917Z" fill="#4D6AD6"/>
+<path id="Series 3" d="M0 83.125H16V133H0V83.125Z" fill="#223B99"/>
+</g>
+</g>
+<defs>
+<clipPath id="clip0_0_160">
+<path d="M0 4C0 1.79086 1.79086 0 4 0H12C14.2091 0 16 1.79086 16 4V133H0V4Z" fill="white"/>
+</clipPath>
+</defs>
+</svg>
