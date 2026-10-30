@@ -301,6 +301,7 @@ func (h *Handler) registerCoreRoutes(router chi.Router) {
 			})
 		})
 		r.Route("/scheduled-tasks", func(r chi.Router) {
+			r.Get("/context", h.handleScheduledTaskContext)
 			r.Get("/", h.listScheduledTasks)
 			r.Post("/", h.createScheduledTask)
 			r.Route("/{scheduled_task_id}", func(r chi.Router) {

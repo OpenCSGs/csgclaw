@@ -1,5 +1,5 @@
 import type { Dispatch, SetStateAction } from "react";
-import { Select } from "@/components/ui";
+import { Combobox, Select } from "@/components/ui";
 import { classNames } from "@/shared/lib/classNames";
 import { TASK_TITLE_MAX_LENGTH } from "./taskDialogTypes";
 import styles from "./TasksView.module.css";
@@ -43,7 +43,7 @@ export function ScheduledTaskFormFields({
       </label>
       <label className={classNames("field", styles.taskCreateField)} data-invalid={errors.agentID ? true : undefined}>
         <span>{t("scheduledTaskAgentLabel")}</span>
-        <Select
+        <Combobox
           value={draft.agentID}
           onValueChange={(agentID) => {
             onChange((current) => ({ ...current, agentID }));
@@ -52,6 +52,8 @@ export function ScheduledTaskFormFields({
           options={scheduledAgentOptions}
           placeholder={t("scheduledTaskAgentPlaceholder")}
           triggerProps={{ "aria-label": t("scheduledTaskAgentLabel") }}
+          searchPlaceholder={t("scheduledTaskAgentPlaceholder")}
+          emptyLabel={t("scheduledTaskExecutorEmpty")}
         />
         {errors.agentID ? <span className="form-error">{errors.agentID}</span> : null}
       </label>

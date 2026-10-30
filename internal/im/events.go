@@ -28,6 +28,7 @@ const (
 	EventTypeTeamCreated              = "team.created"
 	EventTypeTeamUpdated              = "team.updated"
 	EventTypeTeamDeleted              = "team.deleted"
+	EventTypeScheduledTaskChanged     = "scheduled_task.changed"
 	EventTypeUpgradeStatusChanged     = "upgrade.status_changed"
 )
 

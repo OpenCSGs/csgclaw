@@ -1,3 +1,5 @@
+import type { AgentLike } from "@/models/agents";
+
 export type ScheduledTaskRecurrence = "once" | "daily" | "weekly" | "monthly";
 
 export type WorkspaceScheduledTask = {
@@ -6,6 +8,7 @@ export type WorkspaceScheduledTask = {
   agent_id: string;
   agent_name?: string;
   agent_state?: string;
+  timezone?: string;
   prompt: string;
   recurrence: ScheduledTaskRecurrence;
   enabled: boolean;
@@ -63,6 +66,7 @@ export function normalizeScheduledTask(input: unknown): WorkspaceScheduledTask |
     agent_id: text(item.agent_id),
     agent_name: text(item.agent_name),
     agent_state: text(item.agent_state),
+    timezone: text(item.timezone),
     prompt: text(item.prompt),
     recurrence: normalizeRecurrence(item.recurrence),
     enabled: booleanValue(item.enabled, true),
@@ -128,4 +132,21 @@ function timeText(value: unknown): string {
 
 function booleanValue(value: unknown, fallback: boolean): boolean {
   return typeof value === "boolean" ? value : fallback;
+}
+
+export function scheduledTaskExecutors(agents: readonly AgentLike[]): AgentLike[] {
+  return agents
+    .filter((agent) => String(agent.id || "").trim())
+    .slice()
+    .sort(
+      (a, b) =>
+        Number(b.role === "manager") - Number(a.role === "manager") || executorName(a).localeCompare(executorName(b)),
+    );
+}
+export function executorName(agent: AgentLike): string {
+  return String(agent.name || agent.user_name || agent.id || "").trim();
+}
+export function scheduledTaskMention(text: string, caret: number) {
+  const match = /@([^\s@]*)$/.exec(text.slice(0, caret));
+  return match ? { query: match[1], start: caret - match[0].length, end: caret } : null;
 }

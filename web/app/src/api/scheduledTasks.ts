@@ -16,6 +16,7 @@ export type CreateScheduledTaskPayload = {
   agent_id: string;
   prompt: string;
   recurrence: ScheduledTaskRecurrence;
+  timezone?: string;
   first_run_at: string;
   expires_at?: string;
   enabled?: boolean;
@@ -27,6 +28,7 @@ export type UpdateScheduledTaskPayload = Partial<{
   prompt: string;
   recurrence: ScheduledTaskRecurrence;
   next_run_at: string;
+  timezone: string;
   expires_at: string | null;
   enabled: boolean;
 }>;

@@ -1773,16 +1773,16 @@ func TestUsageIncludesTopLevelCommandIndex(t *testing.T) {
 	got := stderr.String()
 	for _, want := range []string{
 		"Available Commands:",
-		"agent        Manage agents",
-		"model        Manage model providers.",
-		"participant  Manage channel participants.",
-		"pt           Manage channel participants.",
-		"room         Manage IM rooms",
-		"member       Manage IM room members",
-		"task         Manage tasks across rooms, teams, and agents.",
-		"team         Manage agent teams.",
-		"user         Manage IM users",
-		"completion   Generate shell completion scripts.",
+		"agent           Manage agents",
+		"model           Manage model providers.",
+		"participant     Manage channel participants.",
+		"pt              Manage channel participants.",
+		"room            Manage IM rooms",
+		"member          Manage IM room members",
+		"task            Manage tasks across rooms, teams, and agents.",
+		"team            Manage agent teams.",
+		"user            Manage IM users",
+		"completion      Generate shell completion scripts.",
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("usage = %q, want substring %q", got, want)
@@ -1809,16 +1809,16 @@ func TestRootHelpIncludesAvailableCommands(t *testing.T) {
 	got := stderr.String()
 	for _, want := range []string{
 		"Available Commands:",
-		"agent        Manage agents",
-		"model        Manage model providers.",
-		"participant  Manage channel participants.",
-		"pt           Manage channel participants.",
-		"room         Manage IM rooms",
-		"member       Manage IM room members",
-		"task         Manage tasks across rooms, teams, and agents.",
-		"team         Manage agent teams.",
-		"user         Manage IM users",
-		"completion   Generate shell completion scripts.",
+		"agent           Manage agents",
+		"model           Manage model providers.",
+		"participant     Manage channel participants.",
+		"pt              Manage channel participants.",
+		"room            Manage IM rooms",
+		"member          Manage IM room members",
+		"task            Manage tasks across rooms, teams, and agents.",
+		"team            Manage agent teams.",
+		"user            Manage IM users",
+		"completion      Generate shell completion scripts.",
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("help = %q, want substring %q", got, want)
@@ -2182,7 +2182,7 @@ func TestExecuteStartIsRejected(t *testing.T) {
 	if !strings.Contains(err.Error(), `unknown command "start"`) {
 		t.Fatalf("Execute() error = %v, want unknown command start", err)
 	}
-	if !strings.Contains(stderr.String(), "  serve        Start the local HTTP server") {
+	if !strings.Contains(stderr.String(), "  serve           Start the local HTTP server") {
 		t.Fatalf("stderr = %q, want serve command in usage", stderr.String())
 	}
 }

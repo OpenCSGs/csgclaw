@@ -88,11 +88,15 @@ func (s *Service) CreateAgentTask(ctx context.Context, input CreateInput) (taskc
 	if err != nil {
 		return taskcore.Task{}, err
 	}
+	role := agent.RoleWorker
+	if agentID == agent.ManagerUserID {
+		role = agent.RoleManager
+	}
 	user, room, err := s.im.EnsureAgentUser(im.EnsureAgentUserRequest{
 		ID:          agentID,
 		Name:        name,
 		Description: description,
-		Role:        agent.RoleWorker,
+		Role:        role,
 	})
 	if err != nil {
 		return taskcore.Task{}, err
@@ -253,12 +257,15 @@ func renderInitialMessage(task taskcore.Task) string {
 	b.WriteString("\n\nClaim it with:\n")
 	b.WriteString("csgclaw-cli task claim --task ")
 	b.WriteString(task.ID)
-	b.WriteString(" --actor-id <worker_participant_id>")
+	b.WriteString(" --actor-id ")
+	b.WriteString(task.AssignedTo)
 	b.WriteString("\nIf blocked, claim it again when ready to resume.")
 	b.WriteString("\n\nWhen finished, update it with:\n")
 	b.WriteString("csgclaw-cli task update --task ")
 	b.WriteString(task.ID)
-	b.WriteString(" --actor-id <worker_participant_id> --status completed --result \"<summary>\"")
+	b.WriteString(" --actor-id ")
+	b.WriteString(task.AssignedTo)
+	b.WriteString(" --status completed --result \"<summary>\"")
 	return b.String()
 }
 
