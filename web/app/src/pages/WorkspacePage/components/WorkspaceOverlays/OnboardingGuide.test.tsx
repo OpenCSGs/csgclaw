@@ -3,8 +3,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { OnboardingGuide } from "./OnboardingGuide";
 import { openOnboardingGuide } from "@/shared/lib/onboardingGuide";
 import { GUIDE_ACKNOWLEDGED_KEY, GUIDE_REVISION } from "./onboardingGuidePersistence";
+import { THEME_STORAGE_KEY } from "@/shared/storage/keys";
 
-const state = vi.hoisted(() => ({ locale: "en", ready: true, version: "dev" as string | undefined }));
+const state = vi.hoisted(() => ({ locale: "en", ready: true, version: "dev" as string | undefined, desktop: false }));
+const desktopBridge = vi.hoisted(() => ({ setWindowChromeAppearance: vi.fn().mockResolvedValue(undefined) }));
+vi.mock("@/shared/platform/desktopBridge", () => ({
+  getDesktopBridge: () => (state.desktop ? desktopBridge : null),
+}));
 vi.mock("@/hooks/workspace", () => ({
   useWorkspaceControllerContext: () => ({
     ready: state.ready,
@@ -28,6 +33,36 @@ describe("OnboardingGuide", () => {
     state.locale = "en";
     state.ready = true;
     state.version = "dev";
+    state.desktop = false;
+    desktopBridge.setWindowChromeAppearance.mockReset().mockResolvedValue(undefined);
+  });
+
+  it("temporarily matches native controls to the guide without changing the theme preference", async () => {
+    state.desktop = true;
+    localStorage.setItem(THEME_STORAGE_KEY, "dark");
+    render(<OnboardingGuide />);
+    await screen.findByRole("dialog");
+    expect(desktopBridge.setWindowChromeAppearance).toHaveBeenLastCalledWith("onboarding");
+    fireEvent.click(screen.getByRole("button", { name: "Exit guide" }));
+    expect(desktopBridge.setWindowChromeAppearance).toHaveBeenLastCalledWith("default");
+    expect(localStorage.getItem(THEME_STORAGE_KEY)).toBe("dark");
+  });
+
+  it("restores native controls if the guide unmounts while open", async () => {
+    state.desktop = true;
+    const view = render(<OnboardingGuide />);
+    await screen.findByRole("dialog");
+    view.unmount();
+    expect(desktopBridge.setWindowChromeAppearance).toHaveBeenLastCalledWith("default");
+  });
+
+  it("can still close when the native appearance bridge fails", async () => {
+    state.desktop = true;
+    desktopBridge.setWindowChromeAppearance.mockRejectedValue(new Error("Unavailable"));
+    render(<OnboardingGuide />);
+    await screen.findByRole("dialog");
+    fireEvent.click(screen.getByRole("button", { name: "Exit guide" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
   it("does not acknowledge loading or initialization without a deliberate dismissal", async () => {

@@ -20,6 +20,7 @@ export const DesktopIPC = {
   showTurnNotification: "csgclaw:desktop:show-turn-notification",
   turnNotificationClick: "csgclaw:desktop:turn-notification-click",
   setThemeSource: "csgclaw:desktop:set-theme-source",
+  setWindowChromeAppearance: "csgclaw:desktop:set-window-chrome-appearance",
   setUpdateChannel: "csgclaw:desktop:set-update-channel",
   updateStatus: "csgclaw:desktop:update-status",
 } as const;
@@ -29,6 +30,7 @@ export type OAuthPurpose =
   | "github-connector"
   | "gitlab-connector";
 export type DesktopThemeSource = "system" | "light" | "dark";
+export type DesktopWindowChromeAppearance = "default" | "onboarding";
 export type DesktopUpdateChannel = "release" | "beta";
 
 export type DesktopRuntimeInfo = {
@@ -88,6 +90,9 @@ export type DesktopBridge = {
   showTurnNotification(input: DesktopTurnNotification): Promise<void>;
   onTurnNotificationClick(listener: (roomID: string) => void): () => void;
   setThemeSource(theme: DesktopThemeSource): Promise<void>;
+  setWindowChromeAppearance?(
+    appearance: DesktopWindowChromeAppearance,
+  ): Promise<void>;
   setUpdateChannel(channel: DesktopUpdateChannel): Promise<DesktopUpdateStatus>;
   onUpdateStatus(listener: (status: DesktopUpdateStatus) => void): () => void;
 };
