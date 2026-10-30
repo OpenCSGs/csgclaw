@@ -179,7 +179,7 @@ var (
 )
 
 type Service struct {
-	agentState       func(string) string
+	agentState       func(User) string
 	diagnosticsOnce  sync.Once
 	diagnostics      *diagnostics.Store
 	mu               sync.RWMutex

@@ -1182,6 +1182,10 @@ func (h *Handler) handleAgentByID(w http.ResponseWriter, r *http.Request) {
 			writeAgentOperationError(w, err, http.StatusBadRequest)
 			return
 		}
+		id = agent.CanonicalID(id)
+		// Resolve a verified legacy identity before deletion removes the agent
+		// record. Participant-backed identities are retired by DeleteAgent.
+		legacyUserID := h.legacyAgentChatUserID(id)
 		var err error
 		if h.participant != nil {
 			_, err = h.participant.DeleteAgent(r.Context(), id)
@@ -1192,8 +1196,8 @@ func (h *Handler) handleAgentByID(w http.ResponseWriter, r *http.Request) {
 			writeAgentOperationError(w, err, http.StatusBadRequest)
 			return
 		}
-		if h.im != nil {
-			if err := h.im.RetireAgentUser(id, id); err != nil {
+		if legacyUserID != "" {
+			if err := h.im.RetireAgentUser(legacyUserID, id); err != nil {
 				writeAgentOperationError(w, err, http.StatusInternalServerError)
 				return
 			}
@@ -1644,7 +1648,7 @@ func (h *Handler) handleCreateAgentWorker(w http.ResponseWriter, r *http.Request
 		return
 	}
 	createReq := agentCreateRequestFromAPI(req)
-	if h.im != nil {
+	if h.im != nil && !createReq.Replace {
 		if err := h.im.ValidateAgentUser(im.EnsureAgentUserRequest{ID: createReq.Spec.ID, Name: createReq.Spec.Name}); err != nil {
 			writeAgentOperationError(w, err, http.StatusBadRequest)
 			return
@@ -1666,6 +1670,16 @@ func (h *Handler) handleCreateAgentWorker(w http.ResponseWriter, r *http.Request
 			return
 		}
 		update := engineReplaceRequest(createReq, current)
+		if h.im != nil {
+			name := current.Spec.Name
+			if len(update.FieldMask) == 0 || agentUpdateIncludes(update, "name") {
+				name = update.Spec.Name
+			}
+			if err := h.im.ValidateAgentReplacement(current.ID, h.agentChatUserIDs(current.ID), name); err != nil {
+				writeAgentOperationError(w, err, http.StatusBadRequest)
+				return
+			}
+		}
 		created, err = agents.Recreate(ctx, current.ID, agentengine.AgentRecreateOptions{Update: &update})
 	} else {
 		created, err = agents.Create(ctx, engineCreateRequest(createReq))

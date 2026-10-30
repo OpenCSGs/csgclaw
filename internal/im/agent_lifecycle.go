@@ -19,6 +19,27 @@ func (s *Service) ValidateAgentUser(req EnsureAgentUserRequest) error {
 	return s.validateAgentUserLocked(canonicalIMUserID(req.ID), strings.TrimSpace(req.Name))
 }
 
+// ValidateAgentReplacement checks an existing runtime against its actual chat
+// identities. Runtime IDs and chat user IDs are separate namespaces.
+func (s *Service) ValidateAgentReplacement(agentID string, userIDs []string, name string) error {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	for _, user := range s.users {
+		if user.AgentState == "deleted" && user.AgentID != "" && canonicalIMUserID(user.AgentID) == canonicalIMUserID(agentID) {
+			return ErrAgentIdentityDeleted
+		}
+	}
+	for _, id := range userIDs {
+		if user, ok := s.users[id]; ok && user.AgentState == "deleted" {
+			return ErrAgentIdentityDeleted
+		}
+	}
+	if owner, ok := s.byName[strings.ToLower(strings.TrimSpace(name))]; ok && !slices.Contains(userIDs, owner) {
+		return fmt.Errorf("name %q already exists", name)
+	}
+	return nil
+}
+
 func (s *Service) validateAgentUserLocked(id, name string) error {
 	if user, ok := s.users[id]; ok && user.AgentState == "deleted" {
 		return ErrAgentIdentityDeleted
@@ -98,7 +119,7 @@ func (s *Service) appendAgentLifecycleEventLocked(room *Room, user User, key, tr
 
 // SetAgentStateLookup installs a read-only identity lookup. It must not call IM
 // methods: it runs while the IM read/write lock is held.
-func (s *Service) SetAgentStateLookup(lookup func(string) string) {
+func (s *Service) SetAgentStateLookup(lookup func(User) string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.agentState = lookup
@@ -112,7 +133,7 @@ func (s *Service) agentStateLocked(id string) string {
 		return "deleted"
 	}
 	if s.agentState != nil {
-		return s.agentState(user.ID)
+		return s.agentState(user)
 	}
 	return user.AgentState
 }
@@ -139,7 +160,9 @@ func (s *Service) hiddenAgentRoomLocked(room Room) bool {
 // removes memberships, and removes direct conversations only.
 func (s *Service) RetireAgentUser(id string, agentIDs ...string) error {
 	s.mu.Lock()
-	id = s.resolveUserIDLocked(id)
+	// The caller supplies a bound user ID. Never fall back to a display-name
+	// lookup: a missing identity must not retire a different user with that name.
+	id = canonicalIMUserID(id)
 	user, ok := s.users[id]
 	if !ok {
 		s.mu.Unlock()

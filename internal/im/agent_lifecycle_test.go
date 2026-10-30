@@ -110,7 +110,8 @@ func TestAgentArchiveHidesWithoutChangingMembershipOrManualArchive(t *testing.T)
 		{ID: "group", Members: []string{AdminUserID, ManagerUserID, "user-worker"}, Messages: []Message{{ID: "old", SenderID: "user-worker", Content: "result"}}},
 	}})
 	archived := true
-	s.SetAgentStateLookup(func(id string) string {
+	s.SetAgentStateLookup(func(user User) string {
+		id := user.ID
 		if id == "user-worker" && archived {
 			return "archived"
 		}
@@ -180,7 +181,8 @@ func TestAgentLifecycleNoticesPersistOnceWithoutDispatchingAgents(t *testing.T) 
 	if err := s.DeleteRoom("removed-group"); err != nil {
 		t.Fatal(err)
 	}
-	s.SetAgentStateLookup(func(id string) string {
+	s.SetAgentStateLookup(func(user User) string {
+		id := user.ID
 		if id == "user-worker" {
 			return "archived"
 		}
@@ -285,5 +287,36 @@ func TestAgentLifecycleNoticeSaveFailureDoesNotPublishOrChangeHistory(t *testing
 	group, _ = s.Room("group")
 	if len(group.Messages) != 1 {
 		t.Fatal("retry did not record the notice")
+	}
+}
+
+func TestRetireAgentUserDoesNotResolveMissingIDByName(t *testing.T) {
+	s := NewServiceFromBootstrap(Bootstrap{CurrentUserID: AdminUserID, Users: []User{
+		{ID: AdminUserID, Name: "admin"}, {ID: "user-other", Name: "user-missing", Role: "worker"},
+	}, Rooms: []Room{{ID: "group", Members: []string{AdminUserID, "user-other"}}}})
+	if err := s.RetireAgentUser("user-missing", "agent-executor"); err != nil {
+		t.Fatal(err)
+	}
+	user, _ := s.User("user-other")
+	room, _ := s.Room("group")
+	if user.AgentState != "" || !slices.Contains(room.Members, "user-other") {
+		t.Fatalf("retired display-name match: %+v %+v", user, room)
+	}
+}
+
+func TestValidateAgentReplacementRejectsDeletedBindingsAndRuntime(t *testing.T) {
+	s := NewServiceFromBootstrap(Bootstrap{Users: []User{
+		{ID: "user-old", Name: "worker", AgentState: "deleted", AgentID: "agent-old"},
+	}})
+	for _, tc := range []struct {
+		agentID string
+		userIDs []string
+	}{
+		{"agent-new", []string{"user-old"}},
+		{"agent-old", []string{"user-new"}},
+	} {
+		if err := s.ValidateAgentReplacement(tc.agentID, tc.userIDs, "worker"); !errors.Is(err, ErrAgentIdentityDeleted) {
+			t.Fatalf("replacement %s/%v error=%v", tc.agentID, tc.userIDs, err)
+		}
 	}
 }

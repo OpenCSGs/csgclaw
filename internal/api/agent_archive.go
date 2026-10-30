@@ -21,7 +21,7 @@ func (h *Handler) agentLifecycleState(id string) string {
 	if h == nil || h.agentEngine == nil {
 		return ""
 	}
-	id = h.runtimeAgentIDForBridgeID(id)
+	id = agent.CanonicalID(id)
 	if id == "" {
 		return ""
 	}
@@ -41,7 +41,7 @@ func (h *Handler) agentLifecycleState(id string) string {
 }
 func (h *Handler) configureAgentLifecycle() {
 	if h.im != nil {
-		h.im.SetAgentStateLookup(h.agentLifecycleState)
+		h.im.SetAgentStateLookup(h.chatUserLifecycleState)
 	}
 }
 func (h *Handler) availableScheduledAgent(id string) error {
@@ -76,6 +76,15 @@ func (h *Handler) setAgentArchived(w http.ResponseWriter, r *http.Request, archi
 		writeAgentGetError(w, lookupErr)
 		return
 	}
+	userIDs := h.agentChatUserIDs(id)
+	previousUserStates := map[string]string{}
+	if h.im != nil && !archived {
+		for _, userID := range userIDs {
+			if user, ok := h.im.User(userID); ok {
+				previousUserStates[userID] = user.AgentState
+			}
+		}
+	}
 	item, err := h.agentEngine.Agents().SetArchived(r.Context(), id, archived)
 	// Even a runtime stop failure can leave the durable archive flag in place.
 	// Schedules and UI must reflect that disabled state, and retries are safe.
@@ -91,7 +100,13 @@ func (h *Handler) setAgentArchived(w http.ResponseWriter, r *http.Request, archi
 			}
 		}
 		if h.roomTaskSvc != nil {
-			actors := []string{id, agent.ParticipantIDForAgent("", id)}
+			actors := []string{id}
+			for _, userID := range userIDs {
+				actors = append(actors, userID)
+			}
+			if legacyID := h.legacyAgentChatUserID(id); legacyID != "" {
+				actors = append(actors, agent.ParticipantIDForAgent("", id))
+			}
 			if h.participant != nil {
 				for _, p := range h.participant.List(participant.ListOptions{AgentID: id}) {
 					actors = append(actors, p.ID, p.ChannelUserRef)
@@ -103,19 +118,25 @@ func (h *Handler) setAgentArchived(w http.ResponseWriter, r *http.Request, archi
 		}
 	}
 	if h.im != nil {
-		if archived && h.agentLifecycleState(id) == "archived" {
-			current, getErr := h.agentEngine.Agents().Get(context.WithoutCancel(r.Context()), id, agentengine.AgentGetOptions{})
-			if getErr == nil && current.ArchivedAt != nil {
-				if noticeErr := h.im.RecordAgentLifecycle(id, im.AgentArchivedEventKey, current.ArchivedAt.Format(time.RFC3339Nano)); noticeErr != nil && err == nil {
+		for _, userID := range userIDs {
+			user, exists := h.im.User(userID)
+			if !exists || user.ID != userID {
+				continue
+			}
+			if archived && user.AgentState == "archived" {
+				current, getErr := h.agentEngine.Agents().Get(context.WithoutCancel(r.Context()), id, agentengine.AgentGetOptions{})
+				if getErr == nil && current.ArchivedAt != nil {
+					if noticeErr := h.im.RecordAgentLifecycle(userID, im.AgentArchivedEventKey, current.ArchivedAt.Format(time.RFC3339Nano)); noticeErr != nil && err == nil {
+						err = noticeErr
+					}
+				}
+			} else if !archived && err == nil && previous.ArchivedAt != nil && item.ArchivedAt == nil && previousUserStates[userID] == "archived" {
+				if noticeErr := h.im.RecordAgentLifecycle(userID, im.AgentRestoredEventKey, previous.ArchivedAt.Format(time.RFC3339Nano)); noticeErr != nil {
 					err = noticeErr
 				}
 			}
-		} else if !archived && err == nil && previous.ArchivedAt != nil && item.ArchivedAt == nil {
-			if noticeErr := h.im.RecordAgentLifecycle(id, im.AgentRestoredEventKey, previous.ArchivedAt.Format(time.RFC3339Nano)); noticeErr != nil {
-				err = noticeErr
-			}
+			h.im.PublishAgentState(userID)
 		}
-		h.im.PublishAgentState(id)
 	}
 	if err != nil {
 		writeAgentOperationError(w, err, http.StatusBadRequest)
@@ -141,7 +162,13 @@ func (h *Handler) handleAgentArchiveImpact(w http.ResponseWriter, r *http.Reques
 		}
 	}
 	if h.im != nil {
-		impact.Rooms = len(h.im.RoomIDsForMember(id))
+		rooms := map[string]struct{}{}
+		for _, userID := range h.agentChatUserIDs(id) {
+			for _, roomID := range h.im.RoomIDsForMember(userID) {
+				rooms[roomID] = struct{}{}
+			}
+		}
+		impact.Rooms = len(rooms)
 	}
 	if h.scheduledTaskSvc != nil {
 		for _, item := range h.scheduledTaskSvc.List() {
