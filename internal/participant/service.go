@@ -80,6 +80,20 @@ func (s *Service) Create(ctx context.Context, req CreateRequest) (apitypes.Parti
 	if _, ok := s.store.Get(normalized.Channel, normalized.ID); ok {
 		return apitypes.Participant{}, fmt.Errorf("participant %s:%s already exists", normalized.Channel, normalized.ID)
 	}
+	if normalized.Channel == ChannelCSGClaw && s.im != nil {
+		if err := s.im.ValidateAgentUser(im.EnsureAgentUserRequest{ID: normalized.ChannelUser.Ref, Name: normalized.Name}); err != nil {
+			return apitypes.Participant{}, err
+		}
+	}
+	if normalized.Type == TypeAgent && normalized.AgentBinding.Mode == BindingModeCreate && s.im != nil {
+		agentID := normalized.AgentBinding.AgentID
+		if agentID == "" {
+			agentID = defaultAgentID(normalized.ID)
+		}
+		if err := s.im.ValidateAgentUser(im.EnsureAgentUserRequest{ID: agentID}); err != nil {
+			return apitypes.Participant{}, err
+		}
+	}
 
 	if normalized.Type == TypeAgent {
 		agentID, err := s.ensureAgentBinding(ctx, normalized)
@@ -477,6 +491,11 @@ func (s *Service) Delete(ctx context.Context, channel, id string, opts DeleteOpt
 		if s.agents == nil {
 			return apitypes.Participant{}, false, fmt.Errorf("agent service is required")
 		}
+		if selected, err := s.agents.Get(ctx, existing.AgentID, agentengine.AgentGetOptions{}); err != nil {
+			return apitypes.Participant{}, false, err
+		} else if selected.ArchivedAt == nil {
+			return apitypes.Participant{}, false, fmt.Errorf("archive the agent before deleting it")
+		}
 		for _, item := range s.store.List(ListOptions{AgentID: existing.AgentID}) {
 			if item.Channel == existing.Channel && item.ID == existing.ID {
 				continue
@@ -626,7 +645,11 @@ func (s *Service) deleteUnreferencedCSGClawParticipantUser(deleted apitypes.Part
 			return nil
 		}
 	}
-	if err := s.im.DeleteUser(userID); err != nil {
+	deleteUser := s.im.DeleteUser
+	if deleted.Type == TypeAgent {
+		deleteUser = func(id string) error { return s.im.RetireAgentUser(id, deleted.AgentID) }
+	}
+	if err := deleteUser(userID); err != nil {
 		if strings.Contains(err.Error(), "not found") {
 			return nil
 		}

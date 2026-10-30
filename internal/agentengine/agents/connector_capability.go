@@ -38,8 +38,8 @@ func (s *Controller) AuthorizesAgentAccessToken(agentID, token string) bool {
 	if expected == "" || subtle.ConstantTimeCompare([]byte(strings.TrimSpace(token)), []byte(expected)) != 1 {
 		return false
 	}
-	_, ok := s.agentSnapshot(agentID)
-	return ok
+	selected, ok := s.agentSnapshot(agentID)
+	return ok && selected.ArchivedAt == nil
 }
 
 // AgentIDForAccessToken authenticates a runtime's platform credential.

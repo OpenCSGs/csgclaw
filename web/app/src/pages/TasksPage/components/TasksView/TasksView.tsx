@@ -718,7 +718,10 @@ export function TasksView({
                               <Button
                                 variant="secondaryGray"
                                 size="sm"
-                                disabled={scheduledTaskActionID === selectedScheduledTask.id}
+                                disabled={
+                                  scheduledTaskActionID === selectedScheduledTask.id ||
+                                  Boolean(selectedScheduledTask.agent_state)
+                                }
                                 onClick={() =>
                                   onToggleScheduledTask(selectedScheduledTask.id, !selectedScheduledTask.enabled)
                                 }
@@ -733,7 +736,11 @@ export function TasksView({
                             <Button
                               variant="primary"
                               size="sm"
-                              disabled={scheduledTaskActionID === selectedScheduledTask.id || hasActiveGeneratedTask}
+                              disabled={
+                                scheduledTaskActionID === selectedScheduledTask.id ||
+                                hasActiveGeneratedTask ||
+                                Boolean(selectedScheduledTask.agent_state)
+                              }
                               onClick={() => onRunScheduledTask(selectedScheduledTask.id)}
                             >
                               <Play size={14} aria-hidden="true" />
@@ -750,6 +757,17 @@ export function TasksView({
                                   selectedScheduledTask.agent_id,
                                   agentNames,
                                   selectedScheduledTask.agent_name,
+                                )}
+                                {selectedScheduledTask.agent_state && (
+                                  <span>
+                                    {" "}
+                                    ·{" "}
+                                    {t(
+                                      selectedScheduledTask.agent_state === "archived"
+                                        ? "agentStateArchived"
+                                        : "agentStateDeleted",
+                                    )}
+                                  </span>
                                 )}
                               </dd>
                             </Tooltip>

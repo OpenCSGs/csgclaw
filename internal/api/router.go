@@ -34,6 +34,7 @@ func (h *Handler) registerCoreRoutes(router chi.Router) {
 			r.Get("/", h.listAgents)
 			r.Post("/", h.createAgent)
 			r.Route("/{id}", func(r chi.Router) {
+				r.Use(h.guardArchivedAgent)
 				r.Handle("/mcp-file-bridge/{server}", http.HandlerFunc(h.handleMCPFileBridge))
 				r.Get("/connectors/gitlab", h.handleAgentGitLabConnector)
 				r.Put("/connectors/gitlab/config", h.handleAgentGitLabConnectorConfig)
@@ -50,6 +51,9 @@ func (h *Handler) registerCoreRoutes(router chi.Router) {
 				r.Get("/", h.getAgent)
 				r.Patch("/", h.updateAgent)
 				r.Delete("/", h.deleteAgent)
+				r.Post("/archive", h.handleArchiveAgent)
+				r.Post("/restore", h.handleRestoreAgent)
+				r.Get("/archive-impact", h.handleAgentArchiveImpact)
 				r.Post("/start", h.startAgent)
 				r.Post("/stop", h.stopAgent)
 				r.Post("/bindings:apply", h.applyAgentBindings)

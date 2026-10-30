@@ -1389,3 +1389,38 @@
   color: var(--muted);
   font-size: 12px;
 }
+
+.archivedAgentName {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.archivedAgentAvatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 28px;
+  width: 28px;
+  height: 28px;
+  overflow: hidden;
+  border-radius: var(--radius-sm);
+  background: var(--panel-soft);
+}
+
+.archivedAgentAvatar :global(.agent-avatar-image) {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.archiveImpactList {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding-left: 20px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+}

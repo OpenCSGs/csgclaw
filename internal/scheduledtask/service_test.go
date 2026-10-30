@@ -3,6 +3,7 @@ package scheduledtask
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -462,4 +463,37 @@ func cloneState(input state) state {
 	out.Tasks = append([]Task(nil), input.Tasks...)
 	out.Runs = append([]Run(nil), input.Runs...)
 	return out
+}
+
+func TestArchivedAgentSchedulesStayPausedAndCannotRun(t *testing.T) {
+	now := time.Now()
+	svc := newTestService(t, now)
+	item, err := svc.Create(CreateInput{Title: "test", AgentID: "worker", Prompt: "run", Recurrence: RecurrenceDaily, FirstRunAt: now.Add(-time.Minute), Enabled: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	archived := true
+	svc.SetAgentCheck(func(string) error {
+		if archived {
+			return fmt.Errorf("archived")
+		}
+		return nil
+	})
+	if err = svc.DisableAgent(item.AgentID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = svc.RunNow(context.Background(), item.ID); err == nil {
+		t.Fatal("archived schedule ran")
+	}
+	enabled := true
+	if _, err = svc.Update(UpdateInput{ID: item.ID, Enabled: &enabled}); err == nil {
+		t.Fatal("enabled archived agent schedule")
+	}
+	archived = false
+	if svc.List()[0].Enabled {
+		t.Fatal("restore reenabled schedule")
+	}
+	if _, err = svc.Update(UpdateInput{ID: item.ID, Enabled: &enabled}); err != nil {
+		t.Fatal(err)
+	}
 }

@@ -10,6 +10,7 @@ import (
 	"csgclaw/internal/taskcore"
 	"fmt"
 	"strings"
+	"time"
 )
 
 type participantLookup interface {
@@ -207,6 +208,9 @@ func (s *Service) Update(input UpdateInput) (taskcore.Task, error) {
 func (s *Service) agentIdentity(agentID string) (string, string, error) {
 	if s != nil && s.agents != nil {
 		if got, err := s.agents.Get(context.Background(), agentID, agentengine.AgentGetOptions{}); err == nil {
+			if got.ArchivedAt != nil {
+				return "", "", fmt.Errorf("agent is archived")
+			}
 			return firstNonEmpty(strings.TrimSpace(got.Spec.Name), fallbackAgentName(agentID)), strings.TrimSpace(got.Spec.Description), nil
 		}
 		return "", "", fmt.Errorf("agent %q not found", agentID)
@@ -294,4 +298,24 @@ func firstNonEmpty(values ...string) string {
 		}
 	}
 	return ""
+}
+
+func (s *Service) CancelAgentTasks(agentID string) error {
+	for _, task := range s.List() {
+		if task.AssignmentID != agentID || task.Status == taskcore.StatusCompleted || task.Status == taskcore.StatusFailed || task.Status == taskcore.StatusCancelled {
+			continue
+		}
+		if err := s.core.Mutate(task.ID, func(a *taskcore.Snapshot, _ func() (string, error)) error {
+			if a.Root.Status == taskcore.StatusCompleted || a.Root.Status == taskcore.StatusFailed || a.Root.Status == taskcore.StatusCancelled {
+				return nil
+			}
+			a.Root.Status = taskcore.StatusCancelled
+			a.Root.Error = "agent archived"
+			a.Root.UpdatedAt = time.Now().UTC()
+			return nil
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
 }

@@ -86,6 +86,11 @@ func (c *Coordinator) Execution(ctx context.Context, id string) (func(), error) 
 // Mutation returns a reentrant context and exclusive lease. Both lock waiting
 // and draining respect cancellation; draining defaults to at most two minutes.
 func (c *Coordinator) Mutation(ctx context.Context, id string) (context.Context, func(), error) {
+	return c.MutationInterrupt(ctx, id, nil)
+}
+
+// MutationInterrupt closes admission before interrupting active work, then drains it.
+func (c *Coordinator) MutationInterrupt(ctx context.Context, id string, interrupt func()) (context.Context, func(), error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -114,6 +119,9 @@ func (c *Coordinator) Mutation(ctx context.Context, id string) (context.Context,
 	g.mu.Unlock()
 	var once sync.Once
 	release := func() { once.Do(func() { g.mu.Lock(); g.closed = false; g.mu.Unlock(); g.token <- struct{}{} }) }
+	if interrupt != nil {
+		interrupt()
+	}
 	timeout := c.DrainTimeout
 	if timeout <= 0 {
 		timeout = 2 * time.Minute

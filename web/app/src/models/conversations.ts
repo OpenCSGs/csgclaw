@@ -15,6 +15,7 @@ import { renderSlashCommandPreviewText } from "@/models/slashCommands";
 import type { WorkspaceTeam } from "@/models/tasks";
 import type { MessageAttachment } from "@/models/attachments";
 import { AgentActivityMsgTypes } from "@/shared/constants/messages";
+import { createTranslator } from "@/shared/i18n";
 
 export type LocaleCode = "zh" | "en" | string;
 export type TranslateFn = (key: string, params?: Record<string, string | number>) => string;
@@ -36,6 +37,9 @@ export type IMParticipantLike = {
 };
 
 export type IMUser = {
+  agent_id?: string | null;
+  agent_state?: "archived" | "deleted" | "";
+  deleted_at?: string | null;
   accent_hex?: string | null;
   avatar?: string | null;
   description?: string | null;
@@ -307,6 +311,11 @@ export function participantIDForLocalIdentity(id: string | null | undefined): st
 }
 
 function addUserIdentityAliases(usersById: UsersById, user: IMUser): void {
+  if (user.agent_id) {
+    for (const alias of localIdentityAliases(user.agent_id)) {
+      addUserAlias(usersById, alias, user);
+    }
+  }
   for (const alias of localIdentityAliases(user.id)) {
     addUserAlias(usersById, alias, user);
   }
@@ -572,6 +581,15 @@ export function latestThreadTimestamp(thread: ThreadView | null | undefined): nu
   return Number.isFinite(ms) ? ms : 0;
 }
 
+const localizedRoomEventKeys = new Set([
+  "room_created",
+  "room_members_added",
+  "room_members_removed",
+  "agent_archived",
+  "agent_restored",
+  "agent_deleted",
+]);
+
 export function formatEventMessage(
   message: IMMessage | null | undefined,
   usersById: UsersById,
@@ -579,6 +597,20 @@ export function formatEventMessage(
 ): string {
   if (!message) {
     return "";
+  }
+  const event = message.event;
+  if (event?.key && localizedRoomEventKeys.has(event.key)) {
+    const actor = userDisplayName(event.actor_id || message.sender_id, usersById);
+    const targets = (event.target_ids || [])
+      .map((id) => userDisplayName(id, usersById))
+      .filter(Boolean)
+      .join(isChineseLocale(locale) ? "、" : ", ");
+    if ((event.key.startsWith("room_") && !actor) || (event.key !== "room_created" && !targets)) {
+      return message.content || "";
+    }
+    // Persisted and SSE content may use the server's language. Render the
+    // structured event in the current UI language without changing its history.
+    return createTranslator(isChineseLocale(locale) ? "zh" : "en")(`systemEvents.${event.key}`, { actor, targets });
   }
   if (message.event?.key === "task_assigned") {
     return formatTaskAssignedEventMessage(message.event, usersById, locale);
@@ -669,11 +701,17 @@ export function agentMatchesUser(
     user_id?: string | null;
   } | null,
   user:
-    | { id?: string | null; name?: string | null; participants?: IMParticipantLike[] | null; user_id?: string | null }
+    | {
+        id?: string | null;
+        name?: string | null;
+        participants?: IMParticipantLike[] | null;
+        user_id?: string | null;
+        agent_state?: string;
+      }
     | null
     | undefined,
 ): boolean {
-  if (!agent || !user) {
+  if (!agent || !user || user.agent_state === "deleted") {
     return false;
   }
   if (agentIdentityMatchesUser(agent, user)) {
@@ -693,9 +731,12 @@ export function agentIdentityMatchesUser(
     participants?: IMParticipantLike[] | null;
     user_id?: string | null;
   } | null,
-  user: { id?: string | null; participants?: IMParticipantLike[] | null; user_id?: string | null } | null | undefined,
+  user:
+    | { id?: string | null; participants?: IMParticipantLike[] | null; user_id?: string | null; agent_state?: string }
+    | null
+    | undefined,
 ): boolean {
-  if (!agent || !user) {
+  if (!agent || !user || user.agent_state === "deleted") {
     return false;
   }
   const agentAliases = localEntityAliasSet([

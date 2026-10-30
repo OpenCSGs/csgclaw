@@ -144,6 +144,7 @@ func writeScheduledTaskError(w http.ResponseWriter, err error) {
 
 func apiScheduledTask(item scheduledtask.Task, presenter teamIdentityPresenter) apitypes.ScheduledTask {
 	return apitypes.ScheduledTask{
+		AgentState: presenter.agentState(item.AgentID),
 		ID:         item.ID,
 		Title:      item.Title,
 		AgentID:    item.AgentID,

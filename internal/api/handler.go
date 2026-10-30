@@ -44,6 +44,7 @@ import (
 	"net/http"
 	"os"
 	goruntime "runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -51,6 +52,7 @@ import (
 )
 
 type Handler struct {
+	agentArchiveMu             sync.Mutex
 	resourcesOnce              sync.Once
 	resources                  *conversationresource.Service
 	svc                        AgentRecords
@@ -209,6 +211,7 @@ type updateBootstrapConfigRequest struct {
 }
 
 type agentResponse struct {
+	ArchivedAt           *time.Time                         `json:"archived_at,omitempty"`
 	ID                   string                             `json:"id"`
 	Name                 string                             `json:"name"`
 	Description          string                             `json:"description,omitempty"`
@@ -248,6 +251,7 @@ func (r *agentResponse) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	*r = agentResponse{
+		ArchivedAt:       apiAgent.ArchivedAt,
 		ID:               apiAgent.ID,
 		Name:             apiAgent.Name,
 		Description:      apiAgent.Description,
@@ -705,6 +709,7 @@ func NewHandlerWithAuth(svc AgentServices, engine agentengine.Interface, imSvc *
 		serverNoAuth:      serverNoAuth,
 		upgradeApply:      upgrade.StartApplyHelper, workspace: svc.Workspace, agentModels: svc.Models, agentRuntime: svc.Runtime,
 	}
+	h.configureAgentLifecycle()
 	return h
 }
 
@@ -758,6 +763,7 @@ func (h *Handler) SetUserInputResponder(responder UserInputResponder) {
 func (h *Handler) SetAgentEngine(engine agentengine.Interface, bindings *agentsession.Store) {
 	if h != nil {
 		h.agentEngine = engine
+		h.configureAgentLifecycle()
 		h.sessionBindings = bindings
 		h.runtimeExtensionSourcesSet = false
 		h.configureRuntimeExtensionSources()
@@ -845,6 +851,10 @@ func (h *Handler) SetAgentTaskService(svc *agenttask.Service) {
 func (h *Handler) SetScheduledTaskService(svc *scheduledtask.Service) {
 	if h != nil {
 		h.scheduledTaskSvc = svc
+		if svc != nil {
+			svc.SetAgentCheck(h.availableScheduledAgent)
+			h.reconcileArchivedSchedules(svc)
+		}
 	}
 }
 
@@ -1078,10 +1088,14 @@ func (h *Handler) handleAgents(w http.ResponseWriter, r *http.Request) {
 	case http.MethodGet:
 		ctx, cancel := context.WithTimeout(r.Context(), agentRuntimeStatusTimeout)
 		defer cancel()
-		items, err := agents.List(ctx, agentengine.AgentListOptions{Reload: true, ProbeRuntime: true})
+		archived := r.URL.Query().Get("archived") == "true"
+		items, err := agents.List(ctx, agentengine.AgentListOptions{Reload: true, ProbeRuntime: !archived, IncludeArchived: archived})
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
+		}
+		if archived {
+			items = slices.DeleteFunc(items, func(item agentengine.Agent) bool { return item.ArchivedAt == nil })
 		}
 		if caller := appRequestAgentID(r); caller != "" {
 			public := []map[string]any{}
@@ -1158,6 +1172,20 @@ func (h *Handler) handleAgentByID(w http.ResponseWriter, r *http.Request) {
 		h.publishUpdatedAgentUser(serviceUpdated)
 		writeJSON(w, http.StatusOK, h.presentEngineAgentForRequest(r, updated))
 	case http.MethodDelete:
+		h.agentArchiveMu.Lock()
+		defer h.agentArchiveMu.Unlock()
+		if err := h.validateArchivedDelete(r, id); err != nil {
+			if agentengine.ErrorCodeOf(err) == agentengine.ErrorAgentNotFound {
+				writeAgentGetError(w, err)
+				return
+			}
+			writeAgentOperationError(w, err, http.StatusBadRequest)
+			return
+		}
+		id = agent.CanonicalID(id)
+		// Resolve a verified legacy identity before deletion removes the agent
+		// record. Participant-backed identities are retired by DeleteAgent.
+		legacyUserID := h.legacyAgentChatUserID(id)
 		var err error
 		if h.participant != nil {
 			_, err = h.participant.DeleteAgent(r.Context(), id)
@@ -1167,6 +1195,18 @@ func (h *Handler) handleAgentByID(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			writeAgentOperationError(w, err, http.StatusBadRequest)
 			return
+		}
+		if legacyUserID != "" {
+			if err := h.im.RetireAgentUser(legacyUserID, id); err != nil {
+				writeAgentOperationError(w, err, http.StatusInternalServerError)
+				return
+			}
+		}
+		if h.teamSvc != nil {
+			if err := h.teamSvc.RemoveAgent(id); err != nil {
+				writeAgentOperationError(w, err, http.StatusInternalServerError)
+				return
+			}
 		}
 		w.WriteHeader(http.StatusNoContent)
 	default:
@@ -1608,6 +1648,12 @@ func (h *Handler) handleCreateAgentWorker(w http.ResponseWriter, r *http.Request
 		return
 	}
 	createReq := agentCreateRequestFromAPI(req)
+	if h.im != nil && !createReq.Replace {
+		if err := h.im.ValidateAgentUser(im.EnsureAgentUserRequest{ID: createReq.Spec.ID, Name: createReq.Spec.Name}); err != nil {
+			writeAgentOperationError(w, err, http.StatusBadRequest)
+			return
+		}
+	}
 	if h.agentEngine == nil {
 		http.Error(w, "agent service is not configured", http.StatusServiceUnavailable)
 		return
@@ -1624,6 +1670,16 @@ func (h *Handler) handleCreateAgentWorker(w http.ResponseWriter, r *http.Request
 			return
 		}
 		update := engineReplaceRequest(createReq, current)
+		if h.im != nil {
+			name := current.Spec.Name
+			if len(update.FieldMask) == 0 || agentUpdateIncludes(update, "name") {
+				name = update.Spec.Name
+			}
+			if err := h.im.ValidateAgentReplacement(current.ID, h.agentChatUserIDs(current.ID), name); err != nil {
+				writeAgentOperationError(w, err, http.StatusBadRequest)
+				return
+			}
+		}
 		created, err = agents.Recreate(ctx, current.ID, agentengine.AgentRecreateOptions{Update: &update})
 	} else {
 		created, err = agents.Create(ctx, engineCreateRequest(createReq))
@@ -1650,6 +1706,10 @@ func writeAgentGetError(w http.ResponseWriter, err error) {
 }
 
 func writeAgentOperationErrorWithBillingURL(w http.ResponseWriter, err error, defaultStatus int, billingURL string) {
+	if errors.Is(err, im.ErrAgentIdentityDeleted) {
+		writeCodedAPIError(w, http.StatusConflict, "agent_identity_deleted", err.Error())
+		return
+	}
 	if errors.Is(err, agent.ErrHomeCleanup) {
 		writeJSON(w, http.StatusConflict, map[string]any{
 			"error": map[string]any{
@@ -2612,6 +2672,10 @@ func (h *Handler) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 	description := strings.TrimSpace(req.Description)
 	role := strings.TrimSpace(req.Role)
 	id = h.resolveCSGClawLocalUserID(id)
+	if err := h.im.ValidateAgentUser(im.EnsureAgentUserRequest{ID: id, Name: name}); err != nil {
+		writeAgentOperationError(w, err, http.StatusBadRequest)
+		return
+	}
 
 	if id == "" {
 		http.Error(w, "id is required", http.StatusBadRequest)
@@ -3591,6 +3655,7 @@ func presentAgent(item agent.Agent) agentResponse {
 	profile := profileResponseFromAgentView(av)
 	runtimeCfg := item.RuntimeConfig()
 	return agentResponse{
+		ArchivedAt:   item.ArchivedAt,
 		ID:           item.ID,
 		Name:         item.Name,
 		Description:  item.Description,

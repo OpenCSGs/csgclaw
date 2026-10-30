@@ -159,6 +159,7 @@ func serviceAgentFromEngine(item agentengine.Agent) agent.Agent {
 	profile.ProfileComplete = item.Status.Model.ProfileComplete
 	runtimeConfig := agentruntime.RuntimeConfig{Name: item.Spec.Runtime.Adapter, Sandboxed: item.Spec.Runtime.Sandboxed}.Normalized()
 	out := agent.Agent{
+		ArchivedAt:       item.ArchivedAt,
 		ID:               item.ID,
 		Name:             item.Spec.Name,
 		Description:      item.Spec.Description,

@@ -90,6 +90,7 @@ type persistedAgent struct {
 	Role               string                     `json:"role"`
 	Status             string                     `json:"status,omitempty"`
 	DesiredState       string                     `json:"desired_state,omitempty"`
+	ArchivedAt         *time.Time                 `json:"archived_at,omitempty"`
 	CreatedAt          time.Time                  `json:"created_at"`
 	UpdatedAt          time.Time                  `json:"updated_at,omitempty"`
 	Profile            AgentProfile               `json:"model_config,omitempty"`
@@ -158,6 +159,9 @@ func (a persistedAgent) MarshalJSON() ([]byte, error) {
 	}
 	if len(a.DetectionResults) > 0 {
 		out["detection_results"] = a.DetectionResults
+	}
+	if a.ArchivedAt != nil {
+		out["archived_at"] = a.ArchivedAt
 	}
 	if strings.TrimSpace(a.DesiredState) != "" {
 		out["desired_state"] = a.DesiredState
@@ -256,6 +260,7 @@ func newPersistedAgent(a Agent) persistedAgent {
 		RuntimeInitShell:   a.runtimeInitShell,
 		Role:               a.Role,
 		DesiredState:       a.DesiredState,
+		ArchivedAt:         a.ArchivedAt,
 		CreatedAt:          a.CreatedAt,
 		UpdatedAt:          updatedAt,
 		Profile:            ap,
@@ -333,6 +338,7 @@ func (a persistedAgent) toAgent() Agent {
 		Role:              a.Role,
 		Status:            status,
 		DesiredState:      a.DesiredState,
+		ArchivedAt:        a.ArchivedAt,
 		CreatedAt:         a.CreatedAt,
 		UpdatedAt:         a.UpdatedAt,
 		Profile:           a.ProfileSelector,

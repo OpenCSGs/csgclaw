@@ -27,6 +27,54 @@ function messageListProps(): ConversationMessageListProps {
 }
 
 describe("ConversationMessageList render isolation", () => {
+  it.each([
+    [
+      "agent_archived",
+      "Worker 因智能体归档已被移出协作空间",
+      "Worker was removed from the collaboration space because the agent was archived",
+    ],
+    ["agent_restored", "Worker 已恢复并加入协作空间", "Worker was restored and rejoined the collaboration space"],
+    [
+      "agent_deleted",
+      "Worker 因智能体删除已被移出协作空间",
+      "Worker was removed from the collaboration space because the agent was deleted",
+    ],
+  ])("renders %s as a centered system notice and updates it when the language changes", (key, zh, en) => {
+    const props = messageListProps();
+    const messages = [
+      {
+        id: `notice-${key}`,
+        sender_id: "admin",
+        kind: "event",
+        content: en,
+        event: { key, actor_id: "admin", target_ids: ["user-worker"] },
+      },
+    ];
+    const usersById = new Map(props.usersById).set("user-worker", { id: "user-worker", name: "Worker" });
+    const { rerender } = render(
+      <ConversationMessageList
+        {...props}
+        locale="zh"
+        usersById={usersById}
+        conversation={{ ...props.conversation, is_direct: false, messages }}
+        visibleMessages={messages}
+      />,
+    );
+    expect(screen.getByText(zh).closest(".message-event-row")).not.toBeNull();
+    expect(screen.queryByRole("button", { name: /profilePreview/ })).not.toBeInTheDocument();
+    rerender(
+      <ConversationMessageList
+        {...props}
+        locale="en"
+        usersById={usersById}
+        conversation={{ ...props.conversation, is_direct: false, messages }}
+        visibleMessages={messages}
+      />,
+    );
+    expect(screen.getByText(en).closest(".message-event-row")).not.toBeNull();
+    expect(screen.queryByText(zh)).not.toBeInTheDocument();
+  });
+
   it("keeps history unchanged during composer updates and invokes the latest event handlers", () => {
     const props = messageListProps();
     const renderMessageFooter = vi.fn(() => null);
