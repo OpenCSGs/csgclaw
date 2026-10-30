@@ -201,3 +201,18 @@ func TestWorkerInstructionsExplainClickableQuestionOutput(t *testing.T) {
 		}
 	}
 }
+
+func TestManagerScheduledTaskSkillIsEmbedded(t *testing.T) {
+	for _, name := range []string{"SKILL.md", "agents/openai.yaml"} {
+		if _, err := fs.ReadFile(FS(), path.Join(CodexManagerRoot, SkillsDirName, "scheduled-tasks", name)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	instructions, err := fs.ReadFile(FS(), path.Join(CodexManagerRoot, InstructionsDirName, "AGENTS.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(instructions), "skills/scheduled-tasks/SKILL.md") {
+		t.Fatal("missing scheduling route")
+	}
+}

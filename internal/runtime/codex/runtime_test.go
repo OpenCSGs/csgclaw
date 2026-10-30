@@ -2333,7 +2333,7 @@ func TestRuntimeCreateInstallsManagerTemplate(t *testing.T) {
 	}
 
 	skillsRoot := filepath.Join(root, agent.ManagerUserID, ".codex", "home", "skills")
-	for _, name := range []string{"agent-creator", "csgclaw-interactive-output-demo", "feishu"} {
+	for _, name := range []string{"agent-creator", "csgclaw-interactive-output-demo", "feishu", "scheduled-tasks"} {
 		if _, err := os.Stat(filepath.Join(skillsRoot, name, "SKILL.md")); err != nil {
 			t.Fatalf("manager template skill %q missing: %v", name, err)
 		}

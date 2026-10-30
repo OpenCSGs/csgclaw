@@ -96,6 +96,7 @@ func FullSpec() CommandSpec {
 			memberSpec(),
 			messageSpec(),
 			taskSpec(),
+			scheduledTaskSpec(),
 			teamSpec(),
 			completionSpec(),
 		},
@@ -115,6 +116,7 @@ func LiteSpec() CommandSpec {
 			memberSpec(),
 			messageSpec(),
 			taskSpec(),
+			scheduledTaskSpec(),
 			teamSpec(),
 			skillSpec(),
 			completionSpec(),
@@ -985,4 +987,14 @@ func safeFunctionName(program string) string {
 		return "csgclaw"
 	}
 	return name
+}
+
+func scheduledTaskSpec() CommandSpec {
+	fields := []FlagSpec{{Name: "title", TakesValue: true}, {Name: "agent-id", TakesValue: true}, {Name: "prompt", TakesValue: true}, {Name: "recurrence", TakesValue: true}, {Name: "first-run-at", TakesValue: true}, {Name: "expires-at", TakesValue: true}, {Name: "enabled"}}
+	return CommandSpec{Name: "scheduled-task", Summary: "Manage scheduled agent tasks", Children: []CommandSpec{
+		{Name: "context", Summary: "Read scheduling context"},
+		{Name: "list", Summary: "List saved schedules"},
+		{Name: "create", Summary: "Save a schedule", Flags: fields},
+		{Name: "update", Summary: "Update a schedule", Flags: append([]FlagSpec{{Name: "id", TakesValue: true}}, fields...)},
+	}}
 }

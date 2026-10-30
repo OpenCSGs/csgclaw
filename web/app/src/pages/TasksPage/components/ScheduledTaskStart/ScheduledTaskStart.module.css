@@ -1,0 +1,151 @@
+.start {
+  display: grid;
+  place-items: center;
+  min-height: 100%;
+  padding: 32px clamp(16px, 4%, 48px);
+}
+.inner {
+  width: min(100%, 720px);
+  min-width: 0;
+  display: grid;
+  gap: 16px;
+  color: var(--text);
+}
+.intro {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  text-align: center;
+}
+.icon {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  margin-bottom: 4px;
+  border-radius: 16px;
+  background: var(--primary-soft);
+  color: var(--primary);
+}
+.inner h2 {
+  margin: 0;
+  font-size: 19px;
+  font-weight: 600;
+  line-height: 28px;
+}
+.intro p {
+  margin: 0;
+  max-width: 38ch;
+  font-size: 13.5px;
+  line-height: 21px;
+  color: var(--muted);
+}
+.composer {
+  position: relative;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 12px;
+  background: var(--field);
+}
+.composer[data-focus] {
+  animation: focus 1.5s ease-out;
+}
+@keyframes focus {
+  from {
+    box-shadow: 0 0 0 3px var(--primary);
+  }
+  to {
+    box-shadow: none;
+  }
+}
+.composer textarea {
+  width: 100%;
+  resize: vertical;
+  min-height: 104px;
+}
+.actions {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  padding-top: 12px;
+}
+.actions > span {
+  color: var(--muted);
+  font-size: 12px;
+}
+.actions button {
+  margin-left: auto;
+  flex-shrink: 0;
+}
+.tips {
+  display: grid;
+  gap: 8px;
+  margin: 2px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.tips li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 13px 18px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--panel-soft);
+  font-size: 13px;
+  line-height: 20px;
+}
+.tips li::before {
+  content: "›";
+  flex-shrink: 0;
+  color: var(--primary);
+  font-size: 16px;
+  font-weight: 700;
+}
+.mentions {
+  display: grid;
+  max-height: 240px;
+  overflow: auto;
+  margin-top: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.mentions button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  color: var(--text);
+  text-align: start;
+}
+.mentions button:hover,
+.mentions button[aria-selected="true"] {
+  background: var(--control-hover-background);
+}
+.avatar {
+  display: inline-flex;
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  overflow: hidden;
+  border-radius: 50%;
+}
+@media (max-width: 640px) {
+  .start {
+    padding: 24px 12px;
+  }
+  .actions {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .actions button {
+    align-self: flex-end;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .composer[data-focus] {
+    animation: none;
+  }
+}

@@ -176,3 +176,12 @@ func assertEqual(t *testing.T, got, want []string) {
 		}
 	}
 }
+
+func TestCompleteScheduledTaskCommands(t *testing.T) {
+	for _, spec := range []CommandSpec{FullSpec(), LiteSpec()} {
+		got := Complete(spec, spec.Name, []string{spec.Name, "scheduled-task", ""})
+		assertContainsAll(t, got, "context", "list", "create", "update")
+		got = Complete(spec, spec.Name, []string{spec.Name, "scheduled-task", "create", "--"})
+		assertContainsAll(t, got, "--title", "--agent-id", "--prompt", "--recurrence", "--first-run-at")
+	}
+}

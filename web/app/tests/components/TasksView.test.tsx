@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import userEvent from "@testing-library/user-event";
 import type { SetStateAction } from "react";
 import { vi } from "vitest";
+import { createTranslator } from "@/shared/i18n";
 import { TasksView } from "@/pages/TasksPage/components";
 import { ScheduledTaskFormFields } from "@/pages/TasksPage/components/TasksView/ScheduledTaskFormFields";
 import { TaskCreateDialog } from "@/pages/TasksPage/components/TasksView/TaskCreateDialog";
@@ -110,6 +111,9 @@ const labels: Record<string, string> = {
   scheduledTaskDisable: "Disable",
   scheduledTaskCompleted: "Completed",
   scheduledTaskActiveTask: "Task running",
+  scheduledTaskStatusEnabled: "Enabled",
+  scheduledTaskStatusDisabled: "Disabled",
+  scheduledTaskStatusRunning: "Running",
   scheduledTaskRunTriggeredStatus: "Triggered",
   scheduledTaskRunFailedStatus: "Failed",
   scheduledTaskRunAgentMissingError:
@@ -879,6 +883,37 @@ describe("TasksView", () => {
     expect(screen.getByText("Select a run record to inspect the generated task.")).toBeInTheDocument();
   });
 
+  it("shows live status for unselected schedules without blocking the selected schedule", () => {
+    const schedules = [
+      scheduledTask(),
+      scheduledTask({ id: "weekly", title: "Weekly report" }),
+      scheduledTask({ id: "paused", title: "Paused report", enabled: false }),
+    ];
+    const runs = [scheduledTaskRun({ scheduled_task_id: "weekly" })];
+    const props = {
+      scheduledTasks: schedules,
+      selectedScheduledTaskID: "scheduled-task-1",
+      allScheduledTaskRuns: runs,
+      t,
+    };
+    const view = render(<TasksView {...props} />);
+
+    expect(
+      within(screen.getByRole("button", { name: /Morning report/, pressed: true })).getByText("Enabled"),
+    ).toBeInTheDocument();
+    expect(
+      within(screen.getByRole("button", { name: /Weekly report/, pressed: false })).getByText("Running"),
+    ).toBeInTheDocument();
+    expect(within(screen.getByRole("button", { name: /Paused report/ })).getByText("Disabled")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Run now" })).toBeEnabled();
+
+    view.rerender(<TasksView {...props} tasks={[task({ id: runs[0].task_id, status: "completed" })]} />);
+    expect(within(screen.getByRole("button", { name: /Weekly report/ })).getByText("Enabled")).toBeInTheDocument();
+
+    view.rerender(<TasksView {...props} allScheduledTaskRuns={[{ ...runs[0], status: "failed" }]} />);
+    expect(within(screen.getByRole("button", { name: /Weekly report/ })).getByText("Enabled")).toBeInTheDocument();
+  });
+
   it("disables run now as soon as a scheduled run is triggered", () => {
     render(
       <TasksView
@@ -945,4 +980,39 @@ describe("TasksView", () => {
 
     await waitFor(() => expect(onDeleteScheduledTask).toHaveBeenCalledWith(item.id));
   });
+});
+
+it("returns from a selected schedule to the focused natural-language start panel", async () => {
+  const user = userEvent.setup();
+  const send = vi.fn().mockResolvedValue(true);
+  render(
+    <TasksView
+      t={createTranslator("zh")}
+      scheduledTasks={[scheduledTask()]}
+      selectedScheduledTaskID="scheduled-task-1"
+      onSendTextToManager={send}
+    />,
+  );
+  expect(screen.queryByRole("textbox", { name: "定时任务描述" })).not.toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "用一句话建" }));
+  expect(screen.getByRole("textbox", { name: "定时任务描述" })).toHaveFocus();
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+});
+it("includes Manager in the searchable manual executor picker", async () => {
+  const user = userEvent.setup();
+  render(
+    <TasksView
+      t={createTranslator("zh")}
+      showCreateScheduledTaskModal
+      agents={[
+        { id: "agent-manager", name: "Manager", role: "manager", avatar: "avatar/manager.png" },
+        { id: "agent-linda", name: "Linda", role: "worker" },
+      ]}
+    />,
+  );
+  const dialog = screen.getByRole("dialog");
+  await user.click(within(dialog).getByRole("combobox", { name: "指派给" }));
+  expect(screen.getByRole("option", { name: /Manager/ })).toBeInTheDocument();
+  await user.click(screen.getByRole("option", { name: /Manager/ }));
+  expect(within(dialog).getByRole("combobox", { name: "指派给" })).toHaveTextContent("Manager");
 });

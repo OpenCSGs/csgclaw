@@ -37,3 +37,21 @@ Configured execution uses `/api/v1/agents/{id}/tasks/{room_id}/llm` for model re
 ## Regression coverage
 
 Tests cover routed message/draft ownership, target selection at creation, directory locking, persisted room configuration, concurrent model routing, unauthorized room access, process reuse, native resume after configuration/server changes, multi-Agent room mappings, canceled queued turns, legacy native-history import, server read-only enforcement, and the toolbar's save/error behavior.
+
+## Natural-language scheduled tasks
+
+The Scheduled tasks page offers **Create manually** and **Use a sentence**. The latter focuses the start-panel composer; Enter inserts a newline and `@` selects an executor, including Manager. Sending creates a new Manager direct task conversation through the existing room/message APIs. Failed sends retain the input and reuse the room/request/message IDs on retry. Manager model and authentication checks run before room creation.
+
+The page uses the demo's full-width header, compact schedule list, centered composer, and three usage hints. List badges show disabled, enabled, or running based on the schedule and its generated tasks, including schedules that are not selected. Narrow workspace panes stack the list above the independently scrolling detail/composer pane.
+
+Manager uses its configured model and embedded `scheduled-tasks` skill to parse requests in new or existing conversations. It reads `csgclaw-cli scheduled-task context` for the current server time, real executor IDs and supported recurrences, shows the parsed time/content/executor in the conversation, and lets the user correct them before saving. Ambiguous times, missing executors and unsupported schedules require clarification. A successful CLI response is required before reporting success. Demo-only keyword parsing is not used.
+
+Both `csgclaw` and `csgclaw-cli` expose `scheduled-task context|list|create|update`. These call the existing `/api/v1/scheduled-tasks` CRUD API; `GET /api/v1/scheduled-tasks/context` returns only executor ID/name/role, current server time and supported recurrences. Model configuration and credentials are excluded. Schedule timestamps and recurrence calculations retain their existing behavior.
+
+For updates, omitting `--expires-at` preserves the existing end date. Passing `--expires-at ''` sends `expires_at: null` to clear it; supplying a timestamp replaces it.
+
+Manager runs these commands with its scoped Agent credential. The API explicitly permits Manager's context/list/create/update routes; workers cannot manage schedules, and read-only execution mode permits only context/list. This does not grant configuration administration, schedule deletion, or immediate execution. Regression coverage uses the CLI against the authenticated HTTP router through saving, editing, triggering, and Manager claim/completion.
+
+Successful schedule creation, editing, and deletion publish `scheduled_task.changed` through the existing workspace event stream. The browser revalidates the shared schedule query so both the list and sidebar count update even while a Manager conversation is open. Event-stream reconnection and entering the Scheduled tasks page also revalidate the list to recover missed notifications.
+
+The supported recurrence set remains `once`, `daily`, `weekly`, `monthly`. Unsupported recurrence values are rejected. The Manager workflow asks about workdays, multiple weekdays and end-of-month dates rather than silently changing them. The running server checks due tasks once a minute. Triggering creates the existing tracked Agent task and delivers its assignment event in the executor's direct room. Manager uses Agent ID `agent-manager` and participant ID `pt-manager`, claims the task, executes it and records completion/failure through the same task API.

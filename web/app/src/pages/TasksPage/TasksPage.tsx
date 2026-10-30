@@ -1,10 +1,12 @@
 import { useWorkspaceControllerContext } from "@/hooks/workspace";
 import { Navigate } from "react-router-dom";
 import { roomTaskPath } from "@/models/roomTasks";
+import { useScheduledTaskConversation } from "./useScheduledTaskConversation";
 import { TasksView } from "./components";
 
 export function TasksPage() {
   const controller = useWorkspaceControllerContext();
+  const scheduledEntry = useScheduledTaskConversation();
 
   if (!controller.ready) {
     return null;
@@ -15,5 +17,12 @@ export function TasksPage() {
     return <Navigate replace to={roomTaskPath(selected.room_id, selected.id)} />;
   }
 
-  return <TasksView {...controller.taskViewProps} />;
+  return (
+    <TasksView
+      {...controller.taskViewProps}
+      onSendTextToManager={scheduledEntry.send}
+      scheduledTextBusy={scheduledEntry.busy}
+      scheduledTextError={scheduledEntry.error}
+    />
+  );
 }

@@ -56,7 +56,7 @@ func TestCreateAgentTaskBindsDirectRoomAndSendsInitialMessage(t *testing.T) {
 		t.Fatalf("initial message content = %q, want task id and title", last.Content)
 	}
 	for _, want := range []string{
-		"csgclaw-cli task claim --task " + task.ID + " --actor-id <worker_participant_id>",
+		"csgclaw-cli task claim --task " + task.ID + " --actor-id pt-dev",
 		"If blocked, claim it again when ready to resume.",
 		"csgclaw-cli task update --task " + task.ID,
 	} {
@@ -173,5 +173,33 @@ func testWorkerAgent(id, name string) agent.Agent {
 			ProfileComplete: true,
 		},
 		ProfileComplete: true,
+	}
+}
+
+func TestManagerAgentTaskCanClaimExecuteAndComplete(t *testing.T) {
+	core := taskcore.NewService()
+	imSvc := im.NewService()
+	svc := NewService(core, imSvc, nil, nil)
+	task, err := svc.CreateAgentTask(context.Background(), CreateInput{AgentID: agent.ManagerUserID, Title: "Summarize", Body: "Report work", CreatedBy: "scheduler"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if task.AssignedTo != agent.ManagerParticipantID {
+		t.Fatalf("assigned=%s", task.AssignedTo)
+	}
+	room, ok := imSvc.Room(task.RoomID)
+	if !ok || !room.IsDirect {
+		t.Fatalf("room=%+v", room)
+	}
+	message := room.Messages[len(room.Messages)-1]
+	if !strings.Contains(message.Content, "--actor-id pt-manager") || message.Event == nil || message.Event.Key != "task_assigned" {
+		t.Fatalf("assignment=%+v", message)
+	}
+	if _, err := svc.Claim(ClaimInput{TaskID: task.ID, ParticipantID: agent.ManagerParticipantID}); err != nil {
+		t.Fatal(err)
+	}
+	done, err := svc.Update(UpdateInput{TaskID: task.ID, ActorID: agent.ManagerParticipantID, Status: taskcore.StatusCompleted, Result: "Summary ready"})
+	if err != nil || done.Status != taskcore.StatusCompleted {
+		t.Fatalf("done=%+v err=%v", done, err)
 	}
 }

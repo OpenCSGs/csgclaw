@@ -1,13 +1,16 @@
 .tasksPane {
   display: flex;
+  grid-row: 1 / -1;
   flex-direction: column;
-  gap: 16px;
+  container-type: inline-size;
+  gap: 0;
   height: 100%;
   max-height: 100%;
   min-width: 0;
   min-height: 0;
   overflow: hidden;
-  padding: 20px 24px 12px;
+  padding: 0;
+  background: var(--panel);
 }
 
 .headerRow {
@@ -30,9 +33,9 @@
   margin: 0;
   color: var(--text);
   font-family: var(--font-display);
-  font-size: 20px;
-  font-weight: 650;
-  line-height: 1.25;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 24px;
 }
 
 .tasksBoardHeading p {
@@ -58,16 +61,16 @@
   min-width: 0;
   min-height: 0;
   overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--border-subtle) 88%, transparent);
-  border-radius: var(--radius-xl);
-  background: var(--surface);
-  box-shadow: 0 8px 20px rgb(15 23 42 / 0.04);
+  background: transparent;
 }
 
 .tasksBoardHead {
-  align-items: flex-start;
+  flex: 0 0 auto;
+  min-height: 56px;
+  align-items: center;
   justify-content: space-between;
-  padding: 18px 20px 14px;
+  padding: 10px 20px;
+  border-bottom: 1px solid var(--line);
 }
 
 .tasksBoardHeading {
@@ -857,7 +860,6 @@
   display: flex;
   flex: 1 1 auto;
   min-height: 0;
-  border-top: 1px solid var(--line);
 }
 
 .taskSideList {
@@ -924,19 +926,21 @@
 .scheduledTaskLayout {
   display: grid;
   flex: 1 1 auto;
-  grid-template-columns: minmax(240px, 320px) minmax(0, 1fr);
+  grid-template-columns: clamp(220px, 30%, 320px) minmax(0, 1fr);
   min-height: 0;
 }
 
 .scheduledTaskList {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 16px;
+  min-height: 0;
+  min-width: 0;
+  overflow-y: auto;
+  gap: 2px;
+  padding: 8px;
   border-right: 1px solid var(--line);
 }
 
-.scheduledTaskListHead,
 .scheduledTaskDetailHead,
 .scheduledTaskActions {
   display: flex;
@@ -947,30 +951,40 @@
 
 .scheduledTaskRow {
   display: flex;
-  min-height: 64px;
+  flex-shrink: 0;
+  min-height: 52px;
+  min-width: 0;
   flex-direction: column;
   align-items: stretch;
   justify-content: center;
-  gap: 6px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--surface);
+  gap: 2px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-lg);
+  background: transparent;
   color: var(--text);
-  padding: 10px 12px;
+  padding: 8px 10px;
   text-align: left;
   cursor: pointer;
 }
 
-.scheduledTaskRow[data-active] {
-  border-color: color-mix(in srgb, var(--primary) 50%, var(--line));
-  background: color-mix(in srgb, var(--primary) 8%, var(--surface));
+.scheduledTaskRow:hover {
+  background: var(--panel-soft);
 }
 
-.scheduledTaskRow span {
+.scheduledTaskRow[data-active] {
+  border-color: color-mix(in srgb, var(--primary) 50%, var(--line));
+  background: var(--primary-soft);
+}
+
+.scheduledTaskRowHeading {
   display: flex;
   align-items: center;
   gap: 8px;
   min-width: 0;
+}
+
+.scheduledTaskRowHeading > svg {
+  flex-shrink: 0;
 }
 
 .scheduledTaskRow strong,
@@ -980,13 +994,63 @@
   white-space: nowrap;
 }
 
+.scheduledTaskRow strong {
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 18px;
+}
+
 .scheduledTaskRow small {
+  padding-left: 23px;
   color: var(--muted);
+  font-size: 11.5px;
+  line-height: 16px;
+}
+
+.scheduledTaskStatus {
+  flex: 0 0 auto;
+  margin-left: auto;
+  padding: 0 6px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--field);
+  color: var(--muted);
+  font-size: 10.5px;
+  font-weight: 500;
+  line-height: 16px;
+  white-space: nowrap;
+}
+
+.scheduledTaskStatus[data-status="enabled"] {
+  border-color: color-mix(in srgb, var(--success-text) 40%, var(--line));
+  background: var(--success-background);
+  color: var(--success-text);
+}
+
+.scheduledTaskStatus[data-status="running"] {
+  border-color: color-mix(in srgb, var(--warning) 40%, var(--line));
+  background: color-mix(in srgb, var(--warning) 14%, transparent);
+  color: var(--warning);
 }
 
 .scheduledTaskDetail {
+  min-width: 0;
+  min-height: 0;
   padding: 18px;
   overflow: auto;
+}
+
+.scheduledTaskDetail[data-start] {
+  padding: 0;
+}
+
+.scheduledTaskDetailHead {
+  flex-wrap: wrap;
+}
+
+.scheduledTaskActions {
+  flex-wrap: wrap;
 }
 
 .scheduledTaskDetailHead h2 {
@@ -1190,10 +1254,6 @@
 }
 
 @media (max-width: 980px) {
-  .tasksBoardWorkbench {
-    min-height: unset;
-  }
-
   .taskDetailLayout {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -1209,20 +1269,6 @@
 }
 
 @media (max-width: 640px) {
-  .tasksBoardHead {
-    align-items: stretch;
-    flex-direction: column;
-    flex-wrap: wrap;
-  }
-
-  .tasksToolbar {
-    justify-content: flex-start;
-  }
-
-  .tasksBoardHead {
-    justify-content: flex-start;
-  }
-
   .taskCreateForm {
     grid-template-columns: 1fr;
   }
@@ -1232,15 +1278,6 @@
   }
 
   .taskSideList {
-    border-right: 0;
-    border-bottom: 1px solid var(--line);
-  }
-
-  .scheduledTaskLayout {
-    grid-template-columns: 1fr;
-  }
-
-  .scheduledTaskList {
     border-right: 0;
     border-bottom: 1px solid var(--line);
   }
@@ -1278,4 +1315,48 @@
   .taskDetailTag {
     width: 100%;
   }
+}
+
+@container (max-width: 640px) {
+  .tasksBoardHead {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px;
+  }
+
+  .tasksToolbar {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .scheduledTaskLayout {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .scheduledTaskList {
+    max-height: 192px;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .scheduledTaskMeta,
+  .scheduledTaskRunRow {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.executorOption {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.executorAvatar {
+  display: inline-flex;
+  width: 24px;
+  height: 24px;
+  overflow: hidden;
+  border-radius: 50%;
+  flex-shrink: 0;
 }
