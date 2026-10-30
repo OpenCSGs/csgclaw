@@ -3,7 +3,6 @@ package api
 import (
 	"context"
 	"encoding/json"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -52,11 +51,11 @@ func TestDiagnosticBundleHTTPCombinesFullContextAndExactLogs(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer response.Body.Close()
-	body, _ := io.ReadAll(response.Body)
+	body := readDiagnosticZIP(t, response)
 	if response.StatusCode != 200 {
 		t.Fatalf("status=%d %s", response.StatusCode, body)
 	}
-	if response.Header.Get("Cache-Control") != "no-store" || !strings.Contains(response.Header.Get("Content-Disposition"), "csgclaw-turn-turn-a-diagnostics.json") {
+	if response.Header.Get("Cache-Control") != "no-store" || !strings.Contains(response.Header.Get("Content-Disposition"), "csgclaw-turn-turn-a-diagnostics.zip") {
 		t.Fatal("missing export headers")
 	}
 	var bundle struct {
@@ -185,10 +184,7 @@ func TestDiagnosticBundleHTTPRedactsMCPArgumentsAndPreservesEmbeddedNumbers(t *t
 		t.Fatal(err)
 	}
 	defer response.Body.Close()
-	body, err := io.ReadAll(response.Body)
-	if err != nil || response.StatusCode != http.StatusOK {
-		t.Fatalf("bundle response: status=%d err=%v", response.StatusCode, err)
-	}
+	body := readDiagnosticZIP(t, response)
 	t.Run("MCP credentials", func(t *testing.T) {
 		for _, secret := range []string{"opaque-production-credential", "opaque-inline-credential", "opaque-config-credential", "opaque-tool-credential"} {
 			if strings.Contains(string(body), secret) {

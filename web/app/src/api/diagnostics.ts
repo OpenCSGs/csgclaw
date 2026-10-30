@@ -1,4 +1,4 @@
-import { request, requestText } from "./client";
+import { apiErrorFromText, readResponseText, request, requestText, resolveRequestPath } from "./client";
 
 export type DiagnosticSpan = {
   id: string;
@@ -91,9 +91,8 @@ export function reportDiagnosticTiming(
   });
 }
 
-export async function fetchDiagnosticBundle(room: string, id: string, download: boolean, signal?: AbortSignal) {
+export async function fetchDiagnosticBundle(room: string, id: string, signal?: AbortSignal) {
   const query = new URLSearchParams({ timezone: Intl.DateTimeFormat().resolvedOptions().timeZone });
-  if (download) query.set("download", "1");
   const text = await requestText(`${path(room)}/${encodeURIComponent(id)}/bundle?${query}`, {
     signal,
     headers: { Accept: "application/json" },
@@ -101,4 +100,47 @@ export async function fetchDiagnosticBundle(room: string, id: string, download: 
   });
   const bundle = JSON.parse(text) as { schema_version: number; turn_id: string; collection: { complete: boolean } };
   return { text, turnId: bundle.turn_id, complete: bundle.collection.complete };
+}
+
+function diagnosticFilename(turnId: string) {
+  return `csgclaw-turn-${turnId.replace(/^turn-csgclaw-/, "").replace(/[^a-zA-Z0-9._-]/g, "_")}-diagnostics`;
+}
+
+export async function fetchDiagnosticArchive(room: string, id: string, signal?: AbortSignal) {
+  const query = new URLSearchParams({ timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, download: "1" });
+  const response = await fetch(resolveRequestPath(`${path(room)}/${encodeURIComponent(id)}/bundle?${query}`), {
+    signal,
+    headers: { Accept: "application/zip" },
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    throw apiErrorFromText(response.status, (await readResponseText(response)) || response.statusText);
+  }
+  const blob = await response.blob();
+  const { default: JSZip } = await import("jszip");
+  // Read only the ZIP directory and small collection-status comment. Do not
+  // inflate or JSON.parse the full diagnostic entry just to download it.
+  const archive = await JSZip.loadAsync(await blob.arrayBuffer());
+  if (!("comment" in archive) || typeof archive.comment !== "string") {
+    throw new Error("Diagnostic archive metadata missing");
+  }
+  const metadata = JSON.parse(archive.comment) as {
+    schema_version?: unknown;
+    turn_id?: unknown;
+    complete?: unknown;
+  } | null;
+  if (
+    metadata?.schema_version !== 1 ||
+    typeof metadata.turn_id !== "string" ||
+    !metadata.turn_id ||
+    typeof metadata.complete !== "boolean"
+  ) {
+    throw new Error("Invalid diagnostic archive metadata");
+  }
+  const filename = diagnosticFilename(metadata.turn_id);
+  if (Object.keys(archive.files).length !== 1 || !archive.file(`${filename}.json`)) {
+    throw new Error("Diagnostic archive entry missing");
+  }
+  if (signal?.aborted) throw new DOMException("Diagnostic export cancelled", "AbortError");
+  return { blob, filename: `${filename}.zip`, turnId: metadata.turn_id, complete: metadata.complete };
 }
