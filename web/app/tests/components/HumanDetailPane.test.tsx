@@ -19,7 +19,7 @@ const labels: Record<string, string> = {
   avatarUploadTab: "Upload avatar",
   cancel: "Cancel",
   close: "Close",
-  confirm: "Confirm",
+  avatarApply: "Apply avatar",
   editAvatar: "Edit avatar",
   editAvatarSubtitle: "Choose or upload an avatar.",
   localComputer: "Local computer",
@@ -89,7 +89,7 @@ describe("HumanDetailPane", () => {
     expect(screen.getByRole("radiogroup", { name: "Built-in avatars" })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("radio", { name: "Cartoon 2" }));
-    fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
+    fireEvent.click(screen.getByRole("button", { name: "Apply avatar" }));
 
     expect(onAvatarChange).toHaveBeenCalledWith("avatar/cartoon-2.png");
   });

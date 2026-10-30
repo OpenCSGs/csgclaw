@@ -191,7 +191,7 @@ export function ConversationResourcePicker({
               void resource.continuation.loadMore();
             }}
           >
-            {t(resource.continuation.loading ? "loading" : "taskEntryLoadMore")}
+            {t(resource.continuation.loading ? "resourceLoading" : "taskEntryLoadMore")}
           </Button>
         ) : null}
         <footer className={styles.footer}>

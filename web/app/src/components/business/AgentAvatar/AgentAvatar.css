@@ -687,61 +687,6 @@
   padding: 32px 24px 24px;
 }
 
-.agent-avatar-editor-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 0;
-  min-height: 44px;
-  padding: 10px 16px;
-  border: 1px solid var(--gray-300);
-  border-radius: 8px;
-  background: var(--white);
-  color: var(--gray-700);
-  box-shadow: var(--shadow-xs);
-  cursor: pointer;
-  font-size: 16px;
-  font-weight: 500;
-  line-height: 24px;
-}
-
-:root[data-theme="dark"] .agent-avatar-editor-button {
-  border-color: #373a41;
-  background: #0a0d12;
-  color: #d5d7da;
-  box-shadow:
-    0 1px 2px 0 rgba(10, 13, 18, 0.05),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.06),
-    inset 0 -2px 0 0 rgba(255, 255, 255, 0.04);
-}
-
-.agent-avatar-editor-button.primary {
-  border-color: var(--brand-600);
-  background: var(--brand-600);
-  color: var(--white);
-}
-
-:root[data-theme="dark"] .agent-avatar-editor-button.primary {
-  border-color: rgba(255, 255, 255, 0.12);
-  background: #223b99;
-  color: #fff;
-}
-
-.agent-avatar-editor-button.primary:disabled {
-  border-color: var(--gray-200);
-  background: var(--gray-100);
-  color: var(--gray-400);
-  cursor: not-allowed;
-}
-
-.agent-avatar-editor-button:hover,
-.agent-avatar-editor-button:focus-visible {
-  outline: none;
-  box-shadow:
-    var(--shadow-xs),
-    0 0 0 4px rgba(77, 106, 214, 0.18);
-}
-
 .agent-avatar-picker-group {
   display: grid;
   gap: 6px;

@@ -679,30 +679,6 @@
 .versionChannelLink {
   justify-self: start;
   align-self: center;
-  min-height: 40px;
-  margin: 0;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: var(--gray-500);
-  font-size: 12px;
-  font-weight: 400;
-  line-height: 18px;
-  text-decoration: underline;
-  text-underline-offset: 2px;
-  cursor: pointer;
-}
-
-.versionChannelLink:hover:not(:disabled),
-.versionChannelLink:focus-visible:not(:disabled) {
-  color: var(--gray-700);
-  outline: none;
-}
-
-.versionChannelLink:disabled {
-  cursor: default;
-  opacity: 0.55;
-  text-decoration: none;
 }
 
 .settingLine,
@@ -989,15 +965,6 @@
   color: var(--error-400);
 }
 
-:root[data-theme="dark"] .versionChannelLink {
-  color: var(--gray-400);
-}
-
-:root[data-theme="dark"] .versionChannelLink:hover:not(:disabled),
-:root[data-theme="dark"] .versionChannelLink:focus-visible:not(:disabled) {
-  color: var(--gray-200);
-}
-
 :root[data-theme="dark"] .segmented,
 :root[data-theme="dark"] .segmentButton,
 :root[data-theme="dark"] .textSegmentButton,
@@ -1127,10 +1094,6 @@
   .versionActions {
     justify-items: start;
     width: 100%;
-  }
-
-  .versionChannelLink {
-    justify-self: start;
   }
 
   .versionMeta {

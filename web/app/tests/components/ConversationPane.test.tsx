@@ -967,7 +967,7 @@ describe("ConversationPane", () => {
     const avatarEditor = screen.getByRole("dialog", { name: "editAvatar" });
     expect(drawer).not.toContainElement(avatarEditor);
     await user.click(within(avatarEditor).getByRole("radio", { name: "agentAvatarStyle3D 2" }));
-    await user.click(within(avatarEditor).getByRole("button", { name: "confirm" }));
+    await user.click(within(avatarEditor).getByRole("button", { name: "avatarApply" }));
 
     expect(onDraftChange).toHaveBeenCalledWith(expect.objectContaining({ avatar: "avatar/3D-2.png" }));
     expect(screen.getByRole("dialog", { name: "agentDetailPanel" })).toBeInTheDocument();

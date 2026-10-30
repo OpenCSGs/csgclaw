@@ -329,7 +329,7 @@ it("moves the signed-in user's community templates to My templates with a cloud 
   expect(screen.getByRole("button", { name: /alice worker 云端/ })).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Local worker" })).toBeInTheDocument();
   expect(screen.getAllByText("云端")).toHaveLength(1);
-  expect(screen.getByRole("link", { name: "在 AgenticHub 上管理我的模板" })).toHaveAttribute(
+  expect(screen.getByRole("link", { name: "管理云端模板" })).toHaveAttribute(
     "href",
     "https://qa.opencsg.com/agentichub?view=resources&subview=template",
   );

@@ -28,7 +28,7 @@
   box-shadow: var(--button-shadow);
   font-family: var(--font-sans);
   font-size: var(--btn-font-size);
-  font-weight: var(--font-weight-medium);
+  font-weight: var(--btn-font-weight, var(--font-weight-medium));
   line-height: var(--btn-line-height);
   white-space: nowrap;
   text-align: center;
@@ -149,7 +149,7 @@
   background: var(--button-hover-background);
   color: var(--button-hover-text);
 }
-.btn.active:not(:disabled):not(.btn-primary, .btn-danger) {
+.btn.active:not(:disabled):not(.btn-primary, .btn-danger, .btn-secondary-gray) {
   border-color: var(--button-brand-hover-border);
   background: var(--control-selected-background);
   color: var(--accent-text);
@@ -241,8 +241,81 @@
   --btn-height: 44px;
 }
 
-.btn-secondary-gray {
+.btn.btn-secondary-gray {
+  --btn-height: 42px;
+  --btn-min-width: 0px;
+  --btn-padding-x: 14px;
+  --btn-font-size: 14px;
+  --btn-line-height: 22px;
+  --btn-icon-size: 14px;
+  --btn-gap: 4px;
   --button-text: var(--button-neutral-text);
+  --button-ring: var(--button-neutral-focus-ring);
+  border-radius: var(--radius-md);
+  /* Figma's inside stroke does not add to its auto-layout padding. */
+  padding-inline: calc(var(--btn-padding-x) - 1px);
+  gap: var(--btn-gap);
+}
+.btn-secondary-gray.btn-sm {
+  --btn-height: 34px;
+  --btn-padding-x: 12px;
+  --btn-font-size: 12px;
+  --btn-line-height: 18px;
+  --btn-font-weight: var(--font-weight-normal);
+  --btn-icon-size: 12px;
+}
+.btn-secondary-gray.btn-lg {
+  --btn-height: 44px;
+  --btn-padding-x: 16px;
+  --btn-font-size: 16px;
+  --btn-line-height: 24px;
+  --btn-icon-size: 16px;
+  --btn-gap: 6px;
+}
+.btn-secondary-gray.btn-xl {
+  --btn-height: 48px;
+  --btn-padding-x: 18px;
+  --btn-font-size: 16px;
+  --btn-line-height: 24px;
+  --btn-icon-size: 20px;
+  --btn-gap: 6px;
+}
+.btn-secondary-gray.btn-2xl {
+  --btn-height: 60px;
+  --btn-padding-x: 22px;
+  --btn-font-size: 18px;
+  --btn-line-height: 28px;
+  --btn-icon-size: 24px;
+  --btn-gap: 10px;
+}
+.btn-secondary-gray.csg-icon-button {
+  padding: 0;
+}
+.btn-secondary-gray.csg-icon-button.btn-sm {
+  --btn-height: 28px;
+}
+.btn-secondary-gray.csg-icon-button.btn-md {
+  --btn-height: 34px;
+}
+.btn-secondary-gray.csg-icon-button.btn-lg {
+  --btn-height: 40px;
+}
+.btn-secondary-gray.csg-icon-button.btn-2xl {
+  --btn-height: 56px;
+}
+.btn-secondary-gray .btn-label {
+  padding-inline: 2px;
+}
+.btn-secondary-gray .btn-content > svg,
+.btn-secondary-gray.csg-icon-button .btn-content > span,
+.btn-secondary-gray.csg-icon-button .btn-content > span > svg {
+  width: var(--btn-icon-size);
+  height: var(--btn-icon-size);
+  flex-shrink: 0;
+}
+.btn-secondary-gray:disabled {
+  background: var(--button-neutral-disabled-background);
+  color: var(--button-neutral-disabled-text);
 }
 .btn-md {
   --btn-height: 40px;
