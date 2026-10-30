@@ -47,6 +47,7 @@ make release
 - Format with `make fmt`.
 - Add or update tests when changing CLI, config, API, or runtime behavior.
 - Before changing the Vite web app, read and follow `docs/tech/web/development.md`; it owns frontend structure, source layout, components, styling, state/data flow, accessibility, assets, and verification. This includes changes under `web/app/src`, frontend tests, package/config files, CSS/Tailwind/tokens, public asset paths, routes, i18n text, and generated `web/static-dist` handling.
+- For user-visible frontend changes, also read and follow `docs/tech/web/interaction-design.md` for layout adaptation, icon/copy consistency, localization, field behavior, feedback, and browser verification.
 - Do not change BoxLite sandbox integration or packaging paths unless the task is about sandbox/runtime integration.
 - When changing config fields or defaults, update loader, saver, onboard flow, tests, and docs together.
 - Never hardcode or print real secrets; startup and logs must keep tokens redacted.
