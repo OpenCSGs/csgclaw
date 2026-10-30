@@ -18,6 +18,26 @@
   const total = stepSlides.length;
   const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   let current = 0;
+  let scrollTarget = null;
+  let scrollSettleTimer = null;
+
+  function finishNavigation() {
+    scrollTarget = null;
+    clearTimeout(scrollSettleTimer);
+    onScroll();
+  }
+
+  function waitForScrollToSettle() {
+    clearTimeout(scrollSettleTimer);
+    // Fallback for browsers without scrollend, including interrupted scrolls.
+    scrollSettleTimer = setTimeout(finishNavigation, 180);
+  }
+
+  function interruptNavigation() {
+    if (scrollTarget === null) return;
+    finishNavigation();
+    window.scrollTo({ top: window.scrollY, behavior: "instant" });
+  }
 
   // 圆点：封面 + 10 个步骤
   const dotSlides = [slides[0], ...stepSlides];
@@ -33,10 +53,12 @@
 
   function go(i, opts) {
     i = Math.max(0, Math.min(dotSlides.length - 1, i));
-    const behavior = reduce || (opts && opts.instant) ? "auto" : "smooth";
+    const behavior = reduce || (opts && opts.instant) ? "instant" : "smooth";
     const el = dotSlides[i];
-    el.scrollIntoView({ behavior, block: "start" });
+    scrollTarget = i;
     setActive(i);
+    el.scrollIntoView({ behavior, block: "start" });
+    waitForScrollToSettle();
     try {
       if (history.replaceState)
         history.replaceState(null, "", i === 0 ? location.pathname + location.search : "#" + el.id);
@@ -188,10 +210,16 @@
   // 滚动观察：取距离视口中线最近的幻灯片
   let ticking = false;
   function onScroll() {
+    if (scrollTarget !== null) {
+      waitForScrollToSettle();
+      return;
+    }
     if (ticking) return;
     ticking = true;
     requestAnimationFrame(() => {
       ticking = false;
+      // A frame queued before navigation must not restore an intermediate page.
+      if (scrollTarget !== null) return;
       const mid = window.scrollY + window.innerHeight * 0.45;
       let best = 0,
         bestDist = Infinity;
@@ -210,6 +238,12 @@
   }
   window.addEventListener("scroll", onScroll, { passive: true });
   window.addEventListener("resize", onScroll);
+  window.addEventListener("scrollend", () => {
+    if (scrollTarget !== null && Math.abs(dotSlides[scrollTarget].getBoundingClientRect().top) <= 2) {
+      finishNavigation();
+    }
+  });
+  window.addEventListener("wheel", interruptNavigation, { passive: true });
 
   // 首屏定位：等布局稳定后再跳转
   if ("scrollRestoration" in history) history.scrollRestoration = "manual";
@@ -231,6 +265,7 @@
   window.addEventListener(
     "touchstart",
     (e) => {
+      interruptNavigation();
       touchX = e.touches[0].clientX;
       touchY = e.touches[0].clientY;
     },
