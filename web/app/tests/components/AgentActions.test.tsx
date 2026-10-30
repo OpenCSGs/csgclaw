@@ -42,7 +42,7 @@ const labels: Record<string, string> = {
   agentUpgrade: "Upgrade",
   agentMoreActions: "More",
   agentSaveLocalTemplate: "Save as local template",
-  agentSaveAndPublishTemplate: "Save and publish to agentic hub",
+  agentSaveAndPublishTemplate: "Save & publish",
   agentPublishCommunity: "Publish to community",
   agentPublishCommunityTemplateOnly: "Publish template only",
   agentPublishCommunityAndDeploy: "Publish and deploy",
@@ -225,12 +225,12 @@ describe("agent action visibility", () => {
       await user.click(screen.getByRole("button", { name: "More" }));
       expect(screen.getByRole("menuitem", { name: "Save as local template" })).toBeInTheDocument();
       expect(screen.queryByRole("menuitem", { name: "Publish and deploy" })).not.toBeInTheDocument();
-      await user.click(screen.getByRole("menuitem", { name: "Save and publish to agentic hub" }));
+      await user.click(screen.getByRole("menuitem", { name: "Save & publish" }));
       expect(screen.getByText(labels.agentTemplateHubGuidance)).toBeInTheDocument();
       expect(screen.queryByRole("button", { name: "Go to agentic hub" })).not.toBeInTheDocument();
-      expect(screen.getByRole("button", { name: "Save and publish to agentic hub" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Save & publish" })).toBeInTheDocument();
       expect(screen.queryByRole("button", { name: "Publish and deploy" })).not.toBeInTheDocument();
-      await user.click(screen.getByRole("button", { name: "Save and publish to agentic hub" }));
+      await user.click(screen.getByRole("button", { name: "Save & publish" }));
 
       expect(onPublish).toHaveBeenCalledWith(
         "official",
@@ -242,11 +242,11 @@ describe("agent action visibility", () => {
       );
 
       await user.click(screen.getByRole("button", { name: "More" }));
-      await user.click(screen.getByRole("menuitem", { name: "Save and publish to agentic hub" }));
+      await user.click(screen.getByRole("menuitem", { name: "Save & publish" }));
       const includeMemory = screen.queryByRole("checkbox", { name: "Include agent memory" });
       expect(includeMemory).toBeInTheDocument();
       await user.click(includeMemory!);
-      await user.click(screen.getByRole("button", { name: "Save and publish to agentic hub" }));
+      await user.click(screen.getByRole("button", { name: "Save & publish" }));
       expect(onPublish).toHaveBeenCalledWith(
         "official",
         expect.stringMatching(new RegExp(`^${worker.id}-[a-z0-9]+$`)),
@@ -283,7 +283,7 @@ describe("agent action visibility", () => {
     expect(screen.queryByRole("button", { name: "More" })).not.toBeInTheDocument();
     expect(screen.queryByRole("menuitem", { name: "Recreate" })).not.toBeInTheDocument();
     expect(screen.queryByRole("menuitem", { name: "Save as local template" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("menuitem", { name: "Save and publish to agentic hub" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: "Save & publish" })).not.toBeInTheDocument();
   });
 
   it("requires sign-in for Codex community publishing without blocking local templates", async () => {
@@ -315,12 +315,12 @@ describe("agent action visibility", () => {
       "aria-disabled",
       "true",
     );
-    const publishCommunity = screen.getByRole("menuitem", { name: "Save and publish to agentic hub" });
+    const publishCommunity = screen.getByRole("menuitem", { name: "Save & publish" });
     expect(publishCommunity).not.toHaveAttribute("aria-disabled", "true");
     expect(publishCommunity).toHaveAttribute("title", "Sign in to OpenCSG before publishing a template.");
     await user.click(publishCommunity);
     expect(screen.getByRole("status")).toHaveTextContent(labels.agentPublishLoginRequired);
-    expect(screen.queryByRole("button", { name: "Save and publish to agentic hub" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Save & publish" })).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Sign in to publish" }));
     expect(onPublishLogin).toHaveBeenCalledOnce();
     expect(onPublish).not.toHaveBeenCalled();

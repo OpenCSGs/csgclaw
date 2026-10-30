@@ -348,6 +348,7 @@ function KnowledgeEmptyState({ t }: { t: (key: string, vars?: Record<string, str
       <div className={styles.knowledgeEmptyText}>
         <h3>{t("resourcesKnowledgeBasesEmpty")}</h3>
         <p>{t("resourcesKnowledgeBasesEmptyHint")}</p>
+        <p>{t("iaKnowledgeCreateHint")}</p>
       </div>
       <div className={styles.knowledgeEmptyActions}>
         <LinkButton href={createURL} target="_blank" rel="noreferrer" variant="primary" size="md">

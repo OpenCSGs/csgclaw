@@ -1,0 +1,85 @@
+.foundation {
+  margin-block: var(--space-6);
+  padding: var(--space-5);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xl);
+  background: var(--panel);
+}
+.foundation h2 {
+  font: var(--text-xl-medium);
+}
+.foundation p {
+  color: var(--muted);
+  line-height: 1.6;
+}
+.foundation a {
+  color: var(--primary);
+}
+.eyebrow {
+  font: var(--text-sm-medium);
+  letter-spacing: 0.08em;
+}
+.notice {
+  margin-block: var(--space-5);
+  padding: var(--space-4);
+  border-inline-start: 3px solid var(--primary);
+  background: var(--panel-soft);
+  border-radius: var(--radius-md);
+}
+.section {
+  margin-block-start: var(--space-6);
+}
+.group {
+  border-top: 1px solid var(--line);
+  padding-block: var(--space-3);
+}
+.group summary {
+  cursor: pointer;
+  padding: var(--space-2);
+  font: var(--text-md-medium);
+}
+.group summary:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+.group summary span {
+  color: var(--muted);
+}
+.swatches {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 150px), 1fr));
+  gap: var(--space-3);
+  padding-block: var(--space-3);
+}
+.swatch {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xl);
+}
+.checker {
+  background: repeating-conic-gradient(var(--gray-200) 0% 25%, var(--white) 0% 50%) 0 / 16px 16px;
+}
+.fill {
+  height: 80px;
+  background: var(--swatch);
+}
+.caption {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  overflow-wrap: anywhere;
+}
+.caption code {
+  font-size: 0.8rem;
+}
+.caption small {
+  color: var(--muted);
+  line-height: 1.5;
+}
+@media (max-width: 600px) {
+  .foundation {
+    padding: var(--space-3);
+  }
+}

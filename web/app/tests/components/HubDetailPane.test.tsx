@@ -963,62 +963,53 @@ describe("HubDetailPane", () => {
 
   it("offers cloud creation only after publishing succeeds, using the complete returned template ID", async () => {
     const user = userEvent.setup();
-    const open = vi.spyOn(window, "open").mockImplementation(() => null);
-    try {
-      renderHubDetailPane("template", {
-        agenticHubSiteURL: "https://opencsg-stg.com/account",
-        selectedTemplate: {
-          ...template,
-          id: "local.repo-id",
-          name: "api-template",
-          display_name: "中文展示名",
-          runtime_kind: "codex",
-          source: { kind: "local", name: "local" },
-        },
-        onPublishTemplate: vi
-          .fn()
-          .mockResolvedValue({ status: "success", template: { id: "alice/repo-id", name: "api-template" } }),
-      });
-      await openTemplateDetail(user);
-      expect(screen.queryByRole("button", { name: "agentTemplateCreateInHub" })).not.toBeInTheDocument();
-      await user.click(screen.getByRole("button", { name: "Publish to community" }));
-      expect(screen.queryByRole("button", { name: "agentTemplateCreateInHub" })).not.toBeInTheDocument();
-      await user.click(screen.getByRole("button", { name: "Publish template only" }));
-      const success = await screen.findByRole("dialog", { name: "Published successfully" });
-      await user.click(within(success).getByRole("button", { name: "agentTemplateCreateInHub" }));
-      expect(open).toHaveBeenCalledWith(
-        "https://opencsg-stg.com/agentichub?action=create-agent&template_name=alice%2Frepo-id",
-        "_blank",
-        "noopener,noreferrer",
-      );
-    } finally {
-      open.mockRestore();
-    }
+    renderHubDetailPane("template", {
+      agenticHubSiteURL: "https://opencsg-stg.com/account",
+      selectedTemplate: {
+        ...template,
+        id: "local.repo-id",
+        name: "api-template",
+        display_name: "中文展示名",
+        runtime_kind: "codex",
+        source: { kind: "local", name: "local" },
+      },
+      onPublishTemplate: vi
+        .fn()
+        .mockResolvedValue({ status: "success", template: { id: "alice/repo-id", name: "api-template" } }),
+    });
+    await openTemplateDetail(user);
+    expect(screen.queryByRole("link", { name: "agentTemplateCreateInHub" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Publish to community" }));
+    expect(screen.queryByRole("link", { name: "agentTemplateCreateInHub" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Publish template only" }));
+    const success = await screen.findByRole("dialog", { name: "Published successfully" });
+    const link = within(success).getByRole("link", { name: "agentTemplateCreateInHub" });
+    expect(link).toHaveAttribute(
+      "href",
+      "https://opencsg-stg.com/agentichub?action=create-agent&template_name=alice%2Frepo-id",
+    );
+    expect(link).toHaveAttribute("target", "_blank");
+    expect(link).toHaveAttribute("rel", "noopener noreferrer");
   });
 
   it("shows success for an agent publication and uses its complete returned template ID", async () => {
-    const user = userEvent.setup();
-    const open = vi.spyOn(window, "open").mockImplementation(() => null);
-    try {
-      renderHubDetailPane("template", {
-        agenticHubSiteURL: "https://opencsg.com",
-        publishedTemplate: {
-          id: "alice/repo",
-          name: "returned-name",
-          display_name: "展示名",
-          source: { kind: "remote" },
-        },
-      });
-      const success = await screen.findByRole("dialog", { name: "Published successfully" });
-      await user.click(within(success).getByRole("button", { name: "agentTemplateCreateInHub" }));
-      expect(open).toHaveBeenCalledWith(
-        "https://opencsg.com/agentichub?action=create-agent&template_name=alice%2Frepo",
-        "_blank",
-        "noopener,noreferrer",
-      );
-    } finally {
-      open.mockRestore();
-    }
+    renderHubDetailPane("template", {
+      agenticHubSiteURL: "https://opencsg.com",
+      publishedTemplate: {
+        id: "alice/repo",
+        name: "returned-name",
+        display_name: "展示名",
+        source: { kind: "remote" },
+      },
+    });
+    const success = await screen.findByRole("dialog", { name: "Published successfully" });
+    const link = within(success).getByRole("link", { name: "agentTemplateCreateInHub" });
+    expect(link).toHaveAttribute(
+      "href",
+      "https://opencsg.com/agentichub?action=create-agent&template_name=alice%2Frepo",
+    );
+    expect(link).toHaveAttribute("target", "_blank");
+    expect(link).toHaveAttribute("rel", "noopener noreferrer");
   });
 
   it("shows the saved local avatar and no source badge in signed-out My templates", async () => {
@@ -1034,7 +1025,7 @@ describe("HubDetailPane", () => {
     await user.click(screen.getByRole("button", { name: "Close" }));
     await user.click(screen.getByRole("tab", { name: "taskEntryOverview_personal" }));
     const card = screen.getByRole("button", { name: /demo-template/ });
-    expect(screen.queryByRole("button", { name: "agentTemplateCreateInHub" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "agentTemplateCreateInHub" })).not.toBeInTheDocument();
     expect(card.querySelector("img")).toHaveAttribute("src", "data:image/png;base64,aGVsbG8=");
     expect(card.querySelector('[class*="hub-template-source-badge"]')).toBeNull();
     expect(screen.getByText("resourcesMyTemplatesLoginHint")).toBeInTheDocument();

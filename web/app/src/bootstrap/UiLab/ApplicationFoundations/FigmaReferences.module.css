@@ -1,0 +1,5504 @@
+/* Compiled from the verified Figma design contexts. Isolated UI Lab references only. */
+/*! tailwindcss v4.3.0 | MIT License | https://tailwindcss.com */
+@layer properties;
+.defaults {
+  --spacing: 0.25rem;
+  --font-weight-normal: 400;
+  --font-weight-bold: 700;
+}
+.r0 {
+  position: relative;
+  display: flex;
+  width: 1216px;
+  flex-direction: column;
+  align-content: stretch;
+  align-items: flex-start;
+  gap: 16px;
+}
+.r1 {
+  position: relative;
+  display: flex;
+  flex-shrink: 0;
+  align-content: stretch;
+  align-items: center;
+}
+.r2 {
+  position: relative;
+  display: flex;
+  flex-shrink: 0;
+  align-content: stretch;
+  align-items: center;
+  gap: 4px;
+}
+.r3 {
+  position: relative;
+  display: flex;
+  flex-shrink: 0;
+  align-content: stretch;
+  align-items: flex-start;
+  border-radius: 6px;
+  padding: 4px;
+}
+.r4 {
+  position: relative;
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+.r5 {
+  position: absolute;
+  inset: calc(var(--spacing) * 0);
+  display: block;
+  max-width: none;
+}
+.r6 {
+  position: relative;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+.r7 {
+  position: relative;
+  display: flex;
+  flex-shrink: 0;
+  align-content: stretch;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  padding-inline: 8px;
+  padding-block: 4px;
+}
+.r8 {
+  position: relative;
+  flex-shrink: 0;
+  font-family: PingFang SC;
+  font-size: 14px;
+  --lab-figma-leading: 20px;
+  line-height: 20px;
+  --lab-figma-font-weight: 500;
+  font-weight: 500;
+  word-break: break-word;
+  white-space: nowrap;
+  color: #717680;
+}
+.r9 {
+  position: relative;
+  display: flex;
+  flex-shrink: 0;
+  align-content: stretch;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  background-color: #fafafa;
+  padding-inline: 8px;
+  padding-block: 4px;
+}
+.r10 {
+  position: relative;
+  flex-shrink: 0;
+  font-family: PingFang SC;
+  font-size: 14px;
+  --lab-figma-leading: 20px;
+  line-height: 20px;
+  --lab-figma-font-weight: 500;
+  font-weight: 500;
+  word-break: break-word;
+  white-space: nowrap;
+  color: #414651;
+}
+.r11 {
+  position: relative;
+  display: flex;
+  width: 100%;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  align-items: flex-start;
+  gap: 20px 16px;
+}
+.r12 {
+  position: relative;
+  display: flex;
+  min-width: 320px;
+  flex: 1 0 0;
+  flex-direction: column;
+  align-content: stretch;
+  align-items: flex-start;
+  gap: 4px;
+  word-break: break-word;
+}
+.r13 {
+  position: relative;
+  width: 100%;
+  flex-shrink: 0;
+  font-family: PingFang SC;
+  font-size: 24px;
+  --lab-figma-leading: 32px;
+  line-height: 32px;
+  --lab-figma-font-weight: 500;
+  font-weight: 500;
+  color: #181d27;
+}
+.r14 {
+  position: relative;
+  width: 100%;
+  flex-shrink: 0;
+  font-family: PingFang SC;
+  font-size: 16px;
+  --lab-figma-leading: 24px;
+  line-height: 24px;
+  --lab-figma-font-weight: 400;
+  font-weight: 400;
+  color: #535862;
+}
+.r15 {
+  position: relative;
+  display: flex;
+  flex-shrink: 0;
+  align-content: stretch;
+  align-items: center;
+  gap: 12px;
+}
+.r16 {
+  position: relative;
+  display: flex;
+  flex-shrink: 0;
+  align-content: stretch;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  overflow: clip;
+  border-radius: 8px;
+  padding-inline: 14px;
+  padding-block: 10px;
+}
+.r17 {
+  position: relative;
+  display: flex;
+  flex-shrink: 0;
+  align-content: stretch;
+  align-items: center;
+  justify-content: center;
+  padding-inline: 2px;
+}
+.r18 {
+  position: relative;
+  flex-shrink: 0;
+  font-family: PingFang SC;
+  font-size: 14px;
+  --lab-figma-leading: 20px;
+  line-height: 20px;
+  --lab-figma-font-weight: 500;
+  font-weight: 500;
+  word-break: break-word;
+  white-space: nowrap;
+  color: #535862;
+}
+.r19 {
+  position: relative;
+  display: flex;
+  flex-shrink: 0;
+  align-content: stretch;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  overflow: clip;
+  border-radius: 8px;
+  border-style: var(--lab-figma-border-style);
+  border-width: 1px;
+  --lab-figma-border-style: solid;
+  border-style: solid;
+  border-color: #d5d7da;
+  padding-inline: 14px;
+  padding-block: 10px;
+  --lab-figma-shadow: 0px 1px 2px 0px
+    var(--lab-figma-shadow-color, var(--颜色\/效果\/阴影\/shadow-xs, rgba(10, 13, 18, 0.05)));
+  box-shadow:
+    var(--lab-figma-inset-shadow), var(--lab-figma-inset-ring-shadow), var(--lab-figma-ring-offset-shadow),
+    var(--lab-figma-ring-shadow), var(--lab-figma-shadow);
+}
+.r20 {
+  pointer-events: none;
+  position: absolute;
+  inset: calc(var(--spacing) * 0);
+  border-radius: 8px;
+  background-color: white;
+}
+.r21 {
+  position: relative;
+  flex-shrink: 0;
+  font-family: PingFang SC;
+  font-size: 14px;
+  --lab-figma-leading: 20px;
+  line-height: 20px;
+  --lab-figma-font-weight: 500;
+  font-weight: 500;
+  word-break: break-word;
+  white-space: nowrap;
+  color: #414651;
+}
+.r22 {
+  pointer-events: none;
+  position: absolute;
+  inset: calc(var(--spacing) * 0);
+  border-radius: inherit;
+  --lab-figma-shadow:
+    inset 0px 0px 0px 1px
+      var(--lab-figma-shadow-color, var(--颜色\/效果\/阴影\/shadow-skeumorphic-inner-border, rgba(10, 13, 18, 0.18))),
+    inset 0px -2px 0px 0px
+      var(--lab-figma-shadow-color, var(--颜色\/效果\/阴影\/shadow-skeumorphic-inner, rgba(10, 13, 18, 0.05)));
+  box-shadow:
+    var(--lab-figma-inset-shadow), var(--lab-figma-inset-ring-shadow), var(--lab-figma-ring-offset-shadow),
+    var(--lab-figma-ring-shadow), var(--lab-figma-shadow);
+}
+.r23 {
+  position: relative;
+  display: flex;
+  flex-shrink: 0;
+  align-content: stretch;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  overflow: clip;
+  border-radius: 8px;
+  border-style: var(--lab-figma-border-style);
+  border-width: 2px;
+  --lab-figma-border-style: solid;
+  border-style: solid;
+  border-color: rgba(255, 255, 255, 0.12);
+  padding-inline: 14px;
+  padding-block: 10px;
+  --lab-figma-shadow: 0px 1px 2px 0px
+    var(--lab-figma-shadow-color, var(--颜色\/效果\/阴影\/shadow-xs, rgba(10, 13, 18, 0.05)));
+  box-shadow:
+    var(--lab-figma-inset-shadow), var(--lab-figma-inset-ring-shadow), var(--lab-figma-ring-offset-shadow),
+    var(--lab-figma-ring-shadow), var(--lab-figma-shadow);
+}
+.r24 {
+  pointer-events: none;
+  position: absolute;
+  inset: calc(var(--spacing) * 0);
+  border-radius: 8px;
+  background-color: #3250bd;
+}
+.r25 {
+  position: relative;
+  flex-shrink: 0;
+  font-family: PingFang SC;
+  font-size: 14px;
+  --lab-figma-leading: 20px;
+  line-height: 20px;
+  --lab-figma-font-weight: 500;
+  font-weight: 500;
+  word-break: break-word;
+  white-space: nowrap;
+  color: white;
+}
+.r26 {
+  position: relative;
+  display: flex;
+  max-width: 320px;
+  min-width: 200px;
+  flex: 1 0 0;
+  cursor: pointer;
+  flex-direction: column;
+  align-content: stretch;
+  align-items: flex-start;
+  gap: 6px;
+}
+.r27 {
+  position: relative;
+  display: flex;
+  width: 100%;
+  flex-shrink: 0;
+  flex-direction: column;
+  align-content: stretch;
+  align-items: flex-start;
+  gap: 6px;
+}
+.r28 {
+  position: relative;
+  display: flex;
+  width: 100%;
+  flex-shrink: 0;
+  align-content: stretch;
+  align-items: center;
+  gap: 8px;
+  overflow: clip;
+  border-radius: 8px;
+  border-style: var(--lab-figma-border-style);
+  border-width: 1px;
+  --lab-figma-border-style: solid;
+  border-style: solid;
+  border-color: #d5d7da;
+  background-color: white;
+  padding-inline: 12px;
+  padding-block: 8px;
+  --lab-figma-shadow: 0px 1px 2px 0px
+    var(--lab-figma-shadow-color, var(--颜色\/效果\/阴影\/shadow-xs, rgba(10, 13, 18, 0.05)));
+  box-shadow:
+    var(--lab-figma-inset-shadow), var(--lab-figma-inset-ring-shadow), var(--lab-figma-ring-offset-shadow),
+    var(--lab-figma-ring-shadow), var(--lab-figma-shadow);
+}
+.r29 {
+  position: relative;
+  display: flex;
+  min-width: 1px;
+  flex: 1 0 0;
+  align-content: stretch;
+  align-items: center;
+  gap: 8px;
+}
+.r30 {
+  position: relative;
+  min-width: 1px;
+  flex: 1 0 0;
+  overflow: hidden;
+  text-align: left;
+  font-family: PingFang SC;
+  font-size: 16px;
+  --lab-figma-leading: 24px;
+  line-height: 24px;
+  --lab-figma-font-weight: 400;
+  font-weight: 400;
+  word-break: break-word;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #717680;
+}
+.r31 {
+  position: relative;
+  display: flex;
+  flex-shrink: 0;
+  align-content: stretch;
+  align-items: flex-start;
+  border-radius: 4px;
+  border-style: var(--lab-figma-border-style);
+  border-width: 1px;
+  --lab-figma-border-style: solid;
+  border-style: solid;
+  border-color: #e9eaeb;
+  padding-inline: 4px;
+  padding-block: 1px;
+}
+.r32 {
+  position: relative;
+  flex-shrink: 0;
+  text-align: left;
+  font-family: PingFang SC;
+  font-size: 12px;
+  --lab-figma-leading: 18px;
+  line-height: 18px;
+  --lab-figma-font-weight: 400;
+  font-weight: 400;
+  word-break: break-word;
+  white-space: nowrap;
+  color: #717680;
+}
+.r33 {
+  position: relative;
+  height: 1px;
+  width: 100%;
+  flex-shrink: 0;
+}
+.r34 {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  width: 1216px;
+  flex-direction: column;
+  align-content: stretch;
+  align-items: flex-start;
+  gap: 20px;
+  background-color: white;
+}
+.r35 {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  width: 100%;
+  flex-shrink: 0;
+  align-content: stretch;
+  align-items: flex-start;
+  gap: 16px;
+  padding-inline: 24px;
+  padding-top: 20px;
+}
+.r36 {
+  position: relative;
+  display: flex;
+  min-width: 1px;
+  flex: 1 0 0;
+  flex-direction: column;
+  align-content: stretch;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 2px;
+}
+.r37 {
+  position: relative;
+  display: flex;
+  width: 100%;
+  flex-shrink: 0;
+  align-content: stretch;
+  align-items: center;
+  gap: 8px;
+}
+.r38 {
+  position: relative;
+  flex-shrink: 0;
+  font-family: PingFang SC;
+  font-size: 18px;
+  --lab-figma-leading: 28px;
+  line-height: 28px;
+  --lab-figma-font-weight: 500;
+  font-weight: 500;
+  word-break: break-word;
+  white-space: nowrap;
+  color: #181d27;
+}
+.r39 {
+  position: relative;
+  display: flex;
+  flex-shrink: 0;
+  align-content: stretch;
+  align-items: center;
+  border-radius: 9999px;
+  border-style: var(--lab-figma-border-style);
+  border-width: 1px;
+  --lab-figma-border-style: solid;
+  border-style: solid;
+  border-color: #99afff;
+  background-color: #ced8ff;
+  padding-inline: 8px;
+  padding-block: 2px;
+}
+.r40 {
+  position: relative;
+  flex-shrink: 0;
+  text-align: center;
+  font-family: PingFang SC;
+  font-size: 12px;
+  --lab-figma-leading: 18px;
+  line-height: 18px;
+  --lab-figma-font-weight: 400;
+  font-weight: 400;
+  word-break: break-word;
+  white-space: nowrap;
+  color: #223b99;
+}
+.r41 {
+  position: relative;
+  width: 100%;
+  flex-shrink: 0;
+  overflow: hidden;
+  font-family: PingFang SC;
+  font-size: 14px;
+  --lab-figma-leading: 20px;
+  line-height: 20px;
+  --lab-figma-font-weight: 400;
+  font-weight: 400;
+  word-break: break-word;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #535862;
+}
+.r42 {
+  position: relative;
+  display: flex;
+  flex-shrink: 0;
+  cursor: pointer;
+  flex-direction: column;
+  align-content: stretch;
+  align-items: flex-start;
+}
+.r43 {
+  position: relative;
+  z-index: 1;
+  height: 1px;
+  width: 100%;
+  flex-shrink: 0;
+}
+.r44 {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  width: 1216px;
+  flex-direction: column;
+  align-content: stretch;
+  align-items: flex-start;
+  gap: 20px;
+}
+.r45 {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  width: 100%;
+  flex-shrink: 0;
+  align-content: stretch;
+  align-items: flex-start;
+  gap: 16px;
+}
+.r46 {
+  position: relative;
+  display: flex;
+  min-width: 1px;
+  flex: 1 0 0;
+  flex-direction: column;
+  align-content: stretch;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 2px;
+  align-self: stretch;
+  word-break: break-word;
+}
+.r47 {
+  position: relative;
+  width: 100%;
+  flex-shrink: 0;
+  font-family: PingFang SC;
+  font-size: 18px;
+  --lab-figma-leading: 28px;
+  line-height: 28px;
+  --lab-figma-font-weight: 500;
+  font-weight: 500;
+  color: #181d27;
+}
+.r48 {
+  position: relative;
+  width: 100%;
+  flex-shrink: 0;
+  overflow: hidden;
+  font-family: PingFang SC;
+  font-size: 14px;
+  --lab-figma-leading: 20px;
+  line-height: 20px;
+  --lab-figma-font-weight: 400;
+  font-weight: 400;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #535862;
+}
+.r49 {
+  position: relative;
+  display: flex;
+  height: 960px;
+  width: 296px;
+  align-content: stretch;
+  align-items: flex-start;
+  border-right-style: var(--lab-figma-border-style);
+  border-right-width: 1px;
+  --lab-figma-border-style: solid;
+  border-style: solid;
+  border-color: #e9eaeb;
+  background-color: white;
+}
+.r50 {
+  position: relative;
+  display: flex;
+  height: 100%;
+  min-width: 1px;
+  flex: 1 0 0;
+  flex-direction: column;
+  align-content: stretch;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+.r51 {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  width: 100%;
+  flex-shrink: 0;
+  flex-direction: column;
+  align-content: stretch;
+  align-items: flex-start;
+  gap: 16px;
+  padding-top: 24px;
+}
+.r52 {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  width: 100%;
+  flex-shrink: 0;
+  flex-direction: column;
+  align-content: stretch;
+  align-items: flex-start;
+  gap: 20px;
+  padding-inline: 20px;
+}
+.r53 {
+  position: relative;
+  display: flex;
+  width: 139px;
+  flex-shrink: 0;
+  align-content: stretch;
+  align-items: flex-start;
+}
+.r54 {
+  position: relative;
+  height: 32px;
+  width: 139px;
+  flex-shrink: 0;
+}
+.r55 {
+  position: absolute;
+  top: calc(var(--spacing) * 0);
+  left: calc(var(--spacing) * 0);
+  height: 32px;
+  width: 110.75px;
+  overflow: clip;
+}
+.r56 {
+  position: absolute;
+  top: calc(var(--spacing) * 0);
+  left: calc(var(--spacing) * 0);
+  display: contents;
+}
+.r57 {
+  position: absolute;
+  top: calc(var(--spacing) * 0);
+  left: calc(var(--spacing) * 0);
+  height: 32px;
+  width: 30.019px;
+}
+.r58 {
+  position: absolute;
+  top: 1.92px;
+  left: 2.07px;
+  height: 28.157px;
+  width: 25.88px;
+}
+.r59 {
+  position: absolute;
+  top: 8.73px;
+  left: 7.74px;
+  width: 14.533px;
+  height: 14.533px;
+}
+.r60 {
+  position: absolute;
+  top: 4.13px;
+  left: 5.36px;
+  display: contents;
+}
+.r61 {
+  position: absolute;
+  top: 24.67px;
+  left: 14.86px;
+  height: 3.2px;
+  width: 0.338px;
+}
+.r62 {
+  position: absolute;
+  top: 24.54px;
+  left: 13.01px;
+  height: 3.213px;
+  width: 0.825px;
+}
+.r63 {
+  position: absolute;
+  top: 24.2px;
+  left: 11.2px;
+  height: 3.147px;
+  width: 1.302px;
+}
+.r64 {
+  position: absolute;
+  top: 23.65px;
+  left: 9.49px;
+  height: 3.004px;
+  width: 1.746px;
+}
+.r65 {
+  position: absolute;
+  top: 22.92px;
+  left: 7.92px;
+  height: 2.787px;
+  width: 2.147px;
+}
+.r66 {
+  position: absolute;
+  top: 22.02px;
+  left: 6.51px;
+  height: 2.501px;
+  width: 2.496px;
+}
+.r67 {
+  position: absolute;
+  top: 21.42px;
+  left: 5.37px;
+  height: 1.648px;
+  width: 2.143px;
+}
+.r68 {
+  position: absolute;
+  top: 8.96px;
+  left: 5.36px;
+  height: 1.174px;
+  width: 1.481px;
+}
+.r69 {
+  position: absolute;
+  top: 7.5px;
+  left: 6.49px;
+  height: 2.496px;
+  width: 2.501px;
+}
+.r70 {
+  position: absolute;
+  top: 6.31px;
+  left: 7.89px;
+  height: 2.783px;
+  width: 2.154px;
+}
+.r71 {
+  position: absolute;
+  top: 5.36px;
+  left: 9.46px;
+  height: 3.001px;
+  width: 1.754px;
+}
+.r72 {
+  position: absolute;
+  top: 4.67px;
+  left: 11.17px;
+  height: 3.145px;
+  width: 1.31px;
+}
+.r73 {
+  position: absolute;
+  top: 4.26px;
+  left: 12.97px;
+  height: 3.213px;
+  width: 0.834px;
+}
+.r74 {
+  position: absolute;
+  top: 4.13px;
+  left: 14.83px;
+  height: 3.2px;
+  width: 0.338px;
+}
+.r75 {
+  position: absolute;
+  top: 4.25px;
+  left: 16.19px;
+  height: 3.213px;
+  width: 0.825px;
+}
+.r76 {
+  position: absolute;
+  top: 4.66px;
+  left: 17.52px;
+  height: 3.147px;
+  width: 1.302px;
+}
+.r77 {
+  position: absolute;
+  top: 5.34px;
+  left: 18.78px;
+  height: 3.004px;
+  width: 1.746px;
+}
+.r78 {
+  position: absolute;
+  top: 6.29px;
+  left: 19.96px;
+  height: 2.787px;
+  width: 2.147px;
+}
+.r79 {
+  position: absolute;
+  top: 7.48px;
+  left: 21.01px;
+  height: 2.501px;
+  width: 2.496px;
+}
+.r80 {
+  position: absolute;
+  top: 8.93px;
+  left: 23.1px;
+  height: 1.248px;
+  width: 1.543px;
+}
+.r81 {
+  position: absolute;
+  top: 21.47px;
+  left: 22.58px;
+  height: 1.574px;
+  width: 2.081px;
+}
+.r82 {
+  position: absolute;
+  top: 22px;
+  left: 21.03px;
+  height: 2.496px;
+  width: 2.501px;
+}
+.r83 {
+  position: absolute;
+  top: 22.9px;
+  left: 19.98px;
+  height: 2.783px;
+  width: 2.154px;
+}
+.r84 {
+  position: absolute;
+  top: 23.64px;
+  left: 18.81px;
+  height: 3.001px;
+  width: 1.754px;
+}
+.r85 {
+  position: absolute;
+  top: 24.19px;
+  left: 17.54px;
+  height: 3.145px;
+  width: 1.31px;
+}
+.r86 {
+  position: absolute;
+  top: 24.53px;
+  left: 16.22px;
+  height: 3.213px;
+  width: 0.834px;
+}
+.r87 {
+  position: absolute;
+  top: 9.03px;
+  left: 34.15px;
+  height: 15.674px;
+  width: 76.595px;
+}
+.r88 {
+  position: relative;
+  display: flex;
+  width: 100%;
+  flex-shrink: 0;
+  cursor: pointer;
+  flex-direction: column;
+  align-content: stretch;
+  align-items: flex-start;
+  gap: 6px;
+}
+.r89 {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  width: 100%;
+  flex-shrink: 0;
+  cursor: pointer;
+  flex-direction: column;
+  align-content: stretch;
+  align-items: flex-start;
+  padding-inline: 12px;
+}
+.r90 {
+  position: relative;
+  display: flex;
+  width: 100%;
+  flex-shrink: 0;
+  align-content: stretch;
+  align-items: flex-start;
+}
+.r91 {
+  position: relative;
+  display: flex;
+  min-width: 1px;
+  flex: 1 0 0;
+  align-content: stretch;
+  align-items: center;
+  overflow: clip;
+  padding-block: 2px;
+}
+.r92 {
+  position: relative;
+  display: flex;
+  min-width: 1px;
+  flex: 1 0 0;
+  align-content: stretch;
+  align-items: center;
+  gap: 12px;
+  border-radius: 6px;
+  background-color: white;
+  padding-inline: 12px;
+  padding-block: 8px;
+}
+.r93 {
+  position: relative;
+  flex-shrink: 0;
+  text-align: left;
+  font-family: PingFang SC;
+  font-size: 16px;
+  --lab-figma-leading: 24px;
+  line-height: 24px;
+  --lab-figma-font-weight: 500;
+  font-weight: 500;
+  word-break: break-word;
+  white-space: nowrap;
+  color: #414651;
+}
+.r94 {
+  position: relative;
+  display: flex;
+  flex-shrink: 0;
+  align-content: stretch;
+  align-items: center;
+  border-radius: 9999px;
+  border-style: var(--lab-figma-border-style);
+  border-width: 1px;
+  --lab-figma-border-style: solid;
+  border-style: solid;
+  border-color: #e9eaeb;
+  background-color: #fafafa;
+  padding-inline: 8px;
+  padding-block: 2px;
+}
+.r95 {
+  position: relative;
+  flex-shrink: 0;
+  text-align: center;
+  font-family: PingFang SC;
+  font-size: 12px;
+  --lab-figma-leading: 18px;
+  line-height: 18px;
+  --lab-figma-font-weight: 400;
+  font-weight: 400;
+  word-break: break-word;
+  white-space: nowrap;
+  color: #414651;
+}
+.r96 {
+  position: relative;
+  display: flex;
+  width: 100%;
+  flex-shrink: 0;
+  flex-direction: column;
+  align-content: stretch;
+  align-items: flex-start;
+  gap: 16px;
+  padding-inline: 16px;
+  padding-bottom: 24px;
+}
+.r97 {
+  position: relative;
+  display: flex;
+  width: 100%;
+  flex-shrink: 0;
+  flex-direction: column;
+  align-content: stretch;
+  align-items: flex-start;
+}
+.r98 {
+  position: relative;
+  display: flex;
+  width: 100%;
+  flex-shrink: 0;
+  align-content: stretch;
+  align-items: center;
+  overflow: clip;
+  padding-block: 2px;
+}
+.r99 {
+  position: relative;
+  flex-shrink: 0;
+  font-family: PingFang SC;
+  font-size: 16px;
+  --lab-figma-leading: 24px;
+  line-height: 24px;
+  --lab-figma-font-weight: 500;
+  font-weight: 500;
+  word-break: break-word;
+  white-space: nowrap;
+  color: #414651;
+}
+.r100 {
+  position: relative;
+  display: flex;
+  flex-shrink: 0;
+  align-content: stretch;
+  align-items: center;
+  gap: 4px;
+  border-radius: 6px;
+  border-style: var(--lab-figma-border-style);
+  border-width: 1px;
+  --lab-figma-border-style: solid;
+  border-style: solid;
+  border-color: #d5d7da;
+  background-color: white;
+  padding-inline: 6px;
+  padding-block: 2px;
+  --lab-figma-drop-shadow-size: drop-shadow(
+    0px 1px 1px var(--lab-figma-drop-shadow-color, var(--颜色\/效果\/阴影\/shadow-xs, rgba(10, 13, 18, 0.05)))
+  );
+  --lab-figma-drop-shadow: var(--lab-figma-drop-shadow-size);
+  filter: var(--lab-figma-blur,) var(--lab-figma-brightness,) var(--lab-figma-contrast,) var(--lab-figma-grayscale,)
+    var(--lab-figma-hue-rotate,) var(--lab-figma-invert,) var(--lab-figma-saturate,) var(--lab-figma-sepia,)
+    var(--lab-figma-drop-shadow,);
+}
+.r101 {
+  position: relative;
+  width: 8px;
+  height: 8px;
+  flex-shrink: 0;
+}
+.r102 {
+  position: relative;
+  flex-shrink: 0;
+  text-align: center;
+  font-family: PingFang SC;
+  font-size: 12px;
+  --lab-figma-leading: 18px;
+  line-height: 18px;
+  --lab-figma-font-weight: 400;
+  font-weight: 400;
+  word-break: break-word;
+  white-space: nowrap;
+  color: #414651;
+}
+.r103 {
+  position: relative;
+  display: flex;
+  width: 100%;
+  flex-shrink: 0;
+  flex-direction: column;
+  align-content: stretch;
+  align-items: flex-start;
+  gap: 16px;
+  border-radius: 12px;
+  background-color: #fafafa;
+  padding: 16px;
+}
+.r104 {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  width: 36px;
+  height: 36px;
+  align-content: stretch;
+  align-items: center;
+  justify-content: center;
+  overflow: clip;
+  border-radius: 8px;
+  padding: 8px;
+}
+.r105 {
+  position: relative;
+  display: flex;
+  width: 100%;
+  flex-shrink: 0;
+  flex-direction: column;
+  align-content: stretch;
+  align-items: flex-start;
+  gap: 4px;
+}
+.r106 {
+  position: relative;
+  display: flex;
+  width: 100%;
+  flex-shrink: 0;
+  align-content: stretch;
+  align-items: flex-start;
+  gap: 4px;
+  padding-right: 24px;
+}
+.r107 {
+  position: relative;
+  min-width: 1px;
+  flex: 1 0 0;
+  font-family: PingFang SC;
+  font-size: 14px;
+  --lab-figma-leading: 20px;
+  line-height: 20px;
+  --lab-figma-font-weight: 500;
+  font-weight: 500;
+  word-break: break-word;
+  color: #181d27;
+}
+.r108 {
+  position: relative;
+  width: 100%;
+  flex-shrink: 0;
+  font-family: PingFang SC;
+  font-size: 14px;
+  --lab-figma-leading: 20px;
+  line-height: 20px;
+  --lab-figma-font-weight: 400;
+  font-weight: 400;
+  word-break: break-word;
+  color: #535862;
+}
+.r109 {
+  position: relative;
+  display: flex;
+  width: 100%;
+  flex-shrink: 0;
+  align-content: stretch;
+  align-items: center;
+  gap: 12px;
+}
+.r110 {
+  position: relative;
+  height: 8px;
+  min-width: 1px;
+  flex: 1 0 0;
+  border-radius: 8px;
+}
+.r111 {
+  position: absolute;
+  top: calc(var(--spacing) * 0);
+  right: calc(var(--spacing) * 0);
+  left: calc(var(--spacing) * 0);
+  height: 8px;
+  border-radius: 9999px;
+  background-color: #e9eaeb;
+}
+.r112 {
+  position: absolute;
+  top: calc(var(--spacing) * 0);
+  right: 16.63%;
+  left: calc(var(--spacing) * 0);
+  height: 8px;
+  border-radius: 9999px;
+  background-color: #3250bd;
+}
+.r113 {
+  position: relative;
+  display: flex;
+  flex-shrink: 0;
+  align-content: stretch;
+  align-items: flex-start;
+  gap: 12px;
+}
+.r114 {
+  position: relative;
+  display: flex;
+  flex-shrink: 0;
+  align-content: stretch;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  overflow: clip;
+}
+.r115 {
+  position: relative;
+  flex-shrink: 0;
+  font-family: PingFang SC;
+  font-size: 14px;
+  --lab-figma-leading: 20px;
+  line-height: 20px;
+  --lab-figma-font-weight: 500;
+  font-weight: 500;
+  word-break: break-word;
+  white-space: nowrap;
+  color: #223b99;
+}
+.r116 {
+  position: relative;
+  display: flex;
+  width: 100%;
+  flex-shrink: 0;
+  cursor: pointer;
+  align-content: stretch;
+  align-items: flex-start;
+  gap: 16px;
+  border-radius: 12px;
+  border-style: var(--lab-figma-border-style);
+  border-width: 1px;
+  --lab-figma-border-style: solid;
+  border-style: solid;
+  border-color: #e9eaeb;
+  background-color: white;
+  padding: 12px;
+}
+.r117 {
+  position: relative;
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  border-radius: 9999px;
+  border-style: var(--lab-figma-border-style);
+  border-width: 1px;
+  --lab-figma-border-style: solid;
+  border-style: solid;
+  border-color: rgba(0, 0, 0, 0.08);
+}
+.r118 {
+  pointer-events: none;
+  position: absolute;
+  inset: calc(var(--spacing) * 0);
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  border-radius: 9999px;
+  object-fit: cover;
+}
+.r119 {
+  position: absolute;
+  right: -1px;
+  bottom: -1px;
+  width: 10px;
+  height: 10px;
+  border-radius: 9999px;
+  border-style: var(--lab-figma-border-style);
+  border-width: 1.5px;
+  --lab-figma-border-style: solid;
+  border-style: solid;
+  border-color: white;
+  background-color: #17b26a;
+}
+.r120 {
+  position: relative;
+  display: flex;
+  flex-shrink: 0;
+  flex-direction: column;
+  align-content: stretch;
+  align-items: flex-start;
+  text-align: left;
+  --lab-figma-leading: 20px;
+  line-height: 20px;
+  word-break: break-word;
+  white-space: nowrap;
+}
+.r121 {
+  position: relative;
+  flex-shrink: 0;
+  font-family: PingFang SC;
+  font-size: 14px;
+  --lab-figma-font-weight: 500;
+  font-weight: 500;
+  color: #181d27;
+}
+.r122 {
+  position: relative;
+  flex-shrink: 0;
+  overflow: hidden;
+  font-family: PingFang SC;
+  font-size: 14px;
+  --lab-figma-font-weight: 400;
+  font-weight: 400;
+  text-overflow: ellipsis;
+  color: #535862;
+}
+.r123 {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  display: flex;
+  width: 32px;
+  align-content: stretch;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  background-color: #fafafa;
+  padding: 6px;
+}
+.r124 {
+  position: absolute;
+  right: -6px;
+  bottom: -6px;
+  width: 20px;
+  height: 20px;
+}
+.r125 {
+  position: absolute;
+  inset: 0 -0.61% -5.6% 0;
+}
+.r126 {
+  display: block;
+  max-width: none;
+}
+.r127 {
+  position: absolute;
+  right: -273px;
+  bottom: -1px;
+  display: flex;
+  width: 264px;
+  flex-direction: column;
+  align-content: stretch;
+  align-items: flex-start;
+  overflow: clip;
+  border-radius: 12px;
+  border-style: var(--lab-figma-border-style);
+  border-width: 1px;
+  --lab-figma-border-style: solid;
+  border-style: solid;
+  border-color: rgba(0, 0, 0, 0.08);
+  background-color: #fafafa;
+  --lab-figma-shadow:
+    0px 12px 16px -4px var(--lab-figma-shadow-color, var(--颜色\/效果\/阴影\/shadow-lg_01, rgba(10, 13, 18, 0.08))),
+    0px 4px 6px -2px var(--lab-figma-shadow-color, var(--颜色\/效果\/阴影\/shadow-lg_02, rgba(10, 13, 18, 0.03))),
+    0px 2px 2px -1px var(--lab-figma-shadow-color, var(--颜色\/效果\/阴影\/shadow-lg_03, rgba(10, 13, 18, 0.04)));
+  box-shadow:
+    var(--lab-figma-inset-shadow), var(--lab-figma-inset-ring-shadow), var(--lab-figma-ring-offset-shadow),
+    var(--lab-figma-ring-shadow), var(--lab-figma-shadow);
+}
+.r128 {
+  position: relative;
+  display: flex;
+  width: 100%;
+  flex-shrink: 0;
+  flex-direction: column;
+  align-content: stretch;
+  align-items: flex-start;
+  border-top-left-radius: 12px;
+  border-top-right-radius: 12px;
+  border-bottom-right-radius: 16px;
+  border-bottom-left-radius: 16px;
+  border-style: var(--lab-figma-border-style);
+  border-width: 1px;
+  --lab-figma-border-style: solid;
+  border-style: solid;
+  border-color: #e9eaeb;
+  background-color: white;
+}
+.r129 {
+  position: relative;
+  display: flex;
+  width: 100%;
+  flex-shrink: 0;
+  flex-direction: column;
+  align-content: stretch;
+  align-items: flex-start;
+  gap: 2px;
+  overflow: clip;
+  padding-block: 6px;
+}
+.r130 {
+  position: relative;
+  display: flex;
+  width: 100%;
+  flex-shrink: 0;
+  align-content: stretch;
+  align-items: center;
+  padding-inline: 6px;
+}
+.r131 {
+  position: relative;
+  display: flex;
+  min-width: 1px;
+  flex: 1 0 0;
+  align-content: stretch;
+  align-items: center;
+  gap: 12px;
+  overflow: clip;
+  border-radius: 6px;
+  padding: 8px;
+}
+.r132 {
+  position: relative;
+  min-width: 1px;
+  flex: 1 0 0;
+  text-align: left;
+  font-family: PingFang SC;
+  font-size: 14px;
+  --lab-figma-leading: 20px;
+  line-height: 20px;
+  --lab-figma-font-weight: 500;
+  font-weight: 500;
+  word-break: break-word;
+  color: #414651;
+}
+.r133 {
+  position: relative;
+  flex-shrink: 0;
+  text-align: left;
+  font-family: PingFang SC;
+  font-size: 12px;
+  --lab-figma-leading: 18px;
+  line-height: 18px;
+  --lab-figma-font-weight: 400;
+  font-weight: 400;
+  word-break: break-word;
+  white-space: nowrap;
+  color: #535862;
+}
+.r134 {
+  position: relative;
+  display: flex;
+  width: 100%;
+  flex-shrink: 0;
+  flex-direction: column;
+  align-content: stretch;
+  align-items: flex-start;
+  gap: 2px;
+  overflow: clip;
+  border-top-style: var(--lab-figma-border-style);
+  border-top-width: 1px;
+  --lab-figma-border-style: solid;
+  border-style: solid;
+  border-color: #e9eaeb;
+  padding-block: 6px;
+}
+.r135 {
+  position: relative;
+  display: flex;
+  width: 100%;
+  flex-shrink: 0;
+  align-content: stretch;
+  align-items: flex-start;
+  padding-inline: 12px;
+  padding-top: 6px;
+  padding-bottom: 4px;
+}
+.r136 {
+  position: relative;
+  min-width: 1px;
+  flex: 1 0 0;
+  text-align: left;
+  font-family: PingFang SC;
+  font-size: 12px;
+  --lab-figma-leading: 18px;
+  line-height: 18px;
+  --lab-figma-font-weight: 500;
+  font-weight: 500;
+  word-break: break-word;
+  color: #535862;
+}
+.r137 {
+  position: relative;
+  display: flex;
+  min-width: 1px;
+  flex: 1 0 0;
+  align-content: stretch;
+  align-items: center;
+  gap: 12px;
+  overflow: clip;
+  border-radius: 6px;
+  background-color: #fafafa;
+  padding-inline: 8px;
+  padding-block: 6px;
+}
+.r138 {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  align-content: stretch;
+  align-items: center;
+  justify-content: center;
+}
+.r139 {
+  position: relative;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  overflow: clip;
+  border-radius: 9999px;
+  background-color: #3250bd;
+}
+.r140 {
+  position: absolute;
+  inset: 31.25%;
+  border-radius: 9999px;
+  background-color: white;
+}
+.r141 {
+  position: relative;
+  display: flex;
+  min-width: 1px;
+  flex: 1 0 0;
+  align-content: stretch;
+  align-items: flex-start;
+  gap: 12px;
+  overflow: clip;
+  border-radius: 6px;
+  padding-inline: 8px;
+  padding-block: 6px;
+}
+.r142 {
+  pointer-events: none;
+  position: absolute;
+  inset: calc(var(--spacing) * 0);
+  border-radius: 9999px;
+}
+.r143 {
+  position: absolute;
+  inset: calc(var(--spacing) * 0);
+  border-radius: 9999px;
+  background-color: #e0e0e0;
+}
+.r144 {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  border-radius: 9999px;
+  object-fit: cover;
+}
+.r145 {
+  position: relative;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  border-radius: 9999px;
+  border-style: var(--lab-figma-border-style);
+  border-width: 1px;
+  --lab-figma-border-style: solid;
+  border-style: solid;
+  border-color: #d5d7da;
+}
+.r146 {
+  position: relative;
+  display: flex;
+  width: 100%;
+  flex-shrink: 0;
+  align-content: stretch;
+  align-items: center;
+  justify-content: center;
+  padding-inline: 8px;
+  padding-top: 2px;
+  padding-bottom: 8px;
+}
+.r147 {
+  position: relative;
+  display: flex;
+  min-width: 1px;
+  flex: 1 0 0;
+  align-content: stretch;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  overflow: clip;
+  border-radius: 8px;
+  border-style: var(--lab-figma-border-style);
+  border-width: 1px;
+  --lab-figma-border-style: solid;
+  border-style: solid;
+  border-color: #d5d7da;
+  padding-inline: 12px;
+  padding-block: 8px;
+  --lab-figma-shadow: 0px 1px 2px 0px
+    var(--lab-figma-shadow-color, var(--颜色\/效果\/阴影\/shadow-xs, rgba(10, 13, 18, 0.05)));
+  box-shadow:
+    var(--lab-figma-inset-shadow), var(--lab-figma-inset-ring-shadow), var(--lab-figma-ring-offset-shadow),
+    var(--lab-figma-ring-shadow), var(--lab-figma-shadow);
+}
+.r148 {
+  position: relative;
+  flex-shrink: 0;
+  text-align: left;
+  font-family: PingFang SC;
+  font-size: 14px;
+  --lab-figma-leading: 20px;
+  line-height: 20px;
+  --lab-figma-font-weight: 500;
+  font-weight: 500;
+  word-break: break-word;
+  white-space: nowrap;
+  color: #414651;
+}
+.r149 {
+  position: relative;
+  display: flex;
+  width: 100%;
+  flex-shrink: 0;
+  flex-direction: column;
+  align-content: stretch;
+  align-items: flex-start;
+  gap: 2px;
+  overflow: clip;
+  padding-top: 4px;
+  padding-bottom: 6px;
+}
+.r150 {
+  position: relative;
+  display: flex;
+  height: 960px;
+  width: 1440px;
+  flex-direction: column;
+  align-content: stretch;
+  align-items: center;
+  justify-content: center;
+  overflow: clip;
+  padding-inline: 32px;
+  padding-block: 32px;
+}
+.r151 {
+  position: absolute;
+  inset: calc(var(--spacing) * 0);
+  --lab-figma-backdrop-blur: blur(8px);
+  -webkit-backdrop-filter: var(--lab-figma-backdrop-blur,) var(--lab-figma-backdrop-brightness,)
+    var(--lab-figma-backdrop-contrast,) var(--lab-figma-backdrop-grayscale,) var(--lab-figma-backdrop-hue-rotate,)
+    var(--lab-figma-backdrop-invert,) var(--lab-figma-backdrop-opacity,) var(--lab-figma-backdrop-saturate,)
+    var(--lab-figma-backdrop-sepia,);
+  backdrop-filter: var(--lab-figma-backdrop-blur,) var(--lab-figma-backdrop-brightness,)
+    var(--lab-figma-backdrop-contrast,) var(--lab-figma-backdrop-grayscale,) var(--lab-figma-backdrop-hue-rotate,)
+    var(--lab-figma-backdrop-invert,) var(--lab-figma-backdrop-opacity,) var(--lab-figma-backdrop-saturate,)
+    var(--lab-figma-backdrop-sepia,);
+}
+.r152 {
+  position: absolute;
+  inset: calc(var(--spacing) * 0);
+  background-color: #0a0d12;
+  opacity: 70%;
+}
+.r153 {
+  position: relative;
+  display: flex;
+  width: 100%;
+  max-width: 400px;
+  flex-shrink: 0;
+  flex-direction: column;
+  align-content: stretch;
+  align-items: center;
+  overflow: clip;
+  border-radius: 16px;
+  background-color: white;
+  --lab-figma-shadow:
+    0px 20px 24px -4px var(--lab-figma-shadow-color, var(--颜色\/效果\/阴影\/shadow-xl_01, rgba(10, 13, 18, 0.08))),
+    0px 8px 8px -4px var(--lab-figma-shadow-color, var(--颜色\/效果\/阴影\/shadow-xl_02, rgba(10, 13, 18, 0.03))),
+    0px 3px 3px -1.5px var(--lab-figma-shadow-color, var(--颜色\/效果\/阴影\/shadow-xl_03, rgba(10, 13, 18, 0.04)));
+  box-shadow:
+    var(--lab-figma-inset-shadow), var(--lab-figma-inset-ring-shadow), var(--lab-figma-ring-offset-shadow),
+    var(--lab-figma-ring-shadow), var(--lab-figma-shadow);
+}
+.r154 {
+  position: absolute;
+  top: -120px;
+  left: -120px;
+  width: 336px;
+  height: 336px;
+}
+.r155 {
+  position: absolute;
+  top: calc(var(--spacing) * 0);
+  left: calc(1 / 2 * 100%);
+  width: 336px;
+  height: 336px;
+  --lab-figma-translate-x: calc(calc(1 / 2 * 100%) * -1);
+  translate: var(--lab-figma-translate-x) var(--lab-figma-translate-y);
+  mask-composite: intersect;
+  mask-mode: alpha;
+  mask-size: 336px 336px;
+  mask-clip: no-clip;
+  mask-repeat: no-repeat;
+}
+.r156 {
+  position: relative;
+  display: flex;
+  width: 100%;
+  flex-shrink: 0;
+  flex-direction: column;
+  align-content: stretch;
+  align-items: center;
+}
+.r157 {
+  position: relative;
+  display: flex;
+  width: 100%;
+  flex-shrink: 0;
+  flex-direction: column;
+  align-content: stretch;
+  align-items: flex-start;
+  gap: 16px;
+  padding-inline: 24px;
+  padding-top: 24px;
+}
+.r158 {
+  position: relative;
+  width: 48px;
+  height: 48px;
+  flex-shrink: 0;
+  overflow: clip;
+  border-radius: 9999px;
+  background-color: #dcfae6;
+}
+.r159 {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  width: 24px;
+  height: 24px;
+}
+.r160 {
+  position: relative;
+  display: flex;
+  width: 100%;
+  flex-shrink: 0;
+  flex-direction: column;
+  align-content: stretch;
+  align-items: flex-start;
+  gap: 2px;
+  word-break: break-word;
+}
+.r161 {
+  position: relative;
+  width: 100%;
+  flex-shrink: 0;
+  font-family: PingFang SC;
+  font-size: 16px;
+  --lab-figma-leading: 24px;
+  line-height: 24px;
+  --lab-figma-font-weight: 500;
+  font-weight: 500;
+  color: #181d27;
+}
+.r162 {
+  position: relative;
+  width: 100%;
+  flex-shrink: 0;
+  font-family: PingFang SC;
+  font-size: 14px;
+  --lab-figma-leading: 20px;
+  line-height: 20px;
+  --lab-figma-font-weight: 400;
+  font-weight: 400;
+  color: #535862;
+}
+.r163 {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  display: flex;
+  width: 44px;
+  height: 44px;
+  align-content: stretch;
+  align-items: center;
+  justify-content: center;
+  overflow: clip;
+  border-radius: 8px;
+  padding: 8px;
+}
+.r164 {
+  position: relative;
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+}
+.r165 {
+  position: relative;
+  display: flex;
+  width: 100%;
+  flex-shrink: 0;
+  flex-direction: column;
+  align-content: stretch;
+  align-items: flex-start;
+  padding-top: 32px;
+}
+.r166 {
+  position: relative;
+  display: flex;
+  width: 100%;
+  flex-shrink: 0;
+  align-content: stretch;
+  align-items: flex-start;
+  gap: 12px;
+  padding-inline: 24px;
+  padding-bottom: 24px;
+}
+.r167 {
+  position: relative;
+  display: flex;
+  min-width: 1px;
+  flex: 1 0 0;
+  align-content: stretch;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  overflow: clip;
+  border-radius: 8px;
+  border-style: var(--lab-figma-border-style);
+  border-width: 1px;
+  --lab-figma-border-style: solid;
+  border-style: solid;
+  border-color: #d5d7da;
+  padding-inline: 16px;
+  padding-block: 10px;
+  --lab-figma-shadow: 0px 1px 2px 0px
+    var(--lab-figma-shadow-color, var(--颜色\/效果\/阴影\/shadow-xs, rgba(10, 13, 18, 0.05)));
+  box-shadow:
+    var(--lab-figma-inset-shadow), var(--lab-figma-inset-ring-shadow), var(--lab-figma-ring-offset-shadow),
+    var(--lab-figma-ring-shadow), var(--lab-figma-shadow);
+}
+.r168 {
+  position: relative;
+  display: flex;
+  min-width: 1px;
+  flex: 1 0 0;
+  align-content: stretch;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  overflow: clip;
+  border-radius: 8px;
+  border-style: var(--lab-figma-border-style);
+  border-width: 2px;
+  --lab-figma-border-style: solid;
+  border-style: solid;
+  border-color: rgba(255, 255, 255, 0.12);
+  padding-inline: 16px;
+  padding-block: 10px;
+  --lab-figma-shadow: 0px 1px 2px 0px
+    var(--lab-figma-shadow-color, var(--颜色\/效果\/阴影\/shadow-xs, rgba(10, 13, 18, 0.05)));
+  box-shadow:
+    var(--lab-figma-inset-shadow), var(--lab-figma-inset-ring-shadow), var(--lab-figma-ring-offset-shadow),
+    var(--lab-figma-ring-shadow), var(--lab-figma-shadow);
+}
+.r169 {
+  position: relative;
+  flex-shrink: 0;
+  font-family: PingFang SC;
+  font-size: 16px;
+  --lab-figma-leading: 24px;
+  line-height: 24px;
+  --lab-figma-font-weight: 500;
+  font-weight: 500;
+  word-break: break-word;
+  white-space: nowrap;
+  color: white;
+}
+.r170 {
+  position: relative;
+  display: flex;
+  height: 960px;
+  width: 1440px;
+  flex-direction: column;
+  align-content: stretch;
+  align-items: center;
+  padding-inline: 32px;
+  padding-top: 160px;
+  padding-bottom: 32px;
+}
+.r171 {
+  position: relative;
+  display: flex;
+  width: 100%;
+  max-width: 640px;
+  flex-shrink: 0;
+  flex-direction: column;
+  align-content: stretch;
+  align-items: flex-start;
+  overflow: clip;
+  border-radius: 12px;
+  background-color: white;
+  --lab-figma-shadow:
+    0px 20px 24px -4px var(--lab-figma-shadow-color, var(--颜色\/效果\/阴影\/shadow-xl_01, rgba(10, 13, 18, 0.08))),
+    0px 8px 8px -4px var(--lab-figma-shadow-color, var(--颜色\/效果\/阴影\/shadow-xl_02, rgba(10, 13, 18, 0.03))),
+    0px 3px 3px -1.5px var(--lab-figma-shadow-color, var(--颜色\/效果\/阴影\/shadow-xl_03, rgba(10, 13, 18, 0.04)));
+  box-shadow:
+    var(--lab-figma-inset-shadow), var(--lab-figma-inset-ring-shadow), var(--lab-figma-ring-offset-shadow),
+    var(--lab-figma-ring-shadow), var(--lab-figma-shadow);
+}
+.r172 {
+  position: relative;
+  display: flex;
+  width: 100%;
+  flex-shrink: 0;
+  align-content: stretch;
+  align-items: center;
+  gap: 8px;
+  overflow: clip;
+  border-top-left-radius: 12px;
+  border-top-right-radius: 12px;
+  border-bottom-style: var(--lab-figma-border-style);
+  border-bottom-width: 1px;
+  --lab-figma-border-style: solid;
+  border-style: solid;
+  border-color: #e9eaeb;
+  background-color: white;
+  padding: 16px;
+}
+.r173 {
+  position: relative;
+  min-width: 1px;
+  flex: 1 0 0;
+  overflow: hidden;
+  font-family: PingFang SC;
+  font-size: 16px;
+  --lab-figma-leading: 24px;
+  line-height: 24px;
+  --lab-figma-font-weight: 400;
+  font-weight: 400;
+  word-break: break-word;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #717680;
+}
+.r174 {
+  position: relative;
+  display: flex;
+  flex-shrink: 0;
+  align-content: stretch;
+  align-items: flex-start;
+  gap: 4px;
+}
+.r175 {
+  position: relative;
+  display: flex;
+  flex-shrink: 0;
+  align-content: stretch;
+  align-items: flex-start;
+  border-radius: 4px;
+  border-style: var(--lab-figma-border-style);
+  border-width: 1px;
+  --lab-figma-border-style: solid;
+  border-style: solid;
+  border-color: #e9eaeb;
+  background-color: #fafafa;
+  padding-inline: 4px;
+  padding-block: 2px;
+}
+.r176 {
+  position: relative;
+  flex-shrink: 0;
+  font-family: PingFang SC;
+  font-size: 14px;
+  --lab-figma-leading: 20px;
+  line-height: 20px;
+  --lab-figma-font-weight: 400;
+  font-weight: 400;
+  word-break: break-word;
+  white-space: nowrap;
+  color: #535862;
+}
+.r177 {
+  position: relative;
+  display: flex;
+  width: 100%;
+  flex-shrink: 0;
+  flex-direction: column;
+  align-content: stretch;
+  align-items: flex-start;
+  gap: 2px;
+  overflow: clip;
+  border-bottom-style: var(--lab-figma-border-style);
+  border-bottom-width: 1px;
+  --lab-figma-border-style: solid;
+  border-style: solid;
+  border-color: #e9eaeb;
+  padding-block: 8px;
+}
+.r178 {
+  position: relative;
+  display: flex;
+  width: 100%;
+  flex-shrink: 0;
+  align-content: stretch;
+  align-items: center;
+  gap: 8px;
+  padding-inline: 8px;
+  padding-block: 2px;
+}
+.r179 {
+  position: relative;
+  display: flex;
+  min-width: 1px;
+  flex: 1 0 0;
+  align-content: stretch;
+  align-items: center;
+  gap: 8px;
+  overflow: clip;
+  border-radius: 8px;
+  padding-block: 8px;
+  padding-right: 8px;
+  padding-left: 10px;
+}
+.r180 {
+  position: relative;
+  display: flex;
+  min-width: 1px;
+  flex: 1 0 0;
+  align-content: stretch;
+  align-items: baseline;
+  gap: 8px;
+}
+.r181 {
+  position: relative;
+  flex-shrink: 0;
+  font-family: PingFang SC;
+  font-size: 14px;
+  --lab-figma-leading: 20px;
+  line-height: 20px;
+  --lab-figma-font-weight: 400;
+  font-weight: 400;
+  word-break: break-word;
+  white-space: nowrap;
+  color: #181d27;
+}
+.r182 {
+  position: relative;
+  display: flex;
+  min-width: 1px;
+  flex: 1 0 0;
+  align-content: stretch;
+  align-items: center;
+  gap: 8px;
+  overflow: clip;
+  border-radius: 8px;
+  background-color: #fafafa;
+  padding-block: 8px;
+  padding-right: 8px;
+  padding-left: 10px;
+}
+.r183 {
+  position: relative;
+  flex-shrink: 0;
+  text-align: center;
+  font-family: PingFang SC;
+  font-size: 14px;
+  --lab-figma-leading: 20px;
+  line-height: 20px;
+  --lab-figma-font-weight: 400;
+  font-weight: 400;
+  word-break: break-word;
+  white-space: nowrap;
+  color: #535862;
+}
+.r184 {
+  position: relative;
+  display: flex;
+  width: 24px;
+  flex-shrink: 0;
+  align-content: stretch;
+  align-items: flex-start;
+  border-radius: 4px;
+  border-style: var(--lab-figma-border-style);
+  border-width: 1px;
+  --lab-figma-border-style: solid;
+  border-style: solid;
+  border-color: #e9eaeb;
+  background-color: #fafafa;
+  padding-inline: 4px;
+  padding-block: 2px;
+}
+.r185 {
+  position: relative;
+  min-width: 1px;
+  flex: 1 0 0;
+  text-align: center;
+  font-family: PingFang SC;
+  font-size: 14px;
+  --lab-figma-leading: 20px;
+  line-height: 20px;
+  --lab-figma-font-weight: 400;
+  font-weight: 400;
+  word-break: break-word;
+  color: #535862;
+}
+.r186 {
+  position: relative;
+  height: 240px;
+  width: 343px;
+}
+.r187 {
+  position: absolute;
+  inset: calc(var(--spacing) * 0);
+  display: flex;
+  align-content: stretch;
+  align-items: flex-start;
+  gap: 4px;
+}
+.r188 {
+  position: relative;
+  display: flex;
+  height: 100%;
+  min-width: 1px;
+  flex: 1 0 0;
+  flex-direction: column;
+  align-content: stretch;
+  align-items: flex-start;
+}
+.r189 {
+  position: relative;
+  display: flex;
+  min-height: 1px;
+  width: 100%;
+  flex: 1 0 0;
+  flex-direction: column;
+  align-content: stretch;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+.r190 {
+  position: relative;
+  height: 22px;
+  width: 100%;
+  flex-shrink: 0;
+}
+.r191 {
+  position: relative;
+  height: 17px;
+  width: 100%;
+  flex-shrink: 0;
+}
+.r192 {
+  position: relative;
+  display: flex;
+  width: 100%;
+  flex-shrink: 0;
+  align-content: stretch;
+  align-items: center;
+  justify-content: space-between;
+  padding-inline: 8px;
+  text-align: right;
+  font-family: PingFang SC;
+  font-size: 12px;
+  --lab-figma-leading: 18px;
+  line-height: 18px;
+  --lab-figma-font-weight: 300;
+  font-weight: 300;
+  word-break: break-word;
+  white-space: nowrap;
+  color: #535862;
+}
+.r193 {
+  position: relative;
+  flex-shrink: 0;
+}
+.r194 {
+  position: absolute;
+  inset: 0 0 27px 0;
+  overflow: clip;
+}
+.r195 {
+  position: absolute;
+  inset: calc(var(--spacing) * 0);
+  display: flex;
+  align-content: stretch;
+  align-items: flex-end;
+  justify-content: space-between;
+  overflow: clip;
+  padding-inline: 12px;
+}
+.r196 {
+  position: relative;
+  height: 100%;
+  width: 16px;
+  flex-shrink: 0;
+}
+.r197 {
+  position: absolute;
+  inset: 48px 0 0 0;
+}
+.r198 {
+  position: absolute;
+  inset: 16px 0 0 0;
+}
+.r199 {
+  position: absolute;
+  inset: 80px 0 0 0;
+}
+.r200 {
+  position: absolute;
+  inset: 40px 0 0 0;
+}
+.r201 {
+  position: absolute;
+  inset: 24px 0 0 0;
+}
+.r202 {
+  position: absolute;
+  inset: 32px 0 0 0;
+}
+.r203 {
+  position: absolute;
+  inset: 56px 0 0 0;
+}
+.r204 {
+  position: relative;
+  display: flex;
+  width: 388px;
+  flex-direction: column;
+  align-content: stretch;
+  align-items: flex-start;
+  gap: 8px;
+  border-radius: 12px;
+  border-style: var(--lab-figma-border-style);
+  border-width: 1px;
+  --lab-figma-border-style: solid;
+  border-style: solid;
+  border-color: #e9eaeb;
+  background-color: white;
+  padding: 20px;
+  --lab-figma-drop-shadow-size: drop-shadow(
+    0px 1px 1px var(--lab-figma-drop-shadow-color, var(--颜色\/效果\/阴影\/shadow-xs, rgba(10, 13, 18, 0.05)))
+  );
+  --lab-figma-drop-shadow: var(--lab-figma-drop-shadow-size);
+  filter: var(--lab-figma-blur,) var(--lab-figma-brightness,) var(--lab-figma-contrast,) var(--lab-figma-grayscale,)
+    var(--lab-figma-hue-rotate,) var(--lab-figma-invert,) var(--lab-figma-saturate,) var(--lab-figma-sepia,)
+    var(--lab-figma-drop-shadow,);
+}
+.r205 {
+  position: relative;
+  width: min-content;
+  min-width: 100%;
+  flex-shrink: 0;
+  font-family: PingFang SC;
+  font-size: 14px;
+  --lab-figma-leading: 20px;
+  line-height: 20px;
+  --lab-figma-font-weight: 400;
+  font-weight: 400;
+  word-break: break-word;
+  color: #535862;
+}
+.r206 {
+  position: relative;
+  display: flex;
+  width: 100%;
+  flex-shrink: 0;
+  align-content: stretch;
+  align-items: flex-end;
+  gap: 16px;
+}
+.r207 {
+  position: relative;
+  min-width: 1px;
+  flex: 1 0 0;
+  font-family: PingFang SC;
+  font-size: 30px;
+  --lab-figma-leading: 38px;
+  line-height: 38px;
+  --lab-figma-font-weight: 500;
+  font-weight: 500;
+  word-break: break-word;
+  color: #181d27;
+}
+.r208 {
+  position: relative;
+  display: flex;
+  flex-shrink: 0;
+  align-content: stretch;
+  align-items: center;
+  gap: 4px;
+  border-radius: 6px;
+  border-style: var(--lab-figma-border-style);
+  border-width: 1px;
+  --lab-figma-border-style: solid;
+  border-style: solid;
+  border-color: #d5d7da;
+  background-color: white;
+  padding-block: 2px;
+  padding-right: 8px;
+  padding-left: 6px;
+  --lab-figma-drop-shadow-size: drop-shadow(
+    0px 1px 1px var(--lab-figma-drop-shadow-color, var(--颜色\/效果\/阴影\/shadow-xs, rgba(10, 13, 18, 0.05)))
+  );
+  --lab-figma-drop-shadow: var(--lab-figma-drop-shadow-size);
+  filter: var(--lab-figma-blur,) var(--lab-figma-brightness,) var(--lab-figma-contrast,) var(--lab-figma-grayscale,)
+    var(--lab-figma-hue-rotate,) var(--lab-figma-invert,) var(--lab-figma-saturate,) var(--lab-figma-sepia,)
+    var(--lab-figma-drop-shadow,);
+}
+.r209 {
+  position: relative;
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+}
+.r210 {
+  position: relative;
+  flex-shrink: 0;
+  text-align: center;
+  font-family: PingFang SC;
+  font-size: 14px;
+  --lab-figma-leading: 20px;
+  line-height: 20px;
+  --lab-figma-font-weight: 400;
+  font-weight: 400;
+  word-break: break-word;
+  white-space: nowrap;
+  color: #414651;
+}
+.r211 {
+  position: absolute;
+  top: 19px;
+  right: 19px;
+  display: flex;
+  cursor: pointer;
+  flex-direction: column;
+  align-content: stretch;
+  align-items: flex-start;
+}
+.r212 {
+  position: relative;
+  display: flex;
+  height: 960px;
+  width: 440px;
+  align-content: stretch;
+  align-items: flex-start;
+  overflow: clip;
+  padding-left: 40px;
+}
+.r213 {
+  position: relative;
+  display: flex;
+  height: 100%;
+  min-width: 1px;
+  flex: 1 0 0;
+  flex-direction: column;
+  align-content: stretch;
+  align-items: center;
+  overflow: clip;
+  border-left-style: var(--lab-figma-border-style);
+  border-left-width: 1px;
+  --lab-figma-border-style: solid;
+  border-style: solid;
+  border-color: rgba(0, 0, 0, 0.08);
+  background-color: white;
+  --lab-figma-shadow:
+    0px 20px 24px -4px var(--lab-figma-shadow-color, var(--颜色\/效果\/阴影\/shadow-xl_01, rgba(10, 13, 18, 0.08))),
+    0px 8px 8px -4px var(--lab-figma-shadow-color, var(--颜色\/效果\/阴影\/shadow-xl_02, rgba(10, 13, 18, 0.03))),
+    0px 3px 3px -1.5px var(--lab-figma-shadow-color, var(--颜色\/效果\/阴影\/shadow-xl_03, rgba(10, 13, 18, 0.04)));
+  box-shadow:
+    var(--lab-figma-inset-shadow), var(--lab-figma-inset-ring-shadow), var(--lab-figma-ring-offset-shadow),
+    var(--lab-figma-ring-shadow), var(--lab-figma-shadow);
+}
+.r214 {
+  position: relative;
+  display: flex;
+  width: 100%;
+  flex-shrink: 0;
+  align-content: stretch;
+  align-items: flex-start;
+  gap: 8px;
+  background-color: white;
+  padding: 24px;
+}
+.r215 {
+  position: relative;
+  display: flex;
+  min-width: 1px;
+  flex: 1 0 0;
+  align-content: stretch;
+  align-items: flex-start;
+  gap: 16px;
+}
+.r216 {
+  position: relative;
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  overflow: clip;
+  border-radius: 8px;
+  border-style: var(--lab-figma-border-style);
+  border-width: 1px;
+  --lab-figma-border-style: solid;
+  border-style: solid;
+  border-color: #d5d7da;
+  --lab-figma-shadow: 0px 1px 2px 0px
+    var(--lab-figma-shadow-color, var(--颜色\/效果\/阴影\/shadow-xs, rgba(10, 13, 18, 0.05)));
+  box-shadow:
+    var(--lab-figma-inset-shadow), var(--lab-figma-inset-ring-shadow), var(--lab-figma-ring-offset-shadow),
+    var(--lab-figma-ring-shadow), var(--lab-figma-shadow);
+}
+.r217 {
+  position: absolute;
+  top: 9px;
+  left: 9px;
+  width: 20px;
+  height: 20px;
+}
+.r218 {
+  position: relative;
+  display: flex;
+  min-width: 1px;
+  flex: 1 0 0;
+  flex-direction: column;
+  align-content: stretch;
+  align-items: flex-start;
+  gap: 2px;
+  word-break: break-word;
+}
+.r219 {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: flex;
+  width: 40px;
+  height: 40px;
+  align-content: stretch;
+  align-items: center;
+  justify-content: center;
+  overflow: clip;
+  border-radius: 8px;
+  padding: 8px;
+}
+.r220 {
+  position: relative;
+  display: flex;
+  min-height: 1px;
+  width: 100%;
+  flex: 1 0 0;
+  flex-direction: column;
+  align-content: stretch;
+  align-items: center;
+  gap: 24px;
+  padding-inline: 24px;
+}
+.r221 {
+  position: relative;
+  display: flex;
+  width: 100%;
+  flex-shrink: 0;
+  flex-direction: column;
+  align-content: stretch;
+  align-items: flex-start;
+  gap: 16px;
+}
+.r222 {
+  position: relative;
+  display: flex;
+  width: 100%;
+  flex-shrink: 0;
+  flex-direction: column;
+  align-content: stretch;
+  align-items: flex-start;
+  gap: 4px;
+  font-size: 14px;
+  --lab-figma-leading: 20px;
+  line-height: 20px;
+  word-break: break-word;
+}
+.r223 {
+  position: relative;
+  width: 100%;
+  flex-shrink: 0;
+  font-family: PingFang SC;
+  --lab-figma-font-weight: 500;
+  font-weight: 500;
+  color: #181d27;
+}
+.r224 {
+  position: relative;
+  width: 100%;
+  flex-shrink: 0;
+  font-family: PingFang SC;
+  --lab-figma-font-weight: 400;
+  font-weight: 400;
+  color: #535862;
+}
+.r225 {
+  position: relative;
+  height: 80px;
+  width: 100%;
+  flex-shrink: 0;
+  border-radius: 8px;
+  background-color: #fafafa;
+}
+.r226 {
+  position: relative;
+  height: 1px;
+  width: 100%;
+  flex-shrink: 0;
+  background-color: #e9eaeb;
+}
+.r227 {
+  position: relative;
+  display: flex;
+  width: 100%;
+  flex-shrink: 0;
+  flex-direction: column;
+  align-content: stretch;
+  align-items: center;
+  border-top-style: var(--lab-figma-border-style);
+  border-top-width: 1px;
+  --lab-figma-border-style: solid;
+  border-style: solid;
+  border-color: #e9eaeb;
+  background-color: white;
+}
+.r228 {
+  position: relative;
+  display: flex;
+  width: 100%;
+  flex-shrink: 0;
+  align-content: stretch;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 16px;
+  padding-inline: 24px;
+  padding-block: 16px;
+}
+.r229 {
+  position: relative;
+  display: flex;
+  width: 768px;
+  flex-direction: column;
+  align-content: stretch;
+  align-items: flex-start;
+  gap: 20px;
+  overflow: clip;
+  border-radius: 12px;
+  border-style: var(--lab-figma-border-style);
+  border-width: 1px;
+  --lab-figma-border-style: solid;
+  border-style: solid;
+  border-color: #e9eaeb;
+  background-color: white;
+  padding: 24px;
+  --lab-figma-shadow: 0px 1px 2px 0px
+    var(--lab-figma-shadow-color, var(--颜色\/效果\/阴影\/shadow-xs, rgba(10, 13, 18, 0.05)));
+  box-shadow:
+    var(--lab-figma-inset-shadow), var(--lab-figma-inset-ring-shadow), var(--lab-figma-ring-offset-shadow),
+    var(--lab-figma-ring-shadow), var(--lab-figma-shadow);
+}
+.r230 {
+  position: relative;
+  display: flex;
+  width: 360px;
+  flex-direction: column;
+  align-content: stretch;
+  align-items: flex-start;
+  gap: 16px;
+}
+.r231 {
+  position: relative;
+  display: flex;
+  width: 100%;
+  flex-shrink: 0;
+  align-content: stretch;
+  align-items: flex-start;
+  gap: 12px;
+}
+.r232 {
+  position: relative;
+  width: 48px;
+  height: 48px;
+  flex-shrink: 0;
+  border-radius: 9999px;
+  border-style: var(--lab-figma-border-style);
+  border-width: 1px;
+  --lab-figma-border-style: solid;
+  border-style: solid;
+  border-color: rgba(0, 0, 0, 0.08);
+}
+.r233 {
+  position: absolute;
+  inset: calc(var(--spacing) * 0);
+  border-radius: 9999px;
+  background-color: #d6cfb7;
+}
+.r234 {
+  position: absolute;
+  right: -1px;
+  bottom: -1px;
+  width: 12px;
+  height: 12px;
+  border-radius: 9999px;
+  border-style: var(--lab-figma-border-style);
+  border-width: 1.5px;
+  --lab-figma-border-style: solid;
+  border-style: solid;
+  border-color: white;
+  background-color: #17b26a;
+}
+.r235 {
+  position: relative;
+  display: flex;
+  min-width: 1px;
+  flex: 1 0 0;
+  flex-direction: column;
+  align-content: stretch;
+  align-items: flex-start;
+  gap: 12px;
+}
+.r236 {
+  position: relative;
+  display: flex;
+  width: 100%;
+  flex-shrink: 0;
+  flex-direction: column;
+  align-content: stretch;
+  align-items: flex-start;
+  word-break: break-word;
+}
+.r237 {
+  position: relative;
+  display: flex;
+  width: 100%;
+  flex-shrink: 0;
+  align-content: stretch;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+.r238 {
+  position: relative;
+  flex-shrink: 0;
+  font-family: PingFang SC;
+  font-size: 14px;
+  --lab-figma-leading: 20px;
+  line-height: 20px;
+  --lab-figma-font-weight: 400;
+  font-weight: 400;
+  color: #414651;
+}
+.r239 {
+  position: relative;
+  flex-shrink: 0;
+  font-family: PingFang SC;
+  font-size: 12px;
+  --lab-figma-leading: 18px;
+  line-height: 18px;
+  --lab-figma-font-weight: 300;
+  font-weight: 300;
+  color: #535862;
+}
+.r240 {
+  position: relative;
+  width: 100%;
+  flex-shrink: 0;
+  font-family: PingFang SC;
+  font-size: 0px;
+  --lab-figma-leading: 0;
+  line-height: 0;
+  --lab-figma-font-weight: 400;
+  font-weight: 400;
+  color: #535862;
+}
+.r241 {
+  font-size: 14px;
+  --lab-figma-leading: 20px;
+  line-height: 20px;
+}
+.r242 {
+  font-family: PingFang SC;
+  font-size: 14px;
+  --lab-figma-leading: 20px;
+  line-height: 20px;
+  color: #223b99;
+  font-style: normal;
+}
+.r243 {
+  position: relative;
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+}
+.r244 {
+  position: absolute;
+  inset: 0 2.5% 0 17.5%;
+}
+.r245 {
+  position: absolute;
+  inset: 45% 32.5% 15% 2.5%;
+  display: flex;
+  align-content: stretch;
+  align-items: flex-start;
+  gap: 8px;
+  border-radius: 2px;
+  background-color: #d92d20;
+  padding-inline: 3px;
+  padding-block: 2px;
+}
+.r246 {
+  position: relative;
+  flex-shrink: 0;
+  text-align: center;
+  font-family: "Inter:Bold";
+  font-size: 10px;
+  --lab-figma-leading: normal;
+  line-height: normal;
+  --lab-figma-font-weight: var(--font-weight-bold);
+  font-weight: var(--font-weight-bold);
+  word-break: break-word;
+  white-space: nowrap;
+  color: white;
+  font-style: normal;
+}
+.r247 {
+  position: relative;
+  display: flex;
+  min-width: 1px;
+  flex: 1 0 0;
+  flex-direction: column;
+  align-content: stretch;
+  align-items: flex-start;
+  align-self: stretch;
+  font-family: PingFang SC;
+  font-size: 14px;
+  --lab-figma-leading: 20px;
+  line-height: 20px;
+  --lab-figma-font-weight: 400;
+  font-weight: 400;
+  word-break: break-word;
+}
+.r248 {
+  position: relative;
+  width: 100%;
+  flex-shrink: 0;
+  color: #414651;
+}
+.r249 {
+  position: relative;
+  width: 100%;
+  flex-shrink: 0;
+  color: #535862;
+}
+.r250 {
+  position: absolute;
+  top: calc(var(--spacing) * 0);
+  right: calc(var(--spacing) * 0);
+  width: 10px;
+  height: 10px;
+}
+.r251 {
+  position: absolute;
+  inset: calc(var(--spacing) * 0);
+  border-radius: 9999px;
+  background-color: #d7e3e8;
+}
+.r252 {
+  position: absolute;
+  right: -1px;
+  bottom: -1px;
+  width: 12px;
+  height: 12px;
+  border-radius: 9999px;
+  border-style: var(--lab-figma-border-style);
+  border-width: 1.5px;
+  --lab-figma-border-style: solid;
+  border-style: solid;
+  border-color: white;
+  background-color: #d5d7da;
+}
+.r253 {
+  position: absolute;
+  inset: calc(var(--spacing) * 0);
+  border-radius: 9999px;
+  background-color: #dadcd6;
+}
+.r254 {
+  position: absolute;
+  inset: calc(var(--spacing) * 0);
+  border-radius: 9999px;
+  background-color: #d9d0e6;
+}
+.r255 {
+  position: absolute;
+  inset: calc(var(--spacing) * 0);
+  border-radius: 9999px;
+  background-color: #e9dcbb;
+}
+.r256 {
+  position: relative;
+  display: flex;
+  flex-shrink: 0;
+  align-content: stretch;
+  align-items: center;
+  border-radius: 9999px;
+  border-style: var(--lab-figma-border-style);
+  border-width: 1px;
+  --lab-figma-border-style: solid;
+  border-style: solid;
+  border-color: #b2ddff;
+  background-color: #eff8ff;
+  padding-inline: 8px;
+  padding-block: 2px;
+}
+.r257 {
+  position: relative;
+  flex-shrink: 0;
+  text-align: center;
+  font-family: PingFang SC;
+  font-size: 12px;
+  --lab-figma-leading: 18px;
+  line-height: 18px;
+  --lab-figma-font-weight: 400;
+  font-weight: 400;
+  word-break: break-word;
+  white-space: nowrap;
+  color: #175cd3;
+}
+.r258 {
+  position: relative;
+  display: flex;
+  flex-shrink: 0;
+  align-content: stretch;
+  align-items: center;
+  border-radius: 9999px;
+  border-style: var(--lab-figma-border-style);
+  border-width: 1px;
+  --lab-figma-border-style: solid;
+  border-style: solid;
+  border-color: #c7d7fe;
+  background-color: #eef4ff;
+  padding-inline: 8px;
+  padding-block: 2px;
+}
+.r259 {
+  position: relative;
+  flex-shrink: 0;
+  text-align: center;
+  font-family: PingFang SC;
+  font-size: 12px;
+  --lab-figma-leading: 18px;
+  line-height: 18px;
+  --lab-figma-font-weight: 400;
+  font-weight: 400;
+  word-break: break-word;
+  white-space: nowrap;
+  color: #3538cd;
+}
+.r260 {
+  position: absolute;
+  inset: calc(var(--spacing) * 0);
+  border-radius: 9999px;
+  background-color: #e5ddce;
+}
+.r261 {
+  position: absolute;
+  inset: calc(var(--spacing) * 0);
+  border-radius: 9999px;
+  background-color: #d9e5cc;
+}
+.r262 {
+  position: absolute;
+  top: 18px;
+  left: 1px;
+  display: flex;
+  align-content: stretch;
+  align-items: flex-start;
+  gap: 8px;
+  border-radius: 2px;
+  background-color: #535862;
+  padding-inline: 3px;
+  padding-block: 2px;
+}
+.r263 {
+  position: absolute;
+  inset: calc(var(--spacing) * 0);
+  border-radius: 9999px;
+  background-color: #cccbdc;
+}
+.r264 {
+  position: relative;
+  display: flex;
+  width: 100%;
+  flex-shrink: 0;
+  align-content: stretch;
+  align-items: flex-start;
+  gap: 8px;
+  border-top-right-radius: 8px;
+  border-bottom-right-radius: 8px;
+  border-bottom-left-radius: 8px;
+  border-style: var(--lab-figma-border-style);
+  border-width: 1px;
+  --lab-figma-border-style: solid;
+  border-style: solid;
+  border-color: #e9eaeb;
+  background-color: white;
+  padding: 12px;
+}
+.r265 {
+  position: relative;
+  min-width: 1px;
+  flex: 1 0 0;
+  font-family: PingFang SC;
+  font-size: 14px;
+  --lab-figma-leading: 20px;
+  line-height: 20px;
+  --lab-figma-font-weight: 400;
+  font-weight: 400;
+  word-break: break-word;
+  color: #414651;
+}
+.r266 {
+  position: absolute;
+  inset: calc(var(--spacing) * 0);
+  border-radius: 9999px;
+  background-color: #e5cfe7;
+}
+.r267 {
+  position: absolute;
+  top: 45%;
+  right: calc(1 / 4 * 100%);
+  bottom: 15%;
+  left: 2.5%;
+  display: flex;
+  align-content: stretch;
+  align-items: flex-start;
+  gap: 8px;
+  border-radius: 2px;
+  background-color: #155eef;
+  padding-inline: 3px;
+  padding-block: 2px;
+}
+.r268 {
+  position: relative;
+  min-width: 1px;
+  flex: 1 0 0;
+  font-family: PingFang SC;
+  font-size: 0px;
+  --lab-figma-leading: 0;
+  line-height: 0;
+  --lab-figma-font-weight: 400;
+  font-weight: 400;
+  word-break: break-word;
+  color: #414651;
+}
+.r269 {
+  position: absolute;
+  inset: calc(var(--spacing) * 0);
+  border-radius: 9999px;
+  background-color: #ddd0be;
+}
+.r270 {
+  position: absolute;
+  inset: calc(var(--spacing) * 0);
+  border-radius: 9999px;
+  background-color: #dfc3cd;
+}
+.r271 {
+  position: relative;
+  display: flex;
+  width: 360px;
+  align-content: stretch;
+  align-items: flex-start;
+  gap: 12px;
+}
+.r272 {
+  position: relative;
+  display: flex;
+  min-width: 1px;
+  flex: 1 0 0;
+  flex-direction: column;
+  align-content: stretch;
+  align-items: flex-start;
+  gap: 6px;
+}
+.r273 {
+  position: relative;
+  display: flex;
+  width: 100%;
+  flex-shrink: 0;
+  align-content: stretch;
+  align-items: center;
+  gap: 8px;
+  word-break: break-word;
+  white-space: nowrap;
+}
+.r274 {
+  position: relative;
+  min-width: 1px;
+  flex: 1 0 0;
+  overflow: hidden;
+  font-family: PingFang SC;
+  font-size: 14px;
+  --lab-figma-leading: 20px;
+  line-height: 20px;
+  --lab-figma-font-weight: 400;
+  font-weight: 400;
+  text-overflow: ellipsis;
+  color: #414651;
+}
+.r275 {
+  position: relative;
+  display: flex;
+  width: 100%;
+  flex-shrink: 0;
+  flex-direction: column;
+  align-content: stretch;
+  align-items: flex-start;
+  gap: 6px;
+  overflow: clip;
+  border-top-right-radius: 8px;
+  border-bottom-right-radius: 8px;
+  border-bottom-left-radius: 8px;
+  border-style: var(--lab-figma-border-style);
+  border-width: 1px;
+  --lab-figma-border-style: solid;
+  border-style: solid;
+  border-color: #e9eaeb;
+  background-color: #fafafa;
+  padding-inline: 12px;
+  padding-block: 8px;
+}
+.r276 {
+  position: relative;
+  width: 100%;
+  flex-shrink: 0;
+  font-family: PingFang SC;
+  font-size: 16px;
+  --lab-figma-leading: 24px;
+  line-height: 24px;
+  --lab-figma-font-weight: 400;
+  font-weight: 400;
+  word-break: break-word;
+  color: #181d27;
+}
+.r277 {
+  position: relative;
+  display: flex;
+  width: 100%;
+  flex-shrink: 0;
+  cursor: pointer;
+  align-content: stretch;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+}
+.r278 {
+  position: relative;
+  display: flex;
+  height: 24px;
+  flex-shrink: 0;
+  align-content: stretch;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  border-radius: 9999px;
+  border-style: var(--lab-figma-border-style);
+  border-width: 1px;
+  --lab-figma-border-style: solid;
+  border-style: solid;
+  border-color: #e9eaeb;
+  background-color: #fafafa;
+  padding-inline: 8px;
+  padding-block: 4px;
+}
+.r279 {
+  position: absolute;
+  top: calc(var(--spacing) * 0);
+  left: calc(var(--spacing) * 0);
+  width: 16px;
+  height: 16px;
+}
+.r280 {
+  pointer-events: none;
+  position: absolute;
+  inset: calc(var(--spacing) * 0);
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  object-fit: cover;
+}
+.r281 {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  width: 1216px;
+  flex-direction: column;
+  align-content: stretch;
+  align-items: flex-start;
+  overflow: clip;
+  border-radius: 12px;
+  border-style: var(--lab-figma-border-style);
+  border-width: 1px;
+  --lab-figma-border-style: solid;
+  border-style: solid;
+  border-color: #e9eaeb;
+  background-color: white;
+  --lab-figma-shadow: 0px 1px 2px 0px
+    var(--lab-figma-shadow-color, var(--颜色\/效果\/阴影\/shadow-xs, rgba(10, 13, 18, 0.05)));
+  box-shadow:
+    var(--lab-figma-inset-shadow), var(--lab-figma-inset-ring-shadow), var(--lab-figma-ring-offset-shadow),
+    var(--lab-figma-ring-shadow), var(--lab-figma-shadow);
+}
+.r282 {
+  position: relative;
+  isolation: isolate;
+  z-index: 3;
+  display: flex;
+  width: 100%;
+  flex-shrink: 0;
+  flex-direction: column;
+  align-content: stretch;
+  align-items: flex-start;
+  gap: 20px;
+  background-color: white;
+}
+.r283 {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  width: 100%;
+  flex-shrink: 0;
+  align-content: stretch;
+  align-items: flex-start;
+}
+.r284 {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  min-width: 1px;
+  flex: 1 0 0;
+  flex-direction: column;
+  align-content: stretch;
+  align-items: flex-start;
+}
+.r285 {
+  position: relative;
+  z-index: 11;
+  display: flex;
+  height: 44px;
+  width: 100%;
+  flex-shrink: 0;
+  align-content: stretch;
+  align-items: center;
+  gap: 12px;
+  border-bottom-style: var(--lab-figma-border-style);
+  border-bottom-width: 1px;
+  --lab-figma-border-style: solid;
+  border-style: solid;
+  border-color: #e9eaeb;
+  background-color: #fafafa;
+  padding-inline: 24px;
+  padding-block: 12px;
+}
+.r286 {
+  position: relative;
+  display: flex;
+  flex-shrink: 0;
+  align-content: stretch;
+  align-items: center;
+  justify-content: center;
+}
+.r287 {
+  position: relative;
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  border-radius: 6px;
+  border-style: var(--lab-figma-border-style);
+  border-width: 1px;
+  --lab-figma-border-style: solid;
+  border-style: solid;
+  border-color: #d5d7da;
+}
+.r288 {
+  position: relative;
+  flex-shrink: 0;
+  font-family: PingFang SC;
+  font-size: 12px;
+  --lab-figma-leading: 18px;
+  line-height: 18px;
+  --lab-figma-font-weight: 500;
+  font-weight: 500;
+  word-break: break-word;
+  white-space: nowrap;
+  color: #717680;
+}
+.r289 {
+  position: relative;
+  z-index: 10;
+  display: flex;
+  height: 72px;
+  width: 100%;
+  flex-shrink: 0;
+  align-content: stretch;
+  align-items: center;
+  gap: 12px;
+  border-bottom-style: var(--lab-figma-border-style);
+  border-bottom-width: 1px;
+  --lab-figma-border-style: solid;
+  border-style: solid;
+  border-color: #e9eaeb;
+  padding-inline: 24px;
+  padding-block: 16px;
+}
+.r290 {
+  position: absolute;
+  inset: calc(var(--spacing) * 0);
+  border-radius: 9999px;
+  background-color: #cfcbdc;
+}
+.r291 {
+  position: relative;
+  display: flex;
+  flex-shrink: 0;
+  flex-direction: column;
+  align-content: stretch;
+  align-items: flex-start;
+  font-size: 14px;
+  --lab-figma-leading: 20px;
+  line-height: 20px;
+  word-break: break-word;
+  white-space: nowrap;
+}
+.r292 {
+  position: relative;
+  flex-shrink: 0;
+  font-family: PingFang SC;
+  --lab-figma-font-weight: 400;
+  font-weight: 400;
+  color: #181d27;
+}
+.r293 {
+  position: relative;
+  flex-shrink: 0;
+  font-family: PingFang SC;
+  --lab-figma-font-weight: 300;
+  font-weight: 300;
+  color: #535862;
+}
+.r294 {
+  position: relative;
+  z-index: 9;
+  display: flex;
+  height: 72px;
+  width: 100%;
+  flex-shrink: 0;
+  align-content: stretch;
+  align-items: center;
+  gap: 12px;
+  border-bottom-style: var(--lab-figma-border-style);
+  border-bottom-width: 1px;
+  --lab-figma-border-style: solid;
+  border-style: solid;
+  border-color: #e9eaeb;
+  padding-inline: 24px;
+  padding-block: 16px;
+}
+.r295 {
+  position: relative;
+  z-index: 8;
+  display: flex;
+  height: 72px;
+  width: 100%;
+  flex-shrink: 0;
+  align-content: stretch;
+  align-items: center;
+  gap: 12px;
+  border-bottom-style: var(--lab-figma-border-style);
+  border-bottom-width: 1px;
+  --lab-figma-border-style: solid;
+  border-style: solid;
+  border-color: #e9eaeb;
+  padding-inline: 24px;
+  padding-block: 16px;
+}
+.r296 {
+  position: relative;
+  z-index: 7;
+  display: flex;
+  height: 72px;
+  width: 100%;
+  flex-shrink: 0;
+  align-content: stretch;
+  align-items: center;
+  gap: 12px;
+  border-bottom-style: var(--lab-figma-border-style);
+  border-bottom-width: 1px;
+  --lab-figma-border-style: solid;
+  border-style: solid;
+  border-color: #e9eaeb;
+  padding-inline: 24px;
+  padding-block: 16px;
+}
+.r297 {
+  position: relative;
+  z-index: 6;
+  display: flex;
+  height: 72px;
+  width: 100%;
+  flex-shrink: 0;
+  align-content: stretch;
+  align-items: center;
+  gap: 12px;
+  border-bottom-style: var(--lab-figma-border-style);
+  border-bottom-width: 1px;
+  --lab-figma-border-style: solid;
+  border-style: solid;
+  border-color: #e9eaeb;
+  padding-inline: 24px;
+  padding-block: 16px;
+}
+.r298 {
+  position: relative;
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  overflow: clip;
+  border-radius: 9999px;
+  border-style: var(--lab-figma-border-style);
+  border-width: 1px;
+  --lab-figma-border-style: solid;
+  border-style: solid;
+  border-color: #e9eaeb;
+  background-color: #f5f5f5;
+}
+.r299 {
+  position: absolute;
+  top: calc(50% - 12px);
+  left: calc(1 / 2 * 100%);
+  width: 40px;
+  --lab-figma-translate-x: calc(calc(1 / 2 * 100%) * -1);
+  translate: var(--lab-figma-translate-x) var(--lab-figma-translate-y);
+  text-align: center;
+  font-family: PingFang SC;
+  font-size: 16px;
+  --lab-figma-leading: 24px;
+  line-height: 24px;
+  --lab-figma-font-weight: 500;
+  font-weight: 500;
+  word-break: break-word;
+  color: #717680;
+}
+.r300 {
+  position: relative;
+  z-index: 5;
+  display: flex;
+  height: 72px;
+  width: 100%;
+  flex-shrink: 0;
+  align-content: stretch;
+  align-items: center;
+  gap: 12px;
+  border-bottom-style: var(--lab-figma-border-style);
+  border-bottom-width: 1px;
+  --lab-figma-border-style: solid;
+  border-style: solid;
+  border-color: #e9eaeb;
+  padding-inline: 24px;
+  padding-block: 16px;
+}
+.r301 {
+  position: relative;
+  z-index: 4;
+  display: flex;
+  height: 72px;
+  width: 100%;
+  flex-shrink: 0;
+  align-content: stretch;
+  align-items: center;
+  gap: 12px;
+  border-bottom-style: var(--lab-figma-border-style);
+  border-bottom-width: 1px;
+  --lab-figma-border-style: solid;
+  border-style: solid;
+  border-color: #e9eaeb;
+  padding-inline: 24px;
+  padding-block: 16px;
+}
+.r302 {
+  position: relative;
+  z-index: 3;
+  display: flex;
+  height: 72px;
+  width: 100%;
+  flex-shrink: 0;
+  align-content: stretch;
+  align-items: center;
+  gap: 12px;
+  border-bottom-style: var(--lab-figma-border-style);
+  border-bottom-width: 1px;
+  --lab-figma-border-style: solid;
+  border-style: solid;
+  border-color: #e9eaeb;
+  padding-inline: 24px;
+  padding-block: 16px;
+}
+.r303 {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  height: 72px;
+  width: 100%;
+  flex-shrink: 0;
+  align-content: stretch;
+  align-items: center;
+  gap: 12px;
+  border-bottom-style: var(--lab-figma-border-style);
+  border-bottom-width: 1px;
+  --lab-figma-border-style: solid;
+  border-style: solid;
+  border-color: #e9eaeb;
+  padding-inline: 24px;
+  padding-block: 16px;
+}
+.r304 {
+  position: absolute;
+  inset: calc(var(--spacing) * 0);
+  border-radius: 9999px;
+  background-color: #dcccbd;
+}
+.r305 {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  height: 72px;
+  width: 100%;
+  flex-shrink: 0;
+  align-content: stretch;
+  align-items: center;
+  gap: 12px;
+  border-bottom-style: var(--lab-figma-border-style);
+  border-bottom-width: 1px;
+  --lab-figma-border-style: solid;
+  border-style: solid;
+  border-color: #e9eaeb;
+  padding-inline: 24px;
+  padding-block: 16px;
+}
+.r306 {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  flex-shrink: 0;
+  flex-direction: column;
+  align-content: stretch;
+  align-items: flex-start;
+}
+.r307 {
+  position: relative;
+  z-index: 10;
+  display: flex;
+  height: 72px;
+  width: 100%;
+  flex-shrink: 0;
+  align-content: stretch;
+  align-items: center;
+  border-bottom-style: var(--lab-figma-border-style);
+  border-bottom-width: 1px;
+  --lab-figma-border-style: solid;
+  border-style: solid;
+  border-color: #e9eaeb;
+  padding-inline: 24px;
+  padding-block: 16px;
+}
+.r308 {
+  position: relative;
+  z-index: 9;
+  display: flex;
+  height: 72px;
+  width: 100%;
+  flex-shrink: 0;
+  align-content: stretch;
+  align-items: center;
+  border-bottom-style: var(--lab-figma-border-style);
+  border-bottom-width: 1px;
+  --lab-figma-border-style: solid;
+  border-style: solid;
+  border-color: #e9eaeb;
+  padding-inline: 24px;
+  padding-block: 16px;
+}
+.r309 {
+  position: relative;
+  z-index: 8;
+  display: flex;
+  height: 72px;
+  width: 100%;
+  flex-shrink: 0;
+  align-content: stretch;
+  align-items: center;
+  border-bottom-style: var(--lab-figma-border-style);
+  border-bottom-width: 1px;
+  --lab-figma-border-style: solid;
+  border-style: solid;
+  border-color: #e9eaeb;
+  padding-inline: 24px;
+  padding-block: 16px;
+}
+.r310 {
+  position: relative;
+  z-index: 7;
+  display: flex;
+  height: 72px;
+  width: 100%;
+  flex-shrink: 0;
+  align-content: stretch;
+  align-items: center;
+  border-bottom-style: var(--lab-figma-border-style);
+  border-bottom-width: 1px;
+  --lab-figma-border-style: solid;
+  border-style: solid;
+  border-color: #e9eaeb;
+  padding-inline: 24px;
+  padding-block: 16px;
+}
+.r311 {
+  position: relative;
+  z-index: 6;
+  display: flex;
+  height: 72px;
+  width: 100%;
+  flex-shrink: 0;
+  align-content: stretch;
+  align-items: center;
+  border-bottom-style: var(--lab-figma-border-style);
+  border-bottom-width: 1px;
+  --lab-figma-border-style: solid;
+  border-style: solid;
+  border-color: #e9eaeb;
+  padding-inline: 24px;
+  padding-block: 16px;
+}
+.r312 {
+  position: relative;
+  z-index: 5;
+  display: flex;
+  height: 72px;
+  width: 100%;
+  flex-shrink: 0;
+  align-content: stretch;
+  align-items: center;
+  border-bottom-style: var(--lab-figma-border-style);
+  border-bottom-width: 1px;
+  --lab-figma-border-style: solid;
+  border-style: solid;
+  border-color: #e9eaeb;
+  padding-inline: 24px;
+  padding-block: 16px;
+}
+.r313 {
+  position: relative;
+  z-index: 4;
+  display: flex;
+  height: 72px;
+  width: 100%;
+  flex-shrink: 0;
+  align-content: stretch;
+  align-items: center;
+  border-bottom-style: var(--lab-figma-border-style);
+  border-bottom-width: 1px;
+  --lab-figma-border-style: solid;
+  border-style: solid;
+  border-color: #e9eaeb;
+  padding-inline: 24px;
+  padding-block: 16px;
+}
+.r314 {
+  position: relative;
+  z-index: 3;
+  display: flex;
+  height: 72px;
+  width: 100%;
+  flex-shrink: 0;
+  align-content: stretch;
+  align-items: center;
+  border-bottom-style: var(--lab-figma-border-style);
+  border-bottom-width: 1px;
+  --lab-figma-border-style: solid;
+  border-style: solid;
+  border-color: #e9eaeb;
+  padding-inline: 24px;
+  padding-block: 16px;
+}
+.r315 {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  height: 72px;
+  width: 100%;
+  flex-shrink: 0;
+  align-content: stretch;
+  align-items: center;
+  border-bottom-style: var(--lab-figma-border-style);
+  border-bottom-width: 1px;
+  --lab-figma-border-style: solid;
+  border-style: solid;
+  border-color: #e9eaeb;
+  padding-inline: 24px;
+  padding-block: 16px;
+}
+.r316 {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  height: 72px;
+  width: 100%;
+  flex-shrink: 0;
+  align-content: stretch;
+  align-items: center;
+  border-bottom-style: var(--lab-figma-border-style);
+  border-bottom-width: 1px;
+  --lab-figma-border-style: solid;
+  border-style: solid;
+  border-color: #e9eaeb;
+  padding-inline: 24px;
+  padding-block: 16px;
+}
+.r317 {
+  position: relative;
+  display: flex;
+  flex-shrink: 0;
+  flex-direction: column;
+  align-content: stretch;
+  align-items: flex-start;
+}
+.r318 {
+  position: relative;
+  height: 44px;
+  width: 100%;
+  flex-shrink: 0;
+  border-bottom-style: var(--lab-figma-border-style);
+  border-bottom-width: 1px;
+  --lab-figma-border-style: solid;
+  border-style: solid;
+  border-color: #e9eaeb;
+  background-color: #fafafa;
+}
+.r319 {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  height: 72px;
+  width: 100%;
+  flex-shrink: 0;
+  align-content: stretch;
+  align-items: center;
+  gap: 2px;
+  border-bottom-style: var(--lab-figma-border-style);
+  border-bottom-width: 1px;
+  --lab-figma-border-style: solid;
+  border-style: solid;
+  border-color: #e9eaeb;
+  padding: 16px;
+}
+.r320 {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-shrink: 0;
+  align-content: stretch;
+  align-items: center;
+  justify-content: center;
+  overflow: clip;
+  border-radius: 6px;
+  padding: 6px;
+}
+.r321 {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-shrink: 0;
+  align-content: stretch;
+  align-items: center;
+  justify-content: center;
+  overflow: clip;
+  border-radius: 6px;
+  padding: 6px;
+}
+.r322 {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  width: 100%;
+  flex-shrink: 0;
+  align-content: stretch;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  border-top-style: var(--lab-figma-border-style);
+  border-top-width: 1px;
+  --lab-figma-border-style: solid;
+  border-style: solid;
+  border-color: #e9eaeb;
+  padding-inline: 24px;
+  padding-top: 12px;
+  padding-bottom: 16px;
+}
+.r323 {
+  position: relative;
+  display: flex;
+  height: 36px;
+  min-width: 1px;
+  flex: 1 0 0;
+  align-content: stretch;
+  align-items: center;
+}
+.r324 {
+  position: relative;
+  display: flex;
+  flex-shrink: 0;
+  align-content: stretch;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  overflow: clip;
+  border-radius: 8px;
+  border-style: var(--lab-figma-border-style);
+  border-width: 1px;
+  --lab-figma-border-style: solid;
+  border-style: solid;
+  border-color: #d5d7da;
+  padding-inline: 12px;
+  padding-block: 8px;
+  --lab-figma-shadow: 0px 1px 2px 0px
+    var(--lab-figma-shadow-color, var(--颜色\/效果\/阴影\/shadow-xs, rgba(10, 13, 18, 0.05)));
+  box-shadow:
+    var(--lab-figma-inset-shadow), var(--lab-figma-inset-ring-shadow), var(--lab-figma-ring-offset-shadow),
+    var(--lab-figma-ring-shadow), var(--lab-figma-shadow);
+}
+.r325 {
+  position: relative;
+  display: flex;
+  flex-shrink: 0;
+  align-content: stretch;
+  align-items: flex-start;
+  gap: 2px;
+}
+.r326 {
+  position: relative;
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  overflow: clip;
+  border-radius: 8px;
+  background-color: #fafafa;
+}
+.r327 {
+  position: absolute;
+  top: calc(var(--spacing) * 0);
+  left: calc(var(--spacing) * 0);
+  display: flex;
+  width: 40px;
+  height: 40px;
+  align-content: stretch;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  padding: 8px;
+}
+.r328 {
+  position: relative;
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  overflow: clip;
+  border-radius: 8px;
+}
+.r329 {
+  position: relative;
+  flex-shrink: 0;
+  text-align: center;
+  font-family: PingFang SC;
+  font-size: 14px;
+  --lab-figma-leading: 20px;
+  line-height: 20px;
+  --lab-figma-font-weight: 400;
+  font-weight: 400;
+  word-break: break-word;
+  white-space: nowrap;
+  color: #717680;
+}
+.r330 {
+  position: relative;
+  display: flex;
+  height: 36px;
+  min-width: 1px;
+  flex: 1 0 0;
+  align-content: stretch;
+  align-items: center;
+  justify-content: flex-end;
+}
+.r331 {
+  position: relative;
+  display: flex;
+  align-content: stretch;
+  align-items: center;
+  gap: 8px;
+}
+.r332 {
+  position: relative;
+  display: flex;
+  flex-shrink: 0;
+  align-content: stretch;
+  align-items: flex-start;
+}
+.r333 {
+  position: relative;
+  display: flex;
+  width: 1216px;
+  align-content: stretch;
+  align-items: flex-start;
+  gap: 16px;
+  border-radius: 12px;
+  border-style: var(--lab-figma-border-style);
+  border-width: 1px;
+  --lab-figma-border-style: solid;
+  border-style: solid;
+  border-color: #d5d7da;
+  background-color: white;
+  padding: 16px;
+  --lab-figma-drop-shadow-size: drop-shadow(
+    0px 1px 1px var(--lab-figma-drop-shadow-color, var(--颜色\/效果\/阴影\/shadow-xs, rgba(10, 13, 18, 0.05)))
+  );
+  --lab-figma-drop-shadow: var(--lab-figma-drop-shadow-size);
+  filter: var(--lab-figma-blur,) var(--lab-figma-brightness,) var(--lab-figma-contrast,) var(--lab-figma-grayscale,)
+    var(--lab-figma-hue-rotate,) var(--lab-figma-invert,) var(--lab-figma-saturate,) var(--lab-figma-sepia,)
+    var(--lab-figma-drop-shadow,);
+}
+.r334 {
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  display: flex;
+  width: 36px;
+  height: 36px;
+  align-content: stretch;
+  align-items: center;
+  justify-content: center;
+  overflow: clip;
+  border-radius: 8px;
+  padding: 8px;
+}
+.r335 {
+  position: relative;
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  border-radius: 8332.5px;
+}
+.r336 {
+  position: absolute;
+  inset: -16.67%;
+  border-radius: 16.667px;
+  border-style: var(--lab-figma-border-style);
+  border-width: 1.667px;
+  --lab-figma-border-style: solid;
+  border-style: solid;
+  border-color: #dc6803;
+  opacity: 30%;
+}
+.r337 {
+  position: absolute;
+  inset: -37.5%;
+  border-radius: 16.667px;
+  border-style: var(--lab-figma-border-style);
+  border-width: 1.667px;
+  --lab-figma-border-style: solid;
+  border-style: solid;
+  border-color: #dc6803;
+  opacity: 10%;
+}
+.r338 {
+  position: absolute;
+  inset: calc(var(--spacing) * 0);
+}
+.r339 {
+  position: relative;
+  display: flex;
+  width: 100%;
+  flex-shrink: 0;
+  align-content: stretch;
+  align-items: flex-start;
+  gap: 8px;
+  padding-right: 32px;
+}
+.r340 {
+  position: relative;
+  min-width: 1px;
+  flex: 1 0 0;
+  font-family: PingFang SC;
+  font-size: 14px;
+  --lab-figma-leading: 20px;
+  line-height: 20px;
+  --lab-figma-font-weight: 500;
+  font-weight: 500;
+  word-break: break-word;
+  color: #414651;
+}
+.r341 {
+  position: relative;
+  display: flex;
+  width: 328px;
+  align-content: stretch;
+  align-items: flex-start;
+  overflow: clip;
+  border-radius: 16px;
+  border-style: var(--lab-figma-border-style);
+  border-width: 1px;
+  --lab-figma-border-style: solid;
+  border-style: solid;
+  border-color: rgba(0, 0, 0, 0.08);
+  background-color: white;
+  --lab-figma-shadow:
+    0px 20px 24px -4px var(--lab-figma-shadow-color, var(--颜色\/效果\/阴影\/shadow-xl_01, rgba(10, 13, 18, 0.08))),
+    0px 8px 8px -4px var(--lab-figma-shadow-color, var(--颜色\/效果\/阴影\/shadow-xl_02, rgba(10, 13, 18, 0.03))),
+    0px 3px 3px -1.5px var(--lab-figma-shadow-color, var(--颜色\/效果\/阴影\/shadow-xl_03, rgba(10, 13, 18, 0.04)));
+  box-shadow:
+    var(--lab-figma-inset-shadow), var(--lab-figma-inset-ring-shadow), var(--lab-figma-ring-offset-shadow),
+    var(--lab-figma-ring-shadow), var(--lab-figma-shadow);
+}
+.r342 {
+  position: relative;
+  display: flex;
+  min-width: 1px;
+  flex: 1 0 0;
+  flex-direction: column;
+  align-content: stretch;
+  align-items: center;
+  overflow: clip;
+}
+.r343 {
+  position: relative;
+  display: flex;
+  width: 100%;
+  flex-shrink: 0;
+  flex-direction: column;
+  align-content: stretch;
+  align-items: flex-start;
+  gap: 16px;
+  padding-inline: 24px;
+  padding-block: 20px;
+}
+.r344 {
+  position: relative;
+  display: flex;
+  width: 100%;
+  flex-shrink: 0;
+  flex-direction: column;
+  align-content: stretch;
+  align-items: flex-start;
+  gap: 12px;
+}
+.r345 {
+  position: relative;
+  display: flex;
+  width: 100%;
+  flex-shrink: 0;
+  align-content: stretch;
+  align-items: center;
+  justify-content: space-between;
+}
+.r346 {
+  position: relative;
+  display: flex;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  align-content: stretch;
+  align-items: center;
+  justify-content: center;
+  overflow: clip;
+  border-radius: 6px;
+  padding: 6px;
+}
+.r347 {
+  position: relative;
+  flex-shrink: 0;
+  text-align: center;
+  font-family: PingFang SC;
+  font-size: 14px;
+  --lab-figma-leading: 20px;
+  line-height: 20px;
+  --lab-figma-font-weight: 500;
+  font-weight: 500;
+  word-break: break-word;
+  white-space: nowrap;
+  color: #414651;
+}
+.r348 {
+  position: relative;
+  display: flex;
+  min-width: 1px;
+  flex: 1 0 0;
+  cursor: pointer;
+  flex-direction: column;
+  align-content: stretch;
+  align-items: flex-start;
+  gap: 6px;
+}
+.r349 {
+  position: relative;
+  display: flex;
+  width: 100%;
+  flex-shrink: 0;
+  align-content: stretch;
+  align-items: center;
+  gap: 8px;
+  border-radius: 8px;
+  border-style: var(--lab-figma-border-style);
+  border-width: 1px;
+  --lab-figma-border-style: solid;
+  border-style: solid;
+  border-color: #d5d7da;
+  background-color: white;
+  padding-inline: 12px;
+  padding-block: 8px;
+  --lab-figma-drop-shadow-size: drop-shadow(
+    0px 1px 1px var(--lab-figma-drop-shadow-color, var(--颜色\/效果\/阴影\/shadow-xs, rgba(10, 13, 18, 0.05)))
+  );
+  --lab-figma-drop-shadow: var(--lab-figma-drop-shadow-size);
+  filter: var(--lab-figma-blur,) var(--lab-figma-brightness,) var(--lab-figma-contrast,) var(--lab-figma-grayscale,)
+    var(--lab-figma-hue-rotate,) var(--lab-figma-invert,) var(--lab-figma-saturate,) var(--lab-figma-sepia,)
+    var(--lab-figma-drop-shadow,);
+}
+.r350 {
+  position: relative;
+  min-width: 1px;
+  flex: 1 0 0;
+  overflow: hidden;
+  text-align: left;
+  font-family: PingFang SC;
+  font-size: 16px;
+  --lab-figma-leading: 24px;
+  line-height: 24px;
+  --lab-figma-font-weight: 400;
+  font-weight: 400;
+  word-break: break-word;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #181d27;
+}
+.r351 {
+  position: relative;
+  display: flex;
+  width: 100%;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  align-items: flex-start;
+  gap: 4px 0px;
+}
+.r352 {
+  position: relative;
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  border-radius: 9999px;
+}
+.r353 {
+  position: absolute;
+  top: calc(50% - 10px);
+  left: calc(1 / 2 * 100%);
+  width: 24px;
+  --lab-figma-translate-x: calc(calc(1 / 2 * 100%) * -1);
+  translate: var(--lab-figma-translate-x) var(--lab-figma-translate-y);
+  text-align: center;
+  font-family: PingFang SC;
+  font-size: 14px;
+  --lab-figma-leading: 20px;
+  line-height: 20px;
+  --lab-figma-font-weight: 400;
+  font-weight: 400;
+  word-break: break-word;
+  color: #414651;
+}
+.r354 {
+  position: absolute;
+  top: calc(50% - 10px);
+  left: calc(1 / 2 * 100%);
+  width: 24px;
+  --lab-figma-translate-x: calc(calc(1 / 2 * 100%) * -1);
+  translate: var(--lab-figma-translate-x) var(--lab-figma-translate-y);
+  text-align: center;
+  font-family: PingFang SC;
+  font-size: 14px;
+  --lab-figma-leading: 20px;
+  line-height: 20px;
+  --lab-figma-font-weight: 400;
+  font-weight: 400;
+  word-break: break-word;
+  color: #717680;
+}
+.r355 {
+  position: absolute;
+  bottom: 4px;
+  left: calc(1 / 2 * 100%);
+  width: 5px;
+  height: 5px;
+  --lab-figma-translate-x: calc(calc(1 / 2 * 100%) * -1);
+  translate: var(--lab-figma-translate-x) var(--lab-figma-translate-y);
+}
+.r356 {
+  position: relative;
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  border-radius: 9999px;
+  background-color: #3250bd;
+}
+.r357 {
+  position: absolute;
+  top: calc(50% - 10px);
+  left: calc(1 / 2 * 100%);
+  width: 24px;
+  --lab-figma-translate-x: calc(calc(1 / 2 * 100%) * -1);
+  translate: var(--lab-figma-translate-x) var(--lab-figma-translate-y);
+  text-align: center;
+  font-family: PingFang SC;
+  font-size: 14px;
+  --lab-figma-leading: 20px;
+  line-height: 20px;
+  --lab-figma-font-weight: 400;
+  font-weight: 400;
+  word-break: break-word;
+  color: white;
+}
+.r358 {
+  position: relative;
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  border-radius: 9999px;
+  background-color: #fafafa;
+}
+.r359 {
+  position: absolute;
+  top: calc(50% - 10px);
+  left: calc(1 / 2 * 100%);
+  width: 24px;
+  --lab-figma-translate-x: calc(calc(1 / 2 * 100%) * -1);
+  translate: var(--lab-figma-translate-x) var(--lab-figma-translate-y);
+  text-align: center;
+  font-family: PingFang SC;
+  font-size: 14px;
+  --lab-figma-leading: 20px;
+  line-height: 20px;
+  --lab-figma-font-weight: 400;
+  font-weight: 400;
+  word-break: break-word;
+  color: #252b37;
+}
+.r360 {
+  position: absolute;
+  top: calc(1 / 2 * 100%);
+  right: -10%;
+  bottom: calc(var(--spacing) * 0);
+  left: 60%;
+}
+.r361 {
+  position: relative;
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  border-radius: 9999px;
+  background-color: #fafafa;
+}
+.r362 {
+  position: relative;
+  display: flex;
+  width: 100%;
+  flex-shrink: 0;
+  align-content: stretch;
+  align-items: flex-start;
+  justify-content: flex-end;
+  gap: 12px;
+  border-top-style: var(--lab-figma-border-style);
+  border-top-width: 1px;
+  --lab-figma-border-style: solid;
+  border-style: solid;
+  border-color: #e9eaeb;
+  padding: 16px;
+}
+.r363 {
+  position: relative;
+  display: flex;
+  min-width: 1px;
+  flex: 1 0 0;
+  align-content: stretch;
+  align-items: flex-start;
+  gap: 12px;
+}
+.r364 {
+  position: relative;
+  display: flex;
+  min-width: 1px;
+  flex: 1 0 0;
+  align-content: stretch;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  overflow: clip;
+  border-radius: 8px;
+  border-style: var(--lab-figma-border-style);
+  border-width: 1px;
+  --lab-figma-border-style: solid;
+  border-style: solid;
+  border-color: #d5d7da;
+  padding-inline: 14px;
+  padding-block: 10px;
+  --lab-figma-shadow: 0px 1px 2px 0px
+    var(--lab-figma-shadow-color, var(--颜色\/效果\/阴影\/shadow-xs, rgba(10, 13, 18, 0.05)));
+  box-shadow:
+    var(--lab-figma-inset-shadow), var(--lab-figma-inset-ring-shadow), var(--lab-figma-ring-offset-shadow),
+    var(--lab-figma-ring-shadow), var(--lab-figma-shadow);
+}
+.r365 {
+  position: relative;
+  display: flex;
+  min-width: 1px;
+  flex: 1 0 0;
+  align-content: stretch;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  overflow: clip;
+  border-radius: 8px;
+  border-style: var(--lab-figma-border-style);
+  border-width: 2px;
+  --lab-figma-border-style: solid;
+  border-style: solid;
+  border-color: rgba(255, 255, 255, 0.12);
+  padding-inline: 14px;
+  padding-block: 10px;
+  --lab-figma-shadow: 0px 1px 2px 0px
+    var(--lab-figma-shadow-color, var(--颜色\/效果\/阴影\/shadow-xs, rgba(10, 13, 18, 0.05)));
+  box-shadow:
+    var(--lab-figma-inset-shadow), var(--lab-figma-inset-ring-shadow), var(--lab-figma-ring-offset-shadow),
+    var(--lab-figma-ring-shadow), var(--lab-figma-shadow);
+}
+.r366 {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  height: 912px;
+  width: 375px;
+  flex-direction: column;
+  align-content: stretch;
+  align-items: flex-start;
+  overflow: clip;
+  border-top-style: var(--lab-figma-border-style);
+  border-top-width: 1px;
+  border-bottom-style: var(--lab-figma-border-style);
+  border-bottom-width: 1px;
+  --lab-figma-border-style: solid;
+  border-style: solid;
+  border-color: #e9eaeb;
+  background-color: white;
+  --lab-figma-shadow: 0px 1px 2px 0px
+    var(--lab-figma-shadow-color, var(--颜色\/效果\/阴影\/shadow-xs, rgba(10, 13, 18, 0.05)));
+  box-shadow:
+    var(--lab-figma-inset-shadow), var(--lab-figma-inset-ring-shadow), var(--lab-figma-ring-offset-shadow),
+    var(--lab-figma-ring-shadow), var(--lab-figma-shadow);
+}
+.r367 {
+  position: relative;
+  isolation: isolate;
+  z-index: 2;
+  display: flex;
+  width: 100%;
+  flex-shrink: 0;
+  flex-direction: column;
+  align-content: stretch;
+  align-items: flex-start;
+  gap: 20px;
+  border-bottom-style: var(--lab-figma-border-style);
+  border-bottom-width: 1px;
+  --lab-figma-border-style: solid;
+  border-style: solid;
+  border-color: #e9eaeb;
+  background-color: white;
+}
+.r368 {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  width: 100%;
+  flex-shrink: 0;
+  flex-direction: column;
+  align-content: stretch;
+  align-items: flex-start;
+  gap: 16px;
+  padding-inline: 16px;
+  padding-block: 20px;
+}
+.r369 {
+  position: relative;
+  display: flex;
+  width: 100%;
+  flex-shrink: 0;
+  flex-direction: column;
+  align-content: stretch;
+  align-items: flex-start;
+  gap: 2px;
+}
+.r370 {
+  position: relative;
+  display: flex;
+  flex-shrink: 0;
+  align-content: stretch;
+  align-items: center;
+  border-radius: 6px;
+  border-style: var(--lab-figma-border-style);
+  border-width: 1px;
+  --lab-figma-border-style: solid;
+  border-style: solid;
+  border-color: #d5d7da;
+  background-color: white;
+  padding-inline: 6px;
+  padding-block: 2px;
+  --lab-figma-drop-shadow-size: drop-shadow(
+    0px 1px 1px var(--lab-figma-drop-shadow-color, var(--颜色\/效果\/阴影\/shadow-xs, rgba(10, 13, 18, 0.05)))
+  );
+  --lab-figma-drop-shadow: var(--lab-figma-drop-shadow-size);
+  filter: var(--lab-figma-blur,) var(--lab-figma-brightness,) var(--lab-figma-contrast,) var(--lab-figma-grayscale,)
+    var(--lab-figma-hue-rotate,) var(--lab-figma-invert,) var(--lab-figma-saturate,) var(--lab-figma-sepia,)
+    var(--lab-figma-drop-shadow,);
+}
+.r371 {
+  position: relative;
+  width: 100%;
+  flex-shrink: 0;
+  font-family: PingFang SC;
+  font-size: 14px;
+  --lab-figma-leading: 20px;
+  line-height: 20px;
+  --lab-figma-font-weight: 300;
+  font-weight: 300;
+  word-break: break-word;
+  color: #535862;
+}
+.r372 {
+  position: relative;
+  display: flex;
+  width: 135px;
+  flex-shrink: 0;
+  cursor: pointer;
+  flex-direction: column;
+  align-content: stretch;
+  align-items: flex-start;
+}
+.r373 {
+  position: relative;
+  display: flex;
+  width: 100%;
+  flex-shrink: 0;
+  align-content: stretch;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  overflow: clip;
+  border-radius: 8px;
+  border-style: var(--lab-figma-border-style);
+  border-width: 1px;
+  --lab-figma-border-style: solid;
+  border-style: solid;
+  border-color: #d5d7da;
+  padding-inline: 14px;
+  padding-block: 10px;
+  --lab-figma-shadow: 0px 1px 2px 0px
+    var(--lab-figma-shadow-color, var(--颜色\/效果\/阴影\/shadow-xs, rgba(10, 13, 18, 0.05)));
+  box-shadow:
+    var(--lab-figma-inset-shadow), var(--lab-figma-inset-ring-shadow), var(--lab-figma-ring-offset-shadow),
+    var(--lab-figma-ring-shadow), var(--lab-figma-shadow);
+}
+.r374 {
+  position: relative;
+  display: flex;
+  flex-shrink: 0;
+  align-content: stretch;
+  align-items: center;
+  justify-content: center;
+  overflow: clip;
+  border-radius: 8px;
+  padding: 10px;
+}
+.r375 {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  width: 100%;
+  flex-shrink: 0;
+  align-content: stretch;
+  align-items: flex-start;
+  overflow: clip;
+  border-radius: 8px;
+  border-style: var(--lab-figma-border-style);
+  border-width: 1px;
+  --lab-figma-border-style: solid;
+  border-style: solid;
+  border-color: #d5d7da;
+  --lab-figma-drop-shadow-size: drop-shadow(
+    0px 1px 1px var(--lab-figma-drop-shadow-color, var(--颜色\/效果\/阴影\/shadow-xs, rgba(10, 13, 18, 0.05)))
+  );
+  --lab-figma-drop-shadow: var(--lab-figma-drop-shadow-size);
+  filter: var(--lab-figma-blur,) var(--lab-figma-brightness,) var(--lab-figma-contrast,) var(--lab-figma-grayscale,)
+    var(--lab-figma-hue-rotate,) var(--lab-figma-invert,) var(--lab-figma-saturate,) var(--lab-figma-sepia,)
+    var(--lab-figma-drop-shadow,);
+}
+.r376 {
+  position: relative;
+  z-index: 9;
+  display: flex;
+  min-height: 40px;
+  flex-shrink: 0;
+  align-content: stretch;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border-right-style: var(--lab-figma-border-style);
+  border-right-width: 1px;
+  --lab-figma-border-style: solid;
+  border-style: solid;
+  border-color: #d5d7da;
+  padding-inline: 12px;
+  padding-block: 8px;
+}
+.r377 {
+  pointer-events: none;
+  position: absolute;
+  inset: calc(var(--spacing) * 0);
+  background-color: white;
+}
+.r378 {
+  pointer-events: none;
+  position: absolute;
+  inset: 0 -0.5px 0 0;
+  border-radius: inherit;
+  --lab-figma-shadow:
+    inset 0px 0px 0px 0px
+      var(--lab-figma-shadow-color, var(--颜色\/效果\/阴影\/shadow-skeumorphic-inner-border, rgba(10, 13, 18, 0.18))),
+    inset 0px -2px 0px 0px
+      var(--lab-figma-shadow-color, var(--颜色\/效果\/阴影\/shadow-skeumorphic-inner, rgba(10, 13, 18, 0.05)));
+  box-shadow:
+    var(--lab-figma-inset-shadow), var(--lab-figma-inset-ring-shadow), var(--lab-figma-ring-offset-shadow),
+    var(--lab-figma-ring-shadow), var(--lab-figma-shadow);
+}
+.r379 {
+  position: relative;
+  z-index: 8;
+  display: flex;
+  min-height: 40px;
+  min-width: 1px;
+  flex: 1 0 0;
+  align-content: stretch;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border-right-style: var(--lab-figma-border-style);
+  border-right-width: 1px;
+  --lab-figma-border-style: solid;
+  border-style: solid;
+  border-color: #d5d7da;
+  padding-inline: 16px;
+  padding-block: 8px;
+}
+.r380 {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  min-height: 40px;
+  flex-shrink: 0;
+  align-content: stretch;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border-right-style: var(--lab-figma-border-style);
+  border-right-width: 1px;
+  --lab-figma-border-style: solid;
+  border-style: solid;
+  border-color: #d5d7da;
+  padding-inline: 12px;
+  padding-block: 8px;
+}
+.r381 {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  min-height: 1px;
+  width: 100%;
+  flex: 1 0 0;
+  flex-direction: column;
+  align-content: stretch;
+  align-items: flex-start;
+}
+.r382 {
+  position: relative;
+  display: flex;
+  min-height: 1px;
+  width: 100%;
+  flex: 1 0 0;
+  align-content: stretch;
+  align-items: flex-start;
+}
+.r383 {
+  position: relative;
+  display: flex;
+  width: 100%;
+  flex-shrink: 0;
+  flex-direction: column;
+  align-content: stretch;
+  align-items: center;
+  gap: 6px;
+  border-right-style: var(--lab-figma-border-style);
+  border-right-width: 1px;
+  border-bottom-style: var(--lab-figma-border-style);
+  border-bottom-width: 1px;
+  --lab-figma-border-style: solid;
+  border-style: solid;
+  border-color: #e9eaeb;
+  background-color: white;
+  padding: 8px;
+}
+.r384 {
+  position: relative;
+  flex-shrink: 0;
+  font-family: PingFang SC;
+  font-size: 12px;
+  --lab-figma-leading: 18px;
+  line-height: 18px;
+  --lab-figma-font-weight: 400;
+  font-weight: 400;
+  word-break: break-word;
+  white-space: nowrap;
+  color: #717680;
+}
+.r385 {
+  position: relative;
+  display: flex;
+  min-height: 1px;
+  width: 100%;
+  flex: 1 0 0;
+  flex-direction: column;
+  align-content: stretch;
+  align-items: flex-start;
+  gap: 6px;
+  overflow: clip;
+  border-right-style: var(--lab-figma-border-style);
+  border-right-width: 1px;
+  border-bottom-style: var(--lab-figma-border-style);
+  border-bottom-width: 1px;
+  --lab-figma-border-style: solid;
+  border-style: solid;
+  border-color: #e9eaeb;
+  background-color: #fdfdfd;
+  padding: 6px;
+}
+.r386 {
+  position: relative;
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  border-radius: 9999px;
+}
+.r387 {
+  position: absolute;
+  top: calc(50% - 9px);
+  left: 4px;
+  font-family: PingFang SC;
+  font-size: 12px;
+  --lab-figma-leading: 18px;
+  line-height: 18px;
+  --lab-figma-font-weight: 500;
+  font-weight: 500;
+  word-break: break-word;
+  white-space: nowrap;
+  color: #717680;
+}
+.r388 {
+  position: relative;
+  display: flex;
+  flex-shrink: 0;
+  align-content: stretch;
+  align-items: flex-start;
+  gap: 4px;
+  padding-left: 4px;
+  opacity: 60%;
+}
+.r389 {
+  position: relative;
+  display: flex;
+  width: 100%;
+  flex-shrink: 0;
+  align-content: stretch;
+  align-items: flex-start;
+  padding-left: 4px;
+  opacity: 60%;
+}
+.r390 {
+  position: relative;
+  min-width: 1px;
+  flex: 1 0 0;
+  overflow: hidden;
+  font-family: PingFang SC;
+  font-size: 12px;
+  --lab-figma-leading: 18px;
+  line-height: 18px;
+  --lab-figma-font-weight: 500;
+  font-weight: 500;
+  word-break: break-word;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #717680;
+}
+.r391 {
+  position: relative;
+  display: flex;
+  min-height: 1px;
+  width: 100%;
+  flex: 1 0 0;
+  flex-direction: column;
+  align-content: stretch;
+  align-items: flex-start;
+  gap: 6px;
+  overflow: clip;
+  border-right-style: var(--lab-figma-border-style);
+  border-right-width: 1px;
+  border-bottom-style: var(--lab-figma-border-style);
+  border-bottom-width: 1px;
+  --lab-figma-border-style: solid;
+  border-style: solid;
+  border-color: #e9eaeb;
+  background-color: white;
+  padding: 6px;
+}
+.r392 {
+  position: absolute;
+  top: calc(50% - 9px);
+  left: 4px;
+  font-family: PingFang SC;
+  font-size: 12px;
+  --lab-figma-leading: 18px;
+  line-height: 18px;
+  --lab-figma-font-weight: 500;
+  font-weight: 500;
+  word-break: break-word;
+  white-space: nowrap;
+  color: #414651;
+}
+.r393 {
+  position: relative;
+  display: flex;
+  flex-shrink: 0;
+  align-content: stretch;
+  align-items: flex-start;
+  gap: 4px;
+  padding-left: 4px;
+}
+.r394 {
+  position: relative;
+  display: flex;
+  height: 8px;
+  width: 36px;
+  flex-shrink: 0;
+  align-content: stretch;
+  align-items: flex-start;
+  gap: 4px;
+  padding-left: 4px;
+}
+.r395 {
+  position: relative;
+  display: flex;
+  width: 100%;
+  flex-shrink: 0;
+  align-content: stretch;
+  align-items: flex-start;
+  padding-left: 4px;
+}
+.r396 {
+  position: relative;
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  border-radius: 9999px;
+  background-color: #fafafa;
+}
+.r397 {
+  position: absolute;
+  top: calc(50% - 9px);
+  left: calc(1 / 2 * 100%);
+  width: 24px;
+  --lab-figma-translate-x: calc(calc(1 / 2 * 100%) * -1);
+  translate: var(--lab-figma-translate-x) var(--lab-figma-translate-y);
+  text-align: center;
+  font-family: PingFang SC;
+  font-size: 12px;
+  --lab-figma-leading: 18px;
+  line-height: 18px;
+  --lab-figma-font-weight: 500;
+  font-weight: 500;
+  word-break: break-word;
+  color: #414651;
+}
+.r398 {
+  position: relative;
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  border-radius: 9999px;
+  background-color: #3250bd;
+}
+.r399 {
+  position: absolute;
+  top: calc(50% - 9px);
+  left: calc(1 / 2 * 100%);
+  width: 24px;
+  --lab-figma-translate-x: calc(calc(1 / 2 * 100%) * -1);
+  translate: var(--lab-figma-translate-x) var(--lab-figma-translate-y);
+  text-align: center;
+  font-family: PingFang SC;
+  font-size: 12px;
+  --lab-figma-leading: 18px;
+  line-height: 18px;
+  --lab-figma-font-weight: 500;
+  font-weight: 500;
+  word-break: break-word;
+  color: white;
+}
+.r400 {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  width: 100%;
+  flex-shrink: 0;
+  flex-direction: column;
+  align-content: stretch;
+  align-items: flex-start;
+  gap: 16px;
+  padding-inline: 16px;
+  padding-block: 20px;
+}
+.r401 {
+  position: relative;
+  z-index: 3;
+  width: 100%;
+  flex-shrink: 0;
+  font-family: PingFang SC;
+  font-size: 14px;
+  --lab-figma-leading: 20px;
+  line-height: 20px;
+  --lab-figma-font-weight: 500;
+  font-weight: 500;
+  word-break: break-word;
+  color: #181d27;
+}
+.r402 {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  width: 100%;
+  flex-shrink: 0;
+  flex-direction: column;
+  align-content: stretch;
+  align-items: flex-start;
+  gap: 6px;
+}
+.r403 {
+  position: relative;
+  display: flex;
+  width: 100%;
+  flex-shrink: 0;
+  align-content: stretch;
+  align-items: center;
+  gap: 4px;
+  border-radius: 6px;
+  border-style: var(--lab-figma-border-style);
+  border-width: 1px;
+  --lab-figma-border-style: solid;
+  border-style: solid;
+  border-color: #e9eaeb;
+  background-color: #fafafa;
+  padding-inline: 8px;
+  padding-block: 4px;
+}
+.r404 {
+  position: relative;
+  display: flex;
+  min-width: 1px;
+  flex: 1 0 0;
+  align-content: stretch;
+  align-items: center;
+  gap: 2px;
+  font-size: 12px;
+  --lab-figma-leading: 18px;
+  line-height: 18px;
+  word-break: break-word;
+  white-space: nowrap;
+}
+.r405 {
+  position: relative;
+  min-width: 1px;
+  flex: 1 0 0;
+  overflow: hidden;
+  font-family: PingFang SC;
+  --lab-figma-font-weight: 500;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  color: #414651;
+}
+.r406 {
+  position: relative;
+  flex-shrink: 0;
+  overflow: hidden;
+  font-family: PingFang SC;
+  --lab-figma-font-weight: 400;
+  font-weight: 400;
+  text-overflow: ellipsis;
+  color: #535862;
+}
+.r407 {
+  position: relative;
+  display: flex;
+  width: 100%;
+  flex-shrink: 0;
+  align-content: stretch;
+  align-items: center;
+  gap: 4px;
+  border-radius: 6px;
+  border-style: var(--lab-figma-border-style);
+  border-width: 1px;
+  --lab-figma-border-style: solid;
+  border-style: solid;
+  border-color: #99afff;
+  background-color: #ced8ff;
+  padding-inline: 8px;
+  padding-block: 4px;
+}
+.r408 {
+  position: relative;
+  min-width: 1px;
+  flex: 1 0 0;
+  overflow: hidden;
+  font-family: PingFang SC;
+  --lab-figma-font-weight: 500;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  color: #223b99;
+}
+.r409 {
+  position: relative;
+  flex-shrink: 0;
+  overflow: hidden;
+  font-family: PingFang SC;
+  --lab-figma-font-weight: 400;
+  font-weight: 400;
+  text-overflow: ellipsis;
+  color: #3250bd;
+}
+.r410 {
+  position: relative;
+  display: flex;
+  width: 100%;
+  flex-shrink: 0;
+  align-content: stretch;
+  align-items: center;
+  gap: 4px;
+  border-radius: 6px;
+  border-style: var(--lab-figma-border-style);
+  border-width: 1px;
+  --lab-figma-border-style: solid;
+  border-style: solid;
+  border-color: #c7d7fe;
+  background-color: #eef4ff;
+  padding-inline: 8px;
+  padding-block: 4px;
+}
+.r411 {
+  position: relative;
+  min-width: 1px;
+  flex: 1 0 0;
+  overflow: hidden;
+  font-family: PingFang SC;
+  --lab-figma-font-weight: 500;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  color: #3538cd;
+}
+.r412 {
+  position: relative;
+  flex-shrink: 0;
+  overflow: hidden;
+  font-family: PingFang SC;
+  --lab-figma-font-weight: 400;
+  font-weight: 400;
+  text-overflow: ellipsis;
+  color: #444ce7;
+}
+.r413 {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  width: 100%;
+  flex-shrink: 0;
+  align-content: stretch;
+  align-items: flex-start;
+}
+.r414 {
+  position: relative;
+  display: flex;
+  width: 512px;
+  flex-direction: column;
+  align-content: stretch;
+  align-items: flex-start;
+  gap: 16px;
+}
+.r415 {
+  position: relative;
+  display: flex;
+  width: 100%;
+  flex-shrink: 0;
+  flex-direction: column;
+  align-content: stretch;
+  align-items: center;
+  gap: 4px;
+  border-radius: 12px;
+  border-style: var(--lab-figma-border-style);
+  border-width: 1px;
+  --lab-figma-border-style: solid;
+  border-style: solid;
+  border-color: #e9eaeb;
+  background-color: white;
+  padding-inline: 24px;
+  padding-block: 16px;
+}
+.r416 {
+  position: relative;
+  display: flex;
+  width: 100%;
+  flex-shrink: 0;
+  flex-direction: column;
+  align-content: stretch;
+  align-items: center;
+  gap: 12px;
+}
+.r417 {
+  position: relative;
+  display: flex;
+  width: 100%;
+  flex-shrink: 0;
+  flex-direction: column;
+  align-content: stretch;
+  align-items: center;
+  gap: 4px;
+}
+.r418 {
+  position: relative;
+  display: flex;
+  width: 100%;
+  flex-shrink: 0;
+  align-content: stretch;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 4px;
+}
+.r419 {
+  position: relative;
+  width: 100%;
+  flex-shrink: 0;
+  text-align: center;
+  font-family: PingFang SC;
+  font-size: 12px;
+  --lab-figma-leading: 18px;
+  line-height: 18px;
+  --lab-figma-font-weight: 400;
+  font-weight: 400;
+  word-break: break-word;
+  color: #535862;
+}
+.r420 {
+  position: relative;
+  display: flex;
+  width: 1216px;
+  align-content: stretch;
+  align-items: center;
+  gap: 8px;
+}
+.r421 {
+  position: relative;
+  height: 1px;
+  min-width: 1px;
+  flex: 1 0 0;
+  background-color: #e9eaeb;
+}
+.r422 {
+  position: relative;
+  display: flex;
+  width: 512px;
+  align-content: stretch;
+  align-items: center;
+  justify-content: center;
+}
+.r423 {
+  position: relative;
+  display: flex;
+  flex-shrink: 0;
+  flex-direction: column;
+  align-content: stretch;
+  align-items: center;
+  gap: 16px;
+}
+.r424 {
+  position: relative;
+  width: 48px;
+  height: 48px;
+  flex-shrink: 0;
+}
+.r425 {
+  position: absolute;
+  top: -276px;
+  left: calc(1 / 2 * 100%);
+  width: 640px;
+  height: 640px;
+  --lab-figma-translate-x: calc(calc(1 / 2 * 100%) * -1);
+  translate: var(--lab-figma-translate-x) var(--lab-figma-translate-y);
+}
+.r426 {
+  position: absolute;
+  top: calc(var(--spacing) * 0);
+  left: calc(1 / 2 * 100%);
+  width: 640px;
+  height: 640px;
+  --lab-figma-translate-x: calc(calc(1 / 2 * 100%) * -1);
+  translate: var(--lab-figma-translate-x) var(--lab-figma-translate-y);
+  mask-composite: intersect;
+  mask-mode: alpha;
+  mask-size: 960px 960px;
+  mask-clip: no-clip;
+  mask-repeat: no-repeat;
+}
+.r427 {
+  position: absolute;
+  top: calc(var(--spacing) * 0);
+  left: calc(1 / 2 * 100%);
+  display: flex;
+  width: 640px;
+  --lab-figma-translate-x: calc(calc(1 / 2 * 100%) * -1);
+  translate: var(--lab-figma-translate-x) var(--lab-figma-translate-y);
+  flex-wrap: wrap;
+  align-content: flex-start;
+  align-items: flex-start;
+  gap: calc(var(--spacing) * 0);
+  overflow: clip;
+  border-style: var(--lab-figma-border-style);
+  border-width: 0.667px;
+  --lab-figma-border-style: solid;
+  border-style: solid;
+  border-color: #e9eaeb;
+}
+.r428 {
+  position: relative;
+  width: 42.667px;
+  height: 42.667px;
+  flex-shrink: 0;
+  border-right-style: var(--lab-figma-border-style);
+  border-right-width: 0.667px;
+  border-bottom-style: var(--lab-figma-border-style);
+  border-bottom-width: 0.667px;
+  --lab-figma-border-style: solid;
+  border-style: solid;
+  border-color: #e9eaeb;
+}
+.r429 {
+  position: relative;
+  width: 42.667px;
+  height: 42.667px;
+  flex-shrink: 0;
+  border-right-style: var(--lab-figma-border-style);
+  border-right-width: 0.667px;
+  border-bottom-style: var(--lab-figma-border-style);
+  border-bottom-width: 0.667px;
+  --lab-figma-border-style: solid;
+  border-style: solid;
+  border-color: #e9eaeb;
+  background-color: #f5f5f5;
+}
+.r430 {
+  position: relative;
+  display: flex;
+  min-width: 1px;
+  flex: 1 0 0;
+  flex-direction: column;
+  align-content: stretch;
+  align-items: center;
+  gap: 24px;
+}
+.r431 {
+  position: relative;
+  display: flex;
+  width: 100%;
+  flex-shrink: 0;
+  flex-direction: column;
+  align-content: stretch;
+  align-items: center;
+  gap: 16px;
+}
+.r432 {
+  position: relative;
+  height: 48px;
+  width: 54px;
+  flex-shrink: 0;
+}
+.r433 {
+  position: absolute;
+  inset: 6.25% 11.11% 6.25% 0;
+}
+.r434 {
+  position: absolute;
+  inset: 10px 9px 6px 3px;
+  border-radius: 4px;
+  background-color: white;
+}
+.r435 {
+  position: absolute;
+  inset: 27.08% -6.48% 6.25% -6.48%;
+}
+.r436 {
+  position: absolute;
+  inset: 0 6.02%;
+}
+.r437 {
+  position: absolute;
+  inset: 27.08% -6.48% 6.25% -6.48%;
+  opacity: 20%;
+  mix-blend-mode: overlay;
+}
+.r438 {
+  display: block;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+}
+.r439 {
+  position: relative;
+  display: flex;
+  width: 100%;
+  max-width: 352px;
+  flex-shrink: 0;
+  flex-direction: column;
+  align-content: stretch;
+  align-items: center;
+  gap: 4px;
+  text-align: center;
+  word-break: break-word;
+}
+.r440 {
+  position: relative;
+  display: flex;
+  width: 720px;
+  align-content: stretch;
+  align-items: flex-start;
+  justify-content: center;
+  overflow: clip;
+  border-radius: 12px;
+  border-style: var(--lab-figma-border-style);
+  border-width: 1px;
+  --lab-figma-border-style: solid;
+  border-style: solid;
+  border-color: #e9eaeb;
+  background-color: white;
+}
+.r441 {
+  position: relative;
+  display: flex;
+  flex-shrink: 0;
+  flex-direction: column;
+  align-content: stretch;
+  align-items: flex-start;
+  align-self: stretch;
+  border-right-style: var(--lab-figma-border-style);
+  border-right-width: 1px;
+  --lab-figma-border-style: solid;
+  border-style: solid;
+  border-color: #e9eaeb;
+  background-color: #fafafa;
+  padding-inline: 16px;
+  padding-block: 20px;
+}
+.r442 {
+  position: relative;
+  flex-shrink: 0;
+  text-align: right;
+  font-family: "Roboto Mono:Bold";
+  font-size: 14px;
+  --lab-figma-leading: 0;
+  line-height: 0;
+  --lab-figma-font-weight: var(--font-weight-bold);
+  font-weight: var(--font-weight-bold);
+  word-break: break-word;
+  white-space: nowrap;
+  color: #717680;
+}
+.r443 {
+  margin-bottom: 1px;
+  --lab-figma-leading: 20px;
+  line-height: 20px;
+}
+.r445 {
+  --lab-figma-leading: 20px;
+  line-height: 20px;
+}
+.r446 {
+  position: relative;
+  display: flex;
+  min-width: 1px;
+  flex: 1 0 0;
+  align-content: stretch;
+  align-items: flex-start;
+  padding: 20px;
+}
+.r447 {
+  position: relative;
+  min-width: 1px;
+  flex: 1 0 0;
+  font-family: "Roboto Mono:Bold";
+  font-size: 0px;
+  --lab-figma-leading: 0;
+  line-height: 0;
+  --lab-figma-font-weight: var(--font-weight-bold);
+  font-weight: var(--font-weight-bold);
+  word-break: break-word;
+  white-space: pre-wrap;
+  color: #181d27;
+}
+.r448 {
+  margin-bottom: 1px;
+  font-family: "Roboto Mono:Regular";
+  font-size: 14px;
+  --lab-figma-leading: 20px;
+  line-height: 20px;
+  --lab-figma-font-weight: var(--font-weight-normal);
+  font-weight: var(--font-weight-normal);
+  color: #079455;
+}
+.r449 {
+  margin-bottom: 1px;
+  font-family: "Roboto Mono:Regular";
+  font-size: 14px;
+  --lab-figma-font-weight: var(--font-weight-normal);
+  font-weight: var(--font-weight-normal);
+}
+.r450 {
+  --lab-figma-leading: 20px;
+  line-height: 20px;
+  color: #dd2590;
+}
+.r451 {
+  --lab-figma-leading: 20px;
+  line-height: 20px;
+  color: #1570ef;
+}
+.r452 {
+  margin-bottom: 1px;
+  font-size: 14px;
+  --lab-figma-leading: 20px;
+  line-height: 20px;
+}
+.r453 {
+  margin-bottom: 1px;
+  font-family: "Roboto Mono:Regular";
+  font-size: 14px;
+  --lab-figma-leading: 20px;
+  line-height: 20px;
+  --lab-figma-font-weight: var(--font-weight-normal);
+  font-weight: var(--font-weight-normal);
+}
+.r454 {
+  font-family: "Roboto Mono:Regular";
+  font-size: 14px;
+  --lab-figma-font-weight: var(--font-weight-normal);
+  font-weight: var(--font-weight-normal);
+}
+@property --lab-figma-leading {
+  syntax: "*";
+  inherits: false;
+}
+@property --lab-figma-font-weight {
+  syntax: "*";
+  inherits: false;
+}
+@property --lab-figma-border-style {
+  syntax: "*";
+  inherits: false;
+  initial-value: solid;
+}
+@property --lab-figma-shadow {
+  syntax: "*";
+  inherits: false;
+  initial-value: 0 0 #0000;
+}
+@property --lab-figma-shadow-color {
+  syntax: "*";
+  inherits: false;
+}
+@property --lab-figma-shadow-alpha {
+  syntax: "<percentage>";
+  inherits: false;
+  initial-value: 100%;
+}
+@property --lab-figma-inset-shadow {
+  syntax: "*";
+  inherits: false;
+  initial-value: 0 0 #0000;
+}
+@property --lab-figma-inset-shadow-color {
+  syntax: "*";
+  inherits: false;
+}
+@property --lab-figma-inset-shadow-alpha {
+  syntax: "<percentage>";
+  inherits: false;
+  initial-value: 100%;
+}
+@property --lab-figma-ring-color {
+  syntax: "*";
+  inherits: false;
+}
+@property --lab-figma-ring-shadow {
+  syntax: "*";
+  inherits: false;
+  initial-value: 0 0 #0000;
+}
+@property --lab-figma-inset-ring-color {
+  syntax: "*";
+  inherits: false;
+}
+@property --lab-figma-inset-ring-shadow {
+  syntax: "*";
+  inherits: false;
+  initial-value: 0 0 #0000;
+}
+@property --lab-figma-ring-inset {
+  syntax: "*";
+  inherits: false;
+}
+@property --lab-figma-ring-offset-width {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+@property --lab-figma-ring-offset-color {
+  syntax: "*";
+  inherits: false;
+  initial-value: #fff;
+}
+@property --lab-figma-ring-offset-shadow {
+  syntax: "*";
+  inherits: false;
+  initial-value: 0 0 #0000;
+}
+@property --lab-figma-blur {
+  syntax: "*";
+  inherits: false;
+}
+@property --lab-figma-brightness {
+  syntax: "*";
+  inherits: false;
+}
+@property --lab-figma-contrast {
+  syntax: "*";
+  inherits: false;
+}
+@property --lab-figma-grayscale {
+  syntax: "*";
+  inherits: false;
+}
+@property --lab-figma-hue-rotate {
+  syntax: "*";
+  inherits: false;
+}
+@property --lab-figma-invert {
+  syntax: "*";
+  inherits: false;
+}
+@property --lab-figma-opacity {
+  syntax: "*";
+  inherits: false;
+}
+@property --lab-figma-saturate {
+  syntax: "*";
+  inherits: false;
+}
+@property --lab-figma-sepia {
+  syntax: "*";
+  inherits: false;
+}
+@property --lab-figma-drop-shadow {
+  syntax: "*";
+  inherits: false;
+}
+@property --lab-figma-drop-shadow-color {
+  syntax: "*";
+  inherits: false;
+}
+@property --lab-figma-drop-shadow-alpha {
+  syntax: "<percentage>";
+  inherits: false;
+  initial-value: 100%;
+}
+@property --lab-figma-drop-shadow-size {
+  syntax: "*";
+  inherits: false;
+}
+@property --lab-figma-backdrop-blur {
+  syntax: "*";
+  inherits: false;
+}
+@property --lab-figma-backdrop-brightness {
+  syntax: "*";
+  inherits: false;
+}
+@property --lab-figma-backdrop-contrast {
+  syntax: "*";
+  inherits: false;
+}
+@property --lab-figma-backdrop-grayscale {
+  syntax: "*";
+  inherits: false;
+}
+@property --lab-figma-backdrop-hue-rotate {
+  syntax: "*";
+  inherits: false;
+}
+@property --lab-figma-backdrop-invert {
+  syntax: "*";
+  inherits: false;
+}
+@property --lab-figma-backdrop-opacity {
+  syntax: "*";
+  inherits: false;
+}
+@property --lab-figma-backdrop-saturate {
+  syntax: "*";
+  inherits: false;
+}
+@property --lab-figma-backdrop-sepia {
+  syntax: "*";
+  inherits: false;
+}
+@property --lab-figma-translate-x {
+  syntax: "*";
+  inherits: false;
+  initial-value: 0;
+}
+@property --lab-figma-translate-y {
+  syntax: "*";
+  inherits: false;
+  initial-value: 0;
+}
+@property --lab-figma-translate-z {
+  syntax: "*";
+  inherits: false;
+  initial-value: 0;
+}
+@layer properties {
+  @supports ((-webkit-hyphens: none) and (not (margin-trim: inline))) or
+    ((-moz-orient: inline) and (not (color: rgb(from red r g b)))) {
+    .defaults,
+    .defaults *,
+    .defaults::before,
+    .defaults::after,
+    .defaults::backdrop {
+      --lab-figma-leading: initial;
+      --lab-figma-font-weight: initial;
+      --lab-figma-border-style: solid;
+      --lab-figma-shadow: 0 0 #0000;
+      --lab-figma-shadow-color: initial;
+      --lab-figma-shadow-alpha: 100%;
+      --lab-figma-inset-shadow: 0 0 #0000;
+      --lab-figma-inset-shadow-color: initial;
+      --lab-figma-inset-shadow-alpha: 100%;
+      --lab-figma-ring-color: initial;
+      --lab-figma-ring-shadow: 0 0 #0000;
+      --lab-figma-inset-ring-color: initial;
+      --lab-figma-inset-ring-shadow: 0 0 #0000;
+      --lab-figma-ring-inset: initial;
+      --lab-figma-ring-offset-width: 0px;
+      --lab-figma-ring-offset-color: #fff;
+      --lab-figma-ring-offset-shadow: 0 0 #0000;
+      --lab-figma-blur: initial;
+      --lab-figma-brightness: initial;
+      --lab-figma-contrast: initial;
+      --lab-figma-grayscale: initial;
+      --lab-figma-hue-rotate: initial;
+      --lab-figma-invert: initial;
+      --lab-figma-opacity: initial;
+      --lab-figma-saturate: initial;
+      --lab-figma-sepia: initial;
+      --lab-figma-drop-shadow: initial;
+      --lab-figma-drop-shadow-color: initial;
+      --lab-figma-drop-shadow-alpha: 100%;
+      --lab-figma-drop-shadow-size: initial;
+      --lab-figma-backdrop-blur: initial;
+      --lab-figma-backdrop-brightness: initial;
+      --lab-figma-backdrop-contrast: initial;
+      --lab-figma-backdrop-grayscale: initial;
+      --lab-figma-backdrop-hue-rotate: initial;
+      --lab-figma-backdrop-invert: initial;
+      --lab-figma-backdrop-opacity: initial;
+      --lab-figma-backdrop-saturate: initial;
+      --lab-figma-backdrop-sepia: initial;
+      --lab-figma-translate-x: 0;
+      --lab-figma-translate-y: 0;
+      --lab-figma-translate-z: 0;
+    }
+  }
+}

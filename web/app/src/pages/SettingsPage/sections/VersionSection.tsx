@@ -84,14 +84,15 @@ export function VersionSection() {
           <div className="field">
             <span>{t("upgradeChannelLabel")}</span>
             {showUpgradeChannel ? (
-              <button
-                type="button"
+              <Button
+                variant="linkGray"
+                size="sm"
                 className={styles.versionChannelLink}
                 disabled={upgradeChannelDisabled}
                 onClick={() => setSwitchVersionOpen(true)}
               >
                 {t("upgradeChannelSwitch")}
-              </button>
+              </Button>
             ) : (
               <strong className={styles.fieldValue}>{inferredUpgradeChannel || "-"}</strong>
             )}

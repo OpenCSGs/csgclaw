@@ -375,14 +375,12 @@ function StartTaskForm({
             </p>
           ) : null}
           {!selectedAgent ? (
-            <button
-              className={styles.emptyRoom}
-              type="button"
-              disabled={busy || !manager}
-              onClick={() => void start(true)}
-            >
-              {t("taskEntryEmptyRoom")}
-            </button>
+            <div className={styles.emptyRoom}>
+              <Button variant="linkGray" size="sm" disabled={busy || !manager} onClick={() => void start(true)}>
+                {t("taskEntryEmptyRoom")}
+              </Button>
+              <span className={styles.emptyRoomHint}>{t("taskEntryEmptyRoomHint")}</span>
+            </div>
           ) : null}
         </div>
         {!examplesHidden && !modelMissing && agents.length ? (

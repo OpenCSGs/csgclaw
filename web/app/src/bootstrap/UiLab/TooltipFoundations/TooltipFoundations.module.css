@@ -1,0 +1,254 @@
+.foundation {
+  min-width: 0;
+  margin-block: var(--space-6);
+  padding: var(--space-5);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xl);
+  background: var(--panel);
+}
+.foundation h2 {
+  font: var(--text-xl-medium);
+}
+.foundation p {
+  color: var(--muted);
+  line-height: 1.6;
+}
+.foundation a {
+  color: var(--primary);
+}
+.eyebrow {
+  font: var(--text-sm-medium);
+  letter-spacing: 0.08em;
+}
+.notice {
+  margin-block: var(--space-5);
+  padding: var(--space-4);
+  border-inline-start: 3px solid var(--primary);
+  border-radius: var(--radius-md);
+  background: var(--panel-soft);
+}
+.notice summary {
+  cursor: pointer;
+}
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  max-width: 100%;
+  overflow-x: auto;
+  padding: var(--space-1);
+  margin-block: var(--space-3);
+}
+.controls > * {
+  flex-shrink: 0;
+  width: max-content;
+}
+.demo,
+.item {
+  min-width: 0;
+  padding: var(--space-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xl);
+}
+.demo {
+  margin-block: var(--space-5);
+}
+.fields,
+.grid {
+  display: grid;
+  gap: var(--space-4);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr));
+}
+.item h4 {
+  font: var(--text-sm-medium);
+}
+.item p {
+  font-size: 0.8rem;
+}
+.previewStage {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  min-height: 160px;
+  padding-block: var(--space-5);
+}
+.referenceStage {
+  min-width: 0;
+  margin-block: var(--space-4);
+  padding: 24px 16px;
+  overflow-x: auto;
+  border-radius: var(--radius-md);
+  background: #fff;
+}
+.bubble,
+.liveContent.liveContent {
+  filter: drop-shadow(0 12px 8px #0a0d1214) drop-shadow(0 4px 3px #0a0d1208) drop-shadow(0 2px 1px #0a0d120a);
+}
+.bubble {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.body {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  gap: 2px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: #0a0d12;
+  font-family: "PingFang SC", var(--font-family-text);
+  text-align: left;
+  font-size: 12px;
+  line-height: 18px;
+  letter-spacing: 0;
+  font-synthesis: none;
+  overflow-wrap: anywhere;
+}
+.body[data-supporting="true"] {
+  padding: 12px;
+}
+.bubble > .body {
+  align-self: stretch;
+}
+.bubble .body[data-supporting="false"] .title {
+  white-space: nowrap;
+}
+.title {
+  display: block;
+  color: #fff;
+  font-weight: 500;
+}
+.body[data-supporting="false"] .title {
+  text-align: center;
+}
+.description {
+  display: block;
+  color: #d5d7da;
+  font-weight: 400;
+  white-space: pre-wrap;
+}
+.arrowSlot {
+  display: block;
+  position: relative;
+  flex: 0 0 6px;
+  width: 16px;
+  height: 6px;
+}
+.arrowRotation {
+  position: relative;
+  display: block;
+  width: 16px;
+  height: 6px;
+}
+.arrowRotation img,
+.liveArrow img {
+  position: absolute;
+  top: -2.51471px;
+  left: 0;
+  display: block;
+  max-width: none;
+}
+.bubble[data-arrow="Bottom left"] {
+  align-items: flex-start;
+}
+.bubble[data-arrow="Bottom right"] {
+  align-items: flex-end;
+}
+.bubble:is([data-arrow="Bottom left"], [data-arrow="Bottom right"]) :is(.arrowSlot, .arrowRotation) {
+  width: 28px;
+}
+.bubble[data-arrow="Top center"] .arrowRotation {
+  transform: rotate(180deg);
+}
+.bubble:is([data-arrow="Left"], [data-arrow="Right"]) {
+  flex-direction: row;
+}
+.bubble:is([data-arrow="Left"], [data-arrow="Right"]) .arrowSlot {
+  width: 6px;
+  height: 16px;
+}
+.bubble:is([data-arrow="Left"], [data-arrow="Right"]) .arrowRotation {
+  position: absolute;
+  left: -5px;
+  top: 5px;
+}
+.bubble[data-arrow="Left"] .arrowRotation {
+  transform: rotate(90deg);
+}
+.bubble[data-arrow="Right"] .arrowRotation {
+  transform: rotate(-90deg);
+}
+.liveContent.liveContent {
+  width: max-content;
+  max-width: min(320px, calc(100vw - 24px), var(--radix-tooltip-content-available-width, 320px));
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  white-space: normal;
+}
+.liveContent[data-supporting="true"] {
+  width: 320px;
+}
+.liveContent > .body {
+  width: 100%;
+}
+.liveArrow {
+  position: relative;
+  width: 16px;
+  height: 6px;
+}
+.liveArrow img {
+  display: none;
+}
+.liveContent[data-side="top"][data-off-center="true"] .liveArrow {
+  width: 28px;
+}
+.liveContent[data-side="top"]:not([data-off-center="true"]) .centerArrow {
+  display: block;
+}
+.liveContent[data-side="top"][data-off-center="true"][data-arrow="Bottom left"] .startArrow {
+  display: block;
+}
+.liveContent[data-side="top"][data-off-center="true"][data-arrow="Bottom right"] .endArrow {
+  display: block;
+}
+.liveContent[data-side="bottom"] .liveArrow img[data-arrow-side="bottom"],
+.liveContent[data-side="right"] .liveArrow img[data-arrow-side="right"],
+.liveContent[data-side="left"] .liveArrow img[data-arrow-side="left"] {
+  display: block;
+}
+.helpGlyph {
+  display: block;
+  position: relative;
+  width: 16px;
+  height: 16px;
+}
+.helpGlyph img {
+  position: absolute;
+  inset: 0;
+  max-width: none;
+}
+.helpGlyph .openIcon {
+  display: none;
+}
+.helpButton:is([data-state="delayed-open"], [data-state="instant-open"]) .openIcon {
+  display: block;
+}
+.helpButton:is([data-state="delayed-open"], [data-state="instant-open"]) .closedIcon {
+  display: none;
+}
+@media (max-width: 600px) {
+  .foundation {
+    padding: var(--space-3);
+  }
+  .previewStage {
+    justify-content: center;
+  }
+}

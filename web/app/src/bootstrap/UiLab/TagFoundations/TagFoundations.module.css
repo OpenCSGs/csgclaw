@@ -1,0 +1,132 @@
+.foundation {
+  min-width: 0;
+  margin-block: var(--space-6);
+  padding: var(--space-5);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xl);
+  background: var(--panel);
+}
+.foundation h2 {
+  font: var(--text-xl-medium);
+}
+.foundation p {
+  color: var(--muted);
+  line-height: 1.6;
+}
+.foundation a {
+  color: var(--primary);
+}
+.eyebrow {
+  font: var(--text-sm-medium);
+  letter-spacing: 0.08em;
+}
+.notice {
+  margin-block: var(--space-5);
+  padding: var(--space-4);
+  border-inline-start: 3px solid var(--primary);
+  border-radius: var(--radius-md);
+  background: var(--panel-soft);
+}
+.controls {
+  max-width: 100%;
+  overflow-x: auto;
+  padding: var(--space-1);
+  margin-block: var(--space-2);
+}
+.controls > * {
+  width: max-content;
+}
+.demo {
+  padding: var(--space-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xl);
+  margin-block: var(--space-5);
+}
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr));
+  gap: var(--space-4);
+}
+.item {
+  min-width: 0;
+  padding: var(--space-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xl);
+}
+.item h4 {
+  font: var(--text-sm-medium);
+}
+.item p {
+  font-size: 0.8rem;
+}
+.stage {
+  min-width: 0;
+  padding: var(--space-5);
+  margin-block: var(--space-4);
+  overflow-x: auto;
+  background: #fff;
+  border-radius: var(--radius-md);
+}
+.tag {
+  box-sizing: border-box;
+  max-width: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid;
+  font-family: "PingFang SC", var(--font-family-text);
+  font-weight: 400;
+  font-synthesis: none;
+  vertical-align: middle;
+}
+.content {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+.content > button {
+  flex-shrink: 0;
+}
+.label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.icon,
+.avatar {
+  display: inline-flex;
+  flex-shrink: 0;
+}
+.tag img {
+  flex-shrink: 0;
+  max-width: none;
+}
+.avatar {
+  width: 16px;
+  height: 16px;
+  border-radius: 9999px;
+  overflow: hidden;
+  box-shadow: inset 0 0 0 0.667px #00000014;
+}
+.avatar img {
+  width: 16px;
+  height: 16px;
+  object-fit: cover;
+}
+.count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border-radius: 3px;
+  background: #f5f5f5;
+}
+.pending {
+  font: var(--text-sm-normal);
+}
+@media (max-width: 600px) {
+  .foundation {
+    padding: var(--space-3);
+  }
+}

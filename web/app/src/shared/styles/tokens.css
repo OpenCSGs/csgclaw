@@ -643,6 +643,13 @@
 /* Shared control state roles. */
 
 :root {
+  /* Button typography and text colors from the verified Figma export.
+     Keep these separate from general type weights and the legacy gray palette. */
+  --button-font-family: "MiSans", var(--font-family-text);
+  --button-font-weight: 380;
+  --button-disabled-text: #a4a7ae;
+  --button-danger-text: var(--error-600);
+  --button-danger-hover-text: var(--error-700);
   --accent-text: var(--brand-700);
   --accent-text-strong: var(--brand-800);
   --danger-text: var(--error-700);
@@ -657,12 +664,15 @@
   --button-primary-hover-border: var(--brand-700);
   --button-neutral-border: var(--gray-300);
   --button-neutral-background: var(--white);
-  --button-neutral-text: var(--gray-700);
+  --button-neutral-text: #414651;
   --button-neutral-hover-border: var(--gray-300);
   --button-neutral-hover-background: var(--gray-50);
-  --button-neutral-hover-text: var(--gray-800);
-  --button-tertiary-text: var(--gray-600);
-  --button-tertiary-hover-text: var(--gray-700);
+  --button-neutral-hover-text: #252b37;
+  --button-neutral-focus-ring: 0 0 0 var(--space-1) color-mix(in srgb, var(--gray-400) 14%, transparent);
+  --button-neutral-disabled-background: var(--white);
+  --button-neutral-disabled-text: var(--button-disabled-text);
+  --button-tertiary-text: #535862;
+  --button-tertiary-hover-text: #414651;
   --button-tertiary-hover-background: var(--gray-50);
   --button-brand-border: color-mix(in oklab, var(--brand-600) 20%, var(--line));
   --button-brand-background: color-mix(in oklab, var(--brand-600) 5%, var(--surface));
@@ -678,6 +688,9 @@
   --button-disabled-shadow: var(--shadow-xs);
 }
 :root[data-theme="dark"] {
+  --button-disabled-text: var(--input-text-disabled);
+  --button-danger-text: var(--danger-text);
+  --button-danger-hover-text: var(--danger-text-strong);
   --accent-text: var(--brand-300);
   --accent-text-strong: var(--brand-100);
   --danger-text: var(--error-300);
@@ -694,6 +707,9 @@
   --button-neutral-hover-border: color-mix(in srgb, var(--gray-300) 28%, transparent);
   --button-neutral-hover-background: color-mix(in srgb, var(--gray-700) 36%, var(--gray-900));
   --button-neutral-hover-text: var(--gray-25);
+  --button-neutral-focus-ring: var(--focus-ring);
+  --button-neutral-disabled-background: var(--button-disabled-background);
+  --button-neutral-disabled-text: var(--input-text-disabled);
   --button-tertiary-text: var(--gray-300);
   --button-tertiary-hover-text: var(--gray-25);
   --button-tertiary-hover-background: var(--gray-800);

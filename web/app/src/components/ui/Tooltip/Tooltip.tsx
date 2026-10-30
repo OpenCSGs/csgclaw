@@ -16,6 +16,13 @@ export function TooltipRoot(props: TooltipRootProps) {
   return <RadixTooltip.Root {...props} />;
 }
 
+export const TooltipArrow = forwardRef<
+  ComponentRef<typeof RadixTooltip.Arrow>,
+  ComponentPropsWithoutRef<typeof RadixTooltip.Arrow>
+>(function TooltipArrow(props, ref) {
+  return <RadixTooltip.Arrow ref={ref} {...props} />;
+});
+
 export type TooltipTriggerProps = ComponentPropsWithoutRef<typeof RadixTooltip.Trigger>;
 
 export const TooltipTrigger = forwardRef<ComponentRef<typeof RadixTooltip.Trigger>, TooltipTriggerProps>(
