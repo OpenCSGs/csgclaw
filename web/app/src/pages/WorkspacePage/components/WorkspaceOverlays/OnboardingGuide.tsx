@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui";
 import { useWorkspaceControllerContext } from "@/hooks/workspace";
 import { OPEN_ONBOARDING_GUIDE_EVENT } from "@/shared/lib/onboardingGuide";
+import { getDesktopBridge } from "@/shared/platform/desktopBridge";
 import styles from "./OnboardingGuide.module.css";
 import { GUIDE_ACKNOWLEDGED_KEY, GUIDE_REVISION, hasAcknowledgedGuide } from "./onboardingGuidePersistence";
 
@@ -13,6 +14,15 @@ export function OnboardingGuide() {
   const closeRef = useRef<HTMLDivElement>(null);
   const returnFocusRef = useRef<HTMLElement | null>(null);
   const readyFrameRef = useRef<Window | null>(null);
+  const bridge = getDesktopBridge();
+
+  useEffect(() => {
+    if (!open || !bridge?.setWindowChromeAppearance) return;
+    void bridge.setWindowChromeAppearance("onboarding").catch(() => undefined);
+    return () => {
+      void bridge.setWindowChromeAppearance?.("default").catch(() => undefined);
+    };
+  }, [open, bridge]);
 
   const dismissGuide = useCallback(() => {
     if (readyFrameRef.current && readyFrameRef.current === frameRef.current?.contentWindow) {

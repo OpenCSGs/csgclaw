@@ -18,6 +18,7 @@ export type DesktopBrowserState = {
 export type DesktopPlatform = "darwin" | "win32" | "linux";
 export type DesktopOAuthPurpose = "opencsg-auth" | "github-connector" | "gitlab-connector";
 export type DesktopThemeSource = "system" | "light" | "dark";
+export type DesktopWindowChromeAppearance = "default" | "onboarding";
 export type DesktopUpdateChannel = "release" | "beta";
 
 export type DesktopRuntimeInfo = {
@@ -54,6 +55,8 @@ export type DesktopBridge = {
   onTurnNotificationClick(listener: (roomID: string) => void): () => void;
   setUpdateChannel(channel: DesktopUpdateChannel): Promise<DesktopUpdateStatus>;
   setThemeSource(theme: DesktopThemeSource): Promise<void>;
+  // Optional so newer Web UIs remain compatible with older desktop shells.
+  setWindowChromeAppearance?(appearance: DesktopWindowChromeAppearance): Promise<void>;
   onUpdateStatus(listener: (status: DesktopUpdateStatus) => void): () => void;
 };
 
