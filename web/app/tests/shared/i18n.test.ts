@@ -1,7 +1,7 @@
 import {
   createTranslator,
   localizeAPIError,
-  localizeTemplatePublishError,
+  localizeAPIErrorWithDiagnostics,
   localizeTemplateSourceTag,
 } from "@/shared/i18n";
 import { messages } from "@/shared/i18n/messages";
@@ -163,7 +163,7 @@ describe("i18n messages", () => {
 describe("template publishing diagnostics", () => {
   it.each(["zh", "en"] as const)("retains remote diagnostic context in %s", (locale) => {
     const message = "create remote hub template: remote hub request failed with status 500: repository unavailable";
-    const formatted = localizeTemplatePublishError(
+    const formatted = localizeAPIErrorWithDiagnostics(
       { status: 502, code: "template_publish_failed", message },
       createTranslator(locale),
     );
@@ -174,15 +174,15 @@ describe("template publishing diagnostics", () => {
   });
   it("keeps details for translated remote error codes", () => {
     expect(
-      localizeTemplatePublishError(
+      localizeAPIErrorWithDiagnostics(
         { code: "SYS-ERR-4", message: "template already exists: alice/guide" },
         createTranslator("zh"),
       ),
     ).toContain("template already exists: alice/guide");
   });
   it("handles missing diagnostics", () => {
-    expect(localizeTemplatePublishError(null, createTranslator("zh"), "发布失败")).toBe("发布失败");
-    expect(localizeTemplatePublishError(new Error("connection refused"), createTranslator("zh"))).toContain(
+    expect(localizeAPIErrorWithDiagnostics(null, createTranslator("zh"), "发布失败")).toBe("发布失败");
+    expect(localizeAPIErrorWithDiagnostics(new Error("connection refused"), createTranslator("zh"))).toContain(
       "connection refused",
     );
   });
@@ -194,10 +194,31 @@ it("explains cloud cleanup retry exhaustion without exposing raw SQL diagnostics
     code: "template_cloud_cleanup_pending",
     message: 'ERROR: duplicate key value violates unique constraint "idx_repositories_git_path"',
   };
-  const result = localizeTemplatePublishError(error, createTranslator("zh"));
+  const result = localizeAPIErrorWithDiagnostics(error, createTranslator("zh"));
   expect(result).toContain("5 秒");
   expect(result).toContain("异步清理");
   expect(result).toContain("本地版本已保留");
   expect(result).not.toContain("SQL");
   expect(result).not.toContain("idx_repositories");
+});
+
+describe("agent operation diagnostics", () => {
+  it.each(["zh", "en"] as const)("retains an untranslated startup failure in %s", (locale) => {
+    const message = "start codex app-server: executable file not found";
+    const formatted = localizeAPIErrorWithDiagnostics({ status: 400, message }, createTranslator(locale));
+    expect(formatted).toContain("HTTP 400");
+    expect(formatted).toContain(message);
+    expect(formatted.split(message)).toHaveLength(2);
+    if (locale === "zh") expect(formatted).toContain("操作失败，请稍后重试。");
+  });
+
+  it("keeps translated guidance together with the concrete startup error", () => {
+    const formatted = localizeAPIErrorWithDiagnostics(
+      { status: 503, code: "docker_unavailable", message: "connect: connection refused" },
+      createTranslator("zh"),
+    );
+    expect(formatted).toContain("Docker 未启动或无法连接");
+    expect(formatted).toContain("HTTP 503 · docker_unavailable");
+    expect(formatted).toContain("connect: connection refused");
+  });
 });

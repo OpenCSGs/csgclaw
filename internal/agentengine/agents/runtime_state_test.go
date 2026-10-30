@@ -1,6 +1,7 @@
 package agents
 
 import (
+	"strings"
 	"testing"
 
 	"csgclaw/internal/config"
@@ -275,5 +276,35 @@ func TestMigratedStoppedHostAgentWithoutRuntimeMetadataStaysStopped(t *testing.T
 	got = statusAfterHydrateFailure(item, "read_runtime_info", sandbox.ErrNotFound)
 	if got.Status != "unknown" {
 		t.Fatal("missing existing runtime was hidden")
+	}
+}
+
+func TestHostRuntimeProfileReplacesStaleConnectionEnvironment(t *testing.T) {
+	for _, kind := range []string{RuntimeKindCodex, RuntimeKindDSH} {
+		t.Run(kind, func(t *testing.T) {
+			svc, err := NewController(config.ModelConfig{}, config.ServerConfig{
+				ListenAddr: "127.0.0.1:19091", AdvertiseBaseURL: "http://host.docker.internal:63423", AccessToken: "fixture-token",
+			}, "", "")
+			if err != nil {
+				t.Fatal(err)
+			}
+			original := map[string]string{
+				"csgclaw_base_url": "http://host.docker.internal:63423", "CSGCLAW_BASE_URL": "http://127.0.0.1:18080",
+				"CsgClaw_Cli": "/old/cli", "csgclaw_caller_agent_id": "old-agent", "csgclaw_access_token": "old-token",
+				"csgclaw_connector_capability": "old-capability", "EXTRA_FLAG": "preserved",
+			}
+			profile := svc.runtimeProfileForKind(kind, "agent-current", "current", "", AgentProfile{Env: original})
+			if want := "http://127.0.0.1:19091"; profile.Env["CSGCLAW_BASE_URL"] != want || profile.BaseURL != want+"/api/v1/agents/agent-current/llm" {
+				t.Fatalf("runtime retained a stale callback: %q, %q", profile.BaseURL, profile.Env["CSGCLAW_BASE_URL"])
+			}
+			for key := range profile.Env {
+				if strings.HasPrefix(strings.ToUpper(key), "CSGCLAW_") && key != strings.ToUpper(key) {
+					t.Fatalf("runtime retained a shadow connection key %q", key)
+				}
+			}
+			if profile.Env["EXTRA_FLAG"] != "preserved" || original["csgclaw_base_url"] != "http://host.docker.internal:63423" {
+				t.Fatal("runtime projection changed user configuration")
+			}
+		})
 	}
 }

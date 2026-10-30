@@ -62,7 +62,7 @@ import {
 import { ACTION_REBUILD_MANAGER } from "@/shared/constants/messages";
 import { selectUnusedAgentAvatar } from "@/shared/avatarOptions";
 import { AGENT_CREATION_WARNINGS_STORAGE_KEY, FEISHU_REGISTRATIONS_STORAGE_KEY } from "@/shared/storage/keys";
-import { localizeAPIError, localizeTemplatePublishError } from "@/shared/i18n";
+import { localizeAPIError, localizeAPIErrorWithDiagnostics } from "@/shared/i18n";
 import { agentDraftWithAvailableModels } from "@/models/agentCreationModels";
 import {
   applyTemplateToDraft,
@@ -1937,7 +1937,7 @@ export function useAgentController({
       const reason =
         target === "local"
           ? errorMessage(err, t("agentActionFailed"))
-          : localizeTemplatePublishError(err, t, t("agentActionFailed"));
+          : localizeAPIErrorWithDiagnostics(err, t, t("agentActionFailed"));
       const message = localTemplateID ? t("agentTemplateSavedPublishFailed", { reason }) : reason;
       setAgentPagePublishError(message);
       setAgentPageSaveError(message);
@@ -2290,7 +2290,11 @@ export function useAgentController({
         clearAgentPageNotice(item.id);
       }
       if (!(actionUsesOpenCSG && handleOpenCSGAuthenticationError(err))) {
-        setAgentOperationError(item, errorMessage(err, t("agentActionFailed")), apiErrorBillingURL(err));
+        setAgentOperationError(
+          item,
+          localizeAPIErrorWithDiagnostics(err, t, t("agentActionFailed")),
+          apiErrorBillingURL(err),
+        );
       }
     } finally {
       releaseAgentAction(item.id, busyKey);

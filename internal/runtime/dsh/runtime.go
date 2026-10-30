@@ -586,7 +586,7 @@ func buildEnvironment(profile agentruntime.Profile, home, permissionMode string)
 		if !found {
 			continue
 		}
-		if !blocked[agentruntime.CanonicalEnvironmentKey(key)] && !larkextension.IsConfigurationEnv(key) {
+		if !blocked[agentruntime.CanonicalEnvironmentKey(key)] && !agentruntime.IsManagedAgentEnvironmentKey(key) && !larkextension.IsConfigurationEnv(key) {
 			values[key] = value
 		}
 	}

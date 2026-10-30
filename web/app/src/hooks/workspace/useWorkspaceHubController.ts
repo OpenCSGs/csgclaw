@@ -7,7 +7,7 @@ import { isDeletableHubTemplate, isVisibleInHubTemplateList } from "@/models/hub
 import type { HubTemplate } from "@/models/hubWorkspace";
 import { isReadonlySkill } from "@/models/skillhub";
 import type { SkillSummary } from "@/models/skillhub";
-import { localizeAPIError, localizeTemplatePublishError } from "@/shared/i18n";
+import { localizeAPIError, localizeAPIErrorWithDiagnostics } from "@/shared/i18n";
 import { workspaceQueryKeys } from "./workspaceQueries";
 import { useWorkspaceHubSelection } from "./useWorkspaceHubSelection";
 import type { UseWorkspaceHubControllerArgs } from "./types";
@@ -305,7 +305,7 @@ export function useWorkspaceHubController({
         if (handleOpenCSGAuthenticationError(err)) {
           return null;
         }
-        const message = localizeTemplatePublishError(err, t, t("resourcesPublishCommunityFailed"));
+        const message = localizeAPIErrorWithDiagnostics(err, t, t("resourcesPublishCommunityFailed"));
         if (requestVersion === publishRequestVersion.current) {
           setPublishFailure({ templateID: template.id, message });
         }

@@ -488,6 +488,9 @@ func TestRefreshStartupModelProvidersSavesDiscoveredModels(t *testing.T) {
 	if err := cfg.Save(configPath); err != nil {
 		t.Fatalf("Save(config) error = %v", err)
 	}
+	// A dynamic listener changes only the effective configuration for this run.
+	cfg.Server.ListenAddr = "127.0.0.1:59999"
+	cfg.Server.AdvertiseBaseURL = "http://runtime-override.example"
 
 	refreshed, _, err := refreshStartupModelProviders(context.Background(), cfg, configPath, nil)
 	if err != nil {
@@ -502,6 +505,12 @@ func TestRefreshStartupModelProvidersSavesDiscoveredModels(t *testing.T) {
 	}
 	if got := saved.Models.Providers[agent.ModelProviderIDCodex].Models; len(got) != 2 || got[0] != "gpt-5.5" || got[1] != "gpt-5.5-codex" {
 		t.Fatalf("saved codex models = %+v, want discovered models", got)
+	}
+	if saved.Server.ListenAddr != "127.0.0.1:18080" || saved.Server.AdvertiseBaseURL != "" {
+		t.Fatalf("model refresh persisted runtime endpoint overrides: %+v", saved.Server)
+	}
+	if refreshed.Server.ListenAddr != "127.0.0.1:59999" {
+		t.Fatal("model refresh changed the effective runtime listener")
 	}
 }
 

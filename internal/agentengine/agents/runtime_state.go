@@ -169,8 +169,11 @@ func (s *Controller) runtimeProfileForKind(runtimeKind, agentID, fallbackName, f
 		if env == nil {
 			env = make(map[string]string)
 		}
-		delete(env, "CSGCLAW_ACCESS_TOKEN")
-		delete(env, ConnectorCapabilityEnv)
+		for key := range env {
+			if agentruntime.IsManagedAgentEnvironmentKey(key) {
+				delete(env, key)
+			}
+		}
 		env["CSGCLAW_CALLER_AGENT_ID"] = canonicalAgentID(agentID)
 		env["CSGCLAW_CLI"] = runtimeassets.HostCLIPath()
 		managerBaseURL := config.ResolveLocalBaseURL(s.server)
