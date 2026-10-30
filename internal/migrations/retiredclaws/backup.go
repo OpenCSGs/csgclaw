@@ -23,7 +23,7 @@ const snapshotReceipt = ".retired-claws-v1-complete"
 
 // backupOnce protects the original state before retirement starts. The receipt
 // is written inside a completed backup, never in the live data. All retirement
-// steps and later retries reuse that snapshot rather than copying the store again.
+// steps and later retries reuse that snapshot, except forced sandbox conversions.
 func backupOnce(root string) error {
 	snapshotMu.Lock()
 	defer snapshotMu.Unlock()
@@ -44,12 +44,23 @@ func backupOnce(root string) error {
 			return nil
 		}
 	}
+	_, err = freshBackup(root)
+	return err
+}
+
+// A forced migration always snapshots the current records, even if an older
+// completed retirement backup exists. The caller holds snapshotMu.
+func freshBackup(root string) (string, error) {
+	root, err := filepath.Abs(root)
+	if err != nil {
+		return "", err
+	}
 	backup, err := localstore.CreateSiblingBackup(root, time.Now(), GeneratedBackupEntry)
 	if err != nil {
-		return err
+		return "", err
 	}
 	if err := os.WriteFile(filepath.Join(backup, snapshotReceipt), []byte(root), 0600); err != nil {
-		return errors.Join(err, os.RemoveAll(backup))
+		return "", errors.Join(err, os.RemoveAll(backup))
 	}
-	return nil
+	return backup, nil
 }

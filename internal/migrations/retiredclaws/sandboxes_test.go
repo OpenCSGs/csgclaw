@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"csgclaw/internal/localstore"
 	"csgclaw/internal/sandbox"
@@ -68,7 +67,7 @@ func TestMigrationStopsProviderSandboxBeforeReadingWorkspace(t *testing.T) {
 	}
 }
 
-func TestMigrationRetainsEveryRecordUntilAllSandboxesAreStopped(t *testing.T) {
+func TestMigrationContinuesWhenOneSandboxCannotBeStopped(t *testing.T) {
 	root := t.TempDir()
 	path := filepath.Join(root, localstore.RootStateFileName)
 	original := `{"version":1,"agents":{"items":[{"id":"agent-first","runtime":{"kind":"openclaw_sandbox","sandbox_id":"first"}},{"id":"agent-second","runtime":{"kind":"picoclaw_sandbox","sandbox_id":"second"}}]}}`
@@ -78,70 +77,111 @@ func TestMigrationRetainsEveryRecordUntilAllSandboxesAreStopped(t *testing.T) {
 	second := sandboxtest.NewInstance(sandbox.Info{ID: "second", State: sandbox.StateRunning})
 	runtime.Instances["first"] = first
 	runtime.Instances["second"] = second
-	failure := errors.New("stop refused")
-	second.StopFunc = func(context.Context, sandbox.StopOptions) error { return failure }
+	second.StopFunc = func(context.Context, sandbox.StopOptions) error { return errors.New("stop refused") }
 	open := func(context.Context, string) (sandbox.Runtime, error) { return runtime, nil }
-	if err := MigrateAgents(context.Background(), root, open); !errors.Is(err, failure) {
-		t.Fatalf("error=%v", err)
-	}
-	data, _ := os.ReadFile(path)
-	if string(data) != original {
-		t.Fatalf("failed migration changed records: %s", data)
-	}
-	if first.InfoValue.State != sandbox.StateStopped || second.InfoValue.State != sandbox.StateRunning {
-		t.Fatal("fixture did not reach a partial shutdown")
-	}
-	second.StopFunc = nil
 	if err := MigrateAgents(context.Background(), root, open); err != nil {
 		t.Fatal(err)
 	}
-	if len(first.StopCalls) != 1 || len(second.StopCalls) != 1 {
-		t.Fatal("retry did not reuse known stopped state")
+	data, err := os.ReadFile(path)
+	if err != nil || bytes.Contains(data, []byte("sandbox_id")) || bytes.Count(data, []byte(`"kind": "codex"`)) != 2 {
+		t.Fatalf("Agents did not migrate: %s, %v", data, err)
+	}
+	if first.InfoValue.State != sandbox.StateStopped || second.InfoValue.State != sandbox.StateRunning {
+		t.Fatal("fixture did not preserve the unresponsive sandbox")
+	}
+	backups, _ := filepath.Glob(root + "_backup_*")
+	if len(backups) != 1 {
+		t.Fatalf("backups = %v", backups)
+	}
+	backup, _ := os.ReadFile(filepath.Join(backups[0], localstore.RootStateFileName))
+	if string(backup) != original {
+		t.Fatal("original sandbox records were not backed up")
 	}
 }
 
-func TestMigrationDoesNotDiscardUnconfirmedSandboxHandles(t *testing.T) {
-	for _, failure := range []string{"unavailable", "inspect", "stop still running", "stop still starting", "unknown state", "active without id", "starting without id", "no provider"} {
+func TestMigrationForcesConversionWhenSandboxDependenciesFail(t *testing.T) {
+	for _, failure := range []string{"unavailable", "inspect", "stop", "shutdown timeout", "active without id", "starting without id", "no provider"} {
 		t.Run(failure, func(t *testing.T) {
 			root := t.TempDir()
 			path := filepath.Join(root, localstore.RootStateFileName)
 			runtime := sandboxtest.NewRuntime()
 			instance := sandboxtest.NewInstance(sandbox.Info{ID: "old-box", State: sandbox.StateRunning})
 			runtime.Instances["old-box"] = instance
-			original := `{"version":1,"agents":{"items":[{"id":"agent-old","runtime":{"kind":"openclaw_sandbox","state":"running","sandbox_id":"old-box"}}]}}`
+			original := `{"version":1,"agents":{"items":[{"id":"agent-old","runtime":{"kind":"openclaw_sandbox","state":"running","sandbox_id":"old-box"},"desired_state":"running","model_config":{"model_provider_id":"fixture","model_id":"fixture-model"}}]}}`
 			open := func(context.Context, string) (sandbox.Runtime, error) { return runtime, nil }
 			switch failure {
 			case "unavailable":
 				open = func(context.Context, string) (sandbox.Runtime, error) { return nil, sandbox.ErrUnavailable }
 			case "inspect":
 				instance.InfoFunc = func(context.Context) (sandbox.Info, error) { return sandbox.Info{}, errors.New("inspect failed") }
-			case "stop still running":
-				instance.StopFunc = func(context.Context, sandbox.StopOptions) error { return nil }
-			case "stop still starting":
-				instance.InfoValue.State = sandbox.StateStarting
-				instance.StopFunc = func(context.Context, sandbox.StopOptions) error { return nil }
-			case "unknown state":
-				instance.InfoValue.State = sandbox.StateUnknown
-				instance.StopFunc = func(context.Context, sandbox.StopOptions) error { return nil }
-			case "active without id":
+			case "stop":
+				instance.StopFunc = func(context.Context, sandbox.StopOptions) error { return errors.New("stop failed") }
+			case "shutdown timeout":
+				instance.StopFunc = func(context.Context, sandbox.StopOptions) error {
+					instance.InfoFunc = func(context.Context) (sandbox.Info, error) { return sandbox.Info{}, context.DeadlineExceeded }
+					return nil
+				}
+			case "active without id", "starting without id":
 				original = strings.ReplaceAll(original, `,"sandbox_id":"old-box"`, ``)
-			case "starting without id":
-				original = strings.ReplaceAll(original, `,"sandbox_id":"old-box"`, ``)
-				original = strings.ReplaceAll(original, `"state":"running"`, `"state":"starting"`)
+				if failure == "starting without id" {
+					original = strings.ReplaceAll(original, `"state":"running"`, `"state":"starting"`)
+				}
 			case "no provider":
 				open = nil
 			}
 			writeFile(t, path, original)
-			ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
-			defer cancel()
-			if err := MigrateAgents(ctx, root, open); err == nil {
-				t.Fatal("unconfirmed sandbox accepted")
+			if err := backupOnce(root); err != nil {
+				t.Fatal(err)
+			}
+			writeFile(t, filepath.Join(root, "new-notes.txt"), "user data created after the earlier backup")
+			if err := MigrateAgents(context.Background(), root, open); err != nil {
+				t.Fatal(err)
 			}
 			data, _ := os.ReadFile(path)
-			if string(data) != original {
-				t.Fatalf("failed migration changed records: %s", data)
+			for _, want := range []string{`"kind": "codex"`, `"state": "stopped"`, `"desired_state": "running"`, `"model_id": "fixture-model"`} {
+				if !bytes.Contains(data, []byte(want)) {
+					t.Fatalf("missing %s: %s", want, data)
+				}
+			}
+			backups, _ := filepath.Glob(root + "_backup_*")
+			if len(backups) != 2 {
+				t.Fatalf("forced migration did not take a fresh snapshot: %v", backups)
+			}
+			fresh := false
+			for _, backup := range backups {
+				if _, err := os.Stat(filepath.Join(backup, "new-notes.txt")); err == nil {
+					before, _ := os.ReadFile(filepath.Join(backup, localstore.RootStateFileName))
+					fresh = string(before) == original
+				}
+			}
+			if !fresh {
+				t.Fatal("current user data and original runtime handles were not preserved")
+			}
+			if err := MigrateAgents(context.Background(), root, open); err != nil {
+				t.Fatal(err)
+			}
+			after, _ := os.ReadFile(path)
+			backups, _ = filepath.Glob(root + "_backup_*")
+			if !bytes.Equal(data, after) || len(backups) != 2 {
+				t.Fatal("completed forced migration was not idempotent")
 			}
 		})
+	}
+}
+
+func TestCanceledMigrationDoesNotForceConversion(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, localstore.RootStateFileName)
+	original := `{"version":1,"agents":{"items":[{"id":"agent-old","runtime":{"kind":"openclaw_sandbox","state":"running","sandbox_id":"old-box"}}]}}`
+	writeFile(t, path, original)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := MigrateAgents(ctx, root, nil); !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled migration returned %v", err)
+	}
+	data, _ := os.ReadFile(path)
+	if string(data) != original {
+		t.Fatal("canceled migration rewrote original records")
 	}
 }
 

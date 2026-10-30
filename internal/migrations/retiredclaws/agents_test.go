@@ -9,7 +9,7 @@ import (
 	"testing"
 )
 
-func TestRetiredRuntimeAgentsPreserveDataAndRequireExplicitStart(t *testing.T) {
+func TestRetiredRuntimeAgentsPreserveDataAndRequestAutomaticStart(t *testing.T) {
 	for _, kind := range []string{"openclaw", "openclaw_sandbox", "picoclaw", "picoclaw_sandbox"} {
 		t.Run(kind, func(t *testing.T) {
 			home := t.TempDir()
@@ -60,7 +60,7 @@ func TestRetiredRuntimeAgentsPreserveDataAndRequireExplicitStart(t *testing.T) {
 			if rt.Kind != "codex" || rt.State != "stopped" || rt.SandboxID != "" || rt.Options["local_workspace_dir"] != workspace || len(rt.Options) != 1 {
 				t.Fatalf("migrated runtime: %+v", rt)
 			}
-			if migrationString(old["desired_state"]) != "stopped" || migrationString(old["instructions"]) != "Custom instructions" {
+			if migrationString(old["desired_state"]) != "running" || migrationString(old["instructions"]) != "Custom instructions" {
 				t.Fatalf("lifecycle/instructions not migrated: %s", data)
 			}
 			if _, ok := old["image"]; ok {
@@ -266,5 +266,49 @@ func TestRetiredNativeMCPAndMemoryAreImportedWithoutReplacingExplicitSettings(t 
 				t.Fatal("existing current memory overwritten")
 			}
 		})
+	}
+}
+
+func TestMigrationStartsPreviouslyStoppedRetiredAgentsAndHonorsLaterStops(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, localstore.RootStateFileName)
+	writeFile(t, path, `{"version":1,"agents":{"items":[{"id":"agent-old","runtime":{"kind":"openclaw_sandbox","state":"stopped"},"desired_state":"stopped"},{"id":"agent-pico","runtime":{"kind":"picoclaw_sandbox","state":"stopped"},"desired_state":"stopped"},{"id":"agent-current","runtime":{"kind":"codex","state":"stopped"},"desired_state":"stopped"}]}}`)
+	if err := migrateAgentsWithMissingSandbox(t, root); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var state struct {
+		Version int `json:"version"`
+		Agents  struct {
+			Items []map[string]json.RawMessage `json:"items"`
+		} `json:"agents"`
+	}
+	if err := json.Unmarshal(data, &state); err != nil {
+		t.Fatal(err)
+	}
+	for _, item := range state.Agents.Items {
+		want := "running"
+		if migrationString(item["id"]) == "agent-current" {
+			want = "stopped"
+		}
+		if migrationString(item["desired_state"]) != want {
+			t.Fatalf("Agent %s desired state = %s, want %s", item["id"], item["desired_state"], want)
+		}
+	}
+	state.Agents.Items[0]["desired_state"] = json.RawMessage(`"stopped"`)
+	stopped, err := json.Marshal(state)
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, path, string(stopped))
+	if err := migrateAgentsWithMissingSandbox(t, root); err != nil {
+		t.Fatal(err)
+	}
+	after, err := os.ReadFile(path)
+	if err != nil || !bytes.Equal(stopped, after) {
+		t.Fatalf("completed migration overrode a later user stop: %s, %v", after, err)
 	}
 }
