@@ -33,15 +33,16 @@ type Record struct {
 }
 
 const (
-	SourceBuiltin = "builtin"
-	SourceLocal   = "local"
-	SourceMarket  = "market"
-	SourceUnknown = "unknown"
+	SourceBuiltin    = "builtin"
+	SourceLocal      = "local"
+	SourceMarket     = "market"
+	SourceUnknown    = "unknown"
+	SourceDiscovered = "discovered"
 )
 
 func (r Record) SourceKind() string {
 	switch r.Source {
-	case SourceBuiltin, SourceLocal, SourceMarket:
+	case SourceBuiltin, SourceLocal, SourceMarket, SourceDiscovered:
 		return r.Source
 	case "":
 		// Recognize full source URLs and older CLI records without an explicit source.

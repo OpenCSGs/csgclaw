@@ -364,7 +364,9 @@ export function useWorkspaceHubWorkspaceFileQuery(
   });
 }
 
-export function useWorkspaceSkillsQuery(options: { enabled?: boolean } = {}): UseQueryResult<SkillSummary[]> {
+export function useWorkspaceSkillsQuery(
+  options: { enabled?: boolean; refetchInterval?: number } = {},
+): UseQueryResult<SkillSummary[]> {
   return useQuery<SkillSummary[]>({
     queryKey: workspaceQueryKeys.skills(),
     queryFn: async () => {
@@ -372,6 +374,7 @@ export function useWorkspaceSkillsQuery(options: { enabled?: boolean } = {}): Us
       return Array.isArray(payload) ? payload : [];
     },
     enabled: options.enabled !== false,
+    refetchInterval: options.refetchInterval,
   });
 }
 

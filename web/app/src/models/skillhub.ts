@@ -6,7 +6,22 @@ export const SKILL_SOURCE_OFFICIAL = "official";
 export const SKILL_SOURCE_PERSONAL = "personal";
 export const SKILL_SOURCE_SYSTEM = "system";
 
+export type DiscoveredSkillSource = {
+  tool: string;
+  path: string;
+  version?: string;
+  updated_at: string;
+};
+
+export type DiscoveredSkill = DiscoveredSkillSource & {
+  key: string;
+  new?: boolean;
+  sources: DiscoveredSkillSource[];
+};
+
 export type SkillSummary = {
+  directory?: string;
+  discovery?: DiscoveredSkill;
   description?: string;
   name: string;
   readonly?: boolean;
@@ -104,7 +119,7 @@ export function skillOriginKind(skill: SkillSummary | null | undefined): "builti
   ) {
     return "market";
   }
-  return source === SKILL_SOURCE_LOCAL ? "local" : "unknown";
+  return source === SKILL_SOURCE_LOCAL || source === "discovered" ? "local" : "unknown";
 }
 
 export const SKILL_SOURCE_MARKET = "market";
