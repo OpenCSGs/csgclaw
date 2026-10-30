@@ -15,6 +15,7 @@ import (
 	"csgclaw/internal/agentworkspace"
 	"csgclaw/internal/apitypes"
 	"csgclaw/internal/runtime"
+	"github.com/google/uuid"
 	toml "github.com/pelletier/go-toml/v2"
 )
 
@@ -98,12 +99,25 @@ func (s *LocalStore) Get(_ context.Context, id string) (Template, error) {
 	if err != nil {
 		return Template{}, fmt.Errorf("validate local hub manifest %q runtime options: %w", id, err)
 	}
+	state, err := readVersionState(s.templateRoot(id))
+	if err != nil {
+		return Template{}, err
+	}
+	latestRevision := manifest.Revision
+	for _, version := range state.Versions {
+		latestRevision = max(latestRevision, version.Revision)
+	}
 	modelConfig, err := normalizeTemplateModelConfig(manifest.ModelConfig)
 	if err != nil {
 		return Template{}, fmt.Errorf("validate local hub manifest %q model config: %w", id, err)
 	}
 	return Template{
+		LatestRevision: latestRevision,
+		Publications:   state.Publications,
+		SourceAgentID:  state.SourceAgentID,
 		ID:             id,
+		UID:            manifest.UID,
+		Revision:       manifest.Revision,
 		Name:           manifest.Name,
 		DisplayName:    manifest.DisplayName,
 		Avatar:         manifest.Avatar,
@@ -136,7 +150,11 @@ func (s *LocalStore) ListWorkspace(_ context.Context, id, workspacePath string) 
 	if _, _, err := s.loadTemplate(id); err != nil {
 		return apitypes.WorkspaceListing{}, err
 	}
-	return agentworkspace.ListDirectory(s.templateRoot(strings.TrimSpace(id)), workspacePath)
+	listing, err := agentworkspace.ListDirectory(s.templateRoot(strings.TrimSpace(id)), workspacePath)
+	listing.Entries = slices.DeleteFunc(listing.Entries, func(entry apitypes.WorkspaceEntry) bool {
+		return strings.HasPrefix(entry.Path, versionSnapshotsDir) || entry.Path == versionStateFile
+	})
+	return listing, err
 }
 
 func (s *LocalStore) ReadWorkspaceFile(_ context.Context, id, workspacePath string) (apitypes.WorkspaceFile, error) {
@@ -146,18 +164,33 @@ func (s *LocalStore) ReadWorkspaceFile(_ context.Context, id, workspacePath stri
 	return agentworkspace.ReadFile(s.templateRoot(strings.TrimSpace(id)), workspacePath)
 }
 
-func (s *LocalStore) WriteWorkspaceFile(_ context.Context, id, workspacePath, content string) error {
-	if _, _, err := s.loadTemplate(id); err != nil {
-		return err
-	}
+func (s *LocalStore) WriteWorkspaceFile(ctx context.Context, id, workspacePath, content string) error {
+	localTemplateReplaceMu.Lock()
+	defer localTemplateReplaceMu.Unlock()
 	if filepath.ToSlash(strings.TrimSpace(workspacePath)) != localInstructionsDirName+"/"+requiredInstructionsFile {
 		return ErrWorkspacePathUnsafe
 	}
-	path := filepath.Join(s.templateRoot(strings.TrimSpace(id)), localInstructionsDirName, requiredInstructionsFile)
+	current, err := s.Get(ctx, id)
+	if err != nil {
+		return err
+	}
+	root, err := os.MkdirTemp(s.root, ".template-edit-")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(root)
+	if err := copyVersionContent(s.templateRoot(id), root); err != nil {
+		return err
+	}
+	path := filepath.Join(root, localInstructionsDirName, requiredInstructionsFile)
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
-	return os.WriteFile(path, []byte(strings.TrimRight(content, "\n")+"\n"), 0o644)
+	if err := os.WriteFile(path, []byte(strings.TrimRight(content, "\n")+"\n"), 0o644); err != nil {
+		return err
+	}
+	_, err = s.commitVersion(ctx, PublishSpec{ID: id, Name: current.Name, DisplayName: current.DisplayName, RuntimeKind: current.RuntimeKind}, 0, root)
+	return err
 }
 
 func (s *LocalStore) Publish(_ context.Context, spec PublishSpec) (Template, error) {
@@ -168,6 +201,9 @@ func (s *LocalStore) Publish(_ context.Context, spec PublishSpec) (Template, err
 
 	if err := os.MkdirAll(s.templatesRoot(), 0o755); err != nil {
 		return Template{}, fmt.Errorf("create local hub templates dir: %w", err)
+	}
+	if normalized.UID == "" {
+		normalized.UID = uuid.NewString()
 	}
 	targetDir := s.templateRoot(normalized.ID)
 	if _, err := os.Stat(targetDir); err == nil {
@@ -270,6 +306,8 @@ func (s *LocalStore) loadTemplate(id string) (string, templateManifest, error) {
 
 func (s *LocalStore) writeManifest(path string, spec PublishSpec) error {
 	manifest := templateManifest{
+		UID:         spec.UID,
+		Revision:    spec.Revision,
 		Name:        spec.Name,
 		DisplayName: spec.DisplayName,
 		Avatar:      spec.Avatar,
@@ -390,7 +428,7 @@ func validateLocalTemplateID(id string) error {
 
 var localTemplateReplaceMu sync.Mutex
 
-// Replace writes a fresh snapshot before swapping out the previous local template.
+// Replace records a new version of an explicitly identified local template.
 func (s *LocalStore) Replace(ctx context.Context, id string, spec PublishSpec) (Template, error) {
 	localTemplateReplaceMu.Lock()
 	defer localTemplateReplaceMu.Unlock()
@@ -402,31 +440,5 @@ func (s *LocalStore) Replace(ctx context.Context, id string, spec PublishSpec) (
 		return Template{}, fmt.Errorf("replacement must retain the template name")
 	}
 	spec.ID = id
-	stagingRoot, err := os.MkdirTemp(s.root, ".template-replace-")
-	if err != nil {
-		return Template{}, err
-	}
-	cleanup := true
-	defer func() {
-		if cleanup {
-			_ = os.RemoveAll(stagingRoot)
-		}
-	}()
-	staging := NewLocalStore(stagingRoot)
-	if _, err := staging.Publish(ctx, spec); err != nil {
-		return Template{}, err
-	}
-	original := s.templateRoot(id)
-	backup := filepath.Join(stagingRoot, "previous")
-	if err := os.Rename(original, backup); err != nil {
-		return Template{}, err
-	}
-	if err := os.Rename(staging.templateRoot(id), original); err != nil {
-		if restoreErr := os.Rename(backup, original); restoreErr != nil {
-			cleanup = false
-			return Template{}, fmt.Errorf("replace failed: %w; restore failed: %v; backup retained at %s", err, restoreErr, backup)
-		}
-		return Template{}, err
-	}
-	return s.Get(ctx, id)
+	return s.commitVersion(ctx, spec, 0)
 }

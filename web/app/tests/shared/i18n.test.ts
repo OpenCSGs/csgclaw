@@ -188,6 +188,20 @@ describe("template publishing diagnostics", () => {
   });
 });
 
+it("explains cloud cleanup retry exhaustion without exposing raw SQL diagnostics", () => {
+  const error = {
+    status: 504,
+    code: "template_cloud_cleanup_pending",
+    message: 'ERROR: duplicate key value violates unique constraint "idx_repositories_git_path"',
+  };
+  const result = localizeAPIErrorWithDiagnostics(error, createTranslator("zh"));
+  expect(result).toContain("5 秒");
+  expect(result).toContain("异步清理");
+  expect(result).toContain("本地版本已保留");
+  expect(result).not.toContain("SQL");
+  expect(result).not.toContain("idx_repositories");
+});
+
 describe("agent operation diagnostics", () => {
   it.each(["zh", "en"] as const)("retains an untranslated startup failure in %s", (locale) => {
     const message = "start codex app-server: executable file not found";

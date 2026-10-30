@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { errorMessage } from "@/api/client";
 import { fetchHubWorkspace, fetchHubWorkspaceFile, updateHubWorkspaceFile } from "@/api/hub";
@@ -30,6 +30,7 @@ import { isOpenCSGAuthenticationError } from "./useOpenCSGAuthGuard";
 type TemplateWorkspaceFilesState = {
   files: Record<string, HubWorkspaceFile>;
   templateID: string;
+  version?: string;
 };
 
 export type HubSelectionState = {
@@ -159,6 +160,7 @@ export function useWorkspaceHubSelection({
   const [workspaceListingsState, setWorkspaceListingsState] = useState<{
     templateID: string;
     listings: WorkspaceDirectoryListings;
+    version?: string;
   }>({ templateID: "", listings: {} });
   const [loadingWorkspaceDirs, setLoadingWorkspaceDirs] = useState<ReadonlySet<string>>(new Set());
   const [workspaceDirectoryError, setWorkspaceDirectoryError] = useState("");
@@ -167,6 +169,18 @@ export function useWorkspaceHubSelection({
     templateID: "",
   });
   const hubTemplateDetailQuery = useWorkspaceHubTemplateQuery(selectedHubTemplateId);
+  const activeTemplate =
+    hubTemplateDetailQuery.data?.id === selectedHubTemplateId ? hubTemplateDetailQuery.data : selectedHubTemplate;
+  const workspaceVersion = JSON.stringify([
+    selectedHubTemplateId,
+    activeTemplate?.uid,
+    activeTemplate?.revision,
+    activeTemplate?.updated_at,
+  ]);
+  const workspaceGeneration = useRef(workspaceVersion);
+  useEffect(() => {
+    workspaceGeneration.current = workspaceVersion;
+  }, [workspaceVersion]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -202,8 +216,8 @@ export function useWorkspaceHubSelection({
 
   useEffect(() => {
     setSelectedHubWorkspacePath("");
-    setTemplateWorkspaceFilesState({ files: {}, templateID: selectedHubTemplateId });
-  }, [selectedHubTemplateId, setSelectedHubWorkspacePath]);
+    setTemplateWorkspaceFilesState({ files: {}, templateID: selectedHubTemplateId, version: workspaceVersion });
+  }, [selectedHubTemplateId, setSelectedHubWorkspacePath, workspaceVersion]);
 
   useEffect(() => {
     if (!skills.length) {
@@ -222,8 +236,12 @@ export function useWorkspaceHubSelection({
     }
   }, [selectedHubSkillName, setSelectedHubSkillPath]);
 
-  const hubWorkspaceQuery = useWorkspaceHubWorkspaceQuery(selectedHubTemplateId);
-  const hubWorkspaceFileQuery = useWorkspaceHubWorkspaceFileQuery(selectedHubTemplateId, selectedHubWorkspacePath);
+  const hubWorkspaceQuery = useWorkspaceHubWorkspaceQuery(selectedHubTemplateId, "", workspaceVersion);
+  const hubWorkspaceFileQuery = useWorkspaceHubWorkspaceFileQuery(
+    selectedHubTemplateId,
+    selectedHubWorkspacePath,
+    workspaceVersion,
+  );
   const skillTreeQuery = useWorkspaceSkillTreeQuery(selectedHubSkillName);
   const skillFileQuery = useWorkspaceSkillFileQuery(selectedHubSkillPath);
   const refetchHubTemplateDetail = hubTemplateDetailQuery.refetch;
@@ -275,8 +293,11 @@ export function useWorkspaceHubSelection({
     selectedHubTemplate,
   );
   const workspaceListings = useMemo(
-    () => (workspaceListingsState.templateID === selectedHubTemplateId ? workspaceListingsState.listings : {}),
-    [selectedHubTemplateId, workspaceListingsState],
+    () =>
+      workspaceListingsState.templateID === selectedHubTemplateId && workspaceListingsState.version === workspaceVersion
+        ? workspaceListingsState.listings
+        : {},
+    [selectedHubTemplateId, workspaceListingsState, workspaceVersion],
   );
   const workspaceEntries = useMemo(() => flattenWorkspaceDirectoryListings(workspaceListings), [workspaceListings]);
 
@@ -300,7 +321,11 @@ export function useWorkspaceHubSelection({
     if (!desiredPaths.length) {
       return;
     }
-    const state = templateWorkspaceFilesState.templateID === selectedHubTemplateId ? templateWorkspaceFilesState : null;
+    const state =
+      templateWorkspaceFilesState.templateID === selectedHubTemplateId &&
+      templateWorkspaceFilesState.version === workspaceVersion
+        ? templateWorkspaceFilesState
+        : null;
     const missingPaths = desiredPaths.filter((path) => !state?.files[path]);
     if (!missingPaths.length) {
       return;
@@ -320,26 +345,27 @@ export function useWorkspaceHubSelection({
         return;
       }
       setTemplateWorkspaceFilesState((current) => {
-        const files = current.templateID === selectedHubTemplateId ? current.files : {};
+        const files =
+          current.templateID === selectedHubTemplateId && current.version === workspaceVersion ? current.files : {};
         const nextFiles = { ...files };
         items.forEach((item) => {
           if (item) {
             nextFiles[item[0]] = item[1];
           }
         });
-        return { files: nextFiles, templateID: selectedHubTemplateId };
+        return { files: nextFiles, templateID: selectedHubTemplateId, version: workspaceVersion };
       });
     });
     return () => {
       canceled = true;
     };
-  }, [selectedHubTemplateId, templateWorkspaceFilesState, workspaceEntries]);
+  }, [selectedHubTemplateId, templateWorkspaceFilesState, workspaceEntries, workspaceVersion]);
 
   useEffect(() => {
-    setWorkspaceListingsState({ templateID: selectedHubTemplateId, listings: {} });
+    setWorkspaceListingsState({ templateID: selectedHubTemplateId, listings: {}, version: workspaceVersion });
     setLoadingWorkspaceDirs(new Set());
     setWorkspaceDirectoryError("");
-  }, [selectedHubTemplateId]);
+  }, [selectedHubTemplateId, workspaceVersion]);
 
   useEffect(() => {
     if (!selectedHubTemplateId || !hubWorkspaceQuery.data) {
@@ -348,8 +374,9 @@ export function useWorkspaceHubSelection({
     setWorkspaceListingsState({
       templateID: selectedHubTemplateId,
       listings: { "": hubWorkspaceQuery.data.entries ?? [] },
+      version: workspaceVersion,
     });
-  }, [hubWorkspaceQuery.data, selectedHubTemplateId]);
+  }, [hubWorkspaceQuery.data, selectedHubTemplateId, workspaceVersion]);
 
   const loadWorkspaceDirectory = useCallback(
     async (workspacePath: string) => {
@@ -360,11 +387,11 @@ export function useWorkspaceHubSelection({
       setWorkspaceDirectoryError("");
       try {
         const listing = await queryClient.fetchQuery({
-          queryKey: workspaceQueryKeys.hubWorkspace(selectedHubTemplateId, workspacePath),
+          queryKey: [...workspaceQueryKeys.hubWorkspace(selectedHubTemplateId, workspacePath), workspaceVersion],
           queryFn: () => fetchHubWorkspace(selectedHubTemplateId, workspacePath),
         });
         setWorkspaceListingsState((current) => {
-          if (current.templateID !== selectedHubTemplateId) {
+          if (current.templateID !== selectedHubTemplateId || current.version !== workspaceVersion) {
             return current;
           }
           return {
@@ -376,16 +403,19 @@ export function useWorkspaceHubSelection({
           };
         });
       } catch (error) {
+        if (workspaceGeneration.current !== workspaceVersion) return;
         setWorkspaceDirectoryError(errorMessage(error, t("resourcesWorkspaceLoadFailed")));
       } finally {
-        setLoadingWorkspaceDirs((current) => {
-          const next = new Set(current);
-          next.delete(workspacePath);
-          return next;
-        });
+        if (workspaceGeneration.current === workspaceVersion) {
+          setLoadingWorkspaceDirs((current) => {
+            const next = new Set(current);
+            next.delete(workspacePath);
+            return next;
+          });
+        }
       }
     },
-    [queryClient, selectedHubTemplateId, t, workspaceListings],
+    [queryClient, selectedHubTemplateId, t, workspaceListings, workspaceVersion],
   );
 
   const selectWorkspaceFile = useCallback(
@@ -401,16 +431,29 @@ export function useWorkspaceHubSelection({
       try {
         const file = await updateHubWorkspaceFile(selectedHubTemplateId, "instructions/AGENTS.md", content);
         setTemplateWorkspaceFilesState((current) => ({
-          files: { ...(current.templateID === selectedHubTemplateId ? current.files : {}), [file.path]: file },
+          files: {
+            ...(current.templateID === selectedHubTemplateId && current.version === workspaceVersion
+              ? current.files
+              : {}),
+            [file.path]: file,
+          },
           templateID: selectedHubTemplateId,
+          version: workspaceVersion,
         }));
-        queryClient.setQueryData(workspaceQueryKeys.hubWorkspaceFile(selectedHubTemplateId, file.path), file);
+        queryClient.setQueryData(
+          [...workspaceQueryKeys.hubWorkspaceFile(selectedHubTemplateId, file.path), workspaceVersion],
+          file,
+        );
+        await Promise.all([
+          queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.hubTemplate(selectedHubTemplateId) }),
+          queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.hubTemplates() }),
+        ]);
         return true;
       } catch {
         return false;
       }
     },
-    [queryClient, selectedHubTemplateId],
+    [queryClient, selectedHubTemplateId, workspaceVersion],
   );
   const selectSkillFile = useCallback(
     (skillPath: string) => {
@@ -709,7 +752,10 @@ export function useWorkspaceHubSelection({
       selectedWorkspacePath: selectedHubWorkspacePath,
       workspaceFile: hubWorkspaceFileQuery.data ?? null,
       workspaceFiles:
-        templateWorkspaceFilesState.templateID === selectedHubTemplateId ? templateWorkspaceFilesState.files : {},
+        templateWorkspaceFilesState.templateID === selectedHubTemplateId &&
+        templateWorkspaceFilesState.version === workspaceVersion
+          ? templateWorkspaceFilesState.files
+          : {},
       workspaceFileLoading: hubWorkspaceFileQuery.isFetching,
       workspaceFileError,
       skillTree: skillTreeQuery.data ?? null,

@@ -1799,14 +1799,26 @@ func (h *Handler) handleHubTemplates(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		var item hub.Template
+		savedTemplateID := ""
 		publishingTemplate := strings.TrimSpace(req.TemplateID) != ""
 		if publishingTemplate {
-			item, err = hubSvc.PublishTemplate(r.Context(), req.TemplateID, req.Registry, req.IncludeMemory)
+			if req.ExpectedRevision != nil {
+				item, err = hubSvc.PublishTemplate(r.Context(), req.TemplateID, req.Registry, req.IncludeMemory, *req.ExpectedRevision)
+			} else {
+				item, err = hubSvc.PublishTemplate(r.Context(), req.TemplateID, req.Registry, req.IncludeMemory)
+			}
 		} else {
 			var spec hub.PublishSpec
 			spec, err = h.workspace.HubPublishSpec(req.AgentID, req.IncludeMemory)
 			if err == nil {
 				spec.Registry = req.Registry
+				spec.SourceAgentID = req.AgentID
+				spec.CommitMessage = req.CommitMessage
+				spec.Author, err = templateVersionAuthor(r)
+				if err != nil {
+					http.Error(w, err.Error(), http.StatusInternalServerError)
+					return
+				}
 				if req.Avatar != nil {
 					spec.Avatar = strings.TrimSpace(*req.Avatar)
 				}
@@ -1826,7 +1838,16 @@ func (h *Handler) handleHubTemplates(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 			if err == nil {
-				if req.ReplaceTemplateID != "" {
+				if req.Registry == "local" || req.Registry == "" {
+					item, err = hubSvc.SaveAgentTemplate(r.Context(), spec)
+				} else if req.Registry == config.DefaultOfficialHubRegistryName {
+					spec.Registry = config.DefaultHubPublishRegistry
+					item, err = hubSvc.SaveAgentTemplate(r.Context(), spec)
+					if err == nil {
+						savedTemplateID = item.ID
+						item, err = hubSvc.PublishTemplate(r.Context(), item.ID, req.Registry, req.IncludeMemory)
+					}
+				} else if req.ReplaceTemplateID != "" {
 					item, err = hubSvc.ReplaceLocal(r.Context(), req.ReplaceTemplateID, spec)
 				} else {
 					item, err = hubSvc.Publish(r.Context(), spec)
@@ -1838,6 +1859,13 @@ func (h *Handler) handleHubTemplates(w http.ResponseWriter, r *http.Request) {
 			code := hub.RemoteAPIErrorCode(err)
 			if !publishingTemplate {
 				status = http.StatusBadRequest
+			}
+			if errors.Is(err, hub.ErrTemplateVersionChanged) {
+				status = http.StatusConflict
+				code = "template_version_changed"
+			}
+			if code == "template_cloud_cleanup_pending" || code == "template_cloud_publish_timeout" {
+				status = http.StatusGatewayTimeout
 			}
 			if code == "SYS-ERR-4" {
 				status = http.StatusBadRequest
@@ -1863,7 +1891,7 @@ func (h *Handler) handleHubTemplates(w http.ResponseWriter, r *http.Request) {
 			if code == "" {
 				code = "template_publish_failed"
 			}
-			writeHubTemplateError(w, status, code, err.Error(), "")
+			writeHubTemplateError(w, status, code, err.Error(), savedTemplateID)
 			return
 		}
 		writeJSON(w, http.StatusCreated, presentHubTemplate(item))
@@ -1986,7 +2014,12 @@ func presentHubTemplates(items []hub.Template) []apitypes.HubTemplate {
 
 func presentHubTemplate(item hub.Template) apitypes.HubTemplate {
 	presented := apitypes.HubTemplate{
+		LatestRevision: item.LatestRevision,
+		Publications:   item.Publications,
 		ID:             item.ID,
+		UID:            item.UID,
+		SourceAgentID:  item.SourceAgentID,
+		Revision:       item.Revision,
 		Namespace:      item.Namespace,
 		Name:           item.Name,
 		DisplayName:    item.DisplayName,

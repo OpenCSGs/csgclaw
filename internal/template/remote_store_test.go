@@ -149,7 +149,7 @@ func TestRemoteStorePostJSONDoesNotInferConflictWithoutCode(t *testing.T) {
 	}
 }
 
-func TestRemoteStorePublishUploadsArchiveAndCreatesTemplateCode(t *testing.T) {
+func TestRemoteStorePublishCommitsFilesAfterCreatingTemplateCode(t *testing.T) {
 	t.Parallel()
 
 	workspace := t.TempDir()
@@ -196,43 +196,23 @@ func TestRemoteStorePublishUploadsArchiveAndCreatesTemplateCode(t *testing.T) {
 		}
 	}
 
-	var uploadedArchive []byte
+	var uploadedFiles []remoteCommitFile
 	var created remoteCreateCodeRequest
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case "/api/v1/codes/upload_url":
-			if got, want := r.URL.Query().Get("current_user"), "alice"; got != want {
-				t.Errorf("upload current_user = %q, want %q", got, want)
+		case "/api/v1/codes/alice/ReviewBot_2":
+			http.NotFound(w, r)
+		case "/api/v1/codes/alice/ReviewBot_2/preupload/main":
+			respondTemplatePreupload(t, w, r)
+		case "/api/v1/codes/alice/ReviewBot_2/commit/main":
+			var request struct {
+				Files []remoteCommitFile `json:"files"`
 			}
-			if got, want := r.Header.Get("Authorization"), "Bearer access-token"; got != want {
-				t.Errorf("upload authorization = %q, want %q", got, want)
+			if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+				t.Error(err)
 			}
-			_ = json.NewEncoder(w).Encode(map[string]any{"data": map[string]any{
-				"url":      "http://" + r.Host + "/object-storage",
-				"uuid":     "package-uuid",
-				"formData": map[string]string{"key": "codes/package-uuid", "policy": "policy-value"},
-			}})
-		case "/object-storage":
-			if err := r.ParseMultipartForm(4 << 20); err != nil {
-				t.Errorf("ParseMultipartForm() error = %v", err)
-				http.Error(w, err.Error(), http.StatusBadRequest)
-				return
-			}
-			if got, want := r.FormValue("key"), "codes/package-uuid"; got != want {
-				t.Errorf("upload key = %q, want %q", got, want)
-			}
-			file, _, err := r.FormFile("file")
-			if err != nil {
-				t.Errorf("FormFile() error = %v", err)
-				http.Error(w, err.Error(), http.StatusBadRequest)
-				return
-			}
-			defer file.Close()
-			uploadedArchive, err = io.ReadAll(file)
-			if err != nil {
-				t.Errorf("ReadAll(upload) error = %v", err)
-			}
-			w.WriteHeader(http.StatusNoContent)
+			uploadedFiles = request.Files
+			w.WriteHeader(http.StatusOK)
 		case "/api/v1/codes":
 			if got, want := r.URL.Query().Get("current_user"), "alice"; got != want {
 				t.Errorf("create current_user = %q, want %q", got, want)
@@ -281,7 +261,7 @@ func TestRemoteStorePublishUploadsArchiveAndCreatesTemplateCode(t *testing.T) {
 	if item.ModelConfig == nil || item.ModelConfig.ModelID != "model-a" || item.ModelConfig.ReasoningEffort != "auto" {
 		t.Fatalf("Publish().ModelConfig = %+v, want model-a with auto reasoning", item.ModelConfig)
 	}
-	if got, want := created.CodeFile, "package-uuid"; got != want {
+	if got, want := created.CodeFile, ""; got != want {
 		t.Fatalf("create code_file = %q, want %q", got, want)
 	}
 	if got, want := created.Namespace, "alice"; got != want {
@@ -303,21 +283,17 @@ func TestRemoteStorePublishUploadsArchiveAndCreatesTemplateCode(t *testing.T) {
 		t.Fatalf("create description = %q, want agent.toml description %q", got, want)
 	}
 
-	archive, err := zip.NewReader(bytes.NewReader(uploadedArchive), int64(len(uploadedArchive)))
-	if err != nil {
-		t.Fatalf("zip.NewReader() error = %v", err)
-	}
-	names := make(map[string]bool, len(archive.File))
-	for _, file := range archive.File {
-		names[file.Name] = true
-		content, err := readZipFile(file)
+	names := make(map[string]bool, len(uploadedFiles))
+	for _, file := range uploadedFiles {
+		names[file.Path] = true
+		content, err := base64.StdEncoding.DecodeString(file.Content)
 		if err != nil {
-			t.Fatalf("readZipFile(%s) error = %v", file.Name, err)
+			t.Fatal(err)
 		}
 		if bytes.Contains(content, []byte("staged memory must not upload")) {
-			t.Errorf("uploaded archive leaked staged memory through %q", file.Name)
+			t.Errorf("uploaded archive leaked staged memory through %q", file.Path)
 		}
-		if file.Name == "agent.toml" {
+		if file.Path == "agent.toml" {
 			manifest := content
 			if !strings.Contains(string(manifest), `schema_version = "agentfile/v1"`) {
 				t.Errorf("agent.toml missing schema_version: %s", manifest)
@@ -378,7 +354,7 @@ func readZipFile(file *zip.File) ([]byte, error) {
 	return io.ReadAll(reader)
 }
 
-func TestBuildRemoteTemplateArchivePreservesDSHWorkspace(t *testing.T) {
+func TestBuildRemoteTemplateFilesPreservesDSHWorkspace(t *testing.T) {
 	workspace := t.TempDir()
 	instructionsPath := filepath.Join(workspace, "AGENTS.md")
 	if err := os.WriteFile(instructionsPath, []byte("# DSH template\n"), 0o644); err != nil {
@@ -392,7 +368,7 @@ func TestBuildRemoteTemplateArchivePreservesDSHWorkspace(t *testing.T) {
 		t.Fatalf("WriteFile(SKILL.md) error = %v", err)
 	}
 
-	archive, err := buildRemoteTemplateArchive(PublishSpec{
+	snapshot, err := buildRemoteTemplateFiles(PublishSpec{
 		Name:        "dsh-reviewer",
 		Description: "DSH review worker",
 		RuntimeKind: "dsh",
@@ -405,22 +381,14 @@ func TestBuildRemoteTemplateArchivePreservesDSHWorkspace(t *testing.T) {
 		MCPServers: map[string]any{
 			"docs": map[string]any{"url": "https://mcp.example.test"},
 		},
-	})
+	}, 32<<20)
 	if err != nil {
-		t.Fatalf("buildRemoteTemplateArchive() error = %v", err)
+		t.Fatalf("buildRemoteTemplateFiles() error = %v", err)
 	}
 
-	reader, err := zip.NewReader(bytes.NewReader(archive), int64(len(archive)))
-	if err != nil {
-		t.Fatalf("zip.NewReader() error = %v", err)
-	}
-	files := make(map[string]string, len(reader.File))
-	for _, file := range reader.File {
-		content, err := readZipFile(file)
-		if err != nil {
-			t.Fatalf("readZipFile(%s) error = %v", file.Name, err)
-		}
-		files[file.Name] = string(content)
+	files := make(map[string]string, len(snapshot))
+	for name, content := range snapshot {
+		files[name] = string(content)
 	}
 	if !strings.Contains(files["agent.toml"], "runtime_kind = 'dsh'") {
 		t.Fatalf("agent.toml = %q, want DSH runtime kind", files["agent.toml"])
@@ -530,14 +498,12 @@ func TestRemoteStorePublishUsesSharedCodeTemplateProtocolForCommunityRuntimes(t 
 			var created remoteCreateCodeRequest
 			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				switch r.URL.Path {
-				case "/api/v1/codes/upload_url":
-					_ = json.NewEncoder(w).Encode(map[string]any{"data": map[string]any{
-						"url":      "http://" + r.Host + "/object-storage",
-						"uuid":     "package-uuid",
-						"formData": map[string]string{},
-					}})
-				case "/object-storage":
-					w.WriteHeader(http.StatusNoContent)
+				case "/api/v1/codes/alice/" + runtimeKind + "-reviewer":
+					http.NotFound(w, r)
+				case "/api/v1/codes/alice/" + runtimeKind + "-reviewer/preupload/main":
+					respondTemplatePreupload(t, w, r)
+				case "/api/v1/codes/alice/" + runtimeKind + "-reviewer/commit/main":
+					w.WriteHeader(http.StatusOK)
 				case "/api/v1/codes":
 					if err := json.NewDecoder(r.Body).Decode(&created); err != nil {
 						t.Fatalf("Decode(create) error = %v", err)

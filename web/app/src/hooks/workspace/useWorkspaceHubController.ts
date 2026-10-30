@@ -139,12 +139,25 @@ export function useWorkspaceHubController({
     async (published?: HubTemplate): Promise<void> => {
       try {
         await refreshWorkspaceHubTemplates();
+        // Detail and file queries use separate caches from the template list.
+        // A save or rollback can change the active revision without changing its ID.
+        await Promise.all([
+          queryClient.invalidateQueries({
+            queryKey: workspaceQueryKeys.hubTemplate("").slice(0, 2),
+            refetchType: "all",
+          }),
+          queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.hubWorkspaceScope("").slice(0, 2) }),
+          queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.hubWorkspaceFileScope("").slice(0, 2) }),
+        ]);
         setResourcesManualError("");
       } catch (_) {
         setResourcesManualError(t("resourcesLoadFailed"));
       }
       // Community listings may lag behind a successful publication.
       // Keep refreshed metadata when present, otherwise include the returned template.
+      if (published?.id && published.source?.kind === "local") {
+        queryClient.setQueryData(workspaceQueryKeys.hubTemplate(published.id), published);
+      }
       if (published?.id) {
         queryClient.setQueryData<HubTemplate[]>(workspaceQueryKeys.hubTemplates(), (current) =>
           current?.some((item) => item.id === published.id) ? current : [...(current ?? []), published],
@@ -284,7 +297,7 @@ export function useWorkspaceHubController({
       const requestVersion = ++publishRequestVersion.current;
       setPublishFailure(null);
       try {
-        const published = await publishHubTemplateToCommunityRequest(template.id, includeMemory);
+        const published = await publishHubTemplateToCommunityRequest(template.id, includeMemory, template.revision);
         await refreshHubTemplates(published);
         setPublishedTemplate(published);
         return { status: "success", template: published };

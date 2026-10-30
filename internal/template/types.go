@@ -16,6 +16,11 @@ const (
 )
 
 type Template struct {
+	LatestRevision int
+	Publications   []apitypes.TemplatePublication
+	UID            string
+	Revision       int
+	SourceAgentID  string
 	ID             string
 	Namespace      string
 	Avatar         string
@@ -66,6 +71,13 @@ type WorkspaceRef struct {
 }
 
 type PublishSpec struct {
+	ReplaceRemote  bool
+	RemotePath     string
+	UID            string
+	Revision       int
+	SourceAgentID  string
+	CommitMessage  string
+	Author         *VersionAuthor
 	Registry       string
 	IncludeMemory  bool
 	ID             string

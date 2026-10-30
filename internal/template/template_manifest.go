@@ -28,6 +28,8 @@ func ValidatePublishTemplateName(name string) error {
 }
 
 type templateManifest struct {
+	UID            string                        `toml:"template_uid,omitempty"`
+	Revision       int                           `toml:"revision,omitempty"`
 	SchemaVersion  string                        `toml:"schema_version,omitempty"`
 	Name           string                        `toml:"name"`
 	Avatar         string                        `toml:"avatar,omitempty"`

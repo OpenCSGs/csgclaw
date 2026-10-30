@@ -1801,3 +1801,5 @@ Fetch Metadata is never an authorization credential.
 The Web UI browses attachment metadata from the existing transcript APIs and uses per-file capabilities for previews and downloads; transcript access policy remains unchanged.
 External clients and Agents retain their existing token and room-membership checks.
 Browser requests do not receive the server management token and do not gain deletion permissions.
+
+Local template identity, retained versions, restore endpoints and cloud replacement behavior are described in [Local template versions](template-versions.md).

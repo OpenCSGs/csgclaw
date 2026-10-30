@@ -978,6 +978,9 @@ func TestExecuteHubPublishUsesHTTPClient(t *testing.T) {
 			if payload["name"] != "ReviewBot_2" || payload["description"] != "Reviews changes" {
 				t.Fatalf("payload metadata = %#v/%#v, want CLI values", payload["name"], payload["description"])
 			}
+			if payload["commit_message"] != "Updated instructions" {
+				t.Fatalf("commit message = %#v", payload["commit_message"])
+			}
 			if payload["include_memory"] != true {
 				t.Fatalf("payload[include_memory] = %#v, want true", payload["include_memory"])
 			}
@@ -987,7 +990,7 @@ func TestExecuteHubPublishUsesHTTPClient(t *testing.T) {
 
 	if err := app.Execute(context.Background(), []string{
 		"--endpoint", "http://example.test", "--output", "json", "template", "publish",
-		"--agent", "u-alice", "--registry", "local", "--name", "ReviewBot_2", "--description", "Reviews changes", "--include-memory",
+		"--agent", "u-alice", "--registry", "local", "--name", "ReviewBot_2", "--description", "Reviews changes", "--include-memory", "--message", "Updated instructions",
 	}); err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
