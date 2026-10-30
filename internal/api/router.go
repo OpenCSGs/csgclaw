@@ -140,6 +140,8 @@ func (h *Handler) registerCoreRoutes(router chi.Router) {
 			r.Put("/{id}/workspace/file", h.putHubTemplateWorkspaceFileByID)
 		})
 		r.Get("/skills", h.listSkills)
+		r.Post("/skills/discovery/ack", h.handleDiscoveryAcknowledge)
+		r.Post("/skills/discovery/rescan", h.handleSkillRescan)
 		r.Get("/skills/remote", h.handleRemoteSkills)
 		r.Post("/skills:upload", h.handleSkillUpload)
 		r.Post("/skills:install", h.handleSkillInstall)

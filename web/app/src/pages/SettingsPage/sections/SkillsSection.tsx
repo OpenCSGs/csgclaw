@@ -1,17 +1,12 @@
-import { skillOriginHint, skillOriginLabel as originLabel } from "./resourceOrigins";
+import { useWorkspaceSkillsQuery } from "@/hooks/workspace/workspaceQueries";
+import { InstalledSkillLibrary } from "./InstalledSkillLibrary";
 import { useEffect, useMemo, useState } from "react";
-import { LoaderCircle, Plus } from "lucide-react";
+import { Plus } from "lucide-react";
 import { Button } from "@/components/ui";
-import { ResourceList, ResourceListCard } from "@/components/business/ResourceListCard";
 import { useWorkspaceControllerContext } from "@/hooks/workspace";
 import { isAuthenticated } from "@/models/auth";
 import { hasSkillName, remoteSkillInstallName } from "@/models/skillhub";
-import {
-  ResourceFeaturedIcon,
-  ResourceFilterTabs,
-  ResourceSearchField,
-  SkillFeaturedIcon,
-} from "@/components/business/HubDetailPane";
+import { ResourceFilterTabs, ResourceSearchField } from "@/components/business/HubDetailPane";
 import { SkillUploadDialog } from "@/components/business/SkillUploadDialog";
 import { SkillDetailDialog } from "./SkillDetailDialog";
 import { SkillMarketPane } from "./SkillMarketPane";
@@ -19,7 +14,6 @@ import { SettingsRow } from "./SettingsRow";
 import styles from "../SettingsPage.module.css";
 import type { SkillDetailTarget } from "./SkillDetailDialog";
 import type { SkillSummary } from "@/models/skillhub";
-import type { TranslateFn } from "@/models/conversations";
 
 type SkillTabID = "installed" | "market";
 
@@ -32,7 +26,8 @@ export function SkillsSection() {
   const [detail, setDetail] = useState<SkillDetailTarget | null>(null);
   const [uploadOpen, setUploadOpen] = useState(false);
 
-  const skills = useMemo(() => hub?.skills ?? [], [hub?.skills]);
+  const skillsQuery = useWorkspaceSkillsQuery({ refetchInterval: 30000 });
+  const skills = useMemo(() => skillsQuery.data ?? hub?.skills ?? [], [skillsQuery.data, hub?.skills]);
   const remoteSkills = hub?.remoteSkills ?? [];
   const authed = isAuthenticated(controller.sidebarProps?.authStatus);
   const setRemoteEnabled = hub?.setRemoteSkillsEnabled;
@@ -51,8 +46,6 @@ export function SkillsSection() {
       setTab("installed");
     }
   }
-
-  const installedVisible = useMemo(() => skills.filter((skill) => matchesQuery(skill, query)), [query, skills]);
 
   const tabs = useMemo(
     () => [
@@ -97,35 +90,15 @@ export function SkillsSection() {
               {hub.skillsError}
             </p>
           ) : null}
-          {/* Use resource-specific loading state; hub.loaded tracks templates. */}
-          {!hub?.detailPaneProps?.loaded ? (
-            <p className={styles.listNotice}>
-              <LoaderCircle className="animate-spin" size={14} strokeWidth={2} aria-hidden="true" />
-              {t("resourcesLoading")}
-            </p>
-          ) : installedVisible.length === 0 ? (
-            <p className={styles.listNotice}>
-              {skills.length === 0 ? t("resourcesSkillsEmpty") : t("iaListSearchEmpty")}
-            </p>
-          ) : (
-            <ResourceList>
-              {installedVisible.map((skill) => (
-                <ResourceListCard
-                  key={skill.name}
-                  title={skill.name}
-                  description={skill.description}
-                  icon={
-                    <ResourceFeaturedIcon>
-                      <SkillFeaturedIcon />
-                    </ResourceFeaturedIcon>
-                  }
-                  active={false}
-                  onOpen={() => setDetail({ skill, variant: "installed" })}
-                  actions={<OriginPill skill={skill} t={t} />}
-                />
-              ))}
-            </ResourceList>
-          )}
+          <InstalledSkillLibrary
+            skills={skills}
+            query={query}
+            onOpen={(skill) => setDetail({ skill, variant: "installed" })}
+            onRefresh={() => skillsQuery.refetch()}
+            busy={skillsQuery.isFetching}
+            loading={!skillsQuery.isFetched}
+            t={t}
+          />
         </>
       ) : (
         <SkillMarketPane
@@ -171,7 +144,11 @@ export function SkillsSection() {
       />
 
       <SkillDetailDialog
-        target={detail}
+        target={
+          detail?.variant === "installed"
+            ? { ...detail, skill: skills.find((skill) => skill.name === detail.skill.name) ?? detail.skill }
+            : detail
+        }
         t={t}
         market={
           detail?.variant === "market"
@@ -186,26 +163,5 @@ export function SkillsSection() {
         onOpenChange={(open) => (open ? undefined : setDetail(null))}
       />
     </SettingsRow>
-  );
-}
-
-function OriginPill({ skill, t }: { skill: SkillSummary; t: TranslateFn }) {
-  return (
-    <span className={styles.tag} title={skillOriginHint(skill, t)}>
-      <span className={styles.tagDot} aria-hidden="true" />
-      {originLabel(skill, t)}
-    </span>
-  );
-}
-
-function matchesQuery(skill: { name: string; description?: string }, query: string): boolean {
-  const needle = query.trim().toLocaleLowerCase();
-  if (!needle) {
-    return true;
-  }
-  return [skill.name, skill.description].some((value) =>
-    String(value ?? "")
-      .toLocaleLowerCase()
-      .includes(needle),
   );
 }

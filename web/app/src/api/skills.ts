@@ -138,3 +138,11 @@ function nullableNumberFromUnknown(value: unknown): number | null {
   const number = typeof value === "string" ? Number(value) : value;
   return typeof number === "number" && Number.isFinite(number) && number >= 0 ? number : null;
 }
+
+export function acknowledgeDiscoveredSkills(keys: string[]): Promise<void> {
+  return request<void>(`${SKILLS_PATH}/discovery/ack`, { method: "POST", json: { keys } });
+}
+
+export function rescanDiscoveredSkills(): Promise<SkillSummary[]> {
+  return request<SkillSummary[]>(`${SKILLS_PATH}/discovery/rescan`, { method: "POST" });
+}
