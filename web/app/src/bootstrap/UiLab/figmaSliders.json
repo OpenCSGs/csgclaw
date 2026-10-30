@@ -1,0 +1,245 @@
+{
+  "source": "https://www.figma.com/design/2s3AVSZ5FfBnCR5nI2AriR/?node-id=1086-1423",
+  "entries": [
+    {
+      "id": "1086:533",
+      "label": "Bottom",
+      "right": 25,
+      "left": 0,
+      "width": 320,
+      "height": 56
+    },
+    {
+      "id": "1087:58586",
+      "label": "Top floating",
+      "right": 25,
+      "left": 0,
+      "width": 320,
+      "height": 24
+    },
+    {
+      "id": "1086:617",
+      "label": "Bottom",
+      "right": 50,
+      "left": 0,
+      "width": 320,
+      "height": 56
+    },
+    {
+      "id": "1087:58566",
+      "label": "Top floating",
+      "right": 50,
+      "left": 0,
+      "width": 320,
+      "height": 24
+    },
+    {
+      "id": "1086:1223",
+      "label": "Bottom",
+      "right": 50,
+      "left": 25,
+      "width": 320,
+      "height": 56
+    },
+    {
+      "id": "1087:58546",
+      "label": "Top floating",
+      "right": 50,
+      "left": 25,
+      "width": 320,
+      "height": 24
+    },
+    {
+      "id": "1086:653",
+      "label": "Bottom",
+      "right": 75,
+      "left": 0,
+      "width": 320,
+      "height": 56
+    },
+    {
+      "id": "1087:58526",
+      "label": "Top floating",
+      "right": 75,
+      "left": 0,
+      "width": 320,
+      "height": 24
+    },
+    {
+      "id": "1086:1213",
+      "label": "Bottom",
+      "right": 75,
+      "left": 25,
+      "width": 320,
+      "height": 56
+    },
+    {
+      "id": "1087:58506",
+      "label": "Top floating",
+      "right": 75,
+      "left": 25,
+      "width": 320,
+      "height": 24
+    },
+    {
+      "id": "1086:1331",
+      "label": "Bottom",
+      "right": 75,
+      "left": 50,
+      "width": 320,
+      "height": 56
+    },
+    {
+      "id": "1087:58576",
+      "label": "Top floating",
+      "right": 75,
+      "left": 50,
+      "width": 320,
+      "height": 24
+    },
+    {
+      "id": "1086:689",
+      "label": "Bottom",
+      "right": 100,
+      "left": 0,
+      "width": 320,
+      "height": 56
+    },
+    {
+      "id": "1087:58556",
+      "label": "Top floating",
+      "right": 100,
+      "left": 0,
+      "width": 320,
+      "height": 24
+    },
+    {
+      "id": "1086:1195",
+      "label": "Bottom",
+      "right": 100,
+      "left": 25,
+      "width": 320,
+      "height": 56
+    },
+    {
+      "id": "1087:58536",
+      "label": "Top floating",
+      "right": 100,
+      "left": 25,
+      "width": 320,
+      "height": 24
+    },
+    {
+      "id": "1086:1321",
+      "label": "Bottom",
+      "right": 100,
+      "left": 50,
+      "width": 320,
+      "height": 56
+    },
+    {
+      "id": "1087:58516",
+      "label": "Top floating",
+      "right": 100,
+      "left": 50,
+      "width": 320,
+      "height": 24
+    },
+    {
+      "id": "1086:1403",
+      "label": "Bottom",
+      "right": 100,
+      "left": 75,
+      "width": 320,
+      "height": 56
+    },
+    {
+      "id": "1087:58496",
+      "label": "Top floating",
+      "right": 100,
+      "left": 75,
+      "width": 320,
+      "height": 24
+    },
+    {
+      "id": "1086:535",
+      "label": "False",
+      "right": 25,
+      "left": 0,
+      "width": 320,
+      "height": 24
+    },
+    {
+      "id": "1086:609",
+      "label": "False",
+      "right": 50,
+      "left": 0,
+      "width": 320,
+      "height": 24
+    },
+    {
+      "id": "1086:1179",
+      "label": "False",
+      "right": 50,
+      "left": 25,
+      "width": 320,
+      "height": 24
+    },
+    {
+      "id": "1086:645",
+      "label": "False",
+      "right": 75,
+      "left": 0,
+      "width": 320,
+      "height": 24
+    },
+    {
+      "id": "1086:1171",
+      "label": "False",
+      "right": 75,
+      "left": 25,
+      "width": 320,
+      "height": 24
+    },
+    {
+      "id": "1086:1305",
+      "label": "False",
+      "right": 75,
+      "left": 50,
+      "width": 320,
+      "height": 24
+    },
+    {
+      "id": "1086:681",
+      "label": "False",
+      "right": 100,
+      "left": 0,
+      "width": 320,
+      "height": 24
+    },
+    {
+      "id": "1086:1205",
+      "label": "False",
+      "right": 100,
+      "left": 25,
+      "width": 320,
+      "height": 24
+    },
+    {
+      "id": "1086:1297",
+      "label": "False",
+      "right": 100,
+      "left": 50,
+      "width": 320,
+      "height": 24
+    },
+    {
+      "id": "1086:1387",
+      "label": "False",
+      "right": 100,
+      "left": 75,
+      "width": 320,
+      "height": 24
+    }
+  ]
+}

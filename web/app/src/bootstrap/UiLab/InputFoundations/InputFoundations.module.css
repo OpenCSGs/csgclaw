@@ -1,0 +1,382 @@
+.foundation {
+  min-width: 0;
+  margin-block: var(--space-6);
+  padding: var(--space-5);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xl);
+  background: var(--panel);
+}
+.foundation h2 {
+  font: var(--text-xl-medium);
+}
+.foundation p {
+  color: var(--muted);
+  line-height: 1.6;
+}
+.foundation a {
+  color: var(--primary);
+}
+.eyebrow {
+  font: var(--text-sm-medium);
+  letter-spacing: 0.08em;
+}
+.notice {
+  margin-block: var(--space-5);
+  padding: var(--space-4);
+  border-inline-start: 3px solid var(--primary);
+  border-radius: var(--radius-md);
+  background: var(--panel-soft);
+}
+.demo,
+.item {
+  min-width: 0;
+  padding: var(--space-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xl);
+}
+.demo {
+  margin-block: var(--space-5);
+}
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  max-width: 100%;
+  overflow-x: auto;
+  padding: var(--space-1);
+  margin-block: var(--space-3);
+}
+.controls > * {
+  flex-shrink: 0;
+  width: max-content;
+}
+.actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+}
+.actions [role="status"] {
+  font: var(--text-sm-normal);
+}
+.grid,
+.liveGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr));
+  gap: var(--space-4);
+}
+.item h4 {
+  font: var(--text-sm-medium);
+}
+.item p {
+  font-size: 0.8rem;
+}
+.stage,
+.referenceStage {
+  min-width: 0;
+  padding: 12px;
+  overflow-x: auto;
+  background: #fff;
+  border-radius: var(--radius-md);
+}
+.referenceStage {
+  margin-block: var(--space-4);
+}
+.sample,
+.compound {
+  --reference-label: #414651;
+  --reference-text: #181d27;
+  --reference-placeholder: #717680;
+  --reference-hint: #535862;
+  --reference-border: #d5d7da;
+  --reference-focus: #4d6ad6;
+  --reference-required: #3250bd;
+  --reference-error: #d92d20;
+  --reference-error-border: #fda29b;
+  --reference-error-focus: #f04438;
+  --reference-shadow: 0 1px 2px #0a0d120d;
+  min-width: 0;
+  font-family: "PingFang SC", var(--font-family-text);
+  font-weight: 400;
+  font-synthesis: none;
+}
+.sample .field[data-csg-field] {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+}
+.sample .field[data-csg-field] > span {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  color: var(--reference-label);
+  font: inherit;
+  font-size: 14px;
+  line-height: 20px;
+}
+.sample .field[data-csg-field] > span > [data-csg-field-part] {
+  color: var(--reference-required);
+  order: 1;
+  white-space: pre;
+}
+.labelHelp {
+  order: 2;
+}
+.sample .field[data-csg-field] > :is(small, div[role="alert"]) {
+  margin: 0;
+  color: var(--reference-hint);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 300;
+  line-height: 20px;
+}
+.sample .field[data-csg-field] > div[role="alert"] {
+  color: var(--reference-error);
+}
+.inputBox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 44px;
+  padding: 9px 13px;
+  border: 1px solid var(--reference-border);
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: var(--reference-shadow);
+}
+.sample[data-size="sm"] .inputBox {
+  height: 40px;
+  padding: 7px 11px;
+}
+.sample .input[data-csg-control="input"][data-variant="plain"] {
+  flex: 1;
+  width: 0;
+  height: 24px;
+  min-height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  outline: none;
+  background: transparent;
+  color: var(--reference-text);
+  box-shadow: none;
+  font: inherit;
+  font-size: 16px;
+  line-height: 24px;
+  text-overflow: ellipsis;
+}
+.sample .input[data-csg-control]::placeholder,
+.sample .textarea[data-csg-control]::placeholder {
+  color: var(--reference-placeholder);
+  opacity: 1;
+}
+.sample img,
+.compound img {
+  display: block;
+  flex-shrink: 0;
+  max-width: none;
+}
+.textareaWrap {
+  position: relative;
+  min-width: 0;
+}
+.sample .textarea[data-csg-control="textarea"] {
+  display: block;
+  height: 128px;
+  min-height: 128px;
+  padding: 11px 13px;
+  border: 1px solid var(--reference-border);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--reference-text);
+  box-shadow: var(--reference-shadow);
+  font: inherit;
+  font-size: 16px;
+  line-height: 24px;
+  overflow-wrap: anywhere;
+}
+.resize {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  pointer-events: none;
+}
+.textarea::-webkit-resizer {
+  background: transparent;
+}
+.sample[data-state] .textarea {
+  resize: none;
+}
+.sample[data-error="true"] :is(.inputBox, .textarea[data-csg-control]) {
+  border-color: var(--reference-error-border);
+}
+.sample :is(.inputBox:focus-within, .textarea[data-csg-control]:focus),
+.sample[data-state="Focused"] :is(.inputBox, .textarea[data-csg-control]) {
+  border-width: 2px;
+  border-color: var(--reference-focus);
+}
+.sample .inputBox:focus-within,
+.sample[data-state="Focused"] .inputBox {
+  padding: 8px 12px;
+}
+.sample[data-size="sm"] .inputBox:focus-within,
+.sample[data-size="sm"][data-state="Focused"] .inputBox {
+  padding: 6px 10px;
+}
+.sample .textarea[data-csg-control]:focus,
+.sample[data-state="Focused"] .textarea[data-csg-control] {
+  padding: 10px 12px;
+}
+.sample[data-error="true"] :is(.inputBox:focus-within, .textarea[data-csg-control]:focus),
+.sample[data-error="true"][data-state="Focused"] :is(.inputBox, .textarea[data-csg-control]) {
+  border-color: var(--reference-error-focus);
+}
+.sample .inputBox[data-disabled="true"],
+.sample .textarea[data-csg-control]:disabled {
+  background: #fafafa;
+  color: var(--reference-placeholder);
+  cursor: not-allowed;
+}
+.sample .input[data-csg-control]:disabled {
+  color: var(--reference-placeholder);
+}
+.referenceLabel {
+  display: flex;
+  gap: 2px;
+  align-items: center;
+  color: var(--reference-label);
+  font-size: 14px;
+  line-height: 20px;
+  margin-bottom: 6px;
+}
+.referenceLabel > span {
+  color: var(--reference-required);
+}
+.compoundBox {
+  display: flex;
+  align-items: center;
+  height: 44px;
+  border: 1px solid var(--reference-border);
+  border-radius: 8px;
+  box-shadow: var(--reference-shadow);
+  background: #fff;
+}
+.compoundContent {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+  padding: 9px 13px;
+}
+.placeholder {
+  min-width: 0;
+  flex: 1;
+  color: var(--reference-placeholder);
+  font-size: 16px;
+  line-height: 24px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.referenceHint {
+  margin-top: 6px;
+  color: var(--reference-hint);
+  font-size: 14px;
+  font-weight: 300;
+  line-height: 20px;
+}
+.addon,
+.prefix {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 9px 13px;
+  color: var(--reference-hint);
+  font-size: 16px;
+  font-weight: 300;
+  line-height: 24px;
+  flex-shrink: 0;
+}
+.compound[data-type="Leading dropdown"] .addon {
+  padding-right: 0;
+}
+.compound[data-type="Leading dropdown"] .compoundContent {
+  padding-left: 12px;
+}
+.compound[data-type="Trailing dropdown"] .compoundContent {
+  padding-right: 0;
+}
+.prefix {
+  padding-right: 12px;
+  border-right: 1px solid var(--reference-border);
+}
+.currency {
+  color: var(--reference-hint);
+  font-size: 16px;
+  line-height: 24px;
+  font-weight: 300;
+}
+.cardIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 24px;
+  margin-left: 9px;
+  border: 1px solid #e9eaeb;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+.compound[data-type="Payment input"] .compoundContent {
+  padding-left: 8px;
+}
+.copy {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  height: 100%;
+  border-left: 1px solid var(--reference-border);
+  padding: 9px 15px;
+  font-size: 16px;
+  line-height: 24px;
+  font-weight: 500;
+  color: var(--reference-label);
+}
+.copy > span {
+  padding-inline: 2px;
+}
+.codeRow {
+  display: flex;
+  gap: 12px;
+}
+.codeDigit {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 80px;
+  height: 80px;
+  border: 1px solid var(--reference-border);
+  border-radius: 12px;
+  box-shadow: var(--reference-shadow);
+  color: #d5d7da;
+  font-size: 48px;
+  line-height: 60px;
+}
+.index {
+  margin-top: var(--space-5);
+  overflow-wrap: anywhere;
+}
+.index li {
+  margin-block: var(--space-2);
+  font: var(--text-sm-normal);
+}
+@media (max-width: 600px) {
+  .foundation {
+    padding: var(--space-3);
+  }
+  .demo {
+    padding: var(--space-3);
+  }
+}

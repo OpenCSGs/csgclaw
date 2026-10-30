@@ -1,5 +1,7 @@
+import { labMessages } from "./uiLab";
 export const messages = {
   zh: {
+    uiLab: labMessages.zh,
     modelConnectErrorKey: "Key 无效或与服务、区域不匹配，请检查后重试。",
     modelConnectErrorPermission: "当前 Key 没有该服务或模型的使用权限。",
     modelConnectErrorQuota: "账户余额或套餐额度不足。",
@@ -3069,6 +3071,7 @@ export const messages = {
     },
   },
   en: {
+    uiLab: labMessages.en,
     modelConnectErrorKey: "The Key is invalid or does not match this service and region.",
     modelConnectErrorPermission: "This Key does not have access to the service or model.",
     modelConnectErrorQuota: "The account balance or plan quota is insufficient.",

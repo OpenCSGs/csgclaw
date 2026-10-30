@@ -22,3 +22,5 @@ export const TASK_EXAMPLES_HIDDEN_STORAGE_KEY = "csgclaw.taskEntry.examplesHidde
 export const TASK_DIRECTORIES_STORAGE_KEY = "csgclaw.taskEntry.directories" as const;
 export const CHAT_SIDE_PANEL_STORAGE_KEY = "csgclaw.im.chatSidePanel.v1" as const;
 export const CHAT_SIDE_PANEL_WIDTH_STORAGE_KEY = "csgclaw.im.chatSidePanelWidth" as const;
+
+export const UI_LAB_LOCALE_STORAGE_KEY = "csgclaw.uiLab.locale" as const;

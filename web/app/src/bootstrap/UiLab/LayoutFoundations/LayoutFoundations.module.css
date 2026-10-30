@@ -1,0 +1,106 @@
+.foundation {
+  margin-block: var(--space-6);
+  padding: var(--space-5);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xl);
+  background: var(--panel);
+  min-width: 0;
+}
+.foundation h2 {
+  font: var(--text-xl-medium);
+}
+.foundation p {
+  color: var(--muted);
+  line-height: 1.6;
+}
+.foundation a {
+  color: var(--primary);
+}
+.eyebrow {
+  font: var(--text-sm-medium);
+  letter-spacing: 0.08em;
+}
+.notice {
+  margin-block: var(--space-5);
+  padding: var(--space-4);
+  border-inline-start: 3px solid var(--primary);
+  border-radius: var(--radius-md);
+  background: var(--panel-soft);
+}
+.controls {
+  max-width: 100%;
+  overflow-x: auto;
+  padding: var(--space-1);
+}
+.controls > * {
+  width: max-content;
+}
+.section {
+  margin-top: var(--space-5);
+  min-width: 0;
+}
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 270px), 1fr));
+  gap: var(--space-4);
+}
+.item {
+  min-width: 0;
+  padding: var(--space-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xl);
+  overflow-wrap: anywhere;
+}
+.item h4 {
+  font: var(--text-md-medium);
+  margin-top: 0;
+}
+.item p {
+  font-size: 0.8rem;
+}
+.ruler {
+  overflow-x: auto;
+  margin-block: var(--space-4);
+  border-inline-start: 1px solid var(--primary);
+}
+.bar {
+  height: 24px;
+  background: var(--primary);
+}
+.radius {
+  width: 128px;
+  height: 80px;
+  margin-block: var(--space-4);
+  background: var(--panel-soft);
+  border: 1px solid var(--primary);
+}
+.scroll {
+  max-width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--line);
+}
+.canvas {
+  box-sizing: border-box;
+  padding-block: 24px;
+  background: var(--panel-soft);
+}
+.columns {
+  display: grid;
+  height: 240px;
+}
+.column {
+  min-width: 0;
+  background: color-mix(in srgb, var(--primary) 16%, transparent);
+  text-align: center;
+  padding-top: 16px;
+}
+.scroll:focus-visible,
+.ruler:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+@media (max-width: 600px) {
+  .foundation {
+    padding: var(--space-3);
+  }
+}

@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { LabLocaleProvider, useLabTranslation } from "./LabLocale";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { Plus } from "lucide-react";
 import {
   Button,
@@ -31,6 +32,19 @@ import "@/components/business/ConversationPane/ConversationThreads.css";
 import { createTranslator } from "@/shared/i18n";
 import type { ResolvedThemeMode } from "@/shared/theme/theme";
 import styles from "./UiLab.module.css";
+import { ColorFoundations } from "./ColorFoundations";
+import { TypographyFoundations } from "./TypographyFoundations";
+import { ShadowFoundations } from "./ShadowFoundations";
+import { LayoutFoundations } from "./LayoutFoundations";
+import { ButtonFoundations } from "./ButtonFoundations";
+import { TagFoundations } from "./TagFoundations";
+import { InputFoundations } from "./InputFoundations";
+import { ToggleFoundations } from "./ToggleFoundations";
+import { CheckboxFoundations } from "./CheckboxFoundations";
+import { TooltipFoundations } from "./TooltipFoundations";
+import { SliderFoundations } from "./SliderFoundations";
+import { ProgressFoundations } from "./ProgressFoundations";
+import { UiLabNavigation, sectionFromHash } from "./UiLabNavigation";
 import "@/pages/WorkspacePage/components/WorkspaceComponents.css";
 import "@/pages/WorkspacePage/components/WorkspaceModals/WorkspaceModals.css";
 
@@ -44,7 +58,25 @@ const options = Array.from({ length: 180 }, (_, index) => ({
   separatorAfter: index === 0,
 }));
 
-export function UiLab() {
+function subscribeToHash(onChange: () => void) {
+  window.addEventListener("hashchange", onChange);
+  return () => window.removeEventListener("hashchange", onChange);
+}
+const getSection = () => sectionFromHash(window.location.hash);
+
+function UiLabContent() {
+  const { text: labText, locale, setLocale } = useLabTranslation();
+
+  const active = useSyncExternalStore(subscribeToHash, getSection, () => sectionFromHash(""));
+  const contentRef = useRef<HTMLElement>(null);
+  const previousSection = useRef(active);
+  useEffect(() => {
+    if (previousSection.current !== active) {
+      contentRef.current?.focus({ preventScroll: true });
+      if (contentRef.current) contentRef.current.scrollTop = 0;
+      previousSection.current = active;
+    }
+  }, [active]);
   const [theme, setTheme] = useState<ResolvedThemeMode>("light");
   const [value, setValue] = useState("model-1");
   const [sort, setSort] = useState("recent");
@@ -60,231 +92,336 @@ export function UiLab() {
   return (
     <TooltipProvider>
       <div className={styles.viewport}>
-        <main className={styles.page}>
-          <PanelHeader>
-            <h1>CSGClaw UI Lab</h1>
-            <SegmentedControl
-              value={theme}
-              onChange={setTheme}
-              label="Preview theme"
-              options={[
-                { value: "light", label: "Light" },
-                { value: "dark", label: "Dark" },
-              ]}
-            />
-          </PanelHeader>
-          <p className={styles.intro}>
-            Production components, semantic tokens and keyboard interactions. No backend or account is required.
-          </p>
-          <section className={styles.card}>
-            <h2>Turn token consumption</h2>
-            {["qwen3.7-plus", "auto", "a-very-long-selected-model-name-for-narrow-screen-layout"].map((model) => (
-              <div key={model} className="message-row">
-                <div className="message-card">
-                  <p>这是一轮已完成的回复。</p>
-                  <ConversationMessageActions
-                    className="message-hover-actions"
-                    content="这是一轮已完成的回复。"
-                    t={createTranslator("zh")}
-                    metadata={{
-                      csgclaw: {
-                        turn_progress: {
-                          status: "succeeded",
-                          usage: {
-                            known: true,
-                            model_id: model,
-                            input_tokens: 1000,
-                            output_tokens: 220,
-                            total_tokens: 1220,
-                          },
-                        },
-                      },
-                    }}
-                  />
-                </div>
-              </div>
-            ))}
-          </section>
-          <section className={styles.card}>
-            <h2>Secondary gray · Figma</h2>
-            <p className={styles.intro}>Default, leading icon, disabled, loading, icon only and navigation.</p>
-            {(["sm", "md", "lg", "xl", "2xl"] as const).map((size) => (
-              <div key={size} className={styles.row} role="group" aria-label={`Secondary gray ${size}`}>
-                <span>{size}</span>
-                <Button size={size}>登录账号</Button>
-                <Button size={size}>
-                  <Plus />
-                  新建智能体
-                </Button>
-                <Button size={size} disabled>
-                  登录账号
-                </Button>
-                <Button size={size} loading loadingLabel={`Saving ${size}`}>
-                  登录账号
-                </Button>
-                <IconButton size={size} icon={<Plus />} label={`Add ${size}`} />
-                <LinkButton size={size} href="#selection-controls">
-                  View items
-                </LinkButton>
-              </div>
-            ))}
-          </section>
-          <section className={styles.card}>
-            <h2>Buttons and fields</h2>
-            <div className={styles.row}>
-              <Button variant="primary">Primary</Button>
-              <Button variant="secondaryGray">Secondary</Button>
-              <Button variant="danger">Danger</Button>
-              <Button disabled>Disabled</Button>
-              <Button loading>Loading</Button>
-              <LinkButton href="#selection-controls">View selection controls</LinkButton>
-            </div>
-            <div className={styles.grid}>
-              <Field label="Name" required hint="Use a short display name" error={error ? "Enter a name" : undefined}>
-                <TextInput placeholder="Example" />
-              </Field>
-              <Field label="Disabled input">
-                <TextInput disabled value="Read only" />
-              </Field>
-              <Field label="Instructions">
-                <TextArea defaultValue="A multiline field with its own component styles." />
-              </Field>
-            </div>
-            <label className={styles.row}>
-              <input type="checkbox" checked={error} onChange={(event) => setError(event.target.checked)} />
-              Show validation errors
-            </label>
-            <FieldHelpTooltip
-              summary="Field help"
-              detail="This is the shared tooltip. It opens with pointer hover or keyboard focus and follows the viewport."
-            />
-          </section>
-          <section className={styles.card}>
-            <h2>Workspace style boundary</h2>
-            <div className="profile-section">
-              <Field label="Workspace input" error={error ? "Enter a value" : undefined}>
-                <TextInput placeholder="Component styles inside legacy workspace CSS" />
-              </Field>
-              <div className={styles.row}>
-                <Button variant="primary" disabled>
-                  Disabled primary
-                </Button>
-                <Button variant="primary" loading>
-                  Saving
-                </Button>
-                <Checkbox aria-label="Disabled checkbox" checked disabled />
-                <Switch aria-label="Disabled switch" checked disabled />
-              </div>
-            </div>
-            <ConversationSection
-              title="Conversation button styles"
-              items={
-                showDemoConversation
-                  ? [{ id: "ui-lab-room", title: "UI Lab conversation", members: [], messages: [] }]
-                  : []
-              }
-              activeConversationId="ui-lab-room"
-              currentUserID="ui-lab-user"
-              usersById={new Map()}
-              locale="en"
-              t={createTranslator("en")}
-              onSelect={() => {}}
-              onDelete={() => setShowDemoConversation(false)}
-            />
-          </section>
-          <section className={styles.card} id="selection-controls">
-            <h2>Selection controls</h2>
-            <div className={styles.grid}>
-              <Field label="Sort order">
-                <Select
-                  value={sort}
-                  onValueChange={setSort}
+        <UiLabNavigation active={active} />
+        <main className={styles.content} ref={contentRef} tabIndex={-1} id="ui-lab-content">
+          <div className={styles.page}>
+            <PanelHeader>
+              <h1>{labText("CSGClaw UI Lab")}</h1>
+              <div className={styles.preferences}>
+                <SegmentedControl
+                  label={labText("语言")}
+                  value={locale}
+                  onChange={(value) => setLocale(value === "en" ? "en" : "zh")}
                   options={[
-                    { value: "", label: "None" },
-                    { value: "recent", label: "Most recent" },
-                    { value: "name", label: "Name" },
+                    { value: "zh", label: "中文" },
+                    { value: "en", label: "English" },
                   ]}
                 />
-              </Field>
-              <Field
-                label="Search picker"
-                hint="Try arrows, Enter, Escape and Tab"
-                error={error ? "Choose a model" : undefined}
-              >
-                <Combobox
-                  value={value}
-                  onValueChange={setValue}
-                  options={options}
-                  searchPlaceholder="Search models"
-                  emptyLabel="No matching models"
+                <SegmentedControl
+                  value={theme}
+                  onChange={setTheme}
+                  label={labText("Preview theme")}
+                  options={[
+                    { value: "light", label: labText("Light") },
+                    { value: "dark", label: labText("Dark") },
+                  ]}
                 />
-              </Field>
-              <Field label="Disabled picker">
-                <Combobox disabled value={value} options={options} searchPlaceholder="Search disabled picker" />
-              </Field>
-              <Field label="Model">
-                <ModelPicker
-                  providerID="opencsg"
-                  value={model}
-                  models={["auto", "qwen-3.5", "deepseek-v4", "a-model-with-a-long-name"]}
-                  onChange={setModel}
-                  placeholder="Choose a model"
-                  t={createTranslator("en")}
-                />
-              </Field>
-            </div>
-            <output className={styles.output}>Selected: {value}</output>
-            <Button variant="secondaryGray" onClick={() => setValue("")}>
-              Clear selection
-            </Button>
-          </section>
-          <section className={styles.card}>
-            <h2>Reasoning effort</h2>
-            <div className={styles.reasoningPreview}>
-              <ReasoningEffortPicker
-                value={reasoning}
-                agentEffort="high"
-                onValueChange={setReasoning}
-                onValueCommit={setReasoning}
-                t={createTranslator("zh")}
-              />
-            </div>
-          </section>
-          <section className={styles.card}>
-            <PanelHeader>
-              <h2>Dialog and empty state</h2>
-              <Button onClick={() => setDialog(true)}>Open nested dialog</Button>
+              </div>
             </PanelHeader>
-            <EmptyState
-              title="No items yet"
-              description="Add an item to see it here."
-              actions={<Button variant="secondaryGray">Add item</Button>}
-            />
-          </section>
-          <DialogRoot open={dialog} onOpenChange={setDialog}>
-            <DialogContent aria-describedby={undefined}>
-              <DialogHeader>
-                <DialogTitle>Nested selection</DialogTitle>
-                <DialogCloseButton label="Close dialog" />
-              </DialogHeader>
-              <DialogBody>
-                <Field label="Dialog model" required>
-                  <Combobox
-                    value={value}
-                    onValueChange={setValue}
-                    options={options}
-                    searchPlaceholder="Search dialog models"
-                    emptyLabel="No matches"
+            <p className={styles.intro}>
+              {labText(
+                "Production components, semantic tokens and keyboard interactions. No backend or account is required.",
+              )}
+            </p>
+            <p className={styles.intro}>
+              {labText("Figma 原始变量名及静态参考文案保留原文；切换语言会保留当前页面和已编辑内容。")}
+            </p>
+            <div className={styles.panel} hidden={active !== "design-foundations"}>
+              <ColorFoundations />
+            </div>
+            <div className={styles.panel} hidden={active !== "typography-foundations"}>
+              <TypographyFoundations />
+            </div>
+            <div className={styles.panel} hidden={active !== "shadow-foundations"}>
+              <ShadowFoundations />
+            </div>
+            <div className={styles.panel} hidden={active !== "layout-foundations"}>
+              <LayoutFoundations />
+            </div>
+            <div className={styles.panel} hidden={active !== "button-foundations"}>
+              <ButtonFoundations />
+            </div>
+            <div className={styles.panel} hidden={active !== "tag-foundations"}>
+              <TagFoundations />
+            </div>
+            <div className={styles.panel} hidden={active !== "input-foundations"}>
+              <InputFoundations />
+            </div>
+            <div className={styles.panel} hidden={active !== "dropdown-foundations"}>
+              <section className={styles.card} id="dropdown-foundations" aria-labelledby="dropdown-title">
+                <h2 id="dropdown-title">{labText("Dropdowns · 下拉菜单")}</h2>
+                <p lang={locale === "zh" ? "zh-CN" : "en"}>
+                  {labText(
+                    "Dropdowns are used to group together actions in a subview. They’re useful for hiding menus or when you have multiple actions that cannot be separate buttons.",
+                  )}
+                </p>
+                <p className={styles.intro}>{labText("组件说明已收录，Figma 设计示例与交互演示待补充。")}</p>
+              </section>
+            </div>
+            <div className={styles.panel} hidden={active !== "toggle-foundations"}>
+              <ToggleFoundations />
+            </div>
+            <div className={styles.panel} hidden={active !== "checkbox-foundations"}>
+              <CheckboxFoundations />
+            </div>
+            <div className={styles.panel} hidden={active !== "tooltip-foundations"}>
+              <TooltipFoundations />
+            </div>
+            <div className={styles.panel} hidden={active !== "progress-foundations"}>
+              <ProgressFoundations />
+            </div>
+            <div className={styles.panel} hidden={active !== "slider-foundations"}>
+              <SliderFoundations />
+            </div>
+            <div className={styles.panel} hidden={active !== "token-consumption"}>
+              <section className={styles.card} id="token-consumption">
+                <h2>{labText("Turn token consumption")}</h2>
+                {["qwen3.7-plus", "auto", "a-very-long-selected-model-name-for-narrow-screen-layout"].map((model) => (
+                  <div key={model} className="message-row">
+                    <div className="message-card">
+                      <p>{labText("这是一轮已完成的回复。")}</p>
+                      <ConversationMessageActions
+                        className="message-hover-actions"
+                        content="这是一轮已完成的回复。"
+                        t={createTranslator(locale)}
+                        metadata={{
+                          csgclaw: {
+                            turn_progress: {
+                              status: "succeeded",
+                              usage: {
+                                known: true,
+                                model_id: model,
+                                input_tokens: 1000,
+                                output_tokens: 220,
+                                total_tokens: 1220,
+                              },
+                            },
+                          },
+                        }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </section>
+            </div>
+            <div className={styles.panel} hidden={active !== "secondary-gray"}>
+              <section className={styles.card} id="secondary-gray">
+                <h2>{labText("Secondary gray · Figma")}</h2>
+                <p className={styles.intro}>
+                  {labText("Default, leading icon, disabled, loading, icon only and navigation.")}
+                </p>
+                {(["sm", "md", "lg", "xl", "2xl"] as const).map((size) => (
+                  <div key={size} className={styles.row} role="group" aria-label={`Secondary gray ${size}`}>
+                    <span>{size}</span>
+                    <Button size={size}>{labText("登录账号")}</Button>
+                    <Button size={size}>
+                      <Plus />
+                      {labText("新建智能体")}
+                    </Button>
+                    <Button size={size} disabled>
+                      {labText("登录账号")}
+                    </Button>
+                    <Button size={size} loading loadingLabel={`Saving ${size}`}>
+                      {labText("登录账号")}
+                    </Button>
+                    <IconButton size={size} icon={<Plus />} label={`Add ${size}`} />
+                    <LinkButton size={size} href="#selection-controls">
+                      {labText("View items")}
+                    </LinkButton>
+                  </div>
+                ))}
+              </section>
+            </div>
+            <div className={styles.panel} hidden={active !== "buttons-and-fields"}>
+              <section className={styles.card} id="buttons-and-fields">
+                <h2>{labText("Buttons and fields")}</h2>
+                <div className={styles.row}>
+                  <Button variant="primary">{labText("Primary")}</Button>
+                  <Button variant="secondaryGray">{labText("Secondary")}</Button>
+                  <Button variant="danger">{labText("Danger")}</Button>
+                  <Button disabled>{labText("Disabled")}</Button>
+                  <Button loading>{labText("Loading")}</Button>
+                  <LinkButton href="#selection-controls">{labText("View selection controls")}</LinkButton>
+                </div>
+                <div className={styles.grid}>
+                  <Field
+                    label={labText("Name")}
                     required
-                    name="model"
+                    hint={labText("Use a short display name")}
+                    error={error ? labText("Enter a name") : undefined}
+                  >
+                    <TextInput placeholder={labText("Example")} />
+                  </Field>
+                  <Field label={labText("Disabled input")}>
+                    <TextInput disabled value={labText("Read only")} />
+                  </Field>
+                  <Field label={labText("Instructions")}>
+                    <TextArea defaultValue={labText("A multiline field with its own component styles.")} />
+                  </Field>
+                </div>
+                <label className={styles.row}>
+                  <input type="checkbox" checked={error} onChange={(event) => setError(event.target.checked)} />
+                  {labText("Show validation errors")}
+                </label>
+                <FieldHelpTooltip
+                  summary={labText("Field help")}
+                  detail={labText(
+                    "This is the shared tooltip. It opens with pointer hover or keyboard focus and follows the viewport.",
+                  )}
+                />
+              </section>
+            </div>
+            <div className={styles.panel} hidden={active !== "workspace-boundary"}>
+              <section className={styles.card} id="workspace-boundary">
+                <h2>{labText("Workspace style boundary")}</h2>
+                <div className="profile-section">
+                  <Field label={labText("Workspace input")} error={error ? labText("Enter a value") : undefined}>
+                    <TextInput placeholder={labText("Component styles inside legacy workspace CSS")} />
+                  </Field>
+                  <div className={styles.row}>
+                    <Button variant="primary" disabled>
+                      {labText("Disabled primary")}
+                    </Button>
+                    <Button variant="primary" loading>
+                      {labText("Saving")}
+                    </Button>
+                    <Checkbox aria-label={labText("Disabled checkbox")} checked disabled />
+                    <Switch aria-label={labText("Disabled switch")} checked disabled />
+                  </div>
+                </div>
+                <ConversationSection
+                  title={labText("Conversation button styles")}
+                  items={
+                    showDemoConversation
+                      ? [{ id: "ui-lab-room", title: "UI Lab conversation", members: [], messages: [] }]
+                      : []
+                  }
+                  activeConversationId="ui-lab-room"
+                  currentUserID="ui-lab-user"
+                  usersById={new Map()}
+                  locale={locale}
+                  t={createTranslator(locale)}
+                  onSelect={() => {}}
+                  onDelete={() => setShowDemoConversation(false)}
+                />
+              </section>
+            </div>
+            <div className={styles.panel} hidden={active !== "selection-controls"}>
+              <section className={styles.card} id="selection-controls">
+                <h2>{labText("Selection controls")}</h2>
+                <div className={styles.grid}>
+                  <Field label={labText("Sort order")}>
+                    <Select
+                      value={sort}
+                      onValueChange={setSort}
+                      options={[
+                        { value: "", label: labText("None") },
+                        { value: "recent", label: labText("Most recent") },
+                        { value: "name", label: labText("Name") },
+                      ]}
+                    />
+                  </Field>
+                  <Field
+                    label={labText("Search picker")}
+                    hint={labText("Try arrows, Enter, Escape and Tab")}
+                    error={error ? labText("Choose a model") : undefined}
+                  >
+                    <Combobox
+                      value={value}
+                      onValueChange={setValue}
+                      options={options}
+                      searchPlaceholder={labText("Search models")}
+                      emptyLabel={labText("No matching models")}
+                    />
+                  </Field>
+                  <Field label={labText("Disabled picker")}>
+                    <Combobox
+                      disabled
+                      value={value}
+                      options={options}
+                      searchPlaceholder={labText("Search disabled picker")}
+                    />
+                  </Field>
+                  <Field label={labText("Model")}>
+                    <ModelPicker
+                      providerID="opencsg"
+                      value={model}
+                      models={["auto", "qwen-3.5", "deepseek-v4", "a-model-with-a-long-name"]}
+                      onChange={setModel}
+                      placeholder={labText("Choose a model")}
+                      t={createTranslator(locale)}
+                    />
+                  </Field>
+                </div>
+                <output className={styles.output}>
+                  {labText("Selected: ")}
+                  {value}
+                </output>
+                <Button variant="secondaryGray" onClick={() => setValue("")}>
+                  {labText("Clear selection")}
+                </Button>
+              </section>
+            </div>
+            <div className={styles.panel} hidden={active !== "reasoning-effort"}>
+              <section className={styles.card} id="reasoning-effort">
+                <h2>{labText("Reasoning effort")}</h2>
+                <div className={styles.reasoningPreview}>
+                  <ReasoningEffortPicker
+                    value={reasoning}
+                    agentEffort="high"
+                    onValueChange={setReasoning}
+                    onValueCommit={setReasoning}
+                    t={createTranslator(locale)}
                   />
-                </Field>
-                <Button>Next dialog field</Button>
-              </DialogBody>
-            </DialogContent>
-          </DialogRoot>
+                </div>
+              </section>
+            </div>
+            <div className={styles.panel} hidden={active !== "dialogs-and-empty"}>
+              <section className={styles.card} id="dialogs-and-empty">
+                <PanelHeader>
+                  <h2>{labText("Dialog and empty state")}</h2>
+                  <Button onClick={() => setDialog(true)}>{labText("Open nested dialog")}</Button>
+                </PanelHeader>
+                <EmptyState
+                  title={labText("No items yet")}
+                  description={labText("Add an item to see it here.")}
+                  actions={<Button variant="secondaryGray">{labText("Add item")}</Button>}
+                />
+              </section>
+            </div>
+            <DialogRoot open={dialog} onOpenChange={setDialog}>
+              <DialogContent aria-describedby={undefined}>
+                <DialogHeader>
+                  <DialogTitle>{labText("Nested selection")}</DialogTitle>
+                  <DialogCloseButton label={labText("Close dialog")} />
+                </DialogHeader>
+                <DialogBody>
+                  <Field label={labText("Dialog model")} required>
+                    <Combobox
+                      value={value}
+                      onValueChange={setValue}
+                      options={options}
+                      searchPlaceholder={labText("Search dialog models")}
+                      emptyLabel={labText("No matches")}
+                      required
+                      name="model"
+                    />
+                  </Field>
+                  <Button>{labText("Next dialog field")}</Button>
+                </DialogBody>
+              </DialogContent>
+            </DialogRoot>
+          </div>
         </main>
       </div>
     </TooltipProvider>
+  );
+}
+
+export function UiLab() {
+  return (
+    <LabLocaleProvider>
+      <UiLabContent />
+    </LabLocaleProvider>
   );
 }

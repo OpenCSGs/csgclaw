@@ -1,7 +1,7 @@
 .btn {
   --btn-height: 40px;
-  --btn-min-width: 80px;
-  --btn-padding-x: 16px;
+  --btn-min-width: 0px;
+  --btn-padding-x: 14px;
   --btn-font-size: 14px;
   --btn-line-height: 20px;
   --button-border: var(--button-neutral-border);
@@ -16,19 +16,20 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: var(--space-1);
+  gap: var(--btn-gap, var(--space-1));
   min-width: var(--btn-min-width);
   min-height: var(--btn-height);
   height: var(--btn-height);
-  padding: 0 var(--btn-padding-x);
+  padding: 0 calc(var(--btn-padding-x) - 1px);
   border: 1px solid var(--button-border);
-  border-radius: var(--radius-base);
+  border-radius: var(--radius-md);
   background: var(--button-background);
   color: var(--button-text);
   box-shadow: var(--button-shadow);
-  font-family: var(--font-sans);
+  font-family: var(--button-font-family);
   font-size: var(--btn-font-size);
-  font-weight: var(--btn-font-weight, var(--font-weight-medium));
+  font-weight: var(--btn-font-weight, var(--button-font-weight));
+  font-synthesis: none;
   line-height: var(--btn-line-height);
   white-space: nowrap;
   text-align: center;
@@ -41,23 +42,23 @@
     box-shadow 180ms ease;
 }
 .btn-sm {
-  --btn-height: 32px;
-  --btn-min-width: 64px;
+  --btn-height: 36px;
+  --btn-min-width: 0px;
   --btn-padding-x: 12px;
-  --btn-font-size: 13px;
-  --btn-line-height: 18px;
+  --btn-font-size: 14px;
+  --btn-line-height: 20px;
 }
 .btn-lg {
   --btn-height: 44px;
-  --btn-min-width: 88px;
-  --btn-padding-x: 18px;
-  --btn-font-size: 15px;
-  --btn-line-height: 22px;
+  --btn-min-width: 0px;
+  --btn-padding-x: 16px;
+  --btn-font-size: 16px;
+  --btn-line-height: 24px;
 }
 .btn-xl {
   --btn-height: 48px;
-  --btn-min-width: 96px;
-  --btn-padding-x: 20px;
+  --btn-min-width: 0px;
+  --btn-padding-x: 18px;
   --btn-font-size: 16px;
   --btn-line-height: 24px;
 }
@@ -67,6 +68,8 @@
   --btn-padding-x: 24px;
   --btn-font-size: 18px;
   --btn-line-height: 28px;
+  padding-inline: var(--btn-padding-x);
+  border-radius: var(--radius-base);
 }
 .btn.btn-primary {
   --button-border: var(--button-primary-border);
@@ -96,10 +99,10 @@
 .btn.btn-outline-danger {
   --button-border: var(--button-danger-outline-border);
   --button-background: var(--button-danger-outline-background);
-  --button-text: var(--danger-text);
+  --button-text: var(--button-danger-text);
   --button-hover-border: var(--button-danger-outline-hover-border);
   --button-hover-background: var(--danger-hover-background);
-  --button-hover-text: var(--danger-text-strong);
+  --button-hover-text: var(--button-danger-hover-text);
   --button-ring: var(--error-focus-ring);
 }
 .btn:is(
@@ -126,8 +129,8 @@
   --button-hover-background: var(--button-tertiary-hover-background);
 }
 .btn:is(.btn-tertiary-danger, .btn-link-danger) {
-  --button-text: var(--danger-text);
-  --button-hover-text: var(--danger-text-strong);
+  --button-text: var(--button-danger-text);
+  --button-hover-text: var(--button-danger-hover-text);
   --button-hover-background: var(--danger-hover-background);
   --button-ring: var(--error-focus-ring);
 }
@@ -158,10 +161,10 @@
   outline: none;
   box-shadow: var(--button-shadow), var(--button-ring);
 }
-.btn:disabled {
+.btn:disabled:not(.btn-loading) {
   border-color: var(--button-disabled-border);
   background: var(--button-disabled-background);
-  color: var(--input-text-disabled);
+  color: var(--button-disabled-text);
   box-shadow: var(--button-disabled-shadow);
   cursor: not-allowed;
 }
@@ -172,17 +175,16 @@
     .btn-link-gray,
     .btn-link-color,
     .btn-link-danger
-  ):disabled {
+  ):disabled:not(.btn-loading) {
   border-color: transparent;
   background: transparent;
   box-shadow: none;
 }
-.btn.btn-loading.btn-primary:disabled {
-  border-color: var(--button-primary-border);
-  background: var(--primary-button-background);
-  color: var(--on-primary);
-}
 .btn.btn-loading:disabled {
+  border-color: var(--button-border);
+  background: var(--button-hover-background);
+  color: var(--button-text);
+  box-shadow: var(--button-shadow);
   cursor: wait;
 }
 .btn-content {
@@ -196,19 +198,10 @@
   width: 100%;
   height: 100%;
 }
-.btn.btn-loading .btn-content {
-  visibility: hidden;
-}
-.btn-loading-overlay {
-  position: absolute;
-  inset: 0;
-  display: grid;
-  place-items: center;
-  pointer-events: none;
-}
 .btn-loading-spinner {
-  width: 14px;
-  height: 14px;
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
   border: 2px solid currentColor;
   border-top-color: transparent;
   border-radius: var(--radius-full);
@@ -221,64 +214,9 @@
   }
 }
 
-/* Icon sizes are a component API, independent of workspace button selectors. */
-.csg-icon-button.btn-sm {
-  --btn-height: 28px;
-}
-.csg-icon-button.btn-md {
-  --btn-height: 34px;
-}
-.csg-icon-button.btn-lg {
-  --btn-height: 40px;
-}
-.csg-icon-button:is(.btn-danger, .btn-outline-danger, .btn-tertiary-danger).btn-sm {
-  --btn-height: 36px;
-}
-.csg-icon-button:is(.btn-danger, .btn-outline-danger, .btn-tertiary-danger).btn-md {
-  --btn-height: 40px;
-}
-.csg-icon-button:is(.btn-danger, .btn-outline-danger, .btn-tertiary-danger).btn-lg {
-  --btn-height: 44px;
-}
-
 .btn.btn-secondary-gray {
-  --btn-height: 42px;
-  --btn-min-width: 0px;
-  --btn-padding-x: 14px;
-  --btn-font-size: 14px;
-  --btn-line-height: 22px;
-  --btn-icon-size: 14px;
-  --btn-gap: 4px;
   --button-text: var(--button-neutral-text);
   --button-ring: var(--button-neutral-focus-ring);
-  border-radius: var(--radius-md);
-  /* Figma's inside stroke does not add to its auto-layout padding. */
-  padding-inline: calc(var(--btn-padding-x) - 1px);
-  gap: var(--btn-gap);
-}
-.btn-secondary-gray.btn-sm {
-  --btn-height: 34px;
-  --btn-padding-x: 12px;
-  --btn-font-size: 12px;
-  --btn-line-height: 18px;
-  --btn-font-weight: var(--font-weight-normal);
-  --btn-icon-size: 12px;
-}
-.btn-secondary-gray.btn-lg {
-  --btn-height: 44px;
-  --btn-padding-x: 16px;
-  --btn-font-size: 16px;
-  --btn-line-height: 24px;
-  --btn-icon-size: 16px;
-  --btn-gap: 6px;
-}
-.btn-secondary-gray.btn-xl {
-  --btn-height: 48px;
-  --btn-padding-x: 18px;
-  --btn-font-size: 16px;
-  --btn-line-height: 24px;
-  --btn-icon-size: 20px;
-  --btn-gap: 6px;
 }
 .btn-secondary-gray.btn-2xl {
   --btn-height: 60px;
@@ -287,40 +225,42 @@
   --btn-line-height: 28px;
   --btn-icon-size: 24px;
   --btn-gap: 10px;
-}
-.btn-secondary-gray.csg-icon-button {
-  padding: 0;
-}
-.btn-secondary-gray.csg-icon-button.btn-sm {
-  --btn-height: 28px;
-}
-.btn-secondary-gray.csg-icon-button.btn-md {
-  --btn-height: 34px;
-}
-.btn-secondary-gray.csg-icon-button.btn-lg {
-  --btn-height: 40px;
+  padding-inline: calc(var(--btn-padding-x) - 1px);
+  border-radius: var(--radius-md);
 }
 .btn-secondary-gray.csg-icon-button.btn-2xl {
   --btn-height: 56px;
 }
-.btn-secondary-gray .btn-label {
+.btn.csg-icon-button.btn-2xl {
+  padding: 0;
+}
+.btn .btn-label {
   padding-inline: 2px;
 }
-.btn-secondary-gray .btn-content > svg,
-.btn-secondary-gray.csg-icon-button .btn-content > span,
-.btn-secondary-gray.csg-icon-button .btn-content > span > svg {
-  width: var(--btn-icon-size);
-  height: var(--btn-icon-size);
+.btn-content > svg,
+.csg-icon-button .btn-content > span > svg {
+  width: var(--btn-icon-size, 20px);
+  height: var(--btn-icon-size, 20px);
   flex-shrink: 0;
 }
-.btn-secondary-gray:disabled {
+.btn-secondary-gray:disabled:not(.btn-loading) {
   background: var(--button-neutral-disabled-background);
   color: var(--button-neutral-disabled-text);
 }
 .btn-md {
   --btn-height: 40px;
-  --btn-min-width: 80px;
-  --btn-padding-x: 16px;
+  --btn-min-width: 0px;
+  --btn-padding-x: 14px;
   --btn-font-size: 14px;
   --btn-line-height: 20px;
+}
+
+.btn-lg,
+.btn-xl {
+  --btn-gap: 6px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .btn-loading-spinner {
+    animation: none;
+  }
 }

@@ -1,0 +1,114 @@
+.foundation {
+  min-width: 0;
+  margin-block: var(--space-6);
+  padding: var(--space-5);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xl);
+  background: var(--panel);
+}
+.foundation p {
+  color: var(--muted);
+  line-height: 1.6;
+}
+.foundation a {
+  color: var(--primary);
+}
+.demo {
+  min-width: 0;
+  padding: var(--space-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  margin-block: var(--space-4);
+}
+.controls {
+  display: flex;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+.stage,
+.reference {
+  padding: 60px 32px;
+  background: white;
+  border-radius: 8px;
+  margin-block: var(--space-4);
+}
+.reference {
+  overflow-x: auto;
+}
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr));
+  gap: var(--space-4);
+}
+.slider {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+  height: 24px;
+  touch-action: none;
+  user-select: none;
+  font-family: "PingFang SC", var(--font-family-text);
+}
+.track {
+  position: relative;
+  flex: 1;
+  height: 8px;
+  background: #e9eaeb;
+  border-radius: 9999px;
+}
+.range {
+  position: absolute;
+  height: 100%;
+  background: #3250bd;
+  border-radius: 9999px;
+}
+.thumb {
+  display: block;
+  position: relative;
+  width: 24px;
+  height: 24px;
+  border: 1.5px solid #3250bd;
+  border-radius: 50%;
+  background: white;
+  box-shadow:
+    0 4px 6px -1px #0a0d121a,
+    0 2px 4px -2px #0a0d120f;
+}
+.thumb:hover {
+  background: #f5f5ff;
+}
+.thumb:focus-visible {
+  outline: 2px solid #3250bd;
+  outline-offset: 3px;
+}
+.slider[data-disabled] {
+  opacity: 0.5;
+}
+.value {
+  position: absolute;
+  top: 30px;
+  left: 50%;
+  transform: translateX(-50%);
+  color: #181d27;
+  font-size: 16px;
+  line-height: 24px;
+  font-weight: 400;
+  white-space: nowrap;
+}
+.slider[data-label="Top floating"] .value {
+  top: -50px;
+  padding: 8px 12px;
+  background: white;
+  border: 1px solid #00000014;
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 18px;
+  font-weight: 500;
+  box-shadow: 0 4px 8px #0a0d1214;
+}
+@media (max-width: 600px) {
+  .foundation {
+    padding: var(--space-3);
+  }
+}

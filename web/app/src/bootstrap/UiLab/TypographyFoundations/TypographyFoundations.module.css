@@ -1,0 +1,78 @@
+.foundation {
+  margin-block: var(--space-6);
+  padding: var(--space-5);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xl);
+  background: var(--panel);
+}
+.foundation h2 {
+  font: var(--text-xl-medium);
+}
+.foundation p {
+  color: var(--muted);
+  line-height: 1.6;
+}
+.foundation a {
+  color: var(--primary);
+}
+.eyebrow {
+  font: var(--text-sm-medium);
+  letter-spacing: 0.08em;
+}
+.notice {
+  margin-block: var(--space-5);
+  padding: var(--space-4);
+  border-inline-start: 3px solid var(--primary);
+  background: var(--panel-soft);
+  border-radius: var(--radius-md);
+}
+.controls {
+  display: grid;
+  gap: var(--space-4);
+  margin-block: var(--space-5);
+}
+.scale {
+  border-top: 1px solid var(--line);
+  padding-block: var(--space-4);
+}
+.mapping {
+  font: var(--text-sm-normal);
+  overflow-wrap: anywhere;
+}
+.variants {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4);
+}
+.variant {
+  min-width: 0;
+  padding: var(--space-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+}
+.variant h4 {
+  font: var(--text-sm-medium);
+  color: var(--muted);
+  margin-top: 0;
+}
+.variant .sample {
+  color: var(--text);
+  overflow-wrap: anywhere;
+  font-synthesis: none;
+}
+.variant code,
+.variant small {
+  display: block;
+  overflow-wrap: anywhere;
+  color: var(--muted);
+  margin-top: var(--space-2);
+  line-height: 1.5;
+}
+@media (max-width: 700px) {
+  .variants {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .foundation {
+    padding: var(--space-3);
+  }
+}

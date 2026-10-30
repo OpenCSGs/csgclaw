@@ -1,0 +1,90 @@
+{
+  "source": "https://www.figma.com/design/2s3AVSZ5FfBnCR5nI2AriR/?node-id=1030-33573",
+  "captured": "2026-10-30",
+  "styles": [
+    {
+      "name": "shadow-xs",
+      "css": "0px 1px 2px 0px #0a0d120d",
+      "node": "5253:373440",
+      "group": "Shadows"
+    },
+    {
+      "name": "shadow-sm",
+      "css": "0px 1px 3px 0px #0a0d121a,0px 1px 2px -1px #0a0d121a",
+      "node": "5253:373440",
+      "group": "Shadows"
+    },
+    {
+      "name": "shadow-md",
+      "css": "0px 4px 6px -1px #0a0d121a,0px 2px 4px -2px #0a0d120f",
+      "node": "5253:373440",
+      "group": "Shadows"
+    },
+    {
+      "name": "shadow-lg",
+      "css": "0px 12px 16px -4px #0a0d1214,0px 4px 6px -2px #0a0d1208,0px 2px 2px -1px #0a0d120a",
+      "node": "5253:373440",
+      "group": "Shadows"
+    },
+    {
+      "name": "shadow-xl",
+      "css": "0px 20px 24px -4px #0a0d1214,0px 8px 8px -4px #0a0d1208,0px 3px 3px -1.5px #0a0d120a",
+      "node": "5253:373440",
+      "group": "Shadows"
+    },
+    {
+      "name": "shadow-2xl",
+      "css": "0px 24px 48px -12px #0a0d122e,0px 4px 4px -2px #0a0d120a",
+      "node": "5253:373440",
+      "group": "Shadows"
+    },
+    {
+      "name": "shadow-3xl",
+      "css": "0px 32px 64px -12px #0a0d1224,0px 5px 5px -2.5px #0a0d120a",
+      "node": "5253:373440",
+      "group": "Shadows"
+    },
+    {
+      "name": "focus-ring",
+      "css": "0px 0px 0px 2px white,0px 0px 0px 4px #4d6ad6",
+      "node": "5424:398994",
+      "group": "Focus rings"
+    },
+    {
+      "name": "focus-ring-error",
+      "css": "0px 0px 0px 2px white,0px 0px 0px 4px #f04438",
+      "node": "5424:398994",
+      "group": "Focus rings"
+    },
+    {
+      "name": "focus-ring-shadow-xs",
+      "css": "0px 1px 2px 0px #0a0d120d,0px 0px 0px 2px white,0px 0px 0px 4px #4d6ad6",
+      "node": "5424:399464",
+      "group": "Focus rings"
+    },
+    {
+      "name": "focus-ring-shadow-sm",
+      "css": "0px 1px 3px 0px #0a0d121a,0px 1px 2px 0px #0a0d121a,0px 0px 0px 2px white,0px 0px 0px 4px #4d6ad6",
+      "node": "5424:399464",
+      "group": "Focus rings"
+    },
+    {
+      "name": "focus-ring-error-shadow-xs",
+      "css": "0px 1px 2px 0px #0a0d120d,0px 0px 0px 2px white,0px 0px 0px 4px #f04438",
+      "node": "5424:399464",
+      "group": "Focus rings"
+    },
+    {
+      "name": "focus-ring-shadow-xs-skeuomorphic",
+      "css": "0px 1px 2px 0px #0a0d120d,0px 0px 0px 2px white,0px 0px 0px 4px #4d6ad6, inset 0px 0px 0px 1px #0a0d122e,inset 0px -2px 0px 0px #0a0d120d",
+      "node": "7396:260015",
+      "group": "Skeuomorphic focus rings"
+    },
+    {
+      "name": "focus-ring-error-shadow-xs-skeuomorphic",
+      "css": "0px 1px 2px 0px #0a0d120d,0px 0px 0px 2px white,0px 0px 0px 4px #f04438, inset 0px 0px 0px 1px #0a0d122e,inset 0px -2px 0px 0px #0a0d120d",
+      "node": "7396:260015",
+      "group": "Skeuomorphic focus rings"
+    }
+  ]
+}

@@ -44,6 +44,12 @@ If a page needs a new highly customized UI, start with a page-private component.
 
 Use `Button` or `IconButton` for commands and `LinkButton` for navigation. `LinkButton` renders a native anchor, preserves `href`, `target`, `rel` and keyboard activation, and shares Button's scoped variant, size, content and focus styles. Do not recreate a button by adding global `btn` classes to native elements.
 
+Boxed buttons and standard icon buttons use the confirmed Figma sm/md/lg/xl heights of 36/40/44/48px and an 8px radius. Text links retain intrinsic height and no padding. The existing 2xl size is retained separately; utility/close-specific sizing is not inferred from the standard icon-button API.
+
+Loading disables activation, sets `aria-busy`, and displays a 20px spinner alongside `loadingLabel`. Without a loading label, plain child text is retained; supply a localized `loadingLabel` for composed labels. Icon buttons render only the spinner and keep their accessible label. Explicit `loadingLabel={null}` requests a spinner-only text button; provide an accessible name. Loading colors retain the variant's theme roles instead of using disabled colors.
+
+Button typography uses the dedicated `--button-font-family` (MiSans with the existing system fallback) and `--button-font-weight: 380` from the verified Figma Medium style. Synthetic weight/style is disabled. No MiSans font binary is bundled, so glyph fidelity still depends on local font availability. Button-specific gray, destructive, hover and disabled text roles match the light export without changing general text tokens; dark roles retain the existing product theme mapping until design modes are verified.
+
 ## Breadcrumb
 
 `Breadcrumb` is a semantic navigation pattern in the shared UI library; Radix Primitives does not provide a dedicated breadcrumb primitive. Use the `home` item for the home/root action and `items` for path segments. Mark the current segment with `current`, and provide either `href` or `onClick` for navigable segments. Long paths collapse their middle segments into the shared Radix Dropdown Menu; `maxVisibleItems` and `overflowLabel` allow callers to adapt the layout and localization.
@@ -125,3 +131,11 @@ Use `size="sm"` on `DropdownMenuContent` for compact menus. Section headings use
 ## Switch
 
 `Switch` wraps the `Switch` namespace from `radix-ui` for boolean settings. Use `checked`, `onCheckedChange`, and `disabled` for controlled updates, and provide an accessible name through `aria-label` or `aria-labelledby`. Use `size="sm"` where a compact switch is needed; the default is `md`. The shared styles support keyboard focus, disabled states, and reduced motion.
+
+## Checkbox
+
+Checkbox composes Radix checkbox semantics. Optional `indicator` supplies decorative indicator content (for example verified design SVGs); the existing Check remains the default. The caller can provide matching checked/indeterminate artwork without replacing keyboard or disabled behavior. Name the control with an associated label or aria-label, and keep the indicator hidden from assistive technology. This additive slot does not migrate production checkbox styling.
+
+## Tooltip
+
+Tooltip composes the shared Root/Trigger/Content wrappers and portals by default. `TooltipArrow` exposes the Radix positioning-aware arrow, including `asChild` for decorative original design assets. Keep collision detection enabled; arrow artwork must follow Content `data-side` when placement flips. Content retains the tooltip layer token and pointer-transparent behavior. The additive arrow export does not change existing product tooltip styles.
