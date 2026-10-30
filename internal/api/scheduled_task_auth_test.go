@@ -78,8 +78,8 @@ func TestManagerScheduledTaskCLIWithScopedCredential(t *testing.T) {
 		t.Fatalf("context agents = %+v", info.Agents)
 	}
 	var saved apitypes.ScheduledTask
-	call(schedulecmd.NewCmd(), []string{"create", "--title", "周报", "--agent-id", manager.ID, "--prompt", "汇总上周工作并输出周报", "--recurrence", "weekly", "--first-run-at", "2026-11-02T10:00:00+08:00"}, &saved)
-	if saved.ID == "" || saved.AgentID != manager.ID {
+	call(schedulecmd.NewCmd(), []string{"create", "--title", "周报", "--agent-id", manager.ID, "--prompt", "汇总上周工作并输出周报", "--recurrence", "weekly", "--first-run-at", "2026-11-02T10:00:00+08:00", "--expires-at", "2026-11-30T23:59:00+08:00"}, &saved)
+	if saved.ID == "" || saved.AgentID != manager.ID || saved.ExpiresAt == nil {
 		t.Fatalf("saved = %+v", saved)
 	}
 	var listed []apitypes.ScheduledTask
@@ -93,6 +93,24 @@ func TestManagerScheduledTaskCLIWithScopedCredential(t *testing.T) {
 		t.Fatalf("updated executor = %q", saved.AgentID)
 	}
 	call(schedulecmd.NewCmd(), []string{"update", "--id", saved.ID, "--agent-id", manager.ID}, &saved)
+	// Omitting expiration leaves it intact; an explicit empty value clears it.
+	call(schedulecmd.NewCmd(), []string{"list"}, &listed)
+	if len(listed) != 1 || listed[0].ExpiresAt == nil {
+		t.Fatalf("unrelated update removed expiration: %+v", listed)
+	}
+	var cleared apitypes.ScheduledTask
+	call(schedulecmd.NewCmd(), []string{"update", "--id", saved.ID, "--expires-at", ""}, &cleared)
+	if cleared.ID != saved.ID || cleared.ExpiresAt != nil || cleared.Recurrence != saved.Recurrence || !cleared.NextRunAt.Equal(saved.NextRunAt) {
+		t.Fatalf("cleared schedule = %+v", cleared)
+	}
+	saved = cleared
+	reloaded, err := scheduledtask.NewService(store, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if items := reloaded.List(); len(items) != 1 || items[0].ExpiresAt != nil {
+		t.Fatalf("cleared expiration was not persisted: %+v", items)
+	}
 	if runs := h.scheduledTaskSvc.TriggerDue(context.Background()); len(runs) != 0 {
 		t.Fatal("schedule triggered early")
 	}
@@ -106,6 +124,10 @@ func TestManagerScheduledTaskCLIWithScopedCredential(t *testing.T) {
 	completed, ok := core.Get(runs[0].TaskID)
 	if !ok || completed.Status != taskcore.StatusCompleted || completed.AssignedTo != agent.ManagerParticipantID {
 		t.Fatalf("completed task = %+v", completed)
+	}
+	now = time.Date(2026, 12, 7, 2, 0, 0, 0, time.UTC)
+	if afterExpiry := h.scheduledTaskSvc.TriggerDue(context.Background()); len(afterExpiry) != 1 || afterExpiry[0].Status != scheduledtask.StatusTriggered {
+		t.Fatalf("schedule stopped at its cleared expiration: %+v", afterExpiry)
 	}
 
 	for _, noAuth := range []bool{false, true} {

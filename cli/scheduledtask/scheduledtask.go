@@ -62,7 +62,7 @@ func (c cmd) Run(ctx context.Context, run *command.Context, args []string, globa
 	prompt := fs.String("prompt", "", "instructions executed at the scheduled time")
 	recurrence := fs.String("recurrence", "once", "once, daily, weekly, or monthly")
 	firstRun := fs.String("first-run-at", "", "first/next run in RFC3339 with an explicit UTC offset")
-	expires := fs.String("expires-at", "", "optional expiration in RFC3339")
+	expires := fs.String("expires-at", "", "optional expiration in RFC3339; pass an empty value on update to clear it")
 	enabled := fs.Bool("enabled", true, "enable the schedule")
 	if err := fs.Parse(args[1:]); err != nil {
 		return err
@@ -83,6 +83,9 @@ func (c cmd) Run(ctx context.Context, run *command.Context, args []string, globa
 	}
 	for key, value := range map[string]string{"first-run-at": *firstRun, "expires-at": *expires} {
 		if value == "" && (action != "create" || key != "first-run-at") {
+			if action == "update" && key == "expires-at" && visited[key] {
+				payload["expires_at"] = nil
+			}
 			continue
 		}
 		parsed, err := time.Parse(time.RFC3339, value)

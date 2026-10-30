@@ -48,6 +48,8 @@ Manager uses its configured model and embedded `scheduled-tasks` skill to parse 
 
 Both `csgclaw` and `csgclaw-cli` expose `scheduled-task context|list|create|update`. These call the existing `/api/v1/scheduled-tasks` CRUD API; `GET /api/v1/scheduled-tasks/context` returns only executor ID/name/role, current server time and supported recurrences. Model configuration and credentials are excluded. Schedule timestamps and recurrence calculations retain their existing behavior.
 
+For updates, omitting `--expires-at` preserves the existing end date. Passing `--expires-at ''` sends `expires_at: null` to clear it; supplying a timestamp replaces it.
+
 Manager runs these commands with its scoped Agent credential. The API explicitly permits Manager's context/list/create/update routes; workers cannot manage schedules, and read-only execution mode permits only context/list. This does not grant configuration administration, schedule deletion, or immediate execution. Regression coverage uses the CLI against the authenticated HTTP router through saving, editing, triggering, and Manager claim/completion.
 
 Successful schedule creation, editing, and deletion publish `scheduled_task.changed` through the existing workspace event stream. The browser revalidates the shared schedule query so both the list and sidebar count update even while a Manager conversation is open. Event-stream reconnection and entering the Scheduled tasks page also revalidate the list to recover missed notifications.
