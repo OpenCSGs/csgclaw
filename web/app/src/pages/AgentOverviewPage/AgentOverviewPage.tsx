@@ -273,6 +273,7 @@ export function AgentOverviewPage() {
                     href={templatesURL}
                     target="_blank"
                     rel="noopener noreferrer"
+                    title={t("iaTemplateManageOnHubHint")}
                   >
                     <ExternalLink size={13} />
                     {t("iaTemplateManageOnHub")}

@@ -661,6 +661,9 @@
   --button-neutral-hover-border: var(--gray-300);
   --button-neutral-hover-background: var(--gray-50);
   --button-neutral-hover-text: var(--gray-800);
+  --button-neutral-focus-ring: 0 0 0 var(--space-1) color-mix(in srgb, var(--gray-400) 14%, transparent);
+  --button-neutral-disabled-background: var(--white);
+  --button-neutral-disabled-text: var(--gray-400);
   --button-tertiary-text: var(--gray-600);
   --button-tertiary-hover-text: var(--gray-700);
   --button-tertiary-hover-background: var(--gray-50);
@@ -694,6 +697,9 @@
   --button-neutral-hover-border: color-mix(in srgb, var(--gray-300) 28%, transparent);
   --button-neutral-hover-background: color-mix(in srgb, var(--gray-700) 36%, var(--gray-900));
   --button-neutral-hover-text: var(--gray-25);
+  --button-neutral-focus-ring: var(--focus-ring);
+  --button-neutral-disabled-background: var(--button-disabled-background);
+  --button-neutral-disabled-text: var(--input-text-disabled);
   --button-tertiary-text: var(--gray-300);
   --button-tertiary-hover-text: var(--gray-25);
   --button-tertiary-hover-background: var(--gray-800);

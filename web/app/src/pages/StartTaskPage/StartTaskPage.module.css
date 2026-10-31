@@ -162,14 +162,14 @@
   margin: 0;
 }
 .emptyRoom {
-  align-self: flex-start;
-  border: 0;
-  background: transparent;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.emptyRoomHint {
   color: var(--muted);
-  padding: 4px;
-  font: inherit;
   font-size: 12px;
-  cursor: pointer;
 }
 .examples {
   margin-top: 34px;

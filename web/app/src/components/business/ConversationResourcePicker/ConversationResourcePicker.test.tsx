@@ -264,7 +264,7 @@ it("keeps the picker open through pagination and dismisses on a non-focusable ou
   await screen.findByTitle("app:first");
   await user.click(screen.getByRole("button", { name: "taskEntryLoadMore" }));
   expect(screen.getByRole("combobox")).toHaveFocus();
-  expect(screen.getByRole("button", { name: "loading" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "resourceLoading" })).toBeDisabled();
   fireEvent.blur(screen.getByRole("combobox"), { relatedTarget: null });
   expect(screen.getByRole("listbox")).toBeInTheDocument();
   finishPage({ items: [item("second")], total: 2, list_revision: "r", has_more: false });

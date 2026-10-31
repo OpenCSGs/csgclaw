@@ -28,7 +28,7 @@ it("edits the personal avatar above the profile dialog without closing the profi
   const editor = screen.getByRole("dialog", { name: "editAvatar" });
   expect(profile).not.toContainElement(editor);
   await user.click(within(editor).getAllByRole("radio")[0]);
-  await user.click(within(editor).getByRole("button", { name: "confirm" }));
+  await user.click(within(editor).getByRole("button", { name: "avatarApply" }));
   expect(onAvatarChange).toHaveBeenCalledOnce();
   expect(onAvatarChange).toHaveBeenCalledWith(expect.stringMatching(/^avatar\//));
   expect(screen.queryByRole("dialog", { name: "editAvatar" })).not.toBeInTheDocument();
@@ -55,7 +55,7 @@ it("traps avatar editor focus and returns it to the profile when canceled", asyn
   const trigger = screen.getByRole("button", { name: "editAvatar" });
   await user.click(trigger);
   const editor = screen.getByRole("dialog", { name: "editAvatar" });
-  within(editor).getByRole("button", { name: "confirm" }).focus();
+  within(editor).getByRole("button", { name: "avatarApply" }).focus();
   await user.tab();
   expect(editor).toContainElement(document.activeElement as HTMLElement);
   await user.click(within(editor).getByRole("button", { name: "cancel" }));

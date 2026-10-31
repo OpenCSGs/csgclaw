@@ -9,6 +9,7 @@
 - 修改 Vite 应用源码、测试、包或配置文件、public 资源，或生成式前端资产链路前，先阅读并遵循本规范。
 - 常见触发范围包括 React 页面、组件、hooks、共享 models、路由 helper、API client、CSS/Tailwind/tokens、i18n 文案、Vite/Vitest/TypeScript 配置、依赖变更、public 资源 URL 和 `web/static-dist` 处理。
 - 修改 UI primitives、Radix wrappers、表单控件、浮层或组件库 export 时，还要遵循 `docs/tech/web/ui-components.md` 或 `docs/tech/web/ui-components.zh.md`。
+- 修改用户可见界面时，还需遵循[交互设计规范](interaction-design.zh.md)，覆盖布局适配、图标文案、多语言、字段、反馈与浏览器验证。
 
 ## 工具链
 

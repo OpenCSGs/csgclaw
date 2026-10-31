@@ -1,4 +1,4 @@
-import { DialogContent, DialogDescription, DialogRoot, DialogTitle, Tooltip } from "@/components/ui";
+import { Button, DialogContent, DialogDescription, DialogRoot, DialogTitle, Tooltip } from "@/components/ui";
 import { AgentIcon } from "@/components/ui/Icons";
 import { AGENT_AVATAR_GROUPS, AGENT_AVATAR_OPTIONS, normalizeAgentAvatarPath } from "@/shared/avatarOptions";
 import { Edit3, ImagePlus, UploadCloud, X, ZoomIn, ZoomOut } from "lucide-react";
@@ -416,17 +416,17 @@ export function AgentAvatarPicker({
               )}
             </div>
             <div className="agent-avatar-editor-actions">
-              <button className="agent-avatar-editor-button secondary" type="button" onClick={closeEditor}>
+              <Button variant="secondaryGray" size="lg" onClick={closeEditor}>
                 {t("cancel")}
-              </button>
-              <button
-                className="agent-avatar-editor-button primary"
-                type="button"
+              </Button>
+              <Button
+                variant="primary"
+                size="lg"
                 disabled={activeTab === "upload" && !uploadSource}
                 onClick={() => void confirmDraft()}
               >
-                {t("confirm")}
-              </button>
+                {t("avatarApply")}
+              </Button>
             </div>
           </DialogContent>
         </DialogRoot>

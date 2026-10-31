@@ -156,42 +156,42 @@ export function TaskDirectoryPicker({
                 {error}
               </p>
             ) : null}
-            <Button
-              variant="tertiaryGray"
-              size="sm"
-              className={styles.configureButton}
-              disabled={disabled || picking}
-              onClick={() => {
-                setDraft(effective);
-                setError("");
-                setOpen(false);
-                setManualOpen(true);
-              }}
-            >
-              <AddDirectoryIcon />
-              {t("iaWorkdirManual")}
-            </Button>
-            <Button
-              variant="tertiaryGray"
-              size="sm"
-              className={styles.configureButton}
-              disabled={disabled || picking}
-              onClick={async () => {
-                setPicking(true);
-                setError("");
-                try {
-                  const path = await pickLocalDirectoryPath();
-                  if (path) await choose(path);
-                } catch (cause) {
-                  setError(cause instanceof Error ? cause.message : t("sendFailed"));
-                } finally {
-                  setPicking(false);
-                }
-              }}
-            >
-              <AddDirectoryIcon />
-              {t(picking ? "iaWorkdirAdding" : "iaWorkdirAdd")}
-            </Button>
+            <div className="flex items-center justify-between gap-2">
+              <Button
+                variant="tertiaryColor"
+                size="sm"
+                disabled={disabled || picking}
+                onClick={async () => {
+                  setPicking(true);
+                  setError("");
+                  try {
+                    const path = await pickLocalDirectoryPath();
+                    if (path) await choose(path);
+                  } catch (cause) {
+                    setError(cause instanceof Error ? cause.message : t("sendFailed"));
+                  } finally {
+                    setPicking(false);
+                  }
+                }}
+              >
+                <AddDirectoryIcon />
+                {t(picking ? "iaWorkdirAdding" : "iaWorkdirAdd")}
+              </Button>
+              <Button
+                variant="tertiaryColor"
+                size="sm"
+                disabled={disabled || picking}
+                onClick={() => {
+                  setDraft(effective);
+                  setError("");
+                  setOpen(false);
+                  setManualOpen(true);
+                }}
+              >
+                <AddDirectoryIcon />
+                {t("iaWorkdirManual")}
+              </Button>
+            </div>
           </div>
         }
       />

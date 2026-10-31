@@ -1,5 +1,5 @@
 import styles from "./Button.module.css";
-import { forwardRef } from "react";
+import { Children, forwardRef } from "react";
 import type { AnchorHTMLAttributes, ButtonHTMLAttributes, ReactNode } from "react";
 import { classNames } from "@/shared/lib/classNames";
 
@@ -55,6 +55,17 @@ function buttonClassName(variant: ButtonVariant, size: ButtonSize, className?: s
   return classNames(styles["btn"], "btn", variantClassNames[variant], sizeClassNames[size], className);
 }
 
+function buttonContent(children: ReactNode, variant: ButtonVariant, iconOnly = false) {
+  if (variant !== "secondaryGray" || iconOnly) return children;
+  return Children.map(children, (child) =>
+    typeof child === "string" || typeof child === "number" ? (
+      <span className={styles["btn-label"]}>{child}</span>
+    ) : (
+      child
+    ),
+  );
+}
+
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
   {
     active,
@@ -98,7 +109,9 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       aria-busy={ariaBusy ?? (loading ? true : undefined)}
       {...props}
     >
-      <span className={classNames(styles["btn-content"], "btn-content")}>{children}</span>
+      <span className={classNames(styles["btn-content"], "btn-content")}>
+        {buttonContent(children, variant, iconOnly)}
+      </span>
       {loading ? (
         <span className={styles["btn-loading-overlay"]} aria-hidden="true">
           <span className={styles["btn-loading-spinner"]} aria-hidden="true" />
@@ -116,7 +129,7 @@ export const LinkButton = forwardRef<HTMLAnchorElement, LinkButtonProps>(functio
 ) {
   return (
     <a ref={ref} data-csg-control="button" className={buttonClassName(variant, size, className)} {...props}>
-      <span className={classNames(styles["btn-content"], "btn-content")}>{children}</span>
+      <span className={classNames(styles["btn-content"], "btn-content")}>{buttonContent(children, variant)}</span>
     </a>
   );
 });
