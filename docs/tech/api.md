@@ -1660,7 +1660,7 @@ and `message_stop`.
 Only one turn may run for a session at a time.
 Different session IDs may run concurrently.
 Using the same global session with another agent returns `409 session_agent_conflict`.
-The server waits up to five minutes for a final agent response and returns `504 response_timeout` afterward.
+The server imposes no response duration limit. Client disconnects and explicit cancellation still cancel the running response.
 
 ### `POST /api/v1/agents/{agent}/sessions/{session_id}/responses/cancel`
 
