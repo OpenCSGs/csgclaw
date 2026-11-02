@@ -12,6 +12,7 @@ import (
 
 	"csgclaw/internal/agentengine"
 	agent "csgclaw/internal/agentengine/agents"
+	"csgclaw/internal/agentengine/contract"
 	"csgclaw/internal/im"
 	"csgclaw/internal/participant"
 	"csgclaw/internal/scheduledtask"
@@ -85,7 +86,13 @@ func (h *Handler) setAgentArchived(w http.ResponseWriter, r *http.Request, archi
 			}
 		}
 	}
-	item, err := h.agentEngine.Agents().SetArchived(r.Context(), id, archived)
+	ctx := r.Context()
+	if h.im != nil {
+		if user, ok := h.im.User(h.im.CurrentUserID()); ok {
+			ctx = contract.WithArchiveActor(ctx, user.Name)
+		}
+	}
+	item, err := h.agentEngine.Agents().SetArchived(ctx, id, archived)
 	// Even a runtime stop failure can leave the durable archive flag in place.
 	// Schedules and UI must reflect that disabled state, and retries are safe.
 	if archived && h.agentLifecycleState(id) == "archived" {
@@ -148,6 +155,8 @@ func (h *Handler) setAgentArchived(w http.ResponseWriter, r *http.Request, archi
 type agentArchiveImpact struct {
 	Teams          int `json:"teams"`
 	Rooms          int `json:"rooms"`
+	Spaces         int `json:"spaces"`
+	DirectChats    int `json:"direct_chats"`
 	ScheduledTasks int `json:"scheduled_tasks"`
 }
 
@@ -169,10 +178,19 @@ func (h *Handler) handleAgentArchiveImpact(w http.ResponseWriter, r *http.Reques
 			}
 		}
 		impact.Rooms = len(rooms)
+		for roomID := range rooms {
+			if room, ok := h.im.Room(roomID); ok {
+				if room.IsDirect {
+					impact.DirectChats++
+				} else {
+					impact.Spaces++
+				}
+			}
+		}
 	}
 	if h.scheduledTaskSvc != nil {
 		for _, item := range h.scheduledTaskSvc.List() {
-			if item.AgentID == id && item.Enabled {
+			if item.AgentID == id {
 				impact.ScheduledTasks++
 			}
 		}

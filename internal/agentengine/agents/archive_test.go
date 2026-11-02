@@ -2,9 +2,11 @@ package agents
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"csgclaw/internal/agentengine/contract"
 	"csgclaw/internal/config"
@@ -29,17 +31,18 @@ func TestArchivePersistsDisablesStartupAndPreservesWorkspaceOnDelete(t *testing.
 	if !svc.AuthorizesAgentAccessToken("agent-worker", token) {
 		t.Fatal("active agent token rejected")
 	}
-	if _, err := svc.SetArchived(context.Background(), "agent-worker", true); err != nil {
+	archiveCtx := contract.WithArchiveActor(context.Background(), "Jared")
+	if _, err := svc.SetArchived(archiveCtx, "agent-worker", true); err != nil {
 		t.Fatal(err)
 	}
 	item, _ := svc.Agent("agent-worker")
 	if svc.AuthorizesAgentAccessToken(item.ID, token) {
 		t.Fatal("archived agent token still authorized")
 	}
-	if item.ArchivedAt == nil || item.DesiredState != DesiredStateStopped || isConfiguredAgentStartupCandidate(item) {
+	if item.ArchivedAt == nil || item.ArchivedBy != "Jared" || item.DesiredState != DesiredStateStopped || isConfiguredAgentStartupCandidate(item) {
 		t.Fatalf("archive = %+v", item)
 	}
-	if repeated, err := svc.SetArchived(context.Background(), item.ID, true); err != nil || repeated.ArchivedAt == nil || !repeated.ArchivedAt.Equal(*item.ArchivedAt) {
+	if repeated, err := svc.SetArchived(contract.WithArchiveActor(context.Background(), "Other"), item.ID, true); err != nil || repeated.ArchivedAt == nil || !repeated.ArchivedAt.Equal(*item.ArchivedAt) || repeated.ArchivedBy != "Jared" {
 		t.Fatalf("repeat archive changed its transition identity: %+v %v", repeated, err)
 	}
 	if _, err := svc.Start(context.Background(), item.ID); err == nil {
@@ -52,7 +55,7 @@ func TestArchivePersistsDisablesStartupAndPreservesWorkspaceOnDelete(t *testing.
 		t.Fatal(err)
 	}
 	item, _ = svc.Agent(item.ID)
-	if item.ArchivedAt == nil {
+	if item.ArchivedAt == nil || item.ArchivedBy != "Jared" {
 		t.Fatal("archive lost after reload")
 	}
 	normal, err := svc.List(context.Background(), contract.AgentListOptions{})
@@ -60,11 +63,11 @@ func TestArchivePersistsDisablesStartupAndPreservesWorkspaceOnDelete(t *testing.
 		t.Fatalf("normal list = %v, %v", normal, err)
 	}
 	all, err := svc.List(context.Background(), contract.AgentListOptions{IncludeArchived: true})
-	if err != nil || len(all) != 1 || all[0].ArchivedAt == nil {
+	if err != nil || len(all) != 1 || all[0].ArchivedAt == nil || all[0].ArchivedBy != "Jared" {
 		t.Fatalf("archive list = %v, %v", all, err)
 	}
 
-	if restored, err := svc.SetArchived(context.Background(), item.ID, false); err != nil || restored.ArchivedAt != nil || restored.Spec.DesiredState != contract.AgentDesiredStateRunning {
+	if restored, err := svc.SetArchived(context.Background(), item.ID, false); err != nil || restored.ArchivedAt != nil || restored.ArchivedBy != "" || restored.Spec.DesiredState != contract.AgentDesiredStateRunning {
 		t.Fatalf("restore=%+v %v", restored, err)
 	}
 	if !svc.AuthorizesAgentAccessToken(item.ID, token) {
@@ -108,5 +111,39 @@ func TestArchivePersistsDisablesStartupAndPreservesWorkspaceOnDelete(t *testing.
 	svc.agents[ManagerUserID] = Agent{ID: ManagerUserID, Name: ManagerName, Role: RoleManager, RuntimeKind: RuntimeKindCodex}
 	if _, err := svc.SetArchived(context.Background(), ManagerUserID, true); err == nil {
 		t.Fatal("archived protected manager")
+	}
+}
+
+func TestFailedRestoreRetainsOriginalArchiveMetadata(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	state := filepath.Join(t.TempDir(), "agents.json")
+	svc, err := NewController(testModelConfig(), config.ServerConfig{}, "manager-image:test", state, WithRuntime(fakeAgentRuntime{
+		kind: RuntimeKindCodex,
+		state: func(context.Context, agentruntime.Handle) (agentruntime.State, error) {
+			return agentruntime.StateStopped, nil
+		},
+		start: func(context.Context, agentruntime.Handle) (agentruntime.State, error) {
+			return "", fmt.Errorf("runtime unavailable")
+		},
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	archivedAt := time.Date(2026, time.October, 30, 12, 0, 0, 0, time.UTC)
+	svc.agents["agent-worker"] = Agent{
+		ID: "agent-worker", Name: "worker", Role: RoleWorker, RuntimeKind: RuntimeKindCodex,
+		RuntimeID: "rt-worker", Status: string(agentruntime.StateStopped), DesiredState: DesiredStateStopped,
+		ArchivedAt: &archivedAt, ArchivedBy: "Jared", ProfileComplete: true,
+		AgentProfile: AgentProfile{Name: "worker", Provider: ProviderAPI, BaseURL: "https://example.com/v1", APIKey: "secret", ModelID: "model", ProfileComplete: true},
+	}
+	if _, err := svc.SetArchived(context.Background(), "agent-worker", false); err == nil {
+		t.Fatal("restore unexpectedly succeeded")
+	}
+	if err := svc.Reload(); err != nil {
+		t.Fatal(err)
+	}
+	item, _ := svc.Agent("agent-worker")
+	if item.ArchivedAt == nil || !item.ArchivedAt.Equal(archivedAt) || item.ArchivedBy != "Jared" {
+		t.Fatalf("failed restore changed original archive metadata: %+v", item)
 	}
 }

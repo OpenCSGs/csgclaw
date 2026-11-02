@@ -42,6 +42,7 @@ type Agent struct {
 	Status           string                   `json:"status"`
 	DesiredState     string                   `json:"-"`
 	ArchivedAt       *time.Time               `json:"archived_at,omitempty"`
+	ArchivedBy       string                   `json:"archived_by,omitempty"`
 	CreatedAt        time.Time                `json:"created_at"`
 	UpdatedAt        time.Time                `json:"updated_at,omitempty"`
 	Profile          string                   `json:"profile,omitempty"`
@@ -144,6 +145,7 @@ func (a *Agent) UnmarshalJSON(data []byte) error {
 		Status           string                   `json:"status"`
 		DesiredState     string                   `json:"desired_state,omitempty"`
 		ArchivedAt       *time.Time               `json:"archived_at,omitempty"`
+		ArchivedBy       string                   `json:"archived_by,omitempty"`
 		CreatedAt        time.Time                `json:"created_at"`
 		UpdatedAt        time.Time                `json:"updated_at,omitempty"`
 		ModelConfig      json.RawMessage          `json:"model_config"`
@@ -174,6 +176,7 @@ func (a *Agent) UnmarshalJSON(data []byte) error {
 		Status:           decoded.Status,
 		DesiredState:     decoded.DesiredState,
 		ArchivedAt:       decoded.ArchivedAt,
+		ArchivedBy:       decoded.ArchivedBy,
 		CreatedAt:        decoded.CreatedAt,
 		UpdatedAt:        decoded.UpdatedAt,
 		AgentProfile:     cloneProfile(decoded.AgentProfile),

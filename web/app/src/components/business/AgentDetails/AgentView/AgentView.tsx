@@ -1,5 +1,6 @@
 import { useAgentArchiveImpact } from "@/hooks/workspace/useAgentArchiveImpact";
 import { forwardRef, useEffect, useRef, useState } from "react";
+import { Archive } from "lucide-react";
 import {
   Button,
   DialogCloseButton,
@@ -8,18 +9,22 @@ import {
   DialogHeader,
   DialogRoot,
   DialogTitle,
+  DialogBody,
+  DialogFooter,
 } from "@/components/ui";
 import { isNotificationBotAgent, agentDeleteConfirmationMessage } from "@/models/agents";
 import type { AgentLike } from "@/models/agents";
 import { AgentDetailPane } from "../AgentDetailPane";
 import type { AgentDetailPaneHandle, AgentDetailPaneProps } from "../AgentDetailPane";
 import { NotificationParticipantDetailPane } from "../NotificationParticipantDetailPane";
+import styles from "./AgentView.module.css";
 
 export const AgentView = forwardRef<AgentDetailPaneHandle, AgentDetailPaneProps>(function AgentView(props, ref) {
   const [deletePendingAgent, setDeletePendingAgent] = useState<AgentLike | null>(null);
   const [deleteBlock, setDeleteBlock] = useState<{ message: string; onResolve?: () => void } | null>(null);
   const [deleteChecking, setDeleteChecking] = useState(false);
   const deleteRequest = useRef(0);
+  const returnFocus = useRef<HTMLElement | null>(null);
   const archiving = Boolean(deletePendingAgent && !isNotificationBotAgent(deletePendingAgent));
   const impact = useAgentArchiveImpact(archiving ? String(deletePendingAgent?.id || "") : null);
   const deleteConfirmMessage = deletePendingAgent
@@ -40,7 +45,8 @@ export const AgentView = forwardRef<AgentDetailPaneHandle, AgentDetailPaneProps>
     setDeletePendingAgent(null);
   }
 
-  async function requestDelete(item: AgentLike) {
+  async function requestDelete(item: AgentLike, trigger?: HTMLElement | null) {
+    returnFocus.current = trigger || (document.activeElement instanceof HTMLElement ? document.activeElement : null);
     const request = ++deleteRequest.current;
     setDeletePendingAgent(item);
     setDeleteBlock(null);
@@ -58,7 +64,7 @@ export const AgentView = forwardRef<AgentDetailPaneHandle, AgentDetailPaneProps>
 
   async function confirmDelete() {
     const item = deletePendingAgent;
-    if (!item || deleteChecking || deleteBlock) {
+    if (!item || deleteChecking || deleteBlock || (archiving && (impact.loading || impact.failed))) {
       return;
     }
     closeDelete();
@@ -69,6 +75,7 @@ export const AgentView = forwardRef<AgentDetailPaneHandle, AgentDetailPaneProps>
     ...props,
     onDelete: requestDelete,
   };
+  const Actions = archiving ? DialogFooter : "div";
 
   return (
     <>
@@ -86,31 +93,53 @@ export const AgentView = forwardRef<AgentDetailPaneHandle, AgentDetailPaneProps>
         }}
       >
         <DialogContent
-          className="agent-delete-dialog"
-          overlayClassName="agent-delete-backdrop"
+          className={archiving ? styles.archiveDialog : "agent-delete-dialog"}
+          overlayClassName={archiving ? undefined : "agent-delete-backdrop"}
           portalContainer={props.dialogPortalContainer}
+          onCloseAutoFocus={(event) => {
+            if (returnFocus.current?.isConnected) {
+              event.preventDefault();
+              returnFocus.current.focus();
+            }
+          }}
         >
-          <DialogHeader className="agent-delete-header">
-            <div className="agent-delete-copy">
+          <DialogHeader className={archiving ? undefined : "agent-delete-header"}>
+            <div className={archiving ? "min-w-0" : "agent-delete-copy"}>
               <DialogTitle>
-                {props.t(deleteBlock ? "agentDeleteBlockedTitle" : archiving ? "agentArchive" : "agentDelete")}
+                {props.t(deleteBlock ? "agentDeleteBlockedTitle" : archiving ? "agentArchiveTitle" : "agentDelete", {
+                  name: String(deletePendingAgent?.name || deletePendingAgent?.id || ""),
+                })}
               </DialogTitle>
-              <DialogDescription className="agent-delete-description">
+              <DialogDescription className={archiving ? undefined : "agent-delete-description"}>
                 {deleteChecking ? props.t("agentDeleteChecking") : deleteBlock?.message || deleteConfirmMessage}
               </DialogDescription>
-              {archiving && impact.data && (
-                <p>
-                  {props.t("agentArchiveImpact", {
-                    teams: impact.data.teams,
-                    rooms: impact.data.rooms,
-                    schedules: impact.data.scheduled_tasks,
-                  })}
-                </p>
-              )}
             </div>
             <DialogCloseButton label={props.t("close")} size="sm" variant="tertiaryGray" />
           </DialogHeader>
-          <div className="agent-delete-actions">
+          {archiving && !deleteBlock && !deleteChecking && (
+            <DialogBody>
+              {impact.loading && <p role="status">{props.t("agentArchiveImpactLoading")}</p>}
+              {impact.failed && (
+                <div className="flex flex-col gap-3">
+                  <p role="alert">{props.t("agentArchiveImpactFailed")}</p>
+                  <Button variant="secondaryGray" size="sm" onClick={impact.retry}>
+                    {props.t("retry")}
+                  </Button>
+                </div>
+              )}
+              {impact.data && (
+                <ul className={styles.impactList}>
+                  <li>{props.t("agentArchiveSchedules", { count: impact.data.scheduled_tasks })}</li>
+                  <li>{props.t("agentArchiveRunning")}</li>
+                  <li>{props.t("agentArchiveTeams", { count: impact.data.teams })}</li>
+                  <li>{props.t("agentArchiveSpaces", { count: impact.data.spaces })}</li>
+                  <li>{props.t("agentArchiveChats", { count: impact.data.direct_chats })}</li>
+                  <li className={styles.recoverable}>{props.t("agentArchiveRestorePath")}</li>
+                </ul>
+              )}
+            </DialogBody>
+          )}
+          <Actions className={archiving ? undefined : "agent-delete-actions"}>
             <Button className="agent-delete-button" variant="secondaryGray" size="sm" onClick={closeDelete}>
               {props.t("cancel")}
             </Button>
@@ -133,13 +162,14 @@ export const AgentView = forwardRef<AgentDetailPaneHandle, AgentDetailPaneProps>
                 className="agent-delete-button"
                 variant={archiving ? "primary" : "danger"}
                 size="sm"
-                disabled={deleteChecking}
+                disabled={deleteChecking || (archiving && (impact.loading || impact.failed))}
                 onClick={confirmDelete}
               >
-                {props.t(archiving ? "agentArchive" : "agentDelete")}
+                {archiving && <Archive size={15} aria-hidden="true" />}
+                {props.t(archiving ? "agentArchiveConfirmAction" : "agentDelete")}
               </Button>
             )}
-          </div>
+          </Actions>
         </DialogContent>
       </DialogRoot>
     </>

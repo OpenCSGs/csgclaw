@@ -6,6 +6,7 @@ import { ResourceLoadMore } from "../ResourceLoadMore";
 import type { ResourceContinuation } from "@/hooks/workspace/useInfiniteAgentResources";
 import { mcpManagedKnowledgeBaseSource } from "@/models/mcp";
 import {
+  Archive,
   BookOpen,
   Check,
   CheckCircle2,
@@ -179,7 +180,7 @@ export type AgentDetailPaneProps = {
   notice?: string;
   noticeTone?: AgentNoticeTone;
   notifierWebhookPublicOrigin?: string;
-  onDelete: AgentActionHandler;
+  onDelete: (item: AgentLike, returnFocus?: HTMLElement | null) => VoidOrPromise;
   onCheckDelete?: (item: AgentLike) => Promise<{ message: string; onResolve?: () => void } | null>;
   onDraftChange?: (draft: AgentDraft) => void;
   onInvite: AgentActionHandler;
@@ -2391,7 +2392,7 @@ type AgentActionsMenuProps = {
   incomplete: boolean;
   isManager: boolean;
   item: AgentLike;
-  onDelete: AgentActionHandler;
+  onDelete: AgentDetailPaneProps["onDelete"];
   onInvite: AgentActionHandler;
   onPublish?: (target: AgentTemplatePublishTarget) => VoidOrPromise;
   onStart: AgentActionHandler;
@@ -2423,13 +2424,14 @@ function AgentActionsMenu({
   onDelete,
   onPublish,
 }: AgentActionsMenuProps) {
+  const triggerRef = useRef<HTMLButtonElement>(null);
   const hasActions = SHOW_AGENT_LIFECYCLE_ACTIONS || canPublishLocal || !isManager;
   if (!hasActions) return null;
 
   return (
     <DropdownMenuRoot>
       <DropdownMenuTrigger asChild>
-        <Button variant="secondaryGray" size="md" className="agent-actions-menu-trigger">
+        <Button ref={triggerRef} variant="secondaryGray" size="md" className="agent-actions-menu-trigger">
           <MoreHorizontal aria-hidden="true" size={18} strokeWidth={2} />
           <span>{t("agentMoreActions")}</span>
           {upgradeNeeded ? <span className="agent-actions-alert-dot" aria-hidden="true"></span> : null}
@@ -2473,8 +2475,16 @@ function AgentActionsMenu({
         {!isManager ? (
           <>
             <DropdownMenuSeparator />
-            <DropdownMenuItem danger disabled={busy} onSelect={() => onDelete(item)}>
-              <Trash2 aria-hidden="true" size={15} strokeWidth={2} />
+            <DropdownMenuItem
+              danger={isNotificationBotAgent(item)}
+              disabled={busy}
+              onSelect={() => onDelete(item, triggerRef.current)}
+            >
+              {isNotificationBotAgent(item) ? (
+                <Trash2 aria-hidden="true" size={15} strokeWidth={2} />
+              ) : (
+                <Archive aria-hidden="true" size={15} strokeWidth={2} />
+              )}
               <span>{t(isNotificationBotAgent(item) ? "agentDelete" : "agentArchive")}</span>
             </DropdownMenuItem>
           </>

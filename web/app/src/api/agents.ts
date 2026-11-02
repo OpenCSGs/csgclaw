@@ -551,7 +551,13 @@ export function updateNotificationParticipantRequest(
   return patch(`api/v1/channels/csgclaw/participants/${encodeURIComponent(participantID)}`, payload);
 }
 
-export type AgentArchiveImpact = { teams: number; rooms: number; scheduled_tasks: number };
+export type AgentArchiveImpact = {
+  teams: number;
+  rooms: number;
+  spaces: number;
+  direct_chats: number;
+  scheduled_tasks: number;
+};
 export function fetchAgentArchiveImpact(id: string): Promise<AgentArchiveImpact> {
   return get(`api/v1/agents/${encodeURIComponent(id)}/archive-impact`);
 }

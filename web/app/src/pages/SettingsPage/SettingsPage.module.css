@@ -1420,7 +1420,28 @@
   gap: 8px;
   margin: 0;
   padding-left: 20px;
-  color: var(--muted);
+  color: var(--text);
   font-size: 13px;
   line-height: 1.6;
+  list-style: disc;
+}
+
+.archivedAgentDialog {
+  overflow-wrap: anywhere;
+}
+
+.archivedAgentRow .archivedAgentName strong {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 480px) {
+  .archivedAgentRow {
+    grid-template-columns: minmax(0, 1fr) auto;
+    padding: 8px;
+  }
+
+  .archivedAgentRow .sourceRowMain {
+    grid-column: 1 / -1;
+  }
 }

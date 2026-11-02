@@ -133,6 +133,7 @@ export type AgentRuntimeAvailabilityLike = {
 
 export type AgentLike = AgentProfileLike & {
   archived_at?: string | null;
+  archived_by?: string | null;
   skipped_resources?: Array<{ type?: "mcp" | "knowledge_base" | string; name?: string }> | null;
   agent_profile?: AgentProfileLike | null;
   model_config?: AgentProfileLike | null;

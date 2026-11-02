@@ -1151,6 +1151,7 @@ func (f *Controller) convert(selected Agent) (contract.Agent, error) {
 	}
 	return contract.Agent{
 		ArchivedAt:      selected.ArchivedAt,
+		ArchivedBy:      selected.ArchivedBy,
 		ID:              selected.ID,
 		ResourceVersion: resourceVersionForAgent(selected),
 		Spec:            spec,

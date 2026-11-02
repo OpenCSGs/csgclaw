@@ -9,11 +9,13 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"csgclaw/internal/agentengine"
 	"csgclaw/internal/agentengine/enginetest"
 	"csgclaw/internal/im"
 	"csgclaw/internal/participant"
+	"csgclaw/internal/scheduledtask"
 )
 
 func independentChatIdentityHandler(t *testing.T) (*Handler, string, string) {
@@ -72,8 +74,8 @@ func TestIndependentChatIdentityLifecycleHTTP(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &impact); err != nil {
 		t.Fatal(err)
 	}
-	if impact.Rooms != 2 {
-		t.Fatalf("rooms=%d, want distinct group + direct", impact.Rooms)
+	if impact.Rooms != 2 || impact.Spaces != 1 || impact.DirectChats != 1 {
+		t.Fatalf("impact=%+v, want one distinct group and one direct", impact)
 	}
 	for _, action := range []string{"archive", "restore", "archive"} {
 		chatIdentityRequest(t, h, http.MethodPost, "/api/v1/agents/agent-executor/"+action, "", 200)
@@ -141,6 +143,40 @@ func TestIndependentChatIdentityLifecycleHTTP(t *testing.T) {
 	}
 	chatIdentityRequest(t, h, http.MethodPost, "/api/v1/agents", `{"id":"agent-executor","name":"worker","runtime_name":"codex"}`, 409)
 	chatIdentityRequest(t, h, http.MethodPost, "/api/v1/channels/csgclaw/participants", `{"id":"replacement","type":"agent","name":"worker","agent_binding":{"mode":"create","agent":{"runtime_name":"codex"}}}`, 201)
+}
+
+func TestAgentArchiveImpactIncludesDisabledSchedules(t *testing.T) {
+	h, _, _ := independentChatIdentityHandler(t)
+	if _, err := h.agentEngine.Agents().Create(context.Background(), agentengine.AgentCreateRequest{ID: "agent-other", Spec: agentengine.AgentSpec{Name: "other", Role: agentengine.AgentRoleWorker, Runtime: agentengine.RuntimeSpec{Adapter: "codex"}}}); err != nil {
+		t.Fatal(err)
+	}
+	store, err := scheduledtask.NewStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	schedules, err := scheduledtask.NewService(store, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.SetScheduledTaskService(schedules)
+	for _, input := range []scheduledtask.CreateInput{
+		{Title: "active", AgentID: "agent-executor", Enabled: true},
+		{Title: "paused", AgentID: "agent-executor", Enabled: false},
+		{Title: "other", AgentID: "agent-other", Enabled: true},
+	} {
+		input.Prompt, input.Recurrence, input.FirstRunAt = "work", scheduledtask.RecurrenceDaily, time.Now().Add(time.Hour)
+		if _, err := schedules.Create(input); err != nil {
+			t.Fatal(err)
+		}
+	}
+	rec := chatIdentityRequest(t, h, http.MethodGet, "/api/v1/agents/agent-executor/archive-impact", "", http.StatusOK)
+	var impact agentArchiveImpact
+	if err := json.Unmarshal(rec.Body.Bytes(), &impact); err != nil {
+		t.Fatal(err)
+	}
+	if impact.ScheduledTasks != 2 {
+		t.Fatalf("impact=%+v, want both active and paused schedules", impact)
+	}
 }
 
 func TestIndependentChatIdentityReplaceHTTP(t *testing.T) {
