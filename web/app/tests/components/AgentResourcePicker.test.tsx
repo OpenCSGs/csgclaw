@@ -86,7 +86,11 @@ function setup(
   return { fetch, onAdd, onClose, t, user: userEvent.setup() };
 }
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(async () => {
+  vi.unstubAllGlobals();
+  // Radix restores focus after unmount; finish that cleanup before the next dialog mounts.
+  await new Promise((resolve) => setTimeout(resolve, 0));
+});
 
 describe("Agent global resource picker", () => {
   it.each([

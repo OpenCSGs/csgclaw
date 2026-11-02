@@ -868,9 +868,11 @@ func (s *Controller) managerStartupProfile(ctx context.Context) (AgentProfile, [
 		s.mu.RUnlock()
 		return normalizeProfile(AgentProfile{Name: ManagerName, Provider: ProviderCSGHubLite}, ManagerName, ""), nil
 	}
+	llm := s.llm
+	recommended := resolveCreationDefaults(s.creationDefaults, ModelProviderCatalogFromLLM(llm))
 	s.mu.RUnlock()
 	if s != nil {
-		if profileName, model, err := s.llm.Resolve(""); err == nil {
+		if profileName, model, err := llm.Resolve(""); err == nil {
 			profile := profileFromConfigModel(profileName, "", model)
 			profile.Name = ManagerName
 			profile = normalizeProfile(profile, ManagerName, "")
@@ -882,6 +884,12 @@ func (s *Controller) managerStartupProfile(ctx context.Context) (AgentProfile, [
 				}}
 			}
 		}
+	}
+	// A fresh installation usually has no global model selector, even after
+	// login has connected a provider with several models.
+	recommended = normalizeProfile(recommended, ManagerName, "")
+	if recommended.ProfileComplete {
+		return recommended, []ProfileDetectionResult{{Provider: recommended.Provider, Status: "ok", ModelID: recommended.ModelID}}
 	}
 	return s.DetectDefaultProfile(ctx)
 }
