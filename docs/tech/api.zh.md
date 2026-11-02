@@ -1607,7 +1607,7 @@ runtime 会降级为一个文本 delta。Agent 完成前，连接已建立并先
 同一个 session 同时只允许一个 turn。
 不同 session ID 可以并发执行。
 同一个全局 session 改用其它 Agent 时返回 `409 session_agent_conflict`。
-服务端最多等待五分钟，之后返回 `504 response_timeout`。
+服务端不限制响应总时长；客户端断开连接或显式取消请求时，仍会取消正在执行的响应。
 
 ### `POST /api/v1/agents/{agent}/sessions/{session_id}/responses/cancel`
 

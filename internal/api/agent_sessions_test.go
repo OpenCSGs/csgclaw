@@ -615,7 +615,32 @@ func TestAgentSessionEventStreamEmitsAndStopsHeartbeat(t *testing.T) {
 	}
 }
 
-func TestAgentSessionResponsesReturnsValidationAndTimeoutErrors(t *testing.T) {
+func TestAgentSessionResponsesHasNoServerDeadline(t *testing.T) {
+	for _, stream := range []bool{false, true} {
+		name := "json"
+		if stream {
+			name = "stream"
+		}
+		t.Run(name, func(t *testing.T) {
+			engine := &fakeSessionEngine{run: func(ctx context.Context, _ string, _ agentengine.TurnRequest, _ agentengine.EventSink) agentengine.TurnResult {
+				if deadline, ok := ctx.Deadline(); ok {
+					t.Errorf("unexpected server deadline: %v", deadline)
+				}
+				if ctx.Done() == nil {
+					t.Error("response context must remain cancelable")
+				}
+				return agentengine.TurnResult{Status: agentengine.TurnSucceeded, Output: "done"}
+			}}
+			handler, _, _, _ := newAgentSessionTestHandler(t, []agent.Agent{sessionCodexAgent("agent-alpha", "Alpha")}, engine, "")
+			response := performAgentSessionRequest(t, handler, "agent-alpha", "no-timeout", map[string]any{"input": "hello", "stream": stream})
+			if response.Code != http.StatusOK {
+				t.Fatalf("response = %d %s", response.Code, response.Body.String())
+			}
+		})
+	}
+}
+
+func TestAgentSessionResponsesReturnsValidationErrors(t *testing.T) {
 	engine := &fakeSessionEngine{run: func(ctx context.Context, _ string, _ agentengine.TurnRequest, _ agentengine.EventSink) agentengine.TurnResult {
 		<-ctx.Done()
 		return agentengine.TurnResult{Status: agentengine.TurnCanceled, Error: &agentengine.TurnError{Code: agentengine.ErrorRuntimeFailed, Message: ctx.Err().Error()}}
@@ -640,13 +665,6 @@ func TestAgentSessionResponsesReturnsValidationAndTimeoutErrors(t *testing.T) {
 		t.Fatalf("unsupported extra response = %d %s", unsupportedExtra.Code, unsupportedExtra.Body.String())
 	}
 
-	previousTimeout := agentSessionResponseTimeout
-	agentSessionResponseTimeout = 10 * time.Millisecond
-	defer func() { agentSessionResponseTimeout = previousTimeout }()
-	timedOut := performAgentSessionRequest(t, handler, "agent-alpha", "timeout", map[string]any{"input": "hello"})
-	if timedOut.Code != http.StatusGatewayTimeout || !strings.Contains(timedOut.Body.String(), "response_timeout") {
-		t.Fatalf("timeout response = %d %s", timedOut.Code, timedOut.Body.String())
-	}
 }
 
 func TestAgentSessionResponsesRejectsUnavailableRuntimeBeforeBinding(t *testing.T) {
