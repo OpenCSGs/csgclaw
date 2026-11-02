@@ -40,7 +40,12 @@ func (s *Controller) SetArchived(ctx context.Context, id string, archived bool) 
 		return contract.Agent{}, fmt.Errorf("agent %q not found", id)
 	}
 	if archived {
-		if err := s.persistArchive(id, true); err != nil {
+		archivedAt, archivedBy := selected.ArchivedAt, selected.ArchivedBy
+		if archivedAt == nil {
+			now := time.Now().UTC()
+			archivedAt, archivedBy = &now, contract.ArchiveActorFromContext(ctx)
+		}
+		if err := s.persistArchive(id, archivedAt, archivedBy); err != nil {
 			return contract.Agent{}, err
 		}
 		// Keep the durable disabled flag on a stop failure; retrying archive repairs
@@ -49,11 +54,11 @@ func (s *Controller) SetArchived(ctx context.Context, id string, archived bool) 
 			return contract.Agent{}, err
 		}
 	} else if selected.ArchivedAt != nil {
-		if err := s.persistArchive(id, false); err != nil {
+		if err := s.persistArchive(id, nil, ""); err != nil {
 			return contract.Agent{}, err
 		}
 		if _, err := s.Start(ctx, id); err != nil {
-			if rollbackErr := s.persistArchive(id, true); rollbackErr != nil {
+			if rollbackErr := s.persistArchive(id, selected.ArchivedAt, selected.ArchivedBy); rollbackErr != nil {
 				return contract.Agent{}, fmt.Errorf("restore: %v; retain archive: %w", err, rollbackErr)
 			}
 			return contract.Agent{}, err
@@ -66,7 +71,7 @@ func (s *Controller) SetArchived(ctx context.Context, id string, archived bool) 
 	return s.convert(selected)
 }
 
-func (s *Controller) persistArchive(id string, archived bool) error {
+func (s *Controller) persistArchive(id string, archivedAt *time.Time, archivedBy string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	current, key, ok := s.agentByIDLocked(id)
@@ -75,13 +80,9 @@ func (s *Controller) persistArchive(id string, archived bool) error {
 	}
 	previous := current
 	now := time.Now().UTC()
-	if archived {
-		if current.ArchivedAt == nil {
-			current.ArchivedAt = &now
-		}
+	current.ArchivedAt, current.ArchivedBy = archivedAt, archivedBy
+	if archivedAt != nil {
 		current.DesiredState = DesiredStateStopped
-	} else {
-		current.ArchivedAt = nil
 	}
 	current.UpdatedAt = now
 	s.putAgentLocked(key, current)

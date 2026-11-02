@@ -70,6 +70,7 @@ type AgentRecreateOptions struct {
 // observed state.
 type Agent struct {
 	ArchivedAt      *time.Time  `json:"archived_at,omitempty"`
+	ArchivedBy      string      `json:"archived_by,omitempty"`
 	ID              string      `json:"id"`
 	ResourceVersion string      `json:"resource_version"`
 	Spec            AgentSpec   `json:"spec"`

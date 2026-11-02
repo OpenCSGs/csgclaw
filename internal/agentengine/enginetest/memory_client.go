@@ -16,6 +16,7 @@ import (
 
 	"csgclaw/internal/activity"
 	"csgclaw/internal/agentengine"
+	"csgclaw/internal/agentengine/contract"
 	"csgclaw/internal/agentengine/interactionstate"
 	"csgclaw/internal/agentengine/lifecycle"
 	agentruntime "csgclaw/internal/runtime"
@@ -1376,12 +1377,14 @@ func (a *memoryAgents) SetArchived(ctx context.Context, id string, archived bool
 		if item.ArchivedAt == nil {
 			now := time.Now().UTC()
 			item.ArchivedAt = &now
+			item.ArchivedBy = contract.ArchiveActorFromContext(ctx)
 		}
 		item.Status.State = agentengine.AgentStateStopped
 		item.Status.Ready = false
 		item.Spec.DesiredState = agentengine.AgentDesiredStateStopped
 	} else {
 		item.ArchivedAt = nil
+		item.ArchivedBy = ""
 		item.Status.State = agentengine.AgentStateRunning
 		item.Status.Ready = true
 		item.Spec.DesiredState = agentengine.AgentDesiredStateRunning

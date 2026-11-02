@@ -212,6 +212,7 @@ type updateBootstrapConfigRequest struct {
 
 type agentResponse struct {
 	ArchivedAt           *time.Time                         `json:"archived_at,omitempty"`
+	ArchivedBy           string                             `json:"archived_by,omitempty"`
 	ID                   string                             `json:"id"`
 	Name                 string                             `json:"name"`
 	Description          string                             `json:"description,omitempty"`
@@ -252,6 +253,7 @@ func (r *agentResponse) UnmarshalJSON(data []byte) error {
 	}
 	*r = agentResponse{
 		ArchivedAt:       apiAgent.ArchivedAt,
+		ArchivedBy:       apiAgent.ArchivedBy,
 		ID:               apiAgent.ID,
 		Name:             apiAgent.Name,
 		Description:      apiAgent.Description,
@@ -3656,6 +3658,7 @@ func presentAgent(item agent.Agent) agentResponse {
 	runtimeCfg := item.RuntimeConfig()
 	return agentResponse{
 		ArchivedAt:   item.ArchivedAt,
+		ArchivedBy:   item.ArchivedBy,
 		ID:           item.ID,
 		Name:         item.Name,
 		Description:  item.Description,

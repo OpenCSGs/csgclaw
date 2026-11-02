@@ -82,7 +82,7 @@ export function ArchivedAgents({
       )}
       <ul className={styles.sourceList}>
         {items.map((item) => (
-          <li key={item.id} className={styles.sourceRow}>
+          <li key={item.id} className={`${styles.sourceRow} ${styles.archivedAgentRow}`}>
             <div className={styles.sourceRowMain}>
               <span className={styles.archivedAgentName}>
                 <span className={styles.archivedAgentAvatar} aria-hidden="true">
@@ -91,11 +91,13 @@ export function ArchivedAgents({
                     fallback={avatarFallbackText(item.avatar, item.name, item.id)}
                   />
                 </span>
-                <strong>{item.name || item.id}</strong>
+                <strong title={String(item.name || item.id || "")}>{item.name || item.id}</strong>
               </span>
               <small>
                 <span className={styles.kindTag}>{t("archivedAgentsTab")}</span>
                 {item.archived_at && t("archivedAgentAt", { time: new Date(item.archived_at).toLocaleString() })}
+                {" · "}
+                {item.archived_by ? t("archivedAgentBy", { name: item.archived_by }) : t("archivedAgentByUnknown")}
               </small>
             </div>
             <Button size="sm" variant="secondaryGray" disabled={busy} onClick={() => select(item, false)}>
@@ -122,7 +124,7 @@ export function ArchivedAgents({
           if (!open && !busy) setSelection(null);
         }}
       >
-        <DialogContent>
+        <DialogContent className={styles.archivedAgentDialog}>
           <DialogHeader>
             <div className="min-w-0">
               <DialogTitle>
@@ -142,10 +144,13 @@ export function ArchivedAgents({
                 <ul className={styles.archiveImpactList}>
                   {[
                     "archivedAgentDeleteData",
-                    "archivedAgentDeleteChats",
+                    "archivedAgentDeleteBindings",
+                    "archivedAgentDeleteMemberships",
                     "archivedAgentKeepSchedules",
+                    "archivedAgentDeleteChats",
                     "archivedAgentKeepHistory",
                     "archivedAgentKeepFiles",
+                    "archivedAgentKeepSnapshot",
                   ].map((key) => (
                     <li key={key}>{t(key)}</li>
                   ))}

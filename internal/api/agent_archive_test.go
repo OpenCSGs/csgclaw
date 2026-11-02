@@ -145,7 +145,7 @@ func TestAgentArchiveRestoreAndConfirmedDeletionHTTP(t *testing.T) {
 		t.Fatalf("active=%v %v", active, err)
 	}
 	var archived []agentResponse
-	if err = json.Unmarshal(request(http.MethodGet, "/api/v1/agents?archived=true", "", 200).Body.Bytes(), &archived); err != nil || len(archived) != 1 || archived[0].ArchivedAt == nil {
+	if err = json.Unmarshal(request(http.MethodGet, "/api/v1/agents?archived=true", "", 200).Body.Bytes(), &archived); err != nil || len(archived) != 1 || archived[0].ArchivedAt == nil || archived[0].ArchivedBy != "admin" {
 		t.Fatalf("archived=%v %v", archived, err)
 	}
 	if len(imSvc.Bootstrap().Rooms) != 1 {

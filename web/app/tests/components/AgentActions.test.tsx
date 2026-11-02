@@ -22,6 +22,8 @@ const labels: Record<string, string> = {
   agentActivityTab: "Activity",
   agentDelete: "Delete",
   agentArchive: "Archive agent",
+  agentArchiveTitle: 'Archive "{name}"?',
+  agentArchiveConfirmAction: "Confirm archive",
   agentArchiveConfirm: 'Archive "{name}" and retain data?',
   agentDeleteBlockedTitle: "This agent cannot be deleted yet",
   agentDeleteChecking: "Checking dependencies…",
@@ -1563,7 +1565,7 @@ describe("agent action visibility", () => {
     );
     await user.click(screen.getByRole("button", { name: "More" }));
     await user.click(screen.getByRole("menuitem", { name: "Archive agent" }));
-    expect(within(screen.getByRole("dialog")).getByRole("button", { name: "Archive agent" })).toBeDisabled();
+    expect(within(screen.getByRole("dialog")).getByRole("button", { name: "Confirm archive" })).toBeDisabled();
     await act(async () => {
       finishCheck({ message: "Remove the agent from its team first.", onResolve });
     });

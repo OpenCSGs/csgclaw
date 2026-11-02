@@ -160,6 +160,7 @@ func serviceAgentFromEngine(item agentengine.Agent) agent.Agent {
 	runtimeConfig := agentruntime.RuntimeConfig{Name: item.Spec.Runtime.Adapter, Sandboxed: item.Spec.Runtime.Sandboxed}.Normalized()
 	out := agent.Agent{
 		ArchivedAt:       item.ArchivedAt,
+		ArchivedBy:       item.ArchivedBy,
 		ID:               item.ID,
 		Name:             item.Spec.Name,
 		Description:      item.Spec.Description,
