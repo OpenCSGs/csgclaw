@@ -2,9 +2,9 @@
 
 Saving an Agent to a local template creates a persistent `template_uid` (UUID) and revision V1. The Agent's next save updates the associated template and always creates a new revision, including unchanged content. The existing template reference (`local.<id>`) remains compatible; the UUID is independent of its name and location.
 
-Templates do not require Git. Each retained revision contains a full snapshot, timestamp, optional commit message and, only when signed in at save time, author information. Only the latest 10 revisions and their records are retained. Revision numbers never reset after pruning. Rollback switches the active revision without creating a revision or deleting history. For example, rolling V3 back to V1 preserves V2 and V3; the next save creates V4. The source Agent and its association remain unchanged. In version history, select a retained version and choose “Switch version” to activate it; the latest version remains selectable after a rollback.
+Templates do not require Git. Each retained revision contains a full snapshot, timestamp, optional commit message and, only when signed in at save time, author information. All revisions are retained until manually deleted. The active revision cannot be deleted. Revision numbers are never reused after deletion. Rollback switches the active revision without creating a revision or deleting history. For example, rolling V3 back to V1 preserves V2 and V3; the next save creates V4. The source Agent and its association remain unchanged. In version history, select a retained version and choose “Switch version” to activate it; the latest version remains selectable after a rollback.
 
-Legacy templates are not associated automatically. A first Agent save with a colliding unassociated local reference preserves that template's identity, snapshots its original content, saves the Agent content as a new revision, and establishes the association. A reference already associated with another Agent is rejected with HTTP 409 (`template_already_exists`); its content, identity, versions and publication records remain unchanged. Subsequent saves follow the persisted association even if the requested name changes.
+Legacy templates without a revision appear as V1, with their existing content available in version history. Legacy templates are not associated automatically. A first Agent save with a colliding unassociated local reference preserves that template's identity, snapshots its original content, saves the Agent content as a new revision, and establishes the association. A reference already associated with another Agent is rejected with HTTP 409 (`template_already_exists`); its content, identity, versions and publication records remain unchanged. Subsequent saves follow the persisted association even if the requested name changes.
 
 The active template remains at `templates/<id>/`; `.versions.json` stores the association, records and cloud publications, and `.versions/<revision>/` stores retained snapshots. Internal history is excluded from the workspace listing and from cloud packages.
 
@@ -23,6 +23,7 @@ The template detail view fetches the associated community template to display it
 - `POST /api/v1/hub/templates` accepts optional `commit_message` when saving an Agent. When publishing an existing template, `expected_revision` can specify the revision shown in the confirmation dialog. If the active revision has changed, the server returns HTTP 409 with `template_version_changed` before uploading or deleting any cloud resource.
 - `GET /api/v1/hub/templates/{id}/versions` lists retained records in ascending revision order.
 - `GET /api/v1/hub/templates/{id}/versions/{revision}?path=...` lists historical content.
+- `DELETE /api/v1/hub/templates/{id}/versions/{revision}` deletes an inactive version and its snapshot.
 - Add `file=true` to read a historical file.
 - `POST /api/v1/hub/templates/{id}/versions/{revision}/restore` accepts `{ "commit_message": "optional" }` and returns the active template without creating a revision.
 
@@ -31,3 +32,9 @@ Template responses expose `uid`, active `revision`, highest allocated `latest_re
 Saving template instructions creates a new retained revision under the same UUID, including after a rollback. The previous snapshots remain unchanged. The template library uses inline details; switching versions updates the current template immediately without opening a detail dialog or waiting for a history-list refresh. Batch publication deletes conflicting paths before creating replacements, including file/directory transitions.
 
 Workspace directory and file caches are scoped to the active template identity, revision and update time. A version switch discards old previews and pending directory results before loading the selected version, including instructions, skills and MCP configuration.
+
+The version history has its own tab. Individual revisions start collapsed. The first Agent save allows editing the template name and display name; subsequent save dialogs lock the template name while allowing display-name changes. Agent associations resolve the persistent template ID and template name, never the display name.
+
+The version tab displays the retained `version_count`, including the active version, rather than the highest allocated revision. Deleting a historical revision updates this count. Template listing supports `scope=local` (builtin and local registries) and `scope=remote` (community registries); the UI displays disk-backed templates first and merges community results in the background.
+
+Community refresh failures retain loaded local and cached remote templates while exposing an error and retry action. A failed community request must not mark the refresh as successful.

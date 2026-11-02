@@ -9,6 +9,7 @@ function siteOrigin(site: string): string {
 }
 
 export function templateVersionLabel(template: HubTemplate | null | undefined): string {
+  if (template?.source?.kind === "local") return `V${template.revision || 1}`;
   return template?.revision && template.revision > 0 ? `V${template.revision}` : template?.version?.trim() || "";
 }
 

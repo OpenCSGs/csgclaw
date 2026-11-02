@@ -295,3 +295,39 @@
     height: 100%;
   }
 }
+
+/* Version rows occupy the full tab width and start collapsed. */
+.layout {
+  grid-template-columns: minmax(0, 1fr);
+  border: 0;
+}
+.versionRail {
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+.versions {
+  max-height: none;
+}
+.versions > li {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xl);
+  padding: var(--space-2);
+}
+.sectionLabel {
+  display: none;
+}
+.detail:empty {
+  display: none;
+}
+
+.metadataGrid {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: var(--space-2) var(--space-4);
+  font-size: var(--text-sm-size);
+}
+.metadataGrid dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}

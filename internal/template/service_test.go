@@ -441,3 +441,27 @@ func mustService(t *testing.T, cfg config.HubConfig, stores map[string]Store) *S
 	}
 	return svc
 }
+
+func TestListLocalSkipsRemoteRegistries(t *testing.T) {
+	svc := mustService(t, config.HubConfig{DefaultRegistry: "builtin", DefaultPublishRegistry: "local", Registries: []config.HubRegistryConfig{
+		{Name: "builtin", Kind: RegistryKindBuiltin, Enabled: true}, {Name: "local", Kind: RegistryKindLocal, Enabled: true}, {Name: "remote", Kind: RegistryKindRemote, Enabled: true},
+	}}, map[string]Store{
+		"builtin": stubStore{listResult: []Template{{ID: "official", Name: "official"}}},
+		"local":   stubStore{listResult: []Template{{ID: "mine", Name: "mine"}}},
+		"remote":  stubStore{listErr: errors.New("remote must not be called")},
+	})
+	items, err := svc.ListLocal(context.Background())
+	if err != nil || len(items) != 2 {
+		t.Fatalf("items=%+v err=%v", items, err)
+	}
+	for _, item := range items {
+		if item.Source.Kind == RegistryKindRemote {
+			t.Fatal("remote template in local list")
+		}
+	}
+}
+
+// A local-only list must never enter the remote store, even if it would return quickly.
+type unexpectedListStore struct{ stubStore }
+
+func (unexpectedListStore) List(context.Context) ([]Template, error) { panic("remote list called") }

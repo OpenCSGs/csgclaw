@@ -19,8 +19,8 @@ type PublishAgentTemplatePayload = {
   include_memory?: boolean;
 };
 
-export function fetchHubTemplates(): Promise<HubTemplate[]> {
-  return get<HubTemplate[]>(HUB_TEMPLATES_PATH);
+export function fetchHubTemplates(scope?: "local" | "remote"): Promise<HubTemplate[]> {
+  return get<HubTemplate[]>(scope ? `${HUB_TEMPLATES_PATH}?scope=${scope}` : HUB_TEMPLATES_PATH);
 }
 
 export function fetchHubTemplate(templateID: string): Promise<HubTemplate> {
@@ -97,6 +97,9 @@ function hubTemplatePath(templateID: string): string {
 }
 
 export type TemplateVersion = {
+  name?: string;
+  description?: string;
+  runtime_kind?: string;
   revision: number;
   message?: string;
   author?: { id?: string; name?: string };
@@ -115,4 +118,8 @@ export function fetchTemplateVersionFile(id: string, revision: number, path: str
 }
 export function restoreTemplateVersion(id: string, revision: number, message = ""): Promise<HubTemplate> {
   return post(`${hubTemplatePath(id)}/versions/${revision}/restore`, { commit_message: message });
+}
+
+export function deleteTemplateVersion(id: string, revision: number): Promise<{ deleted: boolean }> {
+  return del(`${hubTemplatePath(id)}/versions/${revision}`);
 }

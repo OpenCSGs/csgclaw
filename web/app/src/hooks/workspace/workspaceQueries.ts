@@ -1,5 +1,5 @@
 import { useRef } from "react";
-import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { UseQueryResult } from "@tanstack/react-query";
 import { fetchAgentProfileModels, fetchAgentWorkspace, fetchAgentWorkspaceFile, fetchAgents } from "@/api/agents";
 import type { AgentProfileModelRequest } from "@/api/agents";
@@ -280,12 +280,23 @@ export function useWorkspaceRuntimeImagesQuery(): UseQueryResult<string[]> {
 }
 
 export function useWorkspaceHubTemplatesQuery(options: { enabled?: boolean } = {}): UseQueryResult<HubTemplate[]> {
+  const queryClient = useQueryClient();
   return useQuery<HubTemplate[]>({
     queryKey: workspaceQueryKeys.hubTemplates(),
     queryFn: async () => {
-      const payload = await fetchHubTemplates();
-      return Array.isArray(payload) ? payload : [];
+      const local = await fetchHubTemplates("local");
+      const items = Array.isArray(local) ? local : [];
+      // Publish disk-backed templates immediately while community reads continue.
+      queryClient.setQueryData<HubTemplate[]>(workspaceQueryKeys.hubTemplates(), (current) => [
+        ...items,
+        ...(current || []).filter((item) => item.source?.kind === "remote"),
+      ]);
+      const payload = await fetchHubTemplates("remote");
+      const current = queryClient.getQueryData<HubTemplate[]>(workspaceQueryKeys.hubTemplates()) || items;
+      return [...current.filter((item) => item.source?.kind !== "remote"), ...(Array.isArray(payload) ? payload : [])];
     },
+    staleTime: 30_000,
+    retry: false,
     enabled: options.enabled !== false,
   });
 }

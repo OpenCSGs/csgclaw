@@ -102,11 +102,25 @@ func NewService(cfg config.HubConfig, factory StoreFactory, options ...ServiceOp
 }
 
 func (s *Service) List(ctx context.Context) ([]Template, error) {
+	return s.list(ctx, "")
+}
+
+// ListLocal returns disk-backed templates without waiting for community requests.
+func (s *Service) ListLocal(ctx context.Context) ([]Template, error) {
+	return s.list(ctx, "local")
+}
+
+// ListRemote loads only community registries for background refreshes.
+func (s *Service) ListRemote(ctx context.Context) ([]Template, error) {
+	return s.list(ctx, "remote")
+}
+
+func (s *Service) list(ctx context.Context, scope string) ([]Template, error) {
 	var out []Template
 	var listErrs []error
 	for _, name := range s.order {
 		cfgStore, ok := s.stores[name]
-		if !ok || !isReadableKind(cfgStore.ref.Kind) {
+		if !ok || !isReadableKind(cfgStore.ref.Kind) || (scope == "local" && cfgStore.ref.Kind == RegistryKindRemote) || (scope == "remote" && cfgStore.ref.Kind != RegistryKindRemote) {
 			continue
 		}
 		items, err := cfgStore.store.List(ctx)

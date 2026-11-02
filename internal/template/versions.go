@@ -20,7 +20,6 @@ import (
 
 const versionStateFile = ".versions.json"
 const versionSnapshotsDir = ".versions"
-const retainedTemplateVersions = 10
 
 type VersionAuthor struct {
 	ID   string `json:"id,omitempty"`
@@ -28,6 +27,10 @@ type VersionAuthor struct {
 }
 
 type TemplateVersion struct {
+	Name        string `json:"name,omitempty"`
+	Description string `json:"description,omitempty"`
+	RuntimeKind string `json:"runtime_kind,omitempty"`
+
 	Revision     int            `json:"revision"`
 	Message      string         `json:"message,omitempty"`
 	Author       *VersionAuthor `json:"author,omitempty"`
@@ -44,10 +47,11 @@ type TemplateRollback struct {
 }
 
 type templateVersionState struct {
-	LastRollback  *TemplateRollback              `json:"last_rollback,omitempty"`
-	Publications  []apitypes.TemplatePublication `json:"publications,omitempty"`
-	SourceAgentID string                         `json:"source_agent_id,omitempty"`
-	Versions      []TemplateVersion              `json:"versions"`
+	LastRollback    *TemplateRollback              `json:"last_rollback,omitempty"`
+	HighestRevision int                            `json:"highest_revision,omitempty"`
+	Publications    []apitypes.TemplatePublication `json:"publications,omitempty"`
+	SourceAgentID   string                         `json:"source_agent_id,omitempty"`
+	Versions        []TemplateVersion              `json:"versions"`
 }
 
 func readVersionState(root string) (templateVersionState, error) {
@@ -86,6 +90,7 @@ func (s *LocalStore) SaveAgent(ctx context.Context, spec PublishSpec) (Template,
 		}
 		if state.SourceAgentID == spec.SourceAgentID {
 			spec.ID = item.ID
+			spec.Name = item.Name
 			break
 		}
 	}
@@ -147,15 +152,14 @@ func (s *LocalStore) commitVersion(ctx context.Context, spec PublishSpec, restor
 	if len(state.Versions) > 0 {
 		spec.Revision = state.Versions[len(state.Versions)-1].Revision + 1
 	}
+	spec.Revision = max(spec.Revision, state.HighestRevision+1)
+	state.HighestRevision = spec.Revision
 	spec.Version = "V" + strconv.Itoa(spec.Revision)
 	spec.UpdatedAt = time.Now().UTC()
 	if spec.SourceAgentID != "" {
 		state.SourceAgentID = spec.SourceAgentID
 	}
 	state.Versions = append(state.Versions, TemplateVersion{Revision: spec.Revision, Message: strings.TrimSpace(spec.CommitMessage), Author: spec.Author, CreatedAt: spec.UpdatedAt, RestoredFrom: restoredFrom})
-	if len(state.Versions) > retainedTemplateVersions {
-		state.Versions = state.Versions[len(state.Versions)-retainedTemplateVersions:]
-	}
 	if err := os.MkdirAll(s.root, 0o755); err != nil {
 		return Template{}, err
 	}
@@ -239,14 +243,37 @@ func (s *LocalStore) commitVersion(ctx context.Context, spec PublishSpec, restor
 func (s *LocalStore) Versions(ctx context.Context, id string) ([]TemplateVersion, error) {
 	localTemplateReplaceMu.Lock()
 	defer localTemplateReplaceMu.Unlock()
-	if _, err := s.Get(ctx, id); err != nil {
+	item, err := s.Get(ctx, id)
+	if err != nil {
 		return nil, err
 	}
 	state, err := readVersionState(s.templateRoot(id))
-	if state.Versions == nil {
-		state.Versions = []TemplateVersion{}
+	if len(state.Versions) == 0 {
+		state.Versions = []TemplateVersion{{Revision: item.Revision, CreatedAt: item.UpdatedAt}}
 	}
-	return state.Versions, err
+	if err != nil {
+		return nil, err
+	}
+	for i := range state.Versions {
+		root := filepath.Join(s.templateRoot(id), versionSnapshotsDir, strconv.Itoa(state.Versions[i].Revision))
+		if len(state.Versions) == 1 {
+			if _, err := os.Stat(root); errors.Is(err, os.ErrNotExist) {
+				root = s.templateRoot(id)
+			}
+		}
+		_, manifest, err := loadManifestFS(os.DirFS(filepath.Dir(root)), filepath.Join(filepath.Base(root), localManifestFileName), "template version")
+		if err != nil {
+			return nil, err
+		}
+		name := manifest.DisplayName
+		if name == "" {
+			name = manifest.Name
+		}
+		state.Versions[i].Name = name
+		state.Versions[i].Description = manifest.Description
+		state.Versions[i].RuntimeKind = manifest.RuntimeKind
+	}
+	return state.Versions, nil
 }
 
 func (s *LocalStore) versionRoot(ctx context.Context, id string, revision int) (string, error) {
@@ -256,6 +283,9 @@ func (s *LocalStore) versionRoot(ctx context.Context, id string, revision int) (
 	state, err := readVersionState(s.templateRoot(id))
 	if err != nil {
 		return "", err
+	}
+	if len(state.Versions) == 0 && revision == 1 {
+		return s.templateRoot(id), nil
 	}
 	for _, version := range state.Versions {
 		if version.Revision == revision {
@@ -444,4 +474,55 @@ func (s *LocalStore) ensureIdentityLocked(id string) error {
 		return err
 	}
 	return os.Rename(file.Name(), s.manifestPath(id))
+}
+
+// DeleteVersion removes an inactive snapshot while preserving allocated revision numbers.
+func (s *LocalStore) DeleteVersion(ctx context.Context, id string, revision int) error {
+	localTemplateReplaceMu.Lock()
+	defer localTemplateReplaceMu.Unlock()
+	item, err := s.Get(ctx, id)
+	if err != nil {
+		return err
+	}
+	if item.Revision == revision {
+		return fmt.Errorf("cannot delete the active version")
+	}
+	root := s.templateRoot(id)
+	state, err := readVersionState(root)
+	if err != nil {
+		return err
+	}
+	found := false
+	for i, version := range state.Versions {
+		state.HighestRevision = max(state.HighestRevision, version.Revision)
+		if version.Revision == revision {
+			state.Versions = append(state.Versions[:i:i], state.Versions[i+1:]...)
+			found = true
+			break
+		}
+	}
+	if !found {
+		return ErrTemplateNotFound
+	}
+	state.HighestRevision = max(state.HighestRevision, item.LatestRevision)
+	data, err := json.MarshalIndent(state, "", "  ")
+	if err != nil {
+		return err
+	}
+	file, err := os.CreateTemp(root, ".version-delete-")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(file.Name())
+	if _, err := file.Write(data); err != nil {
+		file.Close()
+		return err
+	}
+	if err := file.Close(); err != nil {
+		return err
+	}
+	if err := os.Rename(file.Name(), filepath.Join(root, versionStateFile)); err != nil {
+		return err
+	}
+	return os.RemoveAll(filepath.Join(root, versionSnapshotsDir, strconv.Itoa(revision)))
 }

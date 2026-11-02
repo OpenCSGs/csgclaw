@@ -3,6 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { workspaceQueryKeys } from "@/hooks/workspace/workspaceQueries";
 import {
   fetchTemplateVersions,
+  deleteTemplateVersion,
   fetchTemplateVersionWorkspace,
   fetchTemplateVersionFile,
   restoreTemplateVersion,
@@ -104,5 +105,39 @@ export function useTemplateVersions(
       if (generation.current === request) setBusy(false);
     }
   }
-  return { versions, revision, listing, file, busy, error, browse, rollback };
+  async function remove(selectedRevision: number) {
+    if (busy) return;
+    const request = ++generation.current;
+    setBusy(true);
+    setError("");
+    try {
+      await deleteTemplateVersion(id, selectedRevision);
+      if (generation.current !== request) return;
+      const remaining = versions.filter((item) => item.revision !== selectedRevision);
+      setVersions(remaining);
+      const result = { ...template, version_count: remaining.length };
+      queryClient.setQueryData<HubTemplate[]>(workspaceQueryKeys.hubTemplates(), (current) =>
+        current?.map((item) => (item.id === id ? { ...item, version_count: remaining.length } : item)),
+      );
+      queryClient.setQueryData(workspaceQueryKeys.hubTemplate(id), result);
+      onRestored?.(result);
+      if (revision === selectedRevision) {
+        setRevision(null);
+        setListing(null);
+        setFile(null);
+      }
+    } catch (err) {
+      if (generation.current === request) setError(localizeAPIError(err, t, t("agentActionFailed")));
+    } finally {
+      if (generation.current === request) setBusy(false);
+    }
+  }
+  function collapse() {
+    ++generation.current;
+    setRevision(null);
+    setListing(null);
+    setFile(null);
+    setBusy(false);
+  }
+  return { versions, revision, listing, file, busy, error, browse, rollback, remove, collapse };
 }

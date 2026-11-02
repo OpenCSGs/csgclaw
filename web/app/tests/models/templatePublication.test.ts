@@ -54,7 +54,8 @@ describe("template publication status", () => {
   });
   it("formats revisions and supports legacy version strings", () => {
     expect(templateVersionLabel(local)).toBe("V3");
-    expect(templateVersionLabel({ ...local, revision: 0, version: "v1.2" })).toBe("v1.2");
+    expect(templateVersionLabel({ ...local, revision: 0, version: "0.2.0" })).toBe("V1");
+    expect(templateVersionLabel({ ...local, source: { kind: "remote" }, revision: 0, version: "v1.2" })).toBe("v1.2");
     expect(templateVersionLabel(null)).toBe("");
   });
 });

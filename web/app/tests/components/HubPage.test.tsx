@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
@@ -66,7 +66,7 @@ it("keeps the template library detail inline when switching versions", async () 
       return Response.json({ kind: "dir", entries: [] });
     }),
   );
-  const view = render(
+  render(
     <QueryClientProvider client={client}>
       <MemoryRouter>
         <HubPage />
@@ -74,9 +74,7 @@ it("keeps the template library detail inline when switching versions", async () 
     </QueryClientProvider>,
   );
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-  const details = view.container.querySelector("details")!;
-  details.open = true;
-  fireEvent(details, new Event("toggle"));
+  await user.click(screen.getByRole("button", { name: "Versions (1)" }));
   await user.click(await screen.findByRole("button", { name: "V1" }));
   await user.click(screen.getByRole("button", { name: "Switch version" }));
   await user.click(screen.getByRole("button", { name: "Confirm switch to V1" }));

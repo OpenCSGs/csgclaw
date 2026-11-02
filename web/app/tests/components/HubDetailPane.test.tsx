@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { workspaceQueryKeys } from "@/hooks/workspace/workspaceQueries";
-import { fireEvent, render as rtlRender, screen, within, waitFor } from "@testing-library/react";
+import { render as rtlRender, screen, within, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { useState, type ReactNode } from "react";
@@ -30,6 +30,7 @@ function t(key: string, params: Record<string, string | number> = {}) {
     templateLastPublishedVersion: "Last published {version}",
     templateViewCommunity: "View community template",
     templateCurrentVersionPublished: "Current version published",
+    templateVersionsTab: "Versions ({count})",
     templateVersionPublished: "{version} published",
     templateCommunityVersionDifferent: "Differs from community version",
     templateCommunityVersionUnconfirmed: "Community version unconfirmed",
@@ -981,9 +982,9 @@ describe("HubDetailPane", () => {
       });
       await openTemplateDetail(user);
       expect(screen.queryByRole("button", { name: "agentTemplateCreateInHub" })).not.toBeInTheDocument();
-      await user.click(screen.getByRole("button", { name: "Publish to community" }));
+      await user.click(screen.getByRole("button", { name: "Publish V1 to community" }));
       expect(screen.queryByRole("button", { name: "agentTemplateCreateInHub" })).not.toBeInTheDocument();
-      await user.click(screen.getByRole("button", { name: "Publish template only" }));
+      await user.click(screen.getByRole("button", { name: "Publish V1 to community" }));
       const success = await screen.findByRole("dialog", { name: "Published successfully" });
       await user.click(within(success).getByRole("button", { name: "agentTemplateCreateInHub" }));
       expect(open).toHaveBeenCalledWith(
@@ -1064,7 +1065,7 @@ describe("HubDetailPane", () => {
         "href",
         "https://custom.example:8443/agentichub?view=resources&subview=template",
       );
-      expect(screen.getByRole("button", { name: "Publish to community" })).toBeEnabled();
+      expect(screen.getByRole("button", { name: "Publish V1 to community" })).toBeEnabled();
       expect(screen.getAllByText("Community version unconfirmed").length).toBeGreaterThan(0);
     },
   );
@@ -1171,6 +1172,7 @@ describe("HubDetailPane", () => {
       ...template,
       id: "local.demo-template",
       revision: 2,
+      version_count: 2,
       latest_revision: 2,
       source: { kind: "local" },
     };
@@ -1197,9 +1199,7 @@ describe("HubDetailPane", () => {
       onSelectTemplate,
       queryClient: client,
     });
-    const details = view.container.querySelector("details")!;
-    details.open = true;
-    fireEvent(details, new Event("toggle"));
+    await user.click(screen.getByRole("button", { name: "Versions (2)" }));
     await user.click(await screen.findByRole("button", { name: "V1" }));
     await user.click(screen.getByRole("button", { name: "templateRestoreVersion" }));
     await user.click(screen.getByRole("button", { name: "templateVersionRollbackConfirm" }));
@@ -1209,6 +1209,7 @@ describe("HubDetailPane", () => {
     expect(onSelectTemplate).not.toHaveBeenCalled();
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     view.rerenderOptions({ selectedTemplate: restored });
+    await user.click(screen.getByRole("button", { name: "Versions (2)" }));
     expect(screen.getAllByText("templateVersionActive V1").length).toBeGreaterThan(0);
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
@@ -1283,12 +1284,12 @@ describe("HubDetailPane", () => {
     renderHubDetailPane("template", { selectedTemplate: localTemplate, onPublishTemplate });
 
     await openTemplateDetail(user);
-    await user.click(screen.getByRole("button", { name: "Publish to community" }));
-    expect(screen.getByRole("button", { name: "Publish template only" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Publish V1 to community" }));
+    expect(screen.getByRole("button", { name: "Publish V1 to community" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Publish and deploy" })).not.toBeInTheDocument();
     expect(screen.getByRole("checkbox", { name: "Include agent memory" })).not.toBeChecked();
     await user.click(screen.getByRole("checkbox", { name: "Include agent memory" }));
-    await user.click(screen.getByRole("button", { name: "Publish template only" }));
+    await user.click(screen.getByRole("button", { name: "Publish V1 to community" }));
 
     expect(onPublishTemplate).toHaveBeenCalledWith(localTemplate, true);
   });
@@ -1308,8 +1309,8 @@ describe("HubDetailPane", () => {
     });
 
     await openTemplateDetail(user);
-    await user.click(screen.getByRole("button", { name: "Publish to community" }));
-    await user.click(screen.getByRole("button", { name: "Publish template only" }));
+    await user.click(screen.getByRole("button", { name: "Publish V1 to community" }));
+    await user.click(screen.getByRole("button", { name: "Publish V1 to community" }));
 
     expect(screen.queryByRole("dialog", { name: "Published successfully" })).not.toBeInTheDocument();
   });
@@ -1329,7 +1330,7 @@ describe("HubDetailPane", () => {
     });
 
     await openTemplateDetail(user);
-    await user.click(screen.getByRole("button", { name: "Publish to community" }));
+    await user.click(screen.getByRole("button", { name: "Publish V1 to community" }));
 
     expect(screen.getByRole("dialog", { name: "Publish agent template" })).toBeInTheDocument();
     expect(screen.getByText("Template was published, but deployment failed.")).toBeInTheDocument();
@@ -1346,10 +1347,10 @@ describe("HubDetailPane", () => {
       });
       const user = userEvent.setup();
       if (!inlineTemplateDetail) await openTemplateDetail(user);
-      await user.click(screen.getByRole("button", { name: "Publish to community" }));
+      await user.click(screen.getByRole("button", { name: "Publish V1 to community" }));
       expect(reset).toHaveBeenCalledOnce();
       await user.click(screen.getByRole("button", { name: "Cancel" }));
-      await user.click(screen.getByRole("button", { name: "Publish to community" }));
+      await user.click(screen.getByRole("button", { name: "Publish V1 to community" }));
       expect(reset).toHaveBeenCalledTimes(2);
     },
   );
@@ -1365,7 +1366,7 @@ describe("HubDetailPane", () => {
     renderHubDetailPane("template", { selectedTemplate: localTemplate, publishDisabled: true });
 
     await openTemplateDetail(userEvent.setup());
-    const publish = screen.getByRole("button", { name: "Publish to community" });
+    const publish = screen.getByRole("button", { name: "Publish V1 to community" });
     expect(publish).toBeDisabled();
     expect(publish).toHaveAttribute("title", "Sign in first");
   });
