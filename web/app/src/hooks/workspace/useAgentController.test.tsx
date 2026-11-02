@@ -2112,6 +2112,41 @@ describe("useAgentController", () => {
     await waitFor(() => expect(result.current.agentViewProps.savedDraft?.model_id).toBe("MiniMax-M2.5"));
   });
 
+  it("refreshes an unedited profile after the manager receives its first model_config", async () => {
+    const partial: AgentLike = {
+      id: "u-manager",
+      name: "manager",
+      role: "manager",
+      runtime_kind: "codex",
+      status: "running",
+      model_config: { model_provider_id: "csghub-lite" },
+    };
+    const configured: AgentLike = {
+      ...partial,
+      model_config: { model_provider_id: "openai", model_id: "first-model" },
+    };
+    let current = partial;
+    vi.mocked(fetchAgent)
+      .mockReset()
+      .mockImplementation(async () => current);
+    vi.mocked(fetchAgentProfile)
+      .mockReset()
+      .mockImplementation(async () => current.model_config ?? {});
+    const { result, rerender } = renderHook(({ agents }) => useAgentControllerHarness({ agents }).controller, {
+      initialProps: { agents: [partial] },
+      wrapper: createWrapper(),
+    });
+    await waitFor(() => expect(fetchAgentProfile).toHaveBeenCalledWith("u-manager"));
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(result.current.agentViewProps.draft?.model_provider_id).toBe("csghub-lite");
+    current = configured;
+    rerender({ agents: [configured] });
+    await waitFor(() => expect(result.current.agentViewProps.draft?.model_id).toBe("first-model"));
+    expect(result.current.agentViewProps.savedDraft?.model_provider_id).toBe("openai");
+  });
+
   it("loads one page of descriptions and exposes the complete resource count", async () => {
     const skills = Array.from({ length: 300 }, (_, index) => ({
       name: `skill-${index}`,

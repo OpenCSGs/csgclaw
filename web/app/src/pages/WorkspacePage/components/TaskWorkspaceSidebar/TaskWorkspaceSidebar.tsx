@@ -1,7 +1,7 @@
 import { Plus, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { TaskConversationList } from "@/components/business/TaskConversationList";
-import { resolveAgentChannelUserID, agentRuntimeOptions } from "@/models/agents";
+import { resolveAgentChannelUserID, agentRuntimeOptions, isManagerAgent } from "@/models/agents";
 import { resolveConversationUser, agentMatchesUser } from "@/models/conversations";
 import { pathForPane, WorkspacePaneTypes } from "@/models/routing";
 import { Tooltip } from "@/components/ui";
@@ -9,6 +9,7 @@ import type { WorkspaceSidebarProps } from "@/hooks/workspace/contracts/sidebar"
 import type { TaskEntryController } from "@/hooks/workspace/useTaskEntry";
 import type { IMConversation } from "@/models/conversations";
 import styles from "./TaskWorkspaceSidebar.module.css";
+import { ManagerSetupNotice } from "../ManagerSetupNotice";
 import { WorkspaceUserMenu } from "../WorkspaceUserMenu";
 import { LogoMark, LogoWordmark } from "../WorkspaceSidebar/WorkspaceSidebarBrand";
 import { useWorkspaceDialogs } from "@/hooks/workspace/useWorkspaceDialogs";
@@ -149,6 +150,13 @@ export function TaskWorkspaceSidebar(props: WorkspaceSidebarProps & { entry: Tas
           </Tooltip>
         ))}
       </nav>
+      {!isSidebarCollapsed ? (
+        <ManagerSetupNotice
+          manager={props.agentItems.find(isManagerAgent)}
+          onConfigure={(manager) => selectDestination(() => props.onSelectAgent(manager))}
+          t={t}
+        />
+      ) : null}
       {!isSidebarCollapsed ? (
         <div className={styles.history}>
           <TaskConversationList

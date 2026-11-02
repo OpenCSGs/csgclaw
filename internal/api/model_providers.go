@@ -5,6 +5,7 @@ import (
 	"csgclaw/internal/modelcap"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"maps"
 	"net/http"
 	"strings"
@@ -122,7 +123,7 @@ func (h *Handler) createModelProvider(w http.ResponseWriter, r *http.Request) {
 	}
 	cfg.Models.Providers[id] = provider
 	delete(cfg.Models.Profiles, id)
-	if err := h.saveModelProvidersConfig(path, cfg); err != nil {
+	if err := h.saveModelProvidersConfig(r.Context(), path, cfg); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -191,7 +192,7 @@ func (h *Handler) updateModelProvider(w http.ResponseWriter, r *http.Request) {
 		cfg.Models.Providers[id] = updatedProvider
 	}
 	delete(cfg.Models.Profiles, id)
-	if err := h.saveModelProvidersConfig(path, cfg); err != nil {
+	if err := h.saveModelProvidersConfig(r.Context(), path, cfg); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -233,7 +234,7 @@ func (h *Handler) deleteModelProvider(w http.ResponseWriter, r *http.Request) {
 	}
 	delete(cfg.Models.Providers, id)
 	delete(cfg.Models.Profiles, id)
-	if err := h.saveModelProvidersConfig(path, cfg); err != nil {
+	if err := h.saveModelProvidersConfig(r.Context(), path, cfg); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -268,7 +269,7 @@ func (h *Handler) checkModelProvider(w http.ResponseWriter, r *http.Request) {
 	result := appCheckModelProvider(r.Context(), providerCheckInput(id, merged, req.Connect))
 	if updated, changed := agent.ApplyModelProviderCheckResult(cfg.Models, id, result); changed && !modelProviderTransportChanged(existing, merged) {
 		cfg.Models = updated
-		if err := h.saveModelProvidersConfig(path, cfg); err != nil {
+		if err := h.saveModelProvidersConfig(r.Context(), path, cfg); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
@@ -299,7 +300,7 @@ func (h *Handler) refreshOpenCSGModelProvider(ctx context.Context) error {
 		return nil
 	}
 	cfg.Models = models
-	return h.saveModelProvidersConfig(path, cfg)
+	return h.saveModelProvidersConfig(ctx, path, cfg)
 }
 
 func providerConfigFromRequest(existing config.ProviderConfig, req modelProviderRequest, preserveSecret bool) config.ProviderConfig {
@@ -356,14 +357,50 @@ func defaultModelProviderDisplayName(preset string) string {
 	}
 }
 
-func (h *Handler) saveModelProvidersConfig(path string, cfg config.Config) error {
+func (h *Handler) saveModelProvidersConfig(ctx context.Context, path string, cfg config.Config) error {
 	if err := cfg.Save(path); err != nil {
 		return err
 	}
 	if h != nil && h.svc != nil {
 		h.agentModels.SetLLMConfig(cfg.Models)
+		if err := h.startUnconfiguredManager(ctx); err != nil {
+			slog.Warn("start manager after model provider update failed", "error", err)
+		}
 	}
 	return nil
+}
+
+// Connecting the first model provider completes initial manager setup. Use the
+// Engine's versioned update so concurrent manual configuration wins.
+func (h *Handler) startUnconfiguredManager(ctx context.Context) error {
+	if h.agentEngine == nil || h.agentModels == nil {
+		return nil
+	}
+	defaults := h.agentModels.CreationDefaultsView()
+	if defaults.ModelProviderID == "" || defaults.ModelID == "" {
+		return nil
+	}
+	if _, exists := h.svc.Agent(agent.ManagerUserID); !exists {
+		return nil
+	}
+	manager, err := h.agentEngine.Agents().Get(ctx, agent.ManagerUserID, agentengine.AgentGetOptions{})
+	if err != nil {
+		return err
+	}
+	if manager.ArchivedAt != nil || manager.Spec.DesiredState != agentengine.AgentDesiredStateRunning ||
+		manager.Spec.Model.ModelID != "" || manager.Status.Model.ProfileComplete {
+		return nil
+	}
+	model := manager.Spec.Model
+	model.ProviderID = defaults.ModelProviderID
+	model.Provider = agent.ProfileProviderForModelProviderID(defaults.ModelProviderID)
+	model.ModelID = defaults.ModelID
+	model.Selector = config.ModelSelector(defaults.ModelProviderID, defaults.ModelID)
+	_, err = h.agentEngine.Agents().Update(ctx, manager.ID, agentengine.AgentUpdateRequest{
+		Spec:      agentengine.AgentSpec{Model: model, DesiredState: manager.Spec.DesiredState},
+		FieldMask: []string{"model", "desired_state"}, ResourceVersion: manager.ResourceVersion,
+	})
+	return err
 }
 
 func findProviderSummary(catalog agent.ModelProviderCatalog, id string) agent.ModelProviderSummary {

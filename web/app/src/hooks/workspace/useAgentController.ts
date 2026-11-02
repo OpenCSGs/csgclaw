@@ -673,10 +673,9 @@ export function useAgentController({
     if (!selectedAgentForPage) {
       return "";
     }
-    const profile = selectedAgentForPage.agent_profile;
-    const modelProviderID =
-      selectedAgentForPage.model_provider_id || selectedAgentForPage.agent_profile?.model_provider_id || "";
-    const modelID = selectedAgentForPage.model_id || selectedAgentForPage.agent_profile?.model_id || "";
+    const profile = agentProfileConfig(selectedAgentForPage);
+    const modelProviderID = selectedAgentForPage.model_provider_id || profile?.model_provider_id || "";
+    const modelID = selectedAgentForPage.model_id || profile?.model_id || "";
     return JSON.stringify({
       id: selectedAgentForPage.id || "",
       name: selectedAgentForPage.name || "",
