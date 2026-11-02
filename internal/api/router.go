@@ -134,6 +134,7 @@ func (h *Handler) registerCoreRoutes(router chi.Router) {
 			r.Delete("/{id}", h.deleteHubTemplateByID)
 			r.Get("/{id}/versions", h.handleHubVersions)
 			r.Get("/{id}/versions/{revision}", h.handleHubVersions)
+			r.Delete("/{id}/versions/{revision}", h.handleHubVersions)
 			r.Post("/{id}/versions/{revision}/restore", h.handleHubVersions)
 			r.Get("/{id}/workspace", h.getHubTemplateWorkspaceByID)
 			r.Get("/{id}/workspace/file", h.getHubTemplateWorkspaceFileByID)

@@ -435,14 +435,14 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
     (target: AgentTemplatePublishTarget) => {
       setPublishTarget(target);
       setPublishTemplateName(linkedTemplate?.name || defaultTemplateName(String(item.id || "")));
-      setPublishTemplateDisplayName(String(item.name || "").trim());
+      setPublishTemplateDisplayName(linkedTemplate?.display_name || String(item.name || "").trim());
       setPublishTemplateDescription(String(item.description || "").trim());
       setPublishCommitMessage("");
       setPublishTemplateIncludeMemory(false);
       setPublishTemplateNameError("");
       setPublishAttempted(false);
     },
-    [item.description, item.id, item.name, linkedTemplate?.name],
+    [item.description, item.id, item.name, linkedTemplate?.name, linkedTemplate?.display_name],
   );
   const submitPublishTemplate = useCallback(
     async (target = publishTarget) => {
@@ -1447,6 +1447,7 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
               <span>{t("agentPublishTemplateName")}</span>
               <input
                 value={publishTemplateName}
+                readOnly={Boolean(linkedTemplate)}
                 maxLength={TEMPLATE_NAME_MAX_LENGTH}
                 aria-label={t("agentPublishTemplateName")}
                 aria-invalid={Boolean(publishTemplateNameError)}

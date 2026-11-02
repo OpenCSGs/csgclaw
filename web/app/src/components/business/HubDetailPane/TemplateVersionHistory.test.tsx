@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -9,6 +9,7 @@ import {
   fetchTemplateVersionWorkspace,
   fetchTemplateVersionFile,
   restoreTemplateVersion,
+  deleteTemplateVersion,
 } from "@/api/hub";
 import { workspaceQueryKeys } from "@/hooks/workspace/workspaceQueries";
 import { createTranslator } from "@/shared/i18n";
@@ -18,6 +19,7 @@ vi.mock("@/api/hub", () => ({
   fetchTemplateVersionWorkspace: vi.fn(),
   fetchTemplateVersionFile: vi.fn(),
   restoreTemplateVersion: vi.fn(),
+  deleteTemplateVersion: vi.fn(),
 }));
 const template = { id: "local.Reviewer", uid: "stable-id", revision: 2, name: "Reviewer", source: { kind: "local" } };
 const versions = [
@@ -33,9 +35,6 @@ function mount(onRestored = vi.fn()) {
       <TemplateVersionHistory template={template} locale="en" t={createTranslator("en")} onRestored={onRestored} />
     </QueryClientProvider>,
   );
-  const summary = view.container.querySelector("details")!;
-  summary.open = true;
-  fireEvent(summary, new Event("toggle"));
   return { view, onRestored, client };
 }
 beforeEach(() => {
@@ -50,6 +49,20 @@ beforeEach(() => {
   vi.mocked(restoreTemplateVersion).mockResolvedValue({ ...template, revision: 1, latest_revision: 2 });
 });
 describe("TemplateVersionHistory", () => {
+  it("starts with collapsed versions and deletes only inactive history", async () => {
+    const user = userEvent.setup();
+    vi.mocked(deleteTemplateVersion).mockResolvedValue({ deleted: true });
+    const { client } = mount();
+    expect(await screen.findByRole("button", { name: "V1" })).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByText("initial")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Delete version V2" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Delete version V1" }));
+    await waitFor(() => expect(screen.queryByRole("button", { name: "V1" })).not.toBeInTheDocument());
+    expect(deleteTemplateVersion).toHaveBeenCalledWith(template.id, 1);
+    expect(client.getQueryData(workspaceQueryKeys.hubTemplate(template.id))).toEqual(
+      expect.objectContaining({ version_count: 1 }),
+    );
+  });
   it("previews history and rolls back from the latest version without creating a revision", async () => {
     const user = userEvent.setup();
     const { onRestored, client } = mount();
@@ -93,14 +106,11 @@ describe("TemplateVersionHistory", () => {
         />
       );
     }
-    const view = render(
+    render(
       <QueryClientProvider client={client}>
         <Harness />
       </QueryClientProvider>,
     );
-    const summary = view.container.querySelector("details")!;
-    summary.open = true;
-    fireEvent(summary, new Event("toggle"));
     await user.click(await screen.findByRole("button", { name: "V1" }));
     await user.click(screen.getByRole("button", { name: "Switch version" }));
     expect(screen.getByRole("combobox", { name: "Target version" })).toHaveTextContent("V1");

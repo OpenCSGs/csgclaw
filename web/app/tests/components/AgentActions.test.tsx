@@ -339,6 +339,45 @@ describe("agent action visibility", () => {
     );
   });
 
+  it("locks the template name while allowing display name edits on subsequent saves", async () => {
+    const user = userEvent.setup();
+    const onPublish = vi.fn().mockResolvedValue(true);
+    render(
+      <AgentDetailPane
+        item={worker}
+        t={t}
+        busyKey=""
+        draft={null}
+        models={[]}
+        linkedTemplate={{
+          id: "local.saved",
+          name: "saved",
+          display_name: "Saved name",
+          revision: 1,
+          source: { kind: "local" },
+        }}
+        onDelete={vi.fn()}
+        onDraftChange={vi.fn()}
+        onInvite={vi.fn()}
+        onOpenDM={vi.fn()}
+        onPublish={onPublish}
+        onRecreate={vi.fn()}
+        onStart={vi.fn()}
+        onStop={vi.fn()}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: "More" }));
+    await user.click(screen.getByRole("menuitem", { name: "Save as local template" }));
+    expect(screen.getByRole("textbox", { name: "Template name" })).toHaveAttribute("readonly");
+    expect(screen.getByRole("textbox", { name: "Template name" })).toHaveValue("saved");
+    expect(screen.getByRole("textbox", { name: "Display name" })).not.toHaveAttribute("readonly");
+    expect(screen.getByRole("textbox", { name: "Display name" })).toHaveValue("Saved name");
+    await user.clear(screen.getByRole("textbox", { name: "Display name" }));
+    await user.type(screen.getByRole("textbox", { name: "Display name" }), "Renamed display");
+    await user.click(screen.getByRole("button", { name: "Save as local template" }));
+    expect(onPublish).toHaveBeenCalledWith("local", "saved", "Agent description", false, "Renamed display", "");
+  });
+
   it("rejects an invalid template name before publishing", async () => {
     const user = userEvent.setup();
     const onPublish = vi.fn().mockResolvedValue(true);

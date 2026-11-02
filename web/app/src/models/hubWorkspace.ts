@@ -86,6 +86,7 @@ export type HubTemplate = AgentTemplateLike & {
   }>;
   revision?: number;
   latest_revision?: number;
+  version_count?: number;
   version?: string;
   namespace?: string;
   metadata?: HubTemplateMetadata | null;

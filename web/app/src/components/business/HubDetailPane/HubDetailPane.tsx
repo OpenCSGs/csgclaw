@@ -99,7 +99,7 @@ function moduleClassNames(...values: ModuleClassValue[]): string {
     .join(" ");
 }
 const EMPTY_WORKSPACE_ENTRIES: readonly WorkspaceEntry[] = [];
-type TemplateDetailTabID = "profile" | "instructions" | "memory" | "skills" | "mcp";
+type TemplateDetailTabID = "profile" | "instructions" | "memory" | "skills" | "mcp" | "versions";
 type MCPCreateMode = "manual" | "remote";
 type SkillFilterTabID = "all" | "remote" | "local";
 type TemplateFilterTabID = TemplateGroup;
@@ -1343,15 +1343,30 @@ export function HubDetailPane({
         label: t("agentAppsTab"),
         count: templateMCPServers.length > 0 ? templateMCPServers.length : undefined,
       },
+      ...(selectedTemplate?.source?.kind === "local"
+        ? [
+            {
+              id: "versions" as const,
+              label: t("templateVersionsTab", { count: selectedTemplate?.version_count ?? 1 }),
+            },
+          ]
+        : []),
     ],
-    [t, templateMCPServers.length, templateMemoryEnabled, templateSkillCount],
+    [
+      t,
+      templateMCPServers.length,
+      templateMemoryEnabled,
+      templateSkillCount,
+      selectedTemplate?.source?.kind,
+      selectedTemplate?.version_count,
+    ],
   );
   useEffect(() => {
     setActiveTemplateTab("profile");
   }, [selectedTemplateId]);
   useEffect(() => {
     const directories = new Set<string>(["skills"]);
-    if (activeTemplateTab !== "profile") {
+    if (activeTemplateTab !== "profile" && activeTemplateTab !== "versions") {
       directories.add(
         activeTemplateTab === "mcp" ? "mcps" : activeTemplateTab === "memory" ? "memories" : activeTemplateTab,
       );
@@ -1530,7 +1545,7 @@ export function HubDetailPane({
 
   function selectTemplateTab(tab: TemplateDetailTabID) {
     setActiveTemplateTab(tab);
-    if (tab !== "profile") {
+    if (tab !== "profile" && tab !== "versions") {
       const selectedFile =
         tab === "skills"
           ? firstTemplateSectionFile(workspaceEntries, "skills", "SKILL.md")
@@ -2104,7 +2119,10 @@ export function HubDetailPane({
                 })}
               </nav>
 
-              {activeTemplateTab === "profile" ? (
+              {activeTemplateTab === "versions" && selectedTemplate.source?.kind === "local" ? (
+                <TemplateVersionHistory key={selectedTemplate.id} template={selectedTemplate} t={t} locale={locale} />
+              ) : null}
+              {activeTemplateTab === "versions" ? null : activeTemplateTab === "profile" ? (
                 <div className={moduleClassNames("profile-editor-shell hub-template-profile-shell")}>
                   <section className={moduleClassNames("profile-section")}>
                     <div className={moduleClassNames("profile-section-heading")}>
@@ -2114,14 +2132,6 @@ export function HubDetailPane({
                       </p>
                     </div>
                     <div className={moduleClassNames("profile-grid-compact hub-template-profile-grid")}>
-                      {selectedTemplate.source?.kind === "local" ? (
-                        <TemplateVersionHistory
-                          key={selectedTemplate.id}
-                          template={selectedTemplate}
-                          t={t}
-                          locale={locale}
-                        />
-                      ) : null}
                       <label className={moduleClassNames("field")}>
                         <span>{t("resourcesRuntimeLabel")}</span>
                         <input
@@ -2998,18 +3008,13 @@ export function HubDetailPane({
                     );
                   })}
                 </nav>
-                {activeTemplateTab === "profile" ? (
+                {activeTemplateTab === "versions" && selectedTemplate.source?.kind === "local" ? (
+                  <TemplateVersionHistory key={selectedTemplate.id} template={selectedTemplate} t={t} locale={locale} />
+                ) : null}
+                {activeTemplateTab === "versions" ? null : activeTemplateTab === "profile" ? (
                   <div className={moduleClassNames("profile-editor-shell hub-template-profile-shell")}>
                     <section className={moduleClassNames("profile-section")}>
                       <div className={moduleClassNames("profile-grid-compact hub-template-profile-grid")}>
-                        {selectedTemplate.source?.kind === "local" ? (
-                          <TemplateVersionHistory
-                            key={selectedTemplate.id}
-                            template={selectedTemplate}
-                            t={t}
-                            locale={locale}
-                          />
-                        ) : null}
                         <label className={moduleClassNames("field")}>
                           <span>{t("resourcesRuntimeLabel")}</span>
                           <input
@@ -3654,7 +3659,7 @@ export function HubDetailPane({
               disabled={publishBusy}
               onClick={() => void handlePublishTemplate()}
             >
-              {selectedTemplate?.revision || selectedTemplate?.version
+              {templateVersionLabel(selectedTemplate)
                 ? t("templatePublishVersionAction", { version: publishVersionLabel })
                 : t("agentPublishCommunityTemplateOnly")}
             </Button>

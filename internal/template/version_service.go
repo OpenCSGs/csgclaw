@@ -70,3 +70,11 @@ func (s *Service) RestoreVersion(ctx context.Context, id string, revision int, m
 	store, _, _ := s.resolveRead(id)
 	return decorateTemplate(store, item), nil
 }
+
+func (s *Service) DeleteVersion(ctx context.Context, id string, revision int) error {
+	local, rawID, err := s.localVersionStore(id)
+	if err != nil {
+		return err
+	}
+	return local.DeleteVersion(ctx, rawID, revision)
+}

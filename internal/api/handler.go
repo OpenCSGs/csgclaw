@@ -1822,7 +1822,14 @@ func (h *Handler) handleHubTemplates(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "hub service is not configured", http.StatusServiceUnavailable)
 			return
 		}
-		items, err := hubSvc.List(r.Context())
+		var items []hub.Template
+		if r.URL.Query().Get("scope") == "local" {
+			items, err = hubSvc.ListLocal(r.Context())
+		} else if r.URL.Query().Get("scope") == "remote" {
+			items, err = hubSvc.ListRemote(r.Context())
+		} else {
+			items, err = hubSvc.List(r.Context())
+		}
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadGateway)
 			return
@@ -2077,6 +2084,7 @@ func presentHubTemplates(items []hub.Template) []apitypes.HubTemplate {
 func presentHubTemplate(item hub.Template) apitypes.HubTemplate {
 	presented := apitypes.HubTemplate{
 		LatestRevision: item.LatestRevision,
+		VersionCount:   item.VersionCount,
 		Publications:   item.Publications,
 		ID:             item.ID,
 		UID:            item.UID,

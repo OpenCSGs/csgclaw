@@ -103,7 +103,10 @@ func (s *LocalStore) Get(_ context.Context, id string) (Template, error) {
 	if err != nil {
 		return Template{}, err
 	}
-	latestRevision := manifest.Revision
+	if manifest.Revision < 1 {
+		manifest.Revision = 1
+	}
+	latestRevision := max(manifest.Revision, state.HighestRevision)
 	for _, version := range state.Versions {
 		latestRevision = max(latestRevision, version.Revision)
 	}
@@ -113,6 +116,7 @@ func (s *LocalStore) Get(_ context.Context, id string) (Template, error) {
 	}
 	return Template{
 		LatestRevision: latestRevision,
+		VersionCount:   max(1, len(state.Versions)),
 		Publications:   state.Publications,
 		SourceAgentID:  state.SourceAgentID,
 		ID:             id,
