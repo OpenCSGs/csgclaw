@@ -28,7 +28,6 @@ import type { IMConversation, TranslateFn } from "@/models/conversations";
 import type { NavigatePaneOptions } from "./types";
 
 const TASKS_QUERY_KEY = ["workspace", "tasks"] as const;
-const SCHEDULED_TASKS_QUERY_KEY = ["workspace", "scheduled-tasks"] as const;
 const TASK_BOARD_POLL_DELAY_MS = 3000;
 const TASK_BOARD_POLL_STATUSES = new Set(["pending", "assigned", "in_progress", "running"]);
 const TASK_TAB_REVALIDATE_STALE_MS = 5000;
@@ -84,7 +83,7 @@ export function useTaskController({
     queryFn: fetchGlobalTasks,
   });
   const scheduledTasksQuery = useQuery({
-    queryKey: SCHEDULED_TASKS_QUERY_KEY,
+    queryKey: workspaceQueryKeys.scheduledTasks(),
     queryFn: fetchScheduledTasks,
     refetchInterval: scheduledTaskViewActive ? TASK_BOARD_POLL_DELAY_MS : false,
   });
@@ -193,6 +192,14 @@ export function useTaskController({
       );
     }
   }, [queryClient, refetchScheduledTasks, scheduledTasks, selectedScheduledTaskID]);
+
+  useEffect(() => {
+    if (scheduledTaskViewActive) {
+      // A CLI/Manager may have saved a schedule while this page was inactive.
+      // Revalidate on entry without waiting for the next poll or cancelling an in-flight fetch.
+      void refetchScheduledTasks({ cancelRefetch: false });
+    }
+  }, [refetchScheduledTasks, scheduledTaskViewActive]);
 
   useEffect(() => {
     if (activePane.type !== WorkspacePaneTypes.task || tasksFetching) {
@@ -572,7 +579,8 @@ export function useTaskController({
       teams,
       scheduledTasks,
       scheduledTaskRuns: visibleScheduledTaskRuns,
-      selectedScheduledTaskID: visibleScheduledTaskID,
+      allScheduledTaskRuns,
+      selectedScheduledTaskID,
       activeView: taskBoardView,
       selectedTask,
       selectedTaskID,

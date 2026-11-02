@@ -4,11 +4,18 @@ import { useState, type ReactNode } from "react";
 import { fetchGlobalTasks, fetchTeamEvents, fetchTeams } from "@/api/tasks";
 import { fetchScheduledTaskRuns, fetchScheduledTasks, runScheduledTaskNow } from "@/api/scheduledTasks";
 import { useTaskController } from "@/hooks/workspace/useTaskController";
+import { useWorkspaceRealtime } from "@/hooks/workspace/useWorkspaceRealtime";
+import { workspaceQueryKeys } from "@/hooks/workspace/workspaceQueries";
 import { paneFromLocation, WorkspacePaneTypes } from "@/models/routing";
 import type { WorkspacePane } from "@/models/routing";
-import type { TranslateFn } from "@/models/conversations";
+import type { IMServerEvent, TranslateFn } from "@/models/conversations";
 import type { WorkspaceTask } from "@/models/tasks";
 import type { WorkspaceScheduledTask, WorkspaceScheduledTaskRun } from "@/models/scheduledTasks";
+
+const subscribeIMEventsMock = vi.fn();
+vi.mock("@/shared/realtime/imEvents", () => ({
+  subscribeIMEvents: (handler: (event: IMServerEvent) => void) => subscribeIMEventsMock(handler),
+}));
 
 vi.mock("@/api/tasks", async () => {
   const actual = await vi.importActual<typeof import("@/api/tasks")>("@/api/tasks");
@@ -161,6 +168,8 @@ describe("useTaskController", () => {
   });
 
   beforeEach(() => {
+    subscribeIMEventsMock.mockReset();
+    subscribeIMEventsMock.mockReturnValue(() => {});
     vi.mocked(fetchGlobalTasks).mockReset();
     vi.mocked(fetchTeamEvents).mockReset();
     vi.mocked(fetchTeams).mockReset();
@@ -173,6 +182,96 @@ describe("useTaskController", () => {
     vi.mocked(fetchScheduledTasks).mockResolvedValue([]);
     vi.mocked(fetchScheduledTaskRuns).mockResolvedValue([]);
     vi.mocked(runScheduledTaskNow).mockResolvedValue(scheduledRun());
+  });
+
+  it.each(["scheduled_task.changed", "connection.open"])(
+    "updates schedule list and sidebar count in a conversation after %s",
+    async (type) => {
+      vi.useFakeTimers();
+      const queryClient = createQueryClient();
+      queryClient.setQueryData(workspaceQueryKeys.scheduledTasks(), []);
+      let onEvent: ((event: IMServerEvent) => void) | undefined;
+      subscribeIMEventsMock.mockImplementation((handler) => {
+        onEvent = handler;
+        return () => {};
+      });
+      const item = scheduledTask();
+      vi.mocked(fetchScheduledTasks).mockResolvedValue([item]);
+      const { result, unmount } = renderHook(
+        () => {
+          useWorkspaceRealtime({
+            agents: [],
+            usersById: new Map(),
+            onRefreshAgentState: vi.fn(async () => null),
+            onUpgradeStatusChange: vi.fn(),
+            refreshWorkspaceAgents: vi.fn(async () => []),
+            refreshWorkspaceBootstrap: vi.fn(async () => null),
+            setBootstrapData: vi.fn(),
+          });
+          return useTaskController({
+            activePane: paneFromLocation("/dms/manager-conversation"),
+            agents: [],
+            t,
+            onSelectConversation: vi.fn(),
+            onSelectTask: vi.fn(),
+            onSelectTaskBoardView: vi.fn(),
+          });
+        },
+        { wrapper: createWrapper(queryClient) },
+      );
+      try {
+        expect(result.current.scheduledTaskCount).toBe(0);
+        expect(fetchScheduledTasks).not.toHaveBeenCalled();
+        await act(async () => {
+          onEvent?.({ type });
+          onEvent?.({ type });
+          await vi.advanceTimersByTimeAsync(100);
+        });
+        await vi.waitFor(() => {
+          expect(result.current.scheduledTaskCount).toBe(1);
+          expect(result.current.taskViewProps.scheduledTasks).toEqual([item]);
+        });
+        expect(fetchScheduledTasks).toHaveBeenCalledTimes(1);
+      } finally {
+        unmount();
+        queryClient.clear();
+        vi.useRealTimers();
+      }
+    },
+  );
+
+  it("revalidates schedules immediately on page entry without waiting for polling", async () => {
+    const queryClient = createQueryClient();
+    queryClient.setQueryData(workspaceQueryKeys.scheduledTasks(), []);
+    const item = scheduledTask();
+    vi.mocked(fetchScheduledTasks).mockResolvedValue([item]);
+    const { result, rerender, unmount } = renderHook(
+      ({ pathname }) =>
+        useTaskController({
+          activePane: paneFromLocation(pathname),
+          agents: [],
+          t,
+          onSelectConversation: vi.fn(),
+          onSelectTask: vi.fn(),
+          onSelectTaskBoardView: vi.fn(),
+        }),
+      { initialProps: { pathname: "/dms/manager-conversation" }, wrapper: createWrapper(queryClient) },
+    );
+    try {
+      expect(fetchScheduledTasks).not.toHaveBeenCalled();
+      rerender({ pathname: "/scheduled-tasks" });
+      await waitFor(() => expect(result.current.scheduledTaskCount).toBe(1), { timeout: 500 });
+      expect(fetchScheduledTasks).toHaveBeenCalledTimes(1);
+      // A second visit must also recover an edit missed while the stream was disconnected.
+      rerender({ pathname: "/dms/manager-conversation" });
+      vi.mocked(fetchScheduledTasks).mockResolvedValue([]);
+      rerender({ pathname: "/scheduled-tasks" });
+      await waitFor(() => expect(result.current.scheduledTaskCount).toBe(0), { timeout: 500 });
+      expect(fetchScheduledTasks).toHaveBeenCalledTimes(2);
+    } finally {
+      unmount();
+      queryClient.clear();
+    }
   });
 
   it("refetches stale cached tasks when the tasks pane becomes active", async () => {

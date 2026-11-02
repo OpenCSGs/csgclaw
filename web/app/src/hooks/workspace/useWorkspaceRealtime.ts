@@ -75,6 +75,7 @@ export function useWorkspaceRealtime({
   const pendingBootstrapRefreshRef = useRef(false);
   const pendingAgentsRefreshRef = useRef(false);
   const pendingTeamsRefreshRef = useRef(false);
+  const pendingScheduledTasksRefreshRef = useRef(false);
 
   useEffect(() => {
     refs.current = {
@@ -107,10 +108,17 @@ export function useWorkspaceRealtime({
   ]);
 
   useEffect(() => {
-    function scheduleRefresh(options: { agents?: boolean; bootstrap?: boolean; teams?: boolean }) {
+    function scheduleRefresh(options: {
+      agents?: boolean;
+      bootstrap?: boolean;
+      teams?: boolean;
+      scheduledTasks?: boolean;
+    }) {
       pendingAgentsRefreshRef.current = pendingAgentsRefreshRef.current || Boolean(options.agents);
       pendingBootstrapRefreshRef.current = pendingBootstrapRefreshRef.current || Boolean(options.bootstrap);
       pendingTeamsRefreshRef.current = pendingTeamsRefreshRef.current || Boolean(options.teams);
+      pendingScheduledTasksRefreshRef.current =
+        pendingScheduledTasksRefreshRef.current || Boolean(options.scheduledTasks);
       if (refreshTimerRef.current) {
         clearTimeout(refreshTimerRef.current);
       }
@@ -119,9 +127,11 @@ export function useWorkspaceRealtime({
         const shouldRefreshAgents = pendingAgentsRefreshRef.current;
         const shouldRefreshBootstrap = pendingBootstrapRefreshRef.current;
         const shouldRefreshTeams = pendingTeamsRefreshRef.current;
+        const shouldRefreshScheduledTasks = pendingScheduledTasksRefreshRef.current;
         pendingAgentsRefreshRef.current = false;
         pendingBootstrapRefreshRef.current = false;
         pendingTeamsRefreshRef.current = false;
+        pendingScheduledTasksRefreshRef.current = false;
 
         const current = refs.current;
         void Promise.all([
@@ -130,6 +140,9 @@ export function useWorkspaceRealtime({
           shouldRefreshTeams
             ? current.queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.teams() })
             : Promise.resolve(),
+          shouldRefreshScheduledTasks
+            ? current.queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.scheduledTasks() })
+            : Promise.resolve(),
         ]);
       }, WORKSPACE_REALTIME_REFRESH_DEBOUNCE_MS);
     }
@@ -137,7 +150,10 @@ export function useWorkspaceRealtime({
     function handleEvent(payload: IMServerEvent) {
       const current = refs.current;
       if (payload.type === "connection.open") {
-        scheduleRefresh({ bootstrap: true });
+        scheduleRefresh({ bootstrap: true, scheduledTasks: true });
+      }
+      if (payload.type === "scheduled_task.changed") {
+        scheduleRefresh({ scheduledTasks: true });
       }
       current.setBootstrapData((data) => applyIMEvent(data, payload));
       current.onConversationEvent?.(payload);
@@ -185,6 +201,7 @@ export function useWorkspaceRealtime({
       pendingAgentsRefreshRef.current = false;
       pendingBootstrapRefreshRef.current = false;
       pendingTeamsRefreshRef.current = false;
+      pendingScheduledTasksRefreshRef.current = false;
     };
   }, []);
 }

@@ -497,3 +497,17 @@ func TestArchivedAgentSchedulesStayPausedAndCannotRun(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestUnsupportedSchedulesAreRejectedWithoutSaving(t *testing.T) {
+	svc := newTestService(t, time.Now())
+	for _, input := range []CreateInput{
+		{Title: "Workdays", AgentID: "u-manager", Prompt: "Report", Recurrence: "workdays", FirstRunAt: time.Now(), Enabled: true},
+	} {
+		if _, err := svc.Create(input); err == nil {
+			t.Fatalf("accepted unsupported schedule: %+v", input)
+		}
+	}
+	if len(svc.List()) != 0 {
+		t.Fatal("invalid schedule persisted")
+	}
+}

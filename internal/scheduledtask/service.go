@@ -121,6 +121,9 @@ func (s *Service) Create(input CreateInput) (Task, error) {
 	title := strings.TrimSpace(input.Title)
 	agentID := agent.CanonicalID(input.AgentID)
 	prompt := strings.TrimSpace(input.Prompt)
+	if !validRecurrence(input.Recurrence) {
+		return Task{}, fmt.Errorf("recurrence must be once, daily, weekly, or monthly")
+	}
 	recurrence := normalizeRecurrence(input.Recurrence)
 	if title == "" {
 		return Task{}, fmt.Errorf("title is required")
@@ -183,6 +186,9 @@ func (s *Service) Update(input UpdateInput) (Task, error) {
 		item.Prompt = strings.TrimSpace(*input.Prompt)
 	}
 	if input.Recurrence != nil {
+		if !validRecurrence(*input.Recurrence) {
+			return Task{}, fmt.Errorf("recurrence must be once, daily, weekly, or monthly")
+		}
 		item.Recurrence = normalizeRecurrence(*input.Recurrence)
 	}
 	if input.NextRunAt != nil {
@@ -514,4 +520,13 @@ func (s *Service) DisableAgent(id string) error {
 	}
 	s.state = next
 	return nil
+}
+
+func validRecurrence(value string) bool {
+	switch strings.TrimSpace(value) {
+	case "", RecurrenceOnce, RecurrenceDaily, RecurrenceWeekly, RecurrenceMonthly:
+		return true
+	default:
+		return false
+	}
 }

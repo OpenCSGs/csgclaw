@@ -13,6 +13,8 @@ import {
   DialogRoot,
   DialogTitle,
 } from "@/components/ui";
+import { AgentAvatarContent } from "@/components/business/AgentAvatar";
+import { ScheduledTaskStart } from "../ScheduledTaskStart";
 import { TaskStatusPill } from "@/components/business";
 import type { CreateWorkspaceTaskPayload } from "@/api/tasks";
 import type { CreateScheduledTaskPayload, UpdateScheduledTaskPayload } from "@/api/scheduledTasks";
@@ -20,6 +22,7 @@ import type { AgentLike } from "@/models/agents";
 import type { IMConversation, TranslateFn } from "@/models/conversations";
 import {
   scheduledTaskRecurrenceLabel,
+  scheduledTaskExecutors,
   type WorkspaceScheduledTask,
   type WorkspaceScheduledTaskRun,
 } from "@/models/scheduledTasks";
@@ -155,9 +158,17 @@ function taskAssignmentOptions(teams: readonly WorkspaceTeam[], agents: readonly
 }
 
 function scheduledTaskAgentOptions(agents: readonly AgentLike[]) {
-  return assignableAgents(agents).map((agent) => ({
+  return scheduledTaskExecutors(agents).map((agent) => ({
     value: String(agent.id || ""),
-    label: displayAgent(agent),
+    textValue: displayAgent(agent),
+    label: (
+      <span className={styles.executorOption}>
+        <span className={styles.executorAvatar} aria-hidden="true">
+          <AgentAvatarContent avatar={agent.avatar} fallback={displayAgent(agent).slice(0, 1)} />
+        </span>
+        {displayAgent(agent)}
+      </span>
+    ),
     description: String(agent.id || ""),
   }));
 }
@@ -261,6 +272,9 @@ type VoidOrPromise = void | Promise<void>;
 type TaskBoardView = "tasks" | "scheduled";
 
 export type TasksViewProps = {
+  onSendTextToManager?: (text: string) => Promise<boolean>;
+  scheduledTextBusy?: boolean;
+  scheduledTextError?: string;
   agents?: AgentLike[];
   createTaskBusy?: boolean;
   createTaskError?: string;
@@ -306,6 +320,7 @@ export type TasksViewProps = {
   teams?: WorkspaceTeam[];
   scheduledTasks?: WorkspaceScheduledTask[];
   scheduledTaskRuns?: WorkspaceScheduledTaskRun[];
+  allScheduledTaskRuns?: WorkspaceScheduledTaskRun[];
   createScheduledTaskBusy?: boolean;
   createScheduledTaskError?: string;
   editScheduledTaskBusy?: boolean;
@@ -315,6 +330,9 @@ export type TasksViewProps = {
 };
 
 export function TasksView({
+  onSendTextToManager,
+  scheduledTextBusy = false,
+  scheduledTextError = "",
   t = (key) => key,
   agents = EMPTY_AGENTS,
   tasks = [],
@@ -337,6 +355,7 @@ export function TasksView({
   editingScheduledTaskID = "",
   scheduledTasks = [],
   scheduledTaskRuns = [],
+  allScheduledTaskRuns = scheduledTaskRuns,
   selectedScheduledTaskID = "",
   scheduledTaskActionID = "",
   scheduledTaskActionError = "",
@@ -361,6 +380,11 @@ export function TasksView({
   onOpenEditScheduledTaskModal,
   onOpenConversation = () => {},
 }: TasksViewProps) {
+  const [showScheduledStart, setShowScheduledStart] = useState(!selectedScheduledTaskID);
+  const [scheduledTextFocus, setScheduledTextFocus] = useState(0);
+  useEffect(() => {
+    if (selectedScheduledTaskID) setShowScheduledStart(false);
+  }, [selectedScheduledTaskID]);
   const assignmentOptions = useMemo(() => taskAssignmentOptions(teams, agents, t), [agents, t, teams]);
   const scheduledAgentOptions = useMemo(() => scheduledTaskAgentOptions(agents), [agents]);
   const agentNames = useMemo(() => agentNameLookup(agents), [agents]);
@@ -372,18 +396,21 @@ export function TasksView({
     () => scheduledTasks.find((item) => item.id === editingScheduledTaskID) ?? null,
     [editingScheduledTaskID, scheduledTasks],
   );
-  const hasActiveGeneratedTask = useMemo(() => {
-    for (const run of scheduledTaskRuns) {
+  const activeScheduledTaskIDs = useMemo(() => {
+    const activeIDs = new Set<string>();
+    const tasksByID = new Map(tasks.map((task) => [task.id, task]));
+    for (const run of allScheduledTaskRuns) {
       if (!run.task_id || run.status === "failed") {
         continue;
       }
-      const task = tasks.find((item) => item.id === run.task_id);
+      const task = tasksByID.get(run.task_id);
       if (!task || !isTerminalWorkspaceTaskStatus(task.status)) {
-        return true;
+        activeIDs.add(run.scheduled_task_id);
       }
     }
-    return false;
-  }, [scheduledTaskRuns, tasks]);
+    return activeIDs;
+  }, [allScheduledTaskRuns, tasks]);
+  const hasActiveGeneratedTask = Boolean(selectedScheduledTask && activeScheduledTaskIDs.has(selectedScheduledTask.id));
   const parentDetailTask = useMemo(() => {
     const task = parentDetailTaskID ? (tasks.find((item) => item.id === parentDetailTaskID) ?? null) : selectedTask;
     return rootTaskForTask(tasks, task) ?? task;
@@ -598,6 +625,7 @@ export function TasksView({
 
   function selectScheduledTask(taskID: string) {
     setConversationOpenError("");
+    setShowScheduledStart(false);
     onSelectScheduledTask(taskID);
   }
 
@@ -628,7 +656,7 @@ export function TasksView({
   }
 
   return (
-    <section className={classNames("entity-pane", "tasks-pane", styles.tasksPane)}>
+    <section className={classNames("tasks-pane", styles.tasksPane)}>
       {error ? <div className="form-error">{error}</div> : null}
       {taskActionError ? (
         <div className={classNames("form-error", styles.tasksActionError)}>{taskActionError}</div>
@@ -655,6 +683,10 @@ export function TasksView({
                 planTaskBusy={planTaskBusy}
                 startTaskBusy={startTaskBusy}
                 onCreateScheduledTask={onOpenCreateScheduledTaskModal}
+                onCreateScheduledTaskText={() => {
+                  setShowScheduledStart(true);
+                  setScheduledTextFocus((value) => value + 1);
+                }}
                 onRefresh={onRefresh}
               />
             </div>
@@ -662,33 +694,53 @@ export function TasksView({
               <div className={styles.taskContentMain}>
                 <div className={styles.scheduledTaskLayout}>
                   <section className={styles.scheduledTaskList} aria-label={t("scheduledTasksTab")}>
-                    <div className={styles.scheduledTaskListHead}>
-                      <strong>{t("scheduledTasksTab")}</strong>
-                    </div>
                     {scheduledTasks.length ? (
-                      scheduledTasks.map((item) => (
-                        <button
-                          key={item.id}
-                          type="button"
-                          className={styles.scheduledTaskRow}
-                          data-active={selectedScheduledTask?.id === item.id ? true : undefined}
-                          onClick={() => selectScheduledTask(item.id)}
-                        >
-                          <span>
-                            <CalendarClock size={15} aria-hidden="true" />
-                            <strong>{item.title}</strong>
-                          </span>
-                          <small>
-                            {scheduledTaskRecurrenceLabel(item.recurrence, t)} · {formatTaskUpdatedAt(item.next_run_at)}
-                          </small>
-                        </button>
-                      ))
+                      scheduledTasks.map((item) => {
+                        const status = !item.enabled
+                          ? "disabled"
+                          : activeScheduledTaskIDs.has(item.id)
+                            ? "running"
+                            : "enabled";
+                        const active = !showScheduledStart && selectedScheduledTask?.id === item.id;
+                        return (
+                          <button
+                            key={item.id}
+                            type="button"
+                            className={styles.scheduledTaskRow}
+                            data-active={active || undefined}
+                            aria-pressed={active}
+                            onClick={() => selectScheduledTask(item.id)}
+                          >
+                            <span className={styles.scheduledTaskRowHeading}>
+                              <CalendarClock size={15} aria-hidden="true" />
+                              <strong>{item.title}</strong>
+                              <span className={styles.scheduledTaskStatus} data-status={status}>
+                                {t(
+                                  status === "disabled"
+                                    ? "scheduledTaskStatusDisabled"
+                                    : status === "running"
+                                      ? "scheduledTaskStatusRunning"
+                                      : "scheduledTaskStatusEnabled",
+                                )}
+                              </span>
+                            </span>
+                            <small>
+                              {scheduledTaskRecurrenceLabel(item.recurrence, t)} ·{" "}
+                              {formatTaskUpdatedAt(item.next_run_at)}
+                            </small>
+                          </button>
+                        );
+                      })
                     ) : (
                       <div className={styles.taskBoardEmpty}>{t("scheduledTasksEmpty")}</div>
                     )}
                   </section>
-                  <section className={styles.scheduledTaskDetail} aria-label={t("scheduledTaskDetailTitle")}>
-                    {selectedScheduledTask ? (
+                  <section
+                    className={styles.scheduledTaskDetail}
+                    data-start={showScheduledStart || !selectedScheduledTask || undefined}
+                    aria-label={t("scheduledTaskDetailTitle")}
+                  >
+                    {selectedScheduledTask && !showScheduledStart ? (
                       <>
                         <div className={styles.scheduledTaskDetailHead}>
                           <div>
@@ -830,7 +882,14 @@ export function TasksView({
                         />
                       </>
                     ) : (
-                      <div className={styles.taskBoardEmpty}>{t("scheduledTasksEmpty")}</div>
+                      <ScheduledTaskStart
+                        agents={agents}
+                        t={t}
+                        busy={scheduledTextBusy}
+                        error={scheduledTextError}
+                        focusToken={scheduledTextFocus}
+                        onSend={onSendTextToManager}
+                      />
                     )}
                   </section>
                 </div>
@@ -968,6 +1027,7 @@ type TaskActionStripProps = {
   conversationLabel?: string;
   conversationShortLabel?: string;
   onCreateScheduledTask?: () => VoidOrPromise;
+  onCreateScheduledTaskText?: () => VoidOrPromise;
   onCreateTask?: () => VoidOrPromise;
   onOpenConversation?: () => VoidOrPromise;
   onPlanTask?: () => VoidOrPromise;
@@ -994,6 +1054,7 @@ function TaskActionStrip({
   onOpenConversation = undefined,
   onCreateTask = undefined,
   onCreateScheduledTask = undefined,
+  onCreateScheduledTaskText = undefined,
   onViewParentDetail = undefined,
   onPlanTask = undefined,
   onStartTask = undefined,
@@ -1018,6 +1079,9 @@ function TaskActionStrip({
           tooltipContentProps={{ side: "bottom", sideOffset: 6 }}
           onClick={onCreateTask}
         />
+      ) : null}
+      {onCreateScheduledTaskText ? (
+        <TaskToolbarButton label={t("scheduledTaskTextCreate")} onClick={onCreateScheduledTaskText} />
       ) : null}
       {onCreateScheduledTask ? (
         <TaskToolbarButton
