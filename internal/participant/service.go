@@ -976,6 +976,7 @@ func participantEngineCreateRequest(spec agent.CreateAgentSpec) agentengine.Agen
 				Options:     utils.CloneAnyMap(spec.RuntimeOptions),
 			},
 			Model: agentengine.ModelSpec{
+				Selector:        spec.Profile,
 				ImageGeneration: modelprovider.CloneImageGeneration(spec.AgentProfile.ImageGeneration),
 				VideoGeneration: modelprovider.CloneVideoGeneration(spec.AgentProfile.VideoGeneration),
 				APIProtocol:     spec.AgentProfile.APIProtocol,

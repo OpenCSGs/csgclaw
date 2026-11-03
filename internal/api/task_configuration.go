@@ -61,8 +61,8 @@ func (h *Handler) validateTaskConfiguration(room apitypes.Room, configuration *t
 	return &cfg, err
 }
 
-func (h *Handler) taskLLMContext(w http.ResponseWriter, r *http.Request, agentID string) (*http.Request, bool) {
-	roomID := strings.TrimSpace(pathValue(r, "task_id"))
+func (h *Handler) roomLLMContext(w http.ResponseWriter, r *http.Request, agentID string) (*http.Request, bool) {
+	roomID := strings.TrimSpace(pathValue(r, "room_id"))
 	if roomID == "" {
 		return r, true
 	}
@@ -83,7 +83,7 @@ func (h *Handler) taskLLMContext(w http.ResponseWriter, r *http.Request, agentID
 		}
 	}
 	if !authorized {
-		http.Error(w, "agent is not a member of this task", http.StatusForbidden)
+		http.Error(w, "agent is not a member of this room", http.StatusForbidden)
 		return r, false
 	}
 	models, ok := h.agentModels.(taskModelService)

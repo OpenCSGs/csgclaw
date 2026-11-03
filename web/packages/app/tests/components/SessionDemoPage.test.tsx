@@ -56,36 +56,38 @@ describe("SessionDemoPage", () => {
       .fn<typeof fetch>()
       .mockResolvedValueOnce(
         new Response(
-          JSON.stringify([
-            {
-              id: "agent-builder",
-              name: "Builder",
-              runtime: { name: "codex", state: "running" },
-              participants: [
-                {
-                  channel: "csgclaw",
-                  type: "agent",
-                  lifecycle_status: "active",
-                  channel_user_kind: "local_user_id",
-                  channel_user_ref: "user-builder",
-                },
-              ],
-            },
-            {
-              id: "agent-reviewer",
-              name: "Reviewer",
-              runtime: { name: "codex", state: "running" },
-              participants: [
-                {
-                  channel: "csgclaw",
-                  type: "agent",
-                  lifecycle_status: "active",
-                  channel_user_kind: "local_user_id",
-                  channel_user_ref: "user-reviewer",
-                },
-              ],
-            },
-          ]),
+          JSON.stringify({
+            items: [
+              {
+                id: "agent-builder",
+                name: "Builder",
+                runtime: { name: "codex", state: "running" },
+                participants: [
+                  {
+                    channel: "csgclaw",
+                    type: "agent",
+                    lifecycle_status: "active",
+                    channel_user_kind: "local_user_id",
+                    channel_user_ref: "user-builder",
+                  },
+                ],
+              },
+              {
+                id: "agent-reviewer",
+                name: "Reviewer",
+                runtime: { name: "codex", state: "running" },
+                participants: [
+                  {
+                    channel: "csgclaw",
+                    type: "agent",
+                    lifecycle_status: "active",
+                    channel_user_kind: "local_user_id",
+                    channel_user_ref: "user-reviewer",
+                  },
+                ],
+              },
+            ],
+          }),
           { status: 200 },
         ),
       )
@@ -148,7 +150,9 @@ describe("SessionDemoPage", () => {
       .fn<typeof fetch>()
       .mockResolvedValueOnce(
         new Response(
-          JSON.stringify([{ id: "agent-reviewer", name: "Reviewer", runtime: { name: "codex", state: "running" } }]),
+          JSON.stringify({
+            items: [{ id: "agent-reviewer", name: "Reviewer", runtime: { name: "codex", state: "running" } }],
+          }),
           { status: 200 },
         ),
       )

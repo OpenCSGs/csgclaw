@@ -14,14 +14,16 @@ import (
 	skillsystem "csgclaw/internal/skill/system"
 )
 
-const maxArchiveBytes int64 = 64 << 20
+// MaxArchiveBytes bounds the compressed ZIP accepted by the skill library.
+const MaxArchiveBytes int64 = 64 << 20
 
 var (
-	ErrSkillArchiveEmpty   = errors.New("skill archive is empty")
-	ErrSkillArchiveUnsafe  = errors.New("skill archive path is unsafe")
-	ErrSkillAlreadyExists  = errors.New("skill already exists")
-	ErrSkillArchiveInvalid = errors.New("skill archive must contain exactly one skill")
-	ErrSKILLMDMissing      = errors.New("skill archive must contain SKILL.md")
+	ErrSkillArchiveEmpty    = errors.New("skill archive is empty")
+	ErrSkillArchiveUnsafe   = errors.New("skill archive path is unsafe")
+	ErrSkillAlreadyExists   = errors.New("skill already exists")
+	ErrSkillArchiveInvalid  = errors.New("skill archive must contain exactly one skill")
+	ErrSkillArchiveTooLarge = errors.New("skill archive exceeds 64 MiB")
+	ErrSKILLMDMissing       = errors.New("skill archive must contain SKILL.md")
 )
 
 type InstallArchiveOptions struct {
@@ -39,8 +41,8 @@ func InstallArchiveWithOptions(root, filename string, archive []byte, options In
 		return SkillSummary{}, fmt.Errorf("skills root is required")
 	}
 	root = filepath.Clean(root)
-	if int64(len(archive)) > maxArchiveBytes {
-		return SkillSummary{}, fmt.Errorf("skill archive exceeds %d bytes", maxArchiveBytes)
+	if int64(len(archive)) > MaxArchiveBytes {
+		return SkillSummary{}, ErrSkillArchiveTooLarge
 	}
 	if len(archive) == 0 {
 		return SkillSummary{}, ErrSkillArchiveEmpty

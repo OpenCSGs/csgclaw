@@ -141,8 +141,8 @@ func TestIndependentChatIdentityLifecycleHTTP(t *testing.T) {
 	if len(store.List(participant.ListOptions{AgentID: "agent-executor"})) != 0 {
 		t.Fatal("bindings survived deletion")
 	}
-	chatIdentityRequest(t, h, http.MethodPost, "/api/v1/agents", `{"id":"agent-executor","name":"worker","runtime_name":"codex"}`, 409)
-	chatIdentityRequest(t, h, http.MethodPost, "/api/v1/channels/csgclaw/participants", `{"id":"replacement","type":"agent","name":"worker","agent_binding":{"mode":"create","agent":{"runtime_name":"codex"}}}`, 201)
+	chatIdentityRequest(t, h, http.MethodPost, "/api/v1/agents", `{"id":"agent-executor","name":"worker","runtime":{"name":"codex"}}`, 409)
+	chatIdentityRequest(t, h, http.MethodPost, "/api/v1/channels/csgclaw/participants", `{"id":"replacement","type":"agent","name":"worker","agent_binding":{"mode":"create","agent":{"runtime":{"name":"codex"}}}}`, 201)
 }
 
 func TestAgentArchiveImpactIncludesDisabledSchedules(t *testing.T) {
@@ -184,14 +184,14 @@ func TestIndependentChatIdentityReplaceHTTP(t *testing.T) {
 		name, body string
 		status     int
 	}{
-		{"same name", `{"id":"agent-executor","name":"worker","replace":true,"field_mask":["name"]}`, 201},
-		{"another own identity", `{"id":"agent-executor","name":"second","replace":true,"field_mask":["name"]}`, 201},
-		{"another user's name", `{"id":"agent-executor","name":"unrelated","replace":true,"field_mask":["name"]}`, 400},
-		{"masked out name", `{"id":"agent-executor","name":"unrelated","description":"changed","replace":true,"field_mask":["description"]}`, 201},
+		{"same name", `{"configuration":{"name":"worker"},"field_mask":["name"]}`, 200},
+		{"another own identity", `{"configuration":{"name":"second"},"field_mask":["name"]}`, 200},
+		{"another user's name", `{"configuration":{"name":"unrelated"},"field_mask":["name"]}`, 400},
+		{"masked out name", `{"configuration":{"name":"unrelated","description":"changed"},"field_mask":["description"]}`, 200},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			h, _, _ := independentChatIdentityHandler(t)
-			chatIdentityRequest(t, h, http.MethodPost, "/api/v1/agents", tc.body, tc.status)
+			chatIdentityRequest(t, h, http.MethodPost, "/api/v1/agents/agent-executor/recreate", tc.body, tc.status)
 			if tc.status == 400 {
 				a, err := h.agentEngine.Agents().Get(context.Background(), "agent-executor", agentengine.AgentGetOptions{})
 				if err != nil || a.Spec.Name != "worker" {
@@ -207,7 +207,7 @@ func TestDeletedUnrelatedSuffixDoesNotBlockReplacement(t *testing.T) {
 	if err := h.im.RetireAgentUser("user-executor", "agent-other"); err != nil {
 		t.Fatal(err)
 	}
-	chatIdentityRequest(t, h, http.MethodPost, "/api/v1/agents", `{"id":"agent-executor","name":"worker","replace":true,"field_mask":["name"]}`, 201)
+	chatIdentityRequest(t, h, http.MethodPost, "/api/v1/agents/agent-executor/recreate", `{"configuration":{"name":"worker"},"field_mask":["name"]}`, 200)
 }
 
 func TestLegacyChatIdentityRequiresMatchingProfileAndNoBinding(t *testing.T) {

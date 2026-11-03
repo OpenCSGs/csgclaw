@@ -32,7 +32,7 @@ type bindAPIClient interface {
 	GetAgent(ctx context.Context, id string) (apitypes.Agent, error)
 	CreateParticipant(ctx context.Context, req participantpkg.CreateRequest) (apitypes.Participant, error)
 	UpdateParticipant(ctx context.Context, channel, id string, req participantpkg.UpdateRequest) (apitypes.Participant, error)
-	RecreateAgent(ctx context.Context, id string) (apitypes.Agent, error)
+	RecreateAgent(ctx context.Context, id string, request apitypes.RecreateAgentRequest) (apitypes.Agent, error)
 }
 
 func (c cmd) runBind(ctx context.Context, run *command.Context, args []string, globals command.GlobalOptions) error {
@@ -241,7 +241,7 @@ func bindFeishuBotRemote(ctx context.Context, client bindAPIClient, agentRef, ap
 		if strings.EqualFold(target.ID, agentpkg.ManagerUserID) || strings.EqualFold(target.Role, agentpkg.RoleManager) {
 			restartStatus = "manager_recreated"
 		}
-		if _, err := client.RecreateAgent(ctx, target.ID); err != nil {
+		if _, err := client.RecreateAgent(ctx, target.ID, apitypes.RecreateAgentRequest{}); err != nil {
 			result.Status = "partial"
 			result.RestartStatus = "recreate_failed"
 			result.RestartError = err.Error()

@@ -58,9 +58,15 @@ func TestAgentMCPPagesSeparateKnowledgeBeforePagination(t *testing.T) {
 }
 
 func TestResourceQueryValidation(t *testing.T) {
-	for _, query := range []string{"pagination=other", "pagination=page&per=101", "pagination=page&page=-1", "pagination=page&limit=20", "pagination=cursor&page=2", "pagination=cursor&enabled=maybe", "pagination=page&cursor="} {
+	for _, query := range []string{"pagination=other", "pagination=page&limit=101", "pagination=page&limit=0", "pagination=page&limit=invalid", "pagination=page&page=-1", "pagination=page&per=20", "pagination=cursor&per=20", "pagination=cursor&page=2", "pagination=cursor&enabled=maybe", "pagination=page&cursor="} {
 		if _, err := parseResourceQuery(httptest.NewRequest("GET", "/?"+query, nil)); err == nil {
 			t.Errorf("accepted %s", query)
+		}
+	}
+	for _, mode := range []string{"page", "cursor"} {
+		query, err := parseResourceQuery(httptest.NewRequest("GET", "/?pagination="+mode+"&limit=100&exclude=one&exclude=two", nil))
+		if err != nil || query.Size != 100 || len(query.Exclude) != 2 {
+			t.Fatalf("%s: query=%+v error=%v", mode, query, err)
 		}
 	}
 	if q, err := parseResourceQuery(httptest.NewRequest("GET", "/", nil)); err != nil || q != nil {
@@ -74,7 +80,7 @@ func TestAgentResourcePagesHTTP(t *testing.T) {
 	for _, resource := range []string{"skill-summaries", "mcp-servers"} {
 		for page, want := range []string{"alpha", map[string]string{"skill-summaries": "beta", "mcp-servers": "zulu"}[resource]} {
 			w := httptest.NewRecorder()
-			path := "/api/v1/agents/agent/" + resource + "?pagination=page&per=1&page=" + string(rune('1'+page))
+			path := "/api/v1/agents/agent/" + resource + "?pagination=page&limit=1&page=" + string(rune('1'+page))
 			h.Routes().ServeHTTP(w, httptest.NewRequest("GET", path, nil))
 			if w.Code != 200 || w.Header().Get("ETag") == "" {
 				t.Fatalf("%s: %d %s", path, w.Code, w.Body)
@@ -84,6 +90,10 @@ func TestAgentResourcePagesHTTP(t *testing.T) {
 			}]
 			if err := json.Unmarshal(w.Body.Bytes(), &result); err != nil || len(result.Items) != 1 || result.Items[0].Name != want {
 				t.Fatalf("%s: %s %v", path, w.Body, err)
+			}
+			var fields map[string]json.RawMessage
+			if err := json.Unmarshal(w.Body.Bytes(), &fields); err != nil || result.Limit != 1 || fields["per"] != nil || result.Revision == "" {
+				t.Fatalf("%s pagination fields: %s error=%v", path, w.Body, err)
 			}
 		}
 	}

@@ -1,10 +1,11 @@
 from argparse import Namespace
 from contextlib import redirect_stdout
 from pathlib import Path
-from io import StringIO
+from io import BytesIO, StringIO
 import json
 import sys
 import unittest
+from unittest.mock import patch
 
 SCRIPTS_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(SCRIPTS_DIR))
@@ -144,10 +145,10 @@ class ManagerActionCardTest(unittest.TestCase):
         def fake_api_json(args, method, path, body=None):
             api_calls.append((method, path, body))
             if path == "/api/v1/agents":
-                return [
+                return {"items": [
                     {"id": "agent-meds2g", "name": "generic-assistant-codex", "role": "worker"},
                     {"id": "agent-otep2a", "name": "generic-assistant-codex-2", "role": "worker"},
-                ]
+                ]}
             self.fail(f"unexpected API request: {method} {path}")
 
         commands.api_json = fake_api_json
@@ -198,7 +199,7 @@ class ManagerActionCardTest(unittest.TestCase):
         def fake_api_json(args, method, path, body=None):
             api_calls.append((method, path, body))
             self.assertEqual(path, "/api/v1/agents")
-            return [{"id": "agent-meds2g", "name": "generic-assistant-codex", "role": "worker"}]
+            return {"items": [{"id": "agent-meds2g", "name": "generic-assistant-codex", "role": "worker"}]}
 
         commands.api_json = fake_api_json
         try:
@@ -209,6 +210,25 @@ class ManagerActionCardTest(unittest.TestCase):
         self.assertEqual(resolved, ("agent-meds2g", "generic-assistant-codex"))
         self.assertEqual(api_calls, [("GET", "/api/v1/agents", None)])
 
+    def test_worker_registry_decodes_http_items_response(self):
+        args = Namespace(csgclaw_base_url="http://localhost:18080", csgclaw_access_token="test-token")
+        body = {"items": [{"id": "agent-reviewer", "name": "Reviewer", "role": "worker"}]}
+        with patch.object(csgclaw, "urlopen", return_value=BytesIO(json.dumps(body).encode())) as request:
+            resolved = commands.resolve_worker_agent_reference(args, "Reviewer")
+        self.assertEqual(resolved, ("agent-reviewer", "Reviewer"))
+        request.assert_called_once()
+        self.assertEqual(request.call_args.args[0].full_url, "http://localhost:18080/api/v1/agents")
+        self.assertEqual(request.call_args.args[0].get_method(), "GET")
+        self.assertEqual(request.call_args.args[0].get_header("Authorization"), "Bearer test-token")
+
+    def test_worker_registry_rejects_invalid_http_collection(self):
+        args = Namespace(csgclaw_base_url="http://localhost:18080", csgclaw_access_token="test-token")
+        for body in ({}, {"items": None}, {"items": {}}, []):
+            with self.subTest(body=body):
+                with patch.object(csgclaw, "urlopen", return_value=BytesIO(json.dumps(body).encode())):
+                    with self.assertRaisesRegex(RuntimeError, "invalid agent list"):
+                        commands.resolve_worker_agent_reference(args, "Reviewer")
+
     def test_start_rejects_ambiguous_worker_reference_before_registration(self):
         initialization = []
         original_api_json = commands.api_json
@@ -216,10 +236,10 @@ class ManagerActionCardTest(unittest.TestCase):
 
         def fake_api_json(args, method, path, body=None):
             if path == "/api/v1/agents":
-                return [
+                return {"items": [
                     {"id": "agent-dev", "name": "backend", "role": "worker"},
                     {"id": "agent-other", "name": "agent-dev", "role": "worker"},
-                ]
+                ]}
             self.fail(f"unexpected API request: {method} {path}")
 
         commands.api_json = fake_api_json

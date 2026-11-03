@@ -32,7 +32,7 @@ Codex engine threads register the same host tool declarations in both execution 
 
 Native history, including tool calls and compacted context, is retained across these restarts and server restarts. Room message text is never replayed as a substitute for native history. Explicit reset removes only the existing mapping for that conversation. The unpublished `task-sessions` layout is imported into the existing runtime store once, preserving the original files as backups; reset conversations are not imported again.
 
-Configured execution uses `/api/v1/agents/{id}/tasks/{room_id}/llm` for model requests. This existing route uses the Room ID, not a separate task ID. The bridge validates both the Agent credential and room membership, then resolves the room's model profile. Credentials are resolved from the provider configuration rather than copied into the Room. Agent-wide mutation still uses the existing lifecycle coordinator.
+Configured execution uses `/api/v1/agents/{id}/rooms/{room_id}/llm/v1` for model requests. The bridge validates both the Agent credential and room membership, then resolves the room's model profile. Credentials are resolved from the provider configuration rather than copied into the Room. Agent-wide mutation still uses the existing lifecycle coordinator.
 
 ## Regression coverage
 

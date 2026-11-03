@@ -37,26 +37,39 @@ func TestCreateCSGClawAgentParticipantViaAPI(t *testing.T) {
 	}
 
 	body := `{
-		"id": "qa",
-		"type": "agent",
-		"name": "QA-Display-Name",
-		"avatar": "avatar/3D-5.png",
-		"channel_user": {
-			"ref": "u-qa",
-			"kind": "local_user_id"
-		},
-		"agent_binding": {
-			"mode": "create",
-			"agent": {
-				"name": "QA-Display-Name",
-				"role": "worker",
-				"runtime_kind": "codex",
-				"image": "agent-image:test",
-                "model_config": {"model_provider_id":"service","model_id":"chat","image_generation":{"provider_id":"service","model_id":"image"},"video_generation":{"provider_id":"service","model_id":"video"}},
-				"avatar": "avatar/3D-5.png"
-			}
-		}
-	}`
+  "id": "qa",
+  "type": "agent",
+  "name": "QA-Display-Name",
+  "avatar": "avatar/3D-5.png",
+  "channel_user": {
+    "ref": "u-qa",
+    "kind": "local_user_id"
+  },
+  "agent_binding": {
+    "mode": "create",
+    "agent": {
+      "name": "QA-Display-Name",
+      "role": "worker",
+      "model_config": {
+        "selector": "service.chat",
+        "model_provider_id": "service",
+        "model_id": "chat",
+        "image_generation": {
+          "provider_id": "service",
+          "model_id": "image"
+        },
+        "video_generation": {
+          "provider_id": "service",
+          "model_id": "video"
+        }
+      },
+      "runtime": {
+        "name": "codex",
+        "image": "agent-image:test"
+      }
+    }
+  }
+}`
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/channels/csgclaw/participants", strings.NewReader(body))
 
@@ -78,6 +91,9 @@ func TestCreateCSGClawAgentParticipantViaAPI(t *testing.T) {
 	createdAgent, ok := agentSvc.Agent("agent-qa")
 	if !ok {
 		t.Fatal("agent agent-qa was not created")
+	}
+	if createdAgent.Profile != "service.chat" {
+		t.Fatalf("participant creation model selector = %q, want service.chat", createdAgent.Profile)
 	}
 	profile := createdAgent.AgentProfile
 	if profile.ImageGeneration == nil || profile.ImageGeneration.ModelID != "image" || profile.VideoGeneration == nil || profile.VideoGeneration.ModelID != "video" {
@@ -124,19 +140,22 @@ func TestCreateCSGClawAgentParticipantViaAPIUsesRequestHub(t *testing.T) {
 		participant: participantSvc, agentEngine: agentengine.New(agentSvc), workspace: agentSvc.Workspace(), agentModels: agentSvc.Models(), agentRuntime: agentSvc,
 	}
 	body := `{
-		"id": "request-worker",
-		"type": "agent",
-		"name": "request-worker",
-		"channel_user": {"ref": "u-request-worker", "kind": "local_user_id"},
-		"agent_binding": {
-			"mode": "create",
-			"agent": {
-				"name": "request-worker",
-				"role": "worker",
-				"from_template": "local.request-worker"
-			}
-		}
-	}`
+  "id": "request-worker",
+  "type": "agent",
+  "name": "request-worker",
+  "channel_user": {
+    "ref": "u-request-worker",
+    "kind": "local_user_id"
+  },
+  "agent_binding": {
+    "mode": "create",
+    "agent": {
+      "name": "request-worker",
+      "role": "worker",
+      "from_template": "local.request-worker"
+    }
+  }
+}`
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/channels/csgclaw/participants", strings.NewReader(body))
 
@@ -220,22 +239,24 @@ func TestCreateCSGClawAgentParticipantViaAPIReturnsConflictForDuplicateAgentName
 	}
 
 	body := `{
-		"type": "agent",
-		"name": "generic-assistant-lite",
-		"channel_user": {
-			"ref": "u-generic-assistant-lite",
-			"kind": "local_user_id"
-		},
-		"agent_binding": {
-			"mode": "create",
-			"agent": {
-				"name": "generic-assistant-lite",
-				"role": "worker",
-				"runtime_kind": "codex",
-				"image": "agent-image:test"
-			}
-		}
-	}`
+  "type": "agent",
+  "name": "generic-assistant-lite",
+  "channel_user": {
+    "ref": "u-generic-assistant-lite",
+    "kind": "local_user_id"
+  },
+  "agent_binding": {
+    "mode": "create",
+    "agent": {
+      "name": "generic-assistant-lite",
+      "role": "worker",
+      "runtime": {
+        "name": "codex",
+        "image": "agent-image:test"
+      }
+    }
+  }
+}`
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/channels/csgclaw/participants", strings.NewReader(body))
 
@@ -550,10 +571,11 @@ func TestListAgentsIncludesParticipantsWhenRequested(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
 	}
-	var agents []map[string]any
-	if err := json.NewDecoder(rec.Body).Decode(&agents); err != nil {
+	var response apitypes.ListResponse[map[string]any]
+	if err := json.NewDecoder(rec.Body).Decode(&response); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
+	agents := response.Items
 	if len(agents) != 1 {
 		t.Fatalf("agents = %+v, want one agent", agents)
 	}

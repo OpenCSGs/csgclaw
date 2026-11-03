@@ -87,7 +87,7 @@ func (h *Handler) handleAgentLLMModelsByID(w http.ResponseWriter, r *http.Reques
 	if !ok {
 		return
 	}
-	r, ok = h.taskLLMContext(w, r, agentID)
+	r, ok = h.roomLLMContext(w, r, agentID)
 	if !ok {
 		return
 	}
@@ -99,7 +99,7 @@ func (h *Handler) handleAgentLLMChatCompletionsByID(w http.ResponseWriter, r *ht
 	if !ok {
 		return
 	}
-	r, ok = h.taskLLMContext(w, r, agentID)
+	r, ok = h.roomLLMContext(w, r, agentID)
 	if !ok {
 		return
 	}
@@ -111,7 +111,7 @@ func (h *Handler) handleAgentLLMResponsesByID(w http.ResponseWriter, r *http.Req
 	if !ok {
 		return
 	}
-	r, ok = h.taskLLMContext(w, r, agentID)
+	r, ok = h.roomLLMContext(w, r, agentID)
 	if !ok {
 		return
 	}
@@ -123,7 +123,7 @@ func (h *Handler) handleAgentLLMResponsesWebsocketByID(w http.ResponseWriter, r 
 	if !ok {
 		return
 	}
-	r, ok = h.taskLLMContext(w, r, agentID)
+	r, ok = h.roomLLMContext(w, r, agentID)
 	if !ok {
 		return
 	}

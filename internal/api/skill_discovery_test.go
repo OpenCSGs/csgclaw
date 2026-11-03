@@ -48,11 +48,11 @@ func TestDiscoveredSkillLibraryLifecycle(t *testing.T) {
 		if rec.Code != 200 {
 			t.Fatalf("list %d: %s", rec.Code, rec.Body.String())
 		}
-		var items []skillsystem.SkillSummary
-		if err := json.Unmarshal(rec.Body.Bytes(), &items); err != nil {
+		var response apitypes.ListResponse[skillsystem.SkillSummary]
+		if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
 			t.Fatal(err)
 		}
-		return items
+		return response.Items
 	}
 	find := func() skillsystem.SkillSummary {
 		t.Helper()
@@ -129,6 +129,10 @@ func TestDiscoveredSkillLibraryLifecycle(t *testing.T) {
 	rec = request("POST", "/api/v1/skills/discovery/rescan", "")
 	if rec.Code != http.StatusOK {
 		t.Fatalf("rescan %d: %s", rec.Code, rec.Body.String())
+	}
+	var rescanned apitypes.ListResponse[skillsystem.SkillSummary]
+	if err := json.Unmarshal(rec.Body.Bytes(), &rescanned); err != nil || len(rescanned.Items) == 0 {
+		t.Fatalf("rescan body=%s error=%v", rec.Body, err)
 	}
 	restored := find()
 	if restored.Discovery == nil || !restored.Discovery.New || !filepath.IsAbs(restored.Directory) {

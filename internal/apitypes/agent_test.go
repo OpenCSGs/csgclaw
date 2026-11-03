@@ -21,38 +21,16 @@ func TestAgentUnmarshalJSONSupportsLegacyRuntimeKind(t *testing.T) {
 	}
 }
 
-func TestCreateAgentRequestUnmarshalJSONSupportsLegacyRuntimeKind(t *testing.T) {
+func TestCreateAgentRequestUnmarshalJSONReadsRuntimeConfiguration(t *testing.T) {
 	var got CreateAgentRequest
-	if err := json.Unmarshal([]byte(`{"name":"alice","role":"worker","runtime_kind":"dsh","runtime_options":{"cwd":"/tmp"}}`), &got); err != nil {
-		t.Fatalf("json.Unmarshal() error = %v", err)
+	if err := json.Unmarshal([]byte(`{"name":"alice","role":"worker","runtime":{"name":"dsh","sandbox_enabled":false,"options":{"cwd":"/tmp"}}}`), &got); err != nil {
+		t.Fatal(err)
 	}
-	if got.RuntimeKind != "dsh" {
-		t.Fatalf("RuntimeKind = %q, want %q", got.RuntimeKind, "dsh")
+	if got.Runtime == nil || got.Runtime.Name == nil || *got.Runtime.Name != "dsh" || got.Runtime.SandboxEnabled == nil || *got.Runtime.SandboxEnabled {
+		t.Fatalf("Runtime = %+v", got.Runtime)
 	}
-	if got.RuntimeName != "dsh" {
-		t.Fatalf("RuntimeName = %q, want %q", got.RuntimeName, "dsh")
-	}
-	if got.SandboxEnabled {
-		t.Fatal("SandboxEnabled = true, want false")
-	}
-	if got.RuntimeOptions["cwd"] != "/tmp" {
-		t.Fatalf("RuntimeOptions[cwd] = %#v, want %q", got.RuntimeOptions["cwd"], "/tmp")
-	}
-}
-
-func TestCreateAgentRequestUnmarshalJSONSupportsDSHRuntimeKind(t *testing.T) {
-	var got CreateAgentRequest
-	if err := json.Unmarshal([]byte(`{"name":"alice","role":"worker","runtime_kind":"dsh"}`), &got); err != nil {
-		t.Fatalf("json.Unmarshal() error = %v", err)
-	}
-	if got.RuntimeKind != "dsh" {
-		t.Fatalf("RuntimeKind = %q, want %q", got.RuntimeKind, "dsh")
-	}
-	if got.RuntimeName != "dsh" {
-		t.Fatalf("RuntimeName = %q, want %q", got.RuntimeName, "dsh")
-	}
-	if got.SandboxEnabled {
-		t.Fatal("SandboxEnabled = true, want false")
+	if got.Runtime.Options == nil || (*got.Runtime.Options)["cwd"] != "/tmp" {
+		t.Fatalf("Runtime.Options = %+v", got.Runtime.Options)
 	}
 }
 
@@ -69,7 +47,7 @@ func TestCreateAgentRequestMarshalJSONPreservesExplicitEmptyMCPServers(t *testin
 	if err := json.Unmarshal(data, &fields); err != nil {
 		t.Fatalf("json.Unmarshal() error = %v", err)
 	}
-	if got := string(fields["mcpServers"]); got != "{}" {
+	if got := string(fields["mcp_servers"]); got != "{}" {
 		t.Fatalf("mcpServers = %s, want {}", got)
 	}
 }

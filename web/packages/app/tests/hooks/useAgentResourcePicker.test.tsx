@@ -33,8 +33,8 @@ function mockAPI({
 } = {}) {
   const fetch = vi.fn(async (input: string, init?: RequestInit) => {
     const path = String(input);
-    if (path === "api/v1/skills") return Response.json(skills);
-    if (path.endsWith("/skill-summaries")) return Response.json(installedSkills);
+    if (path === "api/v1/skills") return Response.json({ items: skills });
+    if (path.endsWith("/skill-summaries")) return Response.json({ items: installedSkills });
     if (path === "api/v1/mcp-servers" && init?.method !== "POST") return Response.json({ mcpServers: servers });
     if (path.includes("/agents/") && path.endsWith("/mcp-servers")) return Response.json({ servers: installedServers });
     if (path === "api/v1/skills:install" || path === "api/v1/skills:upload") {

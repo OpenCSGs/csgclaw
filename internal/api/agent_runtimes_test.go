@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"csgclaw/internal/apitypes"
 	"csgclaw/internal/dshcli"
 	"csgclaw/internal/runtimecatalog"
 )
@@ -34,10 +35,11 @@ func TestAgentRuntimesListReportsBundledCodex(t *testing.T) {
 	if got := recorder.Header().Get("Cache-Control"); got != "no-store" {
 		t.Fatalf("Cache-Control = %q, want no-store", got)
 	}
-	var runtimes []runtimecatalog.Runtime
-	if err := json.NewDecoder(recorder.Body).Decode(&runtimes); err != nil {
+	var response apitypes.ListResponse[runtimecatalog.Runtime]
+	if err := json.NewDecoder(recorder.Body).Decode(&response); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
+	runtimes := response.Items
 	if len(runtimes) != 3 {
 		t.Fatalf("runtimes = %+v, want Codex, DSH, and Claude Code", runtimes)
 	}

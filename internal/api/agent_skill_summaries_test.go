@@ -103,10 +103,11 @@ func TestAgentSkillSummariesThroughEngineHTTP(t *testing.T) {
 			if w.Code != http.StatusOK {
 				t.Fatalf("HTTP %d %s", w.Code, w.Body)
 			}
-			var items []agentengine.SkillSummary
-			if err := json.Unmarshal(w.Body.Bytes(), &items); err != nil {
+			var response apitypes.ListResponse[agentengine.SkillSummary]
+			if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
 				t.Fatal(err)
 			}
+			items := response.Items
 			if len(items) != 1000 || items[0].Name != "skill-0000" || items[999].Description != "Skill 999" {
 				t.Fatalf("unexpected summaries: count=%d", len(items))
 			}
@@ -117,7 +118,7 @@ func TestAgentSkillSummariesThroughEngineHTTP(t *testing.T) {
 				t.Fatal("summary leaked body or Runtime path")
 			}
 			paged := httptest.NewRecorder()
-			h.Routes().ServeHTTP(paged, httptest.NewRequest(http.MethodGet, "/api/v1/agents/agent-skills/skill-summaries?pagination=page&page=2&per=7", nil))
+			h.Routes().ServeHTTP(paged, httptest.NewRequest(http.MethodGet, "/api/v1/agents/agent-skills/skill-summaries?pagination=page&page=2&limit=7", nil))
 			var page resourcePage[agentengine.SkillSummary]
 			if err := json.Unmarshal(paged.Body.Bytes(), &page); err != nil || paged.Code != http.StatusOK || len(page.Items) != 7 || page.Total != 1000 || page.Items[0].Name != "skill-0007" || page.Items[0].Source != skillinstall.SourceMarket || paged.Header().Get("ETag") == "" {
 				t.Fatalf("unexpected paged summaries: %d %s %v", paged.Code, paged.Body, err)
@@ -168,9 +169,9 @@ func TestAgentSkillSummariesReadErrorsHTTP(t *testing.T) {
 		wantStatus  int
 		wantBody    string
 	}{
-		{name: "storage failure", invalidRoot: true, agentID: "agent-skills", wantStatus: http.StatusInternalServerError, wantBody: "Agent skill metadata is unavailable\n"},
-		{name: "missing skills directory", agentID: "agent-skills", wantStatus: http.StatusOK, wantBody: "[]\n"},
-		{name: "missing agent", agentID: "missing", wantStatus: http.StatusNotFound, wantBody: "agent not found\n"},
+		{name: "storage failure", invalidRoot: true, agentID: "agent-skills", wantStatus: http.StatusInternalServerError, wantBody: `{"error":{"code":"internal_error","message":"Agent skill metadata is unavailable"}}` + "\n"},
+		{name: "missing skills directory", agentID: "agent-skills", wantStatus: http.StatusOK, wantBody: `{"items":[]}` + "\n"},
+		{name: "missing agent", agentID: "missing", wantStatus: http.StatusNotFound, wantBody: `{"error":{"code":"not_found","message":"agent not found"}}` + "\n"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			item := completeWorkerAgent("agent-skills", "skills")

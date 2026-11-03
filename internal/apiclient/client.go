@@ -75,11 +75,11 @@ func (c *Client) ListParticipants(ctx context.Context, channel, typ, agentID str
 }
 
 func (c *Client) ListAgents(ctx context.Context) ([]apitypes.Agent, error) {
-	var agents []apitypes.Agent
-	if err := c.GetJSON(ctx, "/api/v1/agents", &agents); err != nil {
+	var response apitypes.ListResponse[apitypes.Agent]
+	if err := c.GetJSON(ctx, "/api/v1/agents", &response); err != nil {
 		return nil, err
 	}
-	return agents, nil
+	return response.Items, nil
 }
 
 func (c *Client) GetAgent(ctx context.Context, id string) (apitypes.Agent, error) {
@@ -112,7 +112,11 @@ func (c *Client) CreateParticipant(ctx context.Context, req participant.CreateRe
 	if err != nil {
 		return apitypes.Participant{}, err
 	}
-	if err := c.DoJSON(ctx, http.MethodPost, path, req, &created); err != nil {
+	payload, err := participantCreatePayload(req)
+	if err != nil {
+		return apitypes.Participant{}, err
+	}
+	if err := c.DoJSON(ctx, http.MethodPost, path, payload, &created); err != nil {
 		return apitypes.Participant{}, err
 	}
 	return created, nil
@@ -143,13 +147,13 @@ func (c *Client) DeleteParticipant(ctx context.Context, channel, id, deleteAgent
 	return c.DoNoContent(ctx, http.MethodDelete, path)
 }
 
-func (c *Client) RecreateAgent(ctx context.Context, id string) (apitypes.Agent, error) {
+func (c *Client) RecreateAgent(ctx context.Context, id string, request apitypes.RecreateAgentRequest) (apitypes.Agent, error) {
 	var recreated apitypes.Agent
 	id = strings.TrimSpace(id)
 	if id == "" {
 		return apitypes.Agent{}, fmt.Errorf("agent id is required")
 	}
-	if err := c.DoJSON(ctx, http.MethodPost, "/api/v1/agents/"+url.PathEscape(id)+"/recreate", nil, &recreated); err != nil {
+	if err := c.DoJSON(ctx, http.MethodPost, "/api/v1/agents/"+url.PathEscape(id)+"/recreate", request, &recreated); err != nil {
 		return apitypes.Agent{}, err
 	}
 	return recreated, nil

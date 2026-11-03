@@ -32,7 +32,7 @@ func TestExecuteAgentListUsesHTTPClientJSON(t *testing.T) {
 			if req.URL.String() != "http://example.test/api/v1/agents" {
 				t.Fatalf("url = %q, want %q", req.URL.String(), "http://example.test/api/v1/agents")
 			}
-			return jsonResponse(http.StatusOK, `[{"id":"u-alice","name":"alice","role":"worker","status":"running","created_at":"2026-04-01T12:00:00Z"}]`), nil
+			return jsonResponse(http.StatusOK, `{"items":[{"id":"u-alice","name":"alice","role":"worker","created_at":"2026-04-01T12:00:00Z","runtime":{"state":"running"}}]}`), nil
 		}),
 	}
 
@@ -59,7 +59,7 @@ func TestExecuteDefaultsToJSONOutputForNonTerminalStdout(t *testing.T) {
 			if req.URL.String() != "http://example.test/api/v1/agents" {
 				t.Fatalf("url = %q, want %q", req.URL.String(), "http://example.test/api/v1/agents")
 			}
-			return jsonResponse(http.StatusOK, `[{"id":"u-alice","name":"alice","role":"worker","status":"running","created_at":"2026-04-01T12:00:00Z"}]`), nil
+			return jsonResponse(http.StatusOK, `{"items":[{"id":"u-alice","name":"alice","role":"worker","created_at":"2026-04-01T12:00:00Z","runtime":{"state":"running"}}]}`), nil
 		}),
 	}
 
@@ -89,7 +89,7 @@ func TestExecuteUsesEnvironmentForEndpointAndToken(t *testing.T) {
 			if got := req.Header.Get("Authorization"); got != "Bearer env-secret-token" {
 				t.Fatalf("Authorization = %q, want %q", got, "Bearer env-secret-token")
 			}
-			return jsonResponse(http.StatusOK, `[]`), nil
+			return jsonResponse(http.StatusOK, `{"items":[]}`), nil
 		}),
 	}
 
@@ -112,7 +112,7 @@ func TestExecuteFlagsOverrideEnvironmentForEndpointAndToken(t *testing.T) {
 			if got := req.Header.Get("Authorization"); got != "Bearer flag-secret-token" {
 				t.Fatalf("Authorization = %q, want %q", got, "Bearer flag-secret-token")
 			}
-			return jsonResponse(http.StatusOK, `[]`), nil
+			return jsonResponse(http.StatusOK, `{"items":[]}`), nil
 		}),
 	}
 
@@ -137,7 +137,7 @@ func TestExecuteAgentListUsesHTTPClient(t *testing.T) {
 			if req.URL.String() != "http://example.test/api/v1/agents" {
 				t.Fatalf("url = %q, want %q", req.URL.String(), "http://example.test/api/v1/agents")
 			}
-			return jsonResponse(http.StatusOK, `[{"id":"u-alice","name":"alice","role":"worker","status":"running","runtime_name":"codex","image":"ghcr.io/opencsg/csgclaw-agent:2026.4.28","created_at":"2026-04-01T12:00:00Z","profile":"codex-main"}]`), nil
+			return jsonResponse(http.StatusOK, `{"items":[{"id":"u-alice","name":"alice","role":"worker","created_at":"2026-04-01T12:00:00Z","runtime":{"image":"ghcr.io/opencsg/csgclaw-agent:2026.4.28","name":"codex","state":"running"},"model_config":{"model_id":"codex-main"}}]}`), nil
 		}),
 	}
 
@@ -159,7 +159,7 @@ func TestExecuteAgentStartUsesHTTPClient(t *testing.T) {
 			if req.URL.String() != "http://example.test/api/v1/agents/u-alice/start" {
 				t.Fatalf("url = %q, want %q", req.URL.String(), "http://example.test/api/v1/agents/u-alice/start")
 			}
-			return jsonResponse(http.StatusOK, `{"id":"u-alice","name":"alice","role":"worker","status":"running","runtime_name":"codex","image":"ghcr.io/opencsg/csgclaw-agent:2026.4.28","created_at":"2026-04-01T12:00:00Z","profile":"codex-main"}`), nil
+			return jsonResponse(http.StatusOK, `{"id":"u-alice","name":"alice","role":"worker","created_at":"2026-04-01T12:00:00Z","runtime":{"image":"ghcr.io/opencsg/csgclaw-agent:2026.4.28","name":"codex","state":"running"},"model_config":{"model_id":"codex-main"}}`), nil
 		}),
 	}
 
@@ -181,7 +181,7 @@ func TestExecuteAgentStopUsesHTTPClient(t *testing.T) {
 			if req.URL.String() != "http://example.test/api/v1/agents/u-alice/stop" {
 				t.Fatalf("url = %q, want %q", req.URL.String(), "http://example.test/api/v1/agents/u-alice/stop")
 			}
-			return jsonResponse(http.StatusOK, `{"id":"u-alice","name":"alice","role":"worker","status":"stopped","runtime_name":"codex","image":"ghcr.io/opencsg/csgclaw-agent:2026.4.28","created_at":"2026-04-01T12:00:00Z","profile":"codex-main"}`), nil
+			return jsonResponse(http.StatusOK, `{"id":"u-alice","name":"alice","role":"worker","created_at":"2026-04-01T12:00:00Z","runtime":{"image":"ghcr.io/opencsg/csgclaw-agent:2026.4.28","name":"codex","state":"stopped"},"model_config":{"model_id":"codex-main"}}`), nil
 		}),
 	}
 
@@ -203,7 +203,14 @@ func TestExecuteParticipantCreateSendsTemplateDescriptionAndEnv(t *testing.T) {
 			if req.URL.String() != "http://example.test/api/v1/channels/feishu/participants" {
 				t.Fatalf("url = %q, want feishu participant route", req.URL.String())
 			}
-			var payload participant.CreateRequest
+			var payload struct {
+				participant.CreateRequest
+				AgentBinding struct {
+					Mode    string                            `json:"mode"`
+					AgentID string                            `json:"agent_id"`
+					Agent   *apitypes.ParticipantAgentRequest `json:"agent"`
+				} `json:"agent_binding"`
+			}
 			if err := json.NewDecoder(req.Body).Decode(&payload); err != nil {
 				t.Fatalf("decode request: %v", err)
 			}
@@ -220,8 +227,8 @@ func TestExecuteParticipantCreateSendsTemplateDescriptionAndEnv(t *testing.T) {
 			if spec.Description != "GitLab worker" || spec.FromTemplate != "builtin.gitlab-worker" || spec.Role != "worker" {
 				t.Fatalf("payload.AgentBinding.Agent = %+v, want description/template/role", spec)
 			}
-			if spec.AgentProfile.ModelID != "gpt-test" || spec.AgentProfile.Env["GITLAB_TOKEN"] != "secret" {
-				t.Fatalf("payload.AgentBinding.Agent.AgentProfile = %+v, want model and env", spec.AgentProfile)
+			if spec.ModelConfig.ModelID != "gpt-test" || spec.ModelConfig.Env["GITLAB_TOKEN"] != "secret" {
+				t.Fatalf("payload.AgentBinding.Agent.AgentProfile = %+v, want model and env", spec.ModelConfig)
 			}
 			return jsonResponse(http.StatusCreated, `{"id":"u-gitlab","name":"gitlab","type":"agent","channel":"feishu","agent_id":"u-gitlab","channel_user_ref":"u-gitlab","lifecycle_status":"active","metadata":{"description":"GitLab worker"},"created_at":"2026-04-12T09:00:00Z"}`), nil
 		}),
@@ -461,20 +468,20 @@ func TestExecuteAgentCreateUsesHTTPClient(t *testing.T) {
 			if payload["description"] != "worker" {
 				t.Fatalf("payload[description] = %#v, want %q", payload["description"], "worker")
 			}
-			if payload["image"] != "ghcr.io/opencsg/csgclaw-agent:2026.4.28" {
-				t.Fatalf("payload[image] = %#v, want %q", payload["image"], "ghcr.io/opencsg/csgclaw-agent:2026.4.28")
+			if payload["runtime"].(map[string]any)["image"] != "ghcr.io/opencsg/csgclaw-agent:2026.4.28" {
+				t.Fatalf("payload[image] = %#v, want %q", payload["runtime"].(map[string]any)["image"], "ghcr.io/opencsg/csgclaw-agent:2026.4.28")
 			}
-			if payload["profile"] != "cliproxy-codex" {
-				t.Fatalf("payload[profile] = %#v, want %q", payload["profile"], "cliproxy-codex")
+			if payload["model_config"].(map[string]any)["selector"] != "cliproxy-codex" {
+				t.Fatalf("payload[profile] = %#v, want %q", payload["model_config"].(map[string]any)["selector"], "cliproxy-codex")
 			}
 			if payload["runtime_kind"] != nil {
 				t.Fatalf("payload[runtime_kind] = %#v, want omitted", payload["runtime_kind"])
 			}
-			if payload["runtime_name"] != "codex" {
-				t.Fatalf("payload[runtime_name] = %#v, want %q", payload["runtime_name"], "codex")
+			if payload["runtime"].(map[string]any)["name"] != "codex" {
+				t.Fatalf("payload[runtime_name] = %#v, want %q", payload["runtime"].(map[string]any)["name"], "codex")
 			}
 
-			return jsonResponse(http.StatusCreated, `{"id":"u-alice","name":"alice","role":"worker","status":"running","runtime_name":"codex","image":"ghcr.io/opencsg/csgclaw-agent:2026.4.28","created_at":"2026-04-01T12:00:00Z","profile":"codex-main"}`), nil
+			return jsonResponse(http.StatusCreated, `{"id":"u-alice","name":"alice","role":"worker","created_at":"2026-04-01T12:00:00Z","runtime":{"image":"ghcr.io/opencsg/csgclaw-agent:2026.4.28","name":"codex","state":"running"},"model_config":{"model_id":"codex-main"}}`), nil
 		}),
 	}
 
@@ -506,16 +513,13 @@ func TestExecuteAgentCreateReplaceKeepsExistingFieldsWhenNoOverrides(t *testing.
 			if req.Method != http.MethodPost {
 				t.Fatalf("method = %q, want %q", req.Method, http.MethodPost)
 			}
-			if req.URL.String() != "http://example.test/api/v1/agents" {
-				t.Fatalf("url = %q, want %q", req.URL.String(), "http://example.test/api/v1/agents")
+			if req.URL.String() != "http://example.test/api/v1/agents/u-alice/recreate" {
+				t.Fatalf("url = %q, want %q", req.URL.String(), "http://example.test/api/v1/agents/u-alice/recreate")
 			}
 
 			var payload map[string]any
 			if err := json.NewDecoder(req.Body).Decode(&payload); err != nil {
 				t.Fatalf("decode request: %v", err)
-			}
-			if payload["id"] != "u-alice" {
-				t.Fatalf("payload[id] = %#v, want %q", payload["id"], "u-alice")
 			}
 			if _, ok := payload["description"]; ok {
 				t.Fatalf("payload should omit description when not explicitly set, got %#v", payload["description"])
@@ -526,9 +530,11 @@ func TestExecuteAgentCreateReplaceKeepsExistingFieldsWhenNoOverrides(t *testing.
 			if _, ok := payload["profile"]; ok {
 				t.Fatalf("payload should omit profile when not explicitly set, got %#v", payload["profile"])
 			}
-			assertStringSliceValue(t, payload["field_mask"], []string{"id"})
+			if len(payload) != 0 {
+				t.Fatalf("payload = %#v, want empty recreate request", payload)
+			}
 
-			return jsonResponse(http.StatusCreated, `{"id":"u-alice","name":"alice","description":"worker","image":"ghcr.io/opencsg/csgclaw-agent:2026.4.20","role":"worker","status":"running","created_at":"2026-04-01T12:00:00Z","profile":"codex-main"}`), nil
+			return jsonResponse(http.StatusOK, `{"id":"u-alice","name":"alice","description":"worker","role":"worker","created_at":"2026-04-01T12:00:00Z","runtime":{"image":"ghcr.io/opencsg/csgclaw-agent:2026.4.20","state":"running"},"model_config":{"model_id":"codex-main"}}`), nil
 		}),
 	}
 
@@ -555,41 +561,36 @@ func TestExecuteAgentCreateReplaceOverridesExplicitFields(t *testing.T) {
 			if req.Method != http.MethodPost {
 				t.Fatalf("method = %q, want %q", req.Method, http.MethodPost)
 			}
-			if req.URL.String() != "http://example.test/api/v1/agents" {
-				t.Fatalf("url = %q, want %q", req.URL.String(), "http://example.test/api/v1/agents")
+			if req.URL.String() != "http://example.test/api/v1/agents/u-alice/recreate" {
+				t.Fatalf("url = %q, want %q", req.URL.String(), "http://example.test/api/v1/agents/u-alice/recreate")
 			}
 
 			var payload map[string]any
 			if err := json.NewDecoder(req.Body).Decode(&payload); err != nil {
 				t.Fatalf("decode request: %v", err)
 			}
-			if payload["id"] != "u-alice" {
-				t.Fatalf("payload[id] = %#v, want %q", payload["id"], "u-alice")
+			configuration := payload["configuration"].(map[string]any)
+			if configuration["name"] != "alice-v2" {
+				t.Fatalf("payload[name] = %#v, want %q", configuration["name"], "alice-v2")
 			}
-			if payload["name"] != "alice-v2" {
-				t.Fatalf("payload[name] = %#v, want %q", payload["name"], "alice-v2")
+			if _, ok := configuration["description"]; ok {
+				t.Fatalf("payload should omit description when explicitly cleared, got %#v", configuration["description"])
 			}
-			if _, ok := payload["description"]; ok {
-				t.Fatalf("payload should omit description when explicitly cleared, got %#v", payload["description"])
+			if configuration["runtime"].(map[string]any)["image"] != "ghcr.io/opencsg/csgclaw-agent:2026.4.28" {
+				t.Fatalf("payload[image] = %#v, want %q", configuration["runtime"].(map[string]any)["image"], "ghcr.io/opencsg/csgclaw-agent:2026.4.28")
 			}
-			if payload["image"] != "ghcr.io/opencsg/csgclaw-agent:2026.4.28" {
-				t.Fatalf("payload[image] = %#v, want %q", payload["image"], "ghcr.io/opencsg/csgclaw-agent:2026.4.28")
-			}
-			if payload["replace"] != true {
-				t.Fatalf("payload[replace] = %#v, want true", payload["replace"])
-			}
-			if payload["profile"] != "codex-fast" {
-				t.Fatalf("payload[profile] = %#v, want %q", payload["profile"], "codex-fast")
+			if configuration["model_config"].(map[string]any)["selector"] != "codex-fast" {
+				t.Fatalf("payload[profile] = %#v, want %q", configuration["model_config"].(map[string]any)["selector"], "codex-fast")
 			}
 			if payload["runtime_kind"] != nil {
 				t.Fatalf("payload[runtime_kind] = %#v, want omitted", payload["runtime_kind"])
 			}
-			if payload["runtime_name"] != "codex" {
-				t.Fatalf("payload[runtime_name] = %#v, want %q", payload["runtime_name"], "codex")
+			if configuration["runtime"].(map[string]any)["name"] != "codex" {
+				t.Fatalf("payload[runtime_name] = %#v, want %q", configuration["runtime"].(map[string]any)["name"], "codex")
 			}
-			assertStringSliceValue(t, payload["field_mask"], []string{"id", "name", "description", "image", "profile", "runtime"})
+			assertStringSliceValue(t, payload["field_mask"], []string{"name", "description", "model_config.selector", "runtime"})
 
-			return jsonResponse(http.StatusCreated, `{"id":"u-alice","name":"alice-v2","role":"worker","status":"running","runtime_name":"codex","image":"ghcr.io/opencsg/csgclaw-agent:2026.4.28","created_at":"2026-04-01T12:00:00Z","profile":"codex-fast"}`), nil
+			return jsonResponse(http.StatusOK, `{"id":"u-alice","name":"alice-v2","role":"worker","created_at":"2026-04-01T12:00:00Z","runtime":{"image":"ghcr.io/opencsg/csgclaw-agent:2026.4.28","name":"codex","state":"running"},"model_config":{"model_id":"codex-fast"}}`), nil
 		}),
 	}
 
@@ -648,18 +649,17 @@ func TestExecuteAgentCreateReplaceForceSkipsConfirmation(t *testing.T) {
 			if req.Method != http.MethodPost {
 				t.Fatalf("method = %q, want %q", req.Method, http.MethodPost)
 			}
-			if req.URL.String() != "http://example.test/api/v1/agents" {
-				t.Fatalf("url = %q, want %q", req.URL.String(), "http://example.test/api/v1/agents")
+			if req.URL.String() != "http://example.test/api/v1/agents/u-alice/recreate" {
+				t.Fatalf("url = %q, want %q", req.URL.String(), "http://example.test/api/v1/agents/u-alice/recreate")
 			}
 			var payload map[string]any
 			if err := json.NewDecoder(req.Body).Decode(&payload); err != nil {
 				t.Fatalf("decode request: %v", err)
 			}
-			if payload["replace"] != true {
-				t.Fatalf("payload[replace] = %#v, want true", payload["replace"])
+			if len(payload) != 0 {
+				t.Fatalf("payload = %#v, want empty recreate request", payload)
 			}
-			assertStringSliceValue(t, payload["field_mask"], []string{"id"})
-			return jsonResponse(http.StatusCreated, `{"id":"u-alice","name":"alice","description":"worker","image":"ghcr.io/opencsg/csgclaw-agent:2026.4.20","role":"worker","status":"running","created_at":"2026-04-01T12:00:00Z","profile":"codex-main"}`), nil
+			return jsonResponse(http.StatusOK, `{"id":"u-alice","name":"alice","description":"worker","role":"worker","created_at":"2026-04-01T12:00:00Z","runtime":{"image":"ghcr.io/opencsg/csgclaw-agent:2026.4.20","state":"running"},"model_config":{"model_id":"codex-main"}}`), nil
 		}),
 	}
 
@@ -684,8 +684,8 @@ func TestExecuteAgentCreateReplaceRequiresExistingAgent(t *testing.T) {
 			if req.Method != http.MethodPost {
 				t.Fatalf("method = %q, want %q", req.Method, http.MethodPost)
 			}
-			if req.URL.String() != "http://example.test/api/v1/agents" {
-				t.Fatalf("url = %q, want %q", req.URL.String(), "http://example.test/api/v1/agents")
+			if req.URL.String() != "http://example.test/api/v1/agents/u-missing/recreate" {
+				t.Fatalf("url = %q, want %q", req.URL.String(), "http://example.test/api/v1/agents/u-missing/recreate")
 			}
 			return jsonResponse(http.StatusNotFound, "agent \"u-missing\" not found\n"), nil
 		}),
@@ -765,22 +765,18 @@ func TestExecuteAgentCreateReplaceManagerAliasUsesManagerID(t *testing.T) {
 			if req.Method != http.MethodPost {
 				t.Fatalf("method = %q, want %q", req.Method, http.MethodPost)
 			}
-			if req.URL.String() != "http://example.test/api/v1/agents" {
-				t.Fatalf("url = %q, want %q", req.URL.String(), "http://example.test/api/v1/agents")
+			if req.URL.String() != "http://example.test/api/v1/agents/u-manager/recreate" {
+				t.Fatalf("url = %q, want %q", req.URL.String(), "http://example.test/api/v1/agents/u-manager/recreate")
 			}
 
 			var payload map[string]any
 			if err := json.NewDecoder(req.Body).Decode(&payload); err != nil {
 				t.Fatalf("decode request: %v", err)
 			}
-			if payload["id"] != "u-manager" {
-				t.Fatalf("payload[id] = %#v, want %q", payload["id"], "u-manager")
+			if len(payload) != 0 {
+				t.Fatalf("payload = %#v, want empty recreate request", payload)
 			}
-			if payload["replace"] != true {
-				t.Fatalf("payload[replace] = %#v, want true", payload["replace"])
-			}
-			assertStringSliceValue(t, payload["field_mask"], []string{"id"})
-			return jsonResponse(http.StatusCreated, `{"id":"u-manager","name":"manager","role":"manager","status":"running","created_at":"2026-04-01T12:00:00Z","profile":"codex-main"}`), nil
+			return jsonResponse(http.StatusOK, `{"id":"u-manager","name":"manager","role":"manager","created_at":"2026-04-01T12:00:00Z","runtime":{"state":"running"},"model_config":{"model_id":"codex-main"}}`), nil
 		}),
 	}
 
@@ -800,22 +796,20 @@ func TestExecuteAgentCreateReplaceManagerSendsImageOverride(t *testing.T) {
 			if req.Method != http.MethodPost {
 				t.Fatalf("method = %q, want %q", req.Method, http.MethodPost)
 			}
-			if req.URL.String() != "http://example.test/api/v1/agents" {
-				t.Fatalf("url = %q, want %q", req.URL.String(), "http://example.test/api/v1/agents")
+			if req.URL.String() != "http://example.test/api/v1/agents/u-manager/recreate" {
+				t.Fatalf("url = %q, want %q", req.URL.String(), "http://example.test/api/v1/agents/u-manager/recreate")
 			}
 
 			var payload map[string]any
 			if err := json.NewDecoder(req.Body).Decode(&payload); err != nil {
 				t.Fatalf("decode request: %v", err)
 			}
-			if payload["id"] != "u-manager" {
-				t.Fatalf("payload[id] = %#v, want %q", payload["id"], "u-manager")
+			configuration := payload["configuration"].(map[string]any)
+			if configuration["runtime"].(map[string]any)["image"] != "manager-image:2" {
+				t.Fatalf("payload[image] = %#v, want %q", configuration["runtime"].(map[string]any)["image"], "manager-image:2")
 			}
-			if payload["image"] != "manager-image:2" {
-				t.Fatalf("payload[image] = %#v, want %q", payload["image"], "manager-image:2")
-			}
-			assertStringSliceValue(t, payload["field_mask"], []string{"id", "image"})
-			return jsonResponse(http.StatusCreated, `{"id":"u-manager","name":"manager","role":"manager","status":"running","image":"manager-image:2","created_at":"2026-04-01T12:00:00Z","profile":"codex-main"}`), nil
+			assertStringSliceValue(t, payload["field_mask"], []string{"runtime.image"})
+			return jsonResponse(http.StatusOK, `{"id":"u-manager","name":"manager","role":"manager","created_at":"2026-04-01T12:00:00Z","runtime":{"image":"manager-image:2","state":"running"},"model_config":{"model_id":"codex-main"}}`), nil
 		}),
 	}
 
@@ -846,7 +840,7 @@ func TestExecuteAgentCreateSendsFromTemplate(t *testing.T) {
 			if payload["from_template"] != "builtin.frontend-alice" {
 				t.Fatalf("payload[from_template] = %#v, want %q", payload["from_template"], "builtin.frontend-alice")
 			}
-			return jsonResponse(http.StatusCreated, `{"id":"u-alice","name":"alice","role":"worker","status":"running","created_at":"2026-04-01T12:00:00Z"}`), nil
+			return jsonResponse(http.StatusCreated, `{"id":"u-alice","name":"alice","role":"worker","created_at":"2026-04-01T12:00:00Z","runtime":{"state":"running"}}`), nil
 		}),
 	}
 
@@ -867,7 +861,7 @@ func TestExecuteHubListUsesHTTPClient(t *testing.T) {
 			if req.URL.String() != "http://example.test/api/v1/hub/templates" {
 				t.Fatalf("url = %q, want %q", req.URL.String(), "http://example.test/api/v1/hub/templates")
 			}
-			return jsonResponse(http.StatusOK, `[{"id":"builtin.frontend-alice","name":"frontend-alice","runtime_kind":"codex","source":{"name":"builtin","kind":"builtin"}}]`), nil
+			return jsonResponse(http.StatusOK, `{"items":[{"id":"builtin.frontend-alice","name":"frontend-alice","runtime_kind":"codex","source":{"name":"builtin","kind":"builtin"}}]}`), nil
 		}),
 	}
 
@@ -1047,7 +1041,7 @@ func TestExecuteAgentDeleteAllUsesHTTPClient(t *testing.T) {
 				if req.URL.String() != "http://example.test/api/v1/agents?archived=true" {
 					t.Fatalf("url = %q, want %q", req.URL.String(), "http://example.test/api/v1/agents?archived=true")
 				}
-				return jsonResponse(http.StatusOK, `[{"id":"u-alice","name":"alice","role":"worker","status":"running"},{"id":"u-bob","name":"bob","role":"worker","status":"stopped"}]`), nil
+				return jsonResponse(http.StatusOK, `{"items":[{"id":"u-alice","name":"alice","role":"worker","runtime":{"state":"running"}},{"id":"u-bob","name":"bob","role":"worker","runtime":{"state":"stopped"}}]}`), nil
 			case 2:
 				if req.Method != http.MethodDelete {
 					t.Fatalf("method = %q, want %q", req.Method, http.MethodDelete)
@@ -1137,7 +1131,7 @@ func TestExecuteAgentDeleteAllForceSkipsConfirmation(t *testing.T) {
 				if req.URL.String() != "http://example.test/api/v1/agents?archived=true" {
 					t.Fatalf("url = %q, want %q", req.URL.String(), "http://example.test/api/v1/agents?archived=true")
 				}
-				return jsonResponse(http.StatusOK, `[{"id":"u-alice","name":"alice","role":"worker","status":"running"}]`), nil
+				return jsonResponse(http.StatusOK, `{"items":[{"id":"u-alice","name":"alice","role":"worker","runtime":{"state":"running"}}]}`), nil
 			case 2:
 				if req.Method != http.MethodDelete {
 					t.Fatalf("method = %q, want %q", req.Method, http.MethodDelete)

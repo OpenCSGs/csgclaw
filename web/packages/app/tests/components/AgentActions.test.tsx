@@ -1398,15 +1398,15 @@ describe("agent action visibility", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async (url: string) =>
-        Response.json(
-          String(url).includes("/agents/")
+        Response.json({
+          items: String(url).includes("/agents/")
             ? [{ name: "alpha" }]
             : [
                 { name: "alpha" },
                 { name: "beta", description: "Beta candidate" },
                 { name: "gamma", description: "Gamma candidate" },
               ],
-        ),
+        }),
       ),
     );
     render(

@@ -111,7 +111,7 @@ func testNativeCodexOversizedModelRequest(t *testing.T, binary string, reject ht
 	}))
 	defer bridge.Close()
 	profile := agentruntime.Profile{
-		Provider: "api", BaseURL: bridge.URL + "/api/v1/agents/dev/llm", APIKey: "fixture-token", ModelID: "fixture-model",
+		Provider: "api", BaseURL: bridge.URL + "/api/v1/agents/dev/llm/v1", APIKey: "fixture-token", ModelID: "fixture-model",
 	}
 	rt := codex.New(codex.Dependencies{
 		BinaryProvider: usageNativeBinary(binary), EventSink: codex.NewEventSink(),

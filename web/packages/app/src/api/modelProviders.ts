@@ -1,3 +1,4 @@
+import type { components } from "@/api/generated/controlPlane";
 import type { ModelServicePreset } from "@/models/modelProviderPresets";
 import type { ModelOverride } from "@/models/modelMetadata";
 import { del, get, post, put } from "@/api/client";
@@ -28,7 +29,8 @@ export type ModelProviderCheckResult = {
 };
 
 export async function fetchModelProviders(): Promise<ModelProviderCatalog> {
-  return normalizeModelProviderCatalog(await get("api/v1/model-providers"));
+  const response = await get<components["schemas"]["ModelProviderList"]>("api/v1/model-providers");
+  return normalizeModelProviderCatalog({ providers: response.items });
 }
 
 export function createModelProvider(payload: ModelProviderPayload): Promise<ModelProvider> {
@@ -51,5 +53,9 @@ export function checkModelProvider(
 }
 
 export function fetchModelProviderPresets(signal?: AbortSignal): Promise<{ presets: ModelServicePreset[] }> {
-  return get("api/v1/model-provider-presets", { signal });
+  return get<components["schemas"]["ModelProviderPresetList"]>("api/v1/model-provider-presets", { signal }).then(
+    (response) => ({
+      presets: response.items,
+    }),
+  );
 }

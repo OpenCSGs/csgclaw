@@ -26,7 +26,7 @@ type remoteSkillsListResponse struct {
 	Items    []remoteSkillSummary `json:"items"`
 	NextPage *int                 `json:"next_page,omitempty"`
 	Page     int                  `json:"page"`
-	Per      int                  `json:"per"`
+	Limit    int                  `json:"limit"`
 	Total    *int                 `json:"total,omitempty"`
 }
 
@@ -92,7 +92,7 @@ func (h *Handler) handleRemoteSkills(w http.ResponseWriter, r *http.Request) {
 		Items:    items,
 		NextPage: nextRemoteSkillsPage(page, per, list.Total, list.RecordCount),
 		Page:     page,
-		Per:      per,
+		Limit:    per,
 		Total:    list.Total,
 	})
 }

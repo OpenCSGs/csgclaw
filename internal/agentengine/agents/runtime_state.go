@@ -659,7 +659,7 @@ func ProjectsRoot() (string, error) {
 
 func llmBridgeBaseURL(managerBaseURL, agentID string) string {
 	managerBaseURL = strings.TrimRight(strings.TrimSpace(managerBaseURL), "/")
-	return managerBaseURL + "/api/v1/agents/" + strings.TrimSpace(agentID) + "/llm"
+	return managerBaseURL + "/api/v1/agents/" + strings.TrimSpace(agentID) + "/llm/v1"
 }
 
 func runtimeProfileFromAgent(profile AgentProfile) agentruntime.Profile {

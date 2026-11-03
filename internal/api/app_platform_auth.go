@@ -132,7 +132,7 @@ func (h *Handler) authorizeAgentPlatformRoute(r *http.Request, agentID string) b
 		if agent.CanonicalID(parts[1]) != agent.CanonicalID(agentID) {
 			return false
 		}
-		return (len(parts) >= 6 && parts[2] == "tasks" && parts[4] == "llm" && h.agentPlatformRoom(agentID, parts[3])) || parts[2] == "llm" || (len(parts) == 3 && parts[2] == "mcp") || (r.Method == http.MethodGet && len(parts) == 3 && parts[2] == "connectors")
+		return (len(parts) >= 7 && parts[2] == "rooms" && parts[4] == "llm" && parts[5] == "v1" && h.agentPlatformRoom(agentID, parts[3])) || (len(parts) >= 5 && parts[2] == "llm" && parts[3] == "v1") || (len(parts) == 3 && parts[2] == "mcp") || (r.Method == http.MethodGet && len(parts) == 3 && parts[2] == "connectors")
 	}
 	if p == "connectors/catalog" && r.Method == http.MethodGet {
 		return true

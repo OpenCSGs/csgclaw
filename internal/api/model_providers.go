@@ -12,6 +12,7 @@ import (
 
 	"csgclaw/internal/agentengine"
 	agent "csgclaw/internal/agentengine/agents"
+	"csgclaw/internal/apitypes"
 	"csgclaw/internal/config"
 	"csgclaw/internal/modelpreset"
 	"github.com/go-chi/chi/v5"
@@ -62,7 +63,7 @@ func (h *Handler) listModelProviders(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	writeJSON(w, http.StatusOK, agent.ModelProviderCatalogFromLLM(cfg.Models))
+	writeJSON(w, http.StatusOK, apitypes.ListResponse[agent.ModelProviderSummary]{Items: agent.ModelProviderCatalogFromLLM(cfg.Models).Providers})
 }
 
 func (h *Handler) createModelProvider(w http.ResponseWriter, r *http.Request) {
@@ -461,7 +462,7 @@ func validateModelOverrides(values map[string]modelcap.Metadata) error {
 }
 
 func (h *Handler) listModelProviderPresets(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{"presets": modelpreset.Catalog()})
+	writeJSON(w, http.StatusOK, map[string]any{"items": modelpreset.Catalog()})
 }
 
 func resolveModelProviderRequest(req *modelProviderRequest) error {
