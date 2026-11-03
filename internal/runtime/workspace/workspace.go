@@ -1,4 +1,4 @@
-package sandboxgateway
+package workspace
 
 import (
 	"errors"

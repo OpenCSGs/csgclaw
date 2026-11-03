@@ -312,3 +312,33 @@ func TestMigrationStartsPreviouslyStoppedRetiredAgentsAndHonorsLaterStops(t *tes
 		t.Fatalf("completed migration overrode a later user stop: %s, %v", after, err)
 	}
 }
+
+func TestNativeSandboxMetadataMigrationPreservesRuntimeHandles(t *testing.T) {
+	root := t.TempDir()
+	original := `{"version":1,"unrelated":{"large":9007199254740993},"agents":{"items":[{"id":"agent-native","runtime":{"kind":"codex","state":"running","sandbox_id":"native-session-handle","sandbox_enabled":true,"options":{"local_workspace_dir":"/user/work"}},"sandbox_enabled":true,"desired_state":"stopped","model_config":{"model_id":"keep-model","sandbox_enabled":true}},{"id":"agent-dsh","runtime_kind":"dsh","sandbox_enabled":false,"desired_state":"running"}]}}`
+	path := filepath.Join(root, "state.json")
+	writeFile(t, path, original)
+	if err := migrateAgentsWithMissingSandbox(t, root); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(data, []byte("sandbox_enabled")) {
+		t.Fatal("obsolete sandbox metadata retained")
+	}
+	for _, value := range []string{"9007199254740993", "native-session-handle", "/user/work", "keep-model", `"state": "running"`, `"desired_state": "stopped"`} {
+		if !bytes.Contains(data, []byte(value)) {
+			t.Fatalf("native runtime data changed: %s", data)
+		}
+	}
+	info, _ := os.Stat(path)
+	if err := migrateAgentsWithMissingSandbox(t, root); err != nil {
+		t.Fatal(err)
+	}
+	again, _ := os.Stat(path)
+	if !again.ModTime().Equal(info.ModTime()) {
+		t.Fatal("metadata migration repeats")
+	}
+}

@@ -51,7 +51,6 @@ import { SHOW_AGENT_LIFECYCLE_ACTIONS } from "@/shared/constants/agents";
 import { AGENT_PROFILE_ACTIVE_TAB_STORAGE_KEY } from "@/shared/storage/keys";
 import {
   EnvKeyValueEditor,
-  FieldHelpTooltip,
   ClipboardCopyButton,
   NotifierControls,
   reasoningEffortLabel,
@@ -60,7 +59,6 @@ import {
 import {
   agentProfilePageSaveDisabled,
   agentProfileConfig,
-  agentSandboxEnabled,
   agentAvailabilityStatusLabel,
   agentGatewayUnavailableLabel,
   agentRuntimeStatusDetailLabel,
@@ -1198,7 +1196,7 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
               <AgentAppsPanel
                 key={String(item.id)}
                 agentID={String(item.id || "")}
-                cliSupported={!agentSandboxEnabled(item) && ["codex", "dsh"].includes(runtimeKind)}
+                cliSupported={["codex", "dsh"].includes(runtimeKind)}
                 controller={appsController}
                 t={t}
                 portalContainer={dialogPortalContainer}
@@ -1610,7 +1608,6 @@ function AgentRuntimePanel({
   t,
 }: AgentRuntimePanelProps) {
   const isNotifierDraft = isNotifierRuntimeDraftOnAgentPage(draft, item);
-  const sandboxEnabled = draft.sandbox_enabled ?? agentSandboxEnabled(item);
 
   return (
     <section id="agent-profile-runtime" className="profile-section agent-profile-scroll-target">
@@ -1620,30 +1617,10 @@ function AgentRuntimePanel({
       </div>
       <div className="agent-section-form">
         <div className="profile-grid-compact agent-page-form-content">
-          <label className="field">
+          <label className="field col-span-full">
             <span>{t("profileRuntimeKind")}</span>
             <input value={formatRuntimeKindLabel(draft.runtime_kind || runtimeKind, t)} readOnly disabled />
           </label>
-          {!isNotifierDraft ? (
-            <div className="field agent-fast-mode-field agent-sandbox-readonly-field">
-              <div className="field-label-with-help">
-                <span>{t("profileSandboxEnabled")}</span>
-                <FieldHelpTooltip detail={t("profileSandboxEnabledHelp")} />
-              </div>
-              <label className="selection-item compact-toggle-row agent-fast-mode-toggle agent-sandbox-toggle readonly">
-                <input
-                  type="checkbox"
-                  checked={sandboxEnabled}
-                  aria-label={t("profileSandboxEnabled")}
-                  readOnly
-                  disabled
-                />
-                <span className="agent-sandbox-copy">
-                  <strong>{sandboxEnabled ? t("statusEnabled") : t("statusDisabled")}</strong>
-                </span>
-              </label>
-            </div>
-          ) : null}
           {!isNotifierDraft && runtimeOptionSchemas.length > 0 ? (
             <RuntimeOptionsFields
               draft={draft}

@@ -28,7 +28,7 @@ import (
 	"csgclaw/internal/identity"
 	agentruntime "csgclaw/internal/runtime"
 	runtimeinstructions "csgclaw/internal/runtime/instructions"
-	"csgclaw/internal/runtime/sandboxgateway"
+	runtimeworkspace "csgclaw/internal/runtime/workspace"
 	larkextension "csgclaw/internal/runtimeextension/larkcli"
 	templateembed "csgclaw/internal/template/embed"
 )
@@ -229,17 +229,17 @@ func (r *Runtime) Provision(ctx context.Context, req agentruntime.ProvisionReque
 		return err
 	}
 	root := filepath.Dir(layout.WorkspaceRoot)
-	if err := sandboxgateway.EnsureEmbeddedWorkspace(templateembed.DSHWorkerRoot, layout.WorkspaceRoot); err != nil {
+	if err := runtimeworkspace.EnsureEmbeddedWorkspace(templateembed.DSHWorkerRoot, layout.WorkspaceRoot); err != nil {
 		return fmt.Errorf("seed DSH worker workspace: %w", err)
 	}
 	if overlay := strings.TrimSpace(req.WorkspaceOverlay); overlay != "" {
-		if err := sandboxgateway.OverlayWorkspaceTree(overlay, layout.WorkspaceRoot); err != nil {
+		if err := runtimeworkspace.OverlayWorkspaceTree(overlay, layout.WorkspaceRoot); err != nil {
 			return fmt.Errorf("overlay DSH worker workspace: %w", err)
 		}
 	}
 	workspaceSkills := filepath.Join(layout.WorkspaceRoot, "skills")
 	if info, statErr := os.Stat(workspaceSkills); statErr == nil && info.IsDir() {
-		if err := sandboxgateway.OverlayWorkspaceTree(workspaceSkills, layout.SkillsRoot); err != nil {
+		if err := runtimeworkspace.OverlayWorkspaceTree(workspaceSkills, layout.SkillsRoot); err != nil {
 			return fmt.Errorf("install DSH template skills: %w", err)
 		}
 	} else if statErr != nil && !errors.Is(statErr, os.ErrNotExist) {

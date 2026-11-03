@@ -62,3 +62,26 @@ Pass no retired-cache predicate to generic backup and typed-ID migration helpers
 Remove the retired-config hookup test in `cli/serve/serve_test.go` with the integration it exercises.
 Keep generic fixes for state-section preservation, standalone config backups, stopped host status and instructions-only templates.
 Run `go test ./...`, build the application, and verify startup and current Codex/DSH workflows.
+
+## Retired sandbox settings
+
+`[sandbox]` is no longer an application runtime setting.
+The config loader preserves provider input temporarily under `[migrations.retired_claws.sandbox]` while old Agents need migration.
+The startup owner removes that private input after the conversion succeeds.
+CSGHub deployment behavior is preserved independently as `[server].deployment_mode = "csghub"`.
+Native Agent metadata cleanup removes obsolete sandbox flags without changing native session handles, desired state or workspace options.
+Provider adapters remain available only to attempt shutdown of old sandboxes during retirement.
+Host startup and settings do not instantiate or require these providers.
+
+## Retired per-Agent BoxLite homes
+
+`CleanupAgentSandboxHomes` runs before native runtimes start and after Agent conversion.
+It handles only `agents/<managed-native-agent-id>/.boxlite` and `agents/<managed-native-agent-id>/boxlite`.
+Global runtime directories, unregistered Agent homes, symbolic links and unconverted Agents are retained.
+Current persisted workspace/MCP/config references and links from other Agent files protect their targets.
+Nonempty homes require a successful `boxlite --home <path> list --all --format json` inventory with only inactive instances.
+Missing CLI, active/unknown instances, reference read failures and filesystem errors warn without blocking startup.
+Eligible homes are deleted directly without creating a backup or archive.
+Recursive removal is confined to the validated Agent directory with `os.Root`; nested symbolic links are unlinked without following their targets.
+Filesystem failures warn and any remaining paths are retried on later startup.
+Absent source paths make successful cleanup idempotent.

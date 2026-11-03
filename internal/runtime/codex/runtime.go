@@ -28,7 +28,7 @@ import (
 	"csgclaw/internal/opencsgmcp"
 	agentruntime "csgclaw/internal/runtime"
 	runtimeinstructions "csgclaw/internal/runtime/instructions"
-	"csgclaw/internal/runtime/sandboxgateway"
+	runtimeworkspace "csgclaw/internal/runtime/workspace"
 	"csgclaw/internal/sandbox"
 	templateembed "csgclaw/internal/template/embed"
 )
@@ -472,11 +472,11 @@ func (r *Runtime) Provision(ctx context.Context, req agentruntime.ProvisionReque
 		}
 	}
 	templateRoot := codexWorkspaceTemplateRoot(agentID)
-	if err := sandboxgateway.EnsureEmbeddedWorkspace(templateRoot, layout.WorkspaceRoot); err != nil {
+	if err := runtimeworkspace.EnsureEmbeddedWorkspace(templateRoot, layout.WorkspaceRoot); err != nil {
 		return fmt.Errorf("seed codex workspace template for agent %q: %w", req.AgentName, err)
 	}
 	if overlayRoot := strings.TrimSpace(req.WorkspaceOverlay); overlayRoot != "" {
-		if err := sandboxgateway.OverlayWorkspaceTree(overlayRoot, layout.WorkspaceRoot); err != nil {
+		if err := runtimeworkspace.OverlayWorkspaceTree(overlayRoot, layout.WorkspaceRoot); err != nil {
 			return fmt.Errorf("overlay codex workspace for agent %q: %w", req.AgentName, err)
 		}
 	}

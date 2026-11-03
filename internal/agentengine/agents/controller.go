@@ -253,6 +253,9 @@ func WithSandboxProvider(provider sandbox.Provider) ControllerOption {
 			return fmt.Errorf("sandbox provider is required")
 		}
 		s.sandbox = provider
+		if provider.Name() == config.CSGHubProvider {
+			s.server.DeploymentMode = config.CSGHubProvider
+		}
 		return nil
 	}
 }

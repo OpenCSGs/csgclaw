@@ -43,7 +43,6 @@ func TestApplyUserSettingsUpdatesExposedFields(t *testing.T) {
 		AdvertiseBaseURL:       "http://192.168.1.10:19080/",
 		AccessToken:            "new-secret",
 		ShowUpgrade:            false,
-		SandboxProvider:        DockerProvider,
 		HubLocalPath:           "/new/hub",
 		DefaultManagerTemplate: "builtin.manager-codex",
 		DefaultWorkerTemplate:  "builtin.codex-worker",
@@ -60,8 +59,8 @@ func TestApplyUserSettingsUpdatesExposedFields(t *testing.T) {
 	if updated.Server.ShowUpgrade {
 		t.Fatalf("ShowUpgrade = true, want false")
 	}
-	if updated.Sandbox.Provider != DockerProvider {
-		t.Fatalf("Sandbox.Provider = %q, want %q", updated.Sandbox.Provider, DockerProvider)
+	if updated.Sandbox.Provider != BoxLiteProvider {
+		t.Fatalf("retired sandbox input changed: %q", updated.Sandbox.Provider)
 	}
 	resolvedHub := updated.Hub.Resolved()
 	if got, want := resolvedHub.Registries[1].Path, "/new/hub"; got != want {
@@ -103,7 +102,6 @@ func TestApplyUserSettingsRejectsInvalidListenAddr(t *testing.T) {
 		ListenAddr:             "not-an-address",
 		AccessToken:            "secret",
 		ShowUpgrade:            true,
-		SandboxProvider:        BoxLiteProvider,
 		DefaultManagerTemplate: DefaultBootstrapManagerTemplate,
 		DefaultWorkerTemplate:  DefaultBootstrapWorkerTemplate,
 	})

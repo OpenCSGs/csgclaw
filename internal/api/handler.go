@@ -28,7 +28,6 @@ import (
 	agentruntime "csgclaw/internal/runtime"
 	"csgclaw/internal/runtimecatalog"
 	"csgclaw/internal/sandbox"
-	"csgclaw/internal/sandboxproviders"
 	"csgclaw/internal/scheduledtask"
 	"csgclaw/internal/taskcore"
 	"csgclaw/internal/team"
@@ -169,7 +168,7 @@ type imEventResponse struct {
 type bootstrapConfigResponse struct {
 	DefaultManagerTemplate   string                                        `json:"default_manager_template"`
 	DefaultWorkerTemplate    string                                        `json:"default_worker_template"`
-	SandboxProvider          string                                        `json:"sandbox_provider"`
+	SandboxProvider          string                                        `json:"sandbox_provider,omitempty"`
 	RuntimeKind              string                                        `json:"runtime_kind"`
 	ManagerRuntime           managerRuntimeResponse                        `json:"manager_runtime"`
 	ShowUpgrade              bool                                          `json:"show_upgrade"`
@@ -496,13 +495,9 @@ func (h *Handler) handleLocalDirectoryPicker(w http.ResponseWriter, r *http.Requ
 	writeJSON(w, http.StatusOK, directoryPickerResponse{Path: path})
 }
 
-func listLocalRuntimeImages(ctx context.Context, cfg config.Config) ([]string, error) {
-	provider, err := sandboxproviders.Provider(cfg.Sandbox)
-	if err != nil {
-		return nil, err
-	}
-	return listLocalRuntimeImagesWithProvider(ctx, provider)
-}
+// Host runtimes have no container images. Keep the old read endpoint harmless
+// for clients that still request it during upgrade.
+func listLocalRuntimeImages(context.Context, config.Config) ([]string, error) { return []string{}, nil }
 
 func listLocalRuntimeImagesWithProvider(ctx context.Context, provider sandbox.Provider) ([]string, error) {
 	if provider == nil {
@@ -553,7 +548,6 @@ func bootstrapConfigView(ctx context.Context, cfg config.Config, hubSvc *hub.Ser
 	resp := bootstrapConfigResponse{
 		DefaultManagerTemplate:   cfg.Bootstrap.ResolvedDefaultManagerTemplate(),
 		DefaultWorkerTemplate:    cfg.Bootstrap.ResolvedDefaultWorkerTemplate(),
-		SandboxProvider:          strings.TrimSpace(cfg.Sandbox.Provider),
 		ShowUpgrade:              cfg.Server.ShowUpgrade,
 		DirectoryPickerAvailable: localDirectoryPickerAvailable(),
 		AdvertiseBaseURL:         config.ResolveAdvertiseBaseURL(cfg.Server),
@@ -1997,7 +1991,7 @@ func (h *Handler) filterHubTemplatesForConfiguredProvider(items []hub.Template) 
 	if err != nil {
 		return nil, err
 	}
-	if !strings.EqualFold(strings.TrimSpace(cfg.Sandbox.Provider), config.CSGHubProvider) {
+	if !cfg.IsCSGHubDeployment() {
 		return items, nil
 	}
 

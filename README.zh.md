@@ -33,7 +33,7 @@ curl.exe -fsSL https://csgclaw.opencsg.com/install.ps1 | powershell -ExecutionPo
 - `install.sh` 当前支持 macOS arm64、Linux amd64 和 Linux arm64。
 - `install.ps1` 当前支持 Windows amd64。
 
-官方 release 也会发布 macOS amd64 和 Windows amd64 bundle。当前 Windows bundle 默认使用 Docker，需要本地可用的 Docker 环境。
+官方 release 也会发布 macOS amd64 和 Windows amd64 bundle。本地运行时无需安装 Docker。
 
 **源码编译：**
 
@@ -72,7 +72,7 @@ csgclaw serve
 
 ## 配置
 
-`csgclaw serve` 会使用本地配置中的 server、bootstrap、sandbox 和 channel 设置，并在首次运行时自动补齐缺失的 bootstrap 状态。Agent 模型/provider profile 存储在 agent 状态中，并通过 Web UI 管理。Sandbox provider 选项、Worker 覆盖示例和 agent profile 详情见 [docs/tech/config.zh.md](docs/tech/config.zh.md)。
+`csgclaw serve` 会使用本地配置中的 server、bootstrap 和 channel 设置，并在首次运行时自动补齐缺失的 bootstrap 状态。Agent 模型/provider profile 存储在 agent 状态中，并通过 Web UI 管理。运行环境、旧配置迁移和 Agent profile 详情见 [docs/tech/config.zh.md](docs/tech/config.zh.md)。
 
 面向维护者的架构、API、结构化 skill 输出和 IM thread 设计说明见 [docs/tech/architecture.zh.md](docs/tech/architecture.zh.md)、[docs/tech/api.zh.md](docs/tech/api.zh.md)、[docs/tech/structured-output.zh.md](docs/tech/structured-output.zh.md) 和 [docs/tech/im/im-threads.zh.md](docs/tech/im/im-threads.zh.md)。
 
@@ -82,7 +82,7 @@ csgclaw serve
 - **一键安装** — 提供 macOS arm64/amd64、Linux amd64/arm64 和 Windows amd64 预编译版本，几分钟内即可启动
 - **开箱即用的 WebUI** — 执行 `csgclaw serve` 后直接在浏览器中使用
 - **多通道支持** — 按需接入飞书、微信、Matrix 等通信工具
-- **隔离执行** — 每个 Worker 默认运行在安全沙箱中，无需额外配置
+- **运行权限控制** - Worker 遵循运行时配置的执行模式和权限
 - **角色化 Worker** — 可针对前端、后端、测试、文档、调研等职责分别配置 Worker
 
 ## CSGClaw 是什么
@@ -108,7 +108,7 @@ CSGClaw 提供一位 Manager 和一组可分工的 Worker，让你通过统一�
 
 **Worker** — 面向具体职责的执行单元（前端、后端、测试、文档、调研……）。角色分工让上下文更干净，协作更容易组织。
 
-**Sandbox** — Worker 执行环境由配置的 sandbox provider 隔离。未显式配置 provider 时，CSGClaw 默认使用 **Docker**；BoxLite 仍可通过显式配置启用。
+**运行环境** - Codex 和 DSH 作为本地进程运行，无需 Docker 或 BoxLite。
 
 **Interface** — 默认提供 WebUI；飞书、微信、Matrix 等通道可按需接入。
 
@@ -138,8 +138,8 @@ Manager：已记录，Bob 先修接口，字段确认后 Alice 再更新展示
 **支持 Codex 和 DeepSeek Harness 运行时。**
 CSGClaw 的 Manager 使用内置 Codex CLI，Worker 支持 Codex 和 DeepSeek Harness，并通过统一的 Agent Engine 管理。
 
-**默认选择 Docker，设计上不绑定单一 Sandbox。**
-隔离不是可选项。Docker 作为默认 sandbox provider 具备更广泛的跨平台可用性；BoxLite 仍然适合偏好轻量本地运行时的环境，并允许按需要显式切换不同的 sandbox provider。
+**本地运行时执行。**
+Codex 和 DSH 在 CSGClaw 所在环境中执行任务，由运行时的权限与执行模式控制访问范围。
 
 **默认 WebUI，不绑定单一通道。**
 很多多智能体系统把某种消息协议当作唯一入口。CSGClaw 自带 WebUI，让你可以立即开始；飞书、微信、Matrix 等通道作为可选集成存在，而不是预设前提。

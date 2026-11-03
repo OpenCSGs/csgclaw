@@ -81,9 +81,6 @@ func TestEnsureStateCreatesConfigAndBootstrapsManagerState(t *testing.T) {
 		`[server]`,
 		`show_upgrade = true`,
 		`[bootstrap]`,
-		`[sandbox]`,
-		`provider = ""`,
-		`debian_registries_override = []`,
 		`[hub]`,
 		`default_registry = "builtin"`,
 		`default_publish_registry = "local"`,
@@ -415,8 +412,6 @@ access_token = "your_access_token"
 default_manager_template = "builtin.manager-codex"
 default_worker_template = "builtin.codex-worker"
 
-[sandbox]
-provider = "boxlite"
 debian_registries_override = []
 
 [hub]
@@ -723,9 +718,6 @@ access_token = "your_access_token"
 		`[bootstrap]`,
 		`default_manager_template = "builtin.manager-codex"`,
 		`default_worker_template = "builtin.codex-worker"`,
-		`[sandbox]`,
-		`provider = ""`,
-		`debian_registries_override = []`,
 		`[hub]`,
 		`default_registry = "builtin"`,
 		`default_publish_registry = "local"`,

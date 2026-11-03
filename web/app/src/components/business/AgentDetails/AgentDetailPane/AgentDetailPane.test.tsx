@@ -764,3 +764,14 @@ it("recommends and selects the OpenCSG auto model while preserving its model ID"
   expect(autoOption).toHaveTextContent("modelProviderAutoDescription");
   expect(screen.queryByRole("option", { name: "profileSelectModel" })).not.toBeInTheDocument();
 });
+
+it("omits the retired sandbox switch even when old native metadata contains it", () => {
+  render(
+    <Harness
+      draft={{ ...savedDraft, sandbox_enabled: true }}
+      item={{ ...agent, runtime: { ...agent.runtime, sandbox_enabled: true } }}
+    />,
+  );
+  expect(screen.getByRole("textbox", { name: "profileRuntimeKind" })).toBeDisabled();
+  expect(screen.queryByRole("checkbox", { name: "profileSandboxEnabled" })).not.toBeInTheDocument();
+});

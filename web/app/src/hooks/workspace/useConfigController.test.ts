@@ -28,8 +28,6 @@ const settings: ConfigSettings = {
   access_token_set: true,
   access_token_preview: "pc-***",
   show_upgrade: true,
-  sandbox_provider: "docker",
-  supported_sandbox_providers: ["docker"],
   hub_local_path: "",
   default_manager_template: "builtin.manager-codex",
   default_worker_template: "builtin.codex-worker",

@@ -1,6 +1,6 @@
 # Release on tag v* / workflow_dispatch.
 #
-# Builds release archives; csgclaw bundles include the Linux sandbox CLI.
+# Builds release archives with the server and companion host CLI.
 #
 # <version> is the git tag (v*) or workflow_dispatch input.
 
