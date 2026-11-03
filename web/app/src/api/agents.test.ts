@@ -59,6 +59,9 @@ describe("deleteAgentLikeRequest", () => {
       type: "agent",
     });
 
-    expect(fetchMock).toHaveBeenCalledWith("api/v1/agents/agent-1", expect.objectContaining({ method: "DELETE" }));
+    expect(fetchMock).toHaveBeenCalledWith(
+      "api/v1/agents/agent-1",
+      expect.objectContaining({ method: "DELETE", body: JSON.stringify({ name: "Agent" }) }),
+    );
   });
 });

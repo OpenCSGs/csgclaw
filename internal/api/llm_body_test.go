@@ -70,7 +70,7 @@ func TestLLMLargeRequestBodyThroughBridge(t *testing.T) {
 						// Hide the length to force Transfer-Encoding: chunked.
 						source = struct{ io.Reader }{source}
 					}
-					req, err := http.NewRequest(http.MethodPost, bridge.URL+"/api/v1/agents/alice/llm/"+endpoint, source)
+					req, err := http.NewRequest(http.MethodPost, bridge.URL+"/api/v1/agents/alice/llm/v1/"+endpoint, source)
 					if err != nil {
 						t.Fatal(err)
 					}

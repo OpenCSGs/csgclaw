@@ -97,9 +97,9 @@ describe("agents API", () => {
     await createManagerAgentRequest();
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "api/v1/agents",
+      "api/v1/agents/u-manager/recreate",
       expect.objectContaining({
-        body: JSON.stringify({ id: "u-manager", replace: true, field_mask: ["id"] }),
+        body: "{}",
         method: "POST",
       }),
     );
@@ -223,7 +223,7 @@ describe("资源启用请求", () => {
     vi.stubGlobal("fetch", fetchMock);
     await setAgentResourceEnabled("agent-1", kind, "reviewer", false);
     expect(fetchMock.mock.calls[0]?.[0]).toBe(
-      `api/v1/agents/agent-1/${kind === "skill" ? "skill-summaries" : "mcp-servers"}?pagination=page&page=1&per=1`,
+      `api/v1/agents/agent-1/${kind === "skill" ? "skill-summaries" : "mcp-servers"}?pagination=page&page=1&limit=1`,
     );
     expect(fetchMock.mock.calls[1]).toEqual([
       `api/v1/agents/agent-1/${kind === "skill" ? "skills" : "mcp-servers"}/reviewer/enabled`,

@@ -38,7 +38,7 @@ func TestRuntimeProfileForAgentUsesBridgeForCodex(t *testing.T) {
 		},
 	})
 
-	if got, want := profile.BaseURL, "http://127.0.0.1:18080/api/v1/agents/u-alice/llm"; got != want {
+	if got, want := profile.BaseURL, "http://127.0.0.1:18080/api/v1/agents/u-alice/llm/v1"; got != want {
 		t.Fatalf("runtimeProfileForAgent().BaseURL = %q, want %q", got, want)
 	}
 	if got, want := profile.APIKey, svc.agentAccessToken("u-alice"); got != want {
@@ -84,7 +84,7 @@ func TestRuntimeProfileForAgentIgnoresPublicAdvertiseURLForCodex(t *testing.T) {
 		},
 	})
 
-	if got, want := profile.BaseURL, "http://127.0.0.1:18080/api/v1/agents/u-alice/llm"; got != want {
+	if got, want := profile.BaseURL, "http://127.0.0.1:18080/api/v1/agents/u-alice/llm/v1"; got != want {
 		t.Fatalf("runtimeProfileForAgent().BaseURL = %q, want local bridge %q", got, want)
 	}
 	if got, want := profile.Env["CSGCLAW_BASE_URL"], "http://127.0.0.1:18080"; got != want {
@@ -140,7 +140,7 @@ func TestRuntimeProfileForKindUsesBridgeForCodexRuntime(t *testing.T) {
 		},
 	})
 
-	if got, want := profile.BaseURL, "http://127.0.0.1:18080/api/v1/agents/u-alice/llm"; got != want {
+	if got, want := profile.BaseURL, "http://127.0.0.1:18080/api/v1/agents/u-alice/llm/v1"; got != want {
 		t.Fatalf("runtimeProfileForKind().BaseURL = %q, want %q", got, want)
 	}
 	if got, want := profile.APIKey, svc.agentAccessToken("u-alice"); got != want {
@@ -181,7 +181,7 @@ func TestRuntimeProfileForKindUsesBridgeForDSHRuntime(t *testing.T) {
 		APIKey:   "dashscope-key",
 	})
 
-	if got, want := profile.BaseURL, "http://127.0.0.1:18080/api/v1/agents/u-dsh/llm"; got != want {
+	if got, want := profile.BaseURL, "http://127.0.0.1:18080/api/v1/agents/u-dsh/llm/v1"; got != want {
 		t.Fatalf("runtimeProfileForKind().BaseURL = %q, want %q", got, want)
 	}
 	if got, want := profile.APIKey, svc.agentAccessToken("u-dsh"); got != want {
@@ -244,7 +244,7 @@ func TestRuntimeProfileForKindUsesHostReachableBridgeForCodexRuntime(t *testing.
 		ModelID:  "gpt-5.4",
 	})
 
-	if got, want := profile.BaseURL, "http://127.0.0.1:18080/api/v1/agents/u-developer/llm"; got != want {
+	if got, want := profile.BaseURL, "http://127.0.0.1:18080/api/v1/agents/u-developer/llm/v1"; got != want {
 		t.Fatalf("runtimeProfileForKind().BaseURL = %q, want host-reachable %q", got, want)
 	}
 	if got, want := profile.Env["CSGCLAW_BASE_URL"], "http://127.0.0.1:18080"; got != want {
@@ -294,7 +294,7 @@ func TestHostRuntimeProfileReplacesStaleConnectionEnvironment(t *testing.T) {
 				"csgclaw_connector_capability": "old-capability", "EXTRA_FLAG": "preserved",
 			}
 			profile := svc.runtimeProfileForKind(kind, "agent-current", "current", "", AgentProfile{Env: original})
-			if want := "http://127.0.0.1:19091"; profile.Env["CSGCLAW_BASE_URL"] != want || profile.BaseURL != want+"/api/v1/agents/agent-current/llm" {
+			if want := "http://127.0.0.1:19091"; profile.Env["CSGCLAW_BASE_URL"] != want || profile.BaseURL != want+"/api/v1/agents/agent-current/llm/v1" {
 				t.Fatalf("runtime retained a stale callback: %q, %q", profile.BaseURL, profile.Env["CSGCLAW_BASE_URL"])
 			}
 			for key := range profile.Env {

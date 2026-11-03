@@ -1,3 +1,4 @@
+import type { components } from "@/api/generated/controlPlane";
 import { del, get, requestWithResponse, patch, post, put, requestText, type ApiError } from "@/api/client";
 import { checkModelProvider } from "@/api/modelProviders";
 import { BOT_TYPE_NOTIFICATION, MANAGER_AGENT_ID } from "@/shared/constants/agents";
@@ -26,22 +27,13 @@ export type FetchAgentsOptions = {
   silent?: boolean;
 };
 
-export type AgentInstructionsDocument = {
-  instructions: string;
-  effective: string;
-};
+export type AgentInstructionsDocument = components["schemas"]["InstructionsDocument"];
 
 export function fetchAgentInstructionsDocument(agentID: string): Promise<AgentInstructionsDocument> {
   return get(`api/v1/agents/${encodeURIComponent(agentID)}/instructions`);
 }
 
-export type AgentMemoryDocument = {
-  enabled: boolean;
-  ready: boolean;
-  name: string;
-  location?: string;
-  content: string;
-};
+export type AgentMemoryDocument = components["schemas"]["MemoryDocument"];
 
 export function fetchAgentMemoryDocument(agentID: string): Promise<AgentMemoryDocument> {
   return get(`api/v1/agents/${encodeURIComponent(agentID)}/memory`);
@@ -79,7 +71,6 @@ export type AgentMCPServersView = {
 export type AgentUpdatePayload = {
   agent_profile?: JSONRecord;
   description?: string;
-  field_mask?: string[];
   instructions?: string;
   skills?: string[];
   image?: string;
@@ -87,7 +78,7 @@ export type AgentUpdatePayload = {
   mcpServers?: JSONRecord | null;
   name?: string;
   profile?: JSONRecord | string;
-  runtime?: { name?: RuntimeName; sandbox_enabled?: boolean; options?: JSONRecord };
+  runtime?: { name?: RuntimeName; sandbox_enabled?: boolean; image?: string; options?: JSONRecord };
   role?: string;
   runtime_name?: RuntimeName;
   sandbox_enabled?: boolean;
@@ -158,11 +149,11 @@ export function saveManagerProfileRequest(profile: JSONRecord): Promise<AgentPro
 export async function fetchAgents(options: FetchAgentsOptions = {}): Promise<AgentLike[]> {
   void options;
   const [agents, notifications] = await Promise.all([
-    get<AgentLike[]>("api/v1/agents?include_participants=true"),
+    get<components["schemas"]["AgentList"]>("api/v1/agents?include_participants=true"),
     get<ParticipantLike[]>("api/v1/channels/csgclaw/participants?type=notification"),
   ]);
   return [
-    ...(Array.isArray(agents) ? agents : []),
+    ...agents.items.map(agentFromResponse),
     ...(Array.isArray(notifications) ? notifications.map(participantToAgentLike) : []),
   ];
 }
@@ -172,7 +163,9 @@ export function fetchAgent(agentID: string, options: FetchAgentOptions = {}): Pr
   if (options.cacheBust) {
     params.set("_", String(Date.now()));
   }
-  return get(`api/v1/agents/${encodeURIComponent(agentID)}?${params.toString()}`);
+  return get<AgentResponse>(`api/v1/agents/${encodeURIComponent(agentID)}?${params.toString()}`).then(
+    agentFromResponse,
+  );
 }
 
 export function fetchAgentLogsRequest(agentID: string, options: FetchAgentLogsOptions = {}): Promise<string> {
@@ -216,7 +209,12 @@ export type AgentSkillSummary = {
 };
 
 export function fetchAgentSkillSummaries(agentID: string, signal?: AbortSignal): Promise<AgentSkillSummary[]> {
-  return get(`api/v1/agents/${encodeURIComponent(agentID)}/skill-summaries`, { signal });
+  return get<components["schemas"]["AgentSkillSummaryList"]>(
+    `api/v1/agents/${encodeURIComponent(agentID)}/skill-summaries`,
+    {
+      signal,
+    },
+  ).then((response) => response.items);
 }
 
 export function fetchAgentSkillsFile(agentID: string, skillsPath: string): Promise<WorkspaceFile> {
@@ -266,12 +264,7 @@ export function deleteAgentSkillRequest(agentID: string, skillName: string): Pro
 }
 
 export function createManagerAgentRequest(): Promise<AgentLike> {
-  const payload = {
-    id: MANAGER_AGENT_ID, // Legacy contract: id: "u-manager",
-    replace: true,
-    field_mask: ["id"],
-  };
-  return post("api/v1/agents", payload);
+  return post<AgentResponse>(`api/v1/agents/${MANAGER_AGENT_ID}/recreate`, {}).then(agentFromResponse);
 }
 
 export function fetchAgentProfileDefaults(): Promise<AgentProfileLike> {
@@ -299,7 +292,11 @@ export async function fetchAgentProfileModels(draft: AgentProfileModelRequest): 
     }
     return { models: result.models };
   }
-  return post("api/v1/agent-profiles/models", modelPayload(draft));
+  const { items, provider } = await post<components["schemas"]["ProfileModelList"]>(
+    "api/v1/agent-profiles/models",
+    modelPayload(draft),
+  );
+  return { models: items, provider };
 }
 
 export async function pickHostDirectoryRequest(): Promise<HostDirectoryPickResult> {
@@ -316,39 +313,54 @@ export async function pickHostDirectoryRequest(): Promise<HostDirectoryPickResul
   }
 }
 
-export function updateAgentRequest(agentID: string, payload: AgentUpdatePayload): Promise<AgentLike> {
-  const normalizedPayload = normalizeAgentPayload(payload);
-  const fieldMask = Object.keys(normalizedPayload).filter(
-    (key) => key !== "field_mask" && normalizedPayload[key as keyof AgentUpdatePayload] !== undefined,
-  );
-  return patch(`api/v1/agents/${encodeURIComponent(agentID)}`, {
-    ...normalizedPayload,
-    field_mask: fieldMask,
-  });
+type AgentResponse = components["schemas"]["Agent"];
+
+function agentFromResponse(response: components["schemas"]["AgentList"]["items"][number]): AgentLike {
+  if (!("created_at" in response)) return response;
+  const { mcp_servers, ...agent } = response;
+  return {
+    ...agent,
+    image: agent.runtime?.image,
+    mcpServers: mcp_servers,
+  };
 }
 
-function normalizeAgentPayload(payload: AgentUpdatePayload): AgentUpdatePayload {
-  const normalized: AgentUpdatePayload = { ...payload };
-  if (payload.agent_profile && typeof payload.agent_profile === "object") {
-    normalized.model_config = payload.agent_profile;
-    delete normalized.agent_profile;
-  }
-  if (payload.runtime_name || payload.sandbox_enabled !== undefined) {
-    const runtimeSelection = resolveRuntimeSelection({
+export function updateAgentRequest(agentID: string, payload: AgentUpdatePayload): Promise<AgentLike> {
+  return patch<AgentResponse>(`api/v1/agents/${encodeURIComponent(agentID)}`, normalizeAgentPayload(payload)).then(
+    agentFromResponse,
+  );
+}
+
+function normalizeAgentPayload(payload: AgentUpdatePayload) {
+  const runtime = { ...payload.runtime };
+  if (
+    payload.runtime_name !== undefined ||
+    payload.sandbox_enabled !== undefined ||
+    payload.runtime_kind !== undefined
+  ) {
+    const selection = resolveRuntimeSelection({
       runtime_kind: payload.runtime_kind,
-      runtime_name: payload.runtime_name,
-      sandbox_enabled: payload.sandbox_enabled ?? normalized.runtime?.sandbox_enabled,
+      runtime_name: payload.runtime_name ?? runtime.name,
+      sandbox_enabled: payload.sandbox_enabled ?? runtime.sandbox_enabled,
     });
-    normalized.runtime = {
-      ...(normalized.runtime ?? {}),
-      name: runtimeSelection.runtime_name,
-      sandbox_enabled: runtimeSelection.sandbox_enabled,
-    };
-    delete normalized.runtime_name;
-    delete normalized.sandbox_enabled;
-    delete normalized.runtime_kind;
+    runtime.name = selection.runtime_name;
+    runtime.sandbox_enabled = selection.sandbox_enabled;
   }
-  return normalized;
+  if (payload.image !== undefined) runtime.image = payload.image;
+  if (payload.runtime_options !== undefined) runtime.options = payload.runtime_options;
+  const model =
+    payload.model_config ??
+    payload.agent_profile ??
+    (typeof payload.profile === "object" ? payload.profile : undefined);
+  const modelConfig = typeof payload.profile === "string" ? { ...model, selector: payload.profile } : model;
+  return {
+    name: payload.name,
+    description: payload.description,
+    instructions: payload.instructions,
+    ...(Object.keys(runtime).length ? { runtime } : {}),
+    model_config: modelConfig,
+    mcp_servers: payload.mcpServers,
+  } satisfies components["schemas"]["AgentPatchRequest"];
 }
 
 export type CreateBotPayload = AgentUpdatePayload & {
@@ -358,34 +370,29 @@ export type CreateBotPayload = AgentUpdatePayload & {
 export async function createBotRequest(payload: CreateBotPayload): Promise<AgentLike> {
   const runtimeSelection = resolveRuntimeSelection({
     runtime_kind: payload.runtime_kind,
-    runtime_name: payload.runtime_name,
-    sandbox_enabled: payload.sandbox_enabled,
+    runtime_name: payload.runtime_name ?? payload.runtime?.name,
+    sandbox_enabled: payload.sandbox_enabled ?? payload.runtime?.sandbox_enabled,
   });
-  const participant = await post<ParticipantLike>("api/v1/channels/csgclaw/participants", {
-    name: payload.name,
+  const request: components["schemas"]["CreateParticipantRequest"] = {
+    name: payload.name ?? "",
     type: "agent",
     agent_binding: {
       mode: "create",
       agent: {
-        name: payload.name,
-        role: payload.role,
-        description: payload.description,
-        instructions: payload.instructions,
-        skills: payload.skills,
-        image: payload.image,
-        runtime: {
-          name: runtimeSelection.runtime_name,
+        ...normalizeAgentPayload({
+          ...payload,
+          runtime_kind: undefined,
+          runtime_name: runtimeSelection.runtime_name,
           sandbox_enabled: runtimeSelection.sandbox_enabled,
-          options: payload.runtime_options,
-        },
-        runtime_name: runtimeSelection.runtime_name,
-        sandbox_enabled: runtimeSelection.sandbox_enabled,
-        mcpServers: payload.mcpServers,
+        }),
+        name: payload.name ?? "",
+        role: payload.role,
+        skills: payload.skills,
         from_template: payload.from_template,
-        model_config: payload.agent_profile,
       },
     },
-  });
+  };
+  const participant = await post<ParticipantLike>("api/v1/channels/csgclaw/participants", request);
   const skippedResources = Array.isArray(participant.metadata?.skipped_resources)
     ? participant.metadata.skipped_resources
     : [];
@@ -412,8 +419,8 @@ export function patchNotificationBotRequest(botID: string, payload: CreateBotPay
   }).then(participantToAgentLike);
 }
 
-export function deleteAgentRequest(agentID: string): Promise<void> {
-  return del(`api/v1/agents/${encodeURIComponent(agentID)}`);
+export function deleteAgentRequest(agentID: string, name: string): Promise<void> {
+  return del(`api/v1/agents/${encodeURIComponent(agentID)}`, { json: { name } });
 }
 
 export function deleteBotRequest(botID: string, options: DeleteBotOptions = {}): Promise<void> {
@@ -430,7 +437,7 @@ export function deleteAgentLikeRequest(item: AgentLike): Promise<void> {
   if (!id) {
     return Promise.reject(new Error("agent id is required"));
   }
-  return isNotificationBotAgent(item) ? deleteBotRequest(id) : deleteAgentRequest(id);
+  return isNotificationBotAgent(item) ? deleteBotRequest(id) : deleteAgentRequest(id, String(item.name ?? ""));
 }
 
 export function deleteFeishuParticipantRequest(participantID: string): Promise<void> {
@@ -438,7 +445,7 @@ export function deleteFeishuParticipantRequest(participantID: string): Promise<v
 }
 
 export function runAgentActionRequest(agentID: string, action: string): Promise<AgentLike> {
-  return post(`api/v1/agents/${encodeURIComponent(agentID)}/${action}`);
+  return post<AgentResponse>(`api/v1/agents/${encodeURIComponent(agentID)}/${action}`).then(agentFromResponse);
 }
 
 export async function startFeishuRegistrationRequest(agentID: string): Promise<FeishuRegistration> {
@@ -500,15 +507,7 @@ function participantToAgentLike(participant: ParticipantLike): AgentLike {
 }
 
 export type AgentResourceKind = "skill" | "mcp";
-export type AgentResourceEnabledResult = {
-  agent_id: string;
-  resource_version: string;
-  name: string;
-  enabled: boolean;
-  runtime_kind: string;
-  runtime_state: string;
-  restart_required: boolean;
-};
+export type AgentResourceEnabledResult = components["schemas"]["AgentResourceEnabledResponse"];
 
 export async function setAgentResourceEnabled(
   agentID: string,
@@ -518,7 +517,7 @@ export async function setAgentResourceEnabled(
 ): Promise<AgentResourceEnabledResult> {
   const base = `api/v1/agents/${encodeURIComponent(agentID)}`;
   const list = kind === "skill" ? "skill-summaries" : "mcp-servers";
-  const { headers } = await requestWithResponse<unknown>(`${base}/${list}?pagination=page&page=1&per=1`);
+  const { headers } = await requestWithResponse<unknown>(`${base}/${list}?pagination=page&page=1&limit=1`);
   const etag = headers.get("ETag");
   if (!etag)
     throw {
@@ -551,24 +550,20 @@ export function updateNotificationParticipantRequest(
   return patch(`api/v1/channels/csgclaw/participants/${encodeURIComponent(participantID)}`, payload);
 }
 
-export type AgentArchiveImpact = {
-  teams: number;
-  rooms: number;
-  spaces: number;
-  direct_chats: number;
-  scheduled_tasks: number;
-};
+export type AgentArchiveImpact = components["schemas"]["AgentArchiveImpact"];
 export function fetchAgentArchiveImpact(id: string): Promise<AgentArchiveImpact> {
   return get(`api/v1/agents/${encodeURIComponent(id)}/archive-impact`);
 }
 export function archiveAgent(id: string): Promise<AgentLike> {
-  return post(`api/v1/agents/${encodeURIComponent(id)}/archive`, {});
+  return post<AgentResponse>(`api/v1/agents/${encodeURIComponent(id)}/archive`, {}).then(agentFromResponse);
 }
 export function restoreAgent(id: string): Promise<AgentLike> {
-  return post(`api/v1/agents/${encodeURIComponent(id)}/restore`, {});
+  return post<AgentResponse>(`api/v1/agents/${encodeURIComponent(id)}/restore`, {}).then(agentFromResponse);
 }
 export function fetchArchivedAgents(): Promise<AgentLike[]> {
-  return get("api/v1/agents?archived=true&include_participants=true");
+  return get<components["schemas"]["AgentList"]>("api/v1/agents?archived=true&include_participants=true").then(
+    (response) => response.items.map(agentFromResponse),
+  );
 }
 export function deleteArchivedAgent(id: string, name: string): Promise<void> {
   return del(`api/v1/agents/${encodeURIComponent(id)}`, { json: { name } });

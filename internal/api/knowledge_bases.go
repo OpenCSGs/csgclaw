@@ -55,7 +55,7 @@ var knowledgeBaseProxyHTTPClient = &http.Client{
 type remoteKnowledgeBasesListResponse struct {
 	Items []remoteKnowledgeBaseSummary `json:"items"`
 	Page  int                          `json:"page"`
-	Per   int                          `json:"per"`
+	Limit int                          `json:"limit"`
 	Total int                          `json:"total"`
 }
 
@@ -128,7 +128,7 @@ func (h *Handler) handleRemoteKnowledgeBases(w http.ResponseWriter, r *http.Requ
 	writeJSON(w, http.StatusOK, remoteKnowledgeBasesListResponse{
 		Items: items,
 		Page:  page,
-		Per:   per,
+		Limit: per,
 		Total: result.Total,
 	})
 }

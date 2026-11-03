@@ -36,13 +36,14 @@ function setup(
   const fetch = vi.fn(async (input: string, init?: RequestInit) => {
     const url = new URL(String(input), "http://localhost/");
     const path = url.pathname;
-    if (path === "/api/v1/skills") return Response.json(installed ? [{ name: installedName }] : []);
+    if (path === "/api/v1/skills") return Response.json({ items: installed ? [{ name: installedName }] : [] });
     if (path.endsWith("/skill-summaries")) {
-      return Response.json(
-        existingSkill === "enabled" || existingSkill === "disabled"
-          ? [{ name: installedName, enabled: existingSkill === "enabled" }]
-          : [],
-      );
+      return Response.json({
+        items:
+          existingSkill === "enabled" || existingSkill === "disabled"
+            ? [{ name: installedName, enabled: existingSkill === "enabled" }]
+            : [],
+      });
     }
     if (path === "/api/v1/skills/remote") {
       return Response.json({

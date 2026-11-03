@@ -76,7 +76,7 @@ enabled = true
 	handler.SetConfigPath(configPath)
 
 	recorder := httptest.NewRecorder()
-	request := httptest.NewRequest(http.MethodGet, "/api/v1/mcp-servers/remote?page=2&per=12&search=calendar", nil)
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/mcp-servers/remote?page=2&limit=12&search=calendar", nil)
 	handler.Routes().ServeHTTP(recorder, request)
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d; body=%s", recorder.Code, http.StatusOK, recorder.Body.String())
@@ -85,7 +85,7 @@ enabled = true
 	if err := json.NewDecoder(recorder.Body).Decode(&response); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if response.Total == nil || *response.Total != 25 || response.NextPage == nil || *response.NextPage != 3 {
+	if response.Limit != 12 || response.Total == nil || *response.Total != 25 || response.NextPage == nil || *response.NextPage != 3 {
 		t.Fatalf("page response = %#v, want total 25 and next page 3", response)
 	}
 	if got, want := len(response.Items), 1; got != want {
@@ -133,7 +133,7 @@ enabled = true
 	handler.SetConfigPath(configPath)
 
 	recorder := httptest.NewRecorder()
-	request := httptest.NewRequest(http.MethodGet, "/api/v1/mcp-servers/remote?per=2", nil)
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/mcp-servers/remote?limit=2", nil)
 	handler.Routes().ServeHTTP(recorder, request)
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d; body=%s", recorder.Code, http.StatusOK, recorder.Body.String())
@@ -169,8 +169,14 @@ func TestHandleRemoteMCPServersMapsUpstreamUnauthorizedToLoginRequired(t *testin
 	if recorder.Code != http.StatusUnauthorized {
 		t.Fatalf("status = %d, want %d; body=%s", recorder.Code, http.StatusUnauthorized, recorder.Body.String())
 	}
-	if got, want := strings.TrimSpace(recorder.Body.String()), errRemoteMCPHubSignInRequired.Error(); got != want {
-		t.Fatalf("body = %q, want %q", got, want)
+	var response struct {
+		Error struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil || response.Error.Code != "unauthorized" || response.Error.Message != errRemoteMCPHubSignInRequired.Error() {
+		t.Fatalf("response=%s error=%v", recorder.Body, err)
 	}
 }
 

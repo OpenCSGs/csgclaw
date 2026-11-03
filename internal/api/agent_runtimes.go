@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strings"
 
+	"csgclaw/internal/apitypes"
 	"csgclaw/internal/runtimecatalog"
 
 	"github.com/go-chi/chi/v5"
@@ -16,7 +17,7 @@ func (h *Handler) listAgentRuntimes(w http.ResponseWriter, _ *http.Request) {
 		http.Error(w, "agent runtime service is not configured", http.StatusServiceUnavailable)
 		return
 	}
-	writeJSON(w, http.StatusOK, h.agentRuntimes.List())
+	writeJSON(w, http.StatusOK, apitypes.ListResponse[runtimecatalog.Runtime]{Items: h.agentRuntimes.List()})
 }
 
 func (h *Handler) installAgentRuntime(w http.ResponseWriter, r *http.Request) {

@@ -44,7 +44,7 @@ func (h *Handler) handleAgentResources(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Cache-Control", "no-store")
-	writeJSON(w, http.StatusOK, resourcePage[apitypes.AgentResourceSummary]{Items: items, Metadata: meta})
+	writeJSON(w, http.StatusOK, newResourcePage(items, meta))
 }
 
 func writeConversationResourceError(w http.ResponseWriter, err error) bool {

@@ -12,19 +12,21 @@ describe("agent session API", () => {
       vi.fn(
         async () =>
           new Response(
-            JSON.stringify([
-              {
-                id: "agent-ready",
-                name: "Ready",
-                runtime: { name: "codex", state: "running" },
-              },
-              {
-                id: "agent-stopped",
-                name: "Stopped",
-                runtime: { name: "codex", state: "stopped" },
-              },
-              { id: "agent-dsh", name: "DSH", runtime: { name: "dsh", state: "running" } },
-            ]),
+            JSON.stringify({
+              items: [
+                {
+                  id: "agent-ready",
+                  name: "Ready",
+                  runtime: { name: "codex", state: "running" },
+                },
+                {
+                  id: "agent-stopped",
+                  name: "Stopped",
+                  runtime: { name: "codex", state: "stopped" },
+                },
+                { id: "agent-dsh", name: "DSH", runtime: { name: "dsh", state: "running" } },
+              ],
+            }),
             { status: 200 },
           ),
       ),

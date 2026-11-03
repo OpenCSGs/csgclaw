@@ -80,7 +80,7 @@ func (h *Handler) handleAgentMCPServersByID(w http.ResponseWriter, r *http.Reque
 		for _, name := range names {
 			items = append(items, entry{Name: name, Config: current.Spec.MCPServers[name]})
 		}
-		writeJSON(w, http.StatusOK, resourcePage[entry]{Items: items, Metadata: meta})
+		writeJSON(w, http.StatusOK, newResourcePage(items, meta))
 		return
 	}
 	writeJSON(w, http.StatusOK, agent.MCPServersView{AgentID: current.ID, RuntimeKind: current.Status.RuntimeKind, Servers: serviceMCPServers(current.Spec.MCPServers)})

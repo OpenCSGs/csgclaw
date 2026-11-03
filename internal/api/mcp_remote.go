@@ -27,7 +27,7 @@ type remoteMCPServersListResponse struct {
 	Items    []remoteMCPServerSummary `json:"items"`
 	NextPage *int                     `json:"next_page,omitempty"`
 	Page     int                      `json:"page"`
-	Per      int                      `json:"per"`
+	Limit    int                      `json:"limit"`
 	Total    *int                     `json:"total,omitempty"`
 }
 
@@ -90,7 +90,7 @@ func (h *Handler) handleRemoteMCPServers(w http.ResponseWriter, r *http.Request)
 		Items:    items,
 		NextPage: nextRemoteMCPServersPage(page, per, list.Total, list.RecordCount),
 		Page:     page,
-		Per:      per,
+		Limit:    per,
 		Total:    list.Total,
 	})
 }

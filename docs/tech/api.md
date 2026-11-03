@@ -4,9 +4,11 @@ This document is generated from the HTTP routes and behaviors currently implemen
 
 ## Conventions
 
+Current Agent, Runtime, model, Skill, MCP, knowledge-base, and template definitions are in the [control-plane API guide](control-plane-api.md) and [OpenAPI 3.1 document](../../api/openapi/control-plane.json).
+
 - Except for streaming endpoints, requests and responses use `application/json`
 - Time fields use RFC3339 / ISO8601
-- Most non-streaming errors are returned as plain-text response bodies
+- Ordinary control-plane errors use `{ "error": { "code": "...", "message": "..." } }`; existing business details are retained. Authentication and protocol endpoints retain their existing error formats
 - Agent session response errors use an OpenAI-style JSON error envelope
 - SSE endpoints use `text/event-stream`
 - The current API is mainly grouped into 3 areas:
@@ -43,17 +45,13 @@ The server derives the room and responder from the stored activity and rejects u
 
 ## Authentication
 
-- Most `/api/v1/*` endpoints do not require authentication by default
+- Existing OIDC login and deployment authentication remain in use; see [control-plane authentication](control-plane-api.md) for credential headers and scopes.
 - The following endpoints require `Authorization: Bearer <token>`, where the token is the server access token:
   - `GET /api/v1/channels/{channel}/participants/{id}/events`
   - `POST /api/v1/channels/csgclaw/participants/{id}/messages`
-  - `GET /api/v1/agents/{id}/llm/models`
   - `GET /api/v1/agents/{id}/llm/v1/models`
-  - `POST /api/v1/agents/{id}/llm/chat/completions`
   - `POST /api/v1/agents/{id}/llm/v1/chat/completions`
-  - `POST /api/v1/agents/{id}/llm/responses`
   - `POST /api/v1/agents/{id}/llm/v1/responses`
-  - `GET /api/v1/agents/{id}/llm/responses`
   - `GET /api/v1/agents/{id}/llm/v1/responses`
 - If the server runs with `no_auth`, the checks above are skipped
 
@@ -120,7 +118,7 @@ Returns `503 Service Unavailable` if the upgrade manager is not configured.
 
 On server startup, every 30 seconds, and when listing the skill library, CSGClaw scans known user skill directories and automatically registers their source paths in `~/.csgclaw/skills/.discovered-skills.json`.
 Registration is by reference, without copying, editing, or deleting external skills, and requires no symlink privilege on Windows.
-`GET /api/v1/skills` includes `source: "discovered"` and a `discovery` object containing the selected tool, path, version, modification time, all same-name sources, a content key, and a `new` notification flag.
+`GET /api/v1/skills` returns `{ "items": [...] }`; each discovered item includes `source: "discovered"` and a `discovery` object containing the selected tool, path, version, modification time, all same-name sources, a content key, and a `new` notification flag.
 The library and Agent skill assignment resolve the same selected source.
 An explicit assignment to an Agent installs its usual workspace snapshot, including supporting skill resources.
 
@@ -146,7 +144,7 @@ Equal or unavailable versions use the definition modification time, with the sou
 The same selection rule applies when a tracked external skill collides with a local library copy that declares comparable metadata.
 A local copy with invalid or absent metadata remains an explicit local override.
 Deleting a discovered library entry suppresses automatic registration across restarts and leaves its external files intact.
-`POST /api/v1/skills/discovery/rescan` explicitly rescans known directories, restores removed links, and returns the full skill list.
+`POST /api/v1/skills/discovery/rescan` explicitly rescans known directories, restores removed links, and returns the full skill list as `{ "items": [...] }`.
 Restored skills receive an unseen notification even if their current content was acknowledged before removal.
 Ordinary listing and background scans continue to respect removals.
 Installed summaries include `directory`, the absolute directory of the selected source or local installation; embedded-only skills have no physical directory.
@@ -163,6 +161,10 @@ It acknowledges only the specified current discoveries, so skills discovered con
 Acknowledgements persist across restarts; new or changed definitions receive new keys and new notifications.
 The settings page refreshes discoveries every 30 seconds while open and also provides manual rescanning.
 
+### `POST /api/v1/skills:upload`
+
+Upload a ZIP through the `file` field of `multipart/form-data`, up to `64 MiB`. Success returns `201` and the Skill summary; oversized uploads return `413 payload_too_large`, invalid ZIP files return `400`, and name conflicts return `409`.
+
 ### `GET /api/v1/skills/tree` and `GET /api/v1/skills/file`
 
 Read installed Skill files using the existing `path` parameter. For market previews, pass `remote_path` and optionally `ref` instead: the tree endpoint lists that remote repository, while the file endpoint also takes a repository-relative `path`, such as `SKILL.md`. These read-only requests use the same Hub environment and matching user credentials as remote installation, without installing or changing local Skills.
@@ -174,7 +176,7 @@ Lists remote Skills from the effective OpenCSG Hub. The browser only calls CSGCl
 Optional query parameters:
 
 - `page`: positive page number, default `1`
-- `per`: page size from `1` to `100`, default `16`
+- `limit`: page size from `1` to `100`, default `16`
 - `search`: remote catalog search text
 
 The server keeps the current Hub catalog ordering and returns normalized Skill summaries:
@@ -193,7 +195,7 @@ The server keeps the current Hub catalog ordering and returns normalized Skill s
     }
   ],
   "page": 1,
-  "per": 16,
+  "limit": 16,
   "total": 78,
   "next_page": 2
 }
@@ -288,7 +290,7 @@ Example request body:
     "agent": {
       "name": "QA",
       "role": "worker",
-      "runtime_kind": "codex",
+      "runtime": { "name": "codex" },
       "from_template": "builtin.codex-worker"
     }
   }
@@ -299,7 +301,7 @@ Notes:
 
 - `type` is required and must be `human`, `agent`, or `notification`
 - `name` is required
-- The effective channel comes from the route path rather than the request body
+- The effective channel comes from the route path
 - `agent` participants can create or reuse an Agent through `agent_binding`
 - For Agent creation, non-empty `agent_binding.agent.instructions` takes precedence over template instructions. An explicit `skills` list replaces the template skill selection (`[]` selects none); omitting it retains template defaults.
 - `human` and `notification` participants do not create runtime agents
@@ -334,182 +336,13 @@ Examples:
 
 ## Agent API
 
-### Agent Response Shape
+See the [control-plane API guide](control-plane-api.md) and [OpenAPI document](../../api/openapi/control-plane.json) for request fields, response fields, authentication, and update semantics.
 
-`/api/v1/agents*` returns agent objects with fields like:
-
-```json
-{
-  "id": "u-alice",
-  "name": "alice",
-  "description": "frontend dev",
-  "runtime_id": "codex",
-  "runtime_kind": "codex",
-  "image": "example/image:latest",
-  "box_id": "codex-session-alice",
-  "role": "worker",
-  "status": "running",
-  "created_at": "2026-05-16T08:00:00Z",
-  "profile": "api.gpt-5.4",
-  "runtime_options": {},
-  "mcpServers": {
-    "workspace-filesystem": {
-      "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/workspace"]
-    }
-  },
-  "agent_profile": {
-    "provider": "api",
-    "base_url": "https://api.example.com/v1",
-    "api_key_set": true,
-    "api_key_preview": "sk-1...",
-    "model_id": "gpt-5.4",
-    "reasoning_effort": "medium",
-    "profile_complete": true
-  },
-  "profile_complete": true,
-  "detection_results": []
-}
-```
-
-Notes:
-
-- The real `api_key` is never returned in `agent_profile`
-- `runtime_options` is sanitized before being exposed by the API
-- `mcpServers` is a direct server-name-to-server-config map. Generic Agent
-  responses redact secret values in server `env` and `headers` maps.
-- `profile` is the normalized selector generated by the server, for example `api.gpt-5.4`
-- `detection_results` is used to present default profile detection results
-
-### `GET /api/v1/agents`
-
-Lists all agents.
-
-The server reloads state before returning the latest snapshot.
-
-### `POST /api/v1/agents`
-
-Creates an agent.
-
-Request fields:
-
-- `id`
-- `name`
-- `description`
-- `image`
-- `runtime_kind`
-- `from_template`
-- `replace`
-- `field_mask`
-- `role`
-- `status`
-- `created_at`
-- `profile`
-- `runtime_options`
-- `mcpServers`
-- `agent_profile`
-
-`from_template` should use the exact ID returned by the template list API. Built-in and local IDs use forms such as `builtin.codex-worker` and `local.my-worker`; remote IDs use `<namespace>/<name>`.
-
-Example request body:
-
-```json
-{
-  "id": "u-alice",
-  "name": "alice",
-  "description": "frontend dev",
-  "runtime_kind": "codex",
-  "profile": "api.gpt-5.4",
-  "agent_profile": {
-    "provider": "api",
-    "base_url": "https://api.example.com/v1",
-    "api_key": "sk-xxx",
-    "model_id": "gpt-5.4",
-    "reasoning_effort": "medium"
-  }
-}
-```
-
-Additional notes:
-
-- `name` is required
-- `replace=true` enables replace logic
-- `field_mask` limits which fields are overwritten during replacement
-- `agent_profile.api_key` is write-only and will be redacted in reads
-
-Codex CLI and DSH agents configure MCP servers through the
-top-level `mcpServers` field. Its value is the direct server-name-to-server-
-config map used by every supported runtime:
-
-```json
-{
-  "name": "alice",
-  "runtime_kind": "codex",
-  "mcpServers": {
-    "workspace-filesystem": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "@modelcontextprotocol/server-filesystem",
-        "/path/to/workspace"
-      ]
-    }
-  },
-  "profile": "api.gpt-5.4"
-}
-```
-
-Runtime adapters map this shared input as follows:
-
-- Codex CLI: `mcpServers` -> managed `[mcp_servers."<name>"]` blocks in the isolated Codex home `config.toml`
-
-MCP commands run inside the target runtime environment, so filesystem server
-directory arguments must be paths visible to that runtime. MCP-shaped values
-under `runtime_options` (including `mcp` and `mcpServers`) are rejected; use
-the top-level `mcpServers` field instead.
-
-### `GET /api/v1/agents/{id}`
-
-Gets a single agent.
-
-Returns `404` if it does not exist.
-
-### `PATCH /api/v1/agents/{id}`
-
-Updates basic agent fields.
-
-Supported fields:
-
-- `name`
-- `description`
-- `image`
-- `runtime_options`
-- `mcpServers`
-- `agent_profile`
-
-Example request body:
-
-```json
-{
-  "description": "updated description",
-  "runtime_options": {
-    "execution_mode": "read_only"
-  }
-}
-```
-
-Notes:
-
-- Omitted fields are left unchanged
-- `runtime_options` uses whole-object replacement when submitted
-- Codex worker agents accept `runtime_options.execution_mode` values `standard` and `read_only`; an omitted or blank value defaults to `standard`
-- Changing a running Codex worker's execution mode restarts its runtime so the new command, sandbox, and approval policy takes effect
-- `mcpServers` uses whole-map replacement when submitted; send `null` to clear
-  the CSGClaw-managed server set
-- Updating MCP servers on Codex CLI or DSH agents may recreate
-  that agent runtime so the native configuration takes effect
-- If `agent_profile.api_key` is sent empty, the server keeps the existing key
-- If `agent_profile.env` changes, `env_restart_required` may become `true` in the response
+- `GET /api/v1/agents` returns `{ "items": [...] }`; `GET /api/v1/agents/{id}` returns one Agent.
+- `POST /api/v1/agents` creates an Agent using `runtime`, `model_config`, and the `mcp_servers` dictionary. `from_template` uses the exact ID returned by the template list.
+- `PATCH /api/v1/agents/{id}` updates submitted fields. `runtime.options` and `mcp_servers` replace their complete objects; `mcp_servers: null` or `{}` clears managed MCP servers.
+- Agent responses expose Runtime selection and state under `runtime`, redacted model settings under `model_config`, and redacted managed servers under `mcp_servers`.
+- Runtime permissions, workspace selection, model environment variables, and resource changes retain the Runtime's existing configuration and restart behavior.
 
 ### Agent memory endpoints
 
@@ -543,13 +376,15 @@ Generated memory content is read-only through this API.
 
 #### `GET /api/v1/agents/{id}/resources`
 
-Lists chat resources attached to a DSH or Codex Agent. Required `type` is `skill`, `connector`, or `knowledge_base`. Required `pagination` uses the existing `cursor` or `page` parameters, with `search`, `enabled`, repeated `exclude=source:id`, and `list_revision`. Page and cursor parameters cannot be mixed.
+Lists chat resources attached to a DSH or Codex Agent. Required `type` is `skill`, `connector`, or `knowledge_base`. Required `pagination` is `cursor` or `page`; `limit` controls the number of items in either mode. Filters include `search`, `enabled`, repeated `exclude=source:id`, and `list_revision`. Page and cursor parameters cannot be mixed.
 
-Responses contain `{items, total, list_revision, has_more, next_cursor?}`; page mode also includes `page` and `per`. Each item contains `source` (`skill`, `mcp`, or `app`), `id`, `type`, `name`, optional `description`, `enabled`, `available`, and optional `unavailable_reason`. Empty results use `[]`. Responses use `Cache-Control: no-store`.
+Responses contain `{items, total, list_revision, has_more, next_cursor?}`; page mode also includes `page` and `limit`. Each item contains `source` (`skill`, `mcp`, or `app`), `id`, `type`, `name`, optional `description`, `enabled`, `available`, and optional `unavailable_reason`. Empty results use `items: []`. Responses use `Cache-Control: no-store`.
 
 Skills reuse SkillQuery membership selection before reading metadata for the requested page. MCP identity is its configuration key; App identity is its installation ID. Knowledge bases include managed MCP servers and `llm-wiki` bindings. App availability includes binding and global enablement, connection state, and the current Agent's callable tool catalog. Credentials, connection configuration, and SKILL.md contents are excluded from summaries.
 
 Filtering precedes pagination and stable identity ordering. Invalid queries return `400 invalid_resource_query`; changed membership or query scope returns `409 resource_list_changed`. Dependency failures return `503 resource_service_unavailable`. Skills and MCP remain available when Apps is not enabled.
+
+`GET /api/v1/agents/{id}/skill-summaries` returns `{ "items": [...] }` and accepts the same optional pagination modes. Skill and MCP lists expose the resource version through `ETag`. Enablement updates use `PUT /skills/{name}/enabled` or `PUT /mcp-servers/{name}/enabled` with `{ "enabled": false, "resource_version": "..." }`.
 
 #### `GET /api/v1/agents/{id}/mcp-servers`
 
@@ -606,7 +441,7 @@ Lists installable remote MCP server summaries through CSGClaw. The browser only
 calls CSGClaw; the server resolves the effective OpenCSG Hub from the current
 login environment or explicitly configured official Hub and forwards the
 current user's Hub credential. Query parameters follow the remote Skill list
-style: `page` (default `1`), `per` (default `12`, maximum `100`), and `search`.
+style: `page` (default `1`), `limit` (default `12`, maximum `100`), and `search`.
 
 Each item contains its Hub `id`, name, and display metadata. It intentionally
 does not contain its install configuration or headers. `description` is catalog
@@ -625,7 +460,7 @@ entry is added to an agent runtime.
     }
   ],
   "page": 1,
-  "per": 12,
+  "limit": 12,
   "total": 13,
   "next_page": 2
 }
@@ -635,11 +470,10 @@ entry is added to an agent runtime.
 
 Installs or refreshes one remote MCP entry. CSGClaw fetches the Hub item's
 detail endpoint server-side, converts `protocol`, `url`, and `headers` into the
-catalog configuration, and uses the detail response's `name` as the catalog
-key. New remote entries default to `enabled: true`, `startup_timeout_sec: 5`,
+catalog configuration, and records the source metadata under a stable catalog ID. New remote entries default to `enabled: true`, `startup_timeout_sec: 5`,
 and `tool_timeout_sec: 60`. Resolving the Hub detail, performing the MCP
 handshake, and discovering tools share a five-second total installation deadline.
-The response returns only the installed name:
+The response returns only the stable ID in `name`:
 
 ```json
 { "name": "calendar" }
@@ -675,91 +509,17 @@ Notes:
 - With `follow=false`, errors are returned as normal HTTP errors
 - With `follow=true`, streaming-time errors may be written into the response body
 
-### `GET /api/v1/agents/{id}/profile`
+### Agent model configuration and recreation
 
-Returns the redacted profile for a single agent.
+`GET /api/v1/agents/{id}/profile` returns redacted model settings; `PUT` replaces those settings. An empty `api_key` preserves the saved key.
 
-### `PUT /api/v1/agents/{id}/profile`
+`POST /api/v1/agents/{id}/recreate` recreates the Runtime with its current settings. An optional `configuration` and `field_mask` apply configuration changes before recreation. Supported fields, defaults, and empty-value behavior are defined in the [control-plane API guide](control-plane-api.md).
 
-Replaces the profile for a single agent.
+## Agent Model Helper API
 
-The request body uses the `agent_profile` shape, for example:
+`POST /api/v1/agent-profiles/models` resolves models for a provider configuration and returns `{ "provider": "...", "items": [...] }`. An optional `agent_id` permits reuse of that Agent's saved credentials; default credentials retain their provider and endpoint matching rules.
 
-```json
-{
-  "provider": "api",
-  "base_url": "https://api.example.com/v1",
-  "api_key": "sk-xxx",
-  "model_id": "gpt-5.4",
-  "reasoning_effort": "medium",
-  "headers": {
-    "x-org": "demo"
-  },
-  "env": {
-    "FOO": "bar"
-  }
-}
-```
-
-Notes:
-
-- Unlike `PATCH /api/v1/agents/{id}`, this endpoint semantically replaces the current profile with the new one
-- If `api_key` is empty, the server keeps the existing key
-
-### `POST /api/v1/agents/{id}/recreate`
-
-Recreates the agent using its current configuration and returns the new agent state.
-
-Common failures:
-
-- `404`: agent does not exist
-- `400`: profile is incomplete, or the runtime does not allow recreation
-
-## Agent Profile Helper API
-
-### `POST /api/v1/agent-profiles/models`
-
-Returns the available model list for the given provider configuration.
-
-Request fields:
-
-- `agent_id`
-- `provider`
-- `base_url`
-- `api_key`
-- `headers`
-
-Example request body:
-
-```json
-{
-  "provider": "api",
-  "base_url": "https://api.example.com/v1",
-  "api_key": "sk-xxx"
-}
-```
-
-Example response:
-
-```json
-{
-  "provider": "api",
-  "models": ["gpt-5.4", "gpt-5.4-mini"]
-}
-```
-
-Notes:
-
-- For `provider=codex` or `claude_code`, model choices are obtained through CLIProxy
-- For `provider=api`, the server calls the target OpenAI-compatible `/models` endpoint
-- If `agent_id` is provided and `api_key` is omitted in the request, the server may reuse the saved key from that agent
-- If `agent_id` is omitted and `api_key` is omitted, the server may reuse the saved default API key only when `provider=api` and `base_url` matches the current default profile
-
-### `GET /api/v1/agent-profile-defaults`
-
-Returns the redacted view of the current default agent profile.
-
-This is commonly used by the frontend to initialize default provider/model state.
+`GET /api/v1/agent-profile-defaults` returns the public default model configuration; `PATCH` updates its supported defaults. `GET /api/v1/agent-runtimes` returns `{ "items": [...] }` for Runtime selection. Field definitions are in the [control-plane API guide](control-plane-api.md) and [OpenAPI document](../../api/openapi/control-plane.json).
 
 ## Hub Template API
 
@@ -780,7 +540,7 @@ Templates use the following layout:
 Other instruction files are optional.
 Memory is included only when each publish request explicitly sets `include_memory: true`; runtime memory enablement alone never opts a publish into exporting memory. With that publish opt-in, Codex templates snapshot `CODEX_HOME/memories/memory_summary.md` and restore it to the same location for a newly created agent when `memory_mode` is enabled. Templates with `memory_mode = "disabled"` neither package nor restore a memory summary. They do not copy Codex's SQLite memory pipeline state or treat memory as a workspace overlay.
 With the same explicit publish opt-in, supported non-Codex runtimes preserve and overlay optional template memories according to that Runtime's workspace convention.
-During agent creation, skills are installed under `skills/`, and MCP servers from `mcp.json` are applied unless the create request explicitly supplies `mcpServers`.
+During agent creation, skills are installed under `skills/`, and MCP servers from `mcp.json` are applied unless the create request explicitly supplies `mcp_servers`.
 
 See [MCP Configuration](mcp-config.md) for common fields, OpenCSG Gateway declarations, file bindings, and security rules for `mcps/mcp.json`.
 
@@ -800,87 +560,17 @@ Missing `memory_mode` defaults to `enabled`.
 
 DSH workers accept `workspace-write`, `read-only`, or `danger-full-access` as `permission_mode`, defaulting to `workspace-write`. `local_workspace_dir` selects an absolute local path; when empty, DSH uses the managed Agent workspace. Changing the directory starts fresh DSH sessions so an old session is never resumed in a different directory. CSGClaw stores Agent instructions in the isolated `DSH_HOME/AGENTS.md`; DSH also loads the selected project's own `AGENTS.md` without modifying it. Template publishing retains only `permission_mode`, not the machine-local directory.
 
-### `GET /api/v1/hub/templates`
+### Template endpoints
 
-Lists all templates from readable registries.
+Field definitions are in the [control-plane API guide](control-plane-api.md) and [OpenAPI document](../../api/openapi/control-plane.json).
 
-Response fields:
+- `GET /api/v1/hub/templates` returns `{ "items": [...] }`. Optional `scope=local|remote` selects a source; omission aggregates readable sources.
+- `POST /api/v1/hub/templates` snapshots an `agent_id` or publishes an existing `template_id`. `expected_revision` supports optimistic revision checks. Success returns `201` and the template details.
+- `GET /api/v1/hub/templates/{id}` returns details; `DELETE` removes the template and returns `204`.
+- `GET /api/v1/hub/templates/{id}/versions` returns `{ "items": [...] }`. Version browsing, deletion, and restoration use `/versions/{revision}` and `/versions/{revision}/restore`. Deletion may leave revision gaps; the current revision cannot be deleted.
+- `/workspace` lists template files. `GET /workspace/file?path=...` previews a file; `PUT` updates it using `{ "content": "..." }`.
 
-- `id`
-- `name`
-- `description`
-- `runtime_kind`
-- `image`
-- `runtime_options`
-- `updated_at`
-- `source.name`
-- `source.kind`
-- `workspace.kind`
-
-### `POST /api/v1/hub/templates`
-
-Publishes an existing agent workspace to the hub.
-
-Request body:
-
-```json
-{
-  "agent_id": "u-alice",
-  "registry": "local",
-  "include_memory": false
-}
-```
-
-Notes:
-
-- `agent_id` is required
-- `registry` uses the default publish registry when omitted
-- `include_memory` must be explicitly set to `true` to publish the Codex memory summary, including when republishing an existing local template via `template_id`; it defaults to `false` because memories may contain private conversation-derived information
-- Successful publish returns `201 Created`
-
-### `GET /api/v1/hub/templates/{id}`
-
-Returns template details.
-
-In addition to the list view fields, this endpoint also returns:
-
-- `workspace.entries`
-
-Example `workspace.entries` payload:
-
-```json
-{
-  "workspace": {
-    "kind": "dir",
-    "entries": [
-      {"path":"agent.toml","name":"agent.toml","type":"file","depth":0,"size":128},
-      {"path":"instructions","name":"instructions","type":"dir","depth":0,"size":0}
-    ]
-  }
-}
-```
-
-### `GET /api/v1/hub/templates/{id}/workspace/file?path=...`
-
-Reads a single file preview from the template workspace.
-
-Query parameters:
-
-- `path`: required relative path
-
-Response fields:
-
-- `path`
-- `content`
-- `size`
-- `truncated`
-- `binary`
-
-Notes:
-
-- Non-UTF-8 files return `binary=true`
-- Text content larger than `32 MiB` is truncated and returned with `truncated=true`
-- Absolute paths and `..` traversal are rejected
+Each publish request must explicitly set `include_memory: true` to export Runtime memory. File previews preserve `path`, `content`, `size`, `truncated`, and `binary`; non-UTF-8 files are marked binary, text beyond `32 MiB` is truncated, and absolute paths or `..` traversal are rejected. See [Local template versions](template-versions.md) for version workflows.
 
 ## CLIProxy Auth API
 
@@ -1547,7 +1237,7 @@ Participant outbound message shape is also accepted:
 
 Runs one turn through the selected agent and its real CSGClaw runtime.
 The `{agent}` selector accepts an agent ID or a unique case-insensitive agent name.
-This endpoint is separate from `/llm/responses`, which proxies model traffic without running the agent.
+This endpoint is separate from `/llm/v1/responses`, which proxies model traffic without running the agent.
 
 The endpoint does not require a Bearer token.
 Anonymous is represented by the existing `user-admin` identity because admin is currently the only user.
@@ -1686,8 +1376,6 @@ optional text-output streaming. It rejects tools, instructions, non-user roles,
 attachments, and unknown request fields.
 See [Session API Demo Frontend Guide](web/session-api-demo.md) for the bundled live demo and mockable frontend boundary.
 
-### `GET /api/v1/agents/{id}/llm/models`
-
 ### `GET /api/v1/agents/{id}/llm/v1/models`
 
 Forwards model-list requests to the LLM bridge.
@@ -1696,8 +1384,6 @@ Notes:
 
 - Requires Bearer Token
 - Response content type and body are determined by the upstream bridge
-
-### `POST /api/v1/agents/{id}/llm/chat/completions`
 
 ### `POST /api/v1/agents/{id}/llm/v1/chat/completions`
 
@@ -1721,11 +1407,7 @@ Notes:
 }
 ```
 
-### `POST /api/v1/agents/{id}/llm/responses`
-
 ### `POST /api/v1/agents/{id}/llm/v1/responses`
-
-### `GET /api/v1/agents/{id}/llm/responses`
 
 ### `GET /api/v1/agents/{id}/llm/v1/responses`
 

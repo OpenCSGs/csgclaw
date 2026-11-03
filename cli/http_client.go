@@ -23,11 +23,7 @@ func NewAPIClient(endpoint, token string, client HTTPClient) *APIClient {
 }
 
 func (c *APIClient) ListAgents(ctx context.Context) ([]apitypes.Agent, error) {
-	var agents []apitypes.Agent
-	if err := c.GetJSON(ctx, "/api/v1/agents", &agents); err != nil {
-		return nil, err
-	}
-	return agents, nil
+	return c.Client.ListAgents(ctx)
 }
 
 func (c *APIClient) GetAgent(ctx context.Context, id string) (apitypes.Agent, error) {
@@ -39,11 +35,7 @@ func (c *APIClient) GetAgent(ctx context.Context, id string) (apitypes.Agent, er
 }
 
 func (c *APIClient) CreateAgent(ctx context.Context, req apitypes.CreateAgentRequest) (apitypes.Agent, error) {
-	var created apitypes.Agent
-	if err := c.DoJSON(ctx, http.MethodPost, "/api/v1/agents", req, &created); err != nil {
-		return apitypes.Agent{}, err
-	}
-	return created, nil
+	return c.Client.CreateAgent(ctx, req)
 }
 
 func (c *APIClient) DeleteAgent(ctx context.Context, id string) error {

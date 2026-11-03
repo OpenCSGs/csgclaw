@@ -46,7 +46,7 @@ func (c *recordingHTTPClient) Do(req *http.Request) (*http.Response, error) {
 }
 
 func TestRuntimeCallerScopeOnJSONAndStreamRequests(t *testing.T) {
-	rec := &recordingHTTPClient{body: `[]`}
+	rec := &recordingHTTPClient{body: `{"items":[]}`}
 	c := New("http://example.test", "", rec).WithCallerAgentID("agent-manager")
 	if _, err := c.ListAgents(context.Background()); err != nil {
 		t.Fatal(err)

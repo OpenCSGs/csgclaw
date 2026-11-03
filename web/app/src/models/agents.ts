@@ -475,6 +475,7 @@ export type AgentTemplateLike = {
 };
 
 export type AgentProfileModelsResponse = {
+  provider?: string;
   models: string[];
 };
 

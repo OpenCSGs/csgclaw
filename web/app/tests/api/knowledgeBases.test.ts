@@ -30,7 +30,7 @@ describe("knowledge bases API", () => {
               },
             ],
             page: 1,
-            per: 50,
+            limit: 50,
             total: 1,
           }),
           { status: 200 },
@@ -64,7 +64,7 @@ describe("knowledge bases API", () => {
       total: 1,
     });
     expect(fetchMock).toHaveBeenCalledWith(
-      "api/v1/knowledge-bases/remote?page=1&per=50&search=handbook",
+      "api/v1/knowledge-bases/remote?page=1&limit=50&search=handbook",
       expect.any(Object),
     );
   });
@@ -104,7 +104,7 @@ describe("knowledge bases API", () => {
   it("requests later knowledge-base pages and exposes the next page", async () => {
     const fetchMock = vi.fn<typeof fetch>(async () =>
       Promise.resolve(
-        new Response(JSON.stringify({ items: [], page: 2, per: 50, total: 120 }), {
+        new Response(JSON.stringify({ items: [], page: 2, limit: 50, total: 120 }), {
           status: 200,
         }),
       ),
@@ -119,7 +119,7 @@ describe("knowledge bases API", () => {
       total: 120,
     });
     expect(fetchMock).toHaveBeenCalledWith(
-      "api/v1/knowledge-bases/remote?page=2&per=50&search=tourism",
+      "api/v1/knowledge-bases/remote?page=2&limit=50&search=tourism",
       expect.any(Object),
     );
   });

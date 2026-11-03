@@ -1,3 +1,4 @@
+import type { components } from "@/api/generated/controlPlane";
 import { get, type ApiError } from "@/api/client";
 import type { JSONRecord } from "@/models/agents";
 import type {
@@ -9,24 +10,19 @@ import type {
 const REMOTE_KNOWLEDGE_BASES_PATH = "/api/v1/knowledge-bases/remote";
 const REMOTE_KNOWLEDGE_BASES_PAGE_SIZE = 50;
 
-type RemoteKnowledgeBaseResponse = {
-  items?: unknown;
-  page?: unknown;
-  per?: unknown;
-  total?: unknown;
-};
+type RemoteKnowledgeBaseResponse = components["schemas"]["RemoteKnowledgeBasesListResponse"];
 
 export async function fetchRemoteKnowledgeBases(search = "", page = 1): Promise<RemoteKnowledgeBasePage> {
   const currentPage = Math.max(Math.trunc(page), 1);
   const params = new URLSearchParams({
     page: String(currentPage),
-    per: String(REMOTE_KNOWLEDGE_BASES_PAGE_SIZE),
+    limit: String(REMOTE_KNOWLEDGE_BASES_PAGE_SIZE),
     search: String(search || "").trim(),
   });
   const payload = await get<RemoteKnowledgeBaseResponse>(`${REMOTE_KNOWLEDGE_BASES_PATH}?${params.toString()}`);
   const records = Array.isArray(payload?.items) ? payload.items : [];
   const responsePage = Math.max(numberFromUnknown(payload?.page, currentPage), 1);
-  const per = Math.max(numberFromUnknown(payload?.per, REMOTE_KNOWLEDGE_BASES_PAGE_SIZE), 1);
+  const per = Math.max(numberFromUnknown(payload?.limit, REMOTE_KNOWLEDGE_BASES_PAGE_SIZE), 1);
   const total = numberFromUnknown(payload?.total, records.length);
   return {
     items: records.map(normalizeKnowledgeBase).filter((item): item is RemoteKnowledgeBase => Boolean(item)),

@@ -50,8 +50,13 @@ func (h *Handler) handleParticipants(w http.ResponseWriter, r *http.Request) {
 		})
 		writeJSON(w, http.StatusOK, h.presentParticipants(items))
 	case http.MethodPost:
-		var req participant.CreateRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		var input participantCreateRequest
+		if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+			http.Error(w, fmt.Sprintf("decode request: %v", err), http.StatusBadRequest)
+			return
+		}
+		req, err := input.serviceRequest()
+		if err != nil {
 			http.Error(w, fmt.Sprintf("decode request: %v", err), http.StatusBadRequest)
 			return
 		}

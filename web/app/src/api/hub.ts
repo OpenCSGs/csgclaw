@@ -1,3 +1,4 @@
+import type { components } from "@/api/generated/controlPlane";
 import { del, get, post, put } from "@/api/client";
 import type { HubTemplate, HubWorkspaceFile, HubWorkspaceListing } from "@/models/hubWorkspace";
 
@@ -20,7 +21,9 @@ type PublishAgentTemplatePayload = {
 };
 
 export function fetchHubTemplates(scope?: "local" | "remote"): Promise<HubTemplate[]> {
-  return get<HubTemplate[]>(scope ? `${HUB_TEMPLATES_PATH}?scope=${scope}` : HUB_TEMPLATES_PATH);
+  return get<components["schemas"]["HubTemplateList"]>(
+    scope ? `${HUB_TEMPLATES_PATH}?scope=${scope}` : HUB_TEMPLATES_PATH,
+  ).then((response) => response.items);
 }
 
 export function fetchHubTemplate(templateID: string): Promise<HubTemplate> {
@@ -96,19 +99,12 @@ function hubTemplatePath(templateID: string): string {
   return `${HUB_TEMPLATES_PATH}/${encodeURIComponent(routeID)}`;
 }
 
-export type TemplateVersion = {
-  name?: string;
-  description?: string;
-  runtime_kind?: string;
-  revision: number;
-  message?: string;
-  author?: { id?: string; name?: string };
-  created_at: string;
-  restored_from?: number;
-};
+export type TemplateVersion = components["schemas"]["TemplateVersion"];
 
 export function fetchTemplateVersions(id: string): Promise<TemplateVersion[]> {
-  return get(`${hubTemplatePath(id)}/versions`);
+  return get<components["schemas"]["TemplateVersionList"]>(`${hubTemplatePath(id)}/versions`).then(
+    (response) => response.items,
+  );
 }
 export function fetchTemplateVersionWorkspace(id: string, revision: number, path = ""): Promise<HubWorkspaceListing> {
   return get(`${hubTemplatePath(id)}/versions/${revision}?path=${encodeURIComponent(path)}`);

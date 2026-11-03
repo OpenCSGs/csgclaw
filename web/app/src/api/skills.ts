@@ -1,3 +1,4 @@
+import type { components } from "@/api/generated/controlPlane";
 import { del, get, request } from "@/api/client";
 import { SKILL_SOURCE_OFFICIAL } from "@/models/skillhub";
 import type { SkillFile, SkillSummary, SkillTree } from "@/models/skillhub";
@@ -14,29 +15,23 @@ export type RemoteSkillsPage = {
   total: number | null;
 };
 
-type RemoteSkillsResponse = {
-  items?: unknown;
-  next_page?: unknown;
-  page?: unknown;
-  per?: unknown;
-  total?: unknown;
-};
+type RemoteSkillsResponse = components["schemas"]["RemoteSkillsListResponse"];
 
 export function fetchSkills(): Promise<SkillSummary[]> {
-  return get<SkillSummary[]>(SKILLS_PATH);
+  return get<components["schemas"]["SkillSummaryList"]>(SKILLS_PATH).then((response) => response.items);
 }
 
 export async function fetchRemoteSkillsPage(page = 1, search = ""): Promise<RemoteSkillsPage> {
   const currentPage = Math.max(Math.trunc(page), 1);
   const params = new URLSearchParams({
     page: String(currentPage),
-    per: String(REMOTE_SKILLS_PAGE_SIZE),
+    limit: String(REMOTE_SKILLS_PAGE_SIZE),
     search: String(search || "").trim(),
   });
   const payload = await get<RemoteSkillsResponse>(`${SKILLS_PATH}/remote?${params.toString()}`);
   const records = Array.isArray(payload?.items) ? payload.items : [];
   const responsePage = positiveNumberFromUnknown(payload?.page) || currentPage;
-  const per = positiveNumberFromUnknown(payload?.per) || REMOTE_SKILLS_PAGE_SIZE;
+  const per = positiveNumberFromUnknown(payload?.limit) || REMOTE_SKILLS_PAGE_SIZE;
   const nextPage = positiveNumberFromUnknown(payload?.next_page);
   return {
     hasMore: nextPage !== null,
@@ -144,5 +139,7 @@ export function acknowledgeDiscoveredSkills(keys: string[]): Promise<void> {
 }
 
 export function rescanDiscoveredSkills(): Promise<SkillSummary[]> {
-  return request<SkillSummary[]>(`${SKILLS_PATH}/discovery/rescan`, { method: "POST" });
+  return request<components["schemas"]["SkillSummaryList"]>(`${SKILLS_PATH}/discovery/rescan`, { method: "POST" }).then(
+    (response) => response.items,
+  );
 }

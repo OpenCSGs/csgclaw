@@ -64,7 +64,7 @@ afterEach(() => {
 it("reloads instructions, skill files and connector content when the active revision changes", async () => {
   vi.stubGlobal(
     "fetch",
-    vi.fn(async () => Response.json([])),
+    vi.fn(async () => Response.json({ items: [] })),
   );
   let revision = 2;
   vi.mocked(fetchHubTemplate).mockImplementation(async () => ({ ...template, revision }));
@@ -137,7 +137,7 @@ it("reloads instructions, skill files and connector content when the active revi
 it("discards a directory response that arrives after a version switch", async () => {
   vi.stubGlobal(
     "fetch",
-    vi.fn(async () => Response.json([])),
+    vi.fn(async () => Response.json({ items: [] })),
   );
   let revision = 2;
   let resolveOld!: (value: HubWorkspaceListing) => void;

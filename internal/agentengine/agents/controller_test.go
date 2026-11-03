@@ -950,7 +950,7 @@ func TestCreateWorkerUsesCodexRuntimeWhenRequested(t *testing.T) {
 				if spec.AgentName != "alice" {
 					t.Fatalf("Create() agent name = %q, want %q", spec.AgentName, "alice")
 				}
-				if got, want := spec.Profile.BaseURL, "http://127.0.0.1:18080/api/v1/agents/agent-alice/llm"; got != want {
+				if got, want := spec.Profile.BaseURL, "http://127.0.0.1:18080/api/v1/agents/agent-alice/llm/v1"; got != want {
 					t.Fatalf("Create() profile base url = %q, want %q", got, want)
 				}
 				if got := spec.Profile.APIKey; !strings.HasPrefix(got, "agent.") || got != spec.Profile.Env["CSGCLAW_ACCESS_TOKEN"] {
@@ -1074,7 +1074,7 @@ func TestCreateWorkerUsesDSHRuntimeAndPersistsBeforeNew(t *testing.T) {
 				if persisted.RuntimeKind != RuntimeKindDSH || persisted.RuntimeName != RuntimeNameDSH || persisted.SandboxEnabled {
 					t.Fatalf("persisted DSH selection = %q/%q/%t", persisted.RuntimeKind, persisted.RuntimeName, persisted.SandboxEnabled)
 				}
-				if got, want := spec.Profile.BaseURL, "http://127.0.0.1:18080/api/v1/agents/agent-dsh/llm"; got != want {
+				if got, want := spec.Profile.BaseURL, "http://127.0.0.1:18080/api/v1/agents/agent-dsh/llm/v1"; got != want {
 					t.Fatalf("DSH profile base URL = %q, want %q", got, want)
 				}
 				if got := spec.Profile.APIKey; !strings.HasPrefix(got, "agent.") || got != spec.Profile.Env["CSGCLAW_ACCESS_TOKEN"] {
@@ -1161,7 +1161,7 @@ func TestCreateWorkerDSHSupportsAllModelProviderKinds(t *testing.T) {
 				validate: validator.ValidateConfig,
 				provision: func(_ context.Context, req agentruntime.ProvisionRequest) error {
 					provisioned = req.Profile
-					if req.Profile.BaseURL != "http://127.0.0.1:18080/api/v1/agents/agent-dsh/llm" {
+					if req.Profile.BaseURL != "http://127.0.0.1:18080/api/v1/agents/agent-dsh/llm/v1" {
 						return fmt.Errorf("unexpected DSH bridge URL %q", req.Profile.BaseURL)
 					}
 					if !strings.HasPrefix(req.Profile.APIKey, "agent.") {
@@ -2747,7 +2747,7 @@ func TestCreateWorkerProvisionsRuntimeBeforeNew(t *testing.T) {
 				if req.AgentName != "alice" {
 					t.Fatalf("Provision() agent name = %q, want %q", req.AgentName, "alice")
 				}
-				if got, want := req.Profile.BaseURL, "http://127.0.0.1:18080/api/v1/agents/agent-alice/llm"; got != want {
+				if got, want := req.Profile.BaseURL, "http://127.0.0.1:18080/api/v1/agents/agent-alice/llm/v1"; got != want {
 					t.Fatalf("Provision() profile base url = %q, want %q", got, want)
 				}
 				if got := req.Profile.APIKey; !strings.HasPrefix(got, "agent.") || got != req.Profile.Env["CSGCLAW_ACCESS_TOKEN"] {
@@ -3892,7 +3892,7 @@ func TestRecreateProvisionsRuntimeBeforeDeleteAndNew(t *testing.T) {
 				if req.AgentName != "alice" {
 					t.Fatalf("Provision() agent name = %q, want %q", req.AgentName, "alice")
 				}
-				if got, want := req.Profile.BaseURL, "http://127.0.0.1:18080/api/v1/agents/agent-alice/llm"; got != want {
+				if got, want := req.Profile.BaseURL, "http://127.0.0.1:18080/api/v1/agents/agent-alice/llm/v1"; got != want {
 					t.Fatalf("Provision() profile base url = %q, want %q", got, want)
 				}
 				if got := req.Profile.APIKey; !strings.HasPrefix(got, "agent.") || got != req.Profile.Env["CSGCLAW_ACCESS_TOKEN"] {
@@ -3969,7 +3969,7 @@ func TestRecreateDSHProvisionsBeforeDeleteAndNew(t *testing.T) {
 				if got, want := req.RuntimeID, "rt-agent-alice"; got != want {
 					t.Fatalf("Provision() runtime id = %q, want %q", got, want)
 				}
-				if got, want := req.Profile.BaseURL, "http://127.0.0.1:18080/api/v1/agents/agent-alice/llm"; got != want {
+				if got, want := req.Profile.BaseURL, "http://127.0.0.1:18080/api/v1/agents/agent-alice/llm/v1"; got != want {
 					t.Fatalf("Provision() profile base url = %q, want %q", got, want)
 				}
 				if got := req.Profile.APIKey; !strings.HasPrefix(got, "agent.") || got != req.Profile.Env["CSGCLAW_ACCESS_TOKEN"] {

@@ -32,7 +32,7 @@ func TestTaskModelSelectionUsesCatalogWithoutMutatingAgent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.HasSuffix(execution.BaseURL, "/agents/agent-test/tasks/room-one/llm") || execution.ModelID != "qwen3.7-plus" {
+	if !strings.HasSuffix(execution.BaseURL, "/agents/agent-test/rooms/room-one/llm/v1") || execution.ModelID != "qwen3.7-plus" {
 		t.Fatalf("wrong task bridge: %s", execution.BaseURL)
 	}
 	original, _ := svc.Agent("agent-test")

@@ -70,11 +70,14 @@ func currentOpenCSGAccessToken() (string, error) {
 }
 
 func remoteHubPageOptions(r *http.Request, defaultPage, defaultPer, maxPer int) (int, int, error) {
+	if r.URL.Query().Has("per") {
+		return 0, 0, fmt.Errorf("unsupported query parameter per; use limit")
+	}
 	page, err := remoteHubQueryInt(r, "page", defaultPage, 0)
 	if err != nil {
 		return 0, 0, err
 	}
-	per, err := remoteHubQueryInt(r, "per", defaultPer, maxPer)
+	per, err := remoteHubQueryInt(r, "limit", defaultPer, maxPer)
 	if err != nil {
 		return 0, 0, err
 	}

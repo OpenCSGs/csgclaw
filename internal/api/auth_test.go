@@ -448,11 +448,13 @@ func readOpenCSGProvider(t *testing.T, handler *Handler) agent.ModelProviderSumm
 	if rec.Code != http.StatusOK {
 		t.Fatalf("providers status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
 	}
-	var got agent.ModelProviderCatalog
+	var got struct {
+		Providers []agent.ModelProviderSummary `json:"items"`
+	}
 	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
 		t.Fatalf("decode providers: %v", err)
 	}
-	provider := findProviderSummary(got, agent.ModelProviderIDOpenCSG)
+	provider := findProviderSummary(agent.ModelProviderCatalog{Providers: got.Providers}, agent.ModelProviderIDOpenCSG)
 	if provider.ID != agent.ModelProviderIDOpenCSG {
 		t.Fatalf("providers = %+v, want OpenCSG", got.Providers)
 	}

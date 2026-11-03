@@ -133,11 +133,11 @@ func (c cmd) runPublish(ctx context.Context, run *command.Context, args []string
 }
 
 func listTemplates(ctx context.Context, client *apiclient.Client) ([]apitypes.HubTemplate, error) {
-	var items []apitypes.HubTemplate
-	if err := client.GetJSON(ctx, "/api/v1/hub/templates", &items); err != nil {
+	var response apitypes.ListResponse[apitypes.HubTemplate]
+	if err := client.GetJSON(ctx, "/api/v1/hub/templates", &response); err != nil {
 		return nil, err
 	}
-	return items, nil
+	return response.Items, nil
 }
 
 func getTemplate(ctx context.Context, client *apiclient.Client, id string) (apitypes.HubTemplate, error) {

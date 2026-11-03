@@ -91,11 +91,12 @@ func (c cmd) runList(ctx context.Context, run *command.Context, args []string, g
 	if *archived {
 		path += "?archived=true"
 	}
-	var agents []apitypes.Agent
-	err := run.APIClient(globals).GetJSON(ctx, path, &agents)
+	var response apitypes.ListResponse[apitypes.Agent]
+	err := run.APIClient(globals).GetJSON(ctx, path, &response)
 	if err != nil {
 		return err
 	}
+	agents := response.Items
 	if *filter != "" {
 		agents = filterAgentsByStatus(agents, *filter)
 	}
@@ -140,15 +141,21 @@ func (c cmd) runCreate(ctx context.Context, run *command.Context, args []string,
 		return fmt.Errorf("agent create does not accept positional arguments")
 	}
 
-	req := apitypes.CreateAgentRequest{
-		ID:           *id,
-		Name:         *name,
-		Description:  *description,
-		Image:        *image,
-		RuntimeKind:  *runtimeKind,
-		FromTemplate: *fromTemplate,
-		Replace:      *replace,
-		Profile:      *profile,
+	req := apitypes.CreateAgentRequest{ID: *id, Name: *name, Description: *description, FromTemplate: *fromTemplate}
+	visited := visitedFlags(fs)
+	if visited["runtime"] || visited["image"] {
+		req.Runtime = &apitypes.AgentRuntimeInput{}
+		if visited["runtime"] {
+			req.Runtime.Name = runtimeKind
+			sandboxed := false
+			req.Runtime.SandboxEnabled = &sandboxed
+		}
+		if visited["image"] {
+			req.Runtime.Image = image
+		}
+	}
+	if visited["profile"] {
+		req.ModelConfig = &apitypes.CreateAgentProfile{Selector: *profile}
 	}
 	req.ID = normalizeAgentID(req.ID)
 	client := run.APIClient(globals)
@@ -156,8 +163,6 @@ func (c cmd) runCreate(ctx context.Context, run *command.Context, args []string,
 		if strings.TrimSpace(req.ID) == "" {
 			return fmt.Errorf("agent create --replace requires --id")
 		}
-		req.FieldMask = createAgentFieldMask(visitedFlags(fs))
-		req.Replace = true
 		if !*force {
 			confirmed, err := confirmReplaceAgent(run, req.ID)
 			if err != nil {
@@ -175,7 +180,18 @@ func (c cmd) runCreate(ctx context.Context, run *command.Context, args []string,
 		}
 	}
 
-	created, err := createAgent(ctx, client, req)
+	var created apitypes.Agent
+	var err error
+	if *replace {
+		mask := createAgentFieldMask(visited)
+		recreate := apitypes.RecreateAgentRequest{FieldMask: mask}
+		if len(mask) > 0 {
+			recreate.Configuration = &apitypes.RecreateAgentConfiguration{Name: req.Name, Description: req.Description, Runtime: req.Runtime, ModelConfig: req.ModelConfig}
+		}
+		created, err = client.RecreateAgent(ctx, req.ID, recreate)
+	} else {
+		created, err = createAgent(ctx, client, req)
+	}
 	if err != nil {
 		return err
 	}
@@ -283,11 +299,12 @@ func (c cmd) runDeleteAll(ctx context.Context, run *command.Context, globals com
 			})
 		}
 	}
-	var agents []apitypes.Agent
-	err := run.APIClient(globals).GetJSON(ctx, "/api/v1/agents?archived=true", &agents)
+	var response apitypes.ListResponse[apitypes.Agent]
+	err := run.APIClient(globals).GetJSON(ctx, "/api/v1/agents?archived=true", &response)
 	if err != nil {
 		return err
 	}
+	agents := response.Items
 	for _, a := range agents {
 		if err := run.APIClient(globals).DoJSON(ctx, http.MethodDelete, "/api/v1/agents/"+a.ID, map[string]string{"name": a.Name}, nil); err != nil {
 			return err
@@ -376,19 +393,11 @@ func (c cmd) runLogs(ctx context.Context, run *command.Context, args []string, g
 }
 
 func listAgents(ctx context.Context, client *apiclient.Client) ([]apitypes.Agent, error) {
-	var agents []apitypes.Agent
-	if err := client.GetJSON(ctx, "/api/v1/agents", &agents); err != nil {
-		return nil, err
-	}
-	return agents, nil
+	return client.ListAgents(ctx)
 }
 
 func createAgent(ctx context.Context, client *apiclient.Client, req apitypes.CreateAgentRequest) (apitypes.Agent, error) {
-	var created apitypes.Agent
-	if err := client.DoJSON(ctx, http.MethodPost, "/api/v1/agents", req, &created); err != nil {
-		return apitypes.Agent{}, err
-	}
-	return created, nil
+	return client.CreateAgent(ctx, req)
 }
 
 func startAgent(ctx context.Context, client *apiclient.Client, id string) (apitypes.Agent, error) {
@@ -426,11 +435,11 @@ func visitedFlags(fs interface{ Visit(func(*flag.Flag)) }) map[string]bool {
 }
 
 func createAgentFieldMask(visited map[string]bool) []string {
-	fields := []string{"id", "name", "description", "image", "profile", "runtime"}
+	fields := []struct{ flag, path string }{{"name", "name"}, {"description", "description"}, {"image", "runtime.image"}, {"profile", "model_config.selector"}, {"runtime", "runtime"}}
 	mask := make([]string, 0, len(fields))
 	for _, field := range fields {
-		if visited[field] {
-			mask = append(mask, field)
+		if visited[field.flag] && !(field.flag == "image" && visited["runtime"]) {
+			mask = append(mask, field.path)
 		}
 	}
 	return mask

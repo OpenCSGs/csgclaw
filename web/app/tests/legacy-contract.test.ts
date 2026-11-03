@@ -30,9 +30,6 @@ describe("legacy UI contract", () => {
     expect(source).toContain("function rebuildManagerFromBrowser");
     expect(source).not.toContain("function ManagerRebuildModal");
     expect(source).toContain("function createManagerAgentRequest");
-    expect(source).toContain('post("api/v1/agents", payload)');
-    expect(source).toContain('id: "u-manager",');
-    expect(source).toContain("replace: true,");
     expect(source).toContain("const rebuiltAgent = await createManagerAgentRequest();");
     expect(source).not.toContain("payload.image = options.image;");
     expect(source).toContain("await refreshAgentsWithUpdatedAgent(rebuiltAgent);");
@@ -62,13 +59,13 @@ describe("legacy UI contract", () => {
   });
 
   it("keeps channel-scoped participant and notification frontend contracts", () => {
-    expect(source).toContain('get<AgentLike[]>("api/v1/agents?include_participants=true")');
+    expect(source).toContain('"api/v1/agents?include_participants=true"');
     expect(source).toContain('post<ParticipantLike>("api/v1/channels/csgclaw/participants"');
     expect(source).toContain('"api/v1/channels/csgclaw/participants?type=notification"');
     expect(source).toContain("patchNotificationBotRequest");
     expect(source).toContain("createNotificationBotRequest");
     expect(source).toContain("deleteAgentLikeRequest(item)");
-    expect(source).toContain("del(`api/v1/agents/${encodeURIComponent(agentID)}`)");
+    expect(source).toContain("del(`api/v1/agents/${encodeURIComponent(agentID)}`, { json: { name } })");
     expect(source).toContain('params.set("delete_agent", "if_unreferenced");');
     expect(source).toContain("const SHOW_AGENT_LIFECYCLE_ACTIONS = false;");
     expect(source).toContain('export const BOT_TYPE_NOTIFICATION = "notification"');
@@ -86,7 +83,7 @@ describe("legacy UI contract", () => {
     expect(source).toContain('const HUB_TEMPLATES_PATH = "/api/v1/hub/templates";');
     expect(source).toContain("post<HubTemplate>(HUB_TEMPLATES_PATH, payload)");
     expect(source).toContain("includeMemory,");
-    expect(source).toContain('get("api/v1/agents/image-candidates")');
+    expect(source).toContain('"api/v1/agents/image-candidates"');
     expect(source).toContain("agent_id: agentID");
     expect(source).toContain("setSelectedHubTemplateId(published.id);");
     expect(source).toContain('className="agent-actions-menu"');

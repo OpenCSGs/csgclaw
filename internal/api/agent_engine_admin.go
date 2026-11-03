@@ -147,7 +147,7 @@ func engineReplaceRequest(request agent.CreateRequest, current agentengine.Agent
 }
 
 func engineModelConfigured(spec agentengine.ModelSpec) bool {
-	return strings.TrimSpace(spec.Selector) != "" || strings.TrimSpace(spec.Provider) != "" ||
+	return spec.ImageGeneration != nil || spec.VideoGeneration != nil || strings.TrimSpace(spec.Selector) != "" || strings.TrimSpace(spec.Provider) != "" ||
 		strings.TrimSpace(spec.ProviderID) != "" || strings.TrimSpace(spec.BaseURL) != "" ||
 		strings.TrimSpace(spec.APIKey) != "" || strings.TrimSpace(spec.ModelID) != "" ||
 		strings.TrimSpace(spec.ReasoningEffort) != "" || spec.FastMode || len(spec.Headers) > 0 ||
@@ -248,6 +248,7 @@ func serviceProfileViewFromEngine(view agentengine.ModelView) agent.AgentProfile
 	return agent.AgentProfileView{
 		Name:                 view.Name,
 		ImageGeneration:      view.ImageGeneration,
+		VideoGeneration:      view.VideoGeneration,
 		Description:          view.Description,
 		Provider:             view.Provider,
 		ModelProviderID:      view.ProviderID,
