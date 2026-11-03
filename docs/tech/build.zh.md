@@ -116,7 +116,12 @@ make build-ui UI=none
 | `both` | `web`＋`web/custom` | `/`＋`/ui/custom/` | `both` |
 | `none` | 不包含 UI 包 | 没有 UI 路由 | `headless` |
 
-`UI_DIR` 是已经构建好、包含 `index.html` 的静态前端目录。打包脚本不替另一套 UI
+`UI_DIR` 默认使用仓库内的 `examples/manager-ui`，这是一套不需要额外依赖的精简前端，
+支持 OpenCSG 登录、会话模型选择、新建 Manager 会话和消息同步。直接执行
+`make build-ui UI=both` 即可同时嵌入两套 UI。模型选择仅修改当前会话配置；登录状态、
+会话和消息与原 UI 共用。使用说明见 [Manager Chat](../../examples/manager-ui/README.md)。
+
+`UI_DIR` 也可指定其他已经构建好、包含 `index.html` 的静态前端目录。打包脚本不替另一套 UI
 执行构建，只复制产物到忽略提交的 `web/custom/static-dist/`，替换旧资源，跳过隐藏
 文件和 `node_modules`，拒绝符号链接及特殊文件。同一 worktree 的不同自定义 UI 构建
 应串行执行，或分别使用隔离 worktree。二进制运行时不再依赖 `UI_DIR`；自定义产物按

@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <title>CSGClaw · Manager Chat</title>
+    <link rel="stylesheet" href="./style.css" />
+    <script type="module" src="./app.mjs"></script>
+  </head>
+  <body>
+    <div class="app">
+      <aside class="sidebar" aria-label="会话导航">
+        <a class="brand" id="primary-ui"
+          ><span class="brand-icon">C</span
+          ><span>CSGClaw<small>Manager Chat</small></span></a
+        >
+        <button id="new-chat" class="new-chat" disabled>
+          <span aria-hidden="true">＋</span> 新建会话
+        </button>
+        <div class="section-label">与 Manager 的会话</div>
+        <nav id="rooms" aria-label="会话列表"></nav>
+        <div class="account">
+          <span class="avatar" aria-hidden="true">U</span>
+          <div>
+            <strong id="account-name">未登录</strong
+            ><small id="account-detail">OpenCSG 账号</small>
+          </div>
+          <button id="auth" class="text-button" disabled>登录</button>
+        </div>
+      </aside>
+      <main>
+        <header class="topbar">
+          <div class="heading">
+            <span class="manager-icon" aria-hidden="true">M</span>
+            <div>
+              <h1>Manager</h1>
+              <span id="connection" role="status">正在连接…</span>
+            </div>
+          </div>
+          <div class="model-controls">
+            <label for="model">会话模型</label
+            ><select id="model" disabled>
+              <option>加载中…</option></select
+            ><button
+              id="refresh"
+              class="text-button"
+              aria-label="刷新会话和模型"
+            >
+              刷新
+            </button>
+          </div>
+        </header>
+        <div id="notice" class="notice" role="status" hidden></div>
+        <div id="error" class="error" role="alert" hidden></div>
+        <section
+          id="messages"
+          class="messages"
+          aria-label="对话消息"
+          aria-busy="true"
+        ></section>
+        <div class="composer-wrap">
+          <form id="composer" class="composer">
+            <label class="sr-only" for="input">发送给 Manager 的消息</label>
+            <textarea
+              id="input"
+              rows="3"
+              placeholder="向 Manager 发送消息…"
+              disabled
+            ></textarea>
+            <div class="composer-actions">
+              <span id="send-status" role="status"
+                >Enter 发送 · Shift + Enter 换行</span
+              ><button id="send" type="submit" disabled>
+                发送 <span aria-hidden="true">↑</span>
+              </button>
+            </div>
+          </form>
+          <p class="footnote">
+            Manager Chat · 与完整 CSGClaw UI 共用会话和模型服务
+          </p>
+        </div>
+      </main>
+    </div>
+  </body>
+</html>

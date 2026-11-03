@@ -95,7 +95,13 @@ release packaging continue to select the existing UI.
 | `both` | `web` + `web/custom` | `/` + `/ui/custom/` | `both` |
 | `none` | no UI package | no UI routes | `headless` |
 
-`UI_DIR` is a completed static frontend build containing `index.html`; the
+`UI_DIR` defaults to the dependency-free `examples/manager-ui` frontend. It supports
+OpenCSG sign-in, per-conversation model selection, new Manager chats and message
+synchronization. Run `make build-ui UI=both` to embed both UIs directly. Login,
+conversations and messages are shared with the original UI; model changes only
+affect the selected conversation. See [Manager Chat](../../examples/manager-ui/README.md).
+
+`UI_DIR` can also point to another completed static frontend build containing `index.html`; the
 packager does not run that frontend's build. `prepare-custom-ui` copies its files
 into the ignored `web/custom/static-dist/` embed directory, replaces stale
 output, skips dotfiles and `node_modules`, and rejects symlinks/special files.
