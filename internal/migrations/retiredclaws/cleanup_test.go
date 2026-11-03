@@ -275,3 +275,132 @@ func TestDirectCleanupDoesNotFollowSymlinksInsideRetiredHome(t *testing.T) {
 		t.Fatal("cleanup followed a nested symlink")
 	}
 }
+
+func TestCleanupProtectsLinksFromRetainedCandidateHomes(t *testing.T) {
+	for _, reason := range []string{"workspace", "inventory failure"} {
+		t.Run(reason, func(t *testing.T) {
+			root, state := cleanupFixture(t)
+			a := filepath.Join(root, "agents", "agent-b", "boxlite")
+			b := filepath.Join(root, "agents", "agent-a", ".boxlite")
+			c := filepath.Join(root, "agents", "agent-a", "boxlite")
+			for _, home := range []string{a, b, c} {
+				writeFile(t, filepath.Join(home, "keep"), "workspace data")
+			}
+			for source, target := range map[string]string{a: b, b: c} {
+				if err := os.Symlink(target, filepath.Join(source, "linked-workspace")); err != nil {
+					t.Skipf("symlinks unavailable: %v", err)
+				}
+			}
+			if reason == "workspace" {
+				var record map[string]any
+				data, _ := os.ReadFile(state)
+				json.Unmarshal(data, &record)
+				agents := record["agents"].(map[string]any)["items"].([]any)
+				agents[1].(map[string]any)["runtime"].(map[string]any)["options"] = map[string]any{"local_workspace_dir": a}
+				data, _ = json.Marshal(record)
+				writeFile(t, state, string(data))
+			}
+			err := CleanupAgentSandboxHomes(context.Background(), root, func(_ context.Context, home string) error {
+				if reason == "inventory failure" && home == a {
+					return errors.New("instance still running")
+				}
+				return nil
+			})
+			if err == nil {
+				t.Fatal("missing retained home warning")
+			}
+			for _, home := range []string{a, b, c} {
+				if data, err := os.ReadFile(filepath.Join(home, "keep")); err != nil || string(data) != "workspace data" {
+					t.Fatalf("retained workspace dependency removed: %s, %v", home, err)
+				}
+			}
+		})
+	}
+}
+
+func TestCleanupProtectsCodexMCPWorkspacePlaceholders(t *testing.T) {
+	for _, placeholder := range []string{"${workspace}", "${workspaceDir}", "{workspace}", "{workspaceDir}"} {
+		for _, custom := range []bool{false, true} {
+			t.Run(placeholder+map[bool]string{true: "/custom", false: "/default"}[custom], func(t *testing.T) {
+				root, state := cleanupFixture(t)
+				home := filepath.Join(root, "agents", "agent-a", "boxlite")
+				server := filepath.Join(home, "server.py")
+				writeFile(t, server, "MCP server")
+				workspace := filepath.Join(root, "agents", "agent-a", ".codex", "workspace")
+				if custom {
+					workspace = filepath.Join(root, "custom-project", "workspace")
+				}
+				mustMkdir(t, workspace)
+				relative, err := filepath.Rel(workspace, server)
+				if err != nil {
+					t.Fatal(err)
+				}
+				var record map[string]any
+				data, _ := os.ReadFile(state)
+				json.Unmarshal(data, &record)
+				agents := record["agents"].(map[string]any)["items"].([]any)
+				a := agents[0].(map[string]any)
+				if custom {
+					a["runtime"].(map[string]any)["options"] = map[string]any{"local_workspace_dir": workspace}
+				}
+				a["mcpServers"] = map[string]any{"local": map[string]any{"command": "python", "args": []string{placeholder + "/" + filepath.ToSlash(relative)}}}
+				data, _ = json.Marshal(record)
+				writeFile(t, state, string(data))
+				if err := CleanupAgentSandboxHomes(context.Background(), root, func(context.Context, string) error { return nil }); err == nil {
+					t.Fatal("missing MCP reference warning")
+				}
+				if data, err := os.ReadFile(server); err != nil || string(data) != "MCP server" {
+					t.Fatal("MCP server removed despite workspace placeholder reference")
+				}
+			})
+		}
+	}
+}
+
+func TestCleanupOrdersUnreferencedHomesAndProtectsFailedRemovalDependencies(t *testing.T) {
+	for _, mode := range []string{"unreferenced chain", "cyclic links", "removal failure"} {
+		t.Run(mode, func(t *testing.T) {
+			root, _ := cleanupFixture(t)
+			source := filepath.Join(root, "agents", "agent-b", "boxlite")
+			target := filepath.Join(root, "agents", "agent-a", ".boxlite")
+			writeFile(t, filepath.Join(source, "vm"), "retired")
+			writeFile(t, filepath.Join(target, "keep"), "dependency")
+			if err := os.Symlink(target, filepath.Join(source, "target")); err != nil {
+				t.Skipf("symlinks unavailable: %v", err)
+			}
+			if mode == "cyclic links" {
+				if err := os.Symlink(source, filepath.Join(target, "source")); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if mode == "removal failure" {
+				parent := filepath.Dir(source)
+				if err := os.Chmod(parent, 0555); err != nil {
+					t.Fatal(err)
+				}
+				t.Cleanup(func() { os.Chmod(parent, 0755) })
+				if err := os.WriteFile(filepath.Join(parent, "probe"), nil, 0600); err == nil {
+					t.Skip("filesystem does not enforce permissions")
+				}
+			}
+			err := CleanupAgentSandboxHomes(context.Background(), root, func(context.Context, string) error { return nil })
+			if mode == "unreferenced chain" {
+				if err != nil {
+					t.Fatal(err)
+				}
+				for _, home := range []string{source, target} {
+					if _, err := os.Lstat(home); !errors.Is(err, os.ErrNotExist) {
+						t.Fatalf("unreferenced home was not removed: %s, %v", home, err)
+					}
+				}
+			} else {
+				if err == nil {
+					t.Fatal("missing retained home warning")
+				}
+				if data, err := os.ReadFile(filepath.Join(target, "keep")); err != nil || string(data) != "dependency" {
+					t.Fatalf("retained source dependency removed: %v", err)
+				}
+			}
+		})
+	}
+}

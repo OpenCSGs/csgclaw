@@ -345,21 +345,9 @@ func resolveCodexMCPWorkspaceArgs(args []string, workspaceDir string) []string {
 	}
 	out := make([]string, len(args))
 	for idx, arg := range args {
-		out[idx] = resolveCodexMCPWorkspaceArg(arg, workspaceDir)
+		out[idx] = mcpschema.ResolveWorkspaceArg(arg, workspaceDir)
 	}
 	return out
-}
-
-func resolveCodexMCPWorkspaceArg(arg, workspaceDir string) string {
-	for _, placeholder := range []string{"${workspace}", "${workspaceDir}", "{workspace}", "{workspaceDir}"} {
-		if arg == placeholder {
-			return workspaceDir
-		}
-		if strings.HasPrefix(arg, placeholder+"/") {
-			return filepath.Join(workspaceDir, strings.TrimPrefix(arg, placeholder+"/"))
-		}
-	}
-	return arg
 }
 
 func parseCodexMCPServers(content string) (map[string]any, error) {

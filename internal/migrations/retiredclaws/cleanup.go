@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"csgclaw/internal/localstore"
+	"csgclaw/internal/mcpschema"
 	toml "github.com/pelletier/go-toml/v2"
 )
 
@@ -102,13 +103,7 @@ func cleanupAgentSandboxHomes(ctx context.Context, root string, checkStopped fun
 		}
 		seen[strings.ToLower(id)] = true
 		rt, _ := a["runtime"].(map[string]any)
-		kind := ""
-		for _, raw := range []any{rt["kind"], a["runtime_kind"], rt["name"], a["runtime_name"]} {
-			if v, ok := raw.(string); ok && strings.TrimSpace(v) != "" {
-				kind = strings.ToLower(strings.TrimSpace(v))
-				break
-			}
-		}
+		kind := cleanupRuntimeKind(a, rt)
 		parentPath := filepath.Join(agentsDir, id)
 		parent, err := os.Lstat(parentPath)
 		if errors.Is(err, os.ErrNotExist) {
@@ -147,7 +142,7 @@ func cleanupAgentSandboxHomes(ctx context.Context, root string, checkStopped fun
 		return errors.Join(failures...)
 	}
 	references := []cleanupReference{{statePath, data}}
-	referenceValues := []any{state}
+	referenceValues := []any{state, cleanupMCPWorkspaceReferences(root, items)}
 	paths := append([]string{filepath.Join(root, "im", "state.json")}, configPaths...)
 	for _, path := range paths {
 		if path == "" {
@@ -173,54 +168,166 @@ func cleanupAgentSandboxHomes(ctx context.Context, root string, checkStopped fun
 		references = append(references, cleanupReference{path, data})
 		referenceValues = append(referenceValues, v)
 	}
-	// WalkDir never follows links. Resolve their targets separately, and skip the
-	// retired trees themselves so their internal metadata cannot protect itself.
+	// Collect external roots separately from candidate-to-candidate dependencies.
+	// A retained candidate's links must protect their targets transitively.
 	links, err := cleanupSymlinkTargets(ctx, agentsDir, homes)
 	if err != nil {
 		return errors.Join(errors.Join(failures...), err)
 	}
 	referenceValues = append(referenceValues, links)
-	for _, home := range homes {
+	dependencies := make([][]int, len(homes))
+	retained := make([]bool, len(homes))
+	for i, home := range homes {
+		links, err := cleanupSymlinkTargets(ctx, home.path, nil)
+		if err != nil {
+			return errors.Join(errors.Join(failures...), err)
+		}
+		for j, target := range homes {
+			if i != j && cleanupReferenced(links, target.path) {
+				dependencies[i] = append(dependencies[i], j)
+			}
+		}
 		if err := ctx.Err(); err != nil {
-			failures = append(failures, err)
-			break
+			return errors.Join(errors.Join(failures...), err)
 		}
 		if cleanupReferenced(referenceValues, home.path) {
+			retained[i] = true
 			failures = append(failures, fmt.Errorf("retired home is still referenced; keeping %s", home.path))
 			continue
 		}
 		entries, err := os.ReadDir(home.path)
 		if err != nil {
+			retained[i] = true
 			failures = append(failures, err)
 			continue
 		}
 		if len(entries) > 0 {
 			if checkStopped == nil {
+				retained[i] = true
 				failures = append(failures, fmt.Errorf("cannot confirm old instances have stopped; keeping %s", home.path))
 				continue
 			}
 			if err := checkStopped(ctx, home.path); err != nil {
+				retained[i] = true
 				failures = append(failures, fmt.Errorf("keep retired home %s: %w", home.path, err))
 				continue
 			}
 		}
+	}
+	retainDependencies := func() {
+		queue := make([]int, 0, len(homes))
+		for i, keep := range retained {
+			if keep {
+				queue = append(queue, i)
+			}
+		}
+		for len(queue) > 0 {
+			i := queue[0]
+			queue = queue[1:]
+			for _, j := range dependencies[i] {
+				if !retained[j] {
+					retained[j] = true
+					failures = append(failures, fmt.Errorf("retired home is referenced by retained home %s; keeping %s", homes[i].path, homes[j].path))
+					queue = append(queue, j)
+				}
+			}
+		}
+	}
+	retainDependencies()
+	// Delete link owners before their targets. If removal fails, preserve its
+	// dependencies before any of them can be removed. Cycles remain for inspection.
+	incoming := make([]int, len(homes))
+	for _, targets := range dependencies {
+		for _, j := range targets {
+			incoming[j]++
+		}
+	}
+	var queue []int
+	for i, count := range incoming {
+		if count == 0 {
+			queue = append(queue, i)
+		}
+	}
+	removed := make([]bool, len(homes))
+	for len(queue) > 0 {
+		i := queue[0]
+		queue = queue[1:]
+		if retained[i] {
+			continue
+		}
+		home := homes[i]
+		if err := ctx.Err(); err != nil {
+			return errors.Join(errors.Join(failures...), err)
+		}
 		if err := cleanupReferencesUnchanged(references); err != nil {
-			failures = append(failures, err)
-			break
+			return errors.Join(errors.Join(failures...), err)
 		}
 		current, err := os.Lstat(home.path)
 		parent, parentErr := os.Lstat(filepath.Dir(home.path))
 		if err != nil || parentErr != nil || !os.SameFile(home.info, current) || !os.SameFile(home.parent, parent) || current.Mode()&os.ModeSymlink != 0 || parent.Mode()&os.ModeSymlink != 0 {
+			retained[i] = true
+			retainDependencies()
 			failures = append(failures, fmt.Errorf("retired home changed during cleanup; keeping %s", home.path))
 			continue
 		}
 		if err := removeRetiredSandboxHome(agentsRoot, home); err != nil {
+			retained[i] = true
+			retainDependencies()
 			failures = append(failures, fmt.Errorf("remove retired home %s: %w", home.path, err))
 			continue
 		}
+		removed[i] = true
+		for _, j := range dependencies[i] {
+			incoming[j]--
+			if incoming[j] == 0 {
+				queue = append(queue, j)
+			}
+		}
 		slog.Info("retired Agent sandbox home removed", "agent_id", home.agentID, "path", home.path)
 	}
+	for i, home := range homes {
+		if !removed[i] && !retained[i] {
+			failures = append(failures, fmt.Errorf("retired home has cyclic sandbox references; keeping %s", home.path))
+		}
+	}
 	return errors.Join(failures...)
+}
+
+func cleanupMCPWorkspaceReferences(root string, items []any) []any {
+	var references []any
+	for _, item := range items {
+		agent, _ := item.(map[string]any)
+		rt, _ := agent["runtime"].(map[string]any)
+		if cleanupRuntimeKind(agent, rt) != "codex" {
+			continue
+		}
+		id, _ := agent["id"].(string)
+		workspace := filepath.Join(root, "agents", id, ".codex", "workspace")
+		options, _ := rt["options"].(map[string]any)
+		if configured, _ := options["local_workspace_dir"].(string); strings.TrimSpace(configured) != "" {
+			workspace = strings.TrimSpace(configured)
+		}
+		servers, _ := agent["mcpServers"].(map[string]any)
+		for _, value := range servers {
+			server, _ := value.(map[string]any)
+			args, _ := server["args"].([]any)
+			for _, value := range args {
+				if arg, ok := value.(string); ok {
+					references = append(references, mcpschema.ResolveWorkspaceArg(arg, workspace))
+				}
+			}
+		}
+	}
+	return references
+}
+
+func cleanupRuntimeKind(agent, rt map[string]any) string {
+	for _, raw := range []any{rt["kind"], agent["runtime_kind"], rt["name"], agent["runtime_name"]} {
+		if kind, ok := raw.(string); ok && strings.TrimSpace(kind) != "" {
+			return strings.ToLower(strings.TrimSpace(kind))
+		}
+	}
+	return ""
 }
 
 // The filesystem root confines recursive removal to this exact Agent home.

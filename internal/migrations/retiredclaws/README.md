@@ -79,6 +79,9 @@ Host startup and settings do not instantiate or require these providers.
 It handles only `agents/<managed-native-agent-id>/.boxlite` and `agents/<managed-native-agent-id>/boxlite`.
 Global runtime directories, unregistered Agent homes, symbolic links and unconverted Agents are retained.
 Current persisted workspace/MCP/config references and links from other Agent files protect their targets.
+Links from retained sandbox homes protect their targets transitively, including homes retained after inventory or deletion failures.
+Unreferenced link owners are removed before their targets, while cycles are retained with a warning.
+MCP workspace placeholders are resolved against the owning Codex Agent's default or configured workspace using the runtime's argument expansion rules.
 Nonempty homes require a successful `boxlite --home <path> list --all --format json` inventory with only inactive instances.
 Missing CLI, active/unknown instances, reference read failures and filesystem errors warn without blocking startup.
 Eligible homes are deleted directly without creating a backup or archive.
