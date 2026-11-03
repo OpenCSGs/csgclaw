@@ -19,8 +19,13 @@ func TestOnDemandPolicyInstructionsAreRoleSpecific(t *testing.T) {
 			t.Fatalf("manager instructions contain Worker-only rule %q", unwanted)
 		}
 	}
+	for _, want := range []string{"named independent reviewers", "explicit Worker children with dependencies", "Manager acceptance does not replace a guide-required independent review", "not just the children already created", "Do not invent additional mandatory reviews"} {
+		if !strings.Contains(manager, want) {
+			t.Fatalf("manager guide handling missing %q", want)
+		}
+	}
 
-	for _, want := range []string{`room_type="on_demand", role="worker", and policy_id="on-demand-worker/v1"`, "task claim --task", "task update --task", "task message --task", "pending Manager review", "csgclaw-cli"} {
+	for _, want := range []string{`room_type="on_demand", role="worker", and policy_id="on-demand-worker/v1"`, "task claim --task", "task update --task", "task message --task", "pending Manager review", "independent review required by the guide is separate Worker work", "csgclaw-cli"} {
 		if !strings.Contains(worker, want) {
 			t.Fatalf("worker instructions missing %q", want)
 		}

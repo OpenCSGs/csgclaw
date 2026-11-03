@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { TeamDetailPane } from "./TeamDetailPane";
 import type { TranslateFn } from "@/models/conversations";
 import type { WorkspaceTeam } from "@/models/tasks";
+import { createTranslator } from "@/shared/i18n";
 
 const t: TranslateFn = (key) => key;
 
@@ -17,6 +18,43 @@ const team: WorkspaceTeam = {
 };
 
 describe("TeamDetailPane", () => {
+  it.each(["zh", "en"] as const)("inserts a localized team guide outline without saving it (%s)", async (locale) => {
+    const user = userEvent.setup();
+    const translate = createTranslator(locale);
+    const onUpdateGuide = vi.fn().mockResolvedValue(true);
+    render(<TeamDetailPane team={team} t={translate} onUpdateGuide={onUpdateGuide} />);
+    await user.click(screen.getByRole("tab", { name: translate("teamGuideTab") }));
+    expect(screen.getByText(translate("teamGuideDescription"))).toBeVisible();
+    const editor = screen.getByRole("textbox", { name: translate("teamGuideTab") });
+    await user.click(screen.getByRole("button", { name: translate("teamGuideFillTemplate") }));
+    expect(editor).toHaveValue(translate("teamGuideTemplate"));
+    expect(screen.getByRole("status")).toHaveTextContent(translate("teamGuideDirty"));
+    expect(screen.queryByRole("button", { name: translate("teamGuideFillTemplate") })).not.toBeInTheDocument();
+    expect(onUpdateGuide).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: translate("save") }));
+    expect(onUpdateGuide).toHaveBeenCalledWith(team, translate("teamGuideTemplate"));
+  });
+
+  it("offers the template only for a blank editable guide", async () => {
+    const user = userEvent.setup();
+    const onUpdateGuide = vi.fn().mockResolvedValue(true);
+    const view = render(
+      <TeamDetailPane
+        team={{ ...team, collaboration_guide: "Keep our own guide" }}
+        t={t}
+        onUpdateGuide={onUpdateGuide}
+      />,
+    );
+    await user.click(screen.getByRole("tab", { name: "teamGuideTab" }));
+    expect(screen.queryByRole("button", { name: "teamGuideFillTemplate" })).not.toBeInTheDocument();
+    const editor = screen.getByRole("textbox", { name: "teamGuideTab" });
+    await user.clear(editor);
+    await user.type(editor, "   ");
+    expect(screen.getByRole("button", { name: "teamGuideFillTemplate" })).toBeEnabled();
+    view.rerender(<TeamDetailPane team={team} t={t} />);
+    expect(screen.queryByRole("button", { name: "teamGuideFillTemplate" })).not.toBeInTheDocument();
+  });
+
   it("places the collaboration guide between members and parent tasks", () => {
     render(<TeamDetailPane team={team} t={t} />);
     expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual([
