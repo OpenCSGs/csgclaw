@@ -3189,3 +3189,28 @@
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+.hub-template-publish-version {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+  padding: var(--space-4);
+  margin-bottom: var(--space-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--panel-strong);
+  color: var(--text);
+  font-size: var(--text-sm-size);
+}
+.hub-template-publish-version strong {
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-base);
+  background: var(--primary-soft);
+  color: var(--primary);
+}
+.hub-template-publish-version small {
+  grid-column: 1 / -1;
+  color: var(--muted);
+  line-height: var(--text-xs-line-height);
+}

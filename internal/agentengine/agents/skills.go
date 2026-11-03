@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strings"
 
+	"csgclaw/internal/skill/discovery"
 	skillinstall "csgclaw/internal/skill/installstate"
 	skilllocal "csgclaw/internal/skill/local"
 	skillsystem "csgclaw/internal/skill/system"
@@ -86,6 +87,11 @@ func (s *Controller) BatchAddSkills(agentID string, skillNames []string) error {
 			return fmt.Errorf("stat agent skill destination %q: %w", dstDir, err)
 		}
 		origin := origins[name]
+		if found, err := skilllocal.Discovered(globalRoot, name); err != nil {
+			return err
+		} else if found != nil {
+			origin = skillinstall.Record{Source: skillinstall.SourceDiscovered, SourceURL: found.Path, Version: found.Version}
+		}
 		if source.Source == skillsystem.SkillSourceSystem {
 			origin = skillinstall.Record{Source: skillinstall.SourceBuiltin}
 		}
@@ -212,6 +218,11 @@ func (s *Controller) ReplaceSkills(ctx context.Context, agentID string, skillNam
 			return err
 		}
 		origin := origins[name]
+		if found, err := skilllocal.Discovered(globalRoot, name); err != nil {
+			return err
+		} else if found != nil {
+			origin = skillinstall.Record{Source: skillinstall.SourceDiscovered, SourceURL: found.Path, Version: found.Version}
+		}
 		if source.Source == skillsystem.SkillSourceSystem {
 			origin = skillinstall.Record{Source: skillinstall.SourceBuiltin}
 		}
@@ -249,7 +260,7 @@ func (s *Controller) ReplaceSkills(ctx context.Context, agentID string, skillNam
 
 func resolveAgentSkillSource(root, name string) (skillsystem.SkillSource, error) {
 	if skillDir, err := skilllocal.ResolveDir(root, name); err == nil {
-		return skillsystem.SkillSource{Name: name, Source: skillsystem.SkillSourceLocal, FS: os.DirFS(skillDir), RootPath: "."}, nil
+		return skillsystem.SkillSource{Name: name, Source: skillsystem.SkillSourceLocal, FS: discovery.BoundedFS(skillDir), RootPath: "."}, nil
 	} else if !errors.Is(err, os.ErrNotExist) && !errors.Is(err, skilllocal.ErrSkillInvalid) {
 		return skillsystem.SkillSource{}, err
 	} else if !skillsystem.IsName(name) {

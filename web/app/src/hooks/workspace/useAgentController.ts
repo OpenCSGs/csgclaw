@@ -13,6 +13,7 @@ import {
   createManagerAgentRequest,
   createNotificationBotRequest,
   deleteAgentLikeRequest,
+  archiveAgent,
   deleteAgentSkillRequest,
   deleteBotRequest,
   deleteFeishuParticipantRequest,
@@ -62,7 +63,7 @@ import {
 import { ACTION_REBUILD_MANAGER } from "@/shared/constants/messages";
 import { selectUnusedAgentAvatar } from "@/shared/avatarOptions";
 import { AGENT_CREATION_WARNINGS_STORAGE_KEY, FEISHU_REGISTRATIONS_STORAGE_KEY } from "@/shared/storage/keys";
-import { localizeAPIError, localizeTemplatePublishError } from "@/shared/i18n";
+import { localizeAPIError, localizeAPIErrorWithDiagnostics } from "@/shared/i18n";
 import { agentDraftWithAvailableModels } from "@/models/agentCreationModels";
 import {
   applyTemplateToDraft,
@@ -117,12 +118,7 @@ import type {
   AgentTemplateLike,
   RuntimeBootstrapConfig,
 } from "@/models/agents";
-import {
-  agentIdentityMatchesUser,
-  isDirectConversation,
-  localIdentitiesMatch,
-  upsertUserInData,
-} from "@/models/conversations";
+import { isDirectConversation, localIdentitiesMatch, upsertUserInData } from "@/models/conversations";
 import type { MCPServer, MCPServerSourceStatus } from "@/models/mcp";
 import { displayTeam, teamMemberIDs } from "@/models/tasks";
 import type { WorkspaceTeam } from "@/models/tasks";
@@ -440,7 +436,6 @@ export function useAgentController({
   setManagerProfileData,
   setSelectedHubTemplateId,
   t,
-  workingParticipantsForRoom,
 }: UseAgentControllerArgs) {
   const { showNotice } = useGlobalNotice();
   const {
@@ -678,10 +673,9 @@ export function useAgentController({
     if (!selectedAgentForPage) {
       return "";
     }
-    const profile = selectedAgentForPage.agent_profile;
-    const modelProviderID =
-      selectedAgentForPage.model_provider_id || selectedAgentForPage.agent_profile?.model_provider_id || "";
-    const modelID = selectedAgentForPage.model_id || selectedAgentForPage.agent_profile?.model_id || "";
+    const profile = agentProfileConfig(selectedAgentForPage);
+    const modelProviderID = selectedAgentForPage.model_provider_id || profile?.model_provider_id || "";
+    const modelID = selectedAgentForPage.model_id || profile?.model_id || "";
     return JSON.stringify({
       id: selectedAgentForPage.id || "",
       name: selectedAgentForPage.name || "",
@@ -1467,7 +1461,7 @@ export function useAgentController({
         { codexAvailable: effectiveBootstrapConfig?.manager_runtime?.installed !== false },
       );
       setAgentModalBootstrapConfig(effectiveBootstrapConfig);
-      let draft = agentToDraft({
+      const draft = agentToDraft({
         avatar: initialDraft.avatar,
         image: defaultWorkerImageForRuntime(
           hubTemplates,
@@ -1481,8 +1475,12 @@ export function useAgentController({
         bot_type: BOT_TYPE_NORMAL,
         agent_profile: defaults.status === "fulfilled" ? defaults.value : {},
       });
-      draft = applyTemplateToDraft(draft, selectedTemplate, effectiveBootstrapConfig, managerAgent?.image || "");
-      const readyDraft = agentDraftWithAvailableModels(draft, createModelCatalog, openCSGAuthenticated, false);
+      const readyDraft = applyTemplateToDraft(
+        agentDraftWithAvailableModels(draft, createModelCatalog, openCSGAuthenticated, false),
+        selectedTemplate,
+        effectiveBootstrapConfig,
+        managerAgent?.image || "",
+      );
       setAgentDraft((current) => {
         if (!current || agentModalRequestRef.current !== requestID) return current;
         const next = { ...current };
@@ -1858,6 +1856,7 @@ export function useAgentController({
     description: string,
     includeMemory: boolean,
     displayName: string,
+    commitMessage = "",
   ): Promise<boolean> {
     if (!selectedAgentForPage?.id || agentPagePublishBusy) {
       return false;
@@ -1887,6 +1886,8 @@ export function useAgentController({
           displayName,
           resolveAgentAvatarSource(selectedAgentForPage, usersById) ||
             String(agents.find((item) => item.id === selectedAgentForPage.id)?.avatar || ""),
+          "",
+          commitMessage,
         );
       } else {
         // Always refresh the snapshot: workspace files can change independently of the form.
@@ -1900,6 +1901,7 @@ export function useAgentController({
           resolveAgentAvatarSource(selectedAgentForPage, usersById) ||
             String(agents.find((item) => item.id === selectedAgentForPage.id)?.avatar || ""),
           localTemplateID || "",
+          commitMessage,
         );
         localTemplateID = String(local.id || "").trim();
         if (!localTemplateID) throw new Error("Local template response is missing its ID");
@@ -1929,7 +1931,7 @@ export function useAgentController({
       const reason =
         target === "local"
           ? errorMessage(err, t("agentActionFailed"))
-          : localizeTemplatePublishError(err, t, t("agentActionFailed"));
+          : localizeAPIErrorWithDiagnostics(err, t, t("agentActionFailed"));
       const message = localTemplateID ? t("agentTemplateSavedPublishFailed", { reason }) : reason;
       setAgentPagePublishError(message);
       setAgentPageSaveError(message);
@@ -2153,36 +2155,8 @@ export function useAgentController({
     }
   }
 
-  async function checkAgentDelete(item: AgentLike): Promise<{ message: string; onResolve?: () => void } | null> {
-    if (isNotificationBotAgent(item)) return null;
-    try {
-      const result = await teamsQuery.refetch();
-      if (result.error) throw result.error;
-      const referencedTeams = (result.data ?? []).filter((candidate) =>
-        teamMemberIDs(candidate).some((id) => agentIdentityMatchesUser(item, { id })),
-      );
-      const team = referencedTeams[0];
-      if (team) {
-        return {
-          message: t("agentDeleteTeamBlocked", { count: referencedTeams.length }),
-          onResolve: () => {
-            navigatePane({ type: WorkspacePaneTypes.team, id: team.id });
-          },
-        };
-      }
-      if (
-        rooms.some((room) =>
-          workingParticipantsForRoom?.(room.id).some((participant) =>
-            agentIdentityMatchesUser(item, { id: participant.participantID, user_id: participant.id }),
-          ),
-        )
-      ) {
-        return { message: t("agentDeleteWorkingBlocked") };
-      }
-      return null;
-    } catch {
-      return { message: t("agentDeleteCheckFailed") };
-    }
+  async function checkAgentDelete(): Promise<{ message: string; onResolve?: () => void } | null> {
+    return null;
   }
 
   async function runAgentAction(item: AgentLike | null | undefined, action: AgentAction): Promise<void> {
@@ -2239,19 +2213,20 @@ export function useAgentController({
       let updatedAgent: AgentLike | null = null;
       const deletingNotificationBot = action === "delete" && isNotificationBotAgent(item);
       if (action === "delete") {
-        const blocked = await checkAgentDelete(item);
+        const blocked = await checkAgentDelete();
         if (blocked) {
           setAgentOperationError(item, blocked.message);
           return;
         }
-        await deleteAgentLikeRequest(item);
+        if (isNotificationBotAgent(item)) await deleteAgentLikeRequest(item);
+        else await archiveAgent(item.id);
         onAgentDeleted?.(item);
         if (activePane.type === WorkspacePaneTypes.agent && activePane.id === item.id) {
           const fallbackAgent = agentSelectionAfterDelete(agentItems, item.id);
           if (fallbackAgent) {
             selectAgent(fallbackAgent, { replace: true });
             showAgentPageNotice(
-              t("agentDeletedAndSwitched", {
+              t(isNotificationBotAgent(item) ? "agentDeletedAndSwitched" : "agentArchivedAndSwitched", {
                 deleted: String(item.name || item.id),
                 selected: String(fallbackAgent.name || fallbackAgent.id),
               }),
@@ -2265,6 +2240,7 @@ export function useAgentController({
         updatedAgent = await runAgentActionRequest(item.id, action);
       }
       await refreshAgentsWithUpdatedAgent(updatedAgent);
+      if (action === "delete") await refreshWorkspaceBootstrap();
       if (action === "delete" && !deletingNotificationBot) {
         await refreshAgentSkills(item.id);
       }
@@ -2282,7 +2258,11 @@ export function useAgentController({
         clearAgentPageNotice(item.id);
       }
       if (!(actionUsesOpenCSG && handleOpenCSGAuthenticationError(err))) {
-        setAgentOperationError(item, errorMessage(err, t("agentActionFailed")), apiErrorBillingURL(err));
+        setAgentOperationError(
+          item,
+          localizeAPIErrorWithDiagnostics(err, t, t("agentActionFailed")),
+          apiErrorBillingURL(err),
+        );
       }
     } finally {
       releaseAgentAction(item.id, busyKey);
@@ -2886,6 +2866,9 @@ export function useAgentController({
     workerAgentItems,
     notifierWebhookPublicOrigin,
     agentViewProps: {
+      linkedTemplate: hubTemplates.find(
+        (template) => template.source?.kind === "local" && template.source_agent_id === selectedAgentForPage?.id,
+      ),
       item: selectedAgentForPage,
       t,
       locale,

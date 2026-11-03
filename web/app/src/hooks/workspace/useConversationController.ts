@@ -760,7 +760,8 @@ export function useConversationController({
         .filter((user): user is IMUser => Boolean(user))
     : [];
   const inviteCandidates = activeConversation
-    ? data?.users.filter((user) => !conversationHasLocalIdentity(activeConversation, user.id)) || []
+    ? data?.users.filter((user) => !user.agent_state && !conversationHasLocalIdentity(activeConversation, user.id)) ||
+      []
     : [];
   const inviteActionLabel = t("memberManagement");
 
@@ -770,7 +771,7 @@ export function useConversationController({
     }
     const allowed = conversationMemberParticipantIDs(activeConversation);
     return getMentionCandidates(
-      data.users.filter((user) => allowed.has(participantIDForLocalIdentity(user.id))),
+      data.users.filter((user) => !user.agent_state && allowed.has(participantIDForLocalIdentity(user.id))),
       composerMentionState.query,
     );
   }, [data, activeConversation, composerMentionState]);
@@ -782,7 +783,7 @@ export function useConversationController({
     }
     const allowed = conversationMemberParticipantIDs(activeConversation);
     data.users
-      .filter((user) => allowed.has(participantIDForLocalIdentity(user.id)))
+      .filter((user) => !user.agent_state && allowed.has(participantIDForLocalIdentity(user.id)))
       .forEach((user) => {
         const name = String(user.name ?? "")
           .trim()

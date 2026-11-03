@@ -241,53 +241,6 @@
   overflow-wrap: anywhere;
   white-space: normal;
 }
-
-.profile-modal.agent-modal .agent-sandbox-toggle {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-}
-
-.profile-modal.agent-modal .agent-sandbox-toggle.readonly {
-  cursor: default;
-}
-
-.profile-modal.agent-modal .agent-sandbox-toggle.readonly:hover,
-.profile-modal.agent-modal .agent-sandbox-toggle.readonly:focus-within,
-.profile-modal.agent-modal .agent-sandbox-toggle.readonly:has(input:where(:not([data-csg-control])):checked) {
-  border-color: var(--line);
-  background: var(--surface);
-  color: inherit;
-  box-shadow: var(--shadow-xs);
-}
-
-.profile-modal.agent-modal .agent-sandbox-copy {
-  display: flex;
-  flex: 1 1 auto;
-  min-width: 0;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.profile-modal.agent-modal .agent-sandbox-copy strong {
-  color: var(--text);
-  font-size: var(--text-sm-size);
-  font-weight: var(--font-weight-medium);
-  line-height: var(--text-sm-line-height);
-}
-
-.profile-modal.agent-modal .agent-sandbox-copy small {
-  color: var(--muted);
-  font-size: var(--text-xs-size);
-  font-weight: var(--font-weight-normal);
-  line-height: var(--text-xs-line-height);
-  white-space: normal;
-}
-
-.profile-modal.agent-modal .agent-sandbox-field input:where(:not([data-csg-control]))[type="checkbox"] {
-  margin: 1px 0 0;
-}
-
 .selection-item:hover {
   border-color: color-mix(in oklab, var(--brand-600) 42%, var(--line));
   box-shadow:

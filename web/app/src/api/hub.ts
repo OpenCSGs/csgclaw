@@ -9,6 +9,7 @@ export type AgentTemplatePublishTarget = "local" | "official";
 
 type PublishAgentTemplatePayload = {
   agent_id: string;
+  commit_message?: string;
   registry: AgentTemplatePublishTarget;
   name: string;
   display_name?: string;
@@ -18,8 +19,8 @@ type PublishAgentTemplatePayload = {
   include_memory?: boolean;
 };
 
-export function fetchHubTemplates(): Promise<HubTemplate[]> {
-  return get<HubTemplate[]>(HUB_TEMPLATES_PATH);
+export function fetchHubTemplates(scope?: "local" | "remote"): Promise<HubTemplate[]> {
+  return get<HubTemplate[]>(scope ? `${HUB_TEMPLATES_PATH}?scope=${scope}` : HUB_TEMPLATES_PATH);
 }
 
 export function fetchHubTemplate(templateID: string): Promise<HubTemplate> {
@@ -54,9 +55,11 @@ export function publishAgentTemplateRequest(
   displayName = "",
   avatar = "",
   replaceTemplateID = "",
+  commitMessage = "",
 ): Promise<HubTemplate> {
   const payload: PublishAgentTemplatePayload = {
     agent_id: agentID,
+    ...(commitMessage.trim() ? { commit_message: commitMessage.trim() } : {}),
     registry,
     name,
     ...(displayName.trim() ? { display_name: displayName.trim() } : { display_name: name }),
@@ -68,9 +71,14 @@ export function publishAgentTemplateRequest(
   return post<HubTemplate>(HUB_TEMPLATES_PATH, payload);
 }
 
-export function publishHubTemplateToCommunityRequest(templateID: string, includeMemory = false): Promise<HubTemplate> {
+export function publishHubTemplateToCommunityRequest(
+  templateID: string,
+  includeMemory = false,
+  expectedRevision?: number,
+): Promise<HubTemplate> {
   return post<HubTemplate>(HUB_TEMPLATES_PATH, {
     template_id: templateID,
+    ...(expectedRevision !== undefined ? { expected_revision: expectedRevision } : {}),
     registry: "official",
     ...(includeMemory ? { include_memory: true } : {}),
   });
@@ -86,4 +94,32 @@ function hubTemplatePath(templateID: string): string {
     .replaceAll(HUB_TEMPLATE_ESCAPE, HUB_TEMPLATE_ESCAPE.repeat(2))
     .replaceAll("/", HUB_TEMPLATE_NAMESPACE_SEPARATOR);
   return `${HUB_TEMPLATES_PATH}/${encodeURIComponent(routeID)}`;
+}
+
+export type TemplateVersion = {
+  name?: string;
+  description?: string;
+  runtime_kind?: string;
+  revision: number;
+  message?: string;
+  author?: { id?: string; name?: string };
+  created_at: string;
+  restored_from?: number;
+};
+
+export function fetchTemplateVersions(id: string): Promise<TemplateVersion[]> {
+  return get(`${hubTemplatePath(id)}/versions`);
+}
+export function fetchTemplateVersionWorkspace(id: string, revision: number, path = ""): Promise<HubWorkspaceListing> {
+  return get(`${hubTemplatePath(id)}/versions/${revision}?path=${encodeURIComponent(path)}`);
+}
+export function fetchTemplateVersionFile(id: string, revision: number, path: string): Promise<HubWorkspaceFile> {
+  return get(`${hubTemplatePath(id)}/versions/${revision}?file=true&path=${encodeURIComponent(path)}`);
+}
+export function restoreTemplateVersion(id: string, revision: number, message = ""): Promise<HubTemplate> {
+  return post(`${hubTemplatePath(id)}/versions/${revision}/restore`, { commit_message: message });
+}
+
+export function deleteTemplateVersion(id: string, revision: number): Promise<{ deleted: boolean }> {
+  return del(`${hubTemplatePath(id)}/versions/${revision}`);
 }

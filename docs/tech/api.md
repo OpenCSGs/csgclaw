@@ -116,6 +116,53 @@ Returns `503 Service Unavailable` if the upgrade manager is not configured.
 
 ## Skill API
 
+### Local skill discovery
+
+On server startup, every 30 seconds, and when listing the skill library, CSGClaw scans known user skill directories and automatically registers their source paths in `~/.csgclaw/skills/.discovered-skills.json`.
+Registration is by reference, without copying, editing, or deleting external skills, and requires no symlink privilege on Windows.
+`GET /api/v1/skills` includes `source: "discovered"` and a `discovery` object containing the selected tool, path, version, modification time, all same-name sources, a content key, and a `new` notification flag.
+The library and Agent skill assignment resolve the same selected source.
+An explicit assignment to an Agent installs its usual workspace snapshot, including supporting skill resources.
+
+| Source | User skill directory | Reference |
+| --- | --- | --- |
+| Agent / shared agents | `~/.agent/skills`, `~/.agents/skills` | [Agent Skills in Codex](https://learn.chatgpt.com/docs/customization/overview#skills) documents the shared `.agents` location; `.agent` is an additional user-requested location. |
+| Claude Code | `~/.claude/skills` | [Claude Code skills](https://code.claude.com/docs/en/skills) |
+| Codex | `~/.codex/skills` | Existing standalone skills; shared skills also use `~/.agents/skills`. |
+| Pi | `~/.pi/agent/skills` | [Pi skills](https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/docs/skills.md) |
+| OpenCode | `~/.config/opencode/skills` | [OpenCode skills](https://opencode.ai/docs/skills/) |
+| WorkBuddy / Cursor / CodeBuddy | `~/.workbuddy/skills`, `~/.cursor/skills`, `~/.codebuddy/skills` | [Tencent installation directories](https://cloud.tencent.com/document/product/1278/131433) |
+
+Documented environment overrides (`CLAUDE_CONFIG_DIR`, `CODEX_HOME`, `PI_CODING_AGENT_DIR`, `XDG_CONFIG_HOME`) add their corresponding skill roots.
+Discovery never scans arbitrary projects or reads application configuration, conversations, credentials, scripts, or references.
+Only regular `SKILL.md` files up to 1 MiB are opened, with bounded traversal, cycle detection, and no recursive directory-link following.
+Installed skill directory links at the first level are supported; links to arbitrary directories without their own skill definition are ignored.
+Invalid or inaccessible external skills are skipped independently.
+Explicit skill previews and Agent assignment may read supporting files inside the selected skill, but reject symlink escapes.
+
+Same-name external candidates are deduplicated case-insensitively.
+Valid semantic versions take precedence over unversioned candidates, then the higher semantic version wins.
+Equal or unavailable versions use the definition modification time, with the source path as a stable final tie-breaker.
+The same selection rule applies when a tracked external skill collides with a local library copy that declares comparable metadata.
+A local copy with invalid or absent metadata remains an explicit local override.
+Deleting a discovered library entry suppresses automatic registration across restarts and leaves its external files intact.
+`POST /api/v1/skills/discovery/rescan` explicitly rescans known directories, restores removed links, and returns the full skill list.
+Restored skills receive an unseen notification even if their current content was acknowledged before removal.
+Ordinary listing and background scans continue to respect removals.
+Installed summaries include `directory`, the absolute directory of the selected source or local installation; embedded-only skills have no physical directory.
+The settings library uses a compact two-column card list, with source application filtering and manual rescanning on one toolbar row.
+Every recorded application source remains filterable after skill deduplication, alongside builtin, market, and local skills.
+New or updated skills carry a compact badge that is acknowledged when opening their details.
+Installed skill details show a copyable absolute directory and explicitly identify the active declared version.
+Source software aliases pointing to the same canonical directory are shown as one shared skill, while different directories can be compared with their versions, modification times, and an active-source marker.
+The compact source badge reports the active version and software count; it does not imply additional software aliases are newer versions.
+File previews follow the active source key to avoid reusing content cached from an older selected source.
+
+`POST /api/v1/skills/discovery/ack` accepts `{"keys":["<content key>"]}` and returns `204 No Content`.
+It acknowledges only the specified current discoveries, so skills discovered concurrently retain their notification.
+Acknowledgements persist across restarts; new or changed definitions receive new keys and new notifications.
+The settings page refreshes discoveries every 30 seconds while open and also provides manual rescanning.
+
 ### `GET /api/v1/skills/tree` and `GET /api/v1/skills/file`
 
 Read installed Skill files using the existing `path` parameter. For market previews, pass `remote_path` and optionally `ref` instead: the tree endpoint lists that remote repository, while the file endpoint also takes a repository-relative `path`, such as `SKILL.md`. These read-only requests use the same Hub environment and matching user credentials as remote installation, without installing or changing local Skills.
@@ -1613,7 +1660,7 @@ and `message_stop`.
 Only one turn may run for a session at a time.
 Different session IDs may run concurrently.
 Using the same global session with another agent returns `409 session_agent_conflict`.
-The server waits up to five minutes for a final agent response and returns `504 response_timeout` afterward.
+The server imposes no response duration limit. Client disconnects and explicit cancellation still cancel the running response.
 
 ### `POST /api/v1/agents/{agent}/sessions/{session_id}/responses/cancel`
 
@@ -1801,3 +1848,5 @@ Fetch Metadata is never an authorization credential.
 The Web UI browses attachment metadata from the existing transcript APIs and uses per-file capabilities for previews and downloads; transcript access policy remains unchanged.
 External clients and Agents retain their existing token and room-membership checks.
 Browser requests do not receive the server management token and do not gain deletion permissions.
+
+Local template identity, retained versions, restore endpoints and cloud replacement behavior are described in [Local template versions](template-versions.md).

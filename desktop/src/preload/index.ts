@@ -9,6 +9,7 @@ import type {
   DesktopWindowState,
   DesktopOAuthInput,
   DesktopThemeSource,
+  DesktopWindowChromeAppearance,
   DesktopUpdateChannel,
   DesktopUpdateStatus,
 } from "../shared/desktopBridge.types";
@@ -29,6 +30,7 @@ const DesktopIPC = {
   showTurnNotification: "csgclaw:desktop:show-turn-notification",
   turnNotificationClick: "csgclaw:desktop:turn-notification-click",
   setThemeSource: "csgclaw:desktop:set-theme-source",
+  setWindowChromeAppearance: "csgclaw:desktop:set-window-chrome-appearance",
   setUpdateChannel: "csgclaw:desktop:set-update-channel",
   updateStatus: "csgclaw:desktop:update-status",
 } as const;
@@ -72,6 +74,8 @@ const bridge: DesktopBridge = Object.freeze({
   },
   setThemeSource: (theme: DesktopThemeSource) =>
     ipcRenderer.invoke(DesktopIPC.setThemeSource, theme),
+  setWindowChromeAppearance: (appearance: DesktopWindowChromeAppearance) =>
+    ipcRenderer.invoke(DesktopIPC.setWindowChromeAppearance, appearance),
   setUpdateChannel: (channel: DesktopUpdateChannel) =>
     ipcRenderer.invoke(DesktopIPC.setUpdateChannel, channel),
   onUpdateStatus: (listener: (status: DesktopUpdateStatus) => void) => {

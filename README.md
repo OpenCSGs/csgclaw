@@ -33,7 +33,7 @@ The installers download a prebuilt release bundle, install it into user-local di
 - `install.sh` currently supports macOS arm64, Linux amd64, and Linux arm64.
 - `install.ps1` currently supports Windows amd64.
 
-Official release bundles are also published for macOS amd64 and Windows amd64. Windows bundles currently default to Docker and require a working local Docker installation.
+Official release bundles are also published for macOS amd64 and Windows amd64. Local runtime execution does not require Docker.
 
 **Build from source:**
 
@@ -41,7 +41,7 @@ Official release bundles are also published for macOS amd64 and Windows amd64. W
 make build
 ```
 
-See [docs/tech/build.md](docs/tech/build.md) for runtime image refs, sandbox CLI packaging, and other Makefile targets.
+See [docs/tech/build.md](docs/tech/build.md) for build targets and companion host CLI packaging.
 
 **Build the desktop app (Electron):**
 
@@ -74,7 +74,7 @@ Use `csgclaw serve --browser` to open it automatically after startup.
 
 ## Configuration
 
-`csgclaw serve` uses a local config with server, bootstrap, sandbox, and channel settings, and auto-creates any missing bootstrap state on first run. Agent model/provider profiles are stored in agent state and managed from the Web UI. See [docs/tech/config.md](docs/tech/config.md) for sandbox provider options, Worker override examples, and agent profile details.
+`csgclaw serve` uses a local config with server, bootstrap and channel settings, and auto-creates any missing bootstrap state on first run. Agent model/provider profiles are stored in agent state and managed from the Web UI. See [docs/tech/config.md](docs/tech/config.md) for runtime deployment, migration and Agent profile details.
 
 Maintainer-facing architecture, API, structured skill output, and IM thread design notes live in [docs/tech/architecture.md](docs/tech/architecture.md), [docs/tech/api.md](docs/tech/api.md), [docs/tech/structured-output.md](docs/tech/structured-output.md), and [docs/tech/im/im-threads.md](docs/tech/im/im-threads.md).
 
@@ -84,7 +84,7 @@ Maintainer-facing architecture, API, structured skill output, and IM thread desi
 - **One-click install** — prebuilt releases for macOS arm64/amd64, Linux amd64/arm64, and Windows amd64; up and running in minutes
 - **WebUI out of the box** — browser-based workspace available immediately after `csgclaw serve`
 - **Multi-channel support** — connect Feishu, WeChat, Matrix, or other channels when needed
-- **Isolated execution** — each Worker runs in a secure sandbox with security boundaries enabled by default
+- **Runtime access controls** - Workers use the configured runtime execution mode and permissions
 - **Role-based Workers** — specialize Workers for frontend, backend, testing, docs, research, and more
 
 ## What CSGClaw Is
@@ -110,7 +110,7 @@ CSGClaw gives you one **Manager** and a set of specialized **Workers**, so inste
 
 **Workers** — role-specific executors (frontend, backend, testing, docs, research…). Specialization keeps context clean and reduces role confusion.
 
-**Sandbox** — Worker execution is isolated by the configured sandbox provider. CSGClaw defaults to **Docker** when the provider is unset. The deprecated BoxLite provider remains available through explicit configuration for legacy development use.
+**Runtime environment** - Codex and DSH run as local processes without Docker or BoxLite.
 
 **Interface** — WebUI out of the box; Feishu, WeChat, Matrix, and other channels available as integrations.
 
@@ -140,8 +140,8 @@ The key isn't that multiple agents exist — it's that **their collaboration is 
 **Codex and DeepSeek Harness runtimes.**
 CSGClaw uses the bundled Codex CLI for the Manager and supports Codex and DeepSeek Harness workers through a shared Agent Engine.
 
-**Docker by default, sandbox-agnostic by design.**
-Isolation is non-negotiable. Docker is the default sandbox provider for broad cross-platform availability. The deprecated BoxLite provider remains supported only for explicitly configured legacy development environments.
+**Local runtime execution.**
+Codex and DSH execute in the environment running CSGClaw, with access controlled by runtime permissions and execution modes.
 
 **WebUI first, channel-agnostic by design.**
 Many multi-agent systems are tightly coupled to one messaging protocol. CSGClaw ships with a built-in WebUI so you can start immediately, while keeping other channels (Feishu, WeChat, Matrix) as optional integrations — not assumptions.

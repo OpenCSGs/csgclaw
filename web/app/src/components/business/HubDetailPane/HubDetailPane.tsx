@@ -1,9 +1,10 @@
 import {
-  hasSameNamedCloudTemplate,
-  templateInGroup,
-  templateSourceLabelKey,
-  type TemplateGroup,
-} from "@/models/templateGroups";
+  templatePublicationStatus,
+  templatePublicationTarget,
+  templateVersionLabel,
+} from "@/models/templatePublication";
+import { useTemplatePublication } from "./useTemplatePublication";
+import { templateInGroup, templateSourceLabelKey, type TemplateGroup } from "@/models/templateGroups";
 import { AgentAvatarImage } from "@/components/business/AgentAvatar";
 import { agenticHubCreateAgentURL, agenticHubTemplatesURL } from "@/models/agenticHub";
 import { parseMCPServerDocument } from "@/models/mcpServerDocument";
@@ -84,6 +85,7 @@ import { isReadonlySkill, skillSourceBadgeName } from "@/models/skillhub";
 import type { SkillFile, SkillSummary, SkillTree } from "@/models/skillhub";
 import type { WorkspaceEntry, WorkspaceFile } from "@/models/workspace";
 import { RemoteMCPList } from "./RemoteMCPList";
+import { TemplateVersionHistory } from "./TemplateVersionHistory";
 import styles from "./HubDetailPane.module.css";
 
 type ModuleClassValue = string | false | null | undefined;
@@ -97,7 +99,7 @@ function moduleClassNames(...values: ModuleClassValue[]): string {
     .join(" ");
 }
 const EMPTY_WORKSPACE_ENTRIES: readonly WorkspaceEntry[] = [];
-type TemplateDetailTabID = "profile" | "instructions" | "memory" | "skills" | "mcp";
+type TemplateDetailTabID = "profile" | "instructions" | "memory" | "skills" | "mcp" | "versions";
 type MCPCreateMode = "manual" | "remote";
 type SkillFilterTabID = "all" | "remote" | "local";
 type TemplateFilterTabID = TemplateGroup;
@@ -1091,10 +1093,7 @@ export function HubDetailPane({
   } = hub?.detailPaneProps ?? EMPTY_HUB_DETAIL_PROPS;
   const canDeleteTemplate = isDeletableHubTemplate(selectedTemplate);
   const templatesURL = agenticHubTemplatesURL(agenticHubSiteURL);
-  const hasCloudTemplateWithSameName = Boolean(
-    templateUsername && selectedTemplate && hasSameNamedCloudTemplate(selectedTemplate, templates, templateUsername),
-  );
-  const canPublishTemplate = canPublishHubTemplateToCommunity(selectedTemplate) && !hasCloudTemplateWithSameName;
+  const canPublishTemplate = canPublishHubTemplateToCommunity(selectedTemplate);
   const templateReview = hubTemplateReviewState(selectedTemplate);
 
   const activeResourceType = useMemo(() => {
@@ -1344,15 +1343,30 @@ export function HubDetailPane({
         label: t("agentAppsTab"),
         count: templateMCPServers.length > 0 ? templateMCPServers.length : undefined,
       },
+      ...(selectedTemplate?.source?.kind === "local"
+        ? [
+            {
+              id: "versions" as const,
+              label: t("templateVersionsTab", { count: selectedTemplate?.version_count ?? 1 }),
+            },
+          ]
+        : []),
     ],
-    [t, templateMCPServers.length, templateMemoryEnabled, templateSkillCount],
+    [
+      t,
+      templateMCPServers.length,
+      templateMemoryEnabled,
+      templateSkillCount,
+      selectedTemplate?.source?.kind,
+      selectedTemplate?.version_count,
+    ],
   );
   useEffect(() => {
     setActiveTemplateTab("profile");
   }, [selectedTemplateId]);
   useEffect(() => {
     const directories = new Set<string>(["skills"]);
-    if (activeTemplateTab !== "profile") {
+    if (activeTemplateTab !== "profile" && activeTemplateTab !== "versions") {
       directories.add(
         activeTemplateTab === "mcp" ? "mcps" : activeTemplateTab === "memory" ? "memories" : activeTemplateTab,
       );
@@ -1467,6 +1481,40 @@ export function HubDetailPane({
     }
   }
 
+  const publishVersionLabel = templateVersionLabel(selectedTemplate) || t("templatePublishLegacyVersion");
+  const publication = useTemplatePublication(
+    selectedTemplate,
+    templates,
+    templateUsername,
+    agenticHubSiteURL,
+    publishBusy,
+  );
+  const hasCloudTemplateWithSameName = Boolean(publication.target);
+  const remoteVersion = templateVersionLabel(publication.remote);
+  const lastPublishedRevision = publication.target?.publication?.revision;
+  const communityVersionLabel = remoteVersion
+    ? t("templateCommunityVersion", { version: remoteVersion })
+    : lastPublishedRevision
+      ? t("templateLastPublishedVersion", { version: `V${lastPublishedRevision}` })
+      : t("templateViewCommunity");
+  const publicationStatus = selectedTemplate
+    ? templatePublicationStatus(selectedTemplate, publication.remote)
+    : "unknown";
+  const publicationBadge =
+    publicationStatus === "current"
+      ? t("templateCurrentVersionPublished")
+      : publicationStatus === "different"
+        ? t("templateCommunityVersionDifferent")
+        : lastPublishedRevision
+          ? t("templateLastPublishedVersion", { version: `V${lastPublishedRevision}` })
+          : t("templateCommunityVersionUnconfirmed");
+  const currentVersionPublished = publicationStatus === "current";
+  const publishActionLabel = currentVersionPublished
+    ? t("templateVersionPublished", { version: publishVersionLabel })
+    : templateVersionLabel(selectedTemplate)
+      ? t("templatePublishVersionAction", { version: publishVersionLabel })
+      : t("agentPublishCommunity");
+
   async function handlePublishTemplate() {
     const result = await onPublishTemplate?.(selectedTemplate, publishTemplateIncludeMemory);
     if (result?.status === "success") {
@@ -1497,7 +1545,7 @@ export function HubDetailPane({
 
   function selectTemplateTab(tab: TemplateDetailTabID) {
     setActiveTemplateTab(tab);
-    if (tab !== "profile") {
+    if (tab !== "profile" && tab !== "versions") {
       const selectedFile =
         tab === "skills"
           ? firstTemplateSectionFile(workspaceEntries, "skills", "SKILL.md")
@@ -1865,7 +1913,12 @@ export function HubDetailPane({
                     {filteredTemplates.map((template) => {
                       const active = selectedTemplate?.id === template.id;
                       const review = hubTemplateReviewState(template);
-                      const isPublished = hasSameNamedCloudTemplate(template, templates, templateUsername);
+                      const listPublication = templatePublicationTarget(
+                        template,
+                        templates,
+                        templateUsername,
+                        agenticHubSiteURL,
+                      );
                       return (
                         <button
                           key={template.id}
@@ -1893,9 +1946,13 @@ export function HubDetailPane({
                           <span className={moduleClassNames("hub-skill-card-copy")}>
                             <span className={moduleClassNames("hub-skill-card-title")}>
                               {template.display_name?.trim() || hubTemplateFullName(template)}
-                              {isPublished ? (
+                              {listPublication ? (
                                 <span className={moduleClassNames("mini-badge")}>
-                                  {t("resourcesTemplatePublished")}
+                                  {listPublication.publication?.revision
+                                    ? t("templateLastPublishedVersion", {
+                                        version: `V${listPublication.publication.revision}`,
+                                      })
+                                    : t("templateCommunityVersionUnconfirmed")}
                                 </span>
                               ) : null}
                             </span>
@@ -1957,7 +2014,7 @@ export function HubDetailPane({
                             {t(templateSourceLabelKey(selectedTemplate, templateUsername))}
                           </span>
                           {hasCloudTemplateWithSameName ? (
-                            <span className={moduleClassNames("mini-badge")}>{t("resourcesTemplatePublished")}</span>
+                            <span className={moduleClassNames("mini-badge")}>{publicationBadge}</span>
                           ) : null}
                         </div>
                       </div>
@@ -1981,7 +2038,7 @@ export function HubDetailPane({
                         target="_blank"
                         rel="noopener noreferrer"
                       >
-                        {t("resourcesTemplatePublishedOnHub")} <ExternalLink size={14} />
+                        {communityVersionLabel} <ExternalLink size={14} />
                       </LinkButton>
                     ) : null}
                     {canPublishTemplate ? (
@@ -1989,7 +2046,7 @@ export function HubDetailPane({
                         variant="secondaryGray"
                         size="md"
                         loading={publishBusy}
-                        disabled={publishBusy || publishDisabled}
+                        disabled={publishBusy || publishDisabled || currentVersionPublished}
                         title={publishDisabled ? t("agentPublishLoginRequired") : undefined}
                         onClick={() => {
                           onResetPublishError?.();
@@ -1997,7 +2054,7 @@ export function HubDetailPane({
                           setPublishChoiceDialogOpen(true);
                         }}
                       >
-                        {t("agentPublishCommunity")}
+                        {publishActionLabel}
                       </Button>
                     ) : null}
                     {canDeleteTemplate ? (
@@ -2062,7 +2119,10 @@ export function HubDetailPane({
                 })}
               </nav>
 
-              {activeTemplateTab === "profile" ? (
+              {activeTemplateTab === "versions" && selectedTemplate.source?.kind === "local" ? (
+                <TemplateVersionHistory key={selectedTemplate.id} template={selectedTemplate} t={t} locale={locale} />
+              ) : null}
+              {activeTemplateTab === "versions" ? null : activeTemplateTab === "profile" ? (
                 <div className={moduleClassNames("profile-editor-shell hub-template-profile-shell")}>
                   <section className={moduleClassNames("profile-section")}>
                     <div className={moduleClassNames("profile-section-heading")}>
@@ -2900,7 +2960,7 @@ export function HubDetailPane({
                   <DialogTitle>
                     {hubTemplateFullName(selectedTemplate)}
                     {hasCloudTemplateWithSameName ? (
-                      <span className={moduleClassNames("mini-badge")}>{t("resourcesTemplatePublished")}</span>
+                      <span className={moduleClassNames("mini-badge")}>{publicationBadge}</span>
                     ) : null}
                   </DialogTitle>
                   <DialogDescription>{selectedTemplate.description || ""}</DialogDescription>
@@ -2948,7 +3008,10 @@ export function HubDetailPane({
                     );
                   })}
                 </nav>
-                {activeTemplateTab === "profile" ? (
+                {activeTemplateTab === "versions" && selectedTemplate.source?.kind === "local" ? (
+                  <TemplateVersionHistory key={selectedTemplate.id} template={selectedTemplate} t={t} locale={locale} />
+                ) : null}
+                {activeTemplateTab === "versions" ? null : activeTemplateTab === "profile" ? (
                   <div className={moduleClassNames("profile-editor-shell hub-template-profile-shell")}>
                     <section className={moduleClassNames("profile-section")}>
                       <div className={moduleClassNames("profile-grid-compact hub-template-profile-grid")}>
@@ -3197,7 +3260,7 @@ export function HubDetailPane({
                     target="_blank"
                     rel="noopener noreferrer"
                   >
-                    {t("resourcesTemplatePublishedOnHub")} <ExternalLink size={14} />
+                    {communityVersionLabel} <ExternalLink size={14} />
                   </LinkButton>
                 ) : null}
                 {canPublishTemplate ? (
@@ -3205,7 +3268,7 @@ export function HubDetailPane({
                     variant="secondaryGray"
                     size="md"
                     loading={publishBusy}
-                    disabled={publishBusy || publishDisabled}
+                    disabled={publishBusy || publishDisabled || currentVersionPublished}
                     title={publishDisabled ? t("agentPublishLoginRequired") : undefined}
                     onClick={() => {
                       onResetPublishError?.();
@@ -3213,7 +3276,7 @@ export function HubDetailPane({
                       setPublishChoiceDialogOpen(true);
                     }}
                   >
-                    {t("agentPublishCommunity")}
+                    {publishActionLabel}
                   </Button>
                 ) : null}
                 {
@@ -3550,12 +3613,17 @@ export function HubDetailPane({
           <DialogHeader>
             <div>
               <DialogTitle>{t("agentPublishTemplateTitle")}</DialogTitle>
-              <DialogDescription>{t("agentPublishTemplateCommunitySubtitle")}</DialogDescription>
+              <DialogDescription>{t("templatePublishCommunitySubtitle")}</DialogDescription>
             </div>
             <DialogCloseButton label={t("close")} size="sm" variant="tertiaryGray" />
           </DialogHeader>
-          {templateMemoryEnabled ? (
-            <DialogBody>
+          <DialogBody>
+            <div className={moduleClassNames("hub-template-publish-version")}>
+              <span>{t("templatePublishVersionLabel")}</span>
+              <strong>{publishVersionLabel}</strong>
+              <small>{t("templatePublishLatestHint")}</small>
+            </div>
+            {templateMemoryEnabled ? (
               <label className={moduleClassNames("hub-template-publish-memory-option")}>
                 <Checkbox
                   aria-label={t("agentPublishIncludeMemory")}
@@ -3567,8 +3635,8 @@ export function HubDetailPane({
                   <small>{t("agentPublishIncludeMemoryWarning")}</small>
                 </span>
               </label>
-            </DialogBody>
-          ) : null}
+            ) : null}
+          </DialogBody>
           {publishError ? (
             <div className={moduleClassNames("form-error")} role="alert">
               <span className="whitespace-pre-wrap break-words">{publishError}</span>
@@ -3591,7 +3659,9 @@ export function HubDetailPane({
               disabled={publishBusy}
               onClick={() => void handlePublishTemplate()}
             >
-              {t("agentPublishCommunityTemplateOnly")}
+              {templateVersionLabel(selectedTemplate)
+                ? t("templatePublishVersionAction", { version: publishVersionLabel })
+                : t("agentPublishCommunityTemplateOnly")}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -1,6 +1,7 @@
 package codex
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -19,7 +20,9 @@ const (
 func (m *appServerManager) handleAppServerNotification(runtimeID string, live *liveSession, note appServerNotification) {
 	var params map[string]any
 	if len(note.Params) > 0 && string(note.Params) != "null" {
-		if err := json.Unmarshal(note.Params, &params); err != nil {
+		decoder := json.NewDecoder(bytes.NewReader(note.Params))
+		decoder.UseNumber()
+		if err := decoder.Decode(&params); err != nil {
 			if live.appClient != nil {
 				live.appClient.logDebug("ignore malformed codex app-server notification params", "method", note.Method, "error", err)
 			}
@@ -29,6 +32,11 @@ func (m *appServerManager) handleAppServerNotification(runtimeID string, live *l
 	if params == nil {
 		params = map[string]any{}
 	}
+
+	if waiter := live.appServerTurnWaiter(appServerString(params, "threadId")); waiter != nil {
+		waiter.captureDiagnosticNotification(appServerNotificationTurnID(params), map[string]any{"method": note.Method, "params": params, "received_at": note.ReceivedAt})
+	}
+
 	if note.Method == "turn/completed" {
 		at := note.ReceivedAt
 		if at.IsZero() {
@@ -81,6 +89,10 @@ func appServerRequestIDValue(value any) string {
 	switch typed := value.(type) {
 	case string:
 		return strings.TrimSpace(typed)
+	case json.Number:
+		if value, err := typed.Int64(); err == nil {
+			return fmt.Sprintf("%d", value)
+		}
 	case float64:
 		if typed == float64(int64(typed)) {
 			return fmt.Sprintf("%d", int64(typed))
@@ -118,6 +130,11 @@ func (m *appServerManager) handleRawAppServerNotification(runtimeID string, live
 	switch method {
 	case "thread/tokenUsage/updated":
 		m.publishContextUsage(runtimeID, live, threadID, params, "")
+		live.notifyAppServerTurn(threadID, appServerTurnResult{
+			turnID:   appServerNotificationTurnID(params),
+			activity: method,
+			progress: true,
+		})
 	case "turn/started":
 		live.notifyAppServerTurn(threadID, appServerTurnResult{
 			turnID:   appServerNotificationTurnID(params),
@@ -138,7 +155,6 @@ func (m *appServerManager) handleRawAppServerNotification(runtimeID string, live
 		if strings.HasPrefix(method, "item/") {
 			if appServerNestedString(params, "item", "type") == "contextCompaction" {
 				m.publishContextUsage(runtimeID, live, threadID, params, method)
-				return
 			}
 			m.handleRawItemNotification(runtimeID, live, threadID, method, params)
 		}
@@ -249,6 +265,17 @@ func (m *appServerManager) handleRawErrorNotification(runtimeID string, live *li
 }
 
 func (m *appServerManager) handleRawItemNotification(runtimeID string, live *liveSession, threadID string, method string, params map[string]any) {
+	// Streaming progress carries itemId rather than a complete item object.
+	// Account for it before the item lifecycle handler below.
+	switch method {
+	case "item/reasoning/textDelta", "item/reasoning/summaryTextDelta", "item/reasoning/summaryPartAdded", "item/mcpToolCall/progress":
+		live.notifyAppServerTurn(threadID, appServerTurnResult{
+			turnID:   appServerNotificationTurnID(params),
+			activity: strings.TrimPrefix(method, "item/") + ":" + appServerString(params, "itemId"),
+			progress: true,
+		})
+		return
+	}
 	if method == "item/agentMessage/delta" {
 		itemID := appServerString(params, "itemId")
 		delta, _ := params["delta"].(string)
@@ -280,9 +307,9 @@ func (m *appServerManager) handleRawItemNotification(runtimeID string, live *liv
 			}
 		}
 		live.notifyAppServerTurn(threadID, appServerTurnResult{
-			activity:          "agentMessage:delta:" + itemID,
-			progress:          true,
-			assistantActivity: true,
+			turnID:   appServerNotificationTurnID(params),
+			activity: "agentMessage:delta:" + itemID,
+			progress: true,
 		})
 		return
 	}
@@ -293,6 +320,7 @@ func (m *appServerManager) handleRawItemNotification(runtimeID string, live *liv
 			m.publishAppServerEvent(SessionEvent{RuntimeID: runtimeID, SessionID: threadID, TurnID: appServerNotificationTurnID(params), Kind: SessionEventToolCallUpdate, ToolCallID: itemID, ToolKind: "exec_command", ToolStatus: "running", Payload: map[string]any{"output": preview, "preview_truncated": len(preview) >= appServerCommandOutputPreviewBytes}})
 		}
 		live.notifyAppServerTurn(threadID, appServerTurnResult{
+			turnID:   appServerNotificationTurnID(params),
 			activity: "commandExecution:outputDelta:" + itemID,
 			progress: true,
 		})
@@ -306,9 +334,9 @@ func (m *appServerManager) handleRawItemNotification(runtimeID string, live *liv
 	itemID := appServerString(item, "id")
 	activity := strings.Trim(strings.TrimPrefix(method, "item/")+":"+itemType+":"+itemID, ":")
 	live.notifyAppServerTurn(threadID, appServerTurnResult{
-		activity:          activity,
-		progress:          appServerItemIsProgress(itemType),
-		assistantActivity: appServerItemSignalsAssistantActivity(itemType),
+		turnID:   appServerNotificationTurnID(params),
+		activity: activity,
+		progress: appServerItemIsProgress(itemType),
 	})
 
 	switch {
@@ -1138,16 +1166,11 @@ func appServerNotificationTurnID(params map[string]any) string {
 
 func appServerItemIsProgress(itemType string) bool {
 	switch strings.TrimSpace(itemType) {
-	case "agentMessage", "commandExecution", "fileChange", "mcpToolCall", "dynamicToolCall", "webSearch":
+	case "agentMessage", "commandExecution", "fileChange", "mcpToolCall", "dynamicToolCall", "webSearch", "reasoning", "contextCompaction":
 		return true
 	default:
 		return false
 	}
-}
-
-func appServerItemSignalsAssistantActivity(itemType string) bool {
-	itemType = strings.TrimSpace(itemType)
-	return itemType != "" && itemType != "userMessage"
 }
 
 func appServerToolStatus(item map[string]any, fallback string) string {

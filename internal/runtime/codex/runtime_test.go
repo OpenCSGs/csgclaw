@@ -2333,7 +2333,7 @@ func TestRuntimeCreateInstallsManagerTemplate(t *testing.T) {
 	}
 
 	skillsRoot := filepath.Join(root, agent.ManagerUserID, ".codex", "home", "skills")
-	for _, name := range []string{"agent-creator", "csgclaw-interactive-output-demo", "feishu"} {
+	for _, name := range []string{"agent-creator", "csgclaw-interactive-output-demo", "feishu", "scheduled-tasks"} {
 		if _, err := os.Stat(filepath.Join(skillsRoot, name, "SKILL.md")); err != nil {
 			t.Fatalf("manager template skill %q missing: %v", name, err)
 		}
@@ -4382,4 +4382,25 @@ func seedManagedLarkProjection(t *testing.T, home, agentID string) agentruntime.
 		t.Fatal(err)
 	}
 	return change.Projection()
+}
+
+func TestSessionEnvironmentReplacesInheritedCallbackURL(t *testing.T) {
+	t.Setenv("csgclaw_base_url", "http://host.docker.internal:63423")
+	env, _, err := buildSessionEnvironment(SessionSpec{
+		CodexHomeDir: t.TempDir(),
+		Profile:      agentruntime.Profile{Env: map[string]string{"CSGCLAW_BASE_URL": "http://127.0.0.1:19091"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var callbacks []string
+	for _, entry := range env {
+		key, _, _ := strings.Cut(entry, "=")
+		if strings.EqualFold(key, "CSGCLAW_BASE_URL") {
+			callbacks = append(callbacks, entry)
+		}
+	}
+	if !reflect.DeepEqual(callbacks, []string{"CSGCLAW_BASE_URL=http://127.0.0.1:19091"}) {
+		t.Fatalf("effective callback environment = %v", callbacks)
+	}
 }

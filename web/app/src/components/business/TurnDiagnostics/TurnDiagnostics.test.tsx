@@ -3,8 +3,13 @@ import userEvent from "@testing-library/user-event";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { DiagnosticMessageAction, TurnDiagnostics } from "./TurnDiagnostics";
-import { fetchDiagnostic, fetchDiagnostics } from "@/api/diagnostics";
-vi.mock("@/api/diagnostics", () => ({ fetchDiagnostic: vi.fn(), fetchDiagnostics: vi.fn() }));
+import { fetchDiagnostic, fetchDiagnostics, fetchDiagnosticBundle, fetchDiagnosticArchive } from "@/api/diagnostics";
+vi.mock("@/api/diagnostics", () => ({
+  fetchDiagnostic: vi.fn(),
+  fetchDiagnostics: vi.fn(),
+  fetchDiagnosticBundle: vi.fn(),
+  fetchDiagnosticArchive: vi.fn(),
+}));
 vi.mock("@/api/agents", () => ({ fetchAgentLogsRequest: vi.fn().mockResolvedValue("runtime log") }));
 const record = {
   id: "d",
@@ -279,4 +284,113 @@ it("shows a waiting source instead of selecting an unrelated execution", async (
   expect(fetchDiagnostic).not.toHaveBeenCalled();
   expect(screen.queryByRole("button", { pressed: true })).not.toBeInTheDocument();
   view.unmount();
+});
+
+it("copies and downloads the full server bundle from the fixed action bar", async () => {
+  vi.mocked(fetchDiagnostics).mockResolvedValue({
+    items: [record],
+    next_cursor: "",
+    total: 1,
+    agents: [{ id: record.agent_id, name: "manager" }],
+  });
+  vi.mocked(fetchDiagnostic).mockResolvedValue(record);
+  const text = JSON.stringify(
+    {
+      schema_version: 1,
+      turn_id: record.turn_id,
+      turns: [{ context: [{ kind: "model.runtime_request", data: { input: "full prompt" } }] }],
+      collection: { complete: false },
+    },
+    null,
+    2,
+  );
+  vi.mocked(fetchDiagnosticBundle).mockResolvedValue({ text, turnId: record.turn_id, complete: false });
+  const archive = new Blob(["server-compressed ZIP"], { type: "application/zip" });
+  vi.mocked(fetchDiagnosticArchive).mockResolvedValue({
+    blob: archive,
+    filename: "csgclaw-turn-turn-a-diagnostics.zip",
+    turnId: record.turn_id,
+    complete: false,
+  });
+  const user = userEvent.setup();
+  const clipboard = vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue();
+  const view = render(<TurnDiagnostics room="r" source="s" t={(key) => key} onClose={() => {}} />);
+  await screen.findByText("upstream_failure");
+  const actions = screen.getByLabelText("diagActions");
+  expect(actions).toContainElement(screen.getByRole("button", { name: "diagCopy" }));
+  await user.click(screen.getByRole("button", { name: "diagCopy" }));
+  await waitFor(() => expect(clipboard).toHaveBeenCalledWith(text));
+  expect(fetchDiagnosticBundle).toHaveBeenCalledWith("r", record.id, expect.any(AbortSignal));
+  expect(screen.getByRole("status")).toHaveTextContent("diagBundleIncomplete");
+  let filename = "";
+  const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (this: HTMLAnchorElement) {
+    filename = this.download;
+  });
+  Object.defineProperty(URL, "createObjectURL", { configurable: true, value: vi.fn(() => "blob:diagnostic") });
+  Object.defineProperty(URL, "revokeObjectURL", { configurable: true, value: vi.fn() });
+  await user.click(screen.getByRole("button", { name: "diagExport" }));
+  await waitFor(() => expect(filename).toBe("csgclaw-turn-turn-a-diagnostics.zip"));
+  expect(fetchDiagnosticArchive).toHaveBeenCalledWith("r", record.id, expect.any(AbortSignal));
+  expect(URL.createObjectURL).toHaveBeenCalledWith(archive);
+  expect(fetchDiagnosticBundle).toHaveBeenCalledTimes(1);
+  click.mockRestore();
+  view.unmount();
+});
+
+it("reports bundle collection failure without copying a performance-only fallback", async () => {
+  vi.mocked(fetchDiagnostics).mockResolvedValue({ items: [record], next_cursor: "", total: 1, agents: [] });
+  vi.mocked(fetchDiagnostic).mockResolvedValue(record);
+  vi.mocked(fetchDiagnosticBundle).mockRejectedValue(new Error("collection failed"));
+  const user = userEvent.setup();
+  const clipboard = vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue();
+  const view = render(<TurnDiagnostics room="r" source="s" t={(key) => key} onClose={() => {}} />);
+  await screen.findByText("upstream_failure");
+  await user.click(screen.getByRole("button", { name: "diagCopy" }));
+  await screen.findByText("diagExportFailed");
+  expect(clipboard).not.toHaveBeenCalled();
+  expect(screen.getByRole("button", { name: "diagCopy" })).toBeEnabled();
+  view.unmount();
+});
+
+it("keeps ZIP export failures retryable without fetching the JSON copy bundle", async () => {
+  vi.mocked(fetchDiagnostics).mockResolvedValue({ items: [record], next_cursor: "", total: 1, agents: [] });
+  vi.mocked(fetchDiagnostic).mockResolvedValue(record);
+  vi.mocked(fetchDiagnosticArchive).mockRejectedValueOnce(new Error("interrupted ZIP"));
+  const user = userEvent.setup();
+  const view = render(<TurnDiagnostics room="r" source="s" t={(key) => key} onClose={() => {}} />);
+  await screen.findByText("upstream_failure");
+  await user.click(screen.getByRole("button", { name: "diagExport" }));
+  await screen.findByText("diagExportFailed");
+  expect(screen.getByRole("dialog")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "diagExport" })).toBeEnabled();
+  expect(fetchDiagnosticBundle).not.toHaveBeenCalled();
+  const archive = new Blob(["ZIP"], { type: "application/zip" });
+  vi.mocked(fetchDiagnosticArchive).mockResolvedValueOnce({
+    blob: archive,
+    filename: "diagnostics.zip",
+    turnId: record.turn_id,
+    complete: false,
+  });
+  const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+  await user.click(screen.getByRole("button", { name: "diagExport" }));
+  await waitFor(() => expect(URL.createObjectURL).toHaveBeenCalledWith(archive));
+  expect(screen.getByRole("status")).toHaveTextContent("diagBundleIncomplete");
+  click.mockRestore();
+  view.unmount();
+});
+
+it("blocks duplicate ZIP requests and cancels an export when the dialog unmounts", async () => {
+  vi.mocked(fetchDiagnostics).mockResolvedValue({ items: [record], next_cursor: "", total: 1, agents: [] });
+  vi.mocked(fetchDiagnostic).mockResolvedValue(record);
+  vi.mocked(fetchDiagnosticArchive).mockImplementationOnce(() => new Promise(() => {}));
+  const user = userEvent.setup();
+  const view = render(<TurnDiagnostics room="r" source="s" t={(key) => key} onClose={() => {}} />);
+  await screen.findByText("upstream_failure");
+  await user.dblClick(screen.getByRole("button", { name: "diagExport" }));
+  expect(fetchDiagnosticArchive).toHaveBeenCalledTimes(1);
+  expect(screen.getByRole("button", { name: "diagCopy" })).toBeDisabled();
+  const signal = vi.mocked(fetchDiagnosticArchive).mock.calls[0][2];
+  expect(signal?.aborted).toBe(false);
+  view.unmount();
+  expect(signal?.aborted).toBe(true);
 });

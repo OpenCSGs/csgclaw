@@ -17,7 +17,6 @@ const emptyDraft = (): ConfigSettingsDraft => ({
   access_token_set: false,
   access_token_preview: "",
   show_upgrade: true,
-  sandbox_provider: "boxlite",
   hub_local_path: "",
   default_manager_template: "",
   default_worker_template: "",
@@ -30,7 +29,6 @@ export function useConfigController({
 }: UseConfigControllerArgs): ConfigController {
   const [showConfigModal, setShowConfigModal] = useState(false);
   const [configDraft, setConfigDraft] = useState<ConfigSettingsDraft>(emptyDraft);
-  const [sandboxProviders, setSandboxProviders] = useState<string[]>([]);
   const [configBusy, setConfigBusy] = useState(false);
   const [configError, setConfigError] = useState("");
   const [configPhase, setConfigPhase] = useState<ConfigPhase>("idle");
@@ -53,7 +51,6 @@ export function useConfigController({
         throw new Error(t("configSettingsLoadFailed"));
       }
       setConfigDraft(configSettingsToDraft(payload));
-      setSandboxProviders(payload.supported_sandbox_providers || []);
       setConfigPhase("idle");
     } catch (err: unknown) {
       setConfigPhase("error");
@@ -148,7 +145,6 @@ export function useConfigController({
       const saved = normalizeConfigSettings(await updateServerConfig(configDraftToUpdatePayload(configDraft)));
       if (saved) {
         setConfigDraft(configSettingsToDraft(saved));
-        setSandboxProviders(saved.supported_sandbox_providers || sandboxProviders);
       }
       setConfigPhase("restarting");
       const desktopBridge = getDesktopBridge();
@@ -167,7 +163,7 @@ export function useConfigController({
       setConfigPhase("error");
       setConfigError(configErrorDetail(err, t("configSettingsSaveFailed")));
     }
-  }, [configBusy, configDraft, refreshWorkspaceAppVersion, sandboxProviders, startConfigReconnectPoll, t]);
+  }, [configBusy, configDraft, refreshWorkspaceAppVersion, startConfigReconnectPoll, t]);
 
   useEffect(() => {
     return () => {
@@ -179,7 +175,6 @@ export function useConfigController({
     openConfigModal,
     settings: {
       draft: configDraft,
-      providers: sandboxProviders,
       hubTemplates: hubTemplates || [],
       loading: configBusy,
       phase: configPhase,
@@ -194,7 +189,6 @@ export function useConfigController({
           t,
           configDraft,
           hubTemplates: hubTemplates || [],
-          sandboxProviders,
           configBusy,
           configError,
           configPhase,

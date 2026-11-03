@@ -100,7 +100,11 @@ export function AgentSection({
           <div className="agent-empty">{t("noAgents")}</div>
         )}
       </div>
-      {error ? <div className="form-error agent-error">{error}</div> : null}
+      {error ? (
+        <div className="form-error agent-error whitespace-pre-wrap break-words" role="alert">
+          {error}
+        </div>
+      ) : null}
     </section>
   );
 }

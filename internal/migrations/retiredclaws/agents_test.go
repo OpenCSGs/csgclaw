@@ -9,7 +9,7 @@ import (
 	"testing"
 )
 
-func TestRetiredRuntimeAgentsPreserveDataAndRequireExplicitStart(t *testing.T) {
+func TestRetiredRuntimeAgentsPreserveDataAndRequestAutomaticStart(t *testing.T) {
 	for _, kind := range []string{"openclaw", "openclaw_sandbox", "picoclaw", "picoclaw_sandbox"} {
 		t.Run(kind, func(t *testing.T) {
 			home := t.TempDir()
@@ -60,7 +60,7 @@ func TestRetiredRuntimeAgentsPreserveDataAndRequireExplicitStart(t *testing.T) {
 			if rt.Kind != "codex" || rt.State != "stopped" || rt.SandboxID != "" || rt.Options["local_workspace_dir"] != workspace || len(rt.Options) != 1 {
 				t.Fatalf("migrated runtime: %+v", rt)
 			}
-			if migrationString(old["desired_state"]) != "stopped" || migrationString(old["instructions"]) != "Custom instructions" {
+			if migrationString(old["desired_state"]) != "running" || migrationString(old["instructions"]) != "Custom instructions" {
 				t.Fatalf("lifecycle/instructions not migrated: %s", data)
 			}
 			if _, ok := old["image"]; ok {
@@ -266,5 +266,79 @@ func TestRetiredNativeMCPAndMemoryAreImportedWithoutReplacingExplicitSettings(t 
 				t.Fatal("existing current memory overwritten")
 			}
 		})
+	}
+}
+
+func TestMigrationStartsPreviouslyStoppedRetiredAgentsAndHonorsLaterStops(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, localstore.RootStateFileName)
+	writeFile(t, path, `{"version":1,"agents":{"items":[{"id":"agent-old","runtime":{"kind":"openclaw_sandbox","state":"stopped"},"desired_state":"stopped"},{"id":"agent-pico","runtime":{"kind":"picoclaw_sandbox","state":"stopped"},"desired_state":"stopped"},{"id":"agent-current","runtime":{"kind":"codex","state":"stopped"},"desired_state":"stopped"}]}}`)
+	if err := migrateAgentsWithMissingSandbox(t, root); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var state struct {
+		Version int `json:"version"`
+		Agents  struct {
+			Items []map[string]json.RawMessage `json:"items"`
+		} `json:"agents"`
+	}
+	if err := json.Unmarshal(data, &state); err != nil {
+		t.Fatal(err)
+	}
+	for _, item := range state.Agents.Items {
+		want := "running"
+		if migrationString(item["id"]) == "agent-current" {
+			want = "stopped"
+		}
+		if migrationString(item["desired_state"]) != want {
+			t.Fatalf("Agent %s desired state = %s, want %s", item["id"], item["desired_state"], want)
+		}
+	}
+	state.Agents.Items[0]["desired_state"] = json.RawMessage(`"stopped"`)
+	stopped, err := json.Marshal(state)
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, path, string(stopped))
+	if err := migrateAgentsWithMissingSandbox(t, root); err != nil {
+		t.Fatal(err)
+	}
+	after, err := os.ReadFile(path)
+	if err != nil || !bytes.Equal(stopped, after) {
+		t.Fatalf("completed migration overrode a later user stop: %s, %v", after, err)
+	}
+}
+
+func TestNativeSandboxMetadataMigrationPreservesRuntimeHandles(t *testing.T) {
+	root := t.TempDir()
+	original := `{"version":1,"unrelated":{"large":9007199254740993},"agents":{"items":[{"id":"agent-native","runtime":{"kind":"codex","state":"running","sandbox_id":"native-session-handle","sandbox_enabled":true,"options":{"local_workspace_dir":"/user/work"}},"sandbox_enabled":true,"desired_state":"stopped","model_config":{"model_id":"keep-model","sandbox_enabled":true}},{"id":"agent-dsh","runtime_kind":"dsh","sandbox_enabled":false,"desired_state":"running"}]}}`
+	path := filepath.Join(root, "state.json")
+	writeFile(t, path, original)
+	if err := migrateAgentsWithMissingSandbox(t, root); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(data, []byte("sandbox_enabled")) {
+		t.Fatal("obsolete sandbox metadata retained")
+	}
+	for _, value := range []string{"9007199254740993", "native-session-handle", "/user/work", "keep-model", `"state": "running"`, `"desired_state": "stopped"`} {
+		if !bytes.Contains(data, []byte(value)) {
+			t.Fatalf("native runtime data changed: %s", data)
+		}
+	}
+	info, _ := os.Stat(path)
+	if err := migrateAgentsWithMissingSandbox(t, root); err != nil {
+		t.Fatal(err)
+	}
+	again, _ := os.Stat(path)
+	if !again.ModTime().Equal(info.ModTime()) {
+		t.Fatal("metadata migration repeats")
 	}
 }

@@ -2,9 +2,11 @@ package serve
 
 import (
 	"context"
+	"csgclaw/internal/diagnostics"
 	"csgclaw/internal/migrations"
 	"csgclaw/internal/migrations/retiredclaws"
 	"csgclaw/internal/sandbox"
+	"csgclaw/internal/sandbox/boxlitecli"
 	skillbuiltin "csgclaw/internal/skill/builtin"
 	"errors"
 	"fmt"
@@ -349,6 +351,16 @@ func (c internalServeCmd) Run(ctx context.Context, run *command.Context, args []
 		return err
 	}
 	defer restore()
+	serveOpts := serveOptions{
+		APIOnly:      *apiOnly || !embeddedUIAvailable,
+		OpenBrowser:  *browser && !*noBrowser && !*apiOnly && embeddedUIAvailable,
+		NoAuthDetect: *noAuthDetect,
+	}
+	closeListener, err := prepareRuntimeListener(&cfg.Server, &serveOpts)
+	if err != nil {
+		return err
+	}
+	defer closeListener()
 	_ = preflightDefaultModelProvider(ctx, cfg)
 	if err := migrateLocalStore(ctx, configPath); err != nil {
 		return err
@@ -371,11 +383,7 @@ func (c internalServeCmd) Run(ctx context.Context, run *command.Context, args []
 	if err != nil {
 		return err
 	}
-	return startServerWithConfigPath(ctx, run, cfg, svc, imSvc, imBus, feishuSvc, configPath, globals.Output, serveOptions{
-		APIOnly:      *apiOnly || !embeddedUIAvailable,
-		OpenBrowser:  *browser && !*noBrowser && !*apiOnly && embeddedUIAvailable,
-		NoAuthDetect: *noAuthDetect,
-	})
+	return startServerWithConfigPath(ctx, run, cfg, svc, imSvc, imBus, feishuSvc, configPath, globals.Output, serveOpts)
 }
 
 func serveForeground(ctx context.Context, run *command.Context, cfg config.Config, output string) error {
@@ -411,6 +419,27 @@ type serveOptions struct {
 	OnListening     func()
 }
 
+// prepareRuntimeListener resolves callback ports before services capture the
+// server configuration. Only a listener opened here is owned by the caller.
+func prepareRuntimeListener(serverConfig *config.ServerConfig, opts *serveOptions) (func(), error) {
+	closeListener := func() {}
+	if opts.Listener == nil && config.ListenPort(serverConfig.ListenAddr) == "0" {
+		listener, err := net.Listen("tcp", serverConfig.ListenAddr)
+		if err != nil {
+			return nil, fmt.Errorf("listen on server address: %w", err)
+		}
+		closeListener = func() { _ = listener.Close() }
+		opts.Listener = listener
+	}
+	// Desktop runtimes use the sandbox listener; the renderer has its own URL.
+	if opts.SandboxListener != nil {
+		serverConfig.ListenAddr = opts.SandboxListener.Addr().String()
+	} else if opts.Listener != nil {
+		serverConfig.ListenAddr = opts.Listener.Addr().String()
+	}
+	return closeListener, nil
+}
+
 func serveForegroundWithConfigPath(ctx context.Context, run *command.Context, cfg config.Config, configPath string, output string, opts ...serveOptions) error {
 	serveOpts := serveOptions{}
 	if len(opts) > 0 {
@@ -419,6 +448,11 @@ func serveForegroundWithConfigPath(ctx context.Context, run *command.Context, cf
 	if err := validateServeInstallation(); err != nil {
 		return err
 	}
+	closeListener, err := prepareRuntimeListener(&cfg.Server, &serveOpts)
+	if err != nil {
+		return err
+	}
+	defer closeListener()
 	_ = preflightDefaultModelProvider(ctx, cfg)
 	if err := migrateLocalStore(ctx, configPath); err != nil {
 		return err
@@ -461,7 +495,7 @@ func serveForegroundWithConfigPath(ctx context.Context, run *command.Context, cf
 		}
 	}
 
-	return startServerWithConfigPath(ctx, run, cfg, svc, imSvc, imBus, feishuSvc, configPath, output, opts...)
+	return startServerWithConfigPath(ctx, run, cfg, svc, imSvc, imBus, feishuSvc, configPath, output, serveOpts)
 }
 
 func serveBackground(run *command.Context, cfg config.Config, globals command.GlobalOptions, logPath, pidPath, logLevel string, opts serveOptions) error {
@@ -580,10 +614,17 @@ func configureServeLogger(w io.Writer, level string) (func(), error) {
 	}
 
 	prev := slog.Default()
-	logger := slog.New(slog.NewTextHandler(w, &slog.HandlerOptions{Level: parsedLevel}))
+	logDir, _ := config.DefaultDomainDir("diagnostic-logs")
+	journal := diagnostics.NewLogJournal(logDir)
+	restoreJournal := diagnostics.SetCurrentLogs(journal)
+	logger := slog.New(diagnostics.NewServerLogHandler(w, parsedLevel, journal))
 	slog.SetDefault(logger)
 	return func() {
 		slog.SetDefault(prev)
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = journal.Flush(ctx)
+		restoreJournal()
 	}, nil
 }
 
@@ -623,6 +664,13 @@ func startServerWithConfigPath(ctx context.Context, run *command.Context, cfg co
 		return fmt.Errorf("assemble UI: %w", err)
 	}
 	serveOpts.NoAuthDetect = serveOpts.NoAuthDetect || serveOpts.apiOnly()
+	if imSvc != nil {
+		distribution := "cli"
+		if serveOpts.Desktop != nil {
+			distribution = "electron"
+		}
+		imSvc.Diagnostics().SetEnvironment(map[string]any{"distribution": distribution, "configuration": map[string]any{"listen_addr": cfg.Server.ListenAddr, "advertise_base_url": cfg.Server.AdvertiseBaseURL, "authentication_enabled": !cfg.Server.NoAuth, "config_path": configPath}})
+	}
 	restoreAuthDetect := applyNoAuthDetectEnv(serveOpts.NoAuthDetect)
 	defer restoreAuthDetect()
 	_ = EnsureCLIProxy(ctx)
@@ -901,7 +949,7 @@ func reconcileInterruptedUserInputMessages(imSvc *im.Service) error {
 }
 
 func refreshStartupModelProviders(ctx context.Context, cfg config.Config, configPath string, svc *agent.Controller) (config.Config, []agent.ModelProviderCheckResult, error) {
-	if strings.TrimSpace(cfg.Sandbox.Provider) == "csghub" {
+	if cfg.IsCSGHubDeployment() {
 		return cfg, nil, nil
 	}
 	configPath = strings.TrimSpace(configPath)
@@ -918,7 +966,13 @@ func refreshStartupModelProviders(ctx context.Context, cfg config.Config, config
 	}
 	cfg.Models = updatedLLM
 	cfg.LLM = updatedLLM
-	if err := cfg.Save(configPath); err != nil {
+	// Only the catalog changed. Persisting the effective server configuration
+	// would save temporary listener ports or command-line endpoint overrides.
+	modelsPath, err := config.ModelsPathForConfigPath(configPath)
+	if err != nil {
+		return cfg, results, err
+	}
+	if err := config.SaveModels(modelsPath, updatedLLM); err != nil {
 		return cfg, results, err
 	}
 	if svc != nil {
@@ -1128,15 +1182,7 @@ show_upgrade = %t
 [bootstrap]
 default_manager_template = %q
 default_worker_template = %q
-
-[sandbox]
-provider = %q
-`, cfg.Server.ListenAddr, cfg.Server.AdvertiseBaseURL, partiallyMaskSecret(cfg.Server.AccessToken), cfg.Server.NoAuth, cfg.Server.ShowUpgrade, cfg.Bootstrap.ResolvedDefaultManagerTemplate(), cfg.Bootstrap.ResolvedDefaultWorkerTemplate(), cfg.Sandbox.Resolved().Provider)
-	if len(cfg.Sandbox.Resolved().DebianRegistriesOverride) > 0 {
-		content += fmt.Sprintf("debian_registries_override = %s\n", formatModelList(cfg.Sandbox.Resolved().DebianRegistriesOverride))
-	} else {
-		content += fmt.Sprintf("# using default debian registries: %s\ndebian_registries_override = []\n", formatModelList(config.DefaultDebianRegistries))
-	}
+`, cfg.Server.ListenAddr, cfg.Server.AdvertiseBaseURL, partiallyMaskSecret(cfg.Server.AccessToken), cfg.Server.NoAuth, cfg.Server.ShowUpgrade, cfg.Bootstrap.ResolvedDefaultManagerTemplate(), cfg.Bootstrap.ResolvedDefaultWorkerTemplate())
 	content += fmt.Sprintf(`
 [hub]
 default_registry = %q
@@ -1245,15 +1291,11 @@ func newAgentService(cfg config.Config, feishuProvider feishu.AgentCredentialPro
 	if err != nil {
 		return nil, err
 	}
-	opts, err := sandboxServiceOptions(cfg.Sandbox)
-	if err != nil {
-		return nil, err
-	}
-	opts = append(opts,
+	opts := []agent.ControllerOption{
 		runtimewiring.WithCodexRuntime(),
 		runtimewiring.WithDSHRuntime(),
 		agent.WithBootstrapDefaultTemplates(cfg.Bootstrap),
-	)
+	}
 
 	if hubSvc != nil {
 		opts = append(opts, agent.WithHubService(hubSvc))
@@ -1449,13 +1491,13 @@ func migrateLocalStore(ctx context.Context, configPath string) error {
 	// Loading models reads the same root state that migration locks. Resolve
 	// configuration outside that lock, but require it only for stored sandboxes.
 	cfg, providerErr := config.Load(path)
-	var provider sandbox.Provider
-	if providerErr == nil {
-		provider, providerErr = sandboxproviders.Provider(cfg.Sandbox)
-	}
 	if err := retiredclaws.MigrateAgents(ctx, root, func(ctx context.Context, agentID string) (sandbox.Runtime, error) {
 		if providerErr != nil {
 			return nil, providerErr
+		}
+		provider, err := sandboxproviders.Provider(cfg.Sandbox)
+		if err != nil {
+			return nil, err
 		}
 		return provider.Open(ctx, filepath.Join(root, config.AgentsDirName, agentID, config.RuntimeHomeDirName))
 	}); err != nil {
@@ -1463,6 +1505,22 @@ func migrateLocalStore(ctx context.Context, configPath string) error {
 	}
 	if err := localstore.MigrateMCPIdentities(filepath.Join(root, localstore.RootStateFileName)); err != nil {
 		return fmt.Errorf("migrate MCP identities: %w", err)
+	}
+	if err := retiredclaws.CleanupAgentSandboxHomes(ctx, root, func(ctx context.Context, home string) error {
+		return boxlitecli.NewProvider().CheckHomeStopped(ctx, home)
+	}, path); err != nil {
+		slog.Warn("retired Agent sandbox home cleanup incomplete; continuing startup and retrying later", "error", err)
+	}
+	// Retry config cleanup after Agent migration so desktop and daemon startup
+	// remove legacy provider input in the same successful upgrade.
+	if cfg, err := config.Load(path); err == nil {
+		cleanup := false
+		if !retiredclaws.PendingAgents(root) {
+			cleanup = cfg.ClearRetiredSandboxConfig()
+		}
+		if cleanup || cfg.NeedsMigrationRewrite() {
+			migrations.RewriteConfigBestEffort(path, func() error { return cfg.Save(path) }, retiredclaws.GeneratedBackupEntry)
+		}
 	}
 	return nil
 }

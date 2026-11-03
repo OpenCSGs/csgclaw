@@ -21,6 +21,10 @@ function render(ui: ReactElement, options?: RenderOptions) {
 const labels: Record<string, string> = {
   agentActivityTab: "Activity",
   agentDelete: "Delete",
+  agentArchive: "Archive agent",
+  agentArchiveTitle: 'Archive "{name}"?',
+  agentArchiveConfirmAction: "Confirm archive",
+  agentArchiveConfirm: 'Archive "{name}" and retain data?',
   agentDeleteBlockedTitle: "This agent cannot be deleted yet",
   agentDeleteChecking: "Checking dependencies…",
   agentDeleteResolve: "Go to team",
@@ -236,6 +240,7 @@ describe("agent action visibility", () => {
         "Agent description",
         false,
         "Worker",
+        "",
       );
 
       await user.click(screen.getByRole("button", { name: "More" }));
@@ -250,6 +255,7 @@ describe("agent action visibility", () => {
         "Agent description",
         true,
         "Worker",
+        "",
       );
     },
   );
@@ -329,7 +335,47 @@ describe("agent action visibility", () => {
       "Agent description",
       false,
       "Worker",
+      "",
     );
+  });
+
+  it("locks the template name while allowing display name edits on subsequent saves", async () => {
+    const user = userEvent.setup();
+    const onPublish = vi.fn().mockResolvedValue(true);
+    render(
+      <AgentDetailPane
+        item={worker}
+        t={t}
+        busyKey=""
+        draft={null}
+        models={[]}
+        linkedTemplate={{
+          id: "local.saved",
+          name: "saved",
+          display_name: "Saved name",
+          revision: 1,
+          source: { kind: "local" },
+        }}
+        onDelete={vi.fn()}
+        onDraftChange={vi.fn()}
+        onInvite={vi.fn()}
+        onOpenDM={vi.fn()}
+        onPublish={onPublish}
+        onRecreate={vi.fn()}
+        onStart={vi.fn()}
+        onStop={vi.fn()}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: "More" }));
+    await user.click(screen.getByRole("menuitem", { name: "Save as local template" }));
+    expect(screen.getByRole("textbox", { name: "Template name" })).toHaveAttribute("readonly");
+    expect(screen.getByRole("textbox", { name: "Template name" })).toHaveValue("saved");
+    expect(screen.getByRole("textbox", { name: "Display name" })).not.toHaveAttribute("readonly");
+    expect(screen.getByRole("textbox", { name: "Display name" })).toHaveValue("Saved name");
+    await user.clear(screen.getByRole("textbox", { name: "Display name" }));
+    await user.type(screen.getByRole("textbox", { name: "Display name" }), "Renamed display");
+    await user.click(screen.getByRole("button", { name: "Save as local template" }));
+    expect(onPublish).toHaveBeenCalledWith("local", "saved", "Agent description", false, "Renamed display", "");
   });
 
   it("rejects an invalid template name before publishing", async () => {
@@ -367,7 +413,7 @@ describe("agent action visibility", () => {
     await user.clear(nameInput);
     await user.type(nameInput, "review-bot_2");
     await user.click(screen.getByRole("button", { name: "Save as local template" }));
-    expect(onPublish).toHaveBeenCalledWith("local", "review-bot_2", "Agent description", false, "Worker");
+    expect(onPublish).toHaveBeenCalledWith("local", "review-bot_2", "Agent description", false, "Worker", "");
   });
 
   it("keeps the publish dialog open and shows duplicate local template errors", async () => {
@@ -1004,7 +1050,7 @@ describe("agent action visibility", () => {
     );
 
     await user.click(screen.getByRole("button", { name: "More" }));
-    expect(screen.getByRole("menuitem", { name: "Delete" })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: "Archive agent" })).toBeInTheDocument();
     expect(screen.queryByRole("menuitem", { name: "Recreate" })).not.toBeInTheDocument();
   });
 
@@ -1557,14 +1603,14 @@ describe("agent action visibility", () => {
       />,
     );
     await user.click(screen.getByRole("button", { name: "More" }));
-    await user.click(screen.getByRole("menuitem", { name: "Delete" }));
-    expect(within(screen.getByRole("dialog")).getByRole("button", { name: "Delete" })).toBeDisabled();
+    await user.click(screen.getByRole("menuitem", { name: "Archive agent" }));
+    expect(within(screen.getByRole("dialog")).getByRole("button", { name: "Confirm archive" })).toBeDisabled();
     await act(async () => {
       finishCheck({ message: "Remove the agent from its team first.", onResolve });
     });
     const dialog = screen.getByRole("dialog", { name: "This agent cannot be deleted yet" });
     expect(dialog).toHaveTextContent("Remove the agent from its team first.");
-    expect(within(dialog).queryByRole("button", { name: "Delete" })).not.toBeInTheDocument();
+    expect(within(dialog).queryByRole("button", { name: "Archive agent" })).not.toBeInTheDocument();
     await user.click(within(dialog).getByRole("button", { name: "Go to team" }));
     expect(onResolve).toHaveBeenCalledOnce();
     expect(onDelete).not.toHaveBeenCalled();

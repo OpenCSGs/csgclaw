@@ -42,13 +42,7 @@ const (
 	appServerMaxUploadBytes            = 50 << 20
 )
 
-var (
-	appServerStopTimeout                = 3 * time.Second
-	appServerSemanticInactivityTimeout  = 10 * time.Minute
-	appServerFirstTurnNoProgressTimeout = 5 * time.Minute
-	// Active turns are bounded by inactivity and caller cancellation, not total elapsed time.
-	appServerMaximumTurnDuration = time.Duration(0)
-)
+var appServerStopTimeout = 3 * time.Second
 
 var appServerCommandContext = codexcli.AppServerCommandContextWithOverrides
 
@@ -153,6 +147,10 @@ func (m *appServerManager) Start(ctx context.Context, spec SessionSpec) (*Sessio
 		// Keep completed-turn exports timely; this does not block the turn itself.
 		cmd.Env = append(cmd.Env, "OTEL_BSP_SCHEDULE_DELAY=1000")
 	}
+	logStartOffset := int64(0)
+	if info, err := stderrFile.Stat(); err == nil {
+		logStartOffset = info.Size()
+	}
 	cmd.Stderr = stderrFile
 	if sysProcAttr := newSessionSysProcAttr(); sysProcAttr != nil {
 		cmd.SysProcAttr = sysProcAttr
@@ -170,10 +168,14 @@ func (m *appServerManager) Start(ctx context.Context, spec SessionSpec) (*Sessio
 	}
 	if err := processgroup.Start(cmd); err != nil {
 		_ = stderrFile.Close()
+		diagnostics.ReportFailure(ctx, "runtime.process_start", err, map[string]any{"runtime_id": spec.RuntimeID, "stderr_path": spec.StderrPath})
 		return nil, fmt.Errorf("start codex app-server: %w", err)
 	}
 
-	logger := slog.New(slog.NewTextHandler(stderrFile, &slog.HandlerOptions{}))
+	diagnosticObserver := diagnostics.NewRuntimeObserver(spec.StderrPath, spec.RuntimeID, cmd.Process.Pid, logStartOffset, stderrFile)
+	diagnosticObserver.Bind(ctx)
+	defer diagnosticObserver.End(ctx)
+	logger := slog.New(diagnostics.NewServerLogHandler(stderrFile, slog.LevelInfo, nil))
 	appClient := newAppServerClient(stdin, logger)
 	conversationSessions := cloneConversationSessions(spec.ConversationSessions)
 	if conversationSessions == nil {
@@ -186,6 +188,7 @@ func (m *appServerManager) Start(ctx context.Context, spec SessionSpec) (*Sessio
 		}
 	}
 	live := &liveSession{
+		diagnosticObserver:    diagnosticObserver,
 		telemetry:             telemetry,
 		mcpCatalogRevision:    spec.MCPCatalogRevision,
 		cmd:                   cmd,
@@ -391,8 +394,12 @@ func (m *appServerManager) Prompt(ctx context.Context, handle SessionHandle, req
 		return PromptResponse{}, err
 	}
 
+	live.diagnosticObserver.Bind(ctx)
+	defer live.diagnosticObserver.End(ctx)
+	diagnostics.From(ctx).Capture("runtime.configuration", map[string]any{"runtime": "codex", "runtime_id": runtimeID, "binary": live.spec.BinaryPath, "workspace": live.spec.WorkspaceDir, "stderr_path": live.spec.StderrPath, "profile": live.spec.Profile, "mcp_servers": live.spec.MCPServers, "mcp_revision": live.spec.MCPCatalogRevision, "execution_mode": live.spec.ExecutionMode, "extension_digests": live.session.ExtensionDigests, "runtime_version": live.serverInfo})
+	diagnostics.From(ctx).CaptureRuntimeFiles(filepath.Join(live.spec.HomeDir, "AGENTS.md"), filepath.Join(live.spec.CodexHomeDir, "AGENTS.md"), filepath.Join(live.spec.WorkspaceDir, "AGENTS.md"), filepath.Join(live.spec.WorkspaceDir, "AGENTS.override.md"), filepath.Join(live.spec.CodexHomeDir, "config.toml"))
 	diagnostics.From(ctx).RuntimeInfo("codex", live.spec.Profile.ModelID)
-	live.appClient.logInfo("model request configuration", "model", live.spec.Profile.ModelID, "runtime_id", runtimeID, "thread_id", sessionID)
+	live.appClient.logInfoContext(ctx, "model request configuration", "model", live.spec.Profile.ModelID, "runtime_id", runtimeID, "thread_id", sessionID)
 	waiter, err := live.registerAppServerTurnWaiter(sessionID)
 	if err != nil {
 		m.publishAppServerEvent(promptFailedEvent(runtimeID, sessionID, err))
@@ -412,14 +419,14 @@ func (m *appServerManager) Prompt(ctx context.Context, handle SessionHandle, req
 	m.publishContextUsage(runtimeID, live, sessionID, nil, "snapshot")
 	params := appServerTurnStartParamsWithInput(live.spec, sessionID, promptInput, req.ClientUserMessageID)
 	turnStartAt := time.Now()
-	live.appClient.logDebug("codex app-server turn start request",
+	live.appClient.logDebugContext(ctx, "codex app-server turn start request",
 		"runtime_id", runtimeID,
 		"thread_id", sessionID,
 		"prompt_blocks", len(promptInput),
 	)
 	raw, err := live.appClient.request(ctx, "turn/start", params)
 	if err != nil {
-		live.appClient.logDebug("codex app-server turn start failed",
+		live.appClient.logDebugContext(ctx, "codex app-server turn start failed",
 			"runtime_id", runtimeID,
 			"thread_id", sessionID,
 			"duration", time.Since(turnStartAt),
@@ -443,7 +450,7 @@ func (m *appServerManager) Prompt(ctx context.Context, handle SessionHandle, req
 		req.OnAccepted()
 	}
 	live.trackAppServerTurn(sessionID, waiter.currentTurnID())
-	live.appClient.logDebug("codex app-server turn start accepted",
+	live.appClient.logDebugContext(ctx, "codex app-server turn start accepted",
 		"runtime_id", runtimeID,
 		"thread_id", sessionID,
 		"turn_id", waiter.currentTurnID(),
@@ -456,7 +463,7 @@ func (m *appServerManager) Prompt(ctx context.Context, handle SessionHandle, req
 		resp, err = m.recoverContext(turnCtx, live, &waiter)
 	}
 	if err != nil {
-		live.appClient.logDebug("codex app-server turn wait failed",
+		live.appClient.logDebugContext(ctx, "codex app-server turn wait failed",
 			"runtime_id", runtimeID,
 			"thread_id", sessionID,
 			"turn_id", waiter.currentTurnID(),
@@ -468,7 +475,7 @@ func (m *appServerManager) Prompt(ctx context.Context, handle SessionHandle, req
 		m.publishAppServerEvent(promptFailedEvent(runtimeID, sessionID, err))
 		return resp, err
 	}
-	live.appClient.logDebug("codex app-server turn wait completed",
+	live.appClient.logDebugContext(ctx, "codex app-server turn wait completed",
 		"runtime_id", runtimeID,
 		"thread_id", sessionID,
 		"turn_id", waiter.currentTurnID(),
@@ -764,7 +771,7 @@ func (m *appServerManager) liveSession(runtimeID string) *liveSession {
 // sends "initialized" notification. Without this handshake, the server
 // rejects subsequent requests with "Not initialized (code=-32600)".
 func (m *appServerManager) initializeHandshake(ctx context.Context, live *liveSession) error {
-	_, err := live.appClient.request(ctx, "initialize", map[string]any{
+	serverInfo, err := live.appClient.request(ctx, "initialize", map[string]any{
 		"clientInfo": map[string]any{
 			"name":    "csgclaw-agent-sdk",
 			"title":   "CSGClaw Agent SDK",
@@ -777,6 +784,7 @@ func (m *appServerManager) initializeHandshake(ctx context.Context, live *liveSe
 	if err != nil {
 		return fmt.Errorf("codex app-server initialize handshake: %w", err)
 	}
+	live.serverInfo = append(json.RawMessage(nil), serverInfo...)
 	live.appClient.notify("initialized")
 	return nil
 }
@@ -971,13 +979,18 @@ func appServerOverrides(spec SessionSpec) []string {
 	return overrides
 }
 
-func (m *appServerManager) handleAppServerServerRequest(runtimeID string, live *liveSession, req appServerServerRequest) (any, error) {
+func (m *appServerManager) handleAppServerServerRequest(runtimeID string, live *liveSession, req appServerServerRequest) (result any, resultErr error) {
 	var diagnosticParams struct {
 		ThreadID string `json:"threadId"`
 		TurnID   string `json:"turnId"`
 	}
 	if json.Unmarshal(req.Params, &diagnosticParams) == nil && live != nil {
 		if ctx, ok := live.appServerTurnContext(diagnosticParams.ThreadID, diagnosticParams.TurnID); ok {
+			diagnostics.From(ctx).Capture("runtime.callback_request", map[string]any{"method": req.Method, "params": json.RawMessage(req.Params)})
+			defer func() {
+				diagnostics.From(ctx).Capture("runtime.callback_response", map[string]any{"method": req.Method, "result": result, "failed": resultErr != nil})
+			}()
+
 			name, owner := "callback.handle", "csgclaw"
 			if strings.Contains(req.Method, "requestUserInput") {
 				name, owner = "user.wait", "user"
@@ -1329,13 +1342,11 @@ func (m *appServerManager) handleAppServerUserInputRequest(runtimeID string, liv
 		autoResolve = time.Duration(*params.AutoResolutionMS) * time.Millisecond
 	}
 	live.notifyAppServerTurn(params.ThreadID, appServerTurnResult{
-		activity:       "request_user_input:pending",
-		progress:       true,
-		userInputDelta: 1,
+		activity: "request_user_input:pending",
+		progress: true,
 	})
 	defer live.notifyAppServerTurn(params.ThreadID, appServerTurnResult{
-		activity:       "request_user_input:resolved",
-		userInputDelta: -1,
+		activity: "request_user_input:resolved",
 	})
 	decision, err := m.deps.UserInput.Request(context.Background(), PendingUserInputRequest{
 		Execution: activity.ExecutionRef{
@@ -1500,6 +1511,8 @@ type appServerTurnWaiter struct {
 	pendingUsage             map[string]modelusage.Usage
 	diagnostic               *diagnostics.Record
 	diagnosticEnds           map[string]time.Time
+	diagnosticNotes          map[string][]json.RawMessage
+	diagnosticNoteBytes      int
 	visibleActivity          bool
 	mu                       sync.RWMutex
 	threadID                 string
@@ -1507,22 +1520,17 @@ type appServerTurnWaiter struct {
 	ch                       chan appServerTurnResult
 	terminalResults          map[string]appServerTurnResult
 	lastActivity             string
-	pendingInputs            int
 	structuredOutputBoundary bool
 }
 
 type appServerTurnResult struct {
-	success               bool
-	stopReason            string
-	err                   error
-	turnID                string
-	activity              string
-	started               bool
-	progress              bool
-	assistantActivity     bool
-	userInputStateChanged bool
-	waitingForUser        bool
-	userInputDelta        int
+	success    bool
+	stopReason string
+	err        error
+	turnID     string
+	activity   string
+	started    bool
+	progress   bool
 }
 
 func (s *liveSession) registerAppServerTurnWaiter(threadID string) (*appServerTurnWaiter, error) {
@@ -1649,13 +1657,7 @@ func (s *liveSession) notifyAppServerTurn(threadID string, result appServerTurnR
 	if !waiter.apply(&result) {
 		return true
 	}
-	if result.userInputStateChanged {
-		select {
-		case waiter.ch <- result:
-		case <-s.done:
-		}
-		return true
-	}
+
 	select {
 	case waiter.ch <- result:
 	default:
@@ -1697,6 +1699,7 @@ func (w *appServerTurnWaiter) setTurnID(turnID string) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	w.turnID = turnID
+	w.flushDiagnosticNotesLocked(turnID)
 	w.diagnostic.RuntimeRef(w.threadID, turnID, "")
 	if at, ok := w.diagnosticEnds[turnID]; ok {
 		w.diagnostic.RuntimeEndAt(at)
@@ -1722,6 +1725,7 @@ func (w *appServerTurnWaiter) apply(result *appServerTurnResult) bool {
 	// A previous turn can finish while the next start response is still pending.
 	if result.started && result.turnID != "" {
 		w.turnID = result.turnID
+		w.flushDiagnosticNotesLocked(result.turnID)
 		w.diagnostic.RuntimeRef(w.threadID, result.turnID, "")
 		if at, ok := w.diagnosticEnds[w.turnID]; ok {
 			w.diagnostic.RuntimeEndAt(at)
@@ -1741,14 +1745,7 @@ func (w *appServerTurnWaiter) apply(result *appServerTurnResult) bool {
 	if result.activity != "" {
 		w.lastActivity = strings.TrimSpace(result.activity)
 	}
-	if result.userInputDelta != 0 {
-		w.pendingInputs += result.userInputDelta
-		if w.pendingInputs < 0 {
-			w.pendingInputs = 0
-		}
-		result.userInputStateChanged = true
-		result.waitingForUser = w.pendingInputs > 0
-	}
+
 	return true
 }
 
@@ -1808,96 +1805,10 @@ func (w *appServerTurnWaiter) hasStructuredOutputBoundary() bool {
 }
 
 func (m *appServerManager) waitAppServerTurn(ctx context.Context, live *liveSession, waiter *appServerTurnWaiter) (PromptResponse, error) {
-	semanticTimeout := appServerSemanticInactivityTimeout
-	if semanticTimeout <= 0 {
-		semanticTimeout = 10 * time.Minute
-	}
-	noProgressTimeout := appServerFirstTurnNoProgressTimeout
-	if noProgressTimeout <= 0 {
-		noProgressTimeout = semanticTimeout
-	}
-	semanticTimer := time.NewTimer(semanticTimeout)
-	semanticC := semanticTimer.C
-	defer semanticTimer.Stop()
-	maximumDuration := appServerMaximumTurnDuration
-	var maximumTimer *time.Timer
-	var maximumC <-chan time.Time
-	var maximumRemaining time.Duration
-	var maximumStartedAt time.Time
-	if maximumDuration > 0 {
-		maximumTimer = time.NewTimer(maximumDuration)
-		maximumC = maximumTimer.C
-		maximumRemaining = maximumDuration
-		maximumStartedAt = time.Now()
-		defer maximumTimer.Stop()
-	}
-
-	var noProgressTimer *time.Timer
-	var noProgressC <-chan time.Time
+	// A slow model, quiet tool or context compaction is not evidence of failure.
+	// Only a terminal event, caller cancellation or process exit ends the wait.
 	waitStartedAt := time.Now()
 	lastActivityAt := waitStartedAt
-	waitingForUser := false
-	stopNoProgress := func() {
-		if noProgressTimer == nil {
-			return
-		}
-		if !noProgressTimer.Stop() {
-			select {
-			case <-noProgressTimer.C:
-			default:
-			}
-		}
-		noProgressC = nil
-	}
-	defer stopNoProgress()
-
-	resetSemantic := func() {
-		if !semanticTimer.Stop() {
-			select {
-			case <-semanticTimer.C:
-			default:
-			}
-		}
-		semanticTimer.Reset(semanticTimeout)
-		semanticC = semanticTimer.C
-	}
-	pauseSemantic := func() {
-		if !semanticTimer.Stop() {
-			select {
-			case <-semanticTimer.C:
-			default:
-			}
-		}
-		semanticC = nil
-	}
-	pauseMaximum := func(now time.Time) {
-		if maximumTimer == nil || maximumC == nil {
-			return
-		}
-		maximumRemaining -= now.Sub(maximumStartedAt)
-		if maximumRemaining < 0 {
-			maximumRemaining = 0
-		}
-		if !maximumTimer.Stop() {
-			select {
-			case <-maximumTimer.C:
-			default:
-			}
-		}
-		maximumC = nil
-	}
-	resumeMaximum := func(now time.Time) {
-		if maximumTimer == nil || maximumC != nil {
-			return
-		}
-		remaining := maximumRemaining
-		if remaining <= 0 {
-			remaining = time.Nanosecond
-		}
-		maximumStartedAt = now
-		maximumTimer.Reset(remaining)
-		maximumC = maximumTimer.C
-	}
 
 	for {
 		if result, ok := waiter.terminalResult(); ok {
@@ -1915,17 +1826,6 @@ func (m *appServerManager) waitAppServerTurn(ctx context.Context, live *liveSess
 			if !waiter.matchesTurn(result.turnID) {
 				continue
 			}
-			if result.userInputStateChanged && result.waitingForUser != waitingForUser {
-				now := time.Now()
-				waitingForUser = result.waitingForUser
-				if waitingForUser {
-					pauseSemantic()
-					pauseMaximum(now)
-				} else {
-					resetSemantic()
-					resumeMaximum(now)
-				}
-			}
 			if result.activity != "" {
 				now := time.Now()
 				if live.appClient != nil {
@@ -1942,19 +1842,6 @@ func (m *appServerManager) waitAppServerTurn(ctx context.Context, live *liveSess
 					)
 				}
 				lastActivityAt = now
-				if !waitingForUser {
-					resetSemantic()
-				}
-			}
-			if result.started && noProgressTimeout > 0 && noProgressTimer == nil {
-				noProgressTimer = time.NewTimer(noProgressTimeout)
-				noProgressC = noProgressTimer.C
-			}
-			if result.progress || result.assistantActivity {
-				stopNoProgress()
-			}
-			if result.userInputStateChanged {
-				stopNoProgress()
 			}
 			if result.err != nil {
 				return PromptResponse{}, result.err
@@ -1966,30 +1853,6 @@ func (m *appServerManager) waitAppServerTurn(ctx context.Context, live *liveSess
 				}
 				return PromptResponse{StopReason: stopReason}, nil
 			}
-		case <-noProgressC:
-			if live.appClient != nil {
-				live.appClient.logDebug("codex app-server turn no progress timeout",
-					"runtime_id", strings.TrimSpace(live.spec.RuntimeID),
-					"thread_id", strings.TrimSpace(waiter.threadID),
-					"turn_id", waiter.currentTurnID(),
-					"timeout", noProgressTimeout,
-					"last_activity", waiter.currentLastActivity(),
-				)
-			}
-			return PromptResponse{}, m.failTimedOutAppServerTurn(live, waiter, "initial assistant activity", noProgressTimeout)
-		case <-semanticC:
-			if live.appClient != nil {
-				live.appClient.logDebug("codex app-server turn semantic inactivity timeout",
-					"runtime_id", strings.TrimSpace(live.spec.RuntimeID),
-					"thread_id", strings.TrimSpace(waiter.threadID),
-					"turn_id", waiter.currentTurnID(),
-					"timeout", semanticTimeout,
-					"last_activity", waiter.currentLastActivity(),
-				)
-			}
-			return PromptResponse{}, m.failTimedOutAppServerTurn(live, waiter, "app-server inactivity", semanticTimeout)
-		case <-maximumC:
-			return PromptResponse{}, m.failTimedOutAppServerTurn(live, waiter, "maximum turn duration", maximumDuration)
 		case <-ctx.Done():
 			return m.stopCanceledAppServerTurn(ctx, live, waiter, "prompt context canceled")
 		case <-live.done:
@@ -2017,13 +1880,6 @@ func (m *appServerManager) stopCanceledAppServerTurn(
 	return PromptResponse{StopReason: StopReasonInterrupted}, ctx.Err()
 }
 
-func (m *appServerManager) failTimedOutAppServerTurn(live *liveSession, waiter *appServerTurnWaiter, reason string, timeout time.Duration) error {
-	if err := m.stopAppServerTurn(live, waiter, reason); err != nil {
-		return fmt.Errorf("Codex stopped responding after %s. Turn cancellation is unconfirmed; worker preserved: %w", timeout, err)
-	}
-	return fmt.Errorf("Codex stopped responding after %s. The turn was canceled; try again", timeout)
-}
-
 func (m *appServerManager) stopAppServerTurn(live *liveSession, waiter *appServerTurnWaiter, reason string) error {
 	if m.deps.UserInput != nil {
 		m.deps.UserInput.CancelSession(live.spec.RuntimeID, waiter.threadID)
@@ -2046,7 +1902,7 @@ func (m *appServerManager) stopAppServerTurn(live *liveSession, waiter *appServe
 	}
 	// A rejected or delayed interrupt does not establish that the process is
 	// unhealthy. Keep worker lifetime independent of individual turn failures.
-	slog.Warn("codex app-server turn interrupt failed; preserving runtime",
+	slog.WarnContext(diagnostics.WithRecord(context.Background(), waiter.diagnostic), "codex app-server turn interrupt failed; preserving runtime",
 		"runtime_id", live.spec.RuntimeID,
 		"thread_id", waiter.threadID,
 		"turn_id", waiter.currentTurnID(),
@@ -2153,6 +2009,7 @@ func (m *appServerManager) readAppServerStdout(runtimeID string, live *liveSessi
 				return
 			}
 			if live.appClient != nil {
+				live.diagnosticObserver.Observe("stdout_decode_failed", err, nil)
 				live.appClient.logDebug("codex app-server stdout decoder stopped", "runtime_id", runtimeID, "error", err)
 			}
 			return
@@ -2186,6 +2043,7 @@ func (m *appServerManager) waitAppServerSession(runtimeID string, live *liveSess
 		)
 		live.appClient.closeAllPending(fmt.Errorf("codex app-server exited with code %d", exitCode))
 	}
+	live.diagnosticObserver.Exit(exitCode, err, cleanupErr)
 	isCurrent := false
 	if cleanupErr == nil {
 		isCurrent = m.detachSession(runtimeID, live)
@@ -2298,4 +2156,36 @@ func appServerThreadConfig(profile agentruntime.Profile, executionMode string) m
 		values["web_search"] = "disabled"
 	}
 	return values
+}
+
+func (w *appServerTurnWaiter) captureDiagnosticNotification(turnID string, value any) {
+	if w == nil || turnID == "" {
+		return
+	}
+	raw := diagnostics.Protect(value)
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.turnID == turnID {
+		w.diagnostic.Capture("runtime.notification", raw)
+		return
+	}
+	if w.turnID != "" {
+		return
+	}
+	if w.diagnosticNoteBytes+len(raw) > 8<<20 {
+		w.diagnostic.Issue("early_runtime_notifications_incomplete")
+		return
+	}
+	if w.diagnosticNotes == nil {
+		w.diagnosticNotes = map[string][]json.RawMessage{}
+	}
+	w.diagnosticNotes[turnID] = append(w.diagnosticNotes[turnID], raw)
+	w.diagnosticNoteBytes += len(raw)
+}
+func (w *appServerTurnWaiter) flushDiagnosticNotesLocked(turnID string) {
+	for _, raw := range w.diagnosticNotes[turnID] {
+		w.diagnostic.Capture("runtime.notification", raw)
+	}
+	w.diagnosticNotes = nil
+	w.diagnosticNoteBytes = 0
 }

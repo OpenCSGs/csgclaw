@@ -8,5 +8,5 @@ export function HubPage() {
     return null;
   }
 
-  return <HubDetailPane {...controller.hubViewProps} />;
+  return <HubDetailPane {...controller.hubViewProps} inlineTemplateDetail />;
 }

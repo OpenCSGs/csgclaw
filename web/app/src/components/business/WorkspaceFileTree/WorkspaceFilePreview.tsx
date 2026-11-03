@@ -14,6 +14,7 @@ import {
   Tooltip,
 } from "@/components/ui";
 import type { WorkspaceFile } from "@/models/workspace";
+import { formatFileSize } from "@/shared/lib/fileSize";
 import "./WorkspaceFilePreview.css";
 
 type WorkspaceFileDialogMode = "code" | "preview";
@@ -59,7 +60,9 @@ export function WorkspaceFilePreview({
   const [dialogMode, setDialogMode] = useState<WorkspaceFileDialogMode>("preview");
   const fileText = file && !file.binary ? file.content || emptyFileText : "";
   const lineCount = fileText ? fileText.split(/\r\n|\r|\n/).length : 0;
-  const fileMeta = file?.binary ? binaryText : `${file?.size || 0} B${file?.truncated ? ` - ${truncatedText}` : ""}`;
+  const fileMeta = file?.binary
+    ? binaryText
+    : `${formatFileSize(file?.size)}${file?.truncated ? ` - ${truncatedText}` : ""}`;
   const markdownFile = Boolean(file && !file.binary && isMarkdownPath(file.path));
   const activeDialogMode: WorkspaceFileDialogMode = markdownFile ? dialogMode : "code";
   const renderedMarkdown = useMemo(() => (markdownFile ? renderMarkdown(fileText) : ""), [fileText, markdownFile]);

@@ -104,29 +104,16 @@ func TestRetiredSandboxMigrationUsesConfiguredProviderOutsideStateLock(t *testin
 				}
 				return cmd.CombinedOutput()
 			}
-			if test.rejectFirst {
-				output, err := runMigration()
-				if err != nil {
-					t.Fatalf("migration failure blocked startup: %v\n%s", err, output)
-				}
-				if !strings.Contains(string(output), "retired runtime Agent migration failed") {
-					t.Fatalf("missing migration warning: %s", output)
-				}
-				data, readErr := os.ReadFile(path)
-				if readErr != nil || string(data) != original {
-					t.Fatalf("failed shutdown discarded the starting sandbox record: %s, %v", data, readErr)
-				}
-				rejectStop.Store(false)
-			}
 			output, err := runMigration()
 			if err != nil {
 				t.Fatalf("migration startup failed (context=%v): %v\n%s", ctx.Err(), err, output)
 			}
-			if stopCalls.Load() == 0 || postStopReads.Load() < 2 {
+			if test.rejectFirst {
+				if !strings.Contains(string(output), "forcing Agent migration to Codex") {
+					t.Fatalf("missing forced migration warning: %s", output)
+				}
+			} else if stopCalls.Load() == 0 || postStopReads.Load() < 2 || !stopped.Load() {
 				t.Fatalf("starting sandbox was not stopped and confirmed: stops=%d, post-stop reads=%d", stopCalls.Load(), postStopReads.Load())
-			}
-			if !stopped.Load() {
-				t.Fatal("configured provider was not stopped")
 			}
 			data, err := os.ReadFile(path)
 			if err != nil {
@@ -135,7 +122,8 @@ func TestRetiredSandboxMigrationUsesConfiguredProviderOutsideStateLock(t *testin
 			var state struct {
 				Agents struct {
 					Items []struct {
-						Runtime struct {
+						DesiredState string `json:"desired_state"`
+						Runtime      struct {
 							Kind, State string
 							SandboxID   string `json:"sandbox_id"`
 						}
@@ -146,7 +134,7 @@ func TestRetiredSandboxMigrationUsesConfiguredProviderOutsideStateLock(t *testin
 				t.Fatal(err)
 			}
 			rt := state.Agents.Items[0].Runtime
-			if rt.Kind != "codex" || rt.State != "stopped" || rt.SandboxID != "" {
+			if rt.Kind != "codex" || rt.State != "stopped" || rt.SandboxID != "" || state.Agents.Items[0].DesiredState != "running" {
 				t.Fatalf("migration result: %s", data)
 			}
 		})

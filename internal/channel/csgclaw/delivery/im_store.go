@@ -54,7 +54,7 @@ func (s *IMTranscriptStore) DeliverMessage(ctx context.Context, turn channel.Tur
 	if err := contextError(ctx); err != nil {
 		return err
 	}
-	_, err := s.im.DeliverMessage(im.DeliverMessageRequest{
+	_, err := s.im.DeliverMessageContext(ctx, im.DeliverMessageRequest{
 		RoomID:       strings.TrimSpace(turn.RoomID),
 		SenderID:     s.senderID(turn.ParticipantID),
 		Content:      text,
@@ -80,7 +80,7 @@ func (s *IMTranscriptStore) DeliverFinalMessage(
 	if err := contextError(ctx); err != nil {
 		return err
 	}
-	_, err := s.im.DeliverMessage(im.DeliverMessageRequest{
+	_, err := s.im.DeliverMessageContext(ctx, im.DeliverMessageRequest{
 		RoomID:            strings.TrimSpace(turn.RoomID),
 		SenderID:          s.senderID(turn.ParticipantID),
 		Content:           text,
@@ -195,7 +195,7 @@ func (s *IMTranscriptStore) DeliverFailure(ctx context.Context, turn channel.Tur
 		"error_code":                        publicError.Code,
 		"presentation_version":              2,
 	})
-	_, err := s.im.DeliverMessage(im.DeliverMessageRequest{
+	_, err := s.im.DeliverMessageContext(ctx, im.DeliverMessageRequest{
 		RoomID:       strings.TrimSpace(turn.RoomID),
 		SenderID:     s.senderID(turn.ParticipantID),
 		Content:      strings.TrimSpace(strings.Join(messages, "\n\n")),
@@ -217,7 +217,7 @@ func (s *IMTranscriptStore) DeliverActivity(ctx context.Context, turn channel.Tu
 	if text == "" {
 		return nil
 	}
-	_, err := s.im.DeliverMessage(im.DeliverMessageRequest{
+	_, err := s.im.DeliverMessageContext(ctx, im.DeliverMessageRequest{
 		RoomID:       strings.TrimSpace(turn.RoomID),
 		SenderID:     s.senderID(turn.ParticipantID),
 		Content:      text,
@@ -242,7 +242,7 @@ func (s *IMTranscriptStore) DeliverRenderedActivity(ctx context.Context, turn ch
 	threadRootID := strings.TrimSpace(rendered.ThreadRootID)
 	if rendered.EnsureTurnRoot && threadRootID == "" {
 		threadRootID = activityRootMessageID(turn)
-		if _, err := s.im.DeliverMessage(im.DeliverMessageRequest{
+		if _, err := s.im.DeliverMessageContext(ctx, im.DeliverMessageRequest{
 			RoomID:    strings.TrimSpace(turn.RoomID),
 			SenderID:  senderID,
 			Content:   "\u200b",
@@ -258,7 +258,7 @@ func (s *IMTranscriptStore) DeliverRenderedActivity(ctx context.Context, turn ch
 	} else {
 		metadata = withChannelMetadata(metadata)
 	}
-	_, err := s.im.DeliverMessage(im.DeliverMessageRequest{
+	_, err := s.im.DeliverMessageContext(ctx, im.DeliverMessageRequest{
 		RoomID:       strings.TrimSpace(turn.RoomID),
 		SenderID:     senderID,
 		Content:      text,

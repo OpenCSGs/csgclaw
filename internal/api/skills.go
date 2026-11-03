@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
@@ -11,6 +12,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"csgclaw/internal/apitypes"
+	"csgclaw/internal/skill/discovery"
 	skilllocal "csgclaw/internal/skill/local"
 	skillsystem "csgclaw/internal/skill/system"
 	"csgclaw/internal/utils/filebrowse"
@@ -182,6 +184,39 @@ func (h *Handler) handleSkillBrowse(
 		return
 	}
 	path := r.URL.Query().Get("path")
+	name, err := skillsystem.NameFromRelativePath(path)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if found, err := skilllocal.Discovered(root, name); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	} else if found != nil {
+		// Rebase the request onto its registered skill, preserving the public path.
+		// The bounded browser must be rooted at the skill itself, not its parent's other data.
+		suffix := strings.TrimPrefix(strings.TrimPrefix(path, name), "/")
+		value, err := browseLocal(found.Path, suffix)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		switch item := value.(type) {
+		case apitypes.WorkspaceFile:
+			item.Path = path
+			value = item
+		case apitypes.WorkspaceListing:
+			item.Path = path
+			for i := range item.Entries {
+				item.Entries[i].Path = name + "/" + item.Entries[i].Path
+				item.Entries[i].Depth++
+			}
+			value = item
+		}
+		writeJSON(w, http.StatusOK, value)
+		return
+	}
+
 	if useSystem, err := shouldBrowseSystemSkill(root, path); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -231,6 +266,8 @@ func listSkills(root string) ([]skillsystem.SkillSummary, error) {
 				Name:        item.Name,
 				Description: item.Description,
 				Source:      item.Source,
+				Discovery:   item.Discovery,
+				Directory:   item.Directory,
 			}
 		}
 	}
@@ -244,15 +281,37 @@ func listSkills(root string) ([]skillsystem.SkillSummary, error) {
 	return items, nil
 }
 
+func (h *Handler) handleSkillRescan(w http.ResponseWriter, r *http.Request) {
+	root, err := skilllocal.SkillsRoot()
+	if err == nil {
+		_, err = discovery.Rescan(root)
+	}
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	items, err := listSkills(root)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, http.StatusOK, items)
+}
+
 func mergedSkillRootListing(root string) (apitypes.WorkspaceListing, error) {
 	listing := apitypes.WorkspaceListing{
 		Kind: "dir",
 		Path: "",
 	}
 	localSkillNames := map[string]struct{}{}
+	discoveredNames := map[string]bool{}
 	if localItems, err := skilllocal.List(root); err == nil {
 		for _, item := range localItems {
 			localSkillNames[item.Name] = struct{}{}
+			if item.Discovery != nil {
+				discoveredNames[item.Name] = true
+				listing.Entries = append(listing.Entries, apitypes.WorkspaceEntry{Name: item.Name, Path: item.Name, Type: "dir"})
+			}
 		}
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return apitypes.WorkspaceListing{}, err
@@ -260,6 +319,9 @@ func mergedSkillRootListing(root string) (apitypes.WorkspaceListing, error) {
 	if localListing, err := filebrowse.List(root, ""); err == nil {
 		for _, entry := range localListing.Entries {
 			if _, ok := localSkillNames[topLevelWorkspacePath(entry.Path)]; ok {
+				if discoveredNames[topLevelWorkspacePath(entry.Path)] {
+					continue
+				}
 				listing.Entries = append(listing.Entries, entry)
 			}
 		}
@@ -316,4 +378,23 @@ func topLevelWorkspacePath(value string) string {
 		return before
 	}
 	return value
+}
+
+func (h *Handler) handleDiscoveryAcknowledge(w http.ResponseWriter, r *http.Request) {
+	var payload struct {
+		Keys []string `json:"keys"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 65536)).Decode(&payload); err != nil {
+		http.Error(w, "invalid keys", http.StatusBadRequest)
+		return
+	}
+	root, err := skilllocal.SkillsRoot()
+	if err == nil {
+		err = discovery.Acknowledge(root, payload.Keys)
+	}
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }

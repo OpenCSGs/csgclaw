@@ -28,7 +28,7 @@ import (
 	"csgclaw/internal/identity"
 	agentruntime "csgclaw/internal/runtime"
 	runtimeinstructions "csgclaw/internal/runtime/instructions"
-	"csgclaw/internal/runtime/sandboxgateway"
+	runtimeworkspace "csgclaw/internal/runtime/workspace"
 	larkextension "csgclaw/internal/runtimeextension/larkcli"
 	templateembed "csgclaw/internal/template/embed"
 )
@@ -89,6 +89,7 @@ type Runtime struct {
 }
 
 type process struct {
+	diagnosticObserver   *diagnostics.RuntimeObserver
 	cleanupErr           error
 	contextUsage         map[string]modelcap.ContextUsage
 	cmd                  *exec.Cmd
@@ -228,17 +229,17 @@ func (r *Runtime) Provision(ctx context.Context, req agentruntime.ProvisionReque
 		return err
 	}
 	root := filepath.Dir(layout.WorkspaceRoot)
-	if err := sandboxgateway.EnsureEmbeddedWorkspace(templateembed.DSHWorkerRoot, layout.WorkspaceRoot); err != nil {
+	if err := runtimeworkspace.EnsureEmbeddedWorkspace(templateembed.DSHWorkerRoot, layout.WorkspaceRoot); err != nil {
 		return fmt.Errorf("seed DSH worker workspace: %w", err)
 	}
 	if overlay := strings.TrimSpace(req.WorkspaceOverlay); overlay != "" {
-		if err := sandboxgateway.OverlayWorkspaceTree(overlay, layout.WorkspaceRoot); err != nil {
+		if err := runtimeworkspace.OverlayWorkspaceTree(overlay, layout.WorkspaceRoot); err != nil {
 			return fmt.Errorf("overlay DSH worker workspace: %w", err)
 		}
 	}
 	workspaceSkills := filepath.Join(layout.WorkspaceRoot, "skills")
 	if info, statErr := os.Stat(workspaceSkills); statErr == nil && info.IsDir() {
-		if err := sandboxgateway.OverlayWorkspaceTree(workspaceSkills, layout.SkillsRoot); err != nil {
+		if err := runtimeworkspace.OverlayWorkspaceTree(workspaceSkills, layout.SkillsRoot); err != nil {
 			return fmt.Errorf("install DSH template skills: %w", err)
 		}
 	} else if statErr != nil && !errors.Is(statErr, os.ErrNotExist) {
@@ -478,6 +479,10 @@ func (r *Runtime) launch(ctx context.Context, root, workspace, binary string, pr
 	if err != nil {
 		return nil, fmt.Errorf("open DSH stderr log: %w", err)
 	}
+	logStartOffset := int64(0)
+	if info, err := stderr.Stat(); err == nil {
+		logStartOffset = info.Size()
+	}
 	cmd := exec.Command(binary, dshLaunchArgs(root, enablePresent)...)
 	configureProcessGroup(cmd)
 	cmd.Dir = workspace
@@ -495,10 +500,12 @@ func (r *Runtime) launch(ctx context.Context, root, workspace, binary string, pr
 	}
 	if err := processgroup.Start(cmd); err != nil {
 		stderr.Close()
+		diagnostics.ReportFailure(ctx, "runtime.process_start", err, map[string]any{"runtime_id": meta.RuntimeID, "stderr_path": stderr.Name()})
 		return nil, fmt.Errorf("start DSH ACP process: %w", err)
 	}
 	client := newACPClient(stdout, stdin)
-	proc := &process{cmd: cmd, stdin: stdin, client: client, stderr: stderr, root: root, workspace: workspace, profile: profile.Normalized(), mcp: mcp, meta: meta, environment: append([]string(nil), environment...), extensionDigests: extensionDigests, extensionExecutables: extensionExecutables, done: make(chan struct{}), active: map[string]*activeTurn{}, ready: map[string]bool{}}
+	proc := &process{
+		diagnosticObserver: diagnostics.NewRuntimeObserver(stderr.Name(), meta.RuntimeID, cmd.Process.Pid, logStartOffset, stderr), cmd: cmd, stdin: stdin, client: client, stderr: stderr, root: root, workspace: workspace, profile: profile.Normalized(), mcp: mcp, meta: meta, environment: append([]string(nil), environment...), extensionDigests: extensionDigests, extensionExecutables: extensionExecutables, done: make(chan struct{}), active: map[string]*activeTurn{}, ready: map[string]bool{}}
 	client.setHandlers(
 		func(request serverRequest) { r.handleServerRequest(proc, request) },
 		func(note notification) { r.handleNotification(proc, note) },
@@ -544,6 +551,8 @@ func (r *Runtime) launch(ctx context.Context, root, workspace, binary string, pr
 		stderr.Close()
 		return nil, err
 	}
+	proc.diagnosticObserver.Bind(ctx)
+	defer proc.diagnosticObserver.End(ctx)
 	go r.waitProcess(proc)
 	return proc, nil
 }
@@ -577,7 +586,7 @@ func buildEnvironment(profile agentruntime.Profile, home, permissionMode string)
 		if !found {
 			continue
 		}
-		if !blocked[agentruntime.CanonicalEnvironmentKey(key)] && !larkextension.IsConfigurationEnv(key) {
+		if !blocked[agentruntime.CanonicalEnvironmentKey(key)] && !agentruntime.IsManagedAgentEnvironmentKey(key) && !larkextension.IsConfigurationEnv(key) {
 			values[key] = value
 		}
 	}
@@ -609,11 +618,20 @@ func buildEnvironmentWithExtensions(profile agentruntime.Profile, home, permissi
 }
 
 func (r *Runtime) waitProcess(proc *process) {
-	_ = proc.cmd.Wait()
+	waitErr := proc.cmd.Wait()
 	cleanupErr := terminateProcessTree(proc.cmd.Process.Pid, true)
 	proc.mu.Lock()
 	proc.cleanupErr = cleanupErr
 	proc.mu.Unlock()
+	code := 0
+	if waitErr != nil {
+		code = 1
+		var exit *exec.ExitError
+		if errors.As(waitErr, &exit) {
+			code = exit.ExitCode()
+		}
+	}
+	proc.diagnosticObserver.Exit(code, waitErr, cleanupErr)
 	_ = proc.stderr.Close()
 	_ = proc.updateMetadata(func(meta *runtimeMetadata) {
 		if cleanupErr == nil {

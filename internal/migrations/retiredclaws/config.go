@@ -1,6 +1,12 @@
 package retiredclaws
 
-import "strings"
+import (
+	"encoding/json"
+	"errors"
+	"os"
+	"path/filepath"
+	"strings"
+)
 
 // BootstrapDefaults clears resolved and raw overrides together, preserving all
 // unrelated environment references when the owning loader writes its snapshot.
@@ -34,4 +40,34 @@ func ObsoleteBootstrapKey(key string) bool {
 	default:
 		return false
 	}
+}
+
+// PendingAgents protects legacy provider input until retirement has completed.
+// An unreadable store retains that input so migration can retry after recovery.
+func PendingAgents(root string) bool {
+	data, err := os.ReadFile(filepath.Join(root, "state.json"))
+	if errors.Is(err, os.ErrNotExist) {
+		return false
+	}
+	if err != nil {
+		return true
+	}
+	var state struct {
+		Agents struct{ Items []map[string]json.RawMessage }
+	}
+	if json.Unmarshal(data, &state) != nil {
+		return true
+	}
+	for _, agent := range state.Agents.Items {
+		var runtime map[string]json.RawMessage
+		if json.Unmarshal(agent["runtime"], &runtime) != nil {
+			runtime = nil
+		}
+		for _, raw := range []json.RawMessage{runtime["kind"], runtime["name"], agent["runtime_kind"], agent["runtime_name"]} {
+			if isRetiredRuntimeKind(migrationString(raw)) {
+				return true
+			}
+		}
+	}
+	return false
 }

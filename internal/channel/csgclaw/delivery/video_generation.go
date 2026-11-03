@@ -36,7 +36,7 @@ func (s *IMTranscriptStore) DeliverVideoGeneration(ctx context.Context, turn cha
 			return fmt.Errorf("generated video could not be attached")
 		}
 	}
-	_, err := s.im.DeliverMessage(im.DeliverMessageRequest{RoomID: turn.RoomID, SenderID: s.senderID(turn.ParticipantID), MessageID: messageID, ThreadRootID: turn.ThreadRootID, Content: task.Prompt, Metadata: metadata, AttachmentSources: uploads})
+	_, err := s.im.DeliverMessageContext(ctx, im.DeliverMessageRequest{RoomID: turn.RoomID, SenderID: s.senderID(turn.ParticipantID), MessageID: messageID, ThreadRootID: turn.ThreadRootID, Content: task.Prompt, Metadata: metadata, AttachmentSources: uploads})
 	if err != nil || !completed {
 		return err
 	}
@@ -44,6 +44,6 @@ func (s *IMTranscriptStore) DeliverVideoGeneration(ctx context.Context, turn cha
 	// metadata-only update retains the existing attachment and freezes the clock.
 	task.EndedAt = time.Now().UTC().Format(time.RFC3339Nano)
 	metadata["video_generation"] = task
-	_, err = s.im.UpdateDeliveredMessageMetadata(turn.RoomID, messageID, s.senderID(turn.ParticipantID), metadata)
+	_, err = s.im.UpdateDeliveredMessageMetadataContext(ctx, turn.RoomID, messageID, s.senderID(turn.ParticipantID), metadata)
 	return err
 }

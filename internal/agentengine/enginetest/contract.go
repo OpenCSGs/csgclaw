@@ -150,6 +150,9 @@ func RunInterfaceContract(t *testing.T, factory InterfaceFactory) {
 		if err != nil || recreated.ID != got.ID || recreated.Status.State == "" || recreated.Status.RuntimeID == "" || recreated.Spec.DesiredState != agentengine.AgentDesiredStateRunning || recreated.Spec.Runtime.Credentials != nil {
 			t.Fatalf("Recreate() = %+v, %v", recreated, err)
 		}
+		if _, err := agents.SetArchived(context.Background(), got.ID, true); err != nil {
+			t.Fatal(err)
+		}
 		if err := agents.Delete(context.Background(), got.ID); err != nil {
 			t.Fatalf("Delete() error = %v", err)
 		}
@@ -352,6 +355,9 @@ func RunInterfaceContract(t *testing.T, factory InterfaceFactory) {
 			Name: "owned.txt", MIMEType: "text/plain", SizeBytes: int64(len(content)),
 		}, bytes.NewReader(content))
 		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := client.Agents().SetArchived(context.Background(), "agent-a", true); err != nil {
 			t.Fatal(err)
 		}
 		if err := client.Agents().Delete(context.Background(), "agent-a"); err != nil {
@@ -621,9 +627,6 @@ func RunInterfaceContract(t *testing.T, factory InterfaceFactory) {
 				// verifies that the operation still waits for the active Turn first.
 				_, _ = agents.Recreate(ctx, item.ID, agentengine.AgentRecreateOptions{UpgradeImage: true})
 				return nil
-			},
-			"delete": func(ctx context.Context, agents agentengine.AgentInterface, item agentengine.Agent) error {
-				return agents.Delete(ctx, item.ID)
 			},
 		}
 		for name, operation := range operations {

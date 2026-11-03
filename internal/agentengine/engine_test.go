@@ -18,6 +18,7 @@ import (
 
 	"csgclaw/internal/activity"
 	agent "csgclaw/internal/agentengine/agents"
+	"csgclaw/internal/agentengine/contract"
 	"csgclaw/internal/config"
 	"csgclaw/internal/runtime"
 	"csgclaw/internal/runtime/codex"
@@ -25,7 +26,7 @@ import (
 
 func TestAgentInterfaceRemainsResourceShaped(t *testing.T) {
 	typeOf := reflect.TypeOf((*AgentInterface)(nil)).Elem()
-	want := []string{"Create", "Delete", "Get", "List", "Recreate", "Update"}
+	want := []string{"Create", "Delete", "Get", "List", "Recreate", "SetArchived", "Update"}
 	if typeOf.NumMethod() != len(want) {
 		t.Fatalf("AgentInterface methods = %d, want %d", typeOf.NumMethod(), len(want))
 	}
@@ -1353,3 +1354,41 @@ func newTestAgentService(t *testing.T, agents []agent.Agent, runtimeImpl runtime
 type nativeInteractionSink func(activity.RuntimeEvent)
 
 func (f nativeInteractionSink) Publish(event codex.SessionEvent) { f(event) }
+
+func TestArchiveInterruptsActiveTurnAndRejectsNewExecution(t *testing.T) {
+	rt := &fakeConversationRuntime{}
+	started := make(chan struct{})
+	rt.prompt = func(ctx context.Context, _, _, _ string) error { close(started); <-ctx.Done(); return ctx.Err() }
+	engine := New(newTestAgentService(t, []agent.Agent{{ID: "agent-a", Name: "A", Role: agent.RoleWorker, RuntimeKind: agent.RuntimeKindCodex, RuntimeID: "runtime-a", Status: string(runtime.StateRunning)}}, rt))
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	done := make(chan TurnResult, 1)
+	go func() {
+		done <- engine.Conversations("agent-a").Run(ctx, TurnRequest{ID: "active", ConversationKey: "room", Input: textInput("run")}, nil)
+	}()
+	select {
+	case <-started:
+	case <-ctx.Done():
+		t.Fatal("turn did not start")
+	}
+	if _, err := engine.Agents().SetArchived(ctx, "agent-a", true); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case result := <-done:
+		if result.Status == TurnSucceeded {
+			t.Fatalf("active turn succeeded: %+v", result)
+		}
+	case <-ctx.Done():
+		t.Fatal("archive did not interrupt")
+	}
+	for _, request := range []TurnRequest{
+		{ID: "new", ConversationKey: "room", Input: textInput("run")},
+		{ID: "image", ConversationKey: "image", Input: textInput("draw"), ImageGeneration: &contract.ImageGenerationTask{}},
+	} {
+		result := engine.Conversations("agent-a").Run(ctx, request, nil)
+		if result.Dispatched || result.Error == nil || result.Error.Code != ErrorAgentUnavailable {
+			t.Fatalf("archived execution=%+v", result)
+		}
+	}
+}

@@ -27,7 +27,7 @@ import (
 	runtimecodex "csgclaw/internal/runtime/codex"
 	runtimedsh "csgclaw/internal/runtime/dsh"
 	runtimeinstructions "csgclaw/internal/runtime/instructions"
-	"csgclaw/internal/runtime/sandboxgateway"
+	runtimeworkspace "csgclaw/internal/runtime/workspace"
 	"csgclaw/internal/sandbox"
 	"csgclaw/internal/sandbox/boxlitecli"
 	"csgclaw/internal/sandbox/sandboxtest"
@@ -6488,7 +6488,7 @@ func TestCreateWorkerFromBuiltinDSHTemplateOverlaysDefaultWorkspace(t *testing.T
 				if !strings.Contains(req.TemplateInstructions, "CSGClaw DSH Worker") {
 					t.Fatalf("Provision().TemplateInstructions = %q", req.TemplateInstructions)
 				}
-				return sandboxgateway.OverlayWorkspaceTree(req.WorkspaceOverlay, overlayTarget)
+				return runtimeworkspace.OverlayWorkspaceTree(req.WorkspaceOverlay, overlayTarget)
 			},
 			new: func(_ context.Context, spec agentruntime.Spec) (agentruntime.Handle, error) {
 				return agentruntime.Handle{RuntimeID: spec.RuntimeID, HandleID: "dsh-agent"}, nil
@@ -8519,6 +8519,7 @@ func mustNewLocalTemplateHubServiceWithMCP(t *testing.T, id string, item hub.Tem
 		Version:        item.Version,
 		Image:          item.Image,
 		RuntimeOptions: item.RuntimeOptions,
+		ModelConfig:    item.ModelConfig,
 		WorkspaceRef:   workspaceRef,
 		MCPServers:     mcpServers,
 		UpdatedAt:      time.Date(2026, 5, 12, 9, 0, 0, 0, time.UTC),

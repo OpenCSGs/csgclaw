@@ -8,6 +8,8 @@ import (
 	"log/slog"
 	"os"
 	"strings"
+	"sync"
+	"time"
 
 	"csgclaw/internal/agentworkspace"
 	"csgclaw/internal/apitypes"
@@ -15,11 +17,12 @@ import (
 )
 
 var (
-	ErrStoreFactoryRequired = errors.New("hub store factory is required")
-	ErrRegistryNotFound     = errors.New("hub registry not found")
-	ErrRegistryNotReadable  = errors.New("hub registry is not readable")
-	ErrRegistryNotWritable  = errors.New("hub registry is not writable")
-	ErrRegistryNotDeletable = errors.New("hub registry is not deletable")
+	ErrStoreFactoryRequired   = errors.New("hub store factory is required")
+	ErrRegistryNotFound       = errors.New("hub registry not found")
+	ErrRegistryNotReadable    = errors.New("hub registry is not readable")
+	ErrRegistryNotWritable    = errors.New("hub registry is not writable")
+	ErrTemplateVersionChanged = errors.New("template version changed before publication")
+	ErrRegistryNotDeletable   = errors.New("hub registry is not deletable")
 )
 
 const templateIDNamespaceSeparator = "."
@@ -99,11 +102,25 @@ func NewService(cfg config.HubConfig, factory StoreFactory, options ...ServiceOp
 }
 
 func (s *Service) List(ctx context.Context) ([]Template, error) {
+	return s.list(ctx, "")
+}
+
+// ListLocal returns disk-backed templates without waiting for community requests.
+func (s *Service) ListLocal(ctx context.Context) ([]Template, error) {
+	return s.list(ctx, "local")
+}
+
+// ListRemote loads only community registries for background refreshes.
+func (s *Service) ListRemote(ctx context.Context) ([]Template, error) {
+	return s.list(ctx, "remote")
+}
+
+func (s *Service) list(ctx context.Context, scope string) ([]Template, error) {
 	var out []Template
 	var listErrs []error
 	for _, name := range s.order {
 		cfgStore, ok := s.stores[name]
-		if !ok || !isReadableKind(cfgStore.ref.Kind) {
+		if !ok || !isReadableKind(cfgStore.ref.Kind) || (scope == "local" && cfgStore.ref.Kind == RegistryKindRemote) || (scope == "remote" && cfgStore.ref.Kind != RegistryKindRemote) {
 			continue
 		}
 		items, err := cfgStore.store.List(ctx)
@@ -232,12 +249,29 @@ func (s *Service) Publish(ctx context.Context, spec PublishSpec) (Template, erro
 	return decorateTemplate(cfgStore, item), nil
 }
 
-func (s *Service) PublishTemplate(ctx context.Context, id, registry string, includeMemory bool) (Template, error) {
-	item, err := s.Get(ctx, id)
-	if err != nil {
-		return Template{}, err
-	}
-	workspace, err := s.FetchWorkspace(ctx, id)
+func (s *Service) PublishTemplate(ctx context.Context, id, registry string, includeMemory bool, expectedRevision ...int) (Template, error) {
+	templatePublicationMu.Lock()
+	defer templatePublicationMu.Unlock()
+	// Freeze metadata and workspace under the same lock used by local commits.
+	// The network upload runs after the independent workspace has been materialized.
+	item, workspace, err := func() (Template, WorkspaceRef, error) {
+		if local, rawID, localErr := s.localVersionStore(id); localErr == nil {
+			localTemplateReplaceMu.Lock()
+			defer localTemplateReplaceMu.Unlock()
+			if err := local.ensureIdentityLocked(rawID); err != nil {
+				return Template{}, WorkspaceRef{}, err
+			}
+		}
+		item, err := s.Get(ctx, id)
+		if err != nil {
+			return Template{}, WorkspaceRef{}, err
+		}
+		if len(expectedRevision) > 0 && item.Revision != expectedRevision[0] {
+			return Template{}, WorkspaceRef{}, ErrTemplateVersionChanged
+		}
+		workspace, err := s.FetchWorkspace(ctx, id)
+		return item, workspace, err
+	}()
 	if err != nil {
 		return Template{}, err
 	}
@@ -253,21 +287,56 @@ func (s *Service) PublishTemplate(ctx context.Context, id, registry string, incl
 			return Template{}, fmt.Errorf("decode hub template MCP servers: %w", err)
 		}
 	}
-	return s.Publish(ctx, PublishSpec{
+	target := registry
+	if target == "" {
+		target = s.defaultPublishRegistry
+	}
+	remotePath := ""
+	targetStore, found := s.stores[target]
+	if found {
+		if remote, ok := targetStore.store.(*RemoteStore); ok {
+			for _, publication := range item.Publications {
+				if publication.Site == remote.hubBaseURL && publication.Namespace == remote.username {
+					remotePath = publication.TemplateID
+					break
+				}
+			}
+		}
+	}
+	published, err := s.Publish(ctx, PublishSpec{
+		ReplaceRemote:  item.Source.Kind == RegistryKindLocal,
+		RemotePath:     remotePath,
 		Registry:       registry,
 		IncludeMemory:  includeMemory,
 		ID:             item.Name,
+		UID:            item.UID,
+		Revision:       item.Revision,
 		Name:           item.Name,
+		Avatar:         item.Avatar,
 		DisplayName:    item.DisplayName,
 		Description:    item.Description,
 		RuntimeKind:    item.RuntimeKind,
 		Version:        item.Version,
 		Image:          item.Image,
 		RuntimeOptions: cloneTemplateRuntimeOptions(item.RuntimeOptions),
+		ModelConfig:    item.ModelConfig,
 		WorkspaceRef:   workspace,
 		MCPServers:     mcpServers,
 		UpdatedAt:      item.UpdatedAt,
 	})
+	if err != nil {
+		return Template{}, err
+	}
+	if found {
+		if remote, ok := targetStore.store.(*RemoteStore); ok {
+			if local, rawID, localErr := s.localVersionStore(id); localErr == nil {
+				if err := local.recordPublication(ctx, rawID, item.UID, apitypes.TemplatePublication{Site: remote.hubBaseURL, Namespace: remote.username, TemplateID: published.ID, Revision: item.Revision, PublishedAt: time.Now().UTC()}); err != nil {
+					return Template{}, fmt.Errorf("cloud template published but local association could not be saved: %w", err)
+				}
+			}
+		}
+	}
+	return published, nil
 }
 
 func (s *Service) Delete(ctx context.Context, id string) error {
@@ -426,3 +495,5 @@ func (s *Service) ReplaceLocal(ctx context.Context, id string, spec PublishSpec)
 	}
 	return decorateTemplate(store, item), nil
 }
+
+var templatePublicationMu sync.Mutex

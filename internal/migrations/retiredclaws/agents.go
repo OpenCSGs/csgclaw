@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -25,7 +26,7 @@ func isRetiredRuntimeKind(kind string) bool {
 
 // MigrateAgents runs before services load the store. User identity,
 // model settings, resources, conversations and workspace files remain intact.
-// Workers stay stopped when their retired sandbox is replaced by a host runtime.
+// Migrated Agents request running so the normal startup pass starts Codex.
 func MigrateAgents(ctx context.Context, root string, openSandbox func(context.Context, string) (sandbox.Runtime, error)) error {
 	return localstore.WithRootStateLock(func() error { return migrateAgents(ctx, root, openSandbox) })
 }
@@ -56,8 +57,12 @@ func migrateAgents(ctx context.Context, root string, openSandbox func(context.Co
 		}
 	}
 	changed := false
+	forced := false
 	var memories []retiredMemoryImport
 	for _, agent := range agents {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		var runtime map[string]json.RawMessage
 		if raw := agent["runtime"]; len(raw) > 0 && string(raw) != "null" {
 			if err := json.Unmarshal(raw, &runtime); err != nil {
@@ -75,6 +80,11 @@ func migrateAgents(ctx context.Context, root string, openSandbox func(context.Co
 			kind = migrationString(agent["runtime_name"])
 		}
 		if !isRetiredRuntimeKind(kind) {
+			metadataChanged, err := cleanHostSandboxMetadata(kind, agent, runtime)
+			if err != nil {
+				return err
+			}
+			changed = changed || metadataChanged
 			continue
 		}
 		id := migrationString(agent["id"])
@@ -82,7 +92,12 @@ func migrateAgents(ctx context.Context, root string, openSandbox func(context.Co
 			return fmt.Errorf("invalid retired runtime Agent id %q", id)
 		}
 		if err := stopRetiredSandboxes(ctx, id, agent, runtime, openSandbox); err != nil {
-			return err
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			forced = true
+			slog.Warn("retired sandbox shutdown could not be confirmed; forcing Agent migration to Codex",
+				"agent_id", id, "runtime_kind", kind, "error", err)
 		}
 		workspace, err := retiredRuntimeWorkspace(root, id, kind)
 		if err != nil {
@@ -106,7 +121,7 @@ func migrateAgents(ctx context.Context, root string, openSandbox func(context.Co
 		if err != nil {
 			return err
 		}
-		agent["desired_state"] = json.RawMessage(`"stopped"`)
+		agent["desired_state"] = json.RawMessage(`"running"`)
 		for _, key := range []string{"runtime_kind", "runtime_name", "runtime_id", "box_id", "sandbox_id", "sandbox_enabled", "image", "runtime_options", "status"} {
 			delete(agent, key)
 		}
@@ -147,7 +162,18 @@ func migrateAgents(ctx context.Context, root string, openSandbox func(context.Co
 	if err != nil {
 		return err
 	}
-	if err := backupOnce(root); err != nil {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if forced {
+		snapshotMu.Lock()
+		backup, err := freshBackup(root)
+		snapshotMu.Unlock()
+		if err != nil {
+			return fmt.Errorf("backup forced retired runtime migration: %w", err)
+		}
+		slog.Info("retired runtime migration backup preserves original sandbox records", "backup_path", backup)
+	} else if err := backupOnce(root); err != nil {
 		return fmt.Errorf("backup retired runtime state: %w", err)
 	}
 	for _, memory := range memories {
@@ -236,4 +262,52 @@ func writeRuntimeMigrationFile(path string, data []byte) error {
 		return closeErr
 	}
 	return os.Rename(temp.Name(), path)
+}
+
+// Native runtime handles are still stored in sandbox_id in older records.
+// Remove only obsolete flags; preserve handles, desired state and all user data.
+func cleanHostSandboxMetadata(kind string, agent, runtime map[string]json.RawMessage) (bool, error) {
+	if kind != "codex" && kind != "dsh" {
+		return false, nil
+	}
+	changed := false
+	runtimeChanged := false
+	for _, key := range []string{"sandbox_enabled", "sandbox_provider", "sandboxed"} {
+		if _, ok := agent[key]; ok {
+			delete(agent, key)
+			changed = true
+		}
+		if _, ok := runtime[key]; ok {
+			delete(runtime, key)
+			changed = true
+			runtimeChanged = true
+		}
+	}
+	if runtimeChanged {
+		data, err := json.Marshal(runtime)
+		if err != nil {
+			return false, err
+		}
+		agent["runtime"] = data
+	}
+	for _, key := range []string{"model_config", "agent_profile"} {
+		var profile map[string]json.RawMessage
+		if len(agent[key]) == 0 || string(agent[key]) == "null" {
+			continue
+		}
+		if err := json.Unmarshal(agent[key], &profile); err != nil {
+			return false, err
+		}
+		if _, ok := profile["sandbox_enabled"]; !ok {
+			continue
+		}
+		delete(profile, "sandbox_enabled")
+		data, err := json.Marshal(profile)
+		if err != nil {
+			return false, err
+		}
+		agent[key] = data
+		changed = true
+	}
+	return changed, nil
 }

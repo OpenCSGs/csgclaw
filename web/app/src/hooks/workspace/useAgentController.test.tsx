@@ -24,6 +24,7 @@ import {
   createManagerAgentRequest,
   createNotificationBotRequest,
   deleteAgentLikeRequest,
+  archiveAgent,
   deleteAgentSkillRequest,
   deleteBotRequest,
   fetchAgent,
@@ -103,6 +104,7 @@ vi.mock("@/api/agents", async () => {
     createManagerAgentRequest: vi.fn(),
     createNotificationBotRequest: vi.fn(),
     deleteAgentLikeRequest: vi.fn(),
+    archiveAgent: vi.fn(),
     deleteAgentSkillRequest: vi.fn(),
     deleteBotRequest: vi.fn(),
     fetchAgent: vi.fn(),
@@ -447,6 +449,7 @@ describe("useAgentController", () => {
       user_id: "user-notifier",
     });
     vi.mocked(deleteAgentLikeRequest).mockResolvedValue(undefined);
+    vi.mocked(archiveAgent).mockReset().mockResolvedValue({});
     vi.mocked(deleteAgentSkillRequest).mockResolvedValue(undefined);
     vi.mocked(deleteBotRequest).mockResolvedValue(undefined);
     vi.mocked(fetchAgentMCPServers).mockResolvedValue({
@@ -1011,6 +1014,28 @@ describe("useAgentController", () => {
     expect(result.current.agentViewProps.noticeTone).toBe("success");
   });
 
+  it.each(["zh", "en"] as const)("keeps startup diagnostics on the selected Agent page in %s", async (locale) => {
+    const worker: AgentLike = { ...oldAgent, id: "agent-dev", name: "dev", role: "worker", runtime_kind: "codex" };
+    const message = "start codex app-server: executable file not found";
+    const translate = createTranslator(locale);
+    vi.mocked(runAgentActionRequest).mockRejectedValueOnce({ status: 400, message } satisfies ApiError);
+    const { result } = renderHook(
+      () =>
+        useAgentControllerHarness({
+          activePane: { type: WorkspacePaneTypes.agent, id: worker.id },
+          agents: [worker],
+          t: translate,
+        }).controller,
+      { wrapper: createWrapper() },
+    );
+    await act(async () => {
+      await result.current.agentViewProps.onStart(worker);
+    });
+    expect(runAgentActionRequest).toHaveBeenCalledWith(worker.id, "start");
+    expect(result.current.agentViewProps.saveError).toContain(message);
+    expect(result.current.agentViewProps.saveError).toContain("HTTP 400");
+  });
+
   it("exposes the billing URL when recreating the selected worker fails for insufficient balance", async () => {
     const worker: AgentLike = {
       ...oldAgent,
@@ -1038,7 +1063,7 @@ describe("useAgentController", () => {
       await result.current.agentViewProps.onRecreate(worker);
     });
 
-    expect(result.current.agentViewProps.saveError).toBe("Insufficient balance");
+    expect(result.current.agentViewProps.saveError).toBe("Insufficient balance\nHTTP 402 · insufficient_balance");
     expect(result.current.agentViewProps.saveBillingURL).toBe("https://opencsg-stg.com/settings/billing");
   });
 
@@ -1163,7 +1188,7 @@ describe("useAgentController", () => {
     });
   });
 
-  it("deletes an agent through the agent-aware delete endpoint", async () => {
+  it("archives an agent without calling the permanent delete endpoint", async () => {
     const onAgentDeleted = vi.fn();
     const { result } = renderHook(() => useAgentControllerHarness({ onAgentDeleted }).controller, {
       wrapper: createWrapper(),
@@ -1173,7 +1198,8 @@ describe("useAgentController", () => {
       await result.current.agentViewProps.onDelete?.(oldAgent);
     });
 
-    expect(deleteAgentLikeRequest).toHaveBeenCalledWith(oldAgent);
+    expect(archiveAgent).toHaveBeenCalledWith(oldAgent.id);
+    expect(deleteAgentLikeRequest).not.toHaveBeenCalled();
     expect(deleteBotRequest).not.toHaveBeenCalled();
     expect(onAgentDeleted).toHaveBeenCalledWith(oldAgent);
   });
@@ -1181,7 +1207,7 @@ describe("useAgentController", () => {
   it.each([
     { role: "lead", count: 1 },
     { role: "member", count: 2 },
-  ])("shows $count team references for a $role", async ({ role, count }) => {
+  ])("archives a $role while preserving $count team references", async ({ role, count }) => {
     const worker: AgentLike = {
       ...oldAgent,
       id: "agent-worker",
@@ -1214,10 +1240,10 @@ describe("useAgentController", () => {
     vi.mocked(fetchTeams).mockResolvedValue(count === 2 ? [team, otherTeam, unrelatedTeam] : [team, unrelatedTeam]);
     await act(async () => {
       const block = await result.current.controller.agentViewProps.onCheckDelete(worker);
-      expect(block?.message).toBe(`该智能体仍被 ${count} 个团队使用，请先在团队中移除它，然后再删除。`);
+      expect(block).toBeNull();
       block?.onResolve?.();
     });
-    expect(result.current.navigatePane).toHaveBeenCalledWith({ type: WorkspacePaneTypes.team, id: team.id });
+    expect(result.current.navigatePane).not.toHaveBeenCalled();
     expect(result.current.controller.createTeamModalProps).toBeNull();
     await act(async () => {
       await result.current.controller.agentViewProps.onDelete(worker);
@@ -1243,15 +1269,11 @@ describe("useAgentController", () => {
     await act(async () => {
       await result.current.agentViewProps.onDelete(worker);
     });
-    if (working) {
-      expect(deleteAgentLikeRequest).not.toHaveBeenCalled();
-      expect(result.current.agentViewProps.saveError).toBe("agentDeleteWorkingBlocked");
-    } else {
-      expect(deleteAgentLikeRequest).toHaveBeenCalledWith(worker);
-    }
+    expect(archiveAgent).toHaveBeenCalledWith(worker.id);
+    expect(deleteAgentLikeRequest).not.toHaveBeenCalled();
   });
 
-  it("does not delete when team dependency checks fail", async () => {
+  it("archive does not depend on fetching teams", async () => {
     const { result } = renderHook(() => useAgentControllerHarness().controller, { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.teamsLoading).toBe(false));
     vi.mocked(fetchTeams).mockRejectedValue(new Error("Team service unavailable"));
@@ -1259,7 +1281,7 @@ describe("useAgentController", () => {
       await result.current.agentViewProps.onDelete(oldAgent);
     });
     expect(deleteAgentLikeRequest).not.toHaveBeenCalled();
-    expect(result.current.agentViewProps.saveError).toBe("agentDeleteCheckFailed");
+    expect(archiveAgent).toHaveBeenCalledWith(oldAgent.id);
   });
 
   it("preserves deletion of notification participants when the team service is unavailable", async () => {
@@ -1277,7 +1299,7 @@ describe("useAgentController", () => {
 
   it("keeps the profile detail open when deleting the agent fails", async () => {
     const onAgentDeleted = vi.fn();
-    vi.mocked(deleteAgentLikeRequest).mockRejectedValueOnce(new Error("Delete failed"));
+    vi.mocked(archiveAgent).mockRejectedValueOnce(new Error("Archive failed"));
     const { result } = renderHook(() => useAgentControllerHarness({ onAgentDeleted }).controller, {
       wrapper: createWrapper(),
     });
@@ -1447,6 +1469,7 @@ describe("useAgentController", () => {
         "审查助手",
         "avatars/custom.png",
         "",
+        "",
       );
       return remote;
     });
@@ -1549,6 +1572,7 @@ describe("useAgentController", () => {
         changed ? "新展示名" : "审查助手",
         "",
         "local.Reviewer",
+        "",
       );
       expect(snapshotInstructions).toBe("corrected AGENTS.md instructions");
       expect(publishHubTemplateToCommunityRequest).toHaveBeenCalledTimes(2);
@@ -2086,6 +2110,41 @@ describe("useAgentController", () => {
 
     await waitFor(() => expect(result.current.agentViewProps.draft?.model_id).toBe("MiniMax-M2.5"));
     await waitFor(() => expect(result.current.agentViewProps.savedDraft?.model_id).toBe("MiniMax-M2.5"));
+  });
+
+  it("refreshes an unedited profile after the manager receives its first model_config", async () => {
+    const partial: AgentLike = {
+      id: "u-manager",
+      name: "manager",
+      role: "manager",
+      runtime_kind: "codex",
+      status: "running",
+      model_config: { model_provider_id: "csghub-lite" },
+    };
+    const configured: AgentLike = {
+      ...partial,
+      model_config: { model_provider_id: "openai", model_id: "first-model" },
+    };
+    let current = partial;
+    vi.mocked(fetchAgent)
+      .mockReset()
+      .mockImplementation(async () => current);
+    vi.mocked(fetchAgentProfile)
+      .mockReset()
+      .mockImplementation(async () => current.model_config ?? {});
+    const { result, rerender } = renderHook(({ agents }) => useAgentControllerHarness({ agents }).controller, {
+      initialProps: { agents: [partial] },
+      wrapper: createWrapper(),
+    });
+    await waitFor(() => expect(fetchAgentProfile).toHaveBeenCalledWith("u-manager"));
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(result.current.agentViewProps.draft?.model_provider_id).toBe("csghub-lite");
+    current = configured;
+    rerender({ agents: [configured] });
+    await waitFor(() => expect(result.current.agentViewProps.draft?.model_id).toBe("first-model"));
+    expect(result.current.agentViewProps.savedDraft?.model_provider_id).toBe("openai");
   });
 
   it("loads one page of descriptions and exposes the complete resource count", async () => {
@@ -3337,6 +3396,58 @@ describe("useAgentController", () => {
         from_template: "local.resume-scorer",
         profile: "opencsg.staging-model",
         agent_profile: expect.objectContaining({ model_provider_id: "opencsg", model_id: "staging-model" }),
+      }),
+    );
+  });
+
+  it.each([false, true])("保留目录以外的模板模型并保存用户选择：%s", async (userChangesSelection) => {
+    const catalog = normalizeModelProviderCatalog({
+      providers: [{ id: "remote", status: "connected", models: ["platform-model"] }],
+    });
+    vi.mocked(fetchAgentProfileDefaults).mockResolvedValueOnce({
+      provider: "api",
+      model_provider_id: "remote",
+      model_id: "platform-model",
+      reasoning_effort: "medium",
+    });
+    const { result } = renderHook(
+      () => useAgentControllerHarness({ modelProviders: catalog, modelProvidersLoaded: true }).controller,
+      { wrapper: createWrapper() },
+    );
+    await act(async () => {
+      await result.current.openCreateAgentModal({
+        id: "local.reviewer",
+        name: "Reviewer",
+        runtime_kind: "codex",
+        runtime_options: { execution_mode: "read_only" },
+        model_config: { model_id: "template-model", reasoning_effort: "high" },
+      });
+    });
+    expect(result.current.agentProfileModalProps?.agentDraft).toMatchObject({
+      from_template: "local.reviewer",
+      model_provider_id: "remote",
+      model_id: "template-model",
+      reasoning_effort: "high",
+      runtime_kind: "codex",
+      runtime_options: { execution_mode: "read_only" },
+    });
+    if (userChangesSelection) {
+      act(() => {
+        const modal = result.current.agentProfileModalProps!;
+        modal.onAgentDraftChange({ ...modal.agentDraft, model_id: "platform-model", reasoning_effort: "auto" });
+      });
+    }
+    await act(async () => {
+      await result.current.agentProfileModalProps?.onSave();
+    });
+    expect(createBotRequest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        from_template: "local.reviewer",
+        agent_profile: expect.objectContaining({
+          model_provider_id: "remote",
+          model_id: userChangesSelection ? "platform-model" : "template-model",
+          reasoning_effort: userChangesSelection ? "auto" : "high",
+        }),
       }),
     );
   });

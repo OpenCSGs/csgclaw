@@ -44,38 +44,46 @@ type Timing struct {
 	CompleteMS  *float64   `json:"complete_ms,omitempty"`
 }
 type Snapshot struct {
-	ID               string    `json:"id"`
-	RoomID           string    `json:"room_id"`
-	SourceID         string    `json:"source_id"`
-	ThreadID         string    `json:"thread_id,omitempty"`
-	AgentID          string    `json:"agent_id"`
-	AgentName        string    `json:"agent_name,omitempty"`
-	TurnID           string    `json:"turn_id"`
-	Runtime          string    `json:"runtime,omitempty"`
-	Model            string    `json:"model,omitempty"`
-	RuntimeSessionID string    `json:"runtime_session_id,omitempty"`
-	RuntimeTurnID    string    `json:"runtime_turn_id,omitempty"`
-	RuntimeRequestID string    `json:"runtime_request_id,omitempty"`
-	StartedAt        time.Time `json:"started_at"`
-	DispatchMS       float64   `json:"dispatch_ms"`
-	Status           string    `json:"status"`
-	TotalMS          float64   `json:"total_ms"`
-	RuntimeStartMS   *float64  `json:"runtime_start_ms,omitempty"`
-	RuntimeEndMS     *float64  `json:"runtime_end_ms,omitempty"`
-	FirstOutputMS    *float64  `json:"first_output_ms,omitempty"`
-	Spans            []Span    `json:"spans,omitempty"`
-	Error            *Failure  `json:"error,omitempty"`
-	Incomplete       bool      `json:"incomplete,omitempty"`
-	Browser          *Timing   `json:"browser,omitempty"`
+	RuntimeLogSource *RuntimeLogSource `json:"runtime_log_source,omitempty"`
+	EvidenceVersion  int               `json:"evidence_version,omitempty"`
+	Performance      map[string]Metric `json:"performance,omitempty"`
+	ID               string            `json:"id"`
+	RoomID           string            `json:"room_id"`
+	SourceID         string            `json:"source_id"`
+	ThreadID         string            `json:"thread_id,omitempty"`
+	AgentID          string            `json:"agent_id"`
+	AgentName        string            `json:"agent_name,omitempty"`
+	TurnID           string            `json:"turn_id"`
+	Runtime          string            `json:"runtime,omitempty"`
+	Model            string            `json:"model,omitempty"`
+	RuntimeSessionID string            `json:"runtime_session_id,omitempty"`
+	RuntimeTurnID    string            `json:"runtime_turn_id,omitempty"`
+	RuntimeRequestID string            `json:"runtime_request_id,omitempty"`
+	StartedAt        time.Time         `json:"started_at"`
+	DispatchMS       float64           `json:"dispatch_ms"`
+	Status           string            `json:"status"`
+	TotalMS          float64           `json:"total_ms"`
+	RuntimeStartMS   *float64          `json:"runtime_start_ms,omitempty"`
+	RuntimeEndMS     *float64          `json:"runtime_end_ms,omitempty"`
+	FirstOutputMS    *float64          `json:"first_output_ms,omitempty"`
+	Spans            []Span            `json:"spans,omitempty"`
+	Error            *Failure          `json:"error,omitempty"`
+	Incomplete       bool              `json:"incomplete,omitempty"`
+	CollectionIssues []string          `json:"collection_issues,omitempty"`
+	TaskID           string            `json:"task_id,omitempty"`
+	TaskAttempt      int               `json:"task_attempt,omitempty"`
+	Browser          *Timing           `json:"browser,omitempty"`
 }
 type Record struct {
-	mu          sync.Mutex
-	store       *Store
-	origin      time.Time
-	data        Snapshot
-	active      map[string]int
-	detailBytes int
-	eventSpans  int
+	captureMu       sync.Mutex
+	captureSequence uint64
+	mu              sync.Mutex
+	store           *Store
+	origin          time.Time
+	data            Snapshot
+	active          map[string]int
+	detailBytes     int
+	eventSpans      int
 }
 type source struct {
 	started  time.Time
@@ -83,21 +91,30 @@ type source struct {
 	dispatch string
 }
 type Store struct {
-	mu          sync.Mutex
-	diskMu      sync.Mutex
-	dir         string
-	records     map[string]*Record
-	sources     map[string]source
-	dirty       map[string]*Record
-	writing     bool
-	lastWarning time.Time
-	lastPrune   time.Time
-	sizes       map[string]int64
-	bytes       int64
+	pendingFailures     map[string]*pendingFailure
+	pendingFailureBytes int
+	environment         json.RawMessage
+	context             *contextStore
+	mu                  sync.Mutex
+	diskMu              sync.Mutex
+	dir                 string
+	records             map[string]*Record
+	sources             map[string]source
+	dirty               map[string]*Record
+	writing             bool
+	lastWarning         time.Time
+	lastPrune           time.Time
+	sizes               map[string]int64
+	bytes               int64
 }
 
 func New(dir string) *Store {
 	s := &Store{dir: dir, records: map[string]*Record{}, sources: map[string]source{}, dirty: map[string]*Record{}, sizes: map[string]int64{}}
+	contextDir := ""
+	if dir != "" {
+		contextDir = filepath.Join(dir, "context")
+	}
+	s.context = newContextStore(contextDir)
 	if dir == "" {
 		return s
 	}
@@ -202,13 +219,15 @@ func (s *Store) Begin(room, sourceID, thread, agent, turn string) *Record {
 	if !exists {
 		src = source{started: now, ready: now}
 	}
-	r := &Record{store: s, origin: src.started, active: map[string]int{}, data: Snapshot{ID: id, RoomID: room, SourceID: sourceID, ThreadID: thread, AgentID: agent, TurnID: turn, StartedAt: src.started, DispatchMS: now.Sub(src.started).Seconds() * 1000, Status: "queued", Incomplete: !exists}}
+	r := &Record{store: s, origin: src.started, active: map[string]int{}, data: Snapshot{EvidenceVersion: 2, ID: id, RoomID: room, SourceID: sourceID, ThreadID: thread, AgentID: agent, TurnID: turn, StartedAt: src.started, DispatchMS: now.Sub(src.started).Seconds() * 1000, Status: "queued", Incomplete: !exists}}
 	s.records[id] = r
 	s.mu.Unlock()
 	r.Interval("message.accept", "csgclaw", src.started, src.ready)
 	r.Interval("message.dispatch", "csgclaw", src.ready, now)
 	r.Start("channel.queue", "csgclaw", "channel.queue")
 	s.schedule(r)
+	CurrentLogs().MarkActive(turn, true)
+	r.Capture("execution.environment", s.environmentSnapshot())
 	return r
 }
 func WithRecord(ctx context.Context, r *Record) context.Context {
@@ -327,7 +346,11 @@ func (r *Record) RuntimeRef(session, turn, request string) {
 		return
 	}
 	r.mu.Lock()
-	defer r.mu.Unlock()
+	defer func() {
+		agent, session, turn := r.data.AgentID, r.data.RuntimeSessionID, r.data.RuntimeTurnID
+		r.mu.Unlock()
+		r.store.flushNativeFailures(r, agent, session, turn)
+	}()
 	if session != "" {
 		r.data.RuntimeSessionID = session
 	}
@@ -426,6 +449,7 @@ func (r *Record) Finish(status string) {
 		r.data.Incomplete = true
 	}
 	r.mu.Unlock()
+	CurrentLogs().MarkActive(r.data.TurnID, false)
 	r.store.schedule(r)
 }
 func (r *Record) Snapshot() Snapshot { return r.snapshot(true) }
@@ -434,6 +458,15 @@ func (r *Record) snapshot(full bool) Snapshot {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	out := r.data
+	if r.data.RuntimeLogSource != nil {
+		source := *r.data.RuntimeLogSource
+		out.RuntimeLogSource = &source
+	}
+	out.Performance = make(map[string]Metric, len(r.data.Performance))
+	for name, metric := range r.data.Performance {
+		out.Performance[name] = metric
+	}
+	out.CollectionIssues = append([]string(nil), r.data.CollectionIssues...)
 	out.Spans = nil
 	if full {
 		out.Spans = append([]Span(nil), r.data.Spans...)
@@ -514,6 +547,12 @@ func (s *Store) BrowserTiming(room, sourceID, turnID string, t Timing) bool {
 	return ok
 }
 func (s *Store) DeleteRoom(room string) {
+	var removed []string
+	defer func() {
+		for _, id := range removed {
+			s.context.delete(id)
+		}
+	}()
 	s.diskMu.Lock()
 	defer s.diskMu.Unlock()
 	s.mu.Lock()
@@ -523,6 +562,7 @@ func (s *Store) DeleteRoom(room string) {
 			s.bytes -= s.sizes[id]
 			delete(s.sizes, id)
 			delete(s.records, id)
+			removed = append(removed, id)
 			delete(s.dirty, id)
 			if s.dir != "" {
 				_ = os.Remove(filepath.Join(s.dir, id+".json"))
@@ -540,6 +580,10 @@ func (s *Store) schedule(r *Record) {
 		return
 	}
 	s.mu.Lock()
+	if s.records[r.data.ID] != r {
+		s.mu.Unlock()
+		return
+	}
 	s.dirty[r.data.ID] = r
 	if !s.writing {
 		s.writing = true
@@ -665,6 +709,9 @@ func Redact(value string) string {
 
 // Flush waits for pending snapshots during graceful shutdown.
 func (s *Store) Flush(ctx context.Context) error {
+	if err := s.context.flush(ctx); err != nil {
+		return err
+	}
 	ticker := time.NewTicker(10 * time.Millisecond)
 	defer ticker.Stop()
 	for {

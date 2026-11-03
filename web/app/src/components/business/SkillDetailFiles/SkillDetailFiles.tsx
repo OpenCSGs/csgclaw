@@ -20,19 +20,20 @@ export function SkillDetailFiles({
 }) {
   const remote = market ? skill : undefined;
   const root = remote ? "" : skill.name;
+  const sourceKey = skill.discovery?.key;
   const [selectedPath, setSelectedPath] = useState(root ? `${root}/SKILL.md` : "SKILL.md");
   const tree = useQuery({
     // Keep remote previews inside the existing login-environment cache reset scope.
     queryKey: remote
       ? [...workspaceQueryKeys.officialSkills(), "tree", remote.remotePath, remote.remoteRef]
-      : workspaceQueryKeys.skillTree(root),
+      : [...workspaceQueryKeys.skillTree(root), ...(sourceKey ? ["source", sourceKey] : [])],
     queryFn: () => fetchSkillTree(root, remote),
     retry: false,
   });
   const file = useQuery({
     queryKey: remote
       ? [...workspaceQueryKeys.officialSkills(), "file", remote.remotePath, remote.remoteRef, selectedPath]
-      : workspaceQueryKeys.skillFile(selectedPath),
+      : [...workspaceQueryKeys.skillFile(selectedPath), ...(sourceKey ? ["source", sourceKey] : [])],
     queryFn: () => fetchSkillFile(selectedPath, remote),
     retry: false,
   });

@@ -47,6 +47,6 @@ func (s *IMTranscriptStore) DeliverTurnProgress(ctx context.Context, turn channe
 	if strings.TrimSpace(answer) == "" {
 		answer = "\u200b"
 	}
-	_, err = s.im.DeliverMessage(im.DeliverMessageRequest{RoomID: turn.RoomID, SenderID: s.senderID(turn.ParticipantID), MessageID: finalMessageID(turn), ThreadRootID: turn.ThreadRootID, Content: answer, Metadata: metadata, AttachmentSources: uploads, Transient: !persist})
+	_, err = s.im.DeliverMessageContext(ctx, im.DeliverMessageRequest{RoomID: turn.RoomID, SenderID: s.senderID(turn.ParticipantID), MessageID: finalMessageID(turn), ThreadRootID: turn.ThreadRootID, Content: answer, Metadata: metadata, AttachmentSources: uploads, Transient: !persist})
 	return err
 }

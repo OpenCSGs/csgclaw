@@ -308,6 +308,45 @@ describe("agent model helpers", () => {
     });
   });
 
+  it.each([
+    { name: "未声明", modelConfig: undefined, model: "default-model", effort: "medium" },
+    { name: "仅模型", modelConfig: { model_id: "template-model" }, model: "template-model", effort: "medium" },
+    { name: "仅推理强度", modelConfig: { reasoning_effort: "high" }, model: "default-model", effort: "high" },
+    {
+      name: "模型和推理强度",
+      modelConfig: { model_id: "template-model", reasoning_effort: "high" },
+      model: "template-model",
+      effort: "high",
+    },
+    { name: "明确使用模型默认", modelConfig: { reasoning_effort: "auto" }, model: "default-model", effort: "auto" },
+    { name: "空字段", modelConfig: { model_id: " ", reasoning_effort: "" }, model: "default-model", effort: "medium" },
+  ])("按模板声明初始化模型配置并保留供应商：$name", ({ modelConfig, model, effort }) => {
+    const draft = applyTemplateToDraft(
+      agentToDraft({
+        agent_profile: {
+          provider: "api",
+          model_provider_id: "remote",
+          model_id: "default-model",
+          reasoning_effort: "medium",
+          base_url: "https://gateway.example/v1",
+          headers: { "X-Route": "workspace" },
+        },
+      }),
+      { id: "local.reviewer", model_config: modelConfig },
+      null,
+    );
+
+    expect(draft).toMatchObject({
+      provider: "api",
+      model_provider_id: "remote",
+      model_id: model,
+      reasoning_effort: effort,
+      base_url: "https://gateway.example/v1",
+      headersText: JSON.stringify({ "X-Route": "workspace" }, null, 2),
+    });
+    expect(draftToProfile(draft)).toMatchObject({ model_id: model, reasoning_effort: effort });
+  });
+
   it("inherits template execution mode while preserving explicit local runtime options", () => {
     const draft = applyTemplateToDraft(
       {

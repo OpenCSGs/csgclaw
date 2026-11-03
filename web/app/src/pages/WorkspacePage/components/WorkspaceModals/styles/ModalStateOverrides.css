@@ -338,18 +338,6 @@
   color: var(--input-text);
   box-shadow: var(--input-shadow);
 }
-
-:root[data-theme="dark"] .profile-modal.agent-modal .agent-sandbox-toggle.readonly,
-:root[data-theme="dark"] .profile-modal.agent-modal .agent-sandbox-toggle.readonly:hover,
-:root[data-theme="dark"] .profile-modal.agent-modal .agent-sandbox-toggle.readonly:focus-within,
-:root[data-theme="dark"]
-  .profile-modal.agent-modal
-  .agent-sandbox-toggle.readonly:has(input:where(:not([data-csg-control])):checked) {
-  border-color: var(--input-border);
-  background: var(--input-background);
-  color: var(--input-text);
-}
-
 :root[data-theme="dark"] .profile-modal.agent-modal .agent-fast-mode-help {
   color: var(--input-text);
 }

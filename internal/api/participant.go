@@ -182,6 +182,10 @@ func (h *Handler) handleParticipantByIDPath(w http.ResponseWriter, r *http.Reque
 			http.NotFound(w, r)
 			return
 		}
+		if r.URL.Query().Get("delete_agent") != "" && current.AgentID != "" {
+			writeCodedAPIError(w, http.StatusConflict, "agent_delete_requires_archive_management", "Delete archived agents from archive management")
+			return
+		}
 		var deleted apitypes.Participant
 		var removed bool
 		remove := func(ctx context.Context) error {
@@ -435,6 +439,9 @@ func (h *Handler) presentParticipant(item apitypes.Participant) apitypes.Partici
 	}
 	if strings.TrimSpace(item.AgentID) != "" {
 		item.AgentID = agent.CanonicalID(item.AgentID)
+		if h.agentLifecycleState(item.AgentID) == "archived" {
+			item.Mentionable = false
+		}
 	}
 	if h.svc != nil {
 		if name, ok := h.svc.AgentDisplayName(item.AgentID); ok {

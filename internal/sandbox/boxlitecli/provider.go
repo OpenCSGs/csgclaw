@@ -3,6 +3,7 @@ package boxlitecli
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -242,6 +243,39 @@ func (i *Instance) valid() error {
 	}
 	if strings.TrimSpace(i.idOrName) == "" {
 		return fmt.Errorf("boxlite cli box id or name is required")
+	}
+	return nil
+}
+
+// CheckHomeStopped inventories all instances, including non-running ones, in one
+// specific legacy home. It is used only by migration before deleting that home.
+func (p Provider) CheckHomeStopped(ctx context.Context, homeDir string) error {
+	opened, err := p.Open(ctx, homeDir)
+	if err != nil {
+		return err
+	}
+	r := opened.(*Runtime)
+	defer r.Close()
+	result, err := r.run(ctx, []string{"list", "--all", "--format", "json"}, nil, nil)
+	if err == nil && result.ExitCode != 0 {
+		err = fmt.Errorf("retired BoxLite inventory command failed")
+	}
+	if err != nil {
+		return wrapRunError("list retired boxlite instances", result, err)
+	}
+	data := strings.TrimSpace(string(result.Stdout))
+	if !strings.HasPrefix(data, "[") {
+		return fmt.Errorf("invalid retired BoxLite inventory")
+	}
+	var rows []struct{ Status string }
+	if err := json.Unmarshal(result.Stdout, &rows); err != nil {
+		return fmt.Errorf("decode retired BoxLite inventory: %w", err)
+	}
+	for _, row := range rows {
+		state := mapState(row.Status)
+		if state != sandbox.StateCreated && state != sandbox.StateStopped && state != sandbox.StateExited {
+			return fmt.Errorf("retired BoxLite home contains an instance not confirmed stopped (state %q)", row.Status)
+		}
 	}
 	return nil
 }

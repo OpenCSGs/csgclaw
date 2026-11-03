@@ -16,6 +16,12 @@ const (
 )
 
 type Template struct {
+	VersionCount   int
+	LatestRevision int
+	Publications   []apitypes.TemplatePublication
+	UID            string
+	Revision       int
+	SourceAgentID  string
 	ID             string
 	Namespace      string
 	Avatar         string
@@ -28,6 +34,7 @@ type Template struct {
 	Image          string
 	ImageEnv       []apitypes.ImageEnvContract
 	RuntimeOptions map[string]any
+	ModelConfig    *apitypes.TemplateModelConfig
 	Metadata       *TemplateMetadata
 	WorkspaceRef   WorkspaceRef
 	Source         RegistryRef
@@ -65,6 +72,13 @@ type WorkspaceRef struct {
 }
 
 type PublishSpec struct {
+	ReplaceRemote  bool
+	RemotePath     string
+	UID            string
+	Revision       int
+	SourceAgentID  string
+	CommitMessage  string
+	Author         *VersionAuthor
 	Registry       string
 	IncludeMemory  bool
 	ID             string
@@ -76,6 +90,7 @@ type PublishSpec struct {
 	Version        string
 	Image          string
 	RuntimeOptions map[string]any
+	ModelConfig    *apitypes.TemplateModelConfig
 	WorkspaceRef   WorkspaceRef
 	MCPServers     map[string]any
 	UpdatedAt      time.Time

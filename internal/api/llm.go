@@ -1,8 +1,11 @@
 package api
 
 import (
+	"crypto/rand"
+	"crypto/sha256"
 	"csgclaw/internal/diagnostics"
 	"csgclaw/internal/modelusage"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -18,27 +21,62 @@ import (
 const maxLLMRequestBodyBytes = 128 << 20
 
 func readLLMRequestBody(w http.ResponseWriter, r *http.Request) ([]byte, bool) {
-	tooLarge := func() {
-		writeLLMError(w, &llm.HTTPError{
-			Status:  http.StatusRequestEntityTooLarge,
-			Code:    "request_too_large",
-			Message: fmt.Sprintf("LLM request body exceeds %d MiB limit", maxLLMRequestBodyBytes>>20),
-		})
+	id := rand.Text()
+	w.Header().Set("X-CSGClaw-Request-ID", id)
+	*r = *r.WithContext(diagnostics.WithIngressID(r.Context(), id))
+	observed := int64(0)
+	var readFailure error
+	readComplete := false
+	evidence := func(status int, code string, body []byte) {
+		fields := map[string]any{"request_id": id, "operation": r.URL.Path, "content_length": r.ContentLength, "observed_bytes": observed, "limit_bytes": maxLLMRequestBodyBytes, "http_status": status, "result": code, "body_read_complete": readComplete, "retained_bytes": len(body)}
+		if body != nil {
+			digest := sha256.Sum256(body)
+			fields["body_sha256"] = hex.EncodeToString(digest[:])
+			fields["body_sha256_complete"] = readComplete
+		}
+		if code == "invalid_json" {
+			var parsed any
+			if err := json.Unmarshal(body, &parsed); err != nil {
+				var syntax *json.SyntaxError
+				if errors.As(err, &syntax) {
+					fields["parse_offset"] = syntax.Offset
+				}
+			}
+		}
+		diagnostics.Capture(r.Context(), "llm.ingress", fields)
+		if status >= 400 {
+			failure := readFailure
+			if failure == nil {
+				failure = errors.New(code)
+			}
+			diagnostics.ReportFailure(r.Context(), "llm.ingress", failure, fields)
+		}
+	}
+	tooLarge := func(body []byte) {
+		evidence(http.StatusRequestEntityTooLarge, "request_too_large", body)
+		writeLLMError(w, &llm.HTTPError{Status: http.StatusRequestEntityTooLarge, Code: "request_too_large", Message: fmt.Sprintf("LLM request body exceeds %d MiB limit", maxLLMRequestBodyBytes>>20)})
 	}
 	if r.ContentLength > maxLLMRequestBodyBytes {
-		tooLarge()
+		tooLarge(nil)
 		return nil, false
 	}
-	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxLLMRequestBodyBytes))
+	counted := &llmIngressBody{ReadCloser: r.Body}
+	body, err := io.ReadAll(http.MaxBytesReader(w, counted, maxLLMRequestBodyBytes))
+	observed = counted.bytes
+	readFailure = err
+	readComplete = err == nil
 	if err != nil {
-		var maxBytesErr *http.MaxBytesError
-		if errors.As(err, &maxBytesErr) {
-			tooLarge()
+		var maximum *http.MaxBytesError
+		if errors.As(err, &maximum) {
+			tooLarge(body)
 		} else {
-			http.Error(w, "read request body", http.StatusBadRequest)
+			evidence(http.StatusBadRequest, "request_body_read_failed", body)
+			writeLLMError(w, &llm.HTTPError{Status: http.StatusBadRequest, Code: "request_body_read_failed", Message: "read request body"})
 		}
 		return nil, false
 	}
+
+	evidence(0, "accepted", body)
 	return body, true
 }
 
@@ -125,11 +163,13 @@ func (h *Handler) handleBotLLMChatCompletions(w http.ResponseWriter, r *http.Req
 		return
 	}
 	body, ok := readLLMRequestBody(w, r)
-	if !ok {
+	if !ok || !validateLLMRequestJSON(w, r, body) {
 		return
 	}
 	resp, callErr := h.llm.ChatCompletionsStream(r.Context(), botID, body)
 	if callErr != nil {
+		diagnostics.Capture(r.Context(), "llm.failed_request", map[string]any{"request_id": diagnostics.IngressID(r.Context()), "body": json.RawMessage(body), "error": callErr.Error()})
+		diagnostics.ReportFailure(r.Context(), "llm.forward", callErr, map[string]any{"ingress_request_id": diagnostics.IngressID(r.Context())})
 		writeLLMError(w, callErr)
 		return
 	}
@@ -144,11 +184,13 @@ func (h *Handler) handleBotLLMResponses(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 	body, ok := readLLMRequestBody(w, r)
-	if !ok {
+	if !ok || !validateLLMRequestJSON(w, r, body) {
 		return
 	}
 	resp, callErr := h.llm.Responses(r.Context(), botID, body)
 	if callErr != nil {
+		diagnostics.Capture(r.Context(), "llm.failed_request", map[string]any{"request_id": diagnostics.IngressID(r.Context()), "body": json.RawMessage(body), "error": callErr.Error()})
+		diagnostics.ReportFailure(r.Context(), "llm.forward", callErr, map[string]any{"ingress_request_id": diagnostics.IngressID(r.Context())})
 		writeLLMError(w, callErr)
 		return
 	}
@@ -194,6 +236,10 @@ func copyAndFlushLLMStream(w http.ResponseWriter, src io.Reader) error {
 }
 
 func (h *Handler) handleBotLLMResponsesWebsocket(w http.ResponseWriter, r *http.Request, botID string) {
+	if h.im != nil {
+		r = r.WithContext(diagnostics.WithNativeLookup(r.Context(), h.im.Diagnostics(), botID, "", ""))
+	}
+
 	if h.llm == nil {
 		http.Error(w, "llm bridge is not configured", http.StatusServiceUnavailable)
 		return
@@ -263,5 +309,35 @@ func (h *Handler) withLLMDiagnostic(r *http.Request, agentID string) *http.Reque
 			runtime.ObserveModelResponseUsage(agentID, meta.Thread, meta.Turn, usage)
 		})
 	}
+	diagnostics.BindRequestLogScope(r.Context(), ctx)
 	return r.WithContext(ctx)
+}
+
+type llmIngressBody struct {
+	io.ReadCloser
+	bytes int64
+}
+
+func (b *llmIngressBody) Read(data []byte) (int, error) {
+	n, err := b.ReadCloser.Read(data)
+	b.bytes += int64(n)
+	return n, err
+}
+
+func validateLLMRequestJSON(w http.ResponseWriter, r *http.Request, body []byte) bool {
+	if json.Valid(body) {
+		return true
+	}
+	var parsed any
+	err := json.Unmarshal(body, &parsed)
+	digest := sha256.Sum256(body)
+	fields := map[string]any{"request_id": diagnostics.IngressID(r.Context()), "operation": r.URL.Path, "content_length": r.ContentLength, "observed_bytes": len(body), "retained_bytes": len(body), "limit_bytes": maxLLMRequestBodyBytes, "http_status": 400, "result": "invalid_json", "body_sha256": hex.EncodeToString(digest[:]), "body_read_complete": true, "body_sha256_complete": true}
+	var syntax *json.SyntaxError
+	if errors.As(err, &syntax) {
+		fields["parse_offset"] = syntax.Offset
+	}
+	diagnostics.Capture(r.Context(), "llm.ingress", fields)
+	diagnostics.ReportFailure(r.Context(), "llm.ingress", err, fields)
+	writeLLMError(w, &llm.HTTPError{Status: 400, Code: "invalid_json", Message: "decode request: invalid JSON"})
+	return false
 }

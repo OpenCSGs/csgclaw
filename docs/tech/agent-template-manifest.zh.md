@@ -34,6 +34,24 @@
 | `runtime_options` | Agent 运行时选项。目前只支持 Codex Worker 模板，并且只允许包含 `execution_mode` 和 `memory_mode` | 否 | ✅ |
 | `runtime_options.execution_mode` | Codex Worker 的执行模式；`standard` 表示标准模式，`read_only` 表示只读模式 | 否，未设置时按 `standard` 模式运行 | ✅ |
 | `runtime_options.memory_mode` | Codex Worker 的记忆模式；`enabled` 表示启用，`disabled` 表示不启用 | 否，未设置时按 `enabled` 模式运行 | ✅ |
+| `model_config.model_id` | 创建 Agent 时使用的默认模型标识 | 否 | ✅ |
+| `model_config.reasoning_effort` | 创建 Agent 时使用的默认推理强度 | 否 | ✅ |
+
+## 模型默认值
+
+模板可以通过 `[model_config]` 配置模型和推理强度：
+
+```toml
+[model_config]
+model_id = "example-model"
+reasoning_effort = "high"
+```
+
+两个字段可以独立省略。创建 Agent 时，每个字段按照用户明确选择的值、模板默认值、系统默认值的顺序读取；用户明确选择的 `auto` 会被保留。未配置 `[model_config]` 的模板保持原有默认行为。
+
+`reasoning_effort` 支持 `auto`、`none`、`minimal`、`low`、`medium`、`high`、`xhigh` 和 `max`。读取时会去除两端空白并转换为小写，`off` 会转换为 `none`。可用的模型与推理强度取决于当前供应商和运行时。
+
+本地保存、替换模板和发布到社区都会保存这些默认值，从现有模板复制时也会保留。API 地址、API Key 和供应商配置由当前环境提供。
 
 ## 当前约束
 

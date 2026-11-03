@@ -1,8 +1,9 @@
 import { skillOriginHint, skillOriginLabel as originLabel } from "./resourceOrigins";
 import { useEffect, useState } from "react";
-import { Plus, RefreshCw, Trash2 } from "lucide-react";
+import { Check, Copy, Folder, Plus, RefreshCw, Trash2 } from "lucide-react";
 import {
   Button,
+  IconButton,
   DialogBody,
   DialogCloseButton,
   DialogContent,
@@ -14,6 +15,9 @@ import {
   Switch,
 } from "@/components/ui";
 import { useWorkspaceControllerContext } from "@/hooks/workspace";
+import { writeTextToClipboard } from "@/shared/lib/clipboard";
+import { SkillSourceDetails } from "./SkillSourceDetails";
+import { skillDirectory, skillVersionLabel } from "@/models/skillLibrary";
 import { isReadonlySkill } from "@/models/skillhub";
 import { SkillDetailFiles } from "@/components/business/SkillDetailFiles";
 import styles from "./SkillDetailDialog.module.css";
@@ -92,15 +96,21 @@ export function SkillDetailDialog({
           {skill ? (
             <>
               <DialogHeader>
-                <div>
+                <div className={styles.headingCopy}>
                   <div className={styles.titleRow}>
                     <DialogTitle>{skill.name}</DialogTitle>
                     <span className={pageStyles.tag} title={skillOriginHint(skill, t)}>
-                      <span className={pageStyles.tagDot} aria-hidden="true" />
-                      {originLabel(skill, t)}
+                      {skill.discovery
+                        ? t("iaSkillsActiveVersion", {
+                            version: skillVersionLabel(skill.discovery.version) || t("iaSkillsUnversioned"),
+                          })
+                        : originLabel(skill, t)}
                     </span>
                   </div>
-                  <DialogDescription>{skill.description || skill.name}</DialogDescription>
+                  <SkillDescription key={skill.name} text={skill.description || skill.name} t={t} />
+                  {variant === "installed" ? (
+                    <SkillLocation key={skillDirectory(skill)} directory={skillDirectory(skill)} t={t} />
+                  ) : null}
                 </div>
                 <div className="flex shrink-0 items-center gap-3">
                   {toggle ? (
@@ -115,8 +125,11 @@ export function SkillDetailDialog({
                 </div>
               </DialogHeader>
               <DialogBody className={styles.body}>
+                {variant === "installed" && skill.discovery ? (
+                  <SkillSourceDetails skill={skill} locale={controller.sidebarProps?.locale || "zh"} t={t} />
+                ) : null}
                 <SkillDetailFiles
-                  key={JSON.stringify([variant, skill.name, skill.remotePath, skill.remoteRef])}
+                  key={JSON.stringify([variant, skill.name, skill.discovery?.key, skill.remotePath, skill.remoteRef])}
                   skill={skill}
                   market={variant === "market"}
                   t={t}
@@ -146,7 +159,7 @@ export function SkillDetailDialog({
                       onClick={() => setConfirmOpen(true)}
                     >
                       <Trash2 size={15} strokeWidth={2} aria-hidden="true" />
-                      {t("resourcesDeleteSkill")}
+                      {t(skill?.discovery ? "iaSkillsRemoveLinked" : "resourcesDeleteSkill")}
                     </Button>
                   ) : null}
                   {variant === "market" && market ? (
@@ -171,9 +184,11 @@ export function SkillDetailDialog({
         <DialogContent className={styles.confirmDialog}>
           <DialogHeader>
             <div>
-              <DialogTitle>{t("resourcesDeleteSkill")}</DialogTitle>
+              <DialogTitle>{t(skill?.discovery ? "iaSkillsRemoveLinked" : "resourcesDeleteSkill")}</DialogTitle>
               <DialogDescription>
-                {t("resourcesDeleteSkillConfirmMessage", { name: skill?.name || "" })}
+                {t(skill?.discovery ? "iaSkillsRemoveLinkedHint" : "resourcesDeleteSkillConfirmMessage", {
+                  name: skill?.name || "",
+                })}
               </DialogDescription>
             </div>
             <DialogCloseButton label={t("close")} size="sm" variant="tertiaryGray" />
@@ -193,11 +208,56 @@ export function SkillDetailDialog({
               loading={Boolean(hub?.skillDeleteBusy)}
               onClick={() => void handleDelete()}
             >
-              {t("resourcesDeleteSkillConfirmAction")}
+              {t(skill?.discovery ? "iaSkillsRemoveLinked" : "resourcesDeleteSkillConfirmAction")}
             </Button>
           </DialogFooter>
         </DialogContent>
       </DialogRoot>
+    </>
+  );
+}
+
+function SkillLocation({ directory, t }: { directory: string; t: TranslateFn }) {
+  const [copied, setCopied] = useState(false);
+  const [failed, setFailed] = useState(false);
+  if (!directory) return <p className={styles.embedded}>{t("iaSkillsEmbeddedDirectory")}</p>;
+  return (
+    <div className={styles.location}>
+      <span className={styles.locationLabel}>
+        <Folder size={14} aria-hidden="true" />
+        {t("iaSkillsDirectory")}
+      </span>
+      <code className={styles.locationPath}>{directory}</code>
+      <IconButton
+        variant="tertiaryGray"
+        size="sm"
+        label={t(copied ? "copiedToClipboard" : "iaSkillsCopyDirectory")}
+        icon={copied ? <Check size={15} /> : <Copy size={15} />}
+        onClick={async () => {
+          const success = await writeTextToClipboard(directory);
+          setCopied(success);
+          setFailed(!success);
+        }}
+      />
+      {failed ? (
+        <span className={styles.locationError} role="alert">
+          {t("iaSkillsCopyDirectoryFailed")}
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
+function SkillDescription({ text, t }: { text: string; t: TranslateFn }) {
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <>
+      <DialogDescription className={expanded ? styles.fullDescription : styles.description}>{text}</DialogDescription>
+      {text.length > 240 ? (
+        <Button variant="linkGray" size="sm" onClick={() => setExpanded(!expanded)} aria-expanded={expanded}>
+          {t(expanded ? "iaSkillsDescriptionLess" : "iaSkillsDescriptionMore")}
+        </Button>
+      ) : null}
     </>
   );
 }

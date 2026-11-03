@@ -31,7 +31,6 @@ const (
 var (
 	agentSessionIDPattern             = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._~-]{0,127}$`)
 	agentSessionExtraDelimiterPattern = regexp.MustCompile(`(?i)</?(extra_context|page_dom|content)\b`)
-	agentSessionResponseTimeout       = 5 * time.Minute
 	agentSessionHeartbeatInterval     = 15 * time.Second
 )
 
@@ -166,7 +165,7 @@ func (h *Handler) createAgentSessionResponse(w http.ResponseWriter, r *http.Requ
 		},
 	}
 	turnKey := selected.ID + "\x00" + sessionID
-	runCtx, cancel := context.WithTimeout(r.Context(), agentSessionResponseTimeout)
+	runCtx, cancel := context.WithCancel(r.Context())
 	defer cancel()
 	turn := agentSessionTurn{
 		agentID:         selected.ID,
@@ -332,7 +331,7 @@ func (h *Handler) removeSessionTurn(key string, turnID agentengine.TurnID) {
 
 func (h *Handler) writeSessionTurnError(w http.ResponseWriter, ctx context.Context, result agentengine.TurnResult) {
 	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-		writeAgentSessionError(w, http.StatusGatewayTimeout, "response_timeout", "the agent did not finish within five minutes", nil)
+		writeAgentSessionError(w, http.StatusGatewayTimeout, "response_timeout", "the request deadline was exceeded", nil)
 		return
 	}
 	err := result.Error

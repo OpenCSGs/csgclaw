@@ -270,6 +270,17 @@ describe("agent overview guidance and template loading", () => {
     expect(screen.queryByRole("heading", { name: "正在加载智能体模板…" })).not.toBeInTheDocument();
   });
 
+  it("reports a community failure without hiding loaded templates and allows retry", async () => {
+    const user = userEvent.setup();
+    const refetch = vi.fn();
+    vi.mocked(useWorkspaceHubTemplatesQuery).mockReturnValue(queryState({ data: [template], isError: true, refetch }));
+    render(<Page />);
+    expect(screen.getByText("社区模板加载失败，已加载的模板仍可使用，请重试。")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Codex worker/ })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "重试" }));
+    expect(refetch).toHaveBeenCalledOnce();
+  });
+
   it("explains a failed initial load and offers a retry", async () => {
     const state = queryState({ isError: true });
     vi.mocked(useWorkspaceHubTemplatesQuery).mockReturnValue(state);

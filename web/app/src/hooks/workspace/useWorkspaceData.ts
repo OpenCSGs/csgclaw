@@ -216,7 +216,8 @@ export function useWorkspaceData() {
     modelProvidersLoaded: modelProvidersQuery.isFetched,
     hubTemplates: hubTemplatesQuery.data ?? [],
     hubLoaded: hubTemplatesQuery.isFetched,
-    appVersion: appVersionQuery.data ?? "dev",
+    // Keep an unresolved version distinct from an actual development build.
+    appVersion: appVersionQuery.data ?? "",
     upgradeStatus: upgradeStatusQuery.data ?? null,
     setBootstrapData,
     setManagerProfileData,

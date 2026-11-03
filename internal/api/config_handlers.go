@@ -1,7 +1,6 @@
 package api
 
 import (
-	agent "csgclaw/internal/agentengine/agents"
 	"csgclaw/internal/apitypes"
 	"csgclaw/internal/config"
 	hub "csgclaw/internal/template"
@@ -55,7 +54,6 @@ func (h *Handler) handleServerConfig(w http.ResponseWriter, r *http.Request) {
 			AdvertiseBaseURL:       req.AdvertiseBaseURL,
 			AccessToken:            accessToken,
 			ShowUpgrade:            req.ShowUpgrade,
-			SandboxProvider:        req.SandboxProvider,
 			HubLocalPath:           req.HubLocalPath,
 			DefaultManagerTemplate: req.DefaultManagerTemplate,
 			DefaultWorkerTemplate:  req.DefaultWorkerTemplate,
@@ -85,10 +83,7 @@ func (h *Handler) handleServerConfig(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) serverConfigView(r *http.Request, path string, cfg config.Config) apitypes.ConfigSettingsResponse {
 	settings := config.UserSettingsFromConfig(cfg)
 	token := strings.TrimSpace(settings.AccessToken)
-	effective := agent.ResolveManagerBaseURLForSandboxProvider(cfg.Server, cfg.Sandbox.Resolved().Provider)
-	if effective == "" {
-		effective = config.ResolveAdvertiseBaseURL(cfg.Server)
-	}
+	effective := config.ResolveAdvertiseBaseURL(cfg.Server)
 	return apitypes.ConfigSettingsResponse{
 		Path:                      path,
 		ListenAddr:                settings.ListenAddr,
@@ -97,8 +92,6 @@ func (h *Handler) serverConfigView(r *http.Request, path string, cfg config.Conf
 		AccessTokenSet:            token != "",
 		AccessTokenPreview:        config.AccessTokenPreview(token),
 		ShowUpgrade:               settings.ShowUpgrade,
-		SandboxProvider:           settings.SandboxProvider,
-		SupportedSandboxProviders: settings.SupportedSandboxProvider,
 		HubLocalPath:              settings.HubLocalPath,
 		HubOfficialURLEffective:   h.officialHubBaseURLForRequest(r, cfg),
 		DefaultManagerTemplate:    settings.DefaultManagerTemplate,

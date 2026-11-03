@@ -10,8 +10,8 @@ import (
 	"csgclaw/internal/sandbox"
 )
 
-// Stop every persisted sandbox handle before reading its workspace or replacing
-// its Agent record. Persisted lifecycle state is not proof of provider state.
+// Attempt to stop every persisted sandbox before converting its Agent record.
+// The caller logs failures and continues migration when the provider is unavailable.
 func stopRetiredSandboxes(ctx context.Context, agentID string, agent, runtime map[string]json.RawMessage, openSandbox func(context.Context, string) (sandbox.Runtime, error)) error {
 	var ids []string
 	seen := make(map[string]bool)
@@ -28,7 +28,7 @@ func stopRetiredSandboxes(ctx context.Context, agentID string, agent, runtime ma
 		for _, raw := range []json.RawMessage{runtime["state"], agent["status"], agent["desired_state"]} {
 			switch strings.ToLower(strings.TrimSpace(migrationString(raw))) {
 			case "starting", "running", "paused", "restarting", "removing":
-				return fmt.Errorf("retired Agent %q is marked active without a sandbox identifier; stop its previous sandbox and restore its identifier before retrying the upgrade", agentID)
+				return fmt.Errorf("retired Agent %q is marked active without a sandbox identifier; its previous sandbox cannot be checked", agentID)
 			}
 		}
 		return nil
@@ -36,16 +36,16 @@ func stopRetiredSandboxes(ctx context.Context, agentID string, agent, runtime ma
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	if openSandbox == nil {
-		return fmt.Errorf("cannot confirm retired sandboxes for Agent %q: sandbox provider is required; original record retained", agentID)
+		return fmt.Errorf("cannot confirm retired sandboxes for Agent %q: sandbox provider is unavailable", agentID)
 	}
 	rt, err := openSandbox(ctx, agentID)
 	if err != nil {
-		return fmt.Errorf("open retired sandbox for Agent %q: %w; original record retained", agentID, err)
+		return fmt.Errorf("open retired sandbox for Agent %q: %w", agentID, err)
 	}
 	defer rt.Close()
 	for _, id := range ids {
 		if err := stopRetiredSandbox(ctx, rt, id); err != nil {
-			return fmt.Errorf("stop retired sandbox %q for Agent %q: %w; original record retained, retry the upgrade after restoring sandbox access", id, agentID, err)
+			return fmt.Errorf("stop retired sandbox %q for Agent %q: %w", id, agentID, err)
 		}
 	}
 	return nil

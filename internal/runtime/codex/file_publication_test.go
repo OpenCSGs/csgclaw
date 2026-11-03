@@ -10,7 +10,38 @@ import (
 
 	"csgclaw/internal/activity"
 	"csgclaw/internal/agentengine/contract"
+	"csgclaw/internal/diagnostics"
+	"encoding/json"
 )
+
+func TestFilePublicationFailureKeepsExactTurnAndOSCause(t *testing.T) {
+	store := diagnostics.New(t.TempDir())
+	record := store.Begin("r", "s", "", "a", "turn")
+	record.Running()
+	adapter := &ConversationAdapter{runtimeID: "runtime", runtime: inputLifecycleBackend{workspace: t.TempDir()}}
+	_, failure := adapter.authorizeOutputFile(diagnostics.WithRecord(context.Background(), record), activity.RuntimeFile{Path: "missing.html"})
+	if failure == nil {
+		t.Fatal("missing file unexpectedly published")
+	}
+	var detail map[string]any
+	if err := store.ReadContext(context.Background(), record.Snapshot().ID, func(entry diagnostics.ContextEntry) error {
+		if entry.Kind == "execution.failure" {
+			return json.Unmarshal(entry.Data, &detail)
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if detail["stage"] != "file.publish.open_source" || detail["error_kind"] != "not_found" || detail["runtime_id"] != "runtime" {
+		t.Fatalf("failure detail=%+v", detail)
+	}
+	if !strings.Contains(detail["path"].(string), "missing.html") {
+		t.Fatal("failed path lost")
+	}
+	if record.Snapshot().Error != nil {
+		t.Fatal("recoverable publication error changed the turn result")
+	}
+}
 
 // Manager-only fixtures still use the real Adapter authorization and snapshot
 // code, then dispose of the authorized file after acknowledging the tool.

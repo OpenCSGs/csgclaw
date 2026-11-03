@@ -217,7 +217,15 @@ const MessageListContent = memo(function MessageListContent({
                 </button>
                 <div className="message-card">
                   <div className="message-meta">
-                    <span className="message-author">{user.name}</span>
+                    <span className="message-author">
+                      {user.name}
+                      {user.agent_state && (
+                        <small>
+                          {" "}
+                          · {t(user.agent_state === "archived" ? "agentStateArchived" : "agentStateDeleted")}
+                        </small>
+                      )}
+                    </span>
                     <MessageTimestamp parts={timestampParts} />
                   </div>
                   {(message.content || messageResources(message.metadata).length > 0) &&

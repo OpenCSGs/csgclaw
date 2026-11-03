@@ -12,6 +12,7 @@ export function mcpOriginLabel(server: MCPServer, t: TranslateFn): string {
   return origin === "market" ? t("iaMCPBadgeMarket") : t("iaMCPBadgeManual");
 }
 export function skillOriginLabel(skill: SkillSummary, t: TranslateFn): string {
+  if (skill.discovery) return skill.discovery.tool;
   const kind = skillOriginKind(skill);
   if (kind === "builtin") {
     return t("resourcesSkillSystemBadge");
@@ -23,5 +24,9 @@ export function skillOriginLabel(skill: SkillSummary, t: TranslateFn): string {
 }
 
 export function skillOriginHint(skill: SkillSummary, t: TranslateFn): string | undefined {
+  if (skill.discovery)
+    return skill.discovery.sources
+      .map((source) => `${source.tool}${source.version ? ` · ${source.version}` : ""}\n${source.path}`)
+      .join("\n\n");
   return skillOriginKind(skill) === "unknown" ? t("iaSkillsBadgeUntrackedHint") : undefined;
 }

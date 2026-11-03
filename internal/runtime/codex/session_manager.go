@@ -1,7 +1,9 @@
 package codex
 
 import (
+	"csgclaw/internal/diagnostics"
 	"csgclaw/internal/modelcap"
+	"encoding/json"
 	"io"
 	"os"
 	"os/exec"
@@ -14,6 +16,8 @@ import (
 )
 
 type liveSession struct {
+	diagnosticObserver    *diagnostics.RuntimeObserver
+	serverInfo            json.RawMessage
 	stopErr               error
 	telemetry             *nativeTelemetry
 	compactingThreads     map[string]bool
@@ -137,7 +141,7 @@ func buildSessionEnv(spec SessionSpec) []string {
 }
 
 func shouldOmitInheritedSessionEnvKey(key string) bool {
-	if larkextension.IsConfigurationEnv(key) {
+	if agentruntime.IsManagedAgentEnvironmentKey(key) || larkextension.IsConfigurationEnv(key) {
 		return true
 	}
 	switch strings.ToUpper(strings.TrimSpace(key)) {

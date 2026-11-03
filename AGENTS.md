@@ -7,7 +7,9 @@
 
 ## Overview
 
-CSGClaw is a Go-based local multi-agent platform. The `csgclaw` CLI bootstraps config, starts the local HTTP server and Web UI, and manages agents, rooms, and users. BoxLite runtime integration is provided through the `boxlite` sandbox path.
+CSGClaw is a Go-based local multi-agent platform.
+The `csgclaw` CLI bootstraps config, starts the local HTTP server and Web UI, and manages agents, rooms, and users.
+Codex and DSH run as local processes; retired container providers are retained only for migration.
 
 ## Structure
 
@@ -25,7 +27,7 @@ web/static-dist/        generated Web UI assets for Go embed; run make web-build
 
 ## Commands
 
-See [docs/tech/build.md](docs/tech/build.md) or [docs/tech/build.zh.md](docs/tech/build.zh.md) for Makefile targets, fixed runtime image refs, and sandbox CLI packaging.
+See [docs/tech/build.md](docs/tech/build.md) or [docs/tech/build.zh.md](docs/tech/build.zh.md) for Makefile targets, native runtime bundling, and companion CLI packaging.
 
 ```bash
 make                    # default build (no docker images)

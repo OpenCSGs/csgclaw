@@ -144,9 +144,16 @@ function isLikelyEnglishDiagnostic(value: string): boolean {
   return /[A-Za-z]/.test(value) && !/[\u4e00-\u9fff]/.test(value);
 }
 
-// Publishing diagnostics are needed to resolve remote failures, including untranslated ones.
-export function localizeTemplatePublishError(error: unknown, t: TranslateFn, fallback = ""): string {
+// Keep diagnostic context for operations whose failures require troubleshooting.
+export function localizeAPIErrorWithDiagnostics(error: unknown, t: TranslateFn, fallback = ""): string {
   const summary = localizeAPIError(error, t, fallback);
+  if (
+    error &&
+    typeof error === "object" &&
+    "code" in error &&
+    (error.code === "template_cloud_cleanup_pending" || error.code === "template_cloud_publish_timeout")
+  )
+    return summary;
   if (!error || typeof error !== "object") return summary;
   const value = error as { code?: unknown; message?: unknown; status?: unknown };
   const message = typeof value.message === "string" ? value.message.trim() : "";

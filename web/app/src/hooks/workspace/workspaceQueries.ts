@@ -1,5 +1,5 @@
 import { useRef } from "react";
-import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { UseQueryResult } from "@tanstack/react-query";
 import { fetchAgentProfileModels, fetchAgentWorkspace, fetchAgentWorkspaceFile, fetchAgents } from "@/api/agents";
 import type { AgentProfileModelRequest } from "@/api/agents";
@@ -115,6 +115,7 @@ export const workspaceQueryKeys = {
   managerProfile: () => [WORKSPACE_QUERY_SCOPE, "manager-profile"] as const,
   agents: () => [WORKSPACE_QUERY_SCOPE, "agents"] as const,
   teams: () => [WORKSPACE_QUERY_SCOPE, "teams"] as const,
+  scheduledTasks: () => [WORKSPACE_QUERY_SCOPE, "scheduled-tasks"] as const,
   modelProviders: () => [WORKSPACE_QUERY_SCOPE, "model-providers"] as const,
   runtimeImages: () => [WORKSPACE_QUERY_SCOPE, "runtime-images"] as const,
   hubTemplates: () => [WORKSPACE_QUERY_SCOPE, "hub-templates"] as const,
@@ -279,12 +280,23 @@ export function useWorkspaceRuntimeImagesQuery(): UseQueryResult<string[]> {
 }
 
 export function useWorkspaceHubTemplatesQuery(options: { enabled?: boolean } = {}): UseQueryResult<HubTemplate[]> {
+  const queryClient = useQueryClient();
   return useQuery<HubTemplate[]>({
     queryKey: workspaceQueryKeys.hubTemplates(),
     queryFn: async () => {
-      const payload = await fetchHubTemplates();
-      return Array.isArray(payload) ? payload : [];
+      const local = await fetchHubTemplates("local");
+      const items = Array.isArray(local) ? local : [];
+      // Publish disk-backed templates immediately while community reads continue.
+      queryClient.setQueryData<HubTemplate[]>(workspaceQueryKeys.hubTemplates(), (current) => [
+        ...items,
+        ...(current || []).filter((item) => item.source?.kind === "remote"),
+      ]);
+      const payload = await fetchHubTemplates("remote");
+      const current = queryClient.getQueryData<HubTemplate[]>(workspaceQueryKeys.hubTemplates()) || items;
+      return [...current.filter((item) => item.source?.kind !== "remote"), ...(Array.isArray(payload) ? payload : [])];
     },
+    staleTime: 30_000,
+    retry: false,
     enabled: options.enabled !== false,
   });
 }
@@ -339,9 +351,12 @@ export function useWorkspaceHubTemplateQuery(templateID: string): UseQueryResult
 export function useWorkspaceHubWorkspaceQuery(
   templateID: string,
   workspacePath = "",
+  version = "",
 ): UseQueryResult<HubWorkspaceListing> {
   return useQuery<HubWorkspaceListing>({
-    queryKey: workspaceQueryKeys.hubWorkspace(templateID, workspacePath),
+    queryKey: version
+      ? [...workspaceQueryKeys.hubWorkspace(templateID, workspacePath), version]
+      : workspaceQueryKeys.hubWorkspace(templateID, workspacePath),
     queryFn: () => fetchHubWorkspace(templateID, workspacePath),
     enabled: Boolean(templateID),
   });
@@ -350,15 +365,20 @@ export function useWorkspaceHubWorkspaceQuery(
 export function useWorkspaceHubWorkspaceFileQuery(
   templateID: string,
   workspacePath: string,
+  version = "",
 ): UseQueryResult<HubWorkspaceFile> {
   return useQuery<HubWorkspaceFile>({
-    queryKey: workspaceQueryKeys.hubWorkspaceFile(templateID, workspacePath),
+    queryKey: version
+      ? [...workspaceQueryKeys.hubWorkspaceFile(templateID, workspacePath), version]
+      : workspaceQueryKeys.hubWorkspaceFile(templateID, workspacePath),
     queryFn: () => fetchHubWorkspaceFile(templateID, workspacePath),
     enabled: Boolean(templateID && workspacePath),
   });
 }
 
-export function useWorkspaceSkillsQuery(options: { enabled?: boolean } = {}): UseQueryResult<SkillSummary[]> {
+export function useWorkspaceSkillsQuery(
+  options: { enabled?: boolean; refetchInterval?: number } = {},
+): UseQueryResult<SkillSummary[]> {
   return useQuery<SkillSummary[]>({
     queryKey: workspaceQueryKeys.skills(),
     queryFn: async () => {
@@ -366,6 +386,7 @@ export function useWorkspaceSkillsQuery(options: { enabled?: boolean } = {}): Us
       return Array.isArray(payload) ? payload : [];
     },
     enabled: options.enabled !== false,
+    refetchInterval: options.refetchInterval,
   });
 }
 

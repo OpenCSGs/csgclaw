@@ -831,3 +831,14 @@ func maxCounterFromIdentifier(id string, prefix string, current int64) int64 {
 	}
 	return current
 }
+
+// DiagnosticSnapshot returns an immutable aggregate including approvals and events.
+func (s *Service) DiagnosticSnapshot(taskID string) (Snapshot, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	rootID, _, err := s.requireTaskLocked(taskID)
+	if err != nil {
+		return Snapshot{}, false
+	}
+	return s.snapshotLocked(rootID), true
+}

@@ -30,6 +30,10 @@ Its installed protocol does not expose a reliable off switch, so the UI describe
 On a recognized context overflow, CSGClaw waits for the failed native turn, compacts once, then continues with empty input only if no assistant output or tool execution has occurred.
 The user message is never appended a second time.
 
+The Codex runtime adapter does not impose initial-response, inactivity, or total-duration limits.
+Reasoning deltas, MCP progress, token updates, and compaction lifecycle events are recorded as turn activity.
+A turn ends on native completion or failure, caller cancellation, or runtime process exit.
+
 DSH receives `contextWindow` through its native model settings.
 Its managed compaction patch sets `thresholdRatio: 0.75` and `maxOverflowRetries: 1`.
 The Agent runtime option `auto_compact` accepts `enabled` (default) or `disabled`.
@@ -64,7 +68,7 @@ Values over capacity retain their real percentage in the tooltip while the ring 
 Run regular backend and frontend suites, plus the opt-in real-process tests with isolated local model fixtures:
 
 ```sh
-CSGCLAW_TEST_CODEX_BINARY="$PWD/bin/codex" go test ./internal/runtime/codex -run TestContextUsageBundledCodexE2E -count=1
+CSGCLAW_TEST_CODEX_BINARY="$PWD/bin/codex" go test ./internal/runtime/codex -run 'Test(ContextUsage|TurnActivity)BundledCodexE2E' -count=1
 CSGCLAW_TEST_DSH_BINARY=/absolute/path/to/dsh go test ./internal/runtime/dsh -run TestContextUsageNativeDSHE2E -count=1
 ```
 

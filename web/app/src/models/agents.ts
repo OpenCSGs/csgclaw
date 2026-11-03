@@ -132,6 +132,8 @@ export type AgentRuntimeAvailabilityLike = {
 };
 
 export type AgentLike = AgentProfileLike & {
+  archived_at?: string | null;
+  archived_by?: string | null;
   skipped_resources?: Array<{ type?: "mcp" | "knowledge_base" | string; name?: string }> | null;
   agent_profile?: AgentProfileLike | null;
   model_config?: AgentProfileLike | null;
@@ -453,6 +455,11 @@ type NullableAgentDraftFields = {
 
 export type AgentDraftSource = AgentLike & NullableAgentDraftFields;
 
+export type TemplateModelConfig = {
+  model_id?: string | null;
+  reasoning_effort?: string | null;
+};
+
 export type AgentTemplateLike = {
   avatar?: string | null;
   display_name?: string | null;
@@ -464,6 +471,7 @@ export type AgentTemplateLike = {
   role?: string | null;
   runtime_kind?: string | null;
   runtime_options?: JSONRecord | null;
+  model_config?: TemplateModelConfig | null;
 };
 
 export type AgentProfileModelsResponse = {
@@ -1589,8 +1597,12 @@ export function applyTemplateToDraft(
   );
   const runtimeSelection = resolveRuntimeSelection({ runtime_kind: runtimeKind });
   const templateRuntimeOptions = normalizeRuntimeOptionsRecord(template.runtime_options);
+  const templateModelID = String(template.model_config?.model_id ?? "").trim();
+  const templateReasoningEffort = String(template.model_config?.reasoning_effort ?? "").trim();
   return {
     ...draft,
+    ...(templateModelID ? { model_id: templateModelID } : {}),
+    ...(templateReasoningEffort ? { reasoning_effort: normalizeReasoningEffort(templateReasoningEffort) } : {}),
     from_template: template.id || "",
     template_name: template.name || template.id || "",
     name: agentTemplateDisplayName(template) || draft.name || "",

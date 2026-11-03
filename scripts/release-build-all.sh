@@ -11,11 +11,9 @@
 #   VERSION – tag or version string (e.g. v0.3.0)
 #
 # Optional env (see scripts/package-release.sh):
-#   COMMIT, BUILD_TIME, DIST_DIR, GOCACHE, BOXLITE_CLI_VERSION, BOXLITE_CLI_BASE_URL
+#   COMMIT, BUILD_TIME, DIST_DIR, GOCACHE
 #   RELEASE_APPS – space-separated subset of csgclaw and csgclaw-cli (default: both)
 #
-# Do not set PACKAGE_MODE or INCLUDE_BOXLITE for APP=csgclaw: defaults in
-# package-release.sh match bundled boxlite only on linux/* and darwin/arm64.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -32,7 +30,7 @@ GOCACHE="${GOCACHE:-${ROOT}/.gocache}"
 mkdir -p "${DIST_DIR}" "${GOCACHE}"
 export GOCACHE
 
-chmod +x scripts/package-release.sh scripts/fetch-boxlite-cli.sh scripts/fetch-codex-cli.sh
+chmod +x scripts/package-release.sh scripts/fetch-codex-cli.sh
 
 RELEASE_APPS="${RELEASE_APPS:-csgclaw csgclaw-cli}"
 
@@ -48,14 +46,11 @@ build_pair() {
   if release_builds_app csgclaw; then
     CGO_ENABLED=0 APP=csgclaw VERSION="${VERSION}" COMMIT="${COMMIT}" BUILD_TIME="${BUILD_TIME}" \
       DIST_DIR="${DIST_DIR}" GOCACHE="${GOCACHE}" \
-      BOXLITE_CLI_VERSION="${BOXLITE_CLI_VERSION:-v0.9.0}" \
       ./scripts/package-release.sh "${goos}" "${goarch}"
   fi
   if release_builds_app csgclaw-cli; then
     CGO_ENABLED=0 APP=csgclaw-cli VERSION="${VERSION}" COMMIT="${COMMIT}" BUILD_TIME="${BUILD_TIME}" \
       DIST_DIR="${DIST_DIR}" GOCACHE="${GOCACHE}" \
-      BOXLITE_CLI_VERSION="${BOXLITE_CLI_VERSION:-v0.9.0}" \
-      INCLUDE_BOXLITE=0 \
       ./scripts/package-release.sh "${goos}" "${goarch}"
   fi
 }

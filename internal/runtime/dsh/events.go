@@ -47,6 +47,7 @@ func (r *Runtime) handleNotification(proc *process, note notification) {
 		proc.mu.Unlock()
 		return
 	}
+	turn.diagnostic.Capture("runtime.notification", map[string]any{"method": note.Method, "params": json.RawMessage(note.Params)})
 	kind, _ := params.Update["sessionUpdate"].(string)
 	event := contract.TurnEvent{TurnID: turn.request.ID}
 	switch kind {

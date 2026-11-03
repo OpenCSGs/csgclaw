@@ -139,6 +139,18 @@ describe("hub API", () => {
     );
   });
 
+  it("sends the revision shown in the publication confirmation", async () => {
+    const fetchMock = mockFetch();
+    await publishHubTemplateToCommunityRequest("local.review-bot", false, 3);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "api/v1/hub/templates",
+      expect.objectContaining({
+        body: JSON.stringify({ template_id: "local.review-bot", expected_revision: 3, registry: "official" }),
+        method: "POST",
+      }),
+    );
+  });
+
   it("includes local template memory only after explicit opt-in", async () => {
     const fetchMock = mockFetch();
 

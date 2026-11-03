@@ -15,6 +15,7 @@ import (
 	"csgclaw/internal/apitypes"
 	"csgclaw/internal/channel"
 	"csgclaw/internal/channel/csgclaw/binding"
+	"csgclaw/internal/channel/csgclaw/execution"
 	"csgclaw/internal/diagnostics"
 	"csgclaw/internal/im"
 	"csgclaw/internal/participant"
@@ -313,7 +314,7 @@ func (s *Source) forward(ctx context.Context, bindingID channel.BindingID, parti
 			}
 			if s.submitWithRetry(ctx, bindingID, event) {
 				if event.TaskID != "" {
-					slog.Info("room task notification accepted by binding", "phase", "binding_ingress", "binding_id", bindingID, "participant_id", participantID, "room_id", event.RoomID, "task_id", event.TaskID, "attempt", event.TaskAttempt, "message_id", event.MessageID)
+					slog.Info("room task notification accepted by binding", "turn_id", execution.SourceTurnID(channel.Binding{ID: string(bindingID)}, channel.Event{MessageID: event.MessageID}), "phase", "binding_ingress", "binding_id", bindingID, "participant_id", participantID, "room_id", event.RoomID, "task_id", event.TaskID, "attempt", event.TaskAttempt, "message_id", event.MessageID)
 				}
 				s.bridge.Ack(participantID, event.MessageID)
 				continue
@@ -345,6 +346,7 @@ func (s *Source) submitWithRetry(ctx context.Context, bindingID channel.BindingI
 				return true
 			} else {
 				slog.Warn("submit built-in IM event failed; retrying",
+					"turn_id", execution.SourceTurnID(value, botEvent(value, event)),
 					"binding_id", bindingID,
 					"message_id", event.MessageID,
 					"phase", "binding_ingress", "participant_id", value.ParticipantID, "agent_id", value.AgentID, "room_id", event.RoomID, "task_id", event.TaskID, "attempt", event.TaskAttempt,
@@ -354,6 +356,7 @@ func (s *Source) submitWithRetry(ctx context.Context, bindingID channel.BindingI
 			}
 		} else {
 			slog.Warn("built-in IM binding temporarily unavailable; retrying",
+				"turn_id", execution.SourceTurnID(channel.Binding{ID: string(bindingID)}, channel.Event{MessageID: event.MessageID}),
 				"binding_id", bindingID,
 				"message_id", event.MessageID,
 				"phase", "binding_resolution", "room_id", event.RoomID, "task_id", event.TaskID, "attempt", event.TaskAttempt,

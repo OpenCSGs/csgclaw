@@ -63,7 +63,11 @@ export function ProfilePreviewContent({ agent, user, t, onOpenAgent, onOpenDM }:
   const previewModel = agent ? agentModelWithReasoning(agent, t) : localizeRole(user?.role || "admin", t);
   const displayName = agent?.name || user?.name || "";
   const displayRole = agent ? agent.role || "worker" : user?.role || "";
-  const statusLabel = agent ? agentAvailabilityStatusLabel(agent, t) : t("online");
+  const statusLabel = user?.agent_state
+    ? t(user.agent_state === "deleted" ? "agentStateDeleted" : "agentStateArchived")
+    : agent
+      ? agentAvailabilityStatusLabel(agent, t)
+      : t("online");
 
   return (
     <>

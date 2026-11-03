@@ -78,6 +78,39 @@ function createWrapper(queryClient: QueryClient) {
 }
 
 describe("useWorkspaceRealtime", () => {
+  it("reloads newly provisioned task DMs after assignment and debounces repeated assignments", async () => {
+    vi.useFakeTimers();
+    const refreshWorkspaceBootstrap = vi.fn(async () => null);
+    const { unmount } = renderWorkspaceRealtime({ refreshWorkspaceBootstrap });
+    try {
+      const onEvent = subscribeIMEventsMock.mock.calls[0]?.[0] as ((event: IMServerEvent) => void) | undefined;
+      expect(onEvent).toBeTypeOf("function");
+      await act(async () => {
+        onEvent?.({
+          type: "message.created",
+          room_id: "new-dm",
+          message: { id: "ordinary", sender_id: "u-admin", content: "hello" },
+        });
+        await vi.advanceTimersByTimeAsync(100);
+      });
+      expect(refreshWorkspaceBootstrap).not.toHaveBeenCalled();
+      await act(async () => {
+        for (const id of ["assignment-1", "assignment-2"]) {
+          onEvent?.({
+            type: "message.created",
+            room_id: "new-dm",
+            message: { id, sender_id: "u-admin", content: "Assigned", kind: "event", event: { key: "task_assigned" } },
+          });
+        }
+        await vi.advanceTimersByTimeAsync(100);
+      });
+      expect(refreshWorkspaceBootstrap).toHaveBeenCalledTimes(1);
+    } finally {
+      unmount();
+      vi.useRealTimers();
+    }
+  });
+
   beforeEach(() => {
     vi.useFakeTimers();
     subscribeIMEventsMock.mockReset();

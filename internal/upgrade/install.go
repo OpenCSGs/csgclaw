@@ -10,8 +10,6 @@ import (
 	"slices"
 	"strings"
 	"time"
-
-	"csgclaw/internal/runtimeassets"
 )
 
 var (
@@ -55,9 +53,6 @@ func (c Client) InstallPrepared(prepared PreparedBundle) (InstalledBundle, error
 	}
 	if err := refreshCompanionLauncher(installRoot); err != nil {
 		return InstalledBundle{}, fmt.Errorf("expose companion CLI: %w", err)
-	}
-	if _, err := runtimeassets.RefreshFromBundle(installRoot); err != nil {
-		return InstalledBundle{}, fmt.Errorf("refresh runtime assets: %w", err)
 	}
 	return InstalledBundle{InstallRoot: installRoot}, nil
 }

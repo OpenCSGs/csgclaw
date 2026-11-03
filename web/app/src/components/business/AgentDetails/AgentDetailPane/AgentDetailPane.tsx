@@ -1,3 +1,4 @@
+import type { HubTemplate } from "@/models/hubWorkspace";
 import { AgentModelPanel } from "./components/AgentModelPanel";
 import { defaultTemplateName, isValidTemplateName, TEMPLATE_NAME_MAX_LENGTH } from "@/models/templateNaming";
 import { SidebarMcpIcon } from "@/components/ui/Icons";
@@ -5,6 +6,7 @@ import { ResourceLoadMore } from "../ResourceLoadMore";
 import type { ResourceContinuation } from "@/hooks/workspace/useInfiniteAgentResources";
 import { mcpManagedKnowledgeBaseSource } from "@/models/mcp";
 import {
+  Archive,
   BookOpen,
   Check,
   CheckCircle2,
@@ -49,7 +51,6 @@ import { SHOW_AGENT_LIFECYCLE_ACTIONS } from "@/shared/constants/agents";
 import { AGENT_PROFILE_ACTIVE_TAB_STORAGE_KEY } from "@/shared/storage/keys";
 import {
   EnvKeyValueEditor,
-  FieldHelpTooltip,
   ClipboardCopyButton,
   NotifierControls,
   reasoningEffortLabel,
@@ -58,7 +59,6 @@ import {
 import {
   agentProfilePageSaveDisabled,
   agentProfileConfig,
-  agentSandboxEnabled,
   agentAvailabilityStatusLabel,
   agentGatewayUnavailableLabel,
   agentRuntimeStatusDetailLabel,
@@ -178,7 +178,7 @@ export type AgentDetailPaneProps = {
   notice?: string;
   noticeTone?: AgentNoticeTone;
   notifierWebhookPublicOrigin?: string;
-  onDelete: AgentActionHandler;
+  onDelete: (item: AgentLike, returnFocus?: HTMLElement | null) => VoidOrPromise;
   onCheckDelete?: (item: AgentLike) => Promise<{ message: string; onResolve?: () => void } | null>;
   onDraftChange?: (draft: AgentDraft) => void;
   onInvite: AgentActionHandler;
@@ -194,6 +194,7 @@ export type AgentDetailPaneProps = {
     description: string,
     includeMemory: boolean,
     displayName: string,
+    commitMessage?: string,
   ) => boolean | Promise<boolean>;
   onRecreate: AgentActionHandler;
   onSave?: () => VoidOrPromise;
@@ -205,6 +206,7 @@ export type AgentDetailPaneProps = {
   onFinalizeFeishuConnect?: AgentActionHandler;
   onDisconnectFeishu?: AgentActionHandler;
   onUpgrade?: AgentActionHandler;
+  linkedTemplate?: HubTemplate;
   publishBusy?: boolean;
   publishDisabled?: boolean;
   onPublishLogin?: () => void;
@@ -282,6 +284,7 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
     modelError = null,
     onRetryModels,
     saving = false,
+    linkedTemplate,
     publishBusy = false,
     publishDisabled = false,
     onPublishLogin,
@@ -392,6 +395,7 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
   const [publishTemplateDisplayName, setPublishTemplateDisplayName] = useState("");
   const [publishTemplateName, setPublishTemplateName] = useState("");
   const [publishTemplateDescription, setPublishTemplateDescription] = useState("");
+  const [publishCommitMessage, setPublishCommitMessage] = useState("");
   const [publishTemplateIncludeMemory, setPublishTemplateIncludeMemory] = useState(false);
   const [publishTemplateNameError, setPublishTemplateNameError] = useState("");
   const [publishAttempted, setPublishAttempted] = useState(false);
@@ -428,14 +432,15 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
   const openPublishDialog = useCallback(
     (target: AgentTemplatePublishTarget) => {
       setPublishTarget(target);
-      setPublishTemplateName(defaultTemplateName(String(item.id || "")));
-      setPublishTemplateDisplayName(String(item.name || "").trim());
+      setPublishTemplateName(linkedTemplate?.name || defaultTemplateName(String(item.id || "")));
+      setPublishTemplateDisplayName(linkedTemplate?.display_name || String(item.name || "").trim());
       setPublishTemplateDescription(String(item.description || "").trim());
+      setPublishCommitMessage("");
       setPublishTemplateIncludeMemory(false);
       setPublishTemplateNameError("");
       setPublishAttempted(false);
     },
-    [item.description, item.id, item.name],
+    [item.description, item.id, item.name, linkedTemplate?.name, linkedTemplate?.display_name],
   );
   const submitPublishTemplate = useCallback(
     async (target = publishTarget) => {
@@ -455,6 +460,7 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
         publishTemplateDescription.trim(),
         publishTemplateIncludeMemory,
         publishTemplateDisplayName.trim(),
+        publishCommitMessage.trim(),
       );
       if (published) {
         setPublishTarget(null);
@@ -464,6 +470,7 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
       onPublish,
       publishTarget,
       publishTemplateDisplayName,
+      publishCommitMessage,
       publishTemplateDescription,
       publishTemplateIncludeMemory,
       publishTemplateName,
@@ -974,7 +981,7 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
         </header>
         {error ? <div className="form-error">{error}</div> : null}
         {saveError ? (
-          <div className="form-error">
+          <div className="form-error whitespace-pre-wrap break-words" role="alert">
             {saveError}
             {saveBillingURL ? (
               <>
@@ -1189,7 +1196,7 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
               <AgentAppsPanel
                 key={String(item.id)}
                 agentID={String(item.id || "")}
-                cliSupported={!agentSandboxEnabled(item) && ["codex", "dsh"].includes(runtimeKind)}
+                cliSupported={["codex", "dsh"].includes(runtimeKind)}
                 controller={appsController}
                 t={t}
                 portalContainer={dialogPortalContainer}
@@ -1421,6 +1428,13 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
             <DialogCloseButton label={t("close")} size="sm" variant="tertiaryGray" />
           </DialogHeader>
           <DialogBody className="agent-publish-dialog-body">
+            {linkedTemplate?.revision ? (
+              <p>
+                {t("agentTemplateNextVersion", {
+                  version: (linkedTemplate.latest_revision || linkedTemplate.revision) + 1,
+                })}
+              </p>
+            ) : null}
             {publishTarget === "official" ? (
               <div className="grid gap-2 text-sm text-[var(--muted)]">
                 <p>{t("agentTemplateHubGuidance")}</p>
@@ -1431,6 +1445,7 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
               <span>{t("agentPublishTemplateName")}</span>
               <input
                 value={publishTemplateName}
+                readOnly={Boolean(linkedTemplate)}
                 maxLength={TEMPLATE_NAME_MAX_LENGTH}
                 aria-label={t("agentPublishTemplateName")}
                 aria-invalid={Boolean(publishTemplateNameError)}
@@ -1465,6 +1480,15 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
                 value={publishTemplateDescription}
                 aria-label={t("agentPublishTemplateDescription")}
                 onChange={(event) => setPublishTemplateDescription(event.target.value)}
+              />
+            </label>
+            <label className="agent-publish-field">
+              <span>{t("templateCommitMessage")}</span>
+              <textarea
+                rows={2}
+                value={publishCommitMessage}
+                aria-label={t("templateCommitMessage")}
+                onChange={(event) => setPublishCommitMessage(event.target.value)}
               />
             </label>
             {supportsTemplateMemory ? (
@@ -1584,7 +1608,6 @@ function AgentRuntimePanel({
   t,
 }: AgentRuntimePanelProps) {
   const isNotifierDraft = isNotifierRuntimeDraftOnAgentPage(draft, item);
-  const sandboxEnabled = draft.sandbox_enabled ?? agentSandboxEnabled(item);
 
   return (
     <section id="agent-profile-runtime" className="profile-section agent-profile-scroll-target">
@@ -1594,30 +1617,10 @@ function AgentRuntimePanel({
       </div>
       <div className="agent-section-form">
         <div className="profile-grid-compact agent-page-form-content">
-          <label className="field">
+          <label className="field col-span-full">
             <span>{t("profileRuntimeKind")}</span>
             <input value={formatRuntimeKindLabel(draft.runtime_kind || runtimeKind, t)} readOnly disabled />
           </label>
-          {!isNotifierDraft ? (
-            <div className="field agent-fast-mode-field agent-sandbox-readonly-field">
-              <div className="field-label-with-help">
-                <span>{t("profileSandboxEnabled")}</span>
-                <FieldHelpTooltip detail={t("profileSandboxEnabledHelp")} />
-              </div>
-              <label className="selection-item compact-toggle-row agent-fast-mode-toggle agent-sandbox-toggle readonly">
-                <input
-                  type="checkbox"
-                  checked={sandboxEnabled}
-                  aria-label={t("profileSandboxEnabled")}
-                  readOnly
-                  disabled
-                />
-                <span className="agent-sandbox-copy">
-                  <strong>{sandboxEnabled ? t("statusEnabled") : t("statusDisabled")}</strong>
-                </span>
-              </label>
-            </div>
-          ) : null}
           {!isNotifierDraft && runtimeOptionSchemas.length > 0 ? (
             <RuntimeOptionsFields
               draft={draft}
@@ -2367,7 +2370,7 @@ type AgentActionsMenuProps = {
   incomplete: boolean;
   isManager: boolean;
   item: AgentLike;
-  onDelete: AgentActionHandler;
+  onDelete: AgentDetailPaneProps["onDelete"];
   onInvite: AgentActionHandler;
   onPublish?: (target: AgentTemplatePublishTarget) => VoidOrPromise;
   onStart: AgentActionHandler;
@@ -2399,13 +2402,14 @@ function AgentActionsMenu({
   onDelete,
   onPublish,
 }: AgentActionsMenuProps) {
+  const triggerRef = useRef<HTMLButtonElement>(null);
   const hasActions = SHOW_AGENT_LIFECYCLE_ACTIONS || canPublishLocal || !isManager;
   if (!hasActions) return null;
 
   return (
     <DropdownMenuRoot>
       <DropdownMenuTrigger asChild>
-        <Button variant="secondaryGray" size="md" className="agent-actions-menu-trigger">
+        <Button ref={triggerRef} variant="secondaryGray" size="md" className="agent-actions-menu-trigger">
           <MoreHorizontal aria-hidden="true" size={18} strokeWidth={2} />
           <span>{t("agentMoreActions")}</span>
           {upgradeNeeded ? <span className="agent-actions-alert-dot" aria-hidden="true"></span> : null}
@@ -2449,9 +2453,17 @@ function AgentActionsMenu({
         {!isManager ? (
           <>
             <DropdownMenuSeparator />
-            <DropdownMenuItem danger disabled={busy} onSelect={() => onDelete(item)}>
-              <Trash2 aria-hidden="true" size={15} strokeWidth={2} />
-              <span>{t("agentDelete")}</span>
+            <DropdownMenuItem
+              danger={isNotificationBotAgent(item)}
+              disabled={busy}
+              onSelect={() => onDelete(item, triggerRef.current)}
+            >
+              {isNotificationBotAgent(item) ? (
+                <Trash2 aria-hidden="true" size={15} strokeWidth={2} />
+              ) : (
+                <Archive aria-hidden="true" size={15} strokeWidth={2} />
+              )}
+              <span>{t(isNotificationBotAgent(item) ? "agentDelete" : "agentArchive")}</span>
             </DropdownMenuItem>
           </>
         ) : null}
