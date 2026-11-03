@@ -180,6 +180,9 @@ func (h *Handler) listTaskConversations(w http.ResponseWriter, r *http.Request) 
 
 func hasConversationHistory(room im.Room) bool {
 	for _, message := range room.Messages {
+		if message.Event != nil && message.Event.Key == "task_assigned" {
+			return true
+		}
 		if message.Kind != "event" && message.Kind != "system" && message.Event == nil && !strings.HasPrefix(message.Content, "Bootstrap room created for admin and ") {
 			return true
 		}

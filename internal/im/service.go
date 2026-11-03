@@ -3769,7 +3769,7 @@ func (s *Service) bootstrapLocked() Bootstrap {
 func (s *Service) ensureAdminAgentRoomLocked(agentID, agentName string) (*Room, bool) {
 	agentUserID := s.resolveRoomUserIDLocked(agentID)
 	for _, room := range s.rooms {
-		if room.TaskSession || len(room.Members) != 2 {
+		if !room.IsDirect || room.TaskSession || len(room.Members) != 2 {
 			continue
 		}
 		if containsUserIDInRoom(*room, adminUserID) && containsUserIDInRoom(*room, agentUserID) {

@@ -175,6 +175,10 @@ export function useWorkspaceRealtime({
       }
 
       if (payload?.type === "message.created" && payload.message) {
+        if (payload.message.event?.key === "task_assigned") {
+          // Assignment may have provisioned a DM absent from the current bootstrap.
+          scheduleRefresh({ bootstrap: true });
+        }
         const senderID = String(payload.message.sender_id || "").trim();
         if (senderID) {
           const sender = resolveUserByLocalIdentity(senderID, current.usersById) ?? { id: senderID };

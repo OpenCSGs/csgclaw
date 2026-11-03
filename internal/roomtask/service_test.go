@@ -116,6 +116,46 @@ func TestManagerReviewsEveryChildBeforeExplicitDispatch(t *testing.T) {
 	}
 }
 
+func TestAppendIndependentReviewAfterAcceptingProducerResult(t *testing.T) {
+	s, _, roster, _ := fixture(t)
+	roster.WorkerIDs = []string{"review", "dev"}
+	root := rootTask(t, s)
+	if err := s.Plan("room-a", root.ID, "Prepare deliverable", []PlanItem{{IDRef: "produce", Title: "Prepare report", AssignedTo: "review"}}, true); err != nil {
+		t.Fatal(err)
+	}
+	producer := childFor(t, s, "review")
+	finishChild(t, s, producer, taskcore.StatusCompleted, "report.txt", "")
+	parent, _ := s.Get("room-a", root.ID)
+	if parent.Status != taskcore.StatusReview {
+		t.Fatalf("parent status = %q, want ready for Manager decision", parent.Status)
+	}
+	// A missing guide-required content review can still be added after the
+	// Manager has accepted the producer's submission but before final reporting.
+	if err := s.AppendPlan("room-a", root.ID, "required-independent-review", "Independently check the report", []PlanItem{{
+		IDRef: "verify", Title: "Verify report", Body: "Independently check accuracy and return findings", AssignedTo: "dev", DependsOnRefs: []string{producer.ID},
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	reviewer := childFor(t, s, "dev")
+	if len(reviewer.DependsOn) != 1 || reviewer.DependsOn[0] != producer.ID || reviewer.DispatchedAt != nil {
+		t.Fatalf("reviewer did not retain an explicit dependency and dispatch boundary: %+v", reviewer)
+	}
+	for _, outcome := range []string{"succeeded", "issues"} {
+		if _, err := s.Report("room-a", root.ID, outcome, "Only the producer has finished"); err == nil {
+			t.Fatalf("closed parent with %q before the independent review", outcome)
+		}
+	}
+	finishChild(t, s, reviewer, taskcore.StatusCompleted, "Independent review passed", "")
+	accepted, _ := s.Get("room-a", reviewer.ID)
+	if accepted.ReviewedBy != roster.ManagerID || accepted.AssignedTo != "dev" {
+		t.Fatal("content reviewer and system acceptance authority were conflated", accepted)
+	}
+	result, err := s.Report("room-a", root.ID, "succeeded", "Report independently checked")
+	if err != nil || result.ReportStatus != "delivered" {
+		t.Fatal(result, err)
+	}
+}
+
 func TestPlanValidationAndTaskBoundaries(t *testing.T) {
 	for _, kind := range []string{"empty", "outsider", "manager", "duplicate", "cycle", "unknown"} {
 		t.Run(kind, func(t *testing.T) {

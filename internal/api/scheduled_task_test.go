@@ -6,6 +6,7 @@ import (
 	"csgclaw/internal/im"
 	"csgclaw/internal/taskcore"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -78,6 +79,98 @@ func TestScheduledTaskPatchCanClearExpiresAt(t *testing.T) {
 	}
 	if cleared.ExpiresAt != nil {
 		t.Fatalf("cleared ExpiresAt = %v, want nil", cleared.ExpiresAt)
+	}
+}
+
+func TestScheduledTaskUsesDirectRoomAndAppearsInConversationHistory(t *testing.T) {
+	for _, existingCollaboration := range []bool{false, true} {
+		t.Run(fmt.Sprintf("existing_collaboration=%t", existingCollaboration), func(t *testing.T) {
+			bootstrap := im.Bootstrap{CurrentUserID: im.AdminUserID, Users: []im.User{
+				{ID: im.AdminUserID, Name: "admin", Role: "admin"},
+				{ID: "user-dev", Name: "dev", Role: "worker"},
+			}}
+			if existingCollaboration {
+				bootstrap.Rooms = []im.Room{{ID: "collaboration", Title: "Shared work", Type: apitypes.RoomTypeOnDemand,
+					Members: []string{im.AdminUserID, "user-dev"}}}
+			}
+			imSvc := im.NewServiceFromBootstrap(bootstrap)
+			_, unusedRoom, err := imSvc.EnsureAgentUser(im.EnsureAgentUserRequest{ID: "agent-unused", Name: "unused"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			core := taskcore.NewService()
+			tasks := agenttask.NewService(core, imSvc, nil, nil)
+			store, err := scheduledtask.NewStore(t.TempDir())
+			if err != nil {
+				t.Fatal(err)
+			}
+			svc, err := scheduledtask.NewService(store, tasks)
+			if err != nil {
+				t.Fatal(err)
+			}
+			schedule, err := svc.Create(scheduledtask.CreateInput{Title: "Check build", AgentID: "agent-dev",
+				Prompt: "Report build status", Recurrence: "daily", FirstRunAt: time.Now().Add(time.Hour), Enabled: true})
+			if err != nil {
+				t.Fatal(err)
+			}
+			h := &Handler{im: imSvc, agentTaskSvc: tasks, scheduledTaskSvc: svc}
+			rec := httptest.NewRecorder()
+			h.Routes().ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/v1/scheduled-tasks/"+schedule.ID+"/run-now", nil))
+			if rec.Code != http.StatusCreated {
+				t.Fatalf("run: %d %s", rec.Code, rec.Body.String())
+			}
+			var run apitypes.ScheduledTaskRun
+			if err := json.Unmarshal(rec.Body.Bytes(), &run); err != nil {
+				t.Fatal(err)
+			}
+			generated, ok := core.Get(run.TaskID)
+			if !ok {
+				t.Fatalf("missing generated task %q", run.TaskID)
+			}
+			room, ok := imSvc.Room(generated.RoomID)
+			if !ok || !room.IsDirect || room.ID == "collaboration" {
+				t.Fatalf("scheduled task must use an agent DM, got room %+v", room)
+			}
+			assertVisible := func() {
+				t.Helper()
+				rec := httptest.NewRecorder()
+				h.listTaskConversations(rec, httptest.NewRequest(http.MethodGet, "/api/v1/conversations", nil))
+				if rec.Code != http.StatusOK {
+					t.Fatalf("conversations: %d %s", rec.Code, rec.Body.String())
+				}
+				var page taskConversationPage
+				if err := json.Unmarshal(rec.Body.Bytes(), &page); err != nil {
+					t.Fatal(err)
+				}
+				found := false
+				for _, listed := range page.Rooms {
+					if listed.ID == unusedRoom.ID {
+						t.Fatal("unused bootstrap DM appeared in task history")
+					}
+					if listed.ID == room.ID {
+						found = true
+					}
+				}
+				if !found {
+					t.Fatalf("scheduled task DM %q is missing from task history", room.ID)
+				}
+			}
+			// The assignment is meaningful history even before the agent replies.
+			assertVisible()
+			if _, err := tasks.Claim(agenttask.ClaimInput{TaskID: generated.ID, ParticipantID: "pt-dev"}); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := tasks.Update(agenttask.UpdateInput{TaskID: generated.ID, ActorID: "pt-dev", Status: taskcore.StatusCompleted, Result: "Build passed"}); err != nil {
+				t.Fatal(err)
+			}
+			assertVisible()
+			if existingCollaboration {
+				collaboration, _ := imSvc.Room("collaboration")
+				if len(collaboration.Messages) != 0 || collaboration.IsDirect {
+					t.Fatalf("scheduled task altered the collaboration room: %+v", collaboration)
+				}
+			}
+		})
 	}
 }
 

@@ -105,6 +105,18 @@ export function TeamGuideEditor({
     }
   }
 
+  function fillTemplate() {
+    if (disabled || value.trim()) return;
+    const template = t("teamGuideTemplate");
+    onChange(template);
+    setMention(null);
+    setSaveFailed(false);
+    requestAnimationFrame(() => {
+      editorRef.current?.focus();
+      editorRef.current?.setSelectionRange(template.length, template.length);
+    });
+  }
+
   return (
     <section
       className={styles.panel}
@@ -121,6 +133,11 @@ export function TeamGuideEditor({
           <span className={styles.state} role="status">
             {t(busy ? "teamSaving" : dirty ? "teamGuideDirty" : "teamGuideSaved")}
           </span>
+          {onSave && !value.trim() ? (
+            <Button variant="secondaryGray" size="sm" disabled={busy} onClick={fillTemplate}>
+              {t("teamGuideFillTemplate")}
+            </Button>
+          ) : null}
           {onSave ? (
             <Button
               variant="primary"
