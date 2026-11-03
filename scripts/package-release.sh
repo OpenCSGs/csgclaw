@@ -16,13 +16,9 @@ BUILD_TIME="${BUILD_TIME:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}"
 DIST_DIR="${DIST_DIR:-dist}"
 GOCACHE="${GOCACHE:-$(pwd)/.gocache}"
 GO_BUILD_TAGS="${GO_BUILD_TAGS:-}"
-PACKAGE_MODE="${PACKAGE_MODE:-}"
-INCLUDE_BOXLITE="${INCLUDE_BOXLITE:-}"
 VERSION_PKG="${VERSION_PKG:-csgclaw/internal/version}"
-BOXLITE_CLI_VERSION="${BOXLITE_CLI_VERSION:-v0.9.0}"
-BOXLITE_CLI_BASE_URL="${BOXLITE_CLI_BASE_URL:-https://github.com/boxlite-ai/boxlite/releases/download}"
 WEB_STATIC_DIST_DIR="${WEB_STATIC_DIST_DIR:-web/static-dist}"
-SANDBOX_CLI_CMD_PATH="${SANDBOX_CLI_CMD_PATH:-./cmd/csgclaw-cli}"
+HOST_CLI_CMD_PATH="${HOST_CLI_CMD_PATH:-./cmd/csgclaw-cli}"
 LDFLAGS="-X ${VERSION_PKG}.Version=${VERSION} -X ${VERSION_PKG}.Commit=${COMMIT} -X ${VERSION_PKG}.BuildTime=${BUILD_TIME}"
 if [ "$APP" = "csgclaw-cli" ]; then
   LDFLAGS="-s -w ${LDFLAGS}"
@@ -49,13 +45,6 @@ EOF
   exit 1
 }
 
-supports_boxlite_bundle() {
-  case "$1/$2" in
-    darwin/arm64|linux/amd64|linux/arm64) return 0 ;;
-    *) return 1 ;;
-  esac
-}
-
 to_windows_path() {
   local path="$1"
 
@@ -75,51 +64,6 @@ to_windows_path() {
       ;;
   esac
 }
-
-resolve_include_boxlite() {
-  if [ -n "$INCLUDE_BOXLITE" ]; then
-    echo "$INCLUDE_BOXLITE"
-    return
-  fi
-
-  if [ -n "$PACKAGE_MODE" ]; then
-    case "$PACKAGE_MODE" in
-      bundled-boxlite-cli) echo "1" ;;
-      legacy-single-binary) echo "0" ;;
-      *)
-        echo "unsupported PACKAGE_MODE: ${PACKAGE_MODE}" >&2
-        exit 1
-        ;;
-    esac
-    return
-  fi
-
-  if [ "$APP" = "csgclaw" ] && supports_boxlite_bundle "$GOOS_TARGET" "$GOARCH_TARGET"; then
-    echo "1"
-    return
-  fi
-
-  echo "0"
-}
-
-INCLUDE_BOXLITE="$(resolve_include_boxlite)"
-case "$INCLUDE_BOXLITE" in
-  0|1) ;;
-  *)
-    echo "INCLUDE_BOXLITE must be 0 or 1, got: ${INCLUDE_BOXLITE}" >&2
-    exit 1
-    ;;
-esac
-
-if [ "$APP" != "csgclaw" ] && [ "$INCLUDE_BOXLITE" = "1" ]; then
-  echo "INCLUDE_BOXLITE=1 is only supported for APP=csgclaw" >&2
-  exit 1
-fi
-
-if [ "$APP" = "csgclaw" ] && [ "$INCLUDE_BOXLITE" = "1" ] && ! supports_boxlite_bundle "$GOOS_TARGET" "$GOARCH_TARGET"; then
-  echo "bundled boxlite is not supported for ${GOOS_TARGET}/${GOARCH_TARGET}" >&2
-  exit 1
-fi
 
 require_web_assets
 
@@ -155,22 +99,12 @@ else
 fi
 
 if [ "$APP" = "csgclaw" ]; then
-  sandbox_cli_dir="${stage_dir}/sandbox-tools"
   host_cli_name="csgclaw-cli"
   if [ "$GOOS_TARGET" = "windows" ]; then
     host_cli_name="csgclaw-cli.exe"
   fi
-  mkdir -p "$sandbox_cli_dir"
-  env CGO_ENABLED=0 GOOS=linux GOARCH="$GOARCH_TARGET" GOCACHE="$GOCACHE" \
-    go build -ldflags "-s -w ${LDFLAGS}" -o "${sandbox_cli_dir}/csgclaw-cli" "${SANDBOX_CLI_CMD_PATH}"
   env CGO_ENABLED=0 GOOS="$GOOS_TARGET" GOARCH="$GOARCH_TARGET" GOCACHE="$GOCACHE" \
-    go build -ldflags "-s -w ${LDFLAGS}" -o "${stage_dir}/${host_cli_name}" "${SANDBOX_CLI_CMD_PATH}"
-fi
-
-if [ "$APP" = "csgclaw" ] && [ "$INCLUDE_BOXLITE" = "1" ]; then
-  BOXLITE_CLI_VERSION="$BOXLITE_CLI_VERSION" \
-  BOXLITE_CLI_BASE_URL="$BOXLITE_CLI_BASE_URL" \
-  "$(dirname "$0")/fetch-boxlite-cli.sh" "$GOOS_TARGET" "$GOARCH_TARGET" "$stage_dir"
+    go build -ldflags "-s -w ${LDFLAGS}" -o "${stage_dir}/${host_cli_name}" "${HOST_CLI_CMD_PATH}"
 fi
 
 if [ "$APP" = "csgclaw" ]; then

@@ -323,7 +323,7 @@ type ConfigSettingsResponse struct {
 	AccessTokenSet            bool     `json:"access_token_set,omitempty"`
 	AccessTokenPreview        string   `json:"access_token_preview,omitempty"`
 	ShowUpgrade               bool     `json:"show_upgrade"`
-	SandboxProvider           string   `json:"sandbox_provider"`
+	SandboxProvider           string   `json:"sandbox_provider,omitempty"`
 	SupportedSandboxProviders []string `json:"supported_sandbox_providers,omitempty"`
 	HubLocalPath              string   `json:"hub_local_path"`
 	HubOfficialURLEffective   string   `json:"hub_official_url_effective,omitempty"`
@@ -336,7 +336,7 @@ type UpdateConfigSettingsRequest struct {
 	AdvertiseBaseURL       string `json:"advertise_base_url,omitempty"`
 	AccessToken            string `json:"access_token,omitempty"`
 	ShowUpgrade            bool   `json:"show_upgrade"`
-	SandboxProvider        string `json:"sandbox_provider"`
+	SandboxProvider        string `json:"sandbox_provider,omitempty"`
 	HubLocalPath           string `json:"hub_local_path,omitempty"`
 	DefaultManagerTemplate string `json:"default_manager_template"`
 	DefaultWorkerTemplate  string `json:"default_worker_template"`

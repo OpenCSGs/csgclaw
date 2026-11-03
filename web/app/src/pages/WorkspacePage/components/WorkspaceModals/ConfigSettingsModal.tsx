@@ -1,11 +1,7 @@
 import { Button } from "@/components/ui";
 import type { ConfigPhase } from "@/hooks/workspace/useConfigController";
 import type { ConfigSettingsDraft } from "@/models/configSettings";
-import {
-  configTemplateOptions,
-  configAdvertiseBaseURLPlaceholder,
-  sandboxProviderLabel,
-} from "@/models/configSettings";
+import { configTemplateOptions, configAdvertiseBaseURLPlaceholder } from "@/models/configSettings";
 import type { TranslateFn } from "@/models/conversations";
 import type { HubTemplate } from "@/models/hubWorkspace";
 import { ModalCloseButton } from "./ModalCloseButton";
@@ -14,7 +10,6 @@ type ConfigSettingsModalProps = {
   t: TranslateFn;
   configDraft: ConfigSettingsDraft;
   hubTemplates: readonly HubTemplate[];
-  sandboxProviders: string[];
   configBusy: boolean;
   configError: string;
   configPhase: ConfigPhase;
@@ -28,7 +23,6 @@ export function ConfigSettingsModal({
   t,
   configDraft,
   hubTemplates,
-  sandboxProviders,
   configBusy,
   configError,
   configPhase,
@@ -47,7 +41,6 @@ export function ConfigSettingsModal({
         : restarting
           ? t("configSettingsRestartingBody")
           : t("configSettingsHint");
-  const providerOptions = sandboxProviders.length > 0 ? sandboxProviders : ["boxlite", "docker", "csghub"];
   const managerTemplateOptions = configTemplateOptions(hubTemplates, "manager", configDraft.default_manager_template);
   const managerTemplateLabel =
     managerTemplateOptions.find((option) => option.value === configDraft.default_manager_template)?.label ||
@@ -89,23 +82,6 @@ export function ConfigSettingsModal({
                 />
               </label>
             </div>
-          </section>
-          <section className="config-settings-section">
-            <h3 className="config-settings-section-title">{t("configSettingsSandboxSection")}</h3>
-            <label className="field">
-              <span>{t("configSettingsSandboxProvider")}</span>
-              <select
-                value={configDraft.sandbox_provider}
-                disabled={disabled}
-                onChange={(event) => onDraftChange({ sandbox_provider: event.currentTarget.value })}
-              >
-                {providerOptions.map((provider) => (
-                  <option key={provider} value={provider}>
-                    {sandboxProviderLabel(provider, t)}
-                  </option>
-                ))}
-              </select>
-            </label>
           </section>
           <section className="config-settings-section">
             <h3 className="config-settings-section-title">{t("configSettingsHubSection")}</h3>

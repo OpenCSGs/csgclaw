@@ -10,8 +10,6 @@ export type ConfigSettings = {
   access_token_set?: boolean;
   access_token_preview?: string;
   show_upgrade: boolean;
-  sandbox_provider: string;
-  supported_sandbox_providers?: string[];
   hub_local_path: string;
   hub_official_url_effective?: string;
   default_manager_template: string;
@@ -27,7 +25,6 @@ export type ConfigSettingsDraft = {
   access_token_set: boolean;
   access_token_preview: string;
   show_upgrade: boolean;
-  sandbox_provider: string;
   hub_local_path: string;
   default_manager_template: string;
   default_worker_template: string;
@@ -38,7 +35,6 @@ export type ConfigSettingsUpdatePayload = {
   advertise_base_url: string;
   access_token?: string;
   show_upgrade: boolean;
-  sandbox_provider: string;
   hub_local_path: string;
   default_manager_template: string;
   default_worker_template: string;
@@ -80,10 +76,6 @@ export function normalizeConfigSettings(source: unknown): ConfigSettings | null 
     access_token_set: accessTokenSet,
     access_token_preview: String(value.access_token_preview || "").trim(),
     show_upgrade: value.show_upgrade !== false,
-    sandbox_provider: String(value.sandbox_provider || "").trim(),
-    supported_sandbox_providers: Array.isArray(value.supported_sandbox_providers)
-      ? value.supported_sandbox_providers.map((item) => String(item || "").trim()).filter(Boolean)
-      : [],
     hub_local_path: String(value.hub_local_path || "").trim(),
     hub_official_url_effective: normalizeURLField(String(value.hub_official_url_effective || "")),
     default_manager_template: String(value.default_manager_template || "").trim(),
@@ -145,7 +137,6 @@ export function configSettingsToDraft(settings: ConfigSettings): ConfigSettingsD
     access_token_set: settings.access_token_set ?? Boolean(settings.access_token),
     access_token_preview: settings.access_token_preview || "",
     show_upgrade: settings.show_upgrade,
-    sandbox_provider: settings.sandbox_provider,
     hub_local_path: settings.hub_local_path,
     default_manager_template: settings.default_manager_template,
     default_worker_template: settings.default_worker_template,
@@ -157,7 +148,6 @@ export function configDraftToUpdatePayload(draft: ConfigSettingsDraft): ConfigSe
     listen_addr: formatListenAddress(draft.listen_host, draft.listen_port),
     advertise_base_url: normalizeAdvertiseBaseURL(draft.advertise_base_url),
     show_upgrade: draft.show_upgrade,
-    sandbox_provider: draft.sandbox_provider,
     hub_local_path: draft.hub_local_path.trim(),
     default_manager_template: draft.default_manager_template,
     default_worker_template: draft.default_worker_template,
@@ -205,17 +195,4 @@ export function configTemplateOptions(
     options.unshift({ value: current, label: current });
   }
   return options;
-}
-
-export function sandboxProviderLabel(provider: string, t: (key: string) => string): string {
-  switch (provider) {
-    case "boxlite":
-      return t("configSettingsSandboxBoxlite");
-    case "docker":
-      return t("configSettingsSandboxDocker");
-    case "csghub":
-      return t("configSettingsSandboxCSGHub");
-    default:
-      return provider;
-  }
 }

@@ -597,3 +597,34 @@ func (r *fakeRunner) Run(_ context.Context, req CommandRequest) (CommandResult, 
 	}
 	return result.result, result.err
 }
+
+func TestCheckHomeStoppedIncludesAllInstancesAndRejectsUncertainStates(t *testing.T) {
+	for _, state := range []string{"Configured", "Created", "Stopped", "Exited", "Running", "Starting", "Paused", "Unknown", ""} {
+		t.Run(state, func(t *testing.T) {
+			data := []byte(`[{"Status":"` + state + `"}]`)
+			runner := &fakeRunner{results: []fakeResult{{result: CommandResult{Stdout: data}}}}
+			provider := NewProvider(WithPath("/fixture/boxlite"), WithRunner(runner))
+			err := provider.CheckHomeStopped(context.Background(), "/fixture/home")
+			safe := state == "Configured" || state == "Created" || state == "Stopped" || state == "Exited"
+			if (err == nil) != safe {
+				t.Fatalf("state %q: %v", state, err)
+			}
+			if got, want := runner.requests[0].Args, []string{"--home", "/fixture/home", "list", "--all", "--format", "json"}; !reflect.DeepEqual(got, want) {
+				t.Fatalf("args = %v", got)
+			}
+		})
+	}
+}
+
+func TestCheckHomeStoppedRejectsInvalidOrFailedInventory(t *testing.T) {
+	for _, body := range []string{"null", "{}", "bad JSON", "[{}]", "[{\"Status\":\"Stopped\"},{\"Status\":\"Running\"}]"} {
+		runner := &fakeRunner{results: []fakeResult{{result: CommandResult{Stdout: []byte(body)}}}}
+		if err := NewProvider(WithRunner(runner)).CheckHomeStopped(context.Background(), "/fixture/home"); err == nil {
+			t.Fatalf("unsafe inventory accepted: %s", body)
+		}
+	}
+	runner := &fakeRunner{results: []fakeResult{{result: CommandResult{Stdout: []byte("[]"), ExitCode: 1}}}}
+	if err := NewProvider(WithRunner(runner)).CheckHomeStopped(context.Background(), "/fixture/home"); err == nil {
+		t.Fatal("failed inventory accepted")
+	}
+}

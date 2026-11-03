@@ -151,7 +151,6 @@ export type ConfigModalControllerProps = {
   onDraftChange: (patch: Partial<ConfigSettingsDraft>) => void;
   onReload: () => void;
   onSaveAndRestart: () => Promise<void>;
-  sandboxProviders: string[];
   t: TranslateFn;
 };
 
@@ -166,7 +165,6 @@ export type ConfigController = {
   openConfigModal: () => void;
   settings: {
     draft: ConfigSettingsDraft;
-    providers: string[];
     hubTemplates: readonly HubTemplate[];
     loading: boolean;
     phase: ConfigPhase;

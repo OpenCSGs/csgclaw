@@ -3153,8 +3153,8 @@ func TestBootstrapConfigViewRestrictsCSGHubToHostRuntimes(t *testing.T) {
 		Sandbox: config.SandboxConfig{Provider: config.CSGHubProvider},
 	}, nil, nil)
 
-	if got.SandboxProvider != config.CSGHubProvider {
-		t.Fatalf("sandbox provider = %q, want %q", got.SandboxProvider, config.CSGHubProvider)
+	if got.SandboxProvider != "" {
+		t.Fatalf("retired sandbox provider exposed: %q", got.SandboxProvider)
 	}
 	if len(got.WorkerRuntimeChoices) != 2 {
 		t.Fatalf("worker runtime choices = %#v, want Codex and DSH", got.WorkerRuntimeChoices)

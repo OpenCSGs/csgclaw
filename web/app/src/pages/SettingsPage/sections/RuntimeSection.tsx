@@ -2,7 +2,7 @@ import { Button, Select } from "@/components/ui";
 import { useWorkspaceControllerContext } from "@/hooks/workspace";
 import { AgentRuntimeSection } from "@/components/business/AgentRuntimeSection";
 import { useAgentRuntimes } from "@/components/business/AgentRuntimeSection/useAgentRuntimes";
-import { configTemplateOptions, sandboxProviderLabel } from "@/models/configSettings";
+import { configTemplateOptions } from "@/models/configSettings";
 import { SettingsRow } from "./SettingsRow";
 import styles from "../SettingsPage.module.css";
 
@@ -16,7 +16,6 @@ export function RuntimeSection() {
   }
 
   const disabled = config.loading || config.phase === "saving" || config.phase === "restarting";
-  const providerOptions = config.providers.length > 0 ? config.providers : ["boxlite", "docker", "csghub"];
   const managerTemplateOptions = configTemplateOptions(
     config.hubTemplates,
     "manager",
@@ -33,21 +32,9 @@ export function RuntimeSection() {
 
   return (
     <>
-      <SettingsRow title={t("configSettingsSandboxSection")} description={t("iaSettingsSandboxDescription")}>
+      <SettingsRow title={t("profileRuntimeSection")} description={t("iaSettingsRuntimeDescription")}>
         <div className={styles.formGrid}>
-          <label className="field">
-            <span>{t("configSettingsSandboxProvider")}</span>
-            <Select
-              options={providerOptions.map((provider) => ({
-                value: provider,
-                label: sandboxProviderLabel(provider, t),
-              }))}
-              triggerProps={{ "aria-label": t("configSettingsSandboxProvider"), disabled }}
-              value={config.draft.sandbox_provider}
-              onValueChange={(value) => config.onDraftChange({ sandbox_provider: value })}
-            />
-          </label>
-          <label className="field">
+          <label className={`field ${styles.spanAll}`}>
             <span>{t("configSettingsHubLocalPath")}</span>
             <input
               value={config.draft.hub_local_path}

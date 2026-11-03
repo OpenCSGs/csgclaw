@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 
 	agentruntime "csgclaw/internal/runtime"
-	"csgclaw/internal/runtime/sandboxgateway"
+	runtimeworkspace "csgclaw/internal/runtime/workspace"
 	skill "csgclaw/internal/skill/state"
 )
 
@@ -58,7 +58,7 @@ func projectSkills(root, source string, states map[string]skill.State) error {
 		} else if err != nil {
 			return err
 		}
-		if err := sandboxgateway.OverlayWorkspaceTree(filepath.Join(source, entry.Name()), filepath.Join(targetSkills, entry.Name())); err != nil {
+		if err := runtimeworkspace.OverlayWorkspaceTree(filepath.Join(source, entry.Name()), filepath.Join(targetSkills, entry.Name())); err != nil {
 			return err
 		}
 	}
