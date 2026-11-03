@@ -1,4 +1,4 @@
-//go:build !headless && !ui_custom
+//go:build !headless && !ui_custom && !ui_both
 
 package serve
 

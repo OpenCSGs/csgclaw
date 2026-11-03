@@ -30,8 +30,22 @@ fi
 
 mkdir -p "$DIST_DIR"
 
-require_web_assets() {
+require_ui_assets() {
   if [ "$APP" != "csgclaw" ]; then
+    return
+  fi
+
+  local need_web=1 need_custom=0
+  case ",${GO_BUILD_TAGS// /,}," in
+    *,headless,*) return ;;
+    *,ui_both,*) need_custom=1 ;;
+    *,ui_custom,*) need_web=0; need_custom=1 ;;
+  esac
+  if [ "$need_custom" = 1 ] && [ ! -f web/custom/static-dist/index.html ]; then
+    echo 'missing custom UI build output; run make prepare-custom-ui UI_DIR=<frontend-dist>' >&2
+    exit 1
+  fi
+  if [ "$need_web" = 0 ]; then
     return
   fi
 
@@ -121,7 +135,7 @@ if [ "$APP" = "csgclaw" ] && [ "$INCLUDE_BOXLITE" = "1" ] && ! supports_boxlite_
   exit 1
 fi
 
-require_web_assets
+require_ui_assets
 
 tmpdir="$(mktemp -d)"
 trap 'rm -rf "$tmpdir"' EXIT

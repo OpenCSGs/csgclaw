@@ -96,15 +96,16 @@ docker run --rm csgclaw:headless serve
 最终镜像仍包含伴生 CLI 和 Codex。后续云端沙盒镜像流水线接入时需显式传入该参数；
 源码变更不会自动更新已经部署的实例。
 
-## 选择并打包一套 UI
+## 选择并打包 UI
 
 ```bash
 make build-ui UI=web
 make build-ui UI=custom UI_DIR=/absolute/path/to/another-ui/dist
+make build-ui UI=both UI_DIR=/absolute/path/to/another-ui/dist
 make build-ui UI=none
 ```
 
-每个命令生成一个服务端二进制 `bin/csgclaw-<UI>[.exe]`，最多嵌入一套 UI，统一放在 `/`。
+每个命令生成一个服务端二进制 `bin/csgclaw-<UI>[.exe]`，嵌入选中的网页资源。
 `UI_BIN` 可指定输出位置。执行器等运行依赖由宿主提供，与 `build-headless` 相同。
 默认 `make`、桌面安装包和 release 打包继续使用现有 UI。
 
@@ -112,6 +113,7 @@ make build-ui UI=none
 | --- | --- | --- | --- |
 | `web` | `web` | `/` | `embedded` |
 | `custom` | `web/custom` | `/` | `custom` |
+| `both` | `web`＋`web/custom` | `/`＋`/ui/custom/` | `both` |
 | `none` | 不包含 UI 包 | 没有 UI 路由 | `headless` |
 
 `UI_DIR` 是已经构建好、包含 `index.html` 的静态前端目录。打包脚本不替另一套 UI
@@ -120,27 +122,44 @@ make build-ui UI=none
 应串行执行，或分别使用隔离 worktree。二进制运行时不再依赖 `UI_DIR`；自定义产物按
 与现有前端相同的可信应用代码对待。
 
-构建标签选择一个 `http.Handler`，传给 `server.Options.UI`，传 nil 即纯后端。
-`internal/uiassets.SPA` 只共享静态文件、缓存和 SPA 兜底逻辑。没有模块注册表、挂载
-配置、多 UI 路由或 UI 启动信息接口；API 和健康检查继续由后端提供，缺失资源及未知
-API 返回 404。
+默认 `make`、`make package`、release 和 Electron 打包继续使用现有 CSGClaw UI 与根入口。
+`UI=both` 只增加 `/ui/custom/` 分流，其余路径原样交给现有 UI，浏览器默认打开地址、
+静态资源和 SSE SharedWorker 的 URL 保持原样。无尾斜杠入口采用相对重定向，保留网关
+路径前缀及查询参数。
 
-自定义 UI 相对于应用根路径访问已有 `api/v1/` 接口；使用相对资源和 API 地址可保留
-平台网关路径前缀。优先使用 hash 路由，history 路由需显式配置资源和路由 base。
-鉴权与事件协议保持原样。外部 UI 可通过同域代理连接同一后端，无需一起打包。
+构建标签仍选择一个 `http.Handler` 传给 `server.Options.UI`；双 UI handler 只分发网页
+请求，不再启动一个后端。`serve --api-only` 可以同时关闭两套页面。API、健康检查和
+事件流继续由同一后端提供，不增加插件注册表或生命周期框架。
 
-用最小测试页面验证自定义 UI 打包和 API 接入：
+自定义前端需配置相对资源地址、路由和 API base。custom 单独打包时，相对于应用根路径
+使用 `./api/v1/`；both 中相对于 `/ui/custom/` 使用 `../../api/v1/`。相对地址必须基于
+前端根路径解析，不能基于任意 history 页面；hash 路由更直接，history 路由需显式配置
+资源和路由 base。鉴权和事件协议保持原样。
+
+生成带选定 UI 的完整压缩包：
 
 ```bash
-make build-ui UI=custom UI_DIR=web/custom/testdata
-./bin/csgclaw-custom serve --no-browser
-# 测试页面在 /，读取后端版本接口。
+make package-ui UI=both UI_DIR=/absolute/path/to/another-ui/dist
 ```
 
-测试页面不作为完整产品 UI。构建 custom 容器前，先执行
+它复用原打包脚本、可执行文件名及 bundle 布局，包含伴生 CLI、Codex 和沙盒 CLI。
+变体默认输出到 `dist/ui-<UI>/`（可用 `UI_DIST_DIR` 覆盖），避免覆盖普通发布产物。
+解压后仍使用原来的 `csgclaw` 命令，both 默认进入现有 UI `/`。原 package/release/
+桌面命令的默认行为不变；变体安装器和更新通道需后续单独接入。
+
+用最小测试页面验证双 UI 打包和 API 接入：
+
+```bash
+make build-ui UI=both UI_DIR=web/custom/testdata
+./bin/csgclaw-both serve --no-browser
+# 现有 UI 在 /；测试页面在 /ui/custom/，读取相同后端的版本接口。
+```
+
+测试页面不作为完整产品 UI。构建 custom 或 both 容器前，先执行
 `make prepare-custom-ui UI_DIR=...`，然后执行
 `docker build --build-arg CSGCLAW_BUILD=custom -t csgclaw:custom .`。
-Docker 检查预备产物的 `index.html`，custom 模式跳过现有前端编译阶段。
+选择 `CSGCLAW_BUILD=both` 可包含两套 UI，省略参数时仍为 `embedded`。Docker 检查预备
+产物的 `index.html`；custom/headless 模式跳过现有前端编译阶段。
 云端流水线、签名桌面安装包和正式 release 的变体接入需要另外显式选择构建方式。
 
 ## Web UI

@@ -52,6 +52,10 @@ FROM build-base AS build-custom
 RUN test -s web/custom/static-dist/index.html
 ENV CSGCLAW_GO_TAGS=ui_custom
 
+FROM build-embedded AS build-both
+RUN test -s web/custom/static-dist/index.html
+ENV CSGCLAW_GO_TAGS=ui_both
+
 FROM build-${CSGCLAW_BUILD} AS build
 
 # These are supplied automatically by Buildx. Do not give them defaults: a

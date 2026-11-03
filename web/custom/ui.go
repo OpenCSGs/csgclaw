@@ -14,7 +14,7 @@ import (
 //go:embed all:static-dist
 var assets embed.FS
 
-// Handler serves the selected frontend at the application root.
+// Handler serves frontend paths relative to its root; the caller may strip a mount prefix.
 func Handler() (http.Handler, error) {
 	sub, err := fs.Sub(assets, "static-dist")
 	if err != nil {

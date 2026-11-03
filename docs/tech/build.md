@@ -74,16 +74,17 @@ The default is `CSGCLAW_BUILD=embedded`. BuildKit skips the Web build stage for
 image pipelines must explicitly select this build argument when adopting it;
 changing this source does not update a running deployment.
 
-## Select and bundle one UI
+## Select and bundle UI assets
 
 ```bash
 make build-ui UI=web
 make build-ui UI=custom UI_DIR=/absolute/path/to/another-ui/dist
+make build-ui UI=both UI_DIR=/absolute/path/to/another-ui/dist
 make build-ui UI=none
 ```
 
 Each command produces **one server binary**, `bin/csgclaw-<UI>[.exe]`. It embeds
-at most one UI, served at `/`. Runtime tools are provisioned separately, as for
+the selected UI assets. Runtime tools are provisioned separately, as for
 `build-headless`. `UI_BIN` overrides the output path. Default `make` and desktop/
 release packaging continue to select the existing UI.
 
@@ -91,6 +92,7 @@ release packaging continue to select the existing UI.
 | --- | --- | --- | --- |
 | `web` | `web` | `/` | `embedded` |
 | `custom` | `web/custom` | `/` | `custom` |
+| `both` | `web` + `web/custom` | `/` + `/ui/custom/` | `both` |
 | `none` | no UI package | no UI routes | `headless` |
 
 `UI_DIR` is a completed static frontend build containing `index.html`; the
@@ -101,32 +103,53 @@ Builds using different custom inputs must use separate worktrees or run serially
 The resulting binary no longer needs `UI_DIR` at runtime. Custom assets run as
 trusted application code under the same origin as the backend.
 
-Build tags choose a single `http.Handler`, passed to `server.Options.UI`; nil
-means API-only. `internal/uiassets.SPA` only shares static-file serving, caching
-and SPA fallback between the two implementations. There is no module registry,
-mount configuration, multi-UI routing, or UI bootstrap endpoint. APIs and health
-checks remain backend-owned; missing assets and unknown APIs return 404.
+Default `make`, `make package`, release and Electron packaging keep the existing
+CSGClaw UI and root entrypoint. `UI=both` is additive: only `/ui/custom/` is routed
+to the second UI; every other path is passed unchanged to the existing handler.
+Browser startup, original assets and the shared SSE worker retain their URLs.
+A request to `/ui/custom` redirects using a relative URL, preserving gateway
+prefixes and query parameters.
 
-A custom UI calls the existing `api/v1/` endpoints relative to the application
-root. Relative asset/API URLs preserve an external gateway prefix. Use a hash
-router or explicitly configure the frontend's asset/router base for history
-routes. Authentication and event protocols are unchanged. Separately deployed
-UIs can use a same-origin proxy to connect to one backend without bundling them
-together.
+Build tags still select one `http.Handler` for `server.Options.UI`; the both
+handler delegates to the two static UIs without starting another backend.
+`serve --api-only` disables both UIs. API routes and health checks remain owned by
+the same backend. There is no plugin registry or lifecycle framework.
+
+Custom frontends must configure relative resource URLs and their router/API
+base. For custom-only, the API base relative to the application root is
+`./api/v1/`; for both, relative to `/ui/custom/`, it is `../../api/v1/`.
+Resolve these against the frontend root, not an arbitrary history route.
+Hash routing is convenient; history routing requires an explicit resource/router
+base. Authentication and event protocols are unchanged.
+
+To produce an official-layout archive with selected UIs:
+
+```bash
+make package-ui UI=both UI_DIR=/absolute/path/to/another-ui/dist
+```
+
+This reuses the original package script, executable names and bundle structure
+(including the companion CLI, Codex and sandbox CLI). Variant archives go to
+`dist/ui-<UI>/` by default (`UI_DIST_DIR` overrides it), so they do not overwrite
+regular release output. The extracted `csgclaw` command still opens the existing
+UI at `/` in both mode. Original package/release/desktop commands retain their
+default behavior. UI variant installers and update channels require separate
+release integration.
 
 For a small build/API smoke fixture:
 
 ```bash
-make build-ui UI=custom UI_DIR=web/custom/testdata
-./bin/csgclaw-custom serve --no-browser
-# The fixture reads the backend version and is served at /.
+make build-ui UI=both UI_DIR=web/custom/testdata
+./bin/csgclaw-both serve --no-browser
+# Existing UI: / ; test fixture reading the same backend: /ui/custom/
 ```
 
-This is a test page, not a complete product UI. For a custom Docker image, first
+This is a test page, not a complete product UI. For a custom or both Docker image, first
 run `make prepare-custom-ui UI_DIR=...`, then
 `docker build --build-arg CSGCLAW_BUILD=custom -t csgclaw:custom .`.
-Docker verifies that the prepared `index.html` exists and skips the existing
-frontend build stage. Cloud image pipelines and signed desktop/release variants
+Use `CSGCLAW_BUILD=both` to include both UIs. The default remains `embedded`.
+Docker verifies the prepared custom `index.html`; only custom/headless skip the
+existing frontend build stage. Cloud image pipelines and signed desktop/release variants
 must explicitly adopt the chosen build; these developer commands do not switch
 them automatically.
 
