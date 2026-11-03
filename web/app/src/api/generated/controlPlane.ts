@@ -156,7 +156,10 @@ export interface paths {
     };
     get?: never;
     put?: never;
-    /** Rebuild an Agent with optional configuration */
+    /**
+     * Rebuild an Agent with optional configuration
+     * @description Rebuilds the Agent with its current or replacement configuration. Replacement configurations must have a complete primary model; image or video model selections alone do not provide one. Incomplete replacements return 400 before saving configuration or changing the Runtime. Requests without configuration preserve existing Manager initialization and readiness behavior, including a successful response with profile_incomplete.
+     */
     post: operations["postAgentsIdRecreate"];
     delete?: never;
     options?: never;
@@ -392,7 +395,7 @@ export interface paths {
     put?: never;
     /**
      * Check connectivity and model capabilities
-     * @description The models/image_models/video_models/vision_models arrays describe separate capabilities and remain separate.
+     * @description Checks the saved provider with optional connection overrides. Send {} to check the saved connection. The models/image_models/video_models/vision_models fields describe separate capabilities and may be null when unavailable.
      */
     post: operations["postModelProvidersIdCheck"];
     delete?: never;
@@ -1815,7 +1818,7 @@ export interface components {
       runtime_kind: string;
       servers: {
         [key: string]: unknown;
-      };
+      } | null;
     };
     McpServerRequest: {
       config: {
@@ -1859,20 +1862,20 @@ export interface components {
       base_url?: string;
       error_code?: string;
       id: string;
-      image_models: string[];
+      image_models: string[] | null;
       last_checked_at: string;
       message?: string;
       model_metadata?: {
         [key: string]: components["schemas"]["Metadata"];
       };
       model_source?: string;
-      models: string[];
+      models: string[] | null;
       status: string;
       video_metadata?: {
         [key: string]: components["schemas"]["VideoGeneration"];
       };
-      video_models: string[];
-      vision_models: string[];
+      video_models: string[] | null;
+      vision_models: string[] | null;
     };
     ModelProviderList: {
       items: components["schemas"]["ModelProviderSummary"][];
@@ -1923,9 +1926,9 @@ export interface components {
       };
       model_overrides: {
         [key: string]: components["schemas"]["Metadata"];
-      };
+      } | null;
       model_source?: string;
-      models: string[];
+      models: string[] | null;
       preset?: string;
       reasoning_effort?: string;
       reasoning_efforts?: {
@@ -1937,8 +1940,8 @@ export interface components {
       video_metadata?: {
         [key: string]: components["schemas"]["VideoGeneration"];
       };
-      video_models: string[];
-      vision_models: string[];
+      video_models: string[] | null;
+      vision_models: string[] | null;
     };
     Participant: {
       agent_id?: string;
@@ -2029,7 +2032,7 @@ export interface components {
       name?: string;
       runtime?: components["schemas"]["AgentRuntimeInput"] | null;
     };
-    /** @description No configuration rebuilds the current Agent. Configuration with no mask performs the existing full replacement, retaining the current Runtime/model when the replacement does not select them. A nonempty mask requires configuration; only selected fields are replaced. Parent and child mask paths cannot coexist. Unknown masks return invalid_field_mask. Recreate sets desired_state=running. Role and template creation are not replacement fields. */
+    /** @description No configuration rebuilds the current Agent and preserves existing Manager initialization and readiness behavior, including a successful response with profile_incomplete. Configuration with no mask performs the existing full replacement, retaining the current Runtime/model when the replacement does not select them. A nonempty mask requires configuration; only selected fields are replaced. Parent and child mask paths cannot coexist. Unknown masks return invalid_field_mask. Recreate sets desired_state=running. Role and template creation are not replacement fields. Replacement configurations must have a complete primary model; image or video model selections alone do not provide one. Incomplete replacements return 400 before saving configuration or changing the Runtime. */
     RecreateAgentRequest: {
       configuration?: components["schemas"]["RecreateAgentConfiguration"] | null;
       field_mask?: (
@@ -3274,7 +3277,11 @@ export interface operations {
       };
       cookie?: never;
     };
-    requestBody?: never;
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["ModelProviderRequest"];
+      };
+    };
     responses: {
       /** @description Success */
       200: {

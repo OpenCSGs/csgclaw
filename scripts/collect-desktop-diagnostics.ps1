@@ -807,7 +807,7 @@ try {
             -ErrorAction Stop
         # In Windows PowerShell 5.1, wrapping the pipeline directly can produce [[agents]].
         $parsedAgents = ConvertFrom-Json -InputObject $response.Content -ErrorAction Stop
-        $agents = @($parsedAgents)
+        $agents = @($parsedAgents.items)
         $activeAgents = @($agents | Where-Object { Test-ActiveAgent ([string](Get-DiagnosticProperty $_ 'id')) })
         Write-WorkValue $activeAgents "$agentAPIBase/api/v1/agents" (Join-Path $agentDiagnosticsDirectory 'agents.json')
         "Agent API collection succeeded. agent_count=$($agents.Count)" |

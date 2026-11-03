@@ -1,17 +1,23 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"reflect"
 	"strings"
 	"testing"
 
 	"csgclaw/internal/agentengine"
+	agent "csgclaw/internal/agentengine/agents"
 	"csgclaw/internal/agentengine/enginetest"
+	"csgclaw/internal/apitypes"
+	"csgclaw/internal/config"
 	"csgclaw/internal/modelprovider"
+	agentruntime "csgclaw/internal/runtime"
 )
 
 func TestAgentPatchCanonicalFieldsPreserveOmissionAndClearCollections(t *testing.T) {
@@ -119,24 +125,138 @@ func TestAgentProfileAndCanonicalResponseIncludeVideoConfiguration(t *testing.T)
 	}
 }
 
-func TestAgentRecreateAcceptsVideoOnlyModelConfiguration(t *testing.T) {
-	seed := agentengine.Agent{ID: "agent-worker", ResourceVersion: "1", Spec: agentengine.AgentSpec{Name: "worker", Role: agentengine.AgentRoleWorker, Runtime: agentengine.RuntimeSpec{Adapter: "dsh"}, Model: agentengine.ModelSpec{ModelID: "previous-model"}}}
-	client := enginetest.NewMemoryClient(seed)
-	handler := &Handler{agentEngine: client}
-	recorder := httptest.NewRecorder()
-	request := `{"configuration":{"name":"worker","model_config":{"video_generation":{"provider_id":"video-provider","model_id":"video-model"}}}}`
-	handler.Routes().ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, "/api/v1/agents/agent-worker/recreate", strings.NewReader(request)))
-	if recorder.Code != http.StatusOK {
-		t.Fatalf("recreate = %d: %s", recorder.Code, recorder.Body.String())
-	}
-	got, err := client.Agents().Get(context.Background(), seed.ID, agentengine.AgentGetOptions{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got.Spec.Model.VideoGeneration == nil || got.Spec.Model.VideoGeneration.ModelID != "video-model" || got.Spec.Model.ModelID != "" {
-		t.Fatalf("model configuration was not replaced: %+v", got.Spec.Model)
-	}
-	if got.Spec.Runtime.Adapter != seed.Spec.Runtime.Adapter {
-		t.Fatalf("runtime = %+v, want existing configuration", got.Spec.Runtime)
+func TestAgentRecreateValidatesModelBeforeMutation(t *testing.T) {
+	image := &modelprovider.ImageGenerationConfig{ProviderID: "configured", ModelID: "image-model"}
+	video := &modelprovider.VideoGenerationConfig{ProviderID: "configured", ModelID: "video-model"}
+	for _, tc := range []struct {
+		name   string
+		model  agentengine.ModelSpec
+		masked bool
+		valid  bool
+	}{
+		{name: "image only", model: agentengine.ModelSpec{ImageGeneration: image}},
+		{name: "video only", model: agentengine.ModelSpec{VideoGeneration: video}},
+		{name: "masked video only", model: agentengine.ModelSpec{VideoGeneration: video}, masked: true},
+		{name: "primary and multimodal", model: agentengine.ModelSpec{ProviderID: "configured", ModelID: "next-model", ImageGeneration: image, VideoGeneration: video}, valid: true},
+	} {
+		for _, entry := range []string{"HTTP", "Controller"} {
+			t.Run(tc.name+"/"+entry, func(t *testing.T) {
+				runtimeCalls := 0
+				runtime := fakeCompatRuntime{
+					kind: agent.RuntimeKindCodex,
+					new: func(_ context.Context, spec agentruntime.Spec) (agentruntime.Handle, error) {
+						runtimeCalls++
+						return agentruntime.Handle{RuntimeID: spec.RuntimeID, HandleID: "new-runtime"}, nil
+					},
+					start: func(context.Context, agentruntime.Handle) (agentruntime.State, error) {
+						runtimeCalls++
+						return agentruntime.StateRunning, nil
+					},
+					stop: func(context.Context, agentruntime.Handle) (agentruntime.State, error) {
+						runtimeCalls++
+						return agentruntime.StateStopped, nil
+					},
+					del: func(context.Context, agentruntime.Handle) error {
+						runtimeCalls++
+						return nil
+					},
+				}
+				svc, statePath := mustNewSeededServiceWithPathAndOptions(t, []agent.Agent{{
+					ID: "agent-worker", Name: "worker", Description: "original", Role: agent.RoleWorker,
+					RuntimeKind: agent.RuntimeKindCodex, RuntimeID: "runtime-worker", BoxID: "box-worker", Status: "stopped",
+					Profile: "configured.previous-model", ProfileComplete: true,
+					AgentProfile: agent.AgentProfile{
+						Provider: agent.ProviderAPI, ModelProviderID: "configured", ModelID: "previous-model", APIKey: "test-key",
+						Env: map[string]string{"PREVIOUS_SETTING": "enabled"}, ProfileComplete: true,
+					},
+				}}, agent.WithRuntime(runtime))
+				svc.Models().SetLLMConfig(config.LLMConfig{Providers: map[string]config.ProviderConfig{
+					"configured": {BaseURL: "https://provider.test/v1", APIKey: "test-key", Models: []string{"previous-model", "next-model"}, ImageModels: []string{"image-model"}, VideoModels: []string{"video-model"}},
+				}})
+				before, err := svc.Get(context.Background(), "agent-worker", agentengine.AgentGetOptions{})
+				if err != nil {
+					t.Fatal(err)
+				}
+				if before.Spec.Model.ModelID != "previous-model" {
+					t.Fatalf("initial model = %q, want previous-model", before.Spec.Model.ModelID)
+				}
+				beforeFile, err := os.ReadFile(statePath)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if entry == "HTTP" {
+					request := apitypes.RecreateAgentRequest{Configuration: &apitypes.RecreateAgentConfiguration{
+						Name: "worker", Description: "replacement", ModelConfig: &apitypes.CreateAgentProfile{
+							ModelProviderID: tc.model.ProviderID, ModelID: tc.model.ModelID, ImageGeneration: tc.model.ImageGeneration, VideoGeneration: tc.model.VideoGeneration,
+						},
+					}}
+					if tc.masked {
+						request.FieldMask = []string{"model_config"}
+					}
+					body, err := json.Marshal(request)
+					if err != nil {
+						t.Fatal(err)
+					}
+					handler := &Handler{svc: svc, agentEngine: agentengine.New(svc), agentModels: svc.Models(), workspace: svc.Workspace()}
+					recorder := httptest.NewRecorder()
+					handler.Routes().ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, "/api/v1/agents/agent-worker/recreate", bytes.NewReader(body)))
+					wantStatus := http.StatusBadRequest
+					if tc.valid {
+						wantStatus = http.StatusOK
+					}
+					if recorder.Code != wantStatus {
+						t.Fatalf("recreate = %d: %s, want %d", recorder.Code, recorder.Body.String(), wantStatus)
+					}
+					if !tc.valid && !strings.Contains(recorder.Body.String(), "profile is incomplete") {
+						t.Fatalf("unexpected validation error: %s", recorder.Body.String())
+					}
+				} else {
+					request := &agentengine.AgentUpdateRequest{
+						Spec:            agentengine.AgentSpec{Name: "worker", Description: "replacement", Role: before.Spec.Role, Runtime: before.Spec.Runtime, Model: tc.model},
+						ResourceVersion: before.ResourceVersion,
+					}
+					if tc.masked {
+						request.FieldMask = []string{"model"}
+					}
+					_, err := svc.Recreate(context.Background(), before.ID, agentengine.AgentRecreateOptions{Update: request})
+					if tc.valid && err != nil {
+						t.Fatal(err)
+					}
+					if !tc.valid && (err == nil || !strings.Contains(err.Error(), "profile is incomplete")) {
+						t.Fatalf("Recreate() error = %v, want incomplete profile", err)
+					}
+				}
+				after, err := svc.Get(context.Background(), before.ID, agentengine.AgentGetOptions{})
+				if err != nil {
+					t.Fatal(err)
+				}
+				afterFile, err := os.ReadFile(statePath)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if !tc.valid {
+					if !reflect.DeepEqual(after, before) || !bytes.Equal(afterFile, beforeFile) {
+						t.Fatal("rejected recreate changed Agent memory or its saved file")
+					}
+					if runtimeCalls != 0 {
+						t.Fatalf("rejected recreate performed %d runtime operations", runtimeCalls)
+					}
+					return
+				}
+				if after.Spec.Model.ModelID != "next-model" || after.Spec.Model.ProviderID != "configured" || after.Spec.Description != "replacement" || len(after.Spec.Model.Env) != 0 {
+					t.Fatalf("replacement configuration was not applied: %+v", after.Spec)
+				}
+				if !reflect.DeepEqual(after.Spec.Model.ImageGeneration, image) || !reflect.DeepEqual(after.Spec.Model.VideoGeneration, video) || runtimeCalls == 0 {
+					t.Fatalf("multimodal configuration or runtime recreation missing: %+v, calls=%d", after.Spec.Model, runtimeCalls)
+				}
+				if err := svc.Reload(); err != nil {
+					t.Fatal(err)
+				}
+				saved, err := svc.Get(context.Background(), before.ID, agentengine.AgentGetOptions{})
+				if err != nil || !reflect.DeepEqual(saved.Spec.Model, after.Spec.Model) {
+					t.Fatalf("saved model configuration differs after reload: %+v, %v", saved.Spec.Model, err)
+				}
+			})
+		}
 	}
 }

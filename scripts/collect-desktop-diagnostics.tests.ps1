@@ -89,10 +89,13 @@ try {
     function Get-CimInstance { param($ClassName, $ErrorAction) return }
     function Get-Process { param($ErrorAction) return }
     function Get-WinEvent { param($FilterHashtable, $MaxEvents, $ErrorAction) return }
+    $agentListResponse = '{"items":[{"id":"agent-dev","instructions":"API instructions"},{"id":"agent-manager"},{"id":"agent-idle"}]}'
+    $agentLogRequests = [Collections.Generic.List[string]]::new()
     function Invoke-WebRequest {
         param($Uri, $Method, [switch]$UseBasicParsing, $TimeoutSec, $ErrorAction)
-        if ($Uri -like '*/api/v1/agents') { return [pscustomobject]@{Content='[{"id":"agent-dev","instructions":"API instructions"},{"id":"agent-idle"}]'} }
-        return [pscustomobject]@{Content='{"logs":"api_key=api-log-secret"}'}
+        if ($Uri -like '*/api/v1/agents') { return [pscustomobject]@{Content=$agentListResponse} }
+        $agentLogRequests.Add($Uri)
+        return [pscustomobject]@{Content="runtime log from $Uri api_key=api-log-secret"}
     }
     $portableSource = $source -replace '(?s)if \(\[Environment\]::OSVersion.Platform -ne \[PlatformID\]::Win32NT\) \{\s*throw "collect-desktop-diagnostics.ps1 is only supported on Windows"\s*\}', ''
     $archiveOutput = Join-Path $fixtureRoot 'archives'
@@ -108,8 +111,30 @@ try {
     foreach ($secret in @('state-secret', 'runtime-secret', 'log-secret', 'api-log-secret', 'nested-secret', 'env-secret', 'must-not-copy', 'unrelated instructions')) { Assert-True (-not $allText.Contains($secret)) "Archive exposed $secret" }
     Assert-True (-not (Test-Path (Join-Path $unpacked 'agent-data/agent-idle'))) 'Idle agent work was collected'
     $roster = ConvertFrom-Json -InputObject (Get-Content -LiteralPath (Join-Path $unpacked 'agent-data/agents.json') -Raw)
-    Assert-True (@($roster).Count -eq 1 -and $roster[0].id -eq 'agent-dev') 'Agent array shape is nested or incorrect'
+    Assert-True (@($roster).Count -eq 2 -and $roster[0].id -eq 'agent-dev' -and $roster[1].id -eq 'agent-manager') 'Agent array shape is nested or incorrect'
+    Assert-True ($agentLogRequests.Count -eq 2) 'Runtime logs were not requested for every active Agent'
+    foreach ($id in @('agent-dev', 'agent-manager')) {
+        $logPath = Join-Path $unpacked "agent-data/$id/runtime-log-tail.txt"
+        Assert-True (Test-Path -LiteralPath $logPath) "Missing Runtime log for $id"
+        $logText = Get-Content -LiteralPath $logPath -Raw
+        Assert-True ($logText.Contains("/api/v1/agents/$id/logs?lines=500") -and -not $logText.Contains('api-log-secret')) "Runtime log content is incorrect for $id"
+    }
+    $apiStatus = Get-Content -LiteralPath (Join-Path $unpacked 'agent-data/api-status.txt') -Raw
+    Assert-True ($apiStatus.Contains('agent_count=3')) 'Agent count did not use the items collection'
     Assert-True ($allText.Contains('active instructions') -and $allText.Contains('saved base policy')) 'Instructions missing from archive'
+
+    $agentListResponse = '{"items":[]}'
+    $agentLogRequests.Clear()
+    $emptyArchiveOutput = Join-Path $fixtureRoot 'empty-archives'
+    . ([scriptblock]::Create($portableSource)) -UserDataDirectory $desktopRoot -OutputDirectory $emptyArchiveOutput -AgentsDirectory $agentsRoot -MaxFileMB 1 -MaxWorkDataMB 16
+    $emptyArchives = @(Get-ChildItem -LiteralPath $emptyArchiveOutput -Filter '*.zip')
+    Assert-True ($emptyArchives.Count -eq 1) 'Expected an archive for an empty Agent collection'
+    $emptyUnpacked = Join-Path $fixtureRoot 'empty-unpacked'
+    Expand-Archive -LiteralPath $emptyArchives[0].FullName -DestinationPath $emptyUnpacked
+    $emptyRoster = Get-Content -LiteralPath (Join-Path $emptyUnpacked 'agent-data/agents.json') -Raw
+    Assert-True ($emptyRoster.Trim() -eq '[]' -and $agentLogRequests.Count -eq 0) 'Empty Agent collection produced Agent records or log requests'
+    $emptyAPIStatus = Get-Content -LiteralPath (Join-Path $emptyUnpacked 'agent-data/api-status.txt') -Raw
+    Assert-True ($emptyAPIStatus.Contains('Agent API collection succeeded. agent_count=0')) 'Empty Agent collection was not accepted'
     Write-Host 'PASS: time window, persisted prompt context, active Agents, archive contents, redaction and truncation'
 } finally {
     $env:LOCALAPPDATA = $oldLocalAppData
