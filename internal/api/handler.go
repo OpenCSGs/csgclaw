@@ -1414,18 +1414,12 @@ func (h *Handler) handleAgentRecreate(w http.ResponseWriter, r *http.Request, id
 			return
 		}
 	}
-	hubSvc, err := h.hubServiceForRequest(r)
-	if err != nil {
-		http.Error(w, fmt.Sprintf("resolve hub service: %v", err), http.StatusInternalServerError)
-		return
-	}
-	skippedResources := []mcp.SkippedTemplateResource{}
-	ctx := agentengine.WithLocalTemplateService(r.Context(), hubSvc)
-	ctx = agentengine.WithTemplateMCPAvailability(ctx, h.mcp, &skippedResources)
 	billingModel := current.Spec.Model
 	if update != nil && (len(update.FieldMask) == 0 || agentUpdateIncludes(*update, "model")) {
 		billingModel = update.Spec.Model
 	}
+	skippedResources := []mcp.SkippedTemplateResource{}
+	ctx := agentengine.WithTemplateMCPAvailability(r.Context(), h.mcp, &skippedResources)
 	recreated, err := agents.Recreate(ctx, current.ID, agentengine.AgentRecreateOptions{Update: update})
 	if err != nil {
 		writeAgentOperationErrorWithBillingURL(w, err, http.StatusBadRequest, llm.OpenCSGBillingURL(serviceProfileFromEngine(agentengine.ModelView{ModelSpec: billingModel})))

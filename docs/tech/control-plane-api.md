@@ -60,6 +60,8 @@ Send the current server, platform or Desktop credential in `Authorization: Beare
 
 Allowed masks are `name`, `description`, `instructions`, `runtime`, `runtime.image`, `runtime.options`, `model_config`, `model_config.selector`, and `mcp_servers`. A nonempty mask requires `configuration`; parent and child paths cannot be combined. Invalid masks return `400 invalid_field_mask`. Recreate uses the existing running-state rule. Template selection belongs to creation.
 
+Replacement configurations require a complete primary model. Image or video model selections alone cannot supply that model. An incomplete replacement is rejected before saving configuration or changing the Runtime. An empty request retains the existing Manager initialization behavior, including `profile_incomplete` readiness while model setup is pending.
+
 Start, stop, upgrade, archive, restore, archive-impact, instructions, Memory and log operations retain their business behavior. Archive responses include `archived_by`. Restore starts the Runtime and preserves the disabled state of archived schedules. Permanent deletion requires an archived Agent and the exact name in the existing JSON body `{ "name": "reviewer" }`.
 
 ## Collections and resource pagination
@@ -81,6 +83,8 @@ GET /agents/{id}/resources?pagination=cursor&limit=20&type=skill
 `/agents/{id}/resources` requires both `type=skill|connector|knowledge_base` and `pagination=page|cursor`. Skill summaries and Agent MCP listings also support their existing complete-list form. Cursor and page parameters are mutually constrained as described in OpenAPI. Preserve `ETag` and submit the current `resource_version` when toggling resource enablement. A changed list or resource version retains its existing conflict code.
 
 MCP configuration remains a dictionary: global responses use `mcpServers`; Agent MCP listing and mutation responses use `agent_id`, `runtime_kind` and `servers`. Source synchronization returns the corresponding configuration view. Tree listings, files, model capability checks and protocol responses retain their separate structures.
+
+`POST /model-providers/{id}/check` requires a JSON body: send `{}` to check saved settings, or submit connection overrides. Unavailable model collections and unmanaged Agent MCP `servers` can be `null`; the OpenAPI schemas describe these values explicitly.
 
 ## Skills and templates
 

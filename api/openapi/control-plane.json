@@ -622,7 +622,8 @@
               }
             }
           }
-        }
+        },
+        "description": "Rebuilds the Agent with its current or replacement configuration. Replacement configurations must have a complete primary model; image or video model selections alone do not provide one. Incomplete replacements return 400 before saving configuration or changing the Runtime. Requests without configuration preserve existing Manager initialization and readiness behavior, including a successful response with profile_incomplete."
       }
     },
     "/agents/{id}/archive-impact": {
@@ -1475,7 +1476,7 @@
             }
           }
         },
-        "description": "The models/image_models/video_models/vision_models arrays describe separate capabilities and remain separate.",
+        "description": "Checks the saved provider with optional connection overrides. Send {} to check the saved connection. The models/image_models/video_models/vision_models fields describe separate capabilities and may be null when unavailable.",
         "parameters": [
           {
             "name": "id",
@@ -1485,7 +1486,17 @@
               "type": "string"
             }
           }
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ModelProviderRequest"
+              }
+            }
+          }
+        }
       }
     },
     "/agent-profiles/models": {
@@ -7645,7 +7656,10 @@
           },
           "servers": {
             "additionalProperties": {},
-            "type": "object"
+            "type": [
+              "object",
+              "null"
+            ]
           }
         },
         "required": [
@@ -7795,7 +7809,10 @@
             "items": {
               "type": "string"
             },
-            "type": "array"
+            "type": [
+              "array",
+              "null"
+            ]
           },
           "last_checked_at": {
             "type": "string"
@@ -7816,7 +7833,10 @@
             "items": {
               "type": "string"
             },
-            "type": "array"
+            "type": [
+              "array",
+              "null"
+            ]
           },
           "status": {
             "type": "string"
@@ -7831,13 +7851,19 @@
             "items": {
               "type": "string"
             },
-            "type": "array"
+            "type": [
+              "array",
+              "null"
+            ]
           },
           "vision_models": {
             "items": {
               "type": "string"
             },
-            "type": "array"
+            "type": [
+              "array",
+              "null"
+            ]
           }
         },
         "required": [
@@ -7996,7 +8022,10 @@
             "additionalProperties": {
               "$ref": "#/components/schemas/Metadata"
             },
-            "type": "object"
+            "type": [
+              "object",
+              "null"
+            ]
           },
           "model_source": {
             "type": "string"
@@ -8005,7 +8034,10 @@
             "items": {
               "type": "string"
             },
-            "type": "array"
+            "type": [
+              "array",
+              "null"
+            ]
           },
           "preset": {
             "type": "string"
@@ -8041,13 +8073,19 @@
             "items": {
               "type": "string"
             },
-            "type": "array"
+            "type": [
+              "array",
+              "null"
+            ]
           },
           "vision_models": {
             "items": {
               "type": "string"
             },
-            "type": "array"
+            "type": [
+              "array",
+              "null"
+            ]
           }
         },
         "required": [
@@ -8412,7 +8450,7 @@
         },
         "type": "object",
         "additionalProperties": false,
-        "description": "No configuration rebuilds the current Agent. Configuration with no mask performs the existing full replacement, retaining the current Runtime/model when the replacement does not select them. A nonempty mask requires configuration; only selected fields are replaced. Parent and child mask paths cannot coexist. Unknown masks return invalid_field_mask. Recreate sets desired_state=running. Role and template creation are not replacement fields."
+        "description": "No configuration rebuilds the current Agent and preserves existing Manager initialization and readiness behavior, including a successful response with profile_incomplete. Configuration with no mask performs the existing full replacement, retaining the current Runtime/model when the replacement does not select them. A nonempty mask requires configuration; only selected fields are replaced. Parent and child mask paths cannot coexist. Unknown masks return invalid_field_mask. Recreate sets desired_state=running. Role and template creation are not replacement fields. Replacement configurations must have a complete primary model; image or video model selections alone do not provide one. Incomplete replacements return 400 before saving configuration or changing the Runtime."
       },
       "Region": {
         "properties": {

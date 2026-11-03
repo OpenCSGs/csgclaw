@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { operations } from "@/api/generated/controlPlane";
 import {
   archiveAgent,
   createBotRequest,
@@ -14,7 +15,7 @@ import {
 import { fetchAgentRuntimes } from "@/api/agentRuntimes";
 import { fetchRuntimeImages } from "@/api/app";
 import { fetchHubTemplates, fetchTemplateVersions } from "@/api/hub";
-import { fetchModelProviders, fetchModelProviderPresets } from "@/api/modelProviders";
+import { checkModelProvider, fetchModelProviders, fetchModelProviderPresets } from "@/api/modelProviders";
 import { fetchSkills, rescanDiscoveredSkills } from "@/api/skills";
 
 const agent = {
@@ -37,6 +38,18 @@ const agent = {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("control plane transport", () => {
+  it.each([{}, { base_url: "https://models.example/v1", api_key: "test-key", connect: true }])(
+    "sends the generated model provider check body %j",
+    async (body) => {
+      const request: operations["postModelProvidersIdCheck"]["requestBody"]["content"]["application/json"] = body;
+      const fetchMock = vi.fn().mockResolvedValue(Response.json({ id: "custom", status: "connected", models: [] }));
+      vi.stubGlobal("fetch", fetchMock);
+      await checkModelProvider("custom", request);
+      expect(fetchMock.mock.calls[0][0]).toBe("api/v1/model-providers/custom/check");
+      expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual(body);
+    },
+  );
+
   it.each([
     ["detail", () => fetchAgent("agent-1")],
     ["archive", () => archiveAgent("agent-1")],

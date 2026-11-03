@@ -500,6 +500,21 @@ func (f *Controller) updateDesired(ctx context.Context, agentID, resourceVersion
 		currentRuntime := previous.RuntimeConfig()
 		desiredRuntime := createAgentSpec(desired).RuntimeConfig()
 		replacesRuntime := change.runtimeSelection || currentRuntime != desiredRuntime
+		if options.forceRecreate && !replacesRuntime {
+			// Recreate requires a complete profile before any configuration is saved.
+			profile := previous.AgentProfile
+			if change.modelConfig {
+				profile, err = f.EffectiveAgentProfileForUpdate(agentID, updateAgentRequestForChanges(desired, change, current.Role))
+				if err != nil {
+					return err
+				}
+			}
+			profile = normalizeProfileForAgentRuntime(profile, desired.Runtime.Options, desired.Name, desired.Description, previous.RuntimeKind, nil)
+			profile = f.hydrateProfileFromCatalog(profile)
+			if !profile.ProfileComplete {
+				return fmt.Errorf("agent %q profile is incomplete", agentID)
+			}
+		}
 		var replacement *preparedSkillReplacement
 		if len(options.replaceSkills) > 0 && !replacesRuntime {
 			replacement, err = f.prepareSkillReplacement(previous, options.replaceSkills)
