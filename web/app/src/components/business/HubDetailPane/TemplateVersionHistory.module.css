@@ -239,7 +239,7 @@
   gap: var(--space-3);
   padding: var(--space-4);
   border-top: 1px solid var(--line);
-  background: var(--panel-strong);
+  background: var(--surface);
 }
 .saveSection .hint {
   margin-top: var(--space-1);
