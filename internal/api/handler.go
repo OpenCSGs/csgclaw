@@ -477,6 +477,10 @@ func (h *Handler) handleLocalDirectoryPicker(w http.ResponseWriter, r *http.Requ
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+	if h.hostDesktopActionsDisabled {
+		writeCodedAPIError(w, http.StatusForbidden, "directory_picker_unavailable", "Local directory selection is unavailable")
+		return
+	}
 	picker := h.localDirectoryPicker
 	if picker == nil {
 		picker = selectLocalDirectory
@@ -647,7 +651,9 @@ func (h *Handler) bootstrapConfigView(ctx context.Context, cfg config.Config) bo
 			agent.RuntimeKindDSH,
 		})
 	}
-	return bootstrapConfigView(ctx, cfg, h.hub, schemas)
+	view := bootstrapConfigView(ctx, cfg, h.hub, schemas)
+	view.DirectoryPickerAvailable = view.DirectoryPickerAvailable && !h.hostDesktopActionsDisabled
+	return view
 }
 
 func bootstrapRuntimeKind(runtime string) string {

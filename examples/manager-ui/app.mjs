@@ -26,6 +26,7 @@ const state = {
 };
 let messagesRequest = 0;
 let refreshRequest = 0;
+let roomRequest = 0;
 let events;
 let poll;
 
@@ -151,6 +152,7 @@ function renderMessages(messages) {
 }
 
 function selectRoom(room) {
+  ++roomRequest;
   state.room = room;
   state.messagesKey = "";
   const url = new URL(location.href);
@@ -159,6 +161,38 @@ function selectRoom(room) {
   renderRooms();
   renderModels();
   renderMessages([]);
+}
+
+function reconcileRoom(room) {
+  const previous =
+    state.room?.id === room.id
+      ? state.room
+      : state.rooms.find((item) => item.id === room.id);
+  if (state.room?.id === room.id) ++roomRequest;
+  // Unchanged polls should not rebuild a model selector the user has open.
+  if (JSON.stringify(previous) === JSON.stringify(room)) return;
+  state.rooms = state.rooms.map((item) => (item.id === room.id ? room : item));
+  if (state.room?.id === room.id) {
+    state.room = room;
+    renderModels();
+  }
+  renderRooms();
+  updateControls();
+}
+
+async function refreshRoom() {
+  const roomID = state.room?.id;
+  if (!roomID) return;
+  // An SSE update or room switch invalidates an older poll response.
+  const request = ++roomRequest;
+  const rooms = await api("rooms");
+  const room = rooms.find((item) => item.id === roomID);
+  if (request === roomRequest && state.room?.id === roomID && room)
+    reconcileRoom(room);
+}
+
+async function refreshConversation() {
+  await Promise.all([refreshRoom(), refreshMessages()]);
 }
 
 async function refreshMessages() {
@@ -199,11 +233,7 @@ async function refresh() {
   const room = state.rooms.find((item) => item.id === roomID) || state.rooms[0];
   if (room) {
     if (state.room?.id !== room.id) selectRoom(room);
-    else {
-      state.room = room;
-      renderRooms();
-      renderModels();
-    }
+    else reconcileRoom(room);
     await refreshMessages();
   } else {
     state.room = null;
@@ -267,17 +297,23 @@ $("model").addEventListener(
   "change",
   () =>
     void action(async () => {
+      const roomID = state.room.id;
+      const value = $("model").value;
       try {
-        state.room = await api(
-          `rooms/${encodeURIComponent(state.room.id)}`,
+        // Configuration is replaced by PATCH. Read it now so another UI's
+        // execution mode/workspace changes survive even if an SSE event was lost.
+        const rooms = await api("rooms");
+        const room = rooms.find((item) => item.id === roomID);
+        if (!room) throw new Error("会话已不存在，请刷新后重试。");
+        reconcileRoom(room);
+        const updated = await api(
+          `rooms/${encodeURIComponent(roomID)}`,
           "PATCH",
           {
-            configuration: modelConfiguration(state.room, $("model").value),
+            configuration: modelConfiguration(room, value),
           },
         );
-        state.rooms = state.rooms.map((room) =>
-          room.id === state.room.id ? state.room : room,
-        );
+        reconcileRoom(updated);
       } finally {
         renderModels();
       }
@@ -335,7 +371,7 @@ function connectEvents() {
   events = new EventSource(new URL("api/v1/events", base));
   events.onopen = () => {
     $("connection").textContent = "已连接 · 专属智能助手";
-    void refreshMessages().catch(showError);
+    void refreshConversation().catch(showError);
   };
   events.onerror = () => {
     $("connection").textContent = "正在重连 · 自动同步中";
@@ -343,6 +379,8 @@ function connectEvents() {
   events.onmessage = (event) => {
     try {
       const data = JSON.parse(event.data);
+      if (data.type === "room.updated" && data.room?.id)
+        reconcileRoom(data.room);
       if (data.room_id === state.room?.id)
         void refreshMessages().catch(showError);
     } catch {
@@ -350,7 +388,8 @@ function connectEvents() {
     }
   };
   poll = setInterval(() => {
-    if (!document.hidden) void refreshMessages().catch(showError);
+    if (!document.hidden && !state.busy && !state.sending)
+      void refreshConversation().catch(showError);
   }, 2000);
 }
 

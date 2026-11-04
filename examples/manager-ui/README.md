@@ -33,8 +33,10 @@ make build-ui UI=both UI_DIR=/path/to/another-ui/dist
   the shared server, so signing in/out affects both UIs. Other configured model
   providers can also be used without an OpenCSG account.
 - Model catalog: `/api/v1/model-providers`. Model selection patches the current
-  room's `configuration`, preserving its workspace and execution mode. It does
-  not modify the Manager's global profile. It is also visible in the original UI.
+  room's latest `configuration`, preserving its workspace and execution mode even
+  when changed in the original UI. Room metadata is synchronized via SSE and
+  polling; model changes fetch a fresh snapshot before PATCH. This does not modify
+  the Manager's global profile. It is also visible in the original UI.
 - Conversations/messages: `/api/v1/bootstrap`, `/rooms`, `/messages`, `/events`.
   New chats are direct task sessions with the Manager user from bootstrap
   (`role: manager`); the agent profile is read using its stable `manager` name.
@@ -50,5 +52,5 @@ or agent runtime and no browser-side API-key storage.
 Run the API/adapter regression tests with:
 
 ```sh
-node --test scripts/manager-ui.test.mjs
+node --test scripts/manager-ui*.test.mjs
 ```
