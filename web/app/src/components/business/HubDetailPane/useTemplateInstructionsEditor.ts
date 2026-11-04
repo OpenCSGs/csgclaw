@@ -93,7 +93,8 @@ export function useTemplateInstructionsEditor({
   async function save() {
     if (!canSave || !onSave || inFlight.has(templateId)) return;
     const submitted = documentFor(draft);
-    inFlight.add(templateId);
+    const request = Symbol();
+    inFlight.set(templateId, request);
     update((previous) => ({ ...previous, saving: true, saved: false, failed: false }));
     let success = false;
     try {
@@ -101,22 +102,24 @@ export function useTemplateInstructionsEditor({
     } catch {
       // Keep the draft available when the caller throws as well as when it returns false.
     } finally {
-      inFlight.delete(templateId);
-      update((previous) =>
-        success
-          ? {
-              ...initialDraft(submitted, previous.mode),
-              source: previous.source,
-              saved: true,
-              conflict: previous.source !== draft.source && previous.source !== submitted,
-            }
-          : {
-              ...previous,
-              saving: false,
-              failed: true,
-              conflict: previous.conflict || previous.source !== draft.source,
-            },
-      );
+      if (inFlight.get(templateId) === request) {
+        inFlight.delete(templateId);
+        update((previous) =>
+          success
+            ? {
+                ...initialDraft(submitted, previous.mode),
+                source: previous.source,
+                saved: true,
+                conflict: previous.source !== draft.source && previous.source !== submitted,
+              }
+            : {
+                ...previous,
+                saving: false,
+                failed: true,
+                conflict: previous.conflict || previous.source !== draft.source,
+              },
+        );
+      }
     }
   }
 

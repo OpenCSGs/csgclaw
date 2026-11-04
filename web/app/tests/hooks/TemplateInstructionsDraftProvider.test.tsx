@@ -3,7 +3,8 @@ import userEvent from "@testing-library/user-event";
 import { TemplateInstructionsDraftProvider } from "@/components/business/HubDetailPane/TemplateInstructionsDraftProvider";
 import { useTemplateInstructionsEditor } from "@/components/business/HubDetailPane/useTemplateInstructionsEditor";
 import { replaceManagedAgentInstructions } from "@/models/templateInstructions";
-import { act } from "react";
+import { act, useContext } from "react";
+import { TemplateInstructionsDraftContext } from "@/components/business/HubDetailPane/templateInstructionsDraftStore";
 
 const source = replaceManagedAgentInstructions("# Preface\n", "Original");
 function Editor({
@@ -38,6 +39,11 @@ function beforeUnload() {
   const event = new Event("beforeunload", { cancelable: true });
   window.dispatchEvent(event);
   return event.defaultPrevented;
+}
+
+function DeleteDraft() {
+  const store = useContext(TemplateInstructionsDraftContext);
+  return <button onClick={() => store?.deleteDraft("local.first")}>Delete draft</button>;
 }
 
 it("preserves per-template drafts and unload protection after the detail pane unmounts", async () => {
@@ -154,3 +160,86 @@ it.each([true, false])("settles a save while the editor is absent (success: %s)"
   expect(beforeUnload()).toBe(!success);
   expect(save).toHaveBeenCalledTimes(1);
 });
+
+it.each([true, false])("ignores a save that settles after its template was deleted (success: %s)", async (success) => {
+  const user = userEvent.setup();
+  let finish!: (value: boolean) => void;
+  const save = () =>
+    new Promise<boolean>((resolve) => {
+      finish = resolve;
+    });
+  const view = render(
+    <TemplateInstructionsDraftProvider>
+      <Editor id="local.first" save={save} />
+    </TemplateInstructionsDraftProvider>,
+  );
+  fireEvent.change(screen.getByRole("textbox"), { target: { value: "Deleted draft" } });
+  await user.click(screen.getByRole("button", { name: "Save" }));
+  view.rerender(
+    <TemplateInstructionsDraftProvider>
+      <DeleteDraft />
+    </TemplateInstructionsDraftProvider>,
+  );
+  await user.click(screen.getByRole("button", { name: "Delete draft" }));
+  expect(beforeUnload()).toBe(false);
+  await act(async () => {
+    finish(success);
+  });
+  expect(beforeUnload()).toBe(false);
+  view.rerender(
+    <TemplateInstructionsDraftProvider>
+      <Editor id="local.first" content={replaceManagedAgentInstructions("", "Recreated")} />
+    </TemplateInstructionsDraftProvider>,
+  );
+  expect(screen.getByRole("textbox")).toHaveValue("Recreated");
+  expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
+});
+
+it.each([true, false])(
+  "does not let a deleted template's save settle a recreated template's new save (old success: %s)",
+  async (success) => {
+    const user = userEvent.setup();
+    let finishOld!: (value: boolean) => void;
+    let finishNew!: (value: boolean) => void;
+    const oldSave = () =>
+      new Promise<boolean>((resolve) => {
+        finishOld = resolve;
+      });
+    const newSave = () =>
+      new Promise<boolean>((resolve) => {
+        finishNew = resolve;
+      });
+    const view = render(
+      <TemplateInstructionsDraftProvider>
+        <Editor id="local.first" save={oldSave} />
+      </TemplateInstructionsDraftProvider>,
+    );
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "Old save" } });
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    view.rerender(
+      <TemplateInstructionsDraftProvider>
+        <DeleteDraft />
+      </TemplateInstructionsDraftProvider>,
+    );
+    await user.click(screen.getByRole("button", { name: "Delete draft" }));
+    view.rerender(
+      <TemplateInstructionsDraftProvider>
+        <Editor id="local.first" content={replaceManagedAgentInstructions("", "Recreated")} save={newSave} />
+      </TemplateInstructionsDraftProvider>,
+    );
+    expect(screen.getByRole("textbox")).toHaveValue("Recreated");
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "New save" } });
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await act(async () => {
+      finishOld(success);
+    });
+    expect(screen.getByRole("textbox")).toHaveValue("New save");
+    expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
+    expect(beforeUnload()).toBe(true);
+    await act(async () => {
+      finishNew(true);
+    });
+    expect(screen.getByRole("textbox")).toHaveValue("New save");
+    expect(beforeUnload()).toBe(false);
+  },
+);

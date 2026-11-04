@@ -16,6 +16,15 @@ import type { HubTemplate } from "@/models/hubWorkspace";
 import type { SkillSummary } from "@/models/skillhub";
 import { createTranslator } from "@/shared/i18n";
 import { openCSGAuthGuardStub } from "../helpers/openCSGAuthGuard";
+import { TemplateInstructionsDraftProvider } from "@/components/business/HubDetailPane/TemplateInstructionsDraftProvider";
+import { useTemplateInstructionsEditor } from "@/components/business/HubDetailPane/useTemplateInstructionsEditor";
+import { replaceManagedAgentInstructions } from "@/models/templateInstructions";
+
+function unloadIsProtected() {
+  const event = new Event("beforeunload", { cancelable: true });
+  window.dispatchEvent(event);
+  return event.defaultPrevented;
+}
 
 vi.mock("@/api/hub", async () => ({
   ...(await vi.importActual<typeof import("@/api/hub")>("@/api/hub")),
@@ -170,9 +179,13 @@ describe("useWorkspaceHubController skill deletion", () => {
 });
 
 describe("useWorkspaceHubController template deletion", () => {
-  it.each([false, true])(
-    "leaves detail before deletion and removes cached item (refresh failure: %s)",
-    async (refreshFails) => {
+  it.each([
+    { refreshFails: false, otherDirty: false },
+    { refreshFails: true, otherDirty: false },
+    { refreshFails: false, otherDirty: true },
+  ])(
+    "removes the deleted template and draft (refresh failure: $refreshFails, other draft: $otherDirty)",
+    async ({ refreshFails, otherDirty }) => {
       const template: HubTemplate = { id: "local.codex-211", source: { kind: "local" } };
       const remaining: HubTemplate = { id: "local.other", source: { kind: "local" } };
       const setSelectedHubTemplateId = vi.fn();
@@ -191,12 +204,17 @@ describe("useWorkspaceHubController template deletion", () => {
       vi.mocked(deleteHubTemplateRequest).mockImplementation(async () => {
         expect(setSelectedHubTemplateId).toHaveBeenCalledWith("");
         expect(onTemplateDeleteStarted).toHaveBeenCalledWith(template.id);
+        expect(unloadIsProtected()).toBe(true);
       });
       const wrapper = ({ children }: { children: ReactNode }) =>
-        createElement(QueryClientProvider, { client: queryClient }, children);
-      const { result } = renderHook(
-        () =>
-          useWorkspaceHubController({
+        createElement(
+          QueryClientProvider,
+          { client: queryClient },
+          createElement(TemplateInstructionsDraftProvider, null, children),
+        );
+      const { result, rerender } = renderHook(
+        ({ content }) => {
+          const controller = useWorkspaceHubController({
             activePane: { type: "hub", resourceType: "template", id: "local.codex-211" },
             hubLoaded: true,
             hubTemplates: [template, remaining],
@@ -208,9 +226,26 @@ describe("useWorkspaceHubController template deletion", () => {
               return [remaining];
             },
             t: createTranslator("zh"),
-          }),
-        { wrapper },
+          });
+          const editor = useTemplateInstructionsEditor({
+            templateId: template.id!,
+            content,
+            blocked: false,
+          });
+          const other = useTemplateInstructionsEditor({
+            templateId: remaining.id!,
+            content,
+            blocked: false,
+          });
+          return { ...controller, editor, other };
+        },
+        { wrapper, initialProps: { content: replaceManagedAgentInstructions("", "Original") } },
       );
+      act(() => {
+        result.current.editor.change("Draft to delete");
+        if (otherDirty) result.current.other.change("Keep other draft");
+      });
+      expect(unloadIsProtected()).toBe(true);
       await act(async () => {
         await expect(result.current.hub.deleteHubTemplate(template)).resolves.toBe(true);
       });
@@ -219,10 +254,70 @@ describe("useWorkspaceHubController template deletion", () => {
       );
       expect(queryClient.getQueryData(workspaceQueryKeys.hubTemplates())).toEqual([remaining]);
       expect(queryClient.getQueryData(workspaceQueryKeys.hubTemplate(template.id))).toBeUndefined();
+      expect(result.current.editor.dirty).toBe(false);
+      expect(unloadIsProtected()).toBe(otherDirty);
+      if (otherDirty) {
+        expect(result.current.other.value).toBe("Keep other draft");
+        act(() => result.current.other.reload());
+        expect(unloadIsProtected()).toBe(false);
+      }
+      rerender({ content: replaceManagedAgentInstructions("", "Recreated template") });
+      expect(result.current.editor.value).toBe("Recreated template");
+      expect(result.current.editor.dirty).toBe(false);
+      expect(unloadIsProtected()).toBe(false);
       confirm.mockRestore();
       queryClient.clear();
     },
   );
+
+  it.each(["cancel", "failure"])("retains the draft when template deletion ends in %s", async (outcome) => {
+    const template: HubTemplate = { id: "local.first", source: { kind: "local" } };
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(outcome !== "cancel");
+    vi.mocked(deleteHubTemplateRequest).mockReset().mockRejectedValue(new Error("Delete failed"));
+    vi.mocked(useWorkspaceHubSelection).mockReturnValue({
+      detailPaneProps: { error: "" },
+      error: "",
+      selectedHubResourceType: "template",
+      setSelectedHubTemplateId: vi.fn(),
+      skills: [],
+    } as unknown as ReturnType<typeof useWorkspaceHubSelection>);
+    const queryClient = new QueryClient();
+    const wrapper = ({ children }: { children: ReactNode }) =>
+      createElement(
+        QueryClientProvider,
+        { client: queryClient },
+        createElement(TemplateInstructionsDraftProvider, null, children),
+      );
+    const { result } = renderHook(
+      () => {
+        const controller = useWorkspaceHubController({
+          activePane: { type: "hub", resourceType: "template", id: template.id! },
+          hubLoaded: true,
+          hubTemplates: [template],
+          hubTemplatesQuery: {} as UseQueryResult<HubTemplate[]>,
+          openCSGAuthGuard: openCSGAuthGuardStub(),
+          refreshWorkspaceHubTemplates: async () => [template],
+          t: createTranslator("zh"),
+        });
+        const editor = useTemplateInstructionsEditor({
+          templateId: template.id!,
+          content: replaceManagedAgentInstructions("", "Original"),
+          blocked: false,
+        });
+        return { ...controller, editor };
+      },
+      { wrapper },
+    );
+    act(() => result.current.editor.change("Keep unsaved draft"));
+    await act(async () => {
+      await expect(result.current.hub.deleteHubTemplate(template)).resolves.toBe(false);
+    });
+    expect(deleteHubTemplateRequest).toHaveBeenCalledTimes(outcome === "cancel" ? 0 : 1);
+    expect(result.current.editor.value).toBe("Keep unsaved draft");
+    expect(unloadIsProtected()).toBe(true);
+    confirm.mockRestore();
+    queryClient.clear();
+  });
 });
 
 it("clears publishing errors when selecting a different template", async () => {

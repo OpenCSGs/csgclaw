@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { errorMessage as apiErrorMessage } from "@/api/client";
 import { deleteHubTemplateRequest, publishHubTemplateToCommunityRequest } from "@/api/hub";
@@ -10,6 +10,7 @@ import type { SkillSummary } from "@/models/skillhub";
 import { localizeAPIError, localizeAPIErrorWithDiagnostics } from "@/shared/i18n";
 import { workspaceQueryKeys } from "./workspaceQueries";
 import { useWorkspaceHubSelection } from "./useWorkspaceHubSelection";
+import { TemplateInstructionsDraftContext } from "@/components/business/HubDetailPane/templateInstructionsDraftStore";
 import type { UseWorkspaceHubControllerArgs } from "./types";
 
 type WorkspaceHubSelection = ReturnType<typeof useWorkspaceHubSelection>;
@@ -116,6 +117,7 @@ export function useWorkspaceHubController({
     [t],
   );
   const queryClient = useQueryClient();
+  const templateDrafts = useContext(TemplateInstructionsDraftContext);
   const [resourcesManualError, setResourcesManualError] = useState("");
   const [resourcesDeleteBusy, setResourcesDeleteBusy] = useState(false);
   const [resourcesDeleteError, setResourcesDeleteError] = useState("");
@@ -239,6 +241,7 @@ export function useWorkspaceHubController({
           queryClient.cancelQueries({ queryKey: workspaceQueryKeys.hubWorkspaceFileScope(template.id) }),
         ]);
         await deleteHubTemplateRequest(template.id);
+        templateDrafts?.deleteDraft(template.id);
         queryClient.setQueryData<HubTemplate[]>(workspaceQueryKeys.hubTemplates(), (templates) =>
           templates?.filter((item) => item.id !== template.id),
         );
@@ -255,7 +258,15 @@ export function useWorkspaceHubController({
         setResourcesDeleteBusy(false);
       }
     },
-    [errorMessage, onTemplateDeleteStarted, queryClient, refreshHubTemplates, setSelectedHubTemplateId, t],
+    [
+      errorMessage,
+      onTemplateDeleteStarted,
+      queryClient,
+      refreshHubTemplates,
+      setSelectedHubTemplateId,
+      t,
+      templateDrafts,
+    ],
   );
 
   const deleteSkill = useCallback(
