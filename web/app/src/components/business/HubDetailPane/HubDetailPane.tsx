@@ -4,6 +4,7 @@ import {
   templateVersionLabel,
 } from "@/models/templatePublication";
 import { useTemplatePublication } from "./useTemplatePublication";
+import { useTemplateInstructionsEditor } from "./useTemplateInstructionsEditor";
 import { templateInGroup, templateSourceLabelKey, type TemplateGroup } from "@/models/templateGroups";
 import { AgentAvatarImage } from "@/components/business/AgentAvatar";
 import { agenticHubCreateAgentURL, agenticHubTemplatesURL } from "@/models/agenticHub";
@@ -523,32 +524,6 @@ function MCPProbePanel({ result, t }: { result: MCPProbeResult; t: TranslateFn }
       ) : null}
     </section>
   );
-}
-
-const managedInstructionsStart = "<!-- BEGIN CSGCLAW-INSTRUCTIONS (auto-generated; do not edit) -->";
-const managedInstructionsEnd = "<!-- END CSGCLAW-INSTRUCTIONS -->";
-
-function extractManagedAgentInstructions(document: string): string {
-  const blockStart = document.indexOf(managedInstructionsStart);
-  const blockEnd = blockStart < 0 ? -1 : document.indexOf(managedInstructionsEnd, blockStart);
-  if (blockStart < 0 || blockEnd < 0) return "";
-  const block = document.slice(blockStart, blockEnd);
-  const heading = "# Agent Instructions\n\n";
-  const bodyStart = block.indexOf(heading);
-  if (bodyStart < 0) return "";
-  const body = block.slice(bodyStart + heading.length);
-  const nextHeading = body.search(/\n# (?:Managed Runtime Instructions|CSGClaw Rules)/);
-  return (nextHeading >= 0 ? body.slice(0, nextHeading) : body).trim();
-}
-
-function replaceManagedAgentInstructions(document: string, instructions: string): string {
-  const block = `${managedInstructionsStart}\n\n${instructions.trim() ? `# Agent Instructions\n\n${instructions.trim()}\n\n` : ""}${managedInstructionsEnd}`;
-  const blockStart = document.indexOf(managedInstructionsStart);
-  const blockEnd = blockStart < 0 ? -1 : document.indexOf(managedInstructionsEnd, blockStart);
-  if (blockStart >= 0 && blockEnd >= 0) {
-    return `${document.slice(0, blockStart)}${block}${document.slice(blockEnd + managedInstructionsEnd.length)}`;
-  }
-  return `${document.trimEnd()}${document.trim() ? "\n\n" : ""}${block}\n`;
 }
 
 type HubDetailPaneHub = {
@@ -1277,9 +1252,6 @@ export function HubDetailPane({
     [selectedMCPServer?.config],
   );
   const [activeTemplateTab, setActiveTemplateTab] = useState<TemplateDetailTabID>("profile");
-  const [templateInstructionsMode, setTemplateInstructionsMode] = useState<"default" | "advanced">("default");
-  const [templateInstructionsDraft, setTemplateInstructionsDraft] = useState("");
-  const [templateInstructionsSaving, setTemplateInstructionsSaving] = useState(false);
   const templateSection =
     activeTemplateTab === "mcp" ? "mcps" : activeTemplateTab === "memory" ? "memories" : activeTemplateTab;
   const templateImageEnv = selectedTemplate?.image_env || [];
@@ -1316,14 +1288,23 @@ export function HubDetailPane({
   const templateMemoryFile =
     workspaceFiles["memories/memory_summary.md"] ||
     (workspaceFile?.path === "memories/memory_summary.md" ? workspaceFile : null);
-  const templateInstructions = templateInstructionsFile?.content || "";
-  useEffect(() => {
-    setTemplateInstructionsDraft(templateInstructions);
-  }, [selectedTemplateId, templateInstructions]);
-  const templateCustomInstructions = extractManagedAgentInstructions(templateInstructionsDraft);
-  const templateInstructionsValue =
-    templateInstructionsMode === "advanced" ? templateInstructionsDraft : templateCustomInstructions;
   const templateInstructionsReadonly = selectedTemplate?.source?.kind !== "local";
+  const templateInstructionsIncomplete = Boolean(
+    templateInstructionsFile?.binary || templateInstructionsFile?.truncated,
+  );
+  const instructionsEditor = useTemplateInstructionsEditor({
+    templateId: selectedTemplateId,
+    content: templateInstructionsFile ? templateInstructionsFile.content || "" : null,
+    blocked:
+      templateInstructionsReadonly ||
+      workspaceFileLoading ||
+      Boolean(workspaceFileError) ||
+      templateInstructionsIncomplete,
+    onSave: onUpdateTemplateInstructions,
+  });
+  const templateInstructionsMode = instructionsEditor.mode;
+  const setTemplateInstructionsMode = instructionsEditor.setMode;
+  const templateInstructionsValue = instructionsEditor.value;
   const templateMemoryEnabled = isHubTemplateMemoryEnabled(selectedTemplate);
   useEffect(() => {
     setKnowledgeBaseDeleteDialogOpen(false);
@@ -1555,19 +1536,6 @@ export function HubDetailPane({
               ? firstTemplateSectionFile(workspaceEntries, "memories", "memory_summary.md")
               : firstTemplateSectionFile(workspaceEntries, "instructions", "AGENTS.md");
       onSelectWorkspaceFile(selectedFile);
-    }
-  }
-
-  async function saveTemplateInstructions() {
-    const content =
-      templateInstructionsMode === "advanced"
-        ? templateInstructionsDraft
-        : replaceManagedAgentInstructions(templateInstructionsDraft, templateCustomInstructions);
-    setTemplateInstructionsSaving(true);
-    try {
-      await onUpdateTemplateInstructions?.(content);
-    } finally {
-      setTemplateInstructionsSaving(false);
     }
   }
 
@@ -2220,6 +2188,7 @@ export function HubDetailPane({
                       <button
                         type="button"
                         aria-pressed={templateInstructionsMode === "default"}
+                        disabled={instructionsEditor.saving}
                         onClick={() => setTemplateInstructionsMode("default")}
                       >
                         {t("agentInstructionsDefaultMode")}
@@ -2227,6 +2196,7 @@ export function HubDetailPane({
                       <button
                         type="button"
                         aria-pressed={templateInstructionsMode === "advanced"}
+                        disabled={instructionsEditor.saving}
                         onClick={() => setTemplateInstructionsMode("advanced")}
                       >
                         {t("agentInstructionsAdvancedMode")}
@@ -2272,12 +2242,9 @@ export function HubDetailPane({
                               `compact-textarea hub-template-instructions-editor ${templateInstructionsMode === "advanced" ? "is-advanced" : "is-default"}`,
                             )}
                             value={templateInstructionsValue}
+                            disabled={!instructionsEditor.editable}
                             onInput={(event) => {
-                              const value = event.currentTarget.value;
-                              setTemplateInstructionsDraft((current) => {
-                                if (templateInstructionsMode === "advanced") return value;
-                                return replaceManagedAgentInstructions(current, value);
-                              });
+                              instructionsEditor.change(event.currentTarget.value);
                             }}
                             placeholder={t("agentInstructionsPlaceholder")}
                           />
@@ -2286,14 +2253,58 @@ export function HubDetailPane({
                     )}
                   </div>
                   {selectedTemplate.source?.kind === "local" ? (
-                    <div className={moduleClassNames("form-actions")}>
+                    <div className={moduleClassNames("form-actions hub-template-instructions-actions")}>
                       <Button
-                        variant="secondaryGray"
-                        loading={templateInstructionsSaving}
-                        onClick={saveTemplateInstructions}
+                        variant="primary"
+                        disabled={!instructionsEditor.canSave}
+                        loading={instructionsEditor.saving}
+                        loadingLabel={t("resourcesTemplateInstructionsSaving")}
+                        onClick={() => void instructionsEditor.save()}
                       >
                         {t("save")}
                       </Button>
+                      {instructionsEditor.dirty && !instructionsEditor.conflict ? (
+                        <Button
+                          variant="secondaryGray"
+                          disabled={!instructionsEditor.editable}
+                          onClick={instructionsEditor.reload}
+                        >
+                          {t("resourcesTemplateInstructionsDiscard")}
+                        </Button>
+                      ) : null}
+                      <span
+                        role="status"
+                        aria-live="polite"
+                        className={moduleClassNames("hub-template-instructions-status")}
+                      >
+                        {instructionsEditor.saving
+                          ? t("resourcesTemplateInstructionsSaving")
+                          : workspaceFileLoading || !templateInstructionsFile
+                            ? t("resourcesTemplateInstructionsUnavailable")
+                            : instructionsEditor.dirty
+                              ? t("resourcesTemplateInstructionsUnsaved")
+                              : instructionsEditor.saved
+                                ? t("resourcesTemplateInstructionsSaved")
+                                : t("resourcesTemplateInstructionsUnchanged")}
+                      </span>
+                    </div>
+                  ) : null}
+                  {!templateInstructionsReadonly &&
+                  (instructionsEditor.failed ||
+                    instructionsEditor.conflict ||
+                    workspaceFileError ||
+                    templateInstructionsIncomplete) ? (
+                    <div className={moduleClassNames("form-error")} role="alert">
+                      {instructionsEditor.conflict
+                        ? t("resourcesTemplateInstructionsConflict")
+                        : instructionsEditor.failed
+                          ? t("agentInstructionsSaveFailed")
+                          : workspaceFileError || t("resourcesTemplateInstructionsIncomplete")}
+                      {instructionsEditor.conflict ? (
+                        <Button size="sm" variant="secondaryGray" onClick={instructionsEditor.reload}>
+                          {t("resourcesTemplateInstructionsReload")}
+                        </Button>
+                      ) : null}
                     </div>
                   ) : null}
                 </section>
@@ -3145,7 +3156,14 @@ export function HubDetailPane({
                       </div>
                     )}
                     {!templateInstructionsReadonly ? (
-                      <Button size="md" loading={templateInstructionsSaving} onClick={saveTemplateInstructions}>
+                      <Button
+                        size="md"
+                        variant="primary"
+                        disabled={!instructionsEditor.canSave}
+                        loading={instructionsEditor.saving}
+                        loadingLabel={t("resourcesTemplateInstructionsSaving")}
+                        onClick={() => void instructionsEditor.save()}
+                      >
                         {t("save")}
                       </Button>
                     ) : null}

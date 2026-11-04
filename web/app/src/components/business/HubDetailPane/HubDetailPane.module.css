@@ -2908,6 +2908,19 @@
   gap: 24px;
 }
 
+.hub-template-instructions-status {
+  align-self: center;
+  color: var(--muted);
+  font-size: var(--text-sm-size);
+}
+
+.hub-template-instructions-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
 .hub-template-instructions-header :global(.profile-section-heading) {
   min-width: 0;
 }

@@ -4,6 +4,7 @@ import { GlobalScrollbarController } from "@/bootstrap/GlobalScrollbarController
 import { GlobalNoticeProvider, TooltipProvider } from "@/components/ui";
 import { queryClient } from "@/bootstrap/queryClient";
 import { AppThemeSynchronizer } from "./AppThemeSynchronizer";
+import { TemplateInstructionsDraftProvider } from "@/components/business/HubDetailPane/TemplateInstructionsDraftProvider";
 
 export function AppProviders({ children }: { children: ReactNode }) {
   return (
@@ -12,7 +13,7 @@ export function AppProviders({ children }: { children: ReactNode }) {
       <GlobalNoticeProvider>
         <TooltipProvider>
           <GlobalScrollbarController />
-          {children}
+          <TemplateInstructionsDraftProvider>{children}</TemplateInstructionsDraftProvider>
         </TooltipProvider>
       </GlobalNoticeProvider>
     </QueryClientProvider>

@@ -2661,6 +2661,15 @@ export const messages = {
     resourcesTemplateInstructionsDefaultHint:
       "默认模式仅显示用户自定义指令；未配置时为空。模板的完整 AGENTS.md 请在高级模式中查看。",
     resourcesTemplateInstructionsAdvancedHint: "查看模板最终生效的完整 AGENTS.md 内容。",
+    resourcesTemplateInstructionsUnchanged: "未修改",
+    resourcesTemplateInstructionsUnsaved: "有未保存的修改",
+    resourcesTemplateInstructionsSaving: "正在保存…",
+    resourcesTemplateInstructionsSaved: "已保存",
+    resourcesTemplateInstructionsUnavailable: "指令内容尚未加载完成",
+    resourcesTemplateInstructionsIncomplete: "文件内容不完整或无法作为文本编辑，已暂停保存以避免覆盖原文件。",
+    resourcesTemplateInstructionsConflict: "源文件已更新，草稿已保留。请先重新载入最新内容，再进行编辑。",
+    resourcesTemplateInstructionsReload: "放弃草稿并载入最新内容",
+    resourcesTemplateInstructionsDiscard: "放弃修改",
     resourcesTemplateInstructionsEmptyTitle: "暂无自定义指令",
     resourcesTemplateInstructionsEmptyDescription: "此模板仅包含系统生成的默认指令，可切换到高级模式查看。",
     resourcesTemplateInstructionsViewAdvancedAction: "查看完整 AGENTS.md",
@@ -5913,6 +5922,17 @@ export const messages = {
     resourcesTemplateInstructionsDefaultHint:
       "Default mode shows only user-defined instructions and is empty when none are configured. View the complete template AGENTS.md in Advanced mode.",
     resourcesTemplateInstructionsAdvancedHint: "View the complete AGENTS.md content applied by this template.",
+    resourcesTemplateInstructionsUnchanged: "No changes",
+    resourcesTemplateInstructionsUnsaved: "Unsaved changes",
+    resourcesTemplateInstructionsSaving: "Saving…",
+    resourcesTemplateInstructionsSaved: "Saved",
+    resourcesTemplateInstructionsUnavailable: "Instructions have not finished loading",
+    resourcesTemplateInstructionsIncomplete:
+      "The file is incomplete or cannot be edited as text. Saving is disabled to protect the original file.",
+    resourcesTemplateInstructionsConflict:
+      "The source file changed. Your draft is preserved. Load the latest content before editing again.",
+    resourcesTemplateInstructionsReload: "Discard draft and load latest content",
+    resourcesTemplateInstructionsDiscard: "Discard changes",
     resourcesTemplateInstructionsEmptyTitle: "No custom instructions",
     resourcesTemplateInstructionsEmptyDescription:
       "This template only contains generated defaults. Switch to Advanced to view the full content.",

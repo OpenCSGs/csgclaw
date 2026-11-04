@@ -86,3 +86,11 @@
     grid-column: 1;
   }
 }
+.dialog[role="dialog"] {
+  width: min(920px, calc(100vw - 40px));
+  max-height: min(860px, calc(100dvh - var(--app-overlay-top-inset, 0px) - 40px));
+  display: flex;
+  flex-direction: column;
+  padding: 20px;
+  overflow: hidden;
+}

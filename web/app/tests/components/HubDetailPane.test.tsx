@@ -22,6 +22,11 @@ function t(key: string, params: Record<string, string | number> = {}) {
   const messages: Record<string, string> = {
     cancel: "Cancel",
     close: "Close",
+    save: "Save",
+    resourcesTemplateInstructionsUnchanged: "No changes",
+    resourcesTemplateInstructionsUnsaved: "Unsaved changes",
+    resourcesTemplateInstructionsSaving: "Saving…",
+    resourcesTemplateInstructionsSaved: "Saved",
     iaTemplateCreateAgent: "Create agent",
     agentPublishCommunity: "Publish to community",
     resourcesTemplatePublished: "Published",
@@ -234,6 +239,7 @@ function renderHubDetailPane(
     lazyMemory?: boolean;
     loaded?: boolean;
     inlineTemplateDetail?: boolean;
+    onUpdateTemplateInstructions?: (content: string) => boolean | Promise<boolean>;
   } = {},
 ) {
   const workspaceFiles = {
@@ -349,6 +355,7 @@ function renderHubDetailPane(
             publishDisabled: options.publishDisabled,
             publishError: options.publishError,
             onResetPublishError: options.onResetPublishError,
+            onUpdateTemplateInstructions: options.onUpdateTemplateInstructions,
           },
         }}
       />
@@ -1475,6 +1482,37 @@ describe("HubDetailPane", () => {
     expect(screen.getByLabelText("Instructions")).toHaveTextContent("# Instructions Follow the template rules.");
     expect(screen.getByText("Effective AGENTS.md")).toBeInTheDocument();
     expect(screen.queryByText("AGENTS.md")).not.toBeInTheDocument();
+  });
+
+  it("enables the local instructions save action only for edits and disables it after saving", async () => {
+    const user = userEvent.setup();
+    const onUpdateTemplateInstructions = vi.fn().mockResolvedValue(true);
+    renderHubDetailPane("template", {
+      selectedTemplate: { ...template, id: "local.demo", source: { kind: "local" } },
+      inlineTemplateDetail: true,
+      onUpdateTemplateInstructions,
+    });
+    await user.click(screen.getByRole("button", { name: "Instructions" }));
+    const editor = screen.getByRole("textbox", { name: "Instructions" });
+    const save = screen.getByRole("button", { name: "Save" });
+    expect(save).toBeDisabled();
+    expect(screen.getByRole("status")).toHaveTextContent("No changes");
+    await user.type(editor, "Keep a space and\nthen a new line");
+    expect(editor).toHaveValue("Keep a space and\nthen a new line");
+    expect(save).toBeEnabled();
+    expect(screen.getByRole("status")).toHaveTextContent("Unsaved changes");
+    await user.clear(editor);
+    expect(save).toBeDisabled();
+    await user.type(editor, "New instructions");
+    await user.click(save);
+    expect(onUpdateTemplateInstructions).toHaveBeenCalledTimes(1);
+    expect(onUpdateTemplateInstructions).toHaveBeenCalledWith(expect.stringContaining("New instructions"));
+    expect(save).toBeDisabled();
+    expect(screen.getByRole("status")).toHaveTextContent("Saved");
+    await user.click(screen.getByRole("button", { name: "Profile" }));
+    await user.click(screen.getByRole("button", { name: "Instructions" }));
+    expect(screen.getByRole("textbox", { name: "Instructions" })).toHaveValue("New instructions");
+    expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
   });
 
   it("renders the skill list and opens selected skill details in a dialog", async () => {
