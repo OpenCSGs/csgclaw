@@ -39,19 +39,21 @@ export function installWindowChrome(
   window: BrowserWindow,
   appOrigin: () => string,
 ): void {
+  // BrowserWindow getters are no longer usable when the "closed" event fires.
+  const webContents = window.webContents;
   let appearance: DesktopWindowChromeAppearance = "default";
   const state = () => ({
     focused: window.isFocused(),
     fullscreen: window.isFullScreen(),
   });
   const publish = () => {
-    if (!window.isDestroyed() && !window.webContents.isDestroyed())
-      window.webContents.send(DesktopIPC.windowState, state());
+    if (!window.isDestroyed() && !webContents.isDestroyed())
+      webContents.send(DesktopIPC.windowState, state());
   };
   const assertSender = (event: IpcMainInvokeEvent) => {
     if (
-      event.sender !== window.webContents ||
-      event.senderFrame !== window.webContents.mainFrame ||
+      event.sender !== webContents ||
+      event.senderFrame !== webContents.mainFrame ||
       !isTrustedMainFrame(event.sender, event.senderFrame.url, appOrigin())
     )
       throw new Error("Window chrome sender was rejected.");
@@ -95,7 +97,7 @@ export function installWindowChrome(
     appearance = "default";
     updateTheme();
   };
-  window.webContents.on("did-start-navigation", resetAppearance);
+  webContents.on("did-start-navigation", resetAppearance);
   nativeTheme.on("updated", updateTheme);
   window.on("focus", publish);
   window.on("blur", publish);
@@ -105,6 +107,6 @@ export function installWindowChrome(
     nativeTheme.removeListener("updated", updateTheme);
     ipcMain.removeHandler(DesktopIPC.getWindowState);
     ipcMain.removeHandler(DesktopIPC.setWindowChromeAppearance);
-    window.webContents.removeListener("did-start-navigation", resetAppearance);
+    webContents.removeListener("did-start-navigation", resetAppearance);
   });
 }
