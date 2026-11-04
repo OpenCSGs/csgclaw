@@ -158,9 +158,15 @@ func verifyPackage(ctx context.Context, p Package) error {
 	if actual != expected {
 		return errors.New("installed package checksum mismatch")
 	}
-	check, cancel := context.WithTimeout(ctx, 10*time.Second)
+	// A cold Windows CLI can take longer than ten seconds to start. Keep the
+	// check bounded while honoring an earlier installation deadline or cancel.
+	check, cancel := context.WithTimeout(ctx, time.Minute)
 	defer cancel()
-	data, err = exec.CommandContext(check, p.Executable, p.VersionArgs...).Output()
+	command := exec.CommandContext(check, p.Executable, p.VersionArgs...)
+	if runtime.GOOS == "windows" {
+		configureCommand(command)
+	}
+	data, err = command.Output()
 	if err != nil || !strings.Contains(string(data), p.Version) {
 		return errors.New("CLI version verification failed")
 	}

@@ -3,6 +3,7 @@ package apps
 import (
 	"context"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 
@@ -13,7 +14,26 @@ func (s *Service) installCLI(ctx context.Context, root string, spec connectorcli
 	if s.options.CLI != nil && s.options.CLI.Install != nil {
 		return s.options.CLI.Install(ctx, root, progress)
 	}
-	return (connectorcli.Installer{Root: root, Spec: spec, PreinstalledDir: os.Getenv("CSGCLAW_CONNECTOR_PACKAGES_DIR")}).Install(ctx, progress)
+	return (connectorcli.Installer{Root: root, Spec: s.currentCLIInstallSpec(spec), PreinstalledDir: os.Getenv("CSGCLAW_CONNECTOR_PACKAGES_DIR")}).Install(ctx, progress)
+}
+
+// Saved connectors pin package bytes, but must still receive corrected download
+// locations for those same bytes when a failed installation is retried.
+func (s *Service) currentCLIInstallSpec(spec connectorcli.InstallSpec) connectorcli.InstallSpec {
+	for _, pkg := range s.packages {
+		if pkg.CLI == nil || pkg.CLI.Install.Version != spec.Version || pkg.CLI.Install.Executable != spec.Executable {
+			continue
+		}
+		spec.Releases = maps.Clone(spec.Releases)
+		for platform, archive := range spec.Releases {
+			if current, ok := pkg.CLI.Install.Releases[platform]; ok && current.SHA256 == archive.SHA256 {
+				archive.URL = current.URL
+				spec.Releases[platform] = archive
+			}
+		}
+		break
+	}
+	return spec
 }
 
 // PrepareCLIPackage 使用当前内置声明生成镜像预装包。

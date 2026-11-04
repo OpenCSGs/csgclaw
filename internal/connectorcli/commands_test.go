@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -119,6 +120,36 @@ func TestDeviceAuthorizationRejectsUnexpectedResults(t *testing.T) {
 		}
 	}
 }
+func TestDeviceAuthorizationIgnoresDiagnosticURLs(t *testing.T) {
+	for _, valid := range []bool{false, true} {
+		t.Run(fmt.Sprint(valid), func(t *testing.T) {
+			var shown []string
+			workflow := Workflow{Client: Client{AuthorizationDomains: []string{"example.com"}, URL: func(value string) { shown = append(shown, value) }, Runner: func(_ context.Context, c Client, _ io.Reader, args ...string) ([]byte, error) {
+				output := &commandOutput{domains: c.AuthorizationDomains, notify: c.URL}
+				_, _ = output.Write([]byte("Request https://example.com/api/token\n"))
+				response := `{"event":"authorization_complete"}`
+				if args[0] == "login" {
+					code := ""
+					if valid {
+						code = "test-code"
+					}
+					response = fmt.Sprintf(`{"device_code":%q,"verification_url":"https://example.com/device","expires_in":60}`, code)
+				}
+				_, _ = output.Write([]byte(response + "\n"))
+				return output.data.Bytes(), nil
+			}}}
+			err := workflow.Run(t.Context(), Commands{testDeviceCommand()})
+			if valid {
+				if err != nil || !reflect.DeepEqual(shown, []string{"https://example.com/device"}) {
+					t.Fatalf("validated URLs=%v, error=%v", shown, err)
+				}
+			} else if err == nil || len(shown) != 0 {
+				t.Fatalf("invalid device response published URLs=%v, error=%v", shown, err)
+			}
+		})
+	}
+}
+
 func TestDeviceAuthorizationUsesActualProcessOutput(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("POSIX shell fixture")

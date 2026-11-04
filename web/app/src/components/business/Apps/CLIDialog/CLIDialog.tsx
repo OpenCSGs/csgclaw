@@ -175,7 +175,7 @@ export function CLIDialog({ definition, existing, t, onClose, onChanged }: Props
     removing_configuration: "cliRemovingConfiguration",
   };
   const requestError = error ? localizeAPIError(error, t) || errorMessage(error) : "";
-  const storedError = resource ? appConnectionError(resource, t) : "";
+  const storedError = resource && !active ? appConnectionError(resource, t) : "";
   return (
     <DialogRoot
       open

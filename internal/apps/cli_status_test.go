@@ -87,6 +87,38 @@ func TestFeishuCLICancellationClearsResourceErrors(t *testing.T) {
 	}
 }
 
+func TestFeishuCLIRetryClearsPreviousResourceError(t *testing.T) {
+	s, fixture, id := newCLIFixture(t)
+	entered := make(chan struct{})
+	fixture.wait = func(ctx context.Context) error {
+		close(entered)
+		<-ctx.Done()
+		return ctx.Err()
+	}
+	if err := s.editCLI(id, func(r *record) error {
+		r.LastError, r.LastErrorCode, r.LastErrorHTTPStatus = "previous failure", "cli_operation_failed", 500
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	op := startCLITest(t, s, id, "connect", "retry-connect")
+	select {
+	case <-entered:
+	case <-time.After(3 * time.Second):
+		t.Fatal("retry did not start authorization")
+	}
+	item, err := s.Get(t.Context(), "", id)
+	if err != nil || item.Status != "connecting" || item.LastErrorCode != "" || item.LastError != "" || item.LastErrorHTTPStatus != 0 {
+		t.Fatalf("retry retained a previous failure: %+v, %v", item, err)
+	}
+	if _, err := s.CancelCLI(t.Context(), id, op.SessionID); err != nil {
+		t.Fatal(err)
+	}
+	if got := waitCLIOperation(t, s, id, op); got.Status != "cancelled" {
+		t.Fatalf("retry cancellation: %+v", got)
+	}
+}
+
 func TestLoadResourcesRepairsCancelledCLIErrors(t *testing.T) {
 	for _, tc := range []struct {
 		name          string

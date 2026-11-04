@@ -723,12 +723,13 @@ describe("DocumentPreviewPanel", () => {
 
   it("never renders a DOCX outline and always uses the full preview width", async () => {
     mammothMock.html = "<h1>Document heading</h1><p>Full-width document body</p>";
+    const data = await new JSZip().file("word/document.xml", "<document />").generateAsync({ type: "arraybuffer" });
     const { container } = render(
       <DocumentPreviewPanel
         index={0}
         items={[
           {
-            file: new File(["docx"], "report.docx", {
+            file: new File([data], "report.docx", {
               type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
             }),
             id: "docx-without-outline",
@@ -751,12 +752,13 @@ describe("DocumentPreviewPanel", () => {
 
   it("finishes loading an empty DOCX document", async () => {
     mammothMock.html = "";
+    const data = await new JSZip().file("word/document.xml", "<document />").generateAsync({ type: "arraybuffer" });
     const { container } = render(
       <DocumentPreviewPanel
         index={0}
         items={[
           {
-            file: new File(["docx"], "empty.docx"),
+            file: new File([data], "empty.docx"),
             id: "empty-docx",
             mediaType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
             name: "empty.docx",

@@ -38,14 +38,15 @@ type DeviceFlow struct {
 	AcceptErrorJSON JSONMatch `json:"accept_error_json,omitempty"`
 }
 type Command struct {
-	Args            []string    `json:"args"`
-	Stage           string      `json:"stage,omitempty"`
-	When            *Check      `json:"when,omitempty"`
-	Unless          *Check      `json:"unless,omitempty"`
-	MatchJSON       JSONMatch   `json:"match_json,omitempty"`
-	AcceptErrorJSON JSONMatch   `json:"accept_error_json,omitempty"`
-	URLRewrite      *URLRewrite `json:"url_rewrite,omitempty"`
-	DeviceFlow      *DeviceFlow `json:"device_flow,omitempty"`
+	Args                    []string    `json:"args"`
+	Stage                   string      `json:"stage,omitempty"`
+	When                    *Check      `json:"when,omitempty"`
+	Unless                  *Check      `json:"unless,omitempty"`
+	MatchJSON               JSONMatch   `json:"match_json,omitempty"`
+	AcceptErrorJSON         JSONMatch   `json:"accept_error_json,omitempty"`
+	URLRewrite              *URLRewrite `json:"url_rewrite,omitempty"`
+	AuthorizationURLPattern string      `json:"authorization_url_pattern,omitempty"`
+	DeviceFlow              *DeviceFlow `json:"device_flow,omitempty"`
 }
 
 // Commands also accepts a single argument array for simple connectors.
@@ -149,6 +150,11 @@ func (c Commands) Validate() error {
 	for _, command := range c {
 		if len(command.Args) == 0 {
 			return errors.New("CLI command requires arguments")
+		}
+		if command.AuthorizationURLPattern != "" {
+			if _, err := regexp.Compile(command.AuthorizationURLPattern); err != nil {
+				return errors.New("invalid authorization URL pattern")
+			}
 		}
 		if err := command.MatchJSON.Validate(); err != nil {
 			return err
@@ -329,6 +335,14 @@ func (w *Workflow) completeStage(ctx context.Context, command Command) error {
 }
 func (w *Workflow) run(ctx context.Context, command Command) error {
 	client := w.Client
+	var pattern *regexp.Regexp
+	if command.AuthorizationURLPattern != "" {
+		var err error
+		pattern, err = regexp.Compile(command.AuthorizationURLPattern)
+		if err != nil {
+			return err
+		}
+	}
 	var urlErr error
 	notify := client.URL
 	commandCtx, cancel := context.WithCancel(ctx)
@@ -337,6 +351,9 @@ func (w *Workflow) run(ctx context.Context, command Command) error {
 		if !AllowedAuthorizationURL(raw, client.AuthorizationDomains) {
 			urlErr = errors.New("invalid authorization URL")
 			cancel()
+			return
+		}
+		if pattern != nil && !pattern.MatchString(raw) {
 			return
 		}
 		if command.URLRewrite != nil {
@@ -371,6 +388,10 @@ func (w *Workflow) run(ctx context.Context, command Command) error {
 }
 func (w *Workflow) deviceFlow(ctx context.Context, client Client, command Command, args []string) error {
 	flow := command.DeviceFlow
+	notify := client.URL
+	// Structured device flows publish their validated verification URL, rather
+	// than URLs embedded in request diagnostics or polling output.
+	client.URL = nil
 	encoded, _ := json.Marshal(struct {
 		Command Command
 		Scopes  string
@@ -401,8 +422,8 @@ func (w *Workflow) deviceFlow(ctx context.Context, client Client, command Comman
 			return err
 		}
 	}
-	if client.URL != nil {
-		client.URL(device.URL)
+	if notify != nil {
+		notify(device.URL)
 	}
 	poll := w.args(flow.PollArgs)
 	for i, arg := range poll {
