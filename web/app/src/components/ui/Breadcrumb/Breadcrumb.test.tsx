@@ -46,3 +46,26 @@ test("collapses middle levels into an accessible menu and preserves navigable an
   expect(screen.getByText("one")).toBeInTheDocument();
   expect(screen.getByText("five")).toHaveAttribute("aria-current", "page");
 });
+
+test("supports custom artwork and divider dimensions without changing path actions", async () => {
+  const navigate = vi.fn();
+  const user = userEvent.setup();
+  const { container } = render(
+    <Breadcrumb
+      home={{ label: "Home", onClick: navigate }}
+      homeIconSrc="icons/custom-home.svg"
+      dividerSrc="icons/custom-divider.svg"
+      dividerSize={12}
+      items={[{ label: "Current", current: true }]}
+    />,
+  );
+  expect(screen.getByRole("button", { name: "Home" }).querySelector("img")).toHaveAttribute(
+    "src",
+    "icons/custom-home.svg",
+  );
+  const divider = container.querySelector('img[src="icons/custom-divider.svg"]');
+  expect(divider).toHaveAttribute("width", "12");
+  expect(divider).toHaveAttribute("height", "12");
+  await user.click(screen.getByRole("button", { name: "Home" }));
+  expect(navigate).toHaveBeenCalledTimes(1);
+});

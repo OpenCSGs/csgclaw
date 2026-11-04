@@ -4,9 +4,15 @@ import { describe, expect, it } from "vitest";
 import { ApplicationFoundations } from "./ApplicationFoundations";
 import { monthDays, shiftMonth } from "./calendarModel";
 
+function mount(kind: Parameters<typeof ApplicationFoundations>[0]["kind"]) {
+  const view = render(<ApplicationFoundations kind={kind} />);
+  fireEvent.click(screen.getByText("辅助行为验证", { selector: "summary" }));
+  return view;
+}
+
 describe("application component playgrounds", () => {
   it("filters table rows and retains selection", async () => {
-    render(<ApplicationFoundations kind="tables" />);
+    mount("tables");
     const user = userEvent.setup();
     await user.click(screen.getByRole("checkbox", { name: "选择 Olivia Rhye" }));
     await user.type(screen.getByRole("searchbox", { name: "筛选成员" }), "missing");
@@ -16,7 +22,7 @@ describe("application component playgrounds", () => {
     expect(screen.getByRole("checkbox", { name: "选择 Olivia Rhye" })).toBeChecked();
   });
   it("discards unsaved modal edits and restores trigger focus", async () => {
-    render(<ApplicationFoundations kind="modals" />);
+    mount("modals");
     const user = userEvent.setup();
     const trigger = screen.getByRole("button", { name: "打开弹窗" });
     await user.click(trigger);
@@ -28,7 +34,7 @@ describe("application component playgrounds", () => {
     expect(screen.getByRole("textbox", { name: "草稿名称" })).toHaveValue("");
   });
   it("requires apply before committing a calendar date", async () => {
-    render(<ApplicationFoundations kind="date-pickers" />);
+    mount("date-pickers");
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: "选择日期：2025-01-10" }));
     await user.click(screen.getByRole("button", { name: "2025-01-15" }));
@@ -40,7 +46,7 @@ describe("application component playgrounds", () => {
     expect(screen.getByRole("status")).toHaveTextContent("2025-01-15");
   });
   it("validates event names and adds an event to the selected day", async () => {
-    render(<ApplicationFoundations kind="calendars" />);
+    mount("calendars");
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: "添加日程" }));
     expect(screen.getByText("请输入日程名称。")).toBeVisible();
@@ -51,7 +57,7 @@ describe("application component playgrounds", () => {
     expect(screen.getByText("当天没有日程。")).toBeVisible();
   });
   it("validates messages and preserves multiline content", async () => {
-    render(<ApplicationFoundations kind="messaging" />);
+    mount("messaging");
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: "发送消息" }));
     expect(screen.getByText("请输入消息内容。")).toBeVisible();
@@ -62,7 +68,7 @@ describe("application component playgrounds", () => {
     expect(screen.getByRole("status")).toHaveTextContent("已发送 1");
   });
   it("rejects invalid uploads and recovers with a valid local file", () => {
-    render(<ApplicationFoundations kind="file-upload" />);
+    mount("file-upload");
     const input = screen.getByLabelText("选择文件");
     fireEvent.change(input, {
       target: { files: [new File(["x"], "invalid.exe", { type: "application/octet-stream" })] },
@@ -73,23 +79,39 @@ describe("application component playgrounds", () => {
     expect(screen.getByRole("status")).toHaveTextContent("demo.png");
   });
   it("searches and selects a command using the keyboard", async () => {
-    render(<ApplicationFoundations kind="command-menus" />);
+    mount("command-menus");
     const user = userEvent.setup();
     await user.click(screen.getByRole("combobox", { name: "命令菜单" }));
     await user.type(screen.getByRole("combobox", { name: "搜索命令" }), "帮助");
     await user.keyboard("{ArrowDown}{Enter}");
     expect(screen.getByRole("status")).toHaveTextContent("已选择命令：帮助中心");
   });
-  it("renders a local reference on demand and filters its design index", async () => {
+  it("opens the local reference by default and filters its design index", async () => {
     const { container } = render(<ApplicationFoundations kind="metrics" />);
     const user = userEvent.setup();
-    expect(container.querySelector('[data-node-id="1560:266242"]')).toBeNull();
-    await user.click(screen.getByText("Figma 原尺寸参考", { exact: true }));
-    expect(await screen.findByRole("region", { name: "Figma 原尺寸参考" })).toBeVisible();
     expect(container.querySelector('[data-node-id="1560:266242"]')).toBeInTheDocument();
+    expect(screen.getByText("辅助行为验证", { selector: "summary" }).closest("details")).not.toHaveAttribute("open");
+    expect(await screen.findByRole("region", { name: "Figma 原尺寸参考" })).toBeVisible();
+    await user.click(screen.getByText("Figma 原尺寸参考", { selector: "summary" }));
+    expect(container.querySelector('[data-node-id="1560:266242"]')).toBeNull();
+    await user.click(screen.getByText("Figma 原尺寸参考", { selector: "summary" }));
+    expect(await screen.findByRole("region", { name: "Figma 原尺寸参考" })).toBeVisible();
     await user.click(screen.getByText("设计节点索引", { exact: false }));
     await user.type(screen.getByRole("searchbox", { name: "筛选设计节点" }), "not-a-node");
     expect(await screen.findByText("未找到匹配节点。")).toBeVisible();
+  });
+  it("opens breadcrumb interactions and navigates collapsed ancestors with the keyboard", async () => {
+    render(<ApplicationFoundations kind="breadcrumbs" />);
+    const user = userEvent.setup();
+    expect(screen.getByText("设计交互", { selector: "summary" }).closest("details")).toHaveAttribute("open");
+    expect(screen.queryByRole("region", { name: "Figma 原尺寸参考" })).not.toBeInTheDocument();
+    const trigger = screen.getByRole("button", { name: "查看上级路径" });
+    await user.click(trigger);
+    await user.keyboard("{ArrowDown}{Enter}");
+    expect(screen.getByRole("status")).toHaveTextContent("当前位置：工作区");
+    expect(trigger).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "恢复完整路径" }));
+    expect(screen.getByRole("button", { name: "查看上级路径" })).toBeVisible();
   });
 });
 describe("calendar model", () => {

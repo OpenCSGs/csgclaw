@@ -1,4 +1,4 @@
-import { useId, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { Tabs } from "radix-ui";
 import { Button } from "@/components/ui";
 import { useLabTranslation } from "../LabLocale";
@@ -73,66 +73,6 @@ export function TabsFoundations() {
           </Tabs.Content>
         ))}
       </Tabs.Root>
-    </Foundation>
-  );
-}
-export function FooterFoundations() {
-  const { text: t } = useLabTranslation();
-  const id = useId();
-  const [value, setValue] = useState("");
-  const [saved, setSaved] = useState("");
-  const [help, setHelp] = useState(false);
-  const [notice, setNotice] = useState("");
-  return (
-    <Foundation
-      id="footer-foundations"
-      title="Section footers · 区块页脚"
-      description="区块页脚集中放置当前表单或内容区域的辅助操作与主要操作。"
-      node="3275-371793"
-      scope="已对齐 Section / 无按钮组 / Desktop：顶部分隔线、20px 间距、40px 操作按钮。窄屏自动换行；Card 与按钮组变体待补充。"
-    >
-      <label className={styles.field} htmlFor={id}>
-        {t("草稿名称")}
-        <input id={id} value={value} onChange={(e) => setValue(e.target.value)} />
-      </label>
-      <footer className={styles.footer}>
-        <Button className={styles.action} variant="linkGray" onClick={() => setHelp(!help)} aria-expanded={help}>
-          {t("了解更多")}
-        </Button>
-        <div className={styles.actions}>
-          <Button
-            className={styles.action}
-            variant="tertiaryGray"
-            onClick={() => {
-              setValue(saved);
-              setNotice("已恢复已保存内容。");
-            }}
-          >
-            {t("重置")}
-          </Button>
-          <Button
-            className={styles.action}
-            onClick={() => {
-              setValue(saved);
-              setNotice("已取消本次修改。");
-            }}
-          >
-            {t("取消")}
-          </Button>
-          <Button
-            className={styles.action}
-            variant="primary"
-            onClick={() => {
-              setSaved(value);
-              setNotice("已保存本次草稿。");
-            }}
-          >
-            {t("保存")}
-          </Button>
-        </div>
-      </footer>
-      {help && <p>{t("此处仅演示本地草稿，不提交服务器。")}</p>}
-      <p role="status">{t(notice)}</p>
     </Foundation>
   );
 }

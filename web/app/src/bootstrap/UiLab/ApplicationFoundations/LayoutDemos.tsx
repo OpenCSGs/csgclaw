@@ -1,3 +1,4 @@
+import { applicationAsset } from "./assets";
 import { useState } from "react";
 import { Breadcrumb, Button, Field, PanelHeader, TextInput } from "@/components/ui";
 import { useLabTranslation } from "../LabLocale";
@@ -78,11 +79,17 @@ export function NavigationDemo() {
 }
 export function BreadcrumbDemo() {
   const { text: t } = useLabTranslation();
-  const [level, setLevel] = useState(3);
-  const labels = ["设置", "工作区", "团队"];
+  const [level, setLevel] = useState(4);
+  const labels = ["设置", "工作区", "项目", "团队"];
   return (
     <>
       <Breadcrumb
+        className={styles.figmaBreadcrumb}
+        dividerSrc={applicationAsset("breadcrumbs-imgChevronRight.svg")}
+        dividerSize={16}
+        homeIconSrc={applicationAsset("breadcrumbs-imgHomeLine.svg")}
+        maxVisibleItems={3}
+        overflowLabel={t("查看上级路径")}
         aria-label={t("示例面包屑")}
         home={{ label: t("首页"), onClick: () => setLevel(0) }}
         items={labels
@@ -92,7 +99,7 @@ export function BreadcrumbDemo() {
       <p role="status">
         {t("当前位置")}：{t(level ? labels[level - 1] : "首页")}
       </p>
-      <Button onClick={() => setLevel(3)}>{t("恢复完整路径")}</Button>
+      <Button onClick={() => setLevel(4)}>{t("恢复完整路径")}</Button>
     </>
   );
 }

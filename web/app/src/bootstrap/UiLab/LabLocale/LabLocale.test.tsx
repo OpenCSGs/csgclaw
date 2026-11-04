@@ -46,6 +46,21 @@ describe("UI Lab localization", () => {
     expect(screen.getByRole("heading", { name: "Toggles" })).toBeVisible();
   }, 15000);
 
+  it("translates footer selection and feedback without resetting the selected range", async () => {
+    window.history.replaceState(null, "", "#footer-foundations");
+    const user = userEvent.setup();
+    render(<UiLab />);
+    const demo = within(screen.getByRole("region", { name: "区块页脚交互试用" }));
+    await user.click(demo.getByRole("radio", { name: "30 天" }));
+    expect(demo.getByRole("status")).toHaveTextContent("已触发：30 天");
+    await user.click(screen.getByRole("radio", { name: "English" }));
+    const englishDemo = within(screen.getByRole("region", { name: "Section footer playground" }));
+    expect(englishDemo.getByRole("radio", { name: "30 days" })).toBeChecked();
+    expect(englishDemo.getByRole("status")).toHaveTextContent("Triggered：30 days");
+    await user.click(screen.getByRole("radio", { name: "中文" }));
+    expect(demo.getByRole("radio", { name: "30 天" })).toBeChecked();
+  });
+
   it("has matching catalogs and translates every registered source without exposing message keys", () => {
     expect(Object.keys(labMessages.zh).sort()).toEqual(Object.keys(labMessages.en).sort());
     for (const locale of ["zh", "en"] as const) {

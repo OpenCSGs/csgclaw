@@ -1,9 +1,9 @@
 import { UiLabPanel } from "./UiLabPanel";
 import { ApplicationFoundations } from "./ApplicationFoundations/ApplicationFoundations";
 import { applicationSections } from "./ApplicationFoundations/registry";
+import { FooterFoundations } from "./FooterFoundations";
 import {
   TabsFoundations,
-  FooterFoundations,
   PaginationFoundations,
   StepsFoundations,
 } from "./NavigationFoundations/NavigationFoundations";

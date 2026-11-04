@@ -31,9 +31,9 @@ function renderNode(node: DesignNode, key: number): ReactNode {
     ...(node.children.length ? node.children.map(renderNode) : []),
   );
 }
-export function FigmaReference({ kind }: { kind: ApplicationKind }) {
+export function FigmaReference({ kind, expanded = false }: { kind: ApplicationKind; expanded?: boolean }) {
   const { text: t } = useLabTranslation();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(expanded);
   const [indexOpen, setIndexOpen] = useState(false);
   const [query, setQuery] = useState("");
   const reference = references[kind] as unknown as { nodeId: string; tree: DesignNode };
@@ -41,7 +41,7 @@ export function FigmaReference({ kind }: { kind: ApplicationKind }) {
   const variants = source.variants.filter((v) => `${v.name} ${v.id}`.toLowerCase().includes(query.toLowerCase()));
   return (
     <>
-      <details onToggle={(event) => setOpen(event.currentTarget.open)}>
+      <details open={open} onToggle={(event) => setOpen(event.currentTarget.open)}>
         <summary>{t("Figma 原尺寸参考")}</summary>
         <p>{t("以下为设计节点的静态结构参考，保留原始文案与尺寸；可在容器内滚动。交互操作请使用上方试用区。")}</p>
         <p>

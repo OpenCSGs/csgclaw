@@ -23,11 +23,14 @@ export type BreadcrumbProps = {
   items: BreadcrumbItem[];
   maxVisibleItems?: number;
   overflowLabel?: string;
+  dividerSrc?: string;
+  dividerSize?: number;
+  homeIconSrc?: string;
 };
 
-function Item({ item, home = false }: { home?: boolean; item: BreadcrumbItem }) {
+function Item({ item, home = false, icon = homeIcon }: { home?: boolean; item: BreadcrumbItem; icon?: string }) {
   const className = classNames(styles.item, home && styles.homeItem, item.current && styles.current);
-  const content = home ? <img src={homeIcon} width="20" height="20" alt="" /> : item.label;
+  const content = home ? <img src={icon} width="20" height="20" alt="" /> : item.label;
 
   if (item.current) {
     return (
@@ -40,7 +43,12 @@ function Item({ item, home = false }: { home?: boolean; item: BreadcrumbItem }) 
 
   if (item.href) {
     return (
-      <a className={className} href={item.href} title={home ? item.label : undefined}>
+      <a
+        className={className}
+        href={item.href}
+        aria-label={home ? item.label : undefined}
+        title={home ? item.label : undefined}
+      >
         {content}
       </a>
     );
@@ -51,6 +59,7 @@ function Item({ item, home = false }: { home?: boolean; item: BreadcrumbItem }) 
       className={className}
       type="button"
       onClick={item.onClick}
+      aria-label={home ? item.label : undefined}
       title={home ? item.label : undefined}
       disabled={!item.onClick}
     >
@@ -65,6 +74,9 @@ export function Breadcrumb({
   home,
   items,
   maxVisibleItems = 4,
+  dividerSrc = slashDivider,
+  dividerSize = 20,
+  homeIconSrc = homeIcon,
   overflowLabel = "Show earlier path segments",
 }: BreadcrumbProps) {
   const shouldCollapse = items.length > maxVisibleItems && maxVisibleItems >= 3;
@@ -85,7 +97,9 @@ export function Breadcrumb({
       <ol className={styles.list}>
         {renderedEntries.map((entry, index) => (
           <li className={styles.segment} key={entry.key}>
-            {index > 0 ? <img className={styles.divider} src={slashDivider} width="20" height="20" alt="" /> : null}
+            {index > 0 ? (
+              <img className={styles.divider} src={dividerSrc} width={dividerSize} height={dividerSize} alt="" />
+            ) : null}
             {entry.kind === "overflow" ? (
               <DropdownMenuRoot>
                 <DropdownMenuTrigger className={styles.overflowTrigger} type="button" aria-label={overflowLabel}>
@@ -104,7 +118,7 @@ export function Breadcrumb({
                 </DropdownMenuContent>
               </DropdownMenuRoot>
             ) : (
-              <Item item={entry.item} home={entry.kind === "home"} />
+              <Item item={entry.item} home={entry.kind === "home"} icon={homeIconSrc} />
             )}
           </li>
         ))}

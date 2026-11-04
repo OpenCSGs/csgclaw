@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
-import { TabsFoundations, FooterFoundations, PaginationFoundations, StepsFoundations } from "./NavigationFoundations";
+import { TabsFoundations, PaginationFoundations, StepsFoundations } from "./NavigationFoundations";
 
 describe("navigation foundations", () => {
   it("switches associated tab panels with the keyboard", async () => {
@@ -22,18 +22,6 @@ describe("navigation foundations", () => {
     expect(screen.getByRole("button", { name: "下一页" })).toBeDisabled();
     await user.click(screen.getByRole("button", { name: "上一页" }));
     expect(screen.getByRole("status")).toHaveTextContent("4 / 5");
-  });
-  it("restores the saved draft when cancelling edits", async () => {
-    render(<FooterFoundations />);
-    const user = userEvent.setup();
-    const input = screen.getByRole("textbox");
-    await user.type(input, "Saved draft");
-    await user.click(screen.getByRole("button", { name: "保存" }));
-    await user.clear(input);
-    await user.type(input, "Unsaved");
-    await user.click(screen.getByRole("button", { name: "取消" }));
-    expect(input).toHaveValue("Saved draft");
-    expect(screen.getByRole("status")).toHaveTextContent("已取消本次修改。");
   });
   it("completes and restarts the step flow", async () => {
     const { container } = render(<StepsFoundations />);

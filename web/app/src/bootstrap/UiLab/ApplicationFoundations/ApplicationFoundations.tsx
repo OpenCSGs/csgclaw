@@ -71,15 +71,20 @@ export function ApplicationFoundations({ kind }: { kind: ApplicationKind }) {
         {t("查看 Figma 设计来源 ↗")}
       </a>
       <p>{t("本页已收录一个代表性设计节点与交互试用。完整变体矩阵及生产页面迁移尚待验收。")}</p>
-      <section
-        className={`${styles.stage} ${styles.demoSurface}`}
-        aria-label={`${t(entry.title + " · " + entry.zh)} · ${t("交互试用")}`}
-      >
-        <h3>{t("交互试用")}</h3>
-        <p>{t("试用区使用本地示例数据，不连接业务服务。设计原始文案与尺寸见下方参考。")}</p>
-        <Demo kind={kind} />
-      </section>
-      <FigmaReference kind={kind} />
+      {kind !== "breadcrumbs" && <FigmaReference kind={kind} expanded />}
+      <details className={styles.behavior} open={kind === "breadcrumbs"}>
+        <summary>{t(kind === "breadcrumbs" ? "设计交互" : "辅助行为验证")}</summary>
+        <section
+          className={`${styles.stage} ${styles.demoSurface}`}
+          aria-label={`${t(entry.title + " · " + entry.zh)} · ${t("交互试用")}`}
+        >
+          {kind !== "breadcrumbs" && (
+            <p>{t("试用区使用本地示例数据，不连接业务服务。设计原始文案与尺寸见设计参考。")}</p>
+          )}
+          <Demo kind={kind} />
+        </section>
+      </details>
+      {kind === "breadcrumbs" && <FigmaReference kind={kind} />}
     </section>
   );
 }

@@ -431,3 +431,20 @@
     margin-left: auto;
   }
 }
+
+.figmaBreadcrumb {
+  --breadcrumb-font: 500 14px/20px "PingFang SC", sans-serif;
+  --breadcrumb-list-gap: 8px;
+  --breadcrumb-segment-gap: 8px;
+  --breadcrumb-muted: #717680;
+  --breadcrumb-current: #223b99;
+  padding: 24px;
+  background: white;
+  border: 1px solid #e9eaeb;
+  border-radius: 8px;
+}
+.behavior > section {
+  margin: 16px 0 0;
+  border: 0;
+  padding: 0;
+}
