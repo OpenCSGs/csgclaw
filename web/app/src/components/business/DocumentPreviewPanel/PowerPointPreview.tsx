@@ -62,7 +62,7 @@ export default function PowerPointPreview({
         if (cancelled) {
           return;
         }
-        if (!previewer) {
+        if (!previewer || previewer.slideCount === 0) {
           throw new Error("PowerPoint preview is unavailable");
         }
         setSlideCount(previewer.slideCount);
@@ -116,6 +116,11 @@ export default function PowerPointPreview({
   return (
     <div className="document-preview-powerpoint">
       <div ref={scrollRef} className="document-preview-ppt-stage-shell" onScroll={handleScroll}>
+        {slideCount === 0 ? (
+          <div className="document-preview-status" role="status">
+            {t("attachmentPreviewLoading")}
+          </div>
+        ) : null}
         <div ref={stageRef} className="document-preview-ppt-stage" style={{ zoom: fittedScale * scale }} />
       </div>
       {slideCount > 0 ? (

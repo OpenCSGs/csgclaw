@@ -24,3 +24,28 @@ it("preserves presentations that already define default styles", async () => {
   const original = await presentation("<p:defaultTextStyle><a:lvl1pPr/></p:defaultTextStyle>");
   expect(await normalizePowerPointPreview(original)).toBe(original);
 });
+
+it("removes declarations for absent parts without changing the original package", async () => {
+  const zip = await JSZip.loadAsync(await presentation("<p:defaultTextStyle><a:lvl1pPr/></p:defaultTextStyle>"));
+  const manifest =
+    '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
+    '<Default Extension="xml" ContentType="application/xml"/>' +
+    '<Override PartName="/ppt/slideMasters/slideMaster1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideMaster+xml"/>' +
+    '<Override PartName="/ppt/slideMasters/slideMaster2.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideMaster+xml"/>' +
+    '<Override PartName="/ppt/slides/slide1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/>' +
+    "</Types>";
+  zip.file("[Content_Types].xml", manifest);
+  zip.file("ppt/slideMasters/slideMaster1.xml", "<master/>");
+  zip.file("ppt/slides/slide1.xml", "<slide/>");
+  const original = await zip.generateAsync({ type: "arraybuffer" });
+  const normalized = await JSZip.loadAsync(await normalizePowerPointPreview(original));
+  const xml = await normalized.file("[Content_Types].xml")!.async("string");
+  expect(xml).toContain("slideMaster1.xml");
+  expect(xml).not.toContain("slideMaster2.xml");
+  expect(xml).toContain("slide1.xml");
+  expect(xml).toContain("<Default");
+  expect(await normalized.file("ppt/slides/slide1.xml")!.async("string")).toBe("<slide/>");
+  expect(await (await JSZip.loadAsync(original)).file("[Content_Types].xml")!.async("string")).toBe(manifest);
+  const repaired = await normalizePowerPointPreview(original);
+  expect(await normalizePowerPointPreview(repaired)).toBe(repaired);
+});

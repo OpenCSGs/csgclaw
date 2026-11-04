@@ -488,6 +488,8 @@
   width: 960px;
   min-height: 540px;
   margin: 0 auto;
+  /* Keep zoomed slide text painted when Chromium switches application themes. */
+  transform: translateZ(0);
 }
 
 @media (max-width: 960px) {
