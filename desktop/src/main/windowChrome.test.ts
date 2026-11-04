@@ -43,6 +43,7 @@ test("onboarding controls match the paper background even when the application i
 });
 
 function createChromeHarness() {
+  let destroyed = false;
   type Sender = { sender: unknown; senderFrame: { url: string } };
   const handlers = new Map<
     string,
@@ -51,16 +52,26 @@ function createChromeHarness() {
   const overlays: unknown[] = [];
   const webContents = Object.assign(new EventEmitter(), {
     mainFrame: { url: "http://localhost:18080/" },
-    isDestroyed: () => false,
+    isDestroyed: () => destroyed,
     send: () => undefined,
   });
   const window = Object.assign(new EventEmitter(), {
     webContents,
-    isDestroyed: () => false,
+    isDestroyed: () => destroyed,
     isFocused: () => true,
     isFullScreen: () => false,
     setBackgroundColor: () => undefined,
     setTitleBarOverlay: (value: unknown) => overlays.push(value),
+    destroy: () => {
+      destroyed = true;
+      window.emit("closed");
+    },
+  });
+  Object.defineProperty(window, "webContents", {
+    get: () => {
+      if (destroyed) throw new TypeError("Object has been destroyed");
+      return webContents;
+    },
   });
   const nativeTheme = Object.assign(new EventEmitter(), {
     shouldUseDarkColors: true,
@@ -142,7 +153,7 @@ test("chrome appearance rejects invalid values, frames and origins", () => {
   assert.equal(h.overlays.length, 0);
 });
 
-test("top-level navigation resets chrome and closing removes IPC and native listeners", () => {
+test("top-level navigation resets chrome", () => {
   const h = createChromeHarness();
   h.change("onboarding");
   h.webContents.emit(
@@ -161,7 +172,12 @@ test("top-level navigation resets chrome and closing removes IPC and native list
     true,
   );
   assert.equal((h.overlays.at(-1) as { color: string }).color, "#0c111d");
-  h.window.emit("closed");
+});
+
+test("window destruction removes IPC and listeners without accessing the destroyed window", () => {
+  const h = createChromeHarness();
+  assert.doesNotThrow(() => h.window.destroy());
+  assert.equal(h.window.isDestroyed(), true);
   assert.equal(h.handlers.size, 0);
   assert.equal(h.nativeTheme.listenerCount("updated"), 0);
   assert.equal(h.webContents.listenerCount("did-start-navigation"), 0);
