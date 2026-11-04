@@ -84,4 +84,31 @@ describe("OpenCSGConnectionDialog", () => {
       aiGatewayBaseURL: "https://aigateway.opencsg-stg.com/v1",
     });
   });
+
+  it("selects the OpenEast community preset", async () => {
+    const user = userEvent.setup();
+    const onConnect = vi.fn();
+    render(
+      <TooltipProvider delayDuration={0}>
+        <OpenCSGConnectionDialog
+          busy={false}
+          environment={defaultAuthEnvironmentDraft()}
+          open
+          t={t}
+          onConnect={onConnect}
+          onOpenChange={() => undefined}
+        />
+      </TooltipProvider>,
+    );
+
+    await user.click(screen.getByRole("radio", { name: /csghubEnvEast/ }));
+    await user.click(screen.getByRole("button", { name: "csghubConnectContinue" }));
+
+    expect(onConnect).toHaveBeenCalledWith({
+      preset: "east",
+      opencsgBaseURL: "https://openeast.opencsg.com",
+      csgHubBaseURL: "https://openeast.opencsg.com",
+      aiGatewayBaseURL: "https://openeast.opencsg.com/aigateway/v1",
+    });
+  });
 });

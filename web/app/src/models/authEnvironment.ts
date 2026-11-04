@@ -1,6 +1,6 @@
 import type { AuthStatus } from "@/models/auth";
 
-export type AuthEnvironmentPresetID = "prod" | "stage" | "custom";
+export type AuthEnvironmentPresetID = "prod" | "stage" | "east" | "custom";
 
 export type AuthEnvironmentDraft = {
   preset: AuthEnvironmentPresetID;
@@ -15,8 +15,10 @@ export type AuthEnvironmentLoginPayload = {
   ai_gateway_base_url?: string;
 };
 
+export type AuthEnvironmentNamedPresetID = Exclude<AuthEnvironmentPresetID, "custom">;
+
 export type AuthEnvironmentPreset = {
-  id: AuthEnvironmentPresetID;
+  id: AuthEnvironmentNamedPresetID;
   label: string;
   opencsgBaseURL: string;
   csgHubBaseURL: string;
@@ -39,9 +41,18 @@ const STAGE_AUTH_ENVIRONMENT_PRESET: AuthEnvironmentPreset = {
   aiGatewayBaseURL: "https://aigateway.opencsg-stg.com/v1",
 };
 
+const EAST_AUTH_ENVIRONMENT_PRESET: AuthEnvironmentPreset = {
+  id: "east",
+  label: "openeast.opencsg.com",
+  opencsgBaseURL: "https://openeast.opencsg.com",
+  csgHubBaseURL: "https://openeast.opencsg.com",
+  aiGatewayBaseURL: "https://openeast.opencsg.com/aigateway/v1",
+};
+
 export const AUTH_ENVIRONMENT_PRESETS: AuthEnvironmentPreset[] = [
   PRODUCTION_AUTH_ENVIRONMENT_PRESET,
   STAGE_AUTH_ENVIRONMENT_PRESET,
+  EAST_AUTH_ENVIRONMENT_PRESET,
 ];
 
 const DEFAULT_PRESET = PRODUCTION_AUTH_ENVIRONMENT_PRESET;
@@ -198,7 +209,7 @@ function hostnameFromURL(raw: string): string {
 }
 
 function normalizePresetID(source: unknown): AuthEnvironmentPresetID {
-  if (source === "prod" || source === "stage" || source === "custom") {
+  if (source === "prod" || source === "stage" || source === "east" || source === "custom") {
     return source;
   }
   return DEFAULT_PRESET.id;
