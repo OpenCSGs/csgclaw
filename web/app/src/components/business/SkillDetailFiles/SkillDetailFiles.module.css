@@ -11,12 +11,16 @@
   min-height: 0;
   height: 100%;
   overflow: auto;
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
 }
 
 .panels > :global(.workspace-file-preview) {
   min-height: 0;
   height: 100%;
   overflow: hidden;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
 }
 
 .panels :global(.workspace-preview-body) {
@@ -29,5 +33,15 @@
   .panels {
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows: minmax(140px, 220px) minmax(0, 1fr);
+  }
+
+  .panels > :global(.workspace-file-tree) {
+    border-top-right-radius: var(--radius-md);
+    border-bottom-left-radius: 0;
+  }
+
+  .panels > :global(.workspace-file-preview) {
+    border-top-right-radius: 0;
+    border-bottom-left-radius: var(--radius-md);
   }
 }

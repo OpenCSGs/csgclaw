@@ -352,10 +352,5 @@
 }
 
 .manageTemplatesLink {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin: 16px 10px;
-  color: var(--primary);
-  font-size: 12px;
+  margin: var(--space-4) 10px;
 }

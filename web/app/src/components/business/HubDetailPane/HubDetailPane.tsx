@@ -1,5 +1,6 @@
 import {
   templatePublicationStatus,
+  templatePublicationDestination,
   templatePublicationTarget,
   templateVersionLabel,
 } from "@/models/templatePublication";
@@ -1104,6 +1105,7 @@ export function HubDetailPane({
     onDismissPublishedTemplate?.();
   };
   const [publishChoiceDialogOpen, setPublishChoiceDialogOpen] = useState(false);
+  const publishTriggerRef = useRef<HTMLButtonElement | null>(null);
   const [publishTemplateIncludeMemory, setPublishTemplateIncludeMemory] = useState(false);
   const [mcpDeleteDialogOpen, setMCPDeleteDialogOpen] = useState(false);
   const [knowledgeBaseDeleteDialogOpen, setKnowledgeBaseDeleteDialogOpen] = useState(false);
@@ -1328,7 +1330,8 @@ export function HubDetailPane({
         ? [
             {
               id: "versions" as const,
-              label: t("templateVersionsTab", { count: selectedTemplate?.version_count ?? 1 }),
+              label: t("templateVersionsTab"),
+              count: selectedTemplate.version_count ?? 1,
             },
           ]
         : []),
@@ -1471,6 +1474,12 @@ export function HubDetailPane({
     publishBusy,
   );
   const hasCloudTemplateWithSameName = Boolean(publication.target);
+  const publishDestination = templatePublicationDestination(
+    selectedTemplate,
+    templates,
+    templateUsername,
+    agenticHubSiteURL,
+  );
   const remoteVersion = templateVersionLabel(publication.remote);
   const lastPublishedRevision = publication.target?.publication?.revision;
   const communityVersionLabel = remoteVersion
@@ -1502,6 +1511,16 @@ export function HubDetailPane({
       setPublishedTemplateID(String(result.template?.id || ""));
       setPublishChoiceDialogOpen(false);
       setPublishSuccessDialogOpen(true);
+    }
+  }
+
+  function restorePublishFocus(event: Event) {
+    event.preventDefault();
+    // A success dialog takes over focus after publication. Return to the actual
+    // opener only when neither publication dialog remains open.
+    if (!publishChoiceDialogOpen && !publishSuccessDialogOpen && !publishedTemplate) {
+      const trigger = publishTriggerRef.current;
+      if (trigger?.isConnected && !trigger.disabled) trigger.focus();
     }
   }
 
@@ -2011,6 +2030,7 @@ export function HubDetailPane({
                     ) : null}
                     {canPublishTemplate ? (
                       <Button
+                        ref={publishTriggerRef}
                         variant="secondaryGray"
                         size="md"
                         loading={publishBusy}
@@ -3283,6 +3303,7 @@ export function HubDetailPane({
                 ) : null}
                 {canPublishTemplate ? (
                   <Button
+                    ref={publishTriggerRef}
                     variant="secondaryGray"
                     size="md"
                     loading={publishBusy}
@@ -3594,7 +3615,7 @@ export function HubDetailPane({
           if (!open) dismissPublishSuccess();
         }}
       >
-        <DialogContent className={moduleClassNames("hub-skill-delete-dialog")}>
+        <DialogContent className={moduleClassNames("hub-skill-delete-dialog")} onCloseAutoFocus={restorePublishFocus}>
           <DialogHeader className={moduleClassNames("hub-skill-delete-dialog-header")}>
             <div className={moduleClassNames("hub-skill-delete-dialog-copy")}>
               <DialogTitle>{t("resourcesPublishCommunitySuccessTitle")}</DialogTitle>
@@ -3627,7 +3648,7 @@ export function HubDetailPane({
           }
         }}
       >
-        <DialogContent className={moduleClassNames("agent-publish-dialog")}>
+        <DialogContent className={moduleClassNames("agent-publish-dialog")} onCloseAutoFocus={restorePublishFocus}>
           <DialogHeader>
             <div>
               <DialogTitle>{t("agentPublishTemplateTitle")}</DialogTitle>
@@ -3641,6 +3662,23 @@ export function HubDetailPane({
               <strong>{publishVersionLabel}</strong>
               <small>{t("templatePublishLatestHint")}</small>
             </div>
+            <dl className={moduleClassNames("hub-template-publish-destination")}>
+              <dt>{t("templatePublishSite")}</dt>
+              <dd>{publishDestination.site || t("templatePublishDestinationUnknown")}</dd>
+              <dt>{t("templatePublishAccount")}</dt>
+              <dd>{publishDestination.namespace || t("templatePublishDestinationUnknown")}</dd>
+              <dt>{t("templatePublishTarget")}</dt>
+              <dd>{publishDestination.id || t("templatePublishDestinationUnknown")}</dd>
+              {selectedTemplate?.uid ? (
+                <>
+                  <dt>{t("templateVersionUID")}</dt>
+                  <dd>{selectedTemplate.uid}</dd>
+                </>
+              ) : null}
+            </dl>
+            <p className={moduleClassNames("hub-template-publish-hint")}>{t("templatePublishVisibility")}</p>
+            <p className={moduleClassNames("hub-template-publish-hint")}>{t("templatePublishEffect")}</p>
+            <p className={moduleClassNames("hub-template-publish-hint")}>{t("templatePublishContents")}</p>
             {templateMemoryEnabled ? (
               <label className={moduleClassNames("hub-template-publish-memory-option")}>
                 <Checkbox

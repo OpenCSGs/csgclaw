@@ -2465,9 +2465,15 @@
   gap: 4px;
 }
 
+.agent-publish-memory-option strong {
+  font-size: var(--text-sm-size);
+  font-weight: var(--font-weight-medium);
+}
+
 .agent-publish-memory-option small {
   color: var(--text-muted);
-  font-weight: 400;
+  font-size: var(--text-sm-size);
+  font-weight: var(--font-weight-light);
   line-height: 1.45;
 }
 

@@ -47,6 +47,9 @@
   outline-offset: 4px;
   border-radius: 4px;
 }
+.content:disabled {
+  cursor: default;
+}
 .icon {
   display: inline-flex;
   align-items: center;

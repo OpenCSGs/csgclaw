@@ -2790,7 +2790,7 @@ export const messages = {
     templateCommitMessage: "提交说明（选填）",
     agentTemplateNextVersion: "本次保存将生成现有模板的新版本 V{version}。",
     templateVersionHistory: "版本历史",
-    templateVersionsTab: "版本（{count}）",
+    templateVersionsTab: "版本",
     templateVersionDelete: "删除版本",
     templateVersionHistoryHint: "保留全部版本，可删除非当前历史版本。回滚只切换当前生效版本。",
     templateRestoreVersion: "切换版本",
@@ -2819,6 +2819,13 @@ export const messages = {
     templatePublishLegacyVersion: "旧模板（未编号）",
     templatePublishLatestHint: "仅发布当前生效版本，不包含历史版本。云端仅保留一份当前内容。",
     templatePublishVersionAction: "发布 {version} 到社区",
+    templatePublishSite: "目标站点",
+    templatePublishAccount: "账号 / 命名空间",
+    templatePublishTarget: "云端模板",
+    templatePublishVisibility: "新建模板为私有；已有模板沿用当前可见范围。",
+    templatePublishEffect: "目标不存在时新建；已存在时替换其当前模板内容，包括移除本地已删除的文件。",
+    templatePublishContents: "包含模板配置及已有的指令、技能和连接器文件，不包含历史版本；仅在明确勾选时包含记忆。",
+    templatePublishDestinationUnknown: "暂不可用，请登录后确认发布目标。",
 
     agentPublishIncludeMemory: "包含智能体记忆",
     agentPublishIncludeMemoryWarning: "可能包含从历史对话中提取的私人信息。仅在确认内容适合共享时启用。",
@@ -6069,7 +6076,7 @@ export const messages = {
     templateCommitMessage: "Commit message (optional)",
     agentTemplateNextVersion: "This save creates V{version} of the existing template.",
     templateVersionHistory: "Version history",
-    templateVersionsTab: "Versions ({count})",
+    templateVersionsTab: "Versions",
     templateVersionDelete: "Delete version",
     templateVersionHistoryHint: "All versions are retained. Inactive versions can be deleted.",
     templateRestoreVersion: "Switch version",
@@ -6099,6 +6106,15 @@ export const messages = {
     templatePublishLatestHint:
       "Only the active version is published; history is not included. The cloud keeps one current copy.",
     templatePublishVersionAction: "Publish {version} to community",
+    templatePublishSite: "Destination site",
+    templatePublishAccount: "Account / namespace",
+    templatePublishTarget: "Cloud template",
+    templatePublishVisibility: "New templates are private. Existing templates keep their current visibility.",
+    templatePublishEffect:
+      "Creates the target if missing; otherwise replaces its current template contents, including removing files no longer present locally.",
+    templatePublishContents:
+      "Includes template configuration and existing instruction, skill and connector files. History is excluded; memory is included only when selected.",
+    templatePublishDestinationUnknown: "Unavailable — sign in to confirm the destination.",
 
     agentPublishIncludeMemory: "Include agent memory",
     agentPublishIncludeMemoryWarning:
