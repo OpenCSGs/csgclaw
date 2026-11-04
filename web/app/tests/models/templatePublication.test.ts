@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   templatePublicationStatus,
+  templatePublicationDestination,
   templatePublicationTarget,
   templateVersionLabel,
 } from "@/models/templatePublication";
@@ -24,6 +25,15 @@ const local: HubTemplate = {
 };
 
 describe("template publication status", () => {
+  it("describes new and associated destinations without losing a renamed cloud path", () => {
+    expect(templatePublicationDestination(local, [], "alice", "https://hub.example/account")).toEqual({
+      site: "https://hub.example",
+      namespace: "alice",
+      id: "alice/original",
+    });
+    expect(templatePublicationDestination(local, [], "bob", "https://hub.example/account").id).toBe("bob/renamed");
+    expect(templatePublicationDestination(local, [], "", "invalid")).toEqual({ site: "", namespace: "", id: "" });
+  });
   it("uses the saved association after a local rename, scoped to site and account", () => {
     expect(templatePublicationTarget(local, [], "alice", "https://hub.example/login")?.id).toBe("alice/original");
     expect(templatePublicationTarget(local, [], "bob", "https://hub.example")).toBeNull();

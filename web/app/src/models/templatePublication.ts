@@ -41,3 +41,18 @@ export function templatePublicationStatus(local: HubTemplate, remote?: HubTempla
   if (!remote || !local.uid || remote.uid !== local.uid || !local.revision || !remote.revision) return "unknown";
   return local.revision === remote.revision ? "current" : "different";
 }
+
+export function templatePublicationDestination(
+  template: HubTemplate | null | undefined,
+  templates: readonly HubTemplate[],
+  username: string,
+  site: string,
+) {
+  const namespace = username.trim();
+  const target = templatePublicationTarget(template, templates, namespace, site);
+  return {
+    site: siteOrigin(site),
+    namespace,
+    id: target?.id || (namespace && template?.name ? `${namespace}/${template.name}` : ""),
+  };
+}

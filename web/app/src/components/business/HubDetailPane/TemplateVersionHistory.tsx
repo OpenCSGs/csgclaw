@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ChevronRight, FileText, Folder, History, LoaderCircle, RotateCcw } from "lucide-react";
+import { ChevronRight, FileText, Folder, History, LoaderCircle, RotateCcw, Trash2 } from "lucide-react";
 import { Breadcrumb, Button, EmptyState, Field, Select } from "@/components/ui";
 import type { HubTemplate } from "@/models/hubWorkspace";
 import { formatHubDateTime } from "@/models/hubWorkspace";
@@ -48,52 +48,56 @@ function VersionContent({ template, t, locale, onRestored }: Props) {
             <ul className={styles.versions} aria-label={t("templateVersionHistory")}>
               {state.versions.map((version) => (
                 <li key={version.revision}>
-                  <Button
-                    className={styles.versionButton}
-                    variant={revision === version.revision ? "secondaryColor" : "tertiaryGray"}
-                    size="sm"
-                    aria-label={`V${version.revision}`}
-                    aria-expanded={revision === version.revision}
-                    disabled={state.busy}
-                    onClick={() =>
-                      revision === version.revision ? state.collapse() : void state.browse(version.revision)
-                    }
-                  >
-                    <span className={styles.versionInfo}>
-                      <span className={styles.versionHeading}>
-                        <strong>V{version.revision}</strong>
-                        {version.revision === latestRevision ? (
-                          <span className={styles.latest}>{t("templateVersionLatest")}</span>
-                        ) : null}
-                        {version.revision === template.revision ? (
-                          <span className={styles.latest}>{t("templateVersionActive")}</span>
+                  <div className={styles.versionHeader} data-expanded={revision === version.revision}>
+                    <Button
+                      className={styles.versionButton}
+                      variant={revision === version.revision ? "tertiaryColor" : "tertiaryGray"}
+                      size="sm"
+                      aria-label={`V${version.revision}`}
+                      aria-expanded={revision === version.revision}
+                      disabled={state.busy}
+                      onClick={() =>
+                        revision === version.revision ? state.collapse() : void state.browse(version.revision)
+                      }
+                    >
+                      <span className={styles.versionInfo}>
+                        <span className={styles.versionHeading}>
+                          <strong>V{version.revision}</strong>
+                          {version.revision === latestRevision ? (
+                            <span className={styles.latest}>{t("templateVersionLatest")}</span>
+                          ) : null}
+                          {version.revision === template.revision ? (
+                            <span className={styles.latest}>{t("templateVersionActive")}</span>
+                          ) : null}
+                        </span>
+                        {revision === version.revision ? (
+                          <>
+                            <span className={styles.commitMessage}>
+                              {version.message || t("templateVersionNoMessage")}
+                            </span>
+                            {version.author ? (
+                              <span className={styles.metadata}>{version.author.name || version.author.id}</span>
+                            ) : null}
+                            <time className={styles.metadata} dateTime={version.created_at}>
+                              {formatHubDateTime(version.created_at, locale)}
+                            </time>
+                          </>
                         ) : null}
                       </span>
-                      {revision === version.revision ? (
-                        <>
-                          <span className={styles.commitMessage}>
-                            {version.message || t("templateVersionNoMessage")}
-                          </span>
-                          {version.author ? (
-                            <span className={styles.metadata}>{version.author.name || version.author.id}</span>
-                          ) : null}
-                          <time className={styles.metadata} dateTime={version.created_at}>
-                            {formatHubDateTime(version.created_at, locale)}
-                          </time>
-                        </>
-                      ) : null}
-                    </span>
-                  </Button>
-                  {version.revision !== template.revision ? (
-                    <Button
-                      variant="danger"
-                      size="sm"
-                      disabled={state.busy}
-                      onClick={() => void state.remove(version.revision)}
-                    >
-                      {t("templateVersionDelete")} V{version.revision}
                     </Button>
-                  ) : null}
+                    {version.revision !== template.revision ? (
+                      <Button
+                        className={styles.deleteVersion}
+                        variant="tertiaryDanger"
+                        size="sm"
+                        disabled={state.busy}
+                        onClick={() => void state.remove(version.revision)}
+                      >
+                        <Trash2 size={14} aria-hidden="true" />
+                        {t("templateVersionDelete")} V{version.revision}
+                      </Button>
+                    ) : null}
+                  </div>
                   {revision === version.revision ? (
                     <div className={styles.detail}>
                       {revision === null ? null : (

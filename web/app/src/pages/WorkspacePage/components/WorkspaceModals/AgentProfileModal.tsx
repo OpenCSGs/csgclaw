@@ -1,6 +1,6 @@
 import { AgentModelConfiguration } from "@/components/business/AgentModelConfiguration";
 import { BOT_TYPE_NORMAL } from "@/shared/constants/agents";
-import { useEffect, useState, type SetStateAction } from "react";
+import { useEffect, useRef, useState, type SetStateAction } from "react";
 import {
   AgentCreateProgress,
   type AgentCreateProgressProps,
@@ -11,7 +11,15 @@ import {
   requiredFieldLabel,
   RuntimeOptionsFields,
 } from "@/components/business/ProfileControls";
-import { Button, Select } from "@/components/ui";
+import {
+  Button,
+  Select,
+  DialogRoot,
+  DialogContent,
+  DialogTitle,
+  DialogDescription,
+  DialogCloseButton,
+} from "@/components/ui";
 import { AgentAvatarContent, AgentAvatarPicker } from "@/components/business/AgentAvatar";
 import { RuntimeInstallProgress } from "@/components/business/RuntimeInstallProgress";
 import type { AgentRuntimeInstallation } from "@/api/agentRuntimes";
@@ -42,7 +50,6 @@ import type { LocaleCode } from "@/models/conversations";
 import type { HubTemplate } from "@/models/hubWorkspace";
 import type { AgentCreationResources } from "@/models/agentCreation";
 import { AgentCreateWizard } from "./AgentCreateWizard";
-import { ModalCloseButton } from "./ModalCloseButton";
 import styles from "./AgentProfileModal.module.css";
 
 type AgentModalMode = "create" | "edit";
@@ -122,6 +129,9 @@ export function AgentProfileModal({
   onSave,
 }: AgentProfileModalProps) {
   const [mcpServersInvalid, setMCPServersInvalid] = useState(false);
+  const [opener] = useState(() => (document.activeElement instanceof HTMLElement ? document.activeElement : null));
+  const contentRef = useRef<HTMLDivElement>(null);
+  const nameRef = useRef<HTMLInputElement>(null);
   const createBotKind = agentModalMode === "create" ? agentCreateBotKind : undefined;
   const isNotificationContext = isNotificationBotDraftContext(agentDraft, editingAgent, createBotKind);
   const isWorkerCreate = agentModalMode === "create" && !isNotificationContext;
@@ -283,6 +293,7 @@ export function AgentProfileModal({
               <label className="field agent-name-field">
                 {requiredFieldLabel(t("agentName"))}
                 <input
+                  ref={nameRef}
                   value={agentDraft.name}
                   required
                   aria-required="true"
@@ -516,22 +527,47 @@ export function AgentProfileModal({
     );
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal-card profile-modal agent-modal" onClick={(event) => event.stopPropagation()}>
+    <DialogRoot
+      open
+      onOpenChange={(open) => {
+        if (!open && !agentBusy) onClose();
+      }}
+    >
+      <DialogContent
+        className={`${styles.dialog} profile-modal agent-modal`}
+        ref={contentRef}
+        onOpenAutoFocus={(event) => {
+          if (nameRef.current) {
+            event.preventDefault();
+            nameRef.current.focus();
+          }
+        }}
+        onCloseAutoFocus={(event) => {
+          event.preventDefault();
+          if (opener?.isConnected && !opener.matches(":disabled")) opener.focus();
+        }}
+        onEscapeKeyDown={(event) => {
+          if (agentBusy || contentRef.current?.querySelector('[role="dialog"][aria-modal="true"]'))
+            event.preventDefault();
+        }}
+        onInteractOutside={(event) => {
+          if (agentBusy) event.preventDefault();
+        }}
+      >
         <div className="modal-header">
           <div>
-            <div className="modal-title">
+            <DialogTitle className="modal-title">
               {agentModalMode === "create" ? t("createAgentTitle") : t("editAgentTitle")}
-            </div>
-            <div className="modal-subtitle">
+            </DialogTitle>
+            <DialogDescription className="modal-subtitle">
               {agentModalMode === "create"
                 ? isNotificationContext
                   ? t("createAgentSubtitleNotifier")
                   : t("createAgentSubtitle")
                 : t("editAgentSubtitle")}
-            </div>
+            </DialogDescription>
           </div>
-          <ModalCloseButton label={t("close")} onClose={onClose} />
+          <DialogCloseButton label={t("close")} disabled={agentBusy} />
         </div>
         {editor}
         {agentError ? (
@@ -549,14 +585,14 @@ export function AgentProfileModal({
         ) : null}
         <AgentCreateProgress progress={agentProgress} t={t} />
         <div className="modal-actions">
-          <Button variant="secondaryGray" size="md" onClick={onClose}>
+          <Button variant="secondaryGray" size="md" disabled={agentBusy} onClick={onClose}>
             {t("cancel")}
           </Button>
           <Button variant="primary" size="md" disabled={saveDisabled} loading={agentBusy} onClick={() => void onSave()}>
             {agentModalMode === "create" ? t("agentCreateSave") : t("agentUpdateSave")}
           </Button>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </DialogRoot>
   );
 }

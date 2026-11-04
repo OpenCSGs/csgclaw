@@ -22,6 +22,11 @@ function t(key: string, params: Record<string, string | number> = {}) {
   const messages: Record<string, string> = {
     cancel: "Cancel",
     close: "Close",
+    save: "Save",
+    resourcesTemplateInstructionsUnchanged: "No changes",
+    resourcesTemplateInstructionsUnsaved: "Unsaved changes",
+    resourcesTemplateInstructionsSaving: "Saving…",
+    resourcesTemplateInstructionsSaved: "Saved",
     iaTemplateCreateAgent: "Create agent",
     agentPublishCommunity: "Publish to community",
     resourcesTemplatePublished: "Published",
@@ -30,7 +35,7 @@ function t(key: string, params: Record<string, string | number> = {}) {
     templateLastPublishedVersion: "Last published {version}",
     templateViewCommunity: "View community template",
     templateCurrentVersionPublished: "Current version published",
-    templateVersionsTab: "Versions ({count})",
+    templateVersionsTab: "Versions",
     templateVersionPublished: "{version} published",
     templateCommunityVersionDifferent: "Differs from community version",
     templateCommunityVersionUnconfirmed: "Community version unconfirmed",
@@ -42,6 +47,15 @@ function t(key: string, params: Record<string, string | number> = {}) {
     templatePublishLatestHint:
       "Only the active version is published; history is not included. The cloud keeps one current copy.",
     templatePublishVersionAction: "Publish {version} to community",
+    templatePublishSite: "Destination site",
+    templatePublishAccount: "Account / namespace",
+    templatePublishTarget: "Cloud template",
+    templatePublishVisibility: "New templates are private. Existing templates keep their current visibility.",
+    templatePublishEffect:
+      "Creates the target if missing; otherwise replaces its current template contents, including removing files no longer present locally.",
+    templatePublishContents:
+      "Includes template configuration and existing instruction, skill and connector files. History is excluded; memory is included only when selected.",
+    templatePublishDestinationUnknown: "Unavailable — sign in to confirm the destination.",
     agentPublishLoginRequired: "Sign in first",
     agentPublishTemplateCommunitySubtitle: "Publish remotely",
     agentPublishTemplateTitle: "Publish agent template",
@@ -234,6 +248,7 @@ function renderHubDetailPane(
     lazyMemory?: boolean;
     loaded?: boolean;
     inlineTemplateDetail?: boolean;
+    onUpdateTemplateInstructions?: (content: string) => boolean | Promise<boolean>;
   } = {},
 ) {
   const workspaceFiles = {
@@ -349,6 +364,7 @@ function renderHubDetailPane(
             publishDisabled: options.publishDisabled,
             publishError: options.publishError,
             onResetPublishError: options.onResetPublishError,
+            onUpdateTemplateInstructions: options.onUpdateTemplateInstructions,
           },
         }}
       />
@@ -1199,7 +1215,7 @@ describe("HubDetailPane", () => {
       onSelectTemplate,
       queryClient: client,
     });
-    await user.click(screen.getByRole("button", { name: "Versions (2)" }));
+    await user.click(screen.getByRole("button", { name: /^Versions\s*2$/ }));
     await user.click(await screen.findByRole("button", { name: "V1" }));
     await user.click(screen.getByRole("button", { name: "templateRestoreVersion" }));
     await user.click(screen.getByRole("button", { name: "templateVersionRollbackConfirm" }));
@@ -1209,7 +1225,7 @@ describe("HubDetailPane", () => {
     expect(onSelectTemplate).not.toHaveBeenCalled();
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     view.rerenderOptions({ selectedTemplate: restored });
-    await user.click(screen.getByRole("button", { name: "Versions (2)" }));
+    await user.click(screen.getByRole("button", { name: /^Versions\s*2$/ }));
     expect(screen.getAllByText("templateVersionActive V1").length).toBeGreaterThan(0);
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
@@ -1234,10 +1250,17 @@ describe("HubDetailPane", () => {
     });
 
     await openTemplateDetail(user);
-    await user.click(screen.getByRole("button", { name: "Publish V3 to community" }));
+    const publishTrigger = screen.getByRole("button", { name: "Publish V3 to community" });
+    await user.click(publishTrigger);
     expect(screen.getByRole("dialog", { name: "Publish agent template" })).toBeInTheDocument();
     expect(screen.getByText("Version to publish")).toBeInTheDocument();
     expect(screen.getByText("V3", { selector: "strong" })).toBeInTheDocument();
+    expect(screen.getByText("https://qa.opencsg.com")).toBeInTheDocument();
+    expect(screen.getByText("alice", { exact: true })).toBeInTheDocument();
+    expect(screen.getByText("alice/demo-template", { exact: true })).toBeInTheDocument();
+    expect(
+      screen.getByText("New templates are private. Existing templates keep their current visibility."),
+    ).toBeInTheDocument();
     expect(
       screen.getByText(
         "Only the active version is published; history is not included. The cloud keeps one current copy.",
@@ -1253,6 +1276,7 @@ describe("HubDetailPane", () => {
 
     await user.click(screen.getByRole("button", { name: "OK" }));
     expect(screen.queryByRole("dialog", { name: "Published successfully" })).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole("button", { name: "Publish V3 to community" })).toHaveFocus());
     view.rerenderOptions({
       templates: [
         localTemplate,
@@ -1270,6 +1294,34 @@ describe("HubDetailPane", () => {
     expect(screen.getByRole("button", { name: "Publish V3 to community" })).toBeEnabled();
     expect(screen.queryByText("Community version unconfirmed")).not.toBeInTheDocument();
   });
+
+  it.each([true, false])(
+    "returns keyboard focus after cancelling publication (inline: %s)",
+    async (inlineTemplateDetail) => {
+      const user = userEvent.setup();
+      const onPublishTemplate = vi.fn();
+      renderHubDetailPane("template", {
+        inlineTemplateDetail,
+        selectedTemplate: { ...template, id: "local.demo-template", revision: 3, source: { kind: "local" } },
+        onPublishTemplate,
+        templateUsername: "alice",
+      });
+      if (!inlineTemplateDetail) await openTemplateDetail(user);
+      const trigger = screen.getByRole("button", { name: "Publish V3 to community" });
+      trigger.focus();
+      await user.keyboard("{Enter}");
+      const dialog = screen.getByRole("dialog", { name: "Publish agent template" });
+      await user.keyboard("{Escape}");
+      await waitFor(() => expect(dialog).not.toBeInTheDocument());
+      await waitFor(() => expect(trigger).toHaveFocus());
+      await user.keyboard("{Enter}");
+      await user.click(
+        within(screen.getByRole("dialog", { name: "Publish agent template" })).getByRole("button", { name: "Cancel" }),
+      );
+      await waitFor(() => expect(trigger).toHaveFocus());
+      expect(onPublishTemplate).not.toHaveBeenCalled();
+    },
+  );
 
   it("publishes a local DSH template to the community", async () => {
     const user = userEvent.setup();
@@ -1475,6 +1527,37 @@ describe("HubDetailPane", () => {
     expect(screen.getByLabelText("Instructions")).toHaveTextContent("# Instructions Follow the template rules.");
     expect(screen.getByText("Effective AGENTS.md")).toBeInTheDocument();
     expect(screen.queryByText("AGENTS.md")).not.toBeInTheDocument();
+  });
+
+  it("enables the local instructions save action only for edits and disables it after saving", async () => {
+    const user = userEvent.setup();
+    const onUpdateTemplateInstructions = vi.fn().mockResolvedValue(true);
+    renderHubDetailPane("template", {
+      selectedTemplate: { ...template, id: "local.demo", source: { kind: "local" } },
+      inlineTemplateDetail: true,
+      onUpdateTemplateInstructions,
+    });
+    await user.click(screen.getByRole("button", { name: "Instructions" }));
+    const editor = screen.getByRole("textbox", { name: "Instructions" });
+    const save = screen.getByRole("button", { name: "Save" });
+    expect(save).toBeDisabled();
+    expect(screen.getByRole("status")).toHaveTextContent("No changes");
+    await user.type(editor, "Keep a space and\nthen a new line");
+    expect(editor).toHaveValue("Keep a space and\nthen a new line");
+    expect(save).toBeEnabled();
+    expect(screen.getByRole("status")).toHaveTextContent("Unsaved changes");
+    await user.clear(editor);
+    expect(save).toBeDisabled();
+    await user.type(editor, "New instructions");
+    await user.click(save);
+    expect(onUpdateTemplateInstructions).toHaveBeenCalledTimes(1);
+    expect(onUpdateTemplateInstructions).toHaveBeenCalledWith(expect.stringContaining("New instructions"));
+    expect(save).toBeDisabled();
+    expect(screen.getByRole("status")).toHaveTextContent("Saved");
+    await user.click(screen.getByRole("button", { name: "Profile" }));
+    await user.click(screen.getByRole("button", { name: "Instructions" }));
+    expect(screen.getByRole("textbox", { name: "Instructions" })).toHaveValue("New instructions");
+    expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
   });
 
   it("renders the skill list and opens selected skill details in a dialog", async () => {

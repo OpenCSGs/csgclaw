@@ -2,7 +2,7 @@ import { resolveTeamAvatarMembers, teamMemberIDs, teamStatusLabel } from "@/mode
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { ChevronRight, ExternalLink, List, LoaderCircle, Plus, Search } from "lucide-react";
-import { Button, PanelHeader, EmptyState, TextInput } from "@/components/ui";
+import { Button, LinkButton, PanelHeader, EmptyState, TextInput } from "@/components/ui";
 import { AgentAvatarContent } from "@/components/business/AgentAvatar";
 import { RoomAvatar } from "@/components/business/RoomAvatar";
 import { useWorkspaceControllerContext } from "@/hooks/workspace";
@@ -268,15 +268,17 @@ export function AgentOverviewPage() {
                   </button>
                 ))}
                 {templateFilter === "personal" && templatesURL ? (
-                  <a
+                  <LinkButton
                     className={styles.manageTemplatesLink}
+                    variant="linkColor"
+                    size="sm"
                     href={templatesURL}
                     target="_blank"
                     rel="noopener noreferrer"
                   >
-                    <ExternalLink size={13} />
+                    <ExternalLink size={14} aria-hidden="true" />
                     {t("iaTemplateManageOnHub")}
-                  </a>
+                  </LinkButton>
                 ) : null}
                 {!templatesQuery.isLoading && !templatesQuery.isError && !shownTemplates.length ? (
                   <p className={styles.emptyList}>{templateEmptyTitle}</p>

@@ -74,7 +74,7 @@ it("keeps the template library detail inline when switching versions", async () 
     </QueryClientProvider>,
   );
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-  await user.click(screen.getByRole("button", { name: "Versions (1)" }));
+  await user.click(screen.getByRole("button", { name: /^Versions\s*1$/ }));
   await user.click(await screen.findByRole("button", { name: "V1" }));
   await user.click(screen.getByRole("button", { name: "Switch version" }));
   await user.click(screen.getByRole("button", { name: "Confirm switch to V1" }));

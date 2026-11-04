@@ -84,6 +84,8 @@
 .versionButton {
   display: grid;
   align-items: start;
+  flex: 1;
+  min-width: 0;
   width: 100%;
   height: auto;
   padding: var(--space-3);
@@ -130,7 +132,7 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--space-2);
-  padding: var(--space-4);
+  padding: var(--space-4) 0;
   border-bottom: 1px solid var(--line);
 }
 .detail h4 {
@@ -153,7 +155,12 @@
   color: var(--muted);
 }
 .browser {
-  padding: 0 var(--space-4) var(--space-4);
+  min-width: 0;
+  margin: 0 0 var(--space-4);
+  padding: 0 var(--space-3) var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--panel);
 }
 .browserToolbar {
   display: flex;
@@ -161,6 +168,8 @@
   gap: var(--space-2);
   justify-content: space-between;
   min-height: 48px;
+  margin-bottom: var(--space-2);
+  border-bottom: 1px solid var(--line);
 }
 .browserToolbar > nav {
   min-width: 0;
@@ -230,7 +239,7 @@
   gap: var(--space-3);
   padding: var(--space-4);
   border-top: 1px solid var(--line);
-  background: var(--panel-strong);
+  background: var(--surface);
 }
 .saveSection .hint {
   margin-top: var(--space-1);
@@ -314,6 +323,22 @@
   border-radius: var(--radius-xl);
   padding: var(--space-2);
 }
+.versionHeader {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  border: 1px solid transparent;
+  border-radius: var(--radius-base);
+}
+.versionHeader[data-expanded="true"] {
+  border-color: var(--button-brand-border);
+  background: var(--button-brand-background);
+}
+.deleteVersion {
+  flex-shrink: 0;
+  margin-top: var(--space-1);
+  margin-right: var(--space-1);
+}
 .sectionLabel {
   display: none;
 }
@@ -325,6 +350,8 @@
   display: grid;
   grid-template-columns: max-content minmax(0, 1fr);
   gap: var(--space-2) var(--space-4);
+  margin: 0;
+  padding: var(--space-4) 0;
   font-size: var(--text-sm-size);
 }
 .metadataGrid dd {

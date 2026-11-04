@@ -2661,6 +2661,15 @@ export const messages = {
     resourcesTemplateInstructionsDefaultHint:
       "默认模式仅显示用户自定义指令；未配置时为空。模板的完整 AGENTS.md 请在高级模式中查看。",
     resourcesTemplateInstructionsAdvancedHint: "查看模板最终生效的完整 AGENTS.md 内容。",
+    resourcesTemplateInstructionsUnchanged: "未修改",
+    resourcesTemplateInstructionsUnsaved: "有未保存的修改",
+    resourcesTemplateInstructionsSaving: "正在保存…",
+    resourcesTemplateInstructionsSaved: "已保存",
+    resourcesTemplateInstructionsUnavailable: "指令内容尚未加载完成",
+    resourcesTemplateInstructionsIncomplete: "文件内容不完整或无法作为文本编辑，已暂停保存以避免覆盖原文件。",
+    resourcesTemplateInstructionsConflict: "源文件已更新，草稿已保留。请先重新载入最新内容，再进行编辑。",
+    resourcesTemplateInstructionsReload: "放弃草稿并载入最新内容",
+    resourcesTemplateInstructionsDiscard: "放弃修改",
     resourcesTemplateInstructionsEmptyTitle: "暂无自定义指令",
     resourcesTemplateInstructionsEmptyDescription: "此模板仅包含系统生成的默认指令，可切换到高级模式查看。",
     resourcesTemplateInstructionsViewAdvancedAction: "查看完整 AGENTS.md",
@@ -2781,7 +2790,7 @@ export const messages = {
     templateCommitMessage: "提交说明（选填）",
     agentTemplateNextVersion: "本次保存将生成现有模板的新版本 V{version}。",
     templateVersionHistory: "版本历史",
-    templateVersionsTab: "版本（{count}）",
+    templateVersionsTab: "版本",
     templateVersionDelete: "删除版本",
     templateVersionHistoryHint: "保留全部版本，可删除非当前历史版本。回滚只切换当前生效版本。",
     templateRestoreVersion: "切换版本",
@@ -2810,6 +2819,13 @@ export const messages = {
     templatePublishLegacyVersion: "旧模板（未编号）",
     templatePublishLatestHint: "仅发布当前生效版本，不包含历史版本。云端仅保留一份当前内容。",
     templatePublishVersionAction: "发布 {version} 到社区",
+    templatePublishSite: "目标站点",
+    templatePublishAccount: "账号 / 命名空间",
+    templatePublishTarget: "云端模板",
+    templatePublishVisibility: "新建模板为私有；已有模板沿用当前可见范围。",
+    templatePublishEffect: "目标不存在时新建；已存在时替换其当前模板内容，包括移除本地已删除的文件。",
+    templatePublishContents: "包含模板配置及已有的指令、技能和连接器文件，不包含历史版本；仅在明确勾选时包含记忆。",
+    templatePublishDestinationUnknown: "暂不可用，请登录后确认发布目标。",
 
     agentPublishIncludeMemory: "包含智能体记忆",
     agentPublishIncludeMemoryWarning: "可能包含从历史对话中提取的私人信息。仅在确认内容适合共享时启用。",
@@ -5913,6 +5929,17 @@ export const messages = {
     resourcesTemplateInstructionsDefaultHint:
       "Default mode shows only user-defined instructions and is empty when none are configured. View the complete template AGENTS.md in Advanced mode.",
     resourcesTemplateInstructionsAdvancedHint: "View the complete AGENTS.md content applied by this template.",
+    resourcesTemplateInstructionsUnchanged: "No changes",
+    resourcesTemplateInstructionsUnsaved: "Unsaved changes",
+    resourcesTemplateInstructionsSaving: "Saving…",
+    resourcesTemplateInstructionsSaved: "Saved",
+    resourcesTemplateInstructionsUnavailable: "Instructions have not finished loading",
+    resourcesTemplateInstructionsIncomplete:
+      "The file is incomplete or cannot be edited as text. Saving is disabled to protect the original file.",
+    resourcesTemplateInstructionsConflict:
+      "The source file changed. Your draft is preserved. Load the latest content before editing again.",
+    resourcesTemplateInstructionsReload: "Discard draft and load latest content",
+    resourcesTemplateInstructionsDiscard: "Discard changes",
     resourcesTemplateInstructionsEmptyTitle: "No custom instructions",
     resourcesTemplateInstructionsEmptyDescription:
       "This template only contains generated defaults. Switch to Advanced to view the full content.",
@@ -6049,7 +6076,7 @@ export const messages = {
     templateCommitMessage: "Commit message (optional)",
     agentTemplateNextVersion: "This save creates V{version} of the existing template.",
     templateVersionHistory: "Version history",
-    templateVersionsTab: "Versions ({count})",
+    templateVersionsTab: "Versions",
     templateVersionDelete: "Delete version",
     templateVersionHistoryHint: "All versions are retained. Inactive versions can be deleted.",
     templateRestoreVersion: "Switch version",
@@ -6079,6 +6106,15 @@ export const messages = {
     templatePublishLatestHint:
       "Only the active version is published; history is not included. The cloud keeps one current copy.",
     templatePublishVersionAction: "Publish {version} to community",
+    templatePublishSite: "Destination site",
+    templatePublishAccount: "Account / namespace",
+    templatePublishTarget: "Cloud template",
+    templatePublishVisibility: "New templates are private. Existing templates keep their current visibility.",
+    templatePublishEffect:
+      "Creates the target if missing; otherwise replaces its current template contents, including removing files no longer present locally.",
+    templatePublishContents:
+      "Includes template configuration and existing instruction, skill and connector files. History is excluded; memory is included only when selected.",
+    templatePublishDestinationUnknown: "Unavailable — sign in to confirm the destination.",
 
     agentPublishIncludeMemory: "Include agent memory",
     agentPublishIncludeMemoryWarning:

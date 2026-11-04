@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { AgentProfileModal } from "./AgentProfileModal";
@@ -80,6 +80,85 @@ const worker = {
 };
 
 describe("AgentProfileModal", () => {
+  function TemplateModalHarness({ busy = false }: { busy?: boolean }) {
+    const [open, setOpen] = useState(false);
+    const [draft, setDraft] = useState<AgentDraft | null>({ ...agentToDraft(worker), from_template: "local.demo" });
+    return (
+      <>
+        <button onClick={() => setOpen(true)}>Create from template</button>
+        {open && draft ? (
+          <AgentProfileModal
+            t={t}
+            locale="en"
+            agentModalMode="create"
+            agentCreateMode="template"
+            creationWizard
+            agentCreateBotKind="worker"
+            agentDraft={draft}
+            agentBusy={busy}
+            onAgentCreateBotKindChange={vi.fn()}
+            onAgentDraftChange={setDraft}
+            onAgentModelsReset={vi.fn()}
+            onClose={() => setOpen(false)}
+            onSave={vi.fn()}
+          />
+        ) : null}
+      </>
+    );
+  }
+
+  it.each(["Escape", "Cancel"])(
+    "manages template creation focus and returns to its opener after %s",
+    async (method) => {
+      const user = userEvent.setup();
+      render(<TemplateModalHarness />);
+      const trigger = screen.getByRole("button", { name: "Create from template" });
+      trigger.focus();
+      await user.keyboard("{Enter}");
+      const dialog = screen.getByRole("dialog", { name: "createAgentTitle" });
+      await waitFor(() => expect(screen.getByRole("textbox", { name: /^Name/ })).toHaveFocus());
+      const close = within(dialog).getByRole("button", { name: "Close" });
+      close.focus();
+      await user.tab({ shift: true });
+      expect(dialog).toContainElement(document.activeElement as HTMLElement);
+      await user.tab();
+      expect(close).toHaveFocus();
+      if (method === "Escape") {
+        await user.click(screen.getByRole("textbox", { name: /^Name/ }));
+        await user.keyboard("{Escape}");
+      } else await user.click(within(dialog).getByRole("button", { name: "cancel" }));
+      await waitFor(() => expect(dialog).not.toBeInTheDocument());
+      await waitFor(() => expect(trigger).toHaveFocus());
+    },
+  );
+
+  it("does not dismiss template creation while a save is in progress", async () => {
+    const user = userEvent.setup();
+    render(<TemplateModalHarness busy />);
+    await user.click(screen.getByRole("button", { name: "Create from template" }));
+    const dialog = screen.getByRole("dialog", { name: "createAgentTitle" });
+    await user.keyboard("{Escape}");
+    expect(dialog).toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: "Close" })).toBeDisabled();
+    expect(within(dialog).getByRole("button", { name: "cancel" })).toBeDisabled();
+  });
+
+  it("closes the nested avatar editor before the template creation dialog", async () => {
+    const user = userEvent.setup();
+    render(<TemplateModalHarness />);
+    await user.click(screen.getByRole("button", { name: "Create from template" }));
+    await user.click(screen.getByRole("button", { name: "editAvatar" }));
+    const avatar = screen.getByRole("dialog", { name: "editAvatar" });
+    await user.click(within(avatar).getByRole("button", { name: "confirm" }));
+    expect(screen.queryByRole("dialog", { name: "editAvatar" })).not.toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "createAgentTitle" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /editAvatar/ }));
+    await user.click(within(screen.getByRole("dialog", { name: "editAvatar" })).getAllByRole("radio")[0]);
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog", { name: "editAvatar" })).not.toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "createAgentTitle" })).toBeInTheDocument();
+  });
+
   it("defaults to the custom form without creation mode tabs", () => {
     render(
       <AgentProfileModal
@@ -146,7 +225,7 @@ describe("AgentProfileModal", () => {
   it("does not preselect an avatar in create mode", () => {
     const draft = { ...agentToDraft(worker), avatar: "" };
 
-    const { container } = render(
+    const { baseElement: container } = render(
       <AgentProfileModal
         t={t}
         agentModalMode="create"
@@ -227,7 +306,7 @@ describe("AgentProfileModal", () => {
   });
 
   it("shows the instructions field for worker agents after the model section", () => {
-    const { container } = render(
+    const { baseElement: container } = render(
       <AgentProfileModal
         t={t}
         agentModalMode="edit"
@@ -569,7 +648,7 @@ describe("AgentProfileModal", () => {
       );
     }
 
-    const { container } = render(<TestModal />);
+    const { baseElement: container } = render(<TestModal />);
     const createButton = screen.getByRole("button", { name: "Create" });
 
     expect(container.querySelector(".env-required-star")).toHaveTextContent("*");
@@ -632,7 +711,7 @@ describe("AgentProfileModal", () => {
   it("keeps the DSH option compact and shows installation below the runtime field", async () => {
     const user = userEvent.setup();
     const onInstallRuntime = vi.fn();
-    const { container } = render(
+    const { baseElement: container } = render(
       <AgentProfileModal
         t={t}
         agentModalMode="create"
@@ -1178,7 +1257,7 @@ describe("AgentProfileModal", () => {
   });
 
   it("keeps avatar, name, and description together without create-mode tabs", () => {
-    const { container } = render(
+    const { baseElement: container } = render(
       <AgentProfileModal
         t={t}
         agentModalMode="create"

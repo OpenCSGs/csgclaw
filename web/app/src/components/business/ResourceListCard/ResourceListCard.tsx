@@ -28,7 +28,13 @@ export function ResourceListCard({
 }) {
   return (
     <article className={`${styles.card} ${active ? styles.active : ""}`}>
-      <button type="button" disabled={disabled} className={styles.content} onClick={onOpen}>
+      <button
+        type="button"
+        data-csg-control="resource-card"
+        disabled={disabled}
+        className={styles.content}
+        onClick={onOpen}
+      >
         <span className={styles.icon} aria-hidden="true">
           {icon}
         </span>
