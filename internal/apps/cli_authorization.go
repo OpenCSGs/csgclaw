@@ -43,7 +43,7 @@ func (s *Service) checkCLIStatus(ctx context.Context, id string, r record) (bool
 	return r.Package.CLI.ReadStatus(data)
 }
 func (s *Service) authorizeCLI(ctx context.Context, id string, r record) (bool, json.RawMessage, error) {
-	spec := r.Package.CLI
+	spec := s.currentCLIAuthorizationSpec(r.AppID, r.Package.CLI)
 	stage := func(value string) error {
 		return s.editCLI(id, func(r *record) error { r.CLI.Operation.Stage = value; r.CLI.Operation.URL = ""; return nil })
 	}

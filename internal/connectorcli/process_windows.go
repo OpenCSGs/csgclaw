@@ -7,16 +7,32 @@ import (
 	"errors"
 	"os/exec"
 	"strconv"
-	"strings"
+	"syscall"
+
+	"golang.org/x/sys/windows"
 )
 
-func configureCommand(*exec.Cmd) {}
+func configureCommand(cmd *exec.Cmd) {
+	if cmd.SysProcAttr == nil {
+		cmd.SysProcAttr = &syscall.SysProcAttr{}
+	}
+	cmd.SysProcAttr.HideWindow = true
+	cmd.SysProcAttr.CreationFlags |= windows.CREATE_NO_WINDOW
+}
 func processStarted(pid int) string {
-	out, err := exec.Command("powershell", "-NoProfile", "-NonInteractive", "-Command", "(Get-Process -Id "+strconv.Itoa(pid)+" -ErrorAction Stop).StartTime.ToUniversalTime().Ticks").Output()
+	handle, err := windows.OpenProcess(windows.PROCESS_QUERY_LIMITED_INFORMATION, false, uint32(pid))
 	if err != nil {
 		return ""
 	}
-	return strings.TrimSpace(string(out))
+	defer windows.CloseHandle(handle)
+	var created, exited, kernel, user windows.Filetime
+	if err := windows.GetProcessTimes(handle, &created, &exited, &kernel, &user); err != nil {
+		return ""
+	}
+	// FILETIME uses 1601 as its epoch; the persisted .NET ticks use year 1.
+	const epochOffset = uint64(504911232000000000)
+	ticks := uint64(created.HighDateTime)<<32 | uint64(created.LowDateTime)
+	return strconv.FormatUint(ticks+epochOffset, 10)
 }
 func stopCommand(pid int) error { return processgroup.Stop(pid, true) }
 func RecoverProcess(ref ProcessRef) error {

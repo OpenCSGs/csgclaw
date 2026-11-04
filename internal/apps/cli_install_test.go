@@ -16,6 +16,32 @@ import (
 	skillstate "csgclaw/internal/skill/state"
 )
 
+func TestSavedCLIInstallRefreshesLocationWithoutChangingPinnedBytes(t *testing.T) {
+	s, _, _ := newCLIFixture(t)
+	for _, test := range []string{"same package", "different version", "different checksum"} {
+		t.Run(test, func(t *testing.T) {
+			spec := copyJSON(s.packages["feishu"].CLI.Install)
+			archive := spec.Releases["windows-amd64"]
+			archive.URL = "https://github.com/larksuite/cli/old-location.zip"
+			if test == "different checksum" {
+				archive.SHA256 = "different"
+			}
+			spec.Releases["windows-amd64"] = archive
+			if test == "different version" {
+				spec.Version = "other-version"
+			}
+			got := s.currentCLIInstallSpec(spec)
+			want := archive.URL
+			if test == "same package" {
+				want = s.packages["feishu"].CLI.Install.Releases["windows-amd64"].URL
+			}
+			if got.Releases["windows-amd64"].URL != want || got.Releases["windows-amd64"].SHA256 != archive.SHA256 || spec.Releases["windows-amd64"].URL != archive.URL {
+				t.Fatalf("refreshed spec = %+v; original = %+v", got, spec)
+			}
+		})
+	}
+}
+
 func TestCLIConnectAndMigrationImportPreinstalledPackageOffline(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("shell executable fixture")

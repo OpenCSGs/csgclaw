@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import DOMPurify from "dompurify";
 import { copyPreviewBuffer } from "./previewBuffer";
+import { prepareDocxData } from "./docxData";
 
 export default function DocxPreview({
   data,
@@ -18,10 +19,10 @@ export default function DocxPreview({
     let cancelled = false;
     setHTML(null);
     setError(false);
-    void import("mammoth")
-      .then((mammoth) =>
+    void Promise.all([import("mammoth"), prepareDocxData(copyPreviewBuffer(data))])
+      .then(([mammoth, buffer]) =>
         mammoth.convertToHtml(
-          { arrayBuffer: copyPreviewBuffer(data) },
+          { arrayBuffer: buffer },
           {
             convertImage: mammoth.images.imgElement(async (image) => ({
               src: `data:${image.contentType};base64,${await image.read("base64")}`,

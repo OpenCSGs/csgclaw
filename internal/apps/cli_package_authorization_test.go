@@ -33,7 +33,10 @@ func TestFeishuPackageAuthorizationPermissions(t *testing.T) {
 		if !slices.Equal(args, []string{"config", "init", "--new", "--brand", "feishu", "--lang", "zh"}) {
 			t.Fatalf("init command=%v", args)
 		}
+		c.URL("https://accounts.feishu.cn/open-apis/application/v6/larksuite_cli_app/registration")
+		c.URL("https://open.feishu.cn/page/cli")
 		c.URL("https://open.feishu.cn/page/cli?user_code=test&from=cli&addons=old")
+		c.URL("https://accounts.feishu.cn/open-apis/application/v6/larksuite_cli_app/registration")
 		return nil, nil
 	}}}
 	if err := workflow.Run(context.Background(), spec.Init); err != nil {
@@ -43,7 +46,7 @@ func TestFeishuPackageAuthorizationPermissions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if u.Path != "/page/launcher" || u.Query().Get("user_code") != "test" || u.Query().Get("tp") != "sdk" || u.Query().Get("from") != "sdk" {
+	if u.Host != "open.feishu.cn" || u.Path != "/page/launcher" || u.Query().Get("user_code") != "test" || u.Query().Get("tp") != "sdk" || u.Query().Get("from") != "sdk" {
 		t.Fatal("application registration parameters changed")
 	}
 	compressed, err := base64.RawURLEncoding.DecodeString(u.Query().Get("addons"))

@@ -253,6 +253,7 @@ func (s *Service) StartCLI(_ context.Context, id string, in CLIRequest) (CLIOper
 		next.CLI.Recovery = copyJSON(old)
 	}
 	next.CLI.Operation = op
+	next.LastError, next.LastErrorCode, next.LastErrorHTTPStatus = "", "", 0
 	if err = s.persistLocked(id, &next); err != nil {
 		return CLIOperation{}, err
 	}

@@ -15,6 +15,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"csgclaw/internal/activity"
 	"csgclaw/internal/agentengine/contract"
@@ -716,6 +717,9 @@ func TestDSHHelperProcess(t *testing.T) {
 		}
 		switch frame.Method {
 		case "initialize":
+			if delay, err := time.ParseDuration(os.Getenv("DSH_TEST_INITIALIZE_DELAY")); err == nil {
+				time.Sleep(delay)
+			}
 			respond(map[string]any{"protocolVersion": 1, "agentCapabilities": map[string]any{
 				"promptCapabilities": map[string]any{"image": true},
 				"mcpCapabilities":    map[string]any{"http": true},

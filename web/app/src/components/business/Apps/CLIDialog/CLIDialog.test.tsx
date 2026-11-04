@@ -439,6 +439,24 @@ describe("Feishu CLI authorization", () => {
     await waitFor(() => expect(screen.queryByRole("alert")).not.toBeInTheDocument());
     expect(screen.getByRole("link", { name: "Authorize account" })).toBeInTheDocument();
   });
+  it("clears the previous failure while retrying the connection", async () => {
+    const failed: AppInstallation = {
+      ...resource,
+      status: "error",
+      last_error_code: "cli_operation_failed",
+      operation: undefined,
+    };
+    vi.mocked(fetchAppResource).mockResolvedValue(failed);
+    vi.mocked(startCLIOperation).mockImplementation(async () => {
+      vi.mocked(fetchAppResource).mockResolvedValue({ ...failed, operation: resource.operation });
+      return resource.operation!;
+    });
+    render(<CLIDialog definition={definition} existing={failed} t={t} onClose={vi.fn()} onChanged={vi.fn()} />);
+    expect(await screen.findByRole("alert")).toBeInTheDocument();
+    await userEvent.setup().click(screen.getByRole("button", { name: "Connect Feishu" }));
+    await waitFor(() => expect(screen.queryByRole("alert")).not.toBeInTheDocument());
+    expect(screen.getByRole("link", { name: "Authorize account" })).toBeInTheDocument();
+  });
 });
 
 it("creates and authorizes the selected CLI package", async () => {
