@@ -1542,7 +1542,7 @@ Anonymous Session: <session_id> | Agent: <agent_name> (<agent_id>)
 `extra_type` 时，服务端按 `plain_text` 处理；`extra` 为空或省略时不注入额外上下文，
 即使提供了 `extra_type` 也会忽略。未知的非空 `extra_type` 返回 `400
 invalid_request`。`plain_text` 的 `extra` 最大为 64 KiB，`web_page_dom` 最大为
-512 KiB，且整个请求仍受 1 MiB 上限约束。
+512 KiB。请求中除 Base64 文件数据以外的内容最多为 1 MiB。
 
 服务端会把额外内容包装为带固定安全约束的 `<extra_context>`，并与本轮用户输入
 一起提交给 Agent。`web_page_dom` 被标记为不可信的页面快照；产品文档 Skill 是产品
@@ -1576,6 +1576,36 @@ invalid_request`。`plain_text` 的 `extra` 最大为 64 KiB，`web_page_dom` �
   "stream": false
 }
 ```
+
+提示词和文件可以通过同一个 JSON 请求发送，在 `content` 中添加 `input_file`：
+
+```json
+{
+  "input": [{
+    "role": "user",
+    "content": [
+      {"type": "input_text", "text": "请概括这份文件。"},
+      {
+        "type": "input_file",
+        "filename": "notes.txt",
+        "file_data": "data:text/plain;base64,SGVsbG8gd29ybGQK"
+      }
+    ]
+  }],
+  "stream": true
+}
+```
+
+`filename` 为文件名称，`file_data` 使用 `data:<media-type>;base64,<data>` 格式，
+包含完整文件内容。多个文件使用多个 `input_file`，也支持仅包含文件的消息。
+文件限制与消息接口相同：最多 10 个文件，解码后单个文件最多 1 GiB，合计最多
+2 GiB。HTTP 请求体上限包含 Base64 编码增加的体积，以及 1 MiB 的其他 JSON 内容。
+Base64 会使传输体积增加约三分之一；JSON 客户端和代理可能将编码后的请求缓存在内存中。
+
+文件在本轮执行期间提供给选定 Agent，执行完成、失败或取消后删除。
+后续请求需要使用文件时，应当再次提交。文件数据或元数据无效时返回
+`400 invalid_request`；文件大小或整个 HTTP 请求体超过上限时返回
+`413 invalid_request`。文件校验和准备工作在 SSE 开始前完成。
 
 省略 `stream` 或设置为 `false` 时，接口返回包含最终 assistant 文本和 session
 元数据的 Responses 风格 JSON。设置 `stream: true` 时，接口返回
@@ -1628,8 +1658,8 @@ runtime 会降级为一个文本 delta。Agent 完成前，连接已建立并先
 }
 ```
 
-V1 接受文本输入、可选的纯文本额外上下文以及可选的文本输出流。
-tools、instructions、非 user role、attachments 和未知请求字段都会被拒绝。
+V1 接受 user 文本、Base64 文件输入、可选的纯文本额外上下文以及可选的文本输出流。
+请求字段和内容字段均进行严格校验。
 内置 live demo 和可替换的前端 mock 边界见 [Session API Demo 前端指南](web/session-api-demo.zh.md)。
 
 ### `GET /api/v1/agents/{id}/llm/models`

@@ -1585,8 +1585,8 @@ optional `extra` and `extra_type` fields:
 but `extra_type` is omitted or empty, the server uses `plain_text`. An omitted
 or empty `extra` injects no context and ignores `extra_type`. An unknown non-empty
 `extra_type` returns `400 invalid_request`. A `plain_text` extra is limited to
-64 KiB and a `web_page_dom` extra to 512 KiB; the complete request remains subject
-to the 1 MiB request limit.
+64 KiB and a `web_page_dom` extra to 512 KiB. The request excluding Base64 file
+data is limited to 1 MiB.
 
 The server wraps the content in an `<extra_context>` with fixed safety guidance
 and submits it with the user input. A `web_page_dom` value is labeled as an
@@ -1625,6 +1625,39 @@ Text-only user message items are also accepted:
   "stream": false
 }
 ```
+
+To send a prompt and files in one JSON request, include `input_file` parts:
+
+```json
+{
+  "input": [{
+    "role": "user",
+    "content": [
+      {"type": "input_text", "text": "Summarize this file."},
+      {
+        "type": "input_file",
+        "filename": "notes.txt",
+        "file_data": "data:text/plain;base64,SGVsbG8gd29ybGQK"
+      }
+    ]
+  }],
+  "stream": true
+}
+```
+
+`filename` is the file's basename. `file_data` is a `data:<media-type>;base64,<data>`
+URL containing the complete file. Repeat `input_file` for multiple files; a
+message containing only files is also accepted. File limits match the message
+API: at most 10 files, 1 GiB per decoded file, and 2 GiB of decoded files per
+request. The HTTP body allowance includes Base64 expansion plus 1 MiB of other
+JSON content. Base64 increases transfer size by about one third; JSON clients and
+proxies may buffer the encoded request in memory.
+
+Files are available to the selected Agent during this turn and are removed when
+the turn completes, fails, or is canceled. Attach them again in a later request
+when needed. Invalid file data or metadata returns `400 invalid_request`; file
+size and overall HTTP body limits return `413 invalid_request`. Validation and
+file preparation finish before the SSE stream starts.
 
 With `stream` omitted or set to `false`, the endpoint returns the completed
 Responses-style JSON object containing the final assistant text and session
@@ -1681,9 +1714,9 @@ Errors use this JSON shape:
 }
 ```
 
-The v1 endpoint accepts text input, optional supplemental text context, and
-optional text-output streaming. It rejects tools, instructions, non-user roles,
-attachments, and unknown request fields.
+The v1 endpoint accepts user text, Base64 file inputs, optional supplemental text
+context, and optional text-output streaming. Request and content-part fields are
+strictly validated.
 See [Session API Demo Frontend Guide](web/session-api-demo.md) for the bundled live demo and mockable frontend boundary.
 
 ### `GET /api/v1/agents/{id}/llm/models`

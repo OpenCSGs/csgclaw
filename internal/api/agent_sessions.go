@@ -15,10 +15,13 @@ import (
 	"time"
 
 	"csgclaw/internal/agentengine"
+	"csgclaw/internal/im"
 	agentruntime "csgclaw/internal/runtime"
 )
 
 const agentSessionResponseBodyLimit = 1024 * 1024
+
+const agentSessionFileBodyLimit = ((im.MaxAttachmentMessageBytes+2)/3)*4 + 4*(im.MaxAttachmentsPerMessage-1) + agentSessionResponseBodyLimit
 
 const (
 	agentSessionExtraTypePlainText   = "plain_text"
@@ -55,8 +58,10 @@ type agentSessionInputMessage struct {
 }
 
 type agentSessionInputPart struct {
-	Type string `json:"type"`
-	Text string `json:"text"`
+	Type     string `json:"type"`
+	Text     string `json:"text,omitempty"`
+	Filename string `json:"filename,omitempty"`
+	FileData string `json:"file_data,omitempty"`
 }
 
 type agentSessionResponse struct {
@@ -111,14 +116,19 @@ func (h *Handler) createAgentSessionResponse(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	prompt, stream, err := parseAgentSessionResponseRequest(w, r)
+	input, stream, err := parseAgentSessionResponseRequest(w, r)
 	if err != nil {
 		param := "input"
 		var validationErr *agentSessionRequestValidationError
 		if errors.As(err, &validationErr) {
 			param = validationErr.param
 		}
-		writeAgentSessionError(w, http.StatusBadRequest, "invalid_request", err.Error(), param)
+		status := http.StatusBadRequest
+		var maxBytesError *http.MaxBytesError
+		if errors.Is(err, errAttachmentPayloadTooLarge) || errors.As(err, &maxBytesError) {
+			status = http.StatusRequestEntityTooLarge
+		}
+		writeAgentSessionError(w, status, "invalid_request", err.Error(), param)
 		return
 	}
 	selected, err := h.resolveSessionAgent(strings.TrimSpace(pathValue(r, "id")))
@@ -176,6 +186,18 @@ func (h *Handler) createAgentSessionResponse(w http.ResponseWriter, r *http.Requ
 	h.addSessionTurn(turnKey, turn)
 	defer h.removeSessionTurn(turnKey, turn.turnID)
 
+	conversation := h.agentEngine.Conversations(selected.ID)
+	parts, cleanup, err := input.prepare(runCtx, conversation.Files())
+	defer cleanup()
+	if err != nil {
+		if agentengine.ErrorCodeOf(err) == agentengine.ErrorInvalidRequest {
+			writeAgentSessionError(w, http.StatusBadRequest, "invalid_request", err.Error(), "input")
+		} else {
+			writeAgentSessionError(w, http.StatusServiceUnavailable, "file_unavailable", "input file could not be prepared", "input")
+		}
+		return
+	}
+
 	var eventStream *agentSessionEventStream
 	var sink agentengine.EventSink
 	if stream {
@@ -202,15 +224,12 @@ func (h *Handler) createAgentSessionResponse(w http.ResponseWriter, r *http.Requ
 		})
 	}
 
-	result := h.agentEngine.Conversations(selected.ID).Run(runCtx, agentengine.TurnRequest{
+	result := conversation.Run(runCtx, agentengine.TurnRequest{
 		ID:              agentengine.TurnID(responseID),
 		ConversationKey: agentengine.ConversationKey(binding.ConversationKey),
 		Admission:       agentengine.AdmissionRejectIfBusy,
 		Interaction:     agentengine.InteractionReject,
-		Input: []agentengine.InputPart{{
-			Kind: agentengine.InputPartText,
-			Text: prompt,
-		}},
+		Input:           parts,
 	}, sink)
 	if result.Status != agentengine.TurnSucceeded {
 		if errors.Is(r.Context().Err(), context.Canceled) {
@@ -364,32 +383,43 @@ func turnResultError(result agentengine.TurnResult) error {
 	return errors.New("agent response failed")
 }
 
-func parseAgentSessionResponseRequest(w http.ResponseWriter, r *http.Request) (string, bool, error) {
-	r.Body = http.MaxBytesReader(w, r.Body, agentSessionResponseBodyLimit)
+func parseAgentSessionResponseRequest(w http.ResponseWriter, r *http.Request) (agentSessionInput, bool, error) {
+	r.Body = http.MaxBytesReader(w, r.Body, agentSessionFileBodyLimit)
+	body := &io.LimitedReader{R: r.Body, N: agentSessionFileBodyLimit + 1}
 	var request agentSessionResponseRequest
-	decoder := json.NewDecoder(r.Body)
+	decoder := json.NewDecoder(body)
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&request); err != nil {
-		return "", false, fmt.Errorf("decode request: %w", err)
+		return agentSessionInput{}, false, fmt.Errorf("decode request: %w", err)
 	}
 	if err := ensureJSONEOF(decoder); err != nil {
-		return "", false, err
+		return agentSessionInput{}, false, err
 	}
 	if len(request.Input) == 0 || string(request.Input) == "null" {
-		return "", false, fmt.Errorf("input is required")
+		return agentSessionInput{}, false, fmt.Errorf("input is required")
 	}
-	prompt, err := parseAgentSessionInput(request.Input)
+	input, err := parseAgentSessionInput(request.Input)
 	if err != nil {
-		return "", false, err
+		return agentSessionInput{}, false, err
+	}
+	nonFileBytes := agentSessionFileBodyLimit + 1 - body.N
+	for _, file := range input.Files {
+		nonFileBytes -= int64(len(file.Data))
+	}
+	if nonFileBytes > agentSessionResponseBodyLimit {
+		return agentSessionInput{}, false, fmt.Errorf("request excluding Base64 file data must be at most %d bytes", agentSessionResponseBodyLimit)
+	}
+	if err := input.validateFileLimits(); err != nil {
+		return agentSessionInput{}, false, err
 	}
 	extraContext, err := renderAgentSessionExtraContext(request.ExtraType, request.Extra)
 	if err != nil {
-		return "", false, err
+		return agentSessionInput{}, false, err
 	}
 	if extraContext != "" {
-		prompt += "\n\n" + extraContext
+		input.Text = strings.TrimSpace(input.Text + "\n\n" + extraContext)
 	}
-	return prompt, request.Stream != nil && *request.Stream, nil
+	return input, request.Stream != nil && *request.Stream, nil
 }
 
 func renderAgentSessionExtraContext(extraType, extra string) (string, error) {
@@ -469,74 +499,95 @@ func escapeAgentSessionExtraDelimiters(extra string) string {
 	})
 }
 
-func parseAgentSessionInput(raw json.RawMessage) (string, error) {
+func parseAgentSessionInput(raw json.RawMessage) (agentSessionInput, error) {
 	var direct string
 	if err := json.Unmarshal(raw, &direct); err == nil {
 		if direct = strings.TrimSpace(direct); direct != "" {
-			return direct, nil
+			return agentSessionInput{Text: direct}, nil
 		}
-		return "", fmt.Errorf("input must not be empty")
+		return agentSessionInput{}, fmt.Errorf("input must not be empty")
 	}
 
 	var items []json.RawMessage
 	if err := json.Unmarshal(raw, &items); err != nil {
-		return "", fmt.Errorf("input must be a string or an array of user messages")
+		return agentSessionInput{}, fmt.Errorf("input must be a string or an array of user messages")
 	}
 	if len(items) == 0 {
-		return "", fmt.Errorf("input must contain at least one user message")
+		return agentSessionInput{}, fmt.Errorf("input must contain at least one user message")
 	}
+	var input agentSessionInput
 	texts := make([]string, 0, len(items))
 	for _, rawItem := range items {
 		var item agentSessionInputMessage
 		if err := decodeStrictAgentSessionJSON(rawItem, &item); err != nil {
-			return "", fmt.Errorf("invalid input message: %w", err)
+			return agentSessionInput{}, fmt.Errorf("invalid input message: %w", err)
 		}
 		if item.Type != "" && item.Type != "message" {
-			return "", fmt.Errorf("input message type must be message")
+			return agentSessionInput{}, fmt.Errorf("input message type must be message")
 		}
 		if item.Role != "user" {
-			return "", fmt.Errorf("input message role must be user")
+			return agentSessionInput{}, fmt.Errorf("input message role must be user")
 		}
-		text, err := parseAgentSessionContent(item.Content)
+		content, err := parseAgentSessionContent(item.Content)
 		if err != nil {
-			return "", err
+			return agentSessionInput{}, err
 		}
-		texts = append(texts, text)
+		if content.Text != "" {
+			texts = append(texts, content.Text)
+		}
+		input.Files = append(input.Files, content.Files...)
 	}
-	return strings.Join(texts, "\n\n"), nil
+	input.Text = strings.Join(texts, "\n\n")
+	return input, nil
 }
 
-func parseAgentSessionContent(raw json.RawMessage) (string, error) {
+func parseAgentSessionContent(raw json.RawMessage) (agentSessionInput, error) {
 	if len(raw) == 0 || string(raw) == "null" {
-		return "", fmt.Errorf("input message content is required")
+		return agentSessionInput{}, fmt.Errorf("input message content is required")
 	}
 	var direct string
 	if err := json.Unmarshal(raw, &direct); err == nil {
 		if direct = strings.TrimSpace(direct); direct != "" {
-			return direct, nil
+			return agentSessionInput{Text: direct}, nil
 		}
-		return "", fmt.Errorf("input message content must not be empty")
+		return agentSessionInput{}, fmt.Errorf("input message content must not be empty")
 	}
 	var rawParts []json.RawMessage
 	if err := json.Unmarshal(raw, &rawParts); err != nil || len(rawParts) == 0 {
-		return "", fmt.Errorf("input message content must be text or input_text parts")
+		return agentSessionInput{}, fmt.Errorf("input message content must be text, input_text or input_file parts")
 	}
+	var input agentSessionInput
 	parts := make([]string, 0, len(rawParts))
 	for _, rawPart := range rawParts {
 		var part agentSessionInputPart
 		if err := decodeStrictAgentSessionJSON(rawPart, &part); err != nil {
-			return "", fmt.Errorf("invalid input content part: %w", err)
+			return agentSessionInput{}, fmt.Errorf("invalid input content part: %w", err)
 		}
-		if part.Type != "input_text" {
-			return "", fmt.Errorf("input content part type must be input_text")
+		switch part.Type {
+		case "input_text":
+			if part.Filename != "" || part.FileData != "" {
+				return agentSessionInput{}, fmt.Errorf("input_text must contain only text")
+			}
+			text := strings.TrimSpace(part.Text)
+			if text == "" {
+				return agentSessionInput{}, fmt.Errorf("input_text must not be empty")
+			}
+			parts = append(parts, text)
+		case "input_file":
+			if part.Text != "" {
+				return agentSessionInput{}, fmt.Errorf("input_file must contain only filename and file_data")
+			}
+			file, err := parseAgentSessionFile(part.Filename, part.FileData)
+			if err != nil {
+				return agentSessionInput{}, err
+			}
+			input.Files = append(input.Files, file)
+		default:
+			return agentSessionInput{}, fmt.Errorf("input content part type must be input_text or input_file")
 		}
-		text := strings.TrimSpace(part.Text)
-		if text == "" {
-			return "", fmt.Errorf("input_text must not be empty")
-		}
-		parts = append(parts, text)
 	}
-	return strings.Join(parts, "\n\n"), nil
+	input.Text = strings.Join(parts, "\n\n")
+	return input, nil
 }
 
 func decodeStrictAgentSessionJSON(raw json.RawMessage, dst any) error {
@@ -860,7 +911,7 @@ func writeAgentSessionError(w http.ResponseWriter, status int, code, message str
 	}
 	errorType := "server_error"
 	switch {
-	case status == http.StatusBadRequest:
+	case status == http.StatusBadRequest || status == http.StatusRequestEntityTooLarge:
 		errorType = "invalid_request_error"
 	case status == http.StatusNotFound:
 		errorType = "not_found_error"
