@@ -53,6 +53,7 @@ func (m *appServerManager) recoverContext(ctx context.Context, live *liveSession
 	threadID := (*waiter).threadID
 	(*waiter).mu.RLock()
 	visible := (*waiter).visibleActivity
+	textOnlyUserInput := (*waiter).textOnlyUserInput
 	(*waiter).mu.RUnlock()
 	if visible {
 		return PromptResponse{}, &contextWindowError{}
@@ -75,6 +76,7 @@ func (m *appServerManager) recoverContext(ctx context.Context, live *liveSession
 		live.mu.Unlock()
 		next.mu.Lock()
 		next.diagnostic = diagnostics.From(ctx)
+		next.textOnlyUserInput = textOnlyUserInput
 		next.mu.Unlock()
 		*waiter = next
 		live.setAppServerTurnContext(threadID, next, ctx)

@@ -1518,7 +1518,7 @@ Portal 上传和下载都使用当前 CSGClaw 实例的 `endpoint` 和网关登�
 
 顶层字段 `attachment_ids` 是附件 ID 数组，用于引用同一 Agent、同一会话中已保存的文件。各个 ID 必须互不重复。启用服务认证时，上传文件或引用附件 ID 的请求均需提供有效凭证，认证失败返回 `401`。未知 ID 或其他 Agent、其他会话中的 ID 返回 `404`。JSON 请求可以同时引用已有附件 ID 和传入 Base64 文件，合计最多 10 个。返回的 `input_attachments` 按 `attachment_ids` 的顺序列出已有文件，然后按上传顺序列出新文件。
 
-启用认证时，缺少有效凭证的 JSON 请求可以发送纯文本，请求体最多 1 MiB。超过上限返回 `413`。
+启用认证时，如果会话没有等待提交的受保护表单，`user_input` 为 `false` 或省略的纯文本 JSON 请求可以使用匿名访问，请求体最多 1 MiB。超过上限返回 `413`。
 
 最简请求使用字符串 input：
 
@@ -1597,7 +1597,7 @@ const response = await fetch(responsesUrl, {
 if (!response.ok) throw new Error(`Session request failed (HTTP ${response.status})`)
 ```
 
-multipart 表单字段为 `input`、可选的 `stream` 和可重复的 `file`。如需同时使用 `attachment_ids`、`extra` 或 `extra_type`，请通过会话的 `/attachments` 接口使用 `files` 上传文件，再在 `/responses` 的 JSON 请求中传入返回的附件 ID。只发送文件时可使用仅含 `attachment_ids` 的 JSON 请求。
+multipart 表单字段为 `input`、可选的 `stream` 和 `user_input`，以及可重复的 `file`。如需同时使用 `attachment_ids`、`extra` 或 `extra_type`，请通过会话的 `/attachments` 接口使用 `files` 上传文件，再在 `/responses` 的 JSON 请求中传入返回的附件 ID。只发送文件时可使用仅含 `attachment_ids` 的 JSON 请求。
 
 JSON 请求也可以在 `content` 中使用 `input_file` 发送文件。
 
@@ -1715,6 +1715,37 @@ runtime 会降级为一个文本 delta。Agent 完成前，连接已建立并先
 不同 session ID 可以并发执行。
 不同 Agent 可以各自使用同一个外部 `session_id`。
 服务端不限制响应总时长；客户端断开连接或显式取消请求时，仍会取消正在执行的响应。
+
+### 会话提问
+
+每次请求默认关闭提问表单。省略 `user_input` 或传入 `false` 时，服务端会提示 Agent 在普通回复中提问。如果 Runtime 仍请求表单，本轮可以继续执行。命令或助手只给出结构化问题时，普通问题和选项会显示为文字，私密问题只提示需要使用安全表单。用户可以在同一会话发送下一条消息回答问题。
+
+支持提问表单的客户端在 `/responses` JSON 请求中设置 `"user_input":true` 即可启用。multipart 请求使用字符串字段 `user_input=true`。CSGClaw 自带的房间 UI 通过房间消息接口支持提问表单。
+
+启用实例服务认证时，设置 `user_input: true` 的创建请求、查询待回答问题的 `GET /interactions`、提交答案的 `POST /interactions/{interaction_id}/respond` 都需要该实例的有效服务凭证。缺少凭证或凭证无效时返回 `401 unauthorized`。取消已启用表单的执行，或在仍有受保护表单等待提交时开始下一轮，也需要有效凭证。Portal 使用与该实例附件访问相同的实例地址和网关授权方式。
+
+SSE 事件 `request_user_input` 的顶层字段为 `type`、`interaction_id`、`status`、`detached`、`questions`、`requested_at` 和可选的 `auto_resolve_at`。每道题包含 `id`、`header` 和 `question`，也可以包含 `options`、`is_other` 和 `is_secret`。按数组顺序显示问题和选项。[Agentic 前端接入示例](web/agentic-session-user-input.zh.md)
+
+原生提问的 `detached` 为 `false`，原回复等待答案。使用 `stream: false` 时，客户端需要通过另一条连接查询问题并提交答案。命令生成的提问使用 `detached: true`，原回复可以完成。命令没有指定截止时间时，会话表单默认在 24 小时后过期。使用 `stream: false` 时，这类表单位于成功响应顶层的 `interactions` 数组。
+
+### `GET /api/v1/agents/{agent}/sessions/{session_id}/interactions`
+
+成功返回 `200 OK` 和 `{"interactions":[...]}`，每项使用上述表单字段。`status: "pending"` 表示可以提交，`status: "submitting"` 表示正在处理一次提交。此时禁用提交按钮，定期查询同一列表，直到问题消失或恢复为 `pending`。刷新页面或连接中断后，也按这个规则恢复表单。原回复连接断开时，服务端取消仍在执行的回复。
+
+### `POST /api/v1/agents/{agent}/sessions/{session_id}/interactions/{interaction_id}/respond`
+
+为指定表单提交一次答案。使用原来的实例、Agent 和会话，问题 ID 取自事件中的 `questions[].id`。
+
+```json
+{"answers":{"source":{"answers":["PDF"]},"note":{"answers":["user_note: 只收录公开文档。"]}}}
+```
+
+选项值使用原始 `label`。自由填写的内容使用 `user_note: ` 前缀。一次提交整组问题。每道题都需要提供 `answers` 数组，显式传入 `[]` 可以跳过该题。使用 `{"answers":{}}` 跳过整组问题。
+
+- `detached: false` 的问题提交成功后返回 `204 No Content`。后续输出通过原来的 `/responses` 请求返回。
+- `detached: true` 的问题收到答案后，在同一会话继续执行。`/respond` 默认返回 `200` 和最终 JSON 回复，设置顶层 `"stream":true` 后返回 `200` 和新的 SSE。跳过整张表单时返回 `204 No Content`。答案正在启动后续轮次时，同一会话并发提交的普通 `/responses` 请求在 JSON 模式下返回 `409 session_busy`；已开始的 SSE 通过事件返回错误。
+
+如果 Runtime 在接收 detached 答案前不可用，表单会恢复为 `pending`。SSE 请求的 HTTP `200` 只表示连接已经建立。收到 SSE 错误、连接中断或服务暂时不可用时，查询表单列表，原问题恢复为 `pending` 后可使用原 interaction ID 重试。无效答案返回 `400 invalid_request`，表单继续等待提交。找不到会话或问题时，分别返回 `404 session_not_found` 或 `404 interaction_not_found`。重复提交返回 `409 interaction_already_resolved`。已过期或已取消的问题返回 `410 interaction_gone`。
 
 ### `POST /api/v1/agents/{agent}/sessions/{session_id}/responses/cancel`
 

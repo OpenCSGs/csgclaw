@@ -179,10 +179,13 @@ func TestAgentSessionResponsesMultipartInputFields(t *testing.T) {
 				if prompt := sessionTurnText(turn); prompt != "Read the PDF." {
 					t.Errorf("worker prompt = %q", prompt)
 				}
+				if turn.Interaction != agentengine.InteractionUserInputOnly {
+					t.Errorf("multipart user_input selected policy %q", turn.Interaction)
+				}
 				checkSessionWorkerFiles(t, workspace, turn, files)
 				return agentengine.TurnResult{Status: agentengine.TurnSucceeded, Output: "Read."}
 			}
-			form := sessionMultipartForm(t, map[string][]string{"input": {tc.input}, "stream": {fmt.Sprint(tc.stream)}}, map[string][]sessionUploadFixture{"file": files})
+			form := sessionMultipartForm(t, map[string][]string{"input": {tc.input}, "stream": {fmt.Sprint(tc.stream)}, "user_input": {"true"}}, map[string][]sessionUploadFixture{"file": files})
 			status, body := sessionFileHTTP(t, server, http.MethodPost, multipartSessionPath, form.Header.Get("Content-Type"), form.Body, "Bearer test-server-token")
 			if status != http.StatusOK || len(engine.client.Calls()) != 1 {
 				t.Fatalf("HTTP %d, worker calls %d: %s", status, len(engine.client.Calls()), body)
@@ -250,6 +253,8 @@ func TestAgentSessionRejectsInvalidMultipartInputFields(t *testing.T) {
 		{"payload with stream", map[string][]string{"payload": {payload}, "stream": {"true"}}, []string{"files"}},
 		{"duplicate input", map[string][]string{"input": {input, input}}, []string{"file"}},
 		{"duplicate stream", map[string][]string{"input": {input}, "stream": {"false", "true"}}, []string{"file"}},
+		{"duplicate user input flag", map[string][]string{"input": {input}, "user_input": {"false", "true"}}, []string{"file"}},
+		{"invalid user input flag", map[string][]string{"input": {input}, "user_input": {"unknown"}}, []string{"file"}},
 		{"unknown text field", map[string][]string{"input": {input}, "unexpected": {"field"}}, []string{"file"}},
 		{"invalid input JSON", map[string][]string{"input": {"Read."}}, []string{"file"}},
 		{"null input", map[string][]string{"input": {"null"}}, []string{"file"}},

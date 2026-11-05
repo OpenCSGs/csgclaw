@@ -120,6 +120,8 @@ func (h *Handler) registerCoreRoutes(router chi.Router) {
 				r.Post("/recreate", h.recreateAgent)
 				r.Post("/upgrade", h.upgradeAgent)
 				r.Post("/sessions/{session_id}/attachments", h.uploadAgentSessionAttachments)
+				r.Get("/sessions/{session_id}/interactions", h.listAgentSessionInteractions)
+				r.Post("/sessions/{session_id}/interactions/{interaction_id}/respond", h.respondAgentSessionInteraction)
 				r.Post("/sessions/{session_id}/responses", h.createAgentSessionResponse)
 				r.Post("/sessions/{session_id}/responses/cancel", h.cancelAgentSessionResponse)
 			})

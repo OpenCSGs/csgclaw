@@ -19,9 +19,12 @@ import (
 )
 
 type agentSessionInput struct {
-	attachmentIDs []string
-	Text          string
-	Files         []agentSessionInputFile
+	preservePendingInteractions bool
+	respondingTo                string
+	userInput                   bool
+	attachmentIDs               []string
+	Text                        string
+	Files                       []agentSessionInputFile
 }
 
 type agentSessionInputFile struct {
@@ -80,18 +83,35 @@ func parseAgentSessionMultipart(w http.ResponseWriter, r *http.Request) (agentSe
 	if err != nil {
 		return agentSessionInput{}, false, err
 	}
-	inputs, streams := form.Value["input"], form.Value["stream"]
+	inputs := form.Value["input"]
 	for name := range form.Value {
-		if name != "input" && name != "stream" {
+		if name != "input" && name != "stream" && name != "user_input" {
 			return agentSessionInput{}, false, fmt.Errorf("unknown multipart field %q", name)
 		}
 	}
-	if len(inputs) != 1 || len(streams) > 1 {
-		return agentSessionInput{}, false, fmt.Errorf("expected one input field and an optional stream field")
+	if len(inputs) != 1 {
+		return agentSessionInput{}, false, fmt.Errorf("expected one input field")
 	}
 	metadataBytes := len(inputs[0])
-	if len(streams) == 1 {
-		metadataBytes += len(streams[0])
+	var request agentSessionResponseRequest
+	for _, field := range []string{"stream", "user_input"} {
+		values := form.Value[field]
+		if len(values) == 0 {
+			continue
+		}
+		if len(values) > 1 {
+			return agentSessionInput{}, false, fmt.Errorf("expected at most one %s field", field)
+		}
+		metadataBytes += len(values[0])
+		enabled, err := strconv.ParseBool(values[0])
+		if err != nil {
+			return agentSessionInput{}, false, fmt.Errorf("%s must be a boolean", field)
+		}
+		if field == "stream" {
+			request.Stream = &enabled
+		} else {
+			request.UserInput = enabled
+		}
 	}
 	if metadataBytes > agentSessionResponseBodyLimit {
 		return agentSessionInput{}, false, fmt.Errorf("%w: multipart fields exceed %d bytes", errAttachmentPayloadTooLarge, agentSessionResponseBodyLimit)
@@ -100,14 +120,7 @@ func parseAgentSessionMultipart(w http.ResponseWriter, r *http.Request) (agentSe
 	if input == "" || input == "null" {
 		return agentSessionInput{}, false, fmt.Errorf("input must be a JSON string or an array of user messages")
 	}
-	request := agentSessionResponseRequest{Input: json.RawMessage(input)}
-	if len(streams) == 1 {
-		stream, err := strconv.ParseBool(streams[0])
-		if err != nil {
-			return agentSessionInput{}, false, fmt.Errorf("stream must be a boolean")
-		}
-		request.Stream = &stream
-	}
+	request.Input = json.RawMessage(input)
 	return request.parseInput(files, int64(metadataBytes))
 }
 

@@ -652,7 +652,7 @@ func (c *memoryConversations) Run(ctx context.Context, request agentengine.TurnR
 	if request.Continuation != agentengine.ContinuationCreateOrResume && request.Continuation != agentengine.ContinuationRequireExisting {
 		return failed(agentengine.ErrorInvalidRequest, fmt.Sprintf("unsupported continuation policy %q", request.Continuation))
 	}
-	if request.Interaction != agentengine.InteractionResolve && request.Interaction != agentengine.InteractionReject && request.Interaction != agentengine.InteractionSkipUserInput {
+	if !request.Interaction.Valid() {
 		return failed(agentengine.ErrorInvalidRequest, fmt.Sprintf("unsupported interaction policy %q", request.Interaction))
 	}
 	if err := ctx.Err(); err != nil {
@@ -683,7 +683,12 @@ func (c *memoryConversations) Run(ctx context.Context, request agentengine.TurnR
 		return result
 	}
 	defer releaseExecution()
-	c.client.interactions.Interrupt(c.agentID, request.ConversationKey, "", true)
+	if err := c.client.interactions.BeginTurn(c.agentID, request); err != nil {
+		result := agentengine.TurnResult{Status: agentengine.TurnFailed, Error: err}
+		turn.cancel()
+		c.completeMemoryTurn(key, turn, result)
+		return result
+	}
 
 	c.client.mu.Lock()
 	agentItem, exists := c.client.agents[c.agentID]
@@ -724,7 +729,7 @@ func (c *memoryConversations) Run(ctx context.Context, request agentengine.TurnR
 	var policyResult *agentengine.TurnResult
 	recordingSink := agentengine.EventSinkFunc(func(eventCtx context.Context, event agentengine.TurnEvent) error {
 		if event.Interaction != nil {
-			switch request.Interaction {
+			switch request.Interaction.For(event.Interaction.Kind) {
 			case agentengine.InteractionReject:
 				result := failed(agentengine.ErrorInteractionUnsupported, "Runtime interaction is not supported by this caller")
 				result.Dispatched = true
@@ -769,7 +774,7 @@ func (c *memoryConversations) Run(ctx context.Context, request agentengine.TurnR
 	} else {
 		c.client.interactions.Interrupt(c.agentID, request.ConversationKey, request.ID, false)
 	}
-	if result.Status == agentengine.TurnSucceeded && request.Interaction == agentengine.InteractionResolve {
+	if result.Status == agentengine.TurnSucceeded && request.Interaction.For(agentengine.InteractionUserInput) == agentengine.InteractionResolve {
 		var args *activity.RequestUserInputArgs
 		for _, event := range turn.events {
 			if event.Output != nil && event.Output.Kind == agentengine.OutputItemRequestUserInput {
@@ -779,7 +784,7 @@ func (c *memoryConversations) Run(ctx context.Context, request agentengine.TurnR
 			}
 		}
 		if args != nil {
-			item, err := c.client.interactions.CreateDetached(c.agentID, request.ConversationKey, request.ID, *args, func(item agentengine.InteractionRequest) {
+			item, err := c.client.interactions.CreateDetached(c.agentID, request.ConversationKey, request.ID, *args, request.Interaction, func(item agentengine.InteractionRequest) {
 				event := agentengine.TurnEvent{Kind: agentengine.TurnEventActivityUpdate, Activity: &agentengine.ActivityUpdate{ID: item.ID, Kind: string(activity.RuntimeEventUserInputResolved), Payload: item.Payload}}
 				if snapshot, ok := item.Payload.(activity.UserInputSnapshot); ok {
 					event.Activity.Status = string(snapshot.Status)
@@ -790,6 +795,7 @@ func (c *memoryConversations) Run(ctx context.Context, request agentengine.TurnR
 			})
 			if err != nil {
 				result = failed(agentengine.ErrorRuntimeFailed, err.Error())
+				result.Dispatched = true
 			} else {
 				result.Interactions = []agentengine.InteractionRequest{item}
 			}
@@ -848,6 +854,18 @@ func (c *memoryConversations) Reset(ctx context.Context, key agentengine.Convers
 	delete(c.client.conversations, identity)
 	c.client.mu.Unlock()
 	return nil
+}
+
+func (c *memoryConversations) PendingInteractions(ctx context.Context, key agentengine.ConversationKey) ([]agentengine.InteractionRequest, error) {
+	if ctx != nil {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+	}
+	if c == nil || c.client == nil || c.agentID == "" || key == "" {
+		return nil, &agentengine.TurnError{Code: agentengine.ErrorInvalidRequest, Message: "agent and conversation are required"}
+	}
+	return c.client.interactions.Pending(c.agentID, key), nil
 }
 
 func (c *memoryConversations) GetInteraction(ctx context.Context, key agentengine.ConversationKey, id string) (agentengine.InteractionRequest, error) {

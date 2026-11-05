@@ -35,7 +35,7 @@ func NewConversationAdapter(runtimeID string, backend ConversationBackend) contr
 type ConversationBackend interface {
 	EnsureEngineSession(ctx context.Context, runtimeID, conversationKey string) (string, error)
 	ExistingEngineSession(ctx context.Context, runtimeID, conversationKey string) (string, bool, error)
-	PromptTurn(ctx context.Context, runtimeID, sessionID, turnID string, blocks []PromptContentBlock, accepted func()) error
+	PromptTurn(ctx context.Context, runtimeID string, req PromptRequest) error
 	SubscribeSession(runtimeID, sessionID string) (<-chan activity.RuntimeEvent, func())
 	ResetConversation(ctx context.Context, runtimeID, conversationKey string) error
 	WorkspaceDir(runtimeID string) (string, error)
@@ -79,10 +79,16 @@ func (a *ConversationAdapter) Run(ctx context.Context, request contract.TurnRequ
 	var dispatchedState atomic.Bool
 	promptDone := make(chan error, 1)
 	go func() {
-		promptDone <- a.runtime.PromptTurn(runCtx, a.runtimeID, sessionID, string(request.ID), blocks, func() {
-			if dispatchedState.CompareAndSwap(false, true) {
-				close(accepted)
-			}
+		promptDone <- a.runtime.PromptTurn(runCtx, a.runtimeID, PromptRequest{
+			SessionID:           sessionID,
+			ClientUserMessageID: string(request.ID),
+			Prompt:              blocks,
+			TextOnlyUserInput:   request.Interaction == contract.InteractionTextOnly,
+			OnAccepted: func() {
+				if dispatchedState.CompareAndSwap(false, true) {
+					close(accepted)
+				}
+			},
 		})
 	}()
 
@@ -203,8 +209,12 @@ func (a *ConversationAdapter) handleEvent(ctx context.Context, request contract.
 			result := failedResult(contract.ErrorRuntimeFailed, "Codex returned invalid structured output")
 			return &result
 		}
-		if artifact.RequestUserInput != nil {
-			if result := emit(contract.TurnEvent{Kind: contract.TurnEventOutputItem, Text: event.Text, Output: &contract.OutputItem{Kind: contract.OutputItemRequestUserInput, Payload: *artifact.RequestUserInput}}); result != nil {
+		if form := artifact.RequestUserInput; form != nil {
+			if request.Interaction == contract.InteractionTextOnly {
+				output.fallback = &conversationQuestionFallback{
+					questions: form.Questions, sourceID: event.ToolCallID, sourceText: event.Text,
+				}
+			} else if result := emit(contract.TurnEvent{Kind: contract.TurnEventOutputItem, Text: event.Text, Output: &contract.OutputItem{Kind: contract.OutputItemRequestUserInput, Payload: *form}}); result != nil {
 				return result
 			}
 		}
@@ -387,7 +397,7 @@ func runtimeOutputMediaType(requested, name string, prefix []byte) (string, erro
 }
 
 func (a *ConversationAdapter) handleInteraction(ctx context.Context, policy contract.InteractionPolicy, interaction contract.InteractionRequest, sink contract.EventSink) *contract.TurnResult {
-	switch policy {
+	switch policy.For(interaction.Kind) {
 	case contract.InteractionReject:
 		result := failedResult(contract.ErrorInteractionUnsupported, "Runtime interaction is not supported by this caller")
 		return &result

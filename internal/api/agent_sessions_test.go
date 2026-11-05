@@ -831,6 +831,10 @@ func performAgentSessionRequest(t *testing.T, handler *Handler, agentSelector, s
 	return recorder
 }
 
-func (fakeSessionConversations) GetInteraction(context.Context, agentengine.ConversationKey, string) (agentengine.InteractionRequest, error) {
-	return agentengine.InteractionRequest{}, &agentengine.TurnError{Code: agentengine.ErrorInteractionNotFound, Message: "no interaction in this test fixture"}
+func (c fakeSessionConversations) GetInteraction(ctx context.Context, key agentengine.ConversationKey, id string) (agentengine.InteractionRequest, error) {
+	return c.delegate.GetInteraction(ctx, key, id)
+}
+
+func (c fakeSessionConversations) PendingInteractions(ctx context.Context, key agentengine.ConversationKey) ([]agentengine.InteractionRequest, error) {
+	return c.delegate.PendingInteractions(ctx, key)
 }

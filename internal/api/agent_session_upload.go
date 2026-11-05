@@ -13,10 +13,10 @@ import (
 	"csgclaw/internal/im"
 )
 
-var errSessionFileAuthorization = errors.New("valid server authorization is required")
+var errSessionAuthorization = errors.New("valid server authorization is required")
 
 func writeSessionInputError(w http.ResponseWriter, err error) {
-	if errors.Is(err, errSessionFileAuthorization) {
+	if errors.Is(err, errSessionAuthorization) {
 		writeAgentSessionError(w, http.StatusUnauthorized, "unauthorized", err.Error(), nil)
 		return
 	}
@@ -35,7 +35,7 @@ func writeSessionInputError(w http.ResponseWriter, err error) {
 
 func (h *Handler) uploadAgentSessionAttachments(w http.ResponseWriter, r *http.Request) {
 	if !h.validateServerAccessToken(r.Header.Get("Authorization")) {
-		writeSessionInputError(w, errSessionFileAuthorization)
+		writeSessionInputError(w, errSessionAuthorization)
 		return
 	}
 	sessionID := pathValue(r, "session_id")

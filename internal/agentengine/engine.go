@@ -143,7 +143,7 @@ func (c *conversations) Run(ctx context.Context, request TurnRequest, sink Event
 	if request.Continuation != ContinuationCreateOrResume && request.Continuation != ContinuationRequireExisting {
 		return failedResult(ErrorInvalidRequest, fmt.Sprintf("unsupported continuation policy %q", request.Continuation))
 	}
-	if request.Interaction != InteractionResolve && request.Interaction != InteractionReject && request.Interaction != InteractionSkipUserInput {
+	if !request.Interaction.Valid() {
 		return failedResult(ErrorInvalidRequest, fmt.Sprintf("unsupported interaction policy %q", request.Interaction))
 	}
 	if err := contract.ValidateInput(request.Input); err != nil {
@@ -262,7 +262,12 @@ func (c *conversations) Run(ctx context.Context, request TurnRequest, sink Event
 			turn.ctx = contract.WithVideoGenerationHandler(turn.ctx, c.videoHandler(turn, sink, selected.Spec.Model.VideoGeneration))
 		}
 	}
-	c.engine.interactions.Interrupt(c.agentID, request.ConversationKey, "", true)
+	if err := c.engine.interactions.BeginTurn(c.agentID, request); err != nil {
+		result := TurnResult{Status: TurnFailed, Error: err}
+		turn.cancel()
+		c.engine.complete(identity, turn, result)
+		return result
+	}
 	runtimeAdapter, releaseRuntime, resolveErr := c.engine.runtimes.conversationRuntime(turn.ctx, c.agentID)
 	if resolveErr != nil {
 		diagnostics.From(turn.ctx).Failure(string(resolveErr.Code), "runtime.prepare", resolveErr.Message)
@@ -280,6 +285,10 @@ func (c *conversations) Run(ctx context.Context, request TurnRequest, sink Event
 		return c.engine.recordAndEmit(diagnostics.WithRecord(eventCtx, diagnostics.From(turn.ctx)), turn, sink, event)
 	})
 
+	if runtimeRequest.Interaction == InteractionTextOnly {
+		const guidance = "Question forms (request_user_input) are disabled for this turn. If you need clarification, ask in your reply and wait for the user's next message."
+		runtimeRequest.Input = append([]InputPart{{Kind: InputPartText, Text: guidance}}, runtimeRequest.Input...)
+	}
 	diagnostics.From(turn.ctx).Capture("runtime.input", runtimeRequest)
 	captureTurnInputFiles(turn.ctx, runtimeRequest)
 	result := runtimeAdapter.Run(turn.ctx, runtimeRequest, orderedSink)
@@ -314,12 +323,13 @@ func (c *conversations) Run(ctx context.Context, request TurnRequest, sink Event
 	} else {
 		c.engine.interactions.Interrupt(c.agentID, request.ConversationKey, request.ID, false)
 	}
-	if result.Status == TurnSucceeded && request.Interaction == InteractionResolve && turn.structuredUserInput != nil {
-		interaction, err := c.engine.interactions.CreateDetached(c.agentID, request.ConversationKey, request.ID, *turn.structuredUserInput, func(interaction InteractionRequest) {
+	if result.Status == TurnSucceeded && request.Interaction.For(InteractionUserInput) == InteractionResolve && turn.structuredUserInput != nil {
+		interaction, err := c.engine.interactions.CreateDetached(c.agentID, request.ConversationKey, request.ID, *turn.structuredUserInput, request.Interaction, func(interaction InteractionRequest) {
 			c.engine.emitDetached(identity, turn, sink, interaction)
 		})
 		if err != nil {
 			result = failedResult(ErrorRuntimeFailed, err.Error())
+			result.Dispatched = true
 		} else {
 			result.Interactions = []InteractionRequest{interaction}
 		}
@@ -437,6 +447,18 @@ func (c *conversations) Reset(ctx context.Context, key ConversationKey) error {
 		return err
 	}
 	return nil
+}
+
+func (c *conversations) PendingInteractions(ctx context.Context, key ConversationKey) ([]InteractionRequest, error) {
+	if ctx != nil {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+	}
+	if c == nil || c.engine == nil || c.agentID == "" || key == "" {
+		return nil, &TurnError{Code: ErrorInvalidRequest, Message: "agent and conversation are required"}
+	}
+	return c.engine.interactions.Pending(c.agentID, key), nil
 }
 
 func (c *conversations) GetInteraction(ctx context.Context, key ConversationKey, id string) (InteractionRequest, error) {

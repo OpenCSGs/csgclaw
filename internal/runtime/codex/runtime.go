@@ -352,13 +352,8 @@ func (r *Runtime) Prompt(ctx context.Context, runtimeID, sessionID, prompt strin
 	return err
 }
 
-func (r *Runtime) PromptTurn(ctx context.Context, runtimeID, sessionID, turnID string, blocks []PromptContentBlock, accepted func()) error {
-	_, err := r.SessionManager().Prompt(ctx, SessionHandle{RuntimeID: runtimeID}, PromptRequest{
-		SessionID:           strings.TrimSpace(sessionID),
-		ClientUserMessageID: strings.TrimSpace(turnID),
-		Prompt:              blocks,
-		OnAccepted:          accepted,
-	})
+func (r *Runtime) PromptTurn(ctx context.Context, runtimeID string, req PromptRequest) error {
+	_, err := r.SessionManager().Prompt(ctx, SessionHandle{RuntimeID: runtimeID}, req)
 	return err
 }
 

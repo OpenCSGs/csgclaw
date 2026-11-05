@@ -94,6 +94,8 @@ const (
 	ContinuationCreateOrResume       = contract.ContinuationCreateOrResume
 	ContinuationRequireExisting      = contract.ContinuationRequireExisting
 	InteractionResolve               = contract.InteractionResolve
+	InteractionUserInputOnly         = contract.InteractionUserInputOnly
+	InteractionTextOnly              = contract.InteractionTextOnly
 	InteractionReject                = contract.InteractionReject
 	InteractionSkipUserInput         = contract.InteractionSkipUserInput
 	InputPartText                    = contract.InputPartText
@@ -124,6 +126,7 @@ const (
 	ErrorFileUnavailable             = contract.ErrorFileUnavailable
 	ErrorFileNotFound                = contract.ErrorFileNotFound
 	ErrorInteractionNotFound         = contract.ErrorInteractionNotFound
+	ErrorInteractionPending          = contract.ErrorInteractionPending
 	ErrorInteractionUnsupported      = contract.ErrorInteractionUnsupported
 	ErrorInteractionAlreadyResolved  = contract.ErrorInteractionAlreadyResolved
 	ErrorInteractionGone             = contract.ErrorInteractionGone

@@ -132,16 +132,17 @@ func (f *fakeConversationRuntime) ExistingEngineSession(_ context.Context, _, co
 	sessionID := f.conversations[conversationKey]
 	return sessionID, sessionID != "", nil
 }
-func (f *fakeConversationRuntime) PromptTurn(ctx context.Context, runtimeID, sessionID, turnID string, blocks []codex.PromptContentBlock, accepted func()) error {
+func (f *fakeConversationRuntime) PromptTurn(ctx context.Context, runtimeID string, req codex.PromptRequest) error {
 	f.mu.Lock()
-	f.turnID = turnID
-	f.promptBlocks = append([]codex.PromptContentBlock(nil), blocks...)
+	f.turnID = req.ClientUserMessageID
+	f.promptBlocks = append([]codex.PromptContentBlock(nil), req.Prompt...)
 	f.mu.Unlock()
-	if accepted != nil {
-		accepted()
+	if req.OnAccepted != nil {
+		req.OnAccepted()
 	}
-	parts := make([]string, 0, len(blocks))
-	for _, block := range blocks {
+	sessionID := req.SessionID
+	parts := make([]string, 0, len(req.Prompt))
+	for _, block := range req.Prompt {
 		if block.Text != nil {
 			parts = append(parts, block.Text.Text)
 		} else if block.LocalImage != nil {
@@ -661,7 +662,10 @@ func TestConversationResolveAddressesPendingUserInput(t *testing.T) {
 	runtimeImpl := &fakeConversationRuntime{}
 	broker := codex.NewUserInputBroker(nativeInteractionSink(runtimeImpl.publish))
 	runtimeImpl.userInput = broker
-	runtimeImpl.prompt = func(ctx context.Context, runtimeID, sessionID, _ string) error {
+	var receivedPrompt string
+	decisions := make(chan codex.UserInputDecision, 1)
+	runtimeImpl.prompt = func(ctx context.Context, runtimeID, sessionID, prompt string) error {
+		receivedPrompt = prompt
 		decision, err := broker.Request(ctx, codex.PendingUserInputRequest{
 			Execution: activity.ExecutionRef{RuntimeID: runtimeID, SessionID: sessionID},
 			Questions: []activity.UserInputQuestionSnapshot{{ID: "choice", Header: "Choice", Question: "Continue?", Options: []activity.UserInputOptionSnapshot{{Label: "Yes"}, {Label: "No"}}}},
@@ -669,9 +673,8 @@ func TestConversationResolveAddressesPendingUserInput(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		if answers := decision.Response.Answers["choice"].Answers; len(answers) != 1 || answers[0] != "Yes" {
-			return errors.New("native response was lost")
-		}
+		decisions <- decision
+		runtimeImpl.publish(activity.RuntimeEvent{RuntimeID: runtimeID, SessionID: sessionID, Kind: activity.RuntimeEventTextDelta, Text: "Continue?", Payload: map[string]any{"phase": "final_answer"}})
 		runtimeImpl.publish(activity.RuntimeEvent{RuntimeID: runtimeID, SessionID: sessionID, Kind: activity.RuntimeEventPromptCompleted})
 		return nil
 	}
@@ -679,27 +682,41 @@ func TestConversationResolveAddressesPendingUserInput(t *testing.T) {
 		ID: "agent-a", Name: "A", Role: agent.RoleWorker, RuntimeKind: agent.RuntimeKindCodex,
 		RuntimeID: "runtime-a", Status: string(runtime.StateRunning),
 	}}, runtimeImpl))
-	interactionID := make(chan string, 1)
-	runDone := make(chan TurnResult, 1)
-	go func() {
-		runDone <- engine.Conversations("agent-a").Run(context.Background(), TurnRequest{
-			ID: "turn-1", ConversationKey: "conversation-1", Input: textInput("hello"), Interaction: InteractionResolve,
-		}, EventSinkFunc(func(_ context.Context, event TurnEvent) error {
-			if event.Interaction != nil {
-				interactionID <- event.Interaction.ID
+	conversations := engine.Conversations("agent-a")
+	for _, policy := range []InteractionPolicy{InteractionTextOnly, InteractionUserInputOnly, InteractionResolve} {
+		t.Run(string(policy), func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+			defer cancel()
+			request := TurnRequest{ID: TurnID(policy), ConversationKey: "conversation-1", Input: textInput("hello"), Interaction: policy}
+			result := conversations.Run(ctx, request, EventSinkFunc(func(ctx context.Context, event TurnEvent) error {
+				if event.Interaction == nil {
+					return nil
+				}
+				if policy == InteractionTextOnly {
+					return errors.New("text-only turn exposed a native question")
+				}
+				return conversations.Resolve(ctx, InteractionResolution{
+					ConversationKey: request.ConversationKey, InteractionID: event.Interaction.ID, ResponderID: "tester",
+					Answers: map[string]InteractionAnswer{"choice": {Values: []string{"Yes"}}},
+				})
+			}))
+			if result.Status != TurnSucceeded || !result.Dispatched || result.Output != "Continue?" {
+				t.Fatalf("Run() = %+v", result)
 			}
-			return nil
-		}))
-	}()
-	id := <-interactionID
-	if err := engine.Conversations("agent-a").Resolve(context.Background(), InteractionResolution{
-		ConversationKey: "conversation-1", InteractionID: id, ResponderID: "tester",
-		Answers: map[string]InteractionAnswer{"choice": {Values: []string{"Yes"}}},
-	}); err != nil {
-		t.Fatal(err)
-	}
-	if result := <-runDone; result.Status != TurnSucceeded || !result.Dispatched {
-		t.Fatalf("result = %+v", result)
+			if !strings.Contains(receivedPrompt, "hello") || strings.Contains(receivedPrompt, "ask in your reply") != (policy == InteractionTextOnly) {
+				t.Fatalf("unexpected model input for %s: %q", policy, receivedPrompt)
+			}
+			decision := <-decisions
+			if policy == InteractionTextOnly {
+				if decision.Snapshot.Status != activity.UserInputStatusSkipped || decision.Response.Answers == nil || len(decision.Response.Answers) != 0 {
+					t.Fatalf("native tool received %+v, want skipped with an empty answer map", decision)
+				}
+				return
+			}
+			if answers := decision.Response.Answers["choice"].Answers; len(answers) != 1 || answers[0] != "Yes" {
+				t.Fatalf("native tool received %+v, want the selected answer", decision)
+			}
+		})
 	}
 }
 
