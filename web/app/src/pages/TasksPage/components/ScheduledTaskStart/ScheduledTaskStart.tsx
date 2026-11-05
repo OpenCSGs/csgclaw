@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { CalendarClock } from "lucide-react";
-import { Button, TextArea } from "@/components/ui";
+import { Button, PopoverAnchor, PopoverContent, PopoverRoot, TextArea } from "@/components/ui";
 import { AgentAvatarContent } from "@/components/business/AgentAvatar";
 import type { AgentLike } from "@/models/agents";
 import type { TranslateFn } from "@/models/conversations";
@@ -75,72 +75,95 @@ export function ScheduledTaskStart({ agents, t, busy = false, error = "", focusT
           <p>{t("scheduledTaskTextBody")}</p>
         </div>
         <div key={focusToken} className={styles.composer} data-focus={focusToken > 0 || undefined}>
-          <TextArea
-            ref={editor}
-            rows={4}
-            value={text}
-            disabled={busy}
-            aria-label={t("scheduledTaskTextInput")}
-            placeholder={t("scheduledTaskTextPlaceholder")}
-            aria-controls={candidates.length ? "scheduled-executor-options" : undefined}
-            aria-expanded={candidates.length > 0}
-            aria-activedescendant={
-              candidates.length ? `scheduled-executor-${Math.min(active, candidates.length - 1)}` : undefined
-            }
-            onChange={(event) => {
-              setText(event.currentTarget.value);
-              setCaret(event.currentTarget.selectionStart);
-              setDismissed(false);
-              setActive(0);
+          <PopoverRoot
+            open={candidates.length > 0}
+            onOpenChange={(open) => {
+              if (!open) setDismissed(true);
             }}
-            onSelect={(event) => setCaret(event.currentTarget.selectionStart)}
-            onKeyDown={(event) => {
-              if (event.nativeEvent.isComposing || !candidates.length) return;
-              if (event.key === "Escape") {
-                event.preventDefault();
-                setDismissed(true);
-              }
-              if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-                event.preventDefault();
-                setActive(
-                  (current) => (current + (event.key === "ArrowDown" ? 1 : -1) + candidates.length) % candidates.length,
-                );
-              }
-              if (event.key === "Enter" && !event.shiftKey) {
-                event.preventDefault();
-                choose(candidates[Math.min(active, candidates.length - 1)]);
-              }
-            }}
-          />
-          {candidates.length ? (
-            <div
-              id="scheduled-executor-options"
-              role="listbox"
-              aria-label={t("scheduledTaskAgentLabel")}
-              className={styles.mentions}
-            >
-              {candidates.map((agent, index) => (
-                <Button
-                  key={agent.id}
-                  ref={index === Math.min(active, candidates.length - 1) ? activeOption : null}
-                  id={`scheduled-executor-${index}`}
-                  variant="ghost"
-                  size="sm"
-                  role="option"
-                  aria-selected={active === index}
-                  onMouseDown={(event) => event.preventDefault()}
-                  onClick={() => choose(agent)}
+          >
+            <PopoverAnchor asChild>
+              <TextArea
+                ref={editor}
+                rows={4}
+                value={text}
+                disabled={busy}
+                aria-label={t("scheduledTaskTextInput")}
+                placeholder={t("scheduledTaskTextPlaceholder")}
+                aria-controls={candidates.length ? "scheduled-executor-options" : undefined}
+                aria-expanded={candidates.length > 0}
+                aria-activedescendant={
+                  candidates.length ? `scheduled-executor-${Math.min(active, candidates.length - 1)}` : undefined
+                }
+                onChange={(event) => {
+                  setText(event.currentTarget.value);
+                  setCaret(event.currentTarget.selectionStart);
+                  setDismissed(false);
+                  setActive(0);
+                }}
+                onSelect={(event) => setCaret(event.currentTarget.selectionStart)}
+                onKeyDown={(event) => {
+                  if (event.nativeEvent.isComposing || !candidates.length) return;
+                  if (event.key === "Escape") {
+                    event.preventDefault();
+                    setDismissed(true);
+                  }
+                  if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+                    event.preventDefault();
+                    setActive(
+                      (current) =>
+                        (current + (event.key === "ArrowDown" ? 1 : -1) + candidates.length) % candidates.length,
+                    );
+                  }
+                  if (event.key === "Enter" && !event.shiftKey) {
+                    event.preventDefault();
+                    choose(candidates[Math.min(active, candidates.length - 1)]);
+                  }
+                }}
+              />
+            </PopoverAnchor>
+            {candidates.length ? (
+              <PopoverContent
+                side="bottom"
+                avoidCollisions={false}
+                align="start"
+                role="presentation"
+                className={styles.mentionPopover}
+                onOpenAutoFocus={(event) => event.preventDefault()}
+                onCloseAutoFocus={(event) => event.preventDefault()}
+                onInteractOutside={(event) => {
+                  if (event.target === editor.current) event.preventDefault();
+                }}
+              >
+                <div
+                  id="scheduled-executor-options"
+                  role="listbox"
+                  aria-label={t("scheduledTaskAgentLabel")}
+                  className={styles.mentions}
                 >
-                  <span className={styles.executor}>
-                    <span className={styles.avatar} aria-hidden="true">
-                      <AgentAvatarContent avatar={agent.avatar} fallback={executorName(agent).slice(0, 1)} />
-                    </span>
-                    <span>{executorName(agent)}</span>
-                  </span>
-                </Button>
-              ))}
-            </div>
-          ) : null}
+                  {candidates.map((agent, index) => (
+                    <Button
+                      key={agent.id}
+                      ref={index === Math.min(active, candidates.length - 1) ? activeOption : null}
+                      id={`scheduled-executor-${index}`}
+                      variant="ghost"
+                      size="sm"
+                      role="option"
+                      aria-selected={active === index}
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={() => choose(agent)}
+                    >
+                      <span className={styles.executor}>
+                        <span className={styles.avatar} aria-hidden="true">
+                          <AgentAvatarContent avatar={agent.avatar} fallback={executorName(agent).slice(0, 1)} />
+                        </span>
+                        <span>{executorName(agent)}</span>
+                      </span>
+                    </Button>
+                  ))}
+                </div>
+              </PopoverContent>
+            ) : null}
+          </PopoverRoot>
           <div className={styles.actions}>
             <span>{t("scheduledTaskTextEnterHint")}</span>
             <Button
