@@ -184,6 +184,7 @@ export function FilesTab({
           ) : null}
           <Breadcrumb
             className="chat-files-path"
+            wrap
             aria-label={t("chatWorkspaceFiles")}
             overflowLabel={t("chatBreadcrumbShowEarlier")}
             items={[

@@ -19,6 +19,8 @@ test("renders semantic breadcrumbs and calls the selected path action", async ()
   expect(screen.getByRole("navigation", { name: "Workspace files" })).toBeInTheDocument();
   expect(view.container.querySelector('button[title="workspace"] img')).toHaveAttribute("width", "20");
   expect(screen.getByText("annual")).toHaveAttribute("aria-current", "page");
+  expect(screen.getByText("annual")).toHaveAttribute("title", "annual");
+  expect(screen.getByRole("button", { name: "reports" })).toHaveAttribute("title", "reports");
   await user.click(screen.getByRole("button", { name: "reports" }));
   expect(navigate).toHaveBeenCalledTimes(1);
 });

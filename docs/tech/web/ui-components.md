@@ -48,6 +48,8 @@ Use `Button` or `IconButton` for commands and `LinkButton` for navigation. `Link
 
 `Breadcrumb` is a semantic navigation pattern in the shared UI library; Radix Primitives does not provide a dedicated breadcrumb primitive. Use the `home` item for the home/root action and `items` for path segments. Mark the current segment with `current`, and provide either `href` or `onClick` for navigable segments. Long paths collapse their middle segments into the shared Radix Dropdown Menu; `maxVisibleItems` and `overflowLabel` allow callers to adapt the layout and localization.
 
+Use `wrap` when full directory names need to remain visible in a narrow panel. It lets segments use the available width and wrap long names instead of truncating them; all items also expose their full label through `title`.
+
 ## Overlay Layers
 
 Layer values are shared design tokens. Local component stacking such as `z-index: 1` or `2` is acceptable inside a contained stacking context, but cross-component overlays must use these tokens:
