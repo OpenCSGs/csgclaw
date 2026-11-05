@@ -3,7 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { errorMessage as apiErrorMessage } from "@/api/client";
 import { deleteHubTemplateRequest, publishHubTemplateToCommunityRequest } from "@/api/hub";
 import { deleteSkillRequest, installRemoteSkillRequest, uploadSkillArchive } from "@/api/skills";
-import { isDeletableHubTemplate, isVisibleInHubTemplateList } from "@/models/hubWorkspace";
+import { hubTemplateFullName, isDeletableHubTemplate, isVisibleInHubTemplateList } from "@/models/hubWorkspace";
 import type { HubTemplate } from "@/models/hubWorkspace";
 import { isReadonlySkill } from "@/models/skillhub";
 import type { SkillSummary } from "@/models/skillhub";
@@ -225,7 +225,7 @@ export function useWorkspaceHubController({
       if (!template?.id || !isDeletableHubTemplate(template)) {
         return false;
       }
-      const label = template.name || template.id;
+      const label = hubTemplateFullName(template);
       if (!window.confirm(`${t("resourcesDeleteConfirm")} ${label}?\n\n${t("resourcesDeleteLocalOnlyNotice")}`)) {
         return false;
       }

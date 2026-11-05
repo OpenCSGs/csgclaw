@@ -196,6 +196,8 @@ export function hubTemplateFullName(template: HubTemplate | null | undefined): s
   return name || String(template?.id ?? "").trim();
 }
 
+const HUB_TIME_ZONE = "Asia/Shanghai";
+
 export function formatHubDate(value: string | number | Date | null | undefined, locale: LocaleCode): string {
   if (!value) {
     return "-";
@@ -204,7 +206,7 @@ export function formatHubDate(value: string | number | Date | null | undefined, 
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
-    timeZone: "UTC",
+    timeZone: HUB_TIME_ZONE,
   }).format(new Date(value));
 }
 
@@ -220,8 +222,8 @@ export function formatHubDateTime(value: string | number | Date | null | undefin
     minute: "2-digit",
     second: "2-digit",
     hour12: false,
-    timeZone: "UTC",
-  }).format(new Date(value))} (UTC)`;
+    timeZone: HUB_TIME_ZONE,
+  }).format(new Date(value))} (UTC+8)`;
 }
 
 export function formatHubTemplateCount(count: number, locale: LocaleCode, t: TranslateFn): string {
