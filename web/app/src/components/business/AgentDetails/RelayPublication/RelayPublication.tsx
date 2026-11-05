@@ -16,6 +16,8 @@ import {
   DropdownMenuItem,
 } from "@/components/ui";
 
+const SHOW_RELAY_PUBLISH_ACTION = false;
+
 // Shared agent detail action; the focused controller owns its API lifecycle.
 export function RelayPublication({
   controller,
@@ -24,7 +26,7 @@ export function RelayPublication({
 }: {
   controller: RelayPublicationController;
   t: TranslateFn;
-  renderAction: (action: ReactNode) => ReactNode;
+  renderAction: (action?: ReactNode) => ReactNode;
 }) {
   const { status, publish, unpublish } = controller;
   const [open, setOpen] = useState(false);
@@ -45,21 +47,23 @@ export function RelayPublication({
   return (
     <>
       {renderAction(
-        <DropdownMenuItem
-          disabled={busy || status.isPending || status.isError}
-          onSelect={() => {
-            publish.reset();
-            unpublish.reset();
-            setOpen(true);
-          }}
-        >
-          {canUnpublish ? (
-            <DownloadCloud aria-hidden="true" size={15} strokeWidth={2} />
-          ) : (
-            <UploadCloud aria-hidden="true" size={15} strokeWidth={2} />
-          )}
-          <span>{busy ? t(unpublish.isPending ? "relayUnpublishing" : "agentPublishing") : t(actionLabel)}</span>
-        </DropdownMenuItem>,
+        canUnpublish || SHOW_RELAY_PUBLISH_ACTION ? (
+          <DropdownMenuItem
+            disabled={busy || status.isPending || status.isError}
+            onSelect={() => {
+              publish.reset();
+              unpublish.reset();
+              setOpen(true);
+            }}
+          >
+            {canUnpublish ? (
+              <DownloadCloud aria-hidden="true" size={15} strokeWidth={2} />
+            ) : (
+              <UploadCloud aria-hidden="true" size={15} strokeWidth={2} />
+            )}
+            <span>{busy ? t(unpublish.isPending ? "relayUnpublishing" : "agentPublishing") : t(actionLabel)}</span>
+          </DropdownMenuItem>
+        ) : undefined,
       )}
       {data?.published ? (
         <span role="status">
@@ -107,7 +111,7 @@ export function RelayPublication({
             >
               {t("cancel")}
             </Button>
-            {data?.pending && !data.removing && !data.publishing ? (
+            {SHOW_RELAY_PUBLISH_ACTION && data?.pending && !data.removing && !data.publishing ? (
               <Button variant="primary" size="md" disabled={busy} onClick={() => void submit()}>
                 {t("retry")}
               </Button>
@@ -126,11 +130,11 @@ export function RelayPublication({
               >
                 {t(actionLabel)}
               </Button>
-            ) : (
+            ) : SHOW_RELAY_PUBLISH_ACTION ? (
               <Button variant="primary" size="md" disabled={busy} onClick={() => void submit()}>
                 {t("relayPublish")}
               </Button>
-            )}
+            ) : null}
           </DialogFooter>
         </DialogContent>
       </DialogRoot>
