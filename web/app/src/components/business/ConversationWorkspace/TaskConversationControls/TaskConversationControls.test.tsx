@@ -1,3 +1,4 @@
+import { MemoryRouter, useLocation } from "react-router-dom";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { TaskConversationControls } from "./TaskConversationControls";
@@ -133,4 +134,41 @@ it("keeps the saved guide out of composer controls and does not carry a shared w
   expect(screen.getByLabelText("iaWorkdirTitle")).toHaveAttribute("title", expect.stringContaining("/project"));
   fireEvent.click(screen.getByRole("button", { name: "taskEntryNew" }));
   expect(onNewTask).toHaveBeenCalledExactlyOnceWith();
+});
+
+it("shows pending cloud work and opens a new task with the same remote target", () => {
+  const cloudRoom: IMConversation = {
+    ...conversation,
+    created_by: "u-admin",
+    cloud_agent: { agent_id: "agt_cloud", connection_id: "conn", user_id: "user-cloud" },
+    members: ["u-admin", "user-cloud"],
+    messages: [{ id: "job", sender_id: "u-admin", content: "work" }],
+  };
+  function Location() {
+    const location = useLocation();
+    return <span data-testid="cloud-location">{location.pathname + location.search}</span>;
+  }
+  const { rerender } = render(
+    <MemoryRouter>
+      <TaskConversationControls conversation={cloudRoom} agents={[]} participants={[]} t={t} />
+      <Location />
+    </MemoryRouter>,
+  );
+  expect(screen.getByRole("status")).toHaveTextContent("cloudChatWaiting");
+  expect(screen.getByRole("button", { name: "taskEntryNew" })).toBeDisabled();
+  const completed = {
+    ...cloudRoom,
+    messages: [
+      ...cloudRoom.messages,
+      { id: "reply", sender_id: "user-cloud", content: "Done", client_message_id: "relay-reply:job" },
+    ],
+  };
+  rerender(
+    <MemoryRouter>
+      <TaskConversationControls conversation={completed} agents={[]} participants={[]} t={t} />
+      <Location />
+    </MemoryRouter>,
+  );
+  fireEvent.click(screen.getByRole("button", { name: "taskEntryNew" }));
+  expect(screen.getByTestId("cloud-location")).toHaveTextContent("/new?cloud=agt_cloud");
 });

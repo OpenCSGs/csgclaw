@@ -24,3 +24,5 @@ export const CHAT_SIDE_PANEL_STORAGE_KEY = "csgclaw.im.chatSidePanel.v1" as cons
 export const CHAT_SIDE_PANEL_WIDTH_STORAGE_KEY = "csgclaw.im.chatSidePanelWidth" as const;
 
 export const MANAGER_SETUP_DISMISSED_STORAGE_KEY = "csgclaw.manager.setupDismissed" as const;
+export const CLOUD_AGENTS_STORAGE_KEY = "csgclaw.agents.cloud.v3" as const;
+export const CLOUD_CHAT_STORAGE_KEY = "csgclaw.agents.cloud.chat.v1" as const;

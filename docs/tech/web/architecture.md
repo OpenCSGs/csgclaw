@@ -266,3 +266,25 @@ Chinese companion: `architecture.zh.md`.
   Bundle smoke without static-dist    -> pnpm --dir web/app exec vite build --outDir /private/tmp/csgclaw-web-build --emptyOutDir
   Intentional embedded output update  -> pnpm --dir web/app build
 ```
+
+## Agent directory views
+
+`AgentOverviewPage` owns the existing `/agents` route and its query views:
+`?tab=templates` opens reusable templates; `?tab=plaza` opens the cloud agent
+directory; `?cloud=<relay-agent-id>` selects an added cloud agent in My agents.
+Routing helpers in `models/routing.ts` generate these links. Local agents keep
+their existing `/agents/:agentId` paths. Cloud IDs never enter local Agent APIs.
+
+The plaza reads `GET /api/v1/relay/agents`, backed by public community instances
+from the current login site. `relay.agent_id` supplies the Relay agent
+ID for availability checks and invocation, including agents on other machines.
+External publishing registers Relay before idempotently creating an external community
+instance. Platform template workers patch existing instances by the CSGCLAW_NAME content
+ID. Discovery uses registered=true to include both sources. Credentials prefer the
+interactive login, then the existing managed environment.
+The server persists client identity and publication state per local API address
+and port. Connection references are scoped to the login site and account.
+Browser storage retains display metadata and connection references without tokens.
+Unavailable or removed publications remain offline references in My agents.
+Cloud chat and tasks use the server Relay proxy and Response-based continuation.
+Community forwarding uses `/api/v1/relay/v1/*` with authenticated upstream identity.

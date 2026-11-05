@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useRelayPublication } from "./useRelayPublication";
 import { useAgentResourceLists } from "./useAgentResourceLists";
 import { useAgentResourceEnablement } from "./useAgentResourceEnablement";
 import { useBlocker } from "react-router-dom";
@@ -669,6 +670,7 @@ export function useAgentController({
     }
     return agentItems.find((item) => item.id === selectedAgentID) ?? null;
   }, [agentItems, activePane.id, activePane.type, profileDetailAgentID]);
+  const relayPublication = useRelayPublication(String(selectedAgentForPage?.id || ""));
   const selectedAgentForPageDraftSignature = useMemo(() => {
     if (!selectedAgentForPage) {
       return "";
@@ -2869,6 +2871,7 @@ export function useAgentController({
       linkedTemplate: hubTemplates.find(
         (template) => template.source?.kind === "local" && template.source_agent_id === selectedAgentForPage?.id,
       ),
+      relayPublication,
       item: selectedAgentForPage,
       t,
       locale,

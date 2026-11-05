@@ -1,3 +1,4 @@
+import { hasPendingCloudTask } from "@/models/cloudTasks";
 import { pathForNewAgentTask, pathForNewTeamTask } from "@/models/routing";
 import { bindAgentViews } from "./bindings/agent";
 import {
@@ -815,7 +816,9 @@ export function useWorkspaceController(): WorkspaceController {
       if (activePane.type === WorkspacePaneTypes.conversation && activePane.id === id) navigate("/new");
     },
     onOpen: (room) => selectConversation(room.id, { rooms: [room] }),
-    isWorking: (id) => participantWork.workingParticipantsForRoom(id).length > 0,
+    isWorking: (id) =>
+      participantWork.workingParticipantsForRoom(id).length > 0 ||
+      hasPendingCloudTask(rooms.find((room) => room.id === id)),
   });
 
   if (!displayData) {

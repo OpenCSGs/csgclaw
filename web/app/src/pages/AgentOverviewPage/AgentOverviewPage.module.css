@@ -25,10 +25,13 @@
 }
 .tabs {
   display: flex;
+  flex-wrap: wrap;
+  max-width: 100%;
   align-items: center;
   gap: 20px;
 }
 .tabs button {
+  white-space: nowrap;
   padding: 8px 2px;
   border: 0;
   border-bottom: 2px solid transparent;

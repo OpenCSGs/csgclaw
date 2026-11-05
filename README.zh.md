@@ -14,6 +14,8 @@ CSGClaw 是 OpenCSG 推出的多智能体协作平台。它想解决的不是"�
 
 ![CSGClaw WebUI](assets/webui.zh.png)
 
+通过主动连接中转服务，可将本机 host 智能体共享给其他 CSGClaw 用户使用，无需开放本机端口。用法及真实服务联调见 [CSGRelay 接入指南](docs/tech/relay.zh.md)。
+
 ## 安装
 
 **macOS / Linux：**

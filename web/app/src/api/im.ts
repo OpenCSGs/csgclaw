@@ -40,6 +40,7 @@ export type StartThreadPayload = {
 };
 
 export type CreateRoomPayload = {
+  cloud_agent?: { agent_id: string; connection_id: string };
   source_team_id?: string;
   configuration?: TaskConfiguration;
   is_direct?: boolean;

@@ -63,6 +63,7 @@ import {
   agentGatewayUnavailableLabel,
   agentRuntimeStatusDetailLabel,
   agentRuntimeKind,
+  agentSandboxEnabled,
   canPublishCommunityTemplateRuntime,
   canStartAgent,
   isAgentGatewayDegraded,
@@ -101,6 +102,8 @@ import { AgentAvatarContent, AgentAvatarPicker } from "@/components/business/Age
 import { renderMarkdown } from "@/components/business/MessageContent/markdown";
 import "@/components/business/MessageContent/MessageContent.css";
 import { avatarFallbackText } from "@/shared/avatar";
+import type { RelayPublicationController } from "@/hooks/workspace/useRelayPublication";
+import { RelayPublication } from "../RelayPublication";
 import type { AgentTemplatePublishTarget } from "@/api/hub";
 import {
   Button,
@@ -188,6 +191,7 @@ export type AgentDetailPaneProps = {
   onRetryModels?: () => void | Promise<unknown>;
   onProviderLogin?: (provider: string) => VoidOrPromise;
   onRequireOpenCSGAuth?: () => boolean;
+  relayPublication?: RelayPublicationController;
   onPublish?: (
     target: AgentTemplatePublishTarget,
     name: string,
@@ -327,6 +331,7 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
     onDraftChange,
     onSave,
     onPublish,
+    relayPublication,
     onStart,
     onStop,
     onMetadataSave,
@@ -954,6 +959,11 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
               onStop={onStop}
               onInvite={onInvite}
               onDelete={onDelete}
+              relayPublication={
+                !agentSandboxEnabled(item) && (runtimeKind === "codex" || runtimeKind === "dsh")
+                  ? relayPublication
+                  : undefined
+              }
               onPublish={openPublishDialog}
             />
             {draft && (hasUnsavedChanges || saving) ? (
@@ -2363,6 +2373,7 @@ function AgentChannelsSection({
 }
 
 type AgentActionsMenuProps = {
+  relayPublication?: RelayPublicationController;
   activeRoom?: IMConversation | null;
   busy: boolean;
   canPublishLocal: boolean;
@@ -2401,12 +2412,13 @@ function AgentActionsMenu({
   onInvite,
   onDelete,
   onPublish,
+  relayPublication,
 }: AgentActionsMenuProps) {
   const triggerRef = useRef<HTMLButtonElement>(null);
-  const hasActions = SHOW_AGENT_LIFECYCLE_ACTIONS || canPublishLocal || !isManager;
+  const hasActions = SHOW_AGENT_LIFECYCLE_ACTIONS || canPublishLocal || !isManager || Boolean(relayPublication);
   if (!hasActions) return null;
 
-  return (
+  const renderMenu = (relayAction?: React.ReactNode) => (
     <DropdownMenuRoot>
       <DropdownMenuTrigger asChild>
         <Button ref={triggerRef} variant="secondaryGray" size="md" className="agent-actions-menu-trigger">
@@ -2432,6 +2444,7 @@ function AgentActionsMenu({
             <span>{t("inviteToRoom")}</span>
           </DropdownMenuItem>
         ) : null}
+        {relayAction}
         {canPublishLocal ? (
           <>
             <DropdownMenuItem disabled={publishBusy} onSelect={() => onPublish?.("local")}>
@@ -2469,5 +2482,10 @@ function AgentActionsMenu({
         ) : null}
       </DropdownMenuContent>
     </DropdownMenuRoot>
+  );
+  return relayPublication ? (
+    <RelayPublication key={String(item.id)} controller={relayPublication} t={t} renderAction={renderMenu} />
+  ) : (
+    renderMenu()
   );
 }

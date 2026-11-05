@@ -18,6 +18,7 @@ import (
 	"csgclaw/cli/message"
 	modelcmd "csgclaw/cli/model"
 	participantcmd "csgclaw/cli/participant"
+	relaycmd "csgclaw/cli/relay"
 	"csgclaw/cli/room"
 	scheduledtaskcmd "csgclaw/cli/scheduledtask"
 	servecmd "csgclaw/cli/serve"
@@ -88,6 +89,7 @@ func (a *App) registerDefaultCommands() {
 		participantcmd.NewAliasCmd("pt"),
 		usercmd.NewCmd(),
 		room.NewCmd(),
+		relaycmd.NewCmd(),
 		member.NewCmd(),
 		message.NewCmd(),
 		taskcmd.NewCmd(),

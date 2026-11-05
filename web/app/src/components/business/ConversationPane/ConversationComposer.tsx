@@ -314,7 +314,7 @@ export const ConversationComposer = memo(function ConversationComposer({
         <div className="composer-toolbar">
           <ComposerAddMenu
             onOpenResourcePicker={resourcePicker.open}
-            disabled={interactionDisabled}
+            disabled={interactionDisabled || !onAddAttachments}
             t={t}
             onAddFiles={() => fileInputRef.current?.click()}
           />

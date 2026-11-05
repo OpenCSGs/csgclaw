@@ -19,6 +19,9 @@ func (h *Handler) registerCoreRoutes(router chi.Router) {
 	router.Get("/healthz", h.handleHealthz)
 	router.Route("/api/v1", func(r chi.Router) {
 		r.Get("/version", h.getVersion)
+		r.Get("/relay/agents", h.handleRelayCatalog)
+		r.Post("/relay/agents/{id}/responses", h.handleRelayChat)
+		r.Get("/relay/agents/{id}/responses/{response_id}", h.handleRelayChat)
 		r.Post("/feedback", h.handleFeedback)
 		r.Route("/upgrade", func(r chi.Router) {
 			r.Get("/status", h.getUpgradeStatus)
@@ -54,6 +57,9 @@ func (h *Handler) registerCoreRoutes(router chi.Router) {
 				r.Post("/archive", h.handleArchiveAgent)
 				r.Post("/restore", h.handleRestoreAgent)
 				r.Get("/archive-impact", h.handleAgentArchiveImpact)
+				r.Get("/relay", h.handleAgentRelay)
+				r.Post("/relay", h.handleAgentRelay)
+				r.Delete("/relay", h.handleAgentRelay)
 				r.Post("/start", h.startAgent)
 				r.Post("/stop", h.stopAgent)
 				r.Post("/bindings:apply", h.applyAgentBindings)
