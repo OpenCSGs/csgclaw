@@ -173,6 +173,9 @@ func TestHandleRemoteKnowledgeBasesReportsAvailabilityAndConfiguredMCP(t *testin
 		if got, want := req.Header.Get("Authorization"), "Bearer user-token"; got != want {
 			t.Fatalf("authorization = %q, want %q", got, want)
 		}
+		if req.URL.Query().Get("per") != "3" || req.URL.Query().Has("limit") {
+			t.Fatalf("upstream pagination = %s", req.URL.RawQuery)
+		}
 		return &http.Response{
 			StatusCode: http.StatusOK,
 			Header:     make(http.Header),
@@ -195,7 +198,7 @@ func TestHandleRemoteKnowledgeBasesReportsAvailabilityAndConfiguredMCP(t *testin
 	}}
 	handler := &Handler{mcp: mcp.NewService(mcp.WithServerStore(store))}
 	recorder := httptest.NewRecorder()
-	handler.handleRemoteKnowledgeBases(recorder, httptest.NewRequest(http.MethodGet, "/api/v1/knowledge-bases/remote", nil))
+	handler.handleRemoteKnowledgeBases(recorder, httptest.NewRequest(http.MethodGet, "/api/v1/knowledge-bases/remote?limit=3", nil))
 	if got, want := recorder.Code, http.StatusOK; got != want {
 		t.Fatalf("status = %d, want %d; body=%s", got, want, recorder.Body.String())
 	}
@@ -203,7 +206,7 @@ func TestHandleRemoteKnowledgeBasesReportsAvailabilityAndConfiguredMCP(t *testin
 	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if len(response.Items) != 1 || response.Items[0].ConfiguredMCP != "content-42" {
+	if response.Limit != 3 || len(response.Items) != 1 || response.Items[0].ConfiguredMCP != "content-42" {
 		t.Fatalf("items = %#v", response.Items)
 	}
 	var csgHubResponse map[string]any

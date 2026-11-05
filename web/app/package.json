@@ -13,7 +13,8 @@
     "check": "eslint . && prettier . --check && tsc --noEmit && vitest run",
     "ui:lab": "vite --open ui-lab.html",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "generate:api": "openapi-typescript ../../api/openapi/control-plane.json -o src/api/generated/controlPlane.ts && prettier src/api/generated/controlPlane.ts --write"
   },
   "engines": {
     "node": ">=22.13.0 <25",
@@ -67,6 +68,7 @@
     "eslint-plugin-react-refresh": "~0.5.2",
     "globals": "~17.6.0",
     "jsdom": "~29.1.1",
+    "openapi-typescript": "7.13.0",
     "prettier": "~3.8.3",
     "tailwindcss": "~4.3.0",
     "typescript": "~6.0.3",

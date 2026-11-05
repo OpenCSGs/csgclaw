@@ -3,6 +3,7 @@ package api
 import (
 	"csgclaw/internal/agentengine"
 	agent "csgclaw/internal/agentengine/agents"
+	"csgclaw/internal/apitypes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -41,10 +42,10 @@ func (h *Handler) handleAgentSkillSummaries(w http.ResponseWriter, r *http.Reque
 	}
 	w.Header().Set("ETag", strconv.Quote(item.ResourceVersion))
 	if query != nil && item.Status.SkillPage != nil {
-		writeJSON(w, http.StatusOK, resourcePage[agentengine.SkillSummary]{Items: items, Metadata: *item.Status.SkillPage})
+		writeJSON(w, http.StatusOK, newResourcePage(items, *item.Status.SkillPage))
 		return
 	}
-	writeJSON(w, http.StatusOK, items)
+	writeJSON(w, http.StatusOK, apitypes.ListResponse[agentengine.SkillSummary]{Items: items})
 }
 
 func (h *Handler) handleAgentSkillsBatchAdd(w http.ResponseWriter, r *http.Request) {

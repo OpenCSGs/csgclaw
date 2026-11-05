@@ -39,7 +39,7 @@ describe("MCP API", () => {
             ],
             next_page: 2,
             page: 1,
-            per: 12,
+            limit: 12,
             total: 13,
           }),
           { status: 200 },
@@ -62,12 +62,12 @@ describe("MCP API", () => {
       per: 12,
       total: 13,
     });
-    expect(fetchMock).toHaveBeenCalledWith("api/v1/mcp-servers/remote?page=1&per=12&search=", expect.any(Object));
+    expect(fetchMock).toHaveBeenCalledWith("api/v1/mcp-servers/remote?page=1&limit=12&search=", expect.any(Object));
   });
 
   it("passes pagination and search to the CSGClaw remote MCP endpoint", async () => {
     const fetchMock = mockFetch(
-      async () => new Response(JSON.stringify({ items: [], page: 2, per: 12, total: 12 }), { status: 200 }),
+      async () => new Response(JSON.stringify({ items: [], page: 2, limit: 12, total: 12 }), { status: 200 }),
     );
 
     await expect(fetchRemoteMCPServersPage(2, "calendar")).resolves.toMatchObject({
@@ -79,7 +79,7 @@ describe("MCP API", () => {
       total: 12,
     });
     expect(fetchMock).toHaveBeenCalledWith(
-      "api/v1/mcp-servers/remote?page=2&per=12&search=calendar",
+      "api/v1/mcp-servers/remote?page=2&limit=12&search=calendar",
       expect.any(Object),
     );
   });

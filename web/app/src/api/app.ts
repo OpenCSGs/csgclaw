@@ -1,3 +1,4 @@
+import type { components } from "@/api/generated/controlPlane";
 import { get } from "@/api/client";
 import { ApiEndpoints } from "@/shared/constants/api";
 import type { RuntimeBootstrapConfig } from "@/models/agents";
@@ -20,7 +21,9 @@ export function fetchBootstrapConfig(): Promise<RuntimeBootstrapConfig> {
 }
 
 export function fetchRuntimeImages(): Promise<string[]> {
-  return get("api/v1/agents/image-candidates");
+  return get<components["schemas"]["ImageCandidateList"]>("api/v1/agents/image-candidates").then(
+    (response) => response.items,
+  );
 }
 
 export function fetchVersion(options: FetchVersionOptions = {}): Promise<VersionResponse> {

@@ -1,3 +1,4 @@
+import type { components } from "@/api/generated/controlPlane";
 import { del, get, post, put } from "@/api/client";
 import type { AgentMCPServersView } from "@/api/agents";
 import type { JSONRecord } from "@/models/agents";
@@ -17,13 +18,7 @@ export type RemoteMCPServersPage = {
   total: number | null;
 };
 
-type RemoteMCPServersResponse = {
-  items?: unknown;
-  next_page?: unknown;
-  page?: unknown;
-  per?: unknown;
-  total?: unknown;
-};
+type RemoteMCPServersResponse = components["schemas"]["RemoteMCPServersListResponse"];
 
 type RemoteMCPServerInstallResponse = {
   name?: unknown;
@@ -146,13 +141,13 @@ export async function fetchRemoteMCPServersPage(page = 1, search = ""): Promise<
   const currentPage = Math.max(Math.trunc(page), 1);
   const params = new URLSearchParams({
     page: String(currentPage),
-    per: String(REMOTE_MCP_SERVERS_PAGE_SIZE),
+    limit: String(REMOTE_MCP_SERVERS_PAGE_SIZE),
     search: String(search || "").trim(),
   });
   const payload = await get<RemoteMCPServersResponse>(`${MCP_SERVERS_PATH}/remote?${params.toString()}`);
   const records = Array.isArray(payload?.items) ? payload.items : [];
   const responsePage = positiveNumberFromUnknown(payload?.page) || currentPage;
-  const per = positiveNumberFromUnknown(payload?.per) || REMOTE_MCP_SERVERS_PAGE_SIZE;
+  const per = positiveNumberFromUnknown(payload?.limit) || REMOTE_MCP_SERVERS_PAGE_SIZE;
   const nextPage = positiveNumberFromUnknown(payload?.next_page);
   return {
     hasMore: nextPage !== null,

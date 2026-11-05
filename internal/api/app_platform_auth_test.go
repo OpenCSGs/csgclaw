@@ -190,7 +190,7 @@ func TestAppPlatformAuthHonorsNoAuthAndRejectsCrossAgentAccess(t *testing.T) {
 			t.Errorf("personal mode %s status=%d", path, rec.Code)
 		}
 	}
-	for _, path := range []string{"/api/v1/agents/" + bob.ID + "/connectors", "/api/v1/agents/" + bob.ID + "/llm/models", "/api/v1/config", "/api/v1/agents"} {
+	for _, path := range []string{"/api/v1/agents/" + bob.ID + "/connectors", "/api/v1/agents/" + bob.ID + "/llm/v1/models", "/api/v1/config", "/api/v1/agents"} {
 		if rec := appAuthRequest(t, h, http.MethodGet, path, "", aliceToken, nil); rec.Code != http.StatusForbidden {
 			t.Errorf("scoped %s status=%d", path, rec.Code)
 		}
@@ -209,7 +209,7 @@ func TestAppPlatformAuthHonorsNoAuthAndRejectsCrossAgentAccess(t *testing.T) {
 	if rec := appAuthRequest(t, h, http.MethodPost, "/api/v1/agents/"+alice.ID+"/connectors", body, h.serverAccessToken, nil); rec.Code != http.StatusCreated {
 		t.Fatalf("admin app create status=%d body=%s", rec.Code, rec.Body)
 	}
-	request := httptest.NewRequest(http.MethodGet, "/api/v1/agents/"+alice.ID+"/llm/models", nil)
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/agents/"+alice.ID+"/llm/v1/models", nil)
 	request.Header.Set("Authorization", "Bearer "+aliceToken)
 	request.Header.Set("X-CSGClaw-Caller-Agent", "agent-manager")
 	response := httptest.NewRecorder()

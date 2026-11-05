@@ -4,9 +4,11 @@
 
 ## 约定
 
+Agent、Runtime、模型、Skill、MCP、知识库和模板接口的当前定义见 [控制面 API](control-plane-api.md) 和 [OpenAPI 3.1](../../api/openapi/control-plane.json)。
+
 - 除流式接口外，请求和响应均为 `application/json`
 - 时间字段使用 RFC3339 / ISO8601
-- 常规错误通常返回纯文本错误正文
+- 普通控制面错误使用 `{ "error": { "code": "...", "message": "..." } }`，保留原有业务错误信息；认证和协议接口继续使用各自的错误格式
 - Agent session response 错误使用 OpenAI 风格的 JSON error envelope
 - SSE 接口返回 `text/event-stream`
 - 当前 API 主要分为 3 组：
@@ -43,17 +45,13 @@ CSGClaw skill 脚本可以通过 Runtime 中立的 [CSGClaw 结构化 Skill 输�
 
 ## 认证
 
-- 默认大多数 `/api/v1/*` 接口不要求认证
+- 沿用当前 OIDC 登录与部署认证，认证请求头和权限范围见 [控制面 API](control-plane-api.md)。
 - 以下接口要求 `Authorization: Bearer <token>`，其中 token 为服务端 access token
   - `GET /api/v1/channels/{channel}/participants/{id}/events`
   - `POST /api/v1/channels/csgclaw/participants/{id}/messages`
-  - `GET /api/v1/agents/{id}/llm/models`
   - `GET /api/v1/agents/{id}/llm/v1/models`
-  - `POST /api/v1/agents/{id}/llm/chat/completions`
   - `POST /api/v1/agents/{id}/llm/v1/chat/completions`
-  - `POST /api/v1/agents/{id}/llm/responses`
   - `POST /api/v1/agents/{id}/llm/v1/responses`
-  - `GET /api/v1/agents/{id}/llm/responses`
   - `GET /api/v1/agents/{id}/llm/v1/responses`
 - 若服务端开启 `no_auth`，上述鉴权会被跳过
 
@@ -127,7 +125,7 @@ Server 启动时、每隔 30 秒，以及读取技能库时，自动扫描常用
 技能库与 Agent 分配使用同一个选中来源，原技能更新后无需重新导入。
 显式分配给 Agent 时，沿用现有行为，将技能及配套资源安装为 Agent 工作区快照。
 删除发现的技能只取消登记，重启后仍不自动恢复，不删除源软件的文件。
-`POST /api/v1/skills/discovery/rescan` 显式重新扫描已知目录，恢复此前移除的关联，并返回完整技能列表。
+`POST /api/v1/skills/discovery/rescan` 显式重新扫描已知目录，恢复此前移除的关联，并以 `{ "items": [...] }` 返回完整技能列表。
 恢复的技能重新标记为未查看，即使其内容曾在移除前确认过。
 普通列表刷新与后台扫描仍尊重移除操作。
 已安装技能摘要中的 `directory` 返回选中来源或本地安装的绝对目录；仅嵌入应用的技能没有独立物理目录。
@@ -148,10 +146,14 @@ Server 启动时、每隔 30 秒，以及读取技能库时，自动扫描常用
 优先使用声明了有效语义版本的候选，再比较版本高低；版本相同或均不可比较时，使用 `SKILL.md` 修改时间，再以来源路径稳定排序。
 与技能库中的本地副本重名时，也使用相同规则；缺少或无效元数据的本地副本保留为用户显式覆盖。
 
-`GET /api/v1/skills` 为发现的技能返回 `source: "discovered"`，以及包含工具、路径、版本、更新时间、全部候选来源、内容键和 `new` 标记的 `discovery` 对象。
+`GET /api/v1/skills` 返回 `{ "items": [...] }`，其中发现的技能包含 `source: "discovered"`，以及包含工具、路径、版本、更新时间、全部候选来源、内容键和 `new` 标记的 `discovery` 对象。
 `POST /api/v1/skills/discovery/ack` 接受 `{"keys":["<内容键>"]}`，返回 `204 No Content`，仅确认指定内容键的提示，避免吞掉并发发现的新技能。
 已确认状态跨重启保存；新增或内容变化后的技能使用新内容键，再次提示。
 技能设置页打开期间每 30 秒刷新，也提供手动重新扫描按钮。
+
+### `POST /api/v1/skills:upload`
+
+使用 `multipart/form-data` 的 `file` 字段上传 ZIP，最大 `64 MiB`。成功返回 `201` 和技能摘要；超限返回 `413 payload_too_large`，无效 ZIP 返回 `400`，同名冲突返回 `409`。
 
 ### `GET /api/v1/skills/tree` 和 `GET /api/v1/skills/file`
 
@@ -164,7 +166,7 @@ Server 启动时、每隔 30 秒，以及读取技能库时，自动扫描常用
 可选查询参数：
 
 - `page`：正整数页码，默认 `1`
-- `per`：每页数量，范围 `1` 到 `100`，默认 `16`
+- `limit`：每页数量，范围 `1` 到 `100`，默认 `16`
 - `search`：远端 catalog 搜索文本
 
 Server 保持当前 Hub catalog 的排序，并返回归一化后的 Skill 摘要：
@@ -183,7 +185,7 @@ Server 保持当前 Hub catalog 的排序，并返回归一化后的 Skill 摘�
     }
   ],
   "page": 1,
-  "per": 16,
+  "limit": 16,
   "total": 78,
   "next_page": 2
 }
@@ -276,7 +278,7 @@ Participant 是 channel-scoped identity，用于房间、消息、mention、通�
     "agent": {
       "name": "QA",
       "role": "worker",
-      "runtime_kind": "codex",
+      "runtime": { "name": "codex" },
       "from_template": "builtin.codex-worker"
     }
   }
@@ -287,7 +289,7 @@ Participant 是 channel-scoped identity，用于房间、消息、mention、通�
 
 - `type` 必填，且只能是 `human`、`agent` 或 `notification`
 - `name` 必填
-- 实际 channel 由路由路径决定，而不是由请求体决定
+- 实际 channel 由路由路径决定
 - `agent` participant 可通过 `agent_binding` 创建或复用 Agent
 - 创建 Agent 时，`agent_binding.agent.instructions` 中填写的非空指令优先于模板指令；显式传入 `skills` 列表会替换模板技能选择（`[]` 表示不选择技能），省略则保留模板默认值。
 - `human` 与 `notification` participant 不创建 runtime agent
@@ -321,175 +323,13 @@ Participant 是 channel-scoped identity，用于房间、消息、mention、通�
 
 ## Agent API
 
-### Agent 响应结构
+完整的请求、响应、权限要求和修改规则见 [控制面 API](control-plane-api.md) 与 [OpenAPI 定义](../../api/openapi/control-plane.json)。
 
-`/api/v1/agents*` 返回的 agent 主要字段如下：
-
-```json
-{
-  "id": "u-alice",
-  "name": "alice",
-  "description": "frontend dev",
-  "runtime_id": "codex",
-  "runtime_kind": "codex",
-  "image": "example/image:latest",
-  "box_id": "codex-session-alice",
-  "role": "worker",
-  "status": "running",
-  "created_at": "2026-05-16T08:00:00Z",
-  "profile": "api.gpt-5.4",
-  "runtime_options": {},
-  "mcpServers": {
-    "workspace-filesystem": {
-      "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/workspace"]
-    }
-  },
-  "agent_profile": {
-    "provider": "api",
-    "base_url": "https://api.example.com/v1",
-    "api_key_set": true,
-    "api_key_preview": "sk-1...",
-    "model_id": "gpt-5.4",
-    "reasoning_effort": "medium",
-    "profile_complete": true
-  },
-  "profile_complete": true,
-  "detection_results": []
-}
-```
-
-说明：
-
-- `agent_profile` 中不会返回真实 `api_key`
-- `runtime_options` 会经过 API 侧脱敏处理
-- `mcpServers` 是 server 名称到 server 配置的直接映射；通用 Agent 响应会
-  脱敏各 server 的 `env` 与 `headers` 中的密钥值
-- `profile` 是服务端归一化后的选择器，例如 `api.gpt-5.4`
-- `detection_results` 用于展示默认 profile 探测结果
-
-### `GET /api/v1/agents`
-
-列出全部 agent。
-
-服务端会先执行 reload，再返回最新状态。
-
-### `POST /api/v1/agents`
-
-创建 agent。
-
-请求体字段：
-
-- `id`
-- `name`
-- `description`
-- `image`
-- `runtime_kind`
-- `from_template`
-- `replace`
-- `field_mask`
-- `role`
-- `status`
-- `created_at`
-- `profile`
-- `runtime_options`
-- `mcpServers`
-- `agent_profile`
-
-`from_template` 应使用模板列表 API 返回的原始 ID。内置和本地模板使用 `builtin.codex-worker`、`local.my-worker` 等格式；远端模板使用 `<namespace>/<name>` 格式。
-
-请求体示例：
-
-```json
-{
-  "id": "u-alice",
-  "name": "alice",
-  "description": "frontend dev",
-  "runtime_kind": "codex",
-  "profile": "api.gpt-5.4",
-  "agent_profile": {
-    "provider": "api",
-    "base_url": "https://api.example.com/v1",
-    "api_key": "sk-xxx",
-    "model_id": "gpt-5.4",
-    "reasoning_effort": "medium"
-  }
-}
-```
-
-补充说明：
-
-- `name` 必填
-- `replace=true` 时会走替换逻辑
-- `field_mask` 用于替换时只覆盖指定字段
-- `agent_profile.api_key` 只在写入时使用，读取时会被脱敏
-
-Codex CLI 和 DSH agent 通过顶层 `mcpServers` 字段配置 MCP server。该字段的值是所有已支持 runtime 共用的、从 server 名称到 server 配置的直接映射：
-
-```json
-{
-  "name": "alice",
-  "runtime_kind": "codex",
-  "mcpServers": {
-    "workspace-filesystem": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "@modelcontextprotocol/server-filesystem",
-        "/path/to/workspace"
-      ]
-    }
-  },
-  "profile": "api.gpt-5.4"
-}
-```
-
-各 runtime adapter 的映射关系：
-
-- Codex CLI：`mcpServers` -> 隔离 Codex home `config.toml` 中由 CSGClaw 管理的 `[mcp_servers."<name>"]` 块
-
-注意：MCP command 在目标 runtime 环境内执行，filesystem server 的目录参数也必须是该 runtime 可见路径。`runtime_options` 中的 MCP 形态值（包括 `mcp` 与 `mcpServers`）会被拒绝；请使用顶层 `mcpServers` 字段。
-
-### `GET /api/v1/agents/{id}`
-
-获取单个 agent。
-
-不存在时返回 `404`。
-
-### `PATCH /api/v1/agents/{id}`
-
-更新 agent 基本信息。
-
-可更新字段：
-
-- `name`
-- `description`
-- `image`
-- `runtime_options`
-- `mcpServers`
-- `agent_profile`
-
-请求体示例：
-
-```json
-{
-  "description": "updated description",
-  "runtime_options": {
-    "execution_mode": "read_only"
-  }
-}
-```
-
-说明：
-
-- 省略的字段不会修改
-- `runtime_options` 一旦提交就是整体替换
-- Codex Worker 支持 `runtime_options.execution_mode`，取值为 `standard` 或 `read_only`；字段省略或为空时默认使用 `standard`
-- 正在运行的 Codex Worker 切换运行模式后会自动重启，使新的命令、沙盒和审批策略生效
-- `mcpServers` 一旦提交就是整个映射替换；传 `null` 可清除 CSGClaw 托管的 server 集合
-- Codex CLI 或 DSH agent 的 MCP server 变更可能触发该 agent runtime recreate，使原生配置生效
-- `agent_profile.api_key` 如果传空，服务端会保留原有密钥
-- 如果 `agent_profile.env` 发生变化，响应中的 `env_restart_required` 可能为 `true`
+- `GET /api/v1/agents` 返回 `{ "items": [...] }`；`GET /api/v1/agents/{id}` 返回单个 Agent。
+- `POST /api/v1/agents` 创建 Agent；Runtime 使用 `runtime`，模型配置使用 `model_config`，MCP 字典使用 `mcp_servers`。`from_template` 使用模板列表返回的完整 ID。
+- `PATCH /api/v1/agents/{id}` 按请求中出现的字段更新。`runtime.options` 与 `mcp_servers` 按完整对象替换；`mcp_servers: null` 或 `{}` 清空托管 MCP 集合。
+- Agent 响应中的 `runtime` 包含名称、沙箱设置和状态；`model_config` 返回隐藏密钥的模型配置；`mcp_servers` 中的敏感信息按现有规则隐藏。
+- Runtime 执行权限、工作目录、模型环境变量和资源修改继续使用对应 Runtime 的配置与重启行为。
 
 ### Agent memory 接口
 
@@ -525,11 +365,13 @@ Runtime 尚未生成文档时，`ready` 为 `false`。
 
 查询当前 DSH 或 Codex Agent 已挂载的聊天资源。`type` 必填，取值为 `skill`、`connector`、`knowledge_base`。`pagination` 必填，使用现有 `cursor` 或 `page` 参数、`search`、`enabled`、`exclude` 和 `list_revision`；两种分页模式的参数不可混用。`exclude` 使用重复的 `source:id` 值。
 
-响应使用 `{items, total, list_revision, has_more, next_cursor?}`，page 模式包含 `page`、`per`。每项包含 `source`（`skill`、`mcp`、`app`）、`id`、`type`、`name`、可选 `description`、`enabled`、`available` 和可选 `unavailable_reason`。空列表返回 `[]`，响应使用 `Cache-Control: no-store`。
+响应使用 `{items, total, list_revision, has_more, next_cursor?}`，page 模式包含 `page`、`limit`。每项包含 `source`（`skill`、`mcp`、`app`）、`id`、`type`、`name`、可选 `description`、`enabled`、`available` 和可选 `unavailable_reason`。空列表返回 `items: []`，响应使用 `Cache-Control: no-store`。
 
 技能通过现有 SkillQuery 选择成员后读取当前页的 metadata。MCP 使用配置 key，App 使用 installation ID；名称用于展示与搜索。知识库包含 managed MCP 和 `llm-wiki` App。App 可用性包含挂载开关、全局开关、连接状态及当前 Agent 的可调用工具目录。响应不包含凭证、连接配置或 SKILL.md 正文。
 
 过滤发生在分页之前，结果按稳定身份排序。参数无效返回 `400 invalid_resource_query`，成员集合或查询范围变化返回 `409 resource_list_changed`。依赖读取失败返回 `503 resource_service_unavailable`，未启用 Apps 时继续查询技能和 MCP。
+
+`GET /api/v1/agents/{id}/skill-summaries` 返回 `{ "items": [...] }`，可选择相同的分页规则。Skill 与 MCP 列表的 `ETag` 提供资源版本，修改 `/skills/{name}/enabled` 或 `/mcp-servers/{name}/enabled` 时使用 `PUT` 和 `{ "enabled": false, "resource_version": "..." }`。
 
 #### `GET /api/v1/agents/{id}/mcp-servers`
 
@@ -576,7 +418,7 @@ catalog 条目时使用 `{ "name": "...", "config": { ... } }`，其中 `config`
 
 通过 CSGClaw 列出可安装的远端 MCP server 摘要。浏览器只请求 CSGClaw；服务端根据
 当前登录环境或显式配置的 official Hub 解析有效 OpenCSG Hub，并转发当前用户的
-Hub 凭据。查询参数与远端 Skill 列表保持一致：`page`（默认 `1`）、`per`（默认
+Hub 凭据。查询参数与远端 Skill 列表保持一致：`page`（默认 `1`）、`limit`（默认
 `12`，最大 `100`）和 `search`。
 
 每个条目只包含 Hub 的 `id`、名称和展示元数据，不包含安装配置或 headers。
@@ -595,7 +437,7 @@ Hub 凭据。查询参数与远端 Skill 列表保持一致：`page`（默认 `1
     }
   ],
   "page": 1,
-  "per": 12,
+  "limit": 12,
   "total": 13,
   "next_page": 2
 }
@@ -604,10 +446,9 @@ Hub 凭据。查询参数与远端 Skill 列表保持一致：`page`（默认 `1
 #### `POST /api/v1/mcp-servers/remote/{id}/install`
 
 安装或刷新一个远端 MCP 条目。CSGClaw 会在服务端请求 Hub 详情接口，将详情中的
-`protocol`、`url` 和 `headers` 转换为 catalog 配置，并使用详情响应的 `name` 作为
-catalog key。新远端条目默认写入 `enabled: true`、`startup_timeout_sec: 5` 和
+`protocol`、`url` 和 `headers` 转换为 catalog 配置，并使用稳定 ID 保存 catalog 条目。新远端条目默认写入 `enabled: true`、`startup_timeout_sec: 5` 和
 `tool_timeout_sec: 60`。获取 Hub 详情、执行 MCP 握手与工具发现共用 5 秒安装总超时。
-响应只返回已安装的名称：
+响应的 `name` 返回已安装条目的稳定 ID：
 
 ```json
 { "name": "calendar" }
@@ -643,91 +484,17 @@ catalog key。新远端条目默认写入 `enabled: true`、`startup_timeout_sec
 - `follow=false` 时，错误会直接以 HTTP 错误返回
 - `follow=true` 时，若流式过程中出错，错误文本会被写入响应体
 
-### `GET /api/v1/agents/{id}/profile`
+### Agent 模型配置与重新创建
 
-获取单个 agent 的脱敏 profile。
+`GET /api/v1/agents/{id}/profile` 返回隐藏密钥的模型配置，`PUT` 更新完整模型配置；空 `api_key` 继续保留已保存密钥。
 
-### `PUT /api/v1/agents/{id}/profile`
+`POST /api/v1/agents/{id}/recreate` 使用当前配置重新创建 Runtime。请求可包含 `configuration` 和 `field_mask`，在重新创建前更新指定配置。完整字段列表、缺省值与空值行为见 [控制面 API](control-plane-api.md)。
 
-整体更新单个 agent 的 profile。
+## Agent 模型辅助 API
 
-请求体为 `agent_profile` 结构，例如：
+`POST /api/v1/agent-profiles/models` 根据 provider 配置查询可用模型，返回 `{ "provider": "...", "items": [...] }`。请求可携带 `agent_id` 以复用该 Agent 已保存的凭据；默认凭据仅按现有 provider 和地址匹配规则复用。
 
-```json
-{
-  "provider": "api",
-  "base_url": "https://api.example.com/v1",
-  "api_key": "sk-xxx",
-  "model_id": "gpt-5.4",
-  "reasoning_effort": "medium",
-  "headers": {
-    "x-org": "demo"
-  },
-  "env": {
-    "FOO": "bar"
-  }
-}
-```
-
-说明：
-
-- 与 `PATCH /api/v1/agents/{id}` 不同，这里语义上是“用新的 profile 覆盖当前 profile”
-- 若 `api_key` 为空，服务端会保留现有密钥
-
-### `POST /api/v1/agents/{id}/recreate`
-
-按当前配置重建 agent，返回新的 agent 状态。
-
-常见失败：
-
-- `404`：agent 不存在
-- `400`：profile 不完整或运行时不允许重建
-
-## Agent Profile 辅助 API
-
-### `POST /api/v1/agent-profiles/models`
-
-根据给定 provider 配置获取可选模型列表。
-
-请求体字段：
-
-- `agent_id`
-- `provider`
-- `base_url`
-- `api_key`
-- `headers`
-
-请求体示例：
-
-```json
-{
-  "provider": "api",
-  "base_url": "https://api.example.com/v1",
-  "api_key": "sk-xxx"
-}
-```
-
-响应示例：
-
-```json
-{
-  "provider": "api",
-  "models": ["gpt-5.4", "gpt-5.4-mini"]
-}
-```
-
-说明：
-
-- `provider=codex` 或 `claude_code` 时会通过 CLIProxy 获取模型选项
-- `provider=api` 时会调用目标 OpenAI-compatible `/models`
-- 若提供了 `agent_id` 且当前请求未显式传 `api_key`，服务端可能复用该 agent 已保存的密钥
-- 若未提供 `agent_id` 且当前请求未显式传 `api_key`，仅当 `provider=api` 且 `base_url` 匹配当前默认 profile 时，服务端才可能复用已保存的默认 API key
-
-### `GET /api/v1/agent-profile-defaults`
-
-获取服务当前默认 agent profile 的脱敏视图。
-
-常用于前端初始化默认 provider / model 展示。
+`GET /api/v1/agent-profile-defaults` 返回默认模型配置的公开视图，`PATCH` 更新支持的默认配置。`GET /api/v1/agent-runtimes` 返回 `{ "items": [...] }`，供调用方选择 Runtime。具体字段见 [控制面 API](control-plane-api.md) 与 [OpenAPI 定义](../../api/openapi/control-plane.json)。
 
 ## Hub Template API
 
@@ -748,7 +515,7 @@ catalog key。新远端条目默认写入 `enabled: true`、`startup_timeout_sec
 其他 instruction 文件可选。
 只有每次发布请求显式设置 `include_memory: true` 时才会包含记忆；仅启用 Runtime memory 并不代表同意在发布时导出记忆。在显式发布 opt-in 且 `memory_mode` 启用时，Codex 模板会快照 `CODEX_HOME/memories/memory_summary.md`，并在创建新 Agent 时恢复到相同位置。`memory_mode = "disabled"` 的模板不会打包或恢复记忆摘要；模板也不会复制 Codex 的 SQLite memory 流水线状态，或把 memory 当作 workspace overlay。
 在同样显式发布 opt-in 的前提下，受支持的非 Codex Runtime 会按对应 Runtime 的 workspace 约定保留并叠加可选模板 memories。
-根据模板创建 Agent 时，skills 会安装到 `skills/`，`mcp.json` 中的 MCP server 会自动应用；如果创建请求显式传入 `mcpServers`，则以请求内容为准。
+根据模板创建 Agent 时，skills 会安装到 `skills/`，`mcp.json` 中的 MCP server 会自动应用；如果创建请求显式传入 `mcp_servers`，则以请求内容为准。
 
 `mcps/mcp.json` 的通用字段、OpenCSG Gateway、文件绑定和安全规则见 [MCP 配置规范](mcp-config.zh.md)。
 
@@ -768,87 +535,17 @@ Codex Worker 目前保存 `execution_mode` 和 `memory_mode`，不会保存 `loc
 
 DSH Worker 的 `permission_mode` 可选 `workspace-write`、`read-only`、`danger-full-access`，默认 `workspace-write`。`local_workspace_dir` 可指定本机绝对路径；留空时使用 Agent 自动管理的工作目录。切换目录会开启新 DSH 会话，避免恢复到旧目录。CSGClaw 将 Agent 指令保存在独立的 `DSH_HOME/AGENTS.md`，DSH 同时读取所选项目自己的 `AGENTS.md`，不会修改项目文件。发布模板只保留 `permission_mode`，不会发布本机工作目录。
 
-### `GET /api/v1/hub/templates`
+### 模板接口
 
-列出可读 registry 中的全部模板。
+完整字段见 [控制面 API](control-plane-api.md) 与 [OpenAPI 定义](../../api/openapi/control-plane.json)。
 
-响应字段：
+- `GET /api/v1/hub/templates` 返回 `{ "items": [...] }`；可用 `scope=local|remote` 选择来源，省略则合并可读取来源。
+- `POST /api/v1/hub/templates` 从 `agent_id` 保存模板快照，或者通过 `template_id` 发布已有模板。版本并发检查使用 `expected_revision`，成功返回 `201` 和模板详情。
+- `GET /api/v1/hub/templates/{id}` 返回详情；`DELETE` 删除模板并返回 `204`。
+- `GET /api/v1/hub/templates/{id}/versions` 返回 `{ "items": [...] }`；版本详情、删除和恢复继续使用 `/versions/{revision}` 与 `/versions/{revision}/restore`。删除后版本编号可以不连续，当前版本不可删除。
+- `/workspace` 列出模板文件，`GET /workspace/file?path=...` 预览文件，`PUT` 使用 `{ "content": "..." }` 更新文件。
 
-- `id`
-- `name`
-- `description`
-- `runtime_kind`
-- `image`
-- `runtime_options`
-- `updated_at`
-- `source.name`
-- `source.kind`
-- `workspace.kind`
-
-### `POST /api/v1/hub/templates`
-
-将现有 agent 的 workspace 发布到 hub。
-
-请求体：
-
-```json
-{
-  "agent_id": "u-alice",
-  "registry": "local",
-  "include_memory": false
-}
-```
-
-说明：
-
-- `agent_id` 必填
-- `registry` 省略时使用默认 publish registry
-- 只有显式设置 `include_memory: true` 才会发布 Codex 记忆摘要，包括通过 `template_id` 再发布已有本地模板时；由于记忆可能包含从对话中提取的隐私信息，该字段默认是 `false`
-- 发布成功返回 `201 Created`
-
-### `GET /api/v1/hub/templates/{id}`
-
-获取模板详情。
-
-在列表接口的基础上，还会返回：
-
-- `workspace.entries`
-
-`workspace.entries` 字段示例：
-
-```json
-{
-  "workspace": {
-    "kind": "dir",
-    "entries": [
-      {"path":"agent.toml","name":"agent.toml","type":"file","depth":0,"size":128},
-      {"path":"instructions","name":"instructions","type":"dir","depth":0,"size":0}
-    ]
-  }
-}
-```
-
-### `GET /api/v1/hub/templates/{id}/workspace/file?path=...`
-
-读取模板 workspace 中的单个文件预览。
-
-查询参数：
-
-- `path`：必填，相对路径
-
-响应字段：
-
-- `path`
-- `content`
-- `size`
-- `truncated`
-- `binary`
-
-说明：
-
-- 非 UTF-8 文件会返回 `binary=true`
-- 超过 `32 MiB` 的文本内容会被截断，并返回 `truncated=true`
-- 不允许绝对路径或 `..` 越界路径
+每次发布都需要显式设置 `include_memory: true` 才会包含 Runtime memory。文件预览保留 `path`、`content`、`size`、`truncated`、`binary` 字段；非 UTF-8 文件标记为二进制，超过 `32 MiB` 的文本截断预览，绝对路径和 `..` 路径访问被拒绝。模板版本用途见 [Local template versions](template-versions.md)。
 
 ## CLIProxy Auth API
 
@@ -1505,7 +1202,7 @@ prompt context 使用；它不是 thread reply 列表。Participant client 可�
 
 通过选定 Agent 及其真实 CSGClaw runtime 执行一次 turn。
 `{agent}` selector 可以使用 Agent ID，也可以使用不区分大小写的唯一 Agent 名称。
-该接口与 `/llm/responses` 相互独立，后者只代理模型流量，不执行 Agent。
+该接口与 `/llm/v1/responses` 相互独立，后者只代理模型流量，不执行 Agent。
 
 该接口不要求 Bearer token。
 因为 admin 目前是唯一用户，Anonymous 复用现有 `user-admin` 身份表示。
@@ -1662,8 +1359,6 @@ V1 接受 user 文本、Base64 文件输入、可选的纯文本额外上下文�
 请求字段和内容字段均进行严格校验。
 内置 live demo 和可替换的前端 mock 边界见 [Session API Demo 前端指南](web/session-api-demo.zh.md)。
 
-### `GET /api/v1/agents/{id}/llm/models`
-
 ### `GET /api/v1/agents/{id}/llm/v1/models`
 
 转发模型列表请求到 LLM bridge。
@@ -1672,8 +1367,6 @@ V1 接受 user 文本、Base64 文件输入、可选的纯文本额外上下文�
 
 - 需要 Bearer Token
 - 返回内容类型和响应体由上游 bridge 决定
-
-### `POST /api/v1/agents/{id}/llm/chat/completions`
 
 ### `POST /api/v1/agents/{id}/llm/v1/chat/completions`
 
@@ -1697,11 +1390,7 @@ V1 接受 user 文本、Base64 文件输入、可选的纯文本额外上下文�
 }
 ```
 
-### `POST /api/v1/agents/{id}/llm/responses`
-
 ### `POST /api/v1/agents/{id}/llm/v1/responses`
-
-### `GET /api/v1/agents/{id}/llm/responses`
 
 ### `GET /api/v1/agents/{id}/llm/v1/responses`
 

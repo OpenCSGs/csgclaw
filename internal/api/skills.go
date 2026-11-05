@@ -1,6 +1,7 @@
 package api
 
 import (
+	"archive/zip"
 	"encoding/json"
 	"errors"
 	"io"
@@ -33,7 +34,7 @@ func (h *Handler) handleSkills(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	writeJSON(w, http.StatusOK, items)
+	writeJSON(w, http.StatusOK, apitypes.ListResponse[skillsystem.SkillSummary]{Items: items})
 }
 
 func (h *Handler) handleSkillUpload(w http.ResponseWriter, r *http.Request) {
@@ -46,14 +47,30 @@ func (h *Handler) handleSkillUpload(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	// Bound the multipart envelope separately from the archive payload.
+	r.Body = http.MaxBytesReader(w, r.Body, skilllocal.MaxArchiveBytes+(1<<20))
+	if err := r.ParseMultipartForm(8 << 20); err != nil {
+		var limitErr *http.MaxBytesError
+		if errors.As(err, &limitErr) {
+			writeCodedAPIError(w, http.StatusRequestEntityTooLarge, "payload_too_large", skilllocal.ErrSkillArchiveTooLarge.Error())
+		} else {
+			http.Error(w, "invalid skill upload", http.StatusBadRequest)
+		}
+		return
+	}
+	defer r.MultipartForm.RemoveAll()
 	file, header, err := r.FormFile("file")
 	if err != nil {
 		http.Error(w, "skill zip file is required", http.StatusBadRequest)
 		return
 	}
 	defer file.Close()
+	if header.Size > skilllocal.MaxArchiveBytes {
+		writeCodedAPIError(w, http.StatusRequestEntityTooLarge, "payload_too_large", skilllocal.ErrSkillArchiveTooLarge.Error())
+		return
+	}
 
-	archive, err := io.ReadAll(file)
+	archive, err := io.ReadAll(io.LimitReader(file, skilllocal.MaxArchiveBytes+1))
 	if err != nil {
 		http.Error(w, "read skill zip file failed", http.StatusBadRequest)
 		return
@@ -61,12 +78,17 @@ func (h *Handler) handleSkillUpload(w http.ResponseWriter, r *http.Request) {
 	item, err := skilllocal.InstallArchive(root, header.Filename, archive)
 	if err != nil {
 		switch {
+		case errors.Is(err, skilllocal.ErrSkillArchiveTooLarge):
+			writeCodedAPIError(w, http.StatusRequestEntityTooLarge, "payload_too_large", err.Error())
 		case errors.Is(err, skilllocal.ErrSkillAlreadyExists):
 			http.Error(w, err.Error(), http.StatusConflict)
 		case errors.Is(err, skilllocal.ErrSkillArchiveEmpty),
 			errors.Is(err, skilllocal.ErrSkillArchiveUnsafe),
 			errors.Is(err, skilllocal.ErrSkillArchiveInvalid),
-			errors.Is(err, skilllocal.ErrSKILLMDMissing):
+			errors.Is(err, skilllocal.ErrSKILLMDMissing),
+			errors.Is(err, zip.ErrFormat),
+			errors.Is(err, zip.ErrAlgorithm),
+			errors.Is(err, zip.ErrChecksum):
 			http.Error(w, err.Error(), http.StatusBadRequest)
 		default:
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -295,7 +317,7 @@ func (h *Handler) handleSkillRescan(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	writeJSON(w, http.StatusOK, items)
+	writeJSON(w, http.StatusOK, apitypes.ListResponse[skillsystem.SkillSummary]{Items: items})
 }
 
 func mergedSkillRootListing(root string) (apitypes.WorkspaceListing, error) {

@@ -1,3 +1,4 @@
+import type { components } from "@/api/generated/controlPlane";
 import { get, post, type ApiError } from "@/api/client";
 import { ApiEndpoints } from "@/shared/constants/api";
 
@@ -16,7 +17,9 @@ export type AgentRuntimeInstallation = {
 export type AgentRuntimeInstallProgress = (installation: AgentRuntimeInstallation) => void;
 
 export function fetchAgentRuntimes(): Promise<unknown> {
-  return get(ApiEndpoints.agentRuntimes, { cache: "no-store" });
+  return get<components["schemas"]["RuntimeList"]>(ApiEndpoints.agentRuntimes, { cache: "no-store" }).then(
+    (response) => response.items,
+  );
 }
 
 export async function installAgentRuntime(name: string, onProgress?: AgentRuntimeInstallProgress): Promise<unknown> {

@@ -209,6 +209,15 @@ type updateBootstrapConfigRequest struct {
 	DefaultWorkerTemplate  *string `json:"default_worker_template,omitempty"`
 }
 
+type agentSummaryResponse struct {
+	ID            string                `json:"id"`
+	Name          string                `json:"name"`
+	Description   string                `json:"description"`
+	Role          string                `json:"role"`
+	ParticipantID string                `json:"participant_id"`
+	Runtime       apitypes.AgentRuntime `json:"runtime"`
+}
+
 type agentResponse struct {
 	ArchivedAt           *time.Time                         `json:"archived_at,omitempty"`
 	ArchivedBy           string                             `json:"archived_by,omitempty"`
@@ -219,9 +228,9 @@ type agentResponse struct {
 	Runtime              apitypes.AgentRuntime              `json:"runtime,omitempty"`
 	RuntimeID            string                             `json:"-"`
 	RuntimeKind          string                             `json:"-"`
-	RuntimeName          string                             `json:"runtime_name,omitempty"`
-	SandboxEnabled       bool                               `json:"sandbox_enabled,omitempty"`
-	Image                string                             `json:"image,omitempty"`
+	RuntimeName          string                             `json:"-"`
+	SandboxEnabled       bool                               `json:"-"`
+	Image                string                             `json:"-"`
 	Avatar               string                             `json:"-"`
 	BoxID                string                             `json:"-"`
 	Role                 string                             `json:"role"`
@@ -231,7 +240,7 @@ type agentResponse struct {
 	Profile              string                             `json:"-"`
 	ProfileConfig        apitypes.AgentProfile              `json:"model_config,omitempty"`
 	RuntimeOptions       map[string]any                     `json:"-"`
-	MCPServers           map[string]any                     `json:"mcpServers,omitempty"`
+	MCPServers           map[string]any                     `json:"mcp_servers,omitempty"`
 	RuntimeOptionSchemas []agentruntime.RuntimeOptionSchema `json:"-"`
 	MemorySupported      bool                               `json:"memory_supported,omitempty"`
 	AgentProfile         agent.AgentProfileView             `json:"-"`
@@ -468,7 +477,7 @@ func (h *Handler) listAgentImageCandidates(w http.ResponseWriter, r *http.Reques
 	if images == nil {
 		images = []string{}
 	}
-	writeJSON(w, http.StatusOK, images)
+	writeJSON(w, http.StatusOK, apitypes.ListResponse[string]{Items: images})
 }
 
 func (h *Handler) handleLocalDirectoryPicker(w http.ResponseWriter, r *http.Request) {
@@ -1094,16 +1103,18 @@ func (h *Handler) handleAgents(w http.ResponseWriter, r *http.Request) {
 			items = slices.DeleteFunc(items, func(item agentengine.Agent) bool { return item.ArchivedAt == nil })
 		}
 		if caller := appRequestAgentID(r); caller != "" {
-			public := []map[string]any{}
+			public := []agentSummaryResponse{}
 			for _, item := range items {
 				if h.platformVisibleAgent(caller, item.ID) {
-					public = append(public, platformAgentSummary(serviceAgentFromEngine(item)))
+					serviceItem := serviceAgentFromEngine(item)
+					runtime := serviceItem.RuntimeConfig()
+					public = append(public, agentSummaryResponse{ID: item.ID, Name: item.Spec.Name, Description: item.Spec.Description, Role: serviceItem.Role, ParticipantID: agent.ParticipantIDForAgent(serviceItem.Name, item.ID), Runtime: apitypes.AgentRuntime{Name: runtime.Name, SandboxEnabled: runtime.Sandboxed, State: serviceItem.Status}})
 				}
 			}
-			writeJSON(w, http.StatusOK, public)
+			writeJSON(w, http.StatusOK, apitypes.ListResponse[agentSummaryResponse]{Items: public})
 			return
 		}
-		writeJSON(w, http.StatusOK, h.presentEngineAgentsForRequest(r, items))
+		writeJSON(w, http.StatusOK, apitypes.ListResponse[agentResponse]{Items: h.presentEngineAgentsForRequest(r, items)})
 	case http.MethodPost:
 		h.handleCreateAgentWorker(w, r)
 	default:
@@ -1138,8 +1149,13 @@ func (h *Handler) handleAgentByID(w http.ResponseWriter, r *http.Request) {
 		}
 		writeJSON(w, http.StatusOK, h.presentEngineAgentForRequest(r, item))
 	case http.MethodPatch:
-		var req agent.UpdateRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		var input updateAgentRequest
+		if err := decodeAgentRequest(r.Body, &input, false); err != nil {
+			http.Error(w, fmt.Sprintf("decode request: %v", err), http.StatusBadRequest)
+			return
+		}
+		req, err := input.updateRequest()
+		if err != nil {
 			http.Error(w, fmt.Sprintf("decode request: %v", err), http.StatusBadRequest)
 			return
 		}
@@ -1148,7 +1164,20 @@ func (h *Handler) handleAgentByID(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "agent not found", http.StatusNotFound)
 			return
 		}
+		if req.RuntimeSelectionRequested {
+			if input.Runtime.Name == nil {
+				req.RuntimeName = current.Spec.Runtime.Adapter
+			}
+			if input.Runtime.SandboxEnabled == nil {
+				sandboxed := current.Spec.Runtime.Sandboxed
+				req.SandboxEnabled = &sandboxed
+			}
+		}
 		update := engineUpdateRequest(req, current.ResourceVersion)
+		if len(update.FieldMask) == 0 {
+			writeJSON(w, http.StatusOK, h.presentEngineAgentForRequest(r, current))
+			return
+		}
 		billingModel := current.Spec.Model
 		if agentUpdateIncludes(update, "model") {
 			billingModel = update.Spec.Model
@@ -1332,12 +1361,47 @@ func (h *Handler) handleAgentRecreate(w http.ResponseWriter, r *http.Request, id
 		http.Error(w, "agent service is not configured", http.StatusServiceUnavailable)
 		return
 	}
-	recreated, err := h.agentEngine.Agents().Recreate(r.Context(), id, agentengine.AgentRecreateOptions{})
+	var req recreateAgentRequest
+	if err := decodeAgentRequest(r.Body, &req, true); err != nil {
+		http.Error(w, fmt.Sprintf("decode request: %v", err), http.StatusBadRequest)
+		return
+	}
+	agents := h.agentEngine.Agents()
+	current, err := agents.Get(r.Context(), id, agentengine.AgentGetOptions{})
 	if err != nil {
 		writeAgentOperationError(w, err, http.StatusBadRequest)
 		return
 	}
-	writeJSON(w, http.StatusOK, h.presentEngineAgentForRequest(r, recreated))
+	update, err := req.updateRequest(current)
+	if err != nil {
+		writeCodedAPIError(w, http.StatusBadRequest, "invalid_field_mask", err.Error())
+		return
+	}
+	if update != nil && h.im != nil {
+		name := current.Spec.Name
+		if len(update.FieldMask) == 0 || agentUpdateIncludes(*update, "name") {
+			name = update.Spec.Name
+		}
+		if err := h.im.ValidateAgentReplacement(current.ID, h.agentChatUserIDs(current.ID), name); err != nil {
+			writeAgentOperationError(w, err, http.StatusBadRequest)
+			return
+		}
+	}
+	billingModel := current.Spec.Model
+	if update != nil && (len(update.FieldMask) == 0 || agentUpdateIncludes(*update, "model")) {
+		billingModel = update.Spec.Model
+	}
+	skippedResources := []mcp.SkippedTemplateResource{}
+	ctx := agentengine.WithTemplateMCPAvailability(r.Context(), h.mcp, &skippedResources)
+	recreated, err := agents.Recreate(ctx, current.ID, agentengine.AgentRecreateOptions{Update: update})
+	if err != nil {
+		writeAgentOperationErrorWithBillingURL(w, err, http.StatusBadRequest, llm.OpenCSGBillingURL(serviceProfileFromEngine(agentengine.ModelView{ModelSpec: billingModel})))
+		return
+	}
+	h.publishUpdatedAgentUser(serviceAgentFromEngine(recreated))
+	response := h.presentEngineAgentForRequest(r, recreated)
+	response.SkippedResources = skippedResources
+	writeJSON(w, http.StatusOK, response)
 }
 
 func (h *Handler) handleAgentUpgrade(w http.ResponseWriter, r *http.Request, id string) {
@@ -1376,10 +1440,7 @@ func (h *Handler) handleAgentProfileModels(w http.ResponseWriter, r *http.Reques
 		writeAgentOperationError(w, err, http.StatusBadGateway)
 		return
 	}
-	writeJSON(w, http.StatusOK, agent.ProfileModelsResponse{
-		Provider: req.Provider,
-		Models:   models,
-	})
+	writeJSON(w, http.StatusOK, map[string]any{"provider": req.Provider, "items": models})
 }
 
 func (h *Handler) handleAgentProfileDefaults(w http.ResponseWriter, r *http.Request) {
@@ -1634,7 +1695,7 @@ func parseBoolQuery(v string) bool {
 
 func (h *Handler) handleCreateAgentWorker(w http.ResponseWriter, r *http.Request) {
 	var req apitypes.CreateAgentRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeAgentRequest(r.Body, &req, false); err != nil {
 		http.Error(w, fmt.Sprintf("decode request: %v", err), http.StatusBadRequest)
 		return
 	}
@@ -1644,7 +1705,7 @@ func (h *Handler) handleCreateAgentWorker(w http.ResponseWriter, r *http.Request
 		return
 	}
 	createReq := agentCreateRequestFromAPI(req)
-	if h.im != nil && !createReq.Replace {
+	if h.im != nil {
 		if err := h.im.ValidateAgentUser(im.EnsureAgentUserRequest{ID: createReq.Spec.ID, Name: createReq.Spec.Name}); err != nil {
 			writeAgentOperationError(w, err, http.StatusBadRequest)
 			return
@@ -1658,28 +1719,7 @@ func (h *Handler) handleCreateAgentWorker(w http.ResponseWriter, r *http.Request
 	ctx := agentengine.WithLocalTemplateService(r.Context(), hubSvc)
 	ctx = agentengine.WithTemplateMCPAvailability(ctx, h.mcp, &skippedResources)
 	agents := h.agentEngine.Agents()
-	var created agentengine.Agent
-	if createReq.Replace {
-		current, getErr := agents.Get(ctx, createReq.Spec.ID, agentengine.AgentGetOptions{})
-		if getErr != nil {
-			writeAgentOperationErrorWithBillingURL(w, getErr, http.StatusBadRequest, llm.OpenCSGBillingURL(createReq.Spec.AgentProfile))
-			return
-		}
-		update := engineReplaceRequest(createReq, current)
-		if h.im != nil {
-			name := current.Spec.Name
-			if len(update.FieldMask) == 0 || agentUpdateIncludes(update, "name") {
-				name = update.Spec.Name
-			}
-			if err := h.im.ValidateAgentReplacement(current.ID, h.agentChatUserIDs(current.ID), name); err != nil {
-				writeAgentOperationError(w, err, http.StatusBadRequest)
-				return
-			}
-		}
-		created, err = agents.Recreate(ctx, current.ID, agentengine.AgentRecreateOptions{Update: &update})
-	} else {
-		created, err = agents.Create(ctx, engineCreateRequest(createReq))
-	}
+	created, err := agents.Create(ctx, engineCreateRequest(createReq))
 	if err != nil {
 		writeAgentOperationErrorWithBillingURL(w, err, http.StatusBadRequest, llm.OpenCSGBillingURL(createReq.Spec.AgentProfile))
 		return
@@ -1755,53 +1795,28 @@ func isAgentAPIResourceNotFoundError(err error) bool {
 }
 
 func agentCreateRequestFromAPI(req apitypes.CreateAgentRequest) agent.CreateRequest {
-	profileReq := req.ProfileConfig
-	if profileReq == nil {
-		profileReq = req.AgentProfile
+	spec := agent.CreateAgentSpec{ID: req.ID, Name: req.Name, Description: req.Description, Instructions: req.Instructions, FromTemplate: req.FromTemplate, Role: req.Role, Status: req.Status, CreatedAt: req.CreatedAt, UpdatedAt: req.CreatedAt, AgentProfile: agentProfileFromAPI(req.ModelConfig), MCPServers: utils.CloneAnyMap(req.MCPServers), MCPServersSet: req.MCPServersSet}
+	if req.MCPServers != nil && spec.MCPServers == nil {
+		spec.MCPServers = map[string]any{}
 	}
-	prof := agentProfileFromAPI(profileReq)
-	runtimeName := strings.TrimSpace(req.Runtime.Name)
-	runtimeKind := strings.TrimSpace(req.Runtime.Kind)
-	sandboxEnabled := req.Runtime.SandboxEnabled
-	if runtimeKind == "" {
-		runtimeKind = strings.TrimSpace(req.RuntimeKind)
+	if req.ModelConfig != nil {
+		spec.Profile = req.ModelConfig.Selector
 	}
-	if runtimeName == "" {
-		runtimeName = req.RuntimeName
-		sandboxEnabled = req.SandboxEnabled
+	if req.Runtime != nil {
+		if req.Runtime.Name != nil {
+			spec.RuntimeName = *req.Runtime.Name
+		}
+		if req.Runtime.SandboxEnabled != nil {
+			spec.SandboxEnabled = *req.Runtime.SandboxEnabled
+		}
+		if req.Runtime.Image != nil {
+			spec.Image = *req.Runtime.Image
+		}
+		if req.Runtime.Options != nil {
+			spec.RuntimeOptions = utils.CloneAnyMap(*req.Runtime.Options)
+		}
 	}
-	runtimeOptions := utils.CloneAnyMapShallowNestedStringMaps(req.Runtime.Options)
-	if len(runtimeOptions) == 0 {
-		runtimeOptions = utils.CloneAnyMapShallowNestedStringMaps(req.RuntimeOptions)
-	}
-	mcpServers := utils.CloneAnyMapShallowNestedStringMaps(req.MCPServers)
-	if req.MCPServers != nil && mcpServers == nil {
-		mcpServers = map[string]any{}
-	}
-	return agent.CreateRequest{
-		Spec: agent.CreateAgentSpec{
-			ID:             req.ID,
-			Name:           req.Name,
-			Description:    req.Description,
-			Instructions:   req.Instructions,
-			Image:          req.Image,
-			RuntimeKind:    runtimeKind,
-			RuntimeName:    runtimeName,
-			SandboxEnabled: sandboxEnabled,
-			FromTemplate:   req.FromTemplate,
-			Role:           req.Role,
-			Status:         req.Status,
-			CreatedAt:      req.CreatedAt,
-			UpdatedAt:      req.CreatedAt,
-			Profile:        req.Profile,
-			RuntimeOptions: runtimeOptions,
-			MCPServers:     mcpServers,
-			MCPServersSet:  req.MCPServersSet,
-			AgentProfile:   prof,
-		},
-		Replace:   req.Replace,
-		FieldMask: req.FieldMask,
-	}
+	return agent.CreateRequest{Spec: spec}
 }
 
 func (h *Handler) handleHubTemplates(w http.ResponseWriter, r *http.Request) {
@@ -1833,7 +1848,7 @@ func (h *Handler) handleHubTemplates(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		writeJSON(w, http.StatusOK, presentHubTemplates(items))
+		writeJSON(w, http.StatusOK, apitypes.ListResponse[apitypes.HubTemplate]{Items: presentHubTemplates(items)})
 	case http.MethodPost:
 		hubSvc, err := h.hubServiceForRequest(r)
 		if err != nil {
@@ -3666,6 +3681,7 @@ func presentAgent(item agent.Agent) agentResponse {
 		Description:  item.Description,
 		Instructions: item.Instructions,
 		Runtime: apitypes.AgentRuntime{
+			Image:          item.Image,
 			Name:           runtimeCfg.Name,
 			SandboxEnabled: runtimeCfg.Sandboxed,
 			State:          item.Status,

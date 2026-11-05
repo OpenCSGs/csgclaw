@@ -117,7 +117,8 @@ def worker_agent_identity(agent_ref: str, item: Any) -> tuple[str, str]:
 
 def resolve_worker_agent_reference(args: argparse.Namespace, agent_ref: str) -> tuple[str, str]:
     """Resolve an existing worker from the Agent registry without ID alias ambiguity."""
-    agents = api_json(args, "GET", "/api/v1/agents", None)
+    response = api_json(args, "GET", "/api/v1/agents", None)
+    agents = response.get("items") if isinstance(response, dict) else None
     if not isinstance(agents, list):
         raise RuntimeError("CSGClaw returned an invalid agent list while resolving the worker")
     id_matches = [

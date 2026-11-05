@@ -144,7 +144,7 @@ func TestExecuteTemplateListAcceptsOutputShorthand(t *testing.T) {
 			if req.URL.String() != "http://example.test/api/v1/hub/templates" {
 				t.Fatalf("url = %q, want hub templates route", req.URL.String())
 			}
-			return jsonResponse(http.StatusOK, `[{"id":"builtin.gitlab-worker","name":"gitlab-worker","source":{"name":"builtin","kind":"builtin"}}]`), nil
+			return jsonResponse(http.StatusOK, `{"items":[{"id":"builtin.gitlab-worker","name":"gitlab-worker","source":{"name":"builtin","kind":"builtin"}}]}`), nil
 		}),
 	}
 

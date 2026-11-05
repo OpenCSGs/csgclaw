@@ -1,3 +1,4 @@
+import type { components } from "@/api/generated/controlPlane";
 import { get, readResponseText, resolveRequestPath, type ApiError } from "@/api/client";
 import type { AgentLike } from "@/models/agents";
 
@@ -25,10 +26,10 @@ export type AgentSessionStreamResult = {
 };
 
 export async function fetchSessionAgents(): Promise<SessionAgent[]> {
-  const response = await get<AgentLike[]>("api/v1/agents");
-  return (Array.isArray(response) ? response : [])
+  const response = await get<components["schemas"]["AgentList"]>("api/v1/agents");
+  return response.items
     .filter(supportsSessionAPI)
-    .map((item) => ({
+    .map((item: AgentLike) => ({
       id: String(item.id || "").trim(),
       name: String(item.name || item.id || "").trim(),
       status: String(item.status || item.runtime?.state || "").trim(),

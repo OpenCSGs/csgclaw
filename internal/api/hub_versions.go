@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"csgclaw/internal/apitypes"
 	hub "csgclaw/internal/template"
 	"github.com/go-chi/chi/v5"
 )
@@ -30,7 +31,12 @@ func (h *Handler) handleHubVersions(w http.ResponseWriter, r *http.Request) {
 	id := hubTemplateIDPathValue(r)
 	var result any
 	if raw := chi.URLParam(r, "revision"); raw == "" {
-		result, err = svc.Versions(r.Context(), id)
+		var items []hub.TemplateVersion
+		items, err = svc.Versions(r.Context(), id)
+		if items == nil {
+			items = []hub.TemplateVersion{}
+		}
+		result = apitypes.ListResponse[hub.TemplateVersion]{Items: items}
 	} else {
 		revision, parseErr := strconv.Atoi(raw)
 		if parseErr != nil || revision < 1 {

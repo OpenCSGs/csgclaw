@@ -15,7 +15,7 @@ describe("agent runtime installation API", () => {
   });
 
   it("loads bundled runtime status without browser caching", async () => {
-    vi.mocked(get).mockResolvedValue([]);
+    vi.mocked(get).mockResolvedValue({ items: [] });
 
     await fetchAgentRuntimes();
 

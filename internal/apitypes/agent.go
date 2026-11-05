@@ -1,8 +1,10 @@
 package apitypes
 
 import (
+	"bytes"
 	"csgclaw/internal/modelprovider"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"time"
 )
@@ -25,6 +27,7 @@ func runtimeSelectionForKind(kind string) (string, bool) {
 
 type AgentRuntime struct {
 	Kind            string               `json:"-"`
+	Image           string               `json:"image,omitempty"`
 	Name            string               `json:"name,omitempty"`
 	SandboxEnabled  bool                 `json:"sandbox_enabled,omitempty"`
 	SandboxProvider string               `json:"sandbox_provider,omitempty"`
@@ -82,10 +85,10 @@ type Agent struct {
 	Runtime          AgentRuntime   `json:"runtime,omitempty"`
 	RuntimeID        string         `json:"-"`
 	RuntimeKind      string         `json:"-"`
-	RuntimeName      string         `json:"runtime_name,omitempty"`
-	SandboxEnabled   bool           `json:"sandbox_enabled,omitempty"`
-	MCPServers       map[string]any `json:"mcpServers,omitempty"`
-	Image            string         `json:"image,omitempty"`
+	RuntimeName      string         `json:"-"`
+	SandboxEnabled   bool           `json:"-"`
+	MCPServers       map[string]any `json:"mcp_servers,omitempty"`
+	Image            string         `json:"-"`
 	Avatar           string         `json:"-"`
 	BoxID            string         `json:"-"`
 	Role             string         `json:"role"`
@@ -113,6 +116,7 @@ func (a *Agent) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	*a = Agent(decoded.agentAlias)
+	a.Image = a.Runtime.Image
 	profilePayload := decoded.ModelConfig
 	if len(profilePayload) == 0 || string(profilePayload) == "null" {
 		profilePayload = decoded.Profile
@@ -216,182 +220,67 @@ func profileSelector(profile AgentProfile) string {
 	}
 }
 
+// AgentRuntimeInput contains only writable Runtime configuration.
+type AgentRuntimeInput struct {
+	Name           *string         `json:"name,omitempty"`
+	SandboxEnabled *bool           `json:"sandbox_enabled,omitempty"`
+	Image          *string         `json:"image,omitempty"`
+	Options        *map[string]any `json:"options,omitempty"`
+}
+
 type CreateAgentRequest struct {
-	ID             string              `json:"id,omitempty"`
-	Name           string              `json:"name"`
-	Description    string              `json:"description,omitempty"`
-	Instructions   string              `json:"instructions,omitempty"`
-	Image          string              `json:"image,omitempty"`
-	RuntimeKind    string              `json:"-"`
-	RuntimeName    string              `json:"runtime_name,omitempty"`
-	SandboxEnabled bool                `json:"sandbox_enabled,omitempty"`
-	FromTemplate   string              `json:"from_template,omitempty"`
-	Replace        bool                `json:"replace,omitempty"`
-	FieldMask      []string            `json:"field_mask,omitempty"`
-	Role           string              `json:"role,omitempty"`
-	Status         string              `json:"status,omitempty"`
-	CreatedAt      time.Time           `json:"created_at,omitempty"`
-	Runtime        AgentRuntime        `json:"runtime,omitempty"`
-	RuntimeOptions map[string]any      `json:"runtime_options,omitempty"`
-	MCPServers     map[string]any      `json:"mcpServers,omitempty"`
-	MCPServersSet  bool                `json:"-"`
-	Profile        string              `json:"-"`
-	ProfileConfig  *CreateAgentProfile `json:"model_config,omitempty"`
-	AgentProfile   *CreateAgentProfile `json:"agent_profile,omitempty"`
+	ID            string              `json:"id,omitempty"`
+	Name          string              `json:"name"`
+	Description   string              `json:"description,omitempty"`
+	Instructions  string              `json:"instructions,omitempty"`
+	FromTemplate  string              `json:"from_template,omitempty"`
+	Role          string              `json:"role,omitempty"`
+	Status        string              `json:"status,omitempty"`
+	CreatedAt     time.Time           `json:"created_at,omitempty"`
+	Runtime       *AgentRuntimeInput  `json:"runtime,omitempty"`
+	MCPServers    map[string]any      `json:"mcp_servers,omitempty"`
+	MCPServersSet bool                `json:"-"`
+	ModelConfig   *CreateAgentProfile `json:"model_config,omitempty"`
 }
 
 func (r CreateAgentRequest) MarshalJSON() ([]byte, error) {
-	type createAgentRequestJSON struct {
-		ID             string              `json:"id,omitempty"`
-		Name           string              `json:"name"`
-		Description    string              `json:"description,omitempty"`
-		Instructions   string              `json:"instructions,omitempty"`
-		Image          string              `json:"image,omitempty"`
-		RuntimeName    string              `json:"runtime_name,omitempty"`
-		SandboxEnabled bool                `json:"sandbox_enabled,omitempty"`
-		FromTemplate   string              `json:"from_template,omitempty"`
-		Replace        bool                `json:"replace,omitempty"`
-		FieldMask      []string            `json:"field_mask,omitempty"`
-		Role           string              `json:"role,omitempty"`
-		Status         string              `json:"status,omitempty"`
-		CreatedAt      time.Time           `json:"created_at,omitempty"`
-		Runtime        AgentRuntime        `json:"runtime,omitempty"`
-		RuntimeOptions map[string]any      `json:"runtime_options,omitempty"`
-		MCPServers     json.RawMessage     `json:"mcpServers,omitempty"`
-		ModelConfig    *CreateAgentProfile `json:"model_config,omitempty"`
-		Profile        string              `json:"profile,omitempty"`
-		AgentProfile   *CreateAgentProfile `json:"agent_profile,omitempty"`
-	}
-	profile := strings.TrimSpace(r.Profile)
-	runtime := r.Runtime
-	if strings.TrimSpace(runtime.Kind) == "" {
-		runtime.Kind = strings.TrimSpace(r.RuntimeKind)
-		if runtime.Kind == "" {
-			runtime.Kind = runtimeKindFromSelection(r.RuntimeName, r.SandboxEnabled)
-		}
-	}
-	if strings.TrimSpace(runtime.Name) == "" {
-		runtime.Name = strings.TrimSpace(r.RuntimeName)
-		if runtime.Name == "" {
-			runtime.Name, runtime.SandboxEnabled = runtimeSelectionForKind(runtime.Kind)
-		}
-	}
-	if !runtime.SandboxEnabled {
-		runtime.SandboxEnabled = r.SandboxEnabled
-	}
-	var mcpServers json.RawMessage
+	type request CreateAgentRequest
+	var servers json.RawMessage
 	if r.MCPServersSet || r.MCPServers != nil {
-		encoded, err := json.Marshal(r.MCPServers)
+		data, err := json.Marshal(r.MCPServers)
 		if err != nil {
 			return nil, err
 		}
-		mcpServers = encoded
+		servers = data
 	}
-	return json.Marshal(createAgentRequestJSON{
-		ID:             r.ID,
-		Name:           r.Name,
-		Description:    r.Description,
-		Instructions:   r.Instructions,
-		Image:          r.Image,
-		RuntimeName:    runtime.Name,
-		SandboxEnabled: runtime.SandboxEnabled,
-		FromTemplate:   r.FromTemplate,
-		Replace:        r.Replace,
-		FieldMask:      r.FieldMask,
-		Role:           r.Role,
-		Status:         r.Status,
-		CreatedAt:      r.CreatedAt,
-		Runtime:        runtime,
-		RuntimeOptions: r.RuntimeOptions,
-		MCPServers:     mcpServers,
-		ModelConfig:    r.ProfileConfig,
-		Profile:        profile,
-		AgentProfile:   r.AgentProfile,
-	})
+	return json.Marshal(struct {
+		request
+		MCPServers json.RawMessage `json:"mcp_servers,omitempty"`
+	}{request(r), servers})
 }
 
 func (r *CreateAgentRequest) UnmarshalJSON(data []byte) error {
-	type createAgentRequestAlias CreateAgentRequest
-	type createAgentRequestJSON struct {
-		createAgentRequestAlias
-		Profile        string              `json:"profile,omitempty"`
-		RuntimeKind    string              `json:"runtime_kind,omitempty"`
-		RuntimeName    string              `json:"runtime_name,omitempty"`
-		SandboxEnabled *bool               `json:"sandbox_enabled,omitempty"`
-		RuntimeOptions map[string]any      `json:"runtime_options,omitempty"`
-		MCPServers     map[string]any      `json:"mcpServers,omitempty"`
-		ModelConfig    *CreateAgentProfile `json:"model_config,omitempty"`
-		AgentProfile   *CreateAgentProfile `json:"agent_profile,omitempty"`
-		Runtime        struct {
-			Kind           string         `json:"kind,omitempty"`
-			Name           string         `json:"name,omitempty"`
-			SandboxEnabled *bool          `json:"sandbox_enabled,omitempty"`
-			Options        map[string]any `json:"options,omitempty"`
-		} `json:"runtime,omitempty"`
+	if bytes.Equal(bytes.TrimSpace(data), []byte("null")) {
+		return fmt.Errorf("request must be a JSON object")
 	}
-	var decoded createAgentRequestJSON
-	if err := json.Unmarshal(data, &decoded); err != nil {
+	type request CreateAgentRequest
+	var decoded request
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&decoded); err != nil {
 		return err
 	}
-	*r = CreateAgentRequest(decoded.createAgentRequestAlias)
-	r.Profile = strings.TrimSpace(decoded.Profile)
-	r.RuntimeKind = strings.TrimSpace(decoded.RuntimeKind)
-	r.RuntimeName = strings.TrimSpace(decoded.RuntimeName)
-	r.RuntimeOptions = decoded.RuntimeOptions
-	r.MCPServers = decoded.MCPServers
-	r.ProfileConfig = decoded.ModelConfig
-	r.AgentProfile = decoded.AgentProfile
-	var rawFields map[string]json.RawMessage
-	if err := json.Unmarshal(data, &rawFields); err == nil {
-		if _, ok := rawFields["mcpServers"]; ok {
-			r.MCPServersSet = true
-		}
+	*r = CreateAgentRequest(decoded)
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return err
 	}
-	r.Runtime.Kind = strings.TrimSpace(decoded.Runtime.Kind)
-	r.Runtime.Name = strings.TrimSpace(decoded.Runtime.Name)
-	if len(decoded.Runtime.Options) > 0 {
-		r.Runtime.Options = decoded.Runtime.Options
-	}
-	if decoded.SandboxEnabled != nil {
-		r.SandboxEnabled = *decoded.SandboxEnabled
-	}
-	if strings.TrimSpace(r.RuntimeKind) == "" {
-		r.RuntimeKind = strings.TrimSpace(decoded.Runtime.Kind)
-	}
-	if strings.TrimSpace(r.RuntimeName) == "" {
-		r.RuntimeName = strings.TrimSpace(decoded.Runtime.Name)
-	}
-	if !r.SandboxEnabled && decoded.Runtime.SandboxEnabled != nil {
-		r.SandboxEnabled = *decoded.Runtime.SandboxEnabled
-	}
-	r.Runtime.SandboxEnabled = r.SandboxEnabled
-	if len(r.Runtime.Options) == 0 && len(decoded.Runtime.Options) > 0 {
-		r.Runtime.Options = decoded.Runtime.Options
-	}
-	if strings.TrimSpace(r.RuntimeName) == "" {
-		r.RuntimeName = strings.TrimSpace(r.Runtime.Name)
-	}
-	if strings.TrimSpace(r.RuntimeName) == "" {
-		if name, _ := runtimeSelectionForKind(r.RuntimeKind); name != "" {
-			r.RuntimeName = name
-		}
-	}
-	if !r.SandboxEnabled {
-		r.SandboxEnabled = r.Runtime.SandboxEnabled
-	}
-	if !r.SandboxEnabled {
-		_, r.SandboxEnabled = runtimeSelectionForKind(r.RuntimeKind)
-	}
-	if len(r.RuntimeOptions) == 0 && len(r.Runtime.Options) > 0 {
-		r.RuntimeOptions = r.Runtime.Options
-	}
-	if strings.TrimSpace(r.RuntimeKind) == "" {
-		r.RuntimeKind = runtimeKindFromSelection(r.RuntimeName, r.SandboxEnabled)
-	}
+	_, r.MCPServersSet = fields["mcp_servers"]
 	return nil
 }
 
 type CreateAgentProfile struct {
+	Selector        string                               `json:"selector,omitempty"`
 	ImageGeneration *modelprovider.ImageGenerationConfig `json:"image_generation,omitempty"`
 	VideoGeneration *modelprovider.VideoGenerationConfig `json:"video_generation,omitempty"`
 	ModelProviderID string                               `json:"model_provider_id,omitempty"`

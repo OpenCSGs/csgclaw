@@ -9,8 +9,20 @@ import (
 )
 
 type resourcePage[T any] struct {
-	Items []T `json:"items"`
-	resourcequery.Metadata
+	Items      []T    `json:"items"`
+	Page       int    `json:"page,omitempty"`
+	Limit      int    `json:"limit,omitempty"`
+	Total      int    `json:"total"`
+	Revision   string `json:"list_revision"`
+	NextCursor string `json:"next_cursor,omitempty"`
+	HasMore    bool   `json:"has_more"`
+}
+
+func newResourcePage[T any](items []T, meta resourcequery.Metadata) resourcePage[T] {
+	return resourcePage[T]{
+		Items: items, Page: meta.Page, Limit: meta.Per, Total: meta.Total,
+		Revision: meta.Revision, NextCursor: meta.NextCursor, HasMore: meta.HasMore,
+	}
 }
 
 func parseResourceQuery(r *http.Request) (*resourcequery.Query, error) {
@@ -20,16 +32,17 @@ func parseResourceQuery(r *http.Request) (*resourcequery.Query, error) {
 		return nil, nil
 	}
 	q := &resourcequery.Query{Mode: mode, Page: 1, Size: 20, Search: strings.TrimSpace(values.Get("search")), Cursor: values.Get("cursor"), Revision: values.Get("list_revision"), Exclude: values["exclude"]}
-	sizeKey := "per"
-	if mode == "cursor" {
-		sizeKey = "limit"
-		if values.Has("page") || values.Has("per") {
-			return nil, resourcequery.ErrInvalid
-		}
-	} else if mode != "page" || values.Has("cursor") || values.Has("limit") {
+	if values.Has("per") {
 		return nil, resourcequery.ErrInvalid
 	}
-	for key, target := range map[string]*int{"page": &q.Page, sizeKey: &q.Size} {
+	if mode == "cursor" {
+		if values.Has("page") {
+			return nil, resourcequery.ErrInvalid
+		}
+	} else if mode != "page" || values.Has("cursor") {
+		return nil, resourcequery.ErrInvalid
+	}
+	for key, target := range map[string]*int{"page": &q.Page, "limit": &q.Size} {
 		if values.Has(key) {
 			n, err := strconv.Atoi(values.Get(key))
 			if err != nil || n < 1 {

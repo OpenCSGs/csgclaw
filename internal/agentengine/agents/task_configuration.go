@@ -59,7 +59,7 @@ func (s *Controller) TaskRuntimeProfile(agentID, roomID string, cfg taskconfig.C
 		return agentruntime.Profile{}, err
 	}
 	resolved := s.runtimeProfileForAgentWithProfile(got, profile)
-	resolved.BaseURL = strings.TrimSuffix(resolved.BaseURL, "/llm") + "/tasks/" + url.PathEscape(roomID) + "/llm"
+	resolved.BaseURL = strings.TrimSuffix(resolved.BaseURL, "/llm/v1") + "/rooms/" + url.PathEscape(roomID) + "/llm/v1"
 	return resolved, nil
 }
 

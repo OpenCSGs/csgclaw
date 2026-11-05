@@ -73,7 +73,7 @@ func (r *diagnosticFixtureRuntime) Run(ctx context.Context, req agentengine.Turn
 func (r *diagnosticFixtureRuntime) requestModel(ctx context.Context, session, turn string, input agentengine.TurnRequest) error {
 	gateway, _ := r.gateway.Load().(string)
 	body, _ := json.Marshal(map[string]any{"model": "fixture-model", "input": []any{map[string]any{"role": "system", "content": "Fixture system instruction: " + strings.Repeat("complete diagnostic context ", 250)}, map[string]any{"role": "user", "content": input.Input}}, "tools": []any{map[string]any{"type": "function", "name": "lookup", "parameters": map[string]any{"type": "object", "properties": map[string]any{}}}}, "stream": true})
-	req, err := http.NewRequestWithContext(ctx, "POST", gateway+"/api/v1/agents/"+diagnostics.From(ctx).Snapshot().AgentID+"/llm/responses", strings.NewReader(string(body)))
+	req, err := http.NewRequestWithContext(ctx, "POST", gateway+"/api/v1/agents/"+diagnostics.From(ctx).Snapshot().AgentID+"/llm/v1/responses", strings.NewReader(string(body)))
 	if err != nil {
 		return err
 	}

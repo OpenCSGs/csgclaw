@@ -89,7 +89,7 @@ func TestModelProviderPresetsAndInvalidRequests(t *testing.T) {
 	rec := httptest.NewRecorder()
 	h.Routes().ServeHTTP(rec, httptest.NewRequest("GET", "/api/v1/model-provider-presets", nil))
 	var data struct {
-		Presets []modelpreset.Preset `json:"presets"`
+		Presets []modelpreset.Preset `json:"items"`
 	}
 	if rec.Code != 200 || json.Unmarshal(rec.Body.Bytes(), &data) != nil || len(data.Presets) < 16 {
 		t.Fatalf("directory=%d %s", rec.Code, rec.Body)

@@ -37,7 +37,7 @@ func TestTaskLLMReadsRoomProfileAndRejectsOtherAgents(t *testing.T) {
 		status int
 	}{{"own", 200}, {"other", 403}, {"missing", 404}} {
 		rec := httptest.NewRecorder()
-		h.Routes().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/agents/agent-manager/tasks/"+test.room+"/llm/v1/models", nil))
+		h.Routes().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/agents/agent-manager/rooms/"+test.room+"/llm/v1/models", nil))
 		if rec.Code != test.status {
 			t.Fatalf("%s: %d %s", test.room, rec.Code, rec.Body.String())
 		}
@@ -45,10 +45,10 @@ func TestTaskLLMReadsRoomProfileAndRejectsOtherAgents(t *testing.T) {
 			t.Fatal("did not use task profile")
 		}
 	}
-	if !h.authorizeAgentPlatformRoute(httptest.NewRequest(http.MethodPost, "/api/v1/agents/agent-manager/tasks/own/llm/responses", nil), "agent-manager") {
+	if !h.authorizeAgentPlatformRoute(httptest.NewRequest(http.MethodPost, "/api/v1/agents/agent-manager/rooms/own/llm/v1/responses", nil), "agent-manager") {
 		t.Fatal("own task route is blocked")
 	}
-	if h.authorizeAgentPlatformRoute(httptest.NewRequest(http.MethodPost, "/api/v1/agents/agent-manager/tasks/other/llm/responses", nil), "agent-manager") {
+	if h.authorizeAgentPlatformRoute(httptest.NewRequest(http.MethodPost, "/api/v1/agents/agent-manager/rooms/other/llm/v1/responses", nil), "agent-manager") {
 		t.Fatal("another task route is permitted")
 	}
 }

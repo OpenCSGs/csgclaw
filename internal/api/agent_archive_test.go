@@ -57,7 +57,7 @@ func TestDeletedAgentCanBeRecreatedByNameWithoutReusingHistoryHTTP(t *testing.T)
 		}
 		return rec
 	}
-	const createNew = `{"id":"new","type":"agent","name":"worker","avatar":"avatar/3D-5.png","agent_binding":{"mode":"create","agent":{"name":"worker","role":"worker","runtime_name":"codex"}}}`
+	const createNew = `{"id":"new","type":"agent","name":"worker","avatar":"avatar/3D-5.png","agent_binding":{"mode":"create","agent":{"name":"worker","role":"worker","runtime":{"name":"codex"}}}}`
 	request(http.MethodPost, "/api/v1/agents/agent-old/archive", "", 200)
 	request(http.MethodPost, "/api/v1/channels/csgclaw/participants", createNew, 409)
 	if _, err := engine.Agents().Get(context.Background(), "agent-new", agentengine.AgentGetOptions{}); err == nil {
@@ -65,9 +65,9 @@ func TestDeletedAgentCanBeRecreatedByNameWithoutReusingHistoryHTTP(t *testing.T)
 	}
 	request(http.MethodDelete, "/api/v1/agents/agent-old", `{"name":"worker"}`, 204)
 	for _, tc := range []struct{ path, body string }{
-		{"/api/v1/channels/csgclaw/participants", `{"id":"old","type":"agent","name":"worker","agent_binding":{"mode":"create","agent":{"runtime_name":"codex"}}}`},
+		{"/api/v1/channels/csgclaw/participants", `{"id":"old","type":"agent","name":"worker","agent_binding":{"mode":"create","agent":{"runtime":{"name":"codex"}}}}`},
 		{"/api/v1/channels/csgclaw/users", `{"id":"old","name":"worker","role":"worker"}`},
-		{"/api/v1/agents", `{"id":"agent-old","name":"worker","runtime_name":"codex"}`},
+		{"/api/v1/agents", `{"id":"agent-old","name":"worker","runtime":{"name":"codex"}}`},
 	} {
 		response := request(http.MethodPost, tc.path, tc.body, 409)
 		if !strings.Contains(response.Body.String(), `"code":"agent_identity_deleted"`) {
@@ -140,12 +140,12 @@ func TestAgentArchiveRestoreAndConfirmedDeletionHTTP(t *testing.T) {
 	if len(group.Messages) != 2 || group.Messages[1].Event.Key != im.AgentArchivedEventKey {
 		t.Fatalf("archive notice missing or duplicated: %+v", group.Messages)
 	}
-	var active []agentResponse
-	if err = json.Unmarshal(request(http.MethodGet, "/api/v1/agents", "", 200).Body.Bytes(), &active); err != nil || len(active) != 0 {
+	var active apitypes.ListResponse[agentResponse]
+	if err = json.Unmarshal(request(http.MethodGet, "/api/v1/agents", "", 200).Body.Bytes(), &active); err != nil || len(active.Items) != 0 {
 		t.Fatalf("active=%v %v", active, err)
 	}
-	var archived []agentResponse
-	if err = json.Unmarshal(request(http.MethodGet, "/api/v1/agents?archived=true", "", 200).Body.Bytes(), &archived); err != nil || len(archived) != 1 || archived[0].ArchivedAt == nil || archived[0].ArchivedBy != "admin" {
+	var archived apitypes.ListResponse[agentResponse]
+	if err = json.Unmarshal(request(http.MethodGet, "/api/v1/agents?archived=true", "", 200).Body.Bytes(), &archived); err != nil || len(archived.Items) != 1 || archived.Items[0].ArchivedAt == nil || archived.Items[0].ArchivedBy != "admin" {
 		t.Fatalf("archived=%v %v", archived, err)
 	}
 	if len(imSvc.Bootstrap().Rooms) != 1 {

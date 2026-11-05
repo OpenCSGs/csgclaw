@@ -906,7 +906,7 @@ func TestHandleManagerOmitsRuntimeOptionSchemas(t *testing.T) {
 	patchReq := httptest.NewRequest(
 		http.MethodPatch,
 		"/api/v1/agents/"+agent.ManagerUserID,
-		strings.NewReader(`{"runtime_options":{"local_workspace_dir":"/tmp/manager"}}`),
+		strings.NewReader(`{"runtime":{"options":{"local_workspace_dir":"/tmp/manager"}}}`),
 	)
 	patchReq.Header.Set("Content-Type", "application/json")
 	srv.Routes().ServeHTTP(patchRec, patchReq)
@@ -1088,10 +1088,11 @@ func TestHandleAgentsListReturnsUnifiedAgents(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
 	}
-	var got []agent.Agent
-	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
+	var response apitypes.ListResponse[apitypes.Agent]
+	if err := json.NewDecoder(rec.Body).Decode(&response); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
+	got := response.Items
 	if len(got) != 3 {
 		t.Fatalf("len(agents) = %d, want 3; body=%s", len(got), rec.Body.String())
 	}
@@ -1200,9 +1201,11 @@ func TestHandleAgentsListExposesLinkedLocalUser(t *testing.T) {
 		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
 	}
 	var got []apitypes.Agent
-	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
+	var gotResponse apitypes.ListResponse[apitypes.Agent]
+	if err := json.NewDecoder(rec.Body).Decode(&gotResponse); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
+	got = gotResponse.Items
 	if len(got) != 1 {
 		t.Fatalf("len(agents) = %d, want 1; body=%s", len(got), rec.Body.String())
 	}
@@ -1260,9 +1263,11 @@ func TestHandleAgentResponsesExposeLinkedLocalUserWithoutCSGClawParticipant(t *t
 			var got apitypes.Agent
 			if tt.listResult {
 				var items []apitypes.Agent
-				if err := json.NewDecoder(rec.Body).Decode(&items); err != nil {
+				var itemsResponse apitypes.ListResponse[apitypes.Agent]
+				if err := json.NewDecoder(rec.Body).Decode(&itemsResponse); err != nil {
 					t.Fatalf("decode response: %v", err)
 				}
+				items = itemsResponse.Items
 				if len(items) != 1 {
 					t.Fatalf("len(agents) = %d, want 1; body=%s", len(items), rec.Body.String())
 				}
@@ -1294,7 +1299,7 @@ func TestHandleAgentsGetByIDReturnsAgent(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
 	}
-	var got agent.Agent
+	var got apitypes.Agent
 	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
@@ -1370,14 +1375,11 @@ func TestHandleAgentsListReportsConfiguredStartupPending(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
 	}
-	var got []struct {
-		Runtime struct {
-			StartupPending bool `json:"startup_pending"`
-		} `json:"runtime"`
-	}
-	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
+	var response apitypes.ListResponse[apitypes.Agent]
+	if err := json.NewDecoder(rec.Body).Decode(&response); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
+	got := response.Items
 	if len(got) != 1 {
 		t.Fatalf("len(agents) = %d, want 1", len(got))
 	}
@@ -1636,10 +1638,11 @@ func TestHandleAgentsListRedactsProfileAPIKey(t *testing.T) {
 	if strings.Contains(rec.Body.String(), "secret-token") {
 		t.Fatalf("response leaked API key: %s", rec.Body.String())
 	}
-	var got []map[string]any
-	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
+	var response apitypes.ListResponse[map[string]any]
+	if err := json.NewDecoder(rec.Body).Decode(&response); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
+	got := response.Items
 	profile, ok := got[0]["model_config"].(map[string]any)
 	if !ok || profile["api_key_set"] != true {
 		t.Fatalf("model_config = %#v, want api_key_set true", got[0]["model_config"])
@@ -1724,7 +1727,7 @@ func TestHandleAgentsPatchUpdatesMetadataAndProfile(t *testing.T) {
 	}, agent.WithRuntime(fakeCompatRuntime{kind: agent.RuntimeKindCodex}))
 
 	srv := &Handler{svc: svc, agentEngine: agentengine.New(svc), workspace: svc.Workspace(), agentModels: svc.Models(), agentRuntime: svc}
-	body := `{"description":"new role","agent_profile":{"name":"alice","provider":"csghub_lite","model_id":"new-model","env":{"A":"B"}}}`
+	body := `{"description":"new role","model_config":{"name":"alice","provider":"csghub_lite","model_id":"new-model","env":{"A":"B"}}}`
 	req := httptest.NewRequest(http.MethodPatch, "/api/v1/agents/u-alice", strings.NewReader(body))
 	rec := httptest.NewRecorder()
 
@@ -1769,7 +1772,7 @@ func TestHandleAgentsPatchFieldMaskClearsRuntimeOptions(t *testing.T) {
 	}, agent.WithRuntime(fakeCompatRuntime{kind: agent.RuntimeKindCodex}))
 
 	srv := &Handler{svc: svc, agentEngine: agentengine.New(svc), workspace: svc.Workspace(), agentModels: svc.Models(), agentRuntime: svc}
-	body := `{"runtime_options":{},"field_mask":["runtime_options"]}`
+	body := `{"runtime":{"options":{}}}`
 	req := httptest.NewRequest(http.MethodPatch, "/api/v1/agents/u-alice", strings.NewReader(body))
 	rec := httptest.NewRecorder()
 
@@ -1811,7 +1814,7 @@ func TestHandleAgentsGetByIDReloadsStateBeforeLookup(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
 	}
-	var got agent.Agent
+	var got apitypes.Agent
 	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
@@ -2132,7 +2135,7 @@ func TestHandleAgentsCreateDoesNotProvisionIMUser(t *testing.T) {
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusCreated, rec.Body.String())
 	}
-	var got agent.Agent
+	var got apitypes.Agent
 	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
@@ -2174,7 +2177,7 @@ func TestHandleAgentsCreateWorkerUsesRequestedRuntimeKind(t *testing.T) {
 		svc: svc,
 		im:  im.NewService(), agentEngine: agentengine.New(svc), workspace: svc.Workspace(), agentModels: svc.Models(), agentRuntime: svc,
 	}
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/agents", strings.NewReader(`{"name":"alice","role":"worker","runtime_name":"codex"}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/agents", strings.NewReader(`{"name":"alice","role":"worker","runtime":{"name":"codex"}}`))
 	rec := httptest.NewRecorder()
 
 	srv.Routes().ServeHTTP(rec, req)
@@ -2182,7 +2185,7 @@ func TestHandleAgentsCreateWorkerUsesRequestedRuntimeKind(t *testing.T) {
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusCreated, rec.Body.String())
 	}
-	var got agent.Agent
+	var got apitypes.Agent
 	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
@@ -2194,7 +2197,7 @@ func TestHandleAgentsCreateWorkerUsesRequestedRuntimeKind(t *testing.T) {
 	}
 }
 
-func TestHandleAgentsCreateWorkerSupportsLegacyRuntimeKindRequest(t *testing.T) {
+func TestHandleAgentsCreateWorkerUsesCanonicalRuntimeRequest(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	t.Cleanup(agent.TestOnlySetSandboxProvider(sandboxtest.NewProvider()))
 
@@ -2221,7 +2224,7 @@ func TestHandleAgentsCreateWorkerSupportsLegacyRuntimeKindRequest(t *testing.T) 
 		svc: svc,
 		im:  im.NewService(), agentEngine: agentengine.New(svc), workspace: svc.Workspace(), agentModels: svc.Models(), agentRuntime: svc,
 	}
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/agents", strings.NewReader(`{"name":"alice","role":"worker","runtime_kind":"codex"}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/agents", strings.NewReader(`{"name":"alice","role":"worker","runtime":{"name":"codex"}}`))
 	rec := httptest.NewRecorder()
 
 	srv.Routes().ServeHTTP(rec, req)
@@ -2229,7 +2232,7 @@ func TestHandleAgentsCreateWorkerSupportsLegacyRuntimeKindRequest(t *testing.T) 
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusCreated, rec.Body.String())
 	}
-	var got agent.Agent
+	var got apitypes.Agent
 	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
@@ -2265,7 +2268,7 @@ func TestHandleAgentsCreateCodexWorkerEnsuresCodexBridge(t *testing.T) {
 		svc: svc,
 		im:  im.NewService(), agentEngine: agentengine.New(svc), workspace: svc.Workspace(), agentModels: svc.Models(), agentRuntime: svc,
 	}
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/agents", strings.NewReader(`{"name":"alice","role":"worker","runtime_name":"codex","agent_profile":{"profile_complete":true}}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/agents", strings.NewReader(`{"name":"alice","role":"worker","runtime":{"name":"codex"}}`))
 	rec := httptest.NewRecorder()
 
 	srv.Routes().ServeHTTP(rec, req)
@@ -2291,21 +2294,16 @@ func TestAgentMCPServersResponsesRedactSecrets(t *testing.T) {
 	}
 
 	created := doAgentJSON(t, srv, http.MethodPost, "/api/v1/agents", map[string]any{
-		"id":           "u-mcp-secrets",
-		"name":         "mcp-secrets",
-		"role":         agent.RoleWorker,
-		"runtime_kind": agent.RuntimeKindCodex,
-		"image":        "codex-image:test",
-		"agent_profile": map[string]any{
-			"profile_complete": true,
-		},
-		"mcpServers": secretConfig,
+		"id":          "u-mcp-secrets",
+		"name":        "mcp-secrets",
+		"role":        agent.RoleWorker,
+		"runtime":     map[string]any{"name": agent.RuntimeKindCodex, "image": "codex-image:test"},
+		"mcp_servers": secretConfig,
 	}, http.StatusCreated)
 	assertMCPServersSecretsRedacted(t, created.MCPServers)
 
 	updated := doAgentJSON(t, srv, http.MethodPatch, "/api/v1/agents/"+created.ID, map[string]any{
-		"field_mask": []string{"mcpServers"},
-		"mcpServers": secretConfig,
+		"mcp_servers": secretConfig,
 	}, http.StatusOK)
 	assertMCPServersSecretsRedacted(t, updated.MCPServers)
 
@@ -2319,9 +2317,11 @@ func TestAgentMCPServersResponsesRedactSecrets(t *testing.T) {
 		t.Fatalf("list status = %d, want %d; body=%s", listRec.Code, http.StatusOK, listRec.Body.String())
 	}
 	var listed []agentResponse
-	if err := json.NewDecoder(listRec.Body).Decode(&listed); err != nil {
+	var listedResponse apitypes.ListResponse[agentResponse]
+	if err := json.NewDecoder(listRec.Body).Decode(&listedResponse); err != nil {
 		t.Fatalf("decode list response: %v", err)
 	}
+	listed = listedResponse.Items
 	for _, item := range listed {
 		if item.ID == created.ID {
 			assertMCPServersSecretsRedacted(t, item.MCPServers)
@@ -2756,7 +2756,7 @@ func TestHandleAgentsCreateManagerUsesBootstrapManager(t *testing.T) {
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusCreated, rec.Body.String())
 	}
-	var got agent.Agent
+	var got apitypes.Agent
 	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
@@ -2771,7 +2771,7 @@ func TestHandleAgentsCreateManagerRejectsNonCodexRuntime(t *testing.T) {
 
 	svc := mustNewService(t)
 	srv := &Handler{svc: svc, agentEngine: agentengine.New(svc), workspace: svc.Workspace(), agentModels: svc.Models(), agentRuntime: svc}
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/agents", strings.NewReader(`{"id":"manager","name":"manager","runtime_kind":"dsh"}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/agents", strings.NewReader(`{"id":"manager","name":"manager","runtime":{"name":"dsh"}}`))
 	rec := httptest.NewRecorder()
 
 	srv.Routes().ServeHTTP(rec, req)
@@ -2789,8 +2789,7 @@ func TestHandleAgentsCreateManagerRejectsMCPRuntimeOptions(t *testing.T) {
 	t.Cleanup(agent.TestOnlySetSandboxProvider(sandboxtest.NewProvider()))
 
 	for name, body := range map[string]string{
-		"top-level-runtime-options": `{"id":"manager","name":"manager","runtime_options":{"mcp":{"mcpServers":{"context7":{"command":"npx"}}}}}`,
-		"compact-runtime-options":   `{"id":"manager","name":"manager","runtime":{"options":{"mcp":{"mcpServers":{"context7":{"command":"npx"}}}}}}`,
+		"compact-runtime-options": `{"id":"manager","name":"manager","runtime":{"options":{"mcp":{"mcpServers":{"context7":{"command":"npx"}}}}}}`,
 	} {
 		t.Run(name, func(t *testing.T) {
 			svc := mustNewService(t)
@@ -2829,15 +2828,15 @@ func TestHandleAgentsCreateReplaceUsesUnifiedServiceEntry(t *testing.T) {
 	}
 
 	srv := &Handler{svc: svc, agentEngine: agentengine.New(svc), workspace: svc.Workspace(), agentModels: svc.Models(), agentRuntime: svc}
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/agents", strings.NewReader(`{"id":"u-alice","name":"alice-v2","role":"worker","replace":true}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/agents/u-alice/recreate", strings.NewReader(`{"configuration":{"name":"alice-v2"}}`))
 	rec := httptest.NewRecorder()
 
 	srv.Routes().ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusCreated {
-		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusCreated, rec.Body.String())
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
 	}
-	var got agent.Agent
+	var got apitypes.Agent
 	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
@@ -2870,15 +2869,15 @@ func TestHandleAgentsCreateReplaceFieldMaskMergesInService(t *testing.T) {
 	}
 
 	srv := &Handler{svc: svc, agentEngine: agentengine.New(svc), workspace: svc.Workspace(), agentModels: svc.Models(), agentRuntime: svc}
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/agents", strings.NewReader(`{"id":"u-alice","name":"alice-v2","description":"","image":"agent-image:v2","replace":true,"field_mask":["id","name"]}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/agents/u-alice/recreate", strings.NewReader(`{"configuration":{"name":"alice-v2","description":"","runtime":{"image":"agent-image:v2"}},"field_mask":["name"]}`))
 	rec := httptest.NewRecorder()
 
 	srv.Routes().ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusCreated {
-		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusCreated, rec.Body.String())
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
 	}
-	var got agent.Agent
+	var got apitypes.Agent
 	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
@@ -2886,13 +2885,13 @@ func TestHandleAgentsCreateReplaceFieldMaskMergesInService(t *testing.T) {
 		t.Fatalf("agent = %+v, want masked replace preserving unmasked fields", got)
 	}
 
-	descriptionOnly := httptest.NewRequest(http.MethodPost, "/api/v1/agents", strings.NewReader(`{"id":"u-alice","description":"updated by CLI replace","replace":true,"field_mask":["id","description"]}`))
+	descriptionOnly := httptest.NewRequest(http.MethodPost, "/api/v1/agents/u-alice/recreate", strings.NewReader(`{"configuration":{"description":"updated by CLI replace"},"field_mask":["description"]}`))
 	descriptionRecorder := httptest.NewRecorder()
 	srv.Routes().ServeHTTP(descriptionRecorder, descriptionOnly)
-	if descriptionRecorder.Code != http.StatusCreated {
-		t.Fatalf("description-only replace status = %d, want %d; body=%s", descriptionRecorder.Code, http.StatusCreated, descriptionRecorder.Body.String())
+	if descriptionRecorder.Code != http.StatusOK {
+		t.Fatalf("description-only replace status = %d, want %d; body=%s", descriptionRecorder.Code, http.StatusOK, descriptionRecorder.Body.String())
 	}
-	var descriptionResult agent.Agent
+	var descriptionResult apitypes.Agent
 	if err := json.NewDecoder(descriptionRecorder.Body).Decode(&descriptionResult); err != nil {
 		t.Fatalf("decode description-only replace response: %v", err)
 	}
@@ -2928,13 +2927,11 @@ func TestHandleAgentsCreateReplaceIDOnlyRecreatesWithoutClearingSpec(t *testing.
 		}), agentEngine: agentengine.New(svc), workspace: svc.Workspace(), agentModels: svc.Models(), agentRuntime: svc,
 	}
 	recorder := httptest.NewRecorder()
-	handler.Routes().ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, "/api/v1/agents", strings.NewReader(
-		`{"id":"agent-alice","replace":true,"field_mask":["id"]}`,
-	)))
-	if recorder.Code != http.StatusCreated {
-		t.Fatalf("status = %d, want %d; body=%s", recorder.Code, http.StatusCreated, recorder.Body.String())
+	handler.Routes().ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, "/api/v1/agents/agent-alice/recreate", strings.NewReader(`{}`)))
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body=%s", recorder.Code, http.StatusOK, recorder.Body.String())
 	}
-	var replaced agent.Agent
+	var replaced apitypes.Agent
 	if err := json.NewDecoder(recorder.Body).Decode(&replaced); err != nil {
 		t.Fatal(err)
 	}
@@ -2948,12 +2945,13 @@ func TestHandleAgentsCreateReplaceIDOnlyRecreatesWithoutClearingSpec(t *testing.
 }
 
 func TestAgentCreateRequestFromAPIIncludesFromTemplate(t *testing.T) {
+	runtimeName := agent.RuntimeNameCodex
 	got := agentCreateRequestFromAPI(apitypes.CreateAgentRequest{
 		Name:         "alice",
 		Instructions: "follow AGENTS",
-		RuntimeName:  agent.RuntimeNameCodex,
+		Runtime:      &apitypes.AgentRuntimeInput{Name: &runtimeName},
 		FromTemplate: "builtin.frontend-alice",
-		Profile:      "codex-fast",
+		ModelConfig:  &apitypes.CreateAgentProfile{Selector: "codex-fast"},
 	})
 
 	if got.Spec.Name != "alice" {
@@ -3001,7 +2999,7 @@ func TestHandleAgentsPatchSelectorPreservesModelConfiguration(t *testing.T) {
 	handler := &Handler{svc: svc, agentEngine: agentengine.New(svc), workspace: svc.Workspace(), agentModels: svc.Models(), agentRuntime: svc}
 	recorder := httptest.NewRecorder()
 	handler.Routes().ServeHTTP(recorder, httptest.NewRequest(http.MethodPatch, "/api/v1/agents/agent-selector", strings.NewReader(
-		`{"profile":"new-selector"}`,
+		`{"model_config":{"selector":"new-selector"}}`,
 	)))
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d; body=%s", recorder.Code, http.StatusOK, recorder.Body.String())
@@ -3038,10 +3036,11 @@ func TestHandleHubTemplatesListsAggregatedTemplates(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
 	}
-	var got []apitypes.HubTemplate
-	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
+	var listResponse apitypes.ListResponse[apitypes.HubTemplate]
+	if err := json.NewDecoder(rec.Body).Decode(&listResponse); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
+	got := listResponse.Items
 	if len(got) == 0 {
 		t.Fatalf("templates = %#v, want non-empty result", got)
 	}
@@ -4070,10 +4069,11 @@ func TestHandleSkillsListsGlobalSkillsAndBrowsesFiles(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("list status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
 	}
-	var skills []skillsystem.SkillSummary
-	if err := json.NewDecoder(rec.Body).Decode(&skills); err != nil {
+	var listResponse apitypes.ListResponse[skillsystem.SkillSummary]
+	if err := json.NewDecoder(rec.Body).Decode(&listResponse); err != nil {
 		t.Fatalf("decode skills response: %v", err)
 	}
+	skills := listResponse.Items
 	if len(skills) != 6 {
 		t.Fatalf("len(skills) = %d, want 6", len(skills))
 	}
@@ -4279,10 +4279,11 @@ func TestHandleSkillsMissingRootUsesEmptyOrNotFound(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("list status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
 	}
-	var skills []skillsystem.SkillSummary
-	if err := json.NewDecoder(rec.Body).Decode(&skills); err != nil {
+	var listResponse apitypes.ListResponse[skillsystem.SkillSummary]
+	if err := json.NewDecoder(rec.Body).Decode(&listResponse); err != nil {
 		t.Fatalf("decode skills response: %v", err)
 	}
+	skills := listResponse.Items
 	skillsByName := map[string]skillsystem.SkillSummary{}
 	for _, item := range skills {
 		skillsByName[item.Name] = item
@@ -4341,10 +4342,11 @@ func TestHandleSkillsBrowsesSystemSkillWhenLocalSystemSkillIsMalformed(t *testin
 	if rec.Code != http.StatusOK {
 		t.Fatalf("list status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
 	}
-	var skills []skillsystem.SkillSummary
-	if err := json.NewDecoder(rec.Body).Decode(&skills); err != nil {
+	var listResponse apitypes.ListResponse[skillsystem.SkillSummary]
+	if err := json.NewDecoder(rec.Body).Decode(&listResponse); err != nil {
 		t.Fatalf("decode skills response: %v", err)
 	}
+	skills := listResponse.Items
 	skillsByName := map[string]skillsystem.SkillSummary{}
 	for _, item := range skills {
 		skillsByName[item.Name] = item
@@ -4531,7 +4533,7 @@ enabled = true
 	srv := &Handler{}
 	srv.SetConfigPath(configPath)
 	rec := httptest.NewRecorder()
-	srv.Routes().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/skills/remote?page=2&per=16&search=agents", nil))
+	srv.Routes().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/skills/remote?page=2&limit=16&search=agents", nil))
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
@@ -4547,13 +4549,13 @@ enabled = true
 		} `json:"items"`
 		NextPage *int `json:"next_page"`
 		Page     int  `json:"page"`
-		Per      int  `json:"per"`
+		Limit    int  `json:"limit"`
 		Total    *int `json:"total"`
 	}
 	if err := json.NewDecoder(rec.Body).Decode(&response); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if response.Page != 2 || response.Per != 16 || response.Total == nil || *response.Total != 78 {
+	if response.Page != 2 || response.Limit != 16 || response.Total == nil || *response.Total != 78 {
 		t.Fatalf("response pagination = %+v, want page 2/per 16/total 78", response)
 	}
 	if response.NextPage == nil || *response.NextPage != 3 {
@@ -4602,7 +4604,7 @@ enabled = true
 		t.Run(test.name, func(t *testing.T) {
 			currentStatus = test.status
 			rec := httptest.NewRecorder()
-			srv.Routes().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/skills/remote?page=2&per=16&search=agents", nil))
+			srv.Routes().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/skills/remote?page=2&limit=16&search=agents", nil))
 			if rec.Code != http.StatusOK {
 				t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
 			}
@@ -5041,10 +5043,11 @@ func TestHandleHubTemplatesPublishesAgentSnapshot(t *testing.T) {
 	if history.Code != http.StatusOK {
 		t.Fatalf("history = %d %s", history.Code, history.Body.String())
 	}
-	var versions []hub.TemplateVersion
-	if err := json.Unmarshal(history.Body.Bytes(), &versions); err != nil {
+	var historyResponse apitypes.ListResponse[hub.TemplateVersion]
+	if err := json.Unmarshal(history.Body.Bytes(), &historyResponse); err != nil {
 		t.Fatal(err)
 	}
+	versions := historyResponse.Items
 	if len(versions) != 3 {
 		t.Fatalf("history = %+v", versions)
 	}
@@ -5433,15 +5436,15 @@ func TestHandleAgentsCreateReplaceManagerUsesUnifiedServiceEntry(t *testing.T) {
 	}
 
 	srv := &Handler{svc: svc, agentEngine: agentengine.New(svc), workspace: svc.Workspace(), agentModels: svc.Models(), agentRuntime: svc}
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/agents", strings.NewReader(`{"id":"u-manager","name":"manager","replace":true}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/agents/u-manager/recreate", strings.NewReader(`{"configuration":{"name":"manager"}}`))
 	rec := httptest.NewRecorder()
 
 	srv.Routes().ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusCreated {
-		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusCreated, rec.Body.String())
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
 	}
-	var got agent.Agent
+	var got apitypes.Agent
 	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
@@ -5465,7 +5468,7 @@ func TestHandleAgentsCreateReplaceManagerRejectsNonCodexRuntime(t *testing.T) {
 	}
 
 	srv := &Handler{svc: svc, agentEngine: agentengine.New(svc), workspace: svc.Workspace(), agentModels: svc.Models(), agentRuntime: svc}
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/agents", strings.NewReader(`{"id":"u-manager","name":"manager","replace":true,"runtime_name":"dsh","sandbox_enabled":true}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/agents/u-manager/recreate", strings.NewReader(`{"configuration":{"name":"manager","runtime":{"name":"dsh","sandbox_enabled":true}}}`))
 	rec := httptest.NewRecorder()
 
 	srv.Routes().ServeHTTP(rec, req)
@@ -5493,7 +5496,7 @@ func TestHandleAgentsCreateReplaceManagerRejectsMCPRuntimeOptions(t *testing.T) 
 	}
 
 	srv := &Handler{svc: svc, agentEngine: agentengine.New(svc), workspace: svc.Workspace(), agentModels: svc.Models(), agentRuntime: svc}
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/agents", strings.NewReader(`{"id":"u-manager","name":"manager","replace":true,"field_mask":["runtime_options"],"runtime_options":{"mcp":{"mcpServers":{"context7":{"command":"npx"}}}}}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/agents/u-manager/recreate", strings.NewReader(`{"configuration":{"name":"manager","runtime":{"options":{"mcp":{"mcpServers":{"context7":{"command":"npx"}}}}}},"field_mask":["runtime.options"]}`))
 	rec := httptest.NewRecorder()
 
 	srv.Routes().ServeHTTP(rec, req)
@@ -5573,10 +5576,10 @@ func TestHandleAgentsCreateReplaceManagerIgnoresImageAndUsesRuntimeTemplate(t *t
 	if err != nil {
 		t.Fatalf("read response body: %v", err)
 	}
-	if resp.StatusCode != http.StatusCreated {
-		t.Fatalf("status = %d, want %d; body=%s", resp.StatusCode, http.StatusCreated, string(body))
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body=%s", resp.StatusCode, http.StatusOK, string(body))
 	}
-	var got agent.Agent
+	var got apitypes.Agent
 	if err := json.Unmarshal(body, &got); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
@@ -8382,7 +8385,7 @@ func TestHandleBotLLMModelsLegacyRouteReturnsBridgeCatalog(t *testing.T) {
 		serverAccessToken: "secret", agentEngine: agentengine.New(svc), workspace: svc.Workspace(), agentModels: svc.Models(), agentRuntime: svc,
 	}
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/agents/u-manager/llm/models", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/agents/u-manager/llm/v1/models", nil)
 	req.Header.Set("Authorization", "Bearer secret")
 	rec := httptest.NewRecorder()
 	srv.Routes().ServeHTTP(rec, req)

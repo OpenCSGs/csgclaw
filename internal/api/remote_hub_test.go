@@ -15,9 +15,10 @@ func TestRemoteHubPageOptions(t *testing.T) {
 		per     int
 	}{
 		{name: "defaults", page: 1, per: 12},
-		{name: "explicit values", query: "?page=2&per=24", page: 2, per: 24},
-		{name: "rejects invalid page", query: "?page=0&per=12", wantErr: "page must be a positive integer"},
-		{name: "rejects per above limit", query: "?page=1&per=101", wantErr: "per must be an integer between 1 and 100"},
+		{name: "explicit values", query: "?page=2&limit=24", page: 2, per: 24},
+		{name: "rejects invalid page", query: "?page=0&limit=12", wantErr: "page must be a positive integer"},
+		{name: "rejects limit above maximum", query: "?page=1&limit=101", wantErr: "limit must be an integer between 1 and 100"},
+		{name: "rejects unsupported per", query: "?per=12", wantErr: "unsupported query parameter per; use limit"},
 	}
 
 	for _, test := range tests {

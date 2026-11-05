@@ -29,7 +29,7 @@ type modelProviderTestResponse struct {
 		Models      []string `json:"models"`
 		Status      string   `json:"status"`
 		Message     string   `json:"message"`
-	} `json:"providers"`
+	} `json:"items"`
 }
 
 func TestModelProviderCatalogListsBuiltinsBeforeCustomProviders(t *testing.T) {
@@ -388,7 +388,7 @@ models = ["gpt-test"]
 	}}
 	handler := newModelProviderTestHandler(t, configPath, agentState)
 	patchRecorder := httptest.NewRecorder()
-	handler.Routes().ServeHTTP(patchRecorder, httptest.NewRequest(http.MethodPatch, "/api/v1/agents/agent-selector", strings.NewReader(`{"profile":"openai.gpt-test"}`)))
+	handler.Routes().ServeHTTP(patchRecorder, httptest.NewRequest(http.MethodPatch, "/api/v1/agents/agent-selector", strings.NewReader(`{"model_config":{"selector":"openai.gpt-test"}}`)))
 	if patchRecorder.Code != http.StatusOK {
 		t.Fatalf("selector PATCH status = %d, want %d; body=%s", patchRecorder.Code, http.StatusOK, patchRecorder.Body.String())
 	}
@@ -498,8 +498,8 @@ models = ["gpt-test"]
 	srv := newModelProviderTestHandler(t, configPath, agentState)
 
 	body := strings.NewReader(`{
-		"profile":"openai.gpt-test",
-		"agent_profile":{
+		"model_config":{
+			"selector":"openai.gpt-test",
 			"name":"alice",
 			"provider":"api",
 			"model_provider_id":"openai",

@@ -21,7 +21,7 @@ describe("skills API", () => {
   });
 
   it("loads local skills from the CSGClaw API", async () => {
-    const fetchMock = mockFetch(async () => new Response(JSON.stringify([]), { status: 200 }));
+    const fetchMock = mockFetch(async () => new Response(JSON.stringify({ items: [] }), { status: 200 }));
 
     await fetchSkills();
 
@@ -61,7 +61,7 @@ describe("skills API", () => {
             ],
             next_page: 2,
             page: 1,
-            per: 16,
+            limit: 16,
             total: 78,
           }),
           { status: 200 },
@@ -87,12 +87,12 @@ describe("skills API", () => {
       total: 78,
     });
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(fetchMock).toHaveBeenCalledWith("api/v1/skills/remote?page=1&per=16&search=", expect.any(Object));
+    expect(fetchMock).toHaveBeenCalledWith("api/v1/skills/remote?page=1&limit=16&search=", expect.any(Object));
   });
 
   it("passes pagination and search to the CSGClaw remote skills endpoint", async () => {
     const fetchMock = mockFetch(
-      async () => new Response(JSON.stringify({ items: [], page: 2, per: 16, total: 16 }), { status: 200 }),
+      async () => new Response(JSON.stringify({ items: [], page: 2, limit: 16, total: 16 }), { status: 200 }),
     );
 
     await expect(fetchRemoteSkillsPage(2, "sa")).resolves.toMatchObject({
@@ -103,7 +103,7 @@ describe("skills API", () => {
       per: 16,
       total: 16,
     });
-    expect(fetchMock).toHaveBeenCalledWith("api/v1/skills/remote?page=2&per=16&search=sa", expect.any(Object));
+    expect(fetchMock).toHaveBeenCalledWith("api/v1/skills/remote?page=2&limit=16&search=sa", expect.any(Object));
   });
 
   it("installs a remote skill through the CSGClaw API", async () => {

@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"csgclaw/internal/apitypes"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -116,7 +117,7 @@ func TestAuthEnvironmentSwitchTemplateCreation(t *testing.T) {
 			profile = agent.AgentProfile{ModelProviderID: "opencsg", ModelID: model}
 		}
 		t.Logf("environment=%s defaults=%s", model, defaults.Body.String())
-		body, _ := json.Marshal(map[string]any{"name": fmt.Sprintf("scorer-%d", i), "from_template": "local.resume-scorer", "agent_profile": profile})
+		body, _ := json.Marshal(map[string]any{"name": fmt.Sprintf("scorer-%d", i), "from_template": "local.resume-scorer", "model_config": apitypes.CreateAgentProfile{ModelProviderID: profile.ModelProviderID, ModelID: profile.ModelID}})
 		rec = request(http.MethodPost, "/api/v1/agents", string(body))
 		if rec.Code != http.StatusCreated {
 			t.Fatalf("create in %s: status=%d body=%s probes=%v", model, rec.Code, rec.Body.String(), probed)
