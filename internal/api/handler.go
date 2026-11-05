@@ -1939,6 +1939,16 @@ func (h *Handler) handleHubTemplates(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		if err != nil {
+			var tooLarge *hub.PublishFileTooLargeError
+			if errors.As(err, &tooLarge) {
+				writeHubTemplateErrorPayload(w, http.StatusRequestEntityTooLarge, map[string]any{
+					"code":           "template_publish_file_too_large",
+					"message":        tooLarge.Error(),
+					"file_path":      tooLarge.Path,
+					"max_file_bytes": tooLarge.MaxBytes,
+				}, savedTemplateID)
+				return
+			}
 			status := http.StatusBadGateway
 			code := hub.RemoteAPIErrorCode(err)
 			if !publishingTemplate {
@@ -1985,10 +1995,13 @@ func (h *Handler) handleHubTemplates(w http.ResponseWriter, r *http.Request) {
 }
 
 func writeHubTemplateError(w http.ResponseWriter, status int, code, message, publishedTemplateID string) {
-	payload := map[string]any{
+	writeHubTemplateErrorPayload(w, status, map[string]any{
 		"code":    strings.TrimSpace(code),
 		"message": strings.TrimSpace(message),
-	}
+	}, publishedTemplateID)
+}
+
+func writeHubTemplateErrorPayload(w http.ResponseWriter, status int, payload map[string]any, publishedTemplateID string) {
 	if publishedTemplateID = strings.TrimSpace(publishedTemplateID); publishedTemplateID != "" {
 		payload["published_template_id"] = publishedTemplateID
 	}

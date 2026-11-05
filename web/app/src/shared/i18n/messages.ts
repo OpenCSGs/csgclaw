@@ -2829,6 +2829,7 @@ export const messages = {
     agentPublishing: "发布中...",
     agentSaveLocalTemplate: "保存为本地模板",
     agentSaveAndPublishTemplate: "保存并发布到社区",
+    agentTemplateSavedPublishFileTooLarge: "已保存为本地模板。{reason}",
     agentTemplateSavedPublishFailed: "已保存为本地模板，但发布到社区失败：{reason}。重试将复用已保存的本地模板。",
     agentPublishCommunity: "发布到社区",
     agentPublishCommunityTemplateOnly: "仅发布模板",
@@ -3204,6 +3205,9 @@ export const messages = {
       template_version_invalid: "模板版本号无效。",
       template_version_changed: "模板当前生效版本已变化，请刷新后确认发布的版本。",
       template_publish_failed: "模板发布失败，请稍后重试。",
+      template_publish_file_too_large: "模板中有文件超过单文件大小上限，请缩小或移除该文件后重新发布。",
+      template_publish_file_too_large_detail:
+        "模板文件「{path}」超过单文件 {limit} MB 上限，请缩小或移除该文件后重新发布。",
       template_cloud_cleanup_pending: "云端旧模板仍在异步清理，5 秒内未释放同名路径。本地版本已保留，请稍后重试。",
       template_cloud_publish_timeout:
         "5 秒内未能确认云端发布结果，云端可能仍在清理或处理中。本地版本已保留，请稍后确认社区状态再重试。",
@@ -6198,6 +6202,7 @@ export const messages = {
     agentPublishing: "Publishing...",
     agentSaveLocalTemplate: "Save as local template",
     agentSaveAndPublishTemplate: "Save and publish to community",
+    agentTemplateSavedPublishFileTooLarge: "Saved as a local template. {reason}",
     agentTemplateSavedPublishFailed:
       "Saved locally, but publishing to community failed: {reason}. Retrying will reuse the saved local template.",
     agentPublishCommunity: "Publish to community",
@@ -6621,6 +6626,10 @@ export const messages = {
       template_version_changed:
         "The active template version has changed. Refresh and confirm the version before publishing.",
       template_publish_failed: "Template publishing failed. Try again later.",
+      template_publish_file_too_large:
+        "A template file exceeds the per-file size limit. Reduce its size or remove it before publishing again.",
+      template_publish_file_too_large_detail:
+        "Template file “{path}” exceeds the {limit} MB per-file limit. Reduce its size or remove it before publishing again.",
       template_cloud_cleanup_pending:
         "The previous cloud template is still being cleaned up; its path was not released within 5 seconds. Your local version is preserved. Try again later.",
       template_cloud_publish_timeout:

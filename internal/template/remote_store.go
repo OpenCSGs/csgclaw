@@ -764,7 +764,7 @@ func (s *RemoteStore) Publish(ctx context.Context, spec PublishSpec) (Template, 
 	if !CanPublishCommunityTemplateRuntime(normalized.RuntimeKind) {
 		return Template{}, fmt.Errorf("runtime_kind %q cannot be published to the community", normalized.RuntimeKind)
 	}
-	files, err := buildRemoteTemplateFiles(normalized, s.maxWorkspace)
+	files, err := buildRemoteTemplateFiles(normalized, remotePublishMaxFileBytes)
 	if err != nil {
 		return Template{}, err
 	}
