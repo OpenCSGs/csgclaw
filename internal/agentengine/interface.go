@@ -94,6 +94,7 @@ const (
 	ContinuationCreateOrResume       = contract.ContinuationCreateOrResume
 	ContinuationRequireExisting      = contract.ContinuationRequireExisting
 	InteractionResolve               = contract.InteractionResolve
+	InteractionUserInputOnly         = contract.InteractionUserInputOnly
 	InteractionReject                = contract.InteractionReject
 	InteractionSkipUserInput         = contract.InteractionSkipUserInput
 	InputPartText                    = contract.InputPartText

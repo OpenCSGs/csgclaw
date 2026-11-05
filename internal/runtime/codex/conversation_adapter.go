@@ -387,7 +387,7 @@ func runtimeOutputMediaType(requested, name string, prefix []byte) (string, erro
 }
 
 func (a *ConversationAdapter) handleInteraction(ctx context.Context, policy contract.InteractionPolicy, interaction contract.InteractionRequest, sink contract.EventSink) *contract.TurnResult {
-	switch policy {
+	switch policy.For(interaction.Kind) {
 	case contract.InteractionReject:
 		result := failedResult(contract.ErrorInteractionUnsupported, "Runtime interaction is not supported by this caller")
 		return &result

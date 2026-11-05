@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"csgclaw/internal/agentengine"
+	"csgclaw/internal/agentsession"
 	"csgclaw/internal/channel/csgclaw/delivery"
 	"csgclaw/internal/im"
 	agentruntime "csgclaw/internal/runtime"
@@ -40,6 +41,7 @@ var (
 )
 
 type agentSessionResponseRequest struct {
+	UserInput     bool            `json:"user_input,omitempty"`
 	AttachmentIDs []string        `json:"attachment_ids,omitempty"`
 	Input         json.RawMessage `json:"input"`
 	Stream        *bool           `json:"stream,omitempty"`
@@ -68,6 +70,7 @@ type agentSessionInputPart struct {
 }
 
 type agentSessionResponse struct {
+	Interactions      []agentSessionInteraction    `json:"interactions,omitempty"`
 	ID                string                       `json:"id"`
 	Object            string                       `json:"object"`
 	CreatedAt         int64                        `json:"created_at"`
@@ -123,10 +126,14 @@ func (h *Handler) createAgentSessionResponse(w http.ResponseWriter, r *http.Requ
 	}
 
 	defer cleanupMessagePayload(r)
-	allowFiles := h.validateServerAccessToken(r.Header.Get("Authorization"))
-	input, stream, err := parseAgentSessionResponseRequest(w, r, allowFiles)
+	authorized := h.validateServerAccessToken(r.Header.Get("Authorization"))
+	input, stream, err := parseAgentSessionResponseRequest(w, r, authorized)
 	if err != nil {
 		writeSessionInputError(w, err)
+		return
+	}
+	if input.userInput && !authorized {
+		writeSessionInputError(w, errSessionAuthorization)
 		return
 	}
 	selected, ok := h.sessionRequestAgent(w, r)
@@ -158,6 +165,11 @@ func (h *Handler) createAgentSessionResponse(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	h.runSessionResponse(w, r, selected, binding, input, stream, existing, agentengine.AdmissionRejectIfBusy)
+}
+
+func (h *Handler) runSessionResponse(w http.ResponseWriter, r *http.Request, selected agentengine.Agent, binding agentsession.Binding, input agentSessionInput, stream bool, existing []im.MessageAttachment, admission agentengine.AdmissionPolicy) {
+	sessionID := binding.ExternalSession
 	createdAt := time.Now().UTC()
 	responseID := newAgentSessionAPIID("resp")
 	outputID := newAgentSessionAPIID("msg")
@@ -198,6 +210,7 @@ func (h *Handler) createAgentSessionResponse(w http.ResponseWriter, r *http.Requ
 
 	response.InputAttachments = append(existing, newUploads...)
 
+	acceptUserInput := input.userInput
 	var eventStream *agentSessionEventStream
 	var sink agentengine.EventSink
 	if stream {
@@ -214,6 +227,15 @@ func (h *Handler) createAgentSessionResponse(w http.ResponseWriter, r *http.Requ
 					return nil
 				}
 				return eventStream.writeDelta(event.Text)
+			case agentengine.TurnEventInteractionRequest:
+				if !acceptUserInput || event.Interaction == nil {
+					return nil
+				}
+				question, ok := sessionUserInput(*event.Interaction)
+				if !ok {
+					return fmt.Errorf("unsupported session interaction")
+				}
+				return eventStream.writeUserInput(question)
 			case agentengine.TurnEventToolCallStart:
 				return eventStream.writeToolUse(event.Tool)
 			case agentengine.TurnEventToolCallUpdate:
@@ -224,11 +246,15 @@ func (h *Handler) createAgentSessionResponse(w http.ResponseWriter, r *http.Requ
 		})
 	}
 
+	policy := agentengine.InteractionReject
+	if acceptUserInput {
+		policy = agentengine.InteractionUserInputOnly
+	}
 	result := conversation.Run(runCtx, agentengine.TurnRequest{
 		ID:              agentengine.TurnID(responseID),
 		ConversationKey: agentengine.ConversationKey(binding.ConversationKey),
-		Admission:       agentengine.AdmissionRejectIfBusy,
-		Interaction:     agentengine.InteractionReject,
+		Admission:       admission,
+		Interaction:     policy,
 		Input:           sessionTurnInput(input.Text, response.InputAttachments),
 	}, sink)
 	if result.Status != agentengine.TurnSucceeded {
@@ -270,8 +296,13 @@ func (h *Handler) createAgentSessionResponse(w http.ResponseWriter, r *http.Requ
 			Annotations: []any{},
 		}},
 	}}
+	for _, interaction := range result.Interactions {
+		if question, ok := sessionUserInput(interaction); ok && acceptUserInput {
+			response.Interactions = append(response.Interactions, question)
+		}
+	}
 	if eventStream != nil {
-		_ = eventStream.writeCompleted(result.Output, attachmentNote, response.InputAttachments, outputAttachments)
+		_ = eventStream.writeCompleted(result.Output, attachmentNote, response.InputAttachments, outputAttachments, response.Interactions)
 		return
 	}
 	writeJSON(w, http.StatusOK, response)
@@ -412,7 +443,7 @@ func turnResultError(result agentengine.TurnResult) error {
 func parseAgentSessionResponseRequest(w http.ResponseWriter, r *http.Request, allowFiles bool) (agentSessionInput, bool, error) {
 	if isMultipartRequest(r) {
 		if !allowFiles {
-			return agentSessionInput{}, false, errSessionFileAuthorization
+			return agentSessionInput{}, false, errSessionAuthorization
 		}
 		return parseAgentSessionMultipart(w, r)
 	}
@@ -438,7 +469,7 @@ func parseAgentSessionResponseRequest(w http.ResponseWriter, r *http.Request, al
 	}
 	input, stream, err := request.parseInput(nil, body.read)
 	if err == nil && !allowFiles && (len(input.Files) > 0 || len(input.attachmentIDs) > 0) {
-		return agentSessionInput{}, false, errSessionFileAuthorization
+		return agentSessionInput{}, false, errSessionAuthorization
 	}
 	return input, stream, err
 }
@@ -485,6 +516,8 @@ func (request *agentSessionResponseRequest) readJSON(decoder *json.Decoder, body
 			body.fieldEnd = 0
 		case strings.EqualFold(name, "input"):
 			err = decoder.Decode(&request.Input)
+		case strings.EqualFold(name, "user_input"):
+			err = decoder.Decode(&request.UserInput)
 		case strings.EqualFold(name, "stream"):
 			err = decoder.Decode(&request.Stream)
 		case strings.EqualFold(name, "extra"):
@@ -521,6 +554,7 @@ func (request *agentSessionResponseRequest) parseInput(uploads []agentSessionInp
 		}
 		input.Files = uploads
 	}
+	input.userInput = request.UserInput
 	input.attachmentIDs = request.AttachmentIDs
 	if input.Text == "" && len(input.Files)+len(input.attachmentIDs) == 0 {
 		return agentSessionInput{}, false, fmt.Errorf("input must not be empty")
@@ -745,13 +779,24 @@ func newAgentSessionEventStream(w http.ResponseWriter) *agentSessionEventStream 
 }
 
 func (s *agentSessionEventStream) write(eventType string, fields map[string]any) error {
+	fields["type"] = eventType
+	return s.writeEvent(eventType, fields)
+}
+
+func (s *agentSessionEventStream) writeUserInput(question agentSessionInteraction) error {
+	if err := s.closeTextBlock(); err != nil {
+		return err
+	}
+	const eventType = "request_user_input"
+	return s.writeEvent(eventType, struct {
+		Type string `json:"type"`
+		agentSessionInteraction
+	}{eventType, question})
+}
+
+func (s *agentSessionEventStream) writeEvent(eventType string, payload any) error {
 	s.writeMu.Lock()
 	defer s.writeMu.Unlock()
-	payload := make(map[string]any, len(fields)+1)
-	for key, value := range fields {
-		payload[key] = value
-	}
-	payload["type"] = eventType
 	data, err := json.Marshal(payload)
 	if err != nil {
 		return err
@@ -846,7 +891,7 @@ func (s *agentSessionEventStream) closeTextBlock() error {
 	return nil
 }
 
-func (s *agentSessionEventStream) writeCompleted(text, attachmentNote string, inputs, outputs []im.MessageAttachment) error {
+func (s *agentSessionEventStream) writeCompleted(text, attachmentNote string, inputs, outputs []im.MessageAttachment, questions []agentSessionInteraction) error {
 	s.stopHeartbeat()
 	streamedText := s.text.String()
 	switch {
@@ -864,6 +909,11 @@ func (s *agentSessionEventStream) writeCompleted(text, attachmentNote string, in
 	}
 	if err := s.closeTextBlock(); err != nil {
 		return err
+	}
+	for _, question := range questions {
+		if err := s.writeUserInput(question); err != nil {
+			return err
+		}
 	}
 	fields := map[string]any{"delta": map[string]any{"stop_reason": "end_turn", "stop_sequence": nil}}
 	if len(inputs) > 0 {

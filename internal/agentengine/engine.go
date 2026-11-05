@@ -143,7 +143,7 @@ func (c *conversations) Run(ctx context.Context, request TurnRequest, sink Event
 	if request.Continuation != ContinuationCreateOrResume && request.Continuation != ContinuationRequireExisting {
 		return failedResult(ErrorInvalidRequest, fmt.Sprintf("unsupported continuation policy %q", request.Continuation))
 	}
-	if request.Interaction != InteractionResolve && request.Interaction != InteractionReject && request.Interaction != InteractionSkipUserInput {
+	if request.Interaction.For(InteractionUserInput) != InteractionResolve && request.Interaction != InteractionReject && request.Interaction != InteractionSkipUserInput {
 		return failedResult(ErrorInvalidRequest, fmt.Sprintf("unsupported interaction policy %q", request.Interaction))
 	}
 	if err := contract.ValidateInput(request.Input); err != nil {
@@ -314,7 +314,7 @@ func (c *conversations) Run(ctx context.Context, request TurnRequest, sink Event
 	} else {
 		c.engine.interactions.Interrupt(c.agentID, request.ConversationKey, request.ID, false)
 	}
-	if result.Status == TurnSucceeded && request.Interaction == InteractionResolve && turn.structuredUserInput != nil {
+	if result.Status == TurnSucceeded && request.Interaction.For(InteractionUserInput) == InteractionResolve && turn.structuredUserInput != nil {
 		interaction, err := c.engine.interactions.CreateDetached(c.agentID, request.ConversationKey, request.ID, *turn.structuredUserInput, func(interaction InteractionRequest) {
 			c.engine.emitDetached(identity, turn, sink, interaction)
 		})
@@ -437,6 +437,18 @@ func (c *conversations) Reset(ctx context.Context, key ConversationKey) error {
 		return err
 	}
 	return nil
+}
+
+func (c *conversations) PendingInteractions(ctx context.Context, key ConversationKey) ([]InteractionRequest, error) {
+	if ctx != nil {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+	}
+	if c == nil || c.engine == nil || c.agentID == "" || key == "" {
+		return nil, &TurnError{Code: ErrorInvalidRequest, Message: "agent and conversation are required"}
+	}
+	return c.engine.interactions.Pending(c.agentID, key), nil
 }
 
 func (c *conversations) GetInteraction(ctx context.Context, key ConversationKey, id string) (InteractionRequest, error) {

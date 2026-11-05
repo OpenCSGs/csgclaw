@@ -1,6 +1,7 @@
 package activity
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 )
@@ -139,4 +140,31 @@ func PublicUserInputSnapshot(snapshot UserInputSnapshot) UserInputSnapshot {
 		}
 	}
 	return out
+}
+
+// UserInputContinuationPrompt formats a detached answer for the next model turn.
+func UserInputContinuationPrompt(snapshot UserInputSnapshot) (string, error) {
+	response := RequestUserInputResponse{Answers: make(map[string]RequestUserInputAnswer, len(snapshot.Questions))}
+	for _, question := range snapshot.Questions {
+		answer := snapshot.Answers[question.ID]
+		values := []string{}
+		if answer.Answered {
+			if answer.Secret {
+				values = append(values, "user_note: <redacted>")
+			} else {
+				if answer.OptionLabel != "" {
+					values = append(values, answer.OptionLabel)
+				}
+				if answer.Text != "" {
+					values = append(values, "user_note: "+answer.Text)
+				}
+			}
+		}
+		response.Answers[question.ID] = RequestUserInputAnswer{Answers: values}
+	}
+	body, err := json.Marshal(response)
+	if err != nil {
+		return "", err
+	}
+	return "The user answered the request_user_input emitted by the previous successful command. Continue the same workflow using this wire-compatible response JSON. Secret values are replaced with <redacted> before entering the model session:\n" + string(body), nil
 }

@@ -304,6 +304,9 @@ func assertChannelMetadata(t *testing.T, metadata map[string]any) map[string]any
 	return namespace
 }
 
+func (fixedOutputFileConversation) PendingInteractions(context.Context, agentengine.ConversationKey) ([]agentengine.InteractionRequest, error) {
+	return nil, nil
+}
 func (fixedOutputFileConversation) GetInteraction(context.Context, agentengine.ConversationKey, string) (agentengine.InteractionRequest, error) {
 	return agentengine.InteractionRequest{}, &agentengine.TurnError{Code: agentengine.ErrorInteractionNotFound, Message: "no interaction in this test fixture"}
 }

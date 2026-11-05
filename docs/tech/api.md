@@ -1561,7 +1561,7 @@ In Portal, send uploads and downloads to the current CSGClaw instance's `endpoin
 
 The optional top-level `attachment_ids` array references files already saved for this agent and session. Supply distinct IDs. With service authentication enabled, all requests carrying files or attachment IDs require valid credentials. Missing or invalid credentials return `401`. An unknown ID or an ID belonging to another agent or session returns `404`. A JSON request may combine referenced IDs and inline Base64 files, up to 10 files in total. In `input_attachments`, referenced files appear in the order of their IDs, followed by newly uploaded files in request order.
 
-When authentication is enabled, a JSON request without valid credentials can send text within a 1 MiB request-body limit. Larger bodies return `413`.
+When authentication is enabled, anonymous clients can send plain-text JSON requests with `user_input` omitted or set to `false` and a request body of up to 1 MiB. Larger bodies return `413`.
 
 The shortest request uses string input:
 
@@ -1649,7 +1649,7 @@ const response = await fetch(responsesUrl, {
 if (!response.ok) throw new Error(`Session request failed (HTTP ${response.status})`)
 ```
 
-The multipart fields are `input`, optional `stream`, and repeated `file`. To send files with `attachment_ids`, `extra`, or `extra_type`, upload the files to the session's `/attachments` endpoint using `files`, then include the returned IDs in a JSON request to `/responses`. A JSON request containing only `attachment_ids` starts a file-only turn.
+The multipart fields are `input`, optional `stream` and `user_input`, and repeated `file`. To send files with `attachment_ids`, `extra`, or `extra_type`, upload the files to the session's `/attachments` endpoint using `files`, then include the returned IDs in a JSON request to `/responses`. A JSON request containing only `attachment_ids` starts a file-only turn.
 
 JSON requests also support files through `input_file` parts:
 
@@ -1774,6 +1774,35 @@ Only one turn may run for a session at a time.
 Different session IDs may run concurrently.
 Different agents can use the same external `session_id` independently.
 The server imposes no response duration limit. Client disconnects and explicit cancellation still cancel the running response.
+
+### Session questions
+
+Clients that can display and submit question forms set `"user_input":true` in the `/responses` JSON request, or send a multipart field `user_input` with the string value `"true"`. The option defaults to `false`.
+
+When instance service authentication is enabled, creating a response with `user_input: true`, listing questions with `GET /interactions`, and submitting answers with `POST /interactions/{interaction_id}/respond` all require valid service credentials for that instance. Missing or invalid credentials return `401 unauthorized`. Portal clients use the same instance endpoint and gateway authorization as they use for attachment access.
+
+The `request_user_input` SSE event carries `type`, `interaction_id`, `status`, `detached`, `questions`, `requested_at` and optional `auto_resolve_at` at the top level. Each question includes `id`, `header`, `question` and optional `options`, `is_other` and `is_secret`. Render questions and options in their supplied order. [Agentic frontend integration example (Chinese)](web/agentic-session-user-input.zh.md)
+
+Native questions have `detached: false` and keep the original response open until answered. A client using `stream: false` needs another connection to list and answer pending questions. A question produced by a command has `detached: true` and can outlive the original response. With `stream: false`, the completed response includes these questions in a top-level `interactions` array.
+
+### `GET /api/v1/agents/{agent}/sessions/{session_id}/interactions`
+
+Lists questions that can still be answered in this session. Returns `200 OK` and `{"interactions":[...]}` using the form fields above. An empty array means there are no pending questions. Use this endpoint to restore a form or check whether an answer can still be submitted. Disconnecting the original response cancels the active turn.
+
+### `POST /api/v1/agents/{agent}/sessions/{session_id}/interactions/{interaction_id}/respond`
+
+Submits answers for one form. Use the same instance, agent and session as the response stream. Key the answers by the IDs in `questions[].id`.
+
+```json
+{"answers":{"source":{"answers":["PDF"]},"note":{"answers":["user_note: Include public documents only."]}}}
+```
+
+Use the original option label for a selection and the `user_note: ` prefix for free text. Submit all questions together. An empty answer array skips that question. Use `{"answers":{}}` to skip the entire form.
+
+- For `detached: false`, submission returns `204 No Content`. Continue reading the original `/responses` request for subsequent output.
+- For `detached: true`, submitting an answer starts a continuation in the same session. The `/respond` request returns `200` with the final JSON response by default, or `200` with a new SSE stream when the request includes `"stream":true`. Skipping the entire form returns `204 No Content`.
+
+Invalid answers return `400 invalid_request`. An unknown session or interaction returns `404 session_not_found` or `404 interaction_not_found`, respectively. A duplicate submission returns `409 interaction_already_resolved`. An expired or canceled interaction returns `410 interaction_gone`.
 
 ### `POST /api/v1/agents/{agent}/sessions/{session_id}/responses/cancel`
 

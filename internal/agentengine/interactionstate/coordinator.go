@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -97,6 +98,20 @@ func (c *Coordinator) CreateDetached(agentID string, key contract.ConversationKe
 	request := contract.InteractionRequest{ID: snapshot.ID, Kind: contract.InteractionUserInput, Detached: true, Title: "User input required", Payload: snapshot}
 	c.Register(agentID, key, turnID, request, nil, notify)
 	return Clone(request), nil
+}
+
+func (c *Coordinator) Pending(agentID string, key contract.ConversationKey) []contract.InteractionRequest {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.pruneLocked()
+	var requests []contract.InteractionRequest
+	for identity, record := range c.items {
+		if identity.agentID == agentID && identity.key == key && !record.terminal && !record.resolving {
+			requests = append(requests, Clone(record.request))
+		}
+	}
+	sort.Slice(requests, func(i, j int) bool { return requests[i].ID < requests[j].ID })
+	return requests
 }
 
 func (c *Coordinator) Get(agentID string, key contract.ConversationKey, id string) (contract.InteractionRequest, error) {

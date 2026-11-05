@@ -373,8 +373,9 @@ func (r *Runtime) handleServerRequest(proc *process, request serverRequest) {
 		_ = proc.client.respond(request.ID, map[string]any{"outcome": map[string]any{"outcome": "cancelled"}}, nil)
 		return
 	}
-	if turn.request.Interaction != contract.InteractionResolve {
-		if turn.request.Interaction == contract.InteractionSkipUserInput {
+	policy := turn.request.Interaction.For(contract.InteractionPermission)
+	if policy != contract.InteractionResolve {
+		if policy == contract.InteractionSkipUserInput {
 			if optionID, ok := unattendedLarkCLIPermission(proc, turn, params); ok {
 				_ = proc.client.respond(request.ID, map[string]any{"outcome": map[string]any{"outcome": "selected", "optionId": optionID}}, nil)
 				return
@@ -386,13 +387,13 @@ func (r *Runtime) handleServerRequest(proc *process, request serverRequest) {
 				}
 			}
 		}
-		if turn.request.Interaction == contract.InteractionReject {
+		if policy == contract.InteractionReject {
 			proc.mu.Lock()
 			turn.interactionError = &contract.TurnError{Code: contract.ErrorInteractionUnsupported, Message: "Runtime interaction is not supported by this caller"}
 			proc.mu.Unlock()
 		}
 		_ = proc.client.respond(request.ID, map[string]any{"outcome": map[string]any{"outcome": "cancelled"}}, nil)
-		if turn.request.Interaction == contract.InteractionReject {
+		if policy == contract.InteractionReject {
 			_ = proc.client.notify("session/cancel", map[string]any{"sessionId": params.SessionID})
 		}
 		return

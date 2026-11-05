@@ -102,6 +102,14 @@ func ImportLegacyState(path string, store *Store) error {
 	return nil
 }
 
+func (s *Store) Lookup(agentID, externalSession string) (Binding, bool) {
+	value, ok := s.items.Load(bindingKey(agentID, externalSession))
+	if !ok {
+		return Binding{}, false
+	}
+	return value.(Binding), true
+}
+
 func (s *Store) GetOrCreate(agentID, externalSession string) (Binding, error) {
 	if s == nil {
 		return Binding{}, fmt.Errorf("session binding store is required")
@@ -113,8 +121,8 @@ func (s *Store) GetOrCreate(agentID, externalSession string) (Binding, error) {
 	}
 
 	key := bindingKey(agentID, externalSession)
-	if value, ok := s.items.Load(key); ok {
-		return value.(Binding), nil
+	if existing, ok := s.Lookup(agentID, externalSession); ok {
+		return existing, nil
 	}
 
 	s.pendingMu.Lock()

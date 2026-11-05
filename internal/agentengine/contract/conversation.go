@@ -12,6 +12,7 @@ type ConversationInterface interface {
 	Run(ctx context.Context, request TurnRequest, sink EventSink) TurnResult
 	Cancel(ctx context.Context, key ConversationKey, turnID TurnID) error
 	Reset(ctx context.Context, key ConversationKey) error
+	PendingInteractions(ctx context.Context, key ConversationKey) ([]InteractionRequest, error)
 	GetInteraction(ctx context.Context, key ConversationKey, id string) (InteractionRequest, error)
 	Resolve(ctx context.Context, resolution InteractionResolution) error
 }
@@ -58,9 +59,21 @@ type InteractionPolicy string
 
 const (
 	InteractionResolve       InteractionPolicy = "resolve"
+	InteractionUserInputOnly InteractionPolicy = "user_input_only"
 	InteractionReject        InteractionPolicy = "reject"
 	InteractionSkipUserInput InteractionPolicy = "skip_user_input"
 )
+
+// For returns the policy to apply to this kind of interaction.
+func (p InteractionPolicy) For(kind InteractionKind) InteractionPolicy {
+	if p == InteractionUserInputOnly {
+		if kind == InteractionUserInput {
+			return InteractionResolve
+		}
+		return InteractionReject
+	}
+	return p
+}
 
 // InputPartKind identifies one normalized turn input.
 type InputPartKind string
