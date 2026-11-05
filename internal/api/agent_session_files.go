@@ -19,6 +19,7 @@ import (
 )
 
 type agentSessionInput struct {
+	respondingTo  string
 	userInput     bool
 	attachmentIDs []string
 	Text          string

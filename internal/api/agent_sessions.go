@@ -165,10 +165,10 @@ func (h *Handler) createAgentSessionResponse(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	h.runSessionResponse(w, r, selected, binding, input, stream, existing, agentengine.AdmissionRejectIfBusy)
+	h.runSessionResponse(r.Context(), w, r, selected, binding, input, stream, existing, agentengine.AdmissionRejectIfBusy)
 }
 
-func (h *Handler) runSessionResponse(w http.ResponseWriter, r *http.Request, selected agentengine.Agent, binding agentsession.Binding, input agentSessionInput, stream bool, existing []im.MessageAttachment, admission agentengine.AdmissionPolicy) {
+func (h *Handler) runSessionResponse(ctx context.Context, w http.ResponseWriter, r *http.Request, selected agentengine.Agent, binding agentsession.Binding, input agentSessionInput, stream bool, existing []im.MessageAttachment, admission agentengine.AdmissionPolicy) (delivered bool) {
 	sessionID := binding.ExternalSession
 	createdAt := time.Now().UTC()
 	responseID := newAgentSessionAPIID("resp")
@@ -187,7 +187,7 @@ func (h *Handler) runSessionResponse(w http.ResponseWriter, r *http.Request, sel
 		},
 	}
 	turnKey := selected.ID + "\x00" + sessionID
-	runCtx, cancel := context.WithCancel(r.Context())
+	runCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	turn := agentSessionTurn{
 		agentID:         selected.ID,
@@ -254,9 +254,11 @@ func (h *Handler) runSessionResponse(w http.ResponseWriter, r *http.Request, sel
 		ID:              agentengine.TurnID(responseID),
 		ConversationKey: agentengine.ConversationKey(binding.ConversationKey),
 		Admission:       admission,
+		RespondingTo:    input.respondingTo,
 		Interaction:     policy,
 		Input:           sessionTurnInput(input.Text, response.InputAttachments),
 	}, sink)
+	delivered = result.Status == agentengine.TurnSucceeded || result.Dispatched
 	if result.Status != agentengine.TurnSucceeded {
 		if errors.Is(r.Context().Err(), context.Canceled) {
 			return
@@ -306,6 +308,7 @@ func (h *Handler) runSessionResponse(w http.ResponseWriter, r *http.Request, sel
 		return
 	}
 	writeJSON(w, http.StatusOK, response)
+	return delivered
 }
 
 func (h *Handler) cancelAgentSessionResponse(w http.ResponseWriter, r *http.Request) {

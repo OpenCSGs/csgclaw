@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -347,17 +348,107 @@ func TestAgentSessionUserInputAuthorization(t *testing.T) {
 	}
 }
 
-func TestAgentSessionDetachedAnswerWhileBusy(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+func TestAgentSessionDetachedAnswerRuntimeFailure(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		dispatched bool
+	}{{"before_dispatch", false}, {"after_dispatch", true}} {
+		t.Run(tc.name, func(t *testing.T) {
+			var attempts atomic.Int32
+			engine := &fakeSessionEngine{run: func(ctx context.Context, _ string, request agentengine.TurnRequest, sink agentengine.EventSink) agentengine.TurnResult {
+				if sessionTurnText(request) == "Plan" {
+					if err := sink.Emit(ctx, sessionDetachedQuestionEvent()); err != nil {
+						t.Errorf("emit question: %v", err)
+					}
+				} else if attempts.Add(1) == 1 {
+					return agentengine.TurnResult{
+						Status: agentengine.TurnFailed, Dispatched: tc.dispatched,
+						Error: &agentengine.TurnError{Code: agentengine.ErrorRuntimeAdapterUnavailable, Message: "runtime temporarily unavailable"},
+					}
+				}
+				return agentengine.TurnResult{Status: agentengine.TurnSucceeded, Dispatched: true, Output: "Ready"}
+			}}
+			server, _ := sessionOutputTestServer(t, engine, "")
+			first := sessionInteractionHTTP(t, server, http.MethodPost, sessionQuestionPath+"/responses", `{"input":"Plan","user_input":true}`, http.StatusOK)
+			id := sessionResponseInteractionID(t, first)
+			path := sessionQuestionPath + "/interactions/" + id + "/respond"
+			const answers = `{"answers":{"source":{"answers":["PDF"]},"password":{"answers":[]}}}`
+			sessionInteractionHTTP(t, server, http.MethodPost, path, answers, http.StatusServiceUnavailable)
+			if !tc.dispatched {
+				pending := sessionInteractionHTTP(t, server, http.MethodGet, sessionQuestionPath+"/interactions", "", http.StatusOK)
+				if got := sessionResponseInteractionID(t, pending); got != id {
+					t.Fatalf("pending interaction = %q, want %q", got, id)
+				}
+				sessionInteractionHTTP(t, server, http.MethodPost, path, answers, http.StatusOK)
+			}
+			sessionInteractionHTTP(t, server, http.MethodPost, path, answers, http.StatusConflict)
+			delivered := 0
+			for _, call := range engine.client.Calls() {
+				if call.Result.Dispatched && strings.Contains(sessionTurnText(call.Request), "PDF") {
+					delivered++
+				}
+			}
+			if delivered != 1 {
+				t.Fatalf("runtime accepted the answer %d times, want exactly one", delivered)
+			}
+		})
+	}
+}
+
+func TestAgentSessionDetachedAnswerReportsReset(t *testing.T) {
+	for _, mode := range []string{"json", "stream"} {
+		t.Run(mode, func(t *testing.T) {
+			engine := &fakeSessionEngine{run: func(ctx context.Context, _ string, _ agentengine.TurnRequest, sink agentengine.EventSink) agentengine.TurnResult {
+				if err := sink.Emit(ctx, sessionDetachedQuestionEvent()); err != nil {
+					t.Errorf("emit question: %v", err)
+				}
+				return agentengine.TurnResult{Status: agentengine.TurnSucceeded, Dispatched: true}
+			}}
+			engine.beforeRun = func(_ context.Context) {
+				// Reset during the answer request while its HTTP client is connected.
+				if calls := engine.client.Calls(); len(calls) == 1 {
+					if err := engine.Conversations("agent-alpha").Reset(t.Context(), calls[0].Request.ConversationKey); err != nil {
+						t.Errorf("reset conversation: %v", err)
+					}
+				}
+			}
+			server, _ := sessionOutputTestServer(t, engine, "")
+			first := sessionInteractionHTTP(t, server, http.MethodPost, sessionQuestionPath+"/responses", `{"input":"Plan","user_input":true}`, http.StatusOK)
+			path := sessionQuestionPath + "/interactions/" + sessionResponseInteractionID(t, first) + "/respond"
+			answers := fmt.Sprintf(`{"stream":%t,"answers":{"source":{"answers":["PDF"]},"password":{"answers":[]}}}`, mode == "stream")
+			if mode == "stream" {
+				body := sessionInteractionHTTP(t, server, http.MethodPost, path, answers, http.StatusOK)
+				if !strings.Contains(body, "event: error") || !strings.Contains(body, "event: message_stop") {
+					t.Fatalf("reset did not terminate the stream with an error: %s", body)
+				}
+			} else {
+				body := sessionInteractionHTTP(t, server, http.MethodPost, path, answers, http.StatusServiceUnavailable)
+				var response agentSessionErrorEnvelope
+				if err := json.Unmarshal([]byte(body), &response); err != nil || response.Error.Code == "" {
+					t.Fatalf("missing error after reset: %s, %v", body, err)
+				}
+			}
+		})
+	}
+}
+
+func sessionResponseInteractionID(t *testing.T, body string) string {
+	t.Helper()
+	var response agentSessionResponse
+	if err := json.Unmarshal([]byte(body), &response); err != nil || len(response.Interactions) != 1 || response.Interactions[0].InteractionID == "" {
+		t.Fatalf("expected one interaction: %s, %v", body, err)
+	}
+	return response.Interactions[0].InteractionID
+}
+
+func TestAgentSessionDetachedAnswerReservesTurnBeforeCompetingQuestion(t *testing.T) {
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
 	continuationReady := make(chan struct{})
 	admitContinuation := make(chan struct{})
-	otherStarted := make(chan struct{})
-	finishOther := make(chan struct{})
-	var attempted atomic.Int32
+	var attempts atomic.Int32
 	engine := &fakeSessionEngine{beforeRun: func(ctx context.Context) {
-		// The second request has accepted the answer and is about to enter the engine.
-		if attempted.Add(1) == 2 {
+		if attempts.Add(1) == 2 {
 			close(continuationReady)
 			select {
 			case <-admitContinuation:
@@ -367,62 +458,49 @@ func TestAgentSessionDetachedAnswerWhileBusy(t *testing.T) {
 	}}
 	engine.run = func(ctx context.Context, _ string, request agentengine.TurnRequest, sink agentengine.EventSink) agentengine.TurnResult {
 		switch sessionTurnText(request) {
-		case "Plan":
+		case "Plan", "Other":
 			if err := sink.Emit(ctx, sessionDetachedQuestionEvent()); err != nil {
-				t.Errorf("emit detached question: %v", err)
-			}
-		case "Other":
-			close(otherStarted)
-			select {
-			case <-finishOther:
-			case <-ctx.Done():
+				t.Errorf("emit question: %v", err)
 			}
 		default:
-			if request.Admission != agentengine.AdmissionWait || !strings.Contains(sessionTurnText(request), "PDF") {
-				t.Errorf("continuation after concurrent input: %+v", request)
+			if !strings.Contains(sessionTurnText(request), "PDF") {
+				t.Errorf("continuation omitted the answer: %+v", request)
 			}
 		}
-		return agentengine.TurnResult{Status: agentengine.TurnSucceeded, Output: "Ready"}
+		return agentengine.TurnResult{Status: agentengine.TurnSucceeded, Dispatched: true, Output: "Ready"}
 	}
 	handler, _, _, _ := newAgentSessionTestHandler(t, []agent.Agent{sessionCodexAgent("agent-alpha", "Alpha")}, engine, "")
-	first := performAgentSessionRequest(t, handler, "Alpha", "planning", map[string]any{"input": "Plan", "user_input": true})
-	var initial struct {
-		Interactions []agentSessionInteraction `json:"interactions"`
-	}
-	if err := json.Unmarshal(first.Body.Bytes(), &initial); err != nil || len(initial.Interactions) != 1 {
-		t.Fatalf("initial question: %s, %v", first.Body.String(), err)
-	}
-	router := handler.Routes()
-
-	answer := startSessionRequest(ctx, router, sessionQuestionPath+"/interactions/"+initial.Interactions[0].InteractionID+"/respond", `{"answers":{"source":{"answers":["PDF"]},"password":{"answers":[]}}}`)
+	server := httptest.NewServer(handler.Routes())
+	defer server.Close()
+	first := sessionInteractionHTTP(t, server, http.MethodPost, sessionQuestionPath+"/responses", `{"input":"Plan","user_input":true}`, http.StatusOK)
+	id := sessionResponseInteractionID(t, first)
+	const answers = `{"answers":{"source":{"answers":["PDF"]},"password":{"answers":[]}}}`
+	answerPath := sessionQuestionPath + "/interactions/" + id + "/respond"
+	answer := startSessionRequest(ctx, server.Config.Handler, answerPath, answers)
 	select {
 	case <-continuationReady:
 	case <-ctx.Done():
 		t.Fatal("submission did not attempt the continuation")
 	}
-	other := startSessionRequest(ctx, router, sessionQuestionPath+"/responses", `{"input":"Other"}`)
-	select {
-	case <-otherStarted:
-	case <-ctx.Done():
-		t.Fatal("competing turn did not enter the engine")
-	}
+
+	const newQuestion = `{"input":"Other","user_input":true}`
+	sessionInteractionHTTP(t, server, http.MethodPost, answerPath, answers, http.StatusConflict)
+	sessionInteractionHTTP(t, server, http.MethodPost, sessionQuestionPath+"/responses", newQuestion, http.StatusConflict)
 	close(admitContinuation)
 	select {
-	case result := <-answer:
-		t.Fatalf("accepted answer returned while the other turn was active: HTTP %d %s", result.Code, result.Body.String())
-	case <-time.After(20 * time.Millisecond):
-	}
-	close(finishOther)
-	for _, done := range []<-chan *httptest.ResponseRecorder{other, answer} {
-		select {
-		case result := <-done:
-			if result.Code != http.StatusOK || !strings.Contains(result.Body.String(), "Ready") {
-				t.Fatalf("expected completed turn: HTTP %d %s", result.Code, result.Body.String())
-			}
-		case <-ctx.Done():
-			t.Fatal("session did not complete both turns")
+	case response := <-answer:
+		if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), "Ready") {
+			t.Fatalf("answer returned HTTP %d: %s", response.Code, response.Body.String())
 		}
+	case <-ctx.Done():
+		t.Fatal("answer did not complete")
 	}
+	next := sessionInteractionHTTP(t, server, http.MethodPost, sessionQuestionPath+"/responses", newQuestion, http.StatusOK)
+	nextID := sessionResponseInteractionID(t, next)
+	if nextID == id {
+		t.Fatal("competing turn reused the old question")
+	}
+	sessionInteractionHTTP(t, server, http.MethodPost, sessionQuestionPath+"/interactions/"+nextID+"/respond", answers, http.StatusOK)
 }
 
 func startSessionRequest(ctx context.Context, router http.Handler, path, body string) <-chan *httptest.ResponseRecorder {

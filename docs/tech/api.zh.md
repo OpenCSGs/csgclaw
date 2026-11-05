@@ -1738,12 +1738,12 @@ SSE 事件 `request_user_input` 的顶层字段为 `type`、`interaction_id`、`
 {"answers":{"source":{"answers":["PDF"]},"note":{"answers":["user_note: 只收录公开文档。"]}}}
 ```
 
-选项值使用原始 `label`。自由填写的内容使用 `user_note: ` 前缀。一次提交整组问题，每道跳过的问题使用空的答案数组。使用 `{"answers":{}}` 跳过整组问题。
+选项值使用原始 `label`。自由填写的内容使用 `user_note: ` 前缀。一次提交整组问题。每道题都需要提供 `answers` 数组，显式传入 `[]` 可以跳过该题。使用 `{"answers":{}}` 跳过整组问题。
 
 - `detached: false` 的问题提交成功后返回 `204 No Content`。后续输出通过原来的 `/responses` 请求返回。
-- `detached: true` 的问题收到答案后，在同一会话继续执行。`/respond` 默认返回 `200` 和最终 JSON 回复，设置顶层 `"stream":true` 后返回 `200` 和新的 SSE。跳过整张表单时返回 `204 No Content`。
+- `detached: true` 的问题收到答案后，在同一会话继续执行。`/respond` 默认返回 `200` 和最终 JSON 回复，设置顶层 `"stream":true` 后返回 `200` 和新的 SSE。跳过整张表单时返回 `204 No Content`。答案正在启动后续轮次时，同一会话并发提交的普通 `/responses` 请求在 JSON 模式下返回 `409 session_busy`；已开始的 SSE 通过事件返回错误。
 
-无效答案返回 `400 invalid_request`。找不到会话或问题时，分别返回 `404 session_not_found` 或 `404 interaction_not_found`。重复提交返回 `409 interaction_already_resolved`。已过期或已取消的问题返回 `410 interaction_gone`。
+如果 runtime 在接收 detached 答案前不可用，表单会保留在待回答列表中，可使用原 interaction ID 和答案重试。无效答案返回 `400 invalid_request`，表单继续等待提交。找不到会话或问题时，分别返回 `404 session_not_found` 或 `404 interaction_not_found`。重复提交返回 `409 interaction_already_resolved`。已过期或已取消的问题返回 `410 interaction_gone`。
 
 ### `POST /api/v1/agents/{agent}/sessions/{session_id}/responses/cancel`
 

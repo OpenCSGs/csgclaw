@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -126,32 +127,32 @@ func (h *Handler) respondAgentSessionInteraction(w http.ResponseWriter, r *http.
 		Answers:         make(map[string]agentengine.InteractionAnswer, len(input.Answers)),
 	}
 	for questionID, answer := range input.Answers {
+		if answer.Answers == nil {
+			writeAgentSessionError(w, http.StatusBadRequest, "invalid_request", "each question answer must include an answers array", "answers")
+			return
+		}
 		resolution.Answers[questionID] = agentengine.InteractionAnswer{Values: answer.Answers, Skipped: len(answer.Answers) == 0}
 	}
-	if err := conversation.Resolve(r.Context(), resolution); err != nil {
-		writeSessionInteractionError(w, err)
-		return
-	}
+	var wroteResponse bool
 	if request.Detached {
-		updated, err := conversation.GetInteraction(r.Context(), key, id)
-		if err != nil {
-			writeSessionInteractionError(w, err)
-			return
-		}
-		snapshot, ok := updated.Payload.(activity.UserInputSnapshot)
-		if !ok {
-			writeAgentSessionError(w, http.StatusInternalServerError, "invalid_interaction", "invalid user input snapshot", nil)
-			return
-		}
-		if snapshot.Status == activity.UserInputStatusAnswered {
-			prompt, err := activity.UserInputContinuationPrompt(snapshot)
+		resolution.ContinueDetached = func(ctx context.Context, answer agentengine.InteractionRequest) bool {
+			wroteResponse = true
+			prompt, err := activity.UserInputContinuationPrompt(answer.Payload.(activity.UserInputSnapshot))
 			if err != nil {
 				writeAgentSessionError(w, http.StatusInternalServerError, "invalid_interaction", "user input continuation could not be prepared", nil)
-				return
+				return false
 			}
-			h.runSessionResponse(w, r, selected, binding, agentSessionInput{Text: prompt, userInput: true}, input.Stream, nil, agentengine.AdmissionWait)
-			return
+			continuation := agentSessionInput{Text: prompt, userInput: true, respondingTo: id}
+			return h.runSessionResponse(ctx, w, r, selected, binding, continuation, input.Stream, nil, agentengine.AdmissionWait)
 		}
+	}
+	err = conversation.Resolve(r.Context(), resolution)
+	if wroteResponse {
+		return
+	}
+	if err != nil {
+		writeSessionInteractionError(w, err)
+		return
 	}
 	w.WriteHeader(http.StatusNoContent)
 }

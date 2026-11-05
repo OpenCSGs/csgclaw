@@ -1797,12 +1797,12 @@ Submits answers for one form. Use the same instance, agent and session as the re
 {"answers":{"source":{"answers":["PDF"]},"note":{"answers":["user_note: Include public documents only."]}}}
 ```
 
-Use the original option label for a selection and the `user_note: ` prefix for free text. Submit all questions together. An empty answer array skips that question. Use `{"answers":{}}` to skip the entire form.
+Use the original option label for a selection and the `user_note: ` prefix for free text. Submit all questions together. Each question entry requires an `answers` array. Use `[]` to skip that question. Use `{"answers":{}}` to skip the entire form.
 
 - For `detached: false`, submission returns `204 No Content`. Continue reading the original `/responses` request for subsequent output.
-- For `detached: true`, submitting an answer starts a continuation in the same session. The `/respond` request returns `200` with the final JSON response by default, or `200` with a new SSE stream when the request includes `"stream":true`. Skipping the entire form returns `204 No Content`.
+- For `detached: true`, submitting an answer starts a continuation in the same session. The `/respond` request returns `200` with the final JSON response by default, or `200` with a new SSE stream when the request includes `"stream":true`. Skipping the entire form returns `204 No Content`. While an answer is starting its continuation, a competing `/responses` request receives `409 session_busy` in JSON mode. If an SSE stream has already started, it reports the error in the stream.
 
-Invalid answers return `400 invalid_request`. An unknown session or interaction returns `404 session_not_found` or `404 interaction_not_found`, respectively. A duplicate submission returns `409 interaction_already_resolved`. An expired or canceled interaction returns `410 interaction_gone`.
+If the runtime is unavailable before it receives a detached answer, the form remains pending. Retry with the same interaction ID and answers. Invalid answers return `400 invalid_request` and leave the form pending. An unknown session or interaction returns `404 session_not_found` or `404 interaction_not_found`, respectively. A duplicate submission returns `409 interaction_already_resolved`. An expired or canceled interaction returns `410 interaction_gone`.
 
 ### `POST /api/v1/agents/{agent}/sessions/{session_id}/responses/cancel`
 

@@ -683,7 +683,12 @@ func (c *memoryConversations) Run(ctx context.Context, request agentengine.TurnR
 		return result
 	}
 	defer releaseExecution()
-	c.client.interactions.Interrupt(c.agentID, request.ConversationKey, "", true)
+	if err := c.client.interactions.BeginTurn(c.agentID, request.ConversationKey, request.RespondingTo); err != nil {
+		result := agentengine.TurnResult{Status: agentengine.TurnFailed, Error: err}
+		turn.cancel()
+		c.completeMemoryTurn(key, turn, result)
+		return result
+	}
 
 	c.client.mu.Lock()
 	agentItem, exists := c.client.agents[c.agentID]
@@ -790,6 +795,7 @@ func (c *memoryConversations) Run(ctx context.Context, request agentengine.TurnR
 			})
 			if err != nil {
 				result = failed(agentengine.ErrorRuntimeFailed, err.Error())
+				result.Dispatched = true
 			} else {
 				result.Interactions = []agentengine.InteractionRequest{item}
 			}

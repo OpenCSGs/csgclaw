@@ -262,7 +262,12 @@ func (c *conversations) Run(ctx context.Context, request TurnRequest, sink Event
 			turn.ctx = contract.WithVideoGenerationHandler(turn.ctx, c.videoHandler(turn, sink, selected.Spec.Model.VideoGeneration))
 		}
 	}
-	c.engine.interactions.Interrupt(c.agentID, request.ConversationKey, "", true)
+	if err := c.engine.interactions.BeginTurn(c.agentID, request.ConversationKey, request.RespondingTo); err != nil {
+		result := TurnResult{Status: TurnFailed, Error: err}
+		turn.cancel()
+		c.engine.complete(identity, turn, result)
+		return result
+	}
 	runtimeAdapter, releaseRuntime, resolveErr := c.engine.runtimes.conversationRuntime(turn.ctx, c.agentID)
 	if resolveErr != nil {
 		diagnostics.From(turn.ctx).Failure(string(resolveErr.Code), "runtime.prepare", resolveErr.Message)
@@ -320,6 +325,7 @@ func (c *conversations) Run(ctx context.Context, request TurnRequest, sink Event
 		})
 		if err != nil {
 			result = failedResult(ErrorRuntimeFailed, err.Error())
+			result.Dispatched = true
 		} else {
 			result.Interactions = []InteractionRequest{interaction}
 		}

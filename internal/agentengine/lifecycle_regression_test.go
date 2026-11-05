@@ -193,3 +193,64 @@ func TestExtensionDeletionDoesNotRequireUnrelatedExtensionReadiness(t *testing.T
 		t.Fatalf("optional deletion fails due to unrelated unconfigured required resource: %v", err)
 	}
 }
+
+func TestDetachedAnswerCanRetryUntilRuntimeAccepts(t *testing.T) {
+	rt := &fakeConversationRuntime{state: runtime.StateStopped}
+	calls := 0
+	rt.prompt = func(context.Context, string, string, string) error {
+		calls++
+		return errors.New("runtime failed after accepting the prompt")
+	}
+	engine := New(newTestAgentService(t, []agent.Agent{{
+		ID: "agent-a", Name: "A", Role: agent.RoleWorker, RuntimeKind: agent.RuntimeKindCodex,
+		RuntimeID: "runtime-a", Status: string(runtime.StateRunning),
+	}}, rt))
+	item, err := engine.interactions.CreateDetached("agent-a", "conv", "question", activity.RequestUserInputArgs{
+		Questions: []activity.RequestUserInputQuestion{{ID: "choice", Header: "Choice", Question: "Continue?", IsOther: true}},
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	conversation := engine.Conversations("agent-a")
+	var turnID TurnID
+	var result TurnResult
+	answer := InteractionResolution{
+		ConversationKey: "conv", InteractionID: item.ID,
+		Answers: map[string]InteractionAnswer{"choice": {Values: []string{"user_note: continue"}}},
+		ContinueDetached: func(ctx context.Context, question InteractionRequest) bool {
+			result = conversation.Run(ctx, TurnRequest{
+				ID: turnID, ConversationKey: "conv", RespondingTo: question.ID,
+				Input: textInput("continue"), Admission: AdmissionWait,
+			}, nil)
+			return result.Dispatched
+		},
+	}
+
+	turnID = "before-runtime"
+	_ = conversation.Resolve(ctx, answer)
+	if ErrorCodeOf(result.Error) != ErrorAgentUnavailable || result.Dispatched {
+		t.Fatalf("runtime acquisition: %+v", result)
+	}
+	pending, err := conversation.PendingInteractions(ctx, "conv")
+	if err != nil || len(pending) != 1 || pending[0].ID != item.ID {
+		t.Fatalf("pending after acquisition failure: %+v, %v", pending, err)
+	}
+
+	rt.state = runtime.StateRunning
+	turnID = "retry"
+	if err := conversation.Resolve(ctx, answer); err != nil {
+		t.Fatal(err)
+	}
+	if result.Status != TurnFailed || !result.Dispatched {
+		t.Fatalf("failure after dispatch: %+v", result)
+	}
+	turnID = "duplicate"
+	if err := conversation.Resolve(ctx, answer); ErrorCodeOf(err) != ErrorInteractionAlreadyResolved {
+		t.Fatalf("duplicate answer: %v", err)
+	}
+	if calls != 1 {
+		t.Fatalf("runtime received the answer %d times", calls)
+	}
+}

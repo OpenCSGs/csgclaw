@@ -33,6 +33,7 @@ type interactionRecord struct {
 	resolve       func(context.Context, contract.InteractionRequest, contract.InteractionResolution) *contract.TurnError
 	notify        func(contract.InteractionRequest)
 	resolving     bool
+	continuing    bool
 	resolveCancel context.CancelFunc
 	terminal      bool
 	finishedAt    time.Time
@@ -158,7 +159,10 @@ func (c *Coordinator) Resolve(ctx context.Context, agentID string, resolution co
 		}
 		return &contract.TurnError{Code: contract.ErrorInvalidRequest, Message: err.Error()}
 	}
+	snapshot, _ := next.Payload.(activity.UserInputSnapshot)
+	continuing := next.Detached && resolution.ContinueDetached != nil && snapshot.Status == activity.UserInputStatusAnswered
 	item.resolving = true
+	item.continuing = continuing
 	resolveCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	item.resolveCancel = cancel
@@ -176,23 +180,34 @@ func (c *Coordinator) Resolve(ctx context.Context, agentID string, resolution co
 	if err == nil {
 		err = resolveCtx.Err()
 	}
-	if err == nil && resolve != nil {
+	delivered := false
+	if err == nil && continuing {
+		delivered = resolution.ContinueDetached(resolveCtx, Clone(next))
+		if !delivered {
+			err = &contract.TurnError{Code: contract.ErrorRuntimeFailed, Message: "answer was not dispatched"}
+		}
+	} else if err == nil && resolve != nil {
 		if runtimeErr := resolve(resolveCtx, current, resolution); runtimeErr != nil {
 			err = runtimeErr
 		}
 	}
 	c.mu.Lock()
 	item.resolving = false
+	item.continuing = false
 	item.resolveCancel = nil
 	if item.terminal {
 		c.mu.Unlock()
 		return &contract.TurnError{Code: contract.ErrorInteractionGone, Message: "interaction was interrupted"}
 	}
-	if err == nil {
+	if err == nil && !delivered {
 		err = resolveCtx.Err()
 	}
 	if err != nil {
+		expired := continuing && snapshot.AutoResolveAt != nil && !time.Now().Before(*snapshot.AutoResolveAt)
 		c.mu.Unlock()
+		if expired {
+			c.expire(id)
+		}
 		return err
 	}
 	item.request = next
@@ -284,6 +299,33 @@ func (c *Coordinator) Observe(agentID string, key contract.ConversationKey, even
 	}
 }
 
+// BeginTurn orders a new turn against acceptance of detached answers. A responder
+// owns the next turn until its runtime acknowledges dispatch or fails to start.
+func (c *Coordinator) BeginTurn(agentID string, key contract.ConversationKey, respondingTo string) *contract.TurnError {
+	c.mu.Lock()
+	if respondingTo != "" {
+		item := c.items[interactionIdentity{agentID, key, respondingTo}]
+		reserved := item != nil && item.continuing && !item.terminal
+		c.mu.Unlock()
+		if !reserved {
+			return &contract.TurnError{Code: contract.ErrorInteractionGone, Message: "detached answer is no longer reserved"}
+		}
+		return nil
+	}
+	for id, item := range c.items {
+		if id.agentID == agentID && id.key == key && item.continuing && !item.terminal {
+			c.mu.Unlock()
+			return &contract.TurnError{Code: contract.ErrorConversationBusy, Message: "conversation has a pending answer continuation"}
+		}
+	}
+	notifications := c.interruptMatchingLocked(agentID, key, "", true, false)
+	c.mu.Unlock()
+	for _, notify := range notifications {
+		notify()
+	}
+	return nil
+}
+
 // Interrupt invalidates requests in the chosen scope; empty key/turn matches all.
 func (c *Coordinator) Interrupt(agentID string, key contract.ConversationKey, turnID contract.TurnID, detachedOnly bool) {
 	c.interrupt(agentID, key, turnID, detachedOnly, false)
@@ -297,8 +339,16 @@ func (c *Coordinator) CompleteTurn(agentID string, key contract.ConversationKey,
 }
 
 func (c *Coordinator) interrupt(agentID string, key contract.ConversationKey, turnID contract.TurnID, detachedOnly, completed bool) {
-	var notifications []func()
 	c.mu.Lock()
+	notifications := c.interruptMatchingLocked(agentID, key, turnID, detachedOnly, completed)
+	c.mu.Unlock()
+	for _, notify := range notifications {
+		notify()
+	}
+}
+
+func (c *Coordinator) interruptMatchingLocked(agentID string, key contract.ConversationKey, turnID contract.TurnID, detachedOnly, completed bool) []func() {
+	var notifications []func()
 	for id, item := range c.items {
 		if id.agentID != agentID || (key != "" && id.key != key) || (turnID != "" && item.turnID != turnID) || item.terminal || (detachedOnly && !item.request.Detached) {
 			continue
@@ -312,15 +362,14 @@ func (c *Coordinator) interrupt(agentID string, key contract.ConversationKey, tu
 			notifications = append(notifications, func() { notify(request) })
 		}
 	}
-	c.mu.Unlock()
-	for _, notify := range notifications {
-		notify()
-	}
+	return notifications
 }
 func (c *Coordinator) expire(id interactionIdentity) {
 	c.mu.Lock()
 	item := c.items[id]
-	if item == nil || item.terminal {
+	// The deadline applies to submitting an answer. An accepted answer may take
+	// longer to execute. Resolve rechecks the deadline if dispatch fails.
+	if item == nil || item.terminal || item.continuing {
 		c.mu.Unlock()
 		return
 	}

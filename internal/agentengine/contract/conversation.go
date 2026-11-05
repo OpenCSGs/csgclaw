@@ -109,6 +109,8 @@ type RoomConfiguration struct {
 
 // TurnRequest contains conversation identity and caller-normalized input.
 type TurnRequest struct {
+	// RespondingTo identifies the detached answer reserved for this turn.
+	RespondingTo      string               `json:"-"`
 	RoomConfiguration *RoomConfiguration   `json:"-"`
 	ImageGeneration   *ImageGenerationTask `json:"image_generation,omitempty"`
 	VideoGeneration   *VideoGenerationTask `json:"video_generation,omitempty"`
@@ -199,6 +201,9 @@ type InteractionResolution struct {
 	// BeforeResolve persists caller-owned effects after validation and reservation,
 	// but before releasing the Runtime request. Failure leaves it retryable.
 	BeforeResolve func(context.Context, InteractionRequest) error `json:"-"`
+	// ContinueDetached delivers a validated, public answer in a new turn. Return
+	// true once the runtime has accepted it, even if the turn subsequently fails.
+	ContinueDetached func(context.Context, InteractionRequest) bool `json:"-"`
 }
 
 // InteractionAnswer is a normalized answer for one Runtime question.
