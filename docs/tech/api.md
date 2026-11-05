@@ -1625,10 +1625,36 @@ Text-only user message items are also accepted:
 }
 ```
 
-To send a prompt and local files together, post `multipart/form-data` to the
-worker that will handle the turn. In Portal, use the `endpoint` of the current
-CSGClaw instance as `INSTANCE_ENDPOINT`, keeping the gateway authentication
-used for that instance. For example, to stream a response for two PDFs:
+A browser can send a prompt and selected files in one `multipart/form-data`
+POST. Set `responsesUrl` to the session’s `/responses` URL and `token` to the
+Bearer credential for that instance. Include one `input` field containing the
+JSON encoding of a prompt string or the message array shown above. The optional `stream` field
+defaults to `false`. Send it as the string `"true"` or `"false"`. Append each
+selected `File` under the field name `file`. The browser supplies the
+`Content-Type` header with the multipart boundary.
+
+```js
+const form = new FormData()
+form.append("input", JSON.stringify("Summarize this report."))
+form.append("stream", "true")
+form.append("file", selectedFile)
+
+const response = await fetch(responsesUrl, {
+  method: "POST",
+  headers: { Authorization: `Bearer ${token}` },
+  body: form,
+})
+if (!response.ok) throw new Error(`Session request failed (HTTP ${response.status})`)
+```
+
+The same endpoint also accepts one `payload` field containing a JSON object
+and one `files` part per file. Combining `payload` with a top-level form field
+such as `input` or `stream` returns `400 invalid_request`. Gateways that read only
+top-level form fields derive the session title and streaming response headers
+from the direct form shown above. Each file part carries the filename and raw bytes.
+The payload supports `input`, `stream`, `extra`, `extra_type`, and `attachment_ids`.
+For a file-only turn, use `payload={}`. An `input_file` inside `payload` returns
+`400 invalid_request`. This example sends two PDFs and requests streaming:
 
 ```sh
 curl -N "${INSTANCE_ENDPOINT%/}/api/v1/agents/codex-worker/sessions/${SESSION_ID}/responses" \
@@ -1637,13 +1663,6 @@ curl -N "${INSTANCE_ENDPOINT%/}/api/v1/agents/codex-worker/sessions/${SESSION_ID
   --form 'files=@report.pdf;type=application/pdf' \
   --form 'files=@appendix.pdf;type=application/pdf'
 ```
-
-Send one `payload` field containing JSON and one `files` part per file. Each
-`files` part carries the filename and raw bytes. The payload accepts `input`,
-`stream`, `extra`, `extra_type`, and `attachment_ids`. For a file-only turn, use `payload={}`.
-An `input_file` inside `payload` returns `400 invalid_request`. In a browser, append the
-JSON string and each selected `File` to a `FormData` object and let the browser
-set the `Content-Type` header and boundary.
 
 JSON requests also support files through `input_file` parts:
 

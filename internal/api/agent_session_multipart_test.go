@@ -26,23 +26,32 @@ type sessionUploadFixture struct {
 
 func multipartSessionRequest(t *testing.T, payloads []string, files ...sessionUploadFixture) *http.Request {
 	t.Helper()
+	return sessionMultipartForm(t, map[string][]string{"payload": payloads}, map[string][]sessionUploadFixture{"files": files})
+}
+
+func sessionMultipartForm(t *testing.T, values map[string][]string, uploads map[string][]sessionUploadFixture) *http.Request {
+	t.Helper()
 	var body bytes.Buffer
 	writer := multipart.NewWriter(&body)
-	for _, file := range files {
-		header := make(textproto.MIMEHeader)
-		header.Set("Content-Disposition", fmt.Sprintf(`form-data; name="files"; filename=%q`, file.name))
-		header.Set("Content-Type", file.mediaType)
-		part, err := writer.CreatePart(header)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if _, err := io.WriteString(part, file.data); err != nil {
-			t.Fatal(err)
+	for name, files := range uploads {
+		for _, file := range files {
+			header := make(textproto.MIMEHeader)
+			header.Set("Content-Disposition", fmt.Sprintf(`form-data; name=%q; filename=%q`, name, file.name))
+			header.Set("Content-Type", file.mediaType)
+			part, err := writer.CreatePart(header)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := io.WriteString(part, file.data); err != nil {
+				t.Fatal(err)
+			}
 		}
 	}
-	for _, payload := range payloads {
-		if err := writer.WriteField("payload", payload); err != nil {
-			t.Fatal(err)
+	for key, entries := range values {
+		for _, value := range entries {
+			if err := writer.WriteField(key, value); err != nil {
+				t.Fatal(err)
+			}
 		}
 	}
 	if err := writer.Close(); err != nil {
@@ -77,25 +86,7 @@ func TestAgentSessionResponsesMultipartFiles(t *testing.T) {
 				if !tc.stream && (!strings.Contains(prompt, "Read the PDF") || !strings.Contains(prompt, "from the portal")) {
 					t.Errorf("prompt = %q", prompt)
 				}
-				for _, part := range req.Input {
-					if part.Kind != agentengine.InputPartFile {
-						continue
-					}
-					if part.File == nil || len(ids) >= len(files) {
-						t.Fatalf("unexpected file input: %+v", part)
-					}
-					want := files[len(ids)]
-					ids = append(ids, part.File.ID)
-					got, err := engine.Conversations(agentID).Files().Get(ctx, part.File.ID)
-					if err != nil {
-						t.Fatal(err)
-					}
-					defer got.Content.Close()
-					data, err := io.ReadAll(got.Content)
-					if err != nil || string(data) != want.data || got.Metadata.Name != want.name || got.Metadata.MediaType != want.mediaType {
-						t.Errorf("file %q: metadata=%+v, bytes=%x, error=%v", want.name, got.Metadata, data, err)
-					}
-				}
+				ids = checkSessionWorkerFiles(t, ctx, engine, agentID, req, files)
 				return agentengine.TurnResult{Status: agentengine.TurnSucceeded, Output: "received files"}
 			}
 			h, _, _, _ := newAgentSessionTestHandler(t, []agent.Agent{sessionCodexAgent("agent-alpha", "Alpha")}, engine, "")
@@ -120,6 +111,77 @@ func TestAgentSessionResponsesMultipartFiles(t *testing.T) {
 				}
 			}
 			assertSessionInputFilesDeleted(t, engine.Conversations("agent-alpha").Files(), ids)
+		})
+	}
+}
+
+func checkSessionWorkerFiles(t *testing.T, ctx context.Context, engine *fakeSessionEngine, agentID string, turn agentengine.TurnRequest, files []sessionUploadFixture) []string {
+	t.Helper()
+	var ids []string
+	for _, part := range turn.Input {
+		if part.Kind != agentengine.InputPartFile {
+			continue
+		}
+		if part.File == nil || len(ids) >= len(files) {
+			t.Errorf("unexpected file input: %+v", part)
+			continue
+		}
+		want := files[len(ids)]
+		ids = append(ids, part.File.ID)
+		got, err := engine.Conversations(agentID).Files().Get(ctx, part.File.ID)
+		if err != nil {
+			t.Error(err)
+			continue
+		}
+		data, err := io.ReadAll(got.Content)
+		got.Content.Close()
+		if err != nil || string(data) != want.data || got.Metadata.Name != want.name || got.Metadata.MediaType != want.mediaType {
+			t.Errorf("file %q: metadata=%+v, bytes=%x, error=%v", want.name, got.Metadata, data, err)
+		}
+	}
+	if len(ids) != len(files) {
+		t.Errorf("worker received %d files, want %d", len(ids), len(files))
+	}
+	return ids
+}
+
+func TestAgentSessionResponsesMultipartInputFields(t *testing.T) {
+	files := []sessionUploadFixture{
+		{"会议纪要.pdf", "application/pdf", "%PDF-1.7\r\n\x00\xff"},
+		{"notes.txt", "text/plain", "notes"},
+	}
+	for _, tc := range []struct {
+		name, input string
+		stream      bool
+	}{
+		{"string input", `"Read the PDF."`, false},
+		{"message array", `[{"role":"user","content":[{"type":"input_text","text":"Read the PDF."}]}]`, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			engine := &fakeSessionEngine{}
+			engine.run = func(ctx context.Context, agentID string, turn agentengine.TurnRequest, _ agentengine.EventSink) agentengine.TurnResult {
+				if prompt := sessionTurnText(turn); prompt != "Read the PDF." {
+					t.Errorf("worker prompt = %q", prompt)
+				}
+				checkSessionWorkerFiles(t, ctx, engine, agentID, turn, files)
+				return agentengine.TurnResult{Status: agentengine.TurnSucceeded, Output: "Read."}
+			}
+			server, workspace := sessionOutputTestServer(t, engine, "")
+			form := sessionMultipartForm(t, map[string][]string{"input": {tc.input}, "stream": {fmt.Sprint(tc.stream)}}, map[string][]sessionUploadFixture{"file": files})
+			status, body := sessionFileHTTP(t, server, http.MethodPost, multipartSessionPath, form.Header.Get("Content-Type"), form.Body)
+			if status != http.StatusOK || len(engine.client.Calls()) != 1 {
+				t.Fatalf("HTTP %d, worker calls %d: %s", status, len(engine.client.Calls()), body)
+			}
+			if tc.stream && !bytes.HasPrefix(body, []byte("event: message_start\n")) {
+				t.Fatalf("unexpected first SSE event: %s", body)
+			}
+			published := sessionResponsePublishedFiles(t, body, tc.stream)
+			if len(published.Inputs) != len(files) {
+				t.Fatalf("published input count = %d, want %d", len(published.Inputs), len(files))
+			}
+			for i, file := range files {
+				checkSessionDownload(t, server, workspace, published.Inputs[i], file.name, file.mediaType, []byte(file.data))
+			}
 		})
 	}
 }
@@ -159,6 +221,52 @@ func TestAgentSessionResponsesRejectsInvalidMultipart(t *testing.T) {
 			}
 			assertSessionInputFilesDeleted(t, store, store.created)
 		})
+	}
+}
+
+func TestAgentSessionRejectsInvalidMultipartInputFields(t *testing.T) {
+	engine := &fakeSessionEngine{}
+	server, _ := sessionOutputTestServer(t, engine, "")
+	file := sessionUploadFixture{"notes.txt", "text/plain", "notes"}
+	const input = `"Read."`
+	const payload = `{"input":"Read."}`
+	for _, tc := range []struct {
+		name   string
+		fields map[string][]string
+		files  []string
+	}{
+		{"payload with input", map[string][]string{"payload": {payload}, "input": {input}}, []string{"files"}},
+		{"payload with stream", map[string][]string{"payload": {payload}, "stream": {"true"}}, []string{"files"}},
+		{"duplicate input", map[string][]string{"input": {input, input}}, []string{"file"}},
+		{"duplicate stream", map[string][]string{"input": {input}, "stream": {"false", "true"}}, []string{"file"}},
+		{"unknown text field", map[string][]string{"input": {input}, "unexpected": {"field"}}, []string{"file"}},
+		{"invalid input JSON", map[string][]string{"input": {"Read."}}, []string{"file"}},
+		{"null input", map[string][]string{"input": {"null"}}, []string{"file"}},
+		{"invalid input object", map[string][]string{"input": {`{"content":"read"}`}}, []string{"file"}},
+		{"invalid stream", map[string][]string{"input": {input}, "stream": {"yes"}}, []string{"file"}},
+		{"null stream", map[string][]string{"input": {input}, "stream": {"null"}}, []string{"file"}},
+		{"mixed file parts", map[string][]string{"input": {input}}, []string{"file", "files"}},
+		{"unknown file part", map[string][]string{"input": {input}}, []string{"file", "other"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			uploads := make(map[string][]sessionUploadFixture)
+			for _, name := range tc.files {
+				uploads[name] = []sessionUploadFixture{file}
+			}
+			req := sessionMultipartForm(t, tc.fields, uploads)
+			result := postSessionUploadTest(t, server, multipartSessionPath, "", req.Header.Get("Content-Type"), req.Body, http.StatusBadRequest)
+			if !bytes.Contains(result, []byte(`"invalid_request"`)) {
+				t.Fatalf("unexpected error: %s", result)
+			}
+		})
+	}
+	t.Run("file on standalone upload", func(t *testing.T) {
+		req := sessionMultipartForm(t, nil, map[string][]sessionUploadFixture{"file": {file}})
+		path := strings.TrimSuffix(multipartSessionPath, "/responses") + "/attachments"
+		postSessionUploadTest(t, server, path, "Bearer test-server-token", req.Header.Get("Content-Type"), req.Body, http.StatusBadRequest)
+	})
+	if calls := len(engine.client.Calls()); calls != 0 {
+		t.Errorf("invalid requests dispatched %d worker turns", calls)
 	}
 }
 

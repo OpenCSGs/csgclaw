@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
@@ -10,6 +11,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"csgclaw/internal/agentengine"
@@ -73,23 +75,59 @@ func parseAgentSessionMultipart(w http.ResponseWriter, r *http.Request) (agentSe
 		return agentSessionInput{}, false, fmt.Errorf("decode multipart request: %w", err)
 	}
 	form := r.MultipartForm
-	if len(form.Value) != 1 || len(form.Value["payload"]) != 1 {
-		return agentSessionInput{}, false, fmt.Errorf("expected one payload field")
+	fileField := "files"
+	if len(form.File["file"]) > 0 {
+		fileField = "file"
 	}
-	payload := form.Value["payload"][0]
-	if len(payload) > agentSessionResponseBodyLimit {
-		return agentSessionInput{}, false, fmt.Errorf("%w: payload exceeds %d bytes", errAttachmentPayloadTooLarge, agentSessionResponseBodyLimit)
-	}
-	files, err := sessionMultipartFiles(form)
+	files, err := sessionMultipartFiles(form, fileField)
 	if err != nil {
 		return agentSessionInput{}, false, err
 	}
-	return decodeAgentSessionResponseRequest(strings.NewReader(payload), files)
+
+	if values, ok := form.Value["payload"]; ok {
+		if len(form.Value) != 1 || len(values) != 1 {
+			return agentSessionInput{}, false, fmt.Errorf("payload must appear once and cannot be combined with other form fields")
+		}
+		if len(values[0]) > agentSessionResponseBodyLimit {
+			return agentSessionInput{}, false, fmt.Errorf("%w: payload exceeds %d bytes", errAttachmentPayloadTooLarge, agentSessionResponseBodyLimit)
+		}
+		return decodeAgentSessionResponseRequest(strings.NewReader(values[0]), files)
+	}
+
+	inputs, streams := form.Value["input"], form.Value["stream"]
+	for name := range form.Value {
+		if name != "input" && name != "stream" {
+			return agentSessionInput{}, false, fmt.Errorf("unknown multipart field %q", name)
+		}
+	}
+	if len(inputs) != 1 || len(streams) > 1 {
+		return agentSessionInput{}, false, fmt.Errorf("expected one input field and an optional stream field")
+	}
+	metadataBytes := len(inputs[0])
+	if len(streams) == 1 {
+		metadataBytes += len(streams[0])
+	}
+	if metadataBytes > agentSessionResponseBodyLimit {
+		return agentSessionInput{}, false, fmt.Errorf("%w: multipart fields exceed %d bytes", errAttachmentPayloadTooLarge, agentSessionResponseBodyLimit)
+	}
+	input := strings.Trim(inputs[0], " \t\n\r")
+	if input == "" || input == "null" {
+		return agentSessionInput{}, false, fmt.Errorf("input must be a JSON string or an array of user messages")
+	}
+	request := agentSessionResponseRequest{Input: json.RawMessage(input)}
+	if len(streams) == 1 {
+		stream, err := strconv.ParseBool(streams[0])
+		if err != nil {
+			return agentSessionInput{}, false, fmt.Errorf("stream must be a boolean")
+		}
+		request.Stream = &stream
+	}
+	return request.parseInput(files, int64(metadataBytes))
 }
 
-func sessionMultipartFiles(form *multipart.Form) ([]agentSessionInputFile, error) {
-	if len(form.File) != 1 || len(form.File["files"]) == 0 {
-		return nil, fmt.Errorf("expected one or more files parts")
+func sessionMultipartFiles(form *multipart.Form, field string) ([]agentSessionInputFile, error) {
+	if len(form.File) != 1 || len(form.File[field]) == 0 {
+		return nil, fmt.Errorf("expected one or more %s parts", field)
 	}
 	uploads, err := readMultipartAttachmentUploads(form)
 	if err != nil {

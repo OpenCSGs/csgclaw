@@ -1576,9 +1576,32 @@ invalid_request`。`plain_text` 的 `extra` 最大为 64 KiB，`web_page_dom` �
 }
 ```
 
-可以通过一次 `multipart/form-data` 请求，将提示词和本地文件发送给执行本轮任务的
-worker。在 Portal 中，使用当前 CSGClaw 实例的 `endpoint` 作为 `INSTANCE_ENDPOINT`，
-并沿用访问该实例的网关认证。以下示例上传两份 PDF 并接收流式回复。
+浏览器可以通过一次 `multipart/form-data` POST 请求发送提示词和选中的文件。
+`responsesUrl` 使用当前会话的 `/responses` 地址，`token` 使用当前实例的 Bearer 凭证。
+提供一个 `input` 字段，填写提示词字符串或上文消息数组经过 `JSON.stringify` 编码后的文本。
+可选字段 `stream` 省略时默认为 `false`。提供该字段时，使用字符串 `"true"` 或 `"false"`。
+每个选中的 `File` 使用一个 `file` 字段。浏览器会自动设置包含 boundary 的 `Content-Type` 请求头。
+
+```js
+const form = new FormData()
+form.append("input", JSON.stringify("请总结这份报告"))
+form.append("stream", "true")
+form.append("file", selectedFile)
+
+const response = await fetch(responsesUrl, {
+  method: "POST",
+  headers: { Authorization: `Bearer ${token}` },
+  body: form,
+})
+if (!response.ok) throw new Error(`Session request failed (HTTP ${response.status})`)
+```
+
+同一接口也接受一个包含 JSON 对象的 `payload` 字段，每个文件使用一个 `files` 字段，
+提供文件名称和原始字节。在同一表单中同时提供 `payload` 和顶层 `input` 或 `stream` 会返回 `400 invalid_request`。
+部分网关只读取顶层表单字段来设置会话标题和流式响应头，经过这些网关时请采用上面的直接字段写法。
+`payload` 支持 `input`、`stream`、`extra`、`extra_type`
+和 `attachment_ids`。仅发送文件时可以使用 `payload={}`。在 `payload` 中传入
+`input_file` 会返回 `400 invalid_request`。以下示例上传两份 PDF 并接收流式回复。
 
 ```sh
 curl -N "${INSTANCE_ENDPOINT%/}/api/v1/agents/codex-worker/sessions/${SESSION_ID}/responses" \
@@ -1587,12 +1610,6 @@ curl -N "${INSTANCE_ENDPOINT%/}/api/v1/agents/codex-worker/sessions/${SESSION_ID
   --form 'files=@report.pdf;type=application/pdf' \
   --form 'files=@appendix.pdf;type=application/pdf'
 ```
-
-表单包含一个 `payload` 字段，内容为 JSON 字符串。每个文件使用一个 `files` 字段，
-包含文件名称和原始字节。`payload` 支持 `input`、`stream`、`extra` 和
-`extra_type`，也支持 `attachment_ids`。仅发送文件时可以使用 `payload={}`。在 `payload` 中传入 `input_file`
-会返回 `400 invalid_request`。浏览器可以将 JSON 字符串和选中的每个 `File` 添加到 `FormData`，
-由浏览器设置包含 boundary 的 `Content-Type` 请求头。
 
 JSON 请求也可以在 `content` 中使用 `input_file` 发送文件。
 

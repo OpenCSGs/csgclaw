@@ -451,6 +451,10 @@ func decodeAgentSessionResponseRequest(reader io.Reader, uploads []agentSessionI
 	if request == nil {
 		return agentSessionInput{}, false, fmt.Errorf("expected a request object")
 	}
+	return request.parseInput(uploads, agentSessionFileBodyLimit+1-body.N)
+}
+
+func (request *agentSessionResponseRequest) parseInput(uploads []agentSessionInputFile, requestBytes int64) (agentSessionInput, bool, error) {
 	var input agentSessionInput
 	if len(request.Input) == 0 || string(request.Input) == "null" {
 		if len(uploads) == 0 && len(request.AttachmentIDs) == 0 {
@@ -465,7 +469,7 @@ func decodeAgentSessionResponseRequest(reader io.Reader, uploads []agentSessionI
 	}
 	if len(uploads) > 0 {
 		if len(input.Files) > 0 {
-			return agentSessionInput{}, false, fmt.Errorf("send multipart attachments using files parts only")
+			return agentSessionInput{}, false, fmt.Errorf("send multipart attachments as file parts")
 		}
 		input.Files = uploads
 	}
@@ -473,7 +477,7 @@ func decodeAgentSessionResponseRequest(reader io.Reader, uploads []agentSessionI
 	if input.Text == "" && len(input.Files)+len(input.attachmentIDs) == 0 {
 		return agentSessionInput{}, false, fmt.Errorf("input must not be empty")
 	}
-	nonFileBytes := agentSessionFileBodyLimit + 1 - body.N
+	nonFileBytes := requestBytes
 	for _, file := range input.Files {
 		nonFileBytes -= int64(file.encodedBytes)
 	}

@@ -61,7 +61,7 @@ func (h *Handler) uploadAgentSessionAttachments(w http.ResponseWriter, r *http.R
 		writeAgentSessionError(w, http.StatusBadRequest, "invalid_request", "expected only files parts", "files")
 		return
 	}
-	files, err := sessionMultipartFiles(r.MultipartForm)
+	files, err := sessionMultipartFiles(r.MultipartForm, "files")
 	if err != nil {
 		writeSessionInputError(w, err)
 		return
