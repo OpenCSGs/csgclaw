@@ -133,6 +133,10 @@ type remoteCreateCodeRequest struct {
 	CodeFile      string `json:"code_file,omitempty"`
 }
 
+type remoteUpdateCodeRequest struct {
+	Nickname string `json:"nickname"`
+}
+
 type remoteCodeRepository struct {
 	Name          string            `json:"name"`
 	Nickname      string            `json:"nickname"`
@@ -795,6 +799,8 @@ func (s *RemoteStore) Publish(ctx context.Context, spec PublishSpec) (Template, 
 			return Template{}, fmt.Errorf("create remote hub template: %w", err)
 		}
 		branch = strings.TrimSpace(created.Data.DefaultBranch)
+	} else if err := s.putJSON(ctx, s.remoteTemplateEndpoint(request.Name), remoteUpdateCodeRequest{Nickname: request.Nickname}, nil); err != nil {
+		return Template{}, fmt.Errorf("update remote hub template: %w", err)
 	}
 	if branch == "" {
 		branch = "main"
@@ -900,6 +906,14 @@ func (s *RemoteStore) getJSONWithLimit(ctx context.Context, endpoint string, out
 }
 
 func (s *RemoteStore) postJSON(ctx context.Context, endpoint string, input, out any) error {
+	return s.sendJSON(ctx, http.MethodPost, endpoint, input, out)
+}
+
+func (s *RemoteStore) putJSON(ctx context.Context, endpoint string, input, out any) error {
+	return s.sendJSON(ctx, http.MethodPut, endpoint, input, out)
+}
+
+func (s *RemoteStore) sendJSON(ctx context.Context, method, endpoint string, input, out any) error {
 	var body io.Reader
 	if input != nil {
 		data, err := json.Marshal(input)
@@ -908,7 +922,7 @@ func (s *RemoteStore) postJSON(ctx context.Context, endpoint string, input, out 
 		}
 		body = bytes.NewReader(data)
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, body)
+	req, err := http.NewRequestWithContext(ctx, method, endpoint, body)
 	if err != nil {
 		return fmt.Errorf("create remote hub request: %w", err)
 	}
@@ -919,7 +933,7 @@ func (s *RemoteStore) postJSON(ctx context.Context, endpoint string, input, out 
 	}
 	resp, err := s.httpClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("remote hub request POST %s: %w", endpoint, err)
+		return fmt.Errorf("remote hub request %s %s: %w", method, endpoint, err)
 	}
 	defer resp.Body.Close()
 	data, err := io.ReadAll(io.LimitReader(resp.Body, s.maxJSON+1))
