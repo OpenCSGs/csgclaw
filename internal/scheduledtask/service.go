@@ -340,11 +340,12 @@ func (s *Service) trigger(ctx context.Context, item Task, advanceSchedule bool, 
 		run.Error = "agent task service is not configured"
 	} else {
 		task, err := s.agentTask.CreateAgentTask(ctx, agenttask.CreateInput{
-			ID:        run.TaskID,
-			AgentID:   item.AgentID,
-			Title:     item.Title,
-			Body:      item.Prompt,
-			CreatedBy: schedulerCreatedBy,
+			ID:             run.TaskID,
+			AgentID:        item.AgentID,
+			Title:          item.Title,
+			Body:           item.Prompt,
+			CreatedBy:      schedulerCreatedBy,
+			NewTaskSession: true,
 		})
 		if err != nil {
 			run.Status = StatusFailed

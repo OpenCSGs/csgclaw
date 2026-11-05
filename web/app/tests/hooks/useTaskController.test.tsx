@@ -681,6 +681,35 @@ describe("useTaskController", () => {
     }
   });
 
+  it("keeps a manual run in the scheduled task view", async () => {
+    const item = scheduledTask();
+    const run = scheduledRun();
+    const onSelectTask = vi.fn();
+    vi.mocked(fetchScheduledTasks).mockResolvedValue([item]);
+    vi.mocked(fetchScheduledTaskRuns).mockResolvedValue([run]);
+    vi.mocked(runScheduledTaskNow).mockResolvedValue(run);
+    const { result } = renderHook(
+      () =>
+        useTaskController({
+          activePane: paneFromLocation("/scheduled-tasks"),
+          agents: [],
+          t,
+          onSelectConversation: vi.fn(),
+          onSelectTask,
+          onSelectTaskBoardView: vi.fn(),
+        }),
+      { wrapper: createWrapper(createQueryClient()) },
+    );
+
+    await waitFor(() => expect(result.current.taskViewProps.scheduledTasks).toEqual([item]));
+    await act(async () => {
+      await result.current.taskViewProps.onRunScheduledTask(item.id);
+    });
+
+    expect(result.current.taskViewProps.scheduledTaskRuns).toEqual([run]);
+    expect(onSelectTask).not.toHaveBeenCalled();
+  });
+
   it("shows a localized message when a scheduled task has already been triggered", async () => {
     const queryClient = createQueryClient();
     const item = scheduledTask();

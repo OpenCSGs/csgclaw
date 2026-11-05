@@ -8,6 +8,7 @@ import (
 	"csgclaw/internal/im"
 	"csgclaw/internal/participant"
 	"csgclaw/internal/taskcore"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -33,11 +34,12 @@ func (s *Service) Core() *taskcore.Service {
 }
 
 type CreateInput struct {
-	ID        string
-	AgentID   string
-	Title     string
-	Body      string
-	CreatedBy string
+	ID             string
+	AgentID        string
+	Title          string
+	Body           string
+	CreatedBy      string
+	NewTaskSession bool
 }
 
 type ClaimInput struct {
@@ -93,13 +95,27 @@ func (s *Service) CreateAgentTask(ctx context.Context, input CreateInput) (taskc
 		role = agent.RoleManager
 	}
 	user, room, err := s.im.EnsureAgentUser(im.EnsureAgentUserRequest{
-		ID:          agentID,
-		Name:        name,
-		Description: description,
-		Role:        role,
+		ID:             agentID,
+		Name:           name,
+		Description:    description,
+		Role:           role,
+		SkipDirectRoom: input.NewTaskSession,
 	})
 	if err != nil {
 		return taskcore.Task{}, err
+	}
+	if input.NewTaskSession {
+		session, err := s.im.CreateRoom(im.CreateRoomRequest{
+			Title:       title,
+			CreatorID:   im.AdminUserID,
+			MemberIDs:   []string{user.ID},
+			IsDirect:    true,
+			TaskSession: true,
+		})
+		if err != nil {
+			return taskcore.Task{}, err
+		}
+		room = &session
 	}
 	if room == nil {
 		return taskcore.Task{}, fmt.Errorf("agent direct room was not created")
@@ -118,6 +134,9 @@ func (s *Service) CreateAgentTask(ctx context.Context, input CreateInput) (taskc
 		RoomID:           room.ID,
 	})
 	if err != nil {
+		if input.NewTaskSession {
+			err = errors.Join(err, s.im.DeleteRoom(room.ID))
+		}
 		return taskcore.Task{}, err
 	}
 
@@ -134,6 +153,20 @@ func (s *Service) CreateAgentTask(ctx context.Context, input CreateInput) (taskc
 			TargetIDs: []string{user.ID},
 		},
 	}); err != nil {
+		if input.NewTaskSession {
+			// A task with no delivered assignment cannot run. Release the schedule
+			// for its next trigger while retaining the failed run for inspection.
+			markFailed := s.core.Mutate(task.ID, func(snapshot *taskcore.Snapshot, _ func() (string, error)) error {
+				snapshot.Root.Status = taskcore.StatusFailed
+				snapshot.Root.Error = err.Error()
+				snapshot.Root.UpdatedAt = time.Now().UTC()
+				snapshot.Events = append(snapshot.Events, taskcore.TaskEvent{
+					Type: taskcore.EventTaskFailed, TaskID: task.ID, ActorID: task.CreatedBy, Summary: err.Error(),
+				})
+				return nil
+			})
+			err = errors.Join(err, markFailed)
+		}
 		return taskcore.Task{}, err
 	}
 	return task, nil
