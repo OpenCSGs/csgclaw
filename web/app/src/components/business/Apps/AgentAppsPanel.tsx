@@ -524,7 +524,7 @@ export function AppManagedMCPRows({
 
 export function AppIcon({ appID }: { appID: string }) {
   if (appID === "gitlab") return <ConnectorGitLabIcon size={30} className={styles.gitlabIcon} aria-hidden="true" />;
-  if (appID === "feishu") return <img src="icons/feishu.png" width={28} height={28} alt="" />;
+  if (appID === "feishu") return <img className="rounded-sm" src="icons/feishu.png" width={28} height={28} alt="" />;
   if (appID === "github") return <img src="icons/github.svg" width={28} height={28} alt="" />;
   if (appID === "llm-wiki") return <BookOpen size={22} aria-hidden="true" />;
   return <ConnectorBoxesIcon size={22} aria-hidden="true" />;

@@ -806,7 +806,7 @@ describe("TasksView", () => {
     );
   });
 
-  it("shows a scheduled run task inline instead of opening the task dialog", () => {
+  it("shows a scheduled run task inline only after its task ID is clicked", () => {
     const generatedTask = task({
       id: "task-scheduled-run-1",
       title: "Generated report",
@@ -829,6 +829,9 @@ describe("TasksView", () => {
         t={t}
       />,
     );
+
+    expect(screen.queryByLabelText("Generated task detail")).not.toBeInTheDocument();
+    expect(screen.queryByText("Generated report")).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "task-scheduled-run-1" }));
 
@@ -863,13 +866,14 @@ describe("TasksView", () => {
       />,
     );
 
+    fireEvent.click(screen.getByRole("button", { name: "task-scheduled-run-1" }));
     fireEvent.click(screen.getByRole("button", { name: "View history" }));
 
     expect(onOpenConversation).not.toHaveBeenCalled();
     expect(screen.getByText("Cannot open history: the corresponding agent was deleted.")).toBeInTheDocument();
   });
 
-  it("keeps the generated task detail area reserved before a run is selected", () => {
+  it("hides the generated task detail area when there are no run records", () => {
     render(
       <TasksView
         activeView="scheduled"
@@ -879,8 +883,40 @@ describe("TasksView", () => {
       />,
     );
 
-    expect(screen.getByLabelText("Generated task detail")).toBeInTheDocument();
-    expect(screen.getByText("Select a run record to inspect the generated task.")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Generated task detail")).not.toBeInTheDocument();
+    expect(screen.queryByText("Select a run record to inspect the generated task.")).not.toBeInTheDocument();
+  });
+
+  it("preserves an explicit run selection on refresh and clears it when switching schedules", () => {
+    const firstTask = task({ id: "task-scheduled-run-1", title: "First generated report" });
+    const secondTask = task({ id: "task-scheduled-run-2", title: "Second generated report" });
+    const props = {
+      activeView: "scheduled" as const,
+      tasks: [firstTask, secondTask],
+      scheduledTasks: [scheduledTask(), scheduledTask({ id: "scheduled-task-2", title: "Weekly report" })],
+      selectedScheduledTaskID: "scheduled-task-1",
+      t,
+    };
+    const { rerender } = render(<TasksView {...props} scheduledTaskRuns={[scheduledTaskRun()]} />);
+
+    rerender(<TasksView {...props} scheduledTaskRuns={[scheduledTaskRun()]} />);
+    expect(screen.queryByLabelText("Generated task detail")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: firstTask.id }));
+    const refreshedRuns = [scheduledTaskRun({ id: "scheduled-run-2", task_id: secondTask.id }), scheduledTaskRun()];
+    rerender(<TasksView {...props} scheduledTaskRuns={refreshedRuns} />);
+    expect(within(screen.getByLabelText("Generated task detail")).getByText(firstTask.title)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: firstTask.id })).toHaveAttribute("data-active", "true");
+    expect(screen.getByRole("button", { name: secondTask.id })).not.toHaveAttribute("data-active");
+
+    fireEvent.click(screen.getByRole("button", { name: secondTask.id }));
+    expect(within(screen.getByLabelText("Generated task detail")).getByText(secondTask.title)).toBeInTheDocument();
+
+    rerender(<TasksView {...props} selectedScheduledTaskID="scheduled-task-2" scheduledTaskRuns={[]} />);
+    expect(screen.queryByLabelText("Generated task detail")).not.toBeInTheDocument();
+
+    rerender(<TasksView {...props} scheduledTaskRuns={refreshedRuns} />);
+    expect(screen.queryByLabelText("Generated task detail")).not.toBeInTheDocument();
   });
 
   it("shows live status for unselected schedules without blocking the selected schedule", () => {

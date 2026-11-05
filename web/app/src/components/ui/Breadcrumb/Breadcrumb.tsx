@@ -23,6 +23,7 @@ export type BreadcrumbProps = {
   items: BreadcrumbItem[];
   maxVisibleItems?: number;
   overflowLabel?: string;
+  wrap?: boolean;
 };
 
 function Item({ item, home = false }: { home?: boolean; item: BreadcrumbItem }) {
@@ -31,7 +32,7 @@ function Item({ item, home = false }: { home?: boolean; item: BreadcrumbItem }) 
 
   if (item.current) {
     return (
-      <span className={className} aria-current="page" title={home ? item.label : undefined}>
+      <span className={className} aria-current="page" title={item.label}>
         {content}
         {home ? <span className={styles.srOnly}>{item.label}</span> : null}
       </span>
@@ -40,20 +41,14 @@ function Item({ item, home = false }: { home?: boolean; item: BreadcrumbItem }) 
 
   if (item.href) {
     return (
-      <a className={className} href={item.href} title={home ? item.label : undefined}>
+      <a className={className} href={item.href} title={item.label}>
         {content}
       </a>
     );
   }
 
   return (
-    <button
-      className={className}
-      type="button"
-      onClick={item.onClick}
-      title={home ? item.label : undefined}
-      disabled={!item.onClick}
-    >
+    <button className={className} type="button" onClick={item.onClick} title={item.label} disabled={!item.onClick}>
       {content}
     </button>
   );
@@ -66,6 +61,7 @@ export function Breadcrumb({
   items,
   maxVisibleItems = 4,
   overflowLabel = "Show earlier path segments",
+  wrap = false,
 }: BreadcrumbProps) {
   const shouldCollapse = items.length > maxVisibleItems && maxVisibleItems >= 3;
   const edgeCount = shouldCollapse ? Math.max(1, Math.floor((maxVisibleItems - 2) / 2)) : items.length;
@@ -81,7 +77,7 @@ export function Breadcrumb({
   const renderedEntries = [...(home ? [{ kind: "home" as const, item: home, key: "home" }] : []), ...pathEntries];
 
   return (
-    <nav className={classNames(styles.breadcrumb, className)} aria-label={ariaLabel}>
+    <nav className={classNames(styles.breadcrumb, wrap && styles.wrap, className)} aria-label={ariaLabel}>
       <ol className={styles.list}>
         {renderedEntries.map((entry, index) => (
           <li className={styles.segment} key={entry.key}>

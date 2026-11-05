@@ -55,6 +55,22 @@
   text-overflow: ellipsis;
 }
 
+.wrap .list {
+  flex-wrap: wrap;
+  row-gap: 4px;
+}
+
+.wrap .segment {
+  max-width: 100%;
+}
+
+.wrap .item:not(.homeItem) {
+  display: block;
+  max-width: none;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
 .item:hover,
 .overflowTrigger:hover {
   color: var(--text);

@@ -473,8 +473,8 @@ export function TasksView({
   }, [editingScheduledTask]);
 
   useEffect(() => {
-    setSelectedGeneratedTaskID(scheduledTaskRuns.find((run) => run.task_id)?.task_id ?? "");
-  }, [scheduledTaskRuns, selectedScheduledTask?.id]);
+    setSelectedGeneratedTaskID("");
+  }, [selectedScheduledTask?.id]);
 
   async function submitCreateTask() {
     const title = truncateTaskTitle(createDraft.title.trim());
@@ -871,15 +871,17 @@ export function TasksView({
                             <div className={styles.taskBoardEmpty}>{t("scheduledTaskRunsEmpty")}</div>
                           )}
                         </div>
-                        <GeneratedTaskInlineDetail
-                          task={selectedGeneratedTask}
-                          childTasks={selectedGeneratedChildTasks}
-                          agentNames={agentNames}
-                          teams={teams}
-                          taskEvents={taskEvents}
-                          t={t}
-                          onOpenConversation={openTaskConversation}
-                        />
+                        {selectedGeneratedTaskID ? (
+                          <GeneratedTaskInlineDetail
+                            task={selectedGeneratedTask}
+                            childTasks={selectedGeneratedChildTasks}
+                            agentNames={agentNames}
+                            teams={teams}
+                            taskEvents={taskEvents}
+                            t={t}
+                            onOpenConversation={openTaskConversation}
+                          />
+                        ) : null}
                       </>
                     ) : (
                       <ScheduledTaskStart
