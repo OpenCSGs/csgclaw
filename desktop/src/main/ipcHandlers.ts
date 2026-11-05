@@ -14,10 +14,15 @@ import {
   type DesktopUpdateChannel,
 } from "../shared/desktopBridge.types";
 import { parseDesktopThemeSource } from "../shared/desktopTheme";
-import { isSafeHTTPSURL, isSafeWebURL, isTrustedMainFrame } from "./navigationPolicy";
+import {
+  isSafeHTTPSURL,
+  isSafeWebURL,
+  isTrustedMainFrame,
+} from "./navigationPolicy";
 import type { SidecarSupervisor } from "./sidecar/SidecarSupervisor";
 import type { DesktopUpdater } from "./updater";
 import { TurnNotifications } from "./turnNotifications";
+import { restoreWindowFocusAfterDialog } from "./focusRecovery";
 
 const confirmedCustomOAuthHosts = new Set<string>();
 
@@ -69,6 +74,13 @@ export function registerIPCHandlers(
     await shell.openExternal(parsed.url, { activate: true });
     return { opened: true };
   });
+  ipcMain.handle(DesktopIPC.restoreFocusAfterDialog, (event) => {
+    assertSender(event);
+    const window = getWindow();
+    if (window) {
+      restoreWindowFocusAfterDialog(window);
+    }
+  });
   ipcMain.handle(DesktopIPC.checkForUpdates, async (event) => {
     assertSender(event);
     await updater.checkForUpdates();
@@ -105,6 +117,7 @@ export function registerIPCHandlers(
     ipcMain.removeHandler(DesktopIPC.showTurnNotification);
     ipcMain.removeHandler(DesktopIPC.getRuntimeInfo);
     ipcMain.removeHandler(DesktopIPC.openOAuth);
+    ipcMain.removeHandler(DesktopIPC.restoreFocusAfterDialog);
     ipcMain.removeHandler(DesktopIPC.checkForUpdates);
     ipcMain.removeHandler(DesktopIPC.installDownloadedUpdate);
     ipcMain.removeHandler(DesktopIPC.restartSidecar);

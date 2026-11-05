@@ -25,6 +25,7 @@ const DesktopIPC = {
   getRuntimeInfo: "csgclaw:desktop:get-runtime-info",
   installDownloadedUpdate: "csgclaw:desktop:install-downloaded-update",
   openOAuth: "csgclaw:desktop:open-oauth",
+  restoreFocusAfterDialog: "csgclaw:desktop:restore-focus-after-dialog",
   restartSidecar: "csgclaw:desktop:restart-sidecar",
   showWindow: "csgclaw:desktop:show-window",
   showTurnNotification: "csgclaw:desktop:show-turn-notification",
@@ -58,6 +59,8 @@ const bridge: DesktopBridge = Object.freeze({
   getRuntimeInfo: () => ipcRenderer.invoke(DesktopIPC.getRuntimeInfo),
   openOAuth: (input: DesktopOAuthInput) =>
     ipcRenderer.invoke(DesktopIPC.openOAuth, input),
+  restoreFocusAfterDialog: () =>
+    ipcRenderer.invoke(DesktopIPC.restoreFocusAfterDialog),
   checkForUpdates: () => ipcRenderer.invoke(DesktopIPC.checkForUpdates),
   installDownloadedUpdate: () =>
     ipcRenderer.invoke(DesktopIPC.installDownloadedUpdate),

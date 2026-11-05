@@ -38,6 +38,7 @@ import { useUpgradeController } from "./useUpgradeController";
 import { useConfigController } from "./useConfigController";
 import { useAuthController } from "./useAuthController";
 import { useOpenCSGAuthGuard } from "./useOpenCSGAuthGuard";
+import { confirmWithFocusRecovery } from "@/shared/platform/confirm";
 import { useAgentController } from "./useAgentController";
 import { useConversationController } from "./useConversationController";
 import { useProfilePreviewController } from "./useProfilePreviewController";
@@ -305,7 +306,7 @@ export function useWorkspaceController(): WorkspaceController {
       if (
         !options.skipUnsavedCheck &&
         agent.agentViewProps.hasUnsavedChanges &&
-        !window.confirm(t("agentUnsavedChangesWarning"))
+        !confirmWithFocusRecovery(t("agentUnsavedChangesWarning"))
       ) {
         return false;
       }
