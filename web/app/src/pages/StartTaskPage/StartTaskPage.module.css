@@ -128,6 +128,11 @@
   gap: 4px;
   padding: 4px 10px 8px;
 }
+.cloudActions {
+  --composer-send-control-size: 44px;
+  --composer-send-icon-size: 20px;
+  justify-content: flex-end;
+}
 .addButton {
   --composer-add-control-size: 36px;
   --composer-add-icon-size: 16px;

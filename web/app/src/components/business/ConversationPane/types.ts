@@ -1,3 +1,4 @@
+import type { CloudSendConfirmation } from "@/components/business/CloudPrivacyDialog";
 import type { ResourceSnapshot } from "@/models/conversationResources";
 import type { TaskConfiguration } from "@/models/taskConfiguration";
 import type { SkillContinuation } from "@/models/slashCommands";
@@ -73,6 +74,7 @@ export type ConversationWorkingParticipant = {
 };
 
 export type ConversationPaneProps = {
+  cloudSendConfirmation?: CloudSendConfirmation | null;
   memberPanelProps?: RoomMembersPanelProps | null;
   activeThreadRootID?: string;
   activeThreadView?: ThreadView | null;

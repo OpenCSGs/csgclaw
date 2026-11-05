@@ -276,7 +276,7 @@ const MessageListContent = memo(function MessageListContent({
                       onPreviewAttachment={onPreviewAttachment}
                     />
                   ))}
-                  {threadSummary ? (
+                  {!conversation.cloud_agent && threadSummary ? (
                     <div className="message-thread-actions has-thread-summary">
                       <button type="button" className="thread-action-button" onClick={() => onOpenThread(message)}>
                         <span aria-hidden="true">{IconImage("rooms")}</span>
@@ -309,7 +309,7 @@ const MessageListContent = memo(function MessageListContent({
                     image={
                       message.metadata?.image_generation ? message.attachments?.find(isImageAttachment) : undefined
                     }
-                    onOpenThread={() => onOpenThread(message)}
+                    onOpenThread={conversation.cloud_agent ? undefined : () => onOpenThread(message)}
                     t={t}
                   />
                 </div>
