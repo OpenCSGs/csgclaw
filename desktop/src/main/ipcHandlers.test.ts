@@ -13,7 +13,12 @@ function createHarness(response = 0) {
   const origin = "http://127.0.0.1:18080";
   const frame = { url: origin + "/" };
   const contents = { mainFrame: frame, isDestroyed: () => false };
-  const window = { webContents: contents };
+  const window = {
+    webContents: contents,
+    isDestroyed: () => false,
+    blur: () => {},
+    focus: () => {},
+  };
   const electron = {
     ipcMain: {
       handle: (channel: string, handler: (...args: unknown[]) => unknown) =>
@@ -57,10 +62,25 @@ function createHarness(response = 0) {
     () => {},
   );
   const event = { sender: contents, senderFrame: frame };
+  const invokeChannel = async (
+    channel: string,
+    input?: unknown,
+    sender: unknown = event,
+  ) => handlers.get(channel)!(sender, input);
   const invoke = async (input: unknown, sender: unknown = event) =>
-    handlers.get(DesktopIPC.openOAuth)!(sender, input);
-  return { invoke, opened, confirmations };
+    invokeChannel(DesktopIPC.openOAuth, input, sender);
+  return { invoke, invokeChannel, opened, confirmations };
 }
+
+test("focus recovery IPC accepts only the trusted main frame", async () => {
+  const { invokeChannel } = createHarness();
+
+  await assert.doesNotReject(invokeChannel(DesktopIPC.restoreFocusAfterDialog));
+  await assert.rejects(
+    invokeChannel(DesktopIPC.restoreFocusAfterDialog, undefined, {}),
+    /sender was rejected/,
+  );
+});
 
 test("OpenCSG HTTP login reaches the browser after custom-site confirmation", async () => {
   const { invoke, opened, confirmations } = createHarness();

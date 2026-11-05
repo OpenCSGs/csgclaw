@@ -8,6 +8,7 @@ import type { HubTemplate } from "@/models/hubWorkspace";
 import { isReadonlySkill } from "@/models/skillhub";
 import type { SkillSummary } from "@/models/skillhub";
 import { localizeAPIError, localizeAPIErrorWithDiagnostics } from "@/shared/i18n";
+import { confirmWithFocusRecovery } from "@/shared/platform/confirm";
 import { workspaceQueryKeys } from "./workspaceQueries";
 import { useWorkspaceHubSelection } from "./useWorkspaceHubSelection";
 import { TemplateInstructionsDraftContext } from "@/components/business/HubDetailPane/templateInstructionsDraftStore";
@@ -226,7 +227,9 @@ export function useWorkspaceHubController({
         return false;
       }
       const label = hubTemplateFullName(template);
-      if (!window.confirm(`${t("resourcesDeleteConfirm")} ${label}?\n\n${t("resourcesDeleteLocalOnlyNotice")}`)) {
+      if (
+        !confirmWithFocusRecovery(`${t("resourcesDeleteConfirm")} ${label}?\n\n${t("resourcesDeleteLocalOnlyNotice")}`)
+      ) {
         return false;
       }
       setResourcesDeleteBusy(true);

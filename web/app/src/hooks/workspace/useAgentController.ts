@@ -4,6 +4,7 @@ import { useRelayPublication } from "./useRelayPublication";
 import { useAgentResourceLists } from "./useAgentResourceLists";
 import { useAgentResourceEnablement } from "./useAgentResourceEnablement";
 import { useBlocker } from "react-router-dom";
+import { confirmWithFocusRecovery } from "@/shared/platform/confirm";
 import { apiErrorBillingURL, apiErrorCode, errorMessage as apiErrorMessage } from "@/api/client";
 import { loginCLIProxyProviderRequest } from "@/api/cliproxy";
 import {
@@ -1112,7 +1113,7 @@ export function useAgentController({
       return;
     }
     agentPageNavigationConfirmedRef.current = true;
-    if (window.confirm(t("agentUnsavedChangesWarning"))) {
+    if (confirmWithFocusRecovery(t("agentUnsavedChangesWarning"))) {
       setAgentPageDraft(agentPageSavedDraft);
       setAgentPageSaveError("");
       agentPageNavigationBlocker.proceed();
@@ -2476,7 +2477,7 @@ export function useAgentController({
     if (!item?.id || isAgentActionBusy(item.id)) {
       return false;
     }
-    if (!window.confirm(`${t("agentDelete")} ${item.name}?`)) {
+    if (!confirmWithFocusRecovery(`${t("agentDelete")} ${item.name}?`)) {
       return false;
     }
     const busyKey = `${item.id}:delete-bot`;

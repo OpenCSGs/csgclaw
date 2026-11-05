@@ -20,6 +20,7 @@ import {
   type ModelProviderCatalog,
 } from "@/models/modelProviders";
 import type { LocaleCode, TranslateFn } from "@/models/conversations";
+import { confirmWithFocusRecovery } from "@/shared/platform/confirm";
 import { ModalCloseButton } from "./ModalCloseButton";
 import styles from "./CreateModelProviderModal.module.css";
 
@@ -95,7 +96,7 @@ export function CreateModelProviderModal({
     if (busy) return;
     if (
       (apiKey || (nameDraft !== undefined && nameDraft !== defaultName) || headers || models) &&
-      !window.confirm(t("modelProviderDiscardConfirm"))
+      !confirmWithFocusRecovery(t("modelProviderDiscardConfirm"))
     )
       return;
     onClose();

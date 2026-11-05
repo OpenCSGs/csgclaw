@@ -15,6 +15,7 @@ export const DesktopIPC = {
   getRuntimeInfo: "csgclaw:desktop:get-runtime-info",
   installDownloadedUpdate: "csgclaw:desktop:install-downloaded-update",
   openOAuth: "csgclaw:desktop:open-oauth",
+  restoreFocusAfterDialog: "csgclaw:desktop:restore-focus-after-dialog",
   restartSidecar: "csgclaw:desktop:restart-sidecar",
   showWindow: "csgclaw:desktop:show-window",
   showTurnNotification: "csgclaw:desktop:show-turn-notification",
@@ -83,6 +84,7 @@ export type DesktopBridge = {
   onBrowserState(listener: (state: DesktopBrowserState) => void): () => void;
   getRuntimeInfo(): Promise<DesktopRuntimeInfo>;
   openOAuth(input: DesktopOAuthInput): Promise<{ opened: boolean }>;
+  restoreFocusAfterDialog(): Promise<void>;
   checkForUpdates(): Promise<DesktopUpdateStatus>;
   installDownloadedUpdate(): Promise<void>;
   restartSidecar(): Promise<void>;

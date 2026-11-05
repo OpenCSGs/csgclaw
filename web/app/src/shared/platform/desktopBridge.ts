@@ -47,6 +47,8 @@ export type DesktopBridge = {
   onBrowserState(listener: (state: DesktopBrowserState) => void): () => void;
   getRuntimeInfo(): Promise<DesktopRuntimeInfo>;
   openOAuth(input: { purpose: DesktopOAuthPurpose; url: string }): Promise<{ opened: boolean }>;
+  // Optional so newer Web UIs remain compatible with older desktop shells.
+  restoreFocusAfterDialog?(): Promise<void>;
   checkForUpdates(): Promise<DesktopUpdateStatus>;
   installDownloadedUpdate(): Promise<void>;
   restartSidecar(): Promise<void>;
