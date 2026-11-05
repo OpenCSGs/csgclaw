@@ -1,3 +1,4 @@
+import { CloudPrivacyDialog } from "@/components/business/CloudPrivacyDialog";
 import { PendingTurnReplies } from "./PendingTurnReplies";
 import { TaskConversationControls } from "../TaskConversationControls/TaskConversationControls";
 import { WorkingTurnControls } from "@/components/business/ConversationPane/WorkingTurnControls";
@@ -274,6 +275,7 @@ function ConversationPaneContent({
   onComposerCompositionStart,
   onComposerCompositionEnd,
   onSendMessage,
+  cloudSendConfirmation,
   onRetrySend,
   onStopSend,
   onUndoRemoveAttachment,
@@ -490,63 +492,71 @@ function ConversationPaneContent({
     }
   }, [conversation.id, onDeleteRoom, t]);
 
-  const threadPanel = activeThreadRootID ? (
-    <Conversation.ThreadPanel
-      currentUserID={currentUserID}
-      resourceAgentID={resourceAgentID}
-      onPickResources={onPickThreadResources}
-      renderTurnControls={renderTurnControls}
-      agents={agents}
-      thread={activeThreadView}
-      loading={threadLoading}
-      error={threadError}
-      fileScope={tools.fileScope}
-      draftSegments={threadDraftSegments}
-      attachmentDrafts={threadAttachmentDrafts}
-      disabled={Boolean(threadComposerDisabledReason)}
-      usersById={usersById}
-      locale={locale}
-      theme={theme}
-      showToolCalls={showToolCalls}
-      t={t}
-      onClose={handleCloseThread}
-      onDraftChange={onThreadDraftChange}
-      onSlashQueryChange={onThreadSlashQueryChange}
-      onAddAttachments={onAddThreadAttachments}
-      onRemoveAttachment={onRemoveThreadAttachment}
-      onOpenAgentDetail={onOpenAgentDetail}
-      threadSlashCandidates={threadSlashCandidates}
-      threadSlashIndex={threadSlashIndex}
-      threadSlashContinuation={threadSlashContinuation}
-      threadSlashPickerLoading={threadSlashPickerLoading}
-      threadSlashPickerOpen={threadSlashPickerOpen}
-      onApplyThreadSlashCandidate={onApplyThreadSlashCandidate}
-      onDismissThreadSlashPicker={onDismissThreadSlashPicker}
-      onSetThreadSlashIndex={onSetThreadSlashIndex}
-      mentionableUsers={conversationMembers}
-      onPreviewUser={onPreviewUser}
-      onPreviewAttachment={handlePreviewAttachment}
-      onQuestionSelect={threadQuestionMode.select}
-      onCitationSelect={handleOpenCitation}
-      questionMode={threadQuestionMode}
-      onSend={onSendThreadReply}
-    />
-  ) : null;
+  const threadPanel =
+    !conversation.cloud_agent && activeThreadRootID ? (
+      <Conversation.ThreadPanel
+        currentUserID={currentUserID}
+        resourceAgentID={resourceAgentID}
+        onPickResources={onPickThreadResources}
+        renderTurnControls={renderTurnControls}
+        agents={agents}
+        thread={activeThreadView}
+        loading={threadLoading}
+        error={threadError}
+        fileScope={tools.fileScope}
+        draftSegments={threadDraftSegments}
+        attachmentDrafts={threadAttachmentDrafts}
+        disabled={Boolean(threadComposerDisabledReason)}
+        usersById={usersById}
+        locale={locale}
+        theme={theme}
+        showToolCalls={showToolCalls}
+        t={t}
+        onClose={handleCloseThread}
+        onDraftChange={onThreadDraftChange}
+        onSlashQueryChange={onThreadSlashQueryChange}
+        onAddAttachments={onAddThreadAttachments}
+        onRemoveAttachment={onRemoveThreadAttachment}
+        onOpenAgentDetail={onOpenAgentDetail}
+        threadSlashCandidates={threadSlashCandidates}
+        threadSlashIndex={threadSlashIndex}
+        threadSlashContinuation={threadSlashContinuation}
+        threadSlashPickerLoading={threadSlashPickerLoading}
+        threadSlashPickerOpen={threadSlashPickerOpen}
+        onApplyThreadSlashCandidate={onApplyThreadSlashCandidate}
+        onDismissThreadSlashPicker={onDismissThreadSlashPicker}
+        onSetThreadSlashIndex={onSetThreadSlashIndex}
+        mentionableUsers={conversationMembers}
+        onPreviewUser={onPreviewUser}
+        onPreviewAttachment={handlePreviewAttachment}
+        onQuestionSelect={threadQuestionMode.select}
+        onCitationSelect={handleOpenCitation}
+        questionMode={threadQuestionMode}
+        onSend={onSendThreadReply}
+      />
+    ) : null;
   const agentDetailPanel = agentDetailPanelProps ? <AgentDetailSidePanel {...agentDetailPanelProps} /> : null;
 
   return (
     <>
       {taskDialog}
+      {conversation.cloud_agent && cloudSendConfirmation ? (
+        <CloudPrivacyDialog
+          agentName={usersById.get(conversation.cloud_agent.user_id)?.name || t("agentPlazaCloud")}
+          confirmation={cloudSendConfirmation}
+          t={t}
+        />
+      ) : null}
       <Conversation.Header
         channelToolsRef={channelToolsRef}
         conversation={conversation}
         conversationMembers={conversationMembers}
         description={description}
-        headerAccessory={tools.toolbar}
+        headerAccessory={conversation.cloud_agent ? undefined : tools.toolbar}
         inviteActionLabel={inviteActionLabel}
         selectedMessageCount={selectedMessageCount}
         selectedVisibleMessageCount={visibleMessages.length}
-        showChannelTools={showChannelTools}
+        showChannelTools={!conversation.cloud_agent && showChannelTools}
         showInviteAction={!isDirectConversation(conversation)}
         showChannelToolsAction={false}
         memberManagementOpen={Boolean(memberPanelProps)}
@@ -600,13 +610,14 @@ function ConversationPaneContent({
         onCitationSelect={handleOpenCitation}
       />
 
-      {questionMode.pending.length > 0 ? (
+      {!conversation.cloud_agent && questionMode.pending.length > 0 ? (
         <AgentQuestionComposer mode={questionMode} t={t} usersById={usersById} />
       ) : (
         <Conversation.Composer
+          textOnly={Boolean(conversation.cloud_agent)}
           resourceAgentID={resourceAgentID}
           onPickResources={onPickResources}
-          fileScope={tools.fileScope}
+          fileScope={conversation.cloud_agent ? undefined : tools.fileScope}
           authBusyProvider={authBusyProvider}
           authStatuses={authStatuses}
           composerDisabled={composerDisabled}
@@ -642,7 +653,7 @@ function ConversationPaneContent({
             />
           }
           hideWorkingContextUsage
-          workingParticipants={messageControls.composerParticipants}
+          workingParticipants={conversation.cloud_agent ? [] : messageControls.composerParticipants}
           onApplyMention={onApplyMention}
           onApplySlashCandidate={onApplySlashCandidate}
           onAddAttachments={conversation.cloud_agent ? undefined : onAddAttachments}

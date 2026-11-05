@@ -526,12 +526,24 @@ describe("cloud agent plaza", () => {
     await user.click(screen.getByRole("button", { name: "查看智能体" }));
     expect(screen.getByLabelText("Current URL")).toHaveTextContent("/agents?cloud=agt_demo_contract_reviewer");
     expect(screen.getByRole("heading", { name: "合同条款审阅" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "档案" })).toBeVisible();
+    expect(screen.queryByRole("button", { name: "开始聊天" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "全部 1" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("button", { name: /合同条款审阅\s*在线\s*云端/ })).toHaveAttribute("aria-current", "true");
     expect(screen.getByRole("tab", { name: "我的智能体 1" })).toHaveAttribute("aria-selected", "true");
     await user.click(screen.getByRole("button", { name: "从我的智能体移除" }));
     expect(screen.getByRole("button", { name: "云端 0" })).toBeVisible();
     expect(JSON.parse(localStorage.getItem(CLOUD_AGENTS_STORAGE_KEY)!)).toEqual([]);
+  });
+
+  it("opens the shared new-task page for the selected cloud agent", async () => {
+    localStorage.setItem(CLOUD_AGENTS_STORAGE_KEY, JSON.stringify(cloudAgentFixture));
+    const user = userEvent.setup();
+    render(<Page route="/agents?cloud=agt_demo_contract_reviewer" />);
+
+    await user.click(await screen.findByRole("button", { name: "新建任务" }));
+
+    expect(screen.getByLabelText("Current URL")).toHaveTextContent("/new?cloud=agt_demo_contract_reviewer");
   });
 
   it("restores added agents after remount and supports searching the plaza", async () => {

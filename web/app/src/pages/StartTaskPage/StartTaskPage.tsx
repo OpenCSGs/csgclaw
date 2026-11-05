@@ -1,3 +1,5 @@
+import { CloudPrivacyDialog } from "@/components/business/CloudPrivacyDialog";
+import { useCloudSendConsent } from "@/hooks/workspace/useCloudSendConsent";
 import { useCloudAgents } from "@/hooks/workspace/useCloudAgents";
 import { createUUID } from "@/shared/lib/uuid";
 import { ResourceTag } from "@/components/business/ResourceTag";
@@ -94,6 +96,7 @@ function StartTaskForm({
   const teams = useMemo(() => sidebar?.teams ?? [], [sidebar?.teams]);
   const manager = agents.find((agent) => agent.role === "manager");
   const selected = target || `agent:${manager?.id || agents[0]?.id || ""}`;
+  const consent = useCloudSendConsent(selected);
   const selectedCloud = cloud.agents.find((agent) => selected === `cloud:${agent.id}`);
   const selectedAgent = agents.find((agent) => selected === `agent:${agent.id}`);
   const selectedTeam = teams.find((team) => selected === `team:${team.id}`);
@@ -143,6 +146,7 @@ function StartTaskForm({
   const targetName = selectedCloud?.name || selectedAgent?.name || selectedTeam?.title || t("taskEntrySolo");
 
   function messageInput(prompt: string) {
+    if (selectedCloud) return { content: prompt.trim(), resource_refs: [] };
     const content = promptMentions.serialize(prompt).trim();
     return supportsTaskConfiguration(selectedAgent)
       ? resourceMessageInput(
@@ -153,7 +157,7 @@ function StartTaskForm({
   }
   const draftInput = messageInput(draft);
 
-  async function start(empty = false, prompt = draft) {
+  async function start(empty = false, prompt = draft, confirmed = false) {
     const input = messageInput(prompt);
     if (inFlight.current || (!empty && !canSendResources(input.content, input.resource_refs, files.length))) return;
     if (!selectedCloud && !selectedAgent && !selectedTeam && selected !== "solo") {
@@ -164,6 +168,7 @@ function StartTaskForm({
       setError(t("cloudChatOffline"));
       return;
     }
+    if (!empty && selectedCloud && !confirmed && consent.request(() => void start(false, prompt, true))) return;
     inFlight.current = true;
     setBusy(true);
     setError("");
@@ -232,7 +237,7 @@ function StartTaskForm({
           sender_id: readySidebar.currentUserID,
           content: input.content,
           resource_refs: input.resource_refs,
-          attachments: files,
+          attachments: selectedCloud ? [] : files,
           client_message_id: sendID.current.id,
           locale: readySidebar.locale,
         });
@@ -261,6 +266,9 @@ function StartTaskForm({
         ];
   return (
     <section className={styles.page}>
+      {selectedCloud && consent.dialog ? (
+        <CloudPrivacyDialog agentName={selectedCloud.name} confirmation={consent.dialog} t={t} />
+      ) : null}
       <div className={styles.inner}>
         <header className={styles.head}>
           <h1>{t("iaStartTitle")}</h1>
@@ -338,7 +346,11 @@ function StartTaskForm({
                   autoFocus
                   className={styles.input}
                   aria-label={t("taskEntryPrompt")}
-                  placeholder={resources.length || files.length || draft.length ? "" : t("iaStartComposerPlaceholder")}
+                  placeholder={
+                    resources.length || files.length || draft.length
+                      ? ""
+                      : t(selectedCloud ? "cloudChatPlaceholder" : "iaStartComposerPlaceholder")
+                  }
                   value={draft}
                   onChange={(event) => promptMentions.change(event.currentTarget)}
                   onSelect={(event) => promptMentions.sync(event.currentTarget)}
@@ -409,42 +421,45 @@ function StartTaskForm({
                   ))}
                 </ul>
               ) : null}
-              <div className={styles.actions}>
-                <input
-                  type="file"
-                  multiple
-                  ref={fileInput}
-                  hidden
-                  onChange={(event) => {
-                    setFiles((value) => [...value, ...Array.from(event.target.files ?? [])]);
-                    event.target.value = "";
-                  }}
-                />
-                <ComposerAddMenu
-                  onOpenResourcePicker={resourcePicker.open}
-                  disabled={busy || Boolean(selectedCloud)}
-                  t={t}
-                  buttonClassName={`composer-add-button ${styles.addButton}`}
-                  onAddFiles={() => fileInput.current?.click()}
-                />
+              <div className={selectedCloud ? `${styles.actions} ${styles.cloudActions}` : styles.actions}>
                 {!selectedCloud ? (
-                  <TaskConfigurationToolbar
-                    configuration={configuration}
-                    onChange={async (value) => {
-                      if (created.current) await entry.patch(created.current.id, { configuration: value });
-                      else requestID.current = createUUID();
-                      setConfiguration(value);
-                    }}
-                    directoryLocked={Boolean(created.current)}
-                    directoryMode={selectedAgent ? "agent" : "collaboration"}
-                    agent={selectedAgent || manager}
-                    showModel={Boolean(selectedAgent)}
-                    showDirectory
-                    disabled={busy}
-                  />
+                  <>
+                    <input
+                      type="file"
+                      multiple
+                      ref={fileInput}
+                      hidden
+                      onChange={(event) => {
+                        setFiles((value) => [...value, ...Array.from(event.target.files ?? [])]);
+                        event.target.value = "";
+                      }}
+                    />
+                    <ComposerAddMenu
+                      onOpenResourcePicker={resourcePicker.open}
+                      disabled={busy}
+                      t={t}
+                      buttonClassName={`composer-add-button ${styles.addButton}`}
+                      onAddFiles={() => fileInput.current?.click()}
+                    />
+                    <TaskConfigurationToolbar
+                      configuration={configuration}
+                      onChange={async (value) => {
+                        if (created.current) await entry.patch(created.current.id, { configuration: value });
+                        else requestID.current = createUUID();
+                        setConfiguration(value);
+                      }}
+                      directoryLocked={Boolean(created.current)}
+                      directoryMode={selectedAgent ? "agent" : "collaboration"}
+                      agent={selectedAgent || manager}
+                      showModel={Boolean(selectedAgent)}
+                      showDirectory
+                      disabled={busy}
+                    />
+                  </>
                 ) : null}
                 <Button
-                  className={styles.send}
+                  className={selectedCloud ? "composer-send-button" : styles.send}
+                  variant="primary"
                   iconOnly
                   size="sm"
                   aria-label={t("taskEntryStart")}
@@ -457,7 +472,11 @@ function StartTaskForm({
                   }
                   onClick={() => void start()}
                 >
-                  <ArrowUp size={17} />
+                  <ArrowUp
+                    aria-hidden="true"
+                    size={selectedCloud ? 22 : 17}
+                    strokeWidth={selectedCloud ? 1.5 : undefined}
+                  />
                 </Button>
               </div>
             </div>

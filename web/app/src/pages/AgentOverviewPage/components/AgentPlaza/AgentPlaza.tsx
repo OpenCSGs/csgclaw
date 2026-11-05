@@ -1,4 +1,4 @@
-import { CloudAgentChat } from "../CloudAgentChat";
+import { AgentProfileHeader } from "@/components/business/AgentDetails";
 import { useState } from "react";
 import { Check, Cloud, Plus, Search, Sparkles } from "lucide-react";
 import { AgentAvatarContent } from "@/components/business/AgentAvatar";
@@ -43,20 +43,20 @@ export function AgentPlaza({ agents, addedIDs, t, onAdd, onOpen }: Props) {
           />
         </label>
         <span>{t("agentPlazaCount", { shown: shown.length, total: agents.length })}</span>
+        <nav className={styles.filters} aria-label={t("agentPlazaScope")}>
+          {(["public", "mine"] as const).map((value) => (
+            <Button
+              key={value}
+              size="sm"
+              variant={scope === value ? "primary" : "secondaryGray"}
+              aria-pressed={scope === value}
+              onClick={() => setScope(value)}
+            >
+              {t(value === "public" ? "agentPlazaPublic" : "taskEntryOverview_personal")}
+            </Button>
+          ))}
+        </nav>
       </div>
-      <nav className={styles.filters} aria-label={t("agentPlazaScope")}>
-        {(["public", "mine"] as const).map((value) => (
-          <Button
-            key={value}
-            size="sm"
-            variant={scope === value ? "primary" : "secondaryGray"}
-            aria-pressed={scope === value}
-            onClick={() => setScope(value)}
-          >
-            {t(value === "public" ? "agentPlazaPublic" : "taskEntryOverview_personal")}
-          </Button>
-        ))}
-      </nav>
       <div className={styles.grid}>
         {shown.map((agent) => (
           <article className={styles.card} key={agent.id}>
@@ -124,37 +124,62 @@ export function AgentPlazaMetadata({ agent, t }: { agent: CloudAgent; t: Transla
   );
 }
 
-export function CloudAgentDetail({ agent, t, onRemove }: { agent: CloudAgent; t: TranslateFn; onRemove: () => void }) {
-  const [chatOpen, setChatOpen] = useState(false);
+export function CloudAgentDetail({
+  agent,
+  t,
+  onNewTask,
+  onRemove,
+}: {
+  agent: CloudAgent;
+  t: TranslateFn;
+  onNewTask: () => void;
+  onRemove: () => void;
+}) {
+  const online = agent.status === "online";
   return (
-    <section className={styles.detail}>
-      <header className={styles.detailHeader}>
-        <span className={styles.avatar}>
-          <AgentAvatarContent avatar={agent.avatar} fallback={agent.name.slice(0, 1)} />
-        </span>
-        <div>
-          <h1>{agent.name}</h1>
-          <span className={styles.status} data-online={agent.status === "online"}>
-            {t(agent.status === "online" ? "agentPlazaOnline" : "agentPlazaOffline")}
-          </span>
+    <section className="entity-pane agent-detail-pane">
+      <div className="agent-profile-fixed-header">
+        <AgentProfileHeader
+          avatar={
+            <div className="entity-avatar">
+              <AgentAvatarContent avatar={agent.avatar} fallback={agent.name.slice(0, 1)} />
+            </div>
+          }
+          title={
+            <>
+              <h1>{agent.name}</h1>
+              <span className={`agent-status-dot ${online ? "online" : ""}`} aria-hidden="true" />
+              <span className={`status-pill ${online ? "online" : ""}`}>
+                {t(online ? "agentPlazaOnline" : "agentPlazaOffline")}
+              </span>
+              <span className={styles.cloudLabel}>
+                <Cloud size={14} aria-hidden="true" />
+                {t("agentPlazaCloud")}
+              </span>
+            </>
+          }
+          description={agent.description ? <div className="entity-description-text">{agent.description}</div> : null}
+          actions={
+            <>
+              <Button variant="primary" size="md" onClick={onNewTask}>
+                {t("agentStartTask")}
+              </Button>
+              <Button variant="secondaryGray" size="md" onClick={onRemove}>
+                {t("agentPlazaRemove")}
+              </Button>
+            </>
+          }
+        />
+        <div className="agent-profile-section-nav">
+          <h2 className={`agent-profile-section-tab active ${styles.profileLabel}`}>{t("agentProfileTab")}</h2>
         </div>
-        <span className={styles.cloudLabel}>
-          <Cloud size={14} />
-          {t("agentPlazaCloud")}
-        </span>
-      </header>
-      <p className={styles.description}>{agent.description}</p>
-      <p className={styles.cloudHint}>{t("agentPlazaCloudHint")}</p>
-      <AgentPlazaMetadata agent={agent} t={t} />
-      <div className={styles.detailActions}>
-        <Button variant="primary" size="sm" onClick={() => setChatOpen((open) => !open)}>
-          {t(chatOpen ? "cloudChatHide" : "cloudChatStart")}
-        </Button>
-        <Button variant="secondaryGray" size="sm" onClick={onRemove}>
-          {t("agentPlazaRemove")}
-        </Button>
       </div>
-      {chatOpen ? <CloudAgentChat key={`${agent.connectionID}:${agent.id}`} agent={agent} t={t} /> : null}
+      <div className="agent-profile-scroll-region">
+        <div className="profile-editor-shell agent-page-editor">
+          <p className={styles.cloudHint}>{t("agentPlazaCloudHint")}</p>
+          <AgentPlazaMetadata agent={agent} t={t} />
+        </div>
+      </div>
     </section>
   );
 }

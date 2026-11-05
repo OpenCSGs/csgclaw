@@ -42,6 +42,7 @@ import {
 } from "./types";
 
 export type ConversationComposerProps = ComposerResourceProps & {
+  textOnly?: boolean;
   fileScope?: ChatFileScope;
   authBusyProvider: string;
   authStatuses: CLIProxyAuthStatusMap;
@@ -90,6 +91,7 @@ export type ConversationComposerProps = ComposerResourceProps & {
 };
 
 export const ConversationComposer = memo(function ConversationComposer({
+  textOnly = false,
   resourceAgentID,
   onPickResources,
   fileScope,
@@ -164,6 +166,7 @@ export const ConversationComposer = memo(function ConversationComposer({
   });
   const sendDisabled =
     interactionDisabled || resourcePicker.active || !canSendComposer(draftSegments, attachmentDrafts.length);
+  const placeholder = t(textOnly ? "cloudChatPlaceholder" : "inputPlaceholder");
   const actionSuggestions = useMemo(() => composerActionSuggestions(draftText), [draftText]);
 
   function handleFiles(files: File[]) {
@@ -190,7 +193,8 @@ export const ConversationComposer = memo(function ConversationComposer({
       ) : mentionCandidates.length > 0 ? (
         <MentionPicker users={mentionCandidates} activeIndex={mentionIndex} t={t} onSelect={onApplyMention} />
       ) : null}
-      {managerProfile &&
+      {!textOnly &&
+      managerProfile &&
       providerNeedsAuth(managerProfile.provider) &&
       authStatuses[managerProvider]?.authenticated === false ? (
         <CLIProxyAuthControl
@@ -246,7 +250,7 @@ export const ConversationComposer = memo(function ConversationComposer({
         <div className="composer-editor-wrap" hidden={resourcePicker.active}>
           {draftSegments.length === 0 ? (
             <div className="composer-placeholder" aria-hidden="true">
-              {composerDisabled ? composerDisabledReason || t("profileIncomplete") : t("inputPlaceholder")}
+              {composerDisabled ? composerDisabledReason || t("profileIncomplete") : placeholder}
             </div>
           ) : null}
           <div
@@ -257,7 +261,7 @@ export const ConversationComposer = memo(function ConversationComposer({
             suppressContentEditableWarning={true}
             role="textbox"
             aria-multiline="true"
-            aria-label={t("inputPlaceholder")}
+            aria-label={placeholder}
             aria-describedby={composerHelpId}
             aria-disabled={interactionDisabled}
             onInput={sync}
@@ -294,7 +298,7 @@ export const ConversationComposer = memo(function ConversationComposer({
             }}
           />
         </div>
-        {!resourcePicker.active && actionSuggestions.length > 0 ? (
+        {!textOnly && !resourcePicker.active && actionSuggestions.length > 0 ? (
           <div className="composer-action-suggestions" aria-label={t("suggestedActions")}>
             <span>{t("suggestedActions")}</span>
             {actionSuggestions.map((suggestion) => (
@@ -311,25 +315,29 @@ export const ConversationComposer = memo(function ConversationComposer({
             <small>{t("suggestedActionsOnly")}</small>
           </div>
         ) : null}
-        <div className="composer-toolbar">
-          <ComposerAddMenu
-            onOpenResourcePicker={resourcePicker.open}
-            disabled={interactionDisabled || !onAddAttachments}
-            t={t}
-            onAddFiles={() => fileInputRef.current?.click()}
-          />
-          <input
-            ref={fileInputRef}
-            className="sr-only"
-            type="file"
-            multiple
-            aria-label={t("addAttachment")}
-            disabled={interactionDisabled || !onAddAttachments}
-            onChange={(event) => {
-              handleFiles(Array.from(event.currentTarget.files || []));
-              event.currentTarget.value = "";
-            }}
-          />
+        <div className={textOnly ? "composer-toolbar composer-toolbar-text-only" : "composer-toolbar"}>
+          {!textOnly ? (
+            <>
+              <ComposerAddMenu
+                onOpenResourcePicker={resourcePicker.open}
+                disabled={interactionDisabled || !onAddAttachments}
+                t={t}
+                onAddFiles={() => fileInputRef.current?.click()}
+              />
+              <input
+                ref={fileInputRef}
+                className="sr-only"
+                type="file"
+                multiple
+                aria-label={t("addAttachment")}
+                disabled={interactionDisabled || !onAddAttachments}
+                onChange={(event) => {
+                  handleFiles(Array.from(event.currentTarget.files || []));
+                  event.currentTarget.value = "";
+                }}
+              />
+            </>
+          ) : null}
           {toolbar}
           <span id={composerHelpId} className="sr-only">
             {t("composerTip")}

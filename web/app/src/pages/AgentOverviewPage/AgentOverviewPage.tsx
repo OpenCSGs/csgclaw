@@ -18,6 +18,7 @@ import {
   agentTemplatesSearch,
   agentPlazaSearch,
   cloudAgentSearch,
+  pathForNewCloudTask,
   pathForPane,
   WorkspacePaneTypes,
 } from "@/models/routing";
@@ -478,6 +479,7 @@ export function AgentOverviewPage() {
                 key={`${selectedCloudAgent.connectionID}:${selectedCloudAgent.id}`}
                 agent={selectedCloudAgent}
                 t={t}
+                onNewTask={() => navigate(pathForNewCloudTask(selectedCloudAgent.id))}
                 onRemove={() => {
                   if (plaza.remove(selectedCloudAgent.id))
                     navigate({ pathname: pathForPane({ type: WorkspacePaneTypes.agent }), search: "" });

@@ -1,3 +1,4 @@
+import { CLOUD_SEND_CONSENT_STORAGE_KEY } from "@/shared/storage/keys";
 import { createQueryWrapper } from "../helpers/queryClient";
 import { renderHook, act, waitFor } from "@testing-library/react";
 import { vi } from "vitest";
@@ -233,6 +234,50 @@ function renderConversationController(
 }
 
 describe("useConversationController", () => {
+  it("confirms cloud conversation sends and remembers an explicit opt-out", async () => {
+    const cloudConversation = {
+      ...directConversation,
+      cloud_agent: { agent_id: "agt_cloud", connection_id: "conn", user_id: "u-demo" },
+    };
+    apiMocks.sendMessageRequest.mockClear();
+    apiMocks.sendMessageRequest.mockResolvedValue(successfulMessage("/literal @demo"));
+    const { result } = renderConversationController({
+      data: { ...dataWithMessages([]), rooms: [cloudConversation] },
+      managerProfileIncomplete: true,
+    });
+    const editor = document.createElement("div");
+    editor.textContent = "/literal @demo";
+    act(() => {
+      result.current.conversationViewProps.editorRef.current = editor;
+      result.current.conversationViewProps.onSyncComposer();
+    });
+    await act(async () => result.current.conversationViewProps.onSendMessage());
+    expect(apiMocks.sendMessageRequest).not.toHaveBeenCalled();
+    try {
+      await act(async () => result.current.conversationViewProps.cloudSendConfirmation!.onConfirm(true));
+      expect(apiMocks.sendMessageRequest).toHaveBeenCalledWith(
+        expect.objectContaining({
+          content: "/literal @demo",
+          attachments: [],
+          resource_refs: [],
+          file_references: [],
+        }),
+        expect.anything(),
+      );
+      editor.textContent = "Follow-up";
+      act(() => result.current.conversationViewProps.onSyncComposer());
+      await act(async () => result.current.conversationViewProps.onSendMessage());
+      expect(result.current.conversationViewProps.cloudSendConfirmation).toBeNull();
+      expect(apiMocks.sendMessageRequest).toHaveBeenLastCalledWith(
+        expect.objectContaining({ content: "Follow-up" }),
+        expect.anything(),
+      );
+    } finally {
+      localStorage.removeItem(CLOUD_SEND_CONSENT_STORAGE_KEY);
+      apiMocks.sendMessageRequest.mockReset();
+    }
+  });
+
   it.each([
     ["zh", "网络连接失败，请检查网络后重试。"],
     ["en", "The network request failed. Check your connection and try again."],
