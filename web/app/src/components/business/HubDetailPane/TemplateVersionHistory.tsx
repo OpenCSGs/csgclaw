@@ -32,6 +32,7 @@ export function TemplateVersionHistory(props: Props) {
 function VersionContent({ template, t, locale, onRestored }: Props) {
   const [action, setAction] = useState<VersionAction | null>(null);
   const actionTrigger = useRef<HTMLElement | null>(null);
+  const historyHeading = useRef<HTMLHeadingElement | null>(null);
   const versionButtons = useRef(new Map<number, HTMLButtonElement>());
   const menuTriggers = useRef(new Map<number, HTMLButtonElement>());
   const state = useTemplateVersions(template, t, onRestored);
@@ -72,7 +73,7 @@ function VersionContent({ template, t, locale, onRestored }: Props) {
       {state.versions.length ? (
         <div className={styles.layout}>
           <div className={styles.versionRail}>
-            <h3 className={styles.sectionLabel}>
+            <h3 className={styles.sectionLabel} ref={historyHeading} tabIndex={-1}>
               {t("templateVersionHistory")} <span>{state.versions.length}</span>
             </h3>
             <ul className={styles.versions} aria-label={t("templateVersionHistory")}>
@@ -304,7 +305,8 @@ function VersionContent({ template, t, locale, onRestored }: Props) {
               const target = actionTrigger.current?.isConnected
                 ? actionTrigger.current
                 : versionButtons.current.get(activeRevision);
-              target?.focus();
+              if (target && !target.matches(":disabled")) target.focus();
+              else historyHeading.current?.focus();
             }}
           >
             <DialogHeader>

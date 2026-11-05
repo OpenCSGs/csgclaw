@@ -241,6 +241,44 @@ describe("TemplateVersionHistory", () => {
     expect(screen.getByRole("button", { name: "Set as active version" })).toHaveFocus();
     expect(restoreTemplateVersion).not.toHaveBeenCalled();
   });
+  it("restores focus to the history heading while the newly active preview is loading", async () => {
+    const user = userEvent.setup();
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    function Harness() {
+      const [active, setActive] = useState(template);
+      return (
+        <TemplateVersionHistory
+          template={active}
+          locale="en"
+          t={createTranslator("en")}
+          onRestored={(item) => setActive({ ...template, revision: item.revision! })}
+        />
+      );
+    }
+    render(
+      <QueryClientProvider client={client}>
+        <Harness />
+      </QueryClientProvider>,
+    );
+    await screen.findByRole("button", { name: "agent.toml" });
+    await user.click(screen.getByRole("button", { name: "V1" }));
+    await user.click(screen.getByRole("button", { name: "Set as active version" }));
+    let resolvePreview!: (value: { kind: string; path: string; entries: [] }) => void;
+    vi.mocked(fetchTemplateVersionWorkspace).mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolvePreview = resolve;
+      }),
+    );
+    await user.click(screen.getByRole("button", { name: "Confirm switch to V1" }));
+    await waitFor(() => expect(fetchTemplateVersionWorkspace).toHaveBeenCalledTimes(3));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "V1 · Active" })).toBeDisabled();
+    const heading = screen.getByRole("heading", { name: /^Version history/ });
+    expect(heading).toHaveFocus();
+    resolvePreview({ kind: "dir", path: "", entries: [] });
+    await waitFor(() => expect(screen.getByRole("button", { name: "V1 · Active" })).toBeEnabled());
+    expect(heading).toHaveFocus();
+  });
   it("keeps failed deletion in the confirmation dialog for retry", async () => {
     const user = userEvent.setup();
     vi.mocked(deleteTemplateVersion).mockRejectedValueOnce(new Error("Deletion failed"));

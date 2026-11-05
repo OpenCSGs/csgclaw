@@ -1842,7 +1842,8 @@
 }
 
 .hub-template-versions-panel {
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 .hub-template-versions-panel > .hub-inspector-hero,
