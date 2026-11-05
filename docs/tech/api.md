@@ -1260,17 +1260,17 @@ Unpublished Agent workspace files and document full-text search are outside this
 
 ### `GET /api/v1/attachments/{id}`
 
-Downloads a stored chat attachment by attachment ID.
+Downloads a room or direct-session attachment by ID.
 
 The `download_url` returned in attachment metadata includes an attachment-scoped capability token and can be used directly by browsers and agents.
 
 Callers may instead request the bare path with the configured server Bearer token.
 
-The endpoint serves the original bytes with the stored media type and `X-Content-Type-Options: nosniff`.
+For a room attachment this endpoint serves the original bytes with the stored media type. For a direct-session attachment it opens the current workspace file, detects its content type, and sends `Cache-Control: private, no-store`. Deleting the workspace file makes its URL return `404`. Use `HEAD` to request headers only. Responses include `X-Content-Type-Options: nosniff`.
 
 Downloads return the complete stored file without an additional size limit and support HTTP Range requests.
 
-Treat the capability URL as a secret and avoid sharing it outside the room context.
+Treat the capability URL as a secret and share it only with the intended recipient.
 
 Image attachments are served inline.
 
@@ -1545,9 +1545,9 @@ Participant outbound message shape is also accepted:
 
 ### `POST /api/v1/agents/{agent}/sessions/{session_id}/attachments`
 
-Uploads originals to the selected agent and session without starting a turn. Authenticate using the service credentials for the current CSGClaw instance. Send one or more `files` parts in a `multipart/form-data` request. This endpoint accepts only `files` parts, each containing the filename and raw bytes. The limits are 10 nonempty files, 1 GiB per file, and 2 GiB total.
+Uploads files to the selected agent and session without starting a turn. Authenticate using the service credentials for the current CSGClaw instance. Send one or more `files` parts in a `multipart/form-data` request. This endpoint accepts only `files` parts, each containing the filename and raw bytes. The limits are 10 nonempty files, 1 GiB per file, and 2 GiB total.
 
-On success, the server returns **201 Created** with `{"attachments":[…]}`. Each item uses the same fields as `Message.attachments`. The workspace copy and authorized download are available immediately, before the client sends a prompt. When the user sends the message, pass those IDs in `attachment_ids` to the session’s `/responses` endpoint.
+On success, the server returns **201 Created** with `{"attachments":[…]}`. Each item uses the same fields as `Message.attachments`. The workspace file and its authorized download are available immediately, before the client sends a prompt. When the user sends the message, pass those IDs in `attachment_ids` to the session’s `/responses` endpoint.
 
 ### `POST /api/v1/agents/{agent}/sessions/{session_id}/responses`
 
@@ -1559,7 +1559,9 @@ The client supplies a 1–128 character `session_id` starting with an ASCII lett
 The server binds the session to a conversation for the selected agent and reuses it on later turns. Direct sessions return an empty `metadata.room_id`.
 In Portal, send uploads and downloads to the current CSGClaw instance's `endpoint` with the gateway credentials for that instance.
 
-The optional top-level `attachment_ids` array references files already saved for this agent and session. Supply distinct IDs and authenticate with the service credentials. Missing credentials return `401`. An unknown ID or an ID belonging to another agent or session returns `404`. The same request may include referenced and newly uploaded files, up to 10 total. In `input_attachments`, referenced files appear in the order of their IDs, followed by newly uploaded files in request order.
+The optional top-level `attachment_ids` array references files already saved for this agent and session. Supply distinct IDs. With service authentication enabled, all requests carrying files or attachment IDs require valid credentials. Missing or invalid credentials return `401`. An unknown ID or an ID belonging to another agent or session returns `404`. A JSON request may combine referenced IDs and inline Base64 files, up to 10 files in total. In `input_attachments`, referenced files appear in the order of their IDs, followed by newly uploaded files in request order.
+
+When authentication is enabled, a JSON request without valid credentials can send text within a 1 MiB request-body limit. Larger bodies return `413`.
 
 The shortest request uses string input:
 
@@ -1647,22 +1649,7 @@ const response = await fetch(responsesUrl, {
 if (!response.ok) throw new Error(`Session request failed (HTTP ${response.status})`)
 ```
 
-The same endpoint also accepts one `payload` field containing a JSON object
-and one `files` part per file. Combining `payload` with a top-level form field
-such as `input` or `stream` returns `400 invalid_request`. Gateways that read only
-top-level form fields derive the session title and streaming response headers
-from the direct form shown above. Each file part carries the filename and raw bytes.
-The payload supports `input`, `stream`, `extra`, `extra_type`, and `attachment_ids`.
-For a file-only turn, use `payload={}`. An `input_file` inside `payload` returns
-`400 invalid_request`. This example sends two PDFs and requests streaming:
-
-```sh
-curl -N "${INSTANCE_ENDPOINT%/}/api/v1/agents/codex-worker/sessions/${SESSION_ID}/responses" \
-  --header "Authorization: Bearer ${TOKEN}" \
-  --form-string 'payload={"input":"Compare these PDFs.","stream":true}' \
-  --form 'files=@report.pdf;type=application/pdf' \
-  --form 'files=@appendix.pdf;type=application/pdf'
-```
+The multipart fields are `input`, optional `stream`, and repeated `file`. To send files with `attachment_ids`, `extra`, or `extra_type`, upload the files to the session's `/attachments` endpoint using `files`, then include the returned IDs in a JSON request to `/responses`. A JSON request containing only `attachment_ids` starts a file-only turn.
 
 JSON requests also support files through `input_file` parts:
 
@@ -1692,27 +1679,24 @@ by about one third. JSON clients and proxies may buffer the encoded request in m
 Both formats accept up to 10 nonempty files, up to 1 GiB per file and 2 GiB
 combined, measured in original file bytes. The worker receives each attachment's
 `workspace_path` and can reopen that path in later turns. Referencing the same
-ID uses the current workspace file, including edits. If the file was removed,
-explicitly attaching its ID again restores the uploaded contents at the same path.
-Portal downloads always return the original upload. If an edited image grows
-beyond 1 GiB, the worker receives its path without an inline preview. Codex uses
-a private hard link for native image previews, or a temporary preview copy when
-linking is unavailable.
+ID uses the current workspace file, including edits, and applies the size limits to its current size. Portal downloads and previews read the same file. Deleting it makes downloads and ID references return `404`. The `sha256` field identifies the contents at publication. Download responses use the current file's type and length.
 
 Invalid file data or metadata returns `400 invalid_request`. Exceeding a file size or HTTP body limit
 returns `413 invalid_request`. Validation and file preparation finish before the
 SSE stream starts.
 
-The server saves new originals to IM and the workspace before calling the agent. SSE includes the saved originals in the first `message_start`. The client can use them while the agent runs. Once saved, originals remain available after cancellation, a busy-session rejection, an agent error, or a failure to publish the results. A JSON error returned after the originals were saved includes `input_attachments`.
+The server saves uploads in the workspace before calling the agent. SSE includes their download URLs in the first `message_start`. Saved files remain available after turn cancellation, a busy-session rejection, or an agent error. A JSON error returned after saving the files includes `input_attachments`.
 
 | Files | JSON success | First SSE `message_start` | Final successful SSE `message_delta` |
 | --- | --- | --- | --- |
-| User originals | `input_attachments` | `input_attachments` | `input_attachments` |
+| User uploads | `input_attachments` | `input_attachments` | `input_attachments` |
 | Agent results | `output[0].attachments` | — | `attachments` |
+
+An agent can publish a zero-byte result. If an Engine result is unavailable, the reply names the missing file and includes the text and downloads for all available results.
 
 The attachment arrays are top-level fields of the SSE event data. Empty arrays are omitted. Each attachment includes `id`, `name`, `media_type`, `size_bytes`, `sha256`, `download_url`, and a relative `workspace_path`. Images also have a `preview_url`. PDFs are served with `Content-Disposition: attachment`. To preview a PDF, use `readAttachment(id)` below to fetch its Blob, pass `URL.createObjectURL(blob)` to a PDF viewer, and call `URL.revokeObjectURL(url)` when the preview closes. A Codex agent can publish results with `csgclaw_publish_file`.
 
-Workspace copies are under `.csgclaw/attachments/sessions/<session_id>/` in the agent’s configured `local_workspace_dir` or runtime default. File downloads serve the original bytes even if the workspace copy is edited. To retain both across container replacement, persist both the workspace and the CSGClaw data directory. Session attachment metadata and immutable downloads are stored under `assets/session-responses/` in the IM data directory. During a downgrade, the older server continues to serve room attachments. After upgrading again, session files are available at their original IDs and download URLs.
+Uploads and published results each have one file under `.csgclaw/attachments/sessions/<session_id>/` in the agent's configured `local_workspace_dir` or default workspace. IM stores the attachment ID, owner, path, and download credential under `assets/session-responses/`. When replacing the container, mount both persisted directories at their original paths. A room checkpoint or downgrade preserves the files and IDs for use after upgrading again. On upgrade, existing IDs and download URLs are kept when the file can be found in its owner's workspace. A session download uses `Cache-Control: private, no-store`.
 
 For Portal history, store the stable attachment ID and display fields with the message and its instance, agent, and session. Exclude tokens and token-bearing download or preview URLs from history. To reopen a file, fetch `GET /api/v1/attachments/{id}` on the corresponding instance using its current credentials. The session history API does not generate attachment entries for Portal automatically.
 
@@ -1737,11 +1721,11 @@ async function upload(files) {
   return (await res.json()).attachments.map(historyFile)
 }
 
-async function send(prompt, originals) {
+async function send(prompt, uploads) {
   const res = await fetch(base + session + "/responses", {
     method: "POST",
     headers: { ...headers, "Content-Type": "application/json" },
-    body: JSON.stringify({ input: prompt, attachment_ids: originals.map(file => file.id) }),
+    body: JSON.stringify({ input: prompt, attachment_ids: uploads.map(file => file.id) }),
   })
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
   const { output } = await res.json()
@@ -1749,7 +1733,7 @@ async function send(prompt, originals) {
 }
 
 async function readAttachment(id) {
-  const res = await fetch(base + "/api/v1/attachments/" + encodeURIComponent(id), { headers })
+  const res = await fetch(base + "/api/v1/attachments/" + encodeURIComponent(id), { headers, cache: "no-store" })
   if (!res.ok) throw new Error(await res.text())
   return res.blob()
 }
@@ -1903,6 +1887,8 @@ The following paths often seen in older docs are no longer registered in the cur
 ## Chat side panel files
 
 ### `GET /api/v1/agents/{id}/workspace?path=...&depth=1`
+
+With service authentication enabled, workspace browsing, file reads and workspace file references require credentials. Agent workspace requests use the configured `local_workspace_dir` or the agent's default workspace. A room with an explicit workspace uses its own configured directory.
 
 Lists only the immediate children of the selected workspace directory.
 The `path` is workspace-relative and defaults to the root.

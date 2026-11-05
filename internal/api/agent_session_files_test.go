@@ -216,9 +216,9 @@ func TestAgentSessionInputFileSizeLimits(t *testing.T) {
 			for _, size := range test.sizes {
 				input.Files = append(input.Files, agentSessionInputFile{SizeBytes: size})
 			}
-			var references []im.AttachmentFile
+			var references []im.MessageAttachment
 			for _, size := range test.existing {
-				references = append(references, im.AttachmentFile{Attachment: im.MessageAttachment{SizeBytes: size}})
+				references = append(references, im.MessageAttachment{SizeBytes: size})
 			}
 			err := input.validateFileLimits(references)
 			if test.large {
@@ -248,6 +248,7 @@ func TestAgentSessionResponsesRetainsInlineFilesAfterCancellation(t *testing.T) 
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	request := httptest.NewRequest(http.MethodPost, "/api/v1/agents/agent-alpha/sessions/canceled-files/responses", bytes.NewReader(body)).WithContext(ctx)
+	request.Header.Set("Authorization", "Bearer test-server-token")
 	recorder := httptest.NewRecorder()
 	go func() {
 		handler.Routes().ServeHTTP(recorder, request)

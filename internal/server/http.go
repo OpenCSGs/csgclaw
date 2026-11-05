@@ -147,6 +147,10 @@ func Run(opts Options) error {
 		}()
 	}
 	handler := newHandler(opts)
+	if err := handler.MigrateSessionWorkspaces(); err != nil {
+		_ = listener.Close()
+		return fmt.Errorf("migrate session workspace attachments: %w", err)
+	}
 	if err := handler.EnableRelay(runCtx); err != nil {
 		_ = listener.Close()
 		return fmt.Errorf("initialize relay: %w", err)

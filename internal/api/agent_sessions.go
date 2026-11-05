@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"csgclaw/internal/agentengine"
+	"csgclaw/internal/channel/csgclaw/delivery"
 	"csgclaw/internal/im"
 	agentruntime "csgclaw/internal/runtime"
 )
@@ -122,7 +123,8 @@ func (h *Handler) createAgentSessionResponse(w http.ResponseWriter, r *http.Requ
 	}
 
 	defer cleanupMessagePayload(r)
-	input, stream, err := parseAgentSessionResponseRequest(w, r)
+	allowFiles := h.validateServerAccessToken(r.Header.Get("Authorization"))
+	input, stream, err := parseAgentSessionResponseRequest(w, r, allowFiles)
 	if err != nil {
 		writeSessionInputError(w, err)
 		return
@@ -131,9 +133,9 @@ func (h *Handler) createAgentSessionResponse(w http.ResponseWriter, r *http.Requ
 	if !ok {
 		return
 	}
-	var references []im.AttachmentFile
+	var existing []im.MessageAttachment
 	if len(input.attachmentIDs) > 0 {
-		references, ok = h.sessionInputReferences(w, r, selected.ID, sessionID, input)
+		existing, ok = h.sessionInputReferences(w, selected, sessionID, input)
 		if !ok {
 			return
 		}
@@ -184,12 +186,6 @@ func (h *Handler) createAgentSessionResponse(w http.ResponseWriter, r *http.Requ
 	h.addSessionTurn(turnKey, turn)
 	defer h.removeSessionTurn(turnKey, turn.turnID)
 
-	existing, err := h.restoreSessionWorkspaceFiles(runCtx, selected, references)
-	if err != nil {
-		slog.Warn("restore session workspace attachment failed", "response_id", responseID, "error", err)
-		writeAgentSessionError(w, http.StatusServiceUnavailable, "attachment_unavailable", "session workspace file could not be prepared", "attachment_ids")
-		return
-	}
 	conversation := h.agentEngine.Conversations(selected.ID)
 	newUploads, err := h.storeSessionUploads(runCtx, selected, sessionID, responseID, input.Files)
 	cleanupMessagePayload(r)
@@ -247,7 +243,7 @@ func (h *Handler) createAgentSessionResponse(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	outputAttachments, err := h.storeSessionOutputFiles(runCtx, conversation, selected, sessionID, responseID, result.Files)
+	outputAttachments, rejected, err := h.storeSessionOutputFiles(runCtx, conversation, selected, sessionID, responseID, result.Files)
 	if err != nil {
 		slog.Warn("store session response attachments failed", "response_id", response.ID, "error", err)
 		const message = "session attachments could not be saved"
@@ -258,6 +254,7 @@ func (h *Handler) createAgentSessionResponse(w http.ResponseWriter, r *http.Requ
 		}
 		return
 	}
+	attachmentNote := delivery.OutputFileDeliveryNote(result.Output, rejected, r.Header.Get("Accept-Language"))
 	completedAtUnix := time.Now().UTC().Unix()
 	response.CompletedAt = &completedAtUnix
 	response.Status = "completed"
@@ -269,12 +266,12 @@ func (h *Handler) createAgentSessionResponse(w http.ResponseWriter, r *http.Requ
 		Attachments: outputAttachments,
 		Content: []agentSessionResponseContent{{
 			Type:        "output_text",
-			Text:        result.Output,
+			Text:        result.Output + attachmentNote,
 			Annotations: []any{},
 		}},
 	}}
 	if eventStream != nil {
-		_ = eventStream.writeCompleted(result.Output, response.InputAttachments, outputAttachments)
+		_ = eventStream.writeCompleted(result.Output, attachmentNote, response.InputAttachments, outputAttachments)
 		return
 	}
 	writeJSON(w, http.StatusOK, response)
@@ -412,29 +409,97 @@ func turnResultError(result agentengine.TurnResult) error {
 	return errors.New("agent response failed")
 }
 
-func parseAgentSessionResponseRequest(w http.ResponseWriter, r *http.Request) (agentSessionInput, bool, error) {
+func parseAgentSessionResponseRequest(w http.ResponseWriter, r *http.Request, allowFiles bool) (agentSessionInput, bool, error) {
 	if isMultipartRequest(r) {
+		if !allowFiles {
+			return agentSessionInput{}, false, errSessionFileAuthorization
+		}
 		return parseAgentSessionMultipart(w, r)
 	}
-	r.Body = http.MaxBytesReader(w, r.Body, agentSessionFileBodyLimit)
-	return decodeAgentSessionResponseRequest(r.Body, nil)
-}
-
-func decodeAgentSessionResponseRequest(reader io.Reader, uploads []agentSessionInputFile) (agentSessionInput, bool, error) {
-	body := &io.LimitedReader{R: reader, N: agentSessionFileBodyLimit + 1}
-	var request *agentSessionResponseRequest
+	limit := int64(agentSessionResponseBodyLimit)
+	if allowFiles {
+		limit = agentSessionFileBodyLimit
+	}
+	if r.ContentLength > limit {
+		return agentSessionInput{}, false, &http.MaxBytesError{Limit: limit}
+	}
+	body := &sessionJSONBody{source: http.MaxBytesReader(w, r.Body, limit)}
+	var request agentSessionResponseRequest
 	decoder := json.NewDecoder(body)
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&request); err != nil {
+	if err := request.readJSON(decoder, body); err != nil {
+		// HTTP/1 otherwise drains an unfinished request body before flushing the error.
+		if r.ProtoMajor == 1 {
+			w.Header().Set("Connection", "close")
+		}
 		return agentSessionInput{}, false, fmt.Errorf("decode request: %w", err)
 	}
 	if err := ensureJSONEOF(decoder); err != nil {
 		return agentSessionInput{}, false, err
 	}
-	if request == nil {
-		return agentSessionInput{}, false, fmt.Errorf("expected a request object")
+	input, stream, err := request.parseInput(nil, body.read)
+	if err == nil && !allowFiles && (len(input.Files) > 0 || len(input.attachmentIDs) > 0) {
+		return agentSessionInput{}, false, errSessionFileAuthorization
 	}
-	return request.parseInput(uploads, agentSessionFileBodyLimit+1-body.N)
+	return input, stream, err
+}
+
+type sessionJSONBody struct {
+	source   io.Reader
+	read     int64
+	fieldEnd int64
+}
+
+func (body *sessionJSONBody) Read(p []byte) (int, error) {
+	// Bound how far the decoder can read ahead after a large Base64 input.
+	size := min(int64(len(p)), int64(agentSessionResponseBodyLimit))
+	if body.fieldEnd != 0 {
+		remaining := body.fieldEnd - body.read
+		if remaining <= 0 {
+			return 0, &agentSessionRequestValidationError{param: "attachment_ids", message: "attachment_ids exceeds the request metadata limit"}
+		}
+		size = min(size, remaining)
+	}
+	n, err := body.source.Read(p[:size])
+	body.read += int64(n)
+	return n, err
+}
+
+func (request *agentSessionResponseRequest) readJSON(decoder *json.Decoder, body *sessionJSONBody) error {
+	open, err := decoder.Token()
+	if err != nil {
+		return err
+	}
+	if open != json.Delim('{') {
+		return fmt.Errorf("expected a request object")
+	}
+	for decoder.More() {
+		key, err := decoder.Token()
+		if err != nil {
+			return err
+		}
+		name := key.(string)
+		switch {
+		case strings.EqualFold(name, "attachment_ids"):
+			body.fieldEnd = decoder.InputOffset() + agentSessionResponseBodyLimit
+			request.AttachmentIDs, err = readSessionAttachmentIDs(decoder)
+			body.fieldEnd = 0
+		case strings.EqualFold(name, "input"):
+			err = decoder.Decode(&request.Input)
+		case strings.EqualFold(name, "stream"):
+			err = decoder.Decode(&request.Stream)
+		case strings.EqualFold(name, "extra"):
+			err = decoder.Decode(&request.Extra)
+		case strings.EqualFold(name, "extra_type"):
+			err = decoder.Decode(&request.ExtraType)
+		default:
+			return fmt.Errorf("unknown field %q", name)
+		}
+		if err != nil {
+			return err
+		}
+	}
+	_, err = decoder.Token()
+	return err
 }
 
 func (request *agentSessionResponseRequest) parseInput(uploads []agentSessionInputFile, requestBytes int64) (agentSessionInput, bool, error) {
@@ -781,7 +846,7 @@ func (s *agentSessionEventStream) closeTextBlock() error {
 	return nil
 }
 
-func (s *agentSessionEventStream) writeCompleted(text string, inputs, outputs []im.MessageAttachment) error {
+func (s *agentSessionEventStream) writeCompleted(text, attachmentNote string, inputs, outputs []im.MessageAttachment) error {
 	s.stopHeartbeat()
 	streamedText := s.text.String()
 	switch {
@@ -793,6 +858,9 @@ func (s *agentSessionEventStream) writeCompleted(text string, inputs, outputs []
 		if err := s.writeDelta(strings.TrimPrefix(text, streamedText)); err != nil {
 			return err
 		}
+	}
+	if err := s.writeDelta(attachmentNote); err != nil {
+		return err
 	}
 	if err := s.closeTextBlock(); err != nil {
 		return err

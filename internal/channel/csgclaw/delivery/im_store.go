@@ -116,7 +116,7 @@ func OpenOutputFileSources(ctx context.Context, store agentengine.FileInterface,
 		if name == "" {
 			name = "attachment"
 		}
-		if file.SizeBytes <= 0 || store == nil {
+		if file.SizeBytes < 0 || store == nil {
 			rejected = append(rejected, name)
 			continue
 		}
@@ -161,8 +161,13 @@ func (r outputFileReader) Read(data []byte) (int, error) {
 
 func outputFileDeliveryText(text string, rejected []string, locale string) string {
 	text = strings.TrimSpace(text)
+	return text + OutputFileDeliveryNote(text, rejected, locale)
+}
+
+// OutputFileDeliveryNote appends the names of generated files that could not be delivered.
+func OutputFileDeliveryNote(text string, rejected []string, locale string) string {
 	if len(rejected) == 0 {
-		return text
+		return ""
 	}
 	names := make([]string, 0, len(rejected))
 	for _, name := range rejected {
@@ -172,10 +177,10 @@ func outputFileDeliveryText(text string, rejected []string, locale string) strin
 	if strings.HasPrefix(strings.ToLower(strings.TrimSpace(locale)), "zh") {
 		warning = "无法发送生成的文件：" + strings.Join(names, "、") + "。"
 	}
-	if text == "" {
+	if strings.TrimSpace(text) == "" {
 		return warning
 	}
-	return text + "\n\n" + warning
+	return "\n\n" + warning
 }
 
 // DeliverFailure keeps Runtime internals out of the transcript and preserves

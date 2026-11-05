@@ -51,32 +51,35 @@ type AttachmentSource struct {
 }
 
 type attachmentObject struct {
-	ID            string    `json:"id"`
-	BlobSHA256    string    `json:"blob_sha256"`
-	OriginalName  string    `json:"original_name"`
-	SafeName      string    `json:"safe_name"`
-	MediaType     string    `json:"media_type"`
-	Kind          string    `json:"kind"`
-	SizeBytes     int64     `json:"size_bytes"`
-	SHA256        string    `json:"sha256"`
-	CreatedAt     time.Time `json:"created_at"`
-	CreatedBy     string    `json:"created_by"`
-	RoomID        string    `json:"room_id"`
-	SessionID     string    `json:"session_id,omitempty"`
-	MessageID     string    `json:"message_id"`
-	Width         int       `json:"width,omitempty"`
-	Height        int       `json:"height,omitempty"`
-	DownloadToken string    `json:"download_token"`
-	WorkspacePath string    `json:"workspace_path,omitempty"`
+	ID             string    `json:"id"`
+	BlobSHA256     string    `json:"blob_sha256,omitempty"`
+	OriginalName   string    `json:"original_name"`
+	SafeName       string    `json:"safe_name"`
+	MediaType      string    `json:"media_type"`
+	Kind           string    `json:"kind"`
+	SizeBytes      int64     `json:"size_bytes"`
+	SHA256         string    `json:"sha256"`
+	CreatedAt      time.Time `json:"created_at"`
+	CreatedBy      string    `json:"created_by"`
+	RoomID         string    `json:"room_id"`
+	SessionID      string    `json:"session_id,omitempty"`
+	MessageID      string    `json:"message_id"`
+	Width          int       `json:"width,omitempty"`
+	Height         int       `json:"height,omitempty"`
+	DownloadToken  string    `json:"download_token"`
+	WorkspacePath  string    `json:"workspace_path,omitempty"`
+	WorkspaceRoot  string    `json:"workspace_root,omitempty"`
+	SessionBatchID string    `json:"session_batch_id,omitempty"`
 }
 
 type AttachmentFile struct {
-	Attachment       MessageAttachment
-	Path             string
-	SafeName         string
-	MediaType        string
-	DownloadToken    string
-	sessionWorkspace *sessionWorkspaceSource
+	Attachment    MessageAttachment
+	Path          string
+	SafeName      string
+	MediaType     string
+	DownloadToken string
+	workspaceRoot string
+	workspacePath string
 }
 
 // Prepared files live outside the object/blob directories so a concurrent
@@ -186,8 +189,8 @@ func (store attachmentStore) prepareAttachment(ctx context.Context, source Attac
 	if err != nil {
 		return preparedAttachment{}, err
 	}
-	if source.Reader == nil || source.SizeBytes <= 0 {
-		return preparedAttachment{}, fmt.Errorf("attachment %q is empty", source.Name)
+	if source.Reader == nil || source.SizeBytes < 0 {
+		return preparedAttachment{}, fmt.Errorf("invalid attachment source for %q", source.Name)
 	}
 	dir := string(store)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
@@ -204,61 +207,71 @@ func (store attachmentStore) prepareAttachment(ctx context.Context, source Attac
 			_ = os.Remove(staged.Name())
 		}
 	}()
+	object, err := writeAttachmentData(ctx, staged, source, originalName)
+	if err != nil {
+		return preparedAttachment{}, err
+	}
+	object.BlobSHA256 = object.SHA256
+	corruptBlob, err := inspectExistingAttachmentBlob(ctx, store.blobPath(object.SHA256), object.SHA256, object.SizeBytes)
+	if err != nil {
+		return preparedAttachment{}, err
+	}
+	keep = true
+	return preparedAttachment{path: staged.Name(), corruptBlob: corruptBlob, object: object}, nil
+}
+
+// writeAttachmentData streams the source once and derives its metadata from the
+// same file that will be published in the room store or the session workspace.
+func writeAttachmentData(ctx context.Context, staged *os.File, source AttachmentSource, originalName string) (attachmentObject, error) {
 	hash := sha256.New()
 	reader := attachmentReader(ctx, source.Reader)
 	written, err := io.CopyN(io.MultiWriter(staged, hash), reader, source.SizeBytes)
 	if err != nil {
-		return preparedAttachment{}, fmt.Errorf("read attachment: %w", err)
+		return attachmentObject{}, fmt.Errorf("read attachment: %w", err)
 	}
 	var extra [1]byte
 	n, err := io.ReadFull(reader, extra[:])
 	if ctx.Err() != nil {
-		return preparedAttachment{}, ctx.Err()
+		return attachmentObject{}, ctx.Err()
 	}
 	if n != 0 || err != io.EOF || written != source.SizeBytes {
-		return preparedAttachment{}, fmt.Errorf("attachment size changed")
+		return attachmentObject{}, fmt.Errorf("attachment size changed")
 	}
 	sha := hex.EncodeToString(hash.Sum(nil))
 	if source.SHA256 != "" && source.SHA256 != sha {
-		return preparedAttachment{}, fmt.Errorf("attachment checksum changed")
+		return attachmentObject{}, fmt.Errorf("attachment checksum changed")
 	}
 	if _, err := staged.Seek(0, io.SeekStart); err != nil {
-		return preparedAttachment{}, err
+		return attachmentObject{}, err
 	}
 	header := make([]byte, 512)
 	n, err = staged.Read(header)
 	if err != nil && err != io.EOF {
-		return preparedAttachment{}, err
+		return attachmentObject{}, err
 	}
 	mediaType := normalizedAttachmentMediaType(source.MediaType, header[:n])
 	kind := attachmentKindForMediaType(mediaType)
 	var width, height int
 	if strings.HasPrefix(mediaType, "image/") {
 		if _, err := staged.Seek(0, io.SeekStart); err != nil {
-			return preparedAttachment{}, err
+			return attachmentObject{}, err
 		}
 		if config, _, err := image.DecodeConfig(staged); err == nil {
 			width, height = config.Width, config.Height
 		}
 	}
 	if err := staged.Sync(); err != nil {
-		return preparedAttachment{}, err
+		return attachmentObject{}, err
 	}
 	if err := staged.Close(); err != nil {
-		return preparedAttachment{}, err
-	}
-	corruptBlob, err := inspectExistingAttachmentBlob(ctx, store.blobPath(sha), sha, written)
-	if err != nil {
-		return preparedAttachment{}, err
+		return attachmentObject{}, err
 	}
 	id, err := newAttachmentID(sha)
 	if err != nil {
-		return preparedAttachment{}, err
+		return attachmentObject{}, err
 	}
-	keep = true
-	return preparedAttachment{path: staged.Name(), corruptBlob: corruptBlob, object: attachmentObject{
-		ID: id, BlobSHA256: sha, OriginalName: originalName, SafeName: safeAttachmentName(originalName), MediaType: mediaType, Kind: kind, SizeBytes: written, SHA256: sha, Width: width, Height: height,
-	}}, nil
+	return attachmentObject{ID: id, OriginalName: originalName, SafeName: safeAttachmentName(originalName),
+		MediaType: mediaType, Kind: kind, SizeBytes: written, SHA256: sha, Width: width, Height: height}, nil
 }
 
 // Blob contents are immutable once installed. Detect pre-existing damage outside
@@ -325,13 +338,16 @@ func (s *Service) AttachmentFile(id string) (AttachmentFile, error) {
 	if s == nil || strings.TrimSpace(s.statePath) == "" {
 		return AttachmentFile{}, fmt.Errorf("attachment storage is not configured")
 	}
-	for _, store := range []attachmentStore{roomAttachmentStore(s.statePath), sessionAttachmentStore(s.statePath)} {
+	for _, store := range []attachmentStore{sessionAttachmentStore(s.statePath), roomAttachmentStore(s.statePath)} {
 		object, err := store.readObject(id)
 		if errors.Is(err, errAttachmentNotFound) {
 			continue
 		}
 		if err != nil {
 			return AttachmentFile{}, err
+		}
+		if object.RoomID == "" {
+			return sessionFile(object)
 		}
 		return store.blobFile(object)
 	}
@@ -351,6 +367,18 @@ func (store attachmentStore) readObject(id string) (attachmentObject, error) {
 	}
 	if object.ID != id {
 		return attachmentObject{}, errAttachmentNotFound
+	}
+	if object.SessionBatchID != "" {
+		// This index can become visible while the publisher is still writing
+		// the batch. Only its first index commits the whole set.
+		first, err := readAttachmentObject(store.objectPath(object.SessionBatchID))
+		if err != nil {
+			return attachmentObject{}, err
+		}
+		if first.ID != object.SessionBatchID || first.SessionBatchID != "" || first.CreatedBy != object.CreatedBy ||
+			first.SessionID != object.SessionID || first.MessageID != object.MessageID || first.WorkspaceRoot != object.WorkspaceRoot {
+			return attachmentObject{}, errAttachmentNotFound
+		}
 	}
 	return object, nil
 }
@@ -396,7 +424,7 @@ func (s *Service) MaterializeAttachment(id, workspaceRoot, relativeDir string) (
 	if err != nil {
 		return MessageAttachment{}, err
 	}
-	source, err := os.Open(file.Path)
+	source, err := file.Open()
 	if err != nil {
 		return MessageAttachment{}, fmt.Errorf("read attachment blob: %w", err)
 	}
@@ -592,7 +620,7 @@ func validSHA256(value string) bool {
 	return err == nil
 }
 
-// Room and direct-session attachments use the same immutable object and blob format.
+// Attachment metadata is kept separately for rooms and direct sessions.
 type attachmentStore string
 
 func roomAttachmentStore(statePath string) attachmentStore {
@@ -636,8 +664,18 @@ func readAttachmentObject(path string) (attachmentObject, error) {
 	if err := json.Unmarshal(data, &object); err != nil {
 		return attachmentObject{}, fmt.Errorf("decode attachment object: %w", err)
 	}
-	if !validAttachmentID(object.ID) || !validSHA256(object.BlobSHA256) || !validSHA256(object.SHA256) || object.SizeBytes < 0 || strings.TrimSpace(object.SafeName) == "" {
+	if !validAttachmentID(object.ID) || !validSHA256(object.SHA256) || object.SizeBytes < 0 || strings.TrimSpace(object.SafeName) == "" {
 		return attachmentObject{}, fmt.Errorf("decode attachment object: invalid metadata")
+	}
+	if object.SessionBatchID != "" && (!validAttachmentID(object.SessionBatchID) || object.SessionBatchID == object.ID || object.WorkspaceRoot == "") {
+		return attachmentObject{}, fmt.Errorf("invalid session attachment batch reference")
+	}
+	if object.WorkspaceRoot == "" {
+		if !validSHA256(object.BlobSHA256) {
+			return attachmentObject{}, fmt.Errorf("invalid attachment blob reference")
+		}
+	} else if object.BlobSHA256 != "" || !filepath.IsAbs(object.WorkspaceRoot) || !object.validSessionWorkspacePath() {
+		return attachmentObject{}, fmt.Errorf("invalid attachment workspace reference")
 	}
 	return object, nil
 }

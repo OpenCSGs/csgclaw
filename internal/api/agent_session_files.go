@@ -70,31 +70,16 @@ func parseAgentSessionFile(name, data string) (agentSessionInputFile, error) {
 }
 
 func parseAgentSessionMultipart(w http.ResponseWriter, r *http.Request) (agentSessionInput, bool, error) {
-	// Reserve space for both the JSON payload and multipart framing.
+	// Reserve space for the input fields and multipart framing.
 	r.Body = http.MaxBytesReader(w, r.Body, im.MaxAttachmentMessageBytes+2*agentSessionResponseBodyLimit)
 	if err := r.ParseMultipartForm(multipartAttachmentMemory); err != nil {
 		return agentSessionInput{}, false, fmt.Errorf("decode multipart request: %w", err)
 	}
 	form := r.MultipartForm
-	fileField := "files"
-	if len(form.File["file"]) > 0 {
-		fileField = "file"
-	}
-	files, err := sessionMultipartFiles(form, fileField)
+	files, err := sessionMultipartFiles(form, "file")
 	if err != nil {
 		return agentSessionInput{}, false, err
 	}
-
-	if values, ok := form.Value["payload"]; ok {
-		if len(form.Value) != 1 || len(values) != 1 {
-			return agentSessionInput{}, false, fmt.Errorf("payload must appear once and cannot be combined with other form fields")
-		}
-		if len(values[0]) > agentSessionResponseBodyLimit {
-			return agentSessionInput{}, false, fmt.Errorf("%w: payload exceeds %d bytes", errAttachmentPayloadTooLarge, agentSessionResponseBodyLimit)
-		}
-		return decodeAgentSessionResponseRequest(strings.NewReader(values[0]), files)
-	}
-
 	inputs, streams := form.Value["input"], form.Value["stream"]
 	for name := range form.Value {
 		if name != "input" && name != "stream" {
@@ -154,13 +139,13 @@ func sessionMultipartFiles(form *multipart.Form, field string) ([]agentSessionIn
 	return files, nil
 }
 
-func (input agentSessionInput) validateFileLimits(existing []im.AttachmentFile) error {
+func (input agentSessionInput) validateFileLimits(existing []im.MessageAttachment) error {
 	if len(input.Files)+len(existing) > im.MaxAttachmentsPerMessage {
 		return fmt.Errorf("too many input files: max %d", im.MaxAttachmentsPerMessage)
 	}
 	var total, largest int64
 	for _, file := range existing {
-		size := file.Attachment.SizeBytes
+		size := file.SizeBytes
 		largest = max(largest, size)
 		total += size
 	}
@@ -210,26 +195,31 @@ func (h *Handler) storeSessionUploads(ctx context.Context, agent agentengine.Age
 func (h *Handler) storeSessionOutputFiles(
 	ctx context.Context, conversation agentengine.ConversationInterface, agent agentengine.Agent, sessionID, responseID string,
 	files []agentengine.OutputFile,
-) ([]im.MessageAttachment, error) {
+) ([]im.MessageAttachment, []string, error) {
 	if len(files) == 0 {
-		return nil, nil
+		return nil, nil, nil
 	}
 	sources, rejected := delivery.OpenOutputFileSources(ctx, conversation.Files(), files)
 	defer delivery.CloseOutputFileSources(sources)
-	if len(rejected) > 0 {
-		return nil, fmt.Errorf("session attachment content is unavailable")
+	if len(sources) == 0 {
+		return nil, rejected, ctx.Err()
 	}
-	return h.saveSessionAttachmentSources(ctx, agent, sessionID, responseID, sources)
+	attachments, err := h.saveSessionAttachmentSources(ctx, agent, sessionID, responseID, sources)
+	return attachments, rejected, err
 }
 
 func (h *Handler) saveSessionAttachmentSources(ctx context.Context, agent agentengine.Agent, sessionID, batchID string, sources []im.AttachmentSource) ([]im.MessageAttachment, error) {
-	workspaceRoot, err := h.configuredAgentWorkspace(agent.ID, agent.Spec.Runtime.Options)
-	if err != nil {
-		return nil, err
-	}
-	workspaceRoot, err = filepath.Abs(workspaceRoot)
+	workspaceRoot, err := h.sessionWorkspaceRoot(agent)
 	if err != nil {
 		return nil, err
 	}
 	return h.im.StoreSessionResponseAttachments(ctx, agent.ID, sessionID, batchID, workspaceRoot, sources)
+}
+
+func (h *Handler) sessionWorkspaceRoot(agent agentengine.Agent) (string, error) {
+	root, err := h.configuredAgentWorkspace(agent.ID, agent.Spec.Runtime.Options)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Abs(root)
 }

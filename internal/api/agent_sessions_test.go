@@ -715,10 +715,11 @@ func TestParseAgentSessionResponseRequestHonorsStreamFlag(t *testing.T) {
 		{body: `{"input":"hello"}`, want: false},
 		{body: `{"input":"hello","stream":false}`, want: false},
 		{body: `{"input":"hello","stream":true}`, want: true},
+		{body: `{"STREAM":false,"Attachment_Ids":null,"INPUT":"hello","stream":true}`, want: true},
 	} {
 		recorder := httptest.NewRecorder()
 		request := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(test.body))
-		_, got, err := parseAgentSessionResponseRequest(recorder, request)
+		_, got, err := parseAgentSessionResponseRequest(recorder, request, false)
 		if err != nil || got != test.want {
 			t.Fatalf("body %s: stream = %t, err = %v", test.body, got, err)
 		}
@@ -811,6 +812,7 @@ func newAgentSessionTestHandler(
 		t.Fatal(err)
 	}
 	handler := NewHandler(AgentServices{Records: agentSvc, Workspace: agentSvc.Workspace(), Models: agentSvc.Models(), Runtime: agentSvc}, agentengine.New(agentSvc), imSvc, nil, im.NewParticipantBridge(""), nil, nil)
+	handler.serverAccessToken = "test-server-token"
 	handler.SetAgentEngine(engine, bindings)
 	return handler, imSvc, bindings, bindingPath
 }
@@ -823,7 +825,9 @@ func performAgentSessionRequest(t *testing.T, handler *Handler, agentSelector, s
 	}
 	path := "/api/v1/agents/" + agentSelector + "/sessions/" + sessionID + "/responses"
 	recorder := httptest.NewRecorder()
-	handler.Routes().ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, path, bytes.NewReader(payload)))
+	req := httptest.NewRequest(http.MethodPost, path, bytes.NewReader(payload))
+	req.Header.Set("Authorization", "Bearer test-server-token")
+	handler.Routes().ServeHTTP(recorder, req)
 	return recorder
 }
 

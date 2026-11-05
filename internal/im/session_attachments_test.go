@@ -16,7 +16,7 @@ func sessionAttachmentSource(name, content string) AttachmentSource {
 	return AttachmentSource{Name: name, MediaType: "text/plain", SizeBytes: int64(len(content)), Reader: io.NopCloser(strings.NewReader(content))}
 }
 
-func TestSessionAttachmentFileChecksOwnershipAndReadsSnapshot(t *testing.T) {
+func TestSessionAttachmentFileChecksOwnershipAndReadsWorkspace(t *testing.T) {
 	s, room := newAttachmentTestService(t)
 	workspace := t.TempDir()
 	stored, err := s.StoreSessionResponseAttachments(t.Context(), "worker", "session", "response", workspace, []AttachmentSource{sessionAttachmentSource("input.txt", "original")})
@@ -42,8 +42,8 @@ func TestSessionAttachmentFileChecksOwnershipAndReadsSnapshot(t *testing.T) {
 		t.Fatalf("lookup after restart: %+v, %v", got.Attachment, err)
 	}
 	data, err := os.ReadFile(got.Path)
-	if err != nil || string(data) != "original" {
-		t.Fatalf("snapshot: %q, %v", data, err)
+	if err != nil || string(data) != "workspace edit" {
+		t.Fatalf("workspace: %q, %v", data, err)
 	}
 	for _, tc := range []struct{ name, agentID, sessionID, attachmentID string }{
 		{"different agent", "another-worker", "session", file.ID},
@@ -57,23 +57,7 @@ func TestSessionAttachmentFileChecksOwnershipAndReadsSnapshot(t *testing.T) {
 			}
 		})
 	}
-	// Older objects retain their download but have no stored session identity.
-	// Their workspace path alone must not authorize use in a new request.
-	path := sessionAttachmentStore(s.statePath).objectPath(file.ID)
-	object, err := readAttachmentObject(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	object.SessionID = ""
-	if err := writeAttachmentObject(path, object); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := s.SessionAttachmentFile("worker", "session", file.ID); !errors.Is(err, errAttachmentNotFound) {
-		t.Fatalf("unscoped object: %v", err)
-	}
-	if _, err := s.AttachmentFile(file.ID); err != nil {
-		t.Fatalf("existing download: %v", err)
-	}
+
 }
 
 func TestSessionResponseAttachmentsRetainDownloadsAcrossRestart(t *testing.T) {
@@ -92,6 +76,12 @@ func TestSessionResponseAttachmentsRetainDownloadsAcrossRestart(t *testing.T) {
 	if err != nil || len(attachments) != len(files) {
 		t.Fatalf("stored %d attachments: %v", len(attachments), err)
 	}
+	store := sessionAttachmentStore(path)
+	for _, name := range []string{"blobs", "refs"} {
+		if _, err := os.Stat(filepath.Join(string(store), name)); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("unexpected %s for workspace-only files: %v", name, err)
+		}
+	}
 	s, err = NewServiceFromPath(path)
 	if err != nil {
 		t.Fatal(err)
@@ -109,16 +99,10 @@ func TestSessionResponseAttachmentsRetainDownloadsAcrossRestart(t *testing.T) {
 		t.Fatal(err)
 	}
 	tokens := make(map[string]bool)
-	var sharedBlob string
 	for i, attachment := range attachments {
 		got, err := s.AttachmentFile(attachment.ID)
 		if err != nil {
 			t.Fatal(err)
-		}
-		if i == 0 {
-			sharedBlob = got.Path
-		} else if got.Path != sharedBlob {
-			t.Errorf("identical contents stored at different paths for file %d", i)
 		}
 		if got.Attachment.DownloadURL != attachment.DownloadURL || got.Attachment.Name != files[i].Name ||
 			got.Attachment.WorkspacePath != attachment.WorkspacePath {
@@ -146,7 +130,7 @@ func TestSessionResponseAttachmentsRetainDownloadsAcrossRestart(t *testing.T) {
 			t.Fatal(err)
 		}
 		data, err := os.ReadFile(got.Path)
-		if err != nil || string(data) != "contents" {
+		if err != nil || string(data) != "edited copy" {
 			t.Fatalf("downloaded contents=%q, error=%v", data, err)
 		}
 	}
@@ -195,8 +179,7 @@ func TestSessionAttachmentsSurviveRoomAssetCleanup(t *testing.T) {
 	if _, err := s.AttachmentFile(roomFile.ID); err == nil {
 		t.Error("deleted room attachment still available")
 	}
-	for i, original := range []string{"shared", "session only"} {
-		file := stored[i]
+	for _, file := range stored {
 		download, err := s.AttachmentFile(file.ID)
 		if err != nil {
 			t.Fatal(err)
@@ -211,7 +194,7 @@ func TestSessionAttachmentsSurviveRoomAssetCleanup(t *testing.T) {
 			t.Errorf("download ID or token changed for %q", file.Name)
 		}
 		data, err := os.ReadFile(download.Path)
-		if err != nil || string(data) != original {
+		if err != nil || string(data) != "edited copy" {
 			t.Errorf("%s: download after room cleanup = %q, error = %v", file.Name, data, err)
 		}
 	}
@@ -225,21 +208,33 @@ func TestSessionResponseAttachmentCommitFailureReclaimsPartialBatch(t *testing.T
 		t.Fatal(err)
 	}
 	store := sessionAttachmentStore(s.statePath)
-	// Fail the final installation after one new blob and one reused blob.
-	broken := store.blobPath(fmt.Sprintf("%x", sha256.Sum256([]byte("broken"))))
-	if err := os.MkdirAll(broken, 0700); err != nil {
+	// Pause before committing the indexes. Block the middle index after the
+	// last one was written and check that the entire batch is rolled back.
+	gate := &gatedAttachmentReader{Reader: strings.NewReader("partial"), entered: make(chan struct{}), release: make(chan struct{})}
+	done := make(chan error, 1)
+	go func() {
+		_, err := s.StoreSessionResponseAttachments(t.Context(), "worker", "session", "interrupted", workspace, []AttachmentSource{
+			{Name: "partial.txt", SizeBytes: 7, Reader: gate},
+			sessionAttachmentSource("middle.txt", "reused"),
+			sessionAttachmentSource("last.txt", "broken"),
+		})
+		done <- err
+	}()
+	<-gate.entered
+	s.mu.Lock()
+	close(gate.release)
+	middle := waitForSessionWorkspaceCopy(t, workspace, "middle.txt")
+	blocked := store.objectPath(strings.TrimSuffix(filepath.Base(middle), "-middle.txt"))
+	if err := os.Mkdir(blocked, 0700); err != nil {
+		s.mu.Unlock()
 		t.Fatal(err)
 	}
-	attachments, err := s.StoreSessionResponseAttachments(t.Context(), "worker", "session", "response", workspace, []AttachmentSource{
-		sessionAttachmentSource("partial.txt", "partial"),
-		sessionAttachmentSource("duplicate.txt", "reused"),
-		sessionAttachmentSource("broken.txt", "broken"),
-	})
-	if err == nil || len(attachments) != 0 {
-		t.Fatalf("expected batch publication failure, got %d files, error=%v", len(attachments), err)
+	s.mu.Unlock()
+	if err := <-done; err == nil {
+		t.Fatal("expected failure when publishing the middle index")
 	}
-	if _, err := os.Stat(store.blobPath(fmt.Sprintf("%x", sha256.Sum256([]byte("partial"))))); !errors.Is(err, os.ErrNotExist) {
-		t.Errorf("partial blob remains: %v", err)
+	if err := os.Remove(blocked); err != nil {
+		t.Fatal(err)
 	}
 	kept := existing[0]
 	keptPath := filepath.Join(workspace, filepath.FromSlash(kept.WorkspacePath))
@@ -357,37 +352,54 @@ func TestConcurrentSessionAttachmentsWithSameFilename(t *testing.T) {
 }
 
 func TestSessionWorkspaceFileKeepsDirectoryAcrossSymlinkSwap(t *testing.T) {
-	workspace := t.TempDir()
-	path := filepath.Join(workspace, "response")
-	if err := os.Mkdir(path, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	dir, err := os.OpenRoot(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer dir.Close()
+	s, _ := newAttachmentTestService(t)
+	workspace, outside := t.TempDir(), t.TempDir()
 	reader := &gatedAttachmentReader{Reader: strings.NewReader("contents"), entered: make(chan struct{}), release: make(chan struct{})}
 	done := make(chan error, 1)
-	go func() { done <- writeSessionWorkspaceFile(dir, "report.txt", reader) }()
+	go func() {
+		_, err := s.StoreSessionResponseAttachments(t.Context(), "worker", "session", "response", workspace,
+			[]AttachmentSource{{Name: "report.txt", SizeBytes: 8, Reader: reader}})
+		done <- err
+	}()
 	<-reader.entered
+	path := filepath.Join(workspace, ".csgclaw", "attachments", "sessions", "session", "response")
 	original := filepath.Join(workspace, "original")
-	outside := t.TempDir()
 	swapErr := os.Rename(path, original)
 	if swapErr == nil {
 		swapErr = os.Symlink(outside, path)
 	}
 	close(reader.release)
-	if err := <-done; err != nil {
-		t.Fatal(err)
-	}
+	result := <-done
 	if swapErr != nil {
 		t.Skipf("directory replacement unavailable: %v", swapErr)
+	}
+	if result == nil {
+		t.Fatal("published a file in a displaced workspace directory")
+	}
+	if entries, err := os.ReadDir(original); err != nil || len(entries) != 0 {
+		t.Fatalf("abandoned files in displaced directory: %v, %v", entries, err)
 	}
 	if entries, err := os.ReadDir(outside); err != nil || len(entries) != 0 {
 		t.Fatalf("unexpected files outside workspace: %v, %v", entries, err)
 	}
-	if content, err := os.ReadFile(filepath.Join(original, "report.txt")); err != nil || string(content) != "contents" {
-		t.Fatalf("original directory: %q, %v", content, err)
+}
+
+func TestSessionAttachmentBatchStaysUnpublishedWithoutFirstIndex(t *testing.T) {
+	s, _ := newAttachmentTestService(t)
+	workspace := t.TempDir()
+	files, err := s.StoreSessionResponseAttachments(t.Context(), "worker", "session", "response", workspace,
+		[]AttachmentSource{sessionAttachmentSource("one.txt", "one"), sessionAttachmentSource("two.txt", "two")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	store := sessionAttachmentStore(s.statePath)
+	if err := os.Remove(store.objectPath(files[0].ID)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.AttachmentFile(files[1].ID); !errors.Is(err, ErrSessionAttachmentNotFound) {
+		t.Fatalf("read incomplete batch index: %v", err)
+	}
+	if _, err := s.SessionAttachmentFile("worker", "session", files[1].ID); !errors.Is(err, ErrSessionAttachmentNotFound) {
+		t.Fatalf("referenced incomplete batch index: %v", err)
 	}
 }

@@ -1,7 +1,7 @@
 package api
 
 import (
-	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -13,7 +13,13 @@ import (
 	"csgclaw/internal/im"
 )
 
+var errSessionFileAuthorization = errors.New("valid server authorization is required")
+
 func writeSessionInputError(w http.ResponseWriter, err error) {
+	if errors.Is(err, errSessionFileAuthorization) {
+		writeAgentSessionError(w, http.StatusUnauthorized, "unauthorized", err.Error(), nil)
+		return
+	}
 	param := "input"
 	var validationErr *agentSessionRequestValidationError
 	if errors.As(err, &validationErr) {
@@ -27,16 +33,9 @@ func writeSessionInputError(w http.ResponseWriter, err error) {
 	writeAgentSessionError(w, status, "invalid_request", err.Error(), param)
 }
 
-func (h *Handler) authorizeSessionFiles(w http.ResponseWriter, r *http.Request) bool {
-	if !h.validateServerAccessToken(r.Header.Get("Authorization")) {
-		writeAgentSessionError(w, http.StatusUnauthorized, "unauthorized", "valid server authorization is required", nil)
-		return false
-	}
-	return true
-}
-
 func (h *Handler) uploadAgentSessionAttachments(w http.ResponseWriter, r *http.Request) {
-	if !h.authorizeSessionFiles(w, r) {
+	if !h.validateServerAccessToken(r.Header.Get("Authorization")) {
+		writeSessionInputError(w, errSessionFileAuthorization)
 		return
 	}
 	sessionID := pathValue(r, "session_id")
@@ -75,6 +74,29 @@ func (h *Handler) uploadAgentSessionAttachments(w http.ResponseWriter, r *http.R
 	writeJSON(w, http.StatusCreated, map[string]any{"attachments": attachments})
 }
 
+func readSessionAttachmentIDs(decoder *json.Decoder) ([]string, error) {
+	open, err := decoder.Token()
+	if err != nil || open == nil {
+		return nil, err
+	}
+	if open != json.Delim('[') {
+		return nil, &agentSessionRequestValidationError{param: "attachment_ids", message: "attachment_ids must be an array of IDs"}
+	}
+	var ids []string
+	for decoder.More() {
+		if len(ids) == im.MaxAttachmentsPerMessage {
+			return nil, &agentSessionRequestValidationError{param: "attachment_ids", message: fmt.Sprintf("too many input files: max %d", im.MaxAttachmentsPerMessage)}
+		}
+		var id string
+		if err := decoder.Decode(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	_, err = decoder.Token()
+	return ids, err
+}
+
 func validateSessionAttachmentIDs(ids []string, newFiles int) error {
 	if len(ids)+newFiles > im.MaxAttachmentsPerMessage {
 		return fmt.Errorf("too many input files: max %d", im.MaxAttachmentsPerMessage)
@@ -89,14 +111,16 @@ func validateSessionAttachmentIDs(ids []string, newFiles int) error {
 	return nil
 }
 
-func (h *Handler) sessionInputReferences(w http.ResponseWriter, r *http.Request, agentID, sessionID string, input agentSessionInput) ([]im.AttachmentFile, bool) {
-	if !h.authorizeSessionFiles(w, r) {
+func (h *Handler) sessionInputReferences(w http.ResponseWriter, agent agentengine.Agent, sessionID string, input agentSessionInput) ([]im.MessageAttachment, bool) {
+	root, err := h.sessionWorkspaceRoot(agent)
+	if err != nil {
+		writeAgentSessionError(w, http.StatusServiceUnavailable, "attachment_unavailable", "agent workspace could not be resolved", "attachment_ids")
 		return nil, false
 	}
-	files := make([]im.AttachmentFile, 0, len(input.attachmentIDs))
+	attachments := make([]im.MessageAttachment, 0, len(input.attachmentIDs))
 	for _, id := range input.attachmentIDs {
-		file, err := h.im.SessionAttachmentFile(agentID, sessionID, id)
-		if errors.Is(err, im.ErrSessionAttachmentNotFound) {
+		file, err := h.im.SessionAttachmentFile(agent.ID, sessionID, id)
+		if errors.Is(err, im.ErrSessionAttachmentNotFound) || (err == nil && !file.WorkspaceMatches(root)) {
 			writeAgentSessionError(w, http.StatusNotFound, "attachment_not_found", "session attachment not found", "attachment_ids")
 			return nil, false
 		}
@@ -105,29 +129,11 @@ func (h *Handler) sessionInputReferences(w http.ResponseWriter, r *http.Request,
 			writeAgentSessionError(w, http.StatusServiceUnavailable, "attachment_unavailable", "session attachment could not be read", "attachment_ids")
 			return nil, false
 		}
-		files = append(files, file)
+		attachments = append(attachments, file.Attachment)
 	}
-	if err := input.validateFileLimits(files); err != nil {
+	if err := input.validateFileLimits(attachments); err != nil {
 		writeSessionInputError(w, err)
 		return nil, false
 	}
-	return files, true
-}
-
-func (h *Handler) restoreSessionWorkspaceFiles(ctx context.Context, agent agentengine.Agent, files []im.AttachmentFile) ([]im.MessageAttachment, error) {
-	if len(files) == 0 {
-		return nil, nil
-	}
-	root, err := h.configuredAgentWorkspace(agent.ID, agent.Spec.Runtime.Options)
-	if err != nil {
-		return nil, err
-	}
-	attachments := make([]im.MessageAttachment, 0, len(files))
-	for _, file := range files {
-		if err := im.RestoreSessionWorkspaceFile(ctx, root, file); err != nil {
-			return nil, err
-		}
-		attachments = append(attachments, file.Attachment)
-	}
-	return attachments, nil
+	return attachments, true
 }

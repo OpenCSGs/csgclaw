@@ -3298,7 +3298,7 @@ func TestHandleAgentWorkspaceFileReturnsContent(t *testing.T) {
 		t.Fatalf("write skill file: %v", err)
 	}
 
-	srv := &Handler{svc: svc, agentEngine: agentengine.New(svc), workspace: svc.Workspace(), agentModels: svc.Models(), agentRuntime: svc}
+	srv := &Handler{serverNoAuth: true, svc: svc, agentEngine: agentengine.New(svc), workspace: svc.Workspace(), agentModels: svc.Models(), agentRuntime: svc}
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/agents/"+created.ID+"/workspace/file?path=skills/custom/SKILL.md", nil)
 	rec := httptest.NewRecorder()
 
@@ -3370,7 +3370,7 @@ func TestHandleAgentSkillsReturnsContentFromSkillsRoot(t *testing.T) {
 		t.Fatalf("write skill file: %v", err)
 	}
 
-	srv := &Handler{svc: svc, agentEngine: agentengine.New(svc), workspace: svc.Workspace(), agentModels: svc.Models(), agentRuntime: svc}
+	srv := &Handler{serverNoAuth: true, svc: svc, agentEngine: agentengine.New(svc), workspace: svc.Workspace(), agentModels: svc.Models(), agentRuntime: svc}
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/agents/"+created.ID+"/skills", nil)
 	rec := httptest.NewRecorder()
@@ -6778,13 +6778,14 @@ func TestHandleFeishuEventsRequiresAuthorization(t *testing.T) {
 
 func TestHandleFeishuEventsRequiresAuthorizationWhenServerAccessTokenEmpty(t *testing.T) {
 	srv := &Handler{}
-
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/channels/feishu/participants/u-manager/events", nil)
-	rec := httptest.NewRecorder()
-	srv.Routes().ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusUnauthorized {
-		t.Fatalf("status = %d, want %d", rec.Code, http.StatusUnauthorized)
+	for _, authorization := range []string{"", "Bearer", "Bearer ", "Bearer bogus"} {
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/channels/feishu/participants/u-manager/events", nil)
+		req.Header.Set("Authorization", authorization)
+		rec := httptest.NewRecorder()
+		srv.Routes().ServeHTTP(rec, req)
+		if rec.Code != http.StatusUnauthorized {
+			t.Fatalf("header %q: status %d, want %d", authorization, rec.Code, http.StatusUnauthorized)
+		}
 	}
 }
 

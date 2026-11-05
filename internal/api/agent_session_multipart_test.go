@@ -26,9 +26,13 @@ type sessionUploadFixture struct {
 	name, mediaType, data string
 }
 
-func multipartSessionRequest(t *testing.T, payloads []string, files ...sessionUploadFixture) *http.Request {
+func sessionFormRequest(t *testing.T, input string, stream bool, files ...sessionUploadFixture) *http.Request {
 	t.Helper()
-	return sessionMultipartForm(t, map[string][]string{"payload": payloads}, map[string][]sessionUploadFixture{"files": files})
+	prompt, err := json.Marshal(input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return sessionMultipartForm(t, map[string][]string{"input": {string(prompt)}, "stream": {fmt.Sprint(stream)}}, map[string][]sessionUploadFixture{"file": files})
 }
 
 func sessionMultipartForm(t *testing.T, values map[string][]string, uploads map[string][]sessionUploadFixture) *http.Request {
@@ -70,12 +74,12 @@ func TestAgentSessionResponsesMultipartFiles(t *testing.T) {
 		{"report.bin", "application/octet-stream", "\x00\xfe\x80"},
 	}
 	for _, tc := range []struct {
-		name, payload string
-		stream        bool
+		name, prompt string
+		stream       bool
 	}{
-		{"text and files", `{"input":"Read the PDF","extra":"from the portal","extra_type":"plain_text","stream":false}`, false},
-		{"files only", `{"stream":true}`, true},
-		{"files with blank prompt", `{"input":"  ","stream":true}`, true},
+		{"text and files", "Read the PDF", false},
+		{"files only", "", true},
+		{"files with blank prompt", "  ", true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			engine := &fakeSessionEngine{}
@@ -87,14 +91,16 @@ func TestAgentSessionResponsesMultipartFiles(t *testing.T) {
 				if tc.stream && prompt != "" {
 					t.Errorf("file-only prompt = %q", prompt)
 				}
-				if !tc.stream && (!strings.Contains(prompt, "Read the PDF") || !strings.Contains(prompt, "from the portal")) {
+				if !tc.stream && prompt != tc.prompt {
 					t.Errorf("prompt = %q", prompt)
 				}
 				paths = checkSessionWorkerFiles(t, workspace, req, files)
 				return agentengine.TurnResult{Status: agentengine.TurnSucceeded, Output: "received files"}
 			}
 			rec := httptest.NewRecorder()
-			h.Routes().ServeHTTP(rec, multipartSessionRequest(t, []string{tc.payload}, files...))
+			req := sessionFormRequest(t, tc.prompt, tc.stream, files...)
+			req.Header.Set("Authorization", "Bearer test-server-token")
+			h.Routes().ServeHTTP(rec, req)
 			if rec.Code != http.StatusOK || len(paths) != len(files) {
 				t.Fatalf("status=%d, paths=%v, body=%s", rec.Code, paths, rec.Body)
 			}
@@ -177,7 +183,7 @@ func TestAgentSessionResponsesMultipartInputFields(t *testing.T) {
 				return agentengine.TurnResult{Status: agentengine.TurnSucceeded, Output: "Read."}
 			}
 			form := sessionMultipartForm(t, map[string][]string{"input": {tc.input}, "stream": {fmt.Sprint(tc.stream)}}, map[string][]sessionUploadFixture{"file": files})
-			status, body := sessionFileHTTP(t, server, http.MethodPost, multipartSessionPath, form.Header.Get("Content-Type"), form.Body)
+			status, body := sessionFileHTTP(t, server, http.MethodPost, multipartSessionPath, form.Header.Get("Content-Type"), form.Body, "Bearer test-server-token")
 			if status != http.StatusOK || len(engine.client.Calls()) != 1 {
 				t.Fatalf("HTTP %d, worker calls %d: %s", status, len(engine.client.Calls()), body)
 			}
@@ -197,32 +203,26 @@ func TestAgentSessionResponsesMultipartInputFields(t *testing.T) {
 
 func TestAgentSessionResponsesRejectsInvalidMultipart(t *testing.T) {
 	file := sessionUploadFixture{"note.txt", "text/plain", "note"}
-	payload := `{"input":"Read","stream":true}`
 	tooMany := make([]sessionUploadFixture, im.MaxAttachmentsPerMessage+1)
 	for i := range tooMany {
 		tooMany[i] = file
 	}
 	for _, tc := range []struct {
-		name     string
-		payloads []string
-		files    []sessionUploadFixture
+		name  string
+		files []sessionUploadFixture
 	}{
-		{"missing payload", nil, []sessionUploadFixture{file}},
-		{"duplicate payload", []string{payload, payload}, []sessionUploadFixture{file}},
-		{"missing files", []string{payload}, nil},
-		{"invalid JSON", []string{"{"}, []sessionUploadFixture{file}},
-		{"null payload", []string{"null"}, []sessionUploadFixture{file}},
-		{"unknown payload field", []string{`{"input":"Hi","unknown":true}`}, []sessionUploadFixture{file}},
-		{"inline and multipart files", []string{`{"input":[{"role":"user","content":[{"type":"input_file","filename":"b.txt","file_data":"data:text/plain;base64,YQ=="}]}]}`}, []sessionUploadFixture{file}},
-		{"empty file", []string{payload}, []sessionUploadFixture{{"file.bin", "application/octet-stream", ""}}},
-		{"relative filename", []string{payload}, []sessionUploadFixture{file, {"../bad.txt", "text/plain", "bad"}}},
-		{"too many files", []string{payload}, tooMany},
+		{"missing file", nil},
+		{"empty file", []sessionUploadFixture{{"file.bin", "application/octet-stream", ""}}},
+		{"relative filename", []sessionUploadFixture{file, {"../bad.txt", "text/plain", "bad"}}},
+		{"too many files", tooMany},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			engine := &fakeSessionEngine{}
 			h, _, _, _ := newAgentSessionTestHandler(t, []agent.Agent{sessionCodexAgent("agent-alpha", "Alpha")}, engine, "")
 			rec := httptest.NewRecorder()
-			h.Routes().ServeHTTP(rec, multipartSessionRequest(t, tc.payloads, tc.files...))
+			req := sessionFormRequest(t, "Read", true, tc.files...)
+			req.Header.Set("Authorization", "Bearer test-server-token")
+			h.Routes().ServeHTTP(rec, req)
 			if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "invalid_request") || len(engine.client.Calls()) != 0 {
 				t.Fatalf("status=%d, calls=%d, body=%s", rec.Code, len(engine.client.Calls()), rec.Body)
 			}
@@ -241,6 +241,11 @@ func TestAgentSessionRejectsInvalidMultipartInputFields(t *testing.T) {
 		fields map[string][]string
 		files  []string
 	}{
+		{"missing input", nil, []string{"file"}},
+		{"payload and files", map[string][]string{"payload": {payload}}, []string{"files"}},
+		{"payload and file", map[string][]string{"payload": {payload}}, []string{"file"}},
+		{"input and files", map[string][]string{"input": {input}}, []string{"files"}},
+		{"inline and multipart files", map[string][]string{"input": {`[{"role":"user","content":[{"type":"input_file","filename":"b.txt","file_data":"data:text/plain;base64,YQ=="}]}]`}}, []string{"file"}},
 		{"payload with input", map[string][]string{"payload": {payload}, "input": {input}}, []string{"files"}},
 		{"payload with stream", map[string][]string{"payload": {payload}, "stream": {"true"}}, []string{"files"}},
 		{"duplicate input", map[string][]string{"input": {input, input}}, []string{"file"}},
@@ -260,7 +265,7 @@ func TestAgentSessionRejectsInvalidMultipartInputFields(t *testing.T) {
 				uploads[name] = []sessionUploadFixture{file}
 			}
 			req := sessionMultipartForm(t, tc.fields, uploads)
-			result := postSessionUploadTest(t, server, multipartSessionPath, "", req.Header.Get("Content-Type"), req.Body, http.StatusBadRequest)
+			result := postSessionUploadTest(t, server, multipartSessionPath, "Bearer test-server-token", req.Header.Get("Content-Type"), req.Body, http.StatusBadRequest)
 			if !bytes.Contains(result, []byte(`"invalid_request"`)) {
 				t.Fatalf("unexpected error: %s", result)
 			}
@@ -284,7 +289,8 @@ func TestAgentSessionResponsesCleansMultipartFilesOnTurnFailure(t *testing.T) {
 		return agentengine.TurnResult{Status: agentengine.TurnFailed, Error: &agentengine.TurnError{Code: agentengine.ErrorRuntimeFailed, Message: "runtime failed"}}
 	}}
 	h, _, _, _ := newAgentSessionTestHandler(t, []agent.Agent{sessionCodexAgent("agent-alpha", "Alpha")}, engine, "")
-	req := streamedAttachmentRequest(t, multipartSessionPath, map[string]any{"stream": false}, strings.NewReader(payload), int64(len(payload)))
+	req := sessionFormRequest(t, "Read", false, sessionUploadFixture{"notes.txt", "text/plain", payload})
+	req.Header.Set("Authorization", "Bearer test-server-token")
 	rec := httptest.NewRecorder()
 	h.Routes().ServeHTTP(rec, req)
 	if rec.Code != http.StatusServiceUnavailable {
@@ -296,8 +302,8 @@ func TestAgentSessionResponsesCleansMultipartFilesOnTurnFailure(t *testing.T) {
 func TestAgentSessionResponsesReportsOversizedMultipartRequest(t *testing.T) {
 	engine := &fakeSessionEngine{}
 	h, _, _, _ := newAgentSessionTestHandler(t, []agent.Agent{sessionCodexAgent("agent-alpha", "Alpha")}, engine, "")
-	payload := `{"stream":true,"input":"` + strings.Repeat("a", agentSessionResponseBodyLimit) + `"}`
-	req := multipartSessionRequest(t, []string{payload}, sessionUploadFixture{"notes.txt", "text/plain", "notes"})
+	req := sessionFormRequest(t, strings.Repeat("a", agentSessionResponseBodyLimit), true, sessionUploadFixture{"notes.txt", "text/plain", "notes"})
+	req.Header.Set("Authorization", "Bearer test-server-token")
 	rec := httptest.NewRecorder()
 	h.Routes().ServeHTTP(rec, req)
 	if rec.Code != http.StatusRequestEntityTooLarge || !strings.Contains(rec.Body.String(), "invalid_request") || len(engine.client.Calls()) != 0 {

@@ -1224,17 +1224,17 @@ Worker 的服务端任务上下文包含 `request_source_message_id`，由父任
 
 ### `GET /api/v1/attachments/{id}`
 
-按 attachment ID 下载已存储的聊天附件。
+按附件 ID 下载房间或直接会话中的附件。
 
 附件元数据中的 `download_url` 包含附件级 capability token，浏览器和 agent 可以直接使用。
 
 调用方也可以使用配置的服务端 Bearer token 请求不带 capability token 的基础路径。
 
-该接口会使用存储的 media type 返回原始字节，并设置 `X-Content-Type-Options: nosniff`。
+房间附件返回发布时的原始内容和媒体类型。直接会话附件返回 workspace 文件的当前内容和检测到的媒体类型，并设置 `Cache-Control: private, no-store`。删除该文件后，原地址返回 `404`。使用 `HEAD` 可仅读取响应头。接口会设置 `X-Content-Type-Options: nosniff`。
 
 下载会返回完整的已存储文件，不设置额外的大小上限，并支持 HTTP Range 请求。
 
-请将 capability URL 视为敏感信息，不要在 room 上下文之外共享。
+下载链接包含文件凭证，请仅分享给预期接收者。
 
 图片附件以内联方式返回。
 
@@ -1502,9 +1502,9 @@ prompt context 使用；它不是 thread reply 列表。Participant client 可�
 
 ### `POST /api/v1/agents/{agent}/sessions/{session_id}/attachments`
 
-将原件上传到指定 Agent 和会话。上传成功后，客户端可以直接预览或下载，稍后再发送提示词。请求使用当前 CSGClaw 实例的服务凭证。请求体使用 `multipart/form-data`，只接受 `files` 字段，每个文件使用一个字段，提供文件名称和原始字节。每次最多上传 10 个非空文件，每个文件最多 1 GiB，合计最多 2 GiB。
+将文件上传到指定 Agent 和会话。上传成功后，客户端可以直接预览或下载，稍后再发送提示词。请求使用当前 CSGClaw 实例的服务凭证。请求体使用 `multipart/form-data`，只接受 `files` 字段，每个文件使用一个字段，提供文件名称和原始字节。每次最多上传 10 个非空文件，每个文件最多 1 GiB，合计最多 2 GiB。
 
-服务端把原件保存到 Agent 的 workspace 和 IM，返回 **201 Created** 和 `{"attachments":[…]}`。每项使用 `Message.attachments` 的字段。发送消息时，在同一会话的 `/responses` 请求中通过 `attachment_ids` 引用这些附件。
+服务端把文件保存到 Agent 的 workspace，返回 **201 Created** 和 `{"attachments":[…]}`。每项使用 `Message.attachments` 的字段。发送消息时，在同一会话的 `/responses` 请求中通过 `attachment_ids` 引用这些附件。
 
 ### `POST /api/v1/agents/{agent}/sessions/{session_id}/responses`
 
@@ -1516,7 +1516,9 @@ prompt context 使用；它不是 thread reply 列表。Participant client 可�
 服务端按 Agent 和 `session_id` 保存会话绑定，后续请求复用同一会话。直接会话的 `metadata.room_id` 为空字符串。
 Portal 上传和下载都使用当前 CSGClaw 实例的 `endpoint` 和网关登录凭证。
 
-顶层字段 `attachment_ids` 是附件 ID 数组，用于引用同一 Agent、同一会话中已保存的文件。各个 ID 必须互不重复。按 ID 引用附件需要通过服务认证，缺少凭证返回 `401`。未知 ID 或其他 Agent、其他会话中的 ID 返回 `404`。同一请求可以同时引用已有文件和上传新文件，两者合计最多 10 个。返回的 `input_attachments` 按 `attachment_ids` 的顺序列出已有文件，然后按上传顺序列出新文件。
+顶层字段 `attachment_ids` 是附件 ID 数组，用于引用同一 Agent、同一会话中已保存的文件。各个 ID 必须互不重复。启用服务认证时，上传文件或引用附件 ID 的请求均需提供有效凭证，认证失败返回 `401`。未知 ID 或其他 Agent、其他会话中的 ID 返回 `404`。JSON 请求可以同时引用已有附件 ID 和传入 Base64 文件，合计最多 10 个。返回的 `input_attachments` 按 `attachment_ids` 的顺序列出已有文件，然后按上传顺序列出新文件。
+
+启用认证时，缺少有效凭证的 JSON 请求可以发送纯文本，请求体最多 1 MiB。超过上限返回 `413`。
 
 最简请求使用字符串 input：
 
@@ -1595,20 +1597,7 @@ const response = await fetch(responsesUrl, {
 if (!response.ok) throw new Error(`Session request failed (HTTP ${response.status})`)
 ```
 
-同一接口也接受一个包含 JSON 对象的 `payload` 字段，每个文件使用一个 `files` 字段，
-提供文件名称和原始字节。在同一表单中同时提供 `payload` 和顶层 `input` 或 `stream` 会返回 `400 invalid_request`。
-部分网关只读取顶层表单字段来设置会话标题和流式响应头，经过这些网关时请采用上面的直接字段写法。
-`payload` 支持 `input`、`stream`、`extra`、`extra_type`
-和 `attachment_ids`。仅发送文件时可以使用 `payload={}`。在 `payload` 中传入
-`input_file` 会返回 `400 invalid_request`。以下示例上传两份 PDF 并接收流式回复。
-
-```sh
-curl -N "${INSTANCE_ENDPOINT%/}/api/v1/agents/codex-worker/sessions/${SESSION_ID}/responses" \
-  --header "Authorization: Bearer ${TOKEN}" \
-  --form-string 'payload={"input":"请比较这两份 PDF。","stream":true}' \
-  --form 'files=@report.pdf;type=application/pdf' \
-  --form 'files=@appendix.pdf;type=application/pdf'
-```
+multipart 表单字段为 `input`、可选的 `stream` 和可重复的 `file`。如需同时使用 `attachment_ids`、`extra` 或 `extra_type`，请通过会话的 `/attachments` 接口使用 `files` 上传文件，再在 `/responses` 的 JSON 请求中传入返回的附件 ID。只发送文件时可使用仅含 `attachment_ids` 的 JSON 请求。
 
 JSON 请求也可以在 `content` 中使用 `input_file` 发送文件。
 
@@ -1635,23 +1624,24 @@ JSON 请求体上限包含 Base64 编码增加的体积，以及 1 MiB 的其他
 Base64 会使传输体积增加约三分之一；JSON 客户端和代理可能将编码后的请求缓存在内存中。
 
 两种格式均支持最多 10 个非空文件，每个文件最多 1 GiB，合计最多 2 GiB，按文件原始字节计算。
-worker 使用附件的 `workspace_path` 读取文件，后续轮次可以继续打开同一路径。再次引用同一附件 ID 时，worker 读取工作目录中的当前内容，包括之前的编辑。如果文件已被删除，显式重新引用该 ID 会将上传原件恢复到同一路径。Portal 下载始终返回上传时的内容。
-如果编辑后的图片超过 1 GiB，worker 仅接收文件路径。Codex 使用私有目录中的硬链接预览图片，无法创建硬链接时会创建临时预览副本。
+worker 使用 `workspace_path` 读取文件，后续轮次可以继续使用同一路径。通过 `attachment_ids` 再次引用时，按当前文件大小检查限制。Portal 下载和预览读取同一个文件，编辑后会读取新版。删除文件后，下载和再次引用均返回 `404`。附件的 `sha256` 记录发布时的摘要，下载响应的类型和长度取自当前文件。
 
 文件数据或元数据无效时返回
 `400 invalid_request`；文件大小或整个 HTTP 请求体超过上限时返回
 `413 invalid_request`。文件校验和准备工作在 SSE 开始前完成。
 
-服务端在调用 Agent 前把新原件保存到 IM 和 workspace。SSE 在首个 `message_start` 事件中返回原件，Agent 执行期间即可访问。原件保存成功后，取消执行、会话忙、Agent 执行失败或结果文件发布失败均会保留原件。普通 JSON 请求在保存原件后发生错误时，错误响应仍包含 `input_attachments`。
+服务端在调用 Agent 前把上传文件保存到 workspace。首个 SSE `message_start` 返回下载地址，Agent 执行期间即可访问。取消执行、会话忙或 Agent 执行失败后，已保存的文件仍可下载。如果保存文件后发生错误，普通 JSON 错误响应会包含 `input_attachments`。
 
 | 文件来源 | 成功的 JSON 响应 | SSE 首个 `message_start` | SSE 成功时的最后一个 `message_delta` |
 | --- | --- | --- | --- |
-| 用户原件 | `input_attachments` | `input_attachments` | `input_attachments` |
+| 用户上传 | `input_attachments` | `input_attachments` | `input_attachments` |
 | Agent 结果文件 | `output[0].attachments` | — | `attachments` |
+
+Agent 可以发布零字节结果文件。如果某个 Engine 结果已不可读取，回复会说明缺失的文件，同时返回正文和其他可用结果的下载地址。
 
 附件数组位于 SSE 事件 `data` 的顶层，空数组省略。每个附件包含 `id`、`name`、`media_type`、`size_bytes`、`sha256`、`download_url` 和相对路径 `workspace_path`。图片还提供 `preview_url`。PDF 的下载响应使用 `Content-Disposition: attachment`；Portal 可以通过下例的 `readAttachment(id)` 获取 PDF Blob，使用 `URL.createObjectURL(blob)` 交给 PDF 查看器，并在关闭预览时调用 `URL.revokeObjectURL(url)`。Codex 可以通过 `csgclaw_publish_file` 发布结果文件。
 
-原件和结果文件保存在 Agent workspace 的 `.csgclaw/attachments/sessions/<session_id>/` 目录中。workspace 使用 Agent 配置的 `local_workspace_dir` 或 runtime 默认目录。下载始终返回保存时的内容，即使 workspace 副本已被修改。更换容器后要继续访问两份数据，需同时持久化 workspace 和 CSGClaw 数据目录。 会话附件的元数据和下载内容保存在 IM 数据目录的 `assets/session-responses/` 中。回退期间，旧版仍可下载原有房间附件。再次运行支持会话附件的版本后，会话文件可通过原 ID 和下载地址访问。
+上传文件和发布的结果文件各保存一份，位置为 Agent workspace 的 `.csgclaw/attachments/sessions/<session_id>/`。workspace 使用 Agent 配置的 `local_workspace_dir` 或 runtime 默认目录。IM 在 `assets/session-responses/` 中保存附件 ID、归属、路径和下载凭证。更换容器时，需要将这两个持久化目录挂载到原路径。房间清理和版本回退会保留文件和 ID，再次升级后可继续访问。升级时能在所属 Agent workspace 找到的历史文件沿用原 ID 和下载地址。会话附件的下载响应使用 `Cache-Control: private, no-store`。
 
 Portal 应将附件的稳定 ID 和用于显示的字段随消息保存，并记录所属实例、Agent 和会话。历史记录不保存 token，也不保存带 token 的下载或预览地址。重新打开附件时，使用对应实例当前的凭证，请求 `GET /api/v1/attachments/{id}`。会话历史接口不会自动为 Portal 生成附件记录。
 
@@ -1676,11 +1666,11 @@ async function upload(files) {
   return (await res.json()).attachments.map(historyFile)
 }
 
-async function send(prompt, originals) {
+async function send(prompt, uploads) {
   const res = await fetch(base + session + "/responses", {
     method: "POST",
     headers: { ...headers, "Content-Type": "application/json" },
-    body: JSON.stringify({ input: prompt, attachment_ids: originals.map(file => file.id) }),
+    body: JSON.stringify({ input: prompt, attachment_ids: uploads.map(file => file.id) }),
   })
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
   const { output } = await res.json()
@@ -1688,7 +1678,7 @@ async function send(prompt, originals) {
 }
 
 async function readAttachment(id) {
-  const res = await fetch(base + "/api/v1/attachments/" + encodeURIComponent(id), { headers })
+  const res = await fetch(base + "/api/v1/attachments/" + encodeURIComponent(id), { headers, cache: "no-store" })
   if (!res.ok) throw new Error(await res.text())
   return res.blob()
 }
@@ -1838,6 +1828,8 @@ runtime 会降级为一个文本 delta。Agent 完成前，连接已建立并先
 ## 聊天侧栏文件
 
 ### `GET /api/v1/agents/{id}/workspace?path=...&depth=1`
+
+启用服务认证时，浏览工作目录、读取文件和引用工作目录中的文件均需提供有效凭证。Agent 使用配置的 `local_workspace_dir` 或默认工作目录，单独配置了工作目录的房间使用该房间的目录。
 
 仅列出所选工作区目录的直接子项。
 `path` 是工作区相对路径，默认为根目录。

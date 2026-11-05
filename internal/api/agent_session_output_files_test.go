@@ -64,9 +64,10 @@ func TestAgentSessionResponseOutputDownloads(t *testing.T) {
 				}
 				body, typ = bytes.NewReader(data), "application/json"
 			} else {
-				body, typ = multipartMessageBodyForTest(t, map[string]any{"input": "Generate reports.", "stream": tc.stream}, "files", "分析.pdf", "application/pdf", original)
+				req := sessionFormRequest(t, "Generate reports.", tc.stream, sessionUploadFixture{"分析.pdf", "application/pdf", string(original)})
+				body, typ = req.Body, req.Header.Get("Content-Type")
 			}
-			status, response := sessionFileHTTP(t, server, http.MethodPost, multipartSessionPath, typ, body)
+			status, response := sessionFileHTTP(t, server, http.MethodPost, multipartSessionPath, typ, body, "Bearer test-server-token")
 			if status != http.StatusOK {
 				t.Fatalf("publish: HTTP %d: %s", status, response)
 			}
@@ -133,39 +134,33 @@ func TestAgentSessionResponseWithUnavailableOutput(t *testing.T) {
 		t.Run(fmt.Sprintf("stream=%t", stream), func(t *testing.T) {
 			engine := &fakeSessionEngine{}
 			server, workspace := sessionOutputTestServer(t, engine, "")
-			file := createSessionTestOutput(t, engine.Conversations("agent-alpha").Files(), "first.txt", "text/plain", []byte("private contents"))
+			store := engine.Conversations("agent-alpha").Files()
+			valid := createSessionTestOutput(t, store, "summary.txt", "text/plain", []byte("summary bytes"))
+			empty := createSessionTestOutput(t, store, "matches.csv", "text/csv", nil)
 			missing := agentengine.OutputFile{OutputFileMetadata: agentengine.OutputFileMetadata{ID: "missing-output", Name: "unavailable.txt"}}
-			engine.run = func(context.Context, string, agentengine.TurnRequest, agentengine.EventSink) agentengine.TurnResult {
-				return agentengine.TurnResult{Status: agentengine.TurnSucceeded, Output: "Ready.", Files: []agentengine.OutputFile{file, missing}}
-			}
-			upload, typ := multipartMessageBodyForTest(t, map[string]any{"stream": stream}, "files", "source.txt", "text/plain", []byte("private input"))
-			status, body := sessionFileHTTP(t, server, http.MethodPost, multipartSessionPath, typ, upload)
-			if stream {
-				if status != http.StatusOK || !bytes.Contains(body, []byte("event: error\n")) || !bytes.Contains(body, []byte(`"stop_reason":"error"`)) {
-					t.Fatalf("stream did not report file failure: HTTP %d: %s", status, body)
+			engine.run = func(ctx context.Context, _ string, _ agentengine.TurnRequest, sink agentengine.EventSink) agentengine.TurnResult {
+				if sink != nil {
+					if err := sink.Emit(ctx, agentengine.TurnEvent{Kind: agentengine.TurnEventTextDelta, Text: "Ready."}); err != nil {
+						t.Error(err)
+					}
 				}
-			} else if status < 400 || !bytes.Contains(body, []byte(`"error"`)) {
-				t.Fatalf("expected a JSON error: HTTP %d: %s", status, body)
+				return agentengine.TurnResult{Status: agentengine.TurnSucceeded, Output: "Ready.", Files: []agentengine.OutputFile{valid, missing, empty}}
 			}
-			var inputs []im.MessageAttachment
-			if stream {
-				inputs = sessionResponsePublishedFiles(t, body, true).Inputs
-			} else {
-				var failure agentSessionErrorEnvelope
-				if err := json.Unmarshal(body, &failure); err != nil {
-					t.Fatal(err)
-				}
-				inputs = failure.InputAttachments
+			req := sessionFormRequest(t, "Find matches.", stream, sessionUploadFixture{"source.txt", "text/plain", "input bytes"})
+			status, body := sessionFileHTTP(t, server, http.MethodPost, multipartSessionPath, req.Header.Get("Content-Type"), req.Body, "Bearer test-server-token")
+			if status != http.StatusOK || !bytes.Contains(body, []byte("Ready.")) || !bytes.Contains(body, []byte("Could not deliver generated file")) || !bytes.Contains(body, []byte("unavailable.txt")) {
+				t.Fatalf("expected completed reply with a file warning, got HTTP %d: %s", status, body)
 			}
-			if len(inputs) != 1 {
-				t.Fatalf("expected the saved original, got %s", body)
+			if stream && (bytes.Contains(body, []byte("event: error")) || !bytes.Contains(body, []byte(`"stop_reason":"end_turn"`))) {
+				t.Fatalf("unexpected terminal event: %s", body)
 			}
-			checkSessionDownload(t, server, workspace, inputs[0], "source.txt", "text/plain", []byte("private input"))
-			for _, unpublished := range []string{"private contents", "private input", "first.txt", "unavailable.txt"} {
-				if bytes.Contains(body, []byte(unpublished)) {
-					t.Errorf("failure exposed %q: %s", unpublished, body)
-				}
+			files := sessionResponsePublishedFiles(t, body, stream)
+			if len(files.Inputs) != 1 || len(files.Outputs) != 2 {
+				t.Fatalf("expected original and two available results: %s", body)
 			}
+			checkSessionDownload(t, server, workspace, files.Inputs[0], "source.txt", "text/plain", []byte("input bytes"))
+			checkSessionDownload(t, server, workspace, files.Outputs[0], "summary.txt", "text/plain", []byte("summary bytes"))
+			checkSessionDownload(t, server, workspace, files.Outputs[1], "matches.csv", "text/csv", nil)
 		})
 	}
 }
@@ -199,11 +194,14 @@ func createSessionTestOutput(t *testing.T, files agentengine.FileInterface, name
 	return file
 }
 
-func sessionFileHTTP(t *testing.T, server *httptest.Server, method, path, contentType string, body io.Reader) (int, []byte) {
+func sessionFileHTTP(t *testing.T, server *httptest.Server, method, path, contentType string, body io.Reader, bearer ...string) (int, []byte) {
 	t.Helper()
 	req, err := http.NewRequest(method, server.URL+path, body)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if len(bearer) > 0 {
+		req.Header.Set("Authorization", bearer[0])
 	}
 	if contentType != "" {
 		req.Header.Set("Content-Type", contentType)
@@ -292,14 +290,15 @@ func TestAgentSessionOriginalsAvailableDuringTurnAndAfterCancellation(t *testing
 	server, workspace := sessionOutputTestServer(t, engine, "")
 	original := []byte("GIF89a\x01\x00\x01\x00\x80\x00\x00\x00\x00\x00\xff\xff\xff" +
 		"\x2c\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02\x02\x44\x01\x00\x3b")
-	upload, typ := multipartMessageBodyForTest(t, map[string]any{"stream": true}, "files", "original.gif", "image/gif", original)
+	upload := sessionFormRequest(t, "", true, sessionUploadFixture{"original.gif", "image/gif", string(original)})
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, server.URL+multipartSessionPath, upload)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, server.URL+multipartSessionPath, upload.Body)
 	if err != nil {
 		t.Fatal(err)
 	}
-	req.Header.Set("Content-Type", typ)
+	req.Header.Set("Content-Type", upload.Header.Get("Content-Type"))
+	req.Header.Set("Authorization", "Bearer test-server-token")
 	response, err := server.Client().Do(req)
 	if err != nil {
 		t.Fatal(err)
@@ -335,8 +334,8 @@ func TestAgentSessionOriginalsAvailableDuringTurnAndAfterCancellation(t *testing
 	}
 
 	busyOriginal := []byte("second upload")
-	busyBody, busyType := multipartMessageBodyForTest(t, map[string]any{}, "files", "busy.txt", "text/plain", busyOriginal)
-	status, busyResponse := sessionFileHTTP(t, server, http.MethodPost, multipartSessionPath, busyType, busyBody)
+	busyForm := sessionFormRequest(t, "", false, sessionUploadFixture{"busy.txt", "text/plain", string(busyOriginal)})
+	status, busyResponse := sessionFileHTTP(t, server, http.MethodPost, multipartSessionPath, busyForm.Header.Get("Content-Type"), busyForm.Body, "Bearer test-server-token")
 	var busy agentSessionErrorEnvelope
 	if err := json.Unmarshal(busyResponse, &busy); err != nil || status != http.StatusConflict || busy.Error.Code != "session_busy" || len(busy.InputAttachments) != 1 {
 		t.Fatalf("busy response: HTTP %d, %s, %v", status, busyResponse, err)

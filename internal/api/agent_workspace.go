@@ -17,6 +17,26 @@ var (
 	errAgentWorkspaceNotFound = errors.New("agent not found")
 )
 
+// Authenticate before resolving any path. A configured workspace can alias
+// another directory or contain hard links to files stored in a different room.
+func (h *Handler) authorizeWorkspaceAccess(w http.ResponseWriter, r *http.Request) bool {
+	if appRequestAgentID(r) != "" || h.validateServerAccessToken(r.Header.Get("Authorization")) {
+		return true
+	}
+	w.Header().Set("WWW-Authenticate", `Bearer realm="csgclaw"`)
+	writeCodedAPIError(w, http.StatusUnauthorized, "unauthorized", "Workspace access requires authentication")
+	return false
+}
+
+func (h *Handler) requireWorkspaceAccess(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "private, no-store")
+		if h.authorizeWorkspaceAccess(w, r) {
+			next.ServeHTTP(w, r)
+		}
+	})
+}
+
 func (h *Handler) handleAgentWorkspace(w http.ResponseWriter, r *http.Request) {
 	h.handleAgentWorkspaceListing(w, r, func(id string) (string, error) {
 		return h.conversationWorkspaceRoot(id, r.URL.Query().Get("room_id"))
@@ -122,12 +142,21 @@ func (h *Handler) configuredAgentWorkspace(agentID string, options map[string]an
 	return h.workspace.WorkspaceRootByID(agentID)
 }
 
+// MigrateSessionWorkspaces binds historical attachment IDs to their existing
+// file in the owning agent's configured workspace before HTTP serves downloads.
+func (h *Handler) MigrateSessionWorkspaces() error {
+	if h.im == nil || h.svc == nil {
+		return nil
+	}
+	return h.im.MigrateSessionWorkspaces(h.agentWorkspaceRoot)
+}
+
 func (h *Handler) agentWorkspaceRoot(id string) (string, error) {
 	item, ok := h.svc.Agent(id)
 	if !ok {
 		return "", errAgentWorkspaceNotFound
 	}
-	return h.workspace.WorkspaceRoot(item.Name)
+	return h.configuredAgentWorkspace(item.ID, item.RuntimeOptions)
 }
 
 // Room configuration locks the same root used by task execution, preview, and sharing.
