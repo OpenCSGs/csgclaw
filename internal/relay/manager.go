@@ -90,8 +90,8 @@ func (m *Manager) client(endpoint, token string) (*Client, error) {
 	}
 	c, err := NewClient(endpoint, token, nil)
 	if err == nil {
-		c.clientID = m.manifest.ClientID
 		if m.credentials != nil {
+			c.clientID = m.manifest.ClientID
 			c.credentials = func() (SiteCredentials, error) {
 				cred, err := m.boundCredentials()
 				if err != nil {
@@ -511,6 +511,9 @@ func (m *Manager) startLocked(id string, req PublishRequest) {
 		defer m.mu.Unlock()
 		if err != nil {
 			m.failures[id] = "relay executor stopped; unpublish and publish again"
+			if errors.Is(err, errExecutorOwnershipUnknown) {
+				m.failures[id] = errExecutorOwnershipUnknown.Error()
+			}
 		}
 		delete(m.running, id)
 	}()

@@ -135,7 +135,7 @@ func TestRemoteInvocationSessionIsolationAndAccess(t *testing.T) {
 			t.Error("missing local credential")
 		}
 		if r.Method == "GET" {
-			writeTestJSON(w, 200, map[string]any{"id": "local-agent", "name": "Test agent", "runtime": map[string]any{"name": "codex", "state": "running"}})
+			writeTestJSON(w, 200, map[string]any{"id": "local-agent", "name": "Test agent", "status": "running", "runtime": map[string]any{"name": "codex", "state": "running"}})
 			return
 		}
 		if !strings.HasSuffix(r.URL.Path, "/responses") {
@@ -268,7 +268,25 @@ func TestRegistrationOwnershipVisibilityAndValidation(t *testing.T) {
 		t.Fatalf("identity changed: %+v %v", updated, err)
 	}
 	requireHTTP(t, publisher.Request(context.Background(), "POST", "/v1/agents", "bad-fields", map[string]any{"name": "x", "source_agent_id": "x", "owner_id": "bob"}, nil), 400)
-	requireHTTP(t, publisher.Request(context.Background(), "POST", "/v1/agents", "", req, nil), 400)
+	// Client.Request generates an idempotency key when omitted. Use a raw
+	// authenticated request to exercise the server rejection of a missing key.
+	payload, _ := json.Marshal(req)
+	raw, err := http.NewRequest(http.MethodPost, publisher.endpoint("/v1/agents"), strings.NewReader(string(payload)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = publisher.authenticate(raw.Header); err != nil {
+		t.Fatal(err)
+	}
+	raw.Header.Set("Content-Type", "application/json")
+	missingKey, err := publisher.http.Do(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	missingKey.Body.Close()
+	if missingKey.StatusCode != http.StatusBadRequest {
+		t.Fatalf("missing idempotency key returned HTTP %d", missingKey.StatusCode)
+	}
 	if err = publisher.Request(context.Background(), "DELETE", "/v1/agents/"+p.Agent.ID, "", nil, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -350,7 +368,7 @@ func TestExecutorReconnectResendsUnacknowledgedResult(t *testing.T) {
 
 func TestExecutorRestartDoesNotRepeatInterruptedWork(t *testing.T) {
 	state := filepath.Join(t.TempDir(), "state.json")
-	data, _ := json.Marshal(map[string]executionRecord{"resp_interrupted": {Result: Frame{Type: "request.accepted", ResponseID: "resp_interrupted"}}})
+	data, _ := json.Marshal(executorState{Version: 1, Records: map[string]executionRecord{"resp_interrupted": {InstanceID: "previous-incarnation", Result: Frame{Type: "request.accepted", ResponseID: "resp_interrupted"}}}, Sessions: map[string]executionSession{}})
 	if err := os.WriteFile(state, data, 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -369,6 +387,7 @@ func TestExecutorRestartDoesNotRepeatInterruptedWork(t *testing.T) {
 		_ = conn.WriteJSON(Frame{Type: "hello.ack", HeartbeatIntervalSeconds: 15})
 		if conn.ReadJSON(&f) == nil {
 			received <- f
+			_ = conn.WriteJSON(Frame{Type: "result.ack", ResponseID: f.ResponseID})
 		}
 		for conn.ReadJSON(&f) == nil {
 		}

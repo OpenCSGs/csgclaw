@@ -76,19 +76,6 @@ func (c cmd) Run(ctx context.Context, run *command.Context, args []string, g com
 	if err != nil {
 		return err
 	}
-	root, err := config.DefaultDomainDir("relay")
-	if err != nil {
-		return err
-	}
-	localEndpoint := g.Endpoint
-	if localEndpoint == "" {
-		localEndpoint = config.DefaultAPIBaseURL()
-	}
-	clientID, err := relay.StableClientID(relay.InstanceRoot(root, localEndpoint))
-	if err != nil {
-		return err
-	}
-	client.WithClientID(clientID)
 	if key == "" {
 		key = uuid.NewString()
 	}

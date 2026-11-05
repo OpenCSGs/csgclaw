@@ -66,7 +66,9 @@ The existing template-sharing action is separate from publishing a running agent
 Set `CSGCLAW_RELAY_URL` and `CSGCLAW_RELAY_TOKEN` independently from the local
 `CSGCLAW_BASE_URL` and `CSGCLAW_ACCESS_TOKEN`. The `--relay` flag overrides the
 relay URL. The CLI is a low-level Relay diagnostic tool; it does not create community
-instances. It shares the persistent client ID selected by the local API endpoint.
+instances. Direct diagnostic requests use token authentication only, without
+forwarding identity headers; Relay resolves the token to its configured identity.
+The community proxy path still sends the persistent client ID as required above.
 The production Web UI uses the complete community workflow above. Local API credentials are never sent to the relay.
 
 ```bash
@@ -137,18 +139,38 @@ For the actual local-runtime smoke test, also set `CSGCLAW_TEST_LOCAL_URL`,
 ## Executor recovery
 
 The producer persists accepted Response IDs before execution and terminal results
-before transmission. Unacknowledged results are resent after reconnect; the
-process instance ID remains stable. A restart marks interrupted executions as
-`execution_interrupted` rather than repeating tool side effects. Each publication
-runs one invocation at a time. Session IDs are hashed with the relay and remote
-agent identity to separate them from interactive local sessions.
+before transmission, together with the accepting executor instance ID.
+Reconnections within a running process retain that identity. After restart,
+recovery-only connections reclaim each previous instance identity with
+`ready=false`, replay its terminal results, and wait for `result.ack`. Only after
+these ownership checks complete does a fresh instance admit new work. Interrupted
+executions report `execution_interrupted` without repeating tool side effects.
+Relay records must still exist; if the broker loses them or their TTL expires,
+the current protocol cannot prove receipt, so recovery stays unready rather than
+silently discarding unacknowledged work.
+
+Each publication runs one invocation at a time. Session IDs are hashed with the
+relay and remote agent identity to separate them from interactive local sessions.
+The journal persists the confirmed local history tip and marks history uncertain
+before dispatch. Continuations must reference that exact tip. Non-tip branches,
+missing/evicted checkpoints, and uncertain history fail explicitly with
+`relay_branch_unsupported`; the executor never silently substitutes the latest
+history. Start a new cloud task/conversation in those cases.
 
 State defaults to the CSGClaw data directory's `relay/` subdirectory; `--state`
 overrides it. A process lock prevents sharing one state file. Files have `0600`
 permissions and contain result text; protect them as local conversation data.
 Do not delete the state or lock file while running. Up to 1024 records are kept,
 reclaiming ACKed history first. Relay-side idempotency owns longer-lived history.
-State I/O failure stops the executor.
+State I/O failure stops the executor. Up to 1024 local session tips are retained;
+eviction rejects affected continuations instead of using another context.
+
+The versioned journal migrates legacy ACKed records conservatively; old sessions
+have no confirmed checkpoint, so continuation requires a new conversation.
+Legacy unacknowledged records lack the original ownership identity and cause an
+explicit startup error without modifying the state file. They cannot be safely
+replayed by a new instance. Preserve the file for diagnosis and confirm the old
+request outcomes before retiring it; do not delete it to retry the same work.
 
 Cancellation waits for the local Session API's runtime cleanup. If stopping
 cannot be confirmed within 30 seconds, the result is `cancellation_unconfirmed`

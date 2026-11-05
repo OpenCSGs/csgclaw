@@ -146,9 +146,6 @@ func (m *Manager) Catalog(ctx context.Context) []CatalogEntry {
 	endpoint, token := m.manifest.Endpoint, m.manifest.Token
 	m.mu.Unlock()
 	client, clientErr := NewClient(endpoint, token, nil)
-	if clientErr == nil {
-		client.WithClientID(m.manifest.ClientID)
-	}
 	for i := range entries {
 		entry := &entries[i]
 		entry.Agent.Status = "offline"

@@ -101,6 +101,7 @@ func (r Response) Text() string {
 }
 
 type Frame struct {
+	parentValidated          bool
 	Type                     string          `json:"type"`
 	ProtocolVersion          int             `json:"protocol_version,omitempty"`
 	InstanceID               string          `json:"instance_id,omitempty"`
@@ -112,6 +113,7 @@ type Frame struct {
 	HeartbeatTimeoutSeconds  int             `json:"heartbeat_timeout_seconds,omitempty"`
 	ResponseID               string          `json:"response_id,omitempty"`
 	SessionID                string          `json:"session_id,omitempty"`
+	PreviousResponseID       string          `json:"previous_response_id,omitempty"`
 	Input                    json.RawMessage `json:"input,omitempty"`
 	Deadline                 time.Time       `json:"deadline,omitzero"`
 	Sequence                 uint64          `json:"sequence,omitempty"`

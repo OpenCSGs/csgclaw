@@ -20,9 +20,25 @@ type ExecutionHandler interface {
 }
 
 type executionRecord struct {
-	Result Frame `json:"result"`
-	Acked  bool  `json:"acked"`
+	InstanceID string `json:"instance_id"`
+	Result     Frame  `json:"result"`
+	Acked      bool   `json:"acked"`
 }
+
+type executionSession struct {
+	Tip       string    `json:"tip"`
+	Dirty     bool      `json:"dirty"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+type executorState struct {
+	Version  int                         `json:"version"`
+	Records  map[string]executionRecord  `json:"records"`
+	Sessions map[string]executionSession `json:"sessions"`
+}
+
+var errRecoveryComplete = errors.New("previous executor ownership reconciled")
+var errExecutorOwnershipUnknown = errors.New("relay recovery requires the original executor instance identity; legacy unacknowledged state cannot be replayed safely")
 
 // Executor owns a single outbound connection and one active remote invocation.
 // StatePath stores the durable inbox/outbox and must be unique per publication.
@@ -35,6 +51,8 @@ type Executor struct {
 	OnConnection func(bool)
 	mu           sync.Mutex
 	records      map[string]executionRecord
+	sessions     map[string]executionSession
+	instance     string
 	activeID     string
 	cancel       context.CancelFunc
 	fatal        error
@@ -54,13 +72,31 @@ func (e *Executor) Run(ctx context.Context) error {
 	}
 	defer lock.Close()
 	e.records = map[string]executionRecord{}
+	e.sessions = map[string]executionSession{}
 	data, err := os.ReadFile(e.StatePath)
 	if err == nil {
-		if err = json.Unmarshal(data, &e.records); err != nil || e.records == nil {
+		var state executorState
+		if err = json.Unmarshal(data, &state); err != nil {
 			return fmt.Errorf("invalid relay executor state")
+		}
+		if state.Version == 0 {
+			// Legacy ACKed records can be retained for deduplication. An old
+			// unacknowledged record has no recoverable executor ownership.
+			if err = json.Unmarshal(data, &e.records); err != nil || e.records == nil {
+				return fmt.Errorf("invalid legacy relay executor state")
+			}
+		} else if state.Version != 1 || state.Records == nil || state.Sessions == nil {
+			return fmt.Errorf("unsupported relay executor state")
+		} else {
+			e.records, e.sessions = state.Records, state.Sessions
 		}
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return err
+	}
+	for _, record := range e.records {
+		if !record.Acked && !safeID(record.InstanceID) {
+			return errExecutorOwnershipUnknown
+		}
 	}
 	for id, record := range e.records {
 		if record.Result.Type == "request.accepted" {
@@ -73,7 +109,41 @@ func (e *Executor) Run(ctx context.Context) error {
 	}
 	ctx, cancel := context.WithCancel(ctx)
 	defer func() { cancel(); e.workers.Wait() }()
+	// Restore results through their accepting instance before admitting new work.
+	// A fresh runtime incarnation must never replay frames under a different owner.
+	for {
+		owner := ""
+		for _, record := range e.records {
+			if !record.Acked {
+				owner = record.InstanceID
+				break
+			}
+		}
+		if owner == "" || ctx.Err() != nil {
+			break
+		}
+		backoff := time.Second
+		for ctx.Err() == nil {
+			conn, connectErr := e.Client.connect(ctx, e.AgentID, owner)
+			if connectErr == nil {
+				connectErr = e.serve(ctx, conn, owner, true)
+				conn.Close()
+			}
+			if errors.Is(connectErr, errRecoveryComplete) {
+				break
+			}
+			if e.OnReconnect != nil && ctx.Err() == nil {
+				e.OnReconnect()
+			}
+			select {
+			case <-ctx.Done():
+			case <-time.After(backoff):
+			}
+			backoff = min(backoff*2, 15*time.Second)
+		}
+	}
 	instance := uuid.NewString()
+	e.instance = instance
 	backoff := time.Second
 	for ctx.Err() == nil {
 		e.mu.Lock()
@@ -84,7 +154,7 @@ func (e *Executor) Run(ctx context.Context) error {
 		}
 		conn, err := e.Client.connect(ctx, e.AgentID, instance)
 		if err == nil {
-			err = e.serve(ctx, conn, instance)
+			err = e.serve(ctx, conn, instance, false)
 			conn.Close()
 			backoff = time.Second
 		}
@@ -106,7 +176,7 @@ func (e *Executor) Run(ctx context.Context) error {
 }
 
 func (e *Executor) saveLocked() error {
-	data, err := json.Marshal(e.records)
+	data, err := json.Marshal(executorState{Version: 1, Records: e.records, Sessions: e.sessions})
 	if err != nil {
 		return err
 	}
@@ -132,7 +202,7 @@ func (e *Executor) saveLocked() error {
 	return os.Rename(name, e.StatePath)
 }
 
-func (e *Executor) serve(ctx context.Context, conn *websocket.Conn, instance string) error {
+func (e *Executor) serve(ctx context.Context, conn *websocket.Conn, instance string, recovering bool) error {
 	stop := make(chan struct{})
 	defer close(stop)
 	go func() {
@@ -147,7 +217,10 @@ func (e *Executor) serve(ctx context.Context, conn *websocket.Conn, instance str
 		return conn.WriteJSON(f)
 	}
 	status := func(typ string) Frame {
-		ready := e.Handler.Ready(ctx)
+		ready := false
+		if !recovering {
+			ready = e.Handler.Ready(ctx)
+		}
 		e.mu.Lock()
 		defer e.mu.Unlock()
 		return Frame{Type: typ, ProtocolVersion: 1, InstanceID: instance, Ready: ready && e.fatal == nil, Busy: e.activeID != ""}
@@ -163,7 +236,7 @@ func (e *Executor) serve(ctx context.Context, conn *websocket.Conn, instance str
 	if ack.Type != "hello.ack" || ack.HeartbeatIntervalSeconds <= 0 || ack.HeartbeatIntervalSeconds > 300 {
 		return fmt.Errorf("invalid relay hello acknowledgement")
 	}
-	if e.OnConnection != nil {
+	if e.OnConnection != nil && !recovering {
 		e.OnConnection(true)
 		defer e.OnConnection(false)
 	}
@@ -193,6 +266,16 @@ func (e *Executor) serve(ctx context.Context, conn *websocket.Conn, instance str
 	defer heartbeat.Stop()
 	retry := time.NewTicker(time.Second)
 	defer retry.Stop()
+	recovered := func() bool {
+		e.mu.Lock()
+		defer e.mu.Unlock()
+		for _, record := range e.records {
+			if !record.Acked && record.InstanceID == instance {
+				return false
+			}
+		}
+		return true
+	}
 	flush := func() error {
 		e.mu.Lock()
 		defer e.mu.Unlock()
@@ -200,7 +283,7 @@ func (e *Executor) serve(ctx context.Context, conn *websocket.Conn, instance str
 			return e.fatal
 		}
 		for _, record := range e.records {
-			if !record.Acked && record.Result.Type != "request.accepted" {
+			if !record.Acked && record.InstanceID == instance && record.Result.Type != "request.accepted" {
 				if err := send(record.Result); err != nil {
 					return err
 				}
@@ -231,6 +314,9 @@ func (e *Executor) serve(ctx context.Context, conn *websocket.Conn, instance str
 		case frame := <-incoming:
 			switch frame.Type {
 			case "request":
+				if recovering {
+					return fmt.Errorf("relay dispatched new work to a recovery-only connection")
+				}
 				if err := e.accept(ctx, frame, send); err != nil {
 					return err
 				}
@@ -242,7 +328,7 @@ func (e *Executor) serve(ctx context.Context, conn *websocket.Conn, instance str
 				e.mu.Unlock()
 			case "result.ack":
 				e.mu.Lock()
-				if record, ok := e.records[frame.ResponseID]; ok && record.Result.Type != "request.accepted" {
+				if record, ok := e.records[frame.ResponseID]; ok && record.InstanceID == instance && record.Result.Type != "request.accepted" {
 					record.Acked = true
 					e.records[frame.ResponseID] = record
 					e.fatal = e.saveLocked()
@@ -252,13 +338,16 @@ func (e *Executor) serve(ctx context.Context, conn *websocket.Conn, instance str
 				if fatal != nil {
 					return fatal
 				}
+				if recovering && recovered() {
+					return errRecoveryComplete
+				}
 			}
 		}
 	}
 }
 
 func (e *Executor) accept(ctx context.Context, frame Frame, send func(Frame) error) error {
-	if !safeID(frame.ResponseID) || !safeID(frame.SessionID) || frame.Deadline.IsZero() {
+	if !safeID(frame.ResponseID) || !safeID(frame.SessionID) || (frame.PreviousResponseID != "" && !safeID(frame.PreviousResponseID)) || frame.Deadline.IsZero() {
 		return fmt.Errorf("invalid relay request identity or deadline")
 	}
 	if _, err := InputText(frame.Input); err != nil {
@@ -283,12 +372,10 @@ func (e *Executor) accept(ctx context.Context, frame Frame, send func(Frame) err
 		e.mu.Unlock()
 		return fmt.Errorf("relay outbox is full")
 	}
-	if !ready || e.activeID != "" {
-		result := Frame{Type: "response.failed", ResponseID: frame.ResponseID, Sequence: 1, Error: &ProtocolError{Code: "agent_unavailable", Message: "local executor is not ready"}}
-		if e.activeID != "" {
-			result.Error = &ProtocolError{Code: "agent_busy", Message: "executor already has an active invocation"}
-		}
-		e.records[frame.ResponseID] = executionRecord{Result: result}
+	session := e.sessions[frame.SessionID]
+	if session.Dirty || session.Tip != frame.PreviousResponseID {
+		result := Frame{Type: "response.failed", ResponseID: frame.ResponseID, Sequence: 1, Error: &ProtocolError{Code: "relay_branch_unsupported", Message: "continuation does not match the confirmed local session tip; start a new conversation"}}
+		e.records[frame.ResponseID] = executionRecord{InstanceID: e.instance, Result: result}
 		e.fatal = e.saveLocked()
 		fatal := e.fatal
 		e.mu.Unlock()
@@ -297,7 +384,34 @@ func (e *Executor) accept(ctx context.Context, frame Frame, send func(Frame) err
 		}
 		return send(result)
 	}
-	e.records[frame.ResponseID] = executionRecord{Result: Frame{Type: "request.accepted", ResponseID: frame.ResponseID}}
+	if !ready || e.activeID != "" {
+		result := Frame{Type: "response.failed", ResponseID: frame.ResponseID, Sequence: 1, Error: &ProtocolError{Code: "agent_unavailable", Message: "local executor is not ready"}}
+		if e.activeID != "" {
+			result.Error = &ProtocolError{Code: "agent_busy", Message: "executor already has an active invocation"}
+		}
+		e.records[frame.ResponseID] = executionRecord{InstanceID: e.instance, Result: result}
+		e.fatal = e.saveLocked()
+		fatal := e.fatal
+		e.mu.Unlock()
+		if fatal != nil {
+			return fatal
+		}
+		return send(result)
+	}
+	e.records[frame.ResponseID] = executionRecord{InstanceID: e.instance, Result: Frame{Type: "request.accepted", ResponseID: frame.ResponseID}}
+	frame.parentValidated = true
+	if _, exists := e.sessions[frame.SessionID]; !exists && len(e.sessions) >= 1024 {
+		oldest := ""
+		for id, cached := range e.sessions {
+			if oldest == "" || cached.UpdatedAt.Before(e.sessions[oldest].UpdatedAt) {
+				oldest = id
+			}
+		}
+		delete(e.sessions, oldest)
+	}
+	session.UpdatedAt = time.Now().UTC()
+	session.Dirty = true
+	e.sessions[frame.SessionID] = session
 	if err := e.saveLocked(); err != nil {
 		e.fatal = err
 		e.mu.Unlock()
@@ -331,7 +445,10 @@ func (e *Executor) accept(ctx context.Context, frame Frame, send func(Frame) err
 		}
 		e.mu.Lock()
 		defer e.mu.Unlock()
-		e.records[frame.ResponseID] = executionRecord{Result: result}
+		e.records[frame.ResponseID] = executionRecord{InstanceID: e.instance, Result: result}
+		if result.Type == "response.completed" {
+			e.sessions[frame.SessionID] = executionSession{Tip: frame.ResponseID, UpdatedAt: time.Now().UTC()}
+		}
 		e.activeID = ""
 		e.cancel = nil
 		e.fatal = e.saveLocked()

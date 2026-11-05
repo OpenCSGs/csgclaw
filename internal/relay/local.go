@@ -35,6 +35,12 @@ func (e *LocalExecutor) Ready(ctx context.Context) bool {
 
 func (e *LocalExecutor) Execute(ctx context.Context, frame Frame) Frame {
 	result := Frame{Type: "response.failed", ResponseID: frame.ResponseID, Sequence: 1}
+	// The executor journal checks the parent against the durable local history
+	// tip before dispatch. Direct handlers must not silently ignore a parent.
+	if frame.PreviousResponseID != "" && !frame.parentValidated {
+		result.Error = &ProtocolError{Code: "relay_branch_unsupported", Message: "continuation parent has not been reconciled with local history"}
+		return result
+	}
 	text, err := InputText(frame.Input)
 	if err != nil {
 		result.Error = &ProtocolError{Code: "invalid_request", Message: err.Error()}
