@@ -20,6 +20,7 @@ import (
 	"csgclaw/internal/activity"
 	"csgclaw/internal/agentengine/contract"
 	"csgclaw/internal/agentengine/interactionstate"
+	"csgclaw/internal/apitypes"
 	"csgclaw/internal/dshcli"
 	agentruntime "csgclaw/internal/runtime"
 	larkextension "csgclaw/internal/runtimeextension/larkcli"
@@ -1606,5 +1607,56 @@ func TestEnvironmentReplacesInheritedCallbackURL(t *testing.T) {
 	}
 	if len(callbacks) != 1 || callbacks[0] != "CSGCLAW_BASE_URL=http://127.0.0.1:19091" {
 		t.Fatalf("effective callback environment = %v", callbacks)
+	}
+}
+
+func TestWorkspaceAttachmentRemainsAvailableAcrossDSHTurns(t *testing.T) {
+	root := t.TempDir()
+	relative := ".csgclaw/attachments/sessions/session/batch/photo.png"
+	path := filepath.Join(root, filepath.FromSlash(relative))
+	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+		t.Fatal(err)
+	}
+	payload := []byte("image data")
+	if err := os.WriteFile(path, payload, 0600); err != nil {
+		t.Fatal(err)
+	}
+	input := []contract.InputPart{{Kind: contract.InputPartWorkspaceFile, WorkspaceFile: &contract.WorkspaceFile{Path: relative, Name: "photo.png", MIMEType: "image/png"}}}
+	for _, inline := range []bool{true, false} {
+		blocks, cleanup, turnErr := preparePromptInput(context.Background(), "turn", root, input, inline)
+		cleanup()
+		if turnErr != nil || len(blocks) == 0 || !strings.Contains(blocks[0].Text, relative) || strings.Contains(blocks[0].Text, root) {
+			t.Fatalf("inline=%t: blocks=%+v, error=%v", inline, blocks, turnErr)
+		}
+		if inline && (len(blocks) != 2 || blocks[1].Type != "image" || blocks[1].Data != base64.StdEncoding.EncodeToString(payload)) {
+			t.Fatalf("inline image blocks = %+v", blocks)
+		}
+		if !inline && len(blocks) != 1 {
+			t.Fatalf("text-only blocks = %+v", blocks)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(root, ".csgclaw", "engine-inputs")); !os.IsNotExist(err) {
+		t.Fatalf("temporary input directory: %v", err)
+	}
+}
+
+func TestOversizedEditedWorkspaceImageUsesPath(t *testing.T) {
+	root := t.TempDir()
+	f, err := os.Create(filepath.Join(root, "edited.png"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Truncate(apitypes.MaxAttachmentFileBytes + 1); err != nil {
+		f.Close()
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+	input := []contract.InputPart{{Kind: contract.InputPartWorkspaceFile, WorkspaceFile: &contract.WorkspaceFile{Path: "edited.png", Name: "edited.png", MIMEType: "image/png"}}}
+	blocks, cleanup, turnErr := preparePromptInput(context.Background(), "turn", root, input, true)
+	defer cleanup()
+	if turnErr != nil || len(blocks) != 1 || blocks[0].Type != "text" || !strings.Contains(blocks[0].Text, "edited.png") {
+		t.Fatalf("oversized edited image blocks = %+v, error = %v", blocks, turnErr)
 	}
 }

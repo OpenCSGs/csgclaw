@@ -2,9 +2,11 @@ package im
 
 import (
 	"bytes"
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"crypto/subtle"
+	"csgclaw/internal/apitypes"
 	"csgclaw/internal/diagnostics"
 	"encoding/base64"
 	"encoding/hex"
@@ -33,7 +35,7 @@ const (
 	attachmentKindFile               = "file"
 	attachmentKindImage              = "image"
 	MaxAttachmentsPerMessage         = 10
-	MaxAttachmentFileBytes           = 1024 * 1024 * 1024
+	MaxAttachmentFileBytes           = apitypes.MaxAttachmentFileBytes
 	MaxAttachmentMessageBytes  int64 = 2 * 1024 * 1024 * 1024
 	maxSafeAttachmentNameBytes       = 160
 )
@@ -69,11 +71,12 @@ type attachmentObject struct {
 }
 
 type AttachmentFile struct {
-	Attachment    MessageAttachment
-	Path          string
-	SafeName      string
-	MediaType     string
-	DownloadToken string
+	Attachment       MessageAttachment
+	Path             string
+	SafeName         string
+	MediaType        string
+	DownloadToken    string
+	sessionWorkspace *sessionWorkspaceSource
 }
 
 // Prepared files live outside the object/blob directories so a concurrent
@@ -137,13 +140,13 @@ func (s *Service) prepareMessageAttachments(uploads []MessageAttachmentUpload, s
 		}
 		sources = append(sources, source)
 	}
-	return roomAttachmentStore(s.statePath).prepare(sources)
+	return roomAttachmentStore(s.statePath).prepare(context.Background(), sources)
 }
 
-func (store attachmentStore) prepare(sources []AttachmentSource) ([]preparedAttachment, error) {
+func (store attachmentStore) prepare(ctx context.Context, sources []AttachmentSource) ([]preparedAttachment, error) {
 	attachments := make([]preparedAttachment, 0, len(sources))
 	for _, source := range sources {
-		att, err := store.prepareAttachment(source)
+		att, err := store.prepareAttachment(ctx, source)
 		if err != nil {
 			discardPreparedAttachments(attachments)
 			return nil, err
@@ -178,7 +181,7 @@ func (store attachmentStore) commit(roomID, messageID, senderID string, files []
 	return attachments, nil
 }
 
-func (store attachmentStore) prepareAttachment(source AttachmentSource) (preparedAttachment, error) {
+func (store attachmentStore) prepareAttachment(ctx context.Context, source AttachmentSource) (preparedAttachment, error) {
 	originalName, err := ValidateAttachmentName(source.Name)
 	if err != nil {
 		return preparedAttachment{}, err
@@ -202,12 +205,16 @@ func (store attachmentStore) prepareAttachment(source AttachmentSource) (prepare
 		}
 	}()
 	hash := sha256.New()
-	written, err := io.CopyN(io.MultiWriter(staged, hash), source.Reader, source.SizeBytes)
+	reader := attachmentReader(ctx, source.Reader)
+	written, err := io.CopyN(io.MultiWriter(staged, hash), reader, source.SizeBytes)
 	if err != nil {
 		return preparedAttachment{}, fmt.Errorf("read attachment: %w", err)
 	}
 	var extra [1]byte
-	n, err := io.ReadFull(source.Reader, extra[:])
+	n, err := io.ReadFull(reader, extra[:])
+	if ctx.Err() != nil {
+		return preparedAttachment{}, ctx.Err()
+	}
 	if n != 0 || err != io.EOF || written != source.SizeBytes {
 		return preparedAttachment{}, fmt.Errorf("attachment size changed")
 	}
@@ -240,7 +247,7 @@ func (store attachmentStore) prepareAttachment(source AttachmentSource) (prepare
 	if err := staged.Close(); err != nil {
 		return preparedAttachment{}, err
 	}
-	corruptBlob, err := inspectExistingAttachmentBlob(store.blobPath(sha), sha, written)
+	corruptBlob, err := inspectExistingAttachmentBlob(ctx, store.blobPath(sha), sha, written)
 	if err != nil {
 		return preparedAttachment{}, err
 	}
@@ -256,7 +263,7 @@ func (store attachmentStore) prepareAttachment(source AttachmentSource) (prepare
 
 // Blob contents are immutable once installed. Detect pre-existing damage outside
 // the IM lock, while allowing another pending upload to install the same hash.
-func inspectExistingAttachmentBlob(path, sha string, size int64) (os.FileInfo, error) {
+func inspectExistingAttachmentBlob(ctx context.Context, path, sha string, size int64) (os.FileInfo, error) {
 	file, err := os.Open(path)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil, nil
@@ -273,7 +280,7 @@ func inspectExistingAttachmentBlob(path, sha string, size int64) (os.FileInfo, e
 		return info, nil
 	}
 	hash := sha256.New()
-	if _, err := io.Copy(hash, file); err != nil {
+	if _, err := io.Copy(hash, attachmentReader(ctx, file)); err != nil {
 		return nil, err
 	}
 	if hex.EncodeToString(hash.Sum(nil)) != sha {

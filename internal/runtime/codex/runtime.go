@@ -384,6 +384,17 @@ func (r *Runtime) WorkspaceDir(runtimeID string) (string, error) {
 	return workspace, nil
 }
 
+func (r *Runtime) RuntimeDir(runtimeID string) (string, error) {
+	session, err := r.SessionManager().LiveSession(SessionHandle{RuntimeID: strings.TrimSpace(runtimeID)})
+	if err != nil {
+		return "", err
+	}
+	if session.RuntimeDir == "" {
+		return "", fmt.Errorf("codex runtime directory is unavailable")
+	}
+	return session.RuntimeDir, nil
+}
+
 func (r *Runtime) Subscribe(runtimeID string) (<-chan SessionEvent, func()) {
 	subscriber, ok := r.deps.EventSink.(SessionEventSubscriber)
 	if !ok || subscriber == nil {

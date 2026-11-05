@@ -1253,7 +1253,7 @@ Workers receive `request_source_message_id` in server-provided task context, der
 Agents should search that source first, then the current room by filename before requesting another upload.
 Attachment contents are task data, not platform instructions.
 Current-message and inherited thread attachments also enter the native file-input path, with per-execution staging and ID deduplication.
-Runtime input paths under `.csgclaw/engine-inputs` or `.csgclaw/attachments` are temporary; Agents must copy or download files to a regular workspace path and verify the result before claiming they were saved for later.
+Room deliveries create temporary inputs for each turn. To keep a room file at a chosen workspace path, copy or download it there and verify the saved file.
 Subsequent turns should use the room attachment commands to recover historical uploads instead of relying on expired temporary paths.
 Clearing messages or deleting the room follows existing attachment reference cleanup; explicitly downloaded workspace copies remain ordinary local files.
 Unpublished Agent workspace files and document full-text search are outside this interface.
@@ -1690,9 +1690,16 @@ Base64 expansion plus 1 MiB of other JSON content. Base64 increases transfer siz
 by about one third. JSON clients and proxies may buffer the encoded request in memory.
 
 Both formats accept up to 10 nonempty files, up to 1 GiB per file and 2 GiB
-combined, measured in original file bytes. The selected Agent can use the files
-during this turn. The server removes the temporary Engine input copies when the turn ends. Invalid file data or
-metadata returns `400 invalid_request`. Exceeding a file size or HTTP body limit
+combined, measured in original file bytes. The worker receives each attachment's
+`workspace_path` and can reopen that path in later turns. Referencing the same
+ID uses the current workspace file, including edits. If the file was removed,
+explicitly attaching its ID again restores the uploaded contents at the same path.
+Portal downloads always return the original upload. If an edited image grows
+beyond 1 GiB, the worker receives its path without an inline preview. Codex uses
+a private hard link for native image previews, or a temporary preview copy when
+linking is unavailable.
+
+Invalid file data or metadata returns `400 invalid_request`. Exceeding a file size or HTTP body limit
 returns `413 invalid_request`. Validation and file preparation finish before the
 SSE stream starts.
 

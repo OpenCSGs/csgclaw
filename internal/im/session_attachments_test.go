@@ -19,7 +19,7 @@ func sessionAttachmentSource(name, content string) AttachmentSource {
 func TestSessionAttachmentFileChecksOwnershipAndReadsSnapshot(t *testing.T) {
 	s, room := newAttachmentTestService(t)
 	workspace := t.TempDir()
-	stored, err := s.StoreSessionResponseAttachments("worker", "session", "response", workspace, []AttachmentSource{sessionAttachmentSource("input.txt", "original")})
+	stored, err := s.StoreSessionResponseAttachments(t.Context(), "worker", "session", "response", workspace, []AttachmentSource{sessionAttachmentSource("input.txt", "original")})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -88,7 +88,7 @@ func TestSessionResponseAttachmentsRetainDownloadsAcrossRestart(t *testing.T) {
 		files = append(files, sessionAttachmentSource(fmt.Sprintf("document-%d.txt", i), "contents"))
 	}
 	workspace := filepath.Join(t.TempDir(), "workspace")
-	attachments, err := s.StoreSessionResponseAttachments("worker", "session", "response", workspace, files)
+	attachments, err := s.StoreSessionResponseAttachments(t.Context(), "worker", "session", "response", workspace, files)
 	if err != nil || len(attachments) != len(files) {
 		t.Fatalf("stored %d attachments: %v", len(attachments), err)
 	}
@@ -161,7 +161,7 @@ func TestSessionAttachmentsSurviveRoomAssetCleanup(t *testing.T) {
 		t.Fatal(err)
 	}
 	workspace := t.TempDir()
-	stored, err := s.StoreSessionResponseAttachments("worker", "session", "response", workspace, []AttachmentSource{
+	stored, err := s.StoreSessionResponseAttachments(t.Context(), "worker", "session", "response", workspace, []AttachmentSource{
 		sessionAttachmentSource("shared.txt", "shared"),
 		sessionAttachmentSource("session-only.txt", "session only"),
 	})
@@ -220,7 +220,7 @@ func TestSessionAttachmentsSurviveRoomAssetCleanup(t *testing.T) {
 func TestSessionResponseAttachmentCommitFailureReclaimsPartialBatch(t *testing.T) {
 	s, _ := newAttachmentTestService(t)
 	workspace := t.TempDir()
-	existing, err := s.StoreSessionResponseAttachments("worker", "session", "existing", workspace, []AttachmentSource{sessionAttachmentSource("kept.txt", "reused")})
+	existing, err := s.StoreSessionResponseAttachments(t.Context(), "worker", "session", "existing", workspace, []AttachmentSource{sessionAttachmentSource("kept.txt", "reused")})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -230,7 +230,7 @@ func TestSessionResponseAttachmentCommitFailureReclaimsPartialBatch(t *testing.T
 	if err := os.MkdirAll(broken, 0700); err != nil {
 		t.Fatal(err)
 	}
-	attachments, err := s.StoreSessionResponseAttachments("worker", "session", "response", workspace, []AttachmentSource{
+	attachments, err := s.StoreSessionResponseAttachments(t.Context(), "worker", "session", "response", workspace, []AttachmentSource{
 		sessionAttachmentSource("partial.txt", "partial"),
 		sessionAttachmentSource("duplicate.txt", "reused"),
 		sessionAttachmentSource("broken.txt", "broken"),
@@ -272,7 +272,7 @@ func TestSessionResponseAttachmentCommitFailureReclaimsPartialBatch(t *testing.T
 func TestSessionAttachmentCollectionRemovesCorruptOrphans(t *testing.T) {
 	s, _ := newAttachmentTestService(t)
 	state := s.Bootstrap()
-	stored, err := s.StoreSessionResponseAttachments("worker", "session", "response", t.TempDir(), []AttachmentSource{sessionAttachmentSource("live.txt", "live")})
+	stored, err := s.StoreSessionResponseAttachments(t.Context(), "worker", "session", "response", t.TempDir(), []AttachmentSource{sessionAttachmentSource("live.txt", "live")})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -312,7 +312,7 @@ func TestSessionAttachmentRejectsWorkspaceEscape(t *testing.T) {
 	if err := os.Symlink(outside, filepath.Join(workspace, ".csgclaw")); err != nil {
 		t.Skipf("symlinks unavailable: %v", err)
 	}
-	stored, err := s.StoreSessionResponseAttachments("worker", "session", "response", workspace, []AttachmentSource{sessionAttachmentSource("report.txt", "bytes")})
+	stored, err := s.StoreSessionResponseAttachments(t.Context(), "worker", "session", "response", workspace, []AttachmentSource{sessionAttachmentSource("report.txt", "bytes")})
 	if err == nil || len(stored) != 0 {
 		t.Fatalf("expected unsafe directory rejection, got %d files, error=%v", len(stored), err)
 	}
@@ -335,7 +335,7 @@ func TestConcurrentSessionAttachmentsWithSameFilename(t *testing.T) {
 	for i := range count {
 		go func() {
 			content := fmt.Sprintf("content %d", i)
-			files, err := s.StoreSessionResponseAttachments("worker", "session", "response", workspace, []AttachmentSource{sessionAttachmentSource("report.txt", content)})
+			files, err := s.StoreSessionResponseAttachments(t.Context(), "worker", "session", "response", workspace, []AttachmentSource{sessionAttachmentSource("report.txt", content)})
 			results <- publication{content, files, err}
 		}()
 	}

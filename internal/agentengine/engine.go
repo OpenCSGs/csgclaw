@@ -146,7 +146,7 @@ func (c *conversations) Run(ctx context.Context, request TurnRequest, sink Event
 	if request.Interaction != InteractionResolve && request.Interaction != InteractionReject && request.Interaction != InteractionSkipUserInput {
 		return failedResult(ErrorInvalidRequest, fmt.Sprintf("unsupported interaction policy %q", request.Interaction))
 	}
-	if err := validateInput(request.Input); err != nil {
+	if err := contract.ValidateInput(request.Input); err != nil {
 		return TurnResult{Status: TurnFailed, Error: err}
 	}
 	if err := ctx.Err(); err != nil {
@@ -728,13 +728,7 @@ func cloneTurnRequest(input TurnRequest) TurnRequest {
 		task := contract.CloneVideoGenerationTask(*input.VideoGeneration)
 		input.VideoGeneration = &task
 	}
-	input.Input = append([]InputPart(nil), input.Input...)
-	for index := range input.Input {
-		if input.Input[index].File != nil {
-			fileCopy := *input.Input[index].File
-			input.Input[index].File = &fileCopy
-		}
-	}
+	input.Input = contract.CloneInput(input.Input)
 	return input
 }
 
@@ -819,27 +813,6 @@ func normalizedInteraction(policy InteractionPolicy) InteractionPolicy {
 		return InteractionResolve
 	}
 	return InteractionPolicy(strings.TrimSpace(strings.ToLower(string(policy))))
-}
-
-func validateInput(input []InputPart) *TurnError {
-	for _, part := range input {
-		switch part.Kind {
-		case InputPartText:
-			if part.File != nil || strings.TrimSpace(part.Text) == "" {
-				return &TurnError{Code: ErrorInvalidRequest, Message: "text input must contain only non-empty text"}
-			}
-		case InputPartFile:
-			if part.File == nil || strings.TrimSpace(part.Text) != "" {
-				return &TurnError{Code: ErrorInvalidRequest, Message: "file input must include only a file"}
-			}
-			if strings.TrimSpace(part.File.ID) == "" {
-				return &TurnError{Code: ErrorInvalidRequest, Message: "file ID is required"}
-			}
-		default:
-			return &TurnError{Code: ErrorInvalidRequest, Message: fmt.Sprintf("unsupported input kind %q", part.Kind)}
-		}
-	}
-	return nil
 }
 
 func failedResult(code ErrorCode, message string) TurnResult {

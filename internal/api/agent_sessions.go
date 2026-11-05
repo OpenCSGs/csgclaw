@@ -131,20 +131,10 @@ func (h *Handler) createAgentSessionResponse(w http.ResponseWriter, r *http.Requ
 	if !ok {
 		return
 	}
-	var existing []im.MessageAttachment
+	var references []im.AttachmentFile
 	if len(input.attachmentIDs) > 0 {
-		if !h.authorizeSessionFiles(w, r) {
-			return
-		}
-		references, attachments, err := h.sessionInputReferences(selected.ID, sessionID, input.attachmentIDs)
-		if err != nil {
-			writeAgentSessionError(w, http.StatusNotFound, "attachment_not_found", "session attachment not found", "attachment_ids")
-			return
-		}
-		existing = attachments
-		input.Files = append(references, input.Files...)
-		if err := input.validateFileLimits(); err != nil {
-			writeSessionInputError(w, err)
+		references, ok = h.sessionInputReferences(w, r, selected.ID, sessionID, input)
+		if !ok {
 			return
 		}
 	}
@@ -194,23 +184,16 @@ func (h *Handler) createAgentSessionResponse(w http.ResponseWriter, r *http.Requ
 	h.addSessionTurn(turnKey, turn)
 	defer h.removeSessionTurn(turnKey, turn.turnID)
 
-	conversation := h.agentEngine.Conversations(selected.ID)
-	fileStore := conversation.Files()
-	prepared, cleanup, err := input.prepare(runCtx, fileStore)
-	defer cleanup()
-	// The engine now owns its input copies. Release spooled uploads before the turn runs.
-	cleanupMessagePayload(r)
-	r.MultipartForm = nil
+	existing, err := h.restoreSessionWorkspaceFiles(runCtx, selected, references)
 	if err != nil {
-		if agentengine.ErrorCodeOf(err) == agentengine.ErrorInvalidRequest {
-			writeAgentSessionError(w, http.StatusBadRequest, "invalid_request", err.Error(), "input")
-		} else {
-			writeAgentSessionError(w, http.StatusServiceUnavailable, "file_unavailable", "input file could not be prepared", "input")
-		}
+		slog.Warn("restore session workspace attachment failed", "response_id", responseID, "error", err)
+		writeAgentSessionError(w, http.StatusServiceUnavailable, "attachment_unavailable", "session workspace file could not be prepared", "attachment_ids")
 		return
 	}
-
-	newUploads, err := h.storeSessionFiles(runCtx, fileStore, selected, sessionID, responseID, prepared.files[len(existing):])
+	conversation := h.agentEngine.Conversations(selected.ID)
+	newUploads, err := h.storeSessionUploads(runCtx, selected, sessionID, responseID, input.Files)
+	cleanupMessagePayload(r)
+	r.MultipartForm = nil
 	if err != nil {
 		slog.Warn("store session input attachments failed", "response_id", response.ID, "error", err)
 		writeAgentSessionError(w, http.StatusServiceUnavailable, "attachment_unavailable", "input attachments could not be saved", "input")
@@ -250,7 +233,7 @@ func (h *Handler) createAgentSessionResponse(w http.ResponseWriter, r *http.Requ
 		ConversationKey: agentengine.ConversationKey(binding.ConversationKey),
 		Admission:       agentengine.AdmissionRejectIfBusy,
 		Interaction:     agentengine.InteractionReject,
-		Input:           prepared.parts,
+		Input:           sessionTurnInput(input.Text, response.InputAttachments),
 	}, sink)
 	if result.Status != agentengine.TurnSucceeded {
 		if errors.Is(r.Context().Err(), context.Canceled) {
@@ -264,7 +247,7 @@ func (h *Handler) createAgentSessionResponse(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	outputAttachments, err := h.storeSessionFiles(runCtx, fileStore, selected, sessionID, responseID, result.Files)
+	outputAttachments, err := h.storeSessionOutputFiles(runCtx, conversation, selected, sessionID, responseID, result.Files)
 	if err != nil {
 		slog.Warn("store session response attachments failed", "response_id", response.ID, "error", err)
 		const message = "session attachments could not be saved"
@@ -484,7 +467,7 @@ func (request *agentSessionResponseRequest) parseInput(uploads []agentSessionInp
 	if nonFileBytes > agentSessionResponseBodyLimit {
 		return agentSessionInput{}, false, fmt.Errorf("request excluding Base64 file data must be at most %d bytes", agentSessionResponseBodyLimit)
 	}
-	if err := input.validateFileLimits(); err != nil {
+	if err := input.validateFileLimits(nil); err != nil {
 		return agentSessionInput{}, false, err
 	}
 	if len(input.attachmentIDs) > 0 {

@@ -12,6 +12,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"csgclaw/internal/agentengine/contract"
 )
 
 func TestFileInterfaceMapsToHTTPContentEndpoint(t *testing.T) {
@@ -77,5 +79,20 @@ func TestAgentEngineWireTypesUseStableJSONShapes(t *testing.T) {
 		if bytes.Contains(encoded, []byte("snapshot")) || bytes.Contains(encoded, []byte("SourcePath")) || bytes.Contains(encoded, []byte("source_path")) {
 			t.Fatalf("%T leaked implementation detail: %s", value, encoded)
 		}
+	}
+}
+
+func TestWireInputCannotSelectWorkspaceFiles(t *testing.T) {
+	var request TurnRequest
+	raw := `{"input":[{"kind":"workspace_file","workspace_file":{"Path":"private","Name":"private"},"WorkspaceFile":{"Path":"private","Name":"private"}}]}`
+	if err := json.Unmarshal([]byte(raw), &request); err != nil {
+		t.Fatal(err)
+	}
+	if len(request.Input) != 1 || request.Input[0].WorkspaceFile != nil {
+		t.Fatalf("wire input = %+v", request.Input)
+	}
+	validated := contract.ValidateInput(request.Input)
+	if validated == nil || validated.Code != ErrorInvalidRequest {
+		t.Fatalf("validation = %v", validated)
 	}
 }

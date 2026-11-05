@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log/slog"
 	"mime"
 	"mime/multipart"
 	"net/http"
@@ -29,7 +28,6 @@ type agentSessionInputFile struct {
 	Name         string
 	MediaType    string
 	SizeBytes    int64
-	sha256       string
 	encodedBytes int
 	open         func() (io.ReadCloser, error)
 }
@@ -38,6 +36,9 @@ func parseAgentSessionFile(name, data string) (agentSessionInputFile, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
 		return agentSessionInputFile{}, fmt.Errorf("input_file filename is required")
+	}
+	if _, err := im.ValidateAttachmentName(name); err != nil {
+		return agentSessionInputFile{}, err
 	}
 	value, ok := strings.CutPrefix(data, "data:")
 	header, encoded, found := strings.Cut(value, ",")
@@ -153,16 +154,22 @@ func sessionMultipartFiles(form *multipart.Form, field string) ([]agentSessionIn
 	return files, nil
 }
 
-func (input agentSessionInput) validateFileLimits() error {
-	if len(input.Files) > im.MaxAttachmentsPerMessage {
+func (input agentSessionInput) validateFileLimits(existing []im.AttachmentFile) error {
+	if len(input.Files)+len(existing) > im.MaxAttachmentsPerMessage {
 		return fmt.Errorf("too many input files: max %d", im.MaxAttachmentsPerMessage)
 	}
-	var total int64
+	var total, largest int64
+	for _, file := range existing {
+		size := file.Attachment.SizeBytes
+		largest = max(largest, size)
+		total += size
+	}
 	for _, file := range input.Files {
-		if file.SizeBytes > im.MaxAttachmentFileBytes {
-			return fmt.Errorf("%w: input_file exceeds %d bytes", errAttachmentPayloadTooLarge, im.MaxAttachmentFileBytes)
-		}
+		largest = max(largest, file.SizeBytes)
 		total += file.SizeBytes
+	}
+	if largest > im.MaxAttachmentFileBytes {
+		return fmt.Errorf("%w: input_file exceeds %d bytes", errAttachmentPayloadTooLarge, im.MaxAttachmentFileBytes)
 	}
 	if total > im.MaxAttachmentMessageBytes {
 		return fmt.Errorf("%w: input files exceed %d bytes per request", errAttachmentPayloadTooLarge, im.MaxAttachmentMessageBytes)
@@ -170,58 +177,52 @@ func (input agentSessionInput) validateFileLimits() error {
 	return nil
 }
 
-type preparedSessionInput struct {
-	parts []agentengine.InputPart
-	files []agentengine.OutputFile
+func sessionTurnInput(text string, attachments []im.MessageAttachment) []agentengine.InputPart {
+	parts := make([]agentengine.InputPart, 0, len(attachments)+1)
+	if text != "" {
+		parts = append(parts, agentengine.InputPart{Kind: agentengine.InputPartText, Text: text})
+	}
+	for _, att := range attachments {
+		parts = append(parts, agentengine.InputPart{
+			Kind:          agentengine.InputPartWorkspaceFile,
+			WorkspaceFile: &agentengine.WorkspaceFile{Path: att.WorkspacePath, Name: att.Name, MIMEType: att.MediaType},
+		})
+	}
+	return parts
 }
 
-func (input agentSessionInput) prepare(ctx context.Context, files agentengine.FileInterface) (preparedSessionInput, func(), error) {
-	var prepared preparedSessionInput
-	cleanup := func() {
-		for _, file := range prepared.files {
-			if err := files.Delete(context.Background(), file.ID); err != nil {
-				slog.Warn("delete session input file failed", "file_id", file.ID, "error", err)
-			}
-		}
+func (h *Handler) storeSessionUploads(ctx context.Context, agent agentengine.Agent, sessionID, batchID string, files []agentSessionInputFile) ([]im.MessageAttachment, error) {
+	if len(files) == 0 {
+		return nil, nil
 	}
-	prepared.parts = make([]agentengine.InputPart, 0, len(input.Files)+1)
-	if input.Text != "" {
-		prepared.parts = append(prepared.parts, agentengine.InputPart{Kind: agentengine.InputPartText, Text: input.Text})
-	}
-	for _, file := range input.Files {
+	sources := make([]im.AttachmentSource, 0, len(files))
+	for _, file := range files {
 		reader, err := file.open()
 		if err != nil {
-			return prepared, cleanup, err
+			return nil, err
 		}
-		created, err := files.Create(ctx, agentengine.FileCreateRequest{
-			Name: file.Name, MIMEType: file.MediaType, SizeBytes: file.SizeBytes, SHA256: file.sha256,
-		}, reader)
-		_ = reader.Close()
-		if err != nil {
-			return prepared, cleanup, err
-		}
-		prepared.files = append(prepared.files, created)
-		prepared.parts = append(prepared.parts, agentengine.InputPart{Kind: agentengine.InputPartFile, File: &agentengine.InputFile{ID: created.ID}})
+		defer reader.Close()
+		sources = append(sources, im.AttachmentSource{Name: file.Name, MediaType: file.MediaType, SizeBytes: file.SizeBytes, Reader: reader})
 	}
-	return prepared, cleanup, nil
+	return h.saveSessionAttachmentSources(ctx, agent, sessionID, batchID, sources)
 }
 
-func (h *Handler) storeSessionFiles(
-	ctx context.Context, store agentengine.FileInterface, agent agentengine.Agent, sessionID, responseID string,
+func (h *Handler) storeSessionOutputFiles(
+	ctx context.Context, conversation agentengine.ConversationInterface, agent agentengine.Agent, sessionID, responseID string,
 	files []agentengine.OutputFile,
 ) ([]im.MessageAttachment, error) {
 	if len(files) == 0 {
 		return nil, nil
 	}
-	sources, rejected := delivery.OpenOutputFileSources(ctx, store, files)
+	sources, rejected := delivery.OpenOutputFileSources(ctx, conversation.Files(), files)
 	defer delivery.CloseOutputFileSources(sources)
 	if len(rejected) > 0 {
 		return nil, fmt.Errorf("session attachment content is unavailable")
 	}
-	return h.saveSessionAttachmentSources(agent, sessionID, responseID, sources)
+	return h.saveSessionAttachmentSources(ctx, agent, sessionID, responseID, sources)
 }
 
-func (h *Handler) saveSessionAttachmentSources(agent agentengine.Agent, sessionID, batchID string, sources []im.AttachmentSource) ([]im.MessageAttachment, error) {
+func (h *Handler) saveSessionAttachmentSources(ctx context.Context, agent agentengine.Agent, sessionID, batchID string, sources []im.AttachmentSource) ([]im.MessageAttachment, error) {
 	workspaceRoot, err := h.configuredAgentWorkspace(agent.ID, agent.Spec.Runtime.Options)
 	if err != nil {
 		return nil, err
@@ -230,5 +231,5 @@ func (h *Handler) saveSessionAttachmentSources(agent agentengine.Agent, sessionI
 	if err != nil {
 		return nil, err
 	}
-	return h.im.StoreSessionResponseAttachments(agent.ID, sessionID, batchID, workspaceRoot, sources)
+	return h.im.StoreSessionResponseAttachments(ctx, agent.ID, sessionID, batchID, workspaceRoot, sources)
 }

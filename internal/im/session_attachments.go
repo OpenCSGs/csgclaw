@@ -1,6 +1,7 @@
 package im
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/json"
 	"errors"
@@ -14,7 +15,10 @@ import (
 // StoreSessionResponseAttachments saves direct-session files in the worker's
 // workspace and publishes immutable downloads through the message attachment store.
 // The caller owns the source readers.
-func (s *Service) StoreSessionResponseAttachments(agentID, sessionID, responseID, workspaceRoot string, sources []AttachmentSource) (_ []MessageAttachment, err error) {
+func (s *Service) StoreSessionResponseAttachments(ctx context.Context, agentID, sessionID, responseID, workspaceRoot string, sources []AttachmentSource) (_ []MessageAttachment, err error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	if len(sources) == 0 {
 		return nil, nil
 	}
@@ -27,28 +31,16 @@ func (s *Service) StoreSessionResponseAttachments(agentID, sessionID, responseID
 	if err := s.ensureSessionAttachmentStore(); err != nil {
 		return nil, err
 	}
-	if err := os.MkdirAll(workspaceRoot, 0700); err != nil {
-		return nil, fmt.Errorf("create agent workspace: %w", err)
-	}
-	root, err := os.OpenRoot(workspaceRoot)
-	if err != nil {
-		return nil, err
-	}
-	defer root.Close()
-
 	// Keep both the stable ID and its contents outside the room collector,
 	// including the collector shipped by versions that predate direct sessions.
 	store := sessionAttachmentStore(s.statePath)
-	files, err := store.prepare(sources)
+	files, err := store.prepare(ctx, sources)
 	if err != nil {
 		return nil, err
 	}
 	defer discardPreparedAttachments(files)
 	relativeDir := filepath.Join(".csgclaw", "attachments", "sessions", sessionID, responseID)
-	if err := root.MkdirAll(relativeDir, 0o700); err != nil {
-		return nil, fmt.Errorf("create workspace attachment directory: %w", err)
-	}
-	dir, err := root.OpenRoot(relativeDir)
+	dir, err := openSessionWorkspaceDir(workspaceRoot, relativeDir)
 	if err != nil {
 		return nil, fmt.Errorf("open workspace attachment directory: %w", err)
 	}
@@ -72,7 +64,7 @@ func (s *Service) StoreSessionResponseAttachments(agentID, sessionID, responseID
 		if err != nil {
 			return nil, err
 		}
-		writeErr := writeSessionWorkspaceFile(dir, name, source)
+		writeErr := writeSessionWorkspaceFile(dir, name, attachmentReader(ctx, source))
 		source.Close()
 		if writeErr != nil {
 			return nil, fmt.Errorf("write attachment workspace file: %w", writeErr)
@@ -84,6 +76,9 @@ func (s *Service) StoreSessionResponseAttachments(agentID, sessionID, responseID
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	attachments, err := store.commit("", responseID, agentID, files)
 	if err != nil {
 		return nil, errors.Join(err, store.collectSessionAttachments())
@@ -100,11 +95,13 @@ func (s *Service) StoreSessionResponseAttachments(agentID, sessionID, responseID
 	return attachments, nil
 }
 
+var ErrSessionAttachmentNotFound = errAttachmentNotFound
+
 // SessionAttachmentFile resolves an attachment ID against its original agent
 // and session before opening access to the immutable download.
 func (s *Service) SessionAttachmentFile(agentID, sessionID, id string) (AttachmentFile, error) {
 	agentID = strings.TrimSpace(agentID)
-	if s == nil || s.statePath == "" || agentID == "" || !isAttachmentPathSegment(sessionID) {
+	if s == nil || s.statePath == "" || agentID == "" || !isAttachmentPathSegment(sessionID) || !validAttachmentID(id) {
 		return AttachmentFile{}, errAttachmentNotFound
 	}
 	s.mu.RLock()
@@ -117,22 +114,40 @@ func (s *Service) SessionAttachmentFile(agentID, sessionID, id string) (Attachme
 	if object.RoomID != "" || object.CreatedBy != agentID || object.SessionID != sessionID {
 		return AttachmentFile{}, errAttachmentNotFound
 	}
-	return store.blobFile(object)
+	file, err := store.blobFile(object)
+	if err != nil {
+		return AttachmentFile{}, err
+	}
+	relative := filepath.Join(".csgclaw", "attachments", "sessions", object.SessionID, object.MessageID, id+"-"+object.SafeName)
+	if !isAttachmentPathSegment(object.MessageID) || !isAttachmentPathSegment(object.SafeName) || filepath.ToSlash(relative) != object.WorkspacePath {
+		return AttachmentFile{}, fmt.Errorf("invalid stored session attachment workspace path")
+	}
+	file.sessionWorkspace = &sessionWorkspaceSource{path: file.Path, relative: relative, sha: object.SHA256, size: object.SizeBytes}
+	return file, nil
 }
 
 // Hold the directory open across the copy, rename and any rollback so a
 // concurrent symlink replacement cannot redirect the publication.
 func writeSessionWorkspaceFile(dir *os.Root, name string, source io.Reader) error {
-	tempName := ".attachment-" + rand.Text()
-	tmp, err := dir.OpenFile(tempName, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+	tempName, err := stageSessionWorkspaceFile(dir, source)
 	if err != nil {
 		return err
 	}
 	defer dir.Remove(tempName)
-	if err := writeAndSyncAttachmentTemp(tmp, source, 0o600, nil); err != nil {
-		return err
-	}
 	return dir.Rename(tempName, name)
+}
+
+func stageSessionWorkspaceFile(dir *os.Root, source io.Reader) (string, error) {
+	tempName := ".attachment-" + rand.Text()
+	tmp, err := dir.OpenFile(tempName, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+	if err != nil {
+		return "", err
+	}
+	if err := writeAndSyncAttachmentTemp(tmp, source, 0o600, nil); err != nil {
+		_ = dir.Remove(tempName)
+		return "", err
+	}
+	return tempName, nil
 }
 
 func isAttachmentPathSegment(value string) bool {

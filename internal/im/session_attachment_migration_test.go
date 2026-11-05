@@ -18,7 +18,7 @@ func legacySessionBatch(t *testing.T, s *Service, contents ...string) ([]Message
 	for _, text := range contents {
 		sources = append(sources, sessionAttachmentSource("file.txt", text))
 	}
-	files, err := store.prepare(sources)
+	files, err := store.prepare(t.Context(), sources)
 	if err != nil {
 		t.Fatal(err)
 	}

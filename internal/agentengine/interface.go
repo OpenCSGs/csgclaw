@@ -41,6 +41,7 @@ type InteractionPolicy = contract.InteractionPolicy
 type InputPartKind = contract.InputPartKind
 type InputPart = contract.InputPart
 type InputFile = contract.InputFile
+type WorkspaceFile = contract.WorkspaceFile
 type TurnRequest = contract.TurnRequest
 type TurnEventKind = contract.TurnEventKind
 type TurnEvent = contract.TurnEvent
@@ -97,6 +98,7 @@ const (
 	InteractionSkipUserInput         = contract.InteractionSkipUserInput
 	InputPartText                    = contract.InputPartText
 	InputPartFile                    = contract.InputPartFile
+	InputPartWorkspaceFile           = contract.InputPartWorkspaceFile
 	TurnEventTextDelta               = contract.TurnEventTextDelta
 	TurnEventThoughtDelta            = contract.TurnEventThoughtDelta
 	TurnEventToolCallStart           = contract.TurnEventToolCallStart

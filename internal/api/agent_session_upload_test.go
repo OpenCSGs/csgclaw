@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"csgclaw/internal/agentengine"
+	agent "csgclaw/internal/agentengine/agents"
 	"csgclaw/internal/im"
 )
 
@@ -59,36 +60,26 @@ func TestAgentSessionUploadThenReference(t *testing.T) {
 		t.Fatalf("preview: HTTP %d, %q, image %dx%d, error %v", preview.StatusCode, preview.Header.Get("Content-Disposition"), att.Width, att.Height, err)
 	}
 
-	// Workers receive the immutable upload even if someone edits its workspace copy.
-	edited := []byte("edited in workspace")
 	local := filepath.Join(workspace, filepath.FromSlash(att.WorkspacePath))
-	if err := os.WriteFile(local, edited, 0600); err != nil {
-		t.Fatal(err)
-	}
+	const edited = "edited in workspace"
 	engine.run = func(ctx context.Context, agentID string, req agentengine.TurnRequest, _ agentengine.EventSink) agentengine.TurnResult {
-		var received int
-		for _, part := range req.Input {
-			if part.File == nil {
-				continue
-			}
-			received++
-			download, err := engine.Conversations(agentID).Files().Get(ctx, part.File.ID)
-			if err != nil {
-				t.Error(err)
-				continue
-			}
-			content, err := io.ReadAll(download.Content)
-			download.Content.Close()
-			if err != nil || !bytes.Equal(content, picture.Bytes()) {
-				t.Errorf("worker did not receive the original picture: %v", err)
-			}
+		edit := sessionTurnText(req) == "Edit the picture."
+		want := edited
+		if edit || sessionTurnText(req) == "Read the restored picture." {
+			want = picture.String()
 		}
-		if received != 1 {
-			t.Errorf("worker received %d files, want 1", received)
+		paths := checkSessionWorkerFiles(t, workspace, req, []sessionUploadFixture{{"picture.png", "image/png", want}})
+		if len(paths) != 1 || paths[0] != att.WorkspacePath {
+			t.Errorf("worker paths = %v, want %q", paths, att.WorkspacePath)
+		}
+		if edit {
+			if err := os.WriteFile(local, []byte(edited), 0600); err != nil {
+				t.Error(err)
+			}
 		}
 		return agentengine.TurnResult{Status: agentengine.TurnSucceeded, Output: "Done."}
 	}
-	for _, input := range []string{"Describe the picture.", ""} {
+	for _, input := range []string{"Edit the picture.", ""} {
 		payload := map[string]any{"attachment_ids": []string{att.ID}}
 		if input != "" {
 			payload["input"] = input
@@ -110,7 +101,7 @@ func TestAgentSessionUploadThenReference(t *testing.T) {
 	postSessionReferenceTest(t, server, sessionPath, bearer, map[string]any{"attachment_ids": tooMany}, http.StatusBadRequest)
 	if calls := engine.client.Calls(); len(calls) != 2 {
 		t.Fatalf("expected only the two valid turns, got %d", len(calls))
-	} else if sessionTurnText(calls[0].Request) != "Describe the picture." || sessionTurnText(calls[1].Request) != "" {
+	} else if sessionTurnText(calls[0].Request) != "Edit the picture." || sessionTurnText(calls[1].Request) != "" {
 		t.Errorf("unexpected prompts: %q, %q", sessionTurnText(calls[0].Request), sessionTurnText(calls[1].Request))
 	}
 	if err := filepath.WalkDir(workspace, func(path string, d fs.DirEntry, err error) error {
@@ -121,8 +112,54 @@ func TestAgentSessionUploadThenReference(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if got, err := os.ReadFile(local); err != nil || !bytes.Equal(got, edited) {
+	if got, err := os.ReadFile(local); err != nil || string(got) != edited {
 		t.Fatalf("reference changed the workspace copy: %q, %v", got, err)
+	}
+	status, original := sessionFileHTTP(t, server, http.MethodGet, att.DownloadURL, "", nil)
+	if status != http.StatusOK || !bytes.Equal(original, picture.Bytes()) {
+		t.Fatalf("download changed after editing the workspace file: HTTP %d", status)
+	}
+	if err := os.Remove(local); err != nil {
+		t.Fatal(err)
+	}
+	postSessionReferenceTest(t, server, sessionPath, bearer, map[string]any{"attachment_ids": []string{att.ID, "missing"}}, http.StatusNotFound)
+	if _, err := os.Stat(local); !os.IsNotExist(err) {
+		t.Fatalf("invalid reference batch restored a workspace file: %v", err)
+	}
+	postSessionReferenceTest(t, server, sessionPath, bearer, map[string]any{"input": "Read the restored picture.", "attachment_ids": []string{att.ID}}, http.StatusOK)
+	checkSessionDownload(t, server, workspace, att, "picture.png", "image/png", picture.Bytes())
+
+}
+
+func TestAgentSessionCanceledRequestDoesNotPublishUploads(t *testing.T) {
+	for _, endpoint := range []string{"responses", "attachments"} {
+		t.Run(endpoint, func(t *testing.T) {
+			engine := &fakeSessionEngine{}
+			srv, _, _, _ := newAgentSessionTestHandler(t, []agent.Agent{sessionCodexAgent("agent-alpha", "Alpha")}, engine, "")
+			srv.serverAccessToken = "test-server-token"
+			var payload []string
+			if endpoint == "responses" {
+				payload = []string{`{"input":"Read it"}`}
+			}
+			form := multipartSessionRequest(t, payload, sessionUploadFixture{"report.txt", "text/plain", "data"})
+			form.URL.Path = strings.TrimSuffix(multipartSessionPath, "responses") + endpoint
+			form.Header.Set("Authorization", "Bearer test-server-token")
+			ctx, cancel := context.WithCancel(form.Context())
+			cancel()
+			rec := httptest.NewRecorder()
+			srv.Routes().ServeHTTP(rec, form.WithContext(ctx))
+			if len(engine.client.Calls()) != 0 || rec.Code < 400 {
+				t.Fatalf("canceled upload: HTTP %d, turns %d", rec.Code, len(engine.client.Calls()))
+			}
+			if err := filepath.WalkDir(sessionTestWorkspace(t, srv), func(path string, entry fs.DirEntry, err error) error {
+				if err == nil && !entry.IsDir() {
+					return fmt.Errorf("canceled upload published %s", path)
+				}
+				return err
+			}); err != nil {
+				t.Fatal(err)
+			}
+		})
 	}
 }
 

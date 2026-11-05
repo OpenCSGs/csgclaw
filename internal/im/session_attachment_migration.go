@@ -1,6 +1,7 @@
 package im
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -81,7 +82,7 @@ func migrateLegacySessionFile(rooms, sessions attachmentStore, id string) error 
 	source := rooms.blobPath(sha)
 	// Preserve the room's immutable bytes when a room message shares this hash.
 	// A hard link also avoids copying a large file again on a migration retry.
-	if damaged, err := inspectExistingAttachmentBlob(source, sha, object.SizeBytes); err != nil {
+	if damaged, err := inspectExistingAttachmentBlob(context.Background(), source, sha, object.SizeBytes); err != nil {
 		return err
 	} else if damaged != nil {
 		return fmt.Errorf("invalid legacy attachment blob %s", sha)
@@ -91,7 +92,7 @@ func migrateLegacySessionFile(rooms, sessions attachmentStore, id string) error 
 		return err
 	}
 	if err := os.Link(source, dest); errors.Is(err, os.ErrExist) {
-		if damaged, err := inspectExistingAttachmentBlob(dest, sha, object.SizeBytes); err != nil {
+		if damaged, err := inspectExistingAttachmentBlob(context.Background(), dest, sha, object.SizeBytes); err != nil {
 			return err
 		} else if damaged != nil {
 			return fmt.Errorf("invalid session attachment blob %s", sha)

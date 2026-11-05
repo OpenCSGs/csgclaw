@@ -159,6 +159,9 @@ func (f *fakeConversationRuntime) ResetConversation(_ context.Context, _, conver
 	delete(f.conversations, conversationKey)
 	return nil
 }
+func (f *fakeConversationRuntime) RuntimeDir(string) (string, error) {
+	return filepath.Dir(f.workspace), nil
+}
 func (f *fakeConversationRuntime) WorkspaceDir(string) (string, error) {
 	return f.workspace, nil
 }
@@ -919,12 +922,17 @@ func TestCodexInputPreservesOrderedTextImageAndFileBlocks(t *testing.T) {
 	}}, runtimeImpl))
 	image := createEngineTestFile(t, engine, "agent-a", "image.png", "image/png", []byte("image"))
 	notes := createEngineTestFile(t, engine, "agent-a", "notes.txt", "text/plain", []byte("notes"))
+	saved := "session-document.pdf"
+	if err := os.WriteFile(filepath.Join(runtimeImpl.workspace, saved), []byte("document"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	result := engine.Conversations("agent-a").Run(context.Background(), TurnRequest{
 		ID: "caller-turn", ConversationKey: "conversation-1",
 		Input: []InputPart{
 			{Kind: InputPartText, Text: "before"},
 			{Kind: InputPartFile, File: &InputFile{ID: image.ID}},
 			{Kind: InputPartFile, File: &InputFile{ID: notes.ID}},
+			{Kind: InputPartWorkspaceFile, WorkspaceFile: &WorkspaceFile{Path: saved, Name: saved, MIMEType: "application/pdf"}},
 			{Kind: InputPartText, Text: "after"},
 		},
 	}, nil)
@@ -937,9 +945,10 @@ func TestCodexInputPreservesOrderedTextImageAndFileBlocks(t *testing.T) {
 		t.Fatalf("clientUserMessageId = %q", runtimeImpl.turnID)
 	}
 	blocks := runtimeImpl.promptBlocks
-	if len(blocks) != 4 || blocks[0].Text == nil || blocks[0].Text.Text != "before" ||
+	if len(blocks) != 5 || blocks[0].Text == nil || blocks[0].Text.Text != "before" ||
 		blocks[1].LocalImage == nil || blocks[2].Text == nil || !strings.Contains(blocks[2].Text.Text, "notes.txt") ||
-		blocks[3].Text == nil || blocks[3].Text.Text != "after" {
+		blocks[3].Text == nil || !strings.Contains(blocks[3].Text.Text, saved) ||
+		blocks[4].Text == nil || blocks[4].Text.Text != "after" {
 		t.Fatalf("prompt blocks = %#v", blocks)
 	}
 }

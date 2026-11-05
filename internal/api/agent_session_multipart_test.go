@@ -10,6 +10,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/textproto"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -77,7 +79,9 @@ func TestAgentSessionResponsesMultipartFiles(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			engine := &fakeSessionEngine{}
-			var ids []string
+			var paths []string
+			h, _, _, _ := newAgentSessionTestHandler(t, []agent.Agent{sessionCodexAgent("agent-alpha", "Alpha")}, engine, "")
+			workspace := sessionTestWorkspace(t, h)
 			engine.run = func(ctx context.Context, agentID string, req agentengine.TurnRequest, _ agentengine.EventSink) agentengine.TurnResult {
 				prompt := sessionTurnText(req)
 				if tc.stream && prompt != "" {
@@ -86,14 +90,13 @@ func TestAgentSessionResponsesMultipartFiles(t *testing.T) {
 				if !tc.stream && (!strings.Contains(prompt, "Read the PDF") || !strings.Contains(prompt, "from the portal")) {
 					t.Errorf("prompt = %q", prompt)
 				}
-				ids = checkSessionWorkerFiles(t, ctx, engine, agentID, req, files)
+				paths = checkSessionWorkerFiles(t, workspace, req, files)
 				return agentengine.TurnResult{Status: agentengine.TurnSucceeded, Output: "received files"}
 			}
-			h, _, _, _ := newAgentSessionTestHandler(t, []agent.Agent{sessionCodexAgent("agent-alpha", "Alpha")}, engine, "")
 			rec := httptest.NewRecorder()
 			h.Routes().ServeHTTP(rec, multipartSessionRequest(t, []string{tc.payload}, files...))
-			if rec.Code != http.StatusOK || len(ids) != len(files) {
-				t.Fatalf("status=%d, file IDs=%v, body=%s", rec.Code, ids, rec.Body)
+			if rec.Code != http.StatusOK || len(paths) != len(files) {
+				t.Fatalf("status=%d, paths=%v, body=%s", rec.Code, paths, rec.Body)
 			}
 			if tc.stream {
 				for _, want := range []string{"event: message_start", "received files", "event: message_stop"} {
@@ -110,39 +113,45 @@ func TestAgentSessionResponsesMultipartFiles(t *testing.T) {
 					t.Errorf("response = %+v", response)
 				}
 			}
-			assertSessionInputFilesDeleted(t, engine.Conversations("agent-alpha").Files(), ids)
 		})
 	}
 }
 
-func checkSessionWorkerFiles(t *testing.T, ctx context.Context, engine *fakeSessionEngine, agentID string, turn agentengine.TurnRequest, files []sessionUploadFixture) []string {
+func sessionTestWorkspace(t *testing.T, h *Handler) string {
 	t.Helper()
-	var ids []string
+	root, err := h.workspace.WorkspaceRootByID("agent-alpha")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return root
+}
+
+func checkSessionWorkerFiles(t *testing.T, workspace string, turn agentengine.TurnRequest, files []sessionUploadFixture) []string {
+	t.Helper()
+	var paths []string
 	for _, part := range turn.Input {
-		if part.Kind != agentengine.InputPartFile {
+		if part.Kind == agentengine.InputPartText {
 			continue
 		}
-		if part.File == nil || len(ids) >= len(files) {
+		if part.Kind != agentengine.InputPartWorkspaceFile || part.WorkspaceFile == nil || len(paths) >= len(files) {
 			t.Errorf("unexpected file input: %+v", part)
 			continue
 		}
-		want := files[len(ids)]
-		ids = append(ids, part.File.ID)
-		got, err := engine.Conversations(agentID).Files().Get(ctx, part.File.ID)
-		if err != nil {
-			t.Error(err)
+		got, want := part.WorkspaceFile, files[len(paths)]
+		paths = append(paths, got.Path)
+		if !filepath.IsLocal(filepath.FromSlash(got.Path)) {
+			t.Errorf("invalid workspace path: %q", got.Path)
 			continue
 		}
-		data, err := io.ReadAll(got.Content)
-		got.Content.Close()
-		if err != nil || string(data) != want.data || got.Metadata.Name != want.name || got.Metadata.MediaType != want.mediaType {
-			t.Errorf("file %q: metadata=%+v, bytes=%x, error=%v", want.name, got.Metadata, data, err)
+		data, err := os.ReadFile(filepath.Join(workspace, filepath.FromSlash(got.Path)))
+		if err != nil || string(data) != want.data || got.Name != want.name || got.MIMEType != want.mediaType {
+			t.Errorf("file %q: metadata=%+v, content matches=%t, error=%v", want.name, got, string(data) == want.data, err)
 		}
 	}
-	if len(ids) != len(files) {
-		t.Errorf("worker received %d files, want %d", len(ids), len(files))
+	if len(paths) != len(files) {
+		t.Errorf("worker received %d files, want %d", len(paths), len(files))
 	}
-	return ids
+	return paths
 }
 
 func TestAgentSessionResponsesMultipartInputFields(t *testing.T) {
@@ -159,14 +168,14 @@ func TestAgentSessionResponsesMultipartInputFields(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			engine := &fakeSessionEngine{}
+			server, workspace := sessionOutputTestServer(t, engine, "")
 			engine.run = func(ctx context.Context, agentID string, turn agentengine.TurnRequest, _ agentengine.EventSink) agentengine.TurnResult {
 				if prompt := sessionTurnText(turn); prompt != "Read the PDF." {
 					t.Errorf("worker prompt = %q", prompt)
 				}
-				checkSessionWorkerFiles(t, ctx, engine, agentID, turn, files)
+				checkSessionWorkerFiles(t, workspace, turn, files)
 				return agentengine.TurnResult{Status: agentengine.TurnSucceeded, Output: "Read."}
 			}
-			server, workspace := sessionOutputTestServer(t, engine, "")
 			form := sessionMultipartForm(t, map[string][]string{"input": {tc.input}, "stream": {fmt.Sprint(tc.stream)}}, map[string][]sessionUploadFixture{"file": files})
 			status, body := sessionFileHTTP(t, server, http.MethodPost, multipartSessionPath, form.Header.Get("Content-Type"), form.Body)
 			if status != http.StatusOK || len(engine.client.Calls()) != 1 {
@@ -211,15 +220,12 @@ func TestAgentSessionResponsesRejectsInvalidMultipart(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			engine := &fakeSessionEngine{}
-			h, _, bindings, _ := newAgentSessionTestHandler(t, []agent.Agent{sessionCodexAgent("agent-alpha", "Alpha")}, engine, "")
-			store := &recordingSessionInputFiles{FileInterface: engine.Conversations("agent-alpha").Files()}
-			h.SetAgentEngine(sessionFileRecordingEngine{Interface: engine, files: store}, bindings)
+			h, _, _, _ := newAgentSessionTestHandler(t, []agent.Agent{sessionCodexAgent("agent-alpha", "Alpha")}, engine, "")
 			rec := httptest.NewRecorder()
 			h.Routes().ServeHTTP(rec, multipartSessionRequest(t, tc.payloads, tc.files...))
 			if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "invalid_request") || len(engine.client.Calls()) != 0 {
 				t.Fatalf("status=%d, calls=%d, body=%s", rec.Code, len(engine.client.Calls()), rec.Body)
 			}
-			assertSessionInputFilesDeleted(t, store, store.created)
 		})
 	}
 }
@@ -274,23 +280,16 @@ func TestAgentSessionResponsesCleansMultipartFilesOnTurnFailure(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("TMPDIR", tmp)
 	payload := strings.Repeat("a", multipartAttachmentMemory+1)
-	var ids []string
 	engine := &fakeSessionEngine{run: func(_ context.Context, _ string, req agentengine.TurnRequest, _ agentengine.EventSink) agentengine.TurnResult {
-		for _, part := range req.Input {
-			if part.File != nil {
-				ids = append(ids, part.File.ID)
-			}
-		}
 		return agentengine.TurnResult{Status: agentengine.TurnFailed, Error: &agentengine.TurnError{Code: agentengine.ErrorRuntimeFailed, Message: "runtime failed"}}
 	}}
 	h, _, _, _ := newAgentSessionTestHandler(t, []agent.Agent{sessionCodexAgent("agent-alpha", "Alpha")}, engine, "")
 	req := streamedAttachmentRequest(t, multipartSessionPath, map[string]any{"stream": false}, strings.NewReader(payload), int64(len(payload)))
 	rec := httptest.NewRecorder()
 	h.Routes().ServeHTTP(rec, req)
-	if rec.Code != http.StatusServiceUnavailable || len(ids) != 1 {
-		t.Fatalf("status=%d, file IDs=%v, body=%s", rec.Code, ids, rec.Body)
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status=%d, body=%s", rec.Code, rec.Body)
 	}
-	assertSessionInputFilesDeleted(t, engine.Conversations("agent-alpha").Files(), ids)
 	assertNoMultipartStaging(t, tmp)
 }
 

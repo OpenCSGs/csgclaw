@@ -82,6 +82,8 @@ type Message struct {
 	Attachments     []MessageAttachment `json:"attachments,omitempty"`
 }
 
+const MaxAttachmentFileBytes = 1 << 30
+
 type MessageAttachment struct {
 	ID            string    `json:"id"`
 	Name          string    `json:"name"`

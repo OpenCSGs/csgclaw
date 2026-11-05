@@ -39,6 +39,7 @@ type ConversationBackend interface {
 	SubscribeSession(runtimeID, sessionID string) (<-chan activity.RuntimeEvent, func())
 	ResetConversation(ctx context.Context, runtimeID, conversationKey string) error
 	WorkspaceDir(runtimeID string) (string, error)
+	RuntimeDir(runtimeID string) (string, error)
 	PermissionBroker() PermissionBroker
 	UserInputBroker() UserInputBroker
 }
@@ -492,46 +493,65 @@ func runtimeEventPhase(event activity.RuntimeEvent) string {
 var safeInputNamePattern = regexp.MustCompile(`[^A-Za-z0-9._-]+`)
 
 func (a *ConversationAdapter) prepareInput(ctx context.Context, turnID contract.TurnID, input []contract.InputPart) ([]PromptContentBlock, func(), *contract.TurnError) {
-	needsFiles := false
+	needsWorkspace, needsCopies := false, false
 	for _, part := range input {
-		needsFiles = needsFiles || part.Kind == contract.InputPartFile
+		needsCopies = needsCopies || part.Kind == contract.InputPartFile
+		needsWorkspace = needsWorkspace || needsCopies || part.Kind == contract.InputPartWorkspaceFile
 	}
-	cleanup := func() {}
-	var turnDir string
+	var turnDir, workspace string
 	var workspaceRoot *os.Root
-	var workspace string
-	if needsFiles {
+	var previewDirs []string
+	cleanup := sync.OnceFunc(func() {
+		for _, dir := range previewDirs {
+			_ = os.RemoveAll(dir)
+		}
+		if workspaceRoot != nil {
+			if turnDir != "" {
+				_ = workspaceRoot.RemoveAll(turnDir)
+			}
+			_ = workspaceRoot.Close()
+		}
+	})
+	if needsWorkspace {
 		var err error
 		workspace, err = a.runtime.WorkspaceDir(a.runtimeID)
 		if err != nil {
 			return nil, cleanup, a.runtimeInputFileUnavailable("resolve_workspace", err)
 		}
+	}
+	if needsCopies {
+		var err error
 		workspaceRoot, err = os.OpenRoot(workspace)
 		if err != nil {
 			return nil, cleanup, a.runtimeInputFileUnavailable("open_workspace", err)
 		}
 		inputRoot := filepath.Join(".csgclaw", "engine-inputs")
 		if err := workspaceRoot.MkdirAll(inputRoot, 0o700); err != nil {
-			_ = workspaceRoot.Close()
+			cleanup()
 			return nil, cleanup, a.runtimeInputFileUnavailable("prepare_input_root", err)
 		}
 		turnDir, err = makeRootTempDir(workspaceRoot, inputRoot, safeInputName(string(turnID))+"-")
 		if err != nil {
-			_ = workspaceRoot.Close()
+			cleanup()
 			return nil, cleanup, a.runtimeInputFileUnavailable("prepare_turn_directory", err)
-		}
-		var cleanupOnce sync.Once
-		cleanup = func() {
-			cleanupOnce.Do(func() {
-				_ = workspaceRoot.RemoveAll(turnDir)
-				_ = workspaceRoot.Close()
-			})
 		}
 	}
 	blocks := make([]PromptContentBlock, 0, len(input))
 	for index, part := range input {
 		if part.Kind == contract.InputPartText {
 			blocks = append(blocks, TextBlock(part.Text))
+			continue
+		}
+		if part.Kind == contract.InputPartWorkspaceFile {
+			attachments, previewDir, err := a.workspacePromptBlocks(ctx, workspace, part.WorkspaceFile)
+			if err != nil {
+				cleanup()
+				return nil, func() {}, a.runtimeInputFileUnavailable("workspace_input", err)
+			}
+			if previewDir != "" {
+				previewDirs = append(previewDirs, previewDir)
+			}
+			blocks = append(blocks, attachments...)
 			continue
 		}
 		if part.File == nil || part.File.Resolved == nil {
