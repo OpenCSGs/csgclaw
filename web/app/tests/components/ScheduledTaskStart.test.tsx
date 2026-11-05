@@ -43,3 +43,29 @@ it("does not select mentions while composing with an IME", () => {
   fireEvent.keyDown(editor, { key: "Enter", isComposing: true });
   expect(editor).toHaveValue("@");
 });
+
+it("lists every executor and keeps keyboard selection visible beyond the first eight", async () => {
+  const user = userEvent.setup();
+  const executors = [
+    agents[0],
+    ...Array.from({ length: 12 }, (_, index) => ({
+      id: `worker-${index}`,
+      name: `Worker ${String(index + 1).padStart(2, "0")}`,
+      role: "worker",
+    })),
+  ];
+  const scroll = vi.spyOn(HTMLElement.prototype, "scrollIntoView");
+  render(<ScheduledTaskStart agents={executors} t={t} focusToken={0} />);
+  const editor = screen.getByRole("textbox");
+  await user.type(editor, "@");
+  expect(screen.getAllByRole("option")).toHaveLength(executors.length);
+  await user.keyboard("{ArrowDown>12/}");
+  const last = screen.getByRole("option", { name: "Worker 12" });
+  expect(last).toHaveAttribute("aria-selected", "true");
+  expect(editor).toHaveAttribute("aria-activedescendant", last.id);
+  expect(scroll.mock.contexts.at(-1)).toBe(last);
+  await user.keyboard("{Enter}");
+  expect(editor).toHaveValue("@Worker 12 ");
+  expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+  scroll.mockRestore();
+});

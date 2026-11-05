@@ -104,21 +104,35 @@
   font-size: 16px;
   font-weight: 700;
 }
+.mentionPopover {
+  width: min(360px, var(--radix-popover-trigger-width), calc(100vw - 24px));
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  animation: none;
+}
 .mentions {
   display: grid;
-  max-height: 240px;
+  gap: 2px;
+  max-height: min(240px, var(--radix-popover-content-available-height));
   overflow: auto;
-  margin-top: 8px;
+  padding: 4px;
   border: 1px solid var(--line);
   border-radius: 8px;
+  background: var(--panel);
 }
 .mentions button {
+  justify-content: flex-start;
+  height: auto;
+  padding: 8px;
+}
+.executor {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px;
-  color: var(--text);
   text-align: start;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 .mentions button:hover,
 .mentions button[aria-selected="true"] {
