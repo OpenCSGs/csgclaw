@@ -2,6 +2,7 @@ package relay
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -20,9 +21,10 @@ type ExecutionHandler interface {
 }
 
 type executionRecord struct {
-	InstanceID string `json:"instance_id"`
-	Result     Frame  `json:"result"`
-	Acked      bool   `json:"acked"`
+	InstanceID            string `json:"instance_id"`
+	InvocationFingerprint string `json:"invocation_fingerprint,omitempty"`
+	Result                Frame  `json:"result"`
+	Acked                 bool   `json:"acked"`
 }
 
 type executionSession struct {
@@ -350,14 +352,37 @@ func (e *Executor) accept(ctx context.Context, frame Frame, send func(Frame) err
 	if !safeID(frame.ResponseID) || !safeID(frame.SessionID) || (frame.PreviousResponseID != "" && !safeID(frame.PreviousResponseID)) || frame.Deadline.IsZero() {
 		return fmt.Errorf("invalid relay request identity or deadline")
 	}
-	if _, err := InputText(frame.Input); err != nil {
+	input, err := InputText(frame.Input)
+	if err != nil {
 		return fmt.Errorf("invalid relay request input")
 	}
+	// Relay response IDs can repeat after the idempotency record expires.
+	// The original deadline is stable across redeliveries of one admission.
+	identity, _ := json.Marshal([]string{frame.SessionID, frame.PreviousResponseID, frame.Deadline.UTC().Format(time.RFC3339Nano), input})
+	fingerprint := fmt.Sprintf("%x", sha256.Sum256(identity))
+	record := executionRecord{InstanceID: e.instance, InvocationFingerprint: fingerprint}
 	ready := e.Handler.Ready(ctx)
 	e.mu.Lock()
 	if old, ok := e.records[frame.ResponseID]; ok {
+		if old.InstanceID == record.InstanceID && old.InvocationFingerprint == fingerprint {
+			e.mu.Unlock()
+			return send(old.Result)
+		}
+		// The current admission cannot use the cached result. Persist the
+		// rejection so the outbox cannot replay the old result for this ID.
+		record.Result = Frame{Type: "response.failed", ResponseID: frame.ResponseID, Sequence: 1, Error: &ProtocolError{
+			Code: "relay_invocation_identity_mismatch", Message: "response ID belongs to a different or unverifiable invocation; use a new idempotency key",
+		}}
+		e.records[frame.ResponseID] = record
+		err := e.saveLocked()
+		if err != nil {
+			e.fatal = err
+		}
 		e.mu.Unlock()
-		return send(old.Result)
+		if err != nil {
+			return err
+		}
+		return send(record.Result)
 	}
 	// Reclaim only ACKed entries. Unacknowledged results are never evicted.
 	if len(e.records) >= 1024 {
@@ -375,7 +400,8 @@ func (e *Executor) accept(ctx context.Context, frame Frame, send func(Frame) err
 	session := e.sessions[frame.SessionID]
 	if session.Dirty || session.Tip != frame.PreviousResponseID {
 		result := Frame{Type: "response.failed", ResponseID: frame.ResponseID, Sequence: 1, Error: &ProtocolError{Code: "relay_branch_unsupported", Message: "continuation does not match the confirmed local session tip; start a new conversation"}}
-		e.records[frame.ResponseID] = executionRecord{InstanceID: e.instance, Result: result}
+		record.Result = result
+		e.records[frame.ResponseID] = record
 		e.fatal = e.saveLocked()
 		fatal := e.fatal
 		e.mu.Unlock()
@@ -389,7 +415,8 @@ func (e *Executor) accept(ctx context.Context, frame Frame, send func(Frame) err
 		if e.activeID != "" {
 			result.Error = &ProtocolError{Code: "agent_busy", Message: "executor already has an active invocation"}
 		}
-		e.records[frame.ResponseID] = executionRecord{InstanceID: e.instance, Result: result}
+		record.Result = result
+		e.records[frame.ResponseID] = record
 		e.fatal = e.saveLocked()
 		fatal := e.fatal
 		e.mu.Unlock()
@@ -398,7 +425,8 @@ func (e *Executor) accept(ctx context.Context, frame Frame, send func(Frame) err
 		}
 		return send(result)
 	}
-	e.records[frame.ResponseID] = executionRecord{InstanceID: e.instance, Result: Frame{Type: "request.accepted", ResponseID: frame.ResponseID}}
+	record.Result = Frame{Type: "request.accepted", ResponseID: frame.ResponseID}
+	e.records[frame.ResponseID] = record
 	frame.parentValidated = true
 	if _, exists := e.sessions[frame.SessionID]; !exists && len(e.sessions) >= 1024 {
 		oldest := ""
@@ -445,12 +473,19 @@ func (e *Executor) accept(ctx context.Context, frame Frame, send func(Frame) err
 		}
 		e.mu.Lock()
 		defer e.mu.Unlock()
-		e.records[frame.ResponseID] = executionRecord{InstanceID: e.instance, Result: result}
+		e.activeID = ""
+		e.cancel = nil
+		current := e.records[frame.ResponseID]
+		if current.InvocationFingerprint != fingerprint || current.Result.Type != "request.accepted" {
+			// A reused ID superseded this admission while it was executing.
+			// Leave its session uncertain and preserve the new rejection.
+			return
+		}
+		record.Result = result
+		e.records[frame.ResponseID] = record
 		if result.Type == "response.completed" {
 			e.sessions[frame.SessionID] = executionSession{Tip: frame.ResponseID, UpdatedAt: time.Now().UTC()}
 		}
-		e.activeID = ""
-		e.cancel = nil
 		e.fatal = e.saveLocked()
 	}()
 	return send(Frame{Type: "request.accepted", ResponseID: frame.ResponseID})

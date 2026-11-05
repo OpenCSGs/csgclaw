@@ -228,3 +228,106 @@ func TestLocalExecutorRejectsAnUnvalidatedParent(t *testing.T) {
 		t.Fatal("direct local handler silently ignored its parent")
 	}
 }
+
+func TestCachedResultRequiresMatchingInvocation(t *testing.T) {
+	for _, field := range []string{"input", "session", "parent", "deadline", "instance", "legacy"} {
+		t.Run(field, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "state.json")
+			var executions atomic.Int32
+			e := &Executor{
+				StatePath: path, instance: "instance",
+				records: map[string]executionRecord{}, sessions: map[string]executionSession{},
+				Handler: handlerFunc{run: func(context.Context, Frame) Frame {
+					executions.Add(1)
+					return Frame{Type: "response.completed", OutputText: "first result"}
+				}},
+			}
+			first := Frame{ResponseID: "reused", SessionID: "session", Input: textInput("first"), Deadline: time.Now().Add(time.Minute)}
+			invoke := func(request Frame) Frame {
+				t.Helper()
+				var sent Frame
+				if err := e.accept(context.Background(), request, func(frame Frame) error {
+					sent = frame
+					return nil
+				}); err != nil {
+					t.Fatal(err)
+				}
+				e.workers.Wait()
+				return sent
+			}
+			invoke(first)
+			data, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var saved executorState
+			if err := json.Unmarshal(data, &saved); err != nil {
+				t.Fatal(err)
+			}
+			e.records, e.sessions = saved.Records, saved.Sessions
+			if replay := invoke(first); replay.Type != "response.completed" || replay.OutputText != "first result" {
+				t.Fatalf("matching redelivery lost its result: %+v", replay)
+			}
+
+			second := first
+			switch field {
+			case "input":
+				second.Input = textInput("second")
+			case "session":
+				second.SessionID = "other"
+			case "parent":
+				second.PreviousResponseID = "parent"
+			case "deadline":
+				second.Deadline = second.Deadline.Add(time.Second)
+			case "instance":
+				e.instance = "replacement"
+			case "legacy":
+				old := e.records[first.ResponseID]
+				old.InvocationFingerprint = ""
+				e.records[first.ResponseID] = old
+			}
+			for range 2 {
+				result := invoke(second)
+				if result.Type != "response.failed" || result.Error == nil || result.Error.Code != "relay_invocation_identity_mismatch" || result.OutputText != "" {
+					t.Fatalf("mismatch exposed cached result: %+v", result)
+				}
+			}
+			if executions.Load() != 1 {
+				t.Fatalf("mismatch executed work: %d executions", executions.Load())
+			}
+		})
+	}
+}
+
+func TestSupersededExecutionCannotOverwriteIdentityRejection(t *testing.T) {
+	finish := make(chan struct{})
+	e := &Executor{
+		StatePath: filepath.Join(t.TempDir(), "state.json"), instance: "instance",
+		records: map[string]executionRecord{}, sessions: map[string]executionSession{},
+		Handler: handlerFunc{run: func(context.Context, Frame) Frame {
+			<-finish
+			return Frame{Type: "response.completed", OutputText: "old result"}
+		}},
+	}
+	request := Frame{ResponseID: "reused", SessionID: "old", Input: textInput("first"), Deadline: time.Now().Add(time.Minute)}
+	send := func(Frame) error { return nil }
+	if err := e.accept(context.Background(), request, send); err != nil {
+		close(finish)
+		t.Fatal(err)
+	}
+	request.SessionID = "new"
+	err := e.accept(context.Background(), request, send)
+	if err == nil {
+		request.SessionID = "old"
+		err = e.accept(context.Background(), request, send)
+	}
+	close(finish)
+	e.workers.Wait()
+	if err != nil {
+		t.Fatal(err)
+	}
+	result := e.records[request.ResponseID].Result
+	if result.Error == nil || result.Error.Code != "relay_invocation_identity_mismatch" || result.OutputText != "" {
+		t.Fatalf("old execution overwrote the rejection: %+v", result)
+	}
+}
