@@ -5,7 +5,7 @@ import { vi } from "vitest";
 import { DocumentPreviewPanel } from "@/components/business/DocumentPreviewPanel";
 import type { AttachmentPreviewItem } from "@/models/attachments";
 
-const pdfMock = vi.hoisted(() => ({ pageCount: 1 }));
+const pdfMock = vi.hoisted(() => ({ pageCount: 1, options: undefined as Record<string, unknown> | undefined }));
 
 vi.mock("react-pdf", async () => {
   const React = await import("react");
@@ -14,12 +14,15 @@ vi.mock("react-pdf", async () => {
     Document: ({
       children,
       file,
+      options,
       onLoadSuccess,
     }: {
       children?: React.ReactNode;
       file?: { data?: Uint8Array };
+      options?: Record<string, unknown>;
       onLoadSuccess?: (pdf: { numPages: number }) => void;
     }) => {
+      pdfMock.options = options;
       React.useEffect(() => {
         const buffer = file?.data?.buffer;
         if (buffer instanceof ArrayBuffer && buffer.byteLength > 0) {
@@ -626,6 +629,12 @@ describe("DocumentPreviewPanel", () => {
     );
 
     expect(await screen.findAllByTestId("mock-pdf-page")).toHaveLength(2);
+    expect(pdfMock.options).toMatchObject({
+      cMapUrl: new URL("pdfjs/cmaps/", document.baseURI).href,
+      cMapPacked: true,
+      standardFontDataUrl: new URL("pdfjs/standard_fonts/", document.baseURI).href,
+      wasmUrl: new URL("pdfjs/wasm/", document.baseURI).href,
+    });
     expect(screen.getAllByTestId("mock-pdf-page")[0]).toHaveAttribute("data-width", "612");
     const pdfMain = container.querySelector(".document-preview-pdf-main");
     expect(pdfMain).toHaveClass("is-width-fitted");

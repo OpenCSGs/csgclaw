@@ -50,11 +50,12 @@ function t(key: string, params: Record<string, string | number> = {}) {
     templatePublishSite: "Destination site",
     templatePublishAccount: "Account / namespace",
     templatePublishTarget: "Cloud template",
+    templatePublishDestinationHeading: "Publish destination",
+    templatePublishContentsHeading: "Included content",
     templatePublishVisibility: "New templates are private. Existing templates keep their current visibility.",
     templatePublishEffect:
       "Creates the target if missing; otherwise replaces its current template contents, including removing files no longer present locally.",
-    templatePublishContents:
-      "Includes template configuration and existing instruction, skill and connector files. History is excluded; memory is included only when selected.",
+    templatePublishContents: "Includes template configuration, instructions, skills, and connector files.",
     templatePublishDestinationUnknown: "Unavailable — sign in to confirm the destination.",
     agentPublishLoginRequired: "Sign in first",
     agentPublishTemplateCommunitySubtitle: "Publish remotely",
@@ -1038,6 +1039,21 @@ describe("HubDetailPane", () => {
     }
   });
 
+  it.each([undefined, "avatar/3D-4.png"])(
+    "only shows an official template title avatar when provided (%s)",
+    (avatar) => {
+      const official = { ...template, id: "agentichub/worker", avatar, source: { kind: "remote" } };
+      renderHubDetailPane("template", {
+        selectedTemplate: official,
+        templates: [official],
+        inlineTemplateDetail: true,
+      });
+      const title = screen.getByRole("heading", { level: 2 }).parentElement!;
+      if (avatar) expect(title.querySelector("img")).toHaveAttribute("src", avatar);
+      else expect(title.querySelector("img")).toBeNull();
+    },
+  );
+
   it("shows the saved local avatar and no source badge in signed-out My templates", async () => {
     const user = userEvent.setup();
     renderHubDetailPane("template", {
@@ -1217,7 +1233,7 @@ describe("HubDetailPane", () => {
     });
     await user.click(screen.getByRole("button", { name: /^Versions\s*2$/ }));
     await user.click(await screen.findByRole("button", { name: "V1" }));
-    await user.click(screen.getByRole("button", { name: "templateRestoreVersion" }));
+    await user.click(screen.getByRole("button", { name: "templateVersionSetActive" }));
     await user.click(screen.getByRole("button", { name: "templateVersionRollbackConfirm" }));
     await waitFor(() =>
       expect(client.getQueryData(workspaceQueryKeys.hubTemplate(localTemplate.id))).toEqual(restored),
@@ -1226,7 +1242,7 @@ describe("HubDetailPane", () => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     view.rerenderOptions({ selectedTemplate: restored });
     await user.click(screen.getByRole("button", { name: /^Versions\s*2$/ }));
-    expect(screen.getAllByText("templateVersionActive V1").length).toBeGreaterThan(0);
+    expect(await screen.findByRole("button", { name: "V1 · templateVersionActive" })).toBeInTheDocument();
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
@@ -1253,6 +1269,10 @@ describe("HubDetailPane", () => {
     const publishTrigger = screen.getByRole("button", { name: "Publish V3 to community" });
     await user.click(publishTrigger);
     expect(screen.getByRole("dialog", { name: "Publish agent template" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Publish destination" })).toHaveTextContent("alice/demo-template");
+    expect(screen.getByRole("region", { name: "Included content" })).toHaveTextContent(
+      "Includes template configuration, instructions, skills, and connector files.",
+    );
     expect(screen.getByText("Version to publish")).toBeInTheDocument();
     expect(screen.getByText("V3", { selector: "strong" })).toBeInTheDocument();
     expect(screen.getByText("https://qa.opencsg.com")).toBeInTheDocument();

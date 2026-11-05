@@ -6,8 +6,14 @@ import {
 } from "@/models/templatePublication";
 import { useTemplatePublication } from "./useTemplatePublication";
 import { useTemplateInstructionsEditor } from "./useTemplateInstructionsEditor";
-import { templateInGroup, templateSourceLabelKey, type TemplateGroup } from "@/models/templateGroups";
+import {
+  isOfficialTemplate,
+  templateInGroup,
+  templateSourceLabelKey,
+  type TemplateGroup,
+} from "@/models/templateGroups";
 import { AgentAvatarImage } from "@/components/business/AgentAvatar";
+import { defaultAgentAvatar } from "@/shared/avatarOptions";
 import { agenticHubCreateAgentURL, agenticHubTemplatesURL } from "@/models/agenticHub";
 import { parseMCPServerDocument } from "@/models/mcpServerDocument";
 import { GlobalAppsPanel } from "@/components/business/Apps";
@@ -1161,6 +1167,9 @@ export function HubDetailPane({
     if (selectedSkill) setSkillDetailDialogOpen(true);
   }, [selectedSkill]);
   const selectedTemplateID = selectedTemplate?.id;
+  const selectedTemplateAvatar =
+    selectedTemplate?.avatar?.trim() ||
+    (selectedTemplate && !isOfficialTemplate(selectedTemplate) ? defaultAgentAvatar() : "");
   const selectedTemplateIsMine = Boolean(
     selectedTemplate && templateInGroup(selectedTemplate, "mine", templateUsername),
   );
@@ -1603,7 +1612,16 @@ export function HubDetailPane({
           <strong>{t("resourcesEmpty")}</strong>
         </div>
       ) : (
-        <div className={moduleClassNames("hub-workbench hub-inspector-panel")}>
+        <div
+          className={moduleClassNames(
+            "hub-workbench hub-inspector-panel",
+            activeResourceType === "template" &&
+              (inlineTemplateDetail || legacyResourceDetailEnabled()) &&
+              selectedTemplate &&
+              activeTemplateTab === "versions" &&
+              "hub-template-versions-panel",
+          )}
+        >
           {activeResourceType === "knowledge" ? (
             <div className={moduleClassNames("hub-skill-list-page")}>
               <header className={moduleClassNames("hub-skill-list-header")}>
@@ -1979,13 +1997,14 @@ export function HubDetailPane({
                   <div className={moduleClassNames("hub-inspector-brand")}>
                     <div className={moduleClassNames("hub-inspector-copy")}>
                       <div className={moduleClassNames("hub-inspector-title-row")}>
-                        <span className={moduleClassNames("hub-inspector-title-icon")} aria-hidden="true">
-                          {selectedTemplate.avatar ? (
-                            <AgentAvatarImage avatar={selectedTemplate.avatar} />
-                          ) : (
-                            <WorkspaceTemplatesIcon />
-                          )}
-                        </span>
+                        {selectedTemplateAvatar ? (
+                          <span
+                            className={moduleClassNames("hub-inspector-title-icon hub-template-title-avatar")}
+                            aria-hidden="true"
+                          >
+                            <AgentAvatarImage avatar={selectedTemplateAvatar} />
+                          </span>
+                        ) : null}
                         <h2>{hubTemplateFullName(selectedTemplate)}</h2>
                         <div className={moduleClassNames("hub-inspector-badge-row")}>
                           <span className={moduleClassNames("mini-badge template-runtime-badge")}>
@@ -3648,7 +3667,10 @@ export function HubDetailPane({
           }
         }}
       >
-        <DialogContent className={moduleClassNames("agent-publish-dialog")} onCloseAutoFocus={restorePublishFocus}>
+        <DialogContent
+          className={moduleClassNames("hub-template-publish-dialog")}
+          onCloseAutoFocus={restorePublishFocus}
+        >
           <DialogHeader>
             <div>
               <DialogTitle>{t("agentPublishTemplateTitle")}</DialogTitle>
@@ -3656,45 +3678,63 @@ export function HubDetailPane({
             </div>
             <DialogCloseButton label={t("close")} size="sm" variant="tertiaryGray" />
           </DialogHeader>
-          <DialogBody>
-            <div className={moduleClassNames("hub-template-publish-version")}>
+          <DialogBody className={moduleClassNames("hub-template-publish-body")}>
+            <section
+              className={moduleClassNames("hub-template-publish-version")}
+              aria-label={t("templatePublishVersionLabel")}
+            >
               <span>{t("templatePublishVersionLabel")}</span>
               <strong>{publishVersionLabel}</strong>
+              <h3>{selectedTemplate?.display_name?.trim() || selectedTemplate?.name || selectedTemplate?.id}</h3>
               <small>{t("templatePublishLatestHint")}</small>
-            </div>
-            <dl className={moduleClassNames("hub-template-publish-destination")}>
-              <dt>{t("templatePublishSite")}</dt>
-              <dd>{publishDestination.site || t("templatePublishDestinationUnknown")}</dd>
-              <dt>{t("templatePublishAccount")}</dt>
-              <dd>{publishDestination.namespace || t("templatePublishDestinationUnknown")}</dd>
-              <dt>{t("templatePublishTarget")}</dt>
-              <dd>{publishDestination.id || t("templatePublishDestinationUnknown")}</dd>
-              {selectedTemplate?.uid ? (
-                <>
-                  <dt>{t("templateVersionUID")}</dt>
-                  <dd>{selectedTemplate.uid}</dd>
-                </>
+            </section>
+            <section
+              className={moduleClassNames("hub-template-publish-section")}
+              aria-label={t("templatePublishDestinationHeading")}
+            >
+              <h3>{t("templatePublishDestinationHeading")}</h3>
+              <dl className={moduleClassNames("hub-template-publish-destination")}>
+                <dt>{t("templatePublishTarget")}</dt>
+                <dd className={moduleClassNames("hub-template-publish-target")}>
+                  {publishDestination.id || t("templatePublishDestinationUnknown")}
+                </dd>
+                <dt>{t("templatePublishSite")}</dt>
+                <dd>{publishDestination.site || t("templatePublishDestinationUnknown")}</dd>
+                <dt>{t("templatePublishAccount")}</dt>
+                <dd>{publishDestination.namespace || t("templatePublishDestinationUnknown")}</dd>
+              </dl>
+              <p className={moduleClassNames("hub-template-publish-hint")}>{t("templatePublishVisibility")}</p>
+              <p className={moduleClassNames("hub-template-publish-notice")}>{t("templatePublishEffect")}</p>
+            </section>
+            <section
+              className={moduleClassNames("hub-template-publish-section")}
+              aria-label={t("templatePublishContentsHeading")}
+            >
+              <h3>{t("templatePublishContentsHeading")}</h3>
+              <p className={moduleClassNames("hub-template-publish-hint")}>{t("templatePublishContents")}</p>
+              {templateMemoryEnabled ? (
+                <label className={moduleClassNames("hub-template-publish-memory-option")}>
+                  <Checkbox
+                    aria-label={t("agentPublishIncludeMemory")}
+                    checked={publishTemplateIncludeMemory}
+                    onCheckedChange={(checked) => setPublishTemplateIncludeMemory(checked === true)}
+                  />
+                  <span>
+                    <strong>{t("agentPublishIncludeMemory")}</strong>
+                    <small>{t("agentPublishIncludeMemoryWarning")}</small>
+                  </span>
+                </label>
               ) : null}
-            </dl>
-            <p className={moduleClassNames("hub-template-publish-hint")}>{t("templatePublishVisibility")}</p>
-            <p className={moduleClassNames("hub-template-publish-hint")}>{t("templatePublishEffect")}</p>
-            <p className={moduleClassNames("hub-template-publish-hint")}>{t("templatePublishContents")}</p>
-            {templateMemoryEnabled ? (
-              <label className={moduleClassNames("hub-template-publish-memory-option")}>
-                <Checkbox
-                  aria-label={t("agentPublishIncludeMemory")}
-                  checked={publishTemplateIncludeMemory}
-                  onCheckedChange={(checked) => setPublishTemplateIncludeMemory(checked === true)}
-                />
-                <span>
-                  <strong>{t("agentPublishIncludeMemory")}</strong>
-                  <small>{t("agentPublishIncludeMemoryWarning")}</small>
-                </span>
-              </label>
+            </section>
+            {selectedTemplate?.uid ? (
+              <details className={moduleClassNames("hub-template-publish-identity")}>
+                <summary>{t("templateVersionUID")}</summary>
+                <code>{selectedTemplate.uid}</code>
+              </details>
             ) : null}
           </DialogBody>
           {publishError ? (
-            <div className={moduleClassNames("form-error")} role="alert">
+            <div className={moduleClassNames("form-error hub-template-publish-error")} role="alert">
               <span className="whitespace-pre-wrap break-words">{publishError}</span>
             </div>
           ) : null}

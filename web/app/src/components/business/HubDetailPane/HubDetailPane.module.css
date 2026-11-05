@@ -64,10 +64,13 @@
   gap: 4px;
 }
 
+.hub-template-publish-memory-option strong {
+  font: var(--text-sm-normal);
+}
+
 .hub-template-publish-memory-option small {
   color: var(--text-muted);
-  font-weight: 400;
-  line-height: 1.45;
+  font: var(--text-sm-light);
 }
 
 :root[data-theme="dark"] .hub-detail-pane {
@@ -270,6 +273,12 @@
 .hub-inspector-title-icon :global(.svg-icon) {
   width: 18px;
   height: 18px;
+}
+
+.hub-template-title-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
 }
 
 .hub-inspector-copy :global(.mini-badge) {
@@ -1832,6 +1841,28 @@
   box-shadow: 0 calc(-1 * var(--hub-inspector-padding-top)) 0 var(--surface);
 }
 
+.hub-template-versions-panel {
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.hub-template-versions-panel > .hub-inspector-hero,
+.hub-template-versions-panel > .hub-template-review-alert {
+  flex-shrink: 0;
+}
+
+@container (max-width: 760px) {
+  .hub-template-versions-panel .hub-inspector-hero-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .hub-template-versions-panel .hub-template-actions {
+    flex-shrink: 1;
+    width: 100%;
+  }
+}
+
 .hub-template-section-tab {
   display: inline-flex;
   flex: 0 0 auto;
@@ -2436,6 +2467,12 @@
   line-height: 20px;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
+}
+
+.hub-template-skill-copy p {
+  display: block;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .hub-template-mcp-copy p {
@@ -3209,18 +3246,48 @@
   }
 }
 
+.hub-template-publish-dialog {
+  display: flex;
+  flex-direction: column;
+  width: min(640px, calc(100vw - 32px));
+  overflow: hidden;
+}
+.hub-template-publish-dialog > :first-child,
+.hub-template-publish-dialog > :last-child {
+  flex-shrink: 0;
+}
+
+.hub-template-publish-body {
+  display: grid;
+  gap: var(--space-4);
+  min-height: 0;
+  overflow-y: auto;
+}
+.hub-template-publish-error {
+  flex-shrink: 0;
+  margin: 0 var(--space-5) var(--space-4);
+}
+
 .hub-template-publish-version {
   display: grid;
   grid-template-columns: 1fr auto;
   align-items: center;
   gap: var(--space-2) var(--space-3);
   padding: var(--space-4);
-  margin-bottom: var(--space-4);
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
   background: var(--panel-strong);
   color: var(--text);
   font-size: var(--text-sm-size);
+}
+.hub-template-publish-version > span {
+  color: var(--muted);
+}
+.hub-template-publish-version h3 {
+  grid-column: 1 / -1;
+  margin: 0;
+  overflow-wrap: anywhere;
+  font: var(--text-md-medium);
 }
 .hub-template-publish-version strong {
   padding: var(--space-1) var(--space-2);
@@ -3231,14 +3298,25 @@
 .hub-template-publish-version small {
   grid-column: 1 / -1;
   color: var(--muted);
-  line-height: var(--text-xs-line-height);
+  font: var(--text-xs-normal);
+}
+
+.hub-template-publish-section {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+}
+.hub-template-publish-section h3 {
+  margin: 0;
+  font: var(--text-sm-medium);
 }
 
 .hub-template-publish-destination {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-columns: minmax(96px, max-content) minmax(0, 1fr);
   gap: var(--space-2) var(--space-3);
-  font-size: var(--text-sm-size);
+  margin: 0;
+  font: var(--text-sm-normal);
 }
 
 .hub-template-publish-destination dt {
@@ -3249,8 +3327,46 @@
   margin: 0;
   overflow-wrap: anywhere;
 }
+.hub-template-publish-target {
+  font-weight: var(--font-weight-medium);
+}
 
 .hub-template-publish-hint {
+  margin: 0;
   color: var(--muted);
-  font-size: var(--text-sm-size);
+  font: var(--text-sm-normal);
+}
+.hub-template-publish-notice {
+  margin: 0;
+  padding-left: var(--space-3);
+  border-left: 2px solid var(--line);
+  color: var(--text);
+  font: var(--text-sm-normal);
+}
+.hub-template-publish-identity {
+  color: var(--muted);
+  font: var(--text-xs-normal);
+}
+.hub-template-publish-identity summary {
+  width: fit-content;
+  cursor: pointer;
+}
+.hub-template-publish-identity summary:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 3px;
+  border-radius: var(--radius-base);
+}
+.hub-template-publish-identity code {
+  display: block;
+  margin-top: var(--space-2);
+  overflow-wrap: anywhere;
+}
+@media (max-width: 480px) {
+  .hub-template-publish-destination {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-1);
+  }
+  .hub-template-publish-destination dd + dt {
+    margin-top: var(--space-2);
+  }
 }

@@ -1,15 +1,15 @@
 import { resolveTeamAvatarMembers, teamMemberIDs, teamStatusLabel } from "@/models/tasks";
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { ChevronRight, ExternalLink, List, LoaderCircle, Plus, Search } from "lucide-react";
+import { ExternalLink, List, LoaderCircle, Plus, Search } from "lucide-react";
 import { Button, LinkButton, PanelHeader, EmptyState, TextInput } from "@/components/ui";
-import { AgentAvatarContent } from "@/components/business/AgentAvatar";
+import { AgentAvatarContent, AgentAvatarImage } from "@/components/business/AgentAvatar";
 import { RoomAvatar } from "@/components/business/RoomAvatar";
 import { useWorkspaceControllerContext } from "@/hooks/workspace";
 import { useWorkspaceHubTemplatesQuery } from "@/hooks/workspace/workspaceQueries";
 import { isVisibleInHubTemplateList } from "@/models/hubWorkspace";
 import { agenticHubTemplatesURL } from "@/models/agenticHub";
-import { templateInGroup } from "@/models/templateGroups";
+import { isOfficialTemplate, templateInGroup } from "@/models/templateGroups";
 import { agentAvailabilityStatusLabel, agentRoleLabel, isAgentAvailable, type AgentLike } from "@/models/agents";
 import { AgentPlaza, CloudAgentDetail } from "./components/AgentPlaza";
 import { useCloudAgents } from "@/hooks/workspace/useCloudAgents";
@@ -21,6 +21,7 @@ import {
   pathForPane,
   WorkspacePaneTypes,
 } from "@/models/routing";
+import { defaultAgentAvatar } from "@/shared/avatarOptions";
 
 import styles from "./AgentOverviewPage.module.css";
 import { useAgentViewBindings } from "@/hooks/workspace/useAgentViewBindings";
@@ -306,6 +307,11 @@ export function AgentOverviewPage() {
                         closeList();
                       }}
                     >
+                      {item.avatar?.trim() || !isOfficialTemplate(item) ? (
+                        <span className={styles.avatar} aria-hidden="true">
+                          <AgentAvatarImage avatar={item.avatar?.trim() || defaultAgentAvatar()} />
+                        </span>
+                      ) : null}
                       <span className={styles.identity}>
                         <span className={styles.templateName}>
                           <strong>{item.display_name?.trim() || item.name || item.id}</strong>{" "}
@@ -315,7 +321,6 @@ export function AgentOverviewPage() {
                         </span>
                         <small>{item.description}</small>
                       </span>
-                      <ChevronRight size={14} />
                     </button>
                   ))}
                   {templateFilter === "personal" && templatesURL ? (
@@ -361,7 +366,6 @@ export function AgentOverviewPage() {
                             </span>
                             <small>{agentRoleLabel(item, t)}</small>
                           </span>
-                          <ChevronRight size={14} />
                         </button>
                       ))
                     : null}
@@ -396,7 +400,6 @@ export function AgentOverviewPage() {
                             </span>
                             <small>{item.description}</small>
                           </span>
-                          <ChevronRight size={14} />
                         </button>
                       ))
                     : null}
@@ -428,7 +431,6 @@ export function AgentOverviewPage() {
                               })}
                             </small>
                           </span>
-                          <ChevronRight size={14} />
                         </button>
                       ))
                     : null}

@@ -1,19 +1,11 @@
 .dialog {
-  width: min(640px, calc(100vw - 40px));
-  max-height: calc(100dvh - 40px);
-}
-.fixedHeight {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto auto;
-  height: min(560px, calc(100dvh - 40px));
+  width: min(640px, calc(100vw - 40px));
+  max-height: calc(100dvh - var(--app-overlay-top-inset, 0px) - 40px);
 }
-.fixedHeight .body {
-  overflow: auto;
-  align-content: start;
-}
-.fixedHeight .list {
-  max-height: none;
-  overflow: visible;
+.fixedHeight {
+  height: min(560px, calc(100dvh - var(--app-overlay-top-inset, 0px) - 40px));
 }
 .header {
   display: grid;
@@ -30,12 +22,12 @@
   gap: 12px;
   padding: 20px 22px;
   min-height: 0;
+  overflow: auto;
+  align-content: start;
 }
 .list {
   display: grid;
   gap: 10px;
-  max-height: 420px;
-  overflow: auto;
   padding-right: 4px;
 }
 .row {

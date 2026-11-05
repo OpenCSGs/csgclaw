@@ -180,6 +180,46 @@ describe("agent overview team navigation", () => {
 });
 
 describe("agent overview guidance and template loading", () => {
+  it.each([
+    { kind: "builtin", id: "builtin.codex-worker", filter: "official" },
+    { kind: "remote", id: "agentichub/worker", filter: "official" },
+    { kind: "local", id: "local.worker", filter: "personal" },
+    { kind: "remote", id: "alice/worker", filter: "personal" },
+  ])("shows the saved avatar for $id in $filter templates", ({ kind, id, filter }) => {
+    const saved: HubTemplate = {
+      id,
+      name: "Template with avatar",
+      role: "worker",
+      avatar: "avatar/3D-4.png",
+      source: { kind },
+    };
+    vi.mocked(useWorkspaceHubTemplatesQuery).mockReturnValue(queryState({ data: [saved] }));
+    render(<Page route={`/agents?tab=templates&filter=${filter}`} username="alice" />);
+    const row = screen.getByRole("button", { name: /Template with avatar/ });
+    expect(within(row).getByAltText("")).toHaveAttribute("src", "avatar/3D-4.png");
+  });
+
+  it.each([
+    { kind: "builtin", id: "builtin.codex-worker" },
+    { kind: "remote", id: "agentichub/worker" },
+  ])("omits the avatar for official $id when no avatar is provided", ({ kind, id }) => {
+    vi.mocked(useWorkspaceHubTemplatesQuery).mockReturnValue(
+      queryState({ data: [{ ...template, id, source: { kind } }] }),
+    );
+    render(<Page />);
+    const row = screen.getByRole("button", { name: "Codex worker" });
+    expect(within(row).queryByAltText("")).not.toBeInTheDocument();
+  });
+
+  it("keeps the bundled default avatar for personal templates with no avatar", () => {
+    vi.mocked(useWorkspaceHubTemplatesQuery).mockReturnValue(
+      queryState({ data: [{ ...template, id: "local.worker", source: { kind: "local" } }] }),
+    );
+    render(<Page route="/agents?tab=templates&filter=personal" />);
+    const row = screen.getByRole("button", { name: "Codex worker" });
+    expect(within(row).getByAltText("")).toHaveAttribute("src", "avatar/3D-1.png");
+  });
+
   it.each(["local", "remote"])("displays and searches %s template display names", async (kind) => {
     const user = userEvent.setup();
     const saved: HubTemplate = {

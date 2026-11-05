@@ -9,6 +9,14 @@ import "react-pdf/dist/Page/TextLayer.css";
 
 pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerURL;
 
+const pdfAssetURL = new URL(`${import.meta.env.BASE_URL}pdfjs/`, document.baseURI);
+const pdfOptions = {
+  cMapUrl: new URL("cmaps/", pdfAssetURL).href,
+  cMapPacked: true,
+  standardFontDataUrl: new URL("standard_fonts/", pdfAssetURL).href,
+  wasmUrl: new URL("wasm/", pdfAssetURL).href,
+};
+
 type Translate = (key: string, params?: Record<string, string | number>) => string;
 
 function LazyPdfPage({
@@ -131,6 +139,7 @@ export default function PdfPreview({ data, scale, t }: { data: ArrayBuffer; scal
       >
         <Document
           file={file}
+          options={pdfOptions}
           loading={<div className="document-preview-status">{t("attachmentPreviewLoading")}</div>}
           error={<div className="document-preview-status is-error">{t("attachmentPreviewFailed")}</div>}
           onLoadSuccess={handleLoadSuccess}
