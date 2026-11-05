@@ -652,7 +652,7 @@ func (c *memoryConversations) Run(ctx context.Context, request agentengine.TurnR
 	if request.Continuation != agentengine.ContinuationCreateOrResume && request.Continuation != agentengine.ContinuationRequireExisting {
 		return failed(agentengine.ErrorInvalidRequest, fmt.Sprintf("unsupported continuation policy %q", request.Continuation))
 	}
-	if request.Interaction.For(agentengine.InteractionUserInput) != agentengine.InteractionResolve && request.Interaction != agentengine.InteractionReject && request.Interaction != agentengine.InteractionSkipUserInput {
+	if !request.Interaction.Valid() {
 		return failed(agentengine.ErrorInvalidRequest, fmt.Sprintf("unsupported interaction policy %q", request.Interaction))
 	}
 	if err := ctx.Err(); err != nil {

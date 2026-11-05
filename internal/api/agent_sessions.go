@@ -246,7 +246,7 @@ func (h *Handler) runSessionResponse(ctx context.Context, w http.ResponseWriter,
 		})
 	}
 
-	policy := agentengine.InteractionReject
+	policy := agentengine.InteractionTextOnly
 	if acceptUserInput {
 		policy = agentengine.InteractionUserInputOnly
 	}

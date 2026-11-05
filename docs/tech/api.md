@@ -1777,7 +1777,9 @@ The server imposes no response duration limit. Client disconnects and explicit c
 
 ### Session questions
 
-Clients that can display and submit question forms set `"user_input":true` in the `/responses` JSON request, or send a multipart field `user_input` with the string value `"true"`. The option defaults to `false`.
+Forms are disabled per request by default. When `user_input` is omitted or `false`, the agent is instructed to ask for clarification in its text reply. If the runtime still requests a form, the server skips it and lets the turn continue. The user can reply with a new message in the same session.
+
+Clients that can display and submit forms opt in by setting `"user_input":true` in the `/responses` JSON request, or by sending a multipart field `user_input` with the string value `"true"`. The built-in room UI supports forms through its own message API.
 
 When instance service authentication is enabled, creating a response with `user_input: true`, listing questions with `GET /interactions`, and submitting answers with `POST /interactions/{interaction_id}/respond` all require valid service credentials for that instance. Missing or invalid credentials return `401 unauthorized`. Portal clients use the same instance endpoint and gateway authorization as they use for attachment access.
 

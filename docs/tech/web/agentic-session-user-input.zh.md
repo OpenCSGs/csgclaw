@@ -6,7 +6,9 @@ Genius 创建知识库助手时，可能需要用户选择资料来源或补充�
 
 ## 1. 发送消息
 
-在 Genius 客户端现有的 `POST /responses` 请求体中添加 `"user_input":true`。该字段默认为 `false`。使用 `multipart/form-data` 时，添加表单字段 `user_input`，值为字符串 `"true"`。
+前端尚未支持表单时，省略 `user_input` 或传入 `false` 即可。该轮需要补充信息时，服务端会提示 Agent 在普通回复中提问，用户在同一会话发送下一条消息即可回答。如果 Runtime 仍请求表单，服务端会自动跳过该表单。
+
+前端支持表单后，在每次需要启用表单的 `POST /responses` 请求体中添加 `"user_input":true`。使用 `multipart/form-data` 时，添加表单字段 `user_input`，值为字符串 `"true"`。这个选项只用于会话接口，CSGClaw 自带的房间 UI 通过房间消息接口提供表单。
 
 下面的示例需要两个终端。在两个终端中均设置这些变量。`ENDPOINT` 取所选实例的 `endpoint`，`AGENT` 取实例配置的 Agent 名称，`TOKEN` 取该实例的网关凭证。浏览器构造 URL 时应对每个动态路径参数使用 `encodeURIComponent`。
 

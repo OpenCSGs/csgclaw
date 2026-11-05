@@ -143,7 +143,7 @@ func (c *conversations) Run(ctx context.Context, request TurnRequest, sink Event
 	if request.Continuation != ContinuationCreateOrResume && request.Continuation != ContinuationRequireExisting {
 		return failedResult(ErrorInvalidRequest, fmt.Sprintf("unsupported continuation policy %q", request.Continuation))
 	}
-	if request.Interaction.For(InteractionUserInput) != InteractionResolve && request.Interaction != InteractionReject && request.Interaction != InteractionSkipUserInput {
+	if !request.Interaction.Valid() {
 		return failedResult(ErrorInvalidRequest, fmt.Sprintf("unsupported interaction policy %q", request.Interaction))
 	}
 	if err := contract.ValidateInput(request.Input); err != nil {
@@ -285,6 +285,10 @@ func (c *conversations) Run(ctx context.Context, request TurnRequest, sink Event
 		return c.engine.recordAndEmit(diagnostics.WithRecord(eventCtx, diagnostics.From(turn.ctx)), turn, sink, event)
 	})
 
+	if runtimeRequest.Interaction == InteractionTextOnly {
+		const guidance = "Question forms (request_user_input) are disabled for this turn. If you need clarification, ask in your reply and wait for the user's next message."
+		runtimeRequest.Input = append([]InputPart{{Kind: InputPartText, Text: guidance}}, runtimeRequest.Input...)
+	}
 	diagnostics.From(turn.ctx).Capture("runtime.input", runtimeRequest)
 	captureTurnInputFiles(turn.ctx, runtimeRequest)
 	result := runtimeAdapter.Run(turn.ctx, runtimeRequest, orderedSink)

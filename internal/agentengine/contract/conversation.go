@@ -60,19 +60,32 @@ type InteractionPolicy string
 const (
 	InteractionResolve       InteractionPolicy = "resolve"
 	InteractionUserInputOnly InteractionPolicy = "user_input_only"
+	InteractionTextOnly      InteractionPolicy = "text_only"
 	InteractionReject        InteractionPolicy = "reject"
 	InteractionSkipUserInput InteractionPolicy = "skip_user_input"
 )
 
+func (p InteractionPolicy) Valid() bool {
+	switch p {
+	case InteractionResolve, InteractionUserInputOnly, InteractionTextOnly, InteractionReject, InteractionSkipUserInput:
+		return true
+	default:
+		return false
+	}
+}
+
 // For returns the policy to apply to this kind of interaction.
 func (p InteractionPolicy) For(kind InteractionKind) InteractionPolicy {
-	if p == InteractionUserInputOnly {
-		if kind == InteractionUserInput {
-			return InteractionResolve
-		}
+	if p != InteractionUserInputOnly && p != InteractionTextOnly {
+		return p
+	}
+	if kind != InteractionUserInput {
 		return InteractionReject
 	}
-	return p
+	if p == InteractionTextOnly {
+		return InteractionSkipUserInput
+	}
+	return InteractionResolve
 }
 
 // InputPartKind identifies one normalized turn input.

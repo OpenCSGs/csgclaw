@@ -1718,7 +1718,9 @@ runtime 会降级为一个文本 delta。Agent 完成前，连接已建立并先
 
 ### 会话提问
 
-支持提问表单的客户端在 `/responses` JSON 请求中设置 `"user_input":true`。multipart 请求使用字符串字段 `user_input=true`。该选项默认为 `false`。
+每次请求默认关闭提问表单。省略 `user_input` 或传入 `false` 时，服务端会提示 Agent 在普通回复中提问。如果 Runtime 仍请求表单，服务端会跳过表单，让本轮继续执行。用户可以在同一会话发送下一条消息回答问题。
+
+支持提问表单的客户端在 `/responses` JSON 请求中设置 `"user_input":true` 即可启用。multipart 请求使用字符串字段 `user_input=true`。CSGClaw 自带的房间 UI 通过房间消息接口支持提问表单。
 
 启用实例服务认证时，设置 `user_input: true` 的创建请求、查询待回答问题的 `GET /interactions`、提交答案的 `POST /interactions/{interaction_id}/respond` 都需要该实例的有效服务凭证。缺少凭证或凭证无效时返回 `401 unauthorized`。Portal 使用与该实例附件访问相同的实例地址和网关授权方式。
 

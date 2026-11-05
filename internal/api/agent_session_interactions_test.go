@@ -276,35 +276,55 @@ func TestAgentSessionDetachedUserInput(t *testing.T) {
 	}
 }
 
-func TestAgentSessionRejectsUnsupportedInteractions(t *testing.T) {
+func TestAgentSessionSkipsUserInputWhenDisabled(t *testing.T) {
 	for _, tc := range []struct {
-		name             string
-		requestUserInput bool
-		interaction      agentengine.InteractionKind
+		name string
+		body string
 	}{
-		{name: "legacy", interaction: agentengine.InteractionUserInput},
-		{name: "permission", requestUserInput: true, interaction: agentengine.InteractionPermission},
+		{"default stream", `{"input":"Plan","stream":true}`},
+		{"explicit false", `{"input":"Plan","user_input":false}`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			engine := &fakeSessionEngine{run: func(ctx context.Context, _ string, _ agentengine.TurnRequest, sink agentengine.EventSink) agentengine.TurnResult {
-				event := sessionQuestionEvent()
-				if tc.interaction == agentengine.InteractionPermission {
-					event.Interaction = &agentengine.InteractionRequest{ID: "approval-1", Kind: tc.interaction}
+				for _, event := range []agentengine.TurnEvent{sessionQuestionEvent(), sessionDetachedQuestionEvent()} {
+					if err := sink.Emit(ctx, event); err != nil {
+						t.Errorf("emit question: %v", err)
+					}
 				}
-				_ = sink.Emit(ctx, event)
+				return agentengine.TurnResult{Status: agentengine.TurnSucceeded, Output: "Which source should I use?"}
+			}}
+			server, _ := sessionOutputTestServer(t, engine, "")
+			body := sessionInteractionHTTP(t, server, http.MethodPost, sessionQuestionPath+"/responses", tc.body, http.StatusOK)
+			if !strings.Contains(body, "Which source should I use?") || strings.Contains(body, `"type":"request_user_input"`) || strings.Contains(body, `"type":"error"`) {
+				t.Fatalf("response: %s", body)
+			}
+			if resolved := engine.client.Resolutions(); len(resolved) != 1 || resolved[0].Value.InteractionID != sessionQuestionID || len(resolved[0].Value.Answers) != 0 {
+				t.Fatalf("expected an empty answer for the runtime question, got %+v", resolved)
+			}
+			pending := sessionInteractionHTTP(t, server, http.MethodGet, sessionQuestionPath+"/interactions", "", http.StatusOK)
+			if strings.TrimSpace(pending) != `{"interactions":[]}` {
+				t.Fatalf("pending questions: %s", pending)
+			}
+		})
+	}
+}
+
+func TestAgentSessionRejectsPermissionInteractions(t *testing.T) {
+	for _, userInput := range []bool{false, true} {
+		t.Run(fmt.Sprintf("user_input=%t", userInput), func(t *testing.T) {
+			engine := &fakeSessionEngine{run: func(ctx context.Context, _ string, _ agentengine.TurnRequest, sink agentengine.EventSink) agentengine.TurnResult {
+				_ = sink.Emit(ctx, agentengine.TurnEvent{Kind: agentengine.TurnEventInteractionRequest, Interaction: &agentengine.InteractionRequest{
+					ID: "approval-1", Kind: agentengine.InteractionPermission,
+				}})
 				return agentengine.TurnResult{Status: agentengine.TurnSucceeded}
 			}}
 			handler, _, _, _ := newAgentSessionTestHandler(t, []agent.Agent{sessionCodexAgent("agent-alpha", "Alpha")}, engine, "")
-			body := map[string]any{"input": "Plan", "stream": true}
-			if tc.requestUserInput {
-				body["user_input"] = true
-			}
-			response := performAgentSessionRequest(t, handler, "Alpha", tc.name, body)
+			response := performAgentSessionRequest(t, handler, "Alpha", "permissions", map[string]any{"input": "Plan", "stream": true, "user_input": userInput})
 			if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), "event: error") || strings.Contains(response.Body.String(), "event: request_user_input") {
 				t.Fatalf("response: HTTP %d %s", response.Code, response.Body.String())
 			}
 			if len(engine.client.Resolutions()) != 0 {
-				t.Fatal("runtime interaction was resolved")
+				t.Fatal("runtime permission request was resolved")
 			}
 		})
 	}
