@@ -34,12 +34,13 @@ func respondTemplatePreupload(t *testing.T, w http.ResponseWriter, r *http.Reque
 }
 
 func TestRemoteTemplateBatchPublication(t *testing.T) {
-	for _, scenario := range []string{"create", "update", "lookup_error", "conflict", "preupload_error", "commit_error", "missing_result", "lfs", "ignored"} {
+	for _, scenario := range []string{"create", "update", "lookup_error", "conflict", "metadata_error", "preupload_error", "commit_error", "missing_result", "lfs", "ignored"} {
 		t.Run(scenario, func(t *testing.T) {
 			var events []string
 			var committed []remoteCommitFile
+			var updatedNickname string
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				if r.Header.Get("Authorization") != "Bearer token" || r.URL.Query().Get("current_user") != "wanghj" {
+				if r.Header.Get("Authorization") != "Bearer token" || (r.Method != http.MethodPut && r.URL.Query().Get("current_user") != "wanghj") {
 					t.Error("missing publication credentials")
 				}
 				if r.Method == http.MethodDelete {
@@ -48,10 +49,23 @@ func TestRemoteTemplateBatchPublication(t *testing.T) {
 				events = append(events, r.Method+" "+r.URL.Path)
 				switch r.URL.Path {
 				case "/api/v1/codes/wanghj/ReviewBot":
+					if r.Method == http.MethodPut {
+						var request remoteUpdateCodeRequest
+						if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+							t.Error(err)
+						}
+						updatedNickname = request.Nickname
+						if scenario == "metadata_error" {
+							http.Error(w, "update failed", http.StatusInternalServerError)
+							return
+						}
+						w.WriteHeader(http.StatusOK)
+						return
+					}
 					switch scenario {
 					case "lookup_error":
 						http.Error(w, "unavailable", 500)
-					case "update", "conflict":
+					case "update", "conflict", "metadata_error":
 						_, _ = w.Write([]byte(`{"data":{"default_branch":"release"}}`))
 					default:
 						http.NotFound(w, r)
@@ -124,6 +138,9 @@ func TestRemoteTemplateBatchPublication(t *testing.T) {
 			defer server.Close()
 			remote := NewAuthenticatedRemoteStore(server.URL, "token", "wanghj")
 			spec := versionSpec(t, "ReviewBot")
+			if scenario == "update" {
+				spec.DisplayName = "Updated Reviewer"
+			}
 			spec.ReplaceRemote = scenario != "conflict"
 			_, err := remote.Publish(context.Background(), spec)
 			wantSuccess := scenario == "create" || scenario == "update"
@@ -136,10 +153,22 @@ func TestRemoteTemplateBatchPublication(t *testing.T) {
 					t.Fatalf("events=%v", events)
 				}
 			}
+			if scenario == "update" {
+				want := []string{"GET /api/v1/codes/wanghj/ReviewBot", "PUT /api/v1/codes/wanghj/ReviewBot", "GET /api/v1/codes/wanghj/ReviewBot/refs/release/tree/", "POST /api/v1/codes/wanghj/ReviewBot/preupload/release", "POST /api/v1/codes/wanghj/ReviewBot/commit/release"}
+				if !reflect.DeepEqual(events, want) {
+					t.Fatalf("events=%v", events)
+				}
+				if updatedNickname != "Updated Reviewer" {
+					t.Fatalf("updated nickname=%q", updatedNickname)
+				}
+			}
 			if scenario == "lookup_error" || scenario == "conflict" {
 				if len(events) != 1 {
 					t.Fatalf("unexpected mutation: %v", events)
 				}
+			}
+			if scenario == "metadata_error" && len(events) != 2 {
+				t.Fatalf("metadata failure continued publication: %v", events)
 			}
 			if !wantSuccess {
 				if len(committed) > 0 {

@@ -261,7 +261,7 @@ func (s *LocalStore) Versions(ctx context.Context, id string) ([]TemplateVersion
 				root = s.templateRoot(id)
 			}
 		}
-		_, manifest, err := loadManifestFS(os.DirFS(filepath.Dir(root)), filepath.Join(filepath.Base(root), localManifestFileName), "template version")
+		_, manifest, err := loadManifestFS(os.DirFS(filepath.Dir(root)), templateManifestFSPath(root), "template version")
 		if err != nil {
 			return nil, err
 		}
@@ -322,7 +322,7 @@ func (s *LocalStore) RestoreVersion(ctx context.Context, id string, revision int
 	if err != nil {
 		return Template{}, err
 	}
-	_, manifest, err := loadManifestFS(os.DirFS(filepath.Dir(root)), filepath.Join(filepath.Base(root), localManifestFileName), "template version")
+	_, manifest, err := loadManifestFS(os.DirFS(filepath.Dir(root)), templateManifestFSPath(root), "template version")
 	if err != nil {
 		return Template{}, err
 	}
