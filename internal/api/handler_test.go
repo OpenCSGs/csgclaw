@@ -3077,6 +3077,71 @@ func TestPresentHubTemplateIncludesSensitiveCheckMetadata(t *testing.T) {
 	}
 }
 
+type oversizedHubPublishStore struct {
+	hub.Store
+}
+
+func (oversizedHubPublishStore) Publish(context.Context, hub.PublishSpec) (hub.Template, error) {
+	return hub.Template{}, &hub.PublishFileTooLargeError{Path: "skills/reviewer/data.zip", MaxBytes: 50 * 1024 * 1024}
+}
+
+func TestHandleHubTemplatesReportsOversizedPublishFile(t *testing.T) {
+	restore := stubAuthStatus(func(*http.Request) (auth.Status, error) {
+		return auth.Status{Authenticated: true}, nil
+	})
+	defer restore()
+
+	localRoot := t.TempDir()
+	localStore := hub.NewLocalStore(localRoot)
+	_, err := localStore.Publish(context.Background(), hub.PublishSpec{
+		ID: "Reviewer", Name: "Reviewer", RuntimeKind: agent.RuntimeKindCodex,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	hubSvc, err := hub.NewService(config.HubConfig{
+		DefaultRegistry:        "local",
+		DefaultPublishRegistry: "local",
+		Registries: []config.HubRegistryConfig{
+			{Name: "local", Kind: hub.RegistryKindLocal, Path: localRoot, Enabled: true},
+			{Name: "official", Kind: hub.RegistryKindRemote, Enabled: true},
+		},
+	}, func(cfg config.HubRegistryConfig) (hub.Store, error) {
+		if cfg.Name == "local" {
+			return localStore, nil
+		}
+		return oversizedHubPublishStore{}, nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := &Handler{svc: mustNewService(t)}
+	handler.SetHubService(hubSvc)
+	recorder := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/hub/templates", strings.NewReader(
+		`{"template_id":"local.Reviewer","registry":"official"}`,
+	))
+	handler.handleHubTemplates(recorder, req)
+
+	if recorder.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("status = %d, want 413; body=%s", recorder.Code, recorder.Body.String())
+	}
+	var response struct {
+		Error struct {
+			Code         string `json:"code"`
+			FilePath     string `json:"file_path"`
+			MaxFileBytes int64  `json:"max_file_bytes"`
+		} `json:"error"`
+	}
+	if err := json.NewDecoder(recorder.Body).Decode(&response); err != nil {
+		t.Fatal(err)
+	}
+	if got := response.Error; got.Code != "template_publish_file_too_large" ||
+		got.FilePath != "skills/reviewer/data.zip" || got.MaxFileBytes != 50*1024*1024 {
+		t.Fatalf("unexpected error payload: %+v", got)
+	}
+}
+
 func TestWriteHubTemplateErrorUsesStructuredContract(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	writeHubTemplateError(

@@ -91,6 +91,15 @@ export function localizeAPIError(error: unknown, t: TranslateFn, fallback = ""):
   if (error && typeof error === "object" && "code" in error) {
     const code = String((error as { code?: unknown }).code || "").trim();
     if (code) {
+      if (code === "template_publish_file_too_large") {
+        const { filePath, maxFileBytes } = error as { filePath?: unknown; maxFileBytes?: unknown };
+        if (typeof filePath === "string" && filePath && typeof maxFileBytes === "number" && maxFileBytes > 0) {
+          return t("errors.template_publish_file_too_large_detail", {
+            path: filePath,
+            limit: maxFileBytes / (1024 * 1024),
+          });
+        }
+      }
       const key = `errors.${code}`;
       const localized = t(key);
       const codeFallback = localized !== key ? localized : defaultFallback;
@@ -151,7 +160,9 @@ export function localizeAPIErrorWithDiagnostics(error: unknown, t: TranslateFn, 
     error &&
     typeof error === "object" &&
     "code" in error &&
-    (error.code === "template_cloud_cleanup_pending" || error.code === "template_cloud_publish_timeout")
+    (error.code === "template_cloud_cleanup_pending" ||
+      error.code === "template_cloud_publish_timeout" ||
+      error.code === "template_publish_file_too_large")
   )
     return summary;
   if (!error || typeof error !== "object") return summary;

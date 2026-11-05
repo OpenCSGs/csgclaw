@@ -4,9 +4,12 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -234,14 +237,38 @@ func TestRemotePublicationFilesTraversesPagesAndDirectories(t *testing.T) {
 	}
 }
 
-func TestRemotePublicationSnapshotLimitPrecedesRepositoryCreation(t *testing.T) {
+func TestRemotePublicationAllowsCombinedSizeAbovePerFileLimit(t *testing.T) {
+	spec := versionSpec(t, "Reviewer")
+	files, err := buildRemoteTemplateFiles(spec, remotePublishMaxFileBytes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	limit := len(files[localManifestFileName])
+	if err := os.WriteFile(filepath.Join(spec.WorkspaceRef.Path, "AGENTS.md"), make([]byte, limit), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	files, err = buildRemoteTemplateFiles(spec, int64(limit))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := len(files["instructions/AGENTS.md"]); got != limit {
+		t.Fatalf("instructions file size = %d, want %d", got, limit)
+	}
+}
+
+func TestRemotePublicationFileLimitPrecedesRepositoryCreation(t *testing.T) {
 	calls := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { calls++; http.Error(w, "unexpected request", 500) }))
 	defer server.Close()
 	remote := NewAuthenticatedRemoteStore(server.URL, "token", "alice")
-	remote.maxWorkspace = 1
-	if _, err := remote.Publish(context.Background(), versionSpec(t, "Reviewer")); err == nil {
-		t.Fatal("expected size limit error")
+	spec := versionSpec(t, "Reviewer")
+	if err := os.Truncate(filepath.Join(spec.WorkspaceRef.Path, "AGENTS.md"), remotePublishMaxFileBytes+1); err != nil {
+		t.Fatal(err)
+	}
+	_, err := remote.Publish(context.Background(), spec)
+	var tooLarge *PublishFileTooLargeError
+	if !errors.As(err, &tooLarge) || tooLarge.Path != "instructions/AGENTS.md" || tooLarge.MaxBytes != remotePublishMaxFileBytes {
+		t.Fatalf("expected size limit error for instructions/AGENTS.md, got %v", err)
 	}
 	if calls != 0 {
 		t.Fatalf("oversized snapshot made %d remote requests", calls)

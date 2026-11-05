@@ -1,3 +1,4 @@
+import { apiErrorFromText } from "@/api/client";
 import {
   createTranslator,
   localizeAPIError,
@@ -161,6 +162,29 @@ describe("i18n messages", () => {
 });
 
 describe("template publishing diagnostics", () => {
+  it.each([
+    ["zh", "模板文件「skills/demo/data.zip」超过单文件 50 MB 上限，请缩小或移除该文件后重新发布。"],
+    [
+      "en",
+      "Template file “skills/demo/data.zip” exceeds the 50 MB per-file limit. Reduce its size or remove it before publishing again.",
+    ],
+  ] as const)("shows the file size error without HTTP diagnostics in %s", (locale, expected) => {
+    const error = apiErrorFromText(
+      413,
+      JSON.stringify({
+        error: {
+          code: "template_publish_file_too_large",
+          message: "technical diagnostic",
+          file_path: "skills/demo/data.zip",
+          max_file_bytes: 50 * 1024 * 1024,
+          published_template_id: "local.demo",
+        },
+      }),
+    );
+
+    expect(error.publishedTemplateId).toBe("local.demo");
+    expect(localizeAPIErrorWithDiagnostics(error, createTranslator(locale))).toBe(expected);
+  });
   it.each(["zh", "en"] as const)("retains remote diagnostic context in %s", (locale) => {
     const message = "create remote hub template: remote hub request failed with status 500: repository unavailable";
     const formatted = localizeAPIErrorWithDiagnostics(
