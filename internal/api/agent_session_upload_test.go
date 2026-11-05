@@ -9,6 +9,7 @@ import (
 	"image/png"
 	"io"
 	"io/fs"
+	"mime"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -122,6 +123,47 @@ func TestAgentSessionUploadThenReference(t *testing.T) {
 	}
 	if got, err := os.ReadFile(local); err != nil || !bytes.Equal(got, edited) {
 		t.Fatalf("reference changed the workspace copy: %q, %v", got, err)
+	}
+}
+
+func TestAgentSessionUploadPDF(t *testing.T) {
+	server, _ := sessionOutputTestServer(t, &fakeSessionEngine{}, "")
+	const name = "会议纪要.pdf"
+	const mediaType = "application/pdf"
+	const pdf = "%PDF-1.4\n" +
+		"1 0 obj\n<</Type/Catalog/Pages 2 0 R>>\nendobj\n" +
+		"2 0 obj\n<</Type/Pages/Kids[3 0 R]/Count 1>>\nendobj\n" +
+		"3 0 obj\n<</Type/Page/Parent 2 0 R/MediaBox[0 0 100 100]/Resources<<>>>>\nendobj\n" +
+		"xref\n0 4\n0000000000 65535 f\r\n0000000009 00000 n\r\n0000000054 00000 n\r\n0000000105 00000 n\r\n" +
+		"trailer\n<</Size 4/Root 1 0 R>>\nstartxref\n184\n%%EOF\n"
+	upload := multipartSessionRequest(t, nil, sessionUploadFixture{name, mediaType, pdf})
+	body := postSessionUploadTest(t, server, "/api/v1/agents/agent-alpha/sessions/test-pdf/attachments",
+		"Bearer test-server-token", upload.Header.Get("Content-Type"), upload.Body, http.StatusCreated)
+	var saved struct {
+		Attachments []im.MessageAttachment
+	}
+	if err := json.Unmarshal(body, &saved); err != nil || len(saved.Attachments) != 1 {
+		t.Fatalf("upload: %s, %v", body, err)
+	}
+	att := saved.Attachments[0]
+	if att.Name != name || att.MediaType != mediaType || att.Kind != "file" || att.DownloadURL == "" || att.PreviewURL != "" {
+		t.Fatalf("unexpected PDF metadata: %+v", att)
+	}
+	resp, err := server.Client().Get(server.URL + att.DownloadURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	disposition, params, err := mime.ParseMediaType(resp.Header.Get("Content-Disposition"))
+	if err != nil || disposition != "attachment" || params["filename"] != name {
+		t.Fatalf("PDF disposition: %q, %v", resp.Header.Get("Content-Disposition"), err)
+	}
+	if resp.StatusCode != http.StatusOK || resp.Header.Get("Content-Type") != mediaType {
+		t.Fatalf("PDF download: HTTP %d, Content-Type %q", resp.StatusCode, resp.Header.Get("Content-Type"))
+	}
+	data, err := io.ReadAll(resp.Body)
+	if err != nil || !bytes.Equal(data, []byte(pdf)) {
+		t.Fatalf("PDF download differs from original: %v", err)
 	}
 }
 

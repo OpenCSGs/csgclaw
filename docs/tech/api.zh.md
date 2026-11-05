@@ -1631,7 +1631,7 @@ Base64 会使传输体积增加约三分之一；JSON 客户端和代理可能�
 | 用户原件 | `input_attachments` | `input_attachments` | `input_attachments` |
 | Agent 结果文件 | `output[0].attachments` | — | `attachments` |
 
-附件数组位于 SSE 事件 `data` 的顶层，空数组省略。每个附件包含 `id`、`name`、`media_type`、`size_bytes`、`sha256`、`download_url` 和相对路径 `workspace_path`。图片还提供 `preview_url`。Codex 可以通过 `csgclaw_publish_file` 发布结果文件。
+附件数组位于 SSE 事件 `data` 的顶层，空数组省略。每个附件包含 `id`、`name`、`media_type`、`size_bytes`、`sha256`、`download_url` 和相对路径 `workspace_path`。图片还提供 `preview_url`。PDF 的下载响应使用 `Content-Disposition: attachment`；Portal 可以通过下例的 `readAttachment(id)` 获取 PDF Blob，使用 `URL.createObjectURL(blob)` 交给 PDF 查看器，并在关闭预览时调用 `URL.revokeObjectURL(url)`。Codex 可以通过 `csgclaw_publish_file` 发布结果文件。
 
 原件和结果文件保存在 Agent workspace 的 `.csgclaw/attachments/sessions/<session_id>/` 目录中。workspace 使用 Agent 配置的 `local_workspace_dir` 或 runtime 默认目录。下载始终返回保存时的内容，即使 workspace 副本已被修改。更换容器后要继续访问两份数据，需同时持久化 workspace 和 CSGClaw 数据目录。 写入会话附件后，如需回退到旧版，请提前备份这两个目录。旧版启动时只识别房间消息引用，可能清理会话附件的下载数据。
 

@@ -1684,7 +1684,7 @@ The server saves new originals to IM and the workspace before calling the agent.
 | User originals | `input_attachments` | `input_attachments` | `input_attachments` |
 | Agent results | `output[0].attachments` | — | `attachments` |
 
-The attachment arrays are top-level fields of the SSE event data. Empty arrays are omitted. Each attachment includes `id`, `name`, `media_type`, `size_bytes`, `sha256`, `download_url`, and a relative `workspace_path`. Images also have a `preview_url`. A Codex agent can publish results with `csgclaw_publish_file`.
+The attachment arrays are top-level fields of the SSE event data. Empty arrays are omitted. Each attachment includes `id`, `name`, `media_type`, `size_bytes`, `sha256`, `download_url`, and a relative `workspace_path`. Images also have a `preview_url`. PDFs are served with `Content-Disposition: attachment`. To preview a PDF, use `readAttachment(id)` below to fetch its Blob, pass `URL.createObjectURL(blob)` to a PDF viewer, and call `URL.revokeObjectURL(url)` when the preview closes. A Codex agent can publish results with `csgclaw_publish_file`.
 
 Workspace copies are under `.csgclaw/attachments/sessions/<session_id>/` in the agent’s configured `local_workspace_dir` or runtime default. File downloads serve the original bytes even if the workspace copy is edited. To retain both across container replacement, persist both the workspace and the CSGClaw data directory. Back up both directories before downgrading an instance that has accepted session attachments. Older versions only recognize room message references during startup cleanup and can remove the downloadable copies of session files.
 
