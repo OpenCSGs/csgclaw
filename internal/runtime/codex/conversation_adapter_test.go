@@ -17,7 +17,7 @@ import (
 func TestStructuredQuestionPreservesReadableOutput(t *testing.T) {
 	adapter := &ConversationAdapter{}
 	var events []contract.TurnEvent
-	var output conversationText
+	var output conversationOutput
 	var files []*contract.OutputFile
 	text := "## 交互式输出演示 - 第 1/3 步\n\n请选择工作流分支。"
 	result := adapter.handleEvent(context.Background(), contract.TurnRequest{}, contract.EventSinkFunc(func(_ context.Context, event contract.TurnEvent) error {
@@ -97,7 +97,7 @@ func TestInputFileExplainsTemporaryPathAndPreservesExplicitSavedCopy(t *testing.
 
 func TestConversationAdapterPreservesCommentaryOutsideFinalOutput(t *testing.T) {
 	adapter := &ConversationAdapter{}
-	var output conversationText
+	var output conversationOutput
 	var files []*contract.OutputFile
 	var events []contract.TurnEvent
 	sink := contract.EventSinkFunc(func(_ context.Context, event contract.TurnEvent) error { events = append(events, event); return nil })

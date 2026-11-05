@@ -546,6 +546,7 @@ func TestAgentSessionResponsesStreamsExistingSSEShapeAndToolBlocks(t *testing.T)
 				ID: "call-1", Kind: "mcp_tool_call", InputSummary: `{"truncated":true}`,
 				Payload: map[string]any{"server": "wiki", "tool": "search", "arguments": map[string]any{"query": longQuery, "api_key": "sk-secret"}},
 			}},
+			{Kind: agentengine.TurnEventToolCallUpdate, Tool: &agentengine.ToolActivity{ID: "call-1", Status: "running", OutputSummary: "partial output"}},
 			{Kind: agentengine.TurnEventToolCallUpdate, Tool: &agentengine.ToolActivity{ID: "call-1", OutputSummary: "/workspace"}},
 			{Kind: agentengine.TurnEventTextDelta, Text: "hello"},
 			{Kind: agentengine.TurnEventTextDelta, Text: " world"},
@@ -563,6 +564,7 @@ func TestAgentSessionResponsesStreamsExistingSSEShapeAndToolBlocks(t *testing.T)
 		t.Fatalf("status = %d, content-type = %q", recorder.Code, recorder.Header().Get("Content-Type"))
 	}
 	body := recorder.Body.String()
+	remaining := body
 	for _, want := range []string{
 		"event: message_start",
 		`"content_block":{"id":"call-1","input":{},"name":"search","type":"tool_use"}`,
@@ -574,17 +576,240 @@ func TestAgentSessionResponsesStreamsExistingSSEShapeAndToolBlocks(t *testing.T)
 		`"delta":{"text":" world","type":"text_delta"}`,
 		"event: message_stop",
 	} {
-		if !strings.Contains(body, want) {
-			t.Fatalf("SSE body missing %q: %s", want, body)
+		_, after, found := strings.Cut(remaining, want)
+		if !found {
+			t.Fatalf("SSE body missing or out of order %q: %s", want, body)
 		}
+		remaining = after
+	}
+	if got := strings.Count(body, `"type":"tool_result"`); got != 1 {
+		t.Fatalf("tool_result count = %d, want 1", got)
 	}
 	if strings.Count(body, "hello world") != 0 {
 		t.Fatalf("completed text was duplicated in SSE: %s", body)
 	}
 }
 
+func TestAgentSessionStreamHoldsTextUntilOutstandingToolsFinish(t *testing.T) {
+	recorder := httptest.NewRecorder()
+	stream := newAgentSessionEventStream(recorder)
+	tool := func(kind agentengine.TurnEventKind, id, status string) {
+		t.Helper()
+		if err := stream.writeToolEvent(kind, &agentengine.ToolActivity{ID: id, Kind: "exec_command", Status: status}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	tool(agentengine.TurnEventToolCallStart, "a", "started")
+	tool(agentengine.TurnEventToolCallStart, "b", "started")
+	if err := stream.writeText("final answer"); err != nil {
+		t.Fatal(err)
+	}
+	tool(agentengine.TurnEventToolCallUpdate, "b", "failed")
+	tool(agentengine.TurnEventToolCallUpdate, "b", "failed")
+	if strings.Contains(recorder.Body.String(), "final answer") {
+		t.Fatal("text was published while tool a was running")
+	}
+	tool(agentengine.TurnEventToolCallUpdate, "a", "completed")
+	if err := stream.writeCompleted("final answer", "", nil, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	body := recorder.Body.String()
+	_, after, ok := strings.Cut(body, `"tool_use_id":"a"`)
+	if !ok || !strings.Contains(after, "final answer") || strings.Count(body, "final answer") != 1 {
+		t.Fatalf("expected text once after tool a: %s", body)
+	}
+}
+
+func TestAgentSessionResponsesRestoresBufferedTextInHistoryOrder(t *testing.T) {
+	history := []agentengine.RecoveredTextPart{
+		{Text: "Intro."}, {ToolID: "a"}, {Text: "First. "}, {ToolID: "b"}, {Text: "Second."},
+	}
+	for _, failed := range []bool{false, true} {
+		engine := &fakeSessionEngine{run: func(ctx context.Context, _ string, _ agentengine.TurnRequest, sink agentengine.EventSink) agentengine.TurnResult {
+			events := []agentengine.TurnEvent{
+				{Kind: agentengine.TurnEventTextDelta, Text: "Intro."},
+				{Kind: agentengine.TurnEventToolCallStart, Tool: &agentengine.ToolActivity{ID: "a", Kind: "exec_command"}},
+				{Kind: agentengine.TurnEventToolCallStart, Tool: &agentengine.ToolActivity{ID: "b", Kind: "exec_command"}},
+				{Kind: agentengine.TurnEventTextDelta, ItemID: "second", Text: "Sec"},
+				{Kind: agentengine.TurnEventToolCallUpdate, Tool: &agentengine.ToolActivity{ID: "a", Status: "completed"}, RecoveredText: history},
+				{Kind: agentengine.TurnEventTextDelta, ItemID: "first", Text: "First. ", TextSnapshot: true},
+				{Kind: agentengine.TurnEventToolCallUpdate, Tool: &agentengine.ToolActivity{ID: "b", Status: "completed"}},
+				{Kind: agentengine.TurnEventTextDelta, ItemID: "second", Text: "ond."},
+			}
+			for _, event := range events {
+				if err := sink.Emit(ctx, event); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if failed {
+				return agentengine.TurnResult{Status: agentengine.TurnFailed, Error: &agentengine.TurnError{Code: agentengine.ErrorRuntimeFailed, Message: "worker stopped"}}
+			}
+			return agentengine.TurnResult{Status: agentengine.TurnSucceeded, Output: "Intro.First. Second."}
+		}}
+		handler, _, _, _ := newAgentSessionTestHandler(t, []agent.Agent{sessionCodexAgent("agent-alpha", "Alpha")}, engine, "")
+		response := performAgentSessionRequest(t, handler, "agent-alpha", "recovered", map[string]any{"input": "hello", "stream": true})
+		body := response.Body.String()
+		for _, part := range []string{`"text":"Intro."`, `"tool_use_id":"a"`, `"text":"First. "`, `"tool_use_id":"b"`, `"text":"Second."`, "event: message_stop"} {
+			_, remaining, ok := strings.Cut(body, part)
+			if !ok {
+				t.Fatalf("missing or out of order %s in %s", part, response.Body.String())
+			}
+			body = remaining
+		}
+		if strings.Count(response.Body.String(), `"type":"text_delta"`) != 3 {
+			t.Fatalf("duplicate or partial text in %s", response.Body.String())
+		}
+	}
+}
+
+func TestAgentSessionStreamTextDoesNotWaitForLaterTools(t *testing.T) {
+	recorder := httptest.NewRecorder()
+	stream := newAgentSessionEventStream(recorder)
+	tool := func(kind agentengine.TurnEventKind, id, status string) {
+		t.Helper()
+		if err := stream.writeToolEvent(kind, &agentengine.ToolActivity{ID: id, Kind: "exec_command", Status: status}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	text := func(value string) {
+		t.Helper()
+		if err := stream.writeText(value); err != nil {
+			t.Fatal(err)
+		}
+	}
+	tool(agentengine.TurnEventToolCallStart, "a", "started")
+	text("Before B.")
+	tool(agentengine.TurnEventToolCallStart, "b", "started")
+	text("After B.")
+	tool(agentengine.TurnEventToolCallStart, "c", "started")
+	tool(agentengine.TurnEventToolCallUpdate, "c", "completed")
+	text("After C.")
+	if strings.Contains(recorder.Body.String(), "Before B.") {
+		t.Fatal("text appeared before the result for a")
+	}
+	tool(agentengine.TurnEventToolCallUpdate, "a", "completed")
+	body := recorder.Body.String()
+	if strings.Count(body, "Before B.") != 1 || strings.Contains(body, "After B.") || strings.Contains(body, "After C.") {
+		t.Fatalf("unexpected text while b is running: %s", body)
+	}
+	tool(agentengine.TurnEventToolCallUpdate, "b", "failed")
+	body = recorder.Body.String()
+	for _, want := range []string{`"tool_use_id":"a"`, "Before B.", `"tool_use_id":"b"`, "After B.", "After C."} {
+		_, after, found := strings.Cut(body, want)
+		if !found {
+			t.Fatalf("expected %q in %s", want, body)
+		}
+		body = after
+	}
+}
+
+func TestAgentSessionStreamFlushesPendingTextAtTurnEnd(t *testing.T) {
+	for _, failed := range []bool{false, true} {
+		recorder := httptest.NewRecorder()
+		stream := newAgentSessionEventStream(recorder)
+		if err := stream.writeToolEvent(agentengine.TurnEventToolCallStart, &agentengine.ToolActivity{ID: "a", Kind: "exec_command"}); err != nil {
+			t.Fatal(err)
+		}
+		if err := stream.writeText("partial answer"); err != nil {
+			t.Fatal(err)
+		}
+		if failed {
+			stream.writeFailure(agentSessionResponse{}, errors.New("worker exited"))
+		} else if err := stream.writeCompleted("partial answer", "", nil, nil, nil); err != nil {
+			t.Fatal(err)
+		}
+		body := recorder.Body.String()
+		_, after, ok := strings.Cut(body, "partial answer")
+		if !ok || !strings.Contains(after, "event: message_stop") || strings.Count(body, "partial answer") != 1 || strings.Contains(body, `"type":"tool_result"`) {
+			t.Fatalf("failed=%v: %s", failed, body)
+		}
+	}
+}
+
+func TestAgentSessionStreamMatchesAnonymousToolResultsByID(t *testing.T) {
+	recorder := httptest.NewRecorder()
+	stream := newAgentSessionEventStream(recorder)
+	events := []agentengine.TurnEvent{
+		{Kind: agentengine.TurnEventToolCallUpdate, Tool: &agentengine.ToolActivity{ID: "orphan", Status: "completed", OutputSummary: "unknown output"}},
+		{Kind: agentengine.TurnEventToolCallStart, Tool: &agentengine.ToolActivity{
+			ID: "plan", Kind: "dynamic_tool_call", Payload: map[string]any{"tool": "update_plan", "arguments": map[string]any{}},
+		}},
+		{Kind: agentengine.TurnEventToolCallUpdate, Tool: &agentengine.ToolActivity{ID: "plan", Status: "completed", OutputSummary: "plan updated"}},
+	}
+	for _, event := range events {
+		if err := stream.writeToolEvent(event.Kind, event.Tool); err != nil {
+			t.Fatal(err)
+		}
+	}
+	body := recorder.Body.String()
+	if strings.Count(body, `"type":"tool_use"`) != 1 || strings.Count(body, `"type":"tool_result"`) != 1 ||
+		!strings.Contains(body, `"name":"update_plan"`) || !strings.Contains(body, `"tool_use_id":"plan"`) ||
+		!strings.Contains(body, "plan updated") || strings.Contains(body, "orphan") {
+		t.Fatalf("unexpected tool blocks: %s", body)
+	}
+}
+
+func TestAgentSessionStreamWritesOneResultPerTool(t *testing.T) {
+	recorder := httptest.NewRecorder()
+	stream := newAgentSessionEventStream(recorder)
+	for _, event := range []struct {
+		kind               agentengine.TurnEventKind
+		id, status, output string
+	}{
+		{agentengine.TurnEventToolCallStart, "", "started", ""},
+		{agentengine.TurnEventToolCallUpdate, "", "failed", "unidentified"},
+		{agentengine.TurnEventToolCallStart, "a", "started", ""},
+		{agentengine.TurnEventToolCallStart, "b", "pending", ""},
+		{agentengine.TurnEventToolCallUpdate, "a", "running", "preview a"},
+		{agentengine.TurnEventToolCallUpdate, "b", "in_progress", "preview b"},
+		{agentengine.TurnEventToolCallUpdate, "b", "failed", "command failed"},
+		{agentengine.TurnEventToolCallStart, "a", "started", ""},
+		{agentengine.TurnEventToolCallUpdate, "a", "", ""},
+		{agentengine.TurnEventToolCallUpdate, "b", "completed", "late output"},
+		{agentengine.TurnEventToolCallUpdate, "a", "running", "late preview"},
+		{agentengine.TurnEventToolCallUpdate, "c", "interrupted", "canceled"},
+	} {
+		tool := &agentengine.ToolActivity{ID: event.id, Kind: "exec_command", Status: event.status, OutputSummary: event.output}
+		if err := stream.writeToolEvent(event.kind, tool); err != nil {
+			t.Fatal(err)
+		}
+	}
+	body := recorder.Body.String()
+	for _, unexpected := range []string{"preview", "late output"} {
+		if strings.Contains(body, unexpected) {
+			t.Fatalf("unexpected tool output %q in %s", unexpected, body)
+		}
+	}
+	want := []string{
+		`"id":"a","input":{},"name":"exec_command","type":"tool_use"`,
+		`"id":"b","input":{},"name":"exec_command","type":"tool_use"`,
+		`"is_error":true,"status":"failed","tool_use_id":"b","type":"tool_result"`,
+		`"content":"command failed","type":"tool_result_delta"`,
+		`"content":"","tool_use_id":"a","type":"tool_result"`,
+		`"content":"","type":"tool_result_delta"`,
+		`"id":"c","input":{},"name":"exec_command","type":"tool_use"`,
+		`"is_error":true,"status":"canceled","tool_use_id":"c","type":"tool_result"`,
+	}
+	remaining := body
+	for _, part := range want {
+		_, after, found := strings.Cut(remaining, part)
+		if !found {
+			t.Fatalf("missing or out-of-order %s in %s", part, body)
+		}
+		remaining = after
+	}
+	for _, name := range []string{"content_block_start", "content_block_delta", "content_block_stop"} {
+		if got := strings.Count(body, "event: "+name+"\n"); got != 6 {
+			t.Errorf("%s count = %d, want 6", name, got)
+		}
+	}
+}
+
 func TestAgentSessionResponsesStreamsTerminalErrorShape(t *testing.T) {
-	engine := &fakeSessionEngine{run: func(context.Context, string, agentengine.TurnRequest, agentengine.EventSink) agentengine.TurnResult {
+	engine := &fakeSessionEngine{run: func(ctx context.Context, _ string, _ agentengine.TurnRequest, sink agentengine.EventSink) agentengine.TurnResult {
+		if err := sink.Emit(ctx, agentengine.TurnEvent{Kind: agentengine.TurnEventTextDelta, Text: "partial answer"}); err != nil {
+			t.Fatalf("emit text: %v", err)
+		}
 		return agentengine.TurnResult{
 			Status: agentengine.TurnFailed,
 			Error:  &agentengine.TurnError{Code: agentengine.ErrorRuntimeFailed, Message: "runtime failed"},
@@ -593,8 +818,14 @@ func TestAgentSessionResponsesStreamsTerminalErrorShape(t *testing.T) {
 	handler, _, _, _ := newAgentSessionTestHandler(t, []agent.Agent{sessionCodexAgent("agent-alpha", "Alpha")}, engine, "")
 	recorder := performAgentSessionRequest(t, handler, "agent-alpha", "stream-error", map[string]any{"input": "hello", "stream": true})
 	body := recorder.Body.String()
-	if recorder.Code != http.StatusOK || !strings.Contains(body, "event: error") ||
-		!strings.Contains(body, `"stop_reason":"error"`) || !strings.Contains(body, "event: message_stop") {
+	var events []string
+	for line := range strings.SplitSeq(body, "\n") {
+		if event, ok := strings.CutPrefix(line, "event: "); ok {
+			events = append(events, event)
+		}
+	}
+	want := "message_start content_block_start content_block_delta content_block_stop error message_delta message_stop"
+	if recorder.Code != http.StatusOK || strings.Join(events, " ") != want || !strings.Contains(body, `"stop_reason":"error"`) {
 		t.Fatalf("response = %d %s", recorder.Code, body)
 	}
 }

@@ -1754,16 +1754,19 @@ message_stop
 ```
 
 Each SSE block contains both `event: <type>` and a JSON `data:` payload whose
-`type` matches the event name. Codex tool activity is included as `tool_use`
-content blocks with `input_json_delta`, followed by custom `tool_result` content
-blocks with `tool_result_delta`, matching the Genius chat protocol. Tool-use
-blocks preserve the runtime's concrete tool name and structured input; sensitive
-values are redacted before they leave the server. While a response is idle, the
-server sends an SSE `: heartbeat` comment about every 15 seconds to keep the
-connection alive.
-For Codex agents, final-answer `item/agentMessage/delta` events emitted by Codex
-app-server are forwarded immediately as `text_delta`; commentary
-and unclassified agent-message events are not included in the answer. Completion
+`type` matches the event name. A `tool_use` block identifies the tool and
+carries its redacted input in `input_json_delta`. The following `content_block_stop`
+ends the input. When the tool finishes, a single `tool_result` block carries its
+output in `tool_result_delta`. Each text delta waits for results from tools already running when it arrived,
+or for the end of the turn if a result is unavailable.
+Match `tool_result.tool_use_id` to `tool_use.id`, including when tools run
+concurrently. For a failed or canceled tool, the result block includes
+`is_error: true` and `status: "failed"` or `"canceled"`. While a response is
+idle, the server sends an SSE `: heartbeat` comment about every 15 seconds to
+keep the connection alive.
+
+For Codex agents, the API streams final-answer text and agent-message deltas
+that omit the phase, and skips explicit commentary and text snapshots. Completion
 events do not repeat the full text; clients should build the visible answer by
 appending deltas. Runtimes that only publish a final message fall back to one text
 delta. The stream is established and `message_start` is flushed before the agent
@@ -1773,7 +1776,7 @@ and `message_stop`.
 Only one turn may run for a session at a time.
 Different session IDs may run concurrently.
 Different agents can use the same external `session_id` independently.
-The server imposes no response duration limit. Client disconnects and explicit cancellation still cancel the running response.
+The server imposes no response duration limit. After two minutes without progress, the Codex runtime can check the worker's history for a missing completion notification. This check requires a transport that supports write deadlines. When the native turn ID matches and history records a terminal status and completion time, the server sends any missing tool results and recoverable text in native item order before ending the response. If legacy events omit their turn ID after recovery, an identified completion can also restore the current turn from its native items. Both paths use the same SSE block types as live output. Client disconnects and explicit cancellation cancel the running response.
 
 ### Session questions
 

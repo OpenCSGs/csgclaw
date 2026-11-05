@@ -220,6 +220,9 @@ func mergeDSHToolActivity(previous contract.ToolActivity, update map[string]any)
 	mergeDSHString(&tool.ID, update["toolCallId"])
 	mergeDSHString(&tool.Title, update["title"])
 	mergeDSHString(&tool.Status, update["status"])
+	if tool.Status == "" {
+		tool.Status = "pending" // ACP default for calls that have not reported a status.
+	}
 
 	var reportedKind string
 	mergeDSHString(&reportedKind, update["kind"])

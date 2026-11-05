@@ -242,8 +242,7 @@ func TestEventSinkStillDropsNonReliableEventsWhenSubscriberBufferIsFull(t *testi
 		RuntimeID:  "rt-1",
 		Kind:       SessionEventToolCallUpdate,
 		ToolCallID: "dropped-tool",
-		ToolStatus: "completed",
-		ReceivedAt: time.Now().UTC(),
+		ToolStatus: "running",
 	})
 
 	for i := 0; i < defaultSessionEventBuffer; i++ {
@@ -256,5 +255,86 @@ func TestEventSinkStillDropsNonReliableEventsWhenSubscriberBufferIsFull(t *testi
 	case event := <-events:
 		t.Fatalf("unexpected extra event after draining buffer: %+v", event)
 	case <-time.After(50 * time.Millisecond):
+	}
+}
+
+func TestEventSinkPreservesToolLifecycleWithSlowSubscriber(t *testing.T) {
+	t.Parallel()
+
+	for _, status := range []string{"completed", "failed", "canceled"} {
+		t.Run(status, func(t *testing.T) {
+			sink := NewEventSink()
+			events, cancel := sink.SubscribeSession("rt-1", "session-1")
+			defer cancel()
+
+			publish := func(event SessionEvent) {
+				event.RuntimeID = "rt-1"
+				event.SessionID = "session-1"
+				sink.Publish(event)
+			}
+			for i := 0; i < defaultSessionEventBuffer; i++ {
+				publish(SessionEvent{Kind: SessionEventToolCallUpdate, ToolCallID: "filler", ToolStatus: "running"})
+			}
+
+			want := []SessionEvent{
+				{Kind: SessionEventTextDelta, Text: "before"},
+				{Kind: SessionEventToolCallStart, ToolCallID: "call"},
+				{Kind: SessionEventToolCallUpdate, ToolCallID: "call", ToolStatus: status},
+				{Kind: SessionEventTextDelta, Text: "after"},
+				{Kind: SessionEventPromptCompleted},
+			}
+			for _, event := range want {
+				publish(event)
+				if event.Kind == SessionEventToolCallStart {
+					publish(SessionEvent{Kind: SessionEventToolCallUpdate, ToolCallID: "call", ToolStatus: "running"})
+				}
+			}
+
+			for i := 0; i < defaultSessionEventBuffer; i++ {
+				if got := <-events; got.ToolCallID != "filler" {
+					t.Fatalf("buffered event %d = %+v", i, got)
+				}
+			}
+			deadline := time.After(time.Second)
+			for _, expected := range want {
+				select {
+				case got := <-events:
+					if got.Kind != expected.Kind || got.ToolCallID != expected.ToolCallID || got.ToolStatus != expected.ToolStatus || got.Text != expected.Text {
+						t.Fatalf("got %+v, want %+v", got, expected)
+					}
+				case <-deadline:
+					t.Fatalf("timed out waiting for %+v", expected)
+				}
+			}
+		})
+	}
+}
+
+func TestEventSinkKeepsToolProgressBetweenStartAndCompletion(t *testing.T) {
+	t.Parallel()
+
+	sink := NewEventSink()
+	events, cancel := sink.Subscribe("rt-1")
+	defer cancel()
+	want := []SessionEvent{
+		{RuntimeID: "rt-1", Kind: SessionEventTextDelta, Text: "before"},
+		{RuntimeID: "rt-1", Kind: SessionEventToolCallStart, ToolCallID: "call"},
+		{RuntimeID: "rt-1", Kind: SessionEventToolCallUpdate, ToolCallID: "call", ToolStatus: "running"},
+		{RuntimeID: "rt-1", Kind: SessionEventToolCallUpdate, ToolCallID: "call", ToolStatus: "completed"},
+		{RuntimeID: "rt-1", Kind: SessionEventTextDelta, Text: "after"},
+	}
+	for _, event := range want {
+		sink.Publish(event)
+	}
+	deadline := time.After(time.Second)
+	for _, expected := range want {
+		select {
+		case got := <-events:
+			if got != expected {
+				t.Fatalf("got %+v, want %+v", got, expected)
+			}
+		case <-deadline:
+			t.Fatalf("timed out waiting for %+v", expected)
+		}
 	}
 }

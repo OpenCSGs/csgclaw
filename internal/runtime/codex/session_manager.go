@@ -45,10 +45,10 @@ type liveSession struct {
 	filePublishingThreads map[string]bool
 	turnWaiters           map[string]*appServerTurnWaiter
 	turnContexts          map[string]appServerTurnContext
-	turnThreads           map[string]string
+	turnThreads           map[string]appServerTrackedTurn
 	turnThreadOrder       []string
 	commandOutputs        map[string]*appServerCommandOutputState
-	replayedExecCommands  map[string]struct{}
+	legacyTools           map[string]*legacyTurnTools
 	replayedAgentMessages map[string]struct{}
 	streamedAgentMessages map[string]struct{}
 	streamedAgentThreads  map[string]struct{}
