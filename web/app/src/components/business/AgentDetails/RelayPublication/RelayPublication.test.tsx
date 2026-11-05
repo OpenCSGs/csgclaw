@@ -21,14 +21,16 @@ function Harness() {
     <RelayPublication
       controller={useRelayPublication("agent-alpha")}
       t={((key: string) => key) as TranslateFn}
-      renderAction={(action) => (
-        <DropdownMenuRoot>
-          <DropdownMenuTrigger asChild>
-            <Button>More</Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent>{action}</DropdownMenuContent>
-        </DropdownMenuRoot>
-      )}
+      renderAction={(action) =>
+        action ? (
+          <DropdownMenuRoot>
+            <DropdownMenuTrigger asChild>
+              <Button>More</Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent>{action}</DropdownMenuContent>
+          </DropdownMenuRoot>
+        ) : null
+      }
     />
   );
 }
@@ -39,7 +41,7 @@ function setup() {
       <Harness />
     </QueryClientProvider>,
   );
-  return userEvent.setup();
+  return { user: userEvent.setup(), client };
 }
 beforeEach(() => {
   vi.resetAllMocks();
@@ -48,36 +50,16 @@ beforeEach(() => {
   vi.mocked(unpublishRelayAgent).mockResolvedValue(unpublished);
 });
 describe("Relay publication", () => {
-  it("publishes only after confirmation and shows online state", async () => {
-    const user = setup();
-    expect(screen.queryByRole("button", { name: "relayPublish" })).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "More" }));
-    await waitFor(() => expect(screen.getByRole("menuitem", { name: "relayPublish" })).toBeEnabled());
-    await user.click(screen.getByRole("menuitem", { name: "relayPublish" }));
-    await screen.findByRole("dialog");
+  it("hides the menu for an unpublished agent", async () => {
+    const { client } = setup();
+    await waitFor(() => expect(client.getQueryData(["relay-publication", "agent-alpha"])).toEqual(unpublished));
+    expect(screen.queryByRole("button", { name: "More" })).not.toBeInTheDocument();
     expect(publishRelayAgent).not.toHaveBeenCalled();
-    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "relayPublish" }));
-    await screen.findByText("relayOnline");
-    expect(publishRelayAgent).toHaveBeenCalledWith("agent-alpha");
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-  });
-  it("uses the current login without requesting connection settings", async () => {
-    vi.mocked(fetchRelayPublication).mockResolvedValue({ ...unpublished, configured: false });
-    const user = setup();
-    await user.click(screen.getByRole("button", { name: "More" }));
-    await waitFor(() => expect(screen.getByRole("menuitem", { name: "relayPublish" })).toBeEnabled());
-    await user.click(screen.getByRole("menuitem", { name: "relayPublish" }));
-    await screen.findByRole("dialog");
-    expect(publishRelayAgent).not.toHaveBeenCalled();
-    await user.click(screen.getByRole("button", { name: "relayPublish" }));
-    await waitFor(() => expect(publishRelayAgent).toHaveBeenCalledWith("agent-alpha"));
-    expect(screen.queryByLabelText("relayToken")).not.toBeInTheDocument();
   });
   it("unpublishes an online agent from the management dialog", async () => {
     vi.mocked(fetchRelayPublication).mockResolvedValue(online);
-    const user = setup();
-    await user.click(screen.getByRole("button", { name: "More" }));
+    const { user } = setup();
+    await user.click(await screen.findByRole("button", { name: "More" }));
     await waitFor(() => expect(screen.getByRole("menuitem", { name: "relayUnpublish" })).toBeEnabled());
     expect(screen.queryByRole("menuitem", { name: "relayPublish" })).not.toBeInTheDocument();
     await user.click(screen.getByRole("menuitem", { name: "relayUnpublish" }));
@@ -86,36 +68,18 @@ describe("Relay publication", () => {
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
     expect(unpublishRelayAgent).toHaveBeenCalledWith("agent-alpha");
   });
-  it("shows a retry dialog after publication fails", async () => {
-    vi.mocked(publishRelayAgent).mockRejectedValue(new Error("Connection failed"));
-    const user = setup();
-    expect(screen.queryByRole("button", { name: "relayPublish" })).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "More" }));
-    await waitFor(() => expect(screen.getByRole("menuitem", { name: "relayPublish" })).toBeEnabled());
-    await user.click(screen.getByRole("menuitem", { name: "relayPublish" }));
-    await screen.findByRole("dialog");
-    expect(publishRelayAgent).not.toHaveBeenCalled();
-    await user.click(screen.getByRole("button", { name: "relayPublish" }));
-    await waitFor(() => expect(screen.getAllByRole("alert").length).toBeGreaterThan(0));
-    expect(screen.queryByLabelText("relayToken")).not.toBeInTheDocument();
-    await user.click(screen.getByText("cancel", { selector: "button span" }));
-    await user.click(screen.getByRole("button", { name: "More" }));
-    await user.click(screen.getByRole("menuitem", { name: "relayPublish" }));
-    await screen.findByRole("dialog");
-    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
-    expect(publishRelayAgent).toHaveBeenCalledTimes(1);
-  });
 });
 
 it.each([{ publishing: true }, { pending: true }, { removing: true }])(
   "allows cancelling or retrying cleanup of an incomplete publication: %o",
   async (state) => {
     vi.mocked(fetchRelayPublication).mockResolvedValue({ ...unpublished, ...state, can_unpublish: true });
-    const user = setup();
-    await user.click(screen.getByRole("button", { name: "More" }));
+    const { user } = setup();
+    await user.click(await screen.findByRole("button", { name: "More" }));
     await waitFor(() => expect(screen.getByRole("menuitem", { name: "relayCancelPublication" })).toBeEnabled());
     await user.click(screen.getByRole("menuitem", { name: "relayCancelPublication" }));
     expect(screen.queryByRole("button", { name: "relayPublish" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "retry" })).not.toBeInTheDocument();
     vi.mocked(unpublishRelayAgent).mockRejectedValueOnce(new Error("Cleanup failed"));
     await user.click(screen.getByRole("button", { name: "relayCancelPublication" }));
     await waitFor(() => expect(screen.getAllByRole("alert").length).toBeGreaterThan(0));

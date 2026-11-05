@@ -2426,8 +2426,7 @@ function AgentActionsMenu({
   relayPublication,
 }: AgentActionsMenuProps) {
   const triggerRef = useRef<HTMLButtonElement>(null);
-  const hasActions = SHOW_AGENT_LIFECYCLE_ACTIONS || canPublishLocal || !isManager || Boolean(relayPublication);
-  if (!hasActions) return null;
+  const hasOtherActions = SHOW_AGENT_LIFECYCLE_ACTIONS || canPublishLocal || !isManager;
 
   const renderMenu = (relayAction?: React.ReactNode) => (
     <DropdownMenuRoot>
@@ -2495,8 +2494,13 @@ function AgentActionsMenu({
     </DropdownMenuRoot>
   );
   return relayPublication ? (
-    <RelayPublication key={String(item.id)} controller={relayPublication} t={t} renderAction={renderMenu} />
+    <RelayPublication
+      key={String(item.id)}
+      controller={relayPublication}
+      t={t}
+      renderAction={(action) => (hasOtherActions || action ? renderMenu(action) : null)}
+    />
   ) : (
-    renderMenu()
+    hasOtherActions && renderMenu()
   );
 }
