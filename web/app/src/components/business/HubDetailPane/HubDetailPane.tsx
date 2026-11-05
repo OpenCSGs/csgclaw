@@ -6,12 +6,7 @@ import {
 } from "@/models/templatePublication";
 import { useTemplatePublication } from "./useTemplatePublication";
 import { useTemplateInstructionsEditor } from "./useTemplateInstructionsEditor";
-import {
-  isOfficialTemplate,
-  templateInGroup,
-  templateSourceLabelKey,
-  type TemplateGroup,
-} from "@/models/templateGroups";
+import { templateAvatar, templateInGroup, templateSourceLabelKey, type TemplateGroup } from "@/models/templateGroups";
 import { AgentAvatarImage } from "@/components/business/AgentAvatar";
 import { defaultAgentAvatar } from "@/shared/avatarOptions";
 import { agenticHubCreateAgentURL, agenticHubTemplatesURL } from "@/models/agenticHub";
@@ -1167,9 +1162,7 @@ export function HubDetailPane({
     if (selectedSkill) setSkillDetailDialogOpen(true);
   }, [selectedSkill]);
   const selectedTemplateID = selectedTemplate?.id;
-  const selectedTemplateAvatar =
-    selectedTemplate?.avatar?.trim() ||
-    (selectedTemplate && !isOfficialTemplate(selectedTemplate) ? defaultAgentAvatar() : "");
+  const selectedTemplateAvatar = selectedTemplate ? templateAvatar(selectedTemplate) || defaultAgentAvatar() : "";
   const selectedTemplateIsMine = Boolean(
     selectedTemplate && templateInGroup(selectedTemplate, "mine", templateUsername),
   );
@@ -1939,9 +1932,9 @@ export function HubDetailPane({
                           )}
                           onClick={() => openTemplateDetail(template)}
                         >
-                          {template.avatar ? (
+                          {templateAvatar(template) ? (
                             <span className={moduleClassNames("hub-template-avatar")} aria-hidden="true">
-                              <AgentAvatarImage avatar={template.avatar} />
+                              <AgentAvatarImage avatar={templateAvatar(template)} />
                             </span>
                           ) : (
                             <ResourceFeaturedIcon>
@@ -1993,7 +1986,7 @@ export function HubDetailPane({
           ) : (inlineTemplateDetail || legacyResourceDetailEnabled()) && selectedTemplate ? (
             <>
               <div className={moduleClassNames("hub-inspector-hero")}>
-                <div className={moduleClassNames("hub-inspector-hero-row")}>
+                <div className={moduleClassNames("hub-inspector-hero-row hub-template-hero-layout")}>
                   <div className={moduleClassNames("hub-inspector-brand")}>
                     <div className={moduleClassNames("hub-inspector-copy")}>
                       <div className={moduleClassNames("hub-inspector-title-row")}>
@@ -2024,9 +2017,11 @@ export function HubDetailPane({
                           ) : null}
                         </div>
                       </div>
-                      {selectedTemplate.description ? <p>{selectedTemplate.description}</p> : null}
                     </div>
                   </div>
+                  {selectedTemplate.description ? (
+                    <p className={moduleClassNames("hub-template-description")}>{selectedTemplate.description}</p>
+                  ) : null}
                   <div className={moduleClassNames("hub-template-actions")}>
                     <Button
                       variant="primary"

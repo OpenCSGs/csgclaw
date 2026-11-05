@@ -185,7 +185,7 @@ describe("agent overview guidance and template loading", () => {
     { kind: "remote", id: "agentichub/worker", filter: "official" },
     { kind: "local", id: "local.worker", filter: "personal" },
     { kind: "remote", id: "alice/worker", filter: "personal" },
-  ])("shows the saved avatar for $id in $filter templates", ({ kind, id, filter }) => {
+  ])("shows the template avatar for $id in $filter templates", ({ kind, id, filter }) => {
     const saved: HubTemplate = {
       id,
       name: "Template with avatar",
@@ -196,19 +196,22 @@ describe("agent overview guidance and template loading", () => {
     vi.mocked(useWorkspaceHubTemplatesQuery).mockReturnValue(queryState({ data: [saved] }));
     render(<Page route={`/agents?tab=templates&filter=${filter}`} username="alice" />);
     const row = screen.getByRole("button", { name: /Template with avatar/ });
-    expect(within(row).getByAltText("")).toHaveAttribute("src", "avatar/3D-4.png");
+    expect(within(row).getByAltText("")).toHaveAttribute(
+      "src",
+      kind === "local" ? "avatar/3D-4.png" : "avatar/template.png",
+    );
   });
 
   it.each([
     { kind: "builtin", id: "builtin.codex-worker" },
     { kind: "remote", id: "agentichub/worker" },
-  ])("omits the avatar for official $id when no avatar is provided", ({ kind, id }) => {
+  ])("shows the shared avatar for official $id when no avatar is provided", ({ kind, id }) => {
     vi.mocked(useWorkspaceHubTemplatesQuery).mockReturnValue(
       queryState({ data: [{ ...template, id, source: { kind } }] }),
     );
     render(<Page />);
     const row = screen.getByRole("button", { name: "Codex worker" });
-    expect(within(row).queryByAltText("")).not.toBeInTheDocument();
+    expect(within(row).getByAltText("")).toHaveAttribute("src", "avatar/template.png");
   });
 
   it("keeps the bundled default avatar for personal templates with no avatar", () => {
@@ -384,10 +387,18 @@ it("moves the signed-in user's community templates to My templates with a cloud 
   );
   const view = render(<Page username="alice" />);
   expect(screen.getByRole("button", { name: /agentichub worker/ })).toBeInTheDocument();
+  expect(screen.queryByRole("heading", { name: /仅云端/ })).not.toBeInTheDocument();
   expect(screen.queryByRole("button", { name: /alice worker/ })).not.toBeInTheDocument();
   await userEvent.setup().click(screen.getByRole("button", { name: "我的 2" }));
   expect(screen.getByRole("button", { name: /alice worker 云端/ })).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Local worker" })).toBeInTheDocument();
+  const cloudHeading = screen.getByRole("heading", { name: "仅云端（1）" });
+  expect(screen.getByRole("button", { name: "Local worker" }).compareDocumentPosition(cloudHeading)).toBe(
+    Node.DOCUMENT_POSITION_FOLLOWING,
+  );
+  expect(cloudHeading.compareDocumentPosition(screen.getByRole("button", { name: /alice worker 云端/ }))).toBe(
+    Node.DOCUMENT_POSITION_FOLLOWING,
+  );
   expect(within(screen.getByRole("button", { name: /alice worker 云端/ })).getByText("云端")).toBeVisible();
   expect(screen.getByRole("link", { name: "在 AgenticHub 上管理我的模板" })).toHaveAttribute(
     "href",
@@ -397,6 +408,7 @@ it("moves the signed-in user's community templates to My templates with a cloud 
   view.rerender(<Page />);
   expect(screen.queryByRole("button", { name: /alice worker/ })).not.toBeInTheDocument();
   expect(within(screen.getByRole("complementary")).queryByText("云端")).not.toBeInTheDocument();
+  expect(screen.queryByRole("heading", { name: /仅云端/ })).not.toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Local worker" })).toBeInTheDocument();
 });
 

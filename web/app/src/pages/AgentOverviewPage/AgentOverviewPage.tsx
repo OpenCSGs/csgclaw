@@ -1,5 +1,5 @@
 import { resolveTeamAvatarMembers, teamMemberIDs, teamStatusLabel } from "@/models/tasks";
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { ExternalLink, List, LoaderCircle, Plus, Search } from "lucide-react";
 import { Button, LinkButton, PanelHeader, EmptyState, TextInput } from "@/components/ui";
@@ -9,7 +9,7 @@ import { useWorkspaceControllerContext } from "@/hooks/workspace";
 import { useWorkspaceHubTemplatesQuery } from "@/hooks/workspace/workspaceQueries";
 import { isVisibleInHubTemplateList } from "@/models/hubWorkspace";
 import { agenticHubTemplatesURL } from "@/models/agenticHub";
-import { isOfficialTemplate, templateInGroup } from "@/models/templateGroups";
+import { templateAvatar, templateInGroup } from "@/models/templateGroups";
 import { agentAvailabilityStatusLabel, agentRoleLabel, isAgentAvailable, type AgentLike } from "@/models/agents";
 import { AgentPlaza, CloudAgentDetail } from "./components/AgentPlaza";
 import { useCloudAgents } from "@/hooks/workspace/useCloudAgents";
@@ -132,6 +132,11 @@ export function AgentOverviewPage() {
       matches([item.display_name, item.name, item.id, item.description, item.runtime_kind].filter(Boolean).join(" ")) &&
       templateInGroup(item, templateFilter === "official" ? "official" : "mine", templateUsername),
   );
+  const cloudTemplates = shownTemplates.filter((item) => item.source?.kind === "remote");
+  const orderedTemplates =
+    templateFilter === "personal"
+      ? [...shownTemplates.filter((item) => item.source?.kind !== "remote"), ...cloudTemplates]
+      : shownTemplates;
   const templatesLoading = templatesQuery.isLoading && !templates.length;
   const templatesFailed = templatesQuery.isError && !templates.length;
   const templateEmptyTitle = query.trim()
@@ -294,34 +299,38 @@ export function AgentOverviewPage() {
                       </Button>
                     </div>
                   ) : null}
-                  {shownTemplates.map((item) => (
-                    <button
-                      type="button"
-                      key={item.id}
-                      ref={selectedTemplateID === item.id ? selectedTemplateRef : undefined}
-                      aria-current={selectedTemplateID === item.id ? "true" : undefined}
-                      className={`${styles.row} ${selectedTemplateID === item.id ? styles.active : ""}`}
-                      onClick={() => {
-                        controller.hubViewProps?.onSelectTemplateInPlace(item);
-                        navigate({ search: agentTemplatesSearch(item.id || "", templateFilter) });
-                        closeList();
-                      }}
-                    >
-                      {item.avatar?.trim() || !isOfficialTemplate(item) ? (
-                        <span className={styles.avatar} aria-hidden="true">
-                          <AgentAvatarImage avatar={item.avatar?.trim() || defaultAgentAvatar()} />
-                        </span>
+                  {orderedTemplates.map((item) => (
+                    <Fragment key={item.id}>
+                      {templateFilter === "personal" && item === cloudTemplates[0] ? (
+                        <h3 className={styles.cloudTemplatesHeading}>
+                          {t("iaTemplatesCloudOnly", { count: cloudTemplates.length })}
+                        </h3>
                       ) : null}
-                      <span className={styles.identity}>
-                        <span className={styles.templateName}>
-                          <strong>{item.display_name?.trim() || item.name || item.id}</strong>{" "}
-                          {templateFilter === "personal" && item.source?.kind === "remote" ? (
-                            <span className={styles.cloudTag}>{t("iaTemplateCloudTag")}</span>
-                          ) : null}
+                      <button
+                        type="button"
+                        ref={selectedTemplateID === item.id ? selectedTemplateRef : undefined}
+                        aria-current={selectedTemplateID === item.id ? "true" : undefined}
+                        className={`${styles.row} ${selectedTemplateID === item.id ? styles.active : ""}`}
+                        onClick={() => {
+                          controller.hubViewProps?.onSelectTemplateInPlace(item);
+                          navigate({ search: agentTemplatesSearch(item.id || "", templateFilter) });
+                          closeList();
+                        }}
+                      >
+                        <span className={styles.avatar} aria-hidden="true">
+                          <AgentAvatarImage avatar={templateAvatar(item) || defaultAgentAvatar()} />
                         </span>
-                        <small>{item.description}</small>
-                      </span>
-                    </button>
+                        <span className={styles.identity}>
+                          <span className={styles.templateName}>
+                            <strong>{item.display_name?.trim() || item.name || item.id}</strong>{" "}
+                            {templateFilter === "personal" && item.source?.kind === "remote" ? (
+                              <span className={styles.cloudTag}>{t("iaTemplateCloudTag")}</span>
+                            ) : null}
+                          </span>
+                          <small>{item.description}</small>
+                        </span>
+                      </button>
+                    </Fragment>
                   ))}
                   {templateFilter === "personal" && templatesURL ? (
                     <LinkButton

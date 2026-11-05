@@ -1053,6 +1053,54 @@
   height: 16px;
 }
 
+.hub-template-hero-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px 16px;
+}
+
+.hub-template-hero-layout > .hub-inspector-brand {
+  grid-column: 1;
+  grid-row: 1;
+  overflow-wrap: anywhere;
+}
+
+.hub-template-description {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  min-width: 0;
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.hub-template-hero-layout > .hub-template-actions {
+  grid-column: 2;
+  grid-row: 1;
+  min-width: 0;
+  justify-content: flex-end;
+}
+
+@container (max-width: 760px) {
+  .hub-template-hero-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .hub-template-hero-layout > .hub-template-actions {
+    grid-column: 1;
+    grid-row: auto;
+    justify-content: flex-start;
+  }
+}
+
+@container (max-width: 480px) {
+  .hub-template-hero-layout > .hub-template-actions > :first-child {
+    flex-basis: 100%;
+  }
+}
+
 .hub-skill-delete-button {
   --btn-height: 36px;
   --btn-min-width: 0;
