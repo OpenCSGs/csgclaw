@@ -15,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"csgclaw/internal/activity"
 	"csgclaw/internal/agentengine"
 	"csgclaw/internal/agentsession"
 	"csgclaw/internal/channel/csgclaw/delivery"
@@ -247,7 +248,7 @@ func (h *Handler) runSessionResponse(ctx context.Context, w http.ResponseWriter,
 				if event.Phase == "commentary" || event.TextSnapshot {
 					return nil
 				}
-				return eventStream.writeDelta(event.Text)
+				return eventStream.writeText(event.Text)
 			case agentengine.TurnEventInteractionRequest:
 				if !acceptUserInput || event.Interaction == nil {
 					return nil
@@ -257,10 +258,8 @@ func (h *Handler) runSessionResponse(ctx context.Context, w http.ResponseWriter,
 					return fmt.Errorf("unsupported session interaction")
 				}
 				return eventStream.writeUserInput(question)
-			case agentengine.TurnEventToolCallStart:
-				return eventStream.writeToolUse(event.Tool)
-			case agentengine.TurnEventToolCallUpdate:
-				return eventStream.writeToolResult(event.Tool)
+			case agentengine.TurnEventToolCallStart, agentengine.TurnEventToolCallUpdate:
+				return eventStream.writeToolEvent(event.Kind, event.Tool)
 			default:
 				return nil
 			}
@@ -813,10 +812,18 @@ type agentSessionEventStream struct {
 	writeMu       sync.Mutex
 	contentIndex  int
 	textBlockOpen bool
+	tools         map[string]*agentSessionStreamTool
+	pendingTools  []*agentSessionStreamTool // In tool_use order, until their following text can be delivered.
 	text          strings.Builder
 	heartbeatStop chan struct{}
 	heartbeatDone chan struct{}
 	heartbeatOnce sync.Once
+}
+
+type agentSessionStreamTool struct {
+	finished bool
+	// Text received after this tool started and before the next tool started.
+	followingText strings.Builder
 }
 
 func newAgentSessionEventStream(w http.ResponseWriter) *agentSessionEventStream {
@@ -824,7 +831,7 @@ func newAgentSessionEventStream(w http.ResponseWriter) *agentSessionEventStream 
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("X-Accel-Buffering", "no")
 	w.WriteHeader(http.StatusOK)
-	return &agentSessionEventStream{writer: w, flusher: http.NewResponseController(w)}
+	return &agentSessionEventStream{writer: w, flusher: http.NewResponseController(w), tools: make(map[string]*agentSessionStreamTool)}
 }
 
 func (s *agentSessionEventStream) write(eventType string, fields map[string]any) error {
@@ -907,6 +914,31 @@ func (s *agentSessionEventStream) writeMessageStart(messageID string, inputs []i
 	return s.write("message_start", fields)
 }
 
+func (s *agentSessionEventStream) writeText(delta string) error {
+	if n := len(s.pendingTools); n > 0 {
+		s.pendingTools[n-1].followingText.WriteString(delta)
+		return nil
+	}
+	return s.writeDelta(delta)
+}
+
+// Text depends only on tools already started when it arrived. Keep completed
+// calls in start order until their predecessors finish, even if results race.
+func (s *agentSessionEventStream) flushPendingText(turnEnded bool) error {
+	for len(s.pendingTools) > 0 {
+		tool := s.pendingTools[0]
+		if !turnEnded && !tool.finished {
+			break
+		}
+		if err := s.writeDelta(tool.followingText.String()); err != nil {
+			return err
+		}
+		tool.followingText.Reset()
+		s.pendingTools = s.pendingTools[1:]
+	}
+	return nil
+}
+
 func (s *agentSessionEventStream) writeDelta(delta string) error {
 	if delta == "" {
 		return nil
@@ -942,6 +974,9 @@ func (s *agentSessionEventStream) closeTextBlock() error {
 
 func (s *agentSessionEventStream) writeCompleted(text, attachmentNote string, inputs, outputs []im.MessageAttachment, questions []agentSessionInteraction) error {
 	s.stopHeartbeat()
+	if err := s.flushPendingText(true); err != nil {
+		return err
+	}
 	streamedText := s.text.String()
 	switch {
 	case streamedText == "":
@@ -977,26 +1012,61 @@ func (s *agentSessionEventStream) writeCompleted(text, attachmentNote string, in
 	return s.write("message_stop", map[string]any{})
 }
 
-func (s *agentSessionEventStream) writeToolUse(tool *agentengine.ToolActivity) error {
+func (s *agentSessionEventStream) writeToolEvent(kind agentengine.TurnEventKind, tool *agentengine.ToolActivity) error {
 	if tool == nil {
 		return nil
+	}
+	toolID := strings.TrimSpace(tool.ID)
+	if toolID == "" {
+		return nil
+	}
+	call := s.tools[toolID]
+	if call != nil && call.finished {
+		return nil
+	}
+	status := activity.TerminalToolStatus(tool.Status)
+	if kind == agentengine.TurnEventToolCallUpdate && status == "" {
+		// Older adapters report the final output without a status.
+		if strings.TrimSpace(tool.Status) != "" {
+			return nil
+		}
+		status = "completed"
+	}
+	if call == nil {
+		// A result with only a call ID can close an existing tool block.
+		if kind == agentengine.TurnEventToolCallUpdate && strings.TrimSpace(tool.Kind) == "" && strings.TrimSpace(tool.Title) == "" {
+			return nil
+		}
+		if err := s.writeToolUse(toolID, tool); err != nil {
+			return err
+		}
+		call = &agentSessionStreamTool{}
+		s.tools[toolID] = call
+		s.pendingTools = append(s.pendingTools, call)
+	}
+	if status == "" {
+		return nil
+	}
+	if err := s.writeToolResult(toolID, status, tool.OutputSummary); err != nil {
+		return err
+	}
+	call.finished = true
+	return s.flushPendingText(false)
+}
+
+func (s *agentSessionEventStream) writeToolUse(toolID string, tool *agentengine.ToolActivity) error {
+	toolName, inputValue := agentSessionToolUse(tool)
+	encoded, err := json.Marshal(inputValue)
+	if err != nil {
+		return err
 	}
 	if err := s.closeTextBlock(); err != nil {
 		return err
 	}
-	toolID := strings.TrimSpace(tool.ID)
-	if toolID == "" {
-		toolID = newAgentSessionAPIID("toolu")
-	}
-	toolName, inputValue := agentSessionToolUse(tool)
 	if err := s.write("content_block_start", map[string]any{
 		"index":         s.contentIndex,
 		"content_block": map[string]any{"type": "tool_use", "id": toolID, "name": toolName, "input": map[string]any{}},
 	}); err != nil {
-		return err
-	}
-	encoded, err := json.Marshal(inputValue)
-	if err != nil {
 		return err
 	}
 	if err := s.write("content_block_delta", map[string]any{
@@ -1023,7 +1093,9 @@ func agentSessionToolUse(tool *agentengine.ToolActivity) (string, map[string]any
 			}
 			input = payload["arguments"]
 		case "exec_command":
-			input = map[string]any{"command": payload["command"]}
+			if command := payload["command"]; command != nil {
+				input = map[string]any{"command": command}
+			}
 		case "web_search":
 			input = map[string]any{"query": payload["query"], "action": payload["action"]}
 		case "patch_apply":
@@ -1099,25 +1171,23 @@ func redactAgentSessionToolValue(value any) any {
 	}
 }
 
-func (s *agentSessionEventStream) writeToolResult(tool *agentengine.ToolActivity) error {
-	if tool == nil {
-		return nil
-	}
+func (s *agentSessionEventStream) writeToolResult(toolID, status, output string) error {
 	if err := s.closeTextBlock(); err != nil {
 		return err
 	}
-	toolID := strings.TrimSpace(tool.ID)
-	if toolID == "" {
-		toolID = "unknown"
+	block := map[string]any{"type": "tool_result", "tool_use_id": toolID, "content": ""}
+	if status != "completed" {
+		block["status"] = status
+		block["is_error"] = true
 	}
 	if err := s.write("content_block_start", map[string]any{
 		"index":         s.contentIndex,
-		"content_block": map[string]any{"type": "tool_result", "tool_use_id": toolID, "content": ""},
+		"content_block": block,
 	}); err != nil {
 		return err
 	}
 	if err := s.write("content_block_delta", map[string]any{
-		"index": s.contentIndex, "delta": map[string]any{"type": "tool_result_delta", "content": tool.OutputSummary},
+		"index": s.contentIndex, "delta": map[string]any{"type": "tool_result_delta", "content": output},
 	}); err != nil {
 		return err
 	}
@@ -1130,6 +1200,7 @@ func (s *agentSessionEventStream) writeToolResult(tool *agentengine.ToolActivity
 
 func (s *agentSessionEventStream) writeFailure(response agentSessionResponse, cause error) {
 	s.stopHeartbeat()
+	_ = s.flushPendingText(true)
 	_ = s.closeTextBlock()
 	_ = s.write("error", map[string]any{"error": map[string]any{
 		"type": "server_error", "message": cause.Error(), "request_id": response.ID,

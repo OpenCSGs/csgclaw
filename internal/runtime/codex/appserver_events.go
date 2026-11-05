@@ -119,13 +119,24 @@ func (s *liveSession) appServerProtocol(method string) string {
 
 func (m *appServerManager) handleRawAppServerNotification(runtimeID string, live *liveSession, method string, params map[string]any) {
 	threadID := appServerNotificationThreadID(params)
-	if threadID == "" {
+	turnID := appServerNotificationTurnID(params)
+	turnEvent := turnID != "" || strings.HasPrefix(method, "turn/") || strings.HasPrefix(method, "item/") || method == "error"
+	if turnEvent {
+		threadID = live.nativeNotificationThread(threadID, turnID, method != "turn/completed")
+	} else if threadID == "" {
 		threadID = m.appServerPrimaryThreadID(live)
 	}
 	if threadID == "" || !live.appServerTracksThread(threadID) {
 		return
 	}
-	live.trackAppServerTurn(threadID, appServerNotificationTurnID(params))
+	if method == "turn/completed" {
+		m.handleRawTurnCompleted(runtimeID, live, threadID, params, nil)
+		return
+	}
+	if turnEvent && !live.beginTurnNotification(threadID, turnID) {
+		return
+	}
+	live.trackAppServerTurn(threadID, turnID)
 
 	switch method {
 	case "thread/tokenUsage/updated":
@@ -141,8 +152,6 @@ func (m *appServerManager) handleRawAppServerNotification(runtimeID string, live
 			activity: "status:running",
 			started:  true,
 		})
-	case "turn/completed":
-		m.handleRawTurnCompleted(runtimeID, live, threadID, params)
 	case "thread/status/changed":
 		if strings.EqualFold(appServerNestedString(params, "status", "type"), "idle") {
 			// Thread status has no turn identity. Only turn/completed can release
@@ -161,69 +170,71 @@ func (m *appServerManager) handleRawAppServerNotification(runtimeID string, live
 	}
 }
 
-func (m *appServerManager) handleRawTurnCompleted(runtimeID string, live *liveSession, threadID string, params map[string]any) {
+func (m *appServerManager) handleRawTurnCompleted(runtimeID string, live *liveSession, threadID string, params map[string]any, quietVersion *uint64) bool {
 	live.mu.Lock()
 	wasCompacting := live.contextUsage[threadID].Compacting
 	live.mu.Unlock()
-	if wasCompacting {
-		defer m.publishContextUsage(runtimeID, live, threadID, nil, "item/completed")
-	}
-
 	status := strings.ToLower(appServerNestedString(params, "turn", "status"))
 	if status == "" {
 		status = strings.ToLower(appServerString(params, "status"))
 	}
-	turnID := appServerNotificationTurnID(params)
-	defer live.clearAppServerCommandOutputs(threadID, turnID)
+	waiter := live.appServerTurnWaiter(threadID)
+	result := appServerTurnResult{turnID: appServerNotificationTurnID(params), activity: "turn:" + status}
+	cancelInput := false
 	switch status {
 	case "", "completed", "success", "succeeded":
-		if !live.notifyAppServerTurn(threadID, appServerTurnResult{success: true, stopReason: StopReasonEndTurn, turnID: turnID, activity: "turn:completed"}) {
-			m.publishAppServerEvent(promptCompletedEvent(runtimeID, threadID, PromptResponse{StopReason: StopReasonEndTurn}))
-		}
+		result.success, result.stopReason, result.activity = true, StopReasonEndTurn, "turn:completed"
 	case "cancelled", "canceled", "aborted", "interrupted":
-		if waiter := live.appServerTurnWaiter(threadID); waiter != nil && waiter.hasStructuredOutputBoundary() {
-			if !live.notifyAppServerTurn(threadID, appServerTurnResult{success: true, stopReason: StopReasonEndTurn, turnID: turnID, activity: "turn:structured-output"}) {
-				m.publishAppServerEvent(promptCompletedEvent(runtimeID, threadID, PromptResponse{StopReason: StopReasonEndTurn}))
-			}
-			return
-		}
-		if m.deps.UserInput != nil {
-			m.deps.UserInput.CancelSession(runtimeID, threadID)
-		}
-		err := fmt.Errorf("codex turn %s", status)
-		if !live.notifyAppServerTurn(threadID, appServerTurnResult{err: err, turnID: turnID, activity: "turn:" + status}) {
-			m.publishAppServerEvent(SessionEvent{
-				RuntimeID: runtimeID,
-				SessionID: threadID,
-				Kind:      SessionEventPromptFailed,
-				Error:     err.Error(),
-				Payload:   params,
-			})
+		if waiter != nil && waiter.hasStructuredOutputBoundary() {
+			result.success, result.stopReason, result.activity = true, StopReasonEndTurn, "turn:structured-output"
+		} else {
+			result.err = fmt.Errorf("codex turn %s", status)
+			cancelInput = true
 		}
 	default:
 		errMsg := appServerNestedString(params, "turn", "error", "message")
 		if errMsg == "" {
 			errMsg = "codex turn failed"
 		}
-		var err error = fmt.Errorf("%s", errMsg)
+		result.err = fmt.Errorf("%s", errMsg)
 		if wasCompacting {
-			err = errContextCompaction
-		}
-		if turn, _ := params["turn"].(map[string]any); turn != nil {
-			if details, _ := turn["error"].(map[string]any); details != nil && !wasCompacting && contextErrorInfo(details) {
-				err = &contextWindowError{}
+			result.err = errContextCompaction
+		} else if turn, _ := params["turn"].(map[string]any); turn != nil {
+			if details, _ := turn["error"].(map[string]any); details != nil && contextErrorInfo(details) {
+				result.err = &contextWindowError{}
 			}
 		}
-		if !live.notifyAppServerTurn(threadID, appServerTurnResult{err: err, turnID: turnID, activity: "turn:" + status}) {
-			m.publishAppServerEvent(SessionEvent{
-				RuntimeID: runtimeID,
-				SessionID: threadID,
-				Kind:      SessionEventPromptFailed,
-				Error:     err.Error(),
-				Payload:   params,
-			})
+	}
+	waiter, accepted := live.recordNativeCompletion(threadID, &result, quietVersion)
+	if !accepted {
+		return false
+	}
+	if wasCompacting {
+		defer m.publishContextUsage(runtimeID, live, threadID, nil, "item/completed")
+	}
+	defer live.clearAppServerCommandOutputs(threadID, result.turnID)
+	if cancelInput && m.deps.UserInput != nil {
+		if result.turnID != "" {
+			m.deps.UserInput.CancelTurn(runtimeID, threadID, result.turnID)
+		} else {
+			m.deps.UserInput.CancelSession(runtimeID, threadID)
 		}
 	}
+	if waiter != nil {
+		if quietVersion == nil {
+			waiter.wake(result)
+		}
+		return true
+	}
+	if result.success {
+		m.publishAppServerEvent(promptCompletedEvent(runtimeID, threadID, PromptResponse{StopReason: result.stopReason}))
+	} else {
+		m.publishAppServerEvent(SessionEvent{
+			RuntimeID: runtimeID, SessionID: threadID, Kind: SessionEventPromptFailed,
+			Error: result.err.Error(), Payload: params,
+		})
+	}
+	return true
 }
 
 func (m *appServerManager) handleRawErrorNotification(runtimeID string, live *liveSession, threadID string, params map[string]any) {
@@ -246,7 +257,7 @@ func (m *appServerManager) handleRawErrorNotification(runtimeID string, live *li
 	if errMsg == "" {
 		errMsg = appServerString(params, "message")
 	}
-	result := appServerTurnResult{activity: activity}
+	result := appServerTurnResult{turnID: appServerNotificationTurnID(params), activity: activity}
 	if !willRetry {
 		if errMsg == "" {
 			errMsg = "codex app-server error"
@@ -349,147 +360,6 @@ func (m *appServerManager) handleRawItemNotification(runtimeID string, live *liv
 			phase = "unknown"
 		}
 		live.setAgentMessagePhase(itemID, phase)
-	case method == "item/started" && itemType == "commandExecution":
-		command := appServerString(item, "command")
-		m.publishAppServerEvent(SessionEvent{
-			RuntimeID:         runtimeID,
-			SessionID:         threadID,
-			Kind:              SessionEventToolCallStart,
-			ToolCallID:        itemID,
-			ToolKind:          "exec_command",
-			ToolTitle:         "Run shell command",
-			ToolStatus:        "started",
-			ToolInputSummary:  summarizeToolValue(map[string]any{"command": command}),
-			ToolOutputSummary: "",
-			Payload:           item,
-		})
-	case method == "item/completed" && itemType == "commandExecution":
-		status := appServerToolStatus(item, "completed")
-		output := appServerString(item, "aggregatedOutput")
-		if output == "" {
-			output = appServerString(item, "output")
-		}
-		accumulated := live.takeAppServerCommandOutput(threadID, itemID)
-		if output == "" && accumulated != nil {
-			var artifact activitypkg.StructuredOutputArtifact
-			var decodeErrors []error
-			output, artifact, decodeErrors = accumulated.finish(structuredOutputToolStatusSuccessful(status))
-			m.publishStructuredCommandArtifact(runtimeID, threadID, itemID, artifact, decodeErrors, output, live)
-		} else {
-			output = m.decodeAndPublishStructuredCommandOutput(runtimeID, threadID, itemID, status, output, item, live)
-		}
-		item = cloneAppServerParams(item)
-		item["aggregatedOutput"] = output
-		m.publishAppServerEvent(SessionEvent{
-			RuntimeID:         runtimeID,
-			SessionID:         threadID,
-			Kind:              SessionEventToolCallUpdate,
-			ToolCallID:        itemID,
-			ToolKind:          "exec_command",
-			ToolTitle:         "Run shell command",
-			ToolStatus:        status,
-			ToolOutputSummary: summarizeToolValue(map[string]any{"output": output}),
-			Payload:           item,
-		})
-	case method == "item/started" && itemType == "fileChange":
-		m.publishAppServerEvent(SessionEvent{
-			RuntimeID:        runtimeID,
-			SessionID:        threadID,
-			Kind:             SessionEventToolCallStart,
-			ToolCallID:       itemID,
-			ToolKind:         "patch_apply",
-			ToolTitle:        "Apply patch",
-			ToolStatus:       "started",
-			ToolInputSummary: summarizeToolValue(item),
-			Payload:          item,
-		})
-	case method == "item/completed" && itemType == "fileChange":
-		m.publishAppServerEvent(SessionEvent{
-			RuntimeID:         runtimeID,
-			SessionID:         threadID,
-			Kind:              SessionEventToolCallUpdate,
-			ToolCallID:        itemID,
-			ToolKind:          "patch_apply",
-			ToolTitle:         "Apply patch",
-			ToolStatus:        appServerToolStatus(item, "completed"),
-			ToolOutputSummary: summarizeToolValue(item),
-			Payload:           item,
-		})
-	case method == "item/started" && itemType == "mcpToolCall":
-		m.publishAppServerEvent(SessionEvent{
-			RuntimeID:         runtimeID,
-			SessionID:         threadID,
-			Kind:              SessionEventToolCallStart,
-			ToolCallID:        itemID,
-			ToolKind:          "mcp_tool_call",
-			ToolTitle:         appServerToolTitle(item, "Run MCP tool"),
-			ToolStatus:        appServerToolStatus(item, "started"),
-			ToolInputSummary:  summarizeToolValue(map[string]any{"server": item["server"], "tool": item["tool"], "arguments": item["arguments"]}),
-			ToolOutputSummary: "",
-			Payload:           item,
-		})
-	case method == "item/completed" && itemType == "mcpToolCall":
-		m.publishAppServerEvent(SessionEvent{
-			RuntimeID:         runtimeID,
-			SessionID:         threadID,
-			Kind:              SessionEventToolCallUpdate,
-			ToolCallID:        itemID,
-			ToolKind:          "mcp_tool_call",
-			ToolTitle:         appServerToolTitle(item, "Run MCP tool"),
-			ToolStatus:        appServerToolStatus(item, "completed"),
-			ToolOutputSummary: summarizeToolValue(map[string]any{"result": item["result"], "error": item["error"]}),
-			Payload:           item,
-		})
-	case method == "item/started" && itemType == "dynamicToolCall":
-		m.publishAppServerEvent(SessionEvent{
-			RuntimeID:         runtimeID,
-			SessionID:         threadID,
-			Kind:              SessionEventToolCallStart,
-			ToolCallID:        itemID,
-			ToolKind:          "dynamic_tool_call",
-			ToolTitle:         appServerToolTitle(item, "Run dynamic tool"),
-			ToolStatus:        appServerToolStatus(item, "started"),
-			ToolInputSummary:  summarizeToolValue(map[string]any{"tool": item["tool"], "arguments": item["arguments"]}),
-			ToolOutputSummary: "",
-			Payload:           item,
-		})
-	case method == "item/completed" && itemType == "dynamicToolCall":
-		m.publishAppServerEvent(SessionEvent{
-			RuntimeID:         runtimeID,
-			SessionID:         threadID,
-			Kind:              SessionEventToolCallUpdate,
-			ToolCallID:        itemID,
-			ToolKind:          "dynamic_tool_call",
-			ToolTitle:         appServerToolTitle(item, "Run dynamic tool"),
-			ToolStatus:        appServerToolStatus(item, "completed"),
-			ToolOutputSummary: summarizeToolValue(map[string]any{"content_items": item["contentItems"], "success": item["success"]}),
-			Payload:           item,
-		})
-	case method == "item/started" && itemType == "webSearch":
-		m.publishAppServerEvent(SessionEvent{
-			RuntimeID:         runtimeID,
-			SessionID:         threadID,
-			Kind:              SessionEventToolCallStart,
-			ToolCallID:        itemID,
-			ToolKind:          "web_search",
-			ToolTitle:         "Web search",
-			ToolStatus:        appServerToolStatus(item, "started"),
-			ToolInputSummary:  summarizeToolValue(map[string]any{"query": item["query"], "action": item["action"]}),
-			ToolOutputSummary: "",
-			Payload:           item,
-		})
-	case method == "item/completed" && itemType == "webSearch":
-		m.publishAppServerEvent(SessionEvent{
-			RuntimeID:         runtimeID,
-			SessionID:         threadID,
-			Kind:              SessionEventToolCallUpdate,
-			ToolCallID:        itemID,
-			ToolKind:          "web_search",
-			ToolTitle:         "Web search",
-			ToolStatus:        appServerToolStatus(item, "completed"),
-			ToolOutputSummary: summarizeToolValue(item),
-			Payload:           item,
-		})
 	case method == "item/completed" && itemType == "agentMessage":
 		defer live.clearAgentMessageState(itemID)
 		previousPhase := live.agentMessagePhase(itemID)
@@ -528,6 +398,34 @@ func (m *appServerManager) handleRawItemNotification(runtimeID string, live *liv
 		}
 		// A final-answer item can precede native turn completion. Keep the
 		// waiter active until turn/completed so turn/start cannot steer it.
+	default:
+		if method != "item/started" && method != "item/completed" {
+			return
+		}
+		completed := method == "item/completed"
+		if completed && itemType == "commandExecution" {
+			status := appServerToolStatus(item, "completed")
+			output := appServerString(item, "aggregatedOutput")
+			if output == "" {
+				output = appServerString(item, "output")
+			}
+			accumulated := live.takeAppServerCommandOutput(threadID, itemID)
+			if output == "" && accumulated != nil {
+				var artifact activitypkg.StructuredOutputArtifact
+				var decodeErrors []error
+				output, artifact, decodeErrors = accumulated.finish(structuredOutputToolStatusSuccessful(status))
+				m.publishStructuredCommandArtifact(runtimeID, threadID, itemID, artifact, decodeErrors, output, live)
+			} else {
+				output = m.decodeAndPublishStructuredToolOutput(runtimeID, threadID, itemID, "exec_command", status, output, live)
+			}
+			item = cloneAppServerParams(item)
+			item["aggregatedOutput"] = output
+		}
+		if event, ok := nativeToolEvent(item, completed); ok {
+			event.RuntimeID, event.SessionID = runtimeID, threadID
+			event.TurnID = appServerNotificationTurnID(params)
+			m.publishAppServerEvent(event)
+		}
 	}
 }
 
@@ -674,7 +572,7 @@ func (m *appServerManager) handleLegacyAppServerEvent(runtimeID string, live *li
 	switch msgType {
 	case "task_started":
 		live.clearStreamedAgentThread(threadID)
-		live.notifyAppServerTurn(threadID, appServerTurnResult{activity: "status:running", started: true})
+		live.notifyAppServerTurn(threadID, appServerTurnResult{turnID: legacyNotificationTurnID(params), activity: "status:running", started: true})
 	case "agent_message":
 		text := appServerString(params, "message")
 		text = m.decodeAndPublishStructuredAssistantOutput(runtimeID, threadID, appServerString(params, "id"), text, live)
@@ -699,7 +597,9 @@ func (m *appServerManager) handleLegacyAppServerEvent(runtimeID string, live *li
 	case "exec_command_begin":
 		callID := appServerString(params, "call_id")
 		command := appServerString(params, "command")
-		live.markReplayedExecCommand(callID)
+		if _, ok := live.recordLegacyTool(threadID, callID, "exec_command", false); !ok {
+			return
+		}
 		m.publishAppServerEvent(SessionEvent{
 			RuntimeID:        runtimeID,
 			SessionID:        threadID,
@@ -714,10 +614,12 @@ func (m *appServerManager) handleLegacyAppServerEvent(runtimeID string, live *li
 		live.notifyAppServerTurn(threadID, appServerTurnResult{activity: "legacy:exec_command_begin", progress: true})
 	case "exec_command_end":
 		callID := appServerString(params, "call_id")
-		output := appServerString(params, "output")
-		status := legacyFunctionCallOutputStatus(output)
-		output = m.decodeAndPublishStructuredCommandOutput(runtimeID, threadID, callID, status, output, params, live)
-		live.markReplayedExecCommand(callID + ":output")
+		if _, ok := live.recordLegacyTool(threadID, callID, "exec_command", true); !ok {
+			return
+		}
+		output := firstNonEmpty(appServerString(params, "aggregated_output"), appServerString(params, "output"), appServerString(params, "formatted_output"))
+		status := legacyToolEndStatus(params, output)
+		output = m.decodeAndPublishStructuredToolOutput(runtimeID, threadID, callID, "exec_command", status, output, live)
 		m.publishAppServerEvent(SessionEvent{
 			RuntimeID:         runtimeID,
 			SessionID:         threadID,
@@ -752,23 +654,23 @@ func (m *appServerManager) handleLegacyAppServerEvent(runtimeID string, live *li
 			ToolCallID: callID,
 			ToolKind:   "patch_apply",
 			ToolTitle:  "Apply patch",
-			ToolStatus: "completed",
+			ToolStatus: legacyToolEndStatus(params, ""),
 			Payload:    params,
 		})
 		live.notifyAppServerTurn(threadID, appServerTurnResult{activity: "legacy:patch_apply_end", progress: true})
 	case "task_complete":
-		if !live.notifyAppServerTurn(threadID, appServerTurnResult{success: true, stopReason: StopReasonEndTurn, activity: "legacy:task_complete"}) {
+		if !live.notifyAppServerTurn(threadID, appServerTurnResult{turnID: legacyNotificationTurnID(params), success: true, stopReason: StopReasonEndTurn, activity: "legacy:task_complete"}) {
 			m.publishAppServerEvent(promptCompletedEvent(runtimeID, threadID, PromptResponse{StopReason: StopReasonEndTurn}))
 		}
 	case "turn_aborted":
 		if waiter := live.appServerTurnWaiter(threadID); waiter != nil && waiter.hasStructuredOutputBoundary() {
-			if !live.notifyAppServerTurn(threadID, appServerTurnResult{success: true, stopReason: StopReasonEndTurn, activity: "legacy:turn_structured-output"}) {
+			if !live.notifyAppServerTurn(threadID, appServerTurnResult{turnID: legacyNotificationTurnID(params), success: true, stopReason: StopReasonEndTurn, activity: "legacy:turn_structured-output"}) {
 				m.publishAppServerEvent(promptCompletedEvent(runtimeID, threadID, PromptResponse{StopReason: StopReasonEndTurn}))
 			}
 			return
 		}
 		err := fmt.Errorf("codex turn aborted")
-		if !live.notifyAppServerTurn(threadID, appServerTurnResult{err: err, activity: "legacy:turn_aborted"}) {
+		if !live.notifyAppServerTurn(threadID, appServerTurnResult{turnID: legacyNotificationTurnID(params), err: err, activity: "legacy:turn_aborted"}) {
 			m.publishAppServerEvent(SessionEvent{
 				RuntimeID: runtimeID,
 				SessionID: threadID,
@@ -812,48 +714,64 @@ func (m *appServerManager) handleLegacyResponseItemEvent(runtimeID string, live 
 		live.markReplayedAgentMessage(params)
 		live.notifyAppServerTurn(threadID, legacyMessageTurnResult(params, "legacy:response_item:message"))
 	case "function_call":
-		if appServerString(params, "name") != "exec_command" {
-			return
-		}
 		callID := appServerString(params, "call_id")
-		if callID == "" || live.hasReplayedExecCommand(callID) {
+		name, ok := live.recordLegacyTool(threadID, callID, appServerString(params, "name"), false)
+		if !ok {
 			return
 		}
 		args := decodeLegacyFunctionCallArguments(appServerString(params, "arguments"))
+		kind, title := "dynamic_tool_call", name
+		payload := map[string]any{"tool": name, "arguments": args}
+		if name == "exec_command" {
+			kind, title = name, "Run shell command"
+			payload = map[string]any{"command": args["cmd"], "workdir": args["workdir"]}
+			args = payload
+		}
 		m.publishAppServerEvent(SessionEvent{
 			RuntimeID:        runtimeID,
 			SessionID:        threadID,
 			Kind:             SessionEventToolCallStart,
 			ToolCallID:       callID,
-			ToolKind:         "exec_command",
-			ToolTitle:        "Run shell command",
+			ToolKind:         kind,
+			ToolTitle:        title,
 			ToolStatus:       "started",
-			ToolInputSummary: summarizeToolValue(map[string]any{"command": args["cmd"], "workdir": args["workdir"]}),
-			Payload:          params,
+			ToolInputSummary: summarizeToolValue(args),
+			Payload:          payload,
 		})
-		live.markReplayedExecCommand(callID)
 		live.notifyAppServerTurn(threadID, appServerTurnResult{activity: "legacy:response_item:function_call", progress: true})
 	case "function_call_output":
 		callID := appServerString(params, "call_id")
-		outputKey := callID + ":output"
-		if callID == "" || live.hasReplayedExecCommand(outputKey) {
+		name, ok := live.recordLegacyTool(threadID, callID, "", true)
+		if !ok {
 			return
 		}
-		output := appServerString(params, "output")
-		status := legacyFunctionCallOutputStatus(output)
-		output = m.decodeAndPublishStructuredCommandOutput(runtimeID, threadID, callID, status, output, params, live)
+		output := legacyFunctionCallOutputText(params["output"])
+		var kind, title, status string
+		payload := params
+		switch name {
+		case "", "exec_command":
+			if name != "" {
+				kind, title = name, "Run shell command"
+			}
+			status = legacyToolEndStatus(params, output)
+			output = m.decodeAndPublishStructuredToolOutput(runtimeID, threadID, callID, kind, status, output, live)
+		default:
+			kind, title = "dynamic_tool_call", name
+			status = legacyToolEndStatus(params, "")
+			payload = cloneAppServerParams(params)
+			payload["tool"] = name
+		}
 		m.publishAppServerEvent(SessionEvent{
 			RuntimeID:         runtimeID,
 			SessionID:         threadID,
 			Kind:              SessionEventToolCallUpdate,
 			ToolCallID:        callID,
-			ToolKind:          "exec_command",
-			ToolTitle:         "Run shell command",
+			ToolKind:          kind,
+			ToolTitle:         title,
 			ToolStatus:        status,
 			ToolOutputSummary: summarizeToolValue(map[string]any{"output": output}),
-			Payload:           params,
+			Payload:           payload,
 		})
-		live.markReplayedExecCommand(outputKey)
 		live.notifyAppServerTurn(threadID, appServerTurnResult{activity: "legacy:response_item:function_call_output", progress: true})
 	}
 }
@@ -873,20 +791,15 @@ func (m *appServerManager) decodeAndPublishStructuredAssistantOutput(
 	return cleaned
 }
 
-func (m *appServerManager) decodeAndPublishStructuredCommandOutput(
-	runtimeID string,
-	threadID string,
-	toolCallID string,
-	status string,
-	output string,
-	payload any,
+func (m *appServerManager) decodeAndPublishStructuredToolOutput(
+	runtimeID, threadID, toolCallID, toolKind, status, output string,
 	live *liveSession,
 ) string {
 	if !structuredOutputToolStatusSuccessful(status) || !strings.Contains(output, structuredOutputPrefix) {
 		return output
 	}
 	cleaned, artifact, decodeErrors := decodeStructuredCommandOutput(output)
-	m.publishStructuredOutputArtifact(runtimeID, threadID, toolCallID, "exec_command", artifact, decodeErrors, cleaned, live)
+	m.publishStructuredOutputArtifact(runtimeID, threadID, toolCallID, toolKind, artifact, decodeErrors, cleaned, live)
 	return cleaned
 }
 
@@ -1015,34 +928,22 @@ func (m *appServerManager) appServerLegacyThreadID(live *liveSession, params map
 	if live == nil {
 		return ""
 	}
-	turnID := appServerNotificationTurnID(params)
-	if turnID == "" {
-		turnID = appServerNestedString(params, "internal_chat_message_metadata_passthrough", "turn_id")
+	turnID := legacyNotificationTurnID(params)
+	threadID := live.nativeNotificationThread(appServerNotificationThreadID(params), turnID, true)
+	if threadID == "" || !live.beginTurnNotification(threadID, turnID) {
+		return ""
 	}
+	return threadID
+}
 
-	live.mu.Lock()
-	waiters := make(map[string]*appServerTurnWaiter, len(live.turnWaiters))
-	for threadID, waiter := range live.turnWaiters {
-		waiters[threadID] = waiter
+func legacyNotificationTurnID(params map[string]any) string {
+	if turnID := appServerNotificationTurnID(params); turnID != "" {
+		return turnID
 	}
-	live.mu.Unlock()
-
-	if threadID := live.appServerThreadForTurn(turnID); threadID != "" {
-		return threadID
+	if turnID := appServerString(params, "turn_id"); turnID != "" {
+		return turnID
 	}
-	if turnID != "" {
-		for threadID, waiter := range waiters {
-			if waiter != nil && waiter.currentTurnID() == turnID {
-				return strings.TrimSpace(threadID)
-			}
-		}
-	}
-	if len(waiters) == 1 {
-		for threadID := range waiters {
-			return strings.TrimSpace(threadID)
-		}
-	}
-	return m.appServerPrimaryThreadID(live)
+	return appServerNestedString(params, "internal_chat_message_metadata_passthrough", "turn_id")
 }
 
 func decodeLegacyFunctionCallArguments(raw string) map[string]any {
@@ -1072,6 +973,42 @@ func appServerResponseItemText(params map[string]any) string {
 	return strings.TrimSpace(strings.Join(parts, "\n"))
 }
 
+func legacyFunctionCallOutputText(value any) string {
+	if text, ok := value.(string); ok {
+		return strings.TrimSpace(text)
+	}
+	items, _ := value.([]any)
+	var parts []string
+	for _, item := range items {
+		part, _ := item.(map[string]any)
+		if part["type"] == "input_text" {
+			if text, ok := part["text"].(string); ok {
+				parts = append(parts, text)
+			}
+		}
+	}
+	return strings.TrimSpace(strings.Join(parts, "\n"))
+}
+
+func legacyToolEndStatus(params map[string]any, output string) string {
+	if status := activitypkg.TerminalToolStatus(appServerToolStatus(params, "")); status != "" {
+		return status
+	}
+	success, hasSuccess := params["success"].(bool)
+	if code, ok := params["exit_code"].(json.Number); ok {
+		if exitCode, err := code.Int64(); err == nil {
+			success, hasSuccess = exitCode == 0, true
+		}
+	}
+	if !hasSuccess {
+		return legacyFunctionCallOutputStatus(output)
+	}
+	if success {
+		return "completed"
+	}
+	return "failed"
+}
+
 func legacyFunctionCallOutputStatus(output string) string {
 	lower := strings.ToLower(output)
 	if strings.Contains(lower, "operation not permitted") ||
@@ -1082,7 +1019,7 @@ func legacyFunctionCallOutputStatus(output string) string {
 }
 
 func legacyMessageTurnResult(params map[string]any, activity string) appServerTurnResult {
-	result := appServerTurnResult{activity: activity, progress: true}
+	result := appServerTurnResult{turnID: legacyNotificationTurnID(params), activity: activity, progress: true}
 	if strings.EqualFold(appServerString(params, "phase"), "final_answer") {
 		result.success = true
 		result.stopReason = StopReasonEndTurn
@@ -1090,28 +1027,34 @@ func legacyMessageTurnResult(params map[string]any, activity string) appServerTu
 	return result
 }
 
-func (s *liveSession) hasReplayedExecCommand(key string) bool {
-	key = strings.TrimSpace(key)
-	if key == "" {
-		return false
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	_, ok := s.replayedExecCommands[key]
-	return ok
+type legacyToolCall struct {
+	name     string
+	finished bool
 }
 
-func (s *liveSession) markReplayedExecCommand(key string) {
-	key = strings.TrimSpace(key)
-	if key == "" {
-		return
+// Rollout results carry only a call ID. Typed exec events may describe the same call.
+func (s *liveSession) recordLegacyTool(threadID, callID, name string, finished bool) (string, bool) {
+	if callID == "" || (!finished && name == "") {
+		return "", false
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.replayedExecCommands == nil {
-		s.replayedExecCommands = make(map[string]struct{})
+	calls := s.legacyTools[threadID]
+	if previous, ok := calls[callID]; ok {
+		if !finished || previous.finished || (name != "" && name != previous.name) {
+			return "", false
+		}
+		name = previous.name
 	}
-	s.replayedExecCommands[key] = struct{}{}
+	if calls == nil {
+		if s.legacyTools == nil {
+			s.legacyTools = make(map[string]map[string]legacyToolCall)
+		}
+		calls = make(map[string]legacyToolCall)
+		s.legacyTools[threadID] = calls
+	}
+	calls[callID] = legacyToolCall{name: name, finished: finished}
+	return name, true
 }
 
 func (s *liveSession) hasReplayedAgentMessage(params map[string]any) bool {

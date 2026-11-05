@@ -1155,6 +1155,25 @@ func TestNormalizedDSHToolKindUsesToolNameForGenericACPKind(t *testing.T) {
 	}
 }
 
+func TestMergeDSHToolActivityPreservesStatusDuringPartialUpdates(t *testing.T) {
+	var tool contract.ToolActivity
+	for _, step := range []struct {
+		update map[string]any
+		want   string
+	}{
+		{map[string]any{"toolCallId": "call-1", "content": "early output"}, "pending"},
+		{map[string]any{"status": "in_progress"}, "in_progress"},
+		{map[string]any{"content": "more output"}, "in_progress"},
+		{map[string]any{"status": "completed"}, "completed"},
+		{map[string]any{"content": "more details"}, "completed"},
+	} {
+		tool = mergeDSHToolActivity(tool, step.update)
+		if tool.Status != step.want {
+			t.Fatalf("status after %v = %q, want %q", step.update, tool.Status, step.want)
+		}
+	}
+}
+
 func TestMergeDSHToolActivityKeepsExplicitKindAndRedactsSummaries(t *testing.T) {
 	started := mergeDSHToolActivity(contract.ToolActivity{}, map[string]any{
 		"toolCallId": "call-1",

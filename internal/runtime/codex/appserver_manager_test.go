@@ -2203,6 +2203,37 @@ func TestAppServerEventAdapterLegacyEvents(t *testing.T) {
 	}
 }
 
+func TestAppServerEventAdapterLegacyToolOutcomes(t *testing.T) {
+	for _, tc := range []struct {
+		name, kind, status, output string
+		fields                     map[string]any
+	}{
+		{"command declined", "exec_command_end", "canceled", "permission refused", map[string]any{"status": "declined", "exit_code": 1, "aggregated_output": "permission refused"}},
+		{"command failed", "exec_command_end", "failed", "", map[string]any{"exit_code": 7}},
+		{"command succeeded", "exec_command_end", "completed", "exited with code 7", map[string]any{"exit_code": 0, "output": "exited with code 7"}},
+		{"command text fallback", "exec_command_end", "failed", "exited with code 2", map[string]any{"output": "exited with code 2"}},
+		{"patch failed", "patch_apply_end", "failed", "", map[string]any{"success": false}},
+		{"patch declined", "patch_apply_end", "canceled", "", map[string]any{"status": "declined", "success": false}},
+		{"patch succeeded", "patch_apply_end", "completed", "", map[string]any{}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			manager, live, sink := testAppServerEventAdapter(t)
+			tc.fields["type"] = tc.kind
+			tc.fields["call_id"] = "call-1"
+			manager.handleAppServerNotification("runtime-1", live, appServerNotification{
+				Method: "codex/event", Params: mustJSONRaw(t, tc.fields),
+			})
+			events := withoutContextUsage(sink.snapshot())
+			if len(events) != 1 || events[0].Kind != SessionEventToolCallUpdate || events[0].ToolStatus != tc.status {
+				t.Fatalf("legacy tool events = %+v, want one %s result", events, tc.status)
+			}
+			if tc.output != "" && !strings.Contains(events[0].ToolOutputSummary, tc.output) {
+				t.Fatalf("tool output = %q, want %q", events[0].ToolOutputSummary, tc.output)
+			}
+		})
+	}
+}
+
 func TestAppServerEventAdapterLegacyTurnAbortedAcceptsStructuredOutputBoundary(t *testing.T) {
 	t.Parallel()
 
@@ -2276,6 +2307,50 @@ func TestAppServerEventAdapterLegacyResponseItemExecCommandFallback(t *testing.T
 		events[1].ToolStatus != "failed" ||
 		!strings.Contains(events[1].ToolOutputSummary, "operation not permitted") {
 		t.Fatalf("fallback output = %#v, want failed exec command output", events[1])
+	}
+}
+
+func TestAppServerEventAdapterMatchesLegacyResultsToTheirFunctionCalls(t *testing.T) {
+	manager, live, sink := testAppServerEventAdapter(t)
+	send := func(fields map[string]any) {
+		manager.handleAppServerNotification("runtime-1", live, appServerNotification{
+			Method: "codex/response_item", Params: mustJSONRaw(t, fields),
+		})
+	}
+	send(map[string]any{"type": "function_call", "call_id": "plan", "name": "update_plan", "arguments": `{"step":"test"}`})
+	send(map[string]any{"type": "function_call", "call_id": "command", "name": "exec_command", "arguments": `{"cmd":"pwd"}`})
+	send(map[string]any{"type": "function_call_output", "call_id": "unknown", "output": "unknown result", "status": "cancelled"})
+	send(map[string]any{"type": "function_call_output", "call_id": "unknown", "output": "duplicate"})
+	send(map[string]any{"type": "function_call_output", "call_id": "command", "output": "directory"})
+	record := `::csgclaw-output::resource_link {"type":"resource_link","name":"docs","uri":"https://example.com/docs"}`
+	send(map[string]any{"type": "function_call_output", "call_id": "plan", "output": []any{
+		map[string]any{"type": "input_text", "text": "Plan updated"},
+		map[string]any{"type": "input_image", "image_url": "image-content"},
+		map[string]any{"type": "input_text", "text": record},
+	}})
+	send(map[string]any{"type": "function_call_output", "call_id": "plan", "output": "duplicate"})
+
+	events := withoutContextUsage(sink.snapshot())
+	if len(events) != 5 {
+		t.Fatalf("expected two starts and three results: %+v", events)
+	}
+	plan, command := events[0], events[1]
+	if plan.ToolKind != "dynamic_tool_call" || plan.ToolTitle != "update_plan" || plan.Payload.(map[string]any)["tool"] != "update_plan" {
+		t.Fatalf("plan start = %+v", plan)
+	}
+	if command.ToolKind != "exec_command" || command.Payload.(map[string]any)["command"] != "pwd" {
+		t.Fatalf("command start = %+v", command)
+	}
+	unknown, commandResult, planResult := events[2], events[3], events[4]
+	if unknown.Kind != SessionEventToolCallUpdate || unknown.ToolCallID != "unknown" || unknown.ToolStatus != "canceled" ||
+		unknown.ToolKind != "" || unknown.ToolTitle != "" || !strings.Contains(unknown.ToolOutputSummary, "unknown result") {
+		t.Fatalf("anonymous result = %+v", unknown)
+	}
+	if commandResult.ToolCallID != command.ToolCallID || commandResult.ToolKind != command.ToolKind ||
+		planResult.ToolCallID != plan.ToolCallID || planResult.ToolKind != plan.ToolKind ||
+		planResult.ToolTitle != plan.ToolTitle || planResult.Payload.(map[string]any)["tool"] != plan.ToolTitle ||
+		planResult.ToolStatus != "completed" || planResult.ToolOutputSummary != summarizeToolValue(map[string]any{"output": "Plan updated\n" + record}) {
+		t.Fatalf("results = %+v", events[2:])
 	}
 }
 
