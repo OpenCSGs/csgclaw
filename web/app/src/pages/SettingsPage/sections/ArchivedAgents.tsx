@@ -126,19 +126,17 @@ export function ArchivedAgents({
       >
         <DialogContent className={styles.archivedAgentDialog}>
           <DialogHeader>
-            <div className="min-w-0">
-              <DialogTitle>
-                {t(selection?.deleting ? "archivedAgentDeleteTitle" : "archivedAgentRestore", { name: selectedName })}
-              </DialogTitle>
-              <DialogDescription>
-                {t(selection?.deleting ? "archivedAgentDeleteHint" : "archivedAgentRestoreHint", {
-                  name: selectedName,
-                })}
-              </DialogDescription>
-            </div>
+            <DialogTitle>
+              {t(selection?.deleting ? "archivedAgentDeleteTitle" : "archivedAgentRestore", { name: selectedName })}
+            </DialogTitle>
             <DialogCloseButton label={t("close")} disabled={busy} />
           </DialogHeader>
           <DialogBody className="flex flex-col gap-3">
+            <DialogDescription size="md">
+              {t(selection?.deleting ? "archivedAgentDeleteHint" : "archivedAgentRestoreHint", {
+                name: selectedName,
+              })}
+            </DialogDescription>
             {selection?.deleting && (
               <>
                 <ul className={styles.archiveImpactList}>
