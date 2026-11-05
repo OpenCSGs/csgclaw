@@ -39,8 +39,8 @@ func TestCreateAgentTaskBindsDirectRoomAndSendsInitialMessage(t *testing.T) {
 	if !ok {
 		t.Fatalf("Room(%s) found = false", task.RoomID)
 	}
-	if !room.IsDirect {
-		t.Fatalf("room.IsDirect = false, want true")
+	if !room.IsDirect || room.TaskSession {
+		t.Fatalf("room = %+v, want default direct room", room)
 	}
 	if len(room.Messages) < 2 {
 		t.Fatalf("room messages len = %d, want bootstrap and task message", len(room.Messages))
@@ -69,6 +69,22 @@ func TestCreateAgentTaskBindsDirectRoomAndSendsInitialMessage(t *testing.T) {
 	}
 	if len(last.Mentions) != 1 || last.Mentions[0].ID != "user-dev" {
 		t.Fatalf("mentions = %+v, want user-dev", last.Mentions)
+	}
+}
+
+func TestCreateAgentTaskRemovesNewSessionWhenTaskCreationFails(t *testing.T) {
+	imSvc := im.NewService()
+	svc := NewService(taskcore.NewService(), imSvc, nil, nil)
+	input := CreateInput{ID: "task-scheduled-run-1", AgentID: "agent-dev", Title: "Check build", NewTaskSession: true}
+	created, err := svc.CreateAgentTask(t.Context(), input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.CreateAgentTask(t.Context(), input); err == nil {
+		t.Fatal("duplicate task ID accepted")
+	}
+	if rooms := imSvc.ListRooms(); len(rooms) != 1 || rooms[0].ID != created.RoomID {
+		t.Fatalf("rooms = %+v, want only original session %q", rooms, created.RoomID)
 	}
 }
 

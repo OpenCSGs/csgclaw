@@ -380,7 +380,7 @@ export function TasksView({
   onOpenEditScheduledTaskModal,
   onOpenConversation = () => {},
 }: TasksViewProps) {
-  const [showScheduledStart, setShowScheduledStart] = useState(!selectedScheduledTaskID);
+  const [showScheduledStart, setShowScheduledStart] = useState(false);
   const [scheduledTextFocus, setScheduledTextFocus] = useState(0);
   useEffect(() => {
     if (selectedScheduledTaskID) setShowScheduledStart(false);
@@ -427,6 +427,9 @@ export function TasksView({
   const [editScheduledDraft, setEditScheduledDraft] = useState<ScheduledTaskFormDraft>(emptyScheduledTaskDraft);
   const [editScheduledFieldErrors, setEditScheduledFieldErrors] = useState<ScheduledTaskFormFieldErrors>({});
   const [deletingScheduledTask, setDeletingScheduledTask] = useState<WorkspaceScheduledTask | null>(null);
+  const latestRunTaskID = scheduledTaskRuns[0]?.task_id;
+  const latestRunTask = latestRunTaskID ? tasks.find((item) => item.id === latestRunTaskID) : undefined;
+  const latestRunOutcome = latestRunTask?.result || latestRunTask?.error;
   const [selectedGeneratedTaskID, setSelectedGeneratedTaskID] = useState("");
   const selectedGeneratedTask = useMemo(
     () => tasks.find((item) => item.id === selectedGeneratedTaskID) ?? null,
@@ -640,7 +643,7 @@ export function TasksView({
       return;
     }
     if (availableRoomIDs && !availableRoomIDs.has(normalizedRoomID)) {
-      setConversationOpenError(t("taskConversationAgentDeleted"));
+      setConversationOpenError(t("taskConversationUnavailable"));
       return;
     }
     setConversationOpenError("");
@@ -838,6 +841,12 @@ export function TasksView({
                           </div>
                         </dl>
                         <div className={styles.scheduledTaskPrompt}>{selectedScheduledTask.prompt}</div>
+                        {!selectedGeneratedTaskID && latestRunTask?.assignment_type === "agent" && latestRunOutcome ? (
+                          <section className={classNames(styles.scheduledTaskRuns, styles.generatedTaskDescription)}>
+                            <h3>{t("scheduledTaskLatestResult")}</h3>
+                            <p>{latestRunOutcome}</p>
+                          </section>
+                        ) : null}
                         <div className={styles.scheduledTaskRuns}>
                           <h3>{t("scheduledTaskRunsTitle")}</h3>
                           {scheduledTaskRuns.length ? (
@@ -1250,6 +1259,12 @@ function GeneratedTaskInlineDetail({
               </div>
               <p>{task.id}</p>
             </header>
+            {task.assignment_type === "agent" && (task.result || task.error) ? (
+              <section className={classNames(styles.detailBlock, styles.generatedTaskDescription)}>
+                <h4>{t(task.result ? "taskResultLabel" : "taskErrorLabel")}</h4>
+                <p>{task.result || task.error}</p>
+              </section>
+            ) : null}
             <section className={classNames(styles.detailBlock, styles.generatedTaskDescription)}>
               <h4>{t("taskDescriptionLabel")}</h4>
               <p>{task.body || t("tasksDetailPlaceholder")}</p>

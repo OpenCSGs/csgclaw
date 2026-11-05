@@ -420,9 +420,6 @@ export function useTaskController({
           mergeWorkspaceTaskList(current ?? [], taskResult.data ?? []),
         );
       }
-      if (run.task_id) {
-        onSelectTask(run.task_id);
-      }
     } catch (err) {
       setScheduledTaskActionError(
         isScheduledTaskAlreadyTriggeredError(err)
