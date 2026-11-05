@@ -60,10 +60,12 @@ type attachmentObject struct {
 	CreatedAt     time.Time `json:"created_at"`
 	CreatedBy     string    `json:"created_by"`
 	RoomID        string    `json:"room_id"`
+	SessionID     string    `json:"session_id,omitempty"`
 	MessageID     string    `json:"message_id"`
 	Width         int       `json:"width,omitempty"`
 	Height        int       `json:"height,omitempty"`
 	DownloadToken string    `json:"download_token"`
+	WorkspacePath string    `json:"workspace_path,omitempty"`
 }
 
 type AttachmentFile struct {
@@ -114,7 +116,7 @@ func (s *Service) prepareMessageAttachments(uploads []MessageAttachmentUpload, s
 		if total > MaxAttachmentMessageBytes {
 			return nil, fmt.Errorf("attachments exceed %d bytes per message", MaxAttachmentMessageBytes)
 		}
-		if _, err := validatedAttachmentOriginalName(upload.Name); err != nil {
+		if _, err := ValidateAttachmentName(upload.Name); err != nil {
 			return nil, err
 		}
 	}
@@ -169,7 +171,7 @@ func (s *Service) storeMessageAttachmentsLocked(roomID, messageID, senderID stri
 }
 
 func (s *Service) prepareAttachment(source AttachmentSource) (preparedAttachment, error) {
-	originalName, err := validatedAttachmentOriginalName(source.Name)
+	originalName, err := ValidateAttachmentName(source.Name)
 	if err != nil {
 		return preparedAttachment{}, err
 	}
@@ -234,9 +236,13 @@ func (s *Service) prepareAttachment(source AttachmentSource) (preparedAttachment
 	if err != nil {
 		return preparedAttachment{}, err
 	}
+	id, err := newAttachmentID(sha)
+	if err != nil {
+		return preparedAttachment{}, err
+	}
 	keep = true
 	return preparedAttachment{path: staged.Name(), corruptBlob: corruptBlob, object: attachmentObject{
-		BlobSHA256: sha, OriginalName: originalName, SafeName: safeAttachmentName(originalName), MediaType: mediaType, Kind: kind, SizeBytes: written, SHA256: sha, Width: width, Height: height,
+		ID: id, BlobSHA256: sha, OriginalName: originalName, SafeName: safeAttachmentName(originalName), MediaType: mediaType, Kind: kind, SizeBytes: written, SHA256: sha, Width: width, Height: height,
 	}}, nil
 }
 
@@ -286,10 +292,6 @@ func (s *Service) storePreparedAttachmentLocked(roomID, messageID, senderID stri
 			return MessageAttachment{}, fmt.Errorf("store attachment blob: %w", err)
 		}
 	}
-	object.ID, err = newAttachmentID(object.SHA256)
-	if err != nil {
-		return MessageAttachment{}, err
-	}
 	object.DownloadToken, err = newAttachmentDownloadToken()
 	if err != nil {
 		return MessageAttachment{}, err
@@ -305,20 +307,34 @@ func (s *Service) storePreparedAttachmentLocked(roomID, messageID, senderID stri
 }
 
 func (s *Service) AttachmentFile(id string) (AttachmentFile, error) {
-	id = strings.TrimSpace(id)
-	if !validAttachmentID(id) {
-		return AttachmentFile{}, fmt.Errorf("attachment id is required")
-	}
-	if s == nil || strings.TrimSpace(s.statePath) == "" {
-		return AttachmentFile{}, fmt.Errorf("attachment storage is not configured")
-	}
-	object, err := readAttachmentObject(attachmentObjectPath(s.statePath, id))
+	object, err := s.loadAttachmentObject(id)
 	if err != nil {
 		return AttachmentFile{}, err
 	}
-	if object.ID != id {
-		return AttachmentFile{}, fmt.Errorf("attachment not found")
+	return s.attachmentBlobFile(object)
+}
+
+var errAttachmentNotFound = errors.New("attachment not found")
+
+func (s *Service) loadAttachmentObject(id string) (attachmentObject, error) {
+	id = strings.TrimSpace(id)
+	if !validAttachmentID(id) {
+		return attachmentObject{}, fmt.Errorf("attachment id is required")
 	}
+	if s == nil || strings.TrimSpace(s.statePath) == "" {
+		return attachmentObject{}, fmt.Errorf("attachment storage is not configured")
+	}
+	object, err := readAttachmentObject(attachmentObjectPath(s.statePath, id))
+	if err != nil {
+		return attachmentObject{}, err
+	}
+	if object.ID != id {
+		return attachmentObject{}, errAttachmentNotFound
+	}
+	return object, nil
+}
+
+func (s *Service) attachmentBlobFile(object attachmentObject) (AttachmentFile, error) {
 	path := attachmentBlobPath(s.statePath, object.BlobSHA256)
 	if _, err := os.Stat(path); err != nil {
 		return AttachmentFile{}, fmt.Errorf("stat attachment blob: %w", err)
@@ -374,16 +390,17 @@ func (s *Service) MaterializeAttachment(id, workspaceRoot, relativeDir string) (
 
 func attachmentFromObject(object attachmentObject) MessageAttachment {
 	att := MessageAttachment{
-		ID:          object.ID,
-		Name:        object.SafeName,
-		Kind:        object.Kind,
-		MediaType:   object.MediaType,
-		SizeBytes:   object.SizeBytes,
-		SHA256:      object.SHA256,
-		CreatedAt:   object.CreatedAt,
-		DownloadURL: attachmentDownloadURL(object),
-		Width:       object.Width,
-		Height:      object.Height,
+		ID:            object.ID,
+		Name:          object.SafeName,
+		Kind:          object.Kind,
+		MediaType:     object.MediaType,
+		SizeBytes:     object.SizeBytes,
+		SHA256:        object.SHA256,
+		CreatedAt:     object.CreatedAt,
+		DownloadURL:   attachmentDownloadURL(object),
+		WorkspacePath: object.WorkspacePath,
+		Width:         object.Width,
+		Height:        object.Height,
 	}
 	if att.Kind == attachmentKindImage {
 		att.PreviewURL = att.DownloadURL
@@ -462,7 +479,8 @@ func safeAttachmentName(name string) string {
 	return truncateAttachmentName(name)
 }
 
-func validatedAttachmentOriginalName(name string) (string, error) {
+// ValidateAttachmentName returns the display name accepted by the attachment store.
+func ValidateAttachmentName(name string) (string, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
 		return "attachment", nil
@@ -578,7 +596,7 @@ func readAttachmentObject(path string) (attachmentObject, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return attachmentObject{}, fmt.Errorf("attachment not found")
+			return attachmentObject{}, errAttachmentNotFound
 		}
 		return attachmentObject{}, fmt.Errorf("read attachment object: %w", err)
 	}
@@ -612,6 +630,20 @@ func atomicWriteReader(path string, source io.Reader, perm os.FileMode, operatio
 			_ = os.Remove(tmpName)
 		}
 	}()
+	if err := writeAndSyncAttachmentTemp(tmp, source, perm, operation); err != nil {
+		return err
+	}
+	renameStart := time.Now()
+	renameErr := os.Rename(tmpName, path)
+	operation.Observe("im.rename", time.Since(renameStart), 0, 1)
+	if err := renameErr; err != nil {
+		return fmt.Errorf("rename temp file: %w", err)
+	}
+	cleanup = false
+	return nil
+}
+
+func writeAndSyncAttachmentTemp(tmp *os.File, source io.Reader, perm os.FileMode, operation *diagnostics.Operation) error {
 	writeStart := time.Now()
 	written, copyErr := io.Copy(tmp, source)
 	operation.Observe("im.write", time.Since(writeStart), written, 1)
@@ -633,13 +665,6 @@ func atomicWriteReader(path string, source io.Reader, perm os.FileMode, operatio
 	if err := tmp.Close(); err != nil {
 		return fmt.Errorf("close temp file: %w", err)
 	}
-	renameStart := time.Now()
-	renameErr := os.Rename(tmpName, path)
-	operation.Observe("im.rename", time.Since(renameStart), 0, 1)
-	if err := renameErr; err != nil {
-		return fmt.Errorf("rename temp file: %w", err)
-	}
-	cleanup = false
 	return nil
 }
 
@@ -723,6 +748,9 @@ func cleanupAssetFilesForState(statePath string, rooms []Room) error {
 	}
 
 	live, liveSHA := liveAttachmentRefs(rooms)
+	if err := addSessionAttachmentRefs(statePath, live); err != nil {
+		return err
+	}
 	if err := cleanupLocalAttachmentFiles(statePath, live); err != nil {
 		return err
 	}

@@ -112,6 +112,16 @@ func (h *Handler) handleAgentWorkspaceFileRead(w http.ResponseWriter, r *http.Re
 	writeJSON(w, http.StatusOK, file)
 }
 
+func (h *Handler) configuredAgentWorkspace(agentID string, options map[string]any) (string, error) {
+	if root, ok := options["local_workspace_dir"].(string); ok && strings.TrimSpace(root) != "" {
+		return strings.TrimSpace(root), nil
+	}
+	if h.workspace == nil {
+		return "", errors.New("agent workspace service is unavailable")
+	}
+	return h.workspace.WorkspaceRootByID(agentID)
+}
+
 func (h *Handler) agentWorkspaceRoot(id string) (string, error) {
 	item, ok := h.svc.Agent(id)
 	if !ok {

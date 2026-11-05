@@ -7,22 +7,29 @@ import (
 	"io"
 	"log/slog"
 	"mime"
+	"mime/multipart"
+	"net/http"
+	"path/filepath"
 	"strings"
 
 	"csgclaw/internal/agentengine"
+	"csgclaw/internal/channel/csgclaw/delivery"
 	"csgclaw/internal/im"
 )
 
 type agentSessionInput struct {
-	Text  string
-	Files []agentSessionInputFile
+	attachmentIDs []string
+	Text          string
+	Files         []agentSessionInputFile
 }
 
 type agentSessionInputFile struct {
-	Name      string
-	MediaType string
-	Data      string
-	SizeBytes int64
+	Name         string
+	MediaType    string
+	SizeBytes    int64
+	sha256       string
+	encodedBytes int
+	open         func() (io.ReadCloser, error)
 }
 
 func parseAgentSessionFile(name, data string) (agentSessionInputFile, error) {
@@ -51,7 +58,61 @@ func parseAgentSessionFile(name, data string) (agentSessionInputFile, error) {
 	if size == 0 {
 		return agentSessionInputFile{}, fmt.Errorf("input_file must not be empty")
 	}
-	return agentSessionInputFile{Name: name, MediaType: mediaType, Data: encoded, SizeBytes: size}, nil
+	return agentSessionInputFile{
+		Name: name, MediaType: mediaType, SizeBytes: size, encodedBytes: len(encoded),
+		open: func() (io.ReadCloser, error) {
+			return io.NopCloser(base64.NewDecoder(base64.StdEncoding.Strict(), strings.NewReader(encoded))), nil
+		},
+	}, nil
+}
+
+func parseAgentSessionMultipart(w http.ResponseWriter, r *http.Request) (agentSessionInput, bool, error) {
+	// Reserve space for both the JSON payload and multipart framing.
+	r.Body = http.MaxBytesReader(w, r.Body, im.MaxAttachmentMessageBytes+2*agentSessionResponseBodyLimit)
+	if err := r.ParseMultipartForm(multipartAttachmentMemory); err != nil {
+		return agentSessionInput{}, false, fmt.Errorf("decode multipart request: %w", err)
+	}
+	form := r.MultipartForm
+	if len(form.Value) != 1 || len(form.Value["payload"]) != 1 {
+		return agentSessionInput{}, false, fmt.Errorf("expected one payload field")
+	}
+	payload := form.Value["payload"][0]
+	if len(payload) > agentSessionResponseBodyLimit {
+		return agentSessionInput{}, false, fmt.Errorf("%w: payload exceeds %d bytes", errAttachmentPayloadTooLarge, agentSessionResponseBodyLimit)
+	}
+	files, err := sessionMultipartFiles(form)
+	if err != nil {
+		return agentSessionInput{}, false, err
+	}
+	return decodeAgentSessionResponseRequest(strings.NewReader(payload), files)
+}
+
+func sessionMultipartFiles(form *multipart.Form) ([]agentSessionInputFile, error) {
+	if len(form.File) != 1 || len(form.File["files"]) == 0 {
+		return nil, fmt.Errorf("expected one or more files parts")
+	}
+	uploads, err := readMultipartAttachmentUploads(form)
+	if err != nil {
+		return nil, err
+	}
+	files := make([]agentSessionInputFile, 0, len(uploads))
+	for _, upload := range uploads {
+		name, err := im.ValidateAttachmentName(upload.Name)
+		if err != nil {
+			return nil, err
+		}
+		if upload.SizeBytes == 0 {
+			return nil, fmt.Errorf("file %q must not be empty", upload.Name)
+		}
+		mediaType := upload.MediaType
+		if mediaType == "" {
+			mediaType = "application/octet-stream"
+		}
+		files = append(files, agentSessionInputFile{
+			Name: name, MediaType: mediaType, SizeBytes: upload.SizeBytes, open: upload.Open,
+		})
+	}
+	return files, nil
 }
 
 func (input agentSessionInput) validateFileLimits() error {
@@ -71,29 +132,65 @@ func (input agentSessionInput) validateFileLimits() error {
 	return nil
 }
 
-func (input agentSessionInput) prepare(ctx context.Context, files agentengine.FileInterface) ([]agentengine.InputPart, func(), error) {
-	var ids []string
+type preparedSessionInput struct {
+	parts []agentengine.InputPart
+	files []agentengine.OutputFile
+}
+
+func (input agentSessionInput) prepare(ctx context.Context, files agentengine.FileInterface) (preparedSessionInput, func(), error) {
+	var prepared preparedSessionInput
 	cleanup := func() {
-		for _, id := range ids {
-			if err := files.Delete(context.Background(), id); err != nil {
-				slog.Warn("delete session input file failed", "file_id", id, "error", err)
+		for _, file := range prepared.files {
+			if err := files.Delete(context.Background(), file.ID); err != nil {
+				slog.Warn("delete session input file failed", "file_id", file.ID, "error", err)
 			}
 		}
 	}
-	parts := make([]agentengine.InputPart, 0, len(input.Files)+1)
+	prepared.parts = make([]agentengine.InputPart, 0, len(input.Files)+1)
 	if input.Text != "" {
-		parts = append(parts, agentengine.InputPart{Kind: agentengine.InputPartText, Text: input.Text})
+		prepared.parts = append(prepared.parts, agentengine.InputPart{Kind: agentengine.InputPartText, Text: input.Text})
 	}
 	for _, file := range input.Files {
-		reader := base64.NewDecoder(base64.StdEncoding.Strict(), strings.NewReader(file.Data))
-		created, err := files.Create(ctx, agentengine.FileCreateRequest{
-			Name: file.Name, MIMEType: file.MediaType, SizeBytes: file.SizeBytes,
-		}, reader)
+		reader, err := file.open()
 		if err != nil {
-			return nil, cleanup, err
+			return prepared, cleanup, err
 		}
-		ids = append(ids, created.ID)
-		parts = append(parts, agentengine.InputPart{Kind: agentengine.InputPartFile, File: &agentengine.InputFile{ID: created.ID}})
+		created, err := files.Create(ctx, agentengine.FileCreateRequest{
+			Name: file.Name, MIMEType: file.MediaType, SizeBytes: file.SizeBytes, SHA256: file.sha256,
+		}, reader)
+		_ = reader.Close()
+		if err != nil {
+			return prepared, cleanup, err
+		}
+		prepared.files = append(prepared.files, created)
+		prepared.parts = append(prepared.parts, agentengine.InputPart{Kind: agentengine.InputPartFile, File: &agentengine.InputFile{ID: created.ID}})
 	}
-	return parts, cleanup, nil
+	return prepared, cleanup, nil
+}
+
+func (h *Handler) storeSessionFiles(
+	ctx context.Context, store agentengine.FileInterface, agent agentengine.Agent, sessionID, responseID string,
+	files []agentengine.OutputFile,
+) ([]im.MessageAttachment, error) {
+	if len(files) == 0 {
+		return nil, nil
+	}
+	sources, rejected := delivery.OpenOutputFileSources(ctx, store, files)
+	defer delivery.CloseOutputFileSources(sources)
+	if len(rejected) > 0 {
+		return nil, fmt.Errorf("session attachment content is unavailable")
+	}
+	return h.saveSessionAttachmentSources(agent, sessionID, responseID, sources)
+}
+
+func (h *Handler) saveSessionAttachmentSources(agent agentengine.Agent, sessionID, batchID string, sources []im.AttachmentSource) ([]im.MessageAttachment, error) {
+	workspaceRoot, err := h.configuredAgentWorkspace(agent.ID, agent.Spec.Runtime.Options)
+	if err != nil {
+		return nil, err
+	}
+	workspaceRoot, err = filepath.Abs(workspaceRoot)
+	if err != nil {
+		return nil, err
+	}
+	return h.im.StoreSessionResponseAttachments(agent.ID, sessionID, batchID, workspaceRoot, sources)
 }

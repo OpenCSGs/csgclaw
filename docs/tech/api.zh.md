@@ -1501,24 +1501,23 @@ prompt context 使用；它不是 thread reply 列表。Participant client 可�
 }
 ```
 
+### `POST /api/v1/agents/{agent}/sessions/{session_id}/attachments`
+
+将原件上传到指定 Agent 和会话。上传成功后，客户端可以直接预览或下载，稍后再发送提示词。请求使用当前 CSGClaw 实例的服务凭证。请求体使用 `multipart/form-data`，只接受 `files` 字段，每个文件使用一个字段，提供文件名称和原始字节。每次最多上传 10 个非空文件，每个文件最多 1 GiB，合计最多 2 GiB。
+
+服务端把原件保存到 Agent 的 workspace 和 IM，返回 **201 Created** 和 `{"attachments":[…]}`。每项使用 `Message.attachments` 的字段。发送消息时，在同一会话的 `/responses` 请求中通过 `attachment_ids` 引用这些附件。
+
 ### `POST /api/v1/agents/{agent}/sessions/{session_id}/responses`
 
 通过选定 Agent 及其真实 CSGClaw runtime 执行一次 turn。
 `{agent}` selector 可以使用 Agent ID，也可以使用不区分大小写的唯一 Agent 名称。
 该接口与 `/llm/responses` 相互独立，后者只代理模型流量，不执行 Agent。
 
-该接口不要求 Bearer token。
-因为 admin 目前是唯一用户，Anonymous 复用现有 `user-admin` 身份表示。
-服务端不接受调用方指定身份，每条输入消息都以 `sender_id: "user-admin"` 持久化。
+客户端提供一个长度为 1–128 的 `session_id`，可使用字母、数字以及 `.`、`_`、`~`、`-`，首字符须为字母或数字。
+服务端按 Agent 和 `session_id` 保存会话绑定，后续请求复用同一会话。直接会话的 `metadata.room_id` 为空字符串。
+Portal 上传和下载都使用当前 CSGClaw 实例的 `endpoint` 和网关登录凭证。
 
-客户端提供一个全局 `session_id`，长度为 1-128 位，只能包含 path-safe ASCII 字符。
-第一次请求创建一个 non-direct room，后续请求复用该 room。
-Room 中只能包含 admin 和所选 Agent，服务端会保持 `notify_all_agents` 开启。
-Room title 创建后不再变化，并使用以下便于审计的格式：
-
-```text
-Anonymous Session: <session_id> | Agent: <agent_name> (<agent_id>)
-```
+顶层字段 `attachment_ids` 是附件 ID 数组，用于引用同一 Agent、同一会话中已保存的文件。各个 ID 必须互不重复。按 ID 引用附件需要通过服务认证，缺少凭证返回 `401`。未知 ID 或其他 Agent、其他会话中的 ID 返回 `404`。同一请求可以同时引用已有文件和上传新文件，两者合计最多 10 个。返回的 `input_attachments` 按 `attachment_ids` 的顺序列出已有文件，然后按上传顺序列出新文件。
 
 最简请求使用字符串 input：
 
@@ -1577,7 +1576,25 @@ invalid_request`。`plain_text` 的 `extra` 最大为 64 KiB，`web_page_dom` �
 }
 ```
 
-提示词和文件可以通过同一个 JSON 请求发送，在 `content` 中添加 `input_file`：
+可以通过一次 `multipart/form-data` 请求，将提示词和本地文件发送给执行本轮任务的
+worker。在 Portal 中，使用当前 CSGClaw 实例的 `endpoint` 作为 `INSTANCE_ENDPOINT`，
+并沿用访问该实例的网关认证。以下示例上传两份 PDF 并接收流式回复。
+
+```sh
+curl -N "${INSTANCE_ENDPOINT%/}/api/v1/agents/codex-worker/sessions/${SESSION_ID}/responses" \
+  --header "Authorization: Bearer ${TOKEN}" \
+  --form-string 'payload={"input":"请比较这两份 PDF。","stream":true}' \
+  --form 'files=@report.pdf;type=application/pdf' \
+  --form 'files=@appendix.pdf;type=application/pdf'
+```
+
+表单包含一个 `payload` 字段，内容为 JSON 字符串。每个文件使用一个 `files` 字段，
+包含文件名称和原始字节。`payload` 支持 `input`、`stream`、`extra` 和
+`extra_type`，也支持 `attachment_ids`。仅发送文件时可以使用 `payload={}`。在 `payload` 中传入 `input_file`
+会返回 `400 invalid_request`。浏览器可以将 JSON 字符串和选中的每个 `File` 添加到 `FormData`，
+由浏览器设置包含 boundary 的 `Content-Type` 请求头。
+
+JSON 请求也可以在 `content` 中使用 `input_file` 发送文件。
 
 ```json
 {
@@ -1598,14 +1615,66 @@ invalid_request`。`plain_text` 的 `extra` 最大为 64 KiB，`web_page_dom` �
 
 `filename` 为文件名称，`file_data` 使用 `data:<media-type>;base64,<data>` 格式，
 包含完整文件内容。多个文件使用多个 `input_file`，也支持仅包含文件的消息。
-文件限制与消息接口相同：最多 10 个文件，解码后单个文件最多 1 GiB，合计最多
-2 GiB。HTTP 请求体上限包含 Base64 编码增加的体积，以及 1 MiB 的其他 JSON 内容。
+JSON 请求体上限包含 Base64 编码增加的体积，以及 1 MiB 的其他 JSON 内容。
 Base64 会使传输体积增加约三分之一；JSON 客户端和代理可能将编码后的请求缓存在内存中。
 
-文件在本轮执行期间提供给选定 Agent，执行完成、失败或取消后删除。
-后续请求需要使用文件时，应当再次提交。文件数据或元数据无效时返回
+两种格式均支持最多 10 个非空文件，每个文件最多 1 GiB，合计最多 2 GiB，按文件原始字节计算。
+选定 Agent 在本轮执行期间可以读取输入文件，执行结束后服务端删除供 Agent 读取的临时副本。
+文件数据或元数据无效时返回
 `400 invalid_request`；文件大小或整个 HTTP 请求体超过上限时返回
 `413 invalid_request`。文件校验和准备工作在 SSE 开始前完成。
+
+服务端在调用 Agent 前把新原件保存到 IM 和 workspace。SSE 在首个 `message_start` 事件中返回原件，Agent 执行期间即可访问。原件保存成功后，取消执行、会话忙、Agent 执行失败或结果文件发布失败均会保留原件。普通 JSON 请求在保存原件后发生错误时，错误响应仍包含 `input_attachments`。
+
+| 文件来源 | 成功的 JSON 响应 | SSE 首个 `message_start` | SSE 成功时的最后一个 `message_delta` |
+| --- | --- | --- | --- |
+| 用户原件 | `input_attachments` | `input_attachments` | `input_attachments` |
+| Agent 结果文件 | `output[0].attachments` | — | `attachments` |
+
+附件数组位于 SSE 事件 `data` 的顶层，空数组省略。每个附件包含 `id`、`name`、`media_type`、`size_bytes`、`sha256`、`download_url` 和相对路径 `workspace_path`。图片还提供 `preview_url`。Codex 可以通过 `csgclaw_publish_file` 发布结果文件。
+
+原件和结果文件保存在 Agent workspace 的 `.csgclaw/attachments/sessions/<session_id>/` 目录中。workspace 使用 Agent 配置的 `local_workspace_dir` 或 runtime 默认目录。下载始终返回保存时的内容，即使 workspace 副本已被修改。更换容器后要继续访问两份数据，需同时持久化 workspace 和 CSGClaw 数据目录。 写入会话附件后，如需回退到旧版，请提前备份这两个目录。旧版启动时只识别房间消息引用，可能清理会话附件的下载数据。
+
+Portal 应将附件的稳定 ID 和用于显示的字段随消息保存，并记录所属实例、Agent 和会话。历史记录不保存 token，也不保存带 token 的下载或预览地址。重新打开附件时，使用对应实例当前的凭证，请求 `GET /api/v1/attachments/{id}`。会话历史接口不会自动为 Portal 生成附件记录。
+
+以下浏览器示例可在选定文件时上传，用户发送提示词时再用 JSON 引用附件。
+
+```js
+const endpoint = new URL(instance.endpoint, gatewayHost)
+if (endpoint.origin !== new URL(gatewayHost).origin) throw new Error("Unexpected gateway")
+const base = endpoint.origin + endpoint.pathname.replace(/\/$/, "")
+const headers = { Authorization: `Bearer ${token}` }
+const session = `/api/v1/agents/${encodeURIComponent(agent)}/sessions/${encodeURIComponent(sid)}`
+
+function historyFile({ id, name, media_type, size_bytes }) {
+  return { id, name, media_type, size_bytes }
+}
+
+async function upload(files) {
+  const body = new FormData()
+  for (const file of files) body.append("files", file, file.name)
+  const res = await fetch(base + session + "/attachments", { method: "POST", headers, body })
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  return (await res.json()).attachments.map(historyFile)
+}
+
+async function send(prompt, originals) {
+  const res = await fetch(base + session + "/responses", {
+    method: "POST",
+    headers: { ...headers, "Content-Type": "application/json" },
+    body: JSON.stringify({ input: prompt, attachment_ids: originals.map(file => file.id) }),
+  })
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  const { output } = await res.json()
+  return { content: output[0].content, attachments: (output[0].attachments ?? []).map(historyFile) }
+}
+
+async function readAttachment(id) {
+  const res = await fetch(base + "/api/v1/attachments/" + encodeURIComponent(id), { headers })
+  if (!res.ok) throw new Error(await res.text())
+  return res.blob()
+}
+```
 
 省略 `stream` 或设置为 `false` 时，接口返回包含最终 assistant 文本和 session
 元数据的 Responses 风格 JSON。设置 `stream: true` 时，接口返回
@@ -1636,7 +1705,7 @@ runtime 会降级为一个文本 delta。Agent 完成前，连接已建立并先
 
 同一个 session 同时只允许一个 turn。
 不同 session ID 可以并发执行。
-同一个全局 session 改用其它 Agent 时返回 `409 session_agent_conflict`。
+不同 Agent 可以各自使用同一个外部 `session_id`。
 服务端不限制响应总时长；客户端断开连接或显式取消请求时，仍会取消正在执行的响应。
 
 ### `POST /api/v1/agents/{agent}/sessions/{session_id}/responses/cancel`
@@ -1658,8 +1727,6 @@ runtime 会降级为一个文本 delta。Agent 完成前，连接已建立并先
 }
 ```
 
-V1 接受 user 文本、Base64 文件输入、可选的纯文本额外上下文以及可选的文本输出流。
-请求字段和内容字段均进行严格校验。
 内置 live demo 和可替换的前端 mock 边界见 [Session API Demo 前端指南](web/session-api-demo.zh.md)。
 
 ### `GET /api/v1/agents/{id}/llm/models`

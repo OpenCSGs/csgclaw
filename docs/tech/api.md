@@ -1543,24 +1543,23 @@ Participant outbound message shape is also accepted:
 }
 ```
 
+### `POST /api/v1/agents/{agent}/sessions/{session_id}/attachments`
+
+Uploads originals to the selected agent and session without starting a turn. Authenticate using the service credentials for the current CSGClaw instance. Send one or more `files` parts in a `multipart/form-data` request. This endpoint accepts only `files` parts, each containing the filename and raw bytes. The limits are 10 nonempty files, 1 GiB per file, and 2 GiB total.
+
+On success, the server returns **201 Created** with `{"attachments":[…]}`. Each item uses the same fields as `Message.attachments`. The workspace copy and authorized download are available immediately, before the client sends a prompt. When the user sends the message, pass those IDs in `attachment_ids` to the session’s `/responses` endpoint.
+
 ### `POST /api/v1/agents/{agent}/sessions/{session_id}/responses`
 
 Runs one turn through the selected agent and its real CSGClaw runtime.
 The `{agent}` selector accepts an agent ID or a unique case-insensitive agent name.
 This endpoint is separate from `/llm/responses`, which proxies model traffic without running the agent.
 
-The endpoint does not require a Bearer token.
-Anonymous is represented by the existing `user-admin` identity because admin is currently the only user.
-The server ignores caller identity and persists every input message with `sender_id: "user-admin"`.
+The client supplies a 1–128 character `session_id` starting with an ASCII letter or digit. The remaining characters can also include `.`, `_`, `~`, and `-`.
+The server binds the session to a conversation for the selected agent and reuses it on later turns. Direct sessions return an empty `metadata.room_id`.
+In Portal, send uploads and downloads to the current CSGClaw instance's `endpoint` with the gateway credentials for that instance.
 
-The client owns a global `session_id` containing 1-128 path-safe ASCII characters.
-The first request creates one non-direct room, while later requests reuse it.
-The room contains exactly admin and the selected agent, and the server keeps `notify_all_agents` enabled.
-The room title is immutable and uses this audit-friendly format:
-
-```text
-Anonymous Session: <session_id> | Agent: <agent_name> (<agent_id>)
-```
+The optional top-level `attachment_ids` array references files already saved for this agent and session. Supply distinct IDs and authenticate with the service credentials. Missing credentials return `401`. An unknown ID or an ID belonging to another agent or session returns `404`. The same request may include referenced and newly uploaded files, up to 10 total. In `input_attachments`, referenced files appear in the order of their IDs, followed by newly uploaded files in request order.
 
 The shortest request uses string input:
 
@@ -1626,7 +1625,27 @@ Text-only user message items are also accepted:
 }
 ```
 
-To send a prompt and files in one JSON request, include `input_file` parts:
+To send a prompt and local files together, post `multipart/form-data` to the
+worker that will handle the turn. In Portal, use the `endpoint` of the current
+CSGClaw instance as `INSTANCE_ENDPOINT`, keeping the gateway authentication
+used for that instance. For example, to stream a response for two PDFs:
+
+```sh
+curl -N "${INSTANCE_ENDPOINT%/}/api/v1/agents/codex-worker/sessions/${SESSION_ID}/responses" \
+  --header "Authorization: Bearer ${TOKEN}" \
+  --form-string 'payload={"input":"Compare these PDFs.","stream":true}' \
+  --form 'files=@report.pdf;type=application/pdf' \
+  --form 'files=@appendix.pdf;type=application/pdf'
+```
+
+Send one `payload` field containing JSON and one `files` part per file. Each
+`files` part carries the filename and raw bytes. The payload accepts `input`,
+`stream`, `extra`, `extra_type`, and `attachment_ids`. For a file-only turn, use `payload={}`.
+An `input_file` inside `payload` returns `400 invalid_request`. In a browser, append the
+JSON string and each selected `File` to a `FormData` object and let the browser
+set the `Content-Type` header and boundary.
+
+JSON requests also support files through `input_file` parts:
 
 ```json
 {
@@ -1647,17 +1666,68 @@ To send a prompt and files in one JSON request, include `input_file` parts:
 
 `filename` is the file's basename. `file_data` is a `data:<media-type>;base64,<data>`
 URL containing the complete file. Repeat `input_file` for multiple files; a
-message containing only files is also accepted. File limits match the message
-API: at most 10 files, 1 GiB per decoded file, and 2 GiB of decoded files per
-request. The HTTP body allowance includes Base64 expansion plus 1 MiB of other
-JSON content. Base64 increases transfer size by about one third; JSON clients and
-proxies may buffer the encoded request in memory.
+message containing only files is also accepted. The JSON body allowance includes
+Base64 expansion plus 1 MiB of other JSON content. Base64 increases transfer size
+by about one third. JSON clients and proxies may buffer the encoded request in memory.
 
-Files are available to the selected Agent during this turn and are removed when
-the turn completes, fails, or is canceled. Attach them again in a later request
-when needed. Invalid file data or metadata returns `400 invalid_request`; file
-size and overall HTTP body limits return `413 invalid_request`. Validation and
-file preparation finish before the SSE stream starts.
+Both formats accept up to 10 nonempty files, up to 1 GiB per file and 2 GiB
+combined, measured in original file bytes. The selected Agent can use the files
+during this turn. The server removes the temporary Engine input copies when the turn ends. Invalid file data or
+metadata returns `400 invalid_request`. Exceeding a file size or HTTP body limit
+returns `413 invalid_request`. Validation and file preparation finish before the
+SSE stream starts.
+
+The server saves new originals to IM and the workspace before calling the agent. SSE includes the saved originals in the first `message_start`. The client can use them while the agent runs. Once saved, originals remain available after cancellation, a busy-session rejection, an agent error, or a failure to publish the results. A JSON error returned after the originals were saved includes `input_attachments`.
+
+| Files | JSON success | First SSE `message_start` | Final successful SSE `message_delta` |
+| --- | --- | --- | --- |
+| User originals | `input_attachments` | `input_attachments` | `input_attachments` |
+| Agent results | `output[0].attachments` | — | `attachments` |
+
+The attachment arrays are top-level fields of the SSE event data. Empty arrays are omitted. Each attachment includes `id`, `name`, `media_type`, `size_bytes`, `sha256`, `download_url`, and a relative `workspace_path`. Images also have a `preview_url`. A Codex agent can publish results with `csgclaw_publish_file`.
+
+Workspace copies are under `.csgclaw/attachments/sessions/<session_id>/` in the agent’s configured `local_workspace_dir` or runtime default. File downloads serve the original bytes even if the workspace copy is edited. To retain both across container replacement, persist both the workspace and the CSGClaw data directory. Back up both directories before downgrading an instance that has accepted session attachments. Older versions only recognize room message references during startup cleanup and can remove the downloadable copies of session files.
+
+For Portal history, store the stable attachment ID and display fields with the message and its instance, agent, and session. Exclude tokens and token-bearing download or preview URLs from history. To reopen a file, fetch `GET /api/v1/attachments/{id}` on the corresponding instance using its current credentials. The session history API does not generate attachment entries for Portal automatically.
+
+A browser can upload as soon as the user selects files, then send a JSON turn when the user submits the prompt.
+
+```js
+const endpoint = new URL(instance.endpoint, gatewayHost)
+if (endpoint.origin !== new URL(gatewayHost).origin) throw new Error("Unexpected gateway")
+const base = endpoint.origin + endpoint.pathname.replace(/\/$/, "")
+const headers = { Authorization: `Bearer ${token}` }
+const session = `/api/v1/agents/${encodeURIComponent(agent)}/sessions/${encodeURIComponent(sid)}`
+
+function historyFile({ id, name, media_type, size_bytes }) {
+  return { id, name, media_type, size_bytes }
+}
+
+async function upload(files) {
+  const body = new FormData()
+  for (const file of files) body.append("files", file, file.name)
+  const res = await fetch(base + session + "/attachments", { method: "POST", headers, body })
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  return (await res.json()).attachments.map(historyFile)
+}
+
+async function send(prompt, originals) {
+  const res = await fetch(base + session + "/responses", {
+    method: "POST",
+    headers: { ...headers, "Content-Type": "application/json" },
+    body: JSON.stringify({ input: prompt, attachment_ids: originals.map(file => file.id) }),
+  })
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  const { output } = await res.json()
+  return { content: output[0].content, attachments: (output[0].attachments ?? []).map(historyFile) }
+}
+
+async function readAttachment(id) {
+  const res = await fetch(base + "/api/v1/attachments/" + encodeURIComponent(id), { headers })
+  if (!res.ok) throw new Error(await res.text())
+  return res.blob()
+}
+```
 
 With `stream` omitted or set to `false`, the endpoint returns the completed
 Responses-style JSON object containing the final assistant text and session
@@ -1692,7 +1762,7 @@ and `message_stop`.
 
 Only one turn may run for a session at a time.
 Different session IDs may run concurrently.
-Using the same global session with another agent returns `409 session_agent_conflict`.
+Different agents can use the same external `session_id` independently.
 The server imposes no response duration limit. Client disconnects and explicit cancellation still cancel the running response.
 
 ### `POST /api/v1/agents/{agent}/sessions/{session_id}/responses/cancel`
@@ -1714,9 +1784,6 @@ Errors use this JSON shape:
 }
 ```
 
-The v1 endpoint accepts user text, Base64 file inputs, optional supplemental text
-context, and optional text-output streaming. Request and content-part fields are
-strictly validated.
 See [Session API Demo Frontend Guide](web/session-api-demo.md) for the bundled live demo and mockable frontend boundary.
 
 ### `GET /api/v1/agents/{id}/llm/models`

@@ -776,6 +776,22 @@ func newAgentSessionTestHandler(
 	if err != nil {
 		t.Fatal(err)
 	}
+	for _, item := range agents {
+		if item.RuntimeKind != agent.RuntimeKindCodex && item.RuntimeKind != agent.RuntimeKindDSH {
+			continue
+		}
+		workspaceRoot, err := agentSvc.Workspace().WorkspaceRootByID(item.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		relative, err := filepath.Rel(root, workspaceRoot)
+		if err != nil || !filepath.IsLocal(relative) {
+			t.Fatalf("workspace %q outside test directory %q", workspaceRoot, root)
+		}
+		if err := os.MkdirAll(workspaceRoot, 0700); err != nil {
+			t.Fatal(err)
+		}
+	}
 	engine.client = enginetest.NewMemoryClient(seeded...)
 	engine.client.SetTurnBehavior(func(ctx context.Context, agentID string, request agentengine.TurnRequest, sink agentengine.EventSink) agentengine.TurnResult {
 		if engine.run != nil {
@@ -790,7 +806,10 @@ func newAgentSessionTestHandler(
 	if err != nil {
 		t.Fatal(err)
 	}
-	imSvc := im.NewServiceFromBootstrap(im.Bootstrap{CurrentUserID: im.AdminUserID, Users: []im.User{{ID: im.AdminUserID, Name: "admin", Role: "admin"}}})
+	imSvc, err := im.NewServiceFromPath(filepath.Join(root, "im", "state.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
 	handler := NewHandler(AgentServices{Records: agentSvc, Workspace: agentSvc.Workspace(), Models: agentSvc.Models(), Runtime: agentSvc}, agentengine.New(agentSvc), imSvc, nil, im.NewParticipantBridge(""), nil, nil)
 	handler.SetAgentEngine(engine, bindings)
 	return handler, imSvc, bindings, bindingPath
