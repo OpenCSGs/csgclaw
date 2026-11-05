@@ -683,7 +683,7 @@ func (c *memoryConversations) Run(ctx context.Context, request agentengine.TurnR
 		return result
 	}
 	defer releaseExecution()
-	if err := c.client.interactions.BeginTurn(c.agentID, request.ConversationKey, request.RespondingTo); err != nil {
+	if err := c.client.interactions.BeginTurn(c.agentID, request); err != nil {
 		result := agentengine.TurnResult{Status: agentengine.TurnFailed, Error: err}
 		turn.cancel()
 		c.completeMemoryTurn(key, turn, result)
@@ -784,7 +784,7 @@ func (c *memoryConversations) Run(ctx context.Context, request agentengine.TurnR
 			}
 		}
 		if args != nil {
-			item, err := c.client.interactions.CreateDetached(c.agentID, request.ConversationKey, request.ID, *args, func(item agentengine.InteractionRequest) {
+			item, err := c.client.interactions.CreateDetached(c.agentID, request.ConversationKey, request.ID, *args, request.Interaction, func(item agentengine.InteractionRequest) {
 				event := agentengine.TurnEvent{Kind: agentengine.TurnEventActivityUpdate, Activity: &agentengine.ActivityUpdate{ID: item.ID, Kind: string(activity.RuntimeEventUserInputResolved), Payload: item.Payload}}
 				if snapshot, ok := item.Payload.(activity.UserInputSnapshot); ok {
 					event.Activity.Status = string(snapshot.Status)

@@ -955,6 +955,82 @@ func TestAppServerManagerPromptPublishesStructuredDeltaBeforeCompletion(t *testi
 	}
 }
 
+func TestConversationStructuredQuestionPolicy(t *testing.T) {
+	for _, tc := range []struct {
+		name, mode, modelText, wantText string
+		policy                          contract.InteractionPolicy
+		wantForms                       int
+	}{
+		{"text only command continues", "prompt-command-output-delta", "The model continued.", "The model continued.", contract.InteractionTextOnly, 0},
+		{"text only assistant question", "prompt-assistant-question", "", "Choose step two.\n- Continue", contract.InteractionTextOnly, 0},
+		{"text only assistant preamble and private question", "prompt-private-question", "", "I need one more detail.\n\nA private answer requires a secure question form.", contract.InteractionTextOnly, 0},
+		{"opted in response", "prompt-command-output-delta", "", "", contract.InteractionUserInputOnly, 1},
+		{"room", "prompt-assistant-question", "", "", contract.InteractionResolve, 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			withAppServerHelperCommand(t, tc.mode)
+			spec := testAppServerSessionSpec(t.TempDir())
+			bus := NewEventSink()
+			manager := newAppServerManager(testAppServerManagerDepsWithSink(bus))
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			session, err := manager.Start(ctx, spec)
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { _ = manager.Stop(context.Background(), SessionHandle{RuntimeID: spec.RuntimeID}) })
+			nativeEvents, unsubscribe := bus.SubscribeSession(spec.RuntimeID, session.SessionID)
+			defer unsubscribe()
+			adapter := NewConversationAdapter(spec.RuntimeID, New(Dependencies{Manager: manager, EventSink: bus}))
+			done := make(chan contract.TurnResult, 1)
+			forms := 0
+			go func() {
+				done <- adapter.Run(ctx, contract.TurnRequest{
+					ID: "question-turn", Input: []contract.InputPart{{Kind: contract.InputPartText, Text: "Ask a question"}}, Interaction: tc.policy,
+				}, contract.EventSinkFunc(func(_ context.Context, event contract.TurnEvent) error {
+					if event.Output != nil && event.Output.Kind == contract.OutputItemRequestUserInput {
+						forms++
+					}
+					return nil
+				}))
+			}()
+			if tc.wantForms == 0 {
+				// Let the fixture finish naturally only after the structured record reaches the runtime.
+				for {
+					select {
+					case event := <-nativeEvents:
+						if event.Kind != SessionEventStructuredOutput {
+							continue
+						}
+					case <-ctx.Done():
+						t.Fatal("runtime did not receive a question")
+					}
+					break
+				}
+				live := manager.liveSession(spec.RuntimeID)
+				waiter := live.appServerTurnWaiter(session.SessionID)
+				if waiter == nil {
+					t.Fatal("question finished the turn before the model completed")
+				}
+				if _, err := live.appClient.request(ctx, "test/complete", map[string]any{"text": tc.modelText}); err != nil {
+					t.Fatal(err)
+				}
+				if waiter.hasStructuredOutputBoundary() {
+					t.Fatal("question triggered a turn interrupt")
+				}
+			}
+			select {
+			case result := <-done:
+				if result.Status != contract.TurnSucceeded || result.Output != tc.wantText || forms != tc.wantForms {
+					t.Fatalf("result = %+v, forms = %d", result, forms)
+				}
+			case <-ctx.Done():
+				t.Fatal("turn did not complete")
+			}
+		})
+	}
+}
+
 func TestAppServerManagerPromptCancellationReturnsConfirmedStop(t *testing.T) {
 	withAppServerHelperCommand(t, "prompt-cancel-confirmed")
 	spec := testAppServerSessionSpec(t.TempDir())
@@ -3332,7 +3408,7 @@ func TestAppServerManagerHelperProcess(t *testing.T) {
 				return nil, false
 			}
 		})
-	case "prompt-command-output-delta":
+	case "prompt-command-output-delta", "prompt-assistant-question", "prompt-private-question":
 		runAppServerHelper(t, func(index int, msg map[string]any) (map[string]any, bool) {
 			switch msg["method"] {
 			case "thread/start":
@@ -3342,11 +3418,25 @@ func TestAppServerManagerHelperProcess(t *testing.T) {
 				output := "ordinary\n" + record + "\n"
 				split := strings.Index(output, `"question"`)
 				writeRPCNotification(t, "turn/started", map[string]any{"threadId": "main-thread", "turn": map[string]any{"id": "turn-delta"}})
+				if mode == "prompt-assistant-question" || mode == "prompt-private-question" {
+					if mode == "prompt-private-question" {
+						record = "I need one more detail.\n" + `::csgclaw-output::request_user_input {"questions":[{"id":"private","header":"Private","question":"Enter your recovery code.","isSecret":true,"options":[{"label":"My private code","description":"Personal."}]}]}`
+					}
+					writeRPCNotification(t, "item/completed", map[string]any{"threadId": "main-thread", "turnId": "turn-delta", "item": map[string]any{"id": "assistant-question", "type": "agentMessage", "text": record}})
+					return rpcResult(msg["id"], map[string]any{"turnId": "turn-delta"}), true
+				}
 				writeRPCNotification(t, "item/started", map[string]any{"threadId": "main-thread", "turnId": "turn-delta", "item": map[string]any{"id": "call-delta", "type": "commandExecution", "command": "emit demo"}})
 				writeRPCNotification(t, "item/commandExecution/outputDelta", map[string]any{"threadId": "main-thread", "turnId": "turn-delta", "itemId": "call-delta", "delta": output[:split]})
 				writeRPCNotification(t, "item/commandExecution/outputDelta", map[string]any{"threadId": "main-thread", "turnId": "turn-delta", "itemId": "call-delta", "delta": output[split:]})
 				writeRPCNotification(t, "item/completed", map[string]any{"threadId": "main-thread", "turnId": "turn-delta", "item": map[string]any{"id": "call-delta", "type": "commandExecution", "status": "completed", "aggregatedOutput": ""}})
 				return rpcResult(msg["id"], map[string]any{"turnId": "turn-delta"}), true
+			case "test/complete":
+				params, _ := msg["params"].(map[string]any)
+				if text, _ := params["text"].(string); text != "" {
+					writeRPCNotification(t, "item/completed", map[string]any{"threadId": "main-thread", "turnId": "turn-delta", "item": map[string]any{"id": "final", "type": "agentMessage", "phase": "final_answer", "text": text}})
+				}
+				writeRPCNotification(t, "turn/completed", map[string]any{"threadId": "main-thread", "turn": map[string]any{"id": "turn-delta", "status": "completed"}})
+				return rpcResult(msg["id"], map[string]any{}), true
 			case "turn/interrupt":
 				assertTurnInterruptParams(t, msg, "main-thread", "turn-delta")
 				writeRPCNotification(t, "turn/completed", map[string]any{

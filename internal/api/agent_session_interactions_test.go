@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -374,6 +375,9 @@ func TestAgentSessionDetachedAnswerRuntimeFailure(t *testing.T) {
 		dispatched bool
 	}{{"before_dispatch", false}, {"after_dispatch", true}} {
 		t.Run(tc.name, func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+			defer cancel()
+			submitting, resume := make(chan struct{}), make(chan struct{})
 			var attempts atomic.Int32
 			engine := &fakeSessionEngine{run: func(ctx context.Context, _ string, request agentengine.TurnRequest, sink agentengine.EventSink) agentengine.TurnResult {
 				if sessionTurnText(request) == "Plan" {
@@ -381,6 +385,11 @@ func TestAgentSessionDetachedAnswerRuntimeFailure(t *testing.T) {
 						t.Errorf("emit question: %v", err)
 					}
 				} else if attempts.Add(1) == 1 {
+					close(submitting)
+					select {
+					case <-resume:
+					case <-ctx.Done():
+					}
 					return agentengine.TurnResult{
 						Status: agentengine.TurnFailed, Dispatched: tc.dispatched,
 						Error: &agentengine.TurnError{Code: agentengine.ErrorRuntimeAdapterUnavailable, Message: "runtime temporarily unavailable"},
@@ -393,11 +402,33 @@ func TestAgentSessionDetachedAnswerRuntimeFailure(t *testing.T) {
 			id := sessionResponseInteractionID(t, first)
 			path := sessionQuestionPath + "/interactions/" + id + "/respond"
 			const answers = `{"answers":{"source":{"answers":["PDF"]},"password":{"answers":[]}}}`
-			sessionInteractionHTTP(t, server, http.MethodPost, path, answers, http.StatusServiceUnavailable)
+			answer := startSessionRequest(ctx, server.Config.Handler, path, answers)
+			select {
+			case <-submitting:
+			case <-ctx.Done():
+				t.Fatal("answer did not enter the runtime")
+			}
+			list := sessionInteractionHTTP(t, server, http.MethodGet, sessionQuestionPath+"/interactions", "", http.StatusOK)
+			var recovery agentSessionResponse
+			if err := json.Unmarshal([]byte(list), &recovery); err != nil || len(recovery.Interactions) != 1 ||
+				recovery.Interactions[0].InteractionID != id || recovery.Interactions[0].Status != activity.UserInputStatusSubmitting ||
+				len(recovery.Interactions[0].Questions) != 2 {
+				t.Fatalf("recovery while submitting: %s, %v", list, err)
+			}
+			sessionInteractionHTTP(t, server, http.MethodPost, path, answers, http.StatusConflict)
+			close(resume)
+			select {
+			case failed := <-answer:
+				if failed.Code != http.StatusServiceUnavailable {
+					t.Fatalf("failed submission returned HTTP %d: %s", failed.Code, failed.Body.String())
+				}
+			case <-ctx.Done():
+				t.Fatal("failed submission did not finish")
+			}
 			if !tc.dispatched {
 				pending := sessionInteractionHTTP(t, server, http.MethodGet, sessionQuestionPath+"/interactions", "", http.StatusOK)
-				if got := sessionResponseInteractionID(t, pending); got != id {
-					t.Fatalf("pending interaction = %q, want %q", got, id)
+				if got := sessionResponseInteractionID(t, pending); got != id || !strings.Contains(pending, `"status":"pending"`) {
+					t.Fatalf("expected pending interaction %q: %s", id, pending)
 				}
 				sessionInteractionHTTP(t, server, http.MethodPost, path, answers, http.StatusOK)
 			}
@@ -534,4 +565,73 @@ func startSessionRequest(ctx context.Context, router http.Handler, path, body st
 		result <- rec
 	}()
 	return result
+}
+
+type blockingSessionResultWriter struct {
+	*httptest.ResponseRecorder
+	match           string
+	blocked, resume chan struct{}
+	once            sync.Once
+}
+
+func (w *blockingSessionResultWriter) Write(data []byte) (int, error) {
+	if strings.Contains(string(data), w.match) {
+		w.once.Do(func() {
+			close(w.blocked)
+			<-w.resume
+		})
+	}
+	return w.ResponseRecorder.Write(data)
+}
+
+func TestAgentSessionDetachedReservationEndsBeforeTerminalWrite(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		stream bool
+		match  string
+	}{
+		{"json", false, `"status":"completed"`},
+		{"stream", true, "event: message_stop"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			engine := &fakeSessionEngine{run: func(ctx context.Context, _ string, request agentengine.TurnRequest, sink agentengine.EventSink) agentengine.TurnResult {
+				if sessionTurnText(request) == "Plan" {
+					if err := sink.Emit(ctx, sessionDetachedQuestionEvent()); err != nil {
+						t.Errorf("emit question: %v", err)
+					}
+				}
+				return agentengine.TurnResult{Status: agentengine.TurnSucceeded, Dispatched: true, Output: "Ready"}
+			}}
+			server, _ := sessionOutputTestServer(t, engine, "")
+			first := sessionInteractionHTTP(t, server, http.MethodPost, sessionQuestionPath+"/responses", `{"input":"Plan","user_input":true}`, http.StatusOK)
+			path := sessionQuestionPath + "/interactions/" + sessionResponseInteractionID(t, first) + "/respond"
+			answers := fmt.Sprintf(`{"stream":%t,"answers":{"source":{"answers":["PDF"]},"password":{"answers":[]}}}`, tc.stream)
+			req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, path, strings.NewReader(answers))
+			req.Header.Set("Authorization", "Bearer test-server-token")
+			w := &blockingSessionResultWriter{ResponseRecorder: httptest.NewRecorder(), match: tc.match, blocked: make(chan struct{}), resume: make(chan struct{})}
+			done := make(chan struct{})
+			go func() {
+				defer close(done)
+				server.Config.Handler.ServeHTTP(w, req)
+			}()
+			defer func() {
+				close(w.resume)
+				<-done
+			}()
+			select {
+			case <-w.blocked:
+			case <-done:
+				t.Fatalf("terminal write missing: %s", w.Body.String())
+			case <-time.After(5 * time.Second):
+				t.Fatal("terminal response did not start")
+			}
+
+			list := sessionInteractionHTTP(t, server, http.MethodGet, sessionQuestionPath+"/interactions", "", http.StatusOK)
+			if !strings.Contains(list, `"interactions":[]`) {
+				t.Fatalf("delivered answer still listed during terminal write: %s", list)
+			}
+			sessionInteractionHTTP(t, server, http.MethodPost, path, answers, http.StatusConflict)
+			sessionInteractionHTTP(t, server, http.MethodPost, sessionQuestionPath+"/responses", `{"input":"Next"}`, http.StatusOK)
+		})
+	}
 }

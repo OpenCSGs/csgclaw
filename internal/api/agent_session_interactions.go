@@ -76,7 +76,10 @@ func (h *Handler) listAgentSessionInteractions(w http.ResponseWriter, r *http.Re
 	now := time.Now()
 	for _, request := range requests {
 		item, ok := sessionUserInput(request)
-		if ok && item.Status == activity.UserInputStatusPending && (item.AutoResolveAt == nil || now.Before(*item.AutoResolveAt)) {
+		if !ok {
+			continue
+		}
+		if item.Status == activity.UserInputStatusSubmitting || (item.Status == activity.UserInputStatusPending && (item.AutoResolveAt == nil || now.Before(*item.AutoResolveAt))) {
 			pending = append(pending, item)
 		}
 	}
@@ -133,21 +136,25 @@ func (h *Handler) respondAgentSessionInteraction(w http.ResponseWriter, r *http.
 		}
 		resolution.Answers[questionID] = agentengine.InteractionAnswer{Values: answer.Answers, Skipped: len(answer.Answers) == 0}
 	}
-	var wroteResponse bool
+	var writeResult func()
 	if request.Detached {
 		resolution.ContinueDetached = func(ctx context.Context, answer agentengine.InteractionRequest) bool {
-			wroteResponse = true
 			prompt, err := activity.UserInputContinuationPrompt(answer.Payload.(activity.UserInputSnapshot))
 			if err != nil {
-				writeAgentSessionError(w, http.StatusInternalServerError, "invalid_interaction", "user input continuation could not be prepared", nil)
+				writeResult = func() {
+					writeAgentSessionError(w, http.StatusInternalServerError, "invalid_interaction", "user input continuation could not be prepared", nil)
+				}
 				return false
 			}
 			continuation := agentSessionInput{Text: prompt, userInput: true, respondingTo: id}
-			return h.runSessionResponse(ctx, w, r, selected, binding, continuation, input.Stream, nil, agentengine.AdmissionWait)
+			var delivered bool
+			delivered, writeResult = h.runSessionResponse(ctx, w, r, selected, binding, continuation, input.Stream, nil, agentengine.AdmissionWait)
+			return delivered
 		}
 	}
 	err = conversation.Resolve(r.Context(), resolution)
-	if wroteResponse {
+	if writeResult != nil {
+		writeResult()
 		return
 	}
 	if err != nil {
@@ -158,12 +165,13 @@ func (h *Handler) respondAgentSessionInteraction(w http.ResponseWriter, r *http.
 }
 
 func writeSessionInteractionInputError(w http.ResponseWriter, err error) {
-	status := http.StatusBadRequest
 	var tooLarge *http.MaxBytesError
 	if errors.As(err, &tooLarge) {
-		status = http.StatusRequestEntityTooLarge
+		writeAgentSessionError(w, http.StatusRequestEntityTooLarge, "invalid_request", "answer submission exceeds the request body limit", "answers")
+		return
 	}
-	writeAgentSessionError(w, status, "invalid_request", err.Error(), "answers")
+	// Decoder errors can include a submitted value used as a JSON field name.
+	writeAgentSessionError(w, http.StatusBadRequest, "invalid_request", "invalid answer submission JSON", "answers")
 }
 
 func writeSessionInteractionError(w http.ResponseWriter, err error) {

@@ -79,6 +79,7 @@ type UserInputStatus string
 
 const (
 	UserInputStatusPending     UserInputStatus = "pending"
+	UserInputStatusSubmitting  UserInputStatus = "submitting"
 	UserInputStatusAnswered    UserInputStatus = "answered"
 	UserInputStatusSkipped     UserInputStatus = "skipped"
 	UserInputStatusExpired     UserInputStatus = "expired"

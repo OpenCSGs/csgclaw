@@ -19,11 +19,12 @@ import (
 )
 
 type agentSessionInput struct {
-	respondingTo  string
-	userInput     bool
-	attachmentIDs []string
-	Text          string
-	Files         []agentSessionInputFile
+	preservePendingInteractions bool
+	respondingTo                string
+	userInput                   bool
+	attachmentIDs               []string
+	Text                        string
+	Files                       []agentSessionInputFile
 }
 
 type agentSessionInputFile struct {

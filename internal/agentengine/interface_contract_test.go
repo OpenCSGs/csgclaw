@@ -176,16 +176,17 @@ func (r *contractRuntime) ExistingEngineSession(_ context.Context, _ string, con
 	return sessionID, sessionID != "", nil
 }
 
-func (r *contractRuntime) PromptTurn(ctx context.Context, runtimeID, sessionID, turnID string, blocks []codex.PromptContentBlock, accepted func()) error {
-	if accepted != nil {
-		accepted()
+func (r *contractRuntime) PromptTurn(ctx context.Context, runtimeID string, req codex.PromptRequest) error {
+	if req.OnAccepted != nil {
+		req.OnAccepted()
 	}
+	sessionID, turnID := req.SessionID, req.ClientUserMessageID
 	r.mu.Lock()
 	key := r.sessionKeys[sessionID]
 	behavior := r.behavior
 	r.mu.Unlock()
 	request := agentengine.TurnRequest{ID: agentengine.TurnID(turnID), ConversationKey: key}
-	for _, block := range blocks {
+	for _, block := range req.Prompt {
 		if block.Text != nil {
 			request.Input = append(request.Input, agentengine.InputPart{Kind: agentengine.InputPartText, Text: block.Text.Text})
 		}

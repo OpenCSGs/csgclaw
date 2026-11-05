@@ -132,16 +132,17 @@ func (f *fakeConversationRuntime) ExistingEngineSession(_ context.Context, _, co
 	sessionID := f.conversations[conversationKey]
 	return sessionID, sessionID != "", nil
 }
-func (f *fakeConversationRuntime) PromptTurn(ctx context.Context, runtimeID, sessionID, turnID string, blocks []codex.PromptContentBlock, accepted func()) error {
+func (f *fakeConversationRuntime) PromptTurn(ctx context.Context, runtimeID string, req codex.PromptRequest) error {
 	f.mu.Lock()
-	f.turnID = turnID
-	f.promptBlocks = append([]codex.PromptContentBlock(nil), blocks...)
+	f.turnID = req.ClientUserMessageID
+	f.promptBlocks = append([]codex.PromptContentBlock(nil), req.Prompt...)
 	f.mu.Unlock()
-	if accepted != nil {
-		accepted()
+	if req.OnAccepted != nil {
+		req.OnAccepted()
 	}
-	parts := make([]string, 0, len(blocks))
-	for _, block := range blocks {
+	sessionID := req.SessionID
+	parts := make([]string, 0, len(req.Prompt))
+	for _, block := range req.Prompt {
 		if block.Text != nil {
 			parts = append(parts, block.Text.Text)
 		} else if block.LocalImage != nil {

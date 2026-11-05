@@ -51,7 +51,7 @@ func BuildUserInputResponse(questions []UserInputQuestionSnapshot, response Requ
 	}
 	for id := range response.Answers {
 		if _, ok := known[id]; !ok {
-			return "", RequestUserInputResponse{}, nil, fmt.Errorf("%w: unknown question id %q", ErrUserInputInvalidResponse, id)
+			return "", RequestUserInputResponse{}, nil, fmt.Errorf("%w: answer references an unknown question id", ErrUserInputInvalidResponse)
 		}
 	}
 	normalized := RequestUserInputResponse{Answers: make(map[string]RequestUserInputAnswer, len(questions))}
@@ -107,7 +107,7 @@ func BuildUserInputResponse(questions []UserInputQuestionSnapshot, response Requ
 				optionIndex = len(question.Options) + 1
 			}
 			if optionIndex == 0 {
-				return "", RequestUserInputResponse{}, nil, fmt.Errorf("%w: unknown option label %q for question %q", ErrUserInputInvalidResponse, value, question.ID)
+				return "", RequestUserInputResponse{}, nil, fmt.Errorf("%w: unknown option label for question %q", ErrUserInputInvalidResponse, question.ID)
 			}
 			values = append(values, value)
 			snapshot.OptionIndex = optionIndex

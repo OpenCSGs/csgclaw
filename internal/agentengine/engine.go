@@ -262,7 +262,7 @@ func (c *conversations) Run(ctx context.Context, request TurnRequest, sink Event
 			turn.ctx = contract.WithVideoGenerationHandler(turn.ctx, c.videoHandler(turn, sink, selected.Spec.Model.VideoGeneration))
 		}
 	}
-	if err := c.engine.interactions.BeginTurn(c.agentID, request.ConversationKey, request.RespondingTo); err != nil {
+	if err := c.engine.interactions.BeginTurn(c.agentID, request); err != nil {
 		result := TurnResult{Status: TurnFailed, Error: err}
 		turn.cancel()
 		c.engine.complete(identity, turn, result)
@@ -324,7 +324,7 @@ func (c *conversations) Run(ctx context.Context, request TurnRequest, sink Event
 		c.engine.interactions.Interrupt(c.agentID, request.ConversationKey, request.ID, false)
 	}
 	if result.Status == TurnSucceeded && request.Interaction.For(InteractionUserInput) == InteractionResolve && turn.structuredUserInput != nil {
-		interaction, err := c.engine.interactions.CreateDetached(c.agentID, request.ConversationKey, request.ID, *turn.structuredUserInput, func(interaction InteractionRequest) {
+		interaction, err := c.engine.interactions.CreateDetached(c.agentID, request.ConversationKey, request.ID, *turn.structuredUserInput, request.Interaction, func(interaction InteractionRequest) {
 			c.engine.emitDetached(identity, turn, sink, interaction)
 		})
 		if err != nil {

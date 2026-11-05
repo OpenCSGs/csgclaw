@@ -3,8 +3,11 @@ package agentengine
 import (
 	"context"
 	"errors"
+	goruntime "runtime"
+	"strings"
 	"testing"
 	"time"
+	"weak"
 
 	"csgclaw/internal/activity"
 	agent "csgclaw/internal/agentengine/agents"
@@ -83,7 +86,7 @@ func TestRequiredExtensionDeletionDoesNotGateItsOwnReload(t *testing.T) {
 
 func TestDetachedAnswerCanceledDuringTranscriptCannotComplete(t *testing.T) {
 	engine := &Engine{}
-	item, err := engine.interactions.CreateDetached("agent-a", "conv", "question-turn", activity.RequestUserInputArgs{Questions: []activity.RequestUserInputQuestion{{ID: "choice", Header: "Choice", Question: "Continue?", IsOther: true}}}, nil)
+	item, err := engine.interactions.CreateDetached("agent-a", "conv", "question-turn", activity.RequestUserInputArgs{Questions: []activity.RequestUserInputQuestion{{ID: "choice", Header: "Choice", Question: "Continue?", IsOther: true}}}, InteractionResolve, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -207,7 +210,7 @@ func TestDetachedAnswerCanRetryUntilRuntimeAccepts(t *testing.T) {
 	}}, rt))
 	item, err := engine.interactions.CreateDetached("agent-a", "conv", "question", activity.RequestUserInputArgs{
 		Questions: []activity.RequestUserInputQuestion{{ID: "choice", Header: "Choice", Question: "Continue?", IsOther: true}},
-	}, nil)
+	}, InteractionResolve, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -252,5 +255,41 @@ func TestDetachedAnswerCanRetryUntilRuntimeAccepts(t *testing.T) {
 	}
 	if calls != 1 {
 		t.Fatalf("runtime received the answer %d times", calls)
+	}
+}
+
+// A response sink can hold an HTTP writer, buffered events, and request context.
+type detachedSessionSink struct{ strings.Builder }
+
+func (s *detachedSessionSink) Emit(_ context.Context, event TurnEvent) error {
+	_, err := s.WriteString(event.Text)
+	return err
+}
+
+func TestDetachedSessionFormReleasesResponseSink(t *testing.T) {
+	rt := &fakeConversationRuntime{}
+	rt.prompt = func(_ context.Context, runtimeID, sessionID, _ string) error {
+		rt.publish(activity.RuntimeEvent{RuntimeID: runtimeID, SessionID: sessionID, Kind: activity.RuntimeEventStructuredOutput, Payload: activity.StructuredOutputArtifact{
+			RequestUserInput: &activity.RequestUserInputArgs{Questions: []activity.RequestUserInputQuestion{{ID: "q", Header: "Q", Question: "Continue?"}}},
+		}})
+		rt.publish(activity.RuntimeEvent{RuntimeID: runtimeID, SessionID: sessionID, Kind: activity.RuntimeEventPromptCompleted})
+		return nil
+	}
+	engine := New(newTestAgentService(t, []agent.Agent{{ID: "agent-a", Name: "A", Role: agent.RoleWorker, RuntimeKind: agent.RuntimeKindCodex, RuntimeID: "runtime-a", Status: string(runtime.StateRunning)}}, rt))
+	conversation := engine.Conversations("agent-a")
+	sink := new(detachedSessionSink)
+	result := conversation.Run(t.Context(), TurnRequest{ID: "form", ConversationKey: "session", Input: textInput("Plan"), Interaction: InteractionUserInputOnly}, sink)
+	if len(result.Interactions) != 1 || !result.Interactions[0].Detached {
+		t.Fatalf("expected a detached form: %+v", result)
+	}
+	ref := weak.Make(sink)
+	sink = nil
+	goruntime.GC()
+	if ref.Value() != nil {
+		t.Fatal("completed HTTP turn is retaining its response sink")
+	}
+	forms, err := conversation.PendingInteractions(t.Context(), "session")
+	if err != nil || len(forms) != 1 || forms[0].ID != result.Interactions[0].ID {
+		t.Fatalf("abandoned form should remain recoverable until its deadline: %+v, %v", forms, err)
 	}
 }

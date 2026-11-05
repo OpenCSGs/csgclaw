@@ -126,6 +126,7 @@ const (
 	ErrorFileUnavailable             = contract.ErrorFileUnavailable
 	ErrorFileNotFound                = contract.ErrorFileNotFound
 	ErrorInteractionNotFound         = contract.ErrorInteractionNotFound
+	ErrorInteractionPending          = contract.ErrorInteractionPending
 	ErrorInteractionUnsupported      = contract.ErrorInteractionUnsupported
 	ErrorInteractionAlreadyResolved  = contract.ErrorInteractionAlreadyResolved
 	ErrorInteractionGone             = contract.ErrorInteractionGone

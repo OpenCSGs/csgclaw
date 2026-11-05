@@ -407,6 +407,7 @@ func (m *appServerManager) Prompt(ctx context.Context, handle SessionHandle, req
 	}
 	waiter.mu.Lock()
 	waiter.diagnostic = diagnostics.From(ctx)
+	waiter.textOnlyUserInput = req.TextOnlyUserInput
 	waiter.mu.Unlock()
 	defer func() { live.removeAppServerTurnWaiter(sessionID, waiter) }()
 	turnCtx, cancelTurn := context.WithCancel(ctx)
@@ -1521,6 +1522,7 @@ type appServerTurnWaiter struct {
 	terminalResults          map[string]appServerTurnResult
 	lastActivity             string
 	structuredOutputBoundary bool
+	textOnlyUserInput        bool
 }
 
 type appServerTurnResult struct {
@@ -1788,7 +1790,7 @@ func (w *appServerTurnWaiter) markStructuredOutputBoundary() bool {
 	}
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	if w.structuredOutputBoundary {
+	if w.textOnlyUserInput || w.structuredOutputBoundary {
 		return false
 	}
 	w.structuredOutputBoundary = true

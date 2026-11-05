@@ -123,7 +123,10 @@ type RoomConfiguration struct {
 // TurnRequest contains conversation identity and caller-normalized input.
 type TurnRequest struct {
 	// RespondingTo identifies the detached answer reserved for this turn.
-	RespondingTo      string               `json:"-"`
+	RespondingTo string `json:"-"`
+	// PreservePendingInteractions prevents this turn from superseding a pending form.
+	PreservePendingInteractions bool `json:"-"`
+
 	RoomConfiguration *RoomConfiguration   `json:"-"`
 	ImageGeneration   *ImageGenerationTask `json:"image_generation,omitempty"`
 	VideoGeneration   *VideoGenerationTask `json:"video_generation,omitempty"`
@@ -262,6 +265,7 @@ const (
 	ErrorFileUnavailable             ErrorCode = "file_unavailable"
 	ErrorFileNotFound                ErrorCode = "file_not_found"
 	ErrorInteractionNotFound         ErrorCode = "interaction_not_found"
+	ErrorInteractionPending          ErrorCode = "interaction_pending"
 	ErrorInteractionUnsupported      ErrorCode = "interaction_unsupported"
 	ErrorInteractionAlreadyResolved  ErrorCode = "interaction_already_resolved"
 	ErrorInteractionGone             ErrorCode = "interaction_gone"
