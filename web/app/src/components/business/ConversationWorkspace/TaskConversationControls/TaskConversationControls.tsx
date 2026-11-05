@@ -1,3 +1,6 @@
+import { useNavigate } from "react-router-dom";
+import { pathForNewCloudTask } from "@/models/routing";
+import { hasPendingCloudTask } from "@/models/cloudTasks";
 import type { TaskConfiguration } from "@/models/taskConfiguration";
 import { useOptionalWorkspaceControllerContext } from "@/hooks/workspace";
 import { Plus } from "lucide-react";
@@ -27,22 +30,31 @@ export function TaskConversationControls({
   const hasChatMessages = conversation.messages.some(
     (message) => !isEventMessage(message) && !isToolCallMessage(message),
   );
+  const cloudPending = hasPendingCloudTask(conversation);
   return (
     <div className={styles.controls}>
-      <TaskConfigurationToolbar
-        key={conversation.id}
-        t={t}
-        agent={agent}
-        showModel={Boolean(agent && conversation.is_direct)}
-        showDirectory={Boolean(
-          conversation.is_direct || (conversation.type === "on_demand" && conversation.configuration?.workspace_dir),
-        )}
-        configuration={conversation.configuration}
-        directoryLocked
-        disabled={entry?.isWorking(conversation.id) || entry?.busyID === conversation.id}
-        onChange={entry ? (value) => entry.patch(conversation.id, { configuration: value }) : undefined}
-      />
-      {onNewTask && hasChatMessages ? (
+      {!conversation.cloud_agent ? (
+        <TaskConfigurationToolbar
+          key={conversation.id}
+          t={t}
+          agent={agent}
+          showModel={Boolean(agent && conversation.is_direct)}
+          showDirectory={Boolean(
+            conversation.is_direct || (conversation.type === "on_demand" && conversation.configuration?.workspace_dir),
+          )}
+          configuration={conversation.configuration}
+          directoryLocked
+          disabled={entry?.isWorking(conversation.id) || entry?.busyID === conversation.id}
+          onChange={entry ? (value) => entry.patch(conversation.id, { configuration: value }) : undefined}
+        />
+      ) : (
+        <span>{t("agentPlazaCloud")}</span>
+      )}
+      {conversation.cloud_agent && cloudPending ? <span role="status">{t("cloudChatWaiting")}</span> : null}
+      {conversation.cloud_agent && hasChatMessages ? (
+        <NewCloudTaskButton agentID={conversation.cloud_agent.agent_id} disabled={cloudPending} t={t} />
+      ) : null}
+      {onNewTask && !conversation.cloud_agent && hasChatMessages ? (
         <Button
           variant="tertiaryGray"
           size="sm"
@@ -68,5 +80,15 @@ export function TaskConversationControls({
           </span>
         ))}
     </div>
+  );
+}
+
+function NewCloudTaskButton({ agentID, disabled, t }: { agentID: string; disabled: boolean; t: TranslateFn }) {
+  const navigate = useNavigate();
+  return (
+    <Button variant="tertiaryGray" size="sm" disabled={disabled} onClick={() => navigate(pathForNewCloudTask(agentID))}>
+      <Plus size={15} />
+      {t("taskEntryNew")}
+    </Button>
   );
 }

@@ -158,6 +158,8 @@ function videoGenerationParentMessageID(message: IMMessage): string {
 }
 
 export type IMConversation = {
+  created_by?: string;
+  cloud_agent?: { agent_id: string; connection_id: string; user_id: string };
   configuration?: TaskConfiguration;
   source_team_id?: string;
   collaboration_guide?: string;
@@ -237,6 +239,7 @@ export type ParticipantWorkUpdate = {
 };
 
 export type IMServerEvent = {
+  sender?: IMUser | null;
   attachment_id?: string;
   message?: IMMessage | null;
   participant?: IMParticipantLike | null;
@@ -1043,7 +1046,11 @@ export function applyIMEvent<T extends IMData | null | undefined>(
     return removeUserFromData(current, event.user.id);
   }
   if (event.type === "message.created" && event.message) {
-    return appendMessageToData(current, event.room_id, event.message);
+    return appendMessageToData(
+      event.sender ? upsertUserInData(current, event.sender) : current,
+      event.room_id,
+      event.message,
+    );
   }
   if ((event.type === "thread.created" || event.type === "thread.updated") && event.thread) {
     return applyThreadToData(current, event.room_id || event.thread.room_id, event.thread);

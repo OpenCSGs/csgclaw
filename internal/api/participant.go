@@ -55,6 +55,14 @@ func (h *Handler) handleParticipants(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, fmt.Sprintf("decode request: %v", err), http.StatusBadRequest)
 			return
 		}
+		if req.AutoPublish && (req.Type != participant.TypeAgent || (req.AgentBinding.Mode != participant.BindingModeCreate && req.AgentBinding.Mode != participant.BindingModeReuse)) {
+			writeAgentSessionError(w, 400, "invalid_request", "automatic publication requires a bound agent", nil)
+			return
+		}
+		if req.AutoPublish && h.relayManager == nil {
+			writeAgentSessionError(w, 503, "relay_unavailable", "relay service is unavailable", nil)
+			return
+		}
 		req.Channel = channelName
 		hubSvc, err := h.hubServiceForRequest(r)
 		if err != nil {
@@ -97,6 +105,12 @@ func (h *Handler) handleParticipants(w http.ResponseWriter, r *http.Request) {
 			}
 			writeAgentOperationErrorWithBillingURL(w, err, participantCreateStatus(err), billingURL)
 			return
+		}
+		if req.AutoPublish {
+			if err := h.queueAgentPublication(created.AgentID); err != nil {
+				writeAgentSessionError(w, 502, "relay_publish_failed", "participant created; automatic publication could not be queued: "+err.Error(), nil)
+				return
+			}
 		}
 		presented := h.presentParticipant(created)
 		if len(skippedResources) > 0 {

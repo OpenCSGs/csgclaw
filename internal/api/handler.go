@@ -24,6 +24,7 @@ import (
 	"csgclaw/internal/mcp"
 	"csgclaw/internal/modelprovider"
 	"csgclaw/internal/participant"
+	"csgclaw/internal/relay"
 	"csgclaw/internal/roomtask"
 	agentruntime "csgclaw/internal/runtime"
 	"csgclaw/internal/runtimecatalog"
@@ -52,6 +53,12 @@ import (
 
 type Handler struct {
 	agentArchiveMu             sync.Mutex
+	cloudTaskWG                sync.WaitGroup
+	relayCancel                context.CancelFunc
+	cloudTaskMu                sync.Mutex
+	cloudTasks                 map[string]bool
+	relayContext               context.Context
+	relayManager               *relay.Manager
 	resourcesOnce              sync.Once
 	resources                  *conversationresource.Service
 	svc                        AgentRecords
@@ -1179,6 +1186,14 @@ func (h *Handler) handleAgentByID(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		id = agent.CanonicalID(id)
+		if h.relayManager != nil {
+			release, err := h.relayManager.GuardAgentDeletion(id)
+			if err != nil {
+				writeAgentSessionError(w, http.StatusConflict, "relay_unpublish_required", err.Error(), nil)
+				return
+			}
+			defer release()
+		}
 		// Resolve a verified legacy identity before deletion removes the agent
 		// record. Participant-backed identities are retired by DeleteAgent.
 		legacyUserID := h.legacyAgentChatUserID(id)
@@ -1191,6 +1206,12 @@ func (h *Handler) handleAgentByID(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			writeAgentOperationError(w, err, http.StatusBadRequest)
 			return
+		}
+		if h.relayManager != nil {
+			if err := h.relayManager.CompleteAgentDeletion(id); err != nil {
+				writeAgentOperationError(w, err, http.StatusInternalServerError)
+				return
+			}
 		}
 		if legacyUserID != "" {
 			if err := h.im.RetireAgentUser(legacyUserID, id); err != nil {
@@ -2430,6 +2451,11 @@ func (h *Handler) handleLocalRoomByID(w http.ResponseWriter, r *http.Request, id
 		return
 	}
 
+	if room, found := h.im.Room(id); found && room.CloudAgent != nil {
+		h.cloudTaskMu.Lock()
+		defer h.cloudTaskMu.Unlock()
+	}
+
 	switch r.Method {
 	case http.MethodPatch:
 		var req apitypes.UpdateRoomRequest
@@ -2449,6 +2475,10 @@ func (h *Handler) handleLocalRoomByID(w http.ResponseWriter, r *http.Request, id
 			room, found := h.im.Room(id)
 			if !found {
 				http.NotFound(w, r)
+				return
+			}
+			if room.CloudAgent != nil {
+				writeAgentSessionError(w, 400, "relay_task_text_only", "cloud task configuration is managed by its publisher", nil)
 				return
 			}
 			cfg, err := h.validateTaskConfiguration(room, req.Configuration)
@@ -2515,6 +2545,14 @@ func (h *Handler) handleClearRoomMessages(w http.ResponseWriter, r *http.Request
 	if h == nil || h.im == nil {
 		http.Error(w, "im service is not configured", http.StatusServiceUnavailable)
 		return
+	}
+
+	if room, found := h.im.Room(roomID); found && room.CloudAgent != nil {
+		h.cloudTaskMu.Lock()
+		defer h.cloudTaskMu.Unlock()
+		if !h.allowRoomManagement(w, roomID) {
+			return
+		}
 	}
 
 	room, err := h.im.ClearRoomMessages(roomID)
@@ -2591,6 +2629,11 @@ func (h *Handler) handleRoomMemberDeletePath(w http.ResponseWriter, r *http.Requ
 		InviterID: h.resolveCSGClawParticipantUserID(req.InviterID),
 		UserIDs:   h.resolveCSGClawParticipantUserIDs([]string{memberID}),
 		Locale:    req.Locale,
+	}
+
+	if room, found := h.im.Room(roomID); found && room.CloudAgent != nil {
+		writeAgentSessionError(w, 409, "relay_task_text_only", "cloud task members cannot be changed", nil)
+		return
 	}
 
 	if h.im != nil && h.roomTaskSvc != nil {
@@ -2995,6 +3038,30 @@ func (h *Handler) handleCreateMessage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if h.im != nil {
+		if room, found := h.im.Room(serviceReq.RoomID); found && room.CloudAgent != nil {
+			h.cloudTaskMu.Lock()
+			defer h.cloudTaskMu.Unlock()
+			serviceReq.SenderID = h.im.ResolveUserID(serviceReq.SenderID)
+			if len(req.FileReferences) > 0 || len(req.ResourceRefs) > 0 || len(serviceReq.Attachments) > 0 || serviceReq.RelatesTo != nil || serviceReq.SenderID != room.CreatedBy {
+				writeAgentSessionError(w, 400, "relay_task_text_only", "cloud tasks support text messages from the task creator", nil)
+				return
+			}
+			serviceReq.Metadata = nil
+			message, created, err := channel.SendMessageOnce(serviceReq)
+			if err != nil {
+				writeAPIError(w, err, 400)
+				return
+			}
+			if created {
+				h.publishMessageCreated(room.ID, message.SenderID, message)
+			}
+			h.startCloudTaskLocked(room.ID)
+			writeJSON(w, http.StatusCreated, message)
+			return
+		}
+	}
+
+	if h.im != nil {
 		if existing, found := h.im.MessageByClientID(serviceReq.RoomID, serviceReq.SenderID, serviceReq.ClientMessageID); found {
 			writeJSON(w, http.StatusCreated, existing)
 			return
@@ -3038,6 +3105,13 @@ func (h *Handler) handleCreateRoom(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf("decode request: %v", err), http.StatusBadRequest)
 		return
 	}
+	if req.CloudAgent != nil {
+		if err := h.prepareCloudTask(r.Context(), &req); err != nil {
+			writeAgentSessionError(w, 409, "relay_chat_reference_unavailable", err.Error(), nil)
+			return
+		}
+	}
+
 	req.CreatorID = h.resolveCSGClawParticipantUserID(req.CreatorID)
 	req.MemberIDs = h.resolveCSGClawParticipantUserIDs(req.MemberIDs)
 	if apitypes.NormalizeRoomType(req.Type) == apitypes.RoomTypeOnDemand {
@@ -3128,6 +3202,10 @@ func (h *Handler) handleAddRoomMembers(w http.ResponseWriter, r *http.Request, p
 	serviceReq.InviterID = h.resolveCSGClawParticipantUserID(serviceReq.InviterID)
 	serviceReq.UserIDs = h.resolveCSGClawParticipantUserIDs(serviceReq.UserIDs)
 
+	if room, found := h.im.Room(serviceReq.RoomID); found && room.CloudAgent != nil {
+		writeAgentSessionError(w, 409, "relay_task_text_only", "cloud task members cannot be changed", nil)
+		return
+	}
 	room, err := channel.AddRoomMembers(serviceReq)
 	if err != nil {
 		writeAPIError(w, err, http.StatusBadRequest)

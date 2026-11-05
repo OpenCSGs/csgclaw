@@ -123,7 +123,7 @@ export const ConversationComposer = memo(function ConversationComposer({
   hideWorkingContextUsage = false,
   onApplyMention,
   onApplySlashCandidate,
-  onAddAttachments = () => {},
+  onAddAttachments,
   onComposerCompositionEnd,
   onComposerCompositionStart,
   onComposerKeyDown,
@@ -167,7 +167,7 @@ export const ConversationComposer = memo(function ConversationComposer({
   const actionSuggestions = useMemo(() => composerActionSuggestions(draftText), [draftText]);
 
   function handleFiles(files: File[]) {
-    if (interactionDisabled || files.length === 0) {
+    if (interactionDisabled || !onAddAttachments || files.length === 0) {
       return;
     }
     onAddAttachments(files);
@@ -213,11 +213,11 @@ export const ConversationComposer = memo(function ConversationComposer({
       <div
         className="composer-box"
         onDragOver={(event) => {
-          if (interactionDisabled || !dataTransferHasFiles(event.dataTransfer)) {
+          if (!dataTransferHasFiles(event.dataTransfer)) {
             return;
           }
           event.preventDefault();
-          event.dataTransfer.dropEffect = "copy";
+          event.dataTransfer.dropEffect = interactionDisabled || !onAddAttachments ? "none" : "copy";
         }}
         onDrop={(event) => {
           const files = filesFromDataTransfer(event.dataTransfer);
@@ -314,7 +314,7 @@ export const ConversationComposer = memo(function ConversationComposer({
         <div className="composer-toolbar">
           <ComposerAddMenu
             onOpenResourcePicker={resourcePicker.open}
-            disabled={interactionDisabled}
+            disabled={interactionDisabled || !onAddAttachments}
             t={t}
             onAddFiles={() => fileInputRef.current?.click()}
           />
@@ -324,6 +324,7 @@ export const ConversationComposer = memo(function ConversationComposer({
             type="file"
             multiple
             aria-label={t("addAttachment")}
+            disabled={interactionDisabled || !onAddAttachments}
             onChange={(event) => {
               handleFiles(Array.from(event.currentTarget.files || []));
               event.currentTarget.value = "";

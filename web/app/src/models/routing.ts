@@ -102,6 +102,18 @@ export function agentTemplatesSearch(templateID: string, filter: "official" | "p
   return `?${new URLSearchParams({ tab: "templates", filter, template: templateID })}`;
 }
 
+export function agentPlazaSearch(): string {
+  return "?tab=plaza";
+}
+
+export function cloudAgentSearch(id: string): string {
+  return `?${new URLSearchParams({ cloud: id })}`;
+}
+
+export function pathForNewCloudTask(agentID: string): string {
+  return `/new?${new URLSearchParams({ cloud: agentID })}`;
+}
+
 export function pathForNewAgentTask(agentID: string): string {
   return `/new?${new URLSearchParams({ agent: agentID })}`;
 }

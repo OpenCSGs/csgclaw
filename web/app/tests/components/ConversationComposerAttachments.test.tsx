@@ -61,6 +61,7 @@ function renderComposer(props: Partial<ConversationComposerProps> = {}): ReturnT
       slashPickerLoading={false}
       slashPickerOpen={false}
       t={t}
+      onAddAttachments={vi.fn()}
       onApplyMention={() => {}}
       onApplySlashCandidate={() => {}}
       onComposerCompositionEnd={() => {}}
@@ -205,6 +206,36 @@ describe("ConversationComposer attachments", () => {
     const wheelEvent = createEvent.wheel(strip!, { cancelable: true, deltaX: 0, deltaY: 40 });
     fireEvent(strip!, wheelEvent);
     expect(strip!.scrollLeft).toBeGreaterThan(scrollLeftBeforeWheel);
+  });
+
+  it("disables file selection and rejects drops when attachments are unsupported", async () => {
+    const user = userEvent.setup();
+    const inputClick = vi.spyOn(HTMLInputElement.prototype, "click");
+    try {
+      const { container } = renderComposer({ onAddAttachments: undefined });
+      const add = screen.getByRole("button", { name: "Add content" });
+      expect(add).toBeDisabled();
+      await user.click(add);
+      expect(inputClick).not.toHaveBeenCalled();
+      expect(screen.queryByRole("dialog", { name: "Add content" })).not.toBeInTheDocument();
+      expect(container.querySelector('input[type="file"]')).toBeDisabled();
+      const box = container.querySelector<HTMLElement>(".composer-box")!;
+      const dragData = { dropEffect: "copy", files: [], items: [], types: ["Files"] };
+      const drag = createEvent.dragOver(box, { dataTransfer: dragData });
+      fireEvent(box, drag);
+      expect(drag.defaultPrevented).toBe(true);
+      expect(dragData.dropEffect).toBe("none");
+      const file = new File(["ignored"], "unsupported.txt", { type: "text/plain" });
+      const drop = createEvent.drop(box, { dataTransfer: { files: [file], items: [] } });
+      fireEvent(box, drop);
+      expect(drop.defaultPrevented).toBe(true);
+      fireEvent.paste(screen.getByRole("textbox", { name: "Message" }), {
+        clipboardData: { files: [file], getData: () => "", items: [] },
+      });
+      expect(screen.queryByText("unsupported.txt")).not.toBeInTheDocument();
+    } finally {
+      inputClick.mockRestore();
+    }
   });
 
   it("accepts files from the picker, paste, and drag and drop", async () => {

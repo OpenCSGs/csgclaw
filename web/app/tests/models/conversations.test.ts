@@ -418,6 +418,32 @@ describe("conversation model helpers", () => {
     );
   });
 
+  it("registers a cloud message sender before displaying its first reply", () => {
+    const cloudSender = { id: "user-relay-new", name: "cloud-agent", role: "cloud", avatar: "C" };
+    const next = applyIMEvent(
+      { users: [], rooms: [room("cloud-task", "2026-05-14T00:00:00Z")] },
+      {
+        type: "message.created",
+        room_id: "cloud-task",
+        sender: cloudSender,
+        message: {
+          ...message("cloud-reply", "2026-05-16T00:00:00Z"),
+          sender_id: cloudSender.id,
+          content: "Cloud task failed: incompatible model",
+        },
+      },
+    );
+    expect(next.users).toContainEqual(cloudSender);
+    expect(next.rooms[0].messages.find((item) => item.id === "cloud-reply")?.content).toContain("incompatible model");
+    const retry = applyIMEvent(next, {
+      type: "message.created",
+      room_id: "cloud-task",
+      sender: cloudSender,
+      message: next.rooms[0].messages.find((item) => item.id === "cloud-reply"),
+    });
+    expect(retry.users.filter((item) => item.id === cloudSender.id)).toHaveLength(1);
+  });
+
   it("applies user update events to existing users", () => {
     const current = {
       rooms: [],

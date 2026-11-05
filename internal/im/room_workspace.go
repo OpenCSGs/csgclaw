@@ -16,6 +16,13 @@ func requestedWorkspaceDir(cfg *taskconfig.Config) string {
 }
 
 func sameCollaborationCreation(room Room, req CreateRoomRequest) bool {
+	if (room.CloudAgent == nil) != (req.CloudAgent == nil) {
+		return false
+	}
+	if room.CloudAgent != nil && *room.CloudAgent != *req.CloudAgent {
+		return false
+	}
+
 	if room.SourceTeamID != req.SourceTeamID {
 		return false
 	}

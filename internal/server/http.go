@@ -147,6 +147,11 @@ func Run(opts Options) error {
 		}()
 	}
 	handler := newHandler(opts)
+	if err := handler.EnableRelay(runCtx); err != nil {
+		_ = listener.Close()
+		return fmt.Errorf("initialize relay: %w", err)
+	}
+	defer handler.CloseRelay()
 	if opts.AppsStatePath != "" {
 		if err := handler.EnableConnectors(opts.AppsStatePath); err != nil {
 			_ = listener.Close()

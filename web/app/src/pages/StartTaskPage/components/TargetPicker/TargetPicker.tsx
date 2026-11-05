@@ -1,3 +1,4 @@
+import type { CloudAgent } from "@/models/cloudAgents";
 import { useMemo, useRef, useState } from "react";
 import { Check, ChevronDown, Plus, Search } from "lucide-react";
 import { PopoverContent, PopoverRoot, PopoverTrigger } from "@/components/ui";
@@ -11,7 +12,7 @@ import type { AgentLike } from "@/models/agents";
 import type { TranslateFn, UsersById } from "@/models/conversations";
 import type { WorkspaceTeam } from "@/models/tasks";
 
-export type TargetKind = "agent" | "team";
+export type TargetKind = "agent" | "team" | "cloud";
 
 export const SOLO_TEAM_ID = "__solo__";
 
@@ -22,6 +23,7 @@ export type Target = {
 
 export type TargetPickerProps = {
   agents: readonly AgentLike[];
+  cloudAgents?: readonly CloudAgent[];
   teams: readonly WorkspaceTeam[];
   usersById?: UsersById | null;
   value: Target;
@@ -36,6 +38,7 @@ export type TargetPickerProps = {
 
 export function TargetPicker({
   agents,
+  cloudAgents = [],
   teams,
   usersById,
   value,
@@ -53,12 +56,13 @@ export function TargetPicker({
 
   const isSolo = value.kind === "team" && value.id === SOLO_TEAM_ID;
   const selectedAgent = value.kind === "agent" ? (agents.find((item) => item.id === value.id) ?? null) : null;
+  const selectedCloud = value.kind === "cloud" ? cloudAgents.find((item) => item.id === value.id) : null;
   const selectedTeam = value.kind === "team" && !isSolo ? (teams.find((item) => item.id === value.id) ?? null) : null;
 
   const fallbackAgent = agents[0] ?? null;
   const triggerName = isSolo
     ? t("iaStartRoomSolo")
-    : selectedAgent?.name || selectedTeam?.title || fallbackAgent?.name || "";
+    : selectedCloud?.name || selectedAgent?.name || selectedTeam?.title || fallbackAgent?.name || "";
 
   const needle = query.trim().toLocaleLowerCase();
   const visibleAgents = useMemo(() => {
@@ -71,6 +75,7 @@ export function TargetPicker({
         .includes(needle),
     );
   }, [agents, needle]);
+  const visibleCloud = cloudAgents.filter((item) => !needle || item.name.toLocaleLowerCase().includes(needle));
   const visibleTeams = useMemo(() => {
     if (!needle) {
       return teams;
@@ -127,7 +132,7 @@ export function TargetPicker({
               />
             ) : (
               <AgentAvatarContent
-                avatar={selectedAgent?.avatar ?? fallbackAgent?.avatar}
+                avatar={selectedCloud?.avatar ?? selectedAgent?.avatar ?? fallbackAgent?.avatar}
                 fallback={triggerName.slice(0, 1)}
               />
             )}
@@ -140,6 +145,7 @@ export function TargetPicker({
                 ? t("iaTargetTeamChip", { name: triggerName })
                 : t("iaTargetAgentChip", { name: triggerName })}
           </span>
+          {selectedCloud ? <span className={styles.rowBadge}>{t("agentPlazaCloud")}</span> : null}
           <ChevronDown aria-hidden="true" className={styles.triggerChevron} size={14} strokeWidth={2.2} />
         </button>
       </PopoverTrigger>
@@ -167,8 +173,44 @@ export function TargetPicker({
         </div>
 
         <div className={styles.list}>
-          {visibleAgents.length === 0 && visibleTeams.length === 0 ? (
+          {visibleAgents.length === 0 && visibleTeams.length === 0 && visibleCloud.length === 0 ? (
             <p className={styles.empty}>{t("iaTargetEmpty")}</p>
+          ) : null}
+
+          {visibleCloud.length > 0 ? (
+            <section className={styles.group}>
+              <div className={styles.groupLabel}>{t("agentPlazaCloud")}</div>
+              <ul className={styles.items}>
+                {visibleCloud.map((item) => (
+                  <li key={item.id}>
+                    <button
+                      type="button"
+                      disabled={item.status !== "online"}
+                      title={item.status !== "online" ? t("cloudChatOffline") : item.description}
+                      className={classNames(
+                        styles.row,
+                        value.kind === "cloud" && value.id === item.id && styles.rowActive,
+                      )}
+                      onClick={() => pick({ kind: "cloud", id: item.id })}
+                    >
+                      {value.kind === "cloud" && value.id === item.id ? (
+                        <Check aria-hidden="true" className={styles.rowCheck} size={15} />
+                      ) : null}
+                      <span className={classNames("iaAvatarFrame", styles.rowIcon)} aria-hidden="true">
+                        <AgentAvatarContent avatar={item.avatar} fallback={item.name.slice(0, 1)} />
+                      </span>
+                      <span className={styles.rowText}>
+                        <span className={styles.rowName}>{item.name}</span>
+                      </span>
+                      <span className={styles.rowBadge}>
+                        {t("agentPlazaCloud")} ·{" "}
+                        {t(item.status === "online" ? "agentPlazaOnline" : "agentPlazaOffline")}
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </section>
           ) : null}
 
           {visibleAgents.length > 0 ? (

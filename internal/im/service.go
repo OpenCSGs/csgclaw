@@ -121,11 +121,12 @@ type AddRoomMembersRequest = apitypes.AddRoomMembersRequest
 type AddConversationMembersRequest = AddRoomMembersRequest
 
 type EnsureAgentUserRequest struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	Description string `json:"description,omitempty"`
-	Role        string `json:"role"`
-	Avatar      string `json:"avatar,omitempty"`
+	SkipDirectRoom bool   `json:"-"`
+	ID             string `json:"id"`
+	Name           string `json:"name"`
+	Description    string `json:"description,omitempty"`
+	Role           string `json:"role"`
+	Avatar         string `json:"avatar,omitempty"`
 }
 
 type EnsureWorkerUserRequest = EnsureAgentUserRequest
@@ -252,7 +253,8 @@ type persistedBootstrap struct {
 }
 
 type persistedRoom struct {
-	CreationWorkspaceDir *string `json:"creation_workspace_dir,omitempty"`
+	CloudAgent           *apitypes.CloudAgentReference `json:"cloud_agent,omitempty"`
+	CreationWorkspaceDir *string                       `json:"creation_workspace_dir,omitempty"`
 
 	SourceTeamID       string             `json:"source_team_id,omitempty"`
 	CollaborationGuide string             `json:"collaboration_guide,omitempty"`
@@ -517,6 +519,7 @@ func loadPersistedRooms(statePath string, rooms []persistedRoom) ([]Room, error)
 			Pinned:               room.Pinned,
 			CustomTitle:          room.CustomTitle,
 			TaskSession:          room.TaskSession,
+			CloudAgent:           cloneCloudAgent(room.CloudAgent),
 			Configuration:        taskconfig.Clone(room.Configuration),
 			SourceTeamID:         room.SourceTeamID,
 			CollaborationGuide:   room.CollaborationGuide,
@@ -707,6 +710,7 @@ func persistedRoomFromRoom(room Room) persistedRoom {
 		Pinned:               room.Pinned,
 		CustomTitle:          room.CustomTitle,
 		TaskSession:          room.TaskSession,
+		CloudAgent:           cloneCloudAgent(room.CloudAgent),
 		Configuration:        taskconfig.Clone(room.Configuration),
 		SourceTeamID:         room.SourceTeamID,
 		CollaborationGuide:   room.CollaborationGuide,
@@ -1138,6 +1142,10 @@ func migrateLegacyManagerRoomRefs(rooms []Room, managerAliases map[string]struct
 func migrateRoomRefsToUserIDs(rooms []Room) []Room {
 	for i := range rooms {
 		rooms[i].Members = canonicalUserIDs(rooms[i].Members)
+		if rooms[i].CloudAgent != nil {
+			rooms[i].CloudAgent.UserID = canonicalIMUserID(rooms[i].CloudAgent.UserID)
+			rooms[i].CreatedBy = canonicalIMUserID(rooms[i].CreatedBy)
+		}
 		for j := range rooms[i].Messages {
 			rooms[i].Messages[j].SenderID = canonicalIMUserID(rooms[i].Messages[j].SenderID)
 			rooms[i].Messages[j].Content = migrateMentionTagsToUserIDs(rooms[i].Messages[j].Content)
@@ -1925,7 +1933,10 @@ func (s *Service) EnsureAgentUser(req EnsureAgentUserRequest) (User, *Room, erro
 		return User{}, nil, err
 	}
 	if existing, ok := s.users[id]; ok {
-		room, _ := s.ensureAdminAgentRoomLocked(id, existing.Name)
+		var room *Room
+		if !req.SkipDirectRoom {
+			room, _ = s.ensureAdminAgentRoomLocked(id, existing.Name)
+		}
 		if err := s.saveLocked(); err != nil {
 			return User{}, nil, err
 		}
@@ -1944,7 +1955,11 @@ func (s *Service) EnsureAgentUser(req EnsureAgentUserRequest) (User, *Room, erro
 	}
 	s.users[id] = user
 	s.byName[strings.ToLower(name)] = id
-	room, roomCreated := s.ensureAdminAgentRoomLocked(id, name)
+	var room *Room
+	var roomCreated bool
+	if !req.SkipDirectRoom {
+		room, roomCreated = s.ensureAdminAgentRoomLocked(id, name)
+	}
 	if err := s.saveLocked(); err != nil {
 		delete(s.users, id)
 		delete(s.byName, strings.ToLower(name))
@@ -2567,6 +2582,7 @@ func (s *Service) CreateRoom(req CreateRoomRequest) (Room, error) {
 		Locale:             messagePresentationLocale(req.Locale),
 		IsDirect:           req.IsDirect,
 		TaskSession:        req.TaskSession,
+		CloudAgent:         cloneCloudAgent(req.CloudAgent),
 		Configuration:      taskconfig.Clone(req.Configuration),
 		SourceTeamID:       req.SourceTeamID,
 		CollaborationGuide: req.CollaborationGuide,
@@ -3085,7 +3101,16 @@ func (s *Service) presentConversationLocked(conv Conversation) Conversation {
 	return s.presentRoomLocked(conv, "")
 }
 
+func cloneCloudAgent(ref *apitypes.CloudAgentReference) *apitypes.CloudAgentReference {
+	if ref == nil {
+		return nil
+	}
+	result := *ref
+	return &result
+}
+
 func cloneRoom(room Room) Room {
+	room.CloudAgent = cloneCloudAgent(room.CloudAgent)
 	if room.CreationWorkspaceDir != nil {
 		dir := *room.CreationWorkspaceDir
 		room.CreationWorkspaceDir = &dir

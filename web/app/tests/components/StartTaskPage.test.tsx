@@ -8,9 +8,12 @@ import { sendMessageRequest } from "@/api/im";
 import { StartTaskPage } from "@/pages/StartTaskPage/StartTaskPage";
 import type { IMConversation, LocaleCode } from "@/models/conversations";
 import { createTranslator } from "@/shared/i18n";
-import { TASK_EXAMPLES_HIDDEN_STORAGE_KEY } from "@/shared/storage/keys";
+import { fetchRelayCatalog } from "@/api/relay";
+import { cloudAgentFixture } from "../helpers/cloudAgentFixture";
+import { CLOUD_AGENTS_STORAGE_KEY, TASK_EXAMPLES_HIDDEN_STORAGE_KEY } from "@/shared/storage/keys";
 
 vi.mock("@/api/agentResources", () => ({ fetchConversationResourceBatch: vi.fn() }));
+vi.mock("@/api/relay", () => ({ fetchRelayCatalog: vi.fn().mockResolvedValue([]) }));
 vi.mock("@/api/im", () => ({ sendMessageRequest: vi.fn() }));
 const room: IMConversation = {
   id: "task-1",
@@ -553,5 +556,47 @@ describe("collaboration directory selection", () => {
     await waitFor(() => expect(open).toHaveBeenCalled());
     expect(create.mock.calls[2][0].client_request_id).not.toBe(create.mock.calls[0][0].client_request_id);
     expect(create.mock.calls[2][0].configuration).toEqual({ workspace_dir: "/shared-project" });
+  });
+});
+
+describe("cloud task targets", () => {
+  afterEach(() => {
+    localStorage.removeItem(CLOUD_AGENTS_STORAGE_KEY);
+    vi.mocked(fetchRelayCatalog).mockResolvedValue([]);
+  });
+  it("selects a summoned cloud agent and starts a task without a local model", async () => {
+    localStorage.setItem(CLOUD_AGENTS_STORAGE_KEY, JSON.stringify(cloudAgentFixture));
+    vi.mocked(fetchRelayCatalog).mockResolvedValue([...cloudAgentFixture]);
+    vi.mocked(sendMessageRequest).mockResolvedValue({} as never);
+    const { create, open, requireAuth } = setup("/new", "");
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: /iaTargetLabel/ }));
+    await user.click(await screen.findByRole("button", { name: /合同条款审阅/ }));
+    expect(screen.queryByText("taskEntryModelMissing")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "composerAddContent" })).toBeDisabled();
+    fireEvent.change(screen.getByRole("textbox", { name: "taskEntryPrompt" }), {
+      target: { value: "Review this contract" },
+    });
+    await user.click(screen.getByRole("button", { name: "taskEntryStart" }));
+    await waitFor(() => expect(open).toHaveBeenCalledWith(room));
+    expect(create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        cloud_agent: { agent_id: cloudAgentFixture[0].id, connection_id: cloudAgentFixture[0].connectionID },
+        member_ids: [],
+        type: "free",
+        is_direct: true,
+        configuration: undefined,
+        manager_id: undefined,
+      }),
+    );
+    expect(requireAuth).not.toHaveBeenCalled();
+  });
+  it("keeps an offline cloud agent visible and unavailable for selection", async () => {
+    const offline = { ...cloudAgentFixture[0], status: "offline" as const };
+    localStorage.setItem(CLOUD_AGENTS_STORAGE_KEY, JSON.stringify([offline]));
+    vi.mocked(fetchRelayCatalog).mockResolvedValue([offline]);
+    setup();
+    await userEvent.click(screen.getByRole("button", { name: /iaTargetLabel/ }));
+    expect(await screen.findByRole("button", { name: /合同条款审阅/ })).toBeDisabled();
   });
 });

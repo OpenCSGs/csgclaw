@@ -14,6 +14,8 @@ CSGClaw is a multi-agent collaboration platform built by OpenCSG — designed ar
 
 ![CSGClaw WebUI](assets/webui.png)
 
+Share a local host agent with other CSGClaw users through an outbound relay connection: see the [CSGRelay guide](docs/tech/relay.md).
+
 ## Install
 
 **macOS / Linux:**

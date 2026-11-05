@@ -39,6 +39,7 @@ type AgentBindingSpec struct {
 }
 
 type CreateRequest struct {
+	AutoPublish      bool             `json:"auto_publish,omitempty"`
 	ID               string           `json:"id,omitempty"`
 	Channel          string           `json:"channel,omitempty"`
 	Type             string           `json:"type"`

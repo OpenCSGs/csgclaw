@@ -1,3 +1,4 @@
+import { useCloudAgents } from "@/hooks/workspace/useCloudAgents";
 import { createUUID } from "@/shared/lib/uuid";
 import { ResourceTag } from "@/components/business/ResourceTag";
 import {
@@ -42,11 +43,13 @@ import "@/components/business/ConversationPane/ConversationPane.css";
 export function StartTaskPage() {
   const location = useLocation();
   const [params] = useSearchParams();
-  const initialTarget = params.get("team")
-    ? `team:${params.get("team")}`
-    : params.get("agent")
-      ? `agent:${params.get("agent")}`
-      : "";
+  const initialTarget = params.get("cloud")
+    ? `cloud:${params.get("cloud")}`
+    : params.get("team")
+      ? `team:${params.get("team")}`
+      : params.get("agent")
+        ? `agent:${params.get("agent")}`
+        : "";
   return (
     <StartTaskForm
       key={`${location.pathname}:${initialTarget}`}
@@ -64,6 +67,7 @@ function StartTaskForm({
   initialConfiguration?: TaskConfiguration;
 }) {
   const controller = useWorkspaceControllerContext();
+  const cloud = useCloudAgents();
   const { openSettings } = useWorkspaceDialogs();
   const [configuration, setConfiguration] = useState<TaskConfiguration>(initialConfiguration || {});
   const [target, setTarget] = useState(initialTarget);
@@ -90,6 +94,7 @@ function StartTaskForm({
   const teams = useMemo(() => sidebar?.teams ?? [], [sidebar?.teams]);
   const manager = agents.find((agent) => agent.role === "manager");
   const selected = target || `agent:${manager?.id || agents[0]?.id || ""}`;
+  const selectedCloud = cloud.agents.find((agent) => selected === `cloud:${agent.id}`);
   const selectedAgent = agents.find((agent) => selected === `agent:${agent.id}`);
   const selectedTeam = teams.find((team) => selected === `team:${team.id}`);
   const mentionMembers = useMemo(() => {
@@ -130,12 +135,12 @@ function StartTaskForm({
   const readySidebar = sidebar;
   const { t } = sidebar;
   const entry = controller.taskEntry;
-  const recipient = selectedAgent || manager;
+  const recipient = selectedCloud ? undefined : selectedAgent || manager;
   const selectedProfile = recipient
     ? effectiveConversationProfile(recipient, selectedAgent ? configuration : undefined, controller.modelProviders)
     : null;
   const modelMissing = recipient && (selectedProfile?.profile_complete === false || !selectedProfile?.model_id);
-  const targetName = selectedAgent?.name || selectedTeam?.title || t("taskEntrySolo");
+  const targetName = selectedCloud?.name || selectedAgent?.name || selectedTeam?.title || t("taskEntrySolo");
 
   function messageInput(prompt: string) {
     const content = promptMentions.serialize(prompt).trim();
@@ -151,8 +156,12 @@ function StartTaskForm({
   async function start(empty = false, prompt = draft) {
     const input = messageInput(prompt);
     if (inFlight.current || (!empty && !canSendResources(input.content, input.resource_refs, files.length))) return;
-    if (!selectedAgent && !selectedTeam && selected !== "solo") {
+    if (!selectedCloud && !selectedAgent && !selectedTeam && selected !== "solo") {
       setError(t("taskEntryMissingTarget"));
+      return;
+    }
+    if (selectedCloud && selectedCloud.status !== "online") {
+      setError(t("cloudChatOffline"));
       return;
     }
     inFlight.current = true;
@@ -173,30 +182,38 @@ function StartTaskForm({
       let room = created.current;
       if (!room) {
         const agentIDs = selectedTeam ? [selectedTeam.lead_agent_id, ...selectedTeam.member_agent_ids] : [];
-        const members = selectedAgent
-          ? [resolveAgentChannelUserID(selectedAgent) || selectedAgent.id || ""]
-          : Array.from(
-              new Set([
-                resolveAgentChannelUserID(manager) || manager?.id || "",
-                ...agentIDs.map((id) => resolveAgentChannelUserID(agents.find((item) => item.id === id)) || id),
-              ]),
-            ).filter(Boolean);
-        if (!selectedAgent && !manager) throw new Error(t("taskEntryManagerMissing"));
+        const members = selectedCloud
+          ? []
+          : selectedAgent
+            ? [resolveAgentChannelUserID(selectedAgent) || selectedAgent.id || ""]
+            : Array.from(
+                new Set([
+                  resolveAgentChannelUserID(manager) || manager?.id || "",
+                  ...agentIDs.map((id) => resolveAgentChannelUserID(agents.find((item) => item.id === id)) || id),
+                ]),
+              ).filter(Boolean);
+        if (!selectedCloud && !selectedAgent && !manager) throw new Error(t("taskEntryManagerMissing"));
         if (selectedTeam && agentIDs.some((id) => !agents.some((agent) => agent.id === id))) {
           throw new Error(t("taskEntryMembersMissing"));
         }
         room = await entry.create({
           title: taskConversationTitle(prompt, `${targetName} · ${new Date().toLocaleString(readySidebar.locale)}`),
           member_ids: members,
-          type: selectedAgent ? "free" : "on_demand",
-          is_direct: Boolean(selectedAgent),
-          configuration: selectedAgent
-            ? supportsTaskConfiguration(selectedAgent)
-              ? configuration
-              : undefined
-            : { workspace_dir: configuration.workspace_dir },
+          cloud_agent: selectedCloud
+            ? { agent_id: selectedCloud.id, connection_id: selectedCloud.connectionID }
+            : undefined,
+          type: selectedAgent || selectedCloud ? "free" : "on_demand",
+          is_direct: Boolean(selectedAgent || selectedCloud),
+          configuration: selectedCloud
+            ? undefined
+            : selectedAgent
+              ? supportsTaskConfiguration(selectedAgent)
+                ? configuration
+                : undefined
+              : { workspace_dir: configuration.workspace_dir },
           source_team_id: selectedTeam?.id,
-          manager_id: selectedAgent ? undefined : resolveAgentChannelUserID(manager) || manager?.id || undefined,
+          manager_id:
+            selectedAgent || selectedCloud ? undefined : resolveAgentChannelUserID(manager) || manager?.id || undefined,
           client_request_id: requestID.current,
           locale: readySidebar.locale,
         });
@@ -230,34 +247,36 @@ function StartTaskForm({
     }
   }
 
-  const examples = selectedAgent
-    ? [
-        { key: "knowledgeCard", icon: BookOpen },
-        { key: "meetingNotes", icon: FileText },
-        { key: "aiTrends", icon: Presentation },
-      ]
-    : [
-        { key: "members", icon: Users },
-        { key: "research", icon: Search },
-        { key: "review", icon: ClipboardCheck },
-      ];
+  const examples =
+    selectedAgent || selectedCloud
+      ? [
+          { key: "knowledgeCard", icon: BookOpen },
+          { key: "meetingNotes", icon: FileText },
+          { key: "aiTrends", icon: Presentation },
+        ]
+      : [
+          { key: "members", icon: Users },
+          { key: "research", icon: Search },
+          { key: "review", icon: ClipboardCheck },
+        ];
   return (
     <section className={styles.page}>
       <div className={styles.inner}>
         <header className={styles.head}>
           <h1>{t("iaStartTitle")}</h1>
-          <p>{t(selectedAgent ? "iaStartSubtitleDirect" : "iaStartSubtitleRooms")}</p>
+          <p>{t(selectedAgent || selectedCloud ? "iaStartSubtitleDirect" : "iaStartSubtitleRooms")}</p>
         </header>
         <div className={styles.pane}>
           <TargetPicker
             agents={agents}
+            cloudAgents={cloud.agents}
             teams={teams}
             usersById={sidebar.usersById}
             value={
               selected === "solo"
                 ? { kind: "team", id: SOLO_TEAM_ID }
                 : {
-                    kind: selected.startsWith("team:") ? "team" : "agent",
+                    kind: selected.startsWith("cloud:") ? "cloud" : selected.startsWith("team:") ? "team" : "agent",
                     id: selected.slice(selected.indexOf(":") + 1),
                   }
             }
@@ -265,6 +284,7 @@ function StartTaskForm({
               requestID.current = createUUID();
               promptMentions.clear();
               setResources([]);
+              setFiles([]);
               setTarget(value.id === SOLO_TEAM_ID ? "solo" : `${value.kind}:${value.id}`);
               setConfiguration({});
             }}
@@ -273,7 +293,7 @@ function StartTaskForm({
             onCreateAgent={() => void sidebar.onCreateCustomAgent()}
             onCreateTeam={() => void sidebar.onOpenCreateTeam()}
           />
-          {modelMissing || !agents.length ? (
+          {!selectedCloud && (modelMissing || !agents.length) ? (
             <div className={styles.setup} role="status">
               <strong>{t("iaStartNeedsModelTitle")}</strong>
               <p>{t(modelMissing ? "taskEntryModelMissing" : "taskEntryNoAgents")}</p>
@@ -402,25 +422,27 @@ function StartTaskForm({
                 />
                 <ComposerAddMenu
                   onOpenResourcePicker={resourcePicker.open}
-                  disabled={busy}
+                  disabled={busy || Boolean(selectedCloud)}
                   t={t}
                   buttonClassName={`composer-add-button ${styles.addButton}`}
                   onAddFiles={() => fileInput.current?.click()}
                 />
-                <TaskConfigurationToolbar
-                  configuration={configuration}
-                  onChange={async (value) => {
-                    if (created.current) await entry.patch(created.current.id, { configuration: value });
-                    else requestID.current = createUUID();
-                    setConfiguration(value);
-                  }}
-                  directoryLocked={Boolean(created.current)}
-                  directoryMode={selectedAgent ? "agent" : "collaboration"}
-                  agent={selectedAgent || manager}
-                  showModel={Boolean(selectedAgent)}
-                  showDirectory
-                  disabled={busy}
-                />
+                {!selectedCloud ? (
+                  <TaskConfigurationToolbar
+                    configuration={configuration}
+                    onChange={async (value) => {
+                      if (created.current) await entry.patch(created.current.id, { configuration: value });
+                      else requestID.current = createUUID();
+                      setConfiguration(value);
+                    }}
+                    directoryLocked={Boolean(created.current)}
+                    directoryMode={selectedAgent ? "agent" : "collaboration"}
+                    agent={selectedAgent || manager}
+                    showModel={Boolean(selectedAgent)}
+                    showDirectory
+                    disabled={busy}
+                  />
+                ) : null}
                 <Button
                   className={styles.send}
                   iconOnly
@@ -428,6 +450,7 @@ function StartTaskForm({
                   aria-label={t("taskEntryStart")}
                   disabled={
                     busy ||
+                    Boolean(selectedCloud && selectedCloud.status !== "online") ||
                     resourcePicker.active ||
                     !canSendResources(draftInput.content, draftInput.resource_refs, files.length) ||
                     Boolean(modelMissing)
@@ -439,13 +462,14 @@ function StartTaskForm({
               </div>
             </div>
           </div>
+          {selectedCloud && selectedCloud.status !== "online" ? <p role="status">{t("cloudChatOffline")}</p> : null}
           {error ? (
             <p role="alert" className={styles.error}>
               {error}
               {created.current ? ` ${t("taskEntryRetryCreated")}` : ""}
             </p>
           ) : null}
-          {!selectedAgent ? (
+          {!selectedAgent && !selectedCloud ? (
             <button
               className={styles.emptyRoom}
               type="button"
@@ -456,7 +480,7 @@ function StartTaskForm({
             </button>
           ) : null}
         </div>
-        {!examplesHidden && !modelMissing && agents.length ? (
+        {!examplesHidden && !modelMissing && (agents.length || selectedCloud) ? (
           <div className={styles.examples}>
             <span>{t("iaStartExamples")}</span>
             <div className={styles.chips}>
