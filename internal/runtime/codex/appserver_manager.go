@@ -36,6 +36,7 @@ import (
 const (
 	appServerTurnInterruptTimeout      = 5 * time.Second
 	appServerStdoutExitGracePeriod     = 250 * time.Millisecond
+	appServerStdoutExitBufferBytes     = 1 << 20
 	appServerTrackedTurnLimit          = 256
 	appServerPublishFileToolName       = "csgclaw_publish_file"
 	appServerUploadFileToolName        = "csgclaw_upload_file"
@@ -1517,6 +1518,7 @@ func (m *appServerManager) persistedThreadID(spec SessionSpec) string {
 type appServerTurnWaiter struct {
 	// Guarded by liveSession.mu, alongside the thread's cumulative counters.
 	itemTurns                map[string]string // Native item IDs received with an explicit turn ID.
+	missingItems             bool              // An item without a known owner was withheld.
 	tokenUsage               modelusage.Usage
 	pendingUsage             map[string]modelusage.Usage
 	diagnostic               *diagnostics.Record
@@ -1536,6 +1538,7 @@ type appServerTurnWaiter struct {
 }
 
 type appServerTurnResult struct {
+	storedTurn map[string]any
 	success    bool
 	stopReason string
 	err        error
@@ -1741,9 +1744,21 @@ func (s *liveSession) acceptsTurnNotificationLocked(threadID, turnID string) boo
 
 // Use an explicit item/turn association before falling back to older protocols'
 // thread routing. Items from recovered history remain excluded by their ID.
-func (s *liveSession) beginTurnNotification(threadID, turnID, itemID string) (string, string) {
+func (s *liveSession) beginTurnNotification(threadID, turnID, itemID string, isItem bool) (string, string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	// Only each candidate turn's own history can identify its withheld items.
+	missingOwner := turnID == "" && isItem
+	unowned := func() (string, string) {
+		if missingOwner {
+			for id, waiter := range s.turnWaiters {
+				if threadID == "" || threadID == id {
+					waiter.missingItems = true
+				}
+			}
+		}
+		return "", ""
+	}
 	if turnID == "" {
 		var itemThread string
 		if itemID != "" {
@@ -1753,7 +1768,7 @@ func (s *liveSession) beginTurnNotification(threadID, turnID, itemID string) (st
 				}
 				if owner := waiter.itemTurns[itemID]; owner != "" {
 					if itemThread != "" {
-						return "", "" // Two active threads use the same item ID.
+						return unowned() // Two active threads use the same item ID.
 					}
 					itemThread, turnID = id, owner
 				}
@@ -1764,30 +1779,31 @@ func (s *liveSession) beginTurnNotification(threadID, turnID, itemID string) (st
 				continue
 			}
 			if _, stale := old.recoveredItems[itemID]; stale {
-				return "", ""
+				return unowned()
 			}
 			// A sole active waiter on a different thread cannot establish
 			// ownership of an unscoped record from a recovered thread.
 			if threadID == "" && itemThread == "" && !old.successorFinished && s.turnWaiters[old.threadID] == nil {
-				return "", ""
+				return unowned()
 			}
 		}
 		if itemThread != "" {
 			threadID = itemThread
 		}
 	}
-	threadID = s.nativeNotificationThreadLocked(threadID, turnID, true)
-	if threadID == "" {
-		return "", ""
+	resolved := s.nativeNotificationThreadLocked(threadID, turnID, true)
+	if resolved == "" {
+		return unowned()
 	}
+	threadID = resolved
 	if turnID == "" && itemID != "" && s.turnWaiters[threadID] != nil {
 		for _, old := range s.turnThreads {
 			if old.threadID == threadID && old.recovered && !old.successorFinished {
-				return "", ""
+				return unowned()
 			}
 		}
 	} else if !s.acceptsTurnNotificationLocked(threadID, turnID) {
-		return "", ""
+		return unowned()
 	}
 	if waiter := s.turnWaiters[threadID]; waiter != nil {
 		if itemID != "" && turnID != "" {
@@ -1806,7 +1822,7 @@ func (s *liveSession) beginTurnNotification(threadID, turnID, itemID string) (st
 
 // Claim the terminal event before waking a waiter or publishing to subscribers.
 // A notification can arrive after a native history check has settled this turn.
-func (s *liveSession) recordNativeCompletion(threadID string, result *appServerTurnResult, quietVersion *uint64, items []any) (*appServerTurnWaiter, bool) {
+func (s *liveSession) recordNativeCompletion(threadID string, result *appServerTurnResult, quietVersion *uint64, turn map[string]any) (*appServerTurnWaiter, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if !s.acceptsTurnNotificationLocked(threadID, result.turnID) {
@@ -1815,6 +1831,9 @@ func (s *liveSession) recordNativeCompletion(threadID string, result *appServerT
 	waiter := s.turnWaiters[threadID]
 	if result.turnID == "" && waiter != nil {
 		result.turnID = waiter.currentTurnID()
+	}
+	if quietVersion != nil || (waiter != nil && waiter.missingItems && appServerString(turn, "id") == result.turnID && appServerString(turn, "itemsView") == "full") {
+		result.storedTurn = turn
 	}
 	if quietVersion != nil {
 		if waiter == nil || !waiter.recordQuietResult(result, *quietVersion) {
@@ -1833,6 +1852,7 @@ func (s *liveSession) recordNativeCompletion(threadID string, result *appServerT
 					old.recoveredItems[id] = struct{}{}
 				}
 			}
+			items, _ := turn["items"].([]any)
 			for _, value := range items {
 				item, _ := value.(map[string]any)
 				if id := appServerString(item, "id"); id != "" {
@@ -2044,6 +2064,23 @@ func (w *appServerTurnWaiter) hasStructuredOutputBoundary() bool {
 	return w.structuredOutputBoundary
 }
 
+func (s *liveSession) completedTurnItems(ctx context.Context, waiter *appServerTurnWaiter, result appServerTurnResult) quietTurnHistory {
+	if result.storedTurn != nil {
+		return quietTurnItems(result.storedTurn)
+	}
+	s.mu.Lock()
+	missing := waiter.missingItems
+	s.mu.Unlock()
+	if !missing || result.turnID == "" || s.appClient == nil {
+		return nil
+	}
+	// The identified terminal has already settled the prompt. Only its items
+	// are missing, and an unavailable history must not keep that prompt open.
+	ctx, cancel := context.WithTimeout(ctx, nativeTurnLookupTimeout)
+	defer cancel()
+	return quietTurnItems(readLatestTurn(ctx, s.appClient, waiter.threadID, result.turnID))
+}
+
 func (m *appServerManager) waitAppServerTurn(ctx context.Context, live *liveSession, waiter *appServerTurnWaiter) (PromptResponse, error) {
 	waitStartedAt := time.Now()
 	lastActivityAt := waitStartedAt
@@ -2053,18 +2090,22 @@ func (m *appServerManager) waitAppServerTurn(ctx context.Context, live *liveSess
 	defer cancelRead()
 	var history <-chan map[string]any
 	var readVersion uint64
-	var recovered quietTurnHistory
 
+	finish := func(result appServerTurnResult) (PromptResponse, error) {
+		cancelRead()
+		recovered := live.completedTurnItems(ctx, waiter, result)
+		if result.err != nil {
+			return PromptResponse{}, recovered.failure(result.err)
+		}
+		stopReason := result.stopReason
+		if stopReason == "" {
+			stopReason = StopReasonEndTurn
+		}
+		return PromptResponse{StopReason: stopReason, history: recovered}, nil
+	}
 	for {
 		if result, ok := waiter.terminalResult(); ok {
-			if result.err != nil {
-				return PromptResponse{}, recovered.failure(result.err)
-			}
-			stopReason := result.stopReason
-			if stopReason == "" {
-				stopReason = StopReasonEndTurn
-			}
-			return PromptResponse{StopReason: stopReason, history: recovered}, nil
+			return finish(result)
 		}
 		select {
 		case result := <-waiter.ch:
@@ -2091,15 +2132,8 @@ func (m *appServerManager) waitAppServerTurn(ctx context.Context, live *liveSess
 				}
 				lastActivityAt = now
 			}
-			if result.err != nil {
-				return PromptResponse{}, recovered.failure(result.err)
-			}
-			if result.success {
-				stopReason := result.stopReason
-				if stopReason == "" {
-					stopReason = StopReasonEndTurn
-				}
-				return PromptResponse{StopReason: stopReason, history: recovered}, nil
+			if result.success || result.err != nil {
+				return finish(result)
 			}
 		case <-quiet.C:
 			quiet.Reset(quietTurnInterval)
@@ -2113,7 +2147,6 @@ func (m *appServerManager) waitAppServerTurn(ctx context.Context, live *liveSess
 				continue
 			}
 			if m.handleRawTurnCompleted(live.spec.RuntimeID, live, waiter.threadID, map[string]any{"turn": turn}, &readVersion) {
-				recovered = quietTurnItems(turn)
 				live.appClient.logDebugContext(ctx, "recovered Codex turn from native history", "runtime_id", live.spec.RuntimeID, "thread_id", waiter.threadID, "turn_id", waiter.currentTurnID(), "status", turn["status"])
 			}
 		case <-ctx.Done():
@@ -2263,53 +2296,32 @@ func (m *appServerManager) interruptAppServerStructuredOutputTurn(live *liveSess
 	}()
 }
 
-// After process exit, stop only an idle pipe read. Decoding and delivering
-// buffered messages may take longer than the grace period.
+// Capture the remaining pipe data at process exit. Notification delivery can
+// then finish at its own pace even if another process still owns a writer.
 type drainingAppServerStdout struct {
 	*os.File
-	mu       sync.Mutex
-	reading  bool
-	draining bool
-	timer    *time.Timer
+	mu        sync.Mutex
+	remaining *bytes.Reader
 }
 
 func (s *drainingAppServerStdout) Read(p []byte) (int, error) {
 	s.mu.Lock()
-	s.reading = true
-	if s.draining {
-		s.armReadTimeout()
+	defer s.mu.Unlock()
+	if s.remaining != nil {
+		return s.remaining.Read(p)
 	}
-	s.mu.Unlock()
-	n, err := s.File.Read(p)
-	s.mu.Lock()
-	s.reading = false
-	if s.timer != nil {
-		s.timer.Stop()
-		s.timer = nil
-	}
-	s.mu.Unlock()
-	return n, err
+	return s.File.Read(p)
 }
 
 func (s *drainingAppServerStdout) drain() {
+	// Closing the pipe also releases a Read already in progress at exit.
+	deadline := time.AfterFunc(appServerStdoutExitGracePeriod, func() { _ = s.File.Close() })
+	defer deadline.Stop()
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.draining = true
-	if s.reading {
-		s.armReadTimeout()
-	}
-}
-
-func (s *drainingAppServerStdout) armReadTimeout() {
-	var pending *time.Timer
-	pending = time.AfterFunc(appServerStdoutExitGracePeriod, func() {
-		s.mu.Lock()
-		defer s.mu.Unlock()
-		if s.timer == pending {
-			_ = s.File.Close()
-		}
-	})
-	s.timer = pending
+	data, _ := io.ReadAll(io.LimitReader(s.File, appServerStdoutExitBufferBytes))
+	s.remaining = bytes.NewReader(data)
+	_ = s.File.Close()
 }
 
 func (m *appServerManager) readAppServerStdout(runtimeID string, live *liveSession, stdout io.Reader, exited <-chan struct{}) {
@@ -2324,7 +2336,7 @@ func (m *appServerManager) readAppServerStdout(runtimeID string, live *liveSessi
 		if errors.Is(err, os.ErrClosed) {
 			select {
 			case <-exited:
-				return // The parent closed an idle read after the worker exited.
+				return // The remaining pipe data was collected after exit.
 			default:
 			}
 		}

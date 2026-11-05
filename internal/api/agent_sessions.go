@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"net/http"
 	"regexp"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -243,6 +244,11 @@ func (h *Handler) runSessionResponse(ctx context.Context, w http.ResponseWriter,
 			}
 		}()
 		sink = agentengine.EventSinkFunc(func(_ context.Context, event agentengine.TurnEvent) error {
+			if event.RecoveredText != nil {
+				if err := eventStream.restorePendingText(event.RecoveredText); err != nil {
+					return err
+				}
+			}
 			switch event.Kind {
 			case agentengine.TurnEventTextDelta:
 				if event.Phase == "commentary" || event.TextSnapshot {
@@ -813,7 +819,8 @@ type agentSessionEventStream struct {
 	contentIndex  int
 	textBlockOpen bool
 	tools         map[string]*agentSessionStreamTool
-	pendingTools  []*agentSessionStreamTool // In tool_use order, until their following text can be delivered.
+	pendingTools  []*agentSessionStreamTool       // In tool_use order, until their following text can be delivered.
+	recoveredText []agentengine.RecoveredTextPart // Non-nil while terminal history owns the buffered answer.
 	text          strings.Builder
 	heartbeatStop chan struct{}
 	heartbeatDone chan struct{}
@@ -915,11 +922,56 @@ func (s *agentSessionEventStream) writeMessageStart(messageID string, inputs []i
 }
 
 func (s *agentSessionEventStream) writeText(delta string) error {
+	if s.recoveredText != nil {
+		return nil
+	}
 	if n := len(s.pendingTools); n > 0 {
 		s.pendingTools[n-1].followingText.WriteString(delta)
 		return nil
 	}
 	return s.writeDelta(delta)
+}
+
+// Replace only text the client has not received. The same recovered events may also
+// carry ordinary deltas for consumers that had already displayed the live text.
+func (s *agentSessionEventStream) restorePendingText(parts []agentengine.RecoveredTextPart) error {
+	if s.recoveredText != nil || !slices.ContainsFunc(s.pendingTools, func(tool *agentSessionStreamTool) bool {
+		return tool.followingText.Len() > 0
+	}) {
+		return nil
+	}
+	sent := s.text.String()
+	pending := make([]agentengine.RecoveredTextPart, 0, len(parts))
+	recorded := make(map[string]bool)
+	for _, part := range parts {
+		if part.ToolID != "" {
+			recorded[part.ToolID] = true
+		}
+		n := min(len(part.Text), len(sent))
+		if part.Text[:n] != sent[:n] {
+			return nil
+		}
+		part.Text, sent = part.Text[n:], sent[n:]
+		pending = append(pending, part)
+	}
+	if sent != "" {
+		return nil
+	}
+	// A tool missing from an interrupted history can still release its text at turn end.
+	for id, call := range s.tools {
+		if !call.finished && !recorded[id] {
+			s.recoveredText = append(s.recoveredText, agentengine.RecoveredTextPart{ToolID: id})
+		}
+	}
+	if s.recoveredText == nil {
+		s.recoveredText = pending
+	} else {
+		s.recoveredText = append(s.recoveredText, pending...)
+	}
+	for _, call := range s.pendingTools {
+		call.followingText.Reset()
+	}
+	return s.flushPendingText(false)
 }
 
 // Text depends only on tools already started when it arrived. Keep completed
@@ -935,6 +987,18 @@ func (s *agentSessionEventStream) flushPendingText(turnEnded bool) error {
 		}
 		tool.followingText.Reset()
 		s.pendingTools = s.pendingTools[1:]
+	}
+	for len(s.recoveredText) > 0 {
+		part := s.recoveredText[0]
+		if !turnEnded && part.ToolID != "" {
+			if tool := s.tools[part.ToolID]; tool == nil || !tool.finished {
+				break
+			}
+		}
+		if err := s.writeDelta(part.Text); err != nil {
+			return err
+		}
+		s.recoveredText = s.recoveredText[1:]
 	}
 	return nil
 }

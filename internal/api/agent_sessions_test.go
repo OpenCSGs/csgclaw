@@ -620,6 +620,48 @@ func TestAgentSessionStreamHoldsTextUntilOutstandingToolsFinish(t *testing.T) {
 	}
 }
 
+func TestAgentSessionResponsesRestoresBufferedTextInHistoryOrder(t *testing.T) {
+	history := []agentengine.RecoveredTextPart{
+		{Text: "Intro."}, {ToolID: "a"}, {Text: "First. "}, {ToolID: "b"}, {Text: "Second."},
+	}
+	for _, failed := range []bool{false, true} {
+		engine := &fakeSessionEngine{run: func(ctx context.Context, _ string, _ agentengine.TurnRequest, sink agentengine.EventSink) agentengine.TurnResult {
+			events := []agentengine.TurnEvent{
+				{Kind: agentengine.TurnEventTextDelta, Text: "Intro."},
+				{Kind: agentengine.TurnEventToolCallStart, Tool: &agentengine.ToolActivity{ID: "a", Kind: "exec_command"}},
+				{Kind: agentengine.TurnEventToolCallStart, Tool: &agentengine.ToolActivity{ID: "b", Kind: "exec_command"}},
+				{Kind: agentengine.TurnEventTextDelta, ItemID: "second", Text: "Sec"},
+				{Kind: agentengine.TurnEventToolCallUpdate, Tool: &agentengine.ToolActivity{ID: "a", Status: "completed"}, RecoveredText: history},
+				{Kind: agentengine.TurnEventTextDelta, ItemID: "first", Text: "First. ", TextSnapshot: true},
+				{Kind: agentengine.TurnEventToolCallUpdate, Tool: &agentengine.ToolActivity{ID: "b", Status: "completed"}},
+				{Kind: agentengine.TurnEventTextDelta, ItemID: "second", Text: "ond."},
+			}
+			for _, event := range events {
+				if err := sink.Emit(ctx, event); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if failed {
+				return agentengine.TurnResult{Status: agentengine.TurnFailed, Error: &agentengine.TurnError{Code: agentengine.ErrorRuntimeFailed, Message: "worker stopped"}}
+			}
+			return agentengine.TurnResult{Status: agentengine.TurnSucceeded, Output: "Intro.First. Second."}
+		}}
+		handler, _, _, _ := newAgentSessionTestHandler(t, []agent.Agent{sessionCodexAgent("agent-alpha", "Alpha")}, engine, "")
+		response := performAgentSessionRequest(t, handler, "agent-alpha", "recovered", map[string]any{"input": "hello", "stream": true})
+		body := response.Body.String()
+		for _, part := range []string{`"text":"Intro."`, `"tool_use_id":"a"`, `"text":"First. "`, `"tool_use_id":"b"`, `"text":"Second."`, "event: message_stop"} {
+			_, remaining, ok := strings.Cut(body, part)
+			if !ok {
+				t.Fatalf("missing or out of order %s in %s", part, response.Body.String())
+			}
+			body = remaining
+		}
+		if strings.Count(response.Body.String(), `"type":"text_delta"`) != 3 {
+			t.Fatalf("duplicate or partial text in %s", response.Body.String())
+		}
+	}
+}
+
 func TestAgentSessionStreamTextDoesNotWaitForLaterTools(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	stream := newAgentSessionEventStream(recorder)

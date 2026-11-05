@@ -3,6 +3,7 @@ package codex
 import (
 	"context"
 	"errors"
+	"reflect"
 	"strings"
 
 	"csgclaw/internal/activity"
@@ -11,13 +12,26 @@ import (
 
 type conversationTextItem struct {
 	id, phase, text string
-	visibleText     string // Plain text already emitted to append-only streams.
+	visibleText     string // Plain text already sent to the sink, which may still buffer it.
 }
 
 type conversationQuestionFallback struct {
 	questions            []activity.RequestUserInputQuestion
 	sourceID, sourceText string
 	superseded           bool
+}
+
+func (f *conversationQuestionFallback) matchesSource(item quietTurnItem) bool {
+	if f.sourceID != "" {
+		if item.Tool != nil {
+			return f.sourceID == item.Tool.ID
+		}
+		return f.sourceID == item.ItemID
+	}
+	if item.question != nil {
+		return reflect.DeepEqual(f.questions, item.question.Questions)
+	}
+	return f.sourceText != "" && strings.TrimSpace(item.Text) == f.sourceText
 }
 
 // Native item completion is authoritative even when it corrects streamed text.
@@ -106,7 +120,8 @@ func (b *conversationText) String() string {
 
 type conversationOutput struct {
 	conversationText
-	tools map[string]bool // Native tool ID to whether its result was delivered.
+	tools          map[string]bool // Native tool ID to whether its result was delivered.
+	reconciledText bool            // The terminal history has been offered to buffering consumers.
 }
 
 func (o *conversationOutput) observeTool(kind contract.TurnEventKind, tool *contract.ToolActivity) {
@@ -151,17 +166,11 @@ func (o *conversationOutput) restore(ctx context.Context, sink contract.EventSin
 			}
 			native.apply(event.ItemID, phase, event.Text, true)
 		}
-		// A text-only question remains part of the answer until a later
-		// assistant message supersedes it. History also includes earlier items.
-		if form != nil {
-			sourceID := event.ItemID
-			if event.Tool != nil {
-				sourceID = event.Tool.ID
-			}
-			if sourceID != "" && sourceID == form.sourceID ||
-				form.sourceID == "" && form.sourceText != "" && strings.TrimSpace(event.Text) == form.sourceText {
-				native.fallback = form
-			}
+		// When full history identifies the source, only subsequent assistant
+		// text can supersede it. Its final phase may differ from the live one.
+		if form != nil && form.matchesSource(event) {
+			form.superseded = false
+			native.fallback = form
 		}
 	}
 	textOK, legacyPrefix := o.matchHistory(&native)
@@ -177,7 +186,22 @@ func (o *conversationOutput) restore(ctx context.Context, sink contract.EventSin
 			lastVisible = i
 		}
 	}
-	for _, event := range history {
+	// A consumer may still be holding live text behind a missing tool result.
+	// Supply the native order before the first recovered event can release that text.
+	var recoveredText []contract.RecoveredTextPart
+	if textOK && lastVisible >= 0 && !o.reconciledText {
+		for _, finished := range o.tools {
+			if !finished {
+				recoveredText = history.answerParts(&native)
+				break
+			}
+		}
+	}
+	for _, item := range history {
+		event := item.TurnEvent
+		if item.question != nil && event.Kind == contract.TurnEventTextDelta && event.Text == "" {
+			continue
+		}
 		if event.Tool != nil {
 			finished, started := o.tools[event.Tool.ID]
 			if finished || (started && event.Kind == contract.TurnEventToolCallStart) {
@@ -197,7 +221,17 @@ func (o *conversationOutput) restore(ctx context.Context, sink contract.EventSin
 					continue
 				}
 			} else if !o.missingText(&event) {
-				continue
+				// A live snapshot may have updated this item while its previous
+				// text was still buffered. Re-emit the authoritative item so the
+				// pending stream can adopt the history even without a tool result.
+				visible := item.text
+				if item.phase == "commentary" {
+					visible = ""
+				}
+				if recoveredText == nil || item.visibleText == visible {
+					continue
+				}
+				event.Text, event.TextSnapshot = item.text, true
 			}
 			if event.Phase != "commentary" && event.Text != "" {
 				if index < lastVisible {
@@ -210,8 +244,13 @@ func (o *conversationOutput) restore(ctx context.Context, sink contract.EventSin
 				}
 			}
 		}
+		event.RecoveredText = recoveredText
 		if err := emitTurnEvent(ctx, sink, event); err != nil {
 			return err
+		}
+		if recoveredText != nil {
+			o.reconciledText = true
+			recoveredText = nil
 		}
 	}
 	if textOK {
@@ -219,6 +258,18 @@ func (o *conversationOutput) restore(ctx context.Context, sink contract.EventSin
 		o.conversationText = native
 	}
 	return nil
+}
+
+func (h quietTurnHistory) answerParts(native *conversationText) []contract.RecoveredTextPart {
+	parts := make([]contract.RecoveredTextPart, 0, len(h))
+	for _, item := range h {
+		if item.Kind == contract.TurnEventToolCallUpdate {
+			parts = append(parts, contract.RecoveredTextPart{ToolID: item.Tool.ID})
+		} else if item.Kind == contract.TurnEventTextDelta && native.items[native.indexes[item.ItemID]].phase != "commentary" && item.Text != "" {
+			parts = append(parts, contract.RecoveredTextPart{Text: item.Text})
+		}
+	}
+	return parts
 }
 
 func (o *conversationOutput) matchHistory(native *conversationText) (bool, map[string]int) {

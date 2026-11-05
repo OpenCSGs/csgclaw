@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
@@ -96,14 +97,29 @@ func TestAppServerStdoutFailureHelper(t *testing.T) {
 		time.Sleep(10 * time.Second)
 		return
 	}
+	if mode == "write-stdout" {
+		if _, err := fmt.Fprintln(os.Stdout); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile("stdout-writer-ready", nil, 0600); err != nil {
+			t.Fatal(err)
+		}
+		for {
+			time.Sleep(15 * time.Millisecond)
+			if _, err := fmt.Fprintln(os.Stdout); err != nil {
+				return
+			}
+		}
+	}
 	runAppServerHelper(t, func(_ int, msg map[string]any) (map[string]any, bool) {
 		switch msg["method"] {
 		case "thread/start":
 			return rpcResult(msg["id"], map[string]any{"threadId": "main-thread"}), true
 		case "turn/start":
 			return rpcResult(msg["id"], map[string]any{"turnId": "turn-1"}), true
-		case "test/hold-stdout":
-			child := exec.Command(os.Args[0], "-test.run=^TestAppServerStdoutFailureHelper$", "--", "hold-stdout")
+		case "test/hold-stdout", "test/write-stdout":
+			childMode := strings.TrimPrefix(msg["method"].(string), "test/")
+			child := exec.Command(os.Args[0], "-test.run=^TestAppServerStdoutFailureHelper$", "--", childMode)
 			child.Stdout = os.Stdout
 			if err := processgroup.Start(child); err != nil {
 				t.Fatal(err)
@@ -137,37 +153,47 @@ func TestAppServerStopWhileDetachedChildHoldsStdout(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Windows jobs retain descendants; this fixture needs an independent process group")
 	}
-	original := appServerCommandContext
-	appServerCommandContext = func(ctx context.Context, _ string, _ []string) (*exec.Cmd, error) {
-		return exec.CommandContext(ctx, os.Args[0], "-test.run=^TestAppServerStdoutFailureHelper$", "--", "stop"), nil
-	}
-	t.Cleanup(func() { appServerCommandContext = original })
-	spec := testAppServerSessionSpec(t.TempDir())
-	manager := newAppServerManager(testAppServerManagerDeps())
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	if _, err := manager.Start(ctx, spec); err != nil {
-		t.Fatal(err)
-	}
-	handle := SessionHandle{RuntimeID: spec.RuntimeID}
-	t.Cleanup(func() { _ = manager.Stop(context.Background(), handle) })
-	result, err := manager.liveSession(spec.RuntimeID).appClient.request(ctx, "test/hold-stdout", nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var child struct{ PID int }
-	if err := json.Unmarshal(result, &child); err != nil || child.PID <= 0 {
-		t.Fatalf("invalid helper pid: %s, %v", result, err)
-	}
-	t.Cleanup(func() { _ = processgroup.Stop(child.PID, true) })
-	stopCtx, stopCancel := context.WithTimeout(context.Background(), time.Second)
-	defer stopCancel()
-	if err := manager.Stop(stopCtx, handle); err != nil {
-		t.Fatalf("stop with inherited stdout: %v", err)
-	}
-	log, err := os.ReadFile(spec.StderrPath)
-	if err != nil || strings.Contains(string(log), "stdout unavailable") {
-		t.Fatalf("unexpected stdout error on stop: %s, %v", log, err)
+	for _, mode := range []string{"hold-stdout", "write-stdout"} {
+		t.Run(mode, func(t *testing.T) {
+			original := appServerCommandContext
+			appServerCommandContext = func(ctx context.Context, _ string, _ []string) (*exec.Cmd, error) {
+				return exec.CommandContext(ctx, os.Args[0], "-test.run=^TestAppServerStdoutFailureHelper$", "--", "stop"), nil
+			}
+			t.Cleanup(func() { appServerCommandContext = original })
+			spec := testAppServerSessionSpec(t.TempDir())
+			manager := newAppServerManager(testAppServerManagerDeps())
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			if _, err := manager.Start(ctx, spec); err != nil {
+				t.Fatal(err)
+			}
+			handle := SessionHandle{RuntimeID: spec.RuntimeID}
+			t.Cleanup(func() { _ = manager.Stop(context.Background(), handle) })
+			result, err := manager.liveSession(spec.RuntimeID).appClient.request(ctx, "test/"+mode, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var child struct{ PID int }
+			if err := json.Unmarshal(result, &child); err != nil || child.PID <= 0 {
+				t.Fatalf("invalid helper pid: %s, %v", result, err)
+			}
+			t.Cleanup(func() { _ = processgroup.Stop(child.PID, true) })
+			if mode == "write-stdout" {
+				waitForRuntime(t, func() bool {
+					_, err := os.Stat(filepath.Join(spec.WorkspaceDir, "stdout-writer-ready"))
+					return err == nil
+				})
+			}
+			stopCtx, stopCancel := context.WithTimeout(context.Background(), time.Second)
+			defer stopCancel()
+			if err := manager.Stop(stopCtx, handle); err != nil {
+				t.Fatalf("stop with inherited stdout: %v", err)
+			}
+			log, err := os.ReadFile(spec.StderrPath)
+			if err != nil || strings.Contains(string(log), "stdout unavailable") {
+				t.Fatalf("unexpected stdout error on stop: %s, %v", log, err)
+			}
+		})
 	}
 }
 

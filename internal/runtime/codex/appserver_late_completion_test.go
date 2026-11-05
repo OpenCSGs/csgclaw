@@ -322,3 +322,74 @@ func TestLegacyContentAfterIdentifiedSuccessor(t *testing.T) {
 		t.Fatalf("third terminal: %+v done=%v", result, done)
 	}
 }
+
+func TestIdentifiedSuccessorRecoversOnlyItsOwnItems(t *testing.T) {
+	for _, tc := range []struct {
+		name, terminal, history, want string
+	}{
+		{"legacy", "legacy", "current", "Next answer"},
+		{"native", "native", "current", "Next answer"},
+		{"native with items", "inline", "", "Next answer"},
+		{"reused legacy item ID", "native", "reused", "Next answer"},
+		{"contradictory inline turn", "mismatched", "current", "Next answer"},
+		{"different turn", "native", "previous", ""},
+		{"unavailable history", "legacy", "timeout", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				f := startQuietTurn(t)
+				defer close(f.live.done)
+				// The preceding turn was recovered before its final wire items
+				// arrived. A rollout message ID can differ from its native item ID.
+				f.live.mu.Lock()
+				f.live.trackAppServerTurnLocked("thread", "old", true)
+				if tc.history == "reused" {
+					old := f.live.turnThreads["old"]
+					old.recoveredItems = map[string]struct{}{"wire-1": {}, "wire-2": {}}
+					f.live.turnThreads["old"] = old
+				}
+				f.live.mu.Unlock()
+				f.live.appClient.onNotification = func(note appServerNotification) {
+					f.manager.handleAppServerNotification("rt", f.live, note)
+				}
+				f.live.appClient.handleLine(`{"type":"response_item","payload":{"type":"message","id":"wire-1","role":"assistant","phase":"final_answer","content":[{"type":"output_text","text":"Previous answer"}]}}`)
+				f.live.appClient.handleLine(`{"type":"response_item","payload":{"type":"message","id":"wire-2","role":"assistant","phase":"final_answer","content":[{"type":"output_text","text":"Next answer"}]}}`)
+				f.requireWaiting(t)
+
+				const items = `"itemsView":"full","items":[{"id":"native-2","type":"agentMessage","text":"Next answer","phase":"final_answer"}]`
+				switch tc.terminal {
+				case "legacy":
+					f.live.appClient.handleLine(`{"type":"event_msg","payload":{"type":"task_complete","turn_id":"turn"}}`)
+				case "native":
+					f.live.appClient.handleLine(`{"jsonrpc":"2.0","method":"turn/completed","params":{"threadId":"thread","turn":{"id":"turn","status":"completed"}}}`)
+				case "inline":
+					f.live.appClient.handleLine(`{"jsonrpc":"2.0","method":"turn/completed","params":{"threadId":"thread","turn":{"id":"turn","status":"completed",` + items + `}}}`)
+				case "mismatched":
+					f.live.appClient.handleLine(`{"jsonrpc":"2.0","method":"turn/completed","params":{"threadId":"thread","turnId":"turn","turn":{"id":"old","status":"completed","itemsView":"full","items":[{"type":"agentMessage","id":"old-item","text":"Wrong turn"}]}}}`)
+				}
+				switch tc.history {
+				case "current", "reused":
+					f.reply(t, "thread/turns/list", `{"data":[{"id":"turn","status":"completed",`+items+`}]}`)
+				case "previous":
+					f.reply(t, "thread/turns/list", `{"data":[{"id":"old","status":"completed",`+items+`}]}`)
+				case "timeout":
+					f.receive(t, "thread/turns/list")
+					time.Sleep(5 * time.Second)
+				}
+				synctest.Wait()
+				select {
+				case <-f.done:
+				default:
+					t.Fatal("identified terminal kept waiting")
+				}
+				var output conversationOutput
+				if err := output.restore(t.Context(), nil, f.response.history); err != nil {
+					t.Fatal(err)
+				}
+				if f.err != nil || f.response.StopReason != StopReasonEndTurn || output.String() != tc.want {
+					t.Fatalf("result=%v error=%v output=%q want=%q", f.response, f.err, output.String(), tc.want)
+				}
+			})
+		})
+	}
+}

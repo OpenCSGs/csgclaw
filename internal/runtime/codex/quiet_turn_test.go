@@ -302,6 +302,36 @@ func TestQuietTurnRestoresMissingItemsInNativeOrder(t *testing.T) {
 	}
 }
 
+func TestQuietTurnRestoresTextBehindMissingToolResult(t *testing.T) {
+	var output conversationOutput
+	output.observeTool(contract.TurnEventToolCallStart, &contract.ToolActivity{ID: "tool", Kind: "exec_command"})
+	output.apply("second", "unknown", "Sec", false)
+	history := quietTurnItems(map[string]any{"itemsView": "full", "items": []any{
+		map[string]any{"id": "tool", "type": "commandExecution", "status": "completed"},
+		map[string]any{"id": "first", "type": "agentMessage", "text": "First. "},
+		map[string]any{"id": "second", "type": "agentMessage", "phase": "final_answer", "text": "Second."},
+	}})
+	var parts []contract.RecoveredTextPart
+	sink := contract.EventSinkFunc(func(_ context.Context, event contract.TurnEvent) error {
+		if event.RecoveredText != nil {
+			if event.Kind != contract.TurnEventToolCallUpdate || event.Tool.ID != "tool" {
+				t.Fatalf("unexpected history boundary: %+v", event)
+			}
+			parts = append(parts, event.RecoveredText...)
+		}
+		return nil
+	})
+	for range 2 {
+		if err := output.restore(t.Context(), sink, history); err != nil {
+			t.Fatal(err)
+		}
+	}
+	want := []contract.RecoveredTextPart{{ToolID: "tool"}, {Text: "First. "}, {Text: "Second."}}
+	if !slices.Equal(parts, want) || output.String() != "First. Second." {
+		t.Fatalf("history=%+v answer=%q", parts, output.String())
+	}
+}
+
 func TestQuietTurnFailureDeliversStoredToolOutcome(t *testing.T) {
 	history := quietTurnItems(map[string]any{"itemsView": "full", "items": []any{
 		map[string]any{"id": "cmd", "type": "commandExecution", "status": "failed", "aggregatedOutput": "exit 1"},
@@ -468,6 +498,141 @@ func TestQuietTurnRecoveryPreservesTextOnlyQuestions(t *testing.T) {
 			}
 			if got := output.String(); got != tc.want {
 				t.Fatalf("recovered output = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestQuietTurnReclassifiesTextAfterQuestion(t *testing.T) {
+	for _, tc := range []struct{ phase, want string }{
+		{"commentary", "Choose.\n\nWhich option?"},
+		{"final_answer", "Choose.Checking."},
+	} {
+		t.Run(tc.phase, func(t *testing.T) {
+			var output conversationOutput
+			form := activity.StructuredOutputArtifact{RequestUserInput: &activity.RequestUserInputArgs{Questions: []activity.RequestUserInputQuestion{{ID: "q", Question: "Which option?"}}}}
+			event := activity.RuntimeEvent{Kind: activity.RuntimeEventStructuredOutput, ToolCallID: "ask", Text: "Choose.", Payload: form}
+			var files []*contract.OutputFile
+			if result := (&ConversationAdapter{}).handleEvent(t.Context(), contract.TurnRequest{Interaction: contract.InteractionTextOnly}, nil, event, &output, &files); result != nil {
+				t.Fatal(result)
+			}
+			output.apply("ask", "final_answer", "Choose.", false)
+			output.apply("next", "unknown", "Checking.", false)
+			history := quietTurnItems(map[string]any{"itemsView": "full", "items": []any{
+				map[string]any{"id": "ask", "type": "agentMessage", "phase": "final_answer", "text": "Choose."},
+				map[string]any{"id": "next", "type": "agentMessage", "phase": tc.phase, "text": "Checking."},
+			}})
+			if err := output.restore(t.Context(), nil, history); err != nil {
+				t.Fatal(err)
+			}
+			if got := output.String(); got != tc.want {
+				t.Fatalf("recovered response = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestQuietTurnLocatesStructuredOnlyQuestionWithoutReplayingIt(t *testing.T) {
+	const record = structuredOutputPrefix + `request_user_input {"questions":[{"id":"q","header":"Decision","question":"Which option?","options":[]}]}`
+	for _, sourceID := range []string{"ask", ""} {
+		t.Run("source="+sourceID, func(t *testing.T) {
+			manager, live, raw := testAppServerEventAdapter(t)
+			manager.handleRawItemNotification("rt", live, "main-thread", "item/completed", map[string]any{
+				"item": map[string]any{"id": sourceID, "type": "agentMessage", "phase": "final_answer", "text": record},
+			})
+			var output conversationOutput
+			var files []*contract.OutputFile
+			for _, event := range raw.snapshot() {
+				if result := (&ConversationAdapter{}).handleEvent(t.Context(), contract.TurnRequest{Interaction: contract.InteractionTextOnly}, nil, event, &output, &files); result != nil {
+					t.Fatal(result)
+				}
+			}
+			if got := output.String(); got != "Which option?" {
+				t.Fatalf("live question = %q", got)
+			}
+			items := []any{
+				map[string]any{"id": "intro", "type": "agentMessage", "text": "Intro. "},
+				map[string]any{"id": "ask", "type": "agentMessage", "text": record},
+			}
+			var delivered []string
+			sink := contract.EventSinkFunc(func(_ context.Context, event contract.TurnEvent) error {
+				if event.Kind != contract.TurnEventTextDelta || event.Text == "" || event.Output != nil || event.Interaction != nil {
+					t.Fatalf("unexpected history event: %+v", event)
+				}
+				delivered = append(delivered, event.Text)
+				return nil
+			})
+			if err := output.restore(t.Context(), sink, quietTurnItems(map[string]any{"itemsView": "full", "items": items})); err != nil {
+				t.Fatal(err)
+			}
+			if got := output.String(); got != "Intro. \n\nWhich option?" {
+				t.Fatalf("recovered question = %q", got)
+			}
+			items = append(items, map[string]any{"id": "answer", "type": "agentMessage", "phase": "final_answer", "text": "Done."})
+			for range 2 {
+				if err := output.restore(t.Context(), sink, quietTurnItems(map[string]any{"itemsView": "full", "items": items})); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if got := output.String(); got != "Intro. Done." || !slices.Equal(delivered, []string{"Intro. ", "Done."}) {
+				t.Fatalf("recovered response = %q, events = %q", got, delivered)
+			}
+		})
+	}
+}
+
+func TestQuietTurnRestoresBufferedTextWhenToolHasNoResult(t *testing.T) {
+	var output conversationOutput
+	output.observeTool(contract.TurnEventToolCallStart, &contract.ToolActivity{ID: "tool", Kind: "exec_command"})
+	output.apply("second", "final_answer", "Sec", false)
+	history := quietTurnItems(map[string]any{"itemsView": "full", "status": "interrupted", "items": []any{
+		map[string]any{"id": "tool", "type": "commandExecution", "status": "inProgress"},
+		map[string]any{"id": "first", "type": "agentMessage", "text": "First. "},
+		map[string]any{"id": "second", "type": "agentMessage", "text": "Second."},
+	}})
+	var events []contract.TurnEvent
+	sink := contract.EventSinkFunc(func(_ context.Context, event contract.TurnEvent) error {
+		events = append(events, event)
+		return nil
+	})
+	if err := output.restoreFailure(t.Context(), sink, history.failure(errors.New("interrupted"))); err != nil {
+		t.Fatal(err)
+	}
+	want := []contract.RecoveredTextPart{{Text: "First. "}, {Text: "Second."}}
+	if len(events) != 2 || !events[0].TextSnapshot || events[0].Text != "First. " || !slices.Equal(events[0].RecoveredText, want) ||
+		events[1].Text != "ond." || len(events[1].RecoveredText) != 0 {
+		t.Fatalf("recovered events = %+v; want history on the first text snapshot", events)
+	}
+}
+
+func TestQuietTurnRestoresSnapshotStillBufferedBehindTool(t *testing.T) {
+	for _, tc := range []struct {
+		phase string
+		want  []contract.RecoveredTextPart
+	}{
+		{"final_answer", []contract.RecoveredTextPart{{Text: "New"}}},
+		{"commentary", []contract.RecoveredTextPart{}},
+	} {
+		t.Run(tc.phase, func(t *testing.T) {
+			var output conversationOutput
+			output.observeTool(contract.TurnEventToolCallStart, &contract.ToolActivity{ID: "tool", Kind: "exec_command"})
+			output.apply("answer", "unknown", "Old", false)
+			output.apply("answer", tc.phase, "New", true)
+			history := quietTurnItems(map[string]any{"itemsView": "full", "items": []any{
+				map[string]any{"id": "answer", "type": "agentMessage", "text": "New", "phase": tc.phase},
+			}})
+			var events []contract.TurnEvent
+			for range 2 {
+				err := output.restore(t.Context(), contract.EventSinkFunc(func(_ context.Context, event contract.TurnEvent) error {
+					events = append(events, event)
+					return nil
+				}), history)
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+			if len(events) != 1 || !events[0].TextSnapshot || events[0].ItemID != "answer" || events[0].RecoveredText == nil || !slices.Equal(events[0].RecoveredText, tc.want) {
+				t.Fatalf("recovered events = %+v", events)
 			}
 		})
 	}
