@@ -217,3 +217,108 @@ func TestUnidentifiedCompletionWithoutRecoveryUsesBoundTurn(t *testing.T) {
 		t.Fatalf("legacy terminal=%+v done=%v", result, done)
 	}
 }
+
+func TestRecoveredTurnStillAllowsResultsForCurrentItems(t *testing.T) {
+	manager, live, sink := testAppServerEventAdapter(t)
+	const thread = "main-thread"
+	waiter, err := live.registerAppServerTurnWaiter(thread)
+	if err != nil {
+		t.Fatal(err)
+	}
+	waiter.setTurnID("old")
+	version := waiter.progressVersion()
+	if !manager.handleRawTurnCompleted("rt", live, thread, map[string]any{"turnId": "old", "status": "completed"}, &version) {
+		t.Fatal("expected historical completion")
+	}
+	live.removeAppServerTurnWaiter(thread, waiter)
+	first, err := live.registerAppServerTurnWaiter(thread)
+	if err != nil {
+		t.Fatal(err)
+	}
+	first.setTurnID("current")
+	second, err := live.registerAppServerTurnWaiter("other")
+	if err != nil {
+		t.Fatal(err)
+	}
+	second.setTurnID("other-current")
+
+	note := func(method string, params map[string]any) {
+		manager.handleAppServerNotification("rt", live, appServerNotification{Method: method, Params: mustJSONRaw(t, params)})
+	}
+	for _, call := range []struct{ thread, turn, id string }{{thread, "current", "cmd"}, {"other", "other-current", "other-cmd"}, {thread, "current", "shared"}, {"other", "other-current", "shared"}} {
+		note("item/started", map[string]any{"threadId": call.thread, "turnId": call.turn, "item": map[string]any{"id": call.id, "type": "commandExecution", "command": "pwd"}})
+	}
+	end := func(threadID, id string) {
+		note("item/completed", map[string]any{"threadId": threadID, "item": map[string]any{"id": id, "type": "commandExecution", "status": "completed", "aggregatedOutput": "/work"}})
+	}
+	before := len(sink.snapshot())
+	end("", "shared") // Same item ID in two active threads.
+	end(thread, "unknown")
+	if len(sink.snapshot()) != before {
+		t.Fatal("unclaimed tool result escaped its thread")
+	}
+	end("", "cmd")
+	end("other", "shared")
+	events := sink.snapshot()[before:]
+	if len(events) != 2 || events[0].Kind != SessionEventToolCallUpdate || events[0].SessionID != thread || events[0].ToolCallID != "cmd" || events[1].SessionID != "other" || events[1].ToolCallID != "shared" {
+		t.Fatalf("tool results: %+v", events)
+	}
+	manager.handleLegacyResponseItemEvent("rt", live, map[string]any{"type": "function_call", "threadId": "other", "turn_id": "other-current", "call_id": "legacy-new", "name": "update_plan", "arguments": "{}"})
+	manager.handleLegacyResponseItemEvent("rt", live, map[string]any{"type": "function_call_output", "call_id": "legacy-new", "output": "Plan updated"})
+	events = sink.snapshot()
+	if last := events[len(events)-1]; last.Kind != SessionEventToolCallUpdate || last.SessionID != "other" || last.ToolCallID != "legacy-new" || last.ToolTitle != "update_plan" {
+		t.Fatalf("legacy result routed to wrong thread: %+v", last)
+	}
+
+	live.removeAppServerTurnWaiter(thread, first)
+	before = len(sink.snapshot())
+	manager.handleLegacyResponseItemEvent("rt", live, map[string]any{"type": "message", "id": "unscoped", "role": "assistant", "content": []any{map[string]any{"type": "output_text", "text": "unknown owner"}}})
+	if len(sink.snapshot()) != before {
+		t.Fatal("unscoped legacy message was assigned to the remaining foreign thread")
+	}
+}
+
+func TestLegacyContentAfterIdentifiedSuccessor(t *testing.T) {
+	manager, live, sink := testAppServerEventAdapter(t)
+	const thread = "main-thread"
+	register := func(id string) *appServerTurnWaiter {
+		t.Helper()
+		waiter, err := live.registerAppServerTurnWaiter(thread)
+		if err != nil {
+			t.Fatal(err)
+		}
+		waiter.setTurnID(id)
+		live.trackAppServerTurn(thread, id)
+		return waiter
+	}
+	first := register("first")
+	version := first.progressVersion()
+	if !manager.handleRawTurnCompleted("rt", live, thread, map[string]any{"turn": map[string]any{"id": "first", "status": "completed", "items": []any{map[string]any{"id": "old-message", "type": "agentMessage"}}}}, &version) {
+		t.Fatal("expected recovery")
+	}
+	live.removeAppServerTurnWaiter(thread, first)
+	second := register("second")
+	if !manager.handleRawTurnCompleted("rt", live, thread, map[string]any{"turnId": "second", "status": "completed"}, nil) {
+		t.Fatal("normal successor did not complete")
+	}
+	live.removeAppServerTurnWaiter(thread, second)
+	third := register("third")
+	message := func(id, text string) {
+		manager.handleLegacyResponseItemEvent("rt", live, map[string]any{"type": "message", "id": id, "role": "assistant", "phase": "final_answer", "content": []any{map[string]any{"type": "output_text", "text": text}}})
+	}
+	message("old-message", "late")
+	message("", "unidentified")
+	manager.handleLegacyAppServerEvent("rt", live, map[string]any{"type": "turn_aborted", "turn_id": "first"})
+	message("new-message", "Third answer")
+	events := sink.snapshot()
+	if len(events) != 1 || events[0].Kind != SessionEventTextDelta || events[0].Text != "Third answer" {
+		t.Fatalf("third turn content: %+v", events)
+	}
+	if _, done := third.terminalResult(); done {
+		t.Fatal("legacy content without a turn ID ended the current turn")
+	}
+	manager.handleLegacyAppServerEvent("rt", live, map[string]any{"type": "task_complete", "turn_id": "third"})
+	if result, done := third.terminalResult(); !done || !result.success || result.turnID != "third" {
+		t.Fatalf("third terminal: %+v done=%v", result, done)
+	}
+}

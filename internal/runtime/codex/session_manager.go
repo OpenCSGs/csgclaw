@@ -48,7 +48,7 @@ type liveSession struct {
 	turnThreads           map[string]appServerTrackedTurn
 	turnThreadOrder       []string
 	commandOutputs        map[string]*appServerCommandOutputState
-	legacyTools           map[string]map[string]legacyToolCall
+	legacyTools           map[string]*legacyTurnTools
 	replayedAgentMessages map[string]struct{}
 	streamedAgentMessages map[string]struct{}
 	streamedAgentThreads  map[string]struct{}

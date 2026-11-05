@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -121,19 +122,22 @@ func (m *appServerManager) handleRawAppServerNotification(runtimeID string, live
 	threadID := appServerNotificationThreadID(params)
 	turnID := appServerNotificationTurnID(params)
 	turnEvent := turnID != "" || strings.HasPrefix(method, "turn/") || strings.HasPrefix(method, "item/") || method == "error"
+	if method == "turn/completed" {
+		threadID = live.nativeNotificationThread(threadID, turnID, false)
+		if threadID != "" && live.appServerTracksThread(threadID) {
+			m.handleRawTurnCompleted(runtimeID, live, threadID, params, nil)
+		}
+		return
+	}
 	if turnEvent {
-		threadID = live.nativeNotificationThread(threadID, turnID, method != "turn/completed")
+		threadID, turnID = live.beginTurnNotification(threadID, turnID, notificationItemID(params))
+		if turnID != "" && appServerNotificationTurnID(params) == "" {
+			params["turnId"] = turnID
+		}
 	} else if threadID == "" {
 		threadID = m.appServerPrimaryThreadID(live)
 	}
 	if threadID == "" || !live.appServerTracksThread(threadID) {
-		return
-	}
-	if method == "turn/completed" {
-		m.handleRawTurnCompleted(runtimeID, live, threadID, params, nil)
-		return
-	}
-	if turnEvent && !live.beginTurnNotification(threadID, turnID) {
 		return
 	}
 	live.trackAppServerTurn(threadID, turnID)
@@ -205,7 +209,9 @@ func (m *appServerManager) handleRawTurnCompleted(runtimeID string, live *liveSe
 			}
 		}
 	}
-	waiter, accepted := live.recordNativeCompletion(threadID, &result, quietVersion)
+	turn, _ := params["turn"].(map[string]any)
+	items, _ := turn["items"].([]any)
+	waiter, accepted := live.recordNativeCompletion(threadID, &result, quietVersion, items)
 	if !accepted {
 		return false
 	}
@@ -597,7 +603,7 @@ func (m *appServerManager) handleLegacyAppServerEvent(runtimeID string, live *li
 	case "exec_command_begin":
 		callID := appServerString(params, "call_id")
 		command := appServerString(params, "command")
-		if _, ok := live.recordLegacyTool(threadID, callID, "exec_command", false); !ok {
+		if _, ok := live.recordLegacyTool(threadID, callID, legacyToolCall{name: "exec_command"}); !ok {
 			return
 		}
 		m.publishAppServerEvent(SessionEvent{
@@ -614,22 +620,24 @@ func (m *appServerManager) handleLegacyAppServerEvent(runtimeID string, live *li
 		live.notifyAppServerTurn(threadID, appServerTurnResult{activity: "legacy:exec_command_begin", progress: true})
 	case "exec_command_end":
 		callID := appServerString(params, "call_id")
-		if _, ok := live.recordLegacyTool(threadID, callID, "exec_command", true); !ok {
+		call, ok := live.recordLegacyTool(threadID, callID, legacyToolCall{name: "exec_command", finished: true})
+		if !ok {
 			return
 		}
 		output := firstNonEmpty(appServerString(params, "aggregated_output"), appServerString(params, "output"), appServerString(params, "formatted_output"))
 		status := legacyToolEndStatus(params, output)
-		output = m.decodeAndPublishStructuredToolOutput(runtimeID, threadID, callID, "exec_command", status, output, live)
+		output = m.decodeAndPublishStructuredToolOutput(runtimeID, threadID, callID, call.name, status, output, live)
+		kind, title, payload := legacyResultTool(call.name, params)
 		m.publishAppServerEvent(SessionEvent{
 			RuntimeID:         runtimeID,
 			SessionID:         threadID,
 			Kind:              SessionEventToolCallUpdate,
 			ToolCallID:        callID,
-			ToolKind:          "exec_command",
-			ToolTitle:         "Run shell command",
+			ToolKind:          kind,
+			ToolTitle:         title,
 			ToolStatus:        status,
 			ToolOutputSummary: summarizeToolValue(map[string]any{"output": output}),
-			Payload:           params,
+			Payload:           payload,
 		})
 		live.notifyAppServerTurn(threadID, appServerTurnResult{activity: "legacy:exec_command_end", progress: true})
 	case "patch_apply_begin":
@@ -715,11 +723,16 @@ func (m *appServerManager) handleLegacyResponseItemEvent(runtimeID string, live 
 		live.notifyAppServerTurn(threadID, legacyMessageTurnResult(params, "legacy:response_item:message"))
 	case "function_call":
 		callID := appServerString(params, "call_id")
-		name, ok := live.recordLegacyTool(threadID, callID, appServerString(params, "name"), false)
+		name := appServerString(params, "name")
+		args := decodeLegacyFunctionCallArguments(appServerString(params, "arguments"))
+		call := legacyToolCall{name: name}
+		if name == "write_stdin" {
+			call.ptySession = appServerRequestIDValue(args["session_id"])
+		}
+		_, ok := live.recordLegacyTool(threadID, callID, call)
 		if !ok {
 			return
 		}
-		args := decodeLegacyFunctionCallArguments(appServerString(params, "arguments"))
 		kind, title := "dynamic_tool_call", name
 		payload := map[string]any{"tool": name, "arguments": args}
 		if name == "exec_command" {
@@ -741,26 +754,13 @@ func (m *appServerManager) handleLegacyResponseItemEvent(runtimeID string, live 
 		live.notifyAppServerTurn(threadID, appServerTurnResult{activity: "legacy:response_item:function_call", progress: true})
 	case "function_call_output":
 		callID := appServerString(params, "call_id")
-		name, ok := live.recordLegacyTool(threadID, callID, "", true)
+		call, ok := live.recordLegacyTool(threadID, callID, legacyToolCall{finished: true})
 		if !ok {
 			return
 		}
-		output := legacyFunctionCallOutputText(params["output"])
-		var kind, title, status string
-		payload := params
-		switch name {
-		case "", "exec_command":
-			if name != "" {
-				kind, title = name, "Run shell command"
-			}
-			status = legacyToolEndStatus(params, output)
-			output = m.decodeAndPublishStructuredToolOutput(runtimeID, threadID, callID, kind, status, output, live)
-		default:
-			kind, title = "dynamic_tool_call", name
-			status = legacyToolEndStatus(params, "")
-			payload = cloneAppServerParams(params)
-			payload["tool"] = name
-		}
+		name := call.name
+		status, output := m.legacyFunctionResult(runtimeID, threadID, callID, call, params, live)
+		kind, title, payload := legacyResultTool(name, params)
 		m.publishAppServerEvent(SessionEvent{
 			RuntimeID:         runtimeID,
 			SessionID:         threadID,
@@ -773,6 +773,19 @@ func (m *appServerManager) handleLegacyResponseItemEvent(runtimeID string, live 
 			Payload:           payload,
 		})
 		live.notifyAppServerTurn(threadID, appServerTurnResult{activity: "legacy:response_item:function_call_output", progress: true})
+	}
+}
+
+func legacyResultTool(name string, params map[string]any) (string, string, map[string]any) {
+	switch name {
+	case "":
+		return "", "", params
+	case "exec_command":
+		return name, "Run shell command", params
+	default:
+		payload := cloneAppServerParams(params)
+		payload["tool"] = name
+		return "dynamic_tool_call", name, payload
 	}
 }
 
@@ -929,11 +942,22 @@ func (m *appServerManager) appServerLegacyThreadID(live *liveSession, params map
 		return ""
 	}
 	turnID := legacyNotificationTurnID(params)
-	threadID := live.nativeNotificationThread(appServerNotificationThreadID(params), turnID, true)
-	if threadID == "" || !live.beginTurnNotification(threadID, turnID) {
-		return ""
+	itemID := appServerString(params, "call_id")
+	if itemID == "" {
+		itemID = appServerString(params, "id")
+	}
+	threadID, owner := live.beginTurnNotification(appServerNotificationThreadID(params), turnID, itemID)
+	if turnID == "" && owner != "" {
+		params["turnId"] = owner
 	}
 	return threadID
+}
+
+func notificationItemID(params map[string]any) string {
+	if id := appServerString(params, "itemId"); id != "" {
+		return id
+	}
+	return appServerNestedString(params, "item", "id")
 }
 
 func legacyNotificationTurnID(params map[string]any) string {
@@ -991,6 +1015,13 @@ func legacyFunctionCallOutputText(value any) string {
 }
 
 func legacyToolEndStatus(params map[string]any, output string) string {
+	if status := legacyExplicitToolEndStatus(params); status != "" {
+		return status
+	}
+	return legacyFunctionCallOutputStatus(output)
+}
+
+func legacyExplicitToolEndStatus(params map[string]any) string {
 	if status := activitypkg.TerminalToolStatus(appServerToolStatus(params, "")); status != "" {
 		return status
 	}
@@ -1001,12 +1032,87 @@ func legacyToolEndStatus(params map[string]any, output string) string {
 		}
 	}
 	if !hasSuccess {
-		return legacyFunctionCallOutputStatus(output)
+		return ""
 	}
 	if success {
 		return "completed"
 	}
 	return "failed"
+}
+
+func (m *appServerManager) legacyFunctionResult(runtimeID, threadID, callID string, call legacyToolCall, params map[string]any, live *liveSession) (string, string) {
+	output := legacyFunctionCallOutputText(params["output"])
+	status := legacyExplicitToolEndStatus(params)
+	switch call.name {
+	case "", "exec_command", "shell_command", "write_stdin":
+	default:
+		return firstNonEmpty(status, "completed"), output
+	}
+	process, runningSession := legacyShellProcessStatus(output)
+	if runningSession != "" {
+		// Each PTY poll returns to its caller while the process continues.
+		// Subsequent polls only carry new output.
+		if (status == "" || status == "completed") && strings.Contains(output, structuredOutputPrefix) {
+			cleaned, artifact, _ := decodeStructuredCommandOutput(output)
+			if !structuredOutputArtifactEmpty(artifact) {
+				live.holdLegacyShellArtifact(threadID, runningSession, cleaned, artifact)
+			}
+		}
+		return firstNonEmpty(status, "completed"), output
+	}
+	status = firstNonEmpty(status, process)
+	if status == "" {
+		header, _, formatted := strings.Cut(output, "\nOutput:")
+		if formatted && (strings.HasPrefix(header, "Wall time:") || strings.HasPrefix(header, "Chunk ID:")) {
+			// A formatted poll without an exit status cannot confirm success.
+			return "completed", output
+		}
+		// Older function_call_output records can contain only the command's stdout.
+		status = legacyFunctionCallOutputStatus(output)
+		if call.name == "write_stdin" && strings.HasPrefix(output, "write_stdin failed:") {
+			status = "failed"
+		}
+	}
+	pending := live.takeLegacyShellArtifact(threadID, call.ptySession)
+	if pending == nil || status != "completed" {
+		return status, m.decodeAndPublishStructuredToolOutput(runtimeID, threadID, callID, call.name, status, output, live)
+	}
+	cleaned, artifact, decodeErrors := decodeStructuredCommandOutput(output)
+	pending.mergeArtifact(artifact)
+	pending.appendCleaned(cleaned, false)
+	m.publishStructuredOutputArtifact(runtimeID, threadID, callID, call.name, pending.artifact,
+		append(pending.decodeErrors, decodeErrors...), pending.cleanedPreview.String(), live)
+	return status, cleaned
+}
+
+// Codex puts process metadata before Output:. Text printed by the program may
+// contain the same words and must not change the reported exit status.
+func legacyShellProcessStatus(output string) (status, runningSession string) {
+	for line := range strings.SplitSeq(output, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "Output:" {
+			break
+		}
+		if id, ok := strings.CutPrefix(line, "Process running with session ID "); ok {
+			if _, err := strconv.Atoi(id); err == nil {
+				return "", id
+			}
+		}
+		value, ok := strings.CutPrefix(line, "Process exited with code ")
+		if !ok {
+			value, ok = strings.CutPrefix(line, "Exit code: ")
+		}
+		if ok {
+			if code, err := strconv.Atoi(value); err == nil {
+				if code == 0 {
+					status = "completed"
+				} else {
+					status = "failed"
+				}
+			}
+		}
+	}
+	return status, ""
 }
 
 func legacyFunctionCallOutputStatus(output string) string {
@@ -1028,33 +1134,76 @@ func legacyMessageTurnResult(params map[string]any, activity string) appServerTu
 }
 
 type legacyToolCall struct {
-	name     string
-	finished bool
+	name       string
+	finished   bool
+	ptySession string
 }
 
-// Rollout results carry only a call ID. Typed exec events may describe the same call.
-func (s *liveSession) recordLegacyTool(threadID, callID, name string, finished bool) (string, bool) {
-	if callID == "" || (!finished && name == "") {
-		return "", false
+type legacyTurnTools struct {
+	calls          map[string]legacyToolCall
+	pendingOutputs map[string]*appServerCommandOutputAccumulator
+}
+
+func (s *liveSession) holdLegacyShellArtifact(threadID, ptySession, cleaned string, artifact activitypkg.StructuredOutputArtifact) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	tools := s.legacyTools[threadID]
+	if tools == nil {
+		return
+	}
+	if tools.pendingOutputs == nil {
+		tools.pendingOutputs = make(map[string]*appServerCommandOutputAccumulator)
+	}
+	output := tools.pendingOutputs[ptySession]
+	if output == nil {
+		output = &appServerCommandOutputAccumulator{}
+		tools.pendingOutputs[ptySession] = output
+	}
+	output.mergeArtifact(artifact)
+	output.appendCleaned(cleaned, true)
+}
+
+func (s *liveSession) takeLegacyShellArtifact(threadID, ptySession string) *appServerCommandOutputAccumulator {
+	if ptySession == "" {
+		return nil
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	calls := s.legacyTools[threadID]
-	if previous, ok := calls[callID]; ok {
-		if !finished || previous.finished || (name != "" && name != previous.name) {
-			return "", false
-		}
-		name = previous.name
+	tools := s.legacyTools[threadID]
+	if tools == nil {
+		return nil
 	}
-	if calls == nil {
+	output := tools.pendingOutputs[ptySession]
+	delete(tools.pendingOutputs, ptySession)
+	return output
+}
+
+// Rollout results carry only a call ID. Typed exec events may describe the same call.
+func (s *liveSession) recordLegacyTool(threadID, callID string, call legacyToolCall) (legacyToolCall, bool) {
+	if callID == "" || (!call.finished && call.name == "") {
+		return legacyToolCall{}, false
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	tools := s.legacyTools[threadID]
+	if tools == nil {
 		if s.legacyTools == nil {
-			s.legacyTools = make(map[string]map[string]legacyToolCall)
+			s.legacyTools = make(map[string]*legacyTurnTools)
 		}
-		calls = make(map[string]legacyToolCall)
-		s.legacyTools[threadID] = calls
+		tools = &legacyTurnTools{calls: make(map[string]legacyToolCall)}
+		s.legacyTools[threadID] = tools
 	}
-	calls[callID] = legacyToolCall{name: name, finished: finished}
-	return name, true
+	if previous, ok := tools.calls[callID]; ok {
+		// shell_command also emits an exec_command_end with its function call ID.
+		shellEnd := call.name == "exec_command" && previous.name == "shell_command"
+		if !call.finished || previous.finished || (call.name != "" && call.name != previous.name && !shellEnd) {
+			return legacyToolCall{}, false
+		}
+		call = previous
+		call.finished = true
+	}
+	tools.calls[callID] = call
+	return call, true
 }
 
 func (s *liveSession) hasReplayedAgentMessage(params map[string]any) bool {

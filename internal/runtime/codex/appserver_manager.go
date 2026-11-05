@@ -1516,6 +1516,7 @@ func (m *appServerManager) persistedThreadID(spec SessionSpec) string {
 
 type appServerTurnWaiter struct {
 	// Guarded by liveSession.mu, alongside the thread's cumulative counters.
+	itemTurns                map[string]string // Native item IDs received with an explicit turn ID.
 	tokenUsage               modelusage.Usage
 	pendingUsage             map[string]modelusage.Usage
 	diagnostic               *diagnostics.Record
@@ -1571,8 +1572,19 @@ func (s *liveSession) registerAppServerTurnWaiter(threadID string) (*appServerTu
 func (s *liveSession) removeAppServerTurnWaiter(threadID string, waiter *appServerTurnWaiter) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.turnWaiters[strings.TrimSpace(threadID)] == waiter {
-		delete(s.turnWaiters, strings.TrimSpace(threadID))
+	threadID = strings.TrimSpace(threadID)
+	if s.turnWaiters[threadID] == waiter {
+		if terminal, ok := waiter.terminalResult(); ok && terminal.turnID != "" && terminal.turnID == waiter.currentTurnID() && !s.turnThreads[terminal.turnID].recovered {
+			// An identified successor has finished. Later legacy items can be
+			// delivered again, while the recovered turn and its IDs stay excluded.
+			for id, old := range s.turnThreads {
+				if old.threadID == threadID && old.recovered && !old.successorFinished {
+					old.successorFinished = true
+					s.turnThreads[id] = old
+				}
+			}
+		}
+		delete(s.turnWaiters, threadID)
 	}
 }
 
@@ -1624,8 +1636,10 @@ func (s *liveSession) appServerTurnContext(threadID, turnID string) (context.Con
 }
 
 type appServerTrackedTurn struct {
-	threadID  string
-	recovered bool
+	threadID          string
+	recovered         bool
+	successorFinished bool
+	recoveredItems    map[string]struct{}
 }
 
 func (s *liveSession) trackAppServerTurn(threadID, turnID string) {
@@ -1647,7 +1661,9 @@ func (s *liveSession) trackAppServerTurnLocked(threadID, turnID string, recovere
 	if !exists {
 		s.turnThreadOrder = append(s.turnThreadOrder, turnID)
 	}
-	s.turnThreads[turnID] = appServerTrackedTurn{threadID: threadID, recovered: recovered || tracked.recovered}
+	tracked.threadID = threadID
+	tracked.recovered = recovered || tracked.recovered
+	s.turnThreads[turnID] = tracked
 	for len(s.turnThreadOrder) > appServerTrackedTurnLimit {
 		oldest := s.turnThreadOrder[0]
 		s.turnThreadOrder = s.turnThreadOrder[1:]
@@ -1660,6 +1676,10 @@ func (s *liveSession) trackAppServerTurnLocked(threadID, turnID string, recovere
 func (s *liveSession) nativeNotificationThread(threadID, turnID string, allowPrimaryFallback bool) string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	return s.nativeNotificationThreadLocked(threadID, turnID, allowPrimaryFallback)
+}
+
+func (s *liveSession) nativeNotificationThreadLocked(threadID, turnID string, allowPrimaryFallback bool) string {
 	if owner := s.turnThreads[turnID].threadID; owner != "" {
 		if threadID != "" && threadID != owner {
 			return ""
@@ -1719,25 +1739,74 @@ func (s *liveSession) acceptsTurnNotificationLocked(threadID, turnID string) boo
 	return waiter == nil || waiter.matchesTurn(turnID)
 }
 
-func (s *liveSession) beginTurnNotification(threadID, turnID string) bool {
+// Use an explicit item/turn association before falling back to older protocols'
+// thread routing. Items from recovered history remain excluded by their ID.
+func (s *liveSession) beginTurnNotification(threadID, turnID, itemID string) (string, string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if !s.acceptsTurnNotificationLocked(threadID, turnID) {
-		return false
+	if turnID == "" {
+		var itemThread string
+		if itemID != "" {
+			for id, waiter := range s.turnWaiters {
+				if threadID != "" && threadID != id {
+					continue
+				}
+				if owner := waiter.itemTurns[itemID]; owner != "" {
+					if itemThread != "" {
+						return "", "" // Two active threads use the same item ID.
+					}
+					itemThread, turnID = id, owner
+				}
+			}
+		}
+		for _, old := range s.turnThreads {
+			if !old.recovered || (threadID != "" && old.threadID != threadID) {
+				continue
+			}
+			if _, stale := old.recoveredItems[itemID]; stale {
+				return "", ""
+			}
+			// A sole active waiter on a different thread cannot establish
+			// ownership of an unscoped record from a recovered thread.
+			if threadID == "" && itemThread == "" && !old.successorFinished && s.turnWaiters[old.threadID] == nil {
+				return "", ""
+			}
+		}
+		if itemThread != "" {
+			threadID = itemThread
+		}
+	}
+	threadID = s.nativeNotificationThreadLocked(threadID, turnID, true)
+	if threadID == "" {
+		return "", ""
+	}
+	if turnID == "" && itemID != "" && s.turnWaiters[threadID] != nil {
+		for _, old := range s.turnThreads {
+			if old.threadID == threadID && old.recovered && !old.successorFinished {
+				return "", ""
+			}
+		}
+	} else if !s.acceptsTurnNotificationLocked(threadID, turnID) {
+		return "", ""
 	}
 	if waiter := s.turnWaiters[threadID]; waiter != nil {
-		// Invalidate any pending history lookup before publishing text or
-		// starting work for this notification on the stdout reader.
+		if itemID != "" && turnID != "" {
+			if waiter.itemTurns == nil {
+				waiter.itemTurns = make(map[string]string)
+			}
+			waiter.itemTurns[itemID] = turnID
+		}
+		// Invalidate a pending lookup before publishing this notification.
 		waiter.mu.Lock()
 		waiter.progressSequence++
 		waiter.mu.Unlock()
 	}
-	return true
+	return threadID, turnID
 }
 
 // Claim the terminal event before waking a waiter or publishing to subscribers.
 // A notification can arrive after a native history check has settled this turn.
-func (s *liveSession) recordNativeCompletion(threadID string, result *appServerTurnResult, quietVersion *uint64) (*appServerTurnWaiter, bool) {
+func (s *liveSession) recordNativeCompletion(threadID string, result *appServerTurnResult, quietVersion *uint64, items []any) (*appServerTurnWaiter, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if !s.acceptsTurnNotificationLocked(threadID, result.turnID) {
@@ -1756,6 +1825,22 @@ func (s *liveSession) recordNativeCompletion(threadID string, result *appServerT
 	}
 	if result.turnID != "" {
 		s.trackAppServerTurnLocked(threadID, result.turnID, quietVersion != nil)
+		if quietVersion != nil {
+			old := s.turnThreads[result.turnID]
+			old.recoveredItems = make(map[string]struct{})
+			for id, turn := range waiter.itemTurns {
+				if turn == result.turnID {
+					old.recoveredItems[id] = struct{}{}
+				}
+			}
+			for _, value := range items {
+				item, _ := value.(map[string]any)
+				if id := appServerString(item, "id"); id != "" {
+					old.recoveredItems[id] = struct{}{}
+				}
+			}
+			s.turnThreads[result.turnID] = old
+		}
 	}
 	return waiter, true
 }
@@ -1767,7 +1852,13 @@ func (s *liveSession) notifyAppServerTurn(threadID string, result appServerTurnR
 	}
 	s.mu.Lock()
 	waiter := s.turnWaiters[threadID]
+	// A legacy final-answer item can omit its turn ID. Deliver its text,
+	// but wait for an identified terminal when an older turn was recovered.
+	ambiguousEnd := (result.success || result.err != nil) && result.turnID == "" && !s.acceptsTurnNotificationLocked(threadID, "")
 	s.mu.Unlock()
+	if ambiguousEnd {
+		return true
+	}
 	if waiter == nil {
 		return false
 	}
