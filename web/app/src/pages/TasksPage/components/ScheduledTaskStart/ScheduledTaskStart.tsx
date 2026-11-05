@@ -21,6 +21,7 @@ export function ScheduledTaskStart({ agents, t, busy = false, error = "", focusT
   const [dismissed, setDismissed] = useState(false);
   const [active, setActive] = useState(0);
   const editor = useRef<HTMLTextAreaElement>(null);
+  const activeOption = useRef<HTMLButtonElement>(null);
   const pendingSelection = useRef<number | null>(null);
   useLayoutEffect(() => {
     if (pendingSelection.current === null) return;
@@ -34,15 +35,16 @@ export function ScheduledTaskStart({ agents, t, busy = false, error = "", focusT
     () =>
       query === undefined
         ? []
-        : scheduledTaskExecutors(agents)
-            .filter(
-              (agent) =>
-                executorName(agent).toLocaleLowerCase().includes(query) ||
-                String(agent.id).toLocaleLowerCase().includes(query),
-            )
-            .slice(0, 8),
+        : scheduledTaskExecutors(agents).filter(
+            (agent) =>
+              executorName(agent).toLocaleLowerCase().includes(query) ||
+              String(agent.id).toLocaleLowerCase().includes(query),
+          ),
     [agents, query],
   );
+  useLayoutEffect(() => {
+    activeOption.current?.scrollIntoView({ block: "nearest" });
+  }, [active, candidates]);
   useEffect(() => {
     if (focusToken) editor.current?.focus();
   }, [focusToken]);
@@ -118,20 +120,24 @@ export function ScheduledTaskStart({ agents, t, busy = false, error = "", focusT
               className={styles.mentions}
             >
               {candidates.map((agent, index) => (
-                <button
+                <Button
                   key={agent.id}
+                  ref={index === Math.min(active, candidates.length - 1) ? activeOption : null}
                   id={`scheduled-executor-${index}`}
-                  type="button"
+                  variant="ghost"
+                  size="sm"
                   role="option"
                   aria-selected={active === index}
                   onMouseDown={(event) => event.preventDefault()}
                   onClick={() => choose(agent)}
                 >
-                  <span className={styles.avatar} aria-hidden="true">
-                    <AgentAvatarContent avatar={agent.avatar} fallback={executorName(agent).slice(0, 1)} />
+                  <span className={styles.executor}>
+                    <span className={styles.avatar} aria-hidden="true">
+                      <AgentAvatarContent avatar={agent.avatar} fallback={executorName(agent).slice(0, 1)} />
+                    </span>
+                    <span>{executorName(agent)}</span>
                   </span>
-                  <span>{executorName(agent)}</span>
-                </button>
+                </Button>
               ))}
             </div>
           ) : null}
