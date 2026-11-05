@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { workspaceQueryKeys } from "@/hooks/workspace/workspaceQueries";
 import {
@@ -27,27 +27,37 @@ export function useTemplateVersions(
   const [error, setError] = useState("");
   const generation = useRef(0);
   const id = String(template.id || "");
+  const activeRevision = template.revision || 1;
+  const reportLoadError = useEffectEvent((err: unknown) => {
+    setError(localizeAPIError(err, t, t("agentActionFailed")));
+  });
   useEffect(() => {
     const request = ++generation.current;
+    let cancelled = false;
     setBusy(true);
     setError("");
     setRevision(null);
     setListing(null);
     setFile(null);
     fetchTemplateVersions(id)
-      .then((items) => {
-        if (generation.current === request) setVersions([...items].reverse());
+      .then(async (items) => {
+        if (cancelled || generation.current !== request) return;
+        setVersions([...items].reverse());
+        if (!items.some((item) => item.revision === activeRevision)) return;
+        setRevision(activeRevision);
+        const result = await fetchTemplateVersionWorkspace(id, activeRevision, "");
+        if (!cancelled && generation.current === request) setListing(result);
       })
       .catch((err: unknown) => {
-        if (generation.current === request) setError(localizeAPIError(err, t, t("agentActionFailed")));
+        if (!cancelled && generation.current === request) reportLoadError(err);
       })
       .finally(() => {
-        if (generation.current === request) setBusy(false);
+        if (!cancelled && generation.current === request) setBusy(false);
       });
     return () => {
-      generation.current = request + 1;
+      cancelled = true;
     };
-  }, [id, template.revision, t]);
+  }, [id, activeRevision]);
 
   async function browse(selectedRevision: number, path = "", isFile = false) {
     const request = ++generation.current;
@@ -106,7 +116,7 @@ export function useTemplateVersions(
     }
   }
   async function remove(selectedRevision: number) {
-    if (busy) return;
+    if (busy) return false;
     const request = ++generation.current;
     setBusy(true);
     setError("");
@@ -126,8 +136,10 @@ export function useTemplateVersions(
         setListing(null);
         setFile(null);
       }
+      return true;
     } catch (err) {
       if (generation.current === request) setError(localizeAPIError(err, t, t("agentActionFailed")));
+      return false;
     } finally {
       if (generation.current === request) setBusy(false);
     }

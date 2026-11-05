@@ -104,6 +104,9 @@ import { avatarFallbackText } from "@/shared/avatar";
 import type { AgentTemplatePublishTarget } from "@/api/hub";
 import {
   Button,
+  Field,
+  TextInput,
+  TextArea,
   Switch,
   Checkbox,
   DialogBody,
@@ -1428,81 +1431,89 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
             <DialogCloseButton label={t("close")} size="sm" variant="tertiaryGray" />
           </DialogHeader>
           <DialogBody className="agent-publish-dialog-body">
-            {linkedTemplate?.revision ? (
-              <p>
-                {t("agentTemplateNextVersion", {
-                  version: (linkedTemplate.latest_revision || linkedTemplate.revision) + 1,
-                })}
-              </p>
-            ) : null}
-            {publishTarget === "official" ? (
-              <div className="grid gap-2 text-sm text-[var(--muted)]">
-                <p>{t("agentTemplateHubGuidance")}</p>
-                <p>{t("agentTemplateHubManagementHint")}</p>
+            <section className="agent-publish-section" aria-label={t("agentPublishTemplateDetails")}>
+              <h3>{t("agentPublishTemplateDetails")}</h3>
+              <div className="agent-publish-name-fields">
+                <Field
+                  className="agent-publish-field"
+                  label={t("agentPublishTemplateName")}
+                  hint={t(linkedTemplate ? "agentPublishTemplateNameReadonlyHint" : "agentPublishTemplateNameHint")}
+                  error={publishTemplateNameError || undefined}
+                >
+                  <TextInput
+                    size="sm"
+                    value={publishTemplateName}
+                    readOnly={Boolean(linkedTemplate)}
+                    maxLength={TEMPLATE_NAME_MAX_LENGTH}
+                    aria-label={t("agentPublishTemplateName")}
+                    onChange={(event) => {
+                      setPublishTemplateName(event.target.value);
+                      setPublishTemplateNameError("");
+                      setPublishAttempted(false);
+                    }}
+                  />
+                </Field>
+                <Field
+                  className="agent-publish-field"
+                  label={t("agentPublishTemplateDisplayName")}
+                  hint={t("agentPublishTemplateDisplayNameHint")}
+                >
+                  <TextInput
+                    size="sm"
+                    value={publishTemplateDisplayName}
+                    maxLength={32}
+                    aria-label={t("agentPublishTemplateDisplayName")}
+                    onChange={(event) => setPublishTemplateDisplayName(event.target.value)}
+                  />
+                </Field>
               </div>
-            ) : null}
-            <label className="agent-publish-field">
-              <span>{t("agentPublishTemplateName")}</span>
-              <input
-                value={publishTemplateName}
-                readOnly={Boolean(linkedTemplate)}
-                maxLength={TEMPLATE_NAME_MAX_LENGTH}
-                aria-label={t("agentPublishTemplateName")}
-                aria-invalid={Boolean(publishTemplateNameError)}
-                aria-describedby={publishTemplateNameError ? "agent-publish-template-name-error" : undefined}
-                onChange={(event) => {
-                  setPublishTemplateName(event.target.value);
-                  setPublishTemplateNameError("");
-                  setPublishAttempted(false);
-                }}
-              />
-              <small>{t("agentPublishTemplateNameHint")}</small>
-              {publishTemplateNameError ? (
-                <span id="agent-publish-template-name-error" className="agent-publish-field-error" role="alert">
-                  {publishTemplateNameError}
-                </span>
-              ) : null}
-            </label>
-            <label className="agent-publish-field">
-              <span>{t("agentPublishTemplateDisplayName")}</span>
-              <input
-                value={publishTemplateDisplayName}
-                maxLength={32}
-                aria-label={t("agentPublishTemplateDisplayName")}
-                onChange={(event) => setPublishTemplateDisplayName(event.target.value)}
-              />
-              <small>{t("agentPublishTemplateDisplayNameHint")}</small>
-            </label>
-            <label className="agent-publish-field">
-              <span>{t("agentPublishTemplateDescription")}</span>
-              <textarea
-                rows={4}
-                value={publishTemplateDescription}
-                aria-label={t("agentPublishTemplateDescription")}
-                onChange={(event) => setPublishTemplateDescription(event.target.value)}
-              />
-            </label>
-            <label className="agent-publish-field">
-              <span>{t("templateCommitMessage")}</span>
-              <textarea
-                rows={2}
-                value={publishCommitMessage}
-                aria-label={t("templateCommitMessage")}
-                onChange={(event) => setPublishCommitMessage(event.target.value)}
-              />
-            </label>
-            {supportsTemplateMemory ? (
-              <label className="agent-publish-memory-option">
-                <Checkbox
-                  aria-label={t("agentPublishIncludeMemory")}
-                  checked={publishTemplateIncludeMemory}
-                  onCheckedChange={(checked) => setPublishTemplateIncludeMemory(checked === true)}
+              <Field className="agent-publish-field" label={t("agentPublishTemplateDescription")}>
+                <TextArea
+                  className="agent-publish-description"
+                  rows={3}
+                  value={publishTemplateDescription}
+                  aria-label={t("agentPublishTemplateDescription")}
+                  onChange={(event) => setPublishTemplateDescription(event.target.value)}
                 />
-                <span>
-                  <strong>{t("agentPublishIncludeMemory")}</strong>
-                  <small>{t("agentPublishIncludeMemoryWarning")}</small>
-                </span>
-              </label>
+              </Field>
+            </section>
+            <section className="agent-publish-section" aria-label={t("agentPublishTemplateContents")}>
+              <h3>{t("agentPublishTemplateContents")}</h3>
+              {linkedTemplate?.revision ? (
+                <p className="agent-publish-version-note">
+                  {t("agentTemplateNextVersion", {
+                    version: (linkedTemplate.latest_revision || linkedTemplate.revision) + 1,
+                  })}
+                </p>
+              ) : null}
+              <Field className="agent-publish-field" label={t("templateCommitMessage")}>
+                <TextArea
+                  className="agent-publish-commit-message"
+                  rows={2}
+                  value={publishCommitMessage}
+                  aria-label={t("templateCommitMessage")}
+                  onChange={(event) => setPublishCommitMessage(event.target.value)}
+                />
+              </Field>
+              {supportsTemplateMemory ? (
+                <label className="agent-publish-memory-option">
+                  <Checkbox
+                    aria-label={t("agentPublishIncludeMemory")}
+                    checked={publishTemplateIncludeMemory}
+                    onCheckedChange={(checked) => setPublishTemplateIncludeMemory(checked === true)}
+                  />
+                  <span>
+                    <strong>{t("agentPublishIncludeMemory")}</strong>
+                    <small>{t("agentPublishIncludeMemoryWarning")}</small>
+                  </span>
+                </label>
+              ) : null}
+            </section>
+            {publishTarget === "official" ? (
+              <p className="agent-publish-hub-note">
+                <UploadCloud size={16} aria-hidden="true" />
+                <span>{t("agentTemplateHubGuidance")}</span>
+              </p>
             ) : null}
             {publishTarget === "official" && publishDisabled ? (
               <p role="status" className="text-sm text-[var(--muted)]">
