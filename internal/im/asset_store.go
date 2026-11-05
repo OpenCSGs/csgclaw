@@ -137,9 +137,13 @@ func (s *Service) prepareMessageAttachments(uploads []MessageAttachmentUpload, s
 		}
 		sources = append(sources, source)
 	}
+	return roomAttachmentStore(s.statePath).prepare(sources)
+}
+
+func (store attachmentStore) prepare(sources []AttachmentSource) ([]preparedAttachment, error) {
 	attachments := make([]preparedAttachment, 0, len(sources))
 	for _, source := range sources {
-		att, err := s.prepareAttachment(source)
+		att, err := store.prepareAttachment(source)
 		if err != nil {
 			discardPreparedAttachments(attachments)
 			return nil, err
@@ -155,14 +159,18 @@ func (s *Service) storeMessageAttachmentsLocked(roomID, messageID, senderID stri
 	if len(files) == 0 {
 		return nil, nil
 	}
+	attachments, err := roomAttachmentStore(s.statePath).commit(roomID, messageID, senderID, files)
+	if err != nil {
+		return nil, errors.Join(err, cleanupAssetFilesForState(s.statePath, s.bootstrapLocked().Rooms))
+	}
+	return attachments, nil
+}
+
+func (store attachmentStore) commit(roomID, messageID, senderID string, files []preparedAttachment) ([]MessageAttachment, error) {
 	attachments := make([]MessageAttachment, 0, len(files))
 	for _, file := range files {
-		attachment, err := s.storePreparedAttachmentLocked(roomID, messageID, senderID, file)
+		attachment, err := store.storePreparedAttachment(roomID, messageID, senderID, file)
 		if err != nil {
-			state := s.bootstrapLocked()
-			if cleanupErr := cleanupAssetFilesForState(s.statePath, state.Rooms); cleanupErr != nil {
-				return nil, errors.Join(err, cleanupErr)
-			}
 			return nil, err
 		}
 		attachments = append(attachments, attachment)
@@ -170,7 +178,7 @@ func (s *Service) storeMessageAttachmentsLocked(roomID, messageID, senderID stri
 	return attachments, nil
 }
 
-func (s *Service) prepareAttachment(source AttachmentSource) (preparedAttachment, error) {
+func (store attachmentStore) prepareAttachment(source AttachmentSource) (preparedAttachment, error) {
 	originalName, err := ValidateAttachmentName(source.Name)
 	if err != nil {
 		return preparedAttachment{}, err
@@ -178,7 +186,7 @@ func (s *Service) prepareAttachment(source AttachmentSource) (preparedAttachment
 	if source.Reader == nil || source.SizeBytes <= 0 {
 		return preparedAttachment{}, fmt.Errorf("attachment %q is empty", source.Name)
 	}
-	dir := filepath.Join(filepath.Dir(s.statePath), assetsDirName)
+	dir := string(store)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return preparedAttachment{}, err
 	}
@@ -232,7 +240,7 @@ func (s *Service) prepareAttachment(source AttachmentSource) (preparedAttachment
 	if err := staged.Close(); err != nil {
 		return preparedAttachment{}, err
 	}
-	corruptBlob, err := inspectExistingAttachmentBlob(attachmentBlobPath(s.statePath, sha), sha, written)
+	corruptBlob, err := inspectExistingAttachmentBlob(store.blobPath(sha), sha, written)
 	if err != nil {
 		return preparedAttachment{}, err
 	}
@@ -274,9 +282,9 @@ func inspectExistingAttachmentBlob(path, sha string, size int64) (os.FileInfo, e
 	return nil, nil
 }
 
-func (s *Service) storePreparedAttachmentLocked(roomID, messageID, senderID string, prepared preparedAttachment) (MessageAttachment, error) {
+func (store attachmentStore) storePreparedAttachment(roomID, messageID, senderID string, prepared preparedAttachment) (MessageAttachment, error) {
 	object := prepared.object
-	blobPath := attachmentBlobPath(s.statePath, object.SHA256)
+	blobPath := store.blobPath(object.SHA256)
 	if err := os.MkdirAll(filepath.Dir(blobPath), 0o700); err != nil {
 		return MessageAttachment{}, err
 	}
@@ -300,31 +308,37 @@ func (s *Service) storePreparedAttachmentLocked(roomID, messageID, senderID stri
 	object.CreatedBy = strings.TrimSpace(senderID)
 	object.RoomID = strings.TrimSpace(roomID)
 	object.MessageID = strings.TrimSpace(messageID)
-	if err := writeAttachmentObject(attachmentObjectPath(s.statePath, object.ID), object); err != nil {
+	if err := writeAttachmentObject(store.objectPath(object.ID), object); err != nil {
 		return MessageAttachment{}, err
 	}
 	return attachmentFromObject(object), nil
 }
 
 func (s *Service) AttachmentFile(id string) (AttachmentFile, error) {
-	object, err := s.loadAttachmentObject(id)
-	if err != nil {
-		return AttachmentFile{}, err
+	if s == nil || strings.TrimSpace(s.statePath) == "" {
+		return AttachmentFile{}, fmt.Errorf("attachment storage is not configured")
 	}
-	return s.attachmentBlobFile(object)
+	for _, store := range []attachmentStore{roomAttachmentStore(s.statePath), sessionAttachmentStore(s.statePath)} {
+		object, err := store.readObject(id)
+		if errors.Is(err, errAttachmentNotFound) {
+			continue
+		}
+		if err != nil {
+			return AttachmentFile{}, err
+		}
+		return store.blobFile(object)
+	}
+	return AttachmentFile{}, errAttachmentNotFound
 }
 
 var errAttachmentNotFound = errors.New("attachment not found")
 
-func (s *Service) loadAttachmentObject(id string) (attachmentObject, error) {
+func (store attachmentStore) readObject(id string) (attachmentObject, error) {
 	id = strings.TrimSpace(id)
 	if !validAttachmentID(id) {
 		return attachmentObject{}, fmt.Errorf("attachment id is required")
 	}
-	if s == nil || strings.TrimSpace(s.statePath) == "" {
-		return attachmentObject{}, fmt.Errorf("attachment storage is not configured")
-	}
-	object, err := readAttachmentObject(attachmentObjectPath(s.statePath, id))
+	object, err := readAttachmentObject(store.objectPath(id))
 	if err != nil {
 		return attachmentObject{}, err
 	}
@@ -334,8 +348,8 @@ func (s *Service) loadAttachmentObject(id string) (attachmentObject, error) {
 	return object, nil
 }
 
-func (s *Service) attachmentBlobFile(object attachmentObject) (AttachmentFile, error) {
-	path := attachmentBlobPath(s.statePath, object.BlobSHA256)
+func (store attachmentStore) blobFile(object attachmentObject) (AttachmentFile, error) {
+	path := store.blobPath(object.BlobSHA256)
 	if _, err := os.Stat(path); err != nil {
 		return AttachmentFile{}, fmt.Errorf("stat attachment blob: %w", err)
 	}
@@ -571,16 +585,27 @@ func validSHA256(value string) bool {
 	return err == nil
 }
 
-func attachmentObjectPath(statePath, id string) string {
-	return filepath.Join(filepath.Dir(statePath), assetsDirName, assetObjectsDirName, id+".json")
+// Room and direct-session attachments use the same immutable object and blob format.
+type attachmentStore string
+
+func roomAttachmentStore(statePath string) attachmentStore {
+	return attachmentStore(filepath.Join(filepath.Dir(statePath), assetsDirName))
 }
 
-func attachmentBlobPath(statePath, sha string) string {
+func sessionAttachmentStore(statePath string) attachmentStore {
+	return attachmentStore(filepath.Join(string(roomAttachmentStore(statePath)), "session-responses"))
+}
+
+func (store attachmentStore) objectPath(id string) string {
+	return filepath.Join(string(store), assetObjectsDirName, id+".json")
+}
+
+func (store attachmentStore) blobPath(sha string) string {
 	prefix := "00"
 	if len(sha) >= 2 {
 		prefix = sha[:2]
 	}
-	return filepath.Join(filepath.Dir(statePath), assetsDirName, assetBlobsDirName, "sha256", prefix, sha)
+	return filepath.Join(string(store), assetBlobsDirName, "sha256", prefix, sha)
 }
 
 func writeAttachmentObject(path string, object attachmentObject) error {
@@ -738,22 +763,26 @@ func cleanupAssetFilesForState(statePath string, rooms []Room) error {
 	if statePath == "" {
 		return nil
 	}
-	objectsDir := filepath.Join(filepath.Dir(statePath), assetsDirName, assetObjectsDirName)
-	entries, err := os.ReadDir(objectsDir)
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return nil
-		}
-		return fmt.Errorf("read attachment objects dir: %w", err)
-	}
-
-	live, liveSHA := liveAttachmentRefs(rooms)
-	if err := addSessionAttachmentRefs(statePath, live); err != nil {
+	if err := migrateLegacySessionAttachments(statePath); err != nil {
 		return err
 	}
+	live, liveSHA := liveAttachmentRefs(rooms)
 	if err := cleanupLocalAttachmentFiles(statePath, live); err != nil {
 		return err
 	}
+	return roomAttachmentStore(statePath).collect(live, liveSHA)
+}
+
+func (store attachmentStore) collect(live, liveSHA map[string]struct{}) error {
+	objectsDir := filepath.Join(string(store), assetObjectsDirName)
+	entries, err := os.ReadDir(objectsDir)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("read attachment objects dir: %w", err)
+	}
+
 	canSweepBlobs := true
 	for _, entry := range entries {
 		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".json") {
@@ -779,7 +808,7 @@ func cleanupAssetFilesForState(statePath string, rooms []Room) error {
 	if !canSweepBlobs {
 		return nil
 	}
-	return cleanupUnreferencedAttachmentBlobs(filepath.Join(filepath.Dir(statePath), assetsDirName, assetBlobsDirName, "sha256"), liveSHA)
+	return cleanupUnreferencedAttachmentBlobs(filepath.Join(string(store), assetBlobsDirName, "sha256"), liveSHA)
 }
 
 func liveAttachmentRefs(rooms []Room) (map[string]struct{}, map[string]struct{}) {

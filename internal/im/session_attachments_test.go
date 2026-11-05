@@ -59,7 +59,7 @@ func TestSessionAttachmentFileChecksOwnershipAndReadsSnapshot(t *testing.T) {
 	}
 	// Older objects retain their download but have no stored session identity.
 	// Their workspace path alone must not authorize use in a new request.
-	path := attachmentObjectPath(s.statePath, file.ID)
+	path := sessionAttachmentStore(s.statePath).objectPath(file.ID)
 	object, err := readAttachmentObject(path)
 	if err != nil {
 		t.Fatal(err)
@@ -109,10 +109,16 @@ func TestSessionResponseAttachmentsRetainDownloadsAcrossRestart(t *testing.T) {
 		t.Fatal(err)
 	}
 	tokens := make(map[string]bool)
+	var sharedBlob string
 	for i, attachment := range attachments {
 		got, err := s.AttachmentFile(attachment.ID)
 		if err != nil {
 			t.Fatal(err)
+		}
+		if i == 0 {
+			sharedBlob = got.Path
+		} else if got.Path != sharedBlob {
+			t.Errorf("identical contents stored at different paths for file %d", i)
 		}
 		if got.Attachment.DownloadURL != attachment.DownloadURL || got.Attachment.Name != files[i].Name ||
 			got.Attachment.WorkspacePath != attachment.WorkspacePath {
@@ -146,7 +152,7 @@ func TestSessionResponseAttachmentsRetainDownloadsAcrossRestart(t *testing.T) {
 	}
 }
 
-func TestDeletingRoomAttachmentRetainsSharedSessionDownload(t *testing.T) {
+func TestSessionAttachmentsSurviveRoomAssetCleanup(t *testing.T) {
 	s, room := newAttachmentTestService(t)
 	roomMessage, err := s.DeliverMessage(DeliverMessageRequest{
 		RoomID: room.ID, SenderID: AdminUserID, MessageID: "room-output", AttachmentSources: []AttachmentSource{sessionAttachmentSource("room.txt", "shared")},
@@ -154,57 +160,112 @@ func TestDeletingRoomAttachmentRetainsSharedSessionDownload(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	stored, err := s.StoreSessionResponseAttachments("worker", "session", "response", t.TempDir(), []AttachmentSource{sessionAttachmentSource("original.txt", "shared")})
+	workspace := t.TempDir()
+	stored, err := s.StoreSessionResponseAttachments("worker", "session", "response", workspace, []AttachmentSource{
+		sessionAttachmentSource("shared.txt", "shared"),
+		sessionAttachmentSource("session-only.txt", "session only"),
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	roomFile := roomMessage.Attachments[0]
 	if roomFile.SHA256 != stored[0].SHA256 || roomFile.ID == stored[0].ID {
-		t.Fatal("expected separate attachment IDs backed by the same blob")
+		t.Fatal("expected distinct IDs and matching checksums for identical contents")
+	}
+	for _, file := range stored {
+		if err := os.WriteFile(filepath.Join(workspace, filepath.FromSlash(file.WorkspacePath)), []byte("edited copy"), 0600); err != nil {
+			t.Fatal(err)
+		}
 	}
 	if err := s.DeleteRoomAttachment(room.ID, roomFile.ID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.AttachmentFile(stored[0].ID); err != nil {
+	// With no remaining room files, an older version may collect every room
+	// object and blob. Reopen the service after those files are gone.
+	roomAssets := filepath.Join(filepath.Dir(s.statePath), assetsDirName)
+	for _, name := range []string{assetObjectsDirName, assetBlobsDirName} {
+		if err := os.RemoveAll(filepath.Join(roomAssets, name)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	s, err = NewServiceFromPath(s.statePath)
+	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.AttachmentFile(roomFile.ID); err == nil {
 		t.Error("deleted room attachment still available")
 	}
+	for i, original := range []string{"shared", "session only"} {
+		file := stored[i]
+		download, err := s.AttachmentFile(file.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		link, err := url.Parse(file.DownloadURL)
+		if err != nil {
+			t.Fatal(err)
+		}
+		token := link.Query().Get("token")
+		if download.Attachment.ID != file.ID || download.Attachment.DownloadURL != file.DownloadURL ||
+			token == "" || !download.AuthorizesDownloadToken(token) {
+			t.Errorf("download ID or token changed for %q", file.Name)
+		}
+		data, err := os.ReadFile(download.Path)
+		if err != nil || string(data) != original {
+			t.Errorf("%s: download after room cleanup = %q, error = %v", file.Name, data, err)
+		}
+	}
 }
 
 func TestSessionResponseAttachmentCommitFailureReclaimsPartialBatch(t *testing.T) {
 	s, _ := newAttachmentTestService(t)
-	// Occupying the second blob's destination with a directory causes its
-	// installation to fail after the first object has already been written.
-	broken := attachmentBlobPath(s.statePath, fmt.Sprintf("%x", sha256.Sum256([]byte("broken"))))
+	workspace := t.TempDir()
+	existing, err := s.StoreSessionResponseAttachments("worker", "session", "existing", workspace, []AttachmentSource{sessionAttachmentSource("kept.txt", "reused")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	store := sessionAttachmentStore(s.statePath)
+	// Fail the final installation after one new blob and one reused blob.
+	broken := store.blobPath(fmt.Sprintf("%x", sha256.Sum256([]byte("broken"))))
 	if err := os.MkdirAll(broken, 0700); err != nil {
 		t.Fatal(err)
 	}
-	workspace := t.TempDir()
 	attachments, err := s.StoreSessionResponseAttachments("worker", "session", "response", workspace, []AttachmentSource{
-		sessionAttachmentSource("partial.txt", "partial"), sessionAttachmentSource("broken.txt", "broken"),
+		sessionAttachmentSource("partial.txt", "partial"),
+		sessionAttachmentSource("duplicate.txt", "reused"),
+		sessionAttachmentSource("broken.txt", "broken"),
 	})
 	if err == nil || len(attachments) != 0 {
 		t.Fatalf("expected batch publication failure, got %d files, error=%v", len(attachments), err)
 	}
-	if _, err := os.Stat(attachmentBlobPath(s.statePath, fmt.Sprintf("%x", sha256.Sum256([]byte("partial"))))); !errors.Is(err, os.ErrNotExist) {
+	if _, err := os.Stat(store.blobPath(fmt.Sprintf("%x", sha256.Sum256([]byte("partial"))))); !errors.Is(err, os.ErrNotExist) {
 		t.Errorf("partial blob remains: %v", err)
 	}
+	kept := existing[0]
+	keptPath := filepath.Join(workspace, filepath.FromSlash(kept.WorkspacePath))
 	if err := filepath.WalkDir(workspace, func(path string, entry os.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
-		if !entry.IsDir() {
+		if !entry.IsDir() && path != keptPath {
 			t.Errorf("workspace file remains after failed publication: %s", path)
 		}
 		return nil
 	}); err != nil {
 		t.Fatal(err)
 	}
-	objects, err := os.ReadDir(filepath.Join(filepath.Dir(s.statePath), assetsDirName, assetObjectsDirName))
-	if err != nil || len(objects) != 0 {
+	objects, err := os.ReadDir(filepath.Dir(store.objectPath(kept.ID)))
+	if err != nil || len(objects) != 1 || objects[0].Name() != kept.ID+".json" {
 		t.Fatalf("partial attachment objects=%v, err=%v", objects, err)
+	}
+	download, err := s.AttachmentFile(kept.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{keptPath, download.Path} {
+		if data, err := os.ReadFile(path); err != nil || string(data) != "reused" {
+			t.Errorf("original file %q: %q, error=%v", path, data, err)
+		}
 	}
 }
 
@@ -217,11 +278,15 @@ func TestSessionAttachmentCollectionRemovesCorruptOrphans(t *testing.T) {
 	}
 	// Simulate corrupt metadata left without a room reference by a previous
 	// installation. It must not prevent collection of other abandoned bytes.
-	orphan := attachmentObjectPath(s.statePath, "att-abandoned")
+	store := roomAttachmentStore(s.statePath)
+	orphan := store.objectPath("att-abandoned")
+	if err := os.MkdirAll(filepath.Dir(orphan), 0700); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.WriteFile(orphan, []byte("{"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	blob := attachmentBlobPath(s.statePath, fmt.Sprintf("%x", sha256.Sum256([]byte("unused"))))
+	blob := store.blobPath(fmt.Sprintf("%x", sha256.Sum256([]byte("unused"))))
 	if err := os.MkdirAll(filepath.Dir(blob), 0700); err != nil {
 		t.Fatal(err)
 	}

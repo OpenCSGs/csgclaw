@@ -36,7 +36,10 @@ func (s *Service) StoreSessionResponseAttachments(agentID, sessionID, responseID
 	}
 	defer root.Close()
 
-	files, err := s.prepareMessageAttachments(nil, sources...)
+	// Keep both the stable ID and its contents outside the room collector,
+	// including the collector shipped by versions that predate direct sessions.
+	store := sessionAttachmentStore(s.statePath)
+	files, err := store.prepare(sources)
 	if err != nil {
 		return nil, err
 	}
@@ -81,18 +84,18 @@ func (s *Service) StoreSessionResponseAttachments(agentID, sessionID, responseID
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	attachments, err := s.storeMessageAttachmentsLocked("", responseID, agentID, files)
+	attachments, err := store.commit("", responseID, agentID, files)
 	if err != nil {
-		return nil, err
+		return nil, errors.Join(err, store.collectSessionAttachments())
 	}
 	// A committed batch owns its references independently of room messages.
 	// Publish the references together only after all objects have been stored.
 	data, err := json.Marshal(ids)
 	if err == nil {
-		err = atomicWriteFile(filepath.Join(sessionAttachmentRefDir(s.statePath), ids[0]+".json"), data, 0600)
+		err = atomicWriteFile(filepath.Join(string(store), "refs", ids[0]+".json"), data, 0600)
 	}
 	if err != nil {
-		return nil, errors.Join(err, cleanupAssetFilesForState(s.statePath, s.bootstrapLocked().Rooms))
+		return nil, errors.Join(err, store.collectSessionAttachments())
 	}
 	return attachments, nil
 }
@@ -101,19 +104,20 @@ func (s *Service) StoreSessionResponseAttachments(agentID, sessionID, responseID
 // and session before opening access to the immutable download.
 func (s *Service) SessionAttachmentFile(agentID, sessionID, id string) (AttachmentFile, error) {
 	agentID = strings.TrimSpace(agentID)
-	if s == nil || agentID == "" || !isAttachmentPathSegment(sessionID) {
+	if s == nil || s.statePath == "" || agentID == "" || !isAttachmentPathSegment(sessionID) {
 		return AttachmentFile{}, errAttachmentNotFound
 	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	object, err := s.loadAttachmentObject(id)
+	store := sessionAttachmentStore(s.statePath)
+	object, err := store.readObject(id)
 	if err != nil {
 		return AttachmentFile{}, err
 	}
 	if object.RoomID != "" || object.CreatedBy != agentID || object.SessionID != sessionID {
 		return AttachmentFile{}, errAttachmentNotFound
 	}
-	return s.attachmentBlobFile(object)
+	return store.blobFile(object)
 }
 
 // Hold the directory open across the copy, rename and any rollback so a
@@ -149,17 +153,11 @@ func (s *Service) ensureSessionAttachmentStore() error {
 	return SaveBootstrap(s.statePath, s.bootstrapLocked())
 }
 
-func sessionAttachmentRefDir(statePath string) string {
-	return filepath.Join(filepath.Dir(statePath), assetsDirName, "session-responses")
-}
-
-func addSessionAttachmentRefs(statePath string, live map[string]struct{}) error {
-	dir := sessionAttachmentRefDir(statePath)
+func (store attachmentStore) collectSessionAttachments() error {
+	live := make(map[string]struct{})
+	dir := filepath.Join(string(store), "refs")
 	entries, err := os.ReadDir(dir)
-	if errors.Is(err, os.ErrNotExist) {
-		return nil
-	}
-	if err != nil {
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
 	for _, entry := range entries {
@@ -178,5 +176,5 @@ func addSessionAttachmentRefs(statePath string, live map[string]struct{}) error 
 			live[id] = struct{}{}
 		}
 	}
-	return nil
+	return store.collect(live, make(map[string]struct{}))
 }
