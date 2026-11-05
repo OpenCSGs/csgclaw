@@ -203,7 +203,7 @@ func TestCommunityDiscoveryAndInvocationOfRemotePublication(t *testing.T) {
 		case "/api/v1/relay/v1/agents/" + testRelayID:
 			writeTestJSON(w, 200, Agent{ID: testRelayID, Name: "Relay internal name", Status: "online"})
 		case "/api/v1/relay/v1/agents/" + platformRelayID:
-			w.WriteHeader(503)
+			w.WriteHeader(404)
 		case "/api/v1/relay/v1/responses":
 			if r.Header.Get("X-CSG-Client-ID") == "" {
 				t.Error("missing caller client identity")

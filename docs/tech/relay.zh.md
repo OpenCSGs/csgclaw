@@ -55,7 +55,8 @@ csgclaw 的 HTTP、SSE 和 `csgrelay.v1` WebSocket 握手携带 Bearer Token、
 广场查询带 `public=true&registered=true&kind=runtime`，遍历分页，同时包含 platform
 与 external 的 `csgclaw` / `csgclaw-workspace` runtime，并以 `relay.agent_id` 召唤。
 缺失、非法注册及 logical 记录不进入广场。external 的 `is_running=true` 不能表示在线，
-客户端仍查询 relay 状态，异常时显示离线。
+客户端仍查询 relay 状态；仅确认离线或注册不存在（404）时显示离线。
+认证、限流、网络及服务端错误返回目录查询失败，不伪装为离线。
 广场来源展示社区 Agent 名称，发布端根据 instance.source 映射：platform 为 Agentichub，
 external 为 CSGClaw，不将 relay publisher_id 作为产品名称。
 
@@ -108,3 +109,6 @@ relay_unpublish_required，须先下架或取消再删除。
 本地删除成功后，在发布操作锁内持久化已删除 ID。手动发布和自动排队在获取同一锁后
 检查该标记，拒绝删除前已通过 API 存在性检查的旧请求；重启后仍生效。
 删除失败不标记 ID，同名但不同 ID 的新 Agent 可正常发布并使用已释放的平台绑定。
+
+恢复的发布在缺少或过期凭据时按 1～15 秒退避等待，不丢弃执行端。
+重新登录原账号后自动恢复注册和 WebSocket，其他账号无法接管既有发布；关闭服务会取消等待。

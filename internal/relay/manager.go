@@ -399,13 +399,37 @@ func (m *Manager) startLocked(id string, req PublishRequest) {
 	run := &managedExecutor{cancel: cancel, done: make(chan struct{})}
 	m.running[id] = run
 	endpoint, token := m.manifest.Endpoint, m.manifest.Token
-	c, clientErr := m.client(endpoint, token)
 	m.wg.Add(1)
 	go func() {
 		defer m.wg.Done()
 		defer close(run.done)
-		err := clientErr
-		if err == nil {
+		var c *Client
+		var err error
+		backoff := time.Second
+		for ctx.Err() == nil {
+			m.mu.Lock()
+			current, desired := m.manifest.Agents[id]
+			if !desired || m.manifest.Removing[current.SourceAgentID] || m.manifest.Deleted[current.SourceAgentID] {
+				m.mu.Unlock()
+				break
+			}
+			c, err = m.client(endpoint, token)
+			m.mu.Unlock()
+			if err == nil {
+				break
+			}
+			timer := time.NewTimer(backoff)
+			select {
+			case <-ctx.Done():
+				timer.Stop()
+			case <-timer.C:
+			}
+			backoff = min(backoff*2, 15*time.Second)
+		}
+		if ctx.Err() != nil {
+			err = nil
+		}
+		if c != nil && err == nil && ctx.Err() == nil {
 			register := func() {
 				registerCtx, stop := context.WithTimeout(ctx, 10*time.Second)
 				defer stop()

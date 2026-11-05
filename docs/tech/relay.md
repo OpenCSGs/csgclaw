@@ -171,7 +171,8 @@ Directory metadata shows the community agent name as its source and maps instanc
 `source=platform` to `Agentichub`, `source=external` to `CSGClaw` as the publishing
 product. Relay publisher IDs remain protocol identities, not product labels.
 Each registration is probed through Relay. Community `is_running=true` is not an
-online signal for external workers; relay failures produce offline entries.
+online signal for external workers; confirmed offline or missing registrations produce offline entries. Authentication,
+rate-limit, transport and server errors fail discovery instead of claiming offline.
 
 The browser stores display metadata, Relay ID, URL and a login-scoped connection
 reference without tokens. Cloud invocation is authorized against the current
@@ -295,3 +296,8 @@ operation lock. Both queued and manual publication check this marker after
 acquiring the same lock, rejecting requests that passed an API existence check
 before deletion. The marker survives restart; a new ID may reuse the display
 name and released sandbox target. Failed local deletion does not retire the ID.
+
+Restored publications wait for credentials with cancellable backoff from 1 to 15
+seconds. Missing/expired credentials do not discard the executor; signing back
+into the original account resumes registration and the WebSocket connection.
+Another account cannot take over the saved publication.

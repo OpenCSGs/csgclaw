@@ -84,14 +84,23 @@ func (m *Manager) discover(ctx context.Context, onlyID string) ([]CatalogEntry, 
 				probeCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
 				var live Agent
 				probeErr := c.Request(probeCtx, http.MethodGet, "/v1/agents/"+url.PathEscape(id), "", nil, &live)
+				var availabilityErr error
 				if probeCtx.Err() != nil {
-					failureMu.Lock()
-					probeFailure = fmt.Errorf("relay availability query timed out or was cancelled: %w", probeCtx.Err())
-					failureMu.Unlock()
+					availabilityErr = fmt.Errorf("relay availability query timed out or was cancelled: %w", probeCtx.Err())
+				} else if probeErr != nil && !isNotFound(probeErr) {
+					availabilityErr = fmt.Errorf("relay availability query failed: %w", probeErr)
+				} else if probeErr == nil {
+					if live.ID != id || (live.Status != "online" && live.Status != "offline" && live.Status != "unhealthy") {
+						availabilityErr = fmt.Errorf("relay returned an invalid availability response")
+					} else {
+						a = live
+					}
 				}
 				cancel()
-				if probeErr == nil && live.ID == id {
-					a = live
+				if availabilityErr != nil {
+					failureMu.Lock()
+					probeFailure = availabilityErr
+					failureMu.Unlock()
 				}
 				a.Name, a.Description = item.Name, item.Description
 				entries[index] = CatalogEntry{RelayURL: c.base.String(), ConnectionID: connection, Agent: a, Avatar: item.Metadata.Avatar, Source: item.Source}
