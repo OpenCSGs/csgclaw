@@ -147,12 +147,12 @@ describe("agent overview team navigation", () => {
         </MemoryRouter>,
       );
       const user = userEvent.setup();
-      await user.click(screen.getByRole("button", { name: "我的智能体 1" }));
+      await user.click(screen.getByRole("button", { name: "智能体 1" }));
       await user.type(screen.getByRole("textbox", { name: "搜索智能体和团队" }), "测试智能体");
       await user.click(screen.getByRole("button", { name: "Go to referenced team" }));
       expect(await screen.findByRole("heading", { name: "回归团队 1", level: 1 })).toBeVisible();
       expect(screen.getByRole("button", { name: "团队 2" })).toHaveAttribute("aria-pressed", "true");
-      expect(screen.getByRole("button", { name: "我的智能体 1" })).toHaveAttribute("aria-pressed", "false");
+      expect(screen.getByRole("button", { name: "智能体 1" })).toHaveAttribute("aria-pressed", "false");
       expect(screen.getByRole("textbox", { name: "搜索智能体和团队" })).toHaveValue("");
       expect(screen.getByRole("button", { name: /回归团队 1/ })).toBeVisible();
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
@@ -377,7 +377,7 @@ describe("agent overview list summaries", () => {
     render(<Page route="/agents" agents={agents} teams={teams} />);
     expect(screen.getByRole("button", { name: "全部 6" })).toHaveAttribute("aria-pressed", "true");
     const user = userEvent.setup();
-    await user.click(screen.getByRole("button", { name: "我的智能体 3" }));
+    await user.click(screen.getByRole("button", { name: "智能体 3" }));
     expect(screen.getByRole("button", { name: /在线助手/ })).toBeVisible();
     expect(screen.queryByRole("button", { name: /active team/ })).not.toBeInTheDocument();
     await user.type(screen.getByRole("textbox"), "active");

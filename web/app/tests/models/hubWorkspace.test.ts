@@ -11,11 +11,11 @@ import {
 } from "@/models/hubWorkspace";
 
 describe("hub workspace helpers", () => {
-  it("formats hub dates in a stable UTC timezone", () => {
+  it("formats hub dates in the UTC+8 timezone", () => {
     expect(formatHubDate("", "en")).toBe("-");
-    expect(formatHubDate("2026-05-15T12:34:56Z", "en")).toBe("05/15/2026");
-    expect(formatHubDateTime("2026-05-15T12:34:56Z", "en")).toContain("12:34:56");
-    expect(formatHubDateTime("2026-05-15T12:34:56Z", "en")).toContain("(UTC)");
+    expect(formatHubDate("2026-05-15T20:34:56Z", "en")).toBe("05/16/2026");
+    expect(formatHubDateTime("2026-05-15T12:34:56Z", "en")).toContain("20:34:56");
+    expect(formatHubDateTime("2026-05-15T12:34:56Z", "en")).toContain("(UTC+8)");
   });
 
   it("allows deleting only local hub templates", () => {

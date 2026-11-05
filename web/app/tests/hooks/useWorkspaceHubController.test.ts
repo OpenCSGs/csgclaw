@@ -186,7 +186,12 @@ describe("useWorkspaceHubController template deletion", () => {
   ])(
     "removes the deleted template and draft (refresh failure: $refreshFails, other draft: $otherDirty)",
     async ({ refreshFails, otherDirty }) => {
-      const template: HubTemplate = { id: "local.codex-211", source: { kind: "local" } };
+      const template: HubTemplate = {
+        id: "local.codex-211",
+        name: "agent-tkru2-mvz013kk1",
+        display_name: "法务经理",
+        source: { kind: "local" },
+      };
       const remaining: HubTemplate = { id: "local.other", source: { kind: "local" } };
       const setSelectedHubTemplateId = vi.fn();
       const onTemplateDeleteStarted = vi.fn();
@@ -250,7 +255,7 @@ describe("useWorkspaceHubController template deletion", () => {
         await expect(result.current.hub.deleteHubTemplate(template)).resolves.toBe(true);
       });
       expect(confirm).toHaveBeenCalledWith(
-        `删除模板 ${template.id}?\n\n只删除本地模板，AgenticHub 上的模板不会删除。如需彻底删除，请前往 AgenticHub 下架。`,
+        `删除模板 法务经理?\n\n只删除本地模板，AgenticHub 上的模板不会删除。如需彻底删除，请前往 AgenticHub 下架。`,
       );
       expect(queryClient.getQueryData(workspaceQueryKeys.hubTemplates())).toEqual([remaining]);
       expect(queryClient.getQueryData(workspaceQueryKeys.hubTemplate(template.id))).toBeUndefined();
