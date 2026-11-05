@@ -8,7 +8,7 @@ import {
 import { useMemo, useRef, useState } from "react";
 import { useSearchParams, useLocation } from "react-router-dom";
 import { ArrowUp, BookOpen, ClipboardCheck, FileText, Presentation, Search, Users, X } from "lucide-react";
-import { Button } from "@/components/ui";
+import { Button, PopoverAnchor, PopoverContent, PopoverRoot } from "@/components/ui";
 import { useWorkspaceControllerContext } from "@/hooks/workspace";
 import { sendMessageRequest } from "@/api/im";
 import { errorMessage } from "@/api/client";
@@ -341,13 +341,35 @@ function StartTaskForm({
                 />
               </div>
               {promptMentions.candidates.length ? (
-                <MentionPicker
-                  className={styles.mentions}
-                  users={promptMentions.candidates}
-                  activeIndex={promptMentions.activeIndex}
-                  onSelect={promptMentions.choose}
-                  t={t}
-                />
+                <PopoverRoot
+                  open
+                  onOpenChange={(open) => {
+                    if (!open) promptMentions.dismiss();
+                  }}
+                >
+                  <PopoverAnchor asChild>
+                    <span className={styles.mentionAnchor} aria-hidden="true" />
+                  </PopoverAnchor>
+                  <PopoverContent
+                    side="top"
+                    align="start"
+                    role="presentation"
+                    className={styles.mentionPopover}
+                    onOpenAutoFocus={(event) => event.preventDefault()}
+                    onCloseAutoFocus={(event) => event.preventDefault()}
+                    onInteractOutside={(event) => {
+                      if (event.target === editorRef.current) event.preventDefault();
+                    }}
+                  >
+                    <MentionPicker
+                      className={styles.mentions}
+                      users={promptMentions.candidates}
+                      activeIndex={promptMentions.activeIndex}
+                      onSelect={promptMentions.choose}
+                      t={t}
+                    />
+                  </PopoverContent>
+                </PopoverRoot>
               ) : null}
               {files.length ? (
                 <ul className={styles.files}>
