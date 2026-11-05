@@ -5,6 +5,7 @@ import { defineConfig } from "vite";
 import type { PluginOption } from "vite";
 import path from "node:path";
 import { mkdirSync, writeFileSync } from "node:fs";
+import { pdfjsAssets } from "./vite.pdfjs-assets";
 
 const keepStaticDistPlaceholderPlugin: PluginOption = {
   name: "keep-static-dist-placeholder",
@@ -41,6 +42,7 @@ export default defineConfig(({ command }) => ({
   plugins: [
     tailwindcss(),
     react(),
+    pdfjsAssets(),
     keepStaticDistPlaceholderPlugin,
     command === "serve" &&
       checker({
