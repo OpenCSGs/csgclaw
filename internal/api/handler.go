@@ -936,11 +936,17 @@ func (h *Handler) validateServerAccessToken(authHeader string) bool {
 	if h.serverNoAuth {
 		return true
 	}
-	if token := strings.TrimSpace(h.desktopSessionToken); token != "" && authHeader == "Bearer "+token {
-		return true
+	return h.validServerCredential(authHeader)
+}
+
+// validServerCredential verifies an explicit management credential even in NoAuth mode.
+func (h *Handler) validServerCredential(authHeader string) bool {
+	for _, configured := range []string{h.serverAccessToken, h.desktopSessionToken} {
+		if token := strings.TrimSpace(configured); token != "" && authHeader == "Bearer "+token {
+			return true
+		}
 	}
-	token := strings.TrimSpace(h.serverAccessToken)
-	return authHeader == "Bearer "+token
+	return false
 }
 
 func (h *Handler) handleHealthz(w http.ResponseWriter, _ *http.Request) {
@@ -3036,6 +3042,14 @@ func (h *Handler) handleCreateMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	for _, ref := range req.FileReferences {
+		if ref.Source == "workspace" {
+			if !h.authorizeWorkspaceAccess(w, r) {
+				return
+			}
+			break
+		}
+	}
 	serviceReq, err := req.toServiceRequest()
 	if err != nil {
 		writeAPIError(w, err, http.StatusBadRequest)

@@ -3,14 +3,13 @@ package api
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
 	"encoding/base64"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -28,44 +27,20 @@ func TestAgentSessionResponsesAcceptsInlineFiles(t *testing.T) {
 		}
 		t.Run(name, func(t *testing.T) {
 			contents := [][]byte{[]byte("report!"), {0, 1, 2, 3, 4}}
-			names := []string{"report.pdf", "diagram.png"}
-			mediaTypes := []string{"application/pdf", "image/png"}
-			var fileIDs []string
+			names := []string{"report.pdf", "data.bin"}
+			mediaTypes := []string{"application/pdf", "application/octet-stream"}
 			engine := &fakeSessionEngine{}
+			handler, _, bindings, _ := newAgentSessionTestHandler(t, []agent.Agent{sessionCodexAgent("agent-alpha", "Alpha")}, engine, "")
+			handler.SetAgentEngine(sessionInputOnlyEngine{Interface: engine, t: t}, bindings)
+			workspace := sessionTestWorkspace(t, handler)
 			engine.run = func(ctx context.Context, agentID string, request agentengine.TurnRequest, sink agentengine.EventSink) agentengine.TurnResult {
 				if !strings.Contains(sessionTurnText(request), "Read both files.") {
 					t.Errorf("prompt = %q", sessionTurnText(request))
 				}
-				for _, part := range request.Input {
-					if part.Kind != agentengine.InputPartFile {
-						continue
-					}
-					if part.File == nil || len(fileIDs) >= len(contents) {
-						t.Fatalf("unexpected file input: %+v", part)
-					}
-					index := len(fileIDs)
-					fileIDs = append(fileIDs, part.File.ID)
-					file, err := engine.client.Conversations(agentID).Files().Get(ctx, part.File.ID)
-					if err != nil {
-						t.Fatal(err)
-					}
-					data, readErr := io.ReadAll(file.Content)
-					closeErr := file.Content.Close()
-					if readErr != nil || closeErr != nil {
-						t.Fatalf("read file: %v; close: %v", readErr, closeErr)
-					}
-					if !bytes.Equal(data, contents[index]) {
-						t.Errorf("file content = %v, want %v", data, contents[index])
-					}
-					digest := sha256.Sum256(contents[index])
-					if file.Metadata.Name != names[index] || file.Metadata.MediaType != mediaTypes[index] ||
-						file.Metadata.SizeBytes != int64(len(contents[index])) || file.Metadata.SHA256 != hex.EncodeToString(digest[:]) {
-						t.Errorf("file metadata = %+v", file.Metadata)
-					}
-				}
-				if len(fileIDs) != len(contents) {
-					t.Errorf("file count = %d, want %d", len(fileIDs), len(contents))
-				}
+				checkSessionWorkerFiles(t, workspace, request, []sessionUploadFixture{
+					{names[0], mediaTypes[0], string(contents[0])},
+					{names[1], mediaTypes[1], string(contents[1])},
+				})
 				if sink != nil {
 					if err := sink.Emit(ctx, agentengine.TurnEvent{Kind: agentengine.TurnEventTextDelta, Text: "file answer"}); err != nil {
 						t.Fatal(err)
@@ -73,7 +48,6 @@ func TestAgentSessionResponsesAcceptsInlineFiles(t *testing.T) {
 				}
 				return agentengine.TurnResult{Status: agentengine.TurnSucceeded, Output: "file answer"}
 			}
-			handler, _, _, _ := newAgentSessionTestHandler(t, []agent.Agent{sessionCodexAgent("agent-alpha", "Alpha")}, engine, "")
 			recorder := performAgentSessionRequest(t, handler, "agent-alpha", "inline-files", sessionInlineFileRequest(stream,
 				map[string]any{"type": "input_text", "text": "Read both files."},
 				sessionInlineFilePart(names[0], mediaTypes[0], contents[0]),
@@ -101,29 +75,26 @@ func TestAgentSessionResponsesAcceptsInlineFiles(t *testing.T) {
 					t.Fatalf("response = %+v", response)
 				}
 			}
-			assertSessionInputFilesDeleted(t, engine.client.Conversations("agent-alpha").Files(), fileIDs)
 		})
 	}
 }
 
 func TestAgentSessionResponsesAcceptsFileOnlyInput(t *testing.T) {
-	var fileIDs []string
-	engine := &fakeSessionEngine{run: func(_ context.Context, _ string, request agentengine.TurnRequest, _ agentengine.EventSink) agentengine.TurnResult {
-		for _, part := range request.Input {
-			if part.Kind == agentengine.InputPartFile && part.File != nil {
-				fileIDs = append(fileIDs, part.File.ID)
-			}
-		}
-		return agentengine.TurnResult{Status: agentengine.TurnSucceeded, Output: "received file"}
-	}}
+	const name = "note.txt"
+	content := bytes.Repeat([]byte("a"), (1<<20)+1)
+	engine := &fakeSessionEngine{}
 	handler, _, _, _ := newAgentSessionTestHandler(t, []agent.Agent{sessionCodexAgent("agent-alpha", "Alpha")}, engine, "")
-	recorder := performAgentSessionRequest(t, handler, "agent-alpha", "file-only", sessionInlineFileRequest(false,
-		sessionInlineFilePart("note.txt", "text/plain", bytes.Repeat([]byte("a"), (1<<20)+1)),
-	))
-	if recorder.Code != http.StatusOK || len(fileIDs) != 1 {
-		t.Fatalf("status = %d, file IDs = %v, body = %s", recorder.Code, fileIDs, recorder.Body.String())
+	workspace := sessionTestWorkspace(t, handler)
+	engine.run = func(_ context.Context, _ string, request agentengine.TurnRequest, _ agentengine.EventSink) agentengine.TurnResult {
+		checkSessionWorkerFiles(t, workspace, request, []sessionUploadFixture{{name, "text/plain", string(content)}})
+		return agentengine.TurnResult{Status: agentengine.TurnSucceeded, Output: "received file"}
 	}
-	assertSessionInputFilesDeleted(t, engine.client.Conversations("agent-alpha").Files(), fileIDs)
+	recorder := performAgentSessionRequest(t, handler, "agent-alpha", "file-only", sessionInlineFileRequest(false,
+		sessionInlineFilePart(name, "text/plain", content),
+	))
+	if recorder.Code != http.StatusOK || len(engine.client.Calls()) != 1 {
+		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
+	}
 }
 
 func TestAgentSessionResponsesRejectsInvalidInlineFiles(t *testing.T) {
@@ -139,6 +110,7 @@ func TestAgentSessionResponsesRejectsInvalidInlineFiles(t *testing.T) {
 		{name: "remote URL", part: map[string]any{"type": "input_file", "filename": "note.txt", "file_data": "https://example.com/note.txt"}},
 		{name: "missing filename", part: map[string]any{"type": "input_file", "file_data": "data:text/plain;base64,YQ=="}},
 		{name: "filename path", part: sessionInlineFilePart("../note.txt", "text/plain", []byte("a"))},
+		{name: "client workspace path", part: map[string]any{"type": "workspace_file", "path": "private.txt"}},
 		{name: "file with text", part: map[string]any{"type": "input_file", "filename": "note.txt", "file_data": "data:text/plain;base64,YQ==", "text": "unexpected"}},
 		{name: "text with file", part: map[string]any{"type": "input_text", "text": "hello", "filename": "note.txt", "file_data": "data:text/plain;base64,YQ=="}},
 		{name: "unknown field", part: map[string]any{"type": "input_file", "filename": "note.txt", "file_data": "data:text/plain;base64,YQ==", "future": true}},
@@ -211,43 +183,44 @@ func TestAgentSessionResponsesReportsOversizedBodyAsInvalidRequest(t *testing.T)
 	}
 }
 
-func TestAgentSessionResponsesCleansInlineFilesAfterFailure(t *testing.T) {
-	var fileIDs []string
-	engine := &fakeSessionEngine{run: func(_ context.Context, _ string, request agentengine.TurnRequest, _ agentengine.EventSink) agentengine.TurnResult {
-		for _, part := range request.Input {
-			if part.Kind == agentengine.InputPartFile && part.File != nil {
-				fileIDs = append(fileIDs, part.File.ID)
-			}
-		}
+func TestAgentSessionResponsesRetainsInlineFilesAfterFailure(t *testing.T) {
+	engine := &fakeSessionEngine{run: func(context.Context, string, agentengine.TurnRequest, agentengine.EventSink) agentengine.TurnResult {
 		return agentengine.TurnResult{Status: agentengine.TurnFailed, Error: &agentengine.TurnError{Code: agentengine.ErrorRuntimeFailed, Message: "runtime failed"}}
 	}}
 	handler, _, _, _ := newAgentSessionTestHandler(t, []agent.Agent{sessionCodexAgent("agent-alpha", "Alpha")}, engine, "")
 	recorder := performAgentSessionRequest(t, handler, "agent-alpha", "failed-files", sessionInlineFileRequest(false,
 		sessionInlineFilePart("note.txt", "text/plain", []byte("a")),
 	))
-	if recorder.Code != http.StatusServiceUnavailable || len(fileIDs) != 1 {
-		t.Fatalf("status = %d, file IDs = %v, body = %s", recorder.Code, fileIDs, recorder.Body.String())
+	if recorder.Code != http.StatusServiceUnavailable || len(engine.client.Calls()) != 1 {
+		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
 	}
-	assertSessionInputFilesDeleted(t, engine.client.Conversations("agent-alpha").Files(), fileIDs)
+	checkSessionWorkerFiles(t, sessionTestWorkspace(t, handler), engine.client.Calls()[0].Request, []sessionUploadFixture{{"note.txt", "text/plain", "a"}})
 }
 
 func TestAgentSessionInputFileSizeLimits(t *testing.T) {
 	for _, test := range []struct {
-		name  string
-		sizes []int64
-		large bool
+		name     string
+		sizes    []int64
+		existing []int64
+		large    bool
 	}{
 		{name: "single file at limit", sizes: []int64{im.MaxAttachmentFileBytes}},
 		{name: "single file above limit", sizes: []int64{im.MaxAttachmentFileBytes + 1}, large: true},
 		{name: "total at limit", sizes: []int64{im.MaxAttachmentFileBytes, im.MaxAttachmentFileBytes}},
 		{name: "total above limit", sizes: []int64{im.MaxAttachmentFileBytes, im.MaxAttachmentFileBytes, 1}, large: true},
+		{name: "referenced file above limit", existing: []int64{im.MaxAttachmentFileBytes + 1}, large: true},
+		{name: "uploads and references above total limit", existing: []int64{im.MaxAttachmentFileBytes}, sizes: []int64{im.MaxAttachmentFileBytes, 1}, large: true},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			input := agentSessionInput{}
 			for _, size := range test.sizes {
 				input.Files = append(input.Files, agentSessionInputFile{SizeBytes: size})
 			}
-			err := input.validateFileLimits()
+			var references []im.MessageAttachment
+			for _, size := range test.existing {
+				references = append(references, im.MessageAttachment{SizeBytes: size})
+			}
+			err := input.validateFileLimits(references)
 			if test.large {
 				if !errors.Is(err, errAttachmentPayloadTooLarge) {
 					t.Fatalf("error = %v, want attachment payload too large", err)
@@ -259,16 +232,10 @@ func TestAgentSessionInputFileSizeLimits(t *testing.T) {
 	}
 }
 
-func TestAgentSessionResponsesCleansInlineFilesAfterCancellation(t *testing.T) {
+func TestAgentSessionResponsesRetainsInlineFilesAfterCancellation(t *testing.T) {
 	started := make(chan struct{})
 	done := make(chan struct{})
-	var fileIDs []string
 	engine := &fakeSessionEngine{run: func(ctx context.Context, _ string, request agentengine.TurnRequest, _ agentengine.EventSink) agentengine.TurnResult {
-		for _, part := range request.Input {
-			if part.Kind == agentengine.InputPartFile && part.File != nil {
-				fileIDs = append(fileIDs, part.File.ID)
-			}
-		}
 		close(started)
 		<-ctx.Done()
 		return agentengine.TurnResult{Status: agentengine.TurnCanceled, Error: &agentengine.TurnError{Code: agentengine.ErrorCanceled, Message: ctx.Err().Error()}}
@@ -281,6 +248,7 @@ func TestAgentSessionResponsesCleansInlineFilesAfterCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	request := httptest.NewRequest(http.MethodPost, "/api/v1/agents/agent-alpha/sessions/canceled-files/responses", bytes.NewReader(body)).WithContext(ctx)
+	request.Header.Set("Authorization", "Bearer test-server-token")
 	recorder := httptest.NewRecorder()
 	go func() {
 		handler.Routes().ServeHTTP(recorder, request)
@@ -299,28 +267,30 @@ func TestAgentSessionResponsesCleansInlineFilesAfterCancellation(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("canceled request did not finish")
 	}
-	if len(fileIDs) != 1 {
-		t.Fatalf("file IDs = %v", fileIDs)
+	calls := engine.client.Calls()
+	if len(calls) != 1 {
+		t.Fatalf("expected one canceled turn, got %d", len(calls))
 	}
-	assertSessionInputFilesDeleted(t, engine.client.Conversations("agent-alpha").Files(), fileIDs)
+	checkSessionWorkerFiles(t, sessionTestWorkspace(t, handler), calls[0].Request, []sessionUploadFixture{{"note.txt", "text/plain", "a"}})
 }
 
-func TestAgentSessionResponsesCleansPartiallyCreatedInlineFiles(t *testing.T) {
+func TestAgentSessionResponsesRejectsInlineBatchBeforeSaving(t *testing.T) {
 	engine := &fakeSessionEngine{}
-	handler, _, bindings, _ := newAgentSessionTestHandler(t, []agent.Agent{sessionCodexAgent("agent-alpha", "Alpha")}, engine, "")
-	files := &recordingSessionInputFiles{FileInterface: engine.client.Conversations("agent-alpha").Files()}
-	handler.SetAgentEngine(sessionFileRecordingEngine{Interface: engine, files: files}, bindings)
+	handler, _, _, _ := newAgentSessionTestHandler(t, []agent.Agent{sessionCodexAgent("agent-alpha", "Alpha")}, engine, "")
 	recorder := performAgentSessionRequest(t, handler, "agent-alpha", "partial-files", sessionInlineFileRequest(false,
 		sessionInlineFilePart("valid.txt", "text/plain", []byte("a")),
 		sessionInlineFilePart("../invalid.txt", "text/plain", []byte("b")),
 	))
-	if recorder.Code != http.StatusBadRequest || len(files.created) != 1 {
-		t.Fatalf("status = %d, created = %v, body = %s", recorder.Code, files.created, recorder.Body.String())
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
 	}
 	if calls := engine.client.Calls(); len(calls) != 0 {
 		t.Fatalf("partial upload dispatched %d turns", len(calls))
 	}
-	assertSessionInputFilesDeleted(t, files, files.created)
+	_, err := os.Stat(filepath.Join(sessionTestWorkspace(t, handler), ".csgclaw", "attachments"))
+	if !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("invalid batch created a workspace attachment directory: %v", err)
+	}
 }
 
 func sessionInlineFilePart(name, mediaType string, content []byte) map[string]any {
@@ -337,24 +307,6 @@ func sessionInlineFileRequest(stream bool, parts ...map[string]any) map[string]a
 	}
 }
 
-func assertSessionInputFilesDeleted(t *testing.T, files agentengine.FileInterface, ids []string) {
-	t.Helper()
-	for _, id := range ids {
-		file, err := files.Get(context.Background(), id)
-		if err == nil {
-			_ = file.Content.Close()
-			t.Errorf("file %q remains after request completion", id)
-		} else if agentengine.ErrorCodeOf(err) != agentengine.ErrorFileNotFound {
-			t.Errorf("Get(%q) error = %v, want file_not_found", id, err)
-		}
-	}
-}
-
-type recordingSessionInputFiles struct {
-	agentengine.FileInterface
-	created []string
-}
-
 type sessionOversizedRequestBody struct{}
 
 func (sessionOversizedRequestBody) Read([]byte) (int, error) {
@@ -363,28 +315,21 @@ func (sessionOversizedRequestBody) Read([]byte) (int, error) {
 
 func (sessionOversizedRequestBody) Close() error { return nil }
 
-func (f *recordingSessionInputFiles) Create(ctx context.Context, request agentengine.FileCreateRequest, content io.Reader) (agentengine.OutputFile, error) {
-	file, err := f.FileInterface.Create(ctx, request, content)
-	if err == nil {
-		f.created = append(f.created, file.ID)
-	}
-	return file, err
-}
-
-type sessionFileRecordingEngine struct {
+type sessionInputOnlyEngine struct {
 	agentengine.Interface
-	files *recordingSessionInputFiles
+	t *testing.T
 }
 
-func (e sessionFileRecordingEngine) Conversations(agentID string) agentengine.ConversationInterface {
-	return sessionFileRecordingConversations{ConversationInterface: e.Interface.Conversations(agentID), files: e.files}
+func (e sessionInputOnlyEngine) Conversations(agentID string) agentengine.ConversationInterface {
+	return sessionInputOnlyConversation{ConversationInterface: e.Interface.Conversations(agentID), t: e.t}
 }
 
-type sessionFileRecordingConversations struct {
+type sessionInputOnlyConversation struct {
 	agentengine.ConversationInterface
-	files *recordingSessionInputFiles
+	t *testing.T
 }
 
-func (c sessionFileRecordingConversations) Files() agentengine.FileInterface {
-	return c.files
+func (c sessionInputOnlyConversation) Files() agentengine.FileInterface {
+	c.t.Error("an input-only turn accessed temporary Engine file storage")
+	return nil
 }

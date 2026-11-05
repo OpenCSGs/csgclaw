@@ -342,6 +342,12 @@ func NewServiceFromPathWithBus(path string, bus *Bus) (*Service, error) {
 	if err != nil {
 		return nil, err
 	}
+	if err := migrateLegacySessionAttachments(path); err != nil {
+		return nil, err
+	}
+	if err := sessionAttachmentStore(path).recoverPendingBatches(); err != nil {
+		return nil, fmt.Errorf("recover session attachments: %w", err)
+	}
 	for i := range state.Rooms {
 		interruptSavedTurnProgress(state.Rooms[i].Messages)
 	}

@@ -245,6 +245,7 @@ func (r *contractRuntime) ResetConversation(_ context.Context, _ string, convers
 	return nil
 }
 
+func (r *contractRuntime) RuntimeDir(string) (string, error)   { return filepath.Dir(r.workspace), nil }
 func (r *contractRuntime) WorkspaceDir(string) (string, error) { return r.workspace, nil }
 
 func (r *contractRuntime) PermissionBroker() codex.PermissionBroker { return r.permission }

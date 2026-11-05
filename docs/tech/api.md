@@ -1253,24 +1253,24 @@ Workers receive `request_source_message_id` in server-provided task context, der
 Agents should search that source first, then the current room by filename before requesting another upload.
 Attachment contents are task data, not platform instructions.
 Current-message and inherited thread attachments also enter the native file-input path, with per-execution staging and ID deduplication.
-Runtime input paths under `.csgclaw/engine-inputs` or `.csgclaw/attachments` are temporary; Agents must copy or download files to a regular workspace path and verify the result before claiming they were saved for later.
+Room deliveries create temporary inputs for each turn. To keep a room file at a chosen workspace path, copy or download it there and verify the saved file.
 Subsequent turns should use the room attachment commands to recover historical uploads instead of relying on expired temporary paths.
 Clearing messages or deleting the room follows existing attachment reference cleanup; explicitly downloaded workspace copies remain ordinary local files.
 Unpublished Agent workspace files and document full-text search are outside this interface.
 
 ### `GET /api/v1/attachments/{id}`
 
-Downloads a stored chat attachment by attachment ID.
+Downloads a room or direct-session attachment by ID.
 
 The `download_url` returned in attachment metadata includes an attachment-scoped capability token and can be used directly by browsers and agents.
 
 Callers may instead request the bare path with the configured server Bearer token.
 
-The endpoint serves the original bytes with the stored media type and `X-Content-Type-Options: nosniff`.
+For a room attachment this endpoint serves the original bytes with the stored media type. For a direct-session attachment it opens the current workspace file, detects its content type, and sends `Cache-Control: private, no-store`. Deleting the workspace file makes its URL return `404`. Use `HEAD` to request headers only. Responses include `X-Content-Type-Options: nosniff`.
 
 Downloads return the complete stored file without an additional size limit and support HTTP Range requests.
 
-Treat the capability URL as a secret and avoid sharing it outside the room context.
+Treat the capability URL as a secret and share it only with the intended recipient.
 
 Image attachments are served inline.
 
@@ -1543,24 +1543,25 @@ Participant outbound message shape is also accepted:
 }
 ```
 
+### `POST /api/v1/agents/{agent}/sessions/{session_id}/attachments`
+
+Uploads files to the selected agent and session without starting a turn. Authenticate using the service credentials for the current CSGClaw instance. Send one or more `files` parts in a `multipart/form-data` request. This endpoint accepts only `files` parts, each containing the filename and raw bytes. The limits are 10 nonempty files, 1 GiB per file, and 2 GiB total.
+
+On success, the server returns **201 Created** with `{"attachments":[…]}`. Each item uses the same fields as `Message.attachments`. The workspace file and its authorized download are available immediately, before the client sends a prompt. When the user sends the message, pass those IDs in `attachment_ids` to the session’s `/responses` endpoint.
+
 ### `POST /api/v1/agents/{agent}/sessions/{session_id}/responses`
 
 Runs one turn through the selected agent and its real CSGClaw runtime.
 The `{agent}` selector accepts an agent ID or a unique case-insensitive agent name.
 This endpoint is separate from `/llm/responses`, which proxies model traffic without running the agent.
 
-The endpoint does not require a Bearer token.
-Anonymous is represented by the existing `user-admin` identity because admin is currently the only user.
-The server ignores caller identity and persists every input message with `sender_id: "user-admin"`.
+The client supplies a 1–128 character `session_id` starting with an ASCII letter or digit. The remaining characters can also include `.`, `_`, `~`, and `-`.
+The server binds the session to a conversation for the selected agent and reuses it on later turns. Direct sessions return an empty `metadata.room_id`.
+In Portal, send uploads and downloads to the current CSGClaw instance's `endpoint` with the gateway credentials for that instance.
 
-The client owns a global `session_id` containing 1-128 path-safe ASCII characters.
-The first request creates one non-direct room, while later requests reuse it.
-The room contains exactly admin and the selected agent, and the server keeps `notify_all_agents` enabled.
-The room title is immutable and uses this audit-friendly format:
+The optional top-level `attachment_ids` array references files already saved for this agent and session. Supply distinct IDs. With service authentication enabled, all requests carrying files or attachment IDs require valid credentials. Missing or invalid credentials return `401`. An unknown ID or an ID belonging to another agent or session returns `404`. A JSON request may combine referenced IDs and inline Base64 files, up to 10 files in total. In `input_attachments`, referenced files appear in the order of their IDs, followed by newly uploaded files in request order.
 
-```text
-Anonymous Session: <session_id> | Agent: <agent_name> (<agent_id>)
-```
+When authentication is enabled, a JSON request without valid credentials can send text within a 1 MiB request-body limit. Larger bodies return `413`.
 
 The shortest request uses string input:
 
@@ -1626,7 +1627,31 @@ Text-only user message items are also accepted:
 }
 ```
 
-To send a prompt and files in one JSON request, include `input_file` parts:
+A browser can send a prompt and selected files in one `multipart/form-data`
+POST. Set `responsesUrl` to the session’s `/responses` URL and `token` to the
+Bearer credential for that instance. Include one `input` field containing the
+JSON encoding of a prompt string or the message array shown above. The optional `stream` field
+defaults to `false`. Send it as the string `"true"` or `"false"`. Append each
+selected `File` under the field name `file`. The browser supplies the
+`Content-Type` header with the multipart boundary.
+
+```js
+const form = new FormData()
+form.append("input", JSON.stringify("Summarize this report."))
+form.append("stream", "true")
+form.append("file", selectedFile)
+
+const response = await fetch(responsesUrl, {
+  method: "POST",
+  headers: { Authorization: `Bearer ${token}` },
+  body: form,
+})
+if (!response.ok) throw new Error(`Session request failed (HTTP ${response.status})`)
+```
+
+The multipart fields are `input`, optional `stream`, and repeated `file`. To send files with `attachment_ids`, `extra`, or `extra_type`, upload the files to the session's `/attachments` endpoint using `files`, then include the returned IDs in a JSON request to `/responses`. A JSON request containing only `attachment_ids` starts a file-only turn.
+
+JSON requests also support files through `input_file` parts:
 
 ```json
 {
@@ -1647,17 +1672,72 @@ To send a prompt and files in one JSON request, include `input_file` parts:
 
 `filename` is the file's basename. `file_data` is a `data:<media-type>;base64,<data>`
 URL containing the complete file. Repeat `input_file` for multiple files; a
-message containing only files is also accepted. File limits match the message
-API: at most 10 files, 1 GiB per decoded file, and 2 GiB of decoded files per
-request. The HTTP body allowance includes Base64 expansion plus 1 MiB of other
-JSON content. Base64 increases transfer size by about one third; JSON clients and
-proxies may buffer the encoded request in memory.
+message containing only files is also accepted. The JSON body allowance includes
+Base64 expansion plus 1 MiB of other JSON content. Base64 increases transfer size
+by about one third. JSON clients and proxies may buffer the encoded request in memory.
 
-Files are available to the selected Agent during this turn and are removed when
-the turn completes, fails, or is canceled. Attach them again in a later request
-when needed. Invalid file data or metadata returns `400 invalid_request`; file
-size and overall HTTP body limits return `413 invalid_request`. Validation and
-file preparation finish before the SSE stream starts.
+Both formats accept up to 10 nonempty files, up to 1 GiB per file and 2 GiB
+combined, measured in original file bytes. The worker receives each attachment's
+`workspace_path` and can reopen that path in later turns. Referencing the same
+ID uses the current workspace file, including edits, and applies the size limits to its current size. Portal downloads and previews read the same file. Deleting it makes downloads and ID references return `404`. The `sha256` field identifies the contents at publication. Download responses use the current file's type and length.
+
+Invalid file data or metadata returns `400 invalid_request`. Exceeding a file size or HTTP body limit
+returns `413 invalid_request`. Validation and file preparation finish before the
+SSE stream starts.
+
+The server saves uploads in the workspace before calling the agent. SSE includes their download URLs in the first `message_start`. Saved files remain available after turn cancellation, a busy-session rejection, or an agent error. A JSON error returned after saving the files includes `input_attachments`.
+
+| Files | JSON success | First SSE `message_start` | Final successful SSE `message_delta` |
+| --- | --- | --- | --- |
+| User uploads | `input_attachments` | `input_attachments` | `input_attachments` |
+| Agent results | `output[0].attachments` | — | `attachments` |
+
+An agent can publish a zero-byte result. If an Engine result is unavailable, the reply names the missing file and includes the text and downloads for all available results.
+
+The attachment arrays are top-level fields of the SSE event data. Empty arrays are omitted. Each attachment includes `id`, `name`, `media_type`, `size_bytes`, `sha256`, `download_url`, and a relative `workspace_path`. Images also have a `preview_url`. PDFs are served with `Content-Disposition: attachment`. To preview a PDF, use `readAttachment(id)` below to fetch its Blob, pass `URL.createObjectURL(blob)` to a PDF viewer, and call `URL.revokeObjectURL(url)` when the preview closes. A Codex agent can publish results with `csgclaw_publish_file`.
+
+Uploads and published results each have one file under `.csgclaw/attachments/sessions/<session_id>/` in the agent's configured `local_workspace_dir` or default workspace. IM stores the attachment ID, owner, path, and download credential under `assets/session-responses/`. When replacing the container, mount both persisted directories at their original paths. A room checkpoint or downgrade preserves the files and IDs for use after upgrading again. On upgrade, existing IDs and download URLs are kept when the file can be found in its owner's workspace. A session download uses `Cache-Control: private, no-store`.
+
+For Portal history, store the stable attachment ID and display fields with the message and its instance, agent, and session. Exclude tokens and token-bearing download or preview URLs from history. To reopen a file, fetch `GET /api/v1/attachments/{id}` on the corresponding instance using its current credentials. The session history API does not generate attachment entries for Portal automatically.
+
+A browser can upload as soon as the user selects files, then send a JSON turn when the user submits the prompt.
+
+```js
+const endpoint = new URL(instance.endpoint, gatewayHost)
+if (endpoint.origin !== new URL(gatewayHost).origin) throw new Error("Unexpected gateway")
+const base = endpoint.origin + endpoint.pathname.replace(/\/$/, "")
+const headers = { Authorization: `Bearer ${token}` }
+const session = `/api/v1/agents/${encodeURIComponent(agent)}/sessions/${encodeURIComponent(sid)}`
+
+function historyFile({ id, name, media_type, size_bytes }) {
+  return { id, name, media_type, size_bytes }
+}
+
+async function upload(files) {
+  const body = new FormData()
+  for (const file of files) body.append("files", file, file.name)
+  const res = await fetch(base + session + "/attachments", { method: "POST", headers, body })
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  return (await res.json()).attachments.map(historyFile)
+}
+
+async function send(prompt, uploads) {
+  const res = await fetch(base + session + "/responses", {
+    method: "POST",
+    headers: { ...headers, "Content-Type": "application/json" },
+    body: JSON.stringify({ input: prompt, attachment_ids: uploads.map(file => file.id) }),
+  })
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  const { output } = await res.json()
+  return { content: output[0].content, attachments: (output[0].attachments ?? []).map(historyFile) }
+}
+
+async function readAttachment(id) {
+  const res = await fetch(base + "/api/v1/attachments/" + encodeURIComponent(id), { headers, cache: "no-store" })
+  if (!res.ok) throw new Error(await res.text())
+  return res.blob()
+}
+```
 
 With `stream` omitted or set to `false`, the endpoint returns the completed
 Responses-style JSON object containing the final assistant text and session
@@ -1692,7 +1772,7 @@ and `message_stop`.
 
 Only one turn may run for a session at a time.
 Different session IDs may run concurrently.
-Using the same global session with another agent returns `409 session_agent_conflict`.
+Different agents can use the same external `session_id` independently.
 The server imposes no response duration limit. Client disconnects and explicit cancellation still cancel the running response.
 
 ### `POST /api/v1/agents/{agent}/sessions/{session_id}/responses/cancel`
@@ -1714,9 +1794,6 @@ Errors use this JSON shape:
 }
 ```
 
-The v1 endpoint accepts user text, Base64 file inputs, optional supplemental text
-context, and optional text-output streaming. Request and content-part fields are
-strictly validated.
 See [Session API Demo Frontend Guide](web/session-api-demo.md) for the bundled live demo and mockable frontend boundary.
 
 ### `GET /api/v1/agents/{id}/llm/models`
@@ -1810,6 +1887,8 @@ The following paths often seen in older docs are no longer registered in the cur
 ## Chat side panel files
 
 ### `GET /api/v1/agents/{id}/workspace?path=...&depth=1`
+
+With service authentication enabled, workspace browsing, file reads and workspace file references require credentials. Agent workspace requests use the configured `local_workspace_dir` or the agent's default workspace. A room with an explicit workspace uses its own configured directory.
 
 Lists only the immediate children of the selected workspace directory.
 The `path` is workspace-relative and defaults to the root.

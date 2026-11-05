@@ -12,6 +12,7 @@ import (
 
 func TestRoomAttachmentHeadersCannotAuthorizeReads(t *testing.T) {
 	h, roomID, _, _, _ := referenceTestHandler(t)
+	h.serverNoAuth = false
 	h.serverAccessToken = "test-admin-credential"
 	message, err := h.im.CreateMessage(im.CreateMessageRequest{RoomID: roomID, SenderID: "admin", Attachments: []im.MessageAttachmentUpload{{Name: "private.txt", Data: []byte("fixture-private-content")}}})
 	if err != nil {

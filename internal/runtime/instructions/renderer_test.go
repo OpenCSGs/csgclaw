@@ -215,7 +215,7 @@ func TestRenderRuntimeAgentsInstructionsBlockAddsManagerConnectorRulesOnlyForMan
 		"Historical Attachment Recovery",
 		`"$CSGCLAW_CLI" message list --channel <current_channel> --room-id <target_room_id>`,
 		"jq '[.[] as $message | ($message.attachments // [])[]",
-		"runtime-local cache copies, not as the durable attachment index",
+		"Use the supplied workspace path for direct-session attachments in this and later turns",
 		"GET $CSGCLAW_BASE_URL/api/v1/attachments/<attachment-id>",
 		"curl -fsS -H \"Authorization: Bearer ${CSGCLAW_ACCESS_TOKEN:?}\"",
 		"Use the stable attachment ID for authenticated downloads",

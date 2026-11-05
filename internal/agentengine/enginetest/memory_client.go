@@ -623,16 +623,10 @@ func (c *memoryConversations) Run(ctx context.Context, request agentengine.TurnR
 	if c.agentID == "" || request.ID == "" || request.ConversationKey == "" || len(request.Input) == 0 {
 		return failed(agentengine.ErrorInvalidRequest, "agent ID, turn ID, conversation key, and input are required")
 	}
+	if err := contract.ValidateInput(request.Input); err != nil {
+		return failed(err.Code, err.Message)
+	}
 	for _, part := range request.Input {
-		if part.Kind == agentengine.InputPartText && (strings.TrimSpace(part.Text) == "" || part.File != nil) {
-			return failed(agentengine.ErrorInvalidRequest, "text input must contain only non-empty text")
-		}
-		if part.Kind == agentengine.InputPartFile && (part.File == nil || strings.TrimSpace(part.Text) != "") {
-			return failed(agentengine.ErrorInvalidRequest, "file input must include only a file")
-		}
-		if part.Kind == agentengine.InputPartFile && strings.TrimSpace(part.File.ID) == "" {
-			return failed(agentengine.ErrorInvalidRequest, "file ID is required")
-		}
 		if part.Kind == agentengine.InputPartFile {
 			download, err := c.client.files.Scope(c.agentID).Get(ctx, part.File.ID)
 			if err != nil {
@@ -641,9 +635,6 @@ func (c *memoryConversations) Run(ctx context.Context, request agentengine.TurnR
 			if err := download.Content.Close(); err != nil {
 				return failed(agentengine.ErrorFileUnavailable, "file content is unavailable")
 			}
-		}
-		if part.Kind != agentengine.InputPartText && part.Kind != agentengine.InputPartFile {
-			return failed(agentengine.ErrorInvalidRequest, "unsupported input kind")
 		}
 	}
 	if request.Continuation == "" {
@@ -1232,13 +1223,7 @@ func redactedModelView(spec agentengine.ModelSpec, apiKey string) agentengine.Mo
 }
 
 func cloneRequest(input agentengine.TurnRequest) agentengine.TurnRequest {
-	input.Input = append([]agentengine.InputPart(nil), input.Input...)
-	for index := range input.Input {
-		if input.Input[index].File != nil {
-			fileCopy := *input.Input[index].File
-			input.Input[index].File = &fileCopy
-		}
-	}
+	input.Input = contract.CloneInput(input.Input)
 	return input
 }
 

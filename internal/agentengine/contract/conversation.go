@@ -66,15 +66,17 @@ const (
 type InputPartKind string
 
 const (
-	InputPartText InputPartKind = "text"
-	InputPartFile InputPartKind = "file"
+	InputPartText          InputPartKind = "text"
+	InputPartFile          InputPartKind = "file"
+	InputPartWorkspaceFile InputPartKind = "workspace_file"
 )
 
 // InputPart is text or a caller-authorized file.
 type InputPart struct {
-	Kind InputPartKind `json:"kind"`
-	Text string        `json:"text,omitempty"`
-	File *InputFile    `json:"file,omitempty"`
+	Kind          InputPartKind  `json:"kind"`
+	Text          string         `json:"text,omitempty"`
+	File          *InputFile     `json:"file,omitempty"`
+	WorkspaceFile *WorkspaceFile `json:"-"`
 }
 
 // InputFile references one immutable Agent-scoped Conversation file resource.

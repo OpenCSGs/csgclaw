@@ -42,7 +42,7 @@ func (s *IMTranscriptStore) DeliverTurnProgress(ctx context.Context, turn channe
 		metadata = mergeCSGClawMetadata(metadata, map[string]any{channelrender.RuntimeErrorMetaKey: true, channelrender.RuntimeErrorDetailKey: internalError, "error_code": publicError.Code, "presentation_version": 2})
 	}
 	uploads, rejected := s.outputFileSources(ctx, turn.AgentID, files)
-	defer closeOutputFileSources(uploads)
+	defer CloseOutputFileSources(uploads)
 	answer = outputFileDeliveryText(answer, rejected, turn.Locale)
 	if strings.TrimSpace(answer) == "" {
 		answer = "\u200b"

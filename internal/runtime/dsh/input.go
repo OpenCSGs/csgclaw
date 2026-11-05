@@ -17,6 +17,8 @@ import (
 	"sync"
 
 	"csgclaw/internal/agentengine/contract"
+	"csgclaw/internal/apitypes"
+	workerworkspace "csgclaw/internal/runtime/workspace"
 )
 
 type acpPromptBlock struct {
@@ -72,6 +74,13 @@ func preparePromptInput(ctx context.Context, turnID contract.TurnID, workspace s
 			if part.Text != "" {
 				blocks = append(blocks, acpPromptBlock{Type: "text", Text: part.Text})
 			}
+		case contract.InputPartWorkspaceFile:
+			attachmentBlocks, err := workspacePromptBlocks(ctx, workspace, part.WorkspaceFile, imagePrompts)
+			if err != nil {
+				cleanup()
+				return nil, func() {}, inputFileUnavailable("workspace_input", err)
+			}
+			blocks = append(blocks, attachmentBlocks...)
 		case contract.InputPartFile:
 			if part.File == nil || part.File.Resolved == nil {
 				cleanup()
@@ -109,11 +118,44 @@ func preparePromptInput(ctx context.Context, turnID contract.TurnID, workspace s
 	return blocks, cleanup, nil
 }
 
+func workspacePromptBlocks(ctx context.Context, workspace string, ref *contract.WorkspaceFile, imagePrompts bool) ([]acpPromptBlock, error) {
+	file, prompt, err := workerworkspace.OpenInput(workspace, ref)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+	blocks := []acpPromptBlock{{Type: "text", Text: prompt}}
+	if !imagePrompts || !supportsImageMIME(ref.MIMEType) {
+		return blocks, nil
+	}
+
+	info, err := file.Stat()
+	if err != nil {
+		return nil, err
+	}
+	if info.Size() > apitypes.MaxAttachmentFileBytes {
+		return blocks, nil
+	}
+	var encoded strings.Builder
+	encoder := base64.NewEncoder(base64.StdEncoding, &encoded)
+	stop := context.AfterFunc(ctx, func() { _ = file.Close() })
+	defer stop()
+	_, err = io.CopyN(encoder, file, info.Size())
+	if err := errors.Join(err, encoder.Close()); err != nil {
+		return nil, err
+	}
+	return append(blocks, acpPromptBlock{Type: "image", Data: encoded.String(), MIMEType: ref.MIMEType}), nil
+}
+
 func canInlineImage(input *contract.InputFile, imagePrompts bool) bool {
 	if !imagePrompts || input == nil || input.Resolved == nil {
 		return false
 	}
-	switch strings.ToLower(strings.TrimSpace(input.Resolved.MediaType)) {
+	return supportsImageMIME(input.Resolved.MediaType)
+}
+
+func supportsImageMIME(mediaType string) bool {
+	switch strings.ToLower(strings.TrimSpace(mediaType)) {
 	case "image/png", "image/jpeg", "image/webp", "image/gif":
 		return true
 	default:
