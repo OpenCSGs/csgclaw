@@ -74,6 +74,13 @@
   min-height: 148px;
   padding: 16px 16px 8px;
 }
+.composer .mentions {
+  position: static;
+  width: auto;
+  max-height: 240px;
+  margin: 0 12px 8px;
+  animation: none;
+}
 .draft:not([hidden]) {
   display: flex;
   flex-wrap: wrap;

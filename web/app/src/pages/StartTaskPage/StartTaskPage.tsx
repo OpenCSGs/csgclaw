@@ -19,6 +19,8 @@ import { taskConversationTitle } from "@/models/taskConversations";
 import type { IMConversation } from "@/models/conversations";
 import styles from "./StartTaskPage.module.css";
 import { TargetPicker, SOLO_TEAM_ID } from "./components/TargetPicker";
+import { MentionPicker, type MentionPickerUser } from "@/components/business/ConversationPane";
+import { useTaskPromptMentions } from "./useTaskPromptMentions";
 import {
   ConversationResourcePicker,
   useComposerResourcePicker,
@@ -89,6 +91,26 @@ function StartTaskForm({
   const manager = agents.find((agent) => agent.role === "manager");
   const selected = target || `agent:${manager?.id || agents[0]?.id || ""}`;
   const selectedAgent = agents.find((agent) => selected === `agent:${agent.id}`);
+  const selectedTeam = teams.find((team) => selected === `team:${team.id}`);
+  const mentionMembers = useMemo(() => {
+    const ids = new Set(selectedTeam ? [selectedTeam.lead_agent_id, ...selectedTeam.member_agent_ids] : []);
+    return agents
+      .filter((agent) =>
+        selectedAgent
+          ? agent.id === selectedAgent.id
+          : selectedTeam
+            ? agent === manager || ids.has(agent.id || "")
+            : selected === "solo" && agent === manager,
+      )
+      .map(
+        (agent): MentionPickerUser => ({
+          id: resolveAgentChannelUserID(agent) || agent.id || "",
+          name: agent.name || agent.user_name || agent.id,
+          avatar: agent.avatar,
+          role: agent.role,
+        }),
+      );
+  }, [agents, selectedAgent, selectedTeam, selected, manager]);
   const resourceAgentID = supportsTaskConfiguration(selectedAgent) ? selectedAgent?.id || undefined : undefined;
   const resourcePicker = useComposerResourcePicker({
     resourceAgentID,
@@ -97,11 +119,17 @@ function StartTaskForm({
     selected: resources,
     disabled: busy,
   });
+  const promptMentions = useTaskPromptMentions({
+    value: draft,
+    onChange: setDraft,
+    members: mentionMembers,
+    editorRef,
+    disabled: busy || resourcePicker.active,
+  });
   if (!controller.ready || !sidebar || !controller.taskEntry) return null;
   const readySidebar = sidebar;
   const { t } = sidebar;
   const entry = controller.taskEntry;
-  const selectedTeam = teams.find((team) => selected === `team:${team.id}`);
   const recipient = selectedAgent || manager;
   const selectedProfile = recipient
     ? effectiveConversationProfile(recipient, selectedAgent ? configuration : undefined, controller.modelProviders)
@@ -110,12 +138,13 @@ function StartTaskForm({
   const targetName = selectedAgent?.name || selectedTeam?.title || t("taskEntrySolo");
 
   function messageInput(prompt: string) {
+    const content = promptMentions.serialize(prompt).trim();
     return supportsTaskConfiguration(selectedAgent)
       ? resourceMessageInput(
           resources.map((resource) => resourceSegment(resource)),
-          prompt.trim(),
+          content,
         )
-      : { content: prompt.trim(), resource_refs: [] };
+      : { content, resource_refs: [] };
   }
   const draftInput = messageInput(draft);
 
@@ -234,6 +263,7 @@ function StartTaskForm({
             }
             onChange={(value) => {
               requestID.current = createUUID();
+              promptMentions.clear();
               setResources([]);
               setTarget(value.id === SOLO_TEAM_ID ? "solo" : `${value.kind}:${value.id}`);
               setConfiguration({});
@@ -290,16 +320,35 @@ function StartTaskForm({
                   aria-label={t("taskEntryPrompt")}
                   placeholder={resources.length || files.length || draft.length ? "" : t("iaStartComposerPlaceholder")}
                   value={draft}
-                  onChange={(event) => setDraft(event.target.value)}
+                  onChange={(event) => promptMentions.change(event.currentTarget)}
+                  onSelect={(event) => promptMentions.sync(event.currentTarget)}
+                  onBlur={promptMentions.dismiss}
+                  onCompositionStart={promptMentions.compositionStart}
+                  onCompositionEnd={(event) => promptMentions.compositionEnd(event.currentTarget)}
                   disabled={busy}
                   onKeyDown={(event) => {
-                    if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
+                    if (promptMentions.keyDown(event)) return;
+                    if (
+                      event.key === "Enter" &&
+                      !event.shiftKey &&
+                      !event.nativeEvent.isComposing &&
+                      event.keyCode !== 229
+                    ) {
                       event.preventDefault();
                       void start();
                     }
                   }}
                 />
               </div>
+              {promptMentions.candidates.length ? (
+                <MentionPicker
+                  className={styles.mentions}
+                  users={promptMentions.candidates}
+                  activeIndex={promptMentions.activeIndex}
+                  onSelect={promptMentions.choose}
+                  t={t}
+                />
+              ) : null}
               {files.length ? (
                 <ul className={styles.files}>
                   {files.map((file, index) => (
@@ -397,6 +446,7 @@ function StartTaskForm({
                   className={styles.chip}
                   onClick={() => {
                     const prompt = t(`iaStartExample_${key}_prompt`);
+                    promptMentions.clear();
                     setDraft(prompt);
                     void start(false, prompt);
                   }}

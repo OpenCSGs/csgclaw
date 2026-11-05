@@ -37,6 +37,7 @@ function setup(
     configuration?: { model_provider_id?: string; model_id?: string; workspace_dir?: string };
     managerDirectory?: string;
     locale?: LocaleCode;
+    workerName?: string;
   } = {},
 ) {
   const create = vi.fn().mockResolvedValue(room);
@@ -67,7 +68,14 @@ function setup(
           runtime_kind: "codex",
           runtime_options: { local_workspace_dir: options.managerDirectory },
         },
-        { id: "u-worker", name: "Worker", user_id: "worker", model_id: model, model_provider_id: options.provider },
+        {
+          id: "u-worker",
+          name: options.workerName || "Worker",
+          user_id: "worker",
+          model_id: model,
+          model_provider_id: options.provider,
+        },
+        { id: "u-outsider", name: "Outside team", user_id: "outsider", model_id: model },
       ],
       teams: [{ id: "team-1", title: "Team", lead_agent_id: "u-manager", member_agent_ids: ["u-worker"] }],
       onCreateAgent,
@@ -343,6 +351,71 @@ describe("StartTaskPage task preparation", () => {
     fireEvent.click(screen.getByRole("button", { name: "taskEntryStart" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("taskEntryMissingTarget");
     expect(create).not.toHaveBeenCalled();
+  });
+});
+
+describe("new task member mentions", () => {
+  beforeEach(() =>
+    vi
+      .mocked(sendMessageRequest)
+      .mockReset()
+      .mockResolvedValue({} as never),
+  );
+
+  it("selects a team member without submitting and sends a structured participant reference", async () => {
+    const user = userEvent.setup();
+    const { create, open } = setup("/new?team=team-1", "test-model", { workerName: "测试工程师 Linda" });
+    const editor = screen.getByRole("textbox", { name: "taskEntryPrompt" });
+    await user.type(editor, "请 @");
+    expect(screen.getByRole("option", { name: /Manager/ })).toBeVisible();
+    expect(screen.queryByRole("option", { name: /Outside team/ })).not.toBeInTheDocument();
+    await user.keyboard("{ArrowDown}");
+    fireEvent.select(editor);
+    await user.keyboard("{Enter}");
+    expect(editor).toHaveValue("请 @测试工程师 Linda ");
+    expect(create).not.toHaveBeenCalled();
+    expect(editor).toHaveFocus();
+    await user.type(editor, "检查代码");
+    await user.keyboard("{Enter}");
+    await waitFor(() => expect(open).toHaveBeenCalledWith(room));
+    expect(create).toHaveBeenCalledWith(expect.objectContaining({ member_ids: ["manager", "worker"] }));
+    expect(sendMessageRequest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content: '请 <at user_id="worker">测试工程师 Linda</at> 检查代码',
+      }),
+    );
+  });
+
+  it("filters mentions, preserves a selection when text is prepended, and only offers the direct recipient", async () => {
+    const user = userEvent.setup();
+    setup("/new?agent=u-worker");
+    const editor = screen.getByRole("textbox", { name: "taskEntryPrompt" });
+    await user.type(editor, "@Wor");
+    expect(screen.getAllByRole("option")).toHaveLength(1);
+    await user.click(screen.getByRole("option", { name: /Worker/ }));
+    await user.keyboard("{Home}");
+    await user.keyboard("请 ");
+    await user.click(screen.getByRole("button", { name: "taskEntryStart" }));
+    await waitFor(() => expect(sendMessageRequest).toHaveBeenCalled());
+    expect(sendMessageRequest).toHaveBeenCalledWith(
+      expect.objectContaining({ content: '请 <at user_id="worker">Worker</at>' }),
+    );
+  });
+
+  it("dismisses the picker with Escape and avoids selecting or sending during IME composition", async () => {
+    const user = userEvent.setup();
+    const { create } = setup("/new?team=team-1");
+    const editor = screen.getByRole("textbox", { name: "taskEntryPrompt" });
+    await user.type(editor, "@");
+    fireEvent.keyDown(editor, { key: "Enter", isComposing: true });
+    expect(editor).toHaveValue("@");
+    expect(create).not.toHaveBeenCalled();
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+    expect(editor).toHaveValue("@");
+    fireEvent.compositionStart(editor);
+    fireEvent.change(editor, { target: { value: "@测", selectionStart: 2, selectionEnd: 2 } });
+    expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
   });
 });
 
