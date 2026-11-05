@@ -13,6 +13,7 @@ describe("auth environment model", () => {
   it.each([
     ["https://opencsg.com", "https://opencsg.com/agentichub?view=resources&subview=rag"],
     ["https://opencsg-stg.com", "https://opencsg-stg.com/agentichub?view=resources&subview=rag"],
+    ["https://openeast.opencsg.com", "https://openeast.opencsg.com/agentichub?view=resources&subview=rag"],
     ["https://east.example/site/", "https://east.example/site/agentichub?view=resources&subview=rag"],
   ])("links knowledge creation to the signed-in site %s", (base, expected) => {
     expect(agenticHubKnowledgeCreateURL({ ...emptyAuthStatus(), authenticated: true, opencsg_base_url: base })).toBe(
@@ -39,6 +40,14 @@ describe("auth environment model", () => {
       opencsg_base_url: "https://opencsg-stg.com",
       csghub_base_url: "https://opencsg-stg.com",
       ai_gateway_base_url: "https://aigateway.opencsg-stg.com/v1",
+    });
+  });
+
+  it("builds the east login payload", () => {
+    expect(authEnvironmentLoginPayload(authEnvironmentDraftFromPreset("east"))).toEqual({
+      opencsg_base_url: "https://openeast.opencsg.com",
+      csghub_base_url: "https://openeast.opencsg.com",
+      ai_gateway_base_url: "https://openeast.opencsg.com/aigateway/v1",
     });
   });
 
@@ -99,13 +108,29 @@ describe("auth environment model", () => {
     expect(draft.preset).toBe("stage");
   });
 
-  it("hydrates custom status without falling back to production service URLs", () => {
+  it("hydrates east status from the OpenEast site URL", () => {
     const draft = authEnvironmentDraftFromStatus({
       authenticated: true,
       user_id: "alice",
       user_uuid: "user-1",
       avatar: "",
       opencsg_base_url: "https://openeast.opencsg.com",
+      base_url: "https://openeast.opencsg.com",
+      ai_gateway_base_url: "https://openeast.opencsg.com/aigateway/v1",
+      portal_url: "",
+      logged_in_at: "",
+    });
+
+    expect(draft).toEqual(authEnvironmentDraftFromPreset("east"));
+  });
+
+  it("hydrates custom status without falling back to production service URLs", () => {
+    const draft = authEnvironmentDraftFromStatus({
+      authenticated: true,
+      user_id: "alice",
+      user_uuid: "user-1",
+      avatar: "",
+      opencsg_base_url: "https://east.example.com",
       base_url: "",
       ai_gateway_base_url: "",
       portal_url: "",
@@ -114,14 +139,15 @@ describe("auth environment model", () => {
 
     expect(draft).toMatchObject({
       preset: "custom",
-      opencsgBaseURL: "https://openeast.opencsg.com",
-      csgHubBaseURL: "https://openeast.opencsg.com",
-      aiGatewayBaseURL: "https://openeast.opencsg.com/aigateway/v1",
+      opencsgBaseURL: "https://east.example.com",
+      csgHubBaseURL: "https://east.example.com",
+      aiGatewayBaseURL: "https://east.example.com/aigateway/v1",
     });
   });
 
   it("shows the selected environment by domain", () => {
     expect(authEnvironmentDisplayLabel(authEnvironmentDraftFromPreset("prod"))).toBe("opencsg.com");
+    expect(authEnvironmentDisplayLabel(authEnvironmentDraftFromPreset("east"))).toBe("openeast.opencsg.com");
     expect(
       authEnvironmentDisplayLabel(
         normalizeAuthEnvironmentDraft({

@@ -17,9 +17,19 @@ import {
   authEnvironmentDraftFromPreset,
   authEnvironmentLoginReady,
 } from "@/models/authEnvironment";
-import type { AuthEnvironmentDraft, AuthEnvironmentPresetID } from "@/models/authEnvironment";
+import type {
+  AuthEnvironmentDraft,
+  AuthEnvironmentNamedPresetID,
+  AuthEnvironmentPresetID,
+} from "@/models/authEnvironment";
 import type { TranslateFn } from "@/models/conversations";
 import styles from "./OpenCSGConnectionDialog.module.css";
+
+const AUTH_ENVIRONMENT_PRESET_LABEL_KEYS: Record<AuthEnvironmentNamedPresetID, string> = {
+  prod: "csghubEnvProduction",
+  stage: "csghubEnvStage",
+  east: "csghubEnvEast",
+};
 
 export type OpenCSGConnectionDialogProps = {
   busy: boolean;
@@ -105,7 +115,7 @@ export function OpenCSGConnectionDialog({
                 checked={draft.preset === preset.id}
                 description={preset.label}
                 name={environmentFieldName}
-                label={preset.id === "prod" ? t("csghubEnvProduction") : t("csghubEnvStage")}
+                label={t(AUTH_ENVIRONMENT_PRESET_LABEL_KEYS[preset.id])}
                 value={preset.id}
                 onChange={selectPreset}
               />
