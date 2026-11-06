@@ -11,7 +11,28 @@ function utf16(text: string, littleEndian: boolean, bom: boolean): Uint8Array<Ar
   return data;
 }
 
-describe("DOCX XML encoding", () => {
+describe("DOCX package preparation", () => {
+  it.each([false, true])("normalizes Windows ZIP entry names and retains media (UTF-16 %s)", async (useUTF16) => {
+    const xml = `<?xml version="1.0" encoding="${useUTF16 ? "UTF-16" : "UTF-8"}"?><document>春望 😀</document>`;
+    const zip = new JSZip();
+    for (const name of ["word\\document.xml", "word\\_rels\\document.xml.rels", "_rels\\.rels"]) {
+      zip.file(name, useUTF16 ? utf16(xml, true, true) : xml);
+    }
+    const image = new Uint8Array([0, 255, 10, 128]);
+    zip.file("word\\media\\picture.png", image);
+    const normalized = await JSZip.loadAsync(await prepareDocxData(await zip.generateAsync({ type: "arraybuffer" })));
+    expect(Object.keys(normalized.files).every((name) => !name.includes("\\"))).toBe(true);
+    for (const name of ["word/document.xml", "word/_rels/document.xml.rels", "_rels/.rels"]) {
+      expect(await normalized.file(name)!.async("string")).toBe(xml.replace("UTF-16", "UTF-8"));
+    }
+    expect(await normalized.file("word/media/picture.png")!.async("uint8array")).toEqual(image);
+  });
+
+  it("rejects conflicting names instead of choosing a different document part", async () => {
+    const zip = new JSZip().file("word/document.xml", "first").file("word\\document.xml", "second");
+    await expect(prepareDocxData(await zip.generateAsync({ type: "arraybuffer" }))).rejects.toThrow("Ambiguous");
+  });
+
   it.each([
     [true, true],
     [false, true],
