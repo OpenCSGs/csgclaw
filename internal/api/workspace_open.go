@@ -17,6 +17,12 @@ import (
 	"csgclaw/internal/utils/filebrowse"
 )
 
+// SetHostDesktopActionsDisabled prevents API-only deployments from launching
+// applications on the service host, even for requests arriving over loopback.
+func (h *Handler) SetHostDesktopActionsDisabled(disabled bool) {
+	h.hostDesktopActionsDisabled = disabled
+}
+
 // Native applications run on the service host, never on a remote web client.
 // Only a literal loopback host and loopback peer qualify, including in NoAuth mode.
 func localWorkspaceClient(r *http.Request) bool {
@@ -32,7 +38,7 @@ func localWorkspaceClient(r *http.Request) bool {
 }
 
 func (h *Handler) workspaceOpenTargets(r *http.Request, path string, directory bool) []workspaceOpenTarget {
-	if !localWorkspaceClient(r) || appRequestAgentID(r) != "" || r.Header.Get("X-CSGClaw-Caller-Agent") != "" || strings.HasPrefix(r.Header.Get("Authorization"), "Bearer agent.") {
+	if h.hostDesktopActionsDisabled || !localWorkspaceClient(r) || appRequestAgentID(r) != "" || r.Header.Get("X-CSGClaw-Caller-Agent") != "" || strings.HasPrefix(r.Header.Get("Authorization"), "Bearer agent.") {
 		return []workspaceOpenTarget{}
 	}
 	if header := r.Header.Get("Authorization"); header != "" && !h.validServerCredential(header) {

@@ -1,17 +1,20 @@
 package webui
 
 import (
+	"io/fs"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"regexp"
 	"strings"
 	"testing"
+
+	"csgclaw/internal/uiassets"
 )
 
 func TestOnboardingGuideServesWithoutRedirectAndUsesExternalScript(t *testing.T) {
 	assets := os.DirFS("app/public")
-	handler := spaHandler{fsys: assets, files: http.FileServer(http.FS(assets))}
+	handler := uiassets.SPA(assets)
 	for _, route := range []string{"/onboarding-guide/guide.html?locale=en&embedded=1", "/onboarding-guide/guide.js", "/onboarding-guide/i18n.js"} {
 		rec := httptest.NewRecorder()
 		handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, route, nil))
@@ -147,7 +150,8 @@ func requireBuiltWebAssets(t *testing.T) {
 }
 
 func builtWebAssets() bool {
-	return fileExists(staticFiles, "static-dist/index.html")
+	_, err := fs.Stat(staticFiles, "static-dist/index.html")
+	return err == nil
 }
 
 var htmlAssetPattern = regexp.MustCompile(`(?:src|href)=["']([^"']+)["']`)

@@ -32,6 +32,8 @@ import (
 )
 
 type Options struct {
+	// UI is an optional presentation module. A nil handler serves APIs only.
+	UI                 http.Handler
 	ListenAddr         string
 	Listener           net.Listener
 	SandboxListener    net.Listener
@@ -77,6 +79,7 @@ type Options struct {
 
 func newHandler(opts Options) *api.Handler {
 	handler := api.NewHandlerWithAuth(opts.AgentServices, opts.AgentEngine, opts.IM, opts.IMBus, opts.ParticipantBridge, opts.Feishu, opts.LLM, opts.AccessToken, opts.NoAuth)
+	handler.SetHostDesktopActionsDisabled(opts.UI == nil)
 	handler.SetParticipantService(opts.Participant)
 	handler.SetParticipantWorkService(opts.WorkReporter, opts.WorkBus, opts.WorkControlBus)
 	handler.SetHubService(opts.Hub)
@@ -176,7 +179,7 @@ func Run(opts Options) error {
 		return fmt.Errorf("recover video generations: %w", err)
 	}
 	router := handler.Routes()
-	router.Handle("/*", uiFallbackHandler())
+	router.Handle("/*", apiAwareFallbackHandler(opts.UI))
 
 	var rootHandler http.Handler = router
 	type serverEndpoint struct {

@@ -160,6 +160,7 @@ func (c serveCmd) Run(ctx context.Context, run *command.Context, args []string, 
 	fs.BoolVar(daemon, "d", false, "run server in background")
 	browser := fs.Bool("browser", false, "open the browser after startup")
 	noBrowser := fs.Bool("no-browser", false, "do not open the browser after startup (default)")
+	apiOnly := fs.Bool("api-only", !embeddedUIAvailable, "serve APIs without the bundled UI or host desktop actions")
 	noAuthDetect := fs.Bool("no-auth-detect", false, "disable automatic auth detection during startup")
 	logLevel := fs.String("log-level", "info", "log level: debug, info, warn, error")
 
@@ -175,6 +176,9 @@ func (c serveCmd) Run(ctx context.Context, run *command.Context, args []string, 
 	pidPath := fs.String("pid", defaultPIDPath, "pid file path, daemon mode only")
 	if err := fs.Parse(args); err != nil {
 		return err
+	}
+	if *apiOnly || !embeddedUIAvailable {
+		*noAuthDetect = true
 	}
 	if err := validateServeInstallation(); err != nil {
 		return err
@@ -220,7 +224,8 @@ func (c serveCmd) Run(ctx context.Context, run *command.Context, args []string, 
 	}
 
 	serveOpts := serveOptions{
-		OpenBrowser:  *browser && !*noBrowser,
+		APIOnly:      *apiOnly || !embeddedUIAvailable,
+		OpenBrowser:  *browser && !*noBrowser && !*apiOnly && embeddedUIAvailable,
 		NoAuthDetect: *noAuthDetect,
 	}
 	if *daemon {
@@ -301,9 +306,13 @@ func (c internalServeCmd) Run(ctx context.Context, run *command.Context, args []
 	logLevel := fs.String("log-level", "info", "log level: debug, info, warn, error")
 	browser := fs.Bool("browser", false, "open the browser after startup")
 	noBrowser := fs.Bool("no-browser", false, "do not open the browser after startup (default)")
+	apiOnly := fs.Bool("api-only", !embeddedUIAvailable, "serve APIs without the bundled UI or host desktop actions")
 	noAuthDetect := fs.Bool("no-auth-detect", false, "disable automatic auth detection during startup")
 	if err := fs.Parse(args); err != nil {
 		return err
+	}
+	if *apiOnly || !embeddedUIAvailable {
+		*noAuthDetect = true
 	}
 	if err := validateServeInstallation(); err != nil {
 		return err
@@ -342,7 +351,11 @@ func (c internalServeCmd) Run(ctx context.Context, run *command.Context, args []
 		return err
 	}
 	defer restore()
-	serveOpts := serveOptions{OpenBrowser: *browser && !*noBrowser, NoAuthDetect: *noAuthDetect}
+	serveOpts := serveOptions{
+		APIOnly:      *apiOnly || !embeddedUIAvailable,
+		OpenBrowser:  *browser && !*noBrowser && !*apiOnly && embeddedUIAvailable,
+		NoAuthDetect: *noAuthDetect,
+	}
 	closeListener, err := prepareRuntimeListener(&cfg.Server, &serveOpts)
 	if err != nil {
 		return err
@@ -395,6 +408,7 @@ func officialInstallGuidance(goos string) (string, string) {
 }
 
 type serveOptions struct {
+	APIOnly         bool
 	OpenBrowser     bool
 	NoAuthDetect    bool
 	Quiet           bool
@@ -457,7 +471,7 @@ func serveForegroundWithConfigPath(ctx context.Context, run *command.Context, cf
 		return err
 	}
 	apiURL := serveAPIBaseURL(cfg.Server, serveOpts)
-	imURL := imOpenURL(apiURL)
+	imURL := serveOpts.uiURL(apiURL)
 
 	if serveOpts.Quiet {
 		// Machine entrypoints own stdout and emit their versioned protocol messages.
@@ -474,7 +488,11 @@ func serveForegroundWithConfigPath(ctx context.Context, run *command.Context, cf
 		}
 	} else {
 		printEffectiveConfig(run, cfg, output)
-		fmt.Fprintf(run.Stdout, "CSGClaw IM is available at: %s\n", imURL)
+		if imURL != "" {
+			fmt.Fprintf(run.Stdout, "CSGClaw IM is available at: %s\n", imURL)
+		} else {
+			fmt.Fprintf(run.Stdout, "CSGClaw API is available at: %s\n", apiURL)
+		}
 	}
 
 	return startServerWithConfigPath(ctx, run, cfg, svc, imSvc, imBus, feishuSvc, configPath, output, serveOpts)
@@ -514,7 +532,7 @@ func serveBackground(run *command.Context, cfg config.Config, globals command.Gl
 		Action:  "start",
 		Status:  "started",
 		PID:     cmd.Process.Pid,
-		IMURL:   imOpenURL(apiURL),
+		IMURL:   opts.uiURL(apiURL),
 		APIURL:  apiURL,
 		LogPath: logPath,
 		PIDPath: pidPath,
@@ -525,7 +543,9 @@ func serveBackground(run *command.Context, cfg config.Config, globals command.Gl
 	}
 
 	fmt.Fprintln(run.Stdout, result.Message)
-	fmt.Fprintf(run.Stdout, "im: %s\n", result.IMURL)
+	if result.IMURL != "" {
+		fmt.Fprintf(run.Stdout, "im: %s\n", result.IMURL)
+	}
 	fmt.Fprintf(run.Stdout, "api: %s\n", result.APIURL)
 	fmt.Fprintf(run.Stdout, "log: %s\n", result.LogPath)
 	fmt.Fprintf(run.Stdout, "pid: %s\n", result.PIDPath)
@@ -540,10 +560,13 @@ func backgroundServeArgs(configPath, pidPath, logLevel string, opts serveOptions
 	if strings.TrimSpace(logLevel) != "" {
 		args = append(args, "--log-level", logLevel)
 	}
-	if opts.OpenBrowser {
+	if opts.apiOnly() {
+		args = append(args, "--api-only")
+	}
+	if opts.OpenBrowser && !opts.apiOnly() {
 		args = append(args, "--browser")
 	}
-	if opts.NoAuthDetect {
+	if opts.NoAuthDetect || opts.apiOnly() {
 		args = append(args, "--no-auth-detect")
 	}
 	return args
@@ -636,6 +659,11 @@ func startServerWithConfigPath(ctx context.Context, run *command.Context, cfg co
 	if len(opts) > 0 {
 		serveOpts = opts[0]
 	}
+	ui, err := serveOpts.uiHandler()
+	if err != nil {
+		return fmt.Errorf("assemble UI: %w", err)
+	}
+	serveOpts.NoAuthDetect = serveOpts.NoAuthDetect || serveOpts.apiOnly()
 	if imSvc != nil {
 		distribution := "cli"
 		if serveOpts.Desktop != nil {
@@ -718,7 +746,7 @@ func startServerWithConfigPath(ctx context.Context, run *command.Context, cfg co
 		return err
 	}
 	apiURL := serveAPIBaseURL(cfg.Server, serveOpts)
-	imURL := imOpenURL(apiURL)
+	imURL := serveOpts.uiURL(apiURL)
 	currentVersion := appversion.Current()
 	upgradeChannel := upgrade.InferChannelFromVersion(currentVersion)
 	upgradeClient := &upgrade.Client{
@@ -818,6 +846,7 @@ func startServerWithConfigPath(ctx context.Context, run *command.Context, cfg co
 		svc.PrepareConfiguredAgentsStartup()
 	}
 	return RunServer(server.Options{
+		UI:                 ui,
 		ListenAddr:         cfg.Server.ListenAddr,
 		Listener:           serveOpts.Listener,
 		SandboxListener:    serveOpts.SandboxListener,
@@ -858,7 +887,7 @@ func startServerWithConfigPath(ctx context.Context, run *command.Context, cfg co
 		OnReady: func(handler *api.Handler, router chi.Router) {
 			deliver := channelwiring.WireNotificationParticipantPull(ctx, participantSvc, imSvc, apiURL, cfg.Server.AccessToken)
 			handler.SetNotificationDeliver(deliver)
-			if serveOpts.OpenBrowser && output != "json" && run != nil {
+			if serveOpts.OpenBrowser && !serveOpts.apiOnly() && output != "json" && run != nil {
 				waitForHealthy := WaitForHealthy
 				openBrowser := OpenBrowser
 				go func() {

@@ -26,6 +26,135 @@ Useful targets:
 | `make test` | Run `go test ./...` |
 
 
+## API-only backend
+
+```bash
+make build-headless
+./bin/csgclaw-headless serve
+# An ordinary build can also disable its bundled UI at runtime:
+./bin/csgclaw serve --api-only
+```
+
+`build-headless` builds only `bin/csgclaw-headless` (`.exe` on Windows), using
+`go build -tags headless`. It does not run Node/pnpm, compile the Web app, download
+Codex, or import `csgclaw/web` into the executable. Provision runtime dependencies
+(Codex, DSH, companion CLI, and sandbox tools) in the host or image as needed.
+Local make builds retain the existing `+local` version suffix; release binaries
+still require the official bundle layout.
+
+The CLI assembles an optional `http.Handler` into `server.Options.UI`.
+`internal/server` owns the API router and accepts any UI handler without importing
+its implementation. A nil handler means API-only: `/healthz`, APIs, and event
+streams remain available; UI paths and unknown API paths return 404. API-only
+startup suppresses automatic login discovery, browser opening, and host desktop
+open actions. Daemon startup preserves this mode. Headless builds always use it,
+even if passed `--api-only=false`, and reject the internal Electron entrypoint.
+`--no-browser` only suppresses browser opening; it does not disable UI routes.
+
+The default local/Electron build keeps the bundled UI. Multiple external clients
+can connect to the same backend using its existing API/event protocols and access
+policies. Use the platform gateway or a same-origin proxy for separately hosted
+browser clients. This change does not add CORS, a new UI, an Electron remote-backend
+mode, or a new plugin lifecycle framework. Configuration and persisted business
+data keep their existing formats and locations.
+
+To build the existing container layout without its Web assets:
+
+```bash
+docker build --build-arg CSGCLAW_BUILD=headless -t csgclaw:headless .
+docker run --rm csgclaw:headless serve
+```
+
+The default is `CSGCLAW_BUILD=embedded`. BuildKit skips the Web build stage for
+`headless`; the final image still includes the companion CLI and Codex. Sandbox
+image pipelines must explicitly select this build argument when adopting it;
+changing this source does not update a running deployment.
+
+## Select and bundle UI assets
+
+```bash
+make build-ui UI=web
+make build-ui UI=custom UI_DIR=/absolute/path/to/another-ui/dist
+make build-ui UI=both UI_DIR=/absolute/path/to/another-ui/dist
+make build-ui UI=none
+```
+
+Each command produces **one server binary**, `bin/csgclaw-<UI>[.exe]`. It embeds
+the selected UI assets. Runtime tools are provisioned separately, as for
+`build-headless`. `UI_BIN` overrides the output path. Default `make` and desktop/
+release packaging continue to select the existing UI.
+
+| UI | Compiled UI package | Page entry | Docker `CSGCLAW_BUILD` |
+| --- | --- | --- | --- |
+| `web` | `web` | `/` | `embedded` |
+| `custom` | `web/custom` | `/` | `custom` |
+| `both` | `web` + `web/custom` | `/` + `/ui/custom/` | `both` |
+| `none` | no UI package | no UI routes | `headless` |
+
+`UI_DIR` defaults to the dependency-free `examples/manager-ui` frontend. It supports
+OpenCSG sign-in, per-conversation model selection, new Manager chats and message
+synchronization. Run `make build-ui UI=both` to embed both UIs directly. Login,
+conversations and messages are shared with the original UI; model changes only
+affect the selected conversation. See [Manager Chat](../../examples/manager-ui/README.md).
+
+`UI_DIR` can also point to another completed static frontend build containing `index.html`; the
+packager does not run that frontend's build. `prepare-custom-ui` copies its files
+into the ignored `web/custom/static-dist/` embed directory, replaces stale
+output, skips dotfiles and `node_modules`, and rejects symlinks/special files.
+Builds using different custom inputs must use separate worktrees or run serially.
+The resulting binary no longer needs `UI_DIR` at runtime. Custom assets run as
+trusted application code under the same origin as the backend.
+
+Default `make`, `make package`, release and Electron packaging keep the existing
+CSGClaw UI and root entrypoint. `UI=both` is additive: only `/ui/custom/` is routed
+to the second UI; every other path is passed unchanged to the existing handler.
+Browser startup, original assets and the shared SSE worker retain their URLs.
+A request to `/ui/custom` redirects using a relative URL, preserving gateway
+prefixes and query parameters.
+
+Build tags still select one `http.Handler` for `server.Options.UI`; the both
+handler delegates to the two static UIs without starting another backend.
+`serve --api-only` disables both UIs. API routes and health checks remain owned by
+the same backend. There is no plugin registry or lifecycle framework.
+
+Custom frontends must configure relative resource URLs and their router/API
+base. For custom-only, the API base relative to the application root is
+`./api/v1/`; for both, relative to `/ui/custom/`, it is `../../api/v1/`.
+Resolve these against the frontend root, not an arbitrary history route.
+Hash routing is convenient; history routing requires an explicit resource/router
+base. Authentication and event protocols are unchanged.
+
+To produce an official-layout archive with selected UIs:
+
+```bash
+make package-ui UI=both UI_DIR=/absolute/path/to/another-ui/dist
+```
+
+This reuses the original package script, executable names and bundle structure
+(including the companion CLI and Codex). Variant archives go to
+`dist/ui-<UI>/` by default (`UI_DIST_DIR` overrides it), so they do not overwrite
+regular release output. The extracted `csgclaw` command still opens the existing
+UI at `/` in both mode. Original package/release/desktop commands retain their
+default behavior. UI variant installers and update channels require separate
+release integration.
+
+For a small build/API smoke fixture:
+
+```bash
+make build-ui UI=both UI_DIR=web/custom/testdata
+./bin/csgclaw-both serve --no-browser
+# Existing UI: / ; test fixture reading the same backend: /ui/custom/
+```
+
+This is a test page, not a complete product UI. For a custom or both Docker image, first
+run `make prepare-custom-ui UI_DIR=...`, then
+`docker build --build-arg CSGCLAW_BUILD=custom -t csgclaw:custom .`.
+Use `CSGCLAW_BUILD=both` to include both UIs. The default remains `embedded`.
+Docker verifies the prepared custom `index.html`; only custom/headless skip the
+existing frontend build stage. Cloud image pipelines and signed desktop/release variants
+must explicitly adopt the chosen build; these developer commands do not switch
+them automatically.
+
 ## 镜像内预装 CLI 连接器
 
 镜像构建可以通过服务端的内部命令生成完整安装包：

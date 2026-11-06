@@ -282,6 +282,7 @@ func TestRunDesktopServesRendererAndSandboxOnSeparateListeners(t *testing.T) {
 	go func() {
 		runErr <- Run(Options{
 			ListenAddr:      sandboxListener.Addr().String(),
+			UI:              http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte("desktop UI")) }),
 			Listener:        rendererListener,
 			SandboxListener: sandboxListener,
 			AccessToken:     serverToken,

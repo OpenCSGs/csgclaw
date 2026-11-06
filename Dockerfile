@@ -4,6 +4,7 @@ ARG PNPM_VERSION=11.1.3
 ARG NPM_REGISTRY=https://registry.npmmirror.com
 ARG RUNTIME_IMAGE=alpine:3.23
 ARG APK_REPOSITORY=https://mirrors.aliyun.com/alpine
+ARG CSGCLAW_BUILD=embedded
 
 # The Web UI is architecture-independent. Build it on the BuildKit worker so a
 # multi-platform image build does not run Node under QEMU for every target.
@@ -23,7 +24,7 @@ RUN pnpm build && test -f ../static-dist/index.html
 
 # CGO is disabled below, so Go can cross-compile the target binary while the
 # compiler itself runs natively on the BuildKit worker.
-FROM --platform=$BUILDPLATFORM ${GO_IMAGE} AS build
+FROM --platform=$BUILDPLATFORM ${GO_IMAGE} AS build-base
 
 WORKDIR /src
 
@@ -38,7 +39,24 @@ COPY go.mod go.sum ./
 RUN go mod download
 
 COPY . .
+
+# BuildKit only traverses the selected stage. The headless path never builds web.
+FROM build-base AS build-embedded
 COPY --from=web /src/web/static-dist ./web/static-dist
+ENV CSGCLAW_GO_TAGS=""
+
+FROM build-base AS build-headless
+ENV CSGCLAW_GO_TAGS=headless
+
+FROM build-base AS build-custom
+RUN test -s web/custom/static-dist/index.html
+ENV CSGCLAW_GO_TAGS=ui_custom
+
+FROM build-embedded AS build-both
+RUN test -s web/custom/static-dist/index.html
+ENV CSGCLAW_GO_TAGS=ui_both
+
+FROM build-${CSGCLAW_BUILD} AS build
 
 # These are supplied automatically by Buildx. Do not give them defaults: a
 # default here would override the target platform selected by --platform.
@@ -51,7 +69,7 @@ ARG VERSION_PKG=csgclaw/internal/version
 ARG CODEX_CLI_DOWNLOAD_BASE_URL=https://csgclaw.opencsg.com/codex-cli/latest
 
 RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
-    go build -trimpath \
+    go build -trimpath -tags "${CSGCLAW_GO_TAGS}" \
       -ldflags="-s -w -X ${VERSION_PKG}.Version=${VERSION} -X ${VERSION_PKG}.Commit=${COMMIT} -X ${VERSION_PKG}.BuildTime=${BUILD_TIME}" \
       -o /out/csgclaw ./cmd/csgclaw && \
     CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \

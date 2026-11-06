@@ -44,6 +44,9 @@ func (desktopServeCmd) Run(parent context.Context, run *command.Context, args []
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
+	if !embeddedUIAvailable {
+		return fmt.Errorf("desktop entrypoint requires a build with the bundled UI; use serve for an API-only backend")
+	}
 	if err := validateServeInstallation(); err != nil {
 		return err
 	}

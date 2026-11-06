@@ -25,6 +25,9 @@ desktop/.forge-generated/
 web/static-dist/*
 !web/static-dist/
 !web/static-dist/.gitkeep
+web/custom/static-dist/*
+!web/custom/static-dist/.gitkeep
+web/custom/.prepare-*/
 
 # Local binaries
 /csgclaw
