@@ -155,7 +155,7 @@ export function CloudAgentDetail({
   t: TranslateFn;
   onNewTask: () => void;
   onRemove: () => void;
-  renderTemplate: (repoPath: string, profileIntro: ReactNode) => ReactNode;
+  renderTemplate: (repoPath: string, renderProfileIntro: (showModel: boolean) => ReactNode) => ReactNode;
 }) {
   const online = agent.status === "online";
   const template = useQuery({
@@ -166,10 +166,10 @@ export function CloudAgentDetail({
     retry: false,
   });
   const repoPath = agent.templateRepoPath || template.data?.repo_path;
-  const profileIntro = (
+  const renderProfileIntro = (showModel: boolean) => (
     <div className="profile-editor-shell agent-page-editor">
       <p className={styles.cloudHint}>{t("agentPlazaCloudHint")}</p>
-      <AgentPlazaMetadata agent={agent} t={t} showModel={!repoPath} />
+      <AgentPlazaMetadata agent={agent} t={t} showModel={showModel} />
     </div>
   );
   return (
@@ -214,10 +214,10 @@ export function CloudAgentDetail({
       </div>
       <div className="agent-profile-scroll-region">
         {repoPath ? (
-          renderTemplate(repoPath, profileIntro)
+          renderTemplate(repoPath, renderProfileIntro)
         ) : (
           <>
-            {profileIntro}
+            {renderProfileIntro(true)}
             {agent.publisher === "Agentichub" && template.isPending ? (
               <p role="status">{t("agentPlazaTemplateLoading")}</p>
             ) : template.isError ? (

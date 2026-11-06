@@ -329,12 +329,14 @@ export function useWorkspaceController(): WorkspaceController {
     () => resolveManagerDirectConversation(rooms, displayData?.current_user_id ?? "", agent.managerAgent),
     [agent.managerAgent, displayData?.current_user_id, rooms],
   );
+  const cloudTarget = rooms.find((room) => room.id === (activePane.id || activeConversationId))?.cloud_agent;
   const cloud = useCloudAgents(
     auth.status,
     activePane.type === WorkspacePaneTypes.conversation &&
       location.pathname !== "/" &&
       location.pathname !== "/new" &&
-      rooms.some((room) => room.id === (activePane.id || activeConversationId) && room.cloud_agent),
+      Boolean(cloudTarget),
+    cloudTarget,
   );
   const conversation = useConversationController({
     activeConversationId,

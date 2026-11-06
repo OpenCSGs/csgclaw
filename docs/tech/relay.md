@@ -206,6 +206,10 @@ Each registration is probed through Relay. Community `is_running=true` is not an
 online signal for external workers; confirmed offline or missing registrations produce offline entries. Authentication,
 rate-limit, transport and server errors fail discovery instead of claiming offline.
 
+Existing cloud conversations pass both `agent_id` and `connection_id` to the
+same endpoint. The request probes only the matching registration and returns an
+empty list if the registration or connection reference is unavailable.
+
 The browser stores display metadata, Relay ID, URL and a login-scoped connection
 reference without tokens. Cloud invocation is authorized against the current
 community list, not just this server's own publications. My agents and the task

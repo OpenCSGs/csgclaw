@@ -39,8 +39,13 @@ export type RelayCatalogEntry = {
   };
 };
 
-export async function fetchRelayCatalog(signal?: AbortSignal): Promise<CloudAgent[]> {
-  const result = await get<{ data: RelayCatalogEntry[] }>("api/v1/relay/agents", { signal });
+export type RelayCatalogTarget = { agent_id: string; connection_id: string };
+
+export async function fetchRelayCatalog(signal?: AbortSignal, target?: RelayCatalogTarget): Promise<CloudAgent[]> {
+  const query = target
+    ? `?${new URLSearchParams({ agent_id: target.agent_id, connection_id: target.connection_id })}`
+    : "";
+  const result = await get<{ data: RelayCatalogEntry[] }>(`api/v1/relay/agents${query}`, { signal });
   return result.data.map((entry) => ({
     id: entry.agent.id,
     relayURL: entry.relay_url,

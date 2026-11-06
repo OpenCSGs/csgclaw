@@ -138,7 +138,25 @@ func (h *Handler) handleRelayCatalog(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 	defer cancel()
-	entries, err := h.relayManager.Discover(ctx)
+	query := r.URL.Query()
+	id, connectionID := query.Get("agent_id"), query.Get("connection_id")
+	var entries []relay.CatalogEntry
+	var err error
+	if query.Has("agent_id") || query.Has("connection_id") {
+		if id == "" || connectionID == "" {
+			writeAgentSessionError(w, 400, "relay_chat_reference_unavailable", "agent_id and connection_id are required", nil)
+			return
+		}
+		var entry relay.CatalogEntry
+		entry, err = h.relayManager.DiscoverAgent(ctx, id, connectionID)
+		if errors.Is(err, relay.ErrChatReference) {
+			entries, err = []relay.CatalogEntry{}, nil
+		} else if err == nil {
+			entries = []relay.CatalogEntry{entry}
+		}
+	} else {
+		entries, err = h.relayManager.Discover(ctx)
+	}
 	if err != nil {
 		var upstream *relay.HTTPError
 		if errors.Is(err, relay.ErrSiteLoginRequired) || (errors.As(err, &upstream) && upstream.Status == http.StatusUnauthorized) {

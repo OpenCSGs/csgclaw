@@ -46,12 +46,12 @@ const HubDetailPane = lazy(() =>
 function CloudSourceTemplate({
   repoPath,
   hubViewProps,
-  profileIntro,
+  renderProfileIntro,
   instanceModel,
 }: {
   repoPath: string;
   hubViewProps: WorkspaceControllerReady["hubViewProps"];
-  profileIntro: ReactNode;
+  renderProfileIntro: (showModel: boolean) => ReactNode;
   instanceModel?: string;
 }) {
   const query = useWorkspaceHubTemplateQuery(repoPath);
@@ -61,19 +61,36 @@ function CloudSourceTemplate({
     onSelectTemplateInPlace({ id: repoPath });
   }, [onSelectTemplateInPlace, repoPath]);
   if (query.isError || (template && (template.id !== repoPath || template.source?.kind !== "remote"))) {
-    return <EmptyState title={t("agentPlazaTemplateFailed")} />;
+    return (
+      <>
+        {renderProfileIntro(true)}
+        <EmptyState
+          title={t("agentPlazaTemplateFailed")}
+          actions={
+            <Button variant="tertiaryGray" size="sm" loading={query.isFetching} onClick={() => void query.refetch()}>
+              {t("retry")}
+            </Button>
+          }
+        />
+      </>
+    );
   }
   const selected = hubViewProps.hub.detailPaneProps;
   if (!template || selected.selectedTemplateId !== repoPath || selected.selectedTemplate?.id !== repoPath) {
-    return <EmptyState title={t("agentPlazaTemplateLoading")} />;
+    return (
+      <>
+        {renderProfileIntro(true)}
+        <EmptyState title={t("agentPlazaTemplateLoading")} />
+      </>
+    );
   }
   return (
-    <Suspense fallback={null}>
+    <Suspense fallback={renderProfileIntro(true)}>
       <HubDetailPane
         {...hubViewProps}
         inlineTemplateDetail
         hideInlineTemplateHeader
-        inlineTemplateProfileIntro={profileIntro}
+        inlineTemplateProfileIntro={renderProfileIntro(false)}
         inlineTemplateInstanceModel={instanceModel}
       />
     </Suspense>
@@ -547,11 +564,11 @@ export function AgentOverviewPage() {
                 key={`${selectedCloudAgent.connectionID}:${selectedCloudAgent.id}`}
                 agent={selectedCloudAgent}
                 t={t}
-                renderTemplate={(repoPath, profileIntro) => (
+                renderTemplate={(repoPath, renderProfileIntro) => (
                   <CloudSourceTemplate
                     repoPath={repoPath}
                     hubViewProps={controller.hubViewProps}
-                    profileIntro={profileIntro}
+                    renderProfileIntro={renderProfileIntro}
                     instanceModel={selectedCloudAgent.modelID}
                   />
                 )}

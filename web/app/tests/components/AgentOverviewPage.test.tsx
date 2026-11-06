@@ -57,7 +57,7 @@ const template: HubTemplate = {
   source: { name: "builtin", kind: "builtin" },
 };
 
-function queryState(patch: Partial<UseQueryResult<HubTemplate[]>> = {}): UseQueryResult<HubTemplate[]> {
+function queryState<T = HubTemplate[]>(patch: Partial<UseQueryResult<T>> = {}): UseQueryResult<T> {
   return {
     data: undefined,
     isLoading: false,
@@ -65,7 +65,7 @@ function queryState(patch: Partial<UseQueryResult<HubTemplate[]>> = {}): UseQuer
     isError: false,
     refetch: vi.fn(),
     ...patch,
-  } as UseQueryResult<HubTemplate[]>;
+  } as UseQueryResult<T>;
 }
 
 function NavigationState() {
@@ -572,6 +572,30 @@ describe("cloud agent plaza", () => {
     expect(screen.getByLabelText("Template detail")).toHaveTextContent("instance-model");
     expect(screen.getByRole("button", { name: "从我的智能体移除" })).toBeVisible();
     expect(screen.getByLabelText("Current URL")).toHaveTextContent(`/agents?cloud=${agent.id}`);
+  });
+
+  it("keeps cloud agent metadata visible when its source template fails and allows retry", async () => {
+    const agent = {
+      ...cloudAgentFixture[0],
+      publisher: "Agentichub",
+      creatorName: "Template creator",
+      modelID: "instance-model",
+      templateRepoPath: "alice/worker",
+    };
+    const refetch = vi.fn();
+    localStorage.setItem(CLOUD_AGENTS_STORAGE_KEY, JSON.stringify([agent]));
+    vi.mocked(fetchRelayCatalog).mockResolvedValue([agent]);
+    vi.mocked(useWorkspaceHubTemplateQuery).mockReturnValue(queryState<HubTemplate>({ isError: true, refetch }));
+    const user = userEvent.setup();
+
+    render(<Page route={`/agents?cloud=${agent.id}`} />);
+
+    expect(await screen.findByText("暂时无法加载来源模板。")).toBeVisible();
+    expect(screen.getByText("Template creator")).toBeVisible();
+    expect(screen.getByText("Agentichub")).toBeVisible();
+    expect(screen.getByText("instance-model")).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "重试" }));
+    expect(refetch).toHaveBeenCalledOnce();
   });
 
   it("opens the shared new-task page for the selected cloud agent", async () => {

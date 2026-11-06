@@ -64,6 +64,23 @@ it("polls once for active consumers and stops when all consumers are disabled", 
   }
 });
 
+it("loads the conversation agent independently of a failed full catalog", async () => {
+  const target = { agent_id: agent.id, connection_id: agent.connectionID };
+  vi.mocked(fetchRelayCatalog).mockImplementation(async (_signal, requestedTarget) => {
+    if (!requestedTarget) throw new Error("Another agent probe failed");
+    return [agent];
+  });
+  localStorage.setItem(CLOUD_AGENTS_STORAGE_KEY, JSON.stringify([agent]));
+  const { wrapper } = createQueryWrapper();
+  const directory = renderHook(() => useCloudAgents(), { wrapper });
+  const conversation = renderHook(() => useCloudAgents(undefined, true, target), { wrapper });
+
+  await waitFor(() => expect(directory.result.current.error).toBeTruthy());
+  await waitFor(() => expect(conversation.result.current.catalog).toEqual([agent]));
+  expect(conversation.result.current.addedIDs).toEqual([agent.id]);
+  expect(fetchRelayCatalog).toHaveBeenCalledWith(expect.any(AbortSignal), target);
+});
+
 it("reloads the catalog after authorization", async () => {
   const loginRequired = { status: 401, code: "relay_login_required" };
   vi.mocked(fetchRelayCatalog).mockRejectedValueOnce(loginRequired);

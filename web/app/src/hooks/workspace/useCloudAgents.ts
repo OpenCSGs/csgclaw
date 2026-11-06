@@ -1,14 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { AuthStatus } from "@/models/auth";
-import { fetchRelayCatalog } from "@/api/relay";
+import { fetchRelayCatalog, type RelayCatalogTarget } from "@/api/relay";
 import { parseCloudAgents, sameCloudAgentReference, type CloudAgent } from "@/models/cloudAgents";
 import { CLOUD_AGENTS_STORAGE_KEY } from "@/shared/storage/keys";
 import { RELAY_PUBLICATIONS_CHANGED_EVENT } from "@/shared/constants/relay";
 
 const MEMBERSHIP_CHANGED_EVENT = "csgclaw-cloud-membership-changed";
 
-export function useCloudAgents(auth?: AuthStatus, enabled = true) {
+export function useCloudAgents(auth?: AuthStatus, enabled = true, target?: RelayCatalogTarget) {
   const login = auth?.authenticated
     ? JSON.stringify([auth.base_url, auth.user_uuid || auth.user_id, auth.logged_in_at])
     : "";
@@ -20,10 +20,12 @@ export function useCloudAgents(auth?: AuthStatus, enabled = true) {
     }
   });
   const queryClient = useQueryClient();
-  const queryKey = useMemo(() => ["cloud-agent-catalog", login], [login]);
+  const agentID = target?.agent_id;
+  const connectionID = target?.connection_id;
+  const queryKey = useMemo(() => ["cloud-agent-catalog", login, agentID, connectionID], [login, agentID, connectionID]);
   const query = useQuery({
     queryKey,
-    queryFn: ({ signal }) => fetchRelayCatalog(signal),
+    queryFn: ({ signal }) => fetchRelayCatalog(signal, target),
     enabled,
     staleTime: 5000,
     refetchInterval: 5000,

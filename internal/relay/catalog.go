@@ -29,7 +29,7 @@ func (m *Manager) Discover(ctx context.Context) ([]CatalogEntry, error) {
 	return m.discover(ctx, "")
 }
 
-// DiscoverAgent probes only the requested registration when starting a task.
+// DiscoverAgent probes only the requested registration.
 func (m *Manager) DiscoverAgent(ctx context.Context, id, connectionID string) (CatalogEntry, error) {
 	entries, err := m.discover(ctx, id)
 	if err != nil {
@@ -45,7 +45,7 @@ func (m *Manager) DiscoverAgent(ctx context.Context, id, connectionID string) (C
 
 func (m *Manager) discover(ctx context.Context, onlyID string) ([]CatalogEntry, error) {
 	if m.community == nil {
-		return m.Catalog(ctx), nil
+		return m.catalog(ctx, onlyID), nil
 	}
 	m.mu.Lock()
 	c, err := m.client(m.manifest.Endpoint, m.manifest.Token)
@@ -142,11 +142,15 @@ func (m *Manager) discover(ctx context.Context, onlyID string) ([]CatalogEntry, 
 	return entries, nil
 }
 func (m *Manager) Catalog(ctx context.Context) []CatalogEntry {
+	return m.catalog(ctx, "")
+}
+
+func (m *Manager) catalog(ctx context.Context, onlyID string) []CatalogEntry {
 	m.mu.Lock()
 	entries := make([]CatalogEntry, 0, len(m.manifest.Agents))
 	connected := make(map[string]bool, len(m.running))
 	for id, req := range m.manifest.Agents {
-		if req.Visibility != "public" {
+		if req.Visibility != "public" || (onlyID != "" && id != onlyID) {
 			continue
 		}
 		entry := m.manifest.Catalog[id]
