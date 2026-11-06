@@ -22,7 +22,7 @@ import {
 import { AgentAvatarContent } from "@/components/business/AgentAvatar";
 import { RoomAvatar } from "@/components/business/RoomAvatar";
 import { useTaskConversationPages } from "@/hooks/workspace/useTaskConversationPages";
-import { useCloudAgentCatalog } from "@/hooks/workspace/useCloudAgentCatalog";
+import { useCloudAgentAvatarMetadata } from "@/hooks/workspace/useCloudAgentAvatarMetadata";
 import { cloudAgentAvatar } from "@/models/cloudAgents";
 import type { AuthStatus } from "@/models/auth";
 import { errorMessage } from "@/api/client";
@@ -130,7 +130,7 @@ export function TaskConversationList({
   }, [search]);
   const list = useTaskConversationPages(archived, query);
   const allRooms = uniqueTaskConversations(list.data?.pages ?? []);
-  const cloudCatalog = useCloudAgentCatalog(authStatus, false).data ?? [];
+  const cloudCatalog = useCloudAgentAvatarMetadata(authStatus);
   const directoryPaths = Array.from(
     new Set([
       ...directories.map((item) => item.path),

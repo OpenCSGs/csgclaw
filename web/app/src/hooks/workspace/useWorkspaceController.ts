@@ -14,6 +14,7 @@ import type { TaskConfiguration } from "@/models/taskConfiguration";
 import { settingsDialogSearch } from "@/models/workspaceDialogs";
 import { useTaskEntry } from "./useTaskEntry";
 import { useCloudAgents } from "./useCloudAgents";
+import { useCloudAgentAvatarMetadata } from "./useCloudAgentAvatarMetadata";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { errorMessage } from "@/api/client";
@@ -338,10 +339,12 @@ export function useWorkspaceController(): WorkspaceController {
       Boolean(cloudTarget),
     cloudTarget,
   );
+  const cloudAvatarMetadata = useCloudAgentAvatarMetadata(auth.status);
   const conversation = useConversationController({
     activeConversationId,
     activePane,
     cloudCatalog: cloud.loading || cloud.error ? null : cloud.catalog,
+    cloudAvatarMetadata,
     addedCloudAgentIDs: cloud.addedIDs,
     autoSelectFallbackConversation: location.pathname !== "/" && location.pathname !== "/new",
     messageListActive: location.pathname !== "/" && location.pathname !== "/new",

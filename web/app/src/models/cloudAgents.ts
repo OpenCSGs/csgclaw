@@ -1,4 +1,5 @@
 import { CLOUD_AGENT_AVATARS, normalizeAvatarPath } from "@/shared/avatar";
+import type { IMConversation, IMUser } from "./conversations";
 
 const cloudTypeAvatars = new Map<string, string>([
   ...Object.entries(CLOUD_AGENT_AVATARS),
@@ -8,6 +9,26 @@ const cloudTypeAvatars = new Map<string, string>([
 export function cloudAgentAvatar(type: unknown, avatar?: string): string {
   const normalizedType = typeof type === "string" ? type.trim().toLowerCase() : "";
   return cloudTypeAvatars.get(normalizedType) || normalizeAvatarPath(avatar) || CLOUD_AGENT_AVATARS.csgclaw;
+}
+
+export function withCloudAgentAvatars(
+  users: readonly IMUser[] = [],
+  conversations: readonly IMConversation[] = [],
+  catalog: readonly CloudAgentAvatarMetadata[] | null = [],
+): IMUser[] {
+  const references = new Map(
+    conversations.flatMap((conversation) =>
+      conversation.cloud_agent ? [[conversation.cloud_agent.user_id, conversation.cloud_agent] as const] : [],
+    ),
+  );
+  return users.map((user) => {
+    const reference = references.get(user.id);
+    if (!reference) return user;
+    const agent = catalog?.find(
+      (entry) => entry.id === reference.agent_id && entry.connectionID === reference.connection_id,
+    );
+    return { ...user, avatar: cloudAgentAvatar(agent?.type, agent?.avatar || user.avatar || undefined) };
+  });
 }
 
 export type CloudAgent = {
@@ -28,6 +49,8 @@ export type CloudAgent = {
   avatar: string;
   type?: string;
 };
+
+export type CloudAgentAvatarMetadata = Pick<CloudAgent, "id" | "connectionID" | "type" | "avatar">;
 
 // Persist metadata and a server-side credential reference, never a token.
 export function parseCloudAgents(raw: string | null): CloudAgent[] {
