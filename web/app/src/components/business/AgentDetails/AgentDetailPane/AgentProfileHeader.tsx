@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { classNames } from "@/shared/lib/classNames";
+import styles from "./AgentProfileHeader.module.css";
 
 export function AgentProfileHeader({
   avatar,
@@ -15,13 +16,15 @@ export function AgentProfileHeader({
   className?: string;
 }) {
   return (
-    <header className={classNames("entity-header", className)}>
-      {avatar}
-      <div className="entity-heading">
-        <div className="entity-title-row">{title}</div>
-        {description}
-      </div>
-      <div className="entity-toolbar">{actions}</div>
-    </header>
+    <div className={styles.container}>
+      <header className={classNames("entity-header", styles.header, className)}>
+        {avatar}
+        <div className="entity-heading">
+          <div className="entity-title-row">{title}</div>
+          {description}
+        </div>
+        <div className="entity-toolbar">{actions}</div>
+      </header>
+    </div>
   );
 }

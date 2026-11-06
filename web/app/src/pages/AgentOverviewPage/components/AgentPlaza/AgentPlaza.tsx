@@ -170,9 +170,8 @@ export function CloudAgentDetail({
   const online = agent.status === "online";
   return (
     <section className="entity-pane agent-detail-pane">
-      <div className={`agent-profile-fixed-header ${styles.profileHeaderContainer}`}>
+      <div className="agent-profile-fixed-header">
         <AgentProfileHeader
-          className={styles.profileHeader}
           avatar={
             <div className="entity-avatar">
               <AgentAvatarContent avatar={agent.avatar} fallback={agent.name.slice(0, 1)} />

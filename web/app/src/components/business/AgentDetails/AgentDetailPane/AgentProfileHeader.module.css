@@ -1,0 +1,33 @@
+.container {
+  min-width: 0;
+  container: agent-profile / inline-size;
+}
+
+header.header > :global(.entity-toolbar) > :global(.agent-save-status) {
+  min-width: 0;
+  padding-inline: var(--space-2);
+}
+
+header.header :global(.entity-title-row) > h1 {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@container agent-profile (max-width: 760px) {
+  header.header:global(.entity-header) {
+    grid-template-columns: 48px minmax(0, 1fr);
+    align-items: start;
+  }
+
+  header.header > :global(.entity-toolbar) {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+  }
+
+  header.header > :global(.entity-toolbar) > :global(.agent-save-status) {
+    margin-inline-start: auto;
+  }
+}
