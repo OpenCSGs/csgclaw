@@ -3,8 +3,10 @@ package relay
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -129,12 +131,16 @@ func ResolveRelayProxy(site string) string { return strings.TrimRight(site, "/")
 
 type HubCommunity struct{ Credentials CredentialsSource }
 
-func (h HubCommunity) request(ctx context.Context, method, path string, body, out any) error {
+func (h HubCommunity) client() (*Client, error) {
 	cred, err := h.Credentials()
 	if err != nil {
-		return err
+		return nil, err
 	}
-	c, err := NewClient(cred.Site, cred.Token, nil)
+	return NewClient(cred.Site, cred.Token, nil)
+}
+
+func (h HubCommunity) request(ctx context.Context, method, path string, body, out any) error {
+	c, err := h.client()
 	if err != nil {
 		return err
 	}
@@ -147,35 +153,58 @@ func (h HubCommunity) Register(ctx context.Context, relayID string, req PublishR
 	if !relayAgentIDPattern.MatchString(relayID) {
 		return CommunityInstance{}, fmt.Errorf("invalid relay agent ID")
 	}
-	method, path := http.MethodPost, ""
-	body := map[string]any{"type": "csgclaw", "kind": "runtime", "source": "external", "name": req.Name, "description": req.Description, "public": req.Visibility == "public", "content_id": relayID, "relay": RelayRegistration{AgentID: relayID}}
 	if target != nil {
-		if err := target.validate(); err != nil {
-			return CommunityInstance{}, err
-		}
-		method = http.MethodPut
-		path = "/by-content-id/" + url.PathEscape(target.Type) + "/" + url.PathEscape(target.ContentID)
-		body = map[string]any{"relay": RelayRegistration{AgentID: relayID}}
+		return h.updatePlatformRegistration(ctx, relayID, req, target)
 	}
+	body := map[string]any{"type": "csgclaw", "kind": "runtime", "source": "external", "name": req.Name, "description": req.Description, "public": req.Visibility == "public", "content_id": relayID, "relay": RelayRegistration{AgentID: relayID}}
 	var result struct {
 		Data CommunityInstance `json:"data"`
 	}
-	if err := h.request(ctx, method, path, body, &result); err != nil {
+	if err := h.request(ctx, http.MethodPost, "", body, &result); err != nil {
 		return CommunityInstance{}, err
 	}
 	i := result.Data
 	if i.ID <= 0 || i.Kind != "runtime" || i.relayID() != relayID {
 		return i, fmt.Errorf("community returned an invalid relay registration")
 	}
-	if target == nil {
-		if i.Source != "external" || i.ContentID != relayID || i.Type != "csgclaw" {
-			return i, fmt.Errorf("community returned a different external instance")
-		}
-	} else if i.Source != "platform" || i.ContentID != target.ContentID || i.Type != target.Type {
-		return i, fmt.Errorf("community returned a different platform instance")
+	if i.Source != "external" || i.ContentID != relayID || i.Type != "csgclaw" {
+		return i, fmt.Errorf("community returned a different external instance")
 	}
 	return i, nil
 }
+
+func (h HubCommunity) updatePlatformRegistration(ctx context.Context, relayID string, req PublishRequest, target *CommunityTarget) (CommunityInstance, error) {
+	if err := target.validate(); err != nil {
+		return CommunityInstance{}, err
+	}
+	c, err := h.client()
+	if err != nil {
+		return CommunityInstance{}, err
+	}
+	path := "/api/v1/agent/instances/by-content-id/" + url.PathEscape(target.Type) + "/" + url.PathEscape(target.ContentID)
+	body := map[string]RelayRegistration{"relay": {AgentID: relayID}}
+	resp, err := c.request(ctx, http.MethodPut, path, "", body)
+	if err != nil {
+		return CommunityInstance{}, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return CommunityInstance{}, &HTTPError{Status: resp.StatusCode}
+	}
+
+	// Some StarHub versions acknowledge the update without returning the instance.
+	instance := CommunityInstance{Public: req.Visibility == "public"}
+	var result struct {
+		Data struct {
+			Public *bool `json:"public"`
+		} `json:"data"`
+	}
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 8<<20)).Decode(&result); err == nil && result.Data.Public != nil {
+		instance.Public = *result.Data.Public
+	}
+	return instance, nil
+}
+
 func (h HubCommunity) Delete(ctx context.Context, id int64) error {
 	path := "/" + strconv.FormatInt(id, 10)
 	var record struct {

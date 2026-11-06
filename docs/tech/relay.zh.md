@@ -36,7 +36,7 @@ Content-Type: application/json
 
 只修改 relay 字段，不创建 external 记录，也不覆盖名称、public 或 metadata。
 如果平台提供 `OPENCSG_SANDBOX_TYPE=csgclaw-workspace`，使用该类型的按 content ID 更新接口。
-relay 最初以 private 注册；回写成功后按社区 instance 返回的 public 值同步可见性。
+relay 最初以 private 注册。平台回写收到 HTTP 200 即成功，有 public 时按该值同步可见性，缺少该字段时保留当前可见性。
 目标保存在发布状态中，重启后继续使用。显式下架后再手动发布同一 Agent 仍回写原 instance。
 
 ## 转发与认证

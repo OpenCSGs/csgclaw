@@ -23,6 +23,18 @@
   display: flex;
   gap: 8px;
 }
+.plazaLogin {
+  display: grid;
+  place-items: center;
+  flex: 1;
+  padding: 24px;
+}
+.plazaLoginCard {
+  width: min(100%, 480px);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel-soft);
+}
 .tabs {
   display: flex;
   flex-wrap: wrap;

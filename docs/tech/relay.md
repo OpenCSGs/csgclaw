@@ -32,7 +32,8 @@ it against the local agent, and patches only `relay.agent_id` using
 `PUT /api/v1/agent/instances/by-content-id/csgclaw/{content_id}`. If supplied,
 `OPENCSG_SANDBOX_TYPE=csgclaw-workspace` selects that supported update type.
 It never creates an external row for the platform worker. Registration starts
-private and is synchronized to the existing instance's returned `public` value.
+private. HTTP 200 completes the platform writeback. A returned `public` value
+synchronizes visibility. If omitted, Relay keeps its current visibility.
 Template-free sandboxes are outside this image's agent bootstrap workflow.
 
 `ResolveRelayProxy` uses `{login-site}/api/v1/relay`. OpenCSG authenticates the

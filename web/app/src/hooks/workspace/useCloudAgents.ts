@@ -6,7 +6,7 @@ import { RELAY_PUBLICATIONS_CHANGED_EVENT } from "@/shared/constants/relay";
 
 const MEMBERSHIP_CHANGED_EVENT = "csgclaw-cloud-membership-changed";
 
-export function useCloudAgents() {
+export function useCloudAgents(authenticated?: boolean) {
   const [savedAgents, setSavedAgents] = useState<CloudAgent[]>(() => {
     try {
       return parseCloudAgents(localStorage.getItem(CLOUD_AGENTS_STORAGE_KEY));
@@ -81,7 +81,7 @@ export function useCloudAgents() {
       window.removeEventListener("focus", refresh);
       window.removeEventListener(RELAY_PUBLICATIONS_CHANGED_EVENT, refresh);
     };
-  }, [refreshVersion]);
+  }, [authenticated, refreshVersion]);
   function save(update: (agents: CloudAgent[]) => CloudAgent[]) {
     try {
       const agents = update(parseCloudAgents(localStorage.getItem(CLOUD_AGENTS_STORAGE_KEY)));

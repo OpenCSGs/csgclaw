@@ -33,6 +33,17 @@ it("discards the prototype mock cache instead of migrating it", async () => {
   expect(result.current.agents).toEqual([]);
   expect(localStorage.getItem("csgclaw.agents.cloud.v2")).toBeNull();
 });
+it("reloads the catalog after authorization", async () => {
+  const loginRequired = { status: 401, code: "relay_login_required" };
+  vi.mocked(fetchRelayCatalog).mockRejectedValueOnce(loginRequired);
+  const { result, rerender } = renderHook(({ authenticated }) => useCloudAgents(authenticated), {
+    initialProps: { authenticated: false },
+  });
+  await waitFor(() => expect(result.current.error).toEqual(loginRequired));
+  rerender({ authenticated: true });
+  await waitFor(() => expect(result.current.catalog).toEqual([agent]));
+  expect(result.current.error).toBeNull();
+});
 it("synchronizes membership across mounted consumers without losing other additions", async () => {
   const other = { ...agent, id: "agt_abcdef0123456789abcdef01" };
   vi.mocked(fetchRelayCatalog).mockResolvedValue([agent, other]);

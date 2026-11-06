@@ -22,6 +22,40 @@ import (
 	"csgclaw/internal/relay"
 )
 
+func TestRelayCatalogAuthenticationError(t *testing.T) {
+	tests := []struct {
+		name   string
+		err    error
+		status int
+		code   string
+	}{
+		{"missing login", relay.ErrSiteLoginRequired, http.StatusUnauthorized, "relay_login_required"},
+		{"credential store failure", fmt.Errorf("credential store unavailable"), http.StatusBadGateway, "relay_catalog_failed"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			credentials := func() (relay.SiteCredentials, error) {
+				return relay.SiteCredentials{}, tc.err
+			}
+			manager, err := relay.NewManager(t.Context(), t.TempDir(), nil, relay.WithCommunity(relay.HubCommunity{}, credentials))
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer manager.Close()
+			h := &Handler{relayManager: manager}
+			response := httptest.NewRecorder()
+			h.handleRelayCatalog(response, httptest.NewRequest(http.MethodGet, "/api/v1/relay/agents", nil))
+			var body agentSessionErrorEnvelope
+			if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+				t.Fatal(err)
+			}
+			if response.Code != tc.status || body.Error.Code != tc.code {
+				t.Fatalf("got status %d and error code %q, want %d and %q", response.Code, body.Error.Code, tc.status, tc.code)
+			}
+		})
+	}
+}
+
 // Set CSGCLAW_TEST_RELAY_URL/TOKEN to exercise the same flow against a running
 // CSGRelay with real NATS. No credentials or response contents are logged.
 func TestRelayPublicationEndToEnd(t *testing.T) {
