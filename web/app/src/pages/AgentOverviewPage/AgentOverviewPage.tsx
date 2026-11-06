@@ -9,10 +9,11 @@ import { RoomAvatar } from "@/components/business/RoomAvatar";
 import { useWorkspaceControllerContext } from "@/hooks/workspace";
 import { useWorkspaceHubTemplatesQuery } from "@/hooks/workspace/workspaceQueries";
 import { isVisibleInHubTemplateList } from "@/models/hubWorkspace";
-import { agenticHubTemplatesURL } from "@/models/agenticHub";
+import { agenticHubPlazaURL, agenticHubTemplatesURL } from "@/models/agenticHub";
+import { isAuthenticated } from "@/models/auth";
 import { templateAvatar, templateInGroup } from "@/models/templateGroups";
 import { agentAvailabilityStatusLabel, agentRoleLabel, isAgentAvailable, type AgentLike } from "@/models/agents";
-import { AgentPlaza, CloudAgentDetail } from "./components/AgentPlaza";
+import { AgentPlaza, AgentPlazaLayout, CloudAgentDetail } from "./components/AgentPlaza";
 import { useCloudAgents } from "@/hooks/workspace/useCloudAgents";
 import { filterCloudAgents } from "@/models/cloudAgents";
 import {
@@ -113,6 +114,7 @@ export function AgentOverviewPage() {
   if (!controller.ready || !controller.sidebarProps) return null;
   const props = controller.sidebarProps;
   const { t } = props;
+  const authed = isAuthenticated(props.authStatus) && !props.authExpired;
   const selectedTemplateID = requestedTemplateID;
   const matches = (name: string) => name.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase());
   const agents = props.workerAgentItems.filter((agent) => matches(agent.name || agent.id || ""));
@@ -128,6 +130,9 @@ export function AgentOverviewPage() {
   };
   const templatesURL = agenticHubTemplatesURL(
     props.authStatus?.authenticated ? props.authStatus.opencsg_base_url || props.authStatus.base_url : "",
+  );
+  const communityPlazaURL = agenticHubPlazaURL(
+    authed ? props.authStatus.opencsg_base_url || props.authStatus.base_url : "",
   );
   const shownTemplates = templates.filter(
     (item) =>
@@ -212,34 +217,32 @@ export function AgentOverviewPage() {
           {t("agentPlazaStorageError")}
         </p>
       ) : null}
-      {plazaTab && plaza.loading ? (
+      {plazaTab && (!authed || apiErrorCode(plaza.error) === "relay_login_required") ? (
+        <AgentPlazaLayout t={t}>
+          <div className={styles.loginGate}>
+            <LogIn size={20} strokeWidth={1.8} aria-hidden="true" />
+            <p>{t("agentPlazaLoginRequired")}</p>
+            <Button
+              variant="primary"
+              size="md"
+              disabled={props.authBusy || props.authPending}
+              onClick={() => {
+                if (props.onRequireOpenCSGAuthentication?.() !== false) void props.onLogin();
+              }}
+            >
+              {t("modelProviderOpenCSGAuthorize")}
+            </Button>
+          </div>
+        </AgentPlazaLayout>
+      ) : plazaTab && plaza.loading ? (
         <EmptyState title={t("agentPlazaLoading")} />
-      ) : plazaTab && apiErrorCode(plaza.error) === "relay_login_required" ? (
-        <div className={styles.plazaLogin}>
-          <EmptyState
-            className={styles.plazaLoginCard}
-            icon={<LogIn size={20} />}
-            title={t("relay_login_required")}
-            description={t("agentPlazaLoginDescription")}
-            actions={
-              <Button
-                variant="primary"
-                disabled={props.authBusy || props.authPending}
-                onClick={() => {
-                  if (props.onRequireOpenCSGAuthentication?.() !== false) void props.onLogin();
-                }}
-              >
-                {t("modelProviderOpenCSGAuthorize")}
-              </Button>
-            }
-          />
-        </div>
       ) : plazaTab && plaza.error ? (
         <EmptyState title={t("agentPlazaLoadFailed")} actions={<Button onClick={plaza.refresh}>{t("retry")}</Button>} />
       ) : plazaTab ? (
         <AgentPlaza
           agents={plaza.catalog}
           addedIDs={plaza.addedIDs}
+          communityPlazaURL={communityPlazaURL}
           t={t}
           onAdd={(id) => {
             plaza.add(id);

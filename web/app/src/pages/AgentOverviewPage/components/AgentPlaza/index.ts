@@ -1,1 +1,1 @@
-export { AgentPlaza, AgentPlazaMetadata, CloudAgentDetail } from "./AgentPlaza";
+export { AgentPlaza, AgentPlazaLayout, AgentPlazaMetadata, CloudAgentDetail } from "./AgentPlaza";

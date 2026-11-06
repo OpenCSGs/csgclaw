@@ -1,4 +1,4 @@
-import { agenticHubCreateAgentURL, agenticHubTemplatesURL } from "@/models/agenticHub";
+import { agenticHubCreateAgentURL, agenticHubPlazaURL, agenticHubTemplatesURL } from "@/models/agenticHub";
 
 describe("agenticHubCreateAgentURL", () => {
   it.each(["https://opencsg.com", "https://opencsg-stg.com", "https://custom.example:8443/login"])(
@@ -37,4 +37,24 @@ describe("agenticHubTemplatesURL", () => {
   it.each(["", "bad url", "javascript:alert(1)"])("rejects invalid site %s", (site) => {
     expect(agenticHubTemplatesURL(site)).toBe("");
   });
+});
+
+describe("agenticHubPlazaURL", () => {
+  it.each([
+    "https://opencsg.com",
+    "https://opencsg-stg.com",
+    "https://openeast.opencsg.com",
+    "https://qa.opencsg.com/account?view=mine#profile",
+    "https://custom.example:8443/login",
+    "http://localhost:3000",
+  ])("opens the plaza on the signed-in community %s", (site) => {
+    expect(agenticHubPlazaURL(site)).toBe(`${new URL(site).origin}/agentichub?view=instances`);
+  });
+
+  it.each(["", "invalid", "javascript:alert(1)", "ftp://example.test", "https://user:secret@example.test"])(
+    "omits the link for invalid or credential-bearing site %s",
+    (site) => {
+      expect(agenticHubPlazaURL(site)).toBe("");
+    },
+  );
 });

@@ -23,18 +23,6 @@
   display: flex;
   gap: 8px;
 }
-.plazaLogin {
-  display: grid;
-  place-items: center;
-  flex: 1;
-  padding: 24px;
-}
-.plazaLoginCard {
-  width: min(100%, 480px);
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: var(--panel-soft);
-}
 .tabs {
   display: flex;
   flex-wrap: wrap;
@@ -250,6 +238,26 @@
   color: var(--muted);
   font-size: 13px;
 }
+.loginGate {
+  display: grid;
+  justify-items: center;
+  align-content: start;
+  gap: 10px;
+  margin: 16px 0 0;
+  padding: 32px 16px;
+  border: 1px dashed var(--line);
+  border-radius: var(--radius-lg);
+  color: var(--muted);
+  text-align: center;
+}
+
+.loginGate p {
+  margin: 0;
+  max-width: 420px;
+  font-size: 13px;
+  line-height: 20px;
+}
+
 .emptyList {
   padding: 16px 8px;
   color: var(--muted);

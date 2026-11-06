@@ -76,11 +76,27 @@ function NavigationState() {
 function Page({
   route = "/agents?tab=templates",
   username = "",
+  authSiteURL = "https://qa.opencsg.com/account",
+  authBaseURL = "",
+  authExpired = false,
+  locale = "zh",
+  onRequireOpenCSGAuthentication = vi.fn(),
+  onLogin = vi.fn(),
+  authBusy = false,
+  authPending = false,
   agents = [],
   teams = [],
 }: {
   route?: string;
   username?: string;
+  authSiteURL?: string;
+  authBaseURL?: string;
+  authExpired?: boolean;
+  locale?: "zh" | "en";
+  onRequireOpenCSGAuthentication?: () => boolean;
+  onLogin?: () => void;
+  authBusy?: boolean;
+  authPending?: boolean;
   agents?: AgentLike[];
   teams?: WorkspaceTeam[];
 }) {
@@ -89,11 +105,17 @@ function Page({
     ready: true,
     activePane: { type: "agents", id: "" },
     sidebarProps: {
-      t: createTranslator("zh"),
+      t: createTranslator(locale),
+      authExpired,
+      onRequireOpenCSGAuthentication,
+      onLogin,
+      authBusy,
+      authPending,
       authStatus: {
         authenticated: Boolean(username),
         user_id: username,
-        opencsg_base_url: "https://qa.opencsg.com/account",
+        opencsg_base_url: authSiteURL,
+        base_url: authBaseURL,
       },
       workerAgentItems: agents,
       teams,
@@ -524,9 +546,131 @@ describe("cloud agent plaza", () => {
   });
   afterEach(() => localStorage.removeItem(CLOUD_AGENTS_STORAGE_KEY));
 
+  it.each([
+    ["https://opencsg.com/account", "https://hub.opencsg.com", "https://opencsg.com"],
+    ["https://opencsg-stg.com", "https://opencsg-stg.com", "https://opencsg-stg.com"],
+    ["https://openeast.opencsg.com", "https://openeast.opencsg.com", "https://openeast.opencsg.com"],
+    ["https://custom.example:8443/account", "https://hub.example.test", "https://custom.example:8443"],
+    ["", "https://qa.opencsg.com", "https://qa.opencsg.com"],
+  ])("links the empty My scope to the signed-in site %s", async (authSiteURL, authBaseURL, origin) => {
+    render(<Page route="/agents?tab=plaza" username="alice" authSiteURL={authSiteURL} authBaseURL={authBaseURL} />);
+    await userEvent.setup().click(await screen.findByRole("button", { name: "我的" }));
+    const link = screen.getByRole("link", { name: "前往社区广场" });
+    expect(link).toHaveAttribute("href", `${origin}/agentichub?view=instances`);
+    expect(link).toHaveAttribute("target", "_blank");
+    expect(link).toHaveAttribute("rel", "noopener noreferrer");
+  });
+
+  it("updates the community link when the signed-in account changes", async () => {
+    const view = render(<Page route="/agents?tab=plaza" username="alice" authSiteURL="https://opencsg.com" />);
+    await userEvent.setup().click(await screen.findByRole("button", { name: "我的" }));
+    expect(screen.getByRole("link", { name: "前往社区广场" })).toHaveAttribute(
+      "href",
+      "https://opencsg.com/agentichub?view=instances",
+    );
+    view.rerender(<Page route="/agents?tab=plaza" username="bob" authSiteURL="https://opencsg-stg.com" />);
+    await userEvent.setup().click(await screen.findByRole("button", { name: "我的" }));
+    expect(await screen.findByRole("link", { name: "前往社区广场" })).toHaveAttribute(
+      "href",
+      "https://opencsg-stg.com/agentichub?view=instances",
+    );
+  });
+
+  it("does not link to a default community when the current account has no valid site", async () => {
+    render(<Page route="/agents?tab=plaza" username="alice" authSiteURL="invalid" />);
+    await userEvent.setup().click(await screen.findByRole("button", { name: "我的" }));
+    expect(screen.getByText("还没有添加云端智能体，去公共广场挑选一个吧。")).toBeVisible();
+    expect(screen.queryByRole("link", { name: "前往社区广场" })).not.toBeInTheDocument();
+  });
+
+  it.each(["loading", "failed", "ready"])(
+    "offers authorization instead of the %s catalog when signed out",
+    async (state) => {
+      if (state === "loading") vi.mocked(fetchRelayCatalog).mockReturnValue(new Promise(() => {}));
+      if (state === "failed") vi.mocked(fetchRelayCatalog).mockRejectedValue(new Error("Sign in required"));
+      const onRequireOpenCSGAuthentication = vi.fn(() => false);
+      render(<Page route="/agents?tab=plaza" onRequireOpenCSGAuthentication={onRequireOpenCSGAuthentication} />);
+      await act(async () => {});
+
+      expect(screen.getByRole("heading", { name: "智能体广场", level: 1 })).toBeVisible();
+      expect(screen.getByText("看中的，招呼一声就来")).toBeVisible();
+      const description = screen.getByText(createTranslator("zh")("agentPlazaDescription"));
+      expect(description).toBeVisible();
+      expect(description.compareDocumentPosition(screen.getByRole("button", { name: "授权登录" }))).toBe(
+        Node.DOCUMENT_POSITION_FOLLOWING,
+      );
+      expect(screen.getByText("智能体广场是云端资源，登录账号后才能浏览和添加。")).toBeVisible();
+      expect(screen.queryByText("正在加载已发布智能体…")).not.toBeInTheDocument();
+      expect(screen.queryByText("无法加载智能体广场")).not.toBeInTheDocument();
+      expect(screen.queryByRole("textbox", { name: "搜索公共智能体" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("heading", { name: "合同条款审阅" })).not.toBeInTheDocument();
+      await userEvent.setup().click(screen.getByRole("button", { name: "授权登录" }));
+      expect(onRequireOpenCSGAuthentication).toHaveBeenCalledOnce();
+    },
+  );
+
+  it("localizes the sign-in prompt and supports keyboard authorization", async () => {
+    const onRequireOpenCSGAuthentication = vi.fn(() => false);
+    render(
+      <Page route="/agents?tab=plaza" locale="en" onRequireOpenCSGAuthentication={onRequireOpenCSGAuthentication} />,
+    );
+    expect(screen.getByText("The agent plaza lives in the cloud. Sign in to browse and add agents.")).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Agent Plaza", level: 1 })).toBeVisible();
+    expect(screen.getByText(createTranslator("en")("agentPlazaDescription"))).toBeVisible();
+    screen.getByRole("button", { name: "Authorize & sign in" }).focus();
+    await userEvent.setup().keyboard("{Enter}");
+    expect(onRequireOpenCSGAuthentication).toHaveBeenCalledOnce();
+  });
+
+  it("requires authorization again when the session has expired", () => {
+    render(<Page route="/agents?tab=plaza" username="alice" authExpired />);
+    expect(screen.getByRole("button", { name: "授权登录" })).toBeVisible();
+    expect(screen.queryByRole("button", { name: "添加到我的智能体" })).not.toBeInTheDocument();
+  });
+
+  it("preserves the introduction and allows reauthorization when the catalog rejects the current login", async () => {
+    vi.mocked(fetchRelayCatalog).mockRejectedValue({ code: "relay_login_required" });
+    const onLogin = vi.fn();
+    const onRequireOpenCSGAuthentication = vi.fn(() => true);
+    render(
+      <Page
+        route="/agents?tab=plaza"
+        username="alice"
+        onLogin={onLogin}
+        onRequireOpenCSGAuthentication={onRequireOpenCSGAuthentication}
+      />,
+    );
+    const button = await screen.findByRole("button", { name: "授权登录" });
+    expect(screen.getByRole("heading", { name: "智能体广场", level: 1 })).toBeVisible();
+    expect(screen.queryByText("无法加载智能体广场")).not.toBeInTheDocument();
+    await userEvent.setup().click(button);
+    expect(onRequireOpenCSGAuthentication).toHaveBeenCalledOnce();
+    expect(onLogin).toHaveBeenCalledOnce();
+  });
+
+  it.each(["authBusy", "authPending"] as const)("disables authorization while %s", (flag) => {
+    render(<Page route="/agents?tab=plaza" {...{ [flag]: true }} />);
+    expect(screen.getByRole("button", { name: "授权登录" })).toBeDisabled();
+  });
+
+  it("replaces the sign-in prompt with the catalog after login and restores it after logout", async () => {
+    const view = render(<Page route="/agents?tab=plaza" />);
+    expect(screen.getByRole("button", { name: "授权登录" })).toBeVisible();
+    const description = createTranslator("zh")("agentPlazaDescription");
+    expect(screen.getByText(description)).toBeVisible();
+    view.rerender(<Page route="/agents?tab=plaza" username="alice" />);
+    expect(await screen.findByRole("button", { name: "添加到我的智能体" })).toBeVisible();
+    expect(screen.getByText(description)).toBeVisible();
+    expect(screen.queryByRole("button", { name: "授权登录" })).not.toBeInTheDocument();
+    view.rerender(<Page route="/agents?tab=plaza" />);
+    expect(screen.getByText(description)).toBeVisible();
+    expect(screen.getByRole("button", { name: "授权登录" })).toBeVisible();
+    expect(screen.queryByRole("button", { name: "添加到我的智能体" })).not.toBeInTheDocument();
+  });
+
   it("adds a cloud agent, opens its separate detail and removes it from My agents", async () => {
     const user = userEvent.setup();
-    render(<Page route="/agents?tab=plaza" />);
+    render(<Page route="/agents?tab=plaza" username="alice" />);
     expect(await screen.findByRole("heading", { name: "智能体广场" })).toBeVisible();
     expect(screen.getByRole("heading", { name: "合同条款审阅" })).toBeVisible();
     expect(screen.getByText("在线")).toBeVisible();
@@ -564,7 +708,7 @@ describe("cloud agent plaza", () => {
     const view = render(<Page route="/agents?cloud=agt_demo_contract_reviewer" />);
     expect(await screen.findByRole("button", { name: /合同条款审阅\s*在线\s*云端/ })).toBeVisible();
     view.unmount();
-    render(<Page route="/agents?tab=plaza" />);
+    render(<Page route="/agents?tab=plaza" username="alice" />);
     expect(await screen.findByText("已添加")).toBeVisible();
     await user.type(screen.getByRole("textbox", { name: "搜索公共智能体" }), "not found");
     expect(screen.queryByRole("heading", { name: "合同条款审阅" })).not.toBeInTheDocument();
@@ -586,7 +730,7 @@ describe("cloud agent plaza", () => {
   it("refreshes after publication and exposes recoverable directory errors", async () => {
     vi.mocked(fetchRelayCatalog).mockRejectedValue(new Error("Unavailable"));
     const user = userEvent.setup();
-    render(<Page route="/agents?tab=plaza" />);
+    render(<Page route="/agents?tab=plaza" username="alice" />);
     expect(await screen.findByText("无法加载智能体广场")).toBeVisible();
     vi.mocked(fetchRelayCatalog).mockResolvedValue([]);
     await user.click(screen.getByRole("button", { name: "重试" }));
@@ -600,7 +744,7 @@ describe("cloud agent plaza", () => {
 
   it("shows an empty My scope before adding and keeps local agents separate", async () => {
     const user = userEvent.setup();
-    render(<Page route="/agents?tab=plaza" agents={[{ id: "agent-local", name: "Local worker" }]} />);
+    render(<Page route="/agents?tab=plaza" username="alice" agents={[{ id: "agent-local", name: "Local worker" }]} />);
     await user.click(await screen.findByRole("button", { name: "我的" }));
     expect(screen.getByText("还没有添加云端智能体，去公共广场挑选一个吧。")).toBeVisible();
     await user.click(screen.getByRole("tab", { name: "我的智能体 1" }));
