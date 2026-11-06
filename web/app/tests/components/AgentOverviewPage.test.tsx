@@ -660,7 +660,8 @@ describe("cloud agent plaza", () => {
     expect(screen.getByRole("button", { name: "全部 1" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("button", { name: /合同条款审阅\s*在线\s*云端/ })).toHaveAttribute("aria-current", "true");
     expect(screen.getByRole("tab", { name: "我的智能体 1" })).toHaveAttribute("aria-selected", "true");
-    await user.click(screen.getByRole("button", { name: "从我的智能体移除" }));
+    await user.click(screen.getByRole("button", { name: "更多" }));
+    await user.click(screen.getByRole("menuitem", { name: "从我的智能体移除" }));
     expect(screen.getByRole("button", { name: "云端 0" })).toBeVisible();
     expect(JSON.parse(localStorage.getItem(CLOUD_AGENTS_STORAGE_KEY)!)).toEqual([]);
   });
@@ -697,7 +698,7 @@ describe("cloud agent plaza", () => {
     render(<Page route="/agents?cloud=agt_demo_contract_reviewer" />);
     expect(await screen.findByText("这个云端智能体尚未添加")).toBeVisible();
     expect(screen.queryByRole("button", { name: /合同条款审阅/ })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "从我的智能体移除" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "更多" })).not.toBeInTheDocument();
   });
 
   it("refreshes after publication and exposes recoverable directory errors", async () => {

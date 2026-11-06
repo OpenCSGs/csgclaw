@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { createTranslator } from "@/shared/i18n";
 import { cloudAgentFixture } from "../../../../../tests/helpers/cloudAgentFixture";
-import { AgentPlaza, AgentPlazaMetadata } from "./AgentPlaza";
+import { AgentPlaza, AgentPlazaMetadata, CloudAgentDetail } from "./AgentPlaza";
 
 describe("cloud directory availability", () => {
   it.each([
@@ -55,6 +55,31 @@ describe("cloud directory availability", () => {
     },
   );
 });
+
+it.each(["zh", "en"] as const)(
+  "keeps cloud profile actions available through the compact %s header",
+  async (locale) => {
+    const t = createTranslator(locale);
+    const agent = { ...cloudAgentFixture[0], description: "Long description ".repeat(30).trim() };
+    const onNewTask = vi.fn();
+    const onRemove = vi.fn();
+    const user = userEvent.setup();
+    render(<CloudAgentDetail agent={agent} t={t} onNewTask={onNewTask} onRemove={onRemove} />);
+
+    expect(screen.getByRole("heading", { name: agent.name })).toHaveAttribute("title", agent.name);
+    expect(screen.getByTitle(agent.description)).toBeVisible();
+    expect(screen.queryByRole("button", { name: t("agentPlazaRemove") })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: t("agentStartTask") }));
+    expect(onNewTask).toHaveBeenCalledOnce();
+
+    await user.tab();
+    expect(screen.getByRole("button", { name: t("agentMoreActions") })).toHaveFocus();
+    await user.keyboard("{Enter}");
+    expect(await screen.findByRole("menuitem", { name: t("agentPlazaRemove") })).toBeVisible();
+    await user.keyboard("{Enter}");
+    expect(onRemove).toHaveBeenCalledOnce();
+  },
+);
 
 it("shows only the agent display name and product publisher as metadata", () => {
   const agent = { ...cloudAgentFixture[0], publisher: "CSGClaw" };
