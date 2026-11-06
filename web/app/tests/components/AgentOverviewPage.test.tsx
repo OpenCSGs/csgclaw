@@ -1,6 +1,6 @@
-import { act, render, screen, waitFor, within } from "@testing-library/react";
+import { act, render as renderView, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { MemoryRouter, useLocation, useNavigate } from "react-router-dom";
 import type { UseQueryResult } from "@tanstack/react-query";
 import { WorkspaceControllerProvider, type WorkspaceController } from "@/hooks/workspace";
@@ -15,6 +15,11 @@ import { RELAY_PUBLICATIONS_CHANGED_EVENT } from "@/shared/constants/relay";
 import { fetchRelayCatalog } from "@/api/relay";
 import { cloudAgentFixture } from "../helpers/cloudAgentFixture";
 import { paneFromLocation } from "@/models/routing";
+import { createQueryWrapper } from "../helpers/queryClient";
+
+function render(ui: ReactNode) {
+  return renderView(ui, { wrapper: createQueryWrapper().wrapper });
+}
 
 vi.mock("@/api/relay", () => ({ fetchRelayCatalog: vi.fn() }));
 beforeEach(() => {

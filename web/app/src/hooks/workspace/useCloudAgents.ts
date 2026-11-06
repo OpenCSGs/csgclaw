@@ -1,16 +1,13 @@
 import { useEffect, useState } from "react";
 import type { AuthStatus } from "@/models/auth";
-import { fetchRelayCatalog } from "@/api/relay";
+import { useCloudAgentCatalog } from "./useCloudAgentCatalog";
 import { parseCloudAgents, sameCloudAgentReference, type CloudAgent } from "@/models/cloudAgents";
 import { CLOUD_AGENTS_STORAGE_KEY } from "@/shared/storage/keys";
-import { RELAY_PUBLICATIONS_CHANGED_EVENT } from "@/shared/constants/relay";
 
 const MEMBERSHIP_CHANGED_EVENT = "csgclaw-cloud-membership-changed";
 
 export function useCloudAgents(auth?: AuthStatus, enabled = true) {
-  const login = auth?.authenticated
-    ? JSON.stringify([auth.base_url, auth.user_uuid || auth.user_id, auth.logged_in_at])
-    : "";
+  const query = useCloudAgentCatalog(auth, enabled);
   const [savedAgents, setSavedAgents] = useState<CloudAgent[]>(() => {
     try {
       return parseCloudAgents(localStorage.getItem(CLOUD_AGENTS_STORAGE_KEY));
@@ -18,10 +15,7 @@ export function useCloudAgents(auth?: AuthStatus, enabled = true) {
       return [];
     }
   });
-  const [result, setResult] = useState<{ login: string; catalog: CloudAgent[]; error: unknown } | null>(null);
-  const currentResult = result?.login === login ? result : null;
-  const catalog = currentResult?.catalog ?? [];
-  const [refreshVersion, setRefreshVersion] = useState(0);
+  const catalog = query.isError ? [] : (query.data ?? []);
   const [storageError, setStorageError] = useState(false);
   useEffect(() => {
     const sync = () => {
@@ -48,42 +42,6 @@ export function useCloudAgents(auth?: AuthStatus, enabled = true) {
       window.removeEventListener("storage", onStorage);
     };
   }, []);
-  useEffect(() => {
-    if (!enabled) return;
-    let active = true;
-    let request: AbortController | null = null;
-    const load = async () => {
-      if (request) return;
-      const controller = new AbortController();
-      request = controller;
-      try {
-        const data = await fetchRelayCatalog(controller.signal);
-        if (active) {
-          setResult({ login, catalog: data, error: null });
-        }
-      } catch (err) {
-        if (active) {
-          setResult({ login, catalog: [], error: err });
-        }
-      } finally {
-        request = null;
-      }
-    };
-    void load();
-    const refresh = () => {
-      void load();
-    };
-    const timer = window.setInterval(refresh, 5000);
-    window.addEventListener("focus", refresh);
-    window.addEventListener(RELAY_PUBLICATIONS_CHANGED_EVENT, refresh);
-    return () => {
-      active = false;
-      request?.abort();
-      window.clearInterval(timer);
-      window.removeEventListener("focus", refresh);
-      window.removeEventListener(RELAY_PUBLICATIONS_CHANGED_EVENT, refresh);
-    };
-  }, [login, refreshVersion, enabled]);
   function save(update: (agents: CloudAgent[]) => CloudAgent[]) {
     try {
       const agents = update(parseCloudAgents(localStorage.getItem(CLOUD_AGENTS_STORAGE_KEY)));
@@ -99,9 +57,9 @@ export function useCloudAgents(auth?: AuthStatus, enabled = true) {
   }
   return {
     catalog,
-    loading: !currentResult,
-    error: currentResult?.error ?? null,
-    refresh: () => setRefreshVersion((version) => version + 1),
+    loading: query.isPending,
+    error: query.error,
+    refresh: () => void query.refetch({ cancelRefetch: false }),
     addedIDs: catalog
       .filter((agent) => savedAgents.some((saved) => sameCloudAgentReference(saved, agent)))
       .map((agent) => agent.id),

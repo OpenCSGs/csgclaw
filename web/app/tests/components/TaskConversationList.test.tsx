@@ -9,6 +9,8 @@ import { cloudAgentFixture } from "../helpers/cloudAgentFixture";
 import { useArchiveConfirmation } from "@/hooks/workspace/useArchiveConfirmation";
 import type { TaskEntryController } from "@/hooks/workspace/useTaskEntry";
 import { createQueryWrapper } from "../helpers/queryClient";
+import { cloudAgentCatalogKey } from "@/hooks/workspace/useCloudAgentCatalog";
+import type { CloudAgent } from "@/models/cloudAgents";
 
 vi.mock("@/api/taskConversations", () => ({ fetchTaskConversations: vi.fn() }));
 vi.mock("@/api/relay", () => ({ fetchRelayCatalog: vi.fn() }));
@@ -20,7 +22,7 @@ describe("TaskConversationList cloud avatars", () => {
     vi.mocked(fetchRelayCatalog).mockReset().mockResolvedValue([]);
   });
 
-  function renderCloudTask(archived = false, avatar = "1") {
+  function renderCloudTask(archived = false, avatar = "1", catalog: readonly CloudAgent[] = []) {
     const reference = cloudAgentFixture[0];
     vi.mocked(fetchTaskConversations).mockResolvedValue({
       rooms: [
@@ -34,6 +36,8 @@ describe("TaskConversationList cloud avatars", () => {
       total: 1,
       has_more: false,
     });
+    const queries = createQueryWrapper();
+    queries.client.setQueryData(cloudAgentCatalogKey(), catalog);
     render(
       <TaskConversationList
         compact={!archived}
@@ -44,8 +48,9 @@ describe("TaskConversationList cloud avatars", () => {
         t={(key) => key}
         onSelect={vi.fn()}
       />,
-      { wrapper: createQueryWrapper().wrapper },
+      { wrapper: queries.wrapper },
     );
+    return queries;
   }
 
   it.each([
@@ -55,31 +60,33 @@ describe("TaskConversationList cloud avatars", () => {
     ["code", "code", false],
     ["csgclaw-workspace", "csgclaw", true],
   ] as const)("matches %s to the %s icon in the task list (archived=%s)", async (type, icon, archived) => {
-    vi.mocked(fetchRelayCatalog).mockResolvedValue([{ ...cloudAgentFixture[0], type }]);
-    renderCloudTask(archived);
+    renderCloudTask(archived, "1", [{ ...cloudAgentFixture[0], type }]);
     const task = await screen.findByRole("button", { name: "Cloud task" });
     await waitFor(() => expect(task.querySelector("img")).toHaveAttribute("src", CLOUD_AGENT_AVATARS[icon]));
     expect(task.querySelector(".agent-avatar-fallback")).not.toBeInTheDocument();
+    expect(fetchRelayCatalog).not.toHaveBeenCalled();
   });
 
-  it("uses a cloud icon for older tasks with only an initial, even when catalog loading fails", async () => {
-    vi.mocked(fetchRelayCatalog).mockRejectedValue(new Error("Unavailable"));
+  it("uses a cloud icon for older tasks with only an initial and no cached metadata", async () => {
     renderCloudTask();
     const task = await screen.findByRole("button", { name: "Cloud task" });
     expect(task.querySelector("img")).toHaveAttribute("src", CLOUD_AGENT_AVATARS.csgclaw);
+    expect(fetchRelayCatalog).not.toHaveBeenCalled();
   });
 
   it("does not use an icon from a different account connection", async () => {
-    vi.mocked(fetchRelayCatalog).mockResolvedValue([
-      { ...cloudAgentFixture[0], type: "code", connectionID: "other-login" },
-    ]);
-    renderCloudTask();
+    renderCloudTask(false, "1", [{ ...cloudAgentFixture[0], type: "code", connectionID: "other-login" }]);
     const task = await screen.findByRole("button", { name: "Cloud task" });
-    await waitFor(() => expect(fetchRelayCatalog).toHaveBeenCalled());
-    await act(async () => {
-      await vi.mocked(fetchRelayCatalog).mock.results[0].value;
-    });
     expect(task.querySelector("img")).toHaveAttribute("src", CLOUD_AGENT_AVATARS.csgclaw);
+    expect(fetchRelayCatalog).not.toHaveBeenCalled();
+  });
+
+  it("updates task avatars from shared cache changes without fetching the catalog", async () => {
+    const { client } = renderCloudTask();
+    const task = await screen.findByRole("button", { name: "Cloud task" });
+    act(() => client.setQueryData(cloudAgentCatalogKey(), [{ ...cloudAgentFixture[0], type: "code" }]));
+    await waitFor(() => expect(task.querySelector("img")).toHaveAttribute("src", CLOUD_AGENT_AVATARS.code));
+    expect(fetchRelayCatalog).not.toHaveBeenCalled();
   });
 
   it("keeps an existing image when an old task is absent from the catalog", async () => {
