@@ -21,23 +21,31 @@ type turnProgressStore interface {
 // progressState serializes timer flushes with terminal delivery. A completed
 // snapshot can never be overwritten by a delayed streaming update.
 type progressState struct {
-	diagnostic      *diagnostics.Record
-	lastFlush       time.Time
-	pendingPersist  bool
-	mu              sync.Mutex
-	snapshot        activity.TurnProgress
-	answer          string
-	answerPhase     string
-	answerID        string
-	lastTextID      string
-	lastTextKind    string
-	tools           map[string]int
-	lastProvisional string
-	timer           *time.Timer
-	done            bool
-	lastErr         error
-	store           turnProgressStore
-	turn            channel.TurnContext
+	diagnostic     *diagnostics.Record
+	lastFlush      time.Time
+	pendingPersist bool
+	mu             sync.Mutex
+	snapshot       activity.TurnProgress
+	answer         string
+	answerPhase    string
+	answerID       string
+	lastTextID     string
+	lastTextKind   string
+	tools          map[string]int
+	provisional    *provisionalAnswer
+	timer          *time.Timer
+	done           bool
+	lastErr        error
+	store          turnProgressStore
+	turn           channel.TurnContext
+}
+
+// Text without a known phase can precede a tool and still be the answer.
+// Keep its native identity while the text is displayed in the progress list.
+type provisionalAnswer struct {
+	itemID string
+	index  int
+	phase  string
 }
 
 func newProgressState(store turnProgressStore, turn channel.TurnContext) *progressState {
@@ -95,6 +103,21 @@ func (p *progressState) observe(ctx context.Context, event agentengine.TurnEvent
 	immediate := false
 	switch event.Kind {
 	case agentengine.TurnEventTextDelta:
+		if candidate := p.provisional; candidate != nil && event.ItemID != "" && event.ItemID == candidate.itemID {
+			item := &p.snapshot.Items[candidate.index]
+			if event.TextSnapshot {
+				item.Text = event.Text
+			} else {
+				item.Text += event.Text
+			}
+			immediate = event.TextSnapshot || (event.Phase != "" && event.Phase != candidate.phase)
+			if event.Phase == "commentary" {
+				p.provisional = nil
+			} else if event.Phase != "" {
+				candidate.phase = event.Phase
+			}
+			break
+		}
 		if event.TextSnapshot {
 			if event.ItemID == p.answerID && event.Phase != "commentary" {
 				p.answer = event.Text
@@ -145,7 +168,7 @@ func (p *progressState) observe(ctx context.Context, event agentengine.TurnEvent
 		p.snapshot.Status = "running"
 		if event.Kind == agentengine.TurnEventToolCallStart && p.answer != "" && p.answerPhase != "final_answer" {
 			p.appendText(p.answerID, "commentary", p.answer)
-			p.lastProvisional = p.snapshot.Items[len(p.snapshot.Items)-1].ID
+			p.provisional = &provisionalAnswer{itemID: p.answerID, index: len(p.snapshot.Items) - 1, phase: p.answerPhase}
 			p.answer = ""
 			p.answerID = ""
 		}
@@ -249,10 +272,14 @@ func (p *progressState) finish(ctx context.Context, result agentengine.TurnResul
 		p.snapshot.Error = "turn failed"
 	}
 	if result.Status == agentengine.TurnSucceeded {
+		// Tool updates use indices into Items until this turn finishes.
+		if candidate := p.provisional; candidate != nil && p.answer == "" {
+			i := candidate.index
+			p.snapshot.Items = append(p.snapshot.Items[:i], p.snapshot.Items[i+1:]...)
+		}
 		if structured || (p.answer == "" && len(p.snapshot.Items) == 0) {
 			p.answer = fallback
 		}
-
 	}
 	for i := range p.snapshot.Items {
 		tool := p.snapshot.Items[i].Tool
@@ -288,18 +315,17 @@ func terminalTool(status string) bool {
 func (p *progressState) finalText(fallback string) string {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if p.answerPhase == "final_answer" && fallback != "" {
+	text, phase := p.answer, p.answerPhase
+	if candidate := p.provisional; candidate != nil && text == "" {
+		text = p.snapshot.Items[candidate.index].Text
+		phase = candidate.phase
+	}
+	if phase == "final_answer" && fallback != "" {
 		return fallback
 	}
-	if p.answer != "" {
-		return p.answer
+	// A runtime can recover the rest of a partially streamed answer at completion.
+	if strings.HasPrefix(fallback, text) {
+		return fallback
 	}
-	for i := len(p.snapshot.Items) - 1; i >= 0; i-- {
-		if p.snapshot.Items[i].Kind == "commentary" && p.snapshot.Items[i].ID == p.lastProvisional {
-			text := p.snapshot.Items[i].Text
-			p.snapshot.Items = append(p.snapshot.Items[:i], p.snapshot.Items[i+1:]...)
-			return text
-		}
-	}
-	return fallback
+	return text
 }
