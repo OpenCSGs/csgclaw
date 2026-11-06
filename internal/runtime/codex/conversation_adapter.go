@@ -80,6 +80,7 @@ func (a *ConversationAdapter) Run(ctx context.Context, request contract.TurnRequ
 	promptDone := make(chan error, 1)
 	go func() {
 		promptDone <- a.runtime.PromptTurn(runCtx, a.runtimeID, PromptRequest{
+			Model:               request.Model,
 			SessionID:           sessionID,
 			ClientUserMessageID: string(request.ID),
 			Prompt:              blocks,

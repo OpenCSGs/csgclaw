@@ -43,6 +43,7 @@ type InputPart = contract.InputPart
 type InputFile = contract.InputFile
 type WorkspaceFile = contract.WorkspaceFile
 type TurnRequest = contract.TurnRequest
+type TurnModel = contract.TurnModel
 type TurnEventKind = contract.TurnEventKind
 type RecoveredTextPart = contract.RecoveredTextPart
 type TurnEvent = contract.TurnEvent

@@ -1,6 +1,7 @@
 package codex
 
 import (
+	"csgclaw/internal/agentengine/contract"
 	"csgclaw/internal/diagnostics"
 	"csgclaw/internal/modelcap"
 	"encoding/json"
@@ -22,6 +23,7 @@ type liveSession struct {
 	telemetry             *nativeTelemetry
 	compactingThreads     map[string]bool
 	contextUsage          map[string]modelcap.ContextUsage
+	threadModels          map[string]contract.TurnModel
 	mu                    sync.Mutex
 	conversationResumeMu  sync.Mutex
 	conversationPersistMu sync.Mutex

@@ -251,6 +251,17 @@ func WithTaskProfile(ctx context.Context, profile agent.AgentProfile) context.Co
 }
 
 func (s *Service) resolveProfile(ctx context.Context, botID string) (agent.AgentProfile, error) {
+	if selection, ok := ctx.Value(sessionModelKey{}).(sessionModel); ok {
+		models, ok := s.agents.(sessionProfileReader)
+		if !ok {
+			return agent.AgentProfile{}, &HTTPError{Status: http.StatusServiceUnavailable, Message: "session model configuration is unavailable"}
+		}
+		profile, err := models.ResolvedSessionProfile(botID, selection.model, selection.effort)
+		if err != nil {
+			return agent.AgentProfile{}, &HTTPError{Status: http.StatusConflict, Message: err.Error()}
+		}
+		return profile, nil
+	}
 	if profile, ok := ctx.Value(taskProfileKey{}).(agent.AgentProfile); ok {
 		return profile, nil
 	}

@@ -37,7 +37,7 @@ func (m *appServerManager) observeModelResponseUsage(live *liveSession, threadID
 		usage = *reported
 	}
 	// Preserve the configured selection, including auto, rather than the upstream model.
-	usage.ModelID = live.spec.Profile.ModelID
+	usage.ModelID = waiter.model.ModelID
 	if expected == "" {
 		if waiter.pendingUsage == nil {
 			waiter.pendingUsage = make(map[string]modelusage.Usage)

@@ -1571,6 +1571,22 @@ The shortest request uses string input:
 }
 ```
 
+For a Codex agent, optional string fields `model` and `reasoning_effort` select the model and reasoning effort for this request:
+
+```json
+{
+  "input": "Review this patch.",
+  "model": "model-id-from-your-provider",
+  "reasoning_effort": "high"
+}
+```
+
+`model` is a model ID served by the agent's configured provider. Omitted or empty fields use the agent's default profile. These options apply to this turn, preserve the session history, and do not change the agent configuration or require restarting App Server. Send the options again on later requests to keep using them. Non-empty options on other runtimes return `400 invalid_request`.
+
+`reasoning_effort` accepts `auto`, `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, and `max`; `off` is an alias for `none`. The selected provider/model must support the requested level. `auto` lets the model choose its reasoning default. Each omitted field independently inherits its Profile value, including when the other field is specified. Both fields also work with `stream: true`.
+
+Model switching uses the current provider's catalog loaded when the Codex process starts. Models added afterward, or models whose context-window metadata has changed, require reloading the Runtime before they can be selected. An unavailable selection returns an error and keeps the running process intact.
+
 The request may attach supplemental text to the current user message with the
 optional `extra` and `extra_type` fields:
 
@@ -1649,7 +1665,7 @@ const response = await fetch(responsesUrl, {
 if (!response.ok) throw new Error(`Session request failed (HTTP ${response.status})`)
 ```
 
-The multipart fields are `input`, optional `stream` and `user_input`, and repeated `file`. To send files with `attachment_ids`, `extra`, or `extra_type`, upload the files to the session's `/attachments` endpoint using `files`, then include the returned IDs in a JSON request to `/responses`. A JSON request containing only `attachment_ids` starts a file-only turn.
+The multipart fields are `input`, optional `stream`, `user_input`, `model`, and `reasoning_effort`, and repeated `file`. Each optional field accepts at most one value. Model options have the same meaning as the JSON fields. To send files with `attachment_ids`, `extra`, or `extra_type`, upload the files to the session's `/attachments` endpoint using `files`, then include the returned IDs in a JSON request to `/responses`. A JSON request containing only `attachment_ids` starts a file-only turn.
 
 JSON requests also support files through `input_file` parts:
 

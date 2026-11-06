@@ -14,14 +14,18 @@ func (m *appServerManager) publishContextUsage(runtimeID string, live *liveSessi
 		return
 	}
 	m.publishTokenUsage(runtimeID, live, threadID, turnID, params, method)
-	metadata := live.spec.Profile.ModelMetadata.Normalized()
 	live.mu.Lock()
+	selected := turnModelFromProfile(live.spec.Profile)
+	if model, ok := live.threadModels[threadID]; ok {
+		selected = model
+	}
+	metadata := selected.Metadata.Normalized()
 	if live.contextUsage == nil {
 		live.contextUsage = make(map[string]modelcap.ContextUsage)
 	}
 	usage, ok := live.contextUsage[threadID]
-	if !ok || usage.ModelID != live.spec.Profile.ModelID {
-		usage = modelcap.ContextUsage{SessionID: threadID, ModelID: live.spec.Profile.ModelID, ContextWindow: metadata.ContextWindow, ContextSource: metadata.ContextSource, AutoCompact: true, CompactThreshold: metadata.CompactThreshold(), Estimated: true}
+	if !ok || usage.ModelID != selected.ModelID {
+		usage = modelcap.ContextUsage{SessionID: threadID, ModelID: selected.ModelID, ContextWindow: metadata.ContextWindow, ContextSource: metadata.ContextSource, AutoCompact: true, CompactThreshold: metadata.CompactThreshold(), Estimated: true}
 	}
 	// The model profile is the configured full window. Codex reports its
 	// internal usable budget (normally 95%) as modelContextWindow; using that

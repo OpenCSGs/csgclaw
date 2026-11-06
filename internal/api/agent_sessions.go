@@ -43,12 +43,14 @@ var (
 )
 
 type agentSessionResponseRequest struct {
-	UserInput     bool            `json:"user_input,omitempty"`
-	AttachmentIDs []string        `json:"attachment_ids,omitempty"`
-	Input         json.RawMessage `json:"input"`
-	Stream        *bool           `json:"stream,omitempty"`
-	Extra         string          `json:"extra,omitempty"`
-	ExtraType     string          `json:"extra_type,omitempty"`
+	UserInput       bool            `json:"user_input,omitempty"`
+	Model           string          `json:"model,omitempty"`
+	ReasoningEffort string          `json:"reasoning_effort,omitempty"`
+	AttachmentIDs   []string        `json:"attachment_ids,omitempty"`
+	Input           json.RawMessage `json:"input"`
+	Stream          *bool           `json:"stream,omitempty"`
+	Extra           string          `json:"extra,omitempty"`
+	ExtraType       string          `json:"extra_type,omitempty"`
 }
 
 type agentSessionRequestValidationError struct {
@@ -141,6 +143,11 @@ func (h *Handler) createAgentSessionResponse(w http.ResponseWriter, r *http.Requ
 	}
 	selected, ok := h.sessionRequestAgent(w, r)
 	if !ok {
+		return
+	}
+	input.turnModel, err = h.sessionTurnModel(selected, input.model, input.reasoningEffort)
+	if err != nil {
+		writeSessionInputError(w, err)
 		return
 	}
 	var existing []im.MessageAttachment
@@ -277,6 +284,7 @@ func (h *Handler) runSessionResponse(ctx context.Context, w http.ResponseWriter,
 		policy = agentengine.InteractionUserInputOnly
 	}
 	result := conversation.Run(runCtx, agentengine.TurnRequest{
+		Model:                       input.turnModel,
 		ID:                          agentengine.TurnID(responseID),
 		ConversationKey:             agentengine.ConversationKey(binding.ConversationKey),
 		Admission:                   admission,
@@ -578,6 +586,10 @@ func (request *agentSessionResponseRequest) readJSON(decoder *json.Decoder, body
 			err = decoder.Decode(&request.Extra)
 		case strings.EqualFold(name, "extra_type"):
 			err = decoder.Decode(&request.ExtraType)
+		case strings.EqualFold(name, "model"):
+			err = decoder.Decode(&request.Model)
+		case strings.EqualFold(name, "reasoning_effort"):
+			err = decoder.Decode(&request.ReasoningEffort)
 		default:
 			return fmt.Errorf("unknown field %q", name)
 		}
@@ -609,6 +621,8 @@ func (request *agentSessionResponseRequest) parseInput(uploads []agentSessionInp
 		input.Files = uploads
 	}
 	input.userInput = request.UserInput
+	input.model = strings.TrimSpace(request.Model)
+	input.reasoningEffort = strings.TrimSpace(request.ReasoningEffort)
 	input.attachmentIDs = request.AttachmentIDs
 	if input.Text == "" && len(input.Files)+len(input.attachmentIDs) == 0 {
 		return agentSessionInput{}, false, fmt.Errorf("input must not be empty")

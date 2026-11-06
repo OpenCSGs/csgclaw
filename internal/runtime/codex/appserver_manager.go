@@ -402,14 +402,19 @@ func (m *appServerManager) Prompt(ctx context.Context, handle SessionHandle, req
 		m.publishAppServerEvent(promptFailedEvent(runtimeID, sessionID, err))
 		return PromptResponse{}, err
 	}
+	selectedModel, err := live.resolveTurnModel(req.Model)
+	if err != nil {
+		return PromptResponse{}, err
+	}
 
 	live.diagnosticObserver.Bind(ctx)
 	defer live.diagnosticObserver.End(ctx)
 	diagnostics.From(ctx).Capture("runtime.configuration", map[string]any{"runtime": "codex", "runtime_id": runtimeID, "binary": live.spec.BinaryPath, "workspace": live.spec.WorkspaceDir, "stderr_path": live.spec.StderrPath, "profile": live.spec.Profile, "mcp_servers": live.spec.MCPServers, "mcp_revision": live.spec.MCPCatalogRevision, "execution_mode": live.spec.ExecutionMode, "extension_digests": live.session.ExtensionDigests, "runtime_version": live.serverInfo})
 	diagnostics.From(ctx).CaptureRuntimeFiles(filepath.Join(live.spec.HomeDir, "AGENTS.md"), filepath.Join(live.spec.CodexHomeDir, "AGENTS.md"), filepath.Join(live.spec.WorkspaceDir, "AGENTS.md"), filepath.Join(live.spec.WorkspaceDir, "AGENTS.override.md"), filepath.Join(live.spec.CodexHomeDir, "config.toml"))
-	diagnostics.From(ctx).RuntimeInfo("codex", live.spec.Profile.ModelID)
-	live.appClient.logInfoContext(ctx, "model request configuration", "model", live.spec.Profile.ModelID, "runtime_id", runtimeID, "thread_id", sessionID)
-	waiter, err := live.registerAppServerTurnWaiter(sessionID)
+	diagnostics.From(ctx).Capture("runtime.turn_model", selectedModel)
+	diagnostics.From(ctx).RuntimeInfo("codex", selectedModel.ModelID)
+	live.appClient.logInfoContext(ctx, "model request configuration", "model", selectedModel.ModelID, "runtime_id", runtimeID, "thread_id", sessionID)
+	waiter, err := live.registerAppServerTurnWaiterWithModel(sessionID, selectedModel, req.Model != nil)
 	if err != nil {
 		m.publishAppServerEvent(promptFailedEvent(runtimeID, sessionID, err))
 		return PromptResponse{}, err
@@ -428,6 +433,7 @@ func (m *appServerManager) Prompt(ctx context.Context, handle SessionHandle, req
 
 	m.publishContextUsage(runtimeID, live, sessionID, nil, "snapshot")
 	params := appServerTurnStartParamsWithInput(live.spec, sessionID, promptInput, req.ClientUserMessageID)
+	applyTurnModelParams(params, selectedModel)
 	turnStartAt := time.Now()
 	live.appClient.logDebugContext(ctx, "codex app-server turn start request",
 		"runtime_id", runtimeID,
@@ -943,9 +949,7 @@ func appServerTurnStartParamsWithInput(spec SessionSpec, threadID string, input 
 	if clientUserMessageID = strings.TrimSpace(clientUserMessageID); clientUserMessageID != "" {
 		params["clientUserMessageId"] = clientUserMessageID
 	}
-	if effort := config.NormalizeReasoningEffort(spec.Profile.ReasoningEffort); !config.UsesModelReasoningDefault(effort) {
-		params["effort"] = effort
-	}
+	applyTurnModelParams(params, turnModelFromProfile(spec.Profile))
 	if spec.ExecutionMode == ExecutionModeReadOnly {
 		params["approvalPolicy"] = "never"
 		params["permissions"] = readOnlyPermissionsProfile
@@ -1516,6 +1520,8 @@ func (m *appServerManager) persistedThreadID(spec SessionSpec) string {
 }
 
 type appServerTurnWaiter struct {
+	model         contract.TurnModel
+	modelOverride bool
 	// Guarded by liveSession.mu, alongside the thread's cumulative counters.
 	itemTurns                map[string]string // Native item IDs received with an explicit turn ID.
 	missingItems             bool              // An item without a known owner was withheld.
@@ -1549,6 +1555,10 @@ type appServerTurnResult struct {
 }
 
 func (s *liveSession) registerAppServerTurnWaiter(threadID string) (*appServerTurnWaiter, error) {
+	return s.registerAppServerTurnWaiterWithModel(threadID, turnModelFromProfile(s.spec.Profile), false)
+}
+
+func (s *liveSession) registerAppServerTurnWaiterWithModel(threadID string, selected contract.TurnModel, overridden bool) (*appServerTurnWaiter, error) {
 	threadID = strings.TrimSpace(threadID)
 	if threadID == "" {
 		return nil, fmt.Errorf("thread id is required")
@@ -1563,12 +1573,18 @@ func (s *liveSession) registerAppServerTurnWaiter(threadID string) (*appServerTu
 	}
 	delete(s.legacyTools, threadID)
 	waiter := &appServerTurnWaiter{
-		threadID:     threadID,
-		ch:           make(chan appServerTurnResult, 8),
-		lastActivity: "turn/start",
+		model:         selected,
+		modelOverride: overridden,
+		threadID:      threadID,
+		ch:            make(chan appServerTurnResult, 8),
+		lastActivity:  "turn/start",
 	}
-	waiter.tokenUsage.ModelID = s.spec.Profile.ModelID
+	waiter.tokenUsage.ModelID = selected.ModelID
 	s.turnWaiters[threadID] = waiter
+	if s.threadModels == nil {
+		s.threadModels = make(map[string]contract.TurnModel)
+	}
+	s.threadModels[threadID] = selected
 	return waiter, nil
 }
 
@@ -2502,8 +2518,6 @@ func appServerThreadConfig(profile agentruntime.Profile, executionMode string) m
 	if values == nil {
 		values = make(map[string]any)
 	}
-	values["model_context_window"] = profile.ModelMetadata.Normalized().ContextWindow
-	values["model_auto_compact_token_limit"] = profile.ModelMetadata.CompactThreshold()
 	values["web_search"] = "cached"
 	if executionMode == ExecutionModeReadOnly {
 		values["web_search"] = "disabled"

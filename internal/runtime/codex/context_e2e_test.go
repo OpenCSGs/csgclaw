@@ -131,13 +131,13 @@ func testContextBundledCodex(t *testing.T, mode string) {
 	}
 	if mode == "sol61_auto_compact" || mode == "sol61_history" {
 		live := rt.SessionManager().(*appServerManager).liveSession(h.RuntimeID)
-		config, err := os.ReadFile(filepath.Join(live.spec.CodexHomeDir, "config.toml"))
+		catalog, err := os.ReadFile(filepath.Join(live.spec.CodexHomeDir, modelCatalogFileName))
 		if err != nil {
 			t.Fatal(err)
 		}
-		for _, want := range []string{"model_context_window = 1050000", "model_auto_compact_token_limit = 787500"} {
-			if !strings.Contains(string(config), want) {
-				t.Fatalf("generated Codex config missing %q", want)
+		for _, want := range []string{`"context_window": 1050000`, `"auto_compact_token_limit": 787500`} {
+			if !strings.Contains(string(catalog), want) {
+				t.Fatalf("generated Codex catalog missing %q", want)
 			}
 		}
 	}
