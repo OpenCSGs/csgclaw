@@ -149,7 +149,13 @@ function TeamNavigationContents() {
   const controller = {
     ready: true,
     activePane,
-    sidebarProps: { t, workerAgentItems: agents, teams },
+    sidebarProps: {
+      t,
+      workerAgentItems: agents,
+      teams,
+      onSelectAgent: (agent: AgentLike) => navigate(`/agents/${agent.id}`),
+      onSelectTeam: (team: WorkspaceTeam) => navigate(`/teams/${team.id}`),
+    },
     agentViewProps: { item: null },
     teamViewProps: { t, agents, team: teams.find((team) => team.id === activePane.id) },
   } as unknown as WorkspaceController;
@@ -157,12 +163,62 @@ function TeamNavigationContents() {
     <WorkspaceControllerProvider controller={controller}>
       <AgentOverviewPage />
       <button onClick={() => navigate("/teams/team-1")}>Go to referenced team</button>
+      <NavigationState />
     </WorkspaceControllerProvider>
   );
 }
 
 describe("agent overview team navigation", () => {
   beforeEach(() => vi.mocked(useWorkspaceHubTemplatesQuery).mockReturnValue(queryState()));
+  afterEach(() => localStorage.removeItem(CLOUD_AGENTS_STORAGE_KEY));
+
+  it("keeps All selected while switching between agent and team details, including history navigation", async () => {
+    render(
+      <MemoryRouter initialEntries={["/agents"]}>
+        <TeamNavigationContents />
+      </MemoryRouter>,
+    );
+    const user = userEvent.setup();
+    for (const name of [/测试智能体/, /回归团队 1/, /回归团队 2/, /测试智能体/, /^Back$/, /^Forward$/]) {
+      await user.click(screen.getByRole("button", { name }));
+      expect(screen.getByRole("button", { name: "全部 3" })).toHaveAttribute("aria-pressed", "true");
+      expect(screen.getByRole("button", { name: /测试智能体/ })).toBeVisible();
+      expect(screen.getByRole("button", { name: /回归团队 1/ })).toBeVisible();
+      expect(screen.getByRole("button", { name: /回归团队 2/ })).toBeVisible();
+    }
+    expect(screen.getByLabelText("Current URL")).toHaveTextContent("/agents/agent-worker");
+  });
+
+  it("keeps the team filter and search when selecting another result", async () => {
+    render(
+      <MemoryRouter initialEntries={["/teams/team-1"]}>
+        <TeamNavigationContents />
+      </MemoryRouter>,
+    );
+    const user = userEvent.setup();
+    await user.type(screen.getByRole("textbox", { name: "搜索智能体和团队" }), "回归团队");
+    await user.click(screen.getByRole("button", { name: /回归团队 2/ }));
+    expect(await screen.findByRole("heading", { name: "回归团队 2", level: 1 })).toBeVisible();
+    expect(screen.getByRole("button", { name: "团队 2" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("textbox", { name: "搜索智能体和团队" })).toHaveValue("回归团队");
+  });
+
+  it.each(["全部 4", "云端 1"])("preserves %s and the search when opening a cloud result", async (filterLabel) => {
+    vi.mocked(fetchRelayCatalog).mockResolvedValue([...cloudAgentFixture]);
+    localStorage.setItem(CLOUD_AGENTS_STORAGE_KEY, JSON.stringify(cloudAgentFixture));
+    render(
+      <MemoryRouter initialEntries={["/agents"]}>
+        <TeamNavigationContents />
+      </MemoryRouter>,
+    );
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: filterLabel }));
+    await user.type(screen.getByRole("textbox", { name: "搜索智能体和团队" }), "合同");
+    await user.click(screen.getByRole("button", { name: /合同条款审阅/ }));
+    expect(await screen.findByRole("heading", { name: "合同条款审阅", level: 1 })).toBeVisible();
+    expect(screen.getByRole("button", { name: filterLabel })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("textbox", { name: "搜索智能体和团队" })).toHaveValue("合同");
+  });
 
   it.each(["/agents", "/teams/team-2"])(
     "switches the list to teams and clears the agent search when navigating from %s",

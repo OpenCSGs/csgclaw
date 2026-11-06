@@ -20,6 +20,7 @@ import {
   agentTemplatesSearch,
   agentPlazaSearch,
   cloudAgentSearch,
+  paneFromLocation,
   pathForNewCloudTask,
   pathForPane,
   WorkspacePaneTypes,
@@ -56,21 +57,22 @@ export function AgentOverviewPage() {
   const selectedCloudAgent = plaza.agents.find((agent) => agent.id === cloudID);
   const templatesTab = requestedTab === "templates" || requestedTab === "market";
   const requestedTemplateID = templatesTab ? searchParams.get("template") || "" : "";
-  const [query, setQuery] = useState("");
-  const [filter, setFilter] = useState("all");
+  const [{ query, filter }, setListState] = useState(() => {
+    const pane = paneFromLocation(location.pathname);
+    return {
+      query: "",
+      filter: !cloudID && pane.id ? (pane.type === "team" ? "teams" : "agents") : "all",
+    };
+  });
   const activeType = controller.ready ? controller.activePane.type : "";
   const activeID = controller.ready ? controller.activePane.id : "";
   useEffect(() => {
-    if (!activeID || (activeType !== "agent" && activeType !== "team")) return;
-    setFilter(activeType === "team" ? "teams" : "agents");
-    setQuery("");
-  }, [activeID, activeType]);
-  useEffect(() => {
-    if (cloudID) {
-      setFilter("all");
-      setQuery("");
-    }
-  }, [cloudID]);
+    const selectedFilter = cloudID ? "cloud" : activeID ? (activeType === "team" ? "teams" : "agents") : "";
+    if (!selectedFilter || (activeType !== "agent" && activeType !== "team")) return;
+    setListState((state) =>
+      state.filter === "all" || state.filter === selectedFilter ? state : { filter: selectedFilter, query: "" },
+    );
+  }, [activeID, activeType, cloudID]);
   const templateFilter = searchParams.get("filter") === "personal" ? "personal" : "official";
   const [listOpen, setListOpen] = useState(false);
   const listToggleRef = useRef<HTMLButtonElement>(null);
@@ -106,7 +108,7 @@ export function AgentOverviewPage() {
     if (template) onSelectTemplateInPlace?.(template);
   }, [requestedTemplateID, currentTemplateID, currentResourceType, templates, onSelectTemplateInPlace]);
   useEffect(() => {
-    setQuery("");
+    setListState((state) => ({ ...state, query: "" }));
   }, [requestedTemplateID]);
   useEffect(() => {
     selectedTemplateRef.current?.scrollIntoView({ block: "nearest" });
@@ -161,8 +163,7 @@ export function AgentOverviewPage() {
       pathname: value === "plaza" ? pathForPane({ type: WorkspacePaneTypes.agent }) : location.pathname,
       search: params.toString(),
     });
-    setQuery("");
-    setFilter("all");
+    setListState({ query: "", filter: "all" });
   }
   const chooseAgent = (item: AgentLike) => {
     closeList();
@@ -266,7 +267,10 @@ export function AgentOverviewPage() {
                   aria-label={t(templatesTab ? "resourcesTemplateSearchPlaceholder" : "taskEntrySearchTarget")}
                   placeholder={t(templatesTab ? "resourcesTemplateSearchPlaceholder" : "taskEntrySearchTarget")}
                   value={query}
-                  onChange={(event) => setQuery(event.target.value)}
+                  onChange={(event) => {
+                    const query = event.target.value;
+                    setListState((state) => ({ ...state, query }));
+                  }}
                 />
               </label>
               <nav className={styles.filters} aria-label={t("agentsTab")}>
@@ -277,7 +281,7 @@ export function AgentOverviewPage() {
                     aria-pressed={(templatesTab ? templateFilter : filter) === value}
                     onClick={() => {
                       if (!templatesTab) {
-                        setFilter(value);
+                        setListState((state) => ({ ...state, filter: value }));
                         return;
                       }
                       const params = new URLSearchParams(location.search);
