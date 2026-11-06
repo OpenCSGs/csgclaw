@@ -1,3 +1,15 @@
+import { CLOUD_AGENT_AVATARS, normalizeAvatarPath } from "@/shared/avatar";
+
+const cloudTypeAvatars = new Map<string, string>([
+  ...Object.entries(CLOUD_AGENT_AVATARS),
+  ["csgclaw-workspace", CLOUD_AGENT_AVATARS.csgclaw],
+]);
+
+export function cloudAgentAvatar(type: unknown, avatar?: string): string {
+  const normalizedType = typeof type === "string" ? type.trim().toLowerCase() : "";
+  return cloudTypeAvatars.get(normalizedType) || normalizeAvatarPath(avatar) || CLOUD_AGENT_AVATARS.csgclaw;
+}
+
 export type CloudAgent = {
   id: string;
   relayURL: string;
@@ -11,6 +23,7 @@ export type CloudAgent = {
   status: "online" | "offline";
   lastSeenAt: string | null;
   avatar: string;
+  type?: string;
 };
 
 // Persist metadata and a server-side credential reference, never a token.
@@ -55,6 +68,7 @@ export function parseCloudAgents(raw: string | null): CloudAgent[] {
         publisher: String(entry.publisher),
         sourceAgentID: String(entry.sourceAgentID),
         avatar: String(entry.avatar),
+        ...(typeof entry.type === "string" ? { type: entry.type } : {}),
         visibility: entry.visibility,
         status: "offline",
         lastSeenAt:

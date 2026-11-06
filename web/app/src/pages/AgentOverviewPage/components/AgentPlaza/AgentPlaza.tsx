@@ -173,7 +173,7 @@ export function CloudAgentDetail({
       <div className="agent-profile-fixed-header">
         <AgentProfileHeader
           avatar={
-            <div className="entity-avatar">
+            <div className={styles.detailAvatar}>
               <AgentAvatarContent avatar={agent.avatar} fallback={agent.name.slice(0, 1)} />
             </div>
           }

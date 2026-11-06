@@ -22,6 +22,9 @@ import {
 } from "@/components/ui";
 import { ModelPicker } from "@/components/business/AgentModelFields";
 import { CloudPrivacyDialog } from "@/components/business/CloudPrivacyDialog";
+import { AgentAvatarContent } from "@/components/business/AgentAvatar";
+import { cloudAgentAvatar } from "@/models/cloudAgents";
+import { CLOUD_AGENT_AVATARS } from "@/shared/avatar";
 import { ReasoningEffortPicker } from "@/components/business/ReasoningEffortPicker";
 import { FieldHelpTooltip } from "@/components/business/ProfileControls";
 import { ConversationSection } from "@/components/business/ConversationWorkspace/ConversationSection";
@@ -240,6 +243,17 @@ export function UiLab() {
           <section className={styles.card}>
             <h2>Cloud agent confirmation</h2>
             <Button onClick={() => setCloudPrivacyDialog(true)}>Preview cloud privacy dialog</Button>
+          </section>
+          <section className={styles.card}>
+            <h2>Cloud agent type avatars</h2>
+            <div className={styles.row}>
+              {Object.keys(CLOUD_AGENT_AVATARS).map((type) => (
+                <div key={type} className={styles.cloudAvatarPreview}>
+                  <AgentAvatarContent avatar={cloudAgentAvatar(type)} alt={type} />
+                  <span>{type}</span>
+                </div>
+              ))}
+            </div>
           </section>
           {cloudPrivacyDialog ? (
             <CloudPrivacyDialog

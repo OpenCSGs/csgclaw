@@ -18,6 +18,7 @@ type CatalogEntry struct {
 	Agent        Agent  `json:"agent"`
 	Avatar       string `json:"avatar,omitempty"`
 	Source       string `json:"source,omitempty"`
+	Type         string `json:"type,omitempty"`
 }
 
 // Discover reads community instances and resolves their subscription IDs through
@@ -108,7 +109,7 @@ func (m *Manager) discover(ctx context.Context, onlyID string) ([]CatalogEntry, 
 					a.Visibility = "public"
 				}
 				a.Name, a.Description = item.Name, item.Description
-				entries[index] = CatalogEntry{RelayURL: c.base.String(), ConnectionID: connection, Agent: a, Avatar: item.Metadata.Avatar, Source: item.Source}
+				entries[index] = CatalogEntry{RelayURL: c.base.String(), ConnectionID: connection, Agent: a, Avatar: item.Metadata.Avatar, Source: item.Source, Type: item.Type}
 			}
 		}()
 	}
@@ -145,6 +146,9 @@ func (m *Manager) Catalog(ctx context.Context) []CatalogEntry {
 		}
 		entry.RelayURL = m.manifest.Endpoint
 		entry.ConnectionID = m.manifest.ConnectionID
+		if entry.Type == "" {
+			entry.Type = "csgclaw"
+		}
 		entries = append(entries, entry)
 		connected[id] = m.running[id] != nil && m.running[id].connected
 	}

@@ -418,7 +418,7 @@ export function AgentOverviewPage() {
                             });
                           }}
                         >
-                          <span className={styles.avatar}>
+                          <span className={`${styles.avatar} ${styles.cloudAvatar}`}>
                             <AgentAvatarContent avatar={item.avatar} fallback={item.name.slice(0, 1)} />
                           </span>
                           <span className={styles.identity}>

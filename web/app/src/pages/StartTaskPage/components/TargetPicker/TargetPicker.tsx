@@ -120,7 +120,10 @@ export function TargetPicker({
           disabled={locked}
           title={locked ? t("iaTargetLocked") : t("iaTargetChange")}
         >
-          <span className={classNames("iaAvatarFrame", styles.triggerAvatar)} aria-hidden="true">
+          <span
+            className={classNames("iaAvatarFrame", styles.triggerAvatar, selectedCloud && styles.cloudIcon)}
+            aria-hidden="true"
+          >
             {isSolo ? (
               <AgentAvatarContent avatar={managerAgent?.avatar} fallback={triggerName.slice(0, 1)} />
             ) : selectedTeam ? (
@@ -230,7 +233,10 @@ export function TargetPicker({
                       {value.kind === "cloud" && value.id === item.id ? (
                         <Check aria-hidden="true" className={styles.rowCheck} size={15} />
                       ) : null}
-                      <span className={classNames("iaAvatarFrame", styles.rowIcon)} aria-hidden="true">
+                      <span
+                        className={classNames("iaAvatarFrame", styles.rowIcon, styles.cloudIcon)}
+                        aria-hidden="true"
+                      >
                         <AgentAvatarContent avatar={item.avatar} fallback={item.name.slice(0, 1)} />
                       </span>
                       <span className={styles.rowText}>

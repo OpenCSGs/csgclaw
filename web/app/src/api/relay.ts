@@ -1,5 +1,5 @@
 import type { CloudChatResponse, CloudChatTurn } from "@/models/cloudChat";
-import type { CloudAgent } from "@/models/cloudAgents";
+import { cloudAgentAvatar, type CloudAgent } from "@/models/cloudAgents";
 import { del, get, post } from "@/api/client";
 
 export type RelayPublicationStatus = {
@@ -19,6 +19,7 @@ export const publishRelayAgent = (id: string): Promise<RelayPublicationStatus> =
 export const unpublishRelayAgent = (id: string): Promise<RelayPublicationStatus> => del(path(id));
 
 export type RelayCatalogEntry = {
+  type?: string;
   source?: "platform" | "external";
   relay_url: string;
   connection_id: string;
@@ -50,7 +51,8 @@ export async function fetchRelayCatalog(signal?: AbortSignal): Promise<CloudAgen
     visibility: entry.agent.visibility,
     status: entry.agent.status === "online" ? "online" : "offline",
     lastSeenAt: entry.agent.last_seen_at,
-    avatar: entry.avatar || "",
+    type: entry.type,
+    avatar: cloudAgentAvatar(entry.type, entry.avatar),
   }));
 }
 

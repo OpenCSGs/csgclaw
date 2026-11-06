@@ -251,6 +251,9 @@ func TestCommunityDiscoveryAndInvocationOfRemotePublication(t *testing.T) {
 	if entries[0].Source != "external" || entries[1].Source != "platform" || entries[0].Agent.Name != "Remote" {
 		t.Fatal("discovery lost community origin or display name")
 	}
+	if entries[0].Type != "csgclaw" || entries[1].Type != "csgclaw-workspace" {
+		t.Fatal("discovery lost community instance types")
+	}
 	if entries[0].Agent.Visibility != "private" || entries[1].Agent.Visibility != "public" {
 		t.Fatal("catalog visibility differs from StarHub")
 	}
