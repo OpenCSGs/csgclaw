@@ -1,0 +1,50 @@
+.taskCreateDialog {
+  width: min(600px, calc(100vw - 40px));
+}
+
+.taskCreateForm {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.taskCreateField {
+  margin: 0;
+}
+
+.taskCreateFormCompact {
+  grid-template-columns: 1fr;
+}
+
+.taskCreateForm .span2 {
+  grid-column: 1 / -1;
+}
+
+.taskCreateForm textarea {
+  min-height: 110px;
+}
+
+.taskCreateError {
+  margin-top: 14px;
+}
+
+@media (max-width: 640px) {
+  .taskCreateForm {
+    grid-template-columns: 1fr;
+  }
+}
+
+.executorOption {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.executorAvatar {
+  display: inline-flex;
+  width: 24px;
+  height: 24px;
+  overflow: hidden;
+  border-radius: 50%;
+  flex-shrink: 0;
+}

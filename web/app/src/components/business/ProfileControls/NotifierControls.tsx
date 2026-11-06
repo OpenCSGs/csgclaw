@@ -1,6 +1,7 @@
+import profileControlsStyles from "./ProfileControls.module.css";
 import { DEFAULT_NOTIFIER_POLL_INTERVAL, NOTIFIER_DELIVERY_OPTIONS } from "@/shared/constants/agents";
 import type { ReactNode } from "react";
-import { Select } from "@/components/ui";
+import { TextInput, Select } from "@/components/ui";
 import {
   ensureNotifierPullSubscriptionDraft,
   notifierPushWebhookNotifyURL,
@@ -90,8 +91,8 @@ export function NotifierControls({
                   <FieldLabelWithHelp summary={t("notifierWebhookTokenSummary")} detail={t("notifierWebhookTokenHelp")}>
                     {requiredFieldLabel(t("notifierWebhookToken"))}
                   </FieldLabelWithHelp>
-                  <div className="notifier-copy-row">
-                    <input
+                  <div className={profileControlsStyles["notifier-copy-row"]}>
+                    <TextInput
                       type="password"
                       autoComplete="new-password"
                       value={draft.notifier_webhook_token || ""}
@@ -108,8 +109,8 @@ export function NotifierControls({
                   >
                     <span>{t("notifierThirdPartyCSGWebhookURL")}</span>
                   </FieldLabelWithHelp>
-                  <div className="notifier-copy-row">
-                    <input readOnly value={publicWebhookURL} />
+                  <div className={profileControlsStyles["notifier-copy-row"]}>
+                    <TextInput readOnly value={publicWebhookURL} />
                     <ClipboardCopyButton text={publicWebhookURL} label={t("copyToClipboard")} />
                   </div>
                 </label>
@@ -122,7 +123,7 @@ export function NotifierControls({
                   <FieldLabelWithHelp summary={t("notifierRemoteURLSummary")} detail={t("notifierRemoteURLHelp")}>
                     {requiredFieldLabel(t("notifierRemoteURL"))}
                   </FieldLabelWithHelp>
-                  <input
+                  <TextInput
                     value={draft.notifier_remote_url || ""}
                     placeholder={t("notifierRemoteURLPlaceholder")}
                     onInput={(event) => patch({ notifier_remote_url: event.currentTarget.value })}
@@ -132,7 +133,7 @@ export function NotifierControls({
                   <FieldLabelWithHelp summary={t("notifierRemoteTokenSummary")} detail={t("notifierRemoteTokenHelp")}>
                     <span>{t("notifierRemoteToken")}</span>
                   </FieldLabelWithHelp>
-                  <input
+                  <TextInput
                     type="password"
                     autoComplete="new-password"
                     value={draft.notifier_remote_token || ""}
@@ -148,8 +149,8 @@ export function NotifierControls({
                     >
                       <span>{t("notifierThirdPartyWebhookPasteURL")}</span>
                     </FieldLabelWithHelp>
-                    <div className="notifier-copy-row">
-                      <input readOnly value={relayPasteURL} />
+                    <div className={profileControlsStyles["notifier-copy-row"]}>
+                      <TextInput readOnly value={relayPasteURL} />
                       <ClipboardCopyButton text={relayPasteURL} label={t("copyToClipboard")} />
                     </div>
                   </label>
@@ -158,7 +159,7 @@ export function NotifierControls({
                   <FieldLabelWithHelp summary={t("notifierPollIntervalSummary")} detail={t("notifierPollIntervalHelp")}>
                     <span>{t("notifierPollInterval")}</span>
                   </FieldLabelWithHelp>
-                  <input
+                  <TextInput
                     value={draft.notifier_poll_interval || DEFAULT_NOTIFIER_POLL_INTERVAL}
                     placeholder={t("notifierPollIntervalPlaceholder")}
                     onInput={(event) => patch({ notifier_poll_interval: event.currentTarget.value })}

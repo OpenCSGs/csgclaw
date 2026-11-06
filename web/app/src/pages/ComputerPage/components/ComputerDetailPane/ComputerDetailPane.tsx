@@ -1,3 +1,4 @@
+import computerDetailPaneStyles from "./ComputerDetailPane.module.css";
 import {
   agentModelID,
   canStartAgent,
@@ -87,7 +88,7 @@ export function ComputerDetailPane({
             {t("createAgent")}
           </Button>
         </div>
-        <div className="entity-list computer-agent-list">
+        <div className={`entity-list ${computerDetailPaneStyles["computer-agent-list"]}`}>
           {agents.length ? (
             agents.map((item) => (
               <div key={item.id} className="entity-list-row">

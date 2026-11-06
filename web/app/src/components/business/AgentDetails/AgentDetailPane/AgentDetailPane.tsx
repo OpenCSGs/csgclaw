@@ -1,3 +1,9 @@
+import agentDetailPaneStyles from "./AgentDetailPane.module.css";
+import agentSkillsStyles from "./AgentSkills.module.css";
+import agentPublicationStyles from "./AgentPublication.module.css";
+import agentMemoryStyles from "./AgentMemory.module.css";
+import agentInstructionsStyles from "./AgentInstructions.module.css";
+import agentChannelsStyles from "./AgentChannels.module.css";
 import { AgentProfileHeader } from "./AgentProfileHeader";
 import type { HubTemplate } from "@/models/hubWorkspace";
 import { AgentModelPanel } from "./components/AgentModelPanel";
@@ -111,6 +117,7 @@ import {
   Field,
   TextInput,
   TextArea,
+  SegmentedControl,
   Switch,
   Checkbox,
   DialogBody,
@@ -807,7 +814,7 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
                 canEditAgentName && isEditingName ? (
                   <label className="agent-title-edit-field">
                     <span className="sr-only">{t("agentName")}</span>
-                    <input
+                    <TextInput
                       ref={nameInputRef}
                       className="agent-title-input"
                       value={draft.name}
@@ -885,7 +892,7 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
               isEditingDescription ? (
                 <label className="field entity-description-field">
                   <span className="sr-only">{t("agentDescription")}</span>
-                  <textarea
+                  <TextArea
                     ref={descriptionInputRef}
                     className="compact-textarea"
                     value={draft.description}
@@ -1023,7 +1030,7 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
             <span>{notice}</span>
             <button
               type="button"
-              className="agent-notice-close"
+              className={agentDetailPaneStyles["agent-notice-close"]}
               aria-label={t("close")}
               title={t("close")}
               onClick={onDismissNotice}
@@ -1047,7 +1054,10 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
                 >
                   <span>{section.label}</span>
                   {typeof section.count === "number" ? (
-                    <span className="agent-profile-section-tab-count" aria-label={String(section.count)}>
+                    <span
+                      className={agentDetailPaneStyles["agent-profile-section-tab-count"]}
+                      aria-label={String(section.count)}
+                    >
                       {section.count}
                     </span>
                   ) : null}
@@ -1059,7 +1069,9 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
       </div>
       <div
         className={`agent-profile-scroll-region${
-          visibleActiveProfileTab === "instructions" ? " agent-profile-scroll-region-instructions" : ""
+          visibleActiveProfileTab === "instructions"
+            ? ` ${agentDetailPaneStyles["agent-profile-scroll-region-instructions"]}`
+            : ""
         }${isProfileScrolling ? " is-scrolling" : ""}`}
         onScroll={onProfileScroll}
       >
@@ -1100,7 +1112,7 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
             }`}
           >
             {visibleActiveProfileTab === "profile" ? (
-              <div id="agent-profile-profile" className="agent-profile-tab-panel">
+              <div id="agent-profile-profile" className={agentDetailPaneStyles["agent-profile-tab-panel"]}>
                 <AgentRuntimePanel
                   draft={draft}
                   directoryPickerAvailable={directoryPickerAvailable}
@@ -1337,12 +1349,12 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
         }}
       >
         <DialogContent
-          className="agent-skills-dialog agent-skill-delete-dialog"
-          overlayClassName="agent-skill-delete-backdrop"
+          className={`${agentSkillsStyles["agent-skills-dialog"]} ${agentSkillsStyles["agent-skill-delete-dialog"]}`}
+          overlayClassName={agentSkillsStyles["agent-skill-delete-backdrop"]}
           portalContainer={dialogPortalContainer}
         >
-          <DialogHeader className="agent-skills-dialog-header">
-            <div className="agent-skills-dialog-copy">
+          <DialogHeader className={agentSkillsStyles["agent-skills-dialog-header"]}>
+            <div className={agentSkillsStyles["agent-skills-dialog-copy"]}>
               <DialogTitle>{t("agentDeleteSkill")}</DialogTitle>
               <DialogDescription>
                 {t("agentDeleteSkillConfirmMessage", { name: skillPendingDelete?.name || "" })}
@@ -1351,11 +1363,13 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
             <DialogCloseButton label={t("close")} size="sm" variant="tertiaryGray" />
           </DialogHeader>
           {skillDeleteError ? (
-            <div className="agent-skills-dialog-body agent-skill-delete-dialog-body">
+            <div
+              className={`${agentSkillsStyles["agent-skills-dialog-body"]} ${agentSkillsStyles["agent-skill-delete-dialog-body"]}`}
+            >
               <div className="form-error">{skillDeleteError}</div>
             </div>
           ) : null}
-          <div className="agent-skills-dialog-actions">
+          <div className={agentSkillsStyles["agent-skills-dialog-actions"]}>
             <Button
               variant="secondaryGray"
               size="sm"
@@ -1397,12 +1411,12 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
         }}
       >
         <DialogContent
-          className="agent-skills-dialog agent-skill-delete-dialog"
-          overlayClassName="agent-skill-delete-backdrop"
+          className={`${agentSkillsStyles["agent-skills-dialog"]} ${agentSkillsStyles["agent-skill-delete-dialog"]}`}
+          overlayClassName={agentSkillsStyles["agent-skill-delete-backdrop"]}
           portalContainer={dialogPortalContainer}
         >
-          <DialogHeader className="agent-skills-dialog-header">
-            <div className="agent-skills-dialog-copy">
+          <DialogHeader className={agentSkillsStyles["agent-skills-dialog-header"]}>
+            <div className={agentSkillsStyles["agent-skills-dialog-copy"]}>
               <DialogTitle>{t("agentDeleteMCP")}</DialogTitle>
               <DialogDescription>
                 {t("agentDeleteMCPConfirmMessage", {
@@ -1413,7 +1427,7 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
             <DialogCloseButton label={t("close")} size="sm" variant="tertiaryGray" />
           </DialogHeader>
           {mcpDeleteError ? <div className="form-error">{mcpDeleteError}</div> : null}
-          <div className="agent-skills-dialog-actions">
+          <div className={agentSkillsStyles["agent-skills-dialog-actions"]}>
             <Button
               variant="secondaryGray"
               size="sm"
@@ -1452,12 +1466,15 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
             </div>
             <DialogCloseButton label={t("close")} size="sm" variant="tertiaryGray" />
           </DialogHeader>
-          <DialogBody className="agent-publish-dialog-body">
-            <section className="agent-publish-section" aria-label={t("agentPublishTemplateDetails")}>
+          <DialogBody className={agentPublicationStyles["agent-publish-dialog-body"]}>
+            <section
+              className={agentPublicationStyles["agent-publish-section"]}
+              aria-label={t("agentPublishTemplateDetails")}
+            >
               <h3>{t("agentPublishTemplateDetails")}</h3>
-              <div className="agent-publish-name-fields">
+              <div className={agentPublicationStyles["agent-publish-name-fields"]}>
                 <Field
-                  className="agent-publish-field"
+                  className={agentPublicationStyles["agent-publish-field"]}
                   label={t("agentPublishTemplateName")}
                   hint={t(linkedTemplate ? "agentPublishTemplateNameReadonlyHint" : "agentPublishTemplateNameHint")}
                   error={publishTemplateNameError || undefined}
@@ -1476,7 +1493,7 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
                   />
                 </Field>
                 <Field
-                  className="agent-publish-field"
+                  className={agentPublicationStyles["agent-publish-field"]}
                   label={t("agentPublishTemplateDisplayName")}
                   hint={t("agentPublishTemplateDisplayNameHint")}
                 >
@@ -1489,9 +1506,12 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
                   />
                 </Field>
               </div>
-              <Field className="agent-publish-field" label={t("agentPublishTemplateDescription")}>
+              <Field
+                className={agentPublicationStyles["agent-publish-field"]}
+                label={t("agentPublishTemplateDescription")}
+              >
                 <TextArea
-                  className="agent-publish-description"
+                  className={agentPublicationStyles["agent-publish-description"]}
                   rows={3}
                   value={publishTemplateDescription}
                   aria-label={t("agentPublishTemplateDescription")}
@@ -1499,18 +1519,21 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
                 />
               </Field>
             </section>
-            <section className="agent-publish-section" aria-label={t("agentPublishTemplateContents")}>
+            <section
+              className={agentPublicationStyles["agent-publish-section"]}
+              aria-label={t("agentPublishTemplateContents")}
+            >
               <h3>{t("agentPublishTemplateContents")}</h3>
               {linkedTemplate?.revision ? (
-                <p className="agent-publish-version-note">
+                <p className={agentPublicationStyles["agent-publish-version-note"]}>
                   {t("agentTemplateNextVersion", {
                     version: (linkedTemplate.latest_revision || linkedTemplate.revision) + 1,
                   })}
                 </p>
               ) : null}
-              <Field className="agent-publish-field" label={t("templateCommitMessage")}>
+              <Field className={agentPublicationStyles["agent-publish-field"]} label={t("templateCommitMessage")}>
                 <TextArea
-                  className="agent-publish-commit-message"
+                  className={agentPublicationStyles["agent-publish-commit-message"]}
                   rows={2}
                   value={publishCommitMessage}
                   aria-label={t("templateCommitMessage")}
@@ -1518,7 +1541,7 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
                 />
               </Field>
               {supportsTemplateMemory ? (
-                <label className="agent-publish-memory-option">
+                <label className={agentPublicationStyles["agent-publish-memory-option"]}>
                   <Checkbox
                     aria-label={t("agentPublishIncludeMemory")}
                     checked={publishTemplateIncludeMemory}
@@ -1532,7 +1555,7 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
               ) : null}
             </section>
             {publishTarget === "official" ? (
-              <p className="agent-publish-hub-note">
+              <p className={agentPublicationStyles["agent-publish-hub-note"]}>
                 <UploadCloud size={16} aria-hidden="true" />
                 <span>{t("agentTemplateHubGuidance")}</span>
               </p>
@@ -1643,7 +1666,10 @@ function AgentRuntimePanel({
   const isNotifierDraft = isNotifierRuntimeDraftOnAgentPage(draft, item);
 
   return (
-    <section id="agent-profile-runtime" className="profile-section agent-profile-scroll-target">
+    <section
+      id="agent-profile-runtime"
+      className={`profile-section ${agentDetailPaneStyles["agent-profile-scroll-target"]}`}
+    >
       <div className="profile-section-heading">
         <div className="profile-section-title">{t("profileRuntimeSection")}</div>
         <p className="profile-section-description">{t("profileRuntimeSectionDescription")}</p>
@@ -1652,7 +1678,7 @@ function AgentRuntimePanel({
         <div className="profile-grid-compact agent-page-form-content">
           <label className="field col-span-full">
             <span>{t("profileRuntimeKind")}</span>
-            <input value={formatRuntimeKindLabel(draft.runtime_kind || runtimeKind, t)} readOnly disabled />
+            <TextInput value={formatRuntimeKindLabel(draft.runtime_kind || runtimeKind, t)} readOnly disabled />
           </label>
           {!isNotifierDraft && runtimeOptionSchemas.length > 0 ? (
             <RuntimeOptionsFields
@@ -1720,11 +1746,11 @@ function AgentMCPPanel({
       id={kind === "knowledge" ? "agent-profile-knowledge" : "agent-profile-mcp"}
       className={
         embedded
-          ? "agent-skills-section agent-mcp-section"
-          : "profile-section agent-skills-section agent-mcp-section agent-profile-scroll-target"
+          ? `${agentSkillsStyles["agent-skills-section"]} agent-mcp-section`
+          : `profile-section ${agentSkillsStyles["agent-skills-section"]} agent-mcp-section ${agentDetailPaneStyles["agent-profile-scroll-target"]}`
       }
     >
-      <div className="agent-skills-summary-heading">
+      <div className={agentSkillsStyles["agent-skills-summary-heading"]}>
         <div className="profile-section-heading">
           <div className="profile-section-title">
             {t(kind === "knowledge" ? "profileKnowledgeTitle" : "connectorsTools")}
@@ -1733,8 +1759,8 @@ function AgentMCPPanel({
             {t(kind === "knowledge" ? "profileKnowledgeHint" : "profileMCPHint")}
           </p>
         </div>
-        <div className="agent-skills-summary-actions">
-          <span className="agent-skills-summary-count">
+        <div className={agentSkillsStyles["agent-skills-summary-actions"]}>
+          <span className={agentSkillsStyles["agent-skills-summary-count"]}>
             {t(kind === "knowledge" ? "profileKnowledgeCount" : "agentMCPCount", {
               count: continuation?.total ?? servers.length,
             })}
@@ -1771,10 +1797,10 @@ function AgentMCPPanel({
       ) : null}
       {!continuation?.loading && !listError && !servers.length ? (
         <div className="agent-skills-summary-empty">
-          <span className="agent-skills-summary-icon" aria-hidden="true">
+          <span className={agentSkillsStyles["agent-skills-summary-icon"]} aria-hidden="true">
             {kind === "knowledge" ? <BookOpen size={18} /> : <Server size={18} strokeWidth={1.8} />}
           </span>
-          <div className="agent-skills-summary-empty-copy">
+          <div className={agentSkillsStyles["agent-skills-summary-empty-copy"]}>
             <strong>
               {t(
                 kind === "knowledge" ? "profileKnowledgeEmpty" : hasManagedApps ? "appManualMCPEmpty" : "agentMCPEmpty",
@@ -1833,7 +1859,7 @@ function AgentMCPPanel({
                     {toggleBusyName === server.name ? <span role="status">{t("resourceUpdating")}</span> : null}
                     <Switch
                       aria-busy={toggleBusyName === server.name}
-                      className="agent-skill-card-switch-sm"
+                      className={agentSkillsStyles["agent-skill-card-switch-sm"]}
                       aria-label={mcpServerDisplayName(server)}
                       checked={server.config.enabled !== false}
                       disabled={mutationBusy || !onToggle}
@@ -1861,7 +1887,7 @@ type AgentNotifierPanelProps = {
 
 function AgentNotifierPanel({ draft, item, notifierWebhookPublicOrigin, t, updateDraft }: AgentNotifierPanelProps) {
   return (
-    <div id="agent-profile-model" className="agent-profile-scroll-target">
+    <div id="agent-profile-model" className={agentDetailPaneStyles["agent-profile-scroll-target"]}>
       <NotifierControls
         agentID={item.id || ""}
         draft={draft}
@@ -1919,38 +1945,42 @@ function AgentMemoryPanel({ agentID, onMemoryChange, t }: AgentMemoryPanelProps)
   }
 
   return (
-    <div id="agent-profile-memory" className="agent-memory-tab agent-profile-tab-panel agent-profile-scroll-target">
-      <section className="profile-section agent-skills-section agent-memory-settings-section">
+    <div
+      id="agent-profile-memory"
+      className={`${agentMemoryStyles["agent-memory-tab"]} ${agentDetailPaneStyles["agent-profile-tab-panel"]} ${agentDetailPaneStyles["agent-profile-scroll-target"]}`}
+    >
+      <section className={`profile-section ${agentSkillsStyles["agent-skills-section"]} agent-memory-settings-section`}>
         <div className="agent-memory-section-heading">
           <div className="profile-section-heading">
             <div className="profile-section-title">{t("agentMemoryTitle")}</div>
             <p className="profile-section-description">{t("agentMemoryDescription")}</p>
           </div>
           <div className="agent-memory-setting-actions">
-            <span className="agent-memory-status">{document?.enabled ? t("statusEnabled") : t("statusDisabled")}</span>
-            <label className="agent-memory-switch agent-fast-mode-toggle">
-              <input
-                type="checkbox"
-                checked={document?.enabled ?? false}
-                disabled={!document || loading || updating}
-                aria-label={t("agentMemoryEnabled")}
-                onChange={(event) => void setMemoryEnabled(event.currentTarget.checked)}
-              />
-              <span className="sr-only">{t("agentMemoryEnabled")}</span>
-            </label>
+            <span className={agentMemoryStyles["agent-memory-status"]}>
+              {document?.enabled ? t("statusEnabled") : t("statusDisabled")}
+            </span>
+            <Switch
+              size="sm"
+              checked={document?.enabled ?? false}
+              disabled={!document || loading || updating}
+              aria-label={t("agentMemoryEnabled")}
+              onCheckedChange={(checked) => void setMemoryEnabled(checked)}
+            />
           </div>
         </div>
-        <p className="agent-memory-toggle-hint">{t("agentMemoryToggleHint")}</p>
+        <p className={agentMemoryStyles["agent-memory-toggle-hint"]}>{t("agentMemoryToggleHint")}</p>
       </section>
 
-      <section className="profile-section agent-skills-section agent-memory-document-section">
+      <section className={`profile-section ${agentSkillsStyles["agent-skills-section"]} agent-memory-document-section`}>
         <div className="agent-memory-section-heading">
           <div className="profile-section-heading">
             <div className="profile-section-title">{document?.name || t("agentMemoryDocumentTitle")}</div>
             <p className="profile-section-description">{t("agentMemoryDocumentDescription")}</p>
-            {document?.location ? <code className="agent-memory-location">{document.location}</code> : null}
+            {document?.location ? (
+              <code className={agentMemoryStyles["agent-memory-location"]}>{document.location}</code>
+            ) : null}
           </div>
-          <div className="agent-skills-summary-actions">
+          <div className={agentSkillsStyles["agent-skills-summary-actions"]}>
             <Tooltip content={t("agentMemoryRefresh")}>
               <span>
                 <Button
@@ -1972,10 +2002,10 @@ function AgentMemoryPanel({ agentID, onMemoryChange, t }: AgentMemoryPanelProps)
         {loadError ? <div className="form-error">{loadError}</div> : null}
         {loading ? (
           <div className="agent-skills-summary-empty agent-memory-summary-empty" role="status">
-            <span className="agent-skills-summary-icon" aria-hidden="true">
+            <span className={agentSkillsStyles["agent-skills-summary-icon"]} aria-hidden="true">
               <CircleDashed size={18} strokeWidth={1.8} />
             </span>
-            <div className="agent-skills-summary-empty-copy">
+            <div className={agentSkillsStyles["agent-skills-summary-empty-copy"]}>
               <strong>{t("agentMemoryLoading")}</strong>
             </div>
           </div>
@@ -1991,7 +2021,7 @@ function AgentMemoryPanel({ agentID, onMemoryChange, t }: AgentMemoryPanelProps)
               text={document.content || ""}
             />
             <div
-              className="agent-memory-document message-content"
+              className={`${agentMemoryStyles["agent-memory-document"]} message-content`}
               role="region"
               aria-label={t("agentMemoryDocumentLabel")}
               dangerouslySetInnerHTML={{ __html: renderedMemory }}
@@ -1999,10 +2029,10 @@ function AgentMemoryPanel({ agentID, onMemoryChange, t }: AgentMemoryPanelProps)
           </div>
         ) : (
           <div className="agent-skills-summary-empty agent-memory-summary-empty">
-            <span className="agent-skills-summary-icon" aria-hidden="true">
+            <span className={agentSkillsStyles["agent-skills-summary-icon"]} aria-hidden="true">
               <FileCode2 size={18} strokeWidth={1.8} />
             </span>
-            <div className="agent-skills-summary-empty-copy">
+            <div className={agentSkillsStyles["agent-skills-summary-empty-copy"]}>
               <strong>{t("agentMemoryEmptyTitle")}</strong>
               <p>{t("agentMemoryEmptyDescription")}</p>
             </div>
@@ -2065,32 +2095,34 @@ function AgentInstructionsPanel({ draft, t, updateDraft }: AgentInstructionsPane
   return (
     <section
       id="agent-profile-instructions"
-      className="profile-section agent-instructions-section agent-profile-scroll-target"
+      className={`profile-section agent-instructions-section ${agentDetailPaneStyles["agent-profile-scroll-target"]}`}
     >
-      <div className="agent-instructions-header">
+      <div className={agentInstructionsStyles["agent-instructions-header"]}>
         <div className="profile-section-heading">
           <div className="profile-section-title">{t("agentInstructions")}</div>
           <p className="profile-section-description">
             {mode === "default" ? t("agentInstructionsDefaultHint") : t("agentInstructionsAdvancedHint")}
           </p>
         </div>
-        <div className="agent-instructions-mode-switch" role="group" aria-label={t("agentInstructionsViewMode")}>
-          <button type="button" aria-pressed={mode === "default"} onClick={() => setMode("default")}>
-            {t("agentInstructionsDefaultMode")}
-          </button>
-          <button type="button" aria-pressed={mode === "advanced"} onClick={() => setMode("advanced")}>
-            {t("agentInstructionsAdvancedMode")}
-          </button>
-        </div>
+        <SegmentedControl
+          value={mode}
+          onChange={setMode}
+          label={t("agentInstructionsViewMode")}
+          size="sm"
+          options={[
+            { value: "default", label: t("agentInstructionsDefaultMode") },
+            { value: "advanced", label: t("agentInstructionsAdvancedMode") },
+          ]}
+        />
       </div>
-      <div className="agent-instructions-content">
+      <div className={agentInstructionsStyles["agent-instructions-content"]}>
         <div className="profile-grid-compact">
           <label className="field span-2">
             <span className="sr-only">
               {mode === "advanced" ? t("agentInstructionsEffective") : t("agentInstructions")}
             </span>
-            <textarea
-              className="compact-textarea agent-instructions-editor"
+            <TextArea
+              className={`compact-textarea ${agentInstructionsStyles["agent-instructions-editor"]}`}
               value={mode === "advanced" ? effective : draft.instructions || ""}
               onInput={(event) =>
                 mode === "advanced"
@@ -2146,14 +2178,17 @@ function AgentSkillsPanel({
   t,
 }: AgentSkillsPanelProps) {
   return (
-    <section id="agent-profile-skills" className="profile-section agent-skills-section agent-profile-scroll-target">
-      <div className="agent-skills-summary-heading">
+    <section
+      id="agent-profile-skills"
+      className={`profile-section ${agentSkillsStyles["agent-skills-section"]} ${agentDetailPaneStyles["agent-profile-scroll-target"]}`}
+    >
+      <div className={agentSkillsStyles["agent-skills-summary-heading"]}>
         <div className="profile-section-heading">
           <div className="profile-section-title">{t("agentSkillsTitle")}</div>
           <p className="profile-section-description">{t("agentSkillsDescription")}</p>
         </div>
-        <div className="agent-skills-summary-actions">
-          <span className="agent-skills-summary-count">
+        <div className={agentSkillsStyles["agent-skills-summary-actions"]}>
+          <span className={agentSkillsStyles["agent-skills-summary-count"]}>
             {t("agentSkillsCount", { count: continuation?.total ?? skills.length })}
           </span>
           <Tooltip content={t("agentSkillAdd")}>
@@ -2173,7 +2208,11 @@ function AgentSkillsPanel({
         </div>
       </div>
       {skillsError ? (
-        <DismissibleAlert className="form-error agent-skills-error" messageKey={skillsError} closeLabel={t("close")}>
+        <DismissibleAlert
+          className={`form-error ${agentSkillsStyles["agent-skills-error"]}`}
+          messageKey={skillsError}
+          closeLabel={t("close")}
+        >
           <span role="alert">{skillsError}</span>
           {continuation ? (
             <Button size="sm" onClick={continuation.retry}>
@@ -2186,7 +2225,7 @@ function AgentSkillsPanel({
       {skillDeleteError ? <div className="form-error">{skillDeleteError}</div> : null}
       {skillsLoading ? (
         <div className="agent-skills-summary-empty">
-          <span className="agent-skills-summary-icon" aria-hidden="true">
+          <span className={agentSkillsStyles["agent-skills-summary-icon"]} aria-hidden="true">
             <FileCode2 size={18} strokeWidth={1.8} />
           </span>
           <div>
@@ -2196,10 +2235,10 @@ function AgentSkillsPanel({
       ) : null}
       {!skillsLoading && !skills.length ? (
         <div className="agent-skills-summary-empty">
-          <span className="agent-skills-summary-icon" aria-hidden="true">
+          <span className={agentSkillsStyles["agent-skills-summary-icon"]} aria-hidden="true">
             <FileCode2 size={18} strokeWidth={1.8} />
           </span>
-          <div className="agent-skills-summary-empty-copy">
+          <div className={agentSkillsStyles["agent-skills-summary-empty-copy"]}>
             <strong>{t("agentSkillsEmpty")}</strong>
             <p>{t("agentSkillsEmptyHint")}</p>
           </div>
@@ -2210,7 +2249,7 @@ function AgentSkillsPanel({
         </div>
       ) : null}
       {!skillsLoading && skills.length ? (
-        <div className="hub-skill-card-grid agent-profile-skill-card-grid">
+        <div className={`hub-skill-card-grid ${agentDetailPaneStyles["agent-profile-skill-card-grid"]}`}>
           {skills.map((skill) => (
             <ResourceListCard
               key={skill.name}
@@ -2225,7 +2264,7 @@ function AgentSkillsPanel({
                   </ResourceStatus>
                   <Switch
                     aria-busy={toggleBusyName === skill.name}
-                    className="agent-skill-card-switch-sm"
+                    className={agentSkillsStyles["agent-skill-card-switch-sm"]}
                     aria-label={skill.name}
                     checked={skill.enabled !== false}
                     disabled={mutationBusy || !onToggle}
@@ -2259,7 +2298,10 @@ type AgentAdvancedPanelProps = {
 
 function AgentAdvancedPanel({ draft, item, t, updateDraft }: AgentAdvancedPanelProps) {
   return (
-    <section id="agent-profile-advanced" className="profile-section agent-advanced-section agent-profile-scroll-target">
+    <section
+      id="agent-profile-advanced"
+      className={`profile-section agent-advanced-section ${agentDetailPaneStyles["agent-profile-scroll-target"]}`}
+    >
       <div className="profile-section-heading">
         <div className="profile-section-title">{t("profileAdvanced")}</div>
         <p className="profile-section-description">{t("profileAdvancedDescription")}</p>
@@ -2269,7 +2311,7 @@ function AgentAdvancedPanel({ draft, item, t, updateDraft }: AgentAdvancedPanelP
           {!isNotifierRuntimeDraftOnAgentPage(draft, item) ? (
             <label className="field profile-json-field">
               <span>{t("profileRequestOptions")}</span>
-              <textarea
+              <TextArea
                 className="compact-json"
                 value={draft.requestOptionsText}
                 onInput={(event) => updateDraft({ requestOptionsText: event.currentTarget.value })}
@@ -2325,7 +2367,7 @@ function AgentChannelsSection({
   return (
     <section
       id="agent-profile-channels"
-      className="profile-section agent-channels-section agent-profile-scroll-target"
+      className={`profile-section ${agentChannelsStyles["agent-channels-section"]} ${agentDetailPaneStyles["agent-profile-scroll-target"]}`}
       aria-label={t("agentChannelsTitle")}
     >
       <div className="profile-section-heading">
@@ -2334,19 +2376,23 @@ function AgentChannelsSection({
         </h2>
         <p className="profile-section-description">{t("agentChannelsDescription")}</p>
       </div>
-      <div className="agent-channel-row">
-        <span className="agent-channel-icon" aria-hidden="true">
+      <div className={agentChannelsStyles["agent-channel-row"]}>
+        <span className={agentChannelsStyles["agent-channel-icon"]} aria-hidden="true">
           <img src="icons/feishu.png" alt="" />
         </span>
-        <span className="agent-channel-main">
-          <span className="agent-channel-name">{t("feishuChannelName")}</span>
-          <span className={`agent-channel-status ${connected ? "connected" : pending ? "pending" : ""}`.trim()}>
+        <span className={agentChannelsStyles["agent-channel-main"]}>
+          <span className={agentChannelsStyles["agent-channel-name"]}>{t("feishuChannelName")}</span>
+          <span
+            className={`${agentChannelsStyles["agent-channel-status"]} ${connected ? "connected" : pending ? "pending" : ""}`.trim()}
+          >
             {statusIcon}
             {statusLabel}
           </span>
-          {pending ? <span className="agent-channel-detail">{t("feishuPendingDetail")}</span> : null}
+          {pending ? (
+            <span className={agentChannelsStyles["agent-channel-detail"]}>{t("feishuPendingDetail")}</span>
+          ) : null}
         </span>
-        <span className="agent-channel-actions">
+        <span className={agentChannelsStyles["agent-channel-actions"]}>
           {pending && connectURL ? (
             <Button
               variant="secondaryGray"
@@ -2443,10 +2489,17 @@ function AgentActionsMenu({
   const renderMenu = (relayAction?: React.ReactNode) => (
     <DropdownMenuRoot>
       <DropdownMenuTrigger asChild>
-        <Button ref={triggerRef} variant="secondaryGray" size="md" className="agent-actions-menu-trigger">
+        <Button
+          ref={triggerRef}
+          variant="secondaryGray"
+          size="md"
+          className={agentDetailPaneStyles["agent-actions-menu-trigger"]}
+        >
           <MoreHorizontal aria-hidden="true" size={18} strokeWidth={2} />
           <span>{t("agentMoreActions")}</span>
-          {upgradeNeeded ? <span className="agent-actions-alert-dot" aria-hidden="true"></span> : null}
+          {upgradeNeeded ? (
+            <span className={agentDetailPaneStyles["agent-actions-alert-dot"]} aria-hidden="true"></span>
+          ) : null}
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent className="agent-actions-menu" aria-label={t("agentMoreActions")}>

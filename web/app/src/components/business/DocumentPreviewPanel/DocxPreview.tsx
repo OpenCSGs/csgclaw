@@ -1,3 +1,4 @@
+import documentPreviewPanelStyles from "./DocumentPreviewPanel.module.css";
 import { useEffect, useState } from "react";
 import DOMPurify from "dompurify";
 import { copyPreviewBuffer } from "./previewBuffer";
@@ -46,14 +47,18 @@ export default function DocxPreview({
   }, [data]);
 
   if (error) {
-    return <div className="document-preview-status is-error">{t("attachmentPreviewFailed")}</div>;
+    return (
+      <div className={`${documentPreviewPanelStyles["document-preview-status"]} is-error`}>
+        {t("attachmentPreviewFailed")}
+      </div>
+    );
   }
   if (html === null) {
-    return <div className="document-preview-status">{t("attachmentPreviewLoading")}</div>;
+    return <div className={documentPreviewPanelStyles["document-preview-status"]}>{t("attachmentPreviewLoading")}</div>;
   }
   return (
     <article
-      className="document-preview-docx"
+      className={documentPreviewPanelStyles["document-preview-docx"]}
       style={{ fontSize: `${scale}em` }}
       dangerouslySetInnerHTML={{ __html: html }}
     />

@@ -1,16 +1,14 @@
 import { useEffect, useState } from "react";
-import { X } from "lucide-react";
 import {
   Button,
   DialogBody,
-  DialogClose,
+  DialogCloseButton,
   DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogRoot,
   DialogTitle,
-  Tooltip,
 } from "@/components/ui";
 import type { TranslateFn } from "@/models/conversations";
 import type { UpgradeChannel } from "@/models/upgradeStatus";
@@ -73,13 +71,7 @@ export function SwitchVersionDialog({
             <DialogTitle>{t("upgradeChannelSwitchTitle")}</DialogTitle>
             <DialogDescription>{t("upgradeChannelSwitchDescription")}</DialogDescription>
           </div>
-          <Tooltip content={t("close")}>
-            <DialogClose asChild>
-              <button type="button" className={styles.closeButton} aria-label={t("close")} disabled={busy}>
-                <X size={18} strokeWidth={1.75} aria-hidden="true" />
-              </button>
-            </DialogClose>
-          </Tooltip>
+          <DialogCloseButton label={t("close")} size="sm" variant="tertiaryGray" iconOnly disabled={busy} />
         </DialogHeader>
         <DialogBody className={styles.body}>
           <fieldset className={styles.options} disabled={busy}>

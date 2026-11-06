@@ -1,4 +1,4 @@
-import { Button } from "@/components/ui";
+import { Field, TextInput, Select, Button } from "@/components/ui";
 import type { ConfigPhase } from "@/hooks/workspace/useConfigController";
 import type { ConfigSettingsDraft } from "@/models/configSettings";
 import { configTemplateOptions, configAdvertiseBaseURLPlaceholder } from "@/models/configSettings";
@@ -65,13 +65,11 @@ export function ConfigSettingsModal({
           <section className="config-settings-section">
             <h3 className="config-settings-section-title">{t("configSettingsServerSection")}</h3>
             <div className="config-settings-stack">
-              <label className="field">
-                <span>{t("configSettingsListenPort")}</span>
-                <input inputMode="numeric" value={configDraft.listen_port} disabled readOnly aria-readonly="true" />
-              </label>
-              <label className="field">
-                <span>{t("configSettingsAdvertiseBaseURL")}</span>
-                <input
+              <Field label={t("configSettingsListenPort")}>
+                <TextInput inputMode="numeric" value={configDraft.listen_port} disabled readOnly aria-readonly="true" />
+              </Field>
+              <Field label={t("configSettingsAdvertiseBaseURL")}>
+                <TextInput
                   type="url"
                   value={configDraft.advertise_base_url}
                   disabled={disabled}
@@ -80,56 +78,47 @@ export function ConfigSettingsModal({
                   spellCheck={false}
                   onInput={(event) => onDraftChange({ advertise_base_url: event.currentTarget.value.trim() })}
                 />
-              </label>
+              </Field>
             </div>
           </section>
           <section className="config-settings-section">
             <h3 className="config-settings-section-title">{t("configSettingsHubSection")}</h3>
-            <label className="field">
-              <span>{t("configSettingsHubLocalPath")}</span>
-              <input
+            <Field label={t("configSettingsHubLocalPath")}>
+              <TextInput
                 value={configDraft.hub_local_path}
                 disabled={disabled}
                 autoComplete="off"
                 spellCheck={false}
                 onInput={(event) => onDraftChange({ hub_local_path: event.currentTarget.value })}
               />
-            </label>
+            </Field>
           </section>
           <section className="config-settings-section">
             <h3 className="config-settings-section-title">{t("configSettingsBootstrapSection")}</h3>
             <div className="config-settings-grid">
-              <label className="field">
-                <span>{t("configSettingsManagerTemplate")}</span>
-                <input value={managerTemplateLabel} disabled readOnly aria-readonly="true" />
-              </label>
-              <label className="field">
-                <span>{t("configSettingsWorkerTemplate")}</span>
-                <select
+              <Field label={t("configSettingsManagerTemplate")}>
+                <TextInput value={managerTemplateLabel} disabled readOnly aria-readonly="true" />
+              </Field>
+              <Field label={t("configSettingsWorkerTemplate")}>
+                <Select
                   value={configDraft.default_worker_template}
                   disabled={disabled || workerTemplateOptions.length === 0}
-                  onChange={(event) => onDraftChange({ default_worker_template: event.currentTarget.value })}
-                >
-                  {workerTemplateOptions.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
+                  options={workerTemplateOptions}
+                  onValueChange={(default_worker_template) => onDraftChange({ default_worker_template })}
+                />
+              </Field>
             </div>
           </section>
           <section className="config-settings-section">
             <h3 className="config-settings-section-title">{t("configSettingsOtherSection")}</h3>
-            <label className="field">
-              <span>{t("configSettingsShowUpgrade")}</span>
-              <input
+            <Field label={t("configSettingsShowUpgrade")}>
+              <TextInput
                 value={configDraft.show_upgrade ? t("configSettingsShowUpgradeOn") : t("configSettingsShowUpgradeOff")}
                 disabled
                 readOnly
                 aria-readonly="true"
               />
-            </label>
+            </Field>
           </section>
         </div>
         {configError ? <div className="form-error">{configError}</div> : null}

@@ -24,7 +24,7 @@ import { SkillUploadDialog } from "@/components/business/SkillUploadDialog";
 import { WorkspacePrimaryNavigation } from "./WorkspacePrimaryNavigation";
 import { WorkspaceTabPanels } from "./WorkspaceTabPanels";
 import { WorkspaceContextSectionIds } from "./types";
-import { Tooltip } from "@/components/ui";
+import { TextInput, Tooltip } from "@/components/ui";
 import { WorkspacePaneTypes, WorkspaceTabs, workspaceHasContextSidebar } from "@/models/routing";
 import { classNames } from "@/shared/lib/classNames";
 import styles from "./WorkspaceSidebar.module.css";
@@ -478,7 +478,8 @@ function LegacyWorkspaceSidebar({
             </div>
             <label className={styles.contextSearch}>
               <Search size={20} strokeWidth={1.8} aria-hidden="true" />
-              <input
+              <TextInput
+                variant="plain"
                 className={styles.contextSearchInput}
                 type="search"
                 value={contextQuery}

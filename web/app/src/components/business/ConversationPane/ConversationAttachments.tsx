@@ -1,3 +1,5 @@
+import conversationAttachmentsStyles from "./ConversationAttachments.module.css";
+import conversationPaneStyles from "./ConversationPane.module.css";
 import { useCallback, useEffect, useRef, useState, type WheelEvent } from "react";
 import { ChevronLeft, ChevronRight, X } from "lucide-react";
 import { resolveRequestPath } from "@/api/client";
@@ -103,7 +105,7 @@ export function AttachmentDraftStrip({
     <div className={shellClassName}>
       <div
         ref={scrollRef}
-        className="attachment-draft-strip"
+        className={conversationAttachmentsStyles["attachment-draft-strip"]}
         role="list"
         aria-label={t("attachments")}
         onScroll={updateScrollState}
@@ -121,13 +123,17 @@ export function AttachmentDraftStrip({
           />
         ))}
       </div>
-      {scrollState.canScrollLeft ? <span className="attachment-scroll-fade is-previous" aria-hidden="true" /> : null}
-      {scrollState.canScrollRight ? <span className="attachment-scroll-fade is-next" aria-hidden="true" /> : null}
+      {scrollState.canScrollLeft ? (
+        <span className={`${conversationAttachmentsStyles["attachment-scroll-fade"]} is-previous`} aria-hidden="true" />
+      ) : null}
+      {scrollState.canScrollRight ? (
+        <span className={`${conversationAttachmentsStyles["attachment-scroll-fade"]} is-next`} aria-hidden="true" />
+      ) : null}
       {scrollState.canScrollLeft ? (
         <Tooltip content={t("attachmentsScrollPrevious")}>
           <Button
             aria-label={t("attachmentsScrollPrevious")}
-            className="attachment-scroll-button is-previous"
+            className={`${conversationAttachmentsStyles["attachment-scroll-button"]} is-previous`}
             iconOnly
             size="sm"
             variant="secondaryGray"
@@ -141,7 +147,7 @@ export function AttachmentDraftStrip({
         <Tooltip content={t("attachmentsScrollNext")}>
           <Button
             aria-label={t("attachmentsScrollNext")}
-            className="attachment-scroll-button is-next"
+            className={`${conversationAttachmentsStyles["attachment-scroll-button"]} is-next`}
             iconOnly
             size="sm"
             variant="secondaryGray"
@@ -188,14 +194,14 @@ function AttachmentDraftItem({
       <button
         type="button"
         aria-label={previewLabel}
-        className="attachment-draft-preview-link"
+        className={conversationAttachmentsStyles["attachment-draft-preview-link"]}
         title={previewLabel}
         onClick={(event) => onPreview(event.currentTarget)}
       >
         {isImageAttachment(draft) && previewURL ? (
-          <img className="attachment-draft-preview" src={previewURL} alt="" />
+          <img className={conversationAttachmentsStyles["attachment-draft-preview"]} src={previewURL} alt="" />
         ) : (
-          <span className="attachment-file-icon" aria-hidden="true">
+          <span className={conversationAttachmentsStyles["attachment-file-icon"]} aria-hidden="true">
             <FileTypeIcon name={draft.name} mediaType={draft.mediaType} />
           </span>
         )}
@@ -204,7 +210,7 @@ function AttachmentDraftItem({
       <Tooltip content={removeLabel}>
         <Button
           aria-label={removeLabel}
-          className="attachment-remove-button"
+          className={conversationAttachmentsStyles["attachment-remove-button"]}
           disabled={status === "uploading"}
           iconOnly
           size="sm"
@@ -216,7 +222,7 @@ function AttachmentDraftItem({
       </Tooltip>
       {status === "uploading" ? (
         <span
-          className="attachment-upload-progress"
+          className={conversationAttachmentsStyles["attachment-upload-progress"]}
           role="progressbar"
           aria-label={t("attachmentUploadingNamed", { name: draft.name })}
           aria-valuemin={0}
@@ -248,14 +254,14 @@ export function MessageAttachments({
     ({ attachment }) => !isImageAttachment(attachment) && !String(attachment.media_type || "").startsWith("video/"),
   );
   return (
-    <div className="message-attachments">
+    <div className={conversationPaneStyles["message-attachments"]}>
       {images.length > 0 ? (
-        <div className="message-attachment-grid">
+        <div className={conversationPaneStyles["message-attachment-grid"]}>
           {images.map(({ attachment, index }) => (
             <Tooltip key={attachment.id} content={attachment.name}>
               <button
                 type="button"
-                className="message-image-attachment"
+                className={conversationPaneStyles["message-image-attachment"]}
                 aria-label={t("previewAttachmentNamed", { name: attachment.name })}
                 onClick={(event) => onPreviewAttachment?.({ anchor: event.currentTarget, index, items })}
               >
@@ -272,24 +278,29 @@ export function MessageAttachments({
         </div>
       ) : null}
       {videos.map(({ attachment }) => (
-        <video key={attachment.id} className="message-video-attachment" controls preload="metadata">
+        <video
+          key={attachment.id}
+          className={conversationAttachmentsStyles["message-video-attachment"]}
+          controls
+          preload="metadata"
+        >
           <source src={resolveRequestPath(attachment.download_url)} type={attachment.media_type} />
           {attachment.name}
         </video>
       ))}
       {files.length > 0 ? (
-        <div className="message-file-list">
+        <div className={conversationAttachmentsStyles["message-file-list"]}>
           {files.map(({ attachment, index }) => {
             const filename = splitAttachmentFilename(attachment.name || t("attachment"));
             return (
               <Tooltip key={attachment.id} content={attachment.name}>
                 <button
                   type="button"
-                  className="message-file-attachment"
+                  className={conversationAttachmentsStyles["message-file-attachment"]}
                   aria-label={t("previewAttachmentNamed", { name: attachment.name })}
                   onClick={(event) => onPreviewAttachment?.({ anchor: event.currentTarget, index, items })}
                 >
-                  <span className="message-file-type-icon" aria-hidden="true">
+                  <span className={conversationAttachmentsStyles["message-file-type-icon"]} aria-hidden="true">
                     <FileTypeIcon name={attachment.name} mediaType={attachment.media_type} />
                   </span>
                   <AttachmentMeta
@@ -317,12 +328,14 @@ function AttachmentMeta({
   filename: ReturnType<typeof splitAttachmentFilename>;
 }) {
   return (
-    <span className="attachment-draft-meta">
-      <span className="attachment-name" title={name}>
-        <span className="attachment-name-stem">{filename.stem}</span>
-        {filename.extension ? <span className="attachment-name-extension">{filename.extension}</span> : null}
+    <span className={conversationAttachmentsStyles["attachment-draft-meta"]}>
+      <span className={conversationAttachmentsStyles["attachment-name"]} title={name}>
+        <span className={conversationAttachmentsStyles["attachment-name-stem"]}>{filename.stem}</span>
+        {filename.extension ? (
+          <span className={conversationAttachmentsStyles["attachment-name-extension"]}>{filename.extension}</span>
+        ) : null}
       </span>
-      <span className="attachment-size">{size}</span>
+      <span className={conversationAttachmentsStyles["attachment-size"]}>{size}</span>
     </span>
   );
 }

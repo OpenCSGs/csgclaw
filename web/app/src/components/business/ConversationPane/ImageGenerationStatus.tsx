@@ -1,3 +1,5 @@
+import conversationPaneStyles from "./ConversationPane.module.css";
+import generatedMediaStyles from "./GeneratedMedia.module.css";
 import { useState } from "react";
 import { Button } from "@/components/ui";
 import { retryImageGenerationRequest } from "@/api/im";
@@ -59,10 +61,15 @@ export function ImageGenerationStatus({ message, roomID, t }: { message: IMMessa
     }
   }
   return (
-    <div className="image-generation-status" role="status" aria-live="polite" aria-busy={pending || busy}>
+    <div
+      className={conversationPaneStyles["image-generation-status"]}
+      role="status"
+      aria-live="polite"
+      aria-busy={pending || busy}
+    >
       <span>{label}</span>
       {retryable && (detailMessage || diagnostics) ? (
-        <div className="image-generation-error-details">
+        <div className={generatedMediaStyles["image-generation-error-details"]}>
           {detailMessage ? <p>{detailMessage}</p> : null}
           {diagnostics ? <small>{diagnostics}</small> : null}
         </div>
@@ -73,7 +80,7 @@ export function ImageGenerationStatus({ message, roomID, t }: { message: IMMessa
         </Button>
       ) : null}
       {error && !(retryable && detailMessage) ? <span role="alert">{error}</span> : null}
-      <details className="image-generation-prompt">
+      <details className={generatedMediaStyles["image-generation-prompt"]}>
         <summary>{t("imageViewPrompt")}</summary>
         <p>{String(task.prompt ?? message.content ?? "")}</p>
       </details>

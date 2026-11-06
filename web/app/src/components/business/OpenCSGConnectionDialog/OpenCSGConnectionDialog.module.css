@@ -11,34 +11,6 @@
   gap: var(--space-1);
 }
 
-.closeButton {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  margin: 0;
-  padding: 0;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--gray-500);
-  cursor: pointer;
-  transition:
-    background-color 140ms ease,
-    color 140ms ease;
-}
-
-.closeButton:hover {
-  background: color-mix(in srgb, var(--gray-200) 60%, transparent);
-  color: var(--text);
-}
-
-.closeButton:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-strong) 18%, transparent);
-}
-
 .dialog :global(.csg-dialog-description) {
   max-width: 440px;
   margin-top: 6px;

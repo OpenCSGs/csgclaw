@@ -1,3 +1,4 @@
+import roomAvatarStyles from "./RoomAvatar.module.css";
 import { AgentAvatarContent } from "@/components/business/AgentAvatar";
 import { avatarFallbackText } from "@/shared/avatar";
 import type { RoomAvatarMember } from "./roomAvatarMembers";
@@ -63,7 +64,7 @@ export function RoomAvatar({ ariaLabel, count, members, size = 32, showCountBadg
     <span
       aria-hidden={!ariaLabel}
       aria-label={ariaLabel || undefined}
-      className={`room-avatar ${isCompact ? "room-avatar--compact" : "room-avatar--large"} room-avatar--count-${variantCount}`.trim()}
+      className={`${roomAvatarStyles["room-avatar"]} ${isCompact ? roomAvatarStyles["room-avatar--compact"] : roomAvatarStyles["room-avatar--large"]} room-avatar--count-${variantCount}`.trim()}
       style={{
         borderRadius: Math.round(size / 2),
         height: size,
@@ -78,18 +79,18 @@ export function RoomAvatar({ ariaLabel, count, members, size = 32, showCountBadg
         return (
           <span
             aria-hidden="true"
-            className={`room-avatar-tile ${tile.sizeClass}`}
+            className={`${roomAvatarStyles["room-avatar-tile"]} ${tile.sizeClass}`}
             key={`${member.id}-${tile.variant}`}
             style={{ backgroundColor: pickTileColor(member, index) }}
           >
-            <span className="room-avatar-content">
+            <span className={roomAvatarStyles["room-avatar-content"]}>
               <AgentAvatarContent avatar={member.avatar} fallback={normalizeMemberFallback(member)} />
             </span>
           </span>
         );
       })}
       {shouldShowBadge ? (
-        <span aria-hidden="true" className="room-avatar-count-badge">
+        <span aria-hidden="true" className={roomAvatarStyles["room-avatar-count-badge"]}>
           {totalCount}
         </span>
       ) : null}

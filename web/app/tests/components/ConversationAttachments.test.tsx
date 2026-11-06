@@ -1,3 +1,4 @@
+import testConversationAttachmentsStyles from "@/components/business/ConversationPane/ConversationAttachments.module.css";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { vi } from "vitest";
@@ -89,8 +90,12 @@ describe("MessageAttachments", () => {
     render(<MessageAttachments attachments={[attachment]} onPreviewAttachment={onPreviewAttachment} t={t} />);
 
     const card = screen.getByRole("button", { name: "Preview attachment: report.pdf" });
-    expect(card.querySelector(".message-file-type-icon img")?.getAttribute("src")).toMatch(/^data:image\/svg\+xml,/);
-    expect(card.querySelector(".message-file-type-icon")).toHaveTextContent("PDF");
+    expect(
+      card.querySelector(`.${testConversationAttachmentsStyles["message-file-type-icon"]} img`)?.getAttribute("src"),
+    ).toMatch(/^data:image\/svg\+xml,/);
+    expect(card.querySelector(`.${testConversationAttachmentsStyles["message-file-type-icon"]}`)).toHaveTextContent(
+      "PDF",
+    );
     await user.click(card);
     expect(onPreviewAttachment).toHaveBeenCalledWith(expect.objectContaining({ index: 0, anchor: card }));
   });

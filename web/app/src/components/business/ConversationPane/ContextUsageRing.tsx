@@ -1,3 +1,4 @@
+import contextUsageRingStyles from "./ContextUsageRing.module.css";
 import { useState } from "react";
 import { Tooltip } from "@/components/ui";
 import type { TranslateFn } from "@/models/conversations";
@@ -19,7 +20,7 @@ export function ContextUsageRing({ usage, t }: { usage?: ContextUsage; t: Transl
   const circumference = 2 * Math.PI * 7;
   const format = formatContextSize;
   const detail = (
-    <div className="context-usage-details">
+    <div className={contextUsageRingStyles["context-usage-details"]}>
       <strong>{label}</strong>
       {usage ? (
         <>
@@ -48,7 +49,7 @@ export function ContextUsageRing({ usage, t }: { usage?: ContextUsage; t: Transl
     <Tooltip open={open} onOpenChange={setOpen} content={detail} contentProps={{ side: "top", sideOffset: 6 }}>
       <button
         type="button"
-        className={`context-usage-ring is-${tone}`}
+        className={`${contextUsageRingStyles["context-usage-ring"]} is-${tone}`}
         aria-label={label}
         data-preserve-scroll={hovered || open ? "true" : undefined}
         onPointerEnter={() => setHovered(true)}
@@ -56,7 +57,7 @@ export function ContextUsageRing({ usage, t }: { usage?: ContextUsage; t: Transl
       >
         <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
           <circle
-            className="context-usage-track"
+            className={contextUsageRingStyles["context-usage-track"]}
             cx="8"
             cy="8"
             r="7"

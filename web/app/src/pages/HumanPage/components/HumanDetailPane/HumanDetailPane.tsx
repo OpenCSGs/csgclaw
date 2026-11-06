@@ -1,3 +1,5 @@
+import humanDetailPaneStyles from "./HumanDetailPane.module.css";
+import { TextArea } from "@/components/ui";
 import { Check, CheckCircle2, Edit3, Link2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { AgentAvatarPicker } from "@/components/business/AgentAvatar";
@@ -48,7 +50,7 @@ export function HumanDetailPane({
 
   if (!user) {
     return (
-      <section className="entity-pane human-detail-pane">
+      <section className={`entity-pane ${humanDetailPaneStyles["human-detail-pane"]}`}>
         <div className="empty-state shell-empty-state">
           <strong>{t("humanDetailMissing")}</strong>
           <span>{t("humanDetailMissingHint")}</span>
@@ -85,10 +87,13 @@ export function HumanDetailPane({
   };
 
   return (
-    <section className="entity-pane human-detail-pane">
-      <header className="human-overview-card">
-        <div className="entity-header human-detail-header">
-          <div className="entity-avatar human-detail-avatar agent-header-avatar-picker" aria-busy={avatarBusy}>
+    <section className={`entity-pane ${humanDetailPaneStyles["human-detail-pane"]}`}>
+      <header className={humanDetailPaneStyles["human-overview-card"]}>
+        <div className={`entity-header ${humanDetailPaneStyles["human-detail-header"]}`}>
+          <div
+            className={`entity-avatar ${humanDetailPaneStyles["human-detail-avatar"]} agent-header-avatar-picker`}
+            aria-busy={avatarBusy}
+          >
             <AgentAvatarPicker
               disabled={avatarBusy}
               fallback={avatarFallbackText(user.avatar, displayName, user.id)}
@@ -106,10 +111,10 @@ export function HumanDetailPane({
               </span>
             </div>
             {isEditingDescription ? (
-              <div className="human-description-editor">
-                <label className="human-description-field">
+              <div className={humanDetailPaneStyles["human-description-editor"]}>
+                <label className={humanDetailPaneStyles["human-description-field"]}>
                   <span className="sr-only">{t("humanDescriptionLabel")}</span>
-                  <textarea
+                  <TextArea
                     ref={descriptionInputRef}
                     value={descriptionDraft}
                     rows={4}
@@ -146,34 +151,34 @@ export function HumanDetailPane({
               </button>
             )}
             {avatarBusy || avatarError ? (
-              <div className="human-avatar-feedback">
+              <div className={humanDetailPaneStyles["human-avatar-feedback"]}>
                 {avatarBusy ? (
-                  <span className="human-avatar-status" role="status">
+                  <span className={humanDetailPaneStyles["human-avatar-status"]} role="status">
                     {t("humanAvatarSaving")}
                   </span>
                 ) : null}
                 {avatarError ? (
-                  <span className="human-avatar-error" role="alert">
+                  <span className={humanDetailPaneStyles["human-avatar-error"]} role="alert">
                     {avatarError}
                   </span>
                 ) : null}
               </div>
             ) : null}
             {descriptionError ? (
-              <div className="human-avatar-feedback">
-                <span className="human-avatar-error" role="alert">
+              <div className={humanDetailPaneStyles["human-avatar-feedback"]}>
+                <span className={humanDetailPaneStyles["human-avatar-error"]} role="alert">
                   {descriptionError}
                 </span>
               </div>
             ) : null}
           </div>
-          <div className="entity-toolbar human-detail-toolbar">
+          <div className={`entity-toolbar ${humanDetailPaneStyles["human-detail-toolbar"]}`}>
             {descriptionBusy ? (
-              <span className="human-save-status" role="status">
+              <span className={humanDetailPaneStyles["human-save-status"]} role="status">
                 {t("agentSavingChanges")}
               </span>
             ) : !descriptionChanged ? (
-              <span className="human-save-status" role="status">
+              <span className={humanDetailPaneStyles["human-save-status"]} role="status">
                 <Check aria-hidden="true" size={16} strokeWidth={2.5} />
                 {t("agentSaved")}
               </span>
@@ -182,13 +187,13 @@ export function HumanDetailPane({
         </div>
       </header>
 
-      <section className="human-info-panel">
+      <section className={humanDetailPaneStyles["human-info-panel"]}>
         <HumanChannelsSection t={t} user={user} />
-        <section className="human-info-section human-identity-section">
-          <div className="section-header-inline human-info-section-header">
+        <section className={`${humanDetailPaneStyles["human-info-section"]} human-identity-section`}>
+          <div className={`section-header-inline ${humanDetailPaneStyles["human-info-section-header"]}`}>
             <div className="section-label">{t("humanIdentitySection")}</div>
           </div>
-          <div className="human-identity-fields">
+          <div className={humanDetailPaneStyles["human-identity-fields"]}>
             <HumanField label={t("roleLabel")} value={role} />
             <HumanField label={t("userIDLabel")} value={user.user_id || user.id} />
           </div>
@@ -209,19 +214,22 @@ function HumanChannelsSection({ t, user }: { t: TranslateFn; user: IMUser }) {
   );
 
   return (
-    <section className="human-info-section human-channels-section" aria-labelledby="human-channels-title">
-      <div className="section-header-inline human-info-section-header">
+    <section
+      className={`${humanDetailPaneStyles["human-info-section"]} human-channels-section`}
+      aria-labelledby="human-channels-title"
+    >
+      <div className={`section-header-inline ${humanDetailPaneStyles["human-info-section-header"]}`}>
         <h2 id="human-channels-title" className="section-label">
           {t("humanChannelsSection")}
         </h2>
       </div>
-      <div className="human-channel-row">
-        <span className="human-channel-icon" aria-hidden="true">
+      <div className={humanDetailPaneStyles["human-channel-row"]}>
+        <span className={humanDetailPaneStyles["human-channel-icon"]} aria-hidden="true">
           <img src="icons/feishu.png" alt="" />
         </span>
-        <span className="human-channel-main">
-          <span className="human-channel-name">{t("feishuChannelName")}</span>
-          <span className={`human-channel-status ${connected ? "connected" : ""}`.trim()}>
+        <span className={humanDetailPaneStyles["human-channel-main"]}>
+          <span className={humanDetailPaneStyles["human-channel-name"]}>{t("feishuChannelName")}</span>
+          <span className={`${humanDetailPaneStyles["human-channel-status"]} ${connected ? "connected" : ""}`.trim()}>
             {statusIcon}
             {statusLabel}
           </span>
@@ -233,7 +241,7 @@ function HumanChannelsSection({ t, user }: { t: TranslateFn; user: IMUser }) {
 
 function HumanField({ label, value }: { label: string; value: string }) {
   return (
-    <div className="entity-field human-field">
+    <div className={`entity-field ${humanDetailPaneStyles["human-field"]}`}>
       <span>{label}</span>
       <strong>{value}</strong>
     </div>

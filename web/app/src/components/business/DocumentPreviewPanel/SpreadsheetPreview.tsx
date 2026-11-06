@@ -1,3 +1,4 @@
+import documentPreviewPanelStyles from "./DocumentPreviewPanel.module.css";
 import { useEffect, useState } from "react";
 import { copyPreviewBuffer } from "./previewBuffer";
 
@@ -45,15 +46,23 @@ export default function SpreadsheetPreview({
   }, [data]);
 
   if (error) {
-    return <div className="document-preview-status is-error">{t("attachmentPreviewFailed")}</div>;
+    return (
+      <div className={`${documentPreviewPanelStyles["document-preview-status"]} is-error`}>
+        {t("attachmentPreviewFailed")}
+      </div>
+    );
   }
   if (sheets.length === 0) {
-    return <div className="document-preview-status">{t("attachmentPreviewLoading")}</div>;
+    return <div className={documentPreviewPanelStyles["document-preview-status"]}>{t("attachmentPreviewLoading")}</div>;
   }
   const sheet = sheets[active] ?? sheets[0];
   return (
-    <div className="document-preview-spreadsheet" style={{ fontSize: `${scale}em` }}>
-      <div className="document-preview-sheet-tabs" role="tablist" aria-label={t("attachmentPreviewSheets")}>
+    <div className={documentPreviewPanelStyles["document-preview-spreadsheet"]} style={{ fontSize: `${scale}em` }}>
+      <div
+        className={documentPreviewPanelStyles["document-preview-sheet-tabs"]}
+        role="tablist"
+        aria-label={t("attachmentPreviewSheets")}
+      >
         {sheets.map((candidate, index) => (
           <button
             key={candidate.name}
@@ -67,7 +76,7 @@ export default function SpreadsheetPreview({
           </button>
         ))}
       </div>
-      <div className="document-preview-table-wrap">
+      <div className={documentPreviewPanelStyles["document-preview-table-wrap"]}>
         <table>
           <tbody>
             {sheet.rows.map((row, rowIndex) => (

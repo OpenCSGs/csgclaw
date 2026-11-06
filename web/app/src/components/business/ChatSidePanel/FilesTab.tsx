@@ -1,3 +1,4 @@
+import chatSidePanelStyles from "./ChatSidePanel.module.css";
 import { WorkspacePathActions } from "./WorkspacePathActions";
 import { useRoomFileReader } from "./useRoomFileReader";
 import { useEffect, useRef, useState } from "react";
@@ -111,10 +112,13 @@ export function FilesTab({
   }
   function fileRow(name: string, reference: ComposerFileReference, size: number, mediaType = "", token = "") {
     return (
-      <div className="chat-files-row" key={reference.source === "workspace" ? reference.path : reference.attachment_id}>
+      <div
+        className={chatSidePanelStyles["chat-files-row"]}
+        key={reference.source === "workspace" ? reference.path : reference.attachment_id}
+      >
         <button
           type="button"
-          className="chat-files-open"
+          className={chatSidePanelStyles["chat-files-open"]}
           onClick={() => onPreview(filePreviewItem(scope.roomID, reference, size, mediaType, token))}
           title={reference.label}
         >
@@ -129,9 +133,9 @@ export function FilesTab({
     );
   }
   return (
-    <section className="chat-files-tab" aria-label={t("chatFiles")}>
-      <div className="chat-files-toolbar">
-        <div className="chat-files-sources" role="tablist" aria-label={t("chatFileSource")}>
+    <section className={chatSidePanelStyles["chat-files-tab"]} aria-label={t("chatFiles")}>
+      <div className={chatSidePanelStyles["chat-files-toolbar"]}>
+        <div className={chatSidePanelStyles["chat-files-sources"]} role="tablist" aria-label={t("chatFileSource")}>
           <Button
             role="tab"
             aria-selected={isWorkspace}
@@ -167,12 +171,12 @@ export function FilesTab({
         </Tooltip>
       </div>
       {isWorkspace ? (
-        <div className="chat-files-location">
+        <div className={chatSidePanelStyles["chat-files-location"]}>
           {scope.sharedWorkspace ? <span>{t("chatSharedWorkspace")}</span> : null}
           {!scope.direct && !scope.sharedWorkspace ? (
             <Select
               triggerProps={{ "aria-label": t("chatWorkspaceAgent") }}
-              triggerClassName="chat-files-agent"
+              triggerClassName={chatSidePanelStyles["chat-files-agent"]}
               value={agentID}
               options={scope.agents.map((agent) => ({ value: agent.id, label: agent.name }))}
               onValueChange={(value) => {
@@ -183,7 +187,7 @@ export function FilesTab({
             />
           ) : null}
           <Breadcrumb
-            className="chat-files-path"
+            className={chatSidePanelStyles["chat-files-path"]}
             wrap
             aria-label={t("chatWorkspaceFiles")}
             overflowLabel={t("chatBreadcrumbShowEarlier")}
@@ -212,7 +216,7 @@ export function FilesTab({
           />
         </div>
       ) : null}
-      <div className="chat-files-search-wrap">
+      <div className={chatSidePanelStyles["chat-files-search-wrap"]}>
         <TextInput
           size="sm"
           type="search"
@@ -225,13 +229,13 @@ export function FilesTab({
           }}
         />
       </div>
-      <div className="chat-files-list">
+      <div className={chatSidePanelStyles["chat-files-list"]}>
         {loading ? (
-          <div className="chat-side-status" role="status">
+          <div className={chatSidePanelStyles["chat-side-status"]} role="status">
             {t("loading")}
           </div>
         ) : error ? (
-          <div className="chat-side-status" role="alert">
+          <div className={chatSidePanelStyles["chat-side-status"]} role="alert">
             {errorMessage(error, t("attachmentPreviewFailed"))}
             <Button onClick={refresh} size="sm" variant="secondaryGray">
               {t("retrySend")}
@@ -239,13 +243,17 @@ export function FilesTab({
           </div>
         ) : null}
         {!loading && !error && (isWorkspace ? entries.length === 0 : files.length === 0) ? (
-          <div className="chat-side-status">{t("chatFilesEmpty")}</div>
+          <div className={chatSidePanelStyles["chat-side-status"]}>{t("chatFilesEmpty")}</div>
         ) : null}
         {isWorkspace
           ? entries.slice(0, visibleCount).map((entry) =>
               entry.type === "dir" ? (
-                <div className="chat-files-row" key={entry.path}>
-                  <button className="chat-files-open" type="button" onClick={() => changeDirectory(entry.path)}>
+                <div className={chatSidePanelStyles["chat-files-row"]} key={entry.path}>
+                  <button
+                    className={chatSidePanelStyles["chat-files-open"]}
+                    type="button"
+                    onClick={() => changeDirectory(entry.path)}
+                  >
                     <span className="chat-file-glyph">
                       <FileTypeIcon isFolder />
                     </span>

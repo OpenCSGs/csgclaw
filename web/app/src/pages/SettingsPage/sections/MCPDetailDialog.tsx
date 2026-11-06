@@ -25,7 +25,7 @@ import {
 import { JSONConfigEditor } from "@/components/business/HubDetailPane";
 import { parseMCPServerDocument } from "@/models/mcpServerDocument";
 import styles from "./MCPDetailDialog.module.css";
-import pageStyles from "../SettingsPage.module.css";
+import resourceSettingsStyles from "./ResourceSettings.module.css";
 import type { TranslateFn } from "@/models/conversations";
 
 export type MCPDetailTarget =
@@ -161,8 +161,8 @@ export function MCPDetailDialog({
                 <div>
                   <div className={styles.titleRow}>
                     <DialogTitle>{name}</DialogTitle>
-                    <span className={pageStyles.tag}>
-                      <span className={pageStyles.tagDot} aria-hidden="true" />
+                    <span className={resourceSettingsStyles.tag}>
+                      <span className={resourceSettingsStyles.tagDot} aria-hidden="true" />
                       {installed ? originLabel(installed, t) : t("iaMCPBadgeMarket")}
                     </span>
                   </div>

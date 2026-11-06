@@ -1,5 +1,7 @@
 .csg-tooltip-content {
   z-index: var(--z-tooltip);
+  max-width: min(320px, var(--radix-tooltip-content-available-width, calc(100vw - 24px)));
+  box-sizing: border-box;
   padding: 8px 12px;
   border: 1px solid var(--tooltip-border);
   border-radius: 8px;
@@ -8,7 +10,8 @@
   font-size: 12px;
   font-weight: 400;
   line-height: 16px;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
   pointer-events: none;
   box-shadow: none;
   transform-origin: var(--radix-tooltip-content-transform-origin);

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { X } from "lucide-react";
 import {
+  TextArea,
   Button,
   DialogBody,
   DialogContent,
@@ -47,7 +48,7 @@ export function FeedbackDialog(props: Props) {
         <DialogBody className={styles.body}>
           <label className={styles.label}>
             {t("settingsFeedbackLabel")}
-            <textarea
+            <TextArea
               value={props.description}
               disabled={busy}
               rows={6}

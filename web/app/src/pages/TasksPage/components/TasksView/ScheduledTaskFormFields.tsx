@@ -1,8 +1,8 @@
 import type { Dispatch, SetStateAction } from "react";
-import { Combobox, Select } from "@/components/ui";
+import { Field, TextInput, TextArea, Combobox, Select } from "@/components/ui";
 import { classNames } from "@/shared/lib/classNames";
 import { TASK_TITLE_MAX_LENGTH } from "./taskDialogTypes";
-import styles from "./TasksView.module.css";
+import taskFormStyles from "./TaskForm.module.css";
 import type { SelectOption } from "@/components/ui";
 import type { TranslateFn } from "@/models/conversations";
 import type { ScheduledTaskRecurrence } from "@/models/scheduledTasks";
@@ -26,10 +26,9 @@ export function ScheduledTaskFormFields({
   onClearError,
 }: ScheduledTaskFormFieldsProps) {
   return (
-    <div className={styles.taskCreateForm}>
-      <label className={classNames("field", styles.taskCreateField)} data-invalid={errors.title ? true : undefined}>
-        <span>{t("taskTitleLabel")}</span>
-        <input
+    <div className={taskFormStyles.taskCreateForm}>
+      <Field className={taskFormStyles.taskCreateField} label={t("taskTitleLabel")} error={errors.title}>
+        <TextInput
           value={draft.title}
           maxLength={TASK_TITLE_MAX_LENGTH}
           placeholder={t("taskTitlePlaceholder")}
@@ -39,10 +38,8 @@ export function ScheduledTaskFormFields({
             onClearError("title");
           }}
         />
-        {errors.title ? <span className="form-error">{errors.title}</span> : null}
-      </label>
-      <label className={classNames("field", styles.taskCreateField)} data-invalid={errors.agentID ? true : undefined}>
-        <span>{t("scheduledTaskAgentLabel")}</span>
+      </Field>
+      <Field className={taskFormStyles.taskCreateField} label={t("scheduledTaskAgentLabel")} error={errors.agentID}>
         <Combobox
           value={draft.agentID}
           onValueChange={(agentID) => {
@@ -55,14 +52,13 @@ export function ScheduledTaskFormFields({
           searchPlaceholder={t("scheduledTaskAgentPlaceholder")}
           emptyLabel={t("scheduledTaskExecutorEmpty")}
         />
-        {errors.agentID ? <span className="form-error">{errors.agentID}</span> : null}
-      </label>
-      <label
-        className={classNames("field", styles.taskCreateField, styles.span2)}
-        data-invalid={errors.prompt ? true : undefined}
+      </Field>
+      <Field
+        className={classNames(taskFormStyles.taskCreateField, taskFormStyles.span2)}
+        label={t("scheduledTaskPromptLabel")}
+        error={errors.prompt}
       >
-        <span>{t("scheduledTaskPromptLabel")}</span>
-        <textarea
+        <TextArea
           value={draft.prompt}
           placeholder={t("scheduledTaskPromptPlaceholder")}
           onInput={(event) => {
@@ -71,10 +67,8 @@ export function ScheduledTaskFormFields({
             onClearError("prompt");
           }}
         />
-        {errors.prompt ? <span className="form-error">{errors.prompt}</span> : null}
-      </label>
-      <label className={classNames("field", styles.taskCreateField)}>
-        <span>{t("scheduledTaskRecurrenceLabel")}</span>
+      </Field>
+      <Field className={taskFormStyles.taskCreateField} label={t("scheduledTaskRecurrenceLabel")}>
         <Select
           value={draft.recurrence}
           onValueChange={(recurrence) =>
@@ -88,10 +82,9 @@ export function ScheduledTaskFormFields({
           ]}
           triggerProps={{ "aria-label": t("scheduledTaskRecurrenceLabel") }}
         />
-      </label>
-      <label className={classNames("field", styles.taskCreateField)} data-invalid={errors.date ? true : undefined}>
-        <span>{t("scheduledTaskDateLabel")}</span>
-        <input
+      </Field>
+      <Field className={taskFormStyles.taskCreateField} label={t("scheduledTaskDateLabel")} error={errors.date}>
+        <TextInput
           type="date"
           value={draft.date}
           onInput={(event) => {
@@ -100,11 +93,9 @@ export function ScheduledTaskFormFields({
             onClearError("date");
           }}
         />
-        {errors.date ? <span className="form-error">{errors.date}</span> : null}
-      </label>
-      <label className={classNames("field", styles.taskCreateField)} data-invalid={errors.time ? true : undefined}>
-        <span>{t("scheduledTaskTimeLabel")}</span>
-        <input
+      </Field>
+      <Field className={taskFormStyles.taskCreateField} label={t("scheduledTaskTimeLabel")} error={errors.time}>
+        <TextInput
           type="time"
           value={draft.time}
           onInput={(event) => {
@@ -113,11 +104,9 @@ export function ScheduledTaskFormFields({
             onClearError("time");
           }}
         />
-        {errors.time ? <span className="form-error">{errors.time}</span> : null}
-      </label>
-      <label className={classNames("field", styles.taskCreateField)}>
-        <span>{t("scheduledTaskExpiresLabel")}</span>
-        <input
+      </Field>
+      <Field className={taskFormStyles.taskCreateField} label={t("scheduledTaskExpiresLabel")}>
+        <TextInput
           type="date"
           value={draft.expiresDate}
           onInput={(event) => {
@@ -125,7 +114,7 @@ export function ScheduledTaskFormFields({
             onChange((current) => ({ ...current, expiresDate: value }));
           }}
         />
-      </label>
+      </Field>
     </div>
   );
 }

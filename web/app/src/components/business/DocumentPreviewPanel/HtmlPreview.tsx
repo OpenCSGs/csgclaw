@@ -1,3 +1,4 @@
+import documentPreviewPanelStyles from "./DocumentPreviewPanel.module.css";
 import { useMemo, useState } from "react";
 import DOMPurify from "dompurify";
 import { SegmentedControl } from "@/components/ui";
@@ -112,8 +113,8 @@ export default function HtmlPreview({ scale, text, t }: { scale: number; text: s
   const srcDoc = useMemo(() => htmlPreviewDocument(text, scale), [scale, text]);
 
   return (
-    <div className="document-preview-html-shell">
-      <div className="document-preview-mode-switch">
+    <div className={documentPreviewPanelStyles["document-preview-html-shell"]}>
+      <div className={documentPreviewPanelStyles["document-preview-mode-switch"]}>
         <SegmentedControl
           label={t("attachmentPreviewViewMode")}
           size="sm"
@@ -127,9 +128,9 @@ export default function HtmlPreview({ scale, text, t }: { scale: number; text: s
         />
       </div>
       {mode === "preview" ? (
-        <div className="document-preview-html-frame-wrap">
+        <div className={documentPreviewPanelStyles["document-preview-html-frame-wrap"]}>
           <iframe
-            className="document-preview-html-frame"
+            className={documentPreviewPanelStyles["document-preview-html-frame"]}
             referrerPolicy="no-referrer"
             sandbox=""
             srcDoc={srcDoc}

@@ -1,3 +1,6 @@
+import testAgentChannelsStyles from "@/components/business/AgentDetails/AgentDetailPane/AgentChannels.module.css";
+import testAgentInstructionsStyles from "@/components/business/AgentDetails/AgentDetailPane/AgentInstructions.module.css";
+import testAgentDetailPaneStyles from "@/components/business/AgentDetails/AgentDetailPane/AgentDetailPane.module.css";
 import { createQueryWrapper } from "../helpers/queryClient";
 import { act, render as baseRender, screen, within, type RenderOptions } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -724,7 +727,10 @@ describe("agent action visibility", () => {
     await user.click(screen.getByRole("button", { name: "Channels" }));
     expect(screen.getByRole("region", { name: "Channels" })).toBeInTheDocument();
     expect(screen.getByText("Manage external channels.")).toBeInTheDocument();
-    expect(document.querySelector(".agent-channel-icon img")).toHaveAttribute("src", "icons/feishu.png");
+    expect(document.querySelector(`.${testAgentChannelsStyles["agent-channel-icon"]} img`)).toHaveAttribute(
+      "src",
+      "icons/feishu.png",
+    );
     expect(screen.getByText("Disconnected")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Configure channel tool" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Disconnect Feishu" })).not.toBeInTheDocument();
@@ -781,7 +787,9 @@ describe("agent action visibility", () => {
     expect(screen.getByText("Connected")).toHaveClass("connected");
     expect(screen.getByText("Feishu connection configured.").closest(".form-warning")).toHaveClass("success");
     expect(screen.getByRole("button", { name: "Reconnect Feishu" })).toBeInTheDocument();
-    const channelActionButtons = Array.from(document.querySelectorAll(".agent-channel-actions .btn"));
+    const channelActionButtons = Array.from(
+      document.querySelectorAll(`.${testAgentChannelsStyles["agent-channel-actions"]} .btn`),
+    );
     expect(channelActionButtons.map((button) => button.textContent?.trim())).toEqual([
       "Reconnect Feishu",
       "Disconnect Feishu",
@@ -1136,10 +1144,10 @@ describe("agent action visibility", () => {
     await user.click(within(navigation).getByRole("button", { name: "Instructions" }));
 
     const instructionsEditor = screen.getByDisplayValue("reply in Chinese");
-    expect(instructionsEditor).toHaveClass("agent-instructions-editor");
+    expect(instructionsEditor).toHaveClass(testAgentInstructionsStyles["agent-instructions-editor"]);
     expect(instructionsEditor.closest(".agent-page-editor")).toHaveClass("agent-page-editor-instructions");
     expect(instructionsEditor.closest(".agent-profile-scroll-region")).toHaveClass(
-      "agent-profile-scroll-region-instructions",
+      testAgentDetailPaneStyles["agent-profile-scroll-region-instructions"],
     );
     expect(screen.queryByText("Provider")).not.toBeInTheDocument();
   });

@@ -1,3 +1,4 @@
+import testRoomAvatarStyles from "@/components/business/RoomAvatar/RoomAvatar.module.css";
 import { render } from "@testing-library/react";
 import { RoomAvatar, resolveRoomAvatarMembers } from "@/components/business/RoomAvatar";
 
@@ -14,8 +15,8 @@ describe("RoomAvatar", () => {
     const { container } = render(<RoomAvatar count={2} members={members.slice(0, 2)} />);
 
     expect(container.firstChild).toHaveClass("room-avatar--count-2");
-    expect(container.querySelectorAll(".room-avatar-tile")).toHaveLength(2);
-    expect(container.querySelector(".room-avatar-count-badge")).not.toBeInTheDocument();
+    expect(container.querySelectorAll(`.${testRoomAvatarStyles["room-avatar-tile"]}`)).toHaveLength(2);
+    expect(container.querySelector(`.${testRoomAvatarStyles["room-avatar-count-badge"]}`)).not.toBeInTheDocument();
     expect(container.querySelector(".room-avatar-tile--left")).toBeInTheDocument();
     expect(container.querySelector(".room-avatar-tile--right")).toBeInTheDocument();
   });
@@ -24,7 +25,7 @@ describe("RoomAvatar", () => {
     const { container } = render(<RoomAvatar count={3} members={members.slice(0, 3)} />);
 
     expect(container.firstChild).toHaveClass("room-avatar--count-3");
-    expect(container.querySelectorAll(".room-avatar-tile")).toHaveLength(3);
+    expect(container.querySelectorAll(`.${testRoomAvatarStyles["room-avatar-tile"]}`)).toHaveLength(3);
     expect(container.querySelector(".room-avatar-tile--top-left")).toBeInTheDocument();
     expect(container.querySelector(".room-avatar-tile--bottom-left")).toBeInTheDocument();
     expect(container.querySelector(".room-avatar-tile--tall")).toBeInTheDocument();
@@ -34,8 +35,8 @@ describe("RoomAvatar", () => {
     const { container } = render(<RoomAvatar count={5} members={members} />);
 
     expect(container.firstChild).toHaveClass("room-avatar--count-4");
-    expect(container.querySelectorAll(".room-avatar-tile")).toHaveLength(4);
-    expect(container.querySelector(".room-avatar-count-badge")).toHaveTextContent("5");
+    expect(container.querySelectorAll(`.${testRoomAvatarStyles["room-avatar-tile"]}`)).toHaveLength(4);
+    expect(container.querySelector(`.${testRoomAvatarStyles["room-avatar-count-badge"]}`)).toHaveTextContent("5");
   });
 
   it("filters the current user out of room avatar members", () => {

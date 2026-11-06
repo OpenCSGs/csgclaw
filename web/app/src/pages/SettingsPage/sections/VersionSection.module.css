@@ -1,0 +1,177 @@
+.versionTitle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.versionStack {
+  gap: 8px;
+}
+
+.upgradeProgressRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 38px;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  margin-top: -8px;
+}
+
+.upgradeProgressTrack {
+  width: 100%;
+  height: 4px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--gray-200);
+}
+
+.upgradeProgressTrack span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--brand-500);
+  transition: width 350ms linear;
+}
+
+.upgradeProgressValue {
+  color: var(--gray-500);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  line-height: 18px;
+  text-align: right;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .upgradeProgressTrack span {
+    transition: none;
+  }
+}
+
+.versionValue {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+}
+
+.versionMeta {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.versionChannelLink {
+  justify-self: start;
+  align-self: center;
+  min-height: 40px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--gray-500);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 18px;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.versionChannelLink:hover:not(:disabled),
+.versionChannelLink:focus-visible:not(:disabled) {
+  color: var(--gray-700);
+  outline: none;
+}
+
+.versionChannelLink:disabled {
+  cursor: default;
+  opacity: 0.55;
+  text-decoration: none;
+}
+
+.versionLabel {
+  min-width: 0;
+  color: var(--gray-700);
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 22px;
+  text-align: right;
+}
+
+.versionLabel {
+  display: block;
+}
+
+.versionBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 22px;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: var(--brand-50);
+  color: #4d62b2;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+.versionBadge span {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: var(--brand-500);
+}
+
+.versionValue strong {
+  color: var(--gray-600);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 22px;
+}
+
+:root[data-theme="dark"] .versionLabel {
+  color: var(--gray-100);
+}
+
+:root[data-theme="dark"] .versionValue strong {
+  color: var(--gray-400);
+}
+
+:root[data-theme="dark"] .versionChannelLink {
+  color: var(--gray-400);
+}
+
+:root[data-theme="dark"] .versionChannelLink:hover:not(:disabled),
+:root[data-theme="dark"] .versionChannelLink:focus-visible:not(:disabled) {
+  color: var(--gray-200);
+}
+
+@media (max-width: 640px) {
+  .versionValue {
+    grid-template-columns: minmax(0, 1fr);
+    justify-items: start;
+    gap: 8px;
+  }
+
+  .versionActions {
+    justify-items: start;
+    width: 100%;
+  }
+
+  .versionChannelLink {
+    justify-self: start;
+  }
+
+  .versionMeta {
+    justify-content: flex-start;
+  }
+
+  .versionLabel {
+    text-align: left;
+  }
+}

@@ -1,0 +1,57 @@
+.mention-option {
+  width: 100%;
+  min-height: 56px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 10px;
+  border: 0;
+  background: transparent;
+  border-radius: 14px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.mention-option:hover,
+.mention-option:global(.active) {
+  background: var(--primary-soft);
+}
+
+.mention-option:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.mention-option > div {
+  min-width: 0;
+}
+
+.mention-option {
+  gap: 10px;
+  min-height: 58px;
+  padding: 9px 10px;
+  border-radius: 10px;
+}
+
+.mention-option :global(.avatar) {
+  width: 38px;
+  height: 38px;
+  flex-basis: 38px;
+  overflow: hidden;
+  border-radius: 50%;
+  background: var(--avatar-default-bg);
+  color: var(--avatar-default-fg);
+  font-weight: var(--avatar-default-weight);
+  font-size: 13px;
+}
+
+.mention-option :global(.message-author) {
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 20px;
+}
+
+.mention-option :global(.conversation-preview) {
+  font-size: 12px;
+  line-height: 18px;
+}

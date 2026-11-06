@@ -1,3 +1,4 @@
+import { Switch } from "@/components/ui";
 import { AgentModelFields, type AgentModelFieldsProps } from "@/components/business/AgentModelFields";
 import { AgentMediaModelFields } from "@/components/business/AgentMediaModelFields";
 import { ReasoningControls } from "@/components/business/ProfileControls";
@@ -33,15 +34,15 @@ export function AgentModelConfiguration({ draft, ...props }: AgentModelConfigura
           />
           <div className="field agent-fast-mode-field">
             <span>{t("profileFastMode")}</span>
-            <label className="selection-item compact-toggle-row agent-fast-mode-toggle">
-              <input
-                type="checkbox"
+            <div className={styles.fastMode}>
+              <Switch
+                size="sm"
                 checked={draft.enable_fast_mode}
                 aria-label={t("profileFastMode")}
-                onChange={() => onPatch({ enable_fast_mode: !draft.enable_fast_mode })}
+                onCheckedChange={(enable_fast_mode) => onPatch({ enable_fast_mode })}
               />
-              <small className="agent-fast-mode-help">{t("profileFastModeHelp")}</small>
-            </label>
+              <small>{t("profileFastModeHelp")}</small>
+            </div>
           </div>
         </div>
         <p className={styles.hint}>{t("profileConversationModelSettingsHelp")}</p>

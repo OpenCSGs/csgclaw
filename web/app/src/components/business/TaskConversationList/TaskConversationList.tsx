@@ -197,7 +197,8 @@ export function TaskConversationList({
       <div ref={searchBarRef} className={styles.searchBar}>
         <div className={styles.searchField}>
           <Search size={15} aria-hidden="true" />
-          <input
+          <TextInput
+            variant="plain"
             ref={searchInputRef}
             className={styles.search}
             aria-label={t("taskEntrySearchHistory")}

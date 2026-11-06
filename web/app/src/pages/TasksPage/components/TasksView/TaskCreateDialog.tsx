@@ -1,8 +1,12 @@
 import type { Dispatch, SetStateAction } from "react";
 import {
+  Field,
+  TextInput,
+  TextArea,
   Button,
   DialogBody,
   DialogContent,
+  DialogCloseButton,
   DialogDescription,
   DialogFooter,
   DialogHeader,
@@ -11,9 +15,8 @@ import {
   Select,
 } from "@/components/ui";
 import { classNames } from "@/shared/lib/classNames";
-import { TaskDialogCloseButton } from "./TaskDialogCloseButton";
 import { TASK_TITLE_MAX_LENGTH } from "./taskDialogTypes";
-import styles from "./TasksView.module.css";
+import taskFormStyles from "./TaskForm.module.css";
 import type { SelectOption } from "@/components/ui";
 import type { TranslateFn } from "@/models/conversations";
 import type { TaskCreateDraft, TaskCreateFieldErrors } from "./taskDialogTypes";
@@ -47,26 +50,20 @@ export function TaskCreateDialog({
 }: TaskCreateDialogProps) {
   return (
     <DialogRoot open={open} onOpenChange={(nextOpen) => (!nextOpen ? onClose?.() : null)}>
-      <DialogContent className={styles.taskCreateDialog}>
+      <DialogContent className={taskFormStyles.taskCreateDialog}>
         <DialogHeader>
           <div>
             <DialogTitle>{t("taskCreateTitle")}</DialogTitle>
             <DialogDescription>{t("taskCreateSubtitle")}</DialogDescription>
           </div>
-          <TaskDialogCloseButton label={t("close")} />
+          <DialogCloseButton label={t("close")} size="sm" variant="tertiaryGray" iconOnly />
         </DialogHeader>
         <DialogBody>
-          <div className={classNames(styles.taskCreateForm, styles.taskCreateFormCompact)}>
-            <label
-              className={classNames("field", styles.taskCreateField)}
-              data-invalid={errors.title ? true : undefined}
-            >
-              <span>{t("taskTitleLabel")}</span>
-              <input
+          <div className={classNames(taskFormStyles.taskCreateForm, taskFormStyles.taskCreateFormCompact)}>
+            <Field className={taskFormStyles.taskCreateField} label={t("taskTitleLabel")} error={errors.title}>
+              <TextInput
                 value={draft.title}
                 maxLength={TASK_TITLE_MAX_LENGTH}
-                aria-describedby={errors.title ? "task-create-title-error" : undefined}
-                aria-invalid={errors.title ? true : undefined}
                 onInput={(event) => {
                   const value = event.currentTarget.value;
                   onChange((current) => ({ ...current, title: value }));
@@ -74,51 +71,34 @@ export function TaskCreateDialog({
                 }}
                 placeholder={t("taskTitlePlaceholder")}
               />
-              {errors.title ? (
-                <span id="task-create-title-error" className="form-error" role="alert">
-                  {errors.title}
-                </span>
-              ) : null}
-            </label>
-            <label className={classNames("field", styles.taskCreateField)}>
-              <span>{t("taskDescriptionLabel")}</span>
-              <textarea
+            </Field>
+            <Field className={taskFormStyles.taskCreateField} label={t("taskDescriptionLabel")}>
+              <TextArea
                 value={draft.description}
-                aria-label={t("taskDescriptionLabel")}
                 onInput={(event) => {
                   const value = event.currentTarget.value;
                   onChange((current) => ({ ...current, description: value }));
                 }}
                 placeholder={t("taskDescriptionPlaceholder")}
               />
-            </label>
-            <label
-              className={classNames("field", styles.taskCreateField)}
-              data-invalid={errors.assignment ? true : undefined}
+            </Field>
+            <Field
+              className={taskFormStyles.taskCreateField}
+              label={t("taskAssignmentLabel")}
+              error={errors.assignment}
             >
-              <span>{t("taskAssignmentLabel")}</span>
               <Select
                 value={draft.assignee}
                 onValueChange={(assignee) => {
                   onChange((current) => ({ ...current, assignee }));
                   onClearError("assignment");
                 }}
-                triggerProps={{
-                  "aria-describedby": errors.assignment ? "task-create-assignment-error" : undefined,
-                  "aria-invalid": errors.assignment ? true : undefined,
-                  "aria-label": t("taskAssignmentLabel"),
-                }}
                 options={assignmentOptions}
                 placeholder={t("taskAssignmentPlaceholder")}
               />
-              {errors.assignment ? (
-                <span id="task-create-assignment-error" className="form-error" role="alert">
-                  {errors.assignment}
-                </span>
-              ) : null}
-            </label>
+            </Field>
           </div>
-          {error ? <div className={classNames("form-error", styles.taskCreateError)}>{error}</div> : null}
+          {error ? <div className={classNames("form-error", taskFormStyles.taskCreateError)}>{error}</div> : null}
         </DialogBody>
         <DialogFooter>
           <Button variant="secondaryGray" size="md" onClick={onClose}>

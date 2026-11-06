@@ -1,0 +1,29 @@
+.image-generation-prompt {
+  width: 100%;
+  color: var(--text-muted);
+}
+
+.image-generation-prompt summary {
+  cursor: pointer;
+}
+
+.image-generation-prompt p {
+  max-width: 600px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.image-generation-error-details {
+  width: 100%;
+  max-width: 600px;
+  overflow-wrap: anywhere;
+}
+
+.image-generation-error-details p {
+  margin: 0 0 0.5rem;
+  white-space: pre-wrap;
+}
+
+.image-generation-error-details small {
+  color: var(--text-muted);
+}

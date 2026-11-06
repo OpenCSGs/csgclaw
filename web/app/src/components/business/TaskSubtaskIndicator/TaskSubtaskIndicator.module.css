@@ -123,20 +123,6 @@
   color: var(--warning-700);
 }
 
-@keyframes task-subtask-indicator-dot-bounce {
-  0%,
-  60%,
-  100% {
-    transform: translateY(0);
-    opacity: 0.45;
-  }
-
-  30% {
-    transform: translateY(-3px);
-    opacity: 1;
-  }
-}
-
 :root[data-theme="dark"] .task-subtask-indicator-planning {
   border-color: color-mix(in srgb, var(--brand-300) 34%, transparent);
   background: color-mix(in srgb, var(--brand-300) 14%, transparent);
@@ -158,5 +144,19 @@
   .task-subtask-indicator-dots span:nth-child(2),
   .task-subtask-indicator-dots span:nth-child(3) {
     opacity: 0.52;
+  }
+}
+
+@keyframes task-subtask-indicator-dot-bounce {
+  0%,
+  60%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.45;
+  }
+
+  30% {
+    transform: translateY(-3px);
+    opacity: 1;
   }
 }

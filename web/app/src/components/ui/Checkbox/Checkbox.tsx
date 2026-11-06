@@ -1,6 +1,6 @@
 import styles from "./Checkbox.module.css";
 import { Checkbox as RadixCheckbox } from "radix-ui";
-import { Check } from "lucide-react";
+import { Check, Minus } from "lucide-react";
 import { forwardRef } from "react";
 import type { ComponentPropsWithoutRef, ComponentRef } from "react";
 import { classNames } from "@/shared/lib/classNames";
@@ -19,7 +19,8 @@ export const Checkbox = forwardRef<ComponentRef<typeof RadixCheckbox.Root>, Chec
       {...props}
     >
       <RadixCheckbox.Indicator className={styles["csg-checkbox-indicator"]}>
-        <Check aria-hidden="true" size={12} strokeWidth={3} />
+        <Check className={styles["check-mark"]} aria-hidden="true" size={12} strokeWidth={3} />
+        <Minus className={styles["mixed-mark"]} aria-hidden="true" size={12} strokeWidth={3} />
       </RadixCheckbox.Indicator>
     </RadixCheckbox.Root>
   );

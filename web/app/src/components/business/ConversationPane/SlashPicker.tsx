@@ -1,3 +1,5 @@
+import slashPickerStyles from "./SlashPicker.module.css";
+import mentionPickerStyles from "./MentionPicker.module.css";
 import type { SkillContinuation } from "@/models/slashCommands";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { BoxIcon, TerminalIcon } from "lucide-react";
@@ -72,12 +74,12 @@ export function SlashPicker({
     <div
       ref={listRef}
       onScroll={(event) => setScrollTop(event.currentTarget.scrollTop)}
-      className={`mention-picker slash-picker ${className}`.trim()}
+      className={`mention-picker ${slashPickerStyles["slash-picker"]} ${className}`.trim()}
       role="listbox"
     >
-      {loading ? <div className="slash-picker-empty">{t("slashPickerLoading")}</div> : null}
+      {loading ? <div className={slashPickerStyles["slash-picker-empty"]}>{t("slashPickerLoading")}</div> : null}
       {!loading && !continuation?.failed && candidates.length === 0 ? (
-        <div className="slash-picker-empty">{t("slashPickerEmpty")}</div>
+        <div className={slashPickerStyles["slash-picker-empty"]}>{t("slashPickerEmpty")}</div>
       ) : null}
       <div aria-hidden="true" style={{ height: start * rowHeight, flexShrink: 0 }} />
       {candidates.slice(start, end).map((candidate, visibleIndex) => (
@@ -88,24 +90,26 @@ export function SlashPicker({
           aria-setsize={continuation?.hasMore ? -1 : candidates.length}
           role="option"
           aria-selected={visibleIndex + start === activeIndex}
-          className={`mention-option slash-option ${candidate.type === "command" ? "command-option" : "skill-slash-option"} ${visibleIndex + start === activeIndex ? "active" : ""}`}
+          className={`${mentionPickerStyles["mention-option"]} ${slashPickerStyles["slash-option"]} ${candidate.type === "command" ? "command-option" : "skill-slash-option"} ${visibleIndex + start === activeIndex ? "active" : ""}`}
           onMouseDown={(event) => {
             event.preventDefault();
             onSelect(candidate.name);
           }}
         >
-          <span className="slash-option-mark" aria-hidden="true">
+          <span className={slashPickerStyles["slash-option-mark"]} aria-hidden="true">
             {candidate.type === "command" ? (
               <TerminalIcon size={18} strokeWidth={1.8} />
             ) : (
               <BoxIcon size={18} strokeWidth={1.8} />
             )}
           </span>
-          <div className="slash-option-copy">
+          <div className={slashPickerStyles["slash-option-copy"]}>
             <span className="message-author">{candidate.name}</span>
-            {candidate.description ? <span className="slash-option-description">{candidate.description}</span> : null}
+            {candidate.description ? (
+              <span className={slashPickerStyles["slash-option-description"]}>{candidate.description}</span>
+            ) : null}
           </div>
-          <span className="slash-option-kind">
+          <span className={slashPickerStyles["slash-option-kind"]}>
             {candidate.type === "command" ? t("slashPickerCommandKind") : t("slashPickerSkillKind")}
           </span>
         </button>

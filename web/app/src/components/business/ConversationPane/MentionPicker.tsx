@@ -1,3 +1,4 @@
+import mentionPickerStyles from "./MentionPicker.module.css";
 import { useLayoutEffect, useRef } from "react";
 import { AgentAvatarContent } from "@/components/business/AgentAvatar";
 import { avatarFallbackText } from "@/shared/avatar";
@@ -39,7 +40,7 @@ export function MentionPicker({
             ref={index === activeIndex ? activeOptionRef : null}
             role="option"
             aria-selected={index === activeIndex}
-            className={`mention-option ${index === activeIndex ? "active" : ""}`}
+            className={`${mentionPickerStyles["mention-option"]} ${index === activeIndex ? "active" : ""}`}
             onMouseDown={(event) => {
               event.preventDefault();
               onSelect(user);

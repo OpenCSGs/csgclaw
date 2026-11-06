@@ -14,7 +14,7 @@ function readTree(dir: string, pattern: RegExp): string {
 }
 
 const source: string = readTree(resolve(process.cwd(), "src"), /\.(js|jsx|ts|tsx)$/);
-const styles: string = readTree(resolve(process.cwd(), "src"), /\.css$/);
+const styles = readTree(resolve(process.cwd(), "src"), /\.css$/).replace(/:global\((\.[a-zA-Z][\w-]*)\)/g, "$1");
 
 function styleRule(selector: string): string {
   const pattern = new RegExp(`${selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*\\{([^}]*)\\}`);

@@ -7,6 +7,8 @@ import { useWorkspaceControllerContext } from "@/hooks/workspace";
 import { ArchivedAgents } from "./ArchivedAgents";
 import { SettingsRow } from "./SettingsRow";
 import styles from "../SettingsPage.module.css";
+import archivedSectionStyles from "./ArchivedSection.module.css";
+import resourceSettingsStyles from "./ResourceSettings.module.css";
 export function ArchivedSection() {
   const controller = useWorkspaceControllerContext();
   const [skip, setSkip] = useArchiveConfirmation();
@@ -40,7 +42,7 @@ export function ArchivedSection() {
         <ArchivedAgents t={sidebar.t} usersById={sidebar.usersById} onCountChange={setAgentCount} />
       ) : (
         <>
-          <div className={styles.archivePreference}>
+          <div className={archivedSectionStyles.archivePreference}>
             <div>
               <strong>{sidebar.t("archivedConfirmSwitch")}</strong>
               <p>{sidebar.t("archivedConfirmSwitchHint")}</p>
@@ -60,7 +62,7 @@ export function ArchivedSection() {
             t={sidebar.t}
             onSelect={sidebar.onSelectConversation}
           />
-          <p className={styles.listNotice}>{sidebar.t("archivedWhereHint")}</p>
+          <p className={resourceSettingsStyles.listNotice}>{sidebar.t("archivedWhereHint")}</p>
         </>
       )}
     </SettingsRow>

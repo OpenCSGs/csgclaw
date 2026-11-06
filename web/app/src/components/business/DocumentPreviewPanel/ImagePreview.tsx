@@ -1,3 +1,4 @@
+import documentPreviewPanelStyles from "./DocumentPreviewPanel.module.css";
 import { useLayoutEffect, useRef, useState } from "react";
 
 export function ImagePreview({
@@ -35,10 +36,10 @@ export function ImagePreview({
       : 1;
 
   return (
-    <div ref={viewportRef} className="document-preview-image-viewport">
-      <div className="document-preview-image-stage">
+    <div ref={viewportRef} className={documentPreviewPanelStyles["document-preview-image-viewport"]}>
+      <div className={documentPreviewPanelStyles["document-preview-image-stage"]}>
         <img
-          className="document-preview-image"
+          className={documentPreviewPanelStyles["document-preview-image"]}
           src={objectURL}
           alt={name}
           onError={onError}

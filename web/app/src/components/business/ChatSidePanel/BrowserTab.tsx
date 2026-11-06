@@ -1,3 +1,4 @@
+import chatSidePanelStyles from "./ChatSidePanel.module.css";
 import { useNativeBrowser } from "./useNativeBrowser";
 import { useEffect, useRef, useState } from "react";
 import { ArrowLeft, ArrowRight, ExternalLink, RefreshCw } from "lucide-react";
@@ -42,7 +43,7 @@ export function BrowserTab({
   return (
     <section className="chat-browser-tab" aria-label={t("chatBrowser")}>
       <form
-        className="chat-browser-toolbar"
+        className={chatSidePanelStyles["chat-browser-toolbar"]}
         onSubmit={(event) => {
           event.preventDefault();
           const next = normalizeBrowserURL(address);
@@ -121,7 +122,7 @@ export function BrowserTab({
           </span>
         </Tooltip>
         <TextInput
-          className="chat-browser-address"
+          className={chatSidePanelStyles["chat-browser-address"]}
           size="sm"
           aria-label={t("chatBrowserAddress")}
           placeholder={t("chatBrowserAddressPlaceholder")}
@@ -139,7 +140,7 @@ export function BrowserTab({
         {externalURL ? (
           <Tooltip content={t("chatBrowserSystem")} contentProps={{ side: "bottom" }}>
             <a
-              className="chat-browser-external"
+              className={chatSidePanelStyles["chat-browser-external"]}
               href={externalURL}
               target="_blank"
               rel="noopener noreferrer"
@@ -151,14 +152,14 @@ export function BrowserTab({
         ) : null}
       </form>
       {invalid ? (
-        <div className="chat-browser-hint" role="alert">
+        <div className={chatSidePanelStyles["chat-browser-hint"]} role="alert">
           {t("chatBrowserInvalid")}
         </div>
       ) : null}
       {native.available && url ? (
         <div className="chat-browser-native" ref={native.hostRef}>
           {native.failed ? (
-            <div className="chat-side-status" role="alert">
+            <div className={chatSidePanelStyles["chat-side-status"]} role="alert">
               <span>{t("chatBrowserLoadFailed")}</span>
               <Button size="sm" variant="secondaryGray" onClick={() => void native.command("reload")}>
                 {t("chatBrowserRetry")}
@@ -168,7 +169,9 @@ export function BrowserTab({
         </div>
       ) : url ? (
         <>
-          <div className="chat-browser-hint chat-browser-embed-hint">
+          <div
+            className={`${chatSidePanelStyles["chat-browser-hint"]} ${chatSidePanelStyles["chat-browser-embed-hint"]}`}
+          >
             <span>{t("chatBrowserEmbedHint")}</span>
             <LinkButton href={externalURL} target="_blank" rel="noopener noreferrer" size="sm" variant="linkColor">
               <ExternalLink size={14} />
@@ -185,7 +188,7 @@ export function BrowserTab({
         </>
       ) : (
         <EmptyState
-          className="chat-browser-empty"
+          className={chatSidePanelStyles["chat-browser-empty"]}
           title={t("chatBrowserEmptyTitle")}
           description={t("chatBrowserEmptyDescription")}
         />

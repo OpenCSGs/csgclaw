@@ -1,3 +1,4 @@
+import workspaceFileTreeStyles from "./WorkspaceFileTree.module.css";
 import { useEffect, useMemo, useState } from "react";
 import { ChevronRight, FileText, Folder, LoaderCircle } from "lucide-react";
 import {
@@ -89,24 +90,27 @@ export function WorkspaceFileTree({
             <button
               key={entry.path}
               type="button"
-              className={`workspace-tree-row ${entry.type} ${isDir ? "toggleable" : ""} ${
+              className={`${workspaceFileTreeStyles["workspace-tree-row"]} ${entry.type} ${isDir ? "toggleable" : ""} ${
                 !isDir && selectedPath === entry.path ? "active" : ""
               }`.trim()}
               style={{ "--workspace-tree-depth": entry.depth ?? 0 } as WorkspaceTreeDepthStyle}
               onClick={() => (isDir ? toggleDir(entry.path) : onSelectFile?.(entry.path))}
               aria-expanded={isDir ? !collapsed : undefined}
             >
-              <span className={`workspace-tree-toggle ${!isDir ? "spacer" : ""}`.trim()} aria-hidden="true">
+              <span
+                className={`${workspaceFileTreeStyles["workspace-tree-toggle"]} ${!isDir ? "spacer" : ""}`.trim()}
+                aria-hidden="true"
+              >
                 {dirLoading ? (
                   <LoaderCircle className="animate-spin" size={14} strokeWidth={2} />
                 ) : isDir ? (
                   <ChevronRight className={collapsed ? "collapsed" : ""} size={14} strokeWidth={2} />
                 ) : null}
               </span>
-              <span className="workspace-tree-glyph" aria-hidden="true">
+              <span className={workspaceFileTreeStyles["workspace-tree-glyph"]} aria-hidden="true">
                 {isDir ? <Folder size={16} strokeWidth={2} /> : <FileText size={16} strokeWidth={2} />}
               </span>
-              <span className="workspace-tree-label">{entry.name || entry.path}</span>
+              <span className={workspaceFileTreeStyles["workspace-tree-label"]}>{entry.name || entry.path}</span>
             </button>
           );
         })

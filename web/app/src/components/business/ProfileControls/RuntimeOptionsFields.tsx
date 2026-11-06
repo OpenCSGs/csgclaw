@@ -1,3 +1,4 @@
+import profileControlsStyles from "./ProfileControls.module.css";
 import {
   localizedRuntimeOptionChoiceDescription,
   localizedRuntimeOptionChoiceLabel,
@@ -10,7 +11,7 @@ import {
   type RuntimeOptionSchema,
 } from "@/models/agents";
 import { Button } from "@/components/ui/Button/Button";
-import { Select } from "@/components/ui";
+import { TextInput, Select } from "@/components/ui";
 import type { LocaleCode } from "@/models/conversations";
 import { pickLocalDirectoryPath, rendererDirectoryPickerAvailable } from "./runtimeOptionDirectoryPicker";
 
@@ -90,8 +91,8 @@ export function RuntimeOptionsFields({
     return (
       <label key={String(schema.key ?? path)} className="field span-2">
         <span>{label}</span>
-        <div className={isDirectory ? "runtime-option-input-row" : undefined}>
-          <input
+        <div className={isDirectory ? profileControlsStyles["runtime-option-input-row"] : undefined}>
+          <TextInput
             value={inputValue}
             required={Boolean(schema.required)}
             aria-required={schema.required ? "true" : undefined}
@@ -109,7 +110,7 @@ export function RuntimeOptionsFields({
                 <Button
                   variant="secondaryGray"
                   size="md"
-                  className="runtime-option-action"
+                  className={profileControlsStyles["runtime-option-action"]}
                   onClick={async () => {
                     const pickedPath = await pickLocalDirectoryPath();
                     if (!pickedPath) {
@@ -127,7 +128,7 @@ export function RuntimeOptionsFields({
               <Button
                 variant="secondaryGray"
                 size="md"
-                className="runtime-option-action"
+                className={profileControlsStyles["runtime-option-action"]}
                 onClick={() =>
                   onDraftChange({
                     ...draft,

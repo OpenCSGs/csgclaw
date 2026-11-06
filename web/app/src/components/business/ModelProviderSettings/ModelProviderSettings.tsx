@@ -1,3 +1,4 @@
+import modelProviderSettingsStyles from "./ModelProviderSettings.module.css";
 import { useModelProviderPresets } from "@/hooks/useModelProviderPresets";
 import { DefaultModelSettings } from "./DefaultModelSettings";
 import directoryStyles from "./ProviderDirectory.module.css";
@@ -265,7 +266,7 @@ export function ModelProviderSettings({ embedded = false }: { embedded?: boolean
 
   if (!provider) {
     return (
-      <section className="model-provider-page empty">
+      <section className={`${modelProviderSettingsStyles["model-provider-page"]} empty`}>
         <div className="empty-state">{t("profileSelectModel")}</div>
       </section>
     );
@@ -374,12 +375,16 @@ export function ModelProviderSettings({ embedded = false }: { embedded?: boolean
 
   return (
     <Fragment>
-      <section className={`model-provider-page${embedded ? " embedded" : ""}`}>
-        <header className="model-provider-header model-provider-list-header">
-          <div className="model-provider-header-main">
-            <div className="model-provider-title-row">
+      <section className={`${modelProviderSettingsStyles["model-provider-page"]}${embedded ? " embedded" : ""}`}>
+        <header
+          className={`${modelProviderSettingsStyles["model-provider-header"]} ${modelProviderSettingsStyles["model-provider-list-header"]}`}
+        >
+          <div className={modelProviderSettingsStyles["model-provider-header-main"]}>
+            <div className={modelProviderSettingsStyles["model-provider-title-row"]}>
               <h1>{t("resourcesModelProvidersSection")}</h1>
-              <span className="model-provider-list-count-badge">{filteredProviderCards.length}</span>
+              <span className={modelProviderSettingsStyles["model-provider-list-count-badge"]}>
+                {filteredProviderCards.length}
+              </span>
             </div>
             <p>{t("modelProviderCreateSubtitle")}</p>
           </div>
@@ -391,10 +396,10 @@ export function ModelProviderSettings({ embedded = false }: { embedded?: boolean
 
         <DefaultModelSettings catalog={modelProviders} t={t} />
 
-        <label className="model-provider-search">
+        <label className={modelProviderSettingsStyles["model-provider-search"]}>
           <span className="sr-only">{t("modelProviderSearchPlaceholder")}</span>
           <TextInput
-            className="model-provider-search-input"
+            className={modelProviderSettingsStyles["model-provider-search-input"]}
             type="search"
             value={providerSearch}
             placeholder={t("modelProviderSearchPlaceholder")}
@@ -403,8 +408,11 @@ export function ModelProviderSettings({ embedded = false }: { embedded?: boolean
           />
         </label>
 
-        <section className="model-provider-list-section" aria-label={t("resourcesModelProvidersSection")}>
-          <div className="model-provider-provider-grid">
+        <section
+          className={modelProviderSettingsStyles["model-provider-list-section"]}
+          aria-label={t("resourcesModelProvidersSection")}
+        >
+          <div className={modelProviderSettingsStyles["model-provider-provider-grid"]}>
             {filteredProviderCards.map((item) => {
               const signedOut = item.id === MODEL_PROVIDER_IDS.OpenCSG && !isAuthenticated(authStatus);
               const itemStatus =
@@ -422,7 +430,7 @@ export function ModelProviderSettings({ embedded = false }: { embedded?: boolean
                 <button
                   key={item.id}
                   type="button"
-                  className={`model-provider-provider-card${active ? " active" : ""}`}
+                  className={`${modelProviderSettingsStyles["model-provider-provider-card"]}${active ? " active" : ""}`}
                   onClick={() => {
                     if (embedded) {
                       if (
@@ -446,18 +454,22 @@ export function ModelProviderSettings({ embedded = false }: { embedded?: boolean
                   }}
                 >
                   <img
-                    className="model-provider-provider-icon"
+                    className={modelProviderSettingsStyles["model-provider-provider-icon"]}
                     src={modelProviderAvatarPath(item)}
                     alt=""
                     aria-hidden="true"
                   />
-                  <span className="model-provider-provider-copy">
-                    <span className="model-provider-provider-title">{item.display_name || item.id}</span>
-                    <span className="model-provider-provider-description">
+                  <span className={modelProviderSettingsStyles["model-provider-provider-copy"]}>
+                    <span className={modelProviderSettingsStyles["model-provider-provider-title"]}>
+                      {item.display_name || item.id}
+                    </span>
+                    <span className={modelProviderSettingsStyles["model-provider-provider-description"]}>
                       {itemMetaParts.join(" · ") || item.kind || item.base_url || t("resourcesModelProvidersSection")}
                     </span>
                   </span>
-                  <span className={`model-provider-card-status ${itemTone}`}>{itemStatusLabel}</span>
+                  <span className={`${modelProviderSettingsStyles["model-provider-card-status"]} ${itemTone}`}>
+                    {itemStatusLabel}
+                  </span>
                 </button>
               );
             })}
@@ -508,15 +520,18 @@ export function ModelProviderSettings({ embedded = false }: { embedded?: boolean
       </section>
 
       <DialogRoot open={detailOpen} onOpenChange={setDetailOpen}>
-        <DialogContent className="model-provider-detail-dialog" overlayClassName="model-provider-detail-backdrop">
-          <DialogHeader className="model-provider-detail-header">
+        <DialogContent
+          className={modelProviderSettingsStyles["model-provider-detail-dialog"]}
+          overlayClassName={modelProviderSettingsStyles["model-provider-detail-backdrop"]}
+        >
+          <DialogHeader className={modelProviderSettingsStyles["model-provider-detail-header"]}>
             <img
-              className="model-provider-header-avatar"
+              className={modelProviderSettingsStyles["model-provider-header-avatar"]}
               src={modelProviderAvatarPath(provider)}
               alt=""
               aria-hidden="true"
             />
-            <div className="model-provider-header-main">
+            <div className={modelProviderSettingsStyles["model-provider-header-main"]}>
               <DialogTitle>{provider.display_name || provider.id}</DialogTitle>
               <p>{providerSubtitle}</p>
               {provider.model_source ? (
@@ -532,16 +547,20 @@ export function ModelProviderSettings({ embedded = false }: { embedded?: boolean
                 </p>
               ) : null}
             </div>
-            <div className={`model-provider-status-pill ${effectiveTone}`}>
+            <div className={`${modelProviderSettingsStyles["model-provider-status-pill"]} ${effectiveTone}`}>
               <span className={`workspace-status-dot ${effectiveTone}`} aria-hidden="true"></span>
               <span>{statusLabel}</span>
             </div>
             <DialogCloseButton label={t("close")} size="md" variant="tertiaryGray" />
           </DialogHeader>
 
-          <DialogBody className="model-provider-detail-body">
+          <DialogBody className={modelProviderSettingsStyles["model-provider-detail-body"]}>
             {error ? (
-              <DismissibleAlert className="model-provider-notice warning" messageKey={error} closeLabel={t("close")}>
+              <DismissibleAlert
+                className={`${modelProviderSettingsStyles["model-provider-notice"]} warning`}
+                messageKey={error}
+                closeLabel={t("close")}
+              >
                 <AlertCircle size={16} aria-hidden="true" />
                 <span>{error}</span>
               </DismissibleAlert>
@@ -549,7 +568,7 @@ export function ModelProviderSettings({ embedded = false }: { embedded?: boolean
 
             {showOpenCSGSignIn ? (
               <DismissibleAlert
-                className="model-provider-notice warning opencsg-signin-warning"
+                className={`${modelProviderSettingsStyles["model-provider-notice"]} warning opencsg-signin-warning`}
                 messageKey={t("modelProviderOpenCSGSignInRequired")}
                 closeLabel={t("close")}
               >
@@ -559,7 +578,7 @@ export function ModelProviderSettings({ embedded = false }: { embedded?: boolean
             ) : null}
             {checkMessage ? (
               <DismissibleAlert
-                className={`model-provider-notice ${effectiveTone === "warning" ? "warning" : "success"}`}
+                className={`${modelProviderSettingsStyles["model-provider-notice"]} ${effectiveTone === "warning" ? "warning" : "success"}`}
                 messageKey={checkMessage}
                 closeLabel={t("close")}
               >
@@ -572,9 +591,9 @@ export function ModelProviderSettings({ embedded = false }: { embedded?: boolean
               </DismissibleAlert>
             ) : null}
 
-            <div className="model-provider-grid">
-              <section className="model-provider-card">
-                <div className="model-provider-card-heading">
+            <div className={modelProviderSettingsStyles["model-provider-grid"]}>
+              <section className={modelProviderSettingsStyles["model-provider-card"]}>
+                <div className={modelProviderSettingsStyles["model-provider-card-heading"]}>
                   <h2>{t("modelProviderConfiguration")}</h2>
                   <p>
                     {isOpenCSG
@@ -592,9 +611,13 @@ export function ModelProviderSettings({ embedded = false }: { embedded?: boolean
                     </div>
                   </div>
                 ) : (
-                  <div className="model-provider-form-grid">
+                  <div className={modelProviderSettingsStyles["model-provider-form-grid"]}>
                     {!provider.builtin ? (
-                      <Field className="model-provider-name-field" label={t("modelProviderDisplayName")} required>
+                      <Field
+                        className={modelProviderSettingsStyles["model-provider-name-field"]}
+                        label={t("modelProviderDisplayName")}
+                        required
+                      >
                         <TextInput
                           required
                           value={draft.displayName}
@@ -609,7 +632,7 @@ export function ModelProviderSettings({ embedded = false }: { embedded?: boolean
                       <>
                         <label className="field">
                           {t("profileBaseURL")}
-                          <input
+                          <TextInput
                             value={draft.baseURL}
                             onInput={(event) => {
                               const value = event.currentTarget.value;
@@ -650,9 +673,11 @@ export function ModelProviderSettings({ embedded = false }: { embedded?: boolean
                 )}
               </section>
 
-              <section className="model-provider-card model-provider-models-card">
+              <section
+                className={`${modelProviderSettingsStyles["model-provider-card"]} ${modelProviderSettingsStyles["model-provider-models-card"]}`}
+              >
                 <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div className="model-provider-card-heading">
+                  <div className={modelProviderSettingsStyles["model-provider-card-heading"]}>
                     <h2>{t("profileModel")}</h2>
                     <p>
                       {modelList.length
@@ -683,7 +708,7 @@ export function ModelProviderSettings({ embedded = false }: { embedded?: boolean
                     const videoModel = videoModels.has(model);
                     if (imageModel || videoModel) {
                       return (
-                        <span className="model-provider-model-kinds">
+                        <span className={modelProviderSettingsStyles["model-provider-model-kinds"]}>
                           {imageModel ? (
                             <Tooltip content={t("modelContextImageHint")}>
                               <span className="model-image-kind">
@@ -755,7 +780,7 @@ export function ModelProviderSettings({ embedded = false }: { embedded?: boolean
               </Tooltip>
             ) : null}
             <div
-              className={`model-provider-footer-feedback${error ? " has-error" : dirty ? " is-pending" : ""}`}
+              className={`${modelProviderSettingsStyles["model-provider-footer-feedback"]}${error ? " has-error" : dirty ? " is-pending" : ""}`}
               role="status"
               aria-live="polite"
             >
@@ -820,7 +845,7 @@ export function ModelProviderSettings({ embedded = false }: { embedded?: boolean
           if (busy !== "delete") setDeleteConfirmOpen(open);
         }}
       >
-        <DialogContent className="model-provider-delete-dialog">
+        <DialogContent className={modelProviderSettingsStyles["model-provider-delete-dialog"]}>
           <DialogHeader>
             <div>
               <DialogTitle>{t("modelProviderDeleteTitle")}</DialogTitle>

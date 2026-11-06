@@ -1,3 +1,4 @@
+import composerAddMenuStyles from "@/components/business/ConversationPane/ComposerAddMenu.module.css";
 import { useRef, useState } from "react";
 import { Plus, Paperclip, Wrench, Boxes, BookOpen } from "lucide-react";
 import { Button, PopoverClose, PopoverContent, PopoverRoot, PopoverTrigger, Tooltip } from "@/components/ui";
@@ -44,7 +45,7 @@ export function ComposerAddMenu({
       </Tooltip>
       <PopoverContent
         aria-label={t("composerAddContent")}
-        className="composer-add-popover"
+        className={composerAddMenuStyles["composer-add-popover"]}
         role="dialog"
         side="top"
         onCloseAutoFocus={(event) => {
@@ -55,22 +56,22 @@ export function ComposerAddMenu({
           if (isComposerKeyboardEventComposing(event)) event.preventDefault();
         }}
       >
-        <section className="composer-add-section">
+        <section className={composerAddMenuStyles["composer-add-section"]}>
           <PopoverClose asChild>
-            <button type="button" className="composer-add-menu-item" onClick={onAddFiles}>
+            <button type="button" className={composerAddMenuStyles["composer-add-menu-item"]} onClick={onAddFiles}>
               <Paperclip size={18} />
               {t("addAttachment")}
             </button>
           </PopoverClose>
         </section>
         {onOpenResourcePicker ? (
-          <section className="composer-add-section">
-            <div className="composer-add-section-label">{t("composerAddResources")}</div>
+          <section className={composerAddMenuStyles["composer-add-section"]}>
+            <div className={composerAddMenuStyles["composer-add-section-label"]}>{t("composerAddResources")}</div>
             {resourceKinds.map(({ kind: resourceKind, icon: Icon, label: resourceLabel }) => (
               <button
                 key={resourceKind}
                 type="button"
-                className="composer-add-menu-item"
+                className={composerAddMenuStyles["composer-add-menu-item"]}
                 onClick={() => {
                   openingResourcePicker.current = true;
                   setOpen(false);

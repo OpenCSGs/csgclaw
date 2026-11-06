@@ -7,7 +7,7 @@ import {
   TurnNotificationModes,
 } from "@/models/turnNotifications";
 import { SettingsRow } from "./SettingsRow";
-import styles from "../SettingsPage.module.css";
+import notificationsSectionStyles from "./NotificationsSection.module.css";
 
 export function NotificationsSection() {
   const controller = useWorkspaceControllerContext();
@@ -30,21 +30,21 @@ export function NotificationsSection() {
 
   return (
     <SettingsRow title={t("notificationSettings")} description={t("settingsNotificationDescription")}>
-      <div className={styles.notificationControls}>
-        <div className={styles.notificationModeControl}>
+      <div className={notificationsSectionStyles.notificationControls}>
+        <div className={notificationsSectionStyles.notificationModeControl}>
           <Select
             size="sm"
-            contentClassName={styles.notificationSelectContent}
+            contentClassName={notificationsSectionStyles.notificationSelectContent}
             options={turnNotificationOptions}
             selectedLabel={selectedTurnNotificationLabel}
-            triggerClassName={styles.notificationSelectTrigger}
+            triggerClassName={notificationsSectionStyles.notificationSelectTrigger}
             triggerProps={{ "aria-label": t("turnCompletionNotifications") }}
             value={turnNotificationMode}
             onValueChange={(value) => void sidebar.onTurnNotificationModeChange?.(normalizeTurnNotificationMode(value))}
           />
-          <p className={styles.notificationModeHint}>{t("notificationPermissionDeniedHint")}</p>
+          <p className={notificationsSectionStyles.notificationModeHint}>{t("notificationPermissionDeniedHint")}</p>
         </div>
-        <label className={styles.notificationSoundControl} title={t("turnNotificationSoundHint")}>
+        <label className={notificationsSectionStyles.notificationSoundControl} title={t("turnNotificationSoundHint")}>
           <span>{t("turnNotificationSound")}</span>
           <Switch
             aria-label={t("turnNotificationSound")}
@@ -53,7 +53,7 @@ export function NotificationsSection() {
             onCheckedChange={(enabled) => sidebar.onTurnNotificationSoundChange?.(enabled)}
           />
         </label>
-        <div className={styles.notificationPermissionControls}>
+        <div className={notificationsSectionStyles.notificationPermissionControls}>
           <span
             role="status"
             aria-label={`${t("notificationPermission")}: ${t(`notificationPermission${permissionLabelSuffix(turnNotificationPermission)}`)}`}
@@ -63,9 +63,9 @@ export function NotificationsSection() {
                 : t("notificationPermission")
             }
             className={classNames(
-              styles.permissionStatus,
-              turnNotificationPermission === "granted" && styles.permissionGranted,
-              turnNotificationPermission === "denied" && styles.permissionDenied,
+              notificationsSectionStyles.permissionStatus,
+              turnNotificationPermission === "granted" && notificationsSectionStyles.permissionGranted,
+              turnNotificationPermission === "denied" && notificationsSectionStyles.permissionDenied,
             )}
           >
             <span aria-hidden="true" />

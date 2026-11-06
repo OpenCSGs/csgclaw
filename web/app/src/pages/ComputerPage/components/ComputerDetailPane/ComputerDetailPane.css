@@ -86,31 +86,3 @@
 .computer-agent-panel .section-header-inline .btn {
   min-width: 72px;
 }
-
-.computer-agent-list .entity-list-row {
-  min-height: 58px;
-  padding: 8px;
-  border-radius: 12px;
-}
-
-.computer-agent-list .entity-list-main-button {
-  min-height: 42px;
-  width: 100%;
-  padding: 7px 10px;
-  border-radius: 10px;
-}
-
-.computer-agent-list .entity-list-main {
-  gap: 3px;
-}
-
-.computer-agent-list .entity-list-main strong {
-  font-size: 15px;
-  font-weight: 720;
-  line-height: 20px;
-}
-
-.computer-agent-list .entity-list-main small {
-  font-size: 13px;
-  line-height: 18px;
-}

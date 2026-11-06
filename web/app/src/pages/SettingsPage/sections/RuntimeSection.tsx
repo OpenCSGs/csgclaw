@@ -1,4 +1,4 @@
-import { Button, Select } from "@/components/ui";
+import { TextInput, Field, Button, Select } from "@/components/ui";
 import { useWorkspaceControllerContext } from "@/hooks/workspace";
 import { AgentRuntimeSection } from "@/components/business/AgentRuntimeSection";
 import { useAgentRuntimes } from "@/components/business/AgentRuntimeSection/useAgentRuntimes";
@@ -36,7 +36,7 @@ export function RuntimeSection() {
         <div className={styles.formGrid}>
           <label className={`field ${styles.spanAll}`}>
             <span>{t("configSettingsHubLocalPath")}</span>
-            <input
+            <TextInput
               value={config.draft.hub_local_path}
               disabled={disabled}
               autoComplete="off"
@@ -44,10 +44,9 @@ export function RuntimeSection() {
               onInput={(event) => config.onDraftChange({ hub_local_path: event.currentTarget.value })}
             />
           </label>
-          <label className="field">
-            <span>{t("configSettingsManagerTemplate")}</span>
-            <input value={managerTemplateLabel} disabled readOnly aria-readonly="true" />
-          </label>
+          <Field label={t("configSettingsManagerTemplate")}>
+            <TextInput value={managerTemplateLabel} disabled readOnly aria-readonly="true" />
+          </Field>
           <label className="field">
             <span>{t("configSettingsWorkerTemplate")}</span>
             <Select

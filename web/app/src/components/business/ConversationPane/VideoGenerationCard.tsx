@@ -1,3 +1,4 @@
+import conversationPaneStyles from "./ConversationPane.module.css";
 import type { DocumentPreviewRequest } from "@/components/business/DocumentPreviewPanel";
 import type { IMMessage, TranslateFn } from "@/models/conversations";
 import { MessageAttachments } from "./ConversationAttachments";
@@ -13,7 +14,7 @@ export function VideoGenerationCard({
   t: TranslateFn;
 }) {
   return (
-    <div className="video-generation-card">
+    <div className={conversationPaneStyles["video-generation-card"]}>
       <VideoGenerationStatus message={message} t={t} />
       <MessageAttachments attachments={message.attachments} t={t} onPreviewAttachment={onPreviewAttachment} />
     </div>

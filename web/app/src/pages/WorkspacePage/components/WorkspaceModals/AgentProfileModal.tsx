@@ -12,6 +12,8 @@ import {
   RuntimeOptionsFields,
 } from "@/components/business/ProfileControls";
 import {
+  TextInput,
+  TextArea,
   Button,
   Select,
   DialogRoot,
@@ -292,7 +294,7 @@ export function AgentProfileModal({
               </div>
               <label className="field agent-name-field">
                 {requiredFieldLabel(t("agentName"))}
-                <input
+                <TextInput
                   ref={nameRef}
                   value={agentDraft.name}
                   required
@@ -303,7 +305,7 @@ export function AgentProfileModal({
               </label>
               <label className="field agent-description-field">
                 <span>{t("agentDescription")}</span>
-                <textarea
+                <TextArea
                   className="compact-textarea"
                   value={agentDraft.description}
                   onInput={(event) => onAgentDraftChange({ ...agentDraft, description: event.currentTarget.value })}
@@ -406,7 +408,7 @@ export function AgentProfileModal({
               ) : agentModalMode === "edit" ? (
                 <label className="field span-2">
                   <span>{t("profileRuntimeKind")}</span>
-                  <input value={formatRuntimeKindLabel(agentRuntimeKind(editingAgent), t)} readOnly disabled />
+                  <TextInput value={formatRuntimeKindLabel(agentRuntimeKind(editingAgent), t)} readOnly disabled />
                 </label>
               ) : null}
               {runtimeOptionSchemas.length > 0 ? (
@@ -470,7 +472,7 @@ export function AgentProfileModal({
               <div className="profile-grid-compact">
                 <label className="field span-2">
                   <span>{t("agentInstructions")}</span>
-                  <textarea
+                  <TextArea
                     className="compact-textarea"
                     value={agentDraft.instructions || ""}
                     placeholder={t("agentInstructionsPlaceholder")}

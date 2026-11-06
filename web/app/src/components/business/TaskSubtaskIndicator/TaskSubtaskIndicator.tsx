@@ -1,8 +1,8 @@
+import taskSubtaskIndicatorStyles from "./TaskSubtaskIndicator.module.css";
 import { ListChecks } from "lucide-react";
 import { Tooltip } from "@/components/ui";
 import { normalizeTaskStatus, type TaskSidebarPhase } from "@/models/tasks";
 import { classNames } from "@/shared/lib/classNames";
-import "./TaskSubtaskIndicator.css";
 
 type TranslateFn = (key: string, params?: Record<string, string | number>) => string;
 
@@ -27,16 +27,18 @@ export function TaskSubtaskIndicator({
       <Tooltip content={label}>
         <span
           className={classNames(
-            "task-subtask-indicator",
-            compact && "task-subtask-indicator-compact",
-            "task-subtask-indicator-loading",
-            phase === "planning" ? "task-subtask-indicator-planning" : "task-subtask-indicator-dispatching",
+            taskSubtaskIndicatorStyles["task-subtask-indicator"],
+            compact && taskSubtaskIndicatorStyles["task-subtask-indicator-compact"],
+            taskSubtaskIndicatorStyles["task-subtask-indicator-loading"],
+            phase === "planning"
+              ? taskSubtaskIndicatorStyles["task-subtask-indicator-planning"]
+              : taskSubtaskIndicatorStyles["task-subtask-indicator-dispatching"],
             className,
           )}
           aria-label={label}
         >
-          <span className="task-subtask-indicator-action">{label}</span>
-          <span className="task-subtask-indicator-dots" aria-hidden="true">
+          <span className={taskSubtaskIndicatorStyles["task-subtask-indicator-action"]}>{label}</span>
+          <span className={taskSubtaskIndicatorStyles["task-subtask-indicator-dots"]} aria-hidden="true">
             <span />
             <span />
             <span />
@@ -60,16 +62,21 @@ export function TaskSubtaskIndicator({
     <Tooltip content={label}>
       <span
         className={classNames(
-          "task-subtask-indicator",
-          compact && "task-subtask-indicator-compact",
-          inProgress && "task-subtask-indicator-progress",
-          allCompleted && "task-subtask-indicator-complete",
+          taskSubtaskIndicatorStyles["task-subtask-indicator"],
+          compact && taskSubtaskIndicatorStyles["task-subtask-indicator-compact"],
+          inProgress && taskSubtaskIndicatorStyles["task-subtask-indicator-progress"],
+          allCompleted && taskSubtaskIndicatorStyles["task-subtask-indicator-complete"],
           className,
         )}
         aria-label={label}
       >
-        <ListChecks className="task-subtask-indicator-icon" size={12} strokeWidth={2.2} aria-hidden="true" />
-        <span className="task-subtask-indicator-value">
+        <ListChecks
+          className={taskSubtaskIndicatorStyles["task-subtask-indicator-icon"]}
+          size={12}
+          strokeWidth={2.2}
+          aria-hidden="true"
+        />
+        <span className={taskSubtaskIndicatorStyles["task-subtask-indicator-value"]}>
           {completed}/{total}
         </span>
       </span>

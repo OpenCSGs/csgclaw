@@ -1,3 +1,4 @@
+import documentPreviewPanelStyles from "./DocumentPreviewPanel.module.css";
 import { lazy, Suspense, useMemo } from "react";
 import { FileText } from "lucide-react";
 import type { AttachmentPreviewItem } from "@/models/attachments";
@@ -46,7 +47,9 @@ export function DocumentPreviewContent({
     () => (kind === "text" ? syntaxLanguageForFile(item.name, item.mediaType) : null),
     [item.mediaType, item.name, kind],
   );
-  const loading = <div className="document-preview-status">{t("attachmentPreviewLoading")}</div>;
+  const loading = (
+    <div className={documentPreviewPanelStyles["document-preview-status"]}>{t("attachmentPreviewLoading")}</div>
+  );
 
   if (kind === "video") {
     return (
@@ -87,7 +90,7 @@ export function DocumentPreviewContent({
       );
     }
     return (
-      <pre className="document-preview-text" style={{ fontSize: `${scale}em` }}>
+      <pre className={documentPreviewPanelStyles["document-preview-text"]} style={{ fontSize: `${scale}em` }}>
         {text}
       </pre>
     );
@@ -121,7 +124,7 @@ export function DocumentPreviewContent({
     );
   }
   return (
-    <div className="document-preview-unsupported">
+    <div className={documentPreviewPanelStyles["document-preview-unsupported"]}>
       <FileText aria-hidden="true" size={40} />
       <p>{t("attachmentPreviewUnavailable")}</p>
     </div>

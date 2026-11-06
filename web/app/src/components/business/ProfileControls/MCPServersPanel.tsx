@@ -1,3 +1,5 @@
+import profileControlsStyles from "./ProfileControls.module.css";
+import { TextArea } from "@/components/ui";
 import { useEffect, useId, useState } from "react";
 import {
   MCP_SERVERS_EXAMPLE,
@@ -75,10 +77,10 @@ export function MCPServersPanel({ draft, onDraftChange, onInvalidChange, t }: MC
   }
 
   return (
-    <div className="field span-2 mcp-servers-panel">
-      <div className="mcp-servers-header">
+    <div className={`field span-2 ${profileControlsStyles["mcp-servers-panel"]}`}>
+      <div className={profileControlsStyles["mcp-servers-header"]}>
         <label htmlFor={textareaId}>{t("profileMCPServers")}</label>
-        <div className="mcp-servers-actions">
+        <div className={profileControlsStyles["mcp-servers-actions"]}>
           <Button variant="secondaryGray" size="sm" onClick={fillExample}>
             {t("profileMCPServersUseExample")}
           </Button>
@@ -87,9 +89,9 @@ export function MCPServersPanel({ draft, onDraftChange, onInvalidChange, t }: MC
           </Button>
         </div>
       </div>
-      <textarea
+      <TextArea
         id={textareaId}
-        className="compact-textarea mcp-servers-textarea"
+        className={`compact-textarea ${profileControlsStyles["mcp-servers-textarea"]}`}
         value={text}
         aria-invalid={error ? "true" : undefined}
         aria-describedby={`${textareaId}-hint`}

@@ -4,7 +4,8 @@ import { ResourceList, ResourceListCard } from "@/components/business/ResourceLi
 import { useWorkspaceControllerContext } from "@/hooks/workspace";
 import { hasSkillName, remoteSkillInstallName } from "@/models/skillhub";
 import { ResourceFeaturedIcon, ResourceSearchField, SkillFeaturedIcon } from "@/components/business/HubDetailPane";
-import styles from "../SettingsPage.module.css";
+import accountSectionStyles from "./AccountSection.module.css";
+import resourceSettingsStyles from "./ResourceSettings.module.css";
 import type { SkillSummary } from "@/models/skillhub";
 import type { TranslateFn } from "@/models/conversations";
 
@@ -33,7 +34,7 @@ export function SkillMarketPane({
 }) {
   if (!authed) {
     return (
-      <div className={styles.loginGate}>
+      <div className={accountSectionStyles.loginGate}>
         <LogIn size={20} strokeWidth={1.8} aria-hidden="true" />
         <p>{t("iaSkillsMarketLoginRequired")}</p>
         <Button variant="primary" size="md" onClick={onLogin}>
@@ -45,7 +46,7 @@ export function SkillMarketPane({
 
   if (hub?.remoteSkillsError) {
     return (
-      <div className={styles.listNotice}>
+      <div className={resourceSettingsStyles.listNotice}>
         <span className="form-error" role="alert">
           {hub.remoteSkillsError}
         </span>
@@ -59,7 +60,7 @@ export function SkillMarketPane({
 
   if (hub?.remoteSkillsLoading && remoteSkills.length === 0) {
     return (
-      <p className={styles.listNotice}>
+      <p className={resourceSettingsStyles.listNotice}>
         <LoaderCircle className="animate-spin" size={14} strokeWidth={2} aria-hidden="true" />
         {t("resourcesSkillRemoteSkillsLoading")}
       </p>
@@ -67,7 +68,7 @@ export function SkillMarketPane({
   }
 
   if (remoteSkills.length === 0) {
-    return <p className={styles.listNotice}>{t("resourcesSkillRemoteSkillsEmpty")}</p>;
+    return <p className={resourceSettingsStyles.listNotice}>{t("resourcesSkillRemoteSkillsEmpty")}</p>;
   }
 
   if (rows) {
@@ -107,7 +108,7 @@ export function SkillMarketPane({
           })}
         </div>
         {hub?.remoteSkillsHasMore ? (
-          <div className={styles.listMore}>
+          <div className={resourceSettingsStyles.listMore}>
             <Button
               size="sm"
               variant="secondaryGray"
@@ -187,7 +188,7 @@ export function SkillMarketPane({
       </ResourceList>
 
       {hub?.remoteSkillsHasMore ? (
-        <div className={styles.listMore}>
+        <div className={resourceSettingsStyles.listMore}>
           <Button
             size="sm"
             variant="secondaryGray"

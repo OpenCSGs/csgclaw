@@ -185,14 +185,21 @@ test("group headings stay non-selectable while keyboard navigation crosses group
   expect(changed).toHaveBeenCalledWith("claude");
 });
 
-test("Tab and Shift+Tab leave a portalled picker within the containing dialog", async () => {
+test("Tab and Shift+Tab leave a portalled picker and skip hidden fields in its dialog", async () => {
   const user = userEvent.setup();
   render(
     <DialogRoot defaultOpen>
       <DialogContent aria-describedby={undefined}>
         <DialogTitle>Configure</DialogTitle>
         <button>Previous field</button>
-        <Harness />
+        <div style={{ display: "none" }}>
+          <button>Hidden previous field</button>
+        </div>
+        <Combobox triggerProps={{ "aria-label": "Model" }} options={options} searchPlaceholder="Search models" />
+        <div style={{ display: "none" }}>
+          <button>Hidden next field</button>
+        </div>
+        <button>Next field</button>
       </DialogContent>
     </DialogRoot>,
   );

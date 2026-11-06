@@ -43,3 +43,8 @@
   align-items: center;
   justify-content: center;
 }
+
+.csg-checkbox-indicator:not([data-state="indeterminate"]) .mixed-mark,
+.csg-checkbox-indicator[data-state="indeterminate"] .check-mark {
+  display: none;
+}

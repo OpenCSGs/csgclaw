@@ -18,6 +18,8 @@ import { MCPDetailDialog, type MCPDetailTarget } from "./MCPDetailDialog";
 import { MCPMarketPane } from "./MCPMarketPane";
 import { SettingsRow } from "./SettingsRow";
 import styles from "../SettingsPage.module.css";
+import externalMessagesSectionStyles from "./ExternalMessagesSection.module.css";
+import resourceSettingsStyles from "./ResourceSettings.module.css";
 
 export function ConnectorsSection() {
   const controller = useWorkspaceControllerContext();
@@ -100,8 +102,8 @@ export function ConnectorsSection() {
             onChange={setQuery}
           />
 
-          <section className={styles.group} aria-label={t("iaConnectorsGroupApps")}>
-            <h3 className={styles.groupTitle}>
+          <section className={externalMessagesSectionStyles.group} aria-label={t("iaConnectorsGroupApps")}>
+            <h3 className={externalMessagesSectionStyles.groupTitle}>
               {t("iaConnectorsGroupApps")}
               <span className={styles.countBadge}>{appCount}</span>
             </h3>
@@ -116,8 +118,8 @@ export function ConnectorsSection() {
             />
           </section>
 
-          <section className={styles.group} aria-label={t("iaConnectorsGroupTools")}>
-            <h3 className={styles.groupTitle}>
+          <section className={externalMessagesSectionStyles.group} aria-label={t("iaConnectorsGroupTools")}>
+            <h3 className={externalMessagesSectionStyles.groupTitle}>
               {t("iaConnectorsGroupTools")}
               <span className={styles.countBadge}>{servers.length}</span>
             </h3>
@@ -128,12 +130,12 @@ export function ConnectorsSection() {
             ) : null}
             {/* Use resource-specific loading state; hub.loaded tracks templates. */}
             {!detail?.loaded ? (
-              <p className={styles.listNotice}>
+              <p className={resourceSettingsStyles.listNotice}>
                 <LoaderCircle className="animate-spin" size={14} strokeWidth={2} aria-hidden="true" />
                 {t("resourcesLoading")}
               </p>
             ) : installedVisible.length === 0 ? (
-              <p className={styles.listNotice}>
+              <p className={resourceSettingsStyles.listNotice}>
                 {servers.length === 0 ? t("resourcesMCPEmpty") : t("iaListSearchEmpty")}
               </p>
             ) : (
@@ -151,8 +153,8 @@ export function ConnectorsSection() {
                     active={false}
                     onOpen={() => setTarget({ variant: "installed", name: server.name })}
                     actions={
-                      <span className={styles.tag}>
-                        <span className={styles.tagDot} aria-hidden="true" />
+                      <span className={resourceSettingsStyles.tag}>
+                        <span className={resourceSettingsStyles.tagDot} aria-hidden="true" />
                         {originLabel(server, t)}
                       </span>
                     }

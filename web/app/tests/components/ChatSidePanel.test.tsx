@@ -1,3 +1,4 @@
+import testChatSidePanelStyles from "@/components/business/ChatSidePanel/ChatSidePanel.module.css";
 import { useEffect, useRef } from "react";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -301,7 +302,7 @@ describe("shared chat sidebar", () => {
     render(<Harness />, { wrapper: createQueryWrapper().wrapper });
     await user.click(screen.getByRole("button", { name: "Files" }));
     const panel = screen.getByRole("complementary");
-    const actions = panel.querySelector(".chat-side-leading-actions");
+    const actions = panel.querySelector(`.${testChatSidePanelStyles["chat-side-leading-actions"]}`);
     expect(actions?.nextElementSibling).toHaveClass("chat-side-tabs");
     expect(actions?.querySelectorAll("button")[0]).toHaveAttribute("aria-label", "New tab");
     expect(actions?.querySelectorAll("button")[1]).toHaveAttribute("aria-label", "Close all tabs");
@@ -380,10 +381,11 @@ describe("shared chat sidebar", () => {
     await user.click(screen.getByRole("button", { name: "Files" }));
     await screen.findByRole("button", { name: /^README.md/ });
     const panel = screen.getByRole("complementary");
-    expect(within(panel).getByRole("tab", { name: "Files" }).querySelector(".chat-side-folder-icon")).toHaveAttribute(
-      "aria-hidden",
-      "true",
-    );
+    expect(
+      within(panel)
+        .getByRole("tab", { name: "Files" })
+        .querySelector(`.${testChatSidePanelStyles["chat-side-folder-icon"]}`),
+    ).toHaveAttribute("aria-hidden", "true");
     expect(within(panel).getByRole("searchbox", { name: "Search files" })).toHaveAttribute("data-size", "sm");
     await user.click(within(panel).getByRole("tab", { name: "Conversation attachments" }));
     await screen.findByRole("button", { name: /^report.pdf/ });
@@ -482,7 +484,11 @@ describe("shared chat sidebar", () => {
     await user.click(screen.getByRole("tab", { name: "Files" }));
     await user.click(screen.getByRole("button", { name: /^README.md/ }));
     expect(screen.getByRole("tab", { name: "README.md" })).toHaveAttribute("aria-selected", "true");
-    expect(screen.getByRole("tab", { name: "README.md" }).querySelector(".chat-side-file-icon")).toBeInTheDocument();
+    expect(
+      screen
+        .getByRole("tab", { name: "README.md" })
+        .querySelector(`.${testChatSidePanelStyles["chat-side-file-icon"]}`),
+    ).toBeInTheDocument();
     const closePreview = screen.getByRole("button", { name: "Close tab README.md" });
     expect(closePreview).toHaveAttribute("data-csg-control", "button");
     await user.click(closePreview);

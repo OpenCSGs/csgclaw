@@ -1,3 +1,18 @@
+function isVisibleTabTarget(element: HTMLElement): boolean {
+  if (typeof element.checkVisibility === "function") {
+    return element.checkVisibility({ checkVisibilityCSS: true });
+  }
+
+  const { visibility } = window.getComputedStyle(element);
+  if (visibility === "hidden" || visibility === "collapse") return false;
+
+  // An element can have display:block even when an ancestor hides its entire subtree.
+  for (let ancestor: HTMLElement | null = element; ancestor; ancestor = ancestor.parentElement) {
+    if (window.getComputedStyle(ancestor).display === "none") return false;
+  }
+  return true;
+}
+
 export function nextFocusTarget(
   trigger: HTMLElement,
   popup: HTMLElement | null,
@@ -15,8 +30,7 @@ export function nextFocusTarget(
     if (element.closest("[hidden], [inert]")) return false;
     const hidden = element.closest('[aria-hidden="true"]');
     if (hidden && !(dialog && hidden.contains(dialog))) return false;
-    const style = window.getComputedStyle(element);
-    return style.display !== "none" && style.visibility !== "hidden";
+    return isVisibleTabTarget(element);
   });
   const index = controls.indexOf(trigger);
   const targetIndex = index + (backwards ? -1 : 1);

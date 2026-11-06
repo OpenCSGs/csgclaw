@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import {
+  Field,
+  TextInput,
   Button,
   DialogBody,
   DialogCloseButton,
@@ -32,6 +34,7 @@ import {
 import type { ParticipantLike } from "@/api/agents";
 import { SettingsRow } from "./SettingsRow";
 import styles from "../SettingsPage.module.css";
+import externalMessagesSectionStyles from "./ExternalMessagesSection.module.css";
 
 export function ExternalMessagesSection() {
   const controller = useWorkspaceControllerContext();
@@ -92,15 +95,15 @@ export function ExternalMessagesSection() {
   return (
     <SettingsRow title={t("iaSettingsCardExternal")} description={t("externalMessagesDescription")}>
       {loading ? (
-        <p className={styles.hintInline}>{t("loading")}</p>
+        <p className={externalMessagesSectionStyles.hintInline}>{t("loading")}</p>
       ) : (
         <>
-          <ul className={styles.sourceList}>
+          <ul className={externalMessagesSectionStyles.sourceList}>
             {sources.map((item) => {
               const metadata = (item.metadata || {}) as Record<string, unknown>;
               return (
                 <li key={item.id}>
-                  <div className={styles.sourceRow}>
+                  <div className={externalMessagesSectionStyles.sourceRow}>
                     <span className={styles.sourceRowMain}>
                       <strong>{item.name || item.id}</strong>
                       <small>
@@ -137,7 +140,7 @@ export function ExternalMessagesSection() {
             })}
             {!sources.length ? (
               <li>
-                <p className={styles.hintInline}>{t("externalMessagesEmpty")}</p>
+                <p className={externalMessagesSectionStyles.hintInline}>{t("externalMessagesEmpty")}</p>
               </li>
             ) : null}
           </ul>
@@ -155,7 +158,7 @@ export function ExternalMessagesSection() {
           </div>
 
           {error ? <p className="form-error">{error}</p> : null}
-          <p className={styles.hintInline}>{t("externalMessagesWhereHint")}</p>
+          <p className={externalMessagesSectionStyles.hintInline}>{t("externalMessagesWhereHint")}</p>
 
           {editing ? (
             <SourceDialog
@@ -227,7 +230,7 @@ function SourceDialog({
 
   return (
     <DialogRoot open onOpenChange={(next) => (next ? undefined : onClose())}>
-      <DialogContent className={styles.sourceDialog}>
+      <DialogContent className={externalMessagesSectionStyles.sourceDialog}>
         <DialogHeader>
           <div>
             <DialogTitle>{creating ? t("externalMessagesCreate") : t("externalMessagesEditTitle")}</DialogTitle>
@@ -236,15 +239,14 @@ function SourceDialog({
           <DialogCloseButton label={t("close")} size="md" variant="tertiaryGray" />
         </DialogHeader>
         <DialogBody>
-          <label className="field">
-            <span>{t("externalMessagesNameLabel")}</span>
-            <input
+          <Field label={t("externalMessagesNameLabel")}>
+            <TextInput
               autoFocus
               value={name}
               placeholder={t("externalMessagesNamePlaceholder")}
               onChange={(event) => setName(event.currentTarget.value)}
             />
-          </label>
+          </Field>
           <NotifierControls
             agentID={item?.id || ""}
             draft={draft}

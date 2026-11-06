@@ -1,3 +1,5 @@
+import roomDangerDialogStyles from "./RoomDangerDialog.module.css";
+import agentLogsDialogStyles from "./AgentLogsDialog.module.css";
 import { useLayoutEffect, useRef } from "react";
 import { RefreshCw } from "lucide-react";
 import {
@@ -42,22 +44,30 @@ export function ConversationRoomDangerConfirmDialog({
 }: ConversationRoomDangerConfirmDialogProps) {
   return (
     <DialogRoot open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="room-danger-dialog" overlayClassName="room-danger-backdrop">
-        <DialogHeader className="room-danger-header">
-          <div className="room-danger-copy">
+      <DialogContent
+        className={roomDangerDialogStyles["room-danger-dialog"]}
+        overlayClassName={roomDangerDialogStyles["room-danger-backdrop"]}
+      >
+        <DialogHeader className={roomDangerDialogStyles["room-danger-header"]}>
+          <div className={roomDangerDialogStyles["room-danger-copy"]}>
             <DialogTitle>{title}</DialogTitle>
             <DialogDescription>{description}</DialogDescription>
           </div>
-          <DialogCloseButton className="room-danger-close" label={closeLabel} size="sm" variant="tertiaryGray" />
+          <DialogCloseButton
+            className={roomDangerDialogStyles["room-danger-close"]}
+            label={closeLabel}
+            size="sm"
+            variant="tertiaryGray"
+          />
         </DialogHeader>
         {error ? (
-          <div className="room-danger-error" role="alert">
+          <div className={roomDangerDialogStyles["room-danger-error"]} role="alert">
             {error}
           </div>
         ) : null}
-        <div className="room-danger-actions">
+        <div className={roomDangerDialogStyles["room-danger-actions"]}>
           <Button
-            className="room-danger-button"
+            className={roomDangerDialogStyles["room-danger-button"]}
             disabled={busy}
             size="sm"
             variant="secondaryGray"
@@ -65,7 +75,13 @@ export function ConversationRoomDangerConfirmDialog({
           >
             {cancelLabel}
           </Button>
-          <Button className="room-danger-button" disabled={busy} size="sm" variant="danger" onClick={onConfirm}>
+          <Button
+            className={roomDangerDialogStyles["room-danger-button"]}
+            disabled={busy}
+            size="sm"
+            variant="danger"
+            onClick={onConfirm}
+          >
             {confirmLabel}
           </Button>
         </div>
@@ -113,13 +129,16 @@ export function ConversationAgentLogsDialog({
         }
       }}
     >
-      <DialogContent className="agent-logs-modal" overlayClassName="agent-logs-backdrop">
-        <DialogHeader className="agent-logs-header">
+      <DialogContent
+        className={agentLogsDialogStyles["agent-logs-modal"]}
+        overlayClassName={agentLogsDialogStyles["agent-logs-backdrop"]}
+      >
+        <DialogHeader className={agentLogsDialogStyles["agent-logs-header"]}>
           <div>
             <DialogTitle>{t("agentLogsTitle")}</DialogTitle>
             <DialogDescription>{agentName}</DialogDescription>
           </div>
-          <div className="agent-logs-header-actions">
+          <div className={agentLogsDialogStyles["agent-logs-header-actions"]}>
             <Tooltip content={t("refreshLogs")}>
               <span>
                 <Button
@@ -138,9 +157,9 @@ export function ConversationAgentLogsDialog({
             <DialogCloseButton className="icon-button" label={t("close")} />
           </div>
         </DialogHeader>
-        <DialogBody className="agent-logs-body">
-          {error ? <div className="form-error agent-logs-error">{error}</div> : null}
-          <pre ref={logsViewerRef} className="agent-logs-viewer">
+        <DialogBody className={agentLogsDialogStyles["agent-logs-body"]}>
+          {error ? <div className={`form-error ${agentLogsDialogStyles["agent-logs-error"]}`}>{error}</div> : null}
+          <pre ref={logsViewerRef} className={agentLogsDialogStyles["agent-logs-viewer"]}>
             {displayContent}
           </pre>
         </DialogBody>

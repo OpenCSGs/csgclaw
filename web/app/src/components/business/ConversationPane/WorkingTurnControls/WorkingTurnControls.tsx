@@ -1,3 +1,4 @@
+import workingTurnStyles from "@/components/business/ConversationPane/WorkingTurn.module.css";
 import { Tooltip } from "@/components/ui";
 import { ContextUsageRing } from "../ContextUsageRing";
 import type { TranslateFn } from "@/models/conversations";
@@ -41,7 +42,7 @@ export function WorkingTurnControls({
         <Tooltip content={stopLabel} contentProps={{ side: "top", sideOffset: 6 }}>
           <button
             type="button"
-            className="composer-working-stop"
+            className={workingTurnStyles["composer-working-stop"]}
             aria-label={t("conversationWorkingStopAria", { name: participant.name })}
             disabled={busy}
             onClick={() => void onStop(participant)}

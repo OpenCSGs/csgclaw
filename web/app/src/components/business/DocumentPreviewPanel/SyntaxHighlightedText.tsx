@@ -1,3 +1,4 @@
+import documentPreviewPanelStyles from "./DocumentPreviewPanel.module.css";
 import { useEffect, useState } from "react";
 import DOMPurify from "dompurify";
 import { createHighlighterCore, type HighlighterCore } from "@shikijs/core";
@@ -70,17 +71,17 @@ export function SyntaxHighlightedText({
 
   if (failed) {
     return (
-      <pre className="document-preview-text" style={{ fontSize: `${scale}em` }}>
+      <pre className={documentPreviewPanelStyles["document-preview-text"]} style={{ fontSize: `${scale}em` }}>
         {text}
       </pre>
     );
   }
   if (!html) {
-    return <div className="document-preview-status">{t("attachmentPreviewLoading")}</div>;
+    return <div className={documentPreviewPanelStyles["document-preview-status"]}>{t("attachmentPreviewLoading")}</div>;
   }
   return (
     <div
-      className="document-preview-shiki"
+      className={documentPreviewPanelStyles["document-preview-shiki"]}
       data-language={language}
       style={{ fontSize: `${scale}em` }}
       dangerouslySetInnerHTML={{ __html: html }}

@@ -1,3 +1,4 @@
+import testMessageContentStyles from "@/components/business/MessageContent/MessageContent.module.css";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MessageContent } from "@/components/business/MessageContent";
@@ -42,8 +43,8 @@ describe("MessageContent", () => {
     render(<MessageContent content={"\u200b"} />);
 
     const indicator = screen.getByLabelText("Waiting for response");
-    expect(indicator).toHaveClass("message-loading-dots");
-    expect(indicator.querySelectorAll(".message-loading-dot")).toHaveLength(3);
+    expect(indicator).toHaveClass(testMessageContentStyles["message-loading-dots"]);
+    expect(indicator.querySelectorAll(`.${testMessageContentStyles["message-loading-dot"]}`)).toHaveLength(3);
     expect(screen.queryByText("\u200b")).not.toBeInTheDocument();
   });
 

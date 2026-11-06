@@ -1,3 +1,4 @@
+import conversationMessageListStyles from "./ConversationMessageList.module.css";
 import type { MessageTimestampParts } from "@/models/conversations";
 
 export function MessageTimestamp({ parts }: { parts: MessageTimestampParts }) {
@@ -6,7 +7,7 @@ export function MessageTimestamp({ parts }: { parts: MessageTimestampParts }) {
   }
   return (
     <time
-      className="message-timestamp"
+      className={conversationMessageListStyles["message-timestamp"]}
       dateTime={parts.dateTime}
       aria-label={parts.tooltip}
       data-tooltip={parts.tooltip}
@@ -23,9 +24,9 @@ export function MessageTimeDivider({ parts }: { parts: MessageTimestampParts }) 
     return null;
   }
   return (
-    <div className="message-time-divider">
+    <div className={conversationMessageListStyles["message-time-divider"]}>
       <time
-        className="message-time-divider-label"
+        className={conversationMessageListStyles["message-time-divider-label"]}
         dateTime={parts.dateTime}
         data-tooltip={parts.tooltip}
         data-tooltip-side="top"

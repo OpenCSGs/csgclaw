@@ -21,6 +21,9 @@ import {
   TextInput,
 } from "@/components/ui";
 import styles from "../SettingsPage.module.css";
+import resourceSettingsStyles from "./ResourceSettings.module.css";
+import externalMessagesSectionStyles from "./ExternalMessagesSection.module.css";
+import archivedSectionStyles from "./ArchivedSection.module.css";
 
 export function ArchivedAgents({
   t,
@@ -71,21 +74,21 @@ export function ArchivedAgents({
   return (
     <>
       {notice && (
-        <p className={styles.listNotice} role="status">
+        <p className={resourceSettingsStyles.listNotice} role="status">
           {notice}
         </p>
       )}
-      {query.isPending && <p className={styles.listNotice}>{t("loading")}</p>}
+      {query.isPending && <p className={resourceSettingsStyles.listNotice}>{t("loading")}</p>}
       {query.error && <p role="alert">{errorMessage(query.error, t("agentActionFailed"))}</p>}
       {!query.isPending && !query.error && items.length === 0 && (
         <p className={styles.emptyState}>{t("archivedAgentsEmpty")}</p>
       )}
-      <ul className={styles.sourceList}>
+      <ul className={externalMessagesSectionStyles.sourceList}>
         {items.map((item) => (
-          <li key={item.id} className={`${styles.sourceRow} ${styles.archivedAgentRow}`}>
+          <li key={item.id} className={`${externalMessagesSectionStyles.sourceRow} ${styles.archivedAgentRow}`}>
             <div className={styles.sourceRowMain}>
               <span className={styles.archivedAgentName}>
-                <span className={styles.archivedAgentAvatar} aria-hidden="true">
+                <span className={archivedSectionStyles.archivedAgentAvatar} aria-hidden="true">
                   <AgentAvatarContent
                     avatar={item.avatar}
                     fallback={avatarFallbackText(item.avatar, item.name, item.id)}
@@ -94,7 +97,7 @@ export function ArchivedAgents({
                 <strong title={String(item.name || item.id || "")}>{item.name || item.id}</strong>
               </span>
               <small>
-                <span className={styles.kindTag}>{t("archivedAgentsTab")}</span>
+                <span className={archivedSectionStyles.kindTag}>{t("archivedAgentsTab")}</span>
                 {item.archived_at && t("archivedAgentAt", { time: new Date(item.archived_at).toLocaleString() })}
                 {" · "}
                 {item.archived_by ? t("archivedAgentBy", { name: item.archived_by }) : t("archivedAgentByUnknown")}
@@ -124,7 +127,7 @@ export function ArchivedAgents({
           if (!open && !busy) setSelection(null);
         }}
       >
-        <DialogContent className={styles.archivedAgentDialog}>
+        <DialogContent className={archivedSectionStyles.archivedAgentDialog}>
           <DialogHeader>
             <DialogTitle>
               {t(selection?.deleting ? "archivedAgentDeleteTitle" : "archivedAgentRestore", { name: selectedName })}
@@ -139,7 +142,7 @@ export function ArchivedAgents({
             </DialogDescription>
             {selection?.deleting && (
               <>
-                <ul className={styles.archiveImpactList}>
+                <ul className={archivedSectionStyles.archiveImpactList}>
                   {[
                     "archivedAgentDeleteData",
                     "archivedAgentDeleteBindings",

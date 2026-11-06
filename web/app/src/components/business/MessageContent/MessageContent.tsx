@@ -1,3 +1,4 @@
+import messageContentStyles from "./MessageContent.module.css";
 import { ResourceTag } from "@/components/business/ResourceTag";
 import { messageResources, resourceKey } from "@/models/conversationResources";
 import { TurnProgress } from "@/components/business/TurnProgress";
@@ -126,10 +127,10 @@ function MessageBody({
 
   if (blankTurnPlaceholder) {
     return (
-      <span className="message-loading-dots" role="status" aria-label="Waiting for response">
-        <span className="message-loading-dot" aria-hidden="true" />
-        <span className="message-loading-dot" aria-hidden="true" />
-        <span className="message-loading-dot" aria-hidden="true" />
+      <span className={messageContentStyles["message-loading-dots"]} role="status" aria-label="Waiting for response">
+        <span className={messageContentStyles["message-loading-dot"]} aria-hidden="true" />
+        <span className={messageContentStyles["message-loading-dot"]} aria-hidden="true" />
+        <span className={messageContentStyles["message-loading-dot"]} aria-hidden="true" />
       </span>
     );
   }

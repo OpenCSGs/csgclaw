@@ -88,10 +88,7 @@ export const DropdownMenuCheckboxItem = forwardRef<
   return (
     <RadixDropdownMenu.CheckboxItem
       ref={ref}
-      className={classNames(
-        classNames(styles["csg-dropdown-menu-item"], styles["csg-dropdown-menu-checkbox-item"]),
-        className,
-      )}
+      className={classNames(styles["csg-dropdown-menu-item"], className)}
       {...props}
     >
       <span className={styles["csg-dropdown-menu-item-indicator"]} aria-hidden="true">

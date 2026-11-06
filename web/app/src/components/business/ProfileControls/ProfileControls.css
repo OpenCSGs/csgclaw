@@ -70,57 +70,6 @@
   background: var(--danger);
 }
 
-.mcp-servers-panel {
-  min-width: 0;
-}
-
-.mcp-servers-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  min-width: 0;
-}
-
-.mcp-servers-header > label {
-  min-width: 0;
-  color: var(--text);
-  font-size: var(--text-sm-size);
-  font-weight: var(--font-weight-medium);
-  line-height: var(--text-sm-line-height);
-}
-
-.mcp-servers-actions {
-  display: inline-flex;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: 8px;
-}
-
-.mcp-servers-textarea {
-  min-height: 168px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 12px;
-  line-height: 18px;
-  resize: vertical;
-}
-
-@media (max-width: 680px) {
-  .mcp-servers-header {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-  .mcp-servers-actions {
-    width: 100%;
-  }
-
-  .mcp-servers-actions .btn {
-    flex: 1 1 0;
-    min-width: 0;
-  }
-}
-
 .field .field-label {
   display: inline-flex;
   align-items: center;
@@ -143,10 +92,6 @@
   font-size: 12px;
   line-height: 1.35;
   overflow-wrap: anywhere;
-}
-
-.reasoning-controls-field {
-  min-width: 0;
 }
 
 .auth-status-row {
@@ -378,22 +323,6 @@ span.model-option-avatar {
   margin-top: 2px;
 }
 
-.runtime-option-input-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.runtime-option-input-row input {
-  min-width: 0;
-  flex: 1 1 auto;
-}
-
-.runtime-option-action {
-  flex: 0 0 auto;
-  white-space: nowrap;
-}
-
 .field-label-with-help {
   display: flex;
   align-items: center;
@@ -406,37 +335,6 @@ span.model-option-avatar {
 .field-help-tooltip-root {
   display: inline-flex;
   align-items: center;
-}
-
-.field-help-trigger {
-  flex: 0 0 auto;
-  width: 22px;
-  height: 22px;
-  border-radius: 999px;
-  border: 1px solid rgba(148, 163, 184, 0.35);
-  background: rgba(255, 255, 255, 0.06);
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 700;
-  line-height: 1;
-  padding: 0;
-  cursor: help;
-}
-
-.field-help-trigger:hover,
-.field-help-trigger:focus-visible {
-  color: var(--text);
-  border-color: var(--accent);
-  outline: none;
-}
-
-.field-help-flyout {
-  max-width: min(380px, calc(100vw - 24px));
-  max-height: min(280px, 42vh);
-  overflow: auto;
-  box-shadow: var(--shadow);
-  white-space: pre-wrap;
-  word-break: break-word;
 }
 
 .execution-mode-tooltip {
@@ -475,22 +373,6 @@ span.model-option-avatar {
 
 .execution-mode-help td.blocked {
   color: var(--danger, #ef4444);
-}
-
-.notifier-copy-row {
-  display: flex;
-  align-items: stretch;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.notifier-copy-row input {
-  flex: 1 1 220px;
-  min-width: 0;
-}
-
-.notifier-copy-button {
-  width: fit-content;
 }
 
 .notifier-route-preview {
@@ -621,6 +503,7 @@ span.model-option-avatar {
 }
 
 /* ── Model cards grid layout (skill page style) ── */
+
 .model-provider-model-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

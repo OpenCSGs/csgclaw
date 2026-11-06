@@ -81,27 +81,6 @@
   opacity: 1;
 }
 
-.thread-action-button,
-.thread-latest-reply {
-  border: 1px solid var(--line);
-  border-radius: var(--radius-md);
-  background: var(--field);
-  color: var(--text);
-  font: inherit;
-  cursor: pointer;
-  transition:
-    background 160ms ease,
-    border-color 160ms ease,
-    color 160ms ease;
-}
-
-.thread-action-button:hover,
-.thread-latest-reply:hover {
-  border-color: var(--primary);
-  background: var(--primary-soft);
-  color: var(--primary-strong);
-}
-
 .message-action-controls {
   display: flex;
   align-items: center;
@@ -183,42 +162,6 @@
   justify-content: flex-end;
 }
 
-.thread-action-button {
-  min-height: 30px;
-  padding: 0 9px;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  font-weight: 650;
-}
-
-.thread-action-button .svg-icon {
-  width: 14px;
-  height: 14px;
-}
-
-.thread-latest-reply {
-  min-width: 0;
-  min-height: 30px;
-  max-width: min(320px, 100%);
-  padding: 0 9px;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-}
-
-.thread-latest-reply span {
-  color: var(--muted);
-  white-space: nowrap;
-}
-
-.thread-latest-reply strong {
-  min-width: 0;
-  font-weight: 650;
-}
-
 .thread-panel {
   min-width: 0;
   min-height: 0;
@@ -274,32 +217,6 @@
 
 .csg-dialog-content.agent-detail-side-panel[data-state="closed"] {
   animation: agent-detail-drawer-out 160ms cubic-bezier(0.4, 0, 1, 1) both;
-}
-
-@keyframes agent-detail-backdrop-in {
-  from {
-    opacity: 0;
-  }
-}
-
-@keyframes agent-detail-backdrop-out {
-  to {
-    opacity: 0;
-  }
-}
-
-@keyframes agent-detail-drawer-in {
-  from {
-    opacity: 0.72;
-    transform: translate3d(32px, 0, 0);
-  }
-}
-
-@keyframes agent-detail-drawer-out {
-  to {
-    opacity: 0;
-    transform: translate3d(24px, 0, 0);
-  }
 }
 
 .agent-detail-side-panel-bar {
@@ -369,28 +286,11 @@
   }
 }
 
-.thread-panel-header {
-  min-width: 0;
-  padding: 16px;
-  border-bottom: 1px solid var(--line);
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 12px;
-  align-items: center;
-}
-
-.thread-panel-kicker,
 .thread-section-title {
   color: var(--muted);
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0;
-}
-
-.thread-panel-title {
-  margin-top: 4px;
-  font-size: 15px;
-  font-weight: 700;
 }
 
 .thread-panel-body {
@@ -399,12 +299,6 @@
   padding: 16px;
   display: grid;
   align-content: start;
-  gap: 20px;
-}
-
-.thread-root,
-.thread-replies {
-  display: grid;
   gap: 20px;
 }
 
@@ -423,6 +317,7 @@
 .thread-message.own {
   grid-template-columns: minmax(0, 1fr) 40px;
 }
+
 .thread-message.own .thread-message-avatar {
   grid-column: 2;
   grid-row: 1;
@@ -431,15 +326,18 @@
   border-radius: 50%;
   font-size: 13px;
 }
+
 .thread-message.own .thread-message-main {
   grid-column: 1;
   grid-row: 1;
   display: grid;
   justify-items: end;
 }
+
 .thread-message.own .message-meta {
   justify-content: flex-end;
 }
+
 .thread-message.own .thread-message-bubble {
   padding: 10px 14px;
   border: 0;
@@ -447,6 +345,7 @@
   background: color-mix(in oklab, var(--gray-100) 72%, var(--gray-200));
   color: var(--gray-900);
 }
+
 :root[data-theme="dark"] .thread-message.own .thread-message-bubble {
   background: var(--panel-soft);
   color: var(--text);
@@ -482,38 +381,6 @@ button.thread-message-avatar:focus-visible {
   min-width: 0;
 }
 
-.thread-message-actions {
-  justify-content: flex-start;
-  position: absolute;
-  top: 100%;
-  left: 0;
-  right: 0;
-  bottom: auto;
-  z-index: 2;
-  padding-top: 8px;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 140ms ease;
-}
-
-.thread-message-actions.has-token-usage {
-  position: absolute;
-  margin-top: 0;
-  opacity: 0;
-  pointer-events: none;
-}
-
-.thread-message.own .thread-message-actions {
-  justify-content: flex-end;
-}
-
-.thread-message:hover .thread-message-actions,
-.thread-message:focus-within .thread-message-actions,
-.thread-message-actions:hover {
-  opacity: 1;
-  pointer-events: auto;
-}
-
 .thread-message-bubble {
   width: fit-content;
   max-width: 100%;
@@ -531,34 +398,6 @@ button.thread-message-avatar:focus-visible {
 .thread-message-bubble .message-content .message-slash-token {
   color: var(--mention);
   font-weight: 600;
-}
-
-.thread-empty {
-  color: var(--muted);
-  font-size: 13px;
-}
-
-.thread-composer {
-  --composer-add-control-size: 40px;
-  --composer-add-icon-size: 22px;
-  --composer-send-control-size: 44px;
-  --composer-send-icon-size: 20px;
-
-  position: relative;
-  padding: 14px;
-  border-top: 1px solid var(--line);
-  background: var(--surface);
-  display: grid;
-  gap: 8px;
-}
-
-.thread-mention-picker,
-.thread-slash-picker {
-  left: 14px;
-  right: 14px;
-  bottom: calc(100% - 4px);
-  width: auto;
-  z-index: 5;
 }
 
 .thread-composer-editor {
@@ -592,23 +431,6 @@ button.thread-message-avatar:focus-visible {
   outline: none;
 }
 
-.thread-composer-box:focus-within {
-  outline: none;
-  border-color: var(--brand-500);
-  box-shadow: var(--focus-ring);
-}
-
-.thread-composer textarea {
-  width: 100%;
-  width: 100%;
-  resize: vertical;
-}
-
-.thread-composer textarea:focus {
-  border-color: var(--brand-500);
-  box-shadow: var(--focus-ring);
-}
-
 .thread-send-button {
   justify-self: end;
   display: inline-flex;
@@ -619,25 +441,6 @@ button.thread-message-avatar:focus-visible {
 .thread-send-button .svg-icon {
   width: 14px;
   height: 14px;
-}
-
-.thread-composer-box {
-  position: relative;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-md);
-  background: var(--field);
-}
-
-.thread-composer-toolbar {
-  display: flex;
-  min-height: calc(var(--composer-send-control-size) + 8px);
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 2px 6px 6px;
 }
 
 .thread-attach-button,
@@ -744,6 +547,7 @@ button.thread-message-avatar:focus-visible {
 
 /* Keep task references in the shared action strip and reserve enough room so
    the following message cannot overlap it. */
+
 .message-hover-actions.has-leading {
   position: static;
   inset: auto;
@@ -752,17 +556,46 @@ button.thread-message-avatar:focus-visible {
   padding-block: 4px;
   opacity: 1;
 }
+
 .message-action-leading {
   display: flex;
   align-items: center;
   min-width: 0;
   margin-right: auto;
 }
+
 .message-hover-actions.has-leading > .message-action-button {
   opacity: 0;
   flex-shrink: 0;
 }
+
 .message-row:hover .message-hover-actions.has-leading > .message-action-button,
 .message-row:focus-within .message-hover-actions.has-leading > .message-action-button {
   opacity: 1;
+}
+
+@keyframes agent-detail-backdrop-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes agent-detail-backdrop-out {
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes agent-detail-drawer-in {
+  from {
+    opacity: 0.72;
+    transform: translate3d(32px, 0, 0);
+  }
+}
+
+@keyframes agent-detail-drawer-out {
+  to {
+    opacity: 0;
+    transform: translate3d(24px, 0, 0);
+  }
 }

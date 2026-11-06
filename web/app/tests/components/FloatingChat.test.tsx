@@ -270,7 +270,7 @@ describe("FloatingChat manager prompts", () => {
     render(
       <FloatingChat
         avatarFallback="M"
-        chatProps={managerChatProps(conversation, {})}
+        chatProps={managerChatProps(conversation, { onAddAttachments: vi.fn() })}
         locale="en"
         open={true}
         t={t}

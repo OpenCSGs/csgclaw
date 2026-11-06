@@ -1,3 +1,4 @@
+import testModelProviderSettingsStyles from "@/components/business/ModelProviderSettings/ModelProviderSettings.module.css";
 vi.mock("@/api/agents", () => ({
   fetchAgentProfileDefaults: vi.fn(async () => ({})),
   updateAgentProfileDefaults: vi.fn(),
@@ -106,7 +107,9 @@ function renderModelProviderPage(
   );
 
   const view = render(renderPage());
-  const card = view.container.querySelector(".model-provider-provider-card.active");
+  const card = view.container.querySelector(
+    `.${testModelProviderSettingsStyles["model-provider-provider-card"]}.active`,
+  );
   if (
     card &&
     !(controllerOverrides.sidebarProps as { onSelectModelProvider?: unknown } | undefined)?.onSelectModelProvider
@@ -139,7 +142,7 @@ describe("ModelProviderPage", () => {
 
   it("shows a labeled status badge and keeps diagnostics in the detail", () => {
     const { container } = renderModelProviderPage(createCatalog({ message: "diagnostic detail" }));
-    const card = container.querySelector(".model-provider-provider-card")!;
+    const card = container.querySelector(`.${testModelProviderSettingsStyles["model-provider-provider-card"]}`)!;
     expect(within(card as HTMLElement).getByText("Connected")).toBeVisible();
     expect(within(card as HTMLElement).queryByText("diagnostic detail")).not.toBeInTheDocument();
   });
@@ -469,10 +472,9 @@ describe("ModelProviderPage", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("AI Gateway address")).toBeInTheDocument();
     expect(screen.getAllByText("https://ai.space.opencsg.com/v1")).toHaveLength(2);
-    expect(document.querySelector(".model-provider-header-avatar")).toHaveAttribute(
-      "src",
-      "model-providers/opencsg.svg",
-    );
+    expect(
+      document.querySelector(`.${testModelProviderSettingsStyles["model-provider-header-avatar"]}`),
+    ).toHaveAttribute("src", "model-providers/opencsg.svg");
 
     await user.click(screen.getByRole("button", { name: "Sign in" }));
 

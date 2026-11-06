@@ -34,7 +34,7 @@ test("conversation settings are grouped separately and media changes only patch 
   );
   const conversation = within(screen.getByRole("group", { name: t("profileConversationModelGroup") }));
   expect(conversation.getByRole("combobox", { name: t("profileReasoningEffort") })).toBeInTheDocument();
-  await user.click(conversation.getByRole("checkbox", { name: t("profileFastMode") }));
+  await user.click(conversation.getByRole("switch", { name: t("profileFastMode") }));
   expect(onPatch).toHaveBeenLastCalledWith({ enable_fast_mode: !draft.enable_fast_mode });
   const image = within(screen.getByRole("group", { name: t("profileImageModelGroup") }));
   expect(image.queryByRole("checkbox")).not.toBeInTheDocument();

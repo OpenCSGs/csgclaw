@@ -1,3 +1,4 @@
+import documentPreviewPanelStyles from "./DocumentPreviewPanel.module.css";
 import {
   useEffect,
   useLayoutEffect,
@@ -257,13 +258,13 @@ export function DocumentPreviewPanel({
   return (
     <aside
       ref={panelRef}
-      className={`document-preview-panel is-${mode}${resizing ? " is-resizing" : ""}`}
+      className={`${documentPreviewPanelStyles["document-preview-panel"]} is-${mode}${resizing ? " is-resizing" : ""}`}
       aria-label={t("attachmentPreview")}
       style={style}
     >
       {mode === "panel" ? (
         <div
-          className="document-preview-resize-handle"
+          className={documentPreviewPanelStyles["document-preview-resize-handle"]}
           role="separator"
           tabIndex={0}
           aria-label={t("attachmentPreviewResize")}
@@ -278,15 +279,19 @@ export function DocumentPreviewPanel({
           onPointerCancel={finishResize}
         />
       ) : null}
-      <header className="document-preview-header">
-        <div className="document-preview-title-group">
+      <header className={documentPreviewPanelStyles["document-preview-header"]}>
+        <div className={documentPreviewPanelStyles["document-preview-title-group"]}>
           <strong title={item.name}>
-            <span className="document-preview-title-base">{fileName.base}</span>
-            {fileName.extension ? <span className="document-preview-title-extension">{fileName.extension}</span> : null}
+            <span className={documentPreviewPanelStyles["document-preview-title-base"]}>{fileName.base}</span>
+            {fileName.extension ? (
+              <span className={documentPreviewPanelStyles["document-preview-title-extension"]}>
+                {fileName.extension}
+              </span>
+            ) : null}
           </strong>
           <span>{formatAttachmentSize(item.sizeBytes)}</span>
         </div>
-        <div className="document-preview-toolbar">
+        <div className={documentPreviewPanelStyles["document-preview-toolbar"]}>
           {toolbarAccessory}
           {onReference ? (
             <Tooltip content={t("chatFileReference")} contentProps={{ side: "bottom" }}>
@@ -400,7 +405,7 @@ export function DocumentPreviewPanel({
           {downloadURL ? (
             <Tooltip content={t("downloadAttachment")} contentProps={{ side: "bottom" }}>
               <LinkButton
-                className="document-preview-icon-link"
+                className={documentPreviewPanelStyles["document-preview-icon-link"]}
                 href={downloadURL}
                 download={item.name}
                 aria-label={t("downloadAttachment")}
@@ -413,7 +418,7 @@ export function DocumentPreviewPanel({
           ) : null}
           <Tooltip content={t("close")} contentProps={{ side: "bottom" }}>
             <Button
-              className="document-preview-close-button"
+              className={documentPreviewPanelStyles["document-preview-close-button"]}
               iconOnly
               size="sm"
               variant="tertiaryGray"
@@ -425,17 +430,17 @@ export function DocumentPreviewPanel({
           </Tooltip>
         </div>
       </header>
-      <div className="document-preview-body">
+      <div className={documentPreviewPanelStyles["document-preview-body"]}>
         {loadState === "loading" ? (
-          <div className="document-preview-status">{t("attachmentPreviewLoading")}</div>
+          <div className={documentPreviewPanelStyles["document-preview-status"]}>{t("attachmentPreviewLoading")}</div>
         ) : null}
         {loadState === "error" ? (
           <EmptyState
-            className="document-preview-status is-error document-preview-error-state"
+            className={`${documentPreviewPanelStyles["document-preview-status"]} is-error ${documentPreviewPanelStyles["document-preview-error-state"]}`}
             title={t("attachmentPreviewErrorTitle")}
             description={t("attachmentPreviewFailed")}
             actions={
-              <div className="document-preview-error-actions">
+              <div className={documentPreviewPanelStyles["document-preview-error-actions"]}>
                 <Button size="sm" variant="secondaryGray" onClick={() => setRetry((value) => value + 1)}>
                   {t("chatPreviewReload")}
                 </Button>

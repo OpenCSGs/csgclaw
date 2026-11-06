@@ -1,3 +1,5 @@
+import testHumanDetailPaneStyles from "@/pages/HumanPage/components/HumanDetailPane/HumanDetailPane.module.css";
+import testAgentAvatarStyles from "@/components/business/AgentAvatar/AgentAvatar.module.css";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { HumanDetailPane } from "@/pages/HumanPage/components";
 import type { IMUser, TranslateFn } from "@/models/conversations";
@@ -64,7 +66,7 @@ describe("HumanDetailPane", () => {
 
     expect(screen.getByRole("button", { name: "Edit avatar: Cartoon 1" })).toBeInTheDocument();
 
-    const identityFields = container.querySelector(".human-identity-fields");
+    const identityFields = container.querySelector(`.${testHumanDetailPaneStyles["human-identity-fields"]}`);
     const avatarSection = container.querySelector(".human-avatar-section");
     expect(container.querySelector(".human-identity-section")).toBeInTheDocument();
     expect(identityFields).toBeInTheDocument();
@@ -100,8 +102,10 @@ describe("HumanDetailPane", () => {
 
     const editAvatar = screen.getByRole("button", { name: "Edit avatar" });
     expect(editAvatar).toBeInTheDocument();
-    expect(container.querySelector(".agent-avatar-trigger-fallback")).toHaveTextContent("L");
-    expect(container.querySelector(".agent-avatar-edit-overlay")).toBeInTheDocument();
+    expect(container.querySelector(`.${testAgentAvatarStyles["agent-avatar-trigger-fallback"]}`)).toHaveTextContent(
+      "L",
+    );
+    expect(container.querySelector(`.${testAgentAvatarStyles["agent-avatar-edit-overlay"]}`)).toBeInTheDocument();
 
     fireEvent.click(editAvatar);
     expect(screen.getByRole("dialog", { name: "Edit avatar" })).toBeInTheDocument();
@@ -111,7 +115,9 @@ describe("HumanDetailPane", () => {
     const localUser = { ...admin, avatar: "A" };
     const { container } = render(<HumanDetailPane locale="en" t={t} user={localUser} />);
 
-    expect(container.querySelector(".agent-avatar-trigger-fallback")).toHaveTextContent("A");
+    expect(container.querySelector(`.${testAgentAvatarStyles["agent-avatar-trigger-fallback"]}`)).toHaveTextContent(
+      "A",
+    );
   });
 
   it("shows Feishu channel status without bound user detail", () => {
@@ -123,7 +129,7 @@ describe("HumanDetailPane", () => {
     expect(screen.queryByText("龙韵")).not.toBeInTheDocument();
     expect(screen.queryByText("ou_admin")).not.toBeInTheDocument();
 
-    const panel = container.querySelector(".human-info-panel");
+    const panel = container.querySelector(`.${testHumanDetailPaneStyles["human-info-panel"]}`);
     expect(panel?.firstElementChild).toHaveClass("human-channels-section");
   });
 

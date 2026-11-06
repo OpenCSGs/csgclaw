@@ -1,3 +1,4 @@
+import messageContentStyles from "./MessageContent.module.css";
 import { useEffect, useMemo, useState } from "react";
 import { Check, CircleHelp, Clock3, LockKeyhole, ShieldAlert, ShieldCheck, ShieldX, X } from "lucide-react";
 import { decideChannelActivity } from "@/api/agentActivities";
@@ -51,23 +52,25 @@ function QuestionActivityCard({
       ? deadline.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
       : "";
   return (
-    <section className={`agent-activity-card agent-activity-question status-${question.status}`}>
-      <div className="agent-activity-header">
-        <span className="agent-activity-icon" aria-hidden="true">
+    <section
+      className={`agent-activity-card ${messageContentStyles["agent-activity-question"]} status-${question.status}`}
+    >
+      <div className={messageContentStyles["agent-activity-header"]}>
+        <span className={messageContentStyles["agent-activity-icon"]} aria-hidden="true">
           <CircleHelp size={17} />
         </span>
-        <div className="agent-activity-title-group">
+        <div className={messageContentStyles["agent-activity-title-group"]}>
           <div className="agent-activity-title">{t("questionRequest")}</div>
-          <div className="agent-activity-subtitle">
+          <div className={messageContentStyles["agent-activity-subtitle"]}>
             {pending ? t("questionWaitingForAnswer") : questionStatusLabel(question.status, t)}
           </div>
         </div>
-        <span className={`agent-activity-badge status-${question.status}`} role="status">
+        <span className={`${messageContentStyles["agent-activity-badge"]} status-${question.status}`} role="status">
           {questionStatusLabel(question.status, t)}
         </span>
       </div>
       {deadlineLabel ? (
-        <div className="agent-question-timeout">
+        <div className={messageContentStyles["agent-question-timeout"]}>
           <Clock3 aria-hidden="true" size={14} />
           <span>
             {pending
@@ -76,19 +79,19 @@ function QuestionActivityCard({
           </span>
         </div>
       ) : null}
-      <div className="agent-question-list">
+      <div className={messageContentStyles["agent-question-list"]}>
         {question.questions.map((item, questionIndex) => {
           const answer = question.answers?.[item.id];
           return (
-            <section key={item.id} className="agent-question-item">
-              <div className="agent-question-heading">
+            <section key={item.id} className={messageContentStyles["agent-question-item"]}>
+              <div className={messageContentStyles["agent-question-heading"]}>
                 <span>{t("questionProgress", { current: questionIndex + 1, total: question.questions.length })}</span>
                 <strong>{item.header}</strong>
                 {item.is_secret ? <LockKeyhole aria-label={t("questionSecretAnswer")} size={14} /> : null}
               </div>
-              <p className="agent-question-prompt">{item.question}</p>
+              <p className={messageContentStyles["agent-question-prompt"]}>{item.question}</p>
               {pending ? (
-                <div className="agent-question-options">
+                <div className={messageContentStyles["agent-question-options"]}>
                   {questionOptions(item).map((option, optionIndex) => (
                     <button
                       key={`${optionIndex}:${option.label}`}
@@ -109,7 +112,7 @@ function QuestionActivityCard({
                   ) : null}
                 </div>
               ) : answer ? (
-                <div className="agent-question-resolution">
+                <div className={messageContentStyles["agent-question-resolution"]}>
                   {answer.skipped
                     ? t("questionSkipped")
                     : answer.secret
@@ -123,7 +126,7 @@ function QuestionActivityCard({
       </div>
       {pending ? (
         <Button
-          className="agent-question-answer-button"
+          className={messageContentStyles["agent-question-answer-button"]}
           size="sm"
           variant="primary"
           onClick={() => onSelect?.(question.id)}
@@ -185,28 +188,30 @@ function PermissionActivityCard({
 
   return (
     <section className={`agent-activity-card agent-activity-permission status-${localStatus}`}>
-      <div className="agent-activity-header">
-        <span className="agent-activity-icon" aria-hidden="true">
+      <div className={messageContentStyles["agent-activity-header"]}>
+        <span className={messageContentStyles["agent-activity-icon"]} aria-hidden="true">
           {icon}
         </span>
-        <div className="agent-activity-title-group">
+        <div className={messageContentStyles["agent-activity-title-group"]}>
           <div className="agent-activity-title">{action.title}</div>
-          <div className="agent-activity-subtitle">{t("permissionRequest")}</div>
+          <div className={messageContentStyles["agent-activity-subtitle"]}>{t("permissionRequest")}</div>
         </div>
-        <span className={`agent-activity-badge status-${localStatus}`}>{permissionStatusLabel(localStatus, t)}</span>
+        <span className={`${messageContentStyles["agent-activity-badge"]} status-${localStatus}`}>
+          {permissionStatusLabel(localStatus, t)}
+        </span>
       </div>
       {isPending ? (
-        <div className="agent-activity-actions">
+        <div className={messageContentStyles["agent-activity-actions"]}>
           {(action.options || []).map((option) => (
             <Button
               key={option.id}
-              className={option.kind === "allow_always" ? "agent-activity-allow-always" : ""}
+              className={option.kind === "allow_always" ? messageContentStyles["agent-activity-allow-always"] : ""}
               disabled={Boolean(busyOption)}
               size="sm"
               variant={option.kind.startsWith("reject") ? "outlineDanger" : "secondaryColor"}
               onClick={() => void decide(option)}
             >
-              <span className="agent-activity-button-icon" aria-hidden="true">
+              <span className={messageContentStyles["agent-activity-button-icon"]} aria-hidden="true">
                 {option.kind.startsWith("reject") ? <X size={14} /> : <Check size={14} />}
               </span>
               <span>{busyOption === option.id ? "..." : permissionActionOptionLabel(option, t)}</span>
@@ -214,7 +219,7 @@ function PermissionActivityCard({
           ))}
         </div>
       ) : null}
-      {error ? <div className="agent-activity-error">{error}</div> : null}
+      {error ? <div className={messageContentStyles["agent-activity-error"]}>{error}</div> : null}
     </section>
   );
 }
@@ -222,13 +227,13 @@ function PermissionActivityCard({
 function NoticeActivityCard({ body, t }: { body: string; t: TranslateFn }) {
   return (
     <section className="agent-activity-card agent-activity-notice">
-      <div className="agent-activity-header">
-        <span className="agent-activity-icon" aria-hidden="true">
+      <div className={messageContentStyles["agent-activity-header"]}>
+        <span className={messageContentStyles["agent-activity-icon"]} aria-hidden="true">
           <ShieldAlert size={16} />
         </span>
-        <div className="agent-activity-title-group">
+        <div className={messageContentStyles["agent-activity-title-group"]}>
           <div className="agent-activity-title">{t("agentNoticeTitle")}</div>
-          <div className="agent-activity-subtitle">{body}</div>
+          <div className={messageContentStyles["agent-activity-subtitle"]}>{body}</div>
         </div>
       </div>
     </section>

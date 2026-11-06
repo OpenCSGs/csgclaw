@@ -1,3 +1,4 @@
+import documentPreviewPanelStyles from "./DocumentPreviewPanel.module.css";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type UIEvent } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui";
@@ -111,20 +112,32 @@ export default function PowerPointPreview({
   }
 
   if (error) {
-    return <div className="document-preview-status is-error">{t("attachmentPreviewFailed")}</div>;
+    return (
+      <div className={`${documentPreviewPanelStyles["document-preview-status"]} is-error`}>
+        {t("attachmentPreviewFailed")}
+      </div>
+    );
   }
   return (
-    <div className="document-preview-powerpoint">
-      <div ref={scrollRef} className="document-preview-ppt-stage-shell" onScroll={handleScroll}>
+    <div className={documentPreviewPanelStyles["document-preview-powerpoint"]}>
+      <div
+        ref={scrollRef}
+        className={documentPreviewPanelStyles["document-preview-ppt-stage-shell"]}
+        onScroll={handleScroll}
+      >
         {slideCount === 0 ? (
-          <div className="document-preview-status" role="status">
+          <div className={documentPreviewPanelStyles["document-preview-status"]} role="status">
             {t("attachmentPreviewLoading")}
           </div>
         ) : null}
-        <div ref={stageRef} className="document-preview-ppt-stage" style={{ zoom: fittedScale * scale }} />
+        <div
+          ref={stageRef}
+          className={documentPreviewPanelStyles["document-preview-ppt-stage"]}
+          style={{ zoom: fittedScale * scale }}
+        />
       </div>
       {slideCount > 0 ? (
-        <div className="document-preview-page-controls">
+        <div className={documentPreviewPanelStyles["document-preview-page-controls"]}>
           <Button
             iconOnly
             size="sm"

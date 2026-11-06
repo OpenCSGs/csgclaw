@@ -1,3 +1,5 @@
+import conversationPaneStyles from "./ConversationPane.module.css";
+import generatedMediaStyles from "./GeneratedMedia.module.css";
 import type { IMMessage, TranslateFn } from "@/models/conversations";
 
 export function VideoGenerationStatus({ message, t }: { message: IMMessage; t: TranslateFn }) {
@@ -24,14 +26,14 @@ export function VideoGenerationStatus({ message, t }: { message: IMMessage; t: T
       : null;
   const errorMessage = String(errorDetails?.message ?? "").trim();
   return (
-    <div className="image-generation-status" role="status" aria-live="polite">
+    <div className={conversationPaneStyles["image-generation-status"]} role="status" aria-live="polite">
       <span>
         {state === "generating" && progressLabels[upstreamStatus]
           ? progressLabels[upstreamStatus]
           : labels[state] || t("videoGenerating")}
       </span>
       {state === "failed" && errorMessage ? <p>{errorMessage}</p> : null}
-      <details className="image-generation-prompt">
+      <details className={generatedMediaStyles["image-generation-prompt"]}>
         <summary>{t("videoViewPrompt")}</summary>
         <p>{String(task.prompt ?? message.content ?? "")}</p>
       </details>

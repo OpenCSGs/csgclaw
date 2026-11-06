@@ -1,6 +1,9 @@
 .csg-dropdown-menu-content {
   z-index: var(--z-portal-popover);
   min-width: 196px;
+  max-height: var(--radix-dropdown-menu-content-available-height);
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
   padding: 6px;
   border: 1px solid var(--popover-border);
   border-radius: var(--radius-md);
@@ -63,16 +66,9 @@
   background: color-mix(in oklab, var(--primary) 14%, transparent);
 }
 
-.csg-dropdown-menu-checkbox-item {
-  position: relative;
-  padding-left: 32px;
-}
-
 .csg-dropdown-menu-item-indicator {
-  position: absolute;
-  left: 10px;
   display: inline-flex;
-  width: 14px;
+  flex: 0 0 14px;
   align-items: center;
   justify-content: center;
   color: var(--brand-600);

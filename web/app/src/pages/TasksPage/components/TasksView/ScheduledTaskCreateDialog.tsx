@@ -2,6 +2,7 @@ import {
   Button,
   DialogBody,
   DialogContent,
+  DialogCloseButton,
   DialogDescription,
   DialogFooter,
   DialogHeader,
@@ -10,8 +11,7 @@ import {
 } from "@/components/ui";
 import { classNames } from "@/shared/lib/classNames";
 import { ScheduledTaskFormFields } from "./ScheduledTaskFormFields";
-import { TaskDialogCloseButton } from "./TaskDialogCloseButton";
-import styles from "./TasksView.module.css";
+import taskFormStyles from "./TaskForm.module.css";
 import type { Dispatch, SetStateAction } from "react";
 import type { SelectOption } from "@/components/ui";
 import type { TranslateFn } from "@/models/conversations";
@@ -46,13 +46,13 @@ export function ScheduledTaskCreateDialog({
 }: ScheduledTaskCreateDialogProps) {
   return (
     <DialogRoot open={open} onOpenChange={(nextOpen) => (!nextOpen ? onClose?.() : null)}>
-      <DialogContent className={styles.taskCreateDialog}>
+      <DialogContent className={taskFormStyles.taskCreateDialog}>
         <DialogHeader>
           <div>
             <DialogTitle>{t("scheduledTaskCreateTitle")}</DialogTitle>
             <DialogDescription>{t("scheduledTaskCreateSubtitle")}</DialogDescription>
           </div>
-          <TaskDialogCloseButton label={t("close")} />
+          <DialogCloseButton label={t("close")} size="sm" variant="tertiaryGray" iconOnly />
         </DialogHeader>
         <DialogBody>
           <ScheduledTaskFormFields
@@ -63,7 +63,7 @@ export function ScheduledTaskCreateDialog({
             onChange={onChange}
             onClearError={onClearError}
           />
-          {error ? <div className={classNames("form-error", styles.taskCreateError)}>{error}</div> : null}
+          {error ? <div className={classNames("form-error", taskFormStyles.taskCreateError)}>{error}</div> : null}
         </DialogBody>
         <DialogFooter>
           <Button variant="secondaryGray" size="md" onClick={onClose}>

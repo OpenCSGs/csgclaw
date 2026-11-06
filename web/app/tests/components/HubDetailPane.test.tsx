@@ -249,6 +249,8 @@ function renderHubDetailPane(
     lazyMemory?: boolean;
     loaded?: boolean;
     inlineTemplateDetail?: boolean;
+    inlineTemplateProfileIntro?: ReactNode;
+    inlineTemplateInstanceModel?: string;
     onUpdateTemplateInstructions?: (content: string) => boolean | Promise<boolean>;
   } = {},
 ) {
@@ -306,6 +308,8 @@ function renderHubDetailPane(
         agenticHubSiteURL={options.agenticHubSiteURL}
         templateUsername={options.templateUsername}
         inlineTemplateDetail={options.inlineTemplateDetail}
+        inlineTemplateProfileIntro={options.inlineTemplateProfileIntro}
+        inlineTemplateInstanceModel={options.inlineTemplateInstanceModel}
         locale="en"
         t={t}
         onCreateFromTemplate={vi.fn()}
@@ -1478,7 +1482,7 @@ describe("HubDetailPane", () => {
       screen.getByText("This template only contains generated defaults. Switch to Advanced to view the full content."),
     ).toBeInTheDocument();
     expect(screen.getByText("Default mode shows only user-defined instructions.")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Advanced" }));
+    await user.click(screen.getByRole("radio", { name: "Advanced" }));
     expect(screen.getByLabelText("Instructions")).toHaveTextContent("# Instructions Follow the template rules.");
     await user.click(screen.getByRole("button", { name: /^Skills/ }));
     expect(screen.getByText("demo")).toBeInTheDocument();
@@ -1493,6 +1497,19 @@ describe("HubDetailPane", () => {
     await user.click(screen.getByRole("button", { name: /^Connectors/ }));
     expect(screen.getByText("context7")).toBeInTheDocument();
     expect(screen.getByText("Context lookup")).toBeInTheDocument();
+  });
+
+  it("keeps the profile introduction and distinct models in embedded template details", () => {
+    renderHubDetailPane("template", {
+      selectedTemplate: { ...template, model_config: { model_id: "template-model" } },
+      inlineTemplateDetail: true,
+      inlineTemplateProfileIntro: <p>Cloud agent settings</p>,
+      inlineTemplateInstanceModel: "instance-model",
+    });
+
+    expect(screen.getByText("Cloud agent settings")).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "agentPlazaInstanceModel" })).toHaveValue("instance-model");
+    expect(screen.getByRole("textbox", { name: "agentPlazaTemplateModel" })).toHaveValue("template-model");
   });
 
   it("selects the memory summary after the memories directory is lazily loaded", async () => {

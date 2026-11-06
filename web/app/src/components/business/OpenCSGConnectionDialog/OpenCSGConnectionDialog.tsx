@@ -1,16 +1,15 @@
 import { useEffect, useId, useRef, useState } from "react";
-import { X } from "lucide-react";
 import {
+  TextInput,
   Button,
   DialogBody,
-  DialogClose,
+  DialogCloseButton,
   DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogRoot,
   DialogTitle,
-  Tooltip,
 } from "@/components/ui";
 import {
   AUTH_ENVIRONMENT_PRESETS,
@@ -104,7 +103,7 @@ export function OpenCSGConnectionDialog({
               {t(authenticationRequired ? "openCSGLoginRequiredDescription" : "csghubConnectDescription")}
             </DialogDescription>
           </div>
-          <OpenCSGDialogCloseButton disabled={busy} label={t("close")} />
+          <DialogCloseButton label={t("close")} size="sm" variant="tertiaryGray" iconOnly disabled={busy} />
         </DialogHeader>
         <DialogBody className={styles.body}>
           <fieldset className={styles.options}>
@@ -133,7 +132,7 @@ export function OpenCSGConnectionDialog({
           {draft.preset === "custom" ? (
             <label className={styles.customField}>
               <span>{t("csghubOpenCSGBaseURL")}</span>
-              <input
+              <TextInput
                 autoFocus
                 aria-describedby={showCustomFieldError ? customFieldErrorID : undefined}
                 aria-invalid={showCustomFieldError || undefined}
@@ -204,7 +203,7 @@ export function OpenCSGSwitchDialog({
               {t("csghubSwitchConfirmDescription", { environment: environmentLabel, user: accountName })}
             </DialogDescription>
           </div>
-          <OpenCSGDialogCloseButton label={t("close")} />
+          <DialogCloseButton label={t("close")} size="sm" variant="tertiaryGray" iconOnly />
         </DialogHeader>
         <DialogBody>
           <p className={styles.switchNote}>{t("csghubSwitchConfirmNote")}</p>
@@ -240,17 +239,5 @@ function EnvironmentOption({ checked, description, label, name, value, onChange 
         <small>{description}</small>
       </span>
     </label>
-  );
-}
-
-function OpenCSGDialogCloseButton({ disabled = false, label }: { disabled?: boolean; label: string }) {
-  return (
-    <Tooltip content={label}>
-      <DialogClose asChild>
-        <button type="button" className={styles.closeButton} aria-label={label} disabled={disabled}>
-          <X size={18} strokeWidth={1.75} aria-hidden="true" />
-        </button>
-      </DialogClose>
-    </Tooltip>
   );
 }

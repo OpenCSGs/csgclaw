@@ -1,3 +1,4 @@
+import testDocumentPreviewPanelStyles from "@/components/business/DocumentPreviewPanel/DocumentPreviewPanel.module.css";
 import JSZip from "jszip";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -213,7 +214,9 @@ describe("DocumentPreviewPanel", () => {
       "href",
       "api/v1/attachments/markdown?token=one",
     );
-    expect(screen.getByRole("button", { name: "Close" })).toHaveClass("document-preview-close-button");
+    expect(screen.getByRole("button", { name: "Close" })).toHaveClass(
+      testDocumentPreviewPanelStyles["document-preview-close-button"],
+    );
 
     rerender(
       <DocumentPreviewPanel
@@ -254,9 +257,14 @@ describe("DocumentPreviewPanel", () => {
     );
 
     await waitFor(() =>
-      expect(container.querySelector(".document-preview-shiki")).toHaveTextContent('title = "CSGClaw"'),
+      expect(container.querySelector(`.${testDocumentPreviewPanelStyles["document-preview-shiki"]}`)).toHaveTextContent(
+        'title = "CSGClaw"',
+      ),
     );
-    expect(container.querySelector(".document-preview-shiki")).toHaveAttribute("data-language", "toml");
+    expect(container.querySelector(`.${testDocumentPreviewPanelStyles["document-preview-shiki"]}`)).toHaveAttribute(
+      "data-language",
+      "toml",
+    );
     expect(screen.queryByText("Preview unavailable")).not.toBeInTheDocument();
   });
 
@@ -312,9 +320,9 @@ describe("DocumentPreviewPanel", () => {
 
     await user.click(screen.getByRole("radio", { name: "Code" }));
     await waitFor(() =>
-      expect(container.querySelector('.document-preview-shiki[data-language="html"]')).toHaveTextContent(
-        "window.hacked = true",
-      ),
+      expect(
+        container.querySelector(`.${testDocumentPreviewPanelStyles["document-preview-shiki"]}[data-language="html"]`),
+      ).toHaveTextContent("window.hacked = true"),
     );
   });
 
@@ -340,9 +348,13 @@ describe("DocumentPreviewPanel", () => {
     );
 
     await waitFor(() =>
-      expect(container.querySelector('.document-preview-shiki[data-language="go"]')).toHaveTextContent("package main"),
+      expect(
+        container.querySelector(`.${testDocumentPreviewPanelStyles["document-preview-shiki"]}[data-language="go"]`),
+      ).toHaveTextContent("package main"),
     );
-    const tokens = container.querySelectorAll<HTMLElement>(".document-preview-shiki .shiki span[style]");
+    const tokens = container.querySelectorAll<HTMLElement>(
+      `.${testDocumentPreviewPanelStyles["document-preview-shiki"]} .shiki span[style]`,
+    );
     expect(tokens.length).toBeGreaterThan(3);
     expect(Array.from(tokens).some((token) => token.getAttribute("style")?.includes("--shiki-dark"))).toBe(true);
   });
@@ -376,7 +388,9 @@ describe("DocumentPreviewPanel", () => {
       );
 
       await waitFor(() =>
-        expect(container.querySelector(".document-preview-panel")).toHaveStyle("--document-preview-panel-width: 920px"),
+        expect(container.querySelector(`.${testDocumentPreviewPanelStyles["document-preview-panel"]}`)).toHaveStyle(
+          "--document-preview-panel-width: 920px",
+        ),
       );
       expect(screen.getByRole("button", { name: "Close" })).toBeVisible();
     } finally {
@@ -411,9 +425,9 @@ describe("DocumentPreviewPanel", () => {
 
     rerender(<DocumentPreviewPanel index={1} items={items} t={t} onClose={() => {}} onIndexChange={() => {}} />);
     await waitFor(() =>
-      expect(container.querySelector('.document-preview-shiki[data-language="toml"]')).toHaveTextContent(
-        'severity = "warning"',
-      ),
+      expect(
+        container.querySelector(`.${testDocumentPreviewPanelStyles["document-preview-shiki"]}[data-language="toml"]`),
+      ).toHaveTextContent('severity = "warning"'),
     );
     expect(screen.queryByText(/Unexpected Application Error/)).not.toBeInTheDocument();
   });
@@ -450,7 +464,9 @@ describe("DocumentPreviewPanel", () => {
     );
     expect(await screen.findByText("Slide 1 of 10")).toBeInTheDocument();
     expect(container.querySelectorAll(".pptx-preview-slide-wrapper")).toHaveLength(10);
-    const nextSlide = container.querySelector<HTMLButtonElement>(".document-preview-page-controls button:last-child");
+    const nextSlide = container.querySelector<HTMLButtonElement>(
+      `.${testDocumentPreviewPanelStyles["document-preview-page-controls"]} button:last-child`,
+    );
     expect(nextSlide).not.toBeNull();
     expect(nextSlide).toHaveAttribute("data-csg-control", "button");
     for (let index = 1; index < 10; index += 1) {
@@ -462,7 +478,9 @@ describe("DocumentPreviewPanel", () => {
     expect(await screen.findByText("Slide 1 of 3")).toBeInTheDocument();
     expect(container.querySelectorAll(".pptx-preview-slide-wrapper")).toHaveLength(3);
     expect(screen.queryByText("Slide 10 of 3")).not.toBeInTheDocument();
-    const scrollRoot = container.querySelector<HTMLElement>(".document-preview-ppt-stage-shell")!;
+    const scrollRoot = container.querySelector<HTMLElement>(
+      `.${testDocumentPreviewPanelStyles["document-preview-ppt-stage-shell"]}`,
+    )!;
     Object.defineProperties(scrollRoot, {
       clientHeight: { value: 800 },
       scrollHeight: { value: 1000 },
@@ -493,7 +511,11 @@ describe("DocumentPreviewPanel", () => {
       />,
     );
 
-    await waitFor(() => expect(container.querySelector(".document-preview-text")?.textContent).toBe(fullText));
+    await waitFor(() =>
+      expect(container.querySelector(`.${testDocumentPreviewPanelStyles["document-preview-text"]}`)?.textContent).toBe(
+        fullText,
+      ),
+    );
     expect(screen.queryByText("Only the first 32 MiB is shown")).not.toBeInTheDocument();
   });
 
@@ -547,9 +569,11 @@ describe("DocumentPreviewPanel", () => {
     );
 
     await waitFor(() =>
-      expect(container.querySelector(".document-preview-text")?.textContent).toHaveLength(fullText.length),
+      expect(
+        container.querySelector(`.${testDocumentPreviewPanelStyles["document-preview-text"]}`)?.textContent,
+      ).toHaveLength(fullText.length),
     );
-    const preview = container.querySelector(".document-preview-text");
+    const preview = container.querySelector(`.${testDocumentPreviewPanelStyles["document-preview-text"]}`);
     expect(preview?.textContent).toHaveLength(fullText.length);
     expect(preview?.textContent?.endsWith("TAIL")).toBe(true);
     expect(screen.getByRole("link", { name: "Download" })).toHaveAttribute("download", "large.txt");
@@ -586,7 +610,9 @@ describe("DocumentPreviewPanel", () => {
           onIndexChange={() => {}}
         />,
       );
-      const panel = container.querySelector<HTMLElement>(".document-preview-panel");
+      const panel = container.querySelector<HTMLElement>(
+        `.${testDocumentPreviewPanelStyles["document-preview-panel"]}`,
+      );
       expect(panel).not.toBeNull();
       const requestFullscreen = vi.fn(async () => {
         fullscreenElement = panel;
@@ -636,12 +662,11 @@ describe("DocumentPreviewPanel", () => {
       wasmUrl: new URL("pdfjs/wasm/", document.baseURI).href,
     });
     expect(screen.getAllByTestId("mock-pdf-page")[0]).toHaveAttribute("data-width", "612");
-    const pdfMain = container.querySelector(".document-preview-pdf-main");
+    const pdfMain = container.querySelector(`.${testDocumentPreviewPanelStyles["document-preview-pdf-main"]}`);
     expect(pdfMain).toHaveClass("is-width-fitted");
-    expect(container.querySelector(".document-preview-page-controls button")).toHaveAttribute(
-      "data-csg-control",
-      "button",
-    );
+    expect(
+      container.querySelector(`.${testDocumentPreviewPanelStyles["document-preview-page-controls"]} button`),
+    ).toHaveAttribute("data-csg-control", "button");
     await user.click(screen.getByRole("button", { name: "Zoom in" }));
     expect(pdfMain).toHaveClass("allows-horizontal-pan");
     expect(container.querySelectorAll(".document-preview-pdf-page")).toHaveLength(3);
@@ -675,10 +700,14 @@ describe("DocumentPreviewPanel", () => {
       />,
     );
 
-    const title = container.querySelector(".document-preview-title-group strong");
+    const title = container.querySelector(`.${testDocumentPreviewPanelStyles["document-preview-title-group"]} strong`);
     expect(title).toHaveAttribute("title", name);
-    expect(title?.querySelector(".document-preview-title-base")).toHaveTextContent(name.slice(0, -4));
-    expect(title?.querySelector(".document-preview-title-extension")).toHaveTextContent(".pdf");
+    expect(title?.querySelector(`.${testDocumentPreviewPanelStyles["document-preview-title-base"]}`)).toHaveTextContent(
+      name.slice(0, -4),
+    );
+    expect(
+      title?.querySelector(`.${testDocumentPreviewPanelStyles["document-preview-title-extension"]}`),
+    ).toHaveTextContent(".pdf");
   });
 
   it("jumps to an entered PDF page and lets Escape cancel editing", async () => {
@@ -779,7 +808,11 @@ describe("DocumentPreviewPanel", () => {
         onIndexChange={() => {}}
       />,
     );
-    await waitFor(() => expect(container.querySelector(".document-preview-docx")).toBeInTheDocument());
+    await waitFor(() =>
+      expect(
+        container.querySelector(`.${testDocumentPreviewPanelStyles["document-preview-docx"]}`),
+      ).toBeInTheDocument(),
+    );
     expect(screen.queryByText("Loading preview")).not.toBeInTheDocument();
   });
 });

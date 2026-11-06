@@ -1,3 +1,4 @@
+import agentAvatarStyles from "./AgentAvatar.module.css";
 import { DialogContent, DialogDescription, DialogRoot, DialogTitle, Tooltip } from "@/components/ui";
 import { AgentIcon } from "@/components/ui/Icons";
 import { CLOUD_AGENT_AVATARS } from "@/shared/avatar";
@@ -5,7 +6,6 @@ import { AGENT_AVATAR_GROUPS, AGENT_AVATAR_OPTIONS, normalizeAgentAvatarPath } f
 import { Edit3, ImagePlus, UploadCloud, X, ZoomIn, ZoomOut } from "lucide-react";
 import type { ChangeEvent, DragEvent, PointerEvent as ReactPointerEvent, ReactNode } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import styles from "./AgentAvatar.module.css";
 
 type TranslateFn = (key: string) => string;
 type AvatarEditorTab = "builtin" | "upload";
@@ -28,7 +28,7 @@ export function AgentAvatarImage({ avatar, alt = "" }: { avatar?: string | null;
   }
   return (
     <img
-      className={`agent-avatar-image${CLOUD_AVATAR_PATHS.has(src) ? ` ${styles.cloudAvatar}` : ""}`}
+      className={`agent-avatar-image${CLOUD_AVATAR_PATHS.has(src) ? ` ${agentAvatarStyles.cloudAvatar}` : ""}`}
       src={src}
       alt={alt}
       draggable={false}
@@ -288,16 +288,16 @@ export function AgentAvatarPicker({
           {selected ? (
             <img className="agent-avatar-trigger-image" src={selected} alt="" draggable={false} />
           ) : fallback ? (
-            <span className="agent-avatar-trigger-fallback">{fallback}</span>
+            <span className={agentAvatarStyles["agent-avatar-trigger-fallback"]}>{fallback}</span>
           ) : (
             <ImagePlus aria-hidden="true" size={16} strokeWidth={1.8} />
           )}
           {mode === "edit" ? (
             <>
-              <span className="agent-avatar-edit-overlay" aria-hidden="true">
+              <span className={agentAvatarStyles["agent-avatar-edit-overlay"]} aria-hidden="true">
                 <Edit3 size={20} strokeWidth={1.8} />
               </span>
-              <span className="agent-avatar-edit-tooltip" role="tooltip">
+              <span className={agentAvatarStyles["agent-avatar-edit-tooltip"]} role="tooltip">
                 {t("editAvatar")}
               </span>
             </>
@@ -312,31 +312,40 @@ export function AgentAvatarPicker({
           }}
         >
           <DialogContent
-            className="agent-avatar-editor-modal"
-            overlayClassName="agent-avatar-editor-backdrop"
+            className={agentAvatarStyles["agent-avatar-editor-modal"]}
+            overlayClassName={agentAvatarStyles["agent-avatar-editor-backdrop"]}
             onCloseAutoFocus={(event) => {
               event.preventDefault();
               triggerRef.current?.focus();
             }}
           >
-            <div className="agent-avatar-editor-header">
-              <div className="agent-avatar-editor-heading">
+            <div className={agentAvatarStyles["agent-avatar-editor-header"]}>
+              <div className={agentAvatarStyles["agent-avatar-editor-heading"]}>
                 <DialogTitle>{t("editAvatar")}</DialogTitle>
                 <DialogDescription>{t("editAvatarSubtitle")}</DialogDescription>
               </div>
-              <button className="agent-avatar-editor-close" type="button" aria-label={t("close")} onClick={closeEditor}>
+              <button
+                className={agentAvatarStyles["agent-avatar-editor-close"]}
+                type="button"
+                aria-label={t("close")}
+                onClick={closeEditor}
+              >
                 <X aria-hidden="true" size={24} strokeWidth={1.8} />
               </button>
             </div>
-            <div className="agent-avatar-editor-body">
-              <div className="agent-avatar-editor-tabs" role="tablist" aria-label={t("editAvatar")}>
+            <div className={agentAvatarStyles["agent-avatar-editor-body"]}>
+              <div
+                className={agentAvatarStyles["agent-avatar-editor-tabs"]}
+                role="tablist"
+                aria-label={t("editAvatar")}
+              >
                 {[
                   ["builtin", t("avatarBuiltinTab")],
                   ["upload", t("avatarUploadTab")],
                 ].map(([tab, label]) => (
                   <button
                     aria-selected={activeTab === tab}
-                    className={`agent-avatar-editor-tab ${activeTab === tab ? "active" : ""}`}
+                    className={`${agentAvatarStyles["agent-avatar-editor-tab"]} ${activeTab === tab ? "active" : ""}`}
                     key={tab}
                     role="tab"
                     type="button"
@@ -347,17 +356,25 @@ export function AgentAvatarPicker({
                 ))}
               </div>
               {activeTab === "builtin" ? (
-                <div className="agent-avatar-editor-grid" role="radiogroup" aria-label={t("avatarBuiltinTab")}>
+                <div
+                  className={agentAvatarStyles["agent-avatar-editor-grid"]}
+                  role="radiogroup"
+                  aria-label={t("avatarBuiltinTab")}
+                >
                   {AGENT_AVATAR_OPTIONS.map((option) =>
                     renderAvatarOption(option, draftValue || selected, () => setDraftValue(option.value)),
                   )}
                 </div>
               ) : (
-                <div className="agent-avatar-upload-pane" role="tabpanel" aria-label={t("avatarUploadTab")}>
+                <div
+                  className={agentAvatarStyles["agent-avatar-upload-pane"]}
+                  role="tabpanel"
+                  aria-label={t("avatarUploadTab")}
+                >
                   {uploadSource ? (
-                    <div className="agent-avatar-cropper">
+                    <div className={agentAvatarStyles["agent-avatar-cropper"]}>
                       <div
-                        className="agent-avatar-cropper-stage"
+                        className={agentAvatarStyles["agent-avatar-cropper-stage"]}
                         ref={cropStageRef}
                         onPointerDown={handleCropPointerDown}
                         onPointerMove={handleCropPointerMove}
@@ -365,7 +382,7 @@ export function AgentAvatarPicker({
                         onPointerCancel={stopCropDrag}
                       >
                         <img
-                          className="agent-avatar-cropper-image"
+                          className={agentAvatarStyles["agent-avatar-cropper-image"]}
                           src={uploadSource}
                           alt={t("avatarUploadPreviewAlt")}
                           draggable={false}
@@ -373,14 +390,14 @@ export function AgentAvatarPicker({
                             transform: `translate(calc(-50% + ${uploadOffset.x}px), calc(-50% + ${uploadOffset.y}px)) scale(${uploadZoom})`,
                           }}
                         />
-                        <div className="agent-avatar-cropper-frame" aria-hidden="true">
+                        <div className={agentAvatarStyles["agent-avatar-cropper-frame"]} aria-hidden="true">
                           <span />
                           <span />
                           <span />
                           <span />
                         </div>
                         <div
-                          className="agent-avatar-zoom-controls"
+                          className={agentAvatarStyles["agent-avatar-zoom-controls"]}
                           aria-label={t("avatarZoomControls")}
                           onPointerDown={(event) => event.stopPropagation()}
                         >
@@ -395,29 +412,31 @@ export function AgentAvatarPicker({
                     </div>
                   ) : (
                     <button
-                      className={`agent-avatar-upload-dropzone ${uploadError ? "error" : ""}`}
+                      className={`${agentAvatarStyles["agent-avatar-upload-dropzone"]} ${uploadError ? "error" : ""}`}
                       type="button"
                       onClick={() => fileInputRef.current?.click()}
                       onDragEnter={preventDefaultDrag}
                       onDragOver={preventDefaultDrag}
                       onDrop={handleDrop}
                     >
-                      <span className="agent-avatar-upload-icon" aria-hidden="true">
+                      <span className={agentAvatarStyles["agent-avatar-upload-icon"]} aria-hidden="true">
                         <UploadCloud size={20} strokeWidth={1.8} />
                       </span>
-                      <span className="agent-avatar-upload-copy">
+                      <span className={agentAvatarStyles["agent-avatar-upload-copy"]}>
                         <span>
                           <strong>{t("avatarUploadClick")}</strong>
                           {t("avatarUploadDrop")}
                         </span>
                         <small>{t("avatarUploadHelp")}</small>
                       </span>
-                      {uploadError ? <span className="agent-avatar-upload-error">{uploadError}</span> : null}
+                      {uploadError ? (
+                        <span className={agentAvatarStyles["agent-avatar-upload-error"]}>{uploadError}</span>
+                      ) : null}
                     </button>
                   )}
                   <input
                     ref={fileInputRef}
-                    className="agent-avatar-upload-input"
+                    className={agentAvatarStyles["agent-avatar-upload-input"]}
                     type="file"
                     accept="image/svg+xml,image/png,image/jpeg,image/gif"
                     onChange={handleFileChange}
@@ -425,12 +444,16 @@ export function AgentAvatarPicker({
                 </div>
               )}
             </div>
-            <div className="agent-avatar-editor-actions">
-              <button className="agent-avatar-editor-button secondary" type="button" onClick={closeEditor}>
+            <div className={agentAvatarStyles["agent-avatar-editor-actions"]}>
+              <button
+                className={`${agentAvatarStyles["agent-avatar-editor-button"]} secondary`}
+                type="button"
+                onClick={closeEditor}
+              >
                 {t("cancel")}
               </button>
               <button
-                className="agent-avatar-editor-button primary"
+                className={`${agentAvatarStyles["agent-avatar-editor-button"]} primary`}
                 type="button"
                 disabled={activeTab === "upload" && !uploadSource}
                 onClick={() => void confirmDraft()}
@@ -444,9 +467,9 @@ export function AgentAvatarPicker({
       {open && mode !== "edit" && !disabled ? (
         <div className="agent-avatar-picker-panel" role="radiogroup" aria-label={t("agentAvatar")}>
           {AGENT_AVATAR_GROUPS.map((group) => (
-            <div className="agent-avatar-picker-group" key={group.key}>
-              <div className="agent-avatar-picker-label">{t(group.labelKey)}</div>
-              <div className="agent-avatar-picker-options">
+            <div className={agentAvatarStyles["agent-avatar-picker-group"]} key={group.key}>
+              <div className={agentAvatarStyles["agent-avatar-picker-label"]}>{t(group.labelKey)}</div>
+              <div className={agentAvatarStyles["agent-avatar-picker-options"]}>
                 {AGENT_AVATAR_OPTIONS.filter((option) => option.group === group.key).map((option) =>
                   renderAvatarOption(
                     option,

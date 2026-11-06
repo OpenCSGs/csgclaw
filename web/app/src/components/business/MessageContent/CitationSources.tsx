@@ -1,3 +1,4 @@
+import messageContentStyles from "./MessageContent.module.css";
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type PointerEvent } from "react";
 import { X } from "lucide-react";
 import { Button, DialogCloseButton, DialogContent, DialogHeader, DialogRoot, DialogTitle } from "@/components/ui";
@@ -143,13 +144,13 @@ export function CitationSources({ activeID, cited, onActiveChange, t, variant = 
 
   return (
     <DialogRoot open={Boolean(active)} onOpenChange={(open) => !open && onActiveChange(null)}>
-      <DialogContent className="message-citation-drawer">
+      <DialogContent className={messageContentStyles["message-citation-drawer"]}>
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           <DialogCloseButton label={closeLabel} />
         </DialogHeader>
         {active ? (
-          <article className="message-citation-source-detail">
+          <article className={messageContentStyles["message-citation-source-detail"]}>
             <h3>{active.title}</h3>
             {active.snippet ? <blockquote>{active.snippet}</blockquote> : null}
           </article>

@@ -11,7 +11,7 @@ import {
 import { useMemo, useRef, useState } from "react";
 import { useSearchParams, useLocation } from "react-router-dom";
 import { ArrowUp, BookOpen, ClipboardCheck, FileText, Presentation, Search, Users, X } from "lucide-react";
-import { Button, PopoverAnchor, PopoverContent, PopoverRoot } from "@/components/ui";
+import { TextArea, Button, PopoverAnchor, PopoverContent, PopoverRoot } from "@/components/ui";
 import { useWorkspaceControllerContext } from "@/hooks/workspace";
 import { sendMessageRequest } from "@/api/im";
 import { errorMessage } from "@/api/client";
@@ -341,7 +341,7 @@ function StartTaskForm({
                     }}
                   />
                 ))}
-                <textarea
+                <TextArea
                   ref={editorRef}
                   autoFocus
                   className={styles.input}

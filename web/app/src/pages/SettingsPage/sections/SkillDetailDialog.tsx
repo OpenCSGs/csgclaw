@@ -21,7 +21,7 @@ import { skillDirectory, skillVersionLabel } from "@/models/skillLibrary";
 import { isReadonlySkill } from "@/models/skillhub";
 import { SkillDetailFiles } from "@/components/business/SkillDetailFiles";
 import styles from "./SkillDetailDialog.module.css";
-import pageStyles from "../SettingsPage.module.css";
+import resourceSettingsStyles from "./ResourceSettings.module.css";
 import type { SkillSummary } from "@/models/skillhub";
 import type { TranslateFn } from "@/models/conversations";
 
@@ -99,7 +99,7 @@ export function SkillDetailDialog({
                 <div className={styles.headingCopy}>
                   <div className={styles.titleRow}>
                     <DialogTitle>{skill.name}</DialogTitle>
-                    <span className={pageStyles.tag} title={skillOriginHint(skill, t)}>
+                    <span className={resourceSettingsStyles.tag} title={skillOriginHint(skill, t)}>
                       {skill.discovery
                         ? t("iaSkillsActiveVersion", {
                             version: skillVersionLabel(skill.discovery.version) || t("iaSkillsUnversioned"),

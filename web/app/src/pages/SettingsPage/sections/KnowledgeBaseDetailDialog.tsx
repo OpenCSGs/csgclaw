@@ -18,7 +18,7 @@ import { fetchRemoteKnowledgeBaseMCPConfig } from "@/api/knowledgeBases";
 import { useWorkspaceControllerContext } from "@/hooks/workspace";
 import { MCPProbeCards } from "./MCPDetailDialog";
 import styles from "./MCPDetailDialog.module.css";
-import pageStyles from "../SettingsPage.module.css";
+import resourceSettingsStyles from "./ResourceSettings.module.css";
 import { knowledgeBaseMCPServer, type RemoteKnowledgeBase } from "@/models/knowledgeBases";
 import type { TranslateFn } from "@/models/conversations";
 
@@ -132,8 +132,8 @@ export function KnowledgeBaseDetailDialog({
                 <div className={styles.headerCopy}>
                   <div className={styles.titleRow}>
                     <DialogTitle>{kb.name || kb.id}</DialogTitle>
-                    <span className={pageStyles.tag}>
-                      <span className={pageStyles.tagDot} aria-hidden="true" />
+                    <span className={resourceSettingsStyles.tag}>
+                      <span className={resourceSettingsStyles.tagDot} aria-hidden="true" />
                       {t("iaKnowledgeBadgeAgenticHub")}
                     </span>
                   </div>

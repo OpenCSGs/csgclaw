@@ -1,3 +1,4 @@
+import profileControlsStyles from "./ProfileControls.module.css";
 import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui";
@@ -74,7 +75,7 @@ export function ClipboardCopyButton({
   return (
     <Button
       aria-label={copied ? copiedLabel || label : label}
-      className={className || "notifier-copy-button"}
+      className={className || profileControlsStyles["notifier-copy-button"]}
       disabled={busy}
       iconOnly={iconOnly}
       onClick={handleClick}

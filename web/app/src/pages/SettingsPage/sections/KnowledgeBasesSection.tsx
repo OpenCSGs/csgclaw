@@ -13,6 +13,9 @@ import { ResourceFeaturedIcon, ResourceFilterTabs, ResourceSearchField } from "@
 import { KnowledgeBaseDetailDialog, type KnowledgeBaseDetailTarget } from "./KnowledgeBaseDetailDialog";
 import { SettingsRow } from "./SettingsRow";
 import styles from "../SettingsPage.module.css";
+import accountSectionStyles from "./AccountSection.module.css";
+import resourceSettingsStyles from "./ResourceSettings.module.css";
+import externalMessagesSectionStyles from "./ExternalMessagesSection.module.css";
 
 export function KnowledgeBasesSection() {
   const controller = useWorkspaceControllerContext();
@@ -108,7 +111,7 @@ export function KnowledgeBasesSection() {
       ) : null}
 
       {!authed ? (
-        <div className={styles.loginGate}>
+        <div className={accountSectionStyles.loginGate}>
           <LogIn size={20} strokeWidth={1.8} aria-hidden="true" />
           <p>{t("iaKnowledgeMarketLoginRequired")}</p>
           <Button
@@ -127,12 +130,12 @@ export function KnowledgeBasesSection() {
             </p>
           ) : null}
           {knowledgeBases?.loading && installed.length === 0 ? (
-            <p className={styles.listNotice}>
+            <p className={resourceSettingsStyles.listNotice}>
               <LoaderCircle className="animate-spin" size={14} strokeWidth={2} aria-hidden="true" />
               {t("resourcesKnowledgeBasesLoading")}
             </p>
           ) : installedVisible.length === 0 ? (
-            <p className={styles.listNotice}>
+            <p className={resourceSettingsStyles.listNotice}>
               {installed.length === 0 ? t("iaKnowledgeInstalledEmpty") : t("iaListSearchEmpty")}
             </p>
           ) : (
@@ -214,8 +217,8 @@ function KnowledgeBaseCard({
       onOpen={() => onOpen?.()}
       actions={
         actions ?? (
-          <span className={styles.tag}>
-            <span className={styles.tagDot} aria-hidden="true" />
+          <span className={resourceSettingsStyles.tag}>
+            <span className={resourceSettingsStyles.tagDot} aria-hidden="true" />
             {t("iaKnowledgeBadgeAgenticHub")}
           </span>
         )
@@ -245,7 +248,7 @@ function MarketPane({
 }) {
   if (knowledgeBases?.discoveryLoadError) {
     return (
-      <div className={styles.listNotice}>
+      <div className={resourceSettingsStyles.listNotice}>
         <span className="form-error" role="alert">
           {knowledgeBases.discoveryLoadError}
         </span>
@@ -259,7 +262,7 @@ function MarketPane({
 
   if (knowledgeBases?.discoveryLoading && items.length === 0) {
     return (
-      <p className={styles.listNotice}>
+      <p className={resourceSettingsStyles.listNotice}>
         <LoaderCircle className="animate-spin" size={14} strokeWidth={2} aria-hidden="true" />
         {t("resourcesKnowledgeBasesLoading")}
       </p>
@@ -323,7 +326,7 @@ function MarketPane({
       </ResourceList>
 
       {knowledgeBases?.discoveryHasMore ? (
-        <div className={styles.listMore}>
+        <div className={resourceSettingsStyles.listMore}>
           <Button
             size="sm"
             variant="secondaryGray"
@@ -344,12 +347,12 @@ function KnowledgeEmptyState({ t }: { t: (key: string, vars?: Record<string, str
   const { sidebarProps } = useWorkspaceControllerContext();
   const createURL = agenticHubKnowledgeCreateURL(sidebarProps?.authStatus, sidebarProps?.authEnvironment);
   return (
-    <div className={styles.knowledgeEmptyState}>
-      <div className={styles.knowledgeEmptyText}>
+    <div className={resourceSettingsStyles.knowledgeEmptyState}>
+      <div className={resourceSettingsStyles.knowledgeEmptyText}>
         <h3>{t("resourcesKnowledgeBasesEmpty")}</h3>
         <p>{t("resourcesKnowledgeBasesEmptyHint")}</p>
       </div>
-      <div className={styles.knowledgeEmptyActions}>
+      <div className={resourceSettingsStyles.knowledgeEmptyActions}>
         <LinkButton href={createURL} target="_blank" rel="noreferrer" variant="primary" size="md">
           <Plus size={16} strokeWidth={2} aria-hidden="true" />
           {t("iaKnowledgeCreateAction")}
@@ -363,7 +366,7 @@ function CreateKnowledgeHint({ t }: { t: (key: string, vars?: Record<string, str
   const { sidebarProps } = useWorkspaceControllerContext();
   const createURL = agenticHubKnowledgeCreateURL(sidebarProps?.authStatus, sidebarProps?.authEnvironment);
   return (
-    <p className={styles.createHint}>
+    <p className={externalMessagesSectionStyles.createHint}>
       {t("iaKnowledgeCreateHint")}
       <a href={createURL} target="_blank" rel="noreferrer">
         {t("iaKnowledgeCreateAction")}

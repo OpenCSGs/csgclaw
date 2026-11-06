@@ -43,14 +43,6 @@
   min-width: 0;
 }
 
-.root :global(.csg-select-trigger),
-.root :global(.agent-fast-mode-toggle) {
-  width: 100%;
-  min-width: 0;
-  min-height: var(--input-height-md);
-  box-sizing: border-box;
-}
-
 .root :global(.csg-select-trigger) :global(.model-option-model) {
   font: var(--text-md-normal);
 }
@@ -65,4 +57,11 @@
   .fields {
     grid-template-columns: minmax(0, 1fr);
   }
+}
+
+.fastMode {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--muted);
 }

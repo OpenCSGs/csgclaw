@@ -396,7 +396,7 @@ describe("AgentDetailPane memory", () => {
     expect(refresh.closest(".agent-memory-section-heading")).toBeInTheDocument();
     expect(screen.getByText("$CODEX_HOME/memories/memory_summary.md").tagName).toBe("CODE");
 
-    const toggle = screen.getByRole("checkbox", { name: "agentMemoryEnabled" });
+    const toggle = screen.getByRole("switch", { name: "agentMemoryEnabled" });
     expect(toggle).toBeChecked();
     expect(toggle.closest(".agent-memory-setting-actions")).toBeInTheDocument();
     expect(toggle.closest(".agent-memory-section-heading")).toBeInTheDocument();

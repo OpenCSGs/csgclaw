@@ -1,3 +1,4 @@
+import mentionPickerStyles from "@/components/business/ConversationPane/MentionPicker.module.css";
 import { useRoomFileReader } from "@/components/business/ChatSidePanel/useRoomFileReader";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type RefObject } from "react";
 import { File, Folder, User } from "lucide-react";
@@ -213,7 +214,7 @@ export function useFileMentions({
               role="option"
               aria-selected={i === activeIndex}
               ref={i === activeIndex ? activeRef : undefined}
-              className={`mention-option${i === activeIndex ? " active" : ""}`}
+              className={`${mentionPickerStyles["mention-option"]}${i === activeIndex ? " active" : ""}`}
               onMouseDown={(event) => {
                 event.preventDefault();
                 apply(candidate);

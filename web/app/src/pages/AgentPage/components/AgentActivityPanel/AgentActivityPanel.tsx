@@ -1,3 +1,4 @@
+import agentActivityPanelStyles from "./AgentActivityPanel.module.css";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowDownNarrowWide, ArrowUpNarrowWide, ChevronRight, Clock, Filter, RefreshCw } from "lucide-react";
@@ -234,23 +235,25 @@ export function AgentActivityPanel({ item, locale, rooms = [], t }: AgentActivit
   return (
     <section
       id="agent-profile-activity"
-      className="profile-section agent-activity-section"
+      className={`profile-section ${agentActivityPanelStyles["agent-activity-section"]}`}
       aria-labelledby="agent-activity-title"
     >
       <h2 id="agent-activity-title" className="sr-only">
         {t("agentActivityTitle")}
       </h2>
       <div className="agent-section-form">
-        <div className="agent-page-form-content agent-activity-content">
+        <div className={`agent-page-form-content ${agentActivityPanelStyles["agent-activity-content"]}`}>
           {query.error ? (
             <div className="form-error">{errorMessage(query.error, t("agentActivityLoadFailed"))}</div>
           ) : null}
-          {activityRooms.length === 0 ? <div className="agent-activity-empty">{t("agentActivityNoRooms")}</div> : null}
+          {activityRooms.length === 0 ? (
+            <div className={agentActivityPanelStyles["agent-activity-empty"]}>{t("agentActivityNoRooms")}</div>
+          ) : null}
           {query.isFetching && entries.length === 0 ? (
-            <div className="agent-activity-empty">{t("agentActivityLoading")}</div>
+            <div className={agentActivityPanelStyles["agent-activity-empty"]}>{t("agentActivityLoading")}</div>
           ) : null}
           {empty && activityRooms.length > 0 ? (
-            <div className="agent-activity-empty">{t("agentActivityEmpty")}</div>
+            <div className={agentActivityPanelStyles["agent-activity-empty"]}>{t("agentActivityEmpty")}</div>
           ) : null}
           {entries.length ? (
             <AgentActivityToolbar
@@ -276,9 +279,13 @@ export function AgentActivityPanel({ item, locale, rooms = [], t }: AgentActivit
               t={t}
             />
           ) : null}
-          {filteredEmpty ? <div className="agent-activity-empty">{t("agentActivityNoFilteredResults")}</div> : null}
+          {filteredEmpty ? (
+            <div className={agentActivityPanelStyles["agent-activity-empty"]}>
+              {t("agentActivityNoFilteredResults")}
+            </div>
+          ) : null}
           {displayEntries.length ? (
-            <div className="agent-activity-list" role="list">
+            <div className={agentActivityPanelStyles["agent-activity-list"]} role="list">
               {displayEntries.map((entry) => (
                 <AgentActivityRow
                   key={entry.id}
@@ -946,8 +953,8 @@ function AgentActivityToolbar({
   t: TranslateFn;
 }) {
   return (
-    <div className="agent-activity-toolbar">
-      <div className="agent-activity-meta-row" aria-label={t("agentActivitySummaryLabel")}>
+    <div className={agentActivityPanelStyles["agent-activity-toolbar"]}>
+      <div className={agentActivityPanelStyles["agent-activity-meta-row"]} aria-label={t("agentActivitySummaryLabel")}>
         {summary.duration ? (
           <ActivityMetaChip icon={<Clock aria-hidden="true" size={14} strokeWidth={2} />}>
             {summary.duration}
@@ -960,12 +967,19 @@ function AgentActivityToolbar({
             : t("agentActivityEventsCount", { count: summary.eventCount })}
         </ActivityMetaChip>
       </div>
-      <div className="agent-activity-controls">
-        <div className="agent-activity-sort" role="group" aria-label={t("agentActivitySortLabel")}>
+      <div className={agentActivityPanelStyles["agent-activity-controls"]}>
+        <div
+          className={agentActivityPanelStyles["agent-activity-sort"]}
+          role="group"
+          aria-label={t("agentActivitySortLabel")}
+        >
           <Tooltip content={t("agentActivityChronological")}>
             <button
               type="button"
-              className={classNames("agent-activity-sort-button", sortMode === "chronological" && "active")}
+              className={classNames(
+                agentActivityPanelStyles["agent-activity-sort-button"],
+                sortMode === "chronological" && "active",
+              )}
               aria-pressed={sortMode === "chronological"}
               onClick={() => onSortModeChange("chronological")}
             >
@@ -976,7 +990,10 @@ function AgentActivityToolbar({
           <Tooltip content={t("agentActivityNewestFirst")}>
             <button
               type="button"
-              className={classNames("agent-activity-sort-button", sortMode === "newest_first" && "active")}
+              className={classNames(
+                agentActivityPanelStyles["agent-activity-sort-button"],
+                sortMode === "newest_first" && "active",
+              )}
               aria-pressed={sortMode === "newest_first"}
               onClick={() => onSortModeChange("newest_first")}
             >
@@ -988,7 +1005,10 @@ function AgentActivityToolbar({
         <DropdownMenuRoot>
           <DropdownMenuTrigger asChild>
             <Button
-              className={classNames("agent-activity-filter-trigger", selectedFilters.size > 0 && "active")}
+              className={classNames(
+                agentActivityPanelStyles["agent-activity-filter-trigger"],
+                selectedFilters.size > 0 && "active",
+              )}
               variant="secondaryGray"
               size="sm"
             >
@@ -996,7 +1016,7 @@ function AgentActivityToolbar({
               <span>{t("agentActivityFilter")}</span>
               {selectedFilters.size ? (
                 <span
-                  className="agent-activity-filter-count"
+                  className={agentActivityPanelStyles["agent-activity-filter-count"]}
                   aria-label={t("agentActivityFilterActiveCount", { count: selectedFilters.size })}
                 >
                   {selectedFilters.size}
@@ -1004,7 +1024,10 @@ function AgentActivityToolbar({
               ) : null}
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent className="agent-activity-filter-menu" aria-label={t("agentActivityFilter")}>
+          <DropdownMenuContent
+            className={agentActivityPanelStyles["agent-activity-filter-menu"]}
+            aria-label={t("agentActivityFilter")}
+          >
             {filterOptions.map((option) => (
               <DropdownMenuCheckboxItem
                 key={option.id}
@@ -1012,9 +1035,12 @@ function AgentActivityToolbar({
                 checked={selectedFilters.has(option.id)}
                 onCheckedChange={() => onFilterToggle(option.id)}
               >
-                <span className={classNames("agent-activity-filter-dot", option.tone)} aria-hidden="true" />
-                <span className="agent-activity-filter-label">{option.label}</span>
-                <span className="agent-activity-filter-option-count">{option.count}</span>
+                <span
+                  className={classNames(agentActivityPanelStyles["agent-activity-filter-dot"], option.tone)}
+                  aria-hidden="true"
+                />
+                <span className={agentActivityPanelStyles["agent-activity-filter-label"]}>{option.label}</span>
+                <span className={agentActivityPanelStyles["agent-activity-filter-option-count"]}>{option.count}</span>
               </DropdownMenuCheckboxItem>
             ))}
             {selectedFilters.size > 0 ? (
@@ -1028,7 +1054,7 @@ function AgentActivityToolbar({
         <Tooltip content={t("agentActivityRefresh")}>
           <span>
             <Button
-              className="agent-activity-toolbar-refresh"
+              className={agentActivityPanelStyles["agent-activity-toolbar-refresh"]}
               variant="secondaryGray"
               size="sm"
               disabled={refreshDisabled}
@@ -1041,12 +1067,15 @@ function AgentActivityToolbar({
         </Tooltip>
       </div>
       {selectedFilterOptions.length ? (
-        <div className="agent-activity-selected-filters" aria-label={t("agentActivitySelectedFiltersLabel")}>
+        <div
+          className={agentActivityPanelStyles["agent-activity-selected-filters"]}
+          aria-label={t("agentActivitySelectedFiltersLabel")}
+        >
           {selectedFilterOptions.map((option) => (
             <button
               key={option.id}
               type="button"
-              className={classNames("agent-activity-filter-chip", option.tone)}
+              className={classNames(agentActivityPanelStyles["agent-activity-filter-chip"], option.tone)}
               aria-label={t("agentActivityRemoveFilter", { label: option.label })}
               onClick={() => onFilterToggle(option.id)}
             >
@@ -1062,7 +1091,7 @@ function AgentActivityToolbar({
 
 function ActivityMetaChip({ children, icon }: { children: ReactNode; icon?: ReactNode }) {
   return (
-    <span className="agent-activity-meta-chip">
+    <span className={agentActivityPanelStyles["agent-activity-meta-chip"]}>
       {icon}
       <span>{children}</span>
     </span>
@@ -1083,8 +1112,12 @@ function AgentActivityTimeline({
   t: TranslateFn;
 }) {
   return (
-    <div className="agent-activity-timeline-wrap">
-      <div className="agent-activity-timeline" role="navigation" aria-label={t("agentActivityTimelineLabel")}>
+    <div className={agentActivityPanelStyles["agent-activity-timeline-wrap"]}>
+      <div
+        className={agentActivityPanelStyles["agent-activity-timeline"]}
+        role="navigation"
+        aria-label={t("agentActivityTimelineLabel")}
+      >
         {entries.map((entry) => (
           <Tooltip
             key={entry.id}
@@ -1093,7 +1126,7 @@ function AgentActivityTimeline({
             <button
               type="button"
               className={classNames(
-                "agent-activity-timeline-segment",
+                agentActivityPanelStyles["agent-activity-timeline-segment"],
                 entry.kind,
                 selectedEntryID === entry.id && "selected",
               )}
@@ -1263,35 +1296,40 @@ function AgentActivityRow({
   return (
     <article
       ref={rowRef}
-      className={classNames("agent-activity-row", row.tone, selected && "selected")}
+      className={classNames(agentActivityPanelStyles["agent-activity-row"], row.tone, selected && "selected")}
       role="listitem"
     >
-      <div className="agent-activity-row-main">
-        <span className={`agent-activity-type-badge ${row.tone}`}>{row.label}</span>
+      <div className={agentActivityPanelStyles["agent-activity-row-main"]}>
+        <span className={`${agentActivityPanelStyles["agent-activity-type-badge"]} ${row.tone}`}>{row.label}</span>
         {hasDetail ? (
           <button
             type="button"
-            className="agent-activity-row-summary expandable"
+            className={`${agentActivityPanelStyles["agent-activity-row-summary"]} expandable`}
             aria-expanded={expanded}
             onClick={() => setExpanded((value) => !value)}
           >
-            <ChevronRight className={`agent-activity-row-chevron ${expanded ? "expanded" : ""}`} size={14} />
-            <span className="agent-activity-row-text">{row.summary || "-"}</span>
+            <ChevronRight
+              className={`${agentActivityPanelStyles["agent-activity-row-chevron"]} ${expanded ? "expanded" : ""}`}
+              size={14}
+            />
+            <span className={agentActivityPanelStyles["agent-activity-row-text"]}>{row.summary || "-"}</span>
           </button>
         ) : (
-          <div className="agent-activity-row-summary">
-            <span className="agent-activity-row-text">{row.summary || "-"}</span>
+          <div className={agentActivityPanelStyles["agent-activity-row-summary"]}>
+            <span className={agentActivityPanelStyles["agent-activity-row-text"]}>{row.summary || "-"}</span>
           </div>
         )}
         <Tooltip content={entry.roomTitle || entry.roomID}>
-          <span className="agent-activity-row-room">{entry.roomTitle || entry.roomID}</span>
+          <span className={agentActivityPanelStyles["agent-activity-row-room"]}>{entry.roomTitle || entry.roomID}</span>
         </Tooltip>
-        <span className="agent-activity-row-seq">#{entry.index}</span>
-        <time className="agent-activity-row-time" dateTime={entry.createdAt}>
+        <span className={agentActivityPanelStyles["agent-activity-row-seq"]}>#{entry.index}</span>
+        <time className={agentActivityPanelStyles["agent-activity-row-time"]} dateTime={entry.createdAt}>
           {formatActivityTime(entry.createdAt, locale)}
         </time>
       </div>
-      {hasDetail && expanded ? <div className="agent-activity-row-detail">{row.detail}</div> : null}
+      {hasDetail && expanded ? (
+        <div className={agentActivityPanelStyles["agent-activity-row-detail"]}>{row.detail}</div>
+      ) : null}
     </article>
   );
 }
@@ -1384,10 +1422,10 @@ function isDetailSection(value: DetailSection | null): value is DetailSection {
 
 function ToolDetail({ sections }: { sections: readonly DetailSection[] }) {
   return (
-    <div className="agent-activity-tool-detail">
+    <div className={agentActivityPanelStyles["agent-activity-tool-detail"]}>
       {sections.map((section) => (
-        <div key={section.label} className="agent-activity-tool-section">
-          <div className="agent-activity-tool-section-label">{section.label}</div>
+        <div key={section.label} className={agentActivityPanelStyles["agent-activity-tool-section"]}>
+          <div className={agentActivityPanelStyles["agent-activity-tool-section-label"]}>{section.label}</div>
           <pre>{section.value}</pre>
         </div>
       ))}
@@ -1396,7 +1434,7 @@ function ToolDetail({ sections }: { sections: readonly DetailSection[] }) {
 }
 
 function PlainDetail({ value }: { value: string }) {
-  return <pre className="agent-activity-plain-detail">{value}</pre>;
+  return <pre className={agentActivityPanelStyles["agent-activity-plain-detail"]}>{value}</pre>;
 }
 
 function ActivityMessageDetail({ message, t }: { message: IMMessage; t: TranslateFn }) {

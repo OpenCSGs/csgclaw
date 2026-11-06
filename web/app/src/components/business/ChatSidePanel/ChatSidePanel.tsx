@@ -1,3 +1,4 @@
+import chatSidePanelStyles from "./ChatSidePanel.module.css";
 import { createUUID } from "@/shared/lib/uuid";
 import { WorkspacePathActions } from "./WorkspacePathActions";
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
@@ -241,7 +242,7 @@ export function ChatSidePanel({
     >
       {!overlay && !maximized ? (
         <div
-          className="chat-side-resizer"
+          className={chatSidePanelStyles["chat-side-resizer"]}
           role="separator"
           tabIndex={0}
           aria-label={t("chatSideResize")}
@@ -281,8 +282,8 @@ export function ChatSidePanel({
           }}
         />
       ) : null}
-      <header className="chat-side-header">
-        <div className="chat-side-leading-actions">
+      <header className={chatSidePanelStyles["chat-side-header"]}>
+        <div className={chatSidePanelStyles["chat-side-leading-actions"]}>
           <Tooltip content={t("chatSideNew")} contentProps={{ side: "bottom" }}>
             <Button
               className="chat-side-new"
@@ -336,7 +337,10 @@ export function ChatSidePanel({
           {state.tabs.map((tab) => {
             const Icon = iconFor(tab);
             return (
-              <div className={`chat-side-tab${tab.id === state.activeID ? " is-active" : ""}`} key={tab.id}>
+              <div
+                className={`${chatSidePanelStyles["chat-side-tab"]}${tab.id === state.activeID ? " is-active" : ""}`}
+                key={tab.id}
+              >
                 <Tooltip content={labelFor(tab)} contentProps={{ side: "bottom" }}>
                   <button
                     type="button"
@@ -348,9 +352,9 @@ export function ChatSidePanel({
                     onClick={() => patch({ activeID: tab.id })}
                   >
                     {tab.kind === "files" ? (
-                      <span className="chat-side-folder-icon" aria-hidden="true" />
+                      <span className={chatSidePanelStyles["chat-side-folder-icon"]} aria-hidden="true" />
                     ) : tab.kind === "file" ? (
-                      <span className="chat-side-file-icon" aria-hidden="true" />
+                      <span className={chatSidePanelStyles["chat-side-file-icon"]} aria-hidden="true" />
                     ) : (
                       <Icon size={15} aria-hidden="true" />
                     )}
@@ -362,7 +366,7 @@ export function ChatSidePanel({
                     iconOnly
                     size="sm"
                     variant="tertiaryGray"
-                    className="chat-side-tab-close"
+                    className={chatSidePanelStyles["chat-side-tab-close"]}
                     aria-label={t("chatCloseTab", { name: labelFor(tab) })}
                     onClick={() => close(tab)}
                   >
@@ -401,7 +405,7 @@ export function ChatSidePanel({
           </Tooltip>
         </div>
       </header>
-      <div className="chat-side-content">
+      <div className={chatSidePanelStyles["chat-side-content"]}>
         {!state.tabs.length ? <WelcomeTab t={t} onSelect={newTab} hasRoomTasks={Boolean(roomTasksPanel)} /> : null}
         {state.tabs.map((tab) => (
           <TabBody key={tab.id} tab={tab} active={tab.id === state.activeID && visible}>
@@ -448,7 +452,7 @@ export function ChatSidePanel({
                 onReference={onReference}
               />
             ) : tab.kind === "thread" ? (
-              (threadPanel ?? <div className="chat-side-status">{t("loading")}</div>)
+              (threadPanel ?? <div className={chatSidePanelStyles["chat-side-status"]}>{t("loading")}</div>)
             ) : (
               <CitationSources
                 variant="embedded"
@@ -489,10 +493,10 @@ function WelcomeTab({
           kind === "files" ? FolderIcon : kind === "browser" ? Globe : kind === "tasks" ? ListTodo : Activity;
         return (
           <button key={kind} className={`chat-side-welcome-${kind}`} type="button" onClick={() => onSelect(kind)}>
-            <span className="chat-side-welcome-icon">
+            <span className={chatSidePanelStyles["chat-side-welcome-icon"]}>
               <Icon size={18} />
             </span>
-            <span className="chat-side-welcome-content">
+            <span className={chatSidePanelStyles["chat-side-welcome-content"]}>
               <strong>
                 {t(
                   kind === "files"
@@ -530,7 +534,7 @@ function TabBody({ tab, active, children }: { tab: ChatSideTab; active: boolean;
   }, [active]);
   return (
     <div
-      className="chat-side-tab-body"
+      className={chatSidePanelStyles["chat-side-tab-body"]}
       role="tabpanel"
       id={`chat-tab-${encodeURIComponent(tab.id)}`}
       aria-labelledby={`chat-tab-label-${encodeURIComponent(tab.id)}`}
@@ -625,9 +629,9 @@ function FileTab({
       onReference={tab.reference ? () => onReference(tab.reference!) : undefined}
     />
   ) : attachment.isLoading ? (
-    <div className="chat-side-status">{t("loading")}</div>
+    <div className={chatSidePanelStyles["chat-side-status"]}>{t("loading")}</div>
   ) : (
-    <div className="chat-side-status" role="alert">
+    <div className={chatSidePanelStyles["chat-side-status"]} role="alert">
       {t("attachmentPreviewFailed")}
       <Button onClick={() => void attachment.refetch()}>{t("retry")}</Button>
     </div>

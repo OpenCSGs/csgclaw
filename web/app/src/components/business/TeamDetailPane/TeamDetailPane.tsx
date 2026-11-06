@@ -5,6 +5,7 @@ import { Edit3, ListChecks, MessageSquarePlus, Trash2, UserPlus, Users } from "l
 import { TaskSubtaskIndicator } from "@/components/business";
 import { AgentProfileHeader } from "@/components/business/AgentDetails";
 import {
+  TextArea,
   Button,
   DialogBody,
   DialogCloseButton,
@@ -150,7 +151,7 @@ export function TeamDetailPane({
         description={
           onUpdateDescription ? (
             editingDescription ? (
-              <textarea
+              <TextArea
                 ref={descriptionRef}
                 className={styles.descriptionInput}
                 aria-label={t("teamDescriptionLabel")}

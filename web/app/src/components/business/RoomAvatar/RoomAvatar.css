@@ -1,31 +1,3 @@
-.room-avatar {
-  position: relative;
-  display: block;
-  overflow: clip;
-  border: 1px solid var(--white);
-  background: var(--white);
-  flex: 0 0 auto;
-  isolation: isolate;
-}
-
-.room-avatar--compact {
-  box-shadow: inset 0 0 0 0.5px color-mix(in srgb, var(--white) 56%, transparent);
-}
-
-.room-avatar--large {
-  box-shadow: inset 0 0 0 0.5px color-mix(in srgb, var(--white) 42%, transparent);
-}
-
-.room-avatar-tile {
-  position: absolute;
-  overflow: hidden;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-color: var(--white);
-  color: var(--avatar-text);
-}
-
 .room-avatar-tile--full {
   inset: 0;
 }
@@ -85,40 +57,4 @@
   bottom: 0;
   width: 50%;
   border-left: 1px solid var(--white);
-}
-
-.room-avatar-content {
-  width: 100%;
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font: inherit;
-  line-height: 1;
-  font-weight: var(--avatar-default-weight);
-}
-
-.room-avatar-content .agent-avatar-image {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.room-avatar-count-badge {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
-  width: 16px;
-  height: 16px;
-  border-radius: var(--radius-md);
-  background: var(--white);
-  color: var(--gray-700);
-  font-family: var(--font-sans);
-  font-size: 10px;
-  font-weight: var(--font-weight-medium);
-  line-height: var(--space-4);
-  text-align: center;
-  z-index: 1;
-  pointer-events: none;
 }

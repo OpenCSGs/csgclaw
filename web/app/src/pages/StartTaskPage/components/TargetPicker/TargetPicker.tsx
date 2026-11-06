@@ -1,7 +1,7 @@
 import type { CloudAgent } from "@/models/cloudAgents";
 import { useMemo, useRef, useState } from "react";
 import { Check, ChevronDown, Plus, Search } from "lucide-react";
-import { PopoverContent, PopoverRoot, PopoverTrigger } from "@/components/ui";
+import { TextInput, PopoverContent, PopoverRoot, PopoverTrigger } from "@/components/ui";
 import { AgentAvatarContent } from "@/components/business/AgentAvatar";
 import { RoomAvatar } from "@/components/business/RoomAvatar";
 import { agentRoleLabel, isManagerAgent as isManagerAgentItem } from "@/models/agents";
@@ -161,7 +161,8 @@ export function TargetPicker({
       >
         <div className={styles.searchField}>
           <Search aria-hidden="true" size={14} strokeWidth={2} />
-          <input
+          <TextInput
+            variant="plain"
             ref={searchRef}
             aria-label={t("iaTargetSearch")}
             className={styles.searchInput}

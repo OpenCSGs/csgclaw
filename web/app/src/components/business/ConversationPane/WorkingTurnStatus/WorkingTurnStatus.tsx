@@ -1,3 +1,4 @@
+import workingTurnStyles from "@/components/business/ConversationPane/WorkingTurn.module.css";
 import { ChevronRight } from "lucide-react";
 import { WorkingTurnControls } from "../WorkingTurnControls";
 import type { TranslateFn } from "@/models/conversations";
@@ -41,23 +42,23 @@ export function WorkingTurnStatus({
   const thinkingLatestLine = thinkingText === undefined ? "" : latestThinkingLine(thinkingText);
   const content = (
     <>
-      <span className="composer-working-dots" aria-hidden="true">
+      <span className={workingTurnStyles["composer-working-dots"]} aria-hidden="true">
         <span />
         <span />
         <span />
       </span>
-      {showName ? <strong className="composer-working-name">{participant.name}</strong> : null}
+      {showName ? <strong className={workingTurnStyles["composer-working-name"]}>{participant.name}</strong> : null}
       <span className={`composer-working-verb${toolName ? " is-tool" : ""}`}>
         {actionLabel}
         {toolName && summary ? <ChevronRight aria-hidden="true" size={12} strokeWidth={2} /> : null}
       </span>
-      {summary ? <span className="composer-working-summary">{summary}</span> : null}
+      {summary ? <span className={workingTurnStyles["composer-working-summary"]}>{summary}</span> : null}
     </>
   );
 
   return (
-    <div className={`composer-working-turn${participant.stopping ? " is-stopping" : ""}`}>
-      <div className="composer-working-row">
+    <div className={`${workingTurnStyles["composer-working-turn"]}${participant.stopping ? " is-stopping" : ""}`}>
+      <div className={workingTurnStyles["composer-working-row"]}>
         {onAction ? (
           <button
             type="button"
@@ -87,7 +88,9 @@ export function WorkingTurnStatus({
           </span>
         ) : null}
       </div>
-      {participant.stopError ? <div className="composer-working-error">{participant.stopError}</div> : null}
+      {participant.stopError ? (
+        <div className={workingTurnStyles["composer-working-error"]}>{participant.stopError}</div>
+      ) : null}
     </div>
   );
 }

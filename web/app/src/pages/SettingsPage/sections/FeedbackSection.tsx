@@ -8,6 +8,7 @@ import { useFeedback } from "../useFeedback";
 import { SettingsRow } from "./SettingsRow";
 import { useAuthLoginDialog } from "./useAuthLoginDialog";
 import styles from "../SettingsPage.module.css";
+import accountSectionStyles from "./AccountSection.module.css";
 import { openOnboardingGuide } from "@/shared/lib/onboardingGuide";
 
 export function FeedbackSection() {
@@ -55,7 +56,7 @@ export function FeedbackSection() {
           >
             {t("feedbackWrite")}
           </Button>
-          <a className={styles.linkButton} href={feedbackURL} target="_blank" rel="noreferrer">
+          <a className={accountSectionStyles.linkButton} href={feedbackURL} target="_blank" rel="noreferrer">
             {t("settingsFeedbackGithubAction")}
           </a>
         </div>

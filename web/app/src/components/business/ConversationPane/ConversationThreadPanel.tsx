@@ -1,3 +1,5 @@
+import conversationThreadsStyles from "./ConversationThreads.module.css";
+import conversationPaneStyles from "./ConversationPane.module.css";
 import "@/components/business/ResourceTag";
 import { messageResources, resourceMessageText } from "@/models/conversationResources";
 import {
@@ -333,10 +335,10 @@ export function ConversationThreadPanel({
 
   return (
     <aside className="thread-panel" aria-label={t("threadPanelTitle")}>
-      <div className="thread-panel-header">
+      <div className={conversationThreadsStyles["thread-panel-header"]}>
         <div>
-          <div className="thread-panel-kicker">{t("threadPanelTitle")}</div>
-          <div className="thread-panel-title truncate">
+          <div className={conversationThreadsStyles["thread-panel-kicker"]}>{t("threadPanelTitle")}</div>
+          <div className={`${conversationThreadsStyles["thread-panel-title"]} truncate`}>
             {visibleRoot ? (
               <MessagePreviewText
                 content={
@@ -360,10 +362,10 @@ export function ConversationThreadPanel({
         </Tooltip>
       </div>
       <div ref={threadBodyRef} className="thread-panel-body">
-        {loading && !root ? <div className="thread-empty">{t("loading")}</div> : null}
+        {loading && !root ? <div className={conversationThreadsStyles["thread-empty"]}>{t("loading")}</div> : null}
         {error ? <div className="form-error">{error}</div> : null}
         {visibleRoot ? (
-          <div className="thread-root">
+          <div className={conversationThreadsStyles["thread-root"]}>
             <ThreadMessage
               message={visibleRoot}
               currentUserID={currentUserID}
@@ -382,7 +384,7 @@ export function ConversationThreadPanel({
             />
           </div>
         ) : null}
-        <div className="thread-replies">
+        <div className={conversationThreadsStyles["thread-replies"]}>
           {displayReplies.length > 0 ? (
             displayReplies.map((message) => (
               <ThreadMessage
@@ -404,7 +406,7 @@ export function ConversationThreadPanel({
               />
             ))
           ) : (
-            <div className="thread-empty">{t("threadNoReplies")}</div>
+            <div className={conversationThreadsStyles["thread-empty"]}>{t("threadNoReplies")}</div>
           )}
         </div>
       </div>
@@ -412,7 +414,7 @@ export function ConversationThreadPanel({
         <AgentQuestionComposer mode={questionMode} t={t} usersById={usersById} />
       ) : (
         <div
-          className="thread-composer"
+          className={conversationThreadsStyles["thread-composer"]}
           onDragOver={(event) => {
             if (disabled || !dataTransferHasFiles(event.dataTransfer)) {
               return;
@@ -435,7 +437,7 @@ export function ConversationThreadPanel({
               activeIndex={threadSlashIndex}
               continuation={threadSlashContinuation}
               loading={threadSlashPickerLoading}
-              className="thread-slash-picker"
+              className={conversationThreadsStyles["thread-slash-picker"]}
               t={t}
               onSelect={(name) => onApplyThreadSlashCandidate(name)}
             />
@@ -446,13 +448,13 @@ export function ConversationThreadPanel({
             <MentionPicker
               users={threadMentionCandidates}
               activeIndex={mentionIndex}
-              className="thread-mention-picker"
+              className={conversationThreadsStyles["thread-mention-picker"]}
               showRole={false}
               t={t}
               onSelect={insertThreadMention}
             />
           ) : null}
-          <div className="thread-composer-box">
+          <div className={conversationThreadsStyles["thread-composer-box"]}>
             <AttachmentDraftStrip
               drafts={attachmentDrafts}
               t={t}
@@ -597,7 +599,7 @@ export function ConversationThreadPanel({
                 event.currentTarget.value = "";
               }}
             />
-            <div className="thread-composer-toolbar">
+            <div className={conversationThreadsStyles["thread-composer-toolbar"]}>
               <ComposerAddMenu
                 onOpenResourcePicker={resourcePicker.open}
                 disabled={disabled}
@@ -673,7 +675,7 @@ function ThreadMessage({
 
   return (
     <div
-      className={`thread-message ${own ? "own" : ""} ${compact ? "compact" : ""} ${message.metadata?.image_generation || isVideoGeneration ? "image-generation-message" : ""}`.trim()}
+      className={`thread-message ${own ? "own" : ""} ${compact ? "compact" : ""} ${message.metadata?.image_generation || isVideoGeneration ? conversationPaneStyles["image-generation-message"] : ""}`.trim()}
       data-message-id={message.id || undefined}
     >
       {user ? (
@@ -732,7 +734,7 @@ function ThreadMessage({
         ))}
         <ConversationMessageActions
           metadata={message.metadata}
-          className="thread-message-actions"
+          className={conversationThreadsStyles["thread-message-actions"]}
           content={message.metadata?.image_generation ? null : message.content}
           image={message.metadata?.image_generation ? message.attachments?.find(isImageAttachment) : undefined}
           t={t}

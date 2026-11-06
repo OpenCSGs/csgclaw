@@ -1,3 +1,5 @@
+import testConversationComposerStyles from "@/components/business/ConversationPane/ConversationComposer.module.css";
+import testConversationAttachmentsStyles from "@/components/business/ConversationPane/ConversationAttachments.module.css";
 import { createRef } from "react";
 import { createEvent, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -110,7 +112,7 @@ describe("ConversationComposer attachments", () => {
   it("places the add and send controls in one composer toolbar without visible shortcut copy", () => {
     const { container } = renderComposer();
 
-    const row = container.querySelector(".composer-toolbar");
+    const row = container.querySelector(`.${testConversationComposerStyles["composer-toolbar"]}`);
     expect(row).toBeInTheDocument();
     expect(within(row as HTMLElement).getByRole("button", { name: "Add content" })).toHaveClass("composer-add-button");
     expect(within(row as HTMLElement).getByRole("button", { name: "Send" })).toHaveClass("composer-send-button");
@@ -169,7 +171,7 @@ describe("ConversationComposer attachments", () => {
     ]);
     const { container } = renderComposer({ attachmentDrafts });
 
-    const icon = container.querySelector(".attachment-file-icon");
+    const icon = container.querySelector(`.${testConversationAttachmentsStyles["attachment-file-icon"]}`);
     expect(icon).toBeInTheDocument();
     expect(within(icon as HTMLElement).getByText("PDF")).toBeInTheDocument();
     expect(icon?.querySelector("img")).toBeInTheDocument();
@@ -183,7 +185,9 @@ describe("ConversationComposer attachments", () => {
       new File(["three"], "three.txt", { type: "text/plain" }),
     ]);
     const { container } = renderComposer({ attachmentDrafts });
-    const strip = container.querySelector<HTMLElement>(".attachment-draft-strip");
+    const strip = container.querySelector<HTMLElement>(
+      `.${testConversationAttachmentsStyles["attachment-draft-strip"]}`,
+    );
     expect(strip).not.toBeNull();
     Object.defineProperties(strip!, {
       clientWidth: { configurable: true, value: 240 },
@@ -194,13 +198,19 @@ describe("ConversationComposer attachments", () => {
     fireEvent.scroll(strip!);
     expect(screen.getByRole("button", { name: "View more attachments" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "View previous attachments" })).not.toBeInTheDocument();
-    expect(container.querySelector(".attachment-scroll-fade.is-next")).toBeInTheDocument();
-    expect(container.querySelector(".attachment-scroll-fade.is-previous")).not.toBeInTheDocument();
+    expect(
+      container.querySelector(`.${testConversationAttachmentsStyles["attachment-scroll-fade"]}.is-next`),
+    ).toBeInTheDocument();
+    expect(
+      container.querySelector(`.${testConversationAttachmentsStyles["attachment-scroll-fade"]}.is-previous`),
+    ).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "View more attachments" }));
     expect(strip!.scrollLeft).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: "View previous attachments" })).toBeInTheDocument();
-    expect(container.querySelector(".attachment-scroll-fade.is-previous")).toBeInTheDocument();
+    expect(
+      container.querySelector(`.${testConversationAttachmentsStyles["attachment-scroll-fade"]}.is-previous`),
+    ).toBeInTheDocument();
 
     const scrollLeftBeforeWheel = strip!.scrollLeft;
     const wheelEvent = createEvent.wheel(strip!, { cancelable: true, deltaX: 0, deltaY: 40 });

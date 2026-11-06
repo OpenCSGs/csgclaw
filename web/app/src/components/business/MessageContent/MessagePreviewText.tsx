@@ -1,7 +1,7 @@
+import messagePreviewTextStyles from "./MessagePreviewText.module.css";
 import { Fragment } from "react";
 import type { MessagePreviewTextToken } from "@/models/conversations";
 import { splitMessagePreviewText } from "@/models/conversations";
-import "./MessagePreviewText.css";
 
 export function MessagePreviewText({ content }: { content: unknown }) {
   const tokens: MessagePreviewTextToken[] = splitMessagePreviewText(content);
@@ -15,14 +15,20 @@ export function MessagePreviewText({ content }: { content: unknown }) {
       {tokens.map((token, index) => {
         if (token.type === "mention") {
           return (
-            <span key={`${token.text}-${index}`} className="message-preview-token message-preview-token-mention">
+            <span
+              key={`${token.text}-${index}`}
+              className={`${messagePreviewTextStyles["message-preview-token"]} ${messagePreviewTextStyles["message-preview-token-mention"]}`}
+            >
               {token.text}
             </span>
           );
         }
         if (token.type === "slash") {
           return (
-            <span key={`${token.text}-${index}`} className="message-preview-token message-preview-token-slash">
+            <span
+              key={`${token.text}-${index}`}
+              className={`${messagePreviewTextStyles["message-preview-token"]} ${messagePreviewTextStyles["message-preview-token-slash"]}`}
+            >
               {token.text}
             </span>
           );

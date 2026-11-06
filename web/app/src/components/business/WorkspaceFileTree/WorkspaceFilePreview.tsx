@@ -1,11 +1,12 @@
+import workspaceFilePreviewStyles from "./WorkspaceFilePreview.module.css";
 import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
-import { FileSearch, X } from "lucide-react";
+import { FileSearch } from "lucide-react";
 import { renderMarkdown } from "@/components/business/MessageContent/markdown";
 import {
   Button,
   DialogBody,
-  DialogClose,
+  DialogCloseButton,
   DialogContent,
   DialogDescription,
   DialogHeader,
@@ -79,23 +80,25 @@ export function WorkspaceFilePreview({
       ) : loading ? (
         <div className="workspace-empty">{loadingText}</div>
       ) : !file ? (
-        <div className="workspace-preview-empty-state">
-          {emptyIcon ? <span className="workspace-preview-empty-icon">{emptyIcon}</span> : null}
+        <div className={workspaceFilePreviewStyles["workspace-preview-empty-state"]}>
+          {emptyIcon ? (
+            <span className={workspaceFilePreviewStyles["workspace-preview-empty-icon"]}>{emptyIcon}</span>
+          ) : null}
           <strong>{emptyTitle}</strong>
           <p>{emptyHint}</p>
         </div>
       ) : (
         <>
-          <div className="workspace-preview-file-header">
+          <div className={workspaceFilePreviewStyles["workspace-preview-file-header"]}>
             <strong>{file.path}</strong>
-            <div className="workspace-preview-file-actions">
-              <span className="workspace-preview-file-meta">{fileMeta}</span>
+            <div className={workspaceFilePreviewStyles["workspace-preview-file-actions"]}>
+              <span className={workspaceFilePreviewStyles["workspace-preview-file-meta"]}>{fileMeta}</span>
               {!file.binary ? (
                 <Tooltip content={previewText}>
                   <Button
                     iconOnly
                     aria-label={previewText}
-                    className="workspace-preview-open-button"
+                    className={workspaceFilePreviewStyles["workspace-preview-open-button"]}
                     size="sm"
                     variant="tertiaryGray"
                     onClick={() => setDialogOpen(true)}
@@ -115,21 +118,28 @@ export function WorkspaceFilePreview({
           </div>
           {!file.binary ? (
             <DialogRoot open={dialogOpen} onOpenChange={setDialogOpen}>
-              <DialogContent className="workspace-preview-dialog" portalContainer={portalContainer}>
-                <DialogHeader className="workspace-preview-dialog-header">
-                  <div className="workspace-preview-dialog-heading">
+              <DialogContent
+                className={workspaceFilePreviewStyles["workspace-preview-dialog"]}
+                portalContainer={portalContainer}
+              >
+                <DialogHeader className={workspaceFilePreviewStyles["workspace-preview-dialog-header"]}>
+                  <div className={workspaceFilePreviewStyles["workspace-preview-dialog-heading"]}>
                     <DialogTitle>{file.path}</DialogTitle>
                     <DialogDescription className="sr-only">{file.path}</DialogDescription>
                   </div>
-                  <div className="workspace-preview-dialog-actions">
+                  <div className={workspaceFilePreviewStyles["workspace-preview-dialog-actions"]}>
                     {markdownFile ? (
-                      <div className="workspace-preview-mode-switch" role="tablist" aria-label={viewToggleLabel}>
+                      <div
+                        className={workspaceFilePreviewStyles["workspace-preview-mode-switch"]}
+                        role="tablist"
+                        aria-label={viewToggleLabel}
+                      >
                         <Tooltip content={previewText}>
                           <Button
                             role="tab"
                             aria-selected={activeDialogMode === "preview"}
                             active={activeDialogMode === "preview"}
-                            className="workspace-preview-mode-button"
+                            className={workspaceFilePreviewStyles["workspace-preview-mode-button"]}
                             size="sm"
                             variant="tertiaryGray"
                             onClick={() => setDialogMode("preview")}
@@ -142,7 +152,7 @@ export function WorkspaceFilePreview({
                             role="tab"
                             aria-selected={activeDialogMode === "code"}
                             active={activeDialogMode === "code"}
-                            className="workspace-preview-mode-button"
+                            className={workspaceFilePreviewStyles["workspace-preview-mode-button"]}
                             size="sm"
                             variant="tertiaryGray"
                             onClick={() => setDialogMode("code")}
@@ -152,24 +162,18 @@ export function WorkspaceFilePreview({
                         </Tooltip>
                       </div>
                     ) : null}
-                    <Tooltip content={closeText}>
-                      <DialogClose asChild>
-                        <button type="button" className="workspace-preview-close-button" aria-label={closeText}>
-                          <X size={18} strokeWidth={2} aria-hidden="true" />
-                        </button>
-                      </DialogClose>
-                    </Tooltip>
+                    <DialogCloseButton label={closeText} size="sm" variant="tertiaryGray" iconOnly />
                   </div>
                 </DialogHeader>
-                <DialogBody className="workspace-preview-dialog-body">
+                <DialogBody className={workspaceFilePreviewStyles["workspace-preview-dialog-body"]}>
                   {activeDialogMode === "preview" ? (
                     <div
-                      className="workspace-preview-markdown"
+                      className={workspaceFilePreviewStyles["workspace-preview-markdown"]}
                       dangerouslySetInnerHTML={{ __html: renderedMarkdown }}
                     />
                   ) : (
                     <WorkspaceFileCodeView
-                      className="workspace-preview-dialog-code-view"
+                      className={workspaceFilePreviewStyles["workspace-preview-dialog-code-view"]}
                       text={fileText}
                       lineCount={lineCount}
                     />
@@ -195,11 +199,11 @@ function WorkspaceFileCodeView({
 }) {
   const count = lineCount ?? (text ? text.split(/\r\n|\r|\n/).length : 0);
   return (
-    <div className={`workspace-preview-code-shell ${className}`.trim()}>
-      <pre className="workspace-preview-line-numbers">
+    <div className={`${workspaceFilePreviewStyles["workspace-preview-code-shell"]} ${className}`.trim()}>
+      <pre className={workspaceFilePreviewStyles["workspace-preview-line-numbers"]}>
         {Array.from({ length: count }, (_, index) => index + 1).join("\n")}
       </pre>
-      <pre className="workspace-preview-code">{text}</pre>
+      <pre className={workspaceFilePreviewStyles["workspace-preview-code"]}>{text}</pre>
     </div>
   );
 }

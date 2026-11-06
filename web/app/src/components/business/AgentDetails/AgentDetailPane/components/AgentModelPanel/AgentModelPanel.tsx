@@ -1,3 +1,4 @@
+import agentDetailPaneStyles from "@/components/business/AgentDetails/AgentDetailPane/AgentDetailPane.module.css";
 import { AgentModelConfiguration } from "@/components/business/AgentModelConfiguration";
 import { AlertCircle, RefreshCw } from "lucide-react";
 import { errorMessage } from "@/api/client";
@@ -38,7 +39,10 @@ export function AgentModelPanel({
   updateDraft,
 }: AgentModelPanelProps) {
   return (
-    <section id="agent-profile-model" className="profile-section agent-profile-scroll-target">
+    <section
+      id="agent-profile-model"
+      className={`profile-section ${agentDetailPaneStyles["agent-profile-scroll-target"]}`}
+    >
       <div className="profile-section-heading">
         <div className="profile-section-title">{t("profileModelSection")}</div>
         <p className="profile-section-description">{t("profileModelSectionDescription")}</p>

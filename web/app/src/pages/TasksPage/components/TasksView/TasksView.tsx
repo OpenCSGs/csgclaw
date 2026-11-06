@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
-import type { ComponentProps, ReactNode } from "react";
-import { Bot, CalendarClock, ChevronDown, Pencil, Play, Trash2 } from "lucide-react";
+import type { ComponentProps } from "react";
+import { CalendarClock, Pencil, Play, Trash2 } from "lucide-react";
 import {
   Button,
   Tooltip,
   type ButtonVariant,
   DialogBody,
   DialogContent,
+  DialogCloseButton,
   DialogDescription,
   DialogFooter,
   DialogHeader,
@@ -15,7 +16,6 @@ import {
 } from "@/components/ui";
 import { AgentAvatarContent } from "@/components/business/AgentAvatar";
 import { ScheduledTaskStart } from "../ScheduledTaskStart";
-import { TaskStatusPill } from "@/components/business";
 import type { CreateWorkspaceTaskPayload } from "@/api/tasks";
 import type { CreateScheduledTaskPayload, UpdateScheduledTaskPayload } from "@/api/scheduledTasks";
 import type { AgentLike } from "@/models/agents";
@@ -26,32 +26,13 @@ import {
   type WorkspaceScheduledTask,
   type WorkspaceScheduledTaskRun,
 } from "@/models/scheduledTasks";
-import {
-  displayTaskAssignedAgent,
-  displayTaskClaimedAgent,
-  displayTaskRoomTitle,
-  displayTeam,
-  formatTaskUpdatedAt,
-  rootTaskForTask,
-  taskChildren,
-  taskExecutionRoomID,
-  taskStatusLabel,
-} from "@/models/tasks";
+import { displayTeam, formatTaskUpdatedAt, rootTaskForTask, taskChildren } from "@/models/tasks";
 import type { WorkspaceTask, WorkspaceTeam, WorkspaceTeamEvent } from "@/models/tasks";
-import {
-  agentNameLookup,
-  displayAgentByID,
-  displayTaskClaimedAgentName,
-  displayTaskWorkerName,
-  displayTaskAssignmentTargetName,
-  taskActiveWorker,
-  type TaskActiveWorker,
-} from "@/models/taskBoard";
+import { agentNameLookup, displayAgentByID } from "@/models/taskBoard";
 import { classNames } from "@/shared/lib/classNames";
 import { ScheduledTaskCreateDialog } from "./ScheduledTaskCreateDialog";
 import { ScheduledTaskFormFields } from "./ScheduledTaskFormFields";
 import { TaskCreateDialog } from "./TaskCreateDialog";
-import { TaskDialogCloseButton } from "./TaskDialogCloseButton";
 import {
   TASK_TITLE_MAX_LENGTH,
   type ScheduledTaskFormDraft,
@@ -60,17 +41,12 @@ import {
   type TaskCreateFieldErrors,
 } from "./taskDialogTypes";
 import styles from "./TasksView.module.css";
+import taskFormStyles from "./TaskForm.module.css";
+import scheduledTasksStyles from "./ScheduledTasks.module.css";
+import taskDetailsStyles from "./TaskDetails/TaskDetails.module.css";
+import { GeneratedTaskInlineDetail, TaskDetailDialog } from "./TaskDetails";
 
 const EMPTY_AGENTS: AgentLike[] = [];
-
-function moduleSuffixStyle(prefix: string, suffix: string | undefined): string {
-  if (!suffix) {
-    return "";
-  }
-  const normalized = suffix.replace(/-+([a-zA-Z0-9_])/g, (_, char: string) => char.toUpperCase());
-  const key = `${prefix}${normalized.charAt(0).toUpperCase()}${normalized.slice(1)}`;
-  return styles[key] ?? "";
-}
 
 const emptyCreateDraft: TaskCreateDraft = {
   assignee: "",
@@ -162,8 +138,8 @@ function scheduledTaskAgentOptions(agents: readonly AgentLike[]) {
     value: String(agent.id || ""),
     textValue: displayAgent(agent),
     label: (
-      <span className={styles.executorOption}>
-        <span className={styles.executorAvatar} aria-hidden="true">
+      <span className={taskFormStyles.executorOption}>
+        <span className={taskFormStyles.executorAvatar} aria-hidden="true">
           <AgentAvatarContent avatar={agent.avatar} fallback={displayAgent(agent).slice(0, 1)} />
         </span>
         {displayAgent(agent)}
@@ -695,8 +671,8 @@ export function TasksView({
             </div>
             <div className={styles.taskContentLayout}>
               <div className={styles.taskContentMain}>
-                <div className={styles.scheduledTaskLayout}>
-                  <section className={styles.scheduledTaskList} aria-label={t("scheduledTasksTab")}>
+                <div className={scheduledTasksStyles.scheduledTaskLayout}>
+                  <section className={scheduledTasksStyles.scheduledTaskList} aria-label={t("scheduledTasksTab")}>
                     {scheduledTasks.length ? (
                       scheduledTasks.map((item) => {
                         const status = !item.enabled
@@ -709,15 +685,15 @@ export function TasksView({
                           <button
                             key={item.id}
                             type="button"
-                            className={styles.scheduledTaskRow}
+                            className={scheduledTasksStyles.scheduledTaskRow}
                             data-active={active || undefined}
                             aria-pressed={active}
                             onClick={() => selectScheduledTask(item.id)}
                           >
-                            <span className={styles.scheduledTaskRowHeading}>
+                            <span className={scheduledTasksStyles.scheduledTaskRowHeading}>
                               <CalendarClock size={15} aria-hidden="true" />
                               <strong>{item.title}</strong>
-                              <span className={styles.scheduledTaskStatus} data-status={status}>
+                              <span className={scheduledTasksStyles.scheduledTaskStatus} data-status={status}>
                                 {t(
                                   status === "disabled"
                                     ? "scheduledTaskStatusDisabled"
@@ -739,18 +715,18 @@ export function TasksView({
                     )}
                   </section>
                   <section
-                    className={styles.scheduledTaskDetail}
+                    className={scheduledTasksStyles.scheduledTaskDetail}
                     data-start={showScheduledStart || !selectedScheduledTask || undefined}
                     aria-label={t("scheduledTaskDetailTitle")}
                   >
                     {selectedScheduledTask && !showScheduledStart ? (
                       <>
-                        <div className={styles.scheduledTaskDetailHead}>
+                        <div className={scheduledTasksStyles.scheduledTaskDetailHead}>
                           <div>
                             <h2>{selectedScheduledTask.title}</h2>
                             <p>{scheduledTaskRecurrenceLabel(selectedScheduledTask.recurrence, t)}</p>
                           </div>
-                          <div className={styles.scheduledTaskActions}>
+                          <div className={scheduledTasksStyles.scheduledTaskActions}>
                             <Button
                               variant="secondaryGray"
                               size="sm"
@@ -803,7 +779,7 @@ export function TasksView({
                             </Button>
                           </div>
                         </div>
-                        <dl className={styles.scheduledTaskMeta}>
+                        <dl className={scheduledTasksStyles.scheduledTaskMeta}>
                           <div>
                             <dt>{t("scheduledTaskAgentLabel")}</dt>
                             <Tooltip content={selectedScheduledTask.agent_id}>
@@ -840,19 +816,24 @@ export function TasksView({
                             </dd>
                           </div>
                         </dl>
-                        <div className={styles.scheduledTaskPrompt}>{selectedScheduledTask.prompt}</div>
+                        <div className={scheduledTasksStyles.scheduledTaskPrompt}>{selectedScheduledTask.prompt}</div>
                         {!selectedGeneratedTaskID && latestRunTask?.assignment_type === "agent" && latestRunOutcome ? (
-                          <section className={classNames(styles.scheduledTaskRuns, styles.generatedTaskDescription)}>
+                          <section
+                            className={classNames(
+                              scheduledTasksStyles.scheduledTaskRuns,
+                              taskDetailsStyles.generatedTaskDescription,
+                            )}
+                          >
                             <h3>{t("scheduledTaskLatestResult")}</h3>
                             <p>{latestRunOutcome}</p>
                           </section>
                         ) : null}
-                        <div className={styles.scheduledTaskRuns}>
+                        <div className={scheduledTasksStyles.scheduledTaskRuns}>
                           <h3>{t("scheduledTaskRunsTitle")}</h3>
                           {scheduledTaskRuns.length ? (
-                            <div className={styles.scheduledTaskRunList}>
+                            <div className={scheduledTasksStyles.scheduledTaskRunList}>
                               {scheduledTaskRuns.map((run) => (
-                                <div key={run.id} className={styles.scheduledTaskRunRow}>
+                                <div key={run.id} className={scheduledTasksStyles.scheduledTaskRunRow}>
                                   <span>{formatTaskUpdatedAt(run.triggered_at)}</span>
                                   <strong>
                                     {run.status === "failed"
@@ -952,13 +933,13 @@ export function TasksView({
         open={Boolean(editingScheduledTask)}
         onOpenChange={(open) => (!open ? onCloseEditScheduledTaskModal?.() : null)}
       >
-        <DialogContent className={styles.taskCreateDialog}>
+        <DialogContent className={taskFormStyles.taskCreateDialog}>
           <DialogHeader>
             <div>
               <DialogTitle>{t("scheduledTaskEditTitle")}</DialogTitle>
               <DialogDescription>{t("scheduledTaskEditSubtitle")}</DialogDescription>
             </div>
-            <TaskDialogCloseButton label={t("close")} />
+            <DialogCloseButton label={t("close")} size="sm" variant="tertiaryGray" iconOnly />
           </DialogHeader>
           <DialogBody>
             <ScheduledTaskFormFields
@@ -970,7 +951,7 @@ export function TasksView({
               onClearError={clearEditScheduledFieldError}
             />
             {editScheduledTaskError ? (
-              <div className={classNames("form-error", styles.taskCreateError)}>{editScheduledTaskError}</div>
+              <div className={classNames("form-error", taskFormStyles.taskCreateError)}>{editScheduledTaskError}</div>
             ) : null}
           </DialogBody>
           <DialogFooter>
@@ -998,7 +979,7 @@ export function TasksView({
           }
         }}
       >
-        <DialogContent className={styles.taskCreateDialog}>
+        <DialogContent className={taskFormStyles.taskCreateDialog}>
           <DialogHeader>
             <div>
               <DialogTitle>{t("scheduledTaskDelete")}</DialogTitle>
@@ -1006,7 +987,7 @@ export function TasksView({
                 {t("scheduledTaskDeleteConfirmMessage", { title: deletingScheduledTask?.title || "" })}
               </DialogDescription>
             </div>
-            <TaskDialogCloseButton label={t("close")} />
+            <DialogCloseButton label={t("close")} size="sm" variant="tertiaryGray" iconOnly />
           </DialogHeader>
           <DialogFooter>
             <Button
@@ -1168,816 +1149,4 @@ function TaskToolbarButton({
       </span>
     </Tooltip>
   );
-}
-
-function RoomTaskSummary({ task, t }: { task: WorkspaceTask; t: TranslateFn }) {
-  if (task.assignment_type !== "room" || task.parent_id || !["completed", "failed", "cancelled"].includes(task.status))
-    return null;
-  return (
-    <section className={styles.detailBlock}>
-      <h3>{t("roomTaskSummary")}</h3>
-      <p>{task.goal_outcome ? t("roomTaskOutcome." + task.goal_outcome) : t("roomTaskAwaitingSummary")}</p>
-      {task.report ? <p className="whitespace-pre-wrap">{task.report}</p> : null}
-      {task.report_status === "pending" ? <p>{t("roomTaskReportPending")}</p> : null}
-    </section>
-  );
-}
-
-type TaskDetailDialogProps = {
-  agentNames: ReadonlyMap<string, string>;
-  childCount?: number;
-  childTasks?: WorkspaceTask[];
-  onClose?: () => void;
-  onOpenConversation: (roomID: string) => VoidOrPromise;
-  open: boolean;
-  t: TranslateFn;
-  task: WorkspaceTask | null;
-  taskEvents?: WorkspaceTeamEvent[];
-  teams?: WorkspaceTeam[];
-  title?: string;
-};
-
-type GeneratedTaskInlineDetailProps = {
-  agentNames: ReadonlyMap<string, string>;
-  childTasks?: WorkspaceTask[];
-  onOpenConversation: (roomID: string) => VoidOrPromise;
-  t: TranslateFn;
-  task: WorkspaceTask | null;
-  taskEvents?: WorkspaceTeamEvent[];
-  teams?: WorkspaceTeam[];
-};
-
-function GeneratedTaskInlineDetail({
-  t,
-  task,
-  agentNames,
-  childTasks = [],
-  teams = [],
-  taskEvents = [],
-  onOpenConversation,
-}: GeneratedTaskInlineDetailProps) {
-  const locale = document.documentElement.lang;
-  const isParentDetail = Boolean(task && !task.parent_id);
-  const detailEvents = useMemo(
-    () => (task ? taskEventsForDetail(task, childTasks, taskEvents) : []),
-    [childTasks, task, taskEvents],
-  );
-  const timelineEntries = useMemo(
-    () => (task ? taskTimelineEntries(task, childTasks, detailEvents, t, locale) : []),
-    [childTasks, detailEvents, locale, t, task],
-  );
-  const timelineGroups = useMemo(
-    () => (task && isParentDetail ? taskTimelineGroups(task, childTasks, detailEvents, t, locale) : []),
-    [childTasks, detailEvents, isParentDetail, locale, t, task],
-  );
-  const metaTags = useMemo(
-    () => (task ? taskMetaTags(task, childTasks.length, t, locale, agentNames) : []),
-    [agentNames, childTasks.length, locale, t, task],
-  );
-  const detailRoomID = useMemo(
-    () => (task ? taskExecutionRoomID(task, childTasks, teams) : ""),
-    [childTasks, task, teams],
-  );
-
-  return (
-    <section className={styles.generatedTaskDetail} aria-label={t("generatedTaskDetailTitle")}>
-      <header className={styles.generatedTaskDetailHead}>
-        <h3>{t("generatedTaskDetailTitle")}</h3>
-        {task && (task.room_id || detailRoomID) ? (
-          <Button variant="secondaryGray" size="sm" onClick={() => onOpenConversation(detailRoomID || task.room_id)}>
-            {t("taskOpenConversation")}
-          </Button>
-        ) : null}
-      </header>
-      <div className={styles.generatedTaskPanel}>
-        {task ? (
-          <>
-            <header className={styles.generatedTaskSummary}>
-              <div className={styles.generatedTaskTitleRow}>
-                <strong>{task.title}</strong>
-                <TaskStatusPill status={task.status} t={t} showFullLabel />
-              </div>
-              <p>{task.id}</p>
-            </header>
-            {task.assignment_type === "agent" && (task.result || task.error) ? (
-              <section className={classNames(styles.detailBlock, styles.generatedTaskDescription)}>
-                <h4>{t(task.result ? "taskResultLabel" : "taskErrorLabel")}</h4>
-                <p>{task.result || task.error}</p>
-              </section>
-            ) : null}
-            <section className={classNames(styles.detailBlock, styles.generatedTaskDescription)}>
-              <h4>{t("taskDescriptionLabel")}</h4>
-              <p>{task.body || t("tasksDetailPlaceholder")}</p>
-            </section>
-            <RoomTaskSummary task={task} t={t} />
-            <div className={styles.generatedTaskDetailGrid}>
-              <section className={classNames(styles.detailBlock, styles.generatedTaskActivity)}>
-                <h4>{t("taskActivityLabel")}</h4>
-                {isParentDetail ? (
-                  <TaskGroupedActivityTimeline
-                    groups={timelineGroups}
-                    agentNames={agentNames}
-                    emptyLabel={t("taskActivityEmpty")}
-                    t={t}
-                  />
-                ) : (
-                  <TaskActivityTimeline entries={timelineEntries} emptyLabel={t("taskActivityEmpty")} />
-                )}
-              </section>
-              <aside className={styles.generatedTaskMeta} aria-label={t("taskMetadataLabel")}>
-                <h4>{t("taskMetadataLabel")}</h4>
-                <div className={styles.taskDetailTags}>
-                  {metaTags.map((item) => (
-                    <TaskMetaTag key={item.key} label={item.label} value={item.value} />
-                  ))}
-                </div>
-              </aside>
-            </div>
-          </>
-        ) : (
-          <div className={styles.generatedTaskEmpty}>{t("generatedTaskDetailEmpty")}</div>
-        )}
-      </div>
-    </section>
-  );
-}
-
-function TaskDetailDialog({
-  t,
-  title = "",
-  task,
-  agentNames,
-  childCount = undefined,
-  childTasks = [],
-  teams = [],
-  taskEvents = [],
-  open,
-  onClose,
-  onOpenConversation,
-}: TaskDetailDialogProps) {
-  const dialogTitle = task?.title || title || t("tasksDetailLabel");
-  const locale = document.documentElement.lang;
-  const isParentDetail = Boolean(task && !task.parent_id);
-  const detailEvents = useMemo(
-    () => (task ? taskEventsForDetail(task, childTasks, taskEvents) : []),
-    [childTasks, task, taskEvents],
-  );
-  const timelineEntries = useMemo(
-    () => (task ? taskTimelineEntries(task, childTasks, detailEvents, t, locale) : []),
-    [childTasks, detailEvents, locale, t, task],
-  );
-  const timelineGroups = useMemo(
-    () => (task && isParentDetail ? taskTimelineGroups(task, childTasks, detailEvents, t, locale) : []),
-    [childTasks, detailEvents, isParentDetail, locale, t, task],
-  );
-  const metaTags = useMemo(
-    () => (task ? taskMetaTags(task, childCount, t, locale, agentNames) : []),
-    [agentNames, childCount, locale, t, task],
-  );
-  const detailRoomID = useMemo(
-    () => (task ? taskExecutionRoomID(task, childTasks, teams) : ""),
-    [childTasks, task, teams],
-  );
-  const activeWorker = useMemo(
-    () => (task && isParentDetail ? taskActiveWorker(task, childTasks, t, agentNames) : null),
-    [agentNames, childTasks, isParentDetail, t, task],
-  );
-
-  return (
-    <DialogRoot open={open} onOpenChange={(nextOpen) => (!nextOpen ? onClose?.() : null)}>
-      <DialogContent className={styles.taskDetailDialog}>
-        <DialogHeader className={styles.taskDetailDialogHeader}>
-          <div className={styles.taskDetailDialogHeading}>
-            <div className={styles.taskDetailDialogTitleRow}>
-              <DialogTitle className={styles.taskDetailDialogTitle} title={dialogTitle}>
-                {dialogTitle}
-              </DialogTitle>
-              {task ? <TaskStatusPill status={task.status} t={t} showFullLabel /> : null}
-            </div>
-            <DialogDescription className={styles.taskDetailDialogSubtitle}>
-              {task ? task.id : t("tasksSelectHint")}
-            </DialogDescription>
-          </div>
-          <div className={styles.taskDetailDialogTools}>
-            {activeWorker ? <TaskActiveWorkerBadge worker={activeWorker} /> : null}
-            <TaskDialogCloseButton label={t("close")} />
-          </div>
-        </DialogHeader>
-        {task ? (
-          <>
-            <DialogBody className={styles.taskDetailDialogBody}>
-              <div className={styles.taskDetailLayout}>
-                <main className={styles.taskDetailMain}>
-                  <section className={classNames(styles.detailBlock, styles.taskDetailDescriptionBlock)}>
-                    <h3>{t("taskDescriptionLabel")}</h3>
-                    <p>{task.body || t("tasksDetailPlaceholder")}</p>
-                  </section>
-                  <RoomTaskSummary task={task} t={t} />
-                  <section className={classNames(styles.detailBlock, styles.taskDetailActivityBlock)}>
-                    <h3>{t("taskActivityLabel")}</h3>
-                    {isParentDetail ? (
-                      <TaskGroupedActivityTimeline
-                        groups={timelineGroups}
-                        agentNames={agentNames}
-                        emptyLabel={t("taskActivityEmpty")}
-                        t={t}
-                      />
-                    ) : (
-                      <TaskActivityTimeline entries={timelineEntries} emptyLabel={t("taskActivityEmpty")} />
-                    )}
-                  </section>
-                </main>
-                <aside className={styles.taskDetailAside} aria-label={t("taskMetadataLabel")}>
-                  {isParentDetail ? <TaskDependencyGraph tasks={childTasks} t={t} /> : null}
-                  <h3>{t("taskMetadataLabel")}</h3>
-                  <div className={styles.taskDetailTags}>
-                    {metaTags.map((item) => (
-                      <TaskMetaTag key={item.key} label={item.label} value={item.value} />
-                    ))}
-                  </div>
-                </aside>
-              </div>
-            </DialogBody>
-            <DialogFooter className={styles.taskDialogActions}>
-              <Button variant="secondaryGray" size="md" onClick={onClose}>
-                {t("close")}
-              </Button>
-              <Button variant="primary" size="md" onClick={() => onOpenConversation(detailRoomID || task.room_id)}>
-                {t("taskOpenConversation")}
-              </Button>
-            </DialogFooter>
-          </>
-        ) : null}
-      </DialogContent>
-    </DialogRoot>
-  );
-}
-
-function TaskActiveWorkerBadge({ worker }: { worker: TaskActiveWorker }) {
-  return (
-    <Tooltip content={`${worker.name} ${worker.label}`}>
-      <div className={classNames(styles.taskActiveWorker, moduleSuffixStyle("taskActiveWorker", worker.tone))}>
-        <span className={styles.taskActiveAvatar} aria-hidden="true">
-          <Bot size={14} strokeWidth={1.9} />
-        </span>
-        <span className={styles.taskActiveWorkerName}>{worker.name}</span>
-        <span>{worker.label}</span>
-      </div>
-    </Tooltip>
-  );
-}
-
-type TaskTimelineEntry = {
-  id: string;
-  title: string;
-  subject: string;
-  meta: string;
-  body: string;
-  tone?: "success" | "warning" | "danger";
-  order: number;
-};
-
-type TaskTimelineGroup = {
-  entries: TaskTimelineEntry[];
-  kind: "parent" | "child";
-  task: WorkspaceTask;
-};
-
-type TaskMetaTagItem = {
-  key: string;
-  label: string;
-  value: ReactNode;
-};
-
-function TaskGroupedActivityTimeline({
-  groups,
-  agentNames,
-  emptyLabel,
-  t,
-}: {
-  agentNames: ReadonlyMap<string, string>;
-  emptyLabel: string;
-  groups: TaskTimelineGroup[];
-  t: TranslateFn;
-}) {
-  const [expandedTaskIDs, setExpandedTaskIDs] = useState<Set<string>>(() => new Set());
-  const hasEntries = groups.some((group) => group.entries.length > 0);
-  const parentGroup = groups.find((group) => group.kind === "parent") ?? null;
-  const childGroups = groups
-    .filter((group) => group.kind === "child")
-    .sort(
-      (left, right) =>
-        timelineGroupOrder(left) - timelineGroupOrder(right) || left.task.id.localeCompare(right.task.id),
-    );
-  const parentEntries = parentGroup?.entries ?? [];
-  const leadingParentEntries = parentEntries.length > 1 ? parentEntries.slice(0, 1) : parentEntries;
-  const trailingParentEntries = parentEntries.length > 1 ? parentEntries.slice(1) : [];
-  const defaultExpandedTaskID = defaultExpandedChildTaskID(childGroups);
-  const childGroupSignature = childGroups
-    .map((group) => `${group.task.id}:${group.task.status}:${timelineGroupOrder(group)}:${group.entries.length}`)
-    .join("|");
-
-  useEffect(() => {
-    setExpandedTaskIDs(defaultExpandedTaskID ? new Set([defaultExpandedTaskID]) : new Set());
-  }, [childGroupSignature, defaultExpandedTaskID]);
-
-  if (!hasEntries) {
-    return <div className={styles.taskActivityEmpty}>{emptyLabel}</div>;
-  }
-
-  function toggleTask(taskID: string) {
-    setExpandedTaskIDs((current) => {
-      const next = new Set(current);
-      if (next.has(taskID)) {
-        next.delete(taskID);
-      } else {
-        next.add(taskID);
-      }
-      return next;
-    });
-  }
-
-  return (
-    <div className={styles.taskGroupedActivityList}>
-      {parentGroup ? (
-        <header className={classNames(styles.taskActivityGroupHead, styles.taskActivityRootHead)}>
-          <div className={styles.taskActivityGroupTitle}>
-            <span className={styles.taskActivityGroupKind}>{t("taskTimelineMainTask")}</span>
-            <strong>{parentGroup.task.id}</strong>
-            <span>{parentGroup.task.title}</span>
-          </div>
-          <div className={styles.taskActivityGroupActions}>
-            <span>{t("taskTimelineEventsCount", { count: parentGroup.entries.length + childGroups.length })}</span>
-          </div>
-        </header>
-      ) : null}
-      <ol className={classNames(styles.taskActivityList, styles.taskCombinedActivityList)}>
-        {leadingParentEntries.map((entry) => (
-          <TaskActivityTimelineItem key={entry.id} entry={entry} />
-        ))}
-        {childGroups.length ? (
-          <li className={classNames(styles.taskActivityItem, styles.taskActivityChildStack)}>
-            <span className={styles.taskActivityMarker} aria-hidden="true" />
-            <article className={styles.taskActivityContent}>
-              <header className={styles.taskActivityHead}>
-                <div className={styles.taskActivityTitleRow}>
-                  <strong>{t("taskTimelineChildTask")}</strong>
-                  <span className={styles.taskActivitySubject}>
-                    {t("taskTimelineEventsCount", { count: childGroups.length })}
-                  </span>
-                </div>
-              </header>
-              <div className={styles.taskChildActivityAccordion}>
-                {childGroups.map((group) => {
-                  const expanded = expandedTaskIDs.has(group.task.id);
-                  const entryCount = group.entries.length;
-                  const latestEntry = group.entries[entryCount - 1];
-                  const assignee = displayTaskWorkerName(group.task, agentNames) || t("taskAssigneeUnassigned");
-                  return (
-                    <section key={`child-${group.task.id}`} className={styles.taskChildActivityItem}>
-                      <button
-                        type="button"
-                        aria-expanded={expanded}
-                        onClick={() => toggleTask(group.task.id)}
-                        className={styles.taskChildActivityTrigger}
-                      >
-                        <span className={styles.taskChildActivityArrow} aria-hidden="true">
-                          <ChevronDown size={16} strokeWidth={1.9} />
-                        </span>
-                        <span className={classNames(styles.childActivityMetaRow, styles.taskChildActivityMain)}>
-                          <span className={styles.taskActivityGroupKind}>{t("taskTimelineChildTask")}</span>
-                          <strong>{group.task.id}</strong>
-                          <span>{group.task.title}</span>
-                        </span>
-                        <span className={classNames(styles.childActivityMetaRow, styles.taskChildActivityTags)}>
-                          <span>{assignee}</span>
-                          <span>{t("taskTimelineEventsCount", { count: entryCount })}</span>
-                          <strong>{expanded ? t("taskTimelineCollapse") : t("taskTimelineExpand")}</strong>
-                        </span>
-                      </button>
-                      {!expanded && latestEntry ? (
-                        <div className={styles.taskChildActivitySummary}>
-                          <span>{latestEntry.title}</span>
-                          <span>{latestEntry.meta}</span>
-                        </div>
-                      ) : null}
-                      {expanded ? (
-                        <div className={styles.taskChildActivityPanel}>
-                          <TaskActivityTimeline entries={group.entries} emptyLabel={emptyLabel} />
-                        </div>
-                      ) : null}
-                    </section>
-                  );
-                })}
-              </div>
-            </article>
-          </li>
-        ) : null}
-        {trailingParentEntries.map((entry) => (
-          <TaskActivityTimelineItem key={entry.id} entry={entry} />
-        ))}
-      </ol>
-    </div>
-  );
-}
-
-function TaskActivityTimeline({ entries, emptyLabel }: { entries: TaskTimelineEntry[]; emptyLabel: string }) {
-  if (!entries.length) {
-    return <div className={styles.taskActivityEmpty}>{emptyLabel}</div>;
-  }
-
-  return (
-    <ol className={styles.taskActivityList}>
-      {entries.map((entry) => (
-        <TaskActivityTimelineItem key={entry.id} entry={entry} />
-      ))}
-    </ol>
-  );
-}
-
-function TaskActivityTimelineItem({ entry }: { entry: TaskTimelineEntry }) {
-  return (
-    <li className={classNames(styles.taskActivityItem, moduleSuffixStyle("taskActivityItem", entry.tone))}>
-      <span className={styles.taskActivityMarker} aria-hidden="true" />
-      <article className={styles.taskActivityContent}>
-        <header className={styles.taskActivityHead}>
-          <div className={styles.taskActivityTitleRow}>
-            <strong>{entry.title}</strong>
-            {entry.subject ? <span className={styles.taskActivitySubject}>{entry.subject}</span> : null}
-          </div>
-          <span>{entry.meta}</span>
-        </header>
-        {entry.body ? <p>{entry.body}</p> : null}
-      </article>
-    </li>
-  );
-}
-
-function TaskMetaTag({ label, value }: Pick<TaskMetaTagItem, "label" | "value">) {
-  return (
-    <div className={styles.taskDetailTag}>
-      <span>{label}</span>
-      <strong>{value}</strong>
-    </div>
-  );
-}
-
-function TaskDependencyGraph({ tasks, t }: { tasks: readonly WorkspaceTask[]; t: TranslateFn }) {
-  const dependencyLevels = taskDependencyLevels(tasks);
-
-  return (
-    <section className={styles.taskDependencyGraph} aria-label={t("taskDependencyGraphLabel")}>
-      <h3>{t("taskDependencyGraphLabel")}</h3>
-      {dependencyLevels.length ? (
-        <div className={styles.taskDependencyChain}>
-          {dependencyLevels.map((level, levelIndex) => (
-            <div key={`level-${levelIndex}`} className={styles.taskDependencyStage}>
-              {levelIndex > 0 ? <span className={styles.taskDependencyArrow} aria-hidden="true" /> : null}
-              <div className={styles.taskDependencyRow}>
-                {level.map((task) => (
-                  <Tooltip key={task.id} content={`${task.id} ${task.title}`}>
-                    <article className={styles.taskDependencyCard}>
-                      <strong>{task.id}</strong>
-                      <span>{task.title}</span>
-                    </article>
-                  </Tooltip>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
-      ) : (
-        <div className={styles.taskDependencyEmpty}>{t("taskBoardNoChildren")}</div>
-      )}
-    </section>
-  );
-}
-
-function timelineGroupOrder(group: TaskTimelineGroup): number {
-  const firstEntry = group.entries[0];
-  return firstEntry?.order ?? Number.MAX_SAFE_INTEGER;
-}
-
-function defaultExpandedChildTaskID(groups: readonly TaskTimelineGroup[]): string {
-  const activeGroups = groups.filter((group) => isActiveTaskStatus(group.task.status));
-  if (!activeGroups.length) {
-    return "";
-  }
-  return (
-    activeGroups
-      .slice()
-      .sort(
-        (left, right) =>
-          latestTimelineOrder(right) - latestTimelineOrder(left) ||
-          right.task.updated_at.localeCompare(left.task.updated_at),
-      )[0]?.task.id ?? ""
-  );
-}
-
-function latestTimelineOrder(group: TaskTimelineGroup): number {
-  return group.entries.reduce((latest, entry) => Math.max(latest, entry.order), 0);
-}
-
-function isActiveTaskStatus(status: string): boolean {
-  return ["pending", "assigned", "in_progress", "running", "blocked"].includes(status);
-}
-
-function taskDependencyLevels(tasks: readonly WorkspaceTask[]): WorkspaceTask[][] {
-  const tasksByID = new Map(tasks.map((task) => [task.id, task]));
-  const depthCache = new Map<string, number>();
-
-  function depthForTask(task: WorkspaceTask, visiting = new Set<string>()): number {
-    const cached = depthCache.get(task.id);
-    if (cached !== undefined) {
-      return cached;
-    }
-    if (visiting.has(task.id)) {
-      return 0;
-    }
-    const nextVisiting = new Set(visiting);
-    nextVisiting.add(task.id);
-    const dependencyDepths = task.depends_on
-      .map((id) => tasksByID.get(id))
-      .filter((dependency): dependency is WorkspaceTask => Boolean(dependency))
-      .map((dependency) => depthForTask(dependency, nextVisiting) + 1);
-    const depth = dependencyDepths.length ? Math.max(...dependencyDepths) : 0;
-    depthCache.set(task.id, depth);
-    return depth;
-  }
-
-  const levels = new Map<number, WorkspaceTask[]>();
-  for (const task of tasks) {
-    const depth = depthForTask(task);
-    const level = levels.get(depth) ?? [];
-    level.push(task);
-    levels.set(depth, level);
-  }
-
-  return Array.from(levels.entries())
-    .sort(([left], [right]) => left - right)
-    .map(([, level]) =>
-      level.slice().sort((left, right) => left.id.localeCompare(right.id, undefined, { numeric: true })),
-    );
-}
-
-function taskMetaTags(
-  task: WorkspaceTask,
-  childCount: number | undefined,
-  t: TranslateFn,
-  locale: string,
-  agentNames: ReadonlyMap<string, string>,
-): TaskMetaTagItem[] {
-  const tags: TaskMetaTagItem[] = [];
-  const addTag = (key: string, label: string, value: ReactNode) => {
-    if (value === "" || value === null || value === undefined) {
-      return;
-    }
-    tags.push({ key, label, value });
-  };
-
-  addTag("kind", t("taskKindLabel"), task.parent_id ? t("taskKindChild") : t("taskKindParent"));
-  addTag("status", t("taskStatusLabel"), taskStatusLabel(task.status, t));
-
-  if (childCount !== undefined) {
-    addTag("children", t("taskChildrenLabel"), String(childCount));
-  }
-
-  const claimedBy = displayTaskClaimedAgentName(task, agentNames);
-  if (task.parent_id || task.assignment_type === "agent") {
-    addTag("claimed_by", t("taskClaimedByLabel"), claimedBy);
-  }
-  addTag("parent", t("taskParentLabel"), task.parent_id);
-  const assignmentTarget = displayTaskAssignmentTargetName(task, agentNames);
-  if (!claimedBy || assignmentTarget !== claimedBy) {
-    addTag("assignment", t("taskAssignmentLabel"), assignmentTarget);
-  }
-  addTag("execution_channel", t("taskExecutionChannelLabel"), task.execution_channel);
-  addTag("room", t("taskRoomLabel"), displayTaskRoomTitle(task));
-  addTag("priority", t("taskPriorityLabel"), String(task.priority || 0));
-  const updatedAt = formatTaskUpdatedAt(task.updated_at, locale);
-  addTag("updated_at", t("taskUpdatedAtLabel"), updatedAt === "-" ? "" : updatedAt);
-  addTag(
-    "dispatched_at",
-    t("taskDispatchedAtLabel"),
-    task.dispatched_at ? formatTaskUpdatedAt(task.dispatched_at, locale) : "",
-  );
-  addTag("depends_on", t("taskDependsOnLabel"), task.depends_on.length ? task.depends_on.join(", ") : "");
-
-  return tags;
-}
-
-function taskEventsForDetail(
-  task: WorkspaceTask,
-  childTasks: readonly WorkspaceTask[],
-  taskEvents: readonly WorkspaceTeamEvent[],
-): WorkspaceTeamEvent[] {
-  const relatedTaskIDs = new Set([task.id, ...childTasks.map((item) => item.id)]);
-  return taskEvents
-    .filter((event) => event.task_id && relatedTaskIDs.has(event.task_id))
-    .slice()
-    .sort((left, right) => left.seq - right.seq || left.created_at.localeCompare(right.created_at));
-}
-
-function taskTimelineEntries(
-  task: WorkspaceTask,
-  childTasks: readonly WorkspaceTask[],
-  events: readonly WorkspaceTeamEvent[],
-  t: TranslateFn,
-  locale: string,
-): TaskTimelineEntry[] {
-  const tasksByID = new Map([task, ...childTasks].map((item) => [item.id, item]));
-  const taskEventTypes = new Set(events.filter((event) => event.task_id === task.id).map((event) => event.type));
-  const eventEntries = events
-    .map((event) => taskTimelineEntryForEvent(event, tasksByID, t, locale))
-    .filter((entry): entry is TaskTimelineEntry => Boolean(entry));
-  return [...eventEntries, ...syntheticTimelineEntries(task, taskEventTypes, t, locale)].sort(
-    (left, right) => left.order - right.order,
-  );
-}
-
-function taskTimelineGroups(
-  task: WorkspaceTask,
-  childTasks: readonly WorkspaceTask[],
-  events: readonly WorkspaceTeamEvent[],
-  t: TranslateFn,
-  locale: string,
-): TaskTimelineGroup[] {
-  const tasksByID = new Map([task, ...childTasks].map((item) => [item.id, item]));
-  return [task, ...childTasks].map((item) => {
-    const taskEventsForGroup = events.filter((event) => event.task_id === item.id);
-    const taskEventTypes = new Set(taskEventsForGroup.map((event) => event.type));
-    const eventEntries = taskEventsForGroup
-      .map((event) => taskTimelineEntryForEvent(event, tasksByID, t, locale))
-      .filter((entry): entry is TaskTimelineEntry => Boolean(entry));
-    return {
-      task: item,
-      kind: item.id === task.id ? "parent" : "child",
-      entries: [...eventEntries, ...syntheticTimelineEntries(item, taskEventTypes, t, locale)].sort(
-        (left, right) => left.order - right.order,
-      ),
-    };
-  });
-}
-
-function taskTimelineEntryForEvent(
-  event: WorkspaceTeamEvent,
-  tasksByID: ReadonlyMap<string, WorkspaceTask>,
-  t: TranslateFn,
-  locale: string,
-): TaskTimelineEntry | null {
-  const title = taskEventTitle(event.type, t);
-  if (!title) {
-    return null;
-  }
-  const subjectTask = tasksByID.get(event.task_id);
-  const subject = event.task_id ? `${event.task_id}${subjectTask?.title ? ` · ${subjectTask.title}` : ""}` : "";
-  return {
-    id: `event-${event.seq}-${event.type}-${event.task_id}`,
-    title,
-    subject,
-    meta: taskEventMeta(event, locale),
-    body: taskEventBody(event, t),
-    tone: taskEventTone(event.type),
-    order: event.seq || Number.MAX_SAFE_INTEGER,
-  };
-}
-
-function syntheticTimelineEntries(
-  task: WorkspaceTask,
-  existingEventTypes: ReadonlySet<string>,
-  t: TranslateFn,
-  locale: string,
-): TaskTimelineEntry[] {
-  const entries: TaskTimelineEntry[] = [];
-  const syntheticOrder = () => Number.MAX_SAFE_INTEGER - 100 + entries.length;
-  if (displayTaskAssignedAgent(task) && !existingEventTypes.has("task.assigned")) {
-    const assignee = displayTaskAssignedAgent(task);
-    entries.push({
-      id: `synthetic-assigned-${task.id}`,
-      title: t("taskTimelineAssigned"),
-      subject: task.id,
-      meta: formatTaskUpdatedAt(task.updated_at, locale),
-      body: `${t("taskActivityTargetLabel")}: ${assignee}`,
-      order: syntheticOrder(),
-    });
-  }
-  if (displayTaskClaimedAgent(task) && !existingEventTypes.has("task.claimed")) {
-    const claimedBy = displayTaskClaimedAgent(task);
-    entries.push({
-      id: `synthetic-claimed-${task.id}`,
-      title: t("taskTimelineClaimed"),
-      subject: task.id,
-      meta: formatTaskUpdatedAt(task.updated_at, locale),
-      body: `${t("taskActivityTargetLabel")}: ${claimedBy}`,
-      order: syntheticOrder(),
-    });
-  }
-  if (task.plan_summary && !existingEventTypes.has("task.planned")) {
-    entries.push({
-      id: `synthetic-plan-${task.id}`,
-      title: t("taskTimelinePlanned"),
-      subject: task.id,
-      meta: formatTaskUpdatedAt(task.updated_at, locale),
-      body: task.plan_summary,
-      order: syntheticOrder(),
-    });
-  }
-  if (task.dispatched_at && !existingEventTypes.has("task.dispatched")) {
-    const assignee = displayTaskAssignedAgent(task);
-    entries.push({
-      id: `synthetic-dispatched-${task.id}`,
-      title: t("taskTimelineDispatched"),
-      subject: task.id,
-      meta: formatTaskUpdatedAt(task.dispatched_at, locale),
-      body: assignee ? `${t("taskActivityTargetLabel")}: ${assignee}` : "",
-      order: syntheticOrder(),
-    });
-  }
-  if (task.result && !existingEventTypes.has("task.completed")) {
-    entries.push({
-      id: `synthetic-result-${task.id}`,
-      title: t("taskTimelineCompleted"),
-      subject: task.id,
-      meta: formatTaskUpdatedAt(task.updated_at, locale),
-      body: task.result,
-      tone: "success",
-      order: syntheticOrder(),
-    });
-  }
-  if (task.error && !existingEventTypes.has("task.failed") && !existingEventTypes.has("task.blocked")) {
-    entries.push({
-      id: `synthetic-error-${task.id}`,
-      title: task.status === "failed" ? t("taskTimelineFailed") : t("taskTimelineBlocked"),
-      subject: task.id,
-      meta: formatTaskUpdatedAt(task.updated_at, locale),
-      body: task.error,
-      tone: task.status === "failed" ? "danger" : "warning",
-      order: syntheticOrder(),
-    });
-  }
-  return entries;
-}
-
-function taskEventTitle(type: string, t: TranslateFn): string {
-  switch (type) {
-    case "task.created":
-      return t("taskTimelineCreated");
-    case "task.planned":
-      return t("taskTimelinePlanned");
-    case "task.execution_room":
-      return t("taskTimelineExecutionRoom");
-    case "task.started":
-      return t("taskTimelineStarted");
-    case "task.dispatched":
-      return t("taskTimelineDispatched");
-    case "task.assigned":
-      return t("taskTimelineAssigned");
-    case "task.claimed":
-      return t("taskTimelineClaimed");
-    case "task.blocked":
-      return t("taskTimelineBlocked");
-    case "task.completed":
-      return t("taskTimelineCompleted");
-    case "task.failed":
-      return t("taskTimelineFailed");
-    case "task.cancelled":
-      return t("taskTimelineCancelled");
-    case "presence.updated":
-    case "presence.changed":
-      return t("taskTimelinePresence");
-    case "approval.requested":
-    case "approval.resolved":
-      return t("taskTimelineApproval");
-    default:
-      return t("taskTimelineUpdated");
-  }
-}
-
-function taskEventMeta(event: WorkspaceTeamEvent, locale: string): string {
-  return [formatTaskUpdatedAt(event.created_at, locale), event.actor_agent_name].filter(Boolean).join(" · ");
-}
-
-function taskEventBody(event: WorkspaceTeamEvent, t: TranslateFn): string {
-  const lines: string[] = [];
-  if (event.summary) {
-    lines.push(event.summary);
-  }
-  const target = event.target_agent_name;
-  if (target) {
-    lines.push(`${t("taskActivityTargetLabel")}: ${target}`);
-  }
-  return lines.join("\n");
-}
-
-function taskEventTone(type: string): TaskTimelineEntry["tone"] {
-  if (type === "task.completed") {
-    return "success";
-  }
-  if (type === "task.blocked") {
-    return "warning";
-  }
-  if (type === "task.failed" || type === "task.cancelled") {
-    return "danger";
-  }
-  return undefined;
 }

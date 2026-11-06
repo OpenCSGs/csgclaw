@@ -1,3 +1,6 @@
+import conversationMessageListStyles from "./ConversationMessageList.module.css";
+import conversationPaneStyles from "./ConversationPane.module.css";
+import conversationThreadsStyles from "./ConversationThreads.module.css";
 import { messageResources } from "@/models/conversationResources";
 import { useEventCallback } from "@/hooks/useEventCallback";
 import { emptyCompletedProgress } from "@/models/turnProgress";
@@ -167,7 +170,9 @@ const MessageListContent = memo(function MessageListContent({
               <Fragment key={message.id || `event-${index}`}>
                 {showDivider ? <MessageTimeDivider parts={timestampParts} /> : null}
                 <div className="message-event-row">
-                  <div className="message-event-text">{formatEventMessage(message, usersById, locale)}</div>
+                  <div className={conversationMessageListStyles["message-event-text"]}>
+                    {formatEventMessage(message, usersById, locale)}
+                  </div>
                 </div>
               </Fragment>
             );
@@ -194,7 +199,7 @@ const MessageListContent = memo(function MessageListContent({
             <Fragment key={message.id || `message-${index}`}>
               {showDivider ? <MessageTimeDivider parts={timestampParts} /> : null}
               <div
-                className={`message-row ${own ? "own" : ""} ${isAdmin ? "admin" : ""} ${message.metadata?.image_generation || isVideoGeneration ? "image-generation-message" : ""}`.trim()}
+                className={`message-row ${own ? "own" : ""} ${isAdmin ? "admin" : ""} ${message.metadata?.image_generation || isVideoGeneration ? conversationPaneStyles["image-generation-message"] : ""}`.trim()}
                 data-message-id={message.id || undefined}
               >
                 <button
@@ -280,12 +285,20 @@ const MessageListContent = memo(function MessageListContent({
                   ))}
                   {!conversation.cloud_agent && threadSummary ? (
                     <div className="message-thread-actions has-thread-summary">
-                      <button type="button" className="thread-action-button" onClick={() => onOpenThread(message)}>
+                      <button
+                        type="button"
+                        className={conversationThreadsStyles["thread-action-button"]}
+                        onClick={() => onOpenThread(message)}
+                      >
                         <span aria-hidden="true">{IconImage("rooms")}</span>
                         <span>{formatThreadReplyCount(threadSummary.reply_count, t)}</span>
                       </button>
                       {latestThreadReply ? (
-                        <button type="button" className="thread-latest-reply" onClick={() => onOpenThread(message)}>
+                        <button
+                          type="button"
+                          className={conversationThreadsStyles["thread-latest-reply"]}
+                          onClick={() => onOpenThread(message)}
+                        >
                           <span>{t("latestThreadReply")}</span>
                           <strong className="truncate">
                             <MessagePreviewText
@@ -296,7 +309,11 @@ const MessageListContent = memo(function MessageListContent({
                           </strong>
                         </button>
                       ) : (
-                        <button type="button" className="thread-latest-reply" onClick={() => onOpenThread(message)}>
+                        <button
+                          type="button"
+                          className={conversationThreadsStyles["thread-latest-reply"]}
+                          onClick={() => onOpenThread(message)}
+                        >
                           <span>{t("threadStarted")}</span>
                           <strong>{formatThreadReplyCount(threadSummary.reply_count, t)}</strong>
                         </button>
@@ -322,7 +339,11 @@ const MessageListContent = memo(function MessageListContent({
         {footerSlot}
       </section>
       {hasNewMessages ? (
-        <button type="button" className="message-list-new-messages" onClick={onFollowLatest}>
+        <button
+          type="button"
+          className={conversationMessageListStyles["message-list-new-messages"]}
+          onClick={onFollowLatest}
+        >
           {t("newMessages")} · {t("progressLatest")}
         </button>
       ) : null}

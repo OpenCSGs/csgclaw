@@ -12,6 +12,8 @@ import { nextSimulatedUpgradeProgress } from "@/models/upgradeProgress";
 import { SwitchVersionDialog } from "../components/SwitchVersionDialog";
 import { SettingsRow } from "./SettingsRow";
 import styles from "../SettingsPage.module.css";
+import versionSectionStyles from "./VersionSection.module.css";
+import accountSectionStyles from "./AccountSection.module.css";
 
 export function VersionSection() {
   const controller = useWorkspaceControllerContext();
@@ -64,10 +66,10 @@ export function VersionSection() {
     <>
       <SettingsRow
         title={
-          <span className={styles.versionTitle}>
+          <span className={versionSectionStyles.versionTitle}>
             <span>{t("versionInfo")}</span>
             {showNewVersionBadge ? (
-              <span className={styles.versionBadge} aria-label={t("upgradeNewVersionBadge")}>
+              <span className={versionSectionStyles.versionBadge} aria-label={t("upgradeNewVersionBadge")}>
                 <span aria-hidden="true"></span>
                 {t("upgradeNewVersionBadge")}
               </span>
@@ -79,40 +81,40 @@ export function VersionSection() {
         <div className={styles.formGrid}>
           <div className="field">
             <span>{t("settingsCurrentVersion")}</span>
-            <strong className={styles.fieldValue}>{version}</strong>
+            <strong className={accountSectionStyles.fieldValue}>{version}</strong>
           </div>
           <div className="field">
             <span>{t("upgradeChannelLabel")}</span>
             {showUpgradeChannel ? (
               <button
                 type="button"
-                className={styles.versionChannelLink}
+                className={versionSectionStyles.versionChannelLink}
                 disabled={upgradeChannelDisabled}
                 onClick={() => setSwitchVersionOpen(true)}
               >
                 {t("upgradeChannelSwitch")}
               </button>
             ) : (
-              <strong className={styles.fieldValue}>{inferredUpgradeChannel || "-"}</strong>
+              <strong className={accountSectionStyles.fieldValue}>{inferredUpgradeChannel || "-"}</strong>
             )}
           </div>
           {showUpgradeChannel && showUpgradeProgress ? (
             <div
-              className={`${styles.upgradeProgressRow} ${styles.spanAll}`}
+              className={`${versionSectionStyles.upgradeProgressRow} ${styles.spanAll}`}
               role="progressbar"
               aria-label={t("upgradeProgressLabel")}
               aria-valuemin={0}
               aria-valuemax={100}
               aria-valuenow={upgradeProgress.percent}
             >
-              <div className={styles.upgradeProgressTrack} aria-hidden="true">
+              <div className={versionSectionStyles.upgradeProgressTrack} aria-hidden="true">
                 <span style={{ width: `${upgradeProgress.percent}%` }}></span>
               </div>
-              <span className={styles.upgradeProgressValue}>{upgradeProgress.percent}%</span>
+              <span className={versionSectionStyles.upgradeProgressValue}>{upgradeProgress.percent}%</span>
             </div>
           ) : null}
           {versionError ? (
-            <p className={styles.inlineError} role="alert">
+            <p className={accountSectionStyles.inlineError} role="alert">
               {versionError}
             </p>
           ) : null}

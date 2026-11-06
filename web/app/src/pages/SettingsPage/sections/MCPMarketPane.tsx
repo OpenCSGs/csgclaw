@@ -4,7 +4,8 @@ import { ResourceList, ResourceListCard } from "@/components/business/ResourceLi
 import { SidebarMcpIcon } from "@/components/ui/Icons";
 import { useWorkspaceControllerContext } from "@/hooks/workspace";
 import { ResourceFeaturedIcon, ResourceSearchField } from "@/components/business/HubDetailPane";
-import styles from "../SettingsPage.module.css";
+import accountSectionStyles from "./AccountSection.module.css";
+import resourceSettingsStyles from "./ResourceSettings.module.css";
 import { isRemoteMCPInstalled, type MCPServer } from "@/models/mcp";
 
 type MCPHub = NonNullable<ReturnType<typeof useWorkspaceControllerContext>["hubViewProps"]>["hub"];
@@ -32,7 +33,7 @@ export function MCPMarketPane({
 }) {
   if (!authed) {
     return (
-      <div className={styles.loginGate}>
+      <div className={accountSectionStyles.loginGate}>
         <LogIn size={20} strokeWidth={1.8} aria-hidden="true" />
         <p>{t("iaMCPMarketLoginRequired")}</p>
         <Button variant="primary" size="md" onClick={onLogin}>
@@ -44,7 +45,7 @@ export function MCPMarketPane({
 
   if (hub?.remoteMCPServersError) {
     return (
-      <div className={styles.listNotice}>
+      <div className={resourceSettingsStyles.listNotice}>
         <span className="form-error" role="alert">
           {hub.remoteMCPServersError}
         </span>
@@ -58,7 +59,7 @@ export function MCPMarketPane({
 
   if (hub?.remoteMCPServersLoading && remoteServers.length === 0) {
     return (
-      <p className={styles.listNotice}>
+      <p className={resourceSettingsStyles.listNotice}>
         <LoaderCircle className="animate-spin" size={14} strokeWidth={2} aria-hidden="true" />
         {t("resourcesMCPRemoteServersLoading")}
       </p>
@@ -66,7 +67,7 @@ export function MCPMarketPane({
   }
 
   if (remoteServers.length === 0) {
-    return <p className={styles.listNotice}>{t("resourcesMCPRemoteServersEmpty")}</p>;
+    return <p className={resourceSettingsStyles.listNotice}>{t("resourcesMCPRemoteServersEmpty")}</p>;
   }
   const fallbackError = hub?.remoteMCPInstallFailure ? "" : hub?.mcpMutationError;
 
@@ -115,7 +116,7 @@ export function MCPMarketPane({
           })}
         </div>
         {hub?.remoteMCPServersHasMore ? (
-          <div className={styles.listMore}>
+          <div className={resourceSettingsStyles.listMore}>
             <Button
               size="sm"
               variant="secondaryGray"
@@ -145,7 +146,11 @@ export function MCPMarketPane({
             <ResourceListCard
               key={item.id}
               title={item.name}
-              titleBadge={installed ? <span className={styles.marketInstalled}>{t("iaMCPTabInstalled")}</span> : null}
+              titleBadge={
+                installed ? (
+                  <span className={resourceSettingsStyles.marketInstalled}>{t("iaMCPTabInstalled")}</span>
+                ) : null
+              }
               description={item.description || item.url || item.name}
               badge={
                 <MCPMarketItemFeedback
@@ -201,7 +206,7 @@ export function MCPMarketPane({
       </ResourceList>
 
       {hub?.remoteMCPServersHasMore ? (
-        <div className={styles.listMore}>
+        <div className={resourceSettingsStyles.listMore}>
           <Button
             size="sm"
             variant="secondaryGray"
@@ -227,9 +232,9 @@ function MCPMarketItemFeedback({
 }) {
   return (
     <>
-      {installed ? <span className={styles.marketInstalled}>{t("iaMCPTabInstalled")}</span> : null}
+      {installed ? <span className={resourceSettingsStyles.marketInstalled}>{t("iaMCPTabInstalled")}</span> : null}
       {error ? (
-        <span className={styles.marketInstallError} role="alert">
+        <span className={resourceSettingsStyles.marketInstallError} role="alert">
           {error}
         </span>
       ) : null}

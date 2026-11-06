@@ -1,6 +1,7 @@
+import agentQuestionComposerStyles from "./AgentQuestionComposer.module.css";
 import { useEffect, useState } from "react";
 import { ArrowRight, ChevronLeft, ChevronRight, CircleHelp, Clock3, LockKeyhole, Pencil, X } from "lucide-react";
-import { Button, IconButton } from "@/components/ui";
+import { TextInput, Button, IconButton } from "@/components/ui";
 import { questionOptions } from "@/models/agentActivity";
 import { resolveUserByLocalIdentity, type TranslateFn, type UsersById } from "@/models/conversations";
 import type { QuestionAnswerMode } from "./useQuestionAnswerMode";
@@ -21,12 +22,15 @@ export function AgentQuestionComposer({
   }
   if (!mode.selected) {
     return (
-      <section className="question-composer question-chooser" aria-label={t("questionChooseRequest")}>
-        <div className="question-composer-heading">
+      <section
+        className={`${agentQuestionComposerStyles["question-composer"]} question-chooser`}
+        aria-label={t("questionChooseRequest")}
+      >
+        <div className={agentQuestionComposerStyles["question-composer-heading"]}>
           <CircleHelp aria-hidden="true" size={18} />
           <strong>{t("questionSeveralWaiting", { count: mode.pending.length })}</strong>
         </div>
-        <div className="question-request-options">
+        <div className={agentQuestionComposerStyles["question-request-options"]}>
           {mode.pending.map((activity) => {
             const request = activity.content.question!;
             const first = request.questions[0];
@@ -39,7 +43,7 @@ export function AgentQuestionComposer({
             );
           })}
         </div>
-        <p className="question-composer-hint">{t("questionSelectHint")}</p>
+        <p className={agentQuestionComposerStyles["question-composer-hint"]}>{t("questionSelectHint")}</p>
       </section>
     );
   }
@@ -65,10 +69,13 @@ export function AgentQuestionComposer({
   }
 
   return (
-    <section className="question-composer" aria-label={t("questionAnswerMode")}>
-      <header className="question-composer-header">
+    <section className={agentQuestionComposerStyles["question-composer"]} aria-label={t("questionAnswerMode")}>
+      <header className={agentQuestionComposerStyles["question-composer-header"]}>
         <h2>{question.question}</h2>
-        <nav className="question-composer-navigation" aria-label={t("questionNavigation")}>
+        <nav
+          className={agentQuestionComposerStyles["question-composer-navigation"]}
+          aria-label={t("questionNavigation")}
+        >
           <QuestionExpirationCountdown autoResolveAt={request.auto_resolve_at} t={t} />
           <IconButton
             disabled={mode.busy || mode.questionIndex === 0}
@@ -101,7 +108,11 @@ export function AgentQuestionComposer({
       </header>
 
       {options.length > 0 ? (
-        <div className="question-composer-options" role="radiogroup" aria-label={question.question}>
+        <div
+          className={agentQuestionComposerStyles["question-composer-options"]}
+          role="radiogroup"
+          aria-label={question.question}
+        >
           {options.map((option, index) => {
             const optionIndex = index + 1;
             const selected = currentAnswer.optionIndex === optionIndex;
@@ -113,21 +124,27 @@ export function AgentQuestionComposer({
                 type="button"
                 role="radio"
                 aria-checked={selected}
-                className={`question-composer-option ${selected ? "selected" : ""}`}
+                className={`${agentQuestionComposerStyles["question-composer-option"]} ${selected ? "selected" : ""}`}
                 disabled={mode.busy}
                 onClick={() => mode.chooseOption(optionIndex)}
               >
-                <span className="question-option-number">{optionIndex}</span>
-                <span className="question-option-copy">
-                  <span className="question-option-title">
+                <span className={agentQuestionComposerStyles["question-option-number"]}>{optionIndex}</span>
+                <span className={agentQuestionComposerStyles["question-option-copy"]}>
+                  <span className={agentQuestionComposerStyles["question-option-title"]}>
                     <strong>{visibleLabel}</strong>
                     {recommended ? (
-                      <span className="question-recommended-badge">{t("questionRecommended")}</span>
+                      <span className={agentQuestionComposerStyles["question-recommended-badge"]}>
+                        {t("questionRecommended")}
+                      </span>
                     ) : null}
                   </span>
                   {option.description ? <small>{option.description}</small> : null}
                 </span>
-                <ArrowRight className="question-option-arrow" aria-hidden="true" size={20} />
+                <ArrowRight
+                  className={agentQuestionComposerStyles["question-option-arrow"]}
+                  aria-hidden="true"
+                  size={20}
+                />
               </button>
             );
           })}
@@ -135,15 +152,16 @@ export function AgentQuestionComposer({
       ) : null}
 
       {showFreeform ? (
-        <div className="question-composer-input-row">
-          <span className="question-input-icon">
+        <div className={agentQuestionComposerStyles["question-composer-input-row"]}>
+          <span className={agentQuestionComposerStyles["question-input-icon"]}>
             {question.is_secret ? (
               <LockKeyhole aria-hidden="true" size={18} />
             ) : (
               <Pencil aria-hidden="true" size={18} />
             )}
           </span>
-          <input
+          <TextInput
+            variant="plain"
             key={question.id}
             autoFocus
             type={question.is_secret ? "password" : "text"}
@@ -167,7 +185,7 @@ export function AgentQuestionComposer({
       ) : null}
 
       {mode.error ? (
-        <div className="form-error question-composer-error" role="alert">
+        <div className={`form-error ${agentQuestionComposerStyles["question-composer-error"]}`} role="alert">
           {mode.error}
         </div>
       ) : null}
@@ -210,7 +228,7 @@ function QuestionExpirationCountdown({ autoResolveAt, t }: { autoResolveAt?: str
   const label = t("questionExpiresIn", { time });
   return (
     <span
-      className={`question-composer-countdown ${remainingSeconds === 0 ? "expired" : ""}`}
+      className={`${agentQuestionComposerStyles["question-composer-countdown"]} ${remainingSeconds === 0 ? "expired" : ""}`}
       role="timer"
       aria-label={label}
       title={label}

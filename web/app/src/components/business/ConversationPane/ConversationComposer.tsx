@@ -1,3 +1,5 @@
+import conversationComposerStyles from "./ConversationComposer.module.css";
+import workingTurnStyles from "./WorkingTurn.module.css";
 import "@/components/business/ResourceTag";
 import {
   ConversationResourcePicker,
@@ -247,7 +249,7 @@ export const ConversationComposer = memo(function ConversationComposer({
             t={t}
           />
         ) : null}
-        <div className="composer-editor-wrap" hidden={resourcePicker.active}>
+        <div className={conversationComposerStyles["composer-editor-wrap"]} hidden={resourcePicker.active}>
           {draftSegments.length === 0 ? (
             <div className="composer-placeholder" aria-hidden="true">
               {composerDisabled ? composerDisabledReason || t("profileIncomplete") : placeholder}
@@ -299,13 +301,13 @@ export const ConversationComposer = memo(function ConversationComposer({
           />
         </div>
         {!textOnly && !resourcePicker.active && actionSuggestions.length > 0 ? (
-          <div className="composer-action-suggestions" aria-label={t("suggestedActions")}>
+          <div className={conversationComposerStyles["composer-action-suggestions"]} aria-label={t("suggestedActions")}>
             <span>{t("suggestedActions")}</span>
             {actionSuggestions.map((suggestion) => (
               <button
                 key={suggestion.name}
                 type="button"
-                className="composer-action-suggestion"
+                className={conversationComposerStyles["composer-action-suggestion"]}
                 title={suggestion.description}
                 onClick={() => onApplySlashCandidate(suggestion.name)}
               >
@@ -315,7 +317,13 @@ export const ConversationComposer = memo(function ConversationComposer({
             <small>{t("suggestedActionsOnly")}</small>
           </div>
         ) : null}
-        <div className={textOnly ? "composer-toolbar composer-toolbar-text-only" : "composer-toolbar"}>
+        <div
+          className={
+            textOnly
+              ? `${conversationComposerStyles["composer-toolbar"]} ${conversationComposerStyles["composer-toolbar-text-only"]}`
+              : conversationComposerStyles["composer-toolbar"]
+          }
+        >
           {!textOnly ? (
             <>
               <ComposerAddMenu
@@ -342,9 +350,9 @@ export const ConversationComposer = memo(function ConversationComposer({
           <span id={composerHelpId} className="sr-only">
             {t("composerTip")}
           </span>
-          <div className="composer-toolbar-actions">
+          <div className={conversationComposerStyles["composer-toolbar-actions"]}>
             {isSending ? (
-              <span className="composer-send-state" role="status" aria-live="polite">
+              <span className={conversationComposerStyles["composer-send-state"]} role="status" aria-live="polite">
                 {attachmentDrafts.length > 0
                   ? t("sendingWithProgress", { progress: Math.round(sendProgress) })
                   : t("sending")}
@@ -387,7 +395,7 @@ export const ConversationComposer = memo(function ConversationComposer({
         </div>
       </div>
       {removedAttachmentCount > 0 && onUndoRemoveAttachment ? (
-        <div className="composer-feedback-row" role="status">
+        <div className={conversationComposerStyles["composer-feedback-row"]} role="status">
           <span>
             {removedAttachmentCount === 1
               ? t("attachmentRemoved", { name: removedAttachmentName })
@@ -427,7 +435,7 @@ function ComposerWorkingIndicator({
 }) {
   return (
     <div className="composer-working">
-      <div className="composer-working-status" role="status" aria-live="polite">
+      <div className={workingTurnStyles["composer-working-status"]} role="status" aria-live="polite">
         {participants.map((participant) => (
           <WorkingTurnStatus
             key={participant.leaseID || participant.id || participant.name}

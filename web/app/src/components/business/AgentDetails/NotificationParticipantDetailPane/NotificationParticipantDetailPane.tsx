@@ -2,7 +2,7 @@ import { Check, Edit3 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { AgentAvatarContent } from "@/components/business/AgentAvatar";
 import { NotifierControls } from "@/components/business/ProfileControls";
-import { Button } from "@/components/ui";
+import { TextArea, Button } from "@/components/ui";
 import {
   agentToDraft,
   isAgentIncomplete,
@@ -84,7 +84,7 @@ export function NotificationParticipantDetailPane({
             isEditingDescription ? (
               <label className="field entity-description-field">
                 <span className="sr-only">{t("agentDescription")}</span>
-                <textarea
+                <TextArea
                   ref={descriptionInputRef}
                   className="compact-textarea"
                   value={draft.description}

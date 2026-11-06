@@ -1,3 +1,4 @@
+import documentPreviewPanelStyles from "./DocumentPreviewPanel.module.css";
 import { useCallback, useLayoutEffect, useMemo, useRef, useState, type UIEvent } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Document, Page, pdfjs } from "react-pdf";
@@ -36,12 +37,16 @@ function LazyPdfPage({
         <Page
           pageNumber={pageNumber}
           width={width}
-          loading={<div className="document-preview-pdf-page-placeholder" />}
-          error={<div className="document-preview-status is-error">{t("attachmentPreviewFailed")}</div>}
+          loading={<div className={documentPreviewPanelStyles["document-preview-pdf-page-placeholder"]} />}
+          error={
+            <div className={`${documentPreviewPanelStyles["document-preview-status"]} is-error`}>
+              {t("attachmentPreviewFailed")}
+            </div>
+          }
         />
       ) : (
         <div
-          className="document-preview-pdf-page-placeholder"
+          className={documentPreviewPanelStyles["document-preview-pdf-page-placeholder"]}
           aria-label={t("attachmentPreviewPageNamed", { page: pageNumber })}
           style={{ width: `${width}px` }}
         />
@@ -131,20 +136,26 @@ export default function PdfPreview({ data, scale, t }: { data: ArrayBuffer; scal
   }
 
   return (
-    <div className="document-preview-pdf">
+    <div className={documentPreviewPanelStyles["document-preview-pdf"]}>
       <div
         ref={scrollRootRef}
-        className={`document-preview-pdf-main is-width-fitted${scale > 1.001 ? " allows-horizontal-pan" : ""}`}
+        className={`${documentPreviewPanelStyles["document-preview-pdf-main"]} is-width-fitted${scale > 1.001 ? " allows-horizontal-pan" : ""}`}
         onScroll={handleScroll}
       >
         <Document
           file={file}
           options={pdfOptions}
-          loading={<div className="document-preview-status">{t("attachmentPreviewLoading")}</div>}
-          error={<div className="document-preview-status is-error">{t("attachmentPreviewFailed")}</div>}
+          loading={
+            <div className={documentPreviewPanelStyles["document-preview-status"]}>{t("attachmentPreviewLoading")}</div>
+          }
+          error={
+            <div className={`${documentPreviewPanelStyles["document-preview-status"]} is-error`}>
+              {t("attachmentPreviewFailed")}
+            </div>
+          }
           onLoadSuccess={handleLoadSuccess}
         >
-          <div className="document-preview-pdf-pages">
+          <div className={documentPreviewPanelStyles["document-preview-pdf-pages"]}>
             {Array.from({ length: pageCount }, (_, index) => (
               <LazyPdfPage
                 key={index + 1}
@@ -158,7 +169,7 @@ export default function PdfPreview({ data, scale, t }: { data: ArrayBuffer; scal
         </Document>
       </div>
       {pageCount > 0 ? (
-        <div className="document-preview-page-controls">
+        <div className={documentPreviewPanelStyles["document-preview-page-controls"]}>
           <Button
             iconOnly
             size="sm"
@@ -171,10 +182,10 @@ export default function PdfPreview({ data, scale, t }: { data: ArrayBuffer; scal
             <ChevronLeft aria-hidden="true" size={16} />
           </Button>
           {editingPage ? (
-            <span className="document-preview-page-editor">
+            <span className={documentPreviewPanelStyles["document-preview-page-editor"]}>
               <TextInput
                 ref={pageInputRef}
-                className="document-preview-page-input"
+                className={documentPreviewPanelStyles["document-preview-page-input"]}
                 size="sm"
                 type="number"
                 inputMode="numeric"

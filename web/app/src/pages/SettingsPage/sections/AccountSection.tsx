@@ -11,6 +11,7 @@ import {
 import { SettingsRow } from "./SettingsRow";
 import { useAuthLoginDialog } from "./useAuthLoginDialog";
 import styles from "../SettingsPage.module.css";
+import accountSectionStyles from "./AccountSection.module.css";
 
 export function AccountSection() {
   const controller = useWorkspaceControllerContext();
@@ -45,11 +46,13 @@ export function AccountSection() {
         <div className={`${styles.formGrid} ${styles.accountFormGrid}`}>
           <div className="field">
             <span>{t("currentAccount")}</span>
-            <strong className={styles.fieldValue}>{signedIn ? accountName : t("csghubNotSignedIn")}</strong>
+            <strong className={accountSectionStyles.fieldValue}>
+              {signedIn ? accountName : t("csghubNotSignedIn")}
+            </strong>
           </div>
           <div className="field">
             <span>{t("settingsEnvironmentLabel")}</span>
-            <strong className={styles.fieldValue}>{signedIn ? authEnvironmentLabel : "-"}</strong>
+            <strong className={accountSectionStyles.fieldValue}>{signedIn ? authEnvironmentLabel : "-"}</strong>
           </div>
           <div className={`${styles.formActions} ${styles.spanAll}`}>
             {sidebar.authExpired ? (
@@ -100,8 +103,10 @@ export function AccountSection() {
               </Button>
             )}
           </div>
-          {sidebar.authPending ? <p className={styles.statusHint}>{t("csghubLoginPendingDetail")}</p> : null}
-          {sidebar.authError ? <p className={styles.inlineError}>{sidebar.authError}</p> : null}
+          {sidebar.authPending ? (
+            <p className={accountSectionStyles.statusHint}>{t("csghubLoginPendingDetail")}</p>
+          ) : null}
+          {sidebar.authError ? <p className={accountSectionStyles.inlineError}>{sidebar.authError}</p> : null}
         </div>
       </SettingsRow>
 

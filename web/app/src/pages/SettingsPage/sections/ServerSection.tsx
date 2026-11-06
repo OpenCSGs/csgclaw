@@ -1,4 +1,4 @@
-import { Button } from "@/components/ui";
+import { Field, TextInput, Button } from "@/components/ui";
 import { useWorkspaceControllerContext } from "@/hooks/workspace";
 import { SettingsRow } from "./SettingsRow";
 import styles from "../SettingsPage.module.css";
@@ -16,13 +16,11 @@ export function ServerSection() {
   return (
     <SettingsRow title={t("configSettingsServerSection")} description={t("iaSettingsServerDescription")}>
       <div className={styles.formGrid}>
-        <label className="field">
-          <span>{t("configSettingsListenPort")}</span>
-          <input inputMode="numeric" value={config.draft.listen_port} disabled readOnly aria-readonly="true" />
-        </label>
-        <label className="field">
-          <span>{t("configSettingsAdvertiseBaseURL")}</span>
-          <input
+        <Field label={t("configSettingsListenPort")}>
+          <TextInput inputMode="numeric" value={config.draft.listen_port} disabled readOnly aria-readonly="true" />
+        </Field>
+        <Field label={t("configSettingsAdvertiseBaseURL")}>
+          <TextInput
             type="url"
             value={config.draft.advertise_base_url}
             disabled={disabled}
@@ -31,10 +29,9 @@ export function ServerSection() {
             spellCheck={false}
             onInput={(event) => config.onDraftChange({ advertise_base_url: event.currentTarget.value.trim() })}
           />
-        </label>
-        <label className="field">
-          <span>{t("configSettingsAccessToken")}</span>
-          <input
+        </Field>
+        <Field label={t("configSettingsAccessToken")}>
+          <TextInput
             type="password"
             placeholder={config.draft.access_token_preview}
             value={config.draft.access_token}
@@ -43,7 +40,7 @@ export function ServerSection() {
             spellCheck={false}
             onInput={(event) => config.onDraftChange({ access_token: event.currentTarget.value })}
           />
-        </label>
+        </Field>
         {config.error ? <p className="form-error">{config.error}</p> : null}
         <div className={`${styles.formActions} ${styles.spanAll}`}>
           {config.phase === "done" ? (
