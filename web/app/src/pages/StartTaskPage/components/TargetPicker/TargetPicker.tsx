@@ -177,6 +177,40 @@ export function TargetPicker({
             <p className={styles.empty}>{t("iaTargetEmpty")}</p>
           ) : null}
 
+          {visibleAgents.length > 0 ? (
+            <section className={styles.group}>
+              <div className={styles.groupLabel}>{t("iaTargetGroupAgents")}</div>
+              <ul className={styles.items}>
+                {visibleAgents.map((item) => {
+                  const id = String(item.id || "");
+                  const active = value.kind === "agent" && value.id === id;
+                  return (
+                    <li key={id}>
+                      <button
+                        type="button"
+                        className={classNames(styles.row, active && styles.rowActive)}
+                        onClick={() => pick({ kind: "agent", id })}
+                      >
+                        {active ? (
+                          <Check aria-hidden="true" className={styles.rowCheck} size={15} strokeWidth={2.4} />
+                        ) : null}
+                        <span className={classNames("iaAvatarFrame", styles.rowIcon)} aria-hidden="true">
+                          <AgentAvatarContent avatar={item.avatar} fallback={String(item.name || id).slice(0, 1)} />
+                        </span>
+                        <span className={styles.rowText}>
+                          <span className={styles.rowName}>{item.name || id}</span>
+                        </span>
+                        {}
+                        <span className={styles.rowBadge}>{agentRoleLabel(item, t)}</span>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </section>
+          ) : null}
+
+          {}
           {visibleCloud.length > 0 ? (
             <section className={styles.group}>
               <div className={styles.groupLabel}>{t("agentPlazaCloud")}</div>
@@ -209,39 +243,6 @@ export function TargetPicker({
                     </button>
                   </li>
                 ))}
-              </ul>
-            </section>
-          ) : null}
-
-          {visibleAgents.length > 0 ? (
-            <section className={styles.group}>
-              <div className={styles.groupLabel}>{t("iaTargetGroupAgents")}</div>
-              <ul className={styles.items}>
-                {visibleAgents.map((item) => {
-                  const id = String(item.id || "");
-                  const active = value.kind === "agent" && value.id === id;
-                  return (
-                    <li key={id}>
-                      <button
-                        type="button"
-                        className={classNames(styles.row, active && styles.rowActive)}
-                        onClick={() => pick({ kind: "agent", id })}
-                      >
-                        {active ? (
-                          <Check aria-hidden="true" className={styles.rowCheck} size={15} strokeWidth={2.4} />
-                        ) : null}
-                        <span className={classNames("iaAvatarFrame", styles.rowIcon)} aria-hidden="true">
-                          <AgentAvatarContent avatar={item.avatar} fallback={String(item.name || id).slice(0, 1)} />
-                        </span>
-                        <span className={styles.rowText}>
-                          <span className={styles.rowName}>{item.name || id}</span>
-                        </span>
-                        {}
-                        <span className={styles.rowBadge}>{agentRoleLabel(item, t)}</span>
-                      </button>
-                    </li>
-                  );
-                })}
               </ul>
             </section>
           ) : null}
