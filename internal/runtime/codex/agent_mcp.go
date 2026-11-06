@@ -120,7 +120,7 @@ func (r *Runtime) refreshSessionMCP(ctx context.Context, handle SessionHandle) e
 	if err != nil {
 		return fmt.Errorf("materialize Codex MCP servers for catalog refresh: %w", err)
 	}
-	if err := r.seedCodexHomeConfig(live.spec.CodexHomeDir, live.spec.WorkspaceDir, ref.Profile.Normalized(), ref.RuntimeOptions, servers); err != nil {
+	if err := r.seedCodexHomeConfig(live.spec.CodexHomeDir, live.spec.WorkspaceDir, ref.Profile.Normalized(), ref.RuntimeOptions, servers, live.spec.ModelCatalog...); err != nil {
 		return err
 	}
 	if _, err := live.appClient.request(ctx, "config/mcpServer/reload", map[string]any{}); err != nil {

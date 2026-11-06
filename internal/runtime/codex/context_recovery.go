@@ -51,6 +51,7 @@ func (m *appServerManager) recoverContext(ctx context.Context, live *liveSession
 		return PromptResponse{}, err
 	}
 	threadID := (*waiter).threadID
+	selectedModel, modelOverride := (*waiter).model, (*waiter).modelOverride
 	(*waiter).mu.RLock()
 	visible := (*waiter).visibleActivity
 	textOnlyUserInput := (*waiter).textOnlyUserInput
@@ -67,7 +68,7 @@ func (m *appServerManager) recoverContext(ctx context.Context, live *liveSession
 		}
 		live.mu.Unlock()
 		live.removeAppServerTurnWaiter(threadID, *waiter)
-		next, err := live.registerAppServerTurnWaiter(threadID)
+		next, err := live.registerAppServerTurnWaiterWithModel(threadID, selectedModel, modelOverride)
 		if err != nil {
 			return err
 		}
@@ -119,7 +120,9 @@ func (m *appServerManager) recoverContext(ctx context.Context, live *liveSession
 	if err := newWaiter(); err != nil {
 		return PromptResponse{}, err
 	}
-	raw, err := live.appClient.request(ctx, "turn/start", appServerTurnStartParamsWithInput(live.spec, threadID, []map[string]any{}, ""))
+	params := appServerTurnStartParamsWithInput(live.spec, threadID, []map[string]any{}, "")
+	applyTurnModelParams(params, selectedModel)
+	raw, err := live.appClient.request(ctx, "turn/start", params)
 	if err != nil {
 		return PromptResponse{}, err
 	}

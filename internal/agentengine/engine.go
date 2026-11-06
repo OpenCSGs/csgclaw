@@ -739,6 +739,10 @@ func cloneCompletedTurn(input completedTurn) completedTurn {
 }
 
 func cloneTurnRequest(input TurnRequest) TurnRequest {
+	if input.Model != nil {
+		model := *input.Model
+		input.Model = &model
+	}
 	if input.RoomConfiguration != nil {
 		configuration := *input.RoomConfiguration
 		input.RoomConfiguration = &configuration
