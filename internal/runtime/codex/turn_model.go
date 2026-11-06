@@ -68,28 +68,78 @@ func (s *liveSession) resolveTurnModel(override *contract.TurnModel) (contract.T
 	return contract.TurnModel{}, fmt.Errorf("model %q is unavailable in the running Codex catalog", selected.ModelID)
 }
 
-// TurnModel returns only a request override for the active native conversation.
+// TurnModel resolves a model request belonging to the active native conversation.
 // Before turn/start acknowledges its ID, the thread already owns its immutable
 // selection. Only native start notifications and responses establish the ID.
-func (r *Runtime) TurnModel(agentID, threadID, turnID string) (contract.TurnModel, bool) {
+func (r *Runtime) TurnModel(agentID, threadID, turnID, requestedModel string) (contract.TurnModel, bool, error) {
 	threadID, turnID = strings.TrimSpace(threadID), strings.TrimSpace(turnID)
 	if threadID == "" || turnID == "" || len(threadID) > 256 || len(turnID) > 256 {
-		return contract.TurnModel{}, false
+		return contract.TurnModel{}, false, nil
 	}
 	_, live, err := r.activeAgentSession(agentID)
 	if err != nil {
-		return contract.TurnModel{}, false
+		return contract.TurnModel{}, false, nil
 	}
 	live.mu.Lock()
-	defer live.mu.Unlock()
 	waiter := live.turnWaiters[threadID]
-	if waiter == nil || !waiter.modelOverride {
-		return contract.TurnModel{}, false
+	if waiter == nil || !waiter.matchesTurn(turnID) {
+		live.mu.Unlock()
+		return contract.TurnModel{}, false, nil
 	}
-	if expected := waiter.currentTurnID(); expected != "" && expected != turnID {
-		return contract.TurnModel{}, false
+	requestedModel = strings.TrimSpace(requestedModel)
+	if requestedModel != "" && requestedModel != waiter.model.ModelID && !waiter.compacting {
+		active := live.turnContexts[threadID]
+		live.mu.Unlock()
+		if active.waiter != waiter || active.ctx == nil {
+			return contract.TurnModel{}, false, fmt.Errorf("native model selection has no active turn context")
+		}
+		// Notifications and inference use separate transports. A read response
+		// passes through the same stdout reader after preceding compaction events.
+		if _, err := live.appClient.request(active.ctx, "thread/read", map[string]any{"threadId": threadID, "includeTurns": false}); err != nil {
+			return contract.TurnModel{}, false, fmt.Errorf("synchronize native model selection: %w", err)
+		}
+		live.mu.Lock()
+		if live.turnWaiters[threadID] != waiter || waiter.currentTurnID() != turnID {
+			live.mu.Unlock()
+			return contract.TurnModel{}, false, nil
+		}
 	}
-	return waiter.model, true
+	defer live.mu.Unlock()
+	if waiter.compacting && requestedModel != "" && requestedModel != waiter.model.ModelID {
+		loaded, available := live.loadedTurnModel(requestedModel, waiter.model)
+		if !available {
+			return contract.TurnModel{}, false, fmt.Errorf("compaction model %q is unavailable in the running Codex catalog", requestedModel)
+		}
+		return loaded, true, nil
+	}
+	return waiter.model, waiter.modelOverride, nil
+}
+
+func (s *liveSession) loadedTurnModel(modelID string, selected contract.TurnModel) (contract.TurnModel, bool) {
+	for _, model := range s.spec.ModelCatalog {
+		if model.ModelID == modelID && model.Provider == s.spec.Profile.Provider {
+			selected.ModelID = model.ModelID
+			selected.Metadata = model.Metadata.Normalized()
+			return selected, true
+		}
+	}
+	if modelID == s.spec.Profile.ModelID {
+		selected.ModelID = modelID
+		selected.Metadata = s.spec.Profile.ModelMetadata.Normalized()
+		return selected, true
+	}
+	return contract.TurnModel{}, false
+}
+
+func (s *liveSession) setTurnCompacting(threadID, turnID, method string) {
+	if method != "item/started" && method != "item/completed" {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if waiter := s.turnWaiters[threadID]; waiter != nil && turnID != "" && waiter.currentTurnID() == turnID {
+		waiter.compacting = method == "item/started"
+	}
 }
 
 func applyTurnModelParams(params map[string]any, selected contract.TurnModel) {

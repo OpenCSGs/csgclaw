@@ -63,3 +63,47 @@ func TestSessionModelBridgeUsesOnlyScopedSelection(t *testing.T) {
 		t.Fatal("invalid selection fell back to the Agent model")
 	}
 }
+
+func TestSessionModelPreservesTaskProvider(t *testing.T) {
+	upstream := func(name string) *httptest.Server {
+		return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			var payload map[string]any
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				t.Error(err)
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{"upstream": name, "model": payload["model"], "authorization": r.Header.Get("Authorization")})
+		}))
+	}
+	agentUpstream := upstream("agent")
+	defer agentUpstream.Close()
+	taskUpstream := upstream("task")
+	defer taskUpstream.Close()
+	service := NewService(config.ModelConfig{}, sessionProfileFixture{base: agentUpstream.URL})
+	taskProfile := agent.AgentProfile{Provider: agent.ProviderAPI, ModelProviderID: "task", BaseURL: taskUpstream.URL, APIKey: "task-key", ModelID: "task-model", ReasoningEffort: "low"}
+	for _, test := range []struct {
+		name string
+		call func(context.Context, string, []byte) (*UpstreamResponse, error)
+		body string
+	}{
+		{"responses", service.Responses, `{"model":"model-b","input":"hello"}`},
+		{"chat", service.ChatCompletionsStream, `{"model":"model-b","messages":[]}`},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			ctx := WithTaskProfile(context.Background(), taskProfile)
+			ctx = WithSessionModel(ctx, "model-b", "high")
+			response, err := test.call(ctx, "agent-a", []byte(test.body))
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer response.Body.Close()
+			var result map[string]any
+			if err := json.NewDecoder(response.Body).Decode(&result); err != nil {
+				t.Fatal(err)
+			}
+			if result["upstream"] != "task" || result["model"] != taskProfile.ModelID || result["authorization"] != "Bearer task-key" {
+				t.Fatalf("task provider changed: %v", result)
+			}
+		})
+	}
+}

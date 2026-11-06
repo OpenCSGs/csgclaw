@@ -59,7 +59,10 @@ func TestNativeCodexTurnModelOverridesE2E(t *testing.T) {
 		if err := json.Unmarshal([]byte(r.Header.Get("X-Codex-Turn-Metadata")), &native); err != nil {
 			t.Error(err)
 		}
-		selection, overridden := rt.TurnModel("alice", native.Thread, native.Turn)
+		selection, overridden, err := rt.TurnModel("alice", native.Thread, native.Turn, payload.Model)
+		if err != nil {
+			t.Error(err)
+		}
 		if overridden && selection.ModelID != payload.Model {
 			t.Errorf("bridge model = %q, native model = %q", selection.ModelID, payload.Model)
 		}

@@ -1,6 +1,8 @@
 package agents
 
 import (
+	"fmt"
+	"slices"
 	"strings"
 
 	"csgclaw/internal/config"
@@ -16,54 +18,45 @@ func (e *SessionModelError) Error() string { return e.Message }
 
 // SessionModelProfiles returns the current provider's chat models with the Agent's defaults.
 func (s *ModelConfiguration) SessionModelProfiles(agentID string) ([]AgentProfile, error) {
-	profile, err := s.ResolvedAgentProfile(agentID)
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	profile, providerID, provider, err := s.sessionModelProviderLocked(agentID)
 	if err != nil {
 		return nil, err
 	}
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	providerID := profile.ModelProviderID
-	if providerID == "" {
-		providerID, _ = catalogProviderIDForProfile(s.llm, profile)
-	}
 	profiles := []AgentProfile{profile}
-	for _, provider := range ModelProviderCatalogFromLLM(s.llm).Providers {
-		if provider.ID != providerID {
+	images := imageModels(providerID, provider.Models, provider.ImageModels)
+	videos := videoModels(providerID, provider.Models, provider.VideoModels)
+	for _, model := range prioritizeOpenCSGAutoModel(providerID, provider.BaseURL, provider.Models) {
+		if model == profile.ModelID || containsModelID(images, model) || containsModelID(videos, model) {
 			continue
 		}
-		for _, model := range provider.Models {
-			if model == profile.ModelID || containsModelID(provider.ImageModels, model) || containsModelID(provider.VideoModels, model) {
-				continue
-			}
-			selected := cloneProfile(profile)
-			selected.ModelProviderID = providerID
-			selected.ModelID = model
-			profiles = append(profiles, s.hydrateProfileFromCatalogLocked(selected))
-		}
-		break
+		selected := profile
+		selected.Provider = ProfileProviderForModelProviderID(providerID)
+		selected.ModelProviderID = providerID
+		selected.ModelID = model
+		profiles = append(profiles, hydrateProfileFromProvider(selected, provider))
 	}
 	return profiles, nil
 }
 
 // ResolvedSessionProfile applies request options without changing the Agent's Profile.
 func (s *ModelConfiguration) ResolvedSessionProfile(agentID, model, reasoningEffort string) (AgentProfile, error) {
-	profiles, err := s.SessionModelProfiles(agentID)
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	selected, providerID, provider, err := s.sessionModelProviderLocked(agentID)
 	if err != nil {
 		return AgentProfile{}, err
 	}
 	model = strings.TrimSpace(model)
-	selected := profiles[0]
 	if model != "" && model != selected.ModelID {
-		found := false
-		for _, profile := range profiles {
-			if profile.ModelID == model {
-				selected, found = profile, true
-				break
-			}
-		}
-		if !found {
+		if !slices.Contains(provider.Models, model) || containsModelID(imageModels(providerID, []string{model}, provider.ImageModels), model) || containsModelID(videoModels(providerID, nil, provider.VideoModels), model) {
 			return AgentProfile{}, &SessionModelError{Field: "model", Message: "selected model is unavailable in the Agent's provider"}
 		}
+		selected.Provider = ProfileProviderForModelProviderID(providerID)
+		selected.ModelProviderID = providerID
+		selected.ModelID = model
+		selected = hydrateProfileFromProvider(selected, provider)
 	}
 	if effort := config.NormalizeReasoningEffort(reasoningEffort); effort != "" {
 		switch effort {
@@ -74,4 +67,28 @@ func (s *ModelConfiguration) ResolvedSessionProfile(agentID, model, reasoningEff
 		}
 	}
 	return selected, nil
+}
+
+// Read the Agent and provider together so each selection uses one configuration.
+func (s *ModelConfiguration) sessionModelProviderLocked(agentID string) (AgentProfile, string, config.ProviderConfig, error) {
+	got, _, ok := s.agentByIDLocked(agentID)
+	if !ok {
+		return AgentProfile{}, "", config.ProviderConfig{}, fmt.Errorf("agent %q not found", strings.TrimSpace(agentID))
+	}
+	profile := normalizeProfileForAgentRuntime(got.AgentProfile, got.RuntimeOptions, got.Name, got.Description, got.RuntimeKind, nil)
+	providerID := profile.ModelProviderID
+	provider, found := ModelProviderConfigForProfile(s.llm, profile)
+	if found {
+		profile = hydrateProfileFromProvider(profile, provider)
+	} else {
+		profile = s.hydrateProfileFromCatalogLocked(profile)
+	}
+	if !profile.ProfileComplete {
+		return AgentProfile{}, "", config.ProviderConfig{}, fmt.Errorf("agent %q profile is incomplete", strings.TrimSpace(agentID))
+	}
+	if providerID == "" {
+		providerID, _ = catalogProviderIDForProfile(s.llm, profile)
+		provider, _ = ModelProviderConfigForProfile(s.llm, AgentProfile{ModelProviderID: providerID})
+	}
+	return profile, providerID, provider, nil
 }

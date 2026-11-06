@@ -1523,6 +1523,7 @@ type appServerTurnWaiter struct {
 	model         contract.TurnModel
 	modelOverride bool
 	// Guarded by liveSession.mu, alongside the thread's cumulative counters.
+	compacting               bool
 	itemTurns                map[string]string // Native item IDs received with an explicit turn ID.
 	missingItems             bool              // An item without a known owner was withheld.
 	tokenUsage               modelusage.Usage
