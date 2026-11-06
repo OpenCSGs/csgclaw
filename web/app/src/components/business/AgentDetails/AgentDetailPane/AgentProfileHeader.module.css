@@ -3,17 +3,96 @@
   container: agent-profile / inline-size;
 }
 
+header.header:global(.entity-header) {
+  grid-template-columns: 48px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-2xl);
+  background: var(--surface);
+  box-shadow: var(--shadow-xs);
+}
+
+header.header > :global(.entity-avatar) {
+  width: 48px;
+  height: 48px;
+}
+
+header.header > .heading {
+  display: grid;
+  min-width: 0;
+  gap: 10px;
+}
+
+header.header .titleRow {
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+}
+
+header.header .titleRow > :global(.status-pill) {
+  min-height: 26px;
+  padding: 3px 10px;
+  font-family: var(--font-sans);
+  font-size: var(--text-xs-size);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--text-xs-line-height);
+}
+
+header.header > :global(.entity-toolbar) {
+  display: flex;
+  grid-column: auto;
+  flex-wrap: wrap;
+  align-items: center;
+  align-self: start;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+header.header > :global(.entity-toolbar) :global(.btn) {
+  --btn-height: 40px;
+  --btn-min-width: 80px;
+  --btn-padding-x: 16px;
+
+  border-radius: var(--radius-lg);
+}
+
+header.header .description {
+  min-width: 0;
+  color: var(--muted);
+  font-size: var(--text-sm-size);
+  line-height: 1.6;
+}
+
+header.header .description :global(.entity-description-display-copy) {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: inherit;
+  font-size: var(--text-sm-size);
+  line-height: 1.6;
+}
+
 header.header > :global(.entity-toolbar) > :global(.agent-save-status) {
   min-width: 0;
   padding-inline: var(--space-2);
 }
 
 header.header :global(.entity-title-row) > h1 {
+  margin: 0;
   min-width: 0;
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 700;
+  line-height: var(--text-xl-line-height);
 }
 
 @container agent-profile (max-width: 760px) {
