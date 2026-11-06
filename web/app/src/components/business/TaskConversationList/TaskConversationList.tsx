@@ -22,6 +22,9 @@ import {
 import { AgentAvatarContent } from "@/components/business/AgentAvatar";
 import { RoomAvatar } from "@/components/business/RoomAvatar";
 import { useTaskConversationPages } from "@/hooks/workspace/useTaskConversationPages";
+import { useCloudAgentCatalog } from "@/hooks/workspace/useCloudAgentCatalog";
+import { cloudAgentAvatar } from "@/models/cloudAgents";
+import type { AuthStatus } from "@/models/auth";
 import { errorMessage } from "@/api/client";
 import { uniqueTaskConversations } from "@/models/taskConversations";
 import { resolveConversationUser } from "@/models/conversations";
@@ -70,6 +73,7 @@ function searchExcerpt(text: string, query: string, maxLength = 64, leadingConte
 }
 
 type Props = {
+  authStatus?: AuthStatus;
   archived?: boolean;
   compact?: boolean;
   directories?: { path: string; agentIDs: string[] }[];
@@ -85,6 +89,7 @@ type Props = {
 };
 
 export function TaskConversationList({
+  authStatus,
   archived = false,
   compact = false,
   directories = [],
@@ -125,6 +130,7 @@ export function TaskConversationList({
   }, [search]);
   const list = useTaskConversationPages(archived, query);
   const allRooms = uniqueTaskConversations(list.data?.pages ?? []);
+  const cloudCatalog = useCloudAgentCatalog(authStatus, false).data ?? [];
   const directoryPaths = Array.from(
     new Set([
       ...directories.map((item) => item.path),
@@ -272,7 +278,16 @@ export function TaskConversationList({
       >
         {rooms.map((room) => {
           const other = resolveConversationUser(room, currentUserID, usersById);
-          const managerDM = room.is_direct && (other?.id === MANAGER_PARTICIPANT_ID || other?.id === MANAGER_AGENT_ID);
+          const managerDM =
+            !room.cloud_agent &&
+            room.is_direct &&
+            (other?.id === MANAGER_PARTICIPANT_ID || other?.id === MANAGER_AGENT_ID);
+          const cloudAgent = room.cloud_agent
+            ? cloudCatalog.find(
+                (agent) =>
+                  agent.id === room.cloud_agent?.agent_id && agent.connectionID === room.cloud_agent?.connection_id,
+              )
+            : undefined;
           const searchMatch = query ? room.search_match : undefined;
           const preview = searchMatch || room.messages.at(-1);
           const fullPreviewText = preview?.content?.replace(/<[^>]+>/g, " ") || "";
@@ -297,7 +312,17 @@ export function TaskConversationList({
                 >
                   {!managerDM ? (
                     <span className={styles.avatar} aria-hidden="true">
-                      {room.is_direct ? (
+                      {room.cloud_agent ? (
+                        <AgentAvatarContent
+                          avatar={cloudAgentAvatar(
+                            cloudAgent?.type,
+                            cloudAgent?.avatar ||
+                              usersById.get(room.cloud_agent.user_id)?.avatar ||
+                              other?.avatar ||
+                              undefined,
+                          )}
+                        />
+                      ) : room.is_direct ? (
                         <AgentAvatarContent avatar={other?.avatar} fallback={other?.name?.slice(0, 1) || "A"} />
                       ) : (
                         <RoomAvatar

@@ -13,9 +13,9 @@ import { createTranslator } from "@/shared/i18n";
 import { CLOUD_AGENTS_STORAGE_KEY } from "@/shared/storage/keys";
 import { RELAY_PUBLICATIONS_CHANGED_EVENT } from "@/shared/constants/relay";
 import { fetchCloudAgentTemplate, fetchRelayCatalog } from "@/api/relay";
-import { createQueryWrapper } from "../helpers/queryClient";
 import { cloudAgentFixture } from "../helpers/cloudAgentFixture";
 import { paneFromLocation } from "@/models/routing";
+import { createQueryWrapper } from "../helpers/queryClient";
 
 vi.mock("@/api/relay", () => ({ fetchRelayCatalog: vi.fn(), fetchCloudAgentTemplate: vi.fn() }));
 beforeEach(() => {
@@ -86,11 +86,23 @@ function NavigationState() {
 function Page({
   route = "/agents?tab=templates",
   username = "",
+  authExpired = false,
+  locale = "zh",
+  onRequireOpenCSGAuthentication = vi.fn(),
+  onLogin = vi.fn(),
+  authBusy = false,
+  authPending = false,
   agents = [],
   teams = [],
 }: {
   route?: string;
   username?: string;
+  authExpired?: boolean;
+  locale?: "zh" | "en";
+  onRequireOpenCSGAuthentication?: () => boolean;
+  onLogin?: () => void;
+  authBusy?: boolean;
+  authPending?: boolean;
   agents?: AgentLike[];
   teams?: WorkspaceTeam[];
 }) {
@@ -100,7 +112,12 @@ function Page({
     ready: true,
     activePane: { type: "agents", id: "" },
     sidebarProps: {
-      t: createTranslator("zh"),
+      t: createTranslator(locale),
+      authExpired,
+      onRequireOpenCSGAuthentication,
+      onLogin,
+      authBusy,
+      authPending,
       authStatus: {
         authenticated: Boolean(username),
         user_id: username,
@@ -126,7 +143,7 @@ function Page({
   );
 }
 
-function TeamNavigationContents() {
+function TeamNavigationContents({ remountOnNavigation = false }: { remountOnNavigation?: boolean }) {
   const location = useLocation();
   const navigate = useNavigate();
   const activePane = paneFromLocation(location.pathname);
@@ -144,20 +161,76 @@ function TeamNavigationContents() {
   const controller = {
     ready: true,
     activePane,
-    sidebarProps: { t, workerAgentItems: agents, teams },
+    sidebarProps: {
+      t,
+      workerAgentItems: agents,
+      teams,
+      onSelectAgent: (agent: AgentLike) => navigate(`/agents/${agent.id}`),
+      onSelectTeam: (team: WorkspaceTeam) => navigate(`/teams/${team.id}`),
+    },
     agentViewProps: { item: null },
     teamViewProps: { t, agents, team: teams.find((team) => team.id === activePane.id) },
   } as unknown as WorkspaceController;
   return (
     <WorkspaceControllerProvider controller={controller}>
-      <AgentOverviewPage />
+      <AgentOverviewPage key={remountOnNavigation ? `${location.pathname}${location.search}` : undefined} />
       <button onClick={() => navigate("/teams/team-1")}>Go to referenced team</button>
+      <NavigationState />
     </WorkspaceControllerProvider>
   );
 }
 
 describe("agent overview team navigation", () => {
   beforeEach(() => vi.mocked(useWorkspaceHubTemplatesQuery).mockReturnValue(queryState()));
+  afterEach(() => localStorage.removeItem(CLOUD_AGENTS_STORAGE_KEY));
+
+  it("keeps All selected while switching between agent and team details, including history navigation", async () => {
+    render(
+      <MemoryRouter initialEntries={["/agents"]}>
+        <TeamNavigationContents />
+      </MemoryRouter>,
+    );
+    const user = userEvent.setup();
+    for (const name of [/测试智能体/, /回归团队 1/, /回归团队 2/, /测试智能体/, /^Back$/, /^Forward$/]) {
+      await user.click(screen.getByRole("button", { name }));
+      expect(screen.getByRole("button", { name: "全部 3" })).toHaveAttribute("aria-pressed", "true");
+      expect(screen.getByRole("button", { name: /测试智能体/ })).toBeVisible();
+      expect(screen.getByRole("button", { name: /回归团队 1/ })).toBeVisible();
+      expect(screen.getByRole("button", { name: /回归团队 2/ })).toBeVisible();
+    }
+    expect(screen.getByLabelText("Current URL")).toHaveTextContent("/agents/agent-worker");
+  });
+
+  it("keeps the team filter and search when selecting another result", async () => {
+    render(
+      <MemoryRouter initialEntries={["/teams/team-1"]}>
+        <TeamNavigationContents />
+      </MemoryRouter>,
+    );
+    const user = userEvent.setup();
+    await user.type(screen.getByRole("textbox", { name: "搜索智能体和团队" }), "回归团队");
+    await user.click(screen.getByRole("button", { name: /回归团队 2/ }));
+    expect(await screen.findByRole("heading", { name: "回归团队 2", level: 1 })).toBeVisible();
+    expect(screen.getByRole("button", { name: "团队 2" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("textbox", { name: "搜索智能体和团队" })).toHaveValue("回归团队");
+  });
+
+  it.each(["全部 4", "云端 1"])("preserves %s and the search when opening a cloud result", async (filterLabel) => {
+    vi.mocked(fetchRelayCatalog).mockResolvedValue([...cloudAgentFixture]);
+    localStorage.setItem(CLOUD_AGENTS_STORAGE_KEY, JSON.stringify(cloudAgentFixture));
+    render(
+      <MemoryRouter initialEntries={["/agents"]}>
+        <TeamNavigationContents />
+      </MemoryRouter>,
+    );
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: filterLabel }));
+    await user.type(screen.getByRole("textbox", { name: "搜索智能体和团队" }), "合同");
+    await user.click(screen.getByRole("button", { name: /合同条款审阅/ }));
+    expect(await screen.findByRole("heading", { name: "合同条款审阅", level: 1 })).toBeVisible();
+    expect(screen.getByRole("button", { name: filterLabel })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("textbox", { name: "搜索智能体和团队" })).toHaveValue("合同");
+  });
 
   it.each(["/agents", "/teams/team-2"])(
     "switches the list to teams and clears the agent search when navigating from %s",
@@ -189,6 +262,41 @@ describe("agent overview team navigation", () => {
     expect(await screen.findByRole("heading", { name: "回归团队 1", level: 1 })).toBeVisible();
     expect(screen.getByRole("button", { name: "团队 2" })).toHaveAttribute("aria-pressed", "true");
   });
+
+  it.each([
+    { route: "/agents/agent-worker", filter: "智能体 1", query: "测试智能体" },
+    { route: "/agents?cloud=agt_demo_contract_reviewer", filter: "云端 1", query: "合同" },
+    { route: "/agents/agent-worker", filter: "全部 4", query: "测试智能体" },
+    { route: "/agents/agent-worker", filter: "智能体 1", query: "测试智能体", remount: true },
+  ])(
+    "restores the $filter filter and search per history entry on Back and Forward",
+    async ({ route, filter, query, remount }) => {
+      vi.mocked(fetchRelayCatalog).mockResolvedValue([...cloudAgentFixture]);
+      localStorage.setItem(CLOUD_AGENTS_STORAGE_KEY, JSON.stringify(cloudAgentFixture));
+      render(
+        <MemoryRouter initialEntries={[route]}>
+          <TeamNavigationContents remountOnNavigation={remount} />
+        </MemoryRouter>,
+      );
+      const user = userEvent.setup();
+      await user.click(await screen.findByRole("button", { name: filter }));
+      await user.type(screen.getByRole("textbox", { name: "搜索智能体和团队" }), query);
+      await user.click(screen.getByRole("button", { name: "Go to referenced team" }));
+      await user.click(screen.getByRole("button", { name: "团队 2" }));
+      await user.clear(screen.getByRole("textbox", { name: "搜索智能体和团队" }));
+      await user.type(screen.getByRole("textbox", { name: "搜索智能体和团队" }), "回归团队 1");
+
+      await user.click(screen.getByRole("button", { name: "Back" }));
+      expect(screen.getByLabelText("Current URL")).toHaveTextContent(route);
+      expect(screen.getByRole("button", { name: filter })).toHaveAttribute("aria-pressed", "true");
+      expect(screen.getByRole("textbox", { name: "搜索智能体和团队" })).toHaveValue(query);
+
+      await user.click(screen.getByRole("button", { name: "Forward" }));
+      expect(screen.getByLabelText("Current URL")).toHaveTextContent("/teams/team-1");
+      expect(screen.getByRole("button", { name: "团队 2" })).toHaveAttribute("aria-pressed", "true");
+      expect(screen.getByRole("textbox", { name: "搜索智能体和团队" })).toHaveValue("回归团队 1");
+    },
+  );
 });
 
 describe("agent overview guidance and template loading", () => {
@@ -536,9 +644,121 @@ describe("cloud agent plaza", () => {
   });
   afterEach(() => localStorage.removeItem(CLOUD_AGENTS_STORAGE_KEY));
 
+  it("includes the complete cloud description in the profile body", async () => {
+    const description = "第一段：" + "完整的云端智能体说明。".repeat(15) + "\n第二段：保留换行和结尾。";
+    const agent = { ...cloudAgentFixture[0], description };
+    vi.mocked(fetchRelayCatalog).mockResolvedValue([agent]);
+    localStorage.setItem(CLOUD_AGENTS_STORAGE_KEY, JSON.stringify([agent]));
+    render(<Page route={`/agents?cloud=${agent.id}`} />);
+    const body = await screen.findByRole("region", { name: "说明" });
+    expect(body.querySelector("p")?.textContent).toBe(description);
+    expect(within(body).getByRole("heading", { name: "说明" })).toBeVisible();
+    expect(body.closest(".agent-profile-scroll-region")).toBeInTheDocument();
+  });
+
+  it("switches from empty My scope to Public and adds an agent without leaving the plaza", async () => {
+    const user = userEvent.setup();
+    render(<Page route="/agents?tab=plaza" username="alice" />);
+    await user.click(await screen.findByRole("button", { name: "我的" }));
+    await user.click(screen.getByRole("button", { name: "浏览公共智能体" }));
+    expect(screen.getByRole("button", { name: "公共" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByLabelText("Current URL")).toHaveTextContent("/agents?tab=plaza");
+    expect(screen.queryByRole("link")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "添加到我的智能体" }));
+    await user.click(screen.getByRole("button", { name: "我的" }));
+    expect(screen.getByRole("heading", { name: cloudAgentFixture[0].name })).toBeVisible();
+    expect(screen.getByText("已添加")).toBeVisible();
+    expect(JSON.parse(localStorage.getItem(CLOUD_AGENTS_STORAGE_KEY)!)).toEqual(cloudAgentFixture);
+  });
+
+  it.each(["loading", "failed", "ready"])(
+    "offers authorization instead of the %s catalog when signed out",
+    async (state) => {
+      if (state === "loading") vi.mocked(fetchRelayCatalog).mockReturnValue(new Promise(() => {}));
+      if (state === "failed") vi.mocked(fetchRelayCatalog).mockRejectedValue(new Error("Sign in required"));
+      const onRequireOpenCSGAuthentication = vi.fn(() => false);
+      render(<Page route="/agents?tab=plaza" onRequireOpenCSGAuthentication={onRequireOpenCSGAuthentication} />);
+      await act(async () => {});
+
+      expect(screen.getByRole("heading", { name: "智能体广场", level: 1 })).toBeVisible();
+      expect(screen.getByText("看中的，招呼一声就来")).toBeVisible();
+      const description = screen.getByText(createTranslator("zh")("agentPlazaDescription"));
+      expect(description).toBeVisible();
+      expect(description.compareDocumentPosition(screen.getByRole("button", { name: "授权登录" }))).toBe(
+        Node.DOCUMENT_POSITION_FOLLOWING,
+      );
+      expect(screen.getByText("智能体广场是云端资源，登录账号后才能浏览和添加。")).toBeVisible();
+      expect(screen.queryByText("正在加载已发布智能体…")).not.toBeInTheDocument();
+      expect(screen.queryByText("无法加载智能体广场")).not.toBeInTheDocument();
+      expect(screen.queryByRole("textbox", { name: "搜索公共智能体" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("heading", { name: "合同条款审阅" })).not.toBeInTheDocument();
+      await userEvent.setup().click(screen.getByRole("button", { name: "授权登录" }));
+      expect(onRequireOpenCSGAuthentication).toHaveBeenCalledOnce();
+    },
+  );
+
+  it("localizes the sign-in prompt and supports keyboard authorization", async () => {
+    const onRequireOpenCSGAuthentication = vi.fn(() => false);
+    render(
+      <Page route="/agents?tab=plaza" locale="en" onRequireOpenCSGAuthentication={onRequireOpenCSGAuthentication} />,
+    );
+    expect(screen.getByText("The agent plaza lives in the cloud. Sign in to browse and add agents.")).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Agent Plaza", level: 1 })).toBeVisible();
+    expect(screen.getByText(createTranslator("en")("agentPlazaDescription"))).toBeVisible();
+    screen.getByRole("button", { name: "Authorize & sign in" }).focus();
+    await userEvent.setup().keyboard("{Enter}");
+    expect(onRequireOpenCSGAuthentication).toHaveBeenCalledOnce();
+  });
+
+  it("requires authorization again when the session has expired", () => {
+    render(<Page route="/agents?tab=plaza" username="alice" authExpired />);
+    expect(screen.getByRole("button", { name: "授权登录" })).toBeVisible();
+    expect(screen.queryByRole("button", { name: "添加到我的智能体" })).not.toBeInTheDocument();
+  });
+
+  it("preserves the introduction and allows reauthorization when the catalog rejects the current login", async () => {
+    vi.mocked(fetchRelayCatalog).mockRejectedValue({ code: "relay_login_required" });
+    const onLogin = vi.fn();
+    const onRequireOpenCSGAuthentication = vi.fn(() => true);
+    render(
+      <Page
+        route="/agents?tab=plaza"
+        username="alice"
+        onLogin={onLogin}
+        onRequireOpenCSGAuthentication={onRequireOpenCSGAuthentication}
+      />,
+    );
+    const button = await screen.findByRole("button", { name: "授权登录" });
+    expect(screen.getByRole("heading", { name: "智能体广场", level: 1 })).toBeVisible();
+    expect(screen.queryByText("无法加载智能体广场")).not.toBeInTheDocument();
+    await userEvent.setup().click(button);
+    expect(onRequireOpenCSGAuthentication).toHaveBeenCalledOnce();
+    expect(onLogin).toHaveBeenCalledOnce();
+  });
+
+  it.each(["authBusy", "authPending"] as const)("disables authorization while %s", (flag) => {
+    render(<Page route="/agents?tab=plaza" {...{ [flag]: true }} />);
+    expect(screen.getByRole("button", { name: "授权登录" })).toBeDisabled();
+  });
+
+  it("replaces the sign-in prompt with the catalog after login and restores it after logout", async () => {
+    const view = render(<Page route="/agents?tab=plaza" />);
+    expect(screen.getByRole("button", { name: "授权登录" })).toBeVisible();
+    const description = createTranslator("zh")("agentPlazaDescription");
+    expect(screen.getByText(description)).toBeVisible();
+    view.rerender(<Page route="/agents?tab=plaza" username="alice" />);
+    expect(await screen.findByRole("button", { name: "添加到我的智能体" })).toBeVisible();
+    expect(screen.getByText(description)).toBeVisible();
+    expect(screen.queryByRole("button", { name: "授权登录" })).not.toBeInTheDocument();
+    view.rerender(<Page route="/agents?tab=plaza" />);
+    expect(screen.getByText(description)).toBeVisible();
+    expect(screen.getByRole("button", { name: "授权登录" })).toBeVisible();
+    expect(screen.queryByRole("button", { name: "添加到我的智能体" })).not.toBeInTheDocument();
+  });
+
   it("adds a cloud agent, opens its separate detail and removes it from My agents", async () => {
     const user = userEvent.setup();
-    render(<Page route="/agents?tab=plaza" />);
+    render(<Page route="/agents?tab=plaza" username="alice" />);
     expect(await screen.findByRole("heading", { name: "智能体广场" })).toBeVisible();
     expect(screen.getByRole("heading", { name: "合同条款审阅" })).toBeVisible();
     expect(screen.getByText("在线")).toBeVisible();
@@ -555,7 +775,8 @@ describe("cloud agent plaza", () => {
     expect(screen.getByRole("button", { name: "全部 1" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("button", { name: /合同条款审阅\s*在线\s*云端/ })).toHaveAttribute("aria-current", "true");
     expect(screen.getByRole("tab", { name: "我的智能体 1" })).toHaveAttribute("aria-selected", "true");
-    await user.click(screen.getByRole("button", { name: "从我的智能体移除" }));
+    await user.click(screen.getByRole("button", { name: "更多" }));
+    await user.click(screen.getByRole("menuitem", { name: "从我的智能体移除" }));
     expect(screen.getByRole("button", { name: "云端 0" })).toBeVisible();
     expect(JSON.parse(localStorage.getItem(CLOUD_AGENTS_STORAGE_KEY)!)).toEqual([]);
   });
@@ -570,7 +791,8 @@ describe("cloud agent plaza", () => {
     render(<Page route={`/agents?cloud=${agent.id}`} />);
     expect(await screen.findByLabelText("Template detail")).toHaveTextContent("alice/worker");
     expect(screen.getByLabelText("Template detail")).toHaveTextContent("instance-model");
-    expect(screen.getByRole("button", { name: "从我的智能体移除" })).toBeVisible();
+    await userEvent.setup().click(screen.getByRole("button", { name: "更多" }));
+    expect(await screen.findByRole("menuitem", { name: "从我的智能体移除" })).toBeVisible();
     expect(screen.getByLabelText("Current URL")).toHaveTextContent(`/agents?cloud=${agent.id}`);
   });
 
@@ -614,7 +836,7 @@ describe("cloud agent plaza", () => {
     const view = render(<Page route="/agents?cloud=agt_demo_contract_reviewer" />);
     expect(await screen.findByRole("button", { name: /合同条款审阅\s*在线\s*云端/ })).toBeVisible();
     view.unmount();
-    render(<Page route="/agents?tab=plaza" />);
+    render(<Page route="/agents?tab=plaza" username="alice" />);
     expect(await screen.findByText("已添加")).toBeVisible();
     await user.type(screen.getByRole("textbox", { name: "搜索公共智能体" }), "not found");
     expect(screen.queryByRole("heading", { name: "合同条款审阅" })).not.toBeInTheDocument();
@@ -630,13 +852,13 @@ describe("cloud agent plaza", () => {
     render(<Page route="/agents?cloud=agt_demo_contract_reviewer" />);
     expect(await screen.findByText("这个云端智能体尚未添加")).toBeVisible();
     expect(screen.queryByRole("button", { name: /合同条款审阅/ })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "从我的智能体移除" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "更多" })).not.toBeInTheDocument();
   });
 
   it("refreshes after publication and exposes recoverable directory errors", async () => {
     vi.mocked(fetchRelayCatalog).mockRejectedValue(new Error("Unavailable"));
     const user = userEvent.setup();
-    render(<Page route="/agents?tab=plaza" />);
+    render(<Page route="/agents?tab=plaza" username="alice" />);
     expect(await screen.findByText("无法加载智能体广场")).toBeVisible();
     vi.mocked(fetchRelayCatalog).mockResolvedValue([]);
     await user.click(screen.getByRole("button", { name: "重试" }));
@@ -650,7 +872,7 @@ describe("cloud agent plaza", () => {
 
   it("shows an empty My scope before adding and keeps local agents separate", async () => {
     const user = userEvent.setup();
-    render(<Page route="/agents?tab=plaza" agents={[{ id: "agent-local", name: "Local worker" }]} />);
+    render(<Page route="/agents?tab=plaza" username="alice" agents={[{ id: "agent-local", name: "Local worker" }]} />);
     await user.click(await screen.findByRole("button", { name: "我的" }));
     expect(screen.getByText("还没有添加云端智能体，去公共广场挑选一个吧。")).toBeVisible();
     await user.click(screen.getByRole("tab", { name: "我的智能体 1" }));

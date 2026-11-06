@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { filterCloudAgents, parseCloudAgents, sameCloudAgentReference, type CloudAgent } from "@/models/cloudAgents";
+import {
+  cloudAgentAvatar,
+  filterCloudAgents,
+  parseCloudAgents,
+  sameCloudAgentReference,
+  type CloudAgent,
+} from "@/models/cloudAgents";
+import { normalizeAvatarPath } from "@/shared/avatar";
 import { agentPlazaSearch, cloudAgentSearch } from "@/models/routing";
 const agent: CloudAgent = {
   id: "agt_contract",
@@ -15,6 +22,28 @@ const agent: CloudAgent = {
   lastSeenAt: null,
   avatar: "",
 };
+describe("cloud agent type avatars", () => {
+  it.each([
+    ["openclaw", "openclaw"],
+    ["langflow", "langflow"],
+    ["csgclaw", "csgclaw"],
+    ["csgclaw-workspace", "csgclaw"],
+    ["code", "code"],
+    [" OpenClaw ", "openclaw"],
+  ])("matches %s to its original icon", (type, icon) => {
+    const path = cloudAgentAvatar(type, "avatar/pic-2.png");
+    expect(path).toBe(`avatar/cloud-${icon}.png`);
+    expect(normalizeAvatarPath(path)).toBe(path);
+  });
+  it("keeps an existing avatar for an unknown type and supplies an icon for legacy empty avatars", () => {
+    expect(cloudAgentAvatar("unknown", "avatar/pic-2.png")).toBe("avatar/pic-2.png");
+    expect(cloudAgentAvatar(undefined, "")).toBe("avatar/cloud-csgclaw.png");
+  });
+  it("persists type metadata while remaining compatible with legacy saved entries", () => {
+    expect(parseCloudAgents(JSON.stringify([{ ...agent, type: "code" }]))[0]).toMatchObject({ type: "code" });
+    expect(parseCloudAgents(JSON.stringify([agent]))[0]).not.toHaveProperty("type");
+  });
+});
 describe("cloud agent membership", () => {
   it.each([null, "invalid", "{}", '[1,null,"unknown"]'])("rejects malformed or unknown saved IDs: %s", (raw) => {
     expect(parseCloudAgents(raw)).toEqual([]);

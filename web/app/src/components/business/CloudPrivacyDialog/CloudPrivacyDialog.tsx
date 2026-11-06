@@ -12,6 +12,7 @@ import {
   DialogTitle,
 } from "@/components/ui";
 import type { TranslateFn } from "@/models/conversations";
+import styles from "./CloudPrivacyDialog.module.css";
 
 export type CloudSendConfirmation = {
   onCancel: () => void;
@@ -31,24 +32,26 @@ export function CloudPrivacyDialog({
   const checkboxID = useId();
   return (
     <DialogRoot open onOpenChange={(open) => !open && confirmation.onCancel()}>
-      <DialogContent>
-        <DialogHeader>
+      <DialogContent className={styles.dialog}>
+        <DialogHeader className={styles.header}>
           <DialogTitle>{t("cloudPrivacyTitle")}</DialogTitle>
-          <DialogCloseButton label={t("close")} />
+          <DialogCloseButton label={t("close")} size="sm" variant="tertiaryGray" />
         </DialogHeader>
-        <DialogBody>
-          <DialogDescription>{t("cloudPrivacyAgent", { name: agentName })}</DialogDescription>
-          <p>{t("cloudPrivacyMessage")}</p>
-          <label className="flex items-center gap-2" htmlFor={checkboxID}>
+        <DialogBody className={styles.body}>
+          <p className={styles.agent}>{t("cloudPrivacyAgent", { name: agentName })}</p>
+          <DialogDescription size="md" className={styles.message}>
+            {t("cloudPrivacyMessage")}
+          </DialogDescription>
+          <label className={styles.remember} htmlFor={checkboxID}>
             <Checkbox id={checkboxID} checked={remember} onCheckedChange={(checked) => setRemember(checked === true)} />
             {t("cloudPrivacyRemember")}
           </label>
         </DialogBody>
-        <DialogFooter>
-          <Button variant="secondaryGray" onClick={confirmation.onCancel}>
+        <DialogFooter className={styles.footer}>
+          <Button variant="secondaryGray" size="md" onClick={confirmation.onCancel}>
             {t("cancel")}
           </Button>
-          <Button variant="primary" onClick={() => confirmation.onConfirm(remember)}>
+          <Button variant="primary" size="md" onClick={() => confirmation.onConfirm(remember)}>
             {t("cloudPrivacyContinue")}
           </Button>
         </DialogFooter>

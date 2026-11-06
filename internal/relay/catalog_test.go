@@ -66,7 +66,7 @@ func TestPublicationCatalogPersistsReferencesAndRedactsCredentials(t *testing.T)
 		t.Fatalf("catalog count=%d", len(entries))
 	}
 	entry := entries[0]
-	if entry.Agent.ID != "agt_public" || entry.RelayURL != server.URL || entry.ConnectionID == "" || entry.Avatar != "avatar/pic-2.png" {
+	if entry.Agent.ID != "agt_public" || entry.RelayURL != server.URL || entry.ConnectionID == "" || entry.Avatar != "avatar/pic-2.png" || entry.Type != "csgclaw" {
 		t.Fatal("missing invocation reference metadata")
 	}
 	raw, _ := json.Marshal(entries)

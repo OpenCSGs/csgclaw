@@ -1,17 +1,14 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
+import type { RelayCatalogTarget } from "@/api/relay";
 import type { AuthStatus } from "@/models/auth";
-import { fetchRelayCatalog, type RelayCatalogTarget } from "@/api/relay";
+import { useCloudAgentCatalog } from "./useCloudAgentCatalog";
 import { parseCloudAgents, sameCloudAgentReference, type CloudAgent } from "@/models/cloudAgents";
 import { CLOUD_AGENTS_STORAGE_KEY } from "@/shared/storage/keys";
-import { RELAY_PUBLICATIONS_CHANGED_EVENT } from "@/shared/constants/relay";
 
 const MEMBERSHIP_CHANGED_EVENT = "csgclaw-cloud-membership-changed";
 
 export function useCloudAgents(auth?: AuthStatus, enabled = true, target?: RelayCatalogTarget) {
-  const login = auth?.authenticated
-    ? JSON.stringify([auth.base_url, auth.user_uuid || auth.user_id, auth.logged_in_at])
-    : "";
+  const query = useCloudAgentCatalog(auth, enabled, target);
   const [savedAgents, setSavedAgents] = useState<CloudAgent[]>(() => {
     try {
       return parseCloudAgents(localStorage.getItem(CLOUD_AGENTS_STORAGE_KEY));
@@ -19,22 +16,7 @@ export function useCloudAgents(auth?: AuthStatus, enabled = true, target?: Relay
       return [];
     }
   });
-  const queryClient = useQueryClient();
-  const agentID = target?.agent_id;
-  const connectionID = target?.connection_id;
-  const queryKey = useMemo(() => ["cloud-agent-catalog", login, agentID, connectionID], [login, agentID, connectionID]);
-  const query = useQuery({
-    queryKey,
-    queryFn: ({ signal }) => fetchRelayCatalog(signal, target),
-    enabled,
-    staleTime: 5000,
-    refetchInterval: 5000,
-    retry: false,
-  });
   const catalog = query.isError ? [] : (query.data ?? []);
-  const refresh = useCallback(() => {
-    void queryClient.invalidateQueries({ queryKey, exact: true }, { cancelRefetch: false });
-  }, [queryClient, queryKey]);
   const [storageError, setStorageError] = useState(false);
   useEffect(() => {
     const sync = () => {
@@ -61,15 +43,6 @@ export function useCloudAgents(auth?: AuthStatus, enabled = true, target?: Relay
       window.removeEventListener("storage", onStorage);
     };
   }, []);
-  useEffect(() => {
-    if (!enabled) return;
-    window.addEventListener("focus", refresh);
-    window.addEventListener(RELAY_PUBLICATIONS_CHANGED_EVENT, refresh);
-    return () => {
-      window.removeEventListener("focus", refresh);
-      window.removeEventListener(RELAY_PUBLICATIONS_CHANGED_EVENT, refresh);
-    };
-  }, [enabled, refresh]);
   function save(update: (agents: CloudAgent[]) => CloudAgent[]) {
     try {
       const agents = update(parseCloudAgents(localStorage.getItem(CLOUD_AGENTS_STORAGE_KEY)));
@@ -87,7 +60,7 @@ export function useCloudAgents(auth?: AuthStatus, enabled = true, target?: Relay
     catalog,
     loading: query.isPending,
     error: query.error,
-    refresh,
+    refresh: () => void query.refetch({ cancelRefetch: false }),
     addedIDs: catalog
       .filter((agent) => savedAgents.some((saved) => sameCloudAgentReference(saved, agent)))
       .map((agent) => agent.id),

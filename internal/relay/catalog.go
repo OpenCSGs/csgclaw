@@ -18,6 +18,7 @@ type CatalogEntry struct {
 	Agent            Agent  `json:"agent"`
 	Avatar           string `json:"avatar,omitempty"`
 	Source           string `json:"source,omitempty"`
+	Type             string `json:"type,omitempty"`
 	CreatorName      string `json:"creator_name,omitempty"`
 	ModelID          string `json:"model_id,omitempty"`
 	TemplateRepoPath string `json:"template_repo_path,omitempty"`
@@ -113,7 +114,7 @@ func (m *Manager) discover(ctx context.Context, onlyID string) ([]CatalogEntry, 
 				a.Name, a.Description = item.Name, item.Description
 				entry := CatalogEntry{
 					RelayURL: c.base.String(), ConnectionID: connection, Agent: a, Avatar: item.Metadata.Avatar,
-					Source: item.Source, CreatorName: item.CreatorName, ModelID: item.Metadata.ProvisionRequest.LLM.Model,
+					Source: item.Source, Type: item.Type, CreatorName: item.CreatorName, ModelID: item.Metadata.ProvisionRequest.LLM.Model,
 				}
 				if item.Source == "platform" && item.TemplateID > 0 {
 					entry.TemplateRepoPath = validatedTemplateRepoPath(item.Metadata.TemplateMetadata.RepoPath)
@@ -159,6 +160,9 @@ func (m *Manager) catalog(ctx context.Context, onlyID string) []CatalogEntry {
 		}
 		entry.RelayURL = m.manifest.Endpoint
 		entry.ConnectionID = m.manifest.ConnectionID
+		if entry.Type == "" {
+			entry.Type = "csgclaw"
+		}
 		entries = append(entries, entry)
 		connected[id] = m.running[id] != nil && m.running[id].connected
 	}

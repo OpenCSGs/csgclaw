@@ -21,6 +21,10 @@ import {
   TooltipProvider,
 } from "@/components/ui";
 import { ModelPicker } from "@/components/business/AgentModelFields";
+import { CloudPrivacyDialog } from "@/components/business/CloudPrivacyDialog";
+import { AgentAvatarContent } from "@/components/business/AgentAvatar";
+import { cloudAgentAvatar } from "@/models/cloudAgents";
+import { CLOUD_AGENT_AVATARS } from "@/shared/avatar";
 import { ReasoningEffortPicker } from "@/components/business/ReasoningEffortPicker";
 import { FieldHelpTooltip } from "@/components/business/ProfileControls";
 import { ConversationSection } from "@/components/business/ConversationWorkspace/ConversationSection";
@@ -49,6 +53,7 @@ export function UiLab() {
   const [model, setModel] = useState("qwen-3.5");
   const [reasoning, setReasoning] = useState("");
   const [dialog, setDialog] = useState(false);
+  const [cloudPrivacyDialog, setCloudPrivacyDialog] = useState(false);
   const [error, setError] = useState(false);
   const [showDemoConversation, setShowDemoConversation] = useState(true);
   useEffect(() => {
@@ -235,6 +240,31 @@ export function UiLab() {
               actions={<Button variant="secondaryGray">Add item</Button>}
             />
           </section>
+          <section className={styles.card}>
+            <h2>Cloud agent confirmation</h2>
+            <Button onClick={() => setCloudPrivacyDialog(true)}>Preview cloud privacy dialog</Button>
+          </section>
+          <section className={styles.card}>
+            <h2>Cloud agent type avatars</h2>
+            <div className={styles.row}>
+              {Object.keys(CLOUD_AGENT_AVATARS).map((type) => (
+                <div key={type} className={styles.cloudAvatarPreview}>
+                  <AgentAvatarContent avatar={cloudAgentAvatar(type)} alt={type} />
+                  <span>{type}</span>
+                </div>
+              ))}
+            </div>
+          </section>
+          {cloudPrivacyDialog ? (
+            <CloudPrivacyDialog
+              agentName="气象运维助手"
+              t={createTranslator("zh")}
+              confirmation={{
+                onCancel: () => setCloudPrivacyDialog(false),
+                onConfirm: () => setCloudPrivacyDialog(false),
+              }}
+            />
+          ) : null}
           <DialogRoot open={dialog} onOpenChange={setDialog}>
             <DialogContent aria-describedby={undefined}>
               <DialogHeader>

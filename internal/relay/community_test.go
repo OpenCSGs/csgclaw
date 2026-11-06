@@ -263,6 +263,9 @@ func TestCommunityDiscoveryAndInvocationOfRemotePublication(t *testing.T) {
 	if entries[0].Source != "external" || entries[1].Source != "platform" || entries[0].Agent.Name != "Remote" {
 		t.Fatal("discovery lost community origin or display name")
 	}
+	if entries[0].Type != "csgclaw" || entries[1].Type != "csgclaw-workspace" {
+		t.Fatal("discovery lost community instance types")
+	}
 	profile, err := m.AgentTemplate(context.Background(), platformRelayID, entries[1].ConnectionID)
 	if err != nil || profile == nil || profile.RepoPath != "alice/template" {
 		t.Fatalf("invalid template profile: %+v, %v", profile, err)

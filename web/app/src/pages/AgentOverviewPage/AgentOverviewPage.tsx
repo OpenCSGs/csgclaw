@@ -11,9 +11,10 @@ import { useWorkspaceHubTemplateQuery, useWorkspaceHubTemplatesQuery } from "@/h
 import type { WorkspaceControllerReady } from "@/hooks/workspace/workspaceControllerContract";
 import { isVisibleInHubTemplateList } from "@/models/hubWorkspace";
 import { agenticHubTemplatesURL } from "@/models/agenticHub";
+import { isAuthenticated } from "@/models/auth";
 import { templateAvatar, templateInGroup } from "@/models/templateGroups";
 import { agentAvailabilityStatusLabel, agentRoleLabel, isAgentAvailable, type AgentLike } from "@/models/agents";
-import { AgentPlaza, CloudAgentDetail } from "./components/AgentPlaza";
+import { AgentPlaza, AgentPlazaLayout, CloudAgentDetail } from "./components/AgentPlaza";
 import { useCloudAgents } from "@/hooks/workspace/useCloudAgents";
 import { filterCloudAgents } from "@/models/cloudAgents";
 import {
@@ -29,6 +30,7 @@ import { defaultAgentAvatar } from "@/shared/avatarOptions";
 import styles from "./AgentOverviewPage.module.css";
 import { useAgentViewBindings } from "@/hooks/workspace/useAgentViewBindings";
 import { AgentOverviewGuide } from "./components";
+import { useAgentOverviewListState } from "./useAgentOverviewListState";
 
 const AgentView = lazy(() =>
   import("@/components/business/AgentDetails").then((module) => ({ default: module.AgentView })),
@@ -110,21 +112,8 @@ export function AgentOverviewPage() {
   const selectedCloudAgent = plaza.agents.find((agent) => agent.id === cloudID);
   const templatesTab = requestedTab === "templates" || requestedTab === "market";
   const requestedTemplateID = templatesTab ? searchParams.get("template") || "" : "";
-  const [query, setQuery] = useState("");
-  const [filter, setFilter] = useState("all");
-  const activeType = controller.ready ? controller.activePane.type : "";
+  const { query, filter, setListState } = useAgentOverviewListState();
   const activeID = controller.ready ? controller.activePane.id : "";
-  useEffect(() => {
-    if (!activeID || (activeType !== "agent" && activeType !== "team")) return;
-    setFilter(activeType === "team" ? "teams" : "agents");
-    setQuery("");
-  }, [activeID, activeType]);
-  useEffect(() => {
-    if (cloudID) {
-      setFilter("all");
-      setQuery("");
-    }
-  }, [cloudID]);
   const templateFilter = searchParams.get("filter") === "personal" ? "personal" : "official";
   const [listOpen, setListOpen] = useState(false);
   const listToggleRef = useRef<HTMLButtonElement>(null);
@@ -160,14 +149,12 @@ export function AgentOverviewPage() {
     if (template) onSelectTemplateInPlace?.(template);
   }, [requestedTemplateID, currentTemplateID, currentResourceType, templates, onSelectTemplateInPlace]);
   useEffect(() => {
-    setQuery("");
-  }, [requestedTemplateID]);
-  useEffect(() => {
     selectedTemplateRef.current?.scrollIntoView({ block: "nearest" });
   }, [requestedTemplateID, templates, query]);
   if (!controller.ready || !controller.sidebarProps) return null;
   const props = controller.sidebarProps;
   const { t } = props;
+  const authed = isAuthenticated(props.authStatus) && !props.authExpired;
   const selectedTemplateID = requestedTemplateID;
   const matches = (name: string) => name.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase());
   const agents = props.workerAgentItems.filter((agent) => matches(agent.name || agent.id || ""));
@@ -210,12 +197,13 @@ export function AgentOverviewPage() {
       params.delete("template");
     } else params.set("tab", value === "plaza" ? "plaza" : "templates");
     params.delete("cloud");
-    navigate({
-      pathname: value === "plaza" ? pathForPane({ type: WorkspacePaneTypes.agent }) : location.pathname,
-      search: params.toString(),
-    });
-    setQuery("");
-    setFilter("all");
+    navigate(
+      {
+        pathname: value === "plaza" ? pathForPane({ type: WorkspacePaneTypes.agent }) : location.pathname,
+        search: params.toString(),
+      },
+      { state: { ...location.state, agentOverviewList: { query: "", filter: "all" } } },
+    );
   }
   const chooseAgent = (item: AgentLike) => {
     closeList();
@@ -267,28 +255,25 @@ export function AgentOverviewPage() {
           {t("agentPlazaStorageError")}
         </p>
       ) : null}
-      {plazaTab && plaza.loading ? (
+      {plazaTab && (!authed || apiErrorCode(plaza.error) === "relay_login_required") ? (
+        <AgentPlazaLayout t={t}>
+          <div className={styles.loginGate}>
+            <LogIn size={20} strokeWidth={1.8} aria-hidden="true" />
+            <p>{t("agentPlazaLoginRequired")}</p>
+            <Button
+              variant="primary"
+              size="md"
+              disabled={props.authBusy || props.authPending}
+              onClick={() => {
+                if (props.onRequireOpenCSGAuthentication?.() !== false) void props.onLogin();
+              }}
+            >
+              {t("modelProviderOpenCSGAuthorize")}
+            </Button>
+          </div>
+        </AgentPlazaLayout>
+      ) : plazaTab && plaza.loading ? (
         <EmptyState title={t("agentPlazaLoading")} />
-      ) : plazaTab && apiErrorCode(plaza.error) === "relay_login_required" ? (
-        <div className={styles.plazaLogin}>
-          <EmptyState
-            className={styles.plazaLoginCard}
-            icon={<LogIn size={20} />}
-            title={t("relay_login_required")}
-            description={t("agentPlazaLoginDescription")}
-            actions={
-              <Button
-                variant="primary"
-                disabled={props.authBusy || props.authPending}
-                onClick={() => {
-                  if (props.onRequireOpenCSGAuthentication?.() !== false) void props.onLogin();
-                }}
-              >
-                {t("modelProviderOpenCSGAuthorize")}
-              </Button>
-            }
-          />
-        </div>
       ) : plazaTab && plaza.error ? (
         <EmptyState title={t("agentPlazaLoadFailed")} actions={<Button onClick={plaza.refresh}>{t("retry")}</Button>} />
       ) : plazaTab ? (
@@ -322,7 +307,10 @@ export function AgentOverviewPage() {
                   aria-label={t(templatesTab ? "resourcesTemplateSearchPlaceholder" : "taskEntrySearchTarget")}
                   placeholder={t(templatesTab ? "resourcesTemplateSearchPlaceholder" : "taskEntrySearchTarget")}
                   value={query}
-                  onChange={(event) => setQuery(event.target.value)}
+                  onChange={(event) => {
+                    const query = event.target.value;
+                    setListState((state) => ({ ...state, query }));
+                  }}
                 />
               </label>
               <nav className={styles.filters} aria-label={t("agentsTab")}>
@@ -333,7 +321,7 @@ export function AgentOverviewPage() {
                     aria-pressed={(templatesTab ? templateFilter : filter) === value}
                     onClick={() => {
                       if (!templatesTab) {
-                        setFilter(value);
+                        setListState((state) => ({ ...state, filter: value }));
                         return;
                       }
                       const params = new URLSearchParams(location.search);

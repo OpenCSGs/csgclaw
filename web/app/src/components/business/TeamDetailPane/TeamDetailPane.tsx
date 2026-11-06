@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { AgentAvatarContent, RoomAvatar } from "@/components/business";
 import { Edit3, ListChecks, MessageSquarePlus, Trash2, UserPlus, Users } from "lucide-react";
 import { TaskSubtaskIndicator } from "@/components/business";
+import { AgentProfileHeader } from "@/components/business/AgentDetails";
 import {
   Button,
   DialogBody,
@@ -132,20 +133,22 @@ export function TeamDetailPane({
 
   return (
     <section className={classNames("entity-pane", "team-detail-pane", styles.teamDetailPane)}>
-      <header className={classNames("entity-header", styles.contentWidth, styles.teamDetailHeader)}>
-        <div className={classNames("entity-avatar", styles.teamDetailAvatar)}>
-          <RoomAvatar ariaLabel={displayTeam(team)} count={memberIDs.length} members={avatarMembers} size={48} />
-        </div>
-        <div className={classNames("entity-heading", styles.teamDetailHeading)}>
-          <div className={classNames("entity-title-row", styles.teamDetailTitleRow)}>
-            <h1 className={styles.teamDetailTitle}>{displayTeam(team)}</h1>
-            <span
-              className={classNames("status-pill", "online", styles.teamDetailStatus, styles.teamDetailStatusOnline)}
-            >
-              {teamStatusLabel(team.status, t)}
-            </span>
+      <AgentProfileHeader
+        containerClassName={styles.contentWidth}
+        actionsLabel={t("teamPanelManage")}
+        avatar={
+          <div className={classNames("entity-avatar", styles.teamDetailAvatar)}>
+            <RoomAvatar ariaLabel={displayTeam(team)} count={memberIDs.length} members={avatarMembers} size={48} />
           </div>
-          {onUpdateDescription ? (
+        }
+        title={
+          <>
+            <h1 title={displayTeam(team)}>{displayTeam(team)}</h1>
+            <span className="status-pill online">{teamStatusLabel(team.status, t)}</span>
+          </>
+        }
+        description={
+          onUpdateDescription ? (
             editingDescription ? (
               <textarea
                 ref={descriptionRef}
@@ -182,52 +185,44 @@ export function TeamDetailPane({
                 type="button"
                 className={styles.descriptionDisplay}
                 aria-label={t("editDescription")}
+                title={descriptionDraft || t("teamDescriptionLabel")}
                 disabled={teamActionBusy}
                 onClick={() => setEditingDescription(true)}
               >
-                <span>{descriptionDraft || t("teamDescriptionLabel")}</span>
+                <span className="entity-description-display-copy">{descriptionDraft || t("teamDescriptionLabel")}</span>
                 <Edit3 size={16} aria-hidden="true" />
               </button>
             )
           ) : team.description?.trim() ? (
-            <p className={styles.teamDetailSubtitle}>{team.description}</p>
-          ) : null}
-        </div>
-        <div className={styles.teamDetailToolbar} aria-label={t("teamPanelManage")}>
-          {onStartCollaboration ? (
+            <p className="entity-description-display-copy" title={team.description}>
+              {team.description}
+            </p>
+          ) : null
+        }
+        actions={
+          <>
+            {onStartCollaboration ? (
+              <Button variant="primary" size="md" disabled={teamActionBusy} onClick={() => onStartCollaboration(team)}>
+                <MessageSquarePlus size={16} aria-hidden="true" />
+                {t("teamStartCollaboration")}
+              </Button>
+            ) : null}
+            <Button variant="secondaryGray" size="md" disabled={teamActionBusy} onClick={() => onManageMembers(team)}>
+              <UserPlus size={16} aria-hidden="true" />
+              {t("teamEdit")}
+            </Button>
             <Button
-              className={styles.teamDetailToolbarButton}
-              variant="primary"
+              variant="outlineDanger"
               size="md"
               disabled={teamActionBusy}
-              onClick={() => onStartCollaboration(team)}
+              onClick={() => setDeleteDialogOpen(true)}
             >
-              <MessageSquarePlus size={16} aria-hidden="true" />
-              {t("teamStartCollaboration")}
+              <Trash2 size={16} aria-hidden="true" />
+              {t("teamDelete")}
             </Button>
-          ) : null}
-          <Button
-            className={styles.teamDetailToolbarButton}
-            variant="secondaryGray"
-            size="md"
-            disabled={teamActionBusy}
-            onClick={() => onManageMembers(team)}
-          >
-            <UserPlus size={16} aria-hidden="true" />
-            {t("teamEdit")}
-          </Button>
-          <Button
-            className={styles.teamDetailToolbarButton}
-            variant="outlineDanger"
-            size="md"
-            disabled={teamActionBusy}
-            onClick={() => setDeleteDialogOpen(true)}
-          >
-            <Trash2 size={16} aria-hidden="true" />
-            {t("teamDelete")}
-          </Button>
-        </div>
-      </header>
+          </>
+        }
+      />
 
       <DialogRoot
         open={deleteDialogOpen}

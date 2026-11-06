@@ -2,12 +2,36 @@ import { AgentProfileHeader } from "@/components/business/AgentDetails";
 import { useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { fetchCloudAgentTemplate } from "@/api/relay";
-import { Check, Cloud, Plus, Search, Sparkles } from "lucide-react";
+import { Check, Cloud, MoreHorizontal, Plus, Search, Sparkles } from "lucide-react";
 import { AgentAvatarContent } from "@/components/business/AgentAvatar";
-import { Button, EmptyState, TextInput } from "@/components/ui";
+import {
+  Button,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuRoot,
+  DropdownMenuTrigger,
+  EmptyState,
+  TextInput,
+} from "@/components/ui";
 import { filterCloudAgents, type CloudAgent } from "@/models/cloudAgents";
 import type { TranslateFn } from "@/models/conversations";
 import styles from "./AgentPlaza.module.css";
+
+export function AgentPlazaLayout({ t, children }: { t: TranslateFn; children: ReactNode }) {
+  return (
+    <div className={styles.page}>
+      <section className={styles.intro}>
+        <h1>
+          <Sparkles size={21} />
+          {t("agentPlazaTitle")}
+        </h1>
+        <strong>{t("agentPlazaTagline")}</strong>
+        <p>{t("agentPlazaDescription")}</p>
+      </section>
+      {children}
+    </div>
+  );
+}
 
 type Props = {
   agents: readonly CloudAgent[];
@@ -26,15 +50,7 @@ export function AgentPlaza({ agents, addedIDs, t, onAdd, onOpen }: Props) {
     query,
   );
   return (
-    <div className={styles.page}>
-      <section className={styles.intro}>
-        <h1>
-          <Sparkles size={21} />
-          {t("agentPlazaTitle")}
-        </h1>
-        <strong>{t("agentPlazaTagline")}</strong>
-        <p>{t("agentPlazaDescription")}</p>
-      </section>
+    <AgentPlazaLayout t={t}>
       <div className={styles.toolbar}>
         <label className={styles.search}>
           <Search size={16} aria-hidden="true" />
@@ -107,9 +123,23 @@ export function AgentPlaza({ agents, addedIDs, t, onAdd, onOpen }: Props) {
         <EmptyState
           title={t("workspaceSearchNoResults")}
           description={t(scope === "mine" && !query ? "agentPlazaMineEmpty" : "agentPlazaSearchHint")}
+          actions={
+            scope === "mine" ? (
+              <Button
+                variant="primary"
+                size="md"
+                onClick={() => {
+                  setScope("public");
+                  setQuery("");
+                }}
+              >
+                {t("agentPlazaBrowsePublic")}
+              </Button>
+            ) : undefined
+          }
         />
       ) : null}
-    </div>
+    </AgentPlazaLayout>
   );
 }
 
@@ -168,6 +198,12 @@ export function CloudAgentDetail({
   const repoPath = agent.templateRepoPath || template.data?.repo_path;
   const renderProfileIntro = (showModel: boolean) => (
     <div className="profile-editor-shell agent-page-editor">
+      {agent.description ? (
+        <section className={styles.profileDescription} aria-labelledby="cloud-agent-description-heading">
+          <h3 id="cloud-agent-description-heading">{t("agentDescription")}</h3>
+          <p>{agent.description}</p>
+        </section>
+      ) : null}
       <p className={styles.cloudHint}>{t("agentPlazaCloudHint")}</p>
       <AgentPlazaMetadata agent={agent} t={t} showModel={showModel} />
     </div>
@@ -183,7 +219,9 @@ export function CloudAgentDetail({
           }
           title={
             <>
-              <h1>{agent.name}</h1>
+              <h1 className={styles.profileTitle} title={agent.name}>
+                {agent.name}
+              </h1>
               <span className={`agent-status-dot ${online ? "online" : ""}`} aria-hidden="true" />
               <span className={`status-pill ${online ? "online" : ""}`}>
                 {t(online ? "agentPlazaOnline" : "agentPlazaOffline")}
@@ -194,15 +232,29 @@ export function CloudAgentDetail({
               </span>
             </>
           }
-          description={agent.description ? <div className="entity-description-text">{agent.description}</div> : null}
+          description={
+            agent.description ? (
+              <div className="entity-description-display-copy" title={agent.description}>
+                {agent.description}
+              </div>
+            ) : null
+          }
           actions={
             <>
               <Button variant="primary" size="md" onClick={onNewTask}>
                 {t("agentStartTask")}
               </Button>
-              <Button variant="secondaryGray" size="md" onClick={onRemove}>
-                {t("agentPlazaRemove")}
-              </Button>
+              <DropdownMenuRoot>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="secondaryGray" size="md" className="agent-actions-menu-trigger">
+                    <MoreHorizontal aria-hidden="true" size={18} strokeWidth={2} />
+                    <span>{t("agentMoreActions")}</span>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent aria-label={t("agentMoreActions")}>
+                  <DropdownMenuItem onSelect={onRemove}>{t("agentPlazaRemove")}</DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenuRoot>
             </>
           }
         />
