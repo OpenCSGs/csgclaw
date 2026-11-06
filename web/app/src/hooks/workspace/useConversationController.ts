@@ -1,4 +1,5 @@
 import { useCloudSendConsent } from "./useCloudSendConsent";
+import { withCloudAgentAvatars } from "@/models/cloudAgents";
 import { useConversationMessageSync } from "./useConversationMessageSync";
 import { useQueryClient } from "@tanstack/react-query";
 import { workspaceQueryKeys } from "./workspaceQueries";
@@ -551,7 +552,10 @@ export function useConversationController({
   );
   const composerError = composerErrorsByConversationId[activeConversationId] ?? attachmentWarning;
 
-  const usersById = useMemo(() => buildUsersById(data?.users), [data]);
+  const usersById = useMemo(
+    () => buildUsersById(withCloudAgentAvatars(data?.users, rooms, cloudCatalog)),
+    [data?.users, rooms, cloudCatalog],
+  );
 
   useEffect(() => {
     const observed = observedRuntimeAuthMessageIDsRef.current ?? new Set<string>();
