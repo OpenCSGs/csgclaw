@@ -20,6 +20,9 @@ export const unpublishRelayAgent = (id: string): Promise<RelayPublicationStatus>
 
 export type RelayCatalogEntry = {
   source?: "platform" | "external";
+  creator_name?: string;
+  model_id?: string;
+  template_repo_path?: string;
   relay_url: string;
   connection_id: string;
   avatar?: string;
@@ -36,8 +39,13 @@ export type RelayCatalogEntry = {
   };
 };
 
-export async function fetchRelayCatalog(signal?: AbortSignal): Promise<CloudAgent[]> {
-  const result = await get<{ data: RelayCatalogEntry[] }>("api/v1/relay/agents", { signal });
+export type RelayCatalogTarget = { agent_id: string; connection_id: string };
+
+export async function fetchRelayCatalog(signal?: AbortSignal, target?: RelayCatalogTarget): Promise<CloudAgent[]> {
+  const query = target
+    ? `?${new URLSearchParams({ agent_id: target.agent_id, connection_id: target.connection_id })}`
+    : "";
+  const result = await get<{ data: RelayCatalogEntry[] }>(`api/v1/relay/agents${query}`, { signal });
   return result.data.map((entry) => ({
     id: entry.agent.id,
     relayURL: entry.relay_url,
@@ -45,6 +53,9 @@ export async function fetchRelayCatalog(signal?: AbortSignal): Promise<CloudAgen
     name: entry.agent.name,
     description: entry.agent.description,
     owner: entry.agent.owner_id,
+    creatorName: entry.creator_name?.trim(),
+    modelID: entry.model_id?.trim(),
+    templateRepoPath: entry.template_repo_path?.trim(),
     publisher: entry.source === "platform" ? "Agentichub" : "CSGClaw",
     sourceAgentID: entry.agent.source_agent_id,
     visibility: entry.agent.visibility,
@@ -55,6 +66,15 @@ export async function fetchRelayCatalog(signal?: AbortSignal): Promise<CloudAgen
 }
 
 export type { CloudChatResponse, CloudChatTurn } from "@/models/cloudChat";
+export async function fetchCloudAgentTemplate(agent: CloudAgent, signal: AbortSignal) {
+  const query = new URLSearchParams({ connection_id: agent.connectionID });
+  const result = await get<{ data: { repo_path: string } | null }>(
+    `api/v1/relay/agents/${encodeURIComponent(agent.id)}/template?${query}`,
+    { signal },
+  );
+  return result.data;
+}
+
 export function sendCloudAgentMessage(agent: CloudAgent, turn: CloudChatTurn): Promise<CloudChatResponse> {
   return post(`api/v1/relay/agents/${encodeURIComponent(agent.id)}/responses`, {
     connection_id: agent.connectionID,

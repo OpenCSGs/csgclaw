@@ -50,9 +50,10 @@ function isBootstrapAdminUser(user: IMUser | null | undefined): boolean {
 }
 
 export function ProfilePreviewContent({ agent, user, t, onOpenAgent, onOpenDM }: ProfilePreviewContentProps) {
+  const cloud = user?.role === "cloud";
   const localAdminPreview = !agent && isBootstrapAdminUser(user);
   const showAgentMetadataFields = Boolean(agent || localAdminPreview);
-  const running = agent ? isAgentAvailable(agent) : false;
+  const running = agent ? isAgentAvailable(agent) : cloud && user.is_online === true;
   const incomplete = agent ? isAgentIncomplete(agent) : false;
   const restartNeeded = agent ? isAgentRestartNeeded(agent) : false;
   const upgradeNeeded = agent ? isAgentUpgradeNeeded(agent) : false;
@@ -67,7 +68,9 @@ export function ProfilePreviewContent({ agent, user, t, onOpenAgent, onOpenDM }:
     ? t(user.agent_state === "deleted" ? "agentStateDeleted" : "agentStateArchived")
     : agent
       ? agentAvailabilityStatusLabel(agent, t)
-      : t("online");
+      : cloud
+        ? t(user.is_online == null ? "cloudChatStatusUnknown" : running ? "agentPlazaOnline" : "agentPlazaOffline")
+        : t("online");
 
   return (
     <>

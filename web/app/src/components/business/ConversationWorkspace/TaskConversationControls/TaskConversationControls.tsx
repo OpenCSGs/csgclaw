@@ -17,12 +17,14 @@ export function TaskConversationControls({
   agents,
   t,
   onNewTask,
+  cloudSendDisabled = false,
 }: {
   conversation: IMConversation;
   participants: ConversationWorkingParticipant[];
   agents: AgentLike[];
   t: TranslateFn;
   onNewTask?: (agentID?: string, configuration?: TaskConfiguration) => void;
+  cloudSendDisabled?: boolean;
 }) {
   const controller = useOptionalWorkspaceControllerContext();
   const entry = controller?.taskEntry;
@@ -48,9 +50,12 @@ export function TaskConversationControls({
           onChange={entry ? (value) => entry.patch(conversation.id, { configuration: value }) : undefined}
         />
       ) : null}
-      {conversation.cloud_agent && cloudPending ? <span role="status">{t("cloudChatWaiting")}</span> : null}
       {conversation.cloud_agent && hasChatMessages ? (
-        <NewCloudTaskButton agentID={conversation.cloud_agent.agent_id} disabled={cloudPending} t={t} />
+        <NewCloudTaskButton
+          agentID={conversation.cloud_agent.agent_id}
+          disabled={cloudPending || cloudSendDisabled}
+          t={t}
+        />
       ) : null}
       {onNewTask && !conversation.cloud_agent && hasChatMessages ? (
         <Button

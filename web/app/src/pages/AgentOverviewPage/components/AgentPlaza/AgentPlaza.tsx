@@ -1,5 +1,7 @@
 import { AgentProfileHeader } from "@/components/business/AgentDetails";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { fetchCloudAgentTemplate } from "@/api/relay";
 import { Check, Cloud, Plus, Search, Sparkles } from "lucide-react";
 import { AgentAvatarContent } from "@/components/business/AgentAvatar";
 import { Button, EmptyState, TextInput } from "@/components/ui";
@@ -111,17 +113,33 @@ export function AgentPlaza({ agents, addedIDs, t, onAdd, onOpen }: Props) {
   );
 }
 
-export function AgentPlazaMetadata({ agent, t }: { agent: CloudAgent; t: TranslateFn }) {
+export function AgentPlazaMetadata({
+  agent,
+  t,
+  showModel = true,
+}: {
+  agent: CloudAgent;
+  t: TranslateFn;
+  showModel?: boolean;
+}) {
   return (
     <dl className={styles.metadata}>
-      <div>
-        <dt>{t("agentPlazaSource")}</dt>
-        <dd>{agent.name}</dd>
-      </div>
+      {agent.creatorName ? (
+        <div>
+          <dt>{t("agentPlazaSource")}</dt>
+          <dd>{agent.creatorName}</dd>
+        </div>
+      ) : null}
       <div>
         <dt>{t("agentPlazaPublisher")}</dt>
         <dd>{agent.publisher}</dd>
       </div>
+      {showModel && agent.modelID ? (
+        <div>
+          <dt>{t("agentPlazaInstanceModel")}</dt>
+          <dd>{agent.modelID}</dd>
+        </div>
+      ) : null}
     </dl>
   );
 }
@@ -131,13 +149,29 @@ export function CloudAgentDetail({
   t,
   onNewTask,
   onRemove,
+  renderTemplate,
 }: {
   agent: CloudAgent;
   t: TranslateFn;
   onNewTask: () => void;
   onRemove: () => void;
+  renderTemplate: (repoPath: string, renderProfileIntro: (showModel: boolean) => ReactNode) => ReactNode;
 }) {
   const online = agent.status === "online";
+  const template = useQuery({
+    queryKey: ["cloud-agent-template", agent.connectionID, agent.id],
+    queryFn: ({ signal }) => fetchCloudAgentTemplate(agent, signal),
+    enabled: agent.publisher === "Agentichub" && !agent.templateRepoPath,
+    staleTime: 60_000,
+    retry: false,
+  });
+  const repoPath = agent.templateRepoPath || template.data?.repo_path;
+  const renderProfileIntro = (showModel: boolean) => (
+    <div className="profile-editor-shell agent-page-editor">
+      <p className={styles.cloudHint}>{t("agentPlazaCloudHint")}</p>
+      <AgentPlazaMetadata agent={agent} t={t} showModel={showModel} />
+    </div>
+  );
   return (
     <section className="entity-pane agent-detail-pane">
       <div className="agent-profile-fixed-header">
@@ -172,15 +206,30 @@ export function CloudAgentDetail({
             </>
           }
         />
-        <div className="agent-profile-section-nav">
-          <h2 className={`agent-profile-section-tab active ${styles.profileLabel}`}>{t("agentProfileTab")}</h2>
-        </div>
+        {!repoPath ? (
+          <div className="agent-profile-section-nav">
+            <h2 className={`agent-profile-section-tab active ${styles.profileLabel}`}>{t("agentProfileTab")}</h2>
+          </div>
+        ) : null}
       </div>
       <div className="agent-profile-scroll-region">
-        <div className="profile-editor-shell agent-page-editor">
-          <p className={styles.cloudHint}>{t("agentPlazaCloudHint")}</p>
-          <AgentPlazaMetadata agent={agent} t={t} />
-        </div>
+        {repoPath ? (
+          renderTemplate(repoPath, renderProfileIntro)
+        ) : (
+          <>
+            {renderProfileIntro(true)}
+            {agent.publisher === "Agentichub" && template.isPending ? (
+              <p role="status">{t("agentPlazaTemplateLoading")}</p>
+            ) : template.isError ? (
+              <p>
+                {t("agentPlazaTemplateFailed")}{" "}
+                <Button variant="tertiaryGray" size="sm" onClick={() => void template.refetch()}>
+                  {t("retry")}
+                </Button>
+              </p>
+            ) : null}
+          </>
+        )}
       </div>
     </section>
   );

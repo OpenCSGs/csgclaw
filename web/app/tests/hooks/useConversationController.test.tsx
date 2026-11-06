@@ -1,5 +1,6 @@
 import { CLOUD_SEND_CONSENT_STORAGE_KEY } from "@/shared/storage/keys";
 import { createQueryWrapper } from "../helpers/queryClient";
+import { cloudAgentFixture } from "../helpers/cloudAgentFixture";
 import { renderHook, act, waitFor } from "@testing-library/react";
 import { vi } from "vitest";
 import { useConversationController } from "@/hooks/workspace/useConversationController";
@@ -167,6 +168,8 @@ function renderConversationController(
     managerProfile?: AgentProfileLike | null;
     managerProfileIncomplete?: boolean;
     authStatuses?: Parameters<typeof useConversationController>[0]["authStatuses"];
+    cloudCatalog?: Parameters<typeof useConversationController>[0]["cloudCatalog"];
+    addedCloudAgentIDs?: readonly string[];
     locale?: "en" | "zh";
     t?: TranslateFn;
     managerRuntimeUnavailable?: boolean;
@@ -190,13 +193,21 @@ function renderConversationController(
   const defaultData = dataWithMessages([]);
 
   return renderHook(
-    ({ activeConversationId = directConversation.id, data = defaultData, messageListActive = true }) =>
+    ({
+      activeConversationId = directConversation.id,
+      data = defaultData,
+      messageListActive = true,
+      cloudCatalog,
+      addedCloudAgentIDs,
+    }) =>
       useConversationController({
         activeConversationId,
         activePane: { type: WorkspacePaneTypes.conversation, id: options.routedConversationId ?? activeConversationId },
         agents,
         authBusyProvider: "",
         authStatuses: options.authStatuses ?? {},
+        cloudCatalog,
+        addedCloudAgentIDs,
         data,
         locale: options.locale ?? "en",
         managerProfile: options.managerProfile ?? null,
@@ -228,12 +239,45 @@ function renderConversationController(
         activeConversationId: options.activeConversationId,
         data: options.data,
         messageListActive: options.messageListActive,
+        cloudCatalog: options.cloudCatalog,
+        addedCloudAgentIDs: options.addedCloudAgentIDs,
       },
     },
   );
 }
 
 describe("useConversationController", () => {
+  it("blocks cloud sends when the agent is offline, missing, or removed from My agents", async () => {
+    const agent = cloudAgentFixture[0];
+    const cloudConversation = {
+      ...directConversation,
+      cloud_agent: { agent_id: agent.id, connection_id: agent.connectionID, user_id: "u-demo" },
+    };
+    const data = { ...dataWithMessages([]), rooms: [cloudConversation] };
+    const addedCloudAgentIDs = [agent.id];
+    const { result, rerender } = renderConversationController({ data, cloudCatalog: [agent], addedCloudAgentIDs });
+    const editor = document.createElement("div");
+    editor.textContent = "Follow-up";
+    act(() => {
+      result.current.conversationViewProps.editorRef.current = editor;
+      result.current.conversationViewProps.onSyncComposer();
+    });
+    expect(result.current.conversationViewProps.composerDisabledReason).toBe("");
+    apiMocks.sendMessageRequest.mockClear();
+    for (const cloudCatalog of [[{ ...agent, status: "offline" as const }], []]) {
+      rerender({ data, cloudCatalog, addedCloudAgentIDs });
+      expect(result.current.conversationViewProps.composerDisabledReason).toBe("cloudChatOffline");
+      await act(async () => result.current.conversationViewProps.onSendMessage());
+      expect(apiMocks.sendMessageRequest).not.toHaveBeenCalled();
+    }
+    rerender({ data, cloudCatalog: [agent], addedCloudAgentIDs: [] });
+    expect(result.current.conversationViewProps.composerDisabledReason).toBe("cloudChatRemoved");
+    await act(async () => result.current.conversationViewProps.onSendMessage());
+    expect(apiMocks.sendMessageRequest).not.toHaveBeenCalled();
+    rerender({ data, cloudCatalog: [agent], addedCloudAgentIDs });
+    expect(result.current.conversationViewProps.composerDisabledReason).toBe("");
+  });
+
   it("confirms cloud conversation sends and remembers an explicit opt-out", async () => {
     const cloudConversation = {
       ...directConversation,
@@ -244,6 +288,8 @@ describe("useConversationController", () => {
     const { result } = renderConversationController({
       data: { ...dataWithMessages([]), rooms: [cloudConversation] },
       managerProfileIncomplete: true,
+      cloudCatalog: [{ ...cloudAgentFixture[0], id: "agt_cloud", connectionID: "conn" }],
+      addedCloudAgentIDs: ["agt_cloud"],
     });
     const editor = document.createElement("div");
     editor.textContent = "/literal @demo";

@@ -16,7 +16,8 @@ func InstanceRoot(root, localURL string) string {
 	return filepath.Join(root, fmt.Sprintf("%x", sha256.Sum256([]byte(strings.TrimRight(localURL, "/")))))
 }
 
-// StableClientID is shared by the server and diagnostic CLI for the same slot.
+// StableClientID restores the identity of an existing slot. Platform sandboxes
+// can also recover a newly provisioned identity after losing their local state.
 func StableClientID(root string) (string, error) {
 	if err := os.MkdirAll(root, 0700); err != nil {
 		return "", err
@@ -38,9 +39,19 @@ func StableClientID(root string) (string, error) {
 	if !os.IsNotExist(err) {
 		return "", err
 	}
-	id := uuid.NewString()
+	id := newClientID()
 	if err = os.WriteFile(path, []byte(id+"\n"), 0600); err != nil {
 		return "", err
 	}
 	return id, nil
+}
+
+func newClientID() string {
+	sandboxType := strings.TrimSpace(os.Getenv("OPENCSG_SANDBOX_TYPE"))
+	instanceID := strings.TrimSpace(os.Getenv("CSGCLAW_NAME"))
+	if instanceID != "" && (sandboxType == "csgclaw" || sandboxType == "csgclaw-workspace") {
+		name := "https://opencsg.com/csgclaw/relay-client/v1\x00" + sandboxType + "\x00" + instanceID
+		return uuid.NewSHA1(uuid.NameSpaceURL, []byte(name)).String()
+	}
+	return uuid.NewString()
 }

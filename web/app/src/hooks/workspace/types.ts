@@ -6,6 +6,7 @@ import type { FetchVersionOptions } from "@/api/app";
 import type { AgentDetailPaneProps } from "@/components/business/AgentDetails";
 import type { MessageAction, MessageActionFeedback, MessageLike } from "@/components/business/MessageContent/types";
 import type { AgentLike, AgentProfileLike, RuntimeBootstrapConfig } from "@/models/agents";
+import type { CloudAgent } from "@/models/cloudAgents";
 import type { IMConversation, IMData, IMUser, LocaleCode, TranslateFn, UsersById } from "@/models/conversations";
 import type { HubTemplate } from "@/models/hubWorkspace";
 import type { ModelProviderCatalog } from "@/models/modelProviders";
@@ -198,6 +199,8 @@ export type ProfilePreviewControllerProps = {
 
 export type UseProfilePreviewControllerArgs = {
   agentItems: AgentLike[];
+  cloudAgentOnline?: boolean | null;
+  cloudAgentUserID?: string;
   closeConversationTools: () => void;
   openAgentDirectMessage: (item: AgentLike | null | undefined) => Promise<void>;
   selectAgent: WorkspaceNavigationController["selectAgent"];
@@ -213,6 +216,8 @@ export type ProfilePreviewController = {
 
 export type UseConversationControllerArgs = {
   modelProviders?: ModelProviderCatalog | null;
+  cloudCatalog?: readonly CloudAgent[] | null;
+  addedCloudAgentIDs?: readonly string[];
   activeConversationId: string;
   activePane: WorkspacePane;
   agents: AgentLike[];

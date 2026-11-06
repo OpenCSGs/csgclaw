@@ -5,6 +5,9 @@ export type CloudAgent = {
   name: string;
   description: string;
   owner: string;
+  creatorName?: string;
+  modelID?: string;
+  templateRepoPath?: string;
   publisher: string;
   sourceAgentID: string;
   visibility: "public" | "private";
@@ -52,6 +55,8 @@ export function parseCloudAgents(raw: string | null): CloudAgent[] {
         name: String(entry.name),
         description: String(entry.description),
         owner: String(entry.owner),
+        creatorName: typeof entry.creatorName === "string" ? entry.creatorName.trim() : undefined,
+        modelID: typeof entry.modelID === "string" ? entry.modelID.trim() : undefined,
         publisher: String(entry.publisher),
         sourceAgentID: String(entry.sourceAgentID),
         avatar: String(entry.avatar),
