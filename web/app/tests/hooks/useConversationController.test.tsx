@@ -169,6 +169,7 @@ function renderConversationController(
     managerProfileIncomplete?: boolean;
     authStatuses?: Parameters<typeof useConversationController>[0]["authStatuses"];
     cloudCatalog?: Parameters<typeof useConversationController>[0]["cloudCatalog"];
+    cloudAvatarMetadata?: Parameters<typeof useConversationController>[0]["cloudAvatarMetadata"];
     addedCloudAgentIDs?: readonly string[];
     locale?: "en" | "zh";
     t?: TranslateFn;
@@ -207,6 +208,7 @@ function renderConversationController(
         authBusyProvider: "",
         authStatuses: options.authStatuses ?? {},
         cloudCatalog,
+        cloudAvatarMetadata: options.cloudAvatarMetadata,
         addedCloudAgentIDs,
         data,
         locale: options.locale ?? "en",
@@ -247,6 +249,22 @@ function renderConversationController(
 }
 
 describe("useConversationController", () => {
+  it("uses shared avatar metadata without treating it as cloud availability", () => {
+    const agent = { ...cloudAgentFixture[0], type: "code" };
+    const data = {
+      ...dataWithMessages([]),
+      rooms: [
+        {
+          ...directConversation,
+          cloud_agent: { agent_id: agent.id, connection_id: agent.connectionID, user_id: "u-demo" },
+        },
+      ],
+    };
+    const { result } = renderConversationController({ data, cloudCatalog: null, cloudAvatarMetadata: [agent] });
+    expect(result.current.conversationViewProps.usersById.get("u-demo")?.avatar).toBe("avatar/cloud-code.png");
+    expect(result.current.conversationViewProps.composerDisabledReason).toBe("cloudChatStatusUnavailable");
+  });
+
   it("blocks cloud sends when the agent is offline, missing, or removed from My agents", async () => {
     const agent = cloudAgentFixture[0];
     const cloudConversation = {

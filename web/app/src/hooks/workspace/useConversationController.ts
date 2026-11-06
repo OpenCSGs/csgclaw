@@ -435,6 +435,7 @@ export function useConversationController({
   authBusyProvider,
   authStatuses,
   cloudCatalog,
+  cloudAvatarMetadata,
   addedCloudAgentIDs,
   data,
   locale,
@@ -553,8 +554,8 @@ export function useConversationController({
   const composerError = composerErrorsByConversationId[activeConversationId] ?? attachmentWarning;
 
   const usersById = useMemo(
-    () => buildUsersById(withCloudAgentAvatars(data?.users, rooms, cloudCatalog)),
-    [data?.users, rooms, cloudCatalog],
+    () => buildUsersById(withCloudAgentAvatars(data?.users, rooms, cloudAvatarMetadata ?? cloudCatalog)),
+    [data?.users, rooms, cloudAvatarMetadata, cloudCatalog],
   );
 
   useEffect(() => {

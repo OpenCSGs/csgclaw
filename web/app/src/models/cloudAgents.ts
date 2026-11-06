@@ -14,7 +14,7 @@ export function cloudAgentAvatar(type: unknown, avatar?: string): string {
 export function withCloudAgentAvatars(
   users: readonly IMUser[] = [],
   conversations: readonly IMConversation[] = [],
-  catalog: readonly CloudAgent[] | null = [],
+  catalog: readonly CloudAgentAvatarMetadata[] | null = [],
 ): IMUser[] {
   const references = new Map(
     conversations.flatMap((conversation) =>
@@ -49,6 +49,8 @@ export type CloudAgent = {
   avatar: string;
   type?: string;
 };
+
+export type CloudAgentAvatarMetadata = Pick<CloudAgent, "id" | "connectionID" | "type" | "avatar">;
 
 // Persist metadata and a server-side credential reference, never a token.
 export function parseCloudAgents(raw: string | null): CloudAgent[] {

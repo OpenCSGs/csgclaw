@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { TaskConversationList } from "@/components/business/TaskConversationList";
 import { fetchTaskConversations } from "@/api/taskConversations";
-import { fetchRelayCatalog } from "@/api/relay";
+import { fetchRelayCatalog, type RelayCatalogTarget } from "@/api/relay";
 import { CLOUD_AGENT_AVATARS } from "@/shared/avatar";
 import { cloudAgentFixture } from "../helpers/cloudAgentFixture";
 import { useArchiveConfirmation } from "@/hooks/workspace/useArchiveConfirmation";
@@ -22,7 +22,12 @@ describe("TaskConversationList cloud avatars", () => {
     vi.mocked(fetchRelayCatalog).mockReset().mockResolvedValue([]);
   });
 
-  function renderCloudTask(archived = false, avatar = "1", catalog: readonly CloudAgent[] = []) {
+  function renderCloudTask(
+    archived = false,
+    avatar = "1",
+    catalog: readonly CloudAgent[] = [],
+    target?: RelayCatalogTarget,
+  ) {
     const reference = cloudAgentFixture[0];
     vi.mocked(fetchTaskConversations).mockResolvedValue({
       rooms: [
@@ -37,7 +42,7 @@ describe("TaskConversationList cloud avatars", () => {
       has_more: false,
     });
     const queries = createQueryWrapper();
-    queries.client.setQueryData(cloudAgentCatalogKey(), catalog);
+    if (catalog.length) queries.client.setQueryData(cloudAgentCatalogKey(undefined, target), catalog);
     render(
       <TaskConversationList
         compact={!archived}
@@ -71,6 +76,16 @@ describe("TaskConversationList cloud avatars", () => {
     renderCloudTask();
     const task = await screen.findByRole("button", { name: "Cloud task" });
     expect(task.querySelector("img")).toHaveAttribute("src", CLOUD_AGENT_AVATARS.csgclaw);
+    expect(fetchRelayCatalog).not.toHaveBeenCalled();
+  });
+
+  it.each([false, true])("uses targeted-only cached metadata in the task list (archived=%s)", async (archived) => {
+    const agent = { ...cloudAgentFixture[0], type: "code" };
+    const target = { agent_id: agent.id, connection_id: agent.connectionID };
+    const { client } = renderCloudTask(archived, "1", [agent], target);
+    const task = await screen.findByRole("button", { name: "Cloud task" });
+    expect(task.querySelector("img")).toHaveAttribute("src", CLOUD_AGENT_AVATARS.code);
+    expect(client.getQueryData(cloudAgentCatalogKey())).toBeUndefined();
     expect(fetchRelayCatalog).not.toHaveBeenCalled();
   });
 
