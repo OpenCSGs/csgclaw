@@ -24,20 +24,35 @@ import (
 
 func TestRelayCatalogAuthenticationError(t *testing.T) {
 	tests := []struct {
-		name   string
-		err    error
-		status int
-		code   string
+		name           string
+		err            error
+		upstreamStatus int
+		status         int
+		code           string
 	}{
-		{"missing login", relay.ErrSiteLoginRequired, http.StatusUnauthorized, "relay_login_required"},
-		{"credential store failure", fmt.Errorf("credential store unavailable"), http.StatusBadGateway, "relay_catalog_failed"},
+		{name: "missing login", err: relay.ErrSiteLoginRequired, status: http.StatusUnauthorized, code: "relay_login_required"},
+		{name: "upstream rejected stored token", upstreamStatus: http.StatusUnauthorized, status: http.StatusUnauthorized, code: "relay_login_required"},
+		{name: "upstream unavailable", upstreamStatus: http.StatusServiceUnavailable, status: http.StatusBadGateway, code: "relay_catalog_failed"},
+		{name: "credential store failure", err: fmt.Errorf("credential store unavailable"), status: http.StatusBadGateway, code: "relay_catalog_failed"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			credentials := func() (relay.SiteCredentials, error) {
 				return relay.SiteCredentials{}, tc.err
 			}
-			manager, err := relay.NewManager(t.Context(), t.TempDir(), nil, relay.WithCommunity(relay.HubCommunity{}, credentials))
+			if tc.upstreamStatus != 0 {
+				upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					if r.URL.Path != "/api/v1/agent/instances" || r.Header.Get("Authorization") != "Bearer test-token" {
+						t.Error("expected an authenticated community catalog request")
+					}
+					w.WriteHeader(tc.upstreamStatus)
+				}))
+				defer upstream.Close()
+				credentials = func() (relay.SiteCredentials, error) {
+					return relay.SiteCredentials{Site: upstream.URL, Token: "test-token", User: "owner"}, nil
+				}
+			}
+			manager, err := relay.NewManager(t.Context(), t.TempDir(), nil, relay.WithCommunity(relay.HubCommunity{Credentials: credentials}, credentials))
 			if err != nil {
 				t.Fatal(err)
 			}

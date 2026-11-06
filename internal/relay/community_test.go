@@ -326,6 +326,7 @@ func TestPlatformWorkerUpdatesByContentIDAndPreservesLifecycle(t *testing.T) {
 			}
 			var mu sync.Mutex
 			var ready bool
+			var omitInstance bool
 			var updates, externalCreates, instanceDeletes int
 			var visibilities []string
 			failOnce := true
@@ -358,7 +359,7 @@ func TestPlatformWorkerUpdatesByContentIDAndPreservesLifecycle(t *testing.T) {
 						w.WriteHeader(404)
 						return
 					}
-					if tc.emptyResponse {
+					if tc.emptyResponse || omitInstance {
 						w.WriteHeader(http.StatusOK)
 						return
 					}
@@ -430,6 +431,31 @@ func TestPlatformWorkerUpdatesByContentIDAndPreservesLifecycle(t *testing.T) {
 			if got != expected || targetSaved.ContentID != "platform-instance" {
 				t.Fatal("visibility or target not persisted")
 			}
+			if public {
+				m.Close()
+				mu.Lock()
+				omitInstance = true
+				previousUpdates := updates
+				mu.Unlock()
+				m = create()
+				defer m.Close()
+				waitFor(t, func() bool {
+					mu.Lock()
+					updated := updates > previousUpdates
+					mu.Unlock()
+					status := m.Status(context.Background(), "local")
+					return updated && status.Published && !status.Publishing
+				})
+				m.mu.Lock()
+				visibility := m.manifest.Agents[testRelayID].Visibility
+				m.mu.Unlock()
+				mu.Lock()
+				lastRegistration := visibilities[len(visibilities)-1]
+				mu.Unlock()
+				if visibility != "public" || lastRegistration != "public" {
+					t.Fatalf("empty writeback after restart left manifest %q and Relay %q", visibility, lastRegistration)
+				}
+			}
 			if err = m.QueuePublication(PublishRequest{Name: "Other", SourceAgentID: "other-local", Visibility: "public"}, target); err == nil {
 				t.Fatal("bound the platform instance to a second local agent")
 			}
@@ -448,6 +474,39 @@ func TestPlatformWorkerUpdatesByContentIDAndPreservesLifecycle(t *testing.T) {
 			}
 			if err = m.Unpublish(context.Background(), "local"); err != nil {
 				t.Fatal(err)
+			}
+		})
+	}
+}
+
+func TestPlatformWritebackValidatesReturnedInstance(t *testing.T) {
+	valid := fmt.Sprintf(`{"id":7,"type":"csgclaw","kind":"runtime","source":"platform","content_id":"platform-instance","relay":{"agent_id":%q}}`, testRelayID)
+	for _, tc := range []struct {
+		name    string
+		body    string
+		wantErr bool
+	}{
+		{name: "literal null", body: "null"},
+		{name: "missing public", body: `{"data":` + valid + `}`},
+		{name: "malformed", body: `{"data":`, wantErr: true},
+		{name: "unexpected envelope", body: `{"error":"write failed"}`, wantErr: true},
+		{name: "wrong instance", body: `{"data":` + strings.Replace(valid, "platform-instance", "another-instance", 1) + `}`, wantErr: true},
+		{name: "wrong relay", body: `{"data":` + strings.Replace(valid, testRelayID, platformRelayID, 1) + `}`, wantErr: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				fmt.Fprint(w, tc.body)
+			}))
+			defer server.Close()
+			community := HubCommunity{Credentials: func() (SiteCredentials, error) {
+				return SiteCredentials{Site: server.URL, Token: "test-token"}, nil
+			}}
+			instance, err := community.Register(t.Context(), testRelayID, PublishRequest{Visibility: "public"}, &CommunityTarget{Type: "csgclaw", ContentID: "platform-instance"})
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("Register error = %v, want error: %t", err, tc.wantErr)
+			}
+			if !tc.wantErr && !instance.Public {
+				t.Fatal("writeback changed the fallback visibility")
 			}
 		})
 	}

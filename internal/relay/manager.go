@@ -346,6 +346,10 @@ func (m *Manager) publishLocked(ctx context.Context, req PublishRequest, avatar 
 		return p, fmt.Errorf("invalid relay agent ID")
 	}
 	old, exists := m.manifest.Agents[p.Agent.ID]
+	registeredVisibility := req.Visibility
+	if target != nil && exists {
+		req.Visibility = old.Visibility
+	}
 	oldEntry, hadEntry := m.manifest.Catalog[p.Agent.ID]
 	entry := CatalogEntry{RelayURL: m.manifest.Endpoint, ConnectionID: m.manifest.ConnectionID, Agent: p.Agent, Avatar: oldEntry.Avatar}
 	if len(avatar) > 0 {
@@ -370,7 +374,7 @@ func (m *Manager) publishLocked(ctx context.Context, req PublishRequest, avatar 
 		return p, err
 	}
 	if m.community != nil {
-		updated, instance, syncErr := m.syncCommunity(ctx, c, p.Agent.ID, req, target)
+		updated, instance, syncErr := m.syncCommunity(ctx, c, p.Agent.ID, req, registeredVisibility, target)
 		if syncErr != nil {
 			return p, syncErr
 		}
@@ -448,14 +452,15 @@ func (m *Manager) startLocked(id string, req PublishRequest) {
 						return
 					}
 				}
+				registration := current
 				if target != nil {
-					current.Visibility = "private"
+					registration.Visibility = "private"
 				}
-				p, registerErr := c.Publish(registerCtx, uuid.NewString(), current)
+				p, registerErr := c.Publish(registerCtx, uuid.NewString(), registration)
 				if registerErr != nil || p.Agent.ID != id || m.community == nil {
 					return
 				}
-				updated, instance, syncErr := m.syncCommunity(registerCtx, c, id, current, target)
+				updated, instance, syncErr := m.syncCommunity(registerCtx, c, id, current, registration.Visibility, target)
 				if syncErr != nil {
 					return
 				}
@@ -722,7 +727,7 @@ func (m *Manager) publicationTargetLocked(localID string) *CommunityTarget {
 	}
 	return nil
 }
-func (m *Manager) syncCommunity(ctx context.Context, c *Client, id string, req PublishRequest, target *CommunityTarget) (PublishRequest, int64, error) {
+func (m *Manager) syncCommunity(ctx context.Context, c *Client, id string, req PublishRequest, registeredVisibility string, target *CommunityTarget) (PublishRequest, int64, error) {
 	instance, err := m.community.Register(ctx, id, req, target)
 	if err != nil {
 		return req, 0, err
@@ -731,8 +736,8 @@ func (m *Manager) syncCommunity(ctx context.Context, c *Client, id string, req P
 	if instance.Public {
 		visibility = "public"
 	}
-	if req.Visibility != visibility {
-		req.Visibility = visibility
+	req.Visibility = visibility
+	if registeredVisibility != visibility {
 		p, err := c.Publish(ctx, uuid.NewString(), req)
 		if err != nil {
 			return req, 0, err

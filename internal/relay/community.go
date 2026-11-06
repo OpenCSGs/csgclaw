@@ -1,6 +1,7 @@
 package relay
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/json"
@@ -192,15 +193,44 @@ func (h HubCommunity) updatePlatformRegistration(ctx context.Context, relayID st
 		return CommunityInstance{}, &HTTPError{Status: resp.StatusCode}
 	}
 
-	// Some StarHub versions acknowledge the update without returning the instance.
-	instance := CommunityInstance{Public: req.Visibility == "public"}
-	var result struct {
-		Data struct {
-			Public *bool `json:"public"`
-		} `json:"data"`
+	const maxResponse = 8 << 20
+	payload, err := io.ReadAll(io.LimitReader(resp.Body, maxResponse+1))
+	if err != nil {
+		return CommunityInstance{}, fmt.Errorf("read platform registration response: %w", err)
 	}
-	if err := json.NewDecoder(io.LimitReader(resp.Body, 8<<20)).Decode(&result); err == nil && result.Data.Public != nil {
-		instance.Public = *result.Data.Public
+	if len(payload) > maxResponse {
+		return CommunityInstance{}, fmt.Errorf("platform registration response exceeds 8 MiB")
+	}
+	// Some StarHub versions acknowledge the update without returning the instance.
+	fallback := CommunityInstance{Public: req.Visibility == "public"}
+	payload = bytes.TrimSpace(payload)
+	if len(payload) == 0 || bytes.Equal(payload, []byte("null")) {
+		return fallback, nil
+	}
+	var result struct {
+		Data json.RawMessage `json:"data"`
+	}
+	if err := json.Unmarshal(payload, &result); err != nil || len(result.Data) == 0 {
+		return CommunityInstance{}, fmt.Errorf("invalid platform registration response")
+	}
+	if bytes.Equal(result.Data, []byte("null")) {
+		return fallback, nil
+	}
+	var data struct {
+		CommunityInstance
+		Public *bool `json:"public"`
+	}
+	if err := json.Unmarshal(result.Data, &data); err != nil {
+		return CommunityInstance{}, fmt.Errorf("invalid platform registration instance")
+	}
+	instance := data.CommunityInstance
+	if instance.ID <= 0 || instance.Kind != "runtime" || instance.relayID() != relayID ||
+		instance.Source != "platform" || instance.ContentID != target.ContentID || instance.Type != target.Type {
+		return CommunityInstance{}, fmt.Errorf("community returned an invalid platform instance")
+	}
+	instance.Public = fallback.Public
+	if data.Public != nil {
+		instance.Public = *data.Public
 	}
 	return instance, nil
 }
