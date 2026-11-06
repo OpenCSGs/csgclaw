@@ -422,6 +422,7 @@ describe("ConversationPane", () => {
       usersByIdOverride: new Map([...usersById, [cloudUser.id, cloudUser]]),
     });
     const pending = screen.getByText("Preparing a reply").closest(".message-row");
+    expect(container.querySelector(".chat-kicker")).toHaveTextContent(/^manager$/);
     expect(pending?.querySelector(".message-author")).toHaveTextContent(/^manager$/);
     expect(pending?.querySelector(".avatar")).toBeInTheDocument();
     expect(container.querySelector(".composer")).not.toHaveTextContent(/Preparing a reply|cloudChatWaiting/);
@@ -763,17 +764,21 @@ describe("ConversationPane", () => {
     expect(container.querySelector(".messages .message-thread-actions")).not.toBeInTheDocument();
   });
 
-  it.each(["worker", "agent", "manager", "Worker"])("shows the %s name above the direct task title", (role) => {
-    const { container } = renderThreadPane({
-      conversationTitle: "Investigate login",
-      conversationMembers: [users[0], { ...users[1], name: "测试工程师 Linda", role }],
-    });
+  it.each(["worker", "agent", "manager", undefined])(
+    "shows the peer name above the direct task title (role %s)",
+    (role) => {
+      const agent = { ...users[1], name: "测试工程师 Linda", role };
+      const { container } = renderThreadPane({
+        conversationTitle: "Investigate login",
+        usersByIdOverride: new Map([...usersById, [agent.id, agent]]),
+      });
 
-    expect(container.querySelector(".chat-kicker")).toHaveTextContent("测试工程师 Linda");
-    expect(container.querySelector(".chat-kicker strong")).not.toBeInTheDocument();
-    expect(container.querySelector(".chat-title")).toHaveTextContent("Investigate login");
-    expect(screen.queryByText("Direct Messages")).not.toBeInTheDocument();
-  });
+      expect(container.querySelector(".chat-kicker")).toHaveTextContent("测试工程师 Linda");
+      expect(container.querySelector(".chat-kicker strong")).not.toBeInTheDocument();
+      expect(container.querySelector(".chat-title")).toHaveTextContent("Investigate login");
+      expect(screen.queryByText("Direct Messages")).not.toBeInTheDocument();
+    },
+  );
 
   it("shows the collaboration space label without message counts when some messages are filtered", () => {
     const messages = [

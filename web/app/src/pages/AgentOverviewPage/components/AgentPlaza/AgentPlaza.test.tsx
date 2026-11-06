@@ -140,14 +140,32 @@ it("hides the source row when the creator is unavailable", () => {
   expect(screen.getByText("发布端")).toBeVisible();
 });
 
-it("shows a private agent under Mine before it has been added", async () => {
-  const agent = { ...cloudAgentFixture[0], visibility: "private" } as const;
-  const onAdd = vi.fn();
-  const user = userEvent.setup();
-  render(<AgentPlaza agents={[agent]} addedIDs={[]} t={createTranslator("zh")} onAdd={onAdd} onOpen={vi.fn()} />);
-  expect(screen.queryByRole("heading", { name: agent.name })).not.toBeInTheDocument();
-  await user.click(screen.getByRole("button", { name: "我的" }));
-  expect(screen.getByRole("heading", { name: agent.name })).toBeVisible();
-  await user.click(screen.getByRole("button", { name: "添加到我的智能体" }));
-  expect(onAdd).toHaveBeenCalledWith(agent.id);
-});
+it.each(["private", "public"] as const)(
+  "shows an owned %s agent under Mine before it has been added",
+  async (visibility) => {
+    const agent = { ...cloudAgentFixture[0], ownedByCurrentUser: true, visibility };
+    const shared = {
+      ...agent,
+      id: "shared",
+      name: "Shared private agent",
+      ownedByCurrentUser: false,
+      visibility: "private",
+    } as const;
+    const onAdd = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <AgentPlaza
+        agents={[agent, shared]}
+        addedIDs={[shared.id]}
+        t={createTranslator("zh")}
+        onAdd={onAdd}
+        onOpen={vi.fn()}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: "我的" }));
+    expect(screen.getByRole("heading", { name: agent.name })).toBeVisible();
+    expect(screen.queryByRole("heading", { name: shared.name })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "添加到我的智能体" }));
+    expect(onAdd).toHaveBeenCalledWith(agent.id);
+  },
+);

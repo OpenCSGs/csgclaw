@@ -69,6 +69,7 @@ type CommunityInstance struct {
 	CreatorName string             `json:"creator_name,omitempty"`
 	Description string             `json:"description"`
 	Public      bool               `json:"public"`
+	Editable    bool               `json:"editable"`
 	Type        string             `json:"type"`
 	Kind        string             `json:"kind"`
 	Source      string             `json:"source"`
