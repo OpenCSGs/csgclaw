@@ -1411,6 +1411,7 @@ button.composer-working-item:active {
 
 .message-file-attachment {
   grid-template-columns: 32px minmax(0, 1fr);
+  padding-inline: var(--space-3);
 }
 
 button.message-file-attachment {
