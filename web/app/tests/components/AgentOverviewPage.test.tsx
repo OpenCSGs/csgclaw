@@ -76,8 +76,6 @@ function NavigationState() {
 function Page({
   route = "/agents?tab=templates",
   username = "",
-  authSiteURL = "https://qa.opencsg.com/account",
-  authBaseURL = "",
   authExpired = false,
   locale = "zh",
   onRequireOpenCSGAuthentication = vi.fn(),
@@ -89,8 +87,6 @@ function Page({
 }: {
   route?: string;
   username?: string;
-  authSiteURL?: string;
-  authBaseURL?: string;
   authExpired?: boolean;
   locale?: "zh" | "en";
   onRequireOpenCSGAuthentication?: () => boolean;
@@ -114,8 +110,7 @@ function Page({
       authStatus: {
         authenticated: Boolean(username),
         user_id: username,
-        opencsg_base_url: authSiteURL,
-        base_url: authBaseURL,
+        opencsg_base_url: "https://qa.opencsg.com/account",
       },
       workerAgentItems: agents,
       teams,
@@ -546,41 +541,19 @@ describe("cloud agent plaza", () => {
   });
   afterEach(() => localStorage.removeItem(CLOUD_AGENTS_STORAGE_KEY));
 
-  it.each([
-    ["https://opencsg.com/account", "https://hub.opencsg.com", "https://opencsg.com"],
-    ["https://opencsg-stg.com", "https://opencsg-stg.com", "https://opencsg-stg.com"],
-    ["https://openeast.opencsg.com", "https://openeast.opencsg.com", "https://openeast.opencsg.com"],
-    ["https://custom.example:8443/account", "https://hub.example.test", "https://custom.example:8443"],
-    ["", "https://qa.opencsg.com", "https://qa.opencsg.com"],
-  ])("links the empty My scope to the signed-in site %s", async (authSiteURL, authBaseURL, origin) => {
-    render(<Page route="/agents?tab=plaza" username="alice" authSiteURL={authSiteURL} authBaseURL={authBaseURL} />);
-    await userEvent.setup().click(await screen.findByRole("button", { name: "我的" }));
-    const link = screen.getByRole("link", { name: "前往社区广场" });
-    expect(link).toHaveAttribute("href", `${origin}/agentichub?view=instances`);
-    expect(link).toHaveAttribute("target", "_blank");
-    expect(link).toHaveAttribute("rel", "noopener noreferrer");
-  });
-
-  it("updates the community link when the signed-in account changes", async () => {
-    const view = render(<Page route="/agents?tab=plaza" username="alice" authSiteURL="https://opencsg.com" />);
-    await userEvent.setup().click(await screen.findByRole("button", { name: "我的" }));
-    expect(screen.getByRole("link", { name: "前往社区广场" })).toHaveAttribute(
-      "href",
-      "https://opencsg.com/agentichub?view=instances",
-    );
-    view.rerender(<Page route="/agents?tab=plaza" username="bob" authSiteURL="https://opencsg-stg.com" />);
-    await userEvent.setup().click(await screen.findByRole("button", { name: "我的" }));
-    expect(await screen.findByRole("link", { name: "前往社区广场" })).toHaveAttribute(
-      "href",
-      "https://opencsg-stg.com/agentichub?view=instances",
-    );
-  });
-
-  it("does not link to a default community when the current account has no valid site", async () => {
-    render(<Page route="/agents?tab=plaza" username="alice" authSiteURL="invalid" />);
-    await userEvent.setup().click(await screen.findByRole("button", { name: "我的" }));
-    expect(screen.getByText("还没有添加云端智能体，去公共广场挑选一个吧。")).toBeVisible();
-    expect(screen.queryByRole("link", { name: "前往社区广场" })).not.toBeInTheDocument();
+  it("switches from empty My scope to Public and adds an agent without leaving the plaza", async () => {
+    const user = userEvent.setup();
+    render(<Page route="/agents?tab=plaza" username="alice" />);
+    await user.click(await screen.findByRole("button", { name: "我的" }));
+    await user.click(screen.getByRole("button", { name: "浏览公共智能体" }));
+    expect(screen.getByRole("button", { name: "公共" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByLabelText("Current URL")).toHaveTextContent("/agents?tab=plaza");
+    expect(screen.queryByRole("link")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "添加到我的智能体" }));
+    await user.click(screen.getByRole("button", { name: "我的" }));
+    expect(screen.getByRole("heading", { name: cloudAgentFixture[0].name })).toBeVisible();
+    expect(screen.getByText("已添加")).toBeVisible();
+    expect(JSON.parse(localStorage.getItem(CLOUD_AGENTS_STORAGE_KEY)!)).toEqual(cloudAgentFixture);
   });
 
   it.each(["loading", "failed", "ready"])(

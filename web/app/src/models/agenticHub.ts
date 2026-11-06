@@ -24,15 +24,3 @@ export function agenticHubTemplatesURL(siteURL: string): string {
     return "";
   }
 }
-
-export function agenticHubPlazaURL(siteURL: string): string {
-  try {
-    const site = new URL(siteURL);
-    if ((site.protocol !== "https:" && site.protocol !== "http:") || site.username || site.password) return "";
-    const destination = new URL("/agentichub", site.origin);
-    destination.searchParams.set("view", "instances");
-    return destination.toString();
-  } catch {
-    return "";
-  }
-}

@@ -1,8 +1,8 @@
 import { AgentProfileHeader } from "@/components/business/AgentDetails";
 import { useState, type ReactNode } from "react";
-import { Check, Cloud, ExternalLink, Plus, Search, Sparkles } from "lucide-react";
+import { Check, Cloud, Plus, Search, Sparkles } from "lucide-react";
 import { AgentAvatarContent } from "@/components/business/AgentAvatar";
-import { Button, EmptyState, LinkButton, TextInput } from "@/components/ui";
+import { Button, EmptyState, TextInput } from "@/components/ui";
 import { filterCloudAgents, type CloudAgent } from "@/models/cloudAgents";
 import type { TranslateFn } from "@/models/conversations";
 import styles from "./AgentPlaza.module.css";
@@ -26,12 +26,11 @@ export function AgentPlazaLayout({ t, children }: { t: TranslateFn; children: Re
 type Props = {
   agents: readonly CloudAgent[];
   addedIDs: readonly string[];
-  communityPlazaURL: string;
   t: TranslateFn;
   onAdd: (id: string) => void;
   onOpen: (id: string) => void;
 };
-export function AgentPlaza({ agents, addedIDs, communityPlazaURL, t, onAdd, onOpen }: Props) {
+export function AgentPlaza({ agents, addedIDs, t, onAdd, onOpen }: Props) {
   const [query, setQuery] = useState("");
   const [scope, setScope] = useState<"public" | "mine">("public");
   const shown = filterCloudAgents(
@@ -115,17 +114,17 @@ export function AgentPlaza({ agents, addedIDs, communityPlazaURL, t, onAdd, onOp
           title={t("workspaceSearchNoResults")}
           description={t(scope === "mine" && !query ? "agentPlazaMineEmpty" : "agentPlazaSearchHint")}
           actions={
-            communityPlazaURL ? (
-              <LinkButton
+            scope === "mine" ? (
+              <Button
                 variant="primary"
                 size="md"
-                href={communityPlazaURL}
-                target="_blank"
-                rel="noopener noreferrer"
+                onClick={() => {
+                  setScope("public");
+                  setQuery("");
+                }}
               >
-                {t("agentPlazaOpenCommunity")}
-                <ExternalLink size={14} aria-hidden="true" />
-              </LinkButton>
+                {t("agentPlazaBrowsePublic")}
+              </Button>
             ) : undefined
           }
         />

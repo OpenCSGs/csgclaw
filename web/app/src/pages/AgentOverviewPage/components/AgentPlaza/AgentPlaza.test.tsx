@@ -14,7 +14,6 @@ describe("cloud directory availability", () => {
       <AgentPlaza
         agents={[{ ...cloudAgentFixture[0], status }]}
         addedIDs={[]}
-        communityPlazaURL="https://opencsg.com/agentichub?view=instances"
         t={createTranslator("zh")}
         onAdd={vi.fn()}
         onOpen={vi.fn()}
@@ -23,29 +22,38 @@ describe("cloud directory availability", () => {
     expect(screen.getByText(label)).toBeVisible();
     expect(screen.queryByText(status === "online" ? "离线" : "在线")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "添加到我的智能体" })).toBeEnabled();
-    expect(screen.queryByRole("link", { name: "前往社区广场" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "浏览公共智能体" })).not.toBeInTheDocument();
   });
 
   it.each([
-    ["zh", "我的", "前往社区广场"],
-    ["en", "Mine", "Open community plaza"],
-  ] as const)("offers the community plaza link in the %s empty state", async (locale, scope, label) => {
-    render(
-      <AgentPlaza
-        agents={[...cloudAgentFixture]}
-        addedIDs={[]}
-        communityPlazaURL="https://openeast.opencsg.com/agentichub?view=instances"
-        t={createTranslator(locale)}
-        onAdd={vi.fn()}
-        onOpen={vi.fn()}
-      />,
-    );
-    await userEvent.setup().click(screen.getByRole("button", { name: scope }));
-    expect(screen.getByRole("link", { name: label })).toHaveAttribute(
-      "href",
-      "https://openeast.opencsg.com/agentichub?view=instances",
-    );
-  });
+    ["zh", "我的", "公共", "浏览公共智能体", "搜索公共智能体", "添加到我的智能体"],
+    ["en", "Mine", "Public", "Browse public agents", "Search public agents", "Add to My agents"],
+  ] as const)(
+    "returns to public agents from the %s empty state",
+    async (locale, scope, publicScope, label, search, add) => {
+      const onAdd = vi.fn();
+      const user = userEvent.setup();
+      render(
+        <AgentPlaza
+          agents={[...cloudAgentFixture]}
+          addedIDs={[]}
+          t={createTranslator(locale)}
+          onAdd={onAdd}
+          onOpen={vi.fn()}
+        />,
+      );
+      await user.click(screen.getByRole("button", { name: scope }));
+      await user.type(screen.getByRole("textbox", { name: search }), "not found");
+      await user.click(screen.getByRole("button", { name: label }));
+      expect(screen.getByRole("button", { name: publicScope })).toHaveAttribute("aria-pressed", "true");
+      expect(screen.getByRole("button", { name: scope })).toHaveAttribute("aria-pressed", "false");
+      expect(screen.getByRole("textbox", { name: search })).toHaveValue("");
+      expect(screen.getByRole("heading", { name: cloudAgentFixture[0].name })).toBeVisible();
+      expect(screen.queryByRole("link")).not.toBeInTheDocument();
+      await user.click(screen.getByRole("button", { name: add }));
+      expect(onAdd).toHaveBeenCalledWith(cloudAgentFixture[0].id);
+    },
+  );
 });
 
 it("shows only the agent display name and product publisher as metadata", () => {
@@ -62,16 +70,7 @@ it("shows a private agent under Mine before it has been added", async () => {
   const agent = { ...cloudAgentFixture[0], visibility: "private" } as const;
   const onAdd = vi.fn();
   const user = userEvent.setup();
-  render(
-    <AgentPlaza
-      agents={[agent]}
-      addedIDs={[]}
-      communityPlazaURL="https://opencsg.com/agentichub?view=instances"
-      t={createTranslator("zh")}
-      onAdd={onAdd}
-      onOpen={vi.fn()}
-    />,
-  );
+  render(<AgentPlaza agents={[agent]} addedIDs={[]} t={createTranslator("zh")} onAdd={onAdd} onOpen={vi.fn()} />);
   expect(screen.queryByRole("heading", { name: agent.name })).not.toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "我的" }));
   expect(screen.getByRole("heading", { name: agent.name })).toBeVisible();

@@ -9,7 +9,7 @@ import { RoomAvatar } from "@/components/business/RoomAvatar";
 import { useWorkspaceControllerContext } from "@/hooks/workspace";
 import { useWorkspaceHubTemplatesQuery } from "@/hooks/workspace/workspaceQueries";
 import { isVisibleInHubTemplateList } from "@/models/hubWorkspace";
-import { agenticHubPlazaURL, agenticHubTemplatesURL } from "@/models/agenticHub";
+import { agenticHubTemplatesURL } from "@/models/agenticHub";
 import { isAuthenticated } from "@/models/auth";
 import { templateAvatar, templateInGroup } from "@/models/templateGroups";
 import { agentAvailabilityStatusLabel, agentRoleLabel, isAgentAvailable, type AgentLike } from "@/models/agents";
@@ -131,9 +131,6 @@ export function AgentOverviewPage() {
   const templatesURL = agenticHubTemplatesURL(
     props.authStatus?.authenticated ? props.authStatus.opencsg_base_url || props.authStatus.base_url : "",
   );
-  const communityPlazaURL = agenticHubPlazaURL(
-    authed ? props.authStatus.opencsg_base_url || props.authStatus.base_url : "",
-  );
   const shownTemplates = templates.filter(
     (item) =>
       matches([item.display_name, item.name, item.id, item.description, item.runtime_kind].filter(Boolean).join(" ")) &&
@@ -242,7 +239,6 @@ export function AgentOverviewPage() {
         <AgentPlaza
           agents={plaza.catalog}
           addedIDs={plaza.addedIDs}
-          communityPlazaURL={communityPlazaURL}
           t={t}
           onAdd={(id) => {
             plaza.add(id);
