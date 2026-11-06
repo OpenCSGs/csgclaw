@@ -1,10 +1,10 @@
 import { act, render as renderView, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { useState, type ReactNode } from "react";
+import { useState } from "react";
 import { MemoryRouter, useLocation, useNavigate } from "react-router-dom";
 import type { UseQueryResult } from "@tanstack/react-query";
 import { WorkspaceControllerProvider, type WorkspaceController } from "@/hooks/workspace";
-import { useWorkspaceHubTemplatesQuery } from "@/hooks/workspace/workspaceQueries";
+import { useWorkspaceHubTemplateQuery, useWorkspaceHubTemplatesQuery } from "@/hooks/workspace/workspaceQueries";
 import type { HubTemplate } from "@/models/hubWorkspace";
 import type { AgentLike } from "@/models/agents";
 import type { WorkspaceTeam } from "@/models/tasks";
@@ -12,38 +12,43 @@ import { AgentOverviewPage } from "@/pages/AgentOverviewPage/AgentOverviewPage";
 import { createTranslator } from "@/shared/i18n";
 import { CLOUD_AGENTS_STORAGE_KEY } from "@/shared/storage/keys";
 import { RELAY_PUBLICATIONS_CHANGED_EVENT } from "@/shared/constants/relay";
-import { fetchRelayCatalog } from "@/api/relay";
+import { fetchCloudAgentTemplate, fetchRelayCatalog } from "@/api/relay";
 import { cloudAgentFixture } from "../helpers/cloudAgentFixture";
 import { paneFromLocation } from "@/models/routing";
 import { createQueryWrapper } from "../helpers/queryClient";
 
-function render(ui: ReactNode) {
-  return renderView(ui, { wrapper: createQueryWrapper().wrapper });
-}
-
-vi.mock("@/api/relay", () => ({ fetchRelayCatalog: vi.fn() }));
+vi.mock("@/api/relay", () => ({ fetchRelayCatalog: vi.fn(), fetchCloudAgentTemplate: vi.fn() }));
 beforeEach(() => {
   vi.mocked(fetchRelayCatalog).mockResolvedValue([]);
+  vi.mocked(fetchCloudAgentTemplate).mockResolvedValue(null);
 });
 
 vi.mock("@/hooks/workspace/workspaceQueries", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/hooks/workspace/workspaceQueries")>()),
   useWorkspaceHubTemplatesQuery: vi.fn(),
+  useWorkspaceHubTemplateQuery: vi.fn(),
 }));
 
 vi.mock("@/components/business/HubDetailPane", () => ({
   HubDetailPane: ({
     hub,
     inlineTemplateDetail,
+    inlineTemplateInstanceModel,
   }: {
     hub: { detailPaneProps: { selectedTemplateId: string } };
     inlineTemplateDetail?: boolean;
+    inlineTemplateInstanceModel?: string;
   }) => (
     <section aria-label="Template detail" data-inline={inlineTemplateDetail}>
       {hub.detailPaneProps.selectedTemplateId}
+      {inlineTemplateInstanceModel}
     </section>
   ),
 }));
+
+function render(element: Parameters<typeof renderView>[0]) {
+  return renderView(element, { wrapper: createQueryWrapper().wrapper });
+}
 
 const template: HubTemplate = {
   id: "builtin.codex-worker",
@@ -52,7 +57,7 @@ const template: HubTemplate = {
   source: { name: "builtin", kind: "builtin" },
 };
 
-function queryState(patch: Partial<UseQueryResult<HubTemplate[]>> = {}): UseQueryResult<HubTemplate[]> {
+function queryState<T = HubTemplate[]>(patch: Partial<UseQueryResult<T>> = {}): UseQueryResult<T> {
   return {
     data: undefined,
     isLoading: false,
@@ -60,7 +65,7 @@ function queryState(patch: Partial<UseQueryResult<HubTemplate[]>> = {}): UseQuer
     isError: false,
     refetch: vi.fn(),
     ...patch,
-  } as UseQueryResult<HubTemplate[]>;
+  } as UseQueryResult<T>;
 }
 
 function NavigationState() {
@@ -101,7 +106,8 @@ function Page({
   agents?: AgentLike[];
   teams?: WorkspaceTeam[];
 }) {
-  const [selectedTemplateId, setSelectedTemplateId] = useState("");
+  const [selectedTemplate, setSelectedTemplate] = useState<HubTemplate>();
+  const selectedTemplateId = selectedTemplate?.id || "";
   const controller = {
     ready: true,
     activePane: { type: "agents", id: "" },
@@ -122,8 +128,9 @@ function Page({
     },
     agentViewProps: { item: null },
     hubViewProps: {
-      hub: { detailPaneProps: { selectedTemplateId, selectedResourceType: "template" } },
-      onSelectTemplateInPlace: (template: HubTemplate) => setSelectedTemplateId(template.id || ""),
+      hub: { detailPaneProps: { selectedTemplate, selectedTemplateId, selectedResourceType: "template" } },
+      t: createTranslator("zh"),
+      onSelectTemplateInPlace: setSelectedTemplate,
     },
   } as unknown as WorkspaceController;
   return (
@@ -772,6 +779,45 @@ describe("cloud agent plaza", () => {
     await user.click(screen.getByRole("menuitem", { name: "从我的智能体移除" }));
     expect(screen.getByRole("button", { name: "云端 0" })).toBeVisible();
     expect(JSON.parse(localStorage.getItem(CLOUD_AGENTS_STORAGE_KEY)!)).toEqual([]);
+  });
+
+  it("opens the existing template detail for an AgenticHub instance without leaving its profile", async () => {
+    const agent = { ...cloudAgentFixture[0], publisher: "Agentichub", modelID: "instance-model" };
+    const source: HubTemplate = { id: "alice/worker", name: "Worker", source: { kind: "remote" } };
+    localStorage.setItem(CLOUD_AGENTS_STORAGE_KEY, JSON.stringify([agent]));
+    vi.mocked(fetchRelayCatalog).mockResolvedValue([agent]);
+    vi.mocked(fetchCloudAgentTemplate).mockResolvedValue({ repo_path: "alice/worker" });
+    vi.mocked(useWorkspaceHubTemplateQuery).mockReturnValue({ data: source } as UseQueryResult<HubTemplate>);
+    render(<Page route={`/agents?cloud=${agent.id}`} />);
+    expect(await screen.findByLabelText("Template detail")).toHaveTextContent("alice/worker");
+    expect(screen.getByLabelText("Template detail")).toHaveTextContent("instance-model");
+    await userEvent.setup().click(screen.getByRole("button", { name: "更多" }));
+    expect(await screen.findByRole("menuitem", { name: "从我的智能体移除" })).toBeVisible();
+    expect(screen.getByLabelText("Current URL")).toHaveTextContent(`/agents?cloud=${agent.id}`);
+  });
+
+  it("keeps cloud agent metadata visible when its source template fails and allows retry", async () => {
+    const agent = {
+      ...cloudAgentFixture[0],
+      publisher: "Agentichub",
+      creatorName: "Template creator",
+      modelID: "instance-model",
+      templateRepoPath: "alice/worker",
+    };
+    const refetch = vi.fn();
+    localStorage.setItem(CLOUD_AGENTS_STORAGE_KEY, JSON.stringify([agent]));
+    vi.mocked(fetchRelayCatalog).mockResolvedValue([agent]);
+    vi.mocked(useWorkspaceHubTemplateQuery).mockReturnValue(queryState<HubTemplate>({ isError: true, refetch }));
+    const user = userEvent.setup();
+
+    render(<Page route={`/agents?cloud=${agent.id}`} />);
+
+    expect(await screen.findByText("暂时无法加载来源模板。")).toBeVisible();
+    expect(screen.getByText("Template creator")).toBeVisible();
+    expect(screen.getByText("Agentichub")).toBeVisible();
+    expect(screen.getByText("instance-model")).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "重试" }));
+    expect(refetch).toHaveBeenCalledOnce();
   });
 
   it("opens the shared new-task page for the selected cloud agent", async () => {

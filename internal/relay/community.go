@@ -64,7 +64,9 @@ type RelayRegistration struct {
 }
 type CommunityInstance struct {
 	ID          int64              `json:"id"`
+	TemplateID  int64              `json:"template_id,omitempty"`
 	Name        string             `json:"name"`
+	CreatorName string             `json:"creator_name,omitempty"`
 	Description string             `json:"description"`
 	Public      bool               `json:"public"`
 	Type        string             `json:"type"`
@@ -73,7 +75,15 @@ type CommunityInstance struct {
 	ContentID   string             `json:"content_id"`
 	Relay       *RelayRegistration `json:"relay,omitempty"`
 	Metadata    struct {
-		Avatar string `json:"avatar"`
+		Avatar           string `json:"avatar"`
+		TemplateMetadata struct {
+			RepoPath string `json:"repo_path"`
+		} `json:"template_metadata"`
+		ProvisionRequest struct {
+			LLM struct {
+				Model string `json:"model"`
+			} `json:"llm"`
+		} `json:"provision_request"`
 	} `json:"metadata"`
 }
 

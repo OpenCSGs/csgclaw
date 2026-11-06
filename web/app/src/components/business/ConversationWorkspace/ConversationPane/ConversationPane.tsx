@@ -19,7 +19,13 @@ import { type CitationSelection } from "@/components/business/MessageContent";
 import { AgentView, type AgentDetailPaneHandle } from "@/components/business/AgentDetails";
 import { DialogCloseButton, DialogContent, DialogRoot, DialogTitle } from "@/components/ui";
 import { normalizeAuthProviderName } from "@/models/agents";
-import { getConversationDescription, isDirectConversation, isOnDemandConversation } from "@/models/conversations";
+import { hasPendingCloudTask } from "@/models/cloudTasks";
+import {
+  getConversationDescription,
+  isDirectConversation,
+  isOnDemandConversation,
+  userDisplayName,
+} from "@/models/conversations";
 import type { AgentDetailSidePanelProps } from "@/hooks/workspace/types";
 import { RoomTaskDialog, RoomTaskReference } from "../RoomTaskDialog";
 import { RoomTaskPanel } from "../RoomTaskPanel";
@@ -357,6 +363,14 @@ function ConversationPaneContent({
     () => conversationWorkingParticipantsWithActivity(workingParticipants, activityAgents, activityEntries),
     [activityAgents, activityEntries, workingParticipants],
   );
+  const cloudAgentUserID = conversation.cloud_agent?.user_id;
+  const pendingCloudReply =
+    cloudAgentUserID && hasPendingCloudTask(conversation)
+      ? {
+          id: cloudAgentUserID,
+          name: userDisplayName(cloudAgentUserID, usersById),
+        }
+      : null;
 
   const messageControls = useMemo(() => {
     const byMessage = new Map<string, ConversationWorkingParticipant>();
@@ -574,11 +588,11 @@ function ConversationPaneContent({
       <Conversation.MessageList
         footerSlot={
           <PendingTurnReplies
-            participants={messageControls.pendingReplies}
+            participants={pendingCloudReply ? [pendingCloudReply] : messageControls.pendingReplies}
             agents={agents}
             usersById={usersById}
             t={t}
-            onAction={handleOpenActivityPanel}
+            onAction={conversation.cloud_agent ? undefined : handleOpenActivityPanel}
             onStop={onStopWorkingTurn}
           />
         }
@@ -650,6 +664,7 @@ function ConversationPaneContent({
               agents={agents}
               t={t}
               onNewTask={onNewTask}
+              cloudSendDisabled={composerDisabled}
             />
           }
           hideWorkingContextUsage

@@ -48,6 +48,11 @@ retain their operation key. CSGClaw never asserts a trusted user UUID header.
 
 Each local API address, including its port, has a directory under
 `~/.csgclaw/relay/<address-sha256>/`. A mode-0600 `client-id` survives restarts.
+When both stored identity values are absent, `csgclaw` and
+`csgclaw-workspace` platform sandboxes derive a UUID v5 from their sandbox type
+and `CSGCLAW_NAME`. The same instance can recreate its client ID without a PVC.
+Existing client IDs are retained when the publication manifest or identity file
+is available. A previously random ID can change once if both files are lost.
 The publication manifest stores desired registrations, platform content targets,
 pending writeback and cleanup state, without copying the community login token.
 Restart restores desired connections and pending work. A persisted unpublish
@@ -200,6 +205,10 @@ product. Relay publisher IDs remain protocol identities, not product labels.
 Each registration is probed through Relay. Community `is_running=true` is not an
 online signal for external workers; confirmed offline or missing registrations produce offline entries. Authentication,
 rate-limit, transport and server errors fail discovery instead of claiming offline.
+
+Existing cloud conversations pass both `agent_id` and `connection_id` to the
+same endpoint. The request probes only the matching registration and returns an
+empty list if the registration or connection reference is unavailable.
 
 The browser stores display metadata, Relay ID, URL and a login-scoped connection
 reference without tokens. Cloud invocation is authorized against the current

@@ -1,5 +1,5 @@
 import { startTransition, useEffect, useRef, useState } from "react";
-import { agentMatchesUser } from "@/models/conversations";
+import { agentMatchesUser, userDisplayName } from "@/models/conversations";
 import { WorkspacePaneTypes } from "@/models/routing";
 import type { IMUser } from "@/models/conversations";
 import type { ProfilePreviewAnchorRect, ProfilePreviewController, UseProfilePreviewControllerArgs } from "./types";
@@ -13,6 +13,8 @@ type ProfilePreviewState = {
 
 export function useProfilePreviewController({
   agentItems,
+  cloudAgentOnline,
+  cloudAgentUserID,
   closeConversationTools,
   openAgentDirectMessage,
   selectAgent,
@@ -132,7 +134,14 @@ export function useProfilePreviewController({
         ? {
             previewRef: profilePreviewRef,
             agent: previewAgent,
-            user: previewUser,
+            user:
+              previewUser?.role === "cloud"
+                ? {
+                    ...previewUser,
+                    name: userDisplayName(previewUser.id, usersById),
+                    is_online: previewUser.id === cloudAgentUserID ? cloudAgentOnline : null,
+                  }
+                : previewUser,
             anchorRect: profilePreview.anchorRect,
             t,
             onClose: closeProfilePreview,

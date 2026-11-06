@@ -114,7 +114,10 @@ func (m *Manager) connectionReference() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return fmt.Sprintf("%x", sha256.Sum256([]byte(m.manifest.ConnectionID+"\x00"+cred.Site+"\x00"+cred.User))), nil
+	return m.connectionReferenceFor(cred), nil
+}
+func (m *Manager) connectionReferenceFor(cred SiteCredentials) string {
+	return fmt.Sprintf("%x", sha256.Sum256([]byte(m.manifest.ConnectionID+"\x00"+cred.Site+"\x00"+cred.User)))
 }
 func (m *Manager) boundCredentials() (SiteCredentials, error) {
 	cred, err := m.credentials()

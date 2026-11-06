@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import type { RelayCatalogTarget } from "@/api/relay";
 import type { AuthStatus } from "@/models/auth";
 import { useCloudAgentCatalog } from "./useCloudAgentCatalog";
 import { parseCloudAgents, sameCloudAgentReference, type CloudAgent } from "@/models/cloudAgents";
@@ -6,8 +7,8 @@ import { CLOUD_AGENTS_STORAGE_KEY } from "@/shared/storage/keys";
 
 const MEMBERSHIP_CHANGED_EVENT = "csgclaw-cloud-membership-changed";
 
-export function useCloudAgents(auth?: AuthStatus, enabled = true) {
-  const query = useCloudAgentCatalog(auth, enabled);
+export function useCloudAgents(auth?: AuthStatus, enabled = true, target?: RelayCatalogTarget) {
+  const query = useCloudAgentCatalog(auth, enabled, target);
   const [savedAgents, setSavedAgents] = useState<CloudAgent[]>(() => {
     try {
       return parseCloudAgents(localStorage.getItem(CLOUD_AGENTS_STORAGE_KEY));

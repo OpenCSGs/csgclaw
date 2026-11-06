@@ -7,6 +7,8 @@ const labels: Record<string, string> = {
   agentStateDeleted: "Deleted",
   agentStatusUnknown: "Unknown",
   agentStatusChecking: "Checking",
+  agentPlazaOnline: "Online",
+  agentPlazaOffline: "Offline",
   close: "Close",
   offline: "Offline",
   online: "Online",
@@ -29,6 +31,7 @@ const labels: Record<string, string> = {
   userIDLabel: "User ID",
   "roles.admin": "admin",
   "roles.worker": "Worker",
+  "roles.cloud": "Cloud",
 };
 
 function t(key: string): string {
@@ -36,6 +39,24 @@ function t(key: string): string {
 }
 
 describe("ProfilePreviewPopover", () => {
+  it("shows a cloud user's actual offline status and localized role", () => {
+    render(
+      <ProfilePreviewPopover
+        previewRef={createRef<HTMLElement>()}
+        agent={null}
+        user={{ id: "user-relay-example", name: "Cloud assistant", role: "cloud", is_online: false }}
+        anchorRect={{ top: 20, right: 80, bottom: 60, left: 40 }}
+        t={t}
+        onClose={vi.fn()}
+        onOpenAgent={vi.fn()}
+        onOpenDM={vi.fn()}
+      />,
+    );
+    expect(screen.getByText("Offline")).toBeVisible();
+    expect(screen.queryByText("Online")).not.toBeInTheDocument();
+    expect(screen.getByText("Cloud", { exact: true })).toBeVisible();
+  });
+
   it("shows a deleted sender's saved avatar and name without active-agent actions", () => {
     render(
       <ProfilePreviewPopover

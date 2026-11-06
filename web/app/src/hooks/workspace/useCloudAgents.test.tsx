@@ -46,6 +46,52 @@ it("discards the prototype mock cache instead of migrating it", async () => {
   expect(result.current.agents).toEqual([]);
   expect(localStorage.getItem("csgclaw.agents.cloud.v2")).toBeNull();
 });
+
+it("polls once for active consumers and stops when all consumers are disabled", async () => {
+  vi.useFakeTimers();
+  try {
+    const { wrapper } = createQueryWrapper();
+    const { rerender } = renderHook(
+      ({ enabled }) => {
+        useCloudAgents(undefined, enabled);
+        useCloudAgents(undefined, enabled);
+      },
+      { wrapper, initialProps: { enabled: false } },
+    );
+    await act(() => vi.advanceTimersByTimeAsync(5000));
+    expect(fetchRelayCatalog).not.toHaveBeenCalled();
+
+    rerender({ enabled: true });
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    expect(fetchRelayCatalog).toHaveBeenCalledTimes(1);
+    await act(() => vi.advanceTimersByTimeAsync(5000));
+    expect(fetchRelayCatalog).toHaveBeenCalledTimes(2);
+
+    rerender({ enabled: false });
+    await act(() => vi.advanceTimersByTimeAsync(5000));
+    expect(fetchRelayCatalog).toHaveBeenCalledTimes(2);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("loads the conversation agent independently of a failed full catalog", async () => {
+  const target = { agent_id: agent.id, connection_id: agent.connectionID };
+  vi.mocked(fetchRelayCatalog).mockImplementation(async (_signal, requestedTarget) => {
+    if (!requestedTarget) throw new Error("Another agent probe failed");
+    return [agent];
+  });
+  localStorage.setItem(CLOUD_AGENTS_STORAGE_KEY, JSON.stringify([agent]));
+  const { wrapper } = createQueryWrapper();
+  const directory = renderHook(() => useCloudAgents(), { wrapper });
+  const conversation = renderHook(() => useCloudAgents(undefined, true, target), { wrapper });
+
+  await waitFor(() => expect(directory.result.current.error).toBeTruthy());
+  await waitFor(() => expect(conversation.result.current.catalog).toEqual([agent]));
+  expect(conversation.result.current.addedIDs).toEqual([agent.id]);
+  expect(fetchRelayCatalog).toHaveBeenCalledWith(expect.any(AbortSignal), target);
+});
+
 it("reloads the catalog after authorization", async () => {
   const loginRequired = { status: 401, code: "relay_login_required" };
   vi.mocked(fetchRelayCatalog).mockRejectedValueOnce(loginRequired);
@@ -68,6 +114,9 @@ it("synchronizes membership across mounted consumers without losing other additi
   const second = renderHook(() => useCloudAgents(), { wrapper: queries.wrapper });
   await waitFor(() => expect(second.result.current.loading).toBe(false));
   await waitFor(() => expect(first.result.current.loading).toBe(false));
+  expect(fetchRelayCatalog).toHaveBeenCalledTimes(1);
+  act(() => window.dispatchEvent(new Event(RELAY_PUBLICATIONS_CHANGED_EVENT)));
+  await waitFor(() => expect(fetchRelayCatalog).toHaveBeenCalledTimes(2));
   act(() => {
     first.result.current.add(agent.id);
     second.result.current.add(other.id);

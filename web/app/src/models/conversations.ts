@@ -684,7 +684,8 @@ export function userDisplayName(userID: string | null | undefined, usersById: Us
   if (!user) {
     return userID;
   }
-  return user.name || userID;
+  const name = user.name || userID;
+  return user.role === "cloud" ? name.replace(/-cloud-[0-9a-f]{8}$/, "") : name;
 }
 
 export function resolveConversationUser(
