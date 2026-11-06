@@ -564,6 +564,18 @@ describe("cloud task targets", () => {
     localStorage.removeItem(CLOUD_AGENTS_STORAGE_KEY);
     vi.mocked(fetchRelayCatalog).mockResolvedValue([]);
   });
+  it("orders target groups as cloud agents, local agents, then teams", async () => {
+    localStorage.setItem(CLOUD_AGENTS_STORAGE_KEY, JSON.stringify(cloudAgentFixture));
+    vi.mocked(fetchRelayCatalog).mockResolvedValue([...cloudAgentFixture]);
+    setup();
+    await userEvent.click(screen.getByRole("button", { name: /iaTargetLabel/ }));
+    await screen.findByRole("button", { name: /合同条款审阅/ });
+    const cloud = screen.getByText("agentPlazaCloud", { selector: "div" });
+    const agents = screen.getByText("iaTargetGroupAgents", { selector: "div" });
+    const teams = screen.getByText("iaTargetGroupTeams", { selector: "div" });
+    expect(cloud.compareDocumentPosition(agents)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(agents.compareDocumentPosition(teams)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+  });
   it.each(["/new", "/new?cloud=agt_demo_contract_reviewer"])(
     "starts a cloud task without a local model from %s",
     async (route) => {

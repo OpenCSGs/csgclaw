@@ -33,7 +33,7 @@ export const messages = {
     cloudPrivacyMessage:
       "你发送的文字会离开本机，并在云端处理。发送涉及本地代码、密钥或客户数据的内容前，请确认这些信息可以外发。",
     cloudPrivacyRemember: "以后不再提示",
-    cloudPrivacyContinue: "我知道了，继续",
+    cloudPrivacyContinue: "继续",
     cloudChatPlaceholder: "输入要发送给云端智能体的消息…",
     cloudChatKeyboard: "Enter 发送，Shift+Enter 换行",
     cloudChatSend: "发送",
@@ -3316,7 +3316,7 @@ export const messages = {
     cloudPrivacyMessage:
       "The text you send leaves this device and is processed in the cloud. Before sending local code, secrets, or customer data, make sure you can share it externally.",
     cloudPrivacyRemember: "Don't show this again",
-    cloudPrivacyContinue: "I understand, continue",
+    cloudPrivacyContinue: "Continue",
     cloudChatPlaceholder: "Send a message to this cloud agent…",
     cloudChatKeyboard: "Enter to send, Shift+Enter for a new line",
     cloudChatSend: "Send",
