@@ -106,8 +106,26 @@ export function useAuthController(t: TranslateFn): AuthController {
       queryKey: workspaceQueryKeys.authStatus(),
       queryFn: fetchNormalizedAuthStatus,
       retry: 0,
+      staleTime: 0,
     });
   }, [queryClient]);
+
+  useEffect(() => {
+    const refreshOnReturn = () => {
+      // OAuth may finish in another window while this page stays mounted.
+      // The status query owns any error shown for a failed refresh.
+      void refreshStatus().catch(() => undefined);
+    };
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === "visible") refreshOnReturn();
+    };
+    window.addEventListener("focus", refreshOnReturn);
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+    return () => {
+      window.removeEventListener("focus", refreshOnReturn);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
+    };
+  }, [refreshStatus]);
 
   const login = useCallback(
     async (requestedEnvironment?: AuthEnvironmentDraft) => {
@@ -213,6 +231,7 @@ export function useAuthController(t: TranslateFn): AuthController {
       status.opencsg_base_url || "",
       status.base_url || "",
       status.ai_gateway_base_url || "",
+      status.logged_in_at || "",
     ].join("|");
     if (environmentFingerprintRef.current === fingerprint) {
       return;

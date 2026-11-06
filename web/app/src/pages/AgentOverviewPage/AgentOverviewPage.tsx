@@ -1,7 +1,7 @@
 import { resolveTeamAvatarMembers, teamMemberIDs, teamStatusLabel } from "@/models/tasks";
 import { Fragment, lazy, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { ExternalLink, List, LoaderCircle, LogIn, Plus, Search } from "lucide-react";
+import { Cloud, ExternalLink, List, LoaderCircle, LogIn, Plus, Search } from "lucide-react";
 import { apiErrorCode } from "@/api/client";
 import { Button, LinkButton, PanelHeader, EmptyState, TextInput } from "@/components/ui";
 import { AgentAvatarContent, AgentAvatarImage } from "@/components/business/AgentAvatar";
@@ -159,7 +159,7 @@ export function AgentOverviewPage() {
   const matches = (name: string) => name.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase());
   const agents = props.workerAgentItems.filter((agent) => matches(agent.name || agent.id || ""));
   const teams = props.teams.filter((team) => matches(team.title));
-  const templateUsername = props.authStatus?.authenticated ? props.authStatus.user_id : "";
+  const templateUsername = authed ? props.authStatus?.user_id : "";
   const filterCounts: Record<string, number> = {
     all: props.workerAgentItems.length + props.teams.length + plaza.agents.length,
     cloud: plaza.agents.length,
@@ -169,7 +169,7 @@ export function AgentOverviewPage() {
     personal: templates.filter((item) => templateInGroup(item, "mine", templateUsername)).length,
   };
   const templatesURL = agenticHubTemplatesURL(
-    props.authStatus?.authenticated ? props.authStatus.opencsg_base_url || props.authStatus.base_url : "",
+    authed ? props.authStatus?.opencsg_base_url || props.authStatus?.base_url || "" : "",
   );
   const shownTemplates = templates.filter(
     (item) =>
@@ -397,6 +397,42 @@ export function AgentOverviewPage() {
                       </button>
                     </Fragment>
                   ))}
+                  {templateFilter === "personal" && authed && !cloudTemplates.length ? (
+                    <>
+                      <h3 className={styles.cloudTemplatesHeading}>{t("iaTemplatesCloudOnly", { count: 0 })}</h3>
+                      {!templatesQuery.isLoading && !templatesQuery.isFetching && !templatesQuery.isError ? (
+                        <p className={styles.emptyList}>
+                          {t(query.trim() ? "workspaceSearchNoResults" : "iaTemplatesCloudEmpty")}
+                        </p>
+                      ) : null}
+                    </>
+                  ) : null}
+                  {!templatesQuery.isLoading &&
+                  !templatesQuery.isError &&
+                  !shownTemplates.length &&
+                  !(templateFilter === "personal" && authed) ? (
+                    <p className={styles.emptyList}>{templateEmptyTitle}</p>
+                  ) : null}
+                  {templateFilter === "personal" && !authed ? (
+                    <section className={styles.cloudSignIn} aria-label={t("iaTemplateCloudSignIn")}>
+                      <Cloud className={styles.cloudSignInIcon} size={16} aria-hidden="true" />
+                      <div>
+                        <strong>{t("iaTemplateCloudSignIn")}</strong>
+                        <p>{t("iaTemplateCloudSignInHint")}</p>
+                      </div>
+                      <Button
+                        className={styles.cloudSignInAction}
+                        variant="secondaryGray"
+                        size="sm"
+                        disabled={props.authBusy || props.authPending}
+                        onClick={() => {
+                          if (props.onRequireOpenCSGAuthentication?.() !== false) void props.onLogin();
+                        }}
+                      >
+                        {t("iaTemplateCloudSignInAction")}
+                      </Button>
+                    </section>
+                  ) : null}
                   {templateFilter === "personal" && templatesURL ? (
                     <LinkButton
                       className={styles.manageTemplatesLink}
@@ -409,9 +445,6 @@ export function AgentOverviewPage() {
                       <ExternalLink size={14} aria-hidden="true" />
                       {t("iaTemplateManageOnHub")}
                     </LinkButton>
-                  ) : null}
-                  {!templatesQuery.isLoading && !templatesQuery.isError && !shownTemplates.length ? (
-                    <p className={styles.emptyList}>{templateEmptyTitle}</p>
                   ) : null}
                 </>
               ) : (

@@ -532,6 +532,127 @@ it("moves the signed-in user's community templates to My templates with a cloud 
   expect(screen.getByRole("button", { name: "Local worker" })).toBeInTheDocument();
 });
 
+describe("personal template cloud sign-in", () => {
+  const route = "/agents?tab=templates&filter=personal";
+  beforeEach(() => {
+    vi.mocked(useWorkspaceHubTemplatesQuery).mockReturnValue(
+      queryState({
+        data: [
+          template,
+          { id: "local.worker", name: "Local worker", role: "worker", source: { kind: "local" } },
+          { id: "alice/worker", name: "Cloud worker", source: { kind: "remote" } },
+        ],
+      }),
+    );
+  });
+
+  it("shows the sign-in prompt below usable local templates", () => {
+    render(<Page route={route} />);
+    const local = screen.getByRole("button", { name: "Local worker" });
+    const prompt = screen.getByRole("region", { name: "登录后查看云端模板" });
+    expect(local.compareDocumentPosition(prompt) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(within(prompt).getByText("你在 AgenticHub 上的模板，登录后才能列出来。")).toBeVisible();
+    expect(within(prompt).getByRole("button", { name: "去登录" })).toBeEnabled();
+    expect(screen.queryByRole("button", { name: /Cloud worker/ })).not.toBeInTheDocument();
+  });
+
+  it.each([false, true])("uses the existing authentication guard (authorized=%s)", async (authorized) => {
+    const onRequireOpenCSGAuthentication = vi.fn(() => authorized);
+    const onLogin = vi.fn();
+    render(<Page route={route} onRequireOpenCSGAuthentication={onRequireOpenCSGAuthentication} onLogin={onLogin} />);
+    await userEvent.setup().click(screen.getByRole("button", { name: "去登录" }));
+    expect(onRequireOpenCSGAuthentication).toHaveBeenCalledOnce();
+    expect(onLogin).toHaveBeenCalledTimes(authorized ? 1 : 0);
+  });
+
+  it.each(["authBusy", "authPending"] as const)("disables sign-in while %s", (flag) => {
+    render(<Page route={route} {...{ [flag]: true }} />);
+    expect(screen.getByRole("button", { name: "去登录" })).toBeDisabled();
+  });
+
+  it("localizes the prompt and supports keyboard sign-in", async () => {
+    const onLogin = vi.fn();
+    render(<Page route={route} locale="en" onLogin={onLogin} />);
+    const prompt = screen.getByRole("region", { name: "Sign in to see cloud templates" });
+    within(prompt).getByRole("button", { name: "Sign in" }).focus();
+    await userEvent.setup().keyboard("{Enter}");
+    expect(onLogin).toHaveBeenCalledOnce();
+  });
+
+  it("hides the prompt after login and restores it after logout or session expiry", () => {
+    const view = render(<Page route={route} />);
+    view.rerender(<Page route={route} username="alice" />);
+    expect(screen.queryByRole("button", { name: "去登录" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Cloud worker 云端/ })).toBeVisible();
+    view.rerender(<Page route={route} username="alice" authExpired />);
+    expect(screen.getByRole("button", { name: "去登录" })).toBeVisible();
+    expect(screen.queryByRole("button", { name: /Cloud worker/ })).not.toBeInTheDocument();
+    view.rerender(<Page route={route} />);
+    expect(screen.getByRole("button", { name: "去登录" })).toBeVisible();
+  });
+
+  it.each([false, true])("keeps the cloud section after login with no remote templates (local=%s)", (hasLocal) => {
+    vi.mocked(useWorkspaceHubTemplatesQuery).mockReturnValue(
+      queryState({
+        data: hasLocal ? [{ id: "local.worker", name: "Local worker", role: "worker", source: { kind: "local" } }] : [],
+      }),
+    );
+    const view = render(<Page route={route} />);
+    expect(screen.getByRole("button", { name: "去登录" })).toBeVisible();
+    view.rerender(<Page route={route} username="alice" />);
+    const list = within(screen.getByRole("complementary"));
+    const heading = list.getByRole("heading", { name: "仅云端（0）" });
+    const empty = list.getByText("暂无云端智能体");
+    expect(heading.compareDocumentPosition(empty) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(list.queryByRole("button", { name: "去登录" })).not.toBeInTheDocument();
+    if (hasLocal) expect(list.getByRole("button", { name: "Local worker" })).toBeVisible();
+    expect(list.getByRole("link", { name: "在 AgenticHub 上管理我的模板" })).toBeVisible();
+  });
+
+  it.each([{ isLoading: true }, { isFetching: true }, { isError: true }])(
+    "keeps the cloud heading without showing an empty result before a successful load: %j",
+    (state) => {
+      vi.mocked(useWorkspaceHubTemplatesQuery).mockReturnValue(queryState(state));
+      render(<Page route={route} username="alice" />);
+      expect(screen.getByRole("heading", { name: "仅云端（0）" })).toBeVisible();
+      expect(screen.queryByText("暂无云端智能体")).not.toBeInTheDocument();
+    },
+  );
+
+  it("localizes the empty cloud section", () => {
+    vi.mocked(useWorkspaceHubTemplatesQuery).mockReturnValue(queryState({ data: [] }));
+    render(<Page route={route} username="alice" locale="en" />);
+    expect(screen.getByRole("heading", { name: "Cloud only (0)" })).toBeVisible();
+    expect(screen.getByText("No cloud agents yet")).toBeVisible();
+  });
+
+  it("distinguishes a filtered cloud list from an account with no cloud templates", async () => {
+    render(<Page route={route} username="alice" />);
+    await userEvent.setup().type(screen.getByRole("textbox", { name: "搜索模板名称、用途说明或来源" }), "missing");
+    const list = within(screen.getByRole("complementary"));
+    expect(list.getByRole("heading", { name: "仅云端（0）" })).toBeVisible();
+    expect(list.getByText(createTranslator("zh")("workspaceSearchNoResults"))).toBeVisible();
+    expect(list.queryByText("暂无云端智能体")).not.toBeInTheDocument();
+  });
+
+  it.each(["/agents", "/agents?tab=templates", "/agents?tab=plaza"])(
+    "keeps this prompt scoped to personal templates: %s",
+    (route) => {
+      render(<Page route={route} />);
+      expect(screen.queryByRole("region", { name: "登录后查看云端模板" })).not.toBeInTheDocument();
+    },
+  );
+
+  it.each([{ isLoading: true }, { isError: true }])(
+    "keeps sign-in available while templates are unavailable: %j",
+    (state) => {
+      vi.mocked(useWorkspaceHubTemplatesQuery).mockReturnValue(queryState(state));
+      render(<Page route={route} />);
+      expect(screen.getByRole("button", { name: "去登录" })).toBeEnabled();
+    },
+  );
+});
+
 describe("agent overview list summaries", () => {
   beforeEach(() => vi.mocked(useWorkspaceHubTemplatesQuery).mockReturnValue(queryState()));
 
