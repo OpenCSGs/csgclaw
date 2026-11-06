@@ -87,6 +87,7 @@ type SessionSpec struct {
 	StderrPath                     string
 	Profile                        agentruntime.Profile
 	ModelCatalog                   []codexmodel.Profile
+	UseProfileModelContext         bool
 	ExecutionMode                  string
 	MemoryEnabled                  bool
 	MCPServers                     map[string]any
@@ -817,6 +818,7 @@ func (r *Runtime) ensureSession(ctx context.Context, spec SessionSpec, copyHostS
 		return nil, err
 	}
 	spec.ExecutionMode = runtimeOptions.ExecutionMode
+	spec.UseProfileModelContext = agentRef.RuntimeOptions[conversationProfileOption] == true
 	if agentRef.RuntimeOptions[conversationReadOnlyOption] == true {
 		spec.ExecutionMode = ExecutionModeReadOnly
 	}
@@ -956,6 +958,7 @@ func (r *Runtime) hydratePersistedSession(ctx context.Context, manager *appServe
 		return nil, err
 	}
 	spec.ExecutionMode = runtimeOptions.ExecutionMode
+	spec.UseProfileModelContext = agentRef.RuntimeOptions[conversationProfileOption] == true
 	if agentRef.RuntimeOptions[conversationReadOnlyOption] == true {
 		spec.ExecutionMode = ExecutionModeReadOnly
 	}

@@ -2,6 +2,7 @@ package agents
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -109,6 +110,49 @@ func TestSessionModelOptionsResolveInlineProvider(t *testing.T) {
 	selected, err := service.ResolvedSessionProfile("agent-test", "model-0001", "high")
 	if err != nil || selected.ModelProviderID != "example" || selected.ModelID != "model-0001" || selected.ReasoningEffort != "high" || selected.ModelMetadata.ContextWindow != 32000 {
 		t.Fatalf("inline selection = %+v, error = %v", selected, err)
+	}
+}
+
+func TestSessionModelReasoningUsesKnownSelectedCapabilities(t *testing.T) {
+	for _, test := range []struct {
+		name, providerID, defaultModel, model, effort, want string
+		invalid                                             bool
+	}{
+		{name: "known unsupported max", providerID: ModelProviderIDCodex, defaultModel: "gpt-5.5", effort: "max", invalid: true},
+		{name: "selected model unsupported max", providerID: ModelProviderIDCodex, defaultModel: "gpt-6.1-sol", model: "gpt-5.5", effort: "max", invalid: true},
+		{name: "known unsupported minimal", providerID: ModelProviderIDCodex, defaultModel: "gpt-6.1-sol", effort: "minimal", invalid: true},
+		{name: "known unsupported off", providerID: ModelProviderIDCodex, defaultModel: "gpt-6.1-sol", effort: "off", invalid: true},
+		{name: "known supported max", providerID: ModelProviderIDCodex, defaultModel: "gpt-5.5", model: "gpt-6.1-sol", effort: "max", want: "max"},
+		{name: "known dated supported max", providerID: ModelProviderIDCodex, defaultModel: "gpt-6.1-sol-2026-10-26", effort: "max", want: "max"},
+		{name: "known supported off", providerID: ModelProviderIDCodex, defaultModel: "gpt-5.5", effort: "off", want: "none"},
+		{name: "known automatic", providerID: ModelProviderIDCodex, defaultModel: "gpt-5.5", effort: "auto", want: "auto"},
+		{name: "omitted inherits profile", providerID: ModelProviderIDCodex, defaultModel: "gpt-5.5", want: "max"},
+		{name: "model only inherits profile", providerID: ModelProviderIDCodex, defaultModel: "gpt-6.1-sol", model: "gpt-5.5", want: "max"},
+		{name: "unknown Codex model", providerID: ModelProviderIDCodex, defaultModel: "future-model", effort: "max", want: "max"},
+		{name: "unknown API model", providerID: "example", defaultModel: "future-model", effort: "max", want: "max"},
+		{name: "API matching model name", providerID: "example", defaultModel: "gpt-5.5", effort: "max", want: "max"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			profile := AgentProfile{Provider: ProfileProviderForModelProviderID(test.providerID), ModelProviderID: test.providerID, ModelID: test.defaultModel, ReasoningEffort: "max"}
+			service := &ModelConfiguration{
+				Repository: &Repository{agents: map[string]Agent{"agent-test": {ID: "agent-test", Name: "test", RuntimeKind: RuntimeKindCodex, AgentProfile: profile}}},
+				llm: config.LLMConfig{Providers: map[string]config.ProviderConfig{
+					test.providerID: {BaseURL: "https://models.example/v1", APIKey: "fixture", Models: []string{test.defaultModel, "gpt-5.5", "gpt-6.1-sol"}},
+				}},
+			}
+			selected, err := service.ResolvedSessionProfile("agent-test", test.model, test.effort)
+			if test.invalid {
+				var invalid *SessionModelError
+				if !errors.As(err, &invalid) || invalid.Field != "reasoning_effort" {
+					t.Fatalf("validation error = %v", err)
+				}
+			} else if err != nil || selected.ReasoningEffort != test.want {
+				t.Fatalf("effort = %q, error = %v, want %q", selected.ReasoningEffort, err, test.want)
+			}
+			if !reflect.DeepEqual(service.agents["agent-test"].AgentProfile, profile) {
+				t.Fatal("request validation changed Profile defaults")
+			}
+		})
 	}
 }
 

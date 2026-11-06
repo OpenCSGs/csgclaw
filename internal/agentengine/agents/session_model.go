@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"csgclaw/internal/config"
+	"csgclaw/internal/modelcap"
 )
 
 // SessionModelError identifies the request option that could not be resolved.
@@ -61,10 +62,17 @@ func (s *ModelConfiguration) ResolvedSessionProfile(agentID, model, reasoningEff
 	if effort := config.NormalizeReasoningEffort(reasoningEffort); effort != "" {
 		switch effort {
 		case config.ReasoningEffortAuto, config.ReasoningEffortNone, config.ReasoningEffortMinimal, config.ReasoningEffortLow, config.ReasoningEffortMedium, config.ReasoningEffortHigh, config.ReasoningEffortXHigh, config.ReasoningEffortMax:
-			selected.ReasoningEffort = effort
 		default:
 			return AgentProfile{}, &SessionModelError{Field: "reasoning_effort", Message: "invalid reasoning effort"}
 		}
+		if effort != config.ReasoningEffortAuto {
+			levels := modelcap.ForProviderModel(selected.Provider, selected.ModelID).SupportedReasoningEfforts
+			// Unverified provider/model combinations accept all recognized effort names.
+			if len(levels) > 0 && !slices.Contains(levels, effort) {
+				return AgentProfile{}, &SessionModelError{Field: "reasoning_effort", Message: fmt.Sprintf("reasoning effort %q is unsupported by model %q", effort, selected.ModelID)}
+			}
+		}
+		selected.ReasoningEffort = effort
 	}
 	return selected, nil
 }

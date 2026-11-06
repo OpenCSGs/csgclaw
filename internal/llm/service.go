@@ -259,10 +259,11 @@ func (s *Service) resolveProfile(ctx context.Context, botID string) (agent.Agent
 		if !ok {
 			return agent.AgentProfile{}, &HTTPError{Status: http.StatusServiceUnavailable, Message: "session model configuration is unavailable"}
 		}
-		profile, err := models.ResolvedSessionProfile(botID, selection.model, selection.effort)
+		profile, err := models.ResolvedSessionProfile(botID, selection.model, "")
 		if err != nil {
 			return agent.AgentProfile{}, &HTTPError{Status: http.StatusConflict, Message: err.Error()}
 		}
+		profile.ReasoningEffort = selection.effort
 		return profile, nil
 	}
 	if s.agents == nil {

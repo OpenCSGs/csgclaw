@@ -19,6 +19,9 @@ func (m *appServerManager) publishContextUsage(runtimeID string, live *liveSessi
 	if model, ok := live.threadModels[threadID]; ok {
 		selected = model
 	}
+	if waiter := live.turnWaiters[threadID]; waiter != nil {
+		selected = waiter.model
+	}
 	metadata := selected.Metadata.Normalized()
 	if live.contextUsage == nil {
 		live.contextUsage = make(map[string]modelcap.ContextUsage)

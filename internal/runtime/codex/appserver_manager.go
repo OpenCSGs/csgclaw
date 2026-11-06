@@ -5,6 +5,7 @@ import (
 	"context"
 	"csgclaw/internal/agentengine/contract"
 	"csgclaw/internal/diagnostics"
+	"csgclaw/internal/modelcap"
 	"csgclaw/internal/modelprovider"
 	"csgclaw/internal/modelusage"
 	"csgclaw/internal/processgroup"
@@ -431,7 +432,6 @@ func (m *appServerManager) Prompt(ctx context.Context, handle SessionHandle, req
 		live.clearAppServerTurnContext(sessionID, waiter)
 	}()
 
-	m.publishContextUsage(runtimeID, live, sessionID, nil, "snapshot")
 	params := appServerTurnStartParamsWithInput(live.spec, sessionID, promptInput, req.ClientUserMessageID)
 	applyTurnModelParams(params, selectedModel)
 	turnStartAt := time.Now()
@@ -458,6 +458,7 @@ func (m *appServerManager) Prompt(ctx context.Context, handle SessionHandle, req
 		return PromptResponse{}, err
 	}
 	waiter.setTurnID(appServerTurnIDFromResult(raw))
+	m.publishContextUsage(runtimeID, live, sessionID, nil, "snapshot")
 	live.telemetry.bind(waiter.currentTurnID(), diagnostics.From(ctx))
 	defer live.telemetry.finish(diagnostics.From(ctx))
 	acceptedAt := time.Now()
@@ -863,7 +864,7 @@ func appServerThreadStartParams(spec SessionSpec, publishFiles bool) map[string]
 	if spec.Profile.ModelID != "" {
 		params["model"] = spec.Profile.ModelID
 	}
-	if config := appServerThreadConfig(spec.Profile, spec.ExecutionMode); len(config) > 0 {
+	if config := appServerThreadConfig(spec); len(config) > 0 {
 		params["config"] = config
 	}
 	if spec.ExecutionMode == ExecutionModeReadOnly {
@@ -926,7 +927,7 @@ func appServerThreadResumeParams(spec SessionSpec, threadID string) map[string]a
 	if spec.Profile.ModelID != "" {
 		params["model"] = spec.Profile.ModelID
 	}
-	if config := appServerThreadConfig(spec.Profile, spec.ExecutionMode); len(config) > 0 {
+	if config := appServerThreadConfig(spec); len(config) > 0 {
 		params["config"] = config
 	}
 	if spec.ExecutionMode == ExecutionModeReadOnly {
@@ -1523,6 +1524,7 @@ type appServerTurnWaiter struct {
 	model         contract.TurnModel
 	modelOverride bool
 	// Guarded by liveSession.mu, alongside the thread's cumulative counters.
+	previousContextUsage     *modelcap.ContextUsage
 	compacting               bool
 	itemTurns                map[string]string // Native item IDs received with an explicit turn ID.
 	missingItems             bool              // An item without a known owner was withheld.
@@ -1534,6 +1536,7 @@ type appServerTurnWaiter struct {
 	diagnosticNoteBytes      int
 	visibleActivity          bool
 	mu                       sync.RWMutex
+	accepted                 bool
 	threadID                 string
 	turnID                   string
 	ch                       chan appServerTurnResult
@@ -1581,11 +1584,10 @@ func (s *liveSession) registerAppServerTurnWaiterWithModel(threadID string, sele
 		lastActivity:  "turn/start",
 	}
 	waiter.tokenUsage.ModelID = selected.ModelID
-	s.turnWaiters[threadID] = waiter
-	if s.threadModels == nil {
-		s.threadModels = make(map[string]contract.TurnModel)
+	if usage, ok := s.contextUsage[threadID]; ok {
+		waiter.previousContextUsage = modelcap.CloneUsage(&usage)
 	}
-	s.threadModels[threadID] = selected
+	s.turnWaiters[threadID] = waiter
 	return waiter, nil
 }
 
@@ -1594,6 +1596,23 @@ func (s *liveSession) removeAppServerTurnWaiter(threadID string, waiter *appServ
 	defer s.mu.Unlock()
 	threadID = strings.TrimSpace(threadID)
 	if s.turnWaiters[threadID] == waiter {
+		waiter.mu.RLock()
+		accepted := waiter.accepted
+		waiter.mu.RUnlock()
+		if accepted {
+			if s.threadModels == nil {
+				s.threadModels = make(map[string]contract.TurnModel)
+			}
+			s.threadModels[threadID] = waiter.model
+		} else if waiter.previousContextUsage != nil {
+			// Revert a pending model selection while retaining same-model usage
+			// updates, including a compaction completed during context recovery.
+			if usage, ok := s.contextUsage[threadID]; !ok || usage.ModelID != waiter.previousContextUsage.ModelID {
+				s.contextUsage[threadID] = *waiter.previousContextUsage
+			}
+		} else {
+			delete(s.contextUsage, threadID)
+		}
 		if terminal, ok := waiter.terminalResult(); ok && terminal.turnID != "" && terminal.turnID == waiter.currentTurnID() && !s.turnThreads[terminal.turnID].recovered {
 			// An identified successor has finished. Later legacy items can be
 			// delivered again, while the recovered turn and its IDs stay excluded.
@@ -1942,11 +1961,12 @@ func (w *appServerTurnWaiter) recordDiagnosticCompletion(turnID string, at time.
 
 func (w *appServerTurnWaiter) setTurnID(turnID string) {
 	turnID = strings.TrimSpace(turnID)
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.accepted = true
 	if turnID == "" {
 		return
 	}
-	w.mu.Lock()
-	defer w.mu.Unlock()
 	w.turnID = turnID
 	w.flushDiagnosticNotesLocked(turnID)
 	w.diagnostic.RuntimeRef(w.threadID, turnID, "")
@@ -1976,6 +1996,9 @@ func (w *appServerTurnWaiter) applyLocked(result *appServerTurnResult) bool {
 	}
 	// Only a start notification or the turn/start response establishes identity.
 	// A previous turn can finish while the next start response is still pending.
+	if result.started {
+		w.accepted = true
+	}
 	if result.started && result.turnID != "" {
 		w.turnID = result.turnID
 		w.flushDiagnosticNotesLocked(result.turnID)
@@ -2514,13 +2537,17 @@ func appServerGenerateVideoToolSpec() map[string]any {
 }
 
 // Explicit per-thread values override settings retained by cold-resumed threads.
-func appServerThreadConfig(profile agentruntime.Profile, executionMode string) map[string]any {
-	values := appServerReasoningConfig(profile.ReasoningEffort)
+func appServerThreadConfig(spec SessionSpec) map[string]any {
+	values := appServerReasoningConfig(spec.Profile.ReasoningEffort)
 	if values == nil {
 		values = make(map[string]any)
 	}
+	if spec.UseProfileModelContext {
+		values["model_context_window"] = spec.Profile.ModelMetadata.Normalized().ContextWindow
+		values["model_auto_compact_token_limit"] = spec.Profile.ModelMetadata.CompactThreshold()
+	}
 	values["web_search"] = "cached"
-	if executionMode == ExecutionModeReadOnly {
+	if spec.ExecutionMode == ExecutionModeReadOnly {
 		values["web_search"] = "disabled"
 	}
 	return values

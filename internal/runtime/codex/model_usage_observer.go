@@ -13,8 +13,8 @@ func (r *Runtime) ObserveModelResponseUsage(agentID, threadID, turnID string, us
 	if threadID == "" || turnID == "" || len(threadID) > 256 || len(turnID) > 256 {
 		return
 	}
-	manager, live, err := r.activeAgentSession(agentID)
-	if err != nil {
+	manager, live := r.nativeTurnOwner(agentID, threadID, turnID)
+	if live == nil {
 		return
 	}
 	manager.observeModelResponseUsage(live, threadID, turnID, usage)

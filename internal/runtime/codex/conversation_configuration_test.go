@@ -3,6 +3,7 @@ package codex
 import (
 	"context"
 	"csgclaw/internal/agentengine/contract"
+	"csgclaw/internal/modelcap"
 	agentruntime "csgclaw/internal/runtime"
 	skill "csgclaw/internal/skill/state"
 	"csgclaw/internal/taskconfig"
@@ -95,6 +96,9 @@ func TestRoomConfigurationReusesProcessAndNativeMappings(t *testing.T) {
 		if live.spec.Profile.ModelID != model || live.spec.ExecutionMode != mode {
 			t.Fatal("incorrect process settings")
 		}
+		if !live.spec.UseProfileModelContext {
+			t.Fatal("room Profile context settings missing")
+		}
 		return live.cmd.Process.Pid
 	}
 	first := run("agent-one", "room-shared", "model-a")
@@ -115,6 +119,17 @@ func TestRoomConfigurationReusesProcessAndNativeMappings(t *testing.T) {
 	if ids["agent-one:room-shared"] == ids["agent-two:room-shared"] || ids["agent-one:room-shared"] == ids["agent-one:room-other"] {
 		t.Fatal("shared native identity across agents or rooms")
 	}
+	roomPID := run("agent-one", "room-shared", profile.ModelID, ExecutionModeStandard)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	result := rt.Conversation("agent-one").Run(ctx, contract.TurnRequest{ID: "direct", ConversationKey: "session:direct", Input: []contract.InputPart{{Kind: contract.InputPartText, Text: "hello"}}}, contract.EventSinkFunc(func(context.Context, contract.TurnEvent) error { return nil }))
+	if result.Status != contract.TurnSucceeded {
+		t.Fatalf("direct session: %+v", result)
+	}
+	live := rt.sessionManager().(*appServerManager).liveSession("agent-one")
+	if live.spec.UseProfileModelContext || live.cmd.Process.Pid == roomPID {
+		t.Fatal("direct session retained room Profile context settings")
+	}
 	if err := rt.Close(); err != nil {
 		t.Fatal(err)
 	}
@@ -125,6 +140,22 @@ func TestRoomConfigurationReusesProcessAndNativeMappings(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(root, "agent-one", "task-sessions")); !os.IsNotExist(err) {
 		t.Fatal("created another conversation store")
+	}
+}
+
+func TestConversationThreadContextUsesRoomProfile(t *testing.T) {
+	profile := agentruntime.Profile{ModelID: "room-model", ModelMetadata: modelcap.Resolved{ContextWindow: 64000, ContextSource: "user"}}
+	for _, room := range []bool{false, true} {
+		spec := SessionSpec{Profile: profile, UseProfileModelContext: room}
+		for _, params := range []map[string]any{appServerThreadStartParams(spec, false), appServerThreadResumeParams(spec, "thread")} {
+			values := params["config"].(map[string]any)
+			for key, want := range map[string]int64{"model_context_window": 64000, "model_auto_compact_token_limit": profile.ModelMetadata.CompactThreshold()} {
+				value, exists := values[key]
+				if exists != room || (room && value != want) {
+					t.Fatalf("room=%t: %s = %v, want present=%t value=%d", room, key, value, room, want)
+				}
+			}
+		}
 	}
 }
 

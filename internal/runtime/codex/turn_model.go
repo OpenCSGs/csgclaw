@@ -76,8 +76,8 @@ func (r *Runtime) TurnModel(agentID, threadID, turnID, requestedModel string) (c
 	if threadID == "" || turnID == "" || len(threadID) > 256 || len(turnID) > 256 {
 		return contract.TurnModel{}, false, nil
 	}
-	_, live, err := r.activeAgentSession(agentID)
-	if err != nil {
+	_, live := r.nativeTurnOwner(agentID, threadID, turnID)
+	if live == nil {
 		return contract.TurnModel{}, false, nil
 	}
 	live.mu.Lock()

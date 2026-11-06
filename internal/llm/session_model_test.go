@@ -7,9 +7,11 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"testing"
 
 	agent "csgclaw/internal/agentengine/agents"
+	"csgclaw/internal/cliproxy"
 	"csgclaw/internal/config"
 )
 
@@ -105,5 +107,82 @@ func TestSessionModelPreservesTaskProvider(t *testing.T) {
 				t.Fatalf("task provider changed: %v", result)
 			}
 		})
+	}
+}
+
+func TestSessionModelBridgePreservesInheritedProfileEffort(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	controller := mustSeededAgentService(t, config.LLMConfig{Default: "codex.gpt-5.5", Providers: map[string]config.ProviderConfig{
+		agent.ModelProviderIDCodex: {Models: []string{"gpt-5.5"}},
+	}}, []agent.Agent{{ID: "agent-inherited", Name: "Inherited", Role: agent.RoleWorker, AgentProfile: agent.AgentProfile{
+		Provider: agent.ProviderCodex, ModelProviderID: agent.ModelProviderIDCodex, ModelID: "gpt-5.5", ReasoningEffort: "max",
+	}}})
+	defer controller.Close()
+	models := controller.Models()
+	if _, err := models.ResolvedSessionProfile("agent-inherited", "gpt-5.5", "max"); err == nil {
+		t.Fatal("explicit unsupported effort was accepted")
+	}
+	selected, err := models.ResolvedSessionProfile("agent-inherited", "gpt-5.5", "")
+	if err != nil || selected.ReasoningEffort != "max" {
+		t.Fatalf("inherited selection = %+v, error = %v", selected, err)
+	}
+	before, err := models.ResolvedAgentProfile("agent-inherited")
+	if err != nil {
+		t.Fatal(err)
+	}
+	payloads := make(chan map[string]any, 2)
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var payload map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			t.Error(err)
+		}
+		payloads <- payload
+		w.Header().Set("Content-Type", "text/event-stream")
+		if r.URL.Path == "/v1/responses" {
+			io.WriteString(w, "data: {\"type\":\"response.completed\",\"response\":{\"id\":\"fixture\",\"status\":\"completed\",\"output\":[]}}\n\n")
+		} else {
+			io.WriteString(w, "data: {\"id\":\"fixture\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}\n\ndata: [DONE]\n\n")
+		}
+	}))
+	defer upstream.Close()
+	previousURL, previousAuth := embeddedCLIProxyProviderBaseURL, embeddedCLIProxyAuthStatus
+	defer func() {
+		embeddedCLIProxyProviderBaseURL, embeddedCLIProxyAuthStatus = previousURL, previousAuth
+	}()
+	embeddedCLIProxyProviderBaseURL = func(context.Context, string) (string, error) { return upstream.URL + "/v1", nil }
+	embeddedCLIProxyAuthStatus = func(context.Context, string) (cliproxy.AuthStatus, error) {
+		return cliproxy.AuthStatus{Authenticated: true}, nil
+	}
+	service := NewService(config.ModelConfig{}, models)
+	ctx := WithSessionModel(context.Background(), selected.ModelID, selected.ReasoningEffort)
+	for _, test := range []struct {
+		name, body string
+		call       func(context.Context, string, []byte) (*UpstreamResponse, error)
+	}{
+		{"responses", `{"model":"client-model","input":"hello","reasoning":{"effort":"max"},"stream":true}`, service.Responses},
+		{"chat", `{"model":"client-model","messages":[],"stream":true}`, service.ChatCompletionsStream},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			response, err := test.call(ctx, "agent-inherited", []byte(test.body))
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer response.Body.Close()
+			if _, err := io.Copy(io.Discard, response.Body); err != nil {
+				t.Fatal(err)
+			}
+			payload := <-payloads
+			effort := payload["reasoning_effort"]
+			if reasoning, ok := payload["reasoning"].(map[string]any); ok {
+				effort = reasoning["effort"]
+			}
+			if payload["model"] != selected.ModelID || effort != "max" || payload["stream"] != true {
+				t.Fatalf("inherited upstream selection = %v", payload)
+			}
+		})
+	}
+	after, err := models.ResolvedAgentProfile("agent-inherited")
+	if err != nil || !reflect.DeepEqual(before, after) {
+		t.Fatal("bridge changed Profile defaults", err)
 	}
 }
