@@ -37,7 +37,7 @@ Content-Type: application/json
 只修改 relay 字段，不创建 external 记录，也不覆盖名称、public 或 metadata。
 如果平台提供 `OPENCSG_SANDBOX_TYPE=csgclaw-workspace`，使用该类型的按 content ID 更新接口。
 Relay 最初以 private 注册。平台回写接受 HTTP 200 的空或 null 结果，返回实例时会校验实例身份。
-有 public 时按该值同步可见性，缺少该字段时恢复已有发布上次确认的可见性，新发布保持 private。
+发布端根据 StarHub 实例列表的 `public` 字段设置 Relay 可见性，并在运行期间检查变更。
 目标保存在发布状态中，重启后继续使用。显式下架后再手动发布同一 Agent 仍回写原 instance。
 
 ## 转发与认证
@@ -53,7 +53,8 @@ csgclaw 的 HTTP、SSE 和 `csgrelay.v1` WebSocket 握手携带 Bearer Token、
 
 ## 广场与下架
 
-广场查询带 `public=true&registered=true&kind=runtime`，遍历分页，同时包含 platform
+广场以当前 StarHub 登录身份查询 `registered=true&kind=runtime`。公开页按列表的 `public` 字段筛选，
+「我的」也显示本人已注册的私有 Agent。查询遍历分页，同时包含 platform
 与 external 的 `csgclaw` / `csgclaw-workspace` runtime，并以 `relay.agent_id` 召唤。
 缺失、非法注册及 logical 记录不进入广场。external 的 `is_running=true` 不能表示在线，
 客户端仍查询 relay 状态；仅确认离线或注册不存在（404）时显示离线。

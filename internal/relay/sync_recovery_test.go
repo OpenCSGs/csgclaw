@@ -78,7 +78,12 @@ func TestCommunitySyncRetriesWithoutSocketReconnect(t *testing.T) {
 						w.WriteHeader(503)
 						return
 					}
-					writeTestJSON(w, 200, map[string]any{"data": CommunityInstance{ID: 42, Name: "worker", Type: "csgclaw", Kind: "runtime", Source: origin, Public: true, ContentID: contentID, Relay: &RelayRegistration{AgentID: testRelayID}}})
+					instance := CommunityInstance{ID: 42, Name: "worker", Type: "csgclaw", Kind: "runtime", Source: origin, Public: true, ContentID: contentID, Relay: &RelayRegistration{AgentID: testRelayID}}
+					if r.Method == http.MethodGet {
+						writeTestJSON(w, 200, map[string]any{"data": []CommunityInstance{instance}})
+						return
+					}
+					writeTestJSON(w, 200, map[string]any{"data": instance})
 				case "/api/v1/relay/v1/agents/" + testRelayID + "/connect":
 					conn, err := upgrade.Upgrade(w, r, nil)
 					if err != nil {

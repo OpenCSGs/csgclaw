@@ -51,7 +51,7 @@ export function AgentOverviewPage() {
   const requestedTab = searchParams.get("tab");
   const plazaTab = requestedTab === "plaza";
   const cloudID = searchParams.get("cloud") || "";
-  const plaza = useCloudAgents(controller.sidebarProps?.authStatus?.authenticated);
+  const plaza = useCloudAgents(controller.sidebarProps?.authStatus);
   const selectedCloudAgent = plaza.agents.find((agent) => agent.id === cloudID);
   const templatesTab = requestedTab === "templates" || requestedTab === "market";
   const requestedTemplateID = templatesTab ? searchParams.get("template") || "" : "";

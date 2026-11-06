@@ -155,7 +155,7 @@ func (h HubCommunity) Register(ctx context.Context, relayID string, req PublishR
 		return CommunityInstance{}, fmt.Errorf("invalid relay agent ID")
 	}
 	if target != nil {
-		return h.updatePlatformRegistration(ctx, relayID, req, target)
+		return h.updatePlatformRegistration(ctx, relayID, target)
 	}
 	body := map[string]any{"type": "csgclaw", "kind": "runtime", "source": "external", "name": req.Name, "description": req.Description, "public": req.Visibility == "public", "content_id": relayID, "relay": RelayRegistration{AgentID: relayID}}
 	var result struct {
@@ -174,7 +174,7 @@ func (h HubCommunity) Register(ctx context.Context, relayID string, req PublishR
 	return i, nil
 }
 
-func (h HubCommunity) updatePlatformRegistration(ctx context.Context, relayID string, req PublishRequest, target *CommunityTarget) (CommunityInstance, error) {
+func (h HubCommunity) updatePlatformRegistration(ctx context.Context, relayID string, target *CommunityTarget) (CommunityInstance, error) {
 	if err := target.validate(); err != nil {
 		return CommunityInstance{}, err
 	}
@@ -201,38 +201,45 @@ func (h HubCommunity) updatePlatformRegistration(ctx context.Context, relayID st
 	if len(payload) > maxResponse {
 		return CommunityInstance{}, fmt.Errorf("platform registration response exceeds 8 MiB")
 	}
-	// Some StarHub versions acknowledge the update without returning the instance.
-	fallback := CommunityInstance{Public: req.Visibility == "public"}
+	// A successful writeback may return the instance or just acknowledge the update.
 	payload = bytes.TrimSpace(payload)
-	if len(payload) == 0 || bytes.Equal(payload, []byte("null")) {
-		return fallback, nil
+	if len(payload) > 0 && !bytes.Equal(payload, []byte("null")) {
+		var result struct {
+			Msg  string          `json:"msg"`
+			Code string          `json:"code"`
+			Data json.RawMessage `json:"data"`
+		}
+		if err := json.Unmarshal(payload, &result); err != nil || result.Code != "" {
+			return CommunityInstance{}, fmt.Errorf("invalid platform registration response")
+		}
+		switch {
+		case len(result.Data) == 0:
+			if result.Msg != "OK" {
+				return CommunityInstance{}, fmt.Errorf("invalid platform registration response")
+			}
+		case !bytes.Equal(result.Data, []byte("null")):
+			var instance CommunityInstance
+			if err := json.Unmarshal(result.Data, &instance); err != nil || !matchesPlatformRegistration(instance, relayID, target) {
+				return CommunityInstance{}, fmt.Errorf("community returned an invalid platform instance")
+			}
+		}
 	}
-	var result struct {
-		Data json.RawMessage `json:"data"`
+
+	instances, err := h.list(ctx, c)
+	if err != nil {
+		return CommunityInstance{}, err
 	}
-	if err := json.Unmarshal(payload, &result); err != nil || len(result.Data) == 0 {
-		return CommunityInstance{}, fmt.Errorf("invalid platform registration response")
+	for _, instance := range instances {
+		if matchesPlatformRegistration(instance, relayID, target) {
+			return instance, nil
+		}
 	}
-	if bytes.Equal(result.Data, []byte("null")) {
-		return fallback, nil
-	}
-	var data struct {
-		CommunityInstance
-		Public *bool `json:"public"`
-	}
-	if err := json.Unmarshal(result.Data, &data); err != nil {
-		return CommunityInstance{}, fmt.Errorf("invalid platform registration instance")
-	}
-	instance := data.CommunityInstance
-	if instance.ID <= 0 || instance.Kind != "runtime" || instance.relayID() != relayID ||
-		instance.Source != "platform" || instance.ContentID != target.ContentID || instance.Type != target.Type {
-		return CommunityInstance{}, fmt.Errorf("community returned an invalid platform instance")
-	}
-	instance.Public = fallback.Public
-	if data.Public != nil {
-		instance.Public = *data.Public
-	}
-	return instance, nil
+	return CommunityInstance{}, fmt.Errorf("platform registration not found in community catalog")
+}
+
+func matchesPlatformRegistration(instance CommunityInstance, relayID string, target *CommunityTarget) bool {
+	return instance.ID > 0 && instance.Kind == "runtime" && instance.relayID() == relayID &&
+		instance.Source == "platform" && instance.ContentID == target.ContentID && instance.Type == target.Type
 }
 
 func (h HubCommunity) Delete(ctx context.Context, id int64) error {
@@ -282,17 +289,26 @@ func (h HubCommunity) DeleteExternalRegistration(ctx context.Context, relayID st
 }
 
 func (h HubCommunity) List(ctx context.Context) ([]CommunityInstance, error) {
+	c, err := h.client()
+	if err != nil {
+		return nil, err
+	}
+	return h.list(ctx, c)
+}
+
+// StarHub returns public instances and private instances owned by this login.
+func (h HubCommunity) list(ctx context.Context, c *Client) ([]CommunityInstance, error) {
 	items := []CommunityInstance{}
 	for page := 1; ; page++ {
 		var result struct {
 			Data  []CommunityInstance `json:"data"`
 			Total int                 `json:"total"`
 		}
-		if err := h.request(ctx, http.MethodGet, fmt.Sprintf("?public=true&registered=true&kind=runtime&per=100&page=%d", page), nil, &result); err != nil {
+		if err := c.Request(ctx, http.MethodGet, fmt.Sprintf("/api/v1/agent/instances?registered=true&kind=runtime&per=100&page=%d", page), "", nil, &result); err != nil {
 			return nil, err
 		}
 		for _, item := range result.Data {
-			if (item.Type == "csgclaw" || item.Type == "csgclaw-workspace") && item.Kind == "runtime" && item.Public && relayAgentIDPattern.MatchString(item.relayID()) {
+			if (item.Type == "csgclaw" || item.Type == "csgclaw-workspace") && item.Kind == "runtime" && relayAgentIDPattern.MatchString(item.relayID()) {
 				items = append(items, item)
 			}
 		}

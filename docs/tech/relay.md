@@ -33,9 +33,9 @@ it against the local agent, and patches only `relay.agent_id` using
 `OPENCSG_SANDBOX_TYPE=csgclaw-workspace` selects that supported update type.
 It never creates an external row for the platform worker. Registration starts
 private. The platform writeback accepts HTTP 200 with an empty or null result
-and validates the identity of any returned instance. A returned `public` value
-sets Relay visibility. If omitted, Relay restores the last confirmed visibility
-for an existing registration and keeps a new registration private.
+and validates the identity of any returned instance. The worker reads `public`
+from the StarHub instance list to set Relay visibility and checks for changes
+while it runs.
 Template-free sandboxes are outside this image's agent bootstrap workflow.
 
 `ResolveRelayProxy` uses `{login-site}/api/v1/relay`. OpenCSG authenticates the
@@ -189,7 +189,9 @@ See the [Chinese walkthrough](relay.zh.md) for detailed examples.
 ## Community plaza discovery
 
 `GET /api/v1/relay/agents` queries the community instance API with
-`public=true&registered=true&kind=runtime`, follows pagination, and includes both
+`registered=true&kind=runtime` under the current StarHub login. The public tab
+uses the returned `public` flag, and the Mine tab also shows the caller's
+registered private agents. The query follows pagination and includes both
 `platform` and `external` sources. It accepts registered `csgclaw` and
 `csgclaw-workspace` runtimes and skips missing/invalid `relay.agent_id` values.
 Directory metadata shows the community agent name as its source and maps instance

@@ -69,7 +69,7 @@ function StartTaskForm({
   initialConfiguration?: TaskConfiguration;
 }) {
   const controller = useWorkspaceControllerContext();
-  const cloud = useCloudAgents();
+  const cloud = useCloudAgents(controller.sidebarProps?.authStatus);
   const { openSettings } = useWorkspaceDialogs();
   const [configuration, setConfiguration] = useState<TaskConfiguration>(initialConfiguration || {});
   const [target, setTarget] = useState(initialTarget);
