@@ -131,7 +131,7 @@ function Page({
   );
 }
 
-function TeamNavigationContents() {
+function TeamNavigationContents({ remountOnNavigation = false }: { remountOnNavigation?: boolean }) {
   const location = useLocation();
   const navigate = useNavigate();
   const activePane = paneFromLocation(location.pathname);
@@ -161,7 +161,7 @@ function TeamNavigationContents() {
   } as unknown as WorkspaceController;
   return (
     <WorkspaceControllerProvider controller={controller}>
-      <AgentOverviewPage />
+      <AgentOverviewPage key={remountOnNavigation ? `${location.pathname}${location.search}` : undefined} />
       <button onClick={() => navigate("/teams/team-1")}>Go to referenced team</button>
       <NavigationState />
     </WorkspaceControllerProvider>
@@ -250,6 +250,41 @@ describe("agent overview team navigation", () => {
     expect(await screen.findByRole("heading", { name: "回归团队 1", level: 1 })).toBeVisible();
     expect(screen.getByRole("button", { name: "团队 2" })).toHaveAttribute("aria-pressed", "true");
   });
+
+  it.each([
+    { route: "/agents/agent-worker", filter: "智能体 1", query: "测试智能体" },
+    { route: "/agents?cloud=agt_demo_contract_reviewer", filter: "云端 1", query: "合同" },
+    { route: "/agents/agent-worker", filter: "全部 4", query: "测试智能体" },
+    { route: "/agents/agent-worker", filter: "智能体 1", query: "测试智能体", remount: true },
+  ])(
+    "restores the $filter filter and search per history entry on Back and Forward",
+    async ({ route, filter, query, remount }) => {
+      vi.mocked(fetchRelayCatalog).mockResolvedValue([...cloudAgentFixture]);
+      localStorage.setItem(CLOUD_AGENTS_STORAGE_KEY, JSON.stringify(cloudAgentFixture));
+      render(
+        <MemoryRouter initialEntries={[route]}>
+          <TeamNavigationContents remountOnNavigation={remount} />
+        </MemoryRouter>,
+      );
+      const user = userEvent.setup();
+      await user.click(await screen.findByRole("button", { name: filter }));
+      await user.type(screen.getByRole("textbox", { name: "搜索智能体和团队" }), query);
+      await user.click(screen.getByRole("button", { name: "Go to referenced team" }));
+      await user.click(screen.getByRole("button", { name: "团队 2" }));
+      await user.clear(screen.getByRole("textbox", { name: "搜索智能体和团队" }));
+      await user.type(screen.getByRole("textbox", { name: "搜索智能体和团队" }), "回归团队 1");
+
+      await user.click(screen.getByRole("button", { name: "Back" }));
+      expect(screen.getByLabelText("Current URL")).toHaveTextContent(route);
+      expect(screen.getByRole("button", { name: filter })).toHaveAttribute("aria-pressed", "true");
+      expect(screen.getByRole("textbox", { name: "搜索智能体和团队" })).toHaveValue(query);
+
+      await user.click(screen.getByRole("button", { name: "Forward" }));
+      expect(screen.getByLabelText("Current URL")).toHaveTextContent("/teams/team-1");
+      expect(screen.getByRole("button", { name: "团队 2" })).toHaveAttribute("aria-pressed", "true");
+      expect(screen.getByRole("textbox", { name: "搜索智能体和团队" })).toHaveValue("回归团队 1");
+    },
+  );
 });
 
 describe("agent overview guidance and template loading", () => {
@@ -596,6 +631,18 @@ describe("cloud agent plaza", () => {
     vi.mocked(useWorkspaceHubTemplatesQuery).mockReturnValue(queryState());
   });
   afterEach(() => localStorage.removeItem(CLOUD_AGENTS_STORAGE_KEY));
+
+  it("includes the complete cloud description in the profile body", async () => {
+    const description = "第一段：" + "完整的云端智能体说明。".repeat(15) + "\n第二段：保留换行和结尾。";
+    const agent = { ...cloudAgentFixture[0], description };
+    vi.mocked(fetchRelayCatalog).mockResolvedValue([agent]);
+    localStorage.setItem(CLOUD_AGENTS_STORAGE_KEY, JSON.stringify([agent]));
+    render(<Page route={`/agents?cloud=${agent.id}`} />);
+    const body = await screen.findByRole("region", { name: "说明" });
+    expect(body.querySelector("p")?.textContent).toBe(description);
+    expect(within(body).getByRole("heading", { name: "说明" })).toBeVisible();
+    expect(body.closest(".agent-profile-scroll-region")).toBeInTheDocument();
+  });
 
   it("switches from empty My scope to Public and adds an agent without leaving the plaza", async () => {
     const user = userEvent.setup();

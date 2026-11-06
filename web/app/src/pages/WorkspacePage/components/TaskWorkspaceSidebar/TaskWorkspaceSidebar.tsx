@@ -160,6 +160,7 @@ export function TaskWorkspaceSidebar(props: WorkspaceSidebarProps & { entry: Tas
       {!isSidebarCollapsed ? (
         <div className={styles.history}>
           <TaskConversationList
+            authStatus={props.authStatus}
             compact
             directories={directories}
             entry={entry}

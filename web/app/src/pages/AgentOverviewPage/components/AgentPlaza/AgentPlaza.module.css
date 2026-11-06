@@ -161,6 +161,17 @@
   padding-top: 14px;
   margin-top: auto;
 }
+@media (hover: hover) and (pointer: fine) {
+  .card footer {
+    opacity: 0;
+    pointer-events: none;
+  }
+  .card:hover footer,
+  .card:focus-within footer {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
 @media (max-width: 600px) {
   .page {
     padding: 14px;
@@ -196,6 +207,23 @@
   font-size: 13px;
   line-height: 1.7;
   margin: 0;
+}
+.profileDescription {
+  min-width: 0;
+}
+.profileDescription h3 {
+  margin: 0 0 var(--space-2);
+  color: var(--text);
+  font-size: var(--text-sm-size);
+  font-weight: var(--font-weight-semibold);
+}
+.profileDescription p {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-sm-size);
+  line-height: 1.7;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .search {

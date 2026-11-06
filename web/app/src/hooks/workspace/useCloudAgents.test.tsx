@@ -27,6 +27,14 @@ beforeEach(() => {
   vi.resetAllMocks();
   vi.mocked(fetchRelayCatalog).mockResolvedValue([agent]);
 });
+it("does not request a catalog until a consumer needs cloud agents", async () => {
+  const { result, rerender } = renderHook(({ enabled }) => useCloudAgents(undefined, enabled), {
+    initialProps: { enabled: false },
+  });
+  expect(fetchRelayCatalog).not.toHaveBeenCalled();
+  rerender({ enabled: true });
+  await waitFor(() => expect(result.current.catalog).toEqual([agent]));
+});
 it("discards the prototype mock cache instead of migrating it", async () => {
   localStorage.setItem("csgclaw.agents.cloud.v2", JSON.stringify([{ ...agent, name: "resume-scorer" }]));
   const { result } = renderHook(() => useCloudAgents());

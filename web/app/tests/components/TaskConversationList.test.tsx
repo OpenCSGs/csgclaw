@@ -3,12 +3,97 @@ import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { TaskConversationList } from "@/components/business/TaskConversationList";
 import { fetchTaskConversations } from "@/api/taskConversations";
+import { fetchRelayCatalog } from "@/api/relay";
+import { CLOUD_AGENT_AVATARS } from "@/shared/avatar";
+import { cloudAgentFixture } from "../helpers/cloudAgentFixture";
 import { useArchiveConfirmation } from "@/hooks/workspace/useArchiveConfirmation";
 import type { TaskEntryController } from "@/hooks/workspace/useTaskEntry";
 import { createQueryWrapper } from "../helpers/queryClient";
 
 vi.mock("@/api/taskConversations", () => ({ fetchTaskConversations: vi.fn() }));
+vi.mock("@/api/relay", () => ({ fetchRelayCatalog: vi.fn() }));
 const room = { id: "r1", title: "Review", members: ["user-admin", "manager"], is_direct: true, messages: [] };
+
+describe("TaskConversationList cloud avatars", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    vi.mocked(fetchRelayCatalog).mockReset().mockResolvedValue([]);
+  });
+
+  function renderCloudTask(archived = false, avatar = "1") {
+    const reference = cloudAgentFixture[0];
+    vi.mocked(fetchTaskConversations).mockResolvedValue({
+      rooms: [
+        {
+          ...room,
+          title: "Cloud task",
+          members: ["user-admin", "cloud-user"],
+          cloud_agent: { agent_id: reference.id, connection_id: reference.connectionID, user_id: "cloud-user" },
+        },
+      ],
+      total: 1,
+      has_more: false,
+    });
+    render(
+      <TaskConversationList
+        compact={!archived}
+        archived={archived}
+        entry={{ isWorking: () => false, busyID: "" } as unknown as TaskEntryController}
+        currentUserID="user-admin"
+        usersById={new Map([["cloud-user", { id: "cloud-user", name: "123", avatar, role: "cloud" }]])}
+        t={(key) => key}
+        onSelect={vi.fn()}
+      />,
+      { wrapper: createQueryWrapper().wrapper },
+    );
+  }
+
+  it.each([
+    ["openclaw", "openclaw", false],
+    ["langflow", "langflow", false],
+    ["csgclaw", "csgclaw", false],
+    ["code", "code", false],
+    ["csgclaw-workspace", "csgclaw", true],
+  ] as const)("matches %s to the %s icon in the task list (archived=%s)", async (type, icon, archived) => {
+    vi.mocked(fetchRelayCatalog).mockResolvedValue([{ ...cloudAgentFixture[0], type }]);
+    renderCloudTask(archived);
+    const task = await screen.findByRole("button", { name: "Cloud task" });
+    await waitFor(() => expect(task.querySelector("img")).toHaveAttribute("src", CLOUD_AGENT_AVATARS[icon]));
+    expect(task.querySelector(".agent-avatar-fallback")).not.toBeInTheDocument();
+  });
+
+  it("uses a cloud icon for older tasks with only an initial, even when catalog loading fails", async () => {
+    vi.mocked(fetchRelayCatalog).mockRejectedValue(new Error("Unavailable"));
+    renderCloudTask();
+    const task = await screen.findByRole("button", { name: "Cloud task" });
+    expect(task.querySelector("img")).toHaveAttribute("src", CLOUD_AGENT_AVATARS.csgclaw);
+  });
+
+  it("does not use an icon from a different account connection", async () => {
+    vi.mocked(fetchRelayCatalog).mockResolvedValue([
+      { ...cloudAgentFixture[0], type: "code", connectionID: "other-login" },
+    ]);
+    renderCloudTask();
+    const task = await screen.findByRole("button", { name: "Cloud task" });
+    await waitFor(() => expect(fetchRelayCatalog).toHaveBeenCalled());
+    await act(async () => {
+      await vi.mocked(fetchRelayCatalog).mock.results[0].value;
+    });
+    expect(task.querySelector("img")).toHaveAttribute("src", CLOUD_AGENT_AVATARS.csgclaw);
+  });
+
+  it("keeps an existing image when an old task is absent from the catalog", async () => {
+    renderCloudTask(true, "avatar/pic-3.png");
+    const task = await screen.findByRole("button", { name: "Cloud task" });
+    expect(task.querySelector("img")).toHaveAttribute("src", "avatar/pic-3.png");
+  });
+
+  it("does not load the cloud catalog for a list containing only local tasks", async () => {
+    setup();
+    await screen.findByText("Review");
+    expect(fetchRelayCatalog).not.toHaveBeenCalled();
+  });
+});
 function Preference() {
   const [skip] = useArchiveConfirmation();
   return <output data-testid="preference">{String(skip)}</output>;

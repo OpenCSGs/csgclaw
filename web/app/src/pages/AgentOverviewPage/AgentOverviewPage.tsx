@@ -20,7 +20,6 @@ import {
   agentTemplatesSearch,
   agentPlazaSearch,
   cloudAgentSearch,
-  paneFromLocation,
   pathForNewCloudTask,
   pathForPane,
   WorkspacePaneTypes,
@@ -30,6 +29,7 @@ import { defaultAgentAvatar } from "@/shared/avatarOptions";
 import styles from "./AgentOverviewPage.module.css";
 import { useAgentViewBindings } from "@/hooks/workspace/useAgentViewBindings";
 import { AgentOverviewGuide } from "./components";
+import { useAgentOverviewListState } from "./useAgentOverviewListState";
 
 const AgentView = lazy(() =>
   import("@/components/business/AgentDetails").then((module) => ({ default: module.AgentView })),
@@ -57,22 +57,8 @@ export function AgentOverviewPage() {
   const selectedCloudAgent = plaza.agents.find((agent) => agent.id === cloudID);
   const templatesTab = requestedTab === "templates" || requestedTab === "market";
   const requestedTemplateID = templatesTab ? searchParams.get("template") || "" : "";
-  const [{ query, filter }, setListState] = useState(() => {
-    const pane = paneFromLocation(location.pathname);
-    return {
-      query: "",
-      filter: !cloudID && pane.id ? (pane.type === "team" ? "teams" : "agents") : "all",
-    };
-  });
-  const activeType = controller.ready ? controller.activePane.type : "";
+  const { query, filter, setListState } = useAgentOverviewListState();
   const activeID = controller.ready ? controller.activePane.id : "";
-  useEffect(() => {
-    const selectedFilter = cloudID ? "cloud" : activeID ? (activeType === "team" ? "teams" : "agents") : "";
-    if (!selectedFilter || (activeType !== "agent" && activeType !== "team")) return;
-    setListState((state) =>
-      state.filter === "all" || state.filter === selectedFilter ? state : { filter: selectedFilter, query: "" },
-    );
-  }, [activeID, activeType, cloudID]);
   const templateFilter = searchParams.get("filter") === "personal" ? "personal" : "official";
   const [listOpen, setListOpen] = useState(false);
   const listToggleRef = useRef<HTMLButtonElement>(null);
@@ -107,9 +93,6 @@ export function AgentOverviewPage() {
     const template = templates.find((item) => item.id === requestedTemplateID);
     if (template) onSelectTemplateInPlace?.(template);
   }, [requestedTemplateID, currentTemplateID, currentResourceType, templates, onSelectTemplateInPlace]);
-  useEffect(() => {
-    setListState((state) => ({ ...state, query: "" }));
-  }, [requestedTemplateID]);
   useEffect(() => {
     selectedTemplateRef.current?.scrollIntoView({ block: "nearest" });
   }, [requestedTemplateID, templates, query]);
@@ -159,11 +142,13 @@ export function AgentOverviewPage() {
       params.delete("template");
     } else params.set("tab", value === "plaza" ? "plaza" : "templates");
     params.delete("cloud");
-    navigate({
-      pathname: value === "plaza" ? pathForPane({ type: WorkspacePaneTypes.agent }) : location.pathname,
-      search: params.toString(),
-    });
-    setListState({ query: "", filter: "all" });
+    navigate(
+      {
+        pathname: value === "plaza" ? pathForPane({ type: WorkspacePaneTypes.agent }) : location.pathname,
+        search: params.toString(),
+      },
+      { state: { ...location.state, agentOverviewList: { query: "", filter: "all" } } },
+    );
   }
   const chooseAgent = (item: AgentLike) => {
     closeList();

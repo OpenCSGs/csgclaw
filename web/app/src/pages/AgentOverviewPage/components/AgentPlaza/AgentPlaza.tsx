@@ -224,6 +224,12 @@ export function CloudAgentDetail({
       </div>
       <div className="agent-profile-scroll-region">
         <div className="profile-editor-shell agent-page-editor">
+          {agent.description ? (
+            <section className={styles.profileDescription} aria-labelledby="cloud-agent-description-heading">
+              <h3 id="cloud-agent-description-heading">{t("agentDescription")}</h3>
+              <p>{agent.description}</p>
+            </section>
+          ) : null}
           <p className={styles.cloudHint}>{t("agentPlazaCloudHint")}</p>
           <AgentPlazaMetadata agent={agent} t={t} />
         </div>

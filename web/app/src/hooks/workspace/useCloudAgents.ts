@@ -7,7 +7,7 @@ import { RELAY_PUBLICATIONS_CHANGED_EVENT } from "@/shared/constants/relay";
 
 const MEMBERSHIP_CHANGED_EVENT = "csgclaw-cloud-membership-changed";
 
-export function useCloudAgents(auth?: AuthStatus) {
+export function useCloudAgents(auth?: AuthStatus, enabled = true) {
   const login = auth?.authenticated
     ? JSON.stringify([auth.base_url, auth.user_uuid || auth.user_id, auth.logged_in_at])
     : "";
@@ -49,6 +49,7 @@ export function useCloudAgents(auth?: AuthStatus) {
     };
   }, []);
   useEffect(() => {
+    if (!enabled) return;
     let active = true;
     let request: AbortController | null = null;
     const load = async () => {
@@ -82,7 +83,7 @@ export function useCloudAgents(auth?: AuthStatus) {
       window.removeEventListener("focus", refresh);
       window.removeEventListener(RELAY_PUBLICATIONS_CHANGED_EVENT, refresh);
     };
-  }, [login, refreshVersion]);
+  }, [login, refreshVersion, enabled]);
   function save(update: (agents: CloudAgent[]) => CloudAgent[]) {
     try {
       const agents = update(parseCloudAgents(localStorage.getItem(CLOUD_AGENTS_STORAGE_KEY)));
