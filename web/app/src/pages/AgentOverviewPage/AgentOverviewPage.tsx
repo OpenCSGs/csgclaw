@@ -1,5 +1,5 @@
 import { resolveTeamAvatarMembers, teamMemberIDs, teamStatusLabel } from "@/models/tasks";
-import { Fragment, lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, lazy, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { ExternalLink, List, LoaderCircle, LogIn, Plus, Search } from "lucide-react";
 import { apiErrorCode } from "@/api/client";
@@ -7,7 +7,8 @@ import { Button, LinkButton, PanelHeader, EmptyState, TextInput } from "@/compon
 import { AgentAvatarContent, AgentAvatarImage } from "@/components/business/AgentAvatar";
 import { RoomAvatar } from "@/components/business/RoomAvatar";
 import { useWorkspaceControllerContext } from "@/hooks/workspace";
-import { useWorkspaceHubTemplatesQuery } from "@/hooks/workspace/workspaceQueries";
+import { useWorkspaceHubTemplateQuery, useWorkspaceHubTemplatesQuery } from "@/hooks/workspace/workspaceQueries";
+import type { WorkspaceControllerReady } from "@/hooks/workspace/workspaceControllerContract";
 import { isVisibleInHubTemplateList } from "@/models/hubWorkspace";
 import { agenticHubTemplatesURL } from "@/models/agenticHub";
 import { templateAvatar, templateInGroup } from "@/models/templateGroups";
@@ -41,6 +42,43 @@ const ConversationView = lazy(() =>
 const HubDetailPane = lazy(() =>
   import("@/components/business/HubDetailPane").then((module) => ({ default: module.HubDetailPane })),
 );
+
+function CloudSourceTemplate({
+  repoPath,
+  hubViewProps,
+  profileIntro,
+  instanceModel,
+}: {
+  repoPath: string;
+  hubViewProps: WorkspaceControllerReady["hubViewProps"];
+  profileIntro: ReactNode;
+  instanceModel?: string;
+}) {
+  const query = useWorkspaceHubTemplateQuery(repoPath);
+  const template = query.data;
+  const { onSelectTemplateInPlace, t } = hubViewProps;
+  useEffect(() => {
+    onSelectTemplateInPlace({ id: repoPath });
+  }, [onSelectTemplateInPlace, repoPath]);
+  if (query.isError || (template && (template.id !== repoPath || template.source?.kind !== "remote"))) {
+    return <EmptyState title={t("agentPlazaTemplateFailed")} />;
+  }
+  const selected = hubViewProps.hub.detailPaneProps;
+  if (!template || selected.selectedTemplateId !== repoPath || selected.selectedTemplate?.id !== repoPath) {
+    return <EmptyState title={t("agentPlazaTemplateLoading")} />;
+  }
+  return (
+    <Suspense fallback={null}>
+      <HubDetailPane
+        {...hubViewProps}
+        inlineTemplateDetail
+        hideInlineTemplateHeader
+        inlineTemplateProfileIntro={profileIntro}
+        inlineTemplateInstanceModel={instanceModel}
+      />
+    </Suspense>
+  );
+}
 
 export function AgentOverviewPage() {
   const controller = useWorkspaceControllerContext();
@@ -509,6 +547,14 @@ export function AgentOverviewPage() {
                 key={`${selectedCloudAgent.connectionID}:${selectedCloudAgent.id}`}
                 agent={selectedCloudAgent}
                 t={t}
+                renderTemplate={(repoPath, profileIntro) => (
+                  <CloudSourceTemplate
+                    repoPath={repoPath}
+                    hubViewProps={controller.hubViewProps}
+                    profileIntro={profileIntro}
+                    instanceModel={selectedCloudAgent.modelID}
+                  />
+                )}
                 onNewTask={() => navigate(pathForNewCloudTask(selectedCloudAgent.id))}
                 onRemove={() => {
                   if (plaza.remove(selectedCloudAgent.id))

@@ -136,7 +136,7 @@ it("keeps the saved guide out of composer controls and does not carry a shared w
   expect(onNewTask).toHaveBeenCalledExactlyOnceWith();
 });
 
-it("shows pending cloud work and opens a new task with the same remote target", () => {
+it("disables new cloud tasks while work is pending and preserves the remote target", () => {
   const cloudRoom: IMConversation = {
     ...conversation,
     created_by: "u-admin",
@@ -154,7 +154,7 @@ it("shows pending cloud work and opens a new task with the same remote target", 
       <Location />
     </MemoryRouter>,
   );
-  expect(screen.getByRole("status")).toHaveTextContent("cloudChatWaiting");
+  expect(screen.queryByRole("status")).not.toBeInTheDocument();
   expect(screen.getByRole("button", { name: "taskEntryNew" })).toBeDisabled();
   const completed = {
     ...cloudRoom,

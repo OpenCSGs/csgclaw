@@ -13,11 +13,14 @@ import (
 // CatalogEntry is a browser-safe discovery record. ConnectionID is an opaque
 // server/login reference; it never contains credentials.
 type CatalogEntry struct {
-	RelayURL     string `json:"relay_url"`
-	ConnectionID string `json:"connection_id"`
-	Agent        Agent  `json:"agent"`
-	Avatar       string `json:"avatar,omitempty"`
-	Source       string `json:"source,omitempty"`
+	RelayURL         string `json:"relay_url"`
+	ConnectionID     string `json:"connection_id"`
+	Agent            Agent  `json:"agent"`
+	Avatar           string `json:"avatar,omitempty"`
+	Source           string `json:"source,omitempty"`
+	CreatorName      string `json:"creator_name,omitempty"`
+	ModelID          string `json:"model_id,omitempty"`
+	TemplateRepoPath string `json:"template_repo_path,omitempty"`
 }
 
 // Discover reads community instances and resolves their subscription IDs through
@@ -108,7 +111,14 @@ func (m *Manager) discover(ctx context.Context, onlyID string) ([]CatalogEntry, 
 					a.Visibility = "public"
 				}
 				a.Name, a.Description = item.Name, item.Description
-				entries[index] = CatalogEntry{RelayURL: c.base.String(), ConnectionID: connection, Agent: a, Avatar: item.Metadata.Avatar, Source: item.Source}
+				entry := CatalogEntry{
+					RelayURL: c.base.String(), ConnectionID: connection, Agent: a, Avatar: item.Metadata.Avatar,
+					Source: item.Source, CreatorName: item.CreatorName, ModelID: item.Metadata.ProvisionRequest.LLM.Model,
+				}
+				if item.Source == "platform" && item.TemplateID > 0 {
+					entry.TemplateRepoPath = validatedTemplateRepoPath(item.Metadata.TemplateMetadata.RepoPath)
+				}
+				entries[index] = entry
 			}
 		}()
 	}

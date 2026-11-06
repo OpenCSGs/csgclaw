@@ -433,6 +433,8 @@ export function useConversationController({
   autoSelectFallbackConversation = true,
   authBusyProvider,
   authStatuses,
+  cloudCatalog,
+  addedCloudAgentIDs,
   data,
   locale,
   managerProfile,
@@ -579,7 +581,25 @@ export function useConversationController({
     [data, activeConversationId],
   );
   const cloudTask = activeConversation?.cloud_agent;
-  const cloudConsent = useCloudSendConsent(activeConversationId);
+  const cloudAgentOnline =
+    cloudTask && cloudCatalog
+      ? cloudCatalog.some(
+          (agent) =>
+            agent.id === cloudTask.agent_id &&
+            agent.connectionID === cloudTask.connection_id &&
+            agent.status === "online",
+        )
+      : null;
+  const cloudDisabledReason = cloudTask
+    ? cloudAgentOnline === null
+      ? t("cloudChatStatusUnavailable")
+      : cloudAgentOnline
+        ? addedCloudAgentIDs?.includes(cloudTask.agent_id)
+          ? ""
+          : t("cloudChatRemoved")
+        : t("cloudChatOffline")
+    : "";
+  const cloudConsent = useCloudSendConsent(cloudDisabledReason ? "" : activeConversationId);
   const visibleMessages = useMemo(() => {
     if (!activeConversation) {
       return [];
@@ -1145,6 +1165,7 @@ export function useConversationController({
   }, [activeConversationId, showInvite]);
 
   async function sendMessage(confirmed = false): Promise<void> {
+    if (cloudDisabledReason) return;
     const eligibilityError = cloudTask
       ? ""
       : recipientConfigurationError(draftSegments) || recipientAuthenticationError(draftSegments);
@@ -1957,6 +1978,7 @@ export function useConversationController({
     threadCount,
     threadGroups,
     usersById,
+    cloudAgentOnline,
     visibleMessages,
     clearComposerError,
     conversationViewProps: {
@@ -2027,7 +2049,7 @@ export function useConversationController({
           ) ??
         recipientAgentsForSegments(draftSegments).map(recipientProfile)[0] ??
         null,
-      composerDisabledReason: cloudTask ? "" : composerConfigurationError(draftSegments),
+      composerDisabledReason: cloudTask ? cloudDisabledReason : composerConfigurationError(draftSegments),
       threadComposerDisabledReason: composerConfigurationError(activeThreadDraftSegments),
       authStatuses,
       authBusyProvider,
@@ -2070,7 +2092,7 @@ export function useConversationController({
       onSendMessage: () => sendMessage(),
       onRetrySend: () => sendMessage(),
       onStopSend: stopSending,
-      composerError,
+      composerError: (draftSegments.length ? cloudDisabledReason : "") || composerError,
       messageActionBusy,
       messageActionFeedback,
       onMessageAction,

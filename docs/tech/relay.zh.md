@@ -49,6 +49,10 @@ csgclaw 的 HTTP、SSE 和 `csgrelay.v1` WebSocket 握手携带 Bearer Token、
 
 同一 csgclaw 服务的所有 Agent 共用持久化 client ID；按本地 API 地址和端口隔离，
 重启保持不变。`~/.csgclaw/relay/<地址 sha256>/` 保存权限为 0600 的身份和发布状态。
+对于 `csgclaw` 和 `csgclaw-workspace` 平台沙箱，如果发布清单和身份文件均未保存
+client ID，则根据沙箱类型和 `CSGCLAW_NAME` 派生 UUID v5。同一实例即使没有 PVC，
+也能在重建 Pod 后生成同一个 ID。已有身份优先沿用。如果原随机身份的两个文件均已丢失，
+切换到派生身份时 ID 可能变化一次。
 托管凭据没有本机登录 UUID 时，仍以注入凭据的指纹绑定本地状态，更换凭据前需先下架旧发布。
 
 ## 广场与下架

@@ -11,6 +11,21 @@
   background: var(--bg);
 }
 
+.hub-detail-pane.hub-embedded-template,
+.hub-embedded-template .hub-inspector-panel {
+  width: 100%;
+  height: auto;
+  max-height: none;
+  overflow: visible;
+}
+.hub-detail-pane.hub-embedded-template {
+  width: var(--agent-detail-content-width, 100%);
+}
+.hub-embedded-template .hub-inspector-panel {
+  --hub-inspector-padding-top: 0px;
+  padding: 0;
+}
+
 .hub-loading-state {
   flex: 1 1 auto;
   min-height: 240px;

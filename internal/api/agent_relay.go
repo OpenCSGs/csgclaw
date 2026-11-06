@@ -151,6 +151,25 @@ func (h *Handler) handleRelayCatalog(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"data": entries})
 }
 
+func (h *Handler) handleRelayAgentTemplate(w http.ResponseWriter, r *http.Request) {
+	if h.relayManager == nil {
+		writeAgentSessionError(w, 503, "relay_unavailable", "relay service is unavailable", nil)
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+	profile, err := h.relayManager.AgentTemplate(ctx, pathValue(r, "id"), r.URL.Query().Get("connection_id"))
+	if errors.Is(err, relay.ErrChatReference) {
+		writeAgentSessionError(w, 404, "relay_chat_reference_unavailable", err.Error(), nil)
+		return
+	}
+	if err != nil {
+		writeAgentSessionError(w, 502, "relay_catalog_failed", "unable to load the source template", nil)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": profile})
+}
+
 func (h *Handler) queueAgentPublication(id string) error {
 	if h.relayManager == nil {
 		return fmt.Errorf("relay service is unavailable")

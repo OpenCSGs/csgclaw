@@ -200,7 +200,7 @@ func TestCommunityDiscoveryAndInvocationOfRemotePublication(t *testing.T) {
 			items := []map[string]any{
 				{"id": 7, "type": "csgclaw", "public": true, "name": "Remote", "kind": "runtime", "source": "external", "relay": RelayRegistration{AgentID: testRelayID}},
 				{"id": 8, "type": "csgclaw", "public": true, "name": "Pending", "kind": "runtime"},
-				{"id": 9, "type": "csgclaw-workspace", "public": true, "name": "Platform", "kind": "runtime", "source": "platform", "relay": RelayRegistration{AgentID: platformRelayID}, "is_running": true},
+				{"id": 9, "type": "csgclaw-workspace", "public": true, "name": "Platform", "template_id": 133, "creator_name": "Alice", "metadata": map[string]any{"template_metadata": map[string]any{"repo_path": "alice/template"}, "provision_request": map[string]any{"llm": map[string]any{"model": "instance-model"}}}, "kind": "runtime", "source": "platform", "relay": RelayRegistration{AgentID: platformRelayID}, "is_running": true},
 				{"id": 10, "type": "csgclaw", "public": true, "kind": "logical", "relay": RelayRegistration{AgentID: testRelayID}},
 				{"id": 11, "type": "csgclaw", "public": true, "kind": "runtime", "relay": RelayRegistration{AgentID: "invalid"}},
 			}
@@ -209,6 +209,18 @@ func TestCommunityDiscoveryAndInvocationOfRemotePublication(t *testing.T) {
 				items = items[1:]
 			}
 			writeTestJSON(w, 200, map[string]any{"data": items, "total": len(items)})
+		case "/api/v1/agent/templates/133":
+			if !owner {
+				w.WriteHeader(http.StatusForbidden)
+				return
+			}
+			writeTestJSON(w, 200, map[string]any{"data": map[string]any{
+				"nickname": "Template", "content": "private source",
+				"metadata": map[string]any{"repo_path": "alice/template", "agent_file": map[string]any{
+					"runtime_kind": "codex", "revision": 2, "tags": []string{"writing"},
+					"model_config": map[string]any{"model_id": "model"},
+				}},
+			}})
 		case "/api/v1/relay/v1/agents/" + testRelayID:
 			writeTestJSON(w, 200, Agent{ID: testRelayID, Name: "Relay internal name", Visibility: "private", Status: "online"})
 		case "/api/v1/relay/v1/agents/" + platformRelayID:
@@ -251,6 +263,22 @@ func TestCommunityDiscoveryAndInvocationOfRemotePublication(t *testing.T) {
 	if entries[0].Source != "external" || entries[1].Source != "platform" || entries[0].Agent.Name != "Remote" {
 		t.Fatal("discovery lost community origin or display name")
 	}
+	profile, err := m.AgentTemplate(context.Background(), platformRelayID, entries[1].ConnectionID)
+	if err != nil || profile == nil || profile.RepoPath != "alice/template" {
+		t.Fatalf("invalid template profile: %+v, %v", profile, err)
+	}
+	if _, err := m.AgentTemplate(context.Background(), platformRelayID, "wrong-connection"); !errors.Is(err, ErrChatReference) {
+		t.Fatalf("expected invalid connection to be rejected, got %v", err)
+	}
+	if entries[1].TemplateRepoPath != "alice/template" {
+		t.Fatalf("discovery lost template repository: %q", entries[1].TemplateRepoPath)
+	}
+	if entries[1].ModelID != "instance-model" {
+		t.Fatalf("discovery lost the configured instance model: %q", entries[1].ModelID)
+	}
+	if entries[1].CreatorName != "Alice" {
+		t.Fatal("discovery lost the creator of the offline agent")
+	}
 	if entries[0].Agent.Visibility != "private" || entries[1].Agent.Visibility != "public" {
 		t.Fatal("catalog visibility differs from StarHub")
 	}
@@ -264,6 +292,9 @@ func TestCommunityDiscoveryAndInvocationOfRemotePublication(t *testing.T) {
 	visible, err := m.Discover(t.Context())
 	if err != nil || len(visible) != 1 || visible[0].Agent.ID != platformRelayID {
 		t.Fatalf("other caller discovery: %v, %v", visible, err)
+	}
+	if profile, err := m.AgentTemplate(t.Context(), platformRelayID, visible[0].ConnectionID); err != nil || profile != nil {
+		t.Fatalf("private template exposed to another caller: %+v, %v", profile, err)
 	}
 	if _, err := m.Chat(t.Context(), testRelayID, visible[0].ConnectionID, "call-private", "hello", ""); !errors.Is(err, ErrChatReference) {
 		t.Fatalf("private agent invocation by another caller: %v", err)

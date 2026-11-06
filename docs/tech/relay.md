@@ -48,6 +48,11 @@ retain their operation key. CSGClaw never asserts a trusted user UUID header.
 
 Each local API address, including its port, has a directory under
 `~/.csgclaw/relay/<address-sha256>/`. A mode-0600 `client-id` survives restarts.
+When both stored identity values are absent, `csgclaw` and
+`csgclaw-workspace` platform sandboxes derive a UUID v5 from their sandbox type
+and `CSGCLAW_NAME`. The same instance can recreate its client ID without a PVC.
+Existing client IDs are retained when the publication manifest or identity file
+is available. A previously random ID can change once if both files are lost.
 The publication manifest stores desired registrations, platform content targets,
 pending writeback and cleanup state, without copying the community login token.
 Restart restores desired connections and pending work. A persisted unpublish
