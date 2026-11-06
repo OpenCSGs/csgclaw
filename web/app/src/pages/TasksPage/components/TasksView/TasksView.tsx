@@ -1145,7 +1145,7 @@ type TaskToolbarButtonProps = {
 
 function TaskToolbarButton({
   label,
-  tooltipContentProps,
+  tooltipContentProps = { side: "bottom", sideOffset: 6 },
   title = label,
   variant = "secondaryGray",
   ...props

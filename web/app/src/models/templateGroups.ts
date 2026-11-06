@@ -1,4 +1,5 @@
 import type { HubTemplate } from "@/models/hubWorkspace";
+import { TEMPLATE_AVATAR } from "@/shared/avatar";
 
 export type TemplateGroup = "all" | "official" | "mine" | "public";
 
@@ -19,6 +20,12 @@ export function isOfficialTemplate(template: HubTemplate): boolean {
     template.source?.kind === "builtin" ||
     (template.source?.kind === "remote" && templateNamespace(template) === "agentichub")
   );
+}
+
+export function templateAvatar(template: HubTemplate): string {
+  return isOfficialTemplate(template) || template.source?.kind === "remote"
+    ? TEMPLATE_AVATAR
+    : template.avatar?.trim() || "";
 }
 
 export function templateInGroup(template: HubTemplate, group: TemplateGroup, username = ""): boolean {

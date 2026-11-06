@@ -357,3 +357,12 @@
 .manageTemplatesLink {
   margin: var(--space-4) 10px;
 }
+
+.cloudTemplatesHeading {
+  margin: var(--space-3) 0 var(--space-2);
+  padding: var(--space-3) 10px 0;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+}
