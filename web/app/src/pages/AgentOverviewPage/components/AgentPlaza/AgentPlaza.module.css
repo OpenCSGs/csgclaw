@@ -75,25 +75,14 @@
   flex-shrink: 0;
   width: 40px;
   height: 40px;
-  border-radius: 0;
+  border-radius: 50%;
+  overflow: hidden;
+  background: var(--primary-soft);
 }
 .avatar img {
   width: 100%;
   height: 100%;
-  object-fit: contain;
-  border-radius: 0;
-}
-.detailAvatar {
-  width: 48px;
-  height: 48px;
-  display: grid;
-  place-items: center;
-}
-.detailAvatar > img {
-  width: 100%;
-  height: 100%;
-  border-radius: 0;
-  object-fit: contain;
+  object-fit: cover;
 }
 .identity {
   flex: 1;

@@ -208,14 +208,6 @@
   height: 100%;
   object-fit: cover;
 }
-.avatar.cloudAvatar {
-  border-radius: 0;
-  overflow: visible;
-}
-.avatar.cloudAvatar :global(.agent-avatar-image) {
-  object-fit: contain;
-  border-radius: 0;
-}
 .detail {
   display: flex;
   flex-direction: column;

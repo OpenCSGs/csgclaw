@@ -251,14 +251,3 @@
   height: 100%;
   object-fit: cover;
 }
-.triggerAvatar.cloudIcon,
-.rowIcon.cloudIcon {
-  border-radius: 0;
-  overflow: visible;
-  background: transparent;
-}
-.triggerAvatar.cloudIcon :global(.agent-avatar-image),
-.rowIcon.cloudIcon :global(.agent-avatar-image) {
-  object-fit: contain;
-  border-radius: 0;
-}
