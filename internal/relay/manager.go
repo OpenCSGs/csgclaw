@@ -448,14 +448,15 @@ func (m *Manager) startLocked(id string, req PublishRequest) {
 						return
 					}
 				}
+				registration := current
 				if target != nil {
-					current.Visibility = "private"
+					registration.Visibility = "private"
 				}
-				p, registerErr := c.Publish(registerCtx, uuid.NewString(), current)
+				p, registerErr := c.Publish(registerCtx, uuid.NewString(), registration)
 				if registerErr != nil || p.Agent.ID != id || m.community == nil {
 					return
 				}
-				updated, instance, syncErr := m.syncCommunity(registerCtx, c, id, current, target)
+				updated, instance, syncErr := m.syncCommunity(registerCtx, c, id, registration, target)
 				if syncErr != nil {
 					return
 				}
@@ -473,6 +474,7 @@ func (m *Manager) startLocked(id string, req PublishRequest) {
 			go func() {
 				defer close(retryDone)
 				backoff := time.Second
+				nextVisibilityCheck := time.Now().Add(15 * time.Second)
 				for {
 					timer := time.NewTimer(backoff)
 					select {
@@ -489,6 +491,10 @@ func (m *Manager) startLocked(id string, req PublishRequest) {
 						backoff = min(backoff*2, 15*time.Second)
 					} else {
 						backoff = time.Second
+						if time.Now().After(nextVisibilityCheck) {
+							m.refreshPlatformVisibility(ctx, c, id)
+							nextVisibilityCheck = time.Now().Add(15 * time.Second)
+						}
 					}
 				}
 			}()
@@ -727,19 +733,57 @@ func (m *Manager) syncCommunity(ctx context.Context, c *Client, id string, req P
 	if err != nil {
 		return req, 0, err
 	}
+	updated, err := syncRelayVisibility(ctx, c, id, req, instance.Public)
+	return updated, instance.ID, err
+}
+
+func (m *Manager) refreshPlatformVisibility(ctx context.Context, c *Client, id string) {
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	req, exists := m.manifest.Agents[id]
+	if ctx.Err() != nil || !exists || m.community == nil || m.manifest.Pending[id] || m.manifest.Removing[req.SourceAgentID] {
+		return
+	}
+	target := m.publicationTargetLocked(req.SourceAgentID)
+	if target == nil {
+		return
+	}
+	instances, err := m.community.List(ctx)
+	if err != nil {
+		return
+	}
+	public := false
+	for _, instance := range instances {
+		if matchesPlatformRegistration(instance, id, target) {
+			public = instance.Public
+			break
+		}
+	}
+	updated, err := syncRelayVisibility(ctx, c, id, req, public)
+	if err == nil && updated.Visibility != req.Visibility {
+		m.manifest.Agents[id] = updated
+		if err := m.saveLocked(); err != nil {
+			m.manifest.Pending[id] = true
+		}
+	}
+}
+
+func syncRelayVisibility(ctx context.Context, c *Client, id string, req PublishRequest, public bool) (PublishRequest, error) {
 	visibility := "private"
-	if instance.Public {
+	if public {
 		visibility = "public"
 	}
 	if req.Visibility != visibility {
 		req.Visibility = visibility
 		p, err := c.Publish(ctx, uuid.NewString(), req)
 		if err != nil {
-			return req, 0, err
+			return req, err
 		}
 		if p.Agent.ID != id {
-			return req, 0, fmt.Errorf("relay identity changed while synchronizing visibility")
+			return req, fmt.Errorf("relay identity changed while synchronizing visibility")
 		}
 	}
-	return req, instance.ID, nil
+	return req, nil
 }

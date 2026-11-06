@@ -22,6 +22,55 @@ import (
 	"csgclaw/internal/relay"
 )
 
+func TestRelayCatalogAuthenticationError(t *testing.T) {
+	tests := []struct {
+		name           string
+		err            error
+		upstreamStatus int
+		status         int
+		code           string
+	}{
+		{name: "missing login", err: relay.ErrSiteLoginRequired, status: http.StatusUnauthorized, code: "relay_login_required"},
+		{name: "upstream rejected stored token", upstreamStatus: http.StatusUnauthorized, status: http.StatusUnauthorized, code: "relay_login_required"},
+		{name: "upstream unavailable", upstreamStatus: http.StatusServiceUnavailable, status: http.StatusBadGateway, code: "relay_catalog_failed"},
+		{name: "credential store failure", err: fmt.Errorf("credential store unavailable"), status: http.StatusBadGateway, code: "relay_catalog_failed"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			credentials := func() (relay.SiteCredentials, error) {
+				return relay.SiteCredentials{}, tc.err
+			}
+			if tc.upstreamStatus != 0 {
+				upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					if r.URL.Path != "/api/v1/agent/instances" || r.Header.Get("Authorization") != "Bearer test-token" {
+						t.Error("expected an authenticated community catalog request")
+					}
+					w.WriteHeader(tc.upstreamStatus)
+				}))
+				defer upstream.Close()
+				credentials = func() (relay.SiteCredentials, error) {
+					return relay.SiteCredentials{Site: upstream.URL, Token: "test-token", User: "owner"}, nil
+				}
+			}
+			manager, err := relay.NewManager(t.Context(), t.TempDir(), nil, relay.WithCommunity(relay.HubCommunity{Credentials: credentials}, credentials))
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer manager.Close()
+			h := &Handler{relayManager: manager}
+			response := httptest.NewRecorder()
+			h.handleRelayCatalog(response, httptest.NewRequest(http.MethodGet, "/api/v1/relay/agents", nil))
+			var body agentSessionErrorEnvelope
+			if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+				t.Fatal(err)
+			}
+			if response.Code != tc.status || body.Error.Code != tc.code {
+				t.Fatalf("got status %d and error code %q, want %d and %q", response.Code, body.Error.Code, tc.status, tc.code)
+			}
+		})
+	}
+}
+
 // Set CSGCLAW_TEST_RELAY_URL/TOKEN to exercise the same flow against a running
 // CSGRelay with real NATS. No credentials or response contents are logged.
 func TestRelayPublicationEndToEnd(t *testing.T) {

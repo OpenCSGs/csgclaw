@@ -1,3 +1,4 @@
+import { emptyAuthStatus } from "@/models/auth";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
 import { fetchRelayCatalog } from "@/api/relay";
@@ -32,6 +33,20 @@ it("discards the prototype mock cache instead of migrating it", async () => {
   await waitFor(() => expect(result.current.loading).toBe(false));
   expect(result.current.agents).toEqual([]);
   expect(localStorage.getItem("csgclaw.agents.cloud.v2")).toBeNull();
+});
+it("reloads the catalog after authorization", async () => {
+  const loginRequired = { status: 401, code: "relay_login_required" };
+  vi.mocked(fetchRelayCatalog).mockRejectedValueOnce(loginRequired);
+  const { result, rerender } = renderHook(
+    ({ authenticated }) => useCloudAgents({ ...emptyAuthStatus(), authenticated }),
+    {
+      initialProps: { authenticated: false },
+    },
+  );
+  await waitFor(() => expect(result.current.error).toEqual(loginRequired));
+  rerender({ authenticated: true });
+  await waitFor(() => expect(result.current.catalog).toEqual([agent]));
+  expect(result.current.error).toBeNull();
 });
 it("synchronizes membership across mounted consumers without losing other additions", async () => {
   const other = { ...agent, id: "agt_abcdef0123456789abcdef01" };
@@ -73,4 +88,16 @@ it("uses current community membership and identity, preserving registered offlin
   expect(result.current.agents).toEqual([]);
   await refresh([agent]);
   expect(result.current.agents).toEqual([agent]);
+});
+
+it("clears the previous account's private catalog while loading the next account", async () => {
+  vi.mocked(fetchRelayCatalog).mockResolvedValueOnce([{ ...agent, visibility: "private" }]);
+  const { result, rerender } = renderHook(
+    ({ user }) => useCloudAgents({ ...emptyAuthStatus(), authenticated: true, user_id: user }),
+    { initialProps: { user: "owner" } },
+  );
+  await waitFor(() => expect(result.current.catalog[0]?.visibility).toBe("private"));
+  rerender({ user: "other" });
+  expect(result.current.catalog).toEqual([]);
+  await waitFor(() => expect(result.current.catalog).toEqual([agent]));
 });

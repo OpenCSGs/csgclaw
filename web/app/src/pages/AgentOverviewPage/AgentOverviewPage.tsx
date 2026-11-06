@@ -1,7 +1,8 @@
 import { resolveTeamAvatarMembers, teamMemberIDs, teamStatusLabel } from "@/models/tasks";
 import { Fragment, lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { ExternalLink, List, LoaderCircle, Plus, Search } from "lucide-react";
+import { ExternalLink, List, LoaderCircle, LogIn, Plus, Search } from "lucide-react";
+import { apiErrorCode } from "@/api/client";
 import { Button, LinkButton, PanelHeader, EmptyState, TextInput } from "@/components/ui";
 import { AgentAvatarContent, AgentAvatarImage } from "@/components/business/AgentAvatar";
 import { RoomAvatar } from "@/components/business/RoomAvatar";
@@ -50,7 +51,7 @@ export function AgentOverviewPage() {
   const requestedTab = searchParams.get("tab");
   const plazaTab = requestedTab === "plaza";
   const cloudID = searchParams.get("cloud") || "";
-  const plaza = useCloudAgents();
+  const plaza = useCloudAgents(controller.sidebarProps?.authStatus);
   const selectedCloudAgent = plaza.agents.find((agent) => agent.id === cloudID);
   const templatesTab = requestedTab === "templates" || requestedTab === "market";
   const requestedTemplateID = templatesTab ? searchParams.get("template") || "" : "";
@@ -213,6 +214,26 @@ export function AgentOverviewPage() {
       ) : null}
       {plazaTab && plaza.loading ? (
         <EmptyState title={t("agentPlazaLoading")} />
+      ) : plazaTab && apiErrorCode(plaza.error) === "relay_login_required" ? (
+        <div className={styles.plazaLogin}>
+          <EmptyState
+            className={styles.plazaLoginCard}
+            icon={<LogIn size={20} />}
+            title={t("relay_login_required")}
+            description={t("agentPlazaLoginDescription")}
+            actions={
+              <Button
+                variant="primary"
+                disabled={props.authBusy || props.authPending}
+                onClick={() => {
+                  if (props.onRequireOpenCSGAuthentication?.() !== false) void props.onLogin();
+                }}
+              >
+                {t("modelProviderOpenCSGAuthorize")}
+              </Button>
+            }
+          />
+        </div>
       ) : plazaTab && plaza.error ? (
         <EmptyState title={t("agentPlazaLoadFailed")} actions={<Button onClick={plaza.refresh}>{t("retry")}</Button>} />
       ) : plazaTab ? (

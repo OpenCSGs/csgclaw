@@ -80,7 +80,7 @@ func (m *Manager) discover(ctx context.Context, onlyID string) ([]CatalogEntry, 
 			for index := range jobs {
 				item := instances[index]
 				id := item.relayID()
-				a := Agent{ID: id, Visibility: "public", Status: "offline"}
+				a := Agent{ID: id, Status: "offline"}
 				probeCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
 				var live Agent
 				probeErr := c.Request(probeCtx, http.MethodGet, "/v1/agents/"+url.PathEscape(id), "", nil, &live)
@@ -101,6 +101,11 @@ func (m *Manager) discover(ctx context.Context, onlyID string) ([]CatalogEntry, 
 					failureMu.Lock()
 					probeFailure = availabilityErr
 					failureMu.Unlock()
+				}
+				// Community controls discovery visibility, even if Relay's copy differs.
+				a.Visibility = "private"
+				if item.Public {
+					a.Visibility = "public"
 				}
 				a.Name, a.Description = item.Name, item.Description
 				entries[index] = CatalogEntry{RelayURL: c.base.String(), ConnectionID: connection, Agent: a, Avatar: item.Metadata.Avatar, Source: item.Source}

@@ -140,6 +140,11 @@ func (h *Handler) handleRelayCatalog(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	entries, err := h.relayManager.Discover(ctx)
 	if err != nil {
+		var upstream *relay.HTTPError
+		if errors.Is(err, relay.ErrSiteLoginRequired) || (errors.As(err, &upstream) && upstream.Status == http.StatusUnauthorized) {
+			writeAgentSessionError(w, http.StatusUnauthorized, "relay_login_required", relay.ErrSiteLoginRequired.Error(), nil)
+			return
+		}
 		writeAgentSessionError(w, 502, "relay_catalog_failed", err.Error(), nil)
 		return
 	}

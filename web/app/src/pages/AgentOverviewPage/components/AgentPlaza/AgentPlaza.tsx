@@ -18,7 +18,9 @@ export function AgentPlaza({ agents, addedIDs, t, onAdd, onOpen }: Props) {
   const [query, setQuery] = useState("");
   const [scope, setScope] = useState<"public" | "mine">("public");
   const shown = filterCloudAgents(
-    agents.filter((agent) => (scope === "mine" ? addedIDs.includes(agent.id) : agent.visibility === "public")),
+    agents.filter((agent) =>
+      scope === "mine" ? agent.visibility === "private" || addedIDs.includes(agent.id) : agent.visibility === "public",
+    ),
     query,
   );
   return (
