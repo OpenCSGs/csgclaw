@@ -43,12 +43,10 @@ type Props = {
 export function AgentPlaza({ agents, addedIDs, t, onAdd, onOpen }: Props) {
   const [query, setQuery] = useState("");
   const [scope, setScope] = useState<"public" | "mine">("public");
-  const shown = filterCloudAgents(
-    agents.filter((agent) =>
-      scope === "mine" ? agent.visibility === "private" || addedIDs.includes(agent.id) : agent.visibility === "public",
-    ),
-    query,
+  const scopedAgents = agents.filter((agent) =>
+    scope === "mine" ? agent.ownedByCurrentUser : agent.visibility === "public",
   );
+  const shown = filterCloudAgents(scopedAgents, query);
   return (
     <AgentPlazaLayout t={t}>
       <div className={styles.toolbar}>
@@ -62,7 +60,7 @@ export function AgentPlaza({ agents, addedIDs, t, onAdd, onOpen }: Props) {
             onChange={(event) => setQuery(event.target.value)}
           />
         </label>
-        <span>{t("agentPlazaCount", { shown: shown.length, total: agents.length })}</span>
+        <span>{t("agentPlazaCount", { shown: shown.length, total: scopedAgents.length })}</span>
         <nav className={styles.filters} aria-label={t("agentPlazaScope")}>
           {(["public", "mine"] as const).map((value) => (
             <Button

@@ -24,6 +24,7 @@ export type RelayCatalogEntry = {
   creator_name?: string;
   model_id?: string;
   template_repo_path?: string;
+  owned_by_current_user?: boolean;
   relay_url: string;
   connection_id: string;
   avatar?: string;
@@ -57,6 +58,7 @@ export async function fetchRelayCatalog(signal?: AbortSignal, target?: RelayCata
     creatorName: entry.creator_name?.trim(),
     modelID: entry.model_id?.trim(),
     templateRepoPath: entry.template_repo_path?.trim(),
+    ownedByCurrentUser: entry.owned_by_current_user === true,
     publisher: entry.source === "platform" ? "Agentichub" : "CSGClaw",
     sourceAgentID: entry.agent.source_agent_id,
     visibility: entry.agent.visibility,

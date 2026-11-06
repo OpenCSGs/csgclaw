@@ -205,6 +205,7 @@ func TestCommunityDiscoveryAndInvocationOfRemotePublication(t *testing.T) {
 				{"id": 11, "type": "csgclaw", "public": true, "kind": "runtime", "relay": RelayRegistration{AgentID: "invalid"}},
 			}
 			items[0]["public"] = public.Load()
+			items[0]["editable"] = owner
 			if !owner && !public.Load() {
 				items = items[1:]
 			}
@@ -285,6 +286,9 @@ func TestCommunityDiscoveryAndInvocationOfRemotePublication(t *testing.T) {
 	if entries[0].Agent.Visibility != "private" || entries[1].Agent.Visibility != "public" {
 		t.Fatal("catalog visibility differs from StarHub")
 	}
+	if !entries[0].OwnedByCurrentUser || entries[1].OwnedByCurrentUser {
+		t.Fatal("catalog lost the signed-in user's ownership")
+	}
 	if len(m.manifest.Agents) != 0 {
 		t.Fatal("remote agent became a local publication")
 	}
@@ -303,8 +307,14 @@ func TestCommunityDiscoveryAndInvocationOfRemotePublication(t *testing.T) {
 		t.Fatalf("private agent invocation by another caller: %v", err)
 	}
 	public.Store(true)
+	login = "owner"
+	owned, err := m.Discover(t.Context())
+	if err != nil || len(owned) != 2 || owned[0].Agent.Visibility != "public" || !owned[0].OwnedByCurrentUser {
+		t.Fatalf("owner's public agent discovery: %v, %v", owned, err)
+	}
+	login = "caller"
 	visible, err = m.Discover(t.Context())
-	if err != nil || len(visible) != 2 || visible[0].Agent.Visibility != "public" {
+	if err != nil || len(visible) != 2 || visible[0].Agent.Visibility != "public" || visible[0].OwnedByCurrentUser {
 		t.Fatalf("public agent discovery: %v, %v", visible, err)
 	}
 	if _, err = m.Chat(t.Context(), testRelayID, visible[0].ConnectionID, "call-public", "hello", ""); err != nil {

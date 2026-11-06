@@ -565,6 +565,8 @@ function ConversationPaneContent({
         channelToolsRef={channelToolsRef}
         conversation={conversation}
         conversationMembers={conversationMembers}
+        currentUserID={currentUserID}
+        usersById={usersById}
         description={description}
         headerAccessory={conversation.cloud_agent ? undefined : tools.toolbar}
         inviteActionLabel={inviteActionLabel}

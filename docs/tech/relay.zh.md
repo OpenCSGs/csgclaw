@@ -84,6 +84,7 @@ external 为 CSGClaw，不将 relay publisher_id 作为产品名称。
 - POST `{"auto_publish":true}` 返回 202，先持久化发布意图，等待本地 Agent 就绪后重试。
 - `publishing` 表示排队中；`published` 表示注册与社区同步完成。
 - `GET /api/v1/relay/agents`：返回社区广场记录，不返回 Token。
+  广场的「我的」按 StarHub 返回的 `editable` 标记筛选当前账号的公开和私有智能体。
   已有云端会话同时传入 `agent_id` 和 `connection_id`，仅探测指定的注册。
   找不到注册或连接引用不匹配时返回空列表。
 

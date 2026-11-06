@@ -786,9 +786,10 @@ describe("cloud agent plaza", () => {
     expect(screen.getByLabelText("Current URL")).toHaveTextContent("/agents?tab=plaza");
     expect(screen.queryByRole("link")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "添加到我的智能体" }));
-    await user.click(screen.getByRole("button", { name: "我的" }));
     expect(screen.getByRole("heading", { name: cloudAgentFixture[0].name })).toBeVisible();
     expect(screen.getByText("已添加")).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "我的" }));
+    expect(screen.queryByRole("heading", { name: cloudAgentFixture[0].name })).not.toBeInTheDocument();
     expect(JSON.parse(localStorage.getItem(CLOUD_AGENTS_STORAGE_KEY)!)).toEqual(cloudAgentFixture);
   });
 
@@ -963,7 +964,6 @@ describe("cloud agent plaza", () => {
     expect(screen.queryByRole("heading", { name: "合同条款审阅" })).not.toBeInTheDocument();
     await user.clear(screen.getByRole("textbox", { name: "搜索公共智能体" }));
     expect(screen.getByRole("heading", { name: "合同条款审阅" })).toBeVisible();
-    await user.click(screen.getByRole("button", { name: "我的" }));
     expect(screen.getByRole("button", { name: "查看智能体" })).toBeVisible();
   });
 
@@ -995,7 +995,7 @@ describe("cloud agent plaza", () => {
     const user = userEvent.setup();
     render(<Page route="/agents?tab=plaza" username="alice" agents={[{ id: "agent-local", name: "Local worker" }]} />);
     await user.click(await screen.findByRole("button", { name: "我的" }));
-    expect(screen.getByText("还没有添加云端智能体，去公共广场挑选一个吧。")).toBeVisible();
+    expect(screen.getByText("当前账号还没有自己的云端智能体。")).toBeVisible();
     await user.click(screen.getByRole("tab", { name: "我的智能体 1" }));
     expect(screen.getByRole("button", { name: /Local worker/ })).toBeVisible();
     expect(screen.getByRole("button", { name: "云端 0" })).toBeVisible();

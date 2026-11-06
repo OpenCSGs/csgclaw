@@ -272,6 +272,8 @@ export function FloatingChatPanel({ agentName, chatProps, headerAccessory, onPic
         channelToolsRef={channelToolsRef}
         conversation={conversation}
         conversationMembers={conversationMembers}
+        currentUserID={currentUserID}
+        usersById={usersById}
         description={description}
         headerAccessory={
           <>

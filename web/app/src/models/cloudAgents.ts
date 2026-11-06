@@ -38,6 +38,7 @@ export type CloudAgent = {
   name: string;
   description: string;
   owner: string;
+  ownedByCurrentUser?: boolean;
   creatorName?: string;
   modelID?: string;
   templateRepoPath?: string;

@@ -195,8 +195,9 @@ See the [Chinese walkthrough](relay.zh.md) for detailed examples.
 
 `GET /api/v1/relay/agents` queries the community instance API with
 `registered=true&kind=runtime` under the current StarHub login. The public tab
-uses the returned `public` flag, and the Mine tab also shows the caller's
-registered private agents. The query follows pagination and includes both
+uses the returned `public` flag. The Mine tab shows the caller's registered
+agents, both public and private, using `owned_by_current_user` derived from
+StarHub's `editable` flag. The query follows pagination and includes both
 `platform` and `external` sources. It accepts registered `csgclaw` and
 `csgclaw-workspace` runtimes and skips missing/invalid `relay.agent_id` values.
 Directory metadata shows the community agent name as its source and maps instance
