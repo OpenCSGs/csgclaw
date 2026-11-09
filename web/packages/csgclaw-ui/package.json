@@ -1,6 +1,6 @@
 {
   "name": "csgclaw-ui",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "type": "module",
   "description": "CSGClaw React UI primitives, styles, and theme tokens.",
   "license": "SEE LICENSE IN LICENSE",
