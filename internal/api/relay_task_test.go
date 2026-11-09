@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync/atomic"
@@ -19,14 +20,72 @@ import (
 	"csgclaw/internal/relay"
 )
 
-func TestCloudTaskRecoversKnownResponseAfterRestart(t *testing.T) {
-	var calls atomic.Int32
-	var polls atomic.Int32
+func newCloudTaskTestRelay(t *testing.T, ctx context.Context, agentID string, responses http.HandlerFunc) (*relay.Manager, string) {
+	t.Helper()
 	remote := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
-		case r.Method == "POST" && r.URL.Path == "/v1/agents":
-			_ = json.NewEncoder(w).Encode(relay.Publication{Agent: relay.Agent{ID: "agt_cloud"}})
+		case r.Method == http.MethodPost && r.URL.Path == "/v1/agents":
+			_ = json.NewEncoder(w).Encode(relay.Publication{Agent: relay.Agent{ID: agentID}})
+		case r.Method == http.MethodGet && r.URL.Path == "/v1/agents/"+agentID:
+			_ = json.NewEncoder(w).Encode(relay.Agent{ID: agentID, Status: "online"})
+		case strings.HasPrefix(r.URL.Path, "/v1/responses"):
+			responses(w, r)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(remote.Close)
+	manager, err := relay.NewManager(t.Context(), t.TempDir(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(manager.Close)
+	if err := manager.Configure(remote.URL, "test-token"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.Publish(ctx, relay.PublishRequest{SourceAgentID: "local", Visibility: "public"}); err != nil {
+		t.Fatal(err)
+	}
+	entries := manager.Catalog(ctx)
+	if len(entries) != 1 {
+		t.Fatalf("expected one published Relay agent, got %d", len(entries))
+	}
+	return manager, entries[0].ConnectionID
+}
+
+func cloudTaskTestBootstrap(room im.Room) im.Bootstrap {
+	room.CreatedBy = im.AdminUserID
+	room.Members = []string{im.AdminUserID, room.CloudAgent.UserID}
+	return im.Bootstrap{
+		CurrentUserID: im.AdminUserID,
+		Users: []im.User{
+			{ID: im.AdminUserID, Name: "admin", Role: "admin"},
+			{ID: room.CloudAgent.UserID, Name: "cloud", Role: "cloud"},
+		},
+		Rooms: []im.Room{room},
+	}
+}
+
+func newPersistedCloudTaskTestService(t *testing.T, path string, room im.Room) *im.Service {
+	t.Helper()
+	if err := im.SaveBootstrap(path, cloudTaskTestBootstrap(room)); err != nil {
+		t.Fatal(err)
+	}
+	svc, err := im.NewServiceFromPath(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return svc
+}
+
+func TestCloudTaskRecoversKnownResponseAfterRestart(t *testing.T) {
+	var calls atomic.Int32
+	var polls atomic.Int32
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	m, connectionID := newCloudTaskTestRelay(t, ctx, "agt_cloud", func(w http.ResponseWriter, r *http.Request) {
+		switch {
 		case r.Method == "GET" && r.URL.Path == "/v1/responses/resp_saved":
 			if polls.Add(1) == 1 {
 				w.WriteHeader(http.StatusServiceUnavailable)
@@ -39,54 +98,30 @@ func TestCloudTaskRecoversKnownResponseAfterRestart(t *testing.T) {
 		default:
 			w.WriteHeader(404)
 		}
-	}))
-	defer remote.Close()
-	m, err := relay.NewManager(context.Background(), t.TempDir(), nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer m.Close()
-	if err = m.Configure(remote.URL, "test-secret"); err != nil {
-		t.Fatal(err)
-	}
-	if _, err = m.Publish(context.Background(), relay.PublishRequest{SourceAgentID: "local", Visibility: "public"}); err != nil {
-		t.Fatal(err)
-	}
-	connectionID := m.Catalog(context.Background())[0].ConnectionID
-	room := im.Room{ID: "cloud-task", Title: "Task", TaskSession: true, IsDirect: true, CreatedBy: im.AdminUserID, Members: []string{im.AdminUserID, "relay-user"}, CloudAgent: &apitypes.CloudAgentReference{AgentID: "agt_cloud", ConnectionID: connectionID, UserID: "relay-user"}, Messages: []im.Message{{ID: "pending", SenderID: im.AdminUserID, Content: "hello", CreatedAt: time.Now().Add(-time.Hour), Metadata: map[string]any{"relay_pending_response_id": "resp_saved"}}}}
-	state := im.Bootstrap{CurrentUserID: im.AdminUserID, Users: []im.User{{ID: im.AdminUserID, Name: "admin", Role: "admin"}, {ID: "relay-user", Name: "cloud", Role: "cloud"}}, Rooms: []im.Room{room}}
+	})
+	// Keep the on-disk field name literal to verify compatibility on restart.
+	room := im.Room{ID: "cloud-task", Title: "Task", TaskSession: true, IsDirect: true, CloudAgent: &apitypes.CloudAgentReference{AgentID: "agt_cloud", ConnectionID: connectionID, UserID: "relay-user"}, Messages: []im.Message{{ID: "pending", SenderID: im.AdminUserID, Content: "hello", CreatedAt: time.Now().Add(-time.Hour), Metadata: map[string]any{"relay_pending_response_id": "resp_saved"}}}}
 	path := filepath.Join(t.TempDir(), "state.json")
-	if err = im.SaveBootstrap(path, state); err != nil {
-		t.Fatal(err)
-	}
-	svc, err := im.NewServiceFromPath(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	svc := newPersistedCloudTaskTestService(t, path, room)
 	h := &Handler{im: svc, relayManager: m, relayContext: ctx}
 	h.startCloudTask(room.ID)
 	h.startCloudTask(room.ID)
-	deadline := time.Now().Add(3 * time.Second)
-	for {
-		saved, _ := svc.Room(room.ID)
-		if len(saved.Messages) == 2 {
-			if saved.Messages[1].Content != "recovered result" {
-				t.Fatal("recovery failed")
-			}
-			if _, _, pending := cloudTaskPending(saved); pending {
-				t.Fatal("reply did not consume pending message")
-			}
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatal("recovery timed out")
-		}
-		time.Sleep(10 * time.Millisecond)
+	done := make(chan struct{})
+	go func() { h.cloudTaskWG.Wait(); close(done) }()
+	select {
+	case <-done:
+	case <-ctx.Done():
+		t.Fatal("recovery timed out")
 	}
-	if polls.Load() < 2 {
-		t.Fatal("did not recover from temporary polling failure")
+	saved, _ := svc.Room(room.ID)
+	if len(saved.Messages) != 2 || saved.Messages[1].Content != "recovered result" {
+		t.Fatal("recovery failed")
+	}
+	if _, _, pending := cloudTaskPending(saved); pending {
+		t.Fatal("reply did not consume pending message")
+	}
+	if got := polls.Load(); got != 2 {
+		t.Fatalf("expected one poll and one retry, got %d polls", got)
 	}
 	if calls.Load() != 0 {
 		t.Fatal("reissued an already accepted operation")
@@ -109,26 +144,99 @@ func TestCloudTaskModelFailureIsActionable(t *testing.T) {
 	}
 }
 
+func TestCloudTaskResumesAfterTemporaryWriteFailure(t *testing.T) {
+	for _, phase := range []string{"checkpoint", "reply"} {
+		t.Run(phase, func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+			defer cancel()
+			const roomID = "cloud-task"
+			path := filepath.Join(t.TempDir(), "state.json")
+			submitted := make(chan struct{}, 2)
+			var submissions atomic.Int32
+			manager, connectionID := newCloudTaskTestRelay(t, ctx, "agt_cloud", func(w http.ResponseWriter, r *http.Request) {
+				if r.Method != http.MethodPost || r.URL.Path != "/v1/responses" {
+					http.NotFound(w, r)
+					return
+				}
+				submissions.Add(1)
+				select {
+				case submitted <- struct{}{}:
+				default:
+				}
+				_ = json.NewEncoder(w).Encode(relay.Response{ID: "resp_done", Model: "agt_cloud", Status: "completed"})
+			})
+			svc := newPersistedCloudTaskTestService(t, path, im.Room{
+				ID:         roomID,
+				CloudAgent: &apitypes.CloudAgentReference{AgentID: "agt_cloud", UserID: "cloud", ConnectionID: connectionID},
+				Messages: []im.Message{{
+					ID: "pending", SenderID: im.AdminUserID, Content: "Continue", CreatedAt: time.Now(),
+					Metadata: map[string]any{cloudTaskUnsubmittedKey: true},
+				}},
+			})
+			// The reply writes the room index, while the checkpoint only writes
+			// the room's message log. Block the file needed for this phase.
+			blockedPath := path
+			if phase == "checkpoint" {
+				blockedPath = filepath.Join(filepath.Dir(path), "sessions", roomID+".jsonl")
+			}
+			if err := os.Rename(blockedPath, blockedPath+".saved"); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Mkdir(blockedPath, 0o700); err != nil {
+				t.Fatal(err)
+			}
+			h := &Handler{im: svc, relayManager: manager, relayContext: ctx}
+			h.startCloudTask(roomID)
+			done := make(chan struct{})
+			go func() { h.cloudTaskWG.Wait(); close(done) }()
+			defer func() { cancel(); <-done }()
+			if phase == "reply" {
+				select {
+				case <-submitted:
+				case <-ctx.Done():
+					t.Fatal("task did not submit before the reply write")
+				}
+			}
+			select {
+			case <-done:
+				t.Fatal("worker exited on a temporary write failure")
+			case <-submitted:
+				t.Fatal("task submitted with a blocked checkpoint or repeated its POST")
+			case <-time.After(100 * time.Millisecond):
+			}
+			if err := os.Remove(blockedPath); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Rename(blockedPath+".saved", blockedPath); err != nil {
+				t.Fatal(err)
+			}
+			select {
+			case <-done:
+			case <-ctx.Done():
+				t.Fatal("worker did not resume after storage was restored")
+			}
+			room, _ := svc.Room(roomID)
+			if submissions.Load() != 1 || len(room.Messages) != 2 || room.Messages[1].Metadata["relay_response_id"] != "resp_done" {
+				t.Fatalf("expected one submission and its reply, got %d submissions and %d messages", submissions.Load(), len(room.Messages))
+			}
+		})
+	}
+}
+
 func TestCloudTaskReportsExpiredRecoveryAsUnconfirmed(t *testing.T) {
 	const roomID = "cloud-task"
 	now := time.Now()
-	state := im.Bootstrap{
-		CurrentUserID: im.AdminUserID,
-		Users:         []im.User{{ID: im.AdminUserID, Name: "admin", Role: "admin"}, {ID: "cloud", Name: "cloud", Role: "cloud"}},
-		Rooms: []im.Room{{
-			ID: roomID, CreatedBy: im.AdminUserID, Locale: "en",
-			CloudAgent: &apitypes.CloudAgentReference{AgentID: "agt_cloud", UserID: "cloud"},
-			Members:    []string{im.AdminUserID, "cloud"},
-			Messages: []im.Message{{
-				ID: "pending", SenderID: im.AdminUserID, Content: "Continue", CreatedAt: now.Add(-time.Hour),
-				Metadata: map[string]any{
-					cloudTaskRecoveryKey:                "Saved recovery input",
-					"relay_context_recovery_started_at": now.Add(-11 * time.Minute).Format(time.RFC3339Nano),
-				},
-			}},
+	svc := im.NewServiceFromBootstrap(cloudTaskTestBootstrap(im.Room{
+		ID: roomID, Locale: "en",
+		CloudAgent: &apitypes.CloudAgentReference{AgentID: "agt_cloud", UserID: "cloud"},
+		Messages: []im.Message{{
+			ID: "pending", SenderID: im.AdminUserID, Content: "Continue", CreatedAt: now.Add(-time.Hour),
+			Metadata: map[string]any{
+				cloudTaskRecoveryKey:      "Saved recovery input",
+				cloudTaskRecoveryStartKey: now.Add(-11 * time.Minute).Format(time.RFC3339Nano),
+			},
 		}},
-	}
-	svc := im.NewServiceFromBootstrap(state)
+	}))
 	h := &Handler{im: svc}
 	h.runCloudTask(roomID)
 	room, _ := svc.Room(roomID)
@@ -188,11 +296,10 @@ func TestCloudTaskManagementGuardsPersistedPendingWork(t *testing.T) {
 func TestCloudTaskSubmissionRetriesKeepIdentity(t *testing.T) {
 	var submits atomic.Int32
 	var firstKey string
-	remote := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	m, connection := newCloudTaskTestRelay(t, ctx, "agt_review", func(w http.ResponseWriter, r *http.Request) {
 		switch {
-		case r.Method == "POST" && r.URL.Path == "/v1/agents":
-			_ = json.NewEncoder(w).Encode(relay.Publication{Agent: relay.Agent{ID: "agt_review"}})
 		case r.Method == "POST" && r.URL.Path == "/v1/responses":
 			if submits.Add(1) == 1 {
 				firstKey = r.Header.Get("Idempotency-Key")
@@ -209,22 +316,7 @@ func TestCloudTaskSubmissionRetriesKeepIdentity(t *testing.T) {
 		default:
 			w.WriteHeader(404)
 		}
-	}))
-	defer remote.Close()
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	m, err := relay.NewManager(ctx, t.TempDir(), nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer m.Close()
-	if err = m.Configure(remote.URL, "test-token"); err != nil {
-		t.Fatal(err)
-	}
-	if _, err = m.Publish(ctx, relay.PublishRequest{SourceAgentID: "local", Visibility: "public"}); err != nil {
-		t.Fatal(err)
-	}
-	connection := m.Catalog(ctx)[0].ConnectionID
+	})
 	svc := im.NewService()
 	room, err := svc.CreateRoom(im.CreateRoomRequest{Title: "Review", CreatorID: im.AdminUserID, Type: apitypes.RoomTypeFree})
 	if err != nil {
@@ -248,7 +340,7 @@ func TestCloudTaskSubmissionRetriesKeepIdentity(t *testing.T) {
 		t.Fatalf("retry failed: status=%s submissions=%d error=%v", response.Status, submits.Load(), err)
 	}
 	saved, _ := svc.Room(room.ID)
-	if saved.Messages[len(saved.Messages)-2].Metadata["relay_pending_response_id"] != "resp_existing" {
+	if saved.Messages[len(saved.Messages)-2].Metadata[cloudTaskResponseKey] != "resp_existing" {
 		t.Fatal("response identity was not persisted")
 	}
 }
@@ -310,6 +402,9 @@ func TestCloudTaskRestoresLostContextInSameRoom(t *testing.T) {
 			},
 		},
 		{name: "missing polled result", pending: "resp_pending", before: []exchange{{poll("resp_pending"), missing}}},
+		{name: "interrupted execution", pending: "resp_pending", before: []exchange{{poll("resp_pending"), response("resp_pending", "failed", "execution_interrupted")}}},
+		{name: "execution timeout", pending: "resp_pending", before: []exchange{{poll("resp_pending"), response("resp_pending", "failed", "execution_timeout")}}},
+		{name: "unconfirmed cancellation", pending: "resp_pending", before: []exchange{{poll("resp_pending"), response("resp_pending", "failed", "cancellation_unconfirmed")}}},
 		{
 			name: "persistent invalid poll responses", pending: "resp_pending", old: true,
 			before: []exchange{
@@ -358,6 +453,15 @@ func TestCloudTaskRestoresLostContextInSameRoom(t *testing.T) {
 				{poll("resp_restored"), restored},
 			},
 		},
+		{
+			name: "recovery response without model", restore: true, before: []exchange{{original, missing}},
+			after: []exchange{
+				{recovery, func(w http.ResponseWriter) {
+					_ = json.NewEncoder(w).Encode(relay.Response{ID: "resp_restored", Status: "completed"})
+				}},
+				{poll("resp_restored"), restored},
+			},
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			before, after := tc.before, tc.after
@@ -374,19 +478,7 @@ func TestCloudTaskRestoresLostContextInSameRoom(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "state.json")
 			var calls atomic.Int32
 			var firstRecoveryInput atomic.Value
-			remote := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				w.Header().Set("Content-Type", "application/json")
-				switch r.URL.Path {
-				case "/v1/agents":
-					_ = json.NewEncoder(w).Encode(relay.Publication{Agent: relay.Agent{ID: "agt_cloud"}})
-					return
-				case "/v1/agents/agt_cloud":
-					_ = json.NewEncoder(w).Encode(relay.Agent{ID: "agt_cloud", Status: "online"})
-					return
-				case "/v1/agents/agt_cloud/connect":
-					w.WriteHeader(http.StatusNotFound)
-					return
-				}
+			m, connectionID := newCloudTaskTestRelay(t, ctx, "agt_cloud", func(w http.ResponseWriter, r *http.Request) {
 				request := r.URL.Path
 				if r.Method == http.MethodPost && request == "/v1/responses" {
 					request = r.Header.Get("Idempotency-Key")
@@ -432,8 +524,8 @@ func TestCloudTaskRestoresLostContextInSameRoom(t *testing.T) {
 						if err != nil || len(state.Rooms) != 1 {
 							t.Errorf("could not read persisted recovery state: %v", err)
 						} else if pending, _, found := cloudTaskPending(state.Rooms[0]); !found ||
-							pending.Metadata["relay_context_recovery_after"] != rejectedID ||
-							pending.Metadata["relay_pending_response_id"] != nil {
+							pending.Metadata[cloudTaskRecoveryRetryKey] != rejectedID ||
+							pending.Metadata[cloudTaskResponseKey] != nil {
 							t.Error("replacement recovery attempt was not saved before submission")
 						}
 					}
@@ -451,23 +543,11 @@ func TestCloudTaskRestoresLostContextInSameRoom(t *testing.T) {
 					cancel()
 				}
 				_ = conn.Close()
-			}))
-			defer remote.Close()
-			m, err := relay.NewManager(t.Context(), t.TempDir(), nil)
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer m.Close()
-			if err := m.Configure(remote.URL, "test-token"); err != nil {
-				t.Fatal(err)
-			}
-			if _, err := m.Publish(ctx, relay.PublishRequest{SourceAgentID: "local", Visibility: "public"}); err != nil {
-				t.Fatal(err)
-			}
+			})
 			message := im.Message{ID: "followup", SenderID: im.AdminUserID, Content: "Where is it?", CreatedAt: time.Now()}
 			switch {
 			case tc.pending != "":
-				message.Metadata = map[string]any{"relay_pending_response_id": tc.pending}
+				message.Metadata = map[string]any{cloudTaskResponseKey: tc.pending}
 			case !tc.legacy:
 				message.Metadata = map[string]any{cloudTaskUnsubmittedKey: true}
 			}
@@ -475,8 +555,8 @@ func TestCloudTaskRestoresLostContextInSameRoom(t *testing.T) {
 				message.CreatedAt = time.Now().Add(-11 * time.Minute)
 			}
 			room := im.Room{
-				ID: "room", CreatedBy: im.AdminUserID, Members: []string{im.AdminUserID, "cloud"},
-				CloudAgent: &apitypes.CloudAgentReference{AgentID: "agt_cloud", ConnectionID: m.Catalog(ctx)[0].ConnectionID, UserID: "cloud"},
+				ID:         "room",
+				CloudAgent: &apitypes.CloudAgentReference{AgentID: "agt_cloud", ConnectionID: connectionID, UserID: "cloud"},
 				Messages: []im.Message{
 					{ID: "prior", SenderID: im.AdminUserID, Content: "Remember the report"},
 					{ID: "failed", SenderID: im.AdminUserID, Content: "Failed request"},
@@ -488,33 +568,24 @@ func TestCloudTaskRestoresLostContextInSameRoom(t *testing.T) {
 			if tc.restore {
 				room.Messages = append(room.Messages, im.Message{ID: "next", SenderID: im.AdminUserID, Content: "Future message", CreatedAt: time.Now()})
 			}
-			if err := im.SaveBootstrap(path, im.Bootstrap{
-				CurrentUserID: im.AdminUserID,
-				Users:         []im.User{{ID: im.AdminUserID, Name: "admin", Role: "admin"}, {ID: "cloud", Name: "cloud", Role: "cloud"}},
-				Rooms:         []im.Room{room},
-			}); err != nil {
-				t.Fatal(err)
-			}
-			svc, err := im.NewServiceFromPath(path)
-			if err != nil {
-				t.Fatal(err)
-			}
+			svc := newPersistedCloudTaskTestService(t, path, room)
 			h := &Handler{im: svc, relayManager: m, relayContext: ctx}
 			h.runCloudTask(room.ID)
 			if len(after) != 0 {
 				if int(calls.Load()) != len(before) {
 					t.Fatal("did not stop at the expected restart point")
 				}
-				svc, err = im.NewServiceFromPath(path)
+				reloaded, err := im.NewServiceFromPath(path)
 				if err != nil {
 					t.Fatal(err)
 				}
+				svc = reloaded
 				saved, _ := svc.Room(room.ID)
 				pending, _, found := cloudTaskPending(saved)
-				if !found || pending.Metadata[cloudTaskUnsubmittedKey] != nil || pending.Metadata["relay_pending_response_id"] != nil {
+				if !found || pending.Metadata[cloudTaskUnsubmittedKey] != nil || pending.Metadata[cloudTaskResponseKey] != nil {
 					t.Fatal("submission checkpoint did not survive restart")
 				}
-				if tc.restore && (pending.Metadata["relay_context_recovery_input"] == nil || pending.Metadata["relay_context_recovery_started_at"] == nil) {
+				if tc.restore && (pending.Metadata[cloudTaskRecoveryKey] == nil || pending.Metadata[cloudTaskRecoveryStartKey] == nil) {
 					t.Fatal("recovery checkpoint was not saved before submission")
 				}
 				resumed, stop := context.WithTimeout(t.Context(), 10*time.Second)
@@ -564,7 +635,7 @@ func TestCloudTaskRecoveryInputSkipsOversizedTurns(t *testing.T) {
 func TestCloudTaskShutdownDoesNotConsumePendingMessage(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	room := im.Room{ID: "cloud-shutdown", Title: "Pending", CreatedBy: im.AdminUserID, Members: []string{im.AdminUserID, "user-cloud"}, CloudAgent: &apitypes.CloudAgentReference{AgentID: "agt", ConnectionID: "conn", UserID: "user-cloud"}, Messages: []im.Message{{ID: "job", SenderID: im.AdminUserID, Content: "Work", CreatedAt: time.Now(), Metadata: map[string]any{"relay_pending_response_id": "resp_pending"}}}}
+	room := im.Room{ID: "cloud-shutdown", Title: "Pending", CreatedBy: im.AdminUserID, Members: []string{im.AdminUserID, "user-cloud"}, CloudAgent: &apitypes.CloudAgentReference{AgentID: "agt", ConnectionID: "conn", UserID: "user-cloud"}, Messages: []im.Message{{ID: "job", SenderID: im.AdminUserID, Content: "Work", CreatedAt: time.Now(), Metadata: map[string]any{cloudTaskResponseKey: "resp_pending"}}}}
 	svc := im.NewServiceFromBootstrap(im.Bootstrap{Users: []im.User{{ID: im.AdminUserID, Name: "admin", Role: "admin"}, {ID: "user-cloud", Name: "cloud", Role: "cloud"}}, Rooms: []im.Room{room}})
 	h := &Handler{im: svc, relayContext: ctx}
 	h.runCloudTask(room.ID)
@@ -582,6 +653,8 @@ func TestCloudTaskShutdownDoesNotConsumePendingMessage(t *testing.T) {
 
 func TestCloudTaskAcceptsRegisteredCommunityAgentWithoutLocalPublication(t *testing.T) {
 	const id = "agt_0123456789abcdef01234567"
+	var slowLookup atomic.Bool
+	var delayedLookups, submissions atomic.Int32
 	remote := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
@@ -589,9 +662,20 @@ func TestCloudTaskAcceptsRegisteredCommunityAgentWithoutLocalPublication(t *test
 			if r.URL.Query().Get("registered") != "true" {
 				t.Error("missing registered discovery filter")
 			}
+			if slowLookup.Load() {
+				delayedLookups.Add(1)
+				select {
+				case <-r.Context().Done():
+					return
+				case <-time.After(time.Second):
+				}
+			}
 			_ = json.NewEncoder(w).Encode(map[string]any{"data": []map[string]any{{"id": 42, "kind": "runtime", "source": "external", "type": "csgclaw", "public": true, "name": "Remote worker", "relay": map[string]string{"agent_id": id}}}, "total": 1})
 		case "/api/v1/relay/v1/agents/" + id:
 			_ = json.NewEncoder(w).Encode(relay.Agent{ID: id, Name: "Remote worker", Status: "online", Visibility: "public"})
+		case "/api/v1/relay/v1/responses":
+			submissions.Add(1)
+			_ = json.NewEncoder(w).Encode(relay.Response{ID: "resp_late", Model: id, Status: "completed"})
 		default:
 			t.Error("unexpected cloud task discovery request")
 			w.WriteHeader(404)
@@ -621,4 +705,24 @@ func TestCloudTaskAcceptsRegisteredCommunityAgentWithoutLocalPublication(t *test
 	if req.CloudAgent.UserID == "" || !req.TaskSession || len(req.MemberIDs) != 1 {
 		t.Fatal("did not prepare the remote cloud task")
 	}
+	t.Run("lookup cannot outlast submission window", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(t.Context(), 4*time.Second)
+		defer cancel()
+		slowLookup.Store(true)
+		now := time.Now()
+		message := im.Message{
+			ID: "pending", SenderID: im.AdminUserID, Content: "Continue", CreatedAt: now,
+			Metadata: map[string]any{
+				cloudTaskRecoveryKey:      "Saved recovery input",
+				cloudTaskRecoveryStartKey: now.Add(-10*time.Minute + 500*time.Millisecond).Format(time.RFC3339Nano),
+			},
+		}
+		room := im.Room{ID: "community-task", CloudAgent: req.CloudAgent, Messages: []im.Message{message}}
+		svc := im.NewServiceFromBootstrap(cloudTaskTestBootstrap(room))
+		h := &Handler{im: svc, relayManager: m}
+		_, err := h.awaitCloudTask(ctx, room, message, "")
+		if delayedLookups.Load() != 1 || submissions.Load() != 0 || !errors.Is(err, errCloudTaskResultUnavailable) {
+			t.Fatalf("lookups=%d submissions=%d error=%v", delayedLookups.Load(), submissions.Load(), err)
+		}
+	})
 }

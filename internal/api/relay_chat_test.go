@@ -18,9 +18,13 @@ func TestRelayChatAPIHandlesUnconfirmedRequestAndScopesPolling(t *testing.T) {
 		case r.Method == http.MethodPost && r.URL.Path == "/v1/agents":
 			_ = json.NewEncoder(w).Encode(relay.Publication{Agent: relay.Agent{ID: "agt_test"}})
 		case r.URL.Path == "/v1/responses" && r.Method == http.MethodPost:
-			if r.Header.Get("Idempotency-Key") == "truncated-key" {
+			switch r.Header.Get("Idempotency-Key") {
+			case "truncated-key":
 				w.Header().Set("X-Response-Id", "resp_truncated")
 				_, _ = w.Write([]byte("{"))
+				return
+			case "wrong-model-key":
+				_ = json.NewEncoder(w).Encode(relay.Response{ID: "resp_other", Model: "another_agent", Status: "completed"})
 				return
 			}
 			w.WriteHeader(409)
@@ -63,6 +67,10 @@ func TestRelayChatAPIHandlesUnconfirmedRequestAndScopesPolling(t *testing.T) {
 	truncated := request(http.MethodPost, strings.Replace(body, "stable-key", "truncated-key", 1), "")
 	if truncated.Code != 202 || !strings.Contains(truncated.Body.String(), "resp_truncated") {
 		t.Fatal("lost response ID from a truncated submission")
+	}
+	wrongModel := request(http.MethodPost, strings.Replace(body, "stable-key", "wrong-model-key", 1), "")
+	if wrongModel.Code != 202 || !strings.Contains(wrongModel.Body.String(), "resp_other") {
+		t.Fatal("submission did not defer a mismatched response to scoped polling")
 	}
 	if request(http.MethodGet, "", "resp_other").Code != 409 {
 		t.Fatal("polling accepted another agent's response")

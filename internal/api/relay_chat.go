@@ -40,10 +40,6 @@ func (h *Handler) handleRelayChat(w http.ResponseWriter, r *http.Request) {
 		result, err = h.relayManager.Chat(ctx, id, body.ConnectionID, body.Key, body.Input, body.Previous)
 	}
 	if err != nil {
-		if errors.Is(err, relay.ErrRequestTooLarge) {
-			writeAgentSessionError(w, http.StatusRequestEntityTooLarge, "relay_chat_input_too_large", err.Error(), nil)
-			return
-		}
 		if errors.Is(err, relay.ErrChatReference) {
 			writeAgentSessionError(w, 409, "relay_chat_reference_unavailable", err.Error(), nil)
 			return

@@ -51,7 +51,12 @@ func (m *Manager) Chat(ctx context.Context, id, connectionID, key string, input 
 	if err != nil {
 		return Response{}, err
 	}
-	return c.Call(ctx, key, CallRequest{Model: id, Input: raw, PreviousResponseID: previous})
+	result, err := c.Call(ctx, key, CallRequest{Model: id, Input: raw, PreviousResponseID: previous})
+	if err == nil && result.Model != id {
+		// A successful submission can still be confirmed using its response ID.
+		return Response{}, responseBodyUnavailable(result.ID)
+	}
+	return result, err
 }
 func (m *Manager) ChatResponse(ctx context.Context, id, connectionID, responseID string) (Response, error) {
 	c, err := m.invocationClient(ctx, id, connectionID)

@@ -173,15 +173,20 @@ func (c *Client) Call(ctx context.Context, key string, req CallRequest) (Respons
 		id = result.ID
 	}
 	if safeID(id) {
-		return Response{}, &HTTPError{Status: http.StatusBadGateway, Detail: ProtocolError{
-			Code: "response_body_unavailable", ResponseID: id,
-		}}
+		return Response{}, responseBodyUnavailable(id)
 	}
 	if err == nil {
 		err = errors.New("incomplete relay response")
 	}
 	return Response{}, err
 }
+
+func responseBodyUnavailable(id string) *HTTPError {
+	return &HTTPError{Status: http.StatusBadGateway, Detail: ProtocolError{
+		Code: "response_body_unavailable", ResponseID: id,
+	}}
+}
+
 func (c *Client) Stream(ctx context.Context, key string, req CallRequest, out io.Writer) error {
 	req.Stream = true
 	resp, err := c.request(ctx, http.MethodPost, "/v1/responses", key, req)

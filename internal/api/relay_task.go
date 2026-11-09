@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"maps"
 	"net/http"
+	"os"
 	"slices"
 	"strings"
 	"time"
@@ -127,8 +128,13 @@ func (h *Handler) runCloudTask(roomID string) {
 		metadata := map[string]any{}
 		if err != nil || result.Status != "completed" {
 			code := "execution_failed"
-			if result.Error != nil && result.Error.Code == "model_protocol_unsupported" {
-				code = result.Error.Code
+			if result.Error != nil {
+				switch result.Error.Code {
+				case "model_protocol_unsupported":
+					code = result.Error.Code
+				case "execution_interrupted", "execution_timeout", "cancellation_unconfirmed":
+					code = "relay_task_result_unavailable"
+				}
 			}
 			var remote *relay.HTTPError
 			if errors.Is(err, errCloudTaskResultUnavailable) ||
@@ -147,7 +153,13 @@ func (h *Handler) runCloudTask(roomID string) {
 				content = "(empty response)"
 			}
 		}
-		reply, created, saveErr := h.im.CreateMessageOnce(im.CreateMessageRequest{RoomID: roomID, SenderID: room.CloudAgent.UserID, Content: content, ClientMessageID: "relay-reply:" + message.ID, Metadata: metadata, Locale: room.Locale})
+		var reply im.Message
+		var created bool
+		saveErr := retryCloudTaskWrite(parent, func() error {
+			var err error
+			reply, created, err = h.im.CreateMessageOnce(im.CreateMessageRequest{RoomID: roomID, SenderID: room.CloudAgent.UserID, Content: content, ClientMessageID: "relay-reply:" + message.ID, Metadata: metadata, Locale: room.Locale})
+			return err
+		})
 		if saveErr != nil {
 			h.cloudTaskMu.Lock()
 			delete(h.cloudTasks, roomID)
@@ -156,6 +168,27 @@ func (h *Handler) runCloudTask(roomID string) {
 		}
 		if created {
 			h.publishMessageCreated(roomID, reply.SenderID, reply)
+		}
+	}
+}
+
+// Keep the current attempt in memory while storage is unavailable. Retrying a
+// write must not repeat a Relay request or regenerate its checkpoint.
+func retryCloudTaskWrite(ctx context.Context, write func() error) error {
+	for delay := time.Second; ; delay = min(2*delay, 30*time.Second) {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		err := write()
+		var pathErr *os.PathError
+		var linkErr *os.LinkError
+		if !errors.As(err, &pathErr) && !errors.As(err, &linkErr) {
+			return err
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(delay):
 		}
 	}
 }
@@ -187,10 +220,14 @@ var errCloudTaskPersistence = errors.New("cloud task recovery state could not be
 var errCloudTaskResultUnavailable = errors.New("cloud task execution result could not be confirmed")
 
 const (
-	cloudTaskMaxInvalidPolls = 3
-	cloudTaskUnsubmittedKey  = "relay_task_unsubmitted"
-	cloudTaskResponseKey     = "relay_pending_response_id"
-	cloudTaskRecoveryKey     = "relay_context_recovery_input"
+	cloudTaskMaxInvalidPolls  = 3
+	cloudTaskUnsubmittedKey   = "relay_task_unsubmitted"
+	cloudTaskResponseKey      = "relay_pending_response_id"
+	cloudTaskRecoveryKey      = "relay_context_recovery_input"
+	cloudTaskStartedAtKey     = "relay_task_started_at"
+	cloudTaskRetryAfterKey    = "relay_task_retry_after"
+	cloudTaskRecoveryStartKey = "relay_context_recovery_started_at"
+	cloudTaskRecoveryRetryKey = "relay_context_recovery_after"
 )
 
 // Build a text checkpoint from successful turns in this room. Replies can be
@@ -268,9 +305,9 @@ func (h *Handler) awaitCloudTask(ctx context.Context, room im.Room, message im.M
 	}
 	responseID, _ := metadata[cloudTaskResponseKey].(string)
 	recoveryInput, _ := metadata[cloudTaskRecoveryKey].(string)
-	startedAtKey, retryAfterKey := "relay_task_started_at", "relay_task_retry_after"
+	startedAtKey, retryAfterKey := cloudTaskStartedAtKey, cloudTaskRetryAfterKey
 	if recoveryInput != "" {
-		startedAtKey, retryAfterKey = "relay_context_recovery_started_at", "relay_context_recovery_after"
+		startedAtKey, retryAfterKey = cloudTaskRecoveryStartKey, cloudTaskRecoveryRetryKey
 	}
 	startedAt, _ := metadata[startedAtKey].(string)
 	unsubmitted, _ := metadata[cloudTaskUnsubmittedKey].(bool)
@@ -285,8 +322,10 @@ func (h *Handler) awaitCloudTask(ctx context.Context, room im.Room, message im.M
 	needsCheckpoint := true
 	checkpoint := func() error {
 		needsCheckpoint = false
-		_, err := h.im.UpdateDeliveredMessageMetadata(room.ID, message.ID, message.SenderID, metadata)
-		return err
+		return retryCloudTaskWrite(ctx, func() error {
+			_, err := h.im.UpdateDeliveredMessageMetadata(room.ID, message.ID, message.SenderID, metadata)
+			return err
+		})
 	}
 	invalidPolls := 0
 	for {
@@ -297,12 +336,7 @@ func (h *Handler) awaitCloudTask(ctx context.Context, room im.Room, message im.M
 		retryAfter, _ := metadata[retryAfterKey].(string)
 		recoveryInput, _ := metadata[cloudTaskRecoveryKey].(string)
 		unsubmitted, _ := metadata[cloudTaskUnsubmittedKey].(bool)
-		if responseID == "" && time.Since(submissionStartedAt) > 10*time.Minute {
-			if !unsubmitted {
-				return relay.Response{}, errCloudTaskResultUnavailable
-			}
-			return relay.Response{}, fmt.Errorf("request recovery window expired")
-		}
+		submissionDeadline := submissionStartedAt.Add(10 * time.Minute)
 		knownUnsubmitted := unsubmitted && recoveryInput == "" && responseID == ""
 		if knownUnsubmitted {
 			// Consume this marker before the POST so a restart cannot mistake
@@ -311,10 +345,20 @@ func (h *Handler) awaitCloudTask(ctx context.Context, room im.Room, message im.M
 			metadata[startedAtKey] = submissionStartedAt.Format(time.RFC3339Nano)
 			needsCheckpoint = true
 		}
-		if responseID == "" && needsCheckpoint && checkpoint() != nil {
+		if responseID == "" && needsCheckpoint && time.Now().Before(submissionDeadline) && checkpoint() != nil {
 			return relay.Response{}, errCloudTaskPersistence
 		}
-		callCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+		if responseID == "" && !time.Now().Before(submissionDeadline) {
+			if !unsubmitted {
+				return relay.Response{}, errCloudTaskResultUnavailable
+			}
+			return relay.Response{}, fmt.Errorf("request recovery window expired")
+		}
+		callDeadline := time.Now().Add(30 * time.Second)
+		if responseID == "" && submissionDeadline.Before(callDeadline) {
+			callDeadline = submissionDeadline
+		}
+		callCtx, cancel := context.WithDeadline(ctx, callDeadline)
 		var result relay.Response
 		var err error
 		var remote *relay.HTTPError
@@ -350,7 +394,7 @@ func (h *Handler) awaitCloudTask(ctx context.Context, room im.Room, message im.M
 		metadataChanged := true
 		switch {
 		case restore:
-			startedAtKey, retryAfterKey = "relay_context_recovery_started_at", "relay_context_recovery_after"
+			startedAtKey, retryAfterKey = cloudTaskRecoveryStartKey, cloudTaskRecoveryRetryKey
 			submissionStartedAt = time.Now().UTC()
 			metadata[cloudTaskRecoveryKey] = cloudTaskRecoveryInput(room, message)
 			metadata[startedAtKey] = submissionStartedAt.Format(time.RFC3339Nano)
