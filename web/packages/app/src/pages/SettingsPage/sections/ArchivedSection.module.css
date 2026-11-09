@@ -1,0 +1,73 @@
+.kindTag {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--panel-soft);
+  color: var(--muted);
+  font-size: 10.5px;
+  line-height: 16px;
+  vertical-align: 1px;
+}
+
+.dangerNote {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in oklab, var(--danger) 28%, transparent);
+  border-radius: var(--radius-sm);
+  background: color-mix(in oklab, var(--danger) 8%, transparent);
+  color: var(--danger);
+  font-size: 12.5px;
+  line-height: 18px;
+}
+
+.archivePreference {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--field);
+  margin-bottom: 16px;
+}
+
+.archivePreference p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.archivedAgentAvatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 28px;
+  width: 28px;
+  height: 28px;
+  overflow: hidden;
+  border-radius: var(--radius-sm);
+  background: var(--panel-soft);
+}
+
+.archivedAgentAvatar :global(.agent-avatar-image) {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.archiveImpactList {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding-left: 20px;
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.6;
+  list-style: disc;
+}
+
+.archivedAgentDialog {
+  overflow-wrap: anywhere;
+}

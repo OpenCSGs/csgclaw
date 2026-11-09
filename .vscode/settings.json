@@ -1,12 +1,12 @@
 {
-  "js/ts.tsdk.path": "web/app/node_modules/typescript/lib",
+  "js/ts.tsdk.path": "web/packages/app/node_modules/typescript/lib",
   "js/ts.validate.enabled": true,
   "editor.formatOnSave": true,
   "prettier.requireConfig": true,
-  "prettier.configPath": "web/app/.prettierrc.json",
+  "prettier.configPath": "web/packages/app/.prettierrc.json",
   "eslint.workingDirectories": [
     {
-      "directory": "web/app",
+      "directory": "web/packages/app",
       "changeProcessCWD": true
     }
   ],

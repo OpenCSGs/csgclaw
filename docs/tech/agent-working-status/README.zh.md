@@ -121,9 +121,9 @@ Web 收到 SSE 后新增、续期或关闭对应租约，并根据 `expires_at` 
 
 Web 还会在 participant 被更新或删除、房间被删除、成员离开房间时清理相关状态。主要实现位于：
 
-- `web/app/src/hooks/workspace/useParticipantWorkStatus.ts`
-- `web/app/src/hooks/workspace/participantWorkState.ts`
-- `web/app/src/hooks/workspace/useWorkspaceRealtime.ts`
+- `web/packages/app/src/hooks/workspace/useParticipantWorkStatus.ts`
+- `web/packages/app/src/hooks/workspace/participantWorkState.ts`
+- `web/packages/app/src/hooks/workspace/useWorkspaceRealtime.ts`
 
 ## 明确边界
 

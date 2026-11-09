@@ -1,0 +1,67 @@
+.agent-memory-tab {
+  display: grid;
+  gap: 28px;
+  width: 100%;
+  padding-bottom: 24px;
+}
+
+.agent-memory-status {
+  color: var(--gray-600);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 20px;
+}
+
+.agent-memory-toggle-hint {
+  width: min(100%, 820px);
+  margin: -12px 0 0;
+  color: var(--gray-500);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.agent-memory-location {
+  display: inline-flex;
+  width: fit-content;
+  max-width: 100%;
+  margin-top: 6px;
+  padding: 2px 7px;
+  overflow: hidden;
+  border-radius: var(--radius-sm);
+  background: var(--gray-100);
+  color: var(--gray-600);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-memory-document {
+  width: 100%;
+  height: min(52vh, 520px);
+  min-height: 360px;
+  padding: 20px 52px 28px 20px;
+  overflow: auto;
+  background: var(--surface);
+  line-height: 1.55;
+}
+
+.agent-memory-document > :first-child {
+  margin-top: 0;
+}
+
+.agent-memory-document > :last-child {
+  margin-bottom: 0;
+}
+
+:root[data-theme="dark"] .agent-memory-location {
+  background: var(--gray-800);
+  color: var(--gray-300);
+}
+
+@container (max-width: 620px) {
+  .agent-memory-toggle-hint {
+    width: 100%;
+  }
+}

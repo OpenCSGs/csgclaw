@@ -1,0 +1,1716 @@
+import messageContentStyles from "@/components/business/MessageContent/MessageContent.module.css";
+import testWorkingTurnStyles from "@/components/business/ConversationPane/WorkingTurn.module.css";
+import testConversationThreadsStyles from "@/components/business/ConversationPane/ConversationThreads.module.css";
+import testConversationAttachmentsStyles from "@/components/business/ConversationPane/ConversationAttachments.module.css";
+import testConversationMessageListStyles from "@/components/business/ConversationPane/ConversationMessageList.module.css";
+import testMentionPickerStyles from "@/components/business/ConversationPane/MentionPicker.module.css";
+import { createQueryWrapper } from "../helpers/queryClient";
+import { createRef, useRef, useState } from "react";
+import { MemoryRouter } from "react-router-dom";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { ConversationPane } from "@/components/business/ConversationWorkspace/ConversationPane";
+import { AgentActivityMsgTypes, CSGCLAW_AGENT_ACTIVITY_TYPE } from "@/shared/constants/messages";
+import { CHAT_SIDE_PANEL_WIDTH_STORAGE_KEY } from "@/shared/storage/keys";
+import type { ConversationPaneProps } from "@/components/business/ConversationPane";
+import { agentToDraft } from "@/models/agents";
+import type { IMConversation, IMMessage, IMUser, ThreadView, TranslateFn } from "@/models/conversations";
+import {
+  getCollapsedSelectionTextOffset,
+  parseComposerSegments,
+  segmentsToPlainText,
+  type ComposerSegment,
+} from "@/models/composer";
+
+vi.mock("@/api/im", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/api/im")>();
+  return { ...actual, fetchMessagesRequest: vi.fn(async () => []) };
+});
+
+vi.mock("@/shared/realtime/imEvents", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/shared/realtime/imEvents")>()),
+  subscribeIMEvents: vi.fn(() => () => undefined),
+}));
+
+const users: IMUser[] = [
+  {
+    accent_hex: "#8b1d2c",
+    avatar: "AD",
+    id: "u-admin",
+    name: "本地用户",
+    role: "admin",
+  },
+  {
+    accent_hex: "#0f5b66",
+    avatar: "MG",
+    id: "u-manager",
+    name: "manager",
+    role: "worker",
+  },
+];
+
+const roomUsers: IMUser[] = [
+  users[0],
+  {
+    accent_hex: "#4f2ec7",
+    avatar: "D",
+    id: "u-dev",
+    name: "dev",
+    role: "worker",
+  },
+  users[1],
+  {
+    accent_hex: "#1f57c8",
+    avatar: "Q",
+    id: "u-qa",
+    name: "qa",
+    role: "worker",
+  },
+  {
+    accent_hex: "#047857",
+    avatar: "U",
+    id: "u-ux",
+    name: "ux",
+    role: "worker",
+  },
+  {
+    accent_hex: "#0f5b66",
+    avatar: "S",
+    id: "u-sales",
+    name: "sales",
+    role: "worker",
+  },
+];
+
+const usersById = new Map(users.map((user) => [user.id, user]));
+
+function toolActivityContent(summary: string) {
+  return JSON.stringify({
+    type: CSGCLAW_AGENT_ACTIVITY_TYPE,
+    content: {
+      msgtype: AgentActivityMsgTypes.tool,
+      body: "Tool running",
+      tool: {
+        id: "tool-1",
+        input_summary: summary,
+        kind: "execute",
+        status: "running",
+        title: "Run shell command",
+      },
+    },
+  });
+}
+
+function questionActivityContent(id = "request-1", autoResolveAt = "") {
+  return JSON.stringify({
+    type: CSGCLAW_AGENT_ACTIVITY_TYPE,
+    content: {
+      msgtype: AgentActivityMsgTypes.question,
+      body: "Question pending",
+      question: {
+        id,
+        status: "pending",
+        ...(autoResolveAt ? { auto_resolve_at: autoResolveAt } : {}),
+        questions: [
+          {
+            id: "color",
+            header: "Color",
+            question: "Choose a color",
+            options: [{ label: "Blue", description: "Cool" }],
+          },
+          {
+            id: "detail",
+            header: "Detail",
+            question: "Add more detail",
+            options: [],
+          },
+        ],
+      },
+    },
+    channel: "csgclaw",
+    event_id: `question-${id}`,
+    origin_server_ts: 1,
+    room_id: "room-1",
+    sender: "manager",
+    version: 1,
+  });
+}
+
+const t: TranslateFn = (key, params = {}) => {
+  const labels: Record<string, string> = {
+    close: "Close",
+    composerTip: "Enter to send",
+    directMessagesSection: "Direct Messages",
+    inputPlaceholder: "Message",
+    localIdentityFallback: "Local user",
+    conversationWorkingEditing: "Editing",
+    conversationWorkingGeneratingReply: "Generating reply",
+    conversationWorkingOpenActivity: "View {name}'s activity: {detail}",
+    conversationWorkingPreparingReply: "Preparing a reply",
+    conversationWorkingReading: "Reading",
+    conversationWorkingReplying: "Replying",
+    conversationWorkingRunning: "Running",
+    conversationWorkingSearching: "Searching",
+    conversationWorkingThinking: "Thinking",
+    conversationWorkingUsingTool: "Using tool",
+    conversationWorkingWaiting: "Waiting",
+    deleteRoom: "deleteRoom",
+    deleteRoomConfirm: "deleteRoomConfirm",
+    deleteRoomConfirmBody: "deleteRoomConfirmBody",
+    deleteRoomFailed: "deleteRoomFailed",
+    "errors.room_has_active_tasks": "当前房间仍有未完成的任务。请先停止或完成任务，再删除房间。",
+    agentActivityEmpty: "No activity yet",
+    agentActivityChronological: "Chronological",
+    agentActivityEventsCount: "{count} events",
+    agentActivityLoadFailed: "Failed to load activity",
+    agentActivityLoading: "Loading activity",
+    agentActivityNoFilteredResults: "No matching activity",
+    agentActivitySummaryLabel: "Activity summary",
+    agentActivitySortLabel: "Activity order",
+    agentActivityTimelineLabel: "Activity timeline",
+    agentActivityTitle: "Activity",
+    agentActivityToolCallsCount: "{count} tool calls",
+    agentActivityNewestFirst: "Newest first",
+    conversationActivityOpen: "Activity records",
+    conversationActivityActorFilter: "Filter activity by participant",
+    conversationActivityAllActors: "All",
+    conversationActivityRoomTimeline: "Current conversation · {name} · Room activity",
+    conversationActivityResize: "Resize activity side panel",
+    chatSideResize: "Resize chat sidebar",
+    latestThreadReply: "Latest reply",
+    replyInThread: "Reply in thread",
+    send: "Send",
+    timestampToday: "Today",
+    timestampYesterday: "Yesterday",
+    threadComposerPlaceholder: "Reply in thread",
+    threadNoReplies: "No replies",
+    threadPanelTitle: "Thread",
+    previewAttachmentNamed: "Preview attachment: {name}",
+  };
+  if (key === "threadReplies") {
+    return `${params.count ?? 0} replies`;
+  }
+  const label = labels[key] ?? key;
+  return Object.entries(params).reduce((text, [name, value]) => text.replace(`{${name}}`, String(value)), label);
+};
+
+function renderThreadPane({
+  agents = [],
+  conversationTitle = "manager",
+  conversationMembers = users,
+  isDirect = true,
+  messages,
+  onClearRoomMessages = vi.fn(),
+  onCloseThread = vi.fn(),
+  onDeleteRoom = vi.fn(),
+  onOpenAgentDetail = vi.fn(),
+  onPreserveMessageAnchor = vi.fn(),
+  onPreviewUser = vi.fn(),
+  onRemoveMember = vi.fn(),
+  replies = [],
+  showToolCalls = false,
+  mentionCandidates = [],
+  mentionIndex = 0,
+  visibleMessages,
+  memberActionBusyID = "",
+  memberActionError = "",
+  onClearMemberActionError = vi.fn(),
+  onApplyMention = vi.fn(),
+  agentDetailPanelProps = null,
+  agentDetailPanelStateRef,
+  usersByIdOverride = usersById,
+  statefulThreads = false,
+  onRestoreThread = vi.fn(),
+  workingParticipants = [],
+  onStopWorkingTurn = vi.fn(),
+  cloudAgent,
+}: {
+  agents?: NonNullable<ConversationPaneProps["agents"]>;
+  agentDetailPanelProps?: ConversationPaneProps["agentDetailPanelProps"];
+  agentDetailPanelStateRef?: { close?: () => void };
+  conversationTitle?: string;
+  conversationMembers?: IMUser[];
+  isDirect?: boolean;
+  messages?: IMConversation["messages"];
+  visibleMessages?: IMConversation["messages"];
+  mentionCandidates?: IMUser[];
+  mentionIndex?: number;
+  onClearRoomMessages?: (id: string) => void;
+  onCloseThread?: () => void;
+  onDeleteRoom?: ConversationPaneProps["onDeleteRoom"];
+  onApplyMention?: (user: IMUser) => void;
+  onOpenAgentDetail?: NonNullable<ConversationPaneProps["onOpenAgentDetail"]>;
+  onPreserveMessageAnchor?: NonNullable<ConversationPaneProps["onPreserveMessageAnchor"]>;
+  onPreviewUser?: (user: IMUser) => void;
+  onRemoveMember?: (memberID: string) => void;
+  memberActionBusyID?: string;
+  memberActionError?: string;
+  onClearMemberActionError?: () => void;
+  replies?: ThreadView["replies"];
+  showToolCalls?: boolean;
+  usersByIdOverride?: ConversationPaneProps["usersById"];
+  statefulThreads?: boolean;
+  onRestoreThread?: (rootID: string) => void;
+  workingParticipants?: ConversationPaneProps["workingParticipants"];
+  onStopWorkingTurn?: ConversationPaneProps["onStopWorkingTurn"];
+  cloudAgent?: IMConversation["cloud_agent"];
+} = {}) {
+  const root = {
+    content: "Hi! How can I help you today?",
+    created_at: "2026-05-25T08:13:00Z",
+    id: "msg-root",
+    sender_id: "u-manager",
+  };
+  const thread: ThreadView = {
+    replies,
+    room_id: "room-1",
+    root,
+    summary: {
+      context_summary: { root_excerpt: root.content },
+      reply_count: 0,
+      root_id: root.id,
+    },
+  };
+
+  function Harness({ timelineMessages = messages || [root] }: { timelineMessages?: IMMessage[] }) {
+    const conversation: IMConversation = {
+      id: "room-1",
+      is_direct: isDirect,
+      members: conversationMembers.map((user) => user.id),
+      messages: timelineMessages,
+      title: conversationTitle,
+      cloud_agent: cloudAgent,
+    };
+    const [threadRootID, setThreadRootID] = useState(root.id);
+    const restoreCount = useRef(0);
+    const [showChannelTools, setShowChannelTools] = useState(false);
+    const [showMemberList, setShowMemberList] = useState(false);
+    const [memberPanelOpen, setMemberPanelOpen] = useState(false);
+    const [inviteUserIDs, setInviteUserIDs] = useState<string[]>([]);
+    const [showTools, setShowTools] = useState(showToolCalls);
+    const [threadDraftSegments, setThreadDraftSegments] = useState<ComposerSegment[]>([]);
+    const [agentDetailOpen, setAgentDetailOpen] = useState(Boolean(agentDetailPanelProps));
+    if (agentDetailPanelStateRef) {
+      agentDetailPanelStateRef.close = () => setAgentDetailOpen(false);
+    }
+    return (
+      <ConversationPane
+        activeThreadRootID={threadRootID}
+        activeThreadView={{ ...thread, root: timelineMessages.find((message) => message.id === threadRootID) ?? root }}
+        agents={agents}
+        workingParticipants={workingParticipants}
+        onStopWorkingTurn={onStopWorkingTurn}
+        authBusyProvider=""
+        authStatuses={{}}
+        channelToolsRef={createRef<HTMLDivElement>()}
+        composerError=""
+        conversation={conversation}
+        conversationMembers={conversationMembers}
+        currentUserID="u-admin"
+        draftSegments={[]}
+        draftText=""
+        editorRef={createRef<HTMLDivElement>()}
+        inviteActionLabel="Invite"
+        locale="zh"
+        logAgent={null}
+        managerProfile={null}
+        composerDisabledReason=""
+        memberMenuRef={createRef<HTMLDivElement>()}
+        mentionCandidates={mentionCandidates}
+        mentionIndex={mentionIndex}
+        mentionableUsersByName={new Map([["manager", users[1]]])}
+        messageActionBusy=""
+        messageActionFeedback={{}}
+        messageListRef={createRef<HTMLElement>()}
+        memberActionBusyID={memberActionBusyID}
+        memberActionError={memberActionError}
+        onApplyMention={onApplyMention}
+        onClearRoomMessages={onClearRoomMessages}
+        onClearMemberActionError={onClearMemberActionError}
+        onCloseThread={onCloseThread}
+        onComposerCompositionEnd={() => {}}
+        onComposerCompositionStart={() => {}}
+        onComposerKeyDown={() => {}}
+        onDeleteRoom={onDeleteRoom}
+        onInviteAction={() => setMemberPanelOpen((open) => !open)}
+        onMessageAction={() => {}}
+        onOpenAgentDetail={onOpenAgentDetail}
+        onPreserveMessageAnchor={onPreserveMessageAnchor}
+        onOpenThread={(message) => {
+          if (statefulThreads && message.id) setThreadRootID(message.id);
+        }}
+        onRestoreThread={
+          statefulThreads
+            ? (rootID) => {
+                onRestoreThread(rootID);
+                if (++restoreCount.current > 6) throw new Error("Thread roots keep alternating");
+                setThreadRootID(rootID);
+              }
+            : undefined
+        }
+        onRemoveMember={onRemoveMember}
+        onProviderLogin={() => {}}
+        onPreviewUser={onPreviewUser}
+        onSendMessage={() => {}}
+        onSendThreadReply={() => {}}
+        onSyncComposer={() => {}}
+        onToggleChannelTools={setShowChannelTools}
+        onToggleMemberList={setShowMemberList}
+        onToggleToolCalls={setShowTools}
+        selectedMessageCount={timelineMessages.length}
+        agentDetailPanelProps={agentDetailOpen ? agentDetailPanelProps : null}
+        memberPanelProps={
+          memberPanelOpen && !isDirect
+            ? {
+                agents,
+                candidates: [],
+                currentUserID: "u-admin",
+                inviteUserIDs,
+                members: conversationMembers,
+                memberActionBusyID,
+                memberActionError,
+                onRemoveMember,
+                onExternalMembershipChange: () => {},
+                onClose: () => setMemberPanelOpen(false),
+                onInvite: () => {},
+                onInviteUserIDsChange: setInviteUserIDs,
+                onPreviewUser,
+                t,
+              }
+            : null
+        }
+        showChannelTools={showChannelTools}
+        showMemberList={showMemberList}
+        showToolCalls={showTools}
+        t={t}
+        theme="light"
+        threadDraftSegments={threadDraftSegments}
+        threadError=""
+        threadLoading={false}
+        onThreadDraftChange={setThreadDraftSegments}
+        usersById={usersByIdOverride}
+        visibleMessages={visibleMessages ?? timelineMessages}
+      />
+    );
+  }
+
+  const view = render(
+    cloudAgent ? (
+      <MemoryRouter>
+        <Harness />
+      </MemoryRouter>
+    ) : (
+      <Harness />
+    ),
+    {
+      wrapper: createQueryWrapper().wrapper,
+    },
+  );
+  return {
+    ...view,
+    rerenderCloudMessages: (timelineMessages: IMMessage[]) =>
+      view.rerender(
+        <MemoryRouter>
+          <Harness timelineMessages={timelineMessages} />
+        </MemoryRouter>,
+      ),
+  };
+}
+
+describe("ConversationPane", () => {
+  it("uses the cloud agent name without its identity suffix for both pending and completed replies", () => {
+    const job = { id: "cloud-job", sender_id: "u-admin", content: "Hello" };
+    const cloudUser = { ...users[1], name: "manager-cloud-c30d6746", role: "cloud" };
+    const { container, rerenderCloudMessages } = renderThreadPane({
+      cloudAgent: { user_id: "u-manager", agent_id: "agt_cloud", connection_id: "connection" },
+      isDirect: true,
+      messages: [job],
+      usersByIdOverride: new Map([...usersById, [cloudUser.id, cloudUser]]),
+    });
+    const pending = screen.getByText("Preparing a reply").closest(".message-row");
+    expect(container.querySelector(".chat-kicker")).toHaveTextContent(/^manager$/);
+    expect(pending?.querySelector(".message-author")).toHaveTextContent(/^manager$/);
+    expect(pending?.querySelector(".avatar")).toBeInTheDocument();
+    expect(container.querySelector(".composer")).not.toHaveTextContent(/Preparing a reply|cloudChatWaiting/);
+
+    rerenderCloudMessages([
+      job,
+      { id: "cloud-reply", sender_id: "u-manager", client_message_id: "relay-reply:cloud-job", content: "Cloud reply" },
+    ]);
+    const reply = screen.getByText("Cloud reply").closest(".message-row");
+    expect(reply?.querySelector(".message-author")).toHaveTextContent(/^manager$/);
+    expect(screen.queryByText("Preparing a reply")).not.toBeInTheDocument();
+  });
+
+  it("shows the pending reply beside the agent avatar before its progress message arrives", async () => {
+    const participant = {
+      id: "u-manager",
+      name: "manager",
+      participantID: "pt-manager",
+      roomID: "room-1",
+      requestID: "request-pending",
+      leaseID: "lease-pending",
+      canStop: true,
+    };
+    const onStopWorkingTurn = vi.fn();
+    const { container } = renderThreadPane({ workingParticipants: [participant], onStopWorkingTurn });
+    const pending = screen.getByText("Preparing a reply").closest(".message-row");
+    expect(pending).not.toBeNull();
+    expect(pending?.querySelector(".avatar")).toBeInTheDocument();
+    expect(container.querySelector(".composer > .composer-working")).not.toBeInTheDocument();
+    await userEvent.click(within(pending as HTMLElement).getByRole("button", { name: "conversationWorkingStopAria" }));
+    expect(onStopWorkingTurn).toHaveBeenCalledWith(expect.objectContaining(participant));
+  });
+
+  it.each(["running", "succeeded", "canceled"])(
+    "replaces the pending reply with a matching %s message without duplicating controls",
+    (status) => {
+      const participant = {
+        id: "u-manager",
+        name: "manager",
+        participantID: "pt-manager",
+        roomID: "room-1",
+        requestID: "request-pending",
+        leaseID: "lease-pending",
+        canStop: true,
+      };
+      const { container } = renderThreadPane({
+        workingParticipants: [participant],
+        messages: [
+          {
+            id: "progress-message",
+            sender_id: "u-manager",
+            content: status === "running" ? "\u200b" : "Done",
+            metadata: {
+              csgclaw: {
+                request_id: "request-pending",
+                turn_progress: {
+                  id: "turn-pending",
+                  revision: 1,
+                  status,
+                  started_at: "2026-10-19T00:00:00Z",
+                  items: [],
+                },
+              },
+            },
+          },
+        ],
+      });
+      expect(container.querySelector("[data-work-lease-id]")).not.toBeInTheDocument();
+      expect(container.querySelector(".composer > .composer-working")).not.toBeInTheDocument();
+      expect(
+        container.querySelectorAll(`.message-row .${testWorkingTurnStyles["composer-working-stop"]}`),
+      ).toHaveLength(status === "running" ? 1 : 0);
+    },
+  );
+
+  beforeEach(() => {
+    window.localStorage.clear();
+  });
+
+  it("switches from thread A to B without restoring A again", async () => {
+    const user = userEvent.setup();
+    const onRestoreThread = vi.fn();
+    const view = renderThreadPane({
+      statefulThreads: true,
+      onRestoreThread,
+      messages: [
+        { id: "msg-root", content: "Thread A", sender_id: "u-manager", created_at: "2026-05-25T08:13:00Z" },
+        { id: "thread-b", content: "Thread B", sender_id: "u-manager", created_at: "2026-05-25T08:14:00Z" },
+      ],
+    });
+    await waitFor(() =>
+      expect(document.querySelector(`.${testConversationThreadsStyles["thread-root"]}`)).toHaveTextContent("Thread A"),
+    );
+    const row = screen.getByText("Thread B").closest(".message-row") as HTMLElement;
+    await user.hover(row);
+    await user.click(row.querySelector(".thread-hover-button") as HTMLButtonElement);
+    await waitFor(() =>
+      expect(document.querySelector(`.${testConversationThreadsStyles["thread-root"]}`)).toHaveTextContent("Thread B"),
+    );
+    expect(onRestoreThread).not.toHaveBeenCalled();
+    view.unmount();
+    renderThreadPane({
+      statefulThreads: true,
+      onRestoreThread,
+      messages: [{ id: "msg-root", content: "Thread A", sender_id: "u-manager", created_at: "2026-05-25T08:13:00Z" }],
+    });
+    await waitFor(() =>
+      expect(document.querySelector(`.${testConversationThreadsStyles["thread-root"]}`)).toHaveTextContent("Thread A"),
+    );
+    expect(onRestoreThread).not.toHaveBeenCalled();
+  });
+
+  it("opens activity in a tab while retaining the active thread", async () => {
+    const user = userEvent.setup();
+    const onCloseThread = vi.fn();
+
+    renderThreadPane({
+      agents: [{ id: "u-manager", name: "manager", role: "worker" }],
+      isDirect: false,
+      onCloseThread,
+    });
+
+    expect(document.querySelector(".thread-panel")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Activity records" }));
+
+    expect(onCloseThread).not.toHaveBeenCalled();
+    expect(screen.getByRole("heading", { name: "Activity" })).toBeInTheDocument();
+    expect(document.querySelector(".conversation-activity-panel")).toBeInTheDocument();
+    expect(document.querySelector(".thread-panel")).toBeInTheDocument();
+    expect(document.querySelector(".thread-panel")?.closest("[role=tabpanel]")).toHaveAttribute("hidden");
+  });
+
+  it("shows newest activity first by default", async () => {
+    const user = userEvent.setup();
+    renderThreadPane({
+      agents: [{ id: "u-manager", name: "manager", role: "worker" }],
+      isDirect: false,
+      messages: [
+        { id: "older", sender_id: "u-manager", created_at: "2026-07-16T10:00:00Z", content: "older event" },
+        { id: "newer", sender_id: "u-manager", created_at: "2026-07-16T10:01:00Z", content: "newer event" },
+      ],
+    });
+
+    await user.click(screen.getByRole("button", { name: "Activity records" }));
+
+    expect(screen.getByRole("radio", { name: "Newest first" })).toHaveAttribute("aria-checked", "true");
+    expect(screen.getByRole("radio", { name: "Newest first" })).toHaveAttribute(
+      "data-csg-control",
+      "segmented-control",
+    );
+    const rows = within(document.querySelector(".conversation-activity-panel") as HTMLElement).getAllByRole("listitem");
+    expect(rows[0]).toHaveTextContent("newer event");
+    expect(rows[1]).toHaveTextContent("older event");
+  });
+
+  it("includes user prompts in the conversation activity timeline", async () => {
+    const user = userEvent.setup();
+    renderThreadPane({
+      agents: [{ id: "u-manager", name: "manager", role: "worker" }],
+      conversationMembers: [users[1]],
+      isDirect: false,
+      messages: [
+        { id: "prompt", sender_id: "u-admin", created_at: "2026-07-16T10:00:00Z", content: "check Chengdu weather" },
+        { id: "reply", sender_id: "u-manager", created_at: "2026-07-16T10:01:00Z", content: "checking now" },
+      ],
+    });
+
+    await user.click(screen.getByRole("button", { name: "Activity records" }));
+
+    const panel = document.querySelector(".conversation-activity-panel") as HTMLElement;
+    expect(within(panel).getAllByText("message")).toHaveLength(2);
+    expect(within(panel).getByText("check Chengdu weather")).toBeInTheDocument();
+    expect(within(panel).getAllByText("本地用户")).toHaveLength(2);
+    expect(within(panel).getByRole("button", { name: "All" })).toHaveAttribute("aria-pressed", "true");
+
+    await user.click(within(panel).getByRole("button", { name: "本地用户" }));
+
+    expect(within(panel).getByText("check Chengdu weather")).toBeInTheDocument();
+    expect(within(panel).queryByText("checking now")).not.toBeInTheDocument();
+
+    await user.click(within(panel).getByRole("button", { name: "本地用户" }));
+
+    expect(within(panel).getByRole("button", { name: "All" })).toHaveAttribute("aria-pressed", "true");
+    expect(within(panel).getByText("checking now")).toBeInTheDocument();
+  });
+
+  it("drags the participant filters horizontally without selecting a filter", async () => {
+    const user = userEvent.setup();
+    renderThreadPane({
+      agents: [
+        { id: "u-dev", name: "dev", role: "worker" },
+        { id: "u-manager", name: "manager", role: "worker" },
+      ],
+      conversationMembers: roomUsers,
+      isDirect: false,
+      messages: [
+        { id: "dev-message", sender_id: "u-dev", created_at: "2026-07-16T10:00:00Z", content: "dev update" },
+        {
+          id: "manager-message",
+          sender_id: "u-manager",
+          created_at: "2026-07-16T10:01:00Z",
+          content: "manager update",
+        },
+      ],
+      usersByIdOverride: new Map(roomUsers.map((roomUser) => [roomUser.id, roomUser])),
+    });
+
+    await user.click(screen.getByRole("button", { name: "Activity records" }));
+
+    const filters = screen.getByRole("group", { name: "Filter activity by participant" });
+    const allFilter = within(filters).getByRole("button", { name: "All" });
+    const devFilter = within(filters).getByRole("button", { name: "dev" });
+    Object.defineProperties(filters, {
+      hasPointerCapture: { configurable: true, value: vi.fn(() => true) },
+      releasePointerCapture: { configurable: true, value: vi.fn() },
+      scrollLeft: { configurable: true, value: 120, writable: true },
+      setPointerCapture: { configurable: true, value: vi.fn() },
+    });
+
+    fireEvent.pointerDown(devFilter, { button: 0, clientX: 200, pointerId: 7 });
+    fireEvent.pointerMove(devFilter, { clientX: 140, pointerId: 7 });
+    fireEvent.pointerUp(devFilter, { clientX: 140, pointerId: 7 });
+    fireEvent.click(devFilter);
+
+    expect(filters.scrollLeft).toBe(180);
+    expect(allFilter).toHaveAttribute("aria-pressed", "true");
+    expect(devFilter).toHaveAttribute("aria-pressed", "false");
+
+    fireEvent.pointerDown(devFilter, { button: 0, clientX: 140, pointerId: 8 });
+    fireEvent.pointerUp(devFilter, { clientX: 140, pointerId: 8 });
+    fireEvent.click(devFilter);
+
+    expect(devFilter).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("restores and persists the shared sidebar width", async () => {
+    const bounds = vi
+      .spyOn(HTMLElement.prototype, "getBoundingClientRect")
+      .mockReturnValue(new DOMRect(0, 0, 1200, 900));
+    window.localStorage.setItem(CHAT_SIDE_PANEL_WIDTH_STORAGE_KEY, "512");
+    const user = userEvent.setup();
+    renderThreadPane({
+      agents: [{ id: "u-manager", name: "manager", role: "worker" }],
+      isDirect: false,
+    });
+
+    await user.click(screen.getByRole("button", { name: "Activity records" }));
+    const separator = screen.getByRole("separator", { name: "Resize chat sidebar" });
+    expect(separator).toHaveAttribute("aria-valuenow", "512");
+
+    separator.focus();
+    await user.keyboard("{ArrowLeft}");
+
+    expect(separator).toHaveAttribute("aria-valuenow", "536");
+    await waitFor(() => {
+      expect(window.localStorage.getItem(CHAT_SIDE_PANEL_WIDTH_STORAGE_KEY)).toBe("536");
+    });
+    bounds.mockRestore();
+  });
+
+  it("advances after an option answer and keeps it while navigating", async () => {
+    const user = userEvent.setup();
+    const question = {
+      content: questionActivityContent("request-1", new Date(Date.now() + 120_000).toISOString()),
+      created_at: "2026-05-25T08:14:00Z",
+      id: "question-request-1",
+      sender_id: "u-manager",
+    };
+    renderThreadPane({
+      messages: [
+        {
+          content: "Hi! How can I help you today?",
+          created_at: "2026-05-25T08:13:00Z",
+          id: "msg-root",
+          sender_id: "u-manager",
+        },
+        question,
+      ],
+    });
+
+    expect(screen.getAllByText("Choose a color").length).toBeGreaterThan(0);
+    expect(screen.getByRole("heading", { name: "Choose a color" })).toBeInTheDocument();
+    expect(screen.getByRole("timer")).toBeInTheDocument();
+    expect(
+      screen.getByText("Choose a color", { selector: `.${messageContentStyles["agent-question-prompt"]}` }),
+    ).toBeInTheDocument();
+    expect(document.querySelector(".message-bubble:has(> .agent-activity-card)")).toBeInTheDocument();
+    expect(screen.queryByLabelText("questionFreeformAnswer")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "questionPrevious" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "questionNext" })).toBeEnabled();
+    expect(screen.queryByLabelText("Message")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("radio", { name: /Blue/ }));
+    await waitFor(() => expect(screen.queryByRole("radiogroup", { name: "Choose a color" })).not.toBeInTheDocument());
+    expect(screen.getByRole("heading", { name: "Add more detail" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "questionPrevious" }));
+    const selectedOption = screen.getByRole("radio", { name: /Blue/ });
+    expect(selectedOption).toHaveAttribute("aria-checked", "true");
+    await user.click(selectedOption);
+    expect(screen.getByRole("heading", { name: "Add more detail" })).toBeInTheDocument();
+  });
+
+  it("supports the same option navigation in thread answer mode", async () => {
+    const user = userEvent.setup();
+    renderThreadPane({
+      replies: [
+        {
+          content: questionActivityContent("thread-request", new Date(Date.now() + 120_000).toISOString()),
+          created_at: "2026-05-25T08:14:00Z",
+          id: "question-thread-request",
+          sender_id: "u-manager",
+          relates_to: { rel_type: "m.thread", event_id: "msg-root" },
+        },
+      ],
+    });
+
+    expect(screen.queryByLabelText("questionFreeformAnswer")).not.toBeInTheDocument();
+    expect(screen.getByRole("timer")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "questionNext" })).toBeEnabled();
+    expect(screen.queryByRole("textbox", { name: "Reply in thread" })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("radio", { name: /Blue/ }));
+    await user.click(screen.getByRole("button", { name: "questionPrevious" }));
+    const selectedOption = screen.getByRole("radio", { name: /Blue/ });
+    expect(selectedOption).toHaveAttribute("aria-checked", "true");
+    await user.click(selectedOption);
+    expect(screen.getByRole("heading", { name: "Add more detail" })).toBeInTheDocument();
+  });
+
+  it("hides legacy zero-reply thread summaries from the timeline", () => {
+    const { container } = renderThreadPane({
+      messages: [
+        {
+          content: "No reply yet",
+          created_at: "2026-07-14T09:29:00Z",
+          id: "msg-root",
+          sender_id: "u-manager",
+          thread: {
+            reply_count: 0,
+            root_id: "msg-root",
+          },
+        },
+      ],
+    });
+
+    expect(container.querySelector(".messages .message-thread-actions")).not.toBeInTheDocument();
+  });
+
+  it.each(["worker", "agent", "manager", undefined])(
+    "shows the peer name above the direct task title (role %s)",
+    (role) => {
+      const agent = { ...users[1], name: "测试工程师 Linda", role };
+      const { container } = renderThreadPane({
+        conversationTitle: "Investigate login",
+        usersByIdOverride: new Map([...usersById, [agent.id, agent]]),
+      });
+
+      expect(container.querySelector(".chat-kicker")).toHaveTextContent("测试工程师 Linda");
+      expect(container.querySelector(".chat-kicker strong")).not.toBeInTheDocument();
+      expect(container.querySelector(".chat-title")).toHaveTextContent("Investigate login");
+      expect(screen.queryByText("Direct Messages")).not.toBeInTheDocument();
+    },
+  );
+
+  it("shows the collaboration space label without message counts when some messages are filtered", () => {
+    const messages = [
+      {
+        content: "visible answer",
+        created_at: "2026-05-25T08:13:00Z",
+        id: "msg-visible",
+        sender_id: "u-manager",
+      },
+      {
+        content: toolActivityContent("hidden command"),
+        created_at: "2026-05-25T08:14:00Z",
+        id: "msg-hidden-tool",
+        sender_id: "u-manager",
+      },
+    ];
+
+    const { container } = renderThreadPane({
+      isDirect: false,
+      conversationTitle: "测试空间",
+      messages,
+      visibleMessages: [messages[0]],
+    });
+
+    expect(screen.queryByText("1/2")).not.toBeInTheDocument();
+    expect(container.querySelector(".chat-kicker")).toHaveTextContent("iaRoomsTab");
+    expect(container.querySelector(".chat-title")).toHaveTextContent("测试空间");
+  });
+
+  it("shows the complete room title on hover and keyboard focus", async () => {
+    const user = userEvent.setup();
+    const title = "Anonymous Session: e932c5cd-1865-4f0e-bca7-784377fcc3af | Agent: dev (agent-u26ehm)";
+    renderThreadPane({ conversationTitle: title, isDirect: false });
+
+    const titleElement = screen.getByText(title, { selector: ".chat-title" });
+    expect(titleElement).toHaveAttribute("tabindex", "0");
+
+    await user.hover(titleElement);
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(title);
+
+    await user.unhover(titleElement);
+    titleElement.focus();
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(title);
+  });
+
+  it("opens human message profile previews only on click", async () => {
+    const user = userEvent.setup();
+    const onOpenAgentDetail = vi.fn();
+    const onPreviewUser = vi.fn();
+
+    renderThreadPane({
+      onOpenAgentDetail,
+      onPreviewUser,
+    });
+
+    const avatar = screen.getAllByRole("button", { name: "profilePreview manager" })[0] as HTMLElement;
+    await user.hover(avatar);
+    expect(onPreviewUser).not.toHaveBeenCalled();
+
+    await user.click(avatar);
+    expect(onPreviewUser).toHaveBeenCalledWith(expect.objectContaining({ id: "u-manager" }), avatar);
+    expect(onOpenAgentDetail).not.toHaveBeenCalled();
+  });
+
+  it("opens the profile drawer when clicking an agent avatar", async () => {
+    const user = userEvent.setup();
+    const onOpenAgentDetail = vi.fn();
+    const onPreviewUser = vi.fn();
+
+    renderThreadPane({
+      agents: [{ id: "u-manager", name: "manager", role: "worker" }],
+      onOpenAgentDetail,
+      onPreviewUser,
+    });
+
+    const avatar = screen.getAllByRole("button", { name: "agentDetailPanel manager" })[0] as HTMLElement;
+    await user.hover(avatar);
+    expect(onPreviewUser).not.toHaveBeenCalled();
+
+    onPreviewUser.mockClear();
+    await user.click(avatar);
+    expect(onOpenAgentDetail).toHaveBeenCalledWith(expect.objectContaining({ id: "u-manager" }), avatar);
+    expect(onPreviewUser).not.toHaveBeenCalled();
+  });
+
+  it("opens the profile drawer when the message sender id is a channel identity alias", async () => {
+    const user = userEvent.setup();
+    const weatherUser: IMUser = {
+      avatar: "O",
+      id: "user-codex-weather",
+      name: "codex-weather",
+      role: "worker",
+    };
+    const userAliases = new Map<string, IMUser>([
+      ...usersById,
+      [weatherUser.id, weatherUser],
+      ["codex-weather", weatherUser],
+    ]);
+    const onOpenAgentDetail = vi.fn();
+    const onPreviewUser = vi.fn();
+
+    renderThreadPane({
+      agents: [{ id: "codex-weather", name: "Codex weather", role: "worker" }],
+      conversationMembers: [users[0], weatherUser],
+      messages: [
+        {
+          content: "Weather report",
+          created_at: "2026-05-25T08:13:00Z",
+          id: "msg-weather",
+          sender_id: "codex-weather",
+        },
+      ],
+      onOpenAgentDetail,
+      onPreviewUser,
+      usersByIdOverride: userAliases,
+    });
+
+    const avatar = screen.getByRole("button", { name: "agentDetailPanel codex-weather" });
+    await user.click(avatar);
+
+    expect(onOpenAgentDetail).toHaveBeenCalledWith(expect.objectContaining({ id: "codex-weather" }), avatar);
+    expect(onPreviewUser).not.toHaveBeenCalled();
+  });
+
+  it("renders agent details as a modal drawer with keyboard dismissal", async () => {
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+    const onOpenDM = vi.fn();
+    const { container } = renderThreadPane({
+      agentDetailPanelProps: {
+        item: {
+          id: "u-manager",
+          name: "manager",
+          role: "worker",
+        },
+        t,
+        onClose,
+        onDelete: vi.fn(),
+        onInvite: vi.fn(),
+        onOpenDM,
+        onRecreate: vi.fn(),
+        onStart: vi.fn(),
+        onStop: vi.fn(),
+      },
+    });
+
+    const dialog = screen.getByRole("dialog", { name: "agentDetailPanel" });
+    const closeButton = within(dialog).getByRole("button", { name: /close/i });
+    const backdrop = document.querySelector(".agent-detail-drawer-backdrop");
+
+    expect(dialog).toHaveAttribute("aria-modal", "true");
+    expect(container).not.toContainElement(dialog);
+    expect(backdrop).toBeInTheDocument();
+    expect(dialog.querySelector(".agent-detail-side-panel-bar")?.firstElementChild).toBe(closeButton);
+    await waitFor(() => expect(closeButton).toHaveFocus());
+
+    await user.hover(closeButton);
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    expect(screen.queryByRole("tooltip", { name: "Close" })).not.toBeInTheDocument();
+    expect(closeButton).toHaveAttribute("aria-label", "Close");
+
+    await user.click(closeButton);
+    expect(onClose).toHaveBeenCalledTimes(1);
+
+    onClose.mockClear();
+    await user.keyboard("{Escape}");
+    expect(onClose).toHaveBeenCalledTimes(1);
+
+    onClose.mockClear();
+    await user.click(within(dialog).getByRole("button", { name: "openDM" }));
+    expect(onClose).toHaveBeenCalledWith(false, { skipUnsavedCheck: true });
+    expect(onOpenDM).toHaveBeenCalledWith(expect.objectContaining({ id: "u-manager" }));
+  });
+
+  it.each([true, false])(
+    "guards new-task navigation from the agent drawer when closing is allowed: %s",
+    async (allowed) => {
+      const onNewTask = vi.fn();
+      const onOpenDM = vi.fn();
+      const onClose = vi.fn(() => allowed);
+      const item = { id: "agent-dev", name: "Developer", role: "worker" };
+      renderThreadPane({
+        agentDetailPanelProps: {
+          item,
+          t,
+          onClose,
+          onNewTask,
+          onOpenDM,
+          onDelete: vi.fn(),
+          onInvite: vi.fn(),
+          onRecreate: vi.fn(),
+          onStart: vi.fn(),
+          onStop: vi.fn(),
+        },
+      });
+      const dialog = screen.getByRole("dialog", { name: "agentDetailPanel" });
+      expect(within(dialog).queryByRole("button", { name: "openDM" })).not.toBeInTheDocument();
+      await userEvent.setup().click(within(dialog).getByRole("button", { name: "agentStartTask" }));
+      expect(onClose).toHaveBeenCalledWith(false, { skipUnsavedCheck: true });
+      expect(onNewTask).toHaveBeenCalledTimes(allowed ? 1 : 0);
+      if (allowed) expect(onNewTask).toHaveBeenCalledWith(item);
+      expect(onOpenDM).not.toHaveBeenCalled();
+    },
+  );
+  it("keeps avatar editing interactive inside the agent detail drawer", async () => {
+    const user = userEvent.setup();
+    const onDraftChange = vi.fn();
+    const item = {
+      id: "u-manager",
+      name: "manager",
+      role: "worker",
+      avatar: "avatar/3D-1.png",
+    };
+    const draft = agentToDraft(item);
+
+    renderThreadPane({
+      agentDetailPanelProps: {
+        item,
+        draft,
+        savedDraft: draft,
+        t,
+        onClose: vi.fn(),
+        onDelete: vi.fn(),
+        onDraftChange,
+        onInvite: vi.fn(),
+        onOpenDM: vi.fn(),
+        onRecreate: vi.fn(),
+        onSave: vi.fn(),
+        onStart: vi.fn(),
+        onStop: vi.fn(),
+      },
+    });
+
+    const drawer = screen.getByRole("dialog", { name: "agentDetailPanel" });
+    await user.click(within(drawer).getByRole("button", { name: /editAvatar/ }));
+
+    const avatarEditor = screen.getByRole("dialog", { name: "editAvatar" });
+    expect(drawer).not.toContainElement(avatarEditor);
+    await user.click(within(avatarEditor).getByRole("radio", { name: "agentAvatarStyle3D 2" }));
+    await user.click(within(avatarEditor).getByRole("button", { name: "confirm" }));
+
+    expect(onDraftChange).toHaveBeenCalledWith(expect.objectContaining({ avatar: "avatar/3D-2.png" }));
+    expect(screen.getByRole("dialog", { name: "agentDetailPanel" })).toBeInTheDocument();
+  });
+
+  it("keeps agent details open when unsaved changes block direct-message navigation", async () => {
+    const user = userEvent.setup();
+    const onClose = vi.fn(() => false);
+    const onOpenDM = vi.fn();
+    renderThreadPane({
+      agentDetailPanelProps: {
+        item: {
+          id: "u-manager",
+          name: "manager",
+          role: "worker",
+        },
+        t,
+        onClose,
+        onDelete: vi.fn(),
+        onInvite: vi.fn(),
+        onOpenDM,
+        onRecreate: vi.fn(),
+        onStart: vi.fn(),
+        onStop: vi.fn(),
+      },
+    });
+
+    await user.click(
+      within(screen.getByRole("dialog", { name: "agentDetailPanel" })).getByRole("button", { name: "openDM" }),
+    );
+
+    expect(onClose).toHaveBeenCalledWith(false, { skipUnsavedCheck: true });
+    expect(onOpenDM).not.toHaveBeenCalled();
+  });
+
+  it("does not queue an attachment preview when agent-detail closing is blocked", async () => {
+    const onClose = vi.fn(() => false);
+    const panelState: { close?: () => void } = {};
+    renderThreadPane({
+      agentDetailPanelProps: {
+        item: { id: "u-manager", name: "manager", role: "worker" },
+        t,
+        onClose,
+        onDelete: vi.fn(),
+        onInvite: vi.fn(),
+        onOpenDM: vi.fn(),
+        onRecreate: vi.fn(),
+        onStart: vi.fn(),
+        onStop: vi.fn(),
+      },
+      agentDetailPanelStateRef: panelState,
+      messages: [
+        {
+          attachments: [
+            {
+              created_at: "2026-09-01T00:00:00Z",
+              download_url: "/api/v1/attachments/report?token=test",
+              id: "report",
+              kind: "file",
+              media_type: "text/plain",
+              name: "report.txt",
+              sha256: "sha",
+              size_bytes: 12,
+            },
+          ],
+          content: "Generated file",
+          created_at: "2026-09-01T00:00:00Z",
+          id: "message-with-file",
+          sender_id: "u-manager",
+        },
+      ],
+    });
+
+    const attachmentButton = document.querySelector<HTMLButtonElement>(
+      `.${testConversationAttachmentsStyles["message-file-attachment"]}`,
+    );
+    expect(attachmentButton).not.toBeNull();
+    fireEvent.click(attachmentButton!);
+    expect(onClose).toHaveBeenCalledWith(false);
+    act(() => panelState.close?.());
+    expect(screen.queryByLabelText("attachmentPreview")).not.toBeInTheDocument();
+  });
+
+  it("keeps the clicked attachment near the viewport after opening its preview", async () => {
+    const onPreserveMessageAnchor = vi.fn();
+    renderThreadPane({
+      onPreserveMessageAnchor,
+      messages: [
+        {
+          attachments: [
+            {
+              created_at: "2026-09-02T00:00:00Z",
+              download_url: "/api/v1/attachments/nearby?token=test",
+              id: "nearby",
+              kind: "file",
+              media_type: "text/plain",
+              name: "nearby.txt",
+              sha256: "sha",
+              size_bytes: 12,
+            },
+          ],
+          content: "Nearby file",
+          created_at: "2026-09-02T00:00:00Z",
+          id: "message-nearby-file",
+          sender_id: "u-manager",
+        },
+      ],
+    });
+
+    const attachmentButton = document.querySelector<HTMLButtonElement>(
+      `.${testConversationAttachmentsStyles["message-file-attachment"]}`,
+    );
+    expect(attachmentButton).not.toBeNull();
+    fireEvent.click(attachmentButton!);
+
+    expect(onPreserveMessageAnchor).toHaveBeenCalledWith(attachmentButton);
+  });
+
+  it("keeps nested agent skill dialogs inside the active drawer layer", async () => {
+    const user = userEvent.setup();
+    const item = {
+      id: "u-manager",
+      name: "manager",
+      role: "worker",
+    };
+    const draft = agentToDraft(item);
+    renderThreadPane({
+      agentDetailPanelProps: {
+        draft,
+        item,
+        savedDraft: draft,
+        skills: [{ name: "alpha", description: "Alpha skill" }],
+        t,
+        workspaceSupported: true,
+        onClose: vi.fn(),
+        onDelete: vi.fn(),
+        onDeleteSkill: vi.fn(),
+        onInvite: vi.fn(),
+        onOpenDM: vi.fn(),
+        onRecreate: vi.fn(),
+        onStart: vi.fn(),
+        onStop: vi.fn(),
+      },
+    });
+
+    const drawer = screen.getByRole("dialog", { name: "agentDetailPanel" });
+    await user.click(within(drawer).getByRole("button", { name: /agentProfileSkillsTab/ }));
+    await user.click(within(drawer).getByRole("button", { name: /alpha.*Alpha skill/ }));
+    await user.click(within(drawer).getByRole("button", { name: "profileRemoveResource" }));
+
+    const confirmation = screen.getByRole("dialog", { name: "agentDeleteSkill" });
+    expect(drawer).toContainElement(confirmation);
+  });
+
+  it("keeps the caret after a slash query typed before existing composer text", async () => {
+    const user = userEvent.setup();
+    const conversation: IMConversation = {
+      id: "dm-1",
+      is_direct: true,
+      members: users.map((item) => item.id),
+      messages: [],
+      title: "manager",
+    };
+
+    function Harness() {
+      const [showChannelTools, setShowChannelTools] = useState(false);
+      const [showMemberList, setShowMemberList] = useState(false);
+      const [draftSegments, setDraftSegments] = useState<ComposerSegment[]>([
+        { type: "text", text: " existing prompt" },
+      ]);
+      const editorRef = useRef<HTMLDivElement | null>(null);
+
+      return (
+        <ConversationPane
+          activeThreadRootID=""
+          activeThreadView={null}
+          authBusyProvider=""
+          authStatuses={{}}
+          channelToolsRef={createRef<HTMLDivElement>()}
+          composerError=""
+          conversation={conversation}
+          conversationMembers={users}
+          currentUserID="u-admin"
+          draftSegments={draftSegments}
+          draftText={segmentsToPlainText(draftSegments)}
+          editorRef={editorRef}
+          inviteActionLabel="Invite"
+          locale="zh"
+          logAgent={{ id: "u-manager", name: "manager" }}
+          managerProfile={null}
+          composerDisabledReason=""
+          memberMenuRef={createRef<HTMLDivElement>()}
+          mentionCandidates={[]}
+          mentionIndex={0}
+          mentionableUsersByName={new Map()}
+          messageActionBusy=""
+          messageActionFeedback={{}}
+          messageListRef={createRef<HTMLElement>()}
+          memberActionBusyID=""
+          memberActionError=""
+          onApplyMention={() => {}}
+          onApplySlashCandidate={() => {}}
+          onClearRoomMessages={() => {}}
+          onClearMemberActionError={() => {}}
+          onCloseThread={() => {}}
+          onComposerCompositionEnd={() => {}}
+          onComposerCompositionStart={() => {}}
+          onComposerKeyDown={() => {}}
+          onDeleteRoom={() => {}}
+          onInviteAction={() => {}}
+          onMessageAction={() => {}}
+          onOpenThread={() => {}}
+          onRemoveMember={() => {}}
+          onProviderLogin={() => {}}
+          onPreviewUser={() => {}}
+          onSendMessage={() => {}}
+          onSendThreadReply={() => {}}
+          onSyncComposer={() => {
+            const editor = editorRef.current;
+            if (!editor) {
+              return;
+            }
+            setDraftSegments(parseComposerSegments(editor) as ComposerSegment[]);
+          }}
+          onToggleChannelTools={setShowChannelTools}
+          onToggleMemberList={setShowMemberList}
+          onToggleToolCalls={() => {}}
+          selectedMessageCount={0}
+          showChannelTools={showChannelTools}
+          showMemberList={showMemberList}
+          showToolCalls={false}
+          slashCandidates={[]}
+          slashIndex={0}
+          slashPickerLoading={false}
+          slashPickerOpen={false}
+          t={t}
+          theme="light"
+          threadDraftSegments={[]}
+          threadError=""
+          threadLoading={false}
+          onThreadDraftChange={() => {}}
+          usersById={usersById}
+          visibleMessages={[]}
+        />
+      );
+    }
+
+    render(<Harness />);
+    const editor = screen.getByLabelText("Message");
+    const existingText = editor.firstChild;
+    expect(existingText?.nodeType).toBe(Node.TEXT_NODE);
+    (editor as HTMLElement).focus();
+    const range = document.createRange();
+    range.setStart(existingText || editor, 0);
+    range.collapse(true);
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+    await user.keyboard("/abc");
+
+    expect(editor).toHaveTextContent("/abc existing prompt");
+    expect(getCollapsedSelectionTextOffset(editor)).toBe(4);
+  });
+
+  it("opens conversation activity from the working indicator", async () => {
+    const user = userEvent.setup();
+    const conversation: IMConversation = {
+      id: "dm-1",
+      is_direct: true,
+      members: users.map((item) => item.id),
+      messages: [],
+      title: "manager",
+    };
+
+    function Harness() {
+      const [showChannelTools, setShowChannelTools] = useState(false);
+      const [showMemberList, setShowMemberList] = useState(false);
+
+      return (
+        <ConversationPane
+          activeThreadRootID=""
+          activeThreadView={null}
+          authBusyProvider=""
+          authStatuses={{}}
+          channelToolsRef={createRef<HTMLDivElement>()}
+          composerError=""
+          conversation={conversation}
+          conversationMembers={users}
+          currentUserID="u-admin"
+          draftSegments={[]}
+          draftText=""
+          editorRef={createRef<HTMLDivElement>()}
+          inviteActionLabel="Invite"
+          locale="en"
+          logAgent={{ id: "u-manager", name: "manager" }}
+          managerProfile={null}
+          composerDisabledReason=""
+          memberMenuRef={createRef<HTMLDivElement>()}
+          mentionCandidates={[]}
+          mentionIndex={0}
+          mentionableUsersByName={new Map()}
+          messageActionBusy=""
+          messageActionFeedback={{}}
+          messageListRef={createRef<HTMLElement>()}
+          onApplyMention={() => {}}
+          onClearRoomMessages={() => {}}
+          onClearMemberActionError={() => {}}
+          onCloseThread={() => {}}
+          onComposerCompositionEnd={() => {}}
+          onComposerCompositionStart={() => {}}
+          onComposerKeyDown={() => {}}
+          onDeleteRoom={() => {}}
+          onInviteAction={() => {}}
+          onMessageAction={() => {}}
+          onOpenThread={() => {}}
+          onProviderLogin={() => {}}
+          onPreviewUser={() => {}}
+          onSendMessage={() => {}}
+          onSendThreadReply={() => {}}
+          onSyncComposer={() => {}}
+          onThreadDraftChange={() => {}}
+          onToggleChannelTools={setShowChannelTools}
+          onToggleMemberList={setShowMemberList}
+          onToggleToolCalls={() => {}}
+          selectedMessageCount={0}
+          showChannelTools={showChannelTools}
+          showMemberList={showMemberList}
+          showToolCalls={false}
+          t={t}
+          theme="light"
+          threadDraftSegments={[]}
+          threadError=""
+          threadLoading={false}
+          usersById={usersById}
+          visibleMessages={[]}
+          workingParticipants={[
+            { id: "u-atlas", name: "Atlas" },
+            { id: "u-bram", name: "Bram" },
+          ]}
+        />
+      );
+    }
+
+    const view = render(<Harness />);
+
+    const pendingRows = screen.getAllByRole("status").map((status) => status.closest(".message-row"));
+    expect(pendingRows[0]).toHaveTextContent("AtlasPreparing a reply");
+    expect(pendingRows[1]).toHaveTextContent("BramPreparing a reply");
+    expect(screen.queryByRole("button", { name: "View activity" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "View Atlas's activity: Preparing a reply" }));
+
+    expect(screen.getByRole("heading", { name: "Activity" })).toBeInTheDocument();
+    expect(document.querySelector(".conversation-activity-panel")).toBeInTheDocument();
+
+    view.unmount();
+    render(<Harness />);
+    expect(screen.queryByRole("button", { name: "View activity" })).not.toBeInTheDocument();
+  });
+
+  it("shows one date divider per day without times", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-03T12:00:00+08:00"));
+
+    try {
+      const { container } = renderThreadPane({
+        messages: [
+          {
+            content: "Morning",
+            created_at: "2026-05-11T10:25:00+08:00",
+            id: "msg-morning",
+            sender_id: "u-manager",
+          },
+          {
+            content: "Afternoon",
+            created_at: "2026-05-11T16:45:00+08:00",
+            id: "msg-afternoon",
+            sender_id: "u-manager",
+          },
+          {
+            content: "Next day",
+            created_at: "2026-05-12T09:15:00+08:00",
+            id: "msg-next-day",
+            sender_id: "u-manager",
+          },
+        ],
+      });
+
+      expect(
+        [...container.querySelectorAll(`.${testConversationMessageListStyles["message-time-divider-label"]}`)].map(
+          (item) => ({
+            tooltip: item.getAttribute("data-tooltip"),
+            text: item.textContent,
+            title: item.getAttribute("title"),
+          }),
+        ),
+      ).toEqual([
+        { text: "5月11日", title: null, tooltip: "2026-05-11 10:25:00" },
+        { text: "5月12日", title: null, tooltip: "2026-05-12 09:15:00" },
+      ]);
+      expect(
+        container.querySelector(`.message-row .${testConversationMessageListStyles["message-timestamp"]}`),
+      ).toHaveAttribute("data-tooltip", "2026-05-11 10:25:00");
+      expect(
+        [...container.querySelectorAll(`.message-row .${testConversationMessageListStyles["message-timestamp"]}`)].map(
+          (item) => item.textContent,
+        ),
+      ).toEqual(["10:25", "16:45", "09:15"]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("offers mention choices inside the thread composer", async () => {
+    const user = userEvent.setup();
+    renderThreadPane();
+
+    const threadComposer = within(screen.getByRole("complementary", { name: "Thread" })).getByRole("textbox", {
+      name: "Reply in thread",
+    });
+    await user.type(threadComposer, "@");
+
+    expect(screen.getByText("@manager")).toBeInTheDocument();
+  });
+
+  it("renders main composer mention choices as clickable options", async () => {
+    const user = userEvent.setup();
+    const onApplyMention = vi.fn();
+    renderThreadPane({
+      mentionCandidates: roomUsers,
+      mentionIndex: 1,
+      onApplyMention,
+    });
+
+    const options = screen.getAllByRole("option");
+    expect(options).toHaveLength(roomUsers.length);
+    expect(options[1]).toHaveClass(testMentionPickerStyles["mention-option"], "active");
+    expect(options[1]).toHaveAttribute("aria-selected", "true");
+
+    await user.click(options[2]);
+    expect(onApplyMention).toHaveBeenCalledWith(roomUsers[2]);
+  });
+
+  it("keeps keyboard selection while navigating thread mention choices", async () => {
+    const user = userEvent.setup();
+    renderThreadPane();
+
+    const threadComposer = within(screen.getByRole("complementary", { name: "Thread" })).getByRole("textbox", {
+      name: "Reply in thread",
+    });
+    await user.type(threadComposer, "@");
+    await user.keyboard("{ArrowDown}");
+
+    expect(screen.getByText("@manager").closest("button")).toHaveClass("active");
+  });
+
+  it("scrolls the active thread mention option into view while navigating", async () => {
+    const user = userEvent.setup();
+    const scrollIntoView = vi.fn();
+    const originalScrollIntoView = HTMLElement.prototype.scrollIntoView;
+    HTMLElement.prototype.scrollIntoView = scrollIntoView;
+
+    try {
+      renderThreadPane({ conversationMembers: roomUsers });
+
+      const threadComposer = within(screen.getByRole("complementary", { name: "Thread" })).getByRole("textbox", {
+        name: "Reply in thread",
+      });
+      await user.type(threadComposer, "@");
+      await user.keyboard("{ArrowDown}{ArrowDown}{ArrowDown}{ArrowDown}{ArrowDown}");
+
+      expect(screen.getByText("@sales").closest("button")).toHaveClass("active");
+      expect(scrollIntoView).toHaveBeenCalledWith({ block: "nearest" });
+    } finally {
+      HTMLElement.prototype.scrollIntoView = originalScrollIntoView;
+    }
+  });
+
+  it("opens profile preview from thread message avatars", async () => {
+    const user = userEvent.setup();
+    const onPreviewUser = vi.fn();
+    renderThreadPane({ conversationMembers: users, onPreviewUser });
+
+    const threadPanel = screen.getByRole("complementary", { name: "Thread" });
+    await user.click(within(threadPanel).getByRole("button", { name: "profilePreview manager" }));
+
+    expect(onPreviewUser).toHaveBeenCalledWith(users[1], expect.any(HTMLElement));
+  });
+
+  it("hides tool-call replies in the thread panel when tool calls are off", () => {
+    renderThreadPane({
+      replies: [
+        {
+          content: toolActivityContent("hidden shell output"),
+          created_at: "2026-05-25T08:14:00Z",
+          id: "msg-tool",
+          sender_id: "u-manager",
+        },
+        {
+          content: "Visible answer",
+          created_at: "2026-05-25T08:15:00Z",
+          id: "msg-answer",
+          sender_id: "u-manager",
+        },
+      ],
+      showToolCalls: false,
+    });
+
+    const threadPanel = screen.getByRole("complementary", { name: "Thread" });
+    expect(within(threadPanel).queryByText("hidden shell output")).not.toBeInTheDocument();
+    expect(within(threadPanel).getByText("Visible answer")).toBeInTheDocument();
+    expect(threadPanel.querySelector(".thread-section-title")).toBeNull();
+  });
+
+  it("shows tool-call replies when enabled without exposing direct conversation tools", () => {
+    renderThreadPane({
+      isDirect: true,
+      showToolCalls: true,
+      replies: [{ id: "tool-reply", sender_id: "u-manager", content: toolActivityContent("visible shell output") }],
+    });
+
+    const threadPanel = screen.getByRole("complementary", { name: "Thread" });
+    expect(within(threadPanel).getByText("visible shell output")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "channelTools" })).not.toBeInTheDocument();
+  });
+
+  it("成员管理与工具侧栏互相切换并保留已经打开的话题", async () => {
+    const bounds = vi
+      .spyOn(HTMLElement.prototype, "getBoundingClientRect")
+      .mockReturnValue(new DOMRect(0, 0, 1200, 900));
+    try {
+      const user = userEvent.setup();
+      const onCloseThread = vi.fn();
+      renderThreadPane({ isDirect: false, onCloseThread });
+      await user.click(screen.getByRole("button", { name: "Activity records" }));
+      expect(screen.getByRole("tab", { name: "Activity records" })).toHaveAttribute("aria-selected", "true");
+
+      await user.click(screen.getByRole("button", { name: "Invite" }));
+      expect(screen.getByRole("complementary", { name: "memberManagementTitle" })).toBeInTheDocument();
+      expect(screen.queryByRole("complementary", { name: "chatSidePanel" })).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Invite" })).toHaveAttribute("aria-pressed", "true");
+      expect(screen.getByRole("button", { name: "Activity records" })).toHaveAttribute("aria-pressed", "false");
+
+      await user.click(screen.getByRole("button", { name: "Activity records" }));
+      expect(screen.queryByRole("complementary", { name: "memberManagementTitle" })).not.toBeInTheDocument();
+      expect(screen.getByRole("tab", { name: "Activity records" })).toHaveAttribute("aria-selected", "true");
+      await user.click(screen.getByRole("tab", { name: "Thread" }));
+      expect(screen.getByRole("complementary", { name: "Thread" })).toHaveTextContent("Hi! How can I help you today?");
+      expect(onCloseThread).not.toHaveBeenCalled();
+    } finally {
+      bounds.mockRestore();
+    }
+  });
+
+  it("切换成员侧栏时保留浏览器地址草稿并恢复工具按钮状态", async () => {
+    const bounds = vi
+      .spyOn(HTMLElement.prototype, "getBoundingClientRect")
+      .mockReturnValue(new DOMRect(0, 0, 1200, 900));
+    try {
+      const user = userEvent.setup();
+      renderThreadPane({ isDirect: false });
+      const browserButton = screen.getByRole("button", { name: "chatBrowser" });
+      await user.click(browserButton);
+      const address = screen.getByRole("textbox", { name: "chatBrowserAddress" });
+      await user.type(address, "https://example.com/release");
+      const memberButton = screen.getByRole("button", { name: "Invite" });
+      await user.click(memberButton);
+      expect(screen.queryByRole("textbox", { name: "chatBrowserAddress" })).not.toBeInTheDocument();
+      expect(browserButton).toHaveAttribute("aria-pressed", "false");
+      await user.click(memberButton);
+      expect(screen.getByRole("textbox", { name: "chatBrowserAddress" })).toHaveValue("https://example.com/release");
+      expect(browserButton).toHaveAttribute("aria-pressed", "true");
+      expect(memberButton).toHaveAttribute("aria-pressed", "false");
+    } finally {
+      bounds.mockRestore();
+    }
+  });
+
+  it("keeps a running thread stoppable while its panel is suspended for member management", async () => {
+    const bounds = vi
+      .spyOn(HTMLElement.prototype, "getBoundingClientRect")
+      .mockReturnValue(new DOMRect(0, 0, 1200, 900));
+    try {
+      const user = userEvent.setup();
+      const participant = {
+        id: "u-manager",
+        name: "manager",
+        participantID: "pt-manager",
+        roomID: "room-1",
+        requestID: "request-thread",
+        leaseID: "lease-thread",
+        threadRootID: "msg-root",
+        canStop: true,
+      };
+      const onStopWorkingTurn = vi.fn();
+      renderThreadPane({
+        isDirect: false,
+        workingParticipants: [participant],
+        onStopWorkingTurn,
+        replies: [
+          {
+            id: "thread-progress",
+            sender_id: "u-manager",
+            content: "\u200b",
+            relates_to: { rel_type: "m.thread", event_id: "msg-root" },
+            metadata: {
+              csgclaw: {
+                request_id: "request-thread",
+                turn_progress: {
+                  id: "turn-thread",
+                  revision: 1,
+                  status: "running",
+                  started_at: "2026-10-19T00:00:00Z",
+                  items: [],
+                },
+              },
+            },
+          },
+        ],
+      });
+      await user.click(screen.getByRole("button", { name: "Invite" }));
+      expect(screen.queryByRole("complementary", { name: "Thread" })).not.toBeInTheDocument();
+      await user.click(screen.getByRole("button", { name: "conversationWorkingStopAria" }));
+      expect(onStopWorkingTurn).toHaveBeenCalledWith(expect.objectContaining(participant));
+    } finally {
+      bounds.mockRestore();
+    }
+  });
+
+  it("成员侧栏打开时通过消息的话题入口切换到所选话题", async () => {
+    const bounds = vi
+      .spyOn(HTMLElement.prototype, "getBoundingClientRect")
+      .mockReturnValue(new DOMRect(0, 0, 1200, 900));
+    try {
+      const user = userEvent.setup();
+      renderThreadPane({
+        isDirect: false,
+        statefulThreads: true,
+        messages: [
+          { id: "msg-root", content: "Thread A", sender_id: "u-manager" },
+          { id: "thread-b", content: "Thread B", sender_id: "u-manager" },
+        ],
+      });
+      await user.click(screen.getByRole("button", { name: "Invite" }));
+      const row = screen.getByText("Thread B").closest(".message-row") as HTMLElement;
+      await user.hover(row);
+      await user.click(row.querySelector(".thread-hover-button") as HTMLButtonElement);
+      expect(screen.queryByRole("complementary", { name: "memberManagementTitle" })).not.toBeInTheDocument();
+      expect(screen.getByRole("complementary", { name: "Thread" })).toHaveTextContent("Thread B");
+    } finally {
+      bounds.mockRestore();
+    }
+  });
+
+  it("直接会话隐藏通道工具与成员管理入口", () => {
+    const onClearRoomMessages = vi.fn();
+    renderThreadPane({ isDirect: true, onClearRoomMessages });
+    expect(screen.queryByRole("button", { name: "Invite" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "membersTitle" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "channelTools" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "deleteRoom" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "clearRoomMessages" })).not.toBeInTheDocument();
+    expect(onClearRoomMessages).not.toHaveBeenCalled();
+  });
+
+  it("hides direct conversation tools and preserves room member management alongside side-panel actions", () => {
+    const direct = renderThreadPane({ isDirect: true });
+    expect(screen.getByRole("button", { name: "Activity records" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "chatFiles" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "chatBrowser" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Invite" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "channelTools" })).not.toBeInTheDocument();
+    direct.unmount();
+
+    renderThreadPane({ isDirect: false });
+    expect(screen.getByRole("button", { name: "Invite" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Activity records" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "chatFiles" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "chatBrowser" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "channelTools" })).not.toBeInTheDocument();
+  });
+});

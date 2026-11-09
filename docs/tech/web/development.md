@@ -1,6 +1,6 @@
 # Frontend Development Guide
 
-These rules apply to the Vite web app in `web/app`.
+These rules apply to the Vite web app in `web/packages/app`.
 
 Chinese companion: `development.zh.md`. This English document is the agent-facing source of truth.
 
@@ -12,10 +12,12 @@ Chinese companion: `development.zh.md`. This English document is the agent-facin
 
 ## Tooling
 
+The `web/` pnpm workspace contains the private app at `web/packages/app` and the publishable UI library at `web/packages/csgclaw-ui`. The app links the library through `workspace:*` and Vite loads its source directly. Install with the shared `web/pnpm-lock.yaml`.
+
 - Use Node.js 22.13.x or newer, up to but not including Node.js 25, for frontend development.
 - The repository root has an `.nvmrc`; with `nvm`, run `nvm use` from the `csgclaw` root.
-- `web/app/package.json` declares the required Node.js range in `engines.node`.
-- Use `pnpm` for package management. `web/app/package.json` declares supported pnpm versions through `engines.pnpm` and keeps `packageManager` pinned for Corepack users.
+- `web/packages/app/package.json` declares the required Node.js range in `engines.node`.
+- Use `pnpm` for package management. `web/packages/app/package.json` declares supported pnpm versions through `engines.pnpm` and keeps `packageManager` pinned for Corepack users.
 - Project Make targets run package commands through `scripts/web-pnpm.sh`, which reads `.nvmrc` only as the default nvm version, accepts any supported current Node.js version, and uses an existing compatible pnpm before falling back to Corepack.
 - Prefer these project-level commands for normal development:
 
@@ -30,18 +32,18 @@ make build-web
 ```bash
 corepack enable
 corepack prepare pnpm@11.1.3 --activate
-pnpm --dir web/app install
+pnpm --dir web install --frozen-lockfile
 ```
 
 ## Scope
 
-- Keep frontend source in `web/app/src`.
+- Keep frontend source in `web/packages/app/src`.
 - Treat `web/static-dist` as generated output for Go embedding.
-- Prefer local conventions already present in `web/app` before adding new patterns or dependencies.
+- Prefer local conventions already present in `web/packages/app` before adding new patterns or dependencies.
 
 ## TypeScript Type Checking
 
-- `pnpm --dir web/app typecheck` is the strict TypeScript gate and must stay passing for normal frontend changes.
+- `pnpm --dir web/packages/app typecheck` is the strict TypeScript gate and must stay passing for normal frontend changes.
 - Treat missing type declarations, unresolved modules, implicit `any`, and other TypeScript errors as part of the change. Add or refine local types, package types, runtime guards, or typed adapters until type checking passes.
 - When strict type errors appear, prioritize the touched code and shared foundations first: `src/models`, `src/shared`, controller hooks, API boundary helpers, and reusable UI primitives.
 - Prefer precise input/output types, runtime guards at external boundaries, and small null handling fixes over broad assertions or `any`.
@@ -49,7 +51,7 @@ pnpm --dir web/app install
 
 ## Static Assets And Deployment Paths
 
-- Reference `web/app/public` assets with deployment-relative paths, for example `brand/logo.svg` or `icons/users.svg`.
+- Reference `web/packages/app/public` assets with deployment-relative paths, for example `brand/logo.svg` or `icons/users.svg`.
 - Do not use root-absolute public asset URLs such as `/brand/...`, `/icons/...`, or `/favicon.ico`; cloud deployments may serve the Web UI from a subpath.
 - For bundled `src` assets, use ESM imports or `new URL("./asset.svg", import.meta.url)`.
 - After changing asset paths, run the temporary Vite build and check that no new root-absolute public asset URL was introduced.
@@ -67,7 +69,7 @@ Do not create new top-level directories unless a module is clearly cross-cutting
 
 ## Source Directory Details
 
-Use this map when creating, moving, or reorganizing files under `web/app/src`.
+Use this map when creating, moving, or reorganizing files under `web/packages/app/src`.
 
 | Path                               | Owns                                                                                                                                        | Avoid                                                                    |
 | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
@@ -242,16 +244,16 @@ src/pages/WorkspacePage/components/
 
 ## Tests And Verification
 
-- Run `pnpm --dir web/app typecheck` after frontend TypeScript, import-path, package, or config changes, and fix missing type declarations or type errors before handing off the change.
-- Run `pnpm --dir web/app lint` after frontend source changes.
-- Run `pnpm --dir web/app format:check` before sharing changes, or `pnpm --dir web/app format` to apply Prettier formatting.
-- Run `pnpm --dir web/app test` for the frontend Vitest suite.
-- Run `pnpm --dir web/app check` for the standard frontend verification bundle. `lint` runs ESLint; `test` and `check` include the Vitest ownership tests in `tests/components/UiBoundaries.test.ts`.
+- Run `pnpm --dir web/packages/app typecheck` after frontend TypeScript, import-path, package, or config changes, and fix missing type declarations or type errors before handing off the change.
+- Run `pnpm --dir web/packages/app lint` after frontend source changes.
+- Run `pnpm --dir web/packages/app format:check` before sharing changes, or `pnpm --dir web/packages/app format` to apply Prettier formatting.
+- Run `pnpm --dir web/packages/app test` for the frontend Vitest suite.
+- Run `pnpm --dir web/packages/app check` for the standard frontend verification bundle. `lint` runs ESLint; `test` and `check` include the Vitest ownership tests in `tests/components/UiBoundaries.test.ts`.
 - The ownership tests use `tests/helpers/sourceDependencies.ts` to inspect direct imports, re-exports and literal dynamic imports. They check directory boundaries: UI primitives do not depend on APIs, controllers, pages or application storage/realtime/platform code; shared business components and hooks do not depend on pages; cross-page composition uses public page entrypoints. Pure model helpers remain available, and no component-name allowlist is required.
 - Keep interaction and field-state tests beside the owning component when practical. Shared test utilities belong in `tests/helpers/`. Review color/token ownership in component styles and verify CSS cascade, theme colors and viewport behavior in a real browser rather than imposing a per-component list of forbidden CSS strings.
-- Run the standalone UI Lab from `web/app` with `corepack pnpm ui:lab` (or `pnpm ui:lab` using the pinned package manager). It opens `ui-lab.html`, renders real production components without API/login/controller setup, and is excluded from production build inputs. Use it for light/dark, validation, long-list and nested-dialog checks; use a real browser for portal clipping, viewport collisions and focus behavior.
-- Run `pnpm --dir web/app exec vite build --outDir /private/tmp/csgclaw-web-build --emptyOutDir` when validating bundling without touching `web/static-dist`.
-- Run `pnpm --dir web/app build` only when the generated `web/static-dist` output is intended.
+- Run the standalone UI Lab from `web/packages/app` with `corepack pnpm ui:lab` (or `pnpm ui:lab` using the pinned package manager). It opens `ui-lab.html`, renders real production components without API/login/controller setup, and is excluded from production build inputs. Use it for light/dark, validation, long-list and nested-dialog checks; use a real browser for portal clipping, viewport collisions and focus behavior.
+- Run `pnpm --dir web/packages/app exec vite build --outDir /private/tmp/csgclaw-web-build --emptyOutDir` when validating bundling without touching `web/static-dist`.
+- Run `pnpm --dir web/packages/app build` only when the generated `web/static-dist` output is intended.
 - Add or update pure unit tests for data shaping, routing, formatting, parser, serializer, and state-transition helpers. Good targets include `src/models/**`, `src/shared/lib/**`, and logic-only helpers inside component packages.
 - Put pure unit tests under `tests/models`, `tests/shared`, or a matching focused folder, and keep them small: table-test edge cases, invalid input, defaults, and regression cases without rendering React when a function call is enough.
 - Use React Testing Library with jsdom for component behavior: render the public component, query by role/label/text, drive interactions with `userEvent.setup()`, and assert user-visible output, disabled/loading/error states, or emitted callbacks.

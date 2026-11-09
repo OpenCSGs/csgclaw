@@ -1,0 +1,16 @@
+.workspace-file-tree {
+  min-width: 0;
+  min-height: 280px;
+  overflow: auto;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.workspace-file-tree .workspace-empty {
+  padding: 8px 10px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}

@@ -1,0 +1,117 @@
+/*! Derived from CSGClaw. Modified for standalone csgclaw-ui distribution. */
+import styles from "./FormControls.module.css";
+import { forwardRef, useId } from "react";
+import type { InputHTMLAttributes, ReactNode, TextareaHTMLAttributes } from "react";
+import { classNames, legacyClassName } from "../../lib/classNames.js";
+import { FieldContext, useFieldControlProps } from "./fieldContext.js";
+
+export type FieldProps = {
+  children: ReactNode;
+  className?: string;
+  error?: ReactNode;
+  hint?: ReactNode;
+  label?: ReactNode;
+  required?: boolean;
+  id?: string;
+};
+
+export function Field({ children, className, error, hint, label, required = false, id }: FieldProps) {
+  const generatedId = useId();
+  const controlId = id ?? generatedId;
+  const labelId = label ? `${controlId}-label` : undefined;
+  const hintId = hint ? `${controlId}-hint` : undefined;
+  const errorId = error ? `${controlId}-error` : undefined;
+  return (
+    <FieldContext.Provider
+      value={{
+        controlId,
+        labelId,
+        descriptionIds: [hintId, errorId].filter(Boolean).join(" "),
+        invalid: Boolean(error),
+        required,
+      }}
+    >
+      <label
+        className={classNames(
+          classNames(styles["field"], legacyClassName("field")),
+          classNames(styles["csg-field"], legacyClassName("csg-field")),
+          className,
+        )}
+        data-csg-field
+        data-invalid={error ? "true" : undefined}
+      >
+        {label ? (
+          <span className={classNames(styles["field-label"], legacyClassName("field-label"))} id={labelId}>
+            {label}
+            {required ? (
+              <span
+                className={classNames(styles["field-required"], legacyClassName("field-required"))}
+                data-csg-field-part
+                aria-hidden="true"
+              >
+                {" "}
+                *
+              </span>
+            ) : null}
+          </span>
+        ) : null}
+        {children}
+        {hint ? (
+          <small
+            className={classNames(styles["field-hint"], legacyClassName("field-hint"))}
+            data-csg-field-part
+            id={hintId}
+          >
+            {hint}
+          </small>
+        ) : null}
+        {error ? (
+          <div
+            className={classNames(styles["form-error"], legacyClassName("form-error"))}
+            data-csg-field-part
+            id={errorId}
+            role="alert"
+          >
+            {error}
+          </div>
+        ) : null}
+      </label>
+    </FieldContext.Provider>
+  );
+}
+
+export type TextInputProps = Omit<InputHTMLAttributes<HTMLInputElement>, "size"> & {
+  size?: "sm" | "md";
+  variant?: "default" | "plain";
+};
+
+export const TextInput = forwardRef<HTMLInputElement, TextInputProps>(function TextInput(
+  { className, size = "md", variant = "default", ...props },
+  ref,
+) {
+  const controlProps = useFieldControlProps(props);
+  return (
+    <input
+      ref={ref}
+      className={classNames(styles["csg-text-control"], className)}
+      data-csg-control="input"
+      data-size={size}
+      data-variant={variant}
+      {...controlProps}
+    />
+  );
+});
+
+export type TextAreaProps = TextareaHTMLAttributes<HTMLTextAreaElement>;
+
+export const TextArea = forwardRef<HTMLTextAreaElement, TextAreaProps>(function TextArea({ className, ...props }, ref) {
+  const controlProps = useFieldControlProps(props);
+  return (
+    <textarea
+      ref={ref}
+      className={classNames(styles["csg-text-control"], className)}
+      data-csg-control="textarea"
+      {...controlProps}
+    />
+  );
+});

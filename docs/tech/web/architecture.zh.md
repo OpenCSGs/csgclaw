@@ -1,13 +1,13 @@
 # 前端架构图解
 
-这张图用一个完整视角解释 `web/app` 前端架构，是 `development.zh.md` 的图形化补充。
+这张图用一个完整视角解释 `web/packages/app` 前端架构，是 `development.zh.md` 的图形化补充。
 
 英文版: `architecture.md`。
 
 ```text
 +==============================================================================================+
 |                                   CSGClaw Web 前端架构                                        |
-|                           web/app/src 下的 Vite + React 应用                                  |
+|                           web/packages/app/src 下的 Vite + React 应用                         |
 +==============================================================================================+
 
   构建与托管边界
@@ -15,7 +15,7 @@
 
   +-----------------------+        +-----------------------+        +---------------------------+
   | 开发源码              |        | Vite 构建             |        | 嵌入产物                  |
-  | web/app/src           | -----> | pnpm / make build-web | -----> | web/static-dist           |
+  | web/packages/app/src  | -----> | pnpm / make build-web | -----> | web/static-dist           |
   | 只在这里改源码        |        | 生成前端资源          |        | 由 Go embed 托管          |
   +-----------------------+        +-----------------------+        +---------------------------+
 
@@ -46,7 +46,7 @@
   源码架构
   ----------------------------------------------------------------------------------------------
 
-  web/app/src
+  web/packages/app/src
   |
   +-- main.tsx
   |     只做 React 入口
@@ -259,12 +259,12 @@
   ----------------------------------------------------------------------------------------------
 
   只改文档                         -> 通读并检查 Markdown
-  TypeScript 或 import 路径变化    -> pnpm --dir web/app typecheck
-  前端源码变化                     -> pnpm --dir web/app lint
-  纯 model/helper 变化             -> pnpm --dir web/app test
-  标准前端验证                     -> pnpm --dir web/app check
-  不写 static-dist 的打包冒烟      -> pnpm --dir web/app exec vite build --outDir /private/tmp/csgclaw-web-build --emptyOutDir
-  明确要更新嵌入产物               -> pnpm --dir web/app build
+  TypeScript 或 import 路径变化    -> pnpm --dir web/packages/app typecheck
+  前端源码变化                     -> pnpm --dir web/packages/app lint
+  纯 model/helper 变化             -> pnpm --dir web/packages/app test
+  标准前端验证                     -> pnpm --dir web/packages/app check
+  不写 static-dist 的打包冒烟      -> pnpm --dir web/packages/app exec vite build --outDir /private/tmp/csgclaw-web-build --emptyOutDir
+  明确要更新嵌入产物               -> pnpm --dir web/packages/app build
 ```
 
 共享视图归属：AgentDetails、TeamDetailPane、ConversationWorkspace 位于 components/business；路由页面负责控制器 props 与 URL 的适配。AppsPage、HubPage 都使用 HubDetailPane。workspaceControllerContract 定义显式契约，bindings 组合视图 props；应用主题由 bootstrap/AppThemeSynchronizer 同步。独立 UI Lab 使用生产组件，通用边界测试位于 tests/components，公共解析工具位于 tests/helpers，并通过 pnpm test/check 运行。

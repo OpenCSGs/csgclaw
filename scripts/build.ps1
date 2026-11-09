@@ -216,8 +216,9 @@ function Ensure-WebLayout {
     if (-not (Test-Path -LiteralPath (Join-Path $script:WebAppDir "package.json") -PathType Leaf)) {
         throw "Web UI package.json is missing: $(Join-Path $script:WebAppDir 'package.json')."
     }
-    if (-not (Test-Path -LiteralPath (Join-Path $script:WebAppDir "pnpm-lock.yaml") -PathType Leaf)) {
-        throw "Web UI pnpm lockfile is missing: $(Join-Path $script:WebAppDir 'pnpm-lock.yaml'). Restore the lockfile before building the Web UI."
+    $workspaceLock = Join-Path $script:WebAppDir "../../pnpm-lock.yaml"
+    if (-not (Test-Path -LiteralPath $workspaceLock -PathType Leaf)) {
+        throw "Web UI pnpm lockfile is missing: $workspaceLock. Restore the lockfile before building the Web UI."
     }
 }
 
@@ -296,7 +297,9 @@ function Ensure-WebDeps {
 
     $viteUnix = Join-Path $script:WebAppDir "node_modules/.bin/vite"
     $viteWindows = Join-Path $script:WebAppDir "node_modules/.bin/vite.cmd"
-    if ((Test-Path -LiteralPath $viteUnix -PathType Leaf) -or (Test-Path -LiteralPath $viteWindows -PathType Leaf)) {
+    $uiPackage = Join-Path $script:WebAppDir "node_modules/csgclaw-ui/package.json"
+    if ((Test-Path -LiteralPath $uiPackage -PathType Leaf) -and
+        ((Test-Path -LiteralPath $viteUnix -PathType Leaf) -or (Test-Path -LiteralPath $viteWindows -PathType Leaf))) {
         return
     }
 
@@ -828,7 +831,7 @@ $script:BuildTime = Get-EnvOrDefault -Name "BUILD_TIME" -Default ((Get-Date).ToU
 $script:Ldflags = Get-EnvOrDefault -Name "LDFLAGS" -Default "-X $($script:VersionPkg).Version=$($script:Version) -X $($script:VersionPkg).Commit=$($script:Commit) -X $($script:VersionPkg).BuildTime=$($script:BuildTime)"
 $script:CliLdflags = Get-EnvOrDefault -Name "CLI_LDFLAGS" -Default "-s -w $($script:Ldflags)"
 $script:CgoEnabled = Get-EnvOrDefault -Name "CGO_ENABLED" -Default "0"
-$script:WebAppDir = Get-EnvOrDefault -Name "WEB_APP_DIR" -Default (Join-Path $RootDir "web/app")
+$script:WebAppDir = Get-EnvOrDefault -Name "WEB_APP_DIR" -Default (Join-Path $RootDir "web/packages/app")
 $script:WebStaticDistDir = Get-EnvOrDefault -Name "WEB_STATIC_DIST_DIR" -Default (Join-Path $RootDir "web/static-dist")
 $script:DesktopDir = Get-EnvOrDefault -Name "DESKTOP_DIR" -Default (Join-Path $RootDir "desktop")
 $script:DesktopMakeDir = Join-Path $script:DesktopDir "out/make"

@@ -14,7 +14,8 @@ GO ?= go
 GOFMT ?= gofmt
 NODE ?= node
 CGO_ENABLED ?= 0
-WEB_APP_DIR ?= web/app
+WEB_APP_DIR ?= web/packages/app
+WEB_WORKSPACE_DIR ?= $(abspath $(WEB_APP_DIR)/../..)
 WEB_STATIC_DIST_DIR ?= web/static-dist
 WEB_PNPM ?= $(CURDIR)/scripts/web-pnpm.sh
 WEB_BUILD_REPORT ?= summary
@@ -84,21 +85,21 @@ check-web-toolchain:
 check-web-layout:
 	@if [ ! -d "$(WEB_APP_DIR)" ]; then \
 		printf '%s\n' "Web UI source directory is missing: $(WEB_APP_DIR)."; \
-		printf '%s\n' "Run make from the csgclaw repository root, or set WEB_APP_DIR=/absolute/path/to/web/app."; \
+		printf '%s\n' "Run make from the csgclaw repository root, or set WEB_APP_DIR=/absolute/path/to/web/packages/app."; \
 		exit 1; \
 	fi
 	@if [ ! -f "$(WEB_APP_DIR)/package.json" ]; then \
 		printf '%s\n' "Web UI package.json is missing: $(WEB_APP_DIR)/package.json."; \
 		exit 1; \
 	fi
-	@if [ ! -f "$(WEB_APP_DIR)/pnpm-lock.yaml" ]; then \
-		printf '%s\n' "Web UI pnpm lockfile is missing: $(WEB_APP_DIR)/pnpm-lock.yaml."; \
+	@if [ ! -f "$(WEB_WORKSPACE_DIR)/pnpm-lock.yaml" ]; then \
+		printf '%s\n' "Web UI pnpm lockfile is missing: $(WEB_WORKSPACE_DIR)/pnpm-lock.yaml."; \
 		printf '%s\n' "Restore the lockfile before running make build-web."; \
 		exit 1; \
 	fi
 
 ensure-web-deps: check-web-toolchain check-web-layout
-	@if [ ! -d "$(WEB_APP_DIR)/node_modules" ] || [ ! -x "$(WEB_APP_DIR)/node_modules/.bin/vite" ]; then \
+	@if [ ! -d "$(WEB_APP_DIR)/node_modules/csgclaw-ui" ] || [ ! -x "$(WEB_APP_DIR)/node_modules/.bin/vite" ]; then \
 		printf '%s\n' "Web UI dependencies are missing; running make web-install before build."; \
 		$(MAKE) web-install; \
 	fi

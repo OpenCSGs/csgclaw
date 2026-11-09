@@ -1,0 +1,16 @@
+.csg-dialog-content.document-preview-dialog-content {
+  width: auto;
+  max-width: none;
+  max-height: none;
+  padding: 0;
+  overflow: hidden;
+  background: transparent;
+}
+
+.document-preview-pdf-page {
+  width: max-content;
+  min-height: 120px;
+  display: grid;
+  place-items: start center;
+  scroll-margin-top: 20px;
+}

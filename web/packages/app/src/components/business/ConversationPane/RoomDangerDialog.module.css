@@ -1,0 +1,159 @@
+:global(.csg-dialog-overlay).room-danger-backdrop {
+  background: rgba(16, 24, 40, 0.72);
+}
+
+:global(.csg-dialog-content).room-danger-dialog {
+  width: min(286px, calc(100vw - 48px));
+  max-height: calc(100vh - 48px);
+  overflow: visible;
+  padding: 16px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--white);
+  color: var(--gray-900);
+  box-shadow:
+    0 20px 24px -4px rgba(16, 24, 40, 0.12),
+    0 8px 8px -4px rgba(16, 24, 40, 0.04);
+}
+
+.room-danger-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  justify-content: space-between;
+  padding: 0;
+  border-bottom: 0;
+  background: transparent;
+}
+
+.room-danger-copy {
+  min-width: 0;
+}
+
+.room-danger-dialog :global(.csg-dialog-title) {
+  margin: 0;
+  color: var(--gray-900);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 18px;
+  letter-spacing: 0;
+}
+
+.room-danger-dialog :global(.csg-dialog-description) {
+  margin: 4px 0 0;
+  color: var(--gray-500);
+  font-size: 11px;
+  line-height: 16px;
+  letter-spacing: 0;
+}
+
+.room-danger-error {
+  margin-top: 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--error-200);
+  border-radius: 6px;
+  background: var(--error-50);
+  color: var(--error-700);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.room-danger-close:global(.csg-dialog-close) {
+  width: 20px;
+  min-width: 20px;
+  height: 20px;
+  min-height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--gray-400);
+  box-shadow: none;
+}
+
+.room-danger-close:global(.csg-dialog-close):hover:not(:disabled),
+.room-danger-close:global(.csg-dialog-close):focus-visible {
+  background: var(--gray-100);
+  color: var(--gray-600);
+  box-shadow: none;
+}
+
+.room-danger-close :global(.icon-button-mark),
+.room-danger-close :global(.icon-button-mark) svg {
+  width: 14px;
+  height: 14px;
+}
+
+.room-danger-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 24px;
+}
+
+.room-danger-actions .room-danger-button {
+  width: 100%;
+  min-width: 0;
+  height: 32px;
+  min-height: 32px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 18px;
+}
+
+:global(.csg-dialog-content).room-danger-dialog .room-danger-actions :global(.btn-secondary-gray) {
+  border-color: var(--gray-300);
+  background: var(--white);
+  color: var(--gray-700);
+  box-shadow: var(--shadow-xs);
+}
+
+:global(.csg-dialog-content).room-danger-dialog .room-danger-actions :global(.btn-secondary-gray):hover:not(:disabled),
+:global(.csg-dialog-content).room-danger-dialog .room-danger-actions :global(.btn-secondary-gray):focus-visible {
+  border-color: var(--gray-300);
+  background: var(--gray-50);
+  color: var(--gray-800);
+}
+
+:global(.csg-dialog-content).room-danger-dialog .room-danger-actions :global(.btn-danger) {
+  border-color: var(--error-600);
+  background: var(--error-600);
+  color: var(--white);
+  box-shadow: var(--shadow-xs);
+}
+
+:global(.csg-dialog-content).room-danger-dialog .room-danger-actions :global(.btn-danger):hover:not(:disabled),
+:global(.csg-dialog-content).room-danger-dialog .room-danger-actions :global(.btn-danger):focus-visible {
+  border-color: var(--error-700);
+  background: var(--error-700);
+  color: var(--white);
+}
+
+:root[data-theme="dark"] :global(.csg-dialog-overlay).room-danger-backdrop {
+  background: rgba(16, 24, 40, 0.72);
+}
+
+:root[data-theme="dark"] :global(.csg-dialog-content).room-danger-dialog {
+  background: var(--white);
+  color: var(--gray-900);
+}
+
+:root[data-theme="dark"] .room-danger-dialog :global(.csg-dialog-title) {
+  color: var(--gray-900);
+}
+
+:root[data-theme="dark"] .room-danger-dialog :global(.csg-dialog-description) {
+  color: var(--gray-500);
+}
+
+:root[data-theme="dark"] .room-danger-close:global(.csg-dialog-close) {
+  background: transparent;
+  color: var(--gray-400);
+}
+
+:root[data-theme="dark"] .room-danger-close:global(.csg-dialog-close):hover:not(:disabled),
+:root[data-theme="dark"] .room-danger-close:global(.csg-dialog-close):focus-visible {
+  background: var(--gray-100);
+  color: var(--gray-600);
+}

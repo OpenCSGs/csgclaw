@@ -33,7 +33,7 @@ Key 无效、权限不足、余额或套餐额度不足、限流、网络异常�
 失败连接不会因为存在预设列表而变为成功状态。
 
 Key 由后端持久化，连接目录与错误消息保持脱敏。
-官方 Logo 随应用本地打包，来源记录在 `web/app/public/model-providers/SOURCES.md`。
+官方 Logo 随应用本地打包，来源记录在 `web/packages/app/public/model-providers/SOURCES.md`。
 
 ## 新建 Agent 的模型选择
 

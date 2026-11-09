@@ -48,7 +48,7 @@ Inspect their behavior before suggesting execution, and keep generated archives 
 | Provider protocol, model selection, upstream errors | `internal/modelprovider/`, `internal/llm/`, `internal/modelpreset/` |
 | Feishu or another channel | `internal/channel/`, relevant `docs/tech/channel/` documentation |
 | Skills, apps, MCP discovery or invocation | `internal/skill/`, `internal/apps/`, `internal/agentengine/agents/`, runtime MCP code |
-| Web UI, preview, rendering | `web/app/`, `docs/tech/web/development.md` |
+| Web UI, preview, rendering | `web/packages/app/`, `docs/tech/web/development.md` |
 | Desktop window, sidecar, GPU or installer | `desktop/`, Desktop log documentation and packaging scripts |
 
 Start with `rg -n -F '<exact-error-or-route>' <relevant-directories>`.

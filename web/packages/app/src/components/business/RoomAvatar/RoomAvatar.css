@@ -1,0 +1,60 @@
+.room-avatar-tile--full {
+  inset: 0;
+}
+
+.room-avatar-tile--half {
+  top: 0;
+  bottom: 0;
+  width: 50%;
+}
+
+.room-avatar-tile--left {
+  left: 0;
+  border-right: 1px solid var(--white);
+}
+
+.room-avatar-tile--right {
+  right: 0;
+  border-left: 1px solid var(--white);
+}
+
+.room-avatar-tile--quarter {
+  width: 50%;
+  height: 50%;
+}
+
+.room-avatar-tile--top-left {
+  top: 0;
+  left: 0;
+  border-right: 1px solid var(--white);
+  border-bottom: 1px solid var(--white);
+}
+
+.room-avatar-tile--top-right {
+  top: 0;
+  right: 0;
+  border-left: 1px solid var(--white);
+  border-bottom: 1px solid var(--white);
+}
+
+.room-avatar-tile--bottom-left {
+  left: 0;
+  bottom: 0;
+  border-top: 1px solid var(--white);
+  border-right: 1px solid var(--white);
+}
+
+.room-avatar-tile--bottom-right {
+  right: 0;
+  bottom: 0;
+  border-top: 1px solid var(--white);
+  border-left: 1px solid var(--white);
+}
+
+.room-avatar-tile--tall {
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 50%;
+  border-left: 1px solid var(--white);
+}
