@@ -131,7 +131,8 @@ func (h *Handler) runCloudTask(roomID string) {
 				code = result.Error.Code
 			}
 			var remote *relay.HTTPError
-			if errors.As(err, &remote) && remote.Detail.Code == "response_not_found" {
+			if errors.Is(err, errCloudTaskResultUnavailable) ||
+				(errors.As(err, &remote) && remote.Detail.Code == "response_not_found") {
 				code = "relay_task_result_unavailable"
 			}
 			if errors.Is(err, relay.ErrRequestTooLarge) {
@@ -183,11 +184,13 @@ func cloudTaskFailureText(locale, code string) string {
 }
 
 var errCloudTaskPersistence = errors.New("cloud task recovery state could not be saved")
+var errCloudTaskResultUnavailable = errors.New("cloud task execution result could not be confirmed")
 
 const (
-	cloudTaskUnsubmittedKey = "relay_task_unsubmitted"
-	cloudTaskResponseKey    = "relay_pending_response_id"
-	cloudTaskRecoveryKey    = "relay_context_recovery_input"
+	cloudTaskMaxInvalidPolls = 3
+	cloudTaskUnsubmittedKey  = "relay_task_unsubmitted"
+	cloudTaskResponseKey     = "relay_pending_response_id"
+	cloudTaskRecoveryKey     = "relay_context_recovery_input"
 )
 
 // Build a text checkpoint from successful turns in this room. Replies can be
@@ -285,6 +288,7 @@ func (h *Handler) awaitCloudTask(ctx context.Context, room im.Room, message im.M
 		_, err := h.im.UpdateDeliveredMessageMetadata(room.ID, message.ID, message.SenderID, metadata)
 		return err
 	}
+	invalidPolls := 0
 	for {
 		if ctx.Err() != nil {
 			return relay.Response{}, ctx.Err()
@@ -292,10 +296,13 @@ func (h *Handler) awaitCloudTask(ctx context.Context, room im.Room, message im.M
 		responseID, _ := metadata[cloudTaskResponseKey].(string)
 		retryAfter, _ := metadata[retryAfterKey].(string)
 		recoveryInput, _ := metadata[cloudTaskRecoveryKey].(string)
+		unsubmitted, _ := metadata[cloudTaskUnsubmittedKey].(bool)
 		if responseID == "" && time.Since(submissionStartedAt) > 10*time.Minute {
+			if !unsubmitted {
+				return relay.Response{}, errCloudTaskResultUnavailable
+			}
 			return relay.Response{}, fmt.Errorf("request recovery window expired")
 		}
-		unsubmitted, _ := metadata[cloudTaskUnsubmittedKey].(bool)
 		knownUnsubmitted := unsubmitted && recoveryInput == "" && responseID == ""
 		if knownUnsubmitted {
 			// Consume this marker before the POST so a restart cannot mistake
@@ -330,6 +337,14 @@ func (h *Handler) awaitCloudTask(ctx context.Context, room im.Room, message im.M
 			}
 		}
 		cancel()
+		if errors.Is(err, relay.ErrInvalidChatResponse) {
+			invalidPolls++
+			if invalidPolls >= cloudTaskMaxInvalidPolls {
+				return relay.Response{}, errCloudTaskResultUnavailable
+			}
+		} else if err == nil {
+			invalidPolls = 0
+		}
 		restore := recoveryInput == "" && previous != "" && cloudTaskCanRestoreContext(result, remote, knownUnsubmitted)
 		retryRejected := err == nil && result.ID != retryAfter && cloudTaskRejectedBeforeExecution(result)
 		metadataChanged := true

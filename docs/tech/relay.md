@@ -173,9 +173,11 @@ and skipping any that exceed the remaining budget. It saves the recovery input
 and the start of a new submission window so restarts reuse both. A terminal
 rejection that confirms the request never ran permits a new key within the
 current window. The initial window for new queued messages starts at dispatch.
-When Relay supplies a response ID, the caller polls that ID even if it could
-not read the submission body. A missing response after an ambiguous submission
-leaves the execution outcome unconfirmed.
+When Relay supplies a response ID, the caller polls that ID even if the
+submission body is unreadable. An ambiguous submission remains unconfirmed
+if its response is missing or its submission window expires. Polling stops after
+three invalid response bodies without a valid response in between and reports an
+unconfirmed outcome. The user should verify execution before resending.
 
 State defaults to the CSGClaw data directory's `relay/` subdirectory; `--state`
 overrides it. A process lock prevents sharing one state file. Files have `0600`

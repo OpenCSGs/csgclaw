@@ -4,11 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"net/url"
 )
 
 var ErrChatReference = errors.New("published agent or relay connection is no longer available")
+var ErrInvalidChatResponse = errors.New("invalid relay chat response")
 
 // invocationClient resolves only a server-owned reference. Browsers cannot
 // supply a URL or a token and cannot silently switch to another identity.
@@ -62,10 +64,15 @@ func (m *Manager) ChatResponse(ctx context.Context, id, connectionID, responseID
 	var result Response
 	err = c.Request(ctx, http.MethodGet, "/v1/responses/"+url.PathEscape(responseID), "", nil, &result)
 	if err != nil {
+		var syntax *json.SyntaxError
+		var fieldType *json.UnmarshalTypeError
+		if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) || errors.As(err, &syntax) || errors.As(err, &fieldType) {
+			return Response{}, ErrInvalidChatResponse
+		}
 		return Response{}, err
 	}
 	if result.ID == "" || result.Model == "" || result.Status == "" {
-		return Response{}, errors.New("incomplete relay response")
+		return Response{}, ErrInvalidChatResponse
 	}
 	if result.ID != responseID || result.Model != id {
 		return Response{}, ErrChatReference

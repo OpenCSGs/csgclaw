@@ -109,6 +109,38 @@ func TestCloudTaskModelFailureIsActionable(t *testing.T) {
 	}
 }
 
+func TestCloudTaskReportsExpiredRecoveryAsUnconfirmed(t *testing.T) {
+	const roomID = "cloud-task"
+	now := time.Now()
+	state := im.Bootstrap{
+		CurrentUserID: im.AdminUserID,
+		Users:         []im.User{{ID: im.AdminUserID, Name: "admin", Role: "admin"}, {ID: "cloud", Name: "cloud", Role: "cloud"}},
+		Rooms: []im.Room{{
+			ID: roomID, CreatedBy: im.AdminUserID, Locale: "en",
+			CloudAgent: &apitypes.CloudAgentReference{AgentID: "agt_cloud", UserID: "cloud"},
+			Members:    []string{im.AdminUserID, "cloud"},
+			Messages: []im.Message{{
+				ID: "pending", SenderID: im.AdminUserID, Content: "Continue", CreatedAt: now.Add(-time.Hour),
+				Metadata: map[string]any{
+					cloudTaskRecoveryKey:                "Saved recovery input",
+					"relay_context_recovery_started_at": now.Add(-11 * time.Minute).Format(time.RFC3339Nano),
+				},
+			}},
+		}},
+	}
+	svc := im.NewServiceFromBootstrap(state)
+	h := &Handler{im: svc}
+	h.runCloudTask(roomID)
+	room, _ := svc.Room(roomID)
+	if len(room.Messages) != 2 {
+		t.Fatalf("expected an unconfirmed-result reply, got %d messages", len(room.Messages))
+	}
+	reply := room.Messages[1]
+	if reply.Metadata["relay_error_code"] != "relay_task_result_unavailable" || !strings.Contains(reply.Content, "Check whether it completed") {
+		t.Fatalf("expected an unconfirmed-result warning, got %q", reply.Content)
+	}
+}
+
 func TestCloudTaskManagementGuardsPersistedPendingWork(t *testing.T) {
 	h, svc, _, _ := newAgentSessionTestHandler(t, nil, &fakeSessionEngine{}, "")
 	user, _, err := svc.EnsureAgentUser(im.EnsureAgentUserRequest{ID: "relay-review", Name: "CloudReview", Role: "cloud", SkipDirectRoom: true})
@@ -278,6 +310,14 @@ func TestCloudTaskRestoresLostContextInSameRoom(t *testing.T) {
 			},
 		},
 		{name: "missing polled result", pending: "resp_pending", before: []exchange{{poll("resp_pending"), missing}}},
+		{
+			name: "persistent invalid poll responses", pending: "resp_pending", old: true,
+			before: []exchange{
+				{poll("resp_pending"), func(w http.ResponseWriter) { _, _ = fmt.Fprint(w, "{}") }},
+				{poll("resp_pending"), func(w http.ResponseWriter) { _, _ = fmt.Fprint(w, "{") }},
+				{poll("resp_pending"), response("resp_pending", "", "")},
+			},
+		},
 		{name: "lost response", before: []exchange{{original, nil}, {original, offline}, {original, missing}}},
 		{name: "lost response before restart", before: []exchange{{original, nil}}, after: []exchange{{original, missing}}},
 		{name: "legacy pending message", legacy: true, before: []exchange{{original, missing}}},
