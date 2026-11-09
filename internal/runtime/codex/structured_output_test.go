@@ -157,13 +157,13 @@ func TestStructuredOutputOnlyPublishesForSuccessfulToolStatus(t *testing.T) {
 
 	sink := &recordingSink{}
 	manager := newAppServerManager(testAppServerManagerDepsWithSink(sink))
-	if cleaned := manager.decodeAndPublishStructuredCommandOutput("rt-1", "session-1", "tool-failed", "failed", record, nil, nil); cleaned != record {
+	if cleaned := manager.decodeAndPublishStructuredToolOutput("rt-1", "session-1", "tool-failed", "exec_command", "failed", record, nil); cleaned != record {
 		t.Fatalf("failed cleaned output = %q, want untouched", cleaned)
 	}
 	if events := sink.snapshot(); len(events) != 0 {
 		t.Fatalf("failed events = %+v, want none", events)
 	}
-	if cleaned := manager.decodeAndPublishStructuredCommandOutput("rt-1", "session-1", "tool-ok", "completed", record, nil, nil); cleaned != "" {
+	if cleaned := manager.decodeAndPublishStructuredToolOutput("rt-1", "session-1", "tool-ok", "exec_command", "completed", record, nil); cleaned != "" {
 		t.Fatalf("completed cleaned output = %q", cleaned)
 	}
 	events := sink.snapshot()

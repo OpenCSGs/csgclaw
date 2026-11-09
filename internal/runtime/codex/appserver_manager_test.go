@@ -2203,6 +2203,37 @@ func TestAppServerEventAdapterLegacyEvents(t *testing.T) {
 	}
 }
 
+func TestAppServerEventAdapterLegacyToolOutcomes(t *testing.T) {
+	for _, tc := range []struct {
+		name, kind, status, output string
+		fields                     map[string]any
+	}{
+		{"command declined", "exec_command_end", "canceled", "permission refused", map[string]any{"status": "declined", "exit_code": 1, "aggregated_output": "permission refused"}},
+		{"command failed", "exec_command_end", "failed", "", map[string]any{"exit_code": 7}},
+		{"command succeeded", "exec_command_end", "completed", "exited with code 7", map[string]any{"exit_code": 0, "output": "exited with code 7"}},
+		{"command text fallback", "exec_command_end", "failed", "exited with code 2", map[string]any{"output": "exited with code 2"}},
+		{"patch failed", "patch_apply_end", "failed", "", map[string]any{"success": false}},
+		{"patch declined", "patch_apply_end", "canceled", "", map[string]any{"status": "declined", "success": false}},
+		{"patch succeeded", "patch_apply_end", "completed", "", map[string]any{}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			manager, live, sink := testAppServerEventAdapter(t)
+			tc.fields["type"] = tc.kind
+			tc.fields["call_id"] = "call-1"
+			manager.handleAppServerNotification("runtime-1", live, appServerNotification{
+				Method: "codex/event", Params: mustJSONRaw(t, tc.fields),
+			})
+			events := withoutContextUsage(sink.snapshot())
+			if len(events) != 1 || events[0].Kind != SessionEventToolCallUpdate || events[0].ToolStatus != tc.status {
+				t.Fatalf("legacy tool events = %+v, want one %s result", events, tc.status)
+			}
+			if tc.output != "" && !strings.Contains(events[0].ToolOutputSummary, tc.output) {
+				t.Fatalf("tool output = %q, want %q", events[0].ToolOutputSummary, tc.output)
+			}
+		})
+	}
+}
+
 func TestAppServerEventAdapterLegacyTurnAbortedAcceptsStructuredOutputBoundary(t *testing.T) {
 	t.Parallel()
 
@@ -2276,6 +2307,165 @@ func TestAppServerEventAdapterLegacyResponseItemExecCommandFallback(t *testing.T
 		events[1].ToolStatus != "failed" ||
 		!strings.Contains(events[1].ToolOutputSummary, "operation not permitted") {
 		t.Fatalf("fallback output = %#v, want failed exec command output", events[1])
+	}
+}
+
+func TestAppServerEventAdapterLegacyShellResults(t *testing.T) {
+	const question = `::csgclaw-output::request_user_input {"questions":[{"id":"next","header":"Next","question":"Continue?","options":[{"label":"Yes","description":"Proceed."}]}]}`
+	const link = `::csgclaw-output::resource_link {"type":"resource_link","name":"docs","uri":"https://example.com/docs"}`
+	for _, tc := range []struct {
+		label, name, output, status string
+		wantArtifact                bool
+	}{
+		{"shell question", "shell_command", "Exit code: 0\nWall time: 0.2 seconds\nOutput:\n" + question, "completed", true},
+		{"poll link", "write_stdin", "Chunk ID: 123\nWall time: 0.0002 seconds\nProcess exited with code 0\nOutput:\n" + link, "completed", true},
+		{"plain shell", "shell_command", question, "completed", true},
+		{"plain poll", "write_stdin", link, "completed", true},
+		{"shell failure", "shell_command", "Exit code: 2\nWall time: 0.1 seconds\nOutput:\n" + question, "failed", false},
+		{"poll failure", "write_stdin", "Wall time: 0.1 seconds\nProcess exited with code 2\nOutput:\nProcess exited with code 0\n" + link, "failed", false},
+		{"active poll", "write_stdin", "Wall time: 1.0 seconds\nProcess running with session ID 55\nOutput:\nExit code: 0\n" + question, "completed", false},
+		{"missing exit", "write_stdin", "Wall time: 1.0 seconds\nOutput:\nProcess exited with code 2\n" + link, "completed", false},
+		{"poll error", "write_stdin", "write_stdin failed: Unknown process id 55", "failed", false},
+	} {
+		t.Run(tc.label, func(t *testing.T) {
+			manager, live, sink := testAppServerEventAdapter(t)
+			manager.handleLegacyResponseItemEvent("runtime-1", live, map[string]any{
+				"type": "function_call", "call_id": "shell", "name": tc.name, "arguments": `{}`,
+			})
+			manager.handleLegacyResponseItemEvent("runtime-1", live, map[string]any{
+				"type": "function_call_output", "call_id": "shell", "output": tc.output,
+			})
+			events := withoutContextUsage(sink.snapshot())
+			if tc.wantArtifact {
+				if len(events) != 3 || events[1].Kind != SessionEventStructuredOutput || events[1].ToolKind != tc.name {
+					t.Fatalf("expected a structured output from %s: %+v", tc.name, events)
+				}
+			} else if len(events) != 2 {
+				t.Fatalf("expected only tool start and result: %+v", events)
+			}
+			result := events[len(events)-1]
+			if result.Kind != SessionEventToolCallUpdate || result.ToolStatus != tc.status ||
+				result.ToolTitle != tc.name || result.Payload.(map[string]any)["tool"] != tc.name {
+				t.Fatalf("tool result = %+v", result)
+			}
+			wantControlLine := !tc.wantArtifact && strings.Contains(tc.output, structuredOutputPrefix)
+			if strings.Contains(result.ToolOutputSummary, structuredOutputPrefix) != wantControlLine {
+				t.Fatalf("tool output = %q, decoded artifact = %t", result.ToolOutputSummary, tc.wantArtifact)
+			}
+		})
+	}
+}
+
+func TestLegacyPTYRecordsWaitForProcessExit(t *testing.T) {
+	for _, tc := range []struct {
+		name, exitCode string
+		nextTurn       bool
+		wantCount      int
+	}{
+		{"successful exit", "0", false, 1},
+		{"failed exit", "7", false, 0},
+		{"new turn", "0", true, 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			manager, live, sink := testAppServerEventAdapter(t)
+			send := func(id, name, arguments, output string) {
+				manager.handleLegacyResponseItemEvent("runtime-1", live, map[string]any{
+					"type": "function_call", "call_id": id, "name": name, "arguments": arguments,
+				})
+				manager.handleLegacyResponseItemEvent("runtime-1", live, map[string]any{
+					"type": "function_call_output", "call_id": id, "output": output,
+				})
+			}
+			const record = `::csgclaw-output::resource_link {"type":"resource_link","name":"docs","uri":"https://example.com/docs"}`
+			send("exec", "exec_command", `{"cmd":"./script.sh"}`, "Wall time: 1.0 seconds\nProcess running with session ID 55\nOutput:\n"+record)
+			send("other", "write_stdin", `{"session_id":56}`, "Process exited with code 0\nOutput:\n")
+			for _, event := range sink.snapshot() {
+				if event.Kind == SessionEventStructuredOutput {
+					t.Fatal("published a record before the corresponding process exited")
+				}
+			}
+			if tc.nextTurn {
+				if _, err := live.registerAppServerTurnWaiter("main-thread"); err != nil {
+					t.Fatal(err)
+				}
+			}
+			send("poll", "write_stdin", `{"session_id":55}`, "Process exited with code "+tc.exitCode+"\nOutput:\n")
+			send("again", "write_stdin", `{"session_id":55}`, "Process exited with code 0\nOutput:\n")
+			count := 0
+			for _, event := range sink.snapshot() {
+				if event.Kind == SessionEventStructuredOutput {
+					count++
+					if event.ToolCallID != "poll" || len(event.Payload.(activity.StructuredOutputArtifact).ResourceLinks) != 1 {
+						t.Fatalf("unexpected structured output: %+v", event)
+					}
+				}
+			}
+			if count != tc.wantCount {
+				t.Fatalf("got %d structured outputs, want %d", count, tc.wantCount)
+			}
+		})
+	}
+}
+
+func TestLegacyShellCommandAcceptsExecEnd(t *testing.T) {
+	manager, live, sink := testAppServerEventAdapter(t)
+	manager.handleLegacyResponseItemEvent("runtime-1", live, map[string]any{
+		"type": "function_call", "call_id": "shell", "name": "shell_command", "arguments": `{"command":"run"}`,
+	})
+	manager.handleLegacyAppServerEvent("runtime-1", live, map[string]any{
+		"type": "exec_command_end", "call_id": "shell", "status": "failed", "aggregated_output": "bad option",
+	})
+	manager.handleLegacyResponseItemEvent("runtime-1", live, map[string]any{
+		"type": "function_call_output", "call_id": "shell", "output": "duplicate",
+	})
+	events := withoutContextUsage(sink.snapshot())
+	if len(events) != 2 || events[1].Kind != SessionEventToolCallUpdate || events[1].ToolStatus != "failed" ||
+		events[1].ToolTitle != "shell_command" || !strings.Contains(events[1].ToolOutputSummary, "bad option") {
+		t.Fatalf("expected one shell_command result from exec_command_end: %+v", events)
+	}
+}
+
+func TestAppServerEventAdapterMatchesLegacyResultsToTheirFunctionCalls(t *testing.T) {
+	manager, live, sink := testAppServerEventAdapter(t)
+	send := func(fields map[string]any) {
+		manager.handleAppServerNotification("runtime-1", live, appServerNotification{
+			Method: "codex/response_item", Params: mustJSONRaw(t, fields),
+		})
+	}
+	send(map[string]any{"type": "function_call", "call_id": "plan", "name": "update_plan", "arguments": `{"step":"test"}`})
+	send(map[string]any{"type": "function_call", "call_id": "command", "name": "exec_command", "arguments": `{"cmd":"pwd"}`})
+	send(map[string]any{"type": "function_call_output", "call_id": "unknown", "output": "unknown result", "status": "cancelled"})
+	send(map[string]any{"type": "function_call_output", "call_id": "unknown", "output": "duplicate"})
+	send(map[string]any{"type": "function_call_output", "call_id": "command", "output": "directory"})
+	record := `::csgclaw-output::resource_link {"type":"resource_link","name":"docs","uri":"https://example.com/docs"}`
+	send(map[string]any{"type": "function_call_output", "call_id": "plan", "output": []any{
+		map[string]any{"type": "input_text", "text": "Plan updated"},
+		map[string]any{"type": "input_image", "image_url": "image-content"},
+		map[string]any{"type": "input_text", "text": record},
+	}})
+	send(map[string]any{"type": "function_call_output", "call_id": "plan", "output": "duplicate"})
+
+	events := withoutContextUsage(sink.snapshot())
+	if len(events) != 5 {
+		t.Fatalf("expected two starts and three results: %+v", events)
+	}
+	plan, command := events[0], events[1]
+	if plan.ToolKind != "dynamic_tool_call" || plan.ToolTitle != "update_plan" || plan.Payload.(map[string]any)["tool"] != "update_plan" {
+		t.Fatalf("plan start = %+v", plan)
+	}
+	if command.ToolKind != "exec_command" || command.Payload.(map[string]any)["command"] != "pwd" {
+		t.Fatalf("command start = %+v", command)
+	}
+	unknown, commandResult, planResult := events[2], events[3], events[4]
+	if unknown.Kind != SessionEventToolCallUpdate || unknown.ToolCallID != "unknown" || unknown.ToolStatus != "canceled" ||
+		unknown.ToolKind != "" || unknown.ToolTitle != "" || !strings.Contains(unknown.ToolOutputSummary, "unknown result") {
+		t.Fatalf("anonymous result = %+v", unknown)
+	}
+	if commandResult.ToolCallID != command.ToolCallID || commandResult.ToolKind != command.ToolKind ||
+		planResult.ToolCallID != plan.ToolCallID || planResult.ToolKind != plan.ToolKind ||
+		planResult.ToolTitle != plan.ToolTitle || planResult.Payload.(map[string]any)["tool"] != plan.ToolTitle ||
+		planResult.ToolStatus != "completed" || planResult.ToolOutputSummary != summarizeToolValue(map[string]any{"output": "Plan updated\n" + record}) {
+		t.Fatalf("results = %+v", events[2:])
 	}
 }
 

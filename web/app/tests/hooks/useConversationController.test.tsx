@@ -1,4 +1,6 @@
+import { CLOUD_SEND_CONSENT_STORAGE_KEY } from "@/shared/storage/keys";
 import { createQueryWrapper } from "../helpers/queryClient";
+import { cloudAgentFixture } from "../helpers/cloudAgentFixture";
 import { renderHook, act, waitFor } from "@testing-library/react";
 import { vi } from "vitest";
 import { useConversationController } from "@/hooks/workspace/useConversationController";
@@ -166,6 +168,9 @@ function renderConversationController(
     managerProfile?: AgentProfileLike | null;
     managerProfileIncomplete?: boolean;
     authStatuses?: Parameters<typeof useConversationController>[0]["authStatuses"];
+    cloudCatalog?: Parameters<typeof useConversationController>[0]["cloudCatalog"];
+    cloudAvatarMetadata?: Parameters<typeof useConversationController>[0]["cloudAvatarMetadata"];
+    addedCloudAgentIDs?: readonly string[];
     locale?: "en" | "zh";
     t?: TranslateFn;
     managerRuntimeUnavailable?: boolean;
@@ -189,13 +194,22 @@ function renderConversationController(
   const defaultData = dataWithMessages([]);
 
   return renderHook(
-    ({ activeConversationId = directConversation.id, data = defaultData, messageListActive = true }) =>
+    ({
+      activeConversationId = directConversation.id,
+      data = defaultData,
+      messageListActive = true,
+      cloudCatalog,
+      addedCloudAgentIDs,
+    }) =>
       useConversationController({
         activeConversationId,
         activePane: { type: WorkspacePaneTypes.conversation, id: options.routedConversationId ?? activeConversationId },
         agents,
         authBusyProvider: "",
         authStatuses: options.authStatuses ?? {},
+        cloudCatalog,
+        cloudAvatarMetadata: options.cloudAvatarMetadata,
+        addedCloudAgentIDs,
         data,
         locale: options.locale ?? "en",
         managerProfile: options.managerProfile ?? null,
@@ -227,12 +241,107 @@ function renderConversationController(
         activeConversationId: options.activeConversationId,
         data: options.data,
         messageListActive: options.messageListActive,
+        cloudCatalog: options.cloudCatalog,
+        addedCloudAgentIDs: options.addedCloudAgentIDs,
       },
     },
   );
 }
 
 describe("useConversationController", () => {
+  it("uses shared avatar metadata without treating it as cloud availability", () => {
+    const agent = { ...cloudAgentFixture[0], type: "code" };
+    const data = {
+      ...dataWithMessages([]),
+      rooms: [
+        {
+          ...directConversation,
+          cloud_agent: { agent_id: agent.id, connection_id: agent.connectionID, user_id: "u-demo" },
+        },
+      ],
+    };
+    const { result } = renderConversationController({ data, cloudCatalog: null, cloudAvatarMetadata: [agent] });
+    expect(result.current.conversationViewProps.usersById.get("u-demo")?.avatar).toBe("avatar/cloud-code.png");
+    expect(result.current.conversationViewProps.composerDisabledReason).toBe("cloudChatStatusUnavailable");
+  });
+
+  it("blocks cloud sends when the agent is offline, missing, or removed from My agents", async () => {
+    const agent = cloudAgentFixture[0];
+    const cloudConversation = {
+      ...directConversation,
+      cloud_agent: { agent_id: agent.id, connection_id: agent.connectionID, user_id: "u-demo" },
+    };
+    const data = { ...dataWithMessages([]), rooms: [cloudConversation] };
+    const addedCloudAgentIDs = [agent.id];
+    const { result, rerender } = renderConversationController({ data, cloudCatalog: [agent], addedCloudAgentIDs });
+    const editor = document.createElement("div");
+    editor.textContent = "Follow-up";
+    act(() => {
+      result.current.conversationViewProps.editorRef.current = editor;
+      result.current.conversationViewProps.onSyncComposer();
+    });
+    expect(result.current.conversationViewProps.composerDisabledReason).toBe("");
+    apiMocks.sendMessageRequest.mockClear();
+    for (const cloudCatalog of [[{ ...agent, status: "offline" as const }], []]) {
+      rerender({ data, cloudCatalog, addedCloudAgentIDs });
+      expect(result.current.conversationViewProps.composerDisabledReason).toBe("cloudChatOffline");
+      await act(async () => result.current.conversationViewProps.onSendMessage());
+      expect(apiMocks.sendMessageRequest).not.toHaveBeenCalled();
+    }
+    rerender({ data, cloudCatalog: [agent], addedCloudAgentIDs: [] });
+    expect(result.current.conversationViewProps.composerDisabledReason).toBe("cloudChatRemoved");
+    await act(async () => result.current.conversationViewProps.onSendMessage());
+    expect(apiMocks.sendMessageRequest).not.toHaveBeenCalled();
+    rerender({ data, cloudCatalog: [agent], addedCloudAgentIDs });
+    expect(result.current.conversationViewProps.composerDisabledReason).toBe("");
+  });
+
+  it("confirms cloud conversation sends and remembers an explicit opt-out", async () => {
+    const cloudConversation = {
+      ...directConversation,
+      cloud_agent: { agent_id: "agt_cloud", connection_id: "conn", user_id: "u-demo" },
+    };
+    apiMocks.sendMessageRequest.mockClear();
+    apiMocks.sendMessageRequest.mockResolvedValue(successfulMessage("/literal @demo"));
+    const { result } = renderConversationController({
+      data: { ...dataWithMessages([]), rooms: [cloudConversation] },
+      managerProfileIncomplete: true,
+      cloudCatalog: [{ ...cloudAgentFixture[0], id: "agt_cloud", connectionID: "conn" }],
+      addedCloudAgentIDs: ["agt_cloud"],
+    });
+    const editor = document.createElement("div");
+    editor.textContent = "/literal @demo";
+    act(() => {
+      result.current.conversationViewProps.editorRef.current = editor;
+      result.current.conversationViewProps.onSyncComposer();
+    });
+    await act(async () => result.current.conversationViewProps.onSendMessage());
+    expect(apiMocks.sendMessageRequest).not.toHaveBeenCalled();
+    try {
+      await act(async () => result.current.conversationViewProps.cloudSendConfirmation!.onConfirm(true));
+      expect(apiMocks.sendMessageRequest).toHaveBeenCalledWith(
+        expect.objectContaining({
+          content: "/literal @demo",
+          attachments: [],
+          resource_refs: [],
+          file_references: [],
+        }),
+        expect.anything(),
+      );
+      editor.textContent = "Follow-up";
+      act(() => result.current.conversationViewProps.onSyncComposer());
+      await act(async () => result.current.conversationViewProps.onSendMessage());
+      expect(result.current.conversationViewProps.cloudSendConfirmation).toBeNull();
+      expect(apiMocks.sendMessageRequest).toHaveBeenLastCalledWith(
+        expect.objectContaining({ content: "Follow-up" }),
+        expect.anything(),
+      );
+    } finally {
+      localStorage.removeItem(CLOUD_SEND_CONSENT_STORAGE_KEY);
+      apiMocks.sendMessageRequest.mockReset();
+    }
+  });
+
   it.each([
     ["zh", "网络连接失败，请检查网络后重试。"],
     ["en", "The network request failed. Check your connection and try again."],

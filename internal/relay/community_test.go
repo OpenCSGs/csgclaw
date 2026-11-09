@@ -4,6 +4,7 @@ import (
 	"context"
 	"csgclaw/internal/apiclient"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/gorilla/websocket"
 	"net/http"
@@ -12,6 +13,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 )
 
@@ -187,24 +189,47 @@ func TestStableClientIdentityAcrossRestartAndPorts(t *testing.T) {
 }
 
 func TestCommunityDiscoveryAndInvocationOfRemotePublication(t *testing.T) {
+	var public atomic.Bool
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		owner := r.Header.Get("Authorization") == "Bearer owner-token"
 		switch r.URL.Path {
 		case "/api/v1/agent/instances":
-			if r.URL.Query().Get("public") != "true" || r.URL.Query().Get("registered") != "true" || r.URL.Query().Get("kind") != "runtime" {
-				t.Error("not querying public instances")
+			if r.URL.Query().Has("public") || r.URL.Query().Get("registered") != "true" || r.URL.Query().Get("kind") != "runtime" {
+				t.Error("not querying instances visible to the caller")
 			}
-			writeTestJSON(w, 200, map[string]any{"data": []map[string]any{
+			items := []map[string]any{
 				{"id": 7, "type": "csgclaw", "public": true, "name": "Remote", "kind": "runtime", "source": "external", "relay": RelayRegistration{AgentID: testRelayID}},
 				{"id": 8, "type": "csgclaw", "public": true, "name": "Pending", "kind": "runtime"},
-				{"id": 9, "type": "csgclaw-workspace", "public": true, "name": "Platform", "kind": "runtime", "source": "platform", "relay": RelayRegistration{AgentID: platformRelayID}, "is_running": true},
+				{"id": 9, "type": "csgclaw-workspace", "public": true, "name": "Platform", "template_id": 133, "creator_name": "Alice", "metadata": map[string]any{"template_metadata": map[string]any{"repo_path": "alice/template"}, "provision_request": map[string]any{"llm": map[string]any{"model": "instance-model"}}}, "kind": "runtime", "source": "platform", "relay": RelayRegistration{AgentID: platformRelayID}, "is_running": true},
 				{"id": 10, "type": "csgclaw", "public": true, "kind": "logical", "relay": RelayRegistration{AgentID: testRelayID}},
 				{"id": 11, "type": "csgclaw", "public": true, "kind": "runtime", "relay": RelayRegistration{AgentID: "invalid"}},
-			}, "total": 5})
+			}
+			items[0]["public"] = public.Load()
+			items[0]["editable"] = owner
+			if !owner && !public.Load() {
+				items = items[1:]
+			}
+			writeTestJSON(w, 200, map[string]any{"data": items, "total": len(items)})
+		case "/api/v1/agent/templates/133":
+			if !owner {
+				w.WriteHeader(http.StatusForbidden)
+				return
+			}
+			writeTestJSON(w, 200, map[string]any{"data": map[string]any{
+				"nickname": "Template", "content": "private source",
+				"metadata": map[string]any{"repo_path": "alice/template", "agent_file": map[string]any{
+					"runtime_kind": "codex", "revision": 2, "tags": []string{"writing"},
+					"model_config": map[string]any{"model_id": "model"},
+				}},
+			}})
 		case "/api/v1/relay/v1/agents/" + testRelayID:
-			writeTestJSON(w, 200, Agent{ID: testRelayID, Name: "Relay internal name", Status: "online"})
+			writeTestJSON(w, 200, Agent{ID: testRelayID, Name: "Relay internal name", Visibility: "private", Status: "online"})
 		case "/api/v1/relay/v1/agents/" + platformRelayID:
 			w.WriteHeader(404)
 		case "/api/v1/relay/v1/responses":
+			if !owner && !public.Load() {
+				t.Error("private invocation reached Relay")
+			}
 			if r.Header.Get("X-CSG-Client-ID") == "" {
 				t.Error("missing caller client identity")
 			}
@@ -220,8 +245,9 @@ func TestCommunityDiscoveryAndInvocationOfRemotePublication(t *testing.T) {
 		}
 	}))
 	defer server.Close()
+	login := "owner"
 	source := func() (SiteCredentials, error) {
-		return SiteCredentials{Site: server.URL, Token: "caller-token", User: "caller"}, nil
+		return SiteCredentials{Site: server.URL, Token: login + "-token", User: login}, nil
 	}
 	m, err := NewManager(context.Background(), t.TempDir(), nil, WithCommunity(HubCommunity{Credentials: source}, source))
 	if err != nil {
@@ -238,10 +264,60 @@ func TestCommunityDiscoveryAndInvocationOfRemotePublication(t *testing.T) {
 	if entries[0].Source != "external" || entries[1].Source != "platform" || entries[0].Agent.Name != "Remote" {
 		t.Fatal("discovery lost community origin or display name")
 	}
+	if entries[0].Type != "csgclaw" || entries[1].Type != "csgclaw-workspace" {
+		t.Fatal("discovery lost community instance types")
+	}
+	profile, err := m.AgentTemplate(context.Background(), platformRelayID, entries[1].ConnectionID)
+	if err != nil || profile == nil || profile.RepoPath != "alice/template" {
+		t.Fatalf("invalid template profile: %+v, %v", profile, err)
+	}
+	if _, err := m.AgentTemplate(context.Background(), platformRelayID, "wrong-connection"); !errors.Is(err, ErrChatReference) {
+		t.Fatalf("expected invalid connection to be rejected, got %v", err)
+	}
+	if entries[1].TemplateRepoPath != "alice/template" {
+		t.Fatalf("discovery lost template repository: %q", entries[1].TemplateRepoPath)
+	}
+	if entries[1].ModelID != "instance-model" {
+		t.Fatalf("discovery lost the configured instance model: %q", entries[1].ModelID)
+	}
+	if entries[1].CreatorName != "Alice" {
+		t.Fatal("discovery lost the creator of the offline agent")
+	}
+	if entries[0].Agent.Visibility != "private" || entries[1].Agent.Visibility != "public" {
+		t.Fatal("catalog visibility differs from StarHub")
+	}
+	if !entries[0].OwnedByCurrentUser || entries[1].OwnedByCurrentUser {
+		t.Fatal("catalog lost the signed-in user's ownership")
+	}
 	if len(m.manifest.Agents) != 0 {
 		t.Fatal("remote agent became a local publication")
 	}
 	if _, err = m.Chat(context.Background(), entries[0].Agent.ID, entries[0].ConnectionID, "call-remote", "hello", ""); err != nil {
+		t.Fatal(err)
+	}
+	login = "caller"
+	visible, err := m.Discover(t.Context())
+	if err != nil || len(visible) != 1 || visible[0].Agent.ID != platformRelayID {
+		t.Fatalf("other caller discovery: %v, %v", visible, err)
+	}
+	if profile, err := m.AgentTemplate(t.Context(), platformRelayID, visible[0].ConnectionID); err != nil || profile != nil {
+		t.Fatalf("private template exposed to another caller: %+v, %v", profile, err)
+	}
+	if _, err := m.Chat(t.Context(), testRelayID, visible[0].ConnectionID, "call-private", "hello", ""); !errors.Is(err, ErrChatReference) {
+		t.Fatalf("private agent invocation by another caller: %v", err)
+	}
+	public.Store(true)
+	login = "owner"
+	owned, err := m.Discover(t.Context())
+	if err != nil || len(owned) != 2 || owned[0].Agent.Visibility != "public" || !owned[0].OwnedByCurrentUser {
+		t.Fatalf("owner's public agent discovery: %v, %v", owned, err)
+	}
+	login = "caller"
+	visible, err = m.Discover(t.Context())
+	if err != nil || len(visible) != 2 || visible[0].Agent.Visibility != "public" || visible[0].OwnedByCurrentUser {
+		t.Fatalf("public agent discovery: %v, %v", visible, err)
+	}
+	if _, err = m.Chat(t.Context(), testRelayID, visible[0].ConnectionID, "call-public", "hello", ""); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -300,8 +376,19 @@ func TestRelayHTTPAndWebSocketProxyHeaders(t *testing.T) {
 }
 
 func TestPlatformWorkerUpdatesByContentIDAndPreservesLifecycle(t *testing.T) {
-	for _, public := range []bool{false, true} {
-		t.Run(fmt.Sprintf("public=%t", public), func(t *testing.T) {
+	for _, tc := range []struct {
+		name          string
+		public        bool
+		emptyResponse bool
+		nullResponse  bool
+	}{
+		{name: "private"},
+		{name: "public", public: true},
+		{name: "null response", public: true, nullResponse: true},
+		{name: "empty response", emptyResponse: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			public := tc.public
 			t.Setenv("CSGCLAW_NAME", "platform-instance")
 			t.Setenv("OPENCSG_SANDBOX_TYPE", "csgclaw")
 			target, err := PlatformTargetFromEnvironment()
@@ -310,6 +397,7 @@ func TestPlatformWorkerUpdatesByContentIDAndPreservesLifecycle(t *testing.T) {
 			}
 			var mu sync.Mutex
 			var ready bool
+			var omitInstance bool
 			var updates, externalCreates, instanceDeletes int
 			var visibilities []string
 			failOnce := true
@@ -342,7 +430,17 @@ func TestPlatformWorkerUpdatesByContentIDAndPreservesLifecycle(t *testing.T) {
 						w.WriteHeader(404)
 						return
 					}
+					if tc.emptyResponse || omitInstance {
+						w.WriteHeader(http.StatusOK)
+						return
+					}
+					if tc.nullResponse {
+						writeTestJSON(w, http.StatusOK, map[string]any{"data": nil})
+						return
+					}
 					writeTestJSON(w, 200, map[string]any{"data": map[string]any{"id": 7, "type": "csgclaw", "kind": "runtime", "source": "platform", "content_id": "platform-instance", "public": public, "relay": RelayRegistration{AgentID: testRelayID}}})
+				case r.URL.Path == "/api/v1/agent/instances" && r.Method == http.MethodGet:
+					writeTestJSON(w, 200, map[string]any{"data": []CommunityInstance{{ID: 7, Type: "csgclaw", Kind: "runtime", Source: "platform", ContentID: "platform-instance", Public: public, Relay: &RelayRegistration{AgentID: testRelayID}}}})
 				case r.URL.Path == "/api/v1/agent/instances" && r.Method == http.MethodPost:
 					externalCreates++
 					w.WriteHeader(400)
@@ -406,6 +504,45 @@ func TestPlatformWorkerUpdatesByContentIDAndPreservesLifecycle(t *testing.T) {
 			if got != expected || targetSaved.ContentID != "platform-instance" {
 				t.Fatal("visibility or target not persisted")
 			}
+			if public {
+				mu.Lock()
+				public = false
+				mu.Unlock()
+				c, err := m.client("", "")
+				if err != nil {
+					t.Fatal(err)
+				}
+				m.refreshPlatformVisibility(t.Context(), c, testRelayID)
+				m.mu.Lock()
+				refreshed := m.manifest.Agents[testRelayID].Visibility
+				m.mu.Unlock()
+				if refreshed != "private" {
+					t.Fatalf("running worker kept visibility %q after the catalog changed", refreshed)
+				}
+				m.Close()
+				mu.Lock()
+				omitInstance = true
+				previousUpdates := updates
+				mu.Unlock()
+				m = create()
+				defer m.Close()
+				waitFor(t, func() bool {
+					mu.Lock()
+					updated := updates > previousUpdates
+					mu.Unlock()
+					status := m.Status(context.Background(), "local")
+					return updated && status.Published && !status.Publishing
+				})
+				m.mu.Lock()
+				visibility := m.manifest.Agents[testRelayID].Visibility
+				m.mu.Unlock()
+				mu.Lock()
+				lastRegistration := visibilities[len(visibilities)-1]
+				mu.Unlock()
+				if visibility != "private" || lastRegistration != "private" {
+					t.Fatalf("empty writeback after a visibility change left manifest %q and Relay %q", visibility, lastRegistration)
+				}
+			}
 			if err = m.QueuePublication(PublishRequest{Name: "Other", SourceAgentID: "other-local", Visibility: "public"}, target); err == nil {
 				t.Fatal("bound the platform instance to a second local agent")
 			}
@@ -424,6 +561,45 @@ func TestPlatformWorkerUpdatesByContentIDAndPreservesLifecycle(t *testing.T) {
 			}
 			if err = m.Unpublish(context.Background(), "local"); err != nil {
 				t.Fatal(err)
+			}
+		})
+	}
+}
+
+func TestPlatformWritebackValidatesReturnedInstance(t *testing.T) {
+	valid := fmt.Sprintf(`{"id":7,"type":"csgclaw","kind":"runtime","source":"platform","content_id":"platform-instance","relay":{"agent_id":%q}}`, testRelayID)
+	for _, tc := range []struct {
+		name    string
+		body    string
+		wantErr bool
+	}{
+		{name: "literal null", body: "null"},
+		{name: "acknowledgement", body: `{"msg":"OK"}`},
+		{name: "missing public", body: `{"data":` + valid + `}`},
+		{name: "catalog overrides writeback public", body: `{"data":` + strings.Replace(valid, `{"id":`, `{"public":true,"id":`, 1) + `}`},
+		{name: "malformed", body: `{"data":`, wantErr: true},
+		{name: "unexpected envelope", body: `{"error":"write failed"}`, wantErr: true},
+		{name: "wrong instance", body: `{"data":` + strings.Replace(valid, "platform-instance", "another-instance", 1) + `}`, wantErr: true},
+		{name: "wrong relay", body: `{"data":` + strings.Replace(valid, testRelayID, platformRelayID, 1) + `}`, wantErr: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Method == http.MethodGet {
+					fmt.Fprint(w, `{"data":[`+valid+`]}`)
+					return
+				}
+				fmt.Fprint(w, tc.body)
+			}))
+			defer server.Close()
+			community := HubCommunity{Credentials: func() (SiteCredentials, error) {
+				return SiteCredentials{Site: server.URL, Token: "test-token"}, nil
+			}}
+			instance, err := community.Register(t.Context(), testRelayID, PublishRequest{Visibility: "public"}, &CommunityTarget{Type: "csgclaw", ContentID: "platform-instance"})
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("Register error = %v, want error: %t", err, tc.wantErr)
+			}
+			if !tc.wantErr && (instance.ID != 7 || instance.Public) {
+				t.Fatal("registration did not use the catalog visibility")
 			}
 		})
 	}

@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"reflect"
 	goruntime "runtime"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -763,6 +764,7 @@ func cloneTurnEvents(input []TurnEvent) []TurnEvent {
 }
 
 func cloneTurnEvent(input TurnEvent) TurnEvent {
+	input.RecoveredText = slices.Clone(input.RecoveredText)
 	if input.Tool != nil {
 		copy := *input.Tool
 		input.Tool = &copy

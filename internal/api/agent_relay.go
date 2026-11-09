@@ -138,12 +138,54 @@ func (h *Handler) handleRelayCatalog(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 	defer cancel()
-	entries, err := h.relayManager.Discover(ctx)
+	query := r.URL.Query()
+	id, connectionID := query.Get("agent_id"), query.Get("connection_id")
+	var entries []relay.CatalogEntry
+	var err error
+	if query.Has("agent_id") || query.Has("connection_id") {
+		if id == "" || connectionID == "" {
+			writeAgentSessionError(w, 400, "relay_chat_reference_unavailable", "agent_id and connection_id are required", nil)
+			return
+		}
+		var entry relay.CatalogEntry
+		entry, err = h.relayManager.DiscoverAgent(ctx, id, connectionID)
+		if errors.Is(err, relay.ErrChatReference) {
+			entries, err = []relay.CatalogEntry{}, nil
+		} else if err == nil {
+			entries = []relay.CatalogEntry{entry}
+		}
+	} else {
+		entries, err = h.relayManager.Discover(ctx)
+	}
 	if err != nil {
+		var upstream *relay.HTTPError
+		if errors.Is(err, relay.ErrSiteLoginRequired) || (errors.As(err, &upstream) && upstream.Status == http.StatusUnauthorized) {
+			writeAgentSessionError(w, http.StatusUnauthorized, "relay_login_required", relay.ErrSiteLoginRequired.Error(), nil)
+			return
+		}
 		writeAgentSessionError(w, 502, "relay_catalog_failed", err.Error(), nil)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"data": entries})
+}
+
+func (h *Handler) handleRelayAgentTemplate(w http.ResponseWriter, r *http.Request) {
+	if h.relayManager == nil {
+		writeAgentSessionError(w, 503, "relay_unavailable", "relay service is unavailable", nil)
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+	profile, err := h.relayManager.AgentTemplate(ctx, pathValue(r, "id"), r.URL.Query().Get("connection_id"))
+	if errors.Is(err, relay.ErrChatReference) {
+		writeAgentSessionError(w, 404, "relay_chat_reference_unavailable", err.Error(), nil)
+		return
+	}
+	if err != nil {
+		writeAgentSessionError(w, 502, "relay_catalog_failed", "unable to load the source template", nil)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": profile})
 }
 
 func (h *Handler) queueAgentPublication(id string) error {

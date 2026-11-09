@@ -1,10 +1,13 @@
 package relay
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -61,16 +64,27 @@ type RelayRegistration struct {
 }
 type CommunityInstance struct {
 	ID          int64              `json:"id"`
+	TemplateID  int64              `json:"template_id,omitempty"`
 	Name        string             `json:"name"`
+	CreatorName string             `json:"creator_name,omitempty"`
 	Description string             `json:"description"`
 	Public      bool               `json:"public"`
+	Editable    bool               `json:"editable"`
 	Type        string             `json:"type"`
 	Kind        string             `json:"kind"`
 	Source      string             `json:"source"`
 	ContentID   string             `json:"content_id"`
 	Relay       *RelayRegistration `json:"relay,omitempty"`
 	Metadata    struct {
-		Avatar string `json:"avatar"`
+		Avatar           string `json:"avatar"`
+		TemplateMetadata struct {
+			RepoPath string `json:"repo_path"`
+		} `json:"template_metadata"`
+		ProvisionRequest struct {
+			LLM struct {
+				Model string `json:"model"`
+			} `json:"llm"`
+		} `json:"provision_request"`
 	} `json:"metadata"`
 }
 
@@ -129,12 +143,16 @@ func ResolveRelayProxy(site string) string { return strings.TrimRight(site, "/")
 
 type HubCommunity struct{ Credentials CredentialsSource }
 
-func (h HubCommunity) request(ctx context.Context, method, path string, body, out any) error {
+func (h HubCommunity) client() (*Client, error) {
 	cred, err := h.Credentials()
 	if err != nil {
-		return err
+		return nil, err
 	}
-	c, err := NewClient(cred.Site, cred.Token, nil)
+	return NewClient(cred.Site, cred.Token, nil)
+}
+
+func (h HubCommunity) request(ctx context.Context, method, path string, body, out any) error {
+	c, err := h.client()
 	if err != nil {
 		return err
 	}
@@ -147,35 +165,94 @@ func (h HubCommunity) Register(ctx context.Context, relayID string, req PublishR
 	if !relayAgentIDPattern.MatchString(relayID) {
 		return CommunityInstance{}, fmt.Errorf("invalid relay agent ID")
 	}
-	method, path := http.MethodPost, ""
-	body := map[string]any{"type": "csgclaw", "kind": "runtime", "source": "external", "name": req.Name, "description": req.Description, "public": req.Visibility == "public", "content_id": relayID, "relay": RelayRegistration{AgentID: relayID}}
 	if target != nil {
-		if err := target.validate(); err != nil {
-			return CommunityInstance{}, err
-		}
-		method = http.MethodPut
-		path = "/by-content-id/" + url.PathEscape(target.Type) + "/" + url.PathEscape(target.ContentID)
-		body = map[string]any{"relay": RelayRegistration{AgentID: relayID}}
+		return h.updatePlatformRegistration(ctx, relayID, target)
 	}
+	body := map[string]any{"type": "csgclaw", "kind": "runtime", "source": "external", "name": req.Name, "description": req.Description, "public": req.Visibility == "public", "content_id": relayID, "relay": RelayRegistration{AgentID: relayID}}
 	var result struct {
 		Data CommunityInstance `json:"data"`
 	}
-	if err := h.request(ctx, method, path, body, &result); err != nil {
+	if err := h.request(ctx, http.MethodPost, "", body, &result); err != nil {
 		return CommunityInstance{}, err
 	}
 	i := result.Data
 	if i.ID <= 0 || i.Kind != "runtime" || i.relayID() != relayID {
 		return i, fmt.Errorf("community returned an invalid relay registration")
 	}
-	if target == nil {
-		if i.Source != "external" || i.ContentID != relayID || i.Type != "csgclaw" {
-			return i, fmt.Errorf("community returned a different external instance")
-		}
-	} else if i.Source != "platform" || i.ContentID != target.ContentID || i.Type != target.Type {
-		return i, fmt.Errorf("community returned a different platform instance")
+	if i.Source != "external" || i.ContentID != relayID || i.Type != "csgclaw" {
+		return i, fmt.Errorf("community returned a different external instance")
 	}
 	return i, nil
 }
+
+func (h HubCommunity) updatePlatformRegistration(ctx context.Context, relayID string, target *CommunityTarget) (CommunityInstance, error) {
+	if err := target.validate(); err != nil {
+		return CommunityInstance{}, err
+	}
+	c, err := h.client()
+	if err != nil {
+		return CommunityInstance{}, err
+	}
+	path := "/api/v1/agent/instances/by-content-id/" + url.PathEscape(target.Type) + "/" + url.PathEscape(target.ContentID)
+	body := map[string]RelayRegistration{"relay": {AgentID: relayID}}
+	resp, err := c.request(ctx, http.MethodPut, path, "", body)
+	if err != nil {
+		return CommunityInstance{}, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return CommunityInstance{}, &HTTPError{Status: resp.StatusCode}
+	}
+
+	const maxResponse = 8 << 20
+	payload, err := io.ReadAll(io.LimitReader(resp.Body, maxResponse+1))
+	if err != nil {
+		return CommunityInstance{}, fmt.Errorf("read platform registration response: %w", err)
+	}
+	if len(payload) > maxResponse {
+		return CommunityInstance{}, fmt.Errorf("platform registration response exceeds 8 MiB")
+	}
+	// A successful writeback may return the instance or just acknowledge the update.
+	payload = bytes.TrimSpace(payload)
+	if len(payload) > 0 && !bytes.Equal(payload, []byte("null")) {
+		var result struct {
+			Msg  string          `json:"msg"`
+			Code string          `json:"code"`
+			Data json.RawMessage `json:"data"`
+		}
+		if err := json.Unmarshal(payload, &result); err != nil || result.Code != "" {
+			return CommunityInstance{}, fmt.Errorf("invalid platform registration response")
+		}
+		switch {
+		case len(result.Data) == 0:
+			if result.Msg != "OK" {
+				return CommunityInstance{}, fmt.Errorf("invalid platform registration response")
+			}
+		case !bytes.Equal(result.Data, []byte("null")):
+			var instance CommunityInstance
+			if err := json.Unmarshal(result.Data, &instance); err != nil || !matchesPlatformRegistration(instance, relayID, target) {
+				return CommunityInstance{}, fmt.Errorf("community returned an invalid platform instance")
+			}
+		}
+	}
+
+	instances, err := h.list(ctx, c)
+	if err != nil {
+		return CommunityInstance{}, err
+	}
+	for _, instance := range instances {
+		if matchesPlatformRegistration(instance, relayID, target) {
+			return instance, nil
+		}
+	}
+	return CommunityInstance{}, fmt.Errorf("platform registration not found in community catalog")
+}
+
+func matchesPlatformRegistration(instance CommunityInstance, relayID string, target *CommunityTarget) bool {
+	return instance.ID > 0 && instance.Kind == "runtime" && instance.relayID() == relayID &&
+		instance.Source == "platform" && instance.ContentID == target.ContentID && instance.Type == target.Type
+}
+
 func (h HubCommunity) Delete(ctx context.Context, id int64) error {
 	path := "/" + strconv.FormatInt(id, 10)
 	var record struct {
@@ -223,17 +300,26 @@ func (h HubCommunity) DeleteExternalRegistration(ctx context.Context, relayID st
 }
 
 func (h HubCommunity) List(ctx context.Context) ([]CommunityInstance, error) {
+	c, err := h.client()
+	if err != nil {
+		return nil, err
+	}
+	return h.list(ctx, c)
+}
+
+// StarHub returns public instances and private instances owned by this login.
+func (h HubCommunity) list(ctx context.Context, c *Client) ([]CommunityInstance, error) {
 	items := []CommunityInstance{}
 	for page := 1; ; page++ {
 		var result struct {
 			Data  []CommunityInstance `json:"data"`
 			Total int                 `json:"total"`
 		}
-		if err := h.request(ctx, http.MethodGet, fmt.Sprintf("?public=true&registered=true&kind=runtime&per=100&page=%d", page), nil, &result); err != nil {
+		if err := c.Request(ctx, http.MethodGet, fmt.Sprintf("/api/v1/agent/instances?registered=true&kind=runtime&per=100&page=%d", page), "", nil, &result); err != nil {
 			return nil, err
 		}
 		for _, item := range result.Data {
-			if (item.Type == "csgclaw" || item.Type == "csgclaw-workspace") && item.Kind == "runtime" && item.Public && relayAgentIDPattern.MatchString(item.relayID()) {
+			if (item.Type == "csgclaw" || item.Type == "csgclaw-workspace") && item.Kind == "runtime" && relayAgentIDPattern.MatchString(item.relayID()) {
 				items = append(items, item)
 			}
 		}

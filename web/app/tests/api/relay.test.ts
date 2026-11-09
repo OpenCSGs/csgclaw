@@ -11,6 +11,8 @@ it.each([
         data: [
           {
             source,
+            owned_by_current_user: source === "platform" ? true : undefined,
+            type: "csgclaw",
             relay_url: "http://relay.test",
             connection_id: "saved-connection",
             avatar: "avatar/pic-2.png",
@@ -40,7 +42,10 @@ it.each([
     connectionID: "saved-connection",
     status: "offline",
     owner: "owner",
+    ownedByCurrentUser: source === "platform",
     publisher,
+    type: "csgclaw",
+    avatar: "avatar/cloud-csgclaw.png",
   });
   expect(agent).not.toHaveProperty("token");
 });

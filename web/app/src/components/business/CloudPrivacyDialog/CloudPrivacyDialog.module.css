@@ -1,0 +1,45 @@
+.dialog {
+  border-radius: var(--radius-2xl);
+}
+
+.header {
+  align-items: center;
+  padding: var(--space-6) var(--space-6) 0;
+  border-bottom: 0;
+  background: transparent;
+}
+
+.body {
+  display: grid;
+  gap: var(--space-4);
+  padding: var(--space-4) var(--space-6) 0;
+  overflow-wrap: anywhere;
+}
+
+.agent {
+  margin: 0;
+  color: var(--text);
+  font: var(--text-sm-normal);
+  line-height: 1.6;
+}
+
+.body .message {
+  margin: 0;
+  line-height: 1.6;
+}
+
+.remember {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--text);
+  font: var(--text-sm-normal);
+  cursor: pointer;
+}
+
+.footer {
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  padding: var(--space-6);
+  border-top: 0;
+}

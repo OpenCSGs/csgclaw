@@ -32,7 +32,10 @@ it against the local agent, and patches only `relay.agent_id` using
 `PUT /api/v1/agent/instances/by-content-id/csgclaw/{content_id}`. If supplied,
 `OPENCSG_SANDBOX_TYPE=csgclaw-workspace` selects that supported update type.
 It never creates an external row for the platform worker. Registration starts
-private and is synchronized to the existing instance's returned `public` value.
+private. The platform writeback accepts HTTP 200 with an empty or null result
+and validates the identity of any returned instance. The worker reads `public`
+from the StarHub instance list to set Relay visibility and checks for changes
+while it runs.
 Template-free sandboxes are outside this image's agent bootstrap workflow.
 
 `ResolveRelayProxy` uses `{login-site}/api/v1/relay`. OpenCSG authenticates the
@@ -45,6 +48,11 @@ retain their operation key. CSGClaw never asserts a trusted user UUID header.
 
 Each local API address, including its port, has a directory under
 `~/.csgclaw/relay/<address-sha256>/`. A mode-0600 `client-id` survives restarts.
+When both stored identity values are absent, `csgclaw` and
+`csgclaw-workspace` platform sandboxes derive a UUID v5 from their sandbox type
+and `CSGCLAW_NAME`. The same instance can recreate its client ID without a PVC.
+Existing client IDs are retained when the publication manifest or identity file
+is available. A previously random ID can change once if both files are lost.
 The publication manifest stores desired registrations, platform content targets,
 pending writeback and cleanup state, without copying the community login token.
 Restart restores desired connections and pending work. A persisted unpublish
@@ -186,7 +194,10 @@ See the [Chinese walkthrough](relay.zh.md) for detailed examples.
 ## Community plaza discovery
 
 `GET /api/v1/relay/agents` queries the community instance API with
-`public=true&registered=true&kind=runtime`, follows pagination, and includes both
+`registered=true&kind=runtime` under the current StarHub login. The public tab
+uses the returned `public` flag. The Mine tab shows the caller's registered
+agents, both public and private, using `owned_by_current_user` derived from
+StarHub's `editable` flag. The query follows pagination and includes both
 `platform` and `external` sources. It accepts registered `csgclaw` and
 `csgclaw-workspace` runtimes and skips missing/invalid `relay.agent_id` values.
 Directory metadata shows the community agent name as its source and maps instance
@@ -195,6 +206,10 @@ product. Relay publisher IDs remain protocol identities, not product labels.
 Each registration is probed through Relay. Community `is_running=true` is not an
 online signal for external workers; confirmed offline or missing registrations produce offline entries. Authentication,
 rate-limit, transport and server errors fail discovery instead of claiming offline.
+
+Existing cloud conversations pass both `agent_id` and `connection_id` to the
+same endpoint. The request probes only the matching registration and returns an
+empty list if the registration or connection reference is unavailable.
 
 The browser stores display metadata, Relay ID, URL and a login-scoped connection
 reference without tokens. Cloud invocation is authorized against the current

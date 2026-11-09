@@ -1,5 +1,6 @@
 import { createQueryWrapper } from "../helpers/queryClient";
 import { createRef, useRef, useState } from "react";
+import { MemoryRouter } from "react-router-dom";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ConversationPane } from "@/components/business/ConversationWorkspace/ConversationPane";
@@ -7,7 +8,7 @@ import { AgentActivityMsgTypes, CSGCLAW_AGENT_ACTIVITY_TYPE } from "@/shared/con
 import { CHAT_SIDE_PANEL_WIDTH_STORAGE_KEY } from "@/shared/storage/keys";
 import type { ConversationPaneProps } from "@/components/business/ConversationPane";
 import { agentToDraft } from "@/models/agents";
-import type { IMConversation, IMUser, ThreadView, TranslateFn } from "@/models/conversations";
+import type { IMConversation, IMMessage, IMUser, ThreadView, TranslateFn } from "@/models/conversations";
 import {
   getCollapsedSelectionTextOffset,
   parseComposerSegments,
@@ -216,6 +217,7 @@ function renderThreadPane({
   onRestoreThread = vi.fn(),
   workingParticipants = [],
   onStopWorkingTurn = vi.fn(),
+  cloudAgent,
 }: {
   agents?: NonNullable<ConversationPaneProps["agents"]>;
   agentDetailPanelProps?: ConversationPaneProps["agentDetailPanelProps"];
@@ -245,20 +247,13 @@ function renderThreadPane({
   onRestoreThread?: (rootID: string) => void;
   workingParticipants?: ConversationPaneProps["workingParticipants"];
   onStopWorkingTurn?: ConversationPaneProps["onStopWorkingTurn"];
+  cloudAgent?: IMConversation["cloud_agent"];
 } = {}) {
   const root = {
     content: "Hi! How can I help you today?",
     created_at: "2026-05-25T08:13:00Z",
     id: "msg-root",
     sender_id: "u-manager",
-  };
-  const timelineMessages = messages || [root];
-  const conversation: IMConversation = {
-    id: "room-1",
-    is_direct: isDirect,
-    members: conversationMembers.map((user) => user.id),
-    messages: timelineMessages,
-    title: conversationTitle,
   };
   const thread: ThreadView = {
     replies,
@@ -271,7 +266,15 @@ function renderThreadPane({
     },
   };
 
-  function Harness() {
+  function Harness({ timelineMessages = messages || [root] }: { timelineMessages?: IMMessage[] }) {
+    const conversation: IMConversation = {
+      id: "room-1",
+      is_direct: isDirect,
+      members: conversationMembers.map((user) => user.id),
+      messages: timelineMessages,
+      title: conversationTitle,
+      cloud_agent: cloudAgent,
+    };
     const [threadRootID, setThreadRootID] = useState(root.id);
     const restoreCount = useRef(0);
     const [showChannelTools, setShowChannelTools] = useState(false);
@@ -385,10 +388,54 @@ function renderThreadPane({
     );
   }
 
-  return render(<Harness />, { wrapper: createQueryWrapper().wrapper });
+  const view = render(
+    cloudAgent ? (
+      <MemoryRouter>
+        <Harness />
+      </MemoryRouter>
+    ) : (
+      <Harness />
+    ),
+    {
+      wrapper: createQueryWrapper().wrapper,
+    },
+  );
+  return {
+    ...view,
+    rerenderCloudMessages: (timelineMessages: IMMessage[]) =>
+      view.rerender(
+        <MemoryRouter>
+          <Harness timelineMessages={timelineMessages} />
+        </MemoryRouter>,
+      ),
+  };
 }
 
 describe("ConversationPane", () => {
+  it("uses the cloud agent name without its identity suffix for both pending and completed replies", () => {
+    const job = { id: "cloud-job", sender_id: "u-admin", content: "Hello" };
+    const cloudUser = { ...users[1], name: "manager-cloud-c30d6746", role: "cloud" };
+    const { container, rerenderCloudMessages } = renderThreadPane({
+      cloudAgent: { user_id: "u-manager", agent_id: "agt_cloud", connection_id: "connection" },
+      isDirect: true,
+      messages: [job],
+      usersByIdOverride: new Map([...usersById, [cloudUser.id, cloudUser]]),
+    });
+    const pending = screen.getByText("Preparing a reply").closest(".message-row");
+    expect(container.querySelector(".chat-kicker")).toHaveTextContent(/^manager$/);
+    expect(pending?.querySelector(".message-author")).toHaveTextContent(/^manager$/);
+    expect(pending?.querySelector(".avatar")).toBeInTheDocument();
+    expect(container.querySelector(".composer")).not.toHaveTextContent(/Preparing a reply|cloudChatWaiting/);
+
+    rerenderCloudMessages([
+      job,
+      { id: "cloud-reply", sender_id: "u-manager", client_message_id: "relay-reply:cloud-job", content: "Cloud reply" },
+    ]);
+    const reply = screen.getByText("Cloud reply").closest(".message-row");
+    expect(reply?.querySelector(".message-author")).toHaveTextContent(/^manager$/);
+    expect(screen.queryByText("Preparing a reply")).not.toBeInTheDocument();
+  });
+
   it("shows the pending reply beside the agent avatar before its progress message arrives", async () => {
     const participant = {
       id: "u-manager",
@@ -717,17 +764,21 @@ describe("ConversationPane", () => {
     expect(container.querySelector(".messages .message-thread-actions")).not.toBeInTheDocument();
   });
 
-  it.each(["worker", "agent", "manager", "Worker"])("shows the %s name above the direct task title", (role) => {
-    const { container } = renderThreadPane({
-      conversationTitle: "Investigate login",
-      conversationMembers: [users[0], { ...users[1], name: "测试工程师 Linda", role }],
-    });
+  it.each(["worker", "agent", "manager", undefined])(
+    "shows the peer name above the direct task title (role %s)",
+    (role) => {
+      const agent = { ...users[1], name: "测试工程师 Linda", role };
+      const { container } = renderThreadPane({
+        conversationTitle: "Investigate login",
+        usersByIdOverride: new Map([...usersById, [agent.id, agent]]),
+      });
 
-    expect(container.querySelector(".chat-kicker")).toHaveTextContent("测试工程师 Linda");
-    expect(container.querySelector(".chat-kicker strong")).not.toBeInTheDocument();
-    expect(container.querySelector(".chat-title")).toHaveTextContent("Investigate login");
-    expect(screen.queryByText("Direct Messages")).not.toBeInTheDocument();
-  });
+      expect(container.querySelector(".chat-kicker")).toHaveTextContent("测试工程师 Linda");
+      expect(container.querySelector(".chat-kicker strong")).not.toBeInTheDocument();
+      expect(container.querySelector(".chat-title")).toHaveTextContent("Investigate login");
+      expect(screen.queryByText("Direct Messages")).not.toBeInTheDocument();
+    },
+  );
 
   it("shows the collaboration space label without message counts when some messages are filtered", () => {
     const messages = [

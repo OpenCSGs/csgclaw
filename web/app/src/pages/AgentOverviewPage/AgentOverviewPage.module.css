@@ -238,6 +238,26 @@
   color: var(--muted);
   font-size: 13px;
 }
+.loginGate {
+  display: grid;
+  justify-items: center;
+  align-content: start;
+  gap: 10px;
+  margin: 16px 0 0;
+  padding: 32px 16px;
+  border: 1px dashed var(--line);
+  border-radius: var(--radius-lg);
+  color: var(--muted);
+  text-align: center;
+}
+
+.loginGate p {
+  margin: 0;
+  max-width: 420px;
+  font-size: 13px;
+  line-height: 20px;
+}
+
 .emptyList {
   padding: 16px 8px;
   color: var(--muted);
@@ -356,4 +376,51 @@
 
 .manageTemplatesLink {
   margin: var(--space-4) 10px;
+}
+
+.cloudSignIn {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) auto;
+  align-items: start;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+  padding: var(--space-3) 10px;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.cloudSignIn strong {
+  display: block;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.cloudSignIn p {
+  margin: var(--space-1) 0 0;
+}
+
+.cloudSignInIcon {
+  margin-top: var(--space-1);
+}
+
+.cloudSignInAction {
+  border-radius: var(--radius-full);
+}
+
+.cloudTemplatesHeading {
+  margin: var(--space-3) 0 var(--space-2);
+  padding: var(--space-3) 10px 0;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.cloudTemplatesHeading + .emptyList {
+  margin: 0;
+  padding: 0 10px;
+  line-height: 20px;
 }

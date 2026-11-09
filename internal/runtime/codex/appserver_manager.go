@@ -35,6 +35,8 @@ import (
 
 const (
 	appServerTurnInterruptTimeout      = 5 * time.Second
+	appServerStdoutExitGracePeriod     = 250 * time.Millisecond
+	appServerStdoutExitBufferBytes     = 1 << 20
 	appServerTrackedTurnLimit          = 256
 	appServerPublishFileToolName       = "csgclaw_publish_file"
 	appServerUploadFileToolName        = "csgclaw_upload_file"
@@ -161,16 +163,25 @@ func (m *appServerManager) Start(ctx context.Context, spec SessionSpec) (*Sessio
 		_ = stderrFile.Close()
 		return nil, fmt.Errorf("codex app-server stdin pipe: %w", err)
 	}
-	stdout, err := cmd.StdoutPipe()
+	// Own the read end so cmd.Wait cannot close it before the last turn
+	// notification has been decoded.
+	stdout, stdoutWriter, err := os.Pipe()
 	if err != nil {
+		_ = stdin.Close()
 		_ = stderrFile.Close()
 		return nil, fmt.Errorf("codex app-server stdout pipe: %w", err)
 	}
+	cmd.Stdout = stdoutWriter
 	if err := processgroup.Start(cmd); err != nil {
+		_ = stdoutWriter.Close()
+		_ = stdout.Close()
+		_ = stdin.Close()
 		_ = stderrFile.Close()
 		diagnostics.ReportFailure(ctx, "runtime.process_start", err, map[string]any{"runtime_id": spec.RuntimeID, "stderr_path": spec.StderrPath})
 		return nil, fmt.Errorf("start codex app-server: %w", err)
 	}
+
+	_ = stdoutWriter.Close()
 
 	diagnosticObserver := diagnostics.NewRuntimeObserver(spec.StderrPath, spec.RuntimeID, cmd.Process.Pid, logStartOffset, stderrFile)
 	diagnosticObserver.Bind(ctx)
@@ -204,9 +215,8 @@ func (m *appServerManager) Start(ctx context.Context, spec SessionSpec) (*Sessio
 		filePublishingThreads: filePublishingThreads,
 		turnWaiters:           make(map[string]*appServerTurnWaiter),
 		turnContexts:          make(map[string]appServerTurnContext),
-		turnThreads:           make(map[string]string),
+		turnThreads:           make(map[string]appServerTrackedTurn),
 		commandOutputs:        make(map[string]*appServerCommandOutputState),
-		replayedExecCommands:  make(map[string]struct{}),
 		replayedAgentMessages: make(map[string]struct{}),
 		streamedAgentMessages: make(map[string]struct{}),
 		streamedAgentThreads:  make(map[string]struct{}),
@@ -225,8 +235,7 @@ func (m *appServerManager) Start(ctx context.Context, spec SessionSpec) (*Sessio
 	m.mu.Unlock()
 
 	ownedTelemetry = true
-	go m.readAppServerStdout(spec.RuntimeID, live, stdout)
-	go m.waitAppServerSession(spec.RuntimeID, live)
+	go m.waitAppServerSession(spec.RuntimeID, live, stdout)
 
 	if err := m.initializeHandshake(ctx, live); err != nil {
 		_ = m.Stop(context.Background(), SessionHandle{RuntimeID: spec.RuntimeID})
@@ -1508,6 +1517,8 @@ func (m *appServerManager) persistedThreadID(spec SessionSpec) string {
 
 type appServerTurnWaiter struct {
 	// Guarded by liveSession.mu, alongside the thread's cumulative counters.
+	itemTurns                map[string]string // Native item IDs received with an explicit turn ID.
+	missingItems             bool              // An item without a known owner was withheld.
 	tokenUsage               modelusage.Usage
 	pendingUsage             map[string]modelusage.Usage
 	diagnostic               *diagnostics.Record
@@ -1521,11 +1532,13 @@ type appServerTurnWaiter struct {
 	ch                       chan appServerTurnResult
 	terminalResults          map[string]appServerTurnResult
 	lastActivity             string
+	progressSequence         uint64
 	structuredOutputBoundary bool
 	textOnlyUserInput        bool
 }
 
 type appServerTurnResult struct {
+	storedTurn map[string]any
 	success    bool
 	stopReason string
 	err        error
@@ -1548,6 +1561,7 @@ func (s *liveSession) registerAppServerTurnWaiter(threadID string) (*appServerTu
 	if s.turnWaiters[threadID] != nil {
 		return nil, fmt.Errorf("codex turn already in progress for thread %s", threadID)
 	}
+	delete(s.legacyTools, threadID)
 	waiter := &appServerTurnWaiter{
 		threadID:     threadID,
 		ch:           make(chan appServerTurnResult, 8),
@@ -1561,8 +1575,19 @@ func (s *liveSession) registerAppServerTurnWaiter(threadID string) (*appServerTu
 func (s *liveSession) removeAppServerTurnWaiter(threadID string, waiter *appServerTurnWaiter) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.turnWaiters[strings.TrimSpace(threadID)] == waiter {
-		delete(s.turnWaiters, strings.TrimSpace(threadID))
+	threadID = strings.TrimSpace(threadID)
+	if s.turnWaiters[threadID] == waiter {
+		if terminal, ok := waiter.terminalResult(); ok && terminal.turnID != "" && terminal.turnID == waiter.currentTurnID() && !s.turnThreads[terminal.turnID].recovered {
+			// An identified successor has finished. Later legacy items can be
+			// delivered again, while the recovered turn and its IDs stay excluded.
+			for id, old := range s.turnThreads {
+				if old.threadID == threadID && old.recovered && !old.successorFinished {
+					old.successorFinished = true
+					s.turnThreads[id] = old
+				}
+			}
+		}
+		delete(s.turnWaiters, threadID)
 	}
 }
 
@@ -1613,6 +1638,13 @@ func (s *liveSession) appServerTurnContext(threadID, turnID string) (context.Con
 	return active.ctx, true
 }
 
+type appServerTrackedTurn struct {
+	threadID          string
+	recovered         bool
+	successorFinished bool
+	recoveredItems    map[string]struct{}
+}
+
 func (s *liveSession) trackAppServerTurn(threadID, turnID string) {
 	threadID = strings.TrimSpace(threadID)
 	turnID = strings.TrimSpace(turnID)
@@ -1621,13 +1653,20 @@ func (s *liveSession) trackAppServerTurn(threadID, turnID string) {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.trackAppServerTurnLocked(threadID, turnID, false)
+}
+
+func (s *liveSession) trackAppServerTurnLocked(threadID, turnID string, recovered bool) {
 	if s.turnThreads == nil {
-		s.turnThreads = make(map[string]string)
+		s.turnThreads = make(map[string]appServerTrackedTurn)
 	}
-	if _, exists := s.turnThreads[turnID]; !exists {
+	tracked, exists := s.turnThreads[turnID]
+	if !exists {
 		s.turnThreadOrder = append(s.turnThreadOrder, turnID)
 	}
-	s.turnThreads[turnID] = threadID
+	tracked.threadID = threadID
+	tracked.recovered = recovered || tracked.recovered
+	s.turnThreads[turnID] = tracked
 	for len(s.turnThreadOrder) > appServerTrackedTurnLimit {
 		oldest := s.turnThreadOrder[0]
 		s.turnThreadOrder = s.turnThreadOrder[1:]
@@ -1635,14 +1674,195 @@ func (s *liveSession) trackAppServerTurn(threadID, turnID string) {
 	}
 }
 
-func (s *liveSession) appServerThreadForTurn(turnID string) string {
-	turnID = strings.TrimSpace(turnID)
-	if s == nil || turnID == "" {
-		return ""
-	}
+// Resolve older notifications that omit the thread ID only when the native
+// turn or an unambiguous session identifies the recipient.
+func (s *liveSession) nativeNotificationThread(threadID, turnID string, allowPrimaryFallback bool) string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return strings.TrimSpace(s.turnThreads[turnID])
+	return s.nativeNotificationThreadLocked(threadID, turnID, allowPrimaryFallback)
+}
+
+func (s *liveSession) nativeNotificationThreadLocked(threadID, turnID string, allowPrimaryFallback bool) string {
+	if owner := s.turnThreads[turnID].threadID; owner != "" {
+		if threadID != "" && threadID != owner {
+			return ""
+		}
+		return owner
+	}
+	if threadID != "" {
+		return threadID
+	}
+	for id, waiter := range s.turnWaiters {
+		if len(s.turnWaiters) == 1 || (turnID != "" && turnID == waiter.currentTurnID()) {
+			return id
+		}
+	}
+	if s.session == nil {
+		return ""
+	}
+	id := strings.TrimSpace(s.session.SessionID)
+	if allowPrimaryFallback {
+		// Older rollouts can omit both IDs. Preserve their primary-thread
+		// routing while there is no recovered turn with ambiguous ownership.
+		for _, tracked := range s.turnThreads {
+			if tracked.recovered {
+				return ""
+			}
+		}
+		return id
+	}
+	if len(s.turnWaiters) == 0 {
+		for _, other := range s.conversationSessions {
+			if strings.TrimSpace(other) != id {
+				return ""
+			}
+		}
+		return id
+	}
+	return ""
+}
+
+// A turn without an ID is ambiguous after history recovery: an earlier
+// notification may still be in flight on this thread. Its current waiter can
+// still finish from an identified notification or the native history check.
+func (s *liveSession) acceptsTurnNotificationLocked(threadID, turnID string) bool {
+	if turnID == "" {
+		for _, tracked := range s.turnThreads {
+			if tracked.threadID == threadID && tracked.recovered {
+				return false
+			}
+		}
+		return true
+	}
+	tracked := s.turnThreads[turnID]
+	if tracked.recovered || (tracked.threadID != "" && tracked.threadID != threadID) {
+		return false
+	}
+	waiter := s.turnWaiters[threadID]
+	return waiter == nil || waiter.matchesTurn(turnID)
+}
+
+// Use an explicit item/turn association before falling back to older protocols'
+// thread routing. Items from recovered history remain excluded by their ID.
+func (s *liveSession) beginTurnNotification(threadID, turnID, itemID string, isItem bool) (string, string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	// Only each candidate turn's own history can identify its withheld items.
+	missingOwner := turnID == "" && isItem
+	unowned := func() (string, string) {
+		if missingOwner {
+			for id, waiter := range s.turnWaiters {
+				if threadID == "" || threadID == id {
+					waiter.missingItems = true
+				}
+			}
+		}
+		return "", ""
+	}
+	if turnID == "" {
+		var itemThread string
+		if itemID != "" {
+			for id, waiter := range s.turnWaiters {
+				if threadID != "" && threadID != id {
+					continue
+				}
+				if owner := waiter.itemTurns[itemID]; owner != "" {
+					if itemThread != "" {
+						return unowned() // Two active threads use the same item ID.
+					}
+					itemThread, turnID = id, owner
+				}
+			}
+		}
+		for _, old := range s.turnThreads {
+			if !old.recovered || (threadID != "" && old.threadID != threadID) {
+				continue
+			}
+			if _, stale := old.recoveredItems[itemID]; stale {
+				return unowned()
+			}
+			// A sole active waiter on a different thread cannot establish
+			// ownership of an unscoped record from a recovered thread.
+			if threadID == "" && itemThread == "" && !old.successorFinished && s.turnWaiters[old.threadID] == nil {
+				return unowned()
+			}
+		}
+		if itemThread != "" {
+			threadID = itemThread
+		}
+	}
+	resolved := s.nativeNotificationThreadLocked(threadID, turnID, true)
+	if resolved == "" {
+		return unowned()
+	}
+	threadID = resolved
+	if turnID == "" && itemID != "" && s.turnWaiters[threadID] != nil {
+		for _, old := range s.turnThreads {
+			if old.threadID == threadID && old.recovered && !old.successorFinished {
+				return unowned()
+			}
+		}
+	} else if !s.acceptsTurnNotificationLocked(threadID, turnID) {
+		return unowned()
+	}
+	if waiter := s.turnWaiters[threadID]; waiter != nil {
+		if itemID != "" && turnID != "" {
+			if waiter.itemTurns == nil {
+				waiter.itemTurns = make(map[string]string)
+			}
+			waiter.itemTurns[itemID] = turnID
+		}
+		// Invalidate a pending lookup before publishing this notification.
+		waiter.mu.Lock()
+		waiter.progressSequence++
+		waiter.mu.Unlock()
+	}
+	return threadID, turnID
+}
+
+// Claim the terminal event before waking a waiter or publishing to subscribers.
+// A notification can arrive after a native history check has settled this turn.
+func (s *liveSession) recordNativeCompletion(threadID string, result *appServerTurnResult, quietVersion *uint64, turn map[string]any) (*appServerTurnWaiter, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if !s.acceptsTurnNotificationLocked(threadID, result.turnID) {
+		return nil, false
+	}
+	waiter := s.turnWaiters[threadID]
+	if result.turnID == "" && waiter != nil {
+		result.turnID = waiter.currentTurnID()
+	}
+	if quietVersion != nil || (waiter != nil && waiter.missingItems && appServerString(turn, "id") == result.turnID && appServerString(turn, "itemsView") == "full") {
+		result.storedTurn = turn
+	}
+	if quietVersion != nil {
+		if waiter == nil || !waiter.recordQuietResult(result, *quietVersion) {
+			return nil, false
+		}
+	} else if waiter != nil && !waiter.apply(result) {
+		return nil, false
+	}
+	if result.turnID != "" {
+		s.trackAppServerTurnLocked(threadID, result.turnID, quietVersion != nil)
+		if quietVersion != nil {
+			old := s.turnThreads[result.turnID]
+			old.recoveredItems = make(map[string]struct{})
+			for id, turn := range waiter.itemTurns {
+				if turn == result.turnID {
+					old.recoveredItems[id] = struct{}{}
+				}
+			}
+			items, _ := turn["items"].([]any)
+			for _, value := range items {
+				item, _ := value.(map[string]any)
+				if id := appServerString(item, "id"); id != "" {
+					old.recoveredItems[id] = struct{}{}
+				}
+			}
+			s.turnThreads[result.turnID] = old
+		}
+	}
+	return waiter, true
 }
 
 func (s *liveSession) notifyAppServerTurn(threadID string, result appServerTurnResult) bool {
@@ -1652,7 +1872,13 @@ func (s *liveSession) notifyAppServerTurn(threadID string, result appServerTurnR
 	}
 	s.mu.Lock()
 	waiter := s.turnWaiters[threadID]
+	// A legacy final-answer item can omit its turn ID. Deliver its text,
+	// but wait for an identified terminal when an older turn was recovered.
+	ambiguousEnd := (result.success || result.err != nil) && result.turnID == "" && !s.acceptsTurnNotificationLocked(threadID, "")
 	s.mu.Unlock()
+	if ambiguousEnd {
+		return true
+	}
 	if waiter == nil {
 		return false
 	}
@@ -1660,11 +1886,15 @@ func (s *liveSession) notifyAppServerTurn(threadID string, result appServerTurnR
 		return true
 	}
 
+	waiter.wake(result)
+	return true
+}
+
+func (w *appServerTurnWaiter) wake(result appServerTurnResult) {
 	select {
-	case waiter.ch <- result:
+	case w.ch <- result:
 	default:
 	}
-	return true
 }
 
 func (s *liveSession) appServerTurnWaiter(threadID string) *appServerTurnWaiter {
@@ -1719,6 +1949,10 @@ func (w *appServerTurnWaiter) apply(result *appServerTurnResult) bool {
 	}
 	w.mu.Lock()
 	defer w.mu.Unlock()
+	return w.applyLocked(result)
+}
+
+func (w *appServerTurnWaiter) applyLocked(result *appServerTurnResult) bool {
 	result.turnID = strings.TrimSpace(result.turnID)
 	if w.turnID != "" && result.turnID != "" && w.turnID != result.turnID {
 		return false
@@ -1743,6 +1977,9 @@ func (w *appServerTurnWaiter) apply(result *appServerTurnResult) bool {
 		if _, exists := w.terminalResults[result.turnID]; !exists {
 			w.terminalResults[result.turnID] = *result
 		}
+	}
+	if result.progress || result.started {
+		w.progressSequence++
 	}
 	if result.activity != "" {
 		w.lastActivity = strings.TrimSpace(result.activity)
@@ -1773,6 +2010,27 @@ func (w *appServerTurnWaiter) currentTurnID() string {
 	w.mu.RLock()
 	defer w.mu.RUnlock()
 	return strings.TrimSpace(w.turnID)
+}
+
+func (w *appServerTurnWaiter) recordQuietResult(result *appServerTurnResult, version uint64) bool {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.progressSequence != version || w.turnID != result.turnID {
+		return false
+	}
+	if _, ok := w.terminalResults[w.turnID]; ok {
+		return false
+	}
+	if _, ok := w.terminalResults[""]; ok {
+		return false
+	}
+	return w.applyLocked(result)
+}
+
+func (w *appServerTurnWaiter) progressVersion() uint64 {
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+	return w.progressSequence
 }
 
 func (w *appServerTurnWaiter) currentLastActivity() string {
@@ -1806,27 +2064,56 @@ func (w *appServerTurnWaiter) hasStructuredOutputBoundary() bool {
 	return w.structuredOutputBoundary
 }
 
+func (s *liveSession) completedTurnItems(ctx context.Context, waiter *appServerTurnWaiter, result appServerTurnResult) quietTurnHistory {
+	if result.storedTurn != nil {
+		return quietTurnItems(result.storedTurn)
+	}
+	s.mu.Lock()
+	missing := waiter.missingItems
+	s.mu.Unlock()
+	if !missing || result.turnID == "" || s.appClient == nil {
+		return nil
+	}
+	// The identified terminal has already settled the prompt. Only its items
+	// are missing, and an unavailable history must not keep that prompt open.
+	ctx, cancel := context.WithTimeout(ctx, nativeTurnLookupTimeout)
+	defer cancel()
+	return quietTurnItems(readLatestTurn(ctx, s.appClient, waiter.threadID, result.turnID))
+}
+
 func (m *appServerManager) waitAppServerTurn(ctx context.Context, live *liveSession, waiter *appServerTurnWaiter) (PromptResponse, error) {
-	// A slow model, quiet tool or context compaction is not evidence of failure.
-	// Only a terminal event, caller cancellation or process exit ends the wait.
 	waitStartedAt := time.Now()
 	lastActivityAt := waitStartedAt
+	quiet := time.NewTimer(quietTurnInterval)
+	defer quiet.Stop()
+	readCtx, cancelRead := context.WithCancel(ctx)
+	defer cancelRead()
+	var history <-chan map[string]any
+	var readVersion uint64
 
+	finish := func(result appServerTurnResult) (PromptResponse, error) {
+		cancelRead()
+		recovered := live.completedTurnItems(ctx, waiter, result)
+		if result.err != nil {
+			return PromptResponse{}, recovered.failure(result.err)
+		}
+		stopReason := result.stopReason
+		if stopReason == "" {
+			stopReason = StopReasonEndTurn
+		}
+		return PromptResponse{StopReason: stopReason, history: recovered}, nil
+	}
 	for {
 		if result, ok := waiter.terminalResult(); ok {
-			if result.err != nil {
-				return PromptResponse{}, result.err
-			}
-			stopReason := result.stopReason
-			if stopReason == "" {
-				stopReason = StopReasonEndTurn
-			}
-			return PromptResponse{StopReason: stopReason}, nil
+			return finish(result)
 		}
 		select {
 		case result := <-waiter.ch:
 			if !waiter.matchesTurn(result.turnID) {
 				continue
+			}
+			if result.progress || result.started {
+				quiet.Reset(quietTurnInterval)
 			}
 			if result.activity != "" {
 				now := time.Now()
@@ -1845,15 +2132,22 @@ func (m *appServerManager) waitAppServerTurn(ctx context.Context, live *liveSess
 				}
 				lastActivityAt = now
 			}
-			if result.err != nil {
-				return PromptResponse{}, result.err
+			if result.success || result.err != nil {
+				return finish(result)
 			}
-			if result.success {
-				stopReason := result.stopReason
-				if stopReason == "" {
-					stopReason = StopReasonEndTurn
-				}
-				return PromptResponse{StopReason: stopReason}, nil
+		case <-quiet.C:
+			quiet.Reset(quietTurnInterval)
+			if turnID := waiter.currentTurnID(); history == nil && turnID != "" && live.appClient != nil {
+				readVersion = waiter.progressVersion()
+				history = readQuietTurn(readCtx, live.appClient, waiter.threadID, turnID)
+			}
+		case turn := <-history:
+			history = nil
+			if turn == nil || ctx.Err() != nil {
+				continue
+			}
+			if m.handleRawTurnCompleted(live.spec.RuntimeID, live, waiter.threadID, map[string]any{"turn": turn}, &readVersion) {
+				live.appClient.logDebugContext(ctx, "recovered Codex turn from native history", "runtime_id", live.spec.RuntimeID, "thread_id", waiter.threadID, "turn_id", waiter.currentTurnID(), "status", turn["status"])
 			}
 		case <-ctx.Done():
 			return m.stopCanceledAppServerTurn(ctx, live, waiter, "prompt context canceled")
@@ -2002,29 +2296,86 @@ func (m *appServerManager) interruptAppServerStructuredOutputTurn(live *liveSess
 	}()
 }
 
-func (m *appServerManager) readAppServerStdout(runtimeID string, live *liveSession, stdout io.Reader) {
+// Capture the remaining pipe data at process exit. Notification delivery can
+// then finish at its own pace even if another process still owns a writer.
+type drainingAppServerStdout struct {
+	*os.File
+	mu        sync.Mutex
+	remaining *bytes.Reader
+}
+
+func (s *drainingAppServerStdout) Read(p []byte) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.remaining != nil {
+		return s.remaining.Read(p)
+	}
+	return s.File.Read(p)
+}
+
+func (s *drainingAppServerStdout) drain() {
+	// Closing the pipe also releases a Read already in progress at exit.
+	deadline := time.AfterFunc(appServerStdoutExitGracePeriod, func() { _ = s.File.Close() })
+	defer deadline.Stop()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	data, _ := io.ReadAll(io.LimitReader(s.File, appServerStdoutExitBufferBytes))
+	s.remaining = bytes.NewReader(data)
+	_ = s.File.Close()
+}
+
+func (m *appServerManager) readAppServerStdout(runtimeID string, live *liveSession, stdout io.Reader, exited <-chan struct{}) {
 	decoder := json.NewDecoder(stdout)
 	for {
 		var msg appServerWireMessage
-		if err := decoder.Decode(&msg); err != nil {
-			if errors.Is(err, io.EOF) {
-				return
-			}
-			if live.appClient != nil {
-				live.diagnosticObserver.Observe("stdout_decode_failed", err, nil)
-				live.appClient.logDebug("codex app-server stdout decoder stopped", "runtime_id", runtimeID, "error", err)
-			}
-			return
-		}
-		if live.appClient != nil {
+		err := decoder.Decode(&msg)
+		if err == nil {
 			live.appClient.handleMessage(msg)
+			continue
 		}
+		if errors.Is(err, os.ErrClosed) {
+			select {
+			case <-exited:
+				return // The remaining pipe data was collected after exit.
+			default:
+			}
+		}
+		if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
+			// EOF also accompanies a normal exit. Preserve that exit status.
+			select {
+			case <-exited:
+				return
+			case <-time.After(appServerStdoutExitGracePeriod):
+			}
+		}
+		live.appClient.closeAllPending(fmt.Errorf("codex app-server stdout closed: %w", err))
+		if !errors.Is(err, io.EOF) {
+			live.diagnosticObserver.Observe("stdout_decode_failed", err, nil)
+		}
+		live.appClient.logError("codex app-server stdout unavailable", "runtime_id", runtimeID, "error", err)
+		// The process can still accept work on stdin but can no longer
+		// acknowledge it. Its regular exit path will reclaim the process tree.
+		if killErr := live.cmd.Process.Kill(); killErr != nil && !errors.Is(killErr, os.ErrProcessDone) {
+			live.appClient.logError("stop codex app-server after stdout failure", "runtime_id", runtimeID, "error", killErr)
+		}
+		return
 	}
 }
 
-func (m *appServerManager) waitAppServerSession(runtimeID string, live *liveSession) {
+func (m *appServerManager) waitAppServerSession(runtimeID string, live *liveSession, stdout *os.File) {
+	exited := make(chan struct{})
+	stdoutDone := make(chan struct{})
+	reader := &drainingAppServerStdout{File: stdout}
+	go func() {
+		defer close(stdoutDone)
+		defer stdout.Close()
+		m.readAppServerStdout(runtimeID, live, reader, exited)
+	}()
 	err := live.cmd.Wait()
+	close(exited)
+	reader.drain()
 	cleanupErr := stopProcessTree(live.cmd.Process.Pid)
+	<-stdoutDone
 	live.mu.Lock()
 	live.stopErr = cleanupErr
 	live.mu.Unlock()

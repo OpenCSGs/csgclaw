@@ -5,6 +5,13 @@ import { beginAuthLogin, fetchAuthStatus, logoutAuth } from "@/api/auth";
 import { useAuthController } from "@/hooks/workspace/useAuthController";
 import type { TranslateFn } from "@/models/conversations";
 import { authEnvironmentDraftFromPreset } from "@/models/authEnvironment";
+import { normalizeAuthStatus } from "@/models/auth";
+import { fetchHubTemplates } from "@/api/hub";
+import { fetchRelayCatalog } from "@/api/relay";
+import { cloudAgentFixture } from "../helpers/cloudAgentFixture";
+import { createQueryWrapper } from "../helpers/queryClient";
+import { useWorkspaceHubTemplatesQuery, workspaceQueryKeys } from "@/hooks/workspace/workspaceQueries";
+import { useCloudAgentCatalog } from "@/hooks/workspace/useCloudAgentCatalog";
 
 vi.mock("@/api/auth", async () => {
   const actual = await vi.importActual<typeof import("@/api/auth")>("@/api/auth");
@@ -15,6 +22,12 @@ vi.mock("@/api/auth", async () => {
     logoutAuth: vi.fn(),
   };
 });
+
+vi.mock("@/api/hub", async (original) => ({
+  ...(await original<typeof import("@/api/hub")>()),
+  fetchHubTemplates: vi.fn(),
+}));
+vi.mock("@/api/relay", () => ({ fetchRelayCatalog: vi.fn() }));
 
 const loginPendingStorageKey = "csgclaw.auth.loginPending";
 
@@ -49,6 +62,8 @@ describe("useAuthController", () => {
     vi.mocked(beginAuthLogin).mockReset();
     vi.mocked(fetchAuthStatus).mockReset();
     vi.mocked(logoutAuth).mockReset();
+    vi.mocked(fetchHubTemplates).mockReset();
+    vi.mocked(fetchRelayCatalog).mockReset();
     vi.restoreAllMocks();
   });
 
@@ -290,5 +305,74 @@ describe("useAuthController", () => {
     await waitFor(() => expect(result.current.error).toBe("csghubCallbackInvalid"));
     expect(window.location.hash).toBe("#/settings");
     expect(window.sessionStorage.getItem(loginPendingStorageKey)).toBeNull();
+  });
+
+  it.each(["focus", "visibilitychange"])(
+    "refreshes login status, cloud templates, and agents on %s even when the anonymous status is still fresh",
+    async (event) => {
+      const { client, wrapper } = createQueryWrapper();
+      client.setDefaultOptions({ queries: { retry: false, staleTime: 60_000, refetchOnWindowFocus: false } });
+      const local = { id: "local.worker", name: "Local worker", source: { kind: "local" } };
+      const remote = { id: "alice/worker", name: "Cloud worker", source: { kind: "remote" } };
+      let signedIn = false;
+      client.setQueryData(workspaceQueryKeys.authStatus(), normalizeAuthStatus({ authenticated: false }));
+      vi.mocked(fetchAuthStatus).mockImplementation(async () => ({
+        authenticated: signedIn,
+        user_id: signedIn ? "alice" : "",
+        logged_in_at: signedIn ? "new-session" : "",
+      }));
+      vi.mocked(fetchHubTemplates).mockImplementation(async (scope) =>
+        scope === "local" ? [local] : signedIn ? [remote] : [],
+      );
+      vi.mocked(fetchRelayCatalog).mockImplementation(async () => (signedIn ? [...cloudAgentFixture] : []));
+      const { result } = renderHook(
+        () => {
+          const auth = useAuthController(t);
+          const templates = useWorkspaceHubTemplatesQuery();
+          const cloud = useCloudAgentCatalog(auth.status);
+          return { auth, templates, cloud };
+        },
+        { wrapper },
+      );
+      await waitFor(() => expect(result.current.templates.isFetching).toBe(false));
+      expect(result.current.templates.data).toEqual([local]);
+      expect(fetchAuthStatus).not.toHaveBeenCalled();
+      signedIn = true;
+      act(() => {
+        if (event === "focus") window.dispatchEvent(new Event("focus"));
+        else {
+          vi.spyOn(document, "visibilityState", "get").mockReturnValue("visible");
+          document.dispatchEvent(new Event("visibilitychange"));
+        }
+      });
+      await waitFor(() => expect(result.current.auth.status.authenticated).toBe(true));
+      await waitFor(() => expect(result.current.templates.data).toEqual([local, remote]));
+      await waitFor(() => expect(result.current.cloud.data).toEqual(cloudAgentFixture));
+      expect(window.location.hash).toBe("#/settings");
+    },
+  );
+
+  it("reloads cloud templates after the same account receives a new login session", async () => {
+    const { client, wrapper } = createQueryWrapper();
+    const local = { id: "local.worker", name: "Local worker", source: { kind: "local" } };
+    const remote = { id: "alice/worker", name: "Cloud worker", source: { kind: "remote" } };
+    const previous = normalizeAuthStatus({ authenticated: true, user_id: "alice", logged_in_at: "old-session" });
+    vi.mocked(fetchAuthStatus).mockResolvedValue(previous);
+    let renewed = false;
+    vi.mocked(fetchHubTemplates).mockImplementation(async (scope) =>
+      scope === "local" ? [local] : renewed ? [remote] : [],
+    );
+    const { result } = renderHook(
+      () => {
+        useAuthController(t);
+        return useWorkspaceHubTemplatesQuery();
+      },
+      { wrapper },
+    );
+    await waitFor(() => expect(result.current.isFetching).toBe(false));
+    expect(result.current.data).toEqual([local]);
+    renewed = true;
+    act(() => client.setQueryData(workspaceQueryKeys.authStatus(), { ...previous, logged_in_at: "new-session" }));
+    await waitFor(() => expect(result.current.data).toEqual([local, remote]));
   });
 });

@@ -17,6 +17,7 @@ type PromptRequest struct {
 }
 
 type PromptResponse struct {
+	history    quietTurnHistory
 	MessageID  string
 	StopReason string
 }

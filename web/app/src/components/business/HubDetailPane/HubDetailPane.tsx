@@ -6,12 +6,7 @@ import {
 } from "@/models/templatePublication";
 import { useTemplatePublication } from "./useTemplatePublication";
 import { useTemplateInstructionsEditor } from "./useTemplateInstructionsEditor";
-import {
-  isOfficialTemplate,
-  templateInGroup,
-  templateSourceLabelKey,
-  type TemplateGroup,
-} from "@/models/templateGroups";
+import { templateAvatar, templateInGroup, templateSourceLabelKey, type TemplateGroup } from "@/models/templateGroups";
 import { AgentAvatarImage } from "@/components/business/AgentAvatar";
 import { defaultAgentAvatar } from "@/shared/avatarOptions";
 import { agenticHubCreateAgentURL, agenticHubTemplatesURL } from "@/models/agenticHub";
@@ -973,6 +968,9 @@ export type HubDetailPaneProps = {
   onTemplateLogin?: () => void;
   hub?: HubDetailPaneHub;
   inlineTemplateDetail?: boolean;
+  hideInlineTemplateHeader?: boolean;
+  inlineTemplateProfileIntro?: ReactNode;
+  inlineTemplateInstanceModel?: string;
   locale?: LocaleCode;
   onCreateFromTemplate?: (item: HubTemplate) => void | Promise<void>;
   t?: TranslateFn;
@@ -986,6 +984,9 @@ export function HubDetailPane({
   locale = "en",
   hub,
   inlineTemplateDetail = false,
+  hideInlineTemplateHeader = false,
+  inlineTemplateProfileIntro,
+  inlineTemplateInstanceModel,
   onCreateFromTemplate = () => {},
 }: HubDetailPaneProps) {
   const {
@@ -1167,9 +1168,7 @@ export function HubDetailPane({
     if (selectedSkill) setSkillDetailDialogOpen(true);
   }, [selectedSkill]);
   const selectedTemplateID = selectedTemplate?.id;
-  const selectedTemplateAvatar =
-    selectedTemplate?.avatar?.trim() ||
-    (selectedTemplate && !isOfficialTemplate(selectedTemplate) ? defaultAgentAvatar() : "");
+  const selectedTemplateAvatar = selectedTemplate ? templateAvatar(selectedTemplate) || defaultAgentAvatar() : "";
   const selectedTemplateIsMine = Boolean(
     selectedTemplate && templateInGroup(selectedTemplate, "mine", templateUsername),
   );
@@ -1588,7 +1587,9 @@ export function HubDetailPane({
   }
 
   return (
-    <section className={moduleClassNames("entity-pane hub-detail-pane")}>
+    <section
+      className={moduleClassNames("entity-pane hub-detail-pane", hideInlineTemplateHeader && "hub-embedded-template")}
+    >
       {!loaded && !error && activeResourceType !== "mcp" ? (
         <div className={moduleClassNames("hub-loading-state")} role="status" aria-live="polite">
           <LoaderCircle className={moduleClassNames("hub-loading-spinner")} size={24} aria-hidden="true" />
@@ -1602,6 +1603,7 @@ export function HubDetailPane({
         </div>
       ) : activeResourceType !== "knowledge" &&
         activeResourceType !== "mcp" &&
+        !(inlineTemplateDetail && selectedTemplate) &&
         templates.length === 0 &&
         skills.length === 0 &&
         mcpServers.length === 0 ? (
@@ -1939,9 +1941,9 @@ export function HubDetailPane({
                           )}
                           onClick={() => openTemplateDetail(template)}
                         >
-                          {template.avatar ? (
+                          {templateAvatar(template) ? (
                             <span className={moduleClassNames("hub-template-avatar")} aria-hidden="true">
-                              <AgentAvatarImage avatar={template.avatar} />
+                              <AgentAvatarImage avatar={templateAvatar(template)} />
                             </span>
                           ) : (
                             <ResourceFeaturedIcon>
@@ -1992,111 +1994,115 @@ export function HubDetailPane({
             </div>
           ) : (inlineTemplateDetail || legacyResourceDetailEnabled()) && selectedTemplate ? (
             <>
-              <div className={moduleClassNames("hub-inspector-hero")}>
-                <div className={moduleClassNames("hub-inspector-hero-row")}>
-                  <div className={moduleClassNames("hub-inspector-brand")}>
-                    <div className={moduleClassNames("hub-inspector-copy")}>
-                      <div className={moduleClassNames("hub-inspector-title-row")}>
-                        {selectedTemplateAvatar ? (
-                          <span
-                            className={moduleClassNames("hub-inspector-title-icon hub-template-title-avatar")}
-                            aria-hidden="true"
-                          >
-                            <AgentAvatarImage avatar={selectedTemplateAvatar} />
-                          </span>
-                        ) : null}
-                        <h2>{hubTemplateFullName(selectedTemplate)}</h2>
-                        <div className={moduleClassNames("hub-inspector-badge-row")}>
-                          <span className={moduleClassNames("mini-badge template-runtime-badge")}>
-                            {selectedTemplate.runtime_kind || selectedTemplate.workspace?.kind
-                              ? formatRuntimeKindLabel(
-                                  selectedTemplate.runtime_kind || selectedTemplate.workspace?.kind,
-                                  t,
-                                )
-                              : "-"}
-                          </span>
-                          <span className={moduleClassNames("mini-badge template-source-badge")}>
-                            <span className={moduleClassNames("template-source-badge-dot")} aria-hidden="true"></span>
-                            {t(templateSourceLabelKey(selectedTemplate, templateUsername))}
-                          </span>
-                          {hasCloudTemplateWithSameName ? (
-                            <span className={moduleClassNames("mini-badge")}>{publicationBadge}</span>
+              {!hideInlineTemplateHeader ? (
+                <div className={moduleClassNames("hub-inspector-hero")}>
+                  <div className={moduleClassNames("hub-inspector-hero-row hub-template-hero-layout")}>
+                    <div className={moduleClassNames("hub-inspector-brand")}>
+                      <div className={moduleClassNames("hub-inspector-copy")}>
+                        <div className={moduleClassNames("hub-inspector-title-row")}>
+                          {selectedTemplateAvatar ? (
+                            <span
+                              className={moduleClassNames("hub-inspector-title-icon hub-template-title-avatar")}
+                              aria-hidden="true"
+                            >
+                              <AgentAvatarImage avatar={selectedTemplateAvatar} />
+                            </span>
                           ) : null}
+                          <h2>{hubTemplateFullName(selectedTemplate)}</h2>
+                          <div className={moduleClassNames("hub-inspector-badge-row")}>
+                            <span className={moduleClassNames("mini-badge template-runtime-badge")}>
+                              {selectedTemplate.runtime_kind || selectedTemplate.workspace?.kind
+                                ? formatRuntimeKindLabel(
+                                    selectedTemplate.runtime_kind || selectedTemplate.workspace?.kind,
+                                    t,
+                                  )
+                                : "-"}
+                            </span>
+                            <span className={moduleClassNames("mini-badge template-source-badge")}>
+                              <span className={moduleClassNames("template-source-badge-dot")} aria-hidden="true"></span>
+                              {t(templateSourceLabelKey(selectedTemplate, templateUsername))}
+                            </span>
+                            {hasCloudTemplateWithSameName ? (
+                              <span className={moduleClassNames("mini-badge")}>{publicationBadge}</span>
+                            ) : null}
+                          </div>
                         </div>
                       </div>
-                      {selectedTemplate.description ? <p>{selectedTemplate.description}</p> : null}
+                    </div>
+                    {selectedTemplate.description ? (
+                      <p className={moduleClassNames("hub-template-description")}>{selectedTemplate.description}</p>
+                    ) : null}
+                    <div className={moduleClassNames("hub-template-actions")}>
+                      <Button
+                        variant="primary"
+                        size="md"
+                        title={t("iaTemplateCreateAgentHint")}
+                        onClick={() => onCreateFromTemplate?.(selectedTemplate)}
+                      >
+                        <span>{t("iaTemplateCreateAgent")}</span>
+                      </Button>
+                      {hasCloudTemplateWithSameName && templatesURL ? (
+                        <LinkButton
+                          variant="secondaryGray"
+                          size="md"
+                          href={templatesURL}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          {communityVersionLabel} <ExternalLink size={14} />
+                        </LinkButton>
+                      ) : null}
+                      {canPublishTemplate ? (
+                        <Button
+                          ref={publishTriggerRef}
+                          variant="secondaryGray"
+                          size="md"
+                          loading={publishBusy}
+                          disabled={publishBusy || publishDisabled || currentVersionPublished}
+                          title={publishDisabled ? t("agentPublishLoginRequired") : undefined}
+                          onClick={() => {
+                            onResetPublishError?.();
+                            setPublishTemplateIncludeMemory(false);
+                            setPublishChoiceDialogOpen(true);
+                          }}
+                        >
+                          {publishActionLabel}
+                        </Button>
+                      ) : null}
+                      {canDeleteTemplate ? (
+                        <Button
+                          variant="danger"
+                          size="md"
+                          loading={deleteBusy}
+                          disabled={deleteBusy}
+                          onClick={() => onDeleteTemplate?.(selectedTemplate)}
+                        >
+                          {t("resourcesDeleteTemplate")}
+                        </Button>
+                      ) : null}
                     </div>
                   </div>
-                  <div className={moduleClassNames("hub-template-actions")}>
-                    <Button
-                      variant="primary"
-                      size="md"
-                      title={t("iaTemplateCreateAgentHint")}
-                      onClick={() => onCreateFromTemplate?.(selectedTemplate)}
-                    >
-                      <span>{t("iaTemplateCreateAgent")}</span>
-                    </Button>
-                    {hasCloudTemplateWithSameName && templatesURL ? (
-                      <LinkButton
-                        variant="secondaryGray"
-                        size="md"
-                        href={templatesURL}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                      >
-                        {communityVersionLabel} <ExternalLink size={14} />
-                      </LinkButton>
-                    ) : null}
-                    {canPublishTemplate ? (
-                      <Button
-                        ref={publishTriggerRef}
-                        variant="secondaryGray"
-                        size="md"
-                        loading={publishBusy}
-                        disabled={publishBusy || publishDisabled || currentVersionPublished}
-                        title={publishDisabled ? t("agentPublishLoginRequired") : undefined}
-                        onClick={() => {
-                          onResetPublishError?.();
-                          setPublishTemplateIncludeMemory(false);
-                          setPublishChoiceDialogOpen(true);
-                        }}
-                      >
-                        {publishActionLabel}
-                      </Button>
-                    ) : null}
-                    {canDeleteTemplate ? (
-                      <Button
-                        variant="danger"
-                        size="md"
-                        loading={deleteBusy}
-                        disabled={deleteBusy}
-                        onClick={() => onDeleteTemplate?.(selectedTemplate)}
-                      >
-                        {t("resourcesDeleteTemplate")}
-                      </Button>
-                    ) : null}
-                  </div>
+                  {templateReview ? (
+                    <div className={moduleClassNames(`hub-template-review-alert ${templateReview.kind}`)} role="status">
+                      <strong>
+                        {templateReview.kind === "pending"
+                          ? t("resourcesTemplateReviewPending")
+                          : t("resourcesTemplateReviewFailed")}
+                      </strong>
+                      {templateReview.kind === "exception" && templateReview.paths.length ? (
+                        <>
+                          <span>{t("resourcesTemplateReviewFailedFiles")}</span>
+                          <ul>
+                            {templateReview.paths.map((path, index) => (
+                              <li key={`${index}-${path}`}>{path}</li>
+                            ))}
+                          </ul>
+                        </>
+                      ) : null}
+                    </div>
+                  ) : null}
                 </div>
-                {templateReview ? (
-                  <div className={moduleClassNames(`hub-template-review-alert ${templateReview.kind}`)} role="status">
-                    <strong>
-                      {templateReview.kind === "pending"
-                        ? t("resourcesTemplateReviewPending")
-                        : t("resourcesTemplateReviewFailed")}
-                    </strong>
-                    {templateReview.kind === "exception" && templateReview.paths.length ? (
-                      <>
-                        <span>{t("resourcesTemplateReviewFailedFiles")}</span>
-                        <ul>
-                          {templateReview.paths.map((path, index) => (
-                            <li key={`${index}-${path}`}>{path}</li>
-                          ))}
-                        </ul>
-                      </>
-                    ) : null}
-                  </div>
-                ) : null}
-              </div>
+              ) : null}
 
               <nav
                 className={moduleClassNames("hub-template-section-nav")}
@@ -2131,6 +2137,7 @@ export function HubDetailPane({
               ) : null}
               {activeTemplateTab === "versions" ? null : activeTemplateTab === "profile" ? (
                 <div className={moduleClassNames("profile-editor-shell hub-template-profile-shell")}>
+                  {inlineTemplateProfileIntro}
                   <section className={moduleClassNames("profile-section")}>
                     <div className={moduleClassNames("profile-section-heading")}>
                       <div className={moduleClassNames("profile-section-title")}>{t("profileRuntimeSection")}</div>
@@ -2167,6 +2174,19 @@ export function HubDetailPane({
                         <span>{t("resourcesUpdatedAtLabel")}</span>
                         <input value={formatHubDateTime(selectedTemplate.updated_at, locale)} readOnly disabled />
                       </label>
+                      {inlineTemplateInstanceModel ? (
+                        <label className={moduleClassNames("field")}>
+                          <span>{t("agentPlazaInstanceModel")}</span>
+                          <input value={inlineTemplateInstanceModel} readOnly disabled />
+                        </label>
+                      ) : null}
+                      {selectedTemplate.model_config?.model_id &&
+                      selectedTemplate.model_config.model_id !== inlineTemplateInstanceModel ? (
+                        <label className={moduleClassNames("field")}>
+                          <span>{t("agentPlazaTemplateModel")}</span>
+                          <input value={selectedTemplate.model_config.model_id} readOnly disabled />
+                        </label>
+                      ) : null}
                       <div className={moduleClassNames("field span-2 hub-template-env-field")}>
                         <div className={moduleClassNames("hub-template-env-heading")}>
                           <span>{t("resourcesTemplateEnvLabel")}</span>

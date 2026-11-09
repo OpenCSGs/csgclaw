@@ -7,10 +7,12 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -21,6 +23,126 @@ import (
 	"csgclaw/internal/im"
 	"csgclaw/internal/relay"
 )
+
+func TestRelayCatalogAuthenticationError(t *testing.T) {
+	tests := []struct {
+		name           string
+		err            error
+		upstreamStatus int
+		status         int
+		code           string
+	}{
+		{name: "missing login", err: relay.ErrSiteLoginRequired, status: http.StatusUnauthorized, code: "relay_login_required"},
+		{name: "upstream rejected stored token", upstreamStatus: http.StatusUnauthorized, status: http.StatusUnauthorized, code: "relay_login_required"},
+		{name: "upstream unavailable", upstreamStatus: http.StatusServiceUnavailable, status: http.StatusBadGateway, code: "relay_catalog_failed"},
+		{name: "credential store failure", err: fmt.Errorf("credential store unavailable"), status: http.StatusBadGateway, code: "relay_catalog_failed"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			credentials := func() (relay.SiteCredentials, error) {
+				return relay.SiteCredentials{}, tc.err
+			}
+			if tc.upstreamStatus != 0 {
+				upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					if r.URL.Path != "/api/v1/agent/instances" || r.Header.Get("Authorization") != "Bearer test-token" {
+						t.Error("expected an authenticated community catalog request")
+					}
+					w.WriteHeader(tc.upstreamStatus)
+				}))
+				defer upstream.Close()
+				credentials = func() (relay.SiteCredentials, error) {
+					return relay.SiteCredentials{Site: upstream.URL, Token: "test-token", User: "owner"}, nil
+				}
+			}
+			manager, err := relay.NewManager(t.Context(), t.TempDir(), nil, relay.WithCommunity(relay.HubCommunity{Credentials: credentials}, credentials))
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer manager.Close()
+			h := &Handler{relayManager: manager}
+			response := httptest.NewRecorder()
+			h.handleRelayCatalog(response, httptest.NewRequest(http.MethodGet, "/api/v1/relay/agents", nil))
+			var body agentSessionErrorEnvelope
+			if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+				t.Fatal(err)
+			}
+			if response.Code != tc.status || body.Error.Code != tc.code {
+				t.Fatalf("got status %d and error code %q, want %d and %q", response.Code, body.Error.Code, tc.status, tc.code)
+			}
+		})
+	}
+}
+
+func TestRelayCatalogTargetIgnoresUnrelatedProbeFailure(t *testing.T) {
+	const target = "agt_0123456789abcdef01234567"
+	const other = "agt_1234567890abcdef12345678"
+	var otherUnavailable atomic.Bool
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/api/v1/agent/instances":
+			_ = json.NewEncoder(w).Encode(map[string]any{"data": []relay.CommunityInstance{
+				{ID: 1, Type: "csgclaw", Kind: "runtime", Public: true, Relay: &relay.RelayRegistration{AgentID: target}},
+				{ID: 2, Type: "csgclaw", Kind: "runtime", Public: true, Relay: &relay.RelayRegistration{AgentID: other}},
+			}})
+		case "/api/v1/relay/v1/agents/" + target:
+			_ = json.NewEncoder(w).Encode(relay.Agent{ID: target, Status: "online"})
+		case "/api/v1/relay/v1/agents/" + other:
+			if otherUnavailable.Load() {
+				w.WriteHeader(http.StatusServiceUnavailable)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(relay.Agent{ID: other, Status: "online"})
+		default:
+			t.Errorf("unexpected request: %s", r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer upstream.Close()
+	credentials := func() (relay.SiteCredentials, error) {
+		return relay.SiteCredentials{Site: upstream.URL, Token: "test-token", User: "owner"}, nil
+	}
+	manager, err := relay.NewManager(t.Context(), t.TempDir(), nil, relay.WithCommunity(relay.HubCommunity{Credentials: credentials}, credentials))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer manager.Close()
+	entries, err := manager.Discover(t.Context())
+	if err != nil || len(entries) != 2 {
+		t.Fatalf("initial discovery returned %d entries: %v", len(entries), err)
+	}
+	h := &Handler{relayManager: manager}
+	catalog := func(query string) *httptest.ResponseRecorder {
+		response := httptest.NewRecorder()
+		h.handleRelayCatalog(response, httptest.NewRequest(http.MethodGet, "/api/v1/relay/agents"+query, nil))
+		return response
+	}
+
+	otherUnavailable.Store(true)
+	if response := catalog(""); response.Code != http.StatusBadGateway {
+		t.Fatalf("full catalog returned HTTP %d, want 502", response.Code)
+	}
+	params := url.Values{"agent_id": {target}, "connection_id": {entries[0].ConnectionID}}
+	response := catalog("?" + params.Encode())
+	var body struct {
+		Data []relay.CatalogEntry `json:"data"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if response.Code != http.StatusOK || len(body.Data) != 1 || body.Data[0].Agent.ID != target || body.Data[0].Agent.Status != "online" {
+		t.Fatalf("targeted catalog returned HTTP %d: %s", response.Code, response.Body)
+	}
+
+	params.Set("connection_id", "different-connection")
+	response = catalog("?" + params.Encode())
+	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if response.Code != http.StatusOK || body.Data == nil || len(body.Data) != 0 {
+		t.Fatalf("unexpected response for a different connection: HTTP %d %s", response.Code, response.Body)
+	}
+}
 
 // Set CSGCLAW_TEST_RELAY_URL/TOKEN to exercise the same flow against a running
 // CSGRelay with real NATS. No credentials or response contents are logged.

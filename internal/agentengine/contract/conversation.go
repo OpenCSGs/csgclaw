@@ -151,6 +151,12 @@ const (
 	TurnEventOutputItem         TurnEventKind = "output_item"
 )
 
+// RecoveredTextPart is either a tool result boundary or an answer fragment in native history order.
+type RecoveredTextPart struct {
+	ToolID string
+	Text   string
+}
+
 // TurnEvent is the replay-safe envelope for one normalized Runtime event.
 // Sequence starts at one and increases monotonically for each TurnID.
 type TurnEvent struct {
@@ -166,6 +172,9 @@ type TurnEvent struct {
 	Activity     *ActivityUpdate     `json:"activity,omitempty"`
 	Interaction  *InteractionRequest `json:"interaction,omitempty"`
 	Output       *OutputItem         `json:"output,omitempty"`
+
+	// A terminal history update may reconcile text still buffered by an in-process consumer.
+	RecoveredText []RecoveredTextPart `json:"-"`
 }
 
 // ToolActivity contains normalized tool progress. Payload must be JSON-compatible.

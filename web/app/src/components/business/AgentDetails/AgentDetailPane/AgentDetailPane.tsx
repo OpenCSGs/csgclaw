@@ -1,3 +1,4 @@
+import { AgentProfileHeader } from "./AgentProfileHeader";
 import type { HubTemplate } from "@/models/hubWorkspace";
 import { AgentModelPanel } from "./components/AgentModelPanel";
 import { defaultTemplateName, isValidTemplateName, TEMPLATE_NAME_MAX_LENGTH } from "@/models/templateNaming";
@@ -780,23 +781,28 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
   return (
     <section className="entity-pane agent-detail-pane">
       <div className="agent-profile-fixed-header">
-        <header className="entity-header">
-          {draft ? (
-            <div className="entity-avatar agent-header-avatar-picker">
-              <AgentAvatarPicker
-                value={draft.avatar || item.avatar}
-                t={t}
-                mode="edit"
-                onChange={(avatar) => updateDraft({ avatar })}
-              />
-            </div>
-          ) : (
-            <div className="entity-avatar">
-              <AgentAvatarContent avatar={item.avatar} fallback={avatarFallbackText(item.avatar, item.name, item.id)} />
-            </div>
-          )}
-          <div className="entity-heading">
-            <div className="entity-title-row">
+        <AgentProfileHeader
+          avatar={
+            draft ? (
+              <div className="entity-avatar agent-header-avatar-picker">
+                <AgentAvatarPicker
+                  value={draft.avatar || item.avatar}
+                  t={t}
+                  mode="edit"
+                  onChange={(avatar) => updateDraft({ avatar })}
+                />
+              </div>
+            ) : (
+              <div className="entity-avatar">
+                <AgentAvatarContent
+                  avatar={item.avatar}
+                  fallback={avatarFallbackText(item.avatar, item.name, item.id)}
+                />
+              </div>
+            )
+          }
+          title={
+            <>
               {draft ? (
                 canEditAgentName && isEditingName ? (
                   <label className="agent-title-edit-field">
@@ -832,6 +838,7 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
                     type="button"
                     className={`agent-title-display ${draft.name ? "" : "is-empty"}`.trim()}
                     aria-label={t("editAgentName")}
+                    title={draft.name || t("agentName")}
                     onClick={() => setIsEditingName(true)}
                   >
                     <span className="agent-title-display-copy">{draft.name || t("agentName")}</span>
@@ -840,10 +847,10 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
                     </span>
                   </button>
                 ) : (
-                  <h1>{draft.name || item.name || t("agentName")}</h1>
+                  <h1 title={draft.name || item.name || t("agentName")}>{draft.name || item.name || t("agentName")}</h1>
                 )
               ) : (
-                <h1>{item.name}</h1>
+                <h1 title={item.name || undefined}>{item.name}</h1>
               )}
               <span className={`agent-status-dot ${running ? "online" : ""}`} aria-hidden="true"></span>
               <span className={`status-pill ${running ? "online" : ""}`}>{statusLabel}</span>
@@ -871,8 +878,10 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
                   {t("profileRestartRequired")}
                 </Button>
               ) : null}
-            </div>
-            {draft ? (
+            </>
+          }
+          description={
+            draft ? (
               isEditingDescription ? (
                 <label className="field entity-description-field">
                   <span className="sr-only">{t("agentDescription")}</span>
@@ -902,6 +911,7 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
                   type="button"
                   className={`entity-description-display ${draft.description ? "" : "is-empty"}`.trim()}
                   aria-label={t("editDescription")}
+                  title={draft.description || t("agentDescription")}
                   onClick={() => setIsEditingDescription(true)}
                 >
                   <span className="entity-description-display-copy">{draft.description || t("agentDescription")}</span>
@@ -912,86 +922,88 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
               )
             ) : item.description ? (
               <div className="entity-description-text">{item.description}</div>
-            ) : null}
-          </div>
-          <div className="entity-toolbar">
-            {canStartAgent(item) ? (
+            ) : null
+          }
+          actions={
+            <>
+              {canStartAgent(item) ? (
+                <Button
+                  variant="secondaryGray"
+                  size="md"
+                  disabled={busyKey.startsWith(busyPrefix) || incomplete}
+                  onClick={() => onStart(item)}
+                >
+                  <Play aria-hidden="true" size={16} strokeWidth={2} />
+                  {t("agentStart")}
+                </Button>
+              ) : null}
               <Button
-                variant="secondaryGray"
+                variant={onNewTask ? "primary" : "secondaryGray"}
                 size="md"
-                disabled={busyKey.startsWith(busyPrefix) || incomplete}
-                onClick={() => onStart(item)}
+                disabled={busyKey.startsWith(busyPrefix)}
+                title={onNewTask ? t("agentStartTaskHint") : undefined}
+                onClick={() => (onNewTask ? onNewTask(item) : onOpenDM(item))}
               >
-                <Play aria-hidden="true" size={16} strokeWidth={2} />
-                {t("agentStart")}
+                {t(onNewTask ? "agentStartTask" : "openDM")}
               </Button>
-            ) : null}
-            <Button
-              variant={onNewTask ? "primary" : "secondaryGray"}
-              size="md"
-              disabled={busyKey.startsWith(busyPrefix)}
-              title={onNewTask ? t("agentStartTaskHint") : undefined}
-              onClick={() => (onNewTask ? onNewTask(item) : onOpenDM(item))}
-            >
-              {t(onNewTask ? "agentStartTask" : "openDM")}
-            </Button>
-            {onUpgrade && upgradeNeeded ? (
-              <Button
-                variant="primary"
-                size="md"
-                disabled={busyKey.startsWith(busyPrefix) || incomplete}
-                onClick={() => onUpgrade(item)}
-              >
-                {t("agentUpgrade")}
-              </Button>
-            ) : null}
-            <AgentActionsMenu
-              item={item}
-              t={t}
-              activeRoom={activeRoom}
-              busy={busyKey.startsWith(busyPrefix)}
-              incomplete={incomplete}
-              isManager={isManager}
-              running={lifecycleRunning}
-              upgradeNeeded={upgradeNeeded}
-              canPublishLocal={canPublishLocal}
-              canPublishCommunity={canPublishCommunity}
-              publishBusy={publishBusy}
-              publishDisabled={publishDisabled}
-              onStart={onStart}
-              onStop={onStop}
-              onInvite={onInvite}
-              onDelete={onDelete}
-              relayPublication={
-                !agentSandboxEnabled(item) && (runtimeKind === "codex" || runtimeKind === "dsh")
-                  ? relayPublication
-                  : undefined
-              }
-              onPublish={openPublishDialog}
-            />
-            {draft && (hasUnsavedChanges || saving) ? (
-              <Button
-                variant="primary"
-                size="md"
-                loading={saving}
-                loadingLabel={t("agentSavingChanges")}
-                disabled={saveDisabled}
-                onClick={onSave}
-              >
-                {t("agentSaveChanges")}
-              </Button>
-            ) : draft && incomplete ? (
-              <span className="agent-save-status warn" role="status">
-                {t("agentProfileSetupRequired")}
-              </span>
-            ) : draft ? (
-              <span className="agent-save-status" role="status">
-                <Check aria-hidden="true" size={16} strokeWidth={2.5} />
-                {t("agentSaved")}
-              </span>
-            ) : null}
-          </div>
-        </header>
+              {onUpgrade && upgradeNeeded ? (
+                <Button
+                  variant="primary"
+                  size="md"
+                  disabled={busyKey.startsWith(busyPrefix) || incomplete}
+                  onClick={() => onUpgrade(item)}
+                >
+                  {t("agentUpgrade")}
+                </Button>
+              ) : null}
+              <AgentActionsMenu
+                item={item}
+                t={t}
+                activeRoom={activeRoom}
+                busy={busyKey.startsWith(busyPrefix)}
+                incomplete={incomplete}
+                isManager={isManager}
+                running={lifecycleRunning}
+                upgradeNeeded={upgradeNeeded}
+                canPublishLocal={canPublishLocal}
+                canPublishCommunity={canPublishCommunity}
+                publishBusy={publishBusy}
+                publishDisabled={publishDisabled}
+                onStart={onStart}
+                onStop={onStop}
+                onInvite={onInvite}
+                onDelete={onDelete}
+                relayPublication={
+                  !agentSandboxEnabled(item) && (runtimeKind === "codex" || runtimeKind === "dsh")
+                    ? relayPublication
+                    : undefined
+                }
+                onPublish={openPublishDialog}
+              />
+              {draft && (hasUnsavedChanges || saving) ? (
+                <Button
+                  variant="primary"
+                  size="md"
+                  loading={saving}
+                  loadingLabel={t("agentSavingChanges")}
+                  disabled={saveDisabled}
+                  onClick={onSave}
+                >
+                  {t("agentSaveChanges")}
+                </Button>
+              ) : draft && incomplete ? (
+                <span className="agent-save-status warn" role="status">
+                  {t("agentProfileSetupRequired")}
+                </span>
+              ) : draft ? (
+                <span className="agent-save-status" role="status">
+                  <Check aria-hidden="true" size={16} strokeWidth={2.5} />
+                  {t("agentSaved")}
+                </span>
+              ) : null}
+            </>
+          }
+        />
         {error ? <div className="form-error">{error}</div> : null}
         {saveError ? (
           <div className="form-error whitespace-pre-wrap break-words" role="alert">

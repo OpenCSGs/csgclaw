@@ -17,12 +17,14 @@ export function TaskConversationControls({
   agents,
   t,
   onNewTask,
+  cloudSendDisabled = false,
 }: {
   conversation: IMConversation;
   participants: ConversationWorkingParticipant[];
   agents: AgentLike[];
   t: TranslateFn;
   onNewTask?: (agentID?: string, configuration?: TaskConfiguration) => void;
+  cloudSendDisabled?: boolean;
 }) {
   const controller = useOptionalWorkspaceControllerContext();
   const entry = controller?.taskEntry;
@@ -47,12 +49,13 @@ export function TaskConversationControls({
           disabled={entry?.isWorking(conversation.id) || entry?.busyID === conversation.id}
           onChange={entry ? (value) => entry.patch(conversation.id, { configuration: value }) : undefined}
         />
-      ) : (
-        <span>{t("agentPlazaCloud")}</span>
-      )}
-      {conversation.cloud_agent && cloudPending ? <span role="status">{t("cloudChatWaiting")}</span> : null}
+      ) : null}
       {conversation.cloud_agent && hasChatMessages ? (
-        <NewCloudTaskButton agentID={conversation.cloud_agent.agent_id} disabled={cloudPending} t={t} />
+        <NewCloudTaskButton
+          agentID={conversation.cloud_agent.agent_id}
+          disabled={cloudPending || cloudSendDisabled}
+          t={t}
+        />
       ) : null}
       {onNewTask && !conversation.cloud_agent && hasChatMessages ? (
         <Button
@@ -67,18 +70,19 @@ export function TaskConversationControls({
           {t("taskEntryNew")}
         </Button>
       ) : null}
-      {participants
-        .filter((participant) => participant.showContextUsage || participant.contextUsage)
-        .map((participant) => (
-          <span
-            key={participant.leaseID || participant.id || participant.name}
-            className={styles.usage}
-            title={participant.name}
-          >
-            <small>{conversation.is_direct ? "" : participant.name}</small>
-            <ContextUsageRing usage={participant.contextUsage} t={t} />
-          </span>
-        ))}
+      {!conversation.cloud_agent &&
+        participants
+          .filter((participant) => participant.showContextUsage || participant.contextUsage)
+          .map((participant) => (
+            <span
+              key={participant.leaseID || participant.id || participant.name}
+              className={styles.usage}
+              title={participant.name}
+            >
+              <small>{conversation.is_direct ? "" : participant.name}</small>
+              <ContextUsageRing usage={participant.contextUsage} t={t} />
+            </span>
+          ))}
     </div>
   );
 }

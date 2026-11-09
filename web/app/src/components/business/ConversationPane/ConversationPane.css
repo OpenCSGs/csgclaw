@@ -981,6 +981,10 @@ button.composer-working-item:active {
   padding: 2px 6px 6px;
 }
 
+.composer-toolbar-text-only {
+  justify-content: flex-end;
+}
+
 :root[data-theme="dark"] .composer .composer-box {
   background: transparent;
 }
@@ -1407,6 +1411,7 @@ button.composer-working-item:active {
 
 .message-file-attachment {
   grid-template-columns: 32px minmax(0, 1fr);
+  padding-inline: var(--space-3);
 }
 
 button.message-file-attachment {

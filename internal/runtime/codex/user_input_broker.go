@@ -44,6 +44,7 @@ type UserInputBroker interface {
 	Request(ctx context.Context, req PendingUserInputRequest) (UserInputDecision, error)
 	Get(requestID string) (activity.UserInputSnapshot, bool)
 	CancelSession(runtimeID, sessionID string)
+	CancelTurn(runtimeID, sessionID, turnID string)
 	CancelServerRequest(runtimeID, sessionID, serverRequestID string)
 }
 
@@ -216,6 +217,16 @@ func (b *MemoryUserInputBroker) Get(requestID string) (activity.UserInputSnapsho
 }
 
 func (b *MemoryUserInputBroker) CancelSession(runtimeID, sessionID string) {
+	b.cancelPending(runtimeID, sessionID, "")
+}
+
+func (b *MemoryUserInputBroker) CancelTurn(runtimeID, sessionID, turnID string) {
+	if turnID = strings.TrimSpace(turnID); turnID != "" {
+		b.cancelPending(runtimeID, sessionID, turnID)
+	}
+}
+
+func (b *MemoryUserInputBroker) cancelPending(runtimeID, sessionID, turnID string) {
 	runtimeID = strings.TrimSpace(runtimeID)
 	sessionID = strings.TrimSpace(sessionID)
 	if runtimeID == "" && sessionID == "" {
@@ -227,6 +238,9 @@ func (b *MemoryUserInputBroker) CancelSession(runtimeID, sessionID string) {
 			continue
 		}
 		if sessionID != "" && pending.state.execution.SessionID != sessionID {
+			continue
+		}
+		if turnID != "" && pending.state.execution.TurnID != turnID {
 			continue
 		}
 		b.finishLocked(id, activity.UserInputStatusInterrupted, CodexUserInputResponse{}, "", nil, context.Canceled)

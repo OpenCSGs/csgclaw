@@ -1699,13 +1699,15 @@ message_stop
 ```
 
 每个 SSE block 同时包含 `event: <type>` 和 JSON `data:` payload；payload
-中的 `type` 与事件名一致。Codex 工具活动以 `tool_use` content block 和
-`input_json_delta` 返回，随后以自定义的 `tool_result` content block 和
-`tool_result_delta` 返回工具结果，与 Genius chat 协议一致。`tool_use` 会保留
-runtime 提供的具体工具名和结构化输入，敏感值在返回前会被脱敏。响应空闲期间，
+中的 `type` 与事件名一致。工具名称由 `tool_use` 返回，工具参数由 `input_json_delta` 返回，
+其中的敏感值已经脱敏。`tool_use` 的 `content_block_stop` 表示参数传输结束。
+工具执行结束时，服务端发送一次 `tool_result`，通过 `tool_result_delta` 返回输出。
+每段正文只等待它到达时仍在执行的工具返回结果。如果工具结果缺失，服务端在本轮结束时发送已收到的正文。
+多个工具同时执行时，客户端通过 `tool_result.tool_use_id` 和 `tool_use.id` 关联结果。
+工具失败或取消时，结果包含 `is_error: true`，`status` 分别为 `failed` 或 `canceled`。响应空闲期间，
 服务端约每 15 秒发送一次 SSE `: heartbeat` comment 以保持连接。对于 Codex 智能体，
-Codex app-server 发布的 final-answer `item/agentMessage/delta` 会即时转发为
-`text_delta`；commentary 和无法分类的 agent message 不会计入回答。完成事件不再
+服务端将 final-answer 文本和缺少 phase 的 agent message 增量作为 `text_delta` 返回，
+跳过明确标记为 commentary 的文本和文本快照。完成事件不再
 重复携带全量文本，前端应通过追加 delta 构建可见回答。只发布 final message 的
 runtime 会降级为一个文本 delta。Agent 完成前，连接已建立并先 flush
 `message_start`。流式失败依次返回 `error`、带 `stop_reason: error` 的
@@ -1714,7 +1716,7 @@ runtime 会降级为一个文本 delta。Agent 完成前，连接已建立并先
 同一个 session 同时只允许一个 turn。
 不同 session ID 可以并发执行。
 不同 Agent 可以各自使用同一个外部 `session_id`。
-服务端不限制响应总时长；客户端断开连接或显式取消请求时，仍会取消正在执行的响应。
+服务端不限制整轮响应时长。连续两分钟没有进展时，如果通信管道支持设置写入超时，Codex Runtime 会查询工作进程的历史记录。当原生轮次 ID 匹配、状态已结束且记录了结束时间时，服务端会按历史记录中的顺序补发缺失的工具结果和可恢复的正文，然后结束响应。如果恢复后收到的旧协议事件缺少轮次 ID，服务端收到带有当前轮次 ID 的结束通知时，也可以根据该轮的原生记录补全内容。补发时沿用实时输出的 SSE 事件类型。客户端断开连接或显式取消请求时，服务端会取消正在执行的响应。
 
 ### 会话提问
 

@@ -13,11 +13,16 @@ import (
 // CatalogEntry is a browser-safe discovery record. ConnectionID is an opaque
 // server/login reference; it never contains credentials.
 type CatalogEntry struct {
-	RelayURL     string `json:"relay_url"`
-	ConnectionID string `json:"connection_id"`
-	Agent        Agent  `json:"agent"`
-	Avatar       string `json:"avatar,omitempty"`
-	Source       string `json:"source,omitempty"`
+	RelayURL           string `json:"relay_url"`
+	ConnectionID       string `json:"connection_id"`
+	Agent              Agent  `json:"agent"`
+	Avatar             string `json:"avatar,omitempty"`
+	Source             string `json:"source,omitempty"`
+	Type               string `json:"type,omitempty"`
+	CreatorName        string `json:"creator_name,omitempty"`
+	ModelID            string `json:"model_id,omitempty"`
+	TemplateRepoPath   string `json:"template_repo_path,omitempty"`
+	OwnedByCurrentUser bool   `json:"owned_by_current_user,omitempty"`
 }
 
 // Discover reads community instances and resolves their subscription IDs through
@@ -26,7 +31,7 @@ func (m *Manager) Discover(ctx context.Context) ([]CatalogEntry, error) {
 	return m.discover(ctx, "")
 }
 
-// DiscoverAgent probes only the requested registration when starting a task.
+// DiscoverAgent probes only the requested registration.
 func (m *Manager) DiscoverAgent(ctx context.Context, id, connectionID string) (CatalogEntry, error) {
 	entries, err := m.discover(ctx, id)
 	if err != nil {
@@ -42,7 +47,7 @@ func (m *Manager) DiscoverAgent(ctx context.Context, id, connectionID string) (C
 
 func (m *Manager) discover(ctx context.Context, onlyID string) ([]CatalogEntry, error) {
 	if m.community == nil {
-		return m.Catalog(ctx), nil
+		return m.catalog(ctx, onlyID), nil
 	}
 	m.mu.Lock()
 	c, err := m.client(m.manifest.Endpoint, m.manifest.Token)
@@ -80,7 +85,7 @@ func (m *Manager) discover(ctx context.Context, onlyID string) ([]CatalogEntry, 
 			for index := range jobs {
 				item := instances[index]
 				id := item.relayID()
-				a := Agent{ID: id, Visibility: "public", Status: "offline"}
+				a := Agent{ID: id, Status: "offline"}
 				probeCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
 				var live Agent
 				probeErr := c.Request(probeCtx, http.MethodGet, "/v1/agents/"+url.PathEscape(id), "", nil, &live)
@@ -102,8 +107,21 @@ func (m *Manager) discover(ctx context.Context, onlyID string) ([]CatalogEntry, 
 					probeFailure = availabilityErr
 					failureMu.Unlock()
 				}
+				// Community controls discovery visibility, even if Relay's copy differs.
+				a.Visibility = "private"
+				if item.Public {
+					a.Visibility = "public"
+				}
 				a.Name, a.Description = item.Name, item.Description
-				entries[index] = CatalogEntry{RelayURL: c.base.String(), ConnectionID: connection, Agent: a, Avatar: item.Metadata.Avatar, Source: item.Source}
+				entry := CatalogEntry{
+					RelayURL: c.base.String(), ConnectionID: connection, Agent: a, Avatar: item.Metadata.Avatar,
+					Source: item.Source, Type: item.Type, CreatorName: item.CreatorName, ModelID: item.Metadata.ProvisionRequest.LLM.Model,
+					OwnedByCurrentUser: item.Editable,
+				}
+				if item.Source == "platform" && item.TemplateID > 0 {
+					entry.TemplateRepoPath = validatedTemplateRepoPath(item.Metadata.TemplateMetadata.RepoPath)
+				}
+				entries[index] = entry
 			}
 		}()
 	}
@@ -127,11 +145,15 @@ func (m *Manager) discover(ctx context.Context, onlyID string) ([]CatalogEntry, 
 	return entries, nil
 }
 func (m *Manager) Catalog(ctx context.Context) []CatalogEntry {
+	return m.catalog(ctx, "")
+}
+
+func (m *Manager) catalog(ctx context.Context, onlyID string) []CatalogEntry {
 	m.mu.Lock()
 	entries := make([]CatalogEntry, 0, len(m.manifest.Agents))
 	connected := make(map[string]bool, len(m.running))
 	for id, req := range m.manifest.Agents {
-		if req.Visibility != "public" {
+		if req.Visibility != "public" || (onlyID != "" && id != onlyID) {
 			continue
 		}
 		entry := m.manifest.Catalog[id]
@@ -140,6 +162,9 @@ func (m *Manager) Catalog(ctx context.Context) []CatalogEntry {
 		}
 		entry.RelayURL = m.manifest.Endpoint
 		entry.ConnectionID = m.manifest.ConnectionID
+		if entry.Type == "" {
+			entry.Type = "csgclaw"
+		}
 		entries = append(entries, entry)
 		connected[id] = m.running[id] != nil && m.running[id].connected
 	}

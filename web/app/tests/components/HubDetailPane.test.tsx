@@ -1040,7 +1040,7 @@ describe("HubDetailPane", () => {
   });
 
   it.each([undefined, "avatar/3D-4.png"])(
-    "only shows an official template title avatar when provided (%s)",
+    "shows the shared official template title avatar regardless of its saved avatar (%s)",
     (avatar) => {
       const official = { ...template, id: "agentichub/worker", avatar, source: { kind: "remote" } };
       renderHubDetailPane("template", {
@@ -1049,8 +1049,7 @@ describe("HubDetailPane", () => {
         inlineTemplateDetail: true,
       });
       const title = screen.getByRole("heading", { level: 2 }).parentElement!;
-      if (avatar) expect(title.querySelector("img")).toHaveAttribute("src", avatar);
-      else expect(title.querySelector("img")).toBeNull();
+      expect(title.querySelector("img")).toHaveAttribute("src", "avatar/template.png");
     },
   );
 

@@ -1,9 +1,11 @@
 import { DialogContent, DialogDescription, DialogRoot, DialogTitle, Tooltip } from "@/components/ui";
 import { AgentIcon } from "@/components/ui/Icons";
+import { CLOUD_AGENT_AVATARS } from "@/shared/avatar";
 import { AGENT_AVATAR_GROUPS, AGENT_AVATAR_OPTIONS, normalizeAgentAvatarPath } from "@/shared/avatarOptions";
 import { Edit3, ImagePlus, UploadCloud, X, ZoomIn, ZoomOut } from "lucide-react";
 import type { ChangeEvent, DragEvent, PointerEvent as ReactPointerEvent, ReactNode } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import styles from "./AgentAvatar.module.css";
 
 type TranslateFn = (key: string) => string;
 type AvatarEditorTab = "builtin" | "upload";
@@ -13,6 +15,7 @@ const AVATAR_CROP_SIZE = 256;
 const AVATAR_MIN_ZOOM = 1;
 const AVATAR_MAX_ZOOM = 3;
 const AVATAR_ZOOM_STEP = 0.15;
+const CLOUD_AVATAR_PATHS = new Set<string>(Object.values(CLOUD_AGENT_AVATARS));
 
 type CropOffset = { x: number; y: number };
 type CropStageSize = { width: number; height: number };
@@ -23,7 +26,14 @@ export function AgentAvatarImage({ avatar, alt = "" }: { avatar?: string | null;
   if (!src) {
     return <AgentIcon />;
   }
-  return <img className="agent-avatar-image" src={src} alt={alt} draggable={false} />;
+  return (
+    <img
+      className={`agent-avatar-image${CLOUD_AVATAR_PATHS.has(src) ? ` ${styles.cloudAvatar}` : ""}`}
+      src={src}
+      alt={alt}
+      draggable={false}
+    />
+  );
 }
 
 export function AgentAvatarContent({
@@ -39,7 +49,7 @@ export function AgentAvatarContent({
   if (!src) {
     return <span className="agent-avatar-fallback">{fallback ?? avatar}</span>;
   }
-  return <img className="agent-avatar-image" src={src} alt={alt} draggable={false} />;
+  return <AgentAvatarImage avatar={src} alt={alt} />;
 }
 
 export function AgentAvatarPicker({

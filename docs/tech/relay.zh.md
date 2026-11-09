@@ -36,7 +36,8 @@ Content-Type: application/json
 
 只修改 relay 字段，不创建 external 记录，也不覆盖名称、public 或 metadata。
 如果平台提供 `OPENCSG_SANDBOX_TYPE=csgclaw-workspace`，使用该类型的按 content ID 更新接口。
-relay 最初以 private 注册；回写成功后按社区 instance 返回的 public 值同步可见性。
+Relay 最初以 private 注册。平台回写接受 HTTP 200 的空或 null 结果，返回实例时会校验实例身份。
+发布端根据 StarHub 实例列表的 `public` 字段设置 Relay 可见性，并在运行期间检查变更。
 目标保存在发布状态中，重启后继续使用。显式下架后再手动发布同一 Agent 仍回写原 instance。
 
 ## 转发与认证
@@ -48,11 +49,16 @@ csgclaw 的 HTTP、SSE 和 `csgrelay.v1` WebSocket 握手携带 Bearer Token、
 
 同一 csgclaw 服务的所有 Agent 共用持久化 client ID；按本地 API 地址和端口隔离，
 重启保持不变。`~/.csgclaw/relay/<地址 sha256>/` 保存权限为 0600 的身份和发布状态。
+对于 `csgclaw` 和 `csgclaw-workspace` 平台沙箱，如果发布清单和身份文件均未保存
+client ID，则根据沙箱类型和 `CSGCLAW_NAME` 派生 UUID v5。同一实例即使没有 PVC，
+也能在重建 Pod 后生成同一个 ID。已有身份优先沿用。如果原随机身份的两个文件均已丢失，
+切换到派生身份时 ID 可能变化一次。
 托管凭据没有本机登录 UUID 时，仍以注入凭据的指纹绑定本地状态，更换凭据前需先下架旧发布。
 
 ## 广场与下架
 
-广场查询带 `public=true&registered=true&kind=runtime`，遍历分页，同时包含 platform
+广场以当前 StarHub 登录身份查询 `registered=true&kind=runtime`。公开页按列表的 `public` 字段筛选，
+「我的」也显示本人已注册的私有 Agent。查询遍历分页，同时包含 platform
 与 external 的 `csgclaw` / `csgclaw-workspace` runtime，并以 `relay.agent_id` 召唤。
 缺失、非法注册及 logical 记录不进入广场。external 的 `is_running=true` 不能表示在线，
 客户端仍查询 relay 状态；仅确认离线或注册不存在（404）时显示离线。
@@ -78,6 +84,9 @@ external 为 CSGClaw，不将 relay publisher_id 作为产品名称。
 - POST `{"auto_publish":true}` 返回 202，先持久化发布意图，等待本地 Agent 就绪后重试。
 - `publishing` 表示排队中；`published` 表示注册与社区同步完成。
 - `GET /api/v1/relay/agents`：返回社区广场记录，不返回 Token。
+  广场的「我的」按 StarHub 返回的 `editable` 标记筛选当前账号的公开和私有智能体。
+  已有云端会话同时传入 `agent_id` 和 `connection_id`，仅探测指定的注册。
+  找不到注册或连接引用不匹配时返回空列表。
 
 启动脚本在新建、marker 恢复和已有 Agent 恢复时均检查发布状态，回写完成后才开放 8888 readiness。
 持久挂载 `/home/picoclaw/.csgclaw` 保留身份、目标和恢复进度。关闭自动发布开关不会自动下架。

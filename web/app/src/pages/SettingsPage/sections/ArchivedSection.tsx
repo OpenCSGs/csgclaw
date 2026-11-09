@@ -52,6 +52,7 @@ export function ArchivedSection() {
             />
           </div>
           <TaskConversationList
+            authStatus={sidebar.authStatus}
             archived
             entry={controller.taskEntry}
             currentUserID={sidebar.currentUserID}

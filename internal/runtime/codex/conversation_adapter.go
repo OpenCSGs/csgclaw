@@ -96,7 +96,7 @@ func (a *ConversationAdapter) Run(ctx context.Context, request contract.TurnRequ
 	promptReturned := false
 	runtimeDone := false
 	eventStreamClosed := false
-	var output conversationText
+	var output conversationOutput
 	var files []*contract.OutputFile
 	filesOwned := true
 	defer func() {
@@ -133,6 +133,9 @@ func (a *ConversationAdapter) Run(ctx context.Context, request contract.TurnRequ
 			promptReturned = true
 			dispatched = dispatchedState.Load()
 			if err != nil {
+				if restoreErr := output.restoreFailure(runCtx, sink, err); restoreErr != nil {
+					err = restoreErr
+				}
 				result := resultFromContext(runCtx, err)
 				result.Dispatched = dispatched
 				return result
@@ -175,7 +178,7 @@ func (a *ConversationAdapter) session(ctx context.Context, request contract.Turn
 	return sessionID, nil
 }
 
-func (a *ConversationAdapter) handleEvent(ctx context.Context, request contract.TurnRequest, sink contract.EventSink, event activity.RuntimeEvent, output *conversationText, files *[]*contract.OutputFile) *contract.TurnResult {
+func (a *ConversationAdapter) handleEvent(ctx context.Context, request contract.TurnRequest, sink contract.EventSink, event activity.RuntimeEvent, output *conversationOutput, files *[]*contract.OutputFile) *contract.TurnResult {
 	emit := func(turnEvent contract.TurnEvent) *contract.TurnResult {
 		if err := emitTurnEvent(ctx, sink, turnEvent); err != nil {
 			result := resultFromContext(ctx, err)
@@ -184,6 +187,13 @@ func (a *ConversationAdapter) handleEvent(ctx context.Context, request contract.
 		return nil
 	}
 	switch event.Kind {
+	case activity.RuntimeEventPromptCompleted:
+		if response, ok := event.Payload.(PromptResponse); ok {
+			if err := output.restore(ctx, sink, response.history); err != nil {
+				result := resultFromContext(ctx, err)
+				return &result
+			}
+		}
 	case activity.RuntimeEventPromptFailed:
 		message := strings.TrimSpace(event.Error)
 		if message == "" {
@@ -191,6 +201,10 @@ func (a *ConversationAdapter) handleEvent(ctx context.Context, request contract.
 		}
 		code := contract.ErrorRuntimeFailed
 		eventErr, _ := event.Payload.(error)
+		if err := output.restoreFailure(ctx, sink, eventErr); err != nil {
+			result := resultFromContext(ctx, err)
+			return &result
+		}
 		if errors.Is(eventErr, errContextCompaction) {
 			code = contract.ErrorCode("context_compaction_failed")
 		}
@@ -275,9 +289,13 @@ func (a *ConversationAdapter) handleEvent(ctx context.Context, request contract.
 	case activity.RuntimeEventThoughtDelta:
 		return emit(contract.TurnEvent{Kind: contract.TurnEventThoughtDelta, Thought: event.Text})
 	case activity.RuntimeEventToolCallStart:
-		return emit(contract.TurnEvent{Kind: contract.TurnEventToolCallStart, Tool: toolActivity(event)})
+		tool := toolActivity(event)
+		output.observeTool(contract.TurnEventToolCallStart, tool)
+		return emit(contract.TurnEvent{Kind: contract.TurnEventToolCallStart, Tool: tool})
 	case activity.RuntimeEventToolCallUpdate:
-		return emit(contract.TurnEvent{Kind: contract.TurnEventToolCallUpdate, Tool: toolActivity(event)})
+		tool := toolActivity(event)
+		output.observeTool(contract.TurnEventToolCallUpdate, tool)
+		return emit(contract.TurnEvent{Kind: contract.TurnEventToolCallUpdate, Tool: tool})
 	case activity.RuntimeEventTokenUsage, activity.RuntimeEventContextUsage, activity.RuntimeEventPlanUpdate, activity.RuntimeEventActionDecision, activity.RuntimeEventUserInputResolved:
 		return emit(contract.TurnEvent{Kind: contract.TurnEventActivityUpdate, Activity: &contract.ActivityUpdate{
 			ID: event.ActionID + event.UserInputID, Kind: string(event.Kind), Status: event.ActionStatus + event.UserInputStatus, Payload: event.Payload,

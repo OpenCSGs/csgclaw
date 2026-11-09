@@ -13,6 +13,8 @@ import type { WorkspaceController } from "./workspaceControllerContract";
 import type { TaskConfiguration } from "@/models/taskConfiguration";
 import { settingsDialogSearch } from "@/models/workspaceDialogs";
 import { useTaskEntry } from "./useTaskEntry";
+import { useCloudAgents } from "./useCloudAgents";
+import { useCloudAgentAvatarMetadata } from "./useCloudAgentAvatarMetadata";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { errorMessage } from "@/api/client";
@@ -328,9 +330,22 @@ export function useWorkspaceController(): WorkspaceController {
     () => resolveManagerDirectConversation(rooms, displayData?.current_user_id ?? "", agent.managerAgent),
     [agent.managerAgent, displayData?.current_user_id, rooms],
   );
+  const cloudTarget = rooms.find((room) => room.id === (activePane.id || activeConversationId))?.cloud_agent;
+  const cloud = useCloudAgents(
+    auth.status,
+    activePane.type === WorkspacePaneTypes.conversation &&
+      location.pathname !== "/" &&
+      location.pathname !== "/new" &&
+      Boolean(cloudTarget),
+    cloudTarget,
+  );
+  const cloudAvatarMetadata = useCloudAgentAvatarMetadata(auth.status);
   const conversation = useConversationController({
     activeConversationId,
     activePane,
+    cloudCatalog: cloud.loading || cloud.error ? null : cloud.catalog,
+    cloudAvatarMetadata,
+    addedCloudAgentIDs: cloud.addedIDs,
     autoSelectFallbackConversation: location.pathname !== "/" && location.pathname !== "/new",
     messageListActive: location.pathname !== "/" && location.pathname !== "/new",
     agents,
@@ -467,6 +482,8 @@ export function useWorkspaceController(): WorkspaceController {
   });
   const profilePreview = useProfilePreviewController({
     agentItems: agent.agentItems,
+    cloudAgentOnline: conversation.cloudAgentOnline,
+    cloudAgentUserID: conversation.selectedConversation?.cloud_agent?.user_id,
     closeConversationTools: () => {
       conversation.closeConversationTools();
       floatingConversation.closeConversationTools();
@@ -665,6 +682,13 @@ export function useWorkspaceController(): WorkspaceController {
       navigatePane({ type: WorkspacePaneTypes.hub, id: item.id, resourceType: "template" }, rooms);
     },
     [navigatePane, rooms, selectHub, setSelectedHubResourceType, setSelectedHubTemplateId],
+  );
+  const selectHubTemplateInPlace = useCallback(
+    (item: HubTemplate) => {
+      setSelectedHubResourceType("template");
+      setSelectedHubTemplateId(item.id || "");
+    },
+    [setSelectedHubResourceType, setSelectedHubTemplateId],
   );
 
   const selectHubSkill = useCallback(
@@ -1012,10 +1036,7 @@ export function useWorkspaceController(): WorkspaceController {
       t,
       locale,
       hub: hubViewHub,
-      onSelectTemplateInPlace: (item: HubTemplate) => {
-        setSelectedHubResourceType("template");
-        setSelectedHubTemplateId(item.id || "");
-      },
+      onSelectTemplateInPlace: selectHubTemplateInPlace,
       onCreateFromTemplate: openCreateAgentFromTemplate,
     },
     agentViewProps: agentViews.agentViewProps,

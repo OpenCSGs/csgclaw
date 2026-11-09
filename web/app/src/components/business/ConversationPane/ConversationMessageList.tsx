@@ -27,6 +27,7 @@ import {
   localIdentitiesMatch,
   resolveUserByLocalIdentity,
   threadHasReplies,
+  userDisplayName,
   type IMConversation,
   type IMMessage,
   type IMUser,
@@ -175,6 +176,7 @@ const MessageListContent = memo(function MessageListContent({
           if (!user) {
             return null;
           }
+          const authorName = user.role === "cloud" ? userDisplayName(message.sender_id, usersById) : user.name;
           const own = localIdentitiesMatch(message.sender_id, currentUserID);
           const isAdmin = user?.role === "admin";
           const messageAgent = resolveMessageAgent(agents, user, message.sender_id);
@@ -198,7 +200,7 @@ const MessageListContent = memo(function MessageListContent({
                 <button
                   type="button"
                   className="avatar avatar-button"
-                  aria-label={`${t(messageAgent ? "agentDetailPanel" : "profilePreview")} ${user.name}`}
+                  aria-label={`${t(messageAgent ? "agentDetailPanel" : "profilePreview")} ${authorName}`}
                   onClick={(event) => {
                     if (messageAgent && onOpenAgentDetail) {
                       onOpenAgentDetail(messageAgent, event.currentTarget);
@@ -218,7 +220,7 @@ const MessageListContent = memo(function MessageListContent({
                 <div className="message-card">
                   <div className="message-meta">
                     <span className="message-author">
-                      {user.name}
+                      {authorName}
                       {user.agent_state && (
                         <small>
                           {" "}
@@ -276,7 +278,7 @@ const MessageListContent = memo(function MessageListContent({
                       onPreviewAttachment={onPreviewAttachment}
                     />
                   ))}
-                  {threadSummary ? (
+                  {!conversation.cloud_agent && threadSummary ? (
                     <div className="message-thread-actions has-thread-summary">
                       <button type="button" className="thread-action-button" onClick={() => onOpenThread(message)}>
                         <span aria-hidden="true">{IconImage("rooms")}</span>
@@ -309,7 +311,7 @@ const MessageListContent = memo(function MessageListContent({
                     image={
                       message.metadata?.image_generation ? message.attachments?.find(isImageAttachment) : undefined
                     }
-                    onOpenThread={() => onOpenThread(message)}
+                    onOpenThread={conversation.cloud_agent ? undefined : () => onOpenThread(message)}
                     t={t}
                   />
                 </div>

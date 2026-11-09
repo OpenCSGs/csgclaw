@@ -1,3 +1,5 @@
+import { useCloudSendConsent } from "./useCloudSendConsent";
+import { withCloudAgentAvatars } from "@/models/cloudAgents";
 import { useConversationMessageSync } from "./useConversationMessageSync";
 import { useQueryClient } from "@tanstack/react-query";
 import { workspaceQueryKeys } from "./workspaceQueries";
@@ -432,6 +434,9 @@ export function useConversationController({
   autoSelectFallbackConversation = true,
   authBusyProvider,
   authStatuses,
+  cloudCatalog,
+  cloudAvatarMetadata,
+  addedCloudAgentIDs,
   data,
   locale,
   managerProfile,
@@ -548,7 +553,10 @@ export function useConversationController({
   );
   const composerError = composerErrorsByConversationId[activeConversationId] ?? attachmentWarning;
 
-  const usersById = useMemo(() => buildUsersById(data?.users), [data]);
+  const usersById = useMemo(
+    () => buildUsersById(withCloudAgentAvatars(data?.users, rooms, cloudAvatarMetadata ?? cloudCatalog)),
+    [data?.users, rooms, cloudAvatarMetadata, cloudCatalog],
+  );
 
   useEffect(() => {
     const observed = observedRuntimeAuthMessageIDsRef.current ?? new Set<string>();
@@ -577,6 +585,26 @@ export function useConversationController({
     () => data?.rooms.find((item) => item.id === activeConversationId) ?? null,
     [data, activeConversationId],
   );
+  const cloudTask = activeConversation?.cloud_agent;
+  const cloudAgentOnline =
+    cloudTask && cloudCatalog
+      ? cloudCatalog.some(
+          (agent) =>
+            agent.id === cloudTask.agent_id &&
+            agent.connectionID === cloudTask.connection_id &&
+            agent.status === "online",
+        )
+      : null;
+  const cloudDisabledReason = cloudTask
+    ? cloudAgentOnline === null
+      ? t("cloudChatStatusUnavailable")
+      : cloudAgentOnline
+        ? addedCloudAgentIDs?.includes(cloudTask.agent_id)
+          ? ""
+          : t("cloudChatRemoved")
+        : t("cloudChatOffline")
+    : "";
+  const cloudConsent = useCloudSendConsent(cloudDisabledReason ? "" : activeConversationId);
   const visibleMessages = useMemo(() => {
     if (!activeConversation) {
       return [];
@@ -766,7 +794,7 @@ export function useConversationController({
   const inviteActionLabel = t("memberManagement");
 
   const mentionCandidates = useMemo(() => {
-    if (!data || !composerMentionState) {
+    if (!data || !composerMentionState || activeConversation?.cloud_agent) {
       return [];
     }
     const allowed = conversationMemberParticipantIDs(activeConversation);
@@ -778,7 +806,7 @@ export function useConversationController({
   const mentionableUsersByName = useMemo(() => {
     const result = new Map<string, IMUser>();
     const duplicateNames = new Set<string>();
-    if (!data) {
+    if (!data || activeConversation?.cloud_agent) {
       return result;
     }
     const allowed = conversationMemberParticipantIDs(activeConversation);
@@ -813,10 +841,12 @@ export function useConversationController({
   const composerSendState = composerSendStatesByConversationId[activeConversationId] ?? idleComposerSendState;
   const removedAttachment = removedAttachmentsByConversationId[activeConversationId];
   const resourceAgentID =
-    isDirectConversation(activeConversation) && ["codex", "dsh"].includes(agentRuntimeKind(logAgent))
+    !cloudTask && isDirectConversation(activeConversation) && ["codex", "dsh"].includes(agentRuntimeKind(logAgent))
       ? activeConversationAgentId
       : "";
-  const slashPickerEnabled = Boolean((hasActiveConversationAgent || logAgent?.id) && !slashPickerDismissed);
+  const slashPickerEnabled = Boolean(
+    !cloudTask && (hasActiveConversationAgent || logAgent?.id) && !slashPickerDismissed,
+  );
   const mainSkills = useInfiniteAgentSkills(
     activeConversationAgentId,
     composerSlashQuery,
@@ -1139,8 +1169,11 @@ export function useConversationController({
     });
   }, [activeConversationId, showInvite]);
 
-  async function sendMessage(): Promise<void> {
-    const eligibilityError = recipientConfigurationError(draftSegments) || recipientAuthenticationError(draftSegments);
+  async function sendMessage(confirmed = false): Promise<void> {
+    if (cloudDisabledReason) return;
+    const eligibilityError = cloudTask
+      ? ""
+      : recipientConfigurationError(draftSegments) || recipientAuthenticationError(draftSegments);
     if (eligibilityError) {
       setComposerError(eligibilityError);
       return;
@@ -1148,18 +1181,18 @@ export function useConversationController({
     if (!data?.current_user_id || !activeConversation || !canSendComposer(draftSegments, attachmentDrafts.length)) {
       return;
     }
-    if (!resourcesMatchAgent(draftSegments, resourceAgentID)) {
+    if (!cloudTask && !resourcesMatchAgent(draftSegments, resourceAgentID)) {
       setComposerError(t("resourceAgentChanged"));
       return;
     }
     if (composerSendState.status === "sending") {
       return;
     }
-    const messageUsesOpenCSG = outgoingSegmentsUseOpenCSG(draftSegments);
+    const messageUsesOpenCSG = !cloudTask && outgoingSegmentsUseOpenCSG(draftSegments);
     if (messageUsesOpenCSG && !requireOpenCSGAuthentication()) {
       return;
     }
-    const agentOfflineMessage = activeConversationAgentOfflineMessage(draftSegments);
+    const agentOfflineMessage = !cloudTask && activeConversationAgentOfflineMessage(draftSegments);
     if (agentOfflineMessage) {
       setComposerError(agentOfflineMessage);
       return;
@@ -1167,15 +1200,18 @@ export function useConversationController({
 
     const roomID = activeConversation.id;
     const senderID = data.current_user_id;
-    const attachments = attachmentDrafts.map((draft) => draft.file);
+    const attachments = cloudTask ? [] : attachmentDrafts.map((draft) => draft.file);
     const serializedDraft = serializeComposerSegments(draftSegments);
-    const { content, resource_refs } =
-      resourceAgentID || draftSegments.some((segment) => segment.type === "resource")
+    const { content, resource_refs } = cloudTask
+      ? { content: draftText.trim(), resource_refs: [] }
+      : resourceAgentID || draftSegments.some((segment) => segment.type === "resource")
         ? resourceMessageInput(draftSegments, serializedDraft)
         : { content: normalizeSlashShorthandForPayload(serializedDraft), resource_refs: [] };
+    if (cloudTask && (!content || (!confirmed && cloudConsent.request(() => void sendMessage(true))))) return;
+    const fileReferences = cloudTask ? [] : composerFileReferences(draftSegments);
     const fingerprint = messageFingerprint(
-      content + JSON.stringify(composerFileReferences(draftSegments)),
-      attachmentDrafts,
+      content + JSON.stringify(fileReferences),
+      cloudTask ? [] : attachmentDrafts,
       resource_refs,
     );
     if (sendLocksRef.current[roomID]) {
@@ -1200,7 +1236,7 @@ export function useConversationController({
           sender_id: senderID,
           content,
           resource_refs,
-          file_references: composerFileReferences(draftSegments),
+          file_references: fileReferences,
           client_message_id: clientMessage.id,
           locale,
           attachments,
@@ -1809,7 +1845,7 @@ export function useConversationController({
   }
 
   function addComposerAttachments(files: File[]): void {
-    if (!activeConversationId || files.length === 0) {
+    if (cloudTask || !activeConversationId || files.length === 0) {
       return;
     }
     const selection = selectAttachmentFiles(files, attachmentDrafts);
@@ -1947,6 +1983,7 @@ export function useConversationController({
     threadCount,
     threadGroups,
     usersById,
+    cloudAgentOnline,
     visibleMessages,
     clearComposerError,
     conversationViewProps: {
@@ -2017,7 +2054,7 @@ export function useConversationController({
           ) ??
         recipientAgentsForSegments(draftSegments).map(recipientProfile)[0] ??
         null,
-      composerDisabledReason: composerConfigurationError(draftSegments),
+      composerDisabledReason: cloudTask ? cloudDisabledReason : composerConfigurationError(draftSegments),
       threadComposerDisabledReason: composerConfigurationError(activeThreadDraftSegments),
       authStatuses,
       authBusyProvider,
@@ -2056,10 +2093,11 @@ export function useConversationController({
       onComposerKeyDown,
       onComposerCompositionStart,
       onComposerCompositionEnd,
-      onSendMessage: sendMessage,
-      onRetrySend: sendMessage,
+      cloudSendConfirmation: cloudConsent.dialog,
+      onSendMessage: () => sendMessage(),
+      onRetrySend: () => sendMessage(),
       onStopSend: stopSending,
-      composerError,
+      composerError: (draftSegments.length ? cloudDisabledReason : "") || composerError,
       messageActionBusy,
       messageActionFeedback,
       onMessageAction,

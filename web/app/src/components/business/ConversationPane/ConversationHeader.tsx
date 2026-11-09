@@ -3,8 +3,14 @@ import type { ReactNode, RefObject } from "react";
 import { AgentAvatarContent } from "@/components/business/AgentAvatar";
 import { Button, Tooltip, PanelHeader } from "@/components/ui";
 import { AddUserIcon, TrashIcon, UsersIcon, WrenchIcon } from "@/components/ui/Icons";
-import type { IMConversation, IMUser, TranslateFn } from "@/models/conversations";
-import { isDirectConversation, normalizeComparable } from "@/models/conversations";
+import type { IMConversation, IMUser, TranslateFn, UsersById } from "@/models/conversations";
+import {
+  isDirectConversation,
+  localIdentitiesMatch,
+  resolveConversationUser,
+  resolveUserByLocalIdentity,
+  userDisplayName,
+} from "@/models/conversations";
 import { avatarFallbackText } from "@/shared/avatar";
 import { localizeRole } from "@/shared/i18n";
 import type { BooleanStateSetter } from "./types";
@@ -13,6 +19,7 @@ export type ConversationHeaderProps = {
   channelToolsRef: RefObject<HTMLDivElement | null>;
   conversation: IMConversation;
   conversationMembers: IMUser[];
+  currentUserID: string;
   description?: string;
   headerAccessory?: ReactNode;
   inviteActionLabel: string;
@@ -34,12 +41,14 @@ export type ConversationHeaderProps = {
   showToolCalls: boolean;
   memberManagementOpen?: boolean;
   t: TranslateFn;
+  usersById: UsersById;
 };
 
 export const ConversationHeader = memo(function ConversationHeader({
   channelToolsRef,
   conversation,
   conversationMembers,
+  currentUserID,
   description,
   headerAccessory,
   inviteActionLabel,
@@ -54,6 +63,7 @@ export const ConversationHeader = memo(function ConversationHeader({
   showToolCalls,
   memberManagementOpen = false,
   t,
+  usersById,
   onClearMessages,
   onDeleteRoom,
   onInviteAction,
@@ -65,12 +75,17 @@ export const ConversationHeader = memo(function ConversationHeader({
   const visibleCount = selectedVisibleMessageCount ?? selectedMessageCount;
   const messageCountLabel =
     visibleCount === selectedMessageCount ? String(selectedMessageCount) : `${visibleCount}/${selectedMessageCount}`;
-  const directAgentName = isDirectConversation(conversation)
-    ? conversationMembers
-        .find((user) => ["worker", "agent", "manager"].includes(normalizeComparable(user.role)))
-        ?.name?.trim()
-    : "";
-  const headerName = isDirectConversation(conversation) ? directAgentName : t("iaRoomsTab");
+  const isDirect = isDirectConversation(conversation);
+  const peer = isDirect
+    ? conversation.cloud_agent
+      ? resolveUserByLocalIdentity(conversation.cloud_agent.user_id, usersById)
+      : resolveConversationUser(conversation, currentUserID, usersById)
+    : undefined;
+  const peerName =
+    peer?.name?.trim() && !localIdentitiesMatch(peer.id, currentUserID)
+      ? userDisplayName(peer.id, usersById).trim()
+      : "";
+  const headerName = isDirect ? peerName : t("iaRoomsTab");
 
   return (
     <PanelHeader className="chat-header">
