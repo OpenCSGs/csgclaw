@@ -124,6 +124,9 @@ func (c *Client) request(ctx context.Context, method, path, key string, body any
 			Error ProtocolError `json:"error"`
 		}
 		_ = json.NewDecoder(io.LimitReader(resp.Body, 4096)).Decode(&envelope)
+		if envelope.Error.ResponseID == "" {
+			envelope.Error.ResponseID = resp.Header.Get("X-Response-Id")
+		}
 		return nil, &HTTPError{Status: resp.StatusCode, Detail: envelope.Error}
 	}
 	return resp, nil

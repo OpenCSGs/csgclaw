@@ -163,7 +163,12 @@ The journal persists the confirmed local history tip and marks history uncertain
 before dispatch. Continuations must reference that exact tip. Non-tip branches,
 missing/evicted checkpoints, and uncertain history fail explicitly with
 `relay_branch_unsupported`; the executor never silently substitutes the latest
-history. Start a new cloud task/conversation in those cases.
+history. For a CSGClaw cloud task, this rejection or a missing parent response
+triggers one recovery attempt in the same task. The caller starts a fresh Relay
+session with the current message and up to 16 KiB of recent completed text turns
+from that task. It saves the recovery input before submission so restarts reuse
+the same request. An unavailable result for a previously submitted request
+does not trigger a replay.
 
 State defaults to the CSGClaw data directory's `relay/` subdirectory; `--state`
 overrides it. A process lock prevents sharing one state file. Files have `0600`
@@ -174,7 +179,7 @@ State I/O failure stops the executor. Up to 1024 local session tips are retained
 eviction rejects affected continuations instead of using another context.
 
 The versioned journal migrates legacy ACKed records conservatively; old sessions
-have no confirmed checkpoint, so continuation requires a new conversation.
+have no confirmed checkpoint, so continuation requires a fresh Relay session.
 Legacy unacknowledged records lack the original ownership identity and cause an
 explicit startup error without modifying the state file. They cannot be safely
 replayed by a new instance. Preserve the file for diagnosis and confirm the old
