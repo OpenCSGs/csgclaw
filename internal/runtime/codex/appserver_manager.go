@@ -44,6 +44,11 @@ const (
 	appServerMaxUploadBytes            = 50 << 20
 )
 
+const appServerDeveloperInstructions = `- Base each new turn on the latest user message. Use earlier requests and attachments as context only when they are relevant to that message.
+- Do not resume unfinished work from earlier turns unless the latest user message asks to continue or clearly depends on that work. An unanswered or failed request does not authorize a retry.
+- When the latest user message is only a greeting, thanks, or acknowledgement, reply directly without using tools or inspecting earlier attachments.` +
+	"\n" + runtimeinstructions.ImageGenerationPromptPolicy + "\n" + runtimeinstructions.VideoGenerationPromptPolicy
+
 var appServerStopTimeout = 3 * time.Second
 
 var appServerCommandContext = codexcli.AppServerCommandContextWithOverrides
@@ -848,7 +853,7 @@ func appServerThreadStartParams(spec SessionSpec, publishFiles bool) map[string]
 		"cwd":                    spec.WorkspaceDir,
 		"persistExtendedHistory": true,
 		"experimentalRawEvents":  false,
-		"developerInstructions":  runtimeinstructions.ImageGenerationPromptPolicy + "\n" + runtimeinstructions.VideoGenerationPromptPolicy,
+		"developerInstructions":  appServerDeveloperInstructions,
 	}
 	if publishFiles {
 		// Native tools are immutable on resume; enforce the current mode in the call handler.
@@ -915,7 +920,7 @@ func appServerThreadResumeParams(spec SessionSpec, threadID string) map[string]a
 	params := map[string]any{
 		"threadId":              strings.TrimSpace(threadID),
 		"cwd":                   spec.WorkspaceDir,
-		"developerInstructions": runtimeinstructions.ImageGenerationPromptPolicy + "\n" + runtimeinstructions.VideoGenerationPromptPolicy,
+		"developerInstructions": appServerDeveloperInstructions,
 	}
 	if spec.Profile.ModelID != "" {
 		params["model"] = spec.Profile.ModelID
