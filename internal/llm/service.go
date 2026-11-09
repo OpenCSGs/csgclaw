@@ -552,6 +552,7 @@ func (s *Service) forwardResponsesViaChat(ctx context.Context, profile agent.Age
 		return nil, &HTTPError{Status: http.StatusBadRequest, Message: err.Error()}
 	}
 	mergeProfilePayload(chatPayload, profile)
+	applySessionReasoningEffort(ctx, chatPayload, false)
 	encoded, err := json.Marshal(chatPayload)
 	if err != nil {
 		return nil, &HTTPError{Status: http.StatusBadRequest, Message: fmt.Sprintf("encode chat fallback request: %v", err)}

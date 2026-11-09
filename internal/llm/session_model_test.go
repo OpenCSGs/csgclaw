@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"strings"
 	"testing"
 
 	agent "csgclaw/internal/agentengine/agents"
@@ -15,10 +16,13 @@ import (
 	"csgclaw/internal/config"
 )
 
-type sessionProfileFixture struct{ base string }
+type sessionProfileFixture struct {
+	base           string
+	requestOptions map[string]any
+}
 
 func (f sessionProfileFixture) ResolvedAgentProfile(string) (agent.AgentProfile, error) {
-	return agent.AgentProfile{Provider: agent.ProviderAPI, ModelID: "model-a", ReasoningEffort: "low", BaseURL: f.base, APIKey: "test-key"}, nil
+	return agent.AgentProfile{Provider: agent.ProviderAPI, ModelID: "model-a", ReasoningEffort: "low", BaseURL: f.base, APIKey: "test-key", RequestOptions: f.requestOptions}, nil
 }
 
 func (f sessionProfileFixture) ResolvedSessionProfile(id, model, effort string) (agent.AgentProfile, error) {
@@ -116,6 +120,110 @@ func TestSessionModelBridgeUsesResolvedReasoningEffort(t *testing.T) {
 				}
 				if got != want {
 					t.Fatalf("upstream reasoning effort = %v, want %v", got, want)
+				}
+			})
+		}
+	}
+}
+
+func TestSessionModelResponsesFallbackPreservesReasoningEffort(t *testing.T) {
+	for _, stream := range []bool{false, true} {
+		for _, test := range []struct {
+			name, effort, mode string
+			want               any
+		}{
+			{name: "auto", effort: "auto"},
+			{name: "model_default"},
+			{name: "high", effort: "high", want: "high"},
+			{name: "none", effort: "none", want: "none"},
+			{name: "profile_default", mode: "profile", want: "low"},
+			{name: "task_profile", mode: "task", effort: "auto", want: "high"},
+		} {
+			t.Run(fmt.Sprintf("%s/stream=%t", test.name, stream), func(t *testing.T) {
+				type modelRequest struct {
+					path    string
+					payload map[string]any
+				}
+				requests := make(chan modelRequest, 4)
+				upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					var payload map[string]any
+					if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+						t.Error(err)
+						http.Error(w, "invalid request", http.StatusBadRequest)
+						return
+					}
+					requests <- modelRequest{r.URL.Path, payload}
+					switch r.URL.Path {
+					case "/responses":
+						http.Error(w, "responses unavailable", http.StatusNotFound)
+					case "/chat/completions":
+						if stream {
+							w.Header().Set("Content-Type", "text/event-stream")
+							io.WriteString(w, "data: {\"id\":\"fixture\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"done\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"fixture\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}\n\ndata: [DONE]\n\n")
+							return
+						}
+						w.Header().Set("Content-Type", "application/json")
+						io.WriteString(w, `{"id":"fixture","object":"chat.completion","choices":[{"index":0,"message":{"role":"assistant","content":"done"},"finish_reason":"stop"}]}`)
+					default:
+						t.Errorf("unexpected upstream path %q", r.URL.Path)
+						http.NotFound(w, r)
+					}
+				}))
+				defer upstream.Close()
+				options := map[string]any{"reasoning_effort": "high"}
+				service := NewService(config.ModelConfig{}, sessionProfileFixture{base: upstream.URL, requestOptions: options})
+				ctx := WithSessionModel(t.Context(), "model-b", test.effort)
+				wantModel := "model-b"
+				switch test.mode {
+				case "profile":
+					ctx, wantModel = t.Context(), "model-a"
+				case "task":
+					wantModel = "task-model"
+					ctx = WithTaskProfile(ctx, agent.AgentProfile{Provider: agent.ProviderAPI, BaseURL: upstream.URL, ModelID: wantModel, ReasoningEffort: "auto", RequestOptions: options})
+				}
+				for attempt := 1; attempt <= 2; attempt++ {
+					body := fmt.Appendf(nil, `{"input":"hello","stream":%t,"reasoning":{"effort":"medium"}}`, stream)
+					response, err := service.Responses(ctx, "agent-a", body)
+					if err != nil {
+						t.Fatal(err)
+					}
+					data, err := io.ReadAll(response.Body)
+					response.Body.Close()
+					if err != nil || response.StatusCode != http.StatusOK {
+						t.Fatalf("attempt %d: status=%d body=%s error=%v", attempt, response.StatusCode, data, err)
+					}
+					if stream {
+						if !strings.Contains(string(data), `"type":"response.completed"`) || !strings.Contains(string(data), `"delta":"done"`) {
+							t.Fatalf("attempt %d: incomplete Responses stream: %s", attempt, data)
+						}
+					} else {
+						var result map[string]any
+						if err := json.Unmarshal(data, &result); err != nil || result["status"] != "completed" || result["output_text"] != "done" {
+							t.Fatalf("attempt %d: invalid Responses result: %s, error=%v", attempt, data, err)
+						}
+					}
+					responses, chats := 0, 0
+					for len(requests) > 0 {
+						got := <-requests
+						if got.path == "/responses" {
+							responses++
+							continue
+						}
+						chats++
+						if got.payload["model"] != wantModel || got.payload["stream"] != stream || got.payload["reasoning_effort"] != test.want {
+							t.Errorf("attempt %d: model=%v stream=%v effort=%v, want %s/%t/%v", attempt, got.payload["model"], got.payload["stream"], got.payload["reasoning_effort"], wantModel, stream, test.want)
+						}
+					}
+					wantResponses := 0
+					if attempt == 1 {
+						wantResponses = 1
+					}
+					if responses != wantResponses || chats != 1 {
+						t.Fatalf("attempt %d: Responses requests=%d Chat requests=%d, want %d/1", attempt, responses, chats, wantResponses)
+					}
+				}
+				if options["reasoning_effort"] != "high" {
+					t.Fatalf("Profile request options changed: %v", options)
 				}
 			})
 		}
