@@ -61,8 +61,14 @@ func (m *Manager) ChatResponse(ctx context.Context, id, connectionID, responseID
 	}
 	var result Response
 	err = c.Request(ctx, http.MethodGet, "/v1/responses/"+url.PathEscape(responseID), "", nil, &result)
-	if err == nil && result.Model != id {
+	if err != nil {
+		return Response{}, err
+	}
+	if result.ID == "" || result.Model == "" || result.Status == "" {
+		return Response{}, errors.New("incomplete relay response")
+	}
+	if result.ID != responseID || result.Model != id {
 		return Response{}, ErrChatReference
 	}
-	return result, err
+	return result, nil
 }

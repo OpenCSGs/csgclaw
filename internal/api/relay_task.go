@@ -134,6 +134,9 @@ func (h *Handler) runCloudTask(roomID string) {
 			if errors.As(err, &remote) && remote.Detail.Code == "response_not_found" {
 				code = "relay_task_result_unavailable"
 			}
+			if errors.Is(err, relay.ErrRequestTooLarge) {
+				code = "relay_task_input_too_large"
+			}
 			content = cloudTaskFailureText(room.Locale, code)
 			metadata["relay_error_code"] = code
 			metadata["relay_task_failed"] = true
@@ -158,26 +161,34 @@ func (h *Handler) runCloudTask(roomID string) {
 
 // Use trusted local text instead of exposing arbitrary upstream diagnostics.
 func cloudTaskFailureText(locale, code string) string {
-	if code == "relay_task_result_unavailable" {
-		if locale == "en" {
-			return "Relay could not confirm the result of this message. Check whether it completed before sending it again."
-		}
-		return "Relay 无法确认这条消息的执行结果。请确认消息是否已执行，再决定是否重发。"
-	}
-
-	if code == "model_protocol_unsupported" {
-		if locale == "en" {
-			return "The published agent's model does not support the Responses tool protocol required by its runtime. Select a compatible provider/model in the source agent's settings, then send again."
-		}
-		return "发布端智能体的模型不支持运行时所需的 Responses 工具协议。请在本地源智能体的设置中选择支持该协议的模型服务，再重新发送。"
+	var en, zh string
+	switch code {
+	case "relay_task_input_too_large":
+		en = "This message exceeds the cloud task request size limit. Shorten the message and send it again."
+		zh = "这条消息超过了云端任务的请求大小限制，请缩短消息后再发送。"
+	case "relay_task_result_unavailable":
+		en = "Relay could not confirm the result of this message. Check whether it completed before sending it again."
+		zh = "Relay 无法确认这条消息的执行结果。请确认消息是否已执行，再决定是否重发。"
+	case "model_protocol_unsupported":
+		en = "The published agent's model does not support the Responses tool protocol required by its runtime. Select a compatible provider/model in the source agent's settings, then send again."
+		zh = "发布端智能体的模型不支持运行时所需的 Responses 工具协议。请在本地源智能体的设置中选择支持该协议的模型服务，再重新发送。"
+	default:
+		en = "Cloud task could not complete. Check Relay and agent availability before sending again."
+		zh = "云端任务未能完成，请检查 Relay 和智能体状态后重新发送。"
 	}
 	if locale == "en" {
-		return "Cloud task could not complete. Check Relay and agent availability before sending again."
+		return en
 	}
-	return "云端任务未能完成，请检查 Relay 和智能体状态后重新发送。"
+	return zh
 }
 
 var errCloudTaskPersistence = errors.New("cloud task recovery state could not be saved")
+
+const (
+	cloudTaskUnsubmittedKey = "relay_task_unsubmitted"
+	cloudTaskResponseKey    = "relay_pending_response_id"
+	cloudTaskRecoveryKey    = "relay_context_recovery_input"
+)
 
 // Build a text checkpoint from successful turns in this room. Replies can be
 // appended after the next user message when several messages are queued.
@@ -188,7 +199,7 @@ func cloudTaskRecoveryInput(room im.Room, message im.Message) string {
 			replies[reply.ClientMessageID] = reply.Content
 		}
 	}
-	budget := 16 << 10
+	budget := (16 << 10) - len("[]")
 	var turns []string
 	for i := slices.IndexFunc(room.Messages, func(m im.Message) bool { return m.ID == message.ID }) - 1; i >= 0; i-- {
 		prior := room.Messages[i]
@@ -197,16 +208,16 @@ func cloudTaskRecoveryInput(room im.Room, message im.Message) string {
 			continue
 		}
 		if len(prior.Content)+len(reply) >= budget {
-			break
+			continue
 		}
 		turn, _ := json.Marshal(struct {
 			User  string `json:"user"`
 			Agent string `json:"agent"`
 		}{prior.Content, reply})
-		budget -= len(turn) + 1
-		if budget < 0 {
-			break
+		if len(turn)+1 > budget {
+			continue
 		}
+		budget -= len(turn) + 1
 		turns = append(turns, string(turn))
 	}
 	if len(turns) == 0 {
@@ -223,36 +234,83 @@ func cloudTaskRecoveryInput(room im.Room, message im.Message) string {
 	return input
 }
 
-func cloudTaskCanRestoreContext(result relay.Response, err error, responseID string) bool {
-	if err == nil {
-		return result.Status == "failed" && result.Error != nil && result.Error.Code == "relay_branch_unsupported"
+func cloudTaskCanRestoreContext(result relay.Response, remote *relay.HTTPError, knownUnsubmitted bool) bool {
+	if result.Status == "failed" && result.Error != nil && result.Error.Code == "relay_branch_unsupported" {
+		return true
 	}
-	// A missing result for a known request is ambiguous. Only retry a POST
-	// that Relay rejected before it assigned the new request a response ID.
-	var remote *relay.HTTPError
-	return responseID == "" && errors.As(err, &remote) && remote.Status == http.StatusNotFound &&
+	// The same 404 can follow the loss of an earlier submission record.
+	// Only allow recovery while every earlier attempt was ruled out.
+	return knownUnsubmitted && remote != nil && remote.Status == http.StatusNotFound &&
 		remote.Detail.Code == "response_not_found" && remote.Detail.ResponseID == ""
 }
 
-// Poll known requests through temporary outages. Submission retries always keep
-// the original key; never turn a transport failure into a completed job.
+func cloudTaskRejectedBeforeExecution(result relay.Response) bool {
+	if result.Status != "failed" || result.Error == nil || result.ID == "" {
+		return false
+	}
+	switch result.Error.Code {
+	case "admission_failed", "agent_busy", "agent_offline", "agent_unavailable":
+		return true
+	default:
+		return false
+	}
+}
+
+// Poll known requests by ID and reuse the current key until Relay confirms
+// that the attempt did not execute.
 func (h *Handler) awaitCloudTask(ctx context.Context, room im.Room, message im.Message, previous string) (relay.Response, error) {
 	metadata := maps.Clone(message.Metadata)
 	if metadata == nil {
 		metadata = map[string]any{}
 	}
-	responseID, _ := metadata["relay_pending_response_id"].(string)
-	recoveryInput, _ := metadata["relay_context_recovery_input"].(string)
+	responseID, _ := metadata[cloudTaskResponseKey].(string)
+	recoveryInput, _ := metadata[cloudTaskRecoveryKey].(string)
+	startedAtKey, retryAfterKey := "relay_task_started_at", "relay_task_retry_after"
+	if recoveryInput != "" {
+		startedAtKey, retryAfterKey = "relay_context_recovery_started_at", "relay_context_recovery_after"
+	}
+	startedAt, _ := metadata[startedAtKey].(string)
+	unsubmitted, _ := metadata[cloudTaskUnsubmittedKey].(bool)
+	submissionStartedAt, err := time.Parse(time.RFC3339Nano, startedAt)
+	if err != nil {
+		submissionStartedAt = message.CreatedAt
+		if unsubmitted && recoveryInput == "" && responseID == "" {
+			submissionStartedAt = time.Now().UTC()
+		}
+	}
+	// Reconfirm the checkpoint before the first POST after a worker restart.
+	needsCheckpoint := true
+	checkpoint := func() error {
+		needsCheckpoint = false
+		_, err := h.im.UpdateDeliveredMessageMetadata(room.ID, message.ID, message.SenderID, metadata)
+		return err
+	}
 	for {
 		if ctx.Err() != nil {
 			return relay.Response{}, ctx.Err()
 		}
-		if responseID == "" && time.Since(message.CreatedAt) > 10*time.Minute {
+		responseID, _ := metadata[cloudTaskResponseKey].(string)
+		retryAfter, _ := metadata[retryAfterKey].(string)
+		recoveryInput, _ := metadata[cloudTaskRecoveryKey].(string)
+		if responseID == "" && time.Since(submissionStartedAt) > 10*time.Minute {
 			return relay.Response{}, fmt.Errorf("request recovery window expired")
+		}
+		unsubmitted, _ := metadata[cloudTaskUnsubmittedKey].(bool)
+		knownUnsubmitted := unsubmitted && recoveryInput == "" && responseID == ""
+		if knownUnsubmitted {
+			// Consume this marker before the POST so a restart cannot mistake
+			// an already attempted submission for a new one.
+			delete(metadata, cloudTaskUnsubmittedKey)
+			metadata[startedAtKey] = submissionStartedAt.Format(time.RFC3339Nano)
+			needsCheckpoint = true
+		}
+		if responseID == "" && needsCheckpoint && checkpoint() != nil {
+			return relay.Response{}, errCloudTaskPersistence
 		}
 		callCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 		var result relay.Response
 		var err error
+		var remote *relay.HTTPError
 		if responseID != "" {
 			result, err = h.relayManager.ChatResponse(callCtx, room.CloudAgent.AgentID, room.CloudAgent.ConnectionID, responseID)
 		} else {
@@ -260,36 +318,61 @@ func (h *Handler) awaitCloudTask(ctx context.Context, room im.Room, message im.M
 			if recoveryInput != "" {
 				key, input, parent = "task-recovery:"+room.ID+":"+message.ID, recoveryInput, ""
 			}
+			if retryAfter != "" {
+				key = fmt.Sprintf("task-recovery:%x", sha256.Sum256([]byte(key+"\x00"+retryAfter)))
+			}
 			result, err = h.relayManager.Chat(callCtx, room.CloudAgent.AgentID, room.CloudAgent.ConnectionID, key, input, parent)
-			var remote *relay.HTTPError
-			if errors.As(err, &remote) && remote.Detail.ResponseID != "" && (remote.Detail.Code == "response_in_progress" || remote.Detail.Code == "delivery_confirmation_timeout" || remote.Detail.Code == "relay_unavailable") {
-				result.ID, result.Status, err = remote.Detail.ResponseID, "in_progress", nil
+			if errors.As(err, &remote) {
+				if id := remote.PendingResponseID(); id != "" {
+					result.ID, result.Status, err = id, "in_progress", nil
+					remote = nil
+				}
 			}
 		}
 		cancel()
-		if recoveryInput == "" && previous != "" && cloudTaskCanRestoreContext(result, err, responseID) {
-			// Save the exact replacement input and switch attempts atomically
-			// before submitting work under a different idempotency key.
-			recoveryInput = cloudTaskRecoveryInput(room, message)
-			metadata["relay_context_recovery_input"] = recoveryInput
-			delete(metadata, "relay_pending_response_id")
-			if _, saveErr := h.im.UpdateDeliveredMessageMetadata(room.ID, message.ID, message.SenderID, metadata); saveErr != nil {
-				return result, errCloudTaskPersistence
+		restore := recoveryInput == "" && previous != "" && cloudTaskCanRestoreContext(result, remote, knownUnsubmitted)
+		retryRejected := err == nil && result.ID != retryAfter && cloudTaskRejectedBeforeExecution(result)
+		metadataChanged := true
+		switch {
+		case restore:
+			startedAtKey, retryAfterKey = "relay_context_recovery_started_at", "relay_context_recovery_after"
+			submissionStartedAt = time.Now().UTC()
+			metadata[cloudTaskRecoveryKey] = cloudTaskRecoveryInput(room, message)
+			metadata[startedAtKey] = submissionStartedAt.Format(time.RFC3339Nano)
+			delete(metadata, cloudTaskResponseKey)
+			delete(metadata, retryAfterKey)
+		case retryRejected:
+			// Relay and the executor reject these requests before execution.
+			// A recorded rejection is terminal for its key, so persist the
+			// identity of the next attempt before sending it.
+			metadata[retryAfterKey] = result.ID
+			if recoveryInput == "" {
+				metadata[cloudTaskUnsubmittedKey] = true
+				metadata[startedAtKey] = submissionStartedAt.Format(time.RFC3339Nano)
 			}
-			responseID = ""
+			delete(metadata, cloudTaskResponseKey)
+		case result.ID != "" && result.ID != responseID:
+			delete(metadata, cloudTaskUnsubmittedKey)
+			metadata[cloudTaskResponseKey] = result.ID
+		case knownUnsubmitted && remote != nil && remote.Detail.ResponseID == "" &&
+			((remote.Status == http.StatusServiceUnavailable && (remote.Detail.Code == "agent_offline" || remote.Detail.Code == "agent_unhealthy")) ||
+				(remote.Status == http.StatusConflict && remote.Detail.Code == "agent_busy")):
+			// Relay rejected the POST before assigning a response ID. Restore
+			// eligibility only if no earlier attempt had an unknown outcome.
+			metadata[cloudTaskUnsubmittedKey] = true
+		default:
+			metadataChanged = false
+		}
+		if metadataChanged && checkpoint() != nil {
+			return result, errCloudTaskPersistence
+		}
+		if restore {
 			continue
 		}
-		if result.ID != "" && result.ID != responseID {
-			metadata["relay_pending_response_id"] = result.ID
-			if _, saveErr := h.im.UpdateDeliveredMessageMetadata(room.ID, message.ID, message.SenderID, metadata); saveErr != nil {
-				return result, errCloudTaskPersistence
-			}
-			responseID = result.ID
-		}
-		if err == nil && result.Status != "in_progress" && result.Status != "queued" {
+		if err == nil && !retryRejected && result.Status != "in_progress" && result.Status != "queued" {
 			return result, nil
 		}
-		if err != nil && !cloudTaskRetryable(err, recoveryInput != "" && responseID == "") {
+		if err != nil && !cloudTaskRetryable(err) {
 			return result, err
 		}
 		select {
@@ -300,15 +383,13 @@ func (h *Handler) awaitCloudTask(ctx context.Context, room im.Room, message im.M
 	}
 }
 
-func cloudTaskRetryable(err error, submittingRecovery bool) bool {
-	if errors.Is(err, relay.ErrChatReference) {
+func cloudTaskRetryable(err error) bool {
+	if errors.Is(err, relay.ErrChatReference) || errors.Is(err, relay.ErrRequestTooLarge) {
 		return false
 	}
 	var remote *relay.HTTPError
 	if errors.As(err, &remote) {
-		// A rejected continuation can be visible before Relay releases the
-		// agent. Give the recovery submission time to acquire that slot.
-		if submittingRecovery && remote.Status == http.StatusConflict && remote.Detail.Code == "agent_busy" {
+		if remote.Status == http.StatusConflict && remote.Detail.Code == "agent_busy" {
 			return true
 		}
 		return remote.Status >= http.StatusInternalServerError || remote.Status == http.StatusRequestTimeout || remote.Status == http.StatusTooManyRequests

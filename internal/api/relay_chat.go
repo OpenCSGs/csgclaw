@@ -40,16 +40,18 @@ func (h *Handler) handleRelayChat(w http.ResponseWriter, r *http.Request) {
 		result, err = h.relayManager.Chat(ctx, id, body.ConnectionID, body.Key, body.Input, body.Previous)
 	}
 	if err != nil {
+		if errors.Is(err, relay.ErrRequestTooLarge) {
+			writeAgentSessionError(w, http.StatusRequestEntityTooLarge, "relay_chat_input_too_large", err.Error(), nil)
+			return
+		}
 		if errors.Is(err, relay.ErrChatReference) {
 			writeAgentSessionError(w, 409, "relay_chat_reference_unavailable", err.Error(), nil)
 			return
 		}
 		var remote *relay.HTTPError
 		if errors.As(err, &remote) {
-			// A timed-out submission may already be executing. Return its identity so
-			// the browser queries the same request rather than dispatching new work.
-			if r.Method == http.MethodPost && remote.Detail.ResponseID != "" && (remote.Detail.Code == "response_in_progress" || remote.Detail.Code == "delivery_confirmation_timeout" || remote.Detail.Code == "relay_unavailable") {
-				writeJSON(w, http.StatusAccepted, map[string]any{"id": remote.Detail.ResponseID, "status": "in_progress", "model": id})
+			if responseID := remote.PendingResponseID(); r.Method == http.MethodPost && responseID != "" {
+				writeJSON(w, http.StatusAccepted, map[string]any{"id": responseID, "status": "in_progress", "model": id})
 				return
 			}
 			writeAgentSessionError(w, remote.Status, remote.Detail.Code, "relay request failed", nil)

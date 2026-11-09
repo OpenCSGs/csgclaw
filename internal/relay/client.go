@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -67,8 +68,19 @@ type HTTPError struct {
 	Detail ProtocolError
 }
 
+var ErrRequestTooLarge = errors.New("relay request exceeds 1 MiB")
+
 func (e *HTTPError) Error() string {
 	return fmt.Sprintf("relay HTTP %d: %s (%s)", e.Status, e.Detail.Code, e.Detail.ResponseID)
+}
+
+// PendingResponseID identifies a submitted response whose outcome can be
+// checked without sending another POST.
+func (e *HTTPError) PendingResponseID() string {
+	if !safeID(e.Detail.ResponseID) || e.Detail.Code == "idempotency_conflict" {
+		return ""
+	}
+	return e.Detail.ResponseID
 }
 
 func (c *Client) Request(ctx context.Context, method, path, key string, body, out any) error {
@@ -91,13 +103,18 @@ func (c *Client) request(ctx context.Context, method, path, key string, body any
 			return nil, err
 		}
 		if len(data) > 1<<20 {
-			return nil, fmt.Errorf("relay request exceeds 1 MiB")
+			return nil, ErrRequestTooLarge
 		}
 		reader = bytes.NewReader(data)
 	}
 	req, err := http.NewRequestWithContext(ctx, method, c.endpoint(path), reader)
 	if err != nil {
 		return nil, err
+	}
+	if method == http.MethodPost && path == "/v1/responses" {
+		// The caller tracks submission attempts. Prevent net/http from
+		// replaying a POST with an idempotency key after an ambiguous error.
+		req.GetBody = nil
 	}
 	if err := c.authenticate(req.Header); err != nil {
 		return nil, err
@@ -123,9 +140,11 @@ func (c *Client) request(ctx context.Context, method, path, key string, body any
 		var envelope struct {
 			Error ProtocolError `json:"error"`
 		}
-		_ = json.NewDecoder(io.LimitReader(resp.Body, 4096)).Decode(&envelope)
-		if envelope.Error.ResponseID == "" {
-			envelope.Error.ResponseID = resp.Header.Get("X-Response-Id")
+		if err := json.NewDecoder(io.LimitReader(resp.Body, 4096)).Decode(&envelope); err != nil {
+			envelope.Error = ProtocolError{}
+		}
+		if id := resp.Header.Get("X-Response-Id"); safeID(id) {
+			envelope.Error.ResponseID = id
 		}
 		return nil, &HTTPError{Status: resp.StatusCode, Detail: envelope.Error}
 	}
@@ -138,10 +157,30 @@ func (c *Client) Publish(ctx context.Context, key string, req PublishRequest) (P
 	return p, err
 }
 func (c *Client) Call(ctx context.Context, key string, req CallRequest) (Response, error) {
-	var r Response
 	req.Stream = false
-	err := c.Request(ctx, http.MethodPost, "/v1/responses", key, req, &r)
-	return r, err
+	resp, err := c.request(ctx, http.MethodPost, "/v1/responses", key, req)
+	if err != nil {
+		return Response{}, err
+	}
+	defer resp.Body.Close()
+	var result Response
+	err = json.NewDecoder(io.LimitReader(resp.Body, 8<<20)).Decode(&result)
+	id := resp.Header.Get("X-Response-Id")
+	if err == nil && safeID(result.ID) && result.Status != "" && (!safeID(id) || result.ID == id) {
+		return result, nil
+	}
+	if !safeID(id) && err == nil {
+		id = result.ID
+	}
+	if safeID(id) {
+		return Response{}, &HTTPError{Status: http.StatusBadGateway, Detail: ProtocolError{
+			Code: "response_body_unavailable", ResponseID: id,
+		}}
+	}
+	if err == nil {
+		err = errors.New("incomplete relay response")
+	}
+	return Response{}, err
 }
 func (c *Client) Stream(ctx context.Context, key string, req CallRequest, out io.Writer) error {
 	req.Stream = true

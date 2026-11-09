@@ -2,7 +2,10 @@ package api
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -201,40 +204,160 @@ func TestCloudTaskSubmissionRetriesKeepIdentity(t *testing.T) {
 	}
 	room.CloudAgent = &apitypes.CloudAgentReference{AgentID: "agt_review", ConnectionID: connection}
 	h := &Handler{im: svc, relayManager: m}
+	oversized, err := svc.CreateMessage(im.CreateMessageRequest{RoomID: room.ID, SenderID: im.AdminUserID, Content: strings.Repeat("x", 1<<20)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.awaitCloudTask(ctx, room, oversized, ""); !errors.Is(err, relay.ErrRequestTooLarge) || submits.Load() != 0 {
+		t.Fatalf("oversized task was retried or submitted: %v", err)
+	}
 	response, err := h.awaitCloudTask(ctx, room, message, "")
 	if err != nil || response.Status != "completed" || submits.Load() != 2 {
 		t.Fatalf("retry failed: status=%s submissions=%d error=%v", response.Status, submits.Load(), err)
 	}
 	saved, _ := svc.Room(room.ID)
-	if saved.Messages[len(saved.Messages)-1].Metadata["relay_pending_response_id"] != "resp_existing" {
+	if saved.Messages[len(saved.Messages)-2].Metadata["relay_pending_response_id"] != "resp_existing" {
 		t.Fatal("response identity was not persisted")
 	}
 }
 
 func TestCloudTaskRestoresLostContextInSameRoom(t *testing.T) {
-	for _, rejection := range []string{"missing parent", "missing checkpoint", "missing submitted result", "missing polled result"} {
-		t.Run(rejection, func(t *testing.T) {
-			ctx, cancel := context.WithCancel(context.Background())
+	const original = "task:room:followup"
+	const recovery = "task-recovery:room:followup"
+	const next = "task:room:next"
+	type exchange struct {
+		request string // POST idempotency key or GET path
+		reply   func(http.ResponseWriter)
+	}
+	poll := func(id string) string { return "/v1/responses/" + id }
+	rotate := func(key, id string) string {
+		return fmt.Sprintf("task-recovery:%x", sha256.Sum256([]byte(key+"\x00"+id)))
+	}
+	failure := func(status int, code, id string) func(http.ResponseWriter) {
+		return func(w http.ResponseWriter) {
+			w.WriteHeader(status)
+			_ = json.NewEncoder(w).Encode(map[string]any{"error": relay.ProtocolError{Code: code, ResponseID: id}})
+		}
+	}
+	response := func(id, status, code string) func(http.ResponseWriter) {
+		return func(w http.ResponseWriter) {
+			result := relay.Response{ID: id, Model: "agt_cloud", Status: status}
+			if code != "" {
+				result.Error = &relay.ProtocolError{Code: code}
+			}
+			_ = json.NewEncoder(w).Encode(result)
+		}
+	}
+	missing := failure(404, "response_not_found", "")
+	offline := failure(503, "agent_offline", "")
+	restored := response("resp_restored", "completed", "")
+	rotatedOriginal := rotate(original, "resp_admitted")
+	rotatedBusy := rotate(recovery, "resp_busy")
+	rotatedOffline := rotate(recovery, "resp_offline")
+	recoveryRejections := map[string]string{rotatedBusy: "resp_busy", rotatedOffline: "resp_offline"}
+	for _, tc := range []struct {
+		name, pending        string
+		restore, old, legacy bool
+		before, after        []exchange
+	}{
+		{name: "missing parent", restore: true, old: true, before: []exchange{{original, missing}}},
+		{
+			name: "missing checkpoint", pending: "resp_pending", restore: true, old: true,
+			before: []exchange{{poll("resp_pending"), response("resp_pending", "failed", "relay_branch_unsupported")}},
+			after: []exchange{
+				{recovery, failure(409, "agent_busy", "")},
+				{recovery, failure(409, "agent_busy", "resp_busy")},
+				{poll("resp_busy"), response("resp_busy", "failed", "agent_busy")},
+				{rotatedBusy, restored},
+			},
+		},
+		{
+			name: "missing submitted result", before: []exchange{
+				{original, func(w http.ResponseWriter) { w.Header().Set("X-Response-Id", "resp_admitted"); missing(w) }},
+				{poll("resp_admitted"), missing},
+			},
+		},
+		{name: "missing polled result", pending: "resp_pending", before: []exchange{{poll("resp_pending"), missing}}},
+		{name: "lost response", before: []exchange{{original, nil}, {original, offline}, {original, missing}}},
+		{name: "lost response before restart", before: []exchange{{original, nil}}, after: []exchange{{original, missing}}},
+		{name: "legacy pending message", legacy: true, before: []exchange{{original, missing}}},
+		{name: "agent offline", restore: true, before: []exchange{{original, offline}, {original, missing}}},
+		{
+			name: "agent offline with response ID", restore: true,
+			before: []exchange{
+				{original, failure(503, "agent_offline", "resp_admitted")},
+				{poll("resp_admitted"), response("resp_admitted", "failed", "agent_offline")},
+				{rotatedOriginal, missing},
+			},
+		},
+		{
+			name: "agent unhealthy", restore: true,
+			before: []exchange{{original, failure(503, "agent_unhealthy", "")}, {original, missing}},
+		},
+		{
+			name: "lost offline response", before: []exchange{
+				{original, failure(503, "agent_offline", "resp_admitted")}, {poll("resp_admitted"), missing},
+			},
+		},
+		{
+			name: "recorded recovery offline", restore: true, before: []exchange{{original, missing}},
+			after: []exchange{
+				{recovery, failure(503, "agent_offline", "resp_offline")},
+				{poll("resp_offline"), response("resp_offline", "failed", "agent_offline")},
+				{rotatedOffline, restored},
+			},
+		},
+		{
+			name: "truncated recovery response", restore: true, before: []exchange{{original, missing}},
+			after: []exchange{
+				{recovery, func(w http.ResponseWriter) {
+					w.Header().Set("X-Response-Id", "resp_restored")
+					_, _ = fmt.Fprint(w, "{")
+				}},
+				{poll("resp_restored"), response("resp_restored", "", "")},
+				{poll("resp_restored"), restored},
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			before, after := tc.before, tc.after
+			if tc.restore {
+				before = append(before, exchange{recovery, nil})
+				if len(after) == 0 {
+					after = []exchange{{recovery, restored}}
+				}
+				after = append(after, exchange{next, response("resp_next", "completed", "")})
+			}
+			script := append(before, after...)
+			ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 			defer cancel()
-			var recoveryCalls atomic.Int32
-			firstRecoveryInput := make(chan string, 1)
+			path := filepath.Join(t.TempDir(), "state.json")
+			var calls atomic.Int32
+			var firstRecoveryInput atomic.Value
 			remote := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.Header().Set("Content-Type", "application/json")
-				switch {
-				case r.URL.Path == "/v1/agents":
+				switch r.URL.Path {
+				case "/v1/agents":
 					_ = json.NewEncoder(w).Encode(relay.Publication{Agent: relay.Agent{ID: "agt_cloud"}})
-				case r.URL.Path == "/v1/agents/agt_cloud":
+					return
+				case "/v1/agents/agt_cloud":
 					_ = json.NewEncoder(w).Encode(relay.Agent{ID: "agt_cloud", Status: "online"})
-				case r.URL.Path == "/v1/agents/agt_cloud/connect":
+					return
+				case "/v1/agents/agt_cloud/connect":
 					w.WriteHeader(http.StatusNotFound)
-				case r.URL.Path == "/v1/responses/resp_pending":
-					if rejection == "missing checkpoint" {
-						_ = json.NewEncoder(w).Encode(relay.Response{ID: "resp_pending", Model: "agt_cloud", Status: "failed", Error: &relay.ProtocolError{Code: "relay_branch_unsupported"}})
-					} else {
-						w.WriteHeader(http.StatusNotFound)
-						_ = json.NewEncoder(w).Encode(map[string]any{"error": relay.ProtocolError{Code: "response_not_found"}})
-					}
-				case r.URL.Path == "/v1/responses" && r.Method == http.MethodPost:
+					return
+				}
+				request := r.URL.Path
+				if r.Method == http.MethodPost && request == "/v1/responses" {
+					request = r.Header.Get("Idempotency-Key")
+				}
+				index := int(calls.Add(1)) - 1
+				if index >= len(script) || script[index].request != request {
+					t.Errorf("unexpected Relay request %d: %s", index, request)
+					w.WriteHeader(http.StatusBadRequest)
+					return
+				}
+				if r.Method == http.MethodPost {
 					var req relay.CallRequest
 					if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 						t.Error(err)
@@ -243,55 +366,54 @@ func TestCloudTaskRestoresLostContextInSameRoom(t *testing.T) {
 					}
 					var input string
 					_ = json.Unmarshal(req.Input, &input)
-					switch r.Header.Get("Idempotency-Key") {
-					case "task:room:followup":
+					switch request {
+					case original, rotatedOriginal:
 						if req.PreviousResponseID != "resp_old" || input != "Where is it?" {
-							t.Errorf("unexpected continuation: %+v, %q", req, input)
+							t.Errorf("unexpected continuation: parent %q, input %q", req.PreviousResponseID, input)
 						}
-						if rejection == "missing submitted result" {
-							w.Header().Set("X-Response-Id", "resp_admitted")
+					case next:
+						if req.PreviousResponseID != "resp_restored" || input != "Future message" {
+							t.Errorf("unexpected next turn: parent %q, input %q", req.PreviousResponseID, input)
 						}
-						w.WriteHeader(http.StatusNotFound)
-						_ = json.NewEncoder(w).Encode(map[string]any{"error": relay.ProtocolError{Code: "response_not_found"}})
-					case "task-recovery:room:followup":
+					default:
 						if req.PreviousResponseID != "" || !strings.Contains(input, "Remember the report") ||
 							!strings.Contains(input, "Saved in the project folder") || !strings.HasSuffix(input, "Where is it?") ||
 							strings.Contains(input, "Failed request") || strings.Contains(input, "Future message") {
-							t.Errorf("unexpected recovery input: %q, parent %q", input, req.PreviousResponseID)
+							t.Errorf("unexpected recovery input: parent %q, input %q", req.PreviousResponseID, input)
 						}
-						attempt := recoveryCalls.Add(1)
-						if attempt == 1 {
-							firstRecoveryInput <- input
-							cancel()
-							return
+						if first := firstRecoveryInput.Load(); first == nil {
+							firstRecoveryInput.Store(input)
+						} else if first != input {
+							t.Error("recovery input changed after restart or retry")
 						}
-						original := <-firstRecoveryInput
-						firstRecoveryInput <- original
-						if input != original {
-							t.Error("recovery input changed after restart")
-						}
-						if attempt == 2 && rejection == "missing checkpoint" {
-							w.WriteHeader(http.StatusConflict)
-							_ = json.NewEncoder(w).Encode(map[string]any{"error": relay.ProtocolError{Code: "agent_busy"}})
-							return
-						}
-						_ = json.NewEncoder(w).Encode(relay.Response{ID: "resp_restored", Model: "agt_cloud", Status: "completed"})
-					case "task:room:next":
-						if req.PreviousResponseID != "resp_restored" || input != "Future message" {
-							t.Errorf("unexpected follow-up: parent %q, input %q", req.PreviousResponseID, input)
-						}
-						_ = json.NewEncoder(w).Encode(relay.Response{ID: "resp_next", Model: "agt_cloud", Status: "completed"})
-					default:
-						t.Errorf("unexpected key %q", r.Header.Get("Idempotency-Key"))
-						w.WriteHeader(http.StatusBadRequest)
 					}
-				default:
-					t.Errorf("unexpected request %s %s", r.Method, r.URL.Path)
-					w.WriteHeader(http.StatusNotFound)
+					if rejectedID := recoveryRejections[request]; rejectedID != "" {
+						state, err := im.LoadBootstrap(path)
+						if err != nil || len(state.Rooms) != 1 {
+							t.Errorf("could not read persisted recovery state: %v", err)
+						} else if pending, _, found := cloudTaskPending(state.Rooms[0]); !found ||
+							pending.Metadata["relay_context_recovery_after"] != rejectedID ||
+							pending.Metadata["relay_pending_response_id"] != nil {
+							t.Error("replacement recovery attempt was not saved before submission")
+						}
+					}
 				}
+				if reply := script[index].reply; reply != nil {
+					reply(w)
+					return
+				}
+				conn, _, err := w.(http.Hijacker).Hijack()
+				if err != nil {
+					t.Error(err)
+					return
+				}
+				if len(after) != 0 && index+1 == len(before) {
+					cancel()
+				}
+				_ = conn.Close()
 			}))
 			defer remote.Close()
-			m, err := relay.NewManager(context.Background(), t.TempDir(), nil)
+			m, err := relay.NewManager(t.Context(), t.TempDir(), nil)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -302,24 +424,30 @@ func TestCloudTaskRestoresLostContextInSameRoom(t *testing.T) {
 			if _, err := m.Publish(ctx, relay.PublishRequest{SourceAgentID: "local", Visibility: "public"}); err != nil {
 				t.Fatal(err)
 			}
+			message := im.Message{ID: "followup", SenderID: im.AdminUserID, Content: "Where is it?", CreatedAt: time.Now()}
+			switch {
+			case tc.pending != "":
+				message.Metadata = map[string]any{"relay_pending_response_id": tc.pending}
+			case !tc.legacy:
+				message.Metadata = map[string]any{cloudTaskUnsubmittedKey: true}
+			}
+			if tc.old {
+				message.CreatedAt = time.Now().Add(-11 * time.Minute)
+			}
 			room := im.Room{
 				ID: "room", CreatedBy: im.AdminUserID, Members: []string{im.AdminUserID, "cloud"},
 				CloudAgent: &apitypes.CloudAgentReference{AgentID: "agt_cloud", ConnectionID: m.Catalog(ctx)[0].ConnectionID, UserID: "cloud"},
 				Messages: []im.Message{
 					{ID: "prior", SenderID: im.AdminUserID, Content: "Remember the report"},
 					{ID: "failed", SenderID: im.AdminUserID, Content: "Failed request"},
-					{ID: "followup", SenderID: im.AdminUserID, Content: "Where is it?", CreatedAt: time.Now()},
+					message,
 					{ID: "prior-reply", SenderID: "cloud", ClientMessageID: "relay-reply:prior", Content: "Saved in the project folder", Metadata: map[string]any{"relay_response_id": "resp_old"}},
 					{ID: "failed-reply", SenderID: "cloud", ClientMessageID: "relay-reply:failed", Content: "Failed", Metadata: map[string]any{"relay_task_failed": true}},
 				},
 			}
-			if rejection == "missing checkpoint" || rejection == "missing polled result" {
-				room.Messages[2].Metadata = map[string]any{"relay_pending_response_id": "resp_pending"}
-			}
-			if !strings.HasSuffix(rejection, "result") {
+			if tc.restore {
 				room.Messages = append(room.Messages, im.Message{ID: "next", SenderID: im.AdminUserID, Content: "Future message", CreatedAt: time.Now()})
 			}
-			path := filepath.Join(t.TempDir(), "state.json")
 			if err := im.SaveBootstrap(path, im.Bootstrap{
 				CurrentUserID: im.AdminUserID,
 				Users:         []im.User{{ID: im.AdminUserID, Name: "admin", Role: "admin"}, {ID: "cloud", Name: "cloud", Role: "cloud"}},
@@ -333,39 +461,63 @@ func TestCloudTaskRestoresLostContextInSameRoom(t *testing.T) {
 			}
 			h := &Handler{im: svc, relayManager: m, relayContext: ctx}
 			h.runCloudTask(room.ID)
-			if strings.HasSuffix(rejection, "result") {
-				saved, _ := svc.Room(room.ID)
-				if len(saved.Messages) != 6 || saved.Messages[5].Metadata["relay_error_code"] != "relay_task_result_unavailable" || recoveryCalls.Load() != 0 {
-					t.Fatal("replayed a request with an unknown execution outcome")
+			if len(after) != 0 {
+				if int(calls.Load()) != len(before) {
+					t.Fatal("did not stop at the expected restart point")
 				}
-				return
+				svc, err = im.NewServiceFromPath(path)
+				if err != nil {
+					t.Fatal(err)
+				}
+				saved, _ := svc.Room(room.ID)
+				pending, _, found := cloudTaskPending(saved)
+				if !found || pending.Metadata[cloudTaskUnsubmittedKey] != nil || pending.Metadata["relay_pending_response_id"] != nil {
+					t.Fatal("submission checkpoint did not survive restart")
+				}
+				if tc.restore && (pending.Metadata["relay_context_recovery_input"] == nil || pending.Metadata["relay_context_recovery_started_at"] == nil) {
+					t.Fatal("recovery checkpoint was not saved before submission")
+				}
+				resumed, stop := context.WithTimeout(t.Context(), 10*time.Second)
+				defer stop()
+				h = &Handler{im: svc, relayManager: m, relayContext: resumed}
+				h.runCloudTask(room.ID)
 			}
-			if recoveryCalls.Load() != 1 {
-				t.Fatal("did not start recovery")
-			}
-			svc, err = im.NewServiceFromPath(path)
-			if err != nil {
-				t.Fatal(err)
+			if int(calls.Load()) != len(script) {
+				t.Fatalf("Relay requests = %d, want %d", calls.Load(), len(script))
 			}
 			saved, _ := svc.Room(room.ID)
-			pending, _, found := cloudTaskPending(saved)
-			if !found || pending.Metadata["relay_context_recovery_input"] == nil || pending.Metadata["relay_pending_response_id"] != nil {
-				t.Fatal("recovery attempt was not persisted before submission")
-			}
-			h = &Handler{im: svc, relayManager: m, relayContext: context.Background()}
-			h.runCloudTask(room.ID)
-			saved, _ = svc.Room(room.ID)
-			wantCalls := int32(2)
-			if rejection == "missing checkpoint" {
-				wantCalls++
-			}
-			if recoveryCalls.Load() != wantCalls || len(saved.Messages) != 8 || saved.Messages[6].Metadata["relay_response_id"] != "resp_restored" {
-				t.Fatal("did not finish the recovered turn in the original room")
-			}
-			if saved.Messages[7].Metadata["relay_response_id"] != "resp_next" {
-				t.Fatal("next turn did not continue from the restored response")
+			if tc.restore {
+				if len(saved.Messages) != 8 || saved.Messages[6].Metadata["relay_response_id"] != "resp_restored" ||
+					saved.Messages[7].Metadata["relay_response_id"] != "resp_next" {
+					t.Fatal("recovered turn or its follow-up did not finish in the original room")
+				}
+			} else if len(saved.Messages) != 6 || saved.Messages[5].Metadata["relay_error_code"] != "relay_task_result_unavailable" {
+				t.Fatal("did not report the unknown execution outcome")
 			}
 		})
+	}
+}
+
+func TestCloudTaskRecoveryInputSkipsOversizedTurns(t *testing.T) {
+	message := im.Message{ID: "current", SenderID: im.AdminUserID, Content: "What is the project called?"}
+	room := im.Room{
+		CreatedBy:  im.AdminUserID,
+		CloudAgent: &apitypes.CloudAgentReference{UserID: "cloud"},
+		Messages: []im.Message{
+			{ID: "prior", SenderID: im.AdminUserID, Content: "The project is called Oak."},
+			{ID: "prior-reply", SenderID: "cloud", ClientMessageID: "relay-reply:prior", Content: "Understood.", Metadata: map[string]any{"relay_response_id": "resp_prior"}},
+			{ID: "report", SenderID: im.AdminUserID, Content: "Print the detailed report."},
+			{ID: "report-reply", SenderID: "cloud", ClientMessageID: "relay-reply:report", Metadata: map[string]any{"relay_response_id": "resp_report"}},
+			message,
+		},
+	}
+	for _, content := range []string{strings.Repeat("report ", 3000), strings.Repeat("<", 3000)} {
+		room.Messages[3].Content = content
+		input := cloudTaskRecoveryInput(room, message)
+		if !strings.Contains(input, "The project is called Oak.") || !strings.Contains(input, "Understood.") ||
+			strings.Contains(input, "Print the detailed report.") || !strings.HasSuffix(input, message.Content) {
+			t.Fatal("recovery did not retain the earlier complete turn within the size budget")
+		}
 	}
 }
 

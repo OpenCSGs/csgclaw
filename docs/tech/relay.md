@@ -164,11 +164,18 @@ before dispatch. Continuations must reference that exact tip. Non-tip branches,
 missing/evicted checkpoints, and uncertain history fail explicitly with
 `relay_branch_unsupported`; the executor never silently substitutes the latest
 history. For a CSGClaw cloud task, this rejection or a missing parent response
-triggers one recovery attempt in the same task. The caller starts a fresh Relay
-session with the current message and up to 16 KiB of recent completed text turns
-from that task. It saves the recovery input before submission so restarts reuse
-the same request. An unavailable result for a previously submitted request
-does not trigger a replay.
+when no prior attempt could have been dispatched triggers recovery in the same
+task. A Relay rejection while the agent is offline or not ready preserves
+that eligibility if it arrives before Relay assigns a response ID. The caller
+starts a fresh Relay session with the current message and up to 16 KiB of
+completed text turns, checking recent turns first
+and skipping any that exceed the remaining budget. It saves the recovery input
+and the start of a new submission window so restarts reuse both. A terminal
+rejection that confirms the request never ran permits a new key within the
+current window. The initial window for new queued messages starts at dispatch.
+When Relay supplies a response ID, the caller polls that ID even if it could
+not read the submission body. A missing response after an ambiguous submission
+leaves the execution outcome unconfirmed.
 
 State defaults to the CSGClaw data directory's `relay/` subdirectory; `--state`
 overrides it. A process lock prevents sharing one state file. Files have `0600`
