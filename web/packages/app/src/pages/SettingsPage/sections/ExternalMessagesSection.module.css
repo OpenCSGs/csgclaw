@@ -1,0 +1,126 @@
+.hintInline {
+  margin-left: 6px;
+  color: var(--muted);
+  font-weight: 400;
+  opacity: 0.85;
+}
+
+.createHint {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  padding: 2px 0 4px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.createHint a {
+  color: var(--primary);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.createHint a:hover {
+  text-decoration: underline;
+}
+
+.group {
+  display: grid;
+  gap: 12px;
+}
+
+.group + .group {
+  margin-top: 6px;
+}
+
+.groupTitle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 680;
+  line-height: 20px;
+}
+
+.sourceList {
+  margin: 0 0 12px;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 8px;
+}
+
+.sourceRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px 4px 4px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--field);
+}
+
+.sourceDialog {
+  width: min(680px, 100%);
+}
+
+.sourceDialog :global(.csg-dialog-body) {
+  display: grid;
+  gap: 16px;
+}
+
+.sourceDialog :global(.csg-dialog-body) > :global(.field) {
+  margin-top: 0;
+}
+
+.sourceDialog :global(.csg-dialog-body) :global(.profile-grid) {
+  gap: 12px;
+}
+
+.sourceDialog :global(.csg-dialog-body) :global(.profile-section),
+.sourceDialog :global(.csg-dialog-body) :global(.agent-section-form),
+.sourceDialog :global(.csg-dialog-body) :global(.agent-section-form-content) {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  padding: 0;
+  margin: 0;
+}
+
+.switchRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--field);
+}
+
+.switchRowText {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.switchRowText strong {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 18px;
+}
+
+.switchRowText small {
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 16px;
+}

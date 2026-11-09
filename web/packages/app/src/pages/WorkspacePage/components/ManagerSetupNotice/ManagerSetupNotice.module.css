@@ -1,0 +1,28 @@
+.notice {
+  flex-shrink: 0;
+  min-width: 0;
+  margin: 0 16px 16px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--panel-soft);
+  color: var(--text);
+}
+
+.title {
+  font: var(--text-sm-semibold);
+}
+
+.description {
+  margin: 6px 0 12px;
+  color: var(--muted);
+  font: var(--text-xs-normal);
+  line-height: 1.5;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}

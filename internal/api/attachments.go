@@ -9,6 +9,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"strings"
+	"time"
 
 	"csgclaw/internal/im"
 )
@@ -147,7 +148,7 @@ func (h *Handler) handleAttachmentByID(w http.ResponseWriter, r *http.Request) {
 	}
 	file, err := h.im.AttachmentFile(id)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusNotFound)
+		http.NotFound(w, r)
 		return
 	}
 	if !h.validateServerAccessToken(r.Header.Get("Authorization")) && !file.AuthorizesDownloadToken(r.URL.Query().Get("token")) {
@@ -158,20 +159,46 @@ func (h *Handler) handleAttachmentByID(w http.ResponseWriter, r *http.Request) {
 }
 
 func serveAttachment(w http.ResponseWriter, r *http.Request, file im.AttachmentFile, immutable bool) {
-	w.Header().Set("Content-Type", file.MediaType)
-	if immutable {
+	workspaceFile := file.IsWorkspaceFile()
+	switch {
+	case workspaceFile:
+		w.Header().Set("Cache-Control", "private, no-store")
+	case immutable:
 		w.Header().Set("Cache-Control", "private, max-age=31536000, immutable")
-	} else {
+	default:
 		w.Header().Set("Cache-Control", "no-store")
 	}
+	source, err := file.Open()
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	defer source.Close()
+	info, err := source.Stat()
+	if err != nil || !info.Mode().IsRegular() {
+		http.NotFound(w, r)
+		return
+	}
+	mediaType, modified := file.MediaType, info.ModTime()
+	if workspaceFile {
+		mediaType, err = file.WorkspaceMediaType(source)
+		if err != nil {
+			http.NotFound(w, r)
+			return
+		}
+		// Clients may revalidate two edits within one HTTP timestamp second.
+		// Serve the current bytes even if they send a previous If-Modified-Since.
+		modified = time.Time{}
+	}
+	w.Header().Set("Content-Type", mediaType)
 	w.Header().Set("Content-Security-Policy", "sandbox; default-src 'none'; style-src 'unsafe-inline'")
 	w.Header().Set("Cross-Origin-Resource-Policy", "same-origin")
 	w.Header().Set("Referrer-Policy", "no-referrer")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	disposition := "attachment"
-	if strings.HasPrefix(strings.ToLower(file.MediaType), "image/") {
+	if strings.HasPrefix(strings.ToLower(mediaType), "image/") {
 		disposition = "inline"
 	}
 	w.Header().Set("Content-Disposition", mime.FormatMediaType(disposition, map[string]string{"filename": file.SafeName}))
-	http.ServeFile(w, r, file.Path)
+	http.ServeContent(w, r, file.SafeName, modified, source)
 }

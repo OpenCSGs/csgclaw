@@ -1,12 +1,12 @@
 # UI Component Library
 
-These rules apply to `web/app/src/components/ui`, the shared presentation component library for the Vite web app.
+These rules apply to the shared presentation library in `web/packages/csgclaw-ui/src/components` and the app-specific presentation components in `web/packages/app/src/components/ui`.
 
 Chinese companion: `ui-components.zh.md`.
 
 ## Scope
 
-`src/components/ui` owns presentation primitives: layout shells, buttons, icons, form controls, and Radix-based interaction primitives. UI components must stay data-source agnostic and should not import API clients, route modules, workspace controllers, page modules, storage clients, or realtime clients.
+`csgclaw-ui` owns reusable buttons, form controls, and Radix-based interaction primitives. App layout and product icons stay in `web/packages/app/src/components/ui`. The app's UI entrypoint re-exports the package so features can keep using the existing imports. The package has no dependency on the app.
 
 Business-aware shared components belong in `src/components/business`. Page-private components belong under the owning page directory.
 
@@ -32,7 +32,7 @@ If a page needs a new highly customized UI, start with a page-private component.
 ## Styling
 
 - Prefer tokens from `src/shared/styles/tokens.css` for color, radius, shadow, focus rings, and shared layer values.
-- Keep component-owned styles beside the component in CSS Modules, including animation names. UI modules do not use `:global`, per-component theme selectors or `!important`.
+- Keep component-owned styles beside the component in CSS Modules, including animation names. UI modules do not use `:global`, per-component theme selectors or `!important`. The publishable package owns its namespaced theme tokens in `src/theme.css` and exposes its compiled CSS as `csgclaw-ui/styles.css`.
 - Tailwind CSS utility classes are fine for small layout details, but stable component styling should use component-owned class names.
 - Do not use raw global color, shadow, or z-index values in UI components when a token exists.
 - Keep UI primitives visually neutral enough for reuse across pages. Business-specific layout and copy should stay outside `src/components/ui`.
@@ -53,6 +53,8 @@ Button typography uses the dedicated `--button-font-family` (MiSans with the exi
 ## Breadcrumb
 
 `Breadcrumb` is a semantic navigation pattern in the shared UI library; Radix Primitives does not provide a dedicated breadcrumb primitive. Use the `home` item for the home/root action and `items` for path segments. Mark the current segment with `current`, and provide either `href` or `onClick` for navigable segments. Long paths collapse their middle segments into the shared Radix Dropdown Menu; `maxVisibleItems` and `overflowLabel` allow callers to adapt the layout and localization.
+
+Use `wrap` when full directory names need to remain visible in a narrow panel. It lets segments use the available width and wrap long names instead of truncating them; all items also expose their full label through `title`.
 
 ## Overlay Layers
 
@@ -78,7 +80,7 @@ When adding a Radix component with a portal, expose a container escape hatch whe
 - Pages and business components should not depend on Radix primitives directly unless it is an explicit page-private exploration. Extract the wrapper to `src/components/ui` once the interaction needs reuse or becomes a stable convention.
 - Import Radix namespaces from the unified `radix-ui` package, for example `import { Select as RadixSelect } from "radix-ui"`. Do not add `@radix-ui/react-*` package dependencies for primitives that are available through `radix-ui`.
 - Add a separate Radix package only when the unified package does not expose the needed primitive, and document why in the change.
-- If jsdom lacks browser APIs needed by a Radix primitive, add the smallest stable polyfill in `web/app/tests/setup.ts` and keep component tests focused on user-visible behavior.
+- If jsdom lacks browser APIs needed by a Radix primitive, add the smallest stable polyfill in `web/packages/app/tests/setup.ts` and keep component tests focused on user-visible behavior.
 
 ## Select
 
@@ -112,7 +114,7 @@ Use `variant="text"` when a compact switch should have no surrounding border or 
 
 Semantic tokens own menu surfaces, hover/selected states, tooltip colors and dialog backdrops. Add a theme role in `shared/styles/tokens.css` when a primitive needs a new color relationship. Component CSS consumes the role without repeating light/dark branches.
 
-The standalone `ui-lab.html` entry demonstrates these production components without application data, including integration with the real legacy workspace stylesheet entrypoints. Start it with `corepack pnpm ui:lab` from `web/app`; it is a development fixture and is excluded from production build inputs.
+The standalone `ui-lab.html` entry demonstrates these production components without application data, including integration with the real legacy workspace stylesheet entrypoints. Start it with `corepack pnpm ui:lab` from `web/packages/app`; it is a development fixture and is excluded from production build inputs.
 
 ## Slider
 

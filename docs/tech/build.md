@@ -13,7 +13,6 @@ The default build:
 
 1. Builds the Web UI into `web/static-dist/`.
 2. Builds `bin/csgclaw`, the host-platform `bin/csgclaw-cli`, and the bundled `bin/codex`.
-3. Builds a static Linux `csgclaw-cli` for the current CPU architecture into `bin/sandbox-tools/csgclaw-cli`.
 
 `make build-all` is retained as an alias of `make build`. Codex is bundled with the application; DeepSeek Harness is installed on demand.
 
@@ -22,13 +21,10 @@ Useful targets:
 | Target | Description |
 |---|---|
 | `make build-server-bin` | Build `bin/csgclaw`, host-platform `bin/csgclaw-cli`, and bundled `bin/codex` |
-| `make build-sandbox-cli` | Build Linux `csgclaw-cli` into `bin/sandbox-tools` |
-| `make install-sandbox-cli` | Compatibility alias of `make build-sandbox-cli` |
 | `make run` | Build and run `csgclaw serve` |
 | `make fmt` | Format Go sources |
 | `make test` | Run `go test ./...` |
 
-Override the local bundle destination with `SANDBOX_BUNDLE_TOOLS_DIR=/path make build-sandbox-cli`.
 
 ## 镜像内预装 CLI 连接器
 
@@ -61,7 +57,6 @@ On Windows hosts that do not have `make`, use the PowerShell build script:
 ```powershell
 .\scripts\build.cmd build
 .\scripts\build.cmd build-server-bin
-.\scripts\build.cmd build-sandbox-cli
 .\scripts\build.cmd desktop-package
 .\scripts\build.cmd test
 ```
@@ -78,9 +73,7 @@ The default `build` target mirrors `make build`:
 
 1. Builds the Web UI into `web/static-dist/`.
 2. Builds `bin/csgclaw.exe`, the host-platform `bin/csgclaw-cli.exe`, and bundled `bin/codex.exe`.
-3. Builds a Linux `csgclaw-cli` into `bin/sandbox-tools/csgclaw-cli`.
 
-When a locally built `bin/csgclaw[.exe]` starts a sandbox, it synchronizes the adjacent `bin/sandbox-tools/csgclaw-cli` into `~/.csgclaw/sandbox-tools/csgclaw-cli`, then mounts that managed directory read-only at `/opt/csgclaw/bin` inside the sandbox. Official installers perform the same initial synchronization from the installed bundle.
 
 ## Web UI
 
@@ -102,9 +95,6 @@ csgclaw/
     csgclaw[.exe]
     csgclaw-cli[.exe]            # companion CLI for the release host platform
     codex[.exe]                  # bundled Codex CLI for the release host platform
-    boxlite[.exe]                 # supported platforms only
-    sandbox-tools/
-      csgclaw-cli                # Linux, same CPU architecture as the release
 ```
 
 The canonical CSGClaw-platform-to-Codex-artifact mapping is in
@@ -112,7 +102,6 @@ The canonical CSGClaw-platform-to-Codex-artifact mapping is in
 PowerShell, and Docker packaging consume that file; formal release targets remain
 in [`scripts/release-platforms.txt`](../../scripts/release-platforms.txt).
 
-The installer exposes both host binaries from the same `INSTALL_DIR` and copies the sandbox CLI to `~/.csgclaw/sandbox-tools/csgclaw-cli`. Bundle replacement during upgrade updates both companion host binaries together, and built-in upgrade creates or refreshes a missing companion entry for older installer layouts. Runtime asset refresh only synchronizes the sandbox CLI. Older bundles that stored it at `bin/csgclaw_dir/csgclaw-cli` remain readable during upgrades.
 
 | Target | Description |
 |---|---|

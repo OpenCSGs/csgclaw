@@ -103,8 +103,8 @@ func TestHandleServerConfigGetPut(t *testing.T) {
 	if !got.AccessTokenSet || got.AccessToken != "" {
 		t.Fatalf("AccessTokenSet = %v AccessToken = %q, want masked response", got.AccessTokenSet, got.AccessToken)
 	}
-	if len(got.SupportedSandboxProviders) == 0 {
-		t.Fatalf("SupportedSandboxProviders = %#v, want non-empty", got.SupportedSandboxProviders)
+	if len(got.SupportedSandboxProviders) != 0 {
+		t.Fatal("retired sandbox providers exposed")
 	}
 	if got.AdvertiseBaseURLEffective == "" {
 		t.Fatalf("AdvertiseBaseURLEffective = empty, want resolved manager base URL")
@@ -142,8 +142,8 @@ func TestHandleServerConfigGetPut(t *testing.T) {
 	if saved.ListenAddr != "127.0.0.1:19080" || saved.ShowUpgrade {
 		t.Fatalf("PUT config = %+v, want updated listen_addr and show_upgrade=false", saved)
 	}
-	if saved.SandboxProvider != "docker" {
-		t.Fatalf("SandboxProvider = %q, want docker", saved.SandboxProvider)
+	if saved.SandboxProvider != "" {
+		t.Fatalf("SandboxProvider = %q, want empty", saved.SandboxProvider)
 	}
 	if saved.AdvertiseBaseURL != "http://192.168.1.10:19080" {
 		t.Fatalf("AdvertiseBaseURL = %q, want updated value without trailing slash", saved.AdvertiseBaseURL)
@@ -177,7 +177,7 @@ func TestHandleServerConfigGetPut(t *testing.T) {
 	}
 }
 
-func TestHandleServerConfigReturnsDockerDesktopCallbackURL(t *testing.T) {
+func TestHandleServerConfigIgnoresRetiredDockerCallbackRouting(t *testing.T) {
 	if runtime.GOOS != "darwin" && runtime.GOOS != "windows" {
 		t.Skip("host.docker.internal callback URL is only the Docker Desktop default")
 	}
@@ -217,8 +217,8 @@ models = ["model"]
 	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
 		t.Fatalf("decode GET config response: %v", err)
 	}
-	if got.AdvertiseBaseURLEffective != "http://host.docker.internal:19080" {
-		t.Fatalf("AdvertiseBaseURLEffective = %q, want Docker Desktop host alias", got.AdvertiseBaseURLEffective)
+	if got.AdvertiseBaseURLEffective != "http://127.0.0.1:19080" {
+		t.Fatalf("AdvertiseBaseURLEffective = %q, want local server address", got.AdvertiseBaseURLEffective)
 	}
 }
 

@@ -8,17 +8,25 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"regexp"
+	"slices"
 	"strings"
 	"sync"
 	"time"
 
+	"csgclaw/internal/activity"
 	"csgclaw/internal/agentengine"
+	"csgclaw/internal/agentsession"
+	"csgclaw/internal/channel/csgclaw/delivery"
+	"csgclaw/internal/im"
 	agentruntime "csgclaw/internal/runtime"
 )
 
 const agentSessionResponseBodyLimit = 1024 * 1024
+
+const agentSessionFileBodyLimit = ((im.MaxAttachmentMessageBytes+2)/3)*4 + 4*(im.MaxAttachmentsPerMessage-1) + agentSessionResponseBodyLimit
 
 const (
 	agentSessionExtraTypePlainText   = "plain_text"
@@ -31,15 +39,16 @@ const (
 var (
 	agentSessionIDPattern             = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._~-]{0,127}$`)
 	agentSessionExtraDelimiterPattern = regexp.MustCompile(`(?i)</?(extra_context|page_dom|content)\b`)
-	agentSessionResponseTimeout       = 5 * time.Minute
 	agentSessionHeartbeatInterval     = 15 * time.Second
 )
 
 type agentSessionResponseRequest struct {
-	Input     json.RawMessage `json:"input"`
-	Stream    *bool           `json:"stream,omitempty"`
-	Extra     string          `json:"extra,omitempty"`
-	ExtraType string          `json:"extra_type,omitempty"`
+	UserInput     bool            `json:"user_input,omitempty"`
+	AttachmentIDs []string        `json:"attachment_ids,omitempty"`
+	Input         json.RawMessage `json:"input"`
+	Stream        *bool           `json:"stream,omitempty"`
+	Extra         string          `json:"extra,omitempty"`
+	ExtraType     string          `json:"extra_type,omitempty"`
 }
 
 type agentSessionRequestValidationError struct {
@@ -56,11 +65,14 @@ type agentSessionInputMessage struct {
 }
 
 type agentSessionInputPart struct {
-	Type string `json:"type"`
-	Text string `json:"text"`
+	Type     string `json:"type"`
+	Text     string `json:"text,omitempty"`
+	Filename string `json:"filename,omitempty"`
+	FileData string `json:"file_data,omitempty"`
 }
 
 type agentSessionResponse struct {
+	Interactions      []agentSessionInteraction    `json:"interactions,omitempty"`
 	ID                string                       `json:"id"`
 	Object            string                       `json:"object"`
 	CreatedAt         int64                        `json:"created_at"`
@@ -70,15 +82,17 @@ type agentSessionResponse struct {
 	IncompleteDetails any                          `json:"incomplete_details"`
 	Model             string                       `json:"model"`
 	Output            []agentSessionResponseOutput `json:"output"`
+	InputAttachments  []im.MessageAttachment       `json:"input_attachments,omitempty"`
 	Metadata          map[string]string            `json:"metadata"`
 }
 
 type agentSessionResponseOutput struct {
-	ID      string                        `json:"id"`
-	Type    string                        `json:"type"`
-	Status  string                        `json:"status"`
-	Role    string                        `json:"role"`
-	Content []agentSessionResponseContent `json:"content"`
+	ID          string                        `json:"id"`
+	Type        string                        `json:"type"`
+	Status      string                        `json:"status"`
+	Role        string                        `json:"role"`
+	Content     []agentSessionResponseContent `json:"content"`
+	Attachments []im.MessageAttachment        `json:"attachments,omitempty"`
 }
 
 type agentSessionResponseContent struct {
@@ -88,7 +102,8 @@ type agentSessionResponseContent struct {
 }
 
 type agentSessionErrorEnvelope struct {
-	Error agentSessionError `json:"error"`
+	Error            agentSessionError      `json:"error"`
+	InputAttachments []im.MessageAttachment `json:"input_attachments,omitempty"`
 }
 
 type agentSessionError struct {
@@ -99,6 +114,7 @@ type agentSessionError struct {
 }
 
 type agentSessionTurn struct {
+	userInput       bool
 	agentID         string
 	conversationKey agentengine.ConversationKey
 	turnID          agentengine.TurnID
@@ -112,24 +128,27 @@ func (h *Handler) createAgentSessionResponse(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	prompt, stream, err := parseAgentSessionResponseRequest(w, r)
+	defer cleanupMessagePayload(r)
+	authorized := h.validateServerAccessToken(r.Header.Get("Authorization"))
+	input, stream, err := parseAgentSessionResponseRequest(w, r, authorized)
 	if err != nil {
-		param := "input"
-		var validationErr *agentSessionRequestValidationError
-		if errors.As(err, &validationErr) {
-			param = validationErr.param
-		}
-		writeAgentSessionError(w, http.StatusBadRequest, "invalid_request", err.Error(), param)
+		writeSessionInputError(w, err)
 		return
 	}
-	selected, err := h.resolveSessionAgent(strings.TrimSpace(pathValue(r, "id")))
-	if err != nil {
-		if errors.Is(err, errSessionAgentUnavailable) {
-			writeAgentSessionError(w, http.StatusServiceUnavailable, "agent_unavailable", err.Error(), "agent")
+	if input.userInput && !authorized {
+		writeSessionInputError(w, errSessionAuthorization)
+		return
+	}
+	selected, ok := h.sessionRequestAgent(w, r)
+	if !ok {
+		return
+	}
+	var existing []im.MessageAttachment
+	if len(input.attachmentIDs) > 0 {
+		existing, ok = h.sessionInputReferences(w, selected, sessionID, input)
+		if !ok {
 			return
 		}
-		writeAgentSessionError(w, http.StatusNotFound, "agent_not_found", err.Error(), "agent")
-		return
 	}
 	if h.agentEngine == nil || h.sessionBindings == nil {
 		writeAgentSessionError(w, http.StatusServiceUnavailable, "session_service_unavailable", "session conversation service is not configured", nil)
@@ -148,10 +167,29 @@ func (h *Handler) createAgentSessionResponse(w http.ResponseWriter, r *http.Requ
 		writeAgentSessionError(w, http.StatusServiceUnavailable, "session_binding_failed", err.Error(), nil)
 		return
 	}
+	if !authorized {
+		input.preservePendingInteractions = true
+		// Reject before sending SSE headers. BeginTurn repeats this check atomically
+		// with invalidation in case an interaction is registered before admission.
+		pending, err := h.agentEngine.Conversations(selected.ID).PendingInteractions(r.Context(), agentengine.ConversationKey(binding.ConversationKey))
+		if err != nil {
+			writeSessionInteractionError(w, err)
+			return
+		}
+		if len(pending) > 0 {
+			writeSessionInputError(w, errSessionAuthorization)
+			return
+		}
+	}
 
+	_, writeResult := h.runSessionResponse(r.Context(), w, r, selected, binding, input, stream, existing, agentengine.AdmissionRejectIfBusy)
+	writeResult()
+}
+
+func (h *Handler) runSessionResponse(ctx context.Context, w http.ResponseWriter, r *http.Request, selected agentengine.Agent, binding agentsession.Binding, input agentSessionInput, stream bool, existing []im.MessageAttachment, admission agentengine.AdmissionPolicy) (delivered bool, writeResult func()) {
+	sessionID := binding.ExternalSession
 	createdAt := time.Now().UTC()
 	responseID := newAgentSessionAPIID("resp")
-	outputID := newAgentSessionAPIID("msg")
 	response := agentSessionResponse{
 		ID:        responseID,
 		Object:    "response",
@@ -166,9 +204,10 @@ func (h *Handler) createAgentSessionResponse(w http.ResponseWriter, r *http.Requ
 		},
 	}
 	turnKey := selected.ID + "\x00" + sessionID
-	runCtx, cancel := context.WithTimeout(r.Context(), agentSessionResponseTimeout)
+	runCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	turn := agentSessionTurn{
+		userInput:       input.userInput,
 		agentID:         selected.ID,
 		conversationKey: agentengine.ConversationKey(binding.ConversationKey),
 		turnID:          agentengine.TurnID(responseID),
@@ -177,42 +216,88 @@ func (h *Handler) createAgentSessionResponse(w http.ResponseWriter, r *http.Requ
 	h.addSessionTurn(turnKey, turn)
 	defer h.removeSessionTurn(turnKey, turn.turnID)
 
+	conversation := h.agentEngine.Conversations(selected.ID)
+	newUploads, err := h.storeSessionUploads(runCtx, selected, sessionID, responseID, input.Files)
+	cleanupMessagePayload(r)
+	r.MultipartForm = nil
+	if err != nil {
+		slog.Warn("store session input attachments failed", "response_id", response.ID, "error", err)
+		return false, func() {
+			writeAgentSessionError(w, http.StatusServiceUnavailable, "attachment_unavailable", "input attachments could not be saved", "input")
+		}
+	}
+
+	response.InputAttachments = append(existing, newUploads...)
+
+	acceptUserInput := input.userInput
 	var eventStream *agentSessionEventStream
 	var sink agentengine.EventSink
 	if stream {
 		eventStream = newAgentSessionEventStream(w)
-		if err := eventStream.writeMessageStart(responseID); err != nil {
-			return
+		if err := eventStream.writeMessageStart(responseID, response.InputAttachments); err != nil {
+			return false, func() {}
 		}
 		eventStream.startHeartbeat(agentSessionHeartbeatInterval)
-		defer eventStream.stopHeartbeat()
+		defer func() {
+			if writeResult == nil {
+				eventStream.stopHeartbeat()
+			}
+		}()
 		sink = agentengine.EventSinkFunc(func(_ context.Context, event agentengine.TurnEvent) error {
+			if event.RecoveredText != nil {
+				if err := eventStream.restorePendingText(event.RecoveredText); err != nil {
+					return err
+				}
+			}
 			switch event.Kind {
 			case agentengine.TurnEventTextDelta:
 				if event.Phase == "commentary" || event.TextSnapshot {
 					return nil
 				}
-				return eventStream.writeDelta(event.Text)
-			case agentengine.TurnEventToolCallStart:
-				return eventStream.writeToolUse(event.Tool)
-			case agentengine.TurnEventToolCallUpdate:
-				return eventStream.writeToolResult(event.Tool)
+				return eventStream.writeText(event.Text)
+			case agentengine.TurnEventInteractionRequest:
+				if !acceptUserInput || event.Interaction == nil {
+					return nil
+				}
+				question, ok := sessionUserInput(*event.Interaction)
+				if !ok {
+					return fmt.Errorf("unsupported session interaction")
+				}
+				return eventStream.writeUserInput(question)
+			case agentengine.TurnEventToolCallStart, agentengine.TurnEventToolCallUpdate:
+				return eventStream.writeToolEvent(event.Kind, event.Tool)
 			default:
 				return nil
 			}
 		})
 	}
 
-	result := h.agentEngine.Conversations(selected.ID).Run(runCtx, agentengine.TurnRequest{
-		ID:              agentengine.TurnID(responseID),
-		ConversationKey: agentengine.ConversationKey(binding.ConversationKey),
-		Admission:       agentengine.AdmissionRejectIfBusy,
-		Interaction:     agentengine.InteractionReject,
-		Input: []agentengine.InputPart{{
-			Kind: agentengine.InputPartText,
-			Text: prompt,
-		}},
+	policy := agentengine.InteractionTextOnly
+	if acceptUserInput {
+		policy = agentengine.InteractionUserInputOnly
+	}
+	result := conversation.Run(runCtx, agentengine.TurnRequest{
+		ID:                          agentengine.TurnID(responseID),
+		ConversationKey:             agentengine.ConversationKey(binding.ConversationKey),
+		Admission:                   admission,
+		RespondingTo:                input.respondingTo,
+		PreservePendingInteractions: input.preservePendingInteractions,
+		Interaction:                 policy,
+		Input:                       sessionTurnInput(input.Text, response.InputAttachments),
 	}, sink)
+	if !acceptUserInput {
+		result.Interactions = nil
+	}
+	// Release the detached answer reservation before publishing files or writing
+	// the terminal HTTP response. Both may outlive the runtime turn.
+	delivered = result.Status == agentengine.TurnSucceeded || result.Dispatched
+	return delivered, func() {
+		defer eventStream.stopHeartbeat()
+		h.writeAgentSessionResult(w, r, selected, sessionID, response, eventStream, result)
+	}
+}
+
+func (h *Handler) writeAgentSessionResult(w http.ResponseWriter, r *http.Request, selected agentengine.Agent, sessionID string, response agentSessionResponse, eventStream *agentSessionEventStream, result agentengine.TurnResult) {
 	if result.Status != agentengine.TurnSucceeded {
 		if errors.Is(r.Context().Err(), context.Canceled) {
 			return
@@ -221,26 +306,45 @@ func (h *Handler) createAgentSessionResponse(w http.ResponseWriter, r *http.Requ
 			eventStream.writeFailure(response, turnResultError(result))
 			return
 		}
-		h.writeSessionTurnError(w, runCtx, result)
+		h.writeSessionTurnError(w, r.Context(), result, response.InputAttachments)
 		return
 	}
 
+	conversation := h.agentEngine.Conversations(selected.ID)
+	outputAttachments, rejected, err := h.storeSessionOutputFiles(r.Context(), conversation, selected, sessionID, response.ID, result.Files)
+	if err != nil {
+		slog.Warn("store session response attachments failed", "response_id", response.ID, "error", err)
+		const message = "session attachments could not be saved"
+		if eventStream != nil {
+			eventStream.writeFailure(response, errors.New(message))
+		} else {
+			writeAgentSessionError(w, http.StatusServiceUnavailable, "attachment_unavailable", message, nil, response.InputAttachments...)
+		}
+		return
+	}
+	attachmentNote := delivery.OutputFileDeliveryNote(result.Output, rejected, r.Header.Get("Accept-Language"))
 	completedAtUnix := time.Now().UTC().Unix()
 	response.CompletedAt = &completedAtUnix
 	response.Status = "completed"
 	response.Output = []agentSessionResponseOutput{{
-		ID:     outputID,
-		Type:   "message",
-		Status: "completed",
-		Role:   "assistant",
+		ID:          newAgentSessionAPIID("msg"),
+		Type:        "message",
+		Status:      "completed",
+		Role:        "assistant",
+		Attachments: outputAttachments,
 		Content: []agentSessionResponseContent{{
 			Type:        "output_text",
-			Text:        result.Output,
+			Text:        result.Output + attachmentNote,
 			Annotations: []any{},
 		}},
 	}}
+	for _, interaction := range result.Interactions {
+		if question, ok := sessionUserInput(interaction); ok {
+			response.Interactions = append(response.Interactions, question)
+		}
+	}
 	if eventStream != nil {
-		_ = eventStream.writeCompleted(result.Output)
+		_ = eventStream.writeCompleted(result.Output, attachmentNote, response.InputAttachments, outputAttachments, response.Interactions)
 		return
 	}
 	writeJSON(w, http.StatusOK, response)
@@ -263,13 +367,29 @@ func (h *Handler) cancelAgentSessionResponse(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	if err := h.cancelSessionTurns(r.Context(), selected.ID+"\x00"+sessionID); err != nil {
+	if err := h.cancelSessionTurns(r.Context(), selected.ID+"\x00"+sessionID, h.validateServerAccessToken(r.Header.Get("Authorization"))); err != nil {
+		if errors.Is(err, errSessionAuthorization) {
+			writeSessionInputError(w, errSessionAuthorization)
+		}
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
 var errSessionAgentUnavailable = errors.New("agent is unavailable")
+
+func (h *Handler) sessionRequestAgent(w http.ResponseWriter, r *http.Request) (agentengine.Agent, bool) {
+	selected, err := h.resolveSessionAgent(strings.TrimSpace(pathValue(r, "id")))
+	if err != nil {
+		if errors.Is(err, errSessionAgentUnavailable) {
+			writeAgentSessionError(w, http.StatusServiceUnavailable, "agent_unavailable", err.Error(), "agent")
+			return agentengine.Agent{}, false
+		}
+		writeAgentSessionError(w, http.StatusNotFound, "agent_not_found", err.Error(), "agent")
+		return agentengine.Agent{}, false
+	}
+	return selected, true
+}
 
 func (h *Handler) resolveSessionAgent(selector string) (agentengine.Agent, error) {
 	if selector == "" || h.agentEngine == nil {
@@ -300,11 +420,15 @@ func (h *Handler) addSessionTurn(key string, turn agentSessionTurn) {
 	h.sessionTurns[key][turn.turnID] = turn
 }
 
-func (h *Handler) cancelSessionTurns(ctx context.Context, key string) error {
+func (h *Handler) cancelSessionTurns(ctx context.Context, key string, authorized bool) error {
 	h.sessionTurnsMu.Lock()
 	indexed := h.sessionTurns[key]
 	turns := make([]agentSessionTurn, 0, len(indexed))
 	for _, turn := range indexed {
+		if turn.userInput && !authorized {
+			h.sessionTurnsMu.Unlock()
+			return errSessionAuthorization
+		}
 		turns = append(turns, turn)
 	}
 	h.sessionTurnsMu.Unlock()
@@ -330,67 +454,188 @@ func (h *Handler) removeSessionTurn(key string, turnID agentengine.TurnID) {
 	h.sessionTurnsMu.Unlock()
 }
 
-func (h *Handler) writeSessionTurnError(w http.ResponseWriter, ctx context.Context, result agentengine.TurnResult) {
+func (h *Handler) writeSessionTurnError(w http.ResponseWriter, ctx context.Context, result agentengine.TurnResult, inputs []im.MessageAttachment) {
 	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-		writeAgentSessionError(w, http.StatusGatewayTimeout, "response_timeout", "the agent did not finish within five minutes", nil)
+		writeAgentSessionError(w, http.StatusGatewayTimeout, "response_timeout", "the request deadline was exceeded", nil, inputs...)
 		return
 	}
 	err := result.Error
 	if err == nil {
-		writeAgentSessionError(w, http.StatusServiceUnavailable, "agent_response_failed", "agent response failed", nil)
+		writeAgentSessionError(w, http.StatusServiceUnavailable, "agent_response_failed", "agent response failed", nil, inputs...)
 		return
 	}
 	switch err.Code {
+	case agentengine.ErrorInteractionPending:
+		writeSessionInputError(w, errSessionAuthorization)
 	case agentengine.ErrorInvalidRequest:
-		writeAgentSessionError(w, http.StatusBadRequest, string(err.Code), err.Message, "input")
+		writeAgentSessionError(w, http.StatusBadRequest, string(err.Code), err.Message, "input", inputs...)
 	case agentengine.ErrorFileUnavailable:
-		writeAgentSessionError(w, http.StatusBadRequest, string(err.Code), err.Message, "input")
+		writeAgentSessionError(w, http.StatusBadRequest, string(err.Code), err.Message, "input", inputs...)
 	case agentengine.ErrorAgentUnavailable:
-		writeAgentSessionError(w, http.StatusServiceUnavailable, string(err.Code), err.Message, "agent")
+		writeAgentSessionError(w, http.StatusServiceUnavailable, string(err.Code), err.Message, "agent", inputs...)
 	case agentengine.ErrorRuntimeAdapterUnavailable:
-		writeAgentSessionError(w, http.StatusServiceUnavailable, string(err.Code), err.Message, "agent")
+		writeAgentSessionError(w, http.StatusServiceUnavailable, string(err.Code), err.Message, "agent", inputs...)
 	case agentengine.ErrorConversationBusy:
-		writeAgentSessionError(w, http.StatusConflict, "session_busy", err.Message, "session_id")
+		writeAgentSessionError(w, http.StatusConflict, "session_busy", err.Message, "session_id", inputs...)
 	case agentengine.ErrorInteractionUnsupported:
-		writeAgentSessionError(w, http.StatusServiceUnavailable, string(err.Code), err.Message, nil)
+		writeAgentSessionError(w, http.StatusServiceUnavailable, string(err.Code), err.Message, nil, inputs...)
 	default:
-		writeAgentSessionError(w, http.StatusServiceUnavailable, "agent_response_failed", err.Message, nil)
+		writeAgentSessionError(w, http.StatusServiceUnavailable, "agent_response_failed", err.Message, nil, inputs...)
 	}
 }
 
 func turnResultError(result agentengine.TurnResult) error {
 	if result.Error != nil {
+		if result.Error.Code == agentengine.ErrorInteractionPending {
+			return errSessionAuthorization
+		}
 		return result.Error
 	}
 	return errors.New("agent response failed")
 }
 
-func parseAgentSessionResponseRequest(w http.ResponseWriter, r *http.Request) (string, bool, error) {
-	r.Body = http.MaxBytesReader(w, r.Body, agentSessionResponseBodyLimit)
+func parseAgentSessionResponseRequest(w http.ResponseWriter, r *http.Request, allowFiles bool) (agentSessionInput, bool, error) {
+	if isMultipartRequest(r) {
+		if !allowFiles {
+			return agentSessionInput{}, false, errSessionAuthorization
+		}
+		return parseAgentSessionMultipart(w, r)
+	}
+	limit := int64(agentSessionResponseBodyLimit)
+	if allowFiles {
+		limit = agentSessionFileBodyLimit
+	}
+	if r.ContentLength > limit {
+		return agentSessionInput{}, false, &http.MaxBytesError{Limit: limit}
+	}
+	body := &sessionJSONBody{source: http.MaxBytesReader(w, r.Body, limit)}
 	var request agentSessionResponseRequest
-	decoder := json.NewDecoder(r.Body)
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&request); err != nil {
-		return "", false, fmt.Errorf("decode request: %w", err)
+	decoder := json.NewDecoder(body)
+	if err := request.readJSON(decoder, body); err != nil {
+		// HTTP/1 otherwise drains an unfinished request body before flushing the error.
+		if r.ProtoMajor == 1 {
+			w.Header().Set("Connection", "close")
+		}
+		return agentSessionInput{}, false, fmt.Errorf("decode request: %w", err)
 	}
 	if err := ensureJSONEOF(decoder); err != nil {
-		return "", false, err
+		return agentSessionInput{}, false, err
 	}
-	if len(request.Input) == 0 || string(request.Input) == "null" {
-		return "", false, fmt.Errorf("input is required")
+	input, stream, err := request.parseInput(nil, body.read)
+	if err == nil && !allowFiles && (len(input.Files) > 0 || len(input.attachmentIDs) > 0) {
+		return agentSessionInput{}, false, errSessionAuthorization
 	}
-	prompt, err := parseAgentSessionInput(request.Input)
+	return input, stream, err
+}
+
+type sessionJSONBody struct {
+	source   io.Reader
+	read     int64
+	fieldEnd int64
+}
+
+func (body *sessionJSONBody) Read(p []byte) (int, error) {
+	// Bound how far the decoder can read ahead after a large Base64 input.
+	size := min(int64(len(p)), int64(agentSessionResponseBodyLimit))
+	if body.fieldEnd != 0 {
+		remaining := body.fieldEnd - body.read
+		if remaining <= 0 {
+			return 0, &agentSessionRequestValidationError{param: "attachment_ids", message: "attachment_ids exceeds the request metadata limit"}
+		}
+		size = min(size, remaining)
+	}
+	n, err := body.source.Read(p[:size])
+	body.read += int64(n)
+	return n, err
+}
+
+func (request *agentSessionResponseRequest) readJSON(decoder *json.Decoder, body *sessionJSONBody) error {
+	open, err := decoder.Token()
 	if err != nil {
-		return "", false, err
+		return err
+	}
+	if open != json.Delim('{') {
+		return fmt.Errorf("expected a request object")
+	}
+	for decoder.More() {
+		key, err := decoder.Token()
+		if err != nil {
+			return err
+		}
+		name := key.(string)
+		switch {
+		case strings.EqualFold(name, "attachment_ids"):
+			body.fieldEnd = decoder.InputOffset() + agentSessionResponseBodyLimit
+			request.AttachmentIDs, err = readSessionAttachmentIDs(decoder)
+			body.fieldEnd = 0
+		case strings.EqualFold(name, "input"):
+			err = decoder.Decode(&request.Input)
+		case strings.EqualFold(name, "user_input"):
+			err = decoder.Decode(&request.UserInput)
+		case strings.EqualFold(name, "stream"):
+			err = decoder.Decode(&request.Stream)
+		case strings.EqualFold(name, "extra"):
+			err = decoder.Decode(&request.Extra)
+		case strings.EqualFold(name, "extra_type"):
+			err = decoder.Decode(&request.ExtraType)
+		default:
+			return fmt.Errorf("unknown field %q", name)
+		}
+		if err != nil {
+			return err
+		}
+	}
+	_, err = decoder.Token()
+	return err
+}
+
+func (request *agentSessionResponseRequest) parseInput(uploads []agentSessionInputFile, requestBytes int64) (agentSessionInput, bool, error) {
+	var input agentSessionInput
+	if len(request.Input) == 0 || string(request.Input) == "null" {
+		if len(uploads) == 0 && len(request.AttachmentIDs) == 0 {
+			return agentSessionInput{}, false, fmt.Errorf("input is required")
+		}
+	} else {
+		var err error
+		input, err = parseAgentSessionInput(request.Input)
+		if err != nil {
+			return agentSessionInput{}, false, err
+		}
+	}
+	if len(uploads) > 0 {
+		if len(input.Files) > 0 {
+			return agentSessionInput{}, false, fmt.Errorf("send multipart attachments as file parts")
+		}
+		input.Files = uploads
+	}
+	input.userInput = request.UserInput
+	input.attachmentIDs = request.AttachmentIDs
+	if input.Text == "" && len(input.Files)+len(input.attachmentIDs) == 0 {
+		return agentSessionInput{}, false, fmt.Errorf("input must not be empty")
+	}
+	nonFileBytes := requestBytes
+	for _, file := range input.Files {
+		nonFileBytes -= int64(file.encodedBytes)
+	}
+	if nonFileBytes > agentSessionResponseBodyLimit {
+		return agentSessionInput{}, false, fmt.Errorf("request excluding Base64 file data must be at most %d bytes", agentSessionResponseBodyLimit)
+	}
+	if err := input.validateFileLimits(nil); err != nil {
+		return agentSessionInput{}, false, err
+	}
+	if len(input.attachmentIDs) > 0 {
+		if err := validateSessionAttachmentIDs(input.attachmentIDs, len(input.Files)); err != nil {
+			return agentSessionInput{}, false, &agentSessionRequestValidationError{param: "attachment_ids", message: err.Error()}
+		}
 	}
 	extraContext, err := renderAgentSessionExtraContext(request.ExtraType, request.Extra)
 	if err != nil {
-		return "", false, err
+		return agentSessionInput{}, false, err
 	}
 	if extraContext != "" {
-		prompt += "\n\n" + extraContext
+		input.Text = strings.TrimSpace(input.Text + "\n\n" + extraContext)
 	}
-	return prompt, request.Stream != nil && *request.Stream, nil
+	return input, request.Stream != nil && *request.Stream, nil
 }
 
 func renderAgentSessionExtraContext(extraType, extra string) (string, error) {
@@ -470,74 +715,92 @@ func escapeAgentSessionExtraDelimiters(extra string) string {
 	})
 }
 
-func parseAgentSessionInput(raw json.RawMessage) (string, error) {
+func parseAgentSessionInput(raw json.RawMessage) (agentSessionInput, error) {
 	var direct string
 	if err := json.Unmarshal(raw, &direct); err == nil {
-		if direct = strings.TrimSpace(direct); direct != "" {
-			return direct, nil
-		}
-		return "", fmt.Errorf("input must not be empty")
+		return agentSessionInput{Text: strings.TrimSpace(direct)}, nil
 	}
 
 	var items []json.RawMessage
 	if err := json.Unmarshal(raw, &items); err != nil {
-		return "", fmt.Errorf("input must be a string or an array of user messages")
+		return agentSessionInput{}, fmt.Errorf("input must be a string or an array of user messages")
 	}
 	if len(items) == 0 {
-		return "", fmt.Errorf("input must contain at least one user message")
+		return agentSessionInput{}, fmt.Errorf("input must contain at least one user message")
 	}
+	var input agentSessionInput
 	texts := make([]string, 0, len(items))
 	for _, rawItem := range items {
 		var item agentSessionInputMessage
 		if err := decodeStrictAgentSessionJSON(rawItem, &item); err != nil {
-			return "", fmt.Errorf("invalid input message: %w", err)
+			return agentSessionInput{}, fmt.Errorf("invalid input message: %w", err)
 		}
 		if item.Type != "" && item.Type != "message" {
-			return "", fmt.Errorf("input message type must be message")
+			return agentSessionInput{}, fmt.Errorf("input message type must be message")
 		}
 		if item.Role != "user" {
-			return "", fmt.Errorf("input message role must be user")
+			return agentSessionInput{}, fmt.Errorf("input message role must be user")
 		}
-		text, err := parseAgentSessionContent(item.Content)
+		content, err := parseAgentSessionContent(item.Content)
 		if err != nil {
-			return "", err
+			return agentSessionInput{}, err
 		}
-		texts = append(texts, text)
+		if content.Text != "" {
+			texts = append(texts, content.Text)
+		}
+		input.Files = append(input.Files, content.Files...)
 	}
-	return strings.Join(texts, "\n\n"), nil
+	input.Text = strings.Join(texts, "\n\n")
+	return input, nil
 }
 
-func parseAgentSessionContent(raw json.RawMessage) (string, error) {
+func parseAgentSessionContent(raw json.RawMessage) (agentSessionInput, error) {
 	if len(raw) == 0 || string(raw) == "null" {
-		return "", fmt.Errorf("input message content is required")
+		return agentSessionInput{}, fmt.Errorf("input message content is required")
 	}
 	var direct string
 	if err := json.Unmarshal(raw, &direct); err == nil {
 		if direct = strings.TrimSpace(direct); direct != "" {
-			return direct, nil
+			return agentSessionInput{Text: direct}, nil
 		}
-		return "", fmt.Errorf("input message content must not be empty")
+		return agentSessionInput{}, fmt.Errorf("input message content must not be empty")
 	}
 	var rawParts []json.RawMessage
 	if err := json.Unmarshal(raw, &rawParts); err != nil || len(rawParts) == 0 {
-		return "", fmt.Errorf("input message content must be text or input_text parts")
+		return agentSessionInput{}, fmt.Errorf("input message content must be text, input_text or input_file parts")
 	}
+	var input agentSessionInput
 	parts := make([]string, 0, len(rawParts))
 	for _, rawPart := range rawParts {
 		var part agentSessionInputPart
 		if err := decodeStrictAgentSessionJSON(rawPart, &part); err != nil {
-			return "", fmt.Errorf("invalid input content part: %w", err)
+			return agentSessionInput{}, fmt.Errorf("invalid input content part: %w", err)
 		}
-		if part.Type != "input_text" {
-			return "", fmt.Errorf("input content part type must be input_text")
+		switch part.Type {
+		case "input_text":
+			if part.Filename != "" || part.FileData != "" {
+				return agentSessionInput{}, fmt.Errorf("input_text must contain only text")
+			}
+			text := strings.TrimSpace(part.Text)
+			if text == "" {
+				return agentSessionInput{}, fmt.Errorf("input_text must not be empty")
+			}
+			parts = append(parts, text)
+		case "input_file":
+			if part.Text != "" {
+				return agentSessionInput{}, fmt.Errorf("input_file must contain only filename and file_data")
+			}
+			file, err := parseAgentSessionFile(part.Filename, part.FileData)
+			if err != nil {
+				return agentSessionInput{}, err
+			}
+			input.Files = append(input.Files, file)
+		default:
+			return agentSessionInput{}, fmt.Errorf("input content part type must be input_text or input_file")
 		}
-		text := strings.TrimSpace(part.Text)
-		if text == "" {
-			return "", fmt.Errorf("input_text must not be empty")
-		}
-		parts = append(parts, text)
 	}
-	return strings.Join(parts, "\n\n"), nil
+	input.Text = strings.Join(parts, "\n\n")
+	return input, nil
 }
 
 func decodeStrictAgentSessionJSON(raw json.RawMessage, dst any) error {
@@ -555,10 +818,19 @@ type agentSessionEventStream struct {
 	writeMu       sync.Mutex
 	contentIndex  int
 	textBlockOpen bool
+	tools         map[string]*agentSessionStreamTool
+	pendingTools  []*agentSessionStreamTool       // In tool_use order, until their following text can be delivered.
+	recoveredText []agentengine.RecoveredTextPart // Non-nil while terminal history owns the buffered answer.
 	text          strings.Builder
 	heartbeatStop chan struct{}
 	heartbeatDone chan struct{}
 	heartbeatOnce sync.Once
+}
+
+type agentSessionStreamTool struct {
+	finished bool
+	// Text received after this tool started and before the next tool started.
+	followingText strings.Builder
 }
 
 func newAgentSessionEventStream(w http.ResponseWriter) *agentSessionEventStream {
@@ -566,17 +838,28 @@ func newAgentSessionEventStream(w http.ResponseWriter) *agentSessionEventStream 
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("X-Accel-Buffering", "no")
 	w.WriteHeader(http.StatusOK)
-	return &agentSessionEventStream{writer: w, flusher: http.NewResponseController(w)}
+	return &agentSessionEventStream{writer: w, flusher: http.NewResponseController(w), tools: make(map[string]*agentSessionStreamTool)}
 }
 
 func (s *agentSessionEventStream) write(eventType string, fields map[string]any) error {
+	fields["type"] = eventType
+	return s.writeEvent(eventType, fields)
+}
+
+func (s *agentSessionEventStream) writeUserInput(question agentSessionInteraction) error {
+	if err := s.closeTextBlock(); err != nil {
+		return err
+	}
+	const eventType = "request_user_input"
+	return s.writeEvent(eventType, struct {
+		Type string `json:"type"`
+		agentSessionInteraction
+	}{eventType, question})
+}
+
+func (s *agentSessionEventStream) writeEvent(eventType string, payload any) error {
 	s.writeMu.Lock()
 	defer s.writeMu.Unlock()
-	payload := make(map[string]any, len(fields)+1)
-	for key, value := range fields {
-		payload[key] = value
-	}
-	payload["type"] = eventType
 	data, err := json.Marshal(payload)
 	if err != nil {
 		return err
@@ -627,11 +910,97 @@ func (s *agentSessionEventStream) stopHeartbeat() {
 	<-s.heartbeatDone
 }
 
-func (s *agentSessionEventStream) writeMessageStart(messageID string) error {
-	return s.write("message_start", map[string]any{"message": map[string]any{
+func (s *agentSessionEventStream) writeMessageStart(messageID string, inputs []im.MessageAttachment) error {
+	fields := map[string]any{"message": map[string]any{
 		"id": messageID, "type": "message", "role": "assistant",
 		"content": []any{}, "stop_reason": nil,
-	}})
+	}}
+	if len(inputs) > 0 {
+		fields["input_attachments"] = inputs
+	}
+	return s.write("message_start", fields)
+}
+
+func (s *agentSessionEventStream) writeText(delta string) error {
+	if s.recoveredText != nil {
+		return nil
+	}
+	if n := len(s.pendingTools); n > 0 {
+		s.pendingTools[n-1].followingText.WriteString(delta)
+		return nil
+	}
+	return s.writeDelta(delta)
+}
+
+// Replace only text the client has not received. The same recovered events may also
+// carry ordinary deltas for consumers that had already displayed the live text.
+func (s *agentSessionEventStream) restorePendingText(parts []agentengine.RecoveredTextPart) error {
+	if s.recoveredText != nil || !slices.ContainsFunc(s.pendingTools, func(tool *agentSessionStreamTool) bool {
+		return tool.followingText.Len() > 0
+	}) {
+		return nil
+	}
+	sent := s.text.String()
+	pending := make([]agentengine.RecoveredTextPart, 0, len(parts))
+	recorded := make(map[string]bool)
+	for _, part := range parts {
+		if part.ToolID != "" {
+			recorded[part.ToolID] = true
+		}
+		n := min(len(part.Text), len(sent))
+		if part.Text[:n] != sent[:n] {
+			return nil
+		}
+		part.Text, sent = part.Text[n:], sent[n:]
+		pending = append(pending, part)
+	}
+	if sent != "" {
+		return nil
+	}
+	// A tool missing from an interrupted history can still release its text at turn end.
+	for id, call := range s.tools {
+		if !call.finished && !recorded[id] {
+			s.recoveredText = append(s.recoveredText, agentengine.RecoveredTextPart{ToolID: id})
+		}
+	}
+	if s.recoveredText == nil {
+		s.recoveredText = pending
+	} else {
+		s.recoveredText = append(s.recoveredText, pending...)
+	}
+	for _, call := range s.pendingTools {
+		call.followingText.Reset()
+	}
+	return s.flushPendingText(false)
+}
+
+// Text depends only on tools already started when it arrived. Keep completed
+// calls in start order until their predecessors finish, even if results race.
+func (s *agentSessionEventStream) flushPendingText(turnEnded bool) error {
+	for len(s.pendingTools) > 0 {
+		tool := s.pendingTools[0]
+		if !turnEnded && !tool.finished {
+			break
+		}
+		if err := s.writeDelta(tool.followingText.String()); err != nil {
+			return err
+		}
+		tool.followingText.Reset()
+		s.pendingTools = s.pendingTools[1:]
+	}
+	for len(s.recoveredText) > 0 {
+		part := s.recoveredText[0]
+		if !turnEnded && part.ToolID != "" {
+			if tool := s.tools[part.ToolID]; tool == nil || !tool.finished {
+				break
+			}
+		}
+		if err := s.writeDelta(part.Text); err != nil {
+			return err
+		}
+		s.recoveredText = s.recoveredText[1:]
+	}
+	return nil
 }
 
 func (s *agentSessionEventStream) writeDelta(delta string) error {
@@ -667,8 +1036,11 @@ func (s *agentSessionEventStream) closeTextBlock() error {
 	return nil
 }
 
-func (s *agentSessionEventStream) writeCompleted(text string) error {
+func (s *agentSessionEventStream) writeCompleted(text, attachmentNote string, inputs, outputs []im.MessageAttachment, questions []agentSessionInteraction) error {
 	s.stopHeartbeat()
+	if err := s.flushPendingText(true); err != nil {
+		return err
+	}
 	streamedText := s.text.String()
 	switch {
 	case streamedText == "":
@@ -680,37 +1052,85 @@ func (s *agentSessionEventStream) writeCompleted(text string) error {
 			return err
 		}
 	}
+	if err := s.writeDelta(attachmentNote); err != nil {
+		return err
+	}
 	if err := s.closeTextBlock(); err != nil {
 		return err
 	}
-	if err := s.write("message_delta", map[string]any{
-		"delta": map[string]any{"stop_reason": "end_turn", "stop_sequence": nil},
-	}); err != nil {
+	for _, question := range questions {
+		if err := s.writeUserInput(question); err != nil {
+			return err
+		}
+	}
+	fields := map[string]any{"delta": map[string]any{"stop_reason": "end_turn", "stop_sequence": nil}}
+	if len(inputs) > 0 {
+		fields["input_attachments"] = inputs
+	}
+	if len(outputs) > 0 {
+		fields["attachments"] = outputs
+	}
+	if err := s.write("message_delta", fields); err != nil {
 		return err
 	}
 	return s.write("message_stop", map[string]any{})
 }
 
-func (s *agentSessionEventStream) writeToolUse(tool *agentengine.ToolActivity) error {
+func (s *agentSessionEventStream) writeToolEvent(kind agentengine.TurnEventKind, tool *agentengine.ToolActivity) error {
 	if tool == nil {
 		return nil
+	}
+	toolID := strings.TrimSpace(tool.ID)
+	if toolID == "" {
+		return nil
+	}
+	call := s.tools[toolID]
+	if call != nil && call.finished {
+		return nil
+	}
+	status := activity.TerminalToolStatus(tool.Status)
+	if kind == agentengine.TurnEventToolCallUpdate && status == "" {
+		// Older adapters report the final output without a status.
+		if strings.TrimSpace(tool.Status) != "" {
+			return nil
+		}
+		status = "completed"
+	}
+	if call == nil {
+		// A result with only a call ID can close an existing tool block.
+		if kind == agentengine.TurnEventToolCallUpdate && strings.TrimSpace(tool.Kind) == "" && strings.TrimSpace(tool.Title) == "" {
+			return nil
+		}
+		if err := s.writeToolUse(toolID, tool); err != nil {
+			return err
+		}
+		call = &agentSessionStreamTool{}
+		s.tools[toolID] = call
+		s.pendingTools = append(s.pendingTools, call)
+	}
+	if status == "" {
+		return nil
+	}
+	if err := s.writeToolResult(toolID, status, tool.OutputSummary); err != nil {
+		return err
+	}
+	call.finished = true
+	return s.flushPendingText(false)
+}
+
+func (s *agentSessionEventStream) writeToolUse(toolID string, tool *agentengine.ToolActivity) error {
+	toolName, inputValue := agentSessionToolUse(tool)
+	encoded, err := json.Marshal(inputValue)
+	if err != nil {
+		return err
 	}
 	if err := s.closeTextBlock(); err != nil {
 		return err
 	}
-	toolID := strings.TrimSpace(tool.ID)
-	if toolID == "" {
-		toolID = newAgentSessionAPIID("toolu")
-	}
-	toolName, inputValue := agentSessionToolUse(tool)
 	if err := s.write("content_block_start", map[string]any{
 		"index":         s.contentIndex,
 		"content_block": map[string]any{"type": "tool_use", "id": toolID, "name": toolName, "input": map[string]any{}},
 	}); err != nil {
-		return err
-	}
-	encoded, err := json.Marshal(inputValue)
-	if err != nil {
 		return err
 	}
 	if err := s.write("content_block_delta", map[string]any{
@@ -737,7 +1157,9 @@ func agentSessionToolUse(tool *agentengine.ToolActivity) (string, map[string]any
 			}
 			input = payload["arguments"]
 		case "exec_command":
-			input = map[string]any{"command": payload["command"]}
+			if command := payload["command"]; command != nil {
+				input = map[string]any{"command": command}
+			}
 		case "web_search":
 			input = map[string]any{"query": payload["query"], "action": payload["action"]}
 		case "patch_apply":
@@ -813,25 +1235,23 @@ func redactAgentSessionToolValue(value any) any {
 	}
 }
 
-func (s *agentSessionEventStream) writeToolResult(tool *agentengine.ToolActivity) error {
-	if tool == nil {
-		return nil
-	}
+func (s *agentSessionEventStream) writeToolResult(toolID, status, output string) error {
 	if err := s.closeTextBlock(); err != nil {
 		return err
 	}
-	toolID := strings.TrimSpace(tool.ID)
-	if toolID == "" {
-		toolID = "unknown"
+	block := map[string]any{"type": "tool_result", "tool_use_id": toolID, "content": ""}
+	if status != "completed" {
+		block["status"] = status
+		block["is_error"] = true
 	}
 	if err := s.write("content_block_start", map[string]any{
 		"index":         s.contentIndex,
-		"content_block": map[string]any{"type": "tool_result", "tool_use_id": toolID, "content": ""},
+		"content_block": block,
 	}); err != nil {
 		return err
 	}
 	if err := s.write("content_block_delta", map[string]any{
-		"index": s.contentIndex, "delta": map[string]any{"type": "tool_result_delta", "content": tool.OutputSummary},
+		"index": s.contentIndex, "delta": map[string]any{"type": "tool_result_delta", "content": output},
 	}); err != nil {
 		return err
 	}
@@ -844,6 +1264,7 @@ func (s *agentSessionEventStream) writeToolResult(tool *agentengine.ToolActivity
 
 func (s *agentSessionEventStream) writeFailure(response agentSessionResponse, cause error) {
 	s.stopHeartbeat()
+	_ = s.flushPendingText(true)
 	_ = s.closeTextBlock()
 	_ = s.write("error", map[string]any{"error": map[string]any{
 		"type": "server_error", "message": cause.Error(), "request_id": response.ID,
@@ -854,21 +1275,23 @@ func (s *agentSessionEventStream) writeFailure(response agentSessionResponse, ca
 	_ = s.write("message_stop", map[string]any{})
 }
 
-func writeAgentSessionError(w http.ResponseWriter, status int, code, message string, param any) {
+func writeAgentSessionError(w http.ResponseWriter, status int, code, message string, param any, inputs ...im.MessageAttachment) {
 	var parameter *string
 	if value, ok := param.(string); ok && value != "" {
 		parameter = &value
 	}
 	errorType := "server_error"
 	switch {
-	case status == http.StatusBadRequest:
+	case status == http.StatusBadRequest || status == http.StatusRequestEntityTooLarge || status == http.StatusUnsupportedMediaType:
 		errorType = "invalid_request_error"
+	case status == http.StatusUnauthorized:
+		errorType = "authentication_error"
 	case status == http.StatusNotFound:
 		errorType = "not_found_error"
 	case status == http.StatusConflict:
 		errorType = "conflict_error"
 	}
-	writeJSON(w, status, agentSessionErrorEnvelope{Error: agentSessionError{
+	writeJSON(w, status, agentSessionErrorEnvelope{InputAttachments: inputs, Error: agentSessionError{
 		Message: message,
 		Type:    errorType,
 		Param:   parameter,

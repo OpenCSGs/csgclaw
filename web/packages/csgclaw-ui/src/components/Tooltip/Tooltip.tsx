@@ -1,0 +1,88 @@
+/*! Derived from CSGClaw. Modified for standalone csgclaw-ui distribution. */
+import styles from "./Tooltip.module.css";
+import { Tooltip as RadixTooltip } from "radix-ui";
+import type { ComponentPropsWithoutRef, ComponentRef, ReactNode } from "react";
+import { forwardRef } from "react";
+import { classNames } from "../../lib/classNames.js";
+
+export type TooltipRootProps = ComponentPropsWithoutRef<typeof RadixTooltip.Root>;
+
+export type TooltipProviderProps = ComponentPropsWithoutRef<typeof RadixTooltip.Provider>;
+
+export function TooltipProvider({ delayDuration = 250, ...props }: TooltipProviderProps) {
+  return <RadixTooltip.Provider delayDuration={delayDuration} {...props} />;
+}
+
+export function TooltipRoot(props: TooltipRootProps) {
+  return <RadixTooltip.Root {...props} />;
+}
+
+export const TooltipArrow = forwardRef<
+  ComponentRef<typeof RadixTooltip.Arrow>,
+  ComponentPropsWithoutRef<typeof RadixTooltip.Arrow>
+>(function TooltipArrow(props, ref) {
+  return <RadixTooltip.Arrow ref={ref} {...props} />;
+});
+
+export type TooltipTriggerProps = ComponentPropsWithoutRef<typeof RadixTooltip.Trigger>;
+
+export const TooltipTrigger = forwardRef<ComponentRef<typeof RadixTooltip.Trigger>, TooltipTriggerProps>(
+  function TooltipTrigger(props, ref) {
+    return <RadixTooltip.Trigger ref={ref} data-csg-tooltip-trigger="" {...props} />;
+  },
+);
+
+export type TooltipContentProps = ComponentPropsWithoutRef<typeof RadixTooltip.Content> & {
+  portalContainer?: ComponentPropsWithoutRef<typeof RadixTooltip.Portal>["container"];
+};
+
+export const TooltipContent = forwardRef<ComponentRef<typeof RadixTooltip.Content>, TooltipContentProps>(
+  function TooltipContent(
+    {
+      align = "center",
+      children,
+      className,
+      collisionPadding = 12,
+      portalContainer,
+      side = "right",
+      sideOffset = 10,
+      ...props
+    },
+    ref,
+  ) {
+    return (
+      <RadixTooltip.Portal container={portalContainer}>
+        <RadixTooltip.Content
+          ref={ref}
+          align={align}
+          className={classNames(styles["csg-tooltip-content"], className)}
+          collisionPadding={collisionPadding}
+          side={side}
+          sideOffset={sideOffset}
+          {...props}
+        >
+          {children}
+        </RadixTooltip.Content>
+      </RadixTooltip.Portal>
+    );
+  },
+);
+
+export type TooltipProps = Omit<TooltipRootProps, "content"> & {
+  children: ReactNode;
+  content: ReactNode;
+  contentProps?: Omit<TooltipContentProps, "children">;
+};
+
+export function Tooltip({ children, content, contentProps, ...props }: TooltipProps) {
+  if (!content) {
+    return children;
+  }
+
+  return (
+    <TooltipRoot {...props}>
+      <TooltipTrigger asChild>{children}</TooltipTrigger>
+      <TooltipContent {...contentProps}>{content}</TooltipContent>
+    </TooltipRoot>
+  );
+}

@@ -121,11 +121,12 @@ type AddRoomMembersRequest = apitypes.AddRoomMembersRequest
 type AddConversationMembersRequest = AddRoomMembersRequest
 
 type EnsureAgentUserRequest struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	Description string `json:"description,omitempty"`
-	Role        string `json:"role"`
-	Avatar      string `json:"avatar,omitempty"`
+	SkipDirectRoom bool   `json:"-"`
+	ID             string `json:"id"`
+	Name           string `json:"name"`
+	Description    string `json:"description,omitempty"`
+	Role           string `json:"role"`
+	Avatar         string `json:"avatar,omitempty"`
 }
 
 type EnsureWorkerUserRequest = EnsureAgentUserRequest
@@ -179,6 +180,7 @@ var (
 )
 
 type Service struct {
+	agentState       func(User) string
 	diagnosticsOnce  sync.Once
 	diagnostics      *diagnostics.Store
 	mu               sync.RWMutex
@@ -251,7 +253,8 @@ type persistedBootstrap struct {
 }
 
 type persistedRoom struct {
-	CreationWorkspaceDir *string `json:"creation_workspace_dir,omitempty"`
+	CloudAgent           *apitypes.CloudAgentReference `json:"cloud_agent,omitempty"`
+	CreationWorkspaceDir *string                       `json:"creation_workspace_dir,omitempty"`
 
 	SourceTeamID       string             `json:"source_team_id,omitempty"`
 	CollaborationGuide string             `json:"collaboration_guide,omitempty"`
@@ -338,6 +341,12 @@ func NewServiceFromPathWithBus(path string, bus *Bus) (*Service, error) {
 	state, err := LoadBootstrap(path)
 	if err != nil {
 		return nil, err
+	}
+	if err := migrateLegacySessionAttachments(path); err != nil {
+		return nil, err
+	}
+	if err := sessionAttachmentStore(path).recoverPendingBatches(); err != nil {
+		return nil, fmt.Errorf("recover session attachments: %w", err)
 	}
 	for i := range state.Rooms {
 		interruptSavedTurnProgress(state.Rooms[i].Messages)
@@ -516,6 +525,7 @@ func loadPersistedRooms(statePath string, rooms []persistedRoom) ([]Room, error)
 			Pinned:               room.Pinned,
 			CustomTitle:          room.CustomTitle,
 			TaskSession:          room.TaskSession,
+			CloudAgent:           cloneCloudAgent(room.CloudAgent),
 			Configuration:        taskconfig.Clone(room.Configuration),
 			SourceTeamID:         room.SourceTeamID,
 			CollaborationGuide:   room.CollaborationGuide,
@@ -706,6 +716,7 @@ func persistedRoomFromRoom(room Room) persistedRoom {
 		Pinned:               room.Pinned,
 		CustomTitle:          room.CustomTitle,
 		TaskSession:          room.TaskSession,
+		CloudAgent:           cloneCloudAgent(room.CloudAgent),
 		Configuration:        taskconfig.Clone(room.Configuration),
 		SourceTeamID:         room.SourceTeamID,
 		CollaborationGuide:   room.CollaborationGuide,
@@ -1137,6 +1148,10 @@ func migrateLegacyManagerRoomRefs(rooms []Room, managerAliases map[string]struct
 func migrateRoomRefsToUserIDs(rooms []Room) []Room {
 	for i := range rooms {
 		rooms[i].Members = canonicalUserIDs(rooms[i].Members)
+		if rooms[i].CloudAgent != nil {
+			rooms[i].CloudAgent.UserID = canonicalIMUserID(rooms[i].CloudAgent.UserID)
+			rooms[i].CreatedBy = canonicalIMUserID(rooms[i].CreatedBy)
+		}
 		for j := range rooms[i].Messages {
 			rooms[i].Messages[j].SenderID = canonicalIMUserID(rooms[i].Messages[j].SenderID)
 			rooms[i].Messages[j].Content = migrateMentionTagsToUserIDs(rooms[i].Messages[j].Content)
@@ -1343,12 +1358,15 @@ func (s *Service) Bootstrap() Bootstrap {
 
 	users := make([]User, 0, len(s.users))
 	for _, user := range s.users {
-		users = append(users, user)
+		users = append(users, s.presentUserLocked(user))
 	}
 	sortUsersByDisplayName(users)
 
 	rooms := make([]Room, 0, len(s.rooms))
 	for _, room := range s.rooms {
+		if s.hiddenAgentRoomLocked(*room) {
+			continue
+		}
 		rooms = append(rooms, s.presentRoomLocked(*room, ""))
 	}
 	slices.SortFunc(rooms, func(a, b Room) int {
@@ -1373,6 +1391,9 @@ func (s *Service) ListRoomsWithOptions(opts ListMessagesOptions) []Room {
 	rooms := make([]Room, 0, len(s.rooms))
 	locale := messagePresentationLocale(opts.Locale)
 	for _, room := range s.rooms {
+		if s.hiddenAgentRoomLocked(*room) {
+			continue
+		}
 		presented := s.presentRoomLocked(*room, locale)
 		if opts.IncludeThreadReplies {
 			presented.Messages = s.presentMessagesLocked(*room, true, locale)
@@ -1391,7 +1412,7 @@ func (s *Service) ListUsers() []User {
 
 	users := make([]User, 0, len(s.users))
 	for _, user := range s.users {
-		users = append(users, user)
+		users = append(users, s.presentUserLocked(user))
 	}
 	sortUsersByDisplayName(users)
 	return users
@@ -1413,11 +1434,14 @@ func (s *Service) ListMembers(roomID string) ([]User, error) {
 
 	users := make([]User, 0, len(room.Members))
 	for _, memberID := range room.Members {
+		if s.agentStateLocked(memberID) != "" {
+			continue
+		}
 		user, ok := s.userForLocalIDLocked(memberID)
 		if !ok {
 			return nil, fmt.Errorf("member user not found: %s", memberID)
 		}
-		users = append(users, user)
+		users = append(users, s.presentUserLocked(user))
 	}
 	return users, nil
 }
@@ -1837,6 +1861,10 @@ func (s *Service) DeleteUser(userID string) error {
 		s.mu.Unlock()
 		return fmt.Errorf("cannot delete current user")
 	}
+	if user.AgentState == "deleted" {
+		s.mu.Unlock()
+		return ErrAgentIdentityDeleted
+	}
 
 	delete(s.users, userID)
 	delete(s.byName, strings.ToLower(user.Name))
@@ -1907,15 +1935,18 @@ func (s *Service) EnsureAgentUser(req EnsureAgentUserRequest) (User, *Room, erro
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	if err := s.validateAgentUserLocked(id, name); err != nil {
+		return User{}, nil, err
+	}
 	if existing, ok := s.users[id]; ok {
-		room, _ := s.ensureAdminAgentRoomLocked(id, existing.Name)
+		var room *Room
+		if !req.SkipDirectRoom {
+			room, _ = s.ensureAdminAgentRoomLocked(id, existing.Name)
+		}
 		if err := s.saveLocked(); err != nil {
 			return User{}, nil, err
 		}
 		return existing, room, nil
-	}
-	if existingID, ok := s.byName[strings.ToLower(name)]; ok && existingID != id {
-		return User{}, nil, fmt.Errorf("name %q already exists", name)
 	}
 
 	user := User{
@@ -1930,7 +1961,11 @@ func (s *Service) EnsureAgentUser(req EnsureAgentUserRequest) (User, *Room, erro
 	}
 	s.users[id] = user
 	s.byName[strings.ToLower(name)] = id
-	room, roomCreated := s.ensureAdminAgentRoomLocked(id, name)
+	var room *Room
+	var roomCreated bool
+	if !req.SkipDirectRoom {
+		room, roomCreated = s.ensureAdminAgentRoomLocked(id, name)
+	}
 	if err := s.saveLocked(); err != nil {
 		delete(s.users, id)
 		delete(s.byName, strings.ToLower(name))
@@ -1957,6 +1992,9 @@ func (s *Service) UpdateAgentUser(req UpdateAgentUserRequest) (User, bool, error
 
 	id = s.resolveUserIDLocked(id)
 	user, ok := s.users[id]
+	if ok && user.AgentState == "deleted" {
+		return User{}, false, ErrAgentIdentityDeleted
+	}
 	if !ok {
 		name := strings.TrimSpace(req.Name)
 		if name == "" {
@@ -2028,6 +2066,9 @@ func (s *Service) UpdateUser(req UpdateUserRequest) (User, bool, error) {
 	user, ok := s.users[id]
 	if !ok {
 		return User{}, false, nil
+	}
+	if user.AgentState == "deleted" {
+		return User{}, false, ErrAgentIdentityDeleted
 	}
 	if req.Name != nil {
 		name := strings.TrimSpace(*req.Name)
@@ -2263,6 +2304,14 @@ func (s *Service) DeliverMessageContext(ctx context.Context, req DeliverMessageR
 	room, ok := s.rooms[roomID]
 	if !ok {
 		return Message{}, ErrRoomNotFound
+	}
+	if s.agentStateLocked(senderID) != "" || s.hiddenAgentRoomLocked(*room) {
+		return Message{}, fmt.Errorf("agent is archived or deleted")
+	}
+	for _, mention := range s.extractMentions(content) {
+		if s.agentStateLocked(mention.ID) != "" {
+			return Message{}, fmt.Errorf("mentioned agent is archived or deleted")
+		}
 	}
 	var relation *MessageRelation
 	if rootID := strings.TrimSpace(req.ThreadRootID); rootID != "" {
@@ -2539,6 +2588,7 @@ func (s *Service) CreateRoom(req CreateRoomRequest) (Room, error) {
 		Locale:             messagePresentationLocale(req.Locale),
 		IsDirect:           req.IsDirect,
 		TaskSession:        req.TaskSession,
+		CloudAgent:         cloneCloudAgent(req.CloudAgent),
 		Configuration:      taskconfig.Clone(req.Configuration),
 		SourceTeamID:       req.SourceTeamID,
 		CollaborationGuide: req.CollaborationGuide,
@@ -2618,6 +2668,14 @@ func (s *Service) AddRoomMembers(req AddRoomMembersRequest) (Room, error) {
 		return Room{}, fmt.Errorf("cannot add members to agent session room")
 	}
 
+	if s.agentStateLocked(inviterID) != "" {
+		return Room{}, fmt.Errorf("agent is archived or deleted")
+	}
+	for _, id := range req.UserIDs {
+		if s.agentStateLocked(id) != "" {
+			return Room{}, fmt.Errorf("agent is archived or deleted")
+		}
+	}
 	existing := make(map[string]struct{}, len(room.Members))
 	for _, id := range room.Members {
 		existing[id] = struct{}{}
@@ -2804,7 +2862,7 @@ func (s *Service) User(userID string) (User, bool) {
 
 	userID = s.resolveUserIDLocked(userID)
 	user, ok := s.users[userID]
-	return user, ok
+	return s.presentUserLocked(user), ok
 }
 
 func (s *Service) extractMentions(content string) []Mention {
@@ -2852,6 +2910,9 @@ func (s *Service) extractMentions(content string) []Mention {
 
 func (s *Service) normalizeMembers(creatorID string, memberIDs []string) ([]string, error) {
 	creatorID = s.resolveRoomUserIDLocked(creatorID)
+	if s.agentStateLocked(creatorID) != "" {
+		return nil, fmt.Errorf("agent is archived or deleted")
+	}
 	seen := map[string]struct{}{creatorID: {}}
 	members := []string{creatorID}
 	for _, userID := range memberIDs {
@@ -2861,6 +2922,9 @@ func (s *Service) normalizeMembers(creatorID string, memberIDs []string) ([]stri
 		}
 		if _, ok := s.users[userID]; !ok {
 			return nil, fmt.Errorf("%w: %s", ErrUserNotFound, userID)
+		}
+		if s.agentStateLocked(userID) != "" {
+			return nil, fmt.Errorf("agent is archived or deleted")
 		}
 		if _, ok := seen[userID]; ok {
 			continue
@@ -2914,6 +2978,12 @@ func (s *Service) localizeSystemText(locale, key, actorID, title string, userIDs
 			return fmt.Sprintf("%s invited %s to join the room", actor, strings.Join(targets, ", "))
 		case "room_members_removed":
 			return fmt.Sprintf("%s removed %s from the room", actor, strings.Join(targets, ", "))
+		case AgentArchivedEventKey:
+			return fmt.Sprintf("%s was removed from the collaboration space because the agent was archived", strings.Join(targets, ", "))
+		case AgentRestoredEventKey:
+			return fmt.Sprintf("%s was restored and rejoined the collaboration space", strings.Join(targets, ", "))
+		case AgentDeletedEventKey:
+			return fmt.Sprintf("%s was removed from the collaboration space because the agent was deleted", strings.Join(targets, ", "))
 		}
 	default:
 		switch key {
@@ -2923,6 +2993,12 @@ func (s *Service) localizeSystemText(locale, key, actorID, title string, userIDs
 			return fmt.Sprintf("%s 邀请 %s 加入了房间", actor, strings.Join(targets, "、"))
 		case "room_members_removed":
 			return fmt.Sprintf("%s 将 %s 移出了房间", actor, strings.Join(targets, "、"))
+		case AgentArchivedEventKey:
+			return fmt.Sprintf("%s 因智能体归档已被移出协作空间", strings.Join(targets, "、"))
+		case AgentRestoredEventKey:
+			return fmt.Sprintf("%s 已恢复并加入协作空间", strings.Join(targets, "、"))
+		case AgentDeletedEventKey:
+			return fmt.Sprintf("%s 因智能体删除已被移出协作空间", strings.Join(targets, "、"))
 		}
 	}
 	return ""
@@ -2981,6 +3057,9 @@ func sortUsersByDisplayName(users []User) {
 
 func (s *Service) presentRoomLocked(room Room, locale string) Room {
 	cloned := cloneRoom(room)
+	if !room.IsDirect {
+		cloned.Members = slices.DeleteFunc(cloned.Members, func(id string) bool { return s.agentStateLocked(id) != "" })
+	}
 	cloned.Messages = s.presentMessagesLocked(room, false, locale)
 	cloned.MemberNames = s.roomMemberNamesLocked(cloned.Members)
 	if cloned.CustomTitle || !cloned.IsDirect || len(cloned.Members) != 2 {
@@ -3028,7 +3107,16 @@ func (s *Service) presentConversationLocked(conv Conversation) Conversation {
 	return s.presentRoomLocked(conv, "")
 }
 
+func cloneCloudAgent(ref *apitypes.CloudAgentReference) *apitypes.CloudAgentReference {
+	if ref == nil {
+		return nil
+	}
+	result := *ref
+	return &result
+}
+
 func cloneRoom(room Room) Room {
+	room.CloudAgent = cloneCloudAgent(room.CloudAgent)
 	if room.CreationWorkspaceDir != nil {
 		dir := *room.CreationWorkspaceDir
 		room.CreationWorkspaceDir = &dir
@@ -3657,7 +3745,7 @@ func (s *Service) replaceStateLocked(state Bootstrap) {
 
 	for _, user := range users {
 		s.users[user.ID] = user
-		if name := strings.TrimSpace(user.Name); name != "" {
+		if name := strings.TrimSpace(user.Name); name != "" && user.AgentState != "deleted" {
 			s.byName[strings.ToLower(name)] = user.ID
 		}
 	}
@@ -3712,7 +3800,7 @@ func (s *Service) bootstrapLocked() Bootstrap {
 func (s *Service) ensureAdminAgentRoomLocked(agentID, agentName string) (*Room, bool) {
 	agentUserID := s.resolveRoomUserIDLocked(agentID)
 	for _, room := range s.rooms {
-		if room.TaskSession || len(room.Members) != 2 {
+		if !room.IsDirect || room.TaskSession || len(room.Members) != 2 {
 			continue
 		}
 		if containsUserIDInRoom(*room, adminUserID) && containsUserIDInRoom(*room, agentUserID) {

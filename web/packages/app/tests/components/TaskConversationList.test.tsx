@@ -1,0 +1,432 @@
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { useState } from "react";
+import { TaskConversationList } from "@/components/business/TaskConversationList";
+import { fetchTaskConversations } from "@/api/taskConversations";
+import { fetchRelayCatalog, type RelayCatalogTarget } from "@/api/relay";
+import { CLOUD_AGENT_AVATARS } from "@/shared/avatar";
+import { cloudAgentFixture } from "../helpers/cloudAgentFixture";
+import { useArchiveConfirmation } from "@/hooks/workspace/useArchiveConfirmation";
+import type { TaskEntryController } from "@/hooks/workspace/useTaskEntry";
+import { createQueryWrapper } from "../helpers/queryClient";
+import { cloudAgentCatalogKey } from "@/hooks/workspace/useCloudAgentCatalog";
+import type { CloudAgent } from "@/models/cloudAgents";
+
+vi.mock("@/api/taskConversations", () => ({ fetchTaskConversations: vi.fn() }));
+vi.mock("@/api/relay", () => ({ fetchRelayCatalog: vi.fn() }));
+const room = { id: "r1", title: "Review", members: ["user-admin", "manager"], is_direct: true, messages: [] };
+
+describe("TaskConversationList cloud avatars", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    vi.mocked(fetchRelayCatalog).mockReset().mockResolvedValue([]);
+  });
+
+  function renderCloudTask(
+    archived = false,
+    avatar = "1",
+    catalog: readonly CloudAgent[] = [],
+    target?: RelayCatalogTarget,
+  ) {
+    const reference = cloudAgentFixture[0];
+    vi.mocked(fetchTaskConversations).mockResolvedValue({
+      rooms: [
+        {
+          ...room,
+          title: "Cloud task",
+          members: ["user-admin", "cloud-user"],
+          cloud_agent: { agent_id: reference.id, connection_id: reference.connectionID, user_id: "cloud-user" },
+        },
+      ],
+      total: 1,
+      has_more: false,
+    });
+    const queries = createQueryWrapper();
+    if (catalog.length) queries.client.setQueryData(cloudAgentCatalogKey(undefined, target), catalog);
+    render(
+      <TaskConversationList
+        compact={!archived}
+        archived={archived}
+        entry={{ isWorking: () => false, busyID: "" } as unknown as TaskEntryController}
+        currentUserID="user-admin"
+        usersById={new Map([["cloud-user", { id: "cloud-user", name: "123", avatar, role: "cloud" }]])}
+        t={(key) => key}
+        onSelect={vi.fn()}
+      />,
+      { wrapper: queries.wrapper },
+    );
+    return queries;
+  }
+
+  it.each([
+    ["openclaw", "openclaw", false],
+    ["langflow", "langflow", false],
+    ["csgclaw", "csgclaw", false],
+    ["code", "code", false],
+    ["csgclaw-workspace", "csgclaw", true],
+  ] as const)("matches %s to the %s icon in the task list (archived=%s)", async (type, icon, archived) => {
+    renderCloudTask(archived, "1", [{ ...cloudAgentFixture[0], type }]);
+    const task = await screen.findByRole("button", { name: "Cloud task" });
+    await waitFor(() => expect(task.querySelector("img")).toHaveAttribute("src", CLOUD_AGENT_AVATARS[icon]));
+    expect(task.querySelector(".agent-avatar-fallback")).not.toBeInTheDocument();
+    expect(fetchRelayCatalog).not.toHaveBeenCalled();
+  });
+
+  it("uses a cloud icon for older tasks with only an initial and no cached metadata", async () => {
+    renderCloudTask();
+    const task = await screen.findByRole("button", { name: "Cloud task" });
+    expect(task.querySelector("img")).toHaveAttribute("src", CLOUD_AGENT_AVATARS.csgclaw);
+    expect(fetchRelayCatalog).not.toHaveBeenCalled();
+  });
+
+  it.each([false, true])("uses targeted-only cached metadata in the task list (archived=%s)", async (archived) => {
+    const agent = { ...cloudAgentFixture[0], type: "code" };
+    const target = { agent_id: agent.id, connection_id: agent.connectionID };
+    const { client } = renderCloudTask(archived, "1", [agent], target);
+    const task = await screen.findByRole("button", { name: "Cloud task" });
+    expect(task.querySelector("img")).toHaveAttribute("src", CLOUD_AGENT_AVATARS.code);
+    expect(client.getQueryData(cloudAgentCatalogKey())).toBeUndefined();
+    expect(fetchRelayCatalog).not.toHaveBeenCalled();
+  });
+
+  it("does not use an icon from a different account connection", async () => {
+    renderCloudTask(false, "1", [{ ...cloudAgentFixture[0], type: "code", connectionID: "other-login" }]);
+    const task = await screen.findByRole("button", { name: "Cloud task" });
+    expect(task.querySelector("img")).toHaveAttribute("src", CLOUD_AGENT_AVATARS.csgclaw);
+    expect(fetchRelayCatalog).not.toHaveBeenCalled();
+  });
+
+  it("updates task avatars from shared cache changes without fetching the catalog", async () => {
+    const { client } = renderCloudTask();
+    const task = await screen.findByRole("button", { name: "Cloud task" });
+    act(() => client.setQueryData(cloudAgentCatalogKey(), [{ ...cloudAgentFixture[0], type: "code" }]));
+    await waitFor(() => expect(task.querySelector("img")).toHaveAttribute("src", CLOUD_AGENT_AVATARS.code));
+    expect(fetchRelayCatalog).not.toHaveBeenCalled();
+  });
+
+  it("keeps an existing image when an old task is absent from the catalog", async () => {
+    renderCloudTask(true, "avatar/pic-3.png");
+    const task = await screen.findByRole("button", { name: "Cloud task" });
+    expect(task.querySelector("img")).toHaveAttribute("src", "avatar/pic-3.png");
+  });
+
+  it("does not load the cloud catalog for a list containing only local tasks", async () => {
+    setup();
+    await screen.findByText("Review");
+    expect(fetchRelayCatalog).not.toHaveBeenCalled();
+  });
+});
+function Preference() {
+  const [skip] = useArchiveConfirmation();
+  return <output data-testid="preference">{String(skip)}</output>;
+}
+function setup(working = false, archived = false, compact = false, activeID?: string, onArchiveCurrent?: () => void) {
+  vi.mocked(fetchTaskConversations).mockResolvedValue({ rooms: [room], total: 1, has_more: false });
+  const patch = vi.fn().mockResolvedValue(undefined);
+  const remove = vi.fn().mockResolvedValue(undefined);
+  const entry = { patch, remove, isWorking: () => working, busyID: "" } as unknown as TaskEntryController;
+  const usersById = new Map([{ id: "manager", name: "Manager", role: "worker" }].map((user) => [user.id, user]));
+  render(
+    <>
+      <TaskConversationList
+        archived={archived}
+        compact={compact}
+        activeID={activeID}
+        entry={entry}
+        currentUserID="user-admin"
+        usersById={usersById}
+        t={(key) => key}
+        onSelect={vi.fn()}
+        onArchiveCurrent={onArchiveCurrent}
+      />
+      <Preference />
+    </>,
+    { wrapper: createQueryWrapper().wrapper },
+  );
+  return { patch, remove };
+}
+describe("TaskConversationList archive management", () => {
+  beforeEach(() => window.localStorage.clear());
+  it.each([false, true])(
+    "does not navigate away from a newly selected task after archive completes (skip=%s)",
+    async (skip) => {
+      if (skip) localStorage.setItem("csgclaw.task-entry.skip-archive-confirmation", "true");
+      vi.mocked(fetchTaskConversations).mockResolvedValue({ rooms: [room], total: 1, has_more: false });
+      let finish!: () => void;
+      const patch = vi.fn(
+        () =>
+          new Promise<void>((resolve) => {
+            finish = resolve;
+          }),
+      );
+      const onArchiveCurrent = vi.fn();
+      function Harness() {
+        const [activeID, setActiveID] = useState("r1");
+        return (
+          <>
+            <button onClick={() => setActiveID("r2")}>Switch task</button>
+            <TaskConversationList
+              compact
+              activeID={activeID}
+              entry={{ patch, remove: vi.fn(), isWorking: () => false, busyID: "" } as unknown as TaskEntryController}
+              currentUserID="user-admin"
+              usersById={new Map()}
+              t={(key) => key}
+              onSelect={vi.fn()}
+              onArchiveCurrent={onArchiveCurrent}
+            />
+          </>
+        );
+      }
+      render(<Harness />, { wrapper: createQueryWrapper().wrapper });
+      const user = userEvent.setup();
+      await user.click(await screen.findByRole("button", { name: "taskEntryArchive · Review" }));
+      if (!skip) await user.click(screen.getByRole("button", { name: "confirm" }));
+      await waitFor(() => expect(patch).toHaveBeenCalled());
+      // Change the active task while the archive request is still pending.
+      if (!skip) {
+        fireEvent.click(screen.getByRole("button", { name: "Switch task", hidden: true }));
+      } else await user.click(screen.getByRole("button", { name: "Switch task" }));
+      await act(async () => finish());
+      await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+      expect(onArchiveCurrent).not.toHaveBeenCalled();
+    },
+  );
+  it("exposes the full task title on hover", async () => {
+    setup(false, false, true);
+    const title = await screen.findByText("Review");
+    await userEvent.setup().hover(title);
+    expect(await screen.findByRole("tooltip")).toHaveTextContent("Review");
+    expect(title).not.toHaveAttribute("title");
+  });
+  it("clears the search and restores the unfiltered list", async () => {
+    const user = userEvent.setup();
+    setup(false, false, true);
+    const input = screen.getByRole("textbox", { name: "taskEntrySearchHistory" });
+    expect(screen.queryByRole("button", { name: "taskEntryClearSearch" })).not.toBeInTheDocument();
+    await user.type(input, "needle");
+    await waitFor(() => expect(fetchTaskConversations).toHaveBeenLastCalledWith("needle", false, 0));
+    await user.click(screen.getByRole("button", { name: "taskEntryClearSearch" }));
+    expect(input).toHaveValue("");
+    expect(input).toHaveFocus();
+    expect(screen.queryByRole("button", { name: "taskEntryClearSearch" })).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText("Review")).toBeInTheDocument());
+  });
+  it.each([
+    {
+      historicalMessage:
+        "This beginning is intentionally long enough to overflow the available sidebar preview before the ending Needle",
+      query: "needle",
+      matchedText: "Needle",
+    },
+    {
+      historicalMessage: "请搜索网页了解 OpenAI 最新公开文档里关于 Codex 的说明，并总结一句。",
+      query: "总结一句",
+      matchedText: "总结一句",
+    },
+  ])(
+    "shows the matching historical message below the task title",
+    async ({ historicalMessage, query, matchedText }) => {
+      const user = userEvent.setup();
+      const onSelect = vi.fn();
+      vi.mocked(fetchTaskConversations).mockImplementation(async (query) => ({
+        rooms: [
+          {
+            ...room,
+            messages: [{ content: "Most recent message" }],
+            search_match: query
+              ? { id: "matched-message", content: historicalMessage, created_at: "2026-10-10T10:00:00Z" }
+              : undefined,
+          },
+        ],
+        total: 1,
+        has_more: false,
+      }));
+      render(
+        <TaskConversationList
+          compact
+          entry={
+            {
+              patch: vi.fn(),
+              remove: vi.fn(),
+              isWorking: () => false,
+              busyID: "",
+            } as unknown as TaskEntryController
+          }
+          currentUserID="user-admin"
+          usersById={new Map()}
+          t={(key) => key}
+          onSelect={onSelect}
+        />,
+        { wrapper: createQueryWrapper().wrapper },
+      );
+
+      await user.type(screen.getByRole("textbox", { name: "taskEntrySearchHistory" }), query);
+      const match = await screen.findByText(matchedText, { exact: true });
+      expect(match.tagName).toBe("MARK");
+      expect(match.closest("small")).toHaveTextContent(/^…/);
+      expect(match.closest("small")).toHaveTextContent(matchedText);
+      expect(match.closest("small")).not.toHaveTextContent("This beginning");
+      expect(match.closest("small")).toHaveAttribute("title", historicalMessage);
+      expect(match.closest("small")?.querySelector("time")).toBeNull();
+      expect(fetchTaskConversations).toHaveBeenLastCalledWith(query, false, 0);
+      await user.click(match);
+      expect(onSelect).toHaveBeenCalledWith("r1", expect.objectContaining({ id: "matched-message" }));
+    },
+  );
+  it("opens direct and collaboration conversations from the same list", async () => {
+    const user = userEvent.setup();
+    const onSelect = vi.fn();
+    vi.mocked(fetchTaskConversations).mockResolvedValue({
+      rooms: [room, { ...room, id: "collaboration", title: "Release review", is_direct: false }],
+      total: 2,
+      has_more: false,
+    });
+    render(
+      <TaskConversationList
+        compact
+        activeID="collaboration"
+        entry={{
+          create: vi.fn(),
+          onMessage: vi.fn(),
+          patch: vi.fn(),
+          remove: vi.fn(),
+          open: vi.fn(),
+          isWorking: () => false,
+          busyID: "",
+        }}
+        currentUserID="user-admin"
+        usersById={new Map()}
+        t={(key) => key}
+        onSelect={onSelect}
+      />,
+      { wrapper: createQueryWrapper().wrapper },
+    );
+
+    const collaboration = await screen.findByRole("button", { name: "Release review" });
+    expect(collaboration).toHaveAttribute("aria-current", "page");
+    await user.click(collaboration);
+    await user.click(screen.getByRole("button", { name: "Review" }));
+    expect(onSelect.mock.calls).toEqual([
+      ["collaboration", undefined],
+      ["r1", undefined],
+    ]);
+  });
+
+  it("filters by the session directory instead of another task using the same Agent", async () => {
+    const user = userEvent.setup();
+    vi.mocked(fetchTaskConversations).mockResolvedValue({
+      rooms: [
+        { ...room, id: "first", title: "First project", configuration: { workspace_dir: "/projects/first" } },
+        { ...room, id: "second", title: "Second project", configuration: { workspace_dir: "/projects/second" } },
+      ],
+      total: 2,
+      has_more: false,
+    });
+    render(
+      <TaskConversationList
+        compact
+        directories={[{ path: "/projects/first", agentIDs: ["manager"] }]}
+        entry={{
+          create: vi.fn().mockResolvedValue(room),
+          onMessage: vi.fn(),
+          patch: vi.fn().mockResolvedValue(undefined),
+          remove: vi.fn().mockResolvedValue(undefined),
+          open: vi.fn(),
+          isWorking: () => false,
+          busyID: "",
+        }}
+        currentUserID="user-admin"
+        usersById={new Map()}
+        t={(key) => key}
+        onSelect={vi.fn()}
+      />,
+      { wrapper: createQueryWrapper().wrapper },
+    );
+    await screen.findByText("Second project");
+    await user.click(screen.getByRole("combobox", { name: "iaSessionDirectoryFilter" }));
+    await user.click(screen.getByRole("option", { name: /first/ }));
+    expect(screen.getByText("First project")).toBeInTheDocument();
+    expect(screen.queryByText("Second project")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("combobox", { name: "iaSessionDirectoryFilter" }));
+    await user.click(screen.getByRole("option", { name: /second/ }));
+    expect(screen.getByText("Second project")).toBeInTheDocument();
+    expect(screen.queryByText("First project")).not.toBeInTheDocument();
+  });
+  it("offers pin and archive shortcuts without navigating the conversation", async () => {
+    const user = userEvent.setup();
+    const { patch } = setup(false, false, true);
+    await user.click(await screen.findByRole("button", { name: "taskEntryPin · Review" }));
+    await waitFor(() => expect(patch).toHaveBeenCalledWith("r1", { pinned: true }));
+    await user.click(screen.getByRole("button", { name: "taskEntryArchive · Review" }));
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "confirm" })).toHaveClass("btn-primary");
+    await user.click(screen.getByRole("button", { name: "cancel" }));
+    expect(patch).toHaveBeenCalledTimes(1);
+  });
+  it("disables the archive shortcut while the task is running", async () => {
+    setup(true, false, true);
+    expect(await screen.findByRole("button", { name: "taskEntryArchive · Review" })).toBeDisabled();
+  });
+  it("updates the shared confirmation preference only after a successful archive", async () => {
+    const user = userEvent.setup();
+    const { patch } = setup();
+    await user.click(await screen.findByRole("button", { name: "taskEntryMore · Review" }));
+    await user.click(screen.getByRole("menuitem", { name: "taskEntryArchive" }));
+    await user.click(screen.getByRole("checkbox", { name: "taskEntryDontAsk" }));
+    await user.click(screen.getByRole("button", { name: "cancel" }));
+    expect(screen.getByTestId("preference")).toHaveTextContent("false");
+    expect(patch).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "taskEntryMore · Review" }));
+    await user.click(screen.getByRole("menuitem", { name: "taskEntryArchive" }));
+    await user.click(screen.getByRole("checkbox", { name: "taskEntryDontAsk" }));
+    await user.click(screen.getByRole("button", { name: "confirm" }));
+    await waitFor(() => expect(patch).toHaveBeenCalledWith("r1", { archived: true }));
+    await waitFor(() => expect(screen.getByTestId("preference")).toHaveTextContent("true"));
+  });
+
+  it("opens the start panel after archiving the current conversation", async () => {
+    const user = userEvent.setup();
+    const onArchiveCurrent = vi.fn();
+    const { patch } = setup(false, false, true, "r1", onArchiveCurrent);
+    await user.click(await screen.findByRole("button", { name: "taskEntryMore · Review" }));
+    await user.click(screen.getByRole("menuitem", { name: "taskEntryArchive" }));
+    await user.click(screen.getByRole("button", { name: "confirm" }));
+    await waitFor(() => expect(patch).toHaveBeenCalledWith("r1", { archived: true }));
+    expect(onArchiveCurrent).toHaveBeenCalledOnce();
+  });
+
+  it("opens the start panel when the current conversation skips archive confirmation", async () => {
+    window.localStorage.setItem("csgclaw.task-entry.skip-archive-confirmation", "true");
+    const user = userEvent.setup();
+    const onArchiveCurrent = vi.fn();
+    const { patch } = setup(false, false, true, "r1", onArchiveCurrent);
+    await user.click(await screen.findByRole("button", { name: "taskEntryMore · Review" }));
+    await user.click(screen.getByRole("menuitem", { name: "taskEntryArchive" }));
+    await waitFor(() => expect(patch).toHaveBeenCalledWith("r1", { archived: true }));
+    expect(onArchiveCurrent).toHaveBeenCalledOnce();
+  });
+  it("keeps archive errors visible in the dialog and does not save the preference on failure", async () => {
+    const user = userEvent.setup();
+    const { patch } = setup();
+    patch.mockRejectedValueOnce(new Error("Save failed"));
+    await user.click(await screen.findByRole("button", { name: "taskEntryMore · Review" }));
+    await user.click(screen.getByRole("menuitem", { name: "taskEntryArchive" }));
+    await user.click(screen.getByRole("checkbox", { name: "taskEntryDontAsk" }));
+    await user.click(screen.getByRole("button", { name: "confirm" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Save failed");
+    expect(screen.getByRole("dialog")).toContainElement(screen.getByRole("alert"));
+    expect(screen.getByTestId("preference")).toHaveTextContent("false");
+  });
+
+  it("disables running conversation deletion and archive", async () => {
+    const user = userEvent.setup();
+    const { remove } = setup(true, true);
+    await user.click(await screen.findByRole("button", { name: "taskEntryMore · Review" }));
+    const item = screen.getByRole("menuitem", { name: "taskEntryDelete" });
+    expect(item).toHaveAttribute("data-disabled");
+    fireEvent.click(item);
+    expect(remove).not.toHaveBeenCalled();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+});

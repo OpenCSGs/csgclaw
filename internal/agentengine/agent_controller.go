@@ -28,3 +28,7 @@ func (unavailableAgents) Delete(context.Context, string) error {
 func (unavailableAgents) Recreate(context.Context, string, AgentRecreateOptions) (Agent, error) {
 	return Agent{}, &TurnError{Code: ErrorAgentUnavailable, Message: "agent service is unavailable"}
 }
+
+func (unavailableAgents) SetArchived(context.Context, string, bool) (Agent, error) {
+	return Agent{}, &TurnError{Code: ErrorAgentUnavailable, Message: "agent service is unavailable"}
+}

@@ -1139,7 +1139,10 @@ func TestHandleAgentDeleteRemovesBoundParticipants(t *testing.T) {
 	srv := &Handler{svc: svc, im: imSvc, participant: participantSvc, agentEngine: agentengine.New(svc), workspace: svc.Workspace(), agentModels: svc.Models(), agentRuntime: svc}
 
 	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodDelete, "/api/v1/agents/agent-qa", nil)
+	if _, err := svc.SetArchived(context.Background(), "agent-qa", true); err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/agents/agent-qa", strings.NewReader(`{"name":"qa"}`))
 	srv.Routes().ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusNoContent {
@@ -1159,8 +1162,8 @@ func TestHandleAgentDeleteRemovesBoundParticipants(t *testing.T) {
 			t.Fatalf("participant %s:%s still exists after agent delete", ref.channel, ref.id)
 		}
 	}
-	if _, ok := imSvc.User("user-qa"); ok {
-		t.Fatal("local agent user user-qa still exists after deleting its CSGClaw participant")
+	if user, ok := imSvc.User("user-qa"); !ok || user.AgentState != "deleted" {
+		t.Fatal("deleted identity was not retained")
 	}
 }
 
@@ -1981,7 +1984,10 @@ func TestHandleAgentsDeleteRemovesAgent(t *testing.T) {
 	})
 
 	srv := &Handler{svc: svc, agentEngine: agentengine.New(svc), workspace: svc.Workspace(), agentModels: svc.Models(), agentRuntime: svc}
-	req := httptest.NewRequest(http.MethodDelete, "/api/v1/agents/u-alice", nil)
+	if _, err := svc.SetArchived(context.Background(), "u-alice", true); err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/agents/u-alice", strings.NewReader(`{"name":"alice"}`))
 	rec := httptest.NewRecorder()
 
 	srv.Routes().ServeHTTP(rec, req)
@@ -2036,7 +2042,10 @@ func TestAgentAdministrationRoutesUseInjectedEngineWithoutHandlerService(t *test
 	}
 
 	deleted := httptest.NewRecorder()
-	handler.Routes().ServeHTTP(deleted, httptest.NewRequest(http.MethodDelete, "/api/v1/agents/agent-engine-admin", nil))
+	if _, err := svc.SetArchived(context.Background(), "agent-engine-admin", true); err != nil {
+		t.Fatal(err)
+	}
+	handler.Routes().ServeHTTP(deleted, httptest.NewRequest(http.MethodDelete, "/api/v1/agents/agent-engine-admin", strings.NewReader(`{"name":"engine-admin"}`)))
 	if deleted.Code != http.StatusNoContent {
 		t.Fatalf("DELETE /agents status = %d, want 204; body=%s", deleted.Code, deleted.Body.String())
 	}
@@ -2102,7 +2111,8 @@ func TestAgentSubresourceAdministrationUsesOnlyResourceCRUD(t *testing.T) {
 		got.Spec.Instructions != "after instructions" || got.Spec.Memory == nil || got.Spec.Memory.Enabled {
 		t.Fatalf("final Agent resource = %+v", got)
 	}
-	request(http.MethodDelete, "/api/v1/agents/agent-resource-admin", "", http.StatusNoContent)
+	request(http.MethodPost, "/api/v1/agents/agent-resource-admin/archive", "", http.StatusOK)
+	request(http.MethodDelete, "/api/v1/agents/agent-resource-admin", `{"name":"resource-admin"}`, http.StatusNoContent)
 }
 
 func TestHandleAgentsCreateDoesNotProvisionIMUser(t *testing.T) {
@@ -3067,6 +3077,71 @@ func TestPresentHubTemplateIncludesSensitiveCheckMetadata(t *testing.T) {
 	}
 }
 
+type oversizedHubPublishStore struct {
+	hub.Store
+}
+
+func (oversizedHubPublishStore) Publish(context.Context, hub.PublishSpec) (hub.Template, error) {
+	return hub.Template{}, &hub.PublishFileTooLargeError{Path: "skills/reviewer/data.zip", MaxBytes: 50 * 1024 * 1024}
+}
+
+func TestHandleHubTemplatesReportsOversizedPublishFile(t *testing.T) {
+	restore := stubAuthStatus(func(*http.Request) (auth.Status, error) {
+		return auth.Status{Authenticated: true}, nil
+	})
+	defer restore()
+
+	localRoot := t.TempDir()
+	localStore := hub.NewLocalStore(localRoot)
+	_, err := localStore.Publish(context.Background(), hub.PublishSpec{
+		ID: "Reviewer", Name: "Reviewer", RuntimeKind: agent.RuntimeKindCodex,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	hubSvc, err := hub.NewService(config.HubConfig{
+		DefaultRegistry:        "local",
+		DefaultPublishRegistry: "local",
+		Registries: []config.HubRegistryConfig{
+			{Name: "local", Kind: hub.RegistryKindLocal, Path: localRoot, Enabled: true},
+			{Name: "official", Kind: hub.RegistryKindRemote, Enabled: true},
+		},
+	}, func(cfg config.HubRegistryConfig) (hub.Store, error) {
+		if cfg.Name == "local" {
+			return localStore, nil
+		}
+		return oversizedHubPublishStore{}, nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := &Handler{svc: mustNewService(t)}
+	handler.SetHubService(hubSvc)
+	recorder := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/hub/templates", strings.NewReader(
+		`{"template_id":"local.Reviewer","registry":"official"}`,
+	))
+	handler.handleHubTemplates(recorder, req)
+
+	if recorder.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("status = %d, want 413; body=%s", recorder.Code, recorder.Body.String())
+	}
+	var response struct {
+		Error struct {
+			Code         string `json:"code"`
+			FilePath     string `json:"file_path"`
+			MaxFileBytes int64  `json:"max_file_bytes"`
+		} `json:"error"`
+	}
+	if err := json.NewDecoder(recorder.Body).Decode(&response); err != nil {
+		t.Fatal(err)
+	}
+	if got := response.Error; got.Code != "template_publish_file_too_large" ||
+		got.FilePath != "skills/reviewer/data.zip" || got.MaxFileBytes != 50*1024*1024 {
+		t.Fatalf("unexpected error payload: %+v", got)
+	}
+}
+
 func TestWriteHubTemplateErrorUsesStructuredContract(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	writeHubTemplateError(
@@ -3143,8 +3218,8 @@ func TestBootstrapConfigViewRestrictsCSGHubToHostRuntimes(t *testing.T) {
 		Sandbox: config.SandboxConfig{Provider: config.CSGHubProvider},
 	}, nil, nil)
 
-	if got.SandboxProvider != config.CSGHubProvider {
-		t.Fatalf("sandbox provider = %q, want %q", got.SandboxProvider, config.CSGHubProvider)
+	if got.SandboxProvider != "" {
+		t.Fatalf("retired sandbox provider exposed: %q", got.SandboxProvider)
 	}
 	if len(got.WorkerRuntimeChoices) != 2 {
 		t.Fatalf("worker runtime choices = %#v, want Codex and DSH", got.WorkerRuntimeChoices)
@@ -3288,7 +3363,7 @@ func TestHandleAgentWorkspaceFileReturnsContent(t *testing.T) {
 		t.Fatalf("write skill file: %v", err)
 	}
 
-	srv := &Handler{svc: svc, agentEngine: agentengine.New(svc), workspace: svc.Workspace(), agentModels: svc.Models(), agentRuntime: svc}
+	srv := &Handler{serverNoAuth: true, svc: svc, agentEngine: agentengine.New(svc), workspace: svc.Workspace(), agentModels: svc.Models(), agentRuntime: svc}
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/agents/"+created.ID+"/workspace/file?path=skills/custom/SKILL.md", nil)
 	rec := httptest.NewRecorder()
 
@@ -3360,7 +3435,7 @@ func TestHandleAgentSkillsReturnsContentFromSkillsRoot(t *testing.T) {
 		t.Fatalf("write skill file: %v", err)
 	}
 
-	srv := &Handler{svc: svc, agentEngine: agentengine.New(svc), workspace: svc.Workspace(), agentModels: svc.Models(), agentRuntime: svc}
+	srv := &Handler{serverNoAuth: true, svc: svc, agentEngine: agentengine.New(svc), workspace: svc.Workspace(), agentModels: svc.Models(), agentRuntime: svc}
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/agents/"+created.ID+"/skills", nil)
 	rec := httptest.NewRecorder()
@@ -6768,13 +6843,14 @@ func TestHandleFeishuEventsRequiresAuthorization(t *testing.T) {
 
 func TestHandleFeishuEventsRequiresAuthorizationWhenServerAccessTokenEmpty(t *testing.T) {
 	srv := &Handler{}
-
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/channels/feishu/participants/u-manager/events", nil)
-	rec := httptest.NewRecorder()
-	srv.Routes().ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusUnauthorized {
-		t.Fatalf("status = %d, want %d", rec.Code, http.StatusUnauthorized)
+	for _, authorization := range []string{"", "Bearer", "Bearer ", "Bearer bogus"} {
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/channels/feishu/participants/u-manager/events", nil)
+		req.Header.Set("Authorization", authorization)
+		rec := httptest.NewRecorder()
+		srv.Routes().ServeHTTP(rec, req)
+		if rec.Code != http.StatusUnauthorized {
+			t.Fatalf("header %q: status %d, want %d", authorization, rec.Code, http.StatusUnauthorized)
+		}
 	}
 }
 

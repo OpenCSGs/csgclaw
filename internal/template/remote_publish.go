@@ -58,9 +58,20 @@ type remotePreuploadResult struct {
 	IsDir        bool   `json:"isDir"`
 }
 
-// Stage exactly the same filtered template layout used by local publication.
-// Bound the uncompressed snapshot before making any remote mutations.
-func buildRemoteTemplateFiles(spec PublishSpec, maxBytes int64) (map[string][]byte, error) {
+const remotePublishMaxFileBytes = 50 * 1024 * 1024
+
+// PublishFileTooLargeError identifies a file exceeding the community publication limit.
+type PublishFileTooLargeError struct {
+	Path     string
+	MaxBytes int64
+}
+
+func (e *PublishFileTooLargeError) Error() string {
+	return fmt.Sprintf("template file %q exceeds the size limit of %d MiB", e.Path, e.MaxBytes/(1024*1024))
+}
+
+// Stage the filtered template layout and validate each file before contacting the hub.
+func buildRemoteTemplateFiles(spec PublishSpec, maxFileBytes int64) (map[string][]byte, error) {
 	root, err := os.MkdirTemp("", "csgclaw-hub-publish-*")
 	if err != nil {
 		return nil, err
@@ -75,7 +86,6 @@ func buildRemoteTemplateFiles(spec PublishSpec, maxBytes int64) (map[string][]by
 		}
 	}
 	files := make(map[string][]byte)
-	var total int64
 	err = filepath.WalkDir(root, func(name string, entry os.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
@@ -90,19 +100,19 @@ func buildRemoteTemplateFiles(spec PublishSpec, maxBytes int64) (map[string][]by
 		if !info.Mode().IsRegular() {
 			return fmt.Errorf("unsupported template file %q", name)
 		}
-		total += info.Size()
-		if total > maxBytes {
-			return fmt.Errorf("remote hub template exceeds %d bytes", maxBytes)
+		rel, err := filepath.Rel(root, name)
+		if err != nil {
+			return err
+		}
+		path := filepath.ToSlash(rel)
+		if info.Size() > maxFileBytes {
+			return &PublishFileTooLargeError{Path: path, MaxBytes: maxFileBytes}
 		}
 		content, err := os.ReadFile(name)
 		if err != nil {
 			return err
 		}
-		rel, err := filepath.Rel(root, name)
-		if err != nil {
-			return err
-		}
-		files[filepath.ToSlash(rel)] = content
+		files[path] = content
 		return nil
 	})
 	return files, err

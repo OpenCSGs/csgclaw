@@ -1,0 +1,162 @@
+.agent-avatar-picker {
+  position: relative;
+  display: inline-flex;
+  align-items: flex-start;
+  min-width: 44px;
+  width: 44px;
+}
+
+.agent-avatar-trigger {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--gray-100);
+  color: var(--gray-500);
+  cursor: pointer;
+  overflow: visible;
+  box-shadow: none;
+  transition:
+    background-color 160ms ease,
+    box-shadow 160ms ease,
+    color 160ms ease,
+    transform 160ms ease;
+}
+
+.agent-avatar-trigger:hover,
+.agent-avatar-picker:not(.edit-mode).open .agent-avatar-trigger {
+  background: color-mix(in oklab, var(--gray-100) 84%, var(--brand-500));
+  color: var(--brand-600);
+}
+
+.agent-avatar-picker.edit-mode.empty-avatar .agent-avatar-trigger:hover,
+.agent-avatar-picker.edit-mode.empty-avatar .agent-avatar-trigger:focus-visible {
+  background: var(--gray-100);
+  color: var(--gray-700);
+}
+
+:root[data-theme="dark"] .agent-avatar-picker.edit-mode.empty-avatar .agent-avatar-trigger {
+  background: #181d27;
+  color: #a4a7ae;
+}
+
+:root[data-theme="dark"] .agent-avatar-picker.edit-mode.empty-avatar .agent-avatar-trigger:hover,
+:root[data-theme="dark"] .agent-avatar-picker.edit-mode.empty-avatar .agent-avatar-trigger:focus-visible {
+  background: #252b37;
+  color: #f5f5f6;
+}
+
+.agent-avatar-picker.edit-mode.open .agent-avatar-trigger,
+.agent-avatar-picker.edit-mode.open .agent-avatar-trigger:hover,
+.agent-avatar-picker.edit-mode.open .agent-avatar-trigger:focus-visible {
+  background: var(--gray-100);
+  color: var(--gray-500);
+  box-shadow: none;
+  pointer-events: none;
+}
+
+:root[data-theme="dark"] .agent-avatar-picker.edit-mode.open .agent-avatar-trigger,
+:root[data-theme="dark"] .agent-avatar-picker.edit-mode.open .agent-avatar-trigger:hover,
+:root[data-theme="dark"] .agent-avatar-picker.edit-mode.open .agent-avatar-trigger:focus-visible {
+  background: #181d27;
+  color: #a4a7ae;
+}
+
+.agent-avatar-trigger:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 4px rgba(77, 106, 214, 0.18);
+}
+
+.agent-avatar-trigger-image {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.agent-avatar-picker.edit-mode.suppress-trigger-hover .agent-avatar-trigger,
+.agent-avatar-picker.edit-mode.suppress-trigger-hover .agent-avatar-trigger:hover,
+.agent-avatar-picker.edit-mode.suppress-trigger-hover .agent-avatar-trigger:focus-visible {
+  background: var(--gray-100);
+  color: var(--gray-500);
+  box-shadow: none;
+}
+
+:root[data-theme="dark"] .agent-avatar-picker.edit-mode.suppress-trigger-hover .agent-avatar-trigger,
+:root[data-theme="dark"] .agent-avatar-picker.edit-mode.suppress-trigger-hover .agent-avatar-trigger:hover,
+:root[data-theme="dark"] .agent-avatar-picker.edit-mode.suppress-trigger-hover .agent-avatar-trigger:focus-visible {
+  background: #181d27;
+  color: #a4a7ae;
+}
+
+.agent-avatar-picker-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  z-index: var(--z-popover);
+  display: grid;
+  gap: 10px;
+  width: min(456px, calc(100vw - 48px));
+  max-height: 360px;
+  padding: 12px;
+  overflow-y: auto;
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-md);
+  background: var(--white);
+  box-shadow: var(--shadow-lg);
+}
+
+.agent-avatar-option {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 54px;
+  height: 54px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: var(--surface);
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.agent-avatar-option img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.agent-avatar-option:hover {
+  border-color: var(--primary);
+}
+
+.agent-avatar-option:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.agent-avatar-option.selected {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 4px rgba(77, 106, 214, 0.18);
+}
+
+.agent-avatar-option:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+@media (max-width: 720px) {
+  .agent-avatar-picker-panel {
+    width: min(344px, calc(100vw - 32px));
+  }
+}

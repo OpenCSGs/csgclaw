@@ -57,6 +57,13 @@ func TestRoomTaskDispatchClaimAndDeliveryEndToEnd(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			t.Cleanup(func() {
+				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer cancel()
+				if err := messages.Diagnostics().Flush(ctx); err != nil {
+					t.Errorf("flush room task diagnostics: %v", err)
+				}
+			})
 			if _, _, err := messages.EnsureAgentUser(im.EnsureAgentUserRequest{ID: "agent-dev", Name: "dev", Role: "worker"}); err != nil {
 				t.Fatal(err)
 			}

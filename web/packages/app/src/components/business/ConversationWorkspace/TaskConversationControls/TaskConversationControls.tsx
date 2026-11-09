@@ -1,0 +1,98 @@
+import { useNavigate } from "react-router-dom";
+import { pathForNewCloudTask } from "@/models/routing";
+import { hasPendingCloudTask } from "@/models/cloudTasks";
+import type { TaskConfiguration } from "@/models/taskConfiguration";
+import { useOptionalWorkspaceControllerContext } from "@/hooks/workspace";
+import { Plus } from "lucide-react";
+import { Button } from "@/components/ui";
+import { ContextUsageRing, type ConversationWorkingParticipant } from "@/components/business/ConversationPane";
+import { resolveAgentChannelUserID, type AgentLike } from "@/models/agents";
+import { isEventMessage, isToolCallMessage, type IMConversation, type TranslateFn } from "@/models/conversations";
+import styles from "./TaskConversationControls.module.css";
+import { TaskConfigurationToolbar } from "@/components/business/TaskConfigurationToolbar";
+
+export function TaskConversationControls({
+  conversation,
+  participants,
+  agents,
+  t,
+  onNewTask,
+  cloudSendDisabled = false,
+}: {
+  conversation: IMConversation;
+  participants: ConversationWorkingParticipant[];
+  agents: AgentLike[];
+  t: TranslateFn;
+  onNewTask?: (agentID?: string, configuration?: TaskConfiguration) => void;
+  cloudSendDisabled?: boolean;
+}) {
+  const controller = useOptionalWorkspaceControllerContext();
+  const entry = controller?.taskEntry;
+  const agent = agents.find((item) => conversation.members.includes(resolveAgentChannelUserID(item)));
+  const hasChatMessages = conversation.messages.some(
+    (message) => !isEventMessage(message) && !isToolCallMessage(message),
+  );
+  const cloudPending = hasPendingCloudTask(conversation);
+  return (
+    <div className={styles.controls}>
+      {!conversation.cloud_agent ? (
+        <TaskConfigurationToolbar
+          key={conversation.id}
+          t={t}
+          agent={agent}
+          showModel={Boolean(agent && conversation.is_direct)}
+          showDirectory={Boolean(
+            conversation.is_direct || (conversation.type === "on_demand" && conversation.configuration?.workspace_dir),
+          )}
+          configuration={conversation.configuration}
+          directoryLocked
+          disabled={entry?.isWorking(conversation.id) || entry?.busyID === conversation.id}
+          onChange={entry ? (value) => entry.patch(conversation.id, { configuration: value }) : undefined}
+        />
+      ) : null}
+      {conversation.cloud_agent && hasChatMessages ? (
+        <NewCloudTaskButton
+          agentID={conversation.cloud_agent.agent_id}
+          disabled={cloudPending || cloudSendDisabled}
+          t={t}
+        />
+      ) : null}
+      {onNewTask && !conversation.cloud_agent && hasChatMessages ? (
+        <Button
+          variant="tertiaryGray"
+          size="sm"
+          aria-label={t("taskEntryNew")}
+          onClick={() =>
+            conversation.is_direct ? onNewTask(agent?.id || undefined, conversation.configuration) : onNewTask()
+          }
+        >
+          <Plus size={15} />
+          {t("taskEntryNew")}
+        </Button>
+      ) : null}
+      {!conversation.cloud_agent &&
+        participants
+          .filter((participant) => participant.showContextUsage || participant.contextUsage)
+          .map((participant) => (
+            <span
+              key={participant.leaseID || participant.id || participant.name}
+              className={styles.usage}
+              title={participant.name}
+            >
+              <small>{conversation.is_direct ? "" : participant.name}</small>
+              <ContextUsageRing usage={participant.contextUsage} t={t} />
+            </span>
+          ))}
+    </div>
+  );
+}
+
+function NewCloudTaskButton({ agentID, disabled, t }: { agentID: string; disabled: boolean; t: TranslateFn }) {
+  const navigate = useNavigate();
+  return (
+    <Button variant="tertiaryGray" size="sm" disabled={disabled} onClick={() => navigate(pathForNewCloudTask(agentID))}>
+      <Plus size={15} />
+      {t("taskEntryNew")}
+    </Button>
+  );
+}

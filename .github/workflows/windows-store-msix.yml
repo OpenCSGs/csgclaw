@@ -41,7 +41,7 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
-          node-version-file: web/app/package.json
+          node-version-file: web/packages/app/package.json
 
       - name: Resolve package versions
         id: versions

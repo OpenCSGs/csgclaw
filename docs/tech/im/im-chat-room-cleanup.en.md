@@ -364,11 +364,11 @@ Backend:
 
 Frontend:
 
-- `web/app/tests/models/conversations.test.ts`
+- `web/packages/app/tests/models/conversations.test.ts`
   - `applyIMEvent(room.messages_cleared)` clears target room messages/threads and does not affect other rooms.
-- `web/app/tests/hooks/useConversationController.test.ts`
+- `web/packages/app/tests/hooks/useConversationController.test.ts`
   - After local cleanup, the room remains selected and the thread panel closes.
-- `web/app/tests/components/ConversationPane.test.tsx`
+- `web/packages/app/tests/components/ConversationPane.test.tsx`
   - Room tools show "Clear messages".
   - Clicking it requires confirmation and does not directly delete the room.
   - Confirmation calls `/api/v1/rooms/{roomID}:clearMessages`, not `/api/v1/rooms/{roomID}/messages`.

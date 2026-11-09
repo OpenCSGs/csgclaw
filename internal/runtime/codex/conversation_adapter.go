@@ -35,10 +35,11 @@ func NewConversationAdapter(runtimeID string, backend ConversationBackend) contr
 type ConversationBackend interface {
 	EnsureEngineSession(ctx context.Context, runtimeID, conversationKey string) (string, error)
 	ExistingEngineSession(ctx context.Context, runtimeID, conversationKey string) (string, bool, error)
-	PromptTurn(ctx context.Context, runtimeID, sessionID, turnID string, blocks []PromptContentBlock, accepted func()) error
+	PromptTurn(ctx context.Context, runtimeID string, req PromptRequest) error
 	SubscribeSession(runtimeID, sessionID string) (<-chan activity.RuntimeEvent, func())
 	ResetConversation(ctx context.Context, runtimeID, conversationKey string) error
 	WorkspaceDir(runtimeID string) (string, error)
+	RuntimeDir(runtimeID string) (string, error)
 	PermissionBroker() PermissionBroker
 	UserInputBroker() UserInputBroker
 }
@@ -78,10 +79,16 @@ func (a *ConversationAdapter) Run(ctx context.Context, request contract.TurnRequ
 	var dispatchedState atomic.Bool
 	promptDone := make(chan error, 1)
 	go func() {
-		promptDone <- a.runtime.PromptTurn(runCtx, a.runtimeID, sessionID, string(request.ID), blocks, func() {
-			if dispatchedState.CompareAndSwap(false, true) {
-				close(accepted)
-			}
+		promptDone <- a.runtime.PromptTurn(runCtx, a.runtimeID, PromptRequest{
+			SessionID:           sessionID,
+			ClientUserMessageID: string(request.ID),
+			Prompt:              blocks,
+			TextOnlyUserInput:   request.Interaction == contract.InteractionTextOnly,
+			OnAccepted: func() {
+				if dispatchedState.CompareAndSwap(false, true) {
+					close(accepted)
+				}
+			},
 		})
 	}()
 
@@ -89,7 +96,7 @@ func (a *ConversationAdapter) Run(ctx context.Context, request contract.TurnRequ
 	promptReturned := false
 	runtimeDone := false
 	eventStreamClosed := false
-	var output conversationText
+	var output conversationOutput
 	var files []*contract.OutputFile
 	filesOwned := true
 	defer func() {
@@ -126,6 +133,9 @@ func (a *ConversationAdapter) Run(ctx context.Context, request contract.TurnRequ
 			promptReturned = true
 			dispatched = dispatchedState.Load()
 			if err != nil {
+				if restoreErr := output.restoreFailure(runCtx, sink, err); restoreErr != nil {
+					err = restoreErr
+				}
 				result := resultFromContext(runCtx, err)
 				result.Dispatched = dispatched
 				return result
@@ -168,7 +178,7 @@ func (a *ConversationAdapter) session(ctx context.Context, request contract.Turn
 	return sessionID, nil
 }
 
-func (a *ConversationAdapter) handleEvent(ctx context.Context, request contract.TurnRequest, sink contract.EventSink, event activity.RuntimeEvent, output *conversationText, files *[]*contract.OutputFile) *contract.TurnResult {
+func (a *ConversationAdapter) handleEvent(ctx context.Context, request contract.TurnRequest, sink contract.EventSink, event activity.RuntimeEvent, output *conversationOutput, files *[]*contract.OutputFile) *contract.TurnResult {
 	emit := func(turnEvent contract.TurnEvent) *contract.TurnResult {
 		if err := emitTurnEvent(ctx, sink, turnEvent); err != nil {
 			result := resultFromContext(ctx, err)
@@ -177,6 +187,13 @@ func (a *ConversationAdapter) handleEvent(ctx context.Context, request contract.
 		return nil
 	}
 	switch event.Kind {
+	case activity.RuntimeEventPromptCompleted:
+		if response, ok := event.Payload.(PromptResponse); ok {
+			if err := output.restore(ctx, sink, response.history); err != nil {
+				result := resultFromContext(ctx, err)
+				return &result
+			}
+		}
 	case activity.RuntimeEventPromptFailed:
 		message := strings.TrimSpace(event.Error)
 		if message == "" {
@@ -184,6 +201,10 @@ func (a *ConversationAdapter) handleEvent(ctx context.Context, request contract.
 		}
 		code := contract.ErrorRuntimeFailed
 		eventErr, _ := event.Payload.(error)
+		if err := output.restoreFailure(ctx, sink, eventErr); err != nil {
+			result := resultFromContext(ctx, err)
+			return &result
+		}
 		if errors.Is(eventErr, errContextCompaction) {
 			code = contract.ErrorCode("context_compaction_failed")
 		}
@@ -202,8 +223,12 @@ func (a *ConversationAdapter) handleEvent(ctx context.Context, request contract.
 			result := failedResult(contract.ErrorRuntimeFailed, "Codex returned invalid structured output")
 			return &result
 		}
-		if artifact.RequestUserInput != nil {
-			if result := emit(contract.TurnEvent{Kind: contract.TurnEventOutputItem, Text: event.Text, Output: &contract.OutputItem{Kind: contract.OutputItemRequestUserInput, Payload: *artifact.RequestUserInput}}); result != nil {
+		if form := artifact.RequestUserInput; form != nil {
+			if request.Interaction == contract.InteractionTextOnly {
+				output.fallback = &conversationQuestionFallback{
+					questions: form.Questions, sourceID: event.ToolCallID, sourceText: event.Text,
+				}
+			} else if result := emit(contract.TurnEvent{Kind: contract.TurnEventOutputItem, Text: event.Text, Output: &contract.OutputItem{Kind: contract.OutputItemRequestUserInput, Payload: *form}}); result != nil {
 				return result
 			}
 		}
@@ -264,9 +289,13 @@ func (a *ConversationAdapter) handleEvent(ctx context.Context, request contract.
 	case activity.RuntimeEventThoughtDelta:
 		return emit(contract.TurnEvent{Kind: contract.TurnEventThoughtDelta, Thought: event.Text})
 	case activity.RuntimeEventToolCallStart:
-		return emit(contract.TurnEvent{Kind: contract.TurnEventToolCallStart, Tool: toolActivity(event)})
+		tool := toolActivity(event)
+		output.observeTool(contract.TurnEventToolCallStart, tool)
+		return emit(contract.TurnEvent{Kind: contract.TurnEventToolCallStart, Tool: tool})
 	case activity.RuntimeEventToolCallUpdate:
-		return emit(contract.TurnEvent{Kind: contract.TurnEventToolCallUpdate, Tool: toolActivity(event)})
+		tool := toolActivity(event)
+		output.observeTool(contract.TurnEventToolCallUpdate, tool)
+		return emit(contract.TurnEvent{Kind: contract.TurnEventToolCallUpdate, Tool: tool})
 	case activity.RuntimeEventTokenUsage, activity.RuntimeEventContextUsage, activity.RuntimeEventPlanUpdate, activity.RuntimeEventActionDecision, activity.RuntimeEventUserInputResolved:
 		return emit(contract.TurnEvent{Kind: contract.TurnEventActivityUpdate, Activity: &contract.ActivityUpdate{
 			ID: event.ActionID + event.UserInputID, Kind: string(event.Kind), Status: event.ActionStatus + event.UserInputStatus, Payload: event.Payload,
@@ -386,7 +415,7 @@ func runtimeOutputMediaType(requested, name string, prefix []byte) (string, erro
 }
 
 func (a *ConversationAdapter) handleInteraction(ctx context.Context, policy contract.InteractionPolicy, interaction contract.InteractionRequest, sink contract.EventSink) *contract.TurnResult {
-	switch policy {
+	switch policy.For(interaction.Kind) {
 	case contract.InteractionReject:
 		result := failedResult(contract.ErrorInteractionUnsupported, "Runtime interaction is not supported by this caller")
 		return &result
@@ -492,46 +521,65 @@ func runtimeEventPhase(event activity.RuntimeEvent) string {
 var safeInputNamePattern = regexp.MustCompile(`[^A-Za-z0-9._-]+`)
 
 func (a *ConversationAdapter) prepareInput(ctx context.Context, turnID contract.TurnID, input []contract.InputPart) ([]PromptContentBlock, func(), *contract.TurnError) {
-	needsFiles := false
+	needsWorkspace, needsCopies := false, false
 	for _, part := range input {
-		needsFiles = needsFiles || part.Kind == contract.InputPartFile
+		needsCopies = needsCopies || part.Kind == contract.InputPartFile
+		needsWorkspace = needsWorkspace || needsCopies || part.Kind == contract.InputPartWorkspaceFile
 	}
-	cleanup := func() {}
-	var turnDir string
+	var turnDir, workspace string
 	var workspaceRoot *os.Root
-	var workspace string
-	if needsFiles {
+	var previewDirs []string
+	cleanup := sync.OnceFunc(func() {
+		for _, dir := range previewDirs {
+			_ = os.RemoveAll(dir)
+		}
+		if workspaceRoot != nil {
+			if turnDir != "" {
+				_ = workspaceRoot.RemoveAll(turnDir)
+			}
+			_ = workspaceRoot.Close()
+		}
+	})
+	if needsWorkspace {
 		var err error
 		workspace, err = a.runtime.WorkspaceDir(a.runtimeID)
 		if err != nil {
 			return nil, cleanup, a.runtimeInputFileUnavailable("resolve_workspace", err)
 		}
+	}
+	if needsCopies {
+		var err error
 		workspaceRoot, err = os.OpenRoot(workspace)
 		if err != nil {
 			return nil, cleanup, a.runtimeInputFileUnavailable("open_workspace", err)
 		}
 		inputRoot := filepath.Join(".csgclaw", "engine-inputs")
 		if err := workspaceRoot.MkdirAll(inputRoot, 0o700); err != nil {
-			_ = workspaceRoot.Close()
+			cleanup()
 			return nil, cleanup, a.runtimeInputFileUnavailable("prepare_input_root", err)
 		}
 		turnDir, err = makeRootTempDir(workspaceRoot, inputRoot, safeInputName(string(turnID))+"-")
 		if err != nil {
-			_ = workspaceRoot.Close()
+			cleanup()
 			return nil, cleanup, a.runtimeInputFileUnavailable("prepare_turn_directory", err)
-		}
-		var cleanupOnce sync.Once
-		cleanup = func() {
-			cleanupOnce.Do(func() {
-				_ = workspaceRoot.RemoveAll(turnDir)
-				_ = workspaceRoot.Close()
-			})
 		}
 	}
 	blocks := make([]PromptContentBlock, 0, len(input))
 	for index, part := range input {
 		if part.Kind == contract.InputPartText {
 			blocks = append(blocks, TextBlock(part.Text))
+			continue
+		}
+		if part.Kind == contract.InputPartWorkspaceFile {
+			attachments, previewDir, err := a.workspacePromptBlocks(ctx, workspace, part.WorkspaceFile)
+			if err != nil {
+				cleanup()
+				return nil, func() {}, a.runtimeInputFileUnavailable("workspace_input", err)
+			}
+			if previewDir != "" {
+				previewDirs = append(previewDirs, previewDir)
+			}
+			blocks = append(blocks, attachments...)
 			continue
 		}
 		if part.File == nil || part.File.Resolved == nil {

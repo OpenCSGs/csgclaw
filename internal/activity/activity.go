@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"time"
 )
 
@@ -79,6 +80,7 @@ type UserInputStatus string
 
 const (
 	UserInputStatusPending     UserInputStatus = "pending"
+	UserInputStatusSubmitting  UserInputStatus = "submitting"
 	UserInputStatusAnswered    UserInputStatus = "answered"
 	UserInputStatusSkipped     UserInputStatus = "skipped"
 	UserInputStatusExpired     UserInputStatus = "expired"
@@ -261,6 +263,21 @@ type RuntimeSessionEventSubscriber interface {
 	SubscribeSession(runtimeID, sessionID string) (<-chan RuntimeEvent, func())
 }
 
+// TerminalToolStatus returns the outcome of a finished tool call, or an empty
+// string while the outcome is unknown.
+func TerminalToolStatus(status string) string {
+	switch strings.ToLower(strings.TrimSpace(status)) {
+	case "completed", "complete", "success", "succeeded":
+		return "completed"
+	case "failed", "error":
+		return "failed"
+	case "canceled", "cancelled", "declined", "interrupted":
+		return "canceled"
+	default:
+		return ""
+	}
+}
+
 func RuntimeEventRequiresReliableDelivery(event RuntimeEvent) bool {
 	switch event.Kind {
 	case RuntimeEventTextDelta, RuntimeEventContextUsage, RuntimeEventTokenUsage,
@@ -268,8 +285,10 @@ func RuntimeEventRequiresReliableDelivery(event RuntimeEvent) bool {
 		RuntimeEventUserInputRequest, RuntimeEventUserInputResolved,
 		RuntimeEventStructuredOutput, RuntimeEventFileOutput:
 		return true
-	case RuntimeEventPromptCompleted, RuntimeEventPromptFailed:
+	case RuntimeEventToolCallStart, RuntimeEventPromptCompleted, RuntimeEventPromptFailed:
 		return true
+	case RuntimeEventToolCallUpdate:
+		return TerminalToolStatus(event.ToolStatus) != ""
 	default:
 		return false
 	}

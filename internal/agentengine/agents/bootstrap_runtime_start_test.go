@@ -60,3 +60,22 @@ func TestBootstrapDefersConfiguredManagerUntilServing(t *testing.T) {
 		t.Fatalf("Manager not started after serving: starts=%d status=%s model=%s", starts, manager.Status, manager.AgentProfile.ModelID)
 	}
 }
+
+func TestManagerStartupUsesConnectedCatalogWithoutGlobalDefault(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	svc, err := NewControllerWithLLM(config.LLMConfig{Providers: map[string]config.ProviderConfig{
+		ModelProviderIDOpenCSG: {Status: ModelProviderStatusConnected, Models: []string{"chat", "auto", "image"}, ImageModels: []string{"image"}},
+		"unavailable":          {Status: ModelProviderStatusFailed, Models: []string{"stale"}},
+	}}, config.ServerConfig{}, "manager:test", filepath.Join(t.TempDir(), "agents.json"), WithDeferredManagerRuntimeStart())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer svc.Close()
+	manager, err := svc.EnsureManager(context.Background(), false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !manager.ProfileComplete || manager.AgentProfile.ModelProviderID != ModelProviderIDOpenCSG || manager.AgentProfile.ModelID != "auto" {
+		t.Fatalf("manager bootstrap ignored connected catalog: complete=%v provider=%s model=%s", manager.ProfileComplete, manager.AgentProfile.ModelProviderID, manager.AgentProfile.ModelID)
+	}
+}

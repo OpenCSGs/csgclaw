@@ -109,11 +109,16 @@ func TestWorkspaceOpenCredentialsIndependentOfNoAuth(t *testing.T) {
 					}
 					body, _ := io.ReadAll(response.Body)
 					response.Body.Close()
-					if response.StatusCode != tc.status {
-						t.Errorf("HTTP status %d, want %d: %s", response.StatusCode, tc.status, body)
+					expectStatus := tc.status
+					hasCredential := tc.authorization == "Bearer test-server-token" || tc.authorization == "Bearer test-desktop-token"
+					if !noAuth && !hasCredential {
+						expectStatus = http.StatusUnauthorized
+					}
+					if response.StatusCode != expectStatus {
+						t.Errorf("HTTP status %d, want %d: %s", response.StatusCode, expectStatus, body)
 					}
 					wantLaunches := before
-					if tc.status == http.StatusNoContent {
+					if expectStatus == http.StatusNoContent {
 						wantLaunches++
 					}
 					if launches.Load() != wantLaunches {
@@ -137,6 +142,12 @@ func TestWorkspaceOpenCredentialsIndependentOfNoAuth(t *testing.T) {
 						var location workspaceLocation
 						err = json.NewDecoder(metadata.Body).Decode(&location)
 						metadata.Body.Close()
+						if !noAuth && !hasCredential {
+							if metadata.StatusCode != http.StatusUnauthorized {
+								t.Errorf("metadata status %d, want unauthorized", metadata.StatusCode)
+							}
+							continue
+						}
 						if metadata.StatusCode != http.StatusOK || err != nil {
 							t.Fatalf("metadata: %d, %v", metadata.StatusCode, err)
 						}
@@ -155,19 +166,19 @@ func TestWorkspaceOpenCredentialRequiresConfiguredToken(t *testing.T) {
 	for _, noAuth := range []bool{false, true} {
 		h := &Handler{serverNoAuth: noAuth}
 		for _, header := range []string{"", "Bearer ", "Bearer invalid", "Basic invalid"} {
-			if h.validWorkspaceOpenCredential(header) {
+			if h.validServerCredential(header) {
 				t.Errorf("NoAuth=%t accepted unset token %q", noAuth, header)
 			}
 		}
 		h.serverAccessToken = " server-secret "
 		h.desktopSessionToken = " desktop-secret "
 		for _, header := range []string{"Bearer server-secret", "Bearer desktop-secret"} {
-			if !h.validWorkspaceOpenCredential(header) {
+			if !h.validServerCredential(header) {
 				t.Errorf("NoAuth=%t denied configured token", noAuth)
 			}
 		}
 		for _, header := range []string{"Bearer invalid", "Basic server-secret", "bearer server-secret", "Bearer server-secret ", " Bearer server-secret", "Bearer "} {
-			if h.validWorkspaceOpenCredential(header) {
+			if h.validServerCredential(header) {
 				t.Errorf("NoAuth=%t accepted malformed token %q", noAuth, header)
 			}
 		}

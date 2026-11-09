@@ -34,7 +34,7 @@ Agent 原始 Markdown
   └─ ⑤ 会话右侧面板展示该文档名和片段，挤窄会话内容
 ```
 
-CSGClaw 中，①②由 [citations.ts](../../web/app/src/models/citations.ts) 的 `parseCitationDocument` 完成，返回移除已匹配定义后的正文及 `sources` 映射。③④由 [markdown.ts](../../web/app/src/components/business/MessageContent/markdown.ts) 的 `renderMarkdownWithCitations` 完成：按编号生成 `data-citation-id` 按钮，对标题转义并经 DOMPurify 净化。点击由 [MessageContent.tsx](../../web/app/src/components/business/MessageContent/MessageContent.tsx) 处理；[ConversationPane.tsx](../../web/app/src/pages/ConversationPage/components/ConversationPane/ConversationPane.tsx) 打开 [CitationSources.tsx](../../web/app/src/components/business/MessageContent/CitationSources.tsx) 来源面板，每次只展示当前点击的一条引用。
+CSGClaw 中，①②由 [citations.ts](../../web/packages/app/src/models/citations.ts) 的 `parseCitationDocument` 完成，返回移除已匹配定义后的正文及 `sources` 映射。③④由 [markdown.ts](../../web/packages/app/src/components/business/MessageContent/markdown.ts) 的 `renderMarkdownWithCitations` 完成：按编号生成 `data-citation-id` 按钮，对标题转义并经 DOMPurify 净化。点击由 [MessageContent.tsx](../../web/packages/app/src/components/business/MessageContent/MessageContent.tsx) 处理；[ConversationPane.tsx](../../web/packages/app/src/components/business/ConversationWorkspace/ConversationPane/ConversationPane.tsx) 打开 [CitationSources.tsx](../../web/packages/app/src/components/business/MessageContent/CitationSources.tsx) 来源面板，每次只展示当前点击的一条引用。
 
 仅当正文标记与带双引号的定义按编号配对时，才渲染引用；缺少定义或定义未加双引号时，不生成可点击引用。代码围栏内的内容不参与解析。前端只使用回答文本，不请求额外来源接口。
 

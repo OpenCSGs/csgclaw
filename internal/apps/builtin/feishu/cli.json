@@ -27,11 +27,11 @@
         "sha256": "497641f0a4bd53952a36bca9b452018df2259bdf32902d1f3de7803385516913"
       },
       "windows-amd64": {
-        "url": "https://github.com/larksuite/cli/releases/download/v1.0.97/lark-cli-1.0.97-windows-amd64.zip",
+        "url": "https://registry.npmmirror.com/-/binary/lark-cli/v1.0.97/lark-cli-1.0.97-windows-amd64.zip",
         "sha256": "88ee81ec73be12432b2297df010098b5069e5ff0403123e1cd308ad0061f1397"
       },
       "windows-arm64": {
-        "url": "https://github.com/larksuite/cli/releases/download/v1.0.97/lark-cli-1.0.97-windows-arm64.zip",
+        "url": "https://registry.npmmirror.com/-/binary/lark-cli/v1.0.97/lark-cli-1.0.97-windows-arm64.zip",
         "sha256": "4fef85e999fc54de1234b0bb622766f096870db2b86a396545e01a4156abfb3b"
       }
     },
@@ -61,6 +61,7 @@
         "zh"
       ],
       "stage": "app_authorization",
+      "authorization_url_pattern": "^https://open[.]feishu[.]cn/page/cli[?]user_code=[^&#[:space:]]+([&#]|$)",
       "unless": {
         "args": [
           "auth",

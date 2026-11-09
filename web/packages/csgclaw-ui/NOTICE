@@ -1,0 +1,6 @@
+csgclaw-ui
+
+Includes frontend components and theme tokens from OpenCSGs/csgclaw.
+Source commit: c005cf1b4c54741573321699227730c14e68dee0.
+The components and styles were adapted for standalone distribution.
+See LICENSE for the original terms and conditions.

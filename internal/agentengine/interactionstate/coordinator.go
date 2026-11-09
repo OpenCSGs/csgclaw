@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -17,8 +18,9 @@ import (
 // of Runtime-native request brokers. It is also used by the in-memory client.
 // Only opaque Agent/conversation/turn identities cross this boundary.
 type Coordinator struct {
-	mu    sync.Mutex
-	items map[interactionIdentity]*interactionRecord
+	mu           sync.Mutex
+	items        map[interactionIdentity]*interactionRecord
+	cleanupTimer *time.Timer
 }
 
 type interactionIdentity struct {
@@ -32,6 +34,7 @@ type interactionRecord struct {
 	resolve       func(context.Context, contract.InteractionRequest, contract.InteractionResolution) *contract.TurnError
 	notify        func(contract.InteractionRequest)
 	resolving     bool
+	continuing    bool
 	resolveCancel context.CancelFunc
 	terminal      bool
 	finishedAt    time.Time
@@ -68,7 +71,7 @@ func (c *Coordinator) Register(agentID string, key contract.ConversationKey, tur
 
 // CreateDetached activates validated output only after its Turn succeeded.
 // It does not create an IM identity, access a Runtime session, or execute a Turn.
-func (c *Coordinator) CreateDetached(agentID string, key contract.ConversationKey, turnID contract.TurnID, args activity.RequestUserInputArgs, notify func(contract.InteractionRequest)) (contract.InteractionRequest, error) {
+func (c *Coordinator) CreateDetached(agentID string, key contract.ConversationKey, turnID contract.TurnID, args activity.RequestUserInputArgs, policy contract.InteractionPolicy, notify func(contract.InteractionRequest)) (contract.InteractionRequest, error) {
 	questions := make([]activity.UserInputQuestionSnapshot, 0, len(args.Questions))
 	for _, q := range args.Questions {
 		item := activity.UserInputQuestionSnapshot{ID: q.ID, Header: q.Header, Question: q.Question, IsOther: q.IsOther, IsSecret: q.IsSecret}
@@ -87,16 +90,49 @@ func (c *Coordinator) CreateDetached(agentID string, key contract.ConversationKe
 	}
 	now := time.Now().UTC()
 	snapshot := activity.UserInputSnapshot{ID: "question-" + hex.EncodeToString(random[:]), Status: activity.UserInputStatusPending, Questions: questions, RequestedAt: now}
+	const maxLifetime = 24 * time.Hour
+	var lifetime time.Duration
 	if args.AutoResolutionMS != nil && *args.AutoResolutionMS > 0 {
-		if *args.AutoResolutionMS > uint64((24*time.Hour)/time.Millisecond) {
+		if *args.AutoResolutionMS > uint64(maxLifetime/time.Millisecond) {
 			return contract.InteractionRequest{}, fmt.Errorf("interaction deadline exceeds 24 hours")
 		}
-		deadline := now.Add(time.Duration(*args.AutoResolutionMS) * time.Millisecond)
+		lifetime = time.Duration(*args.AutoResolutionMS) * time.Millisecond
+	}
+	if policy == contract.InteractionUserInputOnly {
+		// Session clients poll the coordinator after their HTTP response ends.
+		// Keep only the form, never the completed turn or its response writer.
+		notify = nil
+		if lifetime == 0 {
+			lifetime = maxLifetime
+		}
+	}
+	if lifetime != 0 {
+		deadline := now.Add(lifetime)
 		snapshot.AutoResolveAt = &deadline
 	}
 	request := contract.InteractionRequest{ID: snapshot.ID, Kind: contract.InteractionUserInput, Detached: true, Title: "User input required", Payload: snapshot}
 	c.Register(agentID, key, turnID, request, nil, notify)
 	return Clone(request), nil
+}
+
+func (c *Coordinator) Pending(agentID string, key contract.ConversationKey) []contract.InteractionRequest {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.pruneLocked()
+	var requests []contract.InteractionRequest
+	for identity, record := range c.items {
+		if identity.agentID != agentID || identity.key != key || record.terminal {
+			continue
+		}
+		request := Clone(record.request)
+		if snapshot, ok := request.Payload.(activity.UserInputSnapshot); ok && record.resolving {
+			snapshot.Status = activity.UserInputStatusSubmitting
+			request.Payload = snapshot
+		}
+		requests = append(requests, request)
+	}
+	sort.Slice(requests, func(i, j int) bool { return requests[i].ID < requests[j].ID })
+	return requests
 }
 
 func (c *Coordinator) Get(agentID string, key contract.ConversationKey, id string) (contract.InteractionRequest, error) {
@@ -143,7 +179,10 @@ func (c *Coordinator) Resolve(ctx context.Context, agentID string, resolution co
 		}
 		return &contract.TurnError{Code: contract.ErrorInvalidRequest, Message: err.Error()}
 	}
+	snapshot, _ := next.Payload.(activity.UserInputSnapshot)
+	continuing := next.Detached && resolution.ContinueDetached != nil && snapshot.Status == activity.UserInputStatusAnswered
 	item.resolving = true
+	item.continuing = continuing
 	resolveCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	item.resolveCancel = cancel
@@ -161,23 +200,34 @@ func (c *Coordinator) Resolve(ctx context.Context, agentID string, resolution co
 	if err == nil {
 		err = resolveCtx.Err()
 	}
-	if err == nil && resolve != nil {
+	delivered := false
+	if err == nil && continuing {
+		delivered = resolution.ContinueDetached(resolveCtx, Clone(next))
+		if !delivered {
+			err = &contract.TurnError{Code: contract.ErrorRuntimeFailed, Message: "answer was not dispatched"}
+		}
+	} else if err == nil && resolve != nil {
 		if runtimeErr := resolve(resolveCtx, current, resolution); runtimeErr != nil {
 			err = runtimeErr
 		}
 	}
 	c.mu.Lock()
 	item.resolving = false
+	item.continuing = false
 	item.resolveCancel = nil
 	if item.terminal {
 		c.mu.Unlock()
 		return &contract.TurnError{Code: contract.ErrorInteractionGone, Message: "interaction was interrupted"}
 	}
-	if err == nil {
+	if err == nil && !delivered {
 		err = resolveCtx.Err()
 	}
 	if err != nil {
+		expired := continuing && snapshot.AutoResolveAt != nil && !time.Now().Before(*snapshot.AutoResolveAt)
 		c.mu.Unlock()
+		if expired {
+			c.expire(id)
+		}
 		return err
 	}
 	item.request = next
@@ -269,6 +319,41 @@ func (c *Coordinator) Observe(agentID string, key contract.ConversationKey, even
 	}
 }
 
+// BeginTurn orders a new turn against acceptance of detached answers. A responder
+// owns the next turn until its runtime acknowledges dispatch or fails to start.
+func (c *Coordinator) BeginTurn(agentID string, turn contract.TurnRequest) *contract.TurnError {
+	key := turn.ConversationKey
+	c.mu.Lock()
+	if turn.RespondingTo != "" {
+		item := c.items[interactionIdentity{agentID, key, turn.RespondingTo}]
+		reserved := item != nil && item.continuing && !item.terminal
+		c.mu.Unlock()
+		if !reserved {
+			return &contract.TurnError{Code: contract.ErrorInteractionGone, Message: "detached answer is no longer reserved"}
+		}
+		return nil
+	}
+	for id, item := range c.items {
+		if id.agentID != agentID || id.key != key || item.terminal {
+			continue
+		}
+		if turn.PreservePendingInteractions {
+			c.mu.Unlock()
+			return &contract.TurnError{Code: contract.ErrorInteractionPending, Message: "conversation has a pending interaction"}
+		}
+		if item.continuing {
+			c.mu.Unlock()
+			return &contract.TurnError{Code: contract.ErrorConversationBusy, Message: "conversation has a pending answer continuation"}
+		}
+	}
+	notifications := c.interruptMatchingLocked(agentID, key, "", true, false)
+	c.mu.Unlock()
+	for _, notify := range notifications {
+		notify()
+	}
+	return nil
+}
+
 // Interrupt invalidates requests in the chosen scope; empty key/turn matches all.
 func (c *Coordinator) Interrupt(agentID string, key contract.ConversationKey, turnID contract.TurnID, detachedOnly bool) {
 	c.interrupt(agentID, key, turnID, detachedOnly, false)
@@ -282,8 +367,16 @@ func (c *Coordinator) CompleteTurn(agentID string, key contract.ConversationKey,
 }
 
 func (c *Coordinator) interrupt(agentID string, key contract.ConversationKey, turnID contract.TurnID, detachedOnly, completed bool) {
-	var notifications []func()
 	c.mu.Lock()
+	notifications := c.interruptMatchingLocked(agentID, key, turnID, detachedOnly, completed)
+	c.mu.Unlock()
+	for _, notify := range notifications {
+		notify()
+	}
+}
+
+func (c *Coordinator) interruptMatchingLocked(agentID string, key contract.ConversationKey, turnID contract.TurnID, detachedOnly, completed bool) []func() {
+	var notifications []func()
 	for id, item := range c.items {
 		if id.agentID != agentID || (key != "" && id.key != key) || (turnID != "" && item.turnID != turnID) || item.terminal || (detachedOnly && !item.request.Detached) {
 			continue
@@ -297,15 +390,14 @@ func (c *Coordinator) interrupt(agentID string, key contract.ConversationKey, tu
 			notifications = append(notifications, func() { notify(request) })
 		}
 	}
-	c.mu.Unlock()
-	for _, notify := range notifications {
-		notify()
-	}
+	return notifications
 }
 func (c *Coordinator) expire(id interactionIdentity) {
 	c.mu.Lock()
 	item := c.items[id]
-	if item == nil || item.terminal {
+	// The deadline applies to submitting an answer. An accepted answer may take
+	// longer to execute. Resolve rechecks the deadline if dispatch fails.
+	if item == nil || item.terminal || item.continuing {
 		c.mu.Unlock()
 		return
 	}
@@ -341,6 +433,9 @@ func (c *Coordinator) interruptLocked(item *interactionRecord, expired bool) {
 	}
 	c.finishLocked(item)
 }
+
+const terminalRetention = 10 * time.Minute
+
 func (c *Coordinator) finishLocked(item *interactionRecord) {
 	item.terminal = true
 	item.finishedAt = time.Now()
@@ -348,14 +443,38 @@ func (c *Coordinator) finishLocked(item *interactionRecord) {
 		item.timer.Stop()
 	}
 	item.resolve = nil
-}
-func (c *Coordinator) pruneLocked() {
-	for id, item := range c.items {
-		if item.terminal && time.Since(item.finishedAt) > 10*time.Minute {
-			delete(c.items, id)
-		}
+	if c.cleanupTimer == nil {
+		c.cleanupTimer = time.AfterFunc(terminalRetention, c.cleanupTerminal)
 	}
 }
+
+// Remove terminal records even when the last client has disconnected.
+func (c *Coordinator) cleanupTerminal() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.cleanupTimer = nil
+	if c.pruneLocked() {
+		c.cleanupTimer = time.AfterFunc(terminalRetention, c.cleanupTerminal)
+	}
+}
+
+// pruneLocked reports whether another sweep is needed for terminal records.
+func (c *Coordinator) pruneLocked() bool {
+	now := time.Now()
+	retained := false
+	for id, item := range c.items {
+		if !item.terminal {
+			continue
+		}
+		if now.Sub(item.finishedAt) >= terminalRetention {
+			delete(c.items, id)
+		} else {
+			retained = true
+		}
+	}
+	return retained
+}
+
 func interactionGone(request contract.InteractionRequest) bool {
 	switch snapshot := request.Payload.(type) {
 	case activity.UserInputSnapshot:

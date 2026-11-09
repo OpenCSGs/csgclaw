@@ -31,6 +31,9 @@ type LegacyBot struct {
 }
 
 type User struct {
+	AgentState   string        `json:"agent_state,omitempty"`
+	AgentID      string        `json:"agent_id,omitempty"`
+	DeletedAt    *time.Time    `json:"deleted_at,omitempty"`
 	ID           string        `json:"id"`
 	Name         string        `json:"name"`
 	Description  string        `json:"description,omitempty"`
@@ -78,6 +81,8 @@ type Message struct {
 	Thread          *ThreadSummary      `json:"thread,omitempty"`
 	Attachments     []MessageAttachment `json:"attachments,omitempty"`
 }
+
+const MaxAttachmentFileBytes = 1 << 30
 
 type MessageAttachment struct {
 	ID            string    `json:"id"`
@@ -199,7 +204,15 @@ func (room Room) IsOnDemand() bool {
 	return NormalizeRoomType(room.Type) == RoomTypeOnDemand
 }
 
+// CloudAgentReference identifies a server-owned Relay connection, never credentials.
+type CloudAgentReference struct {
+	AgentID      string `json:"agent_id"`
+	ConnectionID string `json:"connection_id"`
+	UserID       string `json:"user_id,omitempty"`
+}
+
 type Room struct {
+	CloudAgent *CloudAgentReference `json:"cloud_agent,omitempty"`
 	// CreationWorkspaceDir retains the requested path (empty means automatic).
 	// It is private persistence metadata used to validate creation retries.
 	CreationWorkspaceDir *string `json:"-"`
@@ -238,19 +251,20 @@ type CreateRoomTaskRequest struct {
 }
 
 type CreateRoomRequest struct {
-	SourceTeamID       string             `json:"source_team_id,omitempty"`
-	CollaborationGuide string             `json:"collaboration_guide,omitempty"`
-	Configuration      *taskconfig.Config `json:"configuration,omitempty"`
-	IsDirect           bool               `json:"is_direct,omitempty"`
-	TaskSession        bool               `json:"task_session,omitempty"`
-	ClientRequestID    string             `json:"client_request_id,omitempty"`
-	Type               RoomType           `json:"type"`
-	ManagerID          string             `json:"manager_id,omitempty"`
-	Title              string             `json:"title"`
-	Description        string             `json:"description"`
-	CreatorID          string             `json:"creator_id"`
-	MemberIDs          []string           `json:"member_ids"`
-	Locale             string             `json:"locale"`
+	CloudAgent         *CloudAgentReference `json:"cloud_agent,omitempty"`
+	SourceTeamID       string               `json:"source_team_id,omitempty"`
+	CollaborationGuide string               `json:"collaboration_guide,omitempty"`
+	Configuration      *taskconfig.Config   `json:"configuration,omitempty"`
+	IsDirect           bool                 `json:"is_direct,omitempty"`
+	TaskSession        bool                 `json:"task_session,omitempty"`
+	ClientRequestID    string               `json:"client_request_id,omitempty"`
+	Type               RoomType             `json:"type"`
+	ManagerID          string               `json:"manager_id,omitempty"`
+	Title              string               `json:"title"`
+	Description        string               `json:"description"`
+	CreatorID          string               `json:"creator_id"`
+	MemberIDs          []string             `json:"member_ids"`
+	Locale             string               `json:"locale"`
 }
 
 type UpdateRoomRequest struct {
@@ -320,7 +334,7 @@ type ConfigSettingsResponse struct {
 	AccessTokenSet            bool     `json:"access_token_set,omitempty"`
 	AccessTokenPreview        string   `json:"access_token_preview,omitempty"`
 	ShowUpgrade               bool     `json:"show_upgrade"`
-	SandboxProvider           string   `json:"sandbox_provider"`
+	SandboxProvider           string   `json:"sandbox_provider,omitempty"`
 	SupportedSandboxProviders []string `json:"supported_sandbox_providers,omitempty"`
 	HubLocalPath              string   `json:"hub_local_path"`
 	HubOfficialURLEffective   string   `json:"hub_official_url_effective,omitempty"`
@@ -333,7 +347,7 @@ type UpdateConfigSettingsRequest struct {
 	AdvertiseBaseURL       string `json:"advertise_base_url,omitempty"`
 	AccessToken            string `json:"access_token,omitempty"`
 	ShowUpgrade            bool   `json:"show_upgrade"`
-	SandboxProvider        string `json:"sandbox_provider"`
+	SandboxProvider        string `json:"sandbox_provider,omitempty"`
 	HubLocalPath           string `json:"hub_local_path,omitempty"`
 	DefaultManagerTemplate string `json:"default_manager_template"`
 	DefaultWorkerTemplate  string `json:"default_worker_template"`

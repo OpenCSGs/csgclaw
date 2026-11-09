@@ -83,7 +83,7 @@ type commandOutput struct {
 	data    bytes.Buffer
 	domains []string
 	notify  func(string)
-	last    string
+	seen    map[string]bool
 }
 
 func (w *commandOutput) Write(data []byte) (int, error) {
@@ -96,8 +96,11 @@ func (w *commandOutput) Write(data []byte) (int, error) {
 	if w.notify != nil {
 		for _, raw := range urlPattern.FindAllString(w.data.String(), -1) {
 			raw = strings.TrimRight(raw, ".,);]")
-			if AllowedAuthorizationURL(raw, w.domains) && raw != w.last {
-				w.last = raw
+			if AllowedAuthorizationURL(raw, w.domains) && !w.seen[raw] {
+				if w.seen == nil {
+					w.seen = make(map[string]bool)
+				}
+				w.seen[raw] = true
 				w.notify(raw)
 			}
 		}

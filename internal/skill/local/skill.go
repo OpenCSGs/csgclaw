@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"csgclaw/internal/config"
+	"csgclaw/internal/skill/discovery"
 	skillinstall "csgclaw/internal/skill/installstate"
 
 	"gopkg.in/yaml.v3"
@@ -21,10 +22,12 @@ const skillFileName = "SKILL.md"
 var ErrSkillInvalid = errors.New("skill directory must contain SKILL.md")
 
 type SkillSummary struct {
-	Name        string `json:"name"`
-	Description string `json:"description,omitempty"`
-	Error       string `json:"error,omitempty"`
-	Source      string `json:"source,omitempty"`
+	Name        string           `json:"name"`
+	Description string           `json:"description,omitempty"`
+	Error       string           `json:"error,omitempty"`
+	Source      string           `json:"source,omitempty"`
+	Discovery   *discovery.Skill `json:"discovery,omitempty"`
+	Directory   string           `json:"directory,omitempty"`
 }
 
 func SkillsRoot() (string, error) {
@@ -39,6 +42,14 @@ func List(root string) ([]SkillSummary, error) {
 	root = strings.TrimSpace(root)
 	if root == "" {
 		return nil, fmt.Errorf("skills root is required")
+	}
+	var discovered []discovery.Skill
+	if discovery.IsGlobal(root) {
+		var err error
+		discovered, err = discovery.Sync(root)
+		if err != nil {
+			return nil, err
+		}
 	}
 	entries, err := os.ReadDir(root)
 	if err != nil {
@@ -72,12 +83,35 @@ func List(root string) ([]SkillSummary, error) {
 			Name:        entry.Name(),
 			Description: description,
 			Source:      records[entry.Name()].SourceKind(),
+			Directory:   absoluteSkillDirectory(filepath.Join(root, entry.Name())),
 		})
+	}
+	for _, found := range discovered {
+		index := slices.IndexFunc(items, func(item SkillSummary) bool { return strings.EqualFold(item.Name, found.Name) })
+		if index >= 0 {
+			current, err := discovery.ReadDefinition(filepath.Join(root, items[index].Name))
+			if err != nil || discovery.Compare(current, found) >= 0 {
+				continue
+			}
+			items = slices.Delete(items, index, index+1)
+		}
+		items = append(items, SkillSummary{Name: found.Name, Description: found.Description, Source: "discovered", Discovery: &found, Directory: found.Path})
 	}
 	slices.SortFunc(items, func(left, right SkillSummary) int {
 		return strings.Compare(left.Name, right.Name)
 	})
 	return items, nil
+}
+
+func absoluteSkillDirectory(dir string) string {
+	if resolved, err := filepath.EvalSymlinks(dir); err == nil {
+		dir = resolved
+	}
+	abs, err := filepath.Abs(dir)
+	if err != nil {
+		return ""
+	}
+	return abs
 }
 
 func Delete(root, name string) error {
@@ -89,8 +123,17 @@ func Delete(root, name string) error {
 	if err != nil {
 		return err
 	}
+	if discovery.IsGlobal(root) {
+		if found, err := Discovered(root, cleanName); err != nil {
+			return err
+		} else if found != nil {
+			return discovery.Ignore(root, cleanName)
+		}
+	}
 	return skillinstall.Update(root, cleanName, nil, func() error {
-		skillDir, err := ResolveDir(root, cleanName)
+		// Never use external source resolution for a destructive operation.
+		// A source can appear or change between validation and this transaction.
+		skillDir, err := resolveInstalledDir(root, cleanName)
 		if err != nil {
 			return err
 		}
@@ -119,6 +162,15 @@ func ResolveDir(root, name string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	if found, err := Discovered(root, cleanName); err != nil {
+		return "", err
+	} else if found != nil {
+		return found.Path, nil
+	}
+	return resolveInstalledDir(root, cleanName)
+}
+
+func resolveInstalledDir(root, cleanName string) (string, error) {
 	skillDir := filepath.Join(root, cleanName)
 	info, err := os.Stat(skillDir)
 	if err != nil {
@@ -179,4 +231,40 @@ func extractFrontmatter(data []byte) ([]byte, bool) {
 		return nil, false
 	}
 	return rest[:end], true
+}
+
+// Discovered resolves the same winning source as List, never an arbitrary path.
+func Discovered(root, name string) (*discovery.Skill, error) {
+	if !discovery.IsGlobal(root) {
+		return nil, nil
+	}
+	items, err := discovery.Registered(root)
+	if err != nil {
+		return nil, err
+	}
+	for _, item := range items {
+		if !strings.EqualFold(item.Name, name) {
+			continue
+		}
+		resolved, err := filepath.EvalSymlinks(item.Path)
+		if err != nil || resolved != item.Path {
+			continue
+		}
+		latest, err := discovery.ReadDefinition(item.Path)
+		if err != nil || !strings.EqualFold(latest.Name, item.Name) {
+			continue
+		}
+		item.Description = latest.Description
+		item.Version = latest.Version
+		item.UpdatedAt = latest.UpdatedAt
+		path := filepath.Join(root, name)
+		if _, err := os.Stat(path); err == nil {
+			current, err := discovery.ReadDefinition(path)
+			if err != nil || discovery.Compare(current, item) >= 0 {
+				return nil, nil
+			}
+		}
+		return &item, nil
+	}
+	return nil, nil
 }

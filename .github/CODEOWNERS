@@ -95,7 +95,7 @@
 # /internal/sandboxproviders/ @TODO-owner
 
 # Web UI modules.
-/web/app/ @jialudev @youngbeom-shin
+/web/packages/app/ @jialudev @youngbeom-shin
 # /web/static-dist/ @TODO-owner
 # /web/ui.go @TODO-owner
 # /web/ui_test.go @TODO-owner

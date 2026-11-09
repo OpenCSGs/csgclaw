@@ -1,0 +1,40 @@
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  background: #f4f5ee;
+  pointer-events: auto;
+  -webkit-app-region: no-drag;
+  color-scheme: light;
+  /* The guide is always light, independently of the workspace preference. */
+  --button-neutral-border: var(--gray-300);
+  --button-neutral-background: var(--white);
+  --button-neutral-text: var(--gray-700);
+  --button-neutral-hover-border: var(--gray-300);
+  --button-neutral-hover-background: var(--gray-50);
+  --button-neutral-hover-text: var(--gray-800);
+}
+
+.frame {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  pointer-events: auto;
+}
+
+.close {
+  -webkit-app-region: no-drag;
+  position: absolute;
+  top: 34px;
+  right: max(24px, 4.4vw, calc(var(--desktop-window-controls-width, 0px) + 16px));
+  transform: translateY(-50%);
+  z-index: 1;
+}
+
+@media (max-width: 560px) {
+  .close {
+    top: 30px;
+    right: max(18px, calc(var(--desktop-window-controls-width, 0px) + 16px));
+  }
+}

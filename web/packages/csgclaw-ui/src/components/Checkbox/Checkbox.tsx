@@ -1,0 +1,49 @@
+/*! Derived from CSGClaw. Modified for standalone csgclaw-ui distribution. */
+import styles from "./Checkbox.module.css";
+import { Checkbox as RadixCheckbox } from "radix-ui";
+import { Check, Minus } from "lucide-react";
+import { forwardRef } from "react";
+import type { ComponentPropsWithoutRef, ComponentRef, ReactNode } from "react";
+import { classNames, legacyClassName } from "../../lib/classNames.js";
+
+export type CheckboxProps = ComponentPropsWithoutRef<
+  typeof RadixCheckbox.Root
+> & {
+  indicator?: ReactNode;
+};
+
+export const Checkbox = forwardRef<
+  ComponentRef<typeof RadixCheckbox.Root>,
+  CheckboxProps
+>(function Checkbox({ className, indicator, ...props }, ref) {
+  return (
+    <RadixCheckbox.Root
+      ref={ref}
+      data-csg-control="checkbox"
+      className={classNames(
+        classNames(styles["csg-checkbox"], legacyClassName("csg-checkbox")),
+        className,
+      )}
+      {...props}
+    >
+      <RadixCheckbox.Indicator className={styles["csg-checkbox-indicator"]}>
+        {indicator ?? (
+          <>
+            <Check
+              className={styles["check-mark"]}
+              aria-hidden="true"
+              size={12}
+              strokeWidth={3}
+            />
+            <Minus
+              className={styles["mixed-mark"]}
+              aria-hidden="true"
+              size={12}
+              strokeWidth={3}
+            />
+          </>
+        )}
+      </RadixCheckbox.Indicator>
+    </RadixCheckbox.Root>
+  );
+});

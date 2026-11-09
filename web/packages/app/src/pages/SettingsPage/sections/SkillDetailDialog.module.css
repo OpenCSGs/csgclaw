@@ -1,0 +1,118 @@
+/* File tree and preview selectors are global, outside CSS Modules. */
+
+/* Override DialogContent layout to keep the footer below the expanding body. */
+.dialog {
+  display: flex;
+  flex-direction: column;
+  width: min(960px, calc(100vw - 40px));
+  height: min(720px, calc(100dvh - 40px));
+  overflow: hidden;
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.footer {
+  justify-content: flex-end;
+}
+
+.footerDelete {
+  margin-right: auto;
+}
+
+.footer {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 24px;
+  border-top: 1px solid var(--line);
+}
+
+.origin {
+  margin-right: auto;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 680;
+  line-height: 18px;
+}
+
+.confirmDialog {
+  width: min(420px, calc(100vw - 40px));
+}
+
+.confirmError {
+  margin: 0;
+  padding: 0 24px;
+  color: var(--danger-700, #b42318);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.titleRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.headingCopy {
+  flex: 1;
+  min-width: 0;
+}
+.description {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+}
+.fullDescription {
+  max-height: 160px;
+  overflow-y: auto;
+}
+.location {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 12px;
+  row-gap: 4px;
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-base);
+  background: var(--field);
+  color: var(--muted);
+}
+.locationLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  line-height: 20px;
+  white-space: nowrap;
+}
+.locationPath {
+  min-width: 0;
+  color: var(--text);
+  font-size: 12px;
+  line-height: 20px;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+.locationError {
+  grid-column: 2 / -1;
+  color: var(--danger-text);
+  font-size: 12px;
+  line-height: 18px;
+}
+.embedded {
+  color: var(--muted);
+  font-size: 11px;
+}
+.embedded {
+  margin: 10px 0 0;
+}

@@ -21,7 +21,7 @@ func versionSpec(t *testing.T, name string) PublishSpec {
 	return PublishSpec{Name: name, RuntimeKind: "codex", SourceAgentID: "agent-a", WorkspaceRef: WorkspaceRef{Kind: WorkspaceKindDir, Path: root}}
 }
 
-func TestSaveAgentVersionsPersistAndPrune(t *testing.T) {
+func TestSaveAgentVersionsPersistWithoutLimit(t *testing.T) {
 	ctx := context.Background()
 	root := t.TempDir()
 	store := NewLocalStore(root)
@@ -44,7 +44,7 @@ func TestSaveAgentVersionsPersistAndPrune(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if item.ID != first.ID || item.UID != first.UID || item.Revision != i {
+		if item.ID != first.ID || item.Name != first.Name || item.DisplayName != "Renamed" || item.UID != first.UID || item.Revision != i {
 			t.Fatalf("save %d = %+v", i, item)
 		}
 	}
@@ -52,14 +52,14 @@ func TestSaveAgentVersionsPersistAndPrune(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(versions) != 10 || versions[0].Revision != 3 || versions[9].Revision != 12 {
+	if len(versions) != 12 || versions[0].Revision != 1 || versions[11].Revision != 12 {
 		t.Fatalf("versions = %+v", versions)
 	}
-	if _, err := store.ReadVersionFile(ctx, first.ID, 1, "agent.toml"); !errors.Is(err, ErrTemplateNotFound) {
-		t.Fatalf("pruned version error = %v", err)
+	if _, err := store.ReadVersionFile(ctx, first.ID, 1, "agent.toml"); err != nil {
+		t.Fatalf("retained version error = %v", err)
 	}
 	snapshots, err := os.ReadDir(filepath.Join(store.templateRoot(first.ID), versionSnapshotsDir))
-	if err != nil || len(snapshots) != 10 {
+	if err != nil || len(snapshots) != 12 {
 		t.Fatalf("snapshots = %d, err = %v", len(snapshots), err)
 	}
 }
@@ -341,4 +341,92 @@ func TestTemplateVersionLifecyclePreservesModelConfig(t *testing.T) {
 		t.Fatal(err)
 	}
 	assertConfig(restored, initial)
+}
+
+func TestDeleteVersionPreservesRevisionAllocation(t *testing.T) {
+	ctx := context.Background()
+	store := NewLocalStore(t.TempDir())
+	spec := versionSpec(t, "DeleteBot")
+	first, err := store.SaveAgent(ctx, spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := store.SaveAgent(ctx, spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.DeleteVersion(ctx, first.ID, second.Revision); err == nil {
+		t.Fatal("deleted active version")
+	}
+	if _, err := store.RestoreVersion(ctx, first.ID, 1, "", nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.DeleteVersion(ctx, first.ID, 2); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.ReadVersionFile(ctx, first.ID, 2, "agent.toml"); !errors.Is(err, ErrTemplateNotFound) {
+		t.Fatalf("deleted snapshot: %v", err)
+	}
+	next, err := store.SaveAgent(ctx, spec)
+	if err != nil || next.Revision != 3 {
+		t.Fatalf("next=%+v err=%v", next, err)
+	}
+}
+func TestLegacyTemplateIsVersionOne(t *testing.T) {
+	ctx := context.Background()
+	store := NewLocalStore(t.TempDir())
+	spec := versionSpec(t, "LegacyBot")
+	spec.Version = "0.2.0"
+	item, err := store.Publish(ctx, spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if item.Revision != 1 {
+		t.Fatalf("revision=%d", item.Revision)
+	}
+	versions, err := store.Versions(ctx, item.ID)
+	if err != nil || len(versions) != 1 || versions[0].Revision != 1 {
+		t.Fatalf("versions=%+v err=%v", versions, err)
+	}
+	if _, err := store.ReadVersionFile(ctx, item.ID, 1, "agent.toml"); err != nil {
+		t.Fatal(err)
+	}
+	next, err := store.SaveAgent(ctx, spec)
+	if err != nil || next.Revision != 2 {
+		t.Fatalf("next=%+v err=%v", next, err)
+	}
+}
+
+func TestAgentTemplateAssociationIgnoresDisplayName(t *testing.T) {
+	ctx := context.Background()
+	store := NewLocalStore(t.TempDir())
+	firstSpec := versionSpec(t, "FirstTemplate")
+	firstSpec.DisplayName = "Shared display name"
+	first, err := store.SaveAgent(ctx, firstSpec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	secondSpec := versionSpec(t, "SecondTemplate")
+	secondSpec.SourceAgentID = "agent-b"
+	secondSpec.DisplayName = firstSpec.DisplayName
+	second, err := store.SaveAgent(ctx, secondSpec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.ID == second.ID {
+		t.Fatal("display name merged distinct template associations")
+	}
+	firstSpec.Name = "ChangedName"
+	firstSpec.DisplayName = "New display name"
+	updated, err := store.SaveAgent(ctx, firstSpec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.ID != first.ID || updated.Name != first.Name || updated.UID != first.UID || updated.Revision != 2 || updated.DisplayName != firstSpec.DisplayName {
+		t.Fatalf("updated=%+v", updated)
+	}
+	unchanged, err := store.Get(ctx, second.ID)
+	if err != nil || unchanged.Revision != 1 || unchanged.DisplayName != secondSpec.DisplayName {
+		t.Fatalf("other template=%+v err=%v", unchanged, err)
+	}
 }

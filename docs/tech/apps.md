@@ -215,6 +215,8 @@ service references remain readable, and saved resource configurations are retain
   invoke authorization. `status_fields` selects the JSON fields exposed in the
   resource response; other output is not persisted or returned.
 - `authorization_domains` lists the HTTPS domains allowed in authorization links.
+  A step's optional `authorization_url_pattern` further identifies user-facing verification URLs before rewriting them.
+  Diagnostic API URLs that do not match this pattern are ignored.
   A step can set `url_rewrite.path`, string `query` values, and `gzip_query` JSON
   values encoded as gzip plus unpadded base64url. Existing query parameters remain.
 - A `device_flow` step declares JSON pointers for `code_field`, `url_field`, and
@@ -223,6 +225,7 @@ service references remain readable, and saved resource configurations are retain
   and requested scopes. `accept_error_json` can recognize a documented successful
   authorization event accompanying a nonzero exit; subsequent verification steps
   still run. Cancellation stops the active command process group.
+  Only the validated JSON verification URL is published during device authorization and polling.
 - `requested_scopes` supplies `${REQUESTED_SCOPES}` in command arguments and the
   permission list shown in the dialog. A step's `match_json` requires a successful
   command's output to satisfy the declared condition.

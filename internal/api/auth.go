@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	agent "csgclaw/internal/agentengine/agents"
 	"csgclaw/internal/auth"
 	"encoding/json"
@@ -231,7 +232,7 @@ func (h *Handler) handleAuthLogout(w http.ResponseWriter, r *http.Request) {
 	}
 	h.resetEnvironmentSensitiveRuntimes()
 	h.refreshConnectorPlatformAuthentication()
-	if err := h.clearOpenCSGModelProviderCache(); err != nil {
+	if err := h.clearOpenCSGModelProviderCache(r.Context()); err != nil {
 		slog.Warn("clear OpenCSG models after logout failed", "error", err)
 	}
 	h.syncAgentHubService(r)
@@ -266,7 +267,7 @@ func (h *Handler) resetEnvironmentSensitiveRuntimes() {
 	}
 }
 
-func (h *Handler) clearOpenCSGModelProviderCache() error {
+func (h *Handler) clearOpenCSGModelProviderCache(ctx context.Context) error {
 	if h == nil || strings.TrimSpace(h.configPath) == "" {
 		return nil
 	}
@@ -279,7 +280,7 @@ func (h *Handler) clearOpenCSGModelProviderCache() error {
 		return nil
 	}
 	cfg.Models = models
-	return h.saveModelProvidersConfig(path, cfg)
+	return h.saveModelProvidersConfig(ctx, path, cfg)
 }
 
 func authLocalCallbackURL(r *http.Request) string {

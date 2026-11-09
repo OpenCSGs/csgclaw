@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"csgclaw/internal/apitypes"
+	"csgclaw/internal/im"
 	"csgclaw/internal/scheduledtask"
 )
 
@@ -62,6 +63,7 @@ func (h *Handler) handleCreateScheduledTask(w http.ResponseWriter, r *http.Reque
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+	h.imBus.Publish(im.Event{Type: im.EventTypeScheduledTaskChanged})
 	writeJSON(w, http.StatusCreated, apiScheduledTask(item, h.newTeamIdentityPresenter()))
 }
 
@@ -89,6 +91,7 @@ func (h *Handler) handleUpdateScheduledTask(w http.ResponseWriter, r *http.Reque
 		writeScheduledTaskError(w, err)
 		return
 	}
+	h.imBus.Publish(im.Event{Type: im.EventTypeScheduledTaskChanged})
 	writeJSON(w, http.StatusOK, apiScheduledTask(item, h.newTeamIdentityPresenter()))
 }
 
@@ -101,6 +104,7 @@ func (h *Handler) handleDeleteScheduledTask(w http.ResponseWriter, r *http.Reque
 		writeScheduledTaskError(w, err)
 		return
 	}
+	h.imBus.Publish(im.Event{Type: im.EventTypeScheduledTaskChanged})
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -144,6 +148,7 @@ func writeScheduledTaskError(w http.ResponseWriter, err error) {
 
 func apiScheduledTask(item scheduledtask.Task, presenter teamIdentityPresenter) apitypes.ScheduledTask {
 	return apitypes.ScheduledTask{
+		AgentState: presenter.agentState(item.AgentID),
 		ID:         item.ID,
 		Title:      item.Title,
 		AgentID:    item.AgentID,

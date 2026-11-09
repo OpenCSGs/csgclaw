@@ -1,0 +1,438 @@
+.teamDetailPane {
+  --team-detail-content-width: min(100%, 1520px);
+
+  gap: 14px;
+  justify-items: center;
+  padding: var(--space-6) var(--space-8) 28px;
+  background: var(--bg);
+}
+
+.contentWidth {
+  width: var(--team-detail-content-width);
+}
+
+.descriptionDisplay {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  max-width: 100%;
+  padding: 0;
+  color: var(--muted);
+  font: inherit;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+.descriptionDisplay svg {
+  flex-shrink: 0;
+  opacity: 0;
+}
+.descriptionDisplay:hover svg,
+.descriptionDisplay:focus-visible svg {
+  opacity: 1;
+}
+.descriptionInput {
+  width: 100%;
+  min-height: 78px;
+  font: inherit;
+}
+
+header:global(.entity-header) > .teamDetailAvatar:global(.entity-avatar) {
+  flex-shrink: 0;
+  width: 48px;
+  height: 48px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+}
+
+.teamDetailAvatar svg {
+  width: 24px;
+  height: 24px;
+}
+
+.teamDetailLayout {
+  display: grid;
+  grid-template-columns: minmax(280px, 0.38fr) minmax(0, 1fr);
+  gap: 14px;
+  min-height: 0;
+}
+
+.panelSurface {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface);
+  box-shadow: var(--shadow-xs);
+}
+
+.teamDetailSummary {
+  align-self: stretch;
+  overflow: hidden;
+}
+
+.teamProfileBlock {
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr);
+  gap: 16px;
+  padding: 22px 24px;
+  border-bottom: 1px solid var(--line);
+}
+
+.teamProfileIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 76px;
+  height: 76px;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+}
+
+.teamProfileBlock h2,
+.teamDetailPanelHead h2,
+.teamMemberMain strong,
+.teamTaskMain strong {
+  margin: 0;
+  color: var(--text);
+}
+
+.teamProfileBlock h2 {
+  font-family: var(--font-sans);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 22px;
+}
+
+.teamProfileBlock p {
+  margin: 2px 0 0;
+  color: var(--gray-500);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 18px;
+}
+
+.teamDetailPanelHead h2 {
+  font-family: var(--font-sans);
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.teamDetailPanelHead p {
+  margin: 4px 0 0;
+  color: var(--gray-600);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.teamMemberMain > span:last-child {
+  margin: 2px 0 0;
+  color: var(--gray-500);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.teamDetailFields {
+  display: grid;
+  gap: 0;
+  padding: 4px 0 8px;
+}
+
+.teamDetailFields .teamDetailField {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 11px 22px;
+  border: 0;
+  border-radius: 0;
+  border-bottom: 1px solid var(--line);
+  background: transparent;
+  box-shadow: none;
+}
+
+.teamDetailFields .teamDetailField:last-child {
+  border-bottom: 0;
+}
+
+.fieldText {
+  font-family: var(--font-sans);
+  letter-spacing: normal;
+  text-transform: none;
+}
+
+.teamDetailFields .teamDetailField .teamDetailLabel {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: var(--gray-500);
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 20px;
+}
+
+.teamDetailFields .teamDetailField .teamDetailValue {
+  flex: 0 1 58%;
+  min-width: 0;
+  color: var(--gray-800);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 20px;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.teamDetailMain {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
+}
+
+.teamDetailTabs {
+  display: flex;
+  gap: 0;
+  padding: 0 18px;
+  border-bottom: 1px solid var(--line);
+  overflow-x: auto;
+}
+
+.teamDetailTabs button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 52px;
+  padding: 0 12px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.teamDetailTabs button:hover,
+.teamDetailTabs button.active {
+  color: var(--text);
+}
+
+.teamDetailTabs button.active {
+  border-bottom-color: var(--text);
+  font-weight: 600;
+}
+
+.teamDetailPanels {
+  min-height: 0;
+  padding: 18px 20px 20px;
+  overflow-y: auto;
+}
+
+.teamDetailPanel {
+  display: grid;
+  gap: 12px;
+  padding: 0;
+  border: 0;
+  box-shadow: none;
+}
+
+.teamDetailPanelHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.itemList {
+  display: grid;
+  gap: 10px;
+}
+
+.listRow {
+  display: grid;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xl);
+  background: var(--surface);
+  text-align: left;
+  transition:
+    border-color 140ms ease,
+    background 140ms ease,
+    transform 140ms ease;
+}
+
+.teamMemberRow {
+  grid-template-columns: 40px minmax(0, 1fr);
+  gap: 12px;
+  padding: 14px 16px;
+}
+
+.teamMemberRow:not(.teamMemberStatic) {
+  cursor: pointer;
+}
+
+.teamMemberRow:not(.teamMemberStatic):hover,
+.teamTaskRow:hover {
+  border-color: color-mix(in srgb, var(--blue-600) 32%, var(--line));
+  background: color-mix(in srgb, var(--blue-600) 5%, var(--surface));
+  transform: translateY(-1px);
+}
+
+.teamMemberStatic {
+  cursor: default;
+}
+
+.teamMemberAvatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-xl);
+  overflow: hidden;
+  background: var(--panel-soft);
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.teamMemberAvatar.agent {
+  background: var(--panel);
+}
+
+.teamMemberAvatar :global(.agent-avatar-image) {
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  display: block;
+  object-fit: cover;
+}
+
+.teamMemberAvatar :global(.agent-avatar-fallback) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+}
+
+.teamMemberAvatar svg {
+  width: 21px;
+  height: 21px;
+}
+
+.rowMain {
+  min-width: 0;
+}
+
+.teamMemberTitleLine {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.teamMemberMain strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 20px;
+}
+
+.teamTaskMain {
+  display: grid;
+  gap: 2px;
+}
+
+.teamTaskTitleLine {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.teamTaskMain strong {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 20px;
+}
+
+.teamTaskMain > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--gray-600);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.teamTaskRow {
+  grid-template-columns: 10px minmax(0, 1fr);
+  gap: 12px;
+  padding: 14px 16px;
+  cursor: pointer;
+}
+
+.teamTaskStatus {
+  margin-top: 0;
+}
+
+:root[data-theme="dark"] .teamDetailPane {
+  background: var(--bg);
+}
+
+:root[data-theme="dark"] .panelSurface {
+  background: var(--panel);
+}
+
+:root[data-theme="dark"] .listRow {
+  background: var(--surface);
+}
+
+:root[data-theme="dark"] .teamProfileBlock p,
+:root[data-theme="dark"] .teamDetailPanelHead p,
+:root[data-theme="dark"] .teamMemberMain > span:last-child,
+:root[data-theme="dark"] .teamTaskMain > span,
+:root[data-theme="dark"] .teamDetailFields .teamDetailField .teamDetailLabel {
+  color: var(--muted);
+}
+
+:root[data-theme="dark"] .teamDetailFields .teamDetailField .teamDetailValue {
+  color: var(--text);
+}
+
+@media (max-width: 1100px) {
+  .teamDetailLayout {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .teamDetailPane {
+    padding: 16px;
+  }
+
+  .teamProfileBlock,
+  .teamMemberRow,
+  .teamTaskRow {
+    grid-template-columns: 1fr;
+  }
+}

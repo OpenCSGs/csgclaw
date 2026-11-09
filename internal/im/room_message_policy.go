@@ -2,6 +2,7 @@ package im
 
 import (
 	"errors"
+	"fmt"
 	"slices"
 	"strings"
 
@@ -14,6 +15,14 @@ var ErrRoomTaskDispatchRequired = errors.New("ordinary mentions do not dispatch 
 // callers must get the same result, including runtimes without turn metadata.
 // Task-scoped relays retain their existing assignment checks in the API bridge.
 func (s *Service) validateRoomMessageDispatchLocked(room Room, senderID, content string, metadata map[string]any) error {
+	if s.agentStateLocked(senderID) != "" || s.hiddenAgentRoomLocked(room) {
+		return fmt.Errorf("agent is archived or deleted")
+	}
+	for _, mention := range s.extractMentions(content) {
+		if s.agentStateLocked(mention.ID) != "" {
+			return fmt.Errorf("mentioned agent is archived or deleted")
+		}
+	}
 	if room.IsDirect || !room.IsOnDemand() || taskmeta.ID(metadata) != "" ||
 		s.resolveRoomUserIDLocked(room.ManagerID) != senderID {
 		return nil

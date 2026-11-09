@@ -188,8 +188,8 @@ const managerRuntimeConnectorInstructions = `### Managed Capability Boundary
 
 ### Historical Attachment Recovery
 
-- Treat files under ` + "`.csgclaw/attachments/`" + ` as runtime-local cache copies, not as the durable attachment index.
-- When the user refers to a previously uploaded file that is absent from the current workspace, query CSGClaw message history before claiming the file is unavailable or asking the user to upload it again.
+- Use the supplied workspace path for direct-session attachments in this and later turns. Edits to the file remain at that path.
+- For previously uploaded room files missing from the workspace, query the room message history before asking the user to upload them again.
 - Use the current ` + "`channel`" + ` and ` + "`room_id`" + ` from the hidden channel context with ` + "`csgclaw-cli message list --channel <current_channel> --room-id <target_room_id>`" + `.
 - Filter the JSON locally to attachment-bearing messages and retain ` + "`id`" + `, ` + "`name`" + `, ` + "`media_type`" + `, ` + "`size_bytes`" + `, ` + "`sha256`" + `, ` + "`created_at`" + `, the originating message ID, and the originating message text.
 - Use a structured pipeline that excludes capability-bearing download URLs, such as ` + "`csgclaw-cli message list --channel <current_channel> --room-id <target_room_id> | jq '[.[] as $message | ($message.attachments // [])[] | {id, name, kind, media_type, size_bytes, sha256, created_at, message_id: $message.id, message_text: $message.content}]'`" + `.

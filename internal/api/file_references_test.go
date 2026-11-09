@@ -235,7 +235,7 @@ func referenceTestHandler(t *testing.T) (*Handler, string, string, string, strin
 	if err != nil {
 		t.Fatal(err)
 	}
-	return &Handler{svc: svc, workspace: svc.Workspace(), im: messages}, room.ID, ids[0], roots[0], roots[1]
+	return &Handler{svc: svc, workspace: svc.Workspace(), im: messages, serverNoAuth: true}, room.ID, ids[0], roots[0], roots[1]
 }
 
 func postReference(t *testing.T, h *Handler, roomID, key string, refs []FileReference) (int, im.Message, string) {

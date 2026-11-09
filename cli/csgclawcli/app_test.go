@@ -92,16 +92,16 @@ func TestExecuteExposesOnlyLiteCommands(t *testing.T) {
 	got := stderr.String()
 	for _, want := range []string{
 		"Available Commands:",
-		"participant  Manage channel participants.",
-		"pt           Manage channel participants.",
-		"template     Discover agent templates.",
-		"room         Manage IM rooms",
-		"member       Manage IM room members",
-		"message      Manage IM messages.",
-		"task         Manage tasks across rooms, teams, and agents.",
-		"team         Manage agent teams.",
-		"skill        Discover and install ClawHub skills.",
-		"completion   Generate shell completion scripts.",
+		"participant     Manage channel participants.",
+		"pt              Manage channel participants.",
+		"template        Discover agent templates.",
+		"room            Manage IM rooms",
+		"member          Manage IM room members",
+		"message         Manage IM messages.",
+		"task            Manage tasks across rooms, teams, and agents.",
+		"team            Manage agent teams.",
+		"skill           Discover and install ClawHub skills.",
+		"completion      Generate shell completion scripts.",
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("usage = %q, want substring %q", got, want)

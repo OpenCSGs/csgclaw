@@ -184,9 +184,10 @@ type Controller struct {
 	WorkspaceService
 	ModelConfiguration
 	Repository
-	files        *contract.FileStore
-	interactions *interactionstate.Coordinator
-	extensions   RuntimeExtensionsController
+	files          *contract.FileStore
+	interactions   *interactionstate.Coordinator
+	extensions     RuntimeExtensionsController
+	interruptAgent func(string)
 
 	server                 config.ServerConfig
 	hub                    templateService
@@ -221,12 +222,15 @@ type Controller struct {
 type ControllerOption func(*Controller) error
 
 // AttachEngine supplies the shared process-local execution resources at composition.
-func (s *Controller) AttachEngine(files *contract.FileStore, interactions *interactionstate.Coordinator, extensions RuntimeExtensionsController) {
+func (s *Controller) AttachEngine(files *contract.FileStore, interactions *interactionstate.Coordinator, extensions RuntimeExtensionsController, interrupt ...func(string)) {
 	s.bindResources()
 	s.ModelConfiguration.Repository = &s.Repository
 	s.files = files
 	s.interactions = interactions
 	s.extensions = extensions
+	if len(interrupt) > 0 {
+		s.interruptAgent = interrupt[0]
+	}
 }
 
 type templateService interface {
@@ -249,6 +253,9 @@ func WithSandboxProvider(provider sandbox.Provider) ControllerOption {
 			return fmt.Errorf("sandbox provider is required")
 		}
 		s.sandbox = provider
+		if provider.Name() == config.CSGHubProvider {
+			s.server.DeploymentMode = config.CSGHubProvider
+		}
 		return nil
 	}
 }
@@ -864,9 +871,11 @@ func (s *Controller) managerStartupProfile(ctx context.Context) (AgentProfile, [
 		s.mu.RUnlock()
 		return normalizeProfile(AgentProfile{Name: ManagerName, Provider: ProviderCSGHubLite}, ManagerName, ""), nil
 	}
+	llm := s.llm
+	recommended := resolveCreationDefaults(s.creationDefaults, ModelProviderCatalogFromLLM(llm))
 	s.mu.RUnlock()
 	if s != nil {
-		if profileName, model, err := s.llm.Resolve(""); err == nil {
+		if profileName, model, err := llm.Resolve(""); err == nil {
 			profile := profileFromConfigModel(profileName, "", model)
 			profile.Name = ManagerName
 			profile = normalizeProfile(profile, ManagerName, "")
@@ -878,6 +887,12 @@ func (s *Controller) managerStartupProfile(ctx context.Context) (AgentProfile, [
 				}}
 			}
 		}
+	}
+	// A fresh installation usually has no global model selector, even after
+	// login has connected a provider with several models.
+	recommended = normalizeProfile(recommended, ManagerName, "")
+	if recommended.ProfileComplete {
+		return recommended, []ProfileDetectionResult{{Provider: recommended.Provider, Status: "ok", ModelID: recommended.ModelID}}
 	}
 	return s.DetectDefaultProfile(ctx)
 }
@@ -1657,6 +1672,9 @@ func (s *Controller) Start(ctx context.Context, id string) (Agent, error) {
 	if !ok {
 		return Agent{}, fmt.Errorf("agent %q not found", id)
 	}
+	if got.ArchivedAt != nil {
+		return Agent{}, archivedAgentError()
+	}
 	if got.AgentProfile.EnvRestartRequired && !got.AgentProfile.ImageUpgradeRequired && isHostRuntimeKind(got.RuntimeKind) {
 		return s.restartRuntimeLocked(ctx, id)
 	}
@@ -1752,7 +1770,7 @@ func (s *Controller) Stop(ctx context.Context, id string) (Agent, error) {
 	return updated, nil
 }
 
-func (s *Controller) DeleteRecord(ctx context.Context, id string) error {
+func (s *Controller) DeleteRecord(ctx context.Context, id string) (resultErr error) {
 	id = strings.TrimSpace(id)
 	if id == "" {
 		return fmt.Errorf("agent id is required")
@@ -1770,6 +1788,13 @@ func (s *Controller) DeleteRecord(ctx context.Context, id string) error {
 		return fmt.Errorf("agent %q not found", id)
 	}
 
+	if existing.ArchivedAt != nil {
+		restore, err := s.preserveDeletedWorkspace(existing)
+		if err != nil {
+			return err
+		}
+		defer func() { resultErr = errors.Join(resultErr, restore()) }()
+	}
 	if err := s.removeAgentRuntime(ctx, existing); err != nil {
 		return err
 	}
@@ -2079,7 +2104,7 @@ func (s *Controller) startupAgentCandidates() []Agent {
 }
 
 func isConfiguredAgentStartupCandidate(a Agent) bool {
-	if isManagerAgent(a) || !isAgentProfileComplete(a) {
+	if a.ArchivedAt != nil || isManagerAgent(a) || !isAgentProfileComplete(a) {
 		return false
 	}
 	runtimeKind := strings.TrimSpace(a.RuntimeKind)

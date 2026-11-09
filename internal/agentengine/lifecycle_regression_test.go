@@ -3,8 +3,11 @@ package agentengine
 import (
 	"context"
 	"errors"
+	goruntime "runtime"
+	"strings"
 	"testing"
 	"time"
+	"weak"
 
 	"csgclaw/internal/activity"
 	agent "csgclaw/internal/agentengine/agents"
@@ -83,7 +86,7 @@ func TestRequiredExtensionDeletionDoesNotGateItsOwnReload(t *testing.T) {
 
 func TestDetachedAnswerCanceledDuringTranscriptCannotComplete(t *testing.T) {
 	engine := &Engine{}
-	item, err := engine.interactions.CreateDetached("agent-a", "conv", "question-turn", activity.RequestUserInputArgs{Questions: []activity.RequestUserInputQuestion{{ID: "choice", Header: "Choice", Question: "Continue?", IsOther: true}}}, nil)
+	item, err := engine.interactions.CreateDetached("agent-a", "conv", "question-turn", activity.RequestUserInputArgs{Questions: []activity.RequestUserInputQuestion{{ID: "choice", Header: "Choice", Question: "Continue?", IsOther: true}}}, InteractionResolve, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -191,5 +194,102 @@ func TestExtensionDeletionDoesNotRequireUnrelatedExtensionReadiness(t *testing.T
 	}
 	if err := engine.RuntimeExtensions("agent-a").Delete(ctx, "first"); err != nil {
 		t.Fatalf("optional deletion fails due to unrelated unconfigured required resource: %v", err)
+	}
+}
+
+func TestDetachedAnswerCanRetryUntilRuntimeAccepts(t *testing.T) {
+	rt := &fakeConversationRuntime{state: runtime.StateStopped}
+	calls := 0
+	rt.prompt = func(context.Context, string, string, string) error {
+		calls++
+		return errors.New("runtime failed after accepting the prompt")
+	}
+	engine := New(newTestAgentService(t, []agent.Agent{{
+		ID: "agent-a", Name: "A", Role: agent.RoleWorker, RuntimeKind: agent.RuntimeKindCodex,
+		RuntimeID: "runtime-a", Status: string(runtime.StateRunning),
+	}}, rt))
+	item, err := engine.interactions.CreateDetached("agent-a", "conv", "question", activity.RequestUserInputArgs{
+		Questions: []activity.RequestUserInputQuestion{{ID: "choice", Header: "Choice", Question: "Continue?", IsOther: true}},
+	}, InteractionResolve, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	conversation := engine.Conversations("agent-a")
+	var turnID TurnID
+	var result TurnResult
+	answer := InteractionResolution{
+		ConversationKey: "conv", InteractionID: item.ID,
+		Answers: map[string]InteractionAnswer{"choice": {Values: []string{"user_note: continue"}}},
+		ContinueDetached: func(ctx context.Context, question InteractionRequest) bool {
+			result = conversation.Run(ctx, TurnRequest{
+				ID: turnID, ConversationKey: "conv", RespondingTo: question.ID,
+				Input: textInput("continue"), Admission: AdmissionWait,
+			}, nil)
+			return result.Dispatched
+		},
+	}
+
+	turnID = "before-runtime"
+	_ = conversation.Resolve(ctx, answer)
+	if ErrorCodeOf(result.Error) != ErrorAgentUnavailable || result.Dispatched {
+		t.Fatalf("runtime acquisition: %+v", result)
+	}
+	pending, err := conversation.PendingInteractions(ctx, "conv")
+	if err != nil || len(pending) != 1 || pending[0].ID != item.ID {
+		t.Fatalf("pending after acquisition failure: %+v, %v", pending, err)
+	}
+
+	rt.state = runtime.StateRunning
+	turnID = "retry"
+	if err := conversation.Resolve(ctx, answer); err != nil {
+		t.Fatal(err)
+	}
+	if result.Status != TurnFailed || !result.Dispatched {
+		t.Fatalf("failure after dispatch: %+v", result)
+	}
+	turnID = "duplicate"
+	if err := conversation.Resolve(ctx, answer); ErrorCodeOf(err) != ErrorInteractionAlreadyResolved {
+		t.Fatalf("duplicate answer: %v", err)
+	}
+	if calls != 1 {
+		t.Fatalf("runtime received the answer %d times", calls)
+	}
+}
+
+// A response sink can hold an HTTP writer, buffered events, and request context.
+type detachedSessionSink struct{ strings.Builder }
+
+func (s *detachedSessionSink) Emit(_ context.Context, event TurnEvent) error {
+	_, err := s.WriteString(event.Text)
+	return err
+}
+
+func TestDetachedSessionFormReleasesResponseSink(t *testing.T) {
+	rt := &fakeConversationRuntime{}
+	rt.prompt = func(_ context.Context, runtimeID, sessionID, _ string) error {
+		rt.publish(activity.RuntimeEvent{RuntimeID: runtimeID, SessionID: sessionID, Kind: activity.RuntimeEventStructuredOutput, Payload: activity.StructuredOutputArtifact{
+			RequestUserInput: &activity.RequestUserInputArgs{Questions: []activity.RequestUserInputQuestion{{ID: "q", Header: "Q", Question: "Continue?"}}},
+		}})
+		rt.publish(activity.RuntimeEvent{RuntimeID: runtimeID, SessionID: sessionID, Kind: activity.RuntimeEventPromptCompleted})
+		return nil
+	}
+	engine := New(newTestAgentService(t, []agent.Agent{{ID: "agent-a", Name: "A", Role: agent.RoleWorker, RuntimeKind: agent.RuntimeKindCodex, RuntimeID: "runtime-a", Status: string(runtime.StateRunning)}}, rt))
+	conversation := engine.Conversations("agent-a")
+	sink := new(detachedSessionSink)
+	result := conversation.Run(t.Context(), TurnRequest{ID: "form", ConversationKey: "session", Input: textInput("Plan"), Interaction: InteractionUserInputOnly}, sink)
+	if len(result.Interactions) != 1 || !result.Interactions[0].Detached {
+		t.Fatalf("expected a detached form: %+v", result)
+	}
+	ref := weak.Make(sink)
+	sink = nil
+	goruntime.GC()
+	if ref.Value() != nil {
+		t.Fatal("completed HTTP turn is retaining its response sink")
+	}
+	forms, err := conversation.PendingInteractions(t.Context(), "session")
+	if err != nil || len(forms) != 1 || forms[0].ID != result.Interactions[0].ID {
+		t.Fatalf("abandoned form should remain recoverable until its deadline: %+v, %v", forms, err)
 	}
 }

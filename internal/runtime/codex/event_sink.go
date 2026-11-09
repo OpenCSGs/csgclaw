@@ -42,7 +42,7 @@ func (s *EventSink) Publish(event SessionEvent) {
 	runtimeID := strings.TrimSpace(event.RuntimeID)
 
 	s.mu.Lock()
-	targets := make([]*sessionSubscription, 0, len(s.subscribers))
+	defer s.mu.Unlock()
 	for _, sub := range s.subscribers {
 		if sub.runtimeID != "" && sub.runtimeID != runtimeID {
 			continue
@@ -50,11 +50,6 @@ func (s *EventSink) Publish(event SessionEvent) {
 		if sub.sessionID != "" && sub.sessionID != strings.TrimSpace(event.SessionID) {
 			continue
 		}
-		targets = append(targets, sub)
-	}
-	s.mu.Unlock()
-
-	for _, sub := range targets {
 		sub.deliver(event)
 	}
 }
@@ -106,19 +101,21 @@ func (s *EventSink) subscribe(runtimeID, sessionID string) (<-chan SessionEvent,
 }
 
 func (s *sessionSubscription) deliver(event SessionEvent) {
+	s.reliableMu.Lock()
+	defer s.reliableMu.Unlock()
+	// Send directly only when no older event is waiting for this subscriber.
+	if len(s.reliableQueue) == 0 {
+		select {
+		case s.ch <- event:
+			return
+		default:
+		}
+	}
 	if !activity.RuntimeEventRequiresReliableDelivery(event) {
-		_ = trySendSessionEvent(s.ch, event)
 		return
 	}
-	s.sendReliable(event)
-}
-
-func (s *sessionSubscription) sendReliable(event SessionEvent) {
-	s.reliableMu.Lock()
 	s.reliableQueue = append(s.reliableQueue, event)
-	s.reliableMu.Unlock()
 	select {
-	case <-s.done:
 	case s.reliableWake <- struct{}{}:
 	default:
 	}
@@ -127,59 +124,31 @@ func (s *sessionSubscription) sendReliable(event SessionEvent) {
 func (s *sessionSubscription) pumpReliable() {
 	defer close(s.stopped)
 	for {
-		if event, ok := s.popReliable(); ok {
-			if !sendSessionEventUntilDone(s.ch, s.done, event) {
+		s.reliableMu.Lock()
+		if len(s.reliableQueue) == 0 {
+			s.reliableMu.Unlock()
+			select {
+			case <-s.done:
 				return
+			case <-s.reliableWake:
 			}
 			continue
 		}
+		event := s.reliableQueue[0]
+		s.reliableMu.Unlock()
+
+		// Keep the head in the queue until sent so a new event cannot pass it.
 		select {
+		case s.ch <- event:
 		case <-s.done:
 			return
-		case <-s.reliableWake:
 		}
-	}
-}
-
-func (s *sessionSubscription) popReliable() (SessionEvent, bool) {
-	s.reliableMu.Lock()
-	defer s.reliableMu.Unlock()
-	if len(s.reliableQueue) == 0 {
-		return SessionEvent{}, false
-	}
-	event := s.reliableQueue[0]
-	s.reliableQueue[0] = SessionEvent{}
-	s.reliableQueue = s.reliableQueue[1:]
-	if len(s.reliableQueue) == 0 {
-		s.reliableQueue = nil
-	}
-	return event, true
-}
-
-func trySendSessionEvent(ch chan SessionEvent, event SessionEvent) (sent bool) {
-	defer func() {
-		if recover() != nil {
-			sent = false
+		s.reliableMu.Lock()
+		s.reliableQueue[0] = SessionEvent{}
+		s.reliableQueue = s.reliableQueue[1:]
+		if len(s.reliableQueue) == 0 {
+			s.reliableQueue = nil
 		}
-	}()
-	select {
-	case ch <- event:
-		return true
-	default:
-		return false
-	}
-}
-
-func sendSessionEventUntilDone(ch chan SessionEvent, done <-chan struct{}, event SessionEvent) (sent bool) {
-	defer func() {
-		if recover() != nil {
-			sent = false
-		}
-	}()
-	select {
-	case ch <- event:
-		return true
-	case <-done:
-		return false
+		s.reliableMu.Unlock()
 	}
 }

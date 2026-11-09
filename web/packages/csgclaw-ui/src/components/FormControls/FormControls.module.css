@@ -1,0 +1,106 @@
+/*! Derived from CSGClaw. Modified for standalone csgclaw-ui distribution. */
+.csg-field {
+  align-content: start;
+}
+
+.field {
+  display: grid;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.field > .field-label,
+.field > span:not(.field-hint),
+.field > .field-label-with-help {
+  color: var(--csgclaw-ui-field-label-color);
+  font-family: var(--csgclaw-ui-font-sans);
+  font-size: var(--csgclaw-ui-field-label-font-size);
+  font-weight: var(--csgclaw-ui-field-label-font-weight);
+  line-height: var(--csgclaw-ui-field-label-line-height);
+  letter-spacing: 0;
+}
+
+.field-hint,
+.form-error {
+  color: var(--csgclaw-ui-muted);
+}
+
+.form-error {
+  margin-top: 14px;
+  color: var(--csgclaw-ui-danger);
+}
+
+.field-required {
+  color: var(--csgclaw-ui-danger);
+}
+
+.csg-text-control {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  min-height: var(--csgclaw-ui-input-height-md);
+  padding: var(--csgclaw-ui-input-padding-md);
+  border: 1px solid var(--csgclaw-ui-input-border);
+  border-radius: var(--csgclaw-ui-input-radius);
+  background: var(--csgclaw-ui-input-background);
+  color: var(--csgclaw-ui-input-text);
+  box-shadow: var(--csgclaw-ui-input-shadow);
+  font: var(--csgclaw-ui-text-md-normal);
+  outline: none;
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease;
+}
+.csg-text-control::placeholder {
+  color: var(--csgclaw-ui-input-text-placeholder);
+}
+.csg-text-control:hover:not(:disabled, [aria-invalid="true"]) {
+  border-color: var(--csgclaw-ui-input-border-hover);
+}
+.csg-text-control:focus {
+  border-color: var(--csgclaw-ui-input-border-focus);
+  box-shadow: var(--csgclaw-ui-input-shadow-focus);
+}
+.csg-text-control:disabled {
+  background: var(--csgclaw-ui-input-background-disabled);
+  color: var(--csgclaw-ui-input-text-disabled);
+  cursor: not-allowed;
+}
+.csg-text-control[aria-invalid="true"] {
+  border-color: var(--csgclaw-ui-input-border-error);
+}
+.csg-text-control[aria-invalid="true"]:focus {
+  box-shadow: var(--csgclaw-ui-input-shadow-error-focus);
+}
+.csg-text-control[data-csg-control="input"] {
+  height: var(--csgclaw-ui-input-height-md);
+}
+
+.csg-text-control[data-csg-control="textarea"] {
+  min-height: 116px;
+  padding: var(--csgclaw-ui-textarea-padding-md);
+  resize: vertical;
+}
+.csg-text-control[data-size="sm"] {
+  height: var(--csgclaw-ui-input-height-sm);
+  min-height: var(--csgclaw-ui-input-height-sm);
+  padding: var(--csgclaw-ui-space-2) var(--csgclaw-ui-space-3);
+  font: var(--csgclaw-ui-text-sm-normal);
+}
+.csg-text-control[data-variant="plain"] {
+  height: var(--csgclaw-ui-input-plain-height, var(--input-plain-height, 32px));
+  min-height: var(--csgclaw-ui-input-plain-height, var(--input-plain-height, 32px));
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.csg-text-control[data-variant="plain"]:is(:hover, :focus, [aria-invalid="true"]) {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.csg-text-control:disabled::placeholder {
+  color: var(--csgclaw-ui-input-text-disabled);
+}

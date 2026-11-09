@@ -80,6 +80,11 @@ func migrateAgents(ctx context.Context, root string, openSandbox func(context.Co
 			kind = migrationString(agent["runtime_name"])
 		}
 		if !isRetiredRuntimeKind(kind) {
+			metadataChanged, err := cleanHostSandboxMetadata(kind, agent, runtime)
+			if err != nil {
+				return err
+			}
+			changed = changed || metadataChanged
 			continue
 		}
 		id := migrationString(agent["id"])
@@ -257,4 +262,52 @@ func writeRuntimeMigrationFile(path string, data []byte) error {
 		return closeErr
 	}
 	return os.Rename(temp.Name(), path)
+}
+
+// Native runtime handles are still stored in sandbox_id in older records.
+// Remove only obsolete flags; preserve handles, desired state and all user data.
+func cleanHostSandboxMetadata(kind string, agent, runtime map[string]json.RawMessage) (bool, error) {
+	if kind != "codex" && kind != "dsh" {
+		return false, nil
+	}
+	changed := false
+	runtimeChanged := false
+	for _, key := range []string{"sandbox_enabled", "sandbox_provider", "sandboxed"} {
+		if _, ok := agent[key]; ok {
+			delete(agent, key)
+			changed = true
+		}
+		if _, ok := runtime[key]; ok {
+			delete(runtime, key)
+			changed = true
+			runtimeChanged = true
+		}
+	}
+	if runtimeChanged {
+		data, err := json.Marshal(runtime)
+		if err != nil {
+			return false, err
+		}
+		agent["runtime"] = data
+	}
+	for _, key := range []string{"model_config", "agent_profile"} {
+		var profile map[string]json.RawMessage
+		if len(agent[key]) == 0 || string(agent[key]) == "null" {
+			continue
+		}
+		if err := json.Unmarshal(agent[key], &profile); err != nil {
+			return false, err
+		}
+		if _, ok := profile["sandbox_enabled"]; !ok {
+			continue
+		}
+		delete(profile, "sandbox_enabled")
+		data, err := json.Marshal(profile)
+		if err != nil {
+			return false, err
+		}
+		agent[key] = data
+		changed = true
+	}
+	return changed, nil
 }

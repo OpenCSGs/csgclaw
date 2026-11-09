@@ -102,6 +102,7 @@ func (c cmd) runCreate(ctx context.Context, run *command.Context, args []string,
 	channelUserRef := fs.String("channel-user-ref", "", "channel user identity such as local user id or Feishu open_id")
 	channelUserKind := fs.String("channel-user-kind", "", "channel user identity kind such as local_user_id or open_id")
 	channelAppRef := fs.String("channel-app-ref", "", "channel app/config reference such as Feishu app_id")
+	autoPublish := fs.Bool("auto-publish", false, "publish the bound agent to the community after creation")
 	bindMode := fs.String("bind", participantpkg.BindingModeNone, "agent binding mode: create, reuse, or none")
 	agentID := fs.String("agent-id", "", "agent id for bind reuse, or optional id for bind create")
 	role := fs.String("role", "", "agent role for bind create")
@@ -120,12 +121,16 @@ func (c cmd) runCreate(ctx context.Context, run *command.Context, args []string,
 	if strings.TrimSpace(*name) == "" {
 		return fmt.Errorf("%s create requires --name", c.Name())
 	}
+	if *autoPublish && (*participantType != participantpkg.TypeAgent || (*bindMode != participantpkg.BindingModeCreate && *bindMode != participantpkg.BindingModeReuse)) {
+		return fmt.Errorf("--auto-publish requires an agent with --bind create or reuse")
+	}
 	envMap, err := parseEnvAssignments(envValues)
 	if err != nil {
 		return err
 	}
 
 	req := participantpkg.CreateRequest{
+		AutoPublish:   *autoPublish,
 		ID:            *id,
 		Channel:       *channelName,
 		Type:          *participantType,

@@ -28,6 +28,8 @@ type Config struct {
 }
 
 type ServerConfig struct {
+	// DeploymentMode preserves CSGHub deployment behavior independently of retired sandbox configuration.
+	DeploymentMode   string
 	ListenAddr       string
 	AdvertiseBaseURL string
 	AccessToken      string
@@ -80,6 +82,8 @@ func (b BootstrapConfig) Validate() error {
 	return nil
 }
 
+// SandboxConfig is read-only upgrade input for retired Agent migration.
+// New configurations and user settings do not expose sandbox providers.
 type SandboxConfig struct {
 	Provider                 string
 	StoragePath              string
@@ -262,16 +266,18 @@ func (c SandboxConfig) EffectiveDockerCLIPath() string {
 }
 
 type rawConfigValues struct {
-	server        ServerConfig
-	bootstrap     BootstrapConfig
-	bootstrapMeta rawBootstrapConfigMeta
-	sandbox       SandboxConfig
-	hub           rawHubConfig
-	skill         rawSkillConfig
-	modelsDefault string
-	models        map[string]rawProviderConfig
-	modelsPath    string
-	resolved      *rawConfigValues
+	legacySandboxPresent    bool
+	migrationSandboxPresent bool
+	server                  ServerConfig
+	bootstrap               BootstrapConfig
+	bootstrapMeta           rawBootstrapConfigMeta
+	sandbox                 SandboxConfig
+	hub                     rawHubConfig
+	skill                   rawSkillConfig
+	modelsDefault           string
+	models                  map[string]rawProviderConfig
+	modelsPath              string
+	resolved                *rawConfigValues
 }
 
 type rawBootstrapConfigMeta struct {
@@ -514,6 +520,12 @@ func Load(path string) (Config, error) {
 		}
 		if strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]") {
 			section = strings.Trim(line, "[]")
+			if section == "sandbox" {
+				cfg.raw.legacySandboxPresent = true
+			}
+			if section == "migrations.retired_claws.sandbox" {
+				cfg.raw.migrationSandboxPresent = true
+			}
 			hubRegistryIndex = -1
 			if isLegacyConfigSection(section) {
 				return Config{}, fmt.Errorf("legacy config section [%s] is no longer supported; migrate to [models] and [models.providers.<name>]", section)
@@ -533,6 +545,8 @@ func Load(path string) (Config, error) {
 		switch {
 		case section == "server":
 			switch key {
+			case "deployment_mode":
+				cfg.Server.DeploymentMode = strings.ToLower(strings.TrimSpace(value))
 			case "listen_addr":
 				cfg.raw.server.ListenAddr = parseRawStringValue(rawValue)
 				cfg.Server.ListenAddr = value
@@ -578,7 +592,7 @@ func Load(path string) (Config, error) {
 				cfg.raw.bootstrapMeta.LegacyWorkerTemplateSlash = bootstrapTemplateRefUsesLegacySlash(raw)
 				cfg.Bootstrap.DefaultWorkerTemplate = normalizeBootstrapTemplateRef(value)
 			}
-		case section == "sandbox":
+		case section == "sandbox" || section == "migrations.retired_claws.sandbox":
 			switch key {
 			case "provider":
 				cfg.raw.sandbox.Provider = parseRawStringValue(rawValue)
@@ -595,7 +609,8 @@ func Load(path string) (Config, error) {
 			case "debian_registries_override":
 				registries, parseErr := parseStringArray(rawValue)
 				if parseErr != nil {
-					return Config{}, fmt.Errorf("parse sandbox.debian_registries_override: %w", parseErr)
+					// Retired registry settings cannot prevent host runtime startup.
+					registries = nil
 				}
 				cfg.Sandbox.DebianRegistriesOverride = registries
 			}
@@ -728,8 +743,9 @@ func Load(path string) (Config, error) {
 		cfg.Server.AccessToken = DefaultAccessToken
 	}
 	cfg.Sandbox = cfg.Sandbox.Resolved()
-	if err := cfg.Sandbox.Validate(); err != nil {
-		return Config{}, err
+	if cfg.Server.DeploymentMode == "" && (cfg.raw.legacySandboxPresent || cfg.raw.migrationSandboxPresent) && cfg.Sandbox.Provider == CSGHubProvider {
+		cfg.Server.DeploymentMode = CSGHubProvider
+		cfg.raw.bootstrapMeta.RewriteRequired = true
 	}
 	configuredRegistries := cfg.Hub.Registries[:0]
 	configuredRawRegistries := cfg.raw.hub.Registries[:0]
@@ -807,24 +823,32 @@ advertise_base_url = %q
 access_token = %q
 no_auth = %t
 show_upgrade = %t
-
-[bootstrap]
 `, cfg.rawOrResolvedString(cfg.raw.server.ListenAddr, loadedRaw.server.ListenAddr, cfg.Server.ListenAddr), cfg.rawOrResolvedString(cfg.raw.server.AdvertiseBaseURL, loadedRaw.server.AdvertiseBaseURL, cfg.Server.AdvertiseBaseURL), cfg.rawOrResolvedString(cfg.raw.server.AccessToken, loadedRaw.server.AccessToken, cfg.Server.AccessToken), cfg.Server.NoAuth, cfg.Server.ShowUpgrade)
+	if cfg.Server.DeploymentMode != "" || cfg.Sandbox.Provider == CSGHubProvider {
+		mode := cfg.Server.DeploymentMode
+		if mode == "" {
+			mode = CSGHubProvider
+		}
+		fmt.Fprintf(&b, "deployment_mode = %q\n", mode)
+	}
+	b.WriteString("\n[bootstrap]\n")
 	fmt.Fprintf(&b, "default_manager_template = %q\n", cfg.rawOrResolvedString(cfg.raw.bootstrap.DefaultManagerTemplate, loadedRaw.bootstrap.DefaultManagerTemplate, cfg.Bootstrap.ResolvedDefaultManagerTemplate()))
 	fmt.Fprintf(&b, "default_worker_template = %q\n", cfg.rawOrResolvedString(cfg.raw.bootstrap.DefaultWorkerTemplate, loadedRaw.bootstrap.DefaultWorkerTemplate, cfg.Bootstrap.ResolvedDefaultWorkerTemplate()))
-	sandboxSection := fmt.Sprintf(`
-[sandbox]
+	if c.raw.legacySandboxPresent || c.raw.migrationSandboxPresent {
+		sandboxSection := fmt.Sprintf(`
+[migrations.retired_claws.sandbox]
 provider = %q
 `, cfg.rawOrResolvedSandboxProvider(cfg.raw.sandbox.Provider, loadedRaw.sandbox.Provider, resolvedSandbox.Provider))
-	if strings.TrimSpace(resolvedSandbox.StoragePath) != "" {
-		sandboxSection = strings.Replace(sandboxSection, "[sandbox]\n", fmt.Sprintf("[sandbox]\nstorage_path = %q\n", cfg.rawOrResolvedString(cfg.raw.sandbox.StoragePath, loadedRaw.sandbox.StoragePath, resolvedSandbox.StoragePath)), 1)
+		if strings.TrimSpace(resolvedSandbox.StoragePath) != "" {
+			sandboxSection = strings.Replace(sandboxSection, "[migrations.retired_claws.sandbox]\n", fmt.Sprintf("[migrations.retired_claws.sandbox]\nstorage_path = %q\n", cfg.rawOrResolvedString(cfg.raw.sandbox.StoragePath, loadedRaw.sandbox.StoragePath, resolvedSandbox.StoragePath)), 1)
+		}
+		if strings.TrimSpace(resolvedSandbox.DockerCLIPath) != "" {
+			sandboxSection = strings.Replace(sandboxSection, "[migrations.retired_claws.sandbox]\n", fmt.Sprintf("[migrations.retired_claws.sandbox]\ndocker_cli_path = %q\n", cfg.rawOrResolvedString(cfg.raw.sandbox.DockerCLIPath, loadedRaw.sandbox.DockerCLIPath, resolvedSandbox.DockerCLIPath)), 1)
+		}
+		overrideRegistries := cfg.rawOrResolvedStringArray(cfg.raw.sandbox.DebianRegistriesOverride, loadedRaw.sandbox.DebianRegistriesOverride, resolvedSandbox.DebianRegistriesOverride)
+		sandboxSection += fmt.Sprintf("debian_registries_override = %s\n", formatStringArray(overrideRegistries))
+		b.WriteString(sandboxSection)
 	}
-	if strings.TrimSpace(resolvedSandbox.DockerCLIPath) != "" {
-		sandboxSection = strings.Replace(sandboxSection, "[sandbox]\n", fmt.Sprintf("[sandbox]\ndocker_cli_path = %q\n", cfg.rawOrResolvedString(cfg.raw.sandbox.DockerCLIPath, loadedRaw.sandbox.DockerCLIPath, resolvedSandbox.DockerCLIPath)), 1)
-	}
-	overrideRegistries := cfg.rawOrResolvedStringArray(cfg.raw.sandbox.DebianRegistriesOverride, loadedRaw.sandbox.DebianRegistriesOverride, resolvedSandbox.DebianRegistriesOverride)
-	sandboxSection += fmt.Sprintf("debian_registries_override = %s\n", formatStringArray(overrideRegistries))
-	b.WriteString(sandboxSection)
 	resolvedHub := cfg.Hub.Resolved()
 	fmt.Fprintf(&b, `
 [hub]
@@ -880,7 +904,8 @@ base_url = %q
 }
 
 func (c Config) NeedsMigrationRewrite() bool {
-	return c.raw.bootstrapMeta.LegacyManagerTemplateSlash ||
+	return c.raw.legacySandboxPresent ||
+		c.raw.bootstrapMeta.LegacyManagerTemplateSlash ||
 		c.raw.bootstrapMeta.LegacyWorkerTemplateSlash ||
 		c.raw.bootstrapMeta.RewriteRequired ||
 		hasRemoteHubRegistryURLRewrite(c.raw.hub.Registries) ||
@@ -1386,4 +1411,18 @@ func bootstrapTemplateRefUsesLegacySlash(value string) bool {
 		return false
 	}
 	return !strings.Contains(left, "/") && !strings.Contains(right, "/")
+}
+
+// IsCSGHubDeployment keeps platform behavior separate from legacy sandbox access.
+func (c Config) IsCSGHubDeployment() bool {
+	return strings.EqualFold(strings.TrimSpace(c.Server.DeploymentMode), CSGHubProvider)
+}
+
+// ClearRetiredSandboxConfig removes private retry input only after migration
+// confirms there are no retired Agents left in the application's state.
+func (c *Config) ClearRetiredSandboxConfig() bool {
+	had := c.raw.legacySandboxPresent || c.raw.migrationSandboxPresent
+	c.raw.legacySandboxPresent = false
+	c.raw.migrationSandboxPresent = false
+	return had
 }

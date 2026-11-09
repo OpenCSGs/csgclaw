@@ -50,6 +50,8 @@ func (c cmd) Run(ctx context.Context, run *command.Context, args []string, globa
 		return c.runStart(ctx, run, args[1:], globals)
 	case "stop":
 		return c.runStop(ctx, run, args[1:], globals)
+	case "archive", "restore":
+		return c.runArchive(ctx, run, args[0], args[1:], globals)
 	case "delete":
 		return c.runDelete(ctx, run, args[1:], globals)
 	case "logs":
@@ -66,8 +68,10 @@ func (c cmd) usage(run *command.Context) {
 		"create             Create an agent",
 		"start <id>         Start an agent",
 		"stop <id>          Stop an agent",
-		"delete <id>        Delete one agent",
-		"delete --all       Delete all agents",
+		"archive <id>       Disable and hide an agent, keeping its data",
+		"restore <id>       Restore an archived agent",
+		"delete <id>        Delete one archived agent (--name required)",
+		"delete --all       Delete all archived agents",
 		"logs <id>          Show agent logs",
 	})
 }
@@ -75,6 +79,7 @@ func (c cmd) usage(run *command.Context) {
 func (c cmd) runList(ctx context.Context, run *command.Context, args []string, globals command.GlobalOptions) error {
 	fs := run.NewFlagSet("agent list", run.Program+" agent list [flags]", "List agents.")
 	filter := fs.String("filter", "", "filter by state")
+	archived := fs.Bool("archived", false, "list archived agents")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -82,7 +87,12 @@ func (c cmd) runList(ctx context.Context, run *command.Context, args []string, g
 		return fmt.Errorf("agent list does not accept positional arguments")
 	}
 
-	agents, err := listAgents(ctx, run.APIClient(globals))
+	path := "/api/v1/agents"
+	if *archived {
+		path += "?archived=true"
+	}
+	var agents []apitypes.Agent
+	err := run.APIClient(globals).GetJSON(ctx, path, &agents)
 	if err != nil {
 		return err
 	}
@@ -209,21 +219,23 @@ func (c cmd) runStop(ctx context.Context, run *command.Context, args []string, g
 }
 
 func (c cmd) runDelete(ctx context.Context, run *command.Context, args []string, globals command.GlobalOptions) error {
-	fs := run.NewFlagSet("agent delete", run.Program+" agent delete <id> [flags]\n  "+run.Program+" agent delete --all [flags]", "Delete one agent or all agents.")
-	all := fs.Bool("all", false, "delete all agents")
-	fs.BoolVar(all, "a", false, "delete all agents")
-	force := fs.Bool("force", false, "delete all agents without confirmation")
-	fs.BoolVar(force, "f", false, "delete all agents without confirmation")
+	fs := run.NewFlagSet("agent delete", run.Program+" agent delete <id> [flags]\n  "+run.Program+" agent delete --all [flags]", "Delete archived agents. Working files and collaboration history are retained.")
+	name := fs.String("name", "", "exact agent name to confirm permanent deletion")
+	all := fs.Bool("all", false, "delete all archived agents")
+	fs.BoolVar(all, "a", false, "delete all archived agents")
+	force := fs.Bool("force", false, "delete all archived agents without confirmation")
+	fs.BoolVar(force, "f", false, "delete all archived agents without confirmation")
 	fs.Usage = func() {
-		fmt.Fprintln(run.Stderr, "Delete one agent or all agents.")
+		fmt.Fprintln(run.Stderr, "Delete archived agents. Working files and collaboration history are retained.")
 		fmt.Fprintln(run.Stderr)
 		fmt.Fprintln(run.Stderr, "Usage:")
 		fmt.Fprintf(run.Stderr, "  %s agent delete <id> [flags]\n", run.Program)
 		fmt.Fprintf(run.Stderr, "  %s agent delete --all [flags]\n", run.Program)
 		fmt.Fprintln(run.Stderr)
 		fmt.Fprintln(run.Stderr, "Flags:")
-		fmt.Fprintln(run.Stderr, "  -a, --all     delete all agents")
-		fmt.Fprintln(run.Stderr, "  -f, --force   delete all agents without confirmation")
+		fmt.Fprintln(run.Stderr, "  --name NAME  exact name to confirm deletion")
+		fmt.Fprintln(run.Stderr, "  -a, --all     delete all archived agents")
+		fmt.Fprintln(run.Stderr, "  -f, --force   delete all archived agents without confirmation")
 	}
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -240,8 +252,11 @@ func (c cmd) runDelete(ctx context.Context, run *command.Context, args []string,
 		return fmt.Errorf("agent delete requires exactly one id unless --all is set")
 	}
 
+	if *name == "" {
+		return fmt.Errorf("agent delete requires --name with the exact agent name; archive it first")
+	}
 	id := normalizeAgentID(rest[0])
-	if err := run.APIClient(globals).DoNoContent(ctx, http.MethodDelete, "/api/v1/agents/"+id); err != nil {
+	if err := run.APIClient(globals).DoJSON(ctx, http.MethodDelete, "/api/v1/agents/"+id, map[string]string{"name": *name}, nil); err != nil {
 		return err
 	}
 	return command.RenderAction(globals.Output, run.Stdout, command.ActionResult{
@@ -268,12 +283,13 @@ func (c cmd) runDeleteAll(ctx context.Context, run *command.Context, globals com
 			})
 		}
 	}
-	agents, err := listAgents(ctx, run.APIClient(globals))
+	var agents []apitypes.Agent
+	err := run.APIClient(globals).GetJSON(ctx, "/api/v1/agents?archived=true", &agents)
 	if err != nil {
 		return err
 	}
 	for _, a := range agents {
-		if err := run.APIClient(globals).DoNoContent(ctx, http.MethodDelete, "/api/v1/agents/"+a.ID); err != nil {
+		if err := run.APIClient(globals).DoJSON(ctx, http.MethodDelete, "/api/v1/agents/"+a.ID, map[string]string{"name": a.Name}, nil); err != nil {
 			return err
 		}
 	}
@@ -286,7 +302,7 @@ func (c cmd) runDeleteAll(ctx context.Context, run *command.Context, globals com
 }
 
 func confirmDeleteAll(run *command.Context) (bool, error) {
-	if _, err := fmt.Fprint(run.Stdout, "This will remove all agents. Are you sure? [y/N] "); err != nil {
+	if _, err := fmt.Fprint(run.Stdout, "This will permanently remove all archived agents. Are you sure? [y/N] "); err != nil {
 		return false, err
 	}
 	answer, err := bufio.NewReader(run.Stdin).ReadString('\n')
@@ -451,4 +467,19 @@ func splitLogsArgs(args []string) ([]string, []string) {
 		}
 	}
 	return flagArgs, rest
+}
+
+func (c cmd) runArchive(ctx context.Context, run *command.Context, action string, args []string, globals command.GlobalOptions) error {
+	fs := run.NewFlagSet("agent "+action, run.Program+" agent "+action+" <id>", "Archive or restore an agent; schedules remain paused after restore.")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if len(fs.Args()) != 1 {
+		return fmt.Errorf("agent %s requires one id", action)
+	}
+	var result apitypes.Agent
+	if err := run.APIClient(globals).DoJSON(ctx, http.MethodPost, "/api/v1/agents/"+normalizeAgentID(fs.Args()[0])+"/"+action, nil, &result); err != nil {
+		return err
+	}
+	return command.RenderAgents(globals.Output, run.Stdout, []apitypes.Agent{result})
 }

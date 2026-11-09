@@ -17,6 +17,21 @@ import (
 	skill "csgclaw/internal/skill/state"
 )
 
+func TestFeishuWindowsPackagesUseVerifiedDomesticMirror(t *testing.T) {
+	packages, err := loadPackages()
+	if err != nil {
+		t.Fatal(err)
+	}
+	spec := packages["feishu"].CLI.Install
+	for _, arch := range []string{"amd64", "arm64"} {
+		archive := spec.Releases["windows-"+arch]
+		want := "https://registry.npmmirror.com/-/binary/lark-cli/v" + spec.Version + "/lark-cli-" + spec.Version + "-windows-" + arch + ".zip"
+		if archive.URL != want || len(archive.SHA256) != 64 {
+			t.Fatalf("windows-%s package = %+v", arch, archive)
+		}
+	}
+}
+
 type cliRuntimeStub struct {
 	mu          sync.Mutex
 	running     map[string]bool

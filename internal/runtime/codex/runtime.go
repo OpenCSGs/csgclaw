@@ -28,7 +28,7 @@ import (
 	"csgclaw/internal/opencsgmcp"
 	agentruntime "csgclaw/internal/runtime"
 	runtimeinstructions "csgclaw/internal/runtime/instructions"
-	"csgclaw/internal/runtime/sandboxgateway"
+	runtimeworkspace "csgclaw/internal/runtime/workspace"
 	"csgclaw/internal/sandbox"
 	templateembed "csgclaw/internal/template/embed"
 )
@@ -352,13 +352,8 @@ func (r *Runtime) Prompt(ctx context.Context, runtimeID, sessionID, prompt strin
 	return err
 }
 
-func (r *Runtime) PromptTurn(ctx context.Context, runtimeID, sessionID, turnID string, blocks []PromptContentBlock, accepted func()) error {
-	_, err := r.SessionManager().Prompt(ctx, SessionHandle{RuntimeID: runtimeID}, PromptRequest{
-		SessionID:           strings.TrimSpace(sessionID),
-		ClientUserMessageID: strings.TrimSpace(turnID),
-		Prompt:              blocks,
-		OnAccepted:          accepted,
-	})
+func (r *Runtime) PromptTurn(ctx context.Context, runtimeID string, req PromptRequest) error {
+	_, err := r.SessionManager().Prompt(ctx, SessionHandle{RuntimeID: runtimeID}, req)
 	return err
 }
 
@@ -382,6 +377,17 @@ func (r *Runtime) WorkspaceDir(runtimeID string) (string, error) {
 		return "", fmt.Errorf("codex workspace is unavailable")
 	}
 	return workspace, nil
+}
+
+func (r *Runtime) RuntimeDir(runtimeID string) (string, error) {
+	session, err := r.SessionManager().LiveSession(SessionHandle{RuntimeID: strings.TrimSpace(runtimeID)})
+	if err != nil {
+		return "", err
+	}
+	if session.RuntimeDir == "" {
+		return "", fmt.Errorf("codex runtime directory is unavailable")
+	}
+	return session.RuntimeDir, nil
 }
 
 func (r *Runtime) Subscribe(runtimeID string) (<-chan SessionEvent, func()) {
@@ -472,11 +478,11 @@ func (r *Runtime) Provision(ctx context.Context, req agentruntime.ProvisionReque
 		}
 	}
 	templateRoot := codexWorkspaceTemplateRoot(agentID)
-	if err := sandboxgateway.EnsureEmbeddedWorkspace(templateRoot, layout.WorkspaceRoot); err != nil {
+	if err := runtimeworkspace.EnsureEmbeddedWorkspace(templateRoot, layout.WorkspaceRoot); err != nil {
 		return fmt.Errorf("seed codex workspace template for agent %q: %w", req.AgentName, err)
 	}
 	if overlayRoot := strings.TrimSpace(req.WorkspaceOverlay); overlayRoot != "" {
-		if err := sandboxgateway.OverlayWorkspaceTree(overlayRoot, layout.WorkspaceRoot); err != nil {
+		if err := runtimeworkspace.OverlayWorkspaceTree(overlayRoot, layout.WorkspaceRoot); err != nil {
 			return fmt.Errorf("overlay codex workspace for agent %q: %w", req.AgentName, err)
 		}
 	}

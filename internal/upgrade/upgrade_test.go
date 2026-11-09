@@ -854,7 +854,9 @@ func TestClientInstallPreparedRefreshesRuntimeCLIs(t *testing.T) {
 	if _, err := client.InstallPrepared(PreparedBundle{BundleDir: preparedRoot}); err != nil {
 		t.Fatalf("InstallPrepared() error = %v", err)
 	}
-	assertFileContent(t, filepath.Join(home, ".csgclaw", "sandbox-tools", "csgclaw-cli"), "#!/bin/sh\n# new sandbox cli\n")
+	if _, err := os.Stat(filepath.Join(home, ".csgclaw", "sandbox-tools", "csgclaw-cli")); !os.IsNotExist(err) {
+		t.Fatalf("upgrade installed retired sandbox CLI: %v", err)
+	}
 	assertFileContent(t, filepath.Join(installRoot, "bin", "csgclaw-cli"), "#!/bin/sh\n# new host cli\n")
 }
 

@@ -116,6 +116,53 @@ Returns `503 Service Unavailable` if the upgrade manager is not configured.
 
 ## Skill API
 
+### Local skill discovery
+
+On server startup, every 30 seconds, and when listing the skill library, CSGClaw scans known user skill directories and automatically registers their source paths in `~/.csgclaw/skills/.discovered-skills.json`.
+Registration is by reference, without copying, editing, or deleting external skills, and requires no symlink privilege on Windows.
+`GET /api/v1/skills` includes `source: "discovered"` and a `discovery` object containing the selected tool, path, version, modification time, all same-name sources, a content key, and a `new` notification flag.
+The library and Agent skill assignment resolve the same selected source.
+An explicit assignment to an Agent installs its usual workspace snapshot, including supporting skill resources.
+
+| Source | User skill directory | Reference |
+| --- | --- | --- |
+| Agent / shared agents | `~/.agent/skills`, `~/.agents/skills` | [Agent Skills in Codex](https://learn.chatgpt.com/docs/customization/overview#skills) documents the shared `.agents` location; `.agent` is an additional user-requested location. |
+| Claude Code | `~/.claude/skills` | [Claude Code skills](https://code.claude.com/docs/en/skills) |
+| Codex | `~/.codex/skills` | Existing standalone skills; shared skills also use `~/.agents/skills`. |
+| Pi | `~/.pi/agent/skills` | [Pi skills](https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/docs/skills.md) |
+| OpenCode | `~/.config/opencode/skills` | [OpenCode skills](https://opencode.ai/docs/skills/) |
+| WorkBuddy / Cursor / CodeBuddy | `~/.workbuddy/skills`, `~/.cursor/skills`, `~/.codebuddy/skills` | [Tencent installation directories](https://cloud.tencent.com/document/product/1278/131433) |
+
+Documented environment overrides (`CLAUDE_CONFIG_DIR`, `CODEX_HOME`, `PI_CODING_AGENT_DIR`, `XDG_CONFIG_HOME`) add their corresponding skill roots.
+Discovery never scans arbitrary projects or reads application configuration, conversations, credentials, scripts, or references.
+Only regular `SKILL.md` files up to 1 MiB are opened, with bounded traversal, cycle detection, and no recursive directory-link following.
+Installed skill directory links at the first level are supported; links to arbitrary directories without their own skill definition are ignored.
+Invalid or inaccessible external skills are skipped independently.
+Explicit skill previews and Agent assignment may read supporting files inside the selected skill, but reject symlink escapes.
+
+Same-name external candidates are deduplicated case-insensitively.
+Valid semantic versions take precedence over unversioned candidates, then the higher semantic version wins.
+Equal or unavailable versions use the definition modification time, with the source path as a stable final tie-breaker.
+The same selection rule applies when a tracked external skill collides with a local library copy that declares comparable metadata.
+A local copy with invalid or absent metadata remains an explicit local override.
+Deleting a discovered library entry suppresses automatic registration across restarts and leaves its external files intact.
+`POST /api/v1/skills/discovery/rescan` explicitly rescans known directories, restores removed links, and returns the full skill list.
+Restored skills receive an unseen notification even if their current content was acknowledged before removal.
+Ordinary listing and background scans continue to respect removals.
+Installed summaries include `directory`, the absolute directory of the selected source or local installation; embedded-only skills have no physical directory.
+The settings library uses a compact two-column card list, with source application filtering and manual rescanning on one toolbar row.
+Every recorded application source remains filterable after skill deduplication, alongside builtin, market, and local skills.
+New or updated skills carry a compact badge that is acknowledged when opening their details.
+Installed skill details show a copyable absolute directory and explicitly identify the active declared version.
+Source software aliases pointing to the same canonical directory are shown as one shared skill, while different directories can be compared with their versions, modification times, and an active-source marker.
+The compact source badge reports the active version and software count; it does not imply additional software aliases are newer versions.
+File previews follow the active source key to avoid reusing content cached from an older selected source.
+
+`POST /api/v1/skills/discovery/ack` accepts `{"keys":["<content key>"]}` and returns `204 No Content`.
+It acknowledges only the specified current discoveries, so skills discovered concurrently retain their notification.
+Acknowledgements persist across restarts; new or changed definitions receive new keys and new notifications.
+The settings page refreshes discoveries every 30 seconds while open and also provides manual rescanning.
+
 ### `GET /api/v1/skills/tree` and `GET /api/v1/skills/file`
 
 Read installed Skill files using the existing `path` parameter. For market previews, pass `remote_path` and optionally `ref` instead: the tree endpoint lists that remote repository, while the file endpoint also takes a repository-relative `path`, such as `SKILL.md`. These read-only requests use the same Hub environment and matching user credentials as remote installation, without installing or changing local Skills.
@@ -1206,24 +1253,24 @@ Workers receive `request_source_message_id` in server-provided task context, der
 Agents should search that source first, then the current room by filename before requesting another upload.
 Attachment contents are task data, not platform instructions.
 Current-message and inherited thread attachments also enter the native file-input path, with per-execution staging and ID deduplication.
-Runtime input paths under `.csgclaw/engine-inputs` or `.csgclaw/attachments` are temporary; Agents must copy or download files to a regular workspace path and verify the result before claiming they were saved for later.
+Room deliveries create temporary inputs for each turn. To keep a room file at a chosen workspace path, copy or download it there and verify the saved file.
 Subsequent turns should use the room attachment commands to recover historical uploads instead of relying on expired temporary paths.
 Clearing messages or deleting the room follows existing attachment reference cleanup; explicitly downloaded workspace copies remain ordinary local files.
 Unpublished Agent workspace files and document full-text search are outside this interface.
 
 ### `GET /api/v1/attachments/{id}`
 
-Downloads a stored chat attachment by attachment ID.
+Downloads a room or direct-session attachment by ID.
 
 The `download_url` returned in attachment metadata includes an attachment-scoped capability token and can be used directly by browsers and agents.
 
 Callers may instead request the bare path with the configured server Bearer token.
 
-The endpoint serves the original bytes with the stored media type and `X-Content-Type-Options: nosniff`.
+For a room attachment this endpoint serves the original bytes with the stored media type. For a direct-session attachment it opens the current workspace file, detects its content type, and sends `Cache-Control: private, no-store`. Deleting the workspace file makes its URL return `404`. Use `HEAD` to request headers only. Responses include `X-Content-Type-Options: nosniff`.
 
 Downloads return the complete stored file without an additional size limit and support HTTP Range requests.
 
-Treat the capability URL as a secret and avoid sharing it outside the room context.
+Treat the capability URL as a secret and share it only with the intended recipient.
 
 Image attachments are served inline.
 
@@ -1496,24 +1543,25 @@ Participant outbound message shape is also accepted:
 }
 ```
 
+### `POST /api/v1/agents/{agent}/sessions/{session_id}/attachments`
+
+Uploads files to the selected agent and session without starting a turn. Authenticate using the service credentials for the current CSGClaw instance. Send one or more `files` parts in a `multipart/form-data` request. This endpoint accepts only `files` parts, each containing the filename and raw bytes. The limits are 10 nonempty files, 1 GiB per file, and 2 GiB total.
+
+On success, the server returns **201 Created** with `{"attachments":[…]}`. Each item uses the same fields as `Message.attachments`. The workspace file and its authorized download are available immediately, before the client sends a prompt. When the user sends the message, pass those IDs in `attachment_ids` to the session’s `/responses` endpoint.
+
 ### `POST /api/v1/agents/{agent}/sessions/{session_id}/responses`
 
 Runs one turn through the selected agent and its real CSGClaw runtime.
 The `{agent}` selector accepts an agent ID or a unique case-insensitive agent name.
 This endpoint is separate from `/llm/responses`, which proxies model traffic without running the agent.
 
-The endpoint does not require a Bearer token.
-Anonymous is represented by the existing `user-admin` identity because admin is currently the only user.
-The server ignores caller identity and persists every input message with `sender_id: "user-admin"`.
+The client supplies a 1–128 character `session_id` starting with an ASCII letter or digit. The remaining characters can also include `.`, `_`, `~`, and `-`.
+The server binds the session to a conversation for the selected agent and reuses it on later turns. Direct sessions return an empty `metadata.room_id`.
+In Portal, send uploads and downloads to the current CSGClaw instance's `endpoint` with the gateway credentials for that instance.
 
-The client owns a global `session_id` containing 1-128 path-safe ASCII characters.
-The first request creates one non-direct room, while later requests reuse it.
-The room contains exactly admin and the selected agent, and the server keeps `notify_all_agents` enabled.
-The room title is immutable and uses this audit-friendly format:
+The optional top-level `attachment_ids` array references files already saved for this agent and session. Supply distinct IDs. With service authentication enabled, all requests carrying files or attachment IDs require valid credentials. Missing or invalid credentials return `401`. An unknown ID or an ID belonging to another agent or session returns `404`. A JSON request may combine referenced IDs and inline Base64 files, up to 10 files in total. In `input_attachments`, referenced files appear in the order of their IDs, followed by newly uploaded files in request order.
 
-```text
-Anonymous Session: <session_id> | Agent: <agent_name> (<agent_id>)
-```
+When authentication is enabled, anonymous clients can send up to 1 MiB of plain-text JSON with `user_input` omitted or set to `false`. Larger bodies return `413`. Starting a new turn while a protected form awaits submission requires valid credentials.
 
 The shortest request uses string input:
 
@@ -1538,8 +1586,8 @@ optional `extra` and `extra_type` fields:
 but `extra_type` is omitted or empty, the server uses `plain_text`. An omitted
 or empty `extra` injects no context and ignores `extra_type`. An unknown non-empty
 `extra_type` returns `400 invalid_request`. A `plain_text` extra is limited to
-64 KiB and a `web_page_dom` extra to 512 KiB; the complete request remains subject
-to the 1 MiB request limit.
+64 KiB and a `web_page_dom` extra to 512 KiB. The request excluding Base64 file
+data is limited to 1 MiB.
 
 The server wraps the content in an `<extra_context>` with fixed safety guidance
 and submits it with the user input. A `web_page_dom` value is labeled as an
@@ -1579,6 +1627,118 @@ Text-only user message items are also accepted:
 }
 ```
 
+A browser can send a prompt and selected files in one `multipart/form-data`
+POST. Set `responsesUrl` to the session’s `/responses` URL and `token` to the
+Bearer credential for that instance. Include one `input` field containing the
+JSON encoding of a prompt string or the message array shown above. The optional `stream` field
+defaults to `false`. Send it as the string `"true"` or `"false"`. Append each
+selected `File` under the field name `file`. The browser supplies the
+`Content-Type` header with the multipart boundary.
+
+```js
+const form = new FormData()
+form.append("input", JSON.stringify("Summarize this report."))
+form.append("stream", "true")
+form.append("file", selectedFile)
+
+const response = await fetch(responsesUrl, {
+  method: "POST",
+  headers: { Authorization: `Bearer ${token}` },
+  body: form,
+})
+if (!response.ok) throw new Error(`Session request failed (HTTP ${response.status})`)
+```
+
+The multipart fields are `input`, optional `stream` and `user_input`, and repeated `file`. To send files with `attachment_ids`, `extra`, or `extra_type`, upload the files to the session's `/attachments` endpoint using `files`, then include the returned IDs in a JSON request to `/responses`. A JSON request containing only `attachment_ids` starts a file-only turn.
+
+JSON requests also support files through `input_file` parts:
+
+```json
+{
+  "input": [{
+    "role": "user",
+    "content": [
+      {"type": "input_text", "text": "Summarize this file."},
+      {
+        "type": "input_file",
+        "filename": "notes.txt",
+        "file_data": "data:text/plain;base64,SGVsbG8gd29ybGQK"
+      }
+    ]
+  }],
+  "stream": true
+}
+```
+
+`filename` is the file's basename. `file_data` is a `data:<media-type>;base64,<data>`
+URL containing the complete file. Repeat `input_file` for multiple files; a
+message containing only files is also accepted. The JSON body allowance includes
+Base64 expansion plus 1 MiB of other JSON content. Base64 increases transfer size
+by about one third. JSON clients and proxies may buffer the encoded request in memory.
+
+Both formats accept up to 10 nonempty files, up to 1 GiB per file and 2 GiB
+combined, measured in original file bytes. The worker receives each attachment's
+`workspace_path` and can reopen that path in later turns. Referencing the same
+ID uses the current workspace file, including edits, and applies the size limits to its current size. Portal downloads and previews read the same file. Deleting it makes downloads and ID references return `404`. The `sha256` field identifies the contents at publication. Download responses use the current file's type and length.
+
+Invalid file data or metadata returns `400 invalid_request`. Exceeding a file size or HTTP body limit
+returns `413 invalid_request`. Validation and file preparation finish before the
+SSE stream starts.
+
+The server saves uploads in the workspace before calling the agent. SSE includes their download URLs in the first `message_start`. Saved files remain available after turn cancellation, a busy-session rejection, or an agent error. A JSON error returned after saving the files includes `input_attachments`.
+
+| Files | JSON success | First SSE `message_start` | Final successful SSE `message_delta` |
+| --- | --- | --- | --- |
+| User uploads | `input_attachments` | `input_attachments` | `input_attachments` |
+| Agent results | `output[0].attachments` | — | `attachments` |
+
+An agent can publish a zero-byte result. If an Engine result is unavailable, the reply names the missing file and includes the text and downloads for all available results.
+
+The attachment arrays are top-level fields of the SSE event data. Empty arrays are omitted. Each attachment includes `id`, `name`, `media_type`, `size_bytes`, `sha256`, `download_url`, and a relative `workspace_path`. Images also have a `preview_url`. PDFs are served with `Content-Disposition: attachment`. To preview a PDF, use `readAttachment(id)` below to fetch its Blob, pass `URL.createObjectURL(blob)` to a PDF viewer, and call `URL.revokeObjectURL(url)` when the preview closes. A Codex agent can publish results with `csgclaw_publish_file`.
+
+Uploads and published results each have one file under `.csgclaw/attachments/sessions/<session_id>/` in the agent's configured `local_workspace_dir` or default workspace. IM stores the attachment ID, owner, path, and download credential under `assets/session-responses/`. When replacing the container, mount both persisted directories at their original paths. A room checkpoint or downgrade preserves the files and IDs for use after upgrading again. On upgrade, existing IDs and download URLs are kept when the file can be found in its owner's workspace. A session download uses `Cache-Control: private, no-store`.
+
+For Portal history, store the stable attachment ID and display fields with the message and its instance, agent, and session. Exclude tokens and token-bearing download or preview URLs from history. To reopen a file, fetch `GET /api/v1/attachments/{id}` on the corresponding instance using its current credentials. The session history API does not generate attachment entries for Portal automatically.
+
+A browser can upload as soon as the user selects files, then send a JSON turn when the user submits the prompt.
+
+```js
+const endpoint = new URL(instance.endpoint, gatewayHost)
+if (endpoint.origin !== new URL(gatewayHost).origin) throw new Error("Unexpected gateway")
+const base = endpoint.origin + endpoint.pathname.replace(/\/$/, "")
+const headers = { Authorization: `Bearer ${token}` }
+const session = `/api/v1/agents/${encodeURIComponent(agent)}/sessions/${encodeURIComponent(sid)}`
+
+function historyFile({ id, name, media_type, size_bytes }) {
+  return { id, name, media_type, size_bytes }
+}
+
+async function upload(files) {
+  const body = new FormData()
+  for (const file of files) body.append("files", file, file.name)
+  const res = await fetch(base + session + "/attachments", { method: "POST", headers, body })
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  return (await res.json()).attachments.map(historyFile)
+}
+
+async function send(prompt, uploads) {
+  const res = await fetch(base + session + "/responses", {
+    method: "POST",
+    headers: { ...headers, "Content-Type": "application/json" },
+    body: JSON.stringify({ input: prompt, attachment_ids: uploads.map(file => file.id) }),
+  })
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  const { output } = await res.json()
+  return { content: output[0].content, attachments: (output[0].attachments ?? []).map(historyFile) }
+}
+
+async function readAttachment(id) {
+  const res = await fetch(base + "/api/v1/attachments/" + encodeURIComponent(id), { headers, cache: "no-store" })
+  if (!res.ok) throw new Error(await res.text())
+  return res.blob()
+}
+```
+
 With `stream` omitted or set to `false`, the endpoint returns the completed
 Responses-style JSON object containing the final assistant text and session
 metadata. With `stream: true`, it returns `text/event-stream` using a CSGBot
@@ -1594,16 +1754,19 @@ message_stop
 ```
 
 Each SSE block contains both `event: <type>` and a JSON `data:` payload whose
-`type` matches the event name. Codex tool activity is included as `tool_use`
-content blocks with `input_json_delta`, followed by custom `tool_result` content
-blocks with `tool_result_delta`, matching the Genius chat protocol. Tool-use
-blocks preserve the runtime's concrete tool name and structured input; sensitive
-values are redacted before they leave the server. While a response is idle, the
-server sends an SSE `: heartbeat` comment about every 15 seconds to keep the
-connection alive.
-For Codex agents, final-answer `item/agentMessage/delta` events emitted by Codex
-app-server are forwarded immediately as `text_delta`; commentary
-and unclassified agent-message events are not included in the answer. Completion
+`type` matches the event name. A `tool_use` block identifies the tool and
+carries its redacted input in `input_json_delta`. The following `content_block_stop`
+ends the input. When the tool finishes, a single `tool_result` block carries its
+output in `tool_result_delta`. Each text delta waits for results from tools already running when it arrived,
+or for the end of the turn if a result is unavailable.
+Match `tool_result.tool_use_id` to `tool_use.id`, including when tools run
+concurrently. For a failed or canceled tool, the result block includes
+`is_error: true` and `status: "failed"` or `"canceled"`. While a response is
+idle, the server sends an SSE `: heartbeat` comment about every 15 seconds to
+keep the connection alive.
+
+For Codex agents, the API streams final-answer text and agent-message deltas
+that omit the phase, and skips explicit commentary and text snapshots. Completion
 events do not repeat the full text; clients should build the visible answer by
 appending deltas. Runtimes that only publish a final message fall back to one text
 delta. The stream is established and `message_start` is flushed before the agent
@@ -1612,8 +1775,39 @@ and `message_stop`.
 
 Only one turn may run for a session at a time.
 Different session IDs may run concurrently.
-Using the same global session with another agent returns `409 session_agent_conflict`.
-The server waits up to five minutes for a final agent response and returns `504 response_timeout` afterward.
+Different agents can use the same external `session_id` independently.
+The server imposes no response duration limit. After two minutes without progress, the Codex runtime can check the worker's history for a missing completion notification. This check requires a transport that supports write deadlines. When the native turn ID matches and history records a terminal status and completion time, the server sends any missing tool results and recoverable text in native item order before ending the response. If legacy events omit their turn ID after recovery, an identified completion can also restore the current turn from its native items. Both paths use the same SSE block types as live output. Client disconnects and explicit cancellation cancel the running response.
+
+### Session questions
+
+Forms are disabled per request by default. When `user_input` is omitted or `false`, the agent is instructed to ask for clarification in its text reply. If the runtime still requests a form, the server lets the turn continue. When a command or assistant emits only a structured question, public questions and options appear as chat text. Secret fields show a notice that a secure form is required. The user can reply with a new message in the same session.
+
+Clients that can display and submit forms opt in by setting `"user_input":true` in the `/responses` JSON request, or by sending a multipart field `user_input` with the string value `"true"`. The built-in room UI supports forms through its own message API.
+
+When instance service authentication is enabled, creating a response with `user_input: true`, listing questions with `GET /interactions`, and submitting answers with `POST /interactions/{interaction_id}/respond` all require valid service credentials for that instance. Missing or invalid credentials return `401 unauthorized`. Canceling a form-enabled turn or starting a new turn while a protected form awaits submission also requires valid credentials. Portal clients use the same instance endpoint and gateway authorization as they use for attachment access.
+
+The `request_user_input` SSE event carries `type`, `interaction_id`, `status`, `detached`, `questions`, `requested_at` and optional `auto_resolve_at` at the top level. Each question includes `id`, `header`, `question` and optional `options`, `is_other` and `is_secret`. Render questions and options in their supplied order. [Agentic frontend integration example (Chinese)](web/agentic-session-user-input.zh.md)
+
+Native questions have `detached: false` and keep the original response open until answered. A client using `stream: false` needs another connection to list and answer pending questions. A question produced by a command has `detached: true` and can outlive the original response. Detached session questions without an explicit deadline expire after 24 hours. With `stream: false`, the completed response includes these questions in a top-level `interactions` array.
+
+### `GET /api/v1/agents/{agent}/sessions/{session_id}/interactions`
+
+Returns `200 OK` and `{"interactions":[...]}` using the form fields above. A `pending` question accepts answers. A `submitting` question is processing an answer. Disable its submit button and poll the same endpoint until the question disappears or returns to `pending`. Use the same procedure after a page refresh or a lost response. Disconnecting the original response cancels the active turn.
+
+### `POST /api/v1/agents/{agent}/sessions/{session_id}/interactions/{interaction_id}/respond`
+
+Submits answers for one form. Use the same instance, agent and session as the response stream. Key the answers by the IDs in `questions[].id`.
+
+```json
+{"answers":{"source":{"answers":["PDF"]},"note":{"answers":["user_note: Include public documents only."]}}}
+```
+
+Use the original option label for a selection and the `user_note: ` prefix for free text. Submit all questions together. Each question entry requires an `answers` array. Use `[]` to skip that question. Use `{"answers":{}}` to skip the entire form.
+
+- For `detached: false`, submission returns `204 No Content`. Continue reading the original `/responses` request for subsequent output.
+- For `detached: true`, submitting an answer starts a continuation in the same session. The `/respond` request returns `200` with the final JSON response by default, or `200` with a new SSE stream when the request includes `"stream":true`. Skipping the entire form returns `204 No Content`. While an answer is starting its continuation, a competing `/responses` request receives `409 session_busy` in JSON mode. If an SSE stream has already started, it reports the error in the stream.
+
+If the runtime is unavailable before it receives a detached answer, the form remains pending. An SSE `200` only opens the stream. On an SSE error, disconnect or service failure, query the list and retry with the same interaction ID only when its status is `pending`. Invalid answers return `400 invalid_request` and leave the form pending. An unknown session or interaction returns `404 session_not_found` or `404 interaction_not_found`, respectively. A duplicate submission returns `409 interaction_already_resolved`. An expired or canceled interaction returns `410 interaction_gone`.
 
 ### `POST /api/v1/agents/{agent}/sessions/{session_id}/responses/cancel`
 
@@ -1634,9 +1828,6 @@ Errors use this JSON shape:
 }
 ```
 
-The v1 endpoint accepts text input, optional supplemental text context, and
-optional text-output streaming. It rejects tools, instructions, non-user roles,
-attachments, and unknown request fields.
 See [Session API Demo Frontend Guide](web/session-api-demo.md) for the bundled live demo and mockable frontend boundary.
 
 ### `GET /api/v1/agents/{id}/llm/models`
@@ -1730,6 +1921,8 @@ The following paths often seen in older docs are no longer registered in the cur
 ## Chat side panel files
 
 ### `GET /api/v1/agents/{id}/workspace?path=...&depth=1`
+
+With service authentication enabled, workspace browsing, file reads and workspace file references require credentials. Agent workspace requests use the configured `local_workspace_dir` or the agent's default workspace. A room with an explicit workspace uses its own configured directory.
 
 Lists only the immediate children of the selected workspace directory.
 The `path` is workspace-relative and defaults to the root.

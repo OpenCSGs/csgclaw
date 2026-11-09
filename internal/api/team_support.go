@@ -2,8 +2,10 @@ package api
 
 import (
 	"context"
+	agent "csgclaw/internal/agentengine/agents"
 	"errors"
 	"net/http"
+	"slices"
 	"strings"
 
 	"csgclaw/internal/agentengine"
@@ -145,6 +147,11 @@ func apiTeam(item team.TeamMeta) apitypes.Team {
 func apiTeamWithPresenter(item team.TeamMeta, presenter teamIdentityPresenter) apitypes.Team {
 	resp := apiTeam(item)
 	resp.LeadAgentName = presenter.displayAgentName(resp.LeadAgentID)
+	resp.MemberAgentIDs = slices.DeleteFunc(resp.MemberAgentIDs, func(id string) bool { return presenter.agentState(id) != "" })
+	if presenter.agentState(resp.LeadAgentID) != "" {
+		resp.LeadAgentID = ""
+		resp.LeadAgentName = ""
+	}
 	return resp
 }
 
@@ -165,14 +172,30 @@ func apiTeamsWithPresenter(items []team.TeamMeta, presenter teamIdentityPresente
 }
 
 type teamIdentityPresenter struct {
-	agents    agentengine.AgentInterface
-	namesByID map[string]string
+	agents     agentengine.AgentInterface
+	namesByID  map[string]string
+	statesByID map[string]string
 }
 
 func (h *Handler) newTeamIdentityPresenter() teamIdentityPresenter {
-	p := teamIdentityPresenter{namesByID: make(map[string]string)}
+	p := teamIdentityPresenter{namesByID: make(map[string]string), statesByID: make(map[string]string)}
 	if h != nil && h.agentEngine != nil {
 		p.agents = h.agentEngine.Agents()
+	}
+	if h != nil && h.im != nil {
+		for _, user := range h.im.ListUsers() {
+			p.addName(user.ID, user.Name)
+			if user.AgentID != "" {
+				p.addName(user.AgentID, user.Name)
+				p.statesByID[user.AgentID] = user.AgentState
+			}
+			p.addName(agent.CanonicalID(user.ID), user.Name)
+			p.statesByID[agent.CanonicalID(user.ID)] = user.AgentState
+			p.statesByID[user.ID] = user.AgentState
+			for _, alias := range teamIdentityAliases(user.ID) {
+				p.statesByID[alias] = user.AgentState
+			}
+		}
 	}
 	if h == nil || h.participant == nil {
 		return p
@@ -562,4 +585,21 @@ func uniqueStrings(values []string) []string {
 		out = append(out, value)
 	}
 	return out
+}
+
+func (p teamIdentityPresenter) agentState(id string) string {
+	if state := p.statesByID[id]; state != "" {
+		return state
+	}
+	if id == "" || p.agents == nil {
+		return ""
+	}
+	item, err := p.agents.Get(context.Background(), id, agentengine.AgentGetOptions{})
+	if err != nil {
+		return ""
+	}
+	if item.ArchivedAt != nil {
+		return "archived"
+	}
+	return ""
 }

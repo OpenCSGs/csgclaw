@@ -9,14 +9,13 @@ VERSION_PKG ?= csgclaw/internal/version
 LDFLAGS ?= -X $(VERSION_PKG).Version=$(VERSION) -X $(VERSION_PKG).Commit=$(COMMIT) -X $(VERSION_PKG).BuildTime=$(BUILD_TIME)
 CLI_LDFLAGS ?= -s -w $(LDFLAGS)
 CMD_PATH ?= ./cmd/$(APP)
-BOXLITE_CLI_VERSION ?= v0.9.0
-BOXLITE_CLI_BASE_URL ?= https://github.com/boxlite-ai/boxlite/releases/download
 
 GO ?= go
 GOFMT ?= gofmt
 NODE ?= node
 CGO_ENABLED ?= 0
-WEB_APP_DIR ?= web/app
+WEB_APP_DIR ?= web/packages/app
+WEB_WORKSPACE_DIR ?= $(abspath $(WEB_APP_DIR)/../..)
 WEB_STATIC_DIST_DIR ?= web/static-dist
 WEB_PNPM ?= $(CURDIR)/scripts/web-pnpm.sh
 WEB_BUILD_REPORT ?= summary
@@ -48,16 +47,14 @@ HOST_BINARY_SUFFIX := $(if $(filter windows,$(TARGET_OS)),.exe,)
 SERVER_BIN ?= $(BIN_DIR)/$(APP)$(HOST_BINARY_SUFFIX)
 HOST_CLI_BIN ?= $(BIN_DIR)/csgclaw-cli$(HOST_BINARY_SUFFIX)
 BIN ?= $(SERVER_BIN)
-SANDBOX_BUNDLE_TOOLS_DIR ?= $(BIN_DIR)/sandbox-tools
-SANDBOX_CLI_BIN ?= $(SANDBOX_BUNDLE_TOOLS_DIR)/csgclaw-cli
 
 .DEFAULT_GOAL := build
 
-.PHONY: help fmt test check-web-toolchain check-web-layout ensure-web-deps web-install web-dev web-typecheck web-build-assets build-web check-desktop-layout ensure-desktop-deps desktop-dev desktop-backend-bundle desktop-package desktop-package-macos-signed desktop-package-oss desktop-oss-manifest desktop-oss-publish desktop-oss-upload-packages desktop-oss-release build build-all build-server build-server-bin build-codex-cli build-sandbox-cli install-sandbox-cli run clean package package-all release
+.PHONY: help fmt test check-web-toolchain check-web-layout ensure-web-deps web-install web-dev web-typecheck web-build-assets build-web check-desktop-layout ensure-desktop-deps desktop-dev desktop-backend-bundle desktop-package desktop-package-macos-signed desktop-package-oss desktop-oss-manifest desktop-oss-publish desktop-oss-upload-packages desktop-oss-release build build-all build-server build-server-bin build-codex-cli run clean package package-all release
 
 help:
 	@printf '%s\n' \
-		'make            - build Web UI, companion host binaries, and the Linux sandbox CLI' \
+		'make            - build Web UI, companion host binaries' \
 		'make build      - same as default goal' \
 		'make build-all  - same as build (runtime images are remote fixed refs)' \
 		'make fmt        - format Go files' \
@@ -73,7 +70,6 @@ help:
 		'make desktop-oss-publish - validate the complete installer set, then upload artifacts and downloads.json to OSS' \
 		'make desktop-oss-upload-packages - upload selected immutable desktop packages without changing OSS JSON manifests' \
 		'make build-server-bin - build bin/csgclaw, bin/csgclaw-cli, and bundled Codex' \
-		'make build-sandbox-cli - build Linux csgclaw-cli into bin/sandbox-tools' \
 		'make run        - build (no docker images), then run the server' \
 		'make clean      - remove local build outputs'
 
@@ -89,21 +85,21 @@ check-web-toolchain:
 check-web-layout:
 	@if [ ! -d "$(WEB_APP_DIR)" ]; then \
 		printf '%s\n' "Web UI source directory is missing: $(WEB_APP_DIR)."; \
-		printf '%s\n' "Run make from the csgclaw repository root, or set WEB_APP_DIR=/absolute/path/to/web/app."; \
+		printf '%s\n' "Run make from the csgclaw repository root, or set WEB_APP_DIR=/absolute/path/to/web/packages/app."; \
 		exit 1; \
 	fi
 	@if [ ! -f "$(WEB_APP_DIR)/package.json" ]; then \
 		printf '%s\n' "Web UI package.json is missing: $(WEB_APP_DIR)/package.json."; \
 		exit 1; \
 	fi
-	@if [ ! -f "$(WEB_APP_DIR)/pnpm-lock.yaml" ]; then \
-		printf '%s\n' "Web UI pnpm lockfile is missing: $(WEB_APP_DIR)/pnpm-lock.yaml."; \
+	@if [ ! -f "$(WEB_WORKSPACE_DIR)/pnpm-lock.yaml" ]; then \
+		printf '%s\n' "Web UI pnpm lockfile is missing: $(WEB_WORKSPACE_DIR)/pnpm-lock.yaml."; \
 		printf '%s\n' "Restore the lockfile before running make build-web."; \
 		exit 1; \
 	fi
 
 ensure-web-deps: check-web-toolchain check-web-layout
-	@if [ ! -d "$(WEB_APP_DIR)/node_modules" ] || [ ! -x "$(WEB_APP_DIR)/node_modules/.bin/vite" ]; then \
+	@if [ ! -d "$(WEB_APP_DIR)/node_modules/csgclaw-ui" ] || [ ! -x "$(WEB_APP_DIR)/node_modules/.bin/vite" ]; then \
 		printf '%s\n' "Web UI dependencies are missing; running make web-install before build."; \
 		$(MAKE) web-install; \
 	fi
@@ -177,12 +173,12 @@ ensure-desktop-deps: check-desktop-layout
 		}; \
 	fi
 
-desktop-dev: ensure-desktop-deps build-web build-server-bin build-sandbox-cli
+desktop-dev: ensure-desktop-deps build-web build-server-bin
 	$(DESKTOP_PNPM) start
 
 desktop-backend-bundle: build-web
 	@printf 'Building desktop backend (%s/%s)...\n' "$(TARGET_OS)" "$(TARGET_ARCH)"
-	@VERSION=$(VERSION) COMMIT=$(COMMIT) BUILD_TIME=$(BUILD_TIME) GOCACHE=$(GOCACHE) INCLUDE_BOXLITE=0 $(CURDIR)/scripts/package-desktop-backend.sh $(TARGET_OS) $(TARGET_ARCH)
+	@VERSION=$(VERSION) COMMIT=$(COMMIT) BUILD_TIME=$(BUILD_TIME) GOCACHE=$(GOCACHE) $(CURDIR)/scripts/package-desktop-backend.sh $(TARGET_OS) $(TARGET_ARCH)
 
 desktop-package: WEB_BUILD_REPORT := summary
 desktop-package: ensure-desktop-deps desktop-backend-bundle
@@ -257,7 +253,7 @@ desktop-oss-upload-packages:
 
 desktop-oss-release: desktop-oss-publish
 
-build: build-web build-server-bin build-sandbox-cli
+build: build-web build-server-bin
 
 build-all: build
 
@@ -277,39 +273,32 @@ build-codex-cli:
 	mkdir -p "$(BIN_DIR)"
 	"$(CURDIR)/scripts/fetch-codex-cli.sh" "$(TARGET_OS)" "$(TARGET_ARCH)" "$(BIN_DIR)"
 
-build-server: build-server-bin build-sandbox-cli
-
-build-sandbox-cli:
-	mkdir -p "$(SANDBOX_BUNDLE_TOOLS_DIR)"
-	env GOCACHE=$(GOCACHE) CGO_ENABLED=0 GOOS=linux GOARCH=$(TARGET_ARCH) \
-		$(GO) build -ldflags "$(CLI_LDFLAGS)" -o "$(SANDBOX_CLI_BIN)" ./cmd/csgclaw-cli
-
-install-sandbox-cli: build-sandbox-cli
+build-server: build-server-bin
 
 run: build
 	env PATH="$(abspath $(BIN_DIR)):$$PATH" $(BIN) serve
 
 package: build-web
 	mkdir -p $(DIST_DIR)
-	VERSION=$(VERSION) COMMIT=$(COMMIT) BUILD_TIME=$(BUILD_TIME) DIST_DIR=$(DIST_DIR) APP=$(APP) GOCACHE=$(GOCACHE) INCLUDE_BOXLITE=$(INCLUDE_BOXLITE) BOXLITE_CLI_VERSION=$(BOXLITE_CLI_VERSION) BOXLITE_CLI_BASE_URL=$(BOXLITE_CLI_BASE_URL) $(CURDIR)/scripts/package-release.sh $$(go env GOOS) $$(go env GOARCH)
+	VERSION=$(VERSION) COMMIT=$(COMMIT) BUILD_TIME=$(BUILD_TIME) DIST_DIR=$(DIST_DIR) APP=$(APP) GOCACHE=$(GOCACHE) $(CURDIR)/scripts/package-release.sh $$(go env GOOS) $$(go env GOARCH)
 
 package-all: build-all
 	mkdir -p $(DIST_DIR)
-	VERSION=$(VERSION) COMMIT=$(COMMIT) BUILD_TIME=$(BUILD_TIME) DIST_DIR=$(DIST_DIR) APP=csgclaw GOCACHE=$(GOCACHE) INCLUDE_BOXLITE=$(INCLUDE_BOXLITE) BOXLITE_CLI_VERSION=$(BOXLITE_CLI_VERSION) BOXLITE_CLI_BASE_URL=$(BOXLITE_CLI_BASE_URL) $(CURDIR)/scripts/package-release.sh $$(go env GOOS) $$(go env GOARCH)
-	VERSION=$(VERSION) COMMIT=$(COMMIT) BUILD_TIME=$(BUILD_TIME) DIST_DIR=$(DIST_DIR) APP=csgclaw-cli GOCACHE=$(GOCACHE) INCLUDE_BOXLITE=0 BOXLITE_CLI_VERSION=$(BOXLITE_CLI_VERSION) BOXLITE_CLI_BASE_URL=$(BOXLITE_CLI_BASE_URL) $(CURDIR)/scripts/package-release.sh $$(go env GOOS) $$(go env GOARCH)
+	VERSION=$(VERSION) COMMIT=$(COMMIT) BUILD_TIME=$(BUILD_TIME) DIST_DIR=$(DIST_DIR) APP=csgclaw GOCACHE=$(GOCACHE) $(CURDIR)/scripts/package-release.sh $$(go env GOOS) $$(go env GOARCH)
+	VERSION=$(VERSION) COMMIT=$(COMMIT) BUILD_TIME=$(BUILD_TIME) DIST_DIR=$(DIST_DIR) APP=csgclaw-cli GOCACHE=$(GOCACHE) $(CURDIR)/scripts/package-release.sh $$(go env GOOS) $$(go env GOARCH)
 
 release: build-web
 	mkdir -p $(DIST_DIR)
-	VERSION=$(VERSION) COMMIT=$(COMMIT) BUILD_TIME=$(BUILD_TIME) DIST_DIR=$(DIST_DIR) APP=csgclaw GOCACHE=$(GOCACHE) INCLUDE_BOXLITE=1 BOXLITE_CLI_VERSION=$(BOXLITE_CLI_VERSION) BOXLITE_CLI_BASE_URL=$(BOXLITE_CLI_BASE_URL) $(CURDIR)/scripts/package-release.sh darwin arm64
-	VERSION=$(VERSION) COMMIT=$(COMMIT) BUILD_TIME=$(BUILD_TIME) DIST_DIR=$(DIST_DIR) APP=csgclaw-cli GOCACHE=$(GOCACHE) INCLUDE_BOXLITE=0 BOXLITE_CLI_VERSION=$(BOXLITE_CLI_VERSION) BOXLITE_CLI_BASE_URL=$(BOXLITE_CLI_BASE_URL) $(CURDIR)/scripts/package-release.sh darwin arm64
-	VERSION=$(VERSION) COMMIT=$(COMMIT) BUILD_TIME=$(BUILD_TIME) DIST_DIR=$(DIST_DIR) APP=csgclaw GOCACHE=$(GOCACHE) INCLUDE_BOXLITE=0 BOXLITE_CLI_VERSION=$(BOXLITE_CLI_VERSION) BOXLITE_CLI_BASE_URL=$(BOXLITE_CLI_BASE_URL) $(CURDIR)/scripts/package-release.sh darwin amd64
-	VERSION=$(VERSION) COMMIT=$(COMMIT) BUILD_TIME=$(BUILD_TIME) DIST_DIR=$(DIST_DIR) APP=csgclaw-cli GOCACHE=$(GOCACHE) INCLUDE_BOXLITE=0 BOXLITE_CLI_VERSION=$(BOXLITE_CLI_VERSION) BOXLITE_CLI_BASE_URL=$(BOXLITE_CLI_BASE_URL) $(CURDIR)/scripts/package-release.sh darwin amd64
-	VERSION=$(VERSION) COMMIT=$(COMMIT) BUILD_TIME=$(BUILD_TIME) DIST_DIR=$(DIST_DIR) APP=csgclaw GOCACHE=$(GOCACHE) INCLUDE_BOXLITE=1 BOXLITE_CLI_VERSION=$(BOXLITE_CLI_VERSION) BOXLITE_CLI_BASE_URL=$(BOXLITE_CLI_BASE_URL) $(CURDIR)/scripts/package-release.sh linux amd64
-	VERSION=$(VERSION) COMMIT=$(COMMIT) BUILD_TIME=$(BUILD_TIME) DIST_DIR=$(DIST_DIR) APP=csgclaw-cli GOCACHE=$(GOCACHE) INCLUDE_BOXLITE=0 BOXLITE_CLI_VERSION=$(BOXLITE_CLI_VERSION) BOXLITE_CLI_BASE_URL=$(BOXLITE_CLI_BASE_URL) $(CURDIR)/scripts/package-release.sh linux amd64
-	VERSION=$(VERSION) COMMIT=$(COMMIT) BUILD_TIME=$(BUILD_TIME) DIST_DIR=$(DIST_DIR) APP=csgclaw GOCACHE=$(GOCACHE) INCLUDE_BOXLITE=1 BOXLITE_CLI_VERSION=$(BOXLITE_CLI_VERSION) BOXLITE_CLI_BASE_URL=$(BOXLITE_CLI_BASE_URL) $(CURDIR)/scripts/package-release.sh linux arm64
-	VERSION=$(VERSION) COMMIT=$(COMMIT) BUILD_TIME=$(BUILD_TIME) DIST_DIR=$(DIST_DIR) APP=csgclaw-cli GOCACHE=$(GOCACHE) INCLUDE_BOXLITE=0 BOXLITE_CLI_VERSION=$(BOXLITE_CLI_VERSION) BOXLITE_CLI_BASE_URL=$(BOXLITE_CLI_BASE_URL) $(CURDIR)/scripts/package-release.sh linux arm64
-	VERSION=$(VERSION) COMMIT=$(COMMIT) BUILD_TIME=$(BUILD_TIME) DIST_DIR=$(DIST_DIR) APP=csgclaw GOCACHE=$(GOCACHE) INCLUDE_BOXLITE=0 BOXLITE_CLI_VERSION=$(BOXLITE_CLI_VERSION) BOXLITE_CLI_BASE_URL=$(BOXLITE_CLI_BASE_URL) $(CURDIR)/scripts/package-release.sh windows amd64
-	VERSION=$(VERSION) COMMIT=$(COMMIT) BUILD_TIME=$(BUILD_TIME) DIST_DIR=$(DIST_DIR) APP=csgclaw-cli GOCACHE=$(GOCACHE) INCLUDE_BOXLITE=0 BOXLITE_CLI_VERSION=$(BOXLITE_CLI_VERSION) BOXLITE_CLI_BASE_URL=$(BOXLITE_CLI_BASE_URL) $(CURDIR)/scripts/package-release.sh windows amd64
+	VERSION=$(VERSION) COMMIT=$(COMMIT) BUILD_TIME=$(BUILD_TIME) DIST_DIR=$(DIST_DIR) APP=csgclaw GOCACHE=$(GOCACHE) $(CURDIR)/scripts/package-release.sh darwin arm64
+	VERSION=$(VERSION) COMMIT=$(COMMIT) BUILD_TIME=$(BUILD_TIME) DIST_DIR=$(DIST_DIR) APP=csgclaw-cli GOCACHE=$(GOCACHE) $(CURDIR)/scripts/package-release.sh darwin arm64
+	VERSION=$(VERSION) COMMIT=$(COMMIT) BUILD_TIME=$(BUILD_TIME) DIST_DIR=$(DIST_DIR) APP=csgclaw GOCACHE=$(GOCACHE) $(CURDIR)/scripts/package-release.sh darwin amd64
+	VERSION=$(VERSION) COMMIT=$(COMMIT) BUILD_TIME=$(BUILD_TIME) DIST_DIR=$(DIST_DIR) APP=csgclaw-cli GOCACHE=$(GOCACHE) $(CURDIR)/scripts/package-release.sh darwin amd64
+	VERSION=$(VERSION) COMMIT=$(COMMIT) BUILD_TIME=$(BUILD_TIME) DIST_DIR=$(DIST_DIR) APP=csgclaw GOCACHE=$(GOCACHE) $(CURDIR)/scripts/package-release.sh linux amd64
+	VERSION=$(VERSION) COMMIT=$(COMMIT) BUILD_TIME=$(BUILD_TIME) DIST_DIR=$(DIST_DIR) APP=csgclaw-cli GOCACHE=$(GOCACHE) $(CURDIR)/scripts/package-release.sh linux amd64
+	VERSION=$(VERSION) COMMIT=$(COMMIT) BUILD_TIME=$(BUILD_TIME) DIST_DIR=$(DIST_DIR) APP=csgclaw GOCACHE=$(GOCACHE) $(CURDIR)/scripts/package-release.sh linux arm64
+	VERSION=$(VERSION) COMMIT=$(COMMIT) BUILD_TIME=$(BUILD_TIME) DIST_DIR=$(DIST_DIR) APP=csgclaw-cli GOCACHE=$(GOCACHE) $(CURDIR)/scripts/package-release.sh linux arm64
+	VERSION=$(VERSION) COMMIT=$(COMMIT) BUILD_TIME=$(BUILD_TIME) DIST_DIR=$(DIST_DIR) APP=csgclaw GOCACHE=$(GOCACHE) $(CURDIR)/scripts/package-release.sh windows amd64
+	VERSION=$(VERSION) COMMIT=$(COMMIT) BUILD_TIME=$(BUILD_TIME) DIST_DIR=$(DIST_DIR) APP=csgclaw-cli GOCACHE=$(GOCACHE) $(CURDIR)/scripts/package-release.sh windows amd64
 
 clean:
 	rm -rf $(BIN_DIR) $(DIST_DIR) $(GOCACHE)

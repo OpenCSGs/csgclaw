@@ -106,9 +106,8 @@ web-build:
     - node --version
     - pnpm --version
   script:
-    - pnpm --dir web/app install --frozen-lockfile
-    - mkdir -p web/static-dist
-    - pnpm --dir web/app build
+    - pnpm --dir web install --frozen-lockfile
+    - pnpm --dir web --filter csgclaw-web build
     - test -f web/static-dist/index.html
   artifacts:
     paths:

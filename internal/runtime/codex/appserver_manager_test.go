@@ -955,6 +955,82 @@ func TestAppServerManagerPromptPublishesStructuredDeltaBeforeCompletion(t *testi
 	}
 }
 
+func TestConversationStructuredQuestionPolicy(t *testing.T) {
+	for _, tc := range []struct {
+		name, mode, modelText, wantText string
+		policy                          contract.InteractionPolicy
+		wantForms                       int
+	}{
+		{"text only command continues", "prompt-command-output-delta", "The model continued.", "The model continued.", contract.InteractionTextOnly, 0},
+		{"text only assistant question", "prompt-assistant-question", "", "Choose step two.\n- Continue", contract.InteractionTextOnly, 0},
+		{"text only assistant preamble and private question", "prompt-private-question", "", "I need one more detail.\n\nA private answer requires a secure question form.", contract.InteractionTextOnly, 0},
+		{"opted in response", "prompt-command-output-delta", "", "", contract.InteractionUserInputOnly, 1},
+		{"room", "prompt-assistant-question", "", "", contract.InteractionResolve, 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			withAppServerHelperCommand(t, tc.mode)
+			spec := testAppServerSessionSpec(t.TempDir())
+			bus := NewEventSink()
+			manager := newAppServerManager(testAppServerManagerDepsWithSink(bus))
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			session, err := manager.Start(ctx, spec)
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { _ = manager.Stop(context.Background(), SessionHandle{RuntimeID: spec.RuntimeID}) })
+			nativeEvents, unsubscribe := bus.SubscribeSession(spec.RuntimeID, session.SessionID)
+			defer unsubscribe()
+			adapter := NewConversationAdapter(spec.RuntimeID, New(Dependencies{Manager: manager, EventSink: bus}))
+			done := make(chan contract.TurnResult, 1)
+			forms := 0
+			go func() {
+				done <- adapter.Run(ctx, contract.TurnRequest{
+					ID: "question-turn", Input: []contract.InputPart{{Kind: contract.InputPartText, Text: "Ask a question"}}, Interaction: tc.policy,
+				}, contract.EventSinkFunc(func(_ context.Context, event contract.TurnEvent) error {
+					if event.Output != nil && event.Output.Kind == contract.OutputItemRequestUserInput {
+						forms++
+					}
+					return nil
+				}))
+			}()
+			if tc.wantForms == 0 {
+				// Let the fixture finish naturally only after the structured record reaches the runtime.
+				for {
+					select {
+					case event := <-nativeEvents:
+						if event.Kind != SessionEventStructuredOutput {
+							continue
+						}
+					case <-ctx.Done():
+						t.Fatal("runtime did not receive a question")
+					}
+					break
+				}
+				live := manager.liveSession(spec.RuntimeID)
+				waiter := live.appServerTurnWaiter(session.SessionID)
+				if waiter == nil {
+					t.Fatal("question finished the turn before the model completed")
+				}
+				if _, err := live.appClient.request(ctx, "test/complete", map[string]any{"text": tc.modelText}); err != nil {
+					t.Fatal(err)
+				}
+				if waiter.hasStructuredOutputBoundary() {
+					t.Fatal("question triggered a turn interrupt")
+				}
+			}
+			select {
+			case result := <-done:
+				if result.Status != contract.TurnSucceeded || result.Output != tc.wantText || forms != tc.wantForms {
+					t.Fatalf("result = %+v, forms = %d", result, forms)
+				}
+			case <-ctx.Done():
+				t.Fatal("turn did not complete")
+			}
+		})
+	}
+}
+
 func TestAppServerManagerPromptCancellationReturnsConfirmedStop(t *testing.T) {
 	withAppServerHelperCommand(t, "prompt-cancel-confirmed")
 	spec := testAppServerSessionSpec(t.TempDir())
@@ -2127,6 +2203,37 @@ func TestAppServerEventAdapterLegacyEvents(t *testing.T) {
 	}
 }
 
+func TestAppServerEventAdapterLegacyToolOutcomes(t *testing.T) {
+	for _, tc := range []struct {
+		name, kind, status, output string
+		fields                     map[string]any
+	}{
+		{"command declined", "exec_command_end", "canceled", "permission refused", map[string]any{"status": "declined", "exit_code": 1, "aggregated_output": "permission refused"}},
+		{"command failed", "exec_command_end", "failed", "", map[string]any{"exit_code": 7}},
+		{"command succeeded", "exec_command_end", "completed", "exited with code 7", map[string]any{"exit_code": 0, "output": "exited with code 7"}},
+		{"command text fallback", "exec_command_end", "failed", "exited with code 2", map[string]any{"output": "exited with code 2"}},
+		{"patch failed", "patch_apply_end", "failed", "", map[string]any{"success": false}},
+		{"patch declined", "patch_apply_end", "canceled", "", map[string]any{"status": "declined", "success": false}},
+		{"patch succeeded", "patch_apply_end", "completed", "", map[string]any{}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			manager, live, sink := testAppServerEventAdapter(t)
+			tc.fields["type"] = tc.kind
+			tc.fields["call_id"] = "call-1"
+			manager.handleAppServerNotification("runtime-1", live, appServerNotification{
+				Method: "codex/event", Params: mustJSONRaw(t, tc.fields),
+			})
+			events := withoutContextUsage(sink.snapshot())
+			if len(events) != 1 || events[0].Kind != SessionEventToolCallUpdate || events[0].ToolStatus != tc.status {
+				t.Fatalf("legacy tool events = %+v, want one %s result", events, tc.status)
+			}
+			if tc.output != "" && !strings.Contains(events[0].ToolOutputSummary, tc.output) {
+				t.Fatalf("tool output = %q, want %q", events[0].ToolOutputSummary, tc.output)
+			}
+		})
+	}
+}
+
 func TestAppServerEventAdapterLegacyTurnAbortedAcceptsStructuredOutputBoundary(t *testing.T) {
 	t.Parallel()
 
@@ -2200,6 +2307,165 @@ func TestAppServerEventAdapterLegacyResponseItemExecCommandFallback(t *testing.T
 		events[1].ToolStatus != "failed" ||
 		!strings.Contains(events[1].ToolOutputSummary, "operation not permitted") {
 		t.Fatalf("fallback output = %#v, want failed exec command output", events[1])
+	}
+}
+
+func TestAppServerEventAdapterLegacyShellResults(t *testing.T) {
+	const question = `::csgclaw-output::request_user_input {"questions":[{"id":"next","header":"Next","question":"Continue?","options":[{"label":"Yes","description":"Proceed."}]}]}`
+	const link = `::csgclaw-output::resource_link {"type":"resource_link","name":"docs","uri":"https://example.com/docs"}`
+	for _, tc := range []struct {
+		label, name, output, status string
+		wantArtifact                bool
+	}{
+		{"shell question", "shell_command", "Exit code: 0\nWall time: 0.2 seconds\nOutput:\n" + question, "completed", true},
+		{"poll link", "write_stdin", "Chunk ID: 123\nWall time: 0.0002 seconds\nProcess exited with code 0\nOutput:\n" + link, "completed", true},
+		{"plain shell", "shell_command", question, "completed", true},
+		{"plain poll", "write_stdin", link, "completed", true},
+		{"shell failure", "shell_command", "Exit code: 2\nWall time: 0.1 seconds\nOutput:\n" + question, "failed", false},
+		{"poll failure", "write_stdin", "Wall time: 0.1 seconds\nProcess exited with code 2\nOutput:\nProcess exited with code 0\n" + link, "failed", false},
+		{"active poll", "write_stdin", "Wall time: 1.0 seconds\nProcess running with session ID 55\nOutput:\nExit code: 0\n" + question, "completed", false},
+		{"missing exit", "write_stdin", "Wall time: 1.0 seconds\nOutput:\nProcess exited with code 2\n" + link, "completed", false},
+		{"poll error", "write_stdin", "write_stdin failed: Unknown process id 55", "failed", false},
+	} {
+		t.Run(tc.label, func(t *testing.T) {
+			manager, live, sink := testAppServerEventAdapter(t)
+			manager.handleLegacyResponseItemEvent("runtime-1", live, map[string]any{
+				"type": "function_call", "call_id": "shell", "name": tc.name, "arguments": `{}`,
+			})
+			manager.handleLegacyResponseItemEvent("runtime-1", live, map[string]any{
+				"type": "function_call_output", "call_id": "shell", "output": tc.output,
+			})
+			events := withoutContextUsage(sink.snapshot())
+			if tc.wantArtifact {
+				if len(events) != 3 || events[1].Kind != SessionEventStructuredOutput || events[1].ToolKind != tc.name {
+					t.Fatalf("expected a structured output from %s: %+v", tc.name, events)
+				}
+			} else if len(events) != 2 {
+				t.Fatalf("expected only tool start and result: %+v", events)
+			}
+			result := events[len(events)-1]
+			if result.Kind != SessionEventToolCallUpdate || result.ToolStatus != tc.status ||
+				result.ToolTitle != tc.name || result.Payload.(map[string]any)["tool"] != tc.name {
+				t.Fatalf("tool result = %+v", result)
+			}
+			wantControlLine := !tc.wantArtifact && strings.Contains(tc.output, structuredOutputPrefix)
+			if strings.Contains(result.ToolOutputSummary, structuredOutputPrefix) != wantControlLine {
+				t.Fatalf("tool output = %q, decoded artifact = %t", result.ToolOutputSummary, tc.wantArtifact)
+			}
+		})
+	}
+}
+
+func TestLegacyPTYRecordsWaitForProcessExit(t *testing.T) {
+	for _, tc := range []struct {
+		name, exitCode string
+		nextTurn       bool
+		wantCount      int
+	}{
+		{"successful exit", "0", false, 1},
+		{"failed exit", "7", false, 0},
+		{"new turn", "0", true, 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			manager, live, sink := testAppServerEventAdapter(t)
+			send := func(id, name, arguments, output string) {
+				manager.handleLegacyResponseItemEvent("runtime-1", live, map[string]any{
+					"type": "function_call", "call_id": id, "name": name, "arguments": arguments,
+				})
+				manager.handleLegacyResponseItemEvent("runtime-1", live, map[string]any{
+					"type": "function_call_output", "call_id": id, "output": output,
+				})
+			}
+			const record = `::csgclaw-output::resource_link {"type":"resource_link","name":"docs","uri":"https://example.com/docs"}`
+			send("exec", "exec_command", `{"cmd":"./script.sh"}`, "Wall time: 1.0 seconds\nProcess running with session ID 55\nOutput:\n"+record)
+			send("other", "write_stdin", `{"session_id":56}`, "Process exited with code 0\nOutput:\n")
+			for _, event := range sink.snapshot() {
+				if event.Kind == SessionEventStructuredOutput {
+					t.Fatal("published a record before the corresponding process exited")
+				}
+			}
+			if tc.nextTurn {
+				if _, err := live.registerAppServerTurnWaiter("main-thread"); err != nil {
+					t.Fatal(err)
+				}
+			}
+			send("poll", "write_stdin", `{"session_id":55}`, "Process exited with code "+tc.exitCode+"\nOutput:\n")
+			send("again", "write_stdin", `{"session_id":55}`, "Process exited with code 0\nOutput:\n")
+			count := 0
+			for _, event := range sink.snapshot() {
+				if event.Kind == SessionEventStructuredOutput {
+					count++
+					if event.ToolCallID != "poll" || len(event.Payload.(activity.StructuredOutputArtifact).ResourceLinks) != 1 {
+						t.Fatalf("unexpected structured output: %+v", event)
+					}
+				}
+			}
+			if count != tc.wantCount {
+				t.Fatalf("got %d structured outputs, want %d", count, tc.wantCount)
+			}
+		})
+	}
+}
+
+func TestLegacyShellCommandAcceptsExecEnd(t *testing.T) {
+	manager, live, sink := testAppServerEventAdapter(t)
+	manager.handleLegacyResponseItemEvent("runtime-1", live, map[string]any{
+		"type": "function_call", "call_id": "shell", "name": "shell_command", "arguments": `{"command":"run"}`,
+	})
+	manager.handleLegacyAppServerEvent("runtime-1", live, map[string]any{
+		"type": "exec_command_end", "call_id": "shell", "status": "failed", "aggregated_output": "bad option",
+	})
+	manager.handleLegacyResponseItemEvent("runtime-1", live, map[string]any{
+		"type": "function_call_output", "call_id": "shell", "output": "duplicate",
+	})
+	events := withoutContextUsage(sink.snapshot())
+	if len(events) != 2 || events[1].Kind != SessionEventToolCallUpdate || events[1].ToolStatus != "failed" ||
+		events[1].ToolTitle != "shell_command" || !strings.Contains(events[1].ToolOutputSummary, "bad option") {
+		t.Fatalf("expected one shell_command result from exec_command_end: %+v", events)
+	}
+}
+
+func TestAppServerEventAdapterMatchesLegacyResultsToTheirFunctionCalls(t *testing.T) {
+	manager, live, sink := testAppServerEventAdapter(t)
+	send := func(fields map[string]any) {
+		manager.handleAppServerNotification("runtime-1", live, appServerNotification{
+			Method: "codex/response_item", Params: mustJSONRaw(t, fields),
+		})
+	}
+	send(map[string]any{"type": "function_call", "call_id": "plan", "name": "update_plan", "arguments": `{"step":"test"}`})
+	send(map[string]any{"type": "function_call", "call_id": "command", "name": "exec_command", "arguments": `{"cmd":"pwd"}`})
+	send(map[string]any{"type": "function_call_output", "call_id": "unknown", "output": "unknown result", "status": "cancelled"})
+	send(map[string]any{"type": "function_call_output", "call_id": "unknown", "output": "duplicate"})
+	send(map[string]any{"type": "function_call_output", "call_id": "command", "output": "directory"})
+	record := `::csgclaw-output::resource_link {"type":"resource_link","name":"docs","uri":"https://example.com/docs"}`
+	send(map[string]any{"type": "function_call_output", "call_id": "plan", "output": []any{
+		map[string]any{"type": "input_text", "text": "Plan updated"},
+		map[string]any{"type": "input_image", "image_url": "image-content"},
+		map[string]any{"type": "input_text", "text": record},
+	}})
+	send(map[string]any{"type": "function_call_output", "call_id": "plan", "output": "duplicate"})
+
+	events := withoutContextUsage(sink.snapshot())
+	if len(events) != 5 {
+		t.Fatalf("expected two starts and three results: %+v", events)
+	}
+	plan, command := events[0], events[1]
+	if plan.ToolKind != "dynamic_tool_call" || plan.ToolTitle != "update_plan" || plan.Payload.(map[string]any)["tool"] != "update_plan" {
+		t.Fatalf("plan start = %+v", plan)
+	}
+	if command.ToolKind != "exec_command" || command.Payload.(map[string]any)["command"] != "pwd" {
+		t.Fatalf("command start = %+v", command)
+	}
+	unknown, commandResult, planResult := events[2], events[3], events[4]
+	if unknown.Kind != SessionEventToolCallUpdate || unknown.ToolCallID != "unknown" || unknown.ToolStatus != "canceled" ||
+		unknown.ToolKind != "" || unknown.ToolTitle != "" || !strings.Contains(unknown.ToolOutputSummary, "unknown result") {
+		t.Fatalf("anonymous result = %+v", unknown)
+	}
+	if commandResult.ToolCallID != command.ToolCallID || commandResult.ToolKind != command.ToolKind ||
+		planResult.ToolCallID != plan.ToolCallID || planResult.ToolKind != plan.ToolKind ||
+		planResult.ToolTitle != plan.ToolTitle || planResult.Payload.(map[string]any)["tool"] != plan.ToolTitle ||
+		planResult.ToolStatus != "completed" || planResult.ToolOutputSummary != summarizeToolValue(map[string]any{"output": "Plan updated\n" + record}) {
+		t.Fatalf("results = %+v", events[2:])
 	}
 }
 
@@ -3332,7 +3598,7 @@ func TestAppServerManagerHelperProcess(t *testing.T) {
 				return nil, false
 			}
 		})
-	case "prompt-command-output-delta":
+	case "prompt-command-output-delta", "prompt-assistant-question", "prompt-private-question":
 		runAppServerHelper(t, func(index int, msg map[string]any) (map[string]any, bool) {
 			switch msg["method"] {
 			case "thread/start":
@@ -3342,11 +3608,25 @@ func TestAppServerManagerHelperProcess(t *testing.T) {
 				output := "ordinary\n" + record + "\n"
 				split := strings.Index(output, `"question"`)
 				writeRPCNotification(t, "turn/started", map[string]any{"threadId": "main-thread", "turn": map[string]any{"id": "turn-delta"}})
+				if mode == "prompt-assistant-question" || mode == "prompt-private-question" {
+					if mode == "prompt-private-question" {
+						record = "I need one more detail.\n" + `::csgclaw-output::request_user_input {"questions":[{"id":"private","header":"Private","question":"Enter your recovery code.","isSecret":true,"options":[{"label":"My private code","description":"Personal."}]}]}`
+					}
+					writeRPCNotification(t, "item/completed", map[string]any{"threadId": "main-thread", "turnId": "turn-delta", "item": map[string]any{"id": "assistant-question", "type": "agentMessage", "text": record}})
+					return rpcResult(msg["id"], map[string]any{"turnId": "turn-delta"}), true
+				}
 				writeRPCNotification(t, "item/started", map[string]any{"threadId": "main-thread", "turnId": "turn-delta", "item": map[string]any{"id": "call-delta", "type": "commandExecution", "command": "emit demo"}})
 				writeRPCNotification(t, "item/commandExecution/outputDelta", map[string]any{"threadId": "main-thread", "turnId": "turn-delta", "itemId": "call-delta", "delta": output[:split]})
 				writeRPCNotification(t, "item/commandExecution/outputDelta", map[string]any{"threadId": "main-thread", "turnId": "turn-delta", "itemId": "call-delta", "delta": output[split:]})
 				writeRPCNotification(t, "item/completed", map[string]any{"threadId": "main-thread", "turnId": "turn-delta", "item": map[string]any{"id": "call-delta", "type": "commandExecution", "status": "completed", "aggregatedOutput": ""}})
 				return rpcResult(msg["id"], map[string]any{"turnId": "turn-delta"}), true
+			case "test/complete":
+				params, _ := msg["params"].(map[string]any)
+				if text, _ := params["text"].(string); text != "" {
+					writeRPCNotification(t, "item/completed", map[string]any{"threadId": "main-thread", "turnId": "turn-delta", "item": map[string]any{"id": "final", "type": "agentMessage", "phase": "final_answer", "text": text}})
+				}
+				writeRPCNotification(t, "turn/completed", map[string]any{"threadId": "main-thread", "turn": map[string]any{"id": "turn-delta", "status": "completed"}})
+				return rpcResult(msg["id"], map[string]any{}), true
 			case "turn/interrupt":
 				assertTurnInterruptParams(t, msg, "main-thread", "turn-delta")
 				writeRPCNotification(t, "turn/completed", map[string]any{

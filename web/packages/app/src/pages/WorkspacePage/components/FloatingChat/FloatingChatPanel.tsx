@@ -1,0 +1,469 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { ReactNode } from "react";
+import { errorMessage } from "@/api/client";
+import {
+  Conversation,
+  AgentQuestionComposer,
+  type ConversationMessageListProps,
+  type ConversationPaneProps,
+  useQuestionAnswerMode,
+  useConversationDraftEditorSync,
+} from "@/components/business/ConversationPane";
+import type { DocumentPreviewRequest } from "@/components/business/DocumentPreviewPanel";
+import { ChatSidePanel, useChatTools } from "@/components/business/ChatSidePanel";
+import { normalizeAuthProviderName } from "@/models/agents";
+import {
+  getConversationDescription,
+  isDirectConversation,
+  type IMMessage,
+  type TranslateFn,
+} from "@/models/conversations";
+import { classNames } from "@/shared/lib/classNames";
+import { localizeAPIError } from "@/shared/i18n";
+import { FloatingChatPromptSuggestions } from "./FloatingChatPromptSuggestions";
+import styles from "./FloatingChat.module.css";
+
+export type FloatingChatPanelProps = {
+  agentName: string;
+  chatProps: ConversationPaneProps;
+  headerAccessory?: ReactNode;
+  onPickPrompt: (text: string) => void;
+};
+
+export function FloatingChatPanel({ agentName, chatProps, headerAccessory, onPickPrompt }: FloatingChatPanelProps) {
+  const {
+    activeThreadRootID,
+    activeThreadView,
+    agents = [],
+    authBusyProvider,
+    authStatuses,
+    channelToolsRef,
+    composerError,
+    conversation,
+    conversationMembers,
+    currentUserID = "",
+    resourceAgentID,
+    onPickResources,
+    onPickThreadResources,
+    draftSegments,
+    draftText,
+    attachmentDrafts,
+    removedAttachmentCount,
+    removedAttachmentName,
+    sendError,
+    sendProgress,
+    sendStatus,
+    editorRef,
+    inviteActionLabel,
+    locale,
+    managerProfile,
+    composerDisabledReason = "",
+    threadComposerDisabledReason = "",
+    memberMenuRef,
+    mentionCandidates,
+    mentionIndex,
+    mentionableUsersByName,
+    messageActionBusy,
+    messageActionFeedback,
+    messageListRef,
+    hasNewMessages,
+    onFollowLatest,
+    onApplyMention,
+    onApplySlashCandidate = (_name) => {},
+    onApplyThreadSlashCandidate = (_name) => {},
+    onAddAttachments,
+    onAddThreadAttachments,
+    onClearRoomMessages = (_id) => {},
+    onCloseThread,
+    onComposerCompositionEnd,
+    onComposerCompositionStart,
+    onComposerKeyDown,
+    onDeleteRoom,
+    onDismissThreadSlashPicker = () => {},
+    onInviteAction,
+    onMessageAction,
+    onOpenThread,
+    onRestoreThread,
+    onPreviewUser,
+    onProviderLogin,
+    onRetrySend,
+    onRemoveAttachment,
+    onRemoveThreadAttachment,
+    onSendMessage,
+    onStopSend,
+    onUndoRemoveAttachment,
+    onSendThreadReply,
+    onSetThreadSlashIndex = (_index) => {},
+    onSyncComposer,
+    onStopWorkingTurn,
+    onThreadDraftChange,
+    onThreadSlashQueryChange,
+    onToggleChannelTools,
+    onToggleMemberList,
+    onToggleToolCalls,
+    selectedMessageCount,
+    showChannelTools,
+    showMemberList,
+    showToolCalls,
+    slashCandidates = [],
+    slashIndex = 0,
+    slashContinuation,
+    slashPickerLoading = false,
+    slashPickerOpen = false,
+    t,
+    theme,
+    threadDraftSegments,
+    threadAttachmentDrafts,
+    threadError,
+    threadLoading,
+    threadSlashCandidates = [],
+    threadSlashIndex = 0,
+    threadSlashContinuation,
+    threadSlashPickerLoading = false,
+    threadSlashPickerOpen = false,
+    usersById,
+    visibleMessages,
+    workingParticipants = [],
+  } = chatProps;
+  const description = getConversationDescription(conversation, currentUserID, usersById, locale, t);
+  const managerProvider = normalizeAuthProviderName(managerProfile?.provider);
+  const [clearMessagesDialogOpen, setClearMessagesDialogOpen] = useState(false);
+  const [deleteRoomDialogOpen, setDeleteRoomDialogOpen] = useState(false);
+  const [deleteRoomBusy, setDeleteRoomBusy] = useState(false);
+  const [deleteRoomError, setDeleteRoomError] = useState("");
+  const tools = useChatTools({ conversation, currentUserID, agents, usersById, editorRef, t });
+  const { openPreview, openActivity, openSources } = tools;
+  const { openTab, closeTab, state: sideState } = tools.controller;
+  const composerDisabled = Boolean(composerDisabledReason);
+  const mainMessages = useMemo(
+    () => conversation.messages.filter((message) => !message.relates_to),
+    [conversation.messages],
+  );
+  const threadMessages = useMemo(
+    () => (activeThreadView?.root ? [activeThreadView.root, ...(activeThreadView.replies ?? [])] : []),
+    [activeThreadView],
+  );
+  const questionMode = useQuestionAnswerMode({
+    messages: mainMessages,
+    responderID: currentUserID,
+    roomID: conversation.id,
+    t,
+  });
+  const threadQuestionMode = useQuestionAnswerMode({
+    messages: threadMessages,
+    responderID: currentUserID,
+    roomID: conversation.id,
+    t,
+  });
+  const floatingConversationMessages = useMemo(
+    () => conversation.messages.filter((message) => !isManagerBootstrapNotice(message)),
+    [conversation.messages],
+  );
+  const floatingVisibleMessages = useMemo(
+    () => visibleMessages.filter((message) => !isManagerBootstrapNotice(message)),
+    [visibleMessages],
+  );
+  const floatingConversation = useMemo(
+    () =>
+      floatingConversationMessages.length === conversation.messages.length
+        ? conversation
+        : { ...conversation, messages: floatingConversationMessages },
+    [conversation, floatingConversationMessages],
+  );
+  const floatingComposerT = useCallback<TranslateFn>(
+    (key, params) => (key === "inputPlaceholder" ? t("floatingChatInputPlaceholder") : t(key, params)),
+    [t],
+  );
+
+  useConversationDraftEditorSync(editorRef, draftSegments, t("remove"));
+
+  useEffect(() => {
+    setClearMessagesDialogOpen(false);
+    setDeleteRoomDialogOpen(false);
+    setDeleteRoomBusy(false);
+    setDeleteRoomError("");
+  }, [conversation.id]);
+
+  const handlePreviewAttachment = useCallback(
+    (request: DocumentPreviewRequest, originTabID?: "files") => {
+      openPreview(request, originTabID);
+    },
+    [openPreview],
+  );
+  const previousThreadRoot = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (previousThreadRoot.current === activeThreadRootID) return;
+    previousThreadRoot.current = activeThreadRootID;
+    if (activeThreadRootID && !sideState.tabs.some((tab) => tab.kind === "thread" && tab.rootID === activeThreadRootID))
+      openTab({ id: "thread", kind: "thread", rootID: activeThreadRootID });
+  }, [activeThreadRootID, sideState.tabs, openTab]);
+  const handleCloseThread = () => {
+    closeTab("thread");
+    onCloseThread();
+  };
+
+  const handleOpenClearMessagesDialog = useCallback(() => {
+    onToggleChannelTools(false);
+    setClearMessagesDialogOpen(true);
+  }, [onToggleChannelTools]);
+
+  const handleOpenDeleteRoomDialog = useCallback(() => {
+    onToggleChannelTools(false);
+    setDeleteRoomError("");
+    setDeleteRoomDialogOpen(true);
+  }, [onToggleChannelTools]);
+
+  const handleConfirmDeleteRoom = useCallback(async () => {
+    setDeleteRoomBusy(true);
+    setDeleteRoomError("");
+    try {
+      await onDeleteRoom(conversation.id);
+      setDeleteRoomDialogOpen(false);
+    } catch (err) {
+      setDeleteRoomError(localizeAPIError(err, t, errorMessage(err, t("deleteRoomFailed"))));
+    } finally {
+      setDeleteRoomBusy(false);
+    }
+  }, [conversation.id, onDeleteRoom, t]);
+
+  const threadPanel = activeThreadRootID ? (
+    <Conversation.ThreadPanel
+      currentUserID={currentUserID}
+      resourceAgentID={resourceAgentID}
+      onPickResources={onPickThreadResources}
+      thread={activeThreadView}
+      loading={threadLoading}
+      error={threadError}
+      fileScope={tools.fileScope}
+      draftSegments={threadDraftSegments}
+      attachmentDrafts={threadAttachmentDrafts}
+      disabled={Boolean(threadComposerDisabledReason)}
+      usersById={usersById}
+      locale={locale}
+      theme={theme}
+      showToolCalls={showToolCalls}
+      t={t}
+      onClose={handleCloseThread}
+      onDraftChange={onThreadDraftChange}
+      onSlashQueryChange={onThreadSlashQueryChange}
+      onAddAttachments={onAddThreadAttachments}
+      onRemoveAttachment={onRemoveThreadAttachment}
+      threadSlashCandidates={threadSlashCandidates}
+      threadSlashIndex={threadSlashIndex}
+      threadSlashContinuation={threadSlashContinuation}
+      threadSlashPickerLoading={threadSlashPickerLoading}
+      threadSlashPickerOpen={threadSlashPickerOpen}
+      onApplyThreadSlashCandidate={onApplyThreadSlashCandidate}
+      onDismissThreadSlashPicker={onDismissThreadSlashPicker}
+      onSetThreadSlashIndex={onSetThreadSlashIndex}
+      mentionableUsers={conversationMembers}
+      onPreviewUser={onPreviewUser}
+      onPreviewAttachment={handlePreviewAttachment}
+      onCitationSelect={openSources}
+      onQuestionSelect={threadQuestionMode.select}
+      questionMode={threadQuestionMode}
+      onSend={onSendThreadReply}
+    />
+  ) : null;
+
+  return (
+    <div className={classNames("chat-panel", styles.conversation)}>
+      <Conversation.Header
+        channelToolsRef={channelToolsRef}
+        conversation={conversation}
+        conversationMembers={conversationMembers}
+        currentUserID={currentUserID}
+        usersById={usersById}
+        description={description}
+        headerAccessory={
+          <>
+            {headerAccessory}
+            {tools.toolbar}
+          </>
+        }
+        inviteActionLabel={inviteActionLabel}
+        memberMenuRef={memberMenuRef}
+        selectedMessageCount={selectedMessageCount}
+        selectedVisibleMessageCount={floatingVisibleMessages.length}
+        showChannelTools={showChannelTools}
+        showChannelToolsAction={false}
+        showInviteAction={false}
+        showMemberList={showMemberList}
+        showToolCalls={showToolCalls}
+        t={t}
+        onClearMessages={handleOpenClearMessagesDialog}
+        onDeleteRoom={handleOpenDeleteRoomDialog}
+        onInviteAction={onInviteAction}
+        onPreviewUser={onPreviewUser}
+        onToggleChannelTools={onToggleChannelTools}
+        onToggleMemberList={onToggleMemberList}
+        onToggleToolCalls={onToggleToolCalls}
+      />
+      <FloatingChatMessageArea
+        agents={agents}
+        agentName={agentName}
+        conversation={floatingConversation}
+        currentUserID={currentUserID}
+        locale={locale}
+        messageActionBusy={messageActionBusy}
+        messageActionFeedback={messageActionFeedback}
+        messageListRef={messageListRef}
+        hasNewMessages={hasNewMessages}
+        onFollowLatest={onFollowLatest}
+        t={t}
+        theme={theme}
+        usersById={usersById}
+        visibleMessages={floatingVisibleMessages}
+        onMessageAction={onMessageAction}
+        onOpenThread={onOpenThread}
+        onPickPrompt={onPickPrompt}
+        onPreviewUser={onPreviewUser}
+        onPreviewAttachment={handlePreviewAttachment}
+        onCitationSelect={openSources}
+        onQuestionSelect={questionMode.select}
+      />
+      {questionMode.pending.length > 0 ? (
+        <AgentQuestionComposer mode={questionMode} t={floatingComposerT} usersById={usersById} />
+      ) : (
+        <Conversation.Composer
+          resourceAgentID={resourceAgentID}
+          onPickResources={onPickResources}
+          fileScope={tools.fileScope}
+          authBusyProvider={authBusyProvider}
+          authStatuses={authStatuses}
+          composerDisabled={composerDisabled}
+          composerDisabledReason={composerDisabledReason}
+          composerError={composerError}
+          draftSegments={draftSegments}
+          draftText={draftText}
+          attachmentDrafts={attachmentDrafts}
+          removedAttachmentCount={removedAttachmentCount}
+          removedAttachmentName={removedAttachmentName}
+          sendError={sendError}
+          sendProgress={sendProgress}
+          sendStatus={sendStatus}
+          editorRef={editorRef}
+          managerProfile={managerProfile}
+          managerProvider={managerProvider}
+          mentionCandidates={mentionCandidates}
+          mentionIndex={mentionIndex}
+          mentionableUsersByName={mentionableUsersByName}
+          slashCandidates={slashCandidates}
+          slashIndex={slashIndex}
+          slashContinuation={slashContinuation}
+          slashPickerLoading={slashPickerLoading}
+          slashPickerOpen={slashPickerOpen}
+          t={floatingComposerT}
+          workingParticipants={workingParticipants}
+          onApplyMention={onApplyMention}
+          onApplySlashCandidate={onApplySlashCandidate}
+          onAddAttachments={onAddAttachments}
+          onComposerCompositionEnd={onComposerCompositionEnd}
+          onComposerCompositionStart={onComposerCompositionStart}
+          onComposerKeyDown={onComposerKeyDown}
+          onProviderLogin={onProviderLogin}
+          onPreviewAttachment={handlePreviewAttachment}
+          onRetrySend={onRetrySend}
+          onSendMessage={onSendMessage}
+          onStopSend={onStopSend}
+          onUndoRemoveAttachment={onUndoRemoveAttachment}
+          onWorkingAction={(participant) => openActivity(participant?.activity?.entryID)}
+          onStopWorkingTurn={onStopWorkingTurn}
+          onRemoveAttachment={onRemoveAttachment}
+          onSyncComposer={onSyncComposer}
+        />
+      )}
+      <ChatSidePanel
+        key={conversation.id}
+        controller={tools.controller}
+        fileScope={tools.fileScope}
+        conversation={conversation}
+        agents={agents}
+        usersById={usersById}
+        locale={locale}
+        t={t}
+        onReference={tools.onReference}
+        onPreview={(item) => handlePreviewAttachment({ items: [item], index: 0 }, "files")}
+        onSources={openSources}
+        onCollapse={tools.collapse}
+        activeThreadRootID={activeThreadRootID}
+        threadPanel={threadPanel}
+        onThreadSelect={(rootID) => {
+          if (onRestoreThread) {
+            void onRestoreThread(rootID);
+            return;
+          }
+          const message = conversation.messages.find((item) => item.id === rootID);
+          if (message) void onOpenThread(message);
+        }}
+        onThreadClose={onCloseThread}
+      />
+      <Conversation.RoomDangerConfirmDialog
+        cancelLabel={t("cancel")}
+        closeLabel={t("close")}
+        confirmLabel={t("clearRoomMessagesConfirm")}
+        description={t("clearRoomMessagesAgentScopeHint")}
+        open={clearMessagesDialogOpen}
+        title={t("clearRoomMessages")}
+        onConfirm={() => {
+          setClearMessagesDialogOpen(false);
+          onClearRoomMessages(conversation.id);
+        }}
+        onOpenChange={setClearMessagesDialogOpen}
+      />
+      {!isDirectConversation(conversation) ? (
+        <Conversation.RoomDangerConfirmDialog
+          busy={deleteRoomBusy}
+          cancelLabel={t("cancel")}
+          closeLabel={t("close")}
+          confirmLabel={t("deleteRoomConfirm")}
+          description={t("deleteRoomConfirmBody")}
+          error={deleteRoomError}
+          open={deleteRoomDialogOpen}
+          title={t("deleteRoom")}
+          onConfirm={handleConfirmDeleteRoom}
+          onOpenChange={(open) => {
+            setDeleteRoomDialogOpen(open);
+            if (!open) {
+              setDeleteRoomError("");
+            }
+          }}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+type FloatingChatMessageAreaProps = Omit<ConversationMessageListProps, "emptyStateSlot"> & {
+  agentName: string;
+  onPickPrompt: (text: string) => void;
+};
+
+function FloatingChatMessageArea({
+  agentName,
+  messageListRef,
+  onPickPrompt,
+  t,
+  ...messageListProps
+}: FloatingChatMessageAreaProps) {
+  if (messageListProps.conversation.messages.length === 0) {
+    return (
+      <section ref={messageListRef} className="messages">
+        <FloatingChatPromptSuggestions agentName={agentName} t={t} onPickPrompt={onPickPrompt} />
+      </section>
+    );
+  }
+
+  return <Conversation.MessageList {...messageListProps} messageListRef={messageListRef} t={t} />;
+}
+
+function isManagerBootstrapNotice(message: IMMessage): boolean {
+  if (message.event) {
+    return false;
+  }
+  const content = message.content.trim();
+  return (
+    content === "Bootstrap room created for admin and manager." ||
+    content === "Bootstrap room created for Admin and Manager."
+  );
+}

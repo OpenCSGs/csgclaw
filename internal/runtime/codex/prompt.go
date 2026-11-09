@@ -10,12 +10,14 @@ const (
 type PromptRequest struct {
 	SessionID           string
 	ClientUserMessageID string
+	TextOnlyUserInput   bool
 	Prompt              []PromptContentBlock
 	Meta                map[string]any
 	OnAccepted          func()
 }
 
 type PromptResponse struct {
+	history    quietTurnHistory
 	MessageID  string
 	StopReason string
 }

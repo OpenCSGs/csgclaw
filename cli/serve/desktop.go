@@ -97,10 +97,7 @@ func (desktopServeCmd) Run(parent context.Context, run *command.Context, args []
 	cfg.Server.ListenAddr = sandboxListener.Addr().String()
 	cfg.Server.AdvertiseBaseURL = ""
 	rendererBaseURL := "http://" + rendererListener.Addr().String()
-	sandboxManagerBaseURL := agent.ResolveManagerBaseURLForSandboxProvider(
-		cfg.Server,
-		cfg.Sandbox.Resolved().Provider,
-	)
+	sandboxManagerBaseURL := agent.ResolveLocalRuntimeBaseURL(cfg.Server)
 
 	ready, err := desktop.NewReadyMessage(bootstrap.InstanceID, rendererBaseURL)
 	if err != nil {

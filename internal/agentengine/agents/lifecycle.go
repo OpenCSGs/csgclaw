@@ -28,7 +28,7 @@ func (s *Controller) restartRuntime(ctx context.Context, id string) (Agent, erro
 	}
 	// Configuration saves also start runtimes that were never launched. Recheck
 	// the latest intent and resolved model under the lifecycle gate before doing so.
-	if got.DesiredState == DesiredStateStopped || !s.hydrateProfileFromCatalog(got.AgentProfile).ProfileComplete {
+	if got.ArchivedAt != nil || got.DesiredState == DesiredStateStopped || !s.hydrateProfileFromCatalog(got.AgentProfile).ProfileComplete {
 		return got, nil
 	}
 	return s.restartRuntimeLocked(ctx, id)
@@ -66,6 +66,9 @@ func (s *Controller) restartRuntimeLocked(ctx context.Context, id string) (Agent
 		return Agent{}, fmt.Errorf("agent %q not found", strings.TrimSpace(id))
 	}
 
+	if got.ArchivedAt != nil {
+		return Agent{}, archivedAgentError()
+	}
 	runtimeImpl, err := s.runtimeForKind(got.RuntimeKind)
 	if err != nil {
 		return Agent{}, err

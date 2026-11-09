@@ -44,7 +44,7 @@
 | `internal/runtimeextension/connectorcli` | 将 CLI 路径、环境变量和指令保存为 RuntimeExtension projection |
 | `internal/runtimeextension/larkcli` | 保存及恢复历史飞书配置，提供历史附件恢复指令 |
 | `internal/runtime/codex`、`internal/runtime/dsh` | 加载 projection，管理运行进程及相关子进程 |
-| `web/app/src/components/business/Apps` | 展示全局配置、授权会话、worker 开关及配置状态 |
+| `web/packages/app/src/components/business/Apps` | 展示全局配置、授权会话、worker 开关及配置状态 |
 
 `internal/connectors` 负责 GitHub / GitLab 账号认证。应用连接器的全局资源与 worker 绑定由 `internal/apps` 管理。消息渠道的注册、Participant 和 IM 生命周期由渠道模块管理。
 

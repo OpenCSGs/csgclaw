@@ -1,0 +1,302 @@
+.agent-skills-section {
+  display: grid;
+  align-content: start;
+  gap: 20px;
+  padding: 4px 0 24px;
+}
+
+.agent-skills-summary-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.agent-skills-summary-heading :global(.profile-section-heading) {
+  min-width: 0;
+}
+
+.agent-skills-summary-actions {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.agent-skills-summary-count {
+  color: var(--gray-500);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 18px;
+  font-variant-numeric: tabular-nums;
+}
+
+.agent-skills-summary-icon {
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-md);
+  background: var(--gray-100);
+  color: var(--gray-500);
+}
+
+.agent-skills-summary-empty-copy {
+  min-width: 0;
+}
+
+.agent-skill-card-switch-sm:global(.csg-switch) {
+  width: 36px;
+  height: 20px;
+  padding: 2px;
+}
+
+.agent-skill-card-switch-sm :global(.csg-switch-thumb) {
+  width: 16px;
+  height: 16px;
+}
+
+.agent-skill-card-switch-sm :global(.csg-switch-thumb)[data-state="checked"] {
+  transform: translateX(16px);
+}
+
+.agent-skill-card-switch-sm:global(.csg-switch)[aria-busy="true"] {
+  cursor: progress;
+  opacity: 0.9;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 18%, transparent);
+}
+
+.agent-skill-card-switch-sm:global(.csg-switch)[aria-busy="true"] :global(.csg-switch-thumb) {
+  animation: agent-skill-switch-busy 900ms ease-in-out infinite;
+}
+
+.agent-skills-dialog {
+  width: min(560px, calc(100vw - 32px));
+}
+
+.agent-skills-dialog-header {
+  align-items: flex-start;
+}
+
+.agent-skills-dialog-copy {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.agent-skills-dialog-body {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-5) 22px;
+}
+
+.agent-skills-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  padding: 16px 22px 22px;
+  border-top: 1px solid var(--line);
+}
+
+.agent-skills-dialog :global(.agent-skills-empty) {
+  padding: 16px 2px 4px;
+}
+
+.agent-skills-error {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.agent-skills-dialog :global(.form-error) {
+  margin: 0;
+}
+
+.agent-skills-dialog :global(.csg-dialog-description) {
+  max-width: 440px;
+  margin-top: 6px;
+  font-size: var(--text-sm-size);
+  line-height: 1.5;
+}
+
+:global(.csg-dialog-overlay).agent-skill-delete-backdrop {
+  background: color-mix(in srgb, var(--gray-950) 70%, transparent);
+  backdrop-filter: blur(8px);
+}
+
+:global(.csg-dialog-content).agent-skill-delete-dialog {
+  width: min(400px, calc(100vw - 32px));
+  overflow: hidden;
+  border: 0;
+  border-radius: 12px;
+  background: var(--white);
+  color: var(--gray-900);
+  box-shadow:
+    0 20px 24px -4px rgba(16, 24, 40, 0.08),
+    0 8px 8px -4px rgba(16, 24, 40, 0.03);
+}
+
+.agent-skill-delete-dialog .agent-skills-dialog-header {
+  position: relative;
+  display: block;
+  padding: 24px 72px 0 24px;
+  border: 0;
+  background: transparent;
+}
+
+.agent-skill-delete-dialog .agent-skills-dialog-copy {
+  gap: 4px;
+  min-width: 0;
+}
+
+.agent-skill-delete-dialog :global(.csg-dialog-title) {
+  color: var(--gray-900);
+  font-size: 18px;
+  font-weight: 500;
+  line-height: 28px;
+}
+
+.agent-skill-delete-dialog :global(.csg-dialog-description) {
+  max-width: none;
+  margin-top: 0;
+  color: var(--gray-600);
+  font-size: 14px;
+  font-weight: 300;
+  line-height: 22px;
+  text-wrap: pretty;
+}
+
+.agent-skill-delete-dialog :global(.csg-dialog-close) {
+  --btn-height: 44px;
+  --btn-min-width: 44px;
+
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  min-height: 44px;
+  border-radius: 8px;
+  color: var(--gray-400);
+  box-shadow: none;
+}
+
+.agent-skill-delete-dialog :global(.csg-dialog-close) :global(.icon-button-mark) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  line-height: 0;
+}
+
+.agent-skill-delete-dialog :global(.csg-dialog-close) svg {
+  display: block;
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+}
+
+.agent-skill-delete-dialog .agent-skill-delete-dialog-body {
+  padding: 16px 24px 0;
+}
+
+.agent-skill-delete-dialog .agent-skills-dialog-actions {
+  display: flex;
+  gap: 12px;
+  padding: 32px 24px 24px;
+  border: 0;
+}
+
+.agent-skill-delete-dialog .agent-skills-dialog-actions :global(.btn) {
+  --btn-height: 44px;
+  --btn-min-width: 0;
+  --btn-padding-x: 16px;
+  --btn-font-size: 16px;
+  --btn-line-height: 24px;
+
+  flex: 1 1 0;
+  border-radius: 8px;
+}
+
+:root[data-theme="dark"] :global(.csg-dialog-overlay).agent-skill-delete-backdrop {
+  background: color-mix(in srgb, var(--gray-950) 78%, transparent);
+  backdrop-filter: blur(10px);
+}
+
+:root[data-theme="dark"] :global(.csg-dialog-content).agent-skill-delete-dialog {
+  border: 1px solid color-mix(in oklab, var(--line) 78%, var(--gray-700) 22%);
+  background: color-mix(in oklab, var(--panel) 92%, var(--gray-800) 8%);
+  color: var(--text);
+  box-shadow:
+    0 24px 48px color-mix(in srgb, var(--gray-950) 42%, transparent),
+    inset 0 1px 0 color-mix(in oklab, var(--gray-25) 6%, transparent);
+}
+
+:root[data-theme="dark"] .agent-skill-delete-dialog :global(.csg-dialog-title) {
+  color: var(--text);
+}
+
+:root[data-theme="dark"] .agent-skill-delete-dialog :global(.csg-dialog-description) {
+  color: color-mix(in oklab, var(--muted) 86%, var(--text) 14%);
+}
+
+:root[data-theme="dark"] .agent-skill-delete-dialog :global(.csg-dialog-close) {
+  color: var(--gray-400);
+}
+
+:root[data-theme="dark"] .agent-skill-delete-dialog :global(.csg-dialog-close):hover:not(:disabled) {
+  background: color-mix(in oklab, var(--gray-700) 30%, transparent);
+  color: var(--text);
+}
+
+:root[data-theme="dark"] .agent-skill-delete-dialog .agent-skills-dialog-actions :global(.btn-secondary-gray) {
+  border-color: color-mix(in oklab, var(--line) 80%, var(--gray-700) 20%);
+  background: color-mix(in oklab, var(--field) 78%, var(--gray-950) 22%);
+  color: var(--text);
+}
+
+:root[data-theme="dark"]
+  .agent-skill-delete-dialog
+  .agent-skills-dialog-actions
+  :global(.btn-secondary-gray):hover:not(:disabled) {
+  border-color: color-mix(in oklab, var(--brand-300) 24%, var(--line));
+  background: color-mix(in oklab, var(--field) 84%, var(--brand-300) 8%);
+  color: var(--text);
+}
+
+:root[data-theme="dark"] .agent-skill-delete-dialog .agent-skills-dialog-actions :global(.btn-danger) {
+  border-color: color-mix(in oklab, var(--error-500) 92%, var(--error-300) 8%);
+  background: color-mix(in oklab, var(--error-600) 84%, var(--error-400) 16%);
+}
+
+:root[data-theme="dark"]
+  .agent-skill-delete-dialog
+  .agent-skills-dialog-actions
+  :global(.btn-danger):hover:not(:disabled) {
+  border-color: var(--error-400);
+  background: color-mix(in oklab, var(--error-600) 76%, var(--error-300) 24%);
+}
+
+:root[data-theme="dark"] .agent-skills-summary-icon {
+  background: var(--gray-800);
+  color: var(--gray-400);
+}
+
+@container (max-width: 620px) {
+  .agent-skills-summary-heading {
+    flex-direction: column;
+    gap: 8px;
+  }
+}
+
+@keyframes agent-skill-switch-busy {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.62;
+  }
+}

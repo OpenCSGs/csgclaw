@@ -85,6 +85,7 @@ func FullSpec() CommandSpec {
 				},
 			},
 			agentSpec(),
+			relaySpec(),
 			appSpec(),
 			templateSpec(),
 			skillSpec(),
@@ -96,10 +97,26 @@ func FullSpec() CommandSpec {
 			memberSpec(),
 			messageSpec(),
 			taskSpec(),
+			scheduledTaskSpec(),
 			teamSpec(),
 			completionSpec(),
 		},
 	}
+}
+
+func relaySpec() CommandSpec {
+	flagValue := func(name string) FlagSpec { return FlagSpec{Name: name, TakesValue: true} }
+	base := []FlagSpec{flagValue("relay")}
+	child := func(name string, flags ...FlagSpec) CommandSpec {
+		return CommandSpec{Name: name, Flags: append(append([]FlagSpec{}, base...), flags...)}
+	}
+	return CommandSpec{Name: "relay", Summary: "Publish and call agents through CSGRelay.", Children: []CommandSpec{
+		child("publish", flagValue("agent"), flagValue("name"), flagValue("description"), FlagSpec{Name: "visibility", TakesValue: true, Values: []string{"public", "private"}}, flagValue("key"), flagValue("state")),
+		child("list", FlagSpec{Name: "scope", TakesValue: true, Values: []string{"public", "mine", "accessible"}}, FlagSpec{Name: "status", TakesValue: true, Values: []string{"online", "offline", "unhealthy"}}, flagValue("limit"), flagValue("cursor")),
+		child("get", flagValue("id")), child("unpublish", flagValue("id")),
+		child("call", flagValue("agent"), flagValue("input"), flagValue("previous-response"), flagValue("key"), flagValue("timeout"), FlagSpec{Name: "stream"}),
+		child("response", flagValue("id")), child("cancel", flagValue("id")),
+	}}
 }
 
 func LiteSpec() CommandSpec {
@@ -115,6 +132,7 @@ func LiteSpec() CommandSpec {
 			memberSpec(),
 			messageSpec(),
 			taskSpec(),
+			scheduledTaskSpec(),
 			teamSpec(),
 			skillSpec(),
 			completionSpec(),
@@ -400,6 +418,7 @@ func participantSpec(name string) CommandSpec {
 					FlagSpec{Name: "channel-user-ref", TakesValue: true},
 					FlagSpec{Name: "channel-user-kind", TakesValue: true, Values: []string{"local_user_id", "open_id"}},
 					FlagSpec{Name: "channel-app-ref", TakesValue: true},
+					FlagSpec{Name: "auto-publish"},
 					FlagSpec{Name: "bind", TakesValue: true, Values: []string{"create", "reuse", "none"}},
 					FlagSpec{Name: "agent-id", TakesValue: true},
 					FlagSpec{Name: "role", TakesValue: true, Values: roleValues()},
@@ -985,4 +1004,14 @@ func safeFunctionName(program string) string {
 		return "csgclaw"
 	}
 	return name
+}
+
+func scheduledTaskSpec() CommandSpec {
+	fields := []FlagSpec{{Name: "title", TakesValue: true}, {Name: "agent-id", TakesValue: true}, {Name: "prompt", TakesValue: true}, {Name: "recurrence", TakesValue: true}, {Name: "first-run-at", TakesValue: true}, {Name: "expires-at", TakesValue: true}, {Name: "enabled"}}
+	return CommandSpec{Name: "scheduled-task", Summary: "Manage scheduled agent tasks", Children: []CommandSpec{
+		{Name: "context", Summary: "Read scheduling context"},
+		{Name: "list", Summary: "List saved schedules"},
+		{Name: "create", Summary: "Save a schedule", Flags: fields},
+		{Name: "update", Summary: "Update a schedule", Flags: append([]FlagSpec{{Name: "id", TakesValue: true}}, fields...)},
+	}}
 }

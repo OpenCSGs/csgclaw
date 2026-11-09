@@ -8,36 +8,27 @@ import (
 
 // UserSettings are the config.toml fields exposed in the Web UI settings form.
 type UserSettings struct {
-	ListenAddr               string
-	AdvertiseBaseURL         string
-	AccessToken              string
-	ShowUpgrade              bool
-	SandboxProvider          string
-	HubLocalPath             string
-	DefaultManagerTemplate   string
-	DefaultWorkerTemplate    string
-	SupportedSandboxProvider []string
+	ListenAddr             string
+	AdvertiseBaseURL       string
+	AccessToken            string
+	ShowUpgrade            bool
+	HubLocalPath           string
+	DefaultManagerTemplate string
+	DefaultWorkerTemplate  string
 }
 
 func UserSettingsFromConfig(cfg Config) UserSettings {
-	resolved := cfg.Sandbox.Resolved()
 	resolvedHub := cfg.Hub.Resolved()
 	local := findHubRegistry(resolvedHub.Registries, DefaultHubPublishRegistry)
 	return UserSettings{
-		ListenAddr:               cfg.Server.ListenAddr,
-		AdvertiseBaseURL:         cfg.Server.AdvertiseBaseURL,
-		AccessToken:              cfg.Server.AccessToken,
-		ShowUpgrade:              cfg.Server.ShowUpgrade,
-		SandboxProvider:          resolved.Provider,
-		HubLocalPath:             local.Path,
-		DefaultManagerTemplate:   cfg.Bootstrap.ResolvedDefaultManagerTemplate(),
-		DefaultWorkerTemplate:    cfg.Bootstrap.ResolvedDefaultWorkerTemplate(),
-		SupportedSandboxProvider: SupportedSandboxProviders(),
+		ListenAddr:             cfg.Server.ListenAddr,
+		AdvertiseBaseURL:       cfg.Server.AdvertiseBaseURL,
+		AccessToken:            cfg.Server.AccessToken,
+		ShowUpgrade:            cfg.Server.ShowUpgrade,
+		HubLocalPath:           local.Path,
+		DefaultManagerTemplate: cfg.Bootstrap.ResolvedDefaultManagerTemplate(),
+		DefaultWorkerTemplate:  cfg.Bootstrap.ResolvedDefaultWorkerTemplate(),
 	}
-}
-
-func SupportedSandboxProviders() []string {
-	return []string{BoxLiteProvider, DockerProvider, CSGHubProvider}
 }
 
 func AccessTokenPreview(token string) string {
@@ -57,7 +48,6 @@ func ApplyUserSettings(cfg Config, settings UserSettings) (Config, error) {
 	cfg.Server.AdvertiseBaseURL = strings.TrimRight(strings.TrimSpace(settings.AdvertiseBaseURL), "/")
 	cfg.Server.AccessToken = strings.TrimSpace(settings.AccessToken)
 	cfg.Server.ShowUpgrade = settings.ShowUpgrade
-	cfg.Sandbox.Provider = strings.TrimSpace(settings.SandboxProvider)
 	cfg.Hub = applyHubUserSettings(cfg.Hub, settings)
 	cfg.Bootstrap.DefaultManagerTemplate = normalizeManagerBootstrapTemplateRef(settings.DefaultManagerTemplate)
 	cfg.Bootstrap.DefaultWorkerTemplate = normalizeBootstrapTemplateRef(settings.DefaultWorkerTemplate)
@@ -104,10 +94,6 @@ func validateUserSettings(cfg Config) error {
 		return fmt.Errorf("server.access_token is required")
 	}
 	if err := cfg.Bootstrap.Validate(); err != nil {
-		return err
-	}
-	cfg.Sandbox = cfg.Sandbox.Resolved()
-	if err := cfg.Sandbox.Validate(); err != nil {
 		return err
 	}
 	return nil
