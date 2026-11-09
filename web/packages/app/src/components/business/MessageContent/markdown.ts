@@ -1,7 +1,8 @@
 import DOMPurify from "dompurify";
 import { Marked, marked } from "marked";
 import { parseCitationDocument, type CitationSource } from "@/models/citations";
-import { decorateMentionMarkup, escapeHTML } from "./mentions";
+import { decorateMentionMarkup } from "./messageMentionMarkup";
+import { escapeHTML } from "./mentions";
 
 marked.setOptions({
   breaks: true,

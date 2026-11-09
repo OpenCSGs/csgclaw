@@ -76,9 +76,9 @@ export function WorkspaceFilePreview({
   return (
     <div className={`workspace-file-preview ${className}`.trim()}>
       {error ? (
-        <div className="workspace-empty">{error}</div>
+        <div className="workspace-empty px-2.5 py-2 text-[13px] text-[var(--muted)]">{error}</div>
       ) : loading ? (
-        <div className="workspace-empty">{loadingText}</div>
+        <div className="workspace-empty px-2.5 py-2 text-[13px] text-[var(--muted)]">{loadingText}</div>
       ) : !file ? (
         <div className={workspaceFilePreviewStyles["workspace-preview-empty-state"]}>
           {emptyIcon ? (
@@ -111,7 +111,7 @@ export function WorkspaceFilePreview({
           </div>
           <div className="workspace-preview-body">
             {file.binary ? (
-              <div className="workspace-empty">{binaryText}</div>
+              <div className="workspace-empty px-2.5 py-2 text-[13px] text-[var(--muted)]">{binaryText}</div>
             ) : (
               <WorkspaceFileCodeView text={fileText} lineCount={lineCount} />
             )}

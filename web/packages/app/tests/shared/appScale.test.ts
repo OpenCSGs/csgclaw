@@ -1,6 +1,5 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { stylesheetSource } from "../helpers/styleRules";
 
 function readSource(path: string): string {
   return readFileSync(resolve(process.cwd(), path), "utf8");
@@ -9,7 +8,6 @@ function readSource(path: string): string {
 describe("default app scale", () => {
   it("renders the full UI at normal viewport scale", () => {
     const globals = readSource("src/shared/styles/globals.css");
-    const workspace = stylesheetSource(resolve("src/pages/WorkspacePage/components/WorkspaceComponents.css"));
     const workspaceLayout = readSource("src/pages/WorkspacePage/components/WorkspaceLayout/WorkspaceLayout.module.css");
     const settings = readSource("src/pages/SettingsPage/SettingsPage.module.css");
 
@@ -22,8 +20,7 @@ describe("default app scale", () => {
     expect(globals).not.toContain("[data-radix-popper-content-wrapper]");
     expect(globals).toContain("font-size: var(--text-md-size);");
     expect(globals).toContain("font-family: var(--font-sans);");
-    expect(workspace).toContain("height: var(--app-ui-viewport-height);");
-    expect(workspaceLayout.match(/height: var\(--app-ui-viewport-height\);/g)).toHaveLength(3);
+    expect(workspaceLayout).toMatch(/\.app-shell\s*\{[^}]*\n\s+height: var\(--app-ui-viewport-height\);/);
     expect(settings).not.toContain("zoom:");
     expect(settings).not.toContain("125dvh");
   });

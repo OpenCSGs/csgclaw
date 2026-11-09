@@ -44,13 +44,13 @@ export function AccountSection() {
     <>
       <SettingsRow title={t("settingsOpenCSGAccount")} description={t("settingsOpenCSGDescription")}>
         <div className={`${styles.formGrid} ${styles.accountFormGrid}`}>
-          <div className="field">
+          <div className={styles.formItem}>
             <span>{t("currentAccount")}</span>
             <strong className={accountSectionStyles.fieldValue}>
               {signedIn ? accountName : t("csghubNotSignedIn")}
             </strong>
           </div>
-          <div className="field">
+          <div className={styles.formItem}>
             <span>{t("settingsEnvironmentLabel")}</span>
             <strong className={accountSectionStyles.fieldValue}>{signedIn ? authEnvironmentLabel : "-"}</strong>
           </div>

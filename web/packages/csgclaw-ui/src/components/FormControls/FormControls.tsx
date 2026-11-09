@@ -7,20 +7,53 @@ import { FieldContext, useFieldControlProps } from "./fieldContext.js";
 
 export type FieldProps = {
   children: ReactNode;
+  as?: "label" | "div";
   className?: string;
   error?: ReactNode;
   hint?: ReactNode;
   label?: ReactNode;
+  labelAction?: ReactNode;
   required?: boolean;
   id?: string;
 };
 
-export function Field({ children, className, error, hint, label, required = false, id }: FieldProps) {
+export function Field({
+  children,
+  as = "label",
+  className,
+  error,
+  hint,
+  label,
+  labelAction,
+  required = false,
+  id,
+}: FieldProps) {
   const generatedId = useId();
   const controlId = id ?? generatedId;
   const labelId = label ? `${controlId}-label` : undefined;
   const hintId = hint ? `${controlId}-hint` : undefined;
   const errorId = error ? `${controlId}-error` : undefined;
+  const Root = labelAction ? "div" : as;
+  const Label = Root === "div" ? "label" : "span";
+  const fieldLabel = label ? (
+    <Label
+      className={classNames(styles["field-label"], legacyClassName("field-label"))}
+      htmlFor={Root === "div" ? controlId : undefined}
+      id={labelId}
+    >
+      {label}
+      {required ? (
+        <span
+          className={classNames(styles["field-required"], legacyClassName("field-required"))}
+          data-csg-field-part
+          aria-hidden="true"
+        >
+          {" "}
+          *
+        </span>
+      ) : null}
+    </Label>
+  ) : null;
   return (
     <FieldContext.Provider
       value={{
@@ -31,7 +64,7 @@ export function Field({ children, className, error, hint, label, required = fals
         required,
       }}
     >
-      <label
+      <Root
         className={classNames(
           classNames(styles["field"], legacyClassName("field")),
           classNames(styles["csg-field"], legacyClassName("csg-field")),
@@ -40,21 +73,14 @@ export function Field({ children, className, error, hint, label, required = fals
         data-csg-field
         data-invalid={error ? "true" : undefined}
       >
-        {label ? (
-          <span className={classNames(styles["field-label"], legacyClassName("field-label"))} id={labelId}>
-            {label}
-            {required ? (
-              <span
-                className={classNames(styles["field-required"], legacyClassName("field-required"))}
-                data-csg-field-part
-                aria-hidden="true"
-              >
-                {" "}
-                *
-              </span>
-            ) : null}
-          </span>
-        ) : null}
+        {labelAction ? (
+          <div className={styles["field-heading"]}>
+            {fieldLabel}
+            {labelAction}
+          </div>
+        ) : (
+          fieldLabel
+        )}
         {children}
         {hint ? (
           <small
@@ -75,7 +101,7 @@ export function Field({ children, className, error, hint, label, required = fals
             {error}
           </div>
         ) : null}
-      </label>
+      </Root>
     </FieldContext.Provider>
   );
 }

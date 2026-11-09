@@ -81,38 +81,6 @@
   overflow-wrap: anywhere;
 }
 
-:root[data-theme="dark"] .profile-modal.agent-modal .modal-header {
-  background: var(--panel);
-  border-bottom-color: rgba(208, 213, 221, 0.14);
-}
-
-:root[data-theme="dark"] .profile-modal.agent-modal .modal-title {
-  color: var(--text);
-}
-
-:root[data-theme="dark"] .profile-modal.agent-modal .modal-subtitle {
-  color: var(--muted);
-}
-
-:root[data-theme="dark"] .profile-modal.agent-modal .modal-header .modal-close:where(:not([data-csg-control])) {
-  color: var(--muted);
-}
-
-:root[data-theme="dark"]
-  .profile-modal.agent-modal
-  .modal-header
-  .modal-close:where(:not([data-csg-control])):hover:not(:disabled),
-:root[data-theme="dark"]
-  .profile-modal.agent-modal
-  .modal-header
-  .modal-close:where(:not([data-csg-control])):active:not(:disabled),
-:root[data-theme="dark"]
-  .profile-modal.agent-modal
-  .modal-header
-  .modal-close:where(:not([data-csg-control])):focus-visible {
-  color: var(--text);
-}
-
 :root[data-theme="dark"] .profile-modal.agent-modal .agent-create-kind-tabbar .workspace-tab {
   border-color: rgba(208, 213, 221, 0.18);
   background: color-mix(in oklab, var(--field) 88%, transparent);

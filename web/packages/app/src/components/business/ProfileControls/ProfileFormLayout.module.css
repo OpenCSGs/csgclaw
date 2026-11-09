@@ -1,0 +1,47 @@
+.span-2 {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 960px) {
+  .profile-grid,
+  .profile-grid-compact,
+  .profile-advanced-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.profile-section {
+  border-color: var(--line);
+  border-radius: 8px;
+  background: linear-gradient(180deg, oklch(1 0 0 / 0.025), transparent), var(--surface);
+}
+
+.profile-section-title {
+  color: var(--muted);
+  letter-spacing: 0.1em;
+}
+
+.profile-section {
+  border-radius: var(--radius-md);
+}
+
+.profile-section-title {
+  color: var(--muted);
+  letter-spacing: 0;
+}
+
+.profile-section {
+  border-color: var(--line);
+  background: var(--surface);
+  box-shadow: var(--shadow-xs);
+}
+
+:global(:root[data-theme="dark"]) .profile-section {
+  box-shadow: none;
+}
+
+:global(:root[data-theme="dark"]) .profile-section {
+  border-color: var(--line);
+  background: var(--panel-strong);
+  box-shadow: none;
+}

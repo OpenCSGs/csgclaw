@@ -6,6 +6,10 @@ import {
   Select,
   DialogRoot,
   DialogContent,
+  DialogHeader,
+  DialogCloseButton,
+  DialogBody,
+  DialogFooter,
   DialogTitle,
   DialogDescription,
   TextInput,
@@ -21,7 +25,6 @@ import {
 } from "@/models/modelProviders";
 import type { LocaleCode, TranslateFn } from "@/models/conversations";
 import { confirmWithFocusRecovery } from "@/shared/platform/confirm";
-import { ModalCloseButton } from "./ModalCloseButton";
 import styles from "./CreateModelProviderModal.module.css";
 
 export type CreateModelProviderPayload = ModelProviderPayload;
@@ -141,6 +144,7 @@ export function CreateModelProviderModal({
       }}
     >
       <DialogContent
+        scrollBody
         className={styles.dialog}
         onEscapeKeyDown={(event) => {
           // Keep a fast Escape in a newly opened Select from dismissing its parent dialog.
@@ -150,16 +154,16 @@ export function CreateModelProviderModal({
           }
         }}
       >
-        <header className={styles.header}>
+        <DialogHeader className={styles.header}>
           <div>
             <DialogTitle>
               {t(selected === "custom" ? "modelProviderCreateCustomTitle" : "modelProviderCreateTitle")}
             </DialogTitle>
             <DialogDescription>{t("modelConnectSubtitle")}</DialogDescription>
           </div>
-          <ModalCloseButton label={t("close")} onClose={close} />
-        </header>
-        <div className={styles.body}>
+          <DialogCloseButton label={t("close")} disabled={busy} />
+        </DialogHeader>
+        <DialogBody className={styles.body}>
           {!preset ? (
             <>
               <TextInput
@@ -417,15 +421,15 @@ export function CreateModelProviderModal({
               {error || localError}
             </p>
           ) : null}
-        </div>
-        <footer className={styles.footer}>
+        </DialogBody>
+        <DialogFooter className={styles.footer}>
           <Button variant="secondaryGray" disabled={busy} onClick={close}>
             {t("cancel")}
           </Button>
           <Button variant="primary" loading={busy} disabled={!canConnect} onClick={connect}>
             {t("modelConnectAction")}
           </Button>
-        </footer>
+        </DialogFooter>
       </DialogContent>
     </DialogRoot>
   );

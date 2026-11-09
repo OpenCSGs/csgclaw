@@ -19,7 +19,7 @@ import {
 import { errorMessage } from "@/api/client";
 import { checkModelProvider, deleteModelProvider, updateModelProvider } from "@/api/modelProviders";
 import { APIKeyField, ModelProviderModelList } from "@/components/business/ProfileControls";
-import { Field, TextInput, Select } from "@/components/ui";
+import { StatusDot, InlineError, Field, TextInput, Select } from "@/components/ui";
 import {
   Button,
   DismissibleAlert,
@@ -548,7 +548,7 @@ export function ModelProviderSettings({ embedded = false }: { embedded?: boolean
               ) : null}
             </div>
             <div className={`${modelProviderSettingsStyles["model-provider-status-pill"]} ${effectiveTone}`}>
-              <span className={`workspace-status-dot ${effectiveTone}`} aria-hidden="true"></span>
+              <StatusDot className={effectiveTone} online={effectiveTone === "online"} />
               <span>{statusLabel}</span>
             </div>
             <DialogCloseButton label={t("close")} size="md" variant="tertiaryGray" />
@@ -630,8 +630,7 @@ export function ModelProviderSettings({ embedded = false }: { embedded?: boolean
                     ) : null}
                     {canEditEndpoint ? (
                       <>
-                        <label className="field">
-                          {t("profileBaseURL")}
+                        <Field label={t("profileBaseURL")}>
                           <TextInput
                             value={draft.baseURL}
                             onInput={(event) => {
@@ -640,10 +639,9 @@ export function ModelProviderSettings({ embedded = false }: { embedded?: boolean
                             }}
                             placeholder="https://api.openai.com/v1"
                           />
-                        </label>
+                        </Field>
                         {!provider.builtin ? (
-                          <label className="field">
-                            <span>{t("modelConnectProtocol")}</span>
+                          <Field label={t("modelConnectProtocol")}>
                             <Select
                               value={draft.apiProtocol}
                               onValueChange={(apiProtocol) => setDraft((current) => ({ ...current, apiProtocol }))}
@@ -655,7 +653,7 @@ export function ModelProviderSettings({ embedded = false }: { embedded?: boolean
                               ]}
                               triggerProps={{ "aria-label": t("modelConnectProtocol") }}
                             />
-                          </label>
+                          </Field>
                         ) : null}
                         <APIKeyField
                           t={t}
@@ -857,9 +855,9 @@ export function ModelProviderSettings({ embedded = false }: { embedded?: boolean
           </DialogHeader>
           {deleteError ? (
             <DialogBody>
-              <p className="form-error" role="alert">
+              <InlineError as="p" role="alert">
                 {deleteError}
-              </p>
+              </InlineError>
             </DialogBody>
           ) : null}
           <DialogFooter>

@@ -1,3 +1,5 @@
+import messageLayoutStyles from "@/components/business/ConversationPane/MessageLayout.module.css";
+import chatPanelStyles from "@/components/business/ConversationPane/ChatPanel.module.css";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { errorMessage } from "@/api/client";
@@ -267,7 +269,7 @@ export function FloatingChatPanel({ agentName, chatProps, headerAccessory, onPic
   ) : null;
 
   return (
-    <div className={classNames("chat-panel", styles.conversation)}>
+    <div className={classNames(`chat-panel ${chatPanelStyles["chat-panel"]}`, styles.conversation)}>
       <Conversation.Header
         channelToolsRef={channelToolsRef}
         conversation={conversation}
@@ -448,7 +450,7 @@ function FloatingChatMessageArea({
 }: FloatingChatMessageAreaProps) {
   if (messageListProps.conversation.messages.length === 0) {
     return (
-      <section ref={messageListRef} className="messages">
+      <section ref={messageListRef} className={`messages ${messageLayoutStyles["messages"]}`}>
         <FloatingChatPromptSuggestions agentName={agentName} t={t} onPickPrompt={onPickPrompt} />
       </section>
     );

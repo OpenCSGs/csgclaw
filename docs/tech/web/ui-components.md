@@ -1,12 +1,12 @@
 # UI Component Library
 
-These rules apply to the shared presentation library in `web/packages/csgclaw-ui/src/components` and the app-specific presentation components in `web/packages/app/src/components/ui`.
+These rules apply to the shared presentation library in `web/packages/csgclaw-ui/src/components`.
 
 Chinese companion: `ui-components.zh.md`.
 
 ## Scope
 
-`csgclaw-ui` owns reusable buttons, form controls, and Radix-based interaction primitives. App layout and product icons stay in `web/packages/app/src/components/ui`. The app's UI entrypoint re-exports the package so features can keep using the existing imports. The package has no dependency on the app.
+`csgclaw-ui` owns reusable controls and presentation components that work with React and the package theme alone, including dialogs, badges, and inline errors. App-owned icons and shared feature presentations belong in the app's `src/components/business`. Keep page-specific layout with the page. The app's UI entrypoint only re-exports the package. Keep integration tests for package components under `web/packages/app/tests/components`.
 
 Business-aware shared components belong in `src/components/business`. Page-private components belong under the owning page directory.
 
@@ -14,19 +14,19 @@ Business-aware shared components belong in `src/components/business`. Page-priva
 
 Business features should prefer the project's existing component library instead of rebuilding primitive interactions or styles inside pages:
 
-1. Page and feature code should compose `src/components/business` and `src/components/ui` first.
+1. Page and feature code compose `csgclaw-ui` and existing business components first.
 2. `src/components/business` may combine UI primitives with business labels, state, and actions, but should not reinvent base controls.
-3. `src/components/ui` wraps reusable presentation primitives and turns Radix primitive behavior into CSGClaw-local APIs and visual conventions.
+3. Put reusable primitives in `csgclaw-ui` and use its namespaced theme tokens. Review business components for migration as described in the frontend development guide.
 4. Radix primitives are the interaction foundation for the component library, not the default direct dependency for business pages.
 
-If a page needs a new highly customized UI, start with a page-private component. Promote it to `src/components/ui` or `src/components/business` when it has cross-page reuse, a stable interaction contract, or repeated copies across pages. Update this guide or the styling/component rules in `docs/tech/web/development.md` when extracting the pattern.
+If a page needs a new highly customized UI, start with a page-private component. Move it to `src/components/business` when it has actual cross-page reuse. Promote portable UI to `csgclaw-ui` once its props and theme contract are stable. Update this guide or the styling/component rules in `docs/tech/web/development.md` when extracting the pattern.
 
 ## Package Shape
 
 - Use one PascalCase folder per exported component package.
 - Keep implementation, CSS, and `index.ts` together in that folder.
 - Import the component's `.module.css` from its implementation. Keep `index.ts` limited to public exports.
-- Re-export public UI components from `src/components/ui/index.ts`.
+- Export public components from the library's `src/index.ts`. The app forwards those exports through `src/components/ui/index.ts`.
 - Avoid compatibility re-export paths after moving or replacing a component; update callers instead.
 
 ## Styling
@@ -100,7 +100,9 @@ Provider metadata, authentication guards, model discovery and retained unavailab
 
 `Field` supplies control/label IDs, hint/error descriptions, invalid state and required accessibility state to TextInput, TextArea, SelectTrigger and Combobox. Explicit IDs and accessible names take precedence. `required` on Field marks the field; set `required` on the control when native form validation is needed. Keep one logical control per Field.
 
-TextInput and TextArea own their local, data-marked styles. Legacy input and workspace selectors exclude all `data-csg-control` elements. Compound native forms remain in `shared/styles/inputs.css` during the scoped migration; the managed Field has local label/hint/error styles. Use `size="sm"` for compact text inputs and `variant="plain"` when a composed search container owns the border/background. Avoid overrides with `!important`.
+Use a native form for submission. Group related fields with a fieldset and legend when they share a group label. Give each editable key and value its own Field. Use `as="div"` for a field with adjacent buttons, or `labelAction` for help or actions next to its label. Both layouts keep the buttons outside the input label. If you supply an explicit control ID, pass the same ID to Field to associate the label.
+
+TextInput and TextArea own their local styles. Field owns the label, hint, and field error. Use `InlineError` for an error that applies to the entire form or panel. Use `size="sm"` for compact text inputs and `variant="plain"` when a composed search container owns the border and background.
 
 PanelHeader composes content and an optional actions slot, EmptyState displays a title/description/actions, and SegmentedControl provides a named single-choice group with keyboard navigation. SegmentedControl supports `default`, `text`, and `underline` presentations. DialogDescription supports `sm` and `md` text sizes. Business copy and persistence remain with callers.
 Use `size="sm"` for compact segmented controls in toolbars or preview headers.
@@ -123,6 +125,8 @@ Use `size="sm"` on `DropdownMenuContent` for compact menus. Section headings use
 ## Dialog
 
 `Dialog` is built on the `Dialog` namespace from `radix-ui`. Use the shared dialog exports for modal workflows so pages inherit consistent backdrop, portal, focus trap, close button, title, description, and layout behavior. Expose `portalContainer` when a dialog or nested floating child needs to stay inside a specific layer.
+
+Compose `DialogHeader`, `DialogBody`, and `DialogFooter`. Use `scrollBody` on `DialogContent` when a long form needs its heading and actions to stay visible while the body scrolls. Keep button order, copy, disabled states, and submit logic with the feature that owns the dialog.
 
 ## Switch
 

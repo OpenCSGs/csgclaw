@@ -1,3 +1,5 @@
+import { PanelEmptyState } from "@/components/business/PanelEmptyState";
+import { EntityPane } from "@/components/business/EntityDetail";
 import { useWorkspaceControllerContext } from "@/hooks/workspace";
 import { WorkspacePaneTypes } from "@/models/routing";
 import { ConversationView } from "@/components/business/ConversationWorkspace";
@@ -15,11 +17,9 @@ export function AgentPage() {
   if (!agentViewProps?.item) {
     if (controller.activePane.type === WorkspacePaneTypes.notifications) {
       return (
-        <section className="entity-pane agent-detail-pane notification-participant-detail-pane">
-          <div className="empty-state shell-empty-state">
-            <strong>{controller.t("noNotificationBots")}</strong>
-          </div>
-        </section>
+        <EntityPane className={"agent-detail-pane notification-participant-detail-pane"}>
+          <PanelEmptyState title={controller.t("noNotificationBots")} />
+        </EntityPane>
       );
     }
     return <ConversationView {...controller.conversationViewProps} />;

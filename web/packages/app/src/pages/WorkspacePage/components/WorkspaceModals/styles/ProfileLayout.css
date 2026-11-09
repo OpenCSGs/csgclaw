@@ -11,87 +11,6 @@
   width: min(920px, 100%);
 }
 
-.profile-modal .modal-header {
-  position: relative;
-  flex: 0 0 auto;
-  z-index: 2;
-  margin: 0;
-  padding: 18px 24px 14px;
-  background: color-mix(in oklab, var(--panel) 94%, transparent);
-  border-bottom: 1px solid var(--line);
-  backdrop-filter: none;
-}
-
-.profile-modal.agent-modal .modal-header {
-  display: flex;
-  flex-direction: row;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--space-4);
-  padding: 0 0 20px;
-  background: var(--white);
-  border-bottom: 1px solid var(--gray-200);
-}
-
-.profile-modal.agent-modal .modal-header > div:first-child {
-  display: grid;
-  flex: 1;
-  gap: var(--space-1);
-  min-width: 0;
-}
-
-.profile-modal.agent-modal .modal-header > .modal-close {
-  flex-shrink: 0;
-}
-
-.profile-modal.agent-modal .modal-title {
-  color: var(--gray-900);
-  font-family: var(--font-sans);
-  font: var(--text-lg-medium);
-}
-
-.profile-modal.agent-modal .modal-subtitle {
-  color: var(--gray-600);
-  font: var(--text-sm-light);
-}
-
-.modal-card .modal-header .modal-close:where(:not([data-csg-control])) {
-  width: 44px;
-  min-width: 44px;
-  height: 44px;
-  min-height: 44px;
-  padding: 8px;
-  margin: -8px -8px 0 0;
-  border: 0;
-  border-radius: var(--radius-md);
-  background: transparent;
-  color: var(--gray-400);
-  box-shadow: none;
-  transform: none;
-}
-
-.modal-card .modal-header .modal-close-icon,
-.modal-card .modal-header .modal-close-icon svg {
-  width: 24px;
-  height: 24px;
-}
-
-.modal-card .modal-header .modal-close:where(:not([data-csg-control])):hover:not(:disabled),
-.modal-card .modal-header .modal-close:where(:not([data-csg-control])):active:not(:disabled) {
-  border: 0;
-  background: transparent;
-  color: var(--gray-700);
-  box-shadow: none;
-  transform: none;
-}
-
-.modal-card .modal-header .modal-close:where(:not([data-csg-control])):focus-visible {
-  border: 0;
-  background: transparent;
-  color: var(--gray-700);
-  box-shadow: 0 0 0 var(--space-1) color-mix(in srgb, var(--gray-400) 14%, transparent);
-}
-
 .profile-editor-shell {
   display: grid;
   flex: 1 1 auto;
@@ -583,10 +502,6 @@
 
 .upgrade-modal {
   width: min(520px, 100%);
-}
-
-.upgrade-modal .modal-subtitle {
-  margin-top: 8px;
 }
 
 .upgrade-summary {

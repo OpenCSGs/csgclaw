@@ -1,8 +1,10 @@
+import profileFormLayoutStyles from "@/components/business/ProfileControls/ProfileFormLayout.module.css";
 import { ResourceList, ResourceListCard, ResourceStatus } from "@/components/business/ResourceListCard";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { ArrowUpRight, BookOpen, Plus, RefreshCw } from "lucide-react";
 import {
+  InlineError,
   Button,
   Switch,
   DialogRoot,
@@ -20,7 +22,7 @@ import { localizeAPIError } from "@/shared/i18n";
 import type { AppInstallation } from "@/api/apps";
 import type { TranslateFn } from "@/models/conversations";
 import { settingsDialogSearch } from "@/models/workspaceDialogs";
-import { ConnectorBoxesIcon, ConnectorGitLabIcon } from "@/components/ui/Icons";
+import { ConnectorBoxesIcon, ConnectorGitLabIcon } from "@/components/business/Icons";
 import { appName, appDescription } from "./appForm";
 import { appStatus, appConnectionError } from "./appStatus";
 import { AppToolList } from "./AppToolList";
@@ -132,10 +134,15 @@ export function AgentAppsPanel({
     }
   }
   return (
-    <section id="agent-profile-apps" className={`profile-section ${styles.panel}`}>
+    <section
+      id="agent-profile-apps"
+      className={`profile-section ${profileFormLayoutStyles["profile-section"]} ${styles.panel}`}
+    >
       <div className={styles.heading}>
         <div>
-          <div className="profile-section-title">{t("profileAppConnectors")}</div>
+          <div className={`profile-section-title ${profileFormLayoutStyles["profile-section-title"]}`}>
+            {t("profileAppConnectors")}
+          </div>
           <p className="profile-section-description">{t("profileAppConnectorHint")}</p>
         </div>
         <div className="flex items-center gap-3">
@@ -152,9 +159,9 @@ export function AgentAppsPanel({
         </div>
       </div>
       {error || controller.error ? (
-        <div role="alert" className="form-error">
+        <InlineError role="alert">
           {localizeAPIError(error || controller.error, t) || errorMessage(error || controller.error)}
-        </div>
+        </InlineError>
       ) : null}
       {controller.loading ? (
         <p role="status" className={styles.hint}>
@@ -233,9 +240,9 @@ export function AgentAppsPanel({
           </DialogHeader>
           <DialogBody className={`${styles.settingsBody} ${styles.scrollableSettingsBody}`}>
             {error ? (
-              <p role="alert" className="form-error">
+              <InlineError as="p" role="alert">
                 {localizeAPIError(error, t) || errorMessage(error)}
-              </p>
+              </InlineError>
             ) : null}
             {selected ? (
               <>
@@ -342,9 +349,9 @@ export function AgentAppsPanel({
           }
         >
           {error || controller.error ? (
-            <div className="form-error" role="alert">
+            <InlineError role="alert">
               {localizeAPIError(error || controller.error, t) || errorMessage(error || controller.error)}
-            </div>
+            </InlineError>
           ) : null}
           <ResourcePickerList>
             {available.map((resource) => {
@@ -446,9 +453,9 @@ export function AppManagedMCPRows({
   }
   const busy = disabled || Boolean(controller.busyID);
   const feedback = error ? (
-    <p role="alert" className="form-error">
+    <InlineError as="p" role="alert">
       {localizeAPIError(error, t, t("agentResourceApplyFailed"))}
-    </p>
+    </InlineError>
   ) : null;
   return items.length ? (
     <>

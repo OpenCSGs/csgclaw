@@ -1,7 +1,7 @@
+import profileFormLayoutStyles from "@/components/business/ProfileControls/ProfileFormLayout.module.css";
 import profileControlsStyles from "./ProfileControls.module.css";
 import { DEFAULT_NOTIFIER_POLL_INTERVAL, NOTIFIER_DELIVERY_OPTIONS } from "@/shared/constants/agents";
-import type { ReactNode } from "react";
-import { TextInput, Select } from "@/components/ui";
+import { Field, TextInput, Select } from "@/components/ui";
 import {
   ensureNotifierPullSubscriptionDraft,
   notifierPushWebhookNotifyURL,
@@ -11,7 +11,6 @@ import {
 } from "@/models/agents";
 import { ClipboardCopyButton } from "./ClipboardCopyButton";
 import { FieldHelpTooltip } from "./FieldHelpTooltip";
-import { requiredFieldLabel } from "./requiredFieldLabel";
 import type { Translator } from "./types";
 
 export type NotifierControlsProps = {
@@ -23,15 +22,6 @@ export type NotifierControlsProps = {
   webhookPublicOrigin: string;
   t: Translator;
 };
-
-function FieldLabelWithHelp({ children, detail, summary }: { children: ReactNode; detail?: string; summary?: string }) {
-  return (
-    <div className="field-label-with-help">
-      {children}
-      <FieldHelpTooltip summary={summary} detail={detail} />
-    </div>
-  );
-}
 
 export function NotifierControls({
   agentID,
@@ -62,35 +52,44 @@ export function NotifierControls({
   }
 
   return (
-    <div className="profile-section">
+    <div className={`profile-section ${profileFormLayoutStyles["profile-section"]}`}>
       {!hideHeading ? (
         <div className="profile-section-heading">
-          <div className="profile-section-title">{t("profileNotifierSection")}</div>
+          <div className={`profile-section-title ${profileFormLayoutStyles["profile-section-title"]}`}>
+            {t("profileNotifierSection")}
+          </div>
           <p className="profile-section-description">{t("profileNotifierSectionDescription")}</p>
         </div>
       ) : null}
       <div className="agent-section-form">
         <div className="agent-section-form-content agent-notifier-form-content">
-          <div className="profile-grid profile-grid-compact">
-            <label className="field span-2">
-              <span>{t("notifierDeliveryMode")}</span>
+          <div
+            className={`profile-grid ${profileFormLayoutStyles["profile-grid"]} profile-grid-compact ${profileFormLayoutStyles["profile-grid-compact"]}`}
+          >
+            <Field className={`span-2 ${profileFormLayoutStyles["span-2"]}`} label={t("notifierDeliveryMode")}>
               <Select
                 value={deliveryMode}
                 onValueChange={setDeliveryMode}
-                triggerProps={{ "aria-label": t("notifierDeliveryMode") }}
                 options={NOTIFIER_DELIVERY_OPTIONS.map((mode) => ({
                   value: mode,
                   label: mode === "webhook" ? t("notifierDeliveryWebhook") : t("notifierDeliveryRemotePull"),
                 }))}
               />
-            </label>
+            </Field>
 
             {deliveryMode === "webhook" ? (
               <>
-                <label className="field span-2">
-                  <FieldLabelWithHelp summary={t("notifierWebhookTokenSummary")} detail={t("notifierWebhookTokenHelp")}>
-                    {requiredFieldLabel(t("notifierWebhookToken"))}
-                  </FieldLabelWithHelp>
+                <Field
+                  className={`span-2 ${profileFormLayoutStyles["span-2"]}`}
+                  required
+                  label={t("notifierWebhookToken")}
+                  labelAction={
+                    <FieldHelpTooltip
+                      summary={t("notifierWebhookTokenSummary")}
+                      detail={t("notifierWebhookTokenHelp")}
+                    />
+                  }
+                >
                   <div className={profileControlsStyles["notifier-copy-row"]}>
                     <TextInput
                       type="password"
@@ -101,38 +100,48 @@ export function NotifierControls({
                     />
                     <ClipboardCopyButton text={draft.notifier_webhook_token || ""} label={t("copyToClipboard")} />
                   </div>
-                </label>
-                <label className="field span-2">
-                  <FieldLabelWithHelp
-                    summary={t("notifierThirdPartyCSGWebhookURLSummary")}
-                    detail={t("notifierThirdPartyCSGWebhookURLHelp")}
-                  >
-                    <span>{t("notifierThirdPartyCSGWebhookURL")}</span>
-                  </FieldLabelWithHelp>
+                </Field>
+                <Field
+                  className={`span-2 ${profileFormLayoutStyles["span-2"]}`}
+                  label={t("notifierThirdPartyCSGWebhookURL")}
+                  labelAction={
+                    <FieldHelpTooltip
+                      summary={t("notifierThirdPartyCSGWebhookURLSummary")}
+                      detail={t("notifierThirdPartyCSGWebhookURLHelp")}
+                    />
+                  }
+                >
                   <div className={profileControlsStyles["notifier-copy-row"]}>
                     <TextInput readOnly value={publicWebhookURL} />
                     <ClipboardCopyButton text={publicWebhookURL} label={t("copyToClipboard")} />
                   </div>
-                </label>
+                </Field>
               </>
             ) : null}
 
             {deliveryMode === "remote_pull" ? (
               <>
-                <label className="field span-2">
-                  <FieldLabelWithHelp summary={t("notifierRemoteURLSummary")} detail={t("notifierRemoteURLHelp")}>
-                    {requiredFieldLabel(t("notifierRemoteURL"))}
-                  </FieldLabelWithHelp>
+                <Field
+                  className={`span-2 ${profileFormLayoutStyles["span-2"]}`}
+                  required
+                  label={t("notifierRemoteURL")}
+                  labelAction={
+                    <FieldHelpTooltip summary={t("notifierRemoteURLSummary")} detail={t("notifierRemoteURLHelp")} />
+                  }
+                >
                   <TextInput
                     value={draft.notifier_remote_url || ""}
                     placeholder={t("notifierRemoteURLPlaceholder")}
                     onInput={(event) => patch({ notifier_remote_url: event.currentTarget.value })}
                   />
-                </label>
-                <label className="field span-2">
-                  <FieldLabelWithHelp summary={t("notifierRemoteTokenSummary")} detail={t("notifierRemoteTokenHelp")}>
-                    <span>{t("notifierRemoteToken")}</span>
-                  </FieldLabelWithHelp>
+                </Field>
+                <Field
+                  className={`span-2 ${profileFormLayoutStyles["span-2"]}`}
+                  label={t("notifierRemoteToken")}
+                  labelAction={
+                    <FieldHelpTooltip summary={t("notifierRemoteTokenSummary")} detail={t("notifierRemoteTokenHelp")} />
+                  }
+                >
                   <TextInput
                     type="password"
                     autoComplete="new-password"
@@ -140,31 +149,39 @@ export function NotifierControls({
                     placeholder={notifierRemoteTokenPlaceholderText(draft, t)}
                     onInput={(event) => patch({ notifier_remote_token: event.currentTarget.value })}
                   />
-                </label>
+                </Field>
                 {relayPasteURL ? (
-                  <label className="field span-2">
-                    <FieldLabelWithHelp
-                      summary={t("notifierThirdPartyWebhookPasteURLSummary")}
-                      detail={t("notifierThirdPartyWebhookPasteURLHelp")}
-                    >
-                      <span>{t("notifierThirdPartyWebhookPasteURL")}</span>
-                    </FieldLabelWithHelp>
+                  <Field
+                    className={`span-2 ${profileFormLayoutStyles["span-2"]}`}
+                    label={t("notifierThirdPartyWebhookPasteURL")}
+                    labelAction={
+                      <FieldHelpTooltip
+                        summary={t("notifierThirdPartyWebhookPasteURLSummary")}
+                        detail={t("notifierThirdPartyWebhookPasteURLHelp")}
+                      />
+                    }
+                  >
                     <div className={profileControlsStyles["notifier-copy-row"]}>
                       <TextInput readOnly value={relayPasteURL} />
                       <ClipboardCopyButton text={relayPasteURL} label={t("copyToClipboard")} />
                     </div>
-                  </label>
+                  </Field>
                 ) : null}
-                <label className="field">
-                  <FieldLabelWithHelp summary={t("notifierPollIntervalSummary")} detail={t("notifierPollIntervalHelp")}>
-                    <span>{t("notifierPollInterval")}</span>
-                  </FieldLabelWithHelp>
+                <Field
+                  label={t("notifierPollInterval")}
+                  labelAction={
+                    <FieldHelpTooltip
+                      summary={t("notifierPollIntervalSummary")}
+                      detail={t("notifierPollIntervalHelp")}
+                    />
+                  }
+                >
                   <TextInput
                     value={draft.notifier_poll_interval || DEFAULT_NOTIFIER_POLL_INTERVAL}
                     placeholder={t("notifierPollIntervalPlaceholder")}
                     onInput={(event) => patch({ notifier_poll_interval: event.currentTarget.value })}
                   />
-                </label>
+                </Field>
               </>
             ) : null}
           </div>

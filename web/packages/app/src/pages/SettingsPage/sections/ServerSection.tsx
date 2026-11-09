@@ -1,4 +1,4 @@
-import { Field, TextInput, Button } from "@/components/ui";
+import { InlineError, Field, TextInput, Button } from "@/components/ui";
 import { useWorkspaceControllerContext } from "@/hooks/workspace";
 import { SettingsRow } from "./SettingsRow";
 import styles from "../SettingsPage.module.css";
@@ -41,7 +41,7 @@ export function ServerSection() {
             onInput={(event) => config.onDraftChange({ access_token: event.currentTarget.value })}
           />
         </Field>
-        {config.error ? <p className="form-error">{config.error}</p> : null}
+        {config.error ? <InlineError as="p">{config.error}</InlineError> : null}
         <div className={`${styles.formActions} ${styles.spanAll}`}>
           {config.phase === "done" ? (
             <Button variant="primary" size="md" onClick={config.onReload}>

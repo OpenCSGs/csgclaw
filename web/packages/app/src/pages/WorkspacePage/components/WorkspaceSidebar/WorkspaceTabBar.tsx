@@ -1,5 +1,6 @@
+import workspaceTabBarStyles from "./WorkspaceTabBar.module.css";
 import { Button, Tooltip } from "@/components/ui";
-import { HubIcon, RoomsIcon, TaskIcon, UsersIcon } from "@/components/ui/Icons";
+import { HubIcon, RoomsIcon, TaskIcon, UsersIcon } from "@/components/business/Icons";
 import { WorkspaceTabs } from "@/models/routing";
 import type { WorkspaceSidebarProps } from "@/hooks/workspace/contracts/sidebar";
 
@@ -32,14 +33,14 @@ export function WorkspaceTabBar({
     >
       <Tooltip content={t("messagesTab")}>
         <Button
-          className={`workspace-tab ${rail ? "workspace-tab-rail" : ""}`}
+          className={`workspace-tab ${workspaceTabBarStyles["workspace-tab"]} ${rail ? "workspace-tab-rail" : ""}`}
           active={workspaceTab === WorkspaceTabs.messages}
           role="tab"
           aria-selected={workspaceTab === WorkspaceTabs.messages}
           aria-label={t("messagesTab")}
           onClick={() => onWorkspaceTabChange(WorkspaceTabs.messages)}
         >
-          <span className="workspace-tab-icon" aria-hidden="true">
+          <span className={`workspace-tab-icon ${workspaceTabBarStyles["workspace-tab-icon"]}`} aria-hidden="true">
             <RoomsIcon />
           </span>
           {!rail ? (
@@ -52,14 +53,14 @@ export function WorkspaceTabBar({
       </Tooltip>
       <Tooltip content={t("agentsTab")}>
         <Button
-          className={`workspace-tab ${rail ? "workspace-tab-rail" : ""}`}
+          className={`workspace-tab ${workspaceTabBarStyles["workspace-tab"]} ${rail ? "workspace-tab-rail" : ""}`}
           active={workspaceTab === WorkspaceTabs.agents}
           role="tab"
           aria-selected={workspaceTab === WorkspaceTabs.agents}
           aria-label={t("agentsTab")}
           onClick={() => onWorkspaceTabChange(WorkspaceTabs.agents)}
         >
-          <span className="workspace-tab-icon" aria-hidden="true">
+          <span className={`workspace-tab-icon ${workspaceTabBarStyles["workspace-tab-icon"]}`} aria-hidden="true">
             <UsersIcon />
           </span>
           {!rail ? (
@@ -72,14 +73,14 @@ export function WorkspaceTabBar({
       </Tooltip>
       <Tooltip content={t("scheduledTasksTab")}>
         <Button
-          className={`workspace-tab ${rail ? "workspace-tab-rail" : ""}`}
+          className={`workspace-tab ${workspaceTabBarStyles["workspace-tab"]} ${rail ? "workspace-tab-rail" : ""}`}
           active={workspaceTab === WorkspaceTabs.tasks}
           role="tab"
           aria-selected={workspaceTab === WorkspaceTabs.tasks}
           aria-label={t("scheduledTasksTab")}
           onClick={() => onWorkspaceTabChange(WorkspaceTabs.tasks)}
         >
-          <span className="workspace-tab-icon" aria-hidden="true">
+          <span className={`workspace-tab-icon ${workspaceTabBarStyles["workspace-tab-icon"]}`} aria-hidden="true">
             <TaskIcon />
           </span>
           {!rail ? (
@@ -92,14 +93,14 @@ export function WorkspaceTabBar({
       </Tooltip>
       <Tooltip content={t("resourcesTab")}>
         <Button
-          className={`workspace-tab ${rail ? "workspace-tab-rail" : ""}`}
+          className={`workspace-tab ${workspaceTabBarStyles["workspace-tab"]} ${rail ? "workspace-tab-rail" : ""}`}
           active={workspaceTab === WorkspaceTabs.hub}
           role="tab"
           aria-selected={workspaceTab === WorkspaceTabs.hub}
           aria-label={t("resourcesTab")}
           onClick={() => onSelectHub()}
         >
-          <span className="workspace-tab-icon" aria-hidden="true">
+          <span className={`workspace-tab-icon ${workspaceTabBarStyles["workspace-tab-icon"]}`} aria-hidden="true">
             <HubIcon />
           </span>
           {rail && showHubNewBadge ? (

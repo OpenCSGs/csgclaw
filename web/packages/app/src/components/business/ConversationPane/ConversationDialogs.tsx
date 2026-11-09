@@ -3,6 +3,8 @@ import agentLogsDialogStyles from "./AgentLogsDialog.module.css";
 import { useLayoutEffect, useRef } from "react";
 import { RefreshCw } from "lucide-react";
 import {
+  IconButton,
+  InlineError,
   Button,
   DialogBody,
   DialogCloseButton,
@@ -141,24 +143,23 @@ export function ConversationAgentLogsDialog({
           <div className={agentLogsDialogStyles["agent-logs-header-actions"]}>
             <Tooltip content={t("refreshLogs")}>
               <span>
-                <Button
+                <IconButton
+                  icon={<RefreshCw size={18} strokeWidth={2} />}
+                  iconSize={16}
+                  markClassName="icon-button-mark"
                   className="icon-button agent-logs-refresh"
-                  aria-label={t("refreshLogs")}
+                  label={t("refreshLogs")}
                   loading={loading}
                   loadingLabel={t("agentLogsLoading")}
                   onClick={onRefresh}
-                >
-                  <span className="icon-button-mark" aria-hidden="true">
-                    <RefreshCw size={18} strokeWidth={2} />
-                  </span>
-                </Button>
+                />
               </span>
             </Tooltip>
             <DialogCloseButton className="icon-button" label={t("close")} />
           </div>
         </DialogHeader>
         <DialogBody className={agentLogsDialogStyles["agent-logs-body"]}>
-          {error ? <div className={`form-error ${agentLogsDialogStyles["agent-logs-error"]}`}>{error}</div> : null}
+          {error ? <InlineError className={`${agentLogsDialogStyles["agent-logs-error"]}`}>{error}</InlineError> : null}
           <pre ref={logsViewerRef} className={agentLogsDialogStyles["agent-logs-viewer"]}>
             {displayContent}
           </pre>

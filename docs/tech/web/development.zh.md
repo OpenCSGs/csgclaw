@@ -79,7 +79,7 @@ pnpm --dir web install --frozen-lockfile
 | `src/api/`                         | HTTP client、请求封装、endpoint 类型和传输边界。                                        | 渲染逻辑、页面状态或可复用数据归一化。                    |
 | `src/models/`                      | 可共享或可独立测试的纯数据整理、格式化、解析、路由和领域 helper。                       | React hooks、浏览器存储、fetch 调用或 UI 状态。           |
 | `src/hooks/`                       | 复用型 React hooks，用于组合共享应用数据或 controller 状态。                            | 只属于单个页面的 hooks；这类 hooks 放页面附近。           |
-| `src/components/ui/`               | 展示型基础组件、布局基础件、表单控件、按钮和图标。                                      | CSGClaw 业务状态或 API 数据行为。                         |
+| `src/components/ui/`               | `csgclaw-ui` 的统一转发入口。                                      | 组件实现和样式文件。                         |
 | `src/components/business/`         | 跨页面复用的业务组件，组合 UI 基础件和业务文案、状态、动作或 API 数据。                 | 只被单个页面使用的组件。                                  |
 | `src/pages/<PageName>/`            | 路由页面和该页面拥有的模块。                                                            | 没有真实复用前提前抽跨页面抽象。                          |
 | `src/pages/<PageName>/components/` | 页面私有组件。                                                                          | 从其它页面导入私有模块。                                  |
@@ -113,12 +113,10 @@ pnpm --dir web install --frozen-lockfile
 
 ## 共享组件
 
-- `src/components/ui/` 放展示型基础组件和图标。
-- `src/components/business/` 放跨页面复用的业务组件。
-- 不要把页面私有组件放进 `src/components/`。
-- 纯图标组件放在 `src/components/ui/Icons/`。
-- 当组件把 UI 基础件与业务状态、文案、动作或 API 数据组合起来时，它就是业务组件。
-- 新增页面功能时，先查已有 `src/components/ui` 和 `src/components/business` 是否能组合实现；不要在页面里重复实现基础按钮、表单、选择器、浮层或 tooltip 交互。
+- 通用 UI 实现在 `web/packages/csgclaw-ui/src/components/`。App 的 `src/components/ui/index.ts` 只转发组件库导出。
+- `src/components/business/` 暂放跨页面共用、仍依赖应用状态、业务规则、产品展示或静态资源的组件。应用图标放在 `src/components/business/Icons/`。页面专用组件放在所属页面。
+- 改动业务组件时顺带评估其通用部分。可以仅通过 props 和组件库主题 token 使用，且脱离应用 API、hook、路由、文案和资源后，将组件或可复用部分迁入 `csgclaw-ui`。应用专用的组合逻辑留在所属业务。
+- 新增按钮、表单、选择器、浮层或 tooltip 交互前，先查组件库和已有业务组件。
 - 如果共享组件不适合，优先在当前页面或 feature 附近实现页面私有组件，不要过早增加新的共享组件面。只有出现复用需求或交互契约稳定后，再提升为共享组件。
 - 新增或修改 UI 基础件、Radix wrapper、表单控件、浮层层级或组件库 export 时，遵循 `docs/tech/web/ui-components.md` 或 `docs/tech/web/ui-components.zh.md`。当你需要判断“应该用现有组件、直接用 Radix、还是抽一个新的本地组件”时，也先看该组件库规范。
 
@@ -158,7 +156,7 @@ src/pages/WorkspacePage/components/
 ## 样式
 
 - 组件自有样式默认使用同目录的 CSS Modules，例如 `AgentDetailPane.module.css`，由实现文件导入。
-- `components/ui` 全部使用 CSS Modules；类名和动画局部化，主题与共享状态消费语义 token。
+- `csgclaw-ui` 的组件样式使用 CSS Modules 和组件库主题 token，类名和动画保持局部化。
 - 现有工作区 CSS 入口通过有序 import 加载历史业务样式。迁移具体组件时保持顺序，不继续在入口汇总组件皮肤。
 - 全局样式和设计 token 放在 `src/shared/styles/`。
 - 新增 UI 工作遵循渐进式样式顺序：先组合已有全局组件或 feature 局部组件；如果没有合适组件，再实现最小必要的局部组件。
@@ -195,7 +193,7 @@ src/pages/WorkspacePage/components/
 - 原始 API 响应进入大范围 UI 代码前，如果转换逻辑会复用、足够复杂或需要回归测试，先转换成前端应用使用的形态。纯转换 helper 放在 `src/models/<domain>.ts` 或聚焦的 model 模块里。
 - 路由页面或页面拥有的 hook 负责组合数据加载、mutation、loading/error/empty 状态和页面专属默认值。只要还没有其它页面复用，就把这层编排留在路由附近。
 - 共享组件应接收已经整理好的 props 或聚焦的 callback。组件可以展示业务状态，但不要直接 fetch；除非它是 `src/components/business/` 下有明确跨页面用途的 app-aware 组件。
-- `src/components/ui/` 下的 UI 基础件必须与数据来源无关。不要导入 `src/api/`、route model、storage client、realtime client 或页面模块。
+- `csgclaw-ui` 的基础组件通过 props 接收数据，依赖限定在包内和声明的外部库。
 - 实时事件、轮询和共享订阅放在 `src/shared/realtime/`；如果只有一个页面消费，放在页面拥有的 hook 里。能复用 HTTP 数据的 model helper 时，实时 payload 也通过同一套 helper 归一化。
 - mutation 流程保持显式：在页面/controller 层调用 API，在一个明确位置更新本地或共享状态，并通过 props 暴露 loading、disabled 和 error 状态。只有回滚行为清晰时才使用 optimistic update。
 - 只有状态确实需要跨远距离路由或布局区域共享时，才引入全局 store 或 context。单一可见 owner 的数据优先使用页面本地 hook 和派生 props。

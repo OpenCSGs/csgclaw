@@ -1,3 +1,4 @@
+import hubWorkspaceLayoutStyles from "@/components/business/HubDetailPane/HubWorkspaceLayout.module.css";
 import { useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { fetchAgentSkills, fetchAgentSkillsFile } from "@/api/agents";
@@ -11,6 +12,7 @@ import { skillOriginKind } from "@/models/skillhub";
 import { WorkspaceFileTree, WorkspaceFilePreview } from "@/components/business/WorkspaceFileTree";
 import { JSONConfigEditor } from "@/components/business/HubDetailPane";
 import {
+  InlineError,
   Button,
   Switch,
   DialogRoot,
@@ -119,17 +121,19 @@ export function AgentResourceDetails({
         </DialogHeader>
         <DialogBody className={skill ? "hub-standard-skill-dialog-body" : server ? styles.connectorBody : undefined}>
           {error ? (
-            <div role="alert" className="form-error">
+            <InlineError role="alert">
               {error}
               {onRetry ? (
                 <Button disabled={busy} onClick={() => void onRetry()}>
                   {t("retry")}
                 </Button>
               ) : null}
-            </div>
+            </InlineError>
           ) : null}
           {skill ? (
-            <div className="hub-workspace-panels hub-skill-detail-file-panels">
+            <div
+              className={`hub-workspace-panels ${hubWorkspaceLayoutStyles["hub-workspace-panels"]} hub-skill-detail-file-panels`}
+            >
               <WorkspaceFileTree
                 className="hub-workspace-tree"
                 entries={tree.data?.entries ?? []}
@@ -166,9 +170,9 @@ export function AgentResourceDetails({
             <>
               {probe.isPending ? <p role="status">{t("resourcesMCPTesting")}</p> : null}
               {probeError ? (
-                <p role="alert" className="form-error">
+                <InlineError as="p" role="alert">
                   {probeError}
-                </p>
+                </InlineError>
               ) : probe.data?.connected ? (
                 <p role="status">
                   {t("resourcesMCPTestSuccess")} ·{" "}

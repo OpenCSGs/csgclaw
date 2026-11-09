@@ -2,9 +2,16 @@ import { mcpOriginLabel as originLabel } from "./resourceOrigins";
 import { useEffect, useMemo, useState } from "react";
 import { ChevronDown, LoaderCircle, Plus } from "lucide-react";
 import { GlobalAppsPanel } from "@/components/business/Apps";
-import { Button, DropdownMenuContent, DropdownMenuItem, DropdownMenuRoot, DropdownMenuTrigger } from "@/components/ui";
+import {
+  InlineError,
+  Button,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuRoot,
+  DropdownMenuTrigger,
+} from "@/components/ui";
 import { ResourceList, ResourceListCard } from "@/components/business/ResourceListCard";
-import { SidebarMcpIcon } from "@/components/ui/Icons";
+import { SidebarMcpIcon } from "@/components/business/Icons";
 import { useWorkspaceControllerContext } from "@/hooks/workspace";
 import { isAuthenticated } from "@/models/auth";
 import { isRemoteMCPInstalled, mcpServerDisplayName } from "@/models/mcp";
@@ -124,9 +131,9 @@ export function ConnectorsSection() {
               <span className={styles.countBadge}>{servers.length}</span>
             </h3>
             {hub?.mcpStateError ? (
-              <p className="form-error" role="alert">
+              <InlineError as="p" role="alert">
                 {hub.mcpStateError}
-              </p>
+              </InlineError>
             ) : null}
             {/* Use resource-specific loading state; hub.loaded tracks templates. */}
             {!detail?.loaded ? (

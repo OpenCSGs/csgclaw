@@ -1,3 +1,6 @@
+import avatarLayoutStyles from "@/components/business/AgentAvatar/AvatarLayout.module.css";
+import messageLayoutStyles from "@/components/business/ConversationPane/MessageLayout.module.css";
+import conversationSendButtonStyles from "./ConversationSendButton.module.css";
 import conversationThreadsStyles from "./ConversationThreads.module.css";
 import conversationPaneStyles from "./ConversationPane.module.css";
 import "@/components/business/ResourceTag";
@@ -24,7 +27,7 @@ import { ImageGenerationStatus } from "./ImageGenerationStatus";
 import { MessageContent, MessagePreviewText } from "@/components/business/MessageContent";
 import type { CitationSelectHandler, ProgressControlSlots } from "@/components/business/MessageContent/types";
 import type { DocumentPreviewRequest } from "@/components/business/DocumentPreviewPanel";
-import { Button, Tooltip } from "@/components/ui";
+import { IconButton, InlineError, Button, Tooltip } from "@/components/ui";
 import { resolveAgentAvatarFallback, type AgentLike } from "@/models/agents";
 import type { AttachmentDraft } from "@/models/attachments";
 import {
@@ -354,16 +357,19 @@ export function ConversationThreadPanel({
           </div>
         </div>
         <Tooltip content={t("close")}>
-          <Button className="icon-button" aria-label={t("close")} onClick={onClose}>
-            <span className="icon-button-mark" aria-hidden="true">
-              <X size={18} strokeWidth={2} />
-            </span>
-          </Button>
+          <IconButton
+            icon={<X size={18} strokeWidth={2} />}
+            iconSize={16}
+            markClassName="icon-button-mark"
+            size="sm"
+            label={t("close")}
+            onClick={onClose}
+          />
         </Tooltip>
       </div>
       <div ref={threadBodyRef} className="thread-panel-body">
         {loading && !root ? <div className={conversationThreadsStyles["thread-empty"]}>{t("loading")}</div> : null}
-        {error ? <div className="form-error">{error}</div> : null}
+        {error ? <InlineError>{error}</InlineError> : null}
         {visibleRoot ? (
           <div className={conversationThreadsStyles["thread-root"]}>
             <ThreadMessage
@@ -608,7 +614,7 @@ export function ConversationThreadPanel({
               />
               <Button
                 variant="primary"
-                className="composer-send-button"
+                className={`composer-send-button ${conversationSendButtonStyles["composer-send-button"]}`}
                 iconOnly
                 size="lg"
                 aria-label={t("send")}
@@ -681,7 +687,7 @@ function ThreadMessage({
       {user ? (
         <button
           type="button"
-          className="thread-message-avatar"
+          className={`thread-message-avatar ${avatarLayoutStyles["thread-message-avatar"]}`}
           aria-label={`${t(messageAgent ? "agentDetailPanel" : "profilePreview")} ${name}`}
           onClick={(event) => {
             if (messageAgent && onOpenAgentDetail) {
@@ -694,13 +700,13 @@ function ThreadMessage({
           <AgentAvatarContent avatar={avatar} fallback={fallback} />
         </button>
       ) : (
-        <div className="thread-message-avatar" aria-hidden="true">
+        <div className={`thread-message-avatar ${avatarLayoutStyles["thread-message-avatar"]}`} aria-hidden="true">
           <AgentAvatarContent avatar={avatar} fallback={fallback} />
         </div>
       )}
       <div className="thread-message-main">
-        <div className="message-meta">
-          <span className="message-author">{name}</span>
+        <div className={`message-meta ${messageLayoutStyles["message-meta"]}`}>
+          <span className={`message-author ${messageLayoutStyles["message-author"]}`}>{name}</span>
           <MessageTimestamp parts={timestampParts} />
         </div>
         {(message.content || messageResources(message.metadata).length > 0) && !message.metadata?.image_generation ? (

@@ -129,17 +129,22 @@ export const LinkButton = forwardRef<HTMLAnchorElement, LinkButtonProps>(functio
 
 export type IconButtonProps = Omit<ButtonProps, "aria-label" | "children" | "iconOnly"> & {
   icon: ReactNode;
+  iconSize?: number;
   label: string;
   markClassName?: string;
 };
 
 export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(function IconButton(
-  { icon, label, markClassName, ...props },
+  { icon, iconSize, label, markClassName, ...props },
   ref,
 ) {
   return (
     <Button ref={ref} iconOnly aria-label={label} {...props}>
-      <span className={markClassName} aria-hidden="true">
+      <span
+        className={classNames(iconSize ? styles["icon-mark"] : undefined, markClassName)}
+        style={iconSize ? { width: iconSize, height: iconSize } : undefined}
+        aria-hidden="true"
+      >
         {icon}
       </span>
     </Button>

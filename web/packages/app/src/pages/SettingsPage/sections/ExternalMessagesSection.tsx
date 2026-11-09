@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import {
+  InlineError,
   Field,
   TextInput,
   Button,
@@ -157,7 +158,7 @@ export function ExternalMessagesSection() {
             </Button>
           </div>
 
-          {error ? <p className="form-error">{error}</p> : null}
+          {error ? <InlineError as="p">{error}</InlineError> : null}
           <p className={externalMessagesSectionStyles.hintInline}>{t("externalMessagesWhereHint")}</p>
 
           {editing ? (
@@ -257,7 +258,7 @@ function SourceDialog({
             t={t}
             webhookPublicOrigin={webhookPublicOrigin}
           />
-          {error ? <p className="form-error">{error}</p> : null}
+          {error ? <InlineError as="p">{error}</InlineError> : null}
         </DialogBody>
         <DialogFooter>
           <Button variant="secondaryGray" size="md" disabled={busy} onClick={onClose}>

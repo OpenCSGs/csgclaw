@@ -1,3 +1,4 @@
+import profileFormLayoutStyles from "@/components/business/ProfileControls/ProfileFormLayout.module.css";
 import profileControlsStyles from "./ProfileControls.module.css";
 import {
   localizedRuntimeOptionChoiceDescription,
@@ -11,7 +12,7 @@ import {
   type RuntimeOptionSchema,
 } from "@/models/agents";
 import { Button } from "csgclaw-ui";
-import { TextInput, Select } from "@/components/ui";
+import { Field, TextInput, Select } from "@/components/ui";
 import type { LocaleCode } from "@/models/conversations";
 import { pickLocalDirectoryPath, rendererDirectoryPickerAvailable } from "./runtimeOptionDirectoryPicker";
 
@@ -63,10 +64,15 @@ export function RuntimeOptionsFields({
     if (isSelect) {
       const resolvedValue = inputValue || String(schema.default_value ?? schema.options?.[0] ?? "");
       return (
-        <div key={String(schema.key ?? path)} className="field span-2">
-          <div className="field-label-with-help">
-            <span>{label}</span>
-          </div>
+        <Field
+          key={String(schema.key ?? path)}
+          className={`span-2 ${profileFormLayoutStyles["span-2"]}`}
+          label={label}
+          hint={
+            localizedRuntimeOptionChoiceDescription(choiceForValue(schema.choices, resolvedValue), locale) ||
+            description
+          }
+        >
           <Select
             value={resolvedValue}
             onValueChange={(value) =>
@@ -75,27 +81,27 @@ export function RuntimeOptionsFields({
                 runtime_options: setRuntimeOptionValue(draft.runtime_options, path, value),
               })
             }
-            triggerProps={{ "aria-label": label }}
             options={(schema.options || []).map((value) => ({
               value,
               label: localizedRuntimeOptionChoiceLabel(choiceForValue(schema.choices, value), locale) || value,
             }))}
           />
-          <span className="field-hint">
-            {localizedRuntimeOptionChoiceDescription(choiceForValue(schema.choices, resolvedValue), locale) ||
-              description}
-          </span>
-        </div>
+        </Field>
       );
     }
     return (
-      <label key={String(schema.key ?? path)} className="field span-2">
-        <span>{label}</span>
+      <Field
+        as={isDirectory ? "div" : undefined}
+        label={label}
+        hint={description}
+        required={Boolean(schema.required)}
+        key={String(schema.key ?? path)}
+        className={`span-2 ${profileFormLayoutStyles["span-2"]}`}
+      >
         <div className={isDirectory ? profileControlsStyles["runtime-option-input-row"] : undefined}>
           <TextInput
             value={inputValue}
             required={Boolean(schema.required)}
-            aria-required={schema.required ? "true" : undefined}
             placeholder={placeholder}
             onInput={(event) =>
               onDraftChange({
@@ -141,8 +147,7 @@ export function RuntimeOptionsFields({
             </>
           ) : null}
         </div>
-        {description ? <span className="field-hint">{description}</span> : null}
-      </label>
+      </Field>
     );
   });
 
@@ -150,5 +155,5 @@ export function RuntimeOptionsFields({
     return <>{fields}</>;
   }
 
-  return <div className="profile-grid-compact">{fields}</div>;
+  return <div className={`profile-grid-compact ${profileFormLayoutStyles["profile-grid-compact"]}`}>{fields}</div>;
 }

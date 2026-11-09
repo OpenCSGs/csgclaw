@@ -16,6 +16,22 @@
   font-size: 13px;
 }
 
+.profileItem {
+  display: grid;
+  gap: 6px;
+}
+
+.profileItemLabel {
+  color: var(--field-label-color);
+  font-size: var(--field-label-font-size);
+  font-weight: var(--field-label-font-weight);
+  line-height: var(--field-label-line-height);
+}
+
+.templateHint {
+  color: var(--muted);
+}
+
 .templateCard {
   display: flex;
   align-items: center;
@@ -89,8 +105,12 @@
 .dialog[role="dialog"] {
   width: min(920px, calc(100vw - 40px));
   max-height: min(860px, calc(100dvh - var(--app-overlay-top-inset, 0px) - 40px));
-  display: flex;
-  flex-direction: column;
-  padding: 20px;
-  overflow: hidden;
+}
+
+.dialog .body {
+  padding-block: 0;
+}
+
+.dialog .body > :global(.profile-editor-shell) {
+  overflow: visible;
 }

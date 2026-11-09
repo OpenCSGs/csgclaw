@@ -1,4 +1,5 @@
 import {
+  InlineError,
   Button,
   DialogBody,
   DialogContent,
@@ -9,7 +10,6 @@ import {
   DialogRoot,
   DialogTitle,
 } from "@/components/ui";
-import { classNames } from "@/shared/lib/classNames";
 import { ScheduledTaskFormFields } from "./ScheduledTaskFormFields";
 import taskFormStyles from "./TaskForm.module.css";
 import type { Dispatch, SetStateAction } from "react";
@@ -63,7 +63,7 @@ export function ScheduledTaskCreateDialog({
             onChange={onChange}
             onClearError={onClearError}
           />
-          {error ? <div className={classNames("form-error", taskFormStyles.taskCreateError)}>{error}</div> : null}
+          {error ? <InlineError className={taskFormStyles.taskCreateError}>{error}</InlineError> : null}
         </DialogBody>
         <DialogFooter>
           <Button variant="secondaryGray" size="md" onClick={onClose}>

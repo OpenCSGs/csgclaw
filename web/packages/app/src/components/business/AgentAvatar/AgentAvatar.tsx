@@ -1,6 +1,6 @@
 import agentAvatarStyles from "./AgentAvatar.module.css";
 import { DialogContent, DialogDescription, DialogRoot, DialogTitle, Tooltip } from "@/components/ui";
-import { AgentIcon } from "@/components/ui/Icons";
+import { AgentIcon } from "@/components/business/Icons";
 import { CLOUD_AGENT_AVATARS } from "@/shared/avatar";
 import { AGENT_AVATAR_GROUPS, AGENT_AVATAR_OPTIONS, normalizeAgentAvatarPath } from "@/shared/avatarOptions";
 import { Edit3, ImagePlus, UploadCloud, X, ZoomIn, ZoomOut } from "lucide-react";
@@ -255,7 +255,7 @@ export function AgentAvatarPicker({
         <button
           aria-checked={checked}
           aria-label={label}
-          className={`agent-avatar-option ${checked ? "selected" : ""}`}
+          className={`agent-avatar-option ${agentAvatarStyles["agent-avatar-option"]} ${checked ? "selected" : ""}`}
           role="radio"
           type="button"
           disabled={optionDisabled}
@@ -269,7 +269,7 @@ export function AgentAvatarPicker({
 
   return (
     <div
-      className={`agent-avatar-picker ${mode === "edit" ? "edit-mode" : ""} ${selected ? "has-avatar" : "empty-avatar"} ${open ? "open" : ""} ${suppressTriggerHover ? "suppress-trigger-hover" : ""}`}
+      className={`agent-avatar-picker ${agentAvatarStyles["agent-avatar-picker"]} ${mode === "edit" ? "edit-mode" : ""} ${selected ? "has-avatar" : "empty-avatar"} ${open ? "open" : ""} ${suppressTriggerHover ? "suppress-trigger-hover" : ""}`}
       aria-disabled={disabled}
       ref={pickerRef}
     >
@@ -279,14 +279,19 @@ export function AgentAvatarPicker({
           aria-expanded={open}
           aria-haspopup="dialog"
           aria-label={triggerLabel}
-          className="agent-avatar-trigger"
+          className={`agent-avatar-trigger ${agentAvatarStyles["agent-avatar-trigger"]}`}
           type="button"
           disabled={disabled}
           onClick={() => setOpen((current) => !current)}
           onPointerLeave={mode === "edit" ? handleTriggerPointerLeave : undefined}
         >
           {selected ? (
-            <img className="agent-avatar-trigger-image" src={selected} alt="" draggable={false} />
+            <img
+              className={`agent-avatar-trigger-image ${agentAvatarStyles["agent-avatar-trigger-image"]}`}
+              src={selected}
+              alt=""
+              draggable={false}
+            />
           ) : fallback ? (
             <span className={agentAvatarStyles["agent-avatar-trigger-fallback"]}>{fallback}</span>
           ) : (
@@ -465,7 +470,11 @@ export function AgentAvatarPicker({
         </DialogRoot>
       ) : null}
       {open && mode !== "edit" && !disabled ? (
-        <div className="agent-avatar-picker-panel" role="radiogroup" aria-label={t("agentAvatar")}>
+        <div
+          className={`agent-avatar-picker-panel ${agentAvatarStyles["agent-avatar-picker-panel"]}`}
+          role="radiogroup"
+          aria-label={t("agentAvatar")}
+        >
           {AGENT_AVATAR_GROUPS.map((group) => (
             <div className={agentAvatarStyles["agent-avatar-picker-group"]} key={group.key}>
               <div className={agentAvatarStyles["agent-avatar-picker-label"]}>{t(group.labelKey)}</div>

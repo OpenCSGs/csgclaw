@@ -1,3 +1,6 @@
+import { PanelEmptyState } from "@/components/business/PanelEmptyState";
+import avatarLayoutStyles from "@/components/business/AgentAvatar/AvatarLayout.module.css";
+import messageLayoutStyles from "@/components/business/ConversationPane/MessageLayout.module.css";
 import conversationMessageListStyles from "./ConversationMessageList.module.css";
 import conversationPaneStyles from "./ConversationPane.module.css";
 import conversationThreadsStyles from "./ConversationThreads.module.css";
@@ -19,7 +22,7 @@ import type {
   MessageActionFeedback,
   MessageLike,
 } from "@/components/business/MessageContent/types";
-import { IconImage } from "@/components/ui/Icons";
+import { IconImage } from "@/components/business/Icons";
 import { isAgentAvailable, resolveAgentAvatarFallback, type AgentLike } from "@/models/agents";
 import {
   formatEventMessage,
@@ -140,24 +143,22 @@ const MessageListContent = memo(function MessageListContent({
 
   return (
     <div className={`conversation-message-area ${timelineStyles.area}`}>
-      <section ref={messageListRef} className="messages">
+      <section ref={messageListRef} className={`messages ${messageLayoutStyles["messages"]}`}>
         {headerSlot}
         {conversation.messages.length === 0 ? (
           (emptyStateSlot ?? (
-            <div className="messages-empty rich-empty">
-              <span aria-hidden="true" className="rich-empty-mark">
-                {">"}
-              </span>
-              <strong>{t("noMessages")}</strong>
-            </div>
+            <PanelEmptyState
+              title={t("noMessages")}
+              mark={">"}
+              className={conversationMessageListStyles["emptyCard"]}
+            />
           ))
         ) : displayMessages.length === 0 ? (
-          <div className="messages-empty rich-empty">
-            <span aria-hidden="true" className="rich-empty-mark">
-              #
-            </span>
-            <strong>{t("noVisibleMessages")}</strong>
-          </div>
+          <PanelEmptyState
+            title={t("noVisibleMessages")}
+            mark="#"
+            className={conversationMessageListStyles["emptyCard"]}
+          />
         ) : null}
         {displayMessages.map((message, index) => {
           if (emptyCompletedProgress(message)) return null;
@@ -204,7 +205,7 @@ const MessageListContent = memo(function MessageListContent({
               >
                 <button
                   type="button"
-                  className="avatar avatar-button"
+                  className={`avatar ${avatarLayoutStyles["avatar"]} avatar-button ${avatarLayoutStyles["avatar-button"]}`}
                   aria-label={`${t(messageAgent ? "agentDetailPanel" : "profilePreview")} ${authorName}`}
                   onClick={(event) => {
                     if (messageAgent && onOpenAgentDetail) {
@@ -222,9 +223,9 @@ const MessageListContent = memo(function MessageListContent({
                     />
                   ) : null}
                 </button>
-                <div className="message-card">
-                  <div className="message-meta">
-                    <span className="message-author">
+                <div className={`message-card ${messageLayoutStyles["message-card"]}`}>
+                  <div className={`message-meta ${messageLayoutStyles["message-meta"]}`}>
+                    <span className={`message-author ${messageLayoutStyles["message-author"]}`}>
                       {authorName}
                       {user.agent_state && (
                         <small>
@@ -237,7 +238,7 @@ const MessageListContent = memo(function MessageListContent({
                   </div>
                   {(message.content || messageResources(message.metadata).length > 0) &&
                   !message.metadata?.image_generation ? (
-                    <div className="message-bubble">
+                    <div className={`message-bubble ${messageLayoutStyles["message-bubble"]}`}>
                       <MessageContent
                         key={`${message.id}:${theme}`}
                         content={message.content}

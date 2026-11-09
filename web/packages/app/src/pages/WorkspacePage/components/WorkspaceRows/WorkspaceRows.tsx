@@ -22,8 +22,8 @@ import {
   resolveConversationUser,
 } from "@/models/conversations";
 import { MessagePreviewText } from "@/components/business/MessageContent";
-import { ChevronIcon, ComputerIcon, RoomPlusIcon, RoomsIcon } from "@/components/ui/Icons";
-import { Button, Tooltip } from "@/components/ui";
+import { ChevronIcon, ComputerIcon, RoomPlusIcon, RoomsIcon } from "@/components/business/Icons";
+import { IconButton, Tooltip } from "@/components/ui";
 import { AgentAvatarContent } from "@/components/business/AgentAvatar";
 import { avatarFallbackText } from "@/shared/avatar";
 import { localizeRole } from "@/shared/i18n";
@@ -65,24 +65,22 @@ export type WorkspaceGroupProps = {
 
 function WorkspaceAddAction({ icon, label, onAdd }: { icon: ReactNode; label: string; onAdd: () => void }) {
   return (
-    <Button
+    <IconButton
+      icon={icon}
+      iconSize={15}
+      markClassName="icon-button-mark"
       variant="ghost"
       size="sm"
-      iconOnly
       className={styles.addButton}
       draggable={false}
-      aria-label={label}
+      label={label}
       onDragStart={(event) => event.stopPropagation()}
       onClick={(event) => {
         event.preventDefault();
         event.stopPropagation();
         onAdd();
       }}
-    >
-      <span className="icon-button-mark" aria-hidden="true">
-        {icon}
-      </span>
-    </Button>
+    />
   );
 }
 

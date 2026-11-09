@@ -177,11 +177,17 @@ describe("legacy UI contract", () => {
   });
 
   it("keeps profile dialogs from clipping header or actions", () => {
-    expect(styles).toMatch(/\.profile-modal\s*\{[\s\S]*display:\s*flex;[\s\S]*overflow:\s*hidden;/);
-    expect(styles).toMatch(/\.profile-modal \.modal-header\s*\{[\s\S]*position:\s*relative;/);
+    const dialog = readFileSync(
+      resolve("src/pages/WorkspacePage/components/WorkspaceModals/AgentProfileModal.tsx"),
+      "utf8",
+    );
+    const dialogStyles = readFileSync(resolve("../csgclaw-ui/src/components/Dialog/Dialog.module.css"), "utf8");
+    expect(dialog).toMatch(/<DialogContent\s+scrollBody[\s\S]*<DialogHeader>[\s\S]*<DialogBody[\s\S]*<DialogFooter>/);
+    expect(dialogStyles).toMatch(/\.csg-dialog-content\[data-scroll-body\]\s*\{[^}]*overflow:\s*hidden;/);
+    expect(dialogStyles).toMatch(/> \.csg-dialog-body\s*\{[^}]*overflow:\s*auto;/);
+    expect(dialogStyles).toMatch(/\.csg-dialog-header\s*\{[^}]*flex:\s*0 0 auto;/);
+    expect(dialogStyles).toMatch(/\.csg-dialog-footer\s*\{[^}]*flex:\s*0 0 auto;/);
     expect(styles).not.toContain("top: -24px;");
-    expect(styles).toMatch(/\.profile-editor-shell\s*\{[\s\S]*overflow-y:\s*auto;/);
-    expect(styles).toMatch(/\.agent-modal > \.modal-actions\s*\{[\s\S]*flex:\s*0 0 auto;/);
   });
 
   it("keeps the model provider page scrollable inside the fixed workspace panel", () => {

@@ -1,3 +1,5 @@
+import profileFormLayoutStyles from "@/components/business/ProfileControls/ProfileFormLayout.module.css";
+import messageLayoutStyles from "@/components/business/ConversationPane/MessageLayout.module.css";
 import { useEffect, useState } from "react";
 import {
   Button,
@@ -33,7 +35,6 @@ import "@/components/business/ConversationPane/ConversationThreads.css";
 import { createTranslator } from "@/shared/i18n";
 import type { ResolvedThemeMode } from "@/shared/theme/theme";
 import styles from "./UiLab.module.css";
-import "@/pages/WorkspacePage/components/WorkspaceComponents.css";
 import "@/pages/WorkspacePage/components/WorkspaceModals/WorkspaceModals.css";
 
 const options = Array.from({ length: 180 }, (_, index) => ({
@@ -82,8 +83,8 @@ export function UiLab() {
           <section className={styles.card}>
             <h2>Turn token consumption</h2>
             {["qwen3.7-plus", "auto", "a-very-long-selected-model-name-for-narrow-screen-layout"].map((model) => (
-              <div key={model} className="message-row">
-                <div className="message-card">
+              <div key={model} className={`message-row ${messageLayoutStyles["message-row"]}`}>
+                <div className={`message-card ${messageLayoutStyles["message-card"]}`}>
                   <p>这是一轮已完成的回复。</p>
                   <ConversationMessageActions
                     className="message-hover-actions"
@@ -140,7 +141,7 @@ export function UiLab() {
           </section>
           <section className={styles.card}>
             <h2>Workspace style boundary</h2>
-            <div className="profile-section">
+            <div className={`profile-section ${profileFormLayoutStyles["profile-section"]}`}>
               <Field label="Workspace input" error={error ? "Enter a value" : undefined}>
                 <TextInput placeholder="Component styles inside legacy workspace CSS" />
               </Field>

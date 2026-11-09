@@ -1,4 +1,6 @@
+import { OperationStatus } from "./OperationStatus";
 import {
+  InlineError,
   Button,
   DialogRoot,
   DialogContent,
@@ -87,30 +89,23 @@ export function UpgradeModal({
               <strong>{statusLabel}</strong>
             </div>
           </div>
-          <div className={`upgrade-status-card ${upgradePhase}`}>
-            <span className="upgrade-status-dot" aria-hidden="true"></span>
-            <p>
-              {upgradePhase === "manual_restart" || upgradeStatus?.manual_restart_required
-                ? t("upgradeManualRestartBody")
-                : manualUpgradeRequired
-                  ? t("upgradeManualUpgradeBody")
-                  : upgradePhase === "done"
-                    ? t("upgradeDoneBody")
-                    : upgradePhase === "restarting" ||
-                        upgradePhase === "starting" ||
-                        upgradeBusy ||
-                        upgradeStatus?.upgrading
-                      ? t("upgradeContinueUsing")
-                      : desktopApp
-                        ? t(upgradeStatus?.downloaded ? "upgradeDesktopDownloadedBody" : "upgradeDesktopConfirmBody")
-                        : t("upgradeConfirmBody")}
-            </p>
-          </div>
-          {visibleError ? (
-            <div className="form-error" role="alert">
-              {visibleError}
-            </div>
-          ) : null}
+          <OperationStatus phase={upgradePhase}>
+            {upgradePhase === "manual_restart" || upgradeStatus?.manual_restart_required
+              ? t("upgradeManualRestartBody")
+              : manualUpgradeRequired
+                ? t("upgradeManualUpgradeBody")
+                : upgradePhase === "done"
+                  ? t("upgradeDoneBody")
+                  : upgradePhase === "restarting" ||
+                      upgradePhase === "starting" ||
+                      upgradeBusy ||
+                      upgradeStatus?.upgrading
+                    ? t("upgradeContinueUsing")
+                    : desktopApp
+                      ? t(upgradeStatus?.downloaded ? "upgradeDesktopDownloadedBody" : "upgradeDesktopConfirmBody")
+                      : t("upgradeConfirmBody")}
+          </OperationStatus>
+          {visibleError ? <InlineError role="alert">{visibleError}</InlineError> : null}
         </DialogBody>
         <DialogFooter>
           {upgradePhase === "done" ? (

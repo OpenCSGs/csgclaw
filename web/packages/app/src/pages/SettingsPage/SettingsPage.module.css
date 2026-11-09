@@ -152,6 +152,19 @@
   margin-top: 0;
 }
 
+.formItem {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.formItem > span:first-child {
+  color: var(--field-label-color);
+  font-size: var(--field-label-font-size);
+  font-weight: var(--field-label-font-weight);
+  line-height: var(--field-label-line-height);
+}
+
 .formGrid .segmented {
   width: fit-content;
   max-width: 100%;

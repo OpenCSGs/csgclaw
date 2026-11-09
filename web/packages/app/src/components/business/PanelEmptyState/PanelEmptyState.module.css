@@ -1,0 +1,22 @@
+.panel {
+  height: 100%;
+  padding: 40px;
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--white) 2%, transparent) 1px, transparent 1px),
+    linear-gradient(0deg, color-mix(in srgb, var(--white) 2%, transparent) 1px, transparent 1px);
+  background-size: 36px 36px;
+}
+
+.mark {
+  width: 32px;
+  height: 32px;
+  display: inline-grid;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  color: var(--primary-strong);
+  background: var(--panel-soft);
+  font-family: var(--font-mono);
+  font-size: 18px;
+  line-height: 1;
+}

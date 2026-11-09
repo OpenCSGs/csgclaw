@@ -3,7 +3,6 @@
 @import "tailwindcss/theme.css" layer(theme);
 @import "tailwindcss/utilities.css" layer(utilities);
 @import "./tokens.css";
-@import "./inputs.css";
 
 * {
   box-sizing: border-box;
@@ -42,6 +41,7 @@
 
 :root {
   --app-ui-viewport-height: 100dvh;
+  --app-rise-in: rise-in;
 }
 
 html,
@@ -74,6 +74,14 @@ body {
 
 #root {
   min-height: var(--app-ui-viewport-height);
+}
+
+html,
+button:where(:not([data-csg-control])),
+input:where(:not([data-csg-control])),
+textarea:where(:not([data-csg-control])),
+select:where(:not([data-csg-control])) {
+  font-family: var(--font-sans);
 }
 
 .truncate {
@@ -114,18 +122,6 @@ body {
   font-size: 18px;
 }
 
-@keyframes upgrade-pulse {
-  0%,
-  100% {
-    opacity: 0.62;
-    transform: scale(0.86);
-  }
-  50% {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-
 @keyframes rise-in {
   from {
     opacity: 0;
@@ -135,18 +131,6 @@ body {
   to {
     opacity: 1;
     transform: translateY(0);
-  }
-}
-
-@keyframes drawer-in {
-  from {
-    opacity: 0;
-    transform: translateX(18px);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateX(0);
   }
 }
 
@@ -283,4 +267,24 @@ body::after {
   top: auto;
   bottom: 0;
   transform: translateX(-2px);
+}
+
+/* Native buttons share this baseline. Managed controls own their disabled states. */
+button:where(:not([data-csg-control])):disabled:not(.csg-switch),
+button:where(:not([data-csg-control]))[disabled]:not(.csg-switch) {
+  cursor: not-allowed;
+  pointer-events: none;
+  background: var(--gray-100);
+  border-color: var(--gray-200);
+  color: var(--gray-400);
+  box-shadow: var(--shadow-xs);
+  opacity: 1;
+}
+
+:root[data-theme="dark"] button:where(:not([data-csg-control])):disabled:not(.csg-switch),
+:root[data-theme="dark"] button:where(:not([data-csg-control]))[disabled]:not(.csg-switch) {
+  border-color: rgba(208, 213, 221, 0.12);
+  background: rgba(208, 213, 221, 0.08);
+  color: var(--gray-500);
+  box-shadow: none;
 }

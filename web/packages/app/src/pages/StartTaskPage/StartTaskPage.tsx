@@ -1,3 +1,4 @@
+import conversationSendButtonStyles from "@/components/business/ConversationPane/ConversationSendButton.module.css";
 import { CloudPrivacyDialog } from "@/components/business/CloudPrivacyDialog";
 import { useCloudSendConsent } from "@/hooks/workspace/useCloudSendConsent";
 import { useCloudAgents } from "@/hooks/workspace/useCloudAgents";
@@ -458,7 +459,11 @@ function StartTaskForm({
                   </>
                 ) : null}
                 <Button
-                  className={selectedCloud ? "composer-send-button" : styles.send}
+                  className={
+                    selectedCloud
+                      ? `composer-send-button ${conversationSendButtonStyles["composer-send-button"]}`
+                      : styles.send
+                  }
                   variant="primary"
                   iconOnly
                   size="sm"

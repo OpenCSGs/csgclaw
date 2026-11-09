@@ -194,6 +194,14 @@
   gap: inherit;
   min-width: 0;
 }
+.icon-mark {
+  display: inline-flex;
+  flex: 0 0 auto;
+}
+.icon-mark > svg {
+  width: 100%;
+  height: 100%;
+}
 .btn.csg-icon-button .btn-content {
   width: 100%;
   height: 100%;
