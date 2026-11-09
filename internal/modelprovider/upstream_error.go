@@ -11,6 +11,7 @@ import (
 
 const ToolReasoningUnsupported = "unsupported_tool_reasoning_combination"
 const ReasoningEffortUnsupported = "unsupported_reasoning_effort"
+const RequestTooLarge = "request_too_large"
 
 type UpstreamRequestError struct {
 	Operation string
@@ -149,6 +150,9 @@ func UpstreamStatusForErrorCode(code string) int {
 // FriendlyUpstreamErrorMessage maps upstream status and error codes to text
 // that is safe and actionable for end users.
 func FriendlyUpstreamErrorMessage(status int, code string) string {
+	if status == http.StatusRequestEntityTooLarge || code == RequestTooLarge {
+		return "The model request is too large. Split the task, reduce the number or size of images and attachments, or start a new conversation."
+	}
 	switch strings.ToLower(strings.TrimSpace(code)) {
 	case ReasoningEffortUnsupported:
 		return "The selected reasoning effort is not supported by this model. Choose a supported effort or the model default."

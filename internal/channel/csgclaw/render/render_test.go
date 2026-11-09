@@ -197,6 +197,7 @@ func TestPromptErrorHTTPMappingRequiresParsedUnexpectedStatus(t *testing.T) {
 		{error: "authentication failed", code: "internal_error"},
 		{error: "resource not found", code: "internal_error"},
 		{error: "unexpected status 401 Unauthorized", code: "authentication_error"},
+		{error: "unexpected status 413 Payload Too Large", code: "request_too_large"},
 		{error: "unexpected status 503 Service Unavailable", code: "upstream_unavailable"},
 	}
 	for _, test := range tests {

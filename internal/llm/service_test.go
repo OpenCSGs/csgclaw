@@ -1546,6 +1546,13 @@ func TestCompactUpstreamErrorResponseUsesFriendlyMessages(t *testing.T) {
 			want:   "The model service is temporarily unavailable. Please try again later.",
 		},
 		{
+			name:   "oversized request",
+			status: http.StatusRequestEntityTooLarge,
+			body:   `{"code":"BadRequest.TooLarge","message":"internal gateway limits"}`,
+			code:   "request_too_large",
+			want:   "The model request is too large. Split the task, reduce the number or size of images and attachments, or start a new conversation.",
+		},
+		{
 			name:   "unsupported model",
 			status: http.StatusBadRequest,
 			body:   `{"error":{"code":"unsupported_model","message":"adapter missing"}}`,

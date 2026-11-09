@@ -203,7 +203,23 @@ func (s *Service) Responses(ctx context.Context, botID string, body []byte) (*Up
 	}
 	ctx = withModelRequestContext(ctx, botID, profile, body)
 	response, callErr := s.forwardRemoteResponses(ctx, profile, body)
+	if response != nil && response.StatusCode == http.StatusRequestEntityTooLarge {
+		response.StatusCode = RequestTooLargeError(ctx).Status
+	}
 	return captureRuntimeResponse(ctx, response, callErr)
+}
+
+func RequestTooLargeError(ctx context.Context) *HTTPError {
+	status := http.StatusRequestEntityTooLarge
+	if _, native := ctx.Value(nativeRequestContextKey{}).(nativeRequestContext); native {
+		// Codex retries a 413 as a stream disconnection. It treats a 400 as
+		// a terminal invalid request and carries the JSON error in the turn.
+		status = http.StatusBadRequest
+	}
+	return &HTTPError{
+		Status: status, Code: modelprovider.RequestTooLarge,
+		Message: modelprovider.FriendlyUpstreamErrorMessage(status, modelprovider.RequestTooLarge),
+	}
 }
 
 func (s *Service) ResponsesWebsocket(w http.ResponseWriter, r *http.Request, botID string) error {
@@ -720,6 +736,9 @@ func isUpstreamLogSecretKey(key string) bool {
 
 func compactUpstreamErrorResponse(status int, body []byte, billingURL string) ([]byte, string) {
 	code := modelprovider.UpstreamErrorCodeForResponse(status, body)
+	if status == http.StatusRequestEntityTooLarge {
+		code = modelprovider.RequestTooLarge
+	}
 	message := modelprovider.FriendlyUpstreamErrorMessage(status, code)
 	errorPayload := map[string]string{
 		"code":    code,

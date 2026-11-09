@@ -118,6 +118,9 @@ func (r *progressBrowserRuntime) Run(ctx context.Context, req agentengine.TurnRe
 			failure.Code = "context_length_exceeded"
 		case "failed-context-compaction":
 			failure.Code = "context_compaction_failed"
+		case "failed-request-size":
+			failure.Code = "request_too_large"
+			failure.Message = "The model request is too large. Split the task, reduce the number or size of images and attachments, or start a new conversation."
 		}
 		return agentengine.TurnResult{Status: agentengine.TurnFailed, Error: failure}
 	}
