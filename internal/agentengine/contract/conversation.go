@@ -321,4 +321,8 @@ type TurnResult struct {
 
 	// RuntimeFiles transfers immutable snapshots from the Adapter to Engine.
 	RuntimeFiles []*OutputFile `json:"-"`
+
+	// RuntimeText preserves authoritative native message identities for
+	// in-process delivery, including text recovered from native history.
+	RuntimeText []TurnEvent `json:"-"`
 }

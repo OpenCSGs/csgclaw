@@ -438,3 +438,266 @@ func TestProgressContinuesSameMessageAcrossTool(t *testing.T) {
 		})
 	}
 }
+
+func TestProgressKeepsDistinctNativeMessagesSeparate(t *testing.T) {
+	for _, withTool := range []bool{false, true} {
+		for _, phase := range []string{"unknown", "final_answer"} {
+			t.Run(fmt.Sprintf("tool=%t/phase=%s", withTool, phase), func(t *testing.T) {
+				renderer, service, turn := progressFixture(t)
+				const earlier = "The answer is 42. Verifying it."
+				const answer = "The answer is 42."
+				events := []agentengine.TurnEvent{{Kind: agentengine.TurnEventTextDelta, ItemID: "earlier", Phase: "unknown", Text: earlier}}
+				if withTool {
+					events = append(events, agentengine.TurnEvent{Kind: agentengine.TurnEventToolCallStart, Tool: &agentengine.ToolActivity{ID: "verify", Status: "started"}})
+				}
+				events = append(events, agentengine.TurnEvent{Kind: agentengine.TurnEventTextDelta, ItemID: "answer", Phase: phase, Text: answer})
+				for i, event := range events {
+					event.Sequence = uint64(i + 1)
+					if err := renderer.Emit(t.Context(), turn, event); err != nil {
+						t.Fatal(err)
+					}
+				}
+				if err := renderer.Complete(t.Context(), turn, agentengine.TurnResult{Status: agentengine.TurnSucceeded, Output: earlier + answer}); err != nil {
+					t.Fatal(err)
+				}
+				msg, progress := progressMessage(t, service)
+				if msg.Content != answer || len(progress.Items) == 0 || progress.Items[0].Text != earlier {
+					t.Fatalf("answer=%q progress=%+v", msg.Content, progress.Items)
+				}
+			})
+		}
+	}
+}
+
+func TestProgressPublishesFinalMessagesOnce(t *testing.T) {
+	for _, fallback := range []string{"", "First answer. Second answer."} {
+		for _, secondTool := range []bool{false, true} {
+			t.Run(fmt.Sprintf("fallback=%t/secondTool=%t", fallback != "", secondTool), func(t *testing.T) {
+				renderer, service, turn := progressFixture(t)
+				events := []agentengine.TurnEvent{
+					{Kind: agentengine.TurnEventTextDelta, ItemID: "first", Phase: "unknown", Text: "First answer."},
+					{Kind: agentengine.TurnEventToolCallStart, Tool: &agentengine.ToolActivity{ID: "first-tool", Status: "started"}},
+					{Kind: agentengine.TurnEventTextDelta, ItemID: "first", Phase: "final_answer"},
+					{Kind: agentengine.TurnEventTextDelta, ItemID: "second", Phase: "unknown", Text: " Second draft."},
+				}
+				if secondTool {
+					events = append(events, agentengine.TurnEvent{Kind: agentengine.TurnEventToolCallStart, Tool: &agentengine.ToolActivity{ID: "second-tool", Status: "started"}})
+				}
+				events = append(events,
+					agentengine.TurnEvent{Kind: agentengine.TurnEventTextDelta, ItemID: "second", Phase: "final_answer", Text: " Second answer.", TextSnapshot: true},
+					agentengine.TurnEvent{Kind: agentengine.TurnEventToolCallUpdate, Tool: &agentengine.ToolActivity{ID: "first-tool", Status: "completed"}},
+				)
+				for i, event := range events {
+					event.Sequence = uint64(i + 1)
+					if err := renderer.Emit(t.Context(), turn, event); err != nil {
+						t.Fatal(err)
+					}
+				}
+				if err := renderer.Complete(t.Context(), turn, agentengine.TurnResult{Status: agentengine.TurnSucceeded, Output: fallback}); err != nil {
+					t.Fatal(err)
+				}
+				msg, progress := progressMessage(t, service)
+				wantItems := 1
+				if secondTool {
+					wantItems++
+				}
+				if msg.Content != "First answer. Second answer." || len(progress.Items) != wantItems {
+					t.Fatalf("answer=%q progress=%+v", msg.Content, progress.Items)
+				}
+				for _, item := range progress.Items {
+					if item.Kind != "tool" || item.Tool == nil || (item.ID == "first-tool" && item.Tool.Status != "completed") || (item.ID == "second-tool" && item.Tool.Status != "interrupted") {
+						t.Fatalf("progress item=%+v", item)
+					}
+				}
+			})
+		}
+	}
+}
+
+func TestProgressAppliesSnapshotsToEachFinalMessage(t *testing.T) {
+	for _, withTools := range []bool{false, true} {
+		t.Run(fmt.Sprintf("tools=%t", withTools), func(t *testing.T) {
+			renderer, service, turn := progressFixture(t)
+			var events []agentengine.TurnEvent
+			for _, id := range []string{"first", "second"} {
+				events = append(events, agentengine.TurnEvent{Kind: agentengine.TurnEventTextDelta, ItemID: id, Phase: "final_answer", Text: "Draft."})
+				if withTools {
+					events = append(events, agentengine.TurnEvent{Kind: agentengine.TurnEventToolCallStart, Tool: &agentengine.ToolActivity{ID: id, Status: "started"}})
+				}
+			}
+			events = append(events,
+				agentengine.TurnEvent{Kind: agentengine.TurnEventTextDelta, ItemID: "first", Text: "First. ", TextSnapshot: true},
+				agentengine.TurnEvent{Kind: agentengine.TurnEventTextDelta, ItemID: "second", Text: "Second.", TextSnapshot: true},
+			)
+			for i, event := range events {
+				event.Sequence = uint64(i + 1)
+				if err := renderer.Emit(t.Context(), turn, event); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if err := renderer.Complete(t.Context(), turn, agentengine.TurnResult{Status: agentengine.TurnSucceeded}); err != nil {
+				t.Fatal(err)
+			}
+			msg, progress := progressMessage(t, service)
+			if msg.Content != "First. Second." {
+				t.Fatalf("answer=%q", msg.Content)
+			}
+			for _, item := range progress.Items {
+				if item.Kind != "tool" || item.Tool == nil || item.Tool.Status != "interrupted" {
+					t.Fatalf("progress item=%+v", item)
+				}
+			}
+		})
+	}
+}
+
+func TestProgressRetainsConfirmedCommentaryUpdates(t *testing.T) {
+	renderer, service, turn := progressFixture(t)
+	for i, event := range []agentengine.TurnEvent{
+		{Kind: agentengine.TurnEventTextDelta, ItemID: "comment", Phase: "unknown", Text: "Checking."},
+		{Kind: agentengine.TurnEventToolCallStart, Tool: &agentengine.ToolActivity{ID: "check", Status: "started"}},
+		{Kind: agentengine.TurnEventTextDelta, ItemID: "comment", Phase: "commentary", Text: "Checked.", TextSnapshot: true},
+		{Kind: agentengine.TurnEventTextDelta, ItemID: "comment", Text: " Done."},
+		{Kind: agentengine.TurnEventToolCallUpdate, Tool: &agentengine.ToolActivity{ID: "check", Status: "completed"}},
+		{Kind: agentengine.TurnEventTextDelta, ItemID: "answer", Phase: "final_answer", Text: "Answer."},
+	} {
+		event.Sequence = uint64(i + 1)
+		if err := renderer.Emit(t.Context(), turn, event); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := renderer.Complete(t.Context(), turn, agentengine.TurnResult{Status: agentengine.TurnSucceeded, Output: "Answer."}); err != nil {
+		t.Fatal(err)
+	}
+	msg, progress := progressMessage(t, service)
+	if msg.Content != "Answer." || len(progress.Items) != 2 || progress.Items[0].Text != "Checked. Done." || progress.Items[1].Tool == nil || progress.Items[1].Tool.Status != "completed" {
+		t.Fatalf("answer=%q progress=%+v", msg.Content, progress.Items)
+	}
+}
+
+func TestProgressDoesNotRestoreClearedTextFromAnotherMessage(t *testing.T) {
+	renderer, service, turn := progressFixture(t)
+	for i, event := range []agentengine.TurnEvent{
+		{Kind: agentengine.TurnEventTextDelta, ItemID: "earlier", Phase: "unknown", Text: "Checking."},
+		{Kind: agentengine.TurnEventToolCallStart, Tool: &agentengine.ToolActivity{ID: "check", Status: "started"}},
+		{Kind: agentengine.TurnEventTextDelta, ItemID: "answer", Phase: "unknown", Text: "Draft."},
+		{Kind: agentengine.TurnEventTextDelta, ItemID: "answer", Phase: "final_answer", TextSnapshot: true},
+	} {
+		event.Sequence = uint64(i + 1)
+		if err := renderer.Emit(t.Context(), turn, event); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := renderer.Complete(t.Context(), turn, agentengine.TurnResult{Status: agentengine.TurnSucceeded, Output: "Checking."}); err != nil {
+		t.Fatal(err)
+	}
+	msg, progress := progressMessage(t, service)
+	if !im.IsAgentActivityMessage(msg) || len(progress.Items) != 2 || progress.Items[0].Text != "Checking." {
+		t.Fatalf("message=%+v progress=%+v", msg, progress.Items)
+	}
+}
+
+func TestProgressUsesRecoveredNativeMessages(t *testing.T) {
+	for _, withTool := range []bool{false, true} {
+		t.Run(fmt.Sprintf("tool=%t", withTool), func(t *testing.T) {
+			renderer, service, turn := progressFixture(t)
+			events := []agentengine.TurnEvent{{Kind: agentengine.TurnEventTextDelta, Text: "First part"}}
+			if withTool {
+				events = append(events, agentengine.TurnEvent{Kind: agentengine.TurnEventToolCallStart, Tool: &agentengine.ToolActivity{ID: "tool", Status: "started"}})
+			}
+			events = append(events, agentengine.TurnEvent{Kind: agentengine.TurnEventTextDelta, ItemID: "answer", Phase: "final_answer", Text: " and final part."})
+			for i, event := range events {
+				event.Sequence = uint64(i + 1)
+				if err := renderer.Emit(t.Context(), turn, event); err != nil {
+					t.Fatal(err)
+				}
+			}
+			const answer = "First part and final part."
+			if err := renderer.Complete(t.Context(), turn, agentengine.TurnResult{
+				Status: agentengine.TurnSucceeded, Output: answer,
+				RuntimeText: []agentengine.TurnEvent{{Kind: agentengine.TurnEventTextDelta, ItemID: "answer", Phase: "final_answer", Text: answer, TextSnapshot: true}},
+			}); err != nil {
+				t.Fatal(err)
+			}
+			msg, progress := progressMessage(t, service)
+			if msg.Content != answer {
+				t.Fatalf("answer=%q progress=%+v", msg.Content, progress.Items)
+			}
+			for _, item := range progress.Items {
+				if item.Kind != "tool" || item.Tool == nil || item.Tool.Status != "interrupted" {
+					t.Fatalf("progress item=%+v", item)
+				}
+			}
+		})
+	}
+}
+
+func TestProgressUsesCompletedNativePhases(t *testing.T) {
+	renderer, service, turn := progressFixture(t)
+	for i, event := range []agentengine.TurnEvent{
+		{Kind: agentengine.TurnEventTextDelta, ItemID: "comment", Phase: "unknown", Text: "Checking."},
+		{Kind: agentengine.TurnEventToolCallStart, Tool: &agentengine.ToolActivity{ID: "tool", Status: "started"}},
+		{Kind: agentengine.TurnEventTextDelta, ItemID: "answer", Phase: "unknown", Text: "Draft."},
+	} {
+		event.Sequence = uint64(i + 1)
+		if err := renderer.Emit(t.Context(), turn, event); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := renderer.Complete(t.Context(), turn, agentengine.TurnResult{
+		Status: agentengine.TurnSucceeded, Output: "Answer.",
+		RuntimeText: []agentengine.TurnEvent{
+			{Kind: agentengine.TurnEventTextDelta, ItemID: "comment", Phase: "commentary", Text: "Checked.", TextSnapshot: true},
+			{Kind: agentengine.TurnEventTextDelta, ItemID: "answer", Phase: "final_answer", Text: "Answer.", TextSnapshot: true},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	msg, progress := progressMessage(t, service)
+	if msg.Content != "Answer." || len(progress.Items) != 2 || progress.Items[0].Text != "Checked." || progress.Items[1].Tool == nil || progress.Items[1].Tool.Status != "interrupted" {
+		t.Fatalf("answer=%q progress=%+v", msg.Content, progress.Items)
+	}
+}
+
+func TestProgressContinuesUnidentifiedMessageWhenIDArrives(t *testing.T) {
+	renderer, service, turn := progressFixture(t)
+	for i, event := range []agentengine.TurnEvent{
+		{Kind: agentengine.TurnEventTextDelta, Text: "First "},
+		{Kind: agentengine.TurnEventTextDelta, ItemID: "answer", Phase: "final_answer", Text: "answer."},
+	} {
+		event.Sequence = uint64(i + 1)
+		if err := renderer.Emit(t.Context(), turn, event); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := renderer.Complete(t.Context(), turn, agentengine.TurnResult{Status: agentengine.TurnSucceeded}); err != nil {
+		t.Fatal(err)
+	}
+	msg, progress := progressMessage(t, service)
+	if msg.Content != "First answer." || len(progress.Items) != 0 {
+		t.Fatalf("answer=%q progress=%+v", msg.Content, progress.Items)
+	}
+}
+
+func TestProgressRetainsUnidentifiedCommentaryAtCompletion(t *testing.T) {
+	renderer, service, turn := progressFixture(t)
+	for i, event := range []agentengine.TurnEvent{
+		{Kind: agentengine.TurnEventTextDelta, Phase: "commentary", Text: "Checking."},
+		{Kind: agentengine.TurnEventTextDelta, ItemID: "answer", Phase: "final_answer", Text: "Answer."},
+	} {
+		event.Sequence = uint64(i + 1)
+		if err := renderer.Emit(t.Context(), turn, event); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := renderer.Complete(t.Context(), turn, agentengine.TurnResult{
+		Status: agentengine.TurnSucceeded, Output: "Answer.",
+		RuntimeText: []agentengine.TurnEvent{{Kind: agentengine.TurnEventTextDelta, ItemID: "answer", Phase: "final_answer", Text: "Answer.", TextSnapshot: true}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	msg, progress := progressMessage(t, service)
+	if msg.Content != "Answer." || len(progress.Items) != 1 || progress.Items[0].Text != "Checking." {
+		t.Fatalf("answer=%q progress=%+v", msg.Content, progress.Items)
+	}
+}

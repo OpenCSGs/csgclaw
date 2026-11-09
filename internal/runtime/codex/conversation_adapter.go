@@ -121,7 +121,7 @@ func (a *ConversationAdapter) Run(ctx context.Context, request contract.TurnRequ
 				return result
 			}
 			filesOwned = false
-			return contract.TurnResult{Status: contract.TurnSucceeded, Output: output.String(), Dispatched: dispatched, RuntimeFiles: files}
+			return contract.TurnResult{Status: contract.TurnSucceeded, Output: output.String(), Dispatched: dispatched, RuntimeFiles: files, RuntimeText: output.messageSnapshots()}
 		}
 		select {
 		case <-accepted:

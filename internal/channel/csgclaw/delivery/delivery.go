@@ -272,7 +272,7 @@ func (r *TranscriptRenderer) Complete(ctx context.Context, turn channel.TurnCont
 		state.renderer.ApplyText(activity.RuntimeEvent{Kind: activity.RuntimeEventTextDelta, Text: result.Output})
 	}
 	if state.progress != nil {
-		state.renderer.ReplaceText(state.progress.finalText(result.Output))
+		state.renderer.ReplaceText(state.progress.finalText(result.Output, result.RuntimeText))
 	}
 	text := strings.TrimSpace(strings.Join(state.renderer.FinalMessages(), "\n\n"))
 	if state.progress != nil {

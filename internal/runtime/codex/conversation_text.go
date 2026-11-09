@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"csgclaw/internal/activity"
+	"csgclaw/internal/agentengine/contract"
 )
 
 type conversationTextItem struct{ id, phase, text string }
@@ -54,6 +55,21 @@ func (b *conversationText) apply(id, phase, text string, snapshot bool) {
 			form.superseded = true
 		}
 	}
+}
+
+func (b *conversationText) messageSnapshots() []contract.TurnEvent {
+	if len(b.items) == 0 {
+		return nil
+	}
+	items := make([]contract.TurnEvent, 0, len(b.items))
+	for _, item := range b.items {
+		// Unidentified streams rely on the consumer's tool boundaries.
+		if item.id == "" {
+			return nil
+		}
+		items = append(items, contract.TurnEvent{Kind: contract.TurnEventTextDelta, ItemID: item.id, Phase: item.phase, Text: item.text, TextSnapshot: true})
+	}
+	return items
 }
 
 func (b *conversationText) String() string {

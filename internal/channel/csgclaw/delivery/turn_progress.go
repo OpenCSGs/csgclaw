@@ -27,12 +27,13 @@ type progressState struct {
 	mu             sync.Mutex
 	snapshot       activity.TurnProgress
 	answer         string
-	answerPhase    string
-	answerID       string
+	texts          []*progressText
+	textItems      map[string]*progressText
+	currentText    *progressText
+	lastAnswer     *progressText
 	lastTextID     string
 	lastTextKind   string
 	tools          map[string]int
-	provisional    *provisionalAnswer
 	timer          *time.Timer
 	done           bool
 	lastErr        error
@@ -40,17 +41,19 @@ type progressState struct {
 	turn           channel.TurnContext
 }
 
-// Text without a known phase can precede a tool and still be the answer.
-// Keep its native identity while the text is displayed in the progress list.
-type provisionalAnswer struct {
-	itemID string
-	index  int
-	phase  string
+// Native text keeps its identity and phase while displayed in progress.
+// Progress indices remain stable until terminal delivery.
+type progressText struct {
+	itemID   string
+	phase    string
+	text     string
+	index    int
+	promoted bool
 }
 
 func newProgressState(store turnProgressStore, turn channel.TurnContext) *progressState {
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	return &progressState{store: store, turn: turn, tools: map[string]int{}, snapshot: activity.TurnProgress{ID: string(turn.TurnID), Status: "running", StartedAt: now, UpdatedAt: now, Items: []activity.ProgressItem{}}}
+	return &progressState{store: store, turn: turn, tools: map[string]int{}, textItems: map[string]*progressText{}, snapshot: activity.TurnProgress{ID: string(turn.TurnID), Status: "running", StartedAt: now, UpdatedAt: now, Items: []activity.ProgressItem{}}}
 }
 
 func (r *TranscriptRenderer) Start(ctx context.Context, turn channel.TurnContext) error {
@@ -103,74 +106,28 @@ func (p *progressState) observe(ctx context.Context, event agentengine.TurnEvent
 	immediate := false
 	switch event.Kind {
 	case agentengine.TurnEventTextDelta:
-		if candidate := p.provisional; candidate != nil && event.ItemID != "" && event.ItemID == candidate.itemID {
-			item := &p.snapshot.Items[candidate.index]
-			if event.TextSnapshot {
-				item.Text = event.Text
-			} else {
-				item.Text += event.Text
-			}
-			immediate = event.TextSnapshot || (event.Phase != "" && event.Phase != candidate.phase)
-			if event.Phase == "commentary" {
-				p.provisional = nil
-			} else if event.Phase != "" {
-				candidate.phase = event.Phase
-			}
-			break
-		}
-		if event.TextSnapshot {
-			if event.ItemID == p.answerID && event.Phase != "commentary" {
-				p.answer = event.Text
-				p.answerPhase = event.Phase
-			} else {
-				for i := len(p.snapshot.Items) - 1; i >= 0; i-- {
-					if p.snapshot.Items[i].Kind == "commentary" && strings.HasSuffix(p.snapshot.Items[i].ID, ":"+event.ItemID) {
-						p.snapshot.Items[i].Text = event.Text
-						break
-					}
-				}
-			}
-			return p.flush(ctx, true, nil)
-		}
-		if event.Text == "" {
-			if event.ItemID == p.answerID && event.Phase != "" {
-				p.answerPhase = event.Phase
-				return p.flush(ctx, true, nil)
-			}
-			return nil
-		}
-		p.snapshot.Status = "running"
-		kind := "commentary"
-		if event.Phase == "commentary" {
-			p.appendText(event.ItemID, kind, event.Text)
-		} else {
-			if event.ItemID != "" && p.answerID != "" && event.ItemID != p.answerID && p.answer != "" && p.answerPhase != "final_answer" {
-				p.appendText(p.answerID, "commentary", p.answer)
-				p.answer = ""
-				immediate = true
-			}
-			immediate = immediate || p.answer == ""
-			p.answer += event.Text
-			p.answerPhase = event.Phase
-			p.answerID = event.ItemID
-			p.lastTextKind = ""
-			p.lastTextID = ""
-		}
+		immediate = p.observeText(event)
 	case agentengine.TurnEventThoughtDelta:
 		if event.Thought == "" {
 			return nil
 		}
 		p.appendText(event.ItemID, "reasoning", event.Thought)
+		if p.currentText != nil && p.currentText.itemID == "" && p.currentText.phase == "commentary" {
+			p.currentText = nil
+		}
 	case agentengine.TurnEventToolCallStart, agentengine.TurnEventToolCallUpdate:
 		if event.Tool == nil {
 			return nil
 		}
 		p.snapshot.Status = "running"
-		if event.Kind == agentengine.TurnEventToolCallStart && p.answer != "" && p.answerPhase != "final_answer" {
-			p.appendText(p.answerID, "commentary", p.answer)
-			p.provisional = &provisionalAnswer{itemID: p.answerID, index: len(p.snapshot.Items) - 1, phase: p.answerPhase}
-			p.answer = ""
-			p.answerID = ""
+		if event.Kind == agentengine.TurnEventToolCallStart {
+			for _, item := range p.texts {
+				if item.phase != "final_answer" {
+					p.moveTextToProgress(item)
+				}
+			}
+			p.currentText = nil
+			p.updateAnswer()
 		}
 		p.lastTextKind = ""
 		p.lastTextID = ""
@@ -231,6 +188,84 @@ func (p *progressState) observe(ctx context.Context, event agentengine.TurnEvent
 	return nil
 }
 
+func (p *progressState) observeText(event agentengine.TurnEvent) bool {
+	var item *progressText
+	if event.ItemID != "" {
+		item = p.textItems[event.ItemID]
+	} else if current := p.currentText; current != nil && current.itemID == "" && (current.phase == "commentary") == (event.Phase == "commentary") {
+		item = current
+	}
+	// Legacy deltas can acquire their native ID within the same text segment.
+	if current := p.currentText; item == nil && event.ItemID != "" && current != nil {
+		if current.itemID == "" && current.phase != "commentary" && event.Phase != "commentary" {
+			item = current
+			item.itemID = event.ItemID
+			p.textItems[event.ItemID] = item
+		}
+	}
+	immediate := event.TextSnapshot
+	if item == nil {
+		if event.Text == "" {
+			return false
+		}
+		if event.Phase != "commentary" {
+			for _, previous := range p.texts {
+				if previous.phase != "final_answer" {
+					p.moveTextToProgress(previous)
+				}
+			}
+		}
+		item = &progressText{itemID: event.ItemID, phase: event.Phase, index: -1}
+		p.texts = append(p.texts, item)
+		if event.ItemID != "" {
+			p.textItems[event.ItemID] = item
+		}
+		p.currentText = item
+		if event.Phase != "commentary" {
+			p.lastAnswer = item
+			immediate = true
+		}
+	}
+	if event.Phase != "" {
+		immediate = immediate || event.Phase != item.phase
+		item.phase = event.Phase
+	}
+	if event.TextSnapshot {
+		item.text = event.Text
+	} else {
+		item.text += event.Text
+	}
+	if item.phase == "commentary" {
+		p.moveTextToProgress(item)
+	}
+	if item.index >= 0 {
+		p.snapshot.Items[item.index].Text = item.text
+	} else {
+		p.lastTextKind = ""
+		p.lastTextID = ""
+	}
+	p.snapshot.Status = "running"
+	p.updateAnswer()
+	return immediate
+}
+
+func (p *progressState) moveTextToProgress(item *progressText) {
+	if item.index < 0 && item.text != "" {
+		p.appendText(item.itemID, "commentary", item.text)
+		item.index = len(p.snapshot.Items) - 1
+	}
+}
+
+func (p *progressState) updateAnswer() {
+	var text strings.Builder
+	for _, item := range p.texts {
+		if item.index < 0 && item.phase != "commentary" {
+			text.WriteString(item.text)
+		}
+	}
+	p.answer = text.String()
+}
+
 func (p *progressState) appendText(id, kind, text string) {
 	originalID := id
 	items := p.snapshot.Items
@@ -273,10 +308,19 @@ func (p *progressState) finish(ctx context.Context, result agentengine.TurnResul
 	}
 	if result.Status == agentengine.TurnSucceeded {
 		// Tool updates use indices into Items until this turn finishes.
-		if candidate := p.provisional; candidate != nil && p.answer == "" {
-			i := candidate.index
-			p.snapshot.Items = append(p.snapshot.Items[:i], p.snapshot.Items[i+1:]...)
+		promoted := make(map[int]bool)
+		for _, item := range p.texts {
+			if item.promoted && item.index >= 0 {
+				promoted[item.index] = true
+			}
 		}
+		items := p.snapshot.Items[:0]
+		for i, item := range p.snapshot.Items {
+			if !promoted[i] {
+				items = append(items, item)
+			}
+		}
+		p.snapshot.Items = items
 		if structured || (p.answer == "" && len(p.snapshot.Items) == 0) {
 			p.answer = fallback
 		}
@@ -312,20 +356,69 @@ func terminalTool(status string) bool {
 	return false
 }
 
-func (p *progressState) finalText(fallback string) string {
+func (p *progressState) finalText(fallback string, native []agentengine.TurnEvent) string {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	text, phase := p.answer, p.answerPhase
-	if candidate := p.provisional; candidate != nil && text == "" {
-		text = p.snapshot.Items[candidate.index].Text
-		phase = candidate.phase
+	if native != nil {
+		p.reconcileText(native)
 	}
-	if phase == "final_answer" && fallback != "" {
+	var text strings.Builder
+	var selected *progressText
+	answerItems := 0
+	for _, item := range p.texts {
+		if item.phase == "commentary" {
+			continue
+		}
+		answerItems++
+		if item.phase == "final_answer" || item == p.lastAnswer {
+			text.WriteString(item.text)
+			item.promoted = true
+			selected = item
+		}
+	}
+	if selected == nil {
 		return fallback
 	}
-	// A runtime can recover the rest of a partially streamed answer at completion.
-	if strings.HasPrefix(fallback, text) {
+	// Turn-wide output can extend a message only when its native identity is
+	// unambiguous. Multiple messages use their own deltas and snapshots.
+	if answerItems == 1 && selected.itemID != "" && fallback != "" && (selected.phase == "final_answer" || strings.HasPrefix(fallback, text.String())) {
 		return fallback
 	}
-	return text
+	return text.String()
+}
+
+func (p *progressState) reconcileText(native []agentengine.TurnEvent) {
+	retained := make(map[*progressText]bool)
+	ordered := make([]*progressText, 0, len(native))
+	p.lastAnswer = nil
+	for _, event := range native {
+		item := p.textItems[event.ItemID]
+		if item == nil {
+			item = &progressText{itemID: event.ItemID, index: -1}
+			p.textItems[event.ItemID] = item
+		}
+		item.phase, item.text = event.Phase, event.Text
+		if item.phase == "commentary" {
+			p.moveTextToProgress(item)
+		} else {
+			p.lastAnswer = item
+		}
+		if item.index >= 0 {
+			p.snapshot.Items[item.index].Text = item.text
+		}
+		retained[item] = true
+		ordered = append(ordered, item)
+	}
+	previous := p.texts
+	p.texts = nil
+	for _, item := range previous {
+		if !retained[item] {
+			if item.phase != "commentary" {
+				// Native history has replaced this legacy message identity.
+				item.phase, item.promoted = "commentary", true
+			}
+			p.texts = append(p.texts, item)
+		}
+	}
+	p.texts = append(p.texts, ordered...)
 }
