@@ -1,67 +1,3 @@
-.upgrade-status-card {
-  display: grid;
-  grid-template-columns: 10px minmax(0, 1fr);
-  gap: 10px;
-  align-items: start;
-  margin-top: 16px;
-  padding: 12px 14px;
-  border: 1px solid color-mix(in oklab, var(--primary) 28%, var(--line));
-  border-radius: 8px;
-  background: var(--primary-soft);
-  color: var(--text);
-}
-
-.upgrade-status-card p {
-  margin: 0;
-  color: var(--muted);
-  font-size: 14px;
-  line-height: 20px;
-}
-
-.upgrade-status-dot {
-  width: 10px;
-  height: 10px;
-  margin-top: 5px;
-  border-radius: 999px;
-  background: var(--primary);
-  box-shadow: 0 0 0 4px color-mix(in oklab, var(--primary) 16%, transparent);
-}
-
-.upgrade-status-card.starting .upgrade-status-dot,
-.upgrade-status-card.restarting .upgrade-status-dot {
-  animation: upgrade-pulse 1.4s ease-in-out infinite;
-}
-
-.upgrade-status-card.done {
-  border-color: color-mix(in oklab, var(--success-700) 32%, var(--line));
-  background: var(--success-50);
-}
-
-.upgrade-status-card.done .upgrade-status-dot {
-  background: var(--success-700);
-  box-shadow: 0 0 0 4px color-mix(in oklab, var(--success-700) 16%, transparent);
-}
-
-.upgrade-status-card.error {
-  border-color: color-mix(in oklab, var(--danger) 32%, var(--line));
-  background: var(--error-50);
-}
-
-.upgrade-status-card.error .upgrade-status-dot {
-  background: var(--danger);
-  box-shadow: 0 0 0 4px color-mix(in oklab, var(--danger) 16%, transparent);
-}
-
-.upgrade-status-card.manual_restart {
-  border-color: color-mix(in oklab, var(--warning-700) 32%, var(--line));
-  background: var(--warning-50);
-}
-
-.upgrade-status-card.manual_restart .upgrade-status-dot {
-  background: var(--warning-700);
-  box-shadow: 0 0 0 4px color-mix(in oklab, var(--warning-700) 16%, transparent);
-}
-
 .profile-model-row {
   grid-template-columns: minmax(0, 1fr);
 }
@@ -108,20 +44,6 @@
   .profile-advanced-grid {
     grid-template-columns: 1fr;
   }
-}
-
-.modal-card {
-  padding: 26px;
-}
-
-.modal-actions {
-  border-top-color: var(--line);
-}
-
-.modal-title {
-  color: var(--text);
-  font-size: 22px;
-  line-height: 1.08;
 }
 
 .selection-item {

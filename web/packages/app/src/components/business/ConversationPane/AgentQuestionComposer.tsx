@@ -1,7 +1,7 @@
 import agentQuestionComposerStyles from "./AgentQuestionComposer.module.css";
 import { useEffect, useState } from "react";
 import { ArrowRight, ChevronLeft, ChevronRight, CircleHelp, Clock3, LockKeyhole, Pencil, X } from "lucide-react";
-import { TextInput, Button, IconButton } from "@/components/ui";
+import { InlineError, TextInput, Button, IconButton } from "@/components/ui";
 import { questionOptions } from "@/models/agentActivity";
 import { resolveUserByLocalIdentity, type TranslateFn, type UsersById } from "@/models/conversations";
 import type { QuestionAnswerMode } from "./useQuestionAnswerMode";
@@ -185,9 +185,9 @@ export function AgentQuestionComposer({
       ) : null}
 
       {mode.error ? (
-        <div className={`form-error ${agentQuestionComposerStyles["question-composer-error"]}`} role="alert">
+        <InlineError className={`${agentQuestionComposerStyles["question-composer-error"]}`} role="alert">
           {mode.error}
-        </div>
+        </InlineError>
       ) : null}
     </section>
   );

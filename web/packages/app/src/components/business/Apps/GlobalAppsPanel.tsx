@@ -1,3 +1,4 @@
+import { EntityPane } from "@/components/business/EntityDetail";
 import { QueryClientContext } from "@tanstack/react-query";
 import { useContext, useCallback, useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
@@ -13,6 +14,7 @@ import {
   type AppInstallation,
 } from "@/api/apps";
 import {
+  InlineError,
   Button,
   DialogFooter,
   DialogRoot,
@@ -170,8 +172,9 @@ export function GlobalAppsPanel({
   const filteredItems = items.filter((item) =>
     matches(item.name, `${appName(item.app_id, t)} ${describe(item)} ${item.config.url || item.config.command || ""}`),
   );
+  const Panel = embedded ? "section" : EntityPane;
   return (
-    <section className={embedded ? styles.applicationSection : `entity-pane ${styles.resourcePage}`}>
+    <Panel className={embedded ? styles.applicationSection : styles.resourcePage}>
       {embedded ? (
         showHeading ? (
           <h2 className={styles.sectionTitle}>{t("connectorsApplications")}</h2>
@@ -188,11 +191,7 @@ export function GlobalAppsPanel({
           </Button>
         </div>
       )}
-      {error ? (
-        <div className="form-error" role="alert">
-          {localizeAPIError(error, t) || errorMessage(error)}
-        </div>
-      ) : null}
+      {error ? <InlineError role="alert">{localizeAPIError(error, t) || errorMessage(error)}</InlineError> : null}
       {!loaded ? (
         <p role="status" className={styles.hint}>
           {t("connectorsLoading")}
@@ -417,6 +416,6 @@ export function GlobalAppsPanel({
           </DialogFooter>
         </DialogContent>
       </DialogRoot>
-    </section>
+    </Panel>
   );
 }

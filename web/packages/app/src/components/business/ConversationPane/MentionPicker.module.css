@@ -55,3 +55,32 @@
   font-size: 12px;
   line-height: 18px;
 }
+
+.mention-picker {
+  border-radius: 8px;
+  border-color: var(--line);
+  background:
+    linear-gradient(180deg, oklch(1 0 0 / 0.04), transparent),
+    color-mix(in oklab, var(--panel) 94%, oklch(0.04 0.006 82));
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(18px);
+}
+
+:global(:root[data-theme="light"]) .mention-picker {
+  background: color-mix(in oklab, var(--panel) 96%, oklch(1 0 0));
+}
+
+.mention-picker,
+:global(:root[data-theme="light"]) .mention-picker {
+  border-radius: var(--radius-xl);
+  border-color: var(--line);
+  background: var(--panel);
+  box-shadow: var(--shadow-md);
+  backdrop-filter: none;
+}
+
+:global(:root[data-theme="dark"]) .mention-picker {
+  border-color: var(--line);
+  background: var(--panel);
+  color: var(--text);
+}

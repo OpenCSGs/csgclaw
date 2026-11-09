@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { LoaderCircle, RefreshCw } from "lucide-react";
-import { Button, Select } from "@/components/ui";
+import { InlineError, Button, Select } from "@/components/ui";
 import { ResourceList, ResourceListCard } from "@/components/business/ResourceListCard";
 import { ResourceFeaturedIcon, SkillFeaturedIcon } from "@/components/business/HubDetailPane";
 import { acknowledgeDiscoveredSkills, rescanDiscoveredSkills } from "@/api/skills";
@@ -110,9 +110,9 @@ export function InstalledSkillLibrary({
         </Button>
       </div>
       {error ? (
-        <p className="form-error" role="alert">
+        <InlineError as="p" role="alert">
           {t("iaSkillsDiscoveryFailed")}
-        </p>
+        </InlineError>
       ) : null}
       {scanCount !== null ? (
         <p className={styles.notice} role="status">

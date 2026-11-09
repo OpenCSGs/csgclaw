@@ -1,4 +1,5 @@
 import {
+  InlineError,
   Button,
   Checkbox,
   DialogRoot,
@@ -13,7 +14,7 @@ import {
   TextInput,
   TextArea,
 } from "@/components/ui";
-import { useRef } from "react";
+import { useId, useRef } from "react";
 import styles from "./CreateTeamModal.module.css";
 import { toggleSelection } from "@/shared/lib/collections";
 import type { AgentLike } from "@/models/agents";
@@ -53,6 +54,7 @@ export function CreateTeamModal({
   onClose,
   onCreate,
 }: CreateTeamModalProps) {
+  const membersLabelId = useId();
   const nameInputRef = useRef<HTMLInputElement>(null);
   const editing = mode === "edit";
   const candidateIDs = candidates.map((item) => item.id).filter((id): id is string => Boolean(id));
@@ -104,12 +106,15 @@ export function CreateTeamModal({
             />
           </Field>
 
-          <div className="field">
-            <span>{t("teamMembersLabel")}</span>
-            <div className="selection-list">
+          <div className={styles.memberField} role="group" aria-labelledby={membersLabelId}>
+            <span id={membersLabelId}>{t("teamMembersLabel")}</span>
+            <div className={`selection-list ${styles["selection-list"]}`}>
               {candidates.length ? (
                 <>
-                  <label className="selection-item selection-all-item" htmlFor="team-member-all">
+                  <label
+                    className={`selection-item ${styles["selection-item"]} selection-all-item ${styles["selection-all-item"]}`}
+                    htmlFor="team-member-all"
+                  >
                     <Checkbox
                       id="team-member-all"
                       checked={allCandidatesSelected}
@@ -135,7 +140,11 @@ export function CreateTeamModal({
                     const memberLocked = itemID ? lockedTeamMemberIDs.includes(itemID) : false;
                     const checkboxID = teamMemberCheckboxID(itemID || item.name);
                     return (
-                      <label key={itemID || item.name} className="selection-item" htmlFor={checkboxID}>
+                      <label
+                        key={itemID || item.name}
+                        className={`selection-item ${styles["selection-item"]}`}
+                        htmlFor={checkboxID}
+                      >
                         <Checkbox
                           id={checkboxID}
                           checked={itemID ? memberLocked || teamMemberIDs.includes(itemID) : false}
@@ -151,16 +160,12 @@ export function CreateTeamModal({
                   })}
                 </>
               ) : (
-                <div className="selection-empty">{t("teamNoMembersHint")}</div>
+                <div className={`selection-empty ${styles["selection-empty"]}`}>{t("teamNoMembersHint")}</div>
               )}
             </div>
           </div>
 
-          {submitError ? (
-            <div className="form-error" role="alert">
-              {submitError}
-            </div>
-          ) : null}
+          {submitError ? <InlineError role="alert">{submitError}</InlineError> : null}
         </DialogBody>
 
         <DialogFooter className={styles.footer}>

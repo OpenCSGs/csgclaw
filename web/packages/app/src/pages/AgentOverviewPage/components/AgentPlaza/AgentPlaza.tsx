@@ -1,3 +1,4 @@
+import { EntityAvatar, EntityPane } from "@/components/business/EntityDetail";
 import { AgentProfileHeader } from "@/components/business/AgentDetails";
 import { useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -5,6 +6,7 @@ import { fetchCloudAgentTemplate } from "@/api/relay";
 import { Check, Cloud, MoreHorizontal, Plus, Search, Sparkles } from "lucide-react";
 import { AgentAvatarContent } from "@/components/business/AgentAvatar";
 import {
+  StatusBadge,
   Button,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -207,13 +209,13 @@ export function CloudAgentDetail({
     </div>
   );
   return (
-    <section className="entity-pane agent-detail-pane">
+    <EntityPane className={"agent-detail-pane"}>
       <div className="agent-profile-fixed-header">
         <AgentProfileHeader
           avatar={
-            <div className="entity-avatar">
+            <EntityAvatar>
               <AgentAvatarContent avatar={agent.avatar} fallback={agent.name.slice(0, 1)} />
-            </div>
+            </EntityAvatar>
           }
           title={
             <>
@@ -221,9 +223,9 @@ export function CloudAgentDetail({
                 {agent.name}
               </h1>
               <span className={`agent-status-dot ${online ? "online" : ""}`} aria-hidden="true" />
-              <span className={`status-pill ${online ? "online" : ""}`}>
+              <StatusBadge tone={online ? "positive" : "neutral"} className={`${online ? "online" : ""}`}>
                 {t(online ? "agentPlazaOnline" : "agentPlazaOffline")}
-              </span>
+              </StatusBadge>
               <span className={styles.cloudLabel}>
                 <Cloud size={14} aria-hidden="true" />
                 {t("agentPlazaCloud")}
@@ -281,6 +283,6 @@ export function CloudAgentDetail({
           </>
         )}
       </div>
-    </section>
+    </EntityPane>
   );
 }

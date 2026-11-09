@@ -1,3 +1,4 @@
+import sidebarHeaderStyles from "./SidebarHeader.module.css";
 import type { WorkspaceSidebarProps } from "@/hooks/workspace/contracts/sidebar";
 
 type SidebarHeaderProps = Pick<WorkspaceSidebarProps, "currentWorkspaceLabel" | "runningAgentCount" | "t"> & {
@@ -6,7 +7,9 @@ type SidebarHeaderProps = Pick<WorkspaceSidebarProps, "currentWorkspaceLabel" | 
 
 export function SidebarHeader({ t, currentWorkspaceLabel, runningAgentCount, agentCount }: SidebarHeaderProps) {
   return (
-    <div className="sidebar-header workspace-header">
+    <div
+      className={`sidebar-header ${sidebarHeaderStyles["sidebar-header"]} workspace-header ${sidebarHeaderStyles["workspace-header"]}`}
+    >
       <div className="workspace-presence-panel" aria-label={currentWorkspaceLabel}>
         <span className="workspace-presence-dot" aria-hidden="true"></span>
         <div className="workspace-presence-copy">

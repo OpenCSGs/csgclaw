@@ -2,6 +2,7 @@ import { useMCPProbe } from "./useMCPProbe";
 import { useEffect, useMemo, useState } from "react";
 import { Plus, RefreshCw, Trash2 } from "lucide-react";
 import {
+  DismissibleInlineError,
   Button,
   DialogBody,
   DialogCloseButton,
@@ -11,7 +12,6 @@ import {
   DialogHeader,
   DialogRoot,
   DialogTitle,
-  DismissibleAlert,
   Switch,
 } from "@/components/ui";
 import { fetchRemoteKnowledgeBaseMCPConfig } from "@/api/knowledgeBases";
@@ -156,9 +156,9 @@ export function KnowledgeBaseDetailDialog({
               <DialogBody className={styles.body}>
                 <MCPProbeCards probe={probe} probing={probing} error={probeError} onDismiss={resetProbe} t={t} />
                 {connectError ? (
-                  <DismissibleAlert className="form-error" messageKey={connectError} closeLabel={t("close")}>
+                  <DismissibleInlineError messageKey={connectError} closeLabel={t("close")}>
                     <span role="alert">{connectError}</span>
-                  </DismissibleAlert>
+                  </DismissibleInlineError>
                 ) : null}
                 {variant === "market" ? (
                   previewLoading || preview ? (

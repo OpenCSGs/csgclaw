@@ -1,3 +1,5 @@
+import { EntityField, EntityAvatar, EntityPane } from "@/components/business/EntityDetail";
+import profileFormLayoutStyles from "@/components/business/ProfileControls/ProfileFormLayout.module.css";
 import agentDetailPaneStyles from "./AgentDetailPane.module.css";
 import agentSkillsStyles from "./AgentSkills.module.css";
 import agentPublicationStyles from "./AgentPublication.module.css";
@@ -8,7 +10,7 @@ import { AgentProfileHeader } from "./AgentProfileHeader";
 import type { HubTemplate } from "@/models/hubWorkspace";
 import { AgentModelPanel } from "./components/AgentModelPanel";
 import { defaultTemplateName, isValidTemplateName, TEMPLATE_NAME_MAX_LENGTH } from "@/models/templateNaming";
-import { SidebarMcpIcon } from "@/components/ui/Icons";
+import { SidebarMcpIcon } from "@/components/business/Icons";
 import { ResourceLoadMore } from "../ResourceLoadMore";
 import type { ResourceContinuation } from "@/hooks/workspace/useInfiniteAgentResources";
 import { mcpManagedKnowledgeBaseSource } from "@/models/mcp";
@@ -113,6 +115,9 @@ import type { RelayPublicationController } from "@/hooks/workspace/useRelayPubli
 import { RelayPublication } from "../RelayPublication";
 import type { AgentTemplatePublishTarget } from "@/api/hub";
 import {
+  StatusBadge,
+  DismissibleInlineError,
+  InlineError,
   Button,
   Field,
   TextInput,
@@ -128,7 +133,6 @@ import {
   DialogHeader,
   DialogRoot,
   DialogTitle,
-  DismissibleAlert,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuRoot,
@@ -136,7 +140,7 @@ import {
   DropdownMenuTrigger,
   Tooltip,
 } from "@/components/ui";
-import { SidebarPuzzlePiece02Icon } from "@/components/ui/Icons";
+import { SidebarPuzzlePiece02Icon } from "@/components/business/Icons";
 import { AgentAppsPanel, useAgentApps } from "@/components/business/Apps";
 
 type VoidOrPromise = void | Promise<void>;
@@ -786,26 +790,26 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
   );
 
   return (
-    <section className="entity-pane agent-detail-pane">
+    <EntityPane className={"agent-detail-pane"}>
       <div className="agent-profile-fixed-header">
         <AgentProfileHeader
           avatar={
             draft ? (
-              <div className="entity-avatar agent-header-avatar-picker">
+              <EntityAvatar className={"agent-header-avatar-picker"}>
                 <AgentAvatarPicker
                   value={draft.avatar || item.avatar}
                   t={t}
                   mode="edit"
                   onChange={(avatar) => updateDraft({ avatar })}
                 />
-              </div>
+              </EntityAvatar>
             ) : (
-              <div className="entity-avatar">
+              <EntityAvatar>
                 <AgentAvatarContent
                   avatar={item.avatar}
                   fallback={avatarFallbackText(item.avatar, item.name, item.id)}
                 />
-              </div>
+              </EntityAvatar>
             )
           }
           title={
@@ -860,24 +864,35 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
                 <h1 title={item.name || undefined}>{item.name}</h1>
               )}
               <span className={`agent-status-dot ${running ? "online" : ""}`} aria-hidden="true"></span>
-              <span className={`status-pill ${running ? "online" : ""}`}>{statusLabel}</span>
+              <StatusBadge tone={running ? "positive" : "neutral"} className={`${running ? "online" : ""}`}>
+                {statusLabel}
+              </StatusBadge>
               {runtimeStatusDetail ? (
-                <span className="status-pill profile-state-pill warn">{runtimeStatusDetail}</span>
+                <StatusBadge tone="warning" className={"profile-state-pill warn"}>
+                  {runtimeStatusDetail}
+                </StatusBadge>
               ) : null}
               {gatewayDegraded ? (
-                <span className="status-pill profile-state-pill warn">{agentGatewayUnavailableLabel(item, t)}</span>
+                <StatusBadge tone="warning" className={"profile-state-pill warn"}>
+                  {agentGatewayUnavailableLabel(item, t)}
+                </StatusBadge>
               ) : null}
-              <span className={`status-pill profile-state-pill ${incomplete ? "warn" : "ready"}`}>
+              <StatusBadge
+                tone={incomplete ? "warning" : "neutral"}
+                className={`profile-state-pill ${incomplete ? "warn" : "ready"}`}
+              >
                 {incomplete ? t("profileIncompleteBadge") : t("profileCompleteBadge")}
-              </span>
+              </StatusBadge>
               {upgradeNeeded ? (
-                <span className="status-pill profile-state-pill warn">{t("profileUpgradeRequired")}</span>
+                <StatusBadge tone="warning" className={"profile-state-pill warn"}>
+                  {t("profileUpgradeRequired")}
+                </StatusBadge>
               ) : null}
               {restartNeeded ? (
                 <Button
                   variant="secondaryGray"
                   size="sm"
-                  className="status-pill profile-state-pill profile-recreate-button warn"
+                  className={"status-pill profile-state-pill profile-recreate-button warn"}
                   title={t("agentRecreate")}
                   disabled={saving || busyKey.startsWith(busyPrefix) || isNotificationBotAgent(item)}
                   onClick={() => setRecreateTarget(item)}
@@ -890,9 +905,9 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
           description={
             draft ? (
               isEditingDescription ? (
-                <label className="field entity-description-field">
-                  <span className="sr-only">{t("agentDescription")}</span>
+                <Field className={"entity-description-field"}>
                   <TextArea
+                    aria-label={t("agentDescription")}
                     ref={descriptionInputRef}
                     className="compact-textarea"
                     value={draft.description}
@@ -912,7 +927,7 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
                     }}
                     placeholder={t("agentDescription")}
                   />
-                </label>
+                </Field>
               ) : (
                 <button
                   type="button"
@@ -1011,9 +1026,9 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
             </>
           }
         />
-        {error ? <div className="form-error">{error}</div> : null}
+        {error ? <InlineError>{error}</InlineError> : null}
         {saveError ? (
-          <div className="form-error whitespace-pre-wrap break-words" role="alert">
+          <InlineError className={"whitespace-pre-wrap break-words"} role="alert">
             {saveError}
             {saveBillingURL ? (
               <>
@@ -1023,7 +1038,7 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
                 </a>
               </>
             ) : null}
-          </div>
+          </InlineError>
         ) : null}
         {notice ? (
           <div className={`form-warning ${noticeTone === "warning" ? "" : noticeTone}`.trim()} role="status">
@@ -1077,30 +1092,29 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
       >
         {!draft ? (
           <>
-            <div className="entity-grid">
-              <div className="entity-field">
-                <span>{t("profileRuntimeKind")}</span>
+            <div className={`entity-grid ${agentDetailPaneStyles["entity-grid"]}`}>
+              <EntityField label={t("profileRuntimeKind")}>
                 <strong>{formatRuntimeKindLabel(runtimeKind, t)}</strong>
-              </div>
-              <div className="entity-field">
-                <span>{t("profileProvider")}</span>
+              </EntityField>
+              <EntityField label={t("profileProvider")}>
                 <strong>{formatProviderLabel(provider)}</strong>
-              </div>
-              <div className="entity-field">
-                <span>{t("profileModel")}</span>
+              </EntityField>
+              <EntityField label={t("profileModel")}>
                 <strong>{agentModelID(item)}</strong>
-              </div>
-              <div className="entity-field">
-                <span>{t("profileReasoning")}</span>
+              </EntityField>
+              <EntityField label={t("profileReasoning")}>
                 <strong>{reasoningEffortLabel(t, item.reasoning_effort || profile?.reasoning_effort)}</strong>
-              </div>
-              <div className="entity-field">
-                <span>{t("profileFastMode")}</span>
+              </EntityField>
+              <EntityField label={t("profileFastMode")}>
                 <strong>{item.enable_fast_mode || profile?.enable_fast_mode ? "on" : "off"}</strong>
-              </div>
+              </EntityField>
             </div>
-            <section className="profile-section agent-instructions-section">
-              <div className="profile-section-title">{t("agentInstructions")}</div>
+            <section
+              className={`profile-section ${profileFormLayoutStyles["profile-section"]} agent-instructions-section`}
+            >
+              <div className={`profile-section-title ${profileFormLayoutStyles["profile-section-title"]}`}>
+                {t("agentInstructions")}
+              </div>
               <div className="agent-instructions-body">{item.instructions || "-"}</div>
             </section>
           </>
@@ -1169,14 +1183,14 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
             ) : null}
 
             {["skills", "mcp", "apps", "knowledge"].includes(visibleActiveProfileTab) && resourceError ? (
-              <div className="form-error" role="alert">
+              <InlineError role="alert">
                 {resourceError}
                 {onRetryResource ? (
                   <Button size="sm" disabled={resourceMutationBusy} onClick={() => void onRetryResource()}>
                     {t("retry")}
                   </Button>
                 ) : null}
-              </div>
+              </InlineError>
             ) : null}
             {visibleActiveProfileTab === "skills" && workspaceSupported ? (
               <AgentSkillsPanel
@@ -1366,7 +1380,7 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
             <div
               className={`${agentSkillsStyles["agent-skills-dialog-body"]} ${agentSkillsStyles["agent-skill-delete-dialog-body"]}`}
             >
-              <div className="form-error">{skillDeleteError}</div>
+              <InlineError>{skillDeleteError}</InlineError>
             </div>
           ) : null}
           <div className={agentSkillsStyles["agent-skills-dialog-actions"]}>
@@ -1426,7 +1440,7 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
             </div>
             <DialogCloseButton label={t("close")} size="sm" variant="tertiaryGray" />
           </DialogHeader>
-          {mcpDeleteError ? <div className="form-error">{mcpDeleteError}</div> : null}
+          {mcpDeleteError ? <InlineError>{mcpDeleteError}</InlineError> : null}
           <div className={agentSkillsStyles["agent-skills-dialog-actions"]}>
             <Button
               variant="secondaryGray"
@@ -1565,7 +1579,9 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
                 {t("agentPublishLoginRequired")}
               </p>
             ) : null}
-            {publishAttempted && publishError ? <div className="form-error">{publishError}</div> : null}
+            {publishAttempted && publishError ? (
+              <InlineError className={agentPublicationStyles["agent-publish-error"]}>{publishError}</InlineError>
+            ) : null}
           </DialogBody>
           <DialogFooter>
             <Button variant="secondaryGray" size="md" disabled={publishBusy} onClick={() => setPublishTarget(null)}>
@@ -1611,7 +1627,7 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
           </DialogFooter>
         </DialogContent>
       </DialogRoot>
-    </section>
+    </EntityPane>
   );
 });
 
@@ -1668,18 +1684,21 @@ function AgentRuntimePanel({
   return (
     <section
       id="agent-profile-runtime"
-      className={`profile-section ${agentDetailPaneStyles["agent-profile-scroll-target"]}`}
+      className={`profile-section ${profileFormLayoutStyles["profile-section"]} ${agentDetailPaneStyles["agent-profile-scroll-target"]}`}
     >
       <div className="profile-section-heading">
-        <div className="profile-section-title">{t("profileRuntimeSection")}</div>
+        <div className={`profile-section-title ${profileFormLayoutStyles["profile-section-title"]}`}>
+          {t("profileRuntimeSection")}
+        </div>
         <p className="profile-section-description">{t("profileRuntimeSectionDescription")}</p>
       </div>
       <div className="agent-section-form">
-        <div className="profile-grid-compact agent-page-form-content">
-          <label className="field col-span-full">
-            <span>{t("profileRuntimeKind")}</span>
+        <div
+          className={`profile-grid-compact ${profileFormLayoutStyles["profile-grid-compact"]} agent-page-form-content`}
+        >
+          <Field label={t("profileRuntimeKind")} className={"col-span-full"}>
             <TextInput value={formatRuntimeKindLabel(draft.runtime_kind || runtimeKind, t)} readOnly disabled />
-          </label>
+          </Field>
           {!isNotifierDraft && runtimeOptionSchemas.length > 0 ? (
             <RuntimeOptionsFields
               draft={draft}
@@ -1747,12 +1766,12 @@ function AgentMCPPanel({
       className={
         embedded
           ? `${agentSkillsStyles["agent-skills-section"]} agent-mcp-section`
-          : `profile-section ${agentSkillsStyles["agent-skills-section"]} agent-mcp-section ${agentDetailPaneStyles["agent-profile-scroll-target"]}`
+          : `profile-section ${profileFormLayoutStyles["profile-section"]} ${agentSkillsStyles["agent-skills-section"]} agent-mcp-section ${agentDetailPaneStyles["agent-profile-scroll-target"]}`
       }
     >
       <div className={agentSkillsStyles["agent-skills-summary-heading"]}>
         <div className="profile-section-heading">
-          <div className="profile-section-title">
+          <div className={`profile-section-title ${profileFormLayoutStyles["profile-section-title"]}`}>
             {t(kind === "knowledge" ? "profileKnowledgeTitle" : "connectorsTools")}
           </div>
           <p className="profile-section-description">
@@ -1783,17 +1802,17 @@ function AgentMCPPanel({
           ) : null}
         </div>
       </div>
-      {addError ? <div className="form-error">{addError}</div> : null}
-      {deleteError ? <div className="form-error">{deleteError}</div> : null}
+      {addError ? <InlineError>{addError}</InlineError> : null}
+      {deleteError ? <InlineError>{deleteError}</InlineError> : null}
       {listError ? (
-        <div className="form-error" role="alert">
+        <InlineError role="alert">
           {listError}{" "}
           {continuation ? (
             <Button size="sm" onClick={continuation.retry}>
               {t("retry")}
             </Button>
           ) : null}
-        </div>
+        </InlineError>
       ) : null}
       {!continuation?.loading && !listError && !servers.length ? (
         <div className="agent-skills-summary-empty">
@@ -1949,10 +1968,14 @@ function AgentMemoryPanel({ agentID, onMemoryChange, t }: AgentMemoryPanelProps)
       id="agent-profile-memory"
       className={`${agentMemoryStyles["agent-memory-tab"]} ${agentDetailPaneStyles["agent-profile-tab-panel"]} ${agentDetailPaneStyles["agent-profile-scroll-target"]}`}
     >
-      <section className={`profile-section ${agentSkillsStyles["agent-skills-section"]} agent-memory-settings-section`}>
+      <section
+        className={`profile-section ${profileFormLayoutStyles["profile-section"]} ${agentSkillsStyles["agent-skills-section"]} agent-memory-settings-section`}
+      >
         <div className="agent-memory-section-heading">
           <div className="profile-section-heading">
-            <div className="profile-section-title">{t("agentMemoryTitle")}</div>
+            <div className={`profile-section-title ${profileFormLayoutStyles["profile-section-title"]}`}>
+              {t("agentMemoryTitle")}
+            </div>
             <p className="profile-section-description">{t("agentMemoryDescription")}</p>
           </div>
           <div className="agent-memory-setting-actions">
@@ -1971,10 +1994,14 @@ function AgentMemoryPanel({ agentID, onMemoryChange, t }: AgentMemoryPanelProps)
         <p className={agentMemoryStyles["agent-memory-toggle-hint"]}>{t("agentMemoryToggleHint")}</p>
       </section>
 
-      <section className={`profile-section ${agentSkillsStyles["agent-skills-section"]} agent-memory-document-section`}>
+      <section
+        className={`profile-section ${profileFormLayoutStyles["profile-section"]} ${agentSkillsStyles["agent-skills-section"]} agent-memory-document-section`}
+      >
         <div className="agent-memory-section-heading">
           <div className="profile-section-heading">
-            <div className="profile-section-title">{document?.name || t("agentMemoryDocumentTitle")}</div>
+            <div className={`profile-section-title ${profileFormLayoutStyles["profile-section-title"]}`}>
+              {document?.name || t("agentMemoryDocumentTitle")}
+            </div>
             <p className="profile-section-description">{t("agentMemoryDocumentDescription")}</p>
             {document?.location ? (
               <code className={agentMemoryStyles["agent-memory-location"]}>{document.location}</code>
@@ -1999,7 +2026,7 @@ function AgentMemoryPanel({ agentID, onMemoryChange, t }: AgentMemoryPanelProps)
           </div>
         </div>
 
-        {loadError ? <div className="form-error">{loadError}</div> : null}
+        {loadError ? <InlineError>{loadError}</InlineError> : null}
         {loading ? (
           <div className="agent-skills-summary-empty agent-memory-summary-empty" role="status">
             <span className={agentSkillsStyles["agent-skills-summary-icon"]} aria-hidden="true">
@@ -2095,11 +2122,13 @@ function AgentInstructionsPanel({ draft, t, updateDraft }: AgentInstructionsPane
   return (
     <section
       id="agent-profile-instructions"
-      className={`profile-section agent-instructions-section ${agentDetailPaneStyles["agent-profile-scroll-target"]}`}
+      className={`profile-section ${profileFormLayoutStyles["profile-section"]} agent-instructions-section ${agentDetailPaneStyles["agent-profile-scroll-target"]}`}
     >
       <div className={agentInstructionsStyles["agent-instructions-header"]}>
         <div className="profile-section-heading">
-          <div className="profile-section-title">{t("agentInstructions")}</div>
+          <div className={`profile-section-title ${profileFormLayoutStyles["profile-section-title"]}`}>
+            {t("agentInstructions")}
+          </div>
           <p className="profile-section-description">
             {mode === "default" ? t("agentInstructionsDefaultHint") : t("agentInstructionsAdvancedHint")}
           </p>
@@ -2116,12 +2145,10 @@ function AgentInstructionsPanel({ draft, t, updateDraft }: AgentInstructionsPane
         />
       </div>
       <div className={agentInstructionsStyles["agent-instructions-content"]}>
-        <div className="profile-grid-compact">
-          <label className="field span-2">
-            <span className="sr-only">
-              {mode === "advanced" ? t("agentInstructionsEffective") : t("agentInstructions")}
-            </span>
+        <div className={`profile-grid-compact ${profileFormLayoutStyles["profile-grid-compact"]}`}>
+          <Field className={`span-2 ${profileFormLayoutStyles["span-2"]}`}>
             <TextArea
+              aria-label={mode === "advanced" ? t("agentInstructionsEffective") : t("agentInstructions")}
               className={`compact-textarea ${agentInstructionsStyles["agent-instructions-editor"]}`}
               value={mode === "advanced" ? effective : draft.instructions || ""}
               onInput={(event) =>
@@ -2131,10 +2158,10 @@ function AgentInstructionsPanel({ draft, t, updateDraft }: AgentInstructionsPane
               }
               placeholder={t("agentInstructionsPlaceholder")}
             />
-          </label>
+          </Field>
         </div>
       </div>
-      {advancedError ? <div className="form-error">{advancedError}</div> : null}
+      {advancedError ? <InlineError>{advancedError}</InlineError> : null}
       {mode === "advanced" ? (
         <div className="form-actions">
           <Button type="button" variant="secondaryGray" loading={advancedSaving} onClick={saveEffectiveInstructions}>
@@ -2180,11 +2207,13 @@ function AgentSkillsPanel({
   return (
     <section
       id="agent-profile-skills"
-      className={`profile-section ${agentSkillsStyles["agent-skills-section"]} ${agentDetailPaneStyles["agent-profile-scroll-target"]}`}
+      className={`profile-section ${profileFormLayoutStyles["profile-section"]} ${agentSkillsStyles["agent-skills-section"]} ${agentDetailPaneStyles["agent-profile-scroll-target"]}`}
     >
       <div className={agentSkillsStyles["agent-skills-summary-heading"]}>
         <div className="profile-section-heading">
-          <div className="profile-section-title">{t("agentSkillsTitle")}</div>
+          <div className={`profile-section-title ${profileFormLayoutStyles["profile-section-title"]}`}>
+            {t("agentSkillsTitle")}
+          </div>
           <p className="profile-section-description">{t("agentSkillsDescription")}</p>
         </div>
         <div className={agentSkillsStyles["agent-skills-summary-actions"]}>
@@ -2208,8 +2237,8 @@ function AgentSkillsPanel({
         </div>
       </div>
       {skillsError ? (
-        <DismissibleAlert
-          className={`form-error ${agentSkillsStyles["agent-skills-error"]}`}
+        <DismissibleInlineError
+          className={`${agentSkillsStyles["agent-skills-error"]}`}
           messageKey={skillsError}
           closeLabel={t("close")}
         >
@@ -2219,10 +2248,10 @@ function AgentSkillsPanel({
               {t("retry")}
             </Button>
           ) : null}
-        </DismissibleAlert>
+        </DismissibleInlineError>
       ) : null}
-      {skillAddError ? <div className="form-error">{skillAddError}</div> : null}
-      {skillDeleteError ? <div className="form-error">{skillDeleteError}</div> : null}
+      {skillAddError ? <InlineError>{skillAddError}</InlineError> : null}
+      {skillDeleteError ? <InlineError>{skillDeleteError}</InlineError> : null}
       {skillsLoading ? (
         <div className="agent-skills-summary-empty">
           <span className={agentSkillsStyles["agent-skills-summary-icon"]} aria-hidden="true">
@@ -2300,28 +2329,33 @@ function AgentAdvancedPanel({ draft, item, t, updateDraft }: AgentAdvancedPanelP
   return (
     <section
       id="agent-profile-advanced"
-      className={`profile-section agent-advanced-section ${agentDetailPaneStyles["agent-profile-scroll-target"]}`}
+      className={`profile-section ${profileFormLayoutStyles["profile-section"]} agent-advanced-section ${agentDetailPaneStyles["agent-profile-scroll-target"]}`}
     >
       <div className="profile-section-heading">
-        <div className="profile-section-title">{t("profileAdvanced")}</div>
+        <div className={`profile-section-title ${profileFormLayoutStyles["profile-section-title"]}`}>
+          {t("profileAdvanced")}
+        </div>
         <p className="profile-section-description">{t("profileAdvancedDescription")}</p>
       </div>
       <div className="agent-section-form">
-        <div className="profile-advanced-grid agent-page-form-content">
+        <div
+          className={`profile-advanced-grid ${profileFormLayoutStyles["profile-advanced-grid"]} agent-page-form-content`}
+        >
           {!isNotifierRuntimeDraftOnAgentPage(draft, item) ? (
-            <label className="field profile-json-field">
-              <span>{t("profileRequestOptions")}</span>
+            <Field label={t("profileRequestOptions")} className={"profile-json-field"}>
               <TextArea
                 className="compact-json"
                 value={draft.requestOptionsText}
                 onInput={(event) => updateDraft({ requestOptionsText: event.currentTarget.value })}
               />
-            </label>
+            </Field>
           ) : null}
-          <div className="field profile-env-field">
-            <span>{t("profileEnv")}</span>
-            <EnvKeyValueEditor rows={draft.envRows} t={t} onChange={(rows) => updateDraft({ envRows: rows })} />
-          </div>
+          <EnvKeyValueEditor
+            className="profile-env-field"
+            rows={draft.envRows}
+            t={t}
+            onChange={(rows) => updateDraft({ envRows: rows })}
+          />
         </div>
       </div>
     </section>
@@ -2367,11 +2401,14 @@ function AgentChannelsSection({
   return (
     <section
       id="agent-profile-channels"
-      className={`profile-section ${agentChannelsStyles["agent-channels-section"]} ${agentDetailPaneStyles["agent-profile-scroll-target"]}`}
+      className={`profile-section ${profileFormLayoutStyles["profile-section"]} ${agentChannelsStyles["agent-channels-section"]} ${agentDetailPaneStyles["agent-profile-scroll-target"]}`}
       aria-label={t("agentChannelsTitle")}
     >
       <div className="profile-section-heading">
-        <h2 id="agent-channels-title" className="profile-section-title agent-channels-title">
+        <h2
+          id="agent-channels-title"
+          className={`profile-section-title ${profileFormLayoutStyles["profile-section-title"]} agent-channels-title`}
+        >
           {t("agentChannelsTitle")}
         </h2>
         <p className="profile-section-description">{t("agentChannelsDescription")}</p>

@@ -2,6 +2,7 @@ import { useCallback, useEffect } from "react";
 import type { UIEvent } from "react";
 import { BookOpen, RefreshCw, Search } from "lucide-react";
 import {
+  InlineError,
   Button,
   DialogBody,
   DialogCloseButton,
@@ -103,7 +104,7 @@ export function KnowledgeBaseDiscoveryDialog({
               onChange={(event) => onSearchChange(event.currentTarget.value)}
             />
           </label>
-          {copyError ? <div className="form-error">{copyError}</div> : null}
+          {copyError ? <InlineError>{copyError}</InlineError> : null}
           {loginRequired ? (
             <div className={styles.state}>
               <span>{t("resourcesKnowledgeBasesLoginRequired")}</span>

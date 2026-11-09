@@ -3,7 +3,7 @@ import type { CSSProperties, MouseEvent as ReactMouseEvent, PointerEvent as Reac
 import { Bot, MessageCircle, Minus } from "lucide-react";
 import { AgentAvatarContent } from "@/components/business/AgentAvatar";
 import type { ConversationPaneProps } from "@/components/business/ConversationPane";
-import { Button, Tooltip } from "@/components/ui";
+import { IconButton, Tooltip } from "@/components/ui";
 import type { LocaleCode, ThreadView, TranslateFn } from "@/models/conversations";
 import { placeCaretAtEnd, renderComposerSegments } from "@/models/composer";
 import { classNames } from "@/shared/lib/classNames";
@@ -424,18 +424,16 @@ export function FloatingChat({
 
   const headerAccessory = (
     <Tooltip content={t("floatingChatCollapse")}>
-      <Button
+      <IconButton
+        icon={<Minus size={17} strokeWidth={2.2} />}
+        iconSize={16}
+        markClassName="icon-button-mark"
         className={styles.collapseButton}
-        iconOnly
         size="lg"
         variant="secondaryGray"
-        aria-label={t("floatingChatCollapse")}
+        label={t("floatingChatCollapse")}
         onClick={() => onOpenChange(false)}
-      >
-        <span className="icon-button-mark" aria-hidden="true">
-          <Minus size={17} strokeWidth={2.2} />
-        </span>
-      </Button>
+      />
     </Tooltip>
   );
 

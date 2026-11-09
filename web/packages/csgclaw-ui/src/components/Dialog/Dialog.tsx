@@ -103,11 +103,22 @@ export const DialogOverlay = forwardRef<ComponentRef<typeof RadixDialog.Overlay>
 export type DialogContentProps = ComponentPropsWithoutRef<typeof RadixDialog.Content> & {
   overlayClassName?: string;
   portalContainer?: DialogPortalProps["container"];
+  scrollBody?: boolean;
 };
 
 export const DialogContent = forwardRef<ComponentRef<typeof RadixDialog.Content>, DialogContentProps>(
   function DialogContent(
-    { children, className, onOpenAutoFocus, overlayClassName, portalContainer, style, tabIndex = -1, ...props },
+    {
+      children,
+      className,
+      onOpenAutoFocus,
+      overlayClassName,
+      portalContainer,
+      scrollBody,
+      style,
+      tabIndex = -1,
+      ...props
+    },
     ref,
   ) {
     useEffect(() => observeDialogLayers(), []);
@@ -121,6 +132,7 @@ export const DialogContent = forwardRef<ComponentRef<typeof RadixDialog.Content>
             className,
           )}
           tabIndex={tabIndex}
+          data-scroll-body={scrollBody ? "" : undefined}
           onOpenAutoFocus={(event) => {
             onOpenAutoFocus?.(event);
             if (event.defaultPrevented) {
@@ -228,10 +240,11 @@ export const DialogClose = forwardRef<ComponentRef<typeof RadixDialog.Close>, Di
 
 export type DialogCloseButtonProps = Omit<ComponentPropsWithoutRef<typeof Button>, "aria-label" | "children"> & {
   label: string;
+  iconSize?: number;
 };
 
 export const DialogCloseButton = forwardRef<HTMLButtonElement, DialogCloseButtonProps>(function DialogCloseButton(
-  { className, label, title, ...props },
+  { className, label, title, iconSize, ...props },
   ref,
 ) {
   const button = (
@@ -245,6 +258,7 @@ export const DialogCloseButton = forwardRef<HTMLButtonElement, DialogCloseButton
         <span
           className={classNames(styles["icon-button-mark"], legacyClassName("icon-button-mark"))}
           aria-hidden="true"
+          style={iconSize === undefined ? undefined : { width: iconSize, height: iconSize }}
         >
           <X size={18} strokeWidth={2} />
         </span>

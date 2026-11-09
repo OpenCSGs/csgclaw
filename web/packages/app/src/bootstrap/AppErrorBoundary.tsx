@@ -31,9 +31,7 @@ export class AppErrorBoundary extends React.Component<AppErrorBoundaryProps, App
         <div className="empty-state app-error-state">
           <strong>{t("appErrorBoundaryTitle")}</strong>
           <span>{t("appErrorBoundaryDescription")}</span>
-          <Button className="secondary-button" onClick={() => window.location.reload()}>
-            {t("appErrorBoundaryReload")}
-          </Button>
+          <Button onClick={() => window.location.reload()}>{t("appErrorBoundaryReload")}</Button>
         </div>
       );
     }

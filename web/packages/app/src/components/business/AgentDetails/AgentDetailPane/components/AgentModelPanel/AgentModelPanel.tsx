@@ -1,3 +1,4 @@
+import profileFormLayoutStyles from "@/components/business/ProfileControls/ProfileFormLayout.module.css";
 import agentDetailPaneStyles from "@/components/business/AgentDetails/AgentDetailPane/AgentDetailPane.module.css";
 import { AgentModelConfiguration } from "@/components/business/AgentModelConfiguration";
 import { AlertCircle, RefreshCw } from "lucide-react";
@@ -41,10 +42,12 @@ export function AgentModelPanel({
   return (
     <section
       id="agent-profile-model"
-      className={`profile-section ${agentDetailPaneStyles["agent-profile-scroll-target"]}`}
+      className={`profile-section ${profileFormLayoutStyles["profile-section"]} ${agentDetailPaneStyles["agent-profile-scroll-target"]}`}
     >
       <div className="profile-section-heading">
-        <div className="profile-section-title">{t("profileModelSection")}</div>
+        <div className={`profile-section-title ${profileFormLayoutStyles["profile-section-title"]}`}>
+          {t("profileModelSection")}
+        </div>
         <p className="profile-section-description">{t("profileModelSectionDescription")}</p>
       </div>
       <div className="agent-section-form">

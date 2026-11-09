@@ -1,3 +1,4 @@
+import conversationSendButtonStyles from "./ConversationSendButton.module.css";
 import conversationComposerStyles from "./ConversationComposer.module.css";
 import workingTurnStyles from "./WorkingTurn.module.css";
 import "@/components/business/ResourceTag";
@@ -17,7 +18,7 @@ import type { KeyboardEvent as ReactKeyboardEvent, RefObject, ReactNode } from "
 import { ArrowUp, RotateCcw, Square, Undo2 } from "lucide-react";
 import { CLIProxyAuthControl } from "@/components/business/ProfileControls";
 import type { DocumentPreviewRequest } from "@/components/business/DocumentPreviewPanel";
-import { Button, DismissibleAlert, Tooltip } from "@/components/ui";
+import { DismissibleInlineError, Button, Tooltip } from "@/components/ui";
 import type { CLIProxyAuthStatusMap } from "@/hooks/workspace/useCLIProxyAuthStatuses";
 import type { AgentProfileLike } from "@/models/agents";
 import type { AttachmentDraft } from "@/models/attachments";
@@ -179,7 +180,9 @@ export const ConversationComposer = memo(function ConversationComposer({
   }
 
   return (
-    <footer className={`composer${workingParticipants.length > 0 ? " has-working-status" : ""}`}>
+    <footer
+      className={`composer ${conversationComposerStyles["composer"]}${workingParticipants.length > 0 ? " has-working-status" : ""}`}
+    >
       {!resourcePicker.active && slashPickerOpen ? (
         <SlashPicker
           candidates={slashCandidates}
@@ -217,7 +220,7 @@ export const ConversationComposer = memo(function ConversationComposer({
         />
       ) : null}
       <div
-        className="composer-box"
+        className={`composer-box ${conversationComposerStyles["composer-box"]}`}
         onDragOver={(event) => {
           if (!dataTransferHasFiles(event.dataTransfer)) {
             return;
@@ -257,7 +260,7 @@ export const ConversationComposer = memo(function ConversationComposer({
           ) : null}
           <div
             ref={editorRef}
-            className={`composer-editor ${interactionDisabled ? "disabled" : ""}`}
+            className={`composer-editor ${conversationComposerStyles["composer-editor"]} ${interactionDisabled ? "disabled" : ""}`}
             contentEditable={interactionDisabled ? "false" : "true"}
             tabIndex={interactionDisabled ? -1 : 0}
             suppressContentEditableWarning={true}
@@ -376,7 +379,7 @@ export const ConversationComposer = memo(function ConversationComposer({
               <span>
                 <Button
                   variant="primary"
-                  className={`composer-send-button${isSending ? " is-stopping" : ""}`}
+                  className={`composer-send-button ${conversationSendButtonStyles["composer-send-button"]}${isSending ? " is-stopping" : ""}`}
                   aria-label={isSending ? t("stopSending") : t("send")}
                   disabled={isSending ? !onStopSend : sendDisabled}
                   iconOnly
@@ -408,13 +411,13 @@ export const ConversationComposer = memo(function ConversationComposer({
         </div>
       ) : null}
       {composerError || sendError ? (
-        <DismissibleAlert
-          className="form-error composer-error"
+        <DismissibleInlineError
+          className={"composer-error"}
           messageKey={sendError || composerError}
           closeLabel={t("close")}
         >
           <span role="alert">{sendError || composerError}</span>
-        </DismissibleAlert>
+        </DismissibleInlineError>
       ) : null}
     </footer>
   );

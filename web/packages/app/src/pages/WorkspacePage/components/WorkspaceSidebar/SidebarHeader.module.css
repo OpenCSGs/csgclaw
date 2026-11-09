@@ -1,0 +1,19 @@
+.workspace-header {
+  padding-bottom: 12px;
+}
+
+.sidebar-header {
+  padding: 18px;
+}
+
+.sidebar-header {
+  background: var(--surface);
+}
+
+.sidebar-header {
+  border-bottom: 1px solid var(--line);
+}
+
+:global(:root[data-theme="dark"]) .sidebar-header {
+  border-color: var(--line);
+}

@@ -208,6 +208,10 @@
   line-height: 1.55;
 }
 
+.mcp-server-document-hint {
+  color: var(--muted);
+}
+
 .hub-workspace-block.mcp-server-document-block {
   flex: 0 0 auto;
   grid-template-rows: auto;

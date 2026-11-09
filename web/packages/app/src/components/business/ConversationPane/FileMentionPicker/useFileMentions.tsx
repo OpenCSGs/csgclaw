@@ -1,3 +1,4 @@
+import messageLayoutStyles from "@/components/business/ConversationPane/MessageLayout.module.css";
 import mentionPickerStyles from "@/components/business/ConversationPane/MentionPicker.module.css";
 import { useRoomFileReader } from "@/components/business/ChatSidePanel/useRoomFileReader";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type RefObject } from "react";
@@ -187,7 +188,11 @@ export function useFileMentions({
     return false;
   }
   const picker = open ? (
-    <div className="mention-picker" role="listbox" aria-label={t("chatFileReference")}>
+    <div
+      className={`mention-picker ${mentionPickerStyles["mention-picker"]}`}
+      role="listbox"
+      aria-label={t("chatFileReference")}
+    >
       {candidates.map((candidate, i) => {
         const person = candidate.kind === "person";
         const label = person
@@ -224,8 +229,8 @@ export function useFileMentions({
                 <Icon size={16} />
               </span>
               <span>
-                <span className="message-author">@{label}</span>
-                <span className="conversation-preview">
+                <span className={`message-author ${messageLayoutStyles["message-author"]}`}>@{label}</span>
+                <span className={`conversation-preview ${messageLayoutStyles["conversation-preview"]}`}>
                   {person
                     ? candidate.user.id
                     : candidate.kind === "file"

@@ -102,3 +102,27 @@
 :global(.agent-detail-pane) #agent-profile-skills .agent-profile-skill-card-grid {
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr));
 }
+
+.entity-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+@media (max-width: 960px) {
+  .entity-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 960px) {
+  .entity-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .entity-grid {
+    grid-template-columns: 1fr;
+  }
+}

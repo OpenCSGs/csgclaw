@@ -162,13 +162,11 @@ describe("ProfileControls", () => {
   });
 
   it("marks first-time API keys as required when requested", () => {
-    const { container } = render(
-      <APIKeyField profile={{ api_key_set: false }} required t={t} value="" onInput={() => {}} />,
-    );
+    render(<APIKeyField profile={{ api_key_set: false }} required t={t} value="" onInput={() => {}} />);
 
     expect(screen.getByLabelText(/API key/)).toHaveAttribute("placeholder", "Enter API key");
     expect(screen.getByLabelText(/API key/)).toBeRequired();
-    expect(container.querySelector(".field-required-star")).toHaveTextContent("*");
+    expect(screen.getByText("*", { exact: true })).toHaveAttribute("aria-hidden", "true");
   });
 
   it("normalizes CLI proxy auth providers before starting login", async () => {

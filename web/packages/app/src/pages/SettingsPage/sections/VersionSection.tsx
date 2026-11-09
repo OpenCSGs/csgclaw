@@ -79,11 +79,11 @@ export function VersionSection() {
         description={t("settingsVersionDescription")}
       >
         <div className={styles.formGrid}>
-          <div className="field">
+          <div className={styles.formItem}>
             <span>{t("settingsCurrentVersion")}</span>
             <strong className={accountSectionStyles.fieldValue}>{version}</strong>
           </div>
-          <div className="field">
+          <div className={styles.formItem}>
             <span>{t("upgradeChannelLabel")}</span>
             {showUpgradeChannel ? (
               <button

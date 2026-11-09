@@ -1,3 +1,4 @@
+import messageLayoutStyles from "@/components/business/ConversationPane/MessageLayout.module.css";
 import slashPickerStyles from "./SlashPicker.module.css";
 import mentionPickerStyles from "./MentionPicker.module.css";
 import type { SkillContinuation } from "@/models/slashCommands";
@@ -74,7 +75,7 @@ export function SlashPicker({
     <div
       ref={listRef}
       onScroll={(event) => setScrollTop(event.currentTarget.scrollTop)}
-      className={`mention-picker ${slashPickerStyles["slash-picker"]} ${className}`.trim()}
+      className={`mention-picker ${mentionPickerStyles["mention-picker"]} ${slashPickerStyles["slash-picker"]} ${className}`.trim()}
       role="listbox"
     >
       {loading ? <div className={slashPickerStyles["slash-picker-empty"]}>{t("slashPickerLoading")}</div> : null}
@@ -104,7 +105,7 @@ export function SlashPicker({
             )}
           </span>
           <div className={slashPickerStyles["slash-option-copy"]}>
-            <span className="message-author">{candidate.name}</span>
+            <span className={`message-author ${messageLayoutStyles["message-author"]}`}>{candidate.name}</span>
             {candidate.description ? (
               <span className={slashPickerStyles["slash-option-description"]}>{candidate.description}</span>
             ) : null}

@@ -1,3 +1,4 @@
+import previewStyles from "@/components/business/ProfilePreview/ProfilePreview.module.css";
 import { useLayoutEffect, useState } from "react";
 import type { RefObject } from "react";
 import { X } from "lucide-react";
@@ -74,7 +75,7 @@ export function ProfilePreviewPopover({
   return (
     <aside
       ref={previewRef}
-      className="profile-preview-popover"
+      className={`profile-preview-popover ${previewStyles["profile-preview-popover"]}`}
       style={profilePreviewStyle(anchorRect, cardHeight)}
       aria-label={t("profilePreview")}
       role="dialog"
@@ -82,8 +83,8 @@ export function ProfilePreviewPopover({
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
     >
-      <div className="preview-header">
-        <div className="preview-title">{t("profilePreview")}</div>
+      <div className={`preview-header ${previewStyles["preview-header"]}`}>
+        <div className={`preview-title ${previewStyles["preview-title"]}`}>{t("profilePreview")}</div>
         <IconButton
           className="modal-close"
           icon={<X size={20} strokeWidth={2} />}

@@ -1,10 +1,26 @@
-import { Field, TextInput, Select, Button } from "@/components/ui";
+import { OperationStatus } from "./OperationStatus";
+import { useState } from "react";
+import styles from "./ConfigSettingsModal.module.css";
+import {
+  InlineError,
+  Field,
+  TextInput,
+  Select,
+  Button,
+  DialogRoot,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogCloseButton,
+  DialogBody,
+  DialogFooter,
+} from "@/components/ui";
 import type { ConfigPhase } from "@/hooks/workspace/useConfigController";
 import type { ConfigSettingsDraft } from "@/models/configSettings";
 import { configTemplateOptions, configAdvertiseBaseURLPlaceholder } from "@/models/configSettings";
 import type { TranslateFn } from "@/models/conversations";
 import type { HubTemplate } from "@/models/hubWorkspace";
-import { ModalCloseButton } from "./ModalCloseButton";
 
 type ConfigSettingsModalProps = {
   t: TranslateFn;
@@ -31,6 +47,7 @@ export function ConfigSettingsModal({
   onReload,
   onSaveAndRestart,
 }: ConfigSettingsModalProps) {
+  const [opener] = useState(() => document.activeElement);
   const restarting = configPhase === "restarting" || configPhase === "saving";
   const disabled = configBusy || configPhase === "loading";
   const statusBody =
@@ -48,81 +65,104 @@ export function ConfigSettingsModal({
   const workerTemplateOptions = configTemplateOptions(hubTemplates, "worker", configDraft.default_worker_template);
 
   return (
-    <div className="modal-backdrop">
-      <div className="modal-card config-settings-modal" onClick={(event) => event.stopPropagation()}>
-        <div className="modal-header">
+    <DialogRoot
+      open
+      onOpenChange={(open) => {
+        if (!open && !configBusy) onClose();
+      }}
+    >
+      <DialogContent
+        scrollBody
+        className={styles.dialog}
+        onInteractOutside={(event) => event.preventDefault()}
+        onEscapeKeyDown={(event) => {
+          if (configBusy) event.preventDefault();
+        }}
+        onCloseAutoFocus={(event) => {
+          event.preventDefault();
+          if (opener instanceof HTMLElement && opener.isConnected && !opener.matches(":disabled")) opener.focus();
+        }}
+      >
+        <DialogHeader>
           <div>
-            <div className="modal-title">{t("configSettingsTitle")}</div>
-            <div className="modal-subtitle">{t("configSettingsSubtitle")}</div>
+            <DialogTitle>{t("configSettingsTitle")}</DialogTitle>
+            <DialogDescription>{t("configSettingsSubtitle")}</DialogDescription>
           </div>
-          <ModalCloseButton label={t("close")} onClose={onClose} disabled={configBusy} />
-        </div>
-        <div className={`upgrade-status-card ${configPhase}`}>
-          <span className="upgrade-status-dot" aria-hidden="true"></span>
-          <p>{statusBody}</p>
-        </div>
-        <div className="config-settings-form">
-          <section className="config-settings-section">
-            <h3 className="config-settings-section-title">{t("configSettingsServerSection")}</h3>
-            <div className="config-settings-stack">
-              <Field label={t("configSettingsListenPort")}>
-                <TextInput inputMode="numeric" value={configDraft.listen_port} disabled readOnly aria-readonly="true" />
-              </Field>
-              <Field label={t("configSettingsAdvertiseBaseURL")}>
+          <DialogCloseButton label={t("close")} disabled={configBusy} />
+        </DialogHeader>
+        <DialogBody className={styles.body}>
+          <OperationStatus phase={configPhase}>{statusBody}</OperationStatus>
+          <div className={styles.form}>
+            <section className={styles.section}>
+              <h3 className={styles.sectionTitle}>{t("configSettingsServerSection")}</h3>
+              <div className={styles.stack}>
+                <Field label={t("configSettingsListenPort")}>
+                  <TextInput
+                    inputMode="numeric"
+                    value={configDraft.listen_port}
+                    disabled
+                    readOnly
+                    aria-readonly="true"
+                  />
+                </Field>
+                <Field label={t("configSettingsAdvertiseBaseURL")}>
+                  <TextInput
+                    type="url"
+                    value={configDraft.advertise_base_url}
+                    disabled={disabled}
+                    placeholder={configAdvertiseBaseURLPlaceholder(configDraft) || undefined}
+                    autoComplete="off"
+                    spellCheck={false}
+                    onInput={(event) => onDraftChange({ advertise_base_url: event.currentTarget.value.trim() })}
+                  />
+                </Field>
+              </div>
+            </section>
+            <section className={styles.section}>
+              <h3 className={styles.sectionTitle}>{t("configSettingsHubSection")}</h3>
+              <Field label={t("configSettingsHubLocalPath")}>
                 <TextInput
-                  type="url"
-                  value={configDraft.advertise_base_url}
+                  value={configDraft.hub_local_path}
                   disabled={disabled}
-                  placeholder={configAdvertiseBaseURLPlaceholder(configDraft) || undefined}
                   autoComplete="off"
                   spellCheck={false}
-                  onInput={(event) => onDraftChange({ advertise_base_url: event.currentTarget.value.trim() })}
+                  onInput={(event) => onDraftChange({ hub_local_path: event.currentTarget.value })}
                 />
               </Field>
-            </div>
-          </section>
-          <section className="config-settings-section">
-            <h3 className="config-settings-section-title">{t("configSettingsHubSection")}</h3>
-            <Field label={t("configSettingsHubLocalPath")}>
-              <TextInput
-                value={configDraft.hub_local_path}
-                disabled={disabled}
-                autoComplete="off"
-                spellCheck={false}
-                onInput={(event) => onDraftChange({ hub_local_path: event.currentTarget.value })}
-              />
-            </Field>
-          </section>
-          <section className="config-settings-section">
-            <h3 className="config-settings-section-title">{t("configSettingsBootstrapSection")}</h3>
-            <div className="config-settings-grid">
-              <Field label={t("configSettingsManagerTemplate")}>
-                <TextInput value={managerTemplateLabel} disabled readOnly aria-readonly="true" />
-              </Field>
-              <Field label={t("configSettingsWorkerTemplate")}>
-                <Select
-                  value={configDraft.default_worker_template}
-                  disabled={disabled || workerTemplateOptions.length === 0}
-                  options={workerTemplateOptions}
-                  onValueChange={(default_worker_template) => onDraftChange({ default_worker_template })}
+            </section>
+            <section className={styles.section}>
+              <h3 className={styles.sectionTitle}>{t("configSettingsBootstrapSection")}</h3>
+              <div className={styles.grid}>
+                <Field label={t("configSettingsManagerTemplate")}>
+                  <TextInput value={managerTemplateLabel} disabled readOnly aria-readonly="true" />
+                </Field>
+                <Field label={t("configSettingsWorkerTemplate")}>
+                  <Select
+                    value={configDraft.default_worker_template}
+                    disabled={disabled || workerTemplateOptions.length === 0}
+                    options={workerTemplateOptions}
+                    onValueChange={(default_worker_template) => onDraftChange({ default_worker_template })}
+                  />
+                </Field>
+              </div>
+            </section>
+            <section className={styles.section}>
+              <h3 className={styles.sectionTitle}>{t("configSettingsOtherSection")}</h3>
+              <Field label={t("configSettingsShowUpgrade")}>
+                <TextInput
+                  value={
+                    configDraft.show_upgrade ? t("configSettingsShowUpgradeOn") : t("configSettingsShowUpgradeOff")
+                  }
+                  disabled
+                  readOnly
+                  aria-readonly="true"
                 />
               </Field>
-            </div>
-          </section>
-          <section className="config-settings-section">
-            <h3 className="config-settings-section-title">{t("configSettingsOtherSection")}</h3>
-            <Field label={t("configSettingsShowUpgrade")}>
-              <TextInput
-                value={configDraft.show_upgrade ? t("configSettingsShowUpgradeOn") : t("configSettingsShowUpgradeOff")}
-                disabled
-                readOnly
-                aria-readonly="true"
-              />
-            </Field>
-          </section>
-        </div>
-        {configError ? <div className="form-error">{configError}</div> : null}
-        <div className="modal-actions">
+            </section>
+          </div>
+          {configError ? <InlineError>{configError}</InlineError> : null}
+        </DialogBody>
+        <DialogFooter>
           {configPhase === "done" ? (
             <Button variant="primary" size="md" onClick={onReload}>
               {t("upgradeRefresh")}
@@ -141,8 +181,8 @@ export function ConfigSettingsModal({
               </Button>
             </>
           )}
-        </div>
-      </div>
-    </div>
+        </DialogFooter>
+      </DialogContent>
+    </DialogRoot>
   );
 }

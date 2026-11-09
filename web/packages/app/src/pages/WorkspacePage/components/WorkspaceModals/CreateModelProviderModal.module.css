@@ -1,10 +1,7 @@
 .dialog {
   width: min(640px, calc(100vw - 24px));
   max-height: min(840px, calc(100dvh - 32px));
-  display: flex;
-  flex-direction: column;
   padding: 0;
-  overflow: hidden;
 }
 .header {
   display: flex;
@@ -19,11 +16,9 @@
 }
 .body {
   padding: 20px 24px;
-  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 16px;
-  min-height: 0;
 }
 .brands {
   display: grid;

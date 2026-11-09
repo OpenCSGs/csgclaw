@@ -1,0 +1,417 @@
+.profile-preview-popover {
+  position: fixed;
+  z-index: var(--z-page-overlay);
+  display: grid;
+  align-content: start;
+  max-height: calc(100vh - 24px);
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  background: color-mix(in oklab, var(--panel) 96%, black);
+  backdrop-filter: blur(18px);
+  animation: drawer-in 180ms ease both;
+}
+
+.preview-header,
+.preview-hero,
+.preview-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.preview-header {
+  justify-content: space-between;
+}
+
+.preview-title {
+  letter-spacing: 0.08em;
+}
+
+.preview-hero {
+  align-items: center;
+}
+
+.preview-identity {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.preview-meta,
+.preview-description {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.preview-description {
+  margin: 0;
+}
+
+.preview-fields {
+  display: grid;
+}
+
+.preview-actions {
+  flex-wrap: wrap;
+}
+
+@media (max-width: 640px) {
+  .profile-preview-popover {
+    max-height: calc(100vh - 16px);
+    padding: 16px;
+    border-radius: 18px;
+  }
+}
+
+@media (max-width: 640px) {
+  .preview-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.profile-preview-popover {
+  border-radius: 8px;
+  border-color: var(--line);
+  background:
+    linear-gradient(180deg, oklch(1 0 0 / 0.04), transparent),
+    color-mix(in oklab, var(--panel) 94%, oklch(0.04 0.006 82));
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(18px);
+}
+
+:global(:root[data-theme="light"]) .profile-preview-popover {
+  background: color-mix(in oklab, var(--panel) 96%, oklch(1 0 0));
+}
+
+.preview-title {
+  color: var(--muted);
+  letter-spacing: 0.1em;
+}
+
+.profile-preview-popover,
+:global(:root[data-theme="light"]) .profile-preview-popover {
+  border-radius: var(--radius-xl);
+  border-color: var(--line);
+  background: var(--panel);
+  box-shadow: var(--shadow-md);
+  backdrop-filter: none;
+}
+
+.preview-title {
+  color: var(--muted);
+  letter-spacing: 0;
+}
+
+.profile-preview-popover {
+  font-family: var(--font-sans);
+}
+
+.preview-name {
+  font-family: var(--font-display);
+}
+
+:global(:root[data-theme="dark"]) .profile-preview-popover {
+  border-color: var(--line);
+  background: var(--panel);
+  color: var(--text);
+}
+
+:global(:root[data-theme="dark"]) .preview-name {
+  color: var(--text);
+}
+
+:global(:root[data-theme="dark"]) .preview-title {
+  color: var(--muted);
+}
+
+.profile-preview-popover {
+  width: min(320px, calc(100vw - 24px));
+  gap: 10px;
+  padding: 12px;
+  border-radius: 12px;
+  box-shadow: var(--shadow-md);
+}
+
+.preview-header {
+  align-items: center;
+}
+
+.preview-title {
+  color: var(--gray-600);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 16px;
+  text-transform: uppercase;
+}
+
+.preview-header :global(.modal-close) {
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  min-height: 28px;
+  padding: 0;
+  border-radius: 8px;
+}
+
+.preview-header :global(.modal-close-icon),
+.preview-header :global(.modal-close-icon) svg {
+  width: 18px;
+  height: 18px;
+}
+
+.preview-hero {
+  gap: 10px;
+  padding: 2px 0 10px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+}
+
+.preview-avatar {
+  width: 46px;
+  height: 46px;
+  flex-basis: 46px;
+  border-radius: 50%;
+  border: none;
+  background: var(--avatar-default-bg);
+  color: var(--avatar-default-fg);
+  font-weight: var(--avatar-default-weight);
+  overflow: hidden;
+}
+
+.preview-avatar :global(.svg-icon),
+.preview-avatar svg {
+  width: 26px;
+  height: 26px;
+}
+
+.preview-avatar :global(.agent-avatar-image) {
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.preview-name-line {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.preview-name {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--gray-900);
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 22px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.preview-presence {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--gray-500);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.preview-presence-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--gray-300);
+}
+
+.preview-presence:global(.online) .preview-presence-dot {
+  background: var(--success-500);
+  box-shadow: 0 0 0 2px var(--success-50);
+}
+
+.preview-meta {
+  color: var(--gray-600);
+  font-size: 12px;
+  line-height: 18px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.preview-fields {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
+  padding: 2px 0;
+}
+
+.preview-fields :global(.entity-field) {
+  grid-template-columns: 76px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+  padding: 4px 2px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.preview-fields :global(.entity-field) span {
+  font-size: 10px;
+  line-height: 16px;
+  letter-spacing: 0.06em;
+}
+
+.preview-fields :global(.entity-field) strong {
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.profile-preview-popover :global(.entity-badge-row) {
+  gap: 5px;
+}
+
+.preview-actions {
+  gap: 8px;
+  justify-content: stretch;
+  padding-top: 2px;
+}
+
+.preview-actions :global(.btn) {
+  flex: 1 1 0;
+  min-height: 32px;
+  min-width: 0;
+  justify-content: center;
+}
+
+:global(:root[data-theme="dark"]) .preview-title,
+:global(:root[data-theme="dark"]) .preview-meta {
+  color: var(--muted);
+}
+
+:global(:root[data-theme="dark"]) .preview-name {
+  color: var(--text);
+}
+
+:global(:root[data-theme="dark"]) .preview-hero {
+  background: transparent;
+}
+
+:global(:root[data-theme="dark"]) .preview-presence:global(.online) .preview-presence-dot {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--success-500) 18%, transparent);
+}
+
+.profile-preview-popover .preview-header :global(.modal-close):where(:not([data-csg-control])) {
+  width: 34px;
+  height: 34px;
+  min-width: 34px;
+  min-height: 34px;
+  padding: 0;
+  margin: 0 2px;
+  border: 0;
+  background: transparent;
+  color: var(--gray-500);
+  box-shadow: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transform: none;
+}
+
+.profile-preview-popover .preview-header :global(.modal-close-icon),
+.profile-preview-popover .preview-header :global(.modal-close-icon) svg {
+  width: 20px;
+  height: 20px;
+}
+
+.profile-preview-popover .preview-header :global(.modal-close):where(:not([data-csg-control])):hover:not(:disabled) {
+  border: 0;
+  background: transparent;
+  color: var(--gray-700);
+  box-shadow: none;
+  transform: none;
+}
+
+.profile-preview-popover .preview-header :global(.modal-close):where(:not([data-csg-control])):active:not(:disabled) {
+  border: 0;
+  background: transparent;
+  color: var(--gray-700);
+  box-shadow: none;
+  transform: none;
+}
+
+.profile-preview-popover .preview-header :global(.modal-close):where(:not([data-csg-control])):focus-visible {
+  border: 0;
+  background: transparent;
+  color: var(--gray-700);
+  box-shadow: 0 0 0 var(--space-1) color-mix(in srgb, var(--gray-400) 14%, transparent);
+}
+
+.profile-preview-popover .preview-header :global(.modal-close):where(:not([data-csg-control])):disabled,
+.profile-preview-popover .preview-header :global(.modal-close):where(:not([data-csg-control]))[disabled] {
+  border: 0;
+  background: transparent;
+  color: var(--gray-400);
+  box-shadow: none;
+  opacity: 1;
+  transform: none;
+}
+
+:global(:root[data-theme="dark"])
+  .profile-preview-popover
+  .preview-header
+  :global(.modal-close):where(:not([data-csg-control])) {
+  border: 0;
+  background: transparent;
+  color: var(--gray-300);
+  box-shadow: none;
+}
+
+:global(:root[data-theme="dark"])
+  .profile-preview-popover
+  .preview-header
+  :global(.modal-close):where(:not([data-csg-control])):hover:not(:disabled),
+:global(:root[data-theme="dark"])
+  .profile-preview-popover
+  .preview-header
+  :global(.modal-close):where(:not([data-csg-control])):active:not(:disabled) {
+  border: 0;
+  background: transparent;
+  color: var(--white);
+  box-shadow: none;
+}
+
+:global(:root[data-theme="dark"])
+  .profile-preview-popover
+  .preview-header
+  :global(.modal-close):where(:not([data-csg-control])):focus-visible {
+  border: 0;
+  background: transparent;
+  color: var(--gray-300);
+  box-shadow: 0 0 0 var(--space-1) color-mix(in srgb, var(--gray-400) 16%, transparent);
+}
+
+@keyframes drawer-in {
+  from {
+    opacity: 0;
+    transform: translateX(18px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.entity-badge-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { ComponentProps } from "react";
 import { CalendarClock, Pencil, Play, Trash2 } from "lucide-react";
 import {
+  InlineError,
   Button,
   Tooltip,
   type ButtonVariant,
@@ -636,15 +637,13 @@ export function TasksView({
 
   return (
     <section className={classNames("tasks-pane", styles.tasksPane)}>
-      {error ? <div className="form-error">{error}</div> : null}
-      {taskActionError ? (
-        <div className={classNames("form-error", styles.tasksActionError)}>{taskActionError}</div>
-      ) : null}
+      {error ? <InlineError>{error}</InlineError> : null}
+      {taskActionError ? <InlineError className={styles.tasksActionError}>{taskActionError}</InlineError> : null}
       {scheduledTaskActionError ? (
-        <div className={classNames("form-error", styles.tasksActionError)}>{scheduledTaskActionError}</div>
+        <InlineError className={styles.tasksActionError}>{scheduledTaskActionError}</InlineError>
       ) : null}
       {conversationOpenError ? (
-        <div className={classNames("form-error", styles.tasksActionError)}>{conversationOpenError}</div>
+        <InlineError className={styles.tasksActionError}>{conversationOpenError}</InlineError>
       ) : null}
       {!error && activeView === "scheduled" ? (
         <div className={styles.tasksBoardWorkbench} aria-busy={loading}>
@@ -951,7 +950,7 @@ export function TasksView({
               onClearError={clearEditScheduledFieldError}
             />
             {editScheduledTaskError ? (
-              <div className={classNames("form-error", taskFormStyles.taskCreateError)}>{editScheduledTaskError}</div>
+              <InlineError className={taskFormStyles.taskCreateError}>{editScheduledTaskError}</InlineError>
             ) : null}
           </DialogBody>
           <DialogFooter>

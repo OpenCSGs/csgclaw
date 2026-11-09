@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useId, useRef, useState } from "react";
 import { Button } from "@/components/ui";
-import { LongMessageCollapseIcon, LongMessageExpandIcon } from "@/components/ui/Icons";
+import { LongMessageCollapseIcon, LongMessageExpandIcon } from "@/components/business/Icons";
 import { classNames } from "@/shared/lib/classNames";
 import type { TranslateFn } from "@/models/conversations";
 import { prepareMermaidBlocks, renderMermaidBlocks } from "./mermaid";

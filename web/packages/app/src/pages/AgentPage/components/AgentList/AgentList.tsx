@@ -1,3 +1,4 @@
+import agentListStyles from "./AgentList.module.css";
 import { SHOW_AGENT_LIFECYCLE_ACTIONS } from "@/shared/constants/agents";
 import {
   agentProfileConfig,
@@ -15,8 +16,8 @@ import {
   isAgentUpgradeNeeded,
   isNotificationBotAgent,
 } from "@/models/agents";
-import { AgentIcon, PlayIcon, StopIcon, TrashIcon, WrenchIcon } from "@/components/ui/Icons";
-import { Button, Tooltip } from "@/components/ui";
+import { AgentIcon, PlayIcon, StopIcon, TrashIcon, WrenchIcon } from "@/components/business/Icons";
+import { IconButton, StatusBadge, InlineError, Button, Tooltip } from "@/components/ui";
 import { AgentAvatarContent } from "@/components/business/AgentAvatar";
 import { avatarFallbackText } from "@/shared/avatar";
 import { providerNameForProviderID } from "@/models/modelProviders";
@@ -63,22 +64,26 @@ export function AgentSection({
 }: AgentSectionProps) {
   const items = [manager, ...workers].filter((item): item is AgentLike => Boolean(item));
   return (
-    <section className="agent-section">
-      <div className="agent-section-head">
+    <section className={`agent-section ${agentListStyles["agent-section"]}`}>
+      <div className={`agent-section-head ${agentListStyles["agent-section-head"]}`}>
         <div>
-          <div className="section-label">
+          <div className={`section-label ${agentListStyles["section-label"]}`}>
             {title} {items.length}
           </div>
         </div>
         <Tooltip content={t("createAgent")}>
-          <Button className="agent-add-button" aria-label={t("createAgent")} onClick={onCreate}>
+          <Button
+            className={`agent-add-button ${agentListStyles["agent-add-button"]}`}
+            aria-label={t("createAgent")}
+            onClick={onCreate}
+          >
             <span aria-hidden="true">
               <AgentIcon />
             </span>
           </Button>
         </Tooltip>
       </div>
-      <div className="agent-list">
+      <div className={`agent-list ${agentListStyles["agent-list"]}`}>
         {items.length ? (
           items.map((item) => (
             <AgentRow
@@ -97,13 +102,13 @@ export function AgentSection({
             />
           ))
         ) : (
-          <div className="agent-empty">{t("noAgents")}</div>
+          <div className="agent-empty px-2.5 py-2 text-[13px] text-[var(--muted)]">{t("noAgents")}</div>
         )}
       </div>
       {error ? (
-        <div className="form-error agent-error whitespace-pre-wrap break-words" role="alert">
+        <InlineError className="agent-error whitespace-pre-wrap break-words text-xs" role="alert">
           {error}
-        </div>
+        </InlineError>
       ) : null}
     </section>
   );
@@ -150,50 +155,80 @@ export function AgentRow({
   const provider = item.provider || profile?.provider || providerNameForProviderID(profile?.model_provider_id || "");
   const busyPrefix = `${item.id}:`;
   return (
-    <div className={`agent-row ${isManager ? "manager" : ""} ${incomplete ? "incomplete" : ""}`.trim()}>
-      <div className="agent-avatar" aria-hidden="true">
+    <div
+      className={`agent-row ${agentListStyles["agent-row"]} ${isManager ? "manager" : ""} ${incomplete ? "incomplete" : ""}`.trim()}
+    >
+      <div className={`agent-avatar ${agentListStyles["agent-avatar"]}`} aria-hidden="true">
         <AgentAvatarContent avatar={item.avatar} fallback={avatarFallbackText(item.avatar, item.name, item.id)} />
       </div>
-      <div className="agent-row-main">
-        <div className="agent-row-top">
-          <span className="agent-name truncate">{item.name}</span>
-          <span className="agent-row-statuses">
-            <span className={`agent-status ${running ? "running" : ""}`}>{statusLabel}</span>
-            {runtimeStatusDetail ? <span className="agent-runtime-status-detail">{runtimeStatusDetail}</span> : null}
+      <div className={`agent-row-main ${agentListStyles["agent-row-main"]}`}>
+        <div className={`agent-row-top ${agentListStyles["agent-row-top"]}`}>
+          <span className={`agent-name ${agentListStyles["agent-name"]} truncate`}>{item.name}</span>
+          <span className={`agent-row-statuses ${agentListStyles["agent-row-statuses"]}`}>
+            <span className={`agent-status ${agentListStyles["agent-status"]} ${running ? "running" : ""}`}>
+              {statusLabel}
+            </span>
+            {runtimeStatusDetail ? (
+              <span className={`agent-runtime-status-detail ${agentListStyles["agent-runtime-status-detail"]}`}>
+                {runtimeStatusDetail}
+              </span>
+            ) : null}
           </span>
         </div>
-        <div className="agent-meta truncate">
+        <div className={`agent-meta ${agentListStyles["agent-meta"]} truncate`}>
           {formatProviderLabel(provider)} · {agentModelID(item)}
         </div>
-        <div className="agent-badges">
-          <span className={`agent-badge ${incomplete ? "warn" : "ready"}`}>
+        <div className={`agent-badges ${agentListStyles["agent-badges"]}`}>
+          <StatusBadge
+            kind="compact"
+            tone={incomplete ? "warning" : "positive"}
+            className={`${incomplete ? "warn" : "ready"}`}
+          >
             {incomplete ? t("profileIncompleteBadge") : t("profileCompleteBadge")}
-          </span>
-          {gatewayDegraded ? <span className="agent-badge warn">{agentGatewayUnavailableLabel(item, t)}</span> : null}
-          {upgradeNeeded ? <span className="agent-badge warn">{t("profileUpgradeRequired")}</span> : null}
-          {restartNeeded ? <span className="agent-badge warn">{t("profileRestartRequired")}</span> : null}
+          </StatusBadge>
+          {gatewayDegraded ? (
+            <StatusBadge kind="compact" tone="warning" className={"warn"}>
+              {agentGatewayUnavailableLabel(item, t)}
+            </StatusBadge>
+          ) : null}
+          {upgradeNeeded ? (
+            <StatusBadge kind="compact" tone="warning" className={"warn"}>
+              {t("profileUpgradeRequired")}
+            </StatusBadge>
+          ) : null}
+          {restartNeeded ? (
+            <StatusBadge kind="compact" tone="warning" className={"warn"}>
+              {t("profileRestartRequired")}
+            </StatusBadge>
+          ) : null}
         </div>
       </div>
-      <div className="agent-actions">
+      <div className={`agent-actions ${agentListStyles["agent-actions"]}`}>
         <Tooltip content={t("editProfile")}>
-          <Button className="agent-icon-button" aria-label={t("editProfile")} onClick={() => onEdit(item)}>
-            <span aria-hidden="true">
-              <WrenchIcon />
-            </span>
-          </Button>
+          <IconButton
+            icon={<WrenchIcon />}
+            iconSize={16}
+            size="sm"
+            markClassName="icon-button-mark"
+            className={agentListStyles["agent-action"]}
+            label={t("editProfile")}
+            onClick={() => onEdit(item)}
+          />
         </Tooltip>
         {SHOW_AGENT_LIFECYCLE_ACTIONS || canStartAgent(item) ? (
           <>
             <Tooltip content={lifecycleRunning ? t("agentStop") : t("agentStart")}>
               <span>
-                <Button
-                  className="agent-icon-button"
-                  aria-label={lifecycleRunning ? t("agentStop") : t("agentStart")}
+                <IconButton
+                  icon={lifecycleRunning ? <StopIcon /> : <PlayIcon />}
+                  iconSize={16}
+                  size="sm"
+                  markClassName="icon-button-mark"
+                  className={agentListStyles["agent-action"]}
+                  label={lifecycleRunning ? t("agentStop") : t("agentStart")}
                   disabled={busyKey.startsWith(busyPrefix) || incomplete}
                   onClick={() => (lifecycleRunning ? onStop(item) : onStart(item))}
-                >
-                  <span aria-hidden="true">{lifecycleRunning ? <StopIcon /> : <PlayIcon />}</span>
-                </Button>
+                />
               </span>
             </Tooltip>
           </>
@@ -202,7 +237,7 @@ export function AgentRow({
           <>
             {onUpgrade && upgradeNeeded ? (
               <Button
-                className="agent-action-text"
+                className={`agent-action-text ${agentListStyles["agent-action-text"]}`}
                 disabled={busyKey.startsWith(busyPrefix) || incomplete}
                 onClick={() => onUpgrade(item)}
               >
@@ -211,7 +246,7 @@ export function AgentRow({
             ) : null}
             <Button
               variant="outlineDanger"
-              className="agent-action-text danger"
+              className={`agent-action-text ${agentListStyles["agent-action-text"]} danger`}
               disabled={busyKey.startsWith(busyPrefix) || incomplete}
               onClick={() => onRecreate(item)}
             >
@@ -221,7 +256,7 @@ export function AgentRow({
         ) : null}
         {SHOW_AGENT_LIFECYCLE_ACTIONS && activeRoom && !isManager ? (
           <Button
-            className="agent-action-text"
+            className={`agent-action-text ${agentListStyles["agent-action-text"]}`}
             disabled={busyKey.startsWith(busyPrefix)}
             onClick={() => onInvite(item)}
           >
@@ -231,17 +266,17 @@ export function AgentRow({
         {!isManager ? (
           <Tooltip content={t("agentDelete")}>
             <span>
-              <Button
+              <IconButton
+                icon={<TrashIcon />}
+                iconSize={16}
+                size="sm"
+                markClassName="icon-button-mark"
                 variant="outlineDanger"
-                className="agent-icon-button danger"
-                aria-label={t("agentDelete")}
+                className={agentListStyles["agent-action"]}
+                label={t("agentDelete")}
                 disabled={busyKey.startsWith(busyPrefix)}
                 onClick={() => onDelete(item)}
-              >
-                <span aria-hidden="true">
-                  <TrashIcon />
-                </span>
-              </Button>
+              />
             </span>
           </Tooltip>
         ) : null}

@@ -1,5 +1,5 @@
 import profileControlsStyles from "./ProfileControls.module.css";
-import { Select } from "@/components/ui";
+import { Field, Select } from "@/components/ui";
 import { normalizeReasoningEffort, reasoningSteps } from "@/models/reasoning";
 import type { TranslateFn } from "@/models/conversations";
 import { reasoningEffortLabel } from "./reasoningLabels";
@@ -13,8 +13,7 @@ export type ReasoningControlsProps = {
 
 export function ReasoningControls({ onChange, t, value, supportedEfforts }: ReasoningControlsProps) {
   return (
-    <div className={`field ${profileControlsStyles["reasoning-controls-field"]}`}>
-      <span>{t("profileReasoning")}</span>
+    <Field label={t("profileReasoning")} className={profileControlsStyles["reasoning-controls-field"]}>
       <Select
         value={normalizeReasoningEffort(value)}
         onValueChange={onChange}
@@ -24,6 +23,6 @@ export function ReasoningControls({ onChange, t, value, supportedEfforts }: Reas
           label: reasoningEffortLabel(t, option),
         }))}
       />
-    </div>
+    </Field>
   );
 }

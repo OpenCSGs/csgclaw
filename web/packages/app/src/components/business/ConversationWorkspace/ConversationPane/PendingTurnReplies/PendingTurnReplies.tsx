@@ -1,3 +1,5 @@
+import avatarLayoutStyles from "@/components/business/AgentAvatar/AvatarLayout.module.css";
+import messageLayoutStyles from "@/components/business/ConversationPane/MessageLayout.module.css";
 import { AgentAvatarContent } from "@/components/business/AgentAvatar";
 import { WorkingTurnStatus } from "@/components/business/ConversationPane/WorkingTurnStatus";
 import type { ConversationWorkingParticipant, VoidOrPromise } from "@/components/business/ConversationPane";
@@ -36,17 +38,17 @@ export function PendingTurnReplies({
       : avatarFallbackText(avatar, participant.name, participant.id);
     return (
       <div
-        className="message-row"
+        className={`message-row ${messageLayoutStyles["message-row"]}`}
         data-work-lease-id={participant.leaseID || participant.id}
         key={participant.leaseID || participant.id}
       >
-        <span className={`avatar ${styles.avatar}`} aria-hidden="true">
+        <span className={`avatar ${avatarLayoutStyles["avatar"]} ${styles.avatar}`} aria-hidden="true">
           <AgentAvatarContent avatar={avatar} fallback={fallback} />
           <span className="message-avatar-status online" />
         </span>
-        <div className="message-card">
-          <div className="message-meta">
-            <span className="message-author">{participant.name}</span>
+        <div className={`message-card ${messageLayoutStyles["message-card"]}`}>
+          <div className={`message-meta ${messageLayoutStyles["message-meta"]}`}>
+            <span className={`message-author ${messageLayoutStyles["message-author"]}`}>{participant.name}</span>
           </div>
           <div className={styles.status} role="status" aria-live="polite">
             <WorkingTurnStatus

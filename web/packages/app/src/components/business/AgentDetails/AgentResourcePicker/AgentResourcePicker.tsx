@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { Plus } from "lucide-react";
-import { Button, Checkbox, DialogRoot, SegmentedControl, TextInput } from "@/components/ui";
+import { InlineError, Button, Checkbox, DialogRoot, SegmentedControl, TextInput } from "@/components/ui";
 import { SkillUploadDialog } from "@/components/business/SkillUploadDialog";
 import { MCPServerCreateDialog } from "@/components/business/HubDetailPane";
 import { useAgentResourcePicker, type AgentResourcePickerKind } from "@/hooks/workspace/useAgentResourcePicker";
@@ -9,7 +9,7 @@ import { knowledgeBaseMCPServer } from "@/models/knowledgeBases";
 import { isRemoteMCPInstalled, mcpManagedKnowledgeBaseSource, mcpServerDisplayName } from "@/models/mcp";
 import type { SkillSummary } from "@/models/skillhub";
 import { ResourceFeaturedIcon } from "@/components/business/ResourceListCard";
-import { SidebarMcpIcon, SidebarPuzzlePiece02Icon } from "@/components/ui/Icons";
+import { SidebarMcpIcon, SidebarPuzzlePiece02Icon } from "@/components/business/Icons";
 import { SkillMarketPreview } from "./SkillMarketPreview";
 import type { TranslateFn } from "@/models/conversations";
 import { localizeAPIError } from "@/shared/i18n";
@@ -231,7 +231,7 @@ export function AgentResourcePicker({
             />
           ) : null}
           {failure ? (
-            <div className="form-error" role="alert">
+            <InlineError role="alert">
               {failure}
               {loadError ? (
                 <Button
@@ -244,7 +244,7 @@ export function AgentResourcePicker({
                   {t("retry")}
                 </Button>
               ) : null}
-            </div>
+            </InlineError>
           ) : null}
           <ResourcePickerList>
             {!picker.market ? (

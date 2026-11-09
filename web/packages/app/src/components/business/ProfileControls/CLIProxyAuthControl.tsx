@@ -1,3 +1,4 @@
+import cLIProxyAuthControlStyles from "./CLIProxyAuthControl.module.css";
 import { formatProviderLabel, normalizeAuthProviderName, providerNeedsAuth } from "@/models/agents";
 import { Button } from "@/components/ui";
 import type { CLIProxyAuthStatus, Translator } from "./types";
@@ -20,11 +21,13 @@ export function CLIProxyAuthControl({ provider, t, status, busy, onLogin }: CLIP
     ? `${formatProviderLabel(normalized)} ${t("authConnected")}`
     : status?.message || `${formatProviderLabel(normalized)} ${t("authMissing")}`;
   return (
-    <div className={`auth-status-row ${connected ? "connected" : "missing"}`}>
+    <div
+      className={`auth-status-row ${cLIProxyAuthControlStyles["auth-status-row"]} ${connected ? "connected" : "missing"}`}
+    >
       <span className="auth-status-dot" aria-hidden="true"></span>
       <span className="auth-status-message">{message}</span>
       {connected ? null : (
-        <Button className="secondary-button compact" disabled={busy || !onLogin} onClick={() => onLogin?.(normalized)}>
+        <Button size="sm" disabled={busy || !onLogin} onClick={() => onLogin?.(normalized)}>
           {busy ? t("authConnecting") : `${t("authConnect")} ${formatProviderLabel(normalized)}`}
         </Button>
       )}

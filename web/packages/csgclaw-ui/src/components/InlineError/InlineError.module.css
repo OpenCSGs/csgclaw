@@ -1,0 +1,10 @@
+.error {
+  margin-top: 14px;
+  border: 1px solid color-mix(in srgb, var(--csgclaw-ui-error-600) 28%, transparent);
+  border-radius: var(--csgclaw-ui-radius-md);
+  padding: 10px 12px;
+  background: var(--csgclaw-ui-error-50);
+  color: var(--csgclaw-ui-danger);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}

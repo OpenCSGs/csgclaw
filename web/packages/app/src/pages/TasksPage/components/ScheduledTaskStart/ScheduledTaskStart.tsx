@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { CalendarClock } from "lucide-react";
-import { Button, PopoverAnchor, PopoverContent, PopoverRoot, TextArea } from "@/components/ui";
+import { InlineError, Button, PopoverAnchor, PopoverContent, PopoverRoot, TextArea } from "@/components/ui";
 import { AgentAvatarContent } from "@/components/business/AgentAvatar";
 import type { AgentLike } from "@/models/agents";
 import type { TranslateFn } from "@/models/conversations";
@@ -178,9 +178,9 @@ export function ScheduledTaskStart({ agents, t, busy = false, error = "", focusT
           </div>
         </div>
         {error ? (
-          <p role="alert" className="form-error">
+          <InlineError as="p" role="alert">
             {error}
-          </p>
+          </InlineError>
         ) : null}
         <ul className={styles.tips}>
           <li>{t("scheduledTaskTextTipExecutor")}</li>

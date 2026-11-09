@@ -1,3 +1,4 @@
+import { PanelEmptyState } from "@/components/business/PanelEmptyState";
 import type { ConversationPaneProps } from "@/components/business/ConversationPane";
 import { ConversationPane } from "../ConversationPane";
 
@@ -9,14 +10,7 @@ type ConversationViewProps = Partial<Omit<ConversationPaneProps, "conversation" 
 export function ConversationView({ conversation, t, ...props }: ConversationViewProps) {
   const translate = t ?? ((key: string) => key);
   if (!conversation) {
-    return (
-      <div className="empty-state shell-empty-state">
-        <span className="rich-empty-mark" aria-hidden="true">
-          {">"}
-        </span>
-        <strong>{translate("emptyConversation")}</strong>
-      </div>
-    );
+    return <PanelEmptyState title={translate("emptyConversation")} mark={">"} />;
   }
 
   return (

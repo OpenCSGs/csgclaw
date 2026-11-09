@@ -1,5 +1,6 @@
 import type { Dispatch, SetStateAction } from "react";
 import {
+  InlineError,
   Field,
   TextInput,
   TextArea,
@@ -98,7 +99,7 @@ export function TaskCreateDialog({
               />
             </Field>
           </div>
-          {error ? <div className={classNames("form-error", taskFormStyles.taskCreateError)}>{error}</div> : null}
+          {error ? <InlineError className={taskFormStyles.taskCreateError}>{error}</InlineError> : null}
         </DialogBody>
         <DialogFooter>
           <Button variant="secondaryGray" size="md" onClick={onClose}>

@@ -3,7 +3,7 @@ import { fetchRemoteKnowledgeBaseMCPConfig } from "@/api/knowledgeBases";
 import { workspaceQueryKeys } from "@/hooks/workspace/workspaceQueries";
 import { useEffect, useMemo, useState } from "react";
 import { BookOpen, LoaderCircle, LogIn, Plus, RefreshCw } from "lucide-react";
-import { Button, DismissibleAlert, LinkButton, Tooltip } from "@/components/ui";
+import { DismissibleInlineError, InlineError, Button, LinkButton, Tooltip } from "@/components/ui";
 import { ResourceList, ResourceListCard } from "@/components/business/ResourceListCard";
 import { useWorkspaceControllerContext } from "@/hooks/workspace";
 import { isAuthenticated } from "@/models/auth";
@@ -88,9 +88,9 @@ export function KnowledgeBasesSection() {
       description={t("iaSettingsCardKnowledgeHint")}
     >
       {connectFailure && !detailTarget ? (
-        <DismissibleAlert className="form-error" messageKey={connectFailure.message} closeLabel={t("close")}>
+        <DismissibleInlineError messageKey={connectFailure.message} closeLabel={t("close")}>
           <span role="alert">{connectFailure.message}</span>
-        </DismissibleAlert>
+        </DismissibleInlineError>
       ) : null}
       <ResourceFilterTabs label={t("iaSettingsCardKnowledge")} tabs={tabs} value={tab} onChange={setTab} />
 
@@ -125,9 +125,9 @@ export function KnowledgeBasesSection() {
       ) : tab === "installed" ? (
         <>
           {knowledgeBases?.loadError ? (
-            <p className="form-error" role="alert">
+            <InlineError as="p" role="alert">
               {knowledgeBases.loadError}
-            </p>
+            </InlineError>
           ) : null}
           {knowledgeBases?.loading && installed.length === 0 ? (
             <p className={resourceSettingsStyles.listNotice}>
@@ -249,9 +249,9 @@ function MarketPane({
   if (knowledgeBases?.discoveryLoadError) {
     return (
       <div className={resourceSettingsStyles.listNotice}>
-        <span className="form-error" role="alert">
+        <InlineError as="span" role="alert">
           {knowledgeBases.discoveryLoadError}
-        </span>
+        </InlineError>
         <Button size="sm" variant="secondaryGray" onClick={onRetry}>
           <RefreshCw size={14} strokeWidth={2} aria-hidden="true" />
           {t("resourcesSkillRemoteRefresh")}

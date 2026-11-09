@@ -1,7 +1,7 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { BookOpen, Boxes, Wrench } from "lucide-react";
 import { Button, LinkButton, TextInput } from "@/components/ui";
-import { ConnectorGitLabIcon } from "@/components/ui/Icons";
+import { ConnectorGitLabIcon } from "@/components/business/Icons";
 import { useConversationResources } from "@/hooks/workspace/useConversationResources";
 import { isComposerKeyboardEventComposing } from "@/models/composer";
 import { maxResourceReferences, resourceKey, type ResourceSnapshot } from "@/models/conversationResources";

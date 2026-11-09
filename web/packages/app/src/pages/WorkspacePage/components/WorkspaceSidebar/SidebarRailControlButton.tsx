@@ -1,5 +1,5 @@
 import { IconButton } from "@/components/ui";
-import { SidebarLayoutLeftIcon, SidebarLayoutRightIcon } from "@/components/ui/Icons";
+import { SidebarLayoutLeftIcon, SidebarLayoutRightIcon } from "@/components/business/Icons";
 import { classNames } from "@/shared/lib/classNames";
 import styles from "./SidebarRailControlButton.module.css";
 

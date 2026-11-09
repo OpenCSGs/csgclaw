@@ -15,7 +15,7 @@ import {
   SidebarTimer2Icon,
   SidebarUserIcon,
   SidebarUsersIcon,
-} from "@/components/ui/Icons";
+} from "@/components/business/Icons";
 import { SidebarRailControlButton } from "./SidebarRailControlButton";
 import { SidebarUserButton } from "./SidebarUserButton";
 import { KnowledgeBaseDiscoveryDialog } from "@/components/business/KnowledgeBaseDiscoveryDialog";

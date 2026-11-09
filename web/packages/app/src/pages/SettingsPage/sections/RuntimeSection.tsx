@@ -1,4 +1,4 @@
-import { TextInput, Field, Button, Select } from "@/components/ui";
+import { InlineError, TextInput, Field, Button, Select } from "@/components/ui";
 import { useWorkspaceControllerContext } from "@/hooks/workspace";
 import { AgentRuntimeSection } from "@/components/business/AgentRuntimeSection";
 import { useAgentRuntimes } from "@/components/business/AgentRuntimeSection/useAgentRuntimes";
@@ -34,8 +34,7 @@ export function RuntimeSection() {
     <>
       <SettingsRow title={t("profileRuntimeSection")} description={t("iaSettingsRuntimeDescription")}>
         <div className={styles.formGrid}>
-          <label className={`field ${styles.spanAll}`}>
-            <span>{t("configSettingsHubLocalPath")}</span>
+          <Field className={styles.spanAll} label={t("configSettingsHubLocalPath")}>
             <TextInput
               value={config.draft.hub_local_path}
               disabled={disabled}
@@ -43,23 +42,19 @@ export function RuntimeSection() {
               spellCheck={false}
               onInput={(event) => config.onDraftChange({ hub_local_path: event.currentTarget.value })}
             />
-          </label>
+          </Field>
           <Field label={t("configSettingsManagerTemplate")}>
             <TextInput value={managerTemplateLabel} disabled readOnly aria-readonly="true" />
           </Field>
-          <label className="field">
-            <span>{t("configSettingsWorkerTemplate")}</span>
+          <Field label={t("configSettingsWorkerTemplate")}>
             <Select
               options={workerTemplateOptions}
-              triggerProps={{
-                "aria-label": t("configSettingsWorkerTemplate"),
-                disabled: disabled || workerTemplateOptions.length === 0,
-              }}
+              triggerProps={{ disabled: disabled || workerTemplateOptions.length === 0 }}
               value={config.draft.default_worker_template}
               onValueChange={(value) => config.onDraftChange({ default_worker_template: value })}
             />
-          </label>
-          {config.error ? <p className="form-error">{config.error}</p> : null}
+          </Field>
+          {config.error ? <InlineError as="p">{config.error}</InlineError> : null}
           <div className={`${styles.formActions} ${styles.spanAll}`}>
             {config.phase === "done" ? (
               <Button variant="primary" size="md" onClick={config.onReload}>

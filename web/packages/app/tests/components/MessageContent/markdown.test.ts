@@ -1,6 +1,8 @@
 import { createElement } from "react";
 import { render, screen } from "@testing-library/react";
-import { decorateMentionMarkup, escapeHTML, flattenMentionText } from "@/components/business/MessageContent/mentions";
+import { decorateMentionMarkup } from "@/components/business/MessageContent/messageMentionMarkup";
+import { escapeHTML, flattenMentionText } from "@/components/business/MessageContent/mentions";
+import mentionStyles from "@/components/business/MessageContent/MessageMention.module.css";
 import { renderMarkdown } from "@/components/business/MessageContent/markdown";
 
 describe("message markdown helpers", () => {
@@ -8,7 +10,7 @@ describe("message markdown helpers", () => {
     expect(escapeHTML('<script>"x"</script>')).toBe("&lt;script&gt;&quot;x&quot;&lt;/script&gt;");
     expect(flattenMentionText('Hi <at user_id="u-1">Alice</at>')).toBe("Hi @Alice");
     expect(decorateMentionMarkup('Hi <at user_id="<bad>">A&B</at>')).toBe(
-      'Hi <span class="message-mention" data-user-id="&lt;bad&gt;">@A&amp;B</span>',
+      `Hi <span class="message-mention ${mentionStyles["message-mention"]}" data-user-id="&lt;bad&gt;">@A&amp;B</span>`,
     );
   });
 
@@ -60,7 +62,7 @@ describe("message markdown helpers", () => {
   it("renders decorated mentions through the markdown pipeline", () => {
     const html = renderMarkdown('Ping <at user_id="u-1">Alice</at>');
 
-    expect(html).toContain('class="message-mention"');
+    expect(html).toContain(`class="message-mention ${mentionStyles["message-mention"]}"`);
     expect(html).toContain('data-user-id="u-1"');
     expect(html).toContain("@Alice");
   });
