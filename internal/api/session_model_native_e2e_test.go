@@ -75,6 +75,10 @@ func runNativeSessionModelBridge(t *testing.T, firstInputTokens int, explicitDef
 	t.Cleanup(func() { _ = os.Remove(bundled) })
 
 	type selection struct{ model, effort string }
+	defaultEffort := "low"
+	if firstInputTokens == 40000 {
+		defaultEffort = "none"
+	}
 	var mu sync.Mutex
 	var observed []sessionModelBridgePayload
 	var native []sessionModelBridgePayload
@@ -107,6 +111,12 @@ func runNativeSessionModelBridge(t *testing.T, firstInputTokens int, explicitDef
 			inputTokens = firstInputTokens
 		}
 		mu.Unlock()
+		if payload.Model == "model-b" && payload.Reasoning.Effort != "high" {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			fmt.Fprint(w, `{"error":{"message":"model-b requires high reasoning effort","type":"invalid_request_error","param":"reasoning.effort"}}`)
+			return
+		}
 		w.Header().Set("Content-Type", "text/event-stream")
 		emit := func(value any) {
 			data, _ := json.Marshal(value)
@@ -126,14 +136,14 @@ func runNativeSessionModelBridge(t *testing.T, firstInputTokens int, explicitDef
 	item := sessionCodexAgent("agent-native", "Native")
 	item.Status = string(agentruntime.StateStopped)
 	item.DesiredState = agent.DesiredStateRunning
-	item.AgentProfile = agent.AgentProfile{Provider: agent.ProviderAPI, ModelProviderID: "fixture", ModelID: "model-a", ReasoningEffort: "low", ProfileComplete: true}
+	item.AgentProfile = agent.AgentProfile{Provider: agent.ProviderAPI, ModelProviderID: "fixture", ModelID: "model-a", ReasoningEffort: defaultEffort, ProfileComplete: true}
 	item.RuntimeOptions = map[string]any{"memory_mode": "disabled", "local_workspace_dir": workspace}
 	statePath := filepath.Join(root, "agents.json")
 	if err := writeSeededAgents(statePath, []agent.Agent{item}); err != nil {
 		t.Fatal(err)
 	}
 	providers := config.LLMConfig{Default: "fixture.model-a", Providers: map[string]config.ProviderConfig{
-		"fixture": {BaseURL: upstream.URL + "/v1", APIKey: "fixture-key", APIProtocol: "responses", Models: []string{"model-a", "model-b"}, ReasoningEffort: "low", ModelMetadata: map[string]modelcap.Metadata{"model-a": {ContextWindow: 32000}, "model-b": {ContextWindow: 64000}}},
+		"fixture": {BaseURL: upstream.URL + "/v1", APIKey: "fixture-key", APIProtocol: "responses", Models: []string{"model-a", "model-b"}, ReasoningEffort: defaultEffort, ModelMetadata: map[string]modelcap.Metadata{"model-a": {ContextWindow: 32000}, "model-b": {ContextWindow: 64000}}},
 	}}
 	server := httptest.NewUnstartedServer(nil)
 	defer server.Close()
@@ -215,9 +225,9 @@ func runNativeSessionModelBridge(t *testing.T, firstInputTokens int, explicitDef
 		want    selection
 	}{
 		{"session-a", map[string]any{"input": "Reply done.", "model": "model-b", "reasoning_effort": "high"}, selection{"model-b", "high"}},
-		{"session-b", map[string]any{"input": "Reply done."}, selection{"model-a", "low"}},
-		{"session-a", finalBody, selection{"model-a", "low"}},
-		{"session-b", map[string]any{"input": "Reply done again."}, selection{"model-a", "low"}},
+		{"session-b", map[string]any{"input": "Reply done."}, selection{"model-a", defaultEffort}},
+		{"session-a", finalBody, selection{"model-a", defaultEffort}},
+		{"session-b", map[string]any{"input": "Reply done again."}, selection{"model-a", defaultEffort}},
 	} {
 		mu.Lock()
 		beforeUpstream, beforeNative := len(observed), len(native)
@@ -268,6 +278,9 @@ func runNativeSessionModelBridge(t *testing.T, firstInputTokens int, explicitDef
 			}
 			if compaction && len(traffic.calls[0].Tools) != 0 {
 				t.Errorf("%s compaction request unexpectedly includes tools", traffic.name)
+			}
+			if compaction && traffic.name == "upstream" && traffic.calls[0].Reasoning.Effort != "high" {
+				t.Errorf("compaction effort=%q, want the previous model's accepted high effort", traffic.calls[0].Reasoning.Effort)
 			}
 			last := traffic.calls[len(traffic.calls)-1]
 			if last.Reasoning.Effort != step.want.effort || len(last.Tools) == 0 {

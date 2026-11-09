@@ -290,6 +290,7 @@ func (s *Service) forwardRemoteChatWithAuthRefresh(ctx context.Context, profile 
 		return nil, &HTTPError{Status: http.StatusBadRequest, Message: fmt.Sprintf("decode request: %v", err)}
 	}
 	mergeProfilePayload(payload, profile)
+	applySessionReasoningEffort(ctx, payload, false)
 	if profile.APIProtocol != "" && profile.APIProtocol != modelpreset.ChatCompletions {
 		return s.forwardProtocol(ctx, profile, payload, "openai")
 	}
@@ -350,6 +351,7 @@ func (s *Service) forwardRemoteResponsesWithAuthRefresh(ctx context.Context, pro
 		return nil, &HTTPError{Status: http.StatusBadRequest, Message: fmt.Sprintf("decode request: %v", err)}
 	}
 	mergeResponsesPayload(payload, profile)
+	applySessionReasoningEffort(ctx, payload, true)
 	if profile.APIProtocol != "" && profile.APIProtocol != modelpreset.Responses {
 		return s.forwardProtocol(ctx, profile, payload, "openai-response")
 	}

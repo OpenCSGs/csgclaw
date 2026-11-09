@@ -66,6 +66,62 @@ func TestSessionModelBridgeUsesOnlyScopedSelection(t *testing.T) {
 	}
 }
 
+func TestSessionModelBridgeUsesResolvedReasoningEffort(t *testing.T) {
+	for _, api := range []struct {
+		name, body string
+		call       func(*Service, context.Context, string, []byte) (*UpstreamResponse, error)
+	}{
+		{"responses", `{"input":"hello","reasoning":{"effort":"medium","summary":"auto"}}`, (*Service).Responses},
+		{"chat", `{"messages":[],"reasoning_effort":"medium"}`, (*Service).ChatCompletionsStream},
+	} {
+		for _, effort := range []string{"high", "none", "auto", "", "unscoped", "task"} {
+			t.Run(api.name+"/"+effort, func(t *testing.T) {
+				payloads := make(chan map[string]any, 1)
+				upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					var payload map[string]any
+					if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+						t.Error(err)
+					}
+					payloads <- payload
+					w.Header().Set("Content-Type", "application/json")
+					io.WriteString(w, `{"id":"response","object":"response","status":"completed","output":[]}`)
+				}))
+				defer upstream.Close()
+				service := NewService(config.ModelConfig{}, sessionProfileFixture{base: upstream.URL})
+				ctx := WithSessionModel(t.Context(), "model-b", effort)
+				var want any = effort
+				switch effort {
+				case "auto", "":
+					want = nil
+				case "unscoped":
+					ctx, want = t.Context(), "medium"
+				case "task":
+					ctx = WithTaskProfile(ctx, agent.AgentProfile{Provider: agent.ProviderAPI, BaseURL: upstream.URL, ModelID: "task-model", ReasoningEffort: "low"})
+					want = "medium"
+				}
+				response, err := api.call(service, ctx, "agent-a", []byte(api.body))
+				if err != nil {
+					t.Fatal(err)
+				}
+				io.Copy(io.Discard, response.Body)
+				response.Body.Close()
+				payload := <-payloads
+				got := payload["reasoning_effort"]
+				if api.name == "responses" {
+					reasoning, _ := payload["reasoning"].(map[string]any)
+					got = reasoning["effort"]
+					if reasoning["summary"] != "auto" {
+						t.Fatalf("reasoning summary changed: %v", reasoning)
+					}
+				}
+				if got != want {
+					t.Fatalf("upstream reasoning effort = %v, want %v", got, want)
+				}
+			})
+		}
+	}
+}
+
 func TestSessionModelPreservesTaskProvider(t *testing.T) {
 	upstream := func(name string) *httptest.Server {
 		return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

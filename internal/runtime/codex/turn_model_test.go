@@ -21,7 +21,7 @@ func TestTurnModelCompactionUsesLoadedModelForCurrentTurn(t *testing.T) {
 	for _, overridden := range []bool{false, true} {
 		t.Run(fmt.Sprint(overridden), func(t *testing.T) {
 			profile := agentruntime.Profile{Provider: "api", ModelID: "small", ReasoningEffort: "high", ModelMetadata: modelcap.Resolved{ContextWindow: 32000}}
-			live := &liveSession{spec: SessionSpec{AgentID: canonicalRuntimeAgentID("alice"), RuntimeID: "runtime", Profile: profile, ModelCatalog: []codexmodel.Profile{{Provider: "api", ModelID: "large", Metadata: modelcap.Resolved{ContextWindow: 64000}}, {Provider: "other", ModelID: "other-provider"}}}, session: &Session{SessionID: "thread"}}
+			live := &liveSession{spec: SessionSpec{AgentID: canonicalRuntimeAgentID("alice"), RuntimeID: "runtime", Profile: profile, ModelCatalog: []codexmodel.Profile{{Provider: "api", ModelID: "large", Metadata: modelcap.Resolved{ContextWindow: 64000}}, {Provider: "other", ModelID: "other-provider"}}}, session: &Session{SessionID: "thread"}, threadModels: map[string]contract.TurnModel{"thread": {ModelID: "large", ReasoningEffort: "high"}}}
 			manager := newAppServerManager(managerDeps{})
 			manager.sessions["runtime"] = live
 			rt := New(Dependencies{Manager: manager})
@@ -59,6 +59,74 @@ func TestTurnModelCompactionUsesLoadedModelForCurrentTurn(t *testing.T) {
 			manager.handleRawAppServerNotification("runtime", live, "item/started", compaction)
 			if next.compacting {
 				t.Fatal("previous compaction changed the next turn")
+			}
+		})
+	}
+}
+
+func TestTurnModelCompactionPreservesAcceptedEffort(t *testing.T) {
+	for _, test := range []struct {
+		name, previousModel, previousEffort, wantEffort string
+		profileModel, rejectPrevious                    bool
+	}{
+		{name: "previous_override", previousModel: "large", previousEffort: "high", wantEffort: "high"},
+		{name: "previous_auto", previousModel: "large", previousEffort: "auto", wantEffort: "auto"},
+		{name: "previous_default", previousModel: "large", wantEffort: ""},
+		{name: "previous_profile_override", previousModel: "large", previousEffort: "high", wantEffort: "high", profileModel: true},
+		{name: "rejected_override", previousModel: "large", previousEffort: "high", wantEffort: "high", rejectPrevious: true},
+		{name: "no_previous_selection", wantEffort: "auto"},
+		{name: "different_previous_model", previousModel: "third", previousEffort: "max", wantEffort: "auto"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			profile := agentruntime.Profile{Provider: "api", ModelID: "small", ReasoningEffort: "none", ModelMetadata: modelcap.Resolved{ContextWindow: 32000}}
+			large := contract.TurnModel{ModelID: "large", ReasoningEffort: "auto", Metadata: modelcap.Resolved{ContextWindow: 64000}}
+			if test.profileModel {
+				profile.ModelID, profile.ReasoningEffort, profile.ModelMetadata = large.ModelID, "low", large.Metadata
+			}
+			live := &liveSession{spec: SessionSpec{AgentID: canonicalRuntimeAgentID("alice"), Profile: profile, ModelCatalog: []codexmodel.Profile{{Provider: "api", ModelID: large.ModelID, Metadata: large.Metadata}}}}
+			manager := newAppServerManager(managerDeps{})
+			manager.sessions["runtime"] = live
+			rt := New(Dependencies{Manager: manager})
+			if test.previousModel != "" {
+				previous := large
+				previous.ModelID, previous.ReasoningEffort = test.previousModel, test.previousEffort
+				waiter, err := live.registerAppServerTurnWaiterWithModel("thread", previous, true)
+				if err != nil {
+					t.Fatal(err)
+				}
+				waiter.setTurnID("previous")
+				live.removeAppServerTurnWaiter("thread", waiter)
+			}
+			if test.rejectPrevious {
+				rejected := large
+				rejected.ReasoningEffort = "none"
+				waiter, err := live.registerAppServerTurnWaiterWithModel("thread", rejected, true)
+				if err != nil {
+					t.Fatal(err)
+				}
+				live.removeAppServerTurnWaiter("thread", waiter)
+			}
+			other, err := live.registerAppServerTurnWaiterWithModel("other-thread", contract.TurnModel{ModelID: "large", ReasoningEffort: "max"}, true)
+			if err != nil {
+				t.Fatal(err)
+			}
+			other.setTurnID("other-turn")
+			live.removeAppServerTurnWaiter("other-thread", other)
+			selected := contract.TurnModel{ModelID: "small", ReasoningEffort: "none", Metadata: modelcap.Resolved{ContextWindow: 32000}}
+			waiter, err := live.registerAppServerTurnWaiterWithModel("thread", selected, true)
+			if err != nil {
+				t.Fatal(err)
+			}
+			waiter.setTurnID("current")
+			live.setTurnCompacting("thread", "current", "item/started")
+			got, overridden, err := rt.TurnModel("alice", "thread", "current", "large")
+			if err != nil || !overridden || got.ModelID != large.ModelID || got.Metadata != large.Metadata.Normalized() || got.ReasoningEffort != test.wantEffort {
+				t.Fatalf("compaction selection = %+v, overridden = %t, error = %v; want effort %q", got, overridden, err, test.wantEffort)
+			}
+			live.setTurnCompacting("thread", "current", "item/completed")
+			got, overridden, err = rt.TurnModel("alice", "thread", "current", "small")
+			if err != nil || !overridden || got != selected || waiter.model != selected {
+				t.Fatalf("answer selection changed: %+v, overridden = %t, error = %v", got, overridden, err)
 			}
 		})
 	}

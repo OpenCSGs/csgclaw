@@ -106,16 +106,22 @@ func (r *Runtime) TurnModel(agentID, threadID, turnID, requestedModel string) (c
 	}
 	defer live.mu.Unlock()
 	if waiter.compacting && requestedModel != "" && requestedModel != waiter.model.ModelID {
-		loaded, available := live.loadedTurnModel(requestedModel, waiter.model)
+		loaded, available := live.loadedTurnModel(requestedModel)
 		if !available {
 			return contract.TurnModel{}, false, fmt.Errorf("compaction model %q is unavailable in the running Codex catalog", requestedModel)
+		}
+		// Native compaction can use the last accepted model before starting
+		// inference with the current turn's selection.
+		if previous, ok := live.threadModels[threadID]; ok && previous.ModelID == loaded.ModelID {
+			loaded.ReasoningEffort = previous.ReasoningEffort
 		}
 		return loaded, true, nil
 	}
 	return waiter.model, waiter.modelOverride, nil
 }
 
-func (s *liveSession) loadedTurnModel(modelID string, selected contract.TurnModel) (contract.TurnModel, bool) {
+func (s *liveSession) loadedTurnModel(modelID string) (contract.TurnModel, bool) {
+	selected := contract.TurnModel{ReasoningEffort: config.ReasoningEffortAuto}
 	for _, model := range s.spec.ModelCatalog {
 		if model.ModelID == modelID && model.Provider == s.spec.Profile.Provider {
 			selected.ModelID = model.ModelID
