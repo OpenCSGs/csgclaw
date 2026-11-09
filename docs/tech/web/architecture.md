@@ -1,13 +1,13 @@
 # Frontend Architecture Diagram
 
-This document explains the `web/app` frontend architecture as one complete ASCII diagram. It is a visual companion to `development.md`.
+This document explains the `web/packages/app` frontend architecture as one complete ASCII diagram. It is a visual companion to `development.md`.
 
 Chinese companion: `architecture.zh.md`.
 
 ```text
 +==============================================================================================+
 |                                   CSGClaw Web Frontend                                        |
-|                         Vite + React app under web/app/src                                    |
+|                         Vite + React app under web/packages/app/src                          |
 +==============================================================================================+
 
   Build / Hosting Boundary
@@ -15,7 +15,7 @@ Chinese companion: `architecture.zh.md`.
 
   +-----------------------+        +-----------------------+        +---------------------------+
   | Developer Source      |        | Vite Build            |        | Embedded Output           |
-  | web/app/src           | -----> | pnpm / make build-web | -----> | web/static-dist           |
+  | web/packages/app/src  | -----> | pnpm / make build-web | -----> | web/static-dist           |
   | edit here             |        | generated assets      |        | served by Go embed        |
   +-----------------------+        +-----------------------+        +---------------------------+
 
@@ -46,7 +46,7 @@ Chinese companion: `architecture.zh.md`.
   Source Architecture
   ----------------------------------------------------------------------------------------------
 
-  web/app/src
+  web/packages/app/src
   |
   +-- main.tsx
   |     React entrypoint only
@@ -259,12 +259,12 @@ Chinese companion: `architecture.zh.md`.
   ----------------------------------------------------------------------------------------------
 
   Documentation only                  -> read and review Markdown
-  TypeScript or import path changes   -> pnpm --dir web/app typecheck
-  Frontend source changes             -> pnpm --dir web/app lint
-  Pure model/helper changes           -> pnpm --dir web/app test
-  Standard frontend verification      -> pnpm --dir web/app check
-  Bundle smoke without static-dist    -> pnpm --dir web/app exec vite build --outDir /private/tmp/csgclaw-web-build --emptyOutDir
-  Intentional embedded output update  -> pnpm --dir web/app build
+  TypeScript or import path changes   -> pnpm --dir web/packages/app typecheck
+  Frontend source changes             -> pnpm --dir web/packages/app lint
+  Pure model/helper changes           -> pnpm --dir web/packages/app test
+  Standard frontend verification      -> pnpm --dir web/packages/app check
+  Bundle smoke without static-dist    -> pnpm --dir web/packages/app exec vite build --outDir /private/tmp/csgclaw-web-build --emptyOutDir
+  Intentional embedded output update  -> pnpm --dir web/packages/app build
 ```
 
 ## Agent directory views

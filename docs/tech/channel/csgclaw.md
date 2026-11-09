@@ -106,6 +106,6 @@ Notification deliveries (GitLab/GitHub webhooks, and so on) to the CSGClaw Web I
 
 ### Related code paths
 
-- Frontend parser/renderer: `web/app/src/components/business/MessageContent/MessageContent.tsx`, `web/app/src/components/business/MessageContent/structuredMessages.ts`
-- Action-card and notifier-card test coverage: `web/app/tests/legacy-contract.test.ts`, `web/app/tests/components/MessageContent/structuredMessages.test.ts`
+- Frontend parser/renderer: `web/packages/app/src/components/business/MessageContent/MessageContent.tsx`, `web/packages/app/src/components/business/MessageContent/structuredMessages.ts`
+- Action-card and notifier-card test coverage: `web/packages/app/tests/legacy-contract.test.ts`, `web/packages/app/tests/components/MessageContent/structuredMessages.test.ts`
 - Notification card encoding: `internal/channel/csgclaw/notification/notify_card.go`, `internal/channel/csgclaw/notification/notify_webhooks.go`

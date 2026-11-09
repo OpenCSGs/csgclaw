@@ -9,17 +9,20 @@ ARG APK_REPOSITORY=https://mirrors.aliyun.com/alpine
 # multi-platform image build does not run Node under QEMU for every target.
 FROM --platform=$BUILDPLATFORM ${NODE_IMAGE} AS web
 
-WORKDIR /src/web/app
+WORKDIR /src/web
 
 ARG PNPM_VERSION
 ARG NPM_REGISTRY
 RUN npm config set registry ${NPM_REGISTRY} && npm install -g pnpm@${PNPM_VERSION}
 
-COPY web/app/package.json web/app/pnpm-lock.yaml web/app/.npmrc ./
+COPY web/package.json web/pnpm-lock.yaml web/pnpm-workspace.yaml ./
+COPY web/packages/app/package.json web/packages/app/.npmrc ./packages/app/
+COPY web/packages/csgclaw-ui/package.json ./packages/csgclaw-ui/
 RUN pnpm config set registry ${NPM_REGISTRY} && pnpm install --frozen-lockfile
 
-COPY web/app ./
-RUN pnpm build && test -f ../static-dist/index.html
+COPY web/packages/app ./packages/app
+COPY web/packages/csgclaw-ui ./packages/csgclaw-ui
+RUN pnpm --filter csgclaw-web build && test -f static-dist/index.html
 
 # CGO is disabled below, so Go can cross-compile the target binary while the
 # compiler itself runs natively on the BuildKit worker.

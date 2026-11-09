@@ -21,7 +21,7 @@ type DesktopOptions struct {
 	ValidateAgentAccessToken func(string) bool
 }
 
-// SHA-256 of the exact inline #document-bootstrap script in web/app/index.html.
+// SHA-256 of the exact inline #document-bootstrap script in web/packages/app/index.html.
 // Update this value whenever that script's content or whitespace changes.
 const documentBootstrapCSPHash = "'sha256-6+LwiuNI3rMs0s+LRNmErC0KIlO7j9xL7m1zp4RZ7hg='"
 

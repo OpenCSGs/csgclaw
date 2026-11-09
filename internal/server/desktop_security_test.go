@@ -15,7 +15,7 @@ import (
 )
 
 func TestDocumentBootstrapCSPHashMatchesSource(t *testing.T) {
-	source, err := os.ReadFile("../../web/app/index.html")
+	source, err := os.ReadFile("../../web/packages/app/index.html")
 	if err != nil {
 		t.Fatal(err)
 	}

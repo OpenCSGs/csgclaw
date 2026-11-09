@@ -16,9 +16,9 @@ __pycache__/
 
 # Web frontend local artifacts
 node_modules/
-web/app/playwright-report/
-web/app/test-results/
-web/app/.vite/
+web/packages/app/playwright-report/
+web/packages/app/test-results/
+web/packages/app/.vite/
 desktop/dist/
 desktop/out/
 desktop/.forge-generated/

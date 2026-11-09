@@ -115,7 +115,7 @@ desktop/src/main/
 desktop/src/preload/
   受限的 contextBridge 接口
 
-web/app/src/shared/platform/
+web/packages/app/src/shared/platform/
   Browser / Electron 平台差异
 
 desktop/forge.config.ts
@@ -159,7 +159,7 @@ Sandbox listener 始终要求 server token，并拒绝浏览器 Origin。
 
 ## 5. Web UI 适配
 
-React 页面不直接判断 Electron，也不直接调用 Preload。平台差异集中在 `web/app/src/shared/platform/`：
+React 页面不直接判断 Electron，也不直接调用 Preload。平台差异集中在 `web/packages/app/src/shared/platform/`：
 
 - `runtime.ts`：识别 Browser 或 Electron。
 - `desktopBridge.ts`：读取受控的 Preload bridge。

@@ -1,6 +1,6 @@
 # UI 组件库规范
 
-本规范适用于 Vite 前端应用里的共享展示组件库 `web/app/src/components/ui`。
+本规范适用于 Vite 前端应用里的共享展示组件库 `web/packages/app/src/components/ui`。
 
 英文版为 `ui-components.md`，Agent 默认以英文版为准。
 
@@ -72,7 +72,7 @@
 - 页面或业务组件不要直接依赖 Radix primitive，除非这是一次明确的页面私有探索；一旦需要复用或形成稳定交互，应抽到 `src/components/ui`。
 - 从统一的 `radix-ui` 包导入 Radix namespace，例如 `import { Select as RadixSelect } from "radix-ui"`。不要为已经由 `radix-ui` 暴露的 primitive 新增 `@radix-ui/react-*` 分包依赖。
 - 只有统一包没有暴露所需 primitive 时，才单独新增 Radix 分包，并在改动里说明原因。
-- 如果 jsdom 缺少某个 Radix primitive 依赖的浏览器 API，在 `web/app/tests/setup.ts` 里补最小、稳定的 polyfill，并让组件测试聚焦用户可见行为。
+- 如果 jsdom 缺少某个 Radix primitive 依赖的浏览器 API，在 `web/packages/app/tests/setup.ts` 里补最小、稳定的 polyfill，并让组件测试聚焦用户可见行为。
 
 ## Select
 
@@ -96,7 +96,7 @@ TextInput、TextArea 拥有局部、带 data 标识的样式；历史输入和�
 
 PanelHeader 提供内容与 actions 布局，EmptyState 提供标题、描述和操作，SegmentedControl 提供命名单选组及键盘导航。业务文案和持久化留给调用方。菜单表面、hover/selected、Tooltip 和 Dialog 背景颜色通过 shared/styles/tokens.css 的语义 token 管理。
 
-在 web/app 运行 `corepack pnpm ui:lab`，打开独立 ui-lab.html 展示生产组件和真实工作区 CSS 的组合场景；无需应用数据，也不进入生产构建。
+在 web/packages/app 运行 `corepack pnpm ui:lab`，打开独立 ui-lab.html 展示生产组件和真实工作区 CSS 的组合场景；无需应用数据，也不进入生产构建。
 
 ## Dropdown Menu
 
