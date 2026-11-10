@@ -5,7 +5,6 @@ import (
 	"csgclaw/internal/diagnostics"
 	"csgclaw/internal/modelcap"
 	"csgclaw/internal/modelusage"
-	"csgclaw/internal/processgroup"
 	"csgclaw/internal/runtime/conversationconfig"
 	skill "csgclaw/internal/skill/state"
 	"csgclaw/internal/taskconfig"
@@ -95,7 +94,7 @@ type process struct {
 	cmd                  *exec.Cmd
 	stdin                io.WriteCloser
 	client               *acpClient
-	stderr               *os.File
+	stderr               *diagnostics.StderrLog
 	root                 string
 	workspace            string
 	profile              agentruntime.Profile
@@ -479,15 +478,11 @@ func (r *Runtime) launch(ctx context.Context, root, workspace, binary string, pr
 	if err != nil {
 		return nil, fmt.Errorf("open DSH stderr log: %w", err)
 	}
-	logStartOffset := int64(0)
-	if info, err := stderr.Stat(); err == nil {
-		logStartOffset = info.Size()
-	}
+
 	cmd := exec.Command(binary, dshLaunchArgs(root, enablePresent)...)
 	configureProcessGroup(cmd)
 	cmd.Dir = workspace
 	cmd.Env = environment
-	cmd.Stderr = stderr
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		stderr.Close()
@@ -498,14 +493,15 @@ func (r *Runtime) launch(ctx context.Context, root, workspace, binary string, pr
 		stderr.Close()
 		return nil, err
 	}
-	if err := processgroup.Start(cmd); err != nil {
+	workerLog, err := diagnostics.StartWithStderr(cmd, stderr, "dsh", meta.RuntimeID)
+	if err != nil {
 		stderr.Close()
 		diagnostics.ReportFailure(ctx, "runtime.process_start", err, map[string]any{"runtime_id": meta.RuntimeID, "stderr_path": stderr.Name()})
 		return nil, fmt.Errorf("start DSH ACP process: %w", err)
 	}
 	client := newACPClient(stdout, stdin)
 	proc := &process{
-		diagnosticObserver: diagnostics.NewRuntimeObserver(stderr.Name(), meta.RuntimeID, cmd.Process.Pid, logStartOffset, stderr), cmd: cmd, stdin: stdin, client: client, stderr: stderr, root: root, workspace: workspace, profile: profile.Normalized(), mcp: mcp, meta: meta, environment: append([]string(nil), environment...), extensionDigests: extensionDigests, extensionExecutables: extensionExecutables, done: make(chan struct{}), active: map[string]*activeTurn{}, ready: map[string]bool{}}
+		diagnosticObserver: workerLog.Observer, cmd: cmd, stdin: stdin, client: client, stderr: workerLog, root: root, workspace: workspace, profile: profile.Normalized(), mcp: mcp, meta: meta, environment: append([]string(nil), environment...), extensionDigests: extensionDigests, extensionExecutables: extensionExecutables, done: make(chan struct{}), active: map[string]*activeTurn{}, ready: map[string]bool{}}
 	client.setHandlers(
 		func(request serverRequest) { r.handleServerRequest(proc, request) },
 		func(note notification) { r.handleNotification(proc, note) },
@@ -527,19 +523,19 @@ func (r *Runtime) launch(ctx context.Context, root, workspace, binary string, pr
 	if err := client.call(initCtx, "initialize", map[string]any{"protocolVersion": 1, "clientCapabilities": map[string]any{}}, &initialized, nil); err != nil {
 		_ = terminateProcessTree(cmd.Process.Pid, true)
 		_ = cmd.Wait()
-		stderr.Close()
+		_ = workerLog.Close()
 		return nil, fmt.Errorf("initialize DSH ACP: %w", err)
 	}
 	if initialized.ProtocolVersion != 1 {
 		_ = terminateProcessTree(cmd.Process.Pid, true)
 		_ = cmd.Wait()
-		stderr.Close()
+		_ = workerLog.Close()
 		return nil, fmt.Errorf("DSH ACP protocol version %d is unsupported", initialized.ProtocolVersion)
 	}
 	if requiresHTTPMCP(mcp) && !initialized.AgentCapabilities.MCPCapabilities.HTTP {
 		_ = terminateProcessTree(cmd.Process.Pid, true)
 		_ = cmd.Wait()
-		stderr.Close()
+		_ = workerLog.Close()
 		return nil, fmt.Errorf("DSH ACP does not advertise HTTP MCP support required by this Agent")
 	}
 	proc.imagePrompts = initialized.AgentCapabilities.PromptCapabilities.Image
@@ -549,7 +545,7 @@ func (r *Runtime) launch(ctx context.Context, root, workspace, binary string, pr
 	}); err != nil {
 		_ = terminateProcessTree(cmd.Process.Pid, true)
 		_ = cmd.Wait()
-		stderr.Close()
+		_ = workerLog.Close()
 		return nil, err
 	}
 	proc.diagnosticObserver.Bind(ctx)
@@ -632,6 +628,7 @@ func (r *Runtime) waitProcess(proc *process) {
 			code = exit.ExitCode()
 		}
 	}
+	proc.stderr.Drain()
 	proc.diagnosticObserver.Exit(code, waitErr, cleanupErr)
 	_ = proc.stderr.Close()
 	_ = proc.updateMetadata(func(meta *runtimeMetadata) {

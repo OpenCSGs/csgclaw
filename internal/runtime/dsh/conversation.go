@@ -65,7 +65,9 @@ func (c *conversation) Run(ctx context.Context, request contract.TurnRequest, si
 
 	diagnostics.From(ctx).CaptureRuntimeFiles(filepath.Join(proc.workspace, "AGENTS.md"), filepath.Join(proc.root, settingsFileName), filepath.Join(proc.root, patchFileName), filepath.Join(proc.root, contextPatchFileName))
 	diagnostics.From(ctx).RuntimeInfo("dsh", proc.profile.ModelID)
-	slog.New(diagnostics.NewServerLogHandler(proc.stderr, slog.LevelInfo, nil)).InfoContext(ctx, "model request configuration", "model", proc.profile.ModelID, "runtime_id", c.runtimeID, "session_id", sessionID, "turn_id", request.ID)
+	if proc.stderr != nil {
+		slog.New(diagnostics.NewServerLogHandler(proc.stderr, slog.LevelInfo, nil)).InfoContext(ctx, "model request configuration", "model", proc.profile.ModelID, "runtime_id", c.runtimeID, "session_id", sessionID, "turn_id", request.ID)
+	}
 	diagnostics.From(ctx).RuntimeRef(sessionID, "", "")
 	finishPrepare()
 	turn := &activeTurn{diagnostic: diagnostics.From(ctx), request: request, sink: sink, tools: make(map[string]contract.ToolActivity)}
