@@ -142,6 +142,10 @@ func TestRoomConfigurationReusesProcessAndNativeMappings(t *testing.T) {
 	if err := os.WriteFile(runtimePath, []byte(corrupt), 0600); err != nil {
 		t.Fatal(err)
 	}
+	if !canFindUntrackedRuntimeProcesses {
+		// The previous manager was closed above, so there is no process to stop.
+		deps.StopRuntimeProcesses = func(string) ([]int, error) { return nil, nil }
+	}
 	rt = New(deps)
 	run("agent-one", "room-shared", "model-b")
 	if _, err := rt.readRuntimeMetadata("agent-one"); err != nil {

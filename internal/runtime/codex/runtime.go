@@ -594,31 +594,36 @@ func (r *Runtime) Stop(ctx context.Context, h agentruntime.Handle) (agentruntime
 	// its file descriptors alive. Returning early on missing metadata makes that
 	// state impossible to recover through a later recreate.
 	meta, metaErr := r.readRuntimeMetadata(runtimeID)
-	managerErr := r.sessionManager().Stop(ctx, SessionHandle{RuntimeID: runtimeID})
+	manager := r.sessionManager()
+	handle := SessionHandle{RuntimeID: runtimeID}
+	corrupt := invalidRuntimeMetadata(metaErr)
+	if corrupt {
+		// Stop waits for OnExit. Carry the live generation so this explicit
+		// stop can replace its exit state without replacing a newer generation.
+		if live, err := manager.LiveSession(handle); err == nil && live != nil {
+			meta = sessionToRuntimeMetadata(live)
+			meta.ProcessID = 0
+		}
+	}
+	managerErr := manager.Stop(ctx, handle)
 	if managerErr != nil && !errors.Is(managerErr, os.ErrNotExist) {
 		return agentruntime.StateUnknown, managerErr
 	}
-	if invalidRuntimeMetadata(metaErr) {
+	if corrupt {
 		if managerErr != nil {
 			dir, err := r.runtimeDirForHandle(h)
 			if err != nil {
 				return agentruntime.StateUnknown, err
 			}
-			if err := r.stopUntrackedRuntimeProcesses(ctx, runtimeID, dir); err != nil {
+			if err := r.stopUntrackedRuntimeProcesses(ctx, runtimeID, dir, true); err != nil {
 				return agentruntime.StateUnknown, err
 			}
 		}
 		// A corrupt record cannot identify a PID. Keep the existing skills
 		// when the next start rebuilds metadata from the separate session file.
-		if err := r.writeMetadata(runtimeMetadata{
-			RuntimeID:      runtimeID,
-			PreserveSkills: true,
-			State:          agentruntime.StateStopped,
-			StoppedAt:      time.Now().UTC(),
-		}); err != nil {
-			return agentruntime.StateUnknown, err
-		}
-		return agentruntime.StateStopped, nil
+		meta.RuntimeID = runtimeID
+		meta.PreserveSkills = true
+		metaErr = nil
 	}
 	if metaErr != nil {
 		if !errors.Is(metaErr, os.ErrNotExist) {
@@ -655,7 +660,7 @@ func (r *Runtime) Delete(ctx context.Context, h agentruntime.Handle) error {
 	if err != nil {
 		return err
 	}
-	if err := r.stopUntrackedRuntimeProcesses(ctx, runtimeID, dir); err != nil {
+	if err := r.stopUntrackedRuntimeProcesses(ctx, runtimeID, dir, false); err != nil {
 		return err
 	}
 	preservedState, err := preserveRuntimeState(dir)
@@ -821,9 +826,11 @@ func (r *Runtime) ensureSession(ctx context.Context, spec SessionSpec, copyHostS
 	if strings.TrimSpace(spec.AgentName) == "" || strings.TrimSpace(spec.AgentID) == "" {
 		return nil, fmt.Errorf("agent name and id are required")
 	}
-	if meta, err := r.readRuntimeMetadata(runtimeID); err == nil {
+	meta, err := r.readRuntimeMetadata(runtimeID)
+	corrupt := invalidRuntimeMetadata(err)
+	if err == nil {
 		spec.PreserveSkills = spec.PreserveSkills || meta.PreserveSkills
-	} else if invalidRuntimeMetadata(err) {
+	} else if corrupt {
 		spec.PreserveSkills = true
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return nil, err
@@ -867,7 +874,7 @@ func (r *Runtime) ensureSession(ctx context.Context, spec SessionSpec, copyHostS
 	manager := r.sessionManager()
 	tracker, tracksSessions := manager.(interface{ hasSession(string) bool })
 	if !tracksSessions || !tracker.hasSession(runtimeID) {
-		if err := r.stopUntrackedRuntimeProcesses(ctx, runtimeID, spec.RuntimeDir); err != nil {
+		if err := r.stopUntrackedRuntimeProcesses(ctx, runtimeID, spec.RuntimeDir, corrupt); err != nil {
 			return nil, err
 		}
 	}
@@ -918,7 +925,7 @@ func (r *Runtime) ensureSession(ctx context.Context, spec SessionSpec, copyHostS
 	}
 	session.PreserveSkills = spec.PreserveSkills
 	session.ConversationProfileFingerprint = spec.ConversationProfileFingerprint
-	if err := writeJSONFile(r.writeMetadataFile, filepath.Join(spec.RuntimeDir, sessionFileName), sessionToSessionMetadata(session)); err != nil {
+	if err := r.persistStartedSession(manager, spec.RuntimeDir, session); err != nil {
 		return nil, err
 	}
 	if err := r.storeRuntimeMetadata(filepath.Join(spec.RuntimeDir, runtimeFileName), sessionToRuntimeMetadata(session)); err != nil {
@@ -1044,7 +1051,7 @@ func (r *Runtime) hydratePersistedSession(ctx context.Context, manager *appServe
 		session.CreatedAt = meta.CreatedAt.UTC()
 	}
 	session.PreserveSkills = spec.PreserveSkills
-	if err := r.writeSessionMetadata(sessionToSessionMetadata(session)); err != nil {
+	if err := r.persistStartedSession(manager, spec.RuntimeDir, session); err != nil {
 		return nil, err
 	}
 	if err := r.writeMetadata(sessionToRuntimeMetadata(session)); err != nil {
@@ -1655,9 +1662,13 @@ func (r *Runtime) readRuntimeMetadata(runtimeID string) (runtimeMetadata, error)
 }
 
 func (r *Runtime) readRuntimeMetadataAt(path string) (runtimeMetadata, error) {
-	var meta runtimeMetadata
-	if err := readJSONFile(r.readFile, path, &meta); err != nil {
+	data, err := r.readFile(path)
+	if err != nil {
 		return runtimeMetadata{}, err
+	}
+	var meta runtimeMetadata
+	if err := json.Unmarshal(data, &meta); err != nil {
+		return runtimeMetadata{}, runtimeMetadataDecodeError{err: err}
 	}
 	return normalizeRuntimeMetadata(meta), nil
 }
@@ -1669,10 +1680,14 @@ func (r *Runtime) lockRuntimeMetadata(path string) func() {
 	return mu.Unlock
 }
 
+type runtimeMetadataDecodeError struct{ err error }
+
+func (e runtimeMetadataDecodeError) Error() string { return e.err.Error() }
+func (e runtimeMetadataDecodeError) Unwrap() error { return e.err }
+
 func invalidRuntimeMetadata(err error) bool {
-	var syntaxErr *json.SyntaxError
-	var typeErr *json.UnmarshalTypeError
-	return errors.As(err, &syntaxErr) || errors.As(err, &typeErr)
+	var decodeErr runtimeMetadataDecodeError
+	return errors.As(err, &decodeErr)
 }
 
 // Keep the original in place until its replacement is ready.
@@ -1725,9 +1740,6 @@ func (r *Runtime) storeRuntimeMetadata(path string, meta runtimeMetadata) error 
 	var current runtimeMetadata
 	if err == nil {
 		if parseErr := json.Unmarshal(data, &current); parseErr != nil {
-			if !invalidRuntimeMetadata(parseErr) {
-				return parseErr
-			}
 			if err := backupCorruptRuntimeMetadata(path, data, parseErr); err != nil {
 				return err
 			}
@@ -1745,6 +1757,16 @@ func (r *Runtime) storeRuntimeMetadata(path string, meta runtimeMetadata) error 
 		}
 	}
 	return writeJSONFile(r.writeMetadataFile, path, normalizeRuntimeMetadata(meta))
+}
+
+func (r *Runtime) persistStartedSession(manager Manager, runtimeDir string, session *Session) error {
+	save := func(session *Session) error {
+		return writeJSONFile(r.writeMetadataFile, filepath.Join(runtimeDir, sessionFileName), sessionToSessionMetadata(session))
+	}
+	if appServer, ok := manager.(*appServerManager); ok {
+		return appServer.persistSessionMetadata(session, save)
+	}
+	return save(session)
 }
 
 func (r *Runtime) writeSessionMetadata(meta sessionMetadata) error {
@@ -1814,13 +1836,15 @@ func (r *Runtime) removeAll(path string) error {
 	return os.RemoveAll(path)
 }
 
-func (r *Runtime) stopUntrackedRuntimeProcesses(ctx context.Context, runtimeID, runtimeDir string) error {
+func (r *Runtime) stopUntrackedRuntimeProcesses(ctx context.Context, runtimeID, runtimeDir string, requireVerification bool) error {
 	if ctx == nil {
 		ctx = context.Background()
 	}
 	stop := stopRuntimeProcessesUsingDir
 	if r != nil && r.deps.StopRuntimeProcesses != nil {
 		stop = r.deps.StopRuntimeProcesses
+	} else if requireVerification && !canFindUntrackedRuntimeProcesses {
+		return fmt.Errorf("cannot recover corrupt Codex runtime %q: cannot verify that untracked processes have stopped on this platform", runtimeID)
 	}
 	pids, err := stop(runtimeDir)
 	if err != nil {
