@@ -190,6 +190,7 @@ type Service struct {
 	users            map[string]User
 	byName           map[string]string
 	rooms            map[string]*Room
+	taskTitleClaims  map[string]string // Room ID to source message ID. Survives Reload.
 	sessionRooms     map[string]string
 	sessionConflicts map[string]struct{}
 }
@@ -363,7 +364,8 @@ func NewServiceFromBootstrap(state Bootstrap) *Service {
 
 func NewServiceFromBootstrapWithBus(state Bootstrap, bus *Bus) *Service {
 	svc := &Service{
-		bus: bus,
+		bus:             bus,
+		taskTitleClaims: make(map[string]string),
 	}
 	state = normalizeBootstrap(state)
 	svc.replaceState(state)
@@ -1796,7 +1798,6 @@ func (s *Service) UpdateRoom(roomID string, req UpdateRoomRequest) (Room, error)
 		room.CustomTitle = true
 		if room.TitleSource != "" || (room.TaskSession && room.IsDirect && room.CloudAgent == nil) {
 			room.TitleSource = titleSourceManual
-			room.TitleMessageID = ""
 		}
 	}
 	if req.Archived != nil {

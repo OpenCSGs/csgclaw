@@ -25,7 +25,7 @@ func (s *Service) ClaimTaskTitle(roomID, messageID string) (string, *taskconfig.
 	defer s.mu.Unlock()
 
 	room := s.rooms[roomID]
-	if room == nil || room.TitleSource != titleSourcePlaceholder || room.TitleMessageID != "" {
+	if room == nil || room.TitleSource != titleSourcePlaceholder || s.taskTitleClaims[roomID] != "" {
 		return "", nil, false
 	}
 	index := messageIndexByID(room.Messages, messageID)
@@ -39,7 +39,7 @@ func (s *Service) ClaimTaskTitle(roomID, messageID string) (string, *taskconfig.
 		return "", nil, false
 	}
 
-	room.TitleMessageID = messageID
+	s.taskTitleClaims[roomID] = messageID
 	return question, taskconfig.Clone(room.Configuration), true
 }
 
@@ -47,8 +47,8 @@ func (s *Service) ClaimTaskTitle(roomID, messageID string) (string, *taskconfig.
 func (s *Service) ReleaseTaskTitle(roomID, messageID string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if room := s.rooms[roomID]; room != nil && room.TitleMessageID == messageID {
-		room.TitleMessageID = ""
+	if s.taskTitleClaims[roomID] == messageID {
+		delete(s.taskTitleClaims, roomID)
 	}
 }
 
@@ -56,12 +56,13 @@ func (s *Service) ReleaseTaskTitle(roomID, messageID string) {
 func (s *Service) TaskTitlePending(roomID, messageID string) bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return isPendingTaskTitle(s.rooms[roomID], messageID)
+	return s.isPendingTaskTitleLocked(roomID, messageID)
 }
 
-func isPendingTaskTitle(room *Room, messageID string) bool {
+func (s *Service) isPendingTaskTitleLocked(roomID, messageID string) bool {
+	room := s.rooms[roomID]
 	return room != nil && room.TitleSource == titleSourcePlaceholder && messageID != "" &&
-		room.TitleMessageID == messageID && messageIndexByID(room.Messages, messageID) >= 0
+		s.taskTitleClaims[roomID] == messageID && messageIndexByID(room.Messages, messageID) >= 0
 }
 
 // ApplyTaskTitle updates only the placeholder claimed by this turn.
@@ -73,18 +74,18 @@ func (s *Service) ApplyTaskTitle(roomID, messageID, title string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	room := s.rooms[roomID]
-	if !isPendingTaskTitle(room, messageID) {
+	if !s.isPendingTaskTitleLocked(roomID, messageID) {
 		return nil
 	}
+	room := s.rooms[roomID]
 	previous := *room
 	room.Title = title
 	room.TitleSource = titleSourceGenerated
-	room.TitleMessageID = ""
 	if err := s.saveTitleMetadataLocked(); err != nil {
 		*room = previous
 		return err
 	}
+	delete(s.taskTitleClaims, roomID)
 	s.publishRoomEventLocked(EventTypeRoomUpdated, s.presentRoomLocked(*room, ""))
 	return nil
 }

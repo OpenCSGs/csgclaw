@@ -218,8 +218,6 @@ type Room struct {
 	// It is private persistence metadata used to validate creation retries.
 	CreationWorkspaceDir *string `json:"-"`
 	TitleSource          string  `json:"-"`
-	// TitleMessageID is an in-memory reservation for title generation.
-	TitleMessageID string `json:"-"`
 
 	SourceTeamID       string             `json:"source_team_id,omitempty"`
 	CollaborationGuide string             `json:"collaboration_guide,omitempty"`

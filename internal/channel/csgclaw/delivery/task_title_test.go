@@ -70,6 +70,7 @@ func TestTaskTitleRetriesAttachmentOnlyExchangeAfterTimeout(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
+	started := make(chan struct{})
 	unblock := make(chan struct{})
 	var attempts atomic.Int32
 	model := titleTestModel(func(ctx context.Context, agentID string, profile agent.AgentProfile, question, answer string) (string, error) {
@@ -77,6 +78,7 @@ func TestTaskTitleRetriesAttachmentOnlyExchangeAfterTimeout(t *testing.T) {
 			t.Error("unexpected title request")
 		}
 		if attempts.Add(1) == 1 {
+			close(started)
 			select {
 			case <-unblock:
 				return "", context.DeadlineExceeded
@@ -87,11 +89,11 @@ func TestTaskTitleRetriesAttachmentOnlyExchangeAfterTimeout(t *testing.T) {
 		return "Investigate login timeout", nil
 	})
 	renderer := NewTranscriptRenderer(&recordingStore{}, WithTaskTitleCallback(NewTaskTitleCallback(ctx, rooms, titleTestProfiles{}, model)))
-	turn := channel.TurnContext{RoomID: room.ID, ChatType: "direct", SourceMessageID: first.ID, AgentID: "worker", TurnID: "first"}
+	turn := channel.TurnContext{AgentTurn: true, RoomID: room.ID, ChatType: "direct", SourceMessageID: first.ID, AgentID: "worker", TurnID: "first"}
 	if err := renderer.Complete(ctx, turn, agentengine.TurnResult{Status: agentengine.TurnFailed}); err != nil {
 		t.Fatal(err)
 	}
-	if current, _ := rooms.Room(room.ID); current.TitleMessageID != "" {
+	if rooms.TaskTitlePending(room.ID, first.ID) {
 		t.Fatal("failed reply claimed the title")
 	}
 	events, unsubscribe := bus.Subscribe()
@@ -111,8 +113,19 @@ func TestTaskTitleRetriesAttachmentOnlyExchangeAfterTimeout(t *testing.T) {
 	case <-ctx.Done():
 		t.Fatal("completion waited for the title model")
 	}
+	select {
+	case <-started:
+	case <-ctx.Done():
+		t.Fatal("title model did not start")
+	}
 	if current, _ := rooms.Room(room.ID); current.Title != "First question" {
 		t.Fatalf("title while model is running = %q", current.Title)
+	}
+	if err := rooms.Reload(); err != nil {
+		t.Fatal(err)
+	}
+	if !rooms.TaskTitlePending(room.ID, source.ID) {
+		t.Fatal("reload lost the pending title")
 	}
 	turn.SourceMessageID, turn.TurnID = followUp.ID, "third"
 	if err := renderer.Complete(ctx, turn, agentengine.TurnResult{

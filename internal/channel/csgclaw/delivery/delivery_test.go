@@ -231,7 +231,7 @@ func TestTranscriptRendererOffersTitleOnlyAfterSuccessfulDelivery(t *testing.T) 
 					t.Fatalf("callback saw %d messages, source %q, answer %q", len(store.messages), turn.SourceMessageID, answer)
 				}
 			}))
-			if err := renderer.Complete(context.Background(), channel.TurnContext{RoomID: "room", SourceMessageID: "question"}, tt.result); err != nil {
+			if err := renderer.Complete(context.Background(), channel.TurnContext{AgentTurn: true, RoomID: "room", SourceMessageID: "question"}, tt.result); err != nil {
 				t.Fatal(err)
 			}
 			if called != tt.want {

@@ -315,7 +315,7 @@ func (r *TranscriptRenderer) Complete(ctx context.Context, turn channel.TurnCont
 			return err
 		}
 	}
-	if r.taskTitle != nil && result.Status == agentengine.TurnSucceeded && text != "" &&
+	if r.taskTitle != nil && turn.AgentTurn && result.Status == agentengine.TurnSucceeded && text != "" &&
 		state.structuredUserInput == nil && len(result.Interactions) == 0 {
 		r.taskTitle(turn, answer)
 	}
