@@ -288,6 +288,7 @@ func (o *conversationOutput) restore(ctx context.Context, sink contract.EventSin
 				}
 			}
 		}
+		event.Recovered = true
 		event.RecoveredText = recoveredText
 		if err := emitTurnEvent(ctx, sink, event); err != nil {
 			return err

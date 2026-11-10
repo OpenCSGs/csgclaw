@@ -173,6 +173,9 @@ type TurnEvent struct {
 	Interaction  *InteractionRequest `json:"interaction,omitempty"`
 	Output       *OutputItem         `json:"output,omitempty"`
 
+	// Recovered identifies events reconstructed from Runtime history.
+	Recovered bool `json:"-"`
+
 	// A terminal history update may reconcile text still buffered by an in-process consumer.
 	RecoveredText []RecoveredTextPart `json:"-"`
 }

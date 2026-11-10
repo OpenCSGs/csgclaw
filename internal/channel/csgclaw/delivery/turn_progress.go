@@ -32,9 +32,11 @@ type progressState struct {
 	currentText     *progressText
 	textOrder       uint64
 	recoveredBefore map[int]int
+	recoveredOrder  []int
 	lastTextID      string
 	lastTextKind    string
 	tools           map[string]int
+	recoveredTools  map[string]bool
 	timer           *time.Timer
 	done            bool
 	lastErr         error
@@ -51,6 +53,8 @@ type progressText struct {
 	index     int
 	promoted  bool
 	lastDelta uint64 // Appended-text order; snapshots preserve this value.
+	position  int
+	recovered bool
 }
 
 func newProgressState(store turnProgressStore, turn channel.TurnContext) *progressState {
@@ -122,7 +126,7 @@ func (p *progressState) observe(ctx context.Context, event agentengine.TurnEvent
 			return nil
 		}
 		p.snapshot.Status = "running"
-		if event.Kind == agentengine.TurnEventToolCallStart {
+		if event.Kind == agentengine.TurnEventToolCallStart && !event.Recovered {
 			for _, item := range p.texts {
 				if item.phase != "final_answer" {
 					p.moveTextToProgress(item)
@@ -142,6 +146,12 @@ func (p *progressState) observe(ctx context.Context, event agentengine.TurnEvent
 			index = len(p.snapshot.Items)
 			p.tools[id] = index
 			p.snapshot.Items = append(p.snapshot.Items, activity.ProgressItem{ID: id, Kind: "tool"})
+			if event.Recovered {
+				if p.recoveredTools == nil {
+					p.recoveredTools = make(map[string]bool)
+				}
+				p.recoveredTools[id] = true
+			}
 		}
 		p.snapshot.Items[index].Tool = progressTool(*event.Tool, p.snapshot.Items[index].Tool)
 		immediate = !exists || terminalTool(event.Tool.Status)
@@ -217,7 +227,7 @@ func (p *progressState) observeText(event agentengine.TurnEvent) bool {
 				}
 			}
 		}
-		item = &progressText{itemID: event.ItemID, phase: event.Phase, index: -1}
+		item = &progressText{itemID: event.ItemID, phase: event.Phase, index: -1, position: len(p.snapshot.Items), recovered: event.Recovered}
 		p.texts = append(p.texts, item)
 		if event.ItemID != "" {
 			p.textItems[event.ItemID] = item
@@ -235,7 +245,7 @@ func (p *progressState) observeText(event agentengine.TurnEvent) bool {
 		item.text = event.Text
 	} else {
 		item.text += event.Text
-		if event.Text != "" && item.phase != "commentary" {
+		if event.Text != "" && (!event.Recovered || (item.phase != "commentary" && item.lastDelta == 0)) {
 			p.textOrder++
 			item.lastDelta = p.textOrder
 		}
@@ -319,9 +329,13 @@ func (p *progressState) finish(ctx context.Context, result agentengine.TurnResul
 		for _, item := range p.texts {
 			if item.promoted && item.index >= 0 {
 				promoted[item.index] = true
-			} else if before, ok := p.recoveredBefore[item.index]; ok {
-				relocated[item.index] = true
-				insertions[before] = append(insertions[before], p.snapshot.Items[item.index])
+			}
+		}
+		for _, index := range p.recoveredOrder {
+			if !promoted[index] {
+				before := p.recoveredBefore[index]
+				relocated[index] = true
+				insertions[before] = append(insertions[before], p.snapshot.Items[index])
 			}
 		}
 		items := make([]activity.ProgressItem, 0, len(p.snapshot.Items))
@@ -417,23 +431,22 @@ func (p *progressState) reconcileText(native []agentengine.TurnEvent) {
 	// Known text and tool positions bound each recovered commentary message.
 	// Matching within those bounds preserves independent repeated messages.
 	end := len(p.snapshot.Items)
+	positions := p.nativePositions(native)
 	boundaries := make([]int, len(native))
 	for i := len(native) - 1; i >= 0; i-- {
 		boundaries[i] = end
-		event := native[i]
-		if event.Tool != nil {
-			if index, ok := p.tools[event.Tool.ID]; ok {
-				end = index
-			}
-		} else if item := p.textItems[event.ItemID]; item != nil && item.index >= 0 {
-			end = item.index
+		if positions[i].known {
+			end = positions[i].before
 		}
 	}
 	start, existingItems := 0, len(p.snapshot.Items)
 	for i, event := range native {
 		if event.Tool != nil {
-			if index, ok := p.tools[event.Tool.ID]; ok && index >= start {
-				start = index + 1
+			if index, ok := p.tools[event.Tool.ID]; ok && p.recoveredTools[event.Tool.ID] {
+				p.placeRecovered(index, positions[i].before)
+			}
+			if positions[i].known && positions[i].after > start {
+				start = positions[i].after
 			}
 			continue
 		}
@@ -451,7 +464,7 @@ func (p *progressState) reconcileText(native []agentengine.TurnEvent) {
 			}
 		}
 		if item == nil {
-			item = &progressText{itemID: event.ItemID, index: -1}
+			item = &progressText{itemID: event.ItemID, index: -1, recovered: true}
 		}
 		p.textItems[event.ItemID] = item
 		item.phase, item.text = event.Phase, event.Text
@@ -459,17 +472,17 @@ func (p *progressState) reconcileText(native []agentengine.TurnEvent) {
 			newProgress := item.index < 0
 			p.moveTextToProgress(item)
 			if newProgress && item.index >= 0 {
-				if p.recoveredBefore == nil {
-					p.recoveredBefore = make(map[int]int)
-				}
-				p.recoveredBefore[item.index] = boundaries[i]
+				p.placeRecovered(item.index, boundaries[i])
 			}
 		}
 		if item.index >= 0 {
 			p.snapshot.Items[item.index].Text = item.text
-			if item.index >= start && item.index < existingItems {
+			if !positions[i].known && item.index >= start && item.index < existingItems {
 				start = item.index + 1
 			}
+		}
+		if positions[i].known && positions[i].after > start {
+			start = positions[i].after
 		}
 		retained[item] = true
 		ordered = append(ordered, item)
@@ -486,4 +499,47 @@ func (p *progressState) reconcileText(native []agentengine.TurnEvent) {
 		}
 	}
 	p.texts = append(p.texts, ordered...)
+}
+
+type progressPosition struct {
+	before, after int
+	known         bool
+}
+
+func (p *progressState) nativePositions(native []agentengine.TurnEvent) []progressPosition {
+	positions := make([]progressPosition, len(native))
+	for i, event := range native {
+		if event.Tool != nil {
+			if index, ok := p.tools[event.Tool.ID]; ok && !p.recoveredTools[event.Tool.ID] {
+				positions[i] = progressPosition{before: index, after: index + 1, known: true}
+			}
+		} else if item := p.textItems[event.ItemID]; item != nil && !item.recovered {
+			position := progressPosition{before: item.position, after: item.position, known: true}
+			if item.index == item.position {
+				position.after++
+			}
+			positions[i] = position
+		}
+	}
+	// A recovered tool belongs after the preceding live anchor in native order.
+	// Its appended card index carries no ordering information about the live text.
+	previous := 0
+	for i, event := range native {
+		if positions[i].known {
+			previous = max(previous, positions[i].after)
+		} else if event.Tool != nil {
+			positions[i] = progressPosition{before: previous, after: previous, known: true}
+		}
+	}
+	return positions
+}
+
+func (p *progressState) placeRecovered(index, before int) {
+	if p.recoveredBefore == nil {
+		p.recoveredBefore = make(map[int]int)
+	}
+	if _, exists := p.recoveredBefore[index]; !exists {
+		p.recoveredOrder = append(p.recoveredOrder, index)
+	}
+	p.recoveredBefore[index] = before
 }
