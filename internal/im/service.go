@@ -253,6 +253,7 @@ type persistedBootstrap struct {
 }
 
 type persistedRoom struct {
+	TitleSource          string                        `json:"title_source,omitempty"`
 	CloudAgent           *apitypes.CloudAgentReference `json:"cloud_agent,omitempty"`
 	CreationWorkspaceDir *string                       `json:"creation_workspace_dir,omitempty"`
 
@@ -521,6 +522,7 @@ func loadPersistedRooms(statePath string, rooms []persistedRoom) ([]Room, error)
 		}
 		loaded = append(loaded, Room{
 			CreationWorkspaceDir: room.CreationWorkspaceDir,
+			TitleSource:          room.TitleSource,
 			Archived:             room.Archived,
 			Pinned:               room.Pinned,
 			CustomTitle:          room.CustomTitle,
@@ -712,6 +714,7 @@ func saveRoomThreadsForState(statePath string, room Room, operations ...*diagnos
 func persistedRoomFromRoom(room Room) persistedRoom {
 	return persistedRoom{
 		CreationWorkspaceDir: room.CreationWorkspaceDir,
+		TitleSource:          room.TitleSource,
 		Archived:             room.Archived,
 		Pinned:               room.Pinned,
 		CustomTitle:          room.CustomTitle,
@@ -1791,6 +1794,10 @@ func (s *Service) UpdateRoom(roomID string, req UpdateRoomRequest) (Room, error)
 	if req.Title != nil {
 		room.Title = strings.TrimSpace(*req.Title)
 		room.CustomTitle = true
+		if room.TitleSource != "" || (room.TaskSession && room.IsDirect && room.CloudAgent == nil) {
+			room.TitleSource = titleSourceManual
+			room.TitleMessageID = ""
+		}
 	}
 	if req.Archived != nil {
 		room.Archived = *req.Archived
@@ -1801,7 +1808,7 @@ func (s *Service) UpdateRoom(roomID string, req UpdateRoomRequest) (Room, error)
 	if req.NotifyAllAgents != nil {
 		room.NotifyAllAgents = *req.NotifyAllAgents
 	}
-	if req.Configuration == nil && room.Title == previous.Title && room.CustomTitle == previous.CustomTitle && room.Archived == previous.Archived && room.Pinned == previous.Pinned && room.NotifyAllAgents == previous.NotifyAllAgents {
+	if req.Configuration == nil && room.Title == previous.Title && room.CustomTitle == previous.CustomTitle && room.TitleSource == previous.TitleSource && room.Archived == previous.Archived && room.Pinned == previous.Pinned && room.NotifyAllAgents == previous.NotifyAllAgents {
 		return s.presentRoomLocked(*room, ""), nil
 	}
 	if err := s.saveRoomLocked(*room); err != nil {
@@ -2609,6 +2616,7 @@ func (s *Service) CreateRoom(req CreateRoomRequest) (Room, error) {
 		SourceTeamID:       req.SourceTeamID,
 		CollaborationGuide: req.CollaborationGuide,
 		CustomTitle:        req.TaskSession,
+		TitleSource:        initialTitleSource(req),
 		CreatedBy:          creatorID,
 		ClientRequestID:    req.ClientRequestID,
 		CreatedAt:          time.Now().UTC(),

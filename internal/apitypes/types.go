@@ -217,6 +217,9 @@ type Room struct {
 	// CreationWorkspaceDir retains the requested path (empty means automatic).
 	// It is private persistence metadata used to validate creation retries.
 	CreationWorkspaceDir *string `json:"-"`
+	TitleSource          string  `json:"-"`
+	// TitleMessageID is an in-memory reservation for title generation.
+	TitleMessageID string `json:"-"`
 
 	SourceTeamID       string             `json:"source_team_id,omitempty"`
 	CollaborationGuide string             `json:"collaboration_guide,omitempty"`
@@ -252,6 +255,7 @@ type CreateRoomTaskRequest struct {
 }
 
 type CreateRoomRequest struct {
+	AutoTitle          bool                 `json:"auto_title,omitempty"`
 	CloudAgent         *CloudAgentReference `json:"cloud_agent,omitempty"`
 	SourceTeamID       string               `json:"source_team_id,omitempty"`
 	CollaborationGuide string               `json:"collaboration_guide,omitempty"`

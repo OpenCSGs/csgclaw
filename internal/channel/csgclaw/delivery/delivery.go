@@ -65,12 +65,18 @@ func WithInteractionProjector(projector InteractionProjector) RendererOption {
 	return func(renderer *TranscriptRenderer) { renderer.interactions = projector }
 }
 
+// WithTaskTitleCallback observes a completed turn after its final reply is saved.
+func WithTaskTitleCallback(callback func(channel.TurnContext, string)) RendererOption {
+	return func(renderer *TranscriptRenderer) { renderer.taskTitle = callback }
+}
+
 // TranscriptRenderer maps Engine turn events onto the existing IM activity
 // and transcript contract. Rendering state is isolated by the complete Turn
 // identity so interleaved conversations cannot overwrite each other.
 type TranscriptRenderer struct {
 	store        TranscriptStore
 	interactions InteractionProjector
+	taskTitle    func(channel.TurnContext, string)
 
 	mu             sync.Mutex
 	turns          map[turnBufferKey]*turnRenderState
@@ -271,8 +277,10 @@ func (r *TranscriptRenderer) Complete(ctx context.Context, turn channel.TurnCont
 	if !state.hasText && strings.TrimSpace(result.Output) != "" {
 		state.renderer.ApplyText(activity.RuntimeEvent{Kind: activity.RuntimeEventTextDelta, Text: result.Output})
 	}
+	answer := result.Output
 	if state.progress != nil {
-		state.renderer.ReplaceText(state.progress.finalText(result.Output))
+		answer = state.progress.finalText(result.Output)
+		state.renderer.ReplaceText(answer)
 	}
 	text := strings.TrimSpace(strings.Join(state.renderer.FinalMessages(), "\n\n"))
 	if state.progress != nil {
@@ -306,6 +314,10 @@ func (r *TranscriptRenderer) Complete(ctx context.Context, turn channel.TurnCont
 		if err := r.deliverRenderedActivity(ctx, turn, activityDelivery(turn, event, rendered)); err != nil {
 			return err
 		}
+	}
+	if r.taskTitle != nil && result.Status == agentengine.TurnSucceeded && text != "" &&
+		state.structuredUserInput == nil && len(result.Interactions) == 0 {
+		r.taskTitle(turn, answer)
 	}
 	return nil
 }
