@@ -1136,7 +1136,7 @@ Agent 回复仍只会唤醒被显式提及的 Agent，以防止回复循环。
 - 发送附件时使用 `multipart/form-data`，其中 `payload` JSON part 包含同样字段，`files` part 可以出现一次或多次。
 - 至少带有一个文件时允许发送纯附件消息。
 - 每条消息最多包含 10 个附件，单文件上限为 `1 GiB`，总大小上限为 `2 GiB`。
-- 返回的 message 可以包含 `attachments`，字段包括 `id`、`name`、`kind`、`media_type`、`size_bytes`、`sha256`、`created_at`、`download_url`、可选的 `preview_url`、可选图片尺寸，以及面向 agent 投递时可选的 `workspace_path`。
+- 返回的 message 可以包含 `attachments`，字段包括 `id`、`name`、`kind`、`media_type`、`size_bytes`、`sha256`、`created_at`、`download_url`、可选的 `preview_url`、可选图片尺寸，以及面向 agent 投递时可选的 `workspace_path`。从工作区发布的文件还包含 `source_path`，记录文件在工作区中的相对路径。即使发布时更改文件名，消息仍可通过原路径显示图片。
 
 Multipart 示例：
 

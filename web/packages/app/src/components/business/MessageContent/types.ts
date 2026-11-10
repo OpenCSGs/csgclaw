@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import type { IMMessage, TranslateFn } from "@/models/conversations";
+import type { MessageAttachment } from "@/models/attachments";
 import type { RenderedCitation } from "./markdown";
 
 export type CitationSelection = {
@@ -12,6 +13,7 @@ export type CitationSelectHandler = (selection: CitationSelection) => void;
 
 export type MessageLike = {
   id?: string;
+  attachments?: readonly MessageAttachment[] | null;
   [key: string]: unknown;
 };
 

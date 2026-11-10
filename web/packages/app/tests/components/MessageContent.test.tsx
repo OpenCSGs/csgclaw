@@ -2,6 +2,7 @@ import testMessageContentStyles from "@/components/business/MessageContent/Messa
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MessageContent } from "@/components/business/MessageContent";
+import type { MessageAttachment } from "@/models/attachments";
 import {
   ACTION_REBUILD_MANAGER,
   AgentActivityMsgTypes,
@@ -63,6 +64,56 @@ describe("MessageContent", () => {
     expect(link).toHaveAttribute("target", "_blank");
     expect(link).toHaveAttribute("rel", "noopener noreferrer");
     expect(document.querySelector("script")).toBeNull();
+  });
+
+  it.each([false, true])("updates inline images as message attachments arrive (turn progress: %s)", (withProgress) => {
+    const content = "![飞书授权二维码](feishu-im-auth-qrcode.png)";
+    const attachment: MessageAttachment = {
+      id: "qr-image",
+      name: "feishu-im-auth-qrcode.png",
+      kind: "image",
+      media_type: "image/png",
+      size_bytes: 42,
+      sha256: "image-sha",
+      created_at: "2026-11-09T00:00:00Z",
+      download_url: "/api/v1/attachments/qr-image?token=image-token",
+    };
+    const message = {
+      id: "message-qr",
+      metadata: withProgress
+        ? {
+            csgclaw: {
+              turn_progress: {
+                id: "turn-qr",
+                revision: 1,
+                status: "completed",
+                started_at: "2026-11-09T00:00:00Z",
+                ended_at: "2026-11-09T00:00:01Z",
+                items: [],
+              },
+            },
+          }
+        : undefined,
+    };
+    const base = document.createElement("base");
+    base.href = "/v1/sandboxes/csgship-test/";
+    document.head.prepend(base);
+    try {
+      const { rerender } = render(<MessageContent content={content} message={message} t={longMessageT} />);
+      expect(screen.getByRole("img", { name: "飞书授权二维码" })).toHaveAttribute("src", attachment.name);
+
+      rerender(
+        <MessageContent content={content} message={{ ...message, attachments: [attachment] }} t={longMessageT} />,
+      );
+      const image = screen.getByRole("img", { name: "飞书授权二维码" }) as HTMLImageElement;
+      expect(image).toHaveAttribute("src", "api/v1/attachments/qr-image?token=image-token");
+      expect(new URL(image.src).pathname).toBe("/v1/sandboxes/csgship-test/api/v1/attachments/qr-image");
+
+      rerender(<MessageContent content={content} message={{ ...message, attachments: [] }} t={longMessageT} />);
+      expect(screen.getByRole("img", { name: "飞书授权二维码" })).toHaveAttribute("src", attachment.name);
+    } finally {
+      base.remove();
+    }
   });
 
   it("automatically collapses long markdown messages and toggles them in place", async () => {

@@ -1,6 +1,8 @@
 import DOMPurify from "dompurify";
 import { Marked, marked } from "marked";
 import { parseCitationDocument, type CitationSource } from "@/models/citations";
+import type { MessageAttachment } from "@/models/attachments";
+import { resolveImageAttachmentURL } from "./imageAttachments";
 import { decorateMentionMarkup } from "./messageMentionMarkup";
 import { escapeHTML } from "./mentions";
 
@@ -24,6 +26,7 @@ export type RenderedMarkdown = {
 export function renderMarkdownWithCitations(
   content: unknown,
   citationLabel: (title: string) => string = (title) => `查看引用：${title}`,
+  attachments: readonly MessageAttachment[] | null = null,
 ): RenderedMarkdown {
   const citationDocument = parseCitationDocument(String(content ?? ""));
   const cited: RenderedCitation[] = [];
@@ -65,12 +68,18 @@ export function renderMarkdownWithCitations(
   const raw = parser
     ? (parser.parse(decorateMentionMarkup(citationDocument.body)) as string)
     : (marked.parse(decorateMentionMarkup(citationDocument.body)) as string);
-  const sanitized = DOMPurify.sanitize(raw, {
+  const template = document.createElement("template");
+  template.innerHTML = raw;
+  if (attachments?.length) {
+    template.content.querySelectorAll("img[src]").forEach((image) => {
+      const url = resolveImageAttachmentURL(image.getAttribute("src") || "", attachments);
+      if (url) image.setAttribute("src", url);
+    });
+  }
+  template.innerHTML = DOMPurify.sanitize(template.innerHTML, {
     ADD_ATTR: ["target", "rel", "class", "data-user-id", "data-citation-id", "aria-label"],
     USE_PROFILES: { html: true },
   });
-  const template = document.createElement("template");
-  template.innerHTML = sanitized;
   template.content.querySelectorAll("a[href]").forEach((link) => {
     link.setAttribute("target", "_blank");
     link.setAttribute("rel", "noopener noreferrer");

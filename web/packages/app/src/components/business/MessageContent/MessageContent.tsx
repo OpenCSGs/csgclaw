@@ -91,11 +91,15 @@ function MessageBody({
   const displayContent = String(content ?? "");
   const rendered = useMemo(
     () =>
-      renderMarkdownWithCitations(displayContent, (title) => {
-        const translated = t?.("citationLinkLabel", { title });
-        return translated && translated !== "citationLinkLabel" ? translated : `查看引用：${title}`;
-      }),
-    [displayContent, t],
+      renderMarkdownWithCitations(
+        displayContent,
+        (title) => {
+          const translated = t?.("citationLinkLabel", { title });
+          return translated && translated !== "citationLinkLabel" ? translated : `查看引用：${title}`;
+        },
+        message?.attachments,
+      ),
+    [displayContent, message?.attachments, t],
   );
   const markup = useMemo(
     () => ((activity && !resolvedQuestion) || slashCommandText || structured ? "" : rendered.html),
