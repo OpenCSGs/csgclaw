@@ -1,0 +1,363 @@
+/*! Derived from CSGClaw. Modified for standalone csgclaw-ui distribution. */
+@layer csgclaw-ui-theme {
+  :where(:root, [data-csgclaw-ui-theme="light"]) {
+    --csgclaw-ui-white: #ffffff;
+    --csgclaw-ui-gray-25: #fcfcfd;
+    --csgclaw-ui-gray-50: #f9fafb;
+    --csgclaw-ui-gray-100: #f2f4f7;
+    --csgclaw-ui-gray-200: #eaecf0;
+    --csgclaw-ui-gray-300: #d0d5dd;
+    --csgclaw-ui-gray-400: #98a2b3;
+    --csgclaw-ui-gray-500: #667085;
+    --csgclaw-ui-gray-600: #475467;
+    --csgclaw-ui-gray-700: #344054;
+    --csgclaw-ui-gray-800: #182230;
+    --csgclaw-ui-gray-900: #101828;
+    --csgclaw-ui-gray-950: #0c111d;
+    --csgclaw-ui-brand-100: #acbdff;
+    --csgclaw-ui-brand-300: #6584f8;
+    --csgclaw-ui-brand-500: #4d6ad6;
+    --csgclaw-ui-brand-600: #3250bd;
+    --csgclaw-ui-brand-700: #223b99;
+    --csgclaw-ui-brand-800: #17308f;
+    --csgclaw-ui-error-50: #fef3f2;
+    --csgclaw-ui-error-200: #fecdca;
+    --csgclaw-ui-error-300: #fda29b;
+    --csgclaw-ui-error-500: #f04438;
+    --csgclaw-ui-error-600: #d92d20;
+    --csgclaw-ui-error-700: #b42318;
+    --csgclaw-ui-error-800: #912018;
+    --csgclaw-ui-success-50: #ecfdf3;
+    --csgclaw-ui-success-500: #17b26a;
+    --csgclaw-ui-success-700: #067647;
+    --csgclaw-ui-warning-50: #fffaeb;
+    --csgclaw-ui-warning-300: #fec84b;
+    --csgclaw-ui-warning-500: #f79009;
+    --csgclaw-ui-warning-700: #b54708;
+    --csgclaw-ui-warning-950: #4e1d09;
+    --csgclaw-ui-space-0-5: 2px;
+    --csgclaw-ui-space-1: 4px;
+    --csgclaw-ui-space-2: 8px;
+    --csgclaw-ui-space-3: 12px;
+    --csgclaw-ui-space-6: 24px;
+    --csgclaw-ui-radius-xs: 2px;
+    --csgclaw-ui-radius-base: 6px;
+    --csgclaw-ui-radius-md: 8px;
+    --csgclaw-ui-radius-full: 9999px;
+    --csgclaw-ui-shadow-xs: 0 1px 2px rgba(16, 24, 40, 0.05);
+    --csgclaw-ui-shadow-sm: 0 1px 3px rgba(16, 24, 40, 0.1), 0 1px 2px rgba(16, 24, 40, 0.06);
+    --csgclaw-ui-shadow-md: 0 4px 8px -2px rgba(16, 24, 40, 0.1), 0 2px 4px -2px rgba(16, 24, 40, 0.06);
+    --csgclaw-ui-panel: var(--csgclaw-ui-white);
+    --csgclaw-ui-panel-strong: var(--csgclaw-ui-gray-50);
+    --csgclaw-ui-panel-soft: var(--csgclaw-ui-gray-100);
+    --csgclaw-ui-surface: var(--csgclaw-ui-white);
+    --csgclaw-ui-field: var(--csgclaw-ui-white);
+    --csgclaw-ui-popover-background: var(--csgclaw-ui-panel);
+    --csgclaw-ui-popover-border: var(--csgclaw-ui-line);
+    --csgclaw-ui-control-hover-background: var(--csgclaw-ui-primary-soft);
+    --csgclaw-ui-control-selected-background: var(--csgclaw-ui-primary-soft);
+    --csgclaw-ui-tooltip-background: var(--csgclaw-ui-panel);
+    --csgclaw-ui-tooltip-border: var(--csgclaw-ui-line);
+    --csgclaw-ui-tooltip-text: var(--csgclaw-ui-gray-700);
+    --csgclaw-ui-dialog-backdrop: rgba(15, 23, 42, 0.38);
+    --csgclaw-ui-text: var(--csgclaw-ui-gray-900);
+    --csgclaw-ui-muted: var(--csgclaw-ui-gray-500);
+    --csgclaw-ui-line: var(--csgclaw-ui-gray-200);
+    --csgclaw-ui-primary: var(--csgclaw-ui-brand-600);
+    --csgclaw-ui-primary-soft: color-mix(in srgb, var(--csgclaw-ui-brand-600) 8%, transparent);
+    --csgclaw-ui-primary-strong: var(--csgclaw-ui-brand-700);
+    --csgclaw-ui-on-primary: var(--csgclaw-ui-white);
+    --csgclaw-ui-danger: oklch(0.55 0.18 28);
+    --csgclaw-ui-warning: oklch(0.54 0.13 72);
+    --csgclaw-ui-shadow: var(--csgclaw-ui-shadow-md);
+    --csgclaw-ui-shadow-soft: var(--csgclaw-ui-shadow-xs);
+    --csgclaw-ui-focus-ring: 0 0 0 var(--csgclaw-ui-space-1)
+      color-mix(in srgb, var(--csgclaw-ui-brand-500) 24%, transparent);
+    --csgclaw-ui-error-focus-ring: 0 0 0 var(--csgclaw-ui-space-1)
+      color-mix(in srgb, var(--csgclaw-ui-error-500) 24%, transparent);
+    --csgclaw-ui-z-modal: 60;
+    --csgclaw-ui-z-portal-popover: 10050;
+    --csgclaw-ui-z-tooltip: 10060;
+    --csgclaw-ui-font-family-text:
+      "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "微软雅黑", "Helvetica Neue", Helvetica, Arial, sans-serif;
+    --csgclaw-ui-font-mono: "SFMono-Regular", "SF Mono", Menlo, Monaco, Consolas, monospace;
+    --csgclaw-ui-font-weight-normal: 400;
+    --csgclaw-ui-font-weight-medium: 500;
+    --csgclaw-ui-font-weight-semibold: 600;
+    --csgclaw-ui-text-xs-size: 12px;
+    --csgclaw-ui-text-xs-line-height: 18px;
+    --csgclaw-ui-text-sm-size: 14px;
+    --csgclaw-ui-text-sm-line-height: 22px;
+    --csgclaw-ui-text-sm-semibold-line-height: 20px;
+    --csgclaw-ui-text-md-size: 16px;
+    --csgclaw-ui-text-md-line-height: 24px;
+    --csgclaw-ui-text-xs-medium: var(--csgclaw-ui-font-weight-medium) var(--csgclaw-ui-text-xs-size) /
+      var(--csgclaw-ui-text-xs-line-height) var(--csgclaw-ui-font-family-text);
+    --csgclaw-ui-text-xs-semibold: var(--csgclaw-ui-font-weight-semibold) var(--csgclaw-ui-text-xs-size) /
+      var(--csgclaw-ui-text-xs-line-height) var(--csgclaw-ui-font-family-text);
+    --csgclaw-ui-text-sm-normal: var(--csgclaw-ui-font-weight-normal) var(--csgclaw-ui-text-sm-size) /
+      var(--csgclaw-ui-text-sm-line-height) var(--csgclaw-ui-font-family-text);
+    --csgclaw-ui-text-sm-medium: var(--csgclaw-ui-font-weight-medium) var(--csgclaw-ui-text-sm-size) /
+      var(--csgclaw-ui-text-sm-line-height) var(--csgclaw-ui-font-family-text);
+    --csgclaw-ui-text-sm-semibold: var(--csgclaw-ui-font-weight-semibold) var(--csgclaw-ui-text-sm-size) /
+      var(--csgclaw-ui-text-sm-semibold-line-height) var(--csgclaw-ui-font-family-text);
+    --csgclaw-ui-text-md-normal: var(--csgclaw-ui-font-weight-normal) var(--csgclaw-ui-text-md-size) /
+      var(--csgclaw-ui-text-md-line-height) var(--csgclaw-ui-font-family-text);
+    --csgclaw-ui-text-md-medium: var(--csgclaw-ui-font-weight-medium) var(--csgclaw-ui-text-md-size) /
+      var(--csgclaw-ui-text-md-line-height) var(--csgclaw-ui-font-family-text);
+    --csgclaw-ui-font-sans: var(--csgclaw-ui-font-family-text);
+    --csgclaw-ui-accent-text: var(--csgclaw-ui-brand-700);
+    --csgclaw-ui-accent-text-strong: var(--csgclaw-ui-brand-800);
+    --csgclaw-ui-danger-text: var(--csgclaw-ui-error-700);
+    --csgclaw-ui-danger-text-strong: var(--csgclaw-ui-error-800);
+    --csgclaw-ui-danger-hover-background: var(--csgclaw-ui-error-50);
+    --csgclaw-ui-primary-button-background: var(--csgclaw-ui-brand-600);
+    --csgclaw-ui-primary-button-hover-background: var(--csgclaw-ui-brand-700);
+    --csgclaw-ui-button-primary-border: var(--csgclaw-ui-brand-600);
+    --csgclaw-ui-button-primary-hover-border: var(--csgclaw-ui-brand-700);
+    --csgclaw-ui-button-neutral-border: var(--csgclaw-ui-gray-300);
+    --csgclaw-ui-button-neutral-background: var(--csgclaw-ui-white);
+    --csgclaw-ui-button-neutral-text: var(--csgclaw-ui-gray-700);
+    --csgclaw-ui-button-neutral-hover-border: var(--csgclaw-ui-gray-300);
+    --csgclaw-ui-button-neutral-hover-background: var(--csgclaw-ui-gray-50);
+    --csgclaw-ui-button-neutral-hover-text: var(--csgclaw-ui-gray-800);
+    --csgclaw-ui-button-tertiary-text: var(--csgclaw-ui-gray-600);
+    --csgclaw-ui-button-tertiary-hover-text: var(--csgclaw-ui-gray-700);
+    --csgclaw-ui-button-tertiary-hover-background: var(--csgclaw-ui-gray-50);
+    --csgclaw-ui-button-brand-border: color-mix(in oklab, var(--csgclaw-ui-brand-600) 20%, var(--csgclaw-ui-line));
+    --csgclaw-ui-button-brand-background: color-mix(
+      in oklab,
+      var(--csgclaw-ui-brand-600) 5%,
+      var(--csgclaw-ui-surface)
+    );
+    --csgclaw-ui-button-brand-hover-border: color-mix(
+      in oklab,
+      var(--csgclaw-ui-brand-600) 28%,
+      var(--csgclaw-ui-line)
+    );
+    --csgclaw-ui-button-danger-border: var(--csgclaw-ui-error-600);
+    --csgclaw-ui-button-danger-background: var(--csgclaw-ui-error-600);
+    --csgclaw-ui-button-danger-hover-border: var(--csgclaw-ui-error-700);
+    --csgclaw-ui-button-danger-outline-border: color-mix(
+      in oklab,
+      var(--csgclaw-ui-error-600) 32%,
+      var(--csgclaw-ui-line)
+    );
+    --csgclaw-ui-button-danger-outline-background: color-mix(
+      in oklab,
+      var(--csgclaw-ui-error-600) 8%,
+      var(--csgclaw-ui-surface)
+    );
+    --csgclaw-ui-button-danger-outline-hover-border: color-mix(
+      in oklab,
+      var(--csgclaw-ui-error-600) 46%,
+      var(--csgclaw-ui-line)
+    );
+    --csgclaw-ui-button-disabled-border: var(--csgclaw-ui-gray-200);
+    --csgclaw-ui-button-disabled-background: var(--csgclaw-ui-gray-100);
+    --csgclaw-ui-button-disabled-shadow: var(--csgclaw-ui-shadow-xs);
+    --csgclaw-ui-input-height-md: 44px;
+    --csgclaw-ui-input-height-sm: 36px;
+    --csgclaw-ui-input-padding-md: 10px 14px;
+    --csgclaw-ui-textarea-padding-md: var(--csgclaw-ui-space-3) 14px;
+    --csgclaw-ui-input-radius: var(--csgclaw-ui-radius-md);
+    --csgclaw-ui-input-background: var(--csgclaw-ui-white);
+    --csgclaw-ui-input-background-disabled: var(--csgclaw-ui-gray-50);
+    --csgclaw-ui-input-border: var(--csgclaw-ui-gray-300);
+    --csgclaw-ui-input-border-hover: var(--csgclaw-ui-gray-400);
+    --csgclaw-ui-input-border-focus: var(--csgclaw-ui-brand-300);
+    --csgclaw-ui-input-border-error: var(--csgclaw-ui-error-300);
+    --csgclaw-ui-input-text: var(--csgclaw-ui-gray-900);
+    --csgclaw-ui-input-text-placeholder: var(--csgclaw-ui-gray-500);
+    --csgclaw-ui-input-text-disabled: var(--csgclaw-ui-gray-500);
+    --csgclaw-ui-input-shadow: var(--csgclaw-ui-shadow-xs);
+    --csgclaw-ui-input-shadow-focus: var(--csgclaw-ui-focus-ring), var(--csgclaw-ui-shadow-xs);
+    --csgclaw-ui-input-shadow-error-focus: var(--csgclaw-ui-shadow-xs), var(--csgclaw-ui-error-focus-ring);
+    --csgclaw-ui-field-label-color: var(--csgclaw-ui-gray-700);
+    --csgclaw-ui-field-label-font-size: var(--csgclaw-ui-text-sm-size);
+    --csgclaw-ui-field-label-font-weight: var(--csgclaw-ui-font-weight-normal);
+    --csgclaw-ui-field-label-line-height: var(--csgclaw-ui-text-sm-line-height);
+    --csgclaw-ui-notice-warning-border: var(--csgclaw-ui-warning-300);
+    --csgclaw-ui-notice-warning-background: color-mix(
+      in srgb,
+      var(--csgclaw-ui-warning-50) 82%,
+      var(--csgclaw-ui-panel)
+    );
+  }
+  :where([data-csgclaw-ui-theme="dark"], :root[data-theme="dark"]:not([data-csgclaw-ui-theme])) {
+    --csgclaw-ui-white: #ffffff;
+    --csgclaw-ui-gray-25: #fcfcfd;
+    --csgclaw-ui-gray-50: #f9fafb;
+    --csgclaw-ui-gray-100: #f2f4f7;
+    --csgclaw-ui-gray-200: #eaecf0;
+    --csgclaw-ui-gray-300: #d0d5dd;
+    --csgclaw-ui-gray-400: #98a2b3;
+    --csgclaw-ui-gray-500: #667085;
+    --csgclaw-ui-gray-600: #475467;
+    --csgclaw-ui-gray-700: #344054;
+    --csgclaw-ui-gray-800: #182230;
+    --csgclaw-ui-gray-900: #101828;
+    --csgclaw-ui-gray-950: #0c111d;
+    --csgclaw-ui-brand-100: #acbdff;
+    --csgclaw-ui-brand-300: #6584f8;
+    --csgclaw-ui-brand-500: #4d6ad6;
+    --csgclaw-ui-brand-600: #3250bd;
+    --csgclaw-ui-brand-700: #223b99;
+    --csgclaw-ui-brand-800: #17308f;
+    --csgclaw-ui-error-50: #fef3f2;
+    --csgclaw-ui-error-200: #fecdca;
+    --csgclaw-ui-error-300: #fda29b;
+    --csgclaw-ui-error-500: #f04438;
+    --csgclaw-ui-error-600: #d92d20;
+    --csgclaw-ui-error-700: #b42318;
+    --csgclaw-ui-error-800: #912018;
+    --csgclaw-ui-warning-50: #fffaeb;
+    --csgclaw-ui-warning-300: #fec84b;
+    --csgclaw-ui-warning-500: #f79009;
+    --csgclaw-ui-warning-700: #b54708;
+    --csgclaw-ui-warning-950: #4e1d09;
+    --csgclaw-ui-space-0-5: 2px;
+    --csgclaw-ui-space-1: 4px;
+    --csgclaw-ui-space-2: 8px;
+    --csgclaw-ui-space-3: 12px;
+    --csgclaw-ui-space-6: 24px;
+    --csgclaw-ui-radius-xs: 2px;
+    --csgclaw-ui-radius-base: 6px;
+    --csgclaw-ui-radius-md: 8px;
+    --csgclaw-ui-radius-full: 9999px;
+    --csgclaw-ui-shadow-xs: 0 1px 2px rgba(16, 24, 40, 0.05);
+    --csgclaw-ui-shadow-sm: 0 1px 3px rgba(16, 24, 40, 0.1), 0 1px 2px rgba(16, 24, 40, 0.06);
+    --csgclaw-ui-shadow-md: 0 4px 8px -2px rgba(16, 24, 40, 0.1), 0 2px 4px -2px rgba(16, 24, 40, 0.06);
+    --csgclaw-ui-panel: var(--csgclaw-ui-gray-900);
+    --csgclaw-ui-panel-strong: var(--csgclaw-ui-gray-950);
+    --csgclaw-ui-panel-soft: var(--csgclaw-ui-gray-800);
+    --csgclaw-ui-surface: var(--csgclaw-ui-gray-950);
+    --csgclaw-ui-field: var(--csgclaw-ui-gray-800);
+    --csgclaw-ui-popover-background: var(--csgclaw-ui-panel-strong);
+    --csgclaw-ui-popover-border: var(--csgclaw-ui-line);
+    --csgclaw-ui-control-hover-background: var(--csgclaw-ui-primary-soft);
+    --csgclaw-ui-control-selected-background: var(--csgclaw-ui-primary-soft);
+    --csgclaw-ui-tooltip-background: var(--csgclaw-ui-gray-900);
+    --csgclaw-ui-tooltip-border: var(--csgclaw-ui-gray-700);
+    --csgclaw-ui-tooltip-text: var(--csgclaw-ui-white);
+    --csgclaw-ui-dialog-backdrop: rgba(2, 6, 23, 0.58);
+    --csgclaw-ui-text: var(--csgclaw-ui-gray-200);
+    --csgclaw-ui-muted: var(--csgclaw-ui-gray-400);
+    --csgclaw-ui-line: var(--csgclaw-ui-gray-700);
+    --csgclaw-ui-primary: var(--csgclaw-ui-brand-500);
+    --csgclaw-ui-primary-soft: color-mix(in srgb, var(--csgclaw-ui-brand-500) 18%, transparent);
+    --csgclaw-ui-primary-strong: var(--csgclaw-ui-brand-300);
+    --csgclaw-ui-on-primary: var(--csgclaw-ui-white);
+    --csgclaw-ui-danger: var(--csgclaw-ui-error-600);
+    --csgclaw-ui-warning: var(--csgclaw-ui-warning-700);
+    --csgclaw-ui-shadow: 0 12px 16px -4px rgba(0, 0, 0, 0.28), 0 4px 6px -2px rgba(0, 0, 0, 0.18);
+    --csgclaw-ui-shadow-soft: 0 1px 2px rgba(0, 0, 0, 0.28);
+    --csgclaw-ui-focus-ring: 0 0 0 var(--csgclaw-ui-space-1)
+      color-mix(in srgb, var(--csgclaw-ui-brand-500) 28%, transparent);
+    --csgclaw-ui-error-focus-ring: 0 0 0 var(--csgclaw-ui-space-1)
+      color-mix(in srgb, var(--csgclaw-ui-error-500) 24%, transparent);
+    --csgclaw-ui-z-modal: 60;
+    --csgclaw-ui-z-portal-popover: 10050;
+    --csgclaw-ui-z-tooltip: 10060;
+    --csgclaw-ui-font-family-text:
+      "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "微软雅黑", "Helvetica Neue", Helvetica, Arial, sans-serif;
+    --csgclaw-ui-font-weight-normal: 400;
+    --csgclaw-ui-font-weight-medium: 500;
+    --csgclaw-ui-font-weight-semibold: 600;
+    --csgclaw-ui-text-xs-size: 12px;
+    --csgclaw-ui-text-xs-line-height: 18px;
+    --csgclaw-ui-text-sm-size: 14px;
+    --csgclaw-ui-text-sm-line-height: 22px;
+    --csgclaw-ui-text-sm-semibold-line-height: 20px;
+    --csgclaw-ui-text-md-size: 16px;
+    --csgclaw-ui-text-md-line-height: 24px;
+    --csgclaw-ui-text-xs-medium: var(--csgclaw-ui-font-weight-medium) var(--csgclaw-ui-text-xs-size) /
+      var(--csgclaw-ui-text-xs-line-height) var(--csgclaw-ui-font-family-text);
+    --csgclaw-ui-text-xs-semibold: var(--csgclaw-ui-font-weight-semibold) var(--csgclaw-ui-text-xs-size) /
+      var(--csgclaw-ui-text-xs-line-height) var(--csgclaw-ui-font-family-text);
+    --csgclaw-ui-text-sm-normal: var(--csgclaw-ui-font-weight-normal) var(--csgclaw-ui-text-sm-size) /
+      var(--csgclaw-ui-text-sm-line-height) var(--csgclaw-ui-font-family-text);
+    --csgclaw-ui-text-sm-medium: var(--csgclaw-ui-font-weight-medium) var(--csgclaw-ui-text-sm-size) /
+      var(--csgclaw-ui-text-sm-line-height) var(--csgclaw-ui-font-family-text);
+    --csgclaw-ui-text-sm-semibold: var(--csgclaw-ui-font-weight-semibold) var(--csgclaw-ui-text-sm-size) /
+      var(--csgclaw-ui-text-sm-semibold-line-height) var(--csgclaw-ui-font-family-text);
+    --csgclaw-ui-text-md-normal: var(--csgclaw-ui-font-weight-normal) var(--csgclaw-ui-text-md-size) /
+      var(--csgclaw-ui-text-md-line-height) var(--csgclaw-ui-font-family-text);
+    --csgclaw-ui-text-md-medium: var(--csgclaw-ui-font-weight-medium) var(--csgclaw-ui-text-md-size) /
+      var(--csgclaw-ui-text-md-line-height) var(--csgclaw-ui-font-family-text);
+    --csgclaw-ui-font-sans: var(--csgclaw-ui-font-family-text);
+    --csgclaw-ui-accent-text: var(--csgclaw-ui-brand-300);
+    --csgclaw-ui-accent-text-strong: var(--csgclaw-ui-brand-100);
+    --csgclaw-ui-danger-text: var(--csgclaw-ui-error-300);
+    --csgclaw-ui-danger-text-strong: var(--csgclaw-ui-error-200);
+    --csgclaw-ui-danger-hover-background: color-mix(in srgb, var(--csgclaw-ui-error-600) 20%, transparent);
+    --csgclaw-ui-primary-button-background: var(--csgclaw-ui-brand-600);
+    --csgclaw-ui-primary-button-hover-background: var(--csgclaw-ui-brand-700);
+    --csgclaw-ui-button-primary-border: color-mix(in srgb, var(--csgclaw-ui-brand-100) 34%, transparent);
+    --csgclaw-ui-button-primary-hover-border: color-mix(in srgb, var(--csgclaw-ui-brand-100) 44%, transparent);
+    --csgclaw-ui-button-neutral-border: color-mix(in srgb, var(--csgclaw-ui-gray-300) 18%, transparent);
+    --csgclaw-ui-button-neutral-background: var(--csgclaw-ui-gray-800);
+    --csgclaw-ui-button-neutral-text: var(--csgclaw-ui-gray-25);
+    --csgclaw-ui-button-neutral-hover-border: color-mix(in srgb, var(--csgclaw-ui-gray-300) 28%, transparent);
+    --csgclaw-ui-button-neutral-hover-background: color-mix(
+      in srgb,
+      var(--csgclaw-ui-gray-700) 36%,
+      var(--csgclaw-ui-gray-900)
+    );
+    --csgclaw-ui-button-neutral-hover-text: var(--csgclaw-ui-gray-25);
+    --csgclaw-ui-button-tertiary-text: var(--csgclaw-ui-gray-300);
+    --csgclaw-ui-button-tertiary-hover-text: var(--csgclaw-ui-gray-25);
+    --csgclaw-ui-button-tertiary-hover-background: var(--csgclaw-ui-gray-800);
+    --csgclaw-ui-button-brand-border: color-mix(in oklab, var(--csgclaw-ui-brand-600) 20%, var(--csgclaw-ui-line));
+    --csgclaw-ui-button-brand-background: color-mix(
+      in oklab,
+      var(--csgclaw-ui-brand-600) 5%,
+      var(--csgclaw-ui-surface)
+    );
+    --csgclaw-ui-button-brand-hover-border: color-mix(
+      in oklab,
+      var(--csgclaw-ui-brand-600) 28%,
+      var(--csgclaw-ui-line)
+    );
+    --csgclaw-ui-button-danger-border: color-mix(in srgb, var(--csgclaw-ui-error-300) 32%, transparent);
+    --csgclaw-ui-button-danger-background: color-mix(
+      in oklab,
+      var(--csgclaw-ui-error-600) 86%,
+      var(--csgclaw-ui-error-800)
+    );
+    --csgclaw-ui-button-danger-hover-border: color-mix(in srgb, var(--csgclaw-ui-error-300) 42%, transparent);
+    --csgclaw-ui-button-danger-outline-border: color-mix(in srgb, var(--csgclaw-ui-error-300) 22%, transparent);
+    --csgclaw-ui-button-danger-outline-background: color-mix(in srgb, var(--csgclaw-ui-error-600) 16%, transparent);
+    --csgclaw-ui-button-danger-outline-hover-border: color-mix(in srgb, var(--csgclaw-ui-error-300) 32%, transparent);
+    --csgclaw-ui-button-disabled-border: color-mix(in srgb, var(--csgclaw-ui-gray-300) 12%, transparent);
+    --csgclaw-ui-button-disabled-background: color-mix(in srgb, var(--csgclaw-ui-gray-300) 8%, transparent);
+    --csgclaw-ui-button-disabled-shadow: none;
+    --csgclaw-ui-input-height-md: 44px;
+    --csgclaw-ui-input-height-sm: 36px;
+    --csgclaw-ui-input-padding-md: 10px 14px;
+    --csgclaw-ui-textarea-padding-md: var(--csgclaw-ui-space-3) 14px;
+    --csgclaw-ui-input-radius: var(--csgclaw-ui-radius-md);
+    --csgclaw-ui-input-background: var(--csgclaw-ui-field);
+    --csgclaw-ui-input-background-disabled: var(--csgclaw-ui-panel-strong);
+    --csgclaw-ui-input-border: var(--csgclaw-ui-line);
+    --csgclaw-ui-input-border-hover: var(--csgclaw-ui-gray-600);
+    --csgclaw-ui-input-border-focus: var(--csgclaw-ui-brand-300);
+    --csgclaw-ui-input-border-error: var(--csgclaw-ui-error-300);
+    --csgclaw-ui-input-text: var(--csgclaw-ui-text);
+    --csgclaw-ui-input-text-placeholder: var(--csgclaw-ui-gray-500);
+    --csgclaw-ui-input-text-disabled: var(--csgclaw-ui-gray-500);
+    --csgclaw-ui-input-shadow: none;
+    --csgclaw-ui-input-shadow-focus: var(--csgclaw-ui-focus-ring);
+    --csgclaw-ui-input-shadow-error-focus: var(--csgclaw-ui-error-focus-ring);
+    --csgclaw-ui-field-label-color: var(--csgclaw-ui-muted);
+    --csgclaw-ui-field-label-font-size: var(--csgclaw-ui-text-sm-size);
+    --csgclaw-ui-field-label-font-weight: var(--csgclaw-ui-font-weight-normal);
+    --csgclaw-ui-field-label-line-height: var(--csgclaw-ui-text-sm-line-height);
+    --csgclaw-ui-notice-warning-border: color-mix(in srgb, var(--csgclaw-ui-warning-500) 55%, var(--csgclaw-ui-line));
+    --csgclaw-ui-notice-warning-background: color-mix(
+      in srgb,
+      var(--csgclaw-ui-warning-950) 35%,
+      var(--csgclaw-ui-panel)
+    );
+  }
+}

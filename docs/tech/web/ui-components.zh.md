@@ -1,12 +1,12 @@
 # UI 组件库规范
 
-本规范适用于 Vite 前端应用里的共享展示组件库 `web/app/src/components/ui`。
+本规范适用于 `web/packages/csgclaw-ui`。
 
 英文版为 `ui-components.md`，Agent 默认以英文版为准。
 
 ## 范围
 
-`src/components/ui` 负责展示型基础件：布局基础件、按钮、图标、表单控件，以及基于 Radix 的交互基础件。UI 组件必须与数据来源无关，不应导入 API client、route 模块、workspace controller、页面模块、storage client 或 realtime client。
+`csgclaw-ui` 放仅依赖 React 和组件库主题即可使用的组件，例如按钮、表单控件、弹窗、徽标和错误提示。应用图标和跨页面共用的产品展示放在 App 的 `src/components/business`，例如 `Icons` 和 `PanelEmptyState`。页面专用布局由所属页面维护。App 的 `src/components/ui/index.ts` 只转发组件库导出，组件包的集成测试放在 `app/tests/components`。
 
 带业务语义的共享组件放在 `src/components/business`。页面私有组件放在所属页面目录下。
 
@@ -14,19 +14,19 @@
 
 项目内业务功能应优先使用已有组件库，而不是在页面里重复实现基础交互或样式：
 
-1. 页面和 feature 代码优先组合 `src/components/business` 和 `src/components/ui`。
+1. 页面和 feature 优先组合 `csgclaw-ui` 与现有业务组件。
 2. `src/components/business` 可以组合 UI 基础件、业务文案、业务状态和动作，但不应重新发明基础控件。
-3. `src/components/ui` 封装可复用的展示型基础件，并负责把 Radix primitive 的交互能力包装成 CSGClaw 的本地 API 和视觉规范。
+3. 可复用基础件放进 `csgclaw-ui`，使用组件库主题 token。业务组件迁移按前端开发规范评估。
 4. Radix primitive 是组件库的交互底座，不是业务页面的默认直接依赖。
 
-如果一个页面需要新的、强业务定制的 UI，可以先放在页面私有组件里实现。出现跨页面复用、交互契约稳定，或多个页面开始复制同类结构时，再抽取到 `src/components/ui` 或 `src/components/business`。抽取时同步更新本规范或 `docs/tech/web/development.md` 中的样式/组件规则。
+如果一个页面需要新的、强业务定制的 UI，可以先放在页面私有组件里实现。有实际的跨页面复用后，可以抽到 `src/components/business`。通用部分的 props 和主题契约稳定后，可以迁到 `csgclaw-ui`。抽取时同步更新本规范或 `docs/tech/web/development.md` 中的样式/组件规则。
 
 ## 组件包结构
 
 - 每个导出组件包使用一个 PascalCase 目录。
 - 实现、CSS 和 `index.ts` 放在同一个组件目录。
 - 组件实现直接导入自身 `.module.css`；`index.ts` 只导出公开接口。
-- 公共 UI 组件从 `src/components/ui/index.ts` 统一 re-export。
+- 公共组件从组件库的 `src/index.ts` 导出，App 通过 `src/components/ui/index.ts` 转发。
 - 移动或替换组件后避免保留旧路径兼容 re-export；直接更新调用方。
 
 ## 样式
@@ -72,7 +72,7 @@
 - 页面或业务组件不要直接依赖 Radix primitive，除非这是一次明确的页面私有探索；一旦需要复用或形成稳定交互，应抽到 `src/components/ui`。
 - 从统一的 `radix-ui` 包导入 Radix namespace，例如 `import { Select as RadixSelect } from "radix-ui"`。不要为已经由 `radix-ui` 暴露的 primitive 新增 `@radix-ui/react-*` 分包依赖。
 - 只有统一包没有暴露所需 primitive 时，才单独新增 Radix 分包，并在改动里说明原因。
-- 如果 jsdom 缺少某个 Radix primitive 依赖的浏览器 API，在 `web/app/tests/setup.ts` 里补最小、稳定的 polyfill，并让组件测试聚焦用户可见行为。
+- 如果 jsdom 缺少某个 Radix primitive 依赖的浏览器 API，在 `web/packages/app/tests/setup.ts` 里补最小、稳定的 polyfill，并让组件测试聚焦用户可见行为。
 
 ## Select
 
@@ -92,11 +92,13 @@
 
 Field 向 TextInput、TextArea、SelectTrigger 和 Combobox 传递 label/control ID、hint/error 描述、invalid 和 required 可访问状态；显式 ID 与名称优先。Field 的 required 用于字段标记，需要原生校验时同时设置控件 required。一个 Field 对应一个逻辑控件。
 
-TextInput、TextArea 拥有局部、带 data 标识的样式；历史输入和工作区选择器排除所有 `data-csg-control` 元素。收窄迁移期间，原生复合表单保留在 `shared/styles/inputs.css`，受管理 Field 的标签、提示和错误样式保持局部。紧凑输入使用 size="sm"；组合搜索容器负责边框和背景时使用 variant="plain"，避免 `!important`。
+表单用原生 form 提交。有共同标题的相关字段用 fieldset 和 legend 分组。每个可编辑的键和值各用一个 Field。字段旁有按钮时用 `as="div"`，标题旁有帮助或操作按钮时用 `labelAction`，让按钮和输入框的标签分开。控件有显式 ID 时，也将相同的 ID 传给 Field 来关联标签。
+
+TextInput、TextArea 管理自己的样式，Field 管理标签、提示和字段错误。整张表单或面板的错误用 `InlineError`。紧凑输入使用 `size="sm"`，组合搜索容器负责边框和背景时使用 `variant="plain"`。
 
 PanelHeader 提供内容与 actions 布局，EmptyState 提供标题、描述和操作，SegmentedControl 提供命名单选组及键盘导航。业务文案和持久化留给调用方。菜单表面、hover/selected、Tooltip 和 Dialog 背景颜色通过 shared/styles/tokens.css 的语义 token 管理。
 
-在 web/app 运行 `corepack pnpm ui:lab`，打开独立 ui-lab.html 展示生产组件和真实工作区 CSS 的组合场景；无需应用数据，也不进入生产构建。
+在 web/packages/app 运行 `corepack pnpm ui:lab`，打开独立 ui-lab.html 展示生产组件和真实工作区 CSS 的组合场景；无需应用数据，也不进入生产构建。
 
 ## Dropdown Menu
 
@@ -105,3 +107,5 @@ PanelHeader 提供内容与 actions 布局，EmptyState 提供标题、描述和
 ## Dialog
 
 `Dialog` 基于 `radix-ui` 包里的 `Dialog` namespace 实现。modal 流程应使用共享 dialog exports，让页面继承一致的 backdrop、portal、focus trap、关闭按钮、标题、描述和布局行为。dialog 或嵌套 floating child 需要留在特定层级内时，暴露并使用 `portalContainer`。
+
+用 `DialogHeader`、`DialogBody` 和 `DialogFooter` 组合弹窗。长表单可在 `DialogContent` 上开启 `scrollBody`，让内容区单独滚动，标题和操作保持可见。按钮顺序、文案、禁用状态和提交逻辑由对应业务维护。

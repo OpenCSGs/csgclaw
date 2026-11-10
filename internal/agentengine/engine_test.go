@@ -295,7 +295,7 @@ func TestConversationRunAuthorizesRuntimeOutputFile(t *testing.T) {
 		})
 		runtimeImpl.publish(activity.RuntimeEvent{
 			RuntimeID: runtimeID, SessionID: sessionID, Kind: activity.RuntimeEventFileOutput,
-			Payload: activity.RuntimeFile{Path: filepath.Join("reports", "result.png"), Name: "result.png", MIMEType: "image/png"},
+			Payload: activity.RuntimeFile{Path: filepath.Join("reports", "result.png"), Name: "chart.png", MIMEType: "image/png"},
 		})
 		runtimeImpl.publish(activity.RuntimeEvent{RuntimeID: runtimeID, SessionID: sessionID, Kind: activity.RuntimeEventPromptCompleted})
 		return nil
@@ -319,7 +319,7 @@ func TestConversationRunAuthorizesRuntimeOutputFile(t *testing.T) {
 		t.Fatalf("first output = %+v, want ordinary resource link", outputs[0])
 	}
 	file := result.Files[0]
-	if file.Name != "result.png" || file.MediaType != "image/png" || file.SizeBytes != int64(len(content)) || len(file.SHA256) != 64 || !strings.HasPrefix(file.ID, "file-") || file.ID == "sha256:"+file.SHA256 {
+	if file.Name != "chart.png" || file.MediaType != "image/png" || file.SizeBytes != int64(len(content)) || len(file.SHA256) != 64 || !strings.HasPrefix(file.ID, "file-") || file.ID == "sha256:"+file.SHA256 {
 		t.Fatalf("OutputFile = %+v", file.OutputFileMetadata)
 	}
 	if err := os.WriteFile(outputPath, bytes.Repeat([]byte{1}, len(content)), 0o600); err != nil {
@@ -332,6 +332,9 @@ func TestConversationRunAuthorizesRuntimeOutputFile(t *testing.T) {
 		}
 		got, readErr := io.ReadAll(download.Content)
 		closeErr := download.Content.Close()
+		if download.SourcePath != "reports/result.png" {
+			t.Fatalf("published source path = %q, want reports/result.png", download.SourcePath)
+		}
 		if download.Metadata != file.OutputFileMetadata || readErr != nil || closeErr != nil || !bytes.Equal(got, content) {
 			t.Fatalf("attempt %d authorized file: metadata=%+v bytes=%d read=%v close=%v", attempt, download.Metadata, len(got), readErr, closeErr)
 		}

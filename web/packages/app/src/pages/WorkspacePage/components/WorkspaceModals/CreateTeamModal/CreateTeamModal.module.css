@@ -1,0 +1,97 @@
+.dialog {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  max-height: calc(100dvh - 40px);
+}
+
+.header,
+.footer {
+  flex-shrink: 0;
+}
+
+.body {
+  display: grid;
+  gap: var(--space-4);
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.selection-item small,
+.selection-empty {
+  color: var(--muted);
+}
+
+.selection-empty {
+  margin-top: 14px;
+}
+
+.selection-list {
+  border-color: var(--line);
+  border-radius: 8px;
+  background: linear-gradient(180deg, oklch(1 0 0 / 0.025), transparent), var(--surface);
+}
+
+.selection-item {
+  border-radius: var(--radius-md);
+}
+
+.selection-item {
+  border-color: var(--line);
+  background: var(--surface);
+  box-shadow: var(--shadow-xs);
+}
+
+:global(:root[data-theme="dark"]) .selection-item {
+  box-shadow: none;
+}
+
+.selection-item.selection-all-item {
+  border-color: var(--brand-100);
+  background: var(--brand-25);
+}
+
+:global(:root[data-theme="dark"]) .selection-item.selection-all-item {
+  border-color: rgba(101, 132, 248, 0.3);
+  background: rgba(101, 132, 248, 0.1);
+}
+
+:global(:root[data-theme="dark"]) .selection-item {
+  border-color: var(--line);
+  background: var(--panel-strong);
+  box-shadow: none;
+}
+
+:global(:root[data-theme="dark"]) :global(.modal-card) .selection-item:global(.compact-toggle-row):hover,
+:global(:root[data-theme="dark"]) :global(.profile-section) .selection-item:global(.compact-toggle-row):hover,
+:global(:root[data-theme="dark"]) :global(.modal-card) .selection-item:global(.compact-toggle-row):focus-within,
+:global(:root[data-theme="dark"]) :global(.profile-section) .selection-item:global(.compact-toggle-row):focus-within {
+  border-color: #475467;
+  background: #182230;
+  color: var(--text);
+}
+
+:global(:root[data-theme="dark"]) .selection-item.selection-all-item,
+:global(:root[data-theme="dark"])
+  :global(.modal-card)
+  .selection-item:global(.compact-toggle-row):has(input:where(:not([data-csg-control])):checked),
+:global(:root[data-theme="dark"])
+  :global(.profile-section)
+  .selection-item:global(.compact-toggle-row):has(input:where(:not([data-csg-control])):checked) {
+  border-color: rgba(77, 106, 214, 0.62);
+  background: rgba(77, 106, 214, 0.18);
+  color: #d0d5dd;
+}
+.memberField {
+  display: grid;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.memberField > span:first-child {
+  color: var(--field-label-color);
+  font-size: var(--field-label-font-size);
+  font-weight: var(--field-label-font-weight);
+  line-height: var(--field-label-line-height);
+}

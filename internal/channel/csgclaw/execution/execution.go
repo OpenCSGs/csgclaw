@@ -266,6 +266,7 @@ func (a *Adapter) Run(ctx context.Context, binding channel.Binding, event channe
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	turn.AgentTurn = true
 	record.Capture("channel.turn", turn)
 	ctx, finishWork, observeWork := a.startWork(ctx, turn)
 	defer func() { finishWork(outcome.Result) }()

@@ -1,0 +1,23 @@
+/*! Derived from CSGClaw. Modified for standalone csgclaw-ui distribution. */
+.csg-popover-content {
+  z-index: var(--csgclaw-ui-z-portal-popover);
+  border: 1px solid var(--csgclaw-ui-popover-border);
+  border-radius: var(--csgclaw-ui-radius-md);
+  background: var(--csgclaw-ui-popover-background);
+  color: var(--csgclaw-ui-text);
+  box-shadow: var(--csgclaw-ui-shadow);
+  transform-origin: var(--radix-popover-content-transform-origin);
+  animation: csg-popover-pop 120ms ease;
+}
+
+@keyframes csg-popover-pop {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.98);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}

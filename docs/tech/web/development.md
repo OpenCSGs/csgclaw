@@ -1,6 +1,6 @@
 # Frontend Development Guide
 
-These rules apply to the Vite web app in `web/app`.
+These rules apply to the Vite web app in `web/packages/app`.
 
 Chinese companion: `development.zh.md`. This English document is the agent-facing source of truth.
 
@@ -12,10 +12,12 @@ Chinese companion: `development.zh.md`. This English document is the agent-facin
 
 ## Tooling
 
+The `web/` pnpm workspace contains the private app at `web/packages/app` and the publishable UI library at `web/packages/csgclaw-ui`. The app links the library through `workspace:*` and Vite loads its source directly. Install with the shared `web/pnpm-lock.yaml`.
+
 - Use Node.js 22.13.x or newer, up to but not including Node.js 25, for frontend development.
 - The repository root has an `.nvmrc`; with `nvm`, run `nvm use` from the `csgclaw` root.
-- `web/app/package.json` declares the required Node.js range in `engines.node`.
-- Use `pnpm` for package management. `web/app/package.json` declares supported pnpm versions through `engines.pnpm` and keeps `packageManager` pinned for Corepack users.
+- `web/packages/app/package.json` declares the required Node.js range in `engines.node`.
+- Use `pnpm` for package management. `web/packages/app/package.json` declares supported pnpm versions through `engines.pnpm` and keeps `packageManager` pinned for Corepack users.
 - Project Make targets run package commands through `scripts/web-pnpm.sh`, which reads `.nvmrc` only as the default nvm version, accepts any supported current Node.js version, and uses an existing compatible pnpm before falling back to Corepack.
 - Prefer these project-level commands for normal development:
 
@@ -30,18 +32,18 @@ make build-web
 ```bash
 corepack enable
 corepack prepare pnpm@11.1.3 --activate
-pnpm --dir web/app install
+pnpm --dir web install --frozen-lockfile
 ```
 
 ## Scope
 
-- Keep frontend source in `web/app/src`.
+- Keep frontend source in `web/packages/app/src`.
 - Treat `web/static-dist` as generated output for Go embedding.
-- Prefer local conventions already present in `web/app` before adding new patterns or dependencies.
+- Prefer local conventions already present in `web/packages/app` before adding new patterns or dependencies.
 
 ## TypeScript Type Checking
 
-- `pnpm --dir web/app typecheck` is the strict TypeScript gate and must stay passing for normal frontend changes.
+- `pnpm --dir web/packages/app typecheck` is the strict TypeScript gate and must stay passing for normal frontend changes.
 - Treat missing type declarations, unresolved modules, implicit `any`, and other TypeScript errors as part of the change. Add or refine local types, package types, runtime guards, or typed adapters until type checking passes.
 - When strict type errors appear, prioritize the touched code and shared foundations first: `src/models`, `src/shared`, controller hooks, API boundary helpers, and reusable UI primitives.
 - Prefer precise input/output types, runtime guards at external boundaries, and small null handling fixes over broad assertions or `any`.
@@ -49,7 +51,7 @@ pnpm --dir web/app install
 
 ## Static Assets And Deployment Paths
 
-- Reference `web/app/public` assets with deployment-relative paths, for example `brand/logo.svg` or `icons/users.svg`.
+- Reference `web/packages/app/public` assets with deployment-relative paths, for example `brand/logo.svg` or `icons/users.svg`.
 - Do not use root-absolute public asset URLs such as `/brand/...`, `/icons/...`, or `/favicon.ico`; cloud deployments may serve the Web UI from a subpath.
 - For bundled `src` assets, use ESM imports or `new URL("./asset.svg", import.meta.url)`.
 - After changing asset paths, run the temporary Vite build and check that no new root-absolute public asset URL was introduced.
@@ -67,7 +69,7 @@ Do not create new top-level directories unless a module is clearly cross-cutting
 
 ## Source Directory Details
 
-Use this map when creating, moving, or reorganizing files under `web/app/src`.
+Use this map when creating, moving, or reorganizing files under `web/packages/app/src`.
 
 | Path                               | Owns                                                                                                                                        | Avoid                                                                    |
 | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
@@ -77,7 +79,7 @@ Use this map when creating, moving, or reorganizing files under `web/app/src`.
 | `src/api/`                         | HTTP clients, request wrappers, endpoint types, and transport boundary code.                                                                | Rendering logic, page state, or reusable data normalization.             |
 | `src/models/`                      | Pure data shaping, formatting, parsing, routing helpers, and domain helpers that are shared or independently testable.                      | React hooks, browser storage, fetch calls, or UI state.                  |
 | `src/hooks/`                       | Reusable React hooks that compose shared app data or controller state.                                                                      | Hooks owned by one page only; keep those beside that page.               |
-| `src/components/ui/`               | Presentation primitives, layout primitives, form controls, buttons, and icons.                                                              | CSGClaw-specific business state or API-backed behavior.                  |
+| `src/components/ui/`               | A forwarding entrypoint for `csgclaw-ui`.                                                              | Component implementations or stylesheets.                  |
 | `src/components/business/`         | Cross-page app-aware components that combine UI primitives with business labels, state, actions, or API data.                               | Components used by only one page.                                        |
 | `src/pages/<PageName>/`            | Route screens and modules owned by one page.                                                                                                | Cross-page abstractions before real reuse exists.                        |
 | `src/pages/<PageName>/components/` | Components private to that page.                                                                                                            | Imports from another page's private modules.                             |
@@ -111,12 +113,10 @@ If a subdirectory later needs its own rules, add a short README in that subdirec
 
 ## Shared Components
 
-- `src/components/ui/` contains presentation primitives and icons.
-- `src/components/business/` contains shared app-aware components.
-- Do not put page-private components in `src/components/`.
-- Pure icon components belong under `src/components/ui/Icons/`.
-- A component becomes business UI when it combines UI primitives with business state, labels, actions, or API-backed data.
-- When adding page functionality, first check whether existing `src/components/ui` and `src/components/business` packages can be composed for the need. Do not duplicate base button, form, select, overlay, or tooltip interactions inside pages.
+- Build reusable UI in `web/packages/csgclaw-ui/src/components/`. The app's `src/components/ui/index.ts` only re-exports the package.
+- Use `src/components/business/` for cross-page compositions that still depend on app state, business rules, product presentation, or assets. App icons belong in `src/components/business/Icons/`. Keep page-only components with their page.
+- Review business components as they are changed. Move a component or its reusable parts into `csgclaw-ui` once they work through props and package theme tokens, independently of app APIs, hooks, routes, translations, and assets. Keep the app-specific composition with its owning feature.
+- Check the UI package and existing business components before adding base button, form, select, overlay, or tooltip interactions.
 - If shared components do not fit, prefer a page- or feature-private component near the owner before introducing new shared surface area. Promote it later only after reuse or a stable interaction contract is clear.
 - Follow `docs/tech/web/ui-components.md` when adding or changing UI primitives, Radix wrappers, form controls, overlay layers, or component-library exports. Also read it when deciding whether to use an existing component, wrap a Radix primitive, or extract a new local component.
 
@@ -156,7 +156,7 @@ src/pages/WorkspacePage/components/
 ## Styling
 
 - Component-owned styles default to CSS Modules beside the implementation, such as `AgentDetailPane.module.css`, imported by that implementation.
-- `components/ui` uses CSS Modules throughout. Keep class names and animation names local; colors and shared state relationships come from semantic tokens.
+- Use CSS Modules and package theme tokens for component styles in `csgclaw-ui`. Keep class names and animation names local.
 - The legacy workspace stylesheet entrypoints retain ordered imports for existing business styles. Keep their order stable while migrating a specific owner; do not add another component skin to these files.
 - Global styles and design tokens stay in `src/shared/styles/`.
 - New UI work should follow a progressive styling order: first compose existing global or feature-local components; if no component fits, implement the smallest local component needed.
@@ -195,7 +195,7 @@ src/pages/WorkspacePage/components/
 - Convert raw API responses into app-facing shapes before they reach broad UI code when the conversion is reused, non-trivial, or needs regression coverage. Put those pure helpers in `src/models/<domain>.ts` or a focused model module.
 - Route pages or page-owned hooks should compose data loading, mutations, loading/error/empty state, and page-specific defaults. Keep this orchestration near the route until another page needs the same behavior.
 - Shared components should receive already-shaped props or focused callbacks. They may display business state, but they should not fetch directly unless they are intentionally app-aware components in `src/components/business/` with a documented cross-page use.
-- UI primitives in `src/components/ui/` must stay data-source agnostic. They should not import `src/api/`, route models, storage clients, realtime clients, or page modules.
+- UI primitives in `csgclaw-ui` receive data through props. Their dependencies stay inside the package and its declared libraries.
 - Realtime events, polling, and shared subscriptions belong in `src/shared/realtime/` or in a page-owned hook when only one page consumes them. Normalize realtime payloads through the same model helpers used by HTTP data when possible.
 - Keep mutation flows explicit: call the API at the page/controller layer, update local or shared state in one place, and surface loading, disabled, and error states through props. Use optimistic updates only when rollback behavior is clear.
 - Introduce app-wide stores or context only for state that is genuinely shared across distant routes or layout areas. Prefer page-local hooks and derived props for data that has one visible owner.
@@ -242,16 +242,16 @@ src/pages/WorkspacePage/components/
 
 ## Tests And Verification
 
-- Run `pnpm --dir web/app typecheck` after frontend TypeScript, import-path, package, or config changes, and fix missing type declarations or type errors before handing off the change.
-- Run `pnpm --dir web/app lint` after frontend source changes.
-- Run `pnpm --dir web/app format:check` before sharing changes, or `pnpm --dir web/app format` to apply Prettier formatting.
-- Run `pnpm --dir web/app test` for the frontend Vitest suite.
-- Run `pnpm --dir web/app check` for the standard frontend verification bundle. `lint` runs ESLint; `test` and `check` include the Vitest ownership tests in `tests/components/UiBoundaries.test.ts`.
+- Run `pnpm --dir web/packages/app typecheck` after frontend TypeScript, import-path, package, or config changes, and fix missing type declarations or type errors before handing off the change.
+- Run `pnpm --dir web/packages/app lint` after frontend source changes.
+- Run `pnpm --dir web/packages/app format:check` before sharing changes, or `pnpm --dir web/packages/app format` to apply Prettier formatting.
+- Run `pnpm --dir web/packages/app test` for the frontend Vitest suite.
+- Run `pnpm --dir web/packages/app check` for the standard frontend verification bundle. `lint` runs ESLint; `test` and `check` include the Vitest ownership tests in `tests/components/UiBoundaries.test.ts`.
 - The ownership tests use `tests/helpers/sourceDependencies.ts` to inspect direct imports, re-exports and literal dynamic imports. They check directory boundaries: UI primitives do not depend on APIs, controllers, pages or application storage/realtime/platform code; shared business components and hooks do not depend on pages; cross-page composition uses public page entrypoints. Pure model helpers remain available, and no component-name allowlist is required.
 - Keep interaction and field-state tests beside the owning component when practical. Shared test utilities belong in `tests/helpers/`. Review color/token ownership in component styles and verify CSS cascade, theme colors and viewport behavior in a real browser rather than imposing a per-component list of forbidden CSS strings.
-- Run the standalone UI Lab from `web/app` with `corepack pnpm ui:lab` (or `pnpm ui:lab` using the pinned package manager). It opens `ui-lab.html`, renders real production components without API/login/controller setup, and is excluded from production build inputs. Use it for light/dark, validation, long-list and nested-dialog checks; use a real browser for portal clipping, viewport collisions and focus behavior.
-- Run `pnpm --dir web/app exec vite build --outDir /private/tmp/csgclaw-web-build --emptyOutDir` when validating bundling without touching `web/static-dist`.
-- Run `pnpm --dir web/app build` only when the generated `web/static-dist` output is intended.
+- Run the standalone UI Lab from `web/packages/app` with `corepack pnpm ui:lab` (or `pnpm ui:lab` using the pinned package manager). It opens `ui-lab.html`, renders real production components without API/login/controller setup, and is excluded from production build inputs. Use it for light/dark, validation, long-list and nested-dialog checks; use a real browser for portal clipping, viewport collisions and focus behavior.
+- Run `pnpm --dir web/packages/app exec vite build --outDir /private/tmp/csgclaw-web-build --emptyOutDir` when validating bundling without touching `web/static-dist`.
+- Run `pnpm --dir web/packages/app build` only when the generated `web/static-dist` output is intended.
 - Add or update pure unit tests for data shaping, routing, formatting, parser, serializer, and state-transition helpers. Good targets include `src/models/**`, `src/shared/lib/**`, and logic-only helpers inside component packages.
 - Put pure unit tests under `tests/models`, `tests/shared`, or a matching focused folder, and keep them small: table-test edge cases, invalid input, defaults, and regression cases without rendering React when a function call is enough.
 - Use React Testing Library with jsdom for component behavior: render the public component, query by role/label/text, drive interactions with `userEvent.setup()`, and assert user-visible output, disabled/loading/error states, or emitted callbacks.

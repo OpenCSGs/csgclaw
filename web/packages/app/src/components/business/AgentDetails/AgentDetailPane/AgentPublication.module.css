@@ -1,0 +1,109 @@
+.agent-publish-dialog-body .agent-publish-error {
+  white-space: pre-line;
+}
+
+.agent-publish-dialog-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  gap: var(--space-6);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.agent-publish-section {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.agent-publish-section + .agent-publish-section {
+  padding-top: var(--space-5);
+  border-top: 1px solid var(--line);
+}
+
+.agent-publish-section h3 {
+  margin: 0;
+  font: var(--text-sm-medium);
+  color: var(--text);
+}
+
+.agent-publish-name-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4);
+}
+
+:global(.agent-publish-dialog) .agent-publish-field {
+  min-width: 0;
+  margin: 0;
+}
+
+:global(.agent-publish-dialog) .agent-publish-description {
+  min-height: 96px;
+}
+
+:global(.agent-publish-dialog) .agent-publish-commit-message {
+  min-height: 80px;
+}
+
+.agent-publish-version-note {
+  margin: 0;
+  font: var(--text-sm-normal);
+  color: var(--muted);
+}
+
+.agent-publish-hub-note {
+  display: flex;
+  gap: var(--space-2);
+  margin: 0;
+  padding: var(--space-3);
+  border-radius: var(--radius-lg);
+  background: var(--panel-soft);
+  color: var(--muted);
+  font: var(--text-sm-normal);
+}
+
+.agent-publish-hub-note > svg {
+  flex-shrink: 0;
+  margin-top: var(--space-1);
+}
+
+@media (max-width: 560px) {
+  .agent-publish-name-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.agent-publish-memory-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.agent-publish-memory-option :global(.csg-checkbox) {
+  margin-top: 3px;
+}
+
+.agent-publish-memory-option span {
+  display: grid;
+  gap: 4px;
+}
+
+.agent-publish-memory-option strong {
+  font: var(--text-sm-normal);
+}
+
+.agent-publish-memory-option small {
+  color: var(--text-muted);
+  font-size: var(--text-sm-size);
+  font-weight: var(--font-weight-light);
+  line-height: 1.45;
+}

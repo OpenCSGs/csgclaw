@@ -21,8 +21,9 @@ internal/config/        config defaults, load/save
 internal/api/           HTTP handlers and router
 internal/im/            IM service and channel integration
 internal/server/        HTTP server and UI wiring
-web/app/                Web UI development source and Vite project
-web/static-dist/        generated Web UI assets for Go embed; run make web-build
+web/packages/app/       Web UI development source and Vite project
+web/packages/csgclaw-ui/ shared UI component package
+web/static-dist/        generated Web UI assets for Go embed; run make build-web
 ```
 
 ## Commands
@@ -48,7 +49,7 @@ make release
 - Prefer existing patterns and the standard library before adding dependencies.
 - Format with `make fmt`.
 - Add or update tests when changing CLI, config, API, or runtime behavior.
-- Before changing the Vite web app, read and follow `docs/tech/web/development.md`; it owns frontend structure, source layout, components, styling, state/data flow, accessibility, assets, and verification. This includes changes under `web/app/src`, frontend tests, package/config files, CSS/Tailwind/tokens, public asset paths, routes, i18n text, and generated `web/static-dist` handling.
+- Before changing the Vite web app, read and follow `docs/tech/web/development.md`; it owns frontend structure, source layout, components, styling, state/data flow, accessibility, assets, and verification. This includes changes under `web/packages/app/src`, frontend tests, package/config files, CSS/Tailwind/tokens, public asset paths, routes, i18n text, and generated `web/static-dist` handling.
 - Do not change BoxLite sandbox integration or packaging paths unless the task is about sandbox/runtime integration.
 - When changing config fields or defaults, update loader, saver, onboard flow, tests, and docs together.
 - Never hardcode or print real secrets; startup and logs must keep tokens redacted.

@@ -46,6 +46,9 @@ type OutputFileMetadata struct {
 type OutputFile struct {
 	OutputFileMetadata
 
+	// SourcePath identifies the published file relative to its workspace for inline references.
+	SourcePath string `json:"-"`
+
 	snapshot *outputFileSnapshot
 }
 

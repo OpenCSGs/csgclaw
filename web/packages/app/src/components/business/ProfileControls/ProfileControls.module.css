@@ -1,0 +1,106 @@
+.mcp-servers-panel {
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.mcp-servers-panel [data-csg-field-part][role="alert"] {
+  margin-top: 0;
+}
+
+.mcp-servers-actions {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+  margin-inline-start: auto;
+}
+
+.mcp-servers-textarea {
+  min-height: 168px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 18px;
+  resize: vertical;
+}
+
+@media (max-width: 680px) {
+  .mcp-servers-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+  }
+
+  .mcp-servers-actions > button {
+    min-width: 0;
+    height: auto;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+}
+
+.reasoning-controls-field {
+  min-width: 0;
+}
+
+.runtime-option-input-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.runtime-option-input-row input {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.runtime-option-action {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.field-help-trigger {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  padding: 0;
+  cursor: help;
+}
+
+.field-help-trigger:hover,
+.field-help-trigger:focus-visible {
+  color: var(--text);
+  border-color: var(--accent);
+  outline: none;
+}
+
+.field-help-flyout {
+  max-width: min(380px, calc(100vw - 24px));
+  max-height: min(280px, 42vh);
+  overflow: auto;
+  box-shadow: var(--shadow);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.notifier-copy-row {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.notifier-copy-row input {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
+.notifier-copy-button {
+  width: fit-content;
+}

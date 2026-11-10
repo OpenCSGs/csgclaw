@@ -1,0 +1,290 @@
+@layer theme, utilities;
+
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities);
+@import "./tokens.css";
+
+* {
+  box-sizing: border-box;
+}
+
+*::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+*::-webkit-scrollbar-track,
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: transparent;
+  transition: background-color 160ms ease;
+}
+
+*[data-scrollbar-active="true"]::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--muted) 44%, transparent);
+}
+
+@supports not selector(::-webkit-scrollbar) {
+  * {
+    scrollbar-color: transparent transparent;
+    scrollbar-width: thin;
+  }
+
+  *[data-scrollbar-active="true"] {
+    scrollbar-color: color-mix(in srgb, var(--muted) 58%, transparent) transparent;
+  }
+}
+
+:root {
+  --app-ui-viewport-height: 100dvh;
+  --app-rise-in: rise-in;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+html {
+  background: var(--bg);
+  color-scheme: dark;
+}
+
+html[data-theme="light"] {
+  color-scheme: light;
+}
+
+body {
+  margin: 0;
+  min-height: var(--app-ui-viewport-height);
+  color: var(--text);
+  font-size: var(--text-md-size);
+  font-family: var(--font-sans);
+  overflow: hidden;
+  background: var(--bg);
+  background-size: auto;
+  letter-spacing: 0;
+  text-autospace: normal;
+}
+
+#root {
+  min-height: var(--app-ui-viewport-height);
+}
+
+html,
+button:where(:not([data-csg-control])),
+input:where(:not([data-csg-control])),
+textarea:where(:not([data-csg-control])),
+select:where(:not([data-csg-control])) {
+  font-family: var(--font-sans);
+}
+
+.truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.empty-state {
+  height: 100%;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 10px;
+  padding: 40px;
+  text-align: center;
+  color: var(--muted);
+}
+
+.app-error-state {
+  gap: 12px;
+}
+
+.app-error-state strong {
+  color: var(--text);
+  font-size: 18px;
+}
+
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes signal-pulse {
+  0%,
+  100% {
+    opacity: 0.42;
+    transform: scaleX(0.82);
+  }
+
+  50% {
+    opacity: 1;
+    transform: scaleX(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 1ms !important;
+  }
+}
+
+body::before,
+body::after {
+  display: none;
+}
+
+[data-tooltip] {
+  position: relative;
+}
+
+[data-tooltip]::after {
+  position: absolute;
+  z-index: var(--z-tooltip);
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    opacity 120ms ease,
+    transform 120ms ease;
+  content: attr(data-tooltip);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  max-width: min(320px, calc(100vw - 24px));
+  padding: 8px 12px;
+  border: 1px solid var(--tooltip-border);
+  border-radius: 8px;
+  background: var(--tooltip-background);
+  color: var(--tooltip-text);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 16px;
+  text-align: center;
+  box-shadow: none;
+  white-space: nowrap;
+}
+
+[data-tooltip]:hover::after,
+[data-tooltip]:focus-visible::after {
+  opacity: 1;
+}
+
+[data-tooltip-side="bottom"]:not([data-tooltip-side="top"]):not([data-tooltip-side="left"]):not(
+    [data-tooltip-side="right"]
+  )::after,
+[data-tooltip-side="bottom"]::after {
+  top: calc(100% + 10px);
+  left: 50%;
+  transform: translateX(-50%) translateY(-2px);
+}
+
+[data-tooltip-side="bottom"][data-tooltip-align="start"]::after {
+  left: 0;
+  transform: translateY(-2px);
+}
+
+[data-tooltip-side="bottom"][data-tooltip-align="end"]::after {
+  right: 0;
+  left: auto;
+  transform: translateY(-2px);
+}
+
+[data-tooltip-side="top"]::after {
+  bottom: calc(100% + 10px);
+  left: 50%;
+  transform: translateX(-50%) translateY(2px);
+}
+
+[data-tooltip-side="top"][data-tooltip-align="start"]::after {
+  left: 0;
+  transform: translateY(2px);
+}
+
+[data-tooltip-side="top"][data-tooltip-align="end"]::after {
+  right: 0;
+  left: auto;
+  transform: translateY(2px);
+}
+
+[data-tooltip-side="left"]::after {
+  top: 50%;
+  right: calc(100% + 10px);
+  transform: translateY(-50%) translateX(2px);
+}
+
+[data-tooltip-side="left"][data-tooltip-align="start"]::after {
+  top: 0;
+  transform: translateX(2px);
+}
+
+[data-tooltip-side="left"][data-tooltip-align="end"]::after {
+  top: auto;
+  bottom: 0;
+  transform: translateX(2px);
+}
+
+[data-tooltip-side="right"]::after {
+  top: 50%;
+  left: calc(100% + 10px);
+  transform: translateY(-50%) translateX(-2px);
+}
+
+[data-tooltip-side="right"][data-tooltip-align="start"]::after {
+  top: 0;
+  transform: translateX(-2px);
+}
+
+[data-tooltip-side="right"][data-tooltip-align="end"]::after {
+  top: auto;
+  bottom: 0;
+  transform: translateX(-2px);
+}
+
+/* Native buttons share this baseline. Managed controls own their disabled states. */
+button:where(:not([data-csg-control])):disabled:not(.csg-switch),
+button:where(:not([data-csg-control]))[disabled]:not(.csg-switch) {
+  cursor: not-allowed;
+  pointer-events: none;
+  background: var(--gray-100);
+  border-color: var(--gray-200);
+  color: var(--gray-400);
+  box-shadow: var(--shadow-xs);
+  opacity: 1;
+}
+
+:root[data-theme="dark"] button:where(:not([data-csg-control])):disabled:not(.csg-switch),
+:root[data-theme="dark"] button:where(:not([data-csg-control]))[disabled]:not(.csg-switch) {
+  border-color: rgba(208, 213, 221, 0.12);
+  background: rgba(208, 213, 221, 0.08);
+  color: var(--gray-500);
+  box-shadow: none;
+}

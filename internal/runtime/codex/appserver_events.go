@@ -167,6 +167,7 @@ func (m *appServerManager) handleRawAppServerNotification(runtimeID string, live
 	default:
 		if strings.HasPrefix(method, "item/") {
 			if appServerNestedString(params, "item", "type") == "contextCompaction" {
+				live.setTurnCompacting(threadID, turnID, method)
 				m.publishContextUsage(runtimeID, live, threadID, params, method)
 			}
 			m.handleRawItemNotification(runtimeID, live, threadID, method, params)
@@ -261,6 +262,11 @@ func (m *appServerManager) handleRawErrorNotification(runtimeID string, live *li
 	errMsg := appServerNestedString(params, "error", "message")
 	if errMsg == "" {
 		errMsg = appServerString(params, "message")
+	}
+	if !willRetry && isCodexRequestTooLarge(errMsg) {
+		// The terminal notification can precede turn/completed. Wait for the
+		// completed turn so its failure cannot spill into a following turn.
+		return
 	}
 	result := appServerTurnResult{turnID: appServerNotificationTurnID(params), activity: activity}
 	if !willRetry {

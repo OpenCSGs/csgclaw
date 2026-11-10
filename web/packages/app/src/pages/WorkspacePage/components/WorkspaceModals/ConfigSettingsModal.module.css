@@ -1,0 +1,42 @@
+.dialog[role="dialog"] {
+  width: min(760px, calc(100vw - 40px));
+}
+
+.body {
+  display: grid;
+  gap: 16px;
+}
+
+.form {
+  display: grid;
+  gap: 20px;
+}
+
+.section {
+  display: grid;
+  gap: 12px;
+}
+
+.sectionTitle {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 650;
+  color: var(--text);
+}
+
+.stack {
+  display: grid;
+  gap: 12px;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+@media (max-width: 640px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+}

@@ -1,6 +1,6 @@
 # 前端开发规范
 
-本规范适用于 `web/app` 下的 Vite 前端应用。
+本规范适用于 `web/packages/app` 下的 Vite 前端应用。
 
 英文版为 `development.md`，Agent 默认以英文版为准。
 
@@ -12,10 +12,12 @@
 
 ## 工具链
 
+`web/` 是 pnpm 工作区，包含私有应用 `web/packages/app` 和可发布的组件包 `web/packages/csgclaw-ui`。应用用 `workspace:*` 引用组件包，Vite 直接读取源码。安装使用共享的 `web/pnpm-lock.yaml`。
+
 - 前端开发使用 Node.js 22.13.x 或更新版本，但不包括 Node.js 25 及以上。
 - 仓库根目录有 `.nvmrc`；使用 `nvm` 时，在 `csgclaw` 根目录运行 `nvm use`。
-- `web/app/package.json` 通过 `engines.node` 声明 Node.js 版本范围。
-- 包管理使用 `pnpm`。`web/app/package.json` 通过 `engines.pnpm` 声明支持的 pnpm 版本，并保留 `packageManager` 字段供 Corepack 使用。
+- `web/packages/app/package.json` 通过 `engines.node` 声明 Node.js 版本范围。
+- 包管理使用 `pnpm`。`web/packages/app/package.json` 通过 `engines.pnpm` 声明支持的 pnpm 版本，并保留 `packageManager` 字段供 Corepack 使用。
 - 项目的 Make 目标会通过 `scripts/web-pnpm.sh` 执行前端包管理命令。该脚本只把 `.nvmrc` 作为默认 nvm 版本；如果当前 Node.js 已在支持范围内，就不会强制切换，并且优先使用已有的兼容 pnpm，之后才回退到 Corepack。
 - 日常开发优先使用这些项目级命令:
 
@@ -30,18 +32,18 @@ make build-web
 ```bash
 corepack enable
 corepack prepare pnpm@11.1.3 --activate
-pnpm --dir web/app install
+pnpm --dir web install --frozen-lockfile
 ```
 
 ## 范围
 
-- 前端源码放在 `web/app/src`。
+- 前端源码放在 `web/packages/app/src`。
 - `web/static-dist` 是给 Go embed 使用的构建产物。
-- 新增模式或依赖前，优先沿用 `web/app` 里已有的约定。
+- 新增模式或依赖前，优先沿用 `web/packages/app` 里已有的约定。
 
 ## TypeScript 类型检查
 
-- `pnpm --dir web/app typecheck` 是严格 TypeScript 门槛，普通前端改动必须保持通过。
+- `pnpm --dir web/packages/app typecheck` 是严格 TypeScript 门槛，普通前端改动必须保持通过。
 - 缺失类型声明、模块无法解析、隐式 `any` 和其它 TypeScript 报错，都属于本次改动要处理的内容。通过补充或收敛本地类型、包类型、运行时 guard 或 typed adapter，让类型检查通过。
 - 处理 strict 类型报错时，优先处理本次触碰的代码和共享底座：`src/models`、`src/shared`、controller hooks、API 边界 helper 和可复用 UI primitives。
 - 优先使用准确的输入/输出类型、外部边界运行时 guard、小范围 null 处理；不要用大范围断言或 `any` 掩盖问题。
@@ -49,7 +51,7 @@ pnpm --dir web/app install
 
 ## 静态资源与部署路径
 
-- 引用 `web/app/public` 资源时用部署相对路径，例如 `brand/logo.svg` 或 `icons/users.svg`。
+- 引用 `web/packages/app/public` 资源时用部署相对路径，例如 `brand/logo.svg` 或 `icons/users.svg`。
 - 不要写 `/brand/...`、`/icons/...`、`/favicon.ico` 这类根路径 public 资源；云端可能挂在子路径。
 - `src` 里的打包资源用 ESM import 或 `new URL("./asset.svg", import.meta.url)`。
 - 改资源路径后跑一次临时 Vite build，确认没有新增根路径 public 资源引用。
@@ -67,7 +69,7 @@ pnpm --dir web/app install
 
 ## 源码目录细则
 
-创建、移动或重组 `web/app/src` 下的文件时，使用这张表判断归属。
+创建、移动或重组 `web/packages/app/src` 下的文件时，使用这张表判断归属。
 
 | 路径                               | 职责                                                                                    | 避免                                                      |
 | ---------------------------------- | --------------------------------------------------------------------------------------- | --------------------------------------------------------- |
@@ -77,7 +79,7 @@ pnpm --dir web/app install
 | `src/api/`                         | HTTP client、请求封装、endpoint 类型和传输边界。                                        | 渲染逻辑、页面状态或可复用数据归一化。                    |
 | `src/models/`                      | 可共享或可独立测试的纯数据整理、格式化、解析、路由和领域 helper。                       | React hooks、浏览器存储、fetch 调用或 UI 状态。           |
 | `src/hooks/`                       | 复用型 React hooks，用于组合共享应用数据或 controller 状态。                            | 只属于单个页面的 hooks；这类 hooks 放页面附近。           |
-| `src/components/ui/`               | 展示型基础组件、布局基础件、表单控件、按钮和图标。                                      | CSGClaw 业务状态或 API 数据行为。                         |
+| `src/components/ui/`               | `csgclaw-ui` 的统一转发入口。                                      | 组件实现和样式文件。                         |
 | `src/components/business/`         | 跨页面复用的业务组件，组合 UI 基础件和业务文案、状态、动作或 API 数据。                 | 只被单个页面使用的组件。                                  |
 | `src/pages/<PageName>/`            | 路由页面和该页面拥有的模块。                                                            | 没有真实复用前提前抽跨页面抽象。                          |
 | `src/pages/<PageName>/components/` | 页面私有组件。                                                                          | 从其它页面导入私有模块。                                  |
@@ -111,12 +113,10 @@ pnpm --dir web/app install
 
 ## 共享组件
 
-- `src/components/ui/` 放展示型基础组件和图标。
-- `src/components/business/` 放跨页面复用的业务组件。
-- 不要把页面私有组件放进 `src/components/`。
-- 纯图标组件放在 `src/components/ui/Icons/`。
-- 当组件把 UI 基础件与业务状态、文案、动作或 API 数据组合起来时，它就是业务组件。
-- 新增页面功能时，先查已有 `src/components/ui` 和 `src/components/business` 是否能组合实现；不要在页面里重复实现基础按钮、表单、选择器、浮层或 tooltip 交互。
+- 通用 UI 实现在 `web/packages/csgclaw-ui/src/components/`。App 的 `src/components/ui/index.ts` 只转发组件库导出。
+- `src/components/business/` 暂放跨页面共用、仍依赖应用状态、业务规则、产品展示或静态资源的组件。应用图标放在 `src/components/business/Icons/`。页面专用组件放在所属页面。
+- 改动业务组件时顺带评估其通用部分。可以仅通过 props 和组件库主题 token 使用，且脱离应用 API、hook、路由、文案和资源后，将组件或可复用部分迁入 `csgclaw-ui`。应用专用的组合逻辑留在所属业务。
+- 新增按钮、表单、选择器、浮层或 tooltip 交互前，先查组件库和已有业务组件。
 - 如果共享组件不适合，优先在当前页面或 feature 附近实现页面私有组件，不要过早增加新的共享组件面。只有出现复用需求或交互契约稳定后，再提升为共享组件。
 - 新增或修改 UI 基础件、Radix wrapper、表单控件、浮层层级或组件库 export 时，遵循 `docs/tech/web/ui-components.md` 或 `docs/tech/web/ui-components.zh.md`。当你需要判断“应该用现有组件、直接用 Radix、还是抽一个新的本地组件”时，也先看该组件库规范。
 
@@ -156,7 +156,7 @@ src/pages/WorkspacePage/components/
 ## 样式
 
 - 组件自有样式默认使用同目录的 CSS Modules，例如 `AgentDetailPane.module.css`，由实现文件导入。
-- `components/ui` 全部使用 CSS Modules；类名和动画局部化，主题与共享状态消费语义 token。
+- `csgclaw-ui` 的组件样式使用 CSS Modules 和组件库主题 token，类名和动画保持局部化。
 - 现有工作区 CSS 入口通过有序 import 加载历史业务样式。迁移具体组件时保持顺序，不继续在入口汇总组件皮肤。
 - 全局样式和设计 token 放在 `src/shared/styles/`。
 - 新增 UI 工作遵循渐进式样式顺序：先组合已有全局组件或 feature 局部组件；如果没有合适组件，再实现最小必要的局部组件。
@@ -193,7 +193,7 @@ src/pages/WorkspacePage/components/
 - 原始 API 响应进入大范围 UI 代码前，如果转换逻辑会复用、足够复杂或需要回归测试，先转换成前端应用使用的形态。纯转换 helper 放在 `src/models/<domain>.ts` 或聚焦的 model 模块里。
 - 路由页面或页面拥有的 hook 负责组合数据加载、mutation、loading/error/empty 状态和页面专属默认值。只要还没有其它页面复用，就把这层编排留在路由附近。
 - 共享组件应接收已经整理好的 props 或聚焦的 callback。组件可以展示业务状态，但不要直接 fetch；除非它是 `src/components/business/` 下有明确跨页面用途的 app-aware 组件。
-- `src/components/ui/` 下的 UI 基础件必须与数据来源无关。不要导入 `src/api/`、route model、storage client、realtime client 或页面模块。
+- `csgclaw-ui` 的基础组件通过 props 接收数据，依赖限定在包内和声明的外部库。
 - 实时事件、轮询和共享订阅放在 `src/shared/realtime/`；如果只有一个页面消费，放在页面拥有的 hook 里。能复用 HTTP 数据的 model helper 时，实时 payload 也通过同一套 helper 归一化。
 - mutation 流程保持显式：在页面/controller 层调用 API，在一个明确位置更新本地或共享状态，并通过 props 暴露 loading、disabled 和 error 状态。只有回滚行为清晰时才使用 optimistic update。
 - 只有状态确实需要跨远距离路由或布局区域共享时，才引入全局 store 或 context。单一可见 owner 的数据优先使用页面本地 hook 和派生 props。
@@ -229,13 +229,13 @@ src/pages/WorkspacePage/components/
 
 ## 测试与验证
 
-- 前端 TypeScript、import 路径、包依赖或配置变化后，运行 `pnpm --dir web/app typecheck`，并在交付前修复缺失类型声明和类型报错。
-- 前端源码变化后，运行 `pnpm --dir web/app lint`。
-- 提交或共享改动前，运行 `pnpm --dir web/app format:check`；需要应用 Prettier 格式化时运行 `pnpm --dir web/app format`。
-- 运行 `pnpm --dir web/app test` 执行前端 Vitest 测试。
-- 运行 `pnpm --dir web/app check` 执行标准前端验证组合。
-- 需要验证打包但不想改 `web/static-dist` 时，运行 `pnpm --dir web/app exec vite build --outDir /private/tmp/csgclaw-web-build --emptyOutDir`。
-- 只有确实需要更新嵌入产物时，才运行 `pnpm --dir web/app build`。
+- 前端 TypeScript、import 路径、包依赖或配置变化后，运行 `pnpm --dir web/packages/app typecheck`，并在交付前修复缺失类型声明和类型报错。
+- 前端源码变化后，运行 `pnpm --dir web/packages/app lint`。
+- 提交或共享改动前，运行 `pnpm --dir web/packages/app format:check`；需要应用 Prettier 格式化时运行 `pnpm --dir web/packages/app format`。
+- 运行 `pnpm --dir web/packages/app test` 执行前端 Vitest 测试。
+- 运行 `pnpm --dir web/packages/app check` 执行标准前端验证组合。
+- 需要验证打包但不想改 `web/static-dist` 时，运行 `pnpm --dir web/packages/app exec vite build --outDir /private/tmp/csgclaw-web-build --emptyOutDir`。
+- 只有确实需要更新嵌入产物时，才运行 `pnpm --dir web/packages/app build`。
 - 数据整理、路由解析、格式化、parser、serializer、状态流转 helper 应优先补纯单元测试。典型目标包括 `src/models/**`、`src/shared/lib/**`，以及组件包里不依赖 React 渲染的纯逻辑 helper。
 - 纯单元测试放在 `tests/models`、`tests/shared` 或匹配语义的专门目录下，保持小而聚焦：覆盖表格化边界、非法输入、默认值和回归案例；函数调用足够时，不要为了测试而渲染 React。
 - 组件行为用 React Testing Library + jsdom：渲染公开组件，用 role/label/text 查询，用 `userEvent.setup()` 驱动交互，并断言用户可见输出、disabled/loading/error 状态或回调。
@@ -265,4 +265,4 @@ src/pages/WorkspacePage/components/
 
 组件交互和字段状态的测试尽量放在组件旁边，公共测试工具放在 `tests/helpers/`。颜色与 token 归属在组件样式中审查；CSS 级联、主题颜色及视口行为补真实浏览器验证，不再按特定组件名单禁止一组 CSS 字符串。
 
-在 `web/app` 运行 `corepack pnpm ui:lab`，使用项目固定包管理器打开 `ui-lab.html`。展示入口直接使用生产组件，无需后端、账号或控制器，且不进入生产构建。验收明暗主题、错误状态、长列表和嵌套弹窗；Portal 裁切、视口碰撞和焦点行为必须补真实浏览器验证。
+在 `web/packages/app` 运行 `corepack pnpm ui:lab`，使用项目固定包管理器打开 `ui-lab.html`。展示入口直接使用生产组件，无需后端、账号或控制器，且不进入生产构建。验收明暗主题、错误状态、长列表和嵌套弹窗；Portal 裁切、视口碰撞和焦点行为必须补真实浏览器验证。

@@ -55,6 +55,7 @@ func authorizePresentedFiles(ctx context.Context, runtimeID, workspace string, r
 			return nil, dshOutputFileUnavailable(runtimeID, "detect_media_type", detectErr)
 		}
 		file.MediaType = mediaType
+		file.SourcePath = filepath.ToSlash(relativePath)
 		files = append(files, file)
 	}
 	return files, nil

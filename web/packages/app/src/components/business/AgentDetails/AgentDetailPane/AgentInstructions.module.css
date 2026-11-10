@@ -1,0 +1,46 @@
+.agent-instructions-header {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.agent-instructions-header :global(.profile-section-heading) {
+  min-width: 0;
+}
+
+.agent-instructions-content {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+:global(.agent-detail-pane)
+  :global(.agent-page-editor-instructions)
+  .agent-instructions-content
+  > :global(.profile-grid-compact) {
+  height: 100%;
+  min-height: 0;
+}
+
+:global(.agent-detail-pane)
+  :global(.agent-page-editor-instructions)
+  .agent-instructions-content
+  > :global(.profile-grid-compact) {
+  flex: 1 1 auto;
+}
+
+:global(.agent-detail-pane) :global(.agent-instructions-section) :global(.field) textarea.agent-instructions-editor {
+  height: 100%;
+  min-height: 180px;
+  resize: none;
+}
+
+@container (max-width: 620px) {
+  .agent-instructions-header {
+    flex-direction: column;
+    gap: 12px;
+  }
+}

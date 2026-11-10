@@ -364,11 +364,11 @@ internal/im.Service
 
 前端：
 
-- `web/app/tests/models/conversations.test.ts`
+- `web/packages/app/tests/models/conversations.test.ts`
   - `applyIMEvent(room.messages_cleared)` 清空目标 room messages/threads，不影响其他 room。
-- `web/app/tests/hooks/useConversationController.test.ts`
+- `web/packages/app/tests/hooks/useConversationController.test.ts`
   - 本地调用清空后 room 仍选中，thread panel 关闭。
-- `web/app/tests/components/ConversationPane.test.tsx`
+- `web/packages/app/tests/components/ConversationPane.test.tsx`
   - room tools 显示“清空聊天记录”。
   - 点击后需要确认，不直接调用删除。
   - 确认后调用 `/api/v1/rooms/{roomID}:clearMessages`，不调用 `/api/v1/rooms/{roomID}/messages`。

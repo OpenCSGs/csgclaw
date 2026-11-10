@@ -1,0 +1,84 @@
+.status {
+  display: grid;
+  grid-template-columns: 10px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  padding: 12px 14px;
+  border: 1px solid color-mix(in oklab, var(--primary) 28%, var(--line));
+  border-radius: 8px;
+  background: var(--primary-soft);
+  color: var(--text);
+}
+
+.status p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.dot {
+  width: 10px;
+  height: 10px;
+  margin-top: 5px;
+  border-radius: 999px;
+  background: var(--primary);
+  box-shadow: 0 0 0 4px color-mix(in oklab, var(--primary) 16%, transparent);
+}
+
+.status[data-phase="starting"] .dot,
+.status[data-phase="restarting"] .dot {
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+.status[data-phase="done"] {
+  border-color: color-mix(in oklab, var(--success-700) 32%, var(--line));
+  background: var(--success-50);
+}
+
+.status[data-phase="done"] .dot {
+  background: var(--success-700);
+  box-shadow: 0 0 0 4px color-mix(in oklab, var(--success-700) 16%, transparent);
+}
+
+.status[data-phase="error"] {
+  border-color: color-mix(in oklab, var(--danger) 32%, var(--line));
+  background: var(--error-50);
+}
+
+.status[data-phase="error"] .dot {
+  background: var(--danger);
+  box-shadow: 0 0 0 4px color-mix(in oklab, var(--danger) 16%, transparent);
+}
+
+.status[data-phase="manual_restart"] {
+  border-color: color-mix(in oklab, var(--warning-700) 32%, var(--line));
+  background: var(--warning-50);
+}
+
+.status[data-phase="manual_restart"] .dot {
+  background: var(--warning-700);
+  box-shadow: 0 0 0 4px color-mix(in oklab, var(--warning-700) 16%, transparent);
+}
+
+:global(:root[data-theme="dark"]) .status[data-phase="done"] {
+  border-color: color-mix(in srgb, var(--success-500) 38%, transparent);
+  background: color-mix(in srgb, var(--success-500) 12%, transparent);
+}
+
+:global(:root[data-theme="dark"]) .status[data-phase="error"] {
+  border-color: color-mix(in srgb, var(--error-600) 42%, transparent);
+  background: color-mix(in srgb, var(--error-600) 12%, transparent);
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 0.62;
+    transform: scale(0.86);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}

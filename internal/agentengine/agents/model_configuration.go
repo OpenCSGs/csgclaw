@@ -208,16 +208,23 @@ func (s *ModelConfiguration) hydrateProfileFromCatalogLocked(profile AgentProfil
 	out.ModelProviderID = providerID
 	out.Provider = ProfileProviderForModelProviderID(providerID)
 	if provider, ok := ModelProviderConfigForProfile(s.llm, out); ok {
-		out.ModelMetadata = modelcap.Resolve(providerID, provider.BaseURL, out.ModelID, provider.ModelMetadata[out.ModelID], provider.ModelOverrides[out.ModelID])
-		out.BaseURL = provider.BaseURL
-		out.APIProtocol = provider.APIProtocol
-		out.APIKey = provider.APIKey
-		out.Headers = cloneStringMap(provider.Headers)
-		if strings.TrimSpace(out.ReasoningEffort) == "" && strings.TrimSpace(provider.ReasoningEffort) != "" {
-			out.ReasoningEffort = provider.ReasoningEffort
-		}
-		out.InputModalities = resolvedInputModalities(out.Provider, out.ModelID, containsModelID(provider.VisionModels, out.ModelID))
+		return hydrateProfileFromProvider(out, provider)
 	}
+	out.ProfileComplete = profileIsComplete(out)
+	return out
+}
+
+func hydrateProfileFromProvider(profile AgentProfile, provider config.ProviderConfig) AgentProfile {
+	out := cloneProfile(profile)
+	out.ModelMetadata = modelcap.Resolve(out.ModelProviderID, provider.BaseURL, out.ModelID, provider.ModelMetadata[out.ModelID], provider.ModelOverrides[out.ModelID])
+	out.BaseURL = provider.BaseURL
+	out.APIProtocol = provider.APIProtocol
+	out.APIKey = provider.APIKey
+	out.Headers = cloneStringMap(provider.Headers)
+	if strings.TrimSpace(out.ReasoningEffort) == "" && strings.TrimSpace(provider.ReasoningEffort) != "" {
+		out.ReasoningEffort = provider.ReasoningEffort
+	}
+	out.InputModalities = resolvedInputModalities(out.Provider, out.ModelID, containsModelID(provider.VisionModels, out.ModelID))
 	out.ProfileComplete = profileIsComplete(out)
 	return out
 }

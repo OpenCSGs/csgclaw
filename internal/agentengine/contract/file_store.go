@@ -21,8 +21,9 @@ type FileInterface interface {
 // stream. An HTTP adapter maps Metadata to response headers and Content to the
 // response body.
 type FileContent struct {
-	Metadata OutputFileMetadata
-	Content  io.ReadCloser
+	Metadata   OutputFileMetadata
+	SourcePath string `json:"-"`
+	Content    io.ReadCloser
 }
 
 // FileCreateRequest declares metadata for one uploaded immutable file.
@@ -109,7 +110,7 @@ func (f *agentFiles) Get(ctx context.Context, fileID string) (FileContent, error
 		}
 		return FileContent{}, &TurnError{Code: ErrorFileUnavailable, Message: "file content is unavailable"}
 	}
-	return FileContent{Metadata: file.file.OutputFileMetadata, Content: content}, nil
+	return FileContent{Metadata: file.file.OutputFileMetadata, SourcePath: file.file.SourcePath, Content: content}, nil
 }
 
 func (f *agentFiles) Delete(_ context.Context, fileID string) error {

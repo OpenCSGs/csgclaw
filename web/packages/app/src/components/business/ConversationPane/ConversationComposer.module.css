@@ -1,0 +1,142 @@
+.composer-editor-wrap {
+  position: relative;
+}
+
+.composer-toolbar {
+  display: flex;
+  min-height: calc(var(--composer-send-control-size) + 8px);
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 2px 6px 6px;
+}
+
+.composer-toolbar-text-only {
+  justify-content: flex-end;
+}
+
+.composer-toolbar-actions {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.composer-send-state {
+  overflow: hidden;
+  max-width: 160px;
+  color: var(--muted);
+  font: var(--text-xs-normal);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.composer-feedback-row {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 6px;
+  padding: 4px 6px;
+  color: var(--muted);
+  font: var(--text-xs-normal);
+}
+
+.composer-action-suggestions {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+  padding: 0 12px 6px;
+  color: var(--muted);
+  font: var(--text-xs-normal);
+}
+
+.composer-action-suggestion {
+  min-height: 28px;
+  padding: 4px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-full);
+  background: var(--field);
+  color: var(--primary-strong);
+  font: inherit;
+  cursor: pointer;
+}
+
+.composer-action-suggestion:hover,
+.composer-action-suggestion:focus-visible {
+  border-color: var(--primary);
+  outline: none;
+}
+
+.composer-action-suggestions small {
+  overflow: hidden;
+  min-width: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 520px) {
+  .composer-action-suggestions {
+    overflow-x: auto;
+  }
+
+  .composer-action-suggestions > span,
+  .composer-action-suggestions small {
+    display: none;
+  }
+
+  .composer-send-state {
+    max-width: 96px;
+  }
+}
+
+.composer-editor {
+  line-height: 1.5;
+}
+
+.composer-editor:focus {
+  border-color: rgba(43, 109, 246, 0.44);
+  box-shadow: 0 0 0 4px rgba(43, 109, 246, 0.12);
+}
+
+.composer {
+  padding: 18px;
+}
+
+.composer-editor:focus {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.composer-editor:focus {
+  border-color: var(--brand-500);
+  box-shadow: var(--focus-ring);
+}
+
+.composer-editor {
+  font-family: var(--font-sans);
+}
+
+:global(:root[data-theme="dark"]) .composer {
+  border-color: var(--line);
+}
+
+:global(:root[data-theme="dark"]) .composer-box {
+  border-color: var(--line);
+  background: var(--panel-strong);
+  box-shadow: none;
+}
+
+:global(:root[data-theme="dark"]) .composer-editor {
+  border-color: var(--line);
+  background-color: var(--field);
+  color: var(--text);
+  box-shadow: none;
+}
+
+:global(:root[data-theme="dark"]) .composer-editor:empty::before {
+  color: var(--gray-400);
+}

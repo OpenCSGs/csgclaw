@@ -1136,7 +1136,7 @@ Agent 回复仍只会唤醒被显式提及的 Agent，以防止回复循环。
 - 发送附件时使用 `multipart/form-data`，其中 `payload` JSON part 包含同样字段，`files` part 可以出现一次或多次。
 - 至少带有一个文件时允许发送纯附件消息。
 - 每条消息最多包含 10 个附件，单文件上限为 `1 GiB`，总大小上限为 `2 GiB`。
-- 返回的 message 可以包含 `attachments`，字段包括 `id`、`name`、`kind`、`media_type`、`size_bytes`、`sha256`、`created_at`、`download_url`、可选的 `preview_url`、可选图片尺寸，以及面向 agent 投递时可选的 `workspace_path`。
+- 返回的 message 可以包含 `attachments`，字段包括 `id`、`name`、`kind`、`media_type`、`size_bytes`、`sha256`、`created_at`、`download_url`、可选的 `preview_url`、可选图片尺寸，以及面向 agent 投递时可选的 `workspace_path`。从工作区发布的文件还包含 `source_path`，记录文件在工作区中的相对路径。即使发布时更改文件名，消息仍可通过原路径显示图片。
 
 Multipart 示例：
 
@@ -1528,6 +1528,22 @@ Portal 上传和下载都使用当前 CSGClaw 实例的 `endpoint` 和网关登�
 }
 ```
 
+Codex Agent 支持可选的字符串字段 `model` 和 `reasoning_effort`，用于指定本次请求的模型和推理强度：
+
+```json
+{
+  "input": "Review this patch.",
+  "model": "model-id-from-your-provider",
+  "reasoning_effort": "high"
+}
+```
+
+`model` 使用 Agent 当前 provider 提供的模型 ID。字段省略或为空时使用 Agent 默认 Profile。这些参数只作用于当前 turn，保留会话历史，无需修改 Agent 配置或重启 App Server。后续请求继续使用相同选择时，需要再次传入参数。其他 runtime 收到非空模型参数时返回 `400 invalid_request`。
+
+`reasoning_effort` 接受 `auto`、`none`、`minimal`、`low`、`medium`、`high`、`xhigh` 和 `max`；`off` 是 `none` 的别名。所选 provider/model 需要支持请求的级别。`auto` 使用模型自身的默认推理级别。两个字段分别使用各自的 Profile 默认值，例如只传入 `model` 时，推理级别仍来自 Profile。两个字段也支持 `stream: true`。
+
+模型切换使用 Codex 进程启动时加载的当前 provider 模型目录。启动后新增的模型，或者上下文长度配置发生变化的模型，需要重新加载 Runtime 后才能选择。不可用的选择会返回错误，现有进程继续运行。
+
 请求可以通过可选的 `extra` 和 `extra_type` 为当前用户消息附加额外的纯文本上下文：
 
 ```json
@@ -1597,7 +1613,7 @@ const response = await fetch(responsesUrl, {
 if (!response.ok) throw new Error(`Session request failed (HTTP ${response.status})`)
 ```
 
-multipart 表单字段为 `input`、可选的 `stream` 和 `user_input`，以及可重复的 `file`。如需同时使用 `attachment_ids`、`extra` 或 `extra_type`，请通过会话的 `/attachments` 接口使用 `files` 上传文件，再在 `/responses` 的 JSON 请求中传入返回的附件 ID。只发送文件时可使用仅含 `attachment_ids` 的 JSON 请求。
+multipart 表单字段为 `input`、可选的 `stream`、`user_input`、`model` 和 `reasoning_effort`，以及可重复的 `file`。每个可选字段最多提供一个值。模型参数与 JSON 请求中的字段含义相同。如需同时使用 `attachment_ids`、`extra` 或 `extra_type`，请通过会话的 `/attachments` 接口使用 `files` 上传文件，再在 `/responses` 的 JSON 请求中传入返回的附件 ID。只发送文件时可使用仅含 `attachment_ids` 的 JSON 请求。
 
 JSON 请求也可以在 `content` 中使用 `input_file` 发送文件。
 

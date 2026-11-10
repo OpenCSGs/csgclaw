@@ -1,0 +1,52 @@
+/*! Derived from CSGClaw. Modified for standalone csgclaw-ui distribution. */
+.csg-checkbox {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  min-width: 16px;
+  min-height: 16px;
+  padding: 0;
+  border: 1px solid var(--csgclaw-ui-input-border);
+  border-radius: 4px;
+  background: var(--csgclaw-ui-field);
+  color: var(--csgclaw-ui-on-primary);
+  box-shadow: none;
+  cursor: pointer;
+}
+
+.csg-checkbox:hover:not(:disabled) {
+  border-color: var(--csgclaw-ui-input-border-hover);
+}
+
+.csg-checkbox:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px color-mix(in oklab, var(--csgclaw-ui-primary) 72%, var(--csgclaw-ui-on-primary));
+}
+
+.csg-checkbox[data-state="checked"],
+.csg-checkbox[data-state="indeterminate"] {
+  border-color: var(--csgclaw-ui-primary);
+  background: var(--csgclaw-ui-primary);
+}
+
+.csg-checkbox:disabled {
+  border-color: var(--csgclaw-ui-line);
+  background: var(--csgclaw-ui-panel-soft);
+  color: var(--csgclaw-ui-muted);
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.csg-checkbox-indicator {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.csg-checkbox-indicator:not([data-state="indeterminate"]) .mixed-mark,
+.csg-checkbox-indicator[data-state="indeterminate"] .check-mark {
+  display: none;
+}

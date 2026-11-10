@@ -163,7 +163,21 @@ The journal persists the confirmed local history tip and marks history uncertain
 before dispatch. Continuations must reference that exact tip. Non-tip branches,
 missing/evicted checkpoints, and uncertain history fail explicitly with
 `relay_branch_unsupported`; the executor never silently substitutes the latest
-history. Start a new cloud task/conversation in those cases.
+history. For a CSGClaw cloud task, this rejection or a missing parent response
+when no prior attempt could have been dispatched triggers recovery in the same
+task. A Relay rejection while the agent is offline or not ready preserves
+that eligibility if it arrives before Relay assigns a response ID. The caller
+starts a fresh Relay session with the current message and up to 16 KiB of
+completed text turns, checking recent turns first
+and skipping any that exceed the remaining budget. It saves the recovery input
+and the start of a new submission window so restarts reuse both. A terminal
+rejection that confirms the request never ran permits a new key within the
+current window. The initial window for new queued messages starts at dispatch.
+When Relay supplies a response ID, the caller polls that ID even if the
+submission body is unreadable. An ambiguous submission remains unconfirmed
+if its response is missing or its submission window expires. Polling stops after
+three invalid response bodies without a valid response in between and reports an
+unconfirmed outcome. The user should verify execution before resending.
 
 State defaults to the CSGClaw data directory's `relay/` subdirectory; `--state`
 overrides it. A process lock prevents sharing one state file. Files have `0600`
@@ -174,7 +188,7 @@ State I/O failure stops the executor. Up to 1024 local session tips are retained
 eviction rejects affected continuations instead of using another context.
 
 The versioned journal migrates legacy ACKed records conservatively; old sessions
-have no confirmed checkpoint, so continuation requires a new conversation.
+have no confirmed checkpoint, so continuation requires a fresh Relay session.
 Legacy unacknowledged records lack the original ownership identity and cause an
 explicit startup error without modifying the state file. They cannot be safely
 replayed by a new instance. Preserve the file for diagnosis and confirm the old

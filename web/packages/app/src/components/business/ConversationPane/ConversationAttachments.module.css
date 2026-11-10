@@ -1,0 +1,263 @@
+.attachment-draft-strip {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 8px;
+  min-width: 0;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  padding: 10px 12px 6px;
+  scrollbar-color: transparent transparent;
+  scrollbar-width: thin;
+}
+
+.attachment-draft-strip::-webkit-scrollbar {
+  height: 6px;
+}
+
+.attachment-draft-strip::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: transparent;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .attachment-draft-strip:hover,
+  .attachment-draft-strip:focus-within {
+    scrollbar-color: color-mix(in srgb, var(--muted) 58%, transparent) transparent;
+  }
+
+  .attachment-draft-strip:hover::-webkit-scrollbar-thumb,
+  .attachment-draft-strip:focus-within::-webkit-scrollbar-thumb {
+    background: color-mix(in srgb, var(--muted) 44%, transparent);
+  }
+}
+
+@media (hover: none), (pointer: coarse) {
+  .attachment-draft-strip {
+    padding-bottom: 0;
+    scrollbar-width: none;
+  }
+
+  .attachment-draft-strip::-webkit-scrollbar {
+    display: none;
+  }
+
+  .attachment-scroll-fade,
+  .attachment-scroll-button,
+  :global(.btn).attachment-scroll-button {
+    display: none;
+  }
+}
+
+.attachment-scroll-fade {
+  position: absolute;
+  top: 0;
+  bottom: 6px;
+  width: 52px;
+  pointer-events: none;
+}
+
+.attachment-scroll-fade:global(.is-previous) {
+  left: 0;
+  background: linear-gradient(90deg, var(--surface) 18%, transparent);
+}
+
+.attachment-scroll-fade:global(.is-next) {
+  right: 0;
+  background: linear-gradient(270deg, var(--surface) 18%, transparent);
+}
+
+.attachment-scroll-button,
+:global(.btn).attachment-scroll-button {
+  position: absolute;
+  top: calc(50% + 3px);
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  transform: translateY(-50%);
+  box-shadow: var(--shadow-sm);
+  z-index: var(--z-page-popover);
+}
+
+.attachment-scroll-button:global(.is-previous) {
+  left: 4px;
+}
+
+.attachment-scroll-button:global(.is-next) {
+  right: 4px;
+}
+
+.attachment-draft-strip :global(.attachment-draft) {
+  flex: 0 0 min(220px, calc(100% - 8px));
+  max-width: min(220px, 100%);
+}
+
+.message-file-attachment {
+  position: relative;
+  min-width: 0;
+  max-width: min(280px, 100%);
+  min-height: 44px;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--field);
+  color: var(--text);
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  text-decoration: none;
+}
+
+.attachment-draft-preview-link {
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr);
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  text-decoration: none;
+}
+
+.attachment-draft-preview-link:disabled {
+  cursor: default;
+}
+
+.attachment-draft-preview-link:hover .attachment-name,
+.attachment-draft-preview-link:focus-visible .attachment-name {
+  color: var(--primary);
+}
+
+.attachment-draft-preview-link:focus-visible {
+  border-radius: 6px;
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.attachment-draft-preview {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  object-fit: cover;
+  background: var(--panel);
+}
+
+.message-video-attachment {
+  display: block;
+  width: min(100%, 560px);
+  max-height: 420px;
+  margin-top: 8px;
+  border-radius: var(--radius-lg);
+  background: #000;
+}
+
+.attachment-file-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  display: grid;
+  place-items: center;
+  background: var(--panel);
+  color: var(--muted);
+}
+
+.message-file-type-icon {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.attachment-draft-meta {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.attachment-name {
+  display: flex;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.attachment-name-stem {
+  overflow: hidden;
+  min-width: 0;
+  text-overflow: ellipsis;
+}
+
+.attachment-name-extension {
+  flex: 0 0 auto;
+}
+
+.attachment-size {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.attachment-remove-button,
+:global(.btn).attachment-remove-button {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+}
+
+.attachment-upload-progress {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 2px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--primary) 14%, transparent);
+}
+
+.attachment-upload-progress > span {
+  display: block;
+  height: 100%;
+  background: var(--primary);
+  transition: width 120ms linear;
+}
+
+@media (max-width: 520px) {
+  .attachment-draft-strip :global(.attachment-draft) {
+    flex-basis: min(188px, calc(100% - 8px));
+    max-width: min(188px, 100%);
+  }
+}
+
+:global(.message-row):global(.own) .message-file-list {
+  justify-items: end;
+}
+
+.message-file-attachment:hover,
+.message-file-attachment:focus-visible {
+  border-color: var(--primary);
+  outline: none;
+}
+
+.message-file-list {
+  display: grid;
+  gap: 6px;
+}
+
+.message-file-attachment {
+  grid-template-columns: 32px minmax(0, 1fr);
+  padding-inline: var(--space-3);
+}
+
+button.message-file-attachment {
+  width: 100%;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}

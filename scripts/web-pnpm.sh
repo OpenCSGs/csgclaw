@@ -3,7 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-WEB_APP_DIR="${WEB_APP_DIR:-$ROOT_DIR/web/app}"
+WEB_APP_DIR="${WEB_APP_DIR:-$ROOT_DIR/web/packages/app}"
 NODE_VERSION="$(tr -d '[:space:]' < "$ROOT_DIR/.nvmrc")"
 
 fail() {
