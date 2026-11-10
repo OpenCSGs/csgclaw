@@ -39,13 +39,13 @@ func (h *Handler) requireWorkspaceAccess(next http.Handler) http.Handler {
 
 func (h *Handler) handleAgentWorkspace(w http.ResponseWriter, r *http.Request) {
 	h.handleAgentWorkspaceListing(w, r, func(id string) (string, error) {
-		return h.conversationWorkspaceRoot(id, r.URL.Query().Get("room_id"))
+		return h.requestWorkspaceRoot(r, id)
 	})
 }
 
 func (h *Handler) handleAgentWorkspaceFile(w http.ResponseWriter, r *http.Request) {
 	h.handleAgentWorkspaceFileRead(w, r, func(id string) (string, error) {
-		return h.conversationWorkspaceRoot(id, r.URL.Query().Get("room_id"))
+		return h.requestWorkspaceRoot(r, id)
 	})
 }
 
@@ -188,6 +188,26 @@ func (h *Handler) conversationWorkspaceRoot(agentID, roomID string) (string, err
 	return root, nil
 }
 
+// A draft can preview a directory before its room exists. Only the management
+// client can select this root; a saved room always uses its locked directory.
+func (h *Handler) requestWorkspaceRoot(r *http.Request, agentID string) (string, error) {
+	query := r.URL.Query()
+	roomID, dir := query.Get("room_id"), strings.TrimSpace(query.Get("dir"))
+	root, err := h.conversationWorkspaceRoot(agentID, roomID)
+	if err != nil || dir == "" || strings.TrimSpace(roomID) != "" {
+		return root, err
+	}
+	auth := r.Header.Get("Authorization")
+	if appRequestAgentID(r) != "" || strings.HasPrefix(auth, "Bearer agent.") ||
+		(!h.validServerCredential(auth) && !localWorkspaceClient(r)) {
+		return "", errors.New("draft workspace selection requires local or management access")
+	}
+	if !filepath.IsAbs(dir) {
+		return "", errors.New("working directory must be absolute")
+	}
+	return filepath.Clean(dir), nil
+}
+
 func (h *Handler) agentSkillsRoot(id string) (string, error) {
 	item, ok := h.svc.Agent(id)
 	if !ok {
@@ -211,7 +231,7 @@ func (h *Handler) handleAgentWorkspaceContent(w http.ResponseWriter, r *http.Req
 		writeCodedAPIError(w, http.StatusServiceUnavailable, "workspace_file_unavailable", "Workspace is unavailable")
 		return
 	}
-	root, err := h.conversationWorkspaceRoot(strings.TrimSpace(pathValue(r, "id")), r.URL.Query().Get("room_id"))
+	root, err := h.requestWorkspaceRoot(r, strings.TrimSpace(pathValue(r, "id")))
 	if err != nil {
 		writeCodedAPIError(w, http.StatusNotFound, "workspace_file_unavailable", "Workspace is unavailable")
 		return

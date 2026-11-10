@@ -2,6 +2,7 @@ import { useCallback, useContext } from "react";
 import { QueryClientContext } from "@tanstack/react-query";
 import { fetchRoomFiles, fetchRoomFileMessages, roomFilePage, transcriptRoomFiles } from "@/api/chatFiles";
 import { getDesktopBridge } from "@/shared/platform/desktopBridge";
+import type { FileSort } from "@/models/workspace";
 import type { ChatFileScope } from "./types";
 
 export function useRoomFileReader(scope?: ChatFileScope) {
@@ -21,9 +22,9 @@ export function useRoomFileReader(scope?: ChatFileScope) {
     return transcriptRoomFiles([...messages, ...(retained ?? [])]);
   }, [client, roomID, retained]);
   const read = useCallback(
-    async (query = "", from = 0, signal?: AbortSignal) => {
-      if (desktop) return fetchRoomFiles(roomID, query, from, signal);
-      return roomFilePage(await readTranscript(), query, from);
+    async (query = "", from = 0, signal?: AbortSignal, sort?: FileSort) => {
+      if (desktop) return fetchRoomFiles(roomID, query, from, signal, sort);
+      return roomFilePage(await readTranscript(), query, from, sort);
     },
     [desktop, roomID, readTranscript],
   );

@@ -88,6 +88,10 @@ export function canSendComposer(segments: readonly ComposerSegment[], attachment
   return canSendResources(input.content, input.resource_refs, attachmentCount);
 }
 
+export function hasComposerDraft(segments: readonly ComposerSegment[], attachmentCount: number): boolean {
+  return attachmentCount > 0 || segments.some((segment) => segment.type !== "text" || Boolean(segment.text.trim()));
+}
+
 export function messageResources(metadata: unknown): ResourceSnapshot[] {
   if (!metadata || typeof metadata !== "object") return [];
   const namespace = (metadata as Record<string, unknown>).csgclaw;

@@ -200,8 +200,6 @@
 .composer {
   --composer-add-control-size: 40px;
   --composer-add-icon-size: 22px;
-  --composer-send-control-size: 44px;
-  --composer-send-icon-size: 20px;
 
   position: relative;
   isolation: isolate;
@@ -460,10 +458,6 @@ button.composer-working-item:active {
   border-color: color-mix(in srgb, var(--danger) 58%, var(--line));
 }
 
-.composer-send-button.is-stopping {
-  background: var(--danger);
-}
-
 .attachment-preview-dialog {
   width: min(960px, calc(100vw - 32px));
   max-height: calc(100dvh - 32px);
@@ -576,16 +570,6 @@ button.composer-working-item:active {
   }
 }
 
-.composer-send-button,
-.btn.composer-send-button {
-  width: var(--composer-send-control-size);
-  height: var(--composer-send-control-size);
-  min-width: var(--composer-send-control-size);
-  min-height: var(--composer-send-control-size);
-  padding: 0;
-  border-radius: 50%;
-}
-
 .composer-add-button,
 .btn.composer-add-button {
   width: var(--composer-add-control-size);
@@ -600,11 +584,6 @@ button.composer-working-item:active {
 .composer-add-button svg {
   width: var(--composer-add-icon-size);
   height: var(--composer-add-icon-size);
-}
-
-.composer-send-button svg {
-  width: var(--composer-send-icon-size);
-  height: var(--composer-send-icon-size);
 }
 
 .composer-add-button:hover:not(:disabled),

@@ -1,7 +1,7 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { BookOpen, Boxes, Wrench } from "lucide-react";
 import { Button, LinkButton, TextInput } from "@/components/ui";
-import { ConnectorGitLabIcon } from "@/components/business/Icons";
+import { ConnectorLogo } from "../ConnectorLogo/ConnectorLogo";
 import { useConversationResources } from "@/hooks/workspace/useConversationResources";
 import { isComposerKeyboardEventComposing } from "@/models/composer";
 import { maxResourceReferences, resourceKey, type ResourceSnapshot } from "@/models/conversationResources";
@@ -130,6 +130,7 @@ export function ConversationResourcePicker({
           {resource.items.map((item, index) => {
             const key = resourceKey(item);
             const disabled = !available.includes(item);
+            const icon = <Icon size={18} strokeWidth={1.8} aria-hidden="true" />;
             return (
               <button
                 key={key}
@@ -148,12 +149,14 @@ export function ConversationResourcePicker({
                 }}
                 onClick={() => onPick(item)}
               >
-                {kind === "connector" && item.source === "app" && item.description === "feishu" ? (
-                  <img className={styles.productIcon} src="icons/feishu.png" width={18} height={18} alt="" />
-                ) : kind === "connector" && item.source === "app" && item.description === "gitlab" ? (
-                  <ConnectorGitLabIcon size={18} aria-hidden="true" />
+                {kind === "connector" ? (
+                  <ConnectorLogo
+                    name={item.source === "app" ? item.description || item.name : item.name}
+                    className={styles.productIcon}
+                    fallback={icon}
+                  />
                 ) : (
-                  <Icon size={18} strokeWidth={1.8} aria-hidden="true" />
+                  icon
                 )}
                 <span className={styles.copy}>
                   <strong>{item.name}</strong>

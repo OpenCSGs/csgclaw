@@ -4,6 +4,8 @@ import type { IMMessage } from "@/models/conversations";
 export type ChatFileAgent = { id: string; name: string };
 export type ChatFileScope = {
   roomID: string;
+  workspaceDir?: string;
+  automaticWorkspace?: boolean;
   direct?: boolean;
   sharedWorkspace?: boolean;
   userID: string;

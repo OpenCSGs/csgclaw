@@ -424,3 +424,12 @@
   padding: 0 10px;
   line-height: 20px;
 }
+
+.pinHeading {
+  margin: 0 0 4px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}

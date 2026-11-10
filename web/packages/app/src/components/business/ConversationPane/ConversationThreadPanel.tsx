@@ -616,12 +616,12 @@ export function ConversationThreadPanel({
                 variant="primary"
                 className={`composer-send-button ${conversationSendButtonStyles["composer-send-button"]}`}
                 iconOnly
-                size="lg"
+                size="sm"
                 aria-label={t("send")}
                 disabled={disabled || resourcePicker.active || !canSendComposer(draftSegments, attachmentDrafts.length)}
                 onClick={onSend}
               >
-                <ArrowUp aria-hidden="true" size={22} strokeWidth={1.5} />
+                <ArrowUp aria-hidden="true" size={17} strokeWidth={1.5} />
               </Button>
             </div>
           </div>

@@ -11,6 +11,7 @@ import type { RoomMembersPanelProps } from "@/components/business/RoomMembersPan
 import type { AgentLike, AgentProfileLike } from "@/models/agents";
 import type { AttachmentDraft } from "@/models/attachments";
 import type { ComposerMentionUser, ComposerSegment } from "@/models/composer";
+import type { ComposerFileReference } from "@/models/fileReferences";
 import type {
   IMConversation,
   IMMessage,
@@ -26,7 +27,8 @@ import type { ThemeMode } from "@/shared/theme/theme";
 import type { MessageAction, MessageActionFeedback, MessageLike } from "@/components/business/MessageContent/types";
 
 export type BooleanStateSetter = Dispatch<SetStateAction<boolean>>;
-export type MentionPickerUser = ComposerMentionUser & Pick<IMUser, "avatar" | "role">;
+export type MentionPickerUser = ComposerMentionUser &
+  Pick<IMUser, "avatar" | "role"> & { fileReference?: ComposerFileReference };
 export type VoidOrPromise = void | Promise<void>;
 
 export const ConversationWorkingActions = {

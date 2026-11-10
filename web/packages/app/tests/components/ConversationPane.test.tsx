@@ -14,6 +14,8 @@ import { AgentActivityMsgTypes, CSGCLAW_AGENT_ACTIVITY_TYPE } from "@/shared/con
 import { CHAT_SIDE_PANEL_WIDTH_STORAGE_KEY } from "@/shared/storage/keys";
 import type { ConversationPaneProps } from "@/components/business/ConversationPane";
 import { agentToDraft } from "@/models/agents";
+import { createAttachmentDrafts } from "@/models/attachments";
+import { resourceSegment } from "@/models/conversationResources";
 import type { IMConversation, IMMessage, IMUser, ThreadView, TranslateFn } from "@/models/conversations";
 import {
   getCollapsedSelectionTextOffset,
@@ -223,6 +225,9 @@ function renderThreadPane({
   onRestoreThread = vi.fn(),
   workingParticipants = [],
   onStopWorkingTurn = vi.fn(),
+  initialDraft = [],
+  attachmentDrafts = [],
+  sendStatus = "idle",
   cloudAgent,
 }: {
   agents?: NonNullable<ConversationPaneProps["agents"]>;
@@ -253,6 +258,9 @@ function renderThreadPane({
   onRestoreThread?: (rootID: string) => void;
   workingParticipants?: ConversationPaneProps["workingParticipants"];
   onStopWorkingTurn?: ConversationPaneProps["onStopWorkingTurn"];
+  initialDraft?: ComposerSegment[];
+  attachmentDrafts?: ConversationPaneProps["attachmentDrafts"];
+  sendStatus?: ConversationPaneProps["sendStatus"];
   cloudAgent?: IMConversation["cloud_agent"];
 } = {}) {
   const root = {
@@ -289,6 +297,8 @@ function renderThreadPane({
     const [inviteUserIDs, setInviteUserIDs] = useState<string[]>([]);
     const [showTools, setShowTools] = useState(showToolCalls);
     const [threadDraftSegments, setThreadDraftSegments] = useState<ComposerSegment[]>([]);
+    const [draftSegments, setDraftSegments] = useState(initialDraft);
+    const editorRef = useRef<HTMLDivElement>(null);
     const [agentDetailOpen, setAgentDetailOpen] = useState(Boolean(agentDetailPanelProps));
     if (agentDetailPanelStateRef) {
       agentDetailPanelStateRef.close = () => setAgentDetailOpen(false);
@@ -307,9 +317,11 @@ function renderThreadPane({
         conversation={conversation}
         conversationMembers={conversationMembers}
         currentUserID="u-admin"
-        draftSegments={[]}
-        draftText=""
-        editorRef={createRef<HTMLDivElement>()}
+        draftSegments={draftSegments}
+        draftText={segmentsToPlainText(draftSegments)}
+        attachmentDrafts={attachmentDrafts}
+        sendStatus={sendStatus}
+        editorRef={editorRef}
         inviteActionLabel="Invite"
         locale="zh"
         logAgent={null}
@@ -353,7 +365,7 @@ function renderThreadPane({
         onPreviewUser={onPreviewUser}
         onSendMessage={() => {}}
         onSendThreadReply={() => {}}
-        onSyncComposer={() => {}}
+        onSyncComposer={() => setDraftSegments(parseComposerSegments(editorRef.current))}
         onToggleChannelTools={setShowChannelTools}
         onToggleMemberList={setShowMemberList}
         onToggleToolCalls={setShowTools}
@@ -442,7 +454,7 @@ describe("ConversationPane", () => {
     expect(screen.queryByText("Preparing a reply")).not.toBeInTheDocument();
   });
 
-  it("shows the pending reply beside the agent avatar before its progress message arrives", async () => {
+  it.each([true, false])("keeps the pending reply visible and stops the right turn (direct: %s)", async (isDirect) => {
     const participant = {
       id: "u-manager",
       name: "manager",
@@ -453,14 +465,116 @@ describe("ConversationPane", () => {
       canStop: true,
     };
     const onStopWorkingTurn = vi.fn();
-    const { container } = renderThreadPane({ workingParticipants: [participant], onStopWorkingTurn });
+    const { container } = renderThreadPane({ isDirect, workingParticipants: [participant], onStopWorkingTurn });
     const pending = screen.getByText("Preparing a reply").closest(".message-row");
     expect(pending).not.toBeNull();
     expect(pending?.querySelector(".avatar")).toBeInTheDocument();
     expect(container.querySelector(".composer > .composer-working")).not.toBeInTheDocument();
-    await userEvent.click(within(pending as HTMLElement).getByRole("button", { name: "conversationWorkingStopAria" }));
+    const stopButton = screen.getByRole("button", { name: "conversationWorkingStopAria" });
+    expect(stopButton.closest(isDirect ? ".composer-box" : ".message-row")).not.toBeNull();
+    await userEvent.click(stopButton);
     expect(onStopWorkingTurn).toHaveBeenCalledWith(expect.objectContaining(participant));
   });
+
+  it.each(["pending", "progress"])("keeps a %s turn stoppable while preserving a follow-up draft", async (stage) => {
+    const participant = {
+      id: "u-manager",
+      name: "manager",
+      participantID: "pt-manager",
+      roomID: "room-1",
+      requestID: "request-follow-up",
+      leaseID: "lease-follow-up",
+      canStop: true,
+    };
+    const onStopWorkingTurn = vi.fn();
+    const { container } = renderThreadPane({
+      workingParticipants: [participant],
+      onStopWorkingTurn,
+      initialDraft: [{ type: "text", text: "Follow up" }],
+      messages:
+        stage === "progress"
+          ? [
+              {
+                id: "progress-follow-up",
+                sender_id: "u-manager",
+                content: "\u200b",
+                metadata: {
+                  csgclaw: {
+                    request_id: participant.requestID,
+                    turn_progress: {
+                      id: "turn-follow-up",
+                      revision: 1,
+                      status: "running",
+                      started_at: "2026-11-11T00:00:00Z",
+                      items: [],
+                    },
+                  },
+                },
+              },
+            ]
+          : [],
+    });
+    const composer = container.querySelector(".composer-box") as HTMLElement;
+    const editor = within(composer).getByRole("textbox");
+    expect(within(composer).getByRole("button", { name: "Send" })).toBeEnabled();
+    const stop = screen.getByRole("button", { name: "conversationWorkingStopAria" });
+    expect(stop.closest(".message-row")).toBeInTheDocument();
+    await userEvent.click(stop);
+    expect(onStopWorkingTurn).toHaveBeenCalledWith(expect.objectContaining(participant));
+    expect(editor).toHaveTextContent("Follow up");
+
+    fireEvent.input(editor, { target: { textContent: "" } });
+    expect(
+      screen.getByRole("button", { name: "conversationWorkingStopAria" }).closest(".composer-box"),
+    ).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "conversationWorkingStopAria" })).toHaveLength(1);
+  });
+
+  it.each([
+    {
+      label: "attachment",
+      attachments: createAttachmentDrafts([new File(["notes"], "notes.md")]),
+      draft: [],
+      status: "idle" as const,
+    },
+    {
+      label: "connector",
+      attachments: [],
+      draft: [resourceSegment({ source: "mcp", id: "search", type: "connector", name: "Search" })],
+      status: "idle" as const,
+    },
+    {
+      label: "upload",
+      attachments: createAttachmentDrafts([new File(["notes"], "notes.md")]),
+      draft: [],
+      status: "sending" as const,
+    },
+  ])(
+    "keeps execution Stop in the timeline while the composer contains a $label",
+    async ({ attachments, draft, status }) => {
+      const participant = {
+        id: "u-manager",
+        name: "manager",
+        participantID: "pt-manager",
+        roomID: "room-1",
+        requestID: "request-draft",
+        leaseID: "lease-draft",
+        canStop: true,
+      };
+      const onStopWorkingTurn = vi.fn();
+      renderThreadPane({
+        workingParticipants: [participant],
+        onStopWorkingTurn,
+        initialDraft: draft,
+        attachmentDrafts: attachments,
+        sendStatus: status,
+      });
+      const stop = screen.getByRole("button", { name: "conversationWorkingStopAria" });
+      expect(stop.closest(".message-row")).toBeInTheDocument();
+      await userEvent.click(stop);
+      expect(onStopWorkingTurn).toHaveBeenCalledWith(expect.objectContaining(participant));
+    },
+  );
 
   it.each(["running", "succeeded", "canceled"])(
     "replaces the pending reply with a matching %s message without duplicating controls",
@@ -498,9 +612,10 @@ describe("ConversationPane", () => {
       });
       expect(container.querySelector("[data-work-lease-id]")).not.toBeInTheDocument();
       expect(container.querySelector(".composer > .composer-working")).not.toBeInTheDocument();
-      expect(
-        container.querySelectorAll(`.message-row .${testWorkingTurnStyles["composer-working-stop"]}`),
-      ).toHaveLength(status === "running" ? 1 : 0);
+      expect(container.querySelector(`.message-row .${testWorkingTurnStyles["composer-working-stop"]}`)).toBeNull();
+      const stop = screen.queryByRole("button", { name: "conversationWorkingStopAria" });
+      if (status === "running") expect(stop?.closest(".composer-box")).toBeInTheDocument();
+      else expect(stop).not.toBeInTheDocument();
     },
   );
 

@@ -1,0 +1,10 @@
+.row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+}
+@media (hover: hover) {
+  .row[data-pinned="false"]:not(:hover):not(:focus-within) .pin {
+    opacity: 0;
+  }
+}

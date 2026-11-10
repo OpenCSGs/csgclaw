@@ -7,8 +7,14 @@
   box-shadow: var(--focus-ring);
 }
 
-.composer-send-button {
-  border: 1px solid oklch(0.77 0.16 164 / 0.48);
+button.composer-send-button[data-csg-control] {
+  /* The slot stays the same size when switching to the danger variant. */
+  --composer-action-size: 28px;
+  width: var(--composer-action-size);
+  min-width: var(--composer-action-size);
+  height: var(--composer-action-size);
+  min-height: var(--composer-action-size);
+  border-radius: var(--radius-full);
 }
 
 .composer-send-button:where(:not([data-csg-control])):disabled {

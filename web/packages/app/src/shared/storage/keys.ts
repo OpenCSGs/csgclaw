@@ -27,3 +27,5 @@ export const MANAGER_SETUP_DISMISSED_STORAGE_KEY = "csgclaw.manager.setupDismiss
 export const CLOUD_SEND_CONSENT_STORAGE_KEY = "csgclaw.cloud-send-consent.v1";
 export const CLOUD_AGENTS_STORAGE_KEY = "csgclaw.agents.cloud.v3" as const;
 export const CLOUD_CHAT_STORAGE_KEY = "csgclaw.agents.cloud.chat.v1" as const;
+
+export const PINNED_ENTITIES_STORAGE_KEY = "csgclaw.im.pinnedEntities.v1";

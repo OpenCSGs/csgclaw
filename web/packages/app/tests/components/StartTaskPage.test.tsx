@@ -1,17 +1,26 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createQueryWrapper } from "../helpers/queryClient";
 import { fetchConversationResourceBatch } from "@/api/agentResources";
 import { MemoryRouter, useNavigate } from "react-router-dom";
 import { WorkspaceControllerProvider, type WorkspaceController } from "@/hooks/workspace";
 import { sendMessageRequest } from "@/api/im";
+import { fetchWorkspaceDirectory } from "@/api/chatFiles";
 import { StartTaskPage } from "@/pages/StartTaskPage/StartTaskPage";
 import type { IMConversation, LocaleCode } from "@/models/conversations";
 import { createTranslator } from "@/shared/i18n";
 import { fetchRelayCatalog } from "@/api/relay";
 import { cloudAgentFixture } from "../helpers/cloudAgentFixture";
-import { CLOUD_AGENTS_STORAGE_KEY, TASK_EXAMPLES_HIDDEN_STORAGE_KEY } from "@/shared/storage/keys";
+import {
+  CLOUD_AGENTS_STORAGE_KEY,
+  PINNED_ENTITIES_STORAGE_KEY,
+  TASK_EXAMPLES_HIDDEN_STORAGE_KEY,
+} from "@/shared/storage/keys";
 
+vi.mock("@/api/chatFiles", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/api/chatFiles")>()),
+  fetchWorkspaceDirectory: vi.fn().mockResolvedValue({ entries: [] }),
+}));
 vi.mock("@/api/agentResources", () => ({ fetchConversationResourceBatch: vi.fn() }));
 vi.mock("@/api/relay", () => ({ fetchRelayCatalog: vi.fn().mockResolvedValue([]) }));
 vi.mock("@/api/im", () => ({ sendMessageRequest: vi.fn() }));
@@ -612,4 +621,136 @@ describe("cloud task targets", () => {
     await userEvent.click(screen.getByRole("button", { name: /iaTargetLabel/ }));
     expect(await screen.findByRole("button", { name: /合同条款审阅/ })).toBeDisabled();
   });
+});
+
+it("replaces draft files and references when the working directory changes", async () => {
+  vi.mocked(fetchWorkspaceDirectory).mockImplementation(async (_agent, _path, _signal, _room, dir) => ({
+    entries: [
+      {
+        name: dir === "/new-project" ? "new.md" : "old.md",
+        path: dir === "/new-project" ? "new.md" : "old.md",
+        type: "file",
+      },
+    ],
+  }));
+  vi.mocked(sendMessageRequest).mockResolvedValue({} as never);
+  const user = userEvent.setup();
+  setup("/new", "test-model", { configuration: { workspace_dir: "/old-project" } });
+  await user.click(screen.getByRole("button", { name: "chatSideExpand" }));
+  await user.click(screen.getByRole("button", { name: /chatWorkspaceFiles/ }));
+  const oldFile = await screen.findByRole("button", { name: /^old.md/ });
+  await user.click(screen.getByRole("button", { name: "chatFileReference old.md" }));
+  const prompt = screen.getByRole("textbox", { name: "taskEntryPrompt" });
+  expect(prompt).toHaveValue("@old.md ");
+  await user.click(oldFile);
+  expect(screen.getByRole("tab", { name: "old.md" })).toBeInTheDocument();
+  await user.click(screen.getByRole("combobox", { name: "iaWorkdirTitle" }));
+  await user.click(screen.getByRole("button", { name: "iaWorkdirManual" }));
+  const directory = screen.getByRole("textbox", { name: "taskConfigurationDirectoryPath" });
+  await user.clear(directory);
+  await user.type(directory, "/new-project");
+  await user.click(screen.getByRole("button", { name: "taskConfigurationApply" }));
+  expect(screen.queryByRole("tab", { name: "old.md" })).not.toBeInTheDocument();
+  expect(prompt).toHaveValue("");
+  expect(await screen.findByRole("button", { name: /^new.md/ })).toBeVisible();
+  await user.click(screen.getByRole("button", { name: "chatSideCollapse" }));
+  await waitFor(() => expect(screen.getByRole("button", { name: "chatSideExpand" })).toHaveFocus());
+  await user.type(prompt, "Review @new");
+  expect(prompt).toHaveValue("Review @new");
+  await screen.findByRole("option", { name: /new.md/ });
+  await user.keyboard("{Enter}");
+  await user.click(screen.getByRole("button", { name: "taskEntryStart" }));
+  await waitFor(() =>
+    expect(sendMessageRequest).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        content: 'Review @"new.md"',
+        file_references: [{ source: "workspace", agent_id: "u-manager", path: "new.md" }],
+      }),
+    ),
+  );
+  vi.mocked(fetchWorkspaceDirectory).mockResolvedValue({ entries: [] });
+});
+
+it("moves pinned targets above groups without selecting them and preserves the order after remount", async () => {
+  const user = userEvent.setup();
+  const key = `${PINNED_ENTITIES_STORAGE_KEY}:${location.pathname}:user-admin`;
+  try {
+    const first = setup();
+    const openPicker = () => user.click(screen.getByRole("button", { name: /iaTargetLabel/ }));
+    await openPicker();
+    await user.click(screen.getByTitle("iaPin · Worker"));
+    await user.click(screen.getByTitle("iaPin · Team"));
+    expect(screen.getByRole("button", { name: /iaTargetLabel.*Manager/ })).toBeInTheDocument();
+    first.unmount();
+
+    setup();
+    await openPicker();
+    const team = screen.getByTitle("iaUnpin · Team");
+    const worker = screen.getByTitle("iaUnpin · Worker");
+    expect(team.compareDocumentPosition(worker) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    await user.click(team);
+    expect(screen.getByTitle("iaPin · Team")).toBeInTheDocument();
+  } finally {
+    localStorage.removeItem(key);
+  }
+});
+
+it("selects a slash skill from the shared picker and shows the connector logo", async () => {
+  vi.mocked(fetchConversationResourceBatch).mockResolvedValue({
+    items: [{ source: "skill", type: "skill", id: "feishu-docs", name: "feishu-docs", available: true, enabled: true }],
+    total: 1,
+    list_revision: "r",
+    has_more: false,
+  });
+  vi.mocked(sendMessageRequest)
+    .mockReset()
+    .mockResolvedValue({} as never);
+  const { create } = setup();
+  const user = userEvent.setup();
+  const editor = screen.getByRole("textbox", { name: "taskEntryPrompt" });
+  await user.type(editor, "/fei");
+  const option = await screen.findByRole("option", { name: /feishu-docs/ });
+  expect(option.querySelector("img")).toHaveAttribute("src", "icons/feishu.png");
+  await user.keyboard("{Enter}");
+  expect(create).not.toHaveBeenCalled();
+  expect(editor).toHaveValue("");
+  await user.type(editor, "Summarize the document");
+  await user.click(screen.getByRole("button", { name: "taskEntryStart" }));
+  await waitFor(() =>
+    expect(sendMessageRequest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content: "Summarize the document",
+        resource_refs: [{ source: "skill", id: "feishu-docs" }],
+      }),
+    ),
+  );
+});
+
+it("shows pasted and dropped attachment drafts and sends restored files only once", async () => {
+  vi.mocked(sendMessageRequest)
+    .mockReset()
+    .mockResolvedValue({} as never);
+  const { create } = setup();
+  const user = userEvent.setup();
+  const editor = screen.getByRole("textbox", { name: "taskEntryPrompt" });
+  const pasted = new File(["image data"], "image.png", { type: "image/png" });
+  const dropped = new File(["notes"], "notes.md", { type: "text/markdown" });
+  fireEvent.paste(editor, { clipboardData: { files: [pasted], getData: () => "" } });
+  fireEvent.drop(editor, { dataTransfer: { files: [pasted, dropped] } });
+  const strip = screen.getByRole("list", { name: "attachments" });
+  expect(within(strip).getAllByRole("listitem")).toHaveLength(2);
+  expect(screen.getByRole("alert")).toHaveTextContent("attachmentDuplicate");
+  await user.click(within(strip).getAllByRole("button", { name: "removeAttachmentNamed" })[0]);
+  expect(within(strip).getAllByRole("listitem")).toHaveLength(1);
+  await user.click(screen.getByRole("button", { name: "undo" }));
+  expect(within(strip).getAllByRole("listitem")).toHaveLength(2);
+  expect(create).not.toHaveBeenCalled();
+
+  await user.click(screen.getByRole("button", { name: "taskEntryStart" }));
+  await waitFor(() =>
+    expect(sendMessageRequest).toHaveBeenCalledWith(
+      expect.objectContaining({ content: "", attachments: [pasted, dropped] }),
+      expect.objectContaining({ signal: expect.any(AbortSignal), onUploadProgress: expect.any(Function) }),
+    ),
+  );
 });
