@@ -10,6 +10,7 @@ const attachment: MessageAttachment = {
   size_bytes: 42,
   sha256: "image-sha",
   created_at: "2026-11-09T00:00:00Z",
+  source_path: "images/feishu-im-auth-qrcode.png",
   workspace_path: ".csgclaw/attachments/qr-image-feishu-im-auth-qrcode.png",
   download_url: "/api/v1/attachments/qr-image?token=image-token",
 };
@@ -19,8 +20,6 @@ describe("inline image attachments", () => {
     "feishu-im-auth-qrcode.png",
     "./feishu-im-auth-qrcode.png",
     "images/feishu-im-auth-qrcode.png",
-    "/workspace/feishu-im-auth-qrcode.png",
-    "C:\\workspace\\feishu-im-auth-qrcode.png",
     "feishu-im-auth-qrcode.png?version=1#preview",
     "./.csgclaw/attachments/qr-image-feishu-im-auth-qrcode.png",
   ])("resolves the delivered image for %s", (source) => {
@@ -28,30 +27,52 @@ describe("inline image attachments", () => {
   });
 
   it("matches percent-encoded Unicode names and spaces", () => {
-    const image = { ...attachment, name: "飞书 授权二维码.png" };
-    expect(resolveImageAttachmentURL(`images/${encodeURIComponent(image.name)}`, [image])).toBe(
+    const image = { ...attachment, name: "chart.png", source_path: "images/飞书 授权二维码.png" };
+    expect(resolveImageAttachmentURL(`images/${encodeURIComponent("飞书 授权二维码.png")}`, [image])).toBe(
       "api/v1/attachments/qr-image?token=image-token",
     );
   });
 
-  it("prefers an exact workspace path when image names collide", () => {
-    const first = { ...attachment, workspace_path: "first/feishu-im-auth-qrcode.png" };
+  it("resolves published paths when delivery names collide", () => {
+    const first = { ...attachment, name: "qr.png", source_path: "first/qr.png" };
     const second = {
-      ...attachment,
+      ...first,
       id: "qr-other",
-      workspace_path: "second/feishu-im-auth-qrcode.png",
+      source_path: "second/qr.png",
       preview_url: "/api/v1/attachments/qr-other?token=other-token",
     };
-    expect(resolveImageAttachmentURL("./second/feishu-im-auth-qrcode.png", [first, second])).toBe(
-      "api/v1/attachments/qr-other?token=other-token",
-    );
-    expect(resolveImageAttachmentURL(attachment.name, [first, second])).toBeUndefined();
+    const files = [first, second];
+    expect(resolveImageAttachmentURL(first.source_path, files)).toBe("api/v1/attachments/qr-image?token=image-token");
+    expect(resolveImageAttachmentURL("./second/qr.png", files)).toBe("api/v1/attachments/qr-other?token=other-token");
+    expect(resolveImageAttachmentURL("qr.png", files)).toBeUndefined();
+    expect(resolveImageAttachmentURL("third/qr.png", files)).toBeUndefined();
     expect(
-      resolveImageAttachmentURL(first.workspace_path, [first, { ...second, workspace_path: first.workspace_path }]),
+      resolveImageAttachmentURL(first.source_path, [first, { ...second, source_path: first.source_path }]),
     ).toBeUndefined();
   });
 
+  it("preserves application image URLs when an attachment shares their filename", () => {
+    const image = { ...attachment, name: "manager.png", source_path: "generated/manager.png" };
+    const content = "![Avatar](/avatar/manager.png) ![Icon](avatar/manager.png) ![Output](generated/manager.png)";
+    const rendered = renderMarkdownWithCitations(content, undefined, [image]);
+    const template = document.createElement("template");
+    template.innerHTML = rendered.html;
+    expect([...template.content.querySelectorAll("img")].map((item) => item.getAttribute("src"))).toEqual([
+      "/avatar/manager.png",
+      "avatar/manager.png",
+      "api/v1/attachments/qr-image?token=image-token",
+    ]);
+  });
+
+  it.each(["generated/100%.png", "generated/100%25.png"])("renders a published percent sign in %s", (source) => {
+    const image = { ...attachment, name: "100%.png", source_path: "generated/100%.png" };
+    const rendered = renderMarkdownWithCitations(`![Chart](${source})`, undefined, [image]);
+    expect(rendered.html).toContain('src="api/v1/attachments/qr-image?token=image-token"');
+  });
+
   it.each([
+    "/workspace/feishu-im-auth-qrcode.png",
+    "C:\\workspace\\feishu-im-auth-qrcode.png",
     "https://example.com/feishu-im-auth-qrcode.png",
     "//example.com/feishu-im-auth-qrcode.png",
     "data:image/png;base64,abc",

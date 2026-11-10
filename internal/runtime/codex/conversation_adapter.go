@@ -356,6 +356,7 @@ func (a *ConversationAdapter) authorizeOutputFile(ctx context.Context, request a
 		return nil, &contract.TurnError{Code: contract.ErrorFileUnavailable, Message: err.Error()}
 	}
 	file.MediaType = mediaType
+	file.SourcePath = filepath.ToSlash(relativePath)
 	return file, nil
 }
 

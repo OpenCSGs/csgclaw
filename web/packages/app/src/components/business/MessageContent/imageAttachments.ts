@@ -9,20 +9,20 @@ export function resolveImageAttachmentURL(
   try {
     path = decodeURIComponent(path);
   } catch {
-    return undefined;
+    // A published filename can contain a literal percent sign.
   }
   path = normalizePath(path);
-  if (!path || path.startsWith("//") || (/^[a-z][a-z\d+.-]*:/i.test(path) && !/^[a-z]:\//i.test(path))) {
+  if (!path || path.startsWith("/") || /^[a-z][a-z\d+.-]*:/i.test(path)) {
     return undefined;
   }
 
   const images = attachments.filter(isImageAttachment);
   const exact = images.filter(
-    (attachment) => attachment.workspace_path && normalizePath(attachment.workspace_path) === path,
+    (attachment) =>
+      (attachment.source_path && normalizePath(attachment.source_path) === path) ||
+      (attachment.workspace_path && normalizePath(attachment.workspace_path) === path),
   );
-  const name = path.slice(path.lastIndexOf("/") + 1);
-  // Delivered files can have a different workspace path from the generated file.
-  const matches = exact.length ? exact : images.filter((attachment) => attachment.name === name);
+  const matches = exact.length ? exact : images.filter((attachment) => attachment.name === path);
   if (matches.length !== 1) {
     return undefined;
   }

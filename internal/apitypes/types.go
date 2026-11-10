@@ -97,6 +97,7 @@ type MessageAttachment struct {
 	Width         int       `json:"width,omitempty"`
 	Height        int       `json:"height,omitempty"`
 	WorkspacePath string    `json:"workspace_path,omitempty"`
+	SourcePath    string    `json:"source_path,omitempty"`
 }
 
 type MessageAttachmentUpload struct {

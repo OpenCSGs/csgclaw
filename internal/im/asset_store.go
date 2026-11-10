@@ -43,11 +43,12 @@ const (
 // AttachmentSource is an internal, streamed generated file. The caller owns Reader.
 // User uploads continue to use MessageAttachmentUpload and its upload quotas.
 type AttachmentSource struct {
-	Name      string
-	MediaType string
-	SizeBytes int64
-	SHA256    string
-	Reader    io.ReadCloser
+	SourcePath string
+	Name       string
+	MediaType  string
+	SizeBytes  int64
+	SHA256     string
+	Reader     io.ReadCloser
 }
 
 type attachmentObject struct {
@@ -67,6 +68,7 @@ type attachmentObject struct {
 	Width          int       `json:"width,omitempty"`
 	Height         int       `json:"height,omitempty"`
 	DownloadToken  string    `json:"download_token"`
+	SourcePath     string    `json:"source_path,omitempty"`
 	WorkspacePath  string    `json:"workspace_path,omitempty"`
 	WorkspaceRoot  string    `json:"workspace_root,omitempty"`
 	SessionBatchID string    `json:"session_batch_id,omitempty"`
@@ -270,7 +272,7 @@ func writeAttachmentData(ctx context.Context, staged *os.File, source Attachment
 	if err != nil {
 		return attachmentObject{}, err
 	}
-	return attachmentObject{ID: id, OriginalName: originalName, SafeName: safeAttachmentName(originalName),
+	return attachmentObject{ID: id, OriginalName: originalName, SafeName: safeAttachmentName(originalName), SourcePath: source.SourcePath,
 		MediaType: mediaType, Kind: kind, SizeBytes: written, SHA256: sha, Width: width, Height: height}, nil
 }
 
@@ -447,6 +449,7 @@ func attachmentFromObject(object attachmentObject) MessageAttachment {
 		SHA256:        object.SHA256,
 		CreatedAt:     object.CreatedAt,
 		DownloadURL:   attachmentDownloadURL(object),
+		SourcePath:    object.SourcePath,
 		WorkspacePath: object.WorkspacePath,
 		Width:         object.Width,
 		Height:        object.Height,

@@ -1171,7 +1171,7 @@ Notes:
 - To send attachments, use `multipart/form-data` with a `payload` JSON part containing the same fields and one or more `files` parts.
 - Attachment-only messages are valid when at least one file is present.
 - A message accepts up to 10 attachments, with a maximum of `1 GiB` per file and `2 GiB` in total.
-- Each returned message can include `attachments` with `id`, `name`, `kind`, `media_type`, `size_bytes`, `sha256`, `created_at`, `download_url`, optional `preview_url`, optional image dimensions, and optional `workspace_path` for agent-facing deliveries.
+- Each returned message can include `attachments` with `id`, `name`, `kind`, `media_type`, `size_bytes`, `sha256`, `created_at`, `download_url`, optional `preview_url`, optional image dimensions, and optional `workspace_path` for agent-facing deliveries. Files published from a workspace also include `source_path`, the workspace-relative path used to match inline images even when the delivery name changes.
 
 Multipart example:
 
