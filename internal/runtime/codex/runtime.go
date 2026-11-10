@@ -228,6 +228,7 @@ type Runtime struct {
 	conversationSettings     sync.Map
 	deps                     Dependencies
 	managerMu                sync.Mutex
+	runtimeMetadataLocks     sync.Map
 	configMu                 sync.Mutex
 	mcpCatalogMu             sync.RWMutex
 	mcpCatalogRevisions      map[string]uint64
@@ -425,9 +426,11 @@ func (r *Runtime) New(ctx context.Context, spec agentruntime.Spec) (agentruntime
 	}
 	// 服务启动时也会调用 New 恢复 manager；已有运行记录保持当前技能集合。
 	copyHostSkills := false
-	if _, err := r.readRuntimeMetadata(strings.TrimSpace(spec.RuntimeID)); errors.Is(err, os.ErrNotExist) {
+	_, err := r.readRuntimeMetadata(strings.TrimSpace(spec.RuntimeID))
+	corrupt := invalidRuntimeMetadata(err)
+	if errors.Is(err, os.ErrNotExist) {
 		copyHostSkills = true
-	} else if err != nil {
+	} else if err != nil && !corrupt {
 		return agentruntime.Handle{}, fmt.Errorf("read codex runtime metadata: %w", err)
 	}
 	spec.Profile = spec.Profile.Normalized()
@@ -439,7 +442,7 @@ func (r *Runtime) New(ctx context.Context, spec agentruntime.Spec) (agentruntime
 		return agentruntime.Handle{}, fmt.Errorf("read persisted codex conversations: %w", readErr)
 	}
 	session, err := r.ensureSession(ctx, SessionSpec{
-		PreserveSkills:              spec.PreserveSkills,
+		PreserveSkills:              spec.PreserveSkills || corrupt,
 		RuntimeID:                   strings.TrimSpace(spec.RuntimeID),
 		AgentID:                     strings.TrimSpace(spec.AgentID),
 		AgentName:                   strings.TrimSpace(spec.AgentName),
@@ -563,7 +566,7 @@ func (r *Runtime) Start(ctx context.Context, h agentruntime.Handle) (agentruntim
 	} else if !errors.Is(readErr, os.ErrNotExist) {
 		return agentruntime.StateUnknown, fmt.Errorf("read persisted codex conversations: %w", readErr)
 	}
-	session, err := r.ensureSession(ctx, SessionSpec{
+	_, err = r.ensureSession(ctx, SessionSpec{
 		RuntimeID:                   strings.TrimSpace(h.RuntimeID),
 		AgentID:                     strings.TrimSpace(agentRef.ID),
 		AgentName:                   strings.TrimSpace(agentRef.Name),
@@ -575,9 +578,6 @@ func (r *Runtime) Start(ctx context.Context, h agentruntime.Handle) (agentruntim
 		if sessionRestoreErr != nil {
 			return agentruntime.StateUnknown, fmt.Errorf("repair codex session after restore failed (%v): %w", sessionRestoreErr, err)
 		}
-		return agentruntime.StateUnknown, err
-	}
-	if err := r.writeMetadata(sessionToRuntimeMetadata(session)); err != nil {
 		return agentruntime.StateUnknown, err
 	}
 	return agentruntime.StateRunning, nil
@@ -597,6 +597,28 @@ func (r *Runtime) Stop(ctx context.Context, h agentruntime.Handle) (agentruntime
 	managerErr := r.sessionManager().Stop(ctx, SessionHandle{RuntimeID: runtimeID})
 	if managerErr != nil && !errors.Is(managerErr, os.ErrNotExist) {
 		return agentruntime.StateUnknown, managerErr
+	}
+	if invalidRuntimeMetadata(metaErr) {
+		if managerErr != nil {
+			dir, err := r.runtimeDirForHandle(h)
+			if err != nil {
+				return agentruntime.StateUnknown, err
+			}
+			if err := r.stopUntrackedRuntimeProcesses(ctx, runtimeID, dir); err != nil {
+				return agentruntime.StateUnknown, err
+			}
+		}
+		// A corrupt record cannot identify a PID. Keep the existing skills
+		// when the next start rebuilds metadata from the separate session file.
+		if err := r.writeMetadata(runtimeMetadata{
+			RuntimeID:      runtimeID,
+			PreserveSkills: true,
+			State:          agentruntime.StateStopped,
+			StoppedAt:      time.Now().UTC(),
+		}); err != nil {
+			return agentruntime.StateUnknown, err
+		}
+		return agentruntime.StateStopped, nil
 	}
 	if metaErr != nil {
 		if !errors.Is(metaErr, os.ErrNotExist) {
@@ -675,7 +697,16 @@ func (r *Runtime) Info(_ context.Context, h agentruntime.Handle) (agentruntime.I
 		}, nil
 	}
 
-	meta, err := r.readRuntimeMetadata(h.RuntimeID)
+	path, err := r.runtimeMetadataPath(h.RuntimeID)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return agentruntime.Info{}, sandbox.ErrNotFound
+		}
+		return agentruntime.Info{}, err
+	}
+	unlock := r.lockRuntimeMetadata(path)
+	defer unlock()
+	meta, err := r.readRuntimeMetadataAt(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return agentruntime.Info{}, sandbox.ErrNotFound
@@ -691,7 +722,7 @@ func (r *Runtime) Info(_ context.Context, h agentruntime.Handle) (agentruntime.I
 		}
 		meta.State = state
 		meta.ProcessID = 0
-		_ = r.writeMetadata(meta)
+		_ = writeJSONFile(r.writeMetadataFile, path, meta)
 	}
 	return agentruntime.Info{
 		HandleID:  strings.TrimSpace(meta.SessionID),
@@ -739,7 +770,9 @@ func (r *Runtime) sessionManager() Manager {
 			} else {
 				meta.State = agentruntime.StateExited
 			}
-			_ = writeJSONFile(r.writeFile, filepath.Join(session.RuntimeDir, runtimeFileName), meta)
+			if err := r.storeRuntimeMetadata(filepath.Join(session.RuntimeDir, runtimeFileName), meta); err != nil {
+				slog.Warn("save Codex exit status failed", "runtime_id", session.RuntimeID, "error", err)
+			}
 		},
 		OnConversationSessionsChange: func(session *Session, conversations map[string]string, filePublishing map[string]bool) error {
 			if session == nil {
@@ -748,7 +781,7 @@ func (r *Runtime) sessionManager() Manager {
 			meta := sessionToSessionMetadata(session)
 			meta.ConversationSessions = cloneConversationSessions(conversations)
 			meta.FilePublishingConversations = cloneFilePublishingConversations(filePublishing)
-			return writeJSONFile(r.writeFile, filepath.Join(session.RuntimeDir, sessionFileName), meta)
+			return writeJSONFile(r.writeMetadataFile, filepath.Join(session.RuntimeDir, sessionFileName), meta)
 		},
 	})
 	manager.deps.HydrateSession = func(ctx context.Context, handle SessionHandle) (*Session, error) {
@@ -790,6 +823,8 @@ func (r *Runtime) ensureSession(ctx context.Context, spec SessionSpec, copyHostS
 	}
 	if meta, err := r.readRuntimeMetadata(runtimeID); err == nil {
 		spec.PreserveSkills = spec.PreserveSkills || meta.PreserveSkills
+	} else if invalidRuntimeMetadata(err) {
+		spec.PreserveSkills = true
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return nil, err
 	}
@@ -883,10 +918,10 @@ func (r *Runtime) ensureSession(ctx context.Context, spec SessionSpec, copyHostS
 	}
 	session.PreserveSkills = spec.PreserveSkills
 	session.ConversationProfileFingerprint = spec.ConversationProfileFingerprint
-	if err := writeJSONFile(r.writeFile, filepath.Join(spec.RuntimeDir, sessionFileName), sessionToSessionMetadata(session)); err != nil {
+	if err := writeJSONFile(r.writeMetadataFile, filepath.Join(spec.RuntimeDir, sessionFileName), sessionToSessionMetadata(session)); err != nil {
 		return nil, err
 	}
-	if err := writeJSONFile(r.writeFile, filepath.Join(spec.RuntimeDir, runtimeFileName), sessionToRuntimeMetadata(session)); err != nil {
+	if err := r.storeRuntimeMetadata(filepath.Join(spec.RuntimeDir, runtimeFileName), sessionToRuntimeMetadata(session)); err != nil {
 		return nil, err
 	}
 	return session, nil
@@ -1616,11 +1651,43 @@ func (r *Runtime) readRuntimeMetadata(runtimeID string) (runtimeMetadata, error)
 	if err != nil {
 		return runtimeMetadata{}, err
 	}
+	return r.readRuntimeMetadataAt(path)
+}
+
+func (r *Runtime) readRuntimeMetadataAt(path string) (runtimeMetadata, error) {
 	var meta runtimeMetadata
 	if err := readJSONFile(r.readFile, path, &meta); err != nil {
 		return runtimeMetadata{}, err
 	}
 	return normalizeRuntimeMetadata(meta), nil
+}
+
+func (r *Runtime) lockRuntimeMetadata(path string) func() {
+	value, _ := r.runtimeMetadataLocks.LoadOrStore(path, &sync.Mutex{})
+	mu := value.(*sync.Mutex)
+	mu.Lock()
+	return mu.Unlock
+}
+
+func invalidRuntimeMetadata(err error) bool {
+	var syntaxErr *json.SyntaxError
+	var typeErr *json.UnmarshalTypeError
+	return errors.As(err, &syntaxErr) || errors.As(err, &typeErr)
+}
+
+// Keep the original in place until its replacement is ready.
+func backupCorruptRuntimeMetadata(path string, data []byte, parseErr error) error {
+	backup, err := os.CreateTemp(filepath.Dir(path), runtimeFileName+".corrupt-*")
+	if err != nil {
+		return fmt.Errorf("create corrupt Codex metadata backup: %w", err)
+	}
+	_, writeErr := backup.Write(data)
+	if err := errors.Join(writeErr, backup.Close()); err != nil {
+		_ = os.Remove(backup.Name())
+		return fmt.Errorf("back up corrupt Codex metadata: %w", err)
+	}
+	slog.Warn("backed up corrupt Codex runtime metadata", "path", path, "backup", backup.Name(), "error", parseErr)
+	return nil
 }
 
 func (r *Runtime) readSessionMetadata(runtimeID string) (sessionMetadata, error) {
@@ -1645,8 +1712,39 @@ func (r *Runtime) writeMetadata(meta runtimeMetadata) error {
 	if err != nil {
 		return err
 	}
-	meta = normalizeRuntimeMetadata(meta)
-	return writeJSONFile(r.writeFile, path, meta)
+	return r.storeRuntimeMetadata(path, meta)
+}
+
+func (r *Runtime) storeRuntimeMetadata(path string, meta runtimeMetadata) error {
+	unlock := r.lockRuntimeMetadata(path)
+	defer unlock()
+	data, err := r.readFile(path)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	var current runtimeMetadata
+	if err == nil {
+		if parseErr := json.Unmarshal(data, &current); parseErr != nil {
+			if !invalidRuntimeMetadata(parseErr) {
+				return parseErr
+			}
+			if err := backupCorruptRuntimeMetadata(path, data, parseErr); err != nil {
+				return err
+			}
+			current = runtimeMetadata{}
+		}
+	}
+	// An exit or stop can finish after the next app-server has started.
+	if current.StartedAt.After(meta.StartedAt) {
+		return nil
+	}
+	if meta.State == agentruntime.StateRunning && !meta.StartedAt.IsZero() && current.StartedAt.Equal(meta.StartedAt) {
+		switch current.State {
+		case agentruntime.StateStopped, agentruntime.StateExited, agentruntime.StateFailed:
+			return nil
+		}
+	}
+	return writeJSONFile(r.writeMetadataFile, path, normalizeRuntimeMetadata(meta))
 }
 
 func (r *Runtime) writeSessionMetadata(meta sessionMetadata) error {
@@ -1655,7 +1753,14 @@ func (r *Runtime) writeSessionMetadata(meta sessionMetadata) error {
 		return err
 	}
 	meta = normalizeSessionMetadata(meta)
-	return writeJSONFile(r.writeFile, path, meta)
+	return writeJSONFile(r.writeMetadataFile, path, meta)
+}
+
+func (r *Runtime) writeMetadataFile(path string, data []byte, mode os.FileMode) error {
+	if r.deps.WriteFile != nil {
+		return r.deps.WriteFile(path, data, mode)
+	}
+	return conversationconfig.WriteAtomic(path, data)
 }
 
 func (r *Runtime) runtimeMetadataPath(runtimeID string) (string, error) {

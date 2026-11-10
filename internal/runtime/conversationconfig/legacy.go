@@ -73,10 +73,10 @@ func ImportLegacy(agentHome, runtimeDir, metadataFile string, fields, nativePath
 		if err := os.MkdirAll(root, 0700); err != nil {
 			return err
 		}
-		if err := writeAtomic(filepath.Join(root, metadataFile), data); err != nil {
+		if err := WriteAtomic(filepath.Join(root, metadataFile), data); err != nil {
 			return err
 		}
-		if err := writeAtomic(marker, []byte("1")); err != nil {
+		if err := WriteAtomic(marker, []byte("1")); err != nil {
 			return err
 		}
 	}
@@ -130,12 +130,13 @@ func copyNativeFiles(source, destination string) error {
 		} else if !os.IsNotExist(err) {
 			return err
 		}
-		return writeAtomic(target, data)
+		return WriteAtomic(target, data)
 	})
 }
 
-func writeAtomic(path string, data []byte) error {
-	file, err := os.CreateTemp(filepath.Dir(path), ".session-import-*")
+// WriteAtomic replaces a private file only after its new contents are complete.
+func WriteAtomic(path string, data []byte) error {
+	file, err := os.CreateTemp(filepath.Dir(path), ".csgclaw-state-*")
 	if err != nil {
 		return err
 	}

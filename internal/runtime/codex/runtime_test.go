@@ -4300,6 +4300,37 @@ func TestRuntimeInfoKeepsLiveSessionRunningWhenMetadataIsTemporarilyMissing(t *t
 	}
 }
 
+func TestRuntimeMetadataKeepsNewerProcessState(t *testing.T) {
+	path := filepath.Join(t.TempDir(), runtimeFileName)
+	rt := New(Dependencies{})
+	started := time.Now().UTC()
+	old := runtimeMetadata{StartedAt: started, State: agentruntime.StateExited}
+	current := runtimeMetadata{StartedAt: started.Add(time.Second), State: agentruntime.StateRunning, ProcessID: 42}
+	if err := rt.storeRuntimeMetadata(path, current); err != nil {
+		t.Fatal(err)
+	}
+	if err := rt.storeRuntimeMetadata(path, old); err != nil {
+		t.Fatal(err)
+	}
+	if saved, err := rt.readRuntimeMetadataAt(path); err != nil || saved.State != agentruntime.StateRunning || saved.ProcessID != 42 {
+		t.Fatalf("old exit replaced the new process: %+v, %v", saved, err)
+	}
+
+	exited := current
+	exited.State = agentruntime.StateFailed
+	exited.ProcessID = 0
+	exited.ExitCode = 1
+	if err := rt.storeRuntimeMetadata(path, exited); err != nil {
+		t.Fatal(err)
+	}
+	if err := rt.storeRuntimeMetadata(path, current); err != nil {
+		t.Fatal(err)
+	}
+	if saved, err := rt.readRuntimeMetadataAt(path); err != nil || saved.State != agentruntime.StateFailed || saved.ExitCode != 1 {
+		t.Fatalf("delayed startup overwrote the process exit: %+v, %v", saved, err)
+	}
+}
+
 func TestRuntimeInfoMarksExitedAndFailedWhenProcessIsGone(t *testing.T) {
 	t.Parallel()
 
