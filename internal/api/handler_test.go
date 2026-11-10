@@ -36,6 +36,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"sync"
@@ -2986,7 +2987,7 @@ func TestAgentEngineAdministrationPreservesModelSelector(t *testing.T) {
 	}
 }
 
-func TestHandleAgentsPatchSelectorPreservesModelConfiguration(t *testing.T) {
+func TestHandleAgentsPatchRejectsMalformedSelectorAndPreservesModelConfiguration(t *testing.T) {
 	profile := agent.AgentProfile{
 		Provider: agent.ProviderAPI, BaseURL: "https://models.example/v1", APIKey: "secret",
 		Headers: map[string]string{"X-Test": "keep"}, ModelID: "model-a", ReasoningEffort: "high",
@@ -2996,25 +2997,24 @@ func TestHandleAgentsPatchSelectorPreservesModelConfiguration(t *testing.T) {
 		ID: "agent-selector", Name: "selector", Role: agent.RoleWorker, RuntimeKind: agent.RuntimeKindCodex,
 		Status: string(agentruntime.StateStopped), Profile: "old-selector", AgentProfile: profile, ProfileComplete: true,
 	}})
+	before, ok := svc.Agent("agent-selector")
+	if !ok {
+		t.Fatal("initial Agent not found")
+	}
 	handler := &Handler{svc: svc, agentEngine: agentengine.New(svc), workspace: svc.Workspace(), agentModels: svc.Models(), agentRuntime: svc}
 	recorder := httptest.NewRecorder()
 	handler.Routes().ServeHTTP(recorder, httptest.NewRequest(http.MethodPatch, "/api/v1/agents/agent-selector", strings.NewReader(
 		`{"model_config":{"selector":"new-selector"}}`,
 	)))
-	if recorder.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d; body=%s", recorder.Code, http.StatusOK, recorder.Body.String())
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d; body=%s", recorder.Code, http.StatusBadRequest, recorder.Body.String())
 	}
 	updated, ok := svc.Agent("agent-selector")
 	if !ok {
 		t.Fatal("updated Agent not found")
 	}
-	if updated.Profile != "new-selector" || updated.AgentProfile.Provider != profile.Provider ||
-		updated.AgentProfile.ModelProviderID != profile.ModelProviderID || updated.AgentProfile.BaseURL != profile.BaseURL ||
-		updated.AgentProfile.APIKey != profile.APIKey || updated.AgentProfile.ModelID != profile.ModelID ||
-		updated.AgentProfile.ReasoningEffort != profile.ReasoningEffort ||
-		updated.AgentProfile.Headers["X-Test"] != "keep" || updated.AgentProfile.Env["KEEP"] != "yes" ||
-		updated.AgentProfile.RequestOptions["temperature"] != 0.2 {
-		t.Fatalf("selector PATCH changed model configuration: selector=%q profile=%+v", updated.Profile, updated.AgentProfile)
+	if !reflect.DeepEqual(updated, before) {
+		t.Fatalf("invalid selector changed Agent configuration: before=%+v after=%+v", before, updated)
 	}
 }
 

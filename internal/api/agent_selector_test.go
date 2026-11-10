@@ -151,3 +151,67 @@ func TestAgentPatchSelectorWithExplicitModelConfiguration(t *testing.T) {
 		t.Fatalf("explicit model configuration was not retained: %+v", after)
 	}
 }
+
+func TestAgentModelSelectorReplacementAndValidation(t *testing.T) {
+	const path = "/api/v1/agents/agent-worker"
+	for _, test := range []struct {
+		name, method, body, model, effort string
+	}{
+		{"retain existing model", http.MethodPost, `{"configuration":{"name":"worker"}}`, "previous-model", "high"},
+		{"full replacement", http.MethodPost, `{"configuration":{"name":"worker","model_config":{"selector":"configured.next-model"}}}`, "next-model", "auto"},
+		{"model mask", http.MethodPost, `{"configuration":{"model_config":{"selector":"configured.next-model","reasoning_effort":"low"}},"field_mask":["model_config"]}`, "next-model", "low"},
+		{"explicit model", http.MethodPost, `{"configuration":{"name":"worker","model_config":{"selector":"configured.next-model","model_provider_id":"configured","model_id":"previous-model","reasoning_effort":"low"}}}`, "previous-model", "low"},
+		{"invalid patch", http.MethodPatch, `{"description":"changed","model_config":{"selector":"unqualified"}}`, "", ""},
+		{"invalid replacement", http.MethodPost, `{"configuration":{"name":"changed","model_config":{"selector":"configured."}}}`, "", ""},
+		{"invalid selector with explicit model", http.MethodPatch, `{"model_config":{"selector":".model","model_provider_id":"configured","model_id":"next-model"}}`, "", ""},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			runtimeCreates := 0
+			svc, _ := mustNewSeededServiceWithPathAndOptions(t, []agent.Agent{{
+				ID: "agent-worker", Name: "worker", Role: agent.RoleWorker, Status: "stopped",
+				RuntimeKind: agent.RuntimeKindCodex, RuntimeID: "runtime-worker", BoxID: "box-worker",
+				Profile: "old-selector", ProfileComplete: true, AgentProfile: agent.AgentProfile{
+					Provider: agent.ProviderAPI, ModelProviderID: "configured", ModelID: "previous-model",
+					ReasoningEffort: "high", ProfileComplete: true,
+				},
+			}}, agent.WithRuntime(fakeCompatRuntime{kind: agent.RuntimeKindCodex, new: func(_ context.Context, spec agentruntime.Spec) (agentruntime.Handle, error) {
+				runtimeCreates++
+				return agentruntime.Handle{RuntimeID: spec.RuntimeID, HandleID: "new-runtime"}, nil
+			}}))
+			svc.Models().SetLLMConfig(config.LLMConfig{Providers: map[string]config.ProviderConfig{
+				"configured": {BaseURL: "https://provider.test/v1", APIKey: "test-key", Models: []string{"previous-model", "next-model"}},
+			}})
+			before, _ := svc.Agent("agent-worker")
+			handler := &Handler{svc: svc, agentEngine: agentengine.New(svc), agentModels: svc.Models(), workspace: svc.Workspace()}
+			endpoint := path
+			if test.method == http.MethodPost {
+				endpoint += "/recreate"
+			}
+			recorder := httptest.NewRecorder()
+			handler.Routes().ServeHTTP(recorder, httptest.NewRequest(test.method, endpoint, strings.NewReader(test.body)))
+			if err := svc.Reload(); err != nil {
+				t.Fatal(err)
+			}
+			saved, ok := svc.Agent(before.ID)
+			if !ok {
+				t.Fatal("missing saved Agent")
+			}
+			if test.model == "" {
+				if recorder.Code != http.StatusBadRequest || !strings.Contains(recorder.Body.String(), "invalid model selector") {
+					t.Fatalf("invalid selector returned %d: %s", recorder.Code, recorder.Body.String())
+				}
+				if runtimeCreates != 0 || !reflect.DeepEqual(before, saved) {
+					t.Fatalf("invalid selector changed Agent or Runtime: before=%+v, saved=%+v, creates=%d", before, saved, runtimeCreates)
+				}
+				return
+			}
+			if recorder.Code != http.StatusOK || runtimeCreates != 1 {
+				t.Fatalf("recreate returned %d: %s, runtime creations=%d", recorder.Code, recorder.Body.String(), runtimeCreates)
+			}
+			effective, err := svc.Models().ResolvedModelConfig(before.ID)
+			if err != nil || effective.ModelID != test.model || saved.AgentProfile.ModelID != test.model || saved.AgentProfile.ReasoningEffort != test.effort {
+				t.Fatalf("saved model=%+v, effective=%+v, error=%v", saved.AgentProfile, effective, err)
+			}
+		})
+	}
+}

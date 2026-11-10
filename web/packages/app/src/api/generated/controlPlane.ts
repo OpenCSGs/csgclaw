@@ -158,7 +158,7 @@ export interface paths {
     put?: never;
     /**
      * Rebuild an Agent with optional configuration
-     * @description Rebuilds the Agent with its current or replacement configuration. Replacement configurations must have a complete primary model; image or video model selections alone do not provide one. Incomplete replacements return 400 before saving configuration or changing the Runtime. Requests without configuration preserve existing Manager initialization and readiness behavior, including a successful response with profile_incomplete.
+     * @description Rebuilds the Agent with its current or replacement configuration. A selector can supply the primary model for a full replacement or model_config mask. Explicit primary model settings take precedence. A malformed nonempty selector returns 400. Replacement configurations must have a complete primary model; image or video model selections alone do not provide one. Incomplete replacements return 400 before saving configuration or changing the Runtime. Requests without configuration preserve existing Manager initialization and readiness behavior, including a successful response with profile_incomplete.
      */
     post: operations["postAgentsIdRecreate"];
     delete?: never;
@@ -1468,7 +1468,7 @@ export interface components {
       description?: string;
       provider?: string;
     };
-    /** @description Omitted fields retain their value. Null scalar/runtime/model_config values retain their value. Empty description/instructions clear them. runtime.options replaces the map; {} clears it, null retains it. mcp_servers null or {} clears the map. model_config with only selector resolves the primary model while retaining reasoning, request options, environment and image/video selections; other configuration fields use the existing whole-profile update semantics. */
+    /** @description Omitted fields retain their value. Null scalar/runtime/model_config values retain their value. Empty description/instructions clear them. runtime.options replaces the map; {} clears it, null retains it. mcp_servers null or {} clears the map. model_config with only selector resolves the primary model while retaining reasoning, request options, environment and image/video selections; other configuration fields replace the model configuration. A selector supplies the primary model when the replacement omits explicit primary model settings. A malformed nonempty selector returns 400 without saving changes. */
     AgentPatchRequest: {
       name?: string | null;
       description?: string | null;
@@ -2032,7 +2032,7 @@ export interface components {
       name?: string;
       runtime?: components["schemas"]["AgentRuntimeInput"] | null;
     };
-    /** @description No configuration rebuilds the current Agent and preserves existing Manager initialization and readiness behavior, including a successful response with profile_incomplete. Configuration with no mask performs the existing full replacement, retaining the current Runtime/model when the replacement does not select them. A nonempty mask requires configuration; only selected fields are replaced. Parent and child mask paths cannot coexist. Unknown masks return invalid_field_mask. Recreate sets desired_state=running. Role and template creation are not replacement fields. Replacement configurations must have a complete primary model; image or video model selections alone do not provide one. Incomplete replacements return 400 before saving configuration or changing the Runtime. */
+    /** @description No configuration rebuilds the current Agent and preserves existing Manager initialization and readiness behavior, including a successful response with profile_incomplete. Configuration with no mask performs the existing full replacement, retaining the current Runtime/model when the replacement does not select them. A nonempty mask requires configuration; only selected fields are replaced. Parent and child mask paths cannot coexist. Unknown masks return invalid_field_mask. Recreate sets desired_state=running. Role and template creation are not replacement fields. A selector can supply the primary model for a full replacement or model_config mask. Explicit primary model settings take precedence. A malformed nonempty selector returns 400. Replacement configurations must have a complete primary model; image or video model selections alone do not provide one. Incomplete replacements return 400 before saving configuration or changing the Runtime. */
     RecreateAgentRequest: {
       configuration?: components["schemas"]["RecreateAgentConfiguration"] | null;
       field_mask?: (

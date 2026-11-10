@@ -254,9 +254,7 @@ func (f *Controller) List(ctx context.Context, options contract.AgentListOptions
 }
 
 func (f *Controller) Update(ctx context.Context, agentID string, request contract.AgentUpdateRequest) (contract.Agent, error) {
-	item, err := f.updateDesired(ctx, agentID, request.ResourceVersion, updateOptionsFor(request), func(current contract.AgentSpec) (contract.AgentSpec, error) {
-		return mergeAgentUpdate(current, request), nil
-	})
+	item, err := f.updateDesired(ctx, agentID, request, updateOptionsFor(request))
 	if err == nil && item.Status.State == contract.AgentStateStopped && f.interactions != nil {
 		f.interactions.Interrupt(agentID, "", "", true)
 	}
@@ -394,11 +392,37 @@ func preserveWriteOnlyFields(current, desired contract.AgentSpec) contract.Agent
 	return desired
 }
 
+func applyUpdateModelSelector(desired *contract.ModelSpec, request contract.AgentUpdateRequest) error {
+	model := request.Spec.Model
+	selector := strings.TrimSpace(model.Selector)
+	replaceModel := len(request.FieldMask) == 0 || fieldMaskContains(request.FieldMask, "model")
+	if selector == "" || (!replaceModel && !fieldMaskContains(request.FieldMask, "model.selector")) {
+		return nil
+	}
+	providerID, modelID, ok := splitModelProviderSelector(selector)
+	if !ok {
+		return &contract.TurnError{Code: contract.ErrorInvalidRequest, Message: "invalid model selector: expected provider.model"}
+	}
+	if replaceModel && (strings.TrimSpace(model.Provider) != "" || strings.TrimSpace(model.ProviderID) != "" ||
+		strings.TrimSpace(model.ModelID) != "" || strings.TrimSpace(model.BaseURL) != "" ||
+		strings.TrimSpace(model.APIKey) != "" || strings.TrimSpace(model.APIProtocol) != "" || len(model.Headers) > 0) {
+		return nil
+	}
+	desired.Provider = ProfileProviderForModelProviderID(providerID)
+	desired.ProviderID = providerID
+	desired.ModelID = modelID
+	// The selected provider supplies the connection settings for this model.
+	desired.BaseURL = ""
+	desired.APIKey = ""
+	desired.APIProtocol = ""
+	desired.Headers = nil
+	return nil
+}
+
 type agentUpdateOptions struct {
 	saveInstructions      bool
 	loadSkills            bool
 	loadMemory            bool
-	resolveModelSelector  bool
 	reconcileDesiredState bool
 	reconcileResources    bool
 	forceRecreate         bool
@@ -411,14 +435,13 @@ func updateOptionsFor(request contract.AgentUpdateRequest) agentUpdateOptions {
 		saveInstructions:      len(request.FieldMask) == 0 || fieldMaskContains(request.FieldMask, "instructions"),
 		loadSkills:            loadSkills,
 		loadMemory:            fieldMaskContains(request.FieldMask, "memory") || request.Spec.Memory != nil,
-		resolveModelSelector:  fieldMaskContains(request.FieldMask, "model.selector") && !fieldMaskContains(request.FieldMask, "model"),
 		reconcileDesiredState: fieldMaskContains(request.FieldMask, "desired_state"),
 		reconcileResources:    loadSkills || fieldMaskContains(request.FieldMask, "mcp_servers"),
 		replaceSkills:         slices.Clone(request.ReplaceSkills),
 	}
 }
 
-func (f *Controller) updateDesired(ctx context.Context, agentID, resourceVersion string, options agentUpdateOptions, mutate func(contract.AgentSpec) (contract.AgentSpec, error)) (contract.Agent, error) {
+func (f *Controller) updateDesired(ctx context.Context, agentID string, request contract.AgentUpdateRequest, options agentUpdateOptions) (contract.Agent, error) {
 	var updated Agent
 	err := f.WithAgentLifecycle(ctx, agentID, func(lifecycleCtx context.Context) error {
 		previous, ok := f.Agent(agentID)
@@ -428,7 +451,7 @@ func (f *Controller) updateDesired(ctx context.Context, agentID, resourceVersion
 		if previous.ArchivedAt != nil {
 			return archivedAgentError()
 		}
-		if resourceVersion != "" && resourceVersion != resourceVersionForAgent(previous) {
+		if request.ResourceVersion != "" && request.ResourceVersion != resourceVersionForAgent(previous) {
 			return ErrAgentResourceVersionConflict
 		}
 		var previousSkills []string
@@ -450,23 +473,14 @@ func (f *Controller) updateDesired(ctx context.Context, agentID, resourceVersion
 			}
 			current.Memory = &contract.MemorySpec{Enabled: document.Enabled}
 		}
-		desired, err := mutate(cloneAgentSpec(current))
-		if err != nil {
-			return err
-		}
+		desired := mergeAgentUpdate(current, request)
 		desired = normalizeAgentSpec(desired)
 		if options.forceRecreate {
 			desired.DesiredState = contract.AgentDesiredStateRunning
 		}
 		desired = preserveWriteOnlyFields(current, desired)
-		if options.resolveModelSelector {
-			selector := desired.Model.Selector
-			profile, err := f.EffectiveAgentProfileForUpdate(agentID, UpdateRequest{Profile: &selector})
-			if err != nil {
-				return err
-			}
-			desired.Model = modelFromService(profile)
-			desired.Model.Selector = selector
+		if err := applyUpdateModelSelector(&desired.Model, request); err != nil {
+			return err
 		}
 		if err := validateSkillReplacements(options.replaceSkills, desired.Skills); err != nil {
 			return err
@@ -711,9 +725,7 @@ func (f *Controller) Recreate(ctx context.Context, agentID string, options contr
 		updateOptions := updateOptionsFor(request)
 		updateOptions.forceRecreate = true
 		updateOptions.reconcileDesiredState = false
-		return f.updateDesired(ctx, agentID, request.ResourceVersion, updateOptions, func(current contract.AgentSpec) (contract.AgentSpec, error) {
-			return mergeAgentUpdate(current, request), nil
-		})
+		return f.updateDesired(ctx, agentID, request, updateOptions)
 	}
 	var selected Agent
 	if options.UpgradeImage {

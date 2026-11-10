@@ -60,7 +60,7 @@ Send the current server, platform or Desktop credential in `Authorization: Beare
 
 Allowed masks are `name`, `description`, `instructions`, `runtime`, `runtime.image`, `runtime.options`, `model_config`, `model_config.selector`, and `mcp_servers`. A nonempty mask requires `configuration`; parent and child paths cannot be combined. Invalid masks return `400 invalid_field_mask`. Recreate uses the existing running-state rule. Template selection belongs to creation.
 
-The `model_config.selector` mask resolves the selected primary model through the same Controller update path as `PATCH`, before validating the replacement or changing the Runtime.
+A full replacement or a `model_config` mask can select the primary model with `selector`. Explicit primary model settings take precedence. The `model_config.selector` mask changes only the primary model and retains the other model settings. Both `PATCH` and recreate reject a malformed nonempty selector with HTTP 400 before changing the Agent or Runtime.
 
 Replacement configurations require a complete primary model. Image or video model selections alone cannot supply that model. An incomplete replacement is rejected before saving configuration or changing the Runtime. An empty request retains the existing Manager initialization behavior, including `profile_incomplete` readiness while model setup is pending.
 
