@@ -124,6 +124,15 @@ export function PaginationFoundations() {
           <img src="ui-lab/figma/navigation/arrow-right.svg" alt="" width="20" height="20" />
         </Button>
       </nav>
+      <Button
+        size="sm"
+        onClick={() => {
+          setPage(1);
+          setCircle(false);
+        }}
+      >
+        {t("重置示例")}
+      </Button>
       <p role="status">
         {t("当前页")} {page} / 5
       </p>

@@ -1,3 +1,5 @@
+import { useState } from "react";
+import { Button } from "@/components/ui";
 import { applicationSections, type ApplicationKind } from "./registry";
 import { FigmaReference } from "./FigmaReference";
 import { HeaderDemo, NavigationDemo, BreadcrumbDemo, InlineCtaDemo, DividerDemo } from "./LayoutDemos";
@@ -57,6 +59,7 @@ function Demo({ kind }: { kind: ApplicationKind }) {
 }
 export function ApplicationFoundations({ kind }: { kind: ApplicationKind }) {
   const { text: t } = useLabTranslation();
+  const [revision, setRevision] = useState(0);
   const entry = applicationSections.find((section) => section.key === kind)!;
   const source = inventory.find((item) => item.key === kind)!;
   return (
@@ -81,7 +84,14 @@ export function ApplicationFoundations({ kind }: { kind: ApplicationKind }) {
           {kind !== "breadcrumbs" && (
             <p>{t("试用区使用本地示例数据，不连接业务服务。设计原始文案与尺寸见设计参考。")}</p>
           )}
-          <Demo kind={kind} />
+          <Demo key={revision} kind={kind} />
+          {kind !== "breadcrumbs" && (
+            <div className={styles.actions}>
+              <Button size="sm" onClick={() => setRevision((value) => value + 1)}>
+                {t("重置示例")}
+              </Button>
+            </div>
+          )}
         </section>
       </details>
       {kind === "breadcrumbs" && <FigmaReference kind={kind} />}

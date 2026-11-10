@@ -42,7 +42,7 @@ describe("TooltipFoundations", () => {
     expect(screen.getAllByRole("link", { name: "查看设计节点 ↗" })).toHaveLength(7);
     await user.keyboard("{Escape}");
     await waitFor(() => expect(screen.queryByRole("tooltip")).not.toBeInTheDocument());
-    await user.click(screen.getByRole("button", { name: "重置文案" }));
+    await user.click(screen.getByRole("button", { name: "重置示例" }));
     expect(title).toHaveValue("This is a tooltip");
   });
 });

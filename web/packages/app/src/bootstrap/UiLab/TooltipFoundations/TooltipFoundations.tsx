@@ -100,11 +100,13 @@ export function TooltipFoundations() {
         <Button
           size="sm"
           onClick={() => {
+            setSupporting("no");
+            setArrow("Bottom center");
             setTitle(defaultTooltipTitle);
             setDescription(defaultTooltipDescription);
           }}
         >
-          {labText("重置文案")}
+          {labText("重置示例")}
         </Button>
       </section>
       <h3>{labText("设计静态参考")}</h3>

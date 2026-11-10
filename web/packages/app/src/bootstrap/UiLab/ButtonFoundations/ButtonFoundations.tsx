@@ -194,6 +194,17 @@ export function ButtonFoundations() {
           />
         </div>
       )}
+      <Button
+        size="sm"
+        onClick={() => {
+          setFamily("standard");
+          setSize("md");
+          setShape("text");
+          setClicks(0);
+        }}
+      >
+        {labText("重置示例")}
+      </Button>
       <p role="status">
         {labText("当前 ")}
         {items.length}

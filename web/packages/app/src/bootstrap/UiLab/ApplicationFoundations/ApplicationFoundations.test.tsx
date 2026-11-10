@@ -66,6 +66,9 @@ describe("application component playgrounds", () => {
     expect(screen.getByRole("textbox", { name: "消息内容" })).toHaveValue("");
     expect(screen.getByText(/First\s+Second/)).toBeVisible();
     expect(screen.getByRole("status")).toHaveTextContent("已发送 1");
+    await user.click(screen.getByRole("button", { name: "重置示例" }));
+    expect(screen.queryByText(/First\s+Second/)).not.toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("已发送 0");
   });
   it("rejects invalid uploads and recovers with a valid local file", () => {
     mount("file-upload");

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Checkbox, SegmentedControl } from "@/components/ui";
+import { Button, Checkbox, SegmentedControl } from "@/components/ui";
 import { useLabTranslation } from "../LabLocale";
 import { SectionFooter, type FooterLayout, type FooterBreakpoint } from "./SectionFooter";
 import styles from "./FooterFoundations.module.css";
@@ -85,6 +85,20 @@ export function FooterFoundations() {
             onAction={setAction}
           />
         </div>
+        <Button
+          size="sm"
+          onClick={() => {
+            setLayout("Section");
+            setBreakpoint("Desktop");
+            setGroup(true);
+            setDivider(true);
+            setSecondary(true);
+            setActions(true);
+            setAction("");
+          }}
+        >
+          {t("重置示例")}
+        </Button>
         <p role="status">
           {action ? `${t("已触发")}：${t(action)}` : t("可切换时间范围并点击操作，反馈显示在页脚外部。")}
         </p>
