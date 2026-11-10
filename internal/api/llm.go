@@ -312,7 +312,7 @@ func (h *Handler) withLLMDiagnostic(r *http.Request, agentID string) *http.Reque
 }
 
 func (h *Handler) withLLMTurnModel(r *http.Request, agentID string, body []byte) (*http.Request, error) {
-	if pathValue(r, "task_id") != "" {
+	if pathValue(r, "room_id") != "" {
 		return r, nil
 	}
 	threadID, turnID := nativeLLMRequestIDs(r)
