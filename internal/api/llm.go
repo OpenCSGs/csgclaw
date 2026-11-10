@@ -53,8 +53,10 @@ func readLLMRequestBody(w http.ResponseWriter, r *http.Request) ([]byte, bool) {
 		}
 	}
 	tooLarge := func(body []byte) {
-		evidence(http.StatusRequestEntityTooLarge, "request_too_large", body)
-		writeLLMError(w, &llm.HTTPError{Status: http.StatusRequestEntityTooLarge, Code: "request_too_large", Message: fmt.Sprintf("LLM request body exceeds %d MiB limit", maxLLMRequestBodyBytes>>20)})
+		err := llm.RequestTooLargeError(r.Context())
+		err.Message = fmt.Sprintf("LLM request body exceeds the %d MiB limit. %s", maxLLMRequestBodyBytes>>20, err.Message)
+		evidence(err.Status, err.Code, body)
+		writeLLMError(w, err)
 	}
 	if r.ContentLength > maxLLMRequestBodyBytes {
 		tooLarge(nil)
