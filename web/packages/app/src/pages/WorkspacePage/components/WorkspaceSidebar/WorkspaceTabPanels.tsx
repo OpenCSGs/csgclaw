@@ -1,8 +1,9 @@
+import { InlineError } from "@/components/ui";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { DragEvent } from "react";
 import { BookOpen, FileCode2, Plus } from "lucide-react";
 import { RoomAvatar } from "@/components/business";
-import { ModelsIcon, SidebarMcpIcon } from "@/components/ui/Icons";
+import { ModelsIcon, SidebarMcpIcon } from "@/components/business/Icons";
 import { isDirectConversation, resolveConversationUser } from "@/models/conversations";
 import { hubTemplateFullName, hubTemplateReviewState } from "@/models/hubWorkspace";
 import { modelProviderAvatarPath, providerStatusTone, type ModelProvider } from "@/models/modelProviders";
@@ -1207,7 +1208,7 @@ export function WorkspaceTabPanels({
           {sectionOrders.agents.map((sectionId) => renderAgentSection(sectionId))}
         </div>
       )}
-      {agentsError ? <div className="form-error agent-error">{agentsError}</div> : null}
+      {agentsError ? <InlineError className="agent-error text-xs">{agentsError}</InlineError> : null}
     </>
   );
 }

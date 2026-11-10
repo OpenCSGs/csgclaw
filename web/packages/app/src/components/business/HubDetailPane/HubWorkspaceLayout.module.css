@@ -1,0 +1,5 @@
+@media (max-width: 720px) {
+  .hub-workspace-panels {
+    grid-template-columns: 1fr;
+  }
+}

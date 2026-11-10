@@ -1,3 +1,4 @@
+import profileFormLayoutStyles from "@/components/business/ProfileControls/ProfileFormLayout.module.css";
 import agentActivityPanelStyles from "./AgentActivityPanel.module.css";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -27,6 +28,7 @@ import {
 import { AgentActivityKinds, AgentActivityMsgTypes } from "@/shared/constants/messages";
 import { subscribeIMEvents } from "@/shared/realtime/imEvents";
 import {
+  InlineError,
   Button,
   Tooltip,
   DropdownMenuCheckboxItem,
@@ -235,7 +237,7 @@ export function AgentActivityPanel({ item, locale, rooms = [], t }: AgentActivit
   return (
     <section
       id="agent-profile-activity"
-      className={`profile-section ${agentActivityPanelStyles["agent-activity-section"]}`}
+      className={`profile-section ${profileFormLayoutStyles["profile-section"]} ${agentActivityPanelStyles["agent-activity-section"]}`}
       aria-labelledby="agent-activity-title"
     >
       <h2 id="agent-activity-title" className="sr-only">
@@ -243,9 +245,7 @@ export function AgentActivityPanel({ item, locale, rooms = [], t }: AgentActivit
       </h2>
       <div className="agent-section-form">
         <div className={`agent-page-form-content ${agentActivityPanelStyles["agent-activity-content"]}`}>
-          {query.error ? (
-            <div className="form-error">{errorMessage(query.error, t("agentActivityLoadFailed"))}</div>
-          ) : null}
+          {query.error ? <InlineError>{errorMessage(query.error, t("agentActivityLoadFailed"))}</InlineError> : null}
           {activityRooms.length === 0 ? (
             <div className={agentActivityPanelStyles["agent-activity-empty"]}>{t("agentActivityNoRooms")}</div>
           ) : null}

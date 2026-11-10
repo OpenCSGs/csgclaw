@@ -1,0 +1,165 @@
+.env-remove-button:where(:not([data-csg-control])) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  font: inherit;
+  cursor: pointer;
+}
+
+@media (max-width: 960px) {
+  .env-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+.env-remove-button {
+  transition:
+    color 180ms ease,
+    background-color 180ms ease,
+    border-color 180ms ease,
+    opacity 180ms ease,
+    transform 180ms cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 180ms ease;
+}
+
+.env-remove-button:where(:not([data-csg-control])) {
+  position: relative;
+  z-index: 3;
+  pointer-events: auto;
+}
+
+.env-remove-button:where(:not([data-csg-control])):hover {
+  border-color: oklch(0.77 0.16 164 / 0.42);
+  background: var(--primary-soft);
+  color: var(--primary-strong);
+}
+
+.env-remove-button:where(:not([data-csg-control])) {
+  border-color: transparent;
+  background: transparent;
+  color: var(--gray-600);
+  box-shadow: none;
+}
+
+.env-remove-button:where(:not([data-csg-control])):hover:not(:disabled) {
+  border-color: transparent;
+  background: var(--gray-50);
+  color: var(--gray-700);
+  box-shadow: none;
+}
+
+.env-remove-button {
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  min-height: 36px;
+  padding: 0;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.env-remove-button {
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  min-height: 28px;
+}
+
+.env-remove-button:where(:not([data-csg-control])) {
+  border-color: var(--line);
+  border-radius: var(--radius-md);
+  background: var(--field);
+  color: var(--gray-700);
+  box-shadow: var(--shadow-xs);
+}
+
+:global(:root[data-theme="dark"]) .env-remove-button:where(:not([data-csg-control])) {
+  color: var(--text);
+  box-shadow: none;
+}
+
+.env-remove-button:where(:not([data-csg-control])):hover {
+  border-color: var(--gray-300);
+  background: var(--gray-50);
+  color: var(--gray-800);
+  transform: none;
+}
+
+:global(:root[data-theme="dark"]) .env-remove-button:where(:not([data-csg-control])):hover {
+  border-color: rgba(208, 213, 221, 0.28);
+  background: var(--panel-strong);
+  color: var(--text);
+}
+
+.env-row input:where(:not([data-csg-control])) {
+  border-color: var(--input-border);
+  border-radius: var(--input-radius);
+  background: var(--input-background);
+  color: var(--input-text);
+  box-shadow: var(--input-shadow);
+}
+
+:global(:root[data-theme="dark"]) .env-row input:where(:not([data-csg-control])) {
+  border-color: var(--input-border);
+  background: var(--input-background);
+  color: var(--input-text);
+  box-shadow: var(--input-shadow);
+}
+
+.env-row input:where(:not([data-csg-control])):hover {
+  border-color: var(--input-border-hover);
+}
+
+:global(:root[data-theme="dark"]) .env-remove-button:where(:not([data-csg-control])) {
+  border-color: var(--line);
+  background: var(--panel);
+  color: #d0d5dd;
+  box-shadow: none;
+}
+
+:global(:root[data-theme="dark"]) .env-remove-button:where(:not([data-csg-control])):hover {
+  border-color: #475467;
+  background: #182230;
+  color: var(--text);
+}
+
+:global(:root[data-theme="dark"]) .env-row input:where(:not([data-csg-control])) {
+  border-color: var(--line);
+  background-color: var(--field);
+  color: var(--text);
+  box-shadow: none;
+}
+
+:global(:root[data-theme="dark"]) .env-row input:where(:not([data-csg-control]))::placeholder {
+  color: var(--gray-400);
+}
+.group {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.legend {
+  margin-bottom: 6px;
+  padding: 0;
+  color: var(--field-label-color);
+  font-size: var(--field-label-font-size);
+  font-weight: var(--field-label-font-weight);
+  line-height: var(--field-label-line-height);
+}
+
+.env-row > .cell {
+  margin: 0;
+  min-width: 0;
+}
+
+.env-row > .cell > .requiredMark {
+  color: var(--danger);
+  font-weight: 800;
+  line-height: 1;
+}

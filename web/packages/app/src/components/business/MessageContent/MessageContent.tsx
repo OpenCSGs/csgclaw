@@ -15,6 +15,7 @@ import { StructuredMessageCard } from "./StructuredMessageCard";
 import { parseStructuredMessage } from "./structuredMessages";
 import type { ActionCardPayload, MessageContentProps } from "./types";
 import { mentionMarkupPattern, escapeHTML } from "./mentions";
+import { renderMessageMention } from "./messageMentionMarkup";
 import { hasAgentActivityMetadata, parseAgentActivity } from "@/models/agentActivity";
 import { AgentActivityMsgTypes } from "@/shared/constants/messages";
 import { prepareMermaidBlocks, renderMermaidBlocks } from "./mermaid";
@@ -90,11 +91,15 @@ function MessageBody({
   const displayContent = String(content ?? "");
   const rendered = useMemo(
     () =>
-      renderMarkdownWithCitations(displayContent, (title) => {
-        const translated = t?.("citationLinkLabel", { title });
-        return translated && translated !== "citationLinkLabel" ? translated : `查看引用：${title}`;
-      }),
-    [displayContent, t],
+      renderMarkdownWithCitations(
+        displayContent,
+        (title) => {
+          const translated = t?.("citationLinkLabel", { title });
+          return translated && translated !== "citationLinkLabel" ? translated : `查看引用：${title}`;
+        },
+        message?.attachments,
+      ),
+    [displayContent, message?.attachments, t],
   );
   const markup = useMemo(
     () => ((activity && !resolvedQuestion) || slashCommandText || structured ? "" : rendered.html),
@@ -248,7 +253,7 @@ function renderSlashCommandBodyMarkup(body: string): string {
     result += escapeHTML(body.slice(cursor, index));
     const userID = match[1] || "";
     const userName = match[2] || "";
-    result += `<span class="message-mention" data-user-id="${escapeHTML(userID)}">@${escapeHTML(userName)}</span>`;
+    result += renderMessageMention(userID, userName);
     cursor = index + match[0].length;
   }
 

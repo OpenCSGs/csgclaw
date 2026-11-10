@@ -11,13 +11,21 @@
 
 .field > .field-label,
 .field > span:not(.field-hint),
-.field > .field-label-with-help {
+.field > .field-label-with-help,
+.field-heading > .field-label {
   color: var(--csgclaw-ui-field-label-color);
   font-family: var(--csgclaw-ui-font-sans);
   font-size: var(--csgclaw-ui-field-label-font-size);
   font-weight: var(--csgclaw-ui-field-label-font-weight);
   line-height: var(--csgclaw-ui-field-label-line-height);
   letter-spacing: 0;
+}
+
+.field-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--csgclaw-ui-space-2);
 }
 
 .field-hint,

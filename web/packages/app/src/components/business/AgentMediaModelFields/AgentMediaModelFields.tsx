@@ -1,6 +1,6 @@
 import { ModelPicker } from "@/components/business/AgentModelFields";
 import { ModelOptionLabel } from "@/components/business/ProfileControls";
-import { Select } from "@/components/ui";
+import { Field, Select } from "@/components/ui";
 import type { AgentDraft } from "@/models/agents";
 import type { TranslateFn } from "@/models/conversations";
 import { modelProviderAvatarPath, type ModelProviderSelectOption } from "@/models/modelProviders";
@@ -51,8 +51,7 @@ export function AgentMediaModelFields({
       <fieldset>
         <legend>{t("profileImageModelGroup")}</legend>
         <div className={styles.group}>
-          <label className="field">
-            <span>{t("profileImageModelProvider")}</span>
+          <Field label={t("profileImageModelProvider")}>
             <Select
               disabled={busy}
               value={imageProviderID}
@@ -76,9 +75,8 @@ export function AgentMediaModelFields({
                 })),
               ]}
             />
-          </label>
-          <label className="field">
-            <span>{t("profileImageModel")}</span>
+          </Field>
+          <Field label={t("profileImageModel")}>
             <ModelPicker
               value={imageModelID}
               models={imageModels}
@@ -91,7 +89,7 @@ export function AgentMediaModelFields({
               }
               t={t}
             />
-          </label>
+          </Field>
           <div className={styles.help}>
             <small>{t("profileImageModelHelp")}</small>
             {!imageProviders.some((provider) => provider.imageModels?.length) ? (
@@ -103,8 +101,7 @@ export function AgentMediaModelFields({
       <fieldset>
         <legend>{t("profileVideoModelGroup")}</legend>
         <div className={styles.group}>
-          <label className="field">
-            <span>{t("profileVideoModelProvider")}</span>
+          <Field label={t("profileVideoModelProvider")}>
             <Select
               disabled={busy}
               value={videoProviderID}
@@ -128,9 +125,8 @@ export function AgentMediaModelFields({
                 })),
               ]}
             />
-          </label>
-          <label className="field">
-            <span>{t("profileVideoModel")}</span>
+          </Field>
+          <Field label={t("profileVideoModel")}>
             <ModelPicker
               value={videoModelID}
               models={videoModels}
@@ -142,7 +138,7 @@ export function AgentMediaModelFields({
               }
               t={t}
             />
-          </label>
+          </Field>
           <div className={styles.help}>
             <small>{t("profileVideoModelHelp")}</small>
             {!videoProviders.some((provider) => provider.videoModels?.length) ? (

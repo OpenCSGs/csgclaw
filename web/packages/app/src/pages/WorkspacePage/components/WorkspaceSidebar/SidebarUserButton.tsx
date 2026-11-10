@@ -1,5 +1,5 @@
 import { Tooltip } from "@/components/ui";
-import { SidebarGearIcon } from "@/components/ui/Icons";
+import { SidebarGearIcon } from "@/components/business/Icons";
 import type { TranslateFn } from "@/models/conversations";
 import type { UpgradePhase, UpgradeStatus } from "@/models/upgradeStatus";
 import { isLocalBuildUpgradeStatus } from "@/models/upgradeStatus";

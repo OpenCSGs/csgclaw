@@ -5,6 +5,7 @@ import { EnvKeyValueEditor } from "@/components/business/ProfileControls";
 import type { EnvKeyValueRow } from "@/components/business/ProfileControls";
 
 const labels: Record<string, string> = {
+  profileEnv: "Environment variables",
   profileEnvAdd: "Add environment variable",
   profileEnvKey: "Key",
   profileEnvRemove: "Remove environment variable",
@@ -31,8 +32,14 @@ describe("EnvKeyValueEditor", () => {
   it("starts with one editable blank row when no env values exist", () => {
     renderEditor();
 
-    expect(screen.getByPlaceholderText("Key")).toHaveValue("");
-    expect(screen.getByPlaceholderText("Value")).toHaveValue("");
+    expect(screen.getByRole("group", { name: "Environment variables" })).toBeInTheDocument();
+    const keyInput = screen.getByRole("textbox", { name: "Key" });
+    const valueInput = screen.getByRole("textbox", { name: "Value" });
+    expect(keyInput).toHaveValue("");
+    expect(valueInput).toHaveValue("");
+    expect(keyInput.id).toBeTruthy();
+    expect(valueInput.id).toBeTruthy();
+    expect(keyInput.id).not.toBe(valueInput.id);
     expect(screen.getByRole("button", { name: "Add environment variable" })).toBeInTheDocument();
   });
 

@@ -268,6 +268,9 @@ func TestRuntimeRunsACPConversation(t *testing.T) {
 		t.Fatalf("RuntimeFiles = %+v, want one presented file", result.RuntimeFiles)
 	}
 	t.Cleanup(result.RuntimeFiles[0].Cleanup)
+	if result.RuntimeFiles[0].SourcePath != "index.html" {
+		t.Fatalf("presented source path = %q, want index.html", result.RuntimeFiles[0].SourcePath)
+	}
 	if result.RuntimeFiles[0].Name != "index.html" || result.RuntimeFiles[0].MediaType != "text/html" {
 		t.Fatalf("presented file metadata = %+v", result.RuntimeFiles[0].Metadata())
 	}

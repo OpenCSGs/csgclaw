@@ -133,7 +133,7 @@ func OpenOutputFileSources(ctx context.Context, store agentengine.FileInterface,
 			continue
 		}
 		uploads = append(uploads, im.AttachmentSource{
-			Name: content.Metadata.Name, MediaType: content.Metadata.MediaType,
+			Name: content.Metadata.Name, SourcePath: content.SourcePath, MediaType: content.Metadata.MediaType,
 			SizeBytes: file.SizeBytes, SHA256: file.SHA256, Reader: outputFileReader{ReadCloser: content.Content, ctx: ctx},
 		})
 	}

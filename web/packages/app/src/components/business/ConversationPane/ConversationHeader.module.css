@@ -111,3 +111,428 @@
 :root[data-theme="dark"] :global(.member-badge-button) .member-badge-count {
   border-color: var(--panel);
 }
+
+.chat-subtitle {
+  color: var(--muted);
+}
+
+.chat-subtitle {
+  line-height: 1.5;
+}
+
+@media (max-width: 960px) {
+  .chat-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}
+
+.chat-header {
+  padding: 18px;
+}
+
+.member-badge-button,
+.tool-menu-row {
+  transition:
+    color 180ms ease,
+    background-color 180ms ease,
+    border-color 180ms ease,
+    opacity 180ms ease,
+    transform 180ms cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 180ms ease;
+}
+
+.member-badge-button:active {
+  transform: translateY(1px) scale(0.99);
+}
+
+.member-badge-button,
+.tool-menu-row {
+  border-color: var(--line);
+  background: var(--field);
+  color: var(--text);
+  border-radius: 8px;
+}
+
+.member-badge-button:hover,
+.tool-menu-row:hover {
+  border-color: oklch(0.77 0.16 164 / 0.42);
+  background: color-mix(in oklab, var(--field) 82%, var(--primary-soft));
+  color: var(--text);
+}
+
+.header-popover {
+  border-radius: 8px;
+  border-color: var(--line);
+  background:
+    linear-gradient(180deg, oklch(1 0 0 / 0.04), transparent),
+    color-mix(in oklab, var(--panel) 94%, oklch(0.04 0.006 82));
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(18px);
+}
+
+:global(:root[data-theme="light"]) .header-popover {
+  background: color-mix(in oklab, var(--panel) 96%, oklch(1 0 0));
+}
+
+.header-popover-title {
+  color: var(--muted);
+  letter-spacing: 0.1em;
+}
+
+@media (max-width: 960px) {
+  .chat-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}
+
+.tool-menu-row,
+.member-badge-button {
+  border-color: var(--gray-300);
+  background: var(--white);
+  color: var(--gray-700);
+  box-shadow: var(--shadow-xs);
+}
+
+.tool-menu-row:hover:not(:disabled),
+.member-badge-button:hover:not(:disabled) {
+  border-color: var(--gray-300);
+  background: var(--gray-50);
+  color: var(--gray-800);
+  box-shadow: var(--shadow-xs);
+}
+
+.tool-menu-row:focus-visible,
+.member-badge-button:focus-visible {
+  border-color: var(--gray-300);
+  background: var(--white);
+  color: var(--gray-700);
+  box-shadow:
+    var(--shadow-xs),
+    0 0 0 4px rgba(152, 162, 179, 0.14);
+}
+
+.member-badge-button:global(.active) {
+  border-color: color-mix(in oklab, var(--brand-600) 20%, var(--line));
+  background: color-mix(in oklab, var(--brand-600) 5%, var(--surface));
+  color: var(--brand-700);
+  box-shadow: var(--shadow-xs);
+}
+
+.member-badge-button:global(.active):hover:not(:disabled) {
+  border-color: color-mix(in oklab, var(--brand-600) 28%, var(--line));
+  background: color-mix(in oklab, var(--brand-600) 9%, var(--surface));
+  color: var(--brand-800);
+  box-shadow: var(--shadow-xs);
+}
+
+.tool-menu-row:global(.danger) {
+  border-color: color-mix(in oklab, var(--error-600) 18%, var(--line));
+  background: var(--surface);
+  color: var(--error-700);
+  box-shadow: var(--shadow-xs);
+}
+
+.tool-menu-row:global(.danger):hover:not(:disabled) {
+  border-color: color-mix(in oklab, var(--error-600) 28%, var(--line));
+  background: color-mix(in oklab, var(--error-600) 6%, var(--surface));
+  color: var(--error-800);
+}
+
+:global(:root[data-theme="dark"]) .tool-menu-row,
+:global(:root[data-theme="dark"]) .member-badge-button {
+  border-color: rgba(208, 213, 221, 0.18);
+  background: var(--gray-800);
+  color: var(--gray-25);
+  box-shadow: none;
+}
+
+:global(:root[data-theme="dark"]) .tool-menu-row:hover:not(:disabled),
+:global(:root[data-theme="dark"]) .member-badge-button:hover:not(:disabled) {
+  border-color: rgba(208, 213, 221, 0.28);
+  background: #253044;
+  color: var(--gray-25);
+}
+
+:global(:root[data-theme="dark"]) .tool-menu-row:global(.danger) {
+  border-color: rgba(253, 162, 155, 0.28);
+  background: rgba(217, 45, 32, 0.12);
+  color: #fda29b;
+}
+
+.chat-header {
+  background: var(--surface);
+}
+
+.chat-header {
+  border-bottom: 1px solid var(--line);
+}
+
+.member-badge-button,
+.tool-menu-row {
+  border-color: var(--line);
+  border-radius: var(--radius-md);
+  background: var(--field);
+  color: var(--gray-700);
+  box-shadow: var(--shadow-xs);
+}
+
+:global(:root[data-theme="dark"]) .member-badge-button,
+:global(:root[data-theme="dark"]) .tool-menu-row {
+  color: var(--text);
+  box-shadow: none;
+}
+
+.member-badge-button:hover,
+.tool-menu-row:hover {
+  border-color: var(--gray-300);
+  background: var(--gray-50);
+  color: var(--gray-800);
+  transform: none;
+}
+
+:global(:root[data-theme="dark"]) .member-badge-button:hover,
+:global(:root[data-theme="dark"]) .tool-menu-row:hover {
+  border-color: rgba(208, 213, 221, 0.28);
+  background: var(--panel-strong);
+  color: var(--text);
+}
+
+.member-badge-button:global(.active) {
+  border-color: var(--brand-300);
+  background: var(--brand-25);
+  color: var(--brand-700);
+}
+
+.header-popover,
+:global(:root[data-theme="light"]) .header-popover {
+  border-radius: var(--radius-xl);
+  border-color: var(--line);
+  background: var(--panel);
+  box-shadow: var(--shadow-md);
+  backdrop-filter: none;
+}
+
+.header-popover-title {
+  color: var(--muted);
+  letter-spacing: 0;
+}
+
+.header-popover {
+  font-family: var(--font-sans);
+}
+
+.chat-title {
+  font-family: var(--font-display);
+}
+
+.tool-menu-icon :global(.svg-icon) {
+  width: 100%;
+  height: 100%;
+}
+
+:global(:root[data-theme="dark"]) .chat-header,
+:global(:root[data-theme="dark"]) .header-popover {
+  border-color: var(--line);
+  background: var(--panel);
+  color: var(--text);
+}
+
+:global(:root[data-theme="dark"]) .chat-header {
+  border-color: var(--line);
+}
+
+:global(:root[data-theme="dark"]) .chat-title-bar .chat-title-row .chat-title-group .chat-title,
+:global(:root[data-theme="dark"]) .chat-title {
+  color: var(--text);
+}
+
+:global(:root[data-theme="dark"]) .chat-kicker,
+:global(:root[data-theme="dark"]) .chat-subtitle,
+:global(:root[data-theme="dark"]) .header-popover-title {
+  color: var(--muted);
+}
+
+:global(:root[data-theme="dark"]) .member-badge-button,
+:global(:root[data-theme="dark"]) .tool-menu-row {
+  border-color: var(--line);
+  background: var(--panel);
+  color: #d0d5dd;
+  box-shadow: none;
+}
+
+:global(:root[data-theme="dark"]) .member-badge-button:hover,
+:global(:root[data-theme="dark"]) .tool-menu-row:hover {
+  border-color: #475467;
+  background: #182230;
+  color: var(--text);
+}
+
+:global(:root[data-theme="dark"]) .member-badge-button:global(.active) {
+  border-color: rgba(77, 106, 214, 0.62);
+  background: rgba(77, 106, 214, 0.18);
+  color: #d0d5dd;
+}
+
+.tool-menu-row:global(.danger) {
+  border-radius: 6px;
+  border-color: color-mix(in oklab, var(--error-600) 32%, var(--line));
+  background: color-mix(in oklab, var(--error-600) 8%, var(--surface));
+  color: var(--error-700);
+  box-shadow: var(--shadow-xs);
+}
+
+.tool-menu-row:global(.danger):hover:not(:disabled),
+.tool-menu-row:global(.danger):active:not(:disabled) {
+  border-color: color-mix(in oklab, var(--error-600) 46%, var(--line));
+  background: color-mix(in oklab, var(--error-600) 14%, var(--surface));
+  color: var(--error-800);
+  box-shadow: var(--shadow-xs);
+  transform: none;
+}
+
+.tool-menu-row:global(.danger):focus-visible {
+  border-color: color-mix(in oklab, var(--error-600) 38%, var(--line));
+  background: color-mix(in oklab, var(--error-600) 8%, var(--surface));
+  color: var(--error-800);
+  box-shadow:
+    var(--shadow-xs),
+    0 0 0 4px rgba(240, 68, 56, 0.14);
+}
+
+:global(:root[data-theme="dark"]) .tool-menu-row:global(.danger) {
+  border-color: rgba(253, 162, 155, 0.22);
+  background: rgba(217, 45, 32, 0.16);
+  color: #fda29b;
+}
+
+:global(:root[data-theme="dark"]) .tool-menu-row:global(.danger):hover:not(:disabled),
+:global(:root[data-theme="dark"]) .tool-menu-row:global(.danger):active:not(:disabled) {
+  border-color: rgba(253, 162, 155, 0.32);
+  background: rgba(217, 45, 32, 0.2);
+  color: #fecdca;
+}
+
+.tool-menu-row:global(.danger):disabled,
+.tool-menu-row:global(.danger)[disabled] {
+  border-color: var(--gray-200);
+  background: var(--gray-100);
+  color: var(--gray-400);
+  box-shadow: var(--shadow-xs);
+  opacity: 1;
+  transform: none;
+}
+
+:global(:root[data-theme="dark"]) .tool-menu-row:global(.danger):disabled,
+:global(:root[data-theme="dark"]) .tool-menu-row:global(.danger)[disabled] {
+  border-color: rgba(208, 213, 221, 0.12);
+  background: rgba(208, 213, 221, 0.08);
+  color: var(--gray-500);
+  box-shadow: none;
+}
+
+:global(.chat-panel) > .chat-header {
+  padding: 8px 20px;
+  background: var(--surface);
+}
+
+:global(.chat-panel) > .chat-header .chat-title-bar {
+  min-height: 40px;
+  gap: 12px;
+}
+
+:global(.chat-panel) > .chat-header .chat-title-group {
+  gap: 1px 10px;
+}
+
+:global(.chat-panel) > .chat-header .chat-kicker {
+  gap: 6px;
+  font-size: 11px;
+  line-height: 14px;
+}
+
+:global(.chat-panel) > .chat-header .chat-title {
+  font-size: 20px;
+  line-height: 24px;
+}
+
+:global(.chat-panel) > .chat-header .chat-title-actions {
+  gap: 8px;
+}
+
+:global(.chat-panel) > .chat-header .chat-title-actions :global(.btn):global(.icon-button) {
+  width: 44px;
+  min-width: 44px;
+  max-width: 44px;
+  height: 44px;
+  min-height: 44px;
+  padding: 0;
+  border-radius: 10px;
+}
+
+:global(.chat-panel) > .chat-header .chat-title-actions :global(.btn):global(.icon-button) :global(.btn-content) {
+  width: 100%;
+  height: 100%;
+}
+
+:global(.chat-panel) > .chat-header .chat-title-actions :global(.icon-button) :global(.icon-button-mark) {
+  width: 20px;
+  height: 20px;
+}
+
+.tool-menu-row {
+  width: 100%;
+  min-height: 38px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--field);
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.tool-menu-row > :global(.btn-content) {
+  width: 100%;
+  min-width: 0;
+  justify-content: space-between;
+  gap: 12px;
+  text-align: left;
+}
+
+.tool-menu-row strong {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.tool-menu-row:hover {
+  border-color: rgba(43, 109, 246, 0.24);
+  background: rgba(43, 109, 246, 0.08);
+}
+
+.tool-menu-row:global(.danger) {
+  color: var(--danger);
+}
+
+.tool-menu-icon {
+  width: 16px;
+  height: 16px;
+  display: inline-flex;
+}
+
+.tool-menu-icon svg {
+  width: 100%;
+  height: 100%;
+}
+
+.memberMark {
+  display: inline-flex;
+  flex: 0 0 auto;
+}

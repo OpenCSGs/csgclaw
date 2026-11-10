@@ -2729,12 +2729,17 @@ func TestAppServerParamsOmitReasoningForModelDefault(t *testing.T) {
 	if _, ok := values["model_reasoning_effort"]; ok {
 		t.Fatalf("reasoning config should be omitted: %v", values)
 	}
-	if values["model_context_window"] != int64(200000) || values["model_auto_compact_token_limit"] != int64(150000) {
-		t.Fatalf("context config missing: %v", values)
+	if values["model_context_window"] != nil || values["model_auto_compact_token_limit"] != nil {
+		t.Fatalf("thread context overrides model catalog: %v", values)
 	}
 	turn := appServerTurnStartParams(spec, "thread-1", "hello")
 	if effort, ok := turn["effort"]; ok {
 		t.Fatalf("turn effort = %v, want omitted", effort)
+	}
+	mode := turn["collaborationMode"].(map[string]any)
+	settings := mode["settings"].(map[string]any)
+	if settings["model"] != spec.Profile.ModelID || settings["reasoning_effort"] != nil {
+		t.Fatalf("model reasoning default was not restored: %v", mode)
 	}
 }
 

@@ -1,6 +1,7 @@
+import profileFormLayoutStyles from "@/components/business/ProfileControls/ProfileFormLayout.module.css";
 import profileControlsStyles from "./ProfileControls.module.css";
-import { TextArea } from "@/components/ui";
-import { useEffect, useId, useState } from "react";
+import { Button, Field, TextArea } from "@/components/ui";
+import { useEffect, useState } from "react";
 import {
   MCP_SERVERS_EXAMPLE,
   mcpServersText,
@@ -10,7 +11,6 @@ import {
   type JSONRecord,
 } from "@/models/agents";
 import type { TranslateFn } from "@/models/conversations";
-import { Button } from "csgclaw-ui";
 
 export type MCPServersPanelProps = {
   draft: AgentDraft;
@@ -28,7 +28,6 @@ function errorMessageForKey(key: "invalid_json" | "object_required", t: Translat
 }
 
 export function MCPServersPanel({ draft, onDraftChange, onInvalidChange, t }: MCPServersPanelProps) {
-  const textareaId = useId();
   const draftText = mcpServersText(draft.mcpServers);
   const [text, setText] = useState(draftText);
   const [error, setError] = useState("");
@@ -77,9 +76,12 @@ export function MCPServersPanel({ draft, onDraftChange, onInvalidChange, t }: MC
   }
 
   return (
-    <div className={`field span-2 ${profileControlsStyles["mcp-servers-panel"]}`}>
-      <div className={profileControlsStyles["mcp-servers-header"]}>
-        <label htmlFor={textareaId}>{t("profileMCPServers")}</label>
+    <Field
+      className={`span-2 ${profileFormLayoutStyles["span-2"]} ${profileControlsStyles["mcp-servers-panel"]}`}
+      label={t("profileMCPServers")}
+      hint={error ? undefined : t("profileMCPServersHint")}
+      error={error}
+      labelAction={
         <div className={profileControlsStyles["mcp-servers-actions"]}>
           <Button variant="secondaryGray" size="sm" onClick={fillExample}>
             {t("profileMCPServersUseExample")}
@@ -88,20 +90,15 @@ export function MCPServersPanel({ draft, onDraftChange, onInvalidChange, t }: MC
             {t("profileMCPServersClear")}
           </Button>
         </div>
-      </div>
+      }
+    >
       <TextArea
-        id={textareaId}
         className={`compact-textarea ${profileControlsStyles["mcp-servers-textarea"]}`}
         value={text}
-        aria-invalid={error ? "true" : undefined}
-        aria-describedby={`${textareaId}-hint`}
         placeholder={t("profileMCPServersPlaceholder")}
         spellCheck={false}
         onInput={(event) => commitText(event.currentTarget.value)}
       />
-      <span id={`${textareaId}-hint`} className={`field-hint${error ? " error" : ""}`.trim()}>
-        {error || t("profileMCPServersHint")}
-      </span>
-    </div>
+    </Field>
   );
 }

@@ -1,3 +1,6 @@
+import { PanelEmptyState } from "@/components/business/PanelEmptyState";
+import { EntityPane } from "@/components/business/EntityDetail";
+import profileFormLayoutStyles from "@/components/business/ProfileControls/ProfileFormLayout.module.css";
 import { TemplateProfilePanel } from "./TemplateProfilePanel";
 import { classNames } from "@/shared/lib/classNames";
 import {
@@ -32,7 +35,7 @@ import {
   Server,
   Trash2,
 } from "lucide-react";
-import { ConnectorBoxesIcon, SidebarMcpIcon, SidebarPuzzlePiece02Icon } from "@/components/ui/Icons";
+import { ConnectorBoxesIcon, SidebarMcpIcon, SidebarPuzzlePiece02Icon } from "@/components/business/Icons";
 import { KnowledgeBaseDiscoveryDialog } from "@/components/business/KnowledgeBaseDiscoveryDialog";
 import { formatRuntimeKindLabel } from "@/models/agents";
 import {
@@ -52,8 +55,11 @@ import {
 } from "@/models/mcp";
 import type { MCPProbeResult, MCPServerPayload, MCPServerSourceStatus, RemoteMCPServer } from "@/models/mcp";
 import { WorkspaceFilePreview, WorkspaceFileTree } from "@/components/business/WorkspaceFileTree";
-import { WorkspaceTemplatesIcon } from "@/components/ui/Icons";
+import { WorkspaceTemplatesIcon } from "@/components/business/Icons";
 import {
+  StatusBadge,
+  InlineError,
+  Field,
   TextArea,
   SegmentedControl,
   Button,
@@ -1346,12 +1352,8 @@ export function HubDetailPane({
   }
 
   return (
-    <section
-      className={classNames(
-        "entity-pane",
-        styles["hub-detail-pane"],
-        hideInlineTemplateHeader && styles["hub-embedded-template"],
-      )}
+    <EntityPane
+      className={classNames(styles["hub-detail-pane"], hideInlineTemplateHeader && styles["hub-embedded-template"])}
     >
       {!loaded && !error && activeResourceType !== "mcp" ? (
         <div className={styles["hub-loading-state"]} role="status" aria-live="polite">
@@ -1370,12 +1372,7 @@ export function HubDetailPane({
         templates.length === 0 &&
         skills.length === 0 &&
         mcpServers.length === 0 ? (
-        <div className={classNames("empty-state", "shell-empty-state", styles["hub-empty-state"])}>
-          <span className="rich-empty-mark" aria-hidden="true">
-            *
-          </span>
-          <strong>{t("resourcesEmpty")}</strong>
-        </div>
+        <PanelEmptyState title={t("resourcesEmpty")} mark="*" className={styles["hub-empty-state"]} />
       ) : (
         <div
           className={classNames(
@@ -1452,7 +1449,9 @@ export function HubDetailPane({
                 ) : null}
 
                 {knowledgeBases?.loading ? (
-                  <div className="workspace-empty">{t("resourcesKnowledgeBasesLoading")}</div>
+                  <div className="workspace-empty px-2.5 py-2 text-[13px] text-[var(--muted)]">
+                    {t("resourcesKnowledgeBasesLoading")}
+                  </div>
                 ) : filteredKnowledgeBases.length ? (
                   <div className={styles["hub-skill-card-grid"]}>
                     {filteredKnowledgeBases.map((item) => {
@@ -1478,20 +1477,21 @@ export function HubDetailPane({
                     })}
                   </div>
                 ) : knowledgeBases?.items.length ? (
-                  <div className={classNames("empty-state", "shell-empty-state", styles["hub-empty-state"])}>
-                    <strong>{t("workspaceSearchNoResults")}</strong>
-                  </div>
+                  <PanelEmptyState title={t("workspaceSearchNoResults")} className={styles["hub-empty-state"]} />
                 ) : (
-                  <div className={classNames("empty-state", "shell-empty-state", styles["hub-empty-state"])}>
-                    <BookOpen size={28} strokeWidth={1.5} aria-hidden="true" />
-                    <strong>{t("resourcesKnowledgeBasesEmpty")}</strong>
-                    <span>{t("resourcesKnowledgeBasesEmptyHint")}</span>
-                    {knowledgeBases?.loginRequired ? (
-                      <Button variant="primary" size="sm" onClick={() => void onKnowledgeBaseLogin?.()}>
-                        {t("resourcesKnowledgeBasesLogin")}
-                      </Button>
-                    ) : null}
-                  </div>
+                  <PanelEmptyState
+                    title={t("resourcesKnowledgeBasesEmpty")}
+                    icon={<BookOpen size={28} strokeWidth={1.5} aria-hidden="true" />}
+                    description={t("resourcesKnowledgeBasesEmptyHint")}
+                    actions={
+                      knowledgeBases?.loginRequired ? (
+                        <Button variant="primary" size="sm" onClick={() => void onKnowledgeBaseLogin?.()}>
+                          {t("resourcesKnowledgeBasesLogin")}
+                        </Button>
+                      ) : null
+                    }
+                    className={styles["hub-empty-state"]}
+                  />
                 )}
               </section>
             </div>
@@ -1592,13 +1592,13 @@ export function HubDetailPane({
                             <span className={skillResourceStyles["hub-skill-card-title"]}>
                               {template.display_name?.trim() || hubTemplateFullName(template)}
                               {listPublication ? (
-                                <span className="mini-badge">
+                                <StatusBadge kind="tag">
                                   {listPublication.publication?.revision
                                     ? t("templateLastPublishedVersion", {
                                         version: `V${listPublication.publication.revision}`,
                                       })
                                     : t("templateCommunityVersionUnconfirmed")}
-                                </span>
+                                </StatusBadge>
                               ) : null}
                             </span>
                             <span className={skillResourceStyles["hub-skill-card-description"]}>
@@ -1620,13 +1620,9 @@ export function HubDetailPane({
                     })}
                   </div>
                 ) : templates.length ? (
-                  <div className={classNames("empty-state", "shell-empty-state", styles["hub-empty-state"])}>
-                    <strong>{t("workspaceSearchNoResults")}</strong>
-                  </div>
+                  <PanelEmptyState title={t("workspaceSearchNoResults")} className={styles["hub-empty-state"]} />
                 ) : (
-                  <div className={classNames("empty-state", "shell-empty-state", styles["hub-empty-state"])}>
-                    <strong>{t("resourcesEmpty")}</strong>
-                  </div>
+                  <PanelEmptyState title={t("resourcesEmpty")} className={styles["hub-empty-state"]} />
                 )}
               </section>
             </div>
@@ -1651,20 +1647,20 @@ export function HubDetailPane({
                           ) : null}
                           <h2>{hubTemplateFullName(selectedTemplate)}</h2>
                           <div className={styles["hub-inspector-badge-row"]}>
-                            <span className={"mini-badge template-runtime-badge"}>
+                            <StatusBadge kind="tag" className={"template-runtime-badge"}>
                               {selectedTemplate.runtime_kind || selectedTemplate.workspace?.kind
                                 ? formatRuntimeKindLabel(
                                     selectedTemplate.runtime_kind || selectedTemplate.workspace?.kind,
                                     t,
                                   )
                                 : "-"}
-                            </span>
-                            <span className={"mini-badge template-source-badge"}>
+                            </StatusBadge>
+                            <StatusBadge kind="tag" className={"template-source-badge"}>
                               <span className={"template-source-badge-dot"} aria-hidden="true"></span>
                               {t(templateSourceLabelKey(selectedTemplate, templateUsername))}
-                            </span>
+                            </StatusBadge>
                             {hasCloudTemplateWithSameName ? (
-                              <span className={"mini-badge"}>{publicationBadge}</span>
+                              <StatusBadge kind="tag">{publicationBadge}</StatusBadge>
                             ) : null}
                           </div>
                         </div>
@@ -1785,10 +1781,17 @@ export function HubDetailPane({
                   templateModel={selectedTemplate.model_config?.model_id ?? undefined}
                 />
               ) : activeTemplateTab === "instructions" ? (
-                <section className={classNames("profile-section", styles["hub-template-instructions-section"])}>
+                <section
+                  className={classNames(
+                    `profile-section ${profileFormLayoutStyles["profile-section"]}`,
+                    styles["hub-template-instructions-section"],
+                  )}
+                >
                   <div className={templateResourceStyles["hub-template-instructions-header"]}>
                     <div className="profile-section-heading">
-                      <div className="profile-section-title">{t("agentInstructions")}</div>
+                      <div className={`profile-section-title ${profileFormLayoutStyles["profile-section-title"]}`}>
+                        {t("agentInstructions")}
+                      </div>
                       <p className="profile-section-description">
                         {templateInstructionsMode === "default"
                           ? t("resourcesTemplateInstructionsDefaultHint")
@@ -1848,10 +1851,10 @@ export function HubDetailPane({
                         </div>
                       )
                     ) : (
-                      <div className="profile-grid-compact">
-                        <label className={classNames("field", "span-2")}>
-                          <span className="sr-only">{t("agentInstructions")}</span>
+                      <div className={`profile-grid-compact ${profileFormLayoutStyles["profile-grid-compact"]}`}>
+                        <Field className={`span-2 ${profileFormLayoutStyles["span-2"]}`}>
                           <TextArea
+                            aria-label={t("agentInstructions")}
                             className={classNames(
                               "compact-textarea",
                               "hub-template-instructions-editor",
@@ -1864,7 +1867,7 @@ export function HubDetailPane({
                             }}
                             placeholder={t("agentInstructionsPlaceholder")}
                           />
-                        </label>
+                        </Field>
                       </div>
                     )}
                   </div>
@@ -1915,7 +1918,7 @@ export function HubDetailPane({
                     instructionsEditor.conflict ||
                     workspaceFileError ||
                     templateInstructionsIncomplete) ? (
-                    <div className="form-error" role="alert">
+                    <InlineError role="alert">
                       {instructionsEditor.conflict
                         ? t("resourcesTemplateInstructionsConflict")
                         : instructionsEditor.failed
@@ -1926,21 +1929,28 @@ export function HubDetailPane({
                           {t("resourcesTemplateInstructionsReload")}
                         </Button>
                       ) : null}
-                    </div>
+                    </InlineError>
                   ) : null}
                 </section>
               ) : activeTemplateTab === "memory" ? (
-                <section className={classNames("profile-section", styles["hub-template-memory-panel"])}>
+                <section
+                  className={classNames(
+                    `profile-section ${profileFormLayoutStyles["profile-section"]}`,
+                    styles["hub-template-memory-panel"],
+                  )}
+                >
                   <div className={templateResourceStyles["hub-template-memory-heading"]}>
                     <div className="profile-section-heading">
-                      <div className="profile-section-title">memory_summary.md</div>
+                      <div className={`profile-section-title ${profileFormLayoutStyles["profile-section-title"]}`}>
+                        memory_summary.md
+                      </div>
                       <p className="profile-section-description">{t("resourcesTemplateMemoryDescription")}</p>
                       <code className={templateResourceStyles["hub-template-memory-location"]}>
                         memories/memory_summary.md
                       </code>
                     </div>
                   </div>
-                  {workspaceFileError ? <div className="form-error">{workspaceFileError}</div> : null}
+                  {workspaceFileError ? <InlineError>{workspaceFileError}</InlineError> : null}
                   {workspaceFileLoading ? (
                     <div className={styles["hub-template-memory-empty"]} role="status">
                       <strong>{t("resourcesWorkspaceFileLoading")}</strong>
@@ -1969,14 +1979,16 @@ export function HubDetailPane({
               ) : activeTemplateTab === "skills" ? (
                 <section
                   className={classNames(
-                    "profile-section",
+                    `profile-section ${profileFormLayoutStyles["profile-section"]}`,
                     templateResourceStyles["hub-template-summary-panel"],
                     styles["hub-template-skills-panel"],
                   )}
                 >
                   <div className={templateResourceStyles["hub-template-summary-heading"]}>
                     <div className="profile-section-heading">
-                      <div className="profile-section-title">{t("agentSkillsTitle")}</div>
+                      <div className={`profile-section-title ${profileFormLayoutStyles["profile-section-title"]}`}>
+                        {t("agentSkillsTitle")}
+                      </div>
                       <p className="profile-section-description">{t("resourcesTemplateSkillsDescription")}</p>
                     </div>
                     <span className={templateResourceStyles["hub-template-summary-count"]}>
@@ -2012,14 +2024,16 @@ export function HubDetailPane({
               ) : activeTemplateTab === "mcp" ? (
                 <section
                   className={classNames(
-                    "profile-section",
+                    `profile-section ${profileFormLayoutStyles["profile-section"]}`,
                     templateResourceStyles["hub-template-summary-panel"],
                     styles["hub-template-mcp-panel"],
                   )}
                 >
                   <div className={templateResourceStyles["hub-template-summary-heading"]}>
                     <div className="profile-section-heading">
-                      <div className="profile-section-title">{t("resourcesTemplateMCPServersTitle")}</div>
+                      <div className={`profile-section-title ${profileFormLayoutStyles["profile-section-title"]}`}>
+                        {t("resourcesTemplateMCPServersTitle")}
+                      </div>
                       <p className="profile-section-description">{t("resourcesTemplateMCPServersDescription")}</p>
                     </div>
                     <span className={templateResourceStyles["hub-template-summary-count"]}>
@@ -2179,13 +2193,9 @@ export function HubDetailPane({
                     })}
                   </div>
                 ) : skills.length ? (
-                  <div className={classNames("empty-state", "shell-empty-state", styles["hub-empty-state"])}>
-                    <strong>{t("workspaceSearchNoResults")}</strong>
-                  </div>
+                  <PanelEmptyState title={t("workspaceSearchNoResults")} className={styles["hub-empty-state"]} />
                 ) : (
-                  <div className={classNames("empty-state", "shell-empty-state", styles["hub-empty-state"])}>
-                    <strong>{t("resourcesSkillsEmpty")}</strong>
-                  </div>
+                  <PanelEmptyState title={t("resourcesSkillsEmpty")} className={styles["hub-empty-state"]} />
                 )}
               </section>
             </div>
@@ -2334,27 +2344,24 @@ export function HubDetailPane({
                     })}
                   </div>
                 ) : mcpServers.length ? (
-                  <div className={classNames("empty-state", "shell-empty-state", styles["hub-empty-state"])}>
-                    <strong>{t("workspaceSearchNoResults")}</strong>
-                  </div>
+                  <PanelEmptyState title={t("workspaceSearchNoResults")} className={styles["hub-empty-state"]} />
                 ) : mcpStateLoading ? (
-                  <div className="workspace-empty">{t("resourcesMCPLoading")}</div>
-                ) : (
-                  <div className={classNames("empty-state", "shell-empty-state", styles["hub-empty-state"])}>
-                    <strong>{t("resourcesMCPEmpty")}</strong>
+                  <div className="workspace-empty px-2.5 py-2 text-[13px] text-[var(--muted)]">
+                    {t("resourcesMCPLoading")}
                   </div>
+                ) : (
+                  <PanelEmptyState title={t("resourcesMCPEmpty")} className={styles["hub-empty-state"]} />
                 )}
               </section>
             </div>
           ) : (
-            <div className={classNames("empty-state", "shell-empty-state", styles["hub-empty-state"])}>
-              <span className="rich-empty-mark" aria-hidden="true">
-                *
-              </span>
-              <strong>
-                {templates.length || skills.length || mcpServers.length ? t("resourcesLoading") : t("resourcesEmpty")}
-              </strong>
-            </div>
+            <PanelEmptyState
+              title={
+                templates.length || skills.length || mcpServers.length ? t("resourcesLoading") : t("resourcesEmpty")
+              }
+              mark="*"
+              className={styles["hub-empty-state"]}
+            />
           )}
         </div>
       )}
@@ -2450,7 +2457,7 @@ export function HubDetailPane({
                 <div>
                   <DialogTitle>
                     {hubTemplateFullName(selectedTemplate)}
-                    {hasCloudTemplateWithSameName ? <span className="mini-badge">{publicationBadge}</span> : null}
+                    {hasCloudTemplateWithSameName ? <StatusBadge kind="tag">{publicationBadge}</StatusBadge> : null}
                   </DialogTitle>
                   <DialogDescription>{selectedTemplate.description || ""}</DialogDescription>
                 </div>
@@ -2508,10 +2515,17 @@ export function HubDetailPane({
                     t={t}
                   />
                 ) : activeTemplateTab === "instructions" ? (
-                  <section className={classNames("profile-section", styles["hub-template-instructions-section"])}>
+                  <section
+                    className={classNames(
+                      `profile-section ${profileFormLayoutStyles["profile-section"]}`,
+                      styles["hub-template-instructions-section"],
+                    )}
+                  >
                     <div className={templateResourceStyles["hub-template-instructions-header"]}>
                       <div className="profile-section-heading">
-                        <div className="profile-section-title">{t("agentInstructions")}</div>
+                        <div className={`profile-section-title ${profileFormLayoutStyles["profile-section-title"]}`}>
+                          {t("agentInstructions")}
+                        </div>
                         <p className="profile-section-description">
                           {templateInstructionsMode === "default"
                             ? t("resourcesTemplateInstructionsDefaultHint")
@@ -2574,7 +2588,12 @@ export function HubDetailPane({
                     ) : null}
                   </section>
                 ) : activeTemplateTab === "memory" ? (
-                  <section className={classNames("profile-section", styles["hub-template-memory-panel"])}>
+                  <section
+                    className={classNames(
+                      `profile-section ${profileFormLayoutStyles["profile-section"]}`,
+                      styles["hub-template-memory-panel"],
+                    )}
+                  >
                     {workspaceFileLoading ? (
                       <div className={styles["hub-template-memory-empty"]} role="status">
                         <strong>{t("resourcesWorkspaceFileLoading")}</strong>
@@ -2603,13 +2622,15 @@ export function HubDetailPane({
                 ) : activeTemplateTab === "skills" ? (
                   <section
                     className={classNames(
-                      "profile-section",
+                      `profile-section ${profileFormLayoutStyles["profile-section"]}`,
                       templateResourceStyles["hub-template-summary-panel"],
                       styles["hub-template-skills-panel"],
                     )}
                   >
                     <div className={templateResourceStyles["hub-template-summary-heading"]}>
-                      <div className="profile-section-title">{t("agentSkillsTitle")}</div>
+                      <div className={`profile-section-title ${profileFormLayoutStyles["profile-section-title"]}`}>
+                        {t("agentSkillsTitle")}
+                      </div>
                       <span className={templateResourceStyles["hub-template-summary-count"]}>
                         {t("resourcesTemplateSkillsCount", { count: templateSkills.length })}
                       </span>
@@ -2638,13 +2659,15 @@ export function HubDetailPane({
                 ) : (
                   <section
                     className={classNames(
-                      "profile-section",
+                      `profile-section ${profileFormLayoutStyles["profile-section"]}`,
                       templateResourceStyles["hub-template-summary-panel"],
                       styles["hub-template-mcp-panel"],
                     )}
                   >
                     <div className={templateResourceStyles["hub-template-summary-heading"]}>
-                      <div className="profile-section-title">{t("resourcesTemplateMCPServersTitle")}</div>
+                      <div className={`profile-section-title ${profileFormLayoutStyles["profile-section-title"]}`}>
+                        {t("resourcesTemplateMCPServersTitle")}
+                      </div>
                       <span className={templateResourceStyles["hub-template-summary-count"]}>
                         {t("resourcesTemplateMCPServersCount", { count: templateMCPServers.length })}
                       </span>
@@ -2870,9 +2893,9 @@ export function HubDetailPane({
                 )}
               >
                 {selectedManagedMCPSource ? (
-                  <span className={classNames("mini-badge", "mcp-knowledge-badge")}>
+                  <StatusBadge kind="tag" className={"mcp-knowledge-badge"}>
                     {t("resourcesKnowledgeMCPBadge")}
-                  </span>
+                  </StatusBadge>
                 ) : null}
                 {mcpStateError || mcpMutationError || mcpProbeError ? (
                   <DismissibleAlert
@@ -2885,7 +2908,11 @@ export function HubDetailPane({
                     <span>{mcpStateError || mcpMutationError || mcpProbeError}</span>
                   </DismissibleAlert>
                 ) : null}
-                {mcpStateLoading ? <div className="workspace-empty">{t("resourcesMCPLoading")}</div> : null}
+                {mcpStateLoading ? (
+                  <div className="workspace-empty px-2.5 py-2 text-[13px] text-[var(--muted)]">
+                    {t("resourcesMCPLoading")}
+                  </div>
+                ) : null}
                 {selectedManagedMCPSource && (mcpSourceError || mcpSourceStatus?.updateAvailable) ? (
                   <div
                     className={classNames(
@@ -2933,7 +2960,7 @@ export function HubDetailPane({
                   </div>
                 ) : null}
                 <div className={classNames(styles["hub-workspace-block"], styles["mcp-server-document-block"])}>
-                  <p className="field-hint">{t("resourcesMCPIdentityHint")}</p>
+                  <p className={styles["mcp-server-document-hint"]}>{t("resourcesMCPIdentityHint")}</p>
                   <JSONConfigEditor
                     label={t("resourcesMCPServerDocumentLabel")}
                     value={mcpDetailDocument}
@@ -2943,7 +2970,7 @@ export function HubDetailPane({
                     t={t}
                   />
                   {mcpDetailError ? (
-                    <div className={classNames("form-error", styles["hub-json-editor-error"])}>{mcpDetailError}</div>
+                    <InlineError className={styles["hub-json-editor-error"]}>{mcpDetailError}</InlineError>
                   ) : null}
                   {mcpProbeResult ? <MCPProbePanel result={mcpProbeResult} t={t} /> : null}
                 </div>
@@ -3121,12 +3148,9 @@ export function HubDetailPane({
             ) : null}
           </DialogBody>
           {publishError ? (
-            <div
-              className={classNames("form-error", templateResourceStyles["hub-template-publish-error"])}
-              role="alert"
-            >
+            <InlineError className={templateResourceStyles["hub-template-publish-error"]} role="alert">
               <span className="whitespace-pre-wrap break-words">{publishError}</span>
-            </div>
+            </InlineError>
           ) : null}
           <DialogFooter>
             <Button
@@ -3179,9 +3203,9 @@ export function HubDetailPane({
               })}
             </DialogDescription>
             {knowledgeBases?.copyError ? (
-              <div className={classNames("form-error", knowledgeBaseResourceStyles["knowledge-base-guide-error"])}>
+              <InlineError className={knowledgeBaseResourceStyles["knowledge-base-guide-error"]}>
                 {knowledgeBases.copyError}
-              </div>
+              </InlineError>
             ) : null}
           </DialogBody>
           <DialogFooter className={mCPResourceStyles["hub-skill-delete-dialog-actions"]}>
@@ -3274,9 +3298,9 @@ export function HubDetailPane({
                   t={t}
                 />
                 {mcpFormError || mcpCreateError ? (
-                  <div className={classNames("form-error", styles["hub-json-editor-error"])}>
+                  <InlineError className={styles["hub-json-editor-error"]}>
                     {mcpFormError || mcpCreateError}
-                  </div>
+                  </InlineError>
                 ) : null}
               </>
             ) : (
@@ -3414,7 +3438,7 @@ export function HubDetailPane({
           </DialogFooter>
         </DialogContent>
       </DialogRoot>
-    </section>
+    </EntityPane>
   );
 }
 
@@ -3597,9 +3621,7 @@ export function MCPServerCreateDialog({
                 t={t}
               />
               {parseError || createError ? (
-                <div className={classNames("form-error", styles["hub-json-editor-error"])}>
-                  {parseError || createError}
-                </div>
+                <InlineError className={styles["hub-json-editor-error"]}>{parseError || createError}</InlineError>
               ) : null}
             </>
           ) : (

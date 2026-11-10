@@ -11,7 +11,7 @@ function filesIn(directory: string): string[] {
   });
 }
 
-const uiFiles = filesIn(resolve("src/components/ui"));
+const uiFiles = filesIn(resolve("../csgclaw-ui/src/components"));
 
 afterEach(() => {
   delete document.documentElement.dataset.theme;
@@ -58,11 +58,9 @@ test.each(["light", "dark"])("legacy workspace skins cannot restyle managed cont
       </section>
     </div>,
   );
-  const legacyCSS = [
-    "src/shared/styles/inputs.css",
-    "src/pages/WorkspacePage/components/WorkspaceComponents.css",
-    "src/pages/WorkspacePage/components/WorkspaceModals/WorkspaceModals.css",
-  ].flatMap((file) => styleRules(stylesheetSource(resolve(file))));
+  const legacyCSS = ["src/pages/WorkspacePage/components/WorkspaceModals/WorkspaceModals.css"].flatMap((file) =>
+    styleRules(stylesheetSource(resolve(file)).replace(/:global\(([^()]*)\)/g, "$1")),
+  );
   const managed = [
     screen.getByRole("textbox", { name: "Managed input" }),
     screen.getByRole("textbox", { name: "Managed area" }),

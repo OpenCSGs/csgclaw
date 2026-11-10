@@ -190,6 +190,7 @@ type Service struct {
 	users            map[string]User
 	byName           map[string]string
 	rooms            map[string]*Room
+	taskTitleClaims  map[string]string // Room ID to source message ID. Survives Reload.
 	sessionRooms     map[string]string
 	sessionConflicts map[string]struct{}
 }
@@ -253,6 +254,7 @@ type persistedBootstrap struct {
 }
 
 type persistedRoom struct {
+	TitleSource          string                        `json:"title_source,omitempty"`
 	CloudAgent           *apitypes.CloudAgentReference `json:"cloud_agent,omitempty"`
 	CreationWorkspaceDir *string                       `json:"creation_workspace_dir,omitempty"`
 
@@ -362,7 +364,8 @@ func NewServiceFromBootstrap(state Bootstrap) *Service {
 
 func NewServiceFromBootstrapWithBus(state Bootstrap, bus *Bus) *Service {
 	svc := &Service{
-		bus: bus,
+		bus:             bus,
+		taskTitleClaims: make(map[string]string),
 	}
 	state = normalizeBootstrap(state)
 	svc.replaceState(state)
@@ -521,6 +524,7 @@ func loadPersistedRooms(statePath string, rooms []persistedRoom) ([]Room, error)
 		}
 		loaded = append(loaded, Room{
 			CreationWorkspaceDir: room.CreationWorkspaceDir,
+			TitleSource:          room.TitleSource,
 			Archived:             room.Archived,
 			Pinned:               room.Pinned,
 			CustomTitle:          room.CustomTitle,
@@ -712,6 +716,7 @@ func saveRoomThreadsForState(statePath string, room Room, operations ...*diagnos
 func persistedRoomFromRoom(room Room) persistedRoom {
 	return persistedRoom{
 		CreationWorkspaceDir: room.CreationWorkspaceDir,
+		TitleSource:          room.TitleSource,
 		Archived:             room.Archived,
 		Pinned:               room.Pinned,
 		CustomTitle:          room.CustomTitle,
@@ -1791,6 +1796,9 @@ func (s *Service) UpdateRoom(roomID string, req UpdateRoomRequest) (Room, error)
 	if req.Title != nil {
 		room.Title = strings.TrimSpace(*req.Title)
 		room.CustomTitle = true
+		if room.TitleSource != "" || (room.TaskSession && room.IsDirect && room.CloudAgent == nil) {
+			room.TitleSource = titleSourceManual
+		}
 	}
 	if req.Archived != nil {
 		room.Archived = *req.Archived
@@ -1801,7 +1809,7 @@ func (s *Service) UpdateRoom(roomID string, req UpdateRoomRequest) (Room, error)
 	if req.NotifyAllAgents != nil {
 		room.NotifyAllAgents = *req.NotifyAllAgents
 	}
-	if req.Configuration == nil && room.Title == previous.Title && room.CustomTitle == previous.CustomTitle && room.Archived == previous.Archived && room.Pinned == previous.Pinned && room.NotifyAllAgents == previous.NotifyAllAgents {
+	if req.Configuration == nil && room.Title == previous.Title && room.CustomTitle == previous.CustomTitle && room.TitleSource == previous.TitleSource && room.Archived == previous.Archived && room.Pinned == previous.Pinned && room.NotifyAllAgents == previous.NotifyAllAgents {
 		return s.presentRoomLocked(*room, ""), nil
 	}
 	if err := s.saveRoomLocked(*room); err != nil {
@@ -2399,10 +2407,26 @@ func (s *Service) UpdateDeliveredMessageMetadataContext(ctx context.Context, roo
 		if room.Messages[i].SenderID != senderID {
 			return Message{}, fmt.Errorf("message belongs to another sender")
 		}
+		previousMetadata := room.Messages[i].Metadata
+		previousThreads := room.Threads
 		room.Messages[i].Metadata = utils.CloneAnyMap(metadata)
 		s.rebuildThreadStatesLocked(room)
-		if err := s.saveMessageProjectionLocked(false, operation); err != nil {
-			return Message{}, err
+		var saveErr error
+		if room.CloudAgent != nil && s.statePath != "" && len(room.Threads) == len(previousThreads) {
+			// Cloud dispatch checkpoints leave the room index intact.
+			saveErr = saveRoomThreadsForState(s.statePath, *room, operation)
+			if saveErr == nil {
+				saveErr = saveRoomMessagesForState(s.statePath, *room, operation)
+			}
+		} else {
+			saveErr = s.saveMessageProjectionLocked(false, operation)
+		}
+		if saveErr != nil {
+			if room.CloudAgent != nil {
+				room.Messages[i].Metadata = previousMetadata
+				room.Threads = previousThreads
+			}
+			return Message{}, saveErr
 		}
 		presented := s.presentMessageLocked(*room, room.Messages[i], "")
 		s.publishMessageCreatedLocked(roomID, senderID, presented)
@@ -2593,6 +2617,7 @@ func (s *Service) CreateRoom(req CreateRoomRequest) (Room, error) {
 		SourceTeamID:       req.SourceTeamID,
 		CollaborationGuide: req.CollaborationGuide,
 		CustomTitle:        req.TaskSession,
+		TitleSource:        initialTitleSource(req),
 		CreatedBy:          creatorID,
 		ClientRequestID:    req.ClientRequestID,
 		CreatedAt:          time.Now().UTC(),

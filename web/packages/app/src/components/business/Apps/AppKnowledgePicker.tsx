@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { fetchRemoteKnowledgeBaseMCPConfig, fetchRemoteKnowledgeBases } from "@/api/knowledgeBases";
 import { errorMessage } from "@/api/client";
-import { Button, Field, Select, TextInput } from "@/components/ui";
+import { InlineError, Button, Field, Select, TextInput } from "@/components/ui";
 import type { TranslateFn } from "@/models/conversations";
 import type { RemoteKnowledgeBase } from "@/models/knowledgeBases";
 import { localizeAPIError } from "@/shared/i18n";
@@ -87,9 +87,9 @@ export function AppKnowledgePicker({ t, onSelect }: { t: TranslateFn; onSelect: 
           </Button>
         ) : null}
         {picker.error ? (
-          <p className="form-error" role="alert">
+          <InlineError as="p" role="alert">
             {picker.error}
-          </p>
+          </InlineError>
         ) : null}
       </div>
     </details>

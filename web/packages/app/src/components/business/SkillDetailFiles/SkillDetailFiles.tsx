@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { errorMessage } from "@/api/client";
 import { fetchSkillFile, fetchSkillTree } from "@/api/skills";
 import { WorkspaceFilePreview, WorkspaceFileTree } from "@/components/business/WorkspaceFileTree";
-import { Button } from "@/components/ui";
+import { InlineError, Button } from "@/components/ui";
 import { workspaceQueryKeys } from "@/hooks/workspace/workspaceQueries";
 import type { TranslateFn } from "@/models/conversations";
 import type { SkillSummary } from "@/models/skillhub";
@@ -43,7 +43,7 @@ export function SkillDetailFiles({
     <>
       {error ? (
         <div className="flex items-center gap-3" role="alert">
-          <span className="form-error">{errorMessage(error, t("resourcesSkillFileLoadFailed"))}</span>
+          <InlineError as="span">{errorMessage(error, t("resourcesSkillFileLoadFailed"))}</InlineError>
           <Button
             size="sm"
             variant="secondaryGray"

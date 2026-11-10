@@ -185,7 +185,7 @@ func (r *Runtime) ReconcileMCPServers(_ context.Context, h agentruntime.Handle, 
 	if err != nil {
 		return err
 	}
-	return r.seedCodexHomeConfig(codexHomeDir, workspaceDir, agentRef.Profile.Normalized(), agentRef.RuntimeOptions, servers)
+	return r.seedCodexHomeConfig(codexHomeDir, workspaceDir, agentRef.Profile.Normalized(), agentRef.RuntimeOptions, servers, r.sessionModelCatalog(agentRef.ID, agentRef.Profile)...)
 }
 
 func (r *Runtime) ListMCPServers(_ context.Context, h agentruntime.Handle, _ agentruntime.MCPServersSnapshot) (agentruntime.MCPServersSnapshot, error) {

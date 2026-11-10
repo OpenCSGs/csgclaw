@@ -1,5 +1,5 @@
 import { LoaderCircle, LogIn, Plus, RefreshCw } from "lucide-react";
-import { Button, Tooltip } from "@/components/ui";
+import { InlineError, Button, Tooltip } from "@/components/ui";
 import { ResourceList, ResourceListCard } from "@/components/business/ResourceListCard";
 import { useWorkspaceControllerContext } from "@/hooks/workspace";
 import { hasSkillName, remoteSkillInstallName } from "@/models/skillhub";
@@ -47,9 +47,9 @@ export function SkillMarketPane({
   if (hub?.remoteSkillsError) {
     return (
       <div className={resourceSettingsStyles.listNotice}>
-        <span className="form-error" role="alert">
+        <InlineError as="span" role="alert">
           {hub.remoteSkillsError}
-        </span>
+        </InlineError>
         <Button size="sm" variant="secondaryGray" onClick={() => void hub?.refetchRemoteSkills?.()}>
           <RefreshCw size={14} strokeWidth={2} aria-hidden="true" />
           {t("resourcesSkillRemoteRefresh")}
@@ -120,9 +120,9 @@ export function SkillMarketPane({
           </div>
         ) : null}
         {hub?.remoteInstallError ? (
-          <p className="form-error" role="alert">
+          <InlineError as="p" role="alert">
             {hub.remoteInstallError}
-          </p>
+          </InlineError>
         ) : null}
       </>
     );
@@ -201,9 +201,9 @@ export function SkillMarketPane({
       ) : null}
 
       {hub?.remoteInstallError ? (
-        <p className="form-error" role="alert">
+        <InlineError as="p" role="alert">
           {hub.remoteInstallError}
-        </p>
+        </InlineError>
       ) : null}
     </>
   );

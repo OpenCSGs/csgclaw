@@ -78,9 +78,9 @@ export function WorkspaceFileTree({
   return (
     <div className={`workspace-file-tree ${className}`.trim()}>
       {loading ? (
-        <div className="workspace-empty">{loadingText}</div>
+        <div className="workspace-empty px-2.5 py-2 text-[13px] text-[var(--muted)]">{loadingText}</div>
       ) : visibleEntries.length === 0 ? (
-        <div className="workspace-empty">{emptyText}</div>
+        <div className="workspace-empty px-2.5 py-2 text-[13px] text-[var(--muted)]">{emptyText}</div>
       ) : (
         visibleEntries.map((entry) => {
           const isDir = entry.type === "dir";

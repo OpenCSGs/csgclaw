@@ -1,17 +1,9 @@
+import { ComputerAgentList } from "./ComputerAgentList";
+import { EntityAvatar, EntityHeader, EntityPane } from "@/components/business/EntityDetail";
 import computerDetailPaneStyles from "./ComputerDetailPane.module.css";
-import {
-  agentModelID,
-  canStartAgent,
-  agentProfileConfig,
-  formatProviderLabel,
-  isAgentIncomplete,
-  isAgentRunning,
-} from "@/models/agents";
-import { providerNameForProviderID } from "@/models/modelProviders";
-import { ComputerIcon, PlayIcon } from "@/components/ui/Icons";
-import { Button } from "@/components/ui";
-import { AgentAvatarContent } from "@/components/business/AgentAvatar";
-import { avatarFallbackText } from "@/shared/avatar";
+import { isAgentRunning } from "@/models/agents";
+import { ComputerIcon } from "@/components/business/Icons";
+import { StatusBadge } from "@/components/ui";
 import type { AgentLike } from "@/models/agents";
 import type { IMConversation, TranslateFn } from "@/models/conversations";
 import { AgentRuntimeSection } from "@/components/business/AgentRuntimeSection";
@@ -47,97 +39,56 @@ export function ComputerDetailPane({
   const runningAgents = agents.filter(isAgentRunning);
   const actionBusyKeys = busyKeys.length ? busyKeys : busyKey ? [busyKey] : [];
   return (
-    <section className="entity-pane computer-detail-pane">
-      <section className="computer-overview-card">
-        <header className="entity-header">
-          <div className="entity-avatar">
-            <ComputerIcon />
-          </div>
-          <div className="entity-heading">
-            <div className="entity-title-row">
+    <EntityPane className={`computer-detail-pane ${computerDetailPaneStyles["computer-detail-pane"]}`}>
+      <section className={`computer-overview-card ${computerDetailPaneStyles["computer-overview-card"]}`}>
+        <EntityHeader
+          avatar={
+            <EntityAvatar>
+              <ComputerIcon />
+            </EntityAvatar>
+          }
+          title={
+            <>
               <h1>{t("localComputer")}</h1>
-              <span className="status-pill online">{t("online")}</span>
-            </div>
-            <p>{t("computerOverview")}</p>
-          </div>
-        </header>
-        <div className="computer-summary-strip" aria-label={t("computerOverview")}>
-          <div className="computer-summary-item">
+              <StatusBadge tone="positive" className={"online"}>
+                {t("online")}
+              </StatusBadge>
+            </>
+          }
+        >
+          <p>{t("computerOverview")}</p>
+        </EntityHeader>
+        <div
+          className={`computer-summary-strip ${computerDetailPaneStyles["computer-summary-strip"]}`}
+          aria-label={t("computerOverview")}
+        >
+          <div className={`computer-summary-item ${computerDetailPaneStyles["computer-summary-item"]}`}>
             <span>{t("computerAgentsSection")}</span>
             <strong>{agents.length}</strong>
           </div>
-          <div className="computer-summary-item">
+          <div className={`computer-summary-item ${computerDetailPaneStyles["computer-summary-item"]}`}>
             <span>{t("activeNow")}</span>
             <strong>{runningAgents.length}</strong>
           </div>
-          <div className="computer-summary-item">
+          <div className={`computer-summary-item ${computerDetailPaneStyles["computer-summary-item"]}`}>
             <span>{t("channelsSection")}</span>
             <strong>{channels.length}</strong>
           </div>
-          <div className="computer-summary-item">
+          <div className={`computer-summary-item ${computerDetailPaneStyles["computer-summary-item"]}`}>
             <span>{t("directMessagesSection")}</span>
             <strong>{directMessages.length}</strong>
           </div>
         </div>
       </section>
       {runtimeSectionProps ? <AgentRuntimeSection {...runtimeSectionProps} /> : null}
-      <section className="computer-agent-panel">
-        <div className="section-header-inline">
-          <div className="section-label">{t("computerAgentsSection")}</div>
-          <Button variant="primary" size="md" onClick={onCreateAgent}>
-            {t("createAgent")}
-          </Button>
-        </div>
-        <div className={`entity-list ${computerDetailPaneStyles["computer-agent-list"]}`}>
-          {agents.length ? (
-            agents.map((item) => (
-              <div key={item.id} className="entity-list-row">
-                <button className="entity-list-main-button" onClick={() => onSelectAgent(item)}>
-                  <span className="entity-list-icon">
-                    <AgentAvatarContent
-                      avatar={item.avatar}
-                      fallback={avatarFallbackText(item.avatar, item.name, item.id)}
-                    />
-                  </span>
-                  <span className="entity-list-main">
-                    <strong>{item.name}</strong>
-                    <small>
-                      {formatProviderLabel(
-                        item.provider ||
-                          agentProfileConfig(item)?.provider ||
-                          providerNameForProviderID(agentProfileConfig(item)?.model_provider_id || ""),
-                      )}{" "}
-                      · {agentModelID(item)}
-                    </small>
-                  </span>
-                  <span
-                    className={`workspace-status-dot ${isAgentRunning(item) ? "online" : ""}`}
-                    aria-hidden="true"
-                  ></span>
-                </button>
-                {canStartAgent(item) ? (
-                  <Button
-                    className="agent-icon-button"
-                    aria-label={t("agentStart")}
-                    title={t("agentStart")}
-                    disabled={
-                      actionBusyKeys.some((actionBusyKey) => actionBusyKey.startsWith(`${item.id}:`)) ||
-                      isAgentIncomplete(item)
-                    }
-                    onClick={() => onStartAgent(item)}
-                  >
-                    <span aria-hidden="true">
-                      <PlayIcon />
-                    </span>
-                  </Button>
-                ) : null}
-              </div>
-            ))
-          ) : (
-            <div className="agent-empty">{t("noAgents")}</div>
-          )}
-        </div>
-      </section>
-    </section>
+      <ComputerAgentList
+        agents={agents}
+        actionBusyKeys={actionBusyKeys}
+        onCreateAgent={onCreateAgent}
+        onSelectAgent={onSelectAgent}
+        onStartAgent={onStartAgent}
+        t={t}
+      />
+    </EntityPane>
   );
 }

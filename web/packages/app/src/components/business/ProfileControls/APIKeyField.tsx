@@ -1,9 +1,8 @@
 import type { FocusEventHandler, FormEventHandler } from "react";
-import { useId, useState } from "react";
+import { useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
-import { Button, TextInput } from "@/components/ui";
+import { Button, Field, TextInput } from "@/components/ui";
 import type { APIKeyProfile, Translator } from "./types";
-import { requiredFieldLabel } from "./requiredFieldLabel";
 import { isBlank } from "./utils";
 
 export type APIKeyFieldProps = {
@@ -29,9 +28,6 @@ export function APIKeyField({
   required = false,
   t,
 }: APIKeyFieldProps) {
-  const generatedID = useId();
-  const inputID = `${generatedID}-api-key`;
-  const labelID = `${generatedID}-api-key-label`;
   const [focused, setFocused] = useState(false);
   const [visible, setVisible] = useState(false);
   const stored = Boolean(profile?.api_key_set);
@@ -40,13 +36,15 @@ export function APIKeyField({
   const placeholder = stored ? "" : t("profileAPIKeyNewPlaceholder");
   const labelText = label || t("profileAPIKey");
   return (
-    <label className="field api-key-field" htmlFor={inputID}>
-      {required ? requiredFieldLabel(labelText, { id: labelID }) : <span id={labelID}>{labelText}</span>}
+    <Field
+      as="div"
+      className="api-key-field"
+      label={labelText}
+      required={required}
+      hint={stored ? unchangedHint : undefined}
+    >
       <div className="api-key-input-shell">
         <TextInput
-          id={inputID}
-          aria-labelledby={labelID}
-          aria-required={required ? "true" : undefined}
           type={visible ? "text" : "password"}
           value={value}
           onFocus={(event) => {
@@ -80,7 +78,6 @@ export function APIKeyField({
           {visible ? <EyeOff size={16} aria-hidden="true" /> : <Eye size={16} aria-hidden="true" />}
         </Button>
       </div>
-      {stored && unchangedHint ? <small className="field-hint">{unchangedHint}</small> : null}
-    </label>
+    </Field>
   );
 }

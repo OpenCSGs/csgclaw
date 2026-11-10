@@ -282,6 +282,7 @@
 }
 
 .hub-template-profile-grid .hub-template-env-field {
+  display: grid;
   grid-column: 1 / -1;
   gap: 8px;
 }

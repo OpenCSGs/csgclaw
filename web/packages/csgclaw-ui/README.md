@@ -44,6 +44,12 @@ The app uses `csgclaw-ui: workspace:*` and reads this package's source during Vi
 
 Run `corepack pnpm --filter csgclaw-ui build` from `web/` to create the npm artifacts. Use `npm pack` from this package to test the release in another app before publishing.
 
+## Releases
+
+Bump `version` in this package's `package.json` and merge the change to upstream `main`. The release workflow skips unchanged and already published versions. Stable releases go to `latest` and prereleases go to `next`.
+
+For one-time setup, restrict the GitHub Actions environment `csgclaw-ui-release` to deployments from `main`. In the npm package's Trusted Publisher settings, select GitHub Actions and authorize `OpenCSGs/csgclaw`, workflow `publish-csgclaw-ui.yml`, and environment `csgclaw-ui-release`. Enable direct publishing for that publisher. The workflow uses OIDC for npm authentication.
+
 ## Source and license
 
 See [NOTICE](./NOTICE) for the upstream source and [LICENSE](./LICENSE) for its terms.

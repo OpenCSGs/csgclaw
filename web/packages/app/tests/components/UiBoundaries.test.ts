@@ -1,7 +1,9 @@
+import { readdirSync, readFileSync } from "node:fs";
 import { posix, resolve } from "node:path";
 import { readSourceDependencies, type SourceDependency } from "../helpers/sourceDependencies";
 
 const dependencies = readSourceDependencies(resolve(process.cwd(), "src"));
+const libraryDependencies = readSourceDependencies(resolve(process.cwd(), "../csgclaw-ui/src"));
 
 function report(violations: SourceDependency[]): string {
   return violations.map(({ source, line, specifier }) => `${source}:${line} imports ${specifier}`).join("\n");
@@ -20,11 +22,15 @@ function isPrivatePageFile(file: string): boolean {
 }
 
 describe("shared UI and page ownership", () => {
-  it("keeps UI primitives independent of application data and controllers", () => {
-    const violations = dependencies.filter(
-      ({ source, target }) =>
-        source.startsWith("components/ui/") &&
-        /^(?:api|hooks|pages|shared\/(?:storage|realtime|platform))\//.test(target),
+  it("keeps the app UI entrypoint as a package re-export", () => {
+    const entrypoint = resolve("src/components/ui");
+    expect(readdirSync(entrypoint)).toEqual(["index.ts"]);
+    expect(readFileSync(resolve(entrypoint, "index.ts"), "utf8").trim()).toBe('export * from "csgclaw-ui";');
+  });
+
+  it("keeps the UI package independent of application source", () => {
+    const violations = libraryDependencies.filter(
+      ({ specifier, target }) => specifier.startsWith("@/") || target === ".." || target.startsWith("../"),
     );
     expect(report(violations)).toBe("");
   });

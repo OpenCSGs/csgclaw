@@ -16,3 +16,251 @@
   pointer-events: auto;
   transform: translateY(0);
 }
+
+.conversation-item {
+  position: relative;
+  width: 100%;
+  border-radius: 18px;
+}
+
+.conversation-item-main {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr);
+  gap: 14px;
+  padding: 14px;
+  border: 0;
+  background: transparent;
+  border-radius: 18px;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+  transition:
+    background 160ms ease,
+    transform 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.conversation-item:hover .conversation-item-main,
+.conversation-item:global(.active) .conversation-item-main {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.72), rgba(43, 109, 246, 0.08));
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-soft);
+}
+
+.conversation-delete-button:where(:not([data-csg-control])) {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  color: rgba(148, 33, 33, 0.86);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(2px);
+  transition:
+    opacity 160ms ease,
+    transform 160ms ease,
+    background 160ms ease,
+    color 160ms ease;
+}
+
+.conversation-item:hover .conversation-delete-button:where(:not([data-csg-control])) {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+
+.pending-question-badge {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  padding: 1px 7px;
+  background: var(--warning-100);
+  color: var(--warning-800);
+  font-size: 11px;
+  font-weight: 750;
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+.conversation-delete-button:where(:not([data-csg-control])):hover {
+  background: rgba(254, 226, 226, 0.96);
+  color: #b91c1c;
+}
+
+.conversation-delete-button:where(:not([data-csg-control])):focus-visible {
+  opacity: 1;
+  pointer-events: auto;
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(185, 28, 28, 0.14);
+}
+
+.conversation-delete-icon {
+  width: 14px;
+  height: 14px;
+  display: inline-flex;
+}
+
+.conversation-delete-icon svg {
+  width: 100%;
+  height: 100%;
+}
+
+.conversation-main,
+.conversation-head {
+  min-width: 0;
+}
+
+.conversation-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: baseline;
+}
+
+.conversation-name {
+  font-size: 15px;
+  font-weight: 650;
+}
+
+.conversation-name {
+  font-weight: 680;
+}
+
+.conversation-delete-button:where(:not([data-csg-control])) {
+  border-color: color-mix(in oklab, var(--error-600) 18%, var(--line));
+  background: var(--surface);
+  color: var(--error-700);
+  box-shadow: var(--shadow-xs);
+}
+
+.conversation-delete-button:where(:not([data-csg-control])):hover:not(:disabled) {
+  border-color: color-mix(in oklab, var(--error-600) 28%, var(--line));
+  background: color-mix(in oklab, var(--error-600) 6%, var(--surface));
+  color: var(--error-800);
+}
+
+.conversation-delete-button {
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  min-height: 36px;
+  padding: 0;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+:global(:root[data-theme="dark"]) .conversation-delete-button:where(:not([data-csg-control])) {
+  border-color: rgba(253, 162, 155, 0.28);
+  background: rgba(217, 45, 32, 0.12);
+  color: #fda29b;
+}
+
+.conversation-item-main {
+  border-radius: var(--radius-md);
+}
+
+.conversation-item:hover .conversation-item-main {
+  background: var(--gray-50);
+}
+
+:global(:root[data-theme="dark"]) .conversation-item:hover .conversation-item-main {
+  background: var(--panel-strong);
+}
+
+.conversation-item:global(.active) .conversation-item-main {
+  border-color: var(--brand-100);
+  background: var(--brand-25);
+  color: var(--primary-strong);
+  box-shadow: none;
+}
+
+:global(:root[data-theme="dark"]) .conversation-item:global(.active) .conversation-item-main {
+  border-color: rgba(101, 132, 248, 0.38);
+  background: rgba(101, 132, 248, 0.12);
+}
+
+.conversation-delete-icon :global(.svg-icon) {
+  width: 100%;
+  height: 100%;
+}
+
+:global(:root[data-theme="dark"]) .conversation-item:hover .conversation-item-main {
+  border-color: #475467;
+  background: #182230;
+  color: var(--text);
+}
+
+:global(:root[data-theme="dark"]) .conversation-item:global(.active) .conversation-item-main {
+  border-color: rgba(77, 106, 214, 0.62);
+  background: rgba(77, 106, 214, 0.18);
+  color: #d0d5dd;
+}
+
+.conversation-delete-button:where(:not([data-csg-control])) {
+  border-radius: 6px;
+  border-color: var(--error-600);
+  background: var(--error-600);
+  color: var(--white);
+  box-shadow: var(--shadow-xs);
+}
+
+.conversation-delete-button:where(:not([data-csg-control])):hover:not(:disabled),
+.conversation-delete-button:where(:not([data-csg-control])):active:not(:disabled) {
+  border-color: var(--error-700);
+  background: var(--error-700);
+  color: var(--white);
+  box-shadow: var(--shadow-xs);
+  transform: none;
+}
+
+.conversation-delete-button:where(:not([data-csg-control])):focus-visible {
+  border-color: var(--error-600);
+  background: var(--error-600);
+  color: var(--white);
+  box-shadow:
+    var(--shadow-xs),
+    0 0 0 4px rgba(240, 68, 56, 0.16);
+}
+
+:global(:root[data-theme="dark"]) .conversation-delete-button:where(:not([data-csg-control])) {
+  border-color: rgba(253, 162, 155, 0.32);
+  background: color-mix(in oklab, var(--error-600) 86%, var(--error-800));
+  color: var(--white);
+}
+
+:global(:root[data-theme="dark"]) .conversation-delete-button:where(:not([data-csg-control])):hover:not(:disabled),
+:global(:root[data-theme="dark"]) .conversation-delete-button:where(:not([data-csg-control])):active:not(:disabled) {
+  border-color: rgba(253, 162, 155, 0.42);
+  background: var(--error-700);
+  color: var(--white);
+}
+
+.conversation-delete-button:where(:not([data-csg-control])):disabled,
+.conversation-delete-button:where(:not([data-csg-control]))[disabled] {
+  border-color: var(--gray-200);
+  background: var(--gray-100);
+  color: var(--gray-400);
+  box-shadow: var(--shadow-xs);
+  opacity: 1;
+  transform: none;
+}
+
+:global(:root[data-theme="dark"]) .conversation-delete-button:where(:not([data-csg-control])):disabled,
+:global(:root[data-theme="dark"]) .conversation-delete-button:where(:not([data-csg-control]))[disabled] {
+  border-color: rgba(208, 213, 221, 0.12);
+  background: rgba(208, 213, 221, 0.08);
+  color: var(--gray-500);
+  box-shadow: none;
+}

@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useWorkspaceControllerContext } from "@/hooks/workspace";
 import { workspaceHasContextSidebar } from "@/models/routing";
 import { PRIMARY_SIDEBAR_WIDTH_STORAGE_KEY, SIDEBAR_WIDTH_STORAGE_KEY } from "@/shared/storage/keys";
-import { AppLayout, AppLayoutLoading, AppLayoutMain, AppLayoutOverlays, AppLayoutShell } from "@/components/ui";
 import { classNames } from "@/shared/lib/classNames";
 import { DesktopChrome } from "../DesktopChrome";
 import { WorkspaceMainPanel } from "../WorkspaceMainPanel";
@@ -215,6 +214,7 @@ export function WorkspaceLayout() {
   const baseShellClassName = controller.ready ? controller.shellClassName : "";
   const shellClassName = classNames(
     baseShellClassName,
+    styles["app-shell"],
     isSidebarResizing && styles.sidebarResizing,
     isPrimarySidebarResizing && styles.primarySidebarResizing,
     isPrimarySidebarResizing && "workspace-primary-sidebar-resizing",
@@ -234,64 +234,61 @@ export function WorkspaceLayout() {
       }
       t={sidebarProps?.t}
     >
-      <AppLayout
-        ready={controller.ready}
-        loadingFallback={<AppLayoutLoading>{controller.loadingText}</AppLayoutLoading>}
-      >
-        <AppLayoutShell className={shellClassName} style={shellStyle}>
-          <div className={styles.sidebarShell}>
-            {sidebarProps ? <WorkspaceSidebar {...sidebarProps} /> : null}
-            {controller.ready && !isSidebarCollapsed ? (
+      {controller.ready ? (
+        <>
+          <div className={shellClassName} style={shellStyle}>
+            <div className={styles.sidebarShell}>
+              {sidebarProps ? <WorkspaceSidebar {...sidebarProps} /> : null}
+              {!isSidebarCollapsed ? (
+                <div
+                  className={styles.primarySidebarResizer}
+                  role="separator"
+                  aria-label="Resize primary sidebar"
+                  aria-orientation="vertical"
+                  aria-valuemin={primarySidebarWidthBounds.min}
+                  aria-valuemax={primarySidebarWidthBounds.max}
+                  aria-valuenow={primarySidebarExpandedWidth}
+                  tabIndex={0}
+                  onKeyDown={handlePrimarySidebarResizeKeyDown}
+                  onPointerDown={handlePrimarySidebarResizeStart}
+                  onPointerMove={handlePrimarySidebarResizeMove}
+                  onPointerUp={endPrimarySidebarResize}
+                  onPointerCancel={endPrimarySidebarResize}
+                  onLostPointerCapture={() => {
+                    primaryResizePointerIdRef.current = null;
+                    setIsPrimarySidebarResizing(false);
+                  }}
+                />
+              ) : null}
+            </div>
+            {showSidebarContext ? (
               <div
-                className={styles.primarySidebarResizer}
+                className={styles.sidebarResizer}
                 role="separator"
-                aria-label="Resize primary sidebar"
+                aria-label="Resize sidebar"
                 aria-orientation="vertical"
-                aria-valuemin={primarySidebarWidthBounds.min}
-                aria-valuemax={primarySidebarWidthBounds.max}
-                aria-valuenow={primarySidebarExpandedWidth}
+                aria-valuemin={sidebarWidthBounds.min}
+                aria-valuemax={sidebarWidthBounds.max}
+                aria-valuenow={expandedSidebarWidth}
                 tabIndex={0}
-                onKeyDown={handlePrimarySidebarResizeKeyDown}
-                onPointerDown={handlePrimarySidebarResizeStart}
-                onPointerMove={handlePrimarySidebarResizeMove}
-                onPointerUp={endPrimarySidebarResize}
-                onPointerCancel={endPrimarySidebarResize}
+                onKeyDown={handleSidebarResizeKeyDown}
+                onPointerDown={handleSidebarResizeStart}
+                onPointerMove={handleSidebarResizeMove}
+                onPointerUp={endSidebarResize}
+                onPointerCancel={endSidebarResize}
                 onLostPointerCapture={() => {
-                  primaryResizePointerIdRef.current = null;
-                  setIsPrimarySidebarResizing(false);
+                  resizePointerIdRef.current = null;
+                  setIsSidebarResizing(false);
                 }}
               />
             ) : null}
-          </div>
-          {controller.ready && showSidebarContext ? (
-            <div
-              className={styles.sidebarResizer}
-              role="separator"
-              aria-label="Resize sidebar"
-              aria-orientation="vertical"
-              aria-valuemin={sidebarWidthBounds.min}
-              aria-valuemax={sidebarWidthBounds.max}
-              aria-valuenow={expandedSidebarWidth}
-              tabIndex={0}
-              onKeyDown={handleSidebarResizeKeyDown}
-              onPointerDown={handleSidebarResizeStart}
-              onPointerMove={handleSidebarResizeMove}
-              onPointerUp={endSidebarResize}
-              onPointerCancel={endSidebarResize}
-              onLostPointerCapture={() => {
-                resizePointerIdRef.current = null;
-                setIsSidebarResizing(false);
-              }}
-            />
-          ) : null}
-          <AppLayoutMain>
             <WorkspaceMainPanel />
-          </AppLayoutMain>
-        </AppLayoutShell>
-        <AppLayoutOverlays>
+          </div>
           <WorkspaceOverlays />
-        </AppLayoutOverlays>
-      </AppLayout>
+        </>
+      ) : (
+        <div className="empty-state">{controller.loadingText}</div>
+      )}
     </DesktopChrome>
   );
 }

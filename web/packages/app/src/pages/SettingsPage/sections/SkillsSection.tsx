@@ -2,7 +2,7 @@ import { useWorkspaceSkillsQuery } from "@/hooks/workspace/workspaceQueries";
 import { InstalledSkillLibrary } from "./InstalledSkillLibrary";
 import { useEffect, useMemo, useState } from "react";
 import { Plus } from "lucide-react";
-import { Button } from "@/components/ui";
+import { InlineError, Button } from "@/components/ui";
 import { useWorkspaceControllerContext } from "@/hooks/workspace";
 import { isAuthenticated } from "@/models/auth";
 import { hasSkillName, remoteSkillInstallName } from "@/models/skillhub";
@@ -86,9 +86,9 @@ export function SkillsSection() {
       {tab === "installed" ? (
         <>
           {hub?.skillsError ? (
-            <p className="form-error" role="alert">
+            <InlineError as="p" role="alert">
               {hub.skillsError}
-            </p>
+            </InlineError>
           ) : null}
           <InstalledSkillLibrary
             skills={skills}

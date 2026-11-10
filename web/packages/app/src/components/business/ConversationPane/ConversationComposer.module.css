@@ -92,3 +92,51 @@
     max-width: 96px;
   }
 }
+
+.composer-editor {
+  line-height: 1.5;
+}
+
+.composer-editor:focus {
+  border-color: rgba(43, 109, 246, 0.44);
+  box-shadow: 0 0 0 4px rgba(43, 109, 246, 0.12);
+}
+
+.composer {
+  padding: 18px;
+}
+
+.composer-editor:focus {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.composer-editor:focus {
+  border-color: var(--brand-500);
+  box-shadow: var(--focus-ring);
+}
+
+.composer-editor {
+  font-family: var(--font-sans);
+}
+
+:global(:root[data-theme="dark"]) .composer {
+  border-color: var(--line);
+}
+
+:global(:root[data-theme="dark"]) .composer-box {
+  border-color: var(--line);
+  background: var(--panel-strong);
+  box-shadow: none;
+}
+
+:global(:root[data-theme="dark"]) .composer-editor {
+  border-color: var(--line);
+  background-color: var(--field);
+  color: var(--text);
+  box-shadow: none;
+}
+
+:global(:root[data-theme="dark"]) .composer-editor:empty::before {
+  color: var(--gray-400);
+}

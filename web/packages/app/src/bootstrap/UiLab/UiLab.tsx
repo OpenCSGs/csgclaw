@@ -1,3 +1,5 @@
+import profileFormLayoutStyles from "@/components/business/ProfileControls/ProfileFormLayout.module.css";
+import messageLayoutStyles from "@/components/business/ConversationPane/MessageLayout.module.css";
 import { UiLabPanel } from "./UiLabPanel";
 import { ApplicationFoundations } from "./ApplicationFoundations/ApplicationFoundations";
 import { applicationSections } from "./ApplicationFoundations/registry";
@@ -58,7 +60,6 @@ import { TooltipFoundations } from "./TooltipFoundations";
 import { SliderFoundations } from "./SliderFoundations";
 import { ProgressFoundations } from "./ProgressFoundations";
 import { UiLabNavigation, sectionFromHash } from "./UiLabNavigation";
-import "@/pages/WorkspacePage/components/WorkspaceComponents.css";
 import "@/pages/WorkspacePage/components/WorkspaceModals/WorkspaceModals.css";
 
 const options = Array.from({ length: 180 }, (_, index) => ({
@@ -208,8 +209,8 @@ function UiLabContent() {
               <section className={styles.card} id="token-consumption">
                 <h2>{labText("Turn token consumption")}</h2>
                 {["qwen3.7-plus", "auto", "a-very-long-selected-model-name-for-narrow-screen-layout"].map((model) => (
-                  <div key={model} className="message-row">
-                    <div className="message-card">
+                  <div key={model} className={`message-row ${messageLayoutStyles["message-row"]}`}>
+                    <div className={`message-card ${messageLayoutStyles["message-card"]}`}>
                       <p>{labText("这是一轮已完成的回复。")}</p>
                       <ConversationMessageActions
                         className="message-hover-actions"
@@ -305,7 +306,7 @@ function UiLabContent() {
             <UiLabPanel id="workspace-boundary" active={active}>
               <section className={styles.card} id="workspace-boundary">
                 <h2>{labText("Workspace style boundary")}</h2>
-                <div className="profile-section">
+                <div className={`profile-section ${profileFormLayoutStyles["profile-section"]}`}>
                   <Field label={labText("Workspace input")} error={error ? labText("Enter a value") : undefined}>
                     <TextInput placeholder={labText("Component styles inside legacy workspace CSS")} />
                   </Field>

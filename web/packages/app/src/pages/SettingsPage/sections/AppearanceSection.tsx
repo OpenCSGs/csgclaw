@@ -15,7 +15,7 @@ export function AppearanceSection() {
   return (
     <SettingsRow title={t("appearanceSettings")} description={t("settingsAppearanceDescription")}>
       <div className={styles.formGrid}>
-        <div className="field">
+        <div className={styles.formItem}>
           <span>{t("themeSwitcher")}</span>
           <SegmentedControl
             value={sidebar.theme}
@@ -28,7 +28,7 @@ export function AppearanceSection() {
             ]}
           />
         </div>
-        <div className="field">
+        <div className={styles.formItem}>
           <span>{t("languageSwitcher")}</span>
           <SegmentedControl
             value={sidebar.locale}

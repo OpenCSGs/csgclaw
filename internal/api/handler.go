@@ -3073,7 +3073,7 @@ func (h *Handler) handleCreateMessage(w http.ResponseWriter, r *http.Request) {
 				writeAgentSessionError(w, 400, "relay_task_text_only", "cloud tasks support text messages from the task creator", nil)
 				return
 			}
-			serviceReq.Metadata = nil
+			serviceReq.Metadata = map[string]any{cloudTaskUnsubmittedKey: true}
 			message, created, err := channel.SendMessageOnce(serviceReq)
 			if err != nil {
 				writeAPIError(w, err, 400)

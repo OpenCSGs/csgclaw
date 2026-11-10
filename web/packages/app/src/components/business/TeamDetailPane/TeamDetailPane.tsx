@@ -1,3 +1,5 @@
+import { PanelEmptyState } from "@/components/business/PanelEmptyState";
+import { EntityField, EntityAvatar, EntityPane } from "@/components/business/EntityDetail";
 import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { AgentAvatarContent, RoomAvatar } from "@/components/business";
@@ -5,6 +7,9 @@ import { Edit3, ListChecks, MessageSquarePlus, Trash2, UserPlus, Users } from "l
 import { TaskSubtaskIndicator } from "@/components/business";
 import { AgentProfileHeader } from "@/components/business/AgentDetails";
 import {
+  StatusBadge,
+  StatusDot,
+  InlineError,
   TextArea,
   Button,
   DialogBody,
@@ -117,12 +122,12 @@ export function TeamDetailPane({
 
   if (!team) {
     return (
-      <section className={classNames("entity-pane", "team-detail-pane", styles.teamDetailPane)}>
-        <div className="empty-state shell-empty-state">
-          <strong>{teamsLoading ? t("teamsLoading") : t("teamDetailMissing")}</strong>
-          <span>{t("teamDetailMissingHint")}</span>
-        </div>
-      </section>
+      <EntityPane className={classNames("team-detail-pane", styles.teamDetailPane)}>
+        <PanelEmptyState
+          title={teamsLoading ? t("teamsLoading") : t("teamDetailMissing")}
+          description={t("teamDetailMissingHint")}
+        />
+      </EntityPane>
     );
   }
 
@@ -133,19 +138,21 @@ export function TeamDetailPane({
   const locale = document.documentElement.lang || "en";
 
   return (
-    <section className={classNames("entity-pane", "team-detail-pane", styles.teamDetailPane)}>
+    <EntityPane className={classNames("team-detail-pane", styles.teamDetailPane)}>
       <AgentProfileHeader
         containerClassName={styles.contentWidth}
         actionsLabel={t("teamPanelManage")}
         avatar={
-          <div className={classNames("entity-avatar", styles.teamDetailAvatar)}>
+          <EntityAvatar className={styles.teamDetailAvatar}>
             <RoomAvatar ariaLabel={displayTeam(team)} count={memberIDs.length} members={avatarMembers} size={48} />
-          </div>
+          </EntityAvatar>
         }
         title={
           <>
             <h1 title={displayTeam(team)}>{displayTeam(team)}</h1>
-            <span className="status-pill online">{teamStatusLabel(team.status, t)}</span>
+            <StatusBadge tone="positive" className={"online"}>
+              {teamStatusLabel(team.status, t)}
+            </StatusBadge>
           </>
         }
         description={
@@ -243,9 +250,7 @@ export function TeamDetailPane({
           </DialogHeader>
           {teamActionError ? (
             <DialogBody>
-              <div className="form-error" role="alert">
-                {teamActionError}
-              </div>
+              <InlineError role="alert">{teamActionError}</InlineError>
             </DialogBody>
           ) : null}
           <DialogFooter>
@@ -271,9 +276,9 @@ export function TeamDetailPane({
       </DialogRoot>
 
       {teamActionError ? (
-        <div className={classNames("form-error", styles.contentWidth, styles.teamDetailActionError)} role="alert">
+        <InlineError className={classNames(styles.contentWidth, styles.teamDetailActionError)} role="alert">
           {teamActionError}
-        </div>
+        </InlineError>
       ) : null}
 
       <div className={classNames(styles.contentWidth, styles.teamDetailLayout)}>
@@ -387,7 +392,9 @@ export function TeamDetailPane({
                       );
                     })
                   ) : (
-                    <div className="workspace-empty">{t("teamNoMembers")}</div>
+                    <div className="workspace-empty px-2.5 py-2 text-[13px] text-[var(--muted)]">
+                      {t("teamNoMembers")}
+                    </div>
                   )}
                 </div>
               </section>
@@ -437,7 +444,9 @@ export function TeamDetailPane({
                       );
                     })
                   ) : (
-                    <div className="workspace-empty">{t("teamNoTasks")}</div>
+                    <div className="workspace-empty px-2.5 py-2 text-[13px] text-[var(--muted)]">
+                      {t("teamNoTasks")}
+                    </div>
                   )}
                 </div>
               </section>
@@ -445,7 +454,7 @@ export function TeamDetailPane({
           </div>
         </div>
       </div>
-    </section>
+    </EntityPane>
   );
 }
 
@@ -456,10 +465,13 @@ type DetailFieldProps = {
 
 function DetailField({ label, value }: DetailFieldProps) {
   return (
-    <div className={classNames("entity-field", styles.teamDetailField)}>
-      <span className={classNames(styles.fieldText, styles.teamDetailLabel)}>{label}</span>
+    <EntityField
+      className={styles.teamDetailField}
+      label={label}
+      labelClassName={classNames(styles.fieldText, styles.teamDetailLabel)}
+    >
       <span className={classNames(styles.fieldText, styles.teamDetailValue)}>{value}</span>
-    </div>
+    </EntityField>
   );
 }
 
@@ -489,10 +501,12 @@ function MemberRowContent({ member, t }: { member: TeamMemberDisplay; t: Transla
       <span className={classNames(styles.rowMain, styles.teamMemberMain)}>
         <span className={styles.teamMemberTitleLine}>
           <strong>{member.name}</strong>
-          {member.leader ? <span className="mini-badge warn">{t("teamLeadBadge")}</span> : null}
-          {member.agent ? (
-            <span className={`workspace-status-dot ${member.running ? "online" : ""}`} aria-hidden="true" />
+          {member.leader ? (
+            <StatusBadge kind="tag" tone="warning" className={"warn"}>
+              {t("teamLeadBadge")}
+            </StatusBadge>
           ) : null}
+          {member.agent ? <StatusDot online={member.running} /> : null}
         </span>
         <span>{member.agent ? t("teamMemberAgent") : t("teamMemberHuman")}</span>
       </span>

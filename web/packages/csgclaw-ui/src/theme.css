@@ -27,6 +27,9 @@
     --csgclaw-ui-error-600: #d92d20;
     --csgclaw-ui-error-700: #b42318;
     --csgclaw-ui-error-800: #912018;
+    --csgclaw-ui-success-50: #ecfdf3;
+    --csgclaw-ui-success-500: #17b26a;
+    --csgclaw-ui-success-700: #067647;
     --csgclaw-ui-warning-50: #fffaeb;
     --csgclaw-ui-warning-300: #fec84b;
     --csgclaw-ui-warning-500: #f79009;
@@ -77,6 +80,7 @@
     --csgclaw-ui-z-tooltip: 10060;
     --csgclaw-ui-font-family-text:
       "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "微软雅黑", "Helvetica Neue", Helvetica, Arial, sans-serif;
+    --csgclaw-ui-font-mono: "SFMono-Regular", "SF Mono", Menlo, Monaco, Consolas, monospace;
     --csgclaw-ui-font-weight-normal: 400;
     --csgclaw-ui-font-weight-medium: 500;
     --csgclaw-ui-font-weight-semibold: 600;

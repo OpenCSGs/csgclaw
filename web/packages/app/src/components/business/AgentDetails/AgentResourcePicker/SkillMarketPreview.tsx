@@ -1,5 +1,6 @@
 import { Plus } from "lucide-react";
 import {
+  InlineError,
   Button,
   DialogBody,
   DialogCloseButton,
@@ -67,9 +68,9 @@ export function SkillMarketPreview({
         </DialogHeader>
         <DialogBody className={styles.body}>
           {error ? (
-            <p className="form-error" role="alert">
+            <InlineError as="p" role="alert">
               {error}
-            </p>
+            </InlineError>
           ) : null}
           <SkillDetailFiles
             key={JSON.stringify([skill.remotePath, skill.remoteRef, skill.name])}

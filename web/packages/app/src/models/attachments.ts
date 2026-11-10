@@ -26,6 +26,7 @@ export type MessageAttachment = {
   name: string;
   preview_url?: string;
   sha256: string;
+  source_path?: string;
   size_bytes: number;
   width?: number;
   workspace_path?: string;

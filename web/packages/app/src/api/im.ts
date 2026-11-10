@@ -45,6 +45,7 @@ export type CreateRoomPayload = {
   configuration?: TaskConfiguration;
   is_direct?: boolean;
   task_session?: boolean;
+  auto_title?: boolean;
   client_request_id?: string;
 
   type: RoomType;

@@ -1,0 +1,25 @@
+.auth-status-row {
+  border-color: var(--line);
+  border-radius: 8px;
+  background: linear-gradient(180deg, oklch(1 0 0 / 0.025), transparent), var(--surface);
+}
+
+.auth-status-row {
+  border-radius: var(--radius-md);
+}
+
+.auth-status-row {
+  border-color: var(--line);
+  background: var(--surface);
+  box-shadow: var(--shadow-xs);
+}
+
+:global(:root[data-theme="dark"]) .auth-status-row {
+  box-shadow: none;
+}
+
+:global(:root[data-theme="dark"]) .auth-status-row {
+  border-color: var(--line);
+  background: var(--panel-strong);
+  box-shadow: none;
+}

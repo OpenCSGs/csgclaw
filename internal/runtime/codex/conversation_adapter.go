@@ -7,6 +7,7 @@ import (
 	"csgclaw/internal/activity"
 	"csgclaw/internal/agentengine/contract"
 	"csgclaw/internal/diagnostics"
+	"csgclaw/internal/modelprovider"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -80,6 +81,7 @@ func (a *ConversationAdapter) Run(ctx context.Context, request contract.TurnRequ
 	promptDone := make(chan error, 1)
 	go func() {
 		promptDone <- a.runtime.PromptTurn(runCtx, a.runtimeID, PromptRequest{
+			Model:               request.Model,
 			SessionID:           sessionID,
 			ClientUserMessageID: string(request.ID),
 			Prompt:              blocks,
@@ -211,7 +213,7 @@ func (a *ConversationAdapter) handleEvent(ctx context.Context, request contract.
 		if isContextWindowError(eventErr) || message == (&contextWindowError{}).Error() {
 			code = contract.ErrorCode("context_length_exceeded")
 		}
-		result := failedResult(code, message)
+		result := failedCodexTurn(code, message)
 		return &result
 	case activity.RuntimeEventActionRequest:
 		return a.handleInteraction(ctx, request.Interaction, permissionInteraction(event), sink)
@@ -356,6 +358,7 @@ func (a *ConversationAdapter) authorizeOutputFile(ctx context.Context, request a
 		return nil, &contract.TurnError{Code: contract.ErrorFileUnavailable, Message: err.Error()}
 	}
 	file.MediaType = mediaType
+	file.SourcePath = filepath.ToSlash(relativePath)
 	return file, nil
 }
 
@@ -701,7 +704,20 @@ func resultFromContext(ctx context.Context, err error) contract.TurnResult {
 	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) || errors.Is(ctx.Err(), context.Canceled) || errors.Is(ctx.Err(), context.DeadlineExceeded) {
 		return contract.TurnResult{Status: contract.TurnCanceled, Error: &contract.TurnError{Code: contract.ErrorCanceled, Message: err.Error()}}
 	}
-	return failedResult(contract.ErrorRuntimeFailed, err.Error())
+	return failedCodexTurn(contract.ErrorRuntimeFailed, err.Error())
+}
+
+func failedCodexTurn(code contract.ErrorCode, message string) contract.TurnResult {
+	// Codex embeds the JSON response body in the message for invalid requests.
+	if code == contract.ErrorRuntimeFailed && isCodexRequestTooLarge(message) {
+		code = contract.ErrorCode(modelprovider.RequestTooLarge)
+		message = modelprovider.FriendlyUpstreamErrorMessage(0, modelprovider.RequestTooLarge)
+	}
+	return failedResult(code, message)
+}
+
+func isCodexRequestTooLarge(message string) bool {
+	return modelprovider.UpstreamErrorCode([]byte(message)) == modelprovider.RequestTooLarge
 }
 
 func cleanupOutputFiles(files []*contract.OutputFile) {

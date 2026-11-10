@@ -1,6 +1,6 @@
 # CSGClaw SVG Icons
 
-These files mirror the app icons in [the UI icon directory](../../src/components/ui/Icons).
+These files mirror the app icons in [the app icon components](../../src/components/business/Icons).
 
 Most icons use `currentColor` so they inherit color from CSS. `rooms.svg` and `room-plus.svg` also reference `var(--panel-soft)` for their circular background when used inside the app. The composer send icon is exported as `send.svg`.
 

@@ -80,7 +80,7 @@ Use this map when creating, moving, or reorganizing files under `web/packages/ap
 | `src/api/`                         | HTTP clients, request wrappers, endpoint types, and transport boundary code.                                                                | Rendering logic, page state, or reusable data normalization.             |
 | `src/models/`                      | Pure data shaping, formatting, parsing, routing helpers, and domain helpers that are shared or independently testable.                      | React hooks, browser storage, fetch calls, or UI state.                  |
 | `src/hooks/`                       | Reusable React hooks that compose shared app data or controller state.                                                                      | Hooks owned by one page only; keep those beside that page.               |
-| `src/components/ui/`               | Presentation primitives, layout primitives, form controls, buttons, and icons.                                                              | CSGClaw-specific business state or API-backed behavior.                  |
+| `src/components/ui/`               | A forwarding entrypoint for `csgclaw-ui`.                                                              | Component implementations or stylesheets.                  |
 | `src/components/business/`         | Cross-page app-aware components that combine UI primitives with business labels, state, actions, or API data.                               | Components used by only one page.                                        |
 | `src/pages/<PageName>/`            | Route screens and modules owned by one page.                                                                                                | Cross-page abstractions before real reuse exists.                        |
 | `src/pages/<PageName>/components/` | Components private to that page.                                                                                                            | Imports from another page's private modules.                             |
@@ -114,12 +114,10 @@ If a subdirectory later needs its own rules, add a short README in that subdirec
 
 ## Shared Components
 
-- `src/components/ui/` contains presentation primitives and icons.
-- `src/components/business/` contains shared app-aware components.
-- Do not put page-private components in `src/components/`.
-- Pure icon components belong under `src/components/ui/Icons/`.
-- A component becomes business UI when it combines UI primitives with business state, labels, actions, or API-backed data.
-- When adding page functionality, first check whether existing `src/components/ui` and `src/components/business` packages can be composed for the need. Do not duplicate base button, form, select, overlay, or tooltip interactions inside pages.
+- Build reusable UI in `web/packages/csgclaw-ui/src/components/`. The app's `src/components/ui/index.ts` only re-exports the package.
+- Use `src/components/business/` for cross-page compositions that still depend on app state, business rules, product presentation, or assets. App icons belong in `src/components/business/Icons/`. Keep page-only components with their page.
+- Review business components as they are changed. Move a component or its reusable parts into `csgclaw-ui` once they work through props and package theme tokens, independently of app APIs, hooks, routes, translations, and assets. Keep the app-specific composition with its owning feature.
+- Check the UI package and existing business components before adding base button, form, select, overlay, or tooltip interactions.
 - If shared components do not fit, prefer a page- or feature-private component near the owner before introducing new shared surface area. Promote it later only after reuse or a stable interaction contract is clear.
 - Follow `docs/tech/web/ui-components.md` when adding or changing UI primitives, Radix wrappers, form controls, overlay layers, or component-library exports. Also read it when deciding whether to use an existing component, wrap a Radix primitive, or extract a new local component.
 
@@ -159,7 +157,7 @@ src/pages/WorkspacePage/components/
 ## Styling
 
 - Component-owned styles default to CSS Modules beside the implementation, such as `AgentDetailPane.module.css`, imported by that implementation.
-- `components/ui` uses CSS Modules throughout. Keep class names and animation names local; colors and shared state relationships come from semantic tokens.
+- Use CSS Modules and package theme tokens for component styles in `csgclaw-ui`. Keep class names and animation names local.
 - The legacy workspace stylesheet entrypoints retain ordered imports for existing business styles. Keep their order stable while migrating a specific owner; do not add another component skin to these files.
 - Global styles and design tokens stay in `src/shared/styles/`.
 - New UI work should follow a progressive styling order: first compose existing global or feature-local components; if no component fits, implement the smallest local component needed.
@@ -198,7 +196,7 @@ src/pages/WorkspacePage/components/
 - Convert raw API responses into app-facing shapes before they reach broad UI code when the conversion is reused, non-trivial, or needs regression coverage. Put those pure helpers in `src/models/<domain>.ts` or a focused model module.
 - Route pages or page-owned hooks should compose data loading, mutations, loading/error/empty state, and page-specific defaults. Keep this orchestration near the route until another page needs the same behavior.
 - Shared components should receive already-shaped props or focused callbacks. They may display business state, but they should not fetch directly unless they are intentionally app-aware components in `src/components/business/` with a documented cross-page use.
-- UI primitives in `src/components/ui/` must stay data-source agnostic. They should not import `src/api/`, route models, storage clients, realtime clients, or page modules.
+- UI primitives in `csgclaw-ui` receive data through props. Their dependencies stay inside the package and its declared libraries.
 - Realtime events, polling, and shared subscriptions belong in `src/shared/realtime/` or in a page-owned hook when only one page consumes them. Normalize realtime payloads through the same model helpers used by HTTP data when possible.
 - Keep mutation flows explicit: call the API at the page/controller layer, update local or shared state in one place, and surface loading, disabled, and error states through props. Use optimistic updates only when rollback behavior is clear.
 - Introduce app-wide stores or context only for state that is genuinely shared across distant routes or layout areas. Prefer page-local hooks and derived props for data that has one visible owner.

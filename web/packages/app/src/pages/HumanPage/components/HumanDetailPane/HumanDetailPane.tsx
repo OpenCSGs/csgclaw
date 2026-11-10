@@ -1,5 +1,7 @@
+import { PanelEmptyState } from "@/components/business/PanelEmptyState";
+import { EntityField, EntityAvatar, EntityHeader, EntityPane } from "@/components/business/EntityDetail";
 import humanDetailPaneStyles from "./HumanDetailPane.module.css";
-import { TextArea } from "@/components/ui";
+import { StatusBadge, TextArea } from "@/components/ui";
 import { Check, CheckCircle2, Edit3, Link2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { AgentAvatarPicker } from "@/components/business/AgentAvatar";
@@ -50,12 +52,9 @@ export function HumanDetailPane({
 
   if (!user) {
     return (
-      <section className={`entity-pane ${humanDetailPaneStyles["human-detail-pane"]}`}>
-        <div className="empty-state shell-empty-state">
-          <strong>{t("humanDetailMissing")}</strong>
-          <span>{t("humanDetailMissingHint")}</span>
-        </div>
-      </section>
+      <EntityPane className={`${humanDetailPaneStyles["human-detail-pane"]}`}>
+        <PanelEmptyState title={t("humanDetailMissing")} description={t("humanDetailMissingHint")} />
+      </EntityPane>
     );
   }
 
@@ -87,111 +86,120 @@ export function HumanDetailPane({
   };
 
   return (
-    <section className={`entity-pane ${humanDetailPaneStyles["human-detail-pane"]}`}>
+    <EntityPane className={`${humanDetailPaneStyles["human-detail-pane"]}`}>
       <header className={humanDetailPaneStyles["human-overview-card"]}>
-        <div className={`entity-header ${humanDetailPaneStyles["human-detail-header"]}`}>
-          <div
-            className={`entity-avatar ${humanDetailPaneStyles["human-detail-avatar"]} agent-header-avatar-picker`}
-            aria-busy={avatarBusy}
-          >
-            <AgentAvatarPicker
-              disabled={avatarBusy}
-              fallback={avatarFallbackText(user.avatar, displayName, user.id)}
-              value={user.avatar}
-              t={t}
-              mode="edit"
-              onChange={(avatar) => void onAvatarChange(avatar)}
-            />
-          </div>
-          <div className="entity-heading">
-            <div className="entity-title-row">
+        <EntityHeader
+          as="div"
+          avatar={
+            <EntityAvatar
+              className={`${humanDetailPaneStyles["human-detail-avatar"]} agent-header-avatar-picker`}
+              aria-busy={avatarBusy}
+            >
+              <AgentAvatarPicker
+                disabled={avatarBusy}
+                fallback={avatarFallbackText(user.avatar, displayName, user.id)}
+                value={user.avatar}
+                t={t}
+                mode="edit"
+                onChange={(avatar) => void onAvatarChange(avatar)}
+              />
+            </EntityAvatar>
+          }
+          title={
+            <>
               <h1>{displayName}</h1>
-              <span className={`status-pill ${online ? "online" : ""}`}>
+              <StatusBadge tone={online ? "positive" : "neutral"} className={`${online ? "online" : ""}`}>
                 {online ? t("humanStatusOnline") : t("humanStatusOffline")}
+              </StatusBadge>
+            </>
+          }
+          actions={
+            <div className={`entity-toolbar ${humanDetailPaneStyles["human-detail-toolbar"]}`}>
+              {descriptionBusy ? (
+                <span className={humanDetailPaneStyles["human-save-status"]} role="status">
+                  {t("agentSavingChanges")}
+                </span>
+              ) : !descriptionChanged ? (
+                <span className={humanDetailPaneStyles["human-save-status"]} role="status">
+                  <Check aria-hidden="true" size={16} strokeWidth={2.5} />
+                  {t("agentSaved")}
+                </span>
+              ) : null}
+            </div>
+          }
+          className={`${humanDetailPaneStyles["human-detail-header"]}`}
+        >
+          {isEditingDescription ? (
+            <div className={humanDetailPaneStyles["human-description-editor"]}>
+              <label className={humanDetailPaneStyles["human-description-field"]}>
+                <span className="sr-only">{t("humanDescriptionLabel")}</span>
+                <TextArea
+                  ref={descriptionInputRef}
+                  value={descriptionDraft}
+                  rows={4}
+                  disabled={descriptionBusy}
+                  onBlur={(event) => {
+                    setIsEditingDescription(false);
+                    saveDescriptionIfChanged(event.currentTarget.value);
+                  }}
+                  onChange={(event) => setDescriptionDraft(event.currentTarget.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Escape") {
+                      event.preventDefault();
+                      cancelDescriptionEdit();
+                      event.currentTarget.blur();
+                    }
+                  }}
+                  placeholder={t("humanDescriptionLabel")}
+                />
+              </label>
+            </div>
+          ) : (
+            <button
+              type="button"
+              className={`entity-description-display ${descriptionDraft ? "" : "is-empty"}`.trim()}
+              aria-label={t("humanDescriptionLabel")}
+              onClick={() => setIsEditingDescription(true)}
+            >
+              <span className="entity-description-display-copy">
+                {displayDescription || t("humanDescriptionLabel")}
+              </span>
+              <span className="entity-description-display-icon" aria-hidden="true">
+                <Edit3 size={16} strokeWidth={1.8} />
+              </span>
+            </button>
+          )}
+          {avatarBusy || avatarError ? (
+            <div className={humanDetailPaneStyles["human-avatar-feedback"]}>
+              {avatarBusy ? (
+                <span className={humanDetailPaneStyles["human-avatar-status"]} role="status">
+                  {t("humanAvatarSaving")}
+                </span>
+              ) : null}
+              {avatarError ? (
+                <span className={humanDetailPaneStyles["human-avatar-error"]} role="alert">
+                  {avatarError}
+                </span>
+              ) : null}
+            </div>
+          ) : null}
+          {descriptionError ? (
+            <div className={humanDetailPaneStyles["human-avatar-feedback"]}>
+              <span className={humanDetailPaneStyles["human-avatar-error"]} role="alert">
+                {descriptionError}
               </span>
             </div>
-            {isEditingDescription ? (
-              <div className={humanDetailPaneStyles["human-description-editor"]}>
-                <label className={humanDetailPaneStyles["human-description-field"]}>
-                  <span className="sr-only">{t("humanDescriptionLabel")}</span>
-                  <TextArea
-                    ref={descriptionInputRef}
-                    value={descriptionDraft}
-                    rows={4}
-                    disabled={descriptionBusy}
-                    onBlur={(event) => {
-                      setIsEditingDescription(false);
-                      saveDescriptionIfChanged(event.currentTarget.value);
-                    }}
-                    onChange={(event) => setDescriptionDraft(event.currentTarget.value)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Escape") {
-                        event.preventDefault();
-                        cancelDescriptionEdit();
-                        event.currentTarget.blur();
-                      }
-                    }}
-                    placeholder={t("humanDescriptionLabel")}
-                  />
-                </label>
-              </div>
-            ) : (
-              <button
-                type="button"
-                className={`entity-description-display ${descriptionDraft ? "" : "is-empty"}`.trim()}
-                aria-label={t("humanDescriptionLabel")}
-                onClick={() => setIsEditingDescription(true)}
-              >
-                <span className="entity-description-display-copy">
-                  {displayDescription || t("humanDescriptionLabel")}
-                </span>
-                <span className="entity-description-display-icon" aria-hidden="true">
-                  <Edit3 size={16} strokeWidth={1.8} />
-                </span>
-              </button>
-            )}
-            {avatarBusy || avatarError ? (
-              <div className={humanDetailPaneStyles["human-avatar-feedback"]}>
-                {avatarBusy ? (
-                  <span className={humanDetailPaneStyles["human-avatar-status"]} role="status">
-                    {t("humanAvatarSaving")}
-                  </span>
-                ) : null}
-                {avatarError ? (
-                  <span className={humanDetailPaneStyles["human-avatar-error"]} role="alert">
-                    {avatarError}
-                  </span>
-                ) : null}
-              </div>
-            ) : null}
-            {descriptionError ? (
-              <div className={humanDetailPaneStyles["human-avatar-feedback"]}>
-                <span className={humanDetailPaneStyles["human-avatar-error"]} role="alert">
-                  {descriptionError}
-                </span>
-              </div>
-            ) : null}
-          </div>
-          <div className={`entity-toolbar ${humanDetailPaneStyles["human-detail-toolbar"]}`}>
-            {descriptionBusy ? (
-              <span className={humanDetailPaneStyles["human-save-status"]} role="status">
-                {t("agentSavingChanges")}
-              </span>
-            ) : !descriptionChanged ? (
-              <span className={humanDetailPaneStyles["human-save-status"]} role="status">
-                <Check aria-hidden="true" size={16} strokeWidth={2.5} />
-                {t("agentSaved")}
-              </span>
-            ) : null}
-          </div>
-        </div>
+          ) : null}
+        </EntityHeader>
       </header>
 
       <section className={humanDetailPaneStyles["human-info-panel"]}>
         <HumanChannelsSection t={t} user={user} />
         <section className={`${humanDetailPaneStyles["human-info-section"]} human-identity-section`}>
-          <div className={`section-header-inline ${humanDetailPaneStyles["human-info-section-header"]}`}>
-            <div className="section-label">{t("humanIdentitySection")}</div>
+          <div
+            className={`section-header-inline ${humanDetailPaneStyles["section-header-inline"]} ${humanDetailPaneStyles["human-info-section-header"]}`}
+          >
+            <div className={`section-label ${humanDetailPaneStyles["section-label"]}`}>{t("humanIdentitySection")}</div>
           </div>
           <div className={humanDetailPaneStyles["human-identity-fields"]}>
             <HumanField label={t("roleLabel")} value={role} />
@@ -199,7 +207,7 @@ export function HumanDetailPane({
           </div>
         </section>
       </section>
-    </section>
+    </EntityPane>
   );
 }
 
@@ -218,8 +226,10 @@ function HumanChannelsSection({ t, user }: { t: TranslateFn; user: IMUser }) {
       className={`${humanDetailPaneStyles["human-info-section"]} human-channels-section`}
       aria-labelledby="human-channels-title"
     >
-      <div className={`section-header-inline ${humanDetailPaneStyles["human-info-section-header"]}`}>
-        <h2 id="human-channels-title" className="section-label">
+      <div
+        className={`section-header-inline ${humanDetailPaneStyles["section-header-inline"]} ${humanDetailPaneStyles["human-info-section-header"]}`}
+      >
+        <h2 id="human-channels-title" className={`section-label ${humanDetailPaneStyles["section-label"]}`}>
           {t("humanChannelsSection")}
         </h2>
       </div>
@@ -241,9 +251,8 @@ function HumanChannelsSection({ t, user }: { t: TranslateFn; user: IMUser }) {
 
 function HumanField({ label, value }: { label: string; value: string }) {
   return (
-    <div className={`entity-field ${humanDetailPaneStyles["human-field"]}`}>
-      <span>{label}</span>
+    <EntityField className={`${humanDetailPaneStyles["human-field"]}`} label={label}>
       <strong>{value}</strong>
-    </div>
+    </EntityField>
   );
 }

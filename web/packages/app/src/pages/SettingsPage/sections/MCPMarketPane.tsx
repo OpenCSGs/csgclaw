@@ -1,7 +1,7 @@
 import { LoaderCircle, LogIn, Plus, RefreshCw } from "lucide-react";
-import { Button, Tooltip } from "@/components/ui";
+import { InlineError, Button, Tooltip } from "@/components/ui";
 import { ResourceList, ResourceListCard } from "@/components/business/ResourceListCard";
-import { SidebarMcpIcon } from "@/components/ui/Icons";
+import { SidebarMcpIcon } from "@/components/business/Icons";
 import { useWorkspaceControllerContext } from "@/hooks/workspace";
 import { ResourceFeaturedIcon, ResourceSearchField } from "@/components/business/HubDetailPane";
 import accountSectionStyles from "./AccountSection.module.css";
@@ -46,9 +46,9 @@ export function MCPMarketPane({
   if (hub?.remoteMCPServersError) {
     return (
       <div className={resourceSettingsStyles.listNotice}>
-        <span className="form-error" role="alert">
+        <InlineError as="span" role="alert">
           {hub.remoteMCPServersError}
-        </span>
+        </InlineError>
         <Button size="sm" variant="secondaryGray" onClick={() => void hub?.refetchRemoteMCPServers?.()}>
           <RefreshCw size={14} strokeWidth={2} aria-hidden="true" />
           {t("resourcesMCPRemoteServersRefresh")}
@@ -80,9 +80,9 @@ export function MCPMarketPane({
           onChange={(value) => hub?.setRemoteMCPServersSearch?.(value)}
         />
         {fallbackError ? (
-          <p className="form-error" role="alert">
+          <InlineError as="p" role="alert">
             {fallbackError}
-          </p>
+          </InlineError>
         ) : null}
         <div className="agent-skill-candidates-list" role="list">
           {remoteServers.map((item) => {
@@ -134,9 +134,9 @@ export function MCPMarketPane({
   return (
     <>
       {fallbackError ? (
-        <p className="form-error" role="alert">
+        <InlineError as="p" role="alert">
           {fallbackError}
-        </p>
+        </InlineError>
       ) : null}
       <ResourceList>
         {remoteServers.map((item) => {

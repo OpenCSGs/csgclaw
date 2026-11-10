@@ -1,3 +1,5 @@
+import avatarLayoutStyles from "@/components/business/AgentAvatar/AvatarLayout.module.css";
+import messageLayoutStyles from "@/components/business/ConversationPane/MessageLayout.module.css";
 import {
   formatConversationPreview,
   formatSidebarTime,
@@ -9,7 +11,7 @@ import { AgentAvatarContent } from "@/components/business/AgentAvatar";
 import { avatarFallbackText } from "@/shared/avatar";
 import { RoomAvatar, resolveRoomAvatarMembers } from "@/components/business/RoomAvatar";
 import { IconButton, Tooltip } from "@/components/ui";
-import { TrashIcon } from "@/components/ui/Icons";
+import { TrashIcon } from "@/components/business/Icons";
 import type { IMConversation, LocaleCode, TranslateFn, UsersById } from "@/models/conversations";
 import { conversationPendingQuestionCount } from "@/models/agentActivity";
 import { classNames } from "@/shared/lib/classNames";
@@ -53,14 +55,17 @@ export function ConversationSection({
           <div
             key={conversation.id}
             className={classNames(
-              "conversation-item",
+              `conversation-item ${styles["conversation-item"]}`,
               styles.item,
               conversation.id === activeConversationId && "active",
             )}
           >
-            <button className="conversation-item-main" onClick={() => onSelect(conversation.id)}>
+            <button
+              className={`conversation-item-main ${styles["conversation-item-main"]}`}
+              onClick={() => onSelect(conversation.id)}
+            >
               {displayUser ? (
-                <div className="avatar" aria-hidden="true">
+                <div className={`avatar ${avatarLayoutStyles["avatar"]}`} aria-hidden="true">
                   <AgentAvatarContent
                     avatar={displayUser.avatar}
                     fallback={avatarFallbackText(displayUser.avatar, displayUser.name, displayUser.id)}
@@ -69,20 +74,24 @@ export function ConversationSection({
               ) : (
                 <RoomAvatar members={roomAvatarMembers} count={conversation.members.length} size={48} />
               )}
-              <div className="conversation-main">
-                <div className="conversation-head">
-                  <div className="conversation-name truncate">{conversation.title}</div>
+              <div className={`conversation-main ${styles["conversation-main"]}`}>
+                <div className={`conversation-head ${styles["conversation-head"]}`}>
+                  <div className={`conversation-name ${styles["conversation-name"]} truncate`}>
+                    {conversation.title}
+                  </div>
                   {questionCount > 0 ? (
                     <span
-                      className="pending-question-badge"
+                      className={`pending-question-badge ${styles["pending-question-badge"]}`}
                       aria-label={t("questionPendingCount", { count: questionCount })}
                     >
                       ? {questionCount}
                     </span>
                   ) : null}
-                  <div className="section-label">{formatSidebarTime(lastMessage?.created_at, locale, t)}</div>
+                  <div className="section-label text-[11px] uppercase text-[var(--muted)]">
+                    {formatSidebarTime(lastMessage?.created_at, locale, t)}
+                  </div>
                 </div>
-                <div className="conversation-preview truncate">
+                <div className={`conversation-preview ${messageLayoutStyles["conversation-preview"]} truncate`}>
                   <MessagePreviewText
                     content={formatConversationPreview(lastMessage, conversation, currentUserID, usersById, locale, t)}
                   />
@@ -93,10 +102,13 @@ export function ConversationSection({
               <IconButton
                 variant="outlineDanger"
                 size="sm"
-                className={classNames(styles.deleteButton, "conversation-delete-button")}
+                className={classNames(
+                  styles.deleteButton,
+                  `conversation-delete-button ${styles["conversation-delete-button"]}`,
+                )}
                 label={`${t("deleteRoom")} ${conversation.title}`}
                 icon={<TrashIcon />}
-                markClassName="conversation-delete-icon"
+                markClassName={`conversation-delete-icon ${styles["conversation-delete-icon"]}`}
                 onClick={(event) => {
                   event.stopPropagation();
                   onDelete(conversation.id);

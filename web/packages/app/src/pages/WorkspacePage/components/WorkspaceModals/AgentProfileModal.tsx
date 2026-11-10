@@ -1,3 +1,4 @@
+import profileFormLayoutStyles from "@/components/business/ProfileControls/ProfileFormLayout.module.css";
 import { AgentModelConfiguration } from "@/components/business/AgentModelConfiguration";
 import { BOT_TYPE_NORMAL } from "@/shared/constants/agents";
 import { useEffect, useRef, useState, type SetStateAction } from "react";
@@ -8,16 +9,20 @@ import {
   isBlank,
   MCPServersPanel,
   NotifierControls,
-  requiredFieldLabel,
   RuntimeOptionsFields,
 } from "@/components/business/ProfileControls";
 import {
+  InlineError,
+  Field,
   TextInput,
   TextArea,
   Button,
   Select,
   DialogRoot,
   DialogContent,
+  DialogHeader,
+  DialogBody,
+  DialogFooter,
   DialogTitle,
   DialogDescription,
   DialogCloseButton,
@@ -273,18 +278,20 @@ export function AgentProfileModal({
   const editor = (
     <div className={useWizard ? styles.wizardProfile : "profile-editor-shell"}>
       {agentInitializing ? <p role="status">{t("agentWizardLoadingConfiguration")}</p> : null}
-      <section className="profile-section agent-identity-section">
+      <section className={`profile-section ${profileFormLayoutStyles["profile-section"]} agent-identity-section`}>
         {!isNotificationContext ? (
           <div className="profile-section-heading">
-            <div className="profile-section-title">{t("profileBasics")}</div>
+            <div className={`profile-section-title ${profileFormLayoutStyles["profile-section-title"]}`}>
+              {t("profileBasics")}
+            </div>
             <p className="profile-section-description">{t("profileBasicsDescription")}</p>
           </div>
         ) : null}
         <div className="agent-section-form">
           <div className="agent-section-form-content agent-basics-form-content">
             <div className="agent-identity-layout">
-              <div className="field agent-avatar-field">
-                <span className="field-label">{t("agentAvatar")}</span>
+              <div className={`agent-avatar-field ${styles.profileItem}`}>
+                <span className={styles.profileItemLabel}>{t("agentAvatar")}</span>
                 <AgentAvatarPicker
                   value={agentDraft.avatar}
                   t={t}
@@ -292,8 +299,7 @@ export function AgentProfileModal({
                   onChange={(avatar) => onAgentDraftChange({ ...agentDraft, avatar })}
                 />
               </div>
-              <label className="field agent-name-field">
-                {requiredFieldLabel(t("agentName"))}
+              <Field label={t("agentName")} required className="agent-name-field">
                 <TextInput
                   ref={nameRef}
                   value={agentDraft.name}
@@ -302,15 +308,14 @@ export function AgentProfileModal({
                   onInput={(event) => onAgentDraftChange({ ...agentDraft, name: event.currentTarget.value })}
                   placeholder={t("agentNamePlaceholder")}
                 />
-              </label>
-              <label className="field agent-description-field">
-                <span>{t("agentDescription")}</span>
+              </Field>
+              <Field label={t("agentDescription")} className="agent-description-field">
                 <TextArea
                   className="compact-textarea"
                   value={agentDraft.description}
                   onInput={(event) => onAgentDraftChange({ ...agentDraft, description: event.currentTarget.value })}
                 />
-              </label>
+              </Field>
             </div>
             {isCustomCreate && onBrowseTemplates ? (
               <div className={styles.browseTemplates}>
@@ -324,15 +329,19 @@ export function AgentProfileModal({
         </div>
       </section>
       {isTemplateCreate ? (
-        <section className="profile-section">
+        <section className={`profile-section ${profileFormLayoutStyles["profile-section"]}`}>
           <div className="profile-section-heading">
-            <div className="profile-section-title">{t("createAgentTemplateSectionTitle")}</div>
+            <div className={`profile-section-title ${profileFormLayoutStyles["profile-section-title"]}`}>
+              {t("createAgentTemplateSectionTitle")}
+            </div>
             <p className="profile-section-description">{t("createAgentTemplateSectionDescription")}</p>
           </div>
           <div className="agent-section-form">
-            <div className="profile-grid profile-grid-compact agent-basics-grid">
-              <div className="field span-2">
-                <span>{t("templateLabel")}</span>
+            <div
+              className={`profile-grid ${profileFormLayoutStyles["profile-grid"]} profile-grid-compact ${profileFormLayoutStyles["profile-grid-compact"]} agent-basics-grid`}
+            >
+              <div className={`${styles.profileItem} span-2 ${profileFormLayoutStyles["span-2"]}`}>
+                <span className={styles.profileItemLabel}>{t("templateLabel")}</span>
                 <div className={styles.templateCard}>
                   <span className={styles.templateAvatar} aria-hidden="true">
                     <AgentAvatarContent
@@ -350,37 +359,40 @@ export function AgentProfileModal({
                     </Button>
                   ) : null}
                 </div>
-                <small className="field-hint">{t("templateHelp")}</small>
+                <small className={styles.templateHint}>{t("templateHelp")}</small>
               </div>
               {runtimeAvailabilityNotice}
               {selectedWorkerTemplate?.image_env?.length ? (
-                <div className="field span-2">
-                  <span>{t("profileEnv")}</span>
-                  <EnvKeyValueEditor
-                    rows={agentDraft.envRows}
-                    t={t}
-                    onChange={(rows) => onAgentDraftChange({ ...agentDraft, envRows: rows })}
-                  />
-                </div>
+                <EnvKeyValueEditor
+                  className={`span-2 ${profileFormLayoutStyles["span-2"]}`}
+                  rows={agentDraft.envRows}
+                  t={t}
+                  onChange={(rows) => onAgentDraftChange({ ...agentDraft, envRows: rows })}
+                />
               ) : null}
             </div>
           </div>
         </section>
       ) : null}
       {!isNotificationContext && !isTemplateCreate ? (
-        <section className="profile-section">
+        <section className={`profile-section ${profileFormLayoutStyles["profile-section"]}`}>
           <div className="profile-section-heading">
-            <div className="profile-section-title">{t("profileRuntimeSection")}</div>
+            <div className={`profile-section-title ${profileFormLayoutStyles["profile-section-title"]}`}>
+              {t("profileRuntimeSection")}
+            </div>
             <p className="profile-section-description">{t("profileRuntimeSectionDescription")}</p>
           </div>
           <div className="agent-section-form">
             <div
-              className={useWizard ? styles.wizardRuntimeGrid : "profile-grid profile-grid-compact agent-basics-grid"}
+              className={
+                useWizard
+                  ? styles.wizardRuntimeGrid
+                  : `profile-grid ${profileFormLayoutStyles["profile-grid"]} profile-grid-compact ${profileFormLayoutStyles["profile-grid-compact"]} agent-basics-grid`
+              }
             >
               {isWorkerCreate ? (
                 <div className={useWizard ? styles.wizardRuntimeSelector : "agent-runtime-image-row"}>
-                  <label className="field">
-                    <span>{t("profileRuntimeKind")}</span>
+                  <Field label={t("profileRuntimeKind")}>
                     <Select
                       value={selectedRuntimeName || "codex"}
                       onValueChange={(value) => {
@@ -402,14 +414,13 @@ export function AgentProfileModal({
                         disabled: option.installed === false && option.installable !== true,
                       }))}
                     />
-                  </label>
+                  </Field>
                   {runtimeAvailabilityNotice}
                 </div>
               ) : agentModalMode === "edit" ? (
-                <label className="field span-2">
-                  <span>{t("profileRuntimeKind")}</span>
+                <Field label={t("profileRuntimeKind")} className={`span-2 ${profileFormLayoutStyles["span-2"]}`}>
                   <TextInput value={formatRuntimeKindLabel(agentRuntimeKind(editingAgent), t)} readOnly disabled />
-                </label>
+                </Field>
               ) : null}
               {runtimeOptionSchemas.length > 0 ? (
                 <RuntimeOptionsFields
@@ -443,9 +454,11 @@ export function AgentProfileModal({
           onPatch={(patch) => onAgentDraftChange({ ...agentDraft, ...patch })}
         />
       ) : (
-        <section className="profile-section">
+        <section className={`profile-section ${profileFormLayoutStyles["profile-section"]}`}>
           <div className="profile-section-heading">
-            <div className="profile-section-title">{t("profileModelSection")}</div>
+            <div className={`profile-section-title ${profileFormLayoutStyles["profile-section-title"]}`}>
+              {t("profileModelSection")}
+            </div>
             <p className="profile-section-description">{t("profileModelSectionDescription")}</p>
           </div>
           <div className="agent-section-form">
@@ -468,31 +481,33 @@ export function AgentProfileModal({
       {!isNotificationContext && !isTemplateCreate ? (
         <>
           {!useWizard ? (
-            <section className="profile-section agent-instructions-section">
-              <div className="profile-grid-compact">
-                <label className="field span-2">
-                  <span>{t("agentInstructions")}</span>
+            <section
+              className={`profile-section ${profileFormLayoutStyles["profile-section"]} agent-instructions-section`}
+            >
+              <div className={`profile-grid-compact ${profileFormLayoutStyles["profile-grid-compact"]}`}>
+                <Field label={t("agentInstructions")} className={`span-2 ${profileFormLayoutStyles["span-2"]}`}>
                   <TextArea
                     className="compact-textarea"
                     value={agentDraft.instructions || ""}
                     placeholder={t("agentInstructionsPlaceholder")}
                     onInput={(event) => onAgentDraftChange({ ...agentDraft, instructions: event.currentTarget.value })}
                   />
-                </label>
+                </Field>
               </div>
             </section>
           ) : null}
-          <details className="profile-section agent-advanced-section">
-            <summary className="profile-section-title agent-advanced-summary">{t("profileAdvanced")}</summary>
-            <div className="profile-advanced-grid">
-              <div className="field">
-                <span>{t("profileEnv")}</span>
-                <EnvKeyValueEditor
-                  rows={agentDraft.envRows}
-                  t={t}
-                  onChange={(rows) => onAgentDraftChange({ ...agentDraft, envRows: rows })}
-                />
-              </div>
+          <details className={`profile-section ${profileFormLayoutStyles["profile-section"]} agent-advanced-section`}>
+            <summary
+              className={`profile-section-title ${profileFormLayoutStyles["profile-section-title"]} agent-advanced-summary`}
+            >
+              {t("profileAdvanced")}
+            </summary>
+            <div className={`profile-advanced-grid ${profileFormLayoutStyles["profile-advanced-grid"]}`}>
+              <EnvKeyValueEditor
+                rows={agentDraft.envRows}
+                t={t}
+                onChange={(rows) => onAgentDraftChange({ ...agentDraft, envRows: rows })}
+              />
             </div>
           </details>
         </>
@@ -536,6 +551,7 @@ export function AgentProfileModal({
       }}
     >
       <DialogContent
+        scrollBody
         className={`${styles.dialog} profile-modal agent-modal`}
         ref={contentRef}
         onOpenAutoFocus={(event) => {
@@ -556,12 +572,10 @@ export function AgentProfileModal({
           if (agentBusy) event.preventDefault();
         }}
       >
-        <div className="modal-header">
+        <DialogHeader>
           <div>
-            <DialogTitle className="modal-title">
-              {agentModalMode === "create" ? t("createAgentTitle") : t("editAgentTitle")}
-            </DialogTitle>
-            <DialogDescription className="modal-subtitle">
+            <DialogTitle>{agentModalMode === "create" ? t("createAgentTitle") : t("editAgentTitle")}</DialogTitle>
+            <DialogDescription>
               {agentModalMode === "create"
                 ? isNotificationContext
                   ? t("createAgentSubtitleNotifier")
@@ -570,30 +584,32 @@ export function AgentProfileModal({
             </DialogDescription>
           </div>
           <DialogCloseButton label={t("close")} disabled={agentBusy} />
-        </div>
-        {editor}
-        {agentError ? (
-          <div className="form-error">
-            {agentError}
-            {agentBillingURL ? (
-              <>
-                {" "}
-                <a className="agent-billing-action" href={agentBillingURL} target="_blank" rel="noopener noreferrer">
-                  {t("rechargeAccount")}
-                </a>
-              </>
-            ) : null}
-          </div>
-        ) : null}
-        <AgentCreateProgress progress={agentProgress} t={t} />
-        <div className="modal-actions">
+        </DialogHeader>
+        <DialogBody className={styles.body}>
+          {editor}
+          {agentError ? (
+            <InlineError>
+              {agentError}
+              {agentBillingURL ? (
+                <>
+                  {" "}
+                  <a className="agent-billing-action" href={agentBillingURL} target="_blank" rel="noopener noreferrer">
+                    {t("rechargeAccount")}
+                  </a>
+                </>
+              ) : null}
+            </InlineError>
+          ) : null}
+          <AgentCreateProgress progress={agentProgress} t={t} />
+        </DialogBody>
+        <DialogFooter>
           <Button variant="secondaryGray" size="md" disabled={agentBusy} onClick={onClose}>
             {t("cancel")}
           </Button>
           <Button variant="primary" size="md" disabled={saveDisabled} loading={agentBusy} onClick={() => void onSave()}>
             {agentModalMode === "create" ? t("agentCreateSave") : t("agentUpdateSave")}
           </Button>
-        </div>
+        </DialogFooter>
       </DialogContent>
     </DialogRoot>
   );

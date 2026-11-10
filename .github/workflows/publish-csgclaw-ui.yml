@@ -1,0 +1,128 @@
+name: Publish csgclaw-ui
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - web/packages/csgclaw-ui/package.json
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-csgclaw-ui
+  queue: max
+
+jobs:
+  package:
+    if: github.repository == 'OpenCSGs/csgclaw'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          package-manager-cache: false
+
+      - name: Check for a new npm version
+        id: version
+        env:
+          PREVIOUS_SHA: ${{ github.event.before }}
+        run: |
+          manifest=web/packages/csgclaw-ui/package.json
+          previous_version=$(git show "$PREVIOUS_SHA:$manifest" | jq -er '.version')
+          version=$(jq -er '.version' "$manifest")
+          if [[ "$version" == "$previous_version" ]]; then
+            echo "The csgclaw-ui version did not change."
+            exit 0
+          fi
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::Invalid csgclaw-ui version in package.json."
+            exit 1
+          fi
+
+          versions=$(npm view csgclaw-ui versions --json --prefer-online --registry https://registry.npmjs.org/)
+          published=$(jq -r --arg version "$version" 'index($version) != null' <<< "$versions")
+          if [[ "$published" == true ]]; then
+            echo "csgclaw-ui@$version is already published."
+            exit 0
+          fi
+
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Install UI package dependencies
+        if: steps.version.outputs.version != ''
+        working-directory: web
+        run: |
+          corepack enable pnpm
+          pnpm --filter csgclaw-ui... install --frozen-lockfile --ignore-scripts
+
+      - name: Build and pack the UI package
+        if: steps.version.outputs.version != ''
+        working-directory: web/packages/csgclaw-ui
+        run: |
+          pnpm build
+          mkdir -p "$RUNNER_TEMP/csgclaw-ui"
+          npm pack --ignore-scripts --pack-destination "$RUNNER_TEMP/csgclaw-ui"
+
+      - uses: actions/upload-artifact@v4
+        if: steps.version.outputs.version != ''
+        with:
+          name: csgclaw-ui-npm
+          path: ${{ runner.temp }}/csgclaw-ui/*.tgz
+          if-no-files-found: error
+          overwrite: true
+
+  publish:
+    needs: package
+    if: needs.package.outputs.version != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    environment: csgclaw-ui-release
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          registry-url: https://registry.npmjs.org/
+          package-manager-cache: false
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: csgclaw-ui-npm
+          path: ${{ runner.temp }}/csgclaw-ui
+
+      - name: Publish to npm
+        env:
+          VERSION: ${{ needs.package.outputs.version }}
+        run: |
+          tarball="$RUNNER_TEMP/csgclaw-ui/csgclaw-ui-$VERSION.tgz"
+          if [[ "${VERSION%%+*}" == *-* ]]; then
+            npm publish "$tarball" --ignore-scripts --tag next
+          else
+            npm publish "$tarball" --ignore-scripts
+          fi
+
+      - name: Verify the public release
+        env:
+          VERSION: ${{ needs.package.outputs.version }}
+        run: |
+          # npm scans the package before making it available to install.
+          for attempt in {1..40}; do
+            if [[ "$(npm view "csgclaw-ui@$VERSION" version --prefer-online --fetch-retries=0 2>/dev/null)" == "$VERSION" ]]; then
+              echo "csgclaw-ui@$VERSION is available on npm."
+              exit 0
+            fi
+            sleep 30
+          done
+          echo "::error::csgclaw-ui@$VERSION is not yet available on npm. Check the package version status."
+          exit 1

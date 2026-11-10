@@ -366,3 +366,32 @@
     padding: 20px;
   }
 }
+
+.section-label {
+  display: block;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.section-header-inline {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.section-label {
+  color: var(--muted);
+  letter-spacing: 0.1em;
+}
+
+.section-label {
+  color: var(--muted);
+  letter-spacing: 0;
+}
+
+:global(:root[data-theme="dark"]) .section-label {
+  color: var(--muted);
+}

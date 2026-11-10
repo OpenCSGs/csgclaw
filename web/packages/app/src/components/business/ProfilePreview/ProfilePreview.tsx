@@ -1,3 +1,6 @@
+import { EntityField, EntityAvatar } from "@/components/business/EntityDetail";
+import avatarLayoutStyles from "@/components/business/AgentAvatar/AvatarLayout.module.css";
+import previewStyles from "./ProfilePreview.module.css";
 import {
   agentModelID,
   agentAvailabilityStatusLabel,
@@ -15,7 +18,7 @@ import { localizeRole } from "@/shared/i18n";
 import { AgentAvatarContent } from "@/components/business/AgentAvatar";
 import { reasoningEffortLabel } from "@/components/business/ProfileControls";
 import { avatarFallbackText } from "@/shared/avatar";
-import { Button } from "@/components/ui";
+import { StatusBadge, Button } from "@/components/ui";
 import type { AgentLike } from "@/models/agents";
 import type { IMUser, TranslateFn } from "@/models/conversations";
 
@@ -74,63 +77,76 @@ export function ProfilePreviewContent({ agent, user, t, onOpenAgent, onOpenDM }:
 
   return (
     <>
-      <div className="preview-hero">
+      <div className={`preview-hero ${previewStyles["preview-hero"]}`}>
         {agent ? (
-          <div className="entity-avatar preview-avatar">
+          <EntityAvatar className={`preview-avatar ${previewStyles["preview-avatar"]}`}>
             <AgentAvatarContent
               avatar={agent.avatar}
               fallback={avatarFallbackText(agent.avatar, displayName, agent.id)}
               alt=""
             />
-          </div>
+          </EntityAvatar>
         ) : (
-          <div className="avatar preview-avatar">
+          <div className={`avatar ${avatarLayoutStyles["avatar"]} preview-avatar ${previewStyles["preview-avatar"]}`}>
             <AgentAvatarContent
               avatar={user?.avatar}
               fallback={avatarFallbackText(user?.avatar, user?.name, user?.id)}
             />
           </div>
         )}
-        <div className="preview-identity">
-          <div className="preview-name-line">
-            <div className="preview-name">{displayName}</div>
-            <span className={`preview-presence ${running || localAdminPreview ? "online" : ""}`}>
-              <span className="preview-presence-dot" aria-hidden="true" />
+        <div className={`preview-identity ${previewStyles["preview-identity"]}`}>
+          <div className={`preview-name-line ${previewStyles["preview-name-line"]}`}>
+            <div className={`preview-name ${previewStyles["preview-name"]}`}>{displayName}</div>
+            <span
+              className={`preview-presence ${previewStyles["preview-presence"]} ${running || localAdminPreview ? "online" : ""}`}
+            >
+              <span className={`preview-presence-dot ${previewStyles["preview-presence-dot"]}`} aria-hidden="true" />
               {statusLabel}
             </span>
           </div>
-          <div className="preview-meta">
+          <div className={`preview-meta ${previewStyles["preview-meta"]}`}>
             {user?.id || agent?.id || ""} · {localizeRole(displayRole, t)}
           </div>
         </div>
       </div>
-      {agent?.description ? <p className="preview-description">{agent.description}</p> : null}
+      {agent?.description ? (
+        <p className={`preview-description ${previewStyles["preview-description"]}`}>{agent.description}</p>
+      ) : null}
       {showAgentMetadataFields ? (
         <>
-          <div className="preview-fields">
-            <div className="entity-field">
-              <span>{previewFieldLabel(t("profileRuntimeKind"))}</span>
+          <div className={`preview-fields ${previewStyles["preview-fields"]}`}>
+            <EntityField label={previewFieldLabel(t("profileRuntimeKind"))}>
               <strong title={previewRuntime}>{previewRuntime}</strong>
-            </div>
-            <div className="entity-field">
-              <span>{previewFieldLabel(t("profileProvider"))}</span>
+            </EntityField>
+            <EntityField label={previewFieldLabel(t("profileProvider"))}>
               <strong title={previewProvider}>{previewProvider}</strong>
-            </div>
-            <div className="entity-field">
-              <span>{previewFieldLabel(t("profileModel"))}</span>
+            </EntityField>
+            <EntityField label={previewFieldLabel(t("profileModel"))}>
               <strong title={previewModel}>{previewModel}</strong>
-            </div>
+            </EntityField>
           </div>
           {agent ? (
             <>
-              <div className="entity-badge-row">
-                <span className={`agent-badge ${incomplete ? "warn" : "ready"}`}>
+              <div className={`entity-badge-row ${previewStyles["entity-badge-row"]}`}>
+                <StatusBadge
+                  kind="compact"
+                  tone={incomplete ? "warning" : "positive"}
+                  className={`${incomplete ? "warn" : "ready"}`}
+                >
                   {incomplete ? t("profileIncompleteBadge") : t("profileCompleteBadge")}
-                </span>
-                {upgradeNeeded ? <span className="agent-badge warn">{t("profileUpgradeRequired")}</span> : null}
-                {restartNeeded ? <span className="agent-badge warn">{t("profileRestartRequired")}</span> : null}
+                </StatusBadge>
+                {upgradeNeeded ? (
+                  <StatusBadge kind="compact" tone="warning" className={"warn"}>
+                    {t("profileUpgradeRequired")}
+                  </StatusBadge>
+                ) : null}
+                {restartNeeded ? (
+                  <StatusBadge kind="compact" tone="warning" className={"warn"}>
+                    {t("profileRestartRequired")}
+                  </StatusBadge>
+                ) : null}
               </div>
-              <div className="preview-actions">
+              <div className={`preview-actions ${previewStyles["preview-actions"]}`}>
                 <Button variant="primary" size="sm" onClick={() => onOpenAgent(agent)}>
                   {t("openProfile")}
                 </Button>
@@ -142,15 +158,13 @@ export function ProfilePreviewContent({ agent, user, t, onOpenAgent, onOpenDM }:
           ) : null}
         </>
       ) : (
-        <div className="preview-fields">
-          <div className="entity-field">
-            <span>{previewFieldLabel(t("roleLabel"))}</span>
+        <div className={`preview-fields ${previewStyles["preview-fields"]}`}>
+          <EntityField label={previewFieldLabel(t("roleLabel"))}>
             <strong title={localizeRole(user?.role || "", t)}>{localizeRole(user?.role || "", t)}</strong>
-          </div>
-          <div className="entity-field">
-            <span>{previewFieldLabel(t("userIDLabel"))}</span>
+          </EntityField>
+          <EntityField label={previewFieldLabel(t("userIDLabel"))}>
             <strong title={user?.id || ""}>{user?.id || ""}</strong>
-          </div>
+          </EntityField>
         </div>
       )}
     </>

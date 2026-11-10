@@ -1,3 +1,5 @@
+import avatarLayoutStyles from "@/components/business/AgentAvatar/AvatarLayout.module.css";
+import messageLayoutStyles from "@/components/business/ConversationPane/MessageLayout.module.css";
 import mentionPickerStyles from "./MentionPicker.module.css";
 import { useLayoutEffect, useRef } from "react";
 import { AgentAvatarContent } from "@/components/business/AgentAvatar";
@@ -31,7 +33,7 @@ export function MentionPicker({
   }, [activeIndex, activeUserID, users.length]);
 
   return (
-    <div className={`mention-picker ${className}`.trim()} role="listbox">
+    <div className={`mention-picker ${mentionPickerStyles["mention-picker"]} ${className}`.trim()} role="listbox">
       {users.map((user, index) => {
         const mentionLabel = user.name || user.id;
         return (
@@ -46,15 +48,15 @@ export function MentionPicker({
               onSelect(user);
             }}
           >
-            <span className="avatar">
+            <span className={`avatar ${avatarLayoutStyles["avatar"]}`}>
               <AgentAvatarContent
                 avatar={user.avatar}
                 fallback={avatarFallbackText(user.avatar, mentionLabel, user.id)}
               />
             </span>
             <div>
-              <div className="message-author">@{mentionLabel}</div>
-              <div className="conversation-preview">
+              <div className={`message-author ${messageLayoutStyles["message-author"]}`}>@{mentionLabel}</div>
+              <div className={`conversation-preview ${messageLayoutStyles["conversation-preview"]}`}>
                 {user.id}
                 {showRole ? ` · ${localizeRole(user.role || "", t)}` : ""}
               </div>

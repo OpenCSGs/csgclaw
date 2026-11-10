@@ -1,4 +1,4 @@
-import { Switch } from "@/components/ui";
+import { Field, Switch } from "@/components/ui";
 import { AgentModelFields, type AgentModelFieldsProps } from "@/components/business/AgentModelFields";
 import { AgentMediaModelFields } from "@/components/business/AgentMediaModelFields";
 import { ReasoningControls } from "@/components/business/ProfileControls";
@@ -32,8 +32,7 @@ export function AgentModelConfiguration({ draft, ...props }: AgentModelConfigura
             onChange={(value) => onPatch({ reasoning_effort: value })}
             t={t}
           />
-          <div className="field agent-fast-mode-field">
-            <span>{t("profileFastMode")}</span>
+          <Field label={t("profileFastMode")} className="agent-fast-mode-field">
             <div className={styles.fastMode}>
               <Switch
                 size="sm"
@@ -43,7 +42,7 @@ export function AgentModelConfiguration({ draft, ...props }: AgentModelConfigura
               />
               <small>{t("profileFastModeHelp")}</small>
             </div>
-          </div>
+          </Field>
         </div>
         <p className={styles.hint}>{t("profileConversationModelSettingsHelp")}</p>
       </fieldset>

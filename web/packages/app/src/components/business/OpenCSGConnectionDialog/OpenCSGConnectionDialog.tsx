@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState } from "react";
 import {
+  InlineError,
   TextInput,
   Button,
   DialogBody,
@@ -159,7 +160,7 @@ export function OpenCSGConnectionDialog({
           <p className={styles.returnHint}>
             {t(authenticationRequired ? "openCSGLoginRequiredHint" : "csghubConnectReturnHint")}
           </p>
-          {error ? <div className="form-error">{error}</div> : null}
+          {error ? <InlineError>{error}</InlineError> : null}
         </DialogBody>
         <DialogFooter className={styles.actions}>
           <Button variant="secondaryGray" size="md" disabled={busy} onClick={() => handleOpenChange(false)}>

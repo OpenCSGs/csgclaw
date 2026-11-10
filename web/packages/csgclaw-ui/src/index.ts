@@ -15,3 +15,5 @@ export * from "./components/SegmentedControl/index.js";
 export * from "./components/Slider/index.js";
 export * from "./components/Switch/index.js";
 export * from "./components/Tooltip/index.js";
+export * from "./components/InlineError/index.js";
+export * from "./components/StatusBadge/index.js";
