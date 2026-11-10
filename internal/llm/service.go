@@ -451,57 +451,86 @@ func sanitizeResponsesEventStream(body io.ReadCloser, contentType string) (strea
 	if mediaType != "text/event-stream" {
 		return body, false
 	}
-	// Check the first data event before the downstream HTTP status is committed.
-	// Keep any preceding comments or SSE metadata in order for normal streams.
-	buffered := bufio.NewReader(body)
-	var prefix [][]string
-	var firstReadErr error
-	for remaining := 64 << 10; remaining > 0; {
-		block, size, err := readResponsesSSEBlock(buffered)
-		firstReadErr = err
-		code, hasData := responsesSSEBlockError(block)
-		if code == modelprovider.RequestTooLarge {
-			_ = body.Close()
-			return nil, true
-		}
-		if len(block) > 0 {
-			prefix = append(prefix, block)
-		}
-		if hasData || err != nil {
-			break
-		}
-		remaining -= size
+	type block struct {
+		lines []string
+		size  int
 	}
-
+	blocks := make(chan block)
+	startStreaming := make(chan struct{})
+	defer close(startStreaming)
 	reader, writer := io.Pipe()
+	closeUpstream := sync.OnceFunc(func() { _ = body.Close() })
 	go func() {
-		defer body.Close()
-		for _, block := range prefix {
-			if err := writeResponsesSSEBlock(writer, block); err != nil {
-				_ = writer.CloseWithError(err)
-				return
+		defer closeUpstream()
+		defer close(blocks)
+		lookahead := blocks
+		err := walkResponsesSSEBlocks(body, func(lines []string, size int) error {
+			if lookahead != nil {
+				select {
+				case lookahead <- block{lines, size}:
+					return nil
+				case <-startStreaming:
+					lookahead = nil
+				}
 			}
-		}
-		err := firstReadErr
-		if err == nil {
-			err = rewriteResponsesEventStream(writer, buffered)
-		}
-		if errors.Is(err, io.EOF) {
-			err = nil
-		}
+			return writeResponsesSSEBlock(writer, lines)
+		})
 		_ = writer.CloseWithError(err)
 	}()
-	return reader, false
+
+	// An upstream may send keepalives for a while before producing model data.
+	// Replay the buffered prefix at the deadline, even if the upstream read is blocked.
+	timer := time.NewTimer(responsesSSELookahead)
+	defer timer.Stop()
+	var prefix bytes.Buffer
+preflight:
+	for remaining := 64 << 10; remaining > 0; {
+		select {
+		case next, ok := <-blocks:
+			if !ok {
+				break preflight
+			}
+			code, preamble := classifyResponsesSSEBlock(next.lines)
+			if code == modelprovider.RequestTooLarge {
+				_ = reader.Close()
+				closeUpstream()
+				return nil, true
+			}
+			_ = writeResponsesSSEBlock(&prefix, next.lines)
+			if !preamble {
+				break preflight
+			}
+			remaining -= next.size
+		case <-timer.C:
+			break preflight
+		}
+	}
+	return &protocolStream{
+		ReadCloser: struct {
+			io.Reader
+			io.Closer
+		}{io.MultiReader(&prefix, reader), reader},
+		cancel: closeUpstream,
+	}, false
 }
 
-const maxResponsesSSEEventBytes = 8 * 1024 * 1024
+const (
+	maxResponsesSSEEventBytes = 8 * 1024 * 1024
+	responsesSSELookahead     = 250 * time.Millisecond
+)
 
 func rewriteResponsesEventStream(w io.Writer, r io.Reader) error {
+	return walkResponsesSSEBlocks(r, func(block []string, _ int) error {
+		return writeResponsesSSEBlock(w, block)
+	})
+}
+
+func walkResponsesSSEBlocks(r io.Reader, consume func([]string, int) error) error {
 	reader := bufio.NewReader(r)
 	for {
-		block, _, readErr := readResponsesSSEBlock(reader)
-		if len(block) > 0 {
-			if err := writeResponsesSSEBlock(w, block); err != nil {
+		block, size, readErr := readResponsesSSEBlock(reader)
+		if size > 0 {
+			if err := consume(block, size); err != nil {
 				return err
 			}
 		}
@@ -537,7 +566,7 @@ func readResponsesSSEBlock(reader *bufio.Reader) ([]string, int, error) {
 	}
 }
 
-func responsesSSEBlockError(block []string) (code string, hasData bool) {
+func classifyResponsesSSEBlock(block []string) (code string, preamble bool) {
 	eventType := ""
 	var dataLines []string
 	for _, line := range block {
@@ -556,18 +585,25 @@ func responsesSSEBlockError(block []string) (code string, hasData bool) {
 	if json.Unmarshal(data, &payload) == nil && strings.TrimSpace(payload.Type) != "" {
 		eventType = strings.TrimSpace(payload.Type)
 	}
-	if eventType != "response.failed" && eventType != "error" {
-		return "", len(dataLines) > 0
+	switch eventType {
+	case "response.failed", "error":
+		code = modelprovider.UpstreamErrorCode(data)
+		if code == "" {
+			code = "upstream_unavailable"
+		}
+		return code, false
+	case "response.created", "response.in_progress":
+		return "", true
+	default:
+		return "", len(dataLines) == 0
 	}
-	code = modelprovider.UpstreamErrorCode(data)
-	if code == "" {
-		code = "upstream_unavailable"
-	}
-	return code, len(dataLines) > 0
 }
 
 func writeResponsesSSEBlock(w io.Writer, block []string) error {
-	if code, _ := responsesSSEBlockError(block); code != "" {
+	if len(block) == 0 {
+		return nil
+	}
+	if code, _ := classifyResponsesSSEBlock(block); code != "" {
 		message := modelprovider.FriendlyUpstreamErrorMessage(modelprovider.UpstreamStatusForErrorCode(code), code)
 		return writeSSE(w, "error", map[string]any{"type": "error", "code": code, "message": message, "param": nil})
 	}

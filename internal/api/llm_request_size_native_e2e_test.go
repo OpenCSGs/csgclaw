@@ -45,6 +45,11 @@ func TestNativeCodexOversizedModelRequestStopsWithoutRetry(t *testing.T) {
 			w.Header().Set("Content-Type", "text/event-stream")
 			fmt.Fprint(w, ": keepalive\n\nevent: error\ndata: {\"type\":\"error\",\"code\":\"request_too_large\",\"message\":\"Provider details\"}\n\n")
 		}},
+		{"sse-error-after-created", func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "text/event-stream")
+			fmt.Fprint(w, "data: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_rejected\"}}\n\n")
+			fmt.Fprint(w, "data: {\"type\":\"error\",\"code\":\"request_too_large\"}\n\n")
+		}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			testNativeCodexOversizedModelRequest(t, binary, tc.reject)
