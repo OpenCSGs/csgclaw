@@ -417,6 +417,14 @@ func TestCloudTaskRestoresLostContextInSameRoom(t *testing.T) {
 			},
 		},
 		{name: "lost response", before: []exchange{{original, nil}, {original, offline}, {original, missing}}},
+		{
+			name: "recovery identity mismatch after lost response",
+			before: []exchange{
+				{original, missing},
+				{recovery, nil},
+				{recovery, response("resp_reused", "failed", "relay_invocation_identity_mismatch")},
+			},
+		},
 		{name: "lost response before restart", before: []exchange{{original, nil}}, after: []exchange{{original, missing}}},
 		{name: "unauthorized retry after lost response", before: []exchange{{original, nil}, {original, unauthorized}}},
 		{name: "unauthorized retry after restart", before: []exchange{{original, nil}}, after: []exchange{{original, unauthorized}}},

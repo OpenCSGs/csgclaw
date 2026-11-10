@@ -132,7 +132,7 @@ func (h *Handler) runCloudTask(roomID string) {
 				switch result.Error.Code {
 				case "model_protocol_unsupported":
 					code = result.Error.Code
-				case "execution_interrupted", "execution_timeout", "cancellation_unconfirmed":
+				case "execution_interrupted", "execution_timeout", "cancellation_unconfirmed", "relay_invocation_identity_mismatch":
 					code = "relay_task_result_unavailable"
 				}
 			}
