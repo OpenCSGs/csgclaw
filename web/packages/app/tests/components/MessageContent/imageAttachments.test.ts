@@ -40,13 +40,16 @@ describe("inline image attachments", () => {
     expect(resolveImageAttachmentURL("images/qr.png", [image])).toBe("api/v1/attachments/qr-image?token=image-token");
   });
 
-  it.each(["../qr.png", "images/%2E%2E/../qr.png", "/images/../qr.png", "https://example.com/../../qr.png"])(
-    "keeps non-workspace references unchanged when an image has the same name: %s",
-    (source) => {
-      const image = { ...attachment, name: "qr.png", source_path: "qr.png" };
-      expect(resolveImageAttachmentURL(source, [image])).toBeUndefined();
-    },
-  );
+  it.each([
+    "../qr.png",
+    "images/%2E%2E/../qr.png",
+    "/images/../qr.png",
+    "C%3A%2F..%2Fqr.png",
+    "https://example.com/../../qr.png",
+  ])("keeps non-workspace references unchanged when an image has the same name: %s", (source) => {
+    const image = { ...attachment, name: "qr.png", source_path: "qr.png" };
+    expect(resolveImageAttachmentURL(source, [image])).toBeUndefined();
+  });
 
   it("requires an exact path for a directory-qualified reference that simplifies to a filename", () => {
     const image = { ...attachment, name: "qr.png", source_path: "generated/qr.png" };
@@ -61,6 +64,25 @@ describe("inline image attachments", () => {
     expect(resolveImageAttachmentURL(`images/${encodeURIComponent("飞书 授权二维码.png")}`, [image])).toBe(
       "api/v1/attachments/qr-image?token=image-token",
     );
+  });
+
+  it.each([
+    "./screenshot-2026-11-10T11%3A30%3A00.png",
+    "./screenshot-2026-11-10T11:30:00.png",
+    "screenshot-2026-11-10T11%3A30%3A00.png",
+  ])("renders a published file with colons in its source path for %s", (source) => {
+    const image = {
+      ...attachment,
+      name: "screenshot-2026-11-10T11_30_00.png",
+      source_path: "screenshot-2026-11-10T11:30:00.png",
+    };
+    const rendered = renderMarkdownWithCitations(`![Screenshot](${source})`, undefined, [image]);
+    expect(rendered.html).toContain('src="api/v1/attachments/qr-image?token=image-token"');
+  });
+
+  it("preserves a URL scheme even when the attachment has an identical source path", () => {
+    const source = "custom:qr.png";
+    expect(resolveImageAttachmentURL(source, [{ ...attachment, source_path: source }])).toBeUndefined();
   });
 
   it("resolves published paths when delivery names collide", () => {

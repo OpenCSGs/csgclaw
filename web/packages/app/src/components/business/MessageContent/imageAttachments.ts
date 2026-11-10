@@ -6,6 +6,7 @@ export function resolveImageAttachmentURL(
   attachments: readonly MessageAttachment[],
 ): string | undefined {
   let reference = source.trim().split(/[?#]/, 1)[0] || "";
+  if (/^[a-z][a-z\d+.-]*:/i.test(reference)) return undefined;
   try {
     reference = decodeURIComponent(reference);
   } catch {
@@ -34,7 +35,7 @@ export function resolveImageAttachmentURL(
 
 function normalizePath(path: string): string | undefined {
   const relative = path.replaceAll("\\", "/");
-  if (relative.startsWith("/")) return undefined;
+  if (relative.startsWith("/") || /^[a-z]:\//i.test(relative)) return undefined;
 
   const segments: string[] = [];
   for (const segment of relative.split("/")) {
@@ -43,7 +44,6 @@ function normalizePath(path: string): string | undefined {
       if (segments.length === 0) return undefined;
       segments.pop();
     } else {
-      if (segments.length === 0 && /^[a-z][a-z\d+.-]*:/i.test(segment)) return undefined;
       segments.push(segment);
     }
   }
