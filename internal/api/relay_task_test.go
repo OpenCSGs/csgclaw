@@ -374,6 +374,7 @@ func TestCloudTaskRestoresLostContextInSameRoom(t *testing.T) {
 	}
 	missing := failure(404, "response_not_found", "")
 	offline := failure(503, "agent_offline", "")
+	unauthorized := failure(401, "unauthorized", "")
 	restored := response("resp_restored", "completed", "")
 	rotatedOriginal := rotate(original, "resp_admitted")
 	rotatedBusy := rotate(recovery, "resp_busy")
@@ -383,6 +384,7 @@ func TestCloudTaskRestoresLostContextInSameRoom(t *testing.T) {
 		name, pending        string
 		restore, old, legacy bool
 		before, after        []exchange
+		errorCode            string
 	}{
 		{name: "missing parent", restore: true, old: true, before: []exchange{{original, missing}}},
 		{
@@ -402,6 +404,7 @@ func TestCloudTaskRestoresLostContextInSameRoom(t *testing.T) {
 			},
 		},
 		{name: "missing polled result", pending: "resp_pending", before: []exchange{{poll("resp_pending"), missing}}},
+		{name: "unauthorized poll", pending: "resp_pending", before: []exchange{{poll("resp_pending"), unauthorized}}},
 		{name: "interrupted execution", pending: "resp_pending", before: []exchange{{poll("resp_pending"), response("resp_pending", "failed", "execution_interrupted")}}},
 		{name: "execution timeout", pending: "resp_pending", before: []exchange{{poll("resp_pending"), response("resp_pending", "failed", "execution_timeout")}}},
 		{name: "unconfirmed cancellation", pending: "resp_pending", before: []exchange{{poll("resp_pending"), response("resp_pending", "failed", "cancellation_unconfirmed")}}},
@@ -415,6 +418,9 @@ func TestCloudTaskRestoresLostContextInSameRoom(t *testing.T) {
 		},
 		{name: "lost response", before: []exchange{{original, nil}, {original, offline}, {original, missing}}},
 		{name: "lost response before restart", before: []exchange{{original, nil}}, after: []exchange{{original, missing}}},
+		{name: "unauthorized retry after lost response", before: []exchange{{original, nil}, {original, unauthorized}}},
+		{name: "unauthorized retry after restart", before: []exchange{{original, nil}}, after: []exchange{{original, unauthorized}}},
+		{name: "unauthorized first submission", before: []exchange{{original, unauthorized}}, errorCode: "execution_failed"},
 		{name: "legacy pending message", legacy: true, before: []exchange{{original, missing}}},
 		{name: "agent offline", restore: true, before: []exchange{{original, offline}, {original, missing}}},
 		{
@@ -602,8 +608,18 @@ func TestCloudTaskRestoresLostContextInSameRoom(t *testing.T) {
 					saved.Messages[7].Metadata["relay_response_id"] != "resp_next" {
 					t.Fatal("recovered turn or its follow-up did not finish in the original room")
 				}
-			} else if len(saved.Messages) != 6 || saved.Messages[5].Metadata["relay_error_code"] != "relay_task_result_unavailable" {
-				t.Fatal("did not report the unknown execution outcome")
+				return
+			}
+			wantCode := tc.errorCode
+			if wantCode == "" {
+				wantCode = "relay_task_result_unavailable"
+			}
+			if len(saved.Messages) != 6 {
+				t.Fatalf("expected one failure reply, got %d messages", len(saved.Messages))
+			}
+			reply := saved.Messages[5]
+			if got := reply.Metadata["relay_error_code"]; got != wantCode || reply.Content != cloudTaskFailureText(saved.Locale, wantCode) {
+				t.Fatalf("expected %s failure reply, got %v: %q", wantCode, got, reply.Content)
 			}
 		})
 	}

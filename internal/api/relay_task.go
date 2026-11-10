@@ -432,6 +432,12 @@ func (h *Handler) awaitCloudTask(ctx context.Context, room im.Room, message im.M
 			return result, nil
 		}
 		if err != nil && !cloudTaskRetryable(err) {
+			// A later rejection cannot establish the outcome of an earlier
+			// submission. The local size limit rejects the same body before
+			// any POST, so keep the specific size error.
+			if !knownUnsubmitted && !errors.Is(err, relay.ErrRequestTooLarge) {
+				return result, errCloudTaskResultUnavailable
+			}
 			return result, err
 		}
 		select {
