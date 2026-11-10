@@ -5,6 +5,7 @@ import (
 	"context"
 	"csgclaw/internal/agentengine/contract"
 	"csgclaw/internal/diagnostics"
+	"csgclaw/internal/modelcap"
 	"csgclaw/internal/modelprovider"
 	"csgclaw/internal/modelusage"
 	"csgclaw/internal/processgroup"
@@ -407,14 +408,19 @@ func (m *appServerManager) Prompt(ctx context.Context, handle SessionHandle, req
 		m.publishAppServerEvent(promptFailedEvent(runtimeID, sessionID, err))
 		return PromptResponse{}, err
 	}
+	selectedModel, err := live.resolveTurnModel(req.Model)
+	if err != nil {
+		return PromptResponse{}, err
+	}
 
 	live.diagnosticObserver.Bind(ctx)
 	defer live.diagnosticObserver.End(ctx)
 	diagnostics.From(ctx).Capture("runtime.configuration", map[string]any{"runtime": "codex", "runtime_id": runtimeID, "binary": live.spec.BinaryPath, "workspace": live.spec.WorkspaceDir, "stderr_path": live.spec.StderrPath, "profile": live.spec.Profile, "mcp_servers": live.spec.MCPServers, "mcp_revision": live.spec.MCPCatalogRevision, "execution_mode": live.spec.ExecutionMode, "extension_digests": live.session.ExtensionDigests, "runtime_version": live.serverInfo})
 	diagnostics.From(ctx).CaptureRuntimeFiles(filepath.Join(live.spec.HomeDir, "AGENTS.md"), filepath.Join(live.spec.CodexHomeDir, "AGENTS.md"), filepath.Join(live.spec.WorkspaceDir, "AGENTS.md"), filepath.Join(live.spec.WorkspaceDir, "AGENTS.override.md"), filepath.Join(live.spec.CodexHomeDir, "config.toml"))
-	diagnostics.From(ctx).RuntimeInfo("codex", live.spec.Profile.ModelID)
-	live.appClient.logInfoContext(ctx, "model request configuration", "model", live.spec.Profile.ModelID, "runtime_id", runtimeID, "thread_id", sessionID)
-	waiter, err := live.registerAppServerTurnWaiter(sessionID)
+	diagnostics.From(ctx).Capture("runtime.turn_model", selectedModel)
+	diagnostics.From(ctx).RuntimeInfo("codex", selectedModel.ModelID)
+	live.appClient.logInfoContext(ctx, "model request configuration", "model", selectedModel.ModelID, "runtime_id", runtimeID, "thread_id", sessionID)
+	waiter, err := live.registerAppServerTurnWaiterWithModel(sessionID, selectedModel, req.Model != nil)
 	if err != nil {
 		m.publishAppServerEvent(promptFailedEvent(runtimeID, sessionID, err))
 		return PromptResponse{}, err
@@ -431,8 +437,8 @@ func (m *appServerManager) Prompt(ctx context.Context, handle SessionHandle, req
 		live.clearAppServerTurnContext(sessionID, waiter)
 	}()
 
-	m.publishContextUsage(runtimeID, live, sessionID, nil, "snapshot")
 	params := appServerTurnStartParamsWithInput(live.spec, sessionID, promptInput, req.ClientUserMessageID)
+	applyTurnModelParams(params, selectedModel)
 	turnStartAt := time.Now()
 	live.appClient.logDebugContext(ctx, "codex app-server turn start request",
 		"runtime_id", runtimeID,
@@ -457,6 +463,7 @@ func (m *appServerManager) Prompt(ctx context.Context, handle SessionHandle, req
 		return PromptResponse{}, err
 	}
 	waiter.setTurnID(appServerTurnIDFromResult(raw))
+	m.publishContextUsage(runtimeID, live, sessionID, nil, "snapshot")
 	live.telemetry.bind(waiter.currentTurnID(), diagnostics.From(ctx))
 	defer live.telemetry.finish(diagnostics.From(ctx))
 	acceptedAt := time.Now()
@@ -862,7 +869,7 @@ func appServerThreadStartParams(spec SessionSpec, publishFiles bool) map[string]
 	if spec.Profile.ModelID != "" {
 		params["model"] = spec.Profile.ModelID
 	}
-	if config := appServerThreadConfig(spec.Profile, spec.ExecutionMode); len(config) > 0 {
+	if config := appServerThreadConfig(spec); len(config) > 0 {
 		params["config"] = config
 	}
 	if spec.ExecutionMode == ExecutionModeReadOnly {
@@ -925,7 +932,7 @@ func appServerThreadResumeParams(spec SessionSpec, threadID string) map[string]a
 	if spec.Profile.ModelID != "" {
 		params["model"] = spec.Profile.ModelID
 	}
-	if config := appServerThreadConfig(spec.Profile, spec.ExecutionMode); len(config) > 0 {
+	if config := appServerThreadConfig(spec); len(config) > 0 {
 		params["config"] = config
 	}
 	if spec.ExecutionMode == ExecutionModeReadOnly {
@@ -948,9 +955,7 @@ func appServerTurnStartParamsWithInput(spec SessionSpec, threadID string, input 
 	if clientUserMessageID = strings.TrimSpace(clientUserMessageID); clientUserMessageID != "" {
 		params["clientUserMessageId"] = clientUserMessageID
 	}
-	if effort := config.NormalizeReasoningEffort(spec.Profile.ReasoningEffort); !config.UsesModelReasoningDefault(effort) {
-		params["effort"] = effort
-	}
+	applyTurnModelParams(params, turnModelFromProfile(spec.Profile))
 	if spec.ExecutionMode == ExecutionModeReadOnly {
 		params["approvalPolicy"] = "never"
 		params["permissions"] = readOnlyPermissionsProfile
@@ -1521,7 +1526,11 @@ func (m *appServerManager) persistedThreadID(spec SessionSpec) string {
 }
 
 type appServerTurnWaiter struct {
+	model         contract.TurnModel
+	modelOverride bool
 	// Guarded by liveSession.mu, alongside the thread's cumulative counters.
+	previousContextUsage     *modelcap.ContextUsage
+	compacting               bool
 	itemTurns                map[string]string // Native item IDs received with an explicit turn ID.
 	missingItems             bool              // An item without a known owner was withheld.
 	tokenUsage               modelusage.Usage
@@ -1532,6 +1541,7 @@ type appServerTurnWaiter struct {
 	diagnosticNoteBytes      int
 	visibleActivity          bool
 	mu                       sync.RWMutex
+	accepted                 bool
 	threadID                 string
 	turnID                   string
 	ch                       chan appServerTurnResult
@@ -1554,6 +1564,10 @@ type appServerTurnResult struct {
 }
 
 func (s *liveSession) registerAppServerTurnWaiter(threadID string) (*appServerTurnWaiter, error) {
+	return s.registerAppServerTurnWaiterWithModel(threadID, turnModelFromProfile(s.spec.Profile), false)
+}
+
+func (s *liveSession) registerAppServerTurnWaiterWithModel(threadID string, selected contract.TurnModel, overridden bool) (*appServerTurnWaiter, error) {
 	threadID = strings.TrimSpace(threadID)
 	if threadID == "" {
 		return nil, fmt.Errorf("thread id is required")
@@ -1568,11 +1582,16 @@ func (s *liveSession) registerAppServerTurnWaiter(threadID string) (*appServerTu
 	}
 	delete(s.legacyTools, threadID)
 	waiter := &appServerTurnWaiter{
-		threadID:     threadID,
-		ch:           make(chan appServerTurnResult, 8),
-		lastActivity: "turn/start",
+		model:         selected,
+		modelOverride: overridden,
+		threadID:      threadID,
+		ch:            make(chan appServerTurnResult, 8),
+		lastActivity:  "turn/start",
 	}
-	waiter.tokenUsage.ModelID = s.spec.Profile.ModelID
+	waiter.tokenUsage.ModelID = selected.ModelID
+	if usage, ok := s.contextUsage[threadID]; ok {
+		waiter.previousContextUsage = modelcap.CloneUsage(&usage)
+	}
 	s.turnWaiters[threadID] = waiter
 	return waiter, nil
 }
@@ -1582,6 +1601,23 @@ func (s *liveSession) removeAppServerTurnWaiter(threadID string, waiter *appServ
 	defer s.mu.Unlock()
 	threadID = strings.TrimSpace(threadID)
 	if s.turnWaiters[threadID] == waiter {
+		waiter.mu.RLock()
+		accepted := waiter.accepted
+		waiter.mu.RUnlock()
+		if accepted {
+			if s.threadModels == nil {
+				s.threadModels = make(map[string]contract.TurnModel)
+			}
+			s.threadModels[threadID] = waiter.model
+		} else if waiter.previousContextUsage != nil {
+			// Revert a pending model selection while retaining same-model usage
+			// updates, including a compaction completed during context recovery.
+			if usage, ok := s.contextUsage[threadID]; !ok || usage.ModelID != waiter.previousContextUsage.ModelID {
+				s.contextUsage[threadID] = *waiter.previousContextUsage
+			}
+		} else {
+			delete(s.contextUsage, threadID)
+		}
 		if terminal, ok := waiter.terminalResult(); ok && terminal.turnID != "" && terminal.turnID == waiter.currentTurnID() && !s.turnThreads[terminal.turnID].recovered {
 			// An identified successor has finished. Later legacy items can be
 			// delivered again, while the recovered turn and its IDs stay excluded.
@@ -1930,11 +1966,12 @@ func (w *appServerTurnWaiter) recordDiagnosticCompletion(turnID string, at time.
 
 func (w *appServerTurnWaiter) setTurnID(turnID string) {
 	turnID = strings.TrimSpace(turnID)
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.accepted = true
 	if turnID == "" {
 		return
 	}
-	w.mu.Lock()
-	defer w.mu.Unlock()
 	w.turnID = turnID
 	w.flushDiagnosticNotesLocked(turnID)
 	w.diagnostic.RuntimeRef(w.threadID, turnID, "")
@@ -1964,6 +2001,9 @@ func (w *appServerTurnWaiter) applyLocked(result *appServerTurnResult) bool {
 	}
 	// Only a start notification or the turn/start response establishes identity.
 	// A previous turn can finish while the next start response is still pending.
+	if result.started {
+		w.accepted = true
+	}
 	if result.started && result.turnID != "" {
 		w.turnID = result.turnID
 		w.flushDiagnosticNotesLocked(result.turnID)
@@ -2502,15 +2542,17 @@ func appServerGenerateVideoToolSpec() map[string]any {
 }
 
 // Explicit per-thread values override settings retained by cold-resumed threads.
-func appServerThreadConfig(profile agentruntime.Profile, executionMode string) map[string]any {
-	values := appServerReasoningConfig(profile.ReasoningEffort)
+func appServerThreadConfig(spec SessionSpec) map[string]any {
+	values := appServerReasoningConfig(spec.Profile.ReasoningEffort)
 	if values == nil {
 		values = make(map[string]any)
 	}
-	values["model_context_window"] = profile.ModelMetadata.Normalized().ContextWindow
-	values["model_auto_compact_token_limit"] = profile.ModelMetadata.CompactThreshold()
+	if spec.UseProfileModelContext {
+		values["model_context_window"] = spec.Profile.ModelMetadata.Normalized().ContextWindow
+		values["model_auto_compact_token_limit"] = spec.Profile.ModelMetadata.CompactThreshold()
+	}
 	values["web_search"] = "cached"
-	if executionMode == ExecutionModeReadOnly {
+	if spec.ExecutionMode == ExecutionModeReadOnly {
 		values["web_search"] = "disabled"
 	}
 	return values

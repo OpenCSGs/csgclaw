@@ -2,6 +2,7 @@ package contract
 
 import (
 	"context"
+	"csgclaw/internal/modelcap"
 	"csgclaw/internal/taskconfig"
 )
 
@@ -120,8 +121,16 @@ type RoomConfiguration struct {
 	Configuration taskconfig.Config
 }
 
+// TurnModel is a resolved selection for one turn; credentials remain with the provider.
+type TurnModel struct {
+	ModelID         string
+	ReasoningEffort string
+	Metadata        modelcap.Resolved
+}
+
 // TurnRequest contains conversation identity and caller-normalized input.
 type TurnRequest struct {
+	Model *TurnModel `json:"-"`
 	// RespondingTo identifies the detached answer reserved for this turn.
 	RespondingTo string `json:"-"`
 	// PreservePendingInteractions prevents this turn from superseding a pending form.

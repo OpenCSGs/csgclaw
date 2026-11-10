@@ -86,6 +86,8 @@ type SessionSpec struct {
 	CodexHomeDir                   string
 	StderrPath                     string
 	Profile                        agentruntime.Profile
+	ModelCatalog                   []codexmodel.Profile
+	UseProfileModelContext         bool
 	ExecutionMode                  string
 	MemoryEnabled                  bool
 	MCPServers                     map[string]any
@@ -160,6 +162,7 @@ type BinaryProvider interface {
 }
 
 type Dependencies struct {
+	ModelCatalog          func(agentID string) []codexmodel.Profile
 	ResolveRoomProfile    func(string, string, taskconfig.Config) (agentruntime.Profile, error)
 	BinaryProvider        BinaryProvider
 	ResolveAgent          func(h agentruntime.Handle) (AgentRef, error)
@@ -815,6 +818,7 @@ func (r *Runtime) ensureSession(ctx context.Context, spec SessionSpec, copyHostS
 		return nil, err
 	}
 	spec.ExecutionMode = runtimeOptions.ExecutionMode
+	spec.UseProfileModelContext = agentRef.RuntimeOptions[conversationProfileOption] == true
 	if agentRef.RuntimeOptions[conversationReadOnlyOption] == true {
 		spec.ExecutionMode = ExecutionModeReadOnly
 	}
@@ -838,7 +842,8 @@ func (r *Runtime) ensureSession(ctx context.Context, spec SessionSpec, copyHostS
 	if err := r.seedCodexHomeAuth(spec.CodexHomeDir, spec.Profile); err != nil {
 		return nil, err
 	}
-	if err := r.seedCodexHomeConfig(spec.CodexHomeDir, spec.WorkspaceDir, spec.Profile, agentRef.RuntimeOptions, spec.MCPServers); err != nil {
+	spec.ModelCatalog = r.sessionModelCatalog(spec.AgentID, spec.Profile)
+	if err := r.seedCodexHomeConfig(spec.CodexHomeDir, spec.WorkspaceDir, spec.Profile, agentRef.RuntimeOptions, spec.MCPServers, spec.ModelCatalog...); err != nil {
 		return nil, err
 	}
 	if !spec.PreserveSkills && (copyHostSkills || (spec.ExecutionMode == ExecutionModeReadOnly && r.deps.ResolveRoomProfile == nil)) {
@@ -953,6 +958,7 @@ func (r *Runtime) hydratePersistedSession(ctx context.Context, manager *appServe
 		return nil, err
 	}
 	spec.ExecutionMode = runtimeOptions.ExecutionMode
+	spec.UseProfileModelContext = agentRef.RuntimeOptions[conversationProfileOption] == true
 	if agentRef.RuntimeOptions[conversationReadOnlyOption] == true {
 		spec.ExecutionMode = ExecutionModeReadOnly
 	}
@@ -967,7 +973,8 @@ func (r *Runtime) hydratePersistedSession(ctx context.Context, manager *appServe
 	if err := r.seedCodexHomeAuth(spec.CodexHomeDir, spec.Profile); err != nil {
 		return nil, err
 	}
-	if err := r.seedCodexHomeConfig(spec.CodexHomeDir, spec.WorkspaceDir, spec.Profile, agentRef.RuntimeOptions, spec.MCPServers); err != nil {
+	spec.ModelCatalog = r.sessionModelCatalog(spec.AgentID, spec.Profile)
+	if err := r.seedCodexHomeConfig(spec.CodexHomeDir, spec.WorkspaceDir, spec.Profile, agentRef.RuntimeOptions, spec.MCPServers, spec.ModelCatalog...); err != nil {
 		return nil, err
 	}
 	if !spec.PreserveSkills && spec.ExecutionMode == ExecutionModeReadOnly && r.deps.ResolveRoomProfile == nil {
@@ -1058,7 +1065,7 @@ func (r *Runtime) seedCodexHomeAuth(runtimeCodexHome string, profile agentruntim
 	return nil
 }
 
-func (r *Runtime) seedCodexHomeConfig(runtimeCodexHome, workspaceDir string, profile agentruntime.Profile, runtimeOptions, mcpServers map[string]any) error {
+func (r *Runtime) seedCodexHomeConfig(runtimeCodexHome, workspaceDir string, profile agentruntime.Profile, runtimeOptions, mcpServers map[string]any, catalog ...codexmodel.Profile) error {
 	r.configMu.Lock()
 	defer r.configMu.Unlock()
 	runtimeCodexHome = strings.TrimSpace(runtimeCodexHome)
@@ -1092,7 +1099,7 @@ func (r *Runtime) seedCodexHomeConfig(runtimeCodexHome, workspaceDir string, pro
 	}
 
 	if profile.BaseURL != "" && profile.ModelID != "" {
-		if err := r.writeModelCatalog(runtimeCodexHome, profile); err != nil {
+		if err := r.writeModelCatalog(runtimeCodexHome, profile, catalog...); err != nil {
 			return err
 		}
 	}
@@ -1351,14 +1358,13 @@ func managerTemplateSkillNames() ([]string, error) {
 	return names, nil
 }
 
-func (r *Runtime) writeModelCatalog(runtimeCodexHome string, profile agentruntime.Profile) error {
+func (r *Runtime) writeModelCatalog(runtimeCodexHome string, profile agentruntime.Profile, catalog ...codexmodel.Profile) error {
 	catalogPath := filepath.Join(runtimeCodexHome, modelCatalogFileName)
-	body, err := json.MarshalIndent(codexmodel.Catalog(codexmodel.Profile{
-		Metadata:        profile.ModelMetadata,
-		Provider:        profile.Provider,
-		ModelID:         profile.ModelID,
-		ReasoningEffort: profile.ReasoningEffort,
-	}), "", "  ")
+	models := make([]map[string]any, 0, len(catalog)+1)
+	for _, model := range mergedModelCatalog(profile, catalog) {
+		models = append(models, codexmodel.Metadata(model))
+	}
+	body, err := json.MarshalIndent(map[string]any{"models": models}, "", "  ")
 	if err != nil {
 		return fmt.Errorf("encode runtime codex model catalog: %w", err)
 	}

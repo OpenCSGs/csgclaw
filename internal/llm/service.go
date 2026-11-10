@@ -270,6 +270,18 @@ func (s *Service) resolveProfile(ctx context.Context, botID string) (agent.Agent
 	if profile, ok := ctx.Value(taskProfileKey{}).(agent.AgentProfile); ok {
 		return profile, nil
 	}
+	if selection, ok := ctx.Value(sessionModelKey{}).(sessionModel); ok {
+		models, ok := s.agents.(sessionProfileReader)
+		if !ok {
+			return agent.AgentProfile{}, &HTTPError{Status: http.StatusServiceUnavailable, Message: "session model configuration is unavailable"}
+		}
+		profile, err := models.ResolvedSessionProfile(botID, selection.model, "")
+		if err != nil {
+			return agent.AgentProfile{}, &HTTPError{Status: http.StatusConflict, Message: err.Error()}
+		}
+		profile.ReasoningEffort = selection.effort
+		return profile, nil
+	}
 	if s.agents == nil {
 		return agent.AgentProfile{}, &HTTPError{Status: http.StatusServiceUnavailable, Message: "agent service is not configured"}
 	}
@@ -294,6 +306,7 @@ func (s *Service) forwardRemoteChatWithAuthRefresh(ctx context.Context, profile 
 		return nil, &HTTPError{Status: http.StatusBadRequest, Message: fmt.Sprintf("decode request: %v", err)}
 	}
 	mergeProfilePayload(payload, profile)
+	applySessionReasoningEffort(ctx, payload, false)
 	if profile.APIProtocol != "" && profile.APIProtocol != modelpreset.ChatCompletions {
 		return s.forwardProtocol(ctx, profile, payload, "openai")
 	}
@@ -354,6 +367,7 @@ func (s *Service) forwardRemoteResponsesWithAuthRefresh(ctx context.Context, pro
 		return nil, &HTTPError{Status: http.StatusBadRequest, Message: fmt.Sprintf("decode request: %v", err)}
 	}
 	mergeResponsesPayload(payload, profile)
+	applySessionReasoningEffort(ctx, payload, true)
 	if profile.APIProtocol != "" && profile.APIProtocol != modelpreset.Responses {
 		return s.forwardProtocol(ctx, profile, payload, "openai-response")
 	}
@@ -639,6 +653,7 @@ func (s *Service) forwardResponsesViaChat(ctx context.Context, profile agent.Age
 		return nil, &HTTPError{Status: http.StatusBadRequest, Message: err.Error()}
 	}
 	mergeProfilePayload(chatPayload, profile)
+	applySessionReasoningEffort(ctx, chatPayload, false)
 	encoded, err := json.Marshal(chatPayload)
 	if err != nil {
 		return nil, &HTTPError{Status: http.StatusBadRequest, Message: fmt.Sprintf("encode chat fallback request: %v", err)}

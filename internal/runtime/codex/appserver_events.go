@@ -167,6 +167,7 @@ func (m *appServerManager) handleRawAppServerNotification(runtimeID string, live
 	default:
 		if strings.HasPrefix(method, "item/") {
 			if appServerNestedString(params, "item", "type") == "contextCompaction" {
+				live.setTurnCompacting(threadID, turnID, method)
 				m.publishContextUsage(runtimeID, live, threadID, params, method)
 			}
 			m.handleRawItemNotification(runtimeID, live, threadID, method, params)

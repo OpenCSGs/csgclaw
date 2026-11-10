@@ -168,6 +168,11 @@ func (h *Handler) handleBotLLMChatCompletions(w http.ResponseWriter, r *http.Req
 	if !ok || !validateLLMRequestJSON(w, r, body) {
 		return
 	}
+	r, callErr := h.withLLMTurnModel(r, botID, body)
+	if callErr != nil {
+		writeLLMError(w, callErr)
+		return
+	}
 	resp, callErr := h.llm.ChatCompletionsStream(r.Context(), botID, body)
 	if callErr != nil {
 		diagnostics.Capture(r.Context(), "llm.failed_request", map[string]any{"request_id": diagnostics.IngressID(r.Context()), "body": json.RawMessage(body), "error": callErr.Error()})
@@ -187,6 +192,11 @@ func (h *Handler) handleBotLLMResponses(w http.ResponseWriter, r *http.Request, 
 	}
 	body, ok := readLLMRequestBody(w, r)
 	if !ok || !validateLLMRequestJSON(w, r, body) {
+		return
+	}
+	r, callErr := h.withLLMTurnModel(r, botID, body)
+	if callErr != nil {
+		writeLLMError(w, callErr)
 		return
 	}
 	resp, callErr := h.llm.Responses(r.Context(), botID, body)
@@ -284,9 +294,53 @@ func writeLLMError(w http.ResponseWriter, err error) {
 // Bind diagnostics and usage completeness only with that exact identity.
 // Requests without it are never assigned by Agent identity alone.
 func (h *Handler) withLLMDiagnostic(r *http.Request, agentID string) *http.Request {
+	threadID, turnID := nativeLLMRequestIDs(r)
+	if threadID == "" || turnID == "" {
+		return r
+	}
+	ctx := llm.WithNativeRequestMetadata(r.Context(), threadID, turnID)
+	if h.im != nil {
+		ctx = diagnostics.WithNativeLookup(ctx, h.im.Diagnostics(), agentID, threadID, turnID)
+	}
+	if runtime := h.connectorCodexRuntime(); runtime != nil {
+		ctx = modelusage.WithRequestObserver(ctx, func(usage *modelusage.Usage) {
+			runtime.ObserveModelResponseUsage(agentID, threadID, turnID, usage)
+		})
+	}
+	diagnostics.BindRequestLogScope(r.Context(), ctx)
+	return r.WithContext(ctx)
+}
+
+func (h *Handler) withLLMTurnModel(r *http.Request, agentID string, body []byte) (*http.Request, error) {
+	if pathValue(r, "task_id") != "" {
+		return r, nil
+	}
+	threadID, turnID := nativeLLMRequestIDs(r)
+	if threadID == "" || turnID == "" {
+		return r, nil
+	}
+	runtime := h.connectorCodexRuntime()
+	if runtime == nil {
+		return r, nil
+	}
+	var input struct {
+		Model string `json:"model"`
+	}
+	_ = json.Unmarshal(body, &input)
+	model, ok, err := runtime.TurnModel(agentID, threadID, turnID, input.Model)
+	if err != nil {
+		return nil, &llm.HTTPError{Status: http.StatusConflict, Message: err.Error()}
+	}
+	if ok {
+		r = r.WithContext(llm.WithSessionModel(r.Context(), model.ModelID, model.ReasoningEffort))
+	}
+	return r, nil
+}
+
+func nativeLLMRequestIDs(r *http.Request) (string, string) {
 	raw := r.Header.Get("X-Codex-Turn-Metadata")
 	if len(raw) > 8192 || raw == "" {
-		return r
+		return "", ""
 	}
 	var meta struct {
 		Thread  string `json:"thread_id"`
@@ -294,25 +348,15 @@ func (h *Handler) withLLMDiagnostic(r *http.Request, agentID string) *http.Reque
 		Turn    string `json:"turn_id"`
 	}
 	if json.Unmarshal([]byte(raw), &meta) != nil {
-		return r
+		return "", ""
 	}
 	if meta.Thread == "" {
 		meta.Thread = meta.Session
 	}
 	if meta.Thread == "" || meta.Turn == "" || len(meta.Thread) > 256 || len(meta.Turn) > 256 {
-		return r
+		return "", ""
 	}
-	ctx := llm.WithNativeRequestMetadata(r.Context(), meta.Thread, meta.Turn)
-	if h.im != nil {
-		ctx = diagnostics.WithNativeLookup(ctx, h.im.Diagnostics(), agentID, meta.Thread, meta.Turn)
-	}
-	if runtime := h.connectorCodexRuntime(); runtime != nil {
-		ctx = modelusage.WithRequestObserver(ctx, func(usage *modelusage.Usage) {
-			runtime.ObserveModelResponseUsage(agentID, meta.Thread, meta.Turn, usage)
-		})
-	}
-	diagnostics.BindRequestLogScope(r.Context(), ctx)
-	return r.WithContext(ctx)
+	return meta.Thread, meta.Turn
 }
 
 type llmIngressBody struct {

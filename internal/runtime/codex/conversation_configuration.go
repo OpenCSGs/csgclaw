@@ -14,7 +14,10 @@ import (
 	skill "csgclaw/internal/skill/state"
 )
 
-const conversationReadOnlyOption = "_conversation_read_only"
+const (
+	conversationReadOnlyOption = "_conversation_read_only"
+	conversationProfileOption  = "_conversation_profile"
+)
 
 func (r *Runtime) persistedRoomConversations(meta sessionMetadata, profile agentruntime.Profile) (map[string]string, map[string]bool) {
 	if r.deps.ResolveRoomProfile != nil {
@@ -53,6 +56,7 @@ func (r *Runtime) configuredConversation(runtimeID string) contract.RuntimeConve
 				options[localWorkspaceDirOptionKey] = room.Configuration.WorkspaceDir
 			}
 			options[conversationReadOnlyOption] = room.Configuration.ExecutionMode == ExecutionModeReadOnly
+			options[conversationProfileOption] = true
 		}
 		desired := conversationconfig.Settings{Profile: ref.Profile.Normalized(), Options: options}
 		_, applied := state.Current()
