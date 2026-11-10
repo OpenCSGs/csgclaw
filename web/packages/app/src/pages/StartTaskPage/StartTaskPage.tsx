@@ -203,6 +203,7 @@ function StartTaskForm({
           throw new Error(t("taskEntryMembersMissing"));
         }
         room = await entry.create({
+          auto_title: Boolean(selectedAgent && !selectedCloud),
           title: taskConversationTitle(prompt, `${targetName} · ${new Date().toLocaleString(readySidebar.locale)}`),
           member_ids: members,
           cloud_agent: selectedCloud

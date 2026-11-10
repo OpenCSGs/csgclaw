@@ -279,7 +279,7 @@ describe("StartTaskPage task preparation", () => {
     await screen.findByRole("alert");
     expect(create).toHaveBeenCalledTimes(1);
     expect(create).toHaveBeenCalledWith(
-      expect.objectContaining({ title: "检查代码", is_direct: true, member_ids: ["manager"] }),
+      expect.objectContaining({ title: "检查代码", auto_title: true, is_direct: true, member_ids: ["manager"] }),
     );
     expect(open).not.toHaveBeenCalled();
     expect(screen.getByRole("textbox", { name: "taskEntryPrompt" })).toHaveValue("  检查代码  ");
@@ -320,6 +320,7 @@ describe("StartTaskPage task preparation", () => {
     await waitFor(() => expect(open).toHaveBeenCalled());
     expect(create).toHaveBeenCalledWith(
       expect.objectContaining({
+        auto_title: false,
         is_direct: false,
         type: "on_demand",
         manager_id: "manager",
