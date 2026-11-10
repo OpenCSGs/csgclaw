@@ -26,6 +26,34 @@ func TestNativeCodexOversizedModelRequestStopsWithoutRetry(t *testing.T) {
 	if binary == "" {
 		t.Skip("set CSGCLAW_TEST_CODEX_BINARY")
 	}
+	for _, tc := range []struct {
+		name   string
+		reject http.HandlerFunc
+	}{
+		{"http-413", func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusRequestEntityTooLarge)
+			fmt.Fprint(w, `{"code":"BadRequest.TooLarge","message":"Exceeded limit on max bytes to request body : 67108864"}`)
+		}},
+		{"truncated-413", func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.Header().Set("Content-Length", "512")
+			w.WriteHeader(http.StatusRequestEntityTooLarge)
+			fmt.Fprint(w, `{"code":"BadRequest.TooLarge"`)
+		}},
+		{"initial-sse-error", func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "text/event-stream")
+			fmt.Fprint(w, ": keepalive\n\nevent: error\ndata: {\"type\":\"error\",\"code\":\"request_too_large\",\"message\":\"Provider details\"}\n\n")
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			testNativeCodexOversizedModelRequest(t, binary, tc.reject)
+		})
+	}
+}
+
+func testNativeCodexOversizedModelRequest(t *testing.T, binary string, reject http.HandlerFunc) {
+	t.Helper()
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("CODEX_HOME", filepath.Join(home, "host"))
@@ -36,9 +64,7 @@ func TestNativeCodexOversizedModelRequestStopsWithoutRetry(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		n := calls.Add(1)
 		if n > 1 && oversized.Load() {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusRequestEntityTooLarge)
-			fmt.Fprint(w, `{"code":"BadRequest.TooLarge","message":"Exceeded limit on max bytes to request body : 67108864"}`)
+			reject(w, r)
 			return
 		}
 		if n == 3 {

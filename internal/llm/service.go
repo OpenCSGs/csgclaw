@@ -435,100 +435,149 @@ func (s *Service) handleRemoteResponsesResult(ctx context.Context, profile agent
 		}
 		return compactUpstreamErrorStreamFromBody(resp, body, OpenCSGBillingURL(profile))
 	}
+	body, tooLarge := sanitizeResponsesEventStream(resp.Body, resp.Header.Get("Content-Type"))
+	if tooLarge {
+		return upstreamErrorResponse(resp.Header, http.StatusRequestEntityTooLarge, nil, ""), nil
+	}
 	return &UpstreamResponse{
 		StatusCode: resp.StatusCode,
 		Header:     resp.Header.Clone(),
-		Body:       sanitizeResponsesEventStream(resp.Body, resp.Header.Get("Content-Type")),
+		Body:       body,
 	}, nil
 }
 
-func sanitizeResponsesEventStream(body io.ReadCloser, contentType string) io.ReadCloser {
+func sanitizeResponsesEventStream(body io.ReadCloser, contentType string) (stream io.ReadCloser, tooLarge bool) {
 	mediaType := strings.ToLower(strings.TrimSpace(strings.Split(contentType, ";")[0]))
 	if mediaType != "text/event-stream" {
-		return body
+		return body, false
 	}
+	// Check the first data event before the downstream HTTP status is committed.
+	// Keep any preceding comments or SSE metadata in order for normal streams.
+	buffered := bufio.NewReader(body)
+	var prefix [][]string
+	var firstReadErr error
+	for remaining := 64 << 10; remaining > 0; {
+		block, size, err := readResponsesSSEBlock(buffered)
+		firstReadErr = err
+		code, hasData := responsesSSEBlockError(block)
+		if code == modelprovider.RequestTooLarge {
+			_ = body.Close()
+			return nil, true
+		}
+		if len(block) > 0 {
+			prefix = append(prefix, block)
+		}
+		if hasData || err != nil {
+			break
+		}
+		remaining -= size
+	}
+
 	reader, writer := io.Pipe()
 	go func() {
 		defer body.Close()
-		err := rewriteResponsesEventStream(writer, body)
+		for _, block := range prefix {
+			if err := writeResponsesSSEBlock(writer, block); err != nil {
+				_ = writer.CloseWithError(err)
+				return
+			}
+		}
+		err := firstReadErr
+		if err == nil {
+			err = rewriteResponsesEventStream(writer, buffered)
+		}
+		if errors.Is(err, io.EOF) {
+			err = nil
+		}
 		_ = writer.CloseWithError(err)
 	}()
-	return reader
+	return reader, false
 }
 
 const maxResponsesSSEEventBytes = 8 * 1024 * 1024
 
 func rewriteResponsesEventStream(w io.Writer, r io.Reader) error {
 	reader := bufio.NewReader(r)
-	block := make([]string, 0, 4)
-	blockBytes := 0
-	flush := func() error {
-		if len(block) == 0 {
-			return nil
-		}
-		eventType := ""
-		dataLines := make([]string, 0, len(block))
-		for _, line := range block {
-			trimmed := strings.TrimSpace(line)
-			if strings.HasPrefix(trimmed, "event:") {
-				eventType = strings.TrimSpace(strings.TrimPrefix(trimmed, "event:"))
-			}
-			if strings.HasPrefix(trimmed, "data:") {
-				dataLines = append(dataLines, strings.TrimSpace(strings.TrimPrefix(trimmed, "data:")))
-			}
-		}
-		data := strings.Join(dataLines, "\n")
-		if data != "" {
-			var payload map[string]any
-			if json.Unmarshal([]byte(data), &payload) == nil {
-				if payloadType := strings.TrimSpace(stringValue(payload["type"])); payloadType != "" {
-					eventType = payloadType
-				}
-			}
-		}
-		if eventType == "response.failed" || eventType == "error" {
-			code := modelprovider.UpstreamErrorCode([]byte(data))
-			if code == "" {
-				code = "upstream_unavailable"
-			}
-			message := modelprovider.FriendlyUpstreamErrorMessage(modelprovider.UpstreamStatusForErrorCode(code), code)
-			return writeSSE(w, "error", map[string]any{"type": "error", "code": code, "message": message, "param": nil})
-		}
-		for _, line := range block {
-			if _, err := fmt.Fprintln(w, line); err != nil {
+	for {
+		block, _, readErr := readResponsesSSEBlock(reader)
+		if len(block) > 0 {
+			if err := writeResponsesSSEBlock(w, block); err != nil {
 				return err
 			}
 		}
-		_, err := fmt.Fprintln(w)
-		return err
-	}
-	for {
-		rawLine, readErr := readResponsesSSELine(reader, maxResponsesSSEEventBytes)
-		line := rawLine
-		line = strings.TrimSuffix(strings.TrimSuffix(line, "\n"), "\r")
-		if rawLine != "" {
-			if strings.TrimSpace(line) == "" {
-				if err := flush(); err != nil {
-					return err
-				}
-				block = block[:0]
-				blockBytes = 0
-			} else {
-				blockBytes += len(rawLine)
-				if blockBytes > maxResponsesSSEEventBytes {
-					return fmt.Errorf("responses SSE event exceeds %d bytes", maxResponsesSSEEventBytes)
-				}
-				block = append(block, line)
-			}
+		if errors.Is(readErr, io.EOF) {
+			return nil
 		}
 		if readErr != nil {
-			if !errors.Is(readErr, io.EOF) {
-				return readErr
-			}
-			break
+			return readErr
 		}
 	}
-	return flush()
+}
+
+func readResponsesSSEBlock(reader *bufio.Reader) ([]string, int, error) {
+	var block []string
+	var size int
+	for {
+		rawLine, err := readResponsesSSELine(reader, maxResponsesSSEEventBytes)
+		line := strings.TrimSuffix(strings.TrimSuffix(rawLine, "\n"), "\r")
+		if err != nil && !errors.Is(err, io.EOF) {
+			return nil, 0, err
+		}
+		size += len(rawLine)
+		if strings.TrimSpace(line) == "" {
+			return block, size, err
+		}
+		if size > maxResponsesSSEEventBytes {
+			return nil, 0, fmt.Errorf("responses SSE event exceeds %d bytes", maxResponsesSSEEventBytes)
+		}
+		block = append(block, line)
+		if err != nil {
+			return block, size, err
+		}
+	}
+}
+
+func responsesSSEBlockError(block []string) (code string, hasData bool) {
+	eventType := ""
+	var dataLines []string
+	for _, line := range block {
+		trimmed := strings.TrimSpace(line)
+		if value, ok := strings.CutPrefix(trimmed, "event:"); ok {
+			eventType = strings.TrimSpace(value)
+		}
+		if value, ok := strings.CutPrefix(trimmed, "data:"); ok {
+			dataLines = append(dataLines, strings.TrimSpace(value))
+		}
+	}
+	data := []byte(strings.Join(dataLines, "\n"))
+	var payload struct {
+		Type string `json:"type"`
+	}
+	if json.Unmarshal(data, &payload) == nil && strings.TrimSpace(payload.Type) != "" {
+		eventType = strings.TrimSpace(payload.Type)
+	}
+	if eventType != "response.failed" && eventType != "error" {
+		return "", len(dataLines) > 0
+	}
+	code = modelprovider.UpstreamErrorCode(data)
+	if code == "" {
+		code = "upstream_unavailable"
+	}
+	return code, len(dataLines) > 0
+}
+
+func writeResponsesSSEBlock(w io.Writer, block []string) error {
+	if code, _ := responsesSSEBlockError(block); code != "" {
+		message := modelprovider.FriendlyUpstreamErrorMessage(modelprovider.UpstreamStatusForErrorCode(code), code)
+		return writeSSE(w, "error", map[string]any{"type": "error", "code": code, "message": message, "param": nil})
+	}
+	for _, line := range block {
+		if _, err := fmt.Fprintln(w, line); err != nil {
+			return err
+		}
+	}
+	_, err := fmt.Fprintln(w)
+	return err
 }
 
 func readResponsesSSELine(reader *bufio.Reader, maxBytes int) (string, error) {
@@ -630,32 +679,40 @@ func compactUpstreamErrorStream(resp *http.Response, billingURL string) (*Upstre
 
 func readAndCloseUpstreamBody(resp *http.Response) ([]byte, error) {
 	defer resp.Body.Close()
-	return io.ReadAll(io.LimitReader(resp.Body, 10*1024*1024))
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 10*1024*1024))
+	if err != nil && resp.StatusCode == http.StatusRequestEntityTooLarge {
+		// The status is definitive even if the provider's error body is truncated.
+		return nil, nil
+	}
+	return body, err
 }
 
 func compactUpstreamErrorStreamFromBody(resp *http.Response, body []byte, billingURL string) (*UpstreamResponse, error) {
-	rawBody := append([]byte(nil), body...)
-	body, contentType := compactUpstreamErrorResponse(resp.StatusCode, body, billingURL)
-	code := modelprovider.UpstreamErrorCodeForResponse(resp.StatusCode, rawBody)
+	code := modelprovider.UpstreamErrorCodeForResponse(resp.StatusCode, body)
 	attrs := []any{
 		"status", resp.StatusCode,
 		"code", code,
 		"upstream_request_id", upstreamRequestID(resp.Header),
-		"response_body", upstreamErrorBodyForLog(rawBody),
+		"response_body", upstreamErrorBodyForLog(body),
 	}
 	attrs = append(attrs, modelRequestLogAttrs(resp.Request)...)
 	slog.Error("model upstream request failed", attrs...)
-	header := resp.Header.Clone()
+	return upstreamErrorResponse(resp.Header, resp.StatusCode, body, billingURL), nil
+}
+
+func upstreamErrorResponse(header http.Header, status int, rawBody []byte, billingURL string) *UpstreamResponse {
+	body, contentType := compactUpstreamErrorResponse(status, rawBody, billingURL)
+	header = header.Clone()
 	header.Del("Content-Length")
 	header.Del("Content-Encoding")
 	header.Del("Transfer-Encoding")
 	header.Del("Trailer")
 	header.Set("Content-Type", contentType)
 	return &UpstreamResponse{
-		StatusCode: resp.StatusCode,
+		StatusCode: status,
 		Header:     header,
 		Body:       io.NopCloser(bytes.NewReader(body)),
-	}, nil
+	}
 }
 
 const maxUpstreamErrorLogBytes = 4096

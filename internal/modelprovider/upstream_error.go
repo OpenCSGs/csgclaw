@@ -63,6 +63,8 @@ func FallbackUpstreamErrorCode(status int) string {
 		return "forbidden"
 	case http.StatusNotFound:
 		return "not_found"
+	case http.StatusRequestEntityTooLarge:
+		return RequestTooLarge
 	case http.StatusTooManyRequests:
 		return "rate_limit_exceeded"
 	default:

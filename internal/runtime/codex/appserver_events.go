@@ -262,6 +262,11 @@ func (m *appServerManager) handleRawErrorNotification(runtimeID string, live *li
 	if errMsg == "" {
 		errMsg = appServerString(params, "message")
 	}
+	if !willRetry && isCodexRequestTooLarge(errMsg) {
+		// The terminal notification can precede turn/completed. Wait for the
+		// completed turn so its failure cannot spill into a following turn.
+		return
+	}
 	result := appServerTurnResult{turnID: appServerNotificationTurnID(params), activity: activity}
 	if !willRetry {
 		if errMsg == "" {

@@ -707,11 +707,15 @@ func resultFromContext(ctx context.Context, err error) contract.TurnResult {
 
 func failedCodexTurn(code contract.ErrorCode, message string) contract.TurnResult {
 	// Codex embeds the JSON response body in the message for invalid requests.
-	if code == contract.ErrorRuntimeFailed && modelprovider.UpstreamErrorCode([]byte(message)) == modelprovider.RequestTooLarge {
+	if code == contract.ErrorRuntimeFailed && isCodexRequestTooLarge(message) {
 		code = contract.ErrorCode(modelprovider.RequestTooLarge)
 		message = modelprovider.FriendlyUpstreamErrorMessage(0, modelprovider.RequestTooLarge)
 	}
 	return failedResult(code, message)
+}
+
+func isCodexRequestTooLarge(message string) bool {
+	return modelprovider.UpstreamErrorCode([]byte(message)) == modelprovider.RequestTooLarge
 }
 
 func cleanupOutputFiles(files []*contract.OutputFile) {

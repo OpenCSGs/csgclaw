@@ -1638,6 +1638,26 @@ func TestOpenCSGBillingURLUsesAuthenticatedLoginSite(t *testing.T) {
 	}
 }
 
+func TestResponsesStreamPreflightStopsOnlyInitialRequestSizeError(t *testing.T) {
+	const heartbeat = ": keepalive\n\n"
+	const created = "data: {\"type\":\"response.created\"}\n\n"
+	const failed = "event: response.failed\ndata: {\"type\":\"response.failed\",\ndata: \"response\":{\"error\":{\"code\":\"request_too_large\"}}}\n\n"
+	stream, tooLarge := sanitizeResponsesEventStream(io.NopCloser(strings.NewReader(heartbeat+failed)), "text/event-stream")
+	if stream != nil || !tooLarge {
+		t.Fatal("initial size error should end the stream before HTTP headers")
+	}
+
+	stream, tooLarge = sanitizeResponsesEventStream(io.NopCloser(strings.NewReader(heartbeat+created+failed)), "text/event-stream")
+	if stream == nil || tooLarge {
+		t.Fatal("size error after a data event should stay in the stream")
+	}
+	defer stream.Close()
+	body, err := io.ReadAll(stream)
+	if err != nil || !strings.HasPrefix(string(body), heartbeat+created) || !strings.Contains(string(body), `"code":"request_too_large"`) {
+		t.Fatalf("stream = %q, err = %v, want preserved prefix and sanitized error", body, err)
+	}
+}
+
 func TestRewriteResponsesEventStreamMapsFailedEventToSafeError(t *testing.T) {
 	input := "event: response.failed\ndata: {\"type\":\"response.failed\",\"response\":{\"status\":\"failed\",\"error\":{\"code\":\"model_unavailable\",\"message\":\"model secret-name has no route\"}}}\n\n"
 	var output strings.Builder
