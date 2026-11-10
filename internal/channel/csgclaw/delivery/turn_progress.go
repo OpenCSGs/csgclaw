@@ -21,34 +21,36 @@ type turnProgressStore interface {
 // progressState serializes timer flushes with terminal delivery. A completed
 // snapshot can never be overwritten by a delayed streaming update.
 type progressState struct {
-	diagnostic     *diagnostics.Record
-	lastFlush      time.Time
-	pendingPersist bool
-	mu             sync.Mutex
-	snapshot       activity.TurnProgress
-	answer         string
-	texts          []*progressText
-	textItems      map[string]*progressText
-	currentText    *progressText
-	lastAnswer     *progressText
-	lastTextID     string
-	lastTextKind   string
-	tools          map[string]int
-	timer          *time.Timer
-	done           bool
-	lastErr        error
-	store          turnProgressStore
-	turn           channel.TurnContext
+	diagnostic      *diagnostics.Record
+	lastFlush       time.Time
+	pendingPersist  bool
+	mu              sync.Mutex
+	snapshot        activity.TurnProgress
+	answer          string
+	texts           []*progressText
+	textItems       map[string]*progressText
+	currentText     *progressText
+	textOrder       uint64
+	recoveredBefore map[int]int
+	lastTextID      string
+	lastTextKind    string
+	tools           map[string]int
+	timer           *time.Timer
+	done            bool
+	lastErr         error
+	store           turnProgressStore
+	turn            channel.TurnContext
 }
 
 // Native text keeps its identity and phase while displayed in progress.
 // Progress indices remain stable until terminal delivery.
 type progressText struct {
-	itemID   string
-	phase    string
-	text     string
-	index    int
-	promoted bool
+	itemID    string
+	phase     string
+	text      string
+	index     int
+	promoted  bool
+	lastDelta uint64 // Appended-text order; snapshots preserve this value.
 }
 
 func newProgressState(store turnProgressStore, turn channel.TurnContext) *progressState {
@@ -222,7 +224,6 @@ func (p *progressState) observeText(event agentengine.TurnEvent) bool {
 		}
 		p.currentText = item
 		if event.Phase != "commentary" {
-			p.lastAnswer = item
 			immediate = true
 		}
 	}
@@ -234,6 +235,10 @@ func (p *progressState) observeText(event agentengine.TurnEvent) bool {
 		item.text = event.Text
 	} else {
 		item.text += event.Text
+		if event.Text != "" && item.phase != "commentary" {
+			p.textOrder++
+			item.lastDelta = p.textOrder
+		}
 	}
 	if item.phase == "commentary" {
 		p.moveTextToProgress(item)
@@ -309,17 +314,24 @@ func (p *progressState) finish(ctx context.Context, result agentengine.TurnResul
 	if result.Status == agentengine.TurnSucceeded {
 		// Tool updates use indices into Items until this turn finishes.
 		promoted := make(map[int]bool)
+		relocated := make(map[int]bool)
+		insertions := make(map[int][]activity.ProgressItem)
 		for _, item := range p.texts {
 			if item.promoted && item.index >= 0 {
 				promoted[item.index] = true
+			} else if before, ok := p.recoveredBefore[item.index]; ok {
+				relocated[item.index] = true
+				insertions[before] = append(insertions[before], p.snapshot.Items[item.index])
 			}
 		}
-		items := p.snapshot.Items[:0]
+		items := make([]activity.ProgressItem, 0, len(p.snapshot.Items))
 		for i, item := range p.snapshot.Items {
-			if !promoted[i] {
+			items = append(items, insertions[i]...)
+			if !promoted[i] && !relocated[i] {
 				items = append(items, item)
 			}
 		}
+		items = append(items, insertions[len(p.snapshot.Items)]...)
 		p.snapshot.Items = items
 		if structured || (p.answer == "" && len(p.snapshot.Items) == 0) {
 			p.answer = fallback
@@ -362,6 +374,12 @@ func (p *progressState) finalText(fallback string, native []agentengine.TurnEven
 	if native != nil {
 		p.reconcileText(native)
 	}
+	var latest *progressText
+	for _, item := range p.texts {
+		if item.phase != "commentary" && (latest == nil || item.lastDelta >= latest.lastDelta) {
+			latest = item
+		}
+	}
 	var text strings.Builder
 	var selected *progressText
 	answerItems := 0
@@ -370,7 +388,7 @@ func (p *progressState) finalText(fallback string, native []agentengine.TurnEven
 			continue
 		}
 		answerItems++
-		if item.phase == "final_answer" || item == p.lastAnswer {
+		if item.phase == "final_answer" || item == latest {
 			text.WriteString(item.text)
 			item.promoted = true
 			selected = item
@@ -390,21 +408,68 @@ func (p *progressState) finalText(fallback string, native []agentengine.TurnEven
 func (p *progressState) reconcileText(native []agentengine.TurnEvent) {
 	retained := make(map[*progressText]bool)
 	ordered := make([]*progressText, 0, len(native))
-	p.lastAnswer = nil
-	for _, event := range native {
+	anonymous := make(map[string][]*progressText)
+	for _, item := range p.texts {
+		if item.itemID == "" && item.phase == "commentary" && item.index >= 0 {
+			anonymous[item.text] = append(anonymous[item.text], item)
+		}
+	}
+	// Known text and tool positions bound each recovered commentary message.
+	// Matching within those bounds preserves independent repeated messages.
+	end := len(p.snapshot.Items)
+	boundaries := make([]int, len(native))
+	for i := len(native) - 1; i >= 0; i-- {
+		boundaries[i] = end
+		event := native[i]
+		if event.Tool != nil {
+			if index, ok := p.tools[event.Tool.ID]; ok {
+				end = index
+			}
+		} else if item := p.textItems[event.ItemID]; item != nil && item.index >= 0 {
+			end = item.index
+		}
+	}
+	start, existingItems := 0, len(p.snapshot.Items)
+	for i, event := range native {
+		if event.Tool != nil {
+			if index, ok := p.tools[event.Tool.ID]; ok && index >= start {
+				start = index + 1
+			}
+			continue
+		}
+		if event.Kind != agentengine.TurnEventTextDelta {
+			continue
+		}
 		item := p.textItems[event.ItemID]
+		if item == nil && event.ItemID != "" && event.Phase == "commentary" {
+			for _, candidate := range anonymous[event.Text] {
+				if !retained[candidate] && candidate.index >= start && candidate.index < boundaries[i] {
+					item = candidate
+					item.itemID = event.ItemID
+					break
+				}
+			}
+		}
 		if item == nil {
 			item = &progressText{itemID: event.ItemID, index: -1}
-			p.textItems[event.ItemID] = item
 		}
+		p.textItems[event.ItemID] = item
 		item.phase, item.text = event.Phase, event.Text
 		if item.phase == "commentary" {
+			newProgress := item.index < 0
 			p.moveTextToProgress(item)
-		} else {
-			p.lastAnswer = item
+			if newProgress && item.index >= 0 {
+				if p.recoveredBefore == nil {
+					p.recoveredBefore = make(map[int]int)
+				}
+				p.recoveredBefore[item.index] = boundaries[i]
+			}
 		}
 		if item.index >= 0 {
 			p.snapshot.Items[item.index].Text = item.text
+			if item.index >= start && item.index < existingItems {
+				start = item.index + 1
+			}
 		}
 		retained[item] = true
 		ordered = append(ordered, item)

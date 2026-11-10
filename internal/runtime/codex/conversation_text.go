@@ -137,6 +137,35 @@ type conversationOutput struct {
 	conversationText
 	tools          map[string]bool // Native tool ID to whether its result was delivered.
 	reconciledText bool            // The terminal history has been offered to buffering consumers.
+	history        quietTurnHistory
+}
+
+func (o *conversationOutput) messageSnapshots() []contract.TurnEvent {
+	snapshots := o.conversationText.messageSnapshots()
+	if snapshots == nil || o.history == nil {
+		return snapshots
+	}
+	byID := make(map[string]contract.TurnEvent, len(snapshots))
+	for _, event := range snapshots {
+		byID[event.ItemID] = event
+	}
+	ordered := make([]contract.TurnEvent, 0, len(o.history))
+	for _, item := range o.history {
+		if item.Kind == contract.TurnEventToolCallStart && item.Tool != nil {
+			ordered = append(ordered, contract.TurnEvent{Kind: item.Kind, Tool: &contract.ToolActivity{ID: item.Tool.ID}})
+		} else if item.Kind == contract.TurnEventTextDelta {
+			if event, ok := byID[item.ItemID]; ok {
+				ordered = append(ordered, event)
+				delete(byID, item.ItemID)
+			}
+		}
+	}
+	for _, event := range snapshots {
+		if _, ok := byID[event.ItemID]; ok {
+			ordered = append(ordered, event)
+		}
+	}
+	return ordered
 }
 
 func (o *conversationOutput) observeTool(kind contract.TurnEventKind, tool *contract.ToolActivity) {
@@ -271,6 +300,7 @@ func (o *conversationOutput) restore(ctx context.Context, sink contract.EventSin
 	if textOK {
 		native.fallback = form
 		o.conversationText = native
+		o.history = history
 	}
 	return nil
 }

@@ -333,5 +333,6 @@ type TurnResult struct {
 
 	// RuntimeText preserves authoritative native message identities for
 	// in-process delivery, including text recovered from native history.
+	// Recovered tool boundaries retain the original commentary positions.
 	RuntimeText []TurnEvent `json:"-"`
 }
