@@ -26,6 +26,36 @@ describe("inline image attachments", () => {
     expect(resolveImageAttachmentURL(source, [attachment])).toBe("api/v1/attachments/qr-image?token=image-token");
   });
 
+  it.each(["images/./qr.png", "images/tmp/../qr.png", "images//qr.png", "images/%2E/qr.png"])(
+    "renders the published image for the equivalent Markdown path %s",
+    (source) => {
+      const image = { ...attachment, name: "chart.png", source_path: "images/qr.png" };
+      const rendered = renderMarkdownWithCitations(`![QR](${source})`, undefined, [image]);
+      expect(rendered.html).toContain('src="api/v1/attachments/qr-image?token=image-token"');
+    },
+  );
+
+  it.each(["source_path", "workspace_path"] as const)("normalizes the recorded %s before matching", (field) => {
+    const image = { ...attachment, [field]: "images/tmp/.././qr.png" };
+    expect(resolveImageAttachmentURL("images/qr.png", [image])).toBe("api/v1/attachments/qr-image?token=image-token");
+  });
+
+  it.each(["../qr.png", "images/%2E%2E/../qr.png", "/images/../qr.png", "https://example.com/../../qr.png"])(
+    "keeps non-workspace references unchanged when an image has the same name: %s",
+    (source) => {
+      const image = { ...attachment, name: "qr.png", source_path: "qr.png" };
+      expect(resolveImageAttachmentURL(source, [image])).toBeUndefined();
+    },
+  );
+
+  it("requires an exact path for a directory-qualified reference that simplifies to a filename", () => {
+    const image = { ...attachment, name: "qr.png", source_path: "generated/qr.png" };
+    expect(resolveImageAttachmentURL("assets/../qr.png", [image])).toBeUndefined();
+    expect(resolveImageAttachmentURL("assets/../qr.png", [{ ...image, source_path: "qr.png" }])).toBe(
+      "api/v1/attachments/qr-image?token=image-token",
+    );
+  });
+
   it("matches percent-encoded Unicode names and spaces", () => {
     const image = { ...attachment, name: "chart.png", source_path: "images/飞书 授权二维码.png" };
     expect(resolveImageAttachmentURL(`images/${encodeURIComponent("飞书 授权二维码.png")}`, [image])).toBe(

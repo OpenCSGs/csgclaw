@@ -5,14 +5,14 @@ export function resolveImageAttachmentURL(
   source: string,
   attachments: readonly MessageAttachment[],
 ): string | undefined {
-  let path = source.trim().split(/[?#]/, 1)[0] || "";
+  let reference = source.trim().split(/[?#]/, 1)[0] || "";
   try {
-    path = decodeURIComponent(path);
+    reference = decodeURIComponent(reference);
   } catch {
     // A published filename can contain a literal percent sign.
   }
-  path = normalizePath(path);
-  if (!path || path.startsWith("/") || /^[a-z][a-z\d+.-]*:/i.test(path)) {
+  const path = normalizePath(reference);
+  if (!path) {
     return undefined;
   }
 
@@ -22,7 +22,9 @@ export function resolveImageAttachmentURL(
       (attachment.source_path && normalizePath(attachment.source_path) === path) ||
       (attachment.workspace_path && normalizePath(attachment.workspace_path) === path),
   );
-  const matches = exact.length ? exact : images.filter((attachment) => attachment.name === path);
+  // A directory-qualified reference must match a recorded path, even if ".." reduces it to a filename.
+  const name = reference.replace(/^(?:\.[/\\])+/, "");
+  const matches = exact.length ? exact : images.filter((attachment) => attachment.name === name);
   if (matches.length !== 1) {
     return undefined;
   }
@@ -30,6 +32,20 @@ export function resolveImageAttachmentURL(
   return resolveRequestPath(attachment.preview_url || attachment.download_url) || undefined;
 }
 
-function normalizePath(path: string): string {
-  return path.replaceAll("\\", "/").replace(/^(?:\.\/)+/, "");
+function normalizePath(path: string): string | undefined {
+  const relative = path.replaceAll("\\", "/");
+  if (relative.startsWith("/")) return undefined;
+
+  const segments: string[] = [];
+  for (const segment of relative.split("/")) {
+    if (!segment || segment === ".") continue;
+    if (segment === "..") {
+      if (segments.length === 0) return undefined;
+      segments.pop();
+    } else {
+      if (segments.length === 0 && /^[a-z][a-z\d+.-]*:/i.test(segment)) return undefined;
+      segments.push(segment);
+    }
+  }
+  return segments.join("/") || undefined;
 }
