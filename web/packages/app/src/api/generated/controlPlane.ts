@@ -1468,7 +1468,7 @@ export interface components {
       description?: string;
       provider?: string;
     };
-    /** @description Omitted fields retain their value. Null scalar/runtime/model_config values retain their value. Empty description/instructions clear them. runtime.options replaces the map; {} clears it, null retains it. mcp_servers null or {} clears the map. model_config with only selector updates selection; other configuration fields use the existing whole-profile update semantics. */
+    /** @description Omitted fields retain their value. Null scalar/runtime/model_config values retain their value. Empty description/instructions clear them. runtime.options replaces the map; {} clears it, null retains it. mcp_servers null or {} clears the map. model_config with only selector resolves the primary model while retaining reasoning, request options, environment and image/video selections; other configuration fields use the existing whole-profile update semantics. */
     AgentPatchRequest: {
       name?: string | null;
       description?: string | null;

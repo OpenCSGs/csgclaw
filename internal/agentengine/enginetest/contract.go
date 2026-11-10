@@ -232,8 +232,6 @@ func RunInterfaceContract(t *testing.T, factory InterfaceFactory) {
 			Spec: withModel.Spec, FieldMask: []string{"model.selector"}, ResourceVersion: withModel.ResourceVersion,
 		})
 		if err != nil || withSelector.Spec.Model.Selector != "provider-b.model-b" ||
-			withSelector.Spec.Model.ProviderID != modelBeforeSelector.ProviderID ||
-			withSelector.Spec.Model.ModelID != modelBeforeSelector.ModelID ||
 			withSelector.Spec.Model.ReasoningEffort != modelBeforeSelector.ReasoningEffort {
 			t.Fatalf("Model selector field-mask Update() = %+v, %v", withSelector, err)
 		}

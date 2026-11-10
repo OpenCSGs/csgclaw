@@ -398,6 +398,7 @@ type agentUpdateOptions struct {
 	saveInstructions      bool
 	loadSkills            bool
 	loadMemory            bool
+	resolveModelSelector  bool
 	reconcileDesiredState bool
 	reconcileResources    bool
 	forceRecreate         bool
@@ -410,6 +411,7 @@ func updateOptionsFor(request contract.AgentUpdateRequest) agentUpdateOptions {
 		saveInstructions:      len(request.FieldMask) == 0 || fieldMaskContains(request.FieldMask, "instructions"),
 		loadSkills:            loadSkills,
 		loadMemory:            fieldMaskContains(request.FieldMask, "memory") || request.Spec.Memory != nil,
+		resolveModelSelector:  fieldMaskContains(request.FieldMask, "model.selector") && !fieldMaskContains(request.FieldMask, "model"),
 		reconcileDesiredState: fieldMaskContains(request.FieldMask, "desired_state"),
 		reconcileResources:    loadSkills || fieldMaskContains(request.FieldMask, "mcp_servers"),
 		replaceSkills:         slices.Clone(request.ReplaceSkills),
@@ -457,6 +459,15 @@ func (f *Controller) updateDesired(ctx context.Context, agentID, resourceVersion
 			desired.DesiredState = contract.AgentDesiredStateRunning
 		}
 		desired = preserveWriteOnlyFields(current, desired)
+		if options.resolveModelSelector {
+			selector := desired.Model.Selector
+			profile, err := f.EffectiveAgentProfileForUpdate(agentID, UpdateRequest{Profile: &selector})
+			if err != nil {
+				return err
+			}
+			desired.Model = modelFromService(profile)
+			desired.Model.Selector = selector
+		}
 		if err := validateSkillReplacements(options.replaceSkills, desired.Skills); err != nil {
 			return err
 		}

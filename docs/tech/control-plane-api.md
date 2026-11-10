@@ -37,7 +37,7 @@ Send the current server, platform or Desktop credential in `Authorization: Beare
 | `runtime.options: {}` | Clear options; a nonempty map replaces options |
 | `runtime.options: null` | Retain options |
 | `mcp_servers: null` or `{}` | Clear MCP configuration |
-| `model_config: {"selector": "provider.model"}` | Update only model selection |
+| `model_config: {"selector": "provider.model"}` | Resolve the primary model from the selector; retain reasoning, request options, environment and image/video selections |
 | Other submitted `model_config` fields | Use existing whole-profile validation and update semantics |
 
 `PATCH` accepts no `field_mask`. Agent creation, patch and recreate requests reject unsupported fields and multiple JSON values. Runtime options and MCP configuration keep their extension keys. Read-only state and plaintext secret output are excluded from writable schemas.
@@ -59,6 +59,8 @@ Send the current server, platform or Desktop credential in `Authorization: Beare
 ```
 
 Allowed masks are `name`, `description`, `instructions`, `runtime`, `runtime.image`, `runtime.options`, `model_config`, `model_config.selector`, and `mcp_servers`. A nonempty mask requires `configuration`; parent and child paths cannot be combined. Invalid masks return `400 invalid_field_mask`. Recreate uses the existing running-state rule. Template selection belongs to creation.
+
+The `model_config.selector` mask resolves the selected primary model through the same Controller update path as `PATCH`, before validating the replacement or changing the Runtime.
 
 Replacement configurations require a complete primary model. Image or video model selections alone cannot supply that model. An incomplete replacement is rejected before saving configuration or changing the Runtime. An empty request retains the existing Manager initialization behavior, including `profile_incomplete` readiness while model setup is pending.
 
