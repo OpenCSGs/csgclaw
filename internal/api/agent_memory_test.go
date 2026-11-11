@@ -134,7 +134,7 @@ func TestManagedMemoryRequiresTrustedLocalAccess(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	controller.SetManagedMemory(store.DeleteAgent)
+	controller.SetManagedMemory(store.DeleteAgent, store.SeedTemplate)
 	engine := agentengine.New(controller)
 	engine.SetMemory(store)
 	handler := &Handler{svc: controller, agentEngine: engine, serverNoAuth: true}

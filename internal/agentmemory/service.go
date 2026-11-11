@@ -156,15 +156,14 @@ func (s *Store) Forget(scope Scope, source Source) (Document, error) {
 		return entry.Source != nil && *entry.Source == source
 	})
 	removed := len(next) != len(current.Entries)
-	queued := slices.ContainsFunc(current.Jobs, func(task job) bool {
-		return task.Message != nil && task.Message.Source == source
-	})
-	if !removed && !queued && current.Initialization != "pending" {
+	if slices.Contains(current.Forgotten, source) && !removed {
 		return current.document(), nil
 	}
 	current.Entries = next
-	current.invalidate()
-	current.Initialization = "complete"
+	current.Forgotten = append(current.Forgotten, source)
+	current.Jobs = slices.DeleteFunc(current.Jobs, func(task job) bool {
+		return task.Message != nil && task.Message.Source == source
+	})
 	if removed {
 		current.ContextEpoch++
 	}
@@ -190,6 +189,9 @@ func (s *Store) Enqueue(ticket Ticket, id string, message Message) error {
 	if err != nil || !current.Enabled || current.Policy != ticket.policy ||
 		current.Lifetime != ticket.lifetime || current.WriteEpoch != ticket.writeEpoch {
 		return err
+	}
+	if slices.Contains(current.Forgotten, message.Source) {
+		return nil
 	}
 	id = digest(id)
 	for _, task := range current.Jobs {
@@ -425,6 +427,12 @@ func (w Worker) process(ctx context.Context, scope Scope) {
 		history, err = w.History(callCtx, scope, w.Store.instance.HistoryAfter, task.HistoryThrough, task.HistoryCursor)
 		if err == nil && len(history) > 0 {
 			var cursor HistoryCursor
+			// Keep forgotten positions in the scan so the cursor still advances.
+			for i := range history {
+				if slices.Contains(current.Forgotten, history[i].Source) {
+					history[i].Text = ""
+				}
+			}
 			messages, cursor = historySegment(history, task.HistoryCursor)
 			if !cursor.advances(task.HistoryCursor) {
 				err = fmt.Errorf("%w: history reader did not advance", ErrInvalid)
@@ -464,7 +472,7 @@ func (s *Store) beginAttempt(before state, cancel context.CancelFunc) bool {
 	defer s.mu.Unlock()
 	current, err := s.load(before.Scope)
 	if err != nil || !current.Enabled || current.Lifetime != before.Lifetime ||
-		current.WriteEpoch != before.WriteEpoch || len(current.Jobs) == 0 || current.Jobs[0].ID != before.Jobs[0].ID {
+		current.WriteEpoch != before.WriteEpoch || current.Revision != before.Revision || len(current.Jobs) == 0 || current.Jobs[0].ID != before.Jobs[0].ID {
 		return false
 	}
 	s.attempts[before.Scope] = cancel
@@ -491,7 +499,7 @@ func (s *Store) finish(before state, task job, messages []Message, changes []Cha
 		return err
 	}
 	if !current.Enabled || current.Policy != before.Policy || current.Lifetime != before.Lifetime ||
-		current.WriteEpoch != before.WriteEpoch || len(current.Jobs) == 0 || current.Jobs[0].ID != task.ID {
+		current.WriteEpoch != before.WriteEpoch || current.Revision != before.Revision || len(current.Jobs) == 0 || current.Jobs[0].ID != task.ID {
 		return nil
 	}
 	now := time.Now()

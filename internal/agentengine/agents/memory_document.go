@@ -8,9 +8,10 @@ import (
 	agentruntime "csgclaw/internal/runtime"
 )
 
-func (s *Controller) SetManagedMemory(cleanup func(string) error) {
+func (s *Controller) SetManagedMemory(cleanup func(string) error, seed func(string, string) error) {
 	s.mu.Lock()
 	s.memoryCleanup = cleanup
+	s.memoryTemplate = seed
 	s.mu.Unlock()
 }
 

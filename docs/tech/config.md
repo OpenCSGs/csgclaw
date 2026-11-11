@@ -84,6 +84,13 @@ Long messages continue in subsequent segments rather than losing their trailing 
 Regular chat turns still trigger individual background memory decisions without batching.
 Background memory extraction shares the streaming model gateway, provider authentication, and connection recovery used by Agent chat.
 
+Native Codex and DSH memory files are not imported when switching to unified memory.
+Eligible Agents rebuild personal memory from private chat history during initialization.
+The runtime session binding changes to keep previously injected memory out of the new policy scope.
+Explicit template knowledge is saved separately under `agents/<agent-id>/memory/template.json` and adopted once by a new eligible user scope.
+Resetting or clearing an initialized scope does not restore the template seed.
+Forgetting a message excludes that source from future history scans and late learning updates, while preserving other queued messages and the initialization cursor.
+
 `show_upgrade` controls whether the Web UI shows upgrade actions. The default is `true`; set it to `false` only when the deployment cannot self-upgrade, such as managed Kubernetes environments.
 
 The server derives its active update channel from the running version. Plain versions such as `v0.5.0` use the `release` channel; prerelease, development, local, and otherwise non-plain versions use `beta`. A version-channel switch from the Web UI is a one-shot installation and is not persisted in `config.toml`.

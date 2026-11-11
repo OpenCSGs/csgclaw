@@ -55,6 +55,7 @@ type state struct {
 	WriteEpoch     uint64    `json:"write_epoch"`
 	ContextEpoch   uint64    `json:"context_epoch"`
 	Entries        []Entry   `json:"entries"`
+	Forgotten      []Source  `json:"forgotten,omitempty"`
 	Jobs           []job     `json:"jobs,omitempty"`
 	Receipts       []receipt `json:"receipts,omitempty"`
 	Initialization string    `json:"initialization,omitempty"`
@@ -142,7 +143,7 @@ func (s *Store) load(scope Scope) (state, error) {
 	for _, path := range []string{filepath.Join(s.root, scope.AgentID), filepath.Dir(dir), dir} {
 		info, err := os.Lstat(path)
 		if errors.Is(err, os.ErrNotExist) {
-			return s.defaultState(scope), nil
+			return s.initialState(scope)
 		}
 		if err != nil {
 			return state{}, err
@@ -154,7 +155,7 @@ func (s *Store) load(scope Scope) (state, error) {
 	current := s.defaultState(scope)
 	err := readJSON(filepath.Join(dir, "state.json"), &current)
 	if errors.Is(err, os.ErrNotExist) {
-		return current, nil
+		return s.initialState(scope)
 	}
 	if err != nil {
 		return state{}, err

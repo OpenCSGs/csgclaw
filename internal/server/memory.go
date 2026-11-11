@@ -50,6 +50,11 @@ func startAgentMemory(ctx context.Context, opts Options, listener net.Listener, 
 			return nil
 		}
 		return store.DeleteAgent(identity.CanonicalAgentID(id))
+	}, func(id, content string) error {
+		if store == nil {
+			return agentmemory.ErrUnavailable
+		}
+		return store.SeedTemplate(identity.CanonicalAgentID(id), content)
 	})
 	if store == nil {
 		return func() {}

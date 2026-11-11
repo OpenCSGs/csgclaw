@@ -217,6 +217,7 @@ type Controller struct {
 	connectorCapabilityKey        []byte
 	agentResourceCleanup          func(context.Context, string) error
 	memoryCleanup                 func(string) error
+	memoryTemplate                func(string, string) error
 	runtimeConfigurationGuard     func(context.Context, string) error
 }
 
@@ -2566,7 +2567,20 @@ func (s *Controller) provisionRuntimeRequest(ctx context.Context, rt agentruntim
 	if !ok {
 		return nil
 	}
-	return provisioner.Provision(ctx, req)
+	s.mu.RLock()
+	seed := s.memoryTemplate
+	s.mu.RUnlock()
+	content, hasTemplate := req.TemplateMemory, req.TemplateMemorySet
+	if seed != nil {
+		req.TemplateMemory, req.TemplateMemorySet = "", false
+	}
+	if err := provisioner.Provision(ctx, req); err != nil {
+		return err
+	}
+	if seed != nil && hasTemplate {
+		return seed(req.AgentID, content)
+	}
+	return nil
 }
 
 func (s *Controller) provisionRuntime(ctx context.Context, rt agentruntime.Runtime, runtimeKind string, req agentruntime.ProvisionRequest) error {
