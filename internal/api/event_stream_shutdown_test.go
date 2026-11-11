@@ -15,7 +15,90 @@ import (
 	"csgclaw/internal/im"
 	agentruntime "csgclaw/internal/runtime"
 	"csgclaw/internal/worklease"
+
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
+
+func TestAgentMCPSubscriptionStopsOnShutdown(t *testing.T) {
+	handler, worker, _, token, _ := newAppPlatformAuthFixture(t)
+	shutdown := make(chan struct{})
+	handler.SetEventStreamShutdown(shutdown)
+	routes := handler.Routes()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		r.Header.Set("Authorization", "Bearer "+token)
+		routes.ServeHTTP(w, r)
+	}))
+	t.Cleanup(server.Close)
+	endpoint := server.URL + "/api/v1/agents/" + worker.ID + "/mcp"
+	client := mcp.NewClient(&mcp.Implementation{Name: "shutdown-test", Version: "1"}, nil)
+	// Open the subscription explicitly so the client cannot reconnect during shutdown.
+	session, err := client.Connect(t.Context(), &mcp.StreamableClientTransport{Endpoint: endpoint, DisableStandaloneSSE: true}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer session.Close()
+
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, endpoint, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Accept", "text/event-stream")
+	req.Header.Set("Mcp-Session-Id", session.ID())
+	req.Header.Set("Mcp-Protocol-Version", session.InitializeResult().ProtocolVersion)
+	stream, err := server.Client().Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stream.Body.Close()
+	if stream.StatusCode != http.StatusOK || stream.Header.Get("Content-Type") != "text/event-stream" {
+		t.Fatalf("unexpected MCP stream response: %s %q", stream.Status, stream.Header.Get("Content-Type"))
+	}
+
+	// Keep a tool call in flight until the subscription has ended.
+	started := make(chan struct{})
+	release := make(chan struct{})
+	handler.apps.RegisterTool(worker.ID, &mcp.Tool{Name: "wait_for_release", InputSchema: map[string]any{"type": "object"}},
+		func(ctx context.Context, _ *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			close(started)
+			select {
+			case <-release:
+				return &mcp.CallToolResult{}, nil
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			}
+		})
+	streamDone := make(chan error, 1)
+	go func() {
+		_, err := io.Copy(io.Discard, stream.Body)
+		close(release)
+		streamDone <- err
+	}()
+	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
+	defer cancel()
+	toolDone := make(chan error, 1)
+	go func() {
+		result, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "wait_for_release"})
+		if err == nil && result.IsError {
+			err = errors.New("MCP tool returned an error result")
+		}
+		toolDone <- err
+	}()
+	select {
+	case <-started:
+	case <-ctx.Done():
+		t.Fatal("MCP tool call did not start")
+	}
+	close(shutdown)
+	if err := server.Config.Shutdown(ctx); err != nil {
+		t.Fatalf("HTTP shutdown waited for the MCP subscription: %v", err)
+	}
+	if err := <-streamDone; err != nil {
+		t.Fatalf("MCP subscription did not close cleanly: %v", err)
+	}
+	if err := <-toolDone; err != nil {
+		t.Fatalf("in-flight MCP tool call failed: %v", err)
+	}
+}
 
 func TestFeishuEventStreamShutdownUnsubscribes(t *testing.T) {
 	service := feishu.NewService()
