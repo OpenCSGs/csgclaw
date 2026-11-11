@@ -3,7 +3,7 @@ import { useMemo, useRef, useState, type ReactNode } from "react";
 import { Check, ChevronDown, Plus, Search } from "lucide-react";
 import { TextInput, PopoverContent, PopoverRoot, PopoverTrigger } from "@/components/ui";
 import { AgentAvatarContent } from "@/components/business/AgentAvatar";
-import { EntityPinRow } from "@/components/business/EntityPinRow";
+import { EntityPinHeading, EntityPinRow } from "@/components/business/EntityPinRow";
 import { entityPinKey, partitionPinned, usePinnedEntities } from "@/hooks/workspace/usePinnedEntities";
 import { RoomAvatar } from "@/components/business/RoomAvatar";
 import { agentRoleLabel, isManagerAgent as isManagerAgentItem } from "@/models/agents";
@@ -54,6 +54,7 @@ export function TargetPicker({
 }: TargetPickerProps) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
+  const [pinnedExpanded, setPinnedExpanded] = useState(true);
   const pins = usePinnedEntities(currentUserID);
   const searchRef = useRef<HTMLInputElement | null>(null);
 
@@ -116,7 +117,8 @@ export function TargetPicker({
           content: (
             <button
               type="button"
-              className={classNames(styles.row, active && styles.rowActive)}
+              aria-current={active ? "true" : undefined}
+              className={styles.row}
               onClick={() => pick({ kind: "agent", id })}
             >
               {active ? <Check aria-hidden="true" className={styles.rowCheck} size={15} strokeWidth={2.4} /> : null}
@@ -143,7 +145,8 @@ export function TargetPicker({
             type="button"
             disabled={item.status !== "online"}
             title={item.status !== "online" ? t("cloudChatOffline") : item.description}
-            className={classNames(styles.row, value.kind === "cloud" && value.id === item.id && styles.rowActive)}
+            aria-current={value.kind === "cloud" && value.id === item.id ? "true" : undefined}
+            className={styles.row}
             onClick={() => pick({ kind: "cloud", id: item.id })}
           >
             {value.kind === "cloud" && value.id === item.id ? (
@@ -171,7 +174,8 @@ export function TargetPicker({
         content: (
           <button
             type="button"
-            className={classNames(styles.row, active && styles.rowActive)}
+            aria-current={active ? "true" : undefined}
+            className={styles.row}
             onClick={() => pick({ kind: "team", id: team.id })}
           >
             {active ? <Check aria-hidden="true" className={styles.rowCheck} size={15} strokeWidth={2.4} /> : null}
@@ -194,7 +198,7 @@ export function TargetPicker({
   ];
   const { pinned, rest } = partitionPinned(rows, pins.order);
   const groups = [
-    { key: "pinned", label: t("iaPin"), rows: pinned, solo: false },
+    { key: "pinned", label: t("iaPinned"), rows: pinned, solo: false },
     { key: "agent", label: t("iaTargetGroupAgents"), rows: rest.filter((row) => row.kind === "agent"), solo: false },
     { key: "cloud", label: t("agentPlazaCloud"), rows: rest.filter((row) => row.kind === "cloud"), solo: false },
     { key: "team", label: t("iaTargetGroupTeams"), rows: rest.filter((row) => row.kind === "team"), solo: !needle },
@@ -272,7 +276,11 @@ export function TargetPicker({
             placeholder={t("iaTargetSearch")}
             type="text"
             value={query}
-            onChange={(event) => setQuery(event.currentTarget.value)}
+            onChange={(event) => {
+              const nextQuery = event.currentTarget.value;
+              if (nextQuery.trim()) setPinnedExpanded(true);
+              setQuery(nextQuery);
+            }}
           />
         </div>
 
@@ -282,14 +290,21 @@ export function TargetPicker({
           ) : null}
 
           <ul className={styles.items}>
-            {groups.flatMap((group) =>
-              group.rows.length || group.solo
+            {groups.flatMap((group) => {
+              const isPinned = group.key === "pinned";
+              const visibleRows = isPinned && !pinnedExpanded ? [] : group.rows;
+              return group.rows.length || group.solo
                 ? [
-                    <li
-                      key={group.key}
-                      className={classNames(styles.groupLabel, group.key === "pinned" && styles.pinnedLabel)}
-                    >
-                      {group.label}
+                    <li key={group.key} className={isPinned ? undefined : styles.groupLabel}>
+                      {isPinned ? (
+                        <EntityPinHeading
+                          expanded={pinnedExpanded}
+                          onToggle={() => setPinnedExpanded((expanded) => !expanded)}
+                          t={t}
+                        />
+                      ) : (
+                        group.label
+                      )}
                     </li>,
                     ...(group.solo
                       ? [
@@ -298,6 +313,7 @@ export function TargetPicker({
                               type="button"
                               className={classNames(
                                 styles.row,
+                                styles.soloRow,
                                 value.kind === "team" && value.id === SOLO_TEAM_ID && styles.rowActive,
                               )}
                               onClick={() => pick({ kind: "team", id: SOLO_TEAM_ID })}
@@ -318,21 +334,24 @@ export function TargetPicker({
                           </li>,
                         ]
                       : []),
-                    ...group.rows.map((row) => (
+                    ...visibleRows.map((row) => (
                       <EntityPinRow
                         as="li"
                         key={entityPinKey(row)}
                         name={row.name}
-                        pinned={group.key === "pinned"}
+                        pinned={isPinned}
                         t={t}
-                        onToggle={() => pins.toggle(row)}
+                        onToggle={() => {
+                          if (!isPinned) setPinnedExpanded(true);
+                          pins.toggle(row);
+                        }}
                       >
                         {row.content}
                       </EntityPinRow>
                     )),
                   ]
-                : [],
-            )}
+                : [];
+            })}
           </ul>
         </div>
 

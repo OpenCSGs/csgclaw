@@ -1,8 +1,25 @@
-import { Pin, PinOff } from "lucide-react";
+import { ChevronDown, Pin } from "lucide-react";
 import type { ReactNode } from "react";
 import { Button, Tooltip } from "@/components/ui";
 import type { TranslateFn } from "@/models/conversations";
 import styles from "./EntityPinRow.module.css";
+
+export function EntityPinHeading({
+  expanded,
+  onToggle,
+  t,
+}: {
+  expanded: boolean;
+  onToggle: () => void;
+  t: TranslateFn;
+}) {
+  return (
+    <Button variant="tertiaryGray" size="sm" className={styles.heading} aria-expanded={expanded} onClick={onToggle}>
+      {t("iaPinned")}
+      <ChevronDown className={styles.chevron} size={13} aria-hidden="true" />
+    </Button>
+  );
+}
 
 export function EntityPinRow({
   as: Tag = "div",
@@ -20,23 +37,20 @@ export function EntityPinRow({
   children: ReactNode;
 }) {
   const action = t(pinned ? "iaUnpin" : "iaPin");
-  const Icon = pinned ? PinOff : Pin;
   return (
-    <Tag className={styles.row} data-pinned={pinned}>
+    <Tag className={styles.row}>
       {children}
-      <Tooltip content={action}>
+      <Tooltip content={action} contentProps={{ side: "top", sideOffset: 6 }}>
         <Button
-          variant={pinned ? "tertiaryColor" : "tertiaryGray"}
+          variant="tertiaryGray"
           className={styles.pin}
           iconOnly
           size="sm"
           aria-label={action}
           aria-description={name}
-          aria-pressed={pinned}
-          title={`${action} · ${name}`}
           onClick={onToggle}
         >
-          <Icon size={14} aria-hidden="true" />
+          <Pin size={14} fill={pinned ? "currentColor" : "none"} aria-hidden="true" />
         </Button>
       </Tooltip>
     </Tag>

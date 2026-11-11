@@ -1,1 +1,1 @@
-export { EntityPinRow } from "./EntityPinRow";
+export { EntityPinHeading, EntityPinRow } from "./EntityPinRow";

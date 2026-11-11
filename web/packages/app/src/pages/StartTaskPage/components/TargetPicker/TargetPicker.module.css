@@ -127,11 +127,6 @@
   letter-spacing: 0.02em;
 }
 
-.pinnedLabel {
-  border-bottom: 1px solid var(--line);
-  margin-bottom: 4px;
-}
-
 .items {
   margin: 0;
   padding: 0;
@@ -155,8 +150,8 @@
   cursor: pointer;
 }
 
-.row:hover,
-.row:focus-visible {
+.soloRow:hover,
+.soloRow:focus-visible {
   outline: none;
   background: var(--field);
 }
