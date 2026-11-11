@@ -2,6 +2,20 @@
 
 本文说明仓库中的构建、测试与发布命令。
 
+## 内置 Codex 版本
+
+CSGClaw 在 `scripts/codex-cli-version.txt` 中固定内置 Codex CLI 为 `0.167.1`。
+Shell、PowerShell、Docker 和发布构建均从 `/codex-cli/v<version>/<filename>` 下载同一版本，并在替换可执行文件前校验 `scripts/codex-cli-checksums.txt`。
+`CODEX_CLI_DOWNLOAD_BASE_URL` 只覆盖镜像根地址，默认是 `https://csgclaw.opencsg.com/codex-cli`，不覆盖版本或校验值。
+升级时，先将六个平台的官方完整包上传至镜像的 `v<version>/` 目录，核对上游发布的 SHA-256，再同时更新仓库内的版本和校验文件。
+构建保留官方完整包的辅助程序、元数据和与 `bin/` 同级的资源目录。
+Linux 命令执行需要包内的 `bwrap`，不能只复制 Codex 主程序。
+内置 Codex 随 CSGClaw 源码升级，构建不再解析 `latest`。
+
+CSGClaw 为新建和已有 Codex Agent 显式选择相同的 v1 记忆管线，关闭双写和专用记忆工具。
+升级运行时后，记忆文档、模板和运行时重建仍遵循现有产品行为。
+Shell 快照等上游稳定默认能力继续可用，不增加随版本变化的界面或配置入口。
+
 ## 默认构建
 
 ```bash

@@ -340,7 +340,7 @@ func (m *appServerManager) Stop(ctx context.Context, handle SessionHandle) error
 	}
 	if live.cmd != nil && live.cmd.Process != nil {
 		if err := stopProcess(live.cmd.Process.Pid); err != nil {
-			return err
+			return fmt.Errorf("stop tracked app-server pid=%d: %w", live.cmd.Process.Pid, err)
 		}
 	}
 
@@ -351,7 +351,10 @@ func (m *appServerManager) Stop(ctx context.Context, handle SessionHandle) error
 		live.mu.Lock()
 		stopErr := live.stopErr
 		live.mu.Unlock()
-		return stopErr
+		if stopErr != nil {
+			return fmt.Errorf("cleanup tracked app-server pid=%d: %w", live.cmd.Process.Pid, stopErr)
+		}
+		return nil
 	case <-ctx.Done():
 		return ctx.Err()
 	case <-timeout.C:
@@ -1519,13 +1522,24 @@ func appServerPromptInput(req PromptRequest) ([]map[string]any, error) {
 		return nil, fmt.Errorf("prompt input is required")
 	}
 	input := make([]map[string]any, 0, len(req.Prompt))
+	appendText := func(text string) {
+		// Codex concatenates separate text inputs without adding a separator.
+		// Keep logical prompt blocks distinct, as appServerPromptText does,
+		// while retaining the position of native image inputs.
+		if len(input) > 0 && input[len(input)-1]["type"] == "text" {
+			previous := input[len(input)-1]
+			previous["text"] = previous["text"].(string) + "\n\n" + text
+			return
+		}
+		input = append(input, map[string]any{"type": "text", "text": text})
+	}
 	for _, block := range req.Prompt {
 		switch {
 		case block.Text != nil:
 			if strings.TrimSpace(block.Text.Text) == "" {
 				return nil, fmt.Errorf("prompt text is required")
 			}
-			input = append(input, map[string]any{"type": "text", "text": block.Text.Text})
+			appendText(block.Text.Text)
 		case block.LocalImage != nil:
 			path := strings.TrimSpace(block.LocalImage.Path)
 			if path == "" {
@@ -1537,7 +1551,7 @@ func appServerPromptInput(req PromptRequest) ([]map[string]any, error) {
 			if text == "" {
 				return nil, fmt.Errorf("prompt resource is empty")
 			}
-			input = append(input, map[string]any{"type": "text", "text": text})
+			appendText(text)
 		default:
 			return nil, fmt.Errorf("unsupported prompt content block for codex app-server")
 		}

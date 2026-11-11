@@ -67,6 +67,15 @@ func testContextBundledCodex(t *testing.T, mode string) {
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			t.Error(err)
 		}
+		if mode == "diagnostics" {
+			items, _ := body["input"].([]any)
+			for _, item := range items {
+				m, _ := item.(map[string]any)
+				if m["type"] == "function_call_output" {
+					t.Logf("native tool result: %v", m["output"])
+				}
+			}
+		}
 		input, _ := json.Marshal(body["input"])
 		if strings.Count(string(input), "CSG_CONTEXT_SENTINEL") > 1 {
 			t.Errorf("user input duplicated in request: %s", input)
@@ -265,6 +274,9 @@ func testContextBundledCodex(t *testing.T, mode string) {
 		case e, ok := <-events:
 			if !ok {
 				t.Fatal("event stream closed")
+			}
+			if mode == "diagnostics" && e.Kind == SessionEventToolCallUpdate && e.ToolKind == "exec_command" {
+				t.Logf("native shell status=%s output=%s", e.ToolStatus, e.ToolOutputSummary)
 			}
 			if e.Kind == SessionEventToolCallUpdate && e.ToolKind == "exec_command" && e.ToolStatus == "completed" {
 				successfulCommand = true

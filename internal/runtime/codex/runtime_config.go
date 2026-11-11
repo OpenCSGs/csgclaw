@@ -59,6 +59,8 @@ var (
 
 	rootDottedFeaturesMemoriesRe = regexp.MustCompile(`^\s*features\s*\.\s*memories\s*=`)
 	featuresTableMemoriesRe      = regexp.MustCompile(`^\s*memories\s*=`)
+	rootDottedMemoriesPipelineRe = regexp.MustCompile(`^\s*memories\s*\.\s*(?:version|dual_write|dedicated_tools)\s*=`)
+	memoriesTablePipelineRe      = regexp.MustCompile(`^\s*(?:version|dual_write|dedicated_tools)\s*=`)
 	rootDottedMemoriesGenerateRe = regexp.MustCompile(`^\s*memories\s*\.\s*generate_memories\s*=`)
 	rootDottedMemoriesUseRe      = regexp.MustCompile(`^\s*memories\s*\.\s*use_memories\s*=`)
 	rootDottedMemoriesMinIdleRe  = regexp.MustCompile(`^\s*memories\s*\.\s*min_rollout_idle_hours\s*=`)
@@ -253,11 +255,15 @@ func buildMemoryConfigBlock(inMemoriesTable, enabled bool) string {
 	var b strings.Builder
 	b.WriteString(csgclawMemoryConfigBeginMarker)
 	b.WriteString("\n")
+	// Keep one memory pipeline for all agents instead of Codex selecting a
+	// different default based on whether a home already contains memories.
 	if inMemoriesTable {
+		b.WriteString("version = \"v1\"\ndual_write = false\ndedicated_tools = false\n")
 		fmt.Fprintf(&b, "generate_memories = %t\n", enabled)
 		fmt.Fprintf(&b, "use_memories = %t\n", enabled)
 		fmt.Fprintf(&b, "min_rollout_idle_hours = %d\n", memoryMinRolloutIdleHours)
 	} else {
+		b.WriteString("memories.version = \"v1\"\nmemories.dual_write = false\nmemories.dedicated_tools = false\n")
 		fmt.Fprintf(&b, "memories.generate_memories = %t\n", enabled)
 		fmt.Fprintf(&b, "memories.use_memories = %t\n", enabled)
 		fmt.Fprintf(&b, "memories.min_rollout_idle_hours = %d\n", memoryMinRolloutIdleHours)
@@ -1094,7 +1100,8 @@ func stripUserMemoryDirectives(content string) string {
 			if rootDottedFeaturesMemoriesRe.MatchString(trimmed) ||
 				rootDottedMemoriesGenerateRe.MatchString(trimmed) ||
 				rootDottedMemoriesUseRe.MatchString(trimmed) ||
-				rootDottedMemoriesMinIdleRe.MatchString(trimmed) {
+				rootDottedMemoriesMinIdleRe.MatchString(trimmed) ||
+				rootDottedMemoriesPipelineRe.MatchString(trimmed) {
 				continue
 			}
 		case "[features]":
@@ -1104,7 +1111,8 @@ func stripUserMemoryDirectives(content string) string {
 		case "[memories]":
 			if memoriesTableGenerateRe.MatchString(trimmed) ||
 				memoriesTableUseRe.MatchString(trimmed) ||
-				memoriesTableMinIdleRe.MatchString(trimmed) {
+				memoriesTableMinIdleRe.MatchString(trimmed) ||
+				memoriesTablePipelineRe.MatchString(trimmed) {
 				continue
 			}
 		}

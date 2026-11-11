@@ -1,5 +1,6 @@
 .git
 .gocache
+.cache
 .codex
 .cursor
 .vscode
@@ -16,3 +17,8 @@ web/node_modules
 web/packages/*/node_modules
 web/packages/*/dist
 web/static-dist
+
+# Downloaded Codex package resources
+/codex-resources/
+/codex-path/
+/codex-package.json

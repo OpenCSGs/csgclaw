@@ -51,8 +51,15 @@ func TestStopAfterParentExited(t *testing.T) {
 	if alive, err := Alive(cmd.Process.Pid); err != nil || !alive {
 		t.Fatalf("child alive=%v err=%v", alive, err)
 	}
-	if err := Stop(cmd.Process.Pid, true); err != nil {
-		t.Fatal(err)
+	// The runtime stop path and exit watcher can reclaim the same group.
+	stops := make(chan error, 2)
+	for range 2 {
+		go func() { stops <- Stop(cmd.Process.Pid, true) }()
+	}
+	for range 2 {
+		if err := <-stops; err != nil {
+			t.Fatal(err)
+		}
 	}
 	if alive, err := Alive(cmd.Process.Pid); err != nil || alive {
 		t.Fatalf("remaining child alive=%v err=%v", alive, err)

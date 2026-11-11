@@ -570,6 +570,14 @@ function Invoke-CodexCliDownload {
     }
 }
 
+function Assert-CodexCliChecksum {
+    param([string]$Path, [string]$Expected)
+
+    if ((Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant() -ne $Expected) {
+        throw "Codex CLI checksum mismatch: $(Split-Path -Leaf $Path)"
+    }
+}
+
 function Fetch-CodexCli {
     param(
         [Parameter(Mandatory = $true)][string]$Goos,
@@ -578,33 +586,54 @@ function Fetch-CodexCli {
     )
 
     $target = Resolve-CodexCliDownloadTarget -Goos $Goos -Goarch $Goarch
-    $downloadUrl = "$($script:CodexCliDownloadBaseUrl.TrimEnd('/'))/$($target.Os)/$($target.Arch)?package=codex-cli"
+    $version = (Get-Content -LiteralPath (Join-Path $RootDir "scripts/codex-cli-version.txt") -Raw).Trim()
+    if ($version -notmatch '^\d+\.\d+\.\d+$') {
+        throw "invalid bundled Codex CLI version: $version"
+    }
+    $artifact = "codex-package_$($version)_$($Goos)_$($Goarch).tar.gz"
+    $checksums = @(Get-Content -LiteralPath (Join-Path $RootDir "scripts/codex-cli-checksums.txt") | ForEach-Object {
+        $fields = $_.Trim() -split '\s+'
+        if ($fields.Count -eq 2 -and $fields[1] -eq $artifact) { $fields[0] }
+    })
+    if ($checksums.Count -ne 1 -or $checksums[0] -notmatch '^[0-9a-f]{64}$') {
+        throw "missing or invalid Codex CLI checksum: $artifact"
+    }
+    $downloadUrl = "$($script:CodexCliDownloadBaseUrl.TrimEnd('/'))/v$version/$artifact"
     $tmpDir = Join-Path ([System.IO.Path]::GetTempPath()) ("csgclaw-codex-" + [guid]::NewGuid().ToString("N"))
     Ensure-Directory -Path $tmpDir
     Ensure-Directory -Path $OutputDir
 
     try {
         Write-Host "fetching bundled Codex CLI $downloadUrl"
-        if ($Goos -eq "windows") {
-            $targetPath = Join-Path $OutputDir "codex.exe"
-            Invoke-CodexCliDownload -Uri $downloadUrl -OutputPath $targetPath
-            return
-        }
-
         $archivePath = Join-Path $tmpDir "codex.tar.gz"
         $extractDir = Join-Path $tmpDir "extract"
         Ensure-Directory -Path $extractDir
         Invoke-CodexCliDownload -Uri $downloadUrl -OutputPath $archivePath
+        Assert-CodexCliChecksum -Path $archivePath -Expected $checksums[0]
         $tar = Get-CommandPathOrNull "tar"
         if ($null -eq $tar) {
             throw "missing required command: tar"
         }
         Invoke-Checked -FilePath $tar -Arguments @("-xzf", $archivePath, "-C", $extractDir)
-        $binaryPath = Join-Path $extractDir $target.Binary
+        $binaryPath = Join-Path (Join-Path $extractDir "bin") $target.Binary
         if (-not (Test-Path -LiteralPath $binaryPath -PathType Leaf)) {
             throw "Codex archive did not contain expected binary: $($target.Binary)"
         }
-        Copy-Item -LiteralPath $binaryPath -Destination (Join-Path $OutputDir "codex") -Force
+        foreach ($entry in @("codex-package.json", "codex-resources", "codex-path")) {
+            if (-not (Test-Path -LiteralPath (Join-Path $extractDir $entry))) {
+                throw "Codex package did not contain expected entry: $entry"
+            }
+        }
+        $packageRoot = Split-Path -Parent ([System.IO.Path]::GetFullPath($OutputDir))
+        foreach ($entry in @("codex-resources", "codex-path")) {
+            $destination = Join-Path $packageRoot $entry
+            if (Test-Path -LiteralPath $destination) {
+                Remove-Item -LiteralPath $destination -Recurse -Force
+            }
+            Copy-Item -LiteralPath (Join-Path $extractDir $entry) -Destination $destination -Recurse -Force
+        }
+        Copy-Item -LiteralPath (Join-Path $extractDir "codex-package.json") -Destination $packageRoot -Force
+        Get-ChildItem -LiteralPath (Join-Path $extractDir "bin") | Copy-Item -Destination $OutputDir -Recurse -Force
     }
     finally {
         if (Test-Path -LiteralPath $tmpDir) {
@@ -784,7 +813,9 @@ function Invoke-TargetRun {
 }
 
 function Invoke-TargetClean {
-    foreach ($path in @($script:BinDir, $script:DistDir, $script:Gocache)) {
+    $packageRoot = Split-Path -Parent ([System.IO.Path]::GetFullPath($script:BinDir))
+    foreach ($path in @($script:BinDir, $script:DistDir, $script:Gocache,
+        (Join-Path $packageRoot "codex-resources"), (Join-Path $packageRoot "codex-path"), (Join-Path $packageRoot "codex-package.json"))) {
         if (Test-Path -LiteralPath $path) {
             Remove-Item -LiteralPath $path -Recurse -Force
         }
@@ -840,7 +871,7 @@ $script:HostGoarch = Resolve-GoEnv -Name "GOARCH"
 $script:TargetOs = Get-EnvOrDefault -Name "TARGET_OS" -Default $script:HostGoos
 $script:TargetArch = Get-EnvOrDefault -Name "TARGET_ARCH" -Default $script:HostGoarch
 $script:GoBuildTags = Get-EnvOrDefault -Name "GO_BUILD_TAGS" -Default ""
-$script:CodexCliDownloadBaseUrl = Get-EnvOrDefault -Name "CODEX_CLI_DOWNLOAD_BASE_URL" -Default "https://csgclaw.opencsg.com/codex-cli/latest"
+$script:CodexCliDownloadBaseUrl = Get-EnvOrDefault -Name "CODEX_CLI_DOWNLOAD_BASE_URL" -Default "https://csgclaw.opencsg.com/codex-cli"
 $script:CodexCliPlatformsPath = Join-Path $RootDir "scripts/codex-cli-platforms.txt"
 $script:HostCliCmdPath = Get-EnvOrDefault -Name "HOST_CLI_CMD_PATH" -Default "./cmd/csgclaw-cli"
 
