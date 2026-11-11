@@ -211,7 +211,7 @@ func TestRemoteStorePublishCommitsFilesAfterCreatingTemplateCode(t *testing.T) {
 			if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 				t.Error(err)
 			}
-			uploadedFiles = request.Files
+			uploadedFiles = append(uploadedFiles, request.Files...)
 			w.WriteHeader(http.StatusOK)
 		case "/api/v1/codes":
 			if got, want := r.URL.Query().Get("current_user"), "alice"; got != want {
@@ -727,12 +727,17 @@ func TestRemoteStoreListGetAndFetchWorkspace(t *testing.T) {
 			if got, want := r.Header.Get("Accept"), "application/zip"; got != want {
 				t.Fatalf("Accept = %q, want %q", got, want)
 			}
-			writeRemoteArchive(t, w, "gitlab-assistant-main/", map[string]string{
+			files := map[string]string{
 				"agent.toml":             remoteTestManifest,
 				"instructions/AGENTS.md": "hello",
 				"skills/review.md":       "review",
 				"mcps/mcp.json":          "{}",
-			})
+			}
+			content := strings.Repeat("x", remotePublishMaxBatchBytes)
+			for i := 0; i <= defaultRemoteMaxFileBytes/len(content); i++ {
+				files[fmt.Sprintf("skills/review/data-%d.txt", i)] = content
+			}
+			writeRemoteArchive(t, w, "gitlab-assistant-main/", files)
 		default:
 			http.NotFound(w, r)
 		}
@@ -800,6 +805,13 @@ func TestRemoteStoreListGetAndFetchWorkspace(t *testing.T) {
 
 	if got, want := workspace.Kind, WorkspaceKindDir; got != want {
 		t.Fatalf("FetchWorkspace().Kind = %q, want %q", got, want)
+	}
+	largeFile, err := os.Stat(filepath.Join(workspace.Path, "skills", "review", "data-5.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if largeFile.Size() != remotePublishMaxBatchBytes {
+		t.Fatalf("extracted file size = %d, want %d", largeFile.Size(), remotePublishMaxBatchBytes)
 	}
 	for name, want := range map[string]string{
 		"AGENTS.md":        "hello",

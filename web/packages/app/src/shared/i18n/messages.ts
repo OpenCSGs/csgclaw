@@ -3224,6 +3224,7 @@ export const messages = {
       template_version_changed: "模板当前生效版本已变化，请刷新后确认发布的版本。",
       template_publish_failed: "模板发布失败，请稍后重试。",
       template_publish_file_too_large: "模板中有文件超过单文件大小上限，请缩小或移除该文件后重新发布。",
+      template_publish_total_too_large: "模板总大小超过 100 MiB 上限，请缩小或移除部分文件后重新发布。",
       template_publish_file_too_large_detail:
         "模板文件「{path}」超过单文件 {limit} MB 上限，请缩小或移除该文件后重新发布。",
       template_cloud_cleanup_pending: "云端旧模板仍在异步清理，5 秒内未释放同名路径。本地版本已保留，请稍后重试。",
@@ -6669,6 +6670,8 @@ export const messages = {
       template_publish_failed: "Template publishing failed. Try again later.",
       template_publish_file_too_large:
         "A template file exceeds the per-file size limit. Reduce its size or remove it before publishing again.",
+      template_publish_total_too_large:
+        "The template exceeds the 100 MiB total size limit. Reduce the size of some files or remove them before publishing again.",
       template_publish_file_too_large_detail:
         "Template file “{path}” exceeds the {limit} MB per-file limit. Reduce its size or remove it before publishing again.",
       template_cloud_cleanup_pending:
