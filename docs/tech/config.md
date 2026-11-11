@@ -68,6 +68,22 @@ When it is set, the Web UI login flow also uses it as the trusted public base fo
 
 `no_auth` controls whether CSGClaw skips the bearer-token check. The default is `false`. Set it to `true` only for trusted local or development environments.
 
+`local_single_user = true` declares a standalone Web server bound only to loopback as a personal instance.
+Agent memory is then on by default in private chats and can be disabled from the Agent’s memory page.
+The default is `false`, which shared unauthenticated deployments use.
+
+Memory is stored in `~/.csgclaw/agents/<agent-id>/memory/<user-id>/`, containing `state.json` and the plain Markdown document `MEMORY.md`.
+Instance-level memory state is stored in the `agent_memory` section of `~/.csgclaw/state.json` and is only updated on initialization or a deployment mode change.
+Runtime recreation and switching preserve memory, while permanent Agent deletion removes it.
+The memory page updates automatically while being viewed and pauses refreshes during editing to preserve the draft.
+“Reset memory” deletes existing notes, including manual edits, and rebuilds them from private chat history after confirmation.
+“Clear memory” immediately deletes notes and stops current memory learning after confirmation, while preserving chats and allowing future private turns to create new memories.
+Use the Markdown editor to edit all three categories; uncategorized text is saved under confirmed facts.
+History initialization scans all eligible private messages chronologically in bounded segments, accumulates learned entries, and saves the cursor with each segment so it can resume after a restart.
+Long messages continue in subsequent segments rather than losing their trailing text.
+Regular chat turns still trigger individual background memory decisions without batching.
+Background memory extraction shares the streaming model gateway, provider authentication, and connection recovery used by Agent chat.
+
 `show_upgrade` controls whether the Web UI shows upgrade actions. The default is `true`; set it to `false` only when the deployment cannot self-upgrade, such as managed Kubernetes environments.
 
 The server derives its active update channel from the running version. Plain versions such as `v0.5.0` use the `release` channel; prerelease, development, local, and otherwise non-plain versions use `beta`. A version-channel switch from the Web UI is a one-shot installation and is not persisted in `config.toml`.

@@ -35,20 +35,76 @@ export function fetchAgentInstructionsDocument(agentID: string): Promise<AgentIn
   return get(`api/v1/agents/${encodeURIComponent(agentID)}/instructions`);
 }
 
+export type AgentMemorySource = { room_id: string; message_id: string };
+export type AgentMemoryEntry = {
+  id: string;
+  kind: "preference" | "convention" | "fact";
+  text: string;
+  source?: AgentMemorySource;
+  updated_at?: string;
+};
+
 export type AgentMemoryDocument = {
+  available: boolean;
   enabled: boolean;
   ready: boolean;
   name: string;
-  location?: string;
   content: string;
+  entries: AgentMemoryEntry[];
+  revision: number;
+  status: string;
+  initialization?: string;
+  last_error?: { message: string; operation: string; at: string };
 };
 
-export function fetchAgentMemoryDocument(agentID: string): Promise<AgentMemoryDocument> {
-  return get(`api/v1/agents/${encodeURIComponent(agentID)}/memory`);
+export type AgentMemoryMarks = {
+  available: boolean;
+  enabled: boolean;
+  revision?: number;
+  sources?: AgentMemorySource[];
+};
+
+export type AgentMemoryChange = { agentID: string; document: AgentMemoryDocument };
+
+export const agentMemoryChangedEvent = "csgclaw:agent-memory-changed";
+
+function agentMemoryPath(agentID: string): string {
+  return `api/v1/agents/${encodeURIComponent(agentID)}/memory`;
 }
 
-export function updateAgentMemoryEnabled(agentID: string, enabled: boolean): Promise<AgentMemoryDocument> {
-  return put(`api/v1/agents/${encodeURIComponent(agentID)}/memory`, { enabled });
+export function fetchAgentMemoryDocument(agentID: string): Promise<AgentMemoryDocument> {
+  return get(agentMemoryPath(agentID));
+}
+
+export function fetchAgentMemoryMarks(agentID: string): Promise<AgentMemoryMarks> {
+  return get(`${agentMemoryPath(agentID)}?view=marks`);
+}
+
+export async function updateAgentMemory(
+  agentID: string,
+  revision: number,
+  change:
+    | { enabled: boolean }
+    | { entries: AgentMemoryEntry[] }
+    | { content: string }
+    | { retry_initialization: true }
+    | { reset: true },
+): Promise<AgentMemoryDocument> {
+  const document = await put<AgentMemoryDocument>(agentMemoryPath(agentID), { revision, ...change });
+  window.dispatchEvent(new CustomEvent<AgentMemoryChange>(agentMemoryChangedEvent, { detail: { agentID, document } }));
+  return document;
+}
+
+export async function forgetAgentMemory(
+  agentID: string,
+  roomID: string,
+  messageID: string,
+): Promise<AgentMemoryDocument> {
+  const document = await del<AgentMemoryDocument>(
+    `${agentMemoryPath(agentID)}/sources/${encodeURIComponent(roomID)}/${encodeURIComponent(messageID)}`,
+  );
+  window.dispatchEvent(new CustomEvent<AgentMemoryChange>(agentMemoryChangedEvent, { detail: { agentID, document } }));
+  return document;
 }
 
 export function updateAgentEffectiveInstructions(

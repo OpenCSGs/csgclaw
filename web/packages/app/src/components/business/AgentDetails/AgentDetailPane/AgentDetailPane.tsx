@@ -38,7 +38,7 @@ import {
   UserPlus,
   X,
 } from "lucide-react";
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useId, useMemo, useRef, useState } from "react";
 import {
   ResourceList,
   ResourceListCard,
@@ -53,8 +53,11 @@ import {
   fetchAgentInstructionsDocument,
   fetchAgentMemoryDocument,
   updateAgentEffectiveInstructions,
-  updateAgentMemoryEnabled,
+  updateAgentMemory,
+  agentMemoryChangedEvent,
+  type AgentMemoryEntry,
   type AgentMemoryDocument,
+  type AgentMemoryChange,
 } from "@/api/agents";
 import { SHOW_AGENT_LIFECYCLE_ACTIONS } from "@/shared/constants/agents";
 import { AGENT_PROFILE_ACTIVE_TAB_STORAGE_KEY } from "@/shared/storage/keys";
@@ -1179,7 +1182,12 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
             ) : null}
 
             {visibleActiveProfileTab === "memory" && item.memory_supported ? (
-              <AgentMemoryPanel agentID={String(item.id || "")} onMemoryChange={onMemoryChange} t={t} />
+              <AgentMemoryPanel
+                agentID={String(item.id || "")}
+                onMemoryChange={onMemoryChange}
+                portalContainer={dialogPortalContainer}
+                t={t}
+              />
             ) : null}
 
             {["skills", "mcp", "apps", "knowledge"].includes(visibleActiveProfileTab) && resourceError ? (
@@ -1922,39 +1930,120 @@ type AgentMemoryPanelProps = {
   agentID: string;
   onMemoryChange?: () => VoidOrPromise;
   t: TranslateFn;
+  portalContainer?: HTMLElement | null;
 };
 
-function AgentMemoryPanel({ agentID, onMemoryChange, t }: AgentMemoryPanelProps) {
+const memoryCategories = [
+  { value: "preference", label: "agentMemoryPreference" },
+  { value: "convention", label: "agentMemoryConvention" },
+  { value: "fact", label: "agentMemoryFact" },
+] as const;
+
+function memoryEditorContent(entries: AgentMemoryEntry[], t: TranslateFn): string {
+  return (
+    memoryCategories
+      .map((category) => {
+        const content = entries
+          .filter((entry) => entry.kind === category.value)
+          .map((entry) => `- ${entry.text.replace(/\n/g, "\n  ")}`)
+          .join("\n");
+        return `## ${t(category.label)}\n${content ? `\n${content}\n` : ""}`;
+      })
+      .join("\n") + "\n"
+  );
+}
+
+function AgentMemoryPanel({ agentID, onMemoryChange, portalContainer, t }: AgentMemoryPanelProps) {
   const [document, setDocument] = useState<AgentMemoryDocument | null>(null);
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
   const [loadError, setLoadError] = useState("");
-  const renderedMemory = useMemo(() => renderMarkdown(document?.content || ""), [document?.content]);
+  const [confirmation, setConfirmation] = useState<"reset" | "clear" | null>(null);
+  const memoryDescriptionID = useId();
+  const hasMemoryDocument = document !== null;
+  const memoryAvailable = document?.available;
+  const [markdownDraft, setMarkdownDraft] = useState<string | null>(null);
+  const [draftRevision, setDraftRevision] = useState(0);
+  const loadRequest = useRef({ sequence: 0 });
 
   const loadMemory = useCallback(async () => {
     if (!agentID) return;
+    const request = ++loadRequest.current.sequence;
     setLoading(true);
     setLoadError("");
     try {
-      setDocument(await fetchAgentMemoryDocument(agentID));
+      const value = await fetchAgentMemoryDocument(agentID);
+      if (request === loadRequest.current.sequence) setDocument(value);
     } catch (error) {
-      setLoadError(errorMessage(error, t("agentMemoryLoadFailed")));
+      if (request === loadRequest.current.sequence) setLoadError(errorMessage(error, t("agentMemoryLoadFailed")));
     } finally {
-      setLoading(false);
+      if (request === loadRequest.current.sequence) setLoading(false);
     }
   }, [agentID, t]);
 
   useEffect(() => {
+    const request = loadRequest.current;
     setDocument(null);
+    setConfirmation(null);
+    setMarkdownDraft(null);
     void loadMemory();
+    return () => {
+      request.sequence++;
+    };
   }, [loadMemory]);
 
-  async function setMemoryEnabled(enabled: boolean) {
+  useEffect(() => {
+    if (!agentID || markdownDraft !== null || updating || memoryAvailable === false) return;
+    let disposed = false;
+    let fetching = false;
+    const refresh = async () => {
+      if (disposed || fetching || window.document.hidden) return;
+      fetching = true;
+      const generation = loadRequest.current.sequence;
+      try {
+        const value = await fetchAgentMemoryDocument(agentID);
+        if (!disposed && generation === loadRequest.current.sequence) {
+          setDocument((current) => (current && current.revision > value.revision ? current : value));
+          if (!hasMemoryDocument) setLoadError("");
+        }
+      } catch {
+        // A temporary background read failure must not remove readable memory.
+      } finally {
+        fetching = false;
+      }
+    };
+    const changed = (event: Event) => {
+      const change = (event as CustomEvent<AgentMemoryChange>).detail;
+      if (!disposed && change.agentID === agentID) setDocument(change.document);
+    };
+    const timer = window.setInterval(() => void refresh(), 1500);
+    const activated = () => void refresh();
+    window.addEventListener(agentMemoryChangedEvent, changed);
+    window.addEventListener("focus", activated);
+    window.document.addEventListener("visibilitychange", activated);
+    return () => {
+      disposed = true;
+      window.clearInterval(timer);
+      window.removeEventListener(agentMemoryChangedEvent, changed);
+      window.removeEventListener("focus", activated);
+      window.document.removeEventListener("visibilitychange", activated);
+    };
+  }, [agentID, markdownDraft, updating, memoryAvailable, hasMemoryDocument]);
+
+  async function saveMemory(
+    change: { enabled: boolean } | { entries: AgentMemoryEntry[] } | { content: string } | { reset: true },
+    revision = document?.revision ?? 0,
+  ) {
     if (!agentID || updating) return;
+    // A refresh started before this mutation must not replace its result.
+    loadRequest.current.sequence++;
+    setLoading(false);
     setUpdating(true);
     setLoadError("");
     try {
-      setDocument(await updateAgentMemoryEnabled(agentID, enabled));
+      setDocument(await updateAgentMemory(agentID, revision, change));
+      setMarkdownDraft(null);
+      setConfirmation(null);
       await onMemoryChange?.();
     } catch (error) {
       setLoadError(errorMessage(error, t("agentMemoryUpdateFailed")));
@@ -1985,87 +2074,238 @@ function AgentMemoryPanel({ agentID, onMemoryChange, t }: AgentMemoryPanelProps)
             <Switch
               size="sm"
               checked={document?.enabled ?? false}
-              disabled={!document || loading || updating}
+              disabled={
+                !document ||
+                document.available === false ||
+                loading ||
+                updating ||
+                confirmation !== null ||
+                markdownDraft !== null
+              }
               aria-label={t("agentMemoryEnabled")}
-              onCheckedChange={(checked) => void setMemoryEnabled(checked)}
+              onCheckedChange={(checked) => void saveMemory({ enabled: checked })}
             />
           </div>
         </div>
-        <p className={agentMemoryStyles["agent-memory-toggle-hint"]}>{t("agentMemoryToggleHint")}</p>
+        {document?.available === false ? (
+          <p className={agentMemoryStyles["agent-memory-status"]}>{t("agentMemoryUnavailable")}</p>
+        ) : null}
       </section>
 
       <section
         className={`profile-section ${profileFormLayoutStyles["profile-section"]} ${agentSkillsStyles["agent-skills-section"]} agent-memory-document-section`}
       >
-        <div className="agent-memory-section-heading">
+        <div className={`agent-memory-section-heading ${agentMemoryStyles["agent-memory-document-heading"]}`}>
           <div className="profile-section-heading">
             <div className={`profile-section-title ${profileFormLayoutStyles["profile-section-title"]}`}>
               {document?.name || t("agentMemoryDocumentTitle")}
             </div>
-            <p className="profile-section-description">{t("agentMemoryDocumentDescription")}</p>
-            {document?.location ? (
-              <code className={agentMemoryStyles["agent-memory-location"]}>{document.location}</code>
+          </div>
+          <div className={agentMemoryStyles["agent-memory-document-actions"]}>
+            {document?.available && markdownDraft === null ? (
+              <>
+                <Button
+                  size="sm"
+                  variant="secondaryGray"
+                  disabled={loading || updating}
+                  onClick={() => {
+                    setDraftRevision(document.revision);
+                    setMarkdownDraft(memoryEditorContent(document.entries, t));
+                  }}
+                >
+                  {t("agentMemoryEdit")}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="secondaryGray"
+                  disabled={loading || updating || !document.enabled}
+                  onClick={() => {
+                    setLoadError("");
+                    setConfirmation("reset");
+                  }}
+                >
+                  {t("agentMemoryReset")}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="secondaryGray"
+                  disabled={loading || updating || (!document.entries.length && document.status !== "pending")}
+                  onClick={() => {
+                    setLoadError("");
+                    setConfirmation("clear");
+                  }}
+                >
+                  {t("agentMemoryClear")}
+                </Button>
+              </>
             ) : null}
           </div>
-          <div className={agentSkillsStyles["agent-skills-summary-actions"]}>
-            <Tooltip content={t("agentMemoryRefresh")}>
-              <span>
-                <Button
-                  className="agent-skill-add-button"
-                  type="button"
-                  variant="secondaryGray"
-                  size="sm"
-                  aria-label={t("agentMemoryRefresh")}
-                  disabled={loading || updating}
-                  onClick={() => void loadMemory()}
-                >
-                  <RefreshCw size={16} strokeWidth={2.2} aria-hidden="true" />
-                </Button>
-              </span>
-            </Tooltip>
-          </div>
+          <p id={memoryDescriptionID} className={agentMemoryStyles["agent-memory-document-description"]}>
+            {t("agentMemoryDocumentDescription")}
+          </p>
         </div>
 
-        {loadError ? <InlineError>{loadError}</InlineError> : null}
-        {loading ? (
-          <div className="agent-skills-summary-empty agent-memory-summary-empty" role="status">
-            <span className={agentSkillsStyles["agent-skills-summary-icon"]} aria-hidden="true">
-              <CircleDashed size={18} strokeWidth={1.8} />
-            </span>
-            <div className={agentSkillsStyles["agent-skills-summary-empty-copy"]}>
-              <strong>{t("agentMemoryLoading")}</strong>
+        <div className={agentMemoryStyles["agent-memory-content"]}>
+          {document?.last_error ? (
+            <InlineError>
+              <div>{t("agentMemoryLastError")}</div>
+              <div>{document.last_error.message}</div>
+              <small>{new Date(document.last_error.at).toLocaleString()}</small>
+            </InlineError>
+          ) : document?.status === "failed" ? (
+            <p role="status">{t("agentMemoryLearningFailed")}</p>
+          ) : null}
+          {document?.status === "pending" ? (
+            <p role="status" className={agentMemoryStyles["agent-memory-learning"]}>
+              <CircleDashed size={14} className="animate-spin" aria-hidden="true" />
+              {t("agentMemoryLearning")}
+            </p>
+          ) : null}
+          {loadError && !confirmation ? <InlineError>{loadError}</InlineError> : null}
+          {loading && !document ? (
+            <div className="agent-skills-summary-empty agent-memory-summary-empty" role="status">
+              <span className={agentSkillsStyles["agent-skills-summary-icon"]} aria-hidden="true">
+                <CircleDashed size={18} strokeWidth={1.8} />
+              </span>
+              <div className={agentSkillsStyles["agent-skills-summary-empty-copy"]}>
+                <strong>{t("agentMemoryLoading")}</strong>
+              </div>
             </div>
-          </div>
-        ) : document?.ready ? (
-          <div className="agent-section-form agent-memory-document-shell">
-            <ClipboardCopyButton
-              className="agent-memory-copy-button"
-              copiedIcon={<Check aria-hidden="true" size={16} strokeWidth={2.2} />}
-              copiedLabel={t("copiedToClipboard")}
-              icon={<Copy aria-hidden="true" size={16} strokeWidth={2.2} />}
-              iconOnly
-              label={t("copyToClipboard")}
-              text={document.content || ""}
-            />
+          ) : markdownDraft !== null ? (
+            <div className={agentMemoryStyles["agent-memory-editor"]}>
+              <Field>
+                <TextArea
+                  className={agentMemoryStyles["agent-memory-markdown-input"]}
+                  aria-label={t("agentMemoryMarkdownLabel")}
+                  aria-describedby={memoryDescriptionID}
+                  value={markdownDraft}
+                  rows={18}
+                  spellCheck={false}
+                  disabled={updating}
+                  onChange={(event) => setMarkdownDraft(event.target.value)}
+                />
+              </Field>
+              <div className={agentMemoryStyles["agent-memory-editor-actions"]}>
+                <Button size="sm" variant="secondaryGray" disabled={updating} onClick={() => setMarkdownDraft(null)}>
+                  {t("cancel")}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="primary"
+                  disabled={updating}
+                  onClick={() => void saveMemory({ content: markdownDraft }, draftRevision)}
+                >
+                  {t("save")}
+                </Button>
+              </div>
+            </div>
+          ) : document?.available ? (
             <div
-              className={`${agentMemoryStyles["agent-memory-document"]} message-content`}
-              role="region"
-              aria-label={t("agentMemoryDocumentLabel")}
-              dangerouslySetInnerHTML={{ __html: renderedMemory }}
-            />
-          </div>
-        ) : (
-          <div className="agent-skills-summary-empty agent-memory-summary-empty">
-            <span className={agentSkillsStyles["agent-skills-summary-icon"]} aria-hidden="true">
-              <FileCode2 size={18} strokeWidth={1.8} />
-            </span>
-            <div className={agentSkillsStyles["agent-skills-summary-empty-copy"]}>
-              <strong>{t("agentMemoryEmptyTitle")}</strong>
-              <p>{t("agentMemoryEmptyDescription")}</p>
+              className={`agent-section-form agent-memory-document-shell ${agentMemoryStyles["agent-memory-document-shell"]}`}
+            >
+              <ClipboardCopyButton
+                className="agent-memory-copy-button"
+                copiedIcon={<Check aria-hidden="true" size={16} strokeWidth={2.2} />}
+                copiedLabel={t("copiedToClipboard")}
+                icon={<Copy aria-hidden="true" size={16} strokeWidth={2.2} />}
+                iconOnly
+                label={t("copyToClipboard")}
+                text={document?.content || ""}
+              />
+              <div
+                className={agentMemoryStyles["agent-memory-categories"]}
+                role="region"
+                aria-label={t("agentMemoryDocumentLabel")}
+              >
+                {memoryCategories.map((category) => {
+                  const entries = (document?.entries || []).filter((entry) => entry.kind === category.value);
+                  return (
+                    <section
+                      key={category.value}
+                      className={agentMemoryStyles["agent-memory-category"]}
+                      aria-label={t(category.label)}
+                    >
+                      <div className={agentMemoryStyles["agent-memory-category-heading"]}>
+                        <h3>
+                          {t(category.label)} <span>{entries.length}</span>
+                        </h3>
+                      </div>
+                      {entries.length ? (
+                        <ul className={agentMemoryStyles["agent-memory-category-entries"]}>
+                          {entries.map((entry) => (
+                            <li
+                              key={entry.id}
+                              className="message-content"
+                              dangerouslySetInnerHTML={{ __html: renderMarkdown(entry.text) }}
+                            />
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className={agentMemoryStyles["agent-memory-category-empty"]}>
+                          {t("agentMemoryCategoryEmpty")}
+                        </p>
+                      )}
+                    </section>
+                  );
+                })}
+              </div>
             </div>
-          </div>
-        )}
+          ) : (
+            <div className="agent-skills-summary-empty agent-memory-summary-empty">
+              <span className={agentSkillsStyles["agent-skills-summary-icon"]} aria-hidden="true">
+                <FileCode2 size={18} strokeWidth={1.8} />
+              </span>
+              <div className={agentSkillsStyles["agent-skills-summary-empty-copy"]}>
+                <strong>{t("agentMemoryEmptyTitle")}</strong>
+                <p>
+                  {t(document?.initialization === "empty" ? "agentMemoryHistoryEmpty" : "agentMemoryEmptyDescription")}
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
       </section>
+      <DialogRoot
+        open={confirmation !== null}
+        onOpenChange={(open) => {
+          if (!open && !updating) {
+            setConfirmation(null);
+            setLoadError("");
+          }
+        }}
+      >
+        <DialogContent portalContainer={portalContainer}>
+          <DialogHeader>
+            <div>
+              <DialogTitle>
+                {t(confirmation === "reset" ? "agentMemoryResetTitle" : "agentMemoryClearTitle")}
+              </DialogTitle>
+              <DialogDescription>
+                {t(confirmation === "reset" ? "agentMemoryResetConfirm" : "agentMemoryClearConfirm")}
+              </DialogDescription>
+            </div>
+            <DialogCloseButton label={t("close")} size="sm" variant="tertiaryGray" disabled={updating} />
+          </DialogHeader>
+          {loadError ? (
+            <DialogBody>
+              <InlineError>{loadError}</InlineError>
+            </DialogBody>
+          ) : null}
+          <DialogFooter>
+            <Button size="sm" variant="secondaryGray" disabled={updating} onClick={() => setConfirmation(null)}>
+              {t("cancel")}
+            </Button>
+            <Button
+              size="sm"
+              variant="danger"
+              disabled={updating}
+              onClick={() => void saveMemory(confirmation === "reset" ? { reset: true } : { entries: [] })}
+            >
+              {t(confirmation === "reset" ? "agentMemoryReset" : "agentMemoryClear")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </DialogRoot>
     </div>
   );
 }

@@ -1,3 +1,4 @@
+import styles from "./ConversationMemory.module.css";
 import { resourceMessageText } from "@/models/conversationResources";
 import { writeTextToClipboard } from "@/shared/lib/clipboard";
 import { DiagnosticMessageAction } from "@/components/business/TurnDiagnostics";
@@ -21,6 +22,7 @@ export type ConversationMessageActionsProps = {
   content?: string | null;
   image?: MessageAttachment | null;
   onOpenThread?: () => VoidOrPromise;
+  onForgetMemory?: () => Promise<void>;
   t: TranslateFn;
 };
 
@@ -31,12 +33,16 @@ export function ConversationMessageActions({
   image,
   leading,
   onOpenThread,
+  onForgetMemory,
   t,
 }: ConversationMessageActionsProps) {
+  const [forgetState, setForgetState] = useState<"idle" | "busy" | "done" | "error">("idle");
   const [copied, setCopied] = useState(false);
   const [copying, setCopying] = useState(false);
   const [copyError, setCopyError] = useState("");
   const copiedTimerRef = useRef<number | null>(null);
+  const hasMemory = Boolean(onForgetMemory);
+  const previousMemory = useRef(hasMemory);
   const copyText = flattenMentionText(resourceMessageText(renderSlashCommandPreviewText(content), metadata));
   const imageURL = image?.download_url || image?.preview_url || "";
   const canCopy = Boolean(imageURL || copyText.replace(/\u200b/g, ""));
@@ -48,6 +54,11 @@ export function ConversationMessageActions({
       : imageURL
         ? t("copyImage")
         : t("copyToClipboard");
+
+  useEffect(() => {
+    if (hasMemory && !previousMemory.current) setForgetState("idle");
+    previousMemory.current = hasMemory;
+  }, [hasMemory]);
 
   useEffect(
     () => () => {
@@ -85,15 +96,48 @@ export function ConversationMessageActions({
     }, 2000);
   }
 
-  if (!canCopy && !onOpenThread && !leading && !diagnosticReference(metadata) && !usage) {
+  if (
+    !canCopy &&
+    !onOpenThread &&
+    !leading &&
+    !onForgetMemory &&
+    forgetState === "idle" &&
+    !diagnosticReference(metadata) &&
+    !usage
+  ) {
     return null;
   }
 
   return (
     <div
-      className={`message-action-controls ${className} ${leading ? "has-leading" : ""} ${usage ? "has-token-usage" : ""}`.trim()}
+      className={`message-action-controls ${className} ${onForgetMemory || forgetState !== "idle" ? "has-memory-action" : ""} ${leading ? "has-leading" : ""} ${usage ? "has-token-usage" : ""}`.trim()}
     >
       {leading ? <span className="message-action-leading">{leading}</span> : null}
+      {onForgetMemory || forgetState === "done" ? (
+        <span className={styles.updated} role="status">
+          <Check aria-hidden="true" />
+          {t(forgetState === "done" ? "agentMemoryForgotten" : "agentMemoryUpdated")}
+        </span>
+      ) : null}
+      {onForgetMemory ? (
+        <button
+          type="button"
+          className={styles.forget}
+          disabled={forgetState === "busy"}
+          onClick={async () => {
+            setForgetState("busy");
+            try {
+              await onForgetMemory();
+              setForgetState("done");
+            } catch {
+              setForgetState("error");
+            }
+          }}
+        >
+          {t("agentMemoryForget")}
+        </button>
+      ) : null}
+      {forgetState === "error" ? <span role="alert">{t("agentMemoryUpdateFailed")}</span> : null}
       <DiagnosticMessageAction metadata={metadata} t={t} iconOnly />
       {canCopy ? (
         <button

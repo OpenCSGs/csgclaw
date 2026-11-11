@@ -529,6 +529,13 @@ func (m *appServerManager) ensureSession(ctx context.Context, handle SessionHand
 		return strings.TrimSpace(live.session.SessionID), nil
 	}
 
+	logicalKey := contract.LogicalRuntimeSessionKey(conversationKey)
+	if logicalKey != conversationKey {
+		if err := m.removeConversationBindings(live, logicalKey, conversationKey); err != nil {
+			return "", err
+		}
+	}
+
 	live.mu.Lock()
 	if threadID := strings.TrimSpace(live.conversationSessions[conversationKey]); threadID != "" && live.loadedConversations[conversationKey] {
 		if !publishFiles || live.filePublishingThreads[threadID] {
@@ -692,34 +699,51 @@ func (m *appServerManager) ResetConversationHistory(ctx context.Context, handle 
 		return err
 	}
 
+	return m.removeConversationBindings(live, conversationKey, "")
+}
+
+func (m *appServerManager) removeConversationBindings(live *liveSession, logicalKey, keep string) error {
 	live.conversationPersistMu.Lock()
 	defer live.conversationPersistMu.Unlock()
+	type binding struct {
+		key, sessionID    string
+		loaded, publishes bool
+	}
 	live.mu.Lock()
-	sessionID := strings.TrimSpace(live.conversationSessions[conversationKey])
-	delete(live.conversationSessions, conversationKey)
-	wasLoaded := live.loadedConversations[conversationKey]
-	delete(live.loadedConversations, conversationKey)
-	wasFilePublishing := live.filePublishingThreads[sessionID]
-	delete(live.filePublishingThreads, sessionID)
+	var removed []binding
+	for key, sessionID := range live.conversationSessions {
+		if key == keep || contract.LogicalRuntimeSessionKey(key) != logicalKey {
+			continue
+		}
+		removed = append(removed, binding{key, sessionID, live.loadedConversations[key], live.filePublishingThreads[sessionID]})
+		delete(live.conversationSessions, key)
+		delete(live.loadedConversations, key)
+		delete(live.filePublishingThreads, sessionID)
+	}
+	if len(removed) == 0 {
+		live.mu.Unlock()
+		return nil
+	}
 	conversations := cloneConversationSessions(live.conversationSessions)
-	filePublishingConversations := filePublishingConversationsForThreads(conversations, live.filePublishingThreads)
+	filePublishing := filePublishingConversationsForThreads(conversations, live.filePublishingThreads)
 	live.mu.Unlock()
-	if err := m.persistConversationSessions(live, conversations, filePublishingConversations); err != nil {
+	if err := m.persistConversationSessions(live, conversations, filePublishing); err != nil {
 		live.mu.Lock()
-		if sessionID != "" {
-			live.conversationSessions[conversationKey] = sessionID
-			live.loadedConversations[conversationKey] = wasLoaded
-			live.filePublishingThreads[sessionID] = wasFilePublishing
+		for _, item := range removed {
+			live.conversationSessions[item.key] = item.sessionID
+			live.loadedConversations[item.key] = item.loaded
+			live.filePublishingThreads[item.sessionID] = item.publishes
 		}
 		live.mu.Unlock()
 		return err
 	}
-
-	if m.deps.Permission != nil && sessionID != "" {
-		m.deps.Permission.CancelSession(runtimeID, sessionID)
-	}
-	if m.deps.UserInput != nil && sessionID != "" {
-		m.deps.UserInput.CancelSession(runtimeID, sessionID)
+	for _, item := range removed {
+		if m.deps.Permission != nil {
+			m.deps.Permission.CancelSession(live.spec.RuntimeID, item.sessionID)
+		}
+		if m.deps.UserInput != nil {
+			m.deps.UserInput.CancelSession(live.spec.RuntimeID, item.sessionID)
+		}
 	}
 	return nil
 }

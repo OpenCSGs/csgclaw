@@ -163,6 +163,7 @@ type BinaryProvider interface {
 
 type Dependencies struct {
 	ModelCatalog          func(agentID string) []codexmodel.Profile
+	DisableNativeMemory   bool
 	ResolveRoomProfile    func(string, string, taskconfig.Config) (agentruntime.Profile, error)
 	BinaryProvider        BinaryProvider
 	ResolveAgent          func(h agentruntime.Handle) (AgentRef, error)
@@ -864,7 +865,7 @@ func (r *Runtime) ensureSession(ctx context.Context, spec SessionSpec, copyHostS
 	if agentRef.RuntimeOptions[conversationReadOnlyOption] == true {
 		spec.ExecutionMode = ExecutionModeReadOnly
 	}
-	spec.MemoryEnabled = runtimeOptions.MemoryMode != MemoryModeDisabled
+	spec.MemoryEnabled = !r.deps.DisableNativeMemory && runtimeOptions.MemoryMode != MemoryModeDisabled
 	runtimeMCPServers, err := r.runtimeMCPServers(ctx, spec.AgentID, agentRef.MCPServers)
 	if err != nil {
 		return nil, fmt.Errorf("materialize Codex MCP servers: %w", err)
@@ -1004,7 +1005,7 @@ func (r *Runtime) hydratePersistedSession(ctx context.Context, manager *appServe
 	if agentRef.RuntimeOptions[conversationReadOnlyOption] == true {
 		spec.ExecutionMode = ExecutionModeReadOnly
 	}
-	spec.MemoryEnabled = runtimeOptions.MemoryMode != MemoryModeDisabled
+	spec.MemoryEnabled = !r.deps.DisableNativeMemory && runtimeOptions.MemoryMode != MemoryModeDisabled
 	spec.MCPServers, err = r.runtimeMCPServers(ctx, agentID, agentRef.MCPServers)
 	if err != nil {
 		return nil, fmt.Errorf("materialize Codex MCP servers: %w", err)
@@ -1146,6 +1147,9 @@ func (r *Runtime) seedCodexHomeConfig(runtimeCodexHome, workspaceDir string, pro
 		}
 	}
 
+	if r.deps.DisableNativeMemory {
+		options.MemoryMode = MemoryModeDisabled
+	}
 	rendered := configureCodexHomeConfigWithWorkspaceForRuntimeOptions(string(configRaw), profile, mcpServers, workspaceDir, options)
 	if err := r.writeFile(configPath, []byte(rendered), 0o600); err != nil {
 		return fmt.Errorf("write runtime codex config %s: %w", configPath, err)

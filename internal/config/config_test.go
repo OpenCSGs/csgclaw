@@ -1415,6 +1415,7 @@ listen_addr = "0.0.0.0:18080"
 advertise_base_url = "http://192.168.2.52:18080"
 access_token = "your_access_token"
 no_auth = true
+local_single_user = false
 show_upgrade = true
 
 [bootstrap]

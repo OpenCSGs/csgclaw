@@ -5,12 +5,14 @@ import (
 	"context"
 	"csgclaw/internal/agentengine"
 	agent "csgclaw/internal/agentengine/agents"
+	"csgclaw/internal/agentmemory"
 	"csgclaw/internal/config"
 	agentruntime "csgclaw/internal/runtime"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -111,5 +113,70 @@ func TestAgentMemoryEndpointsExposeCapabilityDocumentAndToggle(t *testing.T) {
 	updated, ok := svc.Agent("agent-alice")
 	if !ok || updated.RuntimeOptions["memory_mode"] != "disabled" || updated.RuntimeOptions["execution_mode"] != "standard" {
 		t.Fatalf("updated runtime options = %#v", updated.RuntimeOptions)
+	}
+}
+
+func TestManagedMemoryRequiresTrustedLocalAccess(t *testing.T) {
+	root := t.TempDir()
+	statePath := filepath.Join(root, "agents.json")
+	if err := writeSeededAgents(statePath, []agent.Agent{{
+		ID: "agent-alice", Name: "alice", RuntimeID: "rt-agent-alice", RuntimeKind: agent.RuntimeKindCodex,
+		Role: agent.RoleWorker, Status: string(agentruntime.StateStopped),
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	controller, err := agent.NewController(config.ModelConfig{}, config.ServerConfig{}, "", statePath,
+		agent.WithRuntime(fakeMemoryCompatRuntime{fakeCompatRuntime: fakeCompatRuntime{kind: agent.RuntimeKindCodex}}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	store, err := agentmemory.Open(filepath.Join(root, "agents"), filepath.Join(root, "state.json"), "local")
+	if err != nil {
+		t.Fatal(err)
+	}
+	controller.SetManagedMemory(store.DeleteAgent)
+	engine := agentengine.New(controller)
+	engine.SetMemory(store)
+	handler := &Handler{svc: controller, agentEngine: engine, serverNoAuth: true}
+	handler.SetAgentMemory(store, "local")
+	router := handler.Routes()
+
+	request := func(method, address, body string, headers map[string]string) *httptest.ResponseRecorder {
+		t.Helper()
+		r := httptest.NewRequest(method, "http://127.0.0.1:18080/api/v1/agents/agent-alice/memory", strings.NewReader(body))
+		r.RemoteAddr = address
+		for key, value := range headers {
+			r.Header.Set(key, value)
+		}
+		result := httptest.NewRecorder()
+		router.ServeHTTP(result, r)
+		return result
+	}
+	body := `{"revision":0,"enabled":true}`
+	for _, test := range []struct {
+		name, address string
+		headers       map[string]string
+	}{
+		{"remote", "192.0.2.1:5678", nil},
+		{"proxy", "127.0.0.1:5678", map[string]string{"X-Forwarded-For": "192.0.2.1"}},
+		{"cross-origin", "127.0.0.1:5678", map[string]string{"Origin": "https://another.example"}},
+		{"agent", "127.0.0.1:5678", map[string]string{"Authorization": "Bearer agent.fixture"}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if got := request(http.MethodPut, test.address, body, test.headers); got.Code != http.StatusForbidden {
+				t.Fatalf("status=%d body=%s", got.Code, got.Body.String())
+			}
+		})
+	}
+	if got := request(http.MethodPut, "127.0.0.1:5678", body, nil); got.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", got.Code, got.Body.String())
+	}
+	if got := request(http.MethodPut, "127.0.0.1:5678", body, nil); got.Code != http.StatusConflict {
+		t.Fatalf("stale revision status=%d body=%s", got.Code, got.Body.String())
+	}
+	handler.SetAgentMemory(store, "disabled")
+	if got := request(http.MethodGet, "127.0.0.1:5678", "", nil); got.Code != http.StatusOK ||
+		!strings.Contains(got.Body.String(), `"available":false`) {
+		t.Fatalf("shared memory status=%d body=%s", got.Code, got.Body.String())
 	}
 }

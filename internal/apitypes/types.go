@@ -68,6 +68,7 @@ type Mention struct {
 }
 
 type Message struct {
+	MemoryUserID    string              `json:"-"`
 	ID              string              `json:"id"`
 	ClientMessageID string              `json:"client_message_id,omitempty"`
 	SenderID        string              `json:"sender_id"`
@@ -112,6 +113,7 @@ type MessageAttachmentUpload struct {
 }
 
 type CreateMessageRequest struct {
+	MemoryUserID      string             `json:"-"`
 	ResourceSelection *ResourceSelection `json:"-"`
 	// ResolveAttachments lazily opens referenced files after completed-send deduplication.
 	ResolveAttachments func() ([]MessageAttachmentUpload, error) `json:"-"`
