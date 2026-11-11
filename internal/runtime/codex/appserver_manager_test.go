@@ -23,11 +23,28 @@ import (
 )
 
 func TestAppServerManagerStartFailureIncludesRedactedStderrTail(t *testing.T) {
+	const providerKey = "opaque-provider-test-value"
+	if os.Getenv("CSGCLAW_TEST_START_FAILURE") == "" {
+		cmd := exec.CommandContext(t.Context(), os.Args[0], "-test.run=^TestAppServerManagerStartFailureIncludesRedactedStderrTail$")
+		cmd.Env = append(os.Environ(), "CSGCLAW_TEST_START_FAILURE=1")
+		stdout, err := cmd.Output()
+		if err != nil {
+			t.Fatalf("startup test process: %v\n%s", err, stdout)
+		}
+		output := string(stdout)
+		if strings.Contains(output, "sk-secret") || strings.Contains(output, providerKey) {
+			t.Fatal("worker startup diagnostics exposed a credential on stdout")
+		}
+		if !strings.Contains(output, `msg="login failed"`) || !strings.Contains(output, `msg="provider rejected [redacted]"`) {
+			t.Fatal("missing redacted worker startup diagnostics on stdout")
+		}
+		return
+	}
 	withAppServerHelperCommand(t, "fail-before-handshake")
 	dir := t.TempDir()
 	manager := newAppServerManager(testAppServerManagerDeps())
 	spec := testAppServerSessionSpec(dir)
-	spec.Profile.APIKey = "sk-secret"
+	spec.Profile.APIKey = providerKey
 
 	_, err := manager.Start(context.Background(), spec)
 	if err == nil {
@@ -36,7 +53,7 @@ func TestAppServerManagerStartFailureIncludesRedactedStderrTail(t *testing.T) {
 	if !strings.Contains(err.Error(), "stderr tail") || !strings.Contains(err.Error(), "login failed") {
 		t.Fatalf("Start() error = %q, want stderr tail", err.Error())
 	}
-	if strings.Contains(err.Error(), "sk-secret") {
+	if strings.Contains(err.Error(), "sk-secret") || strings.Contains(err.Error(), providerKey) {
 		t.Fatalf("Start() error leaked API key: %q", err.Error())
 	}
 }
@@ -3272,6 +3289,7 @@ func TestAppServerManagerHelperProcess(t *testing.T) {
 	case "fail-before-handshake":
 		_, _ = fmt.Fprintln(os.Stderr, "login failed")
 		_, _ = fmt.Fprintln(os.Stderr, "api_key = sk-secret")
+		_, _ = fmt.Fprintln(os.Stderr, "provider rejected", os.Getenv("OPENAI_API_KEY"))
 		os.Exit(2)
 	case "resume-fallback":
 		runAppServerHelper(t, func(index int, msg map[string]any) (map[string]any, bool) {

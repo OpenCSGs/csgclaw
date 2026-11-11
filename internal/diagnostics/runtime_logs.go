@@ -12,6 +12,8 @@ import (
 	"time"
 )
 
+const maxRuntimeLogLine = 1 << 20
+
 type RuntimeLogEntry struct {
 	Source      string     `json:"source"`
 	Association string     `json:"association"`
@@ -89,25 +91,9 @@ func ReadRuntimeLogs(ctx context.Context, source RuntimeLogSource, window LogWin
 			return report
 		}
 		start := offset
-		line := []byte{}
-		oversize := false
-		var readErr error
-		for {
-			var part []byte
-			part, readErr = reader.ReadSlice('\n')
-			offset += int64(len(part))
-			if len(line)+len(part) > 1<<20 {
-				oversize = true
-				line = nil
-			}
-			if !oversize {
-				line = append(line, part...)
-			}
-			if readErr != bufio.ErrBufferFull {
-				break
-			}
-		}
-		if oversize {
+		line, size, readErr := readRuntimeLogLine(reader)
+		offset += size
+		if size > maxRuntimeLogLine {
 			report.Truncated++
 			report.missing("runtime_log_line_too_large")
 		} else if len(line) > 0 {
@@ -163,6 +149,27 @@ func ReadRuntimeLogs(ctx context.Context, source RuntimeLogSource, window LogWin
 	}
 	return report
 }
+
+// An oversized line returns nil and its full byte count so the next offset stays accurate.
+func readRuntimeLogLine(reader *bufio.Reader) ([]byte, int64, error) {
+	part, err := reader.ReadSlice('\n')
+	if err != bufio.ErrBufferFull {
+		return part, int64(len(part)), err
+	}
+	line := bytes.Clone(part)
+	size := int64(len(part))
+	for err == bufio.ErrBufferFull {
+		part, err = reader.ReadSlice('\n')
+		size += int64(len(part))
+		if size <= maxRuntimeLogLine {
+			line = append(line, part...)
+		} else {
+			line = nil
+		}
+	}
+	return line, size, err
+}
+
 func runtimeLogTime(line string) *time.Time {
 	line = strings.TrimSpace(runtimeANSI.ReplaceAllString(line, ""))
 	if strings.HasPrefix(line, "[turn_id=") {

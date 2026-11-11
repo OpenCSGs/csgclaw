@@ -8,6 +8,8 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"strings"
+	"sync"
 	"time"
 
 	"csgclaw/internal/processgroup"
@@ -16,12 +18,14 @@ import (
 // StderrLog preserves the worker's append-only diagnostic file. The pipe is
 // owned by the runtime so Wait can return before descendants release stderr.
 type StderrLog struct {
-	Observer *RuntimeObserver
-	file     *os.File
-	reader   *os.File
-	done     chan struct{}
-	console  *consoleOutput
-	prefix   string
+	Observer  *RuntimeObserver
+	file      *os.File
+	reader    *os.File
+	done      chan struct{}
+	console   *consoleOutput
+	prefix    string
+	secrets   *strings.Replacer
+	fileError sync.Once
 }
 
 // StartWithStderr starts a worker and takes ownership of file on success.
@@ -49,6 +53,7 @@ func startWithStderr(cmd *exec.Cmd, file *os.File, kind, runtimeID string, conso
 	log := &StderrLog{
 		file:    file,
 		console: console,
+		secrets: workerConsoleSecrets(cmd.Environ()),
 		reader:  reader,
 		done:    make(chan struct{}),
 		prefix:  fmt.Sprintf("source=worker.stderr runtime=%s runtime_id=%q pid=%d instance_id=%s", kind, runtimeID, cmd.Process.Pid, instanceID),
@@ -65,34 +70,43 @@ func (l *StderrLog) copyStderr() {
 	defer l.reader.Close()
 	// Tee before framing: downloads and diagnostic byte offsets must also
 	// include partial lines, invalid UTF-8, and lines larger than the buffer.
-	reader := bufio.NewReaderSize(io.TeeReader(l.reader, l.file), maxConsoleLine)
+	reader := bufio.NewReaderSize(io.TeeReader(l.reader, stderrFileCopy{l}), maxConsoleLine)
+	inPrivateKey := false
 	for {
-		part, err := reader.ReadSlice('\n')
-		if len(part) != 0 {
-			l.emit(part)
+		line, size, err := readRuntimeLogLine(reader)
+		if size != 0 {
+			l.emit(line, &inPrivateKey)
 		}
-		if err != nil && err != bufio.ErrBufferFull {
+		if err != nil {
 			return
 		}
 	}
 }
 
-// Write accepts complete records from the protocol logger and runtime observer.
-func (l *StderrLog) Write(p []byte) (int, error) {
+// File errors must never stop the pipe reader or close the worker's stderr.
+type stderrFileCopy struct{ log *StderrLog }
+
+func (c stderrFileCopy) Write(p []byte) (int, error) {
+	_, _ = c.log.appendFile(p)
+	return len(p), nil
+}
+
+func (l *StderrLog) appendFile(p []byte) (int, error) {
 	n, err := l.file.Write(p)
-	for line := range bytes.Lines(p[:n]) {
-		l.emit(line)
+	if err != nil {
+		l.fileError.Do(func() { l.console.offer(l.prefix, "worker diagnostic file write failed") })
 	}
 	return n, err
 }
 
-func (l *StderrLog) emit(line []byte) {
-	line = bytes.TrimSuffix(line, []byte{'\n'})
-	for len(line) > maxConsoleLine {
-		l.console.offer(l.prefix, line[:maxConsoleLine])
-		line = line[maxConsoleLine:]
+// Write accepts complete records from the protocol logger and runtime observer.
+func (l *StderrLog) Write(p []byte) (int, error) {
+	n, err := l.appendFile(p)
+	inPrivateKey := false
+	for line := range bytes.Lines(p) {
+		l.emit(line, &inPrivateKey)
 	}
-	l.console.offer(l.prefix, line)
+	return n, err
 }
 
 // Drain finishes the child stream before callers append their exit record.
