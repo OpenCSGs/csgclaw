@@ -175,6 +175,9 @@
   background: var(--button-hover-background);
   color: var(--button-hover-text);
 }
+.btn:active:not(:disabled) {
+  translate: 0 1px;
+}
 .btn.active:not(:disabled):not(.btn-primary, .btn-danger, .btn-secondary-gray) {
   border-color: var(--csgclaw-ui-button-brand-hover-border);
   background: var(--csgclaw-ui-control-selected-background);

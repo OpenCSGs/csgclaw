@@ -43,7 +43,7 @@ export function ToggleFoundations() {
         <strong>{labText("Default 与 Slim")}</strong>
         <p>
           {labText(
-            "Default sm / md：36 × 20 / 44 × 24px；Slim sm / md：32 × 16 / 40 × 20px。开启为品牌色，禁用使用独立灰色；聚焦环为 2px 白色间隔与 2px 品牌色外环。",
+            "Default sm / md：36 × 20 / 44 × 24px；Slim sm / md：32 × 16 / 40 × 20px。开启为品牌色，禁用使用独立灰色；聚焦环为 2px 背景色间隔与 2px 品牌色外环。",
           )}
         </p>
         <details>
@@ -53,11 +53,7 @@ export function ToggleFoundations() {
               "标签统一使用 PingFang SC Regular 400，说明文字使用 Light 300。已依据更新后的共享文字样式同步字体和字重；缺少本地 PingFang SC 时使用系统字体回退。",
             )}
           </p>
-          <p>
-            {labText(
-              "试用复用共享 Switch 的 Radix 交互，Figma 样式限定在 UI Lab。白色参考区保持设计导出颜色，主题切换只影响外层容器；尚未同步产品 Switch 或建立完整暗色映射。此示例不保存登录信息。",
-            )}
-          </p>
+          <p>{labText("试用复用共享 Switch 的 Radix 交互，轨道、滑块和文字随主题切换。")}</p>
         </details>
       </div>
       <div className={styles.controls}>

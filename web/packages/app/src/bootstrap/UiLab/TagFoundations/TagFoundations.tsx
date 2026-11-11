@@ -53,9 +53,7 @@ export function TagFoundations() {
       <div className={styles.notice}>
         <strong>{labText("标签参考与交互试用")}</strong>
         <p>
-          {labText(
-            "sm / md 高度 24px，lg 高度 28px，圆角 6px；文字为 PingFang SC Regular 400。原始颜色和图片保持设计导出值，主题切换只改变展示容器。PingFang SC 未内置时使用系统字体回退。",
-          )}
+          {labText("sm / md 高度 24px，lg 高度 28px，圆角 6px。标签颜色随主题切换，字体为 PingFang SC Regular 400。")}
         </p>
         <p>
           {labText("勾选与移除复用现有 Checkbox、Button；勾选、焦点和悬浮效果尚未逐项对齐 Figma 子组件。剩余 ")}
@@ -118,6 +116,19 @@ export function TagFoundations() {
         </div>
         <Button size="sm" onClick={() => setRemoved(false)}>
           {labText("恢复标签")}
+        </Button>
+        <Button
+          size="sm"
+          onClick={() => {
+            setSize("md");
+            setIcon("False");
+            setAction("X close");
+            setCheckbox("yes");
+            setLabel(null);
+            setRemoved(false);
+          }}
+        >
+          {labText("重置示例")}
         </Button>
       </section>
       <h3>{labText("当前尺寸的设计参考")}</h3>

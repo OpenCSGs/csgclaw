@@ -1,0 +1,18 @@
+.glyph {
+  display: inline-flex;
+  flex-shrink: 0;
+}
+
+.glyph img {
+  display: block;
+  max-width: none;
+}
+
+:global(:root[data-theme="dark"]) .glyph {
+  background-color: var(--lab-glyph-color, #61656c);
+  mask: var(--lab-glyph-mask) center no-repeat;
+}
+
+:global(:root[data-theme="dark"]) .glyph img {
+  visibility: hidden;
+}

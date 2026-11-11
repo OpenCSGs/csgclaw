@@ -145,8 +145,8 @@
   width: 16px;
   height: 6px;
 }
-.arrowRotation img,
-.liveArrow img {
+.arrowRotation > span,
+.liveArrow > span {
   position: absolute;
   top: -2.51471px;
   left: 0;
@@ -204,7 +204,7 @@
   width: 16px;
   height: 6px;
 }
-.liveArrow img {
+.liveArrow > span {
   display: none;
 }
 .liveContent[data-side="top"][data-off-center="true"] .liveArrow {
@@ -219,9 +219,9 @@
 .liveContent[data-side="top"][data-off-center="true"][data-arrow="Bottom right"] .endArrow {
   display: block;
 }
-.liveContent[data-side="bottom"] .liveArrow img[data-arrow-side="bottom"],
-.liveContent[data-side="right"] .liveArrow img[data-arrow-side="right"],
-.liveContent[data-side="left"] .liveArrow img[data-arrow-side="left"] {
+.liveContent[data-side="bottom"] .liveArrow .bottomArrow,
+.liveContent[data-side="right"] .liveArrow .rightArrow,
+.liveContent[data-side="left"] .liveArrow .leftArrow {
   display: block;
 }
 .helpGlyph {
@@ -230,7 +230,7 @@
   width: 16px;
   height: 16px;
 }
-.helpGlyph img {
+.helpGlyph > span {
   position: absolute;
   inset: 0;
   max-width: none;
@@ -251,4 +251,21 @@
   .previewStage {
     justify-content: center;
   }
+}
+
+:global(:root[data-theme="dark"]) .referenceStage {
+  background: #0c0e12;
+}
+
+:global(:root[data-theme="dark"]) :is(.bubble, .liveContent.liveContent) {
+  --lab-glyph-color: #13161b;
+  filter: none;
+}
+
+:global(:root[data-theme="dark"]) .body {
+  background: #13161b;
+}
+
+:global(:root[data-theme="dark"]) .description {
+  color: #cecfd2;
 }

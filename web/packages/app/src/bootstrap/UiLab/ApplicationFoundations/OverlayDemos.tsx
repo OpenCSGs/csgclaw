@@ -30,7 +30,10 @@ export function ModalDemo({ drawer = false }: { drawer?: boolean }) {
             {t(drawer ? "打开抽屉" : "打开弹窗")}
           </Button>
         </DialogTrigger>
-        <DialogContent className={`${styles.demoSurface} ${drawer ? styles.drawer : styles.modal}`}>
+        <DialogContent
+          className={`${styles.demoSurface} ${drawer ? styles.drawer : styles.modal}`}
+          overlayClassName={drawer ? undefined : styles.modalOverlay}
+        >
           <DialogHeader>
             <div>
               <DialogTitle>{t(drawer ? "编辑设置" : "保存草稿")}</DialogTitle>
@@ -70,6 +73,7 @@ export function CommandDemo() {
   return (
     <>
       <Combobox
+        contentClassName={styles.commandPopover}
         value={action}
         onValueChange={setAction}
         placeholder={t("选择操作")}

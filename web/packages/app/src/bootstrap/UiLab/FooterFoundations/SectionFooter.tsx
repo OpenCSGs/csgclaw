@@ -1,3 +1,4 @@
+import { ThemeGlyph } from "../ThemeGlyph";
 import { useState } from "react";
 import { ToggleGroup } from "radix-ui";
 import { Button } from "@/components/ui";
@@ -57,7 +58,7 @@ export function SectionFooter({
                 className={styles.period}
                 aria-label={t(["12 个月", "30 天", "7 天", "自定义范围"][i])}
               >
-                {i === 3 && <img src={plus} alt="" />}
+                {i === 3 && <ThemeGlyph src={plus} />}
                 <span className={styles.longLabel}>{t(["12 months", "30 days", "7 days", "Custom"][i])}</span>
                 {i !== 3 && <span className={styles.shortLabel}>{value}</span>}
               </ToggleGroup.Item>

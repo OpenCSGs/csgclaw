@@ -1,3 +1,4 @@
+import { ThemeGlyph } from "../ThemeGlyph";
 import { useLabTranslation } from "../LabLocale";
 import type { ChangeEventHandler } from "react";
 import { Field, TextArea, TextInput } from "@/components/ui";
@@ -39,7 +40,7 @@ export function InputSample({
         label={
           <>
             {sampleText(multiline ? "Description" : "Email")}
-            {multiline && <img className={styles.labelHelp} src={help} alt="" />}
+            {multiline && <ThemeGlyph className={styles.labelHelp} src={help} />}
           </>
         }
         required
@@ -61,7 +62,10 @@ export function InputSample({
           </div>
         ) : (
           <div className={styles.inputBox} data-disabled={disabled}>
-            <img src={disabled ? (size === "sm" ? disabledMailSm : disabledMailMd) : mail} alt="" />
+            <ThemeGlyph
+              className={styles.leadingGlyph}
+              src={disabled ? (size === "sm" ? disabledMailSm : disabledMailMd) : mail}
+            />
             <TextInput
               className={styles.input}
               variant="plain"
@@ -73,7 +77,7 @@ export function InputSample({
               placeholder={placeholder}
               required
             />
-            <img src={error ? alert : help} alt="" />
+            <ThemeGlyph className={styles.trailingGlyph} src={error ? alert : help} />
           </div>
         )}
       </Field>

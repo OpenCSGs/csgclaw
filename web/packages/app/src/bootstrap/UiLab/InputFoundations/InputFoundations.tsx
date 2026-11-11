@@ -79,11 +79,7 @@ export function InputFoundations() {
           {snapshot.entries.length - verified.length}{" "}
           {labText("个节点仅建立索引，样式待读取。组合输入与验证码为静态参考，后续补充交互与状态。")}
         </p>
-        <p>
-          {labText(
-            "参考区保持设计导出颜色和原始图标，外层容器跟随主题。PingFang SC 未内置，缺少本地字体时会回退。试用复用现有 Field、TextInput、TextArea，样式限定在 UI Lab；产品输入框尚未同步。",
-          )}
-        </p>
+        <p>{labText("输入框试用复用 Field、TextInput 和 TextArea，已核验的设计颜色随主题切换。")}</p>
       </div>
       <section className={styles.demo} aria-label={labText("输入框交互试用")}>
         <h3>{labText("交互试用")}</h3>
@@ -154,6 +150,8 @@ export function InputFoundations() {
             size="sm"
             variant="secondaryGray"
             onClick={() => {
+              setSize("md");
+              setFamily("input");
               setEmail("");
               setDescription("");
               setValidated(false);

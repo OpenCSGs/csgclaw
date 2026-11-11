@@ -9,9 +9,18 @@ type DismissibleAlertProps = {
   /** When this value changes, the dismissed state resets. */
   messageKey?: string;
   closeLabel?: string;
+  closeIcon?: ReactNode;
+  onDismiss?: () => void;
 };
 
-export function DismissibleAlert({ children, className, messageKey, closeLabel = "Close" }: DismissibleAlertProps) {
+export function DismissibleAlert({
+  children,
+  className,
+  messageKey,
+  closeLabel = "Close",
+  closeIcon,
+  onDismiss,
+}: DismissibleAlertProps) {
   const [dismissed, setDismissed] = useState(false);
 
   useEffect(() => {
@@ -26,10 +35,13 @@ export function DismissibleAlert({ children, className, messageKey, closeLabel =
       <button
         type="button"
         className={styles["dismissible-alert-close-btn"]}
-        onClick={() => setDismissed(true)}
+        onClick={() => {
+          setDismissed(true);
+          onDismiss?.();
+        }}
         aria-label={closeLabel}
       >
-        <X size={14} aria-hidden="true" />
+        {closeIcon ?? <X size={14} aria-hidden="true" />}
       </button>
     </div>
   );

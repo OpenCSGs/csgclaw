@@ -231,3 +231,63 @@
     margin-left: auto;
   }
 }
+
+:global(:root[data-theme="dark"]) .stage {
+  --button-neutral-text: #cecfd2;
+  --button-neutral-hover-text: #ececed;
+  --button-tertiary-text: #94979c;
+  --button-tertiary-hover-text: #cecfd2;
+  background: #0c0e12;
+  border-color: #22262f;
+  color: #cecfd2;
+}
+
+:global(:root[data-theme="dark"]) :is(.stage p, .tab, .number, .step span, .step small) {
+  color: #94979c;
+}
+
+:global(:root[data-theme="dark"]) :is(.tabs, .pagination) {
+  border-color: #22262f;
+}
+
+:global(:root[data-theme="dark"]) .tab:is([data-state="active"], :hover) {
+  border-bottom-color: #cecfd2;
+  color: #cecfd2;
+}
+
+:global(:root[data-theme="dark"]) :is(.tab, .number):focus-visible {
+  outline-color: #4d6ad6;
+}
+
+:global(:root[data-theme="dark"]) .badge {
+  background: #13161b;
+  border-color: #373a41;
+  color: #cecfd2;
+}
+
+:global(:root[data-theme="dark"]) .tab:is([data-state="active"], :hover) .badge {
+  background: #0e1b4e;
+  border-color: #17308f;
+  color: #6584f8;
+}
+
+:global(:root[data-theme="dark"]) .number:is(:hover, [aria-current="page"]) {
+  background: #22262f;
+  color: #cecfd2;
+}
+
+:global(:root[data-theme="dark"]) .step {
+  border-top-color: #373a41;
+}
+
+:global(:root[data-theme="dark"]) .step:is([data-state="current"], [data-state="complete"]) {
+  border-top-color: #cecfd2;
+}
+
+:global(:root[data-theme="dark"]) .step[data-state="current"] strong {
+  color: #cecfd2;
+}
+
+:global(:root[data-theme="dark"]) .step[data-state="current"] span {
+  color: #94979c;
+}

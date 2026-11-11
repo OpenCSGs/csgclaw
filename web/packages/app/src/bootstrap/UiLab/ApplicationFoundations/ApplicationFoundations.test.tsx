@@ -5,12 +5,33 @@ import { ApplicationFoundations } from "./ApplicationFoundations";
 import { monthDays, shiftMonth } from "./calendarModel";
 
 function mount(kind: Parameters<typeof ApplicationFoundations>[0]["kind"]) {
-  const view = render(<ApplicationFoundations kind={kind} />);
-  fireEvent.click(screen.getByText("辅助行为验证", { selector: "summary" }));
-  return view;
+  return render(<ApplicationFoundations kind={kind} />);
 }
 
 describe("application component playgrounds", () => {
+  it("dismisses and restores the inline alert", async () => {
+    render(<ApplicationFoundations kind="alerts" />);
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "了解更多" }));
+    expect(screen.getByText("此提醒仅用于展示，不会修改真实设置。")).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "关闭提醒" }));
+    expect(screen.queryByText("请注意，这可能会带来问题")).not.toBeInTheDocument();
+    expect(screen.queryByText("此提醒仅用于展示，不会修改真实设置。")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "重新显示提醒" }));
+    expect(screen.getByText("请注意，这可能会带来问题")).toBeVisible();
+  });
+
+  it("runs a notification action and dismisses the toast", async () => {
+    render(<ApplicationFoundations kind="alerts" />);
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("radio", { name: "移动端" }));
+    await user.click(screen.getByRole("button", { name: "触发警告通知" }));
+    expect(screen.getByText("项目已取消发布", { exact: true })).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "撤销操作" }));
+    expect(screen.queryByRole("button", { name: "关闭通知" })).not.toBeInTheDocument();
+    expect(screen.getByText("撤销操作", { exact: true })).toHaveAttribute("role", "status");
+  });
+
   it("filters table rows and retains selection", async () => {
     mount("tables");
     const user = userEvent.setup();
@@ -89,16 +110,14 @@ describe("application component playgrounds", () => {
     await user.keyboard("{ArrowDown}{Enter}");
     expect(screen.getByRole("status")).toHaveTextContent("已选择命令：帮助中心");
   });
-  it("opens the local reference by default and filters its design index", async () => {
+  it("opens the interactive example by default and filters the design index", async () => {
     const { container } = render(<ApplicationFoundations kind="metrics" />);
     const user = userEvent.setup();
-    expect(container.querySelector('[data-node-id="1560:266242"]')).toBeInTheDocument();
-    expect(screen.getByText("辅助行为验证", { selector: "summary" }).closest("details")).not.toHaveAttribute("open");
-    expect(await screen.findByRole("region", { name: "Figma 原尺寸参考" })).toBeVisible();
-    await user.click(screen.getByText("Figma 原尺寸参考", { selector: "summary" }));
+    expect(screen.getByRole("button", { name: "重置示例" })).toBeVisible();
     expect(container.querySelector('[data-node-id="1560:266242"]')).toBeNull();
     await user.click(screen.getByText("Figma 原尺寸参考", { selector: "summary" }));
     expect(await screen.findByRole("region", { name: "Figma 原尺寸参考" })).toBeVisible();
+    expect(container.querySelector('[data-node-id="1560:266242"]')).toBeInTheDocument();
     await user.click(screen.getByText("设计节点索引", { exact: false }));
     await user.type(screen.getByRole("searchbox", { name: "筛选设计节点" }), "not-a-node");
     expect(await screen.findByText("未找到匹配节点。")).toBeVisible();

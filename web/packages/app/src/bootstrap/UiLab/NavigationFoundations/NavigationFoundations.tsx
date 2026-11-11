@@ -1,3 +1,4 @@
+import { ThemeGlyph } from "../ThemeGlyph";
 import { useState, type ReactNode } from "react";
 import { Tabs } from "radix-ui";
 import { Button } from "@/components/ui";
@@ -49,6 +50,7 @@ const tabDescriptions = [
 ];
 export function TabsFoundations() {
   const { text: t } = useLabTranslation();
+  const [tab, setTab] = useState("0");
   return (
     <Foundation
       id="tabs-foundations"
@@ -57,7 +59,7 @@ export function TabsFoundations() {
       node="43-0"
       scope="已对齐 sm 下划线选项卡：32px 高、14/20px Medium、12px 间距、2px 品牌色指示线。其他类型与尺寸待补充。"
     >
-      <Tabs.Root defaultValue="0">
+      <Tabs.Root value={tab} onValueChange={setTab}>
         <Tabs.List className={styles.tabs} aria-label={t("设置选项卡")}>
           {tabNames.map((name, i) => (
             <Tabs.Trigger className={styles.tab} key={name} value={String(i)}>
@@ -73,6 +75,9 @@ export function TabsFoundations() {
           </Tabs.Content>
         ))}
       </Tabs.Root>
+      <Button size="sm" onClick={() => setTab("0")}>
+        {t("重置示例")}
+      </Button>
     </Foundation>
   );
 }
@@ -101,7 +106,7 @@ export function PaginationFoundations() {
       </ul>
       <nav className={styles.pagination} aria-label={t("示例分页")}>
         <Button className={styles.action} variant="linkGray" disabled={page === 1} onClick={() => setPage(page - 1)}>
-          <img src="ui-lab/figma/navigation/arrow-left.svg" alt="" width="20" height="20" />
+          <ThemeGlyph src="ui-lab/figma/navigation/arrow-left.svg" />
           {t("上一页")}
         </Button>
         <div className={styles.numbers}>
@@ -121,7 +126,7 @@ export function PaginationFoundations() {
         </div>
         <Button className={styles.action} variant="linkGray" disabled={page === 5} onClick={() => setPage(page + 1)}>
           {t("下一页")}
-          <img src="ui-lab/figma/navigation/arrow-right.svg" alt="" width="20" height="20" />
+          <ThemeGlyph src="ui-lab/figma/navigation/arrow-right.svg" />
         </Button>
       </nav>
       <Button

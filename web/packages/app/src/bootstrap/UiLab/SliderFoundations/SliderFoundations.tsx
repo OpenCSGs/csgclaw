@@ -64,11 +64,7 @@ export function SliderFoundations() {
       <a href={snapshot.source} target="_blank" rel="noreferrer">
         {t("查看 Figma Sliders 来源 ↗")}
       </a>
-      <p>
-        {t(
-          "已读取 30 个滑块组合：无标签、底部标签及顶部浮动标签。轨道 8px，手柄 24px，品牌色 #3250bd；文字使用 PingFang SC。控制柄的独立状态矩阵尚未收录。",
-        )}
-      </p>
+      <p>{t("已收录 30 个滑块组合，包括无标签、底部标签和顶部浮动标签。轨道 8px，手柄 24px，颜色随主题切换。")}</p>
       <section className={styles.demo} aria-label={t("滑块交互试用")}>
         <h3>{t("交互试用")}</h3>
         <p>

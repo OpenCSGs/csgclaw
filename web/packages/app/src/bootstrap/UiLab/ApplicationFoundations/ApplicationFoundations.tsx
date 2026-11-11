@@ -1,14 +1,15 @@
 import { useState } from "react";
-import { Button } from "@/components/ui";
+import { Button, LinkButton } from "@/components/ui";
 import { applicationSections, type ApplicationKind } from "./registry";
 import { FigmaReference } from "./FigmaReference";
 import { HeaderDemo, NavigationDemo, BreadcrumbDemo, InlineCtaDemo, DividerDemo } from "./LayoutDemos";
 import { ModalDemo, CommandDemo } from "./OverlayDemos";
 import { TableDemo, MetricDemo, ChartDemo, ActivityDemo } from "./DataDemos";
 import { DatePickerDemo, CalendarDemo } from "./DateDemos";
-import { AlertDemo, LoadingDemo, EmptyDemo } from "./FeedbackDemos";
+import { LoadingDemo, EmptyDemo } from "./FeedbackDemos";
 import { MessagingDemo, UploadDemo, CodeDemo } from "./ContentDemos";
 import { useLabTranslation } from "../LabLocale";
+import { AlertNotificationDemos } from "./AlertNotificationDemos";
 import inventory from "./figmaInventory.json";
 import styles from "./ApplicationFoundations.module.css";
 function Demo({ kind }: { kind: ApplicationKind }) {
@@ -39,8 +40,6 @@ function Demo({ kind }: { kind: ApplicationKind }) {
       return <TableDemo />;
     case "breadcrumbs":
       return <BreadcrumbDemo />;
-    case "alerts":
-      return <AlertDemo />;
     case "date-pickers":
       return <DatePickerDemo />;
     case "calendars":
@@ -64,37 +63,46 @@ export function ApplicationFoundations({ kind }: { kind: ApplicationKind }) {
   const source = inventory.find((item) => item.key === kind)!;
   return (
     <section id={`${kind}-foundations`} className={styles.foundation} aria-labelledby={`${kind}-title`}>
-      <h2 id={`${kind}-title`}>{t(`${entry.title} · ${entry.zh}`)}</h2>
-      <p>{t(entry.description)}</p>
-      <a
-        href={`https://www.figma.com/design/2s3AVSZ5FfBnCR5nI2AriR/?node-id=${source.pageId.replace(":", "-")}`}
-        target="_blank"
-        rel="noreferrer"
-      >
-        {t("查看 Figma 设计来源 ↗")}
-      </a>
-      <p>{t("本页已收录一个代表性设计节点与交互试用。完整变体矩阵及生产页面迁移尚待验收。")}</p>
-      {kind !== "breadcrumbs" && <FigmaReference kind={kind} expanded />}
-      <details className={styles.behavior} open={kind === "breadcrumbs"}>
-        <summary>{t(kind === "breadcrumbs" ? "设计交互" : "辅助行为验证")}</summary>
-        <section
-          className={`${styles.stage} ${styles.demoSurface}`}
-          aria-label={`${t(entry.title + " · " + entry.zh)} · ${t("交互试用")}`}
+      <header className={styles.heading}>
+        <h2 id={`${kind}-title`}>{t(`${entry.title} · ${entry.zh}`)}</h2>
+        <LinkButton
+          className={styles.sourceButton}
+          variant="primary"
+          href={`https://www.figma.com/design/2s3AVSZ5FfBnCR5nI2AriR/?node-id=${source.pageId.replace(":", "-")}`}
+          target="_blank"
+          rel="noreferrer"
         >
-          {kind !== "breadcrumbs" && (
-            <p>{t("试用区使用本地示例数据，不连接业务服务。设计原始文案与尺寸见设计参考。")}</p>
-          )}
-          <Demo key={revision} kind={kind} />
-          {kind !== "breadcrumbs" && (
-            <div className={styles.actions}>
-              <Button size="sm" onClick={() => setRevision((value) => value + 1)}>
-                {t("重置示例")}
-              </Button>
-            </div>
-          )}
-        </section>
-      </details>
-      {kind === "breadcrumbs" && <FigmaReference kind={kind} />}
+          {t("查看 Figma 设计来源 ↗")}
+        </LinkButton>
+      </header>
+      <p>{t(entry.description)}</p>
+      {kind === "alerts" ? (
+        <AlertNotificationDemos />
+      ) : (
+        <>
+          <p>{t("本页已收录一个代表性设计节点与交互试用。完整变体矩阵及生产页面迁移尚待验收。")}</p>
+          <details open>
+            <summary>{t(kind === "breadcrumbs" ? "设计交互" : "交互试用")}</summary>
+            {kind !== "breadcrumbs" && (
+              <p>{t("试用区使用本地示例数据，不连接业务服务。设计原始文案与尺寸见设计参考。")}</p>
+            )}
+            <section
+              className={`${styles.previewCanvas} ${styles.liveStage} ${styles.demoSurface}`}
+              aria-label={`${t(entry.title + " · " + entry.zh)} · ${t("交互试用")}`}
+            >
+              {kind !== "breadcrumbs" && (
+                <div className={styles.actions}>
+                  <Button size="sm" onClick={() => setRevision((value) => value + 1)}>
+                    {t("重置示例")}
+                  </Button>
+                </div>
+              )}
+              <Demo key={revision} kind={kind} />
+            </section>
+          </details>
+          <FigmaReference kind={kind} />
+        </>
+      )}
     </section>
   );
 }

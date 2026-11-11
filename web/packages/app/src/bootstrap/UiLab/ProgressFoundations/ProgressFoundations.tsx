@@ -34,12 +34,12 @@ export function ProgressFoundations() {
         <strong>{labText("进度、标签与参考范围")}</strong>
         <p>
           {labText(
-            "进度条高 8px，轨道 #e9eaeb，填充 #3250bd；常规标签为 PingFang SC 14/20px、400，浮动标签为 12/18px、500。圆环包含 xxs / xs / sm / md / lg，保留原始 SVG 与设计尺寸。",
+            "进度条高 8px，轨道、填充和标签随主题切换。圆环包含 xxs / xs / sm / md / lg，使用对应主题的 Figma SVG。",
           )}
         </p>
         <p>
           {labText(
-            "部分原稿进度条的标称百分比与填充长度不一致，静态参考保留原值；交互演示按实际百分比显示，0% 为空、100% 为满。圆环参考固定显示原稿的 40%，暂不提供动态圆环。参考配色固定，主题仅影响外层容器；尚未迁移业务页面。",
+            "部分原稿进度条的标称百分比与填充长度不一致，静态参考保留原值；交互演示按实际百分比显示，0% 为空、100% 为满。圆环参考固定显示原稿的 40%，暂不提供动态圆环。参考配色随主题切换。",
           )}
         </p>
       </div>
@@ -76,7 +76,15 @@ export function ProgressFoundations() {
           <Button size="sm" onClick={() => setValue(100)}>
             {labText("完成任务")}
           </Button>
-          <Button size="sm" onClick={() => setValue(40)}>
+          <Button
+            size="sm"
+            onClick={() => {
+              setValue(40);
+              setLabel("Right");
+              setFamily("bars");
+              setShape("Circle");
+            }}
+          >
             {labText("重置示例")}
           </Button>
           <span role="status">

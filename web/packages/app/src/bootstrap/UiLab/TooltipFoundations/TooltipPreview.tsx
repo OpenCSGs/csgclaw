@@ -1,3 +1,4 @@
+import { ThemeGlyph } from "../ThemeGlyph";
 import { useLabTranslation } from "../LabLocale";
 import { Button, IconButton } from "@/components/ui";
 import { TooltipRoot, TooltipTrigger, TooltipContent, TooltipArrow } from "@/components/ui";
@@ -32,8 +33,8 @@ export function TooltipPreview({ arrow, supporting, title, description, edge }: 
             label={edge === "left" ? labText("左边缘提示") : labText("右边缘提示")}
             icon={
               <span className={styles.helpGlyph}>
-                <img className={styles.closedIcon} src={helpClosed} alt="" />
-                <img className={styles.openIcon} src={helpOpen} alt="" />
+                <ThemeGlyph className={styles.closedIcon} src={helpClosed} />
+                <ThemeGlyph className={styles.openIcon} src={helpOpen} />
               </span>
             }
           />
@@ -59,12 +60,12 @@ export function TooltipPreview({ arrow, supporting, title, description, edge }: 
         {hasArrow && (
           <TooltipArrow asChild width={offCenter && !edge ? 28 : 16} height={6}>
             <span className={styles.liveArrow} aria-hidden="true">
-              <img data-arrow-side="top" className={styles.centerArrow} src={arrowAssets["Bottom center"]} alt="" />
-              <img data-arrow-side="top" className={styles.startArrow} src={arrowAssets["Bottom left"]} alt="" />
-              <img data-arrow-side="top" className={styles.endArrow} src={arrowAssets["Bottom right"]} alt="" />
-              <img data-arrow-side="bottom" src={arrowAssets["Top center"]} alt="" />
-              <img data-arrow-side="right" src={arrowAssets.Left} alt="" />
-              <img data-arrow-side="left" src={arrowAssets.Right} alt="" />
+              <ThemeGlyph className={styles.centerArrow} src={arrowAssets["Bottom center"]} />
+              <ThemeGlyph className={styles.startArrow} src={arrowAssets["Bottom left"]} />
+              <ThemeGlyph className={styles.endArrow} src={arrowAssets["Bottom right"]} />
+              <ThemeGlyph className={styles.bottomArrow} src={arrowAssets["Top center"]} />
+              <ThemeGlyph className={styles.rightArrow} src={arrowAssets.Left} />
+              <ThemeGlyph className={styles.leftArrow} src={arrowAssets.Right} />
             </span>
           </TooltipArrow>
         )}

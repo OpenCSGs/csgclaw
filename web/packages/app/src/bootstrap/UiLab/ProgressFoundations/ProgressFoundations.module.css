@@ -211,3 +211,42 @@
     padding-inline: 12px;
   }
 }
+
+:global(:root[data-theme="dark"]) :is(.liveStage, .referenceStage, .circleStage) {
+  background: #0c0e12;
+}
+
+:global(:root[data-theme="dark"]) .track {
+  background: #373a41;
+}
+
+:global(:root[data-theme="dark"]) .fill {
+  background: #4d6ad6;
+}
+
+:global(:root[data-theme="dark"]) :is(.percent, .floating) {
+  color: #cecfd2;
+}
+
+:global(:root[data-theme="dark"]) .floating {
+  background: #13161b;
+  border-color: #373a41;
+  filter: none;
+}
+
+:global(:root[data-theme="dark"]) :is(.circleLabel, .tinyLabel) {
+  color: #94979c;
+}
+
+:global(:root[data-theme="dark"]) :is(.circleNumber, .tinyNumber) {
+  color: #f7f7f7;
+}
+
+.circle img[data-ring-theme="dark"],
+:global(:root[data-theme="dark"]) .circle img[data-ring-theme="light"] {
+  display: none;
+}
+
+:global(:root[data-theme="dark"]) .circle img[data-ring-theme="dark"] {
+  display: block;
+}

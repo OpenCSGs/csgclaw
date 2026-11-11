@@ -77,7 +77,7 @@
   min-width: 0;
   padding: 12px;
   overflow-x: auto;
-  background: #fff;
+  background: var(--reference-surface, #fff);
   border-radius: var(--radius-md);
 }
 .referenceStage {
@@ -142,7 +142,7 @@
   padding: 9px 13px;
   border: 1px solid var(--reference-border);
   border-radius: 8px;
-  background: #fff;
+  background: var(--reference-surface, #fff);
   box-shadow: var(--reference-shadow);
 }
 .sample[data-size="sm"] .inputBox {
@@ -188,7 +188,7 @@
   padding: 11px 13px;
   border: 1px solid var(--reference-border);
   border-radius: 8px;
-  background: #fff;
+  background: var(--reference-surface, #fff);
   color: var(--reference-text);
   box-shadow: var(--reference-shadow);
   font: inherit;
@@ -234,7 +234,7 @@
 }
 .sample .inputBox[data-disabled="true"],
 .sample .textarea[data-csg-control]:disabled {
-  background: #fafafa;
+  background: var(--reference-disabled, #fafafa);
   color: var(--reference-placeholder);
   cursor: not-allowed;
 }
@@ -260,7 +260,7 @@
   border: 1px solid var(--reference-border);
   border-radius: 8px;
   box-shadow: var(--reference-shadow);
-  background: #fff;
+  background: var(--reference-surface, #fff);
 }
 .compoundContent {
   display: flex;
@@ -325,7 +325,7 @@
   width: 34px;
   height: 24px;
   margin-left: 9px;
-  border: 1px solid #e9eaeb;
+  border: 1px solid var(--reference-subtle-border, #e9eaeb);
   border-radius: 4px;
   flex-shrink: 0;
 }
@@ -379,4 +379,32 @@
   .demo {
     padding: var(--space-3);
   }
+}
+
+:global(:root[data-theme="dark"]) .foundation {
+  --reference-surface: #0c0e12;
+  --reference-disabled: #13161b;
+  --reference-subtle-border: #22262f;
+}
+
+:global(:root[data-theme="dark"]) :is(.sample, .compound) {
+  --reference-label: #cecfd2;
+  --reference-text: #f7f7f7;
+  --reference-placeholder: #85888e;
+  --reference-hint: #94979c;
+  --reference-border: #373a41;
+  --reference-focus: #5271e3;
+  --reference-required: #94979c;
+  --reference-error: #f97066;
+  --reference-error-border: #f04438;
+  --reference-error-focus: #f97066;
+  --reference-shadow: none;
+}
+
+:global(:root[data-theme="dark"]) .inputBox[data-disabled="true"] .leadingGlyph {
+  --lab-glyph-color: #85888e;
+}
+
+:global(:root[data-theme="dark"]) .sample[data-error="true"] .trailingGlyph {
+  --lab-glyph-color: #f97066;
 }

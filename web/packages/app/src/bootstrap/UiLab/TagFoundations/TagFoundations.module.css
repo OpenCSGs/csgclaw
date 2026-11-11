@@ -130,3 +130,17 @@
     padding: var(--space-3);
   }
 }
+
+:global(:root[data-theme="dark"]) .stage {
+  background: #0c0e12;
+}
+
+:global(:root[data-theme="dark"]) .tag {
+  --tag-surface: #0c0e12;
+  --tag-border: #373a41;
+  --tag-text: #cecfd2;
+}
+
+:global(:root[data-theme="dark"]) .count {
+  background: #22262f;
+}

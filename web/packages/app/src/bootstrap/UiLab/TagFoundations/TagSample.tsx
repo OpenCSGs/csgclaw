@@ -1,3 +1,4 @@
+import { ThemeGlyph } from "../ThemeGlyph";
 import { useLabTranslation } from "../LabLocale";
 import { useState } from "react";
 import { Button, Checkbox } from "@/components/ui";
@@ -39,12 +40,12 @@ export function TagSample({
         gap: ref.outerGap,
         paddingInlineStart: Math.max(0, Number.parseFloat(ref.left) - 1),
         paddingInlineEnd: Math.max(0, Number.parseFloat(ref.right) - 1),
-        background: ref.background,
-        borderColor: ref.border,
+        background: `var(--tag-surface, ${ref.background})`,
+        borderColor: `var(--tag-border, ${ref.border})`,
         borderRadius: ref.radius,
         fontSize: ref.fontSize,
         lineHeight: ref.lineHeight,
-        color: ref.color,
+        color: `var(--tag-text, ${ref.color})`,
       }}
     >
       <div className={styles.content} style={{ gap: ref.gap }}>
@@ -58,8 +59,8 @@ export function TagSample({
               height: sizes.checkbox,
               minWidth: sizes.checkbox,
               minHeight: sizes.checkbox,
-              borderColor: checked ? undefined : ref.border,
-              background: checked ? undefined : ref.background,
+              borderColor: checked ? undefined : `var(--tag-border, ${ref.border})`,
+              background: checked ? undefined : `var(--tag-surface, ${ref.background})`,
             }}
           />
         )}
@@ -103,7 +104,7 @@ export function TagSample({
             flexShrink: 0,
           }}
         >
-          <img src={assets[`./assets/${ref.closeAsset}`]} alt="" />
+          <ThemeGlyph src={assets[`./assets/${ref.closeAsset}`]} />
         </Button>
       )}
     </div>

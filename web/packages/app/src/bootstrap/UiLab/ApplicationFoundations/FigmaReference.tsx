@@ -1,3 +1,4 @@
+import { ThemeGlyph } from "../ThemeGlyph";
 import { applicationAsset, resolveAssetStyle } from "./assets";
 import { createElement, useState, type CSSProperties, type ReactNode } from "react";
 import references from "./figmaReferences.json";
@@ -7,11 +8,54 @@ import styles from "./ApplicationFoundations.module.css";
 import { useLabTranslation } from "../LabLocale";
 import type { ApplicationKind } from "./registry";
 
+const themedReferences = new Set<ApplicationKind>([
+  "page-headers",
+  "card-headers",
+  "section-headers",
+  "app-navigation",
+]);
+
+const overlayReferences = new Set<ApplicationKind>(["modals", "command-menus", "charts"]);
+
+const batchReferences = new Set<ApplicationKind>([
+  "metrics",
+  "slideouts",
+  "inline-ctas",
+  "activity-feeds",
+  "messaging",
+  "tables",
+  "breadcrumbs",
+  "date-pickers",
+  "calendars",
+  "file-upload",
+  "dividers",
+  "loading",
+  "empty-states",
+  "code-snippets",
+]);
+
 type DesignNode =
   | string
   | { tag: string; css: string; attrs: Record<string, string>; style?: CSSProperties; children: DesignNode[] };
 function renderNode(node: DesignNode, key: number): ReactNode {
   if (typeof node === "string") return node;
+  const source = node.attrs.src;
+  const darkAsset = source ? applicationAsset(`dark-${source.split("/").at(-1)}`) : undefined;
+  if (source?.endsWith("/charts-imgLabelFalse.svg")) {
+    return (
+      <ThemeGlyph
+        key={key}
+        src={applicationAsset(source)}
+        className={`${referenceStyles[node.css]} ${referenceStyles.chartGridGlyph}`}
+      />
+    );
+  }
+  const style = Object.fromEntries(
+    Object.entries(node.style ?? {}).map(([name, value]) => [
+      name,
+      typeof value === "string" ? resolveAssetStyle(value) : value,
+    ]),
+  );
   return createElement(
     node.tag,
     {
@@ -19,23 +63,20 @@ function renderNode(node: DesignNode, key: number): ReactNode {
       ...(node.attrs.src ? { src: applicationAsset(node.attrs.src) } : {}),
       key,
       className: referenceStyles[node.css],
-      style: node.style
-        ? Object.fromEntries(
-            Object.entries(node.style).map(([name, value]) => [
-              name,
-              typeof value === "string" ? resolveAssetStyle(value) : value,
-            ]),
-          )
-        : undefined,
+      style: darkAsset ? { ...style, "--figma-dark-image": `url("${darkAsset}")` } : style,
+      "data-themed-asset": darkAsset ? "" : undefined,
     },
     ...(node.children.length ? node.children.map(renderNode) : []),
   );
 }
-export function FigmaReference({ kind, expanded = false }: { kind: ApplicationKind; expanded?: boolean }) {
+export function FigmaReference({ kind }: { kind: ApplicationKind }) {
   const { text: t } = useLabTranslation();
-  const [open, setOpen] = useState(expanded);
+  const [open, setOpen] = useState(false);
   const [indexOpen, setIndexOpen] = useState(false);
   const [query, setQuery] = useState("");
+  const overlay = overlayReferences.has(kind);
+  const batch = batchReferences.has(kind);
+  const themed = themedReferences.has(kind) || overlay || batch;
   const reference = references[kind] as unknown as { nodeId: string; tree: DesignNode };
   const source = inventory.find((item) => item.key === kind)!;
   const variants = source.variants.filter((v) => `${v.name} ${v.id}`.toLowerCase().includes(query.toLowerCase()));
@@ -43,7 +84,7 @@ export function FigmaReference({ kind, expanded = false }: { kind: ApplicationKi
     <>
       <details open={open} onToggle={(event) => setOpen(event.currentTarget.open)}>
         <summary>{t("Figma 原尺寸参考")}</summary>
-        <p>{t("以下为设计节点的静态结构参考，保留原始文案与尺寸；可在容器内滚动。交互操作请使用上方试用区。")}</p>
+        <p>{t("以下为设计节点的静态结构参考，保留原始文案与尺寸；可在容器内滚动。可在上方交互试用区操作组件。")}</p>
         <p>
           {reference.nodeId} ·{" "}
           <a
@@ -55,8 +96,22 @@ export function FigmaReference({ kind, expanded = false }: { kind: ApplicationKi
           </a>
         </p>
         {open && (
-          <div className={styles.referenceScroll} tabIndex={0} role="region" aria-label={t("Figma 原尺寸参考")}>
-            <div className={`${styles.reference} ${referenceStyles.defaults}`} inert lang="en">
+          <div
+            className={`${styles.previewCanvas} ${styles.referenceScroll}`}
+            data-themed-reference={themed || undefined}
+            tabIndex={0}
+            role="region"
+            aria-label={t("Figma 原尺寸参考")}
+          >
+            <div
+              className={`${styles.reference} ${referenceStyles.defaults}`}
+              data-themed-reference={themed || undefined}
+              data-overlay-reference={overlay || undefined}
+              data-batch-reference={batch || undefined}
+              data-reference-kind={kind}
+              inert
+              lang="en"
+            >
               {renderNode(reference.tree, 0)}
             </div>
           </div>

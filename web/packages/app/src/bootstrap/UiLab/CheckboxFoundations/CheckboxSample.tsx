@@ -1,3 +1,4 @@
+import { ThemeGlyph } from "../ThemeGlyph";
 import { useId } from "react";
 import { Checkbox } from "@/components/ui";
 import type { CheckboxProps } from "@/components/ui";
@@ -63,7 +64,7 @@ export function CheckboxSample({
         aria-label={text ? undefined : label}
         aria-labelledby={text ? `${id}-label` : undefined}
         aria-describedby={text && supporting ? `${id}-description` : undefined}
-        indicator={<img src={icon} alt="" />}
+        indicator={<ThemeGlyph src={icon} />}
       />
       {text && (
         <div className={styles.copy}>

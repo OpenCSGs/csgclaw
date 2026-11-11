@@ -1,4 +1,29 @@
 export const labMessageKeys: Record<string, string> = {
+  忽略: "feedbackDismiss",
+  全局通知: "feedbackPreview0",
+  "触发通知以体验自动消失、关闭和后续操作。": "feedbackPreview1",
+  项目已取消发布: "feedbackPreview2",
+  "我们刚刚发布了一项更新！": "feedbackPreview3",
+  "移除所有用户后，项目已取消发布。添加用户即可重新发布。": "feedbackPreview4",
+  "试试全新的仪表盘。页面和导出的加载速度更快了。": "feedbackPreview5",
+  撤销操作: "feedbackPreview6",
+  更新日志: "feedbackPreview7",
+  关闭通知: "feedbackPreview8",
+  触发品牌通知: "feedbackPreview9",
+  触发警告通知: "feedbackPreview10",
+  品牌通知设计稿: "feedbackPreview11",
+  警告通知设计稿: "feedbackPreview12",
+  行内提醒: "feedbackPreview13",
+  提醒样式: "feedbackPreview14",
+  浮动警告: "feedbackPreview15",
+  浮动默认: "feedbackPreview16",
+  通栏警告: "feedbackPreview17",
+  提醒设计稿: "feedbackPreview18",
+  我们刚刚发布了一项新功能: "feedbackPreview20",
+  "请注意，这可能会带来问题": "feedbackPreview21",
+  "请查看相关说明，确认后再继续。": "feedbackPreview22",
+  "请查看相关说明。如有疑问，可以在继续之前确认详情。": "feedbackPreview23",
+  查看变更: "feedbackPreview24",
   普通按钮: "copy000",
   危险操作: "copy001",
   工具按钮: "copy002",
@@ -24,8 +49,7 @@ export const labMessageKeys: Record<string, string> = {
   " 个已读取样式": "copy022",
   "查看 Figma Buttons 设计来源 ↗": "copy023",
   参考矩阵与现有组件对照: "copy024",
-  "上方为固定状态参考，下方复用生产 Button，可点击、悬浮并用 Tab 检查焦点。代码样本的 Hover / Focused 需真实交互触发，不强制模拟状态。":
-    "copy025",
+  "每个变体包含 Figma 状态参考和可操作的代码样本。将鼠标移入、按下按钮或用 Tab 聚焦，即可查看对应状态。": "copy025",
   "参考使用工具导出的颜色默认值；部分 Figma 截图处于不同主题，尚不能据此确认完整亮暗规范。PingFang SC 未内置，字体回退时字形与字重不代表还原完成。参考保留原始图标及尺寸。":
     "copy026",
   "已同步：sm/md/lg/xl 高度 36/40/44/48px，普通按钮圆角 8px，加载态显示转圈与文案。Secondary 映射到 secondaryGray。设计参考已更新为 PingFang SC Medium 500；现有代码样本继续使用生产 Button 字体 token，便于对照。阴影及完整主题映射仍需验收。":
@@ -72,8 +96,7 @@ export const labMessageKeys: Record<string, string> = {
   参考范围与组件复用: "copy064",
   "设计提供带文字的选中/未选中状态，以及无文字的选中/未选中/半选状态。半选带文字仅为组合交互示例，不计入原稿 40 个变体。图标使用原始 SVG，保留各尺寸与禁用态差异。":
     "copy065",
-  "交互复用共享 Checkbox 的 Radix 语义，Figma 样式仅用于 UI Lab。白色参考区固定设计导出颜色，外层支持主题切换；产品复选框样式尚未同步。缺少 PingFang SC 时使用系统字体回退。通知选项不保存或发送。":
-    "copy066",
+  "交互复用共享 Checkbox。边框、勾选标记和说明文字随主题切换。": "copy066",
   "Checkbox size": "copy067",
   "Checkbox text": "copy068",
   带文字: "copy069",
@@ -296,8 +319,7 @@ export const labMessageKeys: Record<string, string> = {
   参考范围与交互约定: "copy267",
   "箭头名称指箭头所在边，例如“下居中”表示气泡位于触发点上方。静态参考保留设计尺寸；真实提示会随文案、触发点和可用空间调整位置，避让翻转后箭头跟随实际方向。":
     "copy268",
-  "复用现有 Tooltip 的延迟、Portal、焦点和 Escape 行为。帮助图标读取了开/关两个状态，采用真实系统指针，不绘制设计稿的可选光标示意。气泡固定设计导出配色，主题仅影响外层；产品 Tooltip 样式尚未同步，字体缺失时回退。":
-    "copy269",
+  "复用 Tooltip 的延迟、焦点和 Escape 行为。气泡、箭头和文字随主题切换。": "copy269",
   "Tooltip content": "copy270",
   带说明: "copy271",
   气泡提示交互试用: "copy272",
@@ -453,9 +475,9 @@ export const labMessageKeys: Record<string, string> = {
   "已读取 55 个进度条变体和 10 个圆环／半圆变体，覆盖 0%–100% 与 5 种标签布局。": "progressCoverage",
   "查看 Figma 进度指示器来源 ↗": "progressSource",
   "进度、标签与参考范围": "progressBaselineTitle",
-  "进度条高 8px，轨道 #e9eaeb，填充 #3250bd；常规标签为 PingFang SC 14/20px、400，浮动标签为 12/18px、500。圆环包含 xxs / xs / sm / md / lg，保留原始 SVG 与设计尺寸。":
+  "进度条高 8px，轨道、填充和标签随主题切换。圆环包含 xxs / xs / sm / md / lg，使用对应主题的 Figma SVG。":
     "progressBaseline",
-  "部分原稿进度条的标称百分比与填充长度不一致，静态参考保留原值；交互演示按实际百分比显示，0% 为空、100% 为满。圆环参考固定显示原稿的 40%，暂不提供动态圆环。参考配色固定，主题仅影响外层容器；尚未迁移业务页面。":
+  "部分原稿进度条的标称百分比与填充长度不一致，静态参考保留原值；交互演示按实际百分比显示，0% 为空、100% 为满。圆环参考固定显示原稿的 40%，暂不提供动态圆环。参考配色随主题切换。":
     "progressScope",
   进度交互试用: "progressPlayground",
   "拖动滑块或使用方向键、Home、End 调整进度；也可使用按钮检查开始和完成状态。": "progressKeyboard",
@@ -482,8 +504,7 @@ export const labMessageKeys: Record<string, string> = {
   "Sliders · 滑块": "slider0",
   "滑块允许用户在连续范围内选择数值或区间。": "slider1",
   "查看 Figma Sliders 来源 ↗": "slider2",
-  "已读取 30 个滑块组合：无标签、底部标签及顶部浮动标签。轨道 8px，手柄 24px，品牌色 #3250bd；文字使用 PingFang SC。控制柄的独立状态矩阵尚未收录。":
-    "slider3",
+  "已收录 30 个滑块组合，包括无标签、底部标签和顶部浮动标签。轨道 8px，手柄 24px，颜色随主题切换。": "slider3",
   滑块交互试用: "slider4",
   "拖动两个手柄选择区间，或使用 Tab、方向键、Home、End 操作；两个手柄保持至少 1% 间隔。切换语言和样式保留数值。":
     "slider5",
@@ -638,7 +659,7 @@ export const labMessageKeys: Record<string, string> = {
   新建项目: "application78",
   项目总数: "application79",
   "Figma 原尺寸参考": "application80",
-  "以下为设计节点的静态结构参考，保留原始文案与尺寸；可在容器内滚动。交互操作请使用上方试用区。": "application81",
+  "以下为设计节点的静态结构参考，保留原始文案与尺寸；可在容器内滚动。可在上方交互试用区操作组件。": "application81",
   设计节点索引: "application82",
   "索引包含组合变体及内部基础节点；收录索引不代表该变体已实现。": "application83",
   筛选设计节点: "application84",
@@ -765,6 +786,31 @@ export const labMessageKeys: Record<string, string> = {
 };
 export const labMessages = {
   zh: {
+    feedbackDismiss: "忽略",
+    feedbackPreview0: "全局通知",
+    feedbackPreview1: "触发通知以体验自动消失、关闭和后续操作。",
+    feedbackPreview2: "项目已取消发布",
+    feedbackPreview3: "我们刚刚发布了一项更新！",
+    feedbackPreview4: "移除所有用户后，项目已取消发布。添加用户即可重新发布。",
+    feedbackPreview5: "试试全新的仪表盘。页面和导出的加载速度更快了。",
+    feedbackPreview6: "撤销操作",
+    feedbackPreview7: "更新日志",
+    feedbackPreview8: "关闭通知",
+    feedbackPreview9: "触发品牌通知",
+    feedbackPreview10: "触发警告通知",
+    feedbackPreview11: "品牌通知设计稿",
+    feedbackPreview12: "警告通知设计稿",
+    feedbackPreview13: "行内提醒",
+    feedbackPreview14: "提醒样式",
+    feedbackPreview15: "浮动警告",
+    feedbackPreview16: "浮动默认",
+    feedbackPreview17: "通栏警告",
+    feedbackPreview18: "提醒设计稿",
+    feedbackPreview20: "我们刚刚发布了一项新功能",
+    feedbackPreview21: "请注意，这可能会带来问题",
+    feedbackPreview22: "请查看相关说明，确认后再继续。",
+    feedbackPreview23: "请查看相关说明。如有疑问，可以在继续之前确认详情。",
+    feedbackPreview24: "查看变更",
     copy000: "普通按钮",
     copy001: "危险操作",
     copy002: "工具按钮",
@@ -790,8 +836,7 @@ export const labMessages = {
     copy022: " 个已读取样式",
     copy023: "查看 Figma Buttons 设计来源 ↗",
     copy024: "参考矩阵与现有组件对照",
-    copy025:
-      "上方为固定状态参考，下方复用生产 Button，可点击、悬浮并用 Tab 检查焦点。代码样本的 Hover / Focused 需真实交互触发，不强制模拟状态。",
+    copy025: "每个变体包含 Figma 状态参考和可操作的代码样本。将鼠标移入、按下按钮或用 Tab 聚焦，即可查看对应状态。",
     copy026:
       "参考使用工具导出的颜色默认值；部分 Figma 截图处于不同主题，尚不能据此确认完整亮暗规范。PingFang SC 未内置，字体回退时字形与字重不代表还原完成。参考保留原始图标及尺寸。",
     copy027:
@@ -837,8 +882,7 @@ export const labMessages = {
     copy064: "参考范围与组件复用",
     copy065:
       "设计提供带文字的选中/未选中状态，以及无文字的选中/未选中/半选状态。半选带文字仅为组合交互示例，不计入原稿 40 个变体。图标使用原始 SVG，保留各尺寸与禁用态差异。",
-    copy066:
-      "交互复用共享 Checkbox 的 Radix 语义，Figma 样式仅用于 UI Lab。白色参考区固定设计导出颜色，外层支持主题切换；产品复选框样式尚未同步。缺少 PingFang SC 时使用系统字体回退。通知选项不保存或发送。",
+    copy066: "交互复用共享 Checkbox。边框、勾选标记和说明文字随主题切换。",
     copy067: "复选框尺寸",
     copy068: "复选框文字",
     copy069: "带文字",
@@ -1060,8 +1104,7 @@ export const labMessages = {
     copy267: "参考范围与交互约定",
     copy268:
       "箭头名称指箭头所在边，例如“下居中”表示气泡位于触发点上方。静态参考保留设计尺寸；真实提示会随文案、触发点和可用空间调整位置，避让翻转后箭头跟随实际方向。",
-    copy269:
-      "复用现有 Tooltip 的延迟、Portal、焦点和 Escape 行为。帮助图标读取了开/关两个状态，采用真实系统指针，不绘制设计稿的可选光标示意。气泡固定设计导出配色，主题仅影响外层；产品 Tooltip 样式尚未同步，字体缺失时回退。",
+    copy269: "复用 Tooltip 的延迟、焦点和 Escape 行为。气泡、箭头和文字随主题切换。",
     copy270: "气泡内容",
     copy271: "带说明",
     copy272: "气泡提示交互试用",
@@ -1216,9 +1259,9 @@ export const labMessages = {
     progressSource: "查看 Figma 进度指示器来源 ↗",
     progressBaselineTitle: "进度、标签与参考范围",
     progressBaseline:
-      "进度条高 8px，轨道 #e9eaeb，填充 #3250bd；常规标签为 PingFang SC 14/20px、400，浮动标签为 12/18px、500。圆环包含 xxs / xs / sm / md / lg，保留原始 SVG 与设计尺寸。",
+      "进度条高 8px，轨道、填充和标签随主题切换。圆环包含 xxs / xs / sm / md / lg，使用对应主题的 Figma SVG。",
     progressScope:
-      "部分原稿进度条的标称百分比与填充长度不一致，静态参考保留原值；交互演示按实际百分比显示，0% 为空、100% 为满。圆环参考固定显示原稿的 40%，暂不提供动态圆环。参考配色固定，主题仅影响外层容器；尚未迁移业务页面。",
+      "部分原稿进度条的标称百分比与填充长度不一致，静态参考保留原值；交互演示按实际百分比显示，0% 为空、100% 为满。圆环参考固定显示原稿的 40%，暂不提供动态圆环。参考配色随主题切换。",
     progressPlayground: "进度交互试用",
     progressKeyboard: "拖动滑块或使用方向键、Home、End 调整进度；也可使用按钮检查开始和完成状态。",
     progressLabelPosition: "进度标签位置",
@@ -1244,8 +1287,7 @@ export const labMessages = {
     slider0: "Sliders · 滑块",
     slider1: "滑块允许用户在连续范围内选择数值或区间。",
     slider2: "查看 Figma Sliders 来源 ↗",
-    slider3:
-      "已读取 30 个滑块组合：无标签、底部标签及顶部浮动标签。轨道 8px，手柄 24px，品牌色 #3250bd；文字使用 PingFang SC。控制柄的独立状态矩阵尚未收录。",
+    slider3: "已收录 30 个滑块组合，包括无标签、底部标签和顶部浮动标签。轨道 8px，手柄 24px，颜色随主题切换。",
     slider4: "滑块交互试用",
     slider5:
       "拖动两个手柄选择区间，或使用 Tab、方向键、Home、End 操作；两个手柄保持至少 1% 间隔。切换语言和样式保留数值。",
@@ -1400,7 +1442,7 @@ export const labMessages = {
     application78: "新建项目",
     application79: "项目总数",
     application80: "Figma 原尺寸参考",
-    application81: "以下为设计节点的静态结构参考，保留原始文案与尺寸；可在容器内滚动。交互操作请使用辅助行为验证区域。",
+    application81: "以下为设计节点的静态结构参考，保留原始文案与尺寸；可在容器内滚动。可在上方交互试用区操作组件。",
     application82: "设计节点索引",
     application83: "索引包含组合变体及内部基础节点；收录索引不代表该变体已实现。",
     application84: "筛选设计节点",
@@ -1526,6 +1568,31 @@ export const labMessages = {
     footerSpec31: "原尺寸页脚",
   },
   en: {
+    feedbackDismiss: "Dismiss",
+    feedbackPreview0: "Global notification",
+    feedbackPreview1: "Trigger a notification to try auto-dismiss, closing, and follow-up actions.",
+    feedbackPreview2: "This project has been unpublished",
+    feedbackPreview3: "We’ve just released a new update!",
+    feedbackPreview4: "Removing all users has unpublished this project. Add users to republish.",
+    feedbackPreview5: "Check out the all new dashboard view. Pages and exports now load faster.",
+    feedbackPreview6: "Undo action",
+    feedbackPreview7: "Changelog",
+    feedbackPreview8: "Close notification",
+    feedbackPreview9: "Show brand notification",
+    feedbackPreview10: "Show warning notification",
+    feedbackPreview11: "Brand notification in Figma",
+    feedbackPreview12: "Warning notification in Figma",
+    feedbackPreview13: "Inline alert",
+    feedbackPreview14: "Alert style",
+    feedbackPreview15: "Floating warning",
+    feedbackPreview16: "Floating default",
+    feedbackPreview17: "Full-width warning",
+    feedbackPreview18: "Alert in Figma",
+    feedbackPreview20: "We’ve just released a new feature",
+    feedbackPreview21: "Just to let you know this might be a problem",
+    feedbackPreview22: "Review the details before continuing.",
+    feedbackPreview23: "Review the details. If you have questions, check the information before continuing.",
+    feedbackPreview24: "View changes",
     copy000: "Standard buttons",
     copy001: "Destructive actions",
     copy002: "Utility buttons",
@@ -1552,7 +1619,7 @@ export const labMessages = {
     copy023: "View Figma Buttons source ↗",
     copy024: "Reference matrix and existing components",
     copy025:
-      "Fixed state references appear above production Button samples. Click, hover or use Tab to check focus. Hover / Focused states require real interaction and are not forced.",
+      "Each variant includes a Figma state reference and a live code sample. Hover, press the button, or focus it with Tab to see each state.",
     copy026:
       "References use exported color defaults. Some Figma screenshots use different themes, so they do not confirm a complete light/dark specification. PingFang SC is not bundled; fallback glyphs and weights require review. Original icons and dimensions are preserved.",
     copy027:
@@ -1599,8 +1666,7 @@ export const labMessages = {
     copy064: "Reference coverage and component reuse",
     copy065:
       "The design includes labeled checked/unchecked states and unlabeled checked/unchecked/indeterminate states. Labeled indeterminate is a composed demo, not one of the 40 source variants. Original SVGs preserve size and disabled-state differences.",
-    copy066:
-      "Interactions reuse the shared Radix Checkbox; Figma styles are local to UI Lab. White reference stages retain exported colors while the shell follows the theme. Product checkboxes are not migrated. System fonts replace missing PingFang SC. Notification choices are neither saved nor sent.",
+    copy066: "The preview uses the shared Checkbox. Borders, check marks, and supporting text follow the theme.",
     copy067: "Checkbox size",
     copy068: "Checkbox text",
     copy069: "With text",
@@ -1798,7 +1864,7 @@ export const labMessages = {
     copy239: "View Figma Toggles source ↗",
     copy240: "Default and Slim",
     copy241:
-      "Default sm / md: 36 × 20 / 44 × 24px; Slim sm / md: 32 × 16 / 40 × 20px. On uses the brand color; disabled uses distinct grays. Focus has a 2px white gap and 2px brand ring.",
+      "Default sm / md: 36 × 20 / 44 × 24px; Slim sm / md: 32 × 16 / 40 × 20px. On uses the brand color; disabled uses distinct grays. Focus has a 2px gap matching the background and a 2px brand ring.",
     copy242: "Font differences and scope",
     copy243:
       "Labels consistently use PingFang SC Regular 400; supporting text uses Light 300. Font families and weights follow the updated shared text styles. Missing local PingFang SC falls back to system fonts.",
@@ -1834,7 +1900,7 @@ export const labMessages = {
     copy268:
       "Arrow names identify their edge: Bottom center places the bubble above the trigger. Static references preserve design dimensions. Live tooltips adapt to content, anchors and available space; arrows follow the resolved placement after collision flips.",
     copy269:
-      "Reuses Tooltip delay, Portal, focus and Escape behavior. Help icons have open/closed states and use the system pointer instead of the optional cursor illustration. Bubbles retain exported colors; themes affect only the shell. Product Tooltip styles are unchanged; missing fonts fall back.",
+      "The preview uses the shared Tooltip’s delay, focus, and Escape behavior. The bubble, arrow, and text follow the theme.",
     copy270: "Tooltip content",
     copy271: "With supporting text",
     copy272: "Tooltip playground",
@@ -1995,9 +2061,9 @@ export const labMessages = {
     progressSource: "View Figma progress indicators source ↗",
     progressBaselineTitle: "Progress, labels and reference scope",
     progressBaseline:
-      "Bars are 8px high, with #e9eaeb tracks and #3250bd fills. Standard labels use PingFang SC 14/20px at 400; floating labels use 12/18px at 500. Rings cover xxs / xs / sm / md / lg with original SVGs and dimensions.",
+      "Bars are 8px high. Tracks, fills, and labels follow the theme. Rings cover xxs through lg and use the matching Figma SVGs.",
     progressScope:
-      "Some source bars have fill lengths that differ from their labeled percentages; static references retain those values. The playground uses actual percentages: empty at 0% and full at 100%. Ring references retain the original 40% sample; dynamic rings are not included yet. Reference colors are fixed; themes affect the shell. Product pages are not migrated.",
+      "Some source bars have fill lengths that differ from their labeled percentages; static references retain those values. The playground uses actual percentages: empty at 0% and full at 100%. Ring references retain the original 40% sample; dynamic rings are not included yet. Reference colors follow the theme.",
     progressPlayground: "Progress playground",
     progressKeyboard:
       "Drag the slider or use arrow keys, Home and End to change progress. Buttons also let you check start and completion states.",
@@ -2025,7 +2091,7 @@ export const labMessages = {
     slider1: "Sliders let users select a value or interval within a continuous range.",
     slider2: "View Figma Sliders source ↗",
     slider3:
-      "30 slider combinations read: no labels, bottom labels and top floating labels. Tracks are 8px, handles 24px, brand color #3250bd, with PingFang SC. The separate handle state matrix is not included yet.",
+      "The gallery shows 30 slider combinations with no label, bottom labels, and floating labels. The track is 8px and the handles are 24px. Colors follow the theme.",
     slider4: "Slider playground",
     slider5:
       "Drag the two handles or use Tab, arrows, Home and End. Handles stay at least 1% apart. Values survive language and style changes.",
@@ -2185,7 +2251,7 @@ export const labMessages = {
     application79: "Total projects",
     application80: "Figma reference at original size",
     application81:
-      "This static design reference preserves original copy and dimensions. Scroll within the container. Use the supporting behavior checks for interactions.",
+      "This static design reference preserves original copy and dimensions. Scroll within the container. Use the live preview above to try the component.",
     application82: "Design node index",
     application83:
       "The index includes variants and internal base nodes. An indexed node is not necessarily implemented.",

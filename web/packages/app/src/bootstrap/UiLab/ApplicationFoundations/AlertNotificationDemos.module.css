@@ -1,0 +1,377 @@
+.demos,
+.section {
+  display: grid;
+  justify-items: start;
+  gap: 12px;
+  min-width: 0;
+}
+
+.section {
+  position: relative;
+  width: 100%;
+  --feedback-surface: #fff;
+  --feedback-border: #d5d7da;
+  --feedback-toast-border: rgb(0 0 0 / 8%);
+  --feedback-action: #535862;
+  --feedback-icon-warning: #dc6803;
+  --feedback-icon-brand: #3250bd;
+  --feedback-alert-shadow: 0 1px 2px rgb(10 13 18 / 5%);
+  --feedback-toast-shadow:
+    0 12px 16px -4px rgb(10 13 18 / 8%), 0 4px 6px -2px rgb(10 13 18 / 3%), 0 2px 2px -1px rgb(10 13 18 / 4%);
+  --feedback-title: #181d27;
+  --feedback-secondary: #414651;
+  --feedback-copy: #535862;
+  --feedback-link: #223b99;
+  font-family: "PingFang SC", var(--font-family-text);
+}
+
+/* Dark mode values from the bound Figma variables on the Alert and Notification layers. */
+:global(:root[data-theme="dark"]) .section {
+  --feedback-stage: #0c0e12;
+  --feedback-close: #61656c;
+  --feedback-surface: #13161b;
+  --feedback-border: #373a41;
+  --feedback-toast-border: var(--feedback-border);
+  --feedback-title: #fff;
+  --feedback-secondary: #cecfd2;
+  --feedback-copy: #94979c;
+  --feedback-action: #94979c;
+  --feedback-link: #cecfd2;
+  --feedback-icon-warning: #f79009;
+  --feedback-icon-brand: #4d6ad6;
+  --feedback-alert-shadow: none;
+  --feedback-toast-shadow: none;
+}
+
+.controls,
+.actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.controls a {
+  color: var(--accent-text);
+}
+
+.alertStage {
+  width: 100%;
+  min-width: 0;
+  container-type: inline-size;
+}
+
+.alertStage[data-mobile="true"] {
+  width: min(343px, 100%);
+}
+
+.alertStage[data-mobile="true"][data-banner="true"] {
+  width: min(375px, 100%);
+}
+
+.alert {
+  position: relative;
+  box-sizing: border-box;
+  width: 100%;
+  padding: 16px;
+  border: 1px solid var(--feedback-border);
+  border-radius: 12px;
+  background: var(--feedback-surface);
+  box-shadow: var(--feedback-alert-shadow);
+}
+
+.alertBody {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 12px 16px;
+}
+
+.alertCopy {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  color: var(--feedback-copy);
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.alertCopy p {
+  margin: 0;
+}
+
+.alertCopy p:first-child {
+  padding-right: 32px;
+  color: var(--feedback-secondary);
+  font-weight: 500;
+}
+
+.alertBody .actions {
+  grid-column: 2;
+}
+
+.alert :is(.actions button, .actions button:hover, .actions button:active),
+.toast [data-notice-part="actions"] button {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--feedback-action);
+  font:
+    500 14px/20px "PingFang SC",
+    var(--font-family-text);
+  cursor: pointer;
+}
+
+.alert .actions button:last-child,
+.toast [data-notice-part="actions"] button:last-child {
+  color: var(--feedback-link);
+}
+
+.alert .actions button:hover:not(:disabled),
+.toast [data-notice-part="actions"] button:hover:not(:disabled) {
+  text-decoration: underline;
+}
+
+.alert > button:last-child,
+.toast [data-notice-part="close"] {
+  position: absolute;
+  inset: 7px 7px auto auto;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border-radius: 8px;
+}
+
+.alert > button:last-child {
+  opacity: 1;
+}
+
+.featured {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  color: var(--feedback-icon-warning);
+}
+
+.featured[data-icon="brand"] {
+  color: var(--feedback-icon-brand);
+}
+
+.featured[data-icon="default"] {
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--feedback-border);
+  border-radius: 8px;
+  box-shadow:
+    0 1px 2px rgb(10 13 18 / 5%),
+    inset 0 -2px rgb(10 13 18 / 5%);
+}
+
+.featured:not([data-icon="default"])::before,
+.featured:not([data-icon="default"])::after {
+  position: absolute;
+  inset: -20%;
+  border: 2px solid currentColor;
+  border-radius: 50%;
+  opacity: 0.3;
+  content: "";
+  pointer-events: none;
+}
+
+.featured:not([data-icon="default"])::after {
+  inset: -45%;
+  opacity: 0.1;
+}
+
+.alertStage:not([data-banner="true"]) .featured[data-icon="warning"]::before {
+  inset: -16.67%;
+  border-width: 1.667px;
+}
+
+.alertStage:not([data-banner="true"]) .featured[data-icon="warning"]::after {
+  inset: -37.5%;
+  border-width: 1.667px;
+}
+
+.alertStage[data-banner="true"] .alert {
+  padding: 12px clamp(16px, 3vw, 32px);
+  border-width: 0 0 1px;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.alertStage[data-banner="true"][data-mobile="false"] .alertBody {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  padding: 8px 44px 8px 0;
+}
+
+.alertStage[data-banner="true"][data-mobile="false"] .alertCopy {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 6px;
+}
+
+.alertStage[data-banner="true"][data-mobile="false"] .alertCopy p:first-child {
+  padding-right: 0;
+}
+
+.alertStage[data-banner="true"][data-mobile="false"] .actions {
+  grid-column: auto;
+}
+
+.alertStage[data-banner="true"][data-mobile="false"] .alert > button:last-child {
+  inset: 50% clamp(16px, 3vw, 32px) auto auto;
+  transform: translateY(-50%);
+}
+
+.alertStage[data-mobile="true"] .alertBody {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.alertStage[data-mobile="true"] .alertBody .actions {
+  grid-column: auto;
+}
+
+.alertStage[data-mobile="true"]:not([data-banner="true"]) .featured {
+  margin-bottom: 4px;
+}
+
+@container (max-width: 520px) {
+  .alertStage[data-banner="true"][data-mobile="false"] .alertBody {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+  .alertStage[data-banner="true"][data-mobile="false"] .actions {
+    grid-column: 2;
+  }
+}
+
+.notificationStage {
+  width: min(504px, 100%);
+  height: 234px;
+  overflow: hidden;
+}
+
+.notificationStage[data-mobile="true"] {
+  width: min(375px, 100%);
+  height: 260px;
+}
+
+.notificationStage > img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+:global(:root[data-theme="dark"]) .notificationStage {
+  background: var(--feedback-stage);
+}
+
+:global(:root[data-theme="dark"]) .notificationStage > img {
+  visibility: hidden;
+}
+
+/* The original SVG supplies the shape, and the active theme supplies the stroke color. */
+.glyph {
+  display: block;
+}
+
+.glyph > img {
+  display: block;
+}
+
+:global(:root[data-theme="dark"]) .glyph {
+  background-color: var(--feedback-close);
+  mask: var(--feedback-glyph-mask) center no-repeat;
+}
+
+:global(:root[data-theme="dark"]) .glyph > img {
+  visibility: hidden;
+}
+
+:global(:root[data-theme="dark"]) .featured .glyph {
+  background-color: currentColor;
+}
+
+:global(:root[data-theme="dark"]) .featured[data-icon="default"] {
+  color: var(--feedback-secondary);
+  background: var(--feedback-stage);
+  box-shadow:
+    inset 0 0 0 1px #0c0e122e,
+    inset 0 -2px #0c0e120d;
+}
+
+:global(:root[data-theme="dark"]) .alertStage[data-banner="true"] .alert {
+  background: var(--feedback-stage);
+}
+
+.feedback {
+  min-height: 20px;
+  margin: 0;
+}
+
+.section .toastViewport {
+  position: absolute;
+  z-index: 1;
+  inset: auto auto 0 0;
+  box-sizing: border-box;
+  width: min(504px, 100%);
+  height: 234px;
+  padding: 24px 24px 0 min(80px, 16%);
+  transform: none;
+  pointer-events: none;
+}
+
+.section:has(.notificationStage[data-mobile="true"]) .toastViewport {
+  width: min(375px, 100%);
+  height: 260px;
+  padding: 80px 8px 0;
+}
+
+.section .toastViewport .toast {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 16px;
+  padding: 16px;
+  border: 1px solid var(--feedback-toast-border);
+  border-radius: 12px;
+  background: var(--feedback-surface);
+  box-shadow: var(--feedback-toast-shadow);
+  pointer-events: auto;
+}
+
+.section:has(.notificationStage[data-mobile="true"]) .toastViewport .toast {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.toast [data-notice-part="content"] {
+  padding: 2px 32px 0 0;
+}
+
+.section:has(.notificationStage[data-mobile="true"]) .toast [data-notice-part="content"] {
+  padding: 0;
+}
+
+.toast [data-notice-part="title"],
+.toast [data-notice-part="description"] {
+  font:
+    400 14px/20px "PingFang SC",
+    var(--font-family-text);
+  color: var(--feedback-secondary);
+}
+
+.toast [data-notice-part="title"] {
+  margin-bottom: 4px;
+  font-weight: 500;
+  color: var(--feedback-title);
+}
+
+.toast [data-notice-part="close"] {
+  inset: 8px 8px auto auto;
+  opacity: 1;
+}

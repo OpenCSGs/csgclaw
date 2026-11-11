@@ -49,11 +49,7 @@ export function TooltipFoundations() {
               "箭头名称指箭头所在边，例如“下居中”表示气泡位于触发点上方。静态参考保留设计尺寸；真实提示会随文案、触发点和可用空间调整位置，避让翻转后箭头跟随实际方向。",
             )}
           </p>
-          <p>
-            {labText(
-              "复用现有 Tooltip 的延迟、Portal、焦点和 Escape 行为。帮助图标读取了开/关两个状态，采用真实系统指针，不绘制设计稿的可选光标示意。气泡固定设计导出配色，主题仅影响外层；产品 Tooltip 样式尚未同步，字体缺失时回退。",
-            )}
-          </p>
+          <p>{labText("复用 Tooltip 的延迟、焦点和 Escape 行为。气泡、箭头和文字随主题切换。")}</p>
         </details>
       </div>
       <div className={styles.controls}>

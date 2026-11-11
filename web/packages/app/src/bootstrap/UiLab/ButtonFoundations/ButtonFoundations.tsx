@@ -1,3 +1,4 @@
+import { ThemeGlyph } from "../ThemeGlyph";
 import { useLabTranslation } from "../LabLocale";
 import { useState } from "react";
 import type { CSSProperties } from "react";
@@ -49,6 +50,11 @@ function ReferenceButton({ item }: { item: Entry }) {
   if (!ref) return <p className={styles.pending}>{labText("样式待读取 · 仅已确认节点与尺寸")}</p>;
   const missing = ref.images.some((name) => !assets[`./assets/${name}`]);
   if (missing) return <p className={styles.pending}>{labText("设计图标下载待完成，暂不展示不完整样本")}</p>;
+  // Split shadow layers without splitting the commas inside color functions.
+  const shadow = ref.shadow
+    .split(/,(?![^()]*\))/)
+    .filter((layer) => !layer.trimStart().startsWith("inset"))
+    .join(", ");
   const style: CSSProperties = {
     width: item.width,
     minWidth: item.width,
@@ -56,11 +62,11 @@ function ReferenceButton({ item }: { item: Entry }) {
     minHeight: item.height,
     padding: 0,
     gap: ref.gap,
-    border: `${ref.borderWidth}px solid ${ref.borderColor}`,
+    border: `${ref.borderWidth}px solid var(--lab-button-border, ${ref.borderColor})`,
     borderRadius: ref.radius,
-    background: ref.background,
-    color: ref.color,
-    boxShadow: ref.shadow,
+    background: `var(--lab-button-bg, ${ref.background})`,
+    color: `var(--lab-button-text, ${ref.color})`,
+    boxShadow: `var(--lab-button-shadow, ${shadow || "none"})`,
     fontFamily: '"PingFang SC", var(--font-family-text)',
     fontSize: ref.fontSize,
     lineHeight: ref.lineHeight,
@@ -69,11 +75,18 @@ function ReferenceButton({ item }: { item: Entry }) {
     cursor: "default",
   };
   return (
-    <div inert className={styles.reference} data-button-reference={item.id} data-dark-background={item.darkBackground}>
+    <div
+      inert
+      className={styles.reference}
+      data-button-reference={item.id}
+      data-figma-variant={item.family === "standard" || item.family === "destructive" ? codeVariant(item) : undefined}
+      data-figma-state={item.state}
+      data-dark-background={item.darkBackground}
+    >
       <Button style={style} variant="tertiaryGray" tabIndex={-1} aria-label={labText("Figma 静态参考")}>
-        {ref.images[0] && <img src={assets[`./assets/${ref.images[0]}`]} alt="" />}
+        {ref.images[0] && <ThemeGlyph src={assets[`./assets/${ref.images[0]}`]} />}
         {ref.label && <span style={{ paddingInline: ref.textPadding }}>{ref.label}</span>}
-        {ref.images[1] && <img src={assets[`./assets/${ref.images[1]}`]} alt="" />}
+        {ref.images[1] && <ThemeGlyph src={assets[`./assets/${ref.images[1]}`]} />}
       </Button>
     </div>
   );
@@ -88,6 +101,9 @@ function CodeButton({ item, onClick }: { item: Entry; onClick: () => void }) {
   const image = imageName && assets[`./assets/${imageName}`];
   return (
     <Button
+      className={styles.codeButton}
+      data-figma-variant={item.family === "standard" || item.family === "destructive" ? codeVariant(item) : undefined}
+      data-figma-state={item.state}
       variant={codeVariant(item)}
       size={item.size as ButtonSize}
       iconOnly={item.iconOnly}
@@ -97,10 +113,10 @@ function CodeButton({ item, onClick }: { item: Entry; onClick: () => void }) {
       aria-label={`${labText("代码样本")} ${item.family} ${item.hierarchy} ${item.state} ${item.darkBackground ? labText("深色") : labText("普通")}`}
       onClick={onClick}
     >
-      {image && item.state !== "Loading" && <img src={image} alt="" />}
+      {image && item.state !== "Loading" && <ThemeGlyph src={image} />}
       {!item.iconOnly && labText("Button CTA")}
       {!item.iconOnly && item.state !== "Loading" && item.reference?.images[1] && (
-        <img src={assets[`./assets/${item.reference.images[1]}`]} alt="" />
+        <ThemeGlyph src={assets[`./assets/${item.reference.images[1]}`]} />
       )}
     </Button>
   );
@@ -141,14 +157,10 @@ export function ButtonFoundations() {
         <strong>{labText("参考矩阵与现有组件对照")}</strong>
         <p>
           {labText(
-            "上方为固定状态参考，下方复用生产 Button，可点击、悬浮并用 Tab 检查焦点。代码样本的 Hover / Focused 需真实交互触发，不强制模拟状态。",
+            "每个变体包含 Figma 状态参考和可操作的代码样本。将鼠标移入、按下按钮或用 Tab 聚焦，即可查看对应状态。",
           )}
         </p>
-        <p>
-          {labText(
-            "参考使用工具导出的颜色默认值；部分 Figma 截图处于不同主题，尚不能据此确认完整亮暗规范。PingFang SC 未内置，字体回退时字形与字重不代表还原完成。参考保留原始图标及尺寸。",
-          )}
-        </p>
+        <p>{labText("按钮参考保留 Figma 的原始图标和尺寸，已核验的颜色随主题切换。")}</p>
         <p>
           {labText(
             "已同步：sm/md/lg/xl 高度 36/40/44/48px，普通按钮圆角 8px，加载态显示转圈与文案。Secondary 映射到 secondaryGray。设计参考已更新为 PingFang SC Medium 500；现有代码样本继续使用生产 Button 字体 token，便于对照。阴影及完整主题映射仍需验收。",

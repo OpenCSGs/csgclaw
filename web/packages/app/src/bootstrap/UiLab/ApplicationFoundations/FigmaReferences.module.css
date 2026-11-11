@@ -237,20 +237,6 @@
   white-space: nowrap;
   color: #414651;
 }
-.r22 {
-  pointer-events: none;
-  position: absolute;
-  inset: calc(var(--spacing) * 0);
-  border-radius: inherit;
-  --lab-figma-shadow:
-    inset 0px 0px 0px 1px
-      var(--lab-figma-shadow-color, var(--颜色\/效果\/阴影\/shadow-skeumorphic-inner-border, rgba(10, 13, 18, 0.18))),
-    inset 0px -2px 0px 0px
-      var(--lab-figma-shadow-color, var(--颜色\/效果\/阴影\/shadow-skeumorphic-inner, rgba(10, 13, 18, 0.05)));
-  box-shadow:
-    var(--lab-figma-inset-shadow), var(--lab-figma-inset-ring-shadow), var(--lab-figma-ring-offset-shadow),
-    var(--lab-figma-ring-shadow), var(--lab-figma-shadow);
-}
 .r23 {
   position: relative;
   display: flex;
@@ -5501,4 +5487,501 @@
       --lab-figma-translate-z: 0;
     }
   }
+}
+
+/* Dark mode paint bindings for the verified header and sidebar reference nodes. */
+:global(:root[data-theme="dark"])
+  .defaults[data-themed-reference]
+  :is(.r8, .r14, .r18, .r32, .r41, .r48, .r122, .r133, .r136) {
+  color: #94979c;
+}
+
+:global(:root[data-theme="dark"]) .defaults[data-themed-reference] :is(.r9, .r33, .r43, .r123, .r137) {
+  background-color: #22262f;
+}
+
+:global(:root[data-theme="dark"])
+  .defaults[data-themed-reference]
+  :is(.r10, .r21, .r93, .r95, .r99, .r102, .r132, .r148) {
+  color: #cecfd2;
+}
+
+:global(:root[data-theme="dark"]) .defaults[data-themed-reference] :is(.r13, .r38, .r47, .r121) {
+  color: #f7f7f7;
+}
+
+:global(:root[data-theme="dark"]) .defaults[data-themed-reference] :is(.r19, .r147) {
+  background-color: #0c0e12;
+  border-color: #373a41;
+  box-shadow: var(--shadow-xs);
+}
+
+:global(:root[data-theme="dark"]) .defaults[data-themed-reference] :is(.r23) {
+  box-shadow: var(--shadow-xs);
+}
+
+:global(:root[data-theme="dark"]) .defaults[data-themed-reference] :is(.r28) {
+  background-color: #0c0e12;
+  border-color: #373a41;
+  box-shadow: none;
+}
+
+:global(:root[data-theme="dark"]) .defaults[data-themed-reference] :is(.r30) {
+  color: #85888e;
+}
+
+:global(:root[data-theme="dark"]) .defaults[data-themed-reference] :is(.r31, .r134) {
+  border-color: #22262f;
+}
+
+:global(:root[data-theme="dark"]) .defaults[data-themed-reference] :is(.r34, .r92) {
+  background-color: #0c0e12;
+}
+
+:global(:root[data-theme="dark"]) .defaults[data-themed-reference] :is(.r39) {
+  background-color: #0e1b4e;
+  border-color: #17308f;
+}
+
+:global(:root[data-theme="dark"]) .defaults[data-themed-reference] :is(.r40) {
+  color: #6584f8;
+}
+
+:global(:root[data-theme="dark"]) .defaults[data-themed-reference] :is(.r49, .r128) {
+  background-color: #0c0e12;
+  border-color: #22262f;
+}
+
+:global(:root[data-theme="dark"]) .defaults[data-themed-reference] :is(.r94) {
+  background-color: #13161b;
+  border-color: #373a41;
+}
+
+:global(:root[data-theme="dark"]) .defaults[data-themed-reference] :is(.r100, .r127) {
+  background-color: #0c0e12;
+  border-color: #373a41;
+}
+
+:global(:root[data-theme="dark"]) .defaults[data-themed-reference] :is(.r116) {
+  background-color: #13161b;
+  border-color: #22262f;
+}
+
+/* Dark mode paints for the modal, command menu and chart reference nodes. */
+:global(:root[data-theme="dark"]) .defaults[data-overlay-reference] :is(.r152, .r182) {
+  background-color: #22262f;
+}
+
+:global(:root[data-theme="dark"]) .defaults[data-overlay-reference] :is(.r153, .r171) {
+  background-color: #0c0e12;
+  box-shadow: none;
+}
+
+:global(:root[data-theme="dark"]) .defaults[data-overlay-reference] :is(.r158) {
+  background-color: #079455;
+}
+
+:global(:root[data-theme="dark"]) .defaults[data-overlay-reference] :is(.r161, .r181) {
+  color: #f7f7f7;
+}
+
+:global(:root[data-theme="dark"]) .defaults[data-overlay-reference] :is(.r162, .r176, .r183, .r185, .r193) {
+  color: #94979c;
+}
+
+:global(:root[data-theme="dark"]) .defaults[data-overlay-reference] :is(.r167) {
+  background-color: #0c0e12;
+  border-color: #373a41;
+  box-shadow: var(--shadow-xs);
+}
+
+:global(:root[data-theme="dark"]) .defaults[data-overlay-reference] :is(.r99) {
+  color: #cecfd2;
+}
+
+:global(:root[data-theme="dark"]) .defaults[data-overlay-reference] :is(.r168) {
+  box-shadow: var(--shadow-xs);
+}
+
+:global(:root[data-theme="dark"]) .defaults[data-overlay-reference] :is(.r172, .r175, .r184) {
+  background-color: #0c0e12;
+  border-color: #22262f;
+}
+
+:global(:root[data-theme="dark"]) .defaults[data-overlay-reference] :is(.r173) {
+  color: #85888e;
+}
+
+:global(:root[data-theme="dark"]) .defaults[data-overlay-reference] :is(.r177) {
+  border-color: #22262f;
+}
+
+:global(:root[data-theme="dark"]) .defaults[data-themed-reference] img[data-themed-asset] {
+  content: var(--figma-dark-image);
+}
+
+.defaults[data-overlay-reference] .chartGridGlyph {
+  --lab-glyph-color: #22262f;
+  width: max-content;
+  height: max-content;
+}
+
+/* Dark paints from the verified metric, layout, data, and feedback reference nodes. */
+:global(:root[data-theme="dark"])
+  .defaults[data-batch-reference]
+  :is(
+    .r204,
+    .r227,
+    .r367,
+    .r383[data-node-id="8001:20157"],
+    .r383[data-node-id="8001:20164"],
+    .r383[data-node-id="8001:20171"],
+    .r383[data-node-id="8001:20178"],
+    .r383[data-node-id="8001:20185"],
+    .r383[data-node-id="8001:20192"],
+    .r391[data-node-id="8001:20152"],
+    .r391[data-node-id="8001:20153"],
+    .r391[data-node-id="8001:20154"],
+    .r391[data-node-id="8001:20155"],
+    .r391[data-node-id="8001:20159"],
+    .r391[data-node-id="8001:20160"],
+    .r391[data-node-id="8001:20161"],
+    .r391[data-node-id="8001:20162"],
+    .r391[data-node-id="8001:20166"],
+    .r391[data-node-id="8001:20167"],
+    .r391[data-node-id="8001:20168"],
+    .r391[data-node-id="8001:20169"],
+    .r391[data-node-id="8001:20172"],
+    .r391[data-node-id="8001:20173"],
+    .r391[data-node-id="8001:20174"],
+    .r391[data-node-id="8001:20175"],
+    .r391[data-node-id="8001:20176"],
+    .r391[data-node-id="8001:20179"],
+    .r391[data-node-id="8001:20180"],
+    .r391[data-node-id="8001:20181"],
+    .r391[data-node-id="8001:20182"],
+    .r391[data-node-id="8001:20183"],
+    .r391[data-node-id="8001:20186"],
+    .r391[data-node-id="8003:9407"],
+    .r391[data-node-id="8001:20188"],
+    .r391[data-node-id="8001:20189"],
+    .r391[data-node-id="8001:20193"],
+    .r391[data-node-id="8001:20194"],
+    .r391[data-node-id="8001:20195"],
+    .r391[data-node-id="8001:20196"]
+  ) {
+  background-color: #0c0e12;
+  border-color: #22262f;
+}
+
+:global(:root[data-theme="dark"])
+  .defaults[data-batch-reference]
+  :is(
+    .r205,
+    .r162[data-node-id="1254:137017"],
+    .r162[data-node-id="I1254:128487;1254:128128"],
+    .r162[data-node-id="I1254:128497;1254:128192"],
+    .r162[data-node-id="I1254:128526;1254:128128"],
+    .r224,
+    .r239,
+    .r249,
+    .r288,
+    .r293,
+    .r299,
+    .r176[data-node-id="I1225:108336;1223:41"],
+    .r176[data-node-id="I1225:108402;1223:41"],
+    .r176[data-node-id="I1226:164;1223:41"],
+    .r176[data-node-id="I1226:166;1223:41"],
+    .r176[data-node-id="I1226:168;1223:41"],
+    .r176[data-node-id="I1226:170;1223:41"],
+    .r176[data-node-id="I1226:172;1223:41"],
+    .r176[data-node-id="I1226:174;1223:41"],
+    .r176[data-node-id="I1226:176;1223:41"],
+    .r176[data-node-id="I1226:178;1223:41"],
+    .r176[data-node-id="I1225:108337;1223:41"],
+    .r176[data-node-id="I1225:108404;1223:41"],
+    .r176[data-node-id="I1226:188;1223:41"],
+    .r176[data-node-id="I1226:190;1223:41"],
+    .r176[data-node-id="I1226:192;1223:41"],
+    .r176[data-node-id="I1226:194;1223:41"],
+    .r176[data-node-id="I1226:196;1223:41"],
+    .r176[data-node-id="I1226:198;1223:41"],
+    .r176[data-node-id="I1226:200;1223:41"],
+    .r176[data-node-id="I1226:202;1223:41"],
+    .r329,
+    .r8,
+    .r371,
+    .r384[data-node-id="I8001:20157;8001:20136"],
+    .r384[data-node-id="I8001:20164;8001:20136"],
+    .r384[data-node-id="I8001:20171;8001:20136"],
+    .r384[data-node-id="I8001:20178;8001:20136"],
+    .r384[data-node-id="I8001:20185;8001:20136"],
+    .r384[data-node-id="I8001:20192;8001:20136"],
+    .r406,
+    .r183
+  ) {
+  color: #94979c;
+}
+
+:global(:root[data-theme="dark"])
+  .defaults[data-batch-reference]
+  :is(.r207, .r223, .r161, .r276, .r38, .r292, .r350, .r401) {
+  color: #f7f7f7;
+}
+
+:global(:root[data-theme="dark"])
+  .defaults[data-batch-reference]
+  :is(
+    .r210[data-node-id="I1244:393;1244:301"],
+    .r210[data-node-id="I1227:108550;1114:68518;1114:68177"],
+    .r210[data-node-id="1192:608"],
+    .r21,
+    .r238,
+    .r248,
+    .r265,
+    .r274,
+    .r102,
+    .r95,
+    .r115[data-node-id="I53:1183;1122:117"],
+    .r347,
+    .r353,
+    .r148,
+    .r392[data-node-id="I8001:20152;7991:104460;7991:56312"],
+    .r392[data-node-id="I8001:20153;7991:104460;7991:56312"],
+    .r392[data-node-id="I8001:20154;7991:104460;7991:56312"],
+    .r392[data-node-id="I8001:20155;7991:104460;7991:56312"],
+    .r392[data-node-id="I8001:20159;7996:12096;7991:56312"],
+    .r392[data-node-id="I8001:20160;7991:104460;7991:56312"],
+    .r392[data-node-id="I8001:20161;7991:104460;7991:56312"],
+    .r392[data-node-id="I8001:20162;7991:104460;7991:56312"],
+    .r392[data-node-id="I8001:20166;7991:104460;7991:56312"],
+    .r392[data-node-id="I8001:20167;7991:104460;7991:56312"],
+    .r392[data-node-id="I8001:20169;7991:104460;7991:56312"],
+    .r392[data-node-id="I8001:20172;7991:104460;7991:56312"],
+    .r392[data-node-id="I8001:20173;7991:104460;7991:56312"],
+    .r392[data-node-id="I8001:20175;7991:104460;7991:56312"],
+    .r392[data-node-id="I8001:20176;7991:104460;7991:56312"],
+    .r392[data-node-id="I8001:20179;7991:104460;7991:56312"],
+    .r392[data-node-id="I8001:20181;7991:104460;7991:56312"],
+    .r392[data-node-id="I8001:20182;7991:104460;7991:56312"],
+    .r392[data-node-id="I8001:20183;7991:104460;7991:56312"],
+    .r392[data-node-id="I8001:20186;7991:104460;7991:56312"],
+    .r392[data-node-id="I8003:9407;7991:104460;7991:56312"],
+    .r392[data-node-id="I8001:20188;7991:104460;7991:56312"],
+    .r392[data-node-id="I8001:20189;7991:104460;7991:56312"],
+    .r392[data-node-id="I8001:20193;7991:104460;7991:56312"],
+    .r392[data-node-id="I8001:20194;7991:104460;7991:56312"],
+    .r392[data-node-id="I8001:20195;7991:104460;7991:56312"],
+    .r392[data-node-id="I8001:20196;7991:104460;7991:56312"],
+    .r397,
+    .r405
+  ) {
+  color: #cecfd2;
+}
+
+:global(:root[data-theme="dark"]) .defaults[data-batch-reference] :is(.r213, .r341) {
+  background-color: #0c0e12;
+  border-color: #373a41;
+  box-shadow: none;
+}
+
+:global(:root[data-theme="dark"]) .defaults[data-batch-reference] :is(.r225) {
+  background-color: #13161b;
+}
+
+:global(:root[data-theme="dark"]) .defaults[data-batch-reference] :is(.r226, .r43, .r326, .r358, .r361, .r396, .r421) {
+  background-color: #22262f;
+}
+
+:global(:root[data-theme="dark"]) .defaults[data-batch-reference] :is(.r19, .r324, .r364, .r373) {
+  background-color: #0c0e12;
+  border-color: #373a41;
+  box-shadow: var(--shadow-xs);
+}
+
+:global(:root[data-theme="dark"]) .defaults[data-batch-reference] :is(.r23, .r365) {
+  box-shadow: var(--shadow-xs);
+}
+
+:global(:root[data-theme="dark"]) .defaults[data-batch-reference] :is(.r229, .r281, .r366) {
+  background-color: #0c0e12;
+  border-color: #22262f;
+  box-shadow: none;
+}
+
+:global(:root[data-theme="dark"]) .defaults[data-batch-reference] :is(.r252) {
+  background-color: #61656c;
+  border-color: #0c0e12;
+}
+
+:global(:root[data-theme="dark"]) .defaults[data-batch-reference] :is(.r39, .r407) {
+  background-color: #0e1b4e;
+  border-color: #17308f;
+}
+
+:global(:root[data-theme="dark"]) .defaults[data-batch-reference] :is(.r40, .r408) {
+  color: #6584f8;
+}
+
+:global(:root[data-theme="dark"]) .defaults[data-batch-reference] :is(.r256) {
+  background-color: #102a56;
+  border-color: #1849a9;
+}
+
+:global(:root[data-theme="dark"]) .defaults[data-batch-reference] :is(.r257) {
+  color: #84caff;
+}
+
+:global(:root[data-theme="dark"]) .defaults[data-batch-reference] :is(.r258, .r410) {
+  background-color: #1f235b;
+  border-color: #2d31a6;
+}
+
+:global(:root[data-theme="dark"]) .defaults[data-batch-reference] :is(.r259, .r411) {
+  color: #a4bcfd;
+}
+
+:global(:root[data-theme="dark"])
+  .defaults[data-batch-reference]
+  :is(
+    .r264,
+    .r275,
+    .r278,
+    .r285,
+    .r318,
+    .r385[data-node-id="8001:20151"],
+    .r385[data-node-id="8001:20158"],
+    .r385[data-node-id="8001:20197"]
+  ) {
+  background-color: #13161b;
+  border-color: #22262f;
+}
+
+:global(:root[data-theme="dark"]) .defaults[data-batch-reference] :is(.r282) {
+  background-color: #0c0e12;
+}
+
+:global(:root[data-theme="dark"]) .defaults[data-batch-reference] :is(.r287, .r375) {
+  border-color: #373a41;
+}
+
+:global(:root[data-theme="dark"])
+  .defaults[data-batch-reference]
+  :is(
+    .r289,
+    .r294,
+    .r295,
+    .r296,
+    .r297,
+    .r300,
+    .r301,
+    .r302,
+    .r303,
+    .r305,
+    .r307,
+    .r308,
+    .r309,
+    .r310,
+    .r311,
+    .r312,
+    .r313,
+    .r314,
+    .r315,
+    .r316,
+    .r319,
+    .r322,
+    .r362
+  ) {
+  border-color: #22262f;
+}
+
+:global(:root[data-theme="dark"]) .defaults[data-batch-reference] :is(.r298) {
+  background-color: #22262f;
+  border-color: #22262f;
+}
+
+:global(:root[data-theme="dark"]) .defaults[data-batch-reference] :is(.r100, .r349, .r370, .r376, .r379, .r380) {
+  background-color: #0c0e12;
+  border-color: #373a41;
+}
+
+:global(:root[data-theme="dark"]) .defaults[data-batch-reference] :is(.r94, .r403) {
+  background-color: #13161b;
+  border-color: #373a41;
+}
+
+:global(:root[data-theme="dark"])
+  .defaults[data-batch-reference]
+  :is(
+    .r354,
+    .r387[data-node-id="I8001:20151;7996:11812;7991:56312"],
+    .r387[data-node-id="I8001:20158;7996:11812;7991:56312"],
+    .r387[data-node-id="I8001:20197;7996:11812;7991:56312"],
+    .r390
+  ) {
+  color: #85888e;
+}
+
+:global(:root[data-theme="dark"])
+  .defaults[data-batch-reference]
+  :is(.r355[data-node-id="I7365:79371;7365:57927"], .r355[data-node-id="I7365:79400;7365:57932"]) {
+  background-color: #4d6ad6;
+}
+
+:global(:root[data-theme="dark"]) .defaults[data-batch-reference] :is(.r355[data-node-id="I7365:79405;7365:57972"]) {
+  background-color: #85888e;
+}
+
+:global(:root[data-theme="dark"]) .defaults[data-batch-reference] :is(.r359) {
+  color: #ececed;
+}
+
+:global(:root[data-theme="dark"]) .defaults[data-batch-reference] :is(.r409) {
+  color: #5271e3;
+}
+
+:global(:root[data-theme="dark"]) .defaults[data-batch-reference] :is(.r412) {
+  color: #8098f9;
+}
+
+/* Dark mode bindings for the Empty State and Simple Code Snippet references. */
+:global(:root[data-theme="dark"]) .defaults[data-batch-reference] :is(.r427, .r428, .r429, .r440, .r441) {
+  border-color: #22262f;
+}
+
+:global(:root[data-theme="dark"]) .defaults[data-batch-reference] .r429 {
+  background-color: #22262f;
+}
+
+:global(:root[data-theme="dark"]) .defaults[data-reference-kind="empty-states"] .r162 {
+  color: #94979c;
+}
+
+:global(:root[data-theme="dark"]) .defaults[data-batch-reference] .r440 {
+  background-color: #0c0e12;
+}
+
+:global(:root[data-theme="dark"]) .defaults[data-batch-reference] .r441 {
+  background-color: #13161b;
+}
+
+:global(:root[data-theme="dark"]) .defaults[data-batch-reference] .r442 {
+  color: #94979c;
+}
+
+:global(:root[data-theme="dark"]) .defaults[data-batch-reference] .r447 {
+  color: #f7f7f7;
+}
+
+/* Syntax colors are explicit text range fills in the Figma dark export. */
+:global(:root[data-theme="dark"]) .defaults[data-batch-reference] .r448 {
+  color: #47cd89;
+}
+
+:global(:root[data-theme="dark"]) .defaults[data-batch-reference] .r450 {
+  color: #f670c7;
+}
+
+:global(:root[data-theme="dark"]) .defaults[data-batch-reference] .r451 {
+  color: #53b1fd;
 }

@@ -2,7 +2,7 @@ import type { CSSProperties } from "react";
 import type snapshot from "../figmaProgress.json";
 import styles from "./ProgressFoundations.module.css";
 
-const assets = import.meta.glob<string>("./assets/*.svg", { eager: true, query: "?url", import: "default" });
+const assets = import.meta.glob<string>("./assets/**/*.svg", { eager: true, query: "?url", import: "default" });
 const rings: Record<string, string> = {
   "md-Circle": "6e790.svg",
   "lg-Circle": "9ba14.svg",
@@ -22,10 +22,18 @@ const metrics: Record<
   md: { font: 36, line: 44, labelFont: 14, labelLine: 20, halfCenter: 96 },
   lg: { font: 48, line: 60, labelFont: 14, labelLine: 20, halfCenter: 110 },
 };
-const image = (file: string, style?: CSSProperties) => <img src={assets[`./assets/${file}`]} alt="" style={style} />;
+function ringImage(light: string, dark: string, style?: CSSProperties) {
+  return (
+    <>
+      <img src={assets[`./assets/${light}`]} alt="" style={style} data-ring-theme="light" />
+      <img src={assets[`./assets/dark/${dark}`]} alt="" style={style} data-ring-theme="dark" />
+    </>
+  );
+}
 
 export function ProgressCircleReference({ entry }: { entry: (typeof snapshot.circles)[number] }) {
   const half = entry.shape === "Half circle";
+  const shape = half ? "half" : "circle";
   const tiny = entry.size === "xxs";
   const metric = metrics[entry.size];
   return (
@@ -38,8 +46,11 @@ export function ProgressCircleReference({ entry }: { entry: (typeof snapshot.cir
     >
       {tiny ? (
         <>
-          {image(half ? "931d0.svg" : "e87a9.svg")}
-          {image(half ? "ca024.svg" : "30695.svg", { left: half ? 0 : 29, top: half ? 1.4186 : 0 })}
+          {ringImage(half ? "931d0.svg" : "e87a9.svg", `xxs-${shape}-background.svg`)}
+          {ringImage(half ? "ca024.svg" : "30695.svg", `xxs-${shape}-line.svg`, {
+            left: half ? 0 : 29,
+            top: half ? 1.4186 : 0,
+          })}
           <span className={styles.tinyNumber} style={{ left: half ? 32 : 31.5, top: half ? 15 : 22 }}>
             40%
           </span>
@@ -49,7 +60,9 @@ export function ProgressCircleReference({ entry }: { entry: (typeof snapshot.cir
         </>
       ) : (
         <>
-          {image(rings[`${entry.size}-${entry.shape}`], { left: entry.size === "lg" && !half ? -1 : 0 })}
+          {ringImage(rings[`${entry.size}-${entry.shape}`], `${entry.size}-${shape}-ring.svg`, {
+            left: entry.size === "lg" && !half ? -1 : 0,
+          })}
           <div className={styles.circleCopy} style={{ top: half ? metric.halfCenter : entry.height / 2 }}>
             <span
               className={styles.circleLabel}

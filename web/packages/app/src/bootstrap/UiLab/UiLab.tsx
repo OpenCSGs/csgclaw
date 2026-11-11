@@ -1,5 +1,6 @@
 import profileFormLayoutStyles from "@/components/business/ProfileControls/ProfileFormLayout.module.css";
 import messageLayoutStyles from "@/components/business/ConversationPane/MessageLayout.module.css";
+import { DropdownPreview } from "./DropdownFoundations/DropdownPreview";
 import { UiLabPanel } from "./UiLabPanel";
 import { ApplicationFoundations } from "./ApplicationFoundations/ApplicationFoundations";
 import { applicationSections } from "./ApplicationFoundations/registry";
@@ -93,6 +94,7 @@ function UiLabContent() {
   }, [active]);
   const [theme, setTheme] = useState<ResolvedThemeMode>("light");
   const [value, setValue] = useState("model-1");
+  const [workspaceInput, setWorkspaceInput] = useState("");
   const [sort, setSort] = useState("recent");
   const [model, setModel] = useState("qwen-3.5");
   const [reasoning, setReasoning] = useState("");
@@ -170,7 +172,7 @@ function UiLabContent() {
                     "Dropdowns are used to group together actions in a subview. They’re useful for hiding menus or when you have multiple actions that cannot be separate buttons.",
                   )}
                 </p>
-                <p className={styles.intro}>{labText("组件说明已收录，Figma 设计示例与交互演示待补充。")}</p>
+                <DropdownPreview />
               </section>
             </UiLabPanel>
             <UiLabPanel id="toggle-foundations" active={active}>
@@ -308,7 +310,11 @@ function UiLabContent() {
                 <h2>{labText("Workspace style boundary")}</h2>
                 <div className={`profile-section ${profileFormLayoutStyles["profile-section"]}`}>
                   <Field label={labText("Workspace input")} error={error ? labText("Enter a value") : undefined}>
-                    <TextInput placeholder={labText("Component styles inside legacy workspace CSS")} />
+                    <TextInput
+                      placeholder={labText("Component styles inside legacy workspace CSS")}
+                      value={workspaceInput}
+                      onChange={(event) => setWorkspaceInput(event.target.value)}
+                    />
                   </Field>
                   <div className={styles.row}>
                     <Button variant="primary" disabled>
@@ -336,6 +342,15 @@ function UiLabContent() {
                   onSelect={() => {}}
                   onDelete={() => setShowDemoConversation(false)}
                 />
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    setWorkspaceInput("");
+                    setShowDemoConversation(true);
+                  }}
+                >
+                  {labText("重置示例")}
+                </Button>
               </section>
             </UiLabPanel>
             <UiLabPanel id="selection-controls" active={active}>
@@ -392,6 +407,16 @@ function UiLabContent() {
                 <Button variant="secondaryGray" onClick={() => setValue("")}>
                   {labText("Clear selection")}
                 </Button>
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    setSort("recent");
+                    setValue("model-1");
+                    setModel("qwen-3.5");
+                  }}
+                >
+                  {labText("重置示例")}
+                </Button>
               </section>
             </UiLabPanel>
             <UiLabPanel id="reasoning-effort" active={active}>
@@ -405,6 +430,9 @@ function UiLabContent() {
                     onValueCommit={setReasoning}
                     t={createTranslator(locale)}
                   />
+                  <Button size="sm" onClick={() => setReasoning("")}>
+                    {labText("重置示例")}
+                  </Button>
                 </div>
               </section>
             </UiLabPanel>

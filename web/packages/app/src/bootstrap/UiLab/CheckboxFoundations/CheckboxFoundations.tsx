@@ -1,6 +1,6 @@
 import { useLabTranslation } from "../LabLocale";
 import { useState } from "react";
-import { Button, Field, SegmentedControl, TextInput } from "@/components/ui";
+import { Button, Field, LinkButton, SegmentedControl, TextInput } from "@/components/ui";
 import snapshot from "../figmaCheckboxes.json";
 import { CheckboxSample } from "./CheckboxSample";
 import styles from "./CheckboxFoundations.module.css";
@@ -58,11 +58,7 @@ export function CheckboxFoundations() {
               "设计提供带文字的选中/未选中状态，以及无文字的选中/未选中/半选状态。半选带文字仅为组合交互示例，不计入原稿 40 个变体。图标使用原始 SVG，保留各尺寸与禁用态差异。",
             )}
           </p>
-          <p>
-            {labText(
-              "交互复用共享 Checkbox 的 Radix 语义，Figma 样式仅用于 UI Lab。白色参考区固定设计导出颜色，外层支持主题切换；产品复选框样式尚未同步。缺少 PingFang SC 时使用系统字体回退。通知选项不保存或发送。",
-            )}
-          </p>
+          <p>{labText("交互复用共享 Checkbox。边框、勾选标记和说明文字随主题切换。")}</p>
         </details>
       </div>
       <div className={styles.controls}>
@@ -190,14 +186,25 @@ export function CheckboxFoundations() {
           )
           .map((entry) => (
             <article className={styles.item} key={entry.id}>
-              <h4>
-                {labText(stateLabels[entry.State])} ·{" "}
-                {entry.Indeterminate === "True"
-                  ? labText("半选")
-                  : entry.Checked === "True"
-                    ? labText("选中")
-                    : labText("未选")}
-              </h4>
+              <header className={styles.itemHeader}>
+                <h4>
+                  {labText(stateLabels[entry.State])} ·{" "}
+                  {entry.Indeterminate === "True"
+                    ? labText("半选")
+                    : entry.Checked === "True"
+                      ? labText("选中")
+                      : labText("未选")}
+                </h4>
+                <LinkButton
+                  variant="primary"
+                  size="sm"
+                  href={`${snapshot.source.split("?")[0]}?node-id=${entry.id.replace(":", "-")}`}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  {labText("查看设计节点 ↗")}
+                </LinkButton>
+              </header>
               <p>
                 {entry.width} × {entry.height}
                 {labText("px · ")}
@@ -213,13 +220,6 @@ export function CheckboxFoundations() {
                   />
                 </div>
               </div>
-              <a
-                href={`${snapshot.source.split("?")[0]}?node-id=${entry.id.replace(":", "-")}`}
-                target="_blank"
-                rel="noreferrer"
-              >
-                {labText("查看设计节点 ↗")}
-              </a>
             </article>
           ))}
       </div>

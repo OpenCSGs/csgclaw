@@ -1,3 +1,4 @@
+import { ThemeGlyph } from "../ThemeGlyph";
 import { arrowAssets, defaultTooltipTitle, defaultTooltipDescription } from "./tooltipData";
 import styles from "./TooltipFoundations.module.css";
 
@@ -33,7 +34,7 @@ export function TooltipBubble({
     arrow !== "None" ? (
       <span className={styles.arrowSlot}>
         <span className={styles.arrowRotation}>
-          <img src={arrowAssets[arrow]} alt="" />
+          <ThemeGlyph src={arrowAssets[arrow]} />
         </span>
       </span>
     ) : null;

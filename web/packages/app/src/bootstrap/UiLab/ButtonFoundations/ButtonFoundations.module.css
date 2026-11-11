@@ -115,3 +115,151 @@
     padding: var(--space-3);
   }
 }
+
+:global(:root[data-theme="dark"]) :is(.reference, .codeStage) {
+  background: #0c0e12;
+}
+
+:global(:root[data-theme="dark"]) :is(.reference, .codeButton)[data-figma-variant="primary"] {
+  --lab-button-bg: #3250bd;
+  --lab-button-shadow: var(--shadow-xs);
+  --lab-button-border: transparent;
+  --lab-button-text: #fff;
+}
+
+:global(:root[data-theme="dark"]) :is(.reference, .codeButton)[data-figma-variant="secondaryGray"] {
+  --lab-button-bg: #0c0e12;
+  --lab-button-shadow: var(--shadow-xs);
+  --lab-button-border: #373a41;
+  --lab-button-text: #cecfd2;
+}
+
+:global(:root[data-theme="dark"]) :is(.reference, .codeButton)[data-figma-variant="danger"] {
+  --lab-button-bg: #d92d20;
+  --lab-button-shadow: var(--shadow-xs);
+  --lab-button-border: transparent;
+  --lab-button-text: #fff;
+}
+
+:global(:root[data-theme="dark"]) :is(.reference, .codeButton)[data-figma-variant="outlineDanger"] {
+  --lab-button-bg: #0c0e12;
+  --lab-button-shadow: var(--shadow-xs);
+  --lab-button-border: #f04438;
+  --lab-button-text: #f97066;
+}
+
+:global(:root[data-theme="dark"]) :is(.reference, .codeButton)[data-figma-variant="linkColor"] {
+  --lab-button-text: #cecfd2;
+}
+
+:global(:root[data-theme="dark"])
+  :is(.reference, .codeButton):is([data-figma-variant="tertiaryGray"], [data-figma-variant="linkGray"]) {
+  --lab-button-text: #94979c;
+}
+
+:global(:root[data-theme="dark"])
+  :is(.reference, .codeButton):is([data-figma-variant="tertiaryDanger"], [data-figma-variant="linkDanger"]) {
+  --lab-button-text: #f97066;
+}
+
+:global(:root[data-theme="dark"])
+  :is(.reference, .codeButton):is(
+    .reference[data-figma-state="Hover"],
+    .codeButton:hover:not(:disabled)
+  )[data-figma-variant="primary"] {
+  --lab-button-bg: #4d6ad6;
+}
+
+:global(:root[data-theme="dark"])
+  :is(.reference, .codeButton):is(.reference[data-figma-state="Hover"], .codeButton:hover:not(:disabled)):is(
+    [data-figma-variant="secondaryGray"],
+    [data-figma-variant="tertiaryGray"]
+  ) {
+  --lab-button-bg: #22262f;
+}
+
+:global(:root[data-theme="dark"])
+  :is(.reference, .codeButton):is(.reference[data-figma-state="Hover"], .codeButton:hover:not(:disabled)):is(
+    [data-figma-variant="secondaryGray"],
+    [data-figma-variant="linkColor"]
+  ) {
+  --lab-button-text: #ececed;
+}
+
+:global(:root[data-theme="dark"])
+  :is(.reference, .codeButton):is(.reference[data-figma-state="Hover"], .codeButton:hover:not(:disabled)):is(
+    [data-figma-variant="tertiaryGray"],
+    [data-figma-variant="linkGray"]
+  ) {
+  --lab-button-text: #cecfd2;
+}
+
+:global(:root[data-theme="dark"]) :is(.reference, .codeButton)[data-figma-state="Disabled"][data-figma-variant] {
+  --lab-button-border: #22262f;
+  --lab-button-text: #85888e;
+  --lab-button-shadow: none;
+}
+
+:global(:root[data-theme="dark"])
+  :is(.reference, .codeButton)[data-figma-state="Disabled"]:is(
+    [data-figma-variant="primary"],
+    [data-figma-variant="danger"]
+  ) {
+  --lab-button-bg: #22262f;
+}
+
+:global(:root[data-theme="dark"])
+  :is(.reference, .codeButton):is(.reference[data-figma-state="Focused"], .codeButton:focus-visible) {
+  --lab-button-shadow: 0 0 0 2px #0c0e12, 0 0 0 4px #4d6ad6;
+}
+
+:global(:root[data-theme="dark"])
+  .codeStage
+  .codeButton[data-figma-variant]:is(:enabled, [data-figma-state="Disabled"], [data-figma-state="Loading"]) {
+  background-color: var(--lab-button-bg, var(--button-background));
+  border-color: var(--lab-button-border, var(--button-border));
+  color: var(--lab-button-text, var(--button-text));
+  box-shadow: var(--lab-button-shadow, var(--button-shadow));
+}
+
+:global(:root[data-theme="dark"]) .codeStage .codeButton[data-figma-variant]:hover:not(:disabled) {
+  border-color: var(--button-hover-border);
+}
+
+:global(:root[data-theme="dark"])
+  .codeStage
+  .codeButton:is([data-figma-variant="danger"], [data-figma-variant="outlineDanger"]):hover:not(:disabled) {
+  background-color: var(--button-hover-background);
+  color: var(--button-hover-text);
+}
+
+:global(:root[data-theme="dark"]) :is(.reference, .codeButton)[data-figma-variant="primary"] {
+  --lab-glyph-color: #6584f8;
+}
+
+:global(:root[data-theme="dark"]) :is(.reference, .codeButton)[data-figma-variant="danger"] {
+  --lab-glyph-color: #fda29b;
+}
+
+:global(:root[data-theme="dark"])
+  :is(.reference, .codeButton):is(
+    [data-figma-variant="outlineDanger"],
+    [data-figma-variant="tertiaryDanger"],
+    [data-figma-variant="linkDanger"]
+  ) {
+  --lab-glyph-color: #f97066;
+}
+
+:global(:root[data-theme="dark"]) :is(.reference, .codeButton)[data-figma-state="Disabled"][data-figma-variant] {
+  --lab-glyph-color: #61656c;
+}
+
+:global(:root[data-theme="dark"])
+  :is(.reference, .codeButton)[data-figma-state="Loading"][data-figma-variant="primary"] {
+  --lab-button-bg: #4d6ad6;
+}
+
+:global(:root[data-theme="dark"])
+  :is(.reference, .codeButton)[data-figma-state="Loading"][data-figma-variant="secondaryGray"] {
+  --lab-button-bg: #22262f;
+}

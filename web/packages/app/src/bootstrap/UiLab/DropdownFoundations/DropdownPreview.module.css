@@ -1,0 +1,50 @@
+.preview {
+  display: grid;
+  justify-items: start;
+  gap: 12px;
+}
+.preview a {
+  color: var(--primary);
+}
+.row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.menu {
+  width: 240px;
+  padding: 4px;
+}
+.menu .item {
+  gap: 8px;
+}
+:global(:root[data-theme="dark"]) .menu[data-size] {
+  background: #0c0e12;
+  border-color: #373a41;
+  box-shadow: none;
+}
+:global(:root[data-theme="dark"]) .menu .item {
+  color: #cecfd2;
+}
+:global(:root[data-theme="dark"]) .menu .item[data-highlighted] {
+  background: #22262f;
+  color: #ececed;
+}
+:global(:root[data-theme="dark"]) .menu .item[data-disabled] {
+  --lab-glyph-color: #85888e;
+  color: #85888e;
+  opacity: 1;
+}
+:global(:root[data-theme="dark"]) .menu .separator {
+  background: #22262f;
+}
+:global(:root[data-theme="dark"]) .row .trigger[data-csg-control] {
+  background: #0c0e12;
+  border-color: #373a41;
+  color: #cecfd2;
+}
+:global(:root[data-theme="dark"]) .row .trigger[data-csg-control]:hover {
+  background: #22262f;
+  color: #ececed;
+}
