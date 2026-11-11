@@ -1,0 +1,104 @@
+{
+  "source": "https://www.figma.com/design/2s3AVSZ5FfBnCR5nI2AriR/Untitled-UI?node-id=1052-485",
+  "captured": "2026-10-30",
+  "entries": [
+    {
+      "id": "1052:570",
+      "Supporting text": "True",
+      "Arrow": "Bottom center",
+      "width": 320,
+      "height": 104
+    },
+    {
+      "id": "1052:577",
+      "Supporting text": "True",
+      "Arrow": "None",
+      "width": 320,
+      "height": 98
+    },
+    {
+      "id": "1052:582",
+      "Supporting text": "False",
+      "Arrow": "Bottom center",
+      "width": 114,
+      "height": 40
+    },
+    {
+      "id": "1052:587",
+      "Supporting text": "False",
+      "Arrow": "None",
+      "width": 114,
+      "height": 34
+    },
+    {
+      "id": "1052:590",
+      "Supporting text": "True",
+      "Arrow": "Top center",
+      "width": 320,
+      "height": 104
+    },
+    {
+      "id": "1052:597",
+      "Supporting text": "False",
+      "Arrow": "Top center",
+      "width": 114,
+      "height": 40
+    },
+    {
+      "id": "1052:602",
+      "Supporting text": "True",
+      "Arrow": "Bottom left",
+      "width": 320,
+      "height": 104
+    },
+    {
+      "id": "1052:609",
+      "Supporting text": "False",
+      "Arrow": "Bottom left",
+      "width": 114,
+      "height": 40
+    },
+    {
+      "id": "1052:614",
+      "Supporting text": "True",
+      "Arrow": "Left",
+      "width": 326,
+      "height": 98
+    },
+    {
+      "id": "1052:621",
+      "Supporting text": "False",
+      "Arrow": "Left",
+      "width": 120,
+      "height": 34
+    },
+    {
+      "id": "1052:626",
+      "Supporting text": "True",
+      "Arrow": "Right",
+      "width": 326,
+      "height": 98
+    },
+    {
+      "id": "1052:633",
+      "Supporting text": "False",
+      "Arrow": "Right",
+      "width": 120,
+      "height": 34
+    },
+    {
+      "id": "1052:638",
+      "Supporting text": "True",
+      "Arrow": "Bottom right",
+      "width": 320,
+      "height": 104
+    },
+    {
+      "id": "1052:645",
+      "Supporting text": "False",
+      "Arrow": "Bottom right",
+      "width": 114,
+      "height": 40
+    }
+  ]
+}

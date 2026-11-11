@@ -1,0 +1,13 @@
+# Typography foundations
+
+Source: Figma file `2s3AVSZ5FfBnCR5nI2AriR`, Typography page `18:1951`, reference frame `1023:36826`, captured 2026-10-30.
+
+The JSON snapshot records 44 named text styles from `get_variable_defs`, cross-checked with the typeface frame `5253:372252` and all eleven scale instance design contexts (`1277:657`, `1023:36716` through `1023:36723`, `1023:36725`, `1023:36726`). It excludes optional long documentation frames.
+
+Actual styles resolve to MiSans with weights 250/330/380/520 and zero tracking. Static specimen labels say Inter, Regular/Medium/Semibold/Bold (400/500/600/700), and -2% for larger displays. These discrepancies require design confirmation; do not migrate global tokens based on printed labels. Display 2xl through xs map by size to production text-7xl through text-2xl; Text xs through xl retain their names. These are candidate mappings, not acceptance of typography parity. Text sm line height and larger display tracking differ from production.
+
+The reference preview attempts a local MiSans FontFace, with no network request or bundled font. Missing fonts explicitly show a fallback notice. Font synthesis is disabled, but local font version, weight coverage and exact glyph rendering still need design review. Supply an approved licensed font file before claiming pixel-accurate typography. Production preview consumes existing font shorthand and tracking tokens, including any variant-specific line heights.
+
+Font revision2026-10-30: current UI Lab design previews use PingFang SC following the updated shared Figma text styles. Light/Regular/Medium/Semibold resolve to300/400/500/600. Typography node1023:36826 contains all44 updated styles; button3287:427299, input1091:61583, tag3307:417516 and toggle1102:4406 were spot-checked. Earlier MiSans notes above describe the previous capture. Current runtime copy is bilingual and reflects PingFang SC. Product font tokens and existing-code comparison mode remain unchanged. No font files are bundled or downloaded; native CSS family matching selects available weights and the typography page probes local Regular availability separately.
+
+Font revision verification:45 targeted UI Lab/shared i18n tests, typecheck, lint, formatting and a temporary Vite build passed. IAB1149×841/default zoom, Chinese and English: TXT-01/LOC-01 pass for updated family names and notices; computed design sample weights are300/400/500/600 with PingFang SC first, and the local Regular probe loaded successfully. All130 existing images in the affected component galleries loaded. No asset files, SVG slots, or callsites changed. Non-font visual differences and product-wide font migration remain outside this change.

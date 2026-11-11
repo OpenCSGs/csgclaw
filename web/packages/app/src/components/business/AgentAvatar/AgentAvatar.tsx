@@ -1,5 +1,5 @@
 import agentAvatarStyles from "./AgentAvatar.module.css";
-import { DialogContent, DialogDescription, DialogRoot, DialogTitle, Tooltip } from "@/components/ui";
+import { Button, DialogContent, DialogDescription, DialogRoot, DialogTitle, Tooltip } from "@/components/ui";
 import { AgentIcon } from "@/components/business/Icons";
 import { CLOUD_AGENT_AVATARS } from "@/shared/avatar";
 import { AGENT_AVATAR_GROUPS, AGENT_AVATAR_OPTIONS, normalizeAgentAvatarPath } from "@/shared/avatarOptions";
@@ -450,21 +450,17 @@ export function AgentAvatarPicker({
               )}
             </div>
             <div className={agentAvatarStyles["agent-avatar-editor-actions"]}>
-              <button
-                className={`${agentAvatarStyles["agent-avatar-editor-button"]} secondary`}
-                type="button"
-                onClick={closeEditor}
-              >
+              <Button variant="secondaryGray" size="lg" onClick={closeEditor}>
                 {t("cancel")}
-              </button>
-              <button
-                className={`${agentAvatarStyles["agent-avatar-editor-button"]} primary`}
-                type="button"
+              </Button>
+              <Button
+                variant="primary"
+                size="lg"
                 disabled={activeTab === "upload" && !uploadSource}
                 onClick={() => void confirmDraft()}
               >
-                {t("confirm")}
-              </button>
+                {t("avatarApply")}
+              </Button>
             </div>
           </DialogContent>
         </DialogRoot>

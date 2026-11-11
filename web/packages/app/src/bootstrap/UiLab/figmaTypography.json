@@ -1,0 +1,414 @@
+{
+  "source": "https://www.figma.com/design/2s3AVSZ5FfBnCR5nI2AriR/?node-id=18-1951",
+  "captured": "2026-10-30",
+  "frame": "1023:36826",
+  "styles": [
+    {
+      "name": "Text xl/Medium",
+      "scale": "text-xl",
+      "size": 20,
+      "lineHeight": 30,
+      "weight": 500,
+      "letterSpacing": 0,
+      "family": "PingFang SC"
+    },
+    {
+      "name": "Text xl/Light",
+      "scale": "text-xl",
+      "size": 20,
+      "lineHeight": 30,
+      "weight": 300,
+      "letterSpacing": 0,
+      "family": "PingFang SC"
+    },
+    {
+      "name": "Display xl/Medium",
+      "scale": "display-xl",
+      "size": 60,
+      "lineHeight": 72,
+      "weight": 500,
+      "letterSpacing": 0,
+      "family": "PingFang SC"
+    },
+    {
+      "name": "Text lg/Medium",
+      "scale": "text-lg",
+      "size": 18,
+      "lineHeight": 28,
+      "weight": 500,
+      "letterSpacing": 0,
+      "family": "PingFang SC"
+    },
+    {
+      "name": "Text lg/Regular",
+      "scale": "text-lg",
+      "size": 18,
+      "lineHeight": 28,
+      "weight": 400,
+      "letterSpacing": 0,
+      "family": "PingFang SC"
+    },
+    {
+      "name": "Display lg/Light",
+      "scale": "display-lg",
+      "size": 48,
+      "lineHeight": 60,
+      "weight": 300,
+      "letterSpacing": 0,
+      "family": "PingFang SC"
+    },
+    {
+      "name": "Display xl/Light",
+      "scale": "display-xl",
+      "size": 60,
+      "lineHeight": 72,
+      "weight": 300,
+      "letterSpacing": 0,
+      "family": "PingFang SC"
+    },
+    {
+      "name": "Text md/Light",
+      "scale": "text-md",
+      "size": 16,
+      "lineHeight": 24,
+      "weight": 300,
+      "letterSpacing": 0,
+      "family": "PingFang SC"
+    },
+    {
+      "name": "Display xl/Regular",
+      "scale": "display-xl",
+      "size": 60,
+      "lineHeight": 72,
+      "weight": 400,
+      "letterSpacing": 0,
+      "family": "PingFang SC"
+    },
+    {
+      "name": "Display xl/Semibold",
+      "scale": "display-xl",
+      "size": 60,
+      "lineHeight": 72,
+      "weight": 600,
+      "letterSpacing": 0,
+      "family": "PingFang SC"
+    },
+    {
+      "name": "Text md/Regular",
+      "scale": "text-md",
+      "size": 16,
+      "lineHeight": 24,
+      "weight": 400,
+      "letterSpacing": 0,
+      "family": "PingFang SC"
+    },
+    {
+      "name": "Display 2xl/Light",
+      "scale": "display-2xl",
+      "size": 72,
+      "lineHeight": 90,
+      "weight": 300,
+      "letterSpacing": 0,
+      "family": "PingFang SC"
+    },
+    {
+      "name": "Display 2xl/Regular",
+      "scale": "display-2xl",
+      "size": 72,
+      "lineHeight": 90,
+      "weight": 400,
+      "letterSpacing": 0,
+      "family": "PingFang SC"
+    },
+    {
+      "name": "Display 2xl/Medium",
+      "scale": "display-2xl",
+      "size": 72,
+      "lineHeight": 90,
+      "weight": 500,
+      "letterSpacing": 0,
+      "family": "PingFang SC"
+    },
+    {
+      "name": "Display 2xl/Semibold",
+      "scale": "display-2xl",
+      "size": 72,
+      "lineHeight": 90,
+      "weight": 600,
+      "letterSpacing": 0,
+      "family": "PingFang SC"
+    },
+    {
+      "name": "Display lg/Regular",
+      "scale": "display-lg",
+      "size": 48,
+      "lineHeight": 60,
+      "weight": 400,
+      "letterSpacing": 0,
+      "family": "PingFang SC"
+    },
+    {
+      "name": "Display lg/Medium",
+      "scale": "display-lg",
+      "size": 48,
+      "lineHeight": 60,
+      "weight": 500,
+      "letterSpacing": 0,
+      "family": "PingFang SC"
+    },
+    {
+      "name": "Display lg/Semibold",
+      "scale": "display-lg",
+      "size": 48,
+      "lineHeight": 60,
+      "weight": 600,
+      "letterSpacing": 0,
+      "family": "PingFang SC"
+    },
+    {
+      "name": "Display md/Light",
+      "scale": "display-md",
+      "size": 36,
+      "lineHeight": 44,
+      "weight": 300,
+      "letterSpacing": 0,
+      "family": "PingFang SC"
+    },
+    {
+      "name": "Display md/Regular",
+      "scale": "display-md",
+      "size": 36,
+      "lineHeight": 44,
+      "weight": 400,
+      "letterSpacing": 0,
+      "family": "PingFang SC"
+    },
+    {
+      "name": "Display md/Medium",
+      "scale": "display-md",
+      "size": 36,
+      "lineHeight": 44,
+      "weight": 500,
+      "letterSpacing": 0,
+      "family": "PingFang SC"
+    },
+    {
+      "name": "Display md/Semibold",
+      "scale": "display-md",
+      "size": 36,
+      "lineHeight": 44,
+      "weight": 600,
+      "letterSpacing": 0,
+      "family": "PingFang SC"
+    },
+    {
+      "name": "Display sm/Light",
+      "scale": "display-sm",
+      "size": 30,
+      "lineHeight": 38,
+      "weight": 300,
+      "letterSpacing": 0,
+      "family": "PingFang SC"
+    },
+    {
+      "name": "Display sm/Regular",
+      "scale": "display-sm",
+      "size": 30,
+      "lineHeight": 38,
+      "weight": 400,
+      "letterSpacing": 0,
+      "family": "PingFang SC"
+    },
+    {
+      "name": "Display sm/Medium",
+      "scale": "display-sm",
+      "size": 30,
+      "lineHeight": 38,
+      "weight": 500,
+      "letterSpacing": 0,
+      "family": "PingFang SC"
+    },
+    {
+      "name": "Display sm/Semibold",
+      "scale": "display-sm",
+      "size": 30,
+      "lineHeight": 38,
+      "weight": 600,
+      "letterSpacing": 0,
+      "family": "PingFang SC"
+    },
+    {
+      "name": "Display xs/Light",
+      "scale": "display-xs",
+      "size": 24,
+      "lineHeight": 32,
+      "weight": 300,
+      "letterSpacing": 0,
+      "family": "PingFang SC"
+    },
+    {
+      "name": "Display xs/Regular",
+      "scale": "display-xs",
+      "size": 24,
+      "lineHeight": 32,
+      "weight": 400,
+      "letterSpacing": 0,
+      "family": "PingFang SC"
+    },
+    {
+      "name": "Display xs/Medium",
+      "scale": "display-xs",
+      "size": 24,
+      "lineHeight": 32,
+      "weight": 500,
+      "letterSpacing": 0,
+      "family": "PingFang SC"
+    },
+    {
+      "name": "Display xs/Semibold",
+      "scale": "display-xs",
+      "size": 24,
+      "lineHeight": 32,
+      "weight": 600,
+      "letterSpacing": 0,
+      "family": "PingFang SC"
+    },
+    {
+      "name": "Text xl/Regular",
+      "scale": "text-xl",
+      "size": 20,
+      "lineHeight": 30,
+      "weight": 400,
+      "letterSpacing": 0,
+      "family": "PingFang SC"
+    },
+    {
+      "name": "Text xl/Semibold",
+      "scale": "text-xl",
+      "size": 20,
+      "lineHeight": 30,
+      "weight": 600,
+      "letterSpacing": 0,
+      "family": "PingFang SC"
+    },
+    {
+      "name": "Text lg/Light",
+      "scale": "text-lg",
+      "size": 18,
+      "lineHeight": 28,
+      "weight": 300,
+      "letterSpacing": 0,
+      "family": "PingFang SC"
+    },
+    {
+      "name": "Text lg/Semibold",
+      "scale": "text-lg",
+      "size": 18,
+      "lineHeight": 28,
+      "weight": 600,
+      "letterSpacing": 0,
+      "family": "PingFang SC"
+    },
+    {
+      "name": "Text md/Medium",
+      "scale": "text-md",
+      "size": 16,
+      "lineHeight": 24,
+      "weight": 500,
+      "letterSpacing": 0,
+      "family": "PingFang SC"
+    },
+    {
+      "name": "Text md/Semibold",
+      "scale": "text-md",
+      "size": 16,
+      "lineHeight": 24,
+      "weight": 600,
+      "letterSpacing": 0,
+      "family": "PingFang SC"
+    },
+    {
+      "name": "Text sm/Light",
+      "scale": "text-sm",
+      "size": 14,
+      "lineHeight": 20,
+      "weight": 300,
+      "letterSpacing": 0,
+      "family": "PingFang SC"
+    },
+    {
+      "name": "Text sm/Regular",
+      "scale": "text-sm",
+      "size": 14,
+      "lineHeight": 20,
+      "weight": 400,
+      "letterSpacing": 0,
+      "family": "PingFang SC"
+    },
+    {
+      "name": "Text sm/Medium",
+      "scale": "text-sm",
+      "size": 14,
+      "lineHeight": 20,
+      "weight": 500,
+      "letterSpacing": 0,
+      "family": "PingFang SC"
+    },
+    {
+      "name": "Text sm/Semibold",
+      "scale": "text-sm",
+      "size": 14,
+      "lineHeight": 20,
+      "weight": 600,
+      "letterSpacing": 0,
+      "family": "PingFang SC"
+    },
+    {
+      "name": "Text xs/Light",
+      "scale": "text-xs",
+      "size": 12,
+      "lineHeight": 18,
+      "weight": 300,
+      "letterSpacing": 0,
+      "family": "PingFang SC"
+    },
+    {
+      "name": "Text xs/Regular",
+      "scale": "text-xs",
+      "size": 12,
+      "lineHeight": 18,
+      "weight": 400,
+      "letterSpacing": 0,
+      "family": "PingFang SC"
+    },
+    {
+      "name": "Text xs/Medium",
+      "scale": "text-xs",
+      "size": 12,
+      "lineHeight": 18,
+      "weight": 500,
+      "letterSpacing": 0,
+      "family": "PingFang SC"
+    },
+    {
+      "name": "Text xs/Semibold",
+      "scale": "text-xs",
+      "size": 12,
+      "lineHeight": 18,
+      "weight": 600,
+      "letterSpacing": 0,
+      "family": "PingFang SC"
+    }
+  ],
+  "fontRevision": {
+    "reviewed": "2026-10-30",
+    "node": "1023:36826",
+    "family": "PingFang SC",
+    "weights": {
+      "Light": 300,
+      "Regular": 400,
+      "Medium": 500,
+      "Semibold": 600
+    }
+  }
+}

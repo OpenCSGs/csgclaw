@@ -520,7 +520,7 @@ it("moves the signed-in user's community templates to My templates with a cloud 
     Node.DOCUMENT_POSITION_FOLLOWING,
   );
   expect(within(screen.getByRole("button", { name: /alice worker 云端/ })).getByText("云端")).toBeVisible();
-  expect(screen.getByRole("link", { name: "在 AgenticHub 上管理我的模板" })).toHaveAttribute(
+  expect(screen.getByRole("link", { name: "管理云端模板" })).toHaveAttribute(
     "href",
     "https://qa.opencsg.com/agentichub?view=resources&subview=template",
   );
@@ -606,7 +606,7 @@ describe("personal template cloud sign-in", () => {
     expect(heading.compareDocumentPosition(empty) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(list.queryByRole("button", { name: "去登录" })).not.toBeInTheDocument();
     if (hasLocal) expect(list.getByRole("button", { name: "Local worker" })).toBeVisible();
-    expect(list.getByRole("link", { name: "在 AgenticHub 上管理我的模板" })).toBeVisible();
+    expect(list.getByRole("link", { name: "管理云端模板" })).toBeVisible();
   });
 
   it.each([{ isLoading: true }, { isFetching: true }, { isError: true }])(

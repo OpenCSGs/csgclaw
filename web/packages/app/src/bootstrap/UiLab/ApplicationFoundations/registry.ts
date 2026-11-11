@@ -1,0 +1,110 @@
+export const applicationSections = [
+  {
+    key: "page-headers",
+    title: "Page headers",
+    zh: "页面标题",
+    description: "页面标题建立页面层级，并提供搜索与主要操作。",
+  },
+  {
+    key: "card-headers",
+    title: "Card headers",
+    zh: "卡片标题",
+    description: "卡片标题介绍内容区域，并展示数量和相关操作。",
+  },
+  {
+    key: "section-headers",
+    title: "Section headers",
+    zh: "区块标题",
+    description: "区块标题将相关内容归组，并提供上下文操作。",
+  },
+  {
+    key: "app-navigation",
+    title: "Application navigation",
+    zh: "应用导航",
+    description: "应用导航帮助用户在产品的主要区域之间切换。",
+  },
+  { key: "modals", title: "Modals", zh: "弹窗", description: "弹窗聚焦当前任务，关闭后将焦点返回原来的操作入口。" },
+  {
+    key: "command-menus",
+    title: "Command menus",
+    zh: "命令菜单",
+    description: "命令菜单提供可搜索的操作入口，并支持键盘选择。",
+  },
+  { key: "charts", title: "Charts", zh: "图表", description: "图表将数据转换为可比较的视觉信息，并保留可读的数据值。" },
+  { key: "metrics", title: "Metrics", zh: "指标", description: "指标卡突出关键数值、变化趋势和比较周期。" },
+  { key: "slideouts", title: "Slideout menus", zh: "抽屉", description: "抽屉从页面边缘打开，用于补充信息或设置。" },
+  {
+    key: "inline-ctas",
+    title: "Inline CTAs",
+    zh: "内嵌行动提示",
+    description: "内嵌行动提示在内容中展示相关信息和下一步操作。",
+  },
+  {
+    key: "activity-feeds",
+    title: "Activity feeds",
+    zh: "活动动态",
+    description: "活动动态按时间顺序展示人员、事件和相关内容。",
+  },
+  { key: "messaging", title: "Messaging", zh: "消息", description: "消息组件组织发送者、时间、正文和发送状态。" },
+  { key: "tables", title: "Tables", zh: "表格", description: "表格组织结构化数据，并提供排序、筛选和选择。" },
+  {
+    key: "breadcrumbs",
+    title: "Breadcrumbs",
+    zh: "面包屑",
+    description: "面包屑展示当前位置，并帮助用户返回上级内容。",
+  },
+  {
+    key: "alerts",
+    title: "Alerts & notifications",
+    zh: "提醒与通知",
+    description: "提醒与通知传达状态变化，并提供清晰的后续操作。",
+  },
+  {
+    key: "date-pickers",
+    title: "Date pickers",
+    zh: "日期选择器",
+    description: "日期选择器帮助用户选择、确认或取消日期。",
+  },
+  {
+    key: "calendars",
+    title: "Calendars",
+    zh: "日历",
+    description: "日历将日期与事件联系起来，帮助用户查看和安排日程。",
+  },
+  {
+    key: "file-upload",
+    title: "File upload",
+    zh: "文件上传",
+    description: "文件上传提供文件选择、校验和处理状态反馈。",
+  },
+  {
+    key: "dividers",
+    title: "Content dividers",
+    zh: "内容分割器",
+    description: "内容分割器通过线条与标签区分不同内容区域。",
+  },
+  {
+    key: "loading",
+    title: "Loading indicators",
+    zh: "加载指示器",
+    description: "加载指示器告知用户内容正在处理，并提供完成反馈。",
+  },
+  {
+    key: "empty-states",
+    title: "Empty states",
+    zh: "空状态",
+    description: "空状态解释没有内容的原因，并提供有效的下一步操作。",
+  },
+  {
+    key: "code-snippets",
+    title: "Code snippets",
+    zh: "代码片段",
+    description: "代码片段以等宽字体展示代码，并提供复制操作。",
+  },
+] as const;
+export type ApplicationKind = (typeof applicationSections)[number]["key"];
+export const applicationNavItems = applicationSections.map(({ key, title, zh }) => ({
+  id: `${key}-foundations` as const,
+  label: `${title} · ${zh}`,
+  zh,
+}));

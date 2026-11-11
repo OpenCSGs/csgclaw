@@ -23,6 +23,7 @@ export const TASK_DIRECTORIES_STORAGE_KEY = "csgclaw.taskEntry.directories" as c
 export const CHAT_SIDE_PANEL_STORAGE_KEY = "csgclaw.im.chatSidePanel.v1" as const;
 export const CHAT_SIDE_PANEL_WIDTH_STORAGE_KEY = "csgclaw.im.chatSidePanelWidth" as const;
 
+export const UI_LAB_LOCALE_STORAGE_KEY = "csgclaw.uiLab.locale" as const;
 export const MANAGER_SETUP_DISMISSED_STORAGE_KEY = "csgclaw.manager.setupDismissed" as const;
 export const CLOUD_SEND_CONSENT_STORAGE_KEY = "csgclaw.cloud-send-consent.v1";
 export const CLOUD_AGENTS_STORAGE_KEY = "csgclaw.agents.cloud.v3" as const;

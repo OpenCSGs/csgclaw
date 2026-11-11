@@ -1,0 +1,6252 @@
+[
+  {
+    "key": "page-headers",
+    "pageId": "185:2718",
+    "nodeId": "1239:122641",
+    "variants": [
+      {
+        "id": "1239:122641",
+        "name": "Style=Simple, Breakpoint=Desktop",
+        "width": 1216,
+        "height": 145
+      },
+      {
+        "id": "1239:122728",
+        "name": "Style=Avatar, Breakpoint=Desktop",
+        "width": 1216,
+        "height": 117
+      },
+      {
+        "id": "1239:122839",
+        "name": "Style=Avatar, Breakpoint=Mobile",
+        "width": 375,
+        "height": 221
+      },
+      {
+        "id": "1239:122850",
+        "name": "Style=Banner avatar, Breakpoint=Mobile",
+        "width": 375,
+        "height": 413
+      },
+      {
+        "id": "1239:122995",
+        "name": "Style=Banner avatar centered, Breakpoint=Mobile",
+        "width": 375,
+        "height": 413
+      },
+      {
+        "id": "1239:123144",
+        "name": "Style=Banner simple centered, Breakpoint=Mobile",
+        "width": 375,
+        "height": 405
+      },
+      {
+        "id": "1239:123271",
+        "name": "Style=Banner simple, Breakpoint=Mobile",
+        "width": 375,
+        "height": 429
+      },
+      {
+        "id": "1239:123486",
+        "name": "Style=Simple, Breakpoint=Mobile",
+        "width": 375,
+        "height": 245
+      },
+      {
+        "id": "1239:123561",
+        "name": "Style=Banner avatar, Breakpoint=Desktop",
+        "width": 1440,
+        "height": 397
+      },
+      {
+        "id": "1239:123720",
+        "name": "Style=Banner avatar centered, Breakpoint=Desktop",
+        "width": 1440,
+        "height": 561
+      },
+      {
+        "id": "1239:123873",
+        "name": "Style=Banner simple centered, Breakpoint=Desktop",
+        "width": 1440,
+        "height": 529
+      },
+      {
+        "id": "1239:124008",
+        "name": "Style=Banner simple, Breakpoint=Desktop",
+        "width": 1440,
+        "height": 421
+      }
+    ]
+  },
+  {
+    "key": "card-headers",
+    "pageId": "223:8525",
+    "nodeId": "1211:168",
+    "variants": [
+      {
+        "id": "1211:168",
+        "name": "Avatar=False, Breakpoint=Desktop",
+        "width": 1216,
+        "height": 91
+      },
+      {
+        "id": "1211:272",
+        "name": "Avatar=True, Breakpoint=Desktop",
+        "width": 1216,
+        "height": 97
+      },
+      {
+        "id": "1211:622",
+        "name": "Avatar=True, Breakpoint=Mobile",
+        "width": 375,
+        "height": 145
+      },
+      {
+        "id": "1211:221",
+        "name": "Avatar=False, Breakpoint=Mobile",
+        "width": 375,
+        "height": 167
+      }
+    ]
+  },
+  {
+    "key": "section-headers",
+    "pageId": "190:4871",
+    "nodeId": "1214:66",
+    "variants": [
+      {
+        "id": "1214:66",
+        "name": "Tabs=False, Type=Buttons, Breakpoint=Desktop",
+        "width": 1216,
+        "height": 71
+      },
+      {
+        "id": "1740:454693",
+        "name": "Tabs=False, Type=Button group, Breakpoint=Desktop",
+        "width": 1216,
+        "height": 71
+      },
+      {
+        "id": "1214:2800",
+        "name": "Tabs=False, Type=Search, Breakpoint=Desktop",
+        "width": 1216,
+        "height": 71
+      },
+      {
+        "id": "1214:2269",
+        "name": "Tabs=True, Type=Buttons, Breakpoint=Desktop",
+        "width": 1216,
+        "height": 135
+      },
+      {
+        "id": "1740:454704",
+        "name": "Tabs=True, Type=Button group, Breakpoint=Desktop",
+        "width": 1216,
+        "height": 135
+      },
+      {
+        "id": "1214:3129",
+        "name": "Tabs=True, Type=Search, Breakpoint=Desktop",
+        "width": 1216,
+        "height": 135
+      },
+      {
+        "id": "1214:1330",
+        "name": "Tabs=False, Type=Buttons, Breakpoint=Mobile",
+        "width": 343,
+        "height": 147
+      },
+      {
+        "id": "1740:454674",
+        "name": "Tabs=False, Type=Button group, Breakpoint=Mobile",
+        "width": 343,
+        "height": 147
+      },
+      {
+        "id": "1214:2781",
+        "name": "Tabs=False, Type=Search, Breakpoint=Mobile",
+        "width": 343,
+        "height": 147
+      },
+      {
+        "id": "1214:2250",
+        "name": "Tabs=True, Type=Buttons, Breakpoint=Mobile",
+        "width": 343,
+        "height": 211
+      },
+      {
+        "id": "1740:454665",
+        "name": "Tabs=True, Type=Button group, Breakpoint=Mobile",
+        "width": 343,
+        "height": 211
+      },
+      {
+        "id": "1214:3110",
+        "name": "Tabs=True, Type=Search, Breakpoint=Mobile",
+        "width": 343,
+        "height": 211
+      },
+      {
+        "id": "5013:376528",
+        "name": "Size=sm, Actions=False",
+        "width": 280,
+        "height": 40
+      },
+      {
+        "id": "5013:376579",
+        "name": "Size=md, Actions=False",
+        "width": 280,
+        "height": 48
+      },
+      {
+        "id": "5013:376529",
+        "name": "Size=sm, Actions=True",
+        "width": 280,
+        "height": 72
+      },
+      {
+        "id": "5013:376584",
+        "name": "Size=md, Actions=True",
+        "width": 280,
+        "height": 80
+      }
+    ]
+  },
+  {
+    "key": "app-navigation",
+    "pageId": "82:1862",
+    "nodeId": "1161:8593",
+    "variants": [
+      {
+        "id": "1161:17356",
+        "name": "Open=True, Style=Dual-tier, Breakpoint=Mobile",
+        "width": 375,
+        "height": 812
+      },
+      {
+        "id": "7893:127203",
+        "name": "Open=True, Style=Sections dividers, Breakpoint=Mobile",
+        "width": 375,
+        "height": 812
+      },
+      {
+        "id": "7901:412452",
+        "name": "Open=True, Style=Sections subheadings, Breakpoint=Mobile",
+        "width": 375,
+        "height": 812
+      },
+      {
+        "id": "1165:2578",
+        "name": "Open=True, Style=Slim, Breakpoint=Mobile",
+        "width": 375,
+        "height": 812
+      },
+      {
+        "id": "1161:15681",
+        "name": "Open=True, Style=Simple, Breakpoint=Mobile",
+        "width": 375,
+        "height": 812
+      },
+      {
+        "id": "1161:17322",
+        "name": "Open=True, Style=Dual-tier, Breakpoint=Desktop",
+        "width": 552,
+        "height": 960
+      },
+      {
+        "id": "1163:99011",
+        "name": "Open=False, Style=Dual-tier, Breakpoint=Desktop",
+        "width": 296,
+        "height": 960
+      },
+      {
+        "id": "7893:127251",
+        "name": "Open=False, Style=Sections dividers, Breakpoint=Desktop",
+        "width": 296,
+        "height": 960
+      },
+      {
+        "id": "7901:412479",
+        "name": "Open=False, Style=Sections subheadings, Breakpoint=Desktop",
+        "width": 296,
+        "height": 960
+      },
+      {
+        "id": "1165:2049",
+        "name": "Open=False, Style=Slim, Breakpoint=Desktop",
+        "width": 68,
+        "height": 960
+      },
+      {
+        "id": "1165:2013",
+        "name": "Open=True, Style=Slim, Breakpoint=Desktop",
+        "width": 336,
+        "height": 960
+      },
+      {
+        "id": "1161:8593",
+        "name": "Open=False, Style=Simple, Breakpoint=Desktop",
+        "width": 296,
+        "height": 960
+      },
+      {
+        "id": "1207:25",
+        "name": "Open=False, Style=Simple, Breakpoint=Mobile",
+        "width": 375,
+        "height": 64
+      },
+      {
+        "id": "1207:150",
+        "name": "Open=False, Style=Dual-tier, Breakpoint=Mobile",
+        "width": 375,
+        "height": 64
+      },
+      {
+        "id": "7893:127270",
+        "name": "Open=False, Style=Sections dividers, Breakpoint=Mobile",
+        "width": 375,
+        "height": 64
+      },
+      {
+        "id": "7901:412503",
+        "name": "Open=False, Style=Sections subheadings, Breakpoint=Mobile",
+        "width": 375,
+        "height": 64
+      },
+      {
+        "id": "1207:250",
+        "name": "Open=False, Style=Slim, Breakpoint=Mobile",
+        "width": 375,
+        "height": 64
+      },
+      {
+        "id": "1208:101455",
+        "name": "Open=False, Style=Dual-tier, Breakpoint=Desktop",
+        "width": 1440,
+        "height": 72
+      },
+      {
+        "id": "1208:104342",
+        "name": "Open=False, Style=Simple, Breakpoint=Desktop",
+        "width": 1440,
+        "height": 72
+      },
+      {
+        "id": "1208:101427",
+        "name": "Open=True, Style=Dual-tier, Breakpoint=Desktop",
+        "width": 1440,
+        "height": 136
+      },
+      {
+        "id": "1685:427953",
+        "name": "Open=False, Style=Simple, Breakpoint=Mobile",
+        "width": 375,
+        "height": 64
+      },
+      {
+        "id": "1685:428030",
+        "name": "Open=False, Style=Dual-tier, Breakpoint=Mobile",
+        "width": 375,
+        "height": 64
+      },
+      {
+        "id": "1208:101749",
+        "name": "Open=True, Style=Dual-tier, Breakpoint=Mobile",
+        "width": 375,
+        "height": 812
+      },
+      {
+        "id": "1208:104358",
+        "name": "Open=True, Style=Simple, Breakpoint=Mobile",
+        "width": 375,
+        "height": 812
+      },
+      {
+        "id": "1152:89351",
+        "name": "Current=False, State=Default",
+        "width": 272,
+        "height": 44
+      },
+      {
+        "id": "1153:90754",
+        "name": "Current=True, State=Default",
+        "width": 272,
+        "height": 44
+      },
+      {
+        "id": "1152:89344",
+        "name": "Current=False, State=Focused",
+        "width": 272,
+        "height": 44
+      },
+      {
+        "id": "1153:90708",
+        "name": "Current=True, State=Focused",
+        "width": 272,
+        "height": 44
+      },
+      {
+        "id": "1152:89337",
+        "name": "Current=False, State=Hover",
+        "width": 272,
+        "height": 44
+      },
+      {
+        "id": "1153:90789",
+        "name": "Current=True, State=Hover",
+        "width": 272,
+        "height": 44
+      },
+      {
+        "id": "1153:89415",
+        "name": "Open=False, Current=False",
+        "width": 272,
+        "height": 44
+      },
+      {
+        "id": "1153:91463",
+        "name": "Open=False, Current=True",
+        "width": 272,
+        "height": 44
+      },
+      {
+        "id": "1153:89406",
+        "name": "Open=True, Current=False",
+        "width": 272,
+        "height": 224
+      },
+      {
+        "id": "1153:91434",
+        "name": "Open=True, Current=True",
+        "width": 272,
+        "height": 224
+      },
+      {
+        "id": "1157:99074",
+        "name": "Type=Progress bar",
+        "width": 272,
+        "height": 156
+      },
+      {
+        "id": "1157:99053",
+        "name": "Type=Image",
+        "width": 272,
+        "height": 283
+      },
+      {
+        "id": "1157:99042",
+        "name": "Type=Progress circle",
+        "width": 272,
+        "height": 208
+      },
+      {
+        "id": "7910:530582",
+        "name": "Type=Cookie preferences",
+        "width": 272,
+        "height": 184
+      },
+      {
+        "id": "7910:530587",
+        "name": "Type=Current projects",
+        "width": 272,
+        "height": 176
+      },
+      {
+        "id": "7910:530589",
+        "name": "Type=Referral link",
+        "width": 272,
+        "height": 224
+      },
+      {
+        "id": "7910:530594",
+        "name": "Type=Onboarding steps",
+        "width": 272,
+        "height": 244
+      },
+      {
+        "id": "7910:530597",
+        "name": "Type=Upgrade CTA",
+        "width": 272,
+        "height": 222
+      },
+      {
+        "id": "7910:530600",
+        "name": "Type=Support CTA",
+        "width": 272,
+        "height": 162
+      },
+      {
+        "id": "7910:530602",
+        "name": "Type=Event CTA",
+        "width": 272,
+        "height": 174
+      },
+      {
+        "id": "7910:530613",
+        "name": "Type=Message",
+        "width": 272,
+        "height": 204
+      },
+      {
+        "id": "7910:530618",
+        "name": "Type=Free trial CTA",
+        "width": 272,
+        "height": 124
+      },
+      {
+        "id": "7912:554836",
+        "name": "Type=QR code",
+        "width": 272,
+        "height": 276
+      },
+      {
+        "id": "1207:353",
+        "name": "Opened=False, State=Default",
+        "width": 40,
+        "height": 40
+      },
+      {
+        "id": "1207:351",
+        "name": "Opened=True, State=Default",
+        "width": 40,
+        "height": 40
+      },
+      {
+        "id": "1207:349",
+        "name": "Opened=False, State=Focused",
+        "width": 40,
+        "height": 40
+      },
+      {
+        "id": "1207:347",
+        "name": "Opened=True, State=Focused",
+        "width": 40,
+        "height": 40
+      },
+      {
+        "id": "1207:345",
+        "name": "Opened=False, State=Hover",
+        "width": 40,
+        "height": 40
+      },
+      {
+        "id": "1207:343",
+        "name": "Opened=True, State=Hover",
+        "width": 40,
+        "height": 40
+      },
+      {
+        "id": "1165:723",
+        "name": "Current=False, Size=lg, State=Default",
+        "width": 48,
+        "height": 48
+      },
+      {
+        "id": "1200:247",
+        "name": "Current=False, Size=md, State=Default",
+        "width": 40,
+        "height": 40
+      },
+      {
+        "id": "1165:724",
+        "name": "Current=True, Size=lg, State=Default",
+        "width": 48,
+        "height": 48
+      },
+      {
+        "id": "1200:259",
+        "name": "Current=True, Size=md, State=Default",
+        "width": 40,
+        "height": 40
+      },
+      {
+        "id": "1165:727",
+        "name": "Current=False, Size=lg, State=Focused",
+        "width": 48,
+        "height": 48
+      },
+      {
+        "id": "1200:243",
+        "name": "Current=False, Size=md, State=Focused",
+        "width": 40,
+        "height": 40
+      },
+      {
+        "id": "1165:717",
+        "name": "Current=True, Size=lg, State=Focused",
+        "width": 48,
+        "height": 48
+      },
+      {
+        "id": "1200:241",
+        "name": "Current=True, Size=md, State=Focused",
+        "width": 40,
+        "height": 40
+      },
+      {
+        "id": "1165:734",
+        "name": "Current=False, Size=lg, State=Hover",
+        "width": 48,
+        "height": 48
+      },
+      {
+        "id": "1200:227",
+        "name": "Current=False, Size=md, State=Hover",
+        "width": 40,
+        "height": 40
+      },
+      {
+        "id": "1165:735",
+        "name": "Current=True, Size=lg, State=Hover",
+        "width": 48,
+        "height": 48
+      },
+      {
+        "id": "1200:229",
+        "name": "Current=True, Size=md, State=Hover",
+        "width": 40,
+        "height": 40
+      },
+      {
+        "id": "7891:71351",
+        "name": "Type=Menu item, State=Hover, Current=False",
+        "width": 240,
+        "height": 36
+      },
+      {
+        "id": "7917:526436",
+        "name": "Type=Menu item, State=Hover, Current=True",
+        "width": 240,
+        "height": 36
+      },
+      {
+        "id": "7891:72612",
+        "name": "Type=Account, State=Hover, Current=False",
+        "width": 240,
+        "height": 52
+      },
+      {
+        "id": "7891:72766",
+        "name": "Type=Account, State=Hover, Current=True",
+        "width": 240,
+        "height": 52
+      },
+      {
+        "id": "7891:71363",
+        "name": "Type=Menu item, State=Default, Current=False",
+        "width": 240,
+        "height": 36
+      },
+      {
+        "id": "7917:526443",
+        "name": "Type=Menu item, State=Default, Current=True",
+        "width": 240,
+        "height": 36
+      },
+      {
+        "id": "7891:72618",
+        "name": "Type=Account, State=Default, Current=False",
+        "width": 240,
+        "height": 52
+      },
+      {
+        "id": "7891:72770",
+        "name": "Type=Account, State=Default, Current=True",
+        "width": 240,
+        "height": 52
+      },
+      {
+        "id": "7887:496747",
+        "name": "Type=Simple, Open=False, Breakpoint=Desktop",
+        "width": 280,
+        "height": 60
+      },
+      {
+        "id": "7893:122909",
+        "name": "Type=Simple, Open=False, Breakpoint=Mobile",
+        "width": 256,
+        "height": 56
+      },
+      {
+        "id": "7891:87631",
+        "name": "Type=Card, Open=False, Breakpoint=Desktop",
+        "width": 280,
+        "height": 64
+      },
+      {
+        "id": "7893:122792",
+        "name": "Type=Card, Open=False, Breakpoint=Mobile",
+        "width": 256,
+        "height": 64
+      },
+      {
+        "id": "7891:88080",
+        "name": "Type=Card, Open=True, Breakpoint=Desktop",
+        "width": 280,
+        "height": 64
+      },
+      {
+        "id": "7893:122795",
+        "name": "Type=Card, Open=True, Breakpoint=Mobile",
+        "width": 256,
+        "height": 64
+      }
+    ]
+  },
+  {
+    "key": "modals",
+    "pageId": "172:4293",
+    "nodeId": "4057:415359",
+    "variants": [
+      {
+        "id": "4057:415206",
+        "name": "Type=Horizontal, Breakpoint=Desktop",
+        "width": 1440,
+        "height": 960
+      },
+      {
+        "id": "4057:415215",
+        "name": "Type=Warning horizontal, Breakpoint=Desktop",
+        "width": 1440,
+        "height": 960
+      },
+      {
+        "id": "4057:415224",
+        "name": "Type=Destructive horizontal, Breakpoint=Desktop",
+        "width": 1440,
+        "height": 960
+      },
+      {
+        "id": "4057:415260",
+        "name": "Type=Stacked with team, Breakpoint=Desktop",
+        "width": 1440,
+        "height": 960
+      },
+      {
+        "id": "4057:415272",
+        "name": "Type=Stacked with team and link, Breakpoint=Desktop",
+        "width": 1440,
+        "height": 960
+      },
+      {
+        "id": "4057:415287",
+        "name": "Type=Stacked with team and invites, Breakpoint=Desktop",
+        "width": 1440,
+        "height": 960
+      },
+      {
+        "id": "4057:415320",
+        "name": "Type=Centered photo, Breakpoint=Desktop",
+        "width": 1440,
+        "height": 960
+      },
+      {
+        "id": "4057:415328",
+        "name": "Type=Centered photo carousel, Breakpoint=Desktop",
+        "width": 1440,
+        "height": 960
+      },
+      {
+        "id": "4057:415350",
+        "name": "Type=Centered video carousel, Breakpoint=Desktop",
+        "width": 1440,
+        "height": 960
+      },
+      {
+        "id": "4057:415359",
+        "name": "Type=Stacked left aligned, Breakpoint=Desktop",
+        "width": 1440,
+        "height": 960
+      },
+      {
+        "id": "4057:415368",
+        "name": "Type=Warning stacked left aligned, Breakpoint=Desktop",
+        "width": 1440,
+        "height": 960
+      },
+      {
+        "id": "4057:415377",
+        "name": "Type=Destructive stacked left aligned, Breakpoint=Desktop",
+        "width": 1440,
+        "height": 960
+      },
+      {
+        "id": "4057:415386",
+        "name": "Type=Checkboxes, Breakpoint=Desktop",
+        "width": 1440,
+        "height": 960
+      },
+      {
+        "id": "4057:415402",
+        "name": "Type=Access request, Breakpoint=Desktop",
+        "width": 1440,
+        "height": 960
+      },
+      {
+        "id": "4057:415412",
+        "name": "Type=Plan 01, Breakpoint=Desktop",
+        "width": 1440,
+        "height": 960
+      },
+      {
+        "id": "4057:415422",
+        "name": "Type=File upload, Breakpoint=Desktop",
+        "width": 1440,
+        "height": 960
+      },
+      {
+        "id": "4057:415431",
+        "name": "Type=Payment method, Breakpoint=Desktop",
+        "width": 1440,
+        "height": 960
+      },
+      {
+        "id": "4057:415441",
+        "name": "Type=Date picker, Breakpoint=Desktop",
+        "width": 1440,
+        "height": 960
+      },
+      {
+        "id": "4057:415443",
+        "name": "Type=Payment details, Breakpoint=Desktop",
+        "width": 1440,
+        "height": 960
+      },
+      {
+        "id": "8017:537838",
+        "name": "Type=Banner appearance, Breakpoint=Desktop",
+        "width": 1440,
+        "height": 960
+      },
+      {
+        "id": "4057:415459",
+        "name": "Type=Payment details with image, Breakpoint=Desktop",
+        "width": 1440,
+        "height": 960
+      },
+      {
+        "id": "4057:415475",
+        "name": "Type=Toggles, Breakpoint=Desktop",
+        "width": 1440,
+        "height": 960
+      },
+      {
+        "id": "4057:415491",
+        "name": "Type=Link field, Breakpoint=Desktop",
+        "width": 1440,
+        "height": 960
+      },
+      {
+        "id": "4057:415503",
+        "name": "Type=Email invite, Breakpoint=Desktop",
+        "width": 1440,
+        "height": 960
+      },
+      {
+        "id": "4057:415518",
+        "name": "Type=User invite, Breakpoint=Desktop",
+        "width": 1440,
+        "height": 960
+      },
+      {
+        "id": "4057:415538",
+        "name": "Type=Input field, Breakpoint=Desktop",
+        "width": 1440,
+        "height": 960
+      },
+      {
+        "id": "4057:415548",
+        "name": "Type=Labels, Breakpoint=Desktop",
+        "width": 1440,
+        "height": 960
+      },
+      {
+        "id": "4057:415562",
+        "name": "Type=Dropdown, Breakpoint=Desktop",
+        "width": 1440,
+        "height": 960
+      },
+      {
+        "id": "4057:415572",
+        "name": "Type=2FA code, Breakpoint=Desktop",
+        "width": 1440,
+        "height": 960
+      },
+      {
+        "id": "4057:417000",
+        "name": "Type=Verification code, Breakpoint=Desktop",
+        "width": 1440,
+        "height": 960
+      },
+      {
+        "id": "4057:417011",
+        "name": "Type=Password prompt, Breakpoint=Desktop",
+        "width": 1440,
+        "height": 960
+      },
+      {
+        "id": "4057:417050",
+        "name": "Type=Stacked with team, Breakpoint=Mobile",
+        "width": 375,
+        "height": 812
+      },
+      {
+        "id": "4057:417062",
+        "name": "Type=Stacked with team and link, Breakpoint=Mobile",
+        "width": 375,
+        "height": 812
+      },
+      {
+        "id": "4057:417077",
+        "name": "Type=Stacked with team and invites, Breakpoint=Mobile",
+        "width": 375,
+        "height": 812
+      },
+      {
+        "id": "4057:417110",
+        "name": "Type=Centered photo, Breakpoint=Mobile",
+        "width": 375,
+        "height": 812
+      },
+      {
+        "id": "4057:417118",
+        "name": "Type=Centered photo carousel, Breakpoint=Mobile",
+        "width": 375,
+        "height": 812
+      },
+      {
+        "id": "4057:417140",
+        "name": "Type=Centered video carousel, Breakpoint=Mobile",
+        "width": 375,
+        "height": 812
+      },
+      {
+        "id": "4057:417149",
+        "name": "Type=Stacked left aligned, Breakpoint=Mobile",
+        "width": 375,
+        "height": 812
+      },
+      {
+        "id": "4057:417158",
+        "name": "Type=Warning stacked left aligned, Breakpoint=Mobile",
+        "width": 375,
+        "height": 812
+      },
+      {
+        "id": "4057:417167",
+        "name": "Type=Destructive stacked left aligned, Breakpoint=Mobile",
+        "width": 375,
+        "height": 812
+      },
+      {
+        "id": "4057:417176",
+        "name": "Type=Checkboxes, Breakpoint=Mobile",
+        "width": 375,
+        "height": 812
+      },
+      {
+        "id": "4057:417192",
+        "name": "Type=Access request, Breakpoint=Mobile",
+        "width": 375,
+        "height": 812
+      },
+      {
+        "id": "4057:417202",
+        "name": "Type=Plan 01, Breakpoint=Mobile",
+        "width": 375,
+        "height": 812
+      },
+      {
+        "id": "4057:417212",
+        "name": "Type=File upload, Breakpoint=Mobile",
+        "width": 375,
+        "height": 812
+      },
+      {
+        "id": "4057:417221",
+        "name": "Type=Payment method, Breakpoint=Mobile",
+        "width": 375,
+        "height": 812
+      },
+      {
+        "id": "4057:417231",
+        "name": "Type=Date picker, Breakpoint=Mobile",
+        "width": 375,
+        "height": 812
+      },
+      {
+        "id": "4057:417233",
+        "name": "Type=Payment details, Breakpoint=Mobile",
+        "width": 375,
+        "height": 812
+      },
+      {
+        "id": "4057:417248",
+        "name": "Type=Payment details with image, Breakpoint=Mobile",
+        "width": 375,
+        "height": 812
+      },
+      {
+        "id": "4057:417262",
+        "name": "Type=Toggles, Breakpoint=Mobile",
+        "width": 375,
+        "height": 812
+      },
+      {
+        "id": "4057:417278",
+        "name": "Type=Link field, Breakpoint=Mobile",
+        "width": 375,
+        "height": 812
+      },
+      {
+        "id": "4057:417290",
+        "name": "Type=Email invite, Breakpoint=Mobile",
+        "width": 375,
+        "height": 812
+      },
+      {
+        "id": "4057:417305",
+        "name": "Type=User invite, Breakpoint=Mobile",
+        "width": 375,
+        "height": 812
+      },
+      {
+        "id": "4057:417325",
+        "name": "Type=Input field, Breakpoint=Mobile",
+        "width": 375,
+        "height": 812
+      },
+      {
+        "id": "4057:417335",
+        "name": "Type=Labels, Breakpoint=Mobile",
+        "width": 375,
+        "height": 812
+      },
+      {
+        "id": "4057:417349",
+        "name": "Type=Dropdown, Breakpoint=Mobile",
+        "width": 375,
+        "height": 812
+      },
+      {
+        "id": "4057:417359",
+        "name": "Type=2FA code, Breakpoint=Mobile",
+        "width": 375,
+        "height": 812
+      },
+      {
+        "id": "4057:418796",
+        "name": "Type=Verification code, Breakpoint=Mobile",
+        "width": 375,
+        "height": 812
+      },
+      {
+        "id": "4057:418807",
+        "name": "Type=Password prompt, Breakpoint=Mobile",
+        "width": 375,
+        "height": 812
+      },
+      {
+        "id": "4057:418819",
+        "name": "Type=Horizontal, Breakpoint=Mobile",
+        "width": 375,
+        "height": 812
+      },
+      {
+        "id": "4057:418828",
+        "name": "Type=Warning horizontal, Breakpoint=Mobile",
+        "width": 375,
+        "height": 812
+      },
+      {
+        "id": "4057:418837",
+        "name": "Type=Destructive horizontal, Breakpoint=Mobile",
+        "width": 375,
+        "height": 812
+      },
+      {
+        "id": "4057:432890",
+        "name": "Type=Log in, Breakpoint=Desktop",
+        "width": 1440,
+        "height": 960
+      },
+      {
+        "id": "4057:432930",
+        "name": "Type=Sign up 02, Breakpoint=Desktop",
+        "width": 1440,
+        "height": 960
+      },
+      {
+        "id": "4057:432910",
+        "name": "Type=Sign up 01, Breakpoint=Desktop",
+        "width": 1440,
+        "height": 960
+      },
+      {
+        "id": "4057:432900",
+        "name": "Type=Log in, Breakpoint=Mobile",
+        "width": 375,
+        "height": 812
+      },
+      {
+        "id": "4057:432938",
+        "name": "Type=Sign up 02, Breakpoint=Mobile",
+        "width": 375,
+        "height": 812
+      },
+      {
+        "id": "4057:432920",
+        "name": "Type=Sign up 01, Breakpoint=Mobile",
+        "width": 375,
+        "height": 812
+      },
+      {
+        "id": "4057:434011",
+        "name": "Type=Profile settings, Breakpoint=Desktop",
+        "width": 1440,
+        "height": 960
+      },
+      {
+        "id": "4057:434029",
+        "name": "Type=Profile settings, Breakpoint=Mobile",
+        "width": 375,
+        "height": 812
+      },
+      {
+        "id": "4057:434954",
+        "name": "Type=Plan 02, Breakpoint=Desktop",
+        "width": 1440,
+        "height": 960
+      },
+      {
+        "id": "4057:434965",
+        "name": "Type=Plan 02, Breakpoint=Mobile",
+        "width": 375,
+        "height": 812
+      },
+      {
+        "id": "8017:538812",
+        "name": "Type=Banner appearance, Breakpoint=Mobile",
+        "width": 375,
+        "height": 812
+      },
+      {
+        "id": "4057:435426",
+        "name": "Type=User selection, Breakpoint=Desktop",
+        "width": 1440,
+        "height": 960
+      },
+      {
+        "id": "4057:435431",
+        "name": "Type=User selection, Breakpoint=Mobile",
+        "width": 375,
+        "height": 812
+      },
+      {
+        "id": "4059:417281",
+        "name": "Type=Image crop, Breakpoint=Mobile",
+        "width": 375,
+        "height": 812
+      },
+      {
+        "id": "4059:417266",
+        "name": "Type=Image crop, Breakpoint=Desktop",
+        "width": 1440,
+        "height": 960
+      },
+      {
+        "id": "4059:417927",
+        "name": "Type=Form 01, Breakpoint=Desktop",
+        "width": 1440,
+        "height": 960
+      },
+      {
+        "id": "4059:417938",
+        "name": "Type=Form 01, Breakpoint=Mobile",
+        "width": 375,
+        "height": 812
+      },
+      {
+        "id": "4059:418956",
+        "name": "Type=Form 02, Breakpoint=Desktop",
+        "width": 1440,
+        "height": 960
+      },
+      {
+        "id": "8021:9042",
+        "name": "Type=Appearance settings, Breakpoint=Desktop",
+        "width": 1440,
+        "height": 960
+      },
+      {
+        "id": "4059:418971",
+        "name": "Type=Form 02, Breakpoint=Mobile",
+        "width": 375,
+        "height": 812
+      },
+      {
+        "id": "8021:9071",
+        "name": "Type=Appearance settings, Breakpoint=Mobile",
+        "width": 375,
+        "height": 812
+      },
+      {
+        "id": "8017:535347",
+        "name": "Type=Calendar event, Breakpoint=Desktop",
+        "width": 1440,
+        "height": 960
+      },
+      {
+        "id": "8017:535688",
+        "name": "Type=Calendar event, Breakpoint=Mobile",
+        "width": 375,
+        "height": 812
+      },
+      {
+        "id": "9228:23179",
+        "name": "Type=A.I. assistant, Breakpoint=Desktop",
+        "width": 1440,
+        "height": 960
+      },
+      {
+        "id": "9228:23186",
+        "name": "Type=A.I. assistant, Breakpoint=Mobile",
+        "width": 375,
+        "height": 812
+      },
+      {
+        "id": "9232:148790",
+        "name": "Type=User settings, Breakpoint=Desktop",
+        "width": 1440,
+        "height": 960
+      },
+      {
+        "id": "9232:148809",
+        "name": "Type=User settings, Breakpoint=Mobile",
+        "width": 375,
+        "height": 812
+      },
+      {
+        "id": "9234:18400",
+        "name": "Type=New project, Breakpoint=Desktop",
+        "width": 1448,
+        "height": 960
+      },
+      {
+        "id": "9234:18421",
+        "name": "Type=New project, Breakpoint=Mobile",
+        "width": 375,
+        "height": 812
+      },
+      {
+        "id": "9292:562359",
+        "name": "Type=Text editor, Breakpoint=Mobile",
+        "width": 375,
+        "height": 812
+      },
+      {
+        "id": "9292:562317",
+        "name": "Type=Text editor, Breakpoint=Desktop",
+        "width": 1440,
+        "height": 960
+      },
+      {
+        "id": "4057:414353",
+        "name": "Type=Vertical fill container, Destructive=False, Breakpoint=Desktop",
+        "width": 560,
+        "height": 181
+      },
+      {
+        "id": "4057:414637",
+        "name": "Type=Vertical fill container, Destructive=False, Breakpoint=Mobile",
+        "width": 343,
+        "height": 157
+      },
+      {
+        "id": "4057:414356",
+        "name": "Type=Vertical fill container, Destructive=True, Breakpoint=Desktop",
+        "width": 560,
+        "height": 181
+      },
+      {
+        "id": "4057:414642",
+        "name": "Type=Vertical fill container, Destructive=True, Breakpoint=Mobile",
+        "width": 343,
+        "height": 157
+      },
+      {
+        "id": "4057:414363",
+        "name": "Type=Horizontal fill container, Destructive=False, Breakpoint=Desktop",
+        "width": 560,
+        "height": 125
+      },
+      {
+        "id": "4057:414647",
+        "name": "Type=Horizontal fill container, Destructive=False, Breakpoint=Mobile",
+        "width": 343,
+        "height": 157
+      },
+      {
+        "id": "4057:414366",
+        "name": "Type=Horizontal fill container, Destructive=True, Breakpoint=Desktop",
+        "width": 560,
+        "height": 125
+      },
+      {
+        "id": "4057:414652",
+        "name": "Type=Horizontal fill container, Destructive=True, Breakpoint=Mobile",
+        "width": 343,
+        "height": 157
+      },
+      {
+        "id": "4057:414373",
+        "name": "Type=Horizontal right aligned (checkbox), Destructive=False, Breakpoint=Desktop",
+        "width": 560,
+        "height": 125
+      },
+      {
+        "id": "4057:414657",
+        "name": "Type=Horizontal right aligned (checkbox), Destructive=False, Breakpoint=Mobile",
+        "width": 343,
+        "height": 193
+      },
+      {
+        "id": "4057:414379",
+        "name": "Type=Horizontal right aligned (checkbox), Destructive=True, Breakpoint=Desktop",
+        "width": 560,
+        "height": 125
+      },
+      {
+        "id": "4057:414665",
+        "name": "Type=Horizontal right aligned (checkbox), Destructive=True, Breakpoint=Mobile",
+        "width": 343,
+        "height": 193
+      },
+      {
+        "id": "4055:413617",
+        "name": "Type=Horizontal left aligned, Breakpoint=Desktop",
+        "width": 400,
+        "height": 131
+      },
+      {
+        "id": "4055:413661",
+        "name": "Type=Horizontal left aligned, Breakpoint=Mobile",
+        "width": 400,
+        "height": 171
+      },
+      {
+        "id": "4055:413618",
+        "name": "Type=Center aligned, Breakpoint=Desktop",
+        "width": 400,
+        "height": 175
+      },
+      {
+        "id": "4055:413668",
+        "name": "Type=Center aligned, Breakpoint=Mobile",
+        "width": 400,
+        "height": 171
+      },
+      {
+        "id": "4055:413619",
+        "name": "Type=Left aligned, Breakpoint=Desktop",
+        "width": 400,
+        "height": 175
+      },
+      {
+        "id": "4055:413654",
+        "name": "Type=Left aligned, Breakpoint=Mobile",
+        "width": 400,
+        "height": 171
+      }
+    ]
+  },
+  {
+    "key": "command-menus",
+    "pageId": "3307:403757",
+    "nodeId": "3307:407697",
+    "variants": [
+      {
+        "id": "3307:404926",
+        "name": "Type=Default, State=Default, Text=Default, Size=sm",
+        "width": 576,
+        "height": 44
+      },
+      {
+        "id": "3307:411138",
+        "name": "Type=Default, State=Default, Text=Default, Size=md",
+        "width": 576,
+        "height": 48
+      },
+      {
+        "id": "3307:406086",
+        "name": "Type=Default, State=Default, Text=Stacked, Size=sm",
+        "width": 576,
+        "height": 64
+      },
+      {
+        "id": "3307:411144",
+        "name": "Type=Default, State=Default, Text=Stacked, Size=md",
+        "width": 576,
+        "height": 72
+      },
+      {
+        "id": "3307:406430",
+        "name": "Type=Default, State=Hover, Text=Stacked, Size=sm",
+        "width": 576,
+        "height": 64
+      },
+      {
+        "id": "3307:411150",
+        "name": "Type=Default, State=Hover, Text=Stacked, Size=md",
+        "width": 576,
+        "height": 72
+      },
+      {
+        "id": "3307:406506",
+        "name": "Type=Default, State=Focus, Text=Stacked, Size=sm",
+        "width": 576,
+        "height": 64
+      },
+      {
+        "id": "3307:411156",
+        "name": "Type=Default, State=Focus, Text=Stacked, Size=md",
+        "width": 576,
+        "height": 72
+      },
+      {
+        "id": "3307:405054",
+        "name": "Type=Icon leading, State=Default, Text=Default, Size=sm",
+        "width": 576,
+        "height": 44
+      },
+      {
+        "id": "3307:411162",
+        "name": "Type=Icon leading, State=Default, Text=Default, Size=md",
+        "width": 576,
+        "height": 48
+      },
+      {
+        "id": "3307:406093",
+        "name": "Type=Icon leading, State=Default, Text=Stacked, Size=sm",
+        "width": 576,
+        "height": 64
+      },
+      {
+        "id": "3307:411169",
+        "name": "Type=Icon leading, State=Default, Text=Stacked, Size=md",
+        "width": 576,
+        "height": 72
+      },
+      {
+        "id": "3307:406436",
+        "name": "Type=Icon leading, State=Hover, Text=Stacked, Size=sm",
+        "width": 576,
+        "height": 64
+      },
+      {
+        "id": "3307:411176",
+        "name": "Type=Icon leading, State=Hover, Text=Stacked, Size=md",
+        "width": 576,
+        "height": 72
+      },
+      {
+        "id": "3307:406512",
+        "name": "Type=Icon leading, State=Focus, Text=Stacked, Size=sm",
+        "width": 576,
+        "height": 64
+      },
+      {
+        "id": "3307:411183",
+        "name": "Type=Icon leading, State=Focus, Text=Stacked, Size=md",
+        "width": 576,
+        "height": 72
+      },
+      {
+        "id": "3307:405120",
+        "name": "Type=Avatar leading, State=Default, Text=Default, Size=sm",
+        "width": 576,
+        "height": 44
+      },
+      {
+        "id": "3307:411190",
+        "name": "Type=Avatar leading, State=Default, Text=Default, Size=md",
+        "width": 576,
+        "height": 48
+      },
+      {
+        "id": "3307:406101",
+        "name": "Type=Avatar leading, State=Default, Text=Stacked, Size=sm",
+        "width": 576,
+        "height": 64
+      },
+      {
+        "id": "3307:411197",
+        "name": "Type=Avatar leading, State=Default, Text=Stacked, Size=md",
+        "width": 576,
+        "height": 72
+      },
+      {
+        "id": "3307:406443",
+        "name": "Type=Avatar leading, State=Hover, Text=Stacked, Size=sm",
+        "width": 576,
+        "height": 64
+      },
+      {
+        "id": "3307:411204",
+        "name": "Type=Avatar leading, State=Hover, Text=Stacked, Size=md",
+        "width": 576,
+        "height": 72
+      },
+      {
+        "id": "3307:406519",
+        "name": "Type=Avatar leading, State=Focus, Text=Stacked, Size=sm",
+        "width": 576,
+        "height": 64
+      },
+      {
+        "id": "3307:411211",
+        "name": "Type=Avatar leading, State=Focus, Text=Stacked, Size=md",
+        "width": 576,
+        "height": 72
+      },
+      {
+        "id": "3307:405192",
+        "name": "Type=Dot leading, State=Default, Text=Default, Size=sm",
+        "width": 576,
+        "height": 44
+      },
+      {
+        "id": "3307:411218",
+        "name": "Type=Dot leading, State=Default, Text=Default, Size=md",
+        "width": 576,
+        "height": 48
+      },
+      {
+        "id": "3307:406109",
+        "name": "Type=Dot leading, State=Default, Text=Stacked, Size=sm",
+        "width": 576,
+        "height": 64
+      },
+      {
+        "id": "3307:411225",
+        "name": "Type=Dot leading, State=Default, Text=Stacked, Size=md",
+        "width": 576,
+        "height": 72
+      },
+      {
+        "id": "3307:406450",
+        "name": "Type=Dot leading, State=Hover, Text=Stacked, Size=sm",
+        "width": 576,
+        "height": 64
+      },
+      {
+        "id": "3307:411232",
+        "name": "Type=Dot leading, State=Hover, Text=Stacked, Size=md",
+        "width": 576,
+        "height": 72
+      },
+      {
+        "id": "3307:406526",
+        "name": "Type=Dot leading, State=Focus, Text=Stacked, Size=sm",
+        "width": 576,
+        "height": 64
+      },
+      {
+        "id": "3307:411239",
+        "name": "Type=Dot leading, State=Focus, Text=Stacked, Size=md",
+        "width": 576,
+        "height": 72
+      },
+      {
+        "id": "3307:404955",
+        "name": "Type=Default, State=Hover, Text=Default, Size=sm",
+        "width": 576,
+        "height": 44
+      },
+      {
+        "id": "3307:411246",
+        "name": "Type=Default, State=Hover, Text=Default, Size=md",
+        "width": 576,
+        "height": 48
+      },
+      {
+        "id": "3307:405062",
+        "name": "Type=Icon leading, State=Hover, Text=Default, Size=sm",
+        "width": 576,
+        "height": 44
+      },
+      {
+        "id": "3307:411252",
+        "name": "Type=Icon leading, State=Hover, Text=Default, Size=md",
+        "width": 576,
+        "height": 48
+      },
+      {
+        "id": "3307:405128",
+        "name": "Type=Avatar leading, State=Hover, Text=Default, Size=sm",
+        "width": 576,
+        "height": 44
+      },
+      {
+        "id": "3307:411259",
+        "name": "Type=Avatar leading, State=Hover, Text=Default, Size=md",
+        "width": 576,
+        "height": 48
+      },
+      {
+        "id": "3307:405200",
+        "name": "Type=Dot leading, State=Hover, Text=Default, Size=sm",
+        "width": 576,
+        "height": 44
+      },
+      {
+        "id": "3307:411266",
+        "name": "Type=Dot leading, State=Hover, Text=Default, Size=md",
+        "width": 576,
+        "height": 48
+      },
+      {
+        "id": "3307:404971",
+        "name": "Type=Default, State=Focus, Text=Default, Size=sm",
+        "width": 576,
+        "height": 44
+      },
+      {
+        "id": "3307:411273",
+        "name": "Type=Default, State=Focus, Text=Default, Size=md",
+        "width": 576,
+        "height": 48
+      },
+      {
+        "id": "3307:405070",
+        "name": "Type=Icon leading, State=Focus, Text=Default, Size=sm",
+        "width": 576,
+        "height": 44
+      },
+      {
+        "id": "3307:411279",
+        "name": "Type=Icon leading, State=Focus, Text=Default, Size=md",
+        "width": 576,
+        "height": 48
+      },
+      {
+        "id": "3307:405136",
+        "name": "Type=Avatar leading, State=Focus, Text=Default, Size=sm",
+        "width": 576,
+        "height": 44
+      },
+      {
+        "id": "3307:411286",
+        "name": "Type=Avatar leading, State=Focus, Text=Default, Size=md",
+        "width": 576,
+        "height": 48
+      },
+      {
+        "id": "3307:405208",
+        "name": "Type=Dot leading, State=Focus, Text=Default, Size=sm",
+        "width": 576,
+        "height": 44
+      },
+      {
+        "id": "3307:411293",
+        "name": "Type=Dot leading, State=Focus, Text=Default, Size=md",
+        "width": 576,
+        "height": 48
+      },
+      {
+        "id": "3307:405244",
+        "name": "Dual=False",
+        "width": 33,
+        "height": 24
+      },
+      {
+        "id": "3307:405248",
+        "name": "Dual=True",
+        "width": 113,
+        "height": 24
+      },
+      {
+        "id": "3307:404884",
+        "name": "State=Placeholder",
+        "width": 576,
+        "height": 56
+      },
+      {
+        "id": "3307:405354",
+        "name": "State=Filled",
+        "width": 576,
+        "height": 56
+      },
+      {
+        "id": "3307:405367",
+        "name": "State=Focus",
+        "width": 576,
+        "height": 56
+      },
+      {
+        "id": "3307:405528",
+        "name": "Scrollable=False, Size=sm",
+        "width": 640,
+        "height": 354
+      },
+      {
+        "id": "3307:411472",
+        "name": "Scrollable=False, Size=md",
+        "width": 640,
+        "height": 382
+      },
+      {
+        "id": "3307:405549",
+        "name": "Scrollable=True, Size=sm",
+        "width": 640,
+        "height": 224
+      },
+      {
+        "id": "3307:411482",
+        "name": "Scrollable=True, Size=md",
+        "width": 640,
+        "height": 240
+      },
+      {
+        "id": "3307:407212",
+        "name": "Type=Command only, Text=Default",
+        "width": 1440,
+        "height": 960
+      },
+      {
+        "id": "3307:407511",
+        "name": "Type=Users, Text=Default",
+        "width": 1440,
+        "height": 960
+      },
+      {
+        "id": "3307:410235",
+        "name": "Type=Users, Text=Stacked",
+        "width": 1440,
+        "height": 960
+      },
+      {
+        "id": "3307:409632",
+        "name": "Type=Empty state, Text=Default",
+        "width": 1440,
+        "height": 960
+      },
+      {
+        "id": "3307:408520",
+        "name": "Type=Users menu, Text=Default",
+        "width": 1440,
+        "height": 960
+      },
+      {
+        "id": "3307:410240",
+        "name": "Type=Users menu, Text=Stacked",
+        "width": 1440,
+        "height": 960
+      },
+      {
+        "id": "3307:409015",
+        "name": "Type=Integrations menu, Text=Default",
+        "width": 1440,
+        "height": 960
+      },
+      {
+        "id": "3307:410261",
+        "name": "Type=Integrations menu, Text=Stacked",
+        "width": 1440,
+        "height": 960
+      },
+      {
+        "id": "3307:407697",
+        "name": "Type=Actions, Text=Default",
+        "width": 1440,
+        "height": 960
+      },
+      {
+        "id": "3307:410277",
+        "name": "Type=Actions, Text=Stacked",
+        "width": 1440,
+        "height": 960
+      },
+      {
+        "id": "3307:404987",
+        "name": "Size=sm",
+        "width": 640,
+        "height": 28
+      },
+      {
+        "id": "3307:411612",
+        "name": "Size=md",
+        "width": 640,
+        "height": 28
+      },
+      {
+        "id": "4898:411379",
+        "name": "_Command bar footer",
+        "width": 640,
+        "height": 52
+      },
+      {
+        "id": "4898:411305",
+        "name": "Type=Icon",
+        "width": 28,
+        "height": 28
+      },
+      {
+        "id": "4898:411318",
+        "name": "Type=Text",
+        "width": 35,
+        "height": 28
+      }
+    ]
+  },
+  {
+    "key": "charts",
+    "pageId": "1050:146949",
+    "nodeId": "1063:71820",
+    "variants": [
+      {
+        "id": "1061:47348",
+        "name": "_X-axis label",
+        "width": 1133,
+        "height": 26
+      },
+      {
+        "id": "1061:47350",
+        "name": "_Y-axis label",
+        "width": 240.00000078680515,
+        "height": 18.000014305430454
+      },
+      {
+        "id": "1061:47349",
+        "name": "Data=12 months, Breakpoint=Desktop",
+        "width": 1216,
+        "height": 18
+      },
+      {
+        "id": "1061:47553",
+        "name": "Data=12 months, Breakpoint=Mobile",
+        "width": 342,
+        "height": 18
+      },
+      {
+        "id": "1061:47442",
+        "name": "Data=30 days, Breakpoint=Desktop",
+        "width": 1216,
+        "height": 18
+      },
+      {
+        "id": "1061:47537",
+        "name": "Data=30 days, Breakpoint=Mobile",
+        "width": 342,
+        "height": 18
+      },
+      {
+        "id": "1061:47477",
+        "name": "Data=7 days, Breakpoint=Desktop",
+        "width": 1216,
+        "height": 18
+      },
+      {
+        "id": "1061:47529",
+        "name": "Data=7 days, Breakpoint=Mobile",
+        "width": 342,
+        "height": 18
+      },
+      {
+        "id": "1063:72833",
+        "name": "Chart type=Bar 01 desktop",
+        "width": 1100,
+        "height": 192
+      },
+      {
+        "id": "8085:183353",
+        "name": "Chart type=Bar 02 desktop",
+        "width": 1100,
+        "height": 192
+      },
+      {
+        "id": "8085:184126",
+        "name": "Chart type=Bar 03 desktop",
+        "width": 1100,
+        "height": 192
+      },
+      {
+        "id": "1063:73707",
+        "name": "Chart type=Bar 01 mobile",
+        "width": 343,
+        "height": 192
+      },
+      {
+        "id": "8085:183415",
+        "name": "Chart type=Bar 02 mobile",
+        "width": 343,
+        "height": 192
+      },
+      {
+        "id": "1062:46617",
+        "name": "Chart type=Line volatile 01",
+        "width": 1100,
+        "height": 192
+      },
+      {
+        "id": "1062:46568",
+        "name": "Chart type=Line wavy 01",
+        "width": 1100,
+        "height": 192
+      },
+      {
+        "id": "1062:46534",
+        "name": "Chart type=Line gradual 01",
+        "width": 1100,
+        "height": 192
+      },
+      {
+        "id": "8058:190815",
+        "name": "Chart type=Line gradual 02",
+        "width": 1100,
+        "height": 192
+      },
+      {
+        "id": "8058:190816",
+        "name": "Chart type=Line gradual 03",
+        "width": 1100,
+        "height": 192
+      },
+      {
+        "id": "8058:190817",
+        "name": "Chart type=Line gradual 04",
+        "width": 1100,
+        "height": 192
+      },
+      {
+        "id": "8058:190820",
+        "name": "Chart type=Line wavy 04",
+        "width": 1100,
+        "height": 192
+      },
+      {
+        "id": "8058:190819",
+        "name": "Chart type=Line wavy 03",
+        "width": 1100,
+        "height": 192
+      },
+      {
+        "id": "8058:190818",
+        "name": "Chart type=Line wavy 02",
+        "width": 1100,
+        "height": 192
+      },
+      {
+        "id": "8058:190823",
+        "name": "Chart type=Line volatile 04",
+        "width": 1100,
+        "height": 192
+      },
+      {
+        "id": "8058:190822",
+        "name": "Chart type=Line volatile 03",
+        "width": 1100,
+        "height": 192
+      },
+      {
+        "id": "8058:190821",
+        "name": "Chart type=Line volatile 02",
+        "width": 1100,
+        "height": 192
+      },
+      {
+        "id": "8085:184180",
+        "name": "Chart type=Bar 03 mobile",
+        "width": 343,
+        "height": 192
+      },
+      {
+        "id": "1061:47355",
+        "name": "Legend=False, Axis labels=False, Chart style=Line, Breakpoint=Desktop",
+        "width": 1216,
+        "height": 240
+      },
+      {
+        "id": "1063:68702",
+        "name": "Legend=False, Axis labels=False, Chart style=Bar, Breakpoint=Desktop",
+        "width": 1216,
+        "height": 240
+      },
+      {
+        "id": "1063:67952",
+        "name": "Legend=False, Axis labels=False, Chart style=Line, Breakpoint=Mobile",
+        "width": 343,
+        "height": 240
+      },
+      {
+        "id": "1063:71820",
+        "name": "Legend=False, Axis labels=False, Chart style=Bar, Breakpoint=Mobile",
+        "width": 343,
+        "height": 240
+      },
+      {
+        "id": "1062:47341",
+        "name": "Legend=False, Axis labels=True, Chart style=Line, Breakpoint=Desktop",
+        "width": 1216,
+        "height": 240
+      },
+      {
+        "id": "1063:68687",
+        "name": "Legend=False, Axis labels=True, Chart style=Bar, Breakpoint=Desktop",
+        "width": 1216,
+        "height": 240
+      },
+      {
+        "id": "1063:67937",
+        "name": "Legend=False, Axis labels=True, Chart style=Line, Breakpoint=Mobile",
+        "width": 343,
+        "height": 240
+      },
+      {
+        "id": "1063:71805",
+        "name": "Legend=False, Axis labels=True, Chart style=Bar, Breakpoint=Mobile",
+        "width": 343,
+        "height": 240
+      },
+      {
+        "id": "1062:46990",
+        "name": "Legend=Right, Axis labels=False, Chart style=Line, Breakpoint=Desktop",
+        "width": 1216,
+        "height": 240
+      },
+      {
+        "id": "1063:68673",
+        "name": "Legend=Right, Axis labels=False, Chart style=Bar, Breakpoint=Desktop",
+        "width": 1216,
+        "height": 240
+      },
+      {
+        "id": "1062:48114",
+        "name": "Legend=Top, Axis labels=False, Chart style=Line, Breakpoint=Desktop",
+        "width": 1216,
+        "height": 240
+      },
+      {
+        "id": "1063:68659",
+        "name": "Legend=Top, Axis labels=False, Chart style=Bar, Breakpoint=Desktop",
+        "width": 1216,
+        "height": 240
+      },
+      {
+        "id": "1063:67909",
+        "name": "Legend=Top, Axis labels=False, Chart style=Line, Breakpoint=Mobile",
+        "width": 343,
+        "height": 240
+      },
+      {
+        "id": "1063:74505",
+        "name": "Legend=Right, Axis labels=False, Chart style=Line, Breakpoint=Mobile",
+        "width": 343,
+        "height": 240
+      },
+      {
+        "id": "1063:71791",
+        "name": "Legend=Top, Axis labels=False, Chart style=Bar, Breakpoint=Mobile",
+        "width": 343,
+        "height": 240
+      },
+      {
+        "id": "1063:74491",
+        "name": "Legend=Right, Axis labels=False, Chart style=Bar, Breakpoint=Mobile",
+        "width": 343,
+        "height": 240
+      },
+      {
+        "id": "1062:47326",
+        "name": "Legend=Right, Axis labels=True, Chart style=Line, Breakpoint=Desktop",
+        "width": 1216,
+        "height": 240
+      },
+      {
+        "id": "1063:68643",
+        "name": "Legend=Right, Axis labels=True, Chart style=Bar, Breakpoint=Desktop",
+        "width": 1216,
+        "height": 240
+      },
+      {
+        "id": "1062:48099",
+        "name": "Legend=Top, Axis labels=True, Chart style=Line, Breakpoint=Desktop",
+        "width": 1216,
+        "height": 240
+      },
+      {
+        "id": "1063:68627",
+        "name": "Legend=Top, Axis labels=True, Chart style=Bar, Breakpoint=Desktop",
+        "width": 1216,
+        "height": 240
+      },
+      {
+        "id": "1063:67877",
+        "name": "Legend=Top, Axis labels=True, Chart style=Line, Breakpoint=Mobile",
+        "width": 343,
+        "height": 240
+      },
+      {
+        "id": "1063:74475",
+        "name": "Legend=Right, Axis labels=True, Chart style=Line, Breakpoint=Mobile",
+        "width": 343,
+        "height": 240
+      },
+      {
+        "id": "1063:71775",
+        "name": "Legend=Top, Axis labels=True, Chart style=Bar, Breakpoint=Mobile",
+        "width": 343,
+        "height": 240
+      },
+      {
+        "id": "1063:74459",
+        "name": "Legend=Right, Axis labels=True, Chart style=Bar, Breakpoint=Mobile",
+        "width": 343,
+        "height": 240
+      },
+      {
+        "id": "1061:46550",
+        "name": "Label=True",
+        "width": 1216,
+        "height": 22
+      },
+      {
+        "id": "1062:47446",
+        "name": "Label=False",
+        "width": 1216,
+        "height": 22
+      },
+      {
+        "id": "1061:47128",
+        "name": "Orientation=Vertical",
+        "width": 68,
+        "height": 140
+      },
+      {
+        "id": "1062:47962",
+        "name": "Orientation=Horizontal",
+        "width": 465,
+        "height": 20
+      },
+      {
+        "id": "1067:823",
+        "name": "Label=False",
+        "width": 1216,
+        "height": 167
+      },
+      {
+        "id": "1067:825",
+        "name": "Label=True",
+        "width": 1216,
+        "height": 167
+      },
+      {
+        "id": "1076:4075",
+        "name": "Size=md",
+        "width": 240,
+        "height": 240
+      },
+      {
+        "id": "1076:4186",
+        "name": "Size=lg",
+        "width": 280,
+        "height": 280
+      },
+      {
+        "id": "1076:4089",
+        "name": "Size=sm",
+        "width": 200,
+        "height": 200
+      },
+      {
+        "id": "1076:4162",
+        "name": "Size=xs",
+        "width": 160,
+        "height": 160
+      },
+      {
+        "id": "1078:156",
+        "name": "Size=md, Legend=False",
+        "width": 240,
+        "height": 240
+      },
+      {
+        "id": "1084:5505",
+        "name": "Size=lg, Legend=False",
+        "width": 280,
+        "height": 280
+      },
+      {
+        "id": "1084:4772",
+        "name": "Size=sm, Legend=False",
+        "width": 200,
+        "height": 200
+      },
+      {
+        "id": "1084:5141",
+        "name": "Size=xs, Legend=False",
+        "width": 160,
+        "height": 160
+      },
+      {
+        "id": "1078:214",
+        "name": "Size=md, Legend=Bottom",
+        "width": 240,
+        "height": 276
+      },
+      {
+        "id": "1084:5509",
+        "name": "Size=lg, Legend=Bottom",
+        "width": 280,
+        "height": 316
+      },
+      {
+        "id": "1084:4764",
+        "name": "Size=sm, Legend=Bottom",
+        "width": 225,
+        "height": 236
+      },
+      {
+        "id": "1084:5135",
+        "name": "Size=xs, Legend=Bottom",
+        "width": 225,
+        "height": 196
+      },
+      {
+        "id": "1078:272",
+        "name": "Size=md, Legend=Right",
+        "width": 324,
+        "height": 240
+      },
+      {
+        "id": "1084:5499",
+        "name": "Size=lg, Legend=Right",
+        "width": 364,
+        "height": 280
+      },
+      {
+        "id": "1084:4761",
+        "name": "Size=sm, Legend=Right",
+        "width": 284,
+        "height": 200
+      },
+      {
+        "id": "1084:5127",
+        "name": "Size=xs, Legend=Right",
+        "width": 244,
+        "height": 160
+      },
+      {
+        "id": "1084:2283",
+        "name": "Hole=False",
+        "width": 160,
+        "height": 160
+      },
+      {
+        "id": "1084:2275",
+        "name": "Hole=25%",
+        "width": 160,
+        "height": 160
+      },
+      {
+        "id": "1084:2267",
+        "name": "Hole=50%",
+        "width": 160,
+        "height": 160
+      },
+      {
+        "id": "1084:2259",
+        "name": "Hole=75%",
+        "width": 160,
+        "height": 160
+      },
+      {
+        "id": "1084:971",
+        "name": "Size=md, Series=6, Legend=True",
+        "width": 324,
+        "height": 240
+      },
+      {
+        "id": "1084:4340",
+        "name": "Size=lg, Series=6, Legend=True",
+        "width": 364,
+        "height": 280
+      },
+      {
+        "id": "1084:3350",
+        "name": "Size=xs, Series=6, Legend=True",
+        "width": 244,
+        "height": 160
+      },
+      {
+        "id": "1726:463323",
+        "name": "Size=xxs, Series=6, Legend=True",
+        "width": 204,
+        "height": 140
+      },
+      {
+        "id": "1084:3840",
+        "name": "Size=sm, Series=6, Legend=True",
+        "width": 284,
+        "height": 200
+      },
+      {
+        "id": "1084:1612",
+        "name": "Size=md, Series=6, Legend=False",
+        "width": 240,
+        "height": 240
+      },
+      {
+        "id": "1084:4333",
+        "name": "Size=lg, Series=6, Legend=False",
+        "width": 280,
+        "height": 280
+      },
+      {
+        "id": "1084:3348",
+        "name": "Size=xs, Series=6, Legend=False",
+        "width": 160,
+        "height": 160
+      },
+      {
+        "id": "1726:463315",
+        "name": "Size=xxs, Series=6, Legend=False",
+        "width": 120,
+        "height": 120
+      },
+      {
+        "id": "1084:3843",
+        "name": "Size=sm, Series=6, Legend=False",
+        "width": 200,
+        "height": 200
+      },
+      {
+        "id": "1084:7152",
+        "name": "_Radar chart",
+        "width": 392,
+        "height": 372
+      },
+      {
+        "id": "1084:7279",
+        "name": "Legend=False",
+        "width": 392,
+        "height": 372
+      },
+      {
+        "id": "1084:7363",
+        "name": "Legend=Right",
+        "width": 476,
+        "height": 372
+      },
+      {
+        "id": "1084:7489",
+        "name": "Legend=Bottom",
+        "width": 392,
+        "height": 408
+      },
+      {
+        "id": "8099:193212",
+        "name": "Type=Line",
+        "width": 12,
+        "height": 200
+      },
+      {
+        "id": "8101:195716",
+        "name": "Type=Minimal",
+        "width": 12,
+        "height": 200
+      },
+      {
+        "id": "8099:193258",
+        "name": "Type=Dash",
+        "width": 12,
+        "height": 200
+      }
+    ]
+  },
+  {
+    "key": "metrics",
+    "pageId": "185:279",
+    "nodeId": "1560:266242",
+    "variants": [
+      {
+        "id": "1560:266242",
+        "name": "Actions=False, Type=Simple, Breakpoint=Desktop",
+        "width": 388,
+        "height": 106
+      },
+      {
+        "id": "1561:262223",
+        "name": "Actions=True, Type=Simple, Breakpoint=Desktop",
+        "width": 388,
+        "height": 158
+      },
+      {
+        "id": "1561:262364",
+        "name": "Actions=True, Type=Simple, Breakpoint=Mobile",
+        "width": 343,
+        "height": 158
+      },
+      {
+        "id": "1561:261551",
+        "name": "Actions=False, Type=Icon 01, Breakpoint=Desktop",
+        "width": 388,
+        "height": 174
+      },
+      {
+        "id": "4988:370796",
+        "name": "Actions=False, Type=Icon 03, Breakpoint=Desktop",
+        "width": 388,
+        "height": 174
+      },
+      {
+        "id": "8082:163481",
+        "name": "Actions=False, Type=Icon 04, Breakpoint=Desktop",
+        "width": 388,
+        "height": 106
+      },
+      {
+        "id": "5002:371238",
+        "name": "Actions=False, Type=Chart 03, Breakpoint=Desktop",
+        "width": 388,
+        "height": 198
+      },
+      {
+        "id": "1561:262190",
+        "name": "Actions=True, Type=Icon 01, Breakpoint=Desktop",
+        "width": 388,
+        "height": 226
+      },
+      {
+        "id": "4988:370805",
+        "name": "Actions=True, Type=Icon 03, Breakpoint=Desktop",
+        "width": 388,
+        "height": 242
+      },
+      {
+        "id": "8082:163491",
+        "name": "Actions=True, Type=Icon 04, Breakpoint=Desktop",
+        "width": 388,
+        "height": 174
+      },
+      {
+        "id": "5002:371248",
+        "name": "Actions=True, Type=Chart 03, Breakpoint=Desktop",
+        "width": 388,
+        "height": 266
+      },
+      {
+        "id": "1561:262349",
+        "name": "Actions=True, Type=Icon 01, Breakpoint=Mobile",
+        "width": 343,
+        "height": 222
+      },
+      {
+        "id": "4988:370818",
+        "name": "Actions=True, Type=Icon 03, Breakpoint=Mobile",
+        "width": 343,
+        "height": 230
+      },
+      {
+        "id": "8082:163506",
+        "name": "Actions=True, Type=Icon 04, Breakpoint=Mobile",
+        "width": 343,
+        "height": 222
+      },
+      {
+        "id": "5002:371263",
+        "name": "Actions=True, Type=Chart 03, Breakpoint=Mobile",
+        "width": 343,
+        "height": 254
+      },
+      {
+        "id": "1561:261634",
+        "name": "Actions=False, Type=Icon 02, Breakpoint=Desktop",
+        "width": 388,
+        "height": 178
+      },
+      {
+        "id": "4993:376878",
+        "name": "Actions=False, Type=Chart 02, Breakpoint=Desktop",
+        "width": 388,
+        "height": 164
+      },
+      {
+        "id": "1561:265452",
+        "name": "Actions=False, Type=Chart 01, Breakpoint=Desktop",
+        "width": 388,
+        "height": 154
+      },
+      {
+        "id": "1561:265555",
+        "name": "Actions=False, Type=Chart 01, Breakpoint=Mobile",
+        "width": 343,
+        "height": 154
+      },
+      {
+        "id": "1561:262116",
+        "name": "Actions=True, Type=Icon 02, Breakpoint=Desktop",
+        "width": 388,
+        "height": 230
+      },
+      {
+        "id": "4993:376888",
+        "name": "Actions=True, Type=Chart 02, Breakpoint=Desktop",
+        "width": 388,
+        "height": 232
+      },
+      {
+        "id": "1561:262331",
+        "name": "Actions=True, Type=Icon 02, Breakpoint=Mobile",
+        "width": 343,
+        "height": 189
+      },
+      {
+        "id": "1561:265642",
+        "name": "Actions=True, Type=Chart 01, Breakpoint=Desktop",
+        "width": 388,
+        "height": 206
+      },
+      {
+        "id": "4993:376902",
+        "name": "Actions=True, Type=Chart 02, Breakpoint=Mobile",
+        "width": 343,
+        "height": 220
+      },
+      {
+        "id": "1561:265624",
+        "name": "Actions=True, Type=Chart 01, Breakpoint=Mobile",
+        "width": 343,
+        "height": 206
+      },
+      {
+        "id": "1561:261674",
+        "name": "Actions=False, Type=Icon 02, Breakpoint=Mobile",
+        "width": 343,
+        "height": 174
+      },
+      {
+        "id": "4993:376916",
+        "name": "Actions=False, Type=Chart 02, Breakpoint=Mobile",
+        "width": 343,
+        "height": 160
+      },
+      {
+        "id": "1561:261602",
+        "name": "Actions=False, Type=Icon 01, Breakpoint=Mobile",
+        "width": 343,
+        "height": 170
+      },
+      {
+        "id": "4988:370831",
+        "name": "Actions=False, Type=Icon 03, Breakpoint=Mobile",
+        "width": 343,
+        "height": 170
+      },
+      {
+        "id": "8082:163521",
+        "name": "Actions=False, Type=Icon 04, Breakpoint=Mobile",
+        "width": 343,
+        "height": 162
+      },
+      {
+        "id": "5002:371278",
+        "name": "Actions=False, Type=Chart 03, Breakpoint=Mobile",
+        "width": 343,
+        "height": 194
+      },
+      {
+        "id": "1560:266285",
+        "name": "Actions=False, Type=Simple, Breakpoint=Mobile",
+        "width": 343,
+        "height": 106
+      },
+      {
+        "id": "7947:105121",
+        "name": "Actions=True, Type=Chart 04, Breakpoint=Desktop",
+        "width": 388,
+        "height": 256
+      },
+      {
+        "id": "7947:105579",
+        "name": "Actions=False, Type=Chart 04, Breakpoint=Desktop",
+        "width": 388,
+        "height": 196
+      },
+      {
+        "id": "7947:105116",
+        "name": "Actions=True, Type=Chart 04, Breakpoint=Mobile",
+        "width": 343,
+        "height": 252
+      },
+      {
+        "id": "7947:105594",
+        "name": "Actions=False, Type=Chart 04, Breakpoint=Mobile",
+        "width": 343,
+        "height": 192
+      },
+      {
+        "id": "1561:265483",
+        "name": "Type=Wavy 01, Trend=Positive",
+        "width": 112,
+        "height": 56
+      },
+      {
+        "id": "8049:155346",
+        "name": "Type=Wavy 02, Trend=Positive",
+        "width": 112,
+        "height": 56
+      },
+      {
+        "id": "8049:155378",
+        "name": "Type=Wavy 03, Trend=Positive",
+        "width": 112,
+        "height": 56
+      },
+      {
+        "id": "8049:155410",
+        "name": "Type=Wavy 04, Trend=Positive",
+        "width": 112,
+        "height": 56
+      },
+      {
+        "id": "8049:155442",
+        "name": "Type=Wavy 05, Trend=Positive",
+        "width": 112,
+        "height": 56
+      },
+      {
+        "id": "8049:155474",
+        "name": "Type=Wavy 06, Trend=Positive",
+        "width": 112,
+        "height": 56
+      },
+      {
+        "id": "8049:155524",
+        "name": "Type=Wavy 07, Trend=Positive",
+        "width": 112,
+        "height": 56
+      },
+      {
+        "id": "1561:265492",
+        "name": "Type=Wavy 01, Trend=Negative",
+        "width": 112,
+        "height": 56
+      },
+      {
+        "id": "8049:155354",
+        "name": "Type=Wavy 02, Trend=Negative",
+        "width": 112,
+        "height": 56
+      },
+      {
+        "id": "8049:155386",
+        "name": "Type=Wavy 03, Trend=Negative",
+        "width": 112,
+        "height": 56
+      },
+      {
+        "id": "8049:155418",
+        "name": "Type=Wavy 04, Trend=Negative",
+        "width": 112,
+        "height": 56
+      },
+      {
+        "id": "8049:155450",
+        "name": "Type=Wavy 05, Trend=Negative",
+        "width": 112,
+        "height": 56
+      },
+      {
+        "id": "8049:155482",
+        "name": "Type=Wavy 06, Trend=Negative",
+        "width": 112,
+        "height": 56
+      },
+      {
+        "id": "8049:155532",
+        "name": "Type=Wavy 07, Trend=Negative",
+        "width": 112,
+        "height": 56
+      },
+      {
+        "id": "4992:376490",
+        "name": "Type=Realistic 01, Trend=Positive",
+        "width": 112,
+        "height": 56
+      },
+      {
+        "id": "4992:376491",
+        "name": "Type=Realistic 01, Trend=Negative",
+        "width": 112,
+        "height": 56
+      },
+      {
+        "id": "4992:376492",
+        "name": "Type=Straight, Trend=Positive",
+        "width": 112,
+        "height": 56
+      },
+      {
+        "id": "4992:376493",
+        "name": "Type=Straight, Trend=Negative",
+        "width": 112,
+        "height": 56
+      },
+      {
+        "id": "4992:376495",
+        "name": "Type=Layers, Trend=Negative",
+        "width": 128,
+        "height": 56
+      },
+      {
+        "id": "4992:376494",
+        "name": "Type=Layers, Trend=Positive",
+        "width": 128,
+        "height": 56
+      },
+      {
+        "id": "7947:80006",
+        "name": "Type=Realistic 02, Trend=Positive",
+        "width": 112,
+        "height": 56
+      },
+      {
+        "id": "7947:80007",
+        "name": "Type=Realistic 03, Trend=Positive",
+        "width": 112,
+        "height": 56
+      },
+      {
+        "id": "7947:80008",
+        "name": "Type=Realistic 02, Trend=Negative",
+        "width": 112,
+        "height": 56
+      },
+      {
+        "id": "7947:80009",
+        "name": "Type=Realistic 03, Trend=Negative",
+        "width": 112,
+        "height": 56
+      },
+      {
+        "id": "1563:260318",
+        "name": "Type=01, Trend=Positive",
+        "width": 54,
+        "height": 20
+      },
+      {
+        "id": "4988:370934",
+        "name": "Type=02, Trend=Positive",
+        "width": 56,
+        "height": 20
+      },
+      {
+        "id": "1563:260320",
+        "name": "Type=01, Trend=Negative",
+        "width": 54,
+        "height": 20
+      },
+      {
+        "id": "4988:370937",
+        "name": "Type=02, Trend=Negative",
+        "width": 56,
+        "height": 20
+      },
+      {
+        "id": "8083:164432",
+        "name": "Type=03, Trend=Positive",
+        "width": 66,
+        "height": 24
+      },
+      {
+        "id": "8083:164437",
+        "name": "Type=03, Trend=Negative",
+        "width": 66,
+        "height": 24
+      }
+    ]
+  },
+  {
+    "key": "slideouts",
+    "pageId": "231:922",
+    "nodeId": "1240:137697",
+    "variants": [
+      {
+        "id": "1239:120665",
+        "name": "Tabs=False, Breakpoint=Desktop",
+        "width": 480,
+        "height": 98
+      },
+      {
+        "id": "1251:717",
+        "name": "Tabs=True, Breakpoint=Desktop",
+        "width": 480,
+        "height": 170
+      },
+      {
+        "id": "1251:2100",
+        "name": "Tabs=True, Breakpoint=Mobile",
+        "width": 336,
+        "height": 166
+      },
+      {
+        "id": "1240:137263",
+        "name": "Tabs=False, Breakpoint=Mobile",
+        "width": 336,
+        "height": 94
+      },
+      {
+        "id": "1240:137580",
+        "name": "Type=Filters, Breakpoint=Mobile",
+        "width": 375,
+        "height": 960
+      },
+      {
+        "id": "1240:137581",
+        "name": "Type=Placeholder, Breakpoint=Mobile",
+        "width": 375,
+        "height": 960
+      },
+      {
+        "id": "1240:137697",
+        "name": "Type=Placeholder, Breakpoint=Desktop",
+        "width": 440,
+        "height": 960
+      },
+      {
+        "id": "1240:137858",
+        "name": "Type=Filters, Breakpoint=Desktop",
+        "width": 440,
+        "height": 960
+      },
+      {
+        "id": "1240:164570",
+        "name": "Type=Notification settings checkboxes, Breakpoint=Desktop",
+        "width": 440,
+        "height": 960
+      },
+      {
+        "id": "1251:11103",
+        "name": "Type=Notification settings checkboxes, Breakpoint=Mobile",
+        "width": 375,
+        "height": 960
+      },
+      {
+        "id": "1241:124989",
+        "name": "Type=Notification settings button groups, Breakpoint=Desktop",
+        "width": 440,
+        "height": 960
+      },
+      {
+        "id": "1251:10543",
+        "name": "Type=Notification settings button groups, Breakpoint=Mobile",
+        "width": 375,
+        "height": 960
+      },
+      {
+        "id": "1240:175083",
+        "name": "Type=Project details, Breakpoint=Desktop",
+        "width": 440,
+        "height": 960
+      },
+      {
+        "id": "1251:11896",
+        "name": "Type=Order summary, Breakpoint=Desktop",
+        "width": 440,
+        "height": 960
+      },
+      {
+        "id": "1251:12201",
+        "name": "Type=Order summary, Breakpoint=Mobile",
+        "width": 375,
+        "height": 960
+      },
+      {
+        "id": "1251:10038",
+        "name": "Type=Project details, Breakpoint=Mobile",
+        "width": 375,
+        "height": 960
+      },
+      {
+        "id": "1240:169904",
+        "name": "Type=Payment details, Breakpoint=Desktop",
+        "width": 440,
+        "height": 960
+      },
+      {
+        "id": "1251:7992",
+        "name": "Type=Payment details, Breakpoint=Mobile",
+        "width": 375,
+        "height": 960
+      },
+      {
+        "id": "1240:170509",
+        "name": "Type=Payment method, Breakpoint=Desktop",
+        "width": 440,
+        "height": 960
+      },
+      {
+        "id": "1251:7971",
+        "name": "Type=Payment method, Breakpoint=Mobile",
+        "width": 375,
+        "height": 960
+      },
+      {
+        "id": "1240:170914",
+        "name": "Type=Plan, Breakpoint=Desktop",
+        "width": 440,
+        "height": 960
+      },
+      {
+        "id": "1251:8708",
+        "name": "Type=Plan, Breakpoint=Mobile",
+        "width": 375,
+        "height": 960
+      },
+      {
+        "id": "1240:171598",
+        "name": "Type=File upload, Breakpoint=Desktop",
+        "width": 440,
+        "height": 960
+      },
+      {
+        "id": "1251:9500",
+        "name": "Type=File upload, Breakpoint=Mobile",
+        "width": 375,
+        "height": 960
+      },
+      {
+        "id": "1240:168901",
+        "name": "Type=Messages, Breakpoint=Desktop",
+        "width": 440,
+        "height": 960
+      },
+      {
+        "id": "8017:533549",
+        "name": "Type=Calendar event, Breakpoint=Desktop",
+        "width": 440,
+        "height": 960
+      },
+      {
+        "id": "1251:6984",
+        "name": "Type=Messages, Breakpoint=Mobile",
+        "width": 375,
+        "height": 960
+      },
+      {
+        "id": "8017:533555",
+        "name": "Type=Calendar event, Breakpoint=Mobile",
+        "width": 375,
+        "height": 960
+      },
+      {
+        "id": "1251:2998",
+        "name": "Type=Notifications, Breakpoint=Desktop",
+        "width": 440,
+        "height": 960
+      },
+      {
+        "id": "1251:11643",
+        "name": "Type=Notifications, Breakpoint=Mobile",
+        "width": 375,
+        "height": 960
+      },
+      {
+        "id": "1247:167",
+        "name": "Type=Message chat, Breakpoint=Desktop",
+        "width": 440,
+        "height": 960
+      },
+      {
+        "id": "1251:7445",
+        "name": "Type=Message chat, Breakpoint=Mobile",
+        "width": 375,
+        "height": 960
+      },
+      {
+        "id": "1240:164129",
+        "name": "Type=Labels, Breakpoint=Desktop",
+        "width": 440,
+        "height": 960
+      },
+      {
+        "id": "1251:9986",
+        "name": "Type=Labels, Breakpoint=Mobile",
+        "width": 375,
+        "height": 960
+      },
+      {
+        "id": "1240:138404",
+        "name": "Type=Team members, Breakpoint=Desktop",
+        "width": 440,
+        "height": 960
+      },
+      {
+        "id": "1251:8652",
+        "name": "Type=Team members, Breakpoint=Mobile",
+        "width": 375,
+        "height": 960
+      },
+      {
+        "id": "1240:162455",
+        "name": "Type=User profile, Breakpoint=Desktop",
+        "width": 440,
+        "height": 960
+      },
+      {
+        "id": "1251:6584",
+        "name": "Type=User profile, Breakpoint=Mobile",
+        "width": 375,
+        "height": 960
+      },
+      {
+        "id": "9222:10419",
+        "name": "Type=A.I. assistant message, Breakpoint=Desktop",
+        "width": 440,
+        "height": 960
+      },
+      {
+        "id": "9222:10444",
+        "name": "Type=A.I. assistant message, Breakpoint=Mobile",
+        "width": 375,
+        "height": 960
+      },
+      {
+        "id": "9222:10405",
+        "name": "Type=A.I. assistant intro, Breakpoint=Desktop",
+        "width": 440,
+        "height": 960
+      },
+      {
+        "id": "9222:10412",
+        "name": "Type=A.I. assistant intro, Breakpoint=Mobile",
+        "width": 375,
+        "height": 960
+      },
+      {
+        "id": "9230:140485",
+        "name": "Type=User settings, Breakpoint=Desktop",
+        "width": 440,
+        "height": 960
+      },
+      {
+        "id": "9230:140506",
+        "name": "Type=User settings, Breakpoint=Mobile",
+        "width": 375,
+        "height": 960
+      }
+    ]
+  },
+  {
+    "key": "inline-ctas",
+    "pageId": "127:2907",
+    "nodeId": "1255:131889",
+    "variants": [
+      {
+        "id": "1255:131888",
+        "name": "Type=Image, Breakpoint=Desktop",
+        "width": 768,
+        "height": 150
+      },
+      {
+        "id": "1255:132370",
+        "name": "Type=Image, Breakpoint=Mobile",
+        "width": 343,
+        "height": 414
+      },
+      {
+        "id": "1255:131889",
+        "name": "Type=Actions, Breakpoint=Desktop",
+        "width": 768,
+        "height": 154
+      },
+      {
+        "id": "1255:132361",
+        "name": "Type=Actions, Breakpoint=Mobile",
+        "width": 343,
+        "height": 210
+      },
+      {
+        "id": "1255:131908",
+        "name": "Type=Email field, Breakpoint=Desktop",
+        "width": 768,
+        "height": 184
+      },
+      {
+        "id": "1255:132354",
+        "name": "Type=Email field, Breakpoint=Mobile",
+        "width": 343,
+        "height": 252
+      },
+      {
+        "id": "1255:131909",
+        "name": "Type=Change plan, Breakpoint=Desktop",
+        "width": 768,
+        "height": 328
+      },
+      {
+        "id": "1255:132334",
+        "name": "Type=Change plan, Breakpoint=Mobile",
+        "width": 343,
+        "height": 336
+      },
+      {
+        "id": "1255:131912",
+        "name": "Type=Upgrade plan, Breakpoint=Desktop",
+        "width": 768,
+        "height": 356
+      },
+      {
+        "id": "1255:132311",
+        "name": "Type=Upgrade plan, Breakpoint=Mobile",
+        "width": 343,
+        "height": 424
+      },
+      {
+        "id": "1255:131910",
+        "name": "Type=Payment method, Breakpoint=Desktop",
+        "width": 768,
+        "height": 214
+      },
+      {
+        "id": "1255:132295",
+        "name": "Type=Payment method, Breakpoint=Mobile",
+        "width": 343,
+        "height": 202
+      },
+      {
+        "id": "1255:131911",
+        "name": "Type=Receipt, Breakpoint=Desktop",
+        "width": 768,
+        "height": 186
+      },
+      {
+        "id": "1255:132811",
+        "name": "Type=Receipt, Breakpoint=Mobile",
+        "width": 343,
+        "height": 266
+      }
+    ]
+  },
+  {
+    "key": "activity-feeds",
+    "pageId": "253:14231",
+    "nodeId": "1254:128621",
+    "variants": [
+      {
+        "id": "1254:127639",
+        "name": "Size=md, Supporting item=False, Connector=True",
+        "width": 360,
+        "height": 72
+      },
+      {
+        "id": "1719:457980",
+        "name": "Size=sm, Supporting item=False, Connector=True",
+        "width": 360,
+        "height": 72
+      },
+      {
+        "id": "1254:128209",
+        "name": "Size=md, Supporting item=False, Connector=False",
+        "width": 360,
+        "height": 48
+      },
+      {
+        "id": "1719:457971",
+        "name": "Size=sm, Supporting item=False, Connector=False",
+        "width": 360,
+        "height": 40
+      },
+      {
+        "id": "1254:127708",
+        "name": "Size=md, Supporting item=File, Connector=True",
+        "width": 360,
+        "height": 124
+      },
+      {
+        "id": "1719:457937",
+        "name": "Size=sm, Supporting item=File, Connector=True",
+        "width": 360,
+        "height": 124
+      },
+      {
+        "id": "1254:128183",
+        "name": "Size=md, Supporting item=File, Connector=False",
+        "width": 360,
+        "height": 92
+      },
+      {
+        "id": "1719:457923",
+        "name": "Size=sm, Supporting item=File, Connector=False",
+        "width": 360,
+        "height": 92
+      },
+      {
+        "id": "1254:127645",
+        "name": "Size=md, Supporting item=Labels, Connector=True",
+        "width": 360,
+        "height": 126
+      },
+      {
+        "id": "1719:457876",
+        "name": "Size=sm, Supporting item=Labels, Connector=True",
+        "width": 360,
+        "height": 126
+      },
+      {
+        "id": "1254:128149",
+        "name": "Size=md, Supporting item=Labels, Connector=False",
+        "width": 360,
+        "height": 94
+      },
+      {
+        "id": "1719:457859",
+        "name": "Size=sm, Supporting item=Labels, Connector=False",
+        "width": 360,
+        "height": 94
+      },
+      {
+        "id": "1254:127770",
+        "name": "Size=md, Supporting item=Text, Connector=True",
+        "width": 360,
+        "height": 164
+      },
+      {
+        "id": "1719:457813",
+        "name": "Size=sm, Supporting item=Text, Connector=True",
+        "width": 360,
+        "height": 164
+      },
+      {
+        "id": "1254:128119",
+        "name": "Size=md, Supporting item=Text, Connector=False",
+        "width": 360,
+        "height": 136
+      },
+      {
+        "id": "1719:457803",
+        "name": "Size=sm, Supporting item=Text, Connector=False",
+        "width": 360,
+        "height": 136
+      },
+      {
+        "id": "1254:128621",
+        "name": "Divider=Line, Type=Notifications",
+        "width": 360,
+        "height": 1476
+      },
+      {
+        "id": "1254:129961",
+        "name": "Divider=Connector, Type=Notifications",
+        "width": 360,
+        "height": 1356
+      },
+      {
+        "id": "3251:453107",
+        "name": "Divider=False, Type=Notifications",
+        "width": 360,
+        "height": 1428
+      },
+      {
+        "id": "1254:133286",
+        "name": "Divider=Divider, Type=Messages",
+        "width": 360,
+        "height": 1914
+      },
+      {
+        "id": "3251:456493",
+        "name": "Divider=False, Type=Messages",
+        "width": 360,
+        "height": 1900
+      },
+      {
+        "id": "3251:456884",
+        "name": "Divider=Connector, Type=Messages",
+        "width": 360,
+        "height": 1852
+      }
+    ]
+  },
+  {
+    "key": "messaging",
+    "pageId": "1251:12271",
+    "nodeId": "1244:352",
+    "variants": [
+      {
+        "id": "1249:72",
+        "name": "Type=File, Sent=False, Actions panel=False",
+        "width": 360,
+        "height": 120
+      },
+      {
+        "id": "9242:555615",
+        "name": "Type=Audio, Sent=False, Actions panel=False",
+        "width": 360,
+        "height": 112.0000991821289
+      },
+      {
+        "id": "9242:556385",
+        "name": "Type=Video, Sent=False, Actions panel=False",
+        "width": 360,
+        "height": 229.25
+      },
+      {
+        "id": "9244:2694",
+        "name": "Type=Image, Sent=False, Actions panel=False",
+        "width": 360,
+        "height": 313
+      },
+      {
+        "id": "9206:601742",
+        "name": "Type=File, Sent=False, Actions panel=True",
+        "width": 360,
+        "height": 90
+      },
+      {
+        "id": "9242:555631",
+        "name": "Type=Audio, Sent=False, Actions panel=True",
+        "width": 360,
+        "height": 82
+      },
+      {
+        "id": "9242:556403",
+        "name": "Type=Video, Sent=False, Actions panel=True",
+        "width": 360,
+        "height": 199.25
+      },
+      {
+        "id": "9244:2704",
+        "name": "Type=Image, Sent=False, Actions panel=True",
+        "width": 360,
+        "height": 283
+      },
+      {
+        "id": "1244:532",
+        "name": "Type=Writing, Sent=False, Actions panel=False",
+        "width": 360,
+        "height": 54
+      },
+      {
+        "id": "1244:352",
+        "name": "Type=Message, Sent=False, Actions panel=False",
+        "width": 360,
+        "height": 120
+      },
+      {
+        "id": "9241:555098",
+        "name": "Type=Message reply, Sent=False, Actions panel=False",
+        "width": 360,
+        "height": 138
+      },
+      {
+        "id": "9244:4706",
+        "name": "Type=Link minimal, Sent=False, Actions panel=False",
+        "width": 360,
+        "height": 166
+      },
+      {
+        "id": "9242:557079",
+        "name": "Type=Link preview, Sent=False, Actions panel=False",
+        "width": 360,
+        "height": 259.1000061035156
+      },
+      {
+        "id": "9241:555382",
+        "name": "Type=Message reply, Sent=False, Actions panel=True",
+        "width": 360,
+        "height": 108
+      },
+      {
+        "id": "9244:4720",
+        "name": "Type=Link minimal, Sent=False, Actions panel=True",
+        "width": 360,
+        "height": 136
+      },
+      {
+        "id": "9242:557093",
+        "name": "Type=Link preview, Sent=False, Actions panel=True",
+        "width": 360,
+        "height": 229.10000610351562
+      },
+      {
+        "id": "9206:601758",
+        "name": "Type=Message, Sent=False, Actions panel=True",
+        "width": 360,
+        "height": 90
+      },
+      {
+        "id": "1247:402",
+        "name": "Type=Message, Sent=True, Actions panel=False",
+        "width": 360,
+        "height": 96
+      },
+      {
+        "id": "9241:555109",
+        "name": "Type=Message reply, Sent=True, Actions panel=False",
+        "width": 360,
+        "height": 138
+      },
+      {
+        "id": "9244:4732",
+        "name": "Type=Link minimal, Sent=True, Actions panel=False",
+        "width": 360,
+        "height": 166
+      },
+      {
+        "id": "9242:557105",
+        "name": "Type=Link preview, Sent=True, Actions panel=False",
+        "width": 360,
+        "height": 286.39996337890625
+      },
+      {
+        "id": "9241:555396",
+        "name": "Type=Message reply, Sent=True, Actions panel=True",
+        "width": 360,
+        "height": 108
+      },
+      {
+        "id": "9244:4747",
+        "name": "Type=Link minimal, Sent=True, Actions panel=True",
+        "width": 360,
+        "height": 136
+      },
+      {
+        "id": "9242:557120",
+        "name": "Type=Link preview, Sent=True, Actions panel=True",
+        "width": 360,
+        "height": 256.39996337890625
+      },
+      {
+        "id": "9206:601770",
+        "name": "Type=Message, Sent=True, Actions panel=True",
+        "width": 360,
+        "height": 66
+      },
+      {
+        "id": "1249:112",
+        "name": "Type=File, Sent=True, Actions panel=False",
+        "width": 360,
+        "height": 120
+      },
+      {
+        "id": "9242:555645",
+        "name": "Type=Audio, Sent=True, Actions panel=False",
+        "width": 360,
+        "height": 112
+      },
+      {
+        "id": "9242:556419",
+        "name": "Type=Video, Sent=True, Actions panel=False",
+        "width": 360,
+        "height": 258.5
+      },
+      {
+        "id": "9244:2712",
+        "name": "Type=Image, Sent=True, Actions panel=False",
+        "width": 360,
+        "height": 352
+      },
+      {
+        "id": "9206:601781",
+        "name": "Type=File, Sent=True, Actions panel=True",
+        "width": 360,
+        "height": 90
+      },
+      {
+        "id": "9242:555662",
+        "name": "Type=Audio, Sent=True, Actions panel=True",
+        "width": 360,
+        "height": 82
+      },
+      {
+        "id": "9242:556438",
+        "name": "Type=Video, Sent=True, Actions panel=True",
+        "width": 360,
+        "height": 228.5
+      },
+      {
+        "id": "9244:2723",
+        "name": "Type=Image, Sent=True, Actions panel=True",
+        "width": 360,
+        "height": 322
+      },
+      {
+        "id": "1244:297",
+        "name": "Count=False",
+        "width": 32,
+        "height": 24
+      },
+      {
+        "id": "1244:299",
+        "name": "Count=True",
+        "width": 45,
+        "height": 24
+      },
+      {
+        "id": "9206:591554",
+        "name": "_Message action panel",
+        "width": 114,
+        "height": 32
+      },
+      {
+        "id": "9206:591492",
+        "name": "State=Default",
+        "width": 20,
+        "height": 20
+      },
+      {
+        "id": "9206:591499",
+        "name": "State=Hover",
+        "width": 20,
+        "height": 20
+      },
+      {
+        "id": "9206:602510",
+        "name": "Type=Minimal",
+        "width": 360,
+        "height": 44
+      },
+      {
+        "id": "9206:602526",
+        "name": "Type=Advanced",
+        "width": 360,
+        "height": 160
+      },
+      {
+        "id": "9206:602516",
+        "name": "Type=Textarea input",
+        "width": 360,
+        "height": 128
+      },
+      {
+        "id": "9241:548208",
+        "name": "Status=Unread, State=Default",
+        "width": 16,
+        "height": 16
+      },
+      {
+        "id": "9244:2546",
+        "name": "Status=Unread, State=Hover",
+        "width": 16,
+        "height": 16
+      },
+      {
+        "id": "9241:548209",
+        "name": "Status=Read, State=Default",
+        "width": 16,
+        "height": 16
+      },
+      {
+        "id": "9244:2553",
+        "name": "Status=Read, State=Hover",
+        "width": 16,
+        "height": 16
+      },
+      {
+        "id": "9241:548210",
+        "name": "Status=Failed, State=Default",
+        "width": 16,
+        "height": 16
+      },
+      {
+        "id": "9244:2572",
+        "name": "Status=Failed, State=Hover",
+        "width": 16,
+        "height": 16
+      }
+    ]
+  },
+  {
+    "key": "tables",
+    "pageId": "214:0",
+    "nodeId": "1227:110480",
+    "variants": [
+      {
+        "id": "1221:106787",
+        "name": "Help icon=False, Arrow=False, State=Default",
+        "width": 55,
+        "height": 18
+      },
+      {
+        "id": "1221:106927",
+        "name": "Help icon=False, Arrow=False, State=Hover",
+        "width": 55,
+        "height": 18
+      },
+      {
+        "id": "1221:106888",
+        "name": "Help icon=False, Arrow=Down, State=Default",
+        "width": 71,
+        "height": 18
+      },
+      {
+        "id": "8050:165984",
+        "name": "Help icon=False, Arrow=Chevron selector, State=Default",
+        "width": 71,
+        "height": 18
+      },
+      {
+        "id": "1221:107035",
+        "name": "Help icon=False, Arrow=Up, State=Default",
+        "width": 71,
+        "height": 18
+      },
+      {
+        "id": "1221:106920",
+        "name": "Help icon=False, Arrow=Down, State=Hover",
+        "width": 71,
+        "height": 18
+      },
+      {
+        "id": "8050:165987",
+        "name": "Help icon=False, Arrow=Chevron selector, State=Hover",
+        "width": 71,
+        "height": 18
+      },
+      {
+        "id": "1221:107025",
+        "name": "Help icon=False, Arrow=Up, State=Hover",
+        "width": 71,
+        "height": 18
+      },
+      {
+        "id": "1221:106789",
+        "name": "Help icon=True, Arrow=False, State=Default",
+        "width": 75,
+        "height": 18
+      },
+      {
+        "id": "1221:106917",
+        "name": "Help icon=True, Arrow=False, State=Hover",
+        "width": 75,
+        "height": 18
+      },
+      {
+        "id": "1221:106885",
+        "name": "Help icon=True, Arrow=Down, State=Default",
+        "width": 91,
+        "height": 18
+      },
+      {
+        "id": "8050:166020",
+        "name": "Help icon=True, Arrow=Chevron selector, State=Default",
+        "width": 91,
+        "height": 18
+      },
+      {
+        "id": "1221:107021",
+        "name": "Help icon=True, Arrow=Up, State=Default",
+        "width": 91,
+        "height": 18
+      },
+      {
+        "id": "1221:106923",
+        "name": "Help icon=True, Arrow=Down, State=Hover",
+        "width": 91,
+        "height": 18
+      },
+      {
+        "id": "8050:166024",
+        "name": "Help icon=True, Arrow=Chevron selector, State=Hover",
+        "width": 91,
+        "height": 18
+      },
+      {
+        "id": "1221:107017",
+        "name": "Help icon=True, Arrow=Up, State=Hover",
+        "width": 91,
+        "height": 18
+      },
+      {
+        "id": "214:9",
+        "name": "Text=True, Checkbox=True, Color=White",
+        "width": 151,
+        "height": 44
+      },
+      {
+        "id": "1224:4554",
+        "name": "Text=True, Checkbox=False, Color=White",
+        "width": 103,
+        "height": 44
+      },
+      {
+        "id": "1224:4120",
+        "name": "Text=False, Checkbox=True, Color=White",
+        "width": 68,
+        "height": 44
+      },
+      {
+        "id": "1224:4552",
+        "name": "Text=False, Checkbox=False, Color=White",
+        "width": 68,
+        "height": 44
+      },
+      {
+        "id": "1221:107934",
+        "name": "Text=True, Checkbox=True, Color=Gray",
+        "width": 151,
+        "height": 44
+      },
+      {
+        "id": "1224:4549",
+        "name": "Text=True, Checkbox=False, Color=Gray",
+        "width": 103,
+        "height": 44
+      },
+      {
+        "id": "1224:4117",
+        "name": "Text=False, Checkbox=True, Color=Gray",
+        "width": 68,
+        "height": 44
+      },
+      {
+        "id": "1224:4547",
+        "name": "Text=False, Checkbox=False, Color=Gray",
+        "width": 68,
+        "height": 44
+      },
+      {
+        "id": "1222:107304",
+        "name": "Style=Lead text, Supporting text=True, State=Default",
+        "width": 320,
+        "height": 72
+      },
+      {
+        "id": "1223:42",
+        "name": "Style=Text, Supporting text=True, State=Default",
+        "width": 240,
+        "height": 72
+      },
+      {
+        "id": "1224:169",
+        "name": "Style=Badge, Supporting text=False, State=Default",
+        "width": 99,
+        "height": 72
+      },
+      {
+        "id": "1224:1353",
+        "name": "Style=Avatar group, Supporting text=True, State=Default",
+        "width": 240,
+        "height": 72
+      },
+      {
+        "id": "1224:1711",
+        "name": "Style=Avatar group, Supporting text=False, State=Default",
+        "width": 172,
+        "height": 72
+      },
+      {
+        "id": "1224:327",
+        "name": "Style=Badges multiple, Supporting text=False, State=Default",
+        "width": 232,
+        "height": 72
+      },
+      {
+        "id": "1222:107483",
+        "name": "Style=Lead text, Supporting text=False, State=Default",
+        "width": 320,
+        "height": 72
+      },
+      {
+        "id": "1223:39",
+        "name": "Style=Text, Supporting text=False, State=Default",
+        "width": 240,
+        "height": 72
+      },
+      {
+        "id": "1222:107426",
+        "name": "Style=Lead checkbox, Supporting text=True, State=Default",
+        "width": 320,
+        "height": 72
+      },
+      {
+        "id": "1224:5530",
+        "name": "Style=Checkbox only, Supporting text=False, State=Default",
+        "width": 68,
+        "height": 72
+      },
+      {
+        "id": "1224:22",
+        "name": "Style=Lead avatar, Supporting text=True, State=Default",
+        "width": 320,
+        "height": 72
+      },
+      {
+        "id": "1227:123054",
+        "name": "Style=Avatar, Supporting text=True, State=Default",
+        "width": 280,
+        "height": 72
+      },
+      {
+        "id": "1722:459762",
+        "name": "Style=Payment method, Supporting text=True, State=Default",
+        "width": 280,
+        "height": 72
+      },
+      {
+        "id": "1224:5904",
+        "name": "Style=Lead avatar checkbox, Supporting text=True, State=Default",
+        "width": 320,
+        "height": 72
+      },
+      {
+        "id": "1224:6009",
+        "name": "Style=Lead avatar radio button, Supporting text=True, State=Default",
+        "width": 320,
+        "height": 72
+      },
+      {
+        "id": "1224:6087",
+        "name": "Style=Lead avatar toggle, Supporting text=True, State=Default",
+        "width": 320,
+        "height": 72
+      },
+      {
+        "id": "1224:1461",
+        "name": "Style=Lead icon checkbox, Supporting text=True, State=Default",
+        "width": 320,
+        "height": 72
+      },
+      {
+        "id": "1722:460126",
+        "name": "Style=Lead payment method checkbox, Supporting text=True, State=Default",
+        "width": 320,
+        "height": 72
+      },
+      {
+        "id": "1224:6279",
+        "name": "Style=Lead icon radio button, Supporting text=True, State=Default",
+        "width": 320,
+        "height": 72
+      },
+      {
+        "id": "1722:460107",
+        "name": "Style=Lead payment method radio button, Supporting text=True, State=Default",
+        "width": 320,
+        "height": 72
+      },
+      {
+        "id": "1224:6381",
+        "name": "Style=Lead icon toggle, Supporting text=True, State=Default",
+        "width": 320,
+        "height": 72
+      },
+      {
+        "id": "1722:460078",
+        "name": "Style=Lead payment method toggle, Supporting text=True, State=Default",
+        "width": 320,
+        "height": 72
+      },
+      {
+        "id": "1224:6172",
+        "name": "Style=Lead icon, Supporting text=True, State=Default",
+        "width": 320,
+        "height": 72
+      },
+      {
+        "id": "1722:460102",
+        "name": "Style=Lead payment method, Supporting text=True, State=Default",
+        "width": 320,
+        "height": 72
+      },
+      {
+        "id": "1224:1541",
+        "name": "Style=Lead icon checkbox, Supporting text=False, State=Default",
+        "width": 320,
+        "height": 72
+      },
+      {
+        "id": "1722:460098",
+        "name": "Style=Lead payment method checkbox, Supporting text=False, State=Default",
+        "width": 320,
+        "height": 72
+      },
+      {
+        "id": "1224:6275",
+        "name": "Style=Lead icon radio button, Supporting text=False, State=Default",
+        "width": 320,
+        "height": 72
+      },
+      {
+        "id": "1722:460094",
+        "name": "Style=Lead payment method radio button, Supporting text=False, State=Default",
+        "width": 320,
+        "height": 72
+      },
+      {
+        "id": "1224:6377",
+        "name": "Style=Lead icon toggle, Supporting text=False, State=Default",
+        "width": 320,
+        "height": 72
+      },
+      {
+        "id": "1722:460090",
+        "name": "Style=Lead payment method toggle, Supporting text=False, State=Default",
+        "width": 320,
+        "height": 72
+      },
+      {
+        "id": "1224:6163",
+        "name": "Style=Lead icon, Supporting text=False, State=Default",
+        "width": 320,
+        "height": 72
+      },
+      {
+        "id": "1722:460123",
+        "name": "Style=Lead payment method, Supporting text=False, State=Default",
+        "width": 320,
+        "height": 72
+      },
+      {
+        "id": "1222:107578",
+        "name": "Style=Lead radio button, Supporting text=True, State=Default",
+        "width": 320,
+        "height": 72
+      },
+      {
+        "id": "1224:5525",
+        "name": "Style=Radio button only, Supporting text=False, State=Default",
+        "width": 68,
+        "height": 72
+      },
+      {
+        "id": "1224:94",
+        "name": "Style=Lead toggle, Supporting text=True, State=Default",
+        "width": 320,
+        "height": 72
+      },
+      {
+        "id": "1224:5515",
+        "name": "Style=Toggle only, Supporting text=False, State=Default",
+        "width": 84,
+        "height": 72
+      },
+      {
+        "id": "1222:107515",
+        "name": "Style=Lead checkbox, Supporting text=False, State=Default",
+        "width": 320,
+        "height": 72
+      },
+      {
+        "id": "1224:410",
+        "name": "Style=Trend positive, Supporting text=True, State=Default",
+        "width": 158,
+        "height": 72
+      },
+      {
+        "id": "1224:1085",
+        "name": "Style=Trend negative, Supporting text=True, State=Default",
+        "width": 158,
+        "height": 72
+      },
+      {
+        "id": "1224:1209",
+        "name": "Style=Progress bar, Supporting text=True, State=Default",
+        "width": 280,
+        "height": 72
+      },
+      {
+        "id": "1224:1757",
+        "name": "Style=Action buttons, Supporting text=False, State=Default",
+        "width": 132,
+        "height": 72
+      },
+      {
+        "id": "1224:5049",
+        "name": "Style=Action dropdown icon, Supporting text=False, State=Default",
+        "width": 52,
+        "height": 72
+      },
+      {
+        "id": "1224:5295",
+        "name": "Style=Action dropdown icon, Supporting text=False, State=Hover/selected",
+        "width": 52,
+        "height": 72
+      },
+      {
+        "id": "7932:552076",
+        "name": "Style=Action icons, Supporting text=False, State=Default",
+        "width": 150,
+        "height": 72
+      },
+      {
+        "id": "1232:103",
+        "name": "Style=Star ratings, Supporting text=False, State=Default",
+        "width": 148,
+        "height": 72
+      },
+      {
+        "id": "1232:164",
+        "name": "Style=Star ratings, Supporting text=False, State=Hover/selected",
+        "width": 148,
+        "height": 72
+      },
+      {
+        "id": "7932:552081",
+        "name": "Style=Action icons, Supporting text=False, State=Hover/selected",
+        "width": 150,
+        "height": 72
+      },
+      {
+        "id": "1224:1247",
+        "name": "Style=Progress bar, Supporting text=True, State=Hover/selected",
+        "width": 280,
+        "height": 72
+      },
+      {
+        "id": "1224:1755",
+        "name": "Style=Action buttons, Supporting text=False, State=Hover/selected",
+        "width": 132,
+        "height": 72
+      },
+      {
+        "id": "1224:1019",
+        "name": "Style=Trend positive, Supporting text=False, State=Default",
+        "width": 103,
+        "height": 72
+      },
+      {
+        "id": "1224:1081",
+        "name": "Style=Trend negative, Supporting text=False, State=Default",
+        "width": 103,
+        "height": 72
+      },
+      {
+        "id": "1224:971",
+        "name": "Style=Trend positive, Supporting text=True, State=Hover/selected",
+        "width": 158,
+        "height": 72
+      },
+      {
+        "id": "1224:1078",
+        "name": "Style=Trend negative, Supporting text=True, State=Hover/selected",
+        "width": 158,
+        "height": 72
+      },
+      {
+        "id": "1224:1016",
+        "name": "Style=Trend positive, Supporting text=False, State=Hover/selected",
+        "width": 103,
+        "height": 72
+      },
+      {
+        "id": "1224:1083",
+        "name": "Style=Trend negative, Supporting text=False, State=Hover/selected",
+        "width": 103,
+        "height": 72
+      },
+      {
+        "id": "1224:18",
+        "name": "Style=Lead avatar, Supporting text=False, State=Default",
+        "width": 320,
+        "height": 72
+      },
+      {
+        "id": "1227:123035",
+        "name": "Style=Avatar, Supporting text=False, State=Default",
+        "width": 280,
+        "height": 72
+      },
+      {
+        "id": "1722:459759",
+        "name": "Style=Payment method, Supporting text=False, State=Default",
+        "width": 280,
+        "height": 72
+      },
+      {
+        "id": "1224:5895",
+        "name": "Style=Lead avatar checkbox, Supporting text=False, State=Default",
+        "width": 320,
+        "height": 72
+      },
+      {
+        "id": "1224:6005",
+        "name": "Style=Lead avatar radio button, Supporting text=False, State=Default",
+        "width": 320,
+        "height": 72
+      },
+      {
+        "id": "1224:6083",
+        "name": "Style=Lead avatar toggle, Supporting text=False, State=Default",
+        "width": 320,
+        "height": 72
+      },
+      {
+        "id": "1222:107574",
+        "name": "Style=Lead radio button, Supporting text=False, State=Default",
+        "width": 320,
+        "height": 72
+      },
+      {
+        "id": "1224:90",
+        "name": "Style=Lead toggle, Supporting text=False, State=Default",
+        "width": 320,
+        "height": 72
+      },
+      {
+        "id": "1222:107439",
+        "name": "Style=Lead checkbox, Supporting text=True, State=Hover/selected",
+        "width": 320,
+        "height": 72
+      },
+      {
+        "id": "1224:5510",
+        "name": "Style=Checkbox only, Supporting text=False, State=Hover/selected",
+        "width": 68,
+        "height": 72
+      },
+      {
+        "id": "1224:13",
+        "name": "Style=Lead avatar, Supporting text=True, State=Hover/selected",
+        "width": 320,
+        "height": 72
+      },
+      {
+        "id": "1227:123046",
+        "name": "Style=Avatar, Supporting text=True, State=Hover/selected",
+        "width": 280,
+        "height": 72
+      },
+      {
+        "id": "1722:459754",
+        "name": "Style=Payment method, Supporting text=True, State=Hover/selected",
+        "width": 280,
+        "height": 72
+      },
+      {
+        "id": "1224:5890",
+        "name": "Style=Lead avatar checkbox, Supporting text=True, State=Hover/selected",
+        "width": 320,
+        "height": 72
+      },
+      {
+        "id": "1224:5993",
+        "name": "Style=Lead avatar radio button, Supporting text=True, State=Hover/selected",
+        "width": 320,
+        "height": 72
+      },
+      {
+        "id": "1224:6071",
+        "name": "Style=Lead avatar toggle, Supporting text=True, State=Hover/selected",
+        "width": 320,
+        "height": 72
+      },
+      {
+        "id": "1224:1450",
+        "name": "Style=Lead icon checkbox, Supporting text=True, State=Hover/selected",
+        "width": 320,
+        "height": 72
+      },
+      {
+        "id": "1722:460113",
+        "name": "Style=Lead payment method checkbox, Supporting text=True, State=Hover/selected",
+        "width": 320,
+        "height": 72
+      },
+      {
+        "id": "1224:6263",
+        "name": "Style=Lead icon radio button, Supporting text=True, State=Hover/selected",
+        "width": 320,
+        "height": 72
+      },
+      {
+        "id": "1722:460084",
+        "name": "Style=Lead payment method radio button, Supporting text=True, State=Hover/selected",
+        "width": 320,
+        "height": 72
+      },
+      {
+        "id": "1224:6365",
+        "name": "Style=Lead icon toggle, Supporting text=True, State=Hover/selected",
+        "width": 320,
+        "height": 72
+      },
+      {
+        "id": "1722:460072",
+        "name": "Style=Lead payment method toggle, Supporting text=True, State=Hover/selected",
+        "width": 320,
+        "height": 72
+      },
+      {
+        "id": "1224:6158",
+        "name": "Style=Lead icon, Supporting text=True, State=Hover/selected",
+        "width": 320,
+        "height": 72
+      },
+      {
+        "id": "1722:460067",
+        "name": "Style=Lead payment method, Supporting text=True, State=Hover/selected",
+        "width": 320,
+        "height": 72
+      },
+      {
+        "id": "1224:1536",
+        "name": "Style=Lead icon checkbox, Supporting text=False, State=Hover/selected",
+        "width": 320,
+        "height": 72
+      },
+      {
+        "id": "1722:460063",
+        "name": "Style=Lead payment method checkbox, Supporting text=False, State=Hover/selected",
+        "width": 320,
+        "height": 72
+      },
+      {
+        "id": "1224:6259",
+        "name": "Style=Lead icon radio button, Supporting text=False, State=Hover/selected",
+        "width": 320,
+        "height": 72
+      },
+      {
+        "id": "1722:460054",
+        "name": "Style=Lead payment method radio button, Supporting text=False, State=Hover/selected",
+        "width": 320,
+        "height": 72
+      },
+      {
+        "id": "1224:6361",
+        "name": "Style=Lead icon toggle, Supporting text=False, State=Hover/selected",
+        "width": 320,
+        "height": 72
+      },
+      {
+        "id": "1722:460046",
+        "name": "Style=Lead payment method toggle, Supporting text=False, State=Hover/selected",
+        "width": 320,
+        "height": 72
+      },
+      {
+        "id": "1224:6166",
+        "name": "Style=Lead icon, Supporting text=False, State=Hover/selected",
+        "width": 320,
+        "height": 72
+      },
+      {
+        "id": "1722:460039",
+        "name": "Style=Lead payment method, Supporting text=False, State=Hover/selected",
+        "width": 320,
+        "height": 72
+      },
+      {
+        "id": "1222:107569",
+        "name": "Style=Lead radio button, Supporting text=True, State=Hover/selected",
+        "width": 320,
+        "height": 72
+      },
+      {
+        "id": "1224:5520",
+        "name": "Style=Radio button only, Supporting text=False, State=Hover/selected",
+        "width": 68,
+        "height": 72
+      },
+      {
+        "id": "1224:80",
+        "name": "Style=Lead toggle, Supporting text=True, State=Hover/selected",
+        "width": 320,
+        "height": 72
+      },
+      {
+        "id": "1224:5505",
+        "name": "Style=Toggle only, Supporting text=False, State=Hover/selected",
+        "width": 84,
+        "height": 72
+      },
+      {
+        "id": "1222:107510",
+        "name": "Style=Lead checkbox, Supporting text=False, State=Hover/selected",
+        "width": 320,
+        "height": 72
+      },
+      {
+        "id": "1224:9",
+        "name": "Style=Lead avatar, Supporting text=False, State=Hover/selected",
+        "width": 320,
+        "height": 72
+      },
+      {
+        "id": "1227:123051",
+        "name": "Style=Avatar, Supporting text=False, State=Hover/selected",
+        "width": 280,
+        "height": 72
+      },
+      {
+        "id": "1722:459751",
+        "name": "Style=Payment method, Supporting text=False, State=Hover/selected",
+        "width": 280,
+        "height": 72
+      },
+      {
+        "id": "1224:5898",
+        "name": "Style=Lead avatar checkbox, Supporting text=False, State=Hover/selected",
+        "width": 320,
+        "height": 72
+      },
+      {
+        "id": "1224:5989",
+        "name": "Style=Lead avatar radio button, Supporting text=False, State=Hover/selected",
+        "width": 320,
+        "height": 72
+      },
+      {
+        "id": "1224:6067",
+        "name": "Style=Lead avatar toggle, Supporting text=False, State=Hover/selected",
+        "width": 320,
+        "height": 72
+      },
+      {
+        "id": "1222:107565",
+        "name": "Style=Lead radio button, Supporting text=False, State=Hover/selected",
+        "width": 320,
+        "height": 72
+      },
+      {
+        "id": "1224:76",
+        "name": "Style=Lead toggle, Supporting text=False, State=Hover/selected",
+        "width": 320,
+        "height": 72
+      },
+      {
+        "id": "1222:107386",
+        "name": "Style=Lead text, Supporting text=True, State=Hover/selected",
+        "width": 320,
+        "height": 72
+      },
+      {
+        "id": "1223:35",
+        "name": "Style=Text, Supporting text=True, State=Hover/selected",
+        "width": 240,
+        "height": 72
+      },
+      {
+        "id": "1224:158",
+        "name": "Style=Badge, Supporting text=False, State=Hover/selected",
+        "width": 99,
+        "height": 72
+      },
+      {
+        "id": "1224:1341",
+        "name": "Style=Avatar group, Supporting text=True, State=Hover/selected",
+        "width": 240,
+        "height": 72
+      },
+      {
+        "id": "1224:1708",
+        "name": "Style=Avatar group, Supporting text=False, State=Hover/selected",
+        "width": 172,
+        "height": 72
+      },
+      {
+        "id": "1224:319",
+        "name": "Style=Badges multiple, Supporting text=False, State=Hover/selected",
+        "width": 232,
+        "height": 72
+      },
+      {
+        "id": "1222:107479",
+        "name": "Style=Lead text, Supporting text=False, State=Hover/selected",
+        "width": 320,
+        "height": 72
+      },
+      {
+        "id": "1223:32",
+        "name": "Style=Text, Supporting text=False, State=Hover/selected",
+        "width": 240,
+        "height": 72
+      },
+      {
+        "id": "1227:110480",
+        "name": "Example=Team members, Breakpoint=Desktop, Dividers=Divider line",
+        "width": 1216,
+        "height": 901
+      },
+      {
+        "id": "1229:12388",
+        "name": "Example=Team members, Breakpoint=Desktop, Dividers=Alternating fills",
+        "width": 1216,
+        "height": 901
+      },
+      {
+        "id": "1227:121348",
+        "name": "Example=Sales, Breakpoint=Desktop, Dividers=Divider line",
+        "width": 1216,
+        "height": 832
+      },
+      {
+        "id": "1229:12040",
+        "name": "Example=Sales, Breakpoint=Desktop, Dividers=Alternating fills",
+        "width": 1216,
+        "height": 832
+      },
+      {
+        "id": "1227:115509",
+        "name": "Example=Companies, Breakpoint=Desktop, Dividers=Divider line",
+        "width": 1216,
+        "height": 639
+      },
+      {
+        "id": "1229:11893",
+        "name": "Example=Companies, Breakpoint=Desktop, Dividers=Alternating fills",
+        "width": 1216,
+        "height": 639
+      },
+      {
+        "id": "1229:2364",
+        "name": "Example=Files, Breakpoint=Desktop, Dividers=Divider line",
+        "width": 1216,
+        "height": 629
+      },
+      {
+        "id": "1229:12241",
+        "name": "Example=Files, Breakpoint=Desktop, Dividers=Alternating fills",
+        "width": 1216,
+        "height": 629
+      },
+      {
+        "id": "1227:110588",
+        "name": "Example=Team members, Breakpoint=Mobile, Dividers=Divider line",
+        "width": 375,
+        "height": 893
+      },
+      {
+        "id": "1229:15727",
+        "name": "Example=Team members, Breakpoint=Mobile, Dividers=Alternating fills",
+        "width": 375,
+        "height": 893
+      },
+      {
+        "id": "1227:115298",
+        "name": "Example=Companies, Breakpoint=Mobile, Dividers=Divider line",
+        "width": 375,
+        "height": 659
+      },
+      {
+        "id": "1229:17412",
+        "name": "Example=Companies, Breakpoint=Mobile, Dividers=Alternating fills",
+        "width": 375,
+        "height": 659
+      },
+      {
+        "id": "1229:543",
+        "name": "Example=Sales, Breakpoint=Mobile, Dividers=Divider line",
+        "width": 375,
+        "height": 824
+      },
+      {
+        "id": "1229:18422",
+        "name": "Example=Sales, Breakpoint=Mobile, Dividers=Alternating fills",
+        "width": 375,
+        "height": 824
+      },
+      {
+        "id": "1229:7899",
+        "name": "Example=Files, Breakpoint=Mobile, Dividers=Divider line",
+        "width": 375,
+        "height": 673
+      },
+      {
+        "id": "1229:19933",
+        "name": "Example=Files, Breakpoint=Mobile, Dividers=Alternating fills",
+        "width": 375,
+        "height": 673
+      }
+    ]
+  },
+  {
+    "key": "breadcrumbs",
+    "pageId": "43:3087",
+    "nodeId": "53:1190",
+    "variants": [
+      {
+        "id": "43:3237",
+        "name": "Current=False, Type=Text, Icon=False, State=Focused",
+        "width": 55,
+        "height": 20
+      },
+      {
+        "id": "1122:128",
+        "name": "Current=True, Type=Text, Icon=False, State=Focused",
+        "width": 55,
+        "height": 20
+      },
+      {
+        "id": "1122:2575",
+        "name": "Current=False, Type=Button, Icon=False, State=Focused",
+        "width": 71,
+        "height": 28
+      },
+      {
+        "id": "1122:2569",
+        "name": "Current=True, Type=Button, Icon=False, State=Focused",
+        "width": 71,
+        "height": 28
+      },
+      {
+        "id": "43:3235",
+        "name": "Current=False, Type=Text, Icon=False, State=Hover",
+        "width": 55,
+        "height": 20
+      },
+      {
+        "id": "1122:120",
+        "name": "Current=True, Type=Text, Icon=False, State=Hover",
+        "width": 55,
+        "height": 20
+      },
+      {
+        "id": "1122:2565",
+        "name": "Current=False, Type=Button, Icon=False, State=Hover",
+        "width": 71,
+        "height": 28
+      },
+      {
+        "id": "1122:2571",
+        "name": "Current=True, Type=Button, Icon=False, State=Hover",
+        "width": 71,
+        "height": 28
+      },
+      {
+        "id": "43:3231",
+        "name": "Current=False, Type=Text, Icon=False, State=Default",
+        "width": 55,
+        "height": 20
+      },
+      {
+        "id": "1122:116",
+        "name": "Current=True, Type=Text, Icon=False, State=Default",
+        "width": 55,
+        "height": 20
+      },
+      {
+        "id": "1122:2567",
+        "name": "Current=False, Type=Button, Icon=False, State=Default",
+        "width": 71,
+        "height": 28
+      },
+      {
+        "id": "1122:2563",
+        "name": "Current=True, Type=Button, Icon=False, State=Default",
+        "width": 71,
+        "height": 28
+      },
+      {
+        "id": "43:3225",
+        "name": "Current=False, Type=Text, Icon=True, State=Focused",
+        "width": 20,
+        "height": 20
+      },
+      {
+        "id": "1122:124",
+        "name": "Current=True, Type=Text, Icon=True, State=Focused",
+        "width": 20,
+        "height": 20
+      },
+      {
+        "id": "1122:2561",
+        "name": "Current=False, Type=Button, Icon=True, State=Focused",
+        "width": 28,
+        "height": 28
+      },
+      {
+        "id": "1122:2559",
+        "name": "Current=True, Type=Button, Icon=True, State=Focused",
+        "width": 28,
+        "height": 28
+      },
+      {
+        "id": "43:3222",
+        "name": "Current=False, Type=Text, Icon=True, State=Hover",
+        "width": 20,
+        "height": 20
+      },
+      {
+        "id": "1122:112",
+        "name": "Current=True, Type=Text, Icon=True, State=Hover",
+        "width": 20,
+        "height": 20
+      },
+      {
+        "id": "1122:2557",
+        "name": "Current=False, Type=Button, Icon=True, State=Hover",
+        "width": 28,
+        "height": 28
+      },
+      {
+        "id": "1122:2573",
+        "name": "Current=True, Type=Button, Icon=True, State=Hover",
+        "width": 28,
+        "height": 28
+      },
+      {
+        "id": "43:3220",
+        "name": "Current=False, Type=Text, Icon=True, State=Default",
+        "width": 20,
+        "height": 20
+      },
+      {
+        "id": "1122:108",
+        "name": "Current=True, Type=Text, Icon=True, State=Default",
+        "width": 20,
+        "height": 20
+      },
+      {
+        "id": "1122:2555",
+        "name": "Current=False, Type=Button, Icon=True, State=Default",
+        "width": 28,
+        "height": 28
+      },
+      {
+        "id": "1122:2553",
+        "name": "Current=True, Type=Button, Icon=True, State=Default",
+        "width": 28,
+        "height": 28
+      },
+      {
+        "id": "53:1287",
+        "name": "Divider=Slash, Type=Text, Breakpoint=Desktop",
+        "width": 232,
+        "height": 20
+      },
+      {
+        "id": "1122:2246",
+        "name": "Divider=Slash, Type=Text with line, Breakpoint=Desktop",
+        "width": 480,
+        "height": 36
+      },
+      {
+        "id": "1122:3117",
+        "name": "Divider=Slash, Type=Button, Breakpoint=Desktop",
+        "width": 264,
+        "height": 28
+      },
+      {
+        "id": "53:1262",
+        "name": "Divider=Slash, Type=Text, Breakpoint=Mobile",
+        "width": 220,
+        "height": 20
+      },
+      {
+        "id": "1122:2226",
+        "name": "Divider=Slash, Type=Text with line, Breakpoint=Mobile",
+        "width": 320,
+        "height": 36
+      },
+      {
+        "id": "1122:3095",
+        "name": "Divider=Slash, Type=Button, Breakpoint=Mobile",
+        "width": 252,
+        "height": 28
+      },
+      {
+        "id": "53:1190",
+        "name": "Divider=Chevron, Type=Text, Breakpoint=Desktop",
+        "width": 220,
+        "height": 20
+      },
+      {
+        "id": "1122:2216",
+        "name": "Divider=Chevron, Type=Text with line, Breakpoint=Desktop",
+        "width": 480,
+        "height": 36
+      },
+      {
+        "id": "1122:3106",
+        "name": "Divider=Chevron, Type=Button, Breakpoint=Desktop",
+        "width": 252,
+        "height": 28
+      },
+      {
+        "id": "53:1165",
+        "name": "Divider=Chevron, Type=Text, Breakpoint=Mobile",
+        "width": 208,
+        "height": 20
+      },
+      {
+        "id": "1122:2236",
+        "name": "Divider=Chevron, Type=Text with line, Breakpoint=Mobile",
+        "width": 320,
+        "height": 36
+      },
+      {
+        "id": "1122:3084",
+        "name": "Divider=Chevron, Type=Button, Breakpoint=Mobile",
+        "width": 240,
+        "height": 28
+      }
+    ]
+  },
+  {
+    "key": "alerts",
+    "pageId": "176:4256",
+    "nodeId": "1130:82860",
+    "variants": [
+      {
+        "id": "1130:82785",
+        "name": "Color=Brand, Size=Floating, Breakpoint=Desktop",
+        "width": 1216,
+        "height": 108
+      },
+      {
+        "id": "1130:82882",
+        "name": "Color=Gray, Size=Floating, Breakpoint=Desktop",
+        "width": 1216,
+        "height": 108
+      },
+      {
+        "id": "4050:412599",
+        "name": "Color=Default, Size=Floating, Breakpoint=Desktop",
+        "width": 1216,
+        "height": 108
+      },
+      {
+        "id": "1130:82871",
+        "name": "Color=Error, Size=Floating, Breakpoint=Desktop",
+        "width": 1216,
+        "height": 108
+      },
+      {
+        "id": "1130:82860",
+        "name": "Color=Warning, Size=Floating, Breakpoint=Desktop",
+        "width": 1216,
+        "height": 108
+      },
+      {
+        "id": "1130:82796",
+        "name": "Color=Brand, Size=Floating, Breakpoint=Mobile",
+        "width": 343,
+        "height": 164
+      },
+      {
+        "id": "1130:82773",
+        "name": "Color=Gray, Size=Floating, Breakpoint=Mobile",
+        "width": 343,
+        "height": 164
+      },
+      {
+        "id": "4050:412610",
+        "name": "Color=Default, Size=Floating, Breakpoint=Mobile",
+        "width": 343,
+        "height": 184
+      },
+      {
+        "id": "1130:82761",
+        "name": "Color=Error, Size=Floating, Breakpoint=Mobile",
+        "width": 343,
+        "height": 164
+      },
+      {
+        "id": "1130:82749",
+        "name": "Color=Warning, Size=Floating, Breakpoint=Mobile",
+        "width": 343,
+        "height": 164
+      },
+      {
+        "id": "1130:82910",
+        "name": "Color=Success, Size=Floating, Breakpoint=Desktop",
+        "width": 1216,
+        "height": 108
+      },
+      {
+        "id": "1130:82737",
+        "name": "Color=Success, Size=Floating, Breakpoint=Mobile",
+        "width": 343,
+        "height": 164
+      },
+      {
+        "id": "4893:410873",
+        "name": "Color=Default, Size=Full-width, Breakpoint=Desktop",
+        "width": 1440,
+        "height": 64
+      },
+      {
+        "id": "4893:411955",
+        "name": "Color=Brand, Size=Full-width, Breakpoint=Desktop",
+        "width": 1440,
+        "height": 64
+      },
+      {
+        "id": "4893:412330",
+        "name": "Color=Error, Size=Full-width, Breakpoint=Desktop",
+        "width": 1440,
+        "height": 60
+      },
+      {
+        "id": "4893:412516",
+        "name": "Color=Warning, Size=Full-width, Breakpoint=Desktop",
+        "width": 1440,
+        "height": 60
+      },
+      {
+        "id": "4893:412616",
+        "name": "Color=Success, Size=Full-width, Breakpoint=Desktop",
+        "width": 1440,
+        "height": 60
+      },
+      {
+        "id": "4893:412104",
+        "name": "Color=Gray, Size=Full-width, Breakpoint=Desktop",
+        "width": 1440,
+        "height": 64
+      },
+      {
+        "id": "4893:411092",
+        "name": "Color=Default, Size=Full-width, Breakpoint=Mobile",
+        "width": 375,
+        "height": 182
+      },
+      {
+        "id": "4893:411968",
+        "name": "Color=Brand, Size=Full-width, Breakpoint=Mobile",
+        "width": 375,
+        "height": 182
+      },
+      {
+        "id": "4893:412343",
+        "name": "Color=Error, Size=Full-width, Breakpoint=Mobile",
+        "width": 375,
+        "height": 110
+      },
+      {
+        "id": "4893:412529",
+        "name": "Color=Warning, Size=Full-width, Breakpoint=Mobile",
+        "width": 375,
+        "height": 110
+      },
+      {
+        "id": "4893:412629",
+        "name": "Color=Success, Size=Full-width, Breakpoint=Mobile",
+        "width": 375,
+        "height": 110
+      },
+      {
+        "id": "4893:412117",
+        "name": "Color=Gray, Size=Full-width, Breakpoint=Mobile",
+        "width": 375,
+        "height": 182
+      },
+      {
+        "id": "1135:591",
+        "name": "Type=Primary icon, Breakpoint=Desktop",
+        "width": 504,
+        "height": 234
+      },
+      {
+        "id": "1145:62",
+        "name": "Type=Progress indicator, Breakpoint=Desktop",
+        "width": 504,
+        "height": 268
+      },
+      {
+        "id": "1135:2065",
+        "name": "Type=Gray icon, Breakpoint=Desktop",
+        "width": 504,
+        "height": 232
+      },
+      {
+        "id": "1135:2522",
+        "name": "Type=Success icon, Breakpoint=Desktop",
+        "width": 504,
+        "height": 234
+      },
+      {
+        "id": "1135:2644",
+        "name": "Type=No icon, Breakpoint=Desktop",
+        "width": 504,
+        "height": 232
+      },
+      {
+        "id": "1135:2309",
+        "name": "Type=Warning icon, Breakpoint=Desktop",
+        "width": 504,
+        "height": 234
+      },
+      {
+        "id": "1135:2167",
+        "name": "Type=Error icon, Breakpoint=Desktop",
+        "width": 504,
+        "height": 234
+      },
+      {
+        "id": "1135:1960",
+        "name": "Type=Avatar, Breakpoint=Desktop",
+        "width": 504,
+        "height": 232
+      },
+      {
+        "id": "1135:592",
+        "name": "Type=Image, Breakpoint=Mobile",
+        "width": 375,
+        "height": 404
+      },
+      {
+        "id": "1135:914",
+        "name": "Type=Primary icon, Breakpoint=Mobile",
+        "width": 375,
+        "height": 260
+      },
+      {
+        "id": "1145:47",
+        "name": "Type=Progress indicator, Breakpoint=Mobile",
+        "width": 375,
+        "height": 316
+      },
+      {
+        "id": "1135:2050",
+        "name": "Type=Gray icon, Breakpoint=Mobile",
+        "width": 375,
+        "height": 276
+      },
+      {
+        "id": "1135:2507",
+        "name": "Type=Success icon, Breakpoint=Mobile",
+        "width": 375,
+        "height": 260
+      },
+      {
+        "id": "1135:2629",
+        "name": "Type=No icon, Breakpoint=Mobile",
+        "width": 375,
+        "height": 224
+      },
+      {
+        "id": "1135:2294",
+        "name": "Type=Warning icon, Breakpoint=Mobile",
+        "width": 375,
+        "height": 260
+      },
+      {
+        "id": "1135:2152",
+        "name": "Type=Error icon, Breakpoint=Mobile",
+        "width": 375,
+        "height": 260
+      },
+      {
+        "id": "1135:1945",
+        "name": "Type=Avatar, Breakpoint=Mobile",
+        "width": 375,
+        "height": 280
+      },
+      {
+        "id": "1135:890",
+        "name": "Type=Image, Breakpoint=Desktop",
+        "width": 544,
+        "height": 234
+      }
+    ]
+  },
+  {
+    "key": "date-pickers",
+    "pageId": "1143:85678",
+    "nodeId": "1150:6988",
+    "variants": [
+      {
+        "id": "1150:127",
+        "name": "Selected=False, State=Focused",
+        "width": 160,
+        "height": 36
+      },
+      {
+        "id": "1150:4671",
+        "name": "Selected=True, State=Focused",
+        "width": 160,
+        "height": 36
+      },
+      {
+        "id": "1150:137",
+        "name": "Selected=False, State=Hover",
+        "width": 160,
+        "height": 36
+      },
+      {
+        "id": "1150:4667",
+        "name": "Selected=True, State=Hover",
+        "width": 160,
+        "height": 36
+      },
+      {
+        "id": "1150:142",
+        "name": "Selected=False, State=Default",
+        "width": 160,
+        "height": 36
+      },
+      {
+        "id": "1150:4665",
+        "name": "Selected=True, State=Default",
+        "width": 160,
+        "height": 36
+      },
+      {
+        "id": "1150:1918",
+        "name": "Type=Dual dates, Breakpoint=Desktop",
+        "width": 808,
+        "height": 460
+      },
+      {
+        "id": "1150:1926",
+        "name": "Type=Dual dates, Breakpoint=Mobile",
+        "width": 328,
+        "height": 548
+      },
+      {
+        "id": "1150:5772",
+        "name": "Type=Single date, Breakpoint=Mobile",
+        "width": 328,
+        "height": 512
+      },
+      {
+        "id": "1150:6988",
+        "name": "Type=Single date, Breakpoint=Desktop",
+        "width": 328,
+        "height": 512
+      },
+      {
+        "id": "1150:16476",
+        "name": "Opened=True, Type=Dual dates, State=Placeholder, Breakpoint=Desktop",
+        "width": 140,
+        "height": 40
+      },
+      {
+        "id": "1150:24448",
+        "name": "Opened=False, Type=Dual dates, State=Placeholder, Breakpoint=Desktop",
+        "width": 140,
+        "height": 40
+      },
+      {
+        "id": "1150:20598",
+        "name": "Opened=True, Type=Dual dates, State=Placeholder, Breakpoint=Mobile",
+        "width": 140,
+        "height": 40
+      },
+      {
+        "id": "1150:22838",
+        "name": "Opened=False, Type=Dual dates, State=Placeholder, Breakpoint=Mobile",
+        "width": 140,
+        "height": 40
+      },
+      {
+        "id": "1150:18447",
+        "name": "Opened=True, Type=Single date, State=Placeholder, Breakpoint=Desktop",
+        "width": 133,
+        "height": 40
+      },
+      {
+        "id": "1150:24445",
+        "name": "Opened=False, Type=Single date, State=Placeholder, Breakpoint=Desktop",
+        "width": 133,
+        "height": 40
+      },
+      {
+        "id": "1150:20595",
+        "name": "Opened=True, Type=Single date, State=Placeholder, Breakpoint=Mobile",
+        "width": 133,
+        "height": 40
+      },
+      {
+        "id": "1150:22835",
+        "name": "Opened=False, Type=Single date, State=Placeholder, Breakpoint=Mobile",
+        "width": 133,
+        "height": 40
+      },
+      {
+        "id": "1150:16804",
+        "name": "Opened=True, Type=Dual dates, State=Active, Breakpoint=Desktop",
+        "width": 245,
+        "height": 40
+      },
+      {
+        "id": "1150:24442",
+        "name": "Opened=False, Type=Dual dates, State=Active, Breakpoint=Desktop",
+        "width": 245,
+        "height": 40
+      },
+      {
+        "id": "1150:20592",
+        "name": "Opened=True, Type=Dual dates, State=Active, Breakpoint=Mobile",
+        "width": 245,
+        "height": 40
+      },
+      {
+        "id": "1150:22832",
+        "name": "Opened=False, Type=Dual dates, State=Active, Breakpoint=Mobile",
+        "width": 245,
+        "height": 40
+      },
+      {
+        "id": "1150:18444",
+        "name": "Opened=True, Type=Single date, State=Active, Breakpoint=Desktop",
+        "width": 142,
+        "height": 40
+      },
+      {
+        "id": "1150:24439",
+        "name": "Opened=False, Type=Single date, State=Active, Breakpoint=Desktop",
+        "width": 142,
+        "height": 40
+      },
+      {
+        "id": "1150:20589",
+        "name": "Opened=True, Type=Single date, State=Active, Breakpoint=Mobile",
+        "width": 142,
+        "height": 40
+      },
+      {
+        "id": "1150:22829",
+        "name": "Opened=False, Type=Single date, State=Active, Breakpoint=Mobile",
+        "width": 142,
+        "height": 40
+      },
+      {
+        "id": "1547:269823",
+        "name": "Type=Dual dates, Breakpoint=Desktop",
+        "width": 1440,
+        "height": 960
+      },
+      {
+        "id": "1547:269851",
+        "name": "Type=Single date, Breakpoint=Desktop",
+        "width": 1440,
+        "height": 960
+      },
+      {
+        "id": "1547:269830",
+        "name": "Type=Dual dates, Breakpoint=Mobile",
+        "width": 375,
+        "height": 812
+      },
+      {
+        "id": "1547:269855",
+        "name": "Type=Single date, Breakpoint=Mobile",
+        "width": 375,
+        "height": 812
+      },
+      {
+        "id": "7365:57925",
+        "name": "Type=Default, State=Default",
+        "width": 40,
+        "height": 40
+      },
+      {
+        "id": "7365:57930",
+        "name": "Type=Today's date, State=Default",
+        "width": 40,
+        "height": 40
+      },
+      {
+        "id": "7365:57944",
+        "name": "Type=Selected, State=Default",
+        "width": 40,
+        "height": 40
+      },
+      {
+        "id": "7365:57947",
+        "name": "Type=Active, State=Default",
+        "width": 40,
+        "height": 40
+      },
+      {
+        "id": "7365:57956",
+        "name": "Type=Active, State=Hover",
+        "width": 40,
+        "height": 40
+      },
+      {
+        "id": "7365:57964",
+        "name": "Type=Active, State=Disabled",
+        "width": 40,
+        "height": 40
+      },
+      {
+        "id": "7365:57970",
+        "name": "Type=Default, State=Disabled",
+        "width": 40,
+        "height": 40
+      },
+      {
+        "id": "7365:57975",
+        "name": "Type=Today's date, State=Disabled",
+        "width": 40,
+        "height": 40
+      },
+      {
+        "id": "7365:57985",
+        "name": "Type=Selected, State=Disabled",
+        "width": 40,
+        "height": 40
+      },
+      {
+        "id": "7365:57993",
+        "name": "Type=Default, State=Hover",
+        "width": 40,
+        "height": 40
+      },
+      {
+        "id": "7365:58000",
+        "name": "Type=Today's date, State=Hover",
+        "width": 40,
+        "height": 40
+      },
+      {
+        "id": "7365:58014",
+        "name": "Type=Selected, State=Hover",
+        "width": 40,
+        "height": 40
+      }
+    ]
+  },
+  {
+    "key": "calendars",
+    "pageId": "7988:349308",
+    "nodeId": "8017:532765",
+    "variants": [
+      {
+        "id": "7991:19992",
+        "name": "Open=True",
+        "width": 135,
+        "height": 40
+      },
+      {
+        "id": "7991:20116",
+        "name": "Open=False",
+        "width": 135,
+        "height": 40
+      },
+      {
+        "id": "7991:53134",
+        "name": "Breakpoint=Desktop",
+        "width": 1280,
+        "height": 96
+      },
+      {
+        "id": "7991:53149",
+        "name": "Breakpoint=Mobile",
+        "width": 375,
+        "height": 202
+      },
+      {
+        "id": "8044:126959",
+        "name": "_Calendar date icon",
+        "width": 64,
+        "height": 56
+      },
+      {
+        "id": "7991:56360",
+        "name": "Type=Default",
+        "width": 24,
+        "height": 24
+      },
+      {
+        "id": "7991:56362",
+        "name": "Type=Today's date",
+        "width": 24,
+        "height": 24
+      },
+      {
+        "id": "7991:56361",
+        "name": "Type=Selected",
+        "width": 24,
+        "height": 24
+      },
+      {
+        "id": "7991:56012",
+        "name": "State=Default, Color=Gray, Breakpoint=Desktop",
+        "width": 161,
+        "height": 26
+      },
+      {
+        "id": "7991:78944",
+        "name": "State=Default, Color=Brand, Breakpoint=Desktop",
+        "width": 161,
+        "height": 26
+      },
+      {
+        "id": "7991:109181",
+        "name": "State=Default, Color=Brand, Breakpoint=Mobile",
+        "width": 8,
+        "height": 8
+      },
+      {
+        "id": "7994:8807",
+        "name": "State=Default, Color=Pink, Breakpoint=Mobile",
+        "width": 8,
+        "height": 8
+      },
+      {
+        "id": "7994:8822",
+        "name": "State=Default, Color=Green, Breakpoint=Mobile",
+        "width": 8,
+        "height": 8
+      },
+      {
+        "id": "7994:8828",
+        "name": "State=Default, Color=Blue, Breakpoint=Mobile",
+        "width": 8,
+        "height": 8
+      },
+      {
+        "id": "7994:8834",
+        "name": "State=Default, Color=Indigo, Breakpoint=Mobile",
+        "width": 8,
+        "height": 8
+      },
+      {
+        "id": "7994:8840",
+        "name": "State=Default, Color=Purple, Breakpoint=Mobile",
+        "width": 8,
+        "height": 8
+      },
+      {
+        "id": "7994:8846",
+        "name": "State=Default, Color=Orange, Breakpoint=Mobile",
+        "width": 8,
+        "height": 8
+      },
+      {
+        "id": "7999:31454",
+        "name": "State=Default, Color=Yellow, Breakpoint=Mobile",
+        "width": 8,
+        "height": 8
+      },
+      {
+        "id": "7994:7450",
+        "name": "State=Default, Color=Gray, Breakpoint=Mobile",
+        "width": 8,
+        "height": 8
+      },
+      {
+        "id": "7991:79664",
+        "name": "State=Default, Color=Pink, Breakpoint=Desktop",
+        "width": 161,
+        "height": 26
+      },
+      {
+        "id": "7991:79753",
+        "name": "State=Default, Color=Green, Breakpoint=Desktop",
+        "width": 161,
+        "height": 26
+      },
+      {
+        "id": "7991:79777",
+        "name": "State=Default, Color=Blue, Breakpoint=Desktop",
+        "width": 161,
+        "height": 26
+      },
+      {
+        "id": "7991:79801",
+        "name": "State=Default, Color=Indigo, Breakpoint=Desktop",
+        "width": 161,
+        "height": 26
+      },
+      {
+        "id": "7991:79825",
+        "name": "State=Default, Color=Purple, Breakpoint=Desktop",
+        "width": 161,
+        "height": 26
+      },
+      {
+        "id": "7991:79849",
+        "name": "State=Default, Color=Orange, Breakpoint=Desktop",
+        "width": 161,
+        "height": 26
+      },
+      {
+        "id": "7999:31456",
+        "name": "State=Default, Color=Yellow, Breakpoint=Desktop",
+        "width": 161,
+        "height": 26
+      },
+      {
+        "id": "7991:58080",
+        "name": "State=Hover, Color=Gray, Breakpoint=Desktop",
+        "width": 161,
+        "height": 26
+      },
+      {
+        "id": "7991:78949",
+        "name": "State=Hover, Color=Brand, Breakpoint=Desktop",
+        "width": 161,
+        "height": 26
+      },
+      {
+        "id": "7991:79669",
+        "name": "State=Hover, Color=Pink, Breakpoint=Desktop",
+        "width": 161,
+        "height": 26
+      },
+      {
+        "id": "7991:79758",
+        "name": "State=Hover, Color=Green, Breakpoint=Desktop",
+        "width": 161,
+        "height": 26
+      },
+      {
+        "id": "7991:79782",
+        "name": "State=Hover, Color=Blue, Breakpoint=Desktop",
+        "width": 161,
+        "height": 26
+      },
+      {
+        "id": "7991:79806",
+        "name": "State=Hover, Color=Indigo, Breakpoint=Desktop",
+        "width": 161,
+        "height": 26
+      },
+      {
+        "id": "7991:79830",
+        "name": "State=Hover, Color=Purple, Breakpoint=Desktop",
+        "width": 161,
+        "height": 26
+      },
+      {
+        "id": "7991:79854",
+        "name": "State=Hover, Color=Orange, Breakpoint=Desktop",
+        "width": 161,
+        "height": 26
+      },
+      {
+        "id": "7999:31461",
+        "name": "State=Hover, Color=Yellow, Breakpoint=Desktop",
+        "width": 161,
+        "height": 26
+      },
+      {
+        "id": "7991:54084",
+        "name": "State=Default, Breakpoint=Desktop",
+        "width": 176,
+        "height": 208
+      },
+      {
+        "id": "7996:12087",
+        "name": "State=Hover, Breakpoint=Desktop",
+        "width": 176,
+        "height": 208
+      },
+      {
+        "id": "7996:11803",
+        "name": "State=Disabled, Breakpoint=Desktop",
+        "width": 176,
+        "height": 208
+      },
+      {
+        "id": "7991:104480",
+        "name": "State=Default, Breakpoint=Mobile",
+        "width": 56,
+        "height": 88
+      },
+      {
+        "id": "7996:12095",
+        "name": "State=Hover, Breakpoint=Mobile",
+        "width": 56,
+        "height": 88
+      },
+      {
+        "id": "7996:11811",
+        "name": "State=Disabled, Breakpoint=Mobile",
+        "width": 56,
+        "height": 88
+      },
+      {
+        "id": "7996:12684",
+        "name": "State=Default, Color=Gray",
+        "width": 160,
+        "height": 64
+      },
+      {
+        "id": "7999:12912",
+        "name": "State=Default, Color=Brand",
+        "width": 160,
+        "height": 64
+      },
+      {
+        "id": "7999:12940",
+        "name": "State=Default, Color=Green",
+        "width": 160,
+        "height": 64
+      },
+      {
+        "id": "7999:12968",
+        "name": "State=Default, Color=Blue",
+        "width": 160,
+        "height": 64
+      },
+      {
+        "id": "7999:12996",
+        "name": "State=Default, Color=Indigo",
+        "width": 160,
+        "height": 64
+      },
+      {
+        "id": "8001:7462",
+        "name": "State=Default, Color=Purple",
+        "width": 160,
+        "height": 64
+      },
+      {
+        "id": "8001:7490",
+        "name": "State=Default, Color=Pink",
+        "width": 160,
+        "height": 64
+      },
+      {
+        "id": "8001:7518",
+        "name": "State=Default, Color=Orange",
+        "width": 160,
+        "height": 64
+      },
+      {
+        "id": "8001:7546",
+        "name": "State=Default, Color=Yellow",
+        "width": 160,
+        "height": 64
+      },
+      {
+        "id": "7996:12699",
+        "name": "State=Hover, Color=Gray",
+        "width": 160,
+        "height": 64
+      },
+      {
+        "id": "7999:12918",
+        "name": "State=Hover, Color=Brand",
+        "width": 160,
+        "height": 64
+      },
+      {
+        "id": "7999:12946",
+        "name": "State=Hover, Color=Green",
+        "width": 160,
+        "height": 64
+      },
+      {
+        "id": "7999:12974",
+        "name": "State=Hover, Color=Blue",
+        "width": 160,
+        "height": 64
+      },
+      {
+        "id": "7999:13002",
+        "name": "State=Hover, Color=Indigo",
+        "width": 160,
+        "height": 64
+      },
+      {
+        "id": "8001:7468",
+        "name": "State=Hover, Color=Purple",
+        "width": 160,
+        "height": 64
+      },
+      {
+        "id": "8001:7496",
+        "name": "State=Hover, Color=Pink",
+        "width": 160,
+        "height": 64
+      },
+      {
+        "id": "8001:7524",
+        "name": "State=Hover, Color=Orange",
+        "width": 160,
+        "height": 64
+      },
+      {
+        "id": "8001:7552",
+        "name": "State=Hover, Color=Yellow",
+        "width": 160,
+        "height": 64
+      },
+      {
+        "id": "7996:12736",
+        "name": "Type=60 min, State=Default",
+        "width": 160,
+        "height": 96
+      },
+      {
+        "id": "8005:529723",
+        "name": "Type=60 min, State=Hover",
+        "width": 160,
+        "height": 96
+      },
+      {
+        "id": "7996:12734",
+        "name": "Type=30 min, State=Default",
+        "width": 160,
+        "height": 48
+      },
+      {
+        "id": "8005:529585",
+        "name": "Type=30 min, State=Hover",
+        "width": 160,
+        "height": 48
+      },
+      {
+        "id": "7996:12733",
+        "name": "Type=Empty, State=Default",
+        "width": 160,
+        "height": 48
+      },
+      {
+        "id": "8005:529551",
+        "name": "Type=Empty, State=Hover",
+        "width": 160,
+        "height": 48
+      },
+      {
+        "id": "7996:12738",
+        "name": "Type=90 min, State=Default",
+        "width": 160,
+        "height": 144
+      },
+      {
+        "id": "8005:529744",
+        "name": "Type=90 min, State=Hover",
+        "width": 160,
+        "height": 144
+      },
+      {
+        "id": "7996:12740",
+        "name": "Type=120 min, State=Default",
+        "width": 160,
+        "height": 192
+      },
+      {
+        "id": "8005:529767",
+        "name": "Type=120 min, State=Hover",
+        "width": 160,
+        "height": 192
+      },
+      {
+        "id": "7997:8488",
+        "name": "Type=Default, Breakpoint=Desktop",
+        "width": 160,
+        "height": 40
+      },
+      {
+        "id": "8001:20135",
+        "name": "Type=Default, Breakpoint=Mobile",
+        "width": 64,
+        "height": 64
+      },
+      {
+        "id": "7997:11140",
+        "name": "Type=Selected, Breakpoint=Desktop",
+        "width": 160,
+        "height": 40
+      },
+      {
+        "id": "8001:20139",
+        "name": "Type=Selected, Breakpoint=Mobile",
+        "width": 64,
+        "height": 64
+      },
+      {
+        "id": "7998:12056",
+        "name": "Type=Today's date, Breakpoint=Desktop",
+        "width": 160,
+        "height": 40
+      },
+      {
+        "id": "8001:20143",
+        "name": "Type=Today's date, Breakpoint=Mobile",
+        "width": 64,
+        "height": 64
+      },
+      {
+        "id": "7999:12176",
+        "name": "_Calendar row label",
+        "width": 72,
+        "height": 96
+      },
+      {
+        "id": "8003:31640",
+        "name": "Breakpoint=Desktop",
+        "width": 400,
+        "height": 18
+      },
+      {
+        "id": "8003:31676",
+        "name": "Breakpoint=Mobile",
+        "width": 375,
+        "height": 18
+      },
+      {
+        "id": "7991:81840",
+        "name": "Type=Month view, Breakpoint=Desktop",
+        "width": 1280,
+        "height": 912
+      },
+      {
+        "id": "8017:532935",
+        "name": "Type=Week view, Breakpoint=Desktop",
+        "width": 1280,
+        "height": 912
+      },
+      {
+        "id": "8017:532994",
+        "name": "Type=Day view, Breakpoint=Desktop",
+        "width": 1280,
+        "height": 912
+      },
+      {
+        "id": "8017:532765",
+        "name": "Type=Month view, Breakpoint=Mobile",
+        "width": 375,
+        "height": 912
+      },
+      {
+        "id": "8017:532961",
+        "name": "Type=Week view, Breakpoint=Mobile",
+        "width": 375,
+        "height": 912
+      },
+      {
+        "id": "8017:532978",
+        "name": "Type=Day view, Breakpoint=Mobile",
+        "width": 375,
+        "height": 912
+      }
+    ]
+  },
+  {
+    "key": "file-upload",
+    "pageId": "1157:90306",
+    "nodeId": "1177:699",
+    "variants": [
+      {
+        "id": "139:335",
+        "name": "State=Default",
+        "width": 512,
+        "height": 126
+      },
+      {
+        "id": "1175:100340",
+        "name": "State=Disabled",
+        "width": 512,
+        "height": 126
+      },
+      {
+        "id": "1175:100313",
+        "name": "State=Hover",
+        "width": 512,
+        "height": 126
+      },
+      {
+        "id": "1175:100367",
+        "name": "Type=Progress bar, Icon type=File type, State=Complete",
+        "width": 512,
+        "height": 98
+      },
+      {
+        "id": "1175:100307",
+        "name": "Type=Progress bar, Icon type=File type, State=In progress",
+        "width": 512,
+        "height": 98
+      },
+      {
+        "id": "1251:5976",
+        "name": "Type=Progress bar, Icon type=Simple, State=In progress",
+        "width": 512,
+        "height": 98
+      },
+      {
+        "id": "1175:100415",
+        "name": "Type=Progress bar, Icon type=File type, State=Error",
+        "width": 512,
+        "height": 100
+      },
+      {
+        "id": "1251:5956",
+        "name": "Type=Progress bar, Icon type=Simple, State=Error",
+        "width": 512,
+        "height": 100
+      },
+      {
+        "id": "1251:5947",
+        "name": "Type=Progress bar, Icon type=Simple, State=Complete",
+        "width": 512,
+        "height": 98
+      },
+      {
+        "id": "1251:3542",
+        "name": "Type=Progress fill, Icon type=File type, State=In progress",
+        "width": 512,
+        "height": 74
+      },
+      {
+        "id": "1251:5967",
+        "name": "Type=Progress fill, Icon type=Simple, State=In progress",
+        "width": 512,
+        "height": 74
+      },
+      {
+        "id": "1251:3559",
+        "name": "Type=Progress fill, Icon type=File type, State=Complete",
+        "width": 512,
+        "height": 74
+      },
+      {
+        "id": "1251:5938",
+        "name": "Type=Progress fill, Icon type=Simple, State=Complete",
+        "width": 512,
+        "height": 74
+      },
+      {
+        "id": "1251:3592",
+        "name": "Type=Progress fill, Icon type=File type, State=Error",
+        "width": 512,
+        "height": 100
+      },
+      {
+        "id": "1251:5926",
+        "name": "Type=Progress fill, Icon type=Simple, State=Error",
+        "width": 512,
+        "height": 100
+      },
+      {
+        "id": "1175:101146",
+        "name": "Files queued=True, Type=Progress bar, Breakpoint=Desktop",
+        "width": 512,
+        "height": 460
+      },
+      {
+        "id": "1251:4560",
+        "name": "Files queued=True, Type=Progress fill, Breakpoint=Desktop",
+        "width": 512,
+        "height": 388
+      },
+      {
+        "id": "1177:699",
+        "name": "Files queued=False, Type=Progress bar, Breakpoint=Desktop",
+        "width": 512,
+        "height": 126
+      },
+      {
+        "id": "1251:4536",
+        "name": "Files queued=False, Type=Progress fill, Breakpoint=Desktop",
+        "width": 512,
+        "height": 126
+      },
+      {
+        "id": "1175:101432",
+        "name": "Files queued=True, Type=Progress bar, Breakpoint=Mobile",
+        "width": 343,
+        "height": 460
+      },
+      {
+        "id": "1251:4551",
+        "name": "Files queued=True, Type=Progress fill, Breakpoint=Mobile",
+        "width": 343,
+        "height": 388
+      },
+      {
+        "id": "1177:677",
+        "name": "Files queued=False, Type=Progress bar, Breakpoint=Mobile",
+        "width": 343,
+        "height": 126
+      },
+      {
+        "id": "1251:4528",
+        "name": "Files queued=False, Type=Progress fill, Breakpoint=Mobile",
+        "width": 343,
+        "height": 126
+      }
+    ]
+  },
+  {
+    "key": "dividers",
+    "pageId": "780:0",
+    "nodeId": "1252:126895",
+    "variants": [
+      {
+        "id": "1252:126873",
+        "name": "Type=Button, Style=Single line",
+        "width": 1216,
+        "height": 40
+      },
+      {
+        "id": "1252:126921",
+        "name": "Type=Button group icon, Style=Single line",
+        "width": 1216,
+        "height": 40
+      },
+      {
+        "id": "1252:127012",
+        "name": "Type=Button group, Style=Single line",
+        "width": 1216,
+        "height": 40
+      },
+      {
+        "id": "1252:126895",
+        "name": "Type=Text, Style=Single line",
+        "width": 1216,
+        "height": 20
+      },
+      {
+        "id": "1252:126908",
+        "name": "Type=Heading, Style=Single line",
+        "width": 1216,
+        "height": 28
+      },
+      {
+        "id": "1252:127296",
+        "name": "Type=Heading, Style=Dual line",
+        "width": 1216,
+        "height": 52
+      },
+      {
+        "id": "1252:127730",
+        "name": "Type=Heading, Style=Background fill",
+        "width": 1216,
+        "height": 44
+      },
+      {
+        "id": "1252:127736",
+        "name": "Type=Text, Style=Background fill",
+        "width": 1216,
+        "height": 36
+      },
+      {
+        "id": "1252:127741",
+        "name": "Type=Button, Style=Background fill",
+        "width": 1216,
+        "height": 56
+      },
+      {
+        "id": "1252:127747",
+        "name": "Type=Button group icon, Style=Background fill",
+        "width": 1216,
+        "height": 56
+      },
+      {
+        "id": "1252:127751",
+        "name": "Type=Button group, Style=Background fill",
+        "width": 1216,
+        "height": 56
+      },
+      {
+        "id": "1252:127755",
+        "name": "Type=Button icon, Style=Background fill",
+        "width": 1216,
+        "height": 56
+      },
+      {
+        "id": "1252:127426",
+        "name": "Type=Text, Style=Dual line",
+        "width": 1216,
+        "height": 44
+      },
+      {
+        "id": "1252:127435",
+        "name": "Type=Button, Style=Dual line",
+        "width": 1216,
+        "height": 64
+      },
+      {
+        "id": "1252:127452",
+        "name": "Type=Button group icon, Style=Dual line",
+        "width": 1216,
+        "height": 64
+      },
+      {
+        "id": "1252:127543",
+        "name": "Type=Button group, Style=Dual line",
+        "width": 1216,
+        "height": 64
+      },
+      {
+        "id": "1252:127672",
+        "name": "Type=Button icon, Style=Dual line",
+        "width": 1216,
+        "height": 60
+      },
+      {
+        "id": "1252:126875",
+        "name": "Type=Button icon, Style=Single line",
+        "width": 1216,
+        "height": 40
+      }
+    ]
+  },
+  {
+    "key": "loading",
+    "pageId": "1172:32",
+    "nodeId": "1192:607",
+    "variants": [
+      {
+        "id": "1192:607",
+        "name": "Style=Line simple, Size=md",
+        "width": 512,
+        "height": 84
+      },
+      {
+        "id": "1198:99394",
+        "name": "Style=Line simple, Size=sm",
+        "width": 512,
+        "height": 68
+      },
+      {
+        "id": "1196:283",
+        "name": "Style=Line spinner, Size=md",
+        "width": 512,
+        "height": 84
+      },
+      {
+        "id": "1198:99438",
+        "name": "Style=Line spinner, Size=sm",
+        "width": 512,
+        "height": 68
+      },
+      {
+        "id": "1196:147",
+        "name": "Style=Line simple, Size=lg",
+        "width": 512,
+        "height": 100
+      },
+      {
+        "id": "1196:271",
+        "name": "Style=Line spinner, Size=lg",
+        "width": 512,
+        "height": 100
+      },
+      {
+        "id": "1196:200",
+        "name": "Style=Line simple, Size=xl",
+        "width": 512,
+        "height": 112
+      },
+      {
+        "id": "1196:264",
+        "name": "Style=Line spinner, Size=xl",
+        "width": 512,
+        "height": 112
+      },
+      {
+        "id": "1192:633",
+        "name": "Style=Dot circle, Size=md",
+        "width": 512,
+        "height": 84
+      },
+      {
+        "id": "1198:99432",
+        "name": "Style=Dot circle, Size=sm",
+        "width": 512,
+        "height": 68
+      },
+      {
+        "id": "1196:141",
+        "name": "Style=Dot circle, Size=lg",
+        "width": 512,
+        "height": 100
+      },
+      {
+        "id": "1196:189",
+        "name": "Style=Dot circle, Size=xl",
+        "width": 512,
+        "height": 112
+      }
+    ]
+  },
+  {
+    "key": "empty-states",
+    "pageId": "1172:31",
+    "nodeId": "9239:545804",
+    "variants": [
+      {
+        "id": "9239:545804",
+        "name": "Icon=Folder icon, Size=sm",
+        "width": 512,
+        "height": 196
+      },
+      {
+        "id": "9239:545816",
+        "name": "Icon=Folder icon, Size=md",
+        "width": 512,
+        "height": 216
+      },
+      {
+        "id": "9239:545828",
+        "name": "Icon=Folder icon, Size=lg",
+        "width": 512,
+        "height": 230
+      },
+      {
+        "id": "4980:382743",
+        "name": "Icon=File type icon, Size=sm",
+        "width": 512,
+        "height": 252
+      },
+      {
+        "id": "4980:382754",
+        "name": "Icon=File type icon, Size=md",
+        "width": 512,
+        "height": 272
+      },
+      {
+        "id": "4980:382765",
+        "name": "Icon=File type icon, Size=lg",
+        "width": 512,
+        "height": 286
+      },
+      {
+        "id": "1182:2205",
+        "name": "Icon=Illustration, Size=sm",
+        "width": 512,
+        "height": 266
+      },
+      {
+        "id": "1182:2191",
+        "name": "Icon=Illustration, Size=md",
+        "width": 512,
+        "height": 296
+      },
+      {
+        "id": "1182:2177",
+        "name": "Icon=Illustration, Size=lg",
+        "width": 512,
+        "height": 346
+      },
+      {
+        "id": "1182:178",
+        "name": "Icon=Featured icon, Size=sm",
+        "width": 512,
+        "height": 196
+      },
+      {
+        "id": "1182:412",
+        "name": "Icon=Featured icon, Size=md",
+        "width": 512,
+        "height": 216
+      },
+      {
+        "id": "1182:473",
+        "name": "Icon=Featured icon, Size=lg",
+        "width": 512,
+        "height": 238
+      },
+      {
+        "id": "1182:2774",
+        "name": "Style=Cloud, Size=lg",
+        "width": 220,
+        "height": 160
+      },
+      {
+        "id": "1182:2759",
+        "name": "Style=Credit card, Size=lg",
+        "width": 220,
+        "height": 160
+      },
+      {
+        "id": "1182:2741",
+        "name": "Style=Documents, Size=lg",
+        "width": 220,
+        "height": 160
+      },
+      {
+        "id": "1182:2727",
+        "name": "Style=Box, Size=lg",
+        "width": 220,
+        "height": 168
+      },
+      {
+        "id": "1182:2026",
+        "name": "Style=Cloud, Size=md",
+        "width": 172,
+        "height": 128
+      },
+      {
+        "id": "1182:1994",
+        "name": "Style=Cloud, Size=sm",
+        "width": 152,
+        "height": 118
+      },
+      {
+        "id": "1182:1966",
+        "name": "Style=Credit card, Size=sm",
+        "width": 152,
+        "height": 118
+      },
+      {
+        "id": "1182:1949",
+        "name": "Style=Documents, Size=sm",
+        "width": 152,
+        "height": 118
+      },
+      {
+        "id": "1182:1936",
+        "name": "Style=Box, Size=sm",
+        "width": 152,
+        "height": 124
+      },
+      {
+        "id": "1182:1923",
+        "name": "Style=Box, Size=md",
+        "width": 172,
+        "height": 136
+      },
+      {
+        "id": "1182:2009",
+        "name": "Style=Documents, Size=md",
+        "width": 172,
+        "height": 128
+      },
+      {
+        "id": "1182:1980",
+        "name": "Style=Credit card, Size=md",
+        "width": 172,
+        "height": 134
+      }
+    ]
+  },
+  {
+    "key": "code-snippets",
+    "pageId": "1221:106300",
+    "nodeId": "1234:368",
+    "variants": [
+      {
+        "id": "1234:368",
+        "name": "Type=Simple",
+        "width": 720,
+        "height": 478
+      },
+      {
+        "id": "9282:550144",
+        "name": "Type=Tabs",
+        "width": 720,
+        "height": 566
+      },
+      {
+        "id": "9282:60275",
+        "name": "Current=True, State=Focus",
+        "width": 46,
+        "height": 28
+      },
+      {
+        "id": "9282:60277",
+        "name": "Current=True, State=Hover",
+        "width": 46,
+        "height": 28
+      },
+      {
+        "id": "9282:60279",
+        "name": "Current=True, State=Default",
+        "width": 46,
+        "height": 28
+      },
+      {
+        "id": "9282:60281",
+        "name": "Current=False, State=Focus",
+        "width": 46,
+        "height": 28
+      },
+      {
+        "id": "9282:60283",
+        "name": "Current=False, State=Hover",
+        "width": 46,
+        "height": 28
+      },
+      {
+        "id": "9282:60285",
+        "name": "Current=False, State=Default",
+        "width": 46,
+        "height": 28
+      }
+    ]
+  }
+]

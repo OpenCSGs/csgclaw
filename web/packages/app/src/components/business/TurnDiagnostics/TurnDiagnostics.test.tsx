@@ -4,6 +4,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { DiagnosticMessageAction, TurnDiagnostics } from "./TurnDiagnostics";
 import { fetchDiagnostic, fetchDiagnostics, fetchDiagnosticBundle, fetchDiagnosticArchive } from "@/api/diagnostics";
+import { createTranslator } from "@/shared/i18n";
 vi.mock("@/api/diagnostics", () => ({
   fetchDiagnostic: vi.fn(),
   fetchDiagnostics: vi.fn(),
@@ -41,6 +42,30 @@ const record = {
   ],
 };
 afterEach(() => vi.clearAllMocks());
+it.each(["zh", "en"] as const)(
+  "keeps the error disclosure label accurate when expanded and collapsed in %s",
+  async (locale) => {
+    const t = createTranslator(locale);
+    vi.mocked(fetchDiagnostics).mockResolvedValue({ items: [record], next_cursor: "", total: 1, agents: [] });
+    vi.mocked(fetchDiagnostic).mockResolvedValue(record);
+    const user = userEvent.setup();
+    const { container } = render(
+      <DiagnosticMessageAction
+        metadata={{ diagnostics: { room_id: "r", source_id: "s" }, csgclaw: { runtime_error: true } }}
+        t={t}
+      />,
+    );
+    const disclosure = screen.getByText(t("diagExpandError"), { selector: "summary" });
+    expect(container.querySelector("details")).not.toHaveAttribute("open");
+    await user.click(disclosure);
+    expect(container.querySelector("details")).toHaveAttribute("open");
+    expect(await screen.findByText(record.error.message)).toBeInTheDocument();
+    expect(disclosure).toHaveTextContent(locale === "zh" ? "错误详情" : "Error details");
+    await user.click(disclosure);
+    expect(container.querySelector("details")).not.toHaveAttribute("open");
+    expect(screen.queryByText(record.error.message)).not.toBeInTheDocument();
+  },
+);
 describe("turn diagnostic viewer", () => {
   it("shows human-readable boundaries, missing LLM timing and failure details", async () => {
     vi.mocked(fetchDiagnostics).mockResolvedValue({

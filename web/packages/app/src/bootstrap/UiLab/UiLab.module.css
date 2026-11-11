@@ -1,6 +1,17 @@
 .viewport {
   height: 100%;
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr);
+  overflow: hidden;
+}
+.content {
+  min-width: 0;
+  min-height: 0;
   overflow-y: auto;
+  outline: none;
+}
+.panel[hidden] {
+  display: none;
 }
 .page {
   max-width: 1100px;
@@ -57,11 +68,31 @@
   border-radius: var(--radius-md);
   background: var(--popover-background);
 }
+
+@media (max-width: 700px) {
+  .viewport {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+}
+
+.preferences {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: center;
+}
+
+.page > header {
+  flex-wrap: wrap;
+}
+
 .cloudAvatarPreview {
   display: flex;
   align-items: center;
   gap: var(--space-2);
 }
+
 .cloudAvatarPreview > img {
   width: 48px;
   height: 48px;

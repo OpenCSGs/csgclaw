@@ -213,12 +213,12 @@ it("keeps the wizard open while editing its avatar in a nested dialog", async ()
   await user.click(screen.getByRole("button", { name: "editAvatar" }));
   let editor = screen.getByRole("dialog", { name: "editAvatar" });
   await user.click(within(editor).getAllByRole("radio")[0]);
-  await user.click(within(editor).getByRole("button", { name: "confirm" }));
+  await user.click(within(editor).getByRole("button", { name: "avatarApply" }));
   expect(screen.queryByRole("dialog", { name: "editAvatar" })).not.toBeInTheDocument();
   expect(screen.getByRole("dialog", { name: "taskEntryCreateAgent" })).toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: /editAvatar/ }));
   editor = screen.getByRole("dialog", { name: "editAvatar" });
-  within(editor).getByRole("button", { name: "confirm" }).focus();
+  within(editor).getByRole("button", { name: "avatarApply" }).focus();
   await user.keyboard("{Escape}");
   expect(screen.queryByRole("dialog", { name: "editAvatar" })).not.toBeInTheDocument();
   expect(close).not.toHaveBeenCalled();

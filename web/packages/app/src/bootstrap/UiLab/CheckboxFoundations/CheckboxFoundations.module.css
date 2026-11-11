@@ -1,0 +1,191 @@
+.foundation {
+  min-width: 0;
+  margin-block: var(--space-6);
+  padding: var(--space-5);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xl);
+  background: var(--panel);
+}
+.foundation h2 {
+  font: var(--text-xl-medium);
+}
+.foundation p {
+  color: var(--muted);
+  line-height: 1.6;
+}
+.foundation a {
+  color: var(--primary);
+}
+.eyebrow {
+  font: var(--text-sm-medium);
+  letter-spacing: 0.08em;
+}
+.notice {
+  margin-block: var(--space-5);
+  padding: var(--space-4);
+  border-inline-start: 3px solid var(--primary);
+  border-radius: var(--radius-md);
+  background: var(--panel-soft);
+}
+.notice summary {
+  cursor: pointer;
+}
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  max-width: 100%;
+  overflow-x: auto;
+  padding: var(--space-1);
+  margin-block: var(--space-3);
+}
+.controls > * {
+  flex-shrink: 0;
+  width: max-content;
+}
+.demo,
+.item {
+  min-width: 0;
+  padding: var(--space-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xl);
+}
+.demo {
+  margin-block: var(--space-5);
+}
+.fields,
+.grid {
+  display: grid;
+  gap: var(--space-4);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
+}
+.actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+.actions [role="status"] {
+  font: var(--text-sm-normal);
+}
+.item h4 {
+  font: var(--text-sm-medium);
+}
+.item p {
+  font-size: 0.8rem;
+}
+.liveStage,
+.referenceStage {
+  min-width: 0;
+  margin-block: var(--space-4);
+  padding: 16px;
+  overflow-x: auto;
+  border-radius: var(--radius-md);
+  background: #fff;
+}
+.sample {
+  --checkbox-brand: #3250bd;
+  --checkbox-border: #d5d7da;
+  --checkbox-disabled: #fafafa;
+  --checkbox-ring: 0 0 0 2px #fff, 0 0 0 4px #4d6ad6;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  min-width: 0;
+  font-family: "PingFang SC", var(--font-family-text);
+  font-synthesis: none;
+}
+.sample[data-size="sm"] {
+  gap: 8px;
+}
+.sample .checkbox[data-csg-control="checkbox"] {
+  flex-shrink: 0;
+  box-sizing: border-box;
+  width: 20px;
+  height: 20px;
+  min-width: 20px;
+  min-height: 20px;
+  padding: 0;
+  border: 1px solid var(--checkbox-border);
+  border-radius: 6px;
+  background: transparent;
+  outline: none;
+  box-shadow: none;
+  opacity: 1;
+}
+.sample[data-size="sm"] .checkbox[data-csg-control] {
+  width: 16px;
+  height: 16px;
+  min-width: 16px;
+  min-height: 16px;
+  border-radius: 4px;
+}
+.sample[data-text="true"] .checkbox[data-csg-control] {
+  margin-top: 2px;
+}
+.sample .checkbox[data-csg-control]:is([data-state="checked"], [data-state="indeterminate"]) {
+  border: 0;
+  background: var(--checkbox-brand);
+}
+.sample[data-preview-state="Focused"] .checkbox[data-csg-control],
+.sample .checkbox[data-csg-control]:focus-visible {
+  box-shadow: var(--checkbox-ring);
+}
+.sample[data-preview-state="Focused"] .checkbox[data-csg-control][data-state="unchecked"],
+.sample .checkbox[data-csg-control][data-state="unchecked"]:focus-visible {
+  background: #fff;
+}
+.sample .checkbox[data-csg-control]:disabled {
+  border: 1px solid var(--checkbox-border);
+  background: var(--checkbox-disabled);
+  box-shadow: none;
+  opacity: 1;
+}
+.sample .checkbox img {
+  display: block;
+  max-width: none;
+  flex-shrink: 0;
+}
+.copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+  font-size: 16px;
+  line-height: 24px;
+  overflow-wrap: anywhere;
+}
+.sample[data-size="sm"] .copy {
+  gap: 0;
+  font-size: 14px;
+  line-height: 20px;
+}
+.title {
+  color: #414651;
+  font-weight: 400;
+  cursor: pointer;
+}
+.description {
+  color: #535862;
+  font-weight: 300;
+}
+.choices {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  margin: 20px 0 0;
+  padding: 16px 0 0;
+  border: 0;
+  border-top: 1px solid #e9eaeb;
+}
+.choices legend {
+  padding: 0 8px 0 0;
+  color: #535862;
+  font: var(--text-sm-normal);
+}
+@media (max-width: 600px) {
+  .foundation {
+    padding: var(--space-3);
+  }
+}

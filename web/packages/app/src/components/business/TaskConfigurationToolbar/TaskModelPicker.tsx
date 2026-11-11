@@ -103,9 +103,8 @@ export function TaskModelPicker({
           ) : null}
           {controller?.ready && controller.sidebarProps.onCreateModelProvider ? (
             <Button
-              variant="tertiaryGray"
+              variant="tertiaryColor"
               size="sm"
-              className={styles.configureButton}
               onClick={() => {
                 setOpen(false);
                 void controller.sidebarProps.onCreateModelProvider?.({

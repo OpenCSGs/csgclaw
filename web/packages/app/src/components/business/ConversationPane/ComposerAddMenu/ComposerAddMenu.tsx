@@ -58,19 +58,25 @@ export function ComposerAddMenu({
       >
         <section className={composerAddMenuStyles["composer-add-section"]}>
           <PopoverClose asChild>
-            <button type="button" className={composerAddMenuStyles["composer-add-menu-item"]} onClick={onAddFiles}>
+            <Button
+              variant="tertiaryGray"
+              size="sm"
+              className={composerAddMenuStyles["composer-add-menu-item"]}
+              onClick={onAddFiles}
+            >
               <Paperclip size={18} />
               {t("addAttachment")}
-            </button>
+            </Button>
           </PopoverClose>
         </section>
         {onOpenResourcePicker ? (
           <section className={composerAddMenuStyles["composer-add-section"]}>
             <div className={composerAddMenuStyles["composer-add-section-label"]}>{t("composerAddResources")}</div>
             {resourceKinds.map(({ kind: resourceKind, icon: Icon, label: resourceLabel }) => (
-              <button
+              <Button
                 key={resourceKind}
-                type="button"
+                variant="tertiaryGray"
+                size="sm"
                 className={composerAddMenuStyles["composer-add-menu-item"]}
                 onClick={() => {
                   openingResourcePicker.current = true;
@@ -80,7 +86,7 @@ export function ComposerAddMenu({
               >
                 <Icon size={18} />
                 {t(resourceLabel)}
-              </button>
+              </Button>
             ))}
           </section>
         ) : null}

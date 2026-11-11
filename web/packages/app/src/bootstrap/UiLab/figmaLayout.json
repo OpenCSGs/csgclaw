@@ -1,0 +1,387 @@
+{
+  "source": "https://www.figma.com/design/2s3AVSZ5FfBnCR5nI2AriR/?node-id=5245-372829",
+  "captured": "2026-10-30",
+  "nodes": {
+    "primitives": "6300:77478",
+    "spacing": "6300:76651",
+    "radius": "5253:372673",
+    "width": "5245:372982",
+    "container": "6300:77942",
+    "paragraph": "6379:57789",
+    "grids": "5245:373008"
+  },
+  "primitives": [
+    {
+      "name": "0",
+      "value": 0
+    },
+    {
+      "name": "0.5",
+      "value": 2
+    },
+    {
+      "name": "1",
+      "value": 4
+    },
+    {
+      "name": "1.5",
+      "value": 6
+    },
+    {
+      "name": "2",
+      "value": 8
+    },
+    {
+      "name": "3",
+      "value": 12
+    },
+    {
+      "name": "4",
+      "value": 16
+    },
+    {
+      "name": "5",
+      "value": 20
+    },
+    {
+      "name": "6",
+      "value": 24
+    },
+    {
+      "name": "8",
+      "value": 32
+    },
+    {
+      "name": "10",
+      "value": 40
+    },
+    {
+      "name": "12",
+      "value": 48
+    },
+    {
+      "name": "16",
+      "value": 64
+    },
+    {
+      "name": "20",
+      "value": 80
+    },
+    {
+      "name": "24",
+      "value": 96
+    },
+    {
+      "name": "32",
+      "value": 128
+    },
+    {
+      "name": "40",
+      "value": 160
+    },
+    {
+      "name": "48",
+      "value": 192
+    },
+    {
+      "name": "56",
+      "value": 224
+    },
+    {
+      "name": "64",
+      "value": 256
+    },
+    {
+      "name": "80",
+      "value": 320
+    },
+    {
+      "name": "96",
+      "value": 384
+    },
+    {
+      "name": "120",
+      "value": 480
+    },
+    {
+      "name": "140",
+      "value": 560
+    },
+    {
+      "name": "160",
+      "value": 640
+    },
+    {
+      "name": "180",
+      "value": 720
+    },
+    {
+      "name": "192",
+      "value": 768
+    },
+    {
+      "name": "256",
+      "value": 1024
+    },
+    {
+      "name": "320",
+      "value": 1280
+    },
+    {
+      "name": "360",
+      "value": 1440
+    },
+    {
+      "name": "400",
+      "value": 1600
+    },
+    {
+      "name": "480",
+      "value": 1920
+    }
+  ],
+  "spacing": [
+    {
+      "name": "spacing-none",
+      "value": 0
+    },
+    {
+      "name": "spacing-xxs",
+      "value": 2
+    },
+    {
+      "name": "spacing-xs",
+      "value": 4
+    },
+    {
+      "name": "spacing-sm",
+      "value": 6
+    },
+    {
+      "name": "spacing-md",
+      "value": 8
+    },
+    {
+      "name": "spacing-lg",
+      "value": 12
+    },
+    {
+      "name": "spacing-xl",
+      "value": 16
+    },
+    {
+      "name": "spacing-2xl",
+      "value": 20
+    },
+    {
+      "name": "spacing-3xl",
+      "value": 24
+    },
+    {
+      "name": "spacing-4xl",
+      "value": 32
+    },
+    {
+      "name": "spacing-5xl",
+      "value": 40
+    },
+    {
+      "name": "spacing-6xl",
+      "value": 48
+    },
+    {
+      "name": "spacing-7xl",
+      "value": 64
+    },
+    {
+      "name": "spacing-8xl",
+      "value": 80
+    },
+    {
+      "name": "spacing-9xl",
+      "value": 96
+    },
+    {
+      "name": "spacing-10xl",
+      "value": 128
+    },
+    {
+      "name": "spacing-11xl",
+      "value": 160
+    }
+  ],
+  "radius": [
+    {
+      "name": "radius-none",
+      "value": 0
+    },
+    {
+      "name": "radius-xxs",
+      "value": 2
+    },
+    {
+      "name": "radius-xs",
+      "value": 4
+    },
+    {
+      "name": "radius-sm",
+      "value": 6
+    },
+    {
+      "name": "radius-md",
+      "value": 8
+    },
+    {
+      "name": "radius-lg",
+      "value": 10
+    },
+    {
+      "name": "radius-xl",
+      "value": 12
+    },
+    {
+      "name": "radius-2xl",
+      "value": 16
+    },
+    {
+      "name": "radius-3xl",
+      "value": 20
+    },
+    {
+      "name": "radius-4xl",
+      "value": 24
+    },
+    {
+      "name": "radius-full",
+      "value": 9999
+    }
+  ],
+  "width": [
+    {
+      "name": "width-xxs",
+      "value": 320
+    },
+    {
+      "name": "width-xs",
+      "value": 384
+    },
+    {
+      "name": "width-sm",
+      "value": 480
+    },
+    {
+      "name": "width-md",
+      "value": 560
+    },
+    {
+      "name": "width-lg",
+      "value": 640
+    },
+    {
+      "name": "width-xl",
+      "value": 768
+    },
+    {
+      "name": "width-2xl",
+      "value": 1024
+    },
+    {
+      "name": "width-3xl",
+      "value": 1280
+    },
+    {
+      "name": "width-4xl",
+      "value": 1440
+    },
+    {
+      "name": "width-5xl",
+      "value": 1600
+    },
+    {
+      "name": "width-6xl",
+      "value": 1920
+    },
+    {
+      "name": "container-padding-mobile",
+      "value": 16
+    },
+    {
+      "name": "container-padding-desktop",
+      "value": 32
+    },
+    {
+      "name": "container-max-width-desktop",
+      "value": 1280
+    },
+    {
+      "name": "paragraph-max-width",
+      "value": 720
+    }
+  ],
+  "grids": [
+    {
+      "name": "Desktop",
+      "node": "5245:373014",
+      "width": 1440,
+      "columns": 12,
+      "gap": 32,
+      "margin": 112
+    },
+    {
+      "name": "Tablet",
+      "node": "5245:373034",
+      "width": 768,
+      "columns": 6,
+      "gap": 32,
+      "margin": 32
+    },
+    {
+      "name": "Mobile",
+      "node": "5245:373048",
+      "width": 375,
+      "columns": 4,
+      "gap": 16,
+      "margin": 16
+    },
+    {
+      "name": "Container 12",
+      "node": "5245:373062",
+      "width": 1280,
+      "columns": 12,
+      "gap": 32,
+      "margin": 0
+    },
+    {
+      "name": "Container 6",
+      "node": "5245:373063",
+      "width": 1280,
+      "columns": 6,
+      "gap": 32,
+      "margin": 0
+    },
+    {
+      "name": "Container 5",
+      "node": "5245:373064",
+      "width": 1280,
+      "columns": 5,
+      "gap": 32,
+      "margin": 0
+    },
+    {
+      "name": "Container 3",
+      "node": "5245:373065",
+      "width": 1280,
+      "columns": 3,
+      "gap": 32,
+      "margin": 0
+    },
+    {
+      "name": "Container 2",
+      "node": "5245:373066",
+      "width": 1280,
+      "columns": 2,
+      "gap": 32,
+      "margin": 0
+    }
+  ]
+}

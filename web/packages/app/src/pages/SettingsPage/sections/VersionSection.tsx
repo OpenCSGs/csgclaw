@@ -86,14 +86,15 @@ export function VersionSection() {
           <div className={styles.formItem}>
             <span>{t("upgradeChannelLabel")}</span>
             {showUpgradeChannel ? (
-              <button
-                type="button"
+              <Button
+                variant="linkGray"
+                size="sm"
                 className={versionSectionStyles.versionChannelLink}
                 disabled={upgradeChannelDisabled}
                 onClick={() => setSwitchVersionOpen(true)}
               >
                 {t("upgradeChannelSwitch")}
-              </button>
+              </Button>
             ) : (
               <strong className={accountSectionStyles.fieldValue}>{inferredUpgradeChannel || "-"}</strong>
             )}
