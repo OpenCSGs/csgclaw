@@ -745,6 +745,23 @@ func (m *appServerManager) persistConversationSessions(
 	return m.deps.OnConversationSessionsChange(live.session, conversations, filePublishing)
 }
 
+func (m *appServerManager) persistSessionMetadata(session *Session, save func(*Session) error) error {
+	live := m.liveSession(session.RuntimeID)
+	if live == nil || !live.session.StartedAt.Equal(session.StartedAt) {
+		return fmt.Errorf("Codex runtime %q changed before persisting session metadata", session.RuntimeID)
+	}
+	live.conversationPersistMu.Lock()
+	defer live.conversationPersistMu.Unlock()
+	if m.liveSession(session.RuntimeID) != live {
+		return fmt.Errorf("Codex runtime %q changed before persisting session metadata", session.RuntimeID)
+	}
+	live.mu.Lock()
+	session.ConversationSessions = cloneConversationSessions(live.conversationSessions)
+	session.FilePublishingConversations = filePublishingConversationsForThreads(session.ConversationSessions, live.filePublishingThreads)
+	live.mu.Unlock()
+	return save(session)
+}
+
 func (m *appServerManager) ensureLiveSession(ctx context.Context, handle SessionHandle) (*liveSession, error) {
 	runtimeID := strings.TrimSpace(handle.RuntimeID)
 	if runtimeID == "" {

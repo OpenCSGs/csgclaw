@@ -133,8 +133,31 @@ func TestRoomConfigurationReusesProcessAndNativeMappings(t *testing.T) {
 	if err := rt.Close(); err != nil {
 		t.Fatal(err)
 	}
+	runtimePath := filepath.Join(root, "agent-one", hostStateDirName, runtimeFileName)
+	metadata, err := os.ReadFile(runtimePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	corrupt := string(metadata) + "1"
+	if err := os.WriteFile(runtimePath, []byte(corrupt), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if !canFindUntrackedRuntimeProcesses {
+		// The previous manager was closed above, so there is no process to stop.
+		deps.StopRuntimeProcesses = func(string) ([]int, error) { return nil, nil }
+	}
 	rt = New(deps)
 	run("agent-one", "room-shared", "model-b")
+	if _, err := rt.readRuntimeMetadata("agent-one"); err != nil {
+		t.Fatalf("runtime metadata was not rebuilt: %v", err)
+	}
+	backups, err := filepath.Glob(runtimePath + ".corrupt-*")
+	if err != nil || len(backups) != 1 {
+		t.Fatalf("corrupt metadata backups = %v, err = %v", backups, err)
+	}
+	if data, err := os.ReadFile(backups[0]); err != nil || string(data) != corrupt {
+		t.Fatalf("corrupt runtime metadata was not preserved: %v", err)
+	}
 	if data, err := os.ReadFile(assignedSkill); err != nil || string(data) != "# Assigned skill" {
 		t.Fatal("runtime startup removed assigned skills", err)
 	}
