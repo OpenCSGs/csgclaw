@@ -170,15 +170,16 @@ func (c *conversation) Run(ctx context.Context, request contract.TurnRequest, si
 
 func (c *conversation) ensureSession(ctx context.Context, proc *process, request contract.TurnRequest) (string, *contract.TurnError) {
 	key := contract.RuntimeSessionKey(request)
-	if err := removeSessionBindings(ctx, proc, contract.LogicalRuntimeSessionKey(key), key); err != nil {
-		return "", &contract.TurnError{Code: contract.ErrorRuntimeFailed, Message: err.Error()}
-	}
 	proc.mu.Lock()
 	sessionID, exists := proc.meta.Sessions[key]
 	ready := proc.ready[sessionID]
 	proc.mu.Unlock()
 	if !exists && request.Continuation == contract.ContinuationRequireExisting {
 		return "", &contract.TurnError{Code: contract.ErrorConversationNotResumable, Message: "conversation has no DSH session mapping"}
+	}
+	// Reject a missing strict continuation before mutating other sessions.
+	if err := removeSessionBindings(ctx, proc, contract.LogicalRuntimeSessionKey(key), key); err != nil {
+		return "", &contract.TurnError{Code: contract.ErrorRuntimeFailed, Message: err.Error()}
 	}
 	if ready {
 		return sessionID, nil
