@@ -1,13 +1,24 @@
 import { useLayoutEffect, useRef, useState, type KeyboardEvent, type RefObject } from "react";
 import type { MentionPickerUser } from "@/components/business/ConversationPane";
+import { useQuery } from "@tanstack/react-query";
+import { fetchWorkspaceDirectory } from "@/api/chatFiles";
+import { fileReferenceKey, type ComposerFileReference } from "@/models/fileReferences";
 import { getMentionCandidates } from "@/models/composer";
-import { serializeTaskPromptMentions, updateTaskPromptMentions, type TaskPromptMention } from "./taskPromptMentions";
+import {
+  serializeTaskPromptMentions,
+  taskPromptFileReferences,
+  updateTaskPromptMentions,
+  withoutTaskPromptFiles,
+  type TaskPromptMention,
+} from "./taskPromptMentions";
 
 export function useTaskPromptMentions({
   value,
   onChange,
   members,
   editorRef,
+  workspaceAgentID,
+  workspaceDir,
   disabled,
 }: {
   value: string;
@@ -15,16 +26,50 @@ export function useTaskPromptMentions({
   members: MentionPickerUser[];
   editorRef: RefObject<HTMLTextAreaElement | null>;
   disabled: boolean;
+  workspaceAgentID: string;
+  workspaceDir?: string;
 }) {
   const [mention, setMention] = useState<{ start: number; end: number; query: string } | null>(null);
   const [chosen, setChosen] = useState<TaskPromptMention[]>([]);
   const [activeIndex, setActiveIndex] = useState(0);
   const pendingCaret = useRef<number | null>(null);
+  const latestDraft = useRef({ value, chosen });
   const composing = useRef(false);
-  const candidates =
+  const listing = useQuery({
+    queryKey: ["chat-workspace", "", workspaceAgentID, "", workspaceDir],
+    queryFn: ({ signal }) => fetchWorkspaceDirectory(workspaceAgentID, "", signal, "", workspaceDir),
+    enabled: Boolean(mention && !disabled && workspaceAgentID),
+  });
+  const scopedMentions = chosen.filter(
+    (item) =>
+      !("reference" in item) || (item.reference.source === "workspace" && item.reference.agent_id === workspaceAgentID),
+  );
+  const candidates: MentionPickerUser[] =
     mention && !disabled
-      ? (getMentionCandidates(members, mention.query, { limit: members.length }) as MentionPickerUser[])
+      ? [
+          ...getMentionCandidates(members, mention.query, { limit: members.length }),
+          ...(workspaceAgentID
+            ? (listing.data?.entries ?? [])
+                .filter((entry) =>
+                  (entry.name || entry.path).toLocaleLowerCase().includes(mention.query.toLocaleLowerCase()),
+                )
+                .slice(0, 20)
+                .map((entry) => {
+                  const fileReference: ComposerFileReference = {
+                    source: "workspace",
+                    agent_id: workspaceAgentID,
+                    path: entry.path,
+                    label: entry.path + (entry.type === "dir" ? "/" : ""),
+                    name: entry.name || entry.path,
+                  };
+                  return { id: fileReferenceKey(fileReference), name: fileReference.name, fileReference };
+                })
+            : []),
+        ]
       : [];
+  useLayoutEffect(() => {
+    latestDraft.current = { value, chosen };
+  }, [value, chosen]);
   useLayoutEffect(() => {
     if (pendingCaret.current === null) return;
     editorRef.current?.focus();
@@ -52,18 +97,46 @@ export function useTaskPromptMentions({
     sync(editor);
   }
 
-  function choose(member: MentionPickerUser) {
-    if (!mention || disabled) return;
-    const name = member.name || member.id;
+  function insert(
+    selection: { start: number; end: number },
+    item: { reference: ComposerFileReference } | { userId: string; userName: string },
+  ) {
+    const name = "reference" in item ? item.reference.label : item.userName;
+    const prefix = selection.start > 0 && !/\s/u.test(value[selection.start - 1]) ? " " : "";
     const text = `@${name}`;
-    const next = value.slice(0, mention.start) + text + " " + value.slice(mention.end);
+    const next = value.slice(0, selection.start) + prefix + text + " " + value.slice(selection.end);
+    const start = selection.start + prefix.length;
     setChosen((current) => [
       ...updateTaskPromptMentions(value, next, current),
-      { start: mention.start, end: mention.start + text.length, userId: member.id, userName: name },
+      { ...item, start, end: start + text.length },
     ]);
-    pendingCaret.current = mention.start + text.length + 1;
+    pendingCaret.current = start + text.length + 1;
     onChange(next);
     setMention(null);
+  }
+
+  function choose(member: MentionPickerUser) {
+    if (!mention || disabled) return;
+    insert(
+      mention,
+      member.fileReference
+        ? { reference: member.fileReference }
+        : { userId: member.id, userName: member.name || member.id },
+    );
+  }
+
+  function referenceFile(reference: ComposerFileReference) {
+    const editor = editorRef.current;
+    if (!editor || disabled || reference.source !== "workspace" || reference.agent_id !== workspaceAgentID) return;
+    insert({ start: editor.selectionStart, end: editor.selectionEnd }, { reference });
+  }
+
+  function clearFiles(clearPeople = false) {
+    const draft = latestDraft.current;
+    const next = withoutTaskPromptFiles(draft.value, draft.chosen);
+    setMention(null);
+    setChosen(clearPeople ? [] : next.mentions);
+    if (next.text !== draft.value) onChange(next.text);
   }
 
   function keyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
@@ -91,14 +164,13 @@ export function useTaskPromptMentions({
     candidates,
     activeIndex,
     choose,
+    referenceFile,
+    clearFiles,
+    fileReferences: (text: string) => taskPromptFileReferences(text, text === value ? scopedMentions : []),
     change,
     sync,
     keyDown,
     dismiss: () => setMention(null),
-    clear: () => {
-      setMention(null);
-      setChosen([]);
-    },
     compositionStart: () => {
       composing.current = true;
       setMention(null);
@@ -108,6 +180,10 @@ export function useTaskPromptMentions({
       sync(editor);
     },
     serialize: (text: string) =>
-      serializeTaskPromptMentions(text, text === value ? chosen : [], new Set(members.map((member) => member.id))),
+      serializeTaskPromptMentions(
+        text,
+        text === value ? scopedMentions : [],
+        new Set(members.map((member) => member.id)),
+      ),
   };
 }

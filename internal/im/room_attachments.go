@@ -33,10 +33,28 @@ func (s *Service) ListRoomAttachments(roomID string, opts apitypes.RoomAttachmen
 		}
 	}
 	sort.Slice(filtered, func(i, j int) bool {
-		if filtered[i].CreatedAt.Equal(filtered[j].CreatedAt) {
-			return filtered[i].ID > filtered[j].ID
+		a, b := filtered[i], filtered[j]
+		switch opts.Sort {
+		case "name-asc", "name-desc":
+			cmp := strings.Compare(strings.ToLower(a.Name), strings.ToLower(b.Name))
+			if cmp != 0 {
+				if opts.Sort == "name-desc" {
+					return cmp > 0
+				}
+				return cmp < 0
+			}
+		default:
+			if !a.CreatedAt.Equal(b.CreatedAt) {
+				if a.CreatedAt.IsZero() || b.CreatedAt.IsZero() {
+					return !a.CreatedAt.IsZero()
+				}
+				if opts.Sort == "updated-asc" {
+					return a.CreatedAt.Before(b.CreatedAt)
+				}
+				return a.CreatedAt.After(b.CreatedAt)
+			}
 		}
-		return filtered[i].CreatedAt.After(filtered[j].CreatedAt)
+		return a.ID > b.ID
 	})
 	start := min(opts.From, len(filtered))
 	end := start + min(opts.Limit, len(filtered)-start)

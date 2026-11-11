@@ -4,7 +4,6 @@
 
 .composer-toolbar {
   display: flex;
-  min-height: calc(var(--composer-send-control-size) + 8px);
   align-items: center;
   justify-content: space-between;
   gap: 12px;

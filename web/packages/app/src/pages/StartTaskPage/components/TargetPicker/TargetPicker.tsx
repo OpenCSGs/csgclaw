@@ -1,8 +1,10 @@
 import type { CloudAgent } from "@/models/cloudAgents";
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState, type ReactNode } from "react";
 import { Check, ChevronDown, Plus, Search } from "lucide-react";
 import { TextInput, PopoverContent, PopoverRoot, PopoverTrigger } from "@/components/ui";
 import { AgentAvatarContent } from "@/components/business/AgentAvatar";
+import { EntityPinRow } from "@/components/business/EntityPinRow";
+import { entityPinKey, partitionPinned, usePinnedEntities } from "@/hooks/workspace/usePinnedEntities";
 import { RoomAvatar } from "@/components/business/RoomAvatar";
 import { agentRoleLabel, isManagerAgent as isManagerAgentItem } from "@/models/agents";
 import { resolveTeamAvatarMembers } from "@/models/tasks";
@@ -25,6 +27,7 @@ export type TargetPickerProps = {
   agents: readonly AgentLike[];
   cloudAgents?: readonly CloudAgent[];
   teams: readonly WorkspaceTeam[];
+  currentUserID?: string;
   usersById?: UsersById | null;
   value: Target;
 
@@ -41,6 +44,7 @@ export function TargetPicker({
   cloudAgents = [],
   teams,
   usersById,
+  currentUserID = "",
   value,
   locked = false,
   t,
@@ -50,6 +54,7 @@ export function TargetPicker({
 }: TargetPickerProps) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
+  const pins = usePinnedEntities(currentUserID);
   const searchRef = useRef<HTMLInputElement | null>(null);
 
   const managerAgent = useMemo(() => agents.find((item) => isManagerAgentItem(item)) ?? agents[0] ?? null, [agents]);
@@ -96,6 +101,104 @@ export function TargetPicker({
     onChange(next);
     close();
   }
+
+  type Row = Target & { name: string; content: ReactNode };
+  const rows: Row[] = [
+    ...visibleAgents.flatMap((item): Row[] => {
+      const id = item.id || "";
+      if (!id) return [];
+      const active = value.kind === "agent" && value.id === id;
+      return [
+        {
+          kind: "agent",
+          id,
+          name: item.name || id,
+          content: (
+            <button
+              type="button"
+              className={classNames(styles.row, active && styles.rowActive)}
+              onClick={() => pick({ kind: "agent", id })}
+            >
+              {active ? <Check aria-hidden="true" className={styles.rowCheck} size={15} strokeWidth={2.4} /> : null}
+              <span className={classNames("iaAvatarFrame", styles.rowIcon)} aria-hidden="true">
+                <AgentAvatarContent avatar={item.avatar} fallback={String(item.name || id).slice(0, 1)} />
+              </span>
+              <span className={styles.rowText}>
+                <span className={styles.rowName}>{item.name || id}</span>
+              </span>
+              {}
+              <span className={styles.rowBadge}>{agentRoleLabel(item, t)}</span>
+            </button>
+          ),
+        },
+      ];
+    }),
+    ...visibleCloud.map(
+      (item): Row => ({
+        kind: "cloud",
+        id: item.id,
+        name: item.name,
+        content: (
+          <button
+            type="button"
+            disabled={item.status !== "online"}
+            title={item.status !== "online" ? t("cloudChatOffline") : item.description}
+            className={classNames(styles.row, value.kind === "cloud" && value.id === item.id && styles.rowActive)}
+            onClick={() => pick({ kind: "cloud", id: item.id })}
+          >
+            {value.kind === "cloud" && value.id === item.id ? (
+              <Check aria-hidden="true" className={styles.rowCheck} size={15} />
+            ) : null}
+            <span className={classNames("iaAvatarFrame", styles.rowIcon)} aria-hidden="true">
+              <AgentAvatarContent avatar={item.avatar} fallback={item.name.slice(0, 1)} />
+            </span>
+            <span className={styles.rowText}>
+              <span className={styles.rowName}>{item.name}</span>
+            </span>
+            <span className={styles.rowBadge}>
+              {t("agentPlazaCloud")} · {t(item.status === "online" ? "agentPlazaOnline" : "agentPlazaOffline")}
+            </span>
+          </button>
+        ),
+      }),
+    ),
+    ...visibleTeams.map((team): Row => {
+      const active = value.kind === "team" && value.id === team.id;
+      return {
+        kind: "team",
+        id: team.id,
+        name: team.title,
+        content: (
+          <button
+            type="button"
+            className={classNames(styles.row, active && styles.rowActive)}
+            onClick={() => pick({ kind: "team", id: team.id })}
+          >
+            {active ? <Check aria-hidden="true" className={styles.rowCheck} size={15} strokeWidth={2.4} /> : null}
+            <span className={classNames("iaAvatarFrame", styles.rowIcon)} aria-hidden="true">
+              <RoomAvatar
+                count={team.member_agent_ids.length}
+                members={resolveTeamAvatarMembers(team, agents, usersById)}
+                showCountBadge={false}
+                size={22}
+              />
+            </span>
+            <span className={styles.rowText}>
+              <span className={styles.rowName}>{team.title}</span>
+            </span>
+            <span className={styles.rowBadge}>{t("iaTargetTeamMembers", { count: team.member_agent_ids.length })}</span>
+          </button>
+        ),
+      };
+    }),
+  ];
+  const { pinned, rest } = partitionPinned(rows, pins.order);
+  const groups = [
+    { key: "pinned", label: t("iaPin"), rows: pinned, solo: false },
+    { key: "agent", label: t("iaTargetGroupAgents"), rows: rest.filter((row) => row.kind === "agent"), solo: false },
+    { key: "cloud", label: t("agentPlazaCloud"), rows: rest.filter((row) => row.kind === "cloud"), solo: false },
+    { key: "team", label: t("iaTargetGroupTeams"), rows: rest.filter((row) => row.kind === "team"), solo: !needle },
+  ];
 
   return (
     <PopoverRoot
@@ -178,139 +281,59 @@ export function TargetPicker({
             <p className={styles.empty}>{t("iaTargetEmpty")}</p>
           ) : null}
 
-          {visibleAgents.length > 0 ? (
-            <section className={styles.group}>
-              <div className={styles.groupLabel}>{t("iaTargetGroupAgents")}</div>
-              <ul className={styles.items}>
-                {visibleAgents.map((item) => {
-                  const id = String(item.id || "");
-                  const active = value.kind === "agent" && value.id === id;
-                  return (
-                    <li key={id}>
-                      <button
-                        type="button"
-                        className={classNames(styles.row, active && styles.rowActive)}
-                        onClick={() => pick({ kind: "agent", id })}
-                      >
-                        {active ? (
-                          <Check aria-hidden="true" className={styles.rowCheck} size={15} strokeWidth={2.4} />
-                        ) : null}
-                        <span className={classNames("iaAvatarFrame", styles.rowIcon)} aria-hidden="true">
-                          <AgentAvatarContent avatar={item.avatar} fallback={String(item.name || id).slice(0, 1)} />
-                        </span>
-                        <span className={styles.rowText}>
-                          <span className={styles.rowName}>{item.name || id}</span>
-                        </span>
-                        {}
-                        <span className={styles.rowBadge}>{agentRoleLabel(item, t)}</span>
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
-            </section>
-          ) : null}
-
-          {}
-          {visibleCloud.length > 0 ? (
-            <section className={styles.group}>
-              <div className={styles.groupLabel}>{t("agentPlazaCloud")}</div>
-              <ul className={styles.items}>
-                {visibleCloud.map((item) => (
-                  <li key={item.id}>
-                    <button
-                      type="button"
-                      disabled={item.status !== "online"}
-                      title={item.status !== "online" ? t("cloudChatOffline") : item.description}
-                      className={classNames(
-                        styles.row,
-                        value.kind === "cloud" && value.id === item.id && styles.rowActive,
-                      )}
-                      onClick={() => pick({ kind: "cloud", id: item.id })}
+          <ul className={styles.items}>
+            {groups.flatMap((group) =>
+              group.rows.length || group.solo
+                ? [
+                    <li
+                      key={group.key}
+                      className={classNames(styles.groupLabel, group.key === "pinned" && styles.pinnedLabel)}
                     >
-                      {value.kind === "cloud" && value.id === item.id ? (
-                        <Check aria-hidden="true" className={styles.rowCheck} size={15} />
-                      ) : null}
-                      <span className={classNames("iaAvatarFrame", styles.rowIcon)} aria-hidden="true">
-                        <AgentAvatarContent avatar={item.avatar} fallback={item.name.slice(0, 1)} />
-                      </span>
-                      <span className={styles.rowText}>
-                        <span className={styles.rowName}>{item.name}</span>
-                      </span>
-                      <span className={styles.rowBadge}>
-                        {t("agentPlazaCloud")} ·{" "}
-                        {t(item.status === "online" ? "agentPlazaOnline" : "agentPlazaOffline")}
-                      </span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          ) : null}
-
-          {visibleTeams.length > 0 || !needle ? (
-            <section className={styles.group}>
-              <div className={styles.groupLabel}>{t("iaTargetGroupTeams")}</div>
-              <ul className={styles.items}>
-                {}
-                {!needle ? (
-                  <li>
-                    <button
-                      type="button"
-                      className={classNames(
-                        styles.row,
-                        value.kind === "team" && value.id === SOLO_TEAM_ID && styles.rowActive,
-                      )}
-                      onClick={() => pick({ kind: "team", id: SOLO_TEAM_ID })}
-                    >
-                      {value.kind === "team" && value.id === SOLO_TEAM_ID ? (
-                        <Check aria-hidden="true" className={styles.rowCheck} size={15} strokeWidth={2.4} />
-                      ) : null}
-                      <span className={classNames("iaAvatarFrame", styles.rowIcon)} aria-hidden="true">
-                        <AgentAvatarContent
-                          avatar={managerAgent?.avatar}
-                          fallback={String(managerAgent?.name || "M").slice(0, 1)}
-                        />
-                      </span>
-                      <span className={styles.rowText}>
-                        <span className={styles.rowName}>{t("iaStartRoomSolo")}</span>
-                      </span>
-                    </button>
-                  </li>
-                ) : null}
-                {visibleTeams.map((team) => {
-                  const active = value.kind === "team" && value.id === team.id;
-                  return (
-                    <li key={team.id}>
-                      <button
-                        type="button"
-                        className={classNames(styles.row, active && styles.rowActive)}
-                        onClick={() => pick({ kind: "team", id: team.id })}
+                      {group.label}
+                    </li>,
+                    ...(group.solo
+                      ? [
+                          <li key={SOLO_TEAM_ID}>
+                            <button
+                              type="button"
+                              className={classNames(
+                                styles.row,
+                                value.kind === "team" && value.id === SOLO_TEAM_ID && styles.rowActive,
+                              )}
+                              onClick={() => pick({ kind: "team", id: SOLO_TEAM_ID })}
+                            >
+                              {value.kind === "team" && value.id === SOLO_TEAM_ID ? (
+                                <Check aria-hidden="true" className={styles.rowCheck} size={15} strokeWidth={2.4} />
+                              ) : null}
+                              <span className={classNames("iaAvatarFrame", styles.rowIcon)} aria-hidden="true">
+                                <AgentAvatarContent
+                                  avatar={managerAgent?.avatar}
+                                  fallback={String(managerAgent?.name || "M").slice(0, 1)}
+                                />
+                              </span>
+                              <span className={styles.rowText}>
+                                <span className={styles.rowName}>{t("iaStartRoomSolo")}</span>
+                              </span>
+                            </button>
+                          </li>,
+                        ]
+                      : []),
+                    ...group.rows.map((row) => (
+                      <EntityPinRow
+                        as="li"
+                        key={entityPinKey(row)}
+                        name={row.name}
+                        pinned={group.key === "pinned"}
+                        t={t}
+                        onToggle={() => pins.toggle(row)}
                       >
-                        {active ? (
-                          <Check aria-hidden="true" className={styles.rowCheck} size={15} strokeWidth={2.4} />
-                        ) : null}
-                        <span className={classNames("iaAvatarFrame", styles.rowIcon)} aria-hidden="true">
-                          <RoomAvatar
-                            count={team.member_agent_ids.length}
-                            members={resolveTeamAvatarMembers(team, agents, usersById)}
-                            showCountBadge={false}
-                            size={22}
-                          />
-                        </span>
-                        <span className={styles.rowText}>
-                          <span className={styles.rowName}>{team.title}</span>
-                        </span>
-                        <span className={styles.rowBadge}>
-                          {t("iaTargetTeamMembers", { count: team.member_agent_ids.length })}
-                        </span>
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
-            </section>
-          ) : null}
+                        {row.content}
+                      </EntityPinRow>
+                    )),
+                  ]
+                : [],
+            )}
+          </ul>
         </div>
 
         {}

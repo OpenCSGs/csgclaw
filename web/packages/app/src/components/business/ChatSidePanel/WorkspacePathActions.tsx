@@ -19,6 +19,7 @@ export function WorkspacePathActions({
   roomID,
   reference,
   token = "",
+  workspaceDir = "",
   location,
   active = true,
   t,
@@ -26,6 +27,7 @@ export function WorkspacePathActions({
   roomID: string;
   reference: ComposerFileReference;
   token?: string;
+  workspaceDir?: string;
   location?: WorkspaceLocation;
   active?: boolean;
   t: TranslateFn;
@@ -33,8 +35,8 @@ export function WorkspacePathActions({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const query = useQuery({
-    queryKey: ["chat-file-location", roomID, reference, token],
-    queryFn: ({ signal }) => fetchFileLocation(roomID, reference, token, signal),
+    queryKey: ["chat-file-location", roomID, reference, token, workspaceDir],
+    queryFn: ({ signal }) => fetchFileLocation(roomID, reference, token, signal, workspaceDir),
     enabled: false,
     retry: false,
   });
@@ -48,7 +50,7 @@ export function WorkspacePathActions({
     setBusy(true);
     setError("");
     try {
-      await openFileLocation(roomID, reference, target, token);
+      await openFileLocation(roomID, reference, target, token, workspaceDir);
     } catch {
       setError(t("chatOpenFailed"));
     } finally {

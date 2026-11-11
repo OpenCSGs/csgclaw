@@ -195,6 +195,9 @@
   gap: 0;
 }
 .chat-files-search-wrap {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
   margin: 12px;
   min-width: 0;
 }
@@ -309,5 +312,14 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  white-space: nowrap;
+}
+
+.chat-files-sort {
+  min-width: 112px;
+}
+.chat-files-sort-menu {
+  width: max-content;
+  min-width: var(--radix-select-trigger-width, 112px);
   white-space: nowrap;
 }

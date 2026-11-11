@@ -1,5 +1,5 @@
 import { get, post, resolveRequestPath } from "./client";
-import type { WorkspaceListing, FileOpenTarget } from "@/models/workspace";
+import { compareFiles, type WorkspaceListing, type FileOpenTarget, type FileSort } from "@/models/workspace";
 import type { AttachmentPreviewItem } from "@/models/attachments";
 import type { ComposerFileReference } from "@/models/fileReferences";
 import type { IMMessage } from "@/models/conversations";
@@ -42,8 +42,10 @@ export function transcriptRoomFiles(messages: readonly IMMessage[]): RoomFile[] 
     .sort((a, b) => (b.created_at ?? "").localeCompare(a.created_at ?? "") || b.id.localeCompare(a.id));
 }
 
-export function roomFilePage(files: RoomFile[], query = "", from = 0): RoomFiles {
-  const filtered = files.filter((file) => file.name.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()));
+export function roomFilePage(files: RoomFile[], query = "", from = 0, sort: FileSort = "updated-desc"): RoomFiles {
+  const filtered = files
+    .filter((file) => file.name.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()))
+    .sort((a, b) => compareFiles({ name: a.name, date: a.created_at }, { name: b.name, date: b.created_at }, sort));
   return { items: filtered.slice(from, from + 50), total: filtered.length, from, limit: 50 };
 }
 
@@ -55,9 +57,22 @@ export function attachmentCapability(file: RoomFile): string {
   }
 }
 
-export function fetchRoomFiles(roomID: string, query = "", from = 0, signal?: AbortSignal): Promise<RoomFiles> {
+export function fetchRoomFiles(
+  roomID: string,
+  query = "",
+  from = 0,
+  signal?: AbortSignal,
+  sort?: FileSort,
+): Promise<RoomFiles> {
   const params = new URLSearchParams({ query, from: String(from), limit: "50" });
+  if (sort && sort !== "updated-desc") params.set("sort", sort);
   return get(`api/v1/rooms/${encodeURIComponent(roomID)}/attachments?${params}`, { signal });
+}
+
+// A separate endpoint prevents older servers from silently ignoring the draft directory.
+function workspacePath(agentID: string, roomID: string, workspaceDir: string): string {
+  const endpoint = !roomID && workspaceDir ? "draft-workspace" : "workspace";
+  return `api/v1/agents/${encodeURIComponent(agentID)}/${endpoint}`;
 }
 
 export function fetchWorkspaceDirectory(
@@ -65,16 +80,24 @@ export function fetchWorkspaceDirectory(
   path = "",
   signal?: AbortSignal,
   roomID = "",
+  workspaceDir = "",
 ): Promise<WorkspaceListing> {
   const params = new URLSearchParams({ path, depth: "1" });
   if (roomID) params.set("room_id", roomID);
-  return get(`api/v1/agents/${encodeURIComponent(agentID)}/workspace?${params}`, { signal });
+  else if (workspaceDir) params.set("dir", workspaceDir);
+  return get(`${workspacePath(agentID, roomID, workspaceDir)}?${params}`, { signal });
 }
 
-export function fileContentURL(roomID: string, ref: ComposerFileReference, token = ""): string {
+function workspaceFileParams(roomID: string, workspaceDir: string, fields: Record<string, string> = {}) {
+  const params = new URLSearchParams({ ...fields, room_id: roomID });
+  if (!roomID && workspaceDir) params.set("dir", workspaceDir);
+  return params;
+}
+
+export function fileContentURL(roomID: string, ref: ComposerFileReference, token = "", workspaceDir = ""): string {
   return resolveRequestPath(
     ref.source === "workspace"
-      ? `api/v1/agents/${encodeURIComponent(ref.agent_id)}/workspace/content?${new URLSearchParams({ path: ref.path, room_id: roomID })}`
+      ? `${workspacePath(ref.agent_id, roomID, workspaceDir)}/content?${workspaceFileParams(roomID, workspaceDir, { path: ref.path })}`
       : `api/v1/rooms/${encodeURIComponent(roomID)}/attachments/${encodeURIComponent(ref.attachment_id)}${token ? `?${new URLSearchParams({ token })}` : ""}`,
   );
 }
@@ -85,8 +108,9 @@ export function filePreviewItem(
   sizeBytes = 0,
   mediaType = "",
   token = "",
+  workspaceDir = "",
 ): AttachmentPreviewItem {
-  const url = fileContentURL(roomID, reference, token);
+  const url = fileContentURL(roomID, reference, token, workspaceDir);
   return {
     id:
       reference.source === "workspace" ? `workspace:${reference.agent_id}:${reference.path}` : reference.attachment_id,
@@ -106,10 +130,11 @@ export function fetchFileLocation(
   reference: ComposerFileReference,
   token = "",
   signal?: AbortSignal,
+  workspaceDir = "",
 ): Promise<WorkspaceLocation> {
   return get(
     reference.source === "workspace"
-      ? `api/v1/agents/${encodeURIComponent(reference.agent_id)}/workspace/location?${new URLSearchParams({ room_id: roomID, path: reference.path })}`
+      ? `${workspacePath(reference.agent_id, roomID, workspaceDir)}/location?${workspaceFileParams(roomID, workspaceDir, { path: reference.path })}`
       : `api/v1/rooms/${encodeURIComponent(roomID)}/attachments/${encodeURIComponent(reference.attachment_id)}/location${token ? `?${new URLSearchParams({ token })}` : ""}`,
     { signal },
   );
@@ -120,10 +145,11 @@ export function openFileLocation(
   reference: ComposerFileReference,
   target: string,
   token = "",
+  workspaceDir = "",
 ): Promise<void> {
   return post(
     reference.source === "workspace"
-      ? `api/v1/agents/${encodeURIComponent(reference.agent_id)}/workspace/open?${new URLSearchParams({ room_id: roomID })}`
+      ? `${workspacePath(reference.agent_id, roomID, workspaceDir)}/open?${workspaceFileParams(roomID, workspaceDir)}`
       : `api/v1/rooms/${encodeURIComponent(roomID)}/attachments/${encodeURIComponent(reference.attachment_id)}/open${token ? `?${new URLSearchParams({ token })}` : ""}`,
     { ...(reference.source === "workspace" ? { path: reference.path } : {}), target },
   );

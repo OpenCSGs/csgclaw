@@ -413,6 +413,19 @@ function ConversationPaneContent({
     visibleMessages,
     workingParticipantsWithActivity,
   ]);
+  const roomTurns = workingParticipantsWithActivity.filter((participant) => !participant.threadRootID);
+  const stoppableParticipant =
+    !conversation.cloud_agent &&
+    !questionMode.pending.length &&
+    onStopWorkingTurn &&
+    (isDirectConversation(conversation) || activityAgents.length === 1) &&
+    roomTurns.length === 1 &&
+    roomTurns[0].canStop &&
+    (messageControls.pendingReplies.includes(roomTurns[0]) ||
+      [...messageControls.byMessage.values()].includes(roomTurns[0]))
+      ? roomTurns[0]
+      : undefined;
+
   const renderTurnControls = useCallback(
     (message: IMMessage) => {
       const participant = messageControls.byMessage.get(message.id || "");
@@ -420,13 +433,18 @@ function ConversationPaneContent({
         ? {
             header: (
               <>
-                <WorkingTurnControls participant={participant} t={t} onStop={onStopWorkingTurn} placement="message" />
+                <WorkingTurnControls
+                  participant={participant}
+                  t={t}
+                  onStop={participant === stoppableParticipant ? undefined : onStopWorkingTurn}
+                  placement="message"
+                />
               </>
             ),
           }
         : null;
     },
-    [messageControls.byMessage, onStopWorkingTurn, t],
+    [messageControls.byMessage, onStopWorkingTurn, stoppableParticipant, t],
   );
 
   useConversationDraftEditorSync(editorRef, draftSegments, t("remove"));
@@ -591,6 +609,7 @@ function ConversationPaneContent({
         footerSlot={
           <PendingTurnReplies
             participants={pendingCloudReply ? [pendingCloudReply] : messageControls.pendingReplies}
+            stoppableInComposer={stoppableParticipant}
             agents={agents}
             usersById={usersById}
             t={t}
@@ -670,6 +689,7 @@ function ConversationPaneContent({
             />
           }
           hideWorkingContextUsage
+          stoppableParticipant={stoppableParticipant}
           workingParticipants={conversation.cloud_agent ? [] : messageControls.composerParticipants}
           onApplyMention={onApplyMention}
           onApplySlashCandidate={onApplySlashCandidate}

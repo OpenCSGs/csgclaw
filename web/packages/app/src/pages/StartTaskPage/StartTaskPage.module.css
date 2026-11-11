@@ -3,13 +3,24 @@
   grid-row: 1 / -1;
   min-height: 0;
   height: 100%;
-  overflow-y: auto;
+  position: relative;
   display: flex;
-  align-items: flex-start;
-  justify-content: center;
   background: var(--panel);
   color: var(--text);
   --input-text-placeholder: var(--muted);
+}
+.main {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+}
+.panelToggle {
+  position: absolute;
+  inset-block-start: 12px;
+  inset-inline-end: 12px;
 }
 .inner {
   width: min(880px, 100%);
@@ -129,8 +140,6 @@
   padding: 4px 10px 8px;
 }
 .cloudActions {
-  --composer-send-control-size: 44px;
-  --composer-send-icon-size: 20px;
   justify-content: flex-end;
 }
 .addButton {
@@ -139,23 +148,12 @@
   flex: 0 0 auto;
   align-self: center;
 }
-.page .actions .send {
-  border-radius: 50%;
-  width: 28px;
-  min-width: 28px;
-  height: 28px;
-  min-height: 28px;
-  padding: 0;
-}
-.files {
-  list-style: none;
-  margin: 0;
-  padding: 0 12px;
-}
-.files li {
+.attachmentFeedback {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 8px;
+  margin-top: 6px;
+  color: var(--text-secondary);
   font-size: 12px;
 }
 .preset {
@@ -204,6 +202,9 @@
   gap: 10px;
   color: var(--muted);
   font-size: 12px;
+}
+.examples > span {
+  flex-shrink: 0;
 }
 .chips {
   display: flex;

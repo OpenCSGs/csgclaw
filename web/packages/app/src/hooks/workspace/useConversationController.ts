@@ -92,12 +92,8 @@ import {
   type AgentProfileLike,
 } from "@/models/agents";
 import {
-  type AttachmentSelectionResult,
+  attachmentSelectionError,
   createAttachmentDrafts,
-  formatAttachmentSize,
-  MAX_ATTACHMENT_FILE_BYTES,
-  MAX_ATTACHMENT_MESSAGE_BYTES,
-  MAX_ATTACHMENTS_PER_MESSAGE,
   selectAttachmentFiles,
   type AttachmentDraft,
 } from "@/models/attachments";
@@ -108,7 +104,7 @@ import {
   type SlashSkillOption,
 } from "@/models/slashCommands";
 import { localizeAPIError } from "@/shared/i18n";
-import type { IMConversation, IMMessage, IMServerEvent, IMUser, ThreadView, TranslateFn } from "@/models/conversations";
+import type { IMConversation, IMMessage, IMServerEvent, IMUser, ThreadView } from "@/models/conversations";
 import type { SlashPickerCandidate } from "@/models/slashCommands";
 import { useAttachmentWarning } from "./useAttachmentWarning";
 import type { UseConversationControllerArgs } from "./types";
@@ -222,22 +218,6 @@ function updateAttachmentDrafts(
     return rest;
   }
   return { ...current, [key]: drafts };
-}
-
-function attachmentSelectionError(selection: AttachmentSelectionResult, t: TranslateFn): string {
-  if (selection.duplicateNames.length > 0) {
-    return t("attachmentDuplicate", { name: selection.duplicateNames.join("、") });
-  }
-  if (selection.fileTooLarge) {
-    return t("attachmentTooLarge", { size: formatAttachmentSize(MAX_ATTACHMENT_FILE_BYTES) });
-  }
-  if (selection.countExceeded) {
-    return t("attachmentLimitExceeded", { count: MAX_ATTACHMENTS_PER_MESSAGE });
-  }
-  if (selection.totalTooLarge) {
-    return t("attachmentTotalTooLarge", { size: formatAttachmentSize(MAX_ATTACHMENT_MESSAGE_BYTES) });
-  }
-  return "";
 }
 
 function conversationMemberParticipantIDs(conversation: IMConversation | null | undefined): Set<string> {

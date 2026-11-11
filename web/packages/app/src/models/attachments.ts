@@ -1,3 +1,4 @@
+import type { TranslateFn } from "./conversations";
 import type { ComposerFileReference } from "./fileReferences";
 export type AttachmentKind = "image" | "file";
 
@@ -50,6 +51,22 @@ export type AttachmentSelectionResult = {
   files: File[];
   totalTooLarge: boolean;
 };
+
+export function attachmentSelectionError(selection: AttachmentSelectionResult, t: TranslateFn): string {
+  if (selection.duplicateNames.length > 0) {
+    return t("attachmentDuplicate", { name: selection.duplicateNames.join("、") });
+  }
+  if (selection.fileTooLarge) {
+    return t("attachmentTooLarge", { size: formatAttachmentSize(MAX_ATTACHMENT_FILE_BYTES) });
+  }
+  if (selection.countExceeded) {
+    return t("attachmentLimitExceeded", { count: MAX_ATTACHMENTS_PER_MESSAGE });
+  }
+  if (selection.totalTooLarge) {
+    return t("attachmentTotalTooLarge", { size: formatAttachmentSize(MAX_ATTACHMENT_MESSAGE_BYTES) });
+  }
+  return "";
+}
 
 export type AttachmentFilenameParts = {
   extension: string;

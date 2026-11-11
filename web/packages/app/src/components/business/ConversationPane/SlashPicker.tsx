@@ -4,6 +4,7 @@ import mentionPickerStyles from "./MentionPicker.module.css";
 import type { SkillContinuation } from "@/models/slashCommands";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { BoxIcon, TerminalIcon } from "lucide-react";
+import { ConnectorLogo } from "../ConnectorLogo/ConnectorLogo";
 import type { TranslateFn } from "@/models/conversations";
 import type { SlashPickerCandidate } from "@/models/slashCommands";
 
@@ -101,7 +102,7 @@ export function SlashPicker({
             {candidate.type === "command" ? (
               <TerminalIcon size={18} strokeWidth={1.8} />
             ) : (
-              <BoxIcon size={18} strokeWidth={1.8} />
+              <ConnectorLogo name={candidate.name} fallback={<BoxIcon size={18} strokeWidth={1.8} />} />
             )}
           </span>
           <div className={slashPickerStyles["slash-option-copy"]}>
