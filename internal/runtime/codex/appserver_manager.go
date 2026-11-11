@@ -408,19 +408,25 @@ func (m *appServerManager) Prompt(ctx context.Context, handle SessionHandle, req
 		m.publishAppServerEvent(promptFailedEvent(runtimeID, sessionID, err))
 		return PromptResponse{}, err
 	}
-	selectedModel, err := live.resolveTurnModel(req.Model)
+	spec := roomThreadSpec(ctx, live.spec)
+	model := req.Model
+	if _, scoped := ctx.Value(roomThreadSettingsKey{}).(roomThreadSettings); scoped && model == nil {
+		selected := turnModelFromProfile(spec.Profile)
+		model = &selected
+	}
+	selectedModel, err := live.resolveTurnModel(model)
 	if err != nil {
 		return PromptResponse{}, err
 	}
 
 	live.diagnosticObserver.Bind(ctx)
 	defer live.diagnosticObserver.End(ctx)
-	diagnostics.From(ctx).Capture("runtime.configuration", map[string]any{"runtime": "codex", "runtime_id": runtimeID, "binary": live.spec.BinaryPath, "workspace": live.spec.WorkspaceDir, "stderr_path": live.spec.StderrPath, "profile": live.spec.Profile, "mcp_servers": live.spec.MCPServers, "mcp_revision": live.spec.MCPCatalogRevision, "execution_mode": live.spec.ExecutionMode, "extension_digests": live.session.ExtensionDigests, "runtime_version": live.serverInfo})
-	diagnostics.From(ctx).CaptureRuntimeFiles(filepath.Join(live.spec.HomeDir, "AGENTS.md"), filepath.Join(live.spec.CodexHomeDir, "AGENTS.md"), filepath.Join(live.spec.WorkspaceDir, "AGENTS.md"), filepath.Join(live.spec.WorkspaceDir, "AGENTS.override.md"), filepath.Join(live.spec.CodexHomeDir, "config.toml"))
+	diagnostics.From(ctx).Capture("runtime.configuration", map[string]any{"runtime": "codex", "runtime_id": runtimeID, "binary": live.spec.BinaryPath, "workspace": spec.WorkspaceDir, "stderr_path": spec.StderrPath, "profile": spec.Profile, "mcp_servers": live.spec.MCPServers, "mcp_revision": live.spec.MCPCatalogRevision, "execution_mode": live.spec.ExecutionMode, "extension_digests": live.session.ExtensionDigests, "runtime_version": live.serverInfo})
+	diagnostics.From(ctx).CaptureRuntimeFiles(filepath.Join(live.spec.HomeDir, "AGENTS.md"), filepath.Join(live.spec.CodexHomeDir, "AGENTS.md"), filepath.Join(spec.WorkspaceDir, "AGENTS.md"), filepath.Join(spec.WorkspaceDir, "AGENTS.override.md"), filepath.Join(live.spec.CodexHomeDir, "config.toml"))
 	diagnostics.From(ctx).Capture("runtime.turn_model", selectedModel)
 	diagnostics.From(ctx).RuntimeInfo("codex", selectedModel.ModelID)
 	live.appClient.logInfoContext(ctx, "model request configuration", "model", selectedModel.ModelID, "runtime_id", runtimeID, "thread_id", sessionID)
-	waiter, err := live.registerAppServerTurnWaiterWithModel(sessionID, selectedModel, req.Model != nil)
+	waiter, err := live.registerAppServerTurnWaiterWithModel(sessionID, selectedModel, model != nil)
 	if err != nil {
 		m.publishAppServerEvent(promptFailedEvent(runtimeID, sessionID, err))
 		return PromptResponse{}, err
@@ -437,7 +443,7 @@ func (m *appServerManager) Prompt(ctx context.Context, handle SessionHandle, req
 		live.clearAppServerTurnContext(sessionID, waiter)
 	}()
 
-	params := appServerTurnStartParamsWithInput(live.spec, sessionID, promptInput, req.ClientUserMessageID)
+	params := appServerTurnStartParamsForContext(ctx, live.spec, sessionID, promptInput, req.ClientUserMessageID)
 	applyTurnModelParams(params, selectedModel)
 	turnStartAt := time.Now()
 	live.appClient.logDebugContext(ctx, "codex app-server turn start request",
@@ -770,6 +776,14 @@ func (m *appServerManager) ensureLiveSession(ctx context.Context, handle Session
 	if live := m.liveSession(runtimeID); live != nil {
 		return live, nil
 	}
+	// A room-scoped turn acquired a lease on the process during preparation.
+	// A crashed process can only be recovered by the next preparation, with
+	// the base Agent settings for the default thread.
+	if ctx != nil {
+		if _, scoped := ctx.Value(roomThreadSettingsKey{}).(roomThreadSettings); scoped {
+			return nil, os.ErrNotExist
+		}
+	}
 	if m.deps.HydrateSession == nil {
 		return nil, os.ErrNotExist
 	}
@@ -847,7 +861,7 @@ func (m *appServerManager) startOrResumeThread(ctx context.Context, live *liveSe
 }
 
 func (m *appServerManager) startThread(ctx context.Context, live *liveSession, publishFiles bool) (string, error) {
-	params := appServerThreadStartParams(live.spec, publishFiles)
+	params := roomThreadParams(ctx, appServerThreadStartParams(roomThreadSpec(ctx, live.spec), publishFiles))
 	raw, err := live.appClient.request(ctx, "thread/start", params)
 	if err != nil {
 		return "", err
@@ -856,7 +870,7 @@ func (m *appServerManager) startThread(ctx context.Context, live *liveSession, p
 }
 
 func (m *appServerManager) resumeThread(ctx context.Context, live *liveSession, threadID string) (string, error) {
-	params := appServerThreadResumeParams(live.spec, threadID)
+	params := roomThreadParams(ctx, appServerThreadResumeParams(roomThreadSpec(ctx, live.spec), threadID))
 	raw, err := live.appClient.request(ctx, "thread/resume", params)
 	if err != nil {
 		return "", err
@@ -961,6 +975,14 @@ func appServerThreadResumeParams(spec SessionSpec, threadID string) map[string]a
 
 func appServerTurnStartParams(spec SessionSpec, threadID string, prompt string) map[string]any {
 	return appServerTurnStartParamsWithInput(spec, threadID, []map[string]any{{"type": "text", "text": prompt}}, "")
+}
+
+func appServerTurnStartParamsForContext(ctx context.Context, spec SessionSpec, threadID string, input []map[string]any, clientUserMessageID string) map[string]any {
+	params := appServerTurnStartParamsWithInput(roomThreadSpec(ctx, spec), threadID, input, clientUserMessageID)
+	if room, ok := ctx.Value(roomThreadSettingsKey{}).(roomThreadSettings); ok {
+		params["cwd"] = room.WorkspaceDir
+	}
+	return params
 }
 
 func appServerTurnStartParamsWithInput(spec SessionSpec, threadID string, input []map[string]any, clientUserMessageID string) map[string]any {
@@ -1167,7 +1189,7 @@ func (m *appServerManager) handleAppServerDynamicToolCall(runtimeID string, live
 		if !ok {
 			return appServerDynamicToolResponse(false, "file upload is unavailable outside an active turn"), nil
 		}
-		if err := uploadAppServerWorkspaceFile(uploadCtx, live.spec, args); err != nil {
+		if err := uploadAppServerWorkspaceFile(uploadCtx, roomThreadSpec(uploadCtx, live.spec), args); err != nil {
 			return appServerDynamicToolResponse(false, err.Error()), nil
 		}
 		return appServerDynamicToolResponse(true, "File uploaded successfully. Continue by calling the MCP parse tool with its file ID."), nil

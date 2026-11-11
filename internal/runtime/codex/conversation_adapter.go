@@ -306,8 +306,15 @@ func (a *ConversationAdapter) handleEvent(ctx context.Context, request contract.
 	return nil
 }
 
+func (a *ConversationAdapter) workspaceDir(ctx context.Context) (string, error) {
+	if room, ok := ctx.Value(roomThreadSettingsKey{}).(roomThreadSettings); ok {
+		return room.WorkspaceDir, nil
+	}
+	return a.runtime.WorkspaceDir(a.runtimeID)
+}
+
 func (a *ConversationAdapter) authorizeOutputFile(ctx context.Context, request activity.RuntimeFile) (*contract.OutputFile, *contract.TurnError) {
-	workspace, err := a.runtime.WorkspaceDir(a.runtimeID)
+	workspace, err := a.workspaceDir(ctx)
 	if err != nil {
 		return nil, a.runtimeFileUnavailable(ctx, request.Path, "resolve_workspace", err)
 	}
@@ -545,7 +552,7 @@ func (a *ConversationAdapter) prepareInput(ctx context.Context, turnID contract.
 	})
 	if needsWorkspace {
 		var err error
-		workspace, err = a.runtime.WorkspaceDir(a.runtimeID)
+		workspace, err = a.workspaceDir(ctx)
 		if err != nil {
 			return nil, cleanup, a.runtimeInputFileUnavailable("resolve_workspace", err)
 		}

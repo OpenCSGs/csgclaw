@@ -120,7 +120,7 @@ func (m *appServerManager) recoverContext(ctx context.Context, live *liveSession
 	if err := newWaiter(); err != nil {
 		return PromptResponse{}, err
 	}
-	params := appServerTurnStartParamsWithInput(live.spec, threadID, []map[string]any{}, "")
+	params := appServerTurnStartParamsForContext(ctx, live.spec, threadID, []map[string]any{}, "")
 	applyTurnModelParams(params, selectedModel)
 	raw, err := live.appClient.request(ctx, "turn/start", params)
 	if err != nil {
