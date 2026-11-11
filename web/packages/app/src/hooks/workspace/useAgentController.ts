@@ -1937,7 +1937,8 @@ export function useAgentController({
           : localizeAPIErrorWithDiagnostics(err, t, t("agentActionFailed"));
       const message = localTemplateID
         ? t(
-            apiErrorCode(err) === "template_publish_file_too_large"
+            apiErrorCode(err) === "template_publish_file_too_large" ||
+              apiErrorCode(err) === "template_publish_total_too_large"
               ? "agentTemplateSavedPublishFileTooLarge"
               : "agentTemplateSavedPublishFailed",
             { reason },

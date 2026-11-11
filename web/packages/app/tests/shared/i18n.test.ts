@@ -185,6 +185,16 @@ describe("template publishing diagnostics", () => {
     expect(error.publishedTemplateId).toBe("local.demo");
     expect(localizeAPIErrorWithDiagnostics(error, createTranslator(locale))).toBe(expected);
   });
+  it.each([
+    ["zh", "模板总大小超过 100 MiB 上限，请缩小或移除部分文件后重新发布。"],
+    [
+      "en",
+      "The template exceeds the 100 MiB total size limit. Reduce the size of some files or remove them before publishing again.",
+    ],
+  ] as const)("shows the total size limit in %s", (locale, expected) => {
+    const error = { status: 413, code: "template_publish_total_too_large", message: "technical diagnostic" };
+    expect(localizeAPIErrorWithDiagnostics(error, createTranslator(locale))).toBe(expected);
+  });
   it.each(["zh", "en"] as const)("retains remote diagnostic context in %s", (locale) => {
     const message = "create remote hub template: remote hub request failed with status 500: repository unavailable";
     const formatted = localizeAPIErrorWithDiagnostics(

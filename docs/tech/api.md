@@ -836,6 +836,9 @@ Notes:
 - `agent_id` is required
 - `registry` uses the default publish registry when omitted
 - `include_memory` must be explicitly set to `true` to publish the Codex memory summary, including when republishing an existing local template via `template_id`; it defaults to `false` because memories may contain private conversation-derived information
+- Community publication accepts up to 100 MiB per template and applies a 50 MiB client limit per file, measured before Base64 encoding. StarHub's ordinary Git file limit also applies. A template over the total limit returns HTTP 413 with `error.code: "template_publish_total_too_large"` and `error.max_total_bytes`.
+- Publication commits to the repository's existing default branch and skips unchanged files on update. Batches target 10 MiB of raw file content and allow at most 200 file operations. A larger file accepted for ordinary Git upload uses its own batch.
+- Timeouts and retryable service errors trigger up to two automatic retries. Each retry reads the current remote state and commits the remaining changes. A changed `agent.toml` gets its own commit after all other files succeed. A failed publication can leave some file changes on the branch with the previous version marker. Publishing the same local version again reconciles the remaining changes.
 - Successful publish returns `201 Created`
 
 ### `GET /api/v1/hub/templates/{id}`

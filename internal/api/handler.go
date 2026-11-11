@@ -1945,6 +1945,15 @@ func (h *Handler) handleHubTemplates(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		if err != nil {
+			var totalTooLarge *hub.PublishTotalTooLargeError
+			if errors.As(err, &totalTooLarge) {
+				writeHubTemplateErrorPayload(w, http.StatusRequestEntityTooLarge, map[string]any{
+					"code":            "template_publish_total_too_large",
+					"message":         totalTooLarge.Error(),
+					"max_total_bytes": totalTooLarge.MaxBytes,
+				}, savedTemplateID)
+				return
+			}
 			var tooLarge *hub.PublishFileTooLargeError
 			if errors.As(err, &tooLarge) {
 				writeHubTemplateErrorPayload(w, http.StatusRequestEntityTooLarge, map[string]any{

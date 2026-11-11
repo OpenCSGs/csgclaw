@@ -27,13 +27,15 @@ import (
 )
 
 const (
-	defaultRemoteHTTPTimeout    = 60 * time.Second
-	defaultRemoteMaxJSONBytes   = 4 * 1024 * 1024
-	defaultRemoteMaxFileBytes   = 50 * 1024 * 1024
-	officialTemplateNamespace   = "agentichub"
-	remoteManifestFileName      = "agent.toml"
-	remoteAgentTemplatesPerPage = 20
-	remoteCommunityTemplateType = "csgclaw"
+	defaultRemoteHTTPTimeout  = 60 * time.Second
+	defaultRemoteMaxJSONBytes = 4 * 1024 * 1024
+	defaultRemoteMaxFileBytes = 50 * 1024 * 1024
+	// Allow a full publishable snapshot plus repository files and ZIP overhead.
+	defaultRemoteMaxWorkspaceBytes = 128 * 1024 * 1024
+	officialTemplateNamespace      = "agentichub"
+	remoteManifestFileName         = "agent.toml"
+	remoteAgentTemplatesPerPage    = 20
+	remoteCommunityTemplateType    = "csgclaw"
 )
 
 type RemoteStore struct {
@@ -161,6 +163,7 @@ type remoteTreeEntry struct {
 	Type string `json:"type"`
 	Path string `json:"path"`
 	Size int64  `json:"size"`
+	SHA  string `json:"sha"`
 }
 
 type remoteBlobResponse struct {
@@ -182,7 +185,7 @@ func NewRemoteStore(baseURL, token string) *RemoteStore {
 			Timeout: defaultRemoteHTTPTimeout,
 		},
 		maxJSON:      defaultRemoteMaxJSONBytes,
-		maxWorkspace: defaultRemoteMaxFileBytes,
+		maxWorkspace: defaultRemoteMaxWorkspaceBytes,
 	}
 }
 
@@ -730,7 +733,7 @@ func (s *RemoteStore) fetchWorkspaceTree(
 }
 
 func (s *RemoteStore) fetchBlob(ctx context.Context, id, filePath, branch string) ([]byte, error) {
-	return s.fetchBlobWithLimit(ctx, id, filePath, branch, s.maxWorkspace)
+	return s.fetchBlobWithLimit(ctx, id, filePath, branch, min(s.maxWorkspace, defaultRemoteMaxFileBytes))
 }
 
 func (s *RemoteStore) fetchBlobWithLimit(ctx context.Context, id, filePath, branch string, maxBytes int64) ([]byte, error) {
@@ -799,13 +802,11 @@ func (s *RemoteStore) Publish(ctx context.Context, spec PublishSpec) (Template, 
 			return Template{}, fmt.Errorf("create remote hub template: %w", err)
 		}
 		branch = strings.TrimSpace(created.Data.DefaultBranch)
-	} else if err := s.putJSON(ctx, s.remoteTemplateEndpoint(request.Name), remoteUpdateCodeRequest{Nickname: request.Nickname}, nil); err != nil {
-		return Template{}, fmt.Errorf("update remote hub template: %w", err)
 	}
 	if branch == "" {
 		branch = "main"
 	}
-	if err := s.commitRemoteTemplate(ctx, request.Name, branch, files, exists); err != nil {
+	if err := s.commitRemoteTemplate(ctx, request.Name, branch, files, exists, request.Nickname); err != nil {
 		return Template{}, err
 	}
 	return Template{
