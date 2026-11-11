@@ -8,6 +8,19 @@ import (
 	agentruntime "csgclaw/internal/runtime"
 )
 
+func (s *Controller) SetManagedMemory(cleanup func(string) error, seed func(string, string) error) {
+	s.mu.Lock()
+	s.memoryCleanup = cleanup
+	s.memoryTemplate = seed
+	s.mu.Unlock()
+}
+
+func (s *Controller) memoryManaged() bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.memoryCleanup != nil
+}
+
 type MemoryDocument struct {
 	Enabled  bool   `json:"enabled"`
 	Ready    bool   `json:"ready"`
@@ -17,6 +30,9 @@ type MemoryDocument struct {
 }
 
 func (s *Controller) SupportsMemory(runtimeKind string) bool {
+	if s.memoryManaged() {
+		return runtimeKind == agentruntime.NameCodex || runtimeKind == agentruntime.NameDSH
+	}
 	rt, err := s.runtimeForKind(strings.TrimSpace(runtimeKind))
 	if err != nil {
 		return false
@@ -26,6 +42,9 @@ func (s *Controller) SupportsMemory(runtimeKind string) bool {
 }
 
 func (s *Controller) MemoryDocument(ctx context.Context, id string) (MemoryDocument, error) {
+	if s.memoryManaged() {
+		return MemoryDocument{}, fmt.Errorf("memory is scoped to a local user")
+	}
 	got, ok := s.Agent(id)
 	if !ok {
 		return MemoryDocument{}, fmt.Errorf("agent %q not found", strings.TrimSpace(id))
@@ -52,6 +71,9 @@ func (s *Controller) MemoryDocument(ctx context.Context, id string) (MemoryDocum
 func (s *Controller) UpdateMemoryEnabled(ctx context.Context, id string, enabled bool) (MemoryDocument, error) {
 	if s == nil {
 		return MemoryDocument{}, fmt.Errorf("agent service is required")
+	}
+	if s.memoryManaged() {
+		return MemoryDocument{}, fmt.Errorf("use the user-scoped memory endpoint")
 	}
 	ctx, release, err := s.acquireAgentLifecycle(ctx, id)
 	if err != nil {

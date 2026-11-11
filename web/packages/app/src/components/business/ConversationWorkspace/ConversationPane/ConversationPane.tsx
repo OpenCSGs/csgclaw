@@ -1,3 +1,4 @@
+import { conversationMemoryAgent } from "@/components/business/ConversationPane/useConversationMemory";
 import { CloudPrivacyDialog } from "@/components/business/CloudPrivacyDialog";
 import { PendingTurnReplies } from "./PendingTurnReplies";
 import { TaskConversationControls } from "../TaskConversationControls/TaskConversationControls";
@@ -527,6 +528,7 @@ function ConversationPaneContent({
   const threadPanel =
     !conversation.cloud_agent && activeThreadRootID ? (
       <Conversation.ThreadPanel
+        memoryAgentID={conversationMemoryAgent(conversation, agents, currentUserID, usersById)}
         currentUserID={currentUserID}
         resourceAgentID={resourceAgentID}
         onPickResources={onPickThreadResources}

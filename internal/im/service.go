@@ -2232,6 +2232,7 @@ func (s *Service) CreateMessageOnce(req CreateMessageRequest) (Message, bool, er
 
 	message := s.newMessage("", senderID, MessageKindMessage, content)
 	message.ClientMessageID = clientMessageID
+	message.MemoryUserID = req.MemoryUserID
 	message.Metadata = utils.CloneAnyMap(apitypes.WithResourceSelection(req.Metadata, req.ResourceSelection))
 	if !req.DiagnosticStart.IsZero() {
 		if message.Metadata == nil {

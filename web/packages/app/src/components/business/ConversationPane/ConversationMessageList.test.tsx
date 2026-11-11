@@ -1,6 +1,7 @@
 import { createRef } from "react";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
+import * as memoryAPI from "@/api/agents";
 import { ConversationMessageList, type ConversationMessageListProps } from "./ConversationMessageList";
 
 function messageListProps(): ConversationMessageListProps {
@@ -125,5 +126,67 @@ describe("ConversationMessageList render isolation", () => {
     expect(screen.getByText("New reply")).toBeInTheDocument();
     expect(screen.getByText("Reply 0")).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: "translated profilePreview Manager" })).toHaveLength(101);
+  });
+});
+
+describe("private message memory marks", () => {
+  it("marks the source and its final reply and forgets their shared source", async () => {
+    const props = messageListProps();
+    const source = { id: "source", sender_id: "user-admin", content: "Remember my report preference" };
+    const reply = {
+      id: "reply",
+      sender_id: "user-manager",
+      content: "Saved",
+      metadata: {
+        csgclaw: { delivery_kind: "final" },
+        diagnostics: { room_id: "room", source_id: "source" },
+      },
+    };
+    const marks = vi.spyOn(memoryAPI, "fetchAgentMemoryMarks").mockResolvedValue({
+      available: true,
+      enabled: true,
+      revision: 1,
+      sources: [{ room_id: "room", message_id: "source" }],
+    });
+    const forget = vi.spyOn(memoryAPI, "forgetAgentMemory").mockResolvedValue({
+      available: true,
+      enabled: true,
+      ready: false,
+      name: "MEMORY.md",
+      revision: 2,
+      entries: [],
+      content: "",
+      status: "idle",
+    });
+    try {
+      const { container } = render(
+        <ConversationMessageList
+          {...props}
+          agents={[{ id: "agent-manager", name: "manager", user_id: "user-manager", memory_supported: true }]}
+          currentUserID="user-admin"
+          usersById={
+            new Map([
+              ["user-admin", { id: "user-admin", name: "User" }],
+              ["user-manager", { id: "user-manager", name: "Manager" }],
+            ])
+          }
+          conversation={{
+            id: "room",
+            is_direct: true,
+            members: ["user-admin", "user-manager"],
+            messages: [source, reply],
+          }}
+          visibleMessages={[source, reply]}
+        />,
+      );
+      expect(await screen.findAllByText("agentMemoryUpdated")).toHaveLength(2);
+      const replyRow = container.querySelector('[data-message-id="reply"]') as HTMLElement;
+      fireEvent.click(within(replyRow).getByRole("button", { name: "agentMemoryForget" }));
+      expect(await within(replyRow).findByText("agentMemoryForgotten")).toBeInTheDocument();
+      expect(forget).toHaveBeenCalledWith("agent-manager", "room", "source");
+    } finally {
+      marks.mockRestore();
+      forget.mockRestore();
+    }
   });
 });

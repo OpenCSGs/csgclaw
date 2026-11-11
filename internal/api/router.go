@@ -71,6 +71,7 @@ func (h *Handler) registerCoreRoutes(router chi.Router) {
 				r.Put("/instructions", h.putAgentInstructions)
 				r.Get("/memory", h.getAgentMemory)
 				r.Put("/memory", h.putAgentMemory)
+				r.Delete("/memory/sources/{room}/{message}", h.deleteAgentMemorySource)
 				r.Group(func(r chi.Router) {
 					r.Use(h.requireWorkspaceAccess)
 					r.Get("/workspace", h.handleAgentWorkspace)

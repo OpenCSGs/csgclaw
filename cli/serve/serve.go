@@ -851,6 +851,8 @@ func startServerWithConfigPath(ctx context.Context, run *command.Context, cfg co
 		AppsStatePath:      legacyStatePath,
 		AccessToken:        cfg.Server.AccessToken,
 		NoAuth:             cfg.Server.NoAuth,
+		LocalSingleUser:    cfg.Server.LocalSingleUser && !cfg.IsCSGHubDeployment(),
+		MemoryCloud:        cfg.IsCSGHubDeployment(),
 		AdvertiseBaseURL:   apiURL,
 		InternalBaseURL:    serveInternalBaseURL(cfg.Server, serveOpts),
 		Desktop:            serveOpts.Desktop,
@@ -1150,12 +1152,13 @@ listen_addr = %q
 advertise_base_url = %q
 access_token = %q
 no_auth = %t
+local_single_user = %t
 show_upgrade = %t
 
 [bootstrap]
 default_manager_template = %q
 default_worker_template = %q
-`, cfg.Server.ListenAddr, cfg.Server.AdvertiseBaseURL, partiallyMaskSecret(cfg.Server.AccessToken), cfg.Server.NoAuth, cfg.Server.ShowUpgrade, cfg.Bootstrap.ResolvedDefaultManagerTemplate(), cfg.Bootstrap.ResolvedDefaultWorkerTemplate())
+`, cfg.Server.ListenAddr, cfg.Server.AdvertiseBaseURL, partiallyMaskSecret(cfg.Server.AccessToken), cfg.Server.NoAuth, cfg.Server.LocalSingleUser, cfg.Server.ShowUpgrade, cfg.Bootstrap.ResolvedDefaultManagerTemplate(), cfg.Bootstrap.ResolvedDefaultWorkerTemplate())
 	content += fmt.Sprintf(`
 [hub]
 default_registry = %q

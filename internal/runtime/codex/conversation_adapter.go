@@ -64,6 +64,9 @@ func (a *ConversationAdapter) Run(ctx context.Context, request contract.TurnRequ
 		return contract.TurnResult{Status: contract.TurnFailed, Error: inputErr}
 	}
 	defer cleanup()
+	if memory := contract.MemoryReference(request.RuntimeMemory); memory != "" {
+		blocks = append([]PromptContentBlock{TextBlock(memory)}, blocks...)
+	}
 
 	runCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -163,8 +166,9 @@ func (a *ConversationAdapter) Run(ctx context.Context, request contract.TurnRequ
 }
 
 func (a *ConversationAdapter) session(ctx context.Context, request contract.TurnRequest) (string, *contract.TurnError) {
+	key := contract.RuntimeSessionKey(request)
 	if request.Continuation == contract.ContinuationRequireExisting {
-		sessionID, ok, err := a.runtime.ExistingEngineSession(ctx, a.runtimeID, string(request.ConversationKey))
+		sessionID, ok, err := a.runtime.ExistingEngineSession(ctx, a.runtimeID, key)
 		if err != nil {
 			return "", &contract.TurnError{Code: contract.ErrorRuntimeFailed, Message: err.Error()}
 		}
@@ -173,7 +177,7 @@ func (a *ConversationAdapter) session(ctx context.Context, request contract.Turn
 		}
 		return sessionID, nil
 	}
-	sessionID, err := a.runtime.EnsureEngineSession(ctx, a.runtimeID, string(request.ConversationKey))
+	sessionID, err := a.runtime.EnsureEngineSession(ctx, a.runtimeID, key)
 	if err != nil {
 		return "", &contract.TurnError{Code: contract.ErrorRuntimeFailed, Message: fmt.Sprintf("ensure Codex conversation: %v", err)}
 	}

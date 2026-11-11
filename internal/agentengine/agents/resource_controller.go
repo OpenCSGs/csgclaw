@@ -1184,6 +1184,9 @@ func (f *Controller) convertWithDocuments(ctx context.Context, selected Agent) (
 	} else {
 		converted.Status.Instructions.Effective = instructions.Effective
 	}
+	if f.memoryManaged() {
+		return converted, nil
+	}
 	memory, memoryErr := f.MemoryDocument(ctx, selected.ID)
 	converted.Status.Memory = &contract.MemoryStatus{}
 	if memoryErr != nil {

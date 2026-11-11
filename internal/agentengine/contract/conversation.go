@@ -130,7 +130,9 @@ type TurnModel struct {
 
 // TurnRequest contains conversation identity and caller-normalized input.
 type TurnRequest struct {
-	Model *TurnModel `json:"-"`
+	Model         *TurnModel     `json:"-"`
+	MemorySource  *MemorySource  `json:"-"`
+	RuntimeMemory *RuntimeMemory `json:"-"`
 	// RespondingTo identifies the detached answer reserved for this turn.
 	RespondingTo string `json:"-"`
 	// PreservePendingInteractions prevents this turn from superseding a pending form.

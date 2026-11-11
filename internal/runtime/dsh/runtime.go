@@ -66,6 +66,7 @@ type AgentRef struct {
 type BinaryResolver func(context.Context) (dshcli.Info, error)
 
 type Dependencies struct {
+	DisableNativeMemory   bool
 	ResolveRoomProfile    func(string, string, taskconfig.Config) (agentruntime.Profile, error)
 	ResolveBinary         BinaryResolver
 	ResolveAgent          func(agentruntime.Handle) (AgentRef, error)
@@ -280,8 +281,10 @@ func (r *Runtime) Provision(ctx context.Context, req agentruntime.ProvisionReque
 	if err := writeRuntimePatch(filepath.Join(root, patchFileName), req.Profile); err != nil {
 		return err
 	}
-	if err := provisionMemory(root, req); err != nil {
-		return fmt.Errorf("provision DSH memory: %w", err)
+	if !r.deps.DisableNativeMemory {
+		if err := provisionMemory(root, req); err != nil {
+			return fmt.Errorf("provision DSH memory: %w", err)
+		}
 	}
 	r.mu.Lock()
 	r.roots[strings.TrimSpace(req.RuntimeID)] = root
@@ -439,8 +442,10 @@ func (r *Runtime) start(ctx context.Context, h agentruntime.Handle, spec *agentr
 	if err := writeRuntimePatch(filepath.Join(root, patchFileName), ref.Profile); err != nil {
 		return agentruntime.StateUnknown, err
 	}
-	if err := writeMemoryPatch(root, ref.RuntimeOptions, ref.Profile); err != nil {
-		return agentruntime.StateUnknown, err
+	if !r.deps.DisableNativeMemory {
+		if err := writeMemoryPatch(root, ref.RuntimeOptions, ref.Profile); err != nil {
+			return agentruntime.StateUnknown, err
+		}
 	}
 	if err := projectSkills(root, layout.SkillsRoot, ref.SkillStates); err != nil {
 		return agentruntime.StateUnknown, err
@@ -483,7 +488,11 @@ func (r *Runtime) launch(ctx context.Context, root, workspace, binary string, pr
 	if info, err := stderr.Stat(); err == nil {
 		logStartOffset = info.Size()
 	}
-	cmd := exec.Command(binary, dshLaunchArgs(root, enablePresent)...)
+	args := dshLaunchArgs(root, enablePresent)
+	if r.deps.DisableNativeMemory {
+		args = append(args[:4], args[6:]...)
+	}
+	cmd := exec.Command(binary, args...)
 	configureProcessGroup(cmd)
 	cmd.Dir = workspace
 	cmd.Env = environment
