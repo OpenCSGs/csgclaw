@@ -43,3 +43,31 @@ func TestTemplateSeedIsAdoptedOnceAndSurvivesRestart(t *testing.T) {
 		t.Fatalf("disabled scope adopted template: %+v %v", off, err)
 	}
 }
+
+func TestTemplateSeedCanBeCorrectedByBackgroundLearning(t *testing.T) {
+	store := openTestStore(t, t.TempDir(), "local")
+	if err := store.SeedTemplate(testScope.AgentID, "# Preferences\n- Use tabs.\n"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.GetOrInitialize(testScope); err != nil {
+		t.Fatal(err)
+	}
+	_, beforeBinding, _, err := store.Snapshot(testScope, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	Worker{Store: store}.process(context.Background(), testScope)
+	enqueueMemory(t, store, "correction", "Use spaces instead of tabs.")
+	Worker{Store: store, Extract: func(_ context.Context, _ string, input Extraction) ([]Change, error) {
+		return []Change{{EntryID: input.Entries[0].ID, Kind: "preference", Text: "Use spaces.", SourceMessageID: "correction"}}, nil
+	}}.process(context.Background(), testScope)
+	doc := getMemory(t, store, testScope)
+	if len(doc.Entries) != 1 || doc.Entries[0].Text != "Use spaces." || doc.Entries[0].ID == "" {
+		t.Fatalf("correction did not replace seeded preference: %+v", doc)
+	}
+	_, afterBinding, _, err := store.Snapshot(testScope, "")
+	if err != nil || beforeBinding == afterBinding {
+		t.Fatalf("correction retained stale runtime memory binding: %q, %v", afterBinding, err)
+	}
+
+}

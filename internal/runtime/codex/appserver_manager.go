@@ -530,10 +530,8 @@ func (m *appServerManager) ensureSession(ctx context.Context, handle SessionHand
 	}
 
 	logicalKey := contract.LogicalRuntimeSessionKey(conversationKey)
-	if logicalKey != conversationKey {
-		if err := m.removeConversationBindings(live, logicalKey, conversationKey); err != nil {
-			return "", err
-		}
+	if err := m.removeConversationBindings(live, logicalKey, conversationKey); err != nil {
+		return "", err
 	}
 
 	live.mu.Lock()

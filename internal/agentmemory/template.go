@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"time"
 )
 
 // SeedTemplate saves only explicitly supplied template knowledge, never native
@@ -14,6 +15,10 @@ func (s *Store) SeedTemplate(agentID, content string) error {
 		return ErrInvalid
 	}
 	entries, err := parseMarkdown(content, nil)
+	if err != nil {
+		return err
+	}
+	entries, err = editEntries(nil, entries, time.Now())
 	if err != nil {
 		return err
 	}

@@ -170,10 +170,8 @@ func (c *conversation) Run(ctx context.Context, request contract.TurnRequest, si
 
 func (c *conversation) ensureSession(ctx context.Context, proc *process, request contract.TurnRequest) (string, *contract.TurnError) {
 	key := contract.RuntimeSessionKey(request)
-	if logicalKey := contract.LogicalRuntimeSessionKey(key); logicalKey != key {
-		if err := removeSessionBindings(ctx, proc, logicalKey, key); err != nil {
-			return "", &contract.TurnError{Code: contract.ErrorRuntimeFailed, Message: err.Error()}
-		}
+	if err := removeSessionBindings(ctx, proc, contract.LogicalRuntimeSessionKey(key), key); err != nil {
+		return "", &contract.TurnError{Code: contract.ErrorRuntimeFailed, Message: err.Error()}
 	}
 	proc.mu.Lock()
 	sessionID, exists := proc.meta.Sessions[key]

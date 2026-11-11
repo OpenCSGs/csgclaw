@@ -20,7 +20,10 @@ func (c *conversations) prepareMemory(request *TurnRequest) agentmemory.Ticket {
 	if store == nil || source == nil {
 		return agentmemory.Ticket{}
 	}
-	request.RuntimeMemory = &contract.RuntimeMemory{Binding: store.Policy() + "-plain"}
+	// An unbound session has never received unified memory. Keep its chat
+	// context when memory is unavailable; runtime adapters remove stale bound
+	// sessions before selecting this unbound conversation.
+	request.RuntimeMemory = &contract.RuntimeMemory{}
 	if source.UserID == "" {
 		return agentmemory.Ticket{}
 	}

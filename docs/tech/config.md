@@ -86,7 +86,8 @@ Background memory extraction shares the streaming model gateway, provider authen
 
 Native Codex and DSH memory files are not imported when switching to unified memory.
 Eligible Agents rebuild personal memory from private chat history during initialization.
-The runtime session binding changes to keep previously injected memory out of the new policy scope.
+When memory is unavailable, existing sessions that never received unified memory retain their chat context.
+Sessions previously bound to unified memory are detached before selecting a memory-free session.
 Explicit template knowledge is saved separately under `agents/<agent-id>/memory/template.json` and adopted once by a new eligible user scope.
 Resetting or clearing an initialized scope does not restore the template seed.
 Forgetting a message excludes that source from future history scans and late learning updates, while preserving other queued messages and the initialization cursor.
