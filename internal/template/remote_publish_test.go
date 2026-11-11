@@ -419,7 +419,7 @@ func TestRemoteCommitReplacesConflictingFileAndDirectory(t *testing.T) {
 }
 
 func TestRemotePublicationRetryCommitsOnlyRemainingFilesAndManifestLast(t *testing.T) {
-	for _, scenario := range []string{"data_timeout", "manifest_response_lost", "manual_retry"} {
+	for _, scenario := range []string{"data_timeout", "manifest_response_lost", "manual_retry", "initial_head_unavailable", "initial_tree_unavailable", "recovery_tree_unavailable"} {
 		t.Run(scenario, func(t *testing.T) {
 			files := map[string][]byte{localManifestFileName: []byte("new"), "unchanged.txt": []byte("same")}
 			remoteFiles := map[string][]byte{localManifestFileName: []byte("old"), "unchanged.txt": []byte("same")}
@@ -431,8 +431,17 @@ func TestRemotePublicationRetryCommitsOnlyRemainingFilesAndManifestLast(t *testi
 				switch {
 				case strings.HasSuffix(r.URL.Path, "/last_commit"):
 					reads++
+					if scenario == "initial_head_unavailable" && reads == 1 {
+						http.Error(w, "head temporarily unavailable", http.StatusServiceUnavailable)
+						return
+					}
 					_, _ = w.Write([]byte(`{"data":{"id":"base"}}`))
 				case strings.Contains(r.URL.Path, "/tree/"):
+					if (scenario == "initial_tree_unavailable" && reads == 1) ||
+						(scenario == "recovery_tree_unavailable" && reads == 2) {
+						http.Error(w, "tree temporarily unavailable", http.StatusServiceUnavailable)
+						return
+					}
 					entries := make([]map[string]string, 0, len(remoteFiles))
 					for path, content := range remoteFiles {
 						oid := sha1.Sum(fmt.Appendf(nil, "blob %d\x00%s", len(content), content))
@@ -451,7 +460,7 @@ func TestRemotePublicationRetryCommitsOnlyRemainingFilesAndManifestLast(t *testi
 					if len(request.Files) > remotePublishMaxBatchFiles {
 						t.Error("oversized commit")
 					}
-					if commits == 2 && scenario != "manifest_response_lost" {
+					if commits == 2 && (scenario == "data_timeout" || scenario == "manual_retry" || scenario == "recovery_tree_unavailable") {
 						if string(remoteFiles[localManifestFileName]) != "old" {
 							t.Error("manifest changed before all data batches succeeded")
 						}
@@ -502,11 +511,14 @@ func TestRemotePublicationRetryCommitsOnlyRemainingFilesAndManifestLast(t *testi
 			if err != nil {
 				t.Fatal(err)
 			}
-			wantCommits := 4
-			if scenario == "manifest_response_lost" {
+			wantReads, wantCommits := 2, 4
+			switch scenario {
+			case "manifest_response_lost", "initial_head_unavailable", "initial_tree_unavailable":
 				wantCommits = 3
+			case "recovery_tree_unavailable":
+				wantReads = 3
 			}
-			if reads != 2 || commits != wantCommits || !reflect.DeepEqual(remoteFiles, files) {
+			if reads != wantReads || commits != wantCommits || !reflect.DeepEqual(remoteFiles, files) {
 				t.Fatalf("reads=%d commits=%d files=%v", reads, commits, remoteFiles)
 			}
 		})

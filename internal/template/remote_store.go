@@ -895,7 +895,7 @@ func (s *RemoteStore) getJSONWithLimit(ctx context.Context, endpoint string, out
 		return fmt.Errorf("%w", ErrTemplateNotFound)
 	}
 	if status < 200 || status >= 300 {
-		return fmt.Errorf("remote hub request failed with status %d: %s", status, truncateRemoteBody(body))
+		return decodeRemoteAPIError(status, body)
 	}
 	if len(strings.TrimSpace(string(body))) == 0 {
 		return fmt.Errorf("%w", ErrTemplateNotFound)
