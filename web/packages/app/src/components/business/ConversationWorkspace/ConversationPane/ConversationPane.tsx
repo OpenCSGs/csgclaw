@@ -20,7 +20,6 @@ import { AgentView, type AgentDetailPaneHandle } from "@/components/business/Age
 import { DialogCloseButton, DialogContent, DialogRoot, DialogTitle } from "@/components/ui";
 import { normalizeAuthProviderName } from "@/models/agents";
 import { hasPendingCloudTask } from "@/models/cloudTasks";
-import { hasComposerDraft } from "@/models/conversationResources";
 import {
   getConversationDescription,
   isDirectConversation,
@@ -426,10 +425,6 @@ function ConversationPaneContent({
       [...messageControls.byMessage.values()].includes(roomTurns[0]))
       ? roomTurns[0]
       : undefined;
-  const stoppableInComposer =
-    sendStatus !== "sending" && !hasComposerDraft(draftSegments, attachmentDrafts?.length ?? 0)
-      ? stoppableParticipant
-      : undefined;
 
   const renderTurnControls = useCallback(
     (message: IMMessage) => {
@@ -441,7 +436,7 @@ function ConversationPaneContent({
                 <WorkingTurnControls
                   participant={participant}
                   t={t}
-                  onStop={participant === stoppableInComposer ? undefined : onStopWorkingTurn}
+                  onStop={participant === stoppableParticipant ? undefined : onStopWorkingTurn}
                   placement="message"
                 />
               </>
@@ -449,7 +444,7 @@ function ConversationPaneContent({
           }
         : null;
     },
-    [messageControls.byMessage, onStopWorkingTurn, stoppableInComposer, t],
+    [messageControls.byMessage, onStopWorkingTurn, stoppableParticipant, t],
   );
 
   useConversationDraftEditorSync(editorRef, draftSegments, t("remove"));
@@ -614,7 +609,7 @@ function ConversationPaneContent({
         footerSlot={
           <PendingTurnReplies
             participants={pendingCloudReply ? [pendingCloudReply] : messageControls.pendingReplies}
-            stoppableInComposer={stoppableInComposer}
+            stoppableInComposer={stoppableParticipant}
             agents={agents}
             usersById={usersById}
             t={t}
@@ -694,7 +689,7 @@ function ConversationPaneContent({
             />
           }
           hideWorkingContextUsage
-          stoppableParticipant={stoppableInComposer}
+          stoppableParticipant={stoppableParticipant}
           workingParticipants={conversation.cloud_agent ? [] : messageControls.composerParticipants}
           onApplyMention={onApplyMention}
           onApplySlashCandidate={onApplySlashCandidate}

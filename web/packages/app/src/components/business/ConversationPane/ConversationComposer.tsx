@@ -8,7 +8,7 @@ import {
   type ComposerResourceProps,
 } from "@/components/business/ConversationResourcePicker";
 import { ComposerAddMenu } from "./ComposerAddMenu";
-import { canSendComposer, hasComposerDraft, selectedResources } from "@/models/conversationResources";
+import { canSendComposer, selectedResources } from "@/models/conversationResources";
 import type { ChatFileScope } from "@/components/business/ChatSidePanel/types";
 import { useFileMentions } from "./FileMentionPicker";
 import type { SkillContinuation } from "@/models/slashCommands";
@@ -172,7 +172,7 @@ export const ConversationComposer = memo(function ConversationComposer({
   const canSend = canSendComposer(draftSegments, attachmentDrafts.length);
   const sendDisabled = interactionDisabled || resourcePicker.active || !canSend;
   const stopTarget =
-    !isSending && !hasComposerDraft(draftSegments, attachmentDrafts.length) && onStopWorkingTurn
+    !isSending && !resourcePicker.active && !draftText.trim() && !canSend && onStopWorkingTurn
       ? stoppableParticipant
       : undefined;
   const stopping = Boolean(isSending || stopTarget);

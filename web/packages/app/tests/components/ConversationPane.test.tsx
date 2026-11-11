@@ -14,8 +14,6 @@ import { AgentActivityMsgTypes, CSGCLAW_AGENT_ACTIVITY_TYPE } from "@/shared/con
 import { CHAT_SIDE_PANEL_WIDTH_STORAGE_KEY } from "@/shared/storage/keys";
 import type { ConversationPaneProps } from "@/components/business/ConversationPane";
 import { agentToDraft } from "@/models/agents";
-import { createAttachmentDrafts } from "@/models/attachments";
-import { resourceSegment } from "@/models/conversationResources";
 import type { IMConversation, IMMessage, IMUser, ThreadView, TranslateFn } from "@/models/conversations";
 import {
   getCollapsedSelectionTextOffset,
@@ -225,9 +223,6 @@ function renderThreadPane({
   onRestoreThread = vi.fn(),
   workingParticipants = [],
   onStopWorkingTurn = vi.fn(),
-  initialDraft = [],
-  attachmentDrafts = [],
-  sendStatus = "idle",
   cloudAgent,
 }: {
   agents?: NonNullable<ConversationPaneProps["agents"]>;
@@ -258,9 +253,6 @@ function renderThreadPane({
   onRestoreThread?: (rootID: string) => void;
   workingParticipants?: ConversationPaneProps["workingParticipants"];
   onStopWorkingTurn?: ConversationPaneProps["onStopWorkingTurn"];
-  initialDraft?: ComposerSegment[];
-  attachmentDrafts?: ConversationPaneProps["attachmentDrafts"];
-  sendStatus?: ConversationPaneProps["sendStatus"];
   cloudAgent?: IMConversation["cloud_agent"];
 } = {}) {
   const root = {
@@ -297,7 +289,7 @@ function renderThreadPane({
     const [inviteUserIDs, setInviteUserIDs] = useState<string[]>([]);
     const [showTools, setShowTools] = useState(showToolCalls);
     const [threadDraftSegments, setThreadDraftSegments] = useState<ComposerSegment[]>([]);
-    const [draftSegments, setDraftSegments] = useState(initialDraft);
+    const [draftSegments, setDraftSegments] = useState<ComposerSegment[]>([]);
     const editorRef = useRef<HTMLDivElement>(null);
     const [agentDetailOpen, setAgentDetailOpen] = useState(Boolean(agentDetailPanelProps));
     if (agentDetailPanelStateRef) {
@@ -319,8 +311,6 @@ function renderThreadPane({
         currentUserID="u-admin"
         draftSegments={draftSegments}
         draftText={segmentsToPlainText(draftSegments)}
-        attachmentDrafts={attachmentDrafts}
-        sendStatus={sendStatus}
         editorRef={editorRef}
         inviteActionLabel="Invite"
         locale="zh"
@@ -476,7 +466,8 @@ describe("ConversationPane", () => {
     expect(onStopWorkingTurn).toHaveBeenCalledWith(expect.objectContaining(participant));
   });
 
-  it.each(["pending", "progress"])("keeps a %s turn stoppable while preserving a follow-up draft", async (stage) => {
+  it.each(["pending", "progress"])("switches from Stop to Send while drafting during a %s turn", async (stage) => {
+    const user = userEvent.setup();
     const participant = {
       id: "u-manager",
       name: "manager",
@@ -490,7 +481,6 @@ describe("ConversationPane", () => {
     const { container } = renderThreadPane({
       workingParticipants: [participant],
       onStopWorkingTurn,
-      initialDraft: [{ type: "text", text: "Follow up" }],
       messages:
         stage === "progress"
           ? [
@@ -516,65 +506,18 @@ describe("ConversationPane", () => {
     });
     const composer = container.querySelector(".composer-box") as HTMLElement;
     const editor = within(composer).getByRole("textbox");
+    expect(within(composer).getByRole("button", { name: "conversationWorkingStopAria" })).toBeEnabled();
+
+    await user.type(editor, "Follow up");
     expect(within(composer).getByRole("button", { name: "Send" })).toBeEnabled();
+    expect(screen.queryByRole("button", { name: "conversationWorkingStopAria" })).not.toBeInTheDocument();
+
+    await user.clear(editor);
     const stop = screen.getByRole("button", { name: "conversationWorkingStopAria" });
-    expect(stop.closest(".message-row")).toBeInTheDocument();
-    await userEvent.click(stop);
+    expect(composer).toContainElement(stop);
+    await user.click(stop);
     expect(onStopWorkingTurn).toHaveBeenCalledWith(expect.objectContaining(participant));
-    expect(editor).toHaveTextContent("Follow up");
-
-    fireEvent.input(editor, { target: { textContent: "" } });
-    expect(
-      screen.getByRole("button", { name: "conversationWorkingStopAria" }).closest(".composer-box"),
-    ).toBeInTheDocument();
-    expect(screen.getAllByRole("button", { name: "conversationWorkingStopAria" })).toHaveLength(1);
   });
-
-  it.each([
-    {
-      label: "attachment",
-      attachments: createAttachmentDrafts([new File(["notes"], "notes.md")]),
-      draft: [],
-      status: "idle" as const,
-    },
-    {
-      label: "connector",
-      attachments: [],
-      draft: [resourceSegment({ source: "mcp", id: "search", type: "connector", name: "Search" })],
-      status: "idle" as const,
-    },
-    {
-      label: "upload",
-      attachments: createAttachmentDrafts([new File(["notes"], "notes.md")]),
-      draft: [],
-      status: "sending" as const,
-    },
-  ])(
-    "keeps execution Stop in the timeline while the composer contains a $label",
-    async ({ attachments, draft, status }) => {
-      const participant = {
-        id: "u-manager",
-        name: "manager",
-        participantID: "pt-manager",
-        roomID: "room-1",
-        requestID: "request-draft",
-        leaseID: "lease-draft",
-        canStop: true,
-      };
-      const onStopWorkingTurn = vi.fn();
-      renderThreadPane({
-        workingParticipants: [participant],
-        onStopWorkingTurn,
-        initialDraft: draft,
-        attachmentDrafts: attachments,
-        sendStatus: status,
-      });
-      const stop = screen.getByRole("button", { name: "conversationWorkingStopAria" });
-      expect(stop.closest(".message-row")).toBeInTheDocument();
-      await userEvent.click(stop);
-      expect(onStopWorkingTurn).toHaveBeenCalledWith(expect.objectContaining(participant));
-    },
-  );
 
   it.each(["running", "succeeded", "canceled"])(
     "replaces the pending reply with a matching %s message without duplicating controls",
