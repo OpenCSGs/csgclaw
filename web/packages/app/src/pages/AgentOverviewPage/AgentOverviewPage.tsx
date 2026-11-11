@@ -5,7 +5,7 @@ import { Cloud, ExternalLink, List, LoaderCircle, LogIn, Plus, Search } from "lu
 import { apiErrorCode } from "@/api/client";
 import { Button, LinkButton, PanelHeader, EmptyState, TextInput } from "@/components/ui";
 import { AgentAvatarContent, AgentAvatarImage } from "@/components/business/AgentAvatar";
-import { EntityPinRow } from "@/components/business/EntityPinRow";
+import { EntityPinHeading, EntityPinRow } from "@/components/business/EntityPinRow";
 import { entityPinKey, partitionPinned, usePinnedEntities, type Pinnable } from "@/hooks/workspace/usePinnedEntities";
 import { RoomAvatar } from "@/components/business/RoomAvatar";
 import { useWorkspaceControllerContext } from "@/hooks/workspace";
@@ -119,6 +119,7 @@ export function AgentOverviewPage() {
   const activeID = controller.ready ? controller.activePane.id : "";
   const templateFilter = searchParams.get("filter") === "personal" ? "personal" : "official";
   const [listOpen, setListOpen] = useState(false);
+  const [pinnedExpanded, setPinnedExpanded] = useState(true);
   const listToggleRef = useRef<HTMLButtonElement>(null);
   const closeList = () => {
     setListOpen(false);
@@ -225,7 +226,7 @@ export function AgentOverviewPage() {
               type="button"
               ref={selectedTemplateID === item.id ? selectedTemplateRef : undefined}
               aria-current={selectedTemplateID === item.id ? "true" : undefined}
-              className={`${styles.row} ${selectedTemplateID === item.id ? styles.active : ""}`}
+              className={styles.row}
               onClick={() => {
                 controller.hubViewProps?.onSelectTemplateInPlace(item);
                 navigate({ search: agentTemplatesSearch(item.id || "", templateFilter) });
@@ -261,7 +262,8 @@ export function AgentOverviewPage() {
                   content: (
                     <button
                       type="button"
-                      className={`${styles.row} ${activeID === item.id ? styles.active : ""}`}
+                      aria-current={activeID === item.id ? "true" : undefined}
+                      className={styles.row}
                       onClick={() => chooseAgent(item)}
                     >
                       <span className={styles.avatar}>
@@ -295,7 +297,7 @@ export function AgentOverviewPage() {
                     <button
                       type="button"
                       aria-current={cloudID === item.id ? "true" : undefined}
-                      className={`${styles.row} ${cloudID === item.id ? styles.active : ""}`}
+                      className={styles.row}
                       onClick={() => {
                         closeList();
                         navigate({
@@ -334,7 +336,8 @@ export function AgentOverviewPage() {
                   content: (
                     <button
                       type="button"
-                      className={`${styles.row} ${activeID === item.id ? styles.active : ""}`}
+                      aria-current={activeID === item.id ? "true" : undefined}
+                      className={styles.row}
                       onClick={() => {
                         closeList();
                         props.onSelectTeam(item);
@@ -368,15 +371,33 @@ export function AgentOverviewPage() {
   function renderPinned(rows: Row[], showCloudHeading = false) {
     const { pinned, rest } = partitionPinned(rows, pins.order);
     const firstCloudTemplate = showCloudHeading ? rest.find((item) => item.cloudTemplate) : undefined;
+    const renderRow = (row: Row, isPinned: boolean) => (
+      <EntityPinRow
+        key={entityPinKey(row)}
+        name={row.name}
+        pinned={isPinned}
+        t={t}
+        onToggle={() => {
+          if (!isPinned) setPinnedExpanded(true);
+          pins.toggle(row);
+        }}
+      >
+        {row.content}
+      </EntityPinRow>
+    );
     return [
       ...(pinned.length
         ? [
-            <h3 className={styles.pinHeading} key="pinned-heading">
-              {t("iaPin")}
-            </h3>,
+            <EntityPinHeading
+              key="pinned-heading"
+              expanded={pinnedExpanded}
+              onToggle={() => setPinnedExpanded((expanded) => !expanded)}
+              t={t}
+            />,
           ]
         : []),
-      ...[...pinned, ...rest].flatMap((row, index) => [
+      ...(pinnedExpanded ? pinned.map((row) => renderRow(row, true)) : []),
+      ...rest.flatMap((row) => [
         ...(row === firstCloudTemplate
           ? [
               <h3 className={styles.cloudTemplatesHeading} key="cloud-heading">
@@ -384,15 +405,7 @@ export function AgentOverviewPage() {
               </h3>,
             ]
           : []),
-        <EntityPinRow
-          key={entityPinKey(row)}
-          name={row.name}
-          pinned={index < pinned.length}
-          t={t}
-          onToggle={() => pins.toggle(row)}
-        >
-          {row.content}
-        </EntityPinRow>,
+        renderRow(row, false),
       ]),
     ];
   }
@@ -497,6 +510,7 @@ export function AgentOverviewPage() {
                   value={query}
                   onChange={(event) => {
                     const query = event.target.value;
+                    if (query.trim()) setPinnedExpanded(true);
                     setListState((state) => ({ ...state, query }));
                   }}
                 />

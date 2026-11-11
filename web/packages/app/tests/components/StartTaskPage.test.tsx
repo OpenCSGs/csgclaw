@@ -678,19 +678,27 @@ it("moves pinned targets above groups without selecting them and preserves the o
   try {
     const first = setup();
     const openPicker = () => user.click(screen.getByRole("button", { name: /iaTargetLabel/ }));
+    const pinAction = (target: string, action: "iaPin" | "iaUnpin") =>
+      within(screen.getByText(target, { exact: true }).closest("li")!).getByRole("button", { name: action });
     await openPicker();
-    await user.click(screen.getByTitle("iaPin · Worker"));
-    await user.click(screen.getByTitle("iaPin · Team"));
+    await user.click(pinAction("Worker", "iaPin"));
+    await user.click(pinAction("Team", "iaPin"));
     expect(screen.getByRole("button", { name: /iaTargetLabel.*Manager/ })).toBeInTheDocument();
     first.unmount();
 
     setup();
     await openPicker();
-    const team = screen.getByTitle("iaUnpin · Team");
-    const worker = screen.getByTitle("iaUnpin · Worker");
+    const team = pinAction("Team", "iaUnpin");
+    const worker = pinAction("Worker", "iaUnpin");
     expect(team.compareDocumentPosition(worker) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    await user.click(team);
-    expect(screen.getByTitle("iaPin · Team")).toBeInTheDocument();
+    const heading = screen.getByRole("button", { name: "iaPinned", expanded: true });
+    await user.click(heading);
+    expect(team).not.toBeInTheDocument();
+    expect(worker).not.toBeInTheDocument();
+    await user.click(heading);
+    expect(pinAction("Worker", "iaUnpin")).toBeVisible();
+    await user.click(pinAction("Team", "iaUnpin"));
+    expect(pinAction("Team", "iaPin")).toBeInTheDocument();
   } finally {
     localStorage.removeItem(key);
   }
