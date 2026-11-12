@@ -311,3 +311,36 @@
     transform: translateY(-2px);
   }
 }
+
+.toolActivity {
+  min-width: 0;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  background: var(--panel-strong);
+}
+
+.toolActivityHeading {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 6px;
+  color: var(--muted);
+  font: var(--text-xs-semibold);
+}
+
+.toolActivityHeading code {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:global(:root[data-theme]) :global(.message-row:not(.own)) :global(.message-bubble):has(.toolActivity),
+:global(:root[data-theme]) :global(.thread-message) :global(.thread-message-bubble):has(.toolActivity) {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}

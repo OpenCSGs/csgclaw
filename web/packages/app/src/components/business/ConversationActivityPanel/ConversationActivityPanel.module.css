@@ -466,7 +466,7 @@
   text-transform: uppercase;
 }
 
-.detailSection pre {
+.detailSection > pre {
   margin: 0;
   overflow: visible;
   color: var(--text);

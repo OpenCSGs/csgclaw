@@ -283,9 +283,21 @@
 }
 
 .directoryMenu {
+  --csgclaw-ui-popover-background: var(--surface);
+  --csgclaw-ui-popover-border: color-mix(in srgb, var(--text) 12%, transparent);
+  --csgclaw-ui-shadow: 0 8px 24px -4px color-mix(in srgb, var(--gray-950) 26%, transparent);
   width: min(208px, calc(100vw - 16px));
   max-width: calc(100vw - 16px);
   min-width: 0;
+}
+
+:global([data-theme="dark"]) .directoryMenu {
+  --csgclaw-ui-popover-background: var(--panel-soft);
+  --csgclaw-ui-shadow: 0 8px 24px -4px color-mix(in srgb, var(--black) 64%, transparent);
+}
+
+.directoryMenu [role="option"][data-state="checked"] {
+  background: var(--control-selected-background);
 }
 
 .directoryPath {

@@ -60,7 +60,6 @@ import {
   type AgentMemoryChange,
 } from "@/api/agents";
 import { SHOW_AGENT_LIFECYCLE_ACTIONS } from "@/shared/constants/agents";
-import { AGENT_PROFILE_ACTIVE_TAB_STORAGE_KEY } from "@/shared/storage/keys";
 import {
   EnvKeyValueEditor,
   ClipboardCopyButton,
@@ -151,17 +150,7 @@ type AgentActionHandler = (item: AgentLike) => VoidOrPromise;
 type AgentMetadataSavePatch = Pick<Partial<AgentDraft>, "description" | "name">;
 type AgentNoticeTone = "info" | "warning" | "success";
 
-const AGENT_PROFILE_TAB_IDS = [
-  "profile",
-  "channels",
-  "instructions",
-  "memory",
-  "skills",
-  "apps",
-  "mcp",
-  "knowledge",
-] as const;
-type AgentProfileTabID = (typeof AGENT_PROFILE_TAB_IDS)[number];
+type AgentProfileTabID = "profile" | "channels" | "instructions" | "memory" | "skills" | "apps" | "mcp" | "knowledge";
 type UpdateAgentDraft = (patch: Partial<AgentDraft>) => void;
 type RuntimeOptionSchemaList = ReturnType<typeof runtimeOptionSchemasForAgent>;
 const DEFAULT_AGENT_PROFILE_TAB_ID: AgentProfileTabID = "profile";
@@ -377,7 +366,7 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
   const [recreateTarget, setRecreateTarget] = useState<AgentLike | null>(null);
   const [isEditingDescription, setIsEditingDescription] = useState(false);
   const [isEditingName, setIsEditingName] = useState(false);
-  const [activeProfileTab, setActiveProfileTab] = useState<AgentProfileTabID>(() => readAgentProfileActiveTab());
+  const [activeProfileTab, setActiveProfileTab] = useState<AgentProfileTabID>(DEFAULT_AGENT_PROFILE_TAB_ID);
   const [appSettingsID, setAppSettingsID] = useState<string | undefined>();
   const [resourceDetail, setResourceDetail] = useState<{
     agentID: string;
@@ -648,7 +637,7 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
       workspaceSupported,
     ],
   );
-  const requestedTab = requestedProfileTab || activeProfileTab;
+  const requestedTab = requestedProfileTab || (onProfileTabChange ? DEFAULT_AGENT_PROFILE_TAB_ID : activeProfileTab);
   const selectedProfileTab =
     showApps && (requestedTab === "mcp" || requestedTab === "connectors")
       ? "apps"
@@ -759,7 +748,6 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
 
   function selectProfileTab(tabID: AgentProfileTabID): void {
     setActiveProfileTab(tabID);
-    saveAgentProfileActiveTab(tabID);
     setAppSettingsID(undefined);
     onProfileTabChange?.(tabID);
   }
@@ -1638,33 +1626,6 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
     </EntityPane>
   );
 });
-
-function readAgentProfileActiveTab(): AgentProfileTabID {
-  if (typeof window === "undefined") {
-    return DEFAULT_AGENT_PROFILE_TAB_ID;
-  }
-  try {
-    const raw = window.localStorage.getItem(AGENT_PROFILE_ACTIVE_TAB_STORAGE_KEY);
-    return isAgentProfileTabID(raw) ? raw : DEFAULT_AGENT_PROFILE_TAB_ID;
-  } catch {
-    return DEFAULT_AGENT_PROFILE_TAB_ID;
-  }
-}
-
-function saveAgentProfileActiveTab(tabID: AgentProfileTabID): void {
-  if (typeof window === "undefined") {
-    return;
-  }
-  try {
-    window.localStorage.setItem(AGENT_PROFILE_ACTIVE_TAB_STORAGE_KEY, tabID);
-  } catch {
-    // Active tab persistence is best-effort.
-  }
-}
-
-function isAgentProfileTabID(value: unknown): value is AgentProfileTabID {
-  return AGENT_PROFILE_TAB_IDS.includes(value as AgentProfileTabID);
-}
 
 type AgentRuntimePanelProps = {
   draft: AgentDraft;

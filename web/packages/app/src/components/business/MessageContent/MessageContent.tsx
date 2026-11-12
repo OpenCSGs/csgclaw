@@ -5,7 +5,7 @@ import { TurnProgress } from "@/components/business/TurnProgress";
 import { parseTurnProgress } from "@/models/turnProgress";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActionCard } from "./ActionCard";
-import { AgentActivityCard } from "./AgentActivityCard";
+import { AgentActivityCard, ToolActivityOutput } from "./AgentActivityCard";
 import { LongMessageCollapse } from "./LongMessageCollapse";
 import { CitationSources } from "./CitationSources";
 import { renderMarkdownWithCitations } from "./markdown";
@@ -16,7 +16,7 @@ import { parseStructuredMessage } from "./structuredMessages";
 import type { ActionCardPayload, MessageContentProps } from "./types";
 import { mentionMarkupPattern, escapeHTML } from "./mentions";
 import { renderMessageMention } from "./messageMentionMarkup";
-import { hasAgentActivityMetadata, parseAgentActivity } from "@/models/agentActivity";
+import { hasAgentActivityMetadata, parseAgentActivity, parseMessageActivityCommand } from "@/models/agentActivity";
 import { AgentActivityMsgTypes } from "@/shared/constants/messages";
 import { prepareMermaidBlocks, renderMermaidBlocks } from "./mermaid";
 import "./MessageContent.css";
@@ -142,6 +142,13 @@ function MessageBody({
 
   if (activity && !resolvedQuestion) {
     return <AgentActivityCard activity={activity} onQuestionSelect={onQuestionSelect} t={t} />;
+  }
+
+  const command = message && parseMessageActivityCommand({ content: displayContent, metadata: message.metadata });
+  if (command?.output) {
+    return (
+      <ToolActivityOutput name={command.command} label={t?.("progressOutput") ?? "Output"} text={command.output} />
+    );
   }
 
   if (slashCommandText) {

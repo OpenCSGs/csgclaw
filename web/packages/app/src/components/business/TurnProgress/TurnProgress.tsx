@@ -1,3 +1,4 @@
+import { ToolOutput } from "@/components/business/ToolOutput";
 import { imEventsConnected, subscribeIMConnection } from "@/shared/realtime/imEvents";
 import { memo, useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { ReactNode } from "react";
@@ -343,7 +344,7 @@ const ToolRow = memo(function ToolRow({ tool, number, t }: { tool: ProgressTool;
           <div className={styles.detailSection}>
             <span className={styles.detailLabel}>{t("progressOutput")}</span>
             {tool.output ? (
-              <pre>{tool.output}</pre>
+              <ToolOutput label={t("progressOutput")} text={tool.output} />
             ) : (
               <p className={styles.emptyOutput}>
                 {t(terminalTool(tool.status) ? "progressNoOutput" : "progressWaitingOutput")}

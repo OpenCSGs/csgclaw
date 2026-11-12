@@ -14,6 +14,7 @@ export type CitationSelectHandler = (selection: CitationSelection) => void;
 export type MessageLike = {
   id?: string;
   attachments?: readonly MessageAttachment[] | null;
+  metadata?: IMMessage["metadata"];
   [key: string]: unknown;
 };
 
