@@ -79,6 +79,8 @@ const t = (key: string, params?: Record<string, string | number>) => {
     attachmentPreviewFailed: "Preview failed",
     attachmentPreviewFullscreen: "Fullscreen",
     attachmentPreviewHtmlDocument: "HTML preview document",
+    attachmentPreviewWrapSource: "Wrap lines",
+    attachmentPreviewCopySource: "Copy source",
     attachmentPreviewExitFullscreen: "Exit fullscreen",
     attachmentPreviewLoading: "Loading preview",
     attachmentPreviewOutline: "Document outline",
@@ -319,11 +321,41 @@ describe("DocumentPreviewPanel", () => {
     expect(frameDocument).not.toContain("tracker.example");
 
     await user.click(screen.getByRole("radio", { name: "Code" }));
-    await waitFor(() =>
-      expect(
-        container.querySelector(`.${testDocumentPreviewPanelStyles["document-preview-shiki"]}[data-language="html"]`),
-      ).toHaveTextContent("window.hacked = true"),
+    const code = await screen.findByRole("textbox", { name: "Code" });
+    expect(code).toHaveTextContent("window.hacked = true");
+    expect(code).toHaveAttribute("aria-readonly", "true");
+    expect(container.querySelector(".cm-line span")).toBeInTheDocument();
+  });
+
+  it("shows line numbers and can wrap and copy the source of a large HTML document", async () => {
+    const user = userEvent.setup();
+    const body = "<p>Report text</p>\n".repeat(2800);
+    const longLine = "<p>" + "Long line ".repeat(300) + "</p>";
+    const source = `<!doctype html><html><body>\n${longLine}\n${body}<p>End of source</p></body></html>`;
+    const file = new File([source], "report.html", { type: "text/html" });
+    const { container } = render(
+      <DocumentPreviewPanel
+        index={0}
+        items={[{ file, id: "html", mediaType: file.type, name: file.name, sizeBytes: file.size }]}
+        t={t}
+        onClose={() => {}}
+        onIndexChange={() => {}}
+      />,
     );
+
+    await screen.findByTitle("HTML preview document");
+    await user.click(screen.getByRole("radio", { name: "Code" }));
+    const code = await screen.findByRole("textbox", { name: "Code" });
+    expect(container.querySelector(".cm-lineNumbers")).toBeInTheDocument();
+    expect(code).toHaveClass("cm-lineWrapping");
+
+    await user.click(screen.getByRole("button", { name: "Wrap lines" }));
+    expect(code).not.toHaveClass("cm-lineWrapping");
+    await user.click(screen.getByRole("button", { name: "Copy source" }));
+    await waitFor(async () => expect(await navigator.clipboard.readText()).toBe(source));
+
+    await user.click(screen.getByRole("radio", { name: "Preview" }));
+    expect(await screen.findByTitle("HTML preview document")).toHaveAttribute("sandbox", "");
   });
 
   it("syntax-highlights Go source with dual light and dark theme tokens", async () => {
