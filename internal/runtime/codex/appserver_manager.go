@@ -8,7 +8,6 @@ import (
 	"csgclaw/internal/modelcap"
 	"csgclaw/internal/modelprovider"
 	"csgclaw/internal/modelusage"
-	"csgclaw/internal/processgroup"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -155,11 +154,7 @@ func (m *appServerManager) Start(ctx context.Context, spec SessionSpec) (*Sessio
 		// Keep completed-turn exports timely; this does not block the turn itself.
 		cmd.Env = append(cmd.Env, "OTEL_BSP_SCHEDULE_DELAY=1000")
 	}
-	logStartOffset := int64(0)
-	if info, err := stderrFile.Stat(); err == nil {
-		logStartOffset = info.Size()
-	}
-	cmd.Stderr = stderrFile
+
 	if sysProcAttr := newSessionSysProcAttr(); sysProcAttr != nil {
 		cmd.SysProcAttr = sysProcAttr
 	}
@@ -178,7 +173,8 @@ func (m *appServerManager) Start(ctx context.Context, spec SessionSpec) (*Sessio
 		return nil, fmt.Errorf("codex app-server stdout pipe: %w", err)
 	}
 	cmd.Stdout = stdoutWriter
-	if err := processgroup.Start(cmd); err != nil {
+	workerLog, err := diagnostics.StartWithStderr(cmd, stderrFile, "codex", spec.RuntimeID)
+	if err != nil {
 		_ = stdoutWriter.Close()
 		_ = stdout.Close()
 		_ = stdin.Close()
@@ -189,10 +185,10 @@ func (m *appServerManager) Start(ctx context.Context, spec SessionSpec) (*Sessio
 
 	_ = stdoutWriter.Close()
 
-	diagnosticObserver := diagnostics.NewRuntimeObserver(spec.StderrPath, spec.RuntimeID, cmd.Process.Pid, logStartOffset, stderrFile)
+	diagnosticObserver := workerLog.Observer
 	diagnosticObserver.Bind(ctx)
 	defer diagnosticObserver.End(ctx)
-	logger := slog.New(diagnostics.NewServerLogHandler(stderrFile, slog.LevelInfo, nil))
+	logger := slog.New(diagnostics.NewServerLogHandler(workerLog, slog.LevelInfo, nil))
 	appClient := newAppServerClient(stdin, logger)
 	conversationSessions := cloneConversationSessions(spec.ConversationSessions)
 	if conversationSessions == nil {
@@ -210,7 +206,7 @@ func (m *appServerManager) Start(ctx context.Context, spec SessionSpec) (*Sessio
 		mcpCatalogRevision:    spec.MCPCatalogRevision,
 		cmd:                   cmd,
 		stdin:                 stdin,
-		stderr:                stderrFile,
+		stderr:                workerLog,
 		done:                  make(chan struct{}),
 		spec:                  spec,
 		appClient:             appClient,
@@ -2460,6 +2456,9 @@ func (m *appServerManager) waitAppServerSession(runtimeID string, live *liveSess
 	reader.drain()
 	cleanupErr := stopProcessTree(live.cmd.Process.Pid)
 	<-stdoutDone
+	if live.stderr != nil {
+		live.stderr.Drain()
+	}
 	live.mu.Lock()
 	live.stopErr = cleanupErr
 	live.mu.Unlock()

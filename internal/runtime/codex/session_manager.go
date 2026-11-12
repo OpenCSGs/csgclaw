@@ -35,7 +35,7 @@ type liveSession struct {
 	appClient             *appServerClient
 	cmd                   *exec.Cmd
 	stdin                 io.Closer
-	stderr                *os.File
+	stderr                *diagnostics.StderrLog
 	done                  chan struct{}
 	spec                  SessionSpec
 	conversationSessions  map[string]string

@@ -31,7 +31,11 @@ type RuntimeObserver struct {
 }
 
 func NewRuntimeObserver(path, runtimeID string, pid int, startOffset int64, writer io.Writer) *RuntimeObserver {
-	source := RuntimeLogSource{Path: path, RuntimeID: runtimeID, InstanceID: rand.Text(), PID: pid, StartedAt: time.Now().UTC(), ProcessStartOffset: startOffset}
+	return newRuntimeObserver(path, runtimeID, rand.Text(), pid, startOffset, writer)
+}
+
+func newRuntimeObserver(path, runtimeID, instanceID string, pid int, startOffset int64, writer io.Writer) *RuntimeObserver {
+	source := RuntimeLogSource{Path: path, RuntimeID: runtimeID, InstanceID: instanceID, PID: pid, StartedAt: time.Now().UTC(), ProcessStartOffset: startOffset}
 	if writer != nil {
 		_, _ = fmt.Fprintf(writer, "time=%s level=INFO msg=%q runtime_id=%q pid=%d instance_id=%s\n", source.StartedAt.Format(time.RFC3339Nano), "runtime diagnostic process started", runtimeID, pid, source.InstanceID)
 	}
