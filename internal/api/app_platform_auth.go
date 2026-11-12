@@ -25,12 +25,24 @@ func (h *Handler) agentForAuthorization(header string) (string, bool) {
 	if !ok || !strings.HasPrefix(header, "Bearer ") {
 		return "", false
 	}
-	return owner.AgentIDForAccessToken(strings.TrimPrefix(header, "Bearer "))
+	id, valid := owner.AgentIDForAccessToken(strings.TrimPrefix(header, "Bearer "))
+	if valid {
+		if selected, exists := h.svc.Agent(id); !exists || selected.ArchivedAt != nil {
+			return "", false
+		}
+	}
+	return id, valid
 }
 
 func (h *Handler) authorizesAgentToken(agentID, header string) bool {
 	owner, ok := h.svc.(interface{ AuthorizesAgentAccessToken(string, string) bool })
-	return ok && strings.HasPrefix(header, "Bearer ") && owner.AuthorizesAgentAccessToken(agentID, strings.TrimPrefix(header, "Bearer "))
+	if !ok {
+		return false
+	}
+	if selected, exists := h.svc.Agent(agentID); !exists || selected.ArchivedAt != nil {
+		return false
+	}
+	return strings.HasPrefix(header, "Bearer ") && owner.AuthorizesAgentAccessToken(agentID, strings.TrimPrefix(header, "Bearer "))
 }
 
 func (h *Handler) authorizeAppPlatformRequests(next http.Handler) http.Handler {
@@ -104,6 +116,9 @@ func (h *Handler) agentPlatformRoom(agentID, roomID string) bool {
 func (h *Handler) authorizeAgentPlatformRoute(r *http.Request, agentID string) bool {
 	p := strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/v1/"), "/")
 	parts := strings.Split(p, "/")
+	if parts[0] == "scheduled-tasks" {
+		return h.authorizeAgentScheduledTaskRoute(r, agentID, parts)
+	}
 	if h.agentPlatformManager(agentID) && managerSkillRoute(r) {
 		return true
 	}
@@ -153,6 +168,28 @@ func (h *Handler) authorizeAgentPlatformRoute(r *http.Request, agentID string) b
 	}
 	if h.agentPlatformManager(agentID) && r.Method == http.MethodGet {
 		return p == "agents" || p == "hub/templates" || p == "channels/csgclaw/participants" || p == "channels/feishu/participants"
+	}
+	return false
+}
+
+// The Manager's scheduling CLI manages workspace schedules on the user's behalf.
+// Admit only its context/list/create/update operations with the scoped runtime
+// credential; workers and read-only runtimes cannot gain write access.
+func (h *Handler) authorizeAgentScheduledTaskRoute(r *http.Request, agentID string, parts []string) bool {
+	if !h.agentPlatformManager(agentID) {
+		return false
+	}
+	if r.Method != http.MethodGet && h.connectorReadOnlyAgent(agentID) {
+		return false
+	}
+	if len(parts) == 1 {
+		return r.Method == http.MethodGet || r.Method == http.MethodPost
+	}
+	if len(parts) == 2 {
+		if parts[1] == "context" {
+			return r.Method == http.MethodGet
+		}
+		return parts[1] != "" && r.Method == http.MethodPatch
 	}
 	return false
 }

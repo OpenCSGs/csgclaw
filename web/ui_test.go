@@ -10,7 +10,7 @@ import (
 )
 
 func TestOnboardingGuideServesWithoutRedirectAndUsesExternalScript(t *testing.T) {
-	assets := os.DirFS("app/public")
+	assets := os.DirFS("packages/app/public")
 	handler := spaHandler{fsys: assets, files: http.FileServer(http.FS(assets))}
 	for _, route := range []string{"/onboarding-guide/guide.html?locale=en&embedded=1", "/onboarding-guide/guide.js", "/onboarding-guide/i18n.js"} {
 		rec := httptest.NewRecorder()

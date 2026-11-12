@@ -3,6 +3,7 @@ package roomtask
 import (
 	"csgclaw/internal/taskcore"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 )
@@ -158,4 +159,30 @@ func (s *Service) SourceAttempt(room, source string) int {
 		}
 	}
 	return 0
+}
+
+// CancelAgentTasks runs after the Agent Engine has drained the archived agent.
+// Other workers and the parent task keep their existing progress.
+func (s *Service) CancelAgentTasks(actors []string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, task := range s.List("") {
+		if task.ParentID == "" || !slices.Contains(actors, task.AssignedTo) || Terminal(task.Status) {
+			continue
+		}
+		if err := s.core.Mutate(task.ID, func(a *taskcore.Snapshot, _ func() (string, error)) error {
+			t := child(a, task.ID)
+			if t == nil || Terminal(t.Status) {
+				return nil
+			}
+			t.Status, t.Error, t.WaitingOnTaskID = taskcore.StatusCancelled, "agent archived", ""
+			t.RecoveryRequired = false
+			t.UpdatedAt = time.Now().UTC()
+			appendEvent(a, taskcore.EventTaskCancelled, t, task.AssignedTo, t.Error)
+			return nil
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
 }

@@ -675,7 +675,7 @@ func TestParticipantMessageRouteCanonicalizesAgentIDAlias(t *testing.T) {
 	}
 }
 
-func TestParticipantDeleteWithAgentCleanupRemovesCSGClawUser(t *testing.T) {
+func TestParticipantDeleteCannotBypassArchivedAgentConfirmation(t *testing.T) {
 	agentSvc := mustNewService(t)
 	if _, err := agentSvc.CreateRecord(context.Background(), agent.CreateRequest{
 		Spec: agent.CreateAgentSpec{
@@ -712,21 +712,21 @@ func TestParticipantDeleteWithAgentCleanupRemovesCSGClawUser(t *testing.T) {
 		participant: participantSvc, agentEngine: agentengine.New(agentSvc), workspace: agentSvc.Workspace(), agentModels: agentSvc.Models(), agentRuntime: agentSvc,
 	}
 
+	if _, err := agentSvc.SetArchived(context.Background(), "u-qa", true); err != nil {
+		t.Fatal(err)
+	}
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodDelete, "/api/v1/channels/csgclaw/participants/qa?delete_agent=if_unreferenced", nil)
 	srv.Routes().ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusNoContent {
-		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusNoContent, rec.Body.String())
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("status = %d, body=%s", rec.Code, rec.Body.String())
 	}
-	if _, ok := participantSvc.Get(participant.ChannelCSGClaw, "qa"); ok {
-		t.Fatal("participant csgclaw:qa still exists after delete")
+	if _, ok := participantSvc.Get(participant.ChannelCSGClaw, "qa"); !ok {
+		t.Fatal("delete shortcut removed participant")
 	}
-	if _, ok := agentSvc.Agent("agent-qa"); ok {
-		t.Fatal("agent u-qa still exists after delete")
-	}
-	if _, ok := imSvc.User("u-qa"); ok {
-		t.Fatal("user u-qa still exists after participant agent cleanup")
+	if _, ok := agentSvc.Agent("agent-qa"); !ok {
+		t.Fatal("delete shortcut removed agent")
 	}
 }
 

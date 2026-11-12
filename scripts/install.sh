@@ -6,7 +6,6 @@ VERSION="${VERSION:-latest}"
 INSTALL_DIR="${INSTALL_DIR:-$HOME/.local/bin}"
 LIB_DIR="${LIB_DIR:-$HOME/.local/lib/${APP}}"
 CSGCLAW_HOME="${CSGCLAW_HOME:-$HOME/.csgclaw}"
-SANDBOX_TOOLS_DIR="${SANDBOX_TOOLS_DIR:-${CSGCLAW_HOME}/sandbox-tools}"
 # All release metadata and downloads use this host (override per env if needed).
 MIRROR_HOST="${MIRROR_HOST:-https://csgclaw.opencsg.com}"
 BASE_URL="${BASE_URL:-${MIRROR_HOST}/releases}"
@@ -101,7 +100,7 @@ main() {
   need_cmd mktemp
   need_cmd install
 
-  local os arch version archive_name download_url archive_path extracted_path bundle_path bundle_bin_path bundle_codex_path bundle_cli_path bundle_host_cli_path bundle_host_cli_relative install_root bundled_codex_message
+  local os arch version archive_name download_url archive_path extracted_path bundle_path bundle_bin_path bundle_codex_path bundle_host_cli_path bundle_host_cli_relative install_root bundled_codex_message
   os="$(detect_os)"
   arch="$(detect_arch)"
   ensure_supported_platform "$os" "$arch"
@@ -124,10 +123,6 @@ main() {
   bundle_path="${TMPDIR_INSTALL}/${APP}"
   bundle_bin_path="${bundle_path}/bin/${APP}"
   bundle_codex_path="${bundle_path}/bin/codex"
-  bundle_cli_path="${bundle_path}/bin/sandbox-tools/csgclaw-cli"
-  if [ ! -f "$bundle_cli_path" ]; then
-    bundle_cli_path="${bundle_path}/bin/csgclaw_dir/csgclaw-cli"
-  fi
   bundle_host_cli_relative="bin/csgclaw-cli"
   bundle_host_cli_path="${bundle_path}/${bundle_host_cli_relative}"
   if [ ! -f "$bundle_host_cli_path" ]; then
@@ -139,10 +134,6 @@ main() {
   ensure_lib_dir
 
   if [ -f "$bundle_bin_path" ]; then
-    if [ ! -f "$bundle_cli_path" ]; then
-      echo "archive did not contain ${APP}/bin/sandbox-tools/csgclaw-cli" >&2
-      exit 1
-    fi
     if [ ! -f "$bundle_host_cli_path" ]; then
       echo "archive did not contain ${APP}/bin/csgclaw-cli" >&2
       exit 1
@@ -169,14 +160,11 @@ main() {
     extracted_path="${INSTALL_DIR}/${APP}"
   fi
 
-  mkdir -p "$SANDBOX_TOOLS_DIR"
-  install -m 0755 "$bundle_cli_path" "${SANDBOX_TOOLS_DIR}/csgclaw-cli"
 
   cat <<EOF
 Installed ${APP} ${version} to ${extracted_path}
 ${bundled_codex_message:-}
 Installed companion CLI to ${INSTALL_DIR}/csgclaw-cli
-Installed sandbox CLI to ${SANDBOX_TOOLS_DIR}/csgclaw-cli
 
 Next steps:
   ${APP} serve

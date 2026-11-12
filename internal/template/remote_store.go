@@ -27,13 +27,15 @@ import (
 )
 
 const (
-	defaultRemoteHTTPTimeout    = 60 * time.Second
-	defaultRemoteMaxJSONBytes   = 4 * 1024 * 1024
-	defaultRemoteMaxFileBytes   = 50 * 1024 * 1024
-	officialTemplateNamespace   = "agentichub"
-	remoteManifestFileName      = "agent.toml"
-	remoteAgentTemplatesPerPage = 20
-	remoteCommunityTemplateType = "csgclaw"
+	defaultRemoteHTTPTimeout  = 60 * time.Second
+	defaultRemoteMaxJSONBytes = 4 * 1024 * 1024
+	defaultRemoteMaxFileBytes = 50 * 1024 * 1024
+	// Allow a full publishable snapshot plus repository files and ZIP overhead.
+	defaultRemoteMaxWorkspaceBytes = 128 * 1024 * 1024
+	officialTemplateNamespace      = "agentichub"
+	remoteManifestFileName         = "agent.toml"
+	remoteAgentTemplatesPerPage    = 20
+	remoteCommunityTemplateType    = "csgclaw"
 )
 
 type RemoteStore struct {
@@ -133,6 +135,10 @@ type remoteCreateCodeRequest struct {
 	CodeFile      string `json:"code_file,omitempty"`
 }
 
+type remoteUpdateCodeRequest struct {
+	Nickname string `json:"nickname"`
+}
+
 type remoteCodeRepository struct {
 	Name          string            `json:"name"`
 	Nickname      string            `json:"nickname"`
@@ -157,6 +163,7 @@ type remoteTreeEntry struct {
 	Type string `json:"type"`
 	Path string `json:"path"`
 	Size int64  `json:"size"`
+	SHA  string `json:"sha"`
 }
 
 type remoteBlobResponse struct {
@@ -178,7 +185,7 @@ func NewRemoteStore(baseURL, token string) *RemoteStore {
 			Timeout: defaultRemoteHTTPTimeout,
 		},
 		maxJSON:      defaultRemoteMaxJSONBytes,
-		maxWorkspace: defaultRemoteMaxFileBytes,
+		maxWorkspace: defaultRemoteMaxWorkspaceBytes,
 	}
 }
 
@@ -726,7 +733,7 @@ func (s *RemoteStore) fetchWorkspaceTree(
 }
 
 func (s *RemoteStore) fetchBlob(ctx context.Context, id, filePath, branch string) ([]byte, error) {
-	return s.fetchBlobWithLimit(ctx, id, filePath, branch, s.maxWorkspace)
+	return s.fetchBlobWithLimit(ctx, id, filePath, branch, min(s.maxWorkspace, defaultRemoteMaxFileBytes))
 }
 
 func (s *RemoteStore) fetchBlobWithLimit(ctx context.Context, id, filePath, branch string, maxBytes int64) ([]byte, error) {
@@ -760,7 +767,7 @@ func (s *RemoteStore) Publish(ctx context.Context, spec PublishSpec) (Template, 
 	if !CanPublishCommunityTemplateRuntime(normalized.RuntimeKind) {
 		return Template{}, fmt.Errorf("runtime_kind %q cannot be published to the community", normalized.RuntimeKind)
 	}
-	files, err := buildRemoteTemplateFiles(normalized, s.maxWorkspace)
+	files, err := buildRemoteTemplateFiles(normalized, remotePublishMaxFileBytes)
 	if err != nil {
 		return Template{}, err
 	}
@@ -799,7 +806,7 @@ func (s *RemoteStore) Publish(ctx context.Context, spec PublishSpec) (Template, 
 	if branch == "" {
 		branch = "main"
 	}
-	if err := s.commitRemoteTemplate(ctx, request.Name, branch, files, exists); err != nil {
+	if err := s.commitRemoteTemplate(ctx, request.Name, branch, files, exists, request.Nickname); err != nil {
 		return Template{}, err
 	}
 	return Template{
@@ -888,7 +895,7 @@ func (s *RemoteStore) getJSONWithLimit(ctx context.Context, endpoint string, out
 		return fmt.Errorf("%w", ErrTemplateNotFound)
 	}
 	if status < 200 || status >= 300 {
-		return fmt.Errorf("remote hub request failed with status %d: %s", status, truncateRemoteBody(body))
+		return decodeRemoteAPIError(status, body)
 	}
 	if len(strings.TrimSpace(string(body))) == 0 {
 		return fmt.Errorf("%w", ErrTemplateNotFound)
@@ -900,6 +907,14 @@ func (s *RemoteStore) getJSONWithLimit(ctx context.Context, endpoint string, out
 }
 
 func (s *RemoteStore) postJSON(ctx context.Context, endpoint string, input, out any) error {
+	return s.sendJSON(ctx, http.MethodPost, endpoint, input, out)
+}
+
+func (s *RemoteStore) putJSON(ctx context.Context, endpoint string, input, out any) error {
+	return s.sendJSON(ctx, http.MethodPut, endpoint, input, out)
+}
+
+func (s *RemoteStore) sendJSON(ctx context.Context, method, endpoint string, input, out any) error {
 	var body io.Reader
 	if input != nil {
 		data, err := json.Marshal(input)
@@ -908,7 +923,7 @@ func (s *RemoteStore) postJSON(ctx context.Context, endpoint string, input, out 
 		}
 		body = bytes.NewReader(data)
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, body)
+	req, err := http.NewRequestWithContext(ctx, method, endpoint, body)
 	if err != nil {
 		return fmt.Errorf("create remote hub request: %w", err)
 	}
@@ -919,7 +934,7 @@ func (s *RemoteStore) postJSON(ctx context.Context, endpoint string, input, out 
 	}
 	resp, err := s.httpClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("remote hub request POST %s: %w", endpoint, err)
+		return fmt.Errorf("remote hub request %s %s: %w", method, endpoint, err)
 	}
 	defer resp.Body.Close()
 	data, err := io.ReadAll(io.LimitReader(resp.Body, s.maxJSON+1))

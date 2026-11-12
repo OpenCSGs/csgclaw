@@ -152,7 +152,7 @@ func writeMemoryPatchWithTiming(root string, raw map[string]any, profile agentru
 			return err
 		}
 	}
-	patch := fmt.Sprintf("- insert:\n    - id: csgclaw-memory\n      name: %q\n      config:\n        enabled: %t\n        model: %q\n        checkpointIntervalMs: %d\n        checkpointIdleMs: %d\n        retryDelayMs: %d\n        requestTimeoutMs: %d\n", filepath.Join(root, "memory.mjs"), opts.MemoryMode == MemoryModeEnabled, profile.ModelID, timing.CheckpointInterval.Milliseconds(), timing.CheckpointIdle.Milliseconds(), timing.RetryDelay.Milliseconds(), timing.RequestTimeout.Milliseconds())
+	patch := fmt.Sprintf("- insert:\n    - id: csgclaw-memory\n      name: %q\n      config:\n        enabled: %t\n        model: %q\n        checkpointIntervalMs: %d\n        checkpointIdleMs: %d\n        retryDelayMs: %d\n        requestTimeoutMs: %d\n", moduleFileURL(filepath.Join(root, "memory.mjs")), opts.MemoryMode == MemoryModeEnabled, profile.ModelID, timing.CheckpointInterval.Milliseconds(), timing.CheckpointIdle.Milliseconds(), timing.RetryDelay.Milliseconds(), timing.RequestTimeout.Milliseconds())
 	return os.WriteFile(filepath.Join(root, memoryPatchFileName), []byte(patch), 0o600)
 }
 

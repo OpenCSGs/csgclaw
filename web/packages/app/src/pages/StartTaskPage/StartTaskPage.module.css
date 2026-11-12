@@ -1,0 +1,254 @@
+.page {
+  grid-column: 1 / -1;
+  grid-row: 1 / -1;
+  min-height: 0;
+  height: 100%;
+  position: relative;
+  display: flex;
+  background: var(--panel);
+  color: var(--text);
+  --input-text-placeholder: var(--muted);
+}
+.main {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+}
+.panelToggle {
+  position: absolute;
+  inset-block-start: 12px;
+  inset-inline-end: 12px;
+}
+.inner {
+  width: min(880px, 100%);
+  padding: 44px 32px 56px;
+  margin: auto;
+  display: flex;
+  flex-direction: column;
+}
+.head {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  text-align: center;
+  margin-bottom: 22px;
+}
+.head h1 {
+  margin: 0;
+  font-size: 26px;
+  font-weight: 600;
+  line-height: 34px;
+  letter-spacing: -0.01em;
+}
+.head p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 21px;
+}
+.pane {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.composerGroup {
+  position: relative;
+}
+.composer {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--input-border);
+  border-radius: 18px;
+  background: var(--input-background);
+  box-shadow: var(--shadow-xs);
+}
+@supports (color: color-mix(in srgb, black, white)) {
+  .composer {
+    border-color: color-mix(in srgb, var(--text) 16%, transparent);
+  }
+}
+@supports not (color: color-mix(in srgb, black, white)) {
+  .composer:hover {
+    border-color: var(--input-border-hover);
+  }
+  .composer:focus-within {
+    border-color: var(--input-border-focus);
+    outline: 2px solid var(--input-border-focus);
+    outline-offset: 2px;
+  }
+}
+.resourceSearch {
+  min-height: 148px;
+  padding: 16px 16px 8px;
+}
+.mentionAnchor {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.mentionPopover {
+  width: min(360px, calc(100vw - 24px));
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  animation: none;
+}
+.mentionPopover .mentions {
+  position: static;
+  width: 100%;
+  max-height: min(240px, var(--radix-popover-content-available-height));
+  margin: 0;
+  animation: none;
+}
+.draft:not([hidden]) {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 6px;
+  min-height: 148px;
+  padding: 16px 16px 8px;
+}
+.page .composer .input {
+  flex: 1;
+  min-width: 120px;
+  min-height: 116px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 15.5px;
+  line-height: 25px;
+  resize: none;
+}
+.page .composer .input:focus {
+  outline: none;
+  box-shadow: none;
+}
+.actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 4px 10px 8px;
+}
+.cloudActions {
+  justify-content: flex-end;
+}
+.addButton {
+  --composer-add-control-size: 36px;
+  --composer-add-icon-size: 16px;
+  flex: 0 0 auto;
+  align-self: center;
+}
+.attachmentFeedback {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+.preset {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--primary);
+}
+.setup {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  display: grid;
+  gap: 10px;
+}
+.setup p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+.setup > button {
+  justify-self: start;
+}
+.error {
+  color: var(--danger);
+  font-size: 13px;
+  margin: 0;
+}
+.emptyRoom {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.emptyRoomHint {
+  color: var(--muted);
+  font-size: 12px;
+}
+.examples {
+  margin-top: 34px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.examples > span {
+  flex-shrink: 0;
+}
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.chip {
+  padding: 5px 12px 5px 9px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font: inherit;
+  font-size: 12.5px;
+  line-height: 20px;
+  cursor: pointer;
+}
+.chip svg {
+  color: var(--primary);
+}
+.chip:hover {
+  border-color: var(--primary);
+  color: var(--text);
+  background: var(--primary-soft);
+}
+.examplesClose {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  width: 24px;
+  height: 24px;
+  cursor: pointer;
+}
+@media (max-width: 960px) {
+  .inner {
+    padding: 32px 20px 40px;
+  }
+  .examples {
+    flex-wrap: wrap;
+  }
+}

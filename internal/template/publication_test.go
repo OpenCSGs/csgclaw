@@ -9,6 +9,7 @@ import (
 	toml "github.com/pelletier/go-toml/v2"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -27,21 +28,27 @@ func TestPublishLatestUpdatesCloudAndPersistsAssociation(t *testing.T) {
 	}
 	creates, deletes := 0, 0
 	exists := false
+	activeBranch := "main"
 	var uploadedRevisions []int
+	var updatedNicknames []string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case "/api/v1/codes/alice/Reviewer/refs/main/tree/":
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/last_commit"):
+			if r.URL.Query().Get("ref") != activeBranch {
+				t.Errorf("unexpected last commit branch: %s", r.URL)
+			}
+			_, _ = w.Write([]byte(`{"data":{"id":"base"}}`))
+		case r.URL.Path == "/api/v1/codes/alice/Reviewer/refs/base/tree/":
 			_, _ = w.Write([]byte(`{"data":{"files":[]}}`))
-		case "/api/v1/codes/alice/Reviewer/preupload/main":
+		case strings.Contains(r.URL.Path, "/preupload/"):
 			respondTemplatePreupload(t, w, r)
-		case "/api/v1/codes/alice/Reviewer/commit/main":
+		case r.URL.Path == "/api/v1/codes/alice/Reviewer/commit/main":
 			var request struct {
 				Files []remoteCommitFile `json:"files"`
 			}
 			if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 				t.Error(err)
 			}
-			found := false
 			for _, file := range request.Files {
 				if strings.HasPrefix(file.Path, ".versions") {
 					t.Errorf("uploaded local history: %s", file.Path)
@@ -49,7 +56,6 @@ func TestPublishLatestUpdatesCloudAndPersistsAssociation(t *testing.T) {
 				if file.Path != "agent.toml" {
 					continue
 				}
-				found = true
 				data, err := base64.StdEncoding.DecodeString(file.Content)
 				if err != nil {
 					t.Error(err)
@@ -65,11 +71,8 @@ func TestPublishLatestUpdatesCloudAndPersistsAssociation(t *testing.T) {
 				}
 				uploadedRevisions = append(uploadedRevisions, manifest.Revision)
 			}
-			if !found {
-				t.Error("uploaded manifest missing")
-			}
 			w.WriteHeader(http.StatusOK)
-		case "/api/v1/codes":
+		case r.URL.Path == "/api/v1/codes":
 			creates++
 			if exists {
 				t.Error("attempted to recreate an existing repository")
@@ -85,13 +88,22 @@ func TestPublishLatestUpdatesCloudAndPersistsAssociation(t *testing.T) {
 				t.Errorf("cloud association lost after rename: %s", request.Name)
 			}
 			_ = json.NewEncoder(w).Encode(map[string]any{"data": map[string]any{"path": "alice/Reviewer"}})
-		case "/api/v1/codes/alice/Reviewer":
+		case r.URL.Path == "/api/v1/codes/alice/Reviewer":
 			if r.Method == http.MethodGet {
 				if !exists {
 					http.NotFound(w, r)
 					return
 				}
-				_, _ = w.Write([]byte(`{"data":{"path":"alice/Reviewer"}}`))
+				_ = json.NewEncoder(w).Encode(map[string]any{"data": map[string]string{"path": "alice/Reviewer", "default_branch": activeBranch}})
+				return
+			}
+			if r.Method == http.MethodPut {
+				var request remoteUpdateCodeRequest
+				if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+					t.Error(err)
+				}
+				updatedNicknames = append(updatedNicknames, request.Nickname)
+				w.WriteHeader(http.StatusOK)
 				return
 			}
 			if r.Method != http.MethodDelete || r.Header.Get("Authorization") != "Bearer token" {
@@ -118,7 +130,7 @@ func TestPublishLatestUpdatesCloudAndPersistsAssociation(t *testing.T) {
 	}
 	for i := 1; i <= 2; i++ {
 		if i == 2 {
-			spec.Name = "RenamedReviewer"
+			spec.DisplayName = "Renamed Reviewer"
 			if _, err := local.SaveAgent(ctx, spec); err != nil {
 				t.Fatal(err)
 			}
@@ -158,6 +170,9 @@ func TestPublishLatestUpdatesCloudAndPersistsAssociation(t *testing.T) {
 	if creates != 1 || deletes != 0 {
 		t.Fatalf("creates=%d deletes=%d", creates, deletes)
 	}
+	if !reflect.DeepEqual(updatedNicknames, []string{"Renamed Reviewer", "Reviewer"}) {
+		t.Fatalf("updated nicknames=%v", updatedNicknames)
+	}
 }
 
 func TestCloudCommitFailureKeepsLocalVersions(t *testing.T) {
@@ -171,6 +186,8 @@ func TestCloudCommitFailureKeepsLocalVersions(t *testing.T) {
 		switch {
 		case strings.Contains(r.URL.Path, "/tree/"):
 			_, _ = w.Write([]byte(`{"data":{"files":[]}}`))
+		case r.Method == http.MethodPut:
+			w.WriteHeader(http.StatusOK)
 		case r.Method == http.MethodGet:
 			_, _ = w.Write([]byte(`{"data":{"path":"alice/Reviewer"}}`))
 		case strings.Contains(r.URL.Path, "/preupload/"):

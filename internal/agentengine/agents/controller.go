@@ -184,9 +184,10 @@ type Controller struct {
 	WorkspaceService
 	ModelConfiguration
 	Repository
-	files        *contract.FileStore
-	interactions *interactionstate.Coordinator
-	extensions   RuntimeExtensionsController
+	files          *contract.FileStore
+	interactions   *interactionstate.Coordinator
+	extensions     RuntimeExtensionsController
+	interruptAgent func(string)
 
 	server                 config.ServerConfig
 	hub                    templateService
@@ -215,18 +216,23 @@ type Controller struct {
 	deferManagerRuntimeStart      bool
 	connectorCapabilityKey        []byte
 	agentResourceCleanup          func(context.Context, string) error
+	memoryCleanup                 func(string) error
+	memoryTemplate                func(string, string) error
 	runtimeConfigurationGuard     func(context.Context, string) error
 }
 
 type ControllerOption func(*Controller) error
 
 // AttachEngine supplies the shared process-local execution resources at composition.
-func (s *Controller) AttachEngine(files *contract.FileStore, interactions *interactionstate.Coordinator, extensions RuntimeExtensionsController) {
+func (s *Controller) AttachEngine(files *contract.FileStore, interactions *interactionstate.Coordinator, extensions RuntimeExtensionsController, interrupt ...func(string)) {
 	s.bindResources()
 	s.ModelConfiguration.Repository = &s.Repository
 	s.files = files
 	s.interactions = interactions
 	s.extensions = extensions
+	if len(interrupt) > 0 {
+		s.interruptAgent = interrupt[0]
+	}
 }
 
 type templateService interface {
@@ -249,6 +255,9 @@ func WithSandboxProvider(provider sandbox.Provider) ControllerOption {
 			return fmt.Errorf("sandbox provider is required")
 		}
 		s.sandbox = provider
+		if provider.Name() == config.CSGHubProvider {
+			s.server.DeploymentMode = config.CSGHubProvider
+		}
 		return nil
 	}
 }
@@ -864,9 +873,11 @@ func (s *Controller) managerStartupProfile(ctx context.Context) (AgentProfile, [
 		s.mu.RUnlock()
 		return normalizeProfile(AgentProfile{Name: ManagerName, Provider: ProviderCSGHubLite}, ManagerName, ""), nil
 	}
+	llm := s.llm
+	recommended := resolveCreationDefaults(s.creationDefaults, ModelProviderCatalogFromLLM(llm))
 	s.mu.RUnlock()
 	if s != nil {
-		if profileName, model, err := s.llm.Resolve(""); err == nil {
+		if profileName, model, err := llm.Resolve(""); err == nil {
 			profile := profileFromConfigModel(profileName, "", model)
 			profile.Name = ManagerName
 			profile = normalizeProfile(profile, ManagerName, "")
@@ -878,6 +889,12 @@ func (s *Controller) managerStartupProfile(ctx context.Context) (AgentProfile, [
 				}}
 			}
 		}
+	}
+	// A fresh installation usually has no global model selector, even after
+	// login has connected a provider with several models.
+	recommended = normalizeProfile(recommended, ManagerName, "")
+	if recommended.ProfileComplete {
+		return recommended, []ProfileDetectionResult{{Provider: recommended.Provider, Status: "ok", ModelID: recommended.ModelID}}
 	}
 	return s.DetectDefaultProfile(ctx)
 }
@@ -1657,6 +1674,9 @@ func (s *Controller) Start(ctx context.Context, id string) (Agent, error) {
 	if !ok {
 		return Agent{}, fmt.Errorf("agent %q not found", id)
 	}
+	if got.ArchivedAt != nil {
+		return Agent{}, archivedAgentError()
+	}
 	if got.AgentProfile.EnvRestartRequired && !got.AgentProfile.ImageUpgradeRequired && isHostRuntimeKind(got.RuntimeKind) {
 		return s.restartRuntimeLocked(ctx, id)
 	}
@@ -1752,7 +1772,7 @@ func (s *Controller) Stop(ctx context.Context, id string) (Agent, error) {
 	return updated, nil
 }
 
-func (s *Controller) DeleteRecord(ctx context.Context, id string) error {
+func (s *Controller) DeleteRecord(ctx context.Context, id string) (resultErr error) {
 	id = strings.TrimSpace(id)
 	if id == "" {
 		return fmt.Errorf("agent id is required")
@@ -1770,11 +1790,19 @@ func (s *Controller) DeleteRecord(ctx context.Context, id string) error {
 		return fmt.Errorf("agent %q not found", id)
 	}
 
-	if err := s.removeAgentRuntime(ctx, existing); err != nil {
+	if existing.ArchivedAt != nil {
+		restore, err := s.preserveDeletedWorkspace(existing)
+		if err != nil {
+			return err
+		}
+		defer func() { resultErr = errors.Join(resultErr, restore()) }()
+	}
+	if err := s.removeAgentRuntime(ctx, existing, false); err != nil {
 		return err
 	}
 	s.mu.RLock()
 	cleanup := s.agentResourceCleanup
+	memoryCleanup := s.memoryCleanup
 	s.mu.RUnlock()
 	if cleanup != nil {
 		cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
@@ -1785,6 +1813,11 @@ func (s *Controller) DeleteRecord(ctx context.Context, id string) error {
 		}
 	}
 
+	if memoryCleanup != nil {
+		if err := memoryCleanup(existing.ID); err != nil {
+			return fmt.Errorf("remove Agent memory: %w", err)
+		}
+	}
 	s.mu.Lock()
 
 	current, key, ok := s.agentByIDLocked(id)
@@ -1813,7 +1846,7 @@ func (s *Controller) DeleteRecord(ctx context.Context, id string) error {
 
 // removeAgentRuntime retires the old Adapter's files and process without
 // deleting the Agent's desired state or independently managed child resources.
-func (s *Controller) removeAgentRuntime(ctx context.Context, existing Agent) error {
+func (s *Controller) removeAgentRuntime(ctx context.Context, existing Agent, preserveMemory bool) error {
 	rt, err := s.runtimeForKind(existing.RuntimeKind)
 	if err != nil {
 		return err
@@ -1825,7 +1858,7 @@ func (s *Controller) removeAgentRuntime(ctx context.Context, existing Agent) err
 	if err != nil {
 		return err
 	}
-	if err := removeAgentHome(agentHome); err != nil {
+	if err := removeAgentRuntimeHome(agentHome, preserveMemory); err != nil {
 		return fmt.Errorf("%w: %v", ErrHomeCleanup, err)
 	}
 	runtimeHome, err := s.sandboxRuntimeHome(existing.ID)
@@ -1844,6 +1877,45 @@ func sandboxNameForAgentID(agentID string) string {
 
 func removeAll(path string) error {
 	return osRemoveAll(path)
+}
+
+func removeAgentRuntimeHome(home string, preserveMemory bool) error {
+	if !preserveMemory {
+		return removeAgentHome(home)
+	}
+	info, err := os.Lstat(home)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("Agent home must be a real directory")
+	}
+	info, err = os.Lstat(filepath.Join(home, "memory"))
+	if errors.Is(err, os.ErrNotExist) {
+		return removeAgentHome(home)
+	}
+	if err != nil {
+		return err
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("Agent memory must be a real directory")
+	}
+	children, err := os.ReadDir(home)
+	if err != nil {
+		return err
+	}
+	for _, child := range children {
+		if child.Name() == "memory" {
+			continue
+		}
+		if err := removeAgentHome(filepath.Join(home, child.Name())); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func removeAgentHome(path string) error {
@@ -2079,7 +2151,7 @@ func (s *Controller) startupAgentCandidates() []Agent {
 }
 
 func isConfiguredAgentStartupCandidate(a Agent) bool {
-	if isManagerAgent(a) || !isAgentProfileComplete(a) {
+	if a.ArchivedAt != nil || isManagerAgent(a) || !isAgentProfileComplete(a) {
 		return false
 	}
 	runtimeKind := strings.TrimSpace(a.RuntimeKind)
@@ -2247,7 +2319,7 @@ func (s *Controller) createWorker(ctx context.Context, spec CreateAgentSpec, rep
 	}
 	runtimeProfile := s.runtimeProfileForKind(runtimeKind, id, name, description, runtimeResolvedProfile)
 	if replacing {
-		if err := s.removeAgentRuntime(ctx, existing); err != nil {
+		if err := s.removeAgentRuntime(ctx, existing, true); err != nil {
 			return Agent{}, err
 		}
 		if err := s.persistStartingWorker(ctx, id, name, description, instructions, image, avatar, runtimeKind, runtimeName, sandboxed, resolvedProfile, spec.RuntimeOptions, spec.MCPServers, spec.RuntimeCredentials, spec.RuntimeInitShell, true); err != nil {
@@ -2495,7 +2567,20 @@ func (s *Controller) provisionRuntimeRequest(ctx context.Context, rt agentruntim
 	if !ok {
 		return nil
 	}
-	return provisioner.Provision(ctx, req)
+	s.mu.RLock()
+	seed := s.memoryTemplate
+	s.mu.RUnlock()
+	content, hasTemplate := req.TemplateMemory, req.TemplateMemorySet
+	if seed != nil {
+		req.TemplateMemory, req.TemplateMemorySet = "", false
+	}
+	if err := provisioner.Provision(ctx, req); err != nil {
+		return err
+	}
+	if seed != nil && hasTemplate {
+		return seed(req.AgentID, content)
+	}
+	return nil
 }
 
 func (s *Controller) provisionRuntime(ctx context.Context, rt agentruntime.Runtime, runtimeKind string, req agentruntime.ProvisionRequest) error {

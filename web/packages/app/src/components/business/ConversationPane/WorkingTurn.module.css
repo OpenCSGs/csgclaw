@@ -1,0 +1,145 @@
+.composer-working-status {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 5px;
+  min-width: 0;
+}
+
+.composer-working-turn {
+  width: 100%;
+  min-width: 0;
+}
+
+.composer-working-row {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  align-items: center;
+  gap: 7px;
+}
+
+.composer-working-turn:global(.is-stopping) {
+  opacity: 0.78;
+}
+
+.composer-working-stop {
+  display: inline-grid;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 auto;
+  place-items: center;
+  padding: 0;
+  border: 1px solid color-mix(in oklab, var(--danger) 22%, var(--line));
+  border-radius: 8px;
+  color: color-mix(in oklab, var(--danger) 62%, var(--muted));
+  background: color-mix(in oklab, var(--danger) 3%, var(--surface));
+  cursor: pointer;
+  transition:
+    color 120ms ease,
+    border-color 120ms ease,
+    background-color 120ms ease,
+    box-shadow 120ms ease;
+}
+
+.composer-working-stop:hover:not(:disabled) {
+  color: color-mix(in oklab, var(--danger) 72%, var(--muted));
+  border-color: color-mix(in oklab, var(--danger) 34%, var(--line));
+  background: color-mix(in oklab, var(--danger) 8%, var(--surface));
+}
+
+.composer-working-stop:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.composer-working-stop:disabled {
+  color: var(--muted);
+  border-color: color-mix(in oklab, var(--muted) 18%, var(--line));
+  background: color-mix(in oklab, var(--muted) 3%, var(--surface));
+  cursor: default;
+}
+
+.composer-working-error {
+  margin-top: 4px;
+  font: var(--text-xs-normal);
+  margin-left: 24px;
+  color: var(--danger);
+}
+
+.composer-working-name {
+  overflow: hidden;
+  max-width: 150px;
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: -0.01em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.composer-working-summary {
+  overflow: hidden;
+  min-width: 0;
+  max-width: min(240px, 34vw);
+  color: var(--muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:global(.composer-working-item):is([data-working-action="running"], [data-working-action="using_tool"])
+  .composer-working-summary {
+  font-family: var(--font-family-mono);
+  font-size: 11px;
+}
+
+.composer-working-dots {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  width: 16px;
+  height: 12px;
+}
+
+.composer-working-dots span {
+  width: 3px;
+  height: 3px;
+  border-radius: var(--radius-full);
+  background: var(--primary);
+  animation: composer-working-dot 0.48s ease-in-out infinite;
+}
+
+.composer-working-dots span:nth-child(2) {
+  animation-delay: 0.08s;
+}
+
+.composer-working-dots span:nth-child(3) {
+  animation-delay: 0.16s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .composer-working-dots span {
+    animation: none;
+  }
+}
+
+@media (max-width: 720px) {
+  .composer-working-summary {
+    max-width: none;
+  }
+}
+
+@keyframes composer-working-dot {
+  0%,
+  70%,
+  100% {
+    opacity: 0.38;
+    transform: translateY(1.5px);
+  }
+
+  35% {
+    opacity: 1;
+    transform: translateY(-3px);
+  }
+}

@@ -1,12 +1,12 @@
 # UI Component Library
 
-These rules apply to `web/app/src/components/ui`, the shared presentation component library for the Vite web app.
+These rules apply to the shared presentation library in `web/packages/csgclaw-ui/src/components`.
 
 Chinese companion: `ui-components.zh.md`.
 
 ## Scope
 
-`src/components/ui` owns presentation primitives: layout shells, buttons, icons, form controls, and Radix-based interaction primitives. UI components must stay data-source agnostic and should not import API clients, route modules, workspace controllers, page modules, storage clients, or realtime clients.
+`csgclaw-ui` owns reusable controls and presentation components that work with React and the package theme alone, including dialogs, badges, and inline errors. App-owned icons and shared feature presentations belong in the app's `src/components/business`. Keep page-specific layout with the page. The app's UI entrypoint only re-exports the package. Keep integration tests for package components under `web/packages/app/tests/components`.
 
 Business-aware shared components belong in `src/components/business`. Page-private components belong under the owning page directory.
 
@@ -14,25 +14,25 @@ Business-aware shared components belong in `src/components/business`. Page-priva
 
 Business features should prefer the project's existing component library instead of rebuilding primitive interactions or styles inside pages:
 
-1. Page and feature code should compose `src/components/business` and `src/components/ui` first.
+1. Page and feature code compose `csgclaw-ui` and existing business components first.
 2. `src/components/business` may combine UI primitives with business labels, state, and actions, but should not reinvent base controls.
-3. `src/components/ui` wraps reusable presentation primitives and turns Radix primitive behavior into CSGClaw-local APIs and visual conventions.
+3. Put reusable primitives in `csgclaw-ui` and use its namespaced theme tokens. Review business components for migration as described in the frontend development guide.
 4. Radix primitives are the interaction foundation for the component library, not the default direct dependency for business pages.
 
-If a page needs a new highly customized UI, start with a page-private component. Promote it to `src/components/ui` or `src/components/business` when it has cross-page reuse, a stable interaction contract, or repeated copies across pages. Update this guide or the styling/component rules in `docs/tech/web/development.md` when extracting the pattern.
+If a page needs a new highly customized UI, start with a page-private component. Move it to `src/components/business` when it has actual cross-page reuse. Promote portable UI to `csgclaw-ui` once its props and theme contract are stable. Update this guide or the styling/component rules in `docs/tech/web/development.md` when extracting the pattern.
 
 ## Package Shape
 
 - Use one PascalCase folder per exported component package.
 - Keep implementation, CSS, and `index.ts` together in that folder.
 - Import the component's `.module.css` from its implementation. Keep `index.ts` limited to public exports.
-- Re-export public UI components from `src/components/ui/index.ts`.
+- Export public components from the library's `src/index.ts`. The app forwards those exports through `src/components/ui/index.ts`.
 - Avoid compatibility re-export paths after moving or replacing a component; update callers instead.
 
 ## Styling
 
 - Prefer tokens from `src/shared/styles/tokens.css` for color, radius, shadow, focus rings, and shared layer values.
-- Keep component-owned styles beside the component in CSS Modules, including animation names. UI modules do not use `:global`, per-component theme selectors or `!important`.
+- Keep component-owned styles beside the component in CSS Modules, including animation names. UI modules do not use `:global`, per-component theme selectors or `!important`. The publishable package owns its namespaced theme tokens in `src/theme.css` and exposes its compiled CSS as `csgclaw-ui/styles.css`.
 - Tailwind CSS utility classes are fine for small layout details, but stable component styling should use component-owned class names.
 - Do not use raw global color, shadow, or z-index values in UI components when a token exists.
 - Keep UI primitives visually neutral enough for reuse across pages. Business-specific layout and copy should stay outside `src/components/ui`.
@@ -47,6 +47,8 @@ Use `Button` or `IconButton` for commands and `LinkButton` for navigation. `Link
 ## Breadcrumb
 
 `Breadcrumb` is a semantic navigation pattern in the shared UI library; Radix Primitives does not provide a dedicated breadcrumb primitive. Use the `home` item for the home/root action and `items` for path segments. Mark the current segment with `current`, and provide either `href` or `onClick` for navigable segments. Long paths collapse their middle segments into the shared Radix Dropdown Menu; `maxVisibleItems` and `overflowLabel` allow callers to adapt the layout and localization.
+
+Use `wrap` when full directory names need to remain visible in a narrow panel. It lets segments use the available width and wrap long names instead of truncating them; all items also expose their full label through `title`.
 
 ## Overlay Layers
 
@@ -72,7 +74,7 @@ When adding a Radix component with a portal, expose a container escape hatch whe
 - Pages and business components should not depend on Radix primitives directly unless it is an explicit page-private exploration. Extract the wrapper to `src/components/ui` once the interaction needs reuse or becomes a stable convention.
 - Import Radix namespaces from the unified `radix-ui` package, for example `import { Select as RadixSelect } from "radix-ui"`. Do not add `@radix-ui/react-*` package dependencies for primitives that are available through `radix-ui`.
 - Add a separate Radix package only when the unified package does not expose the needed primitive, and document why in the change.
-- If jsdom lacks browser APIs needed by a Radix primitive, add the smallest stable polyfill in `web/app/tests/setup.ts` and keep component tests focused on user-visible behavior.
+- If jsdom lacks browser APIs needed by a Radix primitive, add the smallest stable polyfill in `web/packages/app/tests/setup.ts` and keep component tests focused on user-visible behavior.
 
 ## Select
 
@@ -98,7 +100,9 @@ Provider metadata, authentication guards, model discovery and retained unavailab
 
 `Field` supplies control/label IDs, hint/error descriptions, invalid state and required accessibility state to TextInput, TextArea, SelectTrigger and Combobox. Explicit IDs and accessible names take precedence. `required` on Field marks the field; set `required` on the control when native form validation is needed. Keep one logical control per Field.
 
-TextInput and TextArea own their local, data-marked styles. Legacy input and workspace selectors exclude all `data-csg-control` elements. Compound native forms remain in `shared/styles/inputs.css` during the scoped migration; the managed Field has local label/hint/error styles. Use `size="sm"` for compact text inputs and `variant="plain"` when a composed search container owns the border/background. Avoid overrides with `!important`.
+Use a native form for submission. Group related fields with a fieldset and legend when they share a group label. Give each editable key and value its own Field. Use `as="div"` for a field with adjacent buttons, or `labelAction` for help or actions next to its label. Both layouts keep the buttons outside the input label. If you supply an explicit control ID, pass the same ID to Field to associate the label.
+
+TextInput and TextArea own their local styles. Field owns the label, hint, and field error. Use `InlineError` for an error that applies to the entire form or panel. Use `size="sm"` for compact text inputs and `variant="plain"` when a composed search container owns the border and background.
 
 PanelHeader composes content and an optional actions slot, EmptyState displays a title/description/actions, and SegmentedControl provides a named single-choice group with keyboard navigation. SegmentedControl supports `default`, `text`, and `underline` presentations. DialogDescription supports `sm` and `md` text sizes. Business copy and persistence remain with callers.
 Use `size="sm"` for compact segmented controls in toolbars or preview headers.
@@ -106,7 +110,7 @@ Use `variant="text"` when a compact switch should have no surrounding border or 
 
 Semantic tokens own menu surfaces, hover/selected states, tooltip colors and dialog backdrops. Add a theme role in `shared/styles/tokens.css` when a primitive needs a new color relationship. Component CSS consumes the role without repeating light/dark branches.
 
-The standalone `ui-lab.html` entry demonstrates these production components without application data, including integration with the real legacy workspace stylesheet entrypoints. Start it with `corepack pnpm ui:lab` from `web/app`; it is a development fixture and is excluded from production build inputs.
+The standalone `ui-lab.html` entry demonstrates these production components without application data, including integration with the real legacy workspace stylesheet entrypoints. Start it with `corepack pnpm ui:lab` from `web/packages/app`; it is a development fixture and is excluded from production build inputs.
 
 ## Slider
 
@@ -121,6 +125,8 @@ Use `size="sm"` on `DropdownMenuContent` for compact menus. Section headings use
 ## Dialog
 
 `Dialog` is built on the `Dialog` namespace from `radix-ui`. Use the shared dialog exports for modal workflows so pages inherit consistent backdrop, portal, focus trap, close button, title, description, and layout behavior. Expose `portalContainer` when a dialog or nested floating child needs to stay inside a specific layer.
+
+Compose `DialogHeader`, `DialogBody`, and `DialogFooter`. Use `scrollBody` on `DialogContent` when a long form needs its heading and actions to stay visible while the body scrolls. Keep button order, copy, disabled states, and submit logic with the feature that owns the dialog.
 
 ## Switch
 

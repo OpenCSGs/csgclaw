@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bufio"
 	"bytes"
 	agent "csgclaw/internal/agentengine/agents"
 	"csgclaw/internal/config"
@@ -17,6 +18,54 @@ import (
 	"testing"
 	"time"
 )
+
+func TestResponsesBridgeForwardsKeepaliveBeforeModelData(t *testing.T) {
+	const heartbeat = ": keepalive\n\n"
+	const output = "data: {\"type\":\"response.completed\"}\n\n"
+	release := make(chan struct{})
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = io.WriteString(w, heartbeat)
+		w.(http.Flusher).Flush()
+		select {
+		case <-release:
+			_, _ = io.WriteString(w, output)
+		case <-r.Context().Done():
+		}
+	}))
+	defer upstream.Close()
+	h := &Handler{
+		llm: llm.NewService(config.ModelConfig{}, usageProfile{agent.AgentProfile{
+			Provider: agent.ProviderAPI, ModelID: "fixture-model", BaseURL: upstream.URL + "/v1",
+		}}),
+		serverAccessToken: "fixture-token",
+	}
+	bridge := httptest.NewServer(h.Routes())
+	defer bridge.Close()
+	req, err := http.NewRequest(http.MethodPost, bridge.URL+"/api/v1/agents/alice/llm/responses", strings.NewReader(`{"input":"hello","stream":true}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Authorization", "Bearer fixture-token")
+	resp, err := (&http.Client{Timeout: time.Second}).Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	reader := bufio.NewReader(resp.Body)
+	got := make([]byte, len(heartbeat))
+	if _, err := io.ReadFull(reader, got); err != nil || string(got) != heartbeat {
+		t.Fatalf("initial stream = %q, %v, want keepalive before model data", got, err)
+	}
+	close(release)
+	tail, err := io.ReadAll(reader)
+	if err != nil || string(tail) != output {
+		t.Fatalf("remaining stream = %q, %v, want %q", tail, err, output)
+	}
+}
 
 // Exercise the authenticated production routes over HTTP, including the SSE
 // response and the complete image/tool history received by the upstream.

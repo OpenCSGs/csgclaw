@@ -1,0 +1,67 @@
+// @vitest-environment jsdom
+
+import { act, renderHook } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import type { AgentLike } from "@/models/agents";
+import type { IMUser, TranslateFn } from "@/models/conversations";
+import { useProfilePreviewController } from "./useProfilePreviewController";
+
+const t: TranslateFn = (key) => key;
+const user: IMUser = { id: "user-agent", name: "Agent" };
+const agent: AgentLike = { id: "agent", name: "Agent", user_id: user.id };
+
+function setup() {
+  const anchor = document.createElement("button");
+  document.body.append(anchor);
+  const closeConversationTools = vi.fn();
+  const result = renderHook(() =>
+    useProfilePreviewController({
+      agentItems: [agent],
+      closeConversationTools,
+      openAgentDirectMessage: vi.fn().mockResolvedValue(undefined),
+      selectAgent: vi.fn(),
+      t,
+      usersById: new Map([[user.id, user]]),
+    }),
+  );
+  return { ...result, anchor, closeConversationTools };
+}
+
+describe("useProfilePreviewController", () => {
+  afterEach(() => {
+    document.body.replaceChildren();
+    vi.restoreAllMocks();
+  });
+
+  it("opens clicked avatars immediately and closes the preview with Escape", () => {
+    const { result, anchor, closeConversationTools } = setup();
+    const focus = vi.spyOn(anchor, "focus");
+
+    act(() => result.current.openParticipantPreview(user, anchor));
+    expect(result.current.profilePreviewProps?.agent?.id).toBe(agent.id);
+    expect(closeConversationTools).toHaveBeenCalledTimes(1);
+
+    act(() => document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" })));
+    expect(result.current.profilePreviewProps).toBeNull();
+    expect(focus).toHaveBeenCalledTimes(1);
+  });
+
+  it("opens a deleted sender's own profile rather than a same-name replacement", () => {
+    const oldUser: IMUser = { id: "user-old", name: "Agent", avatar: "avatar/3D-1.png", agent_state: "deleted" };
+    const anchor = document.createElement("button");
+    document.body.append(anchor);
+    const { result } = renderHook(() =>
+      useProfilePreviewController({
+        agentItems: [agent],
+        closeConversationTools: vi.fn(),
+        openAgentDirectMessage: vi.fn(),
+        selectAgent: vi.fn(),
+        t,
+        usersById: new Map([[oldUser.id, oldUser]]),
+      }),
+    );
+    act(() => result.current.openParticipantPreview(oldUser, anchor));
+    expect(result.current.profilePreviewProps?.agent).toBeNull();
+    expect(result.current.profilePreviewProps?.user).toBe(oldUser);
+  });
+});

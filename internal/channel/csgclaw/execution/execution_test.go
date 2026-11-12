@@ -14,6 +14,7 @@ import (
 	"csgclaw/internal/agentengine"
 	"csgclaw/internal/apitypes"
 	"csgclaw/internal/channel"
+	"csgclaw/internal/channel/csgclaw/delivery"
 	"csgclaw/internal/roomtask"
 	agentruntime "csgclaw/internal/runtime"
 	"csgclaw/internal/worklease"
@@ -77,6 +78,19 @@ func (f fakeConversation) Resolve(ctx context.Context, resolution agentengine.In
 type fakeRenderer struct {
 	events   []agentengine.TurnEvent
 	complete []agentengine.TurnResult
+}
+
+type transcriptRecorder struct {
+	messages []string
+}
+
+func (r *transcriptRecorder) DeliverMessage(_ context.Context, _ channel.TurnContext, text string) error {
+	r.messages = append(r.messages, text)
+	return nil
+}
+
+func (*transcriptRecorder) DeliverActivity(context.Context, channel.TurnContext, agentengine.TurnEvent) error {
+	return nil
 }
 
 func (f *fakeRenderer) Emit(_ context.Context, _ channel.TurnContext, event agentengine.TurnEvent) error {
@@ -629,16 +643,22 @@ func TestAdapterRunKeepsRendererFailureOnEnginePath(t *testing.T) {
 
 func TestAdapterHandleResetUsesEngineConversation(t *testing.T) {
 	engine := &fakeEngine{}
-	adapter, err := New(engine, &fakeRenderer{}, WithTurnIDGenerator(func() (agentengine.TurnID, error) {
-		return "turn-reset", nil
+	store := &transcriptRecorder{}
+	var titleSources []string
+	renderer := delivery.NewTranscriptRenderer(store, delivery.WithTaskTitleCallback(func(turn channel.TurnContext, _ string) {
+		titleSources = append(titleSources, turn.SourceMessageID)
 	}))
+	adapter, err := New(engine, renderer)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
 
-	outcome, err := adapter.Handle(context.Background(), channel.Binding{ParticipantID: "manager", AgentID: "u-manager"}, channel.Event{
+	ctx := context.Background()
+	binding := channel.Binding{ParticipantID: "manager", AgentID: "u-manager"}
+	outcome, err := adapter.Handle(ctx, binding, channel.Event{
 		MessageID: "message-new",
 		RoomID:    "room-1",
+		ChatType:  "direct",
 		Text:      `<slash-command name="new" arg="conversation"></slash-command>`,
 	})
 	if err != nil {
@@ -652,6 +672,21 @@ func TestAdapterHandleResetUsesEngineConversation(t *testing.T) {
 	}
 	if string(engine.resetKey) == "" {
 		t.Fatal("Reset conversation key is empty")
+	}
+	if len(store.messages) != 1 || !strings.Contains(store.messages[0], "Cleared my internal history") {
+		t.Fatalf("reset acknowledgment was not delivered: %q", store.messages)
+	}
+	if len(titleSources) != 0 {
+		t.Fatalf("reset offered title sources %v", titleSources)
+	}
+
+	if _, err := adapter.Handle(ctx, binding, channel.Event{
+		MessageID: "message-question", RoomID: "room-1", ChatType: "direct", Text: "Inspect the login error",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if len(titleSources) != 1 || titleSources[0] != "message-question" {
+		t.Fatalf("title sources = %v, want only the agent turn's prompt", titleSources)
 	}
 }
 
@@ -730,6 +765,9 @@ func TestAdapterHandleSkipsEmptyEvents(t *testing.T) {
 	}
 }
 
+func (fakeConversation) PendingInteractions(context.Context, agentengine.ConversationKey) ([]agentengine.InteractionRequest, error) {
+	return nil, nil
+}
 func (fakeConversation) GetInteraction(context.Context, agentengine.ConversationKey, string) (agentengine.InteractionRequest, error) {
 	return agentengine.InteractionRequest{}, &agentengine.TurnError{Code: agentengine.ErrorInteractionNotFound, Message: "no interaction in this test fixture"}
 }

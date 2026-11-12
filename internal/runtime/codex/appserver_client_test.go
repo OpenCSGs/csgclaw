@@ -1,9 +1,11 @@
 package codex
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
+	"net"
 	"strings"
 	"sync"
 	"testing"
@@ -319,6 +321,94 @@ func TestAppServerClientCloseAllPendingDoesNotWaitForBlockedWrite(t *testing.T) 
 	case <-time.After(time.Second):
 		t.Fatal("timed out waiting for request to observe app-server shutdown")
 	}
+}
+
+func TestAppServerProbeSkipsBusyWriter(t *testing.T) {
+	writer := newBlockingWriter()
+	client := newAppServerClient(writer, nil)
+	ordinary := make(chan struct{})
+	go func() {
+		defer close(ordinary)
+		client.notify("initialized")
+	}()
+	defer func() {
+		writer.unblock()
+		<-ordinary
+	}()
+	<-writer.started
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	done := make(chan error, 1)
+	go func() {
+		_, err := client.probe(ctx, "thread/read", nil)
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		if err == nil || !strings.Contains(err.Error(), "stdin is busy") {
+			t.Fatalf("probe with a busy writer = %v", err)
+		}
+	case <-ctx.Done():
+		t.Fatal("probe waited for the active writer")
+	}
+}
+
+func TestAppServerProbeReleasesBlockedPipeOnCancel(t *testing.T) {
+	stdin, reader := net.Pipe()
+	defer stdin.Close()
+	defer reader.Close()
+	writer := &probePipe{Conn: stdin, started: make(chan struct{})}
+	client := newAppServerClient(writer, nil)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	done := make(chan error, 1)
+	go func() {
+		_, err := client.probe(ctx, "thread/read", nil)
+		done <- err
+	}()
+	<-writer.started
+	cancel()
+	select {
+	case err := <-done:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("canceled probe returned %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("blocked probe held the writer after cancellation")
+	}
+	if err := reader.SetReadDeadline(time.Now().Add(time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	go client.notify("initialized")
+	line, err := bufio.NewReader(reader).ReadString('\n')
+	if err != nil || !strings.Contains(line, `"method":"initialized"`) {
+		t.Fatalf("next RPC = %q, %v", line, err)
+	}
+}
+
+func TestAppServerProbeSkipsNonPollableWriter(t *testing.T) {
+	writer := &lockedStringWriter{}
+	client := newAppServerClient(writer, nil)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if _, err := client.probe(ctx, "thread/read", nil); err == nil || writer.String() != "" {
+		t.Fatalf("probe on non-pollable stdin: err=%v, data=%q", err, writer.String())
+	}
+	client.notify("initialized")
+	if !strings.Contains(writer.String(), `"method":"initialized"`) {
+		t.Fatal("ordinary notification was not written")
+	}
+}
+
+type probePipe struct {
+	net.Conn
+	started chan struct{}
+	once    sync.Once
+}
+
+func (p *probePipe) Write(data []byte) (int, error) {
+	p.once.Do(func() { close(p.started) })
+	return p.Conn.Write(data)
 }
 
 func TestAppServerClientRejectsRequestsAfterClose(t *testing.T) {

@@ -116,6 +116,43 @@ ok
 
 ## Skill API
 
+### 本机技能发现
+
+Server 启动时、每隔 30 秒，以及读取技能库时，自动扫描常用智能体的用户技能目录。
+扫描范围包括 `~/.agent/skills`、`~/.agents/skills`、`~/.claude/skills`、`~/.codex/skills`、`~/.pi/agent/skills`、`~/.config/opencode/skills`、`~/.workbuddy/skills`、`~/.cursor/skills` 和 `~/.codebuddy/skills`。
+同时支持 `CLAUDE_CONFIG_DIR`、`CODEX_HOME`、`PI_CODING_AGENT_DIR` 和 `XDG_CONFIG_HOME` 对应的技能目录。
+官方目录参考见 [英文 API 文档](api.md#local-skill-discovery)。
+
+发现结果按来源路径登记在 `~/.csgclaw/skills/.discovered-skills.json`，无须复制文件或取得 Windows 软链接权限。
+技能库与 Agent 分配使用同一个选中来源，原技能更新后无需重新导入。
+显式分配给 Agent 时，沿用现有行为，将技能及配套资源安装为 Agent 工作区快照。
+删除发现的技能只取消登记，重启后仍不自动恢复，不删除源软件的文件。
+`POST /api/v1/skills/discovery/rescan` 显式重新扫描已知目录，恢复此前移除的关联，并返回完整技能列表。
+恢复的技能重新标记为未查看，即使其内容曾在移除前确认过。
+普通列表刷新与后台扫描仍尊重移除操作。
+已安装技能摘要中的 `directory` 返回选中来源或本地安装的绝对目录；仅嵌入应用的技能没有独立物理目录。
+技能库使用紧凑的双列卡片列表，来源软件筛选与手动重新扫描位于同一工具栏。
+同名技能去重后，仍可通过每个已记录的软件来源筛选到，同时覆盖内建、市场和本地技能。
+新增或更新的技能显示紧凑徽标，打开详情时确认已查看；已安装技能详情显示可复制的绝对目录，并明确标注当前采用的声明版本。
+指向同一规范目录的软件来源显示为共用同一份技能；不同目录可展开比较各自版本、修改时间与正在使用的标记。
+卡片徽标显示当前版本和软件数量，不把软件别名误解为其他较新版本。
+文件预览跟随当前来源的内容键更新，避免复用旧来源的缓存内容。
+
+扫描阶段只打开不超过 1 MiB 的普通 `SKILL.md` 文件，不读取其他软件的配置、会话、凭据、脚本或参考文件。
+扫描限于已知技能根目录，限制递归深度和目录数量，并检测循环。
+支持技能根目录下第一层的技能目录链接，但不沿无技能定义的任意目录链接继续扫描。
+无效或无权限的外部技能单独跳过。
+用户显式预览或分配技能时，可以读取该技能内的配套资源，但拒绝通过链接越出技能目录。
+
+同名外部技能忽略大小写去重，并保留所有候选来源。
+优先使用声明了有效语义版本的候选，再比较版本高低；版本相同或均不可比较时，使用 `SKILL.md` 修改时间，再以来源路径稳定排序。
+与技能库中的本地副本重名时，也使用相同规则；缺少或无效元数据的本地副本保留为用户显式覆盖。
+
+`GET /api/v1/skills` 为发现的技能返回 `source: "discovered"`，以及包含工具、路径、版本、更新时间、全部候选来源、内容键和 `new` 标记的 `discovery` 对象。
+`POST /api/v1/skills/discovery/ack` 接受 `{"keys":["<内容键>"]}`，返回 `204 No Content`，仅确认指定内容键的提示，避免吞掉并发发现的新技能。
+已确认状态跨重启保存；新增或内容变化后的技能使用新内容键，再次提示。
+技能设置页打开期间每 30 秒刷新，也提供手动重新扫描按钮。
+
 ### `GET /api/v1/skills/tree` 和 `GET /api/v1/skills/file`
 
 通过原有的 `path` 参数读取已安装 Skill 文件。预览市场技能时传入 `remote_path` 和可选的 `ref`：tree 接口列出远端仓库文件，file 接口还需传入仓库内相对路径 `path`（如 `SKILL.md`）。只读预览复用远端安装的 Hub 环境与匹配的用户凭据，不安装或修改本地 Skill。
@@ -767,6 +804,9 @@ DSH Worker 的 `permission_mode` 可选 `workspace-write`、`read-only`、`dange
 - `agent_id` 必填
 - `registry` 省略时使用默认 publish registry
 - 只有显式设置 `include_memory: true` 才会发布 Codex 记忆摘要，包括通过 `template_id` 再发布已有本地模板时；由于记忆可能包含从对话中提取的隐私信息，该字段默认是 `false`
+- 发布到社区时，整份模板最多 100 MiB，客户端单文件上限为 50 MiB，均按 Base64 编码前的文件字节数计算。单文件还受 StarHub 普通 Git 文件上限约束。超过总上限返回 HTTP 413，`error.code` 为 `template_publish_total_too_large`，`error.max_total_bytes` 为允许的最大字节数。
+- 发布在仓库原有的默认分支上提交，更新时跳过内容未变的文件。每批以 10 MiB 原始文件内容为目标，最多 200 项文件操作。超过 10 MiB 且可通过普通 Git 上传的文件单独提交。
+- 遇到超时或可重试的服务错误时，最多自动重试两次。每次重试读取远端最新状态，只提交剩余变更。其他文件全部提交成功后才单独提交有变化的 `agent.toml`。发布失败后，远端可能已包含部分文件变更，模板版本标记仍保留旧值，用户可再次发布同一本地版本以补齐变更。
 - 发布成功返回 `201 Created`
 
 ### `GET /api/v1/hub/templates/{id}`
@@ -1099,7 +1139,7 @@ Agent 回复仍只会唤醒被显式提及的 Agent，以防止回复循环。
 - 发送附件时使用 `multipart/form-data`，其中 `payload` JSON part 包含同样字段，`files` part 可以出现一次或多次。
 - 至少带有一个文件时允许发送纯附件消息。
 - 每条消息最多包含 10 个附件，单文件上限为 `1 GiB`，总大小上限为 `2 GiB`。
-- 返回的 message 可以包含 `attachments`，字段包括 `id`、`name`、`kind`、`media_type`、`size_bytes`、`sha256`、`created_at`、`download_url`、可选的 `preview_url`、可选图片尺寸，以及面向 agent 投递时可选的 `workspace_path`。
+- 返回的 message 可以包含 `attachments`，字段包括 `id`、`name`、`kind`、`media_type`、`size_bytes`、`sha256`、`created_at`、`download_url`、可选的 `preview_url`、可选图片尺寸，以及面向 agent 投递时可选的 `workspace_path`。从工作区发布的文件还包含 `source_path`，记录文件在工作区中的相对路径。即使发布时更改文件名，消息仍可通过原路径显示图片。
 
 Multipart 示例：
 
@@ -1182,23 +1222,22 @@ Worker 的服务端任务上下文包含 `request_source_message_id`，由父任
 附件不存在时返回 404，非房间成员的 Agent 凭据返回 403。
 删除后发送包含 `room_id` 和 `attachment_id` 的 `room.attachment_deleted` 事件，及时更新聊天界面。
 
-`.csgclaw/engine-inputs` 和 `.csgclaw/attachments` 下的运行时输入是临时文件。
-用户要求长期保存时，Agent 必须复制或下载到普通工作目录路径，验证结果后再确认保存成功。
+房间消息投递时会为本轮执行创建临时文件。用户要求在指定工作目录中长期保存时，Agent 应复制或下载文件到该路径，并验证保存结果。
 后续聊天应通过房间附件命令找回历史上传，不能只依赖已失效的临时路径。
 
 ### `GET /api/v1/attachments/{id}`
 
-按 attachment ID 下载已存储的聊天附件。
+按附件 ID 下载房间或直接会话中的附件。
 
 附件元数据中的 `download_url` 包含附件级 capability token，浏览器和 agent 可以直接使用。
 
 调用方也可以使用配置的服务端 Bearer token 请求不带 capability token 的基础路径。
 
-该接口会使用存储的 media type 返回原始字节，并设置 `X-Content-Type-Options: nosniff`。
+房间附件返回发布时的原始内容和媒体类型。直接会话附件返回 workspace 文件的当前内容和检测到的媒体类型，并设置 `Cache-Control: private, no-store`。删除该文件后，原地址返回 `404`。使用 `HEAD` 可仅读取响应头。接口会设置 `X-Content-Type-Options: nosniff`。
 
 下载会返回完整的已存储文件，不设置额外的大小上限，并支持 HTTP Range 请求。
 
-请将 capability URL 视为敏感信息，不要在 room 上下文之外共享。
+下载链接包含文件凭证，请仅分享给预期接收者。
 
 图片附件以内联方式返回。
 
@@ -1464,24 +1503,27 @@ prompt context 使用；它不是 thread reply 列表。Participant client 可�
 }
 ```
 
+### `POST /api/v1/agents/{agent}/sessions/{session_id}/attachments`
+
+将文件上传到指定 Agent 和会话。上传成功后，客户端可以直接预览或下载，稍后再发送提示词。请求使用当前 CSGClaw 实例的服务凭证。请求体使用 `multipart/form-data`，只接受 `files` 字段，每个文件使用一个字段，提供文件名称和原始字节。每次最多上传 10 个非空文件，每个文件最多 1 GiB，合计最多 2 GiB。
+
+服务端把文件保存到 Agent 的 workspace，返回 **201 Created** 和 `{"attachments":[…]}`。每项使用 `Message.attachments` 的字段。发送消息时，在同一会话的 `/responses` 请求中通过 `attachment_ids` 引用这些附件。
+
 ### `POST /api/v1/agents/{agent}/sessions/{session_id}/responses`
+
+第三方 UI 和客户端的完整接入流程见 [Agent Responses 接入指南](agent-responses-integration.zh.md)。
 
 通过选定 Agent 及其真实 CSGClaw runtime 执行一次 turn。
 `{agent}` selector 可以使用 Agent ID，也可以使用不区分大小写的唯一 Agent 名称。
 该接口与 `/llm/responses` 相互独立，后者只代理模型流量，不执行 Agent。
 
-该接口不要求 Bearer token。
-因为 admin 目前是唯一用户，Anonymous 复用现有 `user-admin` 身份表示。
-服务端不接受调用方指定身份，每条输入消息都以 `sender_id: "user-admin"` 持久化。
+客户端提供一个长度为 1–128 的 `session_id`，可使用字母、数字以及 `.`、`_`、`~`、`-`，首字符须为字母或数字。
+服务端按 Agent 和 `session_id` 保存会话绑定，后续请求复用同一会话。直接会话的 `metadata.room_id` 为空字符串。
+Portal 上传和下载都使用当前 CSGClaw 实例的 `endpoint` 和网关登录凭证。
 
-客户端提供一个全局 `session_id`，长度为 1-128 位，只能包含 path-safe ASCII 字符。
-第一次请求创建一个 non-direct room，后续请求复用该 room。
-Room 中只能包含 admin 和所选 Agent，服务端会保持 `notify_all_agents` 开启。
-Room title 创建后不再变化，并使用以下便于审计的格式：
+顶层字段 `attachment_ids` 是附件 ID 数组，用于引用同一 Agent、同一会话中已保存的文件。各个 ID 必须互不重复。启用服务认证时，上传文件或引用附件 ID 的请求均需提供有效凭证，认证失败返回 `401`。未知 ID 或其他 Agent、其他会话中的 ID 返回 `404`。JSON 请求可以同时引用已有附件 ID 和传入 Base64 文件，合计最多 10 个。返回的 `input_attachments` 按 `attachment_ids` 的顺序列出已有文件，然后按上传顺序列出新文件。
 
-```text
-Anonymous Session: <session_id> | Agent: <agent_name> (<agent_id>)
-```
+启用认证时，如果会话没有等待提交的受保护表单，`user_input` 为 `false` 或省略的纯文本 JSON 请求可以使用匿名访问，请求体最多 1 MiB。超过上限返回 `413`。
 
 最简请求使用字符串 input：
 
@@ -1490,6 +1532,22 @@ Anonymous Session: <session_id> | Agent: <agent_name> (<agent_id>)
   "input": "Review this patch."
 }
 ```
+
+Codex Agent 支持可选的字符串字段 `model` 和 `reasoning_effort`，用于指定本次请求的模型和推理强度：
+
+```json
+{
+  "input": "Review this patch.",
+  "model": "model-id-from-your-provider",
+  "reasoning_effort": "high"
+}
+```
+
+`model` 使用 Agent 当前 provider 提供的模型 ID。字段省略或为空时使用 Agent 默认 Profile。这些参数只作用于当前 turn，保留会话历史，无需修改 Agent 配置或重启 App Server。后续请求继续使用相同选择时，需要再次传入参数。其他 runtime 收到非空模型参数时返回 `400 invalid_request`。
+
+`reasoning_effort` 接受 `auto`、`none`、`minimal`、`low`、`medium`、`high`、`xhigh` 和 `max`；`off` 是 `none` 的别名。所选 provider/model 需要支持请求的级别。`auto` 使用模型自身的默认推理级别。两个字段分别使用各自的 Profile 默认值，例如只传入 `model` 时，推理级别仍来自 Profile。两个字段也支持 `stream: true`。
+
+模型切换使用 Codex 进程启动时加载的当前 provider 模型目录。启动后新增的模型，或者上下文长度配置发生变化的模型，需要重新加载 Runtime 后才能选择。不可用的选择会返回错误，现有进程继续运行。
 
 请求可以通过可选的 `extra` 和 `extra_type` 为当前用户消息附加额外的纯文本上下文：
 
@@ -1505,7 +1563,7 @@ Anonymous Session: <session_id> | Agent: <agent_name> (<agent_id>)
 `extra_type` 时，服务端按 `plain_text` 处理；`extra` 为空或省略时不注入额外上下文，
 即使提供了 `extra_type` 也会忽略。未知的非空 `extra_type` 返回 `400
 invalid_request`。`plain_text` 的 `extra` 最大为 64 KiB，`web_page_dom` 最大为
-512 KiB，且整个请求仍受 1 MiB 上限约束。
+512 KiB。请求中除 Base64 文件数据以外的内容最多为 1 MiB。
 
 服务端会把额外内容包装为带固定安全约束的 `<extra_context>`，并与本轮用户输入
 一起提交给 Agent。`web_page_dom` 被标记为不可信的页面快照；产品文档 Skill 是产品
@@ -1540,6 +1598,113 @@ invalid_request`。`plain_text` 的 `extra` 最大为 64 KiB，`web_page_dom` �
 }
 ```
 
+浏览器可以通过一次 `multipart/form-data` POST 请求发送提示词和选中的文件。
+`responsesUrl` 使用当前会话的 `/responses` 地址，`token` 使用当前实例的 Bearer 凭证。
+提供一个 `input` 字段，填写提示词字符串或上文消息数组经过 `JSON.stringify` 编码后的文本。
+可选字段 `stream` 省略时默认为 `false`。提供该字段时，使用字符串 `"true"` 或 `"false"`。
+每个选中的 `File` 使用一个 `file` 字段。浏览器会自动设置包含 boundary 的 `Content-Type` 请求头。
+
+```js
+const form = new FormData()
+form.append("input", JSON.stringify("请总结这份报告"))
+form.append("stream", "true")
+form.append("file", selectedFile)
+
+const response = await fetch(responsesUrl, {
+  method: "POST",
+  headers: { Authorization: `Bearer ${token}` },
+  body: form,
+})
+if (!response.ok) throw new Error(`Session request failed (HTTP ${response.status})`)
+```
+
+multipart 表单字段为 `input`、可选的 `stream`、`user_input`、`model` 和 `reasoning_effort`，以及可重复的 `file`。每个可选字段最多提供一个值。模型参数与 JSON 请求中的字段含义相同。如需同时使用 `attachment_ids`、`extra` 或 `extra_type`，请通过会话的 `/attachments` 接口使用 `files` 上传文件，再在 `/responses` 的 JSON 请求中传入返回的附件 ID。只发送文件时可使用仅含 `attachment_ids` 的 JSON 请求。
+
+JSON 请求也可以在 `content` 中使用 `input_file` 发送文件。
+
+```json
+{
+  "input": [{
+    "role": "user",
+    "content": [
+      {"type": "input_text", "text": "请概括这份文件。"},
+      {
+        "type": "input_file",
+        "filename": "notes.txt",
+        "file_data": "data:text/plain;base64,SGVsbG8gd29ybGQK"
+      }
+    ]
+  }],
+  "stream": true
+}
+```
+
+`filename` 为文件名称，`file_data` 使用 `data:<media-type>;base64,<data>` 格式，
+包含完整文件内容。多个文件使用多个 `input_file`，也支持仅包含文件的消息。
+JSON 请求体上限包含 Base64 编码增加的体积，以及 1 MiB 的其他 JSON 内容。
+Base64 会使传输体积增加约三分之一；JSON 客户端和代理可能将编码后的请求缓存在内存中。
+
+两种格式均支持最多 10 个非空文件，每个文件最多 1 GiB，合计最多 2 GiB，按文件原始字节计算。
+worker 使用 `workspace_path` 读取文件，后续轮次可以继续使用同一路径。通过 `attachment_ids` 再次引用时，按当前文件大小检查限制。Portal 下载和预览读取同一个文件，编辑后会读取新版。删除文件后，下载和再次引用均返回 `404`。附件的 `sha256` 记录发布时的摘要，下载响应的类型和长度取自当前文件。
+
+文件数据或元数据无效时返回
+`400 invalid_request`；文件大小或整个 HTTP 请求体超过上限时返回
+`413 invalid_request`。文件校验和准备工作在 SSE 开始前完成。
+
+服务端在调用 Agent 前把上传文件保存到 workspace。首个 SSE `message_start` 返回下载地址，Agent 执行期间即可访问。取消执行、会话忙或 Agent 执行失败后，已保存的文件仍可下载。如果保存文件后发生错误，普通 JSON 错误响应会包含 `input_attachments`。
+
+| 文件来源 | 成功的 JSON 响应 | SSE 首个 `message_start` | SSE 成功时的最后一个 `message_delta` |
+| --- | --- | --- | --- |
+| 用户上传 | `input_attachments` | `input_attachments` | `input_attachments` |
+| Agent 结果文件 | `output[0].attachments` | — | `attachments` |
+
+Agent 可以发布零字节结果文件。如果某个 Engine 结果已不可读取，回复会说明缺失的文件，同时返回正文和其他可用结果的下载地址。
+
+附件数组位于 SSE 事件 `data` 的顶层，空数组省略。每个附件包含 `id`、`name`、`media_type`、`size_bytes`、`sha256`、`download_url` 和相对路径 `workspace_path`。图片还提供 `preview_url`。PDF 的下载响应使用 `Content-Disposition: attachment`；Portal 可以通过下例的 `readAttachment(id)` 获取 PDF Blob，使用 `URL.createObjectURL(blob)` 交给 PDF 查看器，并在关闭预览时调用 `URL.revokeObjectURL(url)`。Codex 可以通过 `csgclaw_publish_file` 发布结果文件。
+
+上传文件和发布的结果文件各保存一份，位置为 Agent workspace 的 `.csgclaw/attachments/sessions/<session_id>/`。workspace 使用 Agent 配置的 `local_workspace_dir` 或 runtime 默认目录。IM 在 `assets/session-responses/` 中保存附件 ID、归属、路径和下载凭证。更换容器时，需要将这两个持久化目录挂载到原路径。房间清理和版本回退会保留文件和 ID，再次升级后可继续访问。升级时能在所属 Agent workspace 找到的历史文件沿用原 ID 和下载地址。会话附件的下载响应使用 `Cache-Control: private, no-store`。
+
+Portal 应将附件的稳定 ID 和用于显示的字段随消息保存，并记录所属实例、Agent 和会话。历史记录不保存 token，也不保存带 token 的下载或预览地址。重新打开附件时，使用对应实例当前的凭证，请求 `GET /api/v1/attachments/{id}`。会话历史接口不会自动为 Portal 生成附件记录。
+
+以下浏览器示例可在选定文件时上传，用户发送提示词时再用 JSON 引用附件。
+
+```js
+const endpoint = new URL(instance.endpoint, gatewayHost)
+if (endpoint.origin !== new URL(gatewayHost).origin) throw new Error("Unexpected gateway")
+const base = endpoint.origin + endpoint.pathname.replace(/\/$/, "")
+const headers = { Authorization: `Bearer ${token}` }
+const session = `/api/v1/agents/${encodeURIComponent(agent)}/sessions/${encodeURIComponent(sid)}`
+
+function historyFile({ id, name, media_type, size_bytes }) {
+  return { id, name, media_type, size_bytes }
+}
+
+async function upload(files) {
+  const body = new FormData()
+  for (const file of files) body.append("files", file, file.name)
+  const res = await fetch(base + session + "/attachments", { method: "POST", headers, body })
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  return (await res.json()).attachments.map(historyFile)
+}
+
+async function send(prompt, uploads) {
+  const res = await fetch(base + session + "/responses", {
+    method: "POST",
+    headers: { ...headers, "Content-Type": "application/json" },
+    body: JSON.stringify({ input: prompt, attachment_ids: uploads.map(file => file.id) }),
+  })
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  const { output } = await res.json()
+  return { content: output[0].content, attachments: (output[0].attachments ?? []).map(historyFile) }
+}
+
+async function readAttachment(id) {
+  const res = await fetch(base + "/api/v1/attachments/" + encodeURIComponent(id), { headers, cache: "no-store" })
+  if (!res.ok) throw new Error(await res.text())
+  return res.blob()
+}
+```
+
 省略 `stream` 或设置为 `false` 时，接口返回包含最终 assistant 文本和 session
 元数据的 Responses 风格 JSON。设置 `stream: true` 时，接口返回
 `text/event-stream`，格式为与 CSGBot Genius 兼容的 Anthropic 风格事件流。
@@ -1555,13 +1720,15 @@ message_stop
 ```
 
 每个 SSE block 同时包含 `event: <type>` 和 JSON `data:` payload；payload
-中的 `type` 与事件名一致。Codex 工具活动以 `tool_use` content block 和
-`input_json_delta` 返回，随后以自定义的 `tool_result` content block 和
-`tool_result_delta` 返回工具结果，与 Genius chat 协议一致。`tool_use` 会保留
-runtime 提供的具体工具名和结构化输入，敏感值在返回前会被脱敏。响应空闲期间，
+中的 `type` 与事件名一致。工具名称由 `tool_use` 返回，工具参数由 `input_json_delta` 返回，
+其中的敏感值已经脱敏。`tool_use` 的 `content_block_stop` 表示参数传输结束。
+工具执行结束时，服务端发送一次 `tool_result`，通过 `tool_result_delta` 返回输出。
+每段正文只等待它到达时仍在执行的工具返回结果。如果工具结果缺失，服务端在本轮结束时发送已收到的正文。
+多个工具同时执行时，客户端通过 `tool_result.tool_use_id` 和 `tool_use.id` 关联结果。
+工具失败或取消时，结果包含 `is_error: true`，`status` 分别为 `failed` 或 `canceled`。响应空闲期间，
 服务端约每 15 秒发送一次 SSE `: heartbeat` comment 以保持连接。对于 Codex 智能体，
-Codex app-server 发布的 final-answer `item/agentMessage/delta` 会即时转发为
-`text_delta`；commentary 和无法分类的 agent message 不会计入回答。完成事件不再
+服务端将 final-answer 文本和缺少 phase 的 agent message 增量作为 `text_delta` 返回，
+跳过明确标记为 commentary 的文本和文本快照。完成事件不再
 重复携带全量文本，前端应通过追加 delta 构建可见回答。只发布 final message 的
 runtime 会降级为一个文本 delta。Agent 完成前，连接已建立并先 flush
 `message_start`。流式失败依次返回 `error`、带 `stop_reason: error` 的
@@ -1569,8 +1736,39 @@ runtime 会降级为一个文本 delta。Agent 完成前，连接已建立并先
 
 同一个 session 同时只允许一个 turn。
 不同 session ID 可以并发执行。
-同一个全局 session 改用其它 Agent 时返回 `409 session_agent_conflict`。
-服务端最多等待五分钟，之后返回 `504 response_timeout`。
+不同 Agent 可以各自使用同一个外部 `session_id`。
+服务端不限制整轮响应时长。连续两分钟没有进展时，如果通信管道支持设置写入超时，Codex Runtime 会查询工作进程的历史记录。当原生轮次 ID 匹配、状态已结束且记录了结束时间时，服务端会按历史记录中的顺序补发缺失的工具结果和可恢复的正文，然后结束响应。如果恢复后收到的旧协议事件缺少轮次 ID，服务端收到带有当前轮次 ID 的结束通知时，也可以根据该轮的原生记录补全内容。补发时沿用实时输出的 SSE 事件类型。客户端断开连接或显式取消请求时，服务端会取消正在执行的响应。
+
+### 会话提问
+
+每次请求默认关闭提问表单。省略 `user_input` 或传入 `false` 时，服务端会提示 Agent 在普通回复中提问。如果 Runtime 仍请求表单，本轮可以继续执行。命令或助手只给出结构化问题时，普通问题和选项会显示为文字，私密问题只提示需要使用安全表单。用户可以在同一会话发送下一条消息回答问题。
+
+支持提问表单的客户端在 `/responses` JSON 请求中设置 `"user_input":true` 即可启用。multipart 请求使用字符串字段 `user_input=true`。CSGClaw 自带的房间 UI 通过房间消息接口支持提问表单。
+
+启用实例服务认证时，设置 `user_input: true` 的创建请求、查询待回答问题的 `GET /interactions`、提交答案的 `POST /interactions/{interaction_id}/respond` 都需要该实例的有效服务凭证。缺少凭证或凭证无效时返回 `401 unauthorized`。取消已启用表单的执行，或在仍有受保护表单等待提交时开始下一轮，也需要有效凭证。Portal 使用与该实例附件访问相同的实例地址和网关授权方式。
+
+SSE 事件 `request_user_input` 的顶层字段为 `type`、`interaction_id`、`status`、`detached`、`questions`、`requested_at` 和可选的 `auto_resolve_at`。每道题包含 `id`、`header` 和 `question`，也可以包含 `options`、`is_other` 和 `is_secret`。按数组顺序显示问题和选项。[Agentic 前端接入示例](web/agentic-session-user-input.zh.md)
+
+原生提问的 `detached` 为 `false`，原回复等待答案。使用 `stream: false` 时，客户端需要通过另一条连接查询问题并提交答案。命令生成的提问使用 `detached: true`，原回复可以完成。命令没有指定截止时间时，会话表单默认在 24 小时后过期。使用 `stream: false` 时，这类表单位于成功响应顶层的 `interactions` 数组。
+
+### `GET /api/v1/agents/{agent}/sessions/{session_id}/interactions`
+
+成功返回 `200 OK` 和 `{"interactions":[...]}`，每项使用上述表单字段。`status: "pending"` 表示可以提交，`status: "submitting"` 表示正在处理一次提交。此时禁用提交按钮，定期查询同一列表，直到问题消失或恢复为 `pending`。刷新页面或连接中断后，也按这个规则恢复表单。原回复连接断开时，服务端取消仍在执行的回复。
+
+### `POST /api/v1/agents/{agent}/sessions/{session_id}/interactions/{interaction_id}/respond`
+
+为指定表单提交一次答案。使用原来的实例、Agent 和会话，问题 ID 取自事件中的 `questions[].id`。
+
+```json
+{"answers":{"source":{"answers":["PDF"]},"note":{"answers":["user_note: 只收录公开文档。"]}}}
+```
+
+选项值使用原始 `label`。自由填写的内容使用 `user_note: ` 前缀。一次提交整组问题。每道题都需要提供 `answers` 数组，显式传入 `[]` 可以跳过该题。使用 `{"answers":{}}` 跳过整组问题。
+
+- `detached: false` 的问题提交成功后返回 `204 No Content`。后续输出通过原来的 `/responses` 请求返回。
+- `detached: true` 的问题收到答案后，在同一会话继续执行。`/respond` 默认返回 `200` 和最终 JSON 回复，设置顶层 `"stream":true` 后返回 `200` 和新的 SSE。跳过整张表单时返回 `204 No Content`。答案正在启动后续轮次时，同一会话并发提交的普通 `/responses` 请求在 JSON 模式下返回 `409 session_busy`；已开始的 SSE 通过事件返回错误。
+
+如果 Runtime 在接收 detached 答案前不可用，表单会恢复为 `pending`。SSE 请求的 HTTP `200` 只表示连接已经建立。收到 SSE 错误、连接中断或服务暂时不可用时，查询表单列表，原问题恢复为 `pending` 后可使用原 interaction ID 重试。无效答案返回 `400 invalid_request`，表单继续等待提交。找不到会话或问题时，分别返回 `404 session_not_found` 或 `404 interaction_not_found`。重复提交返回 `409 interaction_already_resolved`。已过期或已取消的问题返回 `410 interaction_gone`。
 
 ### `POST /api/v1/agents/{agent}/sessions/{session_id}/responses/cancel`
 
@@ -1591,8 +1789,6 @@ runtime 会降级为一个文本 delta。Agent 完成前，连接已建立并先
 }
 ```
 
-V1 接受文本输入、可选的纯文本额外上下文以及可选的文本输出流。
-tools、instructions、非 user role、attachments 和未知请求字段都会被拒绝。
 内置 live demo 和可替换的前端 mock 边界见 [Session API Demo 前端指南](web/session-api-demo.zh.md)。
 
 ### `GET /api/v1/agents/{id}/llm/models`
@@ -1686,6 +1882,8 @@ tools、instructions、非 user role、attachments 和未知请求字段都会�
 ## 聊天侧栏文件
 
 ### `GET /api/v1/agents/{id}/workspace?path=...&depth=1`
+
+启用服务认证时，浏览工作目录、读取文件和引用工作目录中的文件均需提供有效凭证。Agent 使用配置的 `local_workspace_dir` 或默认工作目录，单独配置了工作目录的房间使用该房间的目录。
 
 仅列出所选工作区目录的直接子项。
 `path` 是工作区相对路径，默认为根目录。

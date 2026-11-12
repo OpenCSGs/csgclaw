@@ -63,6 +63,11 @@ func (s *Controller) prepareSkillReplacement(item Agent, names []string) (*prepa
 				return fmt.Errorf("prepare skill %q: %w", name, err)
 			}
 			origin := origins[name]
+			if found, err := skilllocal.Discovered(globalRoot, name); err != nil {
+				return err
+			} else if found != nil {
+				origin = skillinstall.Record{Source: skillinstall.SourceDiscovered, SourceURL: found.Path, Version: found.Version}
+			}
 			if source.Source == skillsystem.SkillSourceSystem {
 				origin = skillinstall.Record{Source: skillinstall.SourceBuiltin}
 			}

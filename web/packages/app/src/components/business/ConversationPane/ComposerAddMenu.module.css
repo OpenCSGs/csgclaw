@@ -1,0 +1,39 @@
+.composer-add-popover {
+  width: min(280px, calc(100vw - 20px));
+  max-height: min(340px, calc(100dvh - 20px));
+  overflow-y: auto;
+  padding: 5px;
+  display: grid;
+  gap: 1px;
+  font-size: 12px;
+}
+
+@media (max-width: 720px) {
+  .composer-add-popover {
+    max-height: min(150px, calc(100dvh - 16px));
+  }
+}
+
+.composer-add-section {
+  display: grid;
+  gap: 1px;
+}
+
+.composer-add-section-label {
+  padding: 3px 6px 1px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 14px;
+}
+
+.composer-add-menu-item {
+  width: 100%;
+  justify-content: flex-start;
+  gap: 7px;
+}
+
+.composer-add-menu-item svg {
+  width: 14px;
+  height: 14px;
+}

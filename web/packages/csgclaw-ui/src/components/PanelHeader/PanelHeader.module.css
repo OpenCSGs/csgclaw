@@ -1,0 +1,14 @@
+/*! Derived from CSGClaw. Modified for standalone csgclaw-ui distribution. */
+.csg-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--csgclaw-ui-space-3);
+  min-width: 0;
+}
+.csg-panel-header-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--csgclaw-ui-space-2);
+  flex-shrink: 0;
+}

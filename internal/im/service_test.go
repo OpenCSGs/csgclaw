@@ -173,6 +173,56 @@ func TestCreateMessageOnceDeduplicatesClientMessageID(t *testing.T) {
 	}
 }
 
+func TestCloudMessageMetadataPersistsOnlyItsRoom(t *testing.T) {
+	const cloudRoom = "cloud-room"
+	const otherRoom = "other-room"
+	state := DefaultBootstrap()
+	state.Rooms = []Room{
+		{ID: cloudRoom, CloudAgent: &apitypes.CloudAgentReference{AgentID: "agent"}, Messages: []Message{{ID: "message", SenderID: AdminUserID, Content: "continue"}}},
+		{ID: otherRoom, Messages: []Message{{ID: "other", SenderID: AdminUserID, Content: "unrelated"}}},
+	}
+	dir := t.TempDir()
+	path := filepath.Join(dir, "state.json")
+	if err := SaveBootstrap(path, state); err != nil {
+		t.Fatal(err)
+	}
+	svc, err := NewServiceFromPath(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := svc.StartThread(StartThreadRequest{RoomID: cloudRoom, RootMessageID: "message"}); err != nil {
+		t.Fatal(err)
+	}
+	// Make the unrelated room's log unwritable without affecting the cloud room.
+	otherLog := filepath.Join(dir, filepath.FromSlash(sessionRelativePath(otherRoom)))
+	if err := os.Rename(otherLog, otherLog+".saved"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(otherLog, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.UpdateDeliveredMessageMetadata(cloudRoom, "message", AdminUserID, map[string]any{"checkpoint": "saved"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(otherLog); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(otherLog+".saved", otherLog); err != nil {
+		t.Fatal(err)
+	}
+	reloaded, err := NewServiceFromPath(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	room, found := reloaded.Room(cloudRoom)
+	if !found || len(room.Messages) != 1 || room.Messages[0].Metadata["checkpoint"] != "saved" {
+		t.Fatal("cloud dispatch checkpoint did not survive reload")
+	}
+	if len(room.Threads) != 1 || len(room.Threads[0].Context) != 1 || room.Threads[0].Context[0].Metadata["checkpoint"] != "saved" {
+		t.Fatal("cloud thread context did not retain updated metadata")
+	}
+}
+
 func TestCreateMessageOnceRetriesAfterPersistenceFailure(t *testing.T) {
 	svc := NewService()
 	room, err := svc.CreateRoom(CreateRoomRequest{

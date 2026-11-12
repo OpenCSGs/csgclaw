@@ -1,0 +1,110 @@
+.listNotice {
+  margin: 0;
+  padding: 16px 8px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 20px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.knowledgeEmptyState {
+  display: flex;
+  min-height: 220px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  padding: 32px 24px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--panel-soft);
+  text-align: center;
+}
+
+.knowledgeEmptyText {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  max-width: 420px;
+}
+
+.knowledgeEmptyText h3 {
+  margin: 0;
+  color: var(--text);
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 24px;
+}
+
+.knowledgeEmptyText p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 22px;
+}
+
+.knowledgeEmptyActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.listMore {
+  display: flex;
+  justify-content: center;
+  padding: 4px 0 8px;
+}
+
+.marketInstalled,
+.marketInstallError {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 18px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.marketInstalled {
+  color: var(--success-text);
+  flex-shrink: 0;
+  margin-top: 0;
+  white-space: nowrap;
+}
+
+.marketInstallError {
+  color: var(--danger-text);
+}
+
+.tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  height: 24px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--field);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.tagDot {
+  flex: 0 0 auto;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--primary);
+}

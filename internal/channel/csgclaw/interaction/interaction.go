@@ -4,7 +4,6 @@ package interaction
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -233,29 +232,10 @@ func (c *Coordinator) Observe(turn channel.TurnContext, event agentengine.TurnEv
 	if !ok || snapshot.Status != activity.UserInputStatusAnswered || submitter == nil || !submitter.IsCurrent(turn.BindingID, turn.ConversationKey, turn.SourceMessageID) {
 		return
 	}
-	response := activity.RequestUserInputResponse{Answers: make(map[string]activity.RequestUserInputAnswer, len(snapshot.Questions))}
-	for _, question := range snapshot.Questions {
-		answer := snapshot.Answers[question.ID]
-		values := []string{}
-		if answer.Answered {
-			if answer.Secret {
-				values = append(values, "user_note: <redacted>")
-			} else {
-				if answer.OptionLabel != "" {
-					values = append(values, answer.OptionLabel)
-				}
-				if answer.Text != "" {
-					values = append(values, "user_note: "+answer.Text)
-				}
-			}
-		}
-		response.Answers[question.ID] = activity.RequestUserInputAnswer{Answers: values}
-	}
-	body, err := json.Marshal(response)
+	prompt, err := activity.UserInputContinuationPrompt(snapshot)
 	if err != nil {
 		return
 	}
-	prompt := "The user answered the request_user_input emitted by the previous successful command. Continue the same workflow using this wire-compatible response JSON. Secret values are replaced with <redacted> before entering the model session:\n" + string(body)
 	err = submitter.Submit(channel.Binding{ID: string(turn.BindingID), Channel: channel.ChannelCSGClaw, ParticipantID: turn.ParticipantID, AgentID: turn.AgentID, Enabled: true}, channel.Event{
 		TaskID:      turn.TaskID,
 		RoomManager: turn.RoomManager, TaskAttempt: turn.TaskAttempt,

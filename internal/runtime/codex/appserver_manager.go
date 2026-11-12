@@ -5,6 +5,7 @@ import (
 	"context"
 	"csgclaw/internal/agentengine/contract"
 	"csgclaw/internal/diagnostics"
+	"csgclaw/internal/modelcap"
 	"csgclaw/internal/modelprovider"
 	"csgclaw/internal/modelusage"
 	"csgclaw/internal/processgroup"
@@ -35,12 +36,19 @@ import (
 
 const (
 	appServerTurnInterruptTimeout      = 5 * time.Second
+	appServerStdoutExitGracePeriod     = 250 * time.Millisecond
+	appServerStdoutExitBufferBytes     = 1 << 20
 	appServerTrackedTurnLimit          = 256
 	appServerPublishFileToolName       = "csgclaw_publish_file"
 	appServerUploadFileToolName        = "csgclaw_upload_file"
 	appServerMaxPublishedFileNameBytes = 255
 	appServerMaxUploadBytes            = 50 << 20
 )
+
+const appServerDeveloperInstructions = `- Base each new turn on the latest user message. Use earlier requests and attachments as context only when they are relevant to that message.
+- Do not resume unfinished work from earlier turns unless the latest user message asks to continue or clearly depends on that work. An unanswered or failed request does not authorize a retry.
+- When the latest user message is only a greeting, thanks, or acknowledgement, reply directly without using tools or inspecting earlier attachments.` +
+	"\n" + runtimeinstructions.ImageGenerationPromptPolicy + "\n" + runtimeinstructions.VideoGenerationPromptPolicy
 
 var appServerStopTimeout = 3 * time.Second
 
@@ -161,16 +169,25 @@ func (m *appServerManager) Start(ctx context.Context, spec SessionSpec) (*Sessio
 		_ = stderrFile.Close()
 		return nil, fmt.Errorf("codex app-server stdin pipe: %w", err)
 	}
-	stdout, err := cmd.StdoutPipe()
+	// Own the read end so cmd.Wait cannot close it before the last turn
+	// notification has been decoded.
+	stdout, stdoutWriter, err := os.Pipe()
 	if err != nil {
+		_ = stdin.Close()
 		_ = stderrFile.Close()
 		return nil, fmt.Errorf("codex app-server stdout pipe: %w", err)
 	}
+	cmd.Stdout = stdoutWriter
 	if err := processgroup.Start(cmd); err != nil {
+		_ = stdoutWriter.Close()
+		_ = stdout.Close()
+		_ = stdin.Close()
 		_ = stderrFile.Close()
 		diagnostics.ReportFailure(ctx, "runtime.process_start", err, map[string]any{"runtime_id": spec.RuntimeID, "stderr_path": spec.StderrPath})
 		return nil, fmt.Errorf("start codex app-server: %w", err)
 	}
+
+	_ = stdoutWriter.Close()
 
 	diagnosticObserver := diagnostics.NewRuntimeObserver(spec.StderrPath, spec.RuntimeID, cmd.Process.Pid, logStartOffset, stderrFile)
 	diagnosticObserver.Bind(ctx)
@@ -204,9 +221,8 @@ func (m *appServerManager) Start(ctx context.Context, spec SessionSpec) (*Sessio
 		filePublishingThreads: filePublishingThreads,
 		turnWaiters:           make(map[string]*appServerTurnWaiter),
 		turnContexts:          make(map[string]appServerTurnContext),
-		turnThreads:           make(map[string]string),
+		turnThreads:           make(map[string]appServerTrackedTurn),
 		commandOutputs:        make(map[string]*appServerCommandOutputState),
-		replayedExecCommands:  make(map[string]struct{}),
 		replayedAgentMessages: make(map[string]struct{}),
 		streamedAgentMessages: make(map[string]struct{}),
 		streamedAgentThreads:  make(map[string]struct{}),
@@ -225,8 +241,7 @@ func (m *appServerManager) Start(ctx context.Context, spec SessionSpec) (*Sessio
 	m.mu.Unlock()
 
 	ownedTelemetry = true
-	go m.readAppServerStdout(spec.RuntimeID, live, stdout)
-	go m.waitAppServerSession(spec.RuntimeID, live)
+	go m.waitAppServerSession(spec.RuntimeID, live, stdout)
 
 	if err := m.initializeHandshake(ctx, live); err != nil {
 		_ = m.Stop(context.Background(), SessionHandle{RuntimeID: spec.RuntimeID})
@@ -393,20 +408,26 @@ func (m *appServerManager) Prompt(ctx context.Context, handle SessionHandle, req
 		m.publishAppServerEvent(promptFailedEvent(runtimeID, sessionID, err))
 		return PromptResponse{}, err
 	}
+	selectedModel, err := live.resolveTurnModel(req.Model)
+	if err != nil {
+		return PromptResponse{}, err
+	}
 
 	live.diagnosticObserver.Bind(ctx)
 	defer live.diagnosticObserver.End(ctx)
 	diagnostics.From(ctx).Capture("runtime.configuration", map[string]any{"runtime": "codex", "runtime_id": runtimeID, "binary": live.spec.BinaryPath, "workspace": live.spec.WorkspaceDir, "stderr_path": live.spec.StderrPath, "profile": live.spec.Profile, "mcp_servers": live.spec.MCPServers, "mcp_revision": live.spec.MCPCatalogRevision, "execution_mode": live.spec.ExecutionMode, "extension_digests": live.session.ExtensionDigests, "runtime_version": live.serverInfo})
 	diagnostics.From(ctx).CaptureRuntimeFiles(filepath.Join(live.spec.HomeDir, "AGENTS.md"), filepath.Join(live.spec.CodexHomeDir, "AGENTS.md"), filepath.Join(live.spec.WorkspaceDir, "AGENTS.md"), filepath.Join(live.spec.WorkspaceDir, "AGENTS.override.md"), filepath.Join(live.spec.CodexHomeDir, "config.toml"))
-	diagnostics.From(ctx).RuntimeInfo("codex", live.spec.Profile.ModelID)
-	live.appClient.logInfoContext(ctx, "model request configuration", "model", live.spec.Profile.ModelID, "runtime_id", runtimeID, "thread_id", sessionID)
-	waiter, err := live.registerAppServerTurnWaiter(sessionID)
+	diagnostics.From(ctx).Capture("runtime.turn_model", selectedModel)
+	diagnostics.From(ctx).RuntimeInfo("codex", selectedModel.ModelID)
+	live.appClient.logInfoContext(ctx, "model request configuration", "model", selectedModel.ModelID, "runtime_id", runtimeID, "thread_id", sessionID)
+	waiter, err := live.registerAppServerTurnWaiterWithModel(sessionID, selectedModel, req.Model != nil)
 	if err != nil {
 		m.publishAppServerEvent(promptFailedEvent(runtimeID, sessionID, err))
 		return PromptResponse{}, err
 	}
 	waiter.mu.Lock()
 	waiter.diagnostic = diagnostics.From(ctx)
+	waiter.textOnlyUserInput = req.TextOnlyUserInput
 	waiter.mu.Unlock()
 	defer func() { live.removeAppServerTurnWaiter(sessionID, waiter) }()
 	turnCtx, cancelTurn := context.WithCancel(ctx)
@@ -416,8 +437,8 @@ func (m *appServerManager) Prompt(ctx context.Context, handle SessionHandle, req
 		live.clearAppServerTurnContext(sessionID, waiter)
 	}()
 
-	m.publishContextUsage(runtimeID, live, sessionID, nil, "snapshot")
 	params := appServerTurnStartParamsWithInput(live.spec, sessionID, promptInput, req.ClientUserMessageID)
+	applyTurnModelParams(params, selectedModel)
 	turnStartAt := time.Now()
 	live.appClient.logDebugContext(ctx, "codex app-server turn start request",
 		"runtime_id", runtimeID,
@@ -442,6 +463,7 @@ func (m *appServerManager) Prompt(ctx context.Context, handle SessionHandle, req
 		return PromptResponse{}, err
 	}
 	waiter.setTurnID(appServerTurnIDFromResult(raw))
+	m.publishContextUsage(runtimeID, live, sessionID, nil, "snapshot")
 	live.telemetry.bind(waiter.currentTurnID(), diagnostics.From(ctx))
 	defer live.telemetry.finish(diagnostics.From(ctx))
 	acceptedAt := time.Now()
@@ -505,6 +527,11 @@ func (m *appServerManager) ensureSession(ctx context.Context, handle SessionHand
 	conversationKey = strings.TrimSpace(conversationKey)
 	if conversationKey == "" {
 		return strings.TrimSpace(live.session.SessionID), nil
+	}
+
+	logicalKey := contract.LogicalRuntimeSessionKey(conversationKey)
+	if err := m.removeConversationBindings(live, logicalKey, conversationKey); err != nil {
+		return "", err
 	}
 
 	live.mu.Lock()
@@ -670,34 +697,51 @@ func (m *appServerManager) ResetConversationHistory(ctx context.Context, handle 
 		return err
 	}
 
+	return m.removeConversationBindings(live, conversationKey, "")
+}
+
+func (m *appServerManager) removeConversationBindings(live *liveSession, logicalKey, keep string) error {
 	live.conversationPersistMu.Lock()
 	defer live.conversationPersistMu.Unlock()
+	type binding struct {
+		key, sessionID    string
+		loaded, publishes bool
+	}
 	live.mu.Lock()
-	sessionID := strings.TrimSpace(live.conversationSessions[conversationKey])
-	delete(live.conversationSessions, conversationKey)
-	wasLoaded := live.loadedConversations[conversationKey]
-	delete(live.loadedConversations, conversationKey)
-	wasFilePublishing := live.filePublishingThreads[sessionID]
-	delete(live.filePublishingThreads, sessionID)
+	var removed []binding
+	for key, sessionID := range live.conversationSessions {
+		if key == keep || contract.LogicalRuntimeSessionKey(key) != logicalKey {
+			continue
+		}
+		removed = append(removed, binding{key, sessionID, live.loadedConversations[key], live.filePublishingThreads[sessionID]})
+		delete(live.conversationSessions, key)
+		delete(live.loadedConversations, key)
+		delete(live.filePublishingThreads, sessionID)
+	}
+	if len(removed) == 0 {
+		live.mu.Unlock()
+		return nil
+	}
 	conversations := cloneConversationSessions(live.conversationSessions)
-	filePublishingConversations := filePublishingConversationsForThreads(conversations, live.filePublishingThreads)
+	filePublishing := filePublishingConversationsForThreads(conversations, live.filePublishingThreads)
 	live.mu.Unlock()
-	if err := m.persistConversationSessions(live, conversations, filePublishingConversations); err != nil {
+	if err := m.persistConversationSessions(live, conversations, filePublishing); err != nil {
 		live.mu.Lock()
-		if sessionID != "" {
-			live.conversationSessions[conversationKey] = sessionID
-			live.loadedConversations[conversationKey] = wasLoaded
-			live.filePublishingThreads[sessionID] = wasFilePublishing
+		for _, item := range removed {
+			live.conversationSessions[item.key] = item.sessionID
+			live.loadedConversations[item.key] = item.loaded
+			live.filePublishingThreads[item.sessionID] = item.publishes
 		}
 		live.mu.Unlock()
 		return err
 	}
-
-	if m.deps.Permission != nil && sessionID != "" {
-		m.deps.Permission.CancelSession(runtimeID, sessionID)
-	}
-	if m.deps.UserInput != nil && sessionID != "" {
-		m.deps.UserInput.CancelSession(runtimeID, sessionID)
+	for _, item := range removed {
+		if m.deps.Permission != nil {
+			m.deps.Permission.CancelSession(live.spec.RuntimeID, item.sessionID)
+		}
+		if m.deps.UserInput != nil {
+			m.deps.UserInput.CancelSession(live.spec.RuntimeID, item.sessionID)
+		}
 	}
 	return nil
 }
@@ -721,6 +765,23 @@ func (m *appServerManager) persistConversationSessions(
 		return nil
 	}
 	return m.deps.OnConversationSessionsChange(live.session, conversations, filePublishing)
+}
+
+func (m *appServerManager) persistSessionMetadata(session *Session, save func(*Session) error) error {
+	live := m.liveSession(session.RuntimeID)
+	if live == nil || !live.session.StartedAt.Equal(session.StartedAt) {
+		return fmt.Errorf("Codex runtime %q changed before persisting session metadata", session.RuntimeID)
+	}
+	live.conversationPersistMu.Lock()
+	defer live.conversationPersistMu.Unlock()
+	if m.liveSession(session.RuntimeID) != live {
+		return fmt.Errorf("Codex runtime %q changed before persisting session metadata", session.RuntimeID)
+	}
+	live.mu.Lock()
+	session.ConversationSessions = cloneConversationSessions(live.conversationSessions)
+	session.FilePublishingConversations = filePublishingConversationsForThreads(session.ConversationSessions, live.filePublishingThreads)
+	live.mu.Unlock()
+	return save(session)
 }
 
 func (m *appServerManager) ensureLiveSession(ctx context.Context, handle SessionHandle) (*liveSession, error) {
@@ -838,7 +899,7 @@ func appServerThreadStartParams(spec SessionSpec, publishFiles bool) map[string]
 		"cwd":                    spec.WorkspaceDir,
 		"persistExtendedHistory": true,
 		"experimentalRawEvents":  false,
-		"developerInstructions":  runtimeinstructions.ImageGenerationPromptPolicy + "\n" + runtimeinstructions.VideoGenerationPromptPolicy,
+		"developerInstructions":  appServerDeveloperInstructions,
 	}
 	if publishFiles {
 		// Native tools are immutable on resume; enforce the current mode in the call handler.
@@ -847,7 +908,7 @@ func appServerThreadStartParams(spec SessionSpec, publishFiles bool) map[string]
 	if spec.Profile.ModelID != "" {
 		params["model"] = spec.Profile.ModelID
 	}
-	if config := appServerThreadConfig(spec.Profile, spec.ExecutionMode); len(config) > 0 {
+	if config := appServerThreadConfig(spec); len(config) > 0 {
 		params["config"] = config
 	}
 	if spec.ExecutionMode == ExecutionModeReadOnly {
@@ -905,12 +966,12 @@ func appServerThreadResumeParams(spec SessionSpec, threadID string) map[string]a
 	params := map[string]any{
 		"threadId":              strings.TrimSpace(threadID),
 		"cwd":                   spec.WorkspaceDir,
-		"developerInstructions": runtimeinstructions.ImageGenerationPromptPolicy + "\n" + runtimeinstructions.VideoGenerationPromptPolicy,
+		"developerInstructions": appServerDeveloperInstructions,
 	}
 	if spec.Profile.ModelID != "" {
 		params["model"] = spec.Profile.ModelID
 	}
-	if config := appServerThreadConfig(spec.Profile, spec.ExecutionMode); len(config) > 0 {
+	if config := appServerThreadConfig(spec); len(config) > 0 {
 		params["config"] = config
 	}
 	if spec.ExecutionMode == ExecutionModeReadOnly {
@@ -933,9 +994,7 @@ func appServerTurnStartParamsWithInput(spec SessionSpec, threadID string, input 
 	if clientUserMessageID = strings.TrimSpace(clientUserMessageID); clientUserMessageID != "" {
 		params["clientUserMessageId"] = clientUserMessageID
 	}
-	if effort := config.NormalizeReasoningEffort(spec.Profile.ReasoningEffort); !config.UsesModelReasoningDefault(effort) {
-		params["effort"] = effort
-	}
+	applyTurnModelParams(params, turnModelFromProfile(spec.Profile))
 	if spec.ExecutionMode == ExecutionModeReadOnly {
 		params["approvalPolicy"] = "never"
 		params["permissions"] = readOnlyPermissionsProfile
@@ -1506,7 +1565,13 @@ func (m *appServerManager) persistedThreadID(spec SessionSpec) string {
 }
 
 type appServerTurnWaiter struct {
+	model         contract.TurnModel
+	modelOverride bool
 	// Guarded by liveSession.mu, alongside the thread's cumulative counters.
+	previousContextUsage     *modelcap.ContextUsage
+	compacting               bool
+	itemTurns                map[string]string // Native item IDs received with an explicit turn ID.
+	missingItems             bool              // An item without a known owner was withheld.
 	tokenUsage               modelusage.Usage
 	pendingUsage             map[string]modelusage.Usage
 	diagnostic               *diagnostics.Record
@@ -1515,15 +1580,19 @@ type appServerTurnWaiter struct {
 	diagnosticNoteBytes      int
 	visibleActivity          bool
 	mu                       sync.RWMutex
+	accepted                 bool
 	threadID                 string
 	turnID                   string
 	ch                       chan appServerTurnResult
 	terminalResults          map[string]appServerTurnResult
 	lastActivity             string
+	progressSequence         uint64
 	structuredOutputBoundary bool
+	textOnlyUserInput        bool
 }
 
 type appServerTurnResult struct {
+	storedTurn map[string]any
 	success    bool
 	stopReason string
 	err        error
@@ -1534,6 +1603,10 @@ type appServerTurnResult struct {
 }
 
 func (s *liveSession) registerAppServerTurnWaiter(threadID string) (*appServerTurnWaiter, error) {
+	return s.registerAppServerTurnWaiterWithModel(threadID, turnModelFromProfile(s.spec.Profile), false)
+}
+
+func (s *liveSession) registerAppServerTurnWaiterWithModel(threadID string, selected contract.TurnModel, overridden bool) (*appServerTurnWaiter, error) {
 	threadID = strings.TrimSpace(threadID)
 	if threadID == "" {
 		return nil, fmt.Errorf("thread id is required")
@@ -1546,12 +1619,18 @@ func (s *liveSession) registerAppServerTurnWaiter(threadID string) (*appServerTu
 	if s.turnWaiters[threadID] != nil {
 		return nil, fmt.Errorf("codex turn already in progress for thread %s", threadID)
 	}
+	delete(s.legacyTools, threadID)
 	waiter := &appServerTurnWaiter{
-		threadID:     threadID,
-		ch:           make(chan appServerTurnResult, 8),
-		lastActivity: "turn/start",
+		model:         selected,
+		modelOverride: overridden,
+		threadID:      threadID,
+		ch:            make(chan appServerTurnResult, 8),
+		lastActivity:  "turn/start",
 	}
-	waiter.tokenUsage.ModelID = s.spec.Profile.ModelID
+	waiter.tokenUsage.ModelID = selected.ModelID
+	if usage, ok := s.contextUsage[threadID]; ok {
+		waiter.previousContextUsage = modelcap.CloneUsage(&usage)
+	}
 	s.turnWaiters[threadID] = waiter
 	return waiter, nil
 }
@@ -1559,8 +1638,36 @@ func (s *liveSession) registerAppServerTurnWaiter(threadID string) (*appServerTu
 func (s *liveSession) removeAppServerTurnWaiter(threadID string, waiter *appServerTurnWaiter) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.turnWaiters[strings.TrimSpace(threadID)] == waiter {
-		delete(s.turnWaiters, strings.TrimSpace(threadID))
+	threadID = strings.TrimSpace(threadID)
+	if s.turnWaiters[threadID] == waiter {
+		waiter.mu.RLock()
+		accepted := waiter.accepted
+		waiter.mu.RUnlock()
+		if accepted {
+			if s.threadModels == nil {
+				s.threadModels = make(map[string]contract.TurnModel)
+			}
+			s.threadModels[threadID] = waiter.model
+		} else if waiter.previousContextUsage != nil {
+			// Revert a pending model selection while retaining same-model usage
+			// updates, including a compaction completed during context recovery.
+			if usage, ok := s.contextUsage[threadID]; !ok || usage.ModelID != waiter.previousContextUsage.ModelID {
+				s.contextUsage[threadID] = *waiter.previousContextUsage
+			}
+		} else {
+			delete(s.contextUsage, threadID)
+		}
+		if terminal, ok := waiter.terminalResult(); ok && terminal.turnID != "" && terminal.turnID == waiter.currentTurnID() && !s.turnThreads[terminal.turnID].recovered {
+			// An identified successor has finished. Later legacy items can be
+			// delivered again, while the recovered turn and its IDs stay excluded.
+			for id, old := range s.turnThreads {
+				if old.threadID == threadID && old.recovered && !old.successorFinished {
+					old.successorFinished = true
+					s.turnThreads[id] = old
+				}
+			}
+		}
+		delete(s.turnWaiters, threadID)
 	}
 }
 
@@ -1611,6 +1718,13 @@ func (s *liveSession) appServerTurnContext(threadID, turnID string) (context.Con
 	return active.ctx, true
 }
 
+type appServerTrackedTurn struct {
+	threadID          string
+	recovered         bool
+	successorFinished bool
+	recoveredItems    map[string]struct{}
+}
+
 func (s *liveSession) trackAppServerTurn(threadID, turnID string) {
 	threadID = strings.TrimSpace(threadID)
 	turnID = strings.TrimSpace(turnID)
@@ -1619,13 +1733,20 @@ func (s *liveSession) trackAppServerTurn(threadID, turnID string) {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.trackAppServerTurnLocked(threadID, turnID, false)
+}
+
+func (s *liveSession) trackAppServerTurnLocked(threadID, turnID string, recovered bool) {
 	if s.turnThreads == nil {
-		s.turnThreads = make(map[string]string)
+		s.turnThreads = make(map[string]appServerTrackedTurn)
 	}
-	if _, exists := s.turnThreads[turnID]; !exists {
+	tracked, exists := s.turnThreads[turnID]
+	if !exists {
 		s.turnThreadOrder = append(s.turnThreadOrder, turnID)
 	}
-	s.turnThreads[turnID] = threadID
+	tracked.threadID = threadID
+	tracked.recovered = recovered || tracked.recovered
+	s.turnThreads[turnID] = tracked
 	for len(s.turnThreadOrder) > appServerTrackedTurnLimit {
 		oldest := s.turnThreadOrder[0]
 		s.turnThreadOrder = s.turnThreadOrder[1:]
@@ -1633,14 +1754,195 @@ func (s *liveSession) trackAppServerTurn(threadID, turnID string) {
 	}
 }
 
-func (s *liveSession) appServerThreadForTurn(turnID string) string {
-	turnID = strings.TrimSpace(turnID)
-	if s == nil || turnID == "" {
-		return ""
-	}
+// Resolve older notifications that omit the thread ID only when the native
+// turn or an unambiguous session identifies the recipient.
+func (s *liveSession) nativeNotificationThread(threadID, turnID string, allowPrimaryFallback bool) string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return strings.TrimSpace(s.turnThreads[turnID])
+	return s.nativeNotificationThreadLocked(threadID, turnID, allowPrimaryFallback)
+}
+
+func (s *liveSession) nativeNotificationThreadLocked(threadID, turnID string, allowPrimaryFallback bool) string {
+	if owner := s.turnThreads[turnID].threadID; owner != "" {
+		if threadID != "" && threadID != owner {
+			return ""
+		}
+		return owner
+	}
+	if threadID != "" {
+		return threadID
+	}
+	for id, waiter := range s.turnWaiters {
+		if len(s.turnWaiters) == 1 || (turnID != "" && turnID == waiter.currentTurnID()) {
+			return id
+		}
+	}
+	if s.session == nil {
+		return ""
+	}
+	id := strings.TrimSpace(s.session.SessionID)
+	if allowPrimaryFallback {
+		// Older rollouts can omit both IDs. Preserve their primary-thread
+		// routing while there is no recovered turn with ambiguous ownership.
+		for _, tracked := range s.turnThreads {
+			if tracked.recovered {
+				return ""
+			}
+		}
+		return id
+	}
+	if len(s.turnWaiters) == 0 {
+		for _, other := range s.conversationSessions {
+			if strings.TrimSpace(other) != id {
+				return ""
+			}
+		}
+		return id
+	}
+	return ""
+}
+
+// A turn without an ID is ambiguous after history recovery: an earlier
+// notification may still be in flight on this thread. Its current waiter can
+// still finish from an identified notification or the native history check.
+func (s *liveSession) acceptsTurnNotificationLocked(threadID, turnID string) bool {
+	if turnID == "" {
+		for _, tracked := range s.turnThreads {
+			if tracked.threadID == threadID && tracked.recovered {
+				return false
+			}
+		}
+		return true
+	}
+	tracked := s.turnThreads[turnID]
+	if tracked.recovered || (tracked.threadID != "" && tracked.threadID != threadID) {
+		return false
+	}
+	waiter := s.turnWaiters[threadID]
+	return waiter == nil || waiter.matchesTurn(turnID)
+}
+
+// Use an explicit item/turn association before falling back to older protocols'
+// thread routing. Items from recovered history remain excluded by their ID.
+func (s *liveSession) beginTurnNotification(threadID, turnID, itemID string, isItem bool) (string, string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	// Only each candidate turn's own history can identify its withheld items.
+	missingOwner := turnID == "" && isItem
+	unowned := func() (string, string) {
+		if missingOwner {
+			for id, waiter := range s.turnWaiters {
+				if threadID == "" || threadID == id {
+					waiter.missingItems = true
+				}
+			}
+		}
+		return "", ""
+	}
+	if turnID == "" {
+		var itemThread string
+		if itemID != "" {
+			for id, waiter := range s.turnWaiters {
+				if threadID != "" && threadID != id {
+					continue
+				}
+				if owner := waiter.itemTurns[itemID]; owner != "" {
+					if itemThread != "" {
+						return unowned() // Two active threads use the same item ID.
+					}
+					itemThread, turnID = id, owner
+				}
+			}
+		}
+		for _, old := range s.turnThreads {
+			if !old.recovered || (threadID != "" && old.threadID != threadID) {
+				continue
+			}
+			if _, stale := old.recoveredItems[itemID]; stale {
+				return unowned()
+			}
+			// A sole active waiter on a different thread cannot establish
+			// ownership of an unscoped record from a recovered thread.
+			if threadID == "" && itemThread == "" && !old.successorFinished && s.turnWaiters[old.threadID] == nil {
+				return unowned()
+			}
+		}
+		if itemThread != "" {
+			threadID = itemThread
+		}
+	}
+	resolved := s.nativeNotificationThreadLocked(threadID, turnID, true)
+	if resolved == "" {
+		return unowned()
+	}
+	threadID = resolved
+	if turnID == "" && itemID != "" && s.turnWaiters[threadID] != nil {
+		for _, old := range s.turnThreads {
+			if old.threadID == threadID && old.recovered && !old.successorFinished {
+				return unowned()
+			}
+		}
+	} else if !s.acceptsTurnNotificationLocked(threadID, turnID) {
+		return unowned()
+	}
+	if waiter := s.turnWaiters[threadID]; waiter != nil {
+		if itemID != "" && turnID != "" {
+			if waiter.itemTurns == nil {
+				waiter.itemTurns = make(map[string]string)
+			}
+			waiter.itemTurns[itemID] = turnID
+		}
+		// Invalidate a pending lookup before publishing this notification.
+		waiter.mu.Lock()
+		waiter.progressSequence++
+		waiter.mu.Unlock()
+	}
+	return threadID, turnID
+}
+
+// Claim the terminal event before waking a waiter or publishing to subscribers.
+// A notification can arrive after a native history check has settled this turn.
+func (s *liveSession) recordNativeCompletion(threadID string, result *appServerTurnResult, quietVersion *uint64, turn map[string]any) (*appServerTurnWaiter, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if !s.acceptsTurnNotificationLocked(threadID, result.turnID) {
+		return nil, false
+	}
+	waiter := s.turnWaiters[threadID]
+	if result.turnID == "" && waiter != nil {
+		result.turnID = waiter.currentTurnID()
+	}
+	if quietVersion != nil || (waiter != nil && waiter.missingItems && appServerString(turn, "id") == result.turnID && appServerString(turn, "itemsView") == "full") {
+		result.storedTurn = turn
+	}
+	if quietVersion != nil {
+		if waiter == nil || !waiter.recordQuietResult(result, *quietVersion) {
+			return nil, false
+		}
+	} else if waiter != nil && !waiter.apply(result) {
+		return nil, false
+	}
+	if result.turnID != "" {
+		s.trackAppServerTurnLocked(threadID, result.turnID, quietVersion != nil)
+		if quietVersion != nil {
+			old := s.turnThreads[result.turnID]
+			old.recoveredItems = make(map[string]struct{})
+			for id, turn := range waiter.itemTurns {
+				if turn == result.turnID {
+					old.recoveredItems[id] = struct{}{}
+				}
+			}
+			items, _ := turn["items"].([]any)
+			for _, value := range items {
+				item, _ := value.(map[string]any)
+				if id := appServerString(item, "id"); id != "" {
+					old.recoveredItems[id] = struct{}{}
+				}
+			}
+			s.turnThreads[result.turnID] = old
+		}
+	}
+	return waiter, true
 }
 
 func (s *liveSession) notifyAppServerTurn(threadID string, result appServerTurnResult) bool {
@@ -1650,7 +1952,13 @@ func (s *liveSession) notifyAppServerTurn(threadID string, result appServerTurnR
 	}
 	s.mu.Lock()
 	waiter := s.turnWaiters[threadID]
+	// A legacy final-answer item can omit its turn ID. Deliver its text,
+	// but wait for an identified terminal when an older turn was recovered.
+	ambiguousEnd := (result.success || result.err != nil) && result.turnID == "" && !s.acceptsTurnNotificationLocked(threadID, "")
 	s.mu.Unlock()
+	if ambiguousEnd {
+		return true
+	}
 	if waiter == nil {
 		return false
 	}
@@ -1658,11 +1966,15 @@ func (s *liveSession) notifyAppServerTurn(threadID string, result appServerTurnR
 		return true
 	}
 
+	waiter.wake(result)
+	return true
+}
+
+func (w *appServerTurnWaiter) wake(result appServerTurnResult) {
 	select {
-	case waiter.ch <- result:
+	case w.ch <- result:
 	default:
 	}
-	return true
 }
 
 func (s *liveSession) appServerTurnWaiter(threadID string) *appServerTurnWaiter {
@@ -1693,11 +2005,12 @@ func (w *appServerTurnWaiter) recordDiagnosticCompletion(turnID string, at time.
 
 func (w *appServerTurnWaiter) setTurnID(turnID string) {
 	turnID = strings.TrimSpace(turnID)
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.accepted = true
 	if turnID == "" {
 		return
 	}
-	w.mu.Lock()
-	defer w.mu.Unlock()
 	w.turnID = turnID
 	w.flushDiagnosticNotesLocked(turnID)
 	w.diagnostic.RuntimeRef(w.threadID, turnID, "")
@@ -1717,12 +2030,19 @@ func (w *appServerTurnWaiter) apply(result *appServerTurnResult) bool {
 	}
 	w.mu.Lock()
 	defer w.mu.Unlock()
+	return w.applyLocked(result)
+}
+
+func (w *appServerTurnWaiter) applyLocked(result *appServerTurnResult) bool {
 	result.turnID = strings.TrimSpace(result.turnID)
 	if w.turnID != "" && result.turnID != "" && w.turnID != result.turnID {
 		return false
 	}
 	// Only a start notification or the turn/start response establishes identity.
 	// A previous turn can finish while the next start response is still pending.
+	if result.started {
+		w.accepted = true
+	}
 	if result.started && result.turnID != "" {
 		w.turnID = result.turnID
 		w.flushDiagnosticNotesLocked(result.turnID)
@@ -1741,6 +2061,9 @@ func (w *appServerTurnWaiter) apply(result *appServerTurnResult) bool {
 		if _, exists := w.terminalResults[result.turnID]; !exists {
 			w.terminalResults[result.turnID] = *result
 		}
+	}
+	if result.progress || result.started {
+		w.progressSequence++
 	}
 	if result.activity != "" {
 		w.lastActivity = strings.TrimSpace(result.activity)
@@ -1773,6 +2096,27 @@ func (w *appServerTurnWaiter) currentTurnID() string {
 	return strings.TrimSpace(w.turnID)
 }
 
+func (w *appServerTurnWaiter) recordQuietResult(result *appServerTurnResult, version uint64) bool {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.progressSequence != version || w.turnID != result.turnID {
+		return false
+	}
+	if _, ok := w.terminalResults[w.turnID]; ok {
+		return false
+	}
+	if _, ok := w.terminalResults[""]; ok {
+		return false
+	}
+	return w.applyLocked(result)
+}
+
+func (w *appServerTurnWaiter) progressVersion() uint64 {
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+	return w.progressSequence
+}
+
 func (w *appServerTurnWaiter) currentLastActivity() string {
 	if w == nil {
 		return ""
@@ -1788,7 +2132,7 @@ func (w *appServerTurnWaiter) markStructuredOutputBoundary() bool {
 	}
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	if w.structuredOutputBoundary {
+	if w.textOnlyUserInput || w.structuredOutputBoundary {
 		return false
 	}
 	w.structuredOutputBoundary = true
@@ -1804,27 +2148,56 @@ func (w *appServerTurnWaiter) hasStructuredOutputBoundary() bool {
 	return w.structuredOutputBoundary
 }
 
+func (s *liveSession) completedTurnItems(ctx context.Context, waiter *appServerTurnWaiter, result appServerTurnResult) quietTurnHistory {
+	if result.storedTurn != nil {
+		return quietTurnItems(result.storedTurn)
+	}
+	s.mu.Lock()
+	missing := waiter.missingItems
+	s.mu.Unlock()
+	if !missing || result.turnID == "" || s.appClient == nil {
+		return nil
+	}
+	// The identified terminal has already settled the prompt. Only its items
+	// are missing, and an unavailable history must not keep that prompt open.
+	ctx, cancel := context.WithTimeout(ctx, nativeTurnLookupTimeout)
+	defer cancel()
+	return quietTurnItems(readLatestTurn(ctx, s.appClient, waiter.threadID, result.turnID))
+}
+
 func (m *appServerManager) waitAppServerTurn(ctx context.Context, live *liveSession, waiter *appServerTurnWaiter) (PromptResponse, error) {
-	// A slow model, quiet tool or context compaction is not evidence of failure.
-	// Only a terminal event, caller cancellation or process exit ends the wait.
 	waitStartedAt := time.Now()
 	lastActivityAt := waitStartedAt
+	quiet := time.NewTimer(quietTurnInterval)
+	defer quiet.Stop()
+	readCtx, cancelRead := context.WithCancel(ctx)
+	defer cancelRead()
+	var history <-chan map[string]any
+	var readVersion uint64
 
+	finish := func(result appServerTurnResult) (PromptResponse, error) {
+		cancelRead()
+		recovered := live.completedTurnItems(ctx, waiter, result)
+		if result.err != nil {
+			return PromptResponse{}, recovered.failure(result.err)
+		}
+		stopReason := result.stopReason
+		if stopReason == "" {
+			stopReason = StopReasonEndTurn
+		}
+		return PromptResponse{StopReason: stopReason, history: recovered}, nil
+	}
 	for {
 		if result, ok := waiter.terminalResult(); ok {
-			if result.err != nil {
-				return PromptResponse{}, result.err
-			}
-			stopReason := result.stopReason
-			if stopReason == "" {
-				stopReason = StopReasonEndTurn
-			}
-			return PromptResponse{StopReason: stopReason}, nil
+			return finish(result)
 		}
 		select {
 		case result := <-waiter.ch:
 			if !waiter.matchesTurn(result.turnID) {
 				continue
+			}
+			if result.progress || result.started {
+				quiet.Reset(quietTurnInterval)
 			}
 			if result.activity != "" {
 				now := time.Now()
@@ -1843,15 +2216,22 @@ func (m *appServerManager) waitAppServerTurn(ctx context.Context, live *liveSess
 				}
 				lastActivityAt = now
 			}
-			if result.err != nil {
-				return PromptResponse{}, result.err
+			if result.success || result.err != nil {
+				return finish(result)
 			}
-			if result.success {
-				stopReason := result.stopReason
-				if stopReason == "" {
-					stopReason = StopReasonEndTurn
-				}
-				return PromptResponse{StopReason: stopReason}, nil
+		case <-quiet.C:
+			quiet.Reset(quietTurnInterval)
+			if turnID := waiter.currentTurnID(); history == nil && turnID != "" && live.appClient != nil {
+				readVersion = waiter.progressVersion()
+				history = readQuietTurn(readCtx, live.appClient, waiter.threadID, turnID)
+			}
+		case turn := <-history:
+			history = nil
+			if turn == nil || ctx.Err() != nil {
+				continue
+			}
+			if m.handleRawTurnCompleted(live.spec.RuntimeID, live, waiter.threadID, map[string]any{"turn": turn}, &readVersion) {
+				live.appClient.logDebugContext(ctx, "recovered Codex turn from native history", "runtime_id", live.spec.RuntimeID, "thread_id", waiter.threadID, "turn_id", waiter.currentTurnID(), "status", turn["status"])
 			}
 		case <-ctx.Done():
 			return m.stopCanceledAppServerTurn(ctx, live, waiter, "prompt context canceled")
@@ -2000,29 +2380,86 @@ func (m *appServerManager) interruptAppServerStructuredOutputTurn(live *liveSess
 	}()
 }
 
-func (m *appServerManager) readAppServerStdout(runtimeID string, live *liveSession, stdout io.Reader) {
+// Capture the remaining pipe data at process exit. Notification delivery can
+// then finish at its own pace even if another process still owns a writer.
+type drainingAppServerStdout struct {
+	*os.File
+	mu        sync.Mutex
+	remaining *bytes.Reader
+}
+
+func (s *drainingAppServerStdout) Read(p []byte) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.remaining != nil {
+		return s.remaining.Read(p)
+	}
+	return s.File.Read(p)
+}
+
+func (s *drainingAppServerStdout) drain() {
+	// Closing the pipe also releases a Read already in progress at exit.
+	deadline := time.AfterFunc(appServerStdoutExitGracePeriod, func() { _ = s.File.Close() })
+	defer deadline.Stop()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	data, _ := io.ReadAll(io.LimitReader(s.File, appServerStdoutExitBufferBytes))
+	s.remaining = bytes.NewReader(data)
+	_ = s.File.Close()
+}
+
+func (m *appServerManager) readAppServerStdout(runtimeID string, live *liveSession, stdout io.Reader, exited <-chan struct{}) {
 	decoder := json.NewDecoder(stdout)
 	for {
 		var msg appServerWireMessage
-		if err := decoder.Decode(&msg); err != nil {
-			if errors.Is(err, io.EOF) {
-				return
-			}
-			if live.appClient != nil {
-				live.diagnosticObserver.Observe("stdout_decode_failed", err, nil)
-				live.appClient.logDebug("codex app-server stdout decoder stopped", "runtime_id", runtimeID, "error", err)
-			}
-			return
-		}
-		if live.appClient != nil {
+		err := decoder.Decode(&msg)
+		if err == nil {
 			live.appClient.handleMessage(msg)
+			continue
 		}
+		if errors.Is(err, os.ErrClosed) {
+			select {
+			case <-exited:
+				return // The remaining pipe data was collected after exit.
+			default:
+			}
+		}
+		if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
+			// EOF also accompanies a normal exit. Preserve that exit status.
+			select {
+			case <-exited:
+				return
+			case <-time.After(appServerStdoutExitGracePeriod):
+			}
+		}
+		live.appClient.closeAllPending(fmt.Errorf("codex app-server stdout closed: %w", err))
+		if !errors.Is(err, io.EOF) {
+			live.diagnosticObserver.Observe("stdout_decode_failed", err, nil)
+		}
+		live.appClient.logError("codex app-server stdout unavailable", "runtime_id", runtimeID, "error", err)
+		// The process can still accept work on stdin but can no longer
+		// acknowledge it. Its regular exit path will reclaim the process tree.
+		if killErr := live.cmd.Process.Kill(); killErr != nil && !errors.Is(killErr, os.ErrProcessDone) {
+			live.appClient.logError("stop codex app-server after stdout failure", "runtime_id", runtimeID, "error", killErr)
+		}
+		return
 	}
 }
 
-func (m *appServerManager) waitAppServerSession(runtimeID string, live *liveSession) {
+func (m *appServerManager) waitAppServerSession(runtimeID string, live *liveSession, stdout *os.File) {
+	exited := make(chan struct{})
+	stdoutDone := make(chan struct{})
+	reader := &drainingAppServerStdout{File: stdout}
+	go func() {
+		defer close(stdoutDone)
+		defer stdout.Close()
+		m.readAppServerStdout(runtimeID, live, reader, exited)
+	}()
 	err := live.cmd.Wait()
+	close(exited)
+	reader.drain()
 	cleanupErr := stopProcessTree(live.cmd.Process.Pid)
+	<-stdoutDone
 	live.mu.Lock()
 	live.stopErr = cleanupErr
 	live.mu.Unlock()
@@ -2144,15 +2581,17 @@ func appServerGenerateVideoToolSpec() map[string]any {
 }
 
 // Explicit per-thread values override settings retained by cold-resumed threads.
-func appServerThreadConfig(profile agentruntime.Profile, executionMode string) map[string]any {
-	values := appServerReasoningConfig(profile.ReasoningEffort)
+func appServerThreadConfig(spec SessionSpec) map[string]any {
+	values := appServerReasoningConfig(spec.Profile.ReasoningEffort)
 	if values == nil {
 		values = make(map[string]any)
 	}
-	values["model_context_window"] = profile.ModelMetadata.Normalized().ContextWindow
-	values["model_auto_compact_token_limit"] = profile.ModelMetadata.CompactThreshold()
+	if spec.UseProfileModelContext {
+		values["model_context_window"] = spec.Profile.ModelMetadata.Normalized().ContextWindow
+		values["model_auto_compact_token_limit"] = spec.Profile.ModelMetadata.CompactThreshold()
+	}
 	values["web_search"] = "cached"
-	if executionMode == ExecutionModeReadOnly {
+	if spec.ExecutionMode == ExecutionModeReadOnly {
 		values["web_search"] = "disabled"
 	}
 	return values

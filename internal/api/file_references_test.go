@@ -18,6 +18,57 @@ import (
 	"csgclaw/internal/taskconfig"
 )
 
+func TestDraftWorkspaceUsesSelectedDirectoryWithoutOverridingRooms(t *testing.T) {
+	h, _, agentID, defaultRoot, _ := referenceTestHandler(t)
+	draftRoot := t.TempDir()
+	for root, content := range map[string]string{defaultRoot: "DEFAULT", draftRoot: "DRAFT"} {
+		if err := os.WriteFile(filepath.Join(root, "same.md"), []byte(content), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.Symlink(defaultRoot, filepath.Join(draftRoot, "escape")); err != nil {
+		t.Fatal(err)
+	}
+	room, err := h.im.CreateRoom(im.CreateRoomRequest{
+		Title: "Locked", CreatorID: "admin", MemberIDs: []string{agentID}, IsDirect: true,
+		Configuration: &taskconfig.Config{WorkspaceDir: defaultRoot},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, tt := range []struct {
+		name, suffix, path, roomID, remoteAddr, want string
+		status                                       int
+	}{
+		{name: "list", want: "modified_at", status: http.StatusOK},
+		{name: "content", suffix: "/content", path: "same.md", want: "DRAFT", status: http.StatusOK},
+		{name: "location", suffix: "/location", path: "same.md", want: draftRoot, status: http.StatusOK},
+		{name: "locked room", suffix: "/content", path: "same.md", roomID: room.ID, want: "DEFAULT", status: http.StatusOK},
+		{name: "nonlocal", remoteAddr: "192.0.2.1:1234", status: http.StatusBadRequest},
+		{name: "traversal", suffix: "/content", path: "../same.md", status: http.StatusBadRequest},
+		{name: "symlink", suffix: "/content", path: "escape/same.md", status: http.StatusBadRequest},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			query := url.Values{"dir": {draftRoot}, "room_id": {tt.roomID}, "path": {tt.path}, "depth": {"1"}}
+			endpoint := "/draft-workspace"
+			if tt.roomID != "" {
+				endpoint = "/workspace"
+			}
+			req := httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/agents/"+agentID+endpoint+tt.suffix+"?"+query.Encode(), nil)
+			req.RemoteAddr = tt.remoteAddr
+			if req.RemoteAddr == "" {
+				req.RemoteAddr = "127.0.0.1:1234"
+			}
+			rec := httptest.NewRecorder()
+			h.Routes().ServeHTTP(rec, req)
+			if rec.Code != tt.status || (tt.want != "" && !bytes.Contains(rec.Body.Bytes(), []byte(tt.want))) {
+				t.Fatalf("status/body: %d %s", rec.Code, rec.Body.String())
+			}
+		})
+	}
+}
+
 func TestTaskWorkspaceListingPreviewAndReferenceUseLockedDirectory(t *testing.T) {
 	h, _, alice, defaultRoot, _ := referenceTestHandler(t)
 	taskRoot := t.TempDir()
@@ -235,7 +286,7 @@ func referenceTestHandler(t *testing.T) (*Handler, string, string, string, strin
 	if err != nil {
 		t.Fatal(err)
 	}
-	return &Handler{svc: svc, workspace: svc.Workspace(), im: messages}, room.ID, ids[0], roots[0], roots[1]
+	return &Handler{svc: svc, workspace: svc.Workspace(), im: messages, serverNoAuth: true}, room.ID, ids[0], roots[0], roots[1]
 }
 
 func postReference(t *testing.T, h *Handler, roomID, key string, refs []FileReference) (int, im.Message, string) {

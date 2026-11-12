@@ -1,0 +1,68 @@
+.sources {
+  flex: 0 0 auto;
+  min-width: 0;
+  margin-bottom: 12px;
+}
+.summary,
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.summary {
+  justify-content: space-between;
+}
+.summary p,
+.rule {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.comparison {
+  max-height: 180px;
+  overflow-y: auto;
+  margin-top: 8px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-base);
+  background: var(--field);
+}
+.comparison ul {
+  list-style: none;
+  padding: 0;
+  margin: 10px 0 0;
+  display: grid;
+  gap: 8px;
+}
+.comparison li {
+  display: grid;
+  gap: 5px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-base);
+  font-size: 12px;
+}
+.comparison li.active {
+  border-color: var(--primary);
+}
+.row {
+  color: var(--text);
+}
+.comparison code {
+  overflow-wrap: anywhere;
+  font-size: 11px;
+  color: var(--muted);
+}
+.activeBadge {
+  padding: 1px 7px;
+  border-radius: 999px;
+  color: var(--accent-text);
+  background: var(--control-selected-background);
+  font-size: 11px;
+}
+.updated {
+  color: var(--muted);
+  font-size: 11px;
+}

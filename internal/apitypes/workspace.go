@@ -1,5 +1,7 @@
 package apitypes
 
+import "time"
+
 type WorkspaceListing struct {
 	Kind    string           `json:"kind"`
 	Path    string           `json:"path"`
@@ -7,11 +9,12 @@ type WorkspaceListing struct {
 }
 
 type WorkspaceEntry struct {
-	Path  string `json:"path"`
-	Name  string `json:"name"`
-	Type  string `json:"type"`
-	Depth int    `json:"depth,omitempty"`
-	Size  int64  `json:"size,omitempty"`
+	Path       string    `json:"path"`
+	Name       string    `json:"name"`
+	Type       string    `json:"type"`
+	Depth      int       `json:"depth,omitempty"`
+	Size       int64     `json:"size,omitempty"`
+	ModifiedAt time.Time `json:"modified_at,omitzero"`
 }
 
 type WorkspaceFile struct {

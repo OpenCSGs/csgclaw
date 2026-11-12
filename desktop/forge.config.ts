@@ -145,8 +145,6 @@ const config: ForgeConfig = {
             entitlements,
             entitlementsInherit: entitlements,
             continueOnError: false,
-            ignore: (filePath: string) =>
-              filePath.endsWith(path.join("sandbox-tools", "csgclaw-cli")),
             ...(macSignIdentity
               ? {
                   identity: macSignIdentity,

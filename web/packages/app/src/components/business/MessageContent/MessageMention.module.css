@@ -1,0 +1,9 @@
+.message-mention {
+  color: var(--mention);
+  font-weight: 600;
+}
+
+.mention {
+  color: var(--mention);
+  font-weight: 700;
+}

@@ -15,10 +15,12 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"csgclaw/internal/activity"
 	"csgclaw/internal/agentengine/contract"
 	"csgclaw/internal/agentengine/interactionstate"
+	"csgclaw/internal/apitypes"
 	"csgclaw/internal/dshcli"
 	agentruntime "csgclaw/internal/runtime"
 	larkextension "csgclaw/internal/runtimeextension/larkcli"
@@ -266,6 +268,9 @@ func TestRuntimeRunsACPConversation(t *testing.T) {
 		t.Fatalf("RuntimeFiles = %+v, want one presented file", result.RuntimeFiles)
 	}
 	t.Cleanup(result.RuntimeFiles[0].Cleanup)
+	if result.RuntimeFiles[0].SourcePath != "index.html" {
+		t.Fatalf("presented source path = %q, want index.html", result.RuntimeFiles[0].SourcePath)
+	}
 	if result.RuntimeFiles[0].Name != "index.html" || result.RuntimeFiles[0].MediaType != "text/html" {
 		t.Fatalf("presented file metadata = %+v", result.RuntimeFiles[0].Metadata())
 	}
@@ -716,6 +721,9 @@ func TestDSHHelperProcess(t *testing.T) {
 		}
 		switch frame.Method {
 		case "initialize":
+			if delay, err := time.ParseDuration(os.Getenv("DSH_TEST_INITIALIZE_DELAY")); err == nil {
+				time.Sleep(delay)
+			}
 			respond(map[string]any{"protocolVersion": 1, "agentCapabilities": map[string]any{
 				"promptCapabilities": map[string]any{"image": true},
 				"mcpCapabilities":    map[string]any{"http": true},
@@ -1146,6 +1154,25 @@ func TestNormalizedDSHToolKindUsesToolNameForGenericACPKind(t *testing.T) {
 	for _, test := range tests {
 		if got := normalizedDSHToolKind(test.reported, test.title); got != test.want {
 			t.Errorf("normalizedDSHToolKind(%q, %q) = %q, want %q", test.reported, test.title, got, test.want)
+		}
+	}
+}
+
+func TestMergeDSHToolActivityPreservesStatusDuringPartialUpdates(t *testing.T) {
+	var tool contract.ToolActivity
+	for _, step := range []struct {
+		update map[string]any
+		want   string
+	}{
+		{map[string]any{"toolCallId": "call-1", "content": "early output"}, "pending"},
+		{map[string]any{"status": "in_progress"}, "in_progress"},
+		{map[string]any{"content": "more output"}, "in_progress"},
+		{map[string]any{"status": "completed"}, "completed"},
+		{map[string]any{"content": "more details"}, "completed"},
+	} {
+		tool = mergeDSHToolActivity(tool, step.update)
+		if tool.Status != step.want {
+			t.Fatalf("status after %v = %q, want %q", step.update, tool.Status, step.want)
 		}
 	}
 }
@@ -1602,5 +1629,56 @@ func TestEnvironmentReplacesInheritedCallbackURL(t *testing.T) {
 	}
 	if len(callbacks) != 1 || callbacks[0] != "CSGCLAW_BASE_URL=http://127.0.0.1:19091" {
 		t.Fatalf("effective callback environment = %v", callbacks)
+	}
+}
+
+func TestWorkspaceAttachmentRemainsAvailableAcrossDSHTurns(t *testing.T) {
+	root := t.TempDir()
+	relative := ".csgclaw/attachments/sessions/session/batch/photo.png"
+	path := filepath.Join(root, filepath.FromSlash(relative))
+	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+		t.Fatal(err)
+	}
+	payload := []byte("image data")
+	if err := os.WriteFile(path, payload, 0600); err != nil {
+		t.Fatal(err)
+	}
+	input := []contract.InputPart{{Kind: contract.InputPartWorkspaceFile, WorkspaceFile: &contract.WorkspaceFile{Path: relative, Name: "photo.png", MIMEType: "image/png"}}}
+	for _, inline := range []bool{true, false} {
+		blocks, cleanup, turnErr := preparePromptInput(context.Background(), "turn", root, input, inline)
+		cleanup()
+		if turnErr != nil || len(blocks) == 0 || !strings.Contains(blocks[0].Text, relative) || strings.Contains(blocks[0].Text, root) {
+			t.Fatalf("inline=%t: blocks=%+v, error=%v", inline, blocks, turnErr)
+		}
+		if inline && (len(blocks) != 2 || blocks[1].Type != "image" || blocks[1].Data != base64.StdEncoding.EncodeToString(payload)) {
+			t.Fatalf("inline image blocks = %+v", blocks)
+		}
+		if !inline && len(blocks) != 1 {
+			t.Fatalf("text-only blocks = %+v", blocks)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(root, ".csgclaw", "engine-inputs")); !os.IsNotExist(err) {
+		t.Fatalf("temporary input directory: %v", err)
+	}
+}
+
+func TestOversizedEditedWorkspaceImageUsesPath(t *testing.T) {
+	root := t.TempDir()
+	f, err := os.Create(filepath.Join(root, "edited.png"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Truncate(apitypes.MaxAttachmentFileBytes + 1); err != nil {
+		f.Close()
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+	input := []contract.InputPart{{Kind: contract.InputPartWorkspaceFile, WorkspaceFile: &contract.WorkspaceFile{Path: "edited.png", Name: "edited.png", MIMEType: "image/png"}}}
+	blocks, cleanup, turnErr := preparePromptInput(context.Background(), "turn", root, input, true)
+	defer cleanup()
+	if turnErr != nil || len(blocks) != 1 || blocks[0].Type != "text" || !strings.Contains(blocks[0].Text, "edited.png") {
+		t.Fatalf("oversized edited image blocks = %+v, error = %v", blocks, turnErr)
 	}
 }

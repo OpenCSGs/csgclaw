@@ -9,6 +9,8 @@ import (
 	"slices"
 	"strings"
 
+	"csgclaw/internal/skill/discovery"
+
 	"gopkg.in/yaml.v3"
 )
 
@@ -20,10 +22,12 @@ const (
 )
 
 type SkillSummary struct {
-	Name        string `json:"name"`
-	Description string `json:"description,omitempty"`
-	Source      string `json:"source,omitempty"`
-	Readonly    bool   `json:"readonly,omitempty"`
+	Name        string           `json:"name"`
+	Description string           `json:"description,omitempty"`
+	Source      string           `json:"source,omitempty"`
+	Readonly    bool             `json:"readonly,omitempty"`
+	Discovery   *discovery.Skill `json:"discovery,omitempty"`
+	Directory   string           `json:"directory,omitempty"`
 }
 
 type SkillSource struct {

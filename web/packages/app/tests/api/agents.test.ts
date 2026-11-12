@@ -1,0 +1,238 @@
+import { afterEach, describe, expect, it, vi } from "vitest";
+import type { Mock } from "vitest";
+import {
+  setAgentResourceEnabled,
+  batchAddAgentMCPServersRequest,
+  batchDeleteAgentMCPServersRequest,
+  batchAddAgentSkillsRequest,
+  createManagerAgentRequest,
+  deleteAgentSkillRequest,
+  fetchAgentMemoryDocument,
+  fetchAgentMCPServers,
+  fetchAgentProfileModels,
+  startFeishuRegistrationRequest,
+  updateAgentMemory,
+} from "@/api/agents";
+
+function mockFetch(): Mock<typeof fetch> {
+  const fetchMock = vi.fn<typeof fetch>(async () => new Response("", { status: 200 }));
+  vi.stubGlobal("fetch", fetchMock);
+  return fetchMock;
+}
+
+describe("agents API", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("discovers models by the selected provider ID without sending the previous provider's credentials", async () => {
+    const fetchMock = mockFetch();
+    fetchMock.mockResolvedValue(
+      new Response(JSON.stringify({ id: "new-provider", status: "connected", models: ["new-model"] })),
+    );
+    await expect(
+      fetchAgentProfileModels({
+        agent_id: "agent-manager",
+        model_provider_id: "new-provider",
+        provider: "api",
+        base_url: "https://previous.example.test/v1",
+        api_key: "previous-test-key",
+        headers: { "X-Previous": "previous" },
+      }),
+    ).resolves.toEqual({ models: ["new-model"] });
+    expect(fetchMock).toHaveBeenCalledExactlyOnceWith(
+      "api/v1/model-providers/new-provider/check",
+      expect.objectContaining({ method: "POST", body: "{}" }),
+    );
+  });
+
+  it("surfaces a failed provider check instead of using its retained model list", async () => {
+    const fetchMock = mockFetch();
+    fetchMock.mockResolvedValue(
+      new Response(JSON.stringify({ status: "failed", message: "Provider is unavailable", models: ["old-model"] })),
+    );
+    await expect(fetchAgentProfileModels({ model_provider_id: "failed-provider", provider: "api" })).rejects.toThrow(
+      "Provider is unavailable",
+    );
+  });
+
+  it("posts batch add requests to the agent-scoped skills endpoint", async () => {
+    const fetchMock = mockFetch();
+
+    await batchAddAgentSkillsRequest("u-manager", ["alpha", "beta"]);
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "api/v1/agents/u-manager/skills:batchAdd",
+      expect.objectContaining({
+        body: JSON.stringify({ names: ["alpha", "beta"] }),
+        method: "POST",
+      }),
+    );
+  });
+
+  it("requests replacement explicitly for installed agent skills", async () => {
+    const fetchMock = mockFetch();
+
+    await batchAddAgentSkillsRequest("worker/id", ["alpha"], { replace: true });
+
+    expect(fetchMock).toHaveBeenCalledExactlyOnceWith(
+      "api/v1/agents/worker%2Fid/skills:batchAdd",
+      expect.objectContaining({
+        body: JSON.stringify({ names: ["alpha"], replace: true }),
+        method: "POST",
+      }),
+    );
+  });
+
+  it("recreates the manager without overriding its runtime or image", async () => {
+    const fetchMock = vi.fn<typeof fetch>(
+      async () =>
+        new Response(JSON.stringify({ id: "u-manager", role: "manager", status: "running" }), {
+          headers: { "content-type": "application/json" },
+          status: 200,
+        }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await createManagerAgentRequest();
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "api/v1/agents",
+      expect.objectContaining({
+        body: JSON.stringify({ id: "u-manager", replace: true, field_mask: ["id"] }),
+        method: "POST",
+      }),
+    );
+  });
+
+  it("uses the agent MCP servers paths", async () => {
+    const fetchMock = vi.fn<typeof fetch>(
+      async () =>
+        new Response(JSON.stringify({ servers: {} }), {
+          headers: { "content-type": "application/json" },
+          status: 200,
+        }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await fetchAgentMCPServers("u-manager");
+    await batchAddAgentMCPServersRequest("u-manager", ["context7"]);
+    await batchDeleteAgentMCPServersRequest("u-manager", ["context7"]);
+
+    expect(fetchMock).toHaveBeenNthCalledWith(1, "api/v1/agents/u-manager/mcp-servers", expect.anything());
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "api/v1/agents/u-manager/mcp-servers:batchAdd",
+      expect.objectContaining({
+        body: JSON.stringify({ names: ["context7"] }),
+        method: "POST",
+      }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
+      "api/v1/agents/u-manager/mcp-servers:batchDelete",
+      expect.objectContaining({
+        body: JSON.stringify({ names: ["context7"] }),
+        method: "POST",
+      }),
+    );
+  });
+
+  it("uses the agent memory document path for reads and toggles", async () => {
+    const fetchMock = vi.fn<typeof fetch>(
+      async () =>
+        new Response(
+          JSON.stringify({
+            enabled: true,
+            ready: true,
+            name: "memory_summary.md",
+            location: "$CODEX_HOME/memories/memory_summary.md",
+            content: "# Memory\n",
+          }),
+          {
+            headers: { "content-type": "application/json" },
+            status: 200,
+          },
+        ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await fetchAgentMemoryDocument("u-manager");
+    await updateAgentMemory("u-manager", 7, { enabled: false });
+
+    expect(fetchMock).toHaveBeenNthCalledWith(1, "api/v1/agents/u-manager/memory", expect.anything());
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "api/v1/agents/u-manager/memory",
+      expect.objectContaining({
+        body: JSON.stringify({ revision: 7, enabled: false }),
+        method: "PUT",
+      }),
+    );
+  });
+
+  it("deletes skills from the agent-scoped skills endpoint", async () => {
+    const fetchMock = mockFetch();
+
+    await deleteAgentSkillRequest("u-manager", "alpha");
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "api/v1/agents/u-manager/skills/alpha",
+      expect.objectContaining({ method: "DELETE" }),
+    );
+  });
+
+  it("returns the active pending Feishu registration when create reports a conflict", async () => {
+    const pendingRegistration = {
+      agent_id: "u-dev",
+      connect_url: "https://open.feishu.cn/page/launcher?user_code=ABCD-EFGH",
+      expires_at: "2026-06-22T03:48:22.7024502Z",
+      next_poll_seconds: 5,
+      participant_id: "dev",
+      registration_id: "reg-dev",
+      status: "pending",
+      user_code: "ABCD-EFGH",
+    };
+    const fetchMock = vi.fn<typeof fetch>(
+      async () => new Response(JSON.stringify(pendingRegistration), { status: 409 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(startFeishuRegistrationRequest("u-dev")).resolves.toEqual(pendingRegistration);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "api/v1/channels/feishu/registrations",
+      expect.objectContaining({
+        body: JSON.stringify({ agent_id: "u-dev" }),
+        method: "POST",
+      }),
+    );
+  });
+});
+
+describe("资源启用请求", () => {
+  afterEach(() => vi.unstubAllGlobals());
+  it.each(["skill", "mcp"] as const)("%s 使用当前版本提交目标状态", async (kind) => {
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        new Response("[]", { headers: { "content-type": "application/json", ETag: '"version-2"' } }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ revision: 7, enabled: false }), {
+          headers: { "content-type": "application/json" },
+        }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    await setAgentResourceEnabled("agent-1", kind, "reviewer", false);
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(
+      `api/v1/agents/agent-1/${kind === "skill" ? "skill-summaries" : "mcp-servers"}?pagination=page&page=1&per=1`,
+    );
+    expect(fetchMock.mock.calls[1]).toEqual([
+      `api/v1/agents/agent-1/${kind === "skill" ? "skills" : "mcp-servers"}/reviewer/enabled`,
+      expect.objectContaining({
+        method: "PUT",
+        body: JSON.stringify({ enabled: false, resource_version: "version-2" }),
+      }),
+    ]);
+  });
+});

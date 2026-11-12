@@ -1,0 +1,23 @@
+.archiveDialog {
+  width: min(520px, calc(100vw - 40px));
+  overflow-wrap: anywhere;
+}
+
+.impactList {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding-left: 20px;
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.6;
+  list-style: disc;
+}
+
+.impactList li::marker {
+  color: var(--muted);
+}
+
+.recoverable {
+  color: var(--accent-text);
+}

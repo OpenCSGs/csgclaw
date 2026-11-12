@@ -16,6 +16,7 @@ import (
 	"csgclaw/cli/message"
 	participantcmd "csgclaw/cli/participant"
 	"csgclaw/cli/room"
+	scheduledtaskcmd "csgclaw/cli/scheduledtask"
 	skillcmd "csgclaw/cli/skill"
 	taskcmd "csgclaw/cli/task"
 	teamcmd "csgclaw/cli/team"
@@ -78,6 +79,7 @@ func (a *App) registerDefaultCommands() {
 		member.NewCmd(),
 		message.NewCmd(),
 		taskcmd.NewCmd(),
+		scheduledtaskcmd.NewCmd(),
 		teamcmd.NewCmd(),
 		skillcmd.NewCmd(),
 		completioncmd.NewCmd("csgclaw-cli", completioncmd.LiteSpec()),

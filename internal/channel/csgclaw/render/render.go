@@ -245,15 +245,17 @@ func (r *TurnRenderer) publicPromptError() PublicPromptError {
 			code = "forbidden"
 		case status == 404:
 			code = "not_found"
+		case status == 413:
+			code = "request_too_large"
 		case status == 429:
 			code = "rate_limit_exceeded"
 		case status >= 500 && status <= 599:
 			code = "upstream_unavailable"
 		}
 	}
-	// Structured context failures take precedence over incidental HTTP statuses.
+	// Structured turn failures take precedence over incidental HTTP statuses.
 	switch r.promptErrorCode {
-	case "context_length_exceeded", "context_compaction_failed", "invalid_resource_reference", "resource_not_attached", "resource_disabled", "resource_unavailable", "resource_service_unavailable":
+	case "request_too_large", "context_length_exceeded", "context_compaction_failed", "invalid_resource_reference", "resource_not_attached", "resource_disabled", "resource_unavailable", "resource_service_unavailable":
 		code = r.promptErrorCode
 	}
 	zh := strings.HasPrefix(strings.ToLower(strings.TrimSpace(r.locale)), "zh") || strings.TrimSpace(r.locale) == ""
@@ -265,6 +267,7 @@ func (r *TurnRenderer) publicPromptError() PublicPromptError {
 		"resource_unavailable":         {"所选资源暂时不可用，请检查连接或授权。", "A selected resource is unavailable. Check its connection or authorization."},
 		"context_length_exceeded":      {"本次内容超过模型容量，请拆分输入、检查模型容量设置或选择容量更大的模型。已有对话已保留。", "This request exceeds the model context capacity. Split the input, check the context settings, or choose a model with a larger context window. Your conversation has been preserved."},
 		"context_compaction_failed":    {"暂时无法整理对话，已有记录已保留。请重试或选择容量更大的模型。", "The conversation could not be compacted. Your history has been preserved. Retry or choose a model with a larger context window."},
+		"request_too_large":            {"本轮模型请求体过大。请拆分任务、减少图片或附件，或新建会话。", "The model request is too large. Split the task, reduce the number or size of images and attachments, or start a new conversation."},
 		"invalid_request":              {"请求内容无效，请检查后重试。", "The request is invalid. Check it and try again."},
 		"authentication_error":         {"模型服务认证失败，请联系管理员检查配置。", "Model service authentication failed. Contact an administrator."},
 		"insufficient_balance":         {"模型服务余额不足，请充值或联系管理员后重试。", "The model service balance is insufficient. Add funds or contact an administrator."},

@@ -127,6 +127,9 @@ func TestNewHandlerRequiresEngine(t *testing.T) {
 	}
 }
 
+func (*recordingConversation) PendingInteractions(context.Context, agentengine.ConversationKey) ([]agentengine.InteractionRequest, error) {
+	return nil, nil
+}
 func (*recordingConversation) GetInteraction(context.Context, agentengine.ConversationKey, string) (agentengine.InteractionRequest, error) {
 	return agentengine.InteractionRequest{}, &agentengine.TurnError{Code: agentengine.ErrorInteractionNotFound, Message: "no interaction in this test fixture"}
 }

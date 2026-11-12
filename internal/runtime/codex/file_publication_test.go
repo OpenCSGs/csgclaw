@@ -68,7 +68,7 @@ func newFilePublicationTestSink(t *testing.T, workspace, path string) *filePubli
 
 func (s *filePublicationTestSink) Publish(event SessionEvent) {
 	if publication, ok := event.Payload.(*filePublication); ok {
-		var output conversationText
+		var output conversationOutput
 		var files []*contract.OutputFile
 		s.adapter.handleEvent(publication.ctx, contract.TurnRequest{}, nil, event, &output, &files)
 		cleanupOutputFiles(files)
@@ -120,7 +120,7 @@ func TestFilePublicationCancellationReleasesToolAndRejectsLateDelivery(t *testin
 		t.Fatal("tool did not stop after turn cancellation")
 	}
 	adapter := &ConversationAdapter{runtime: inputLifecycleBackend{workspace: spec.WorkspaceDir}}
-	var output conversationText
+	var output conversationOutput
 	var files []*contract.OutputFile
 	if result := adapter.handleEvent(context.Background(), contract.TurnRequest{}, nil, sink.snapshot()[0], &output, &files); result != nil || len(files) != 0 {
 		t.Fatalf("late publication affected another turn: result=%+v files=%d", result, len(files))
@@ -146,7 +146,7 @@ func TestFilePublicationFailurePreservesPreviouslyAcknowledgedFiles(t *testing.T
 		t.Fatal(err)
 	}
 	adapter := &ConversationAdapter{runtime: inputLifecycleBackend{workspace: workspace}}
-	var output conversationText
+	var output conversationOutput
 	var files []*contract.OutputFile
 	defer func() { cleanupOutputFiles(files) }()
 	publish := func(path string) error {

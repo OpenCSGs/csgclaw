@@ -1,0 +1,623 @@
+import type { ComponentProps } from "react";
+import { act, render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { MemoryRouter, Routes, Route, useLocation, useNavigate } from "react-router-dom";
+import { createTranslator } from "@/shared/i18n";
+import { GlobalAppsPanel } from "./GlobalAppsPanel";
+import { AppSettingsDialog } from "./AppSettingsDialog";
+import type { AppDefinition, AppInstallation } from "@/api/apps";
+import buttonStyles from "csgclaw-ui/testing/Button/Button.module.css";
+const t = createTranslator("en");
+const definition: AppDefinition = {
+  app_id: "feishu",
+  name: "Feishu",
+  description: "",
+  version: "1",
+  interface: {},
+  config_schema: {},
+  auth_methods: ["feishu"],
+  oauth_supported: false,
+};
+afterEach(() => vi.unstubAllGlobals());
+
+describe("Global Apps", () => {
+  it.each(["global-1", "missing"])("opens settings resource %s while preserving the agent page", async (resourceID) => {
+    const resource = {
+      installation_id: "global-1",
+      app_id: "gitlab",
+      name: "Team GitLab",
+      enabled: true,
+      status: "connected",
+      config: { transport: "http", url: "https://service.example/mcp", auth_mode: "bearer" },
+      credentials_set: { token: true },
+      tools: [],
+      bindings: [],
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) =>
+        Response.json({
+          items: String(url).endsWith("catalog") ? [{ ...definition, app_id: "gitlab", name: "GitLab" }] : [resource],
+        }),
+      ),
+    );
+    function SettingsHarness() {
+      const location = useLocation();
+      return (
+        <>
+          <output data-testid="location">{location.pathname + location.search}</output>
+          <GlobalAppsPanel embedded t={t} />
+        </>
+      );
+    }
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter
+        initialEntries={[
+          `/agents/agent-1?tab=connectors&dialog=settings&section=connectors&app_resource=${resourceID}`,
+        ]}
+      >
+        <SettingsHarness />
+      </MemoryRouter>,
+    );
+    if (resourceID === "missing") {
+      await screen.findByRole("button", { name: /Team GitLab/ });
+      await user.click(screen.getByRole("button", { name: /Team GitLab/ }));
+    }
+    const dialog = within(await screen.findByRole("dialog"));
+    expect(dialog.getByRole("heading", { name: "Settings for Team GitLab" })).toBeVisible();
+    await user.click(dialog.getByRole("button", { name: "Close" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.getByTestId("location")).toHaveTextContent(
+      "/agents/agent-1?tab=connectors&dialog=settings&section=connectors",
+    );
+    expect(screen.getByTestId("location")).not.toHaveTextContent("app_resource");
+  });
+
+  it("shows connector loading until the resource response arrives", async () => {
+    let finish!: (response: Response) => void;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((url: string) =>
+        String(url).endsWith("catalog")
+          ? Promise.resolve(Response.json({ items: [] }))
+          : new Promise<Response>((resolve) => {
+              finish = resolve;
+            }),
+      ),
+    );
+    render(
+      <MemoryRouter>
+        <GlobalAppsPanel t={t} />
+      </MemoryRouter>,
+    );
+    expect(screen.getByRole("status")).toHaveTextContent("Loading connectors…");
+    expect(screen.queryByText(t("appEmptyTitle"))).not.toBeInTheDocument();
+    await act(async () => finish(Response.json({ items: [] })));
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    expect(screen.getByText(t("appEmptyTitle"))).toBeVisible();
+  });
+
+  it("reenables a disabled global connector from its details header", async () => {
+    const user = userEvent.setup();
+    let resource = {
+      installation_id: "global-disabled",
+      app_id: "gitlab",
+      name: "Disabled GitLab",
+      kind: "mcp",
+      enabled: false,
+      status: "disabled",
+      config: {},
+      credentials_set: {},
+      tools: [],
+    };
+    let finishUpdate!: () => void;
+    const fetch = vi.fn(async (url: string, init?: RequestInit) => {
+      if (init?.method === "PATCH") {
+        await new Promise<void>((resolve) => {
+          finishUpdate = resolve;
+        });
+        resource = { ...resource, ...JSON.parse(String(init.body)), status: "configured" };
+        return Response.json(resource);
+      }
+      return Response.json({
+        items: String(url).endsWith("catalog")
+          ? [{ ...definition, app_id: "gitlab", name: "GitLab", kind: "mcp" }]
+          : [resource],
+      });
+    });
+    vi.stubGlobal("fetch", fetch);
+    render(
+      <MemoryRouter initialEntries={["/connectors/global-disabled"]}>
+        <Routes>
+          <Route path="/connectors/:resourceId" element={<GlobalAppsPanel t={t} />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    const dialog = within(await screen.findByRole("dialog"));
+    const toggle = dialog.getByRole("switch", { name: "Enable" });
+    expect(toggle).not.toBeChecked();
+    await user.click(toggle);
+    expect(toggle).toBeDisabled();
+    expect(fetch).toHaveBeenCalledWith(
+      "api/v1/connectors/resources/global-disabled",
+      expect.objectContaining({ method: "PATCH", body: JSON.stringify({ enabled: true }) }),
+    );
+    await act(async () => finishUpdate());
+    expect(toggle).toBeChecked();
+    expect(toggle).toBeEnabled();
+  });
+
+  it("loads the selected CLI resource when navigating between authorization dialogs", async () => {
+    const definitions = ["first", "second"].map((id) => ({
+      ...definition,
+      app_id: id,
+      name: id,
+      kind: "cli" as const,
+    }));
+    const resources = definitions.map((item, index) => ({
+      installation_id: item.app_id,
+      app_id: item.app_id,
+      name: item.name,
+      kind: "cli",
+      enabled: true,
+      authorized: index === 0,
+      status: index === 0 ? "connected" : "needs_configuration",
+      config: {},
+      credentials_set: {},
+      tools: [],
+    }));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (String(url).endsWith("catalog")) return Response.json({ items: definitions });
+        const resource = resources.find((item) => String(url).endsWith(`/resources/${item.installation_id}`));
+        return Response.json(resource ?? { items: resources });
+      }),
+    );
+    let navigate!: ReturnType<typeof useNavigate>;
+    function Harness() {
+      navigate = useNavigate();
+      return <GlobalAppsPanel t={t} />;
+    }
+    render(
+      <MemoryRouter initialEntries={["/connectors/first"]}>
+        <Routes>
+          <Route path="/connectors/:resourceId" element={<Harness />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    const first = within(await screen.findByRole("dialog"));
+    expect(first.getByRole("button", { name: "Disconnect" })).toBeVisible();
+    await act(async () => navigate("/connectors/second"));
+    const second = within(await screen.findByRole("dialog", { name: "second" }));
+    expect(await second.findByRole("button", { name: "Connect" })).toBeVisible();
+    expect(second.queryByRole("button", { name: "Disconnect" })).not.toBeInTheDocument();
+  });
+
+  it("replaces a saved environment error with the current successful probe", async () => {
+    const user = userEvent.setup();
+    const resource = {
+      installation_id: "global-1",
+      app_id: "feishu",
+      name: "Team Feishu",
+      feishu_app_id: "test-app",
+      enabled: true,
+      status: "error",
+      last_error: "Environment mismatch",
+      last_error_code: "app_opencsg_environment_mismatch",
+      config: { transport: "http", url: "https://service.example/mcp", auth_mode: "feishu" },
+      credentials_set: { app_id: true, app_secret: true },
+      tools: [],
+      bindings: [],
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: RequestInit) => {
+        if (init?.method === "POST") return Response.json({ connected: true, tools: [] });
+        return Response.json({ items: String(url).endsWith("catalog") ? [definition] : [resource] });
+      }),
+    );
+    render(
+      <MemoryRouter initialEntries={["/connectors/global-1"]}>
+        <Routes>
+          <Route path="/connectors/:resourceId" element={<GlobalAppsPanel t={t} />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    const dialog = within(await screen.findByRole("dialog"));
+    expect(dialog.getByRole("alert")).toHaveTextContent(t("errors.app_opencsg_environment_mismatch"));
+    await user.click(dialog.getByRole("button", { name: "Test connection" }));
+    expect(await dialog.findByRole("status")).toHaveTextContent("Connected · 0 tools");
+    expect(dialog.queryByRole("alert")).not.toBeInTheDocument();
+    expect(dialog.queryByText(t("appStatusError"))).not.toBeInTheDocument();
+    expect(dialog.getByText(t("appResourceUsers", { count: 0 }))).toBeVisible();
+    await user.type(dialog.getByLabelText("MCP service URL"), "/changed");
+    expect(dialog.queryByRole("status")).not.toBeInTheDocument();
+    expect(dialog.getByRole("alert")).toHaveTextContent(t("errors.app_opencsg_environment_mismatch"));
+  });
+
+  it("tests the current draft without saving and invalidates the result after edits", async () => {
+    const user = userEvent.setup();
+    // These assertions exercise draft changes, not individual keystrokes.
+    const enter = async (label: string, value: string) => {
+      await user.click(screen.getByLabelText(label));
+      await user.paste(value);
+    };
+    const close = vi.fn();
+    const probe = vi.fn().mockResolvedValue({
+      connected: true,
+      tools: [{ name: "inspect", description: "Long tool details should not appear" }],
+    });
+    let reject: (e: Error) => void = () => {};
+    const save = vi.fn(
+      (_payload: Parameters<NonNullable<ComponentProps<typeof AppSettingsDialog>["onSave"]>>[0]) =>
+        new Promise<void>((_, fail) => {
+          reject = fail;
+        }),
+    );
+    render(
+      <AppSettingsDialog
+        globalResource
+        definition={definition}
+        existing={null}
+        t={t}
+        onClose={close}
+        onProbe={probe}
+        onSave={save}
+      />,
+    );
+    expect(screen.queryByRole("combobox", { name: "Credential source" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Test connection" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Save configuration" })).toBeDisabled();
+    await enter("MCP service URL", "https://service.example/mcp");
+    await enter("App ID", "test-app");
+    expect(screen.getByLabelText("App Secret")).toBeRequired();
+    expect(screen.getByLabelText("App Secret").closest("label")?.querySelector(".field-required")).toHaveTextContent(
+      "*",
+    );
+    expect(screen.getByRole("button", { name: "Test connection" })).toBeDisabled();
+    await enter("App Secret", "   ");
+    expect(screen.getByRole("button", { name: "Save configuration" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Test connection" })).toBeDisabled();
+    await user.clear(screen.getByLabelText("App Secret"));
+    await enter("App Secret", "test-secret");
+    await user.click(screen.getByRole("button", { name: "Test connection" }));
+    expect(await screen.findByRole("status")).toHaveTextContent("Connected · 1 tools");
+    expect(screen.queryByText("Current settings tested successfully. Not saved yet.")).not.toBeInTheDocument();
+    expect(screen.getByText("Long tool details should not appear")).toBeVisible();
+    const tools = screen.getByText("Available tools (1)").closest("details");
+    expect(tools).toHaveAttribute("open");
+    await user.click(screen.getByText("Available tools (1)"));
+    expect(tools).not.toHaveAttribute("open");
+    expect(screen.getByText("Long tool details should not appear")).not.toBeVisible();
+    await user.click(screen.getByText("Available tools (1)"));
+    expect(screen.getByText("Long tool details should not appear")).toBeVisible();
+    expect(probe.mock.calls[0][0].credentials.app_secret).toBe("test-secret");
+    expect(save).not.toHaveBeenCalled();
+    await user.clear(screen.getByLabelText("App Secret"));
+    expect(screen.getByRole("button", { name: "Save configuration" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Test connection" })).toBeDisabled();
+    await enter("App Secret", "test-secret-changed");
+    expect(screen.getByRole("button", { name: "Save configuration" })).toBeDisabled();
+    await user.click(screen.getByRole("button", { name: "Test connection" }));
+    expect(probe.mock.calls[1][0].credentials.app_secret).toBe("test-secret-changed");
+    await user.click(screen.getByRole("button", { name: "Save configuration" }));
+    expect(screen.getByRole("button", { name: "Save configuration" })).toBeDisabled();
+    expect(close).not.toHaveBeenCalled();
+    reject(new Error("Connection validation failed"));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Connection validation failed");
+    expect(screen.getByLabelText("App ID")).toHaveValue("test-app");
+    expect(close).not.toHaveBeenCalled();
+    expect(save.mock.calls[0][0].config.credential_source).toBe("manual");
+  });
+  it("opens global connector settings when its card is activated", async () => {
+    const resource = {
+      installation_id: "global-1",
+      resource_id: "global-1",
+      agent_id: "",
+      app_id: "gitlab",
+      name: "Team GitLab",
+      kind: "mcp",
+      enabled: true,
+      resource_enabled: true,
+      status: "configured",
+      config: {},
+      credentials_set: {},
+      tools: [],
+      bindings: [
+        {
+          agent_id: "agent-manager",
+          agent_name: "Manager",
+          installation_id: "binding-1",
+          enabled: true,
+          status: "connected",
+        },
+      ],
+    };
+    const fetch = vi.fn(async (url: string) => {
+      if (String(url) === "api/v1/connectors/catalog")
+        return Response.json({ items: [{ ...definition, app_id: "gitlab", name: "GitLab", kind: "mcp" }] });
+      return Response.json({ items: [resource] });
+    });
+    vi.stubGlobal("fetch", fetch);
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter initialEntries={["/connectors"]}>
+        <Routes>
+          <Route path="/connectors" element={<GlobalAppsPanel t={t} />} />
+          <Route path="/connectors/:resourceId" element={<GlobalAppsPanel t={t} />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    await screen.findByText("Team GitLab");
+    expect(screen.queryByRole("button", { name: "Actions for Team GitLab" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /^Team GitLab/ }));
+    const dialog = screen.getByRole("dialog");
+    expect(dialog).toHaveTextContent("Team GitLab");
+    expect(within(dialog).getByRole("button", { name: "Remove" })).toHaveClass(
+      buttonStyles["btn-danger"],
+      buttonStyles["btn-md"],
+    );
+    expect(within(dialog).getByRole("button", { name: "Test connection" })).toHaveClass(
+      buttonStyles["btn-secondary-gray"],
+      buttonStyles["btn-md"],
+    );
+    expect(within(dialog).getByRole("button", { name: "Save configuration" })).toHaveClass(
+      buttonStyles["btn-primary"],
+      buttonStyles["btn-md"],
+    );
+    expect(within(dialog).queryByRole("button", { name: "Cancel" })).not.toBeInTheDocument();
+  });
+});
+
+describe("Connector creation and existing forms", () => {
+  it("offers application types and keeps connection options and advanced fields available", async () => {
+    const gitlab = {
+      ...definition,
+      app_id: "gitlab",
+      name: "GitLab",
+      config_schema: { properties: { url: { default: "https://service.example/mcp" } } },
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) =>
+        Response.json({
+          items: String(url).endsWith("catalog")
+            ? [gitlab, definition, { ...definition, app_id: "llm-wiki", name: "LLM Wiki" }]
+            : [],
+        }),
+      ),
+    );
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter>
+        <GlobalAppsPanel t={t} />
+      </MemoryRouter>,
+    );
+    await screen.findByText("Connect the services your agent needs");
+    expect(screen.queryByRole("button", { name: /GitLab/ })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Add connector" }));
+    const picker = screen.getByRole("dialog");
+    expect(within(picker).getByRole("heading", { name: "Add application connector" })).toBeVisible();
+    expect(within(picker).queryByText("LLM Wiki")).not.toBeInTheDocument();
+    await user.click(within(picker).getByRole("button", { name: /GitLab/ }));
+    expect(screen.getByLabelText("GitLab instance URL")).toBeVisible();
+    expect(screen.getByLabelText("GitLab Personal Access Token")).toBeVisible();
+    expect(screen.getByLabelText("Instance name")).toBeVisible();
+    expect(screen.getByLabelText("MCP service URL")).toHaveValue("https://service.example/mcp");
+    expect(screen.getByRole("combobox", { name: "Platform credential source" })).toBeVisible();
+    const name = screen.getByLabelText("Instance name");
+    const service = screen.getByLabelText("MCP service URL");
+    const credentials = screen.getByRole("combobox", { name: "Platform credential source" });
+    const instance = screen.getByLabelText("GitLab instance URL");
+    expect(name.closest("details")).toBeNull();
+    expect(service.compareDocumentPosition(instance) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(credentials.compareDocumentPosition(instance) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    await user.click(screen.getByText("Advanced connection settings"));
+    expect(screen.getByLabelText("Connection timeout (seconds)")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Add field" })).toBeVisible();
+    const token = screen.getByLabelText("GitLab Personal Access Token");
+    await user.type(token, "fixture-token");
+    await user.click(within(token.closest("label")!).getByRole("button", { name: "Show credential" }));
+    expect(token).toHaveAttribute("type", "text");
+    await user.click(within(token.closest("label")!).getByRole("button", { name: "Hide credential" }));
+    expect(token).toHaveAttribute("type", "password");
+  });
+});
+
+it("shows configured instance names and leaves application types in the add picker", async () => {
+  const resources = ["Company workspace", "Personal workspace"].map((name, index) => ({
+    installation_id: `resource-${index}`,
+    app_id: "feishu",
+    name,
+    enabled: true,
+    status: "configured",
+    config: {},
+    tools: [],
+    credentials_set: {},
+    bindings: [],
+  }));
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string) =>
+      Response.json({
+        items: String(url).endsWith("catalog")
+          ? [definition, { ...definition, app_id: "gitlab", name: "GitLab" }]
+          : resources,
+      }),
+    ),
+  );
+  render(
+    <MemoryRouter>
+      <GlobalAppsPanel t={t} />
+    </MemoryRouter>,
+  );
+  expect(await screen.findByRole("button", { name: /^Company workspace/ })).toBeVisible();
+  expect(screen.getByRole("button", { name: /^Personal workspace/ })).toBeVisible();
+  expect(screen.getByText("Company workspace")).toHaveAttribute("title", "Company workspace");
+  expect(screen.queryByRole("button", { name: /^GitLab / })).not.toBeInTheDocument();
+});
+
+it("shows live connection states and the actual failure in global connector cards", async () => {
+  const resources = [
+    { name: "Healthy", status: "connected" },
+    {
+      name: "Failed",
+      status: "error",
+      last_error: "MCP connection closed; reconnect the App",
+      last_error_code: "app_mcp_connection_closed",
+    },
+    {
+      name: "Connecting",
+      status: "connecting",
+      last_error: "Stale error from a previous attempt",
+    },
+    { name: "Unused", status: "not_connected" },
+  ].map((item, index) => ({
+    ...item,
+    installation_id: `live-${index}`,
+    app_id: "feishu",
+    enabled: true,
+    config: {},
+    tools: [],
+    credentials_set: {},
+    bindings: [],
+  }));
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string) => Response.json({ items: String(url).endsWith("catalog") ? [definition] : resources })),
+  );
+  render(
+    <MemoryRouter>
+      <GlobalAppsPanel t={t} />
+    </MemoryRouter>,
+  );
+  expect(await screen.findByText("Connected")).toBeVisible();
+  expect(screen.getByText(t("appStatusError"))).toBeVisible();
+  expect(screen.getByText("Not connected")).toBeVisible();
+  expect(screen.getByText(t("errors.app_mcp_connection_closed"))).toBeVisible();
+  expect(screen.getAllByText(t("appStatusConnecting")).length).toBeGreaterThanOrEqual(2);
+  expect(screen.queryByText("Stale error from a previous attempt")).not.toBeInTheDocument();
+  expect(screen.queryByText("Configured")).not.toBeInTheDocument();
+});
+
+describe.each(["en", "zh"] as const)("CLI connector status in %s", (locale) => {
+  const translate = createTranslator(locale);
+  const cliDefinition: AppDefinition = { ...definition, kind: "cli" };
+  const connected: AppInstallation = {
+    installation_id: "feishu-cli",
+    agent_id: "",
+    app_id: "feishu",
+    name: "Feishu",
+    kind: "cli",
+    enabled: true,
+    disconnected: false,
+    authorized: true,
+    status: "connected",
+    config: {},
+    credentials_set: {},
+    tools: [],
+    created_at: "",
+    updated_at: "",
+    auth_status: {
+      appId: "cli_test",
+      defaultAs: "auto",
+      identities: {
+        bot: { available: true, verified: true, status: "ready" },
+        user: { available: false, status: "pending" },
+      },
+    },
+  };
+  afterEach(() => vi.useRealTimers());
+
+  it.each([false, true])("keeps cancelled authorization consistent after refresh (user=%s)", async (userAuthorized) => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    let current: AppInstallation = {
+      ...connected,
+      last_error: "CLI connector operation could not be completed; retry the operation.",
+      operation: {
+        operation_id: "connect",
+        session_id: "session",
+        resource_id: connected.installation_id,
+        resource_revision: 1,
+        action: "connect",
+        stage: userAuthorized ? "applying" : "user_authorization",
+        status: "cancelled",
+      },
+      auth_status: {
+        ...connected.auth_status!,
+        identities: {
+          ...connected.auth_status!.identities,
+          user: { available: userAuthorized, verified: userAuthorized, status: userAuthorized ? "ready" : "pending" },
+        },
+      },
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (String(url).endsWith("catalog")) return Response.json({ items: [cliDefinition] });
+        if (String(url).endsWith(`/resources/${current.installation_id}`)) return Response.json(current);
+        return Response.json({ items: [current] });
+      }),
+    );
+    const panel = (
+      <MemoryRouter>
+        <GlobalAppsPanel embedded t={translate} />
+      </MemoryRouter>
+    );
+    const view = render(panel);
+    const summary = translate("feishuCLIAuthorizationSummary", {
+      bot: translate("feishuCLIAvailable"),
+      user: translate(userAuthorized ? "feishuCLIAvailable" : "feishuCLIUnauthorized"),
+    });
+    const card = within(await screen.findByRole("article"));
+    expect(card.getByText(summary)).toBeVisible();
+    expect(card.getByText(translate("appStatusConnected"))).toBeVisible();
+    expect(screen.queryByText(translate("errors.unknown_api_error"))).not.toBeInTheDocument();
+    await userEvent.setup().click(card.getByRole("button"));
+    const dialog = within(await screen.findByRole("dialog"));
+    expect(dialog.getByRole("status")).toHaveTextContent(summary);
+    expect(dialog.queryByRole("alert")).not.toBeInTheDocument();
+    if (!userAuthorized) expect(dialog.getByRole("button", { name: translate("feishuCLILogin") })).toBeEnabled();
+
+    current = { ...current, last_error: undefined };
+    await act(async () => {
+      window.dispatchEvent(new Event("focus"));
+      await vi.advanceTimersByTimeAsync(2500);
+    });
+    expect(dialog.getByRole("status")).toHaveTextContent(summary);
+    expect(dialog.queryByRole("alert")).not.toBeInTheDocument();
+    view.unmount();
+    render(panel);
+    expect(await screen.findByText(summary)).toBeVisible();
+    expect(screen.queryByText(translate("errors.unknown_api_error"))).not.toBeInTheDocument();
+  });
+
+  it.each(["authorization_expired", "cleanup_pending", "migration_failed"])(
+    "shows the same actionable %s error in the card and dialog",
+    async (code) => {
+      const failed = { ...connected, status: "error", last_error_code: code };
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (url: string) => {
+          if (String(url).endsWith("catalog")) return Response.json({ items: [cliDefinition] });
+          if (String(url).endsWith(`/resources/${failed.installation_id}`)) return Response.json(failed);
+          return Response.json({ items: [failed] });
+        }),
+      );
+      render(
+        <MemoryRouter>
+          <GlobalAppsPanel embedded t={translate} />
+        </MemoryRouter>,
+      );
+      const card = within(await screen.findByRole("article"));
+      const message = translate(`errors.${code}`);
+      expect(card.getByText(message)).toBeVisible();
+      await userEvent.setup().click(card.getByRole("button"));
+      const dialog = within(await screen.findByRole("dialog"));
+      expect(dialog.getByRole("alert")).toHaveTextContent(message);
+    },
+  );
+});

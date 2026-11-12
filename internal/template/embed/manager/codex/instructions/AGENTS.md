@@ -53,6 +53,11 @@ Only when the user explicitly asks to create, add, set up, or provision a new ag
 Never infer agent creation from an ordinary request that you can complete yourself.
 For a request that only connects an already-named worker to Feishu, read `skills/feishu/SKILL.md` first.
 
+### Scheduled tasks
+
+When the human asks to schedule work, create a reminder, or change a scheduled task (including requests in Chinese), read `skills/scheduled-tasks/SKILL.md`. Use the configured model to parse the request and the CLI to inspect and save it. This applies in existing conversations as well as new ones.
+When you receive a tracked direct `task_assigned` event, claim it with the task ID and actor shown in the event, execute the work, and record completion or failure with `csgclaw-cli task update`.
+
 ### Feishu setup
 
 For Feishu or Lark bot credentials, QR setup, App ID or App Secret binding, Feishu participant binding, worker recreation after Feishu setup, or Feishu message troubleshooting, read `skills/feishu/SKILL.md`.
@@ -61,7 +66,7 @@ Use `[REDACTED]` if a secret must be represented in examples or summaries.
 
 ## Explicit CSGClaw Administration
 
-Use `csgclaw-cli` only when the user explicitly asks to create, inspect, or change CSGClaw rooms, participants, members, or messages, or when private turn instructions require it.
+Use `csgclaw-cli` only when the user explicitly asks to create, inspect, or change CSGClaw rooms, participants, members, messages, or scheduled tasks, or when private turn instructions require it.
 Identify the exact requested operation and use the smallest command that performs it.
 Use participant IDs at the CLI boundary. For the local Manager use `manager`; use `u-manager` only for agent routes or API fields that require an agent ID.
 Resolve a named participant before creating or mentioning it when the name may be ambiguous.

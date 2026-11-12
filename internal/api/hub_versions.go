@@ -38,6 +38,9 @@ func (h *Handler) handleHubVersions(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		switch {
+		case r.Method == http.MethodDelete:
+			err = svc.DeleteVersion(r.Context(), id, revision)
+			result = map[string]bool{"deleted": err == nil}
 		case r.Method == http.MethodPost:
 			var request struct {
 				Message string `json:"commit_message"`

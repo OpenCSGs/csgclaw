@@ -2,7 +2,7 @@
 
 English | [中文](config.zh.md)
 
-`csgclaw serve` uses the local config file for server access, bootstrap image selection, sandbox isolation, and optional channels, and it auto-creates missing local state on first run. Agent LLM provider profiles are stored in agent state and managed from the Web UI.
+`csgclaw serve` uses the local config file for server access, bootstrap templates and optional channels, and it auto-creates missing local state on first run. Agent LLM provider profiles are stored in agent state and managed from the Web UI.
 
 ## Upgrading retired runtimes
 
@@ -11,7 +11,7 @@ Removed builtin template defaults fall back to the current Codex defaults, and o
 Existing custom template selections, supported runtimes, credentials and unrelated settings are preserved.
 
 Old Agent records migrate to Codex with their identities, model configuration, resources and chat history intact.
-Migrated workers remain stopped until explicitly started because their previous sandbox has been replaced by a host process.
+Migrated Agents request running and are started by the configured-Agent startup pass when their profiles are complete.
 Their existing workspace is retained and selected through `local_workspace_dir`, including user files and custom Skills.
 Old sandbox handles, images, runtime-specific options and runtime-specific environment variables are removed from active Agent state.
 When no Agent MCP snapshot exists, native MCP settings are imported with timeout units and workspace paths converted.
@@ -59,15 +59,38 @@ Stored or explicitly requested efforts are never silently converted to another l
 
 `advertise_base_url` is the base URL that CSGClaw gives to manager and worker boxes so they can call back into the local HTTP server. When it is set, CSGClaw uses it as-is after trimming a trailing slash and does not try to infer a host IP. When it is empty, CSGClaw falls back to an inferred local IPv4 address plus the configured listen port.
 
-Use `advertise_base_url` when the automatically inferred address is not reachable from BoxLite boxes, such as when you need a LAN address, a tunnel URL, or a host alias.
+Use `advertise_base_url` when external clients need a LAN address or a public tunnel URL.
 
 When it is set, the Web UI login flow also uses it as the trusted public base for the auth callback and post-login return URL. Reverse proxies and sandbox gateways must route `<advertise_base_url>/api/v1/auth/callback` back to the CSGClaw server.
 
-When the sandbox provider is `docker` on Docker Desktop, an empty `advertise_base_url` resolves to `http://host.docker.internal:<port>` for generated manager and worker runtime config. Set `advertise_base_url` explicitly when you need a different Docker callback URL.
 
 `access_token` protects authenticated API routes, including participant channel routes. When authentication is enabled, clients must send `Authorization: Bearer <access_token>`.
 
 `no_auth` controls whether CSGClaw skips the bearer-token check. The default is `false`. Set it to `true` only for trusted local or development environments.
+
+`local_single_user = true` declares a standalone Web server bound only to loopback as a personal instance.
+Agent memory is then on by default in private chats and can be disabled from the Agent’s memory page.
+The default is `false`, which shared unauthenticated deployments use.
+
+Memory is stored in `~/.csgclaw/agents/<agent-id>/memory/<user-id>/`, containing `state.json` and the plain Markdown document `MEMORY.md`.
+Instance-level memory state is stored in the `agent_memory` section of `~/.csgclaw/state.json` and is only updated on initialization or a deployment mode change.
+Runtime recreation and switching preserve memory, while permanent Agent deletion removes it.
+The memory page updates automatically while being viewed and pauses refreshes during editing to preserve the draft.
+“Reset memory” deletes existing notes, including manual edits, and rebuilds them from private chat history after confirmation.
+“Clear memory” immediately deletes notes and stops current memory learning after confirmation, while preserving chats and allowing future private turns to create new memories.
+Use the Markdown editor to edit all three categories; uncategorized text is saved under confirmed facts.
+History initialization scans all eligible private messages chronologically in bounded segments, accumulates learned entries, and saves the cursor with each segment so it can resume after a restart.
+Long messages continue in subsequent segments rather than losing their trailing text.
+Regular chat turns still trigger individual background memory decisions without batching.
+Background memory extraction shares the streaming model gateway, provider authentication, and connection recovery used by Agent chat.
+
+Native Codex and DSH memory files are not imported when switching to unified memory.
+Eligible Agents rebuild personal memory from private chat history during initialization.
+When memory is unavailable, existing sessions that never received unified memory retain their chat context.
+Sessions previously bound to unified memory are detached before selecting a memory-free session.
+Explicit template knowledge is saved separately under `agents/<agent-id>/memory/template.json` and adopted once by a new eligible user scope.
+Resetting or clearing an initialized scope does not restore the template seed.
+Forgetting a message excludes that source from future history scans and late learning updates, while preserving other queued messages and the initialization cursor.
 
 `show_upgrade` controls whether the Web UI shows upgrade actions. The default is `true`; set it to `false` only when the deployment cannot self-upgrade, such as managed Kubernetes environments.
 
@@ -111,11 +134,9 @@ api_key = "local"
 models = ["Qwen/Qwen3-0.6B-GGUF"]
 
 [bootstrap]
-manager_image_override = ""
-runtime_kind = "codex"
+default_manager_template = "builtin.manager-codex"
+default_worker_template = "builtin.codex-worker"
 
-[sandbox]
-provider = "boxlite"
 ```
 
 ### Remote LLM API
@@ -137,11 +158,9 @@ api_key = "sk-your-api-key"
 models = ["gpt-5.4"]
 
 [bootstrap]
-manager_image_override = ""
-runtime_kind = "codex"
+default_manager_template = "builtin.manager-codex"
+default_worker_template = "builtin.codex-worker"
 
-[sandbox]
-provider = "boxlite"
 ```
 
 ### Image generation models
@@ -168,11 +187,9 @@ no_auth = false
 show_upgrade = true
 
 [bootstrap]
-manager_image_override = ""
-runtime_kind = "codex"
+default_manager_template = "builtin.manager-codex"
+default_worker_template = "builtin.codex-worker"
 
-[sandbox]
-provider = "boxlite"
 ```
 
 Codex and Claude Code profiles are configured in agent state through the Web UI. CSGClaw starts an embedded CLIProxyAPI on a private localhost port at serve time, so static CLIProxy base URLs are not required.
@@ -195,7 +212,7 @@ Auth is also managed locally:
 - `CSGCLAW_CLIPROXY_NO_BROWSER=1` prints OAuth URLs instead of opening a browser.
 - `CSGCLAW_CLIPROXY_DISABLE_KEYCHAIN=1` disables Claude Keychain probing.
 
-When a worker uses the Codex runtime, its local state is stored under `~/.csgclaw/agents/<agent-name>/.codex/`. The workspace lives at `~/.csgclaw/agents/<agent-name>/.codex/workspace`, shell home lives at `~/.csgclaw/agents/<agent-name>/.codex/home`, and Codex-managed files such as `auth.json`, `config.toml`, `stderr.log`, and runtime metadata are stored under `~/.csgclaw/agents/<agent-name>/.codex/home`. This path is intentionally separate from the sandbox provider home such as `~/.csgclaw/agents/<agent-name>/boxlite`.
+When a worker uses the Codex runtime, its local state is stored under `~/.csgclaw/agents/<agent-name>/.codex/`. The workspace lives at `~/.csgclaw/agents/<agent-name>/.codex/workspace`, shell home lives at `~/.csgclaw/agents/<agent-name>/.codex/home`, and Codex-managed files such as `auth.json`, `config.toml`, `stderr.log`, and runtime metadata are stored under `~/.csgclaw/agents/<agent-name>/.codex/home`. Local runtime directories are independent of sandbox providers.
 
 CSGClaw enables [Codex local memories](https://learn.chatgpt.com/docs/customization/memories) for each Codex runtime, including both memory generation and reuse in later sessions.
 Memories are isolated per Agent under `~/.csgclaw/agents/<agent-name>/.codex/home/memories/` and are not shared with the host Codex installation or another Agent.
@@ -221,78 +238,30 @@ The raw upstream API key is not written to this file; it is injected into the ru
 
 When a worker uses the Codex runtime, CSGClaw launches the Codex CLI bundled next to the CSGClaw executable with `codex app-server --listen stdio://`. It does not use `PATH`, `CSGCLAW_CODEX_PATH`, or `CSGCLAW_CODEX_ACP_PATH`; reinstall CSGClaw if that bundled executable is missing.
 
-## Sandbox Providers
+## Runtime deployment and retired sandbox settings
 
-CSGClaw runs Workers through the configured sandbox provider. Supported built-in providers are:
+Codex and DSH Agents execute as local processes in the environment running CSGClaw.
+Docker and BoxLite are not required, and the application no longer exposes an Agent sandbox switch or sandbox provider settings.
+Codex execution modes and Electron's security sandbox are separate security controls and remain enabled according to their existing policies.
 
-- `boxlite`: deprecated compatibility provider for legacy development environments; runs Workers through the local `boxlite` CLI when explicitly configured.
-- `docker`: runs Workers through the local Docker CLI.
-- `csghub`: runs Workers in the remote CSGHub sandbox. This is currently supported only in [AgenticHub](https://opencsg.com/agentichub).
+Startup removes the obsolete `[sandbox]` section, including `provider`, `storage_path`, `docker_cli_path`, `home_dir_name`, and `debian_registries_override`.
+When old OpenClaw/PicoClaw Agents still need migration, the original provider settings are retained temporarily under `[migrations.retired_claws.sandbox]` for retry.
+This private migration input is removed after the Agent conversion succeeds.
+Migration failures log warnings and do not prevent CSGClaw or supported local Agents from starting.
+Completed migrations are not repeated and incomplete backups are not retained.
 
-Official bundles use one of these layouts:
-
-- `csgclaw/bin/csgclaw` plus `csgclaw/bin/boxlite`
-- `csgclaw/bin/csgclaw` only
-
-If `[sandbox].provider` is omitted or empty, CSGClaw defaults to `docker`.
-
-That means a generated config can keep the provider empty to follow the default:
+An old `[sandbox].provider = "csghub"` also selected platform behavior unrelated to container execution.
+Upgrade preserves that behavior as a deployment setting:
 
 ```toml
-[sandbox]
-provider = ""
+[server]
+deployment_mode = "csghub"
 ```
 
-You can always override the default explicitly:
-
-```toml
-[sandbox]
-provider = "boxlite"
-```
-
-```toml
-[sandbox]
-provider = "docker"
-```
-
-For `provider = "boxlite"`, CSGClaw resolves the bundled sibling `boxlite` binary next to `csgclaw` first, then falls back to `PATH` if that bundle is missing. BoxLite is deprecated and no longer the recommended provider, but explicit legacy configurations remain supported for development use. CSGClaw does not silently rewrite them. If BoxLite is unavailable, the server and host-only runtimes still start; the first BoxLite-backed operation returns an actionable error recommending Docker.
-
-For `provider = "docker"`, Docker executable availability is checked when an operation actually opens the provider, such as creating or starting a sandbox Agent or listing local images. The server and a host-only manager can therefore start without Docker installed; the first Docker-backed operation still returns an actionable error.
-
-`debian_registries_override` controls where BoxLite pulls `debian:bookworm-slim` when you need to override the built-in default order. If omitted or empty, CSGClaw uses `harbor.opencsg.com` then `docker.io`. When CSGClaw writes `config.toml`, it keeps this field visible as an empty array so it can be edited in place:
-
-```toml
-[sandbox]
-provider = "boxlite"
-debian_registries_override = []
-```
-
-CSGClaw passes an explicit `--home` to the BoxLite CLI for each agent, using the fixed per-agent runtime home `~/.csgclaw/agents/<agent-id>/boxlite`. That explicit home takes precedence over `BOXLITE_HOME` for CSGClaw-managed sandboxes, while `BOXLITE_HOME` still applies when you run `boxlite` manually without `--home`.
-
-The `boxlite` provider does not need a vendored Go SDK at runtime. Current source builds and release packaging use the same BoxLite CLI-backed integration:
-
-- `make build`, `make test`, `make run`, and `make package` all use the standard `boxlite` path.
-- `boxlite` remains the built-in BoxLite sandbox provider, alongside other non-BoxLite providers such as `csghub`.
-
-To use Docker as the sandbox provider:
-
-```toml
-[sandbox]
-provider = "docker"
-```
-
-When `provider = "docker"`, CSGClaw runs the local `docker` CLI. By default it resolves `docker` from `PATH`. If you need a specific binary, set `docker_cli_path`:
-
-```toml
-[sandbox]
-provider = "docker"
-docker_cli_path = "/usr/local/bin/docker"
-```
-
-Current platform expectations:
-
-- An empty provider resolves to `docker`.
-- Windows users should have Docker installed and reachable on `PATH`, or set `[sandbox].docker_cli_path` explicitly.
+This field is for CSGHub deployments, has no sandbox provider selection, and is omitted for ordinary local installations.
+Explicit deployment settings take precedence over the old provider value.
+Existing Agent identities, model settings, workspaces, memory, Skills and conversation history are retained.
+Native runtime handles are preserved when obsolete `sandbox_enabled` metadata is removed.
 
 ## Hub Configuration
 
@@ -372,7 +341,7 @@ non_suspicious_only = true
 
 Channel integration is optional. CSGClaw works with the built-in Web UI by default, and you only need channel config when you want to connect external messaging platforms such as Feishu.
 
-Keep `config.toml` focused on shared server, model, bootstrap, and sandbox settings. Feishu credentials live on Feishu participants in `~/.csgclaw/im/participants.json` and are written with `csgclaw-cli participant bind`; legacy `[channels.feishu]` blocks and `channels/feishu.toml` are not read by the participant-backed flow.
+Keep `config.toml` focused on shared server, model and bootstrap settings. Feishu credentials live on Feishu participants in `~/.csgclaw/im/participants.json` and are written with `csgclaw-cli participant bind`; legacy `[channels.feishu]` blocks and `channels/feishu.toml` are not read by the participant-backed flow.
 
 For detailed field definitions and examples, see [Feishu Channel Configuration](channel/feishu.md).
 

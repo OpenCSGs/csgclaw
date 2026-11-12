@@ -14,6 +14,15 @@ import (
 
 // Archive and delete share the same work guard. Neither operation stops a turn.
 func (h *Handler) allowRoomManagement(w http.ResponseWriter, roomID string) bool {
+	if h.im != nil {
+		if room, found := h.im.Room(roomID); found && room.CloudAgent != nil {
+			if _, _, pending := cloudTaskPending(room); pending {
+				writeCodedAPIError(w, http.StatusConflict, "room_has_active_work", "This cloud task is still executing or awaiting confirmation.")
+				return false
+			}
+		}
+	}
+
 	if reader, ok := h.participantWork.(roomWorkReader); ok && len(reader.ActiveWork(roomID)) > 0 {
 		writeCodedAPIError(w, http.StatusConflict, "room_has_active_work", "Stop the running task before archiving or deleting this conversation.")
 		return false
@@ -180,6 +189,9 @@ func (h *Handler) listTaskConversations(w http.ResponseWriter, r *http.Request) 
 
 func hasConversationHistory(room im.Room) bool {
 	for _, message := range room.Messages {
+		if message.Event != nil && message.Event.Key == "task_assigned" {
+			return true
+		}
 		if message.Kind != "event" && message.Kind != "system" && message.Event == nil && !strings.HasPrefix(message.Content, "Bootstrap room created for admin and ") {
 			return true
 		}

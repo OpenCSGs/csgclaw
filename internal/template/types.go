@@ -16,6 +16,7 @@ const (
 )
 
 type Template struct {
+	VersionCount   int
 	LatestRevision int
 	Publications   []apitypes.TemplatePublication
 	UID            string

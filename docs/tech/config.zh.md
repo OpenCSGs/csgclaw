@@ -2,7 +2,7 @@
 
 [English](config.md) | 中文
 
-`csgclaw serve` 会使用本地配置文件中的 server 访问方式、bootstrap 镜像、sandbox 隔离方式和可选通信通道，并在首次运行时自动补齐缺失的本地状态。
+`csgclaw serve` 会使用本地配置文件中的 server 访问方式、bootstrap 模板和可选通信通道，并在首次运行时自动补齐缺失的本地状态。
 
 ## 已退役运行时的升级迁移
 
@@ -11,7 +11,7 @@
 已有的自定义模板选择、受支持运行时、凭据和其他设置会保留。
 
 旧 Agent 记录会迁移到 Codex，保留身份、模型配置、资源与聊天记录。
-由于原沙箱将由本机进程替代，迁移后的 Worker 保持停止，需手动启动。
+迁移后的 Agent 会请求运行，由正常启动流程在模型配置完整时启动 Codex。
 原工作目录通过 `local_workspace_dir` 继续使用，用户文件和自定义 Skill 均保留。
 旧沙箱句柄、镜像、运行时专属选项及运行时专属环境变量会从活动 Agent 状态中清除。
 Agent 尚无 MCP 配置快照时，会导入旧原生配置，并转换超时单位及工作目录路径。
@@ -59,15 +59,38 @@ GPT-5.4 和 GPT-5.5 支持 `none` 到 `xhigh`，不支持 `minimal` 或 `max`。
 
 `advertise_base_url` 是 CSGClaw 传给 manager 和 worker box 的回连地址，box 会用它访问本地 HTTP server。设置后，CSGClaw 会直接使用该值，只去掉末尾的 `/`，不会再自动推断本机 IP。为空时，CSGClaw 才会回退到自动推断出的本机 IPv4 地址，并拼上监听端口。
 
-当自动推断出的地址无法从 BoxLite box 内访问时，可以设置 `advertise_base_url`，例如使用局域网地址、隧道地址或 host alias。
+外部客户端需要使用局域网地址或公开隧道地址时，可以设置 `advertise_base_url`。
 
 设置该值后，Web UI 登录流程也会将它作为受信任的公开地址，用于认证回调和登录后的返回地址。反向代理或 sandbox gateway 必须将 `<advertise_base_url>/api/v1/auth/callback` 路由回 CSGClaw server。
 
-当 sandbox provider 是 Docker Desktop 上的 `docker` 时，空的 `advertise_base_url` 会在生成 manager 和 worker 运行时配置时解析为 `http://host.docker.internal:<port>`。如果 Docker 需要使用其它回连地址，请显式设置 `advertise_base_url`。
 
 `access_token` 用来保护需要认证的 API 路由，包括 participant channel 路由。启用鉴权时，客户端必须发送 `Authorization: Bearer <access_token>`。
 
 `no_auth` 控制 CSGClaw 是否跳过 bearer token 检查，默认值是 `false`。仅建议在可信的本地或开发环境中设置为 `true`。
+
+`local_single_user = true` 将仅监听回环地址的独立 Web 服务声明为单人本地实例。
+启用后，Agent 记忆在站内私聊默认开启，可在 Agent 的记忆页关闭。
+默认值为 `false`，共享免鉴权部署使用默认值。
+
+记忆保存在 `~/.csgclaw/agents/<agent-id>/memory/<user-id>/`，包含 `state.json` 和纯正文 `MEMORY.md`。
+实例级记忆状态保存在 `~/.csgclaw/state.json` 的 `agent_memory` 小节，仅在首次初始化或实例模式变化时更新。
+Runtime 重建或切换会保留记忆，永久删除 Agent 时会清理对应记忆。
+记忆页在查看时自动更新，编辑过程中暂停刷新，保留未保存的草稿。
+“重置记忆”在确认后删除当前全部记忆（含手动编辑），并从历史私聊重新生成。
+“清空记忆”在确认后立即删除记忆并停止当前学习，聊天记录保留，后续私聊仍可产生新记忆。
+通过 Markdown 编辑三类记忆，未分类内容会归入已确认事实。
+历史初始化按时间顺序分段遍历全部符合条件的私聊，累积提炼记忆，并随每段结果保存读取位置，以便重启后继续。
+长消息的后续正文会在下一段继续读取。
+日常聊天仍然每轮独立触发后台记忆判断，不合并批处理。
+后台记忆提炼与 Agent 聊天共用流式模型网关、服务商认证和连接重试机制。
+
+切换到统一记忆时，不导入 Codex 或 DSH 的旧原生记忆文件。
+符合条件的 Agent 会在初始化时从历史私聊重新生成个人记忆。
+记忆不可用时，从未注入统一记忆的已有会话继续保留聊天上下文。
+曾绑定统一记忆的会话会先被解除关联，再选择不带记忆的会话。
+新建 Agent 时明确提供的模板知识单独保存在 `agents/<agent-id>/memory/template.json`，供新的可用用户作用域首次采用。
+已初始化作用域的记忆被重置或清空后，不会恢复模板种子。
+“忘掉这条”会排除该消息后续的历史扫描和延迟学习更新，同时保留其他排队消息及初始化读取位置。
 
 `show_upgrade` 控制 Web UI 是否展示升级操作。默认值是 `true`；仅在当前部署不能自升级时设置为 `false`，例如托管的 Kubernetes 环境。
 
@@ -111,11 +134,9 @@ api_key = "local"
 models = ["Qwen/Qwen3-0.6B-GGUF"]
 
 [bootstrap]
-manager_image_override = ""
-runtime_kind = "codex"
+default_manager_template = "builtin.manager-codex"
+default_worker_template = "builtin.codex-worker"
 
-[sandbox]
-provider = "boxlite"
 ```
 
 ### 远程 LLM API
@@ -137,11 +158,9 @@ api_key = "sk-your-api-key"
 models = ["gpt-5.4"]
 
 [bootstrap]
-manager_image_override = ""
-runtime_kind = "codex"
+default_manager_template = "builtin.manager-codex"
+default_worker_template = "builtin.codex-worker"
 
-[sandbox]
-provider = "boxlite"
 ```
 
 ### 图片生成模型
@@ -168,11 +187,9 @@ no_auth = false
 show_upgrade = true
 
 [bootstrap]
-manager_image_override = ""
-runtime_kind = "codex"
+default_manager_template = "builtin.manager-codex"
+default_worker_template = "builtin.codex-worker"
 
-[sandbox]
-provider = "boxlite"
 ```
 
 Codex 和 Claude Code Profile 通过 Web UI 写入 agent state。CSGClaw 在 `serve` 时会嵌入启动 CLIProxyAPI，并绑定到私有 localhost 端口，因此不再需要配置固定的 CLIProxy base URL。
@@ -195,7 +212,7 @@ API 创建 Agent 时接受相同的运行时名称。
 - `CSGCLAW_CLIPROXY_NO_BROWSER=1` 会打印 OAuth URL，而不是自动打开浏览器。
 - `CSGCLAW_CLIPROXY_DISABLE_KEYCHAIN=1` 可关闭 Claude Keychain 探测。
 
-当 worker 使用 Codex runtime 时，它的本地状态会统一放在 `~/.csgclaw/agents/<agent-name>/.codex/` 下。workspace 路径是 `~/.csgclaw/agents/<agent-name>/.codex/workspace`，shell home 路径是 `~/.csgclaw/agents/<agent-name>/.codex/home`，而 `auth.json`、`config.toml`、`stderr.log` 以及 runtime metadata 等由 Codex 管理的文件会放在 `~/.csgclaw/agents/<agent-name>/.codex/home` 下。这个路径会和 sandbox provider 的 home（例如 `~/.csgclaw/agents/<agent-name>/boxlite`）分开。
+当 worker 使用 Codex runtime 时，它的本地状态会统一放在 `~/.csgclaw/agents/<agent-name>/.codex/` 下。workspace 路径是 `~/.csgclaw/agents/<agent-name>/.codex/workspace`，shell home 路径是 `~/.csgclaw/agents/<agent-name>/.codex/home`，而 `auth.json`、`config.toml`、`stderr.log` 以及 runtime metadata 等由 Codex 管理的文件会放在 `~/.csgclaw/agents/<agent-name>/.codex/home` 下。本地运行时目录不依赖沙盒提供者。
 
 CSGClaw 会为每个 Codex runtime 启用 [Codex 本地 memory](https://learn.chatgpt.com/docs/customization/memories)，包括生成 memory 和在后续会话中复用 memory。
 Memory 按 Agent 隔离存放在 `~/.csgclaw/agents/<agent-name>/.codex/home/memories/`，不会与宿主机 Codex 或其他 Agent 共享。
@@ -221,78 +238,30 @@ Checkpoint 和维护输出不会发送到房间，但后台提取与合并请求
 
 当 worker 使用 Codex runtime 时，CSGClaw 会通过与 CSGClaw 可执行文件同目录打包的 Codex CLI 执行 `codex app-server --listen stdio://`。不会使用 `PATH`、`CSGCLAW_CODEX_PATH` 或 `CSGCLAW_CODEX_ACP_PATH`；如该内置文件缺失，请重新安装 CSGClaw。
 
-## Sandbox Provider
+## 运行环境与旧沙盒配置迁移
 
-CSGClaw 通过配置的 sandbox provider 隔离 Worker 执行环境。当前内置支持的 provider 包括：
+Codex 和 DSH Agent 都作为本地进程，在 CSGClaw 所在环境中运行。
+无需安装 Docker 或 BoxLite，界面不再提供 Agent 沙盒开关或沙盒提供者设置。
+Codex 运行权限控制和 Electron 安全沙盒仍按原策略生效。
 
-- `boxlite`：用于旧开发环境兼容的已弃用 provider；仅在显式配置时通过本地 `boxlite` CLI 运行 Worker。
-- `docker`：通过本地 Docker CLI 运行 Worker。
-- `csghub`：在远端 CSGHub sandbox 运行 Worker（目前仅支持在 [AgenticHub](https://opencsg.com/agentichub) 里使用）。
+启动时会移除废弃的 `[sandbox]` 配置段，包括 `provider`、`storage_path`、`docker_cli_path`、`home_dir_name` 和 `debian_registries_override`。
+如果旧 OpenClaw/PicoClaw Agent 尚未完成迁移，原提供者配置会临时保存在 `[migrations.retired_claws.sandbox]`，供后续重试使用。
+Agent 转换成功后会移除这部分内部迁移配置。
+迁移失败只记录警告，不会阻止 CSGClaw 或其他本地 Agent 启动。
+完成的迁移不会重复执行，失败的半成品备份会清理。
 
-官方 bundle 目前有两种布局：
-
-- `csgclaw/bin/csgclaw` 加 `csgclaw/bin/boxlite`
-- 只有 `csgclaw/bin/csgclaw`
-
-如果 `[sandbox].provider` 省略或为空，CSGClaw 默认使用 `docker`。
-
-这也是为什么生成出来的配置文件可以把 provider 留空，直接跟随默认值：
+旧的 `[sandbox].provider = "csghub"` 同时控制了与容器运行无关的平台行为。
+升级会通过独立的部署字段保留该行为：
 
 ```toml
-[sandbox]
-provider = ""
+[server]
+deployment_mode = "csghub"
 ```
 
-你也可以随时显式覆盖默认值：
-
-```toml
-[sandbox]
-provider = "boxlite"
-```
-
-```toml
-[sandbox]
-provider = "docker"
-```
-
-对于 `provider = "boxlite"`，CSGClaw 会优先解析与 `csgclaw` 同 bundle 的 `boxlite`，只有 bundle 缺失时才回退到 `PATH`。BoxLite 已弃用且不再是推荐 provider，但为了开发兼容，显式的旧配置仍然有效，CSGClaw 不会静默改写它。即使 BoxLite 不可用，服务和仅使用宿主机 runtime 的 manager 仍可启动；第一次 BoxLite sandbox 操作会返回带操作建议的错误并推荐切换到 Docker。
-
-对于 `provider = "docker"`，Docker 可执行文件会在真正打开 provider 的操作中检查，例如创建或启动 sandbox Agent、列出本地镜像。这样，即使未安装 Docker，服务和仅使用宿主机 runtime 的 manager 也可以正常启动；第一次 Docker sandbox 操作仍会返回带操作建议的错误。
-
-`debian_registries_override` 用于在你需要覆盖内置顺序时，控制 BoxLite 拉取 `debian:bookworm-slim` 的仓库顺序。若省略或为空，CSGClaw 会使用默认顺序 `harbor.opencsg.com`、`docker.io`。当 CSGClaw 写入 `config.toml` 时，会把该字段保留为空数组，方便直接原地修改：
-
-```toml
-[sandbox]
-provider = "boxlite"
-debian_registries_override = []
-```
-
-CSGClaw 会为每个 agent 调用 BoxLite CLI 时显式传入 `--home`，固定使用 `~/.csgclaw/agents/<agent-id>/boxlite` 作为每个 agent 的 runtime home。这个显式 home 对 CSGClaw 管理的 sandbox 生效，优先于 `BOXLITE_HOME`；你手动运行 `boxlite` 且不传 `--home` 时，`BOXLITE_HOME` 仍按 BoxLite 自身规则生效。
-
-`boxlite` provider 运行时不需要 vendored Go SDK。当前源码构建和 release 打包都走同一条 BoxLite CLI 路径：
-
-- `make build`、`make test`、`make run`、`make package` 都使用标准的 `boxlite` 路径。
-- `boxlite` 是内置的 BoxLite sandbox provider，同时仓库也保留 `csghub` 等其他非 BoxLite provider。
-
-如果要使用 Docker 作为 sandbox provider，可以这样配置：
-
-```toml
-[sandbox]
-provider = "docker"
-```
-
-当 `provider = "docker"` 时，CSGClaw 会调用本地 `docker` CLI。默认情况下会从 `PATH` 解析 `docker`。如果你需要指定特定二进制路径，可以设置 `docker_cli_path`：
-
-```toml
-[sandbox]
-provider = "docker"
-docker_cli_path = "/usr/local/bin/docker"
-```
-
-当前平台上的默认行为如下：
-
-- provider 留空时会解析成 `docker`。
-- Windows 用户需要确保本地 Docker 可用并且能从 `PATH` 找到；如果路径特殊，可以显式设置 `[sandbox].docker_cli_path`。
+该字段仅用于 CSGHub 部署，普通本地安装无需配置。
+显式指定的部署模式优先于旧提供者配置。
+Agent 身份、模型设置、工作文件、记忆、Skills 和聊天记录都会保留。
+清理无效的 `sandbox_enabled` 元数据时，仍会保留原生运行时句柄。
 
 ## Hub 配置
 
@@ -372,7 +341,7 @@ non_suspicious_only = true
 
 Channel 集成是可选的。默认情况下，CSGClaw 直接使用内置 Web UI；只有在你需要接入飞书等外部消息平台时，才需要增加 channel 配置。
 
-`config.toml` 只保留通用的 server、model、bootstrap 和 sandbox 配置。飞书凭证保存在 `~/.csgclaw/im/participants.json` 的 Feishu participant 上，并通过 `csgclaw-cli participant bind` 写入；participant-backed 流程不读取旧 `[channels.feishu]` 配置块或 `channels/feishu.toml`。
+`config.toml` 只保留通用的 server、model 和 bootstrap 配置。飞书凭证保存在 `~/.csgclaw/im/participants.json` 的 Feishu participant 上，并通过 `csgclaw-cli participant bind` 写入；participant-backed 流程不读取旧 `[channels.feishu]` 配置块或 `channels/feishu.toml`。
 
 更详细的字段说明和示例，请参阅 [飞书 Channel 配置](channel/feishu.zh.md)。
 

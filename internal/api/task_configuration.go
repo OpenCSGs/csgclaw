@@ -52,10 +52,7 @@ func (h *Handler) validateTaskConfiguration(room apitypes.Room, configuration *t
 		return nil, fmt.Errorf("working directory is locked; start a new task")
 	}
 	if cfg.WorkspaceDir == "" && room.Configuration == nil && h.workspace != nil {
-		cfg.WorkspaceDir, _ = got.RuntimeOptions["local_workspace_dir"].(string)
-		if cfg.WorkspaceDir == "" {
-			cfg.WorkspaceDir, err = h.workspace.WorkspaceRootByID(got.ID)
-		}
+		cfg.WorkspaceDir, err = h.configuredAgentWorkspace(got.ID, got.RuntimeOptions)
 		if err != nil {
 			return nil, err
 		}

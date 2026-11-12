@@ -1,6 +1,10 @@
 package codex
 
-import "strings"
+import (
+	"strings"
+
+	"csgclaw/internal/agentengine/contract"
+)
 
 const (
 	StopReasonEndTurn     = "end_turn"
@@ -8,14 +12,17 @@ const (
 )
 
 type PromptRequest struct {
+	Model               *contract.TurnModel
 	SessionID           string
 	ClientUserMessageID string
+	TextOnlyUserInput   bool
 	Prompt              []PromptContentBlock
 	Meta                map[string]any
 	OnAccepted          func()
 }
 
 type PromptResponse struct {
+	history    quietTurnHistory
 	MessageID  string
 	StopReason string
 }

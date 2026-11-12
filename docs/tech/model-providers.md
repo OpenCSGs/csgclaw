@@ -53,7 +53,7 @@ Authentication, quota, permission, and network failures are shown separately and
 
 Credentials are persisted by the backend and are omitted from connection-directory responses.
 Provider errors shown during connection do not include raw upstream bodies or echoed secrets.
-Official logos ship locally, with provenance recorded in `web/app/public/model-providers/SOURCES.md`.
+Official logos ship locally, with provenance recorded in `web/packages/app/public/model-providers/SOURCES.md`.
 
 ## Agent creation defaults
 

@@ -1,0 +1,40 @@
+.chat-panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  min-height: 0;
+}
+
+.chat-panel {
+  display: grid;
+  overflow: hidden;
+}
+
+.chat-panel {
+  border-color: var(--line);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+  animation: var(--app-rise-in) 360ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+:global(:root[data-theme="light"]) .chat-panel {
+  background: var(--panel);
+}
+
+.chat-panel,
+:global(:root[data-theme="light"]) .chat-panel {
+  border-radius: 0;
+  background: var(--panel);
+  box-shadow: none;
+}
+
+:global(:root[data-theme="dark"]) .chat-panel {
+  border-color: var(--line);
+  background: var(--sidebar);
+  box-shadow: none;
+}
+
+:global(:root[data-theme="dark"]) .chat-panel {
+  border-color: var(--line);
+  background: var(--panel);
+  color: var(--text);
+}

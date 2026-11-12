@@ -31,7 +31,7 @@ func (s *IMTranscriptStore) DeliverVideoGeneration(ctx context.Context, turn cha
 	if task.State == "completed" && task.File != nil {
 		var rejected []string
 		uploads, rejected = s.outputFileSources(ctx, turn.AgentID, []agentengine.OutputFile{*task.File})
-		defer closeOutputFileSources(uploads)
+		defer CloseOutputFileSources(uploads)
 		if len(rejected) > 0 || len(uploads) != 1 {
 			return fmt.Errorf("generated video could not be attached")
 		}

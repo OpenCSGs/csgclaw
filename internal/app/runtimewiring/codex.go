@@ -4,6 +4,7 @@ import (
 	"context"
 	agent "csgclaw/internal/agentengine/agents"
 	"csgclaw/internal/codexcli"
+	"csgclaw/internal/codexmodel"
 	agentruntime "csgclaw/internal/runtime"
 	runtimecodex "csgclaw/internal/runtime/codex"
 	"fmt"
@@ -25,8 +26,20 @@ func WithCodexRuntime() agent.ControllerOption {
 		permissions := runtimecodex.NewPermissionBroker(events)
 		userInputs := runtimecodex.NewUserInputBroker(events)
 		rt := runtimecodex.New(runtimecodex.Dependencies{
-			ResolveRoomProfile: s.TaskRuntimeProfile,
-			BinaryProvider:     codexcli.Provider{},
+			ModelCatalog: func(agentID string) []codexmodel.Profile {
+				profiles, err := s.Models().SessionModelProfiles(agentID)
+				if err != nil {
+					return nil
+				}
+				models := make([]codexmodel.Profile, 0, len(profiles))
+				for _, profile := range profiles {
+					models = append(models, codexmodel.Profile{Provider: profile.Provider, ModelID: profile.ModelID, ReasoningEffort: profile.ReasoningEffort, Metadata: profile.ModelMetadata})
+				}
+				return models
+			},
+			ResolveRoomProfile:  s.TaskRuntimeProfile,
+			DisableNativeMemory: true,
+			BinaryProvider:      codexcli.Provider{},
 			MaterializeMCPServers: func(ctx context.Context, servers map[string]any) (map[string]any, error) {
 				return s.MaterializeRuntimeMCPServers(ctx, agent.RuntimeKindCodex, servers)
 			},

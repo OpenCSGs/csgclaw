@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	agent "csgclaw/internal/agentengine/agents"
 	"csgclaw/internal/config"
@@ -27,6 +28,13 @@ func TestFullModelDiagnosticCapturesBothSidesOfProtocolConversion(t *testing.T) 
 	}))
 	defer model.Close()
 	store := diagnostics.New(t.TempDir())
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := store.Flush(ctx); err != nil {
+			t.Errorf("flush diagnostic writes before removing temporary files: %v", err)
+		}
+	})
 	record := store.Begin("r", "s", "", "agent", "turn")
 	record.Running()
 	// Explicit profile avoids unrelated provider discovery while using the real

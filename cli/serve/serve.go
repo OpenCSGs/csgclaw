@@ -6,6 +6,7 @@ import (
 	"csgclaw/internal/migrations"
 	"csgclaw/internal/migrations/retiredclaws"
 	"csgclaw/internal/sandbox"
+	"csgclaw/internal/sandbox/boxlitecli"
 	skillbuiltin "csgclaw/internal/skill/builtin"
 	"errors"
 	"fmt"
@@ -691,8 +692,14 @@ func startServerWithConfigPath(ctx context.Context, run *command.Context, cfg co
 	if err != nil {
 		return err
 	}
+	llmSvc, err := NewLLMService(cfg, svc)
+	if err != nil {
+		return err
+	}
+	titleCtx, stopTaskTitles := context.WithCancel(ctx)
+	defer stopTaskTitles()
 	interactionCoordinator := csgclawinteraction.NewCoordinator(conversationEngine, participantSvc)
-	imAdapterSource, err := NewCSGClawAdapterSource(conversationEngine, svc, imSvc, imBus, participantSvc, workRegistry, participantBridge, interactionCoordinator)
+	imAdapterSource, err := NewCSGClawAdapterSource(titleCtx, conversationEngine, svc, imSvc, imBus, participantSvc, workRegistry, participantBridge, interactionCoordinator, llmSvc)
 	if err != nil {
 		return err
 	}
@@ -711,10 +718,6 @@ func startServerWithConfigPath(ctx context.Context, run *command.Context, cfg co
 		if err := feishuBindingMgr.Start(ctx); err != nil {
 			return err
 		}
-	}
-	llmSvc, err := NewLLMService(cfg, svc)
-	if err != nil {
-		return err
 	}
 	apiURL := serveAPIBaseURL(cfg.Server, serveOpts)
 	imURL := imOpenURL(apiURL)
@@ -848,6 +851,8 @@ func startServerWithConfigPath(ctx context.Context, run *command.Context, cfg co
 		AppsStatePath:      legacyStatePath,
 		AccessToken:        cfg.Server.AccessToken,
 		NoAuth:             cfg.Server.NoAuth,
+		LocalSingleUser:    cfg.Server.LocalSingleUser && !cfg.IsCSGHubDeployment(),
+		MemoryCloud:        cfg.IsCSGHubDeployment(),
 		AdvertiseBaseURL:   apiURL,
 		InternalBaseURL:    serveInternalBaseURL(cfg.Server, serveOpts),
 		Desktop:            serveOpts.Desktop,
@@ -919,7 +924,7 @@ func reconcileInterruptedUserInputMessages(imSvc *im.Service) error {
 }
 
 func refreshStartupModelProviders(ctx context.Context, cfg config.Config, configPath string, svc *agent.Controller) (config.Config, []agent.ModelProviderCheckResult, error) {
-	if strings.TrimSpace(cfg.Sandbox.Provider) == "csghub" {
+	if cfg.IsCSGHubDeployment() {
 		return cfg, nil, nil
 	}
 	configPath = strings.TrimSpace(configPath)
@@ -1147,20 +1152,13 @@ listen_addr = %q
 advertise_base_url = %q
 access_token = %q
 no_auth = %t
+local_single_user = %t
 show_upgrade = %t
 
 [bootstrap]
 default_manager_template = %q
 default_worker_template = %q
-
-[sandbox]
-provider = %q
-`, cfg.Server.ListenAddr, cfg.Server.AdvertiseBaseURL, partiallyMaskSecret(cfg.Server.AccessToken), cfg.Server.NoAuth, cfg.Server.ShowUpgrade, cfg.Bootstrap.ResolvedDefaultManagerTemplate(), cfg.Bootstrap.ResolvedDefaultWorkerTemplate(), cfg.Sandbox.Resolved().Provider)
-	if len(cfg.Sandbox.Resolved().DebianRegistriesOverride) > 0 {
-		content += fmt.Sprintf("debian_registries_override = %s\n", formatModelList(cfg.Sandbox.Resolved().DebianRegistriesOverride))
-	} else {
-		content += fmt.Sprintf("# using default debian registries: %s\ndebian_registries_override = []\n", formatModelList(config.DefaultDebianRegistries))
-	}
+`, cfg.Server.ListenAddr, cfg.Server.AdvertiseBaseURL, partiallyMaskSecret(cfg.Server.AccessToken), cfg.Server.NoAuth, cfg.Server.LocalSingleUser, cfg.Server.ShowUpgrade, cfg.Bootstrap.ResolvedDefaultManagerTemplate(), cfg.Bootstrap.ResolvedDefaultWorkerTemplate())
 	content += fmt.Sprintf(`
 [hub]
 default_registry = %q
@@ -1269,15 +1267,11 @@ func newAgentService(cfg config.Config, feishuProvider feishu.AgentCredentialPro
 	if err != nil {
 		return nil, err
 	}
-	opts, err := sandboxServiceOptions(cfg.Sandbox)
-	if err != nil {
-		return nil, err
-	}
-	opts = append(opts,
+	opts := []agent.ControllerOption{
 		runtimewiring.WithCodexRuntime(),
 		runtimewiring.WithDSHRuntime(),
 		agent.WithBootstrapDefaultTemplates(cfg.Bootstrap),
-	)
+	}
 
 	if hubSvc != nil {
 		opts = append(opts, agent.WithHubService(hubSvc))
@@ -1396,6 +1390,7 @@ func newFeishuBindingManager(feishuSvc *feishu.Service, engine agentengine.Inter
 }
 
 func newCSGClawAdapterSource(
+	ctx context.Context,
 	engine *agentengine.Engine,
 	agentSvc *agent.Controller, imSvc *im.Service,
 	imBus *im.Bus,
@@ -1403,6 +1398,7 @@ func newCSGClawAdapterSource(
 	workReporter worklease.ParticipantWorkReporter,
 	participantBridge *im.ParticipantBridge,
 	interactionCoordinator *csgclawinteraction.Coordinator,
+	llmSvc *llm.Service,
 ) (csgclawAdapterSource, error) {
 	if engine == nil || agentSvc == nil || imSvc == nil || participantSvc == nil || participantBridge == nil {
 		return nil, nil
@@ -1416,6 +1412,9 @@ func newCSGClawAdapterSource(
 		return nil, err
 	}
 	rendererOptions := []delivery.RendererOption{delivery.WithInteractionProjector(interactionCoordinator)}
+	if llmSvc != nil {
+		rendererOptions = append(rendererOptions, delivery.WithTaskTitleCallback(delivery.NewTaskTitleCallback(ctx, imSvc, agentSvc.Models(), llmSvc)))
+	}
 	adapterOptions := []execution.Option{
 		execution.WithDiagnostics(imSvc.Diagnostics()),
 		execution.WithRoomContextProvider(participantBridge.RoomContext),
@@ -1473,13 +1472,13 @@ func migrateLocalStore(ctx context.Context, configPath string) error {
 	// Loading models reads the same root state that migration locks. Resolve
 	// configuration outside that lock, but require it only for stored sandboxes.
 	cfg, providerErr := config.Load(path)
-	var provider sandbox.Provider
-	if providerErr == nil {
-		provider, providerErr = sandboxproviders.Provider(cfg.Sandbox)
-	}
 	if err := retiredclaws.MigrateAgents(ctx, root, func(ctx context.Context, agentID string) (sandbox.Runtime, error) {
 		if providerErr != nil {
 			return nil, providerErr
+		}
+		provider, err := sandboxproviders.Provider(cfg.Sandbox)
+		if err != nil {
+			return nil, err
 		}
 		return provider.Open(ctx, filepath.Join(root, config.AgentsDirName, agentID, config.RuntimeHomeDirName))
 	}); err != nil {
@@ -1487,6 +1486,22 @@ func migrateLocalStore(ctx context.Context, configPath string) error {
 	}
 	if err := localstore.MigrateMCPIdentities(filepath.Join(root, localstore.RootStateFileName)); err != nil {
 		return fmt.Errorf("migrate MCP identities: %w", err)
+	}
+	if err := retiredclaws.CleanupAgentSandboxHomes(ctx, root, func(ctx context.Context, home string) error {
+		return boxlitecli.NewProvider().CheckHomeStopped(ctx, home)
+	}, path); err != nil {
+		slog.Warn("retired Agent sandbox home cleanup incomplete; continuing startup and retrying later", "error", err)
+	}
+	// Retry config cleanup after Agent migration so desktop and daemon startup
+	// remove legacy provider input in the same successful upgrade.
+	if cfg, err := config.Load(path); err == nil {
+		cleanup := false
+		if !retiredclaws.PendingAgents(root) {
+			cleanup = cfg.ClearRetiredSandboxConfig()
+		}
+		if cleanup || cfg.NeedsMigrationRewrite() {
+			migrations.RewriteConfigBestEffort(path, func() error { return cfg.Save(path) }, retiredclaws.GeneratedBackupEntry)
+		}
 	}
 	return nil
 }

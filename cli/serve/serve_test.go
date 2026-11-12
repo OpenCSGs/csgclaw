@@ -985,9 +985,6 @@ func TestServeForegroundPassesContextToServer(t *testing.T) {
 		`access_token = "pc*****et"`,
 		`no_auth = true`,
 		`show_upgrade = true`,
-		`[sandbox]`,
-		fmt.Sprintf(`provider = %q`, config.DockerProvider),
-		`debian_registries_override = []`,
 		"CSGClaw IM is available at: http://example.test/",
 	} {
 		if !strings.Contains(got, want) {
@@ -1246,6 +1243,7 @@ func TestServeForegroundUsesSingleBuiltInIMAdapterSource(t *testing.T) {
 	var sourceBridge *im.ParticipantBridge
 	var cancelSubscription func()
 	NewCSGClawAdapterSource = func(
+		_ context.Context,
 		engine *agentengine.Engine,
 		_ *agent.Controller, _ *im.Service,
 		_ *im.Bus,
@@ -1253,6 +1251,7 @@ func TestServeForegroundUsesSingleBuiltInIMAdapterSource(t *testing.T) {
 		workReporter worklease.ParticipantWorkReporter,
 		bridge *im.ParticipantBridge,
 		_ *csgclawinteraction.Coordinator,
+		_ *llm.Service,
 	) (csgclawAdapterSource, error) {
 		if engine == nil || workReporter == nil || bridge == nil {
 			t.Fatal("built-in IM adapter dependencies were not assembled")
@@ -1608,16 +1607,12 @@ listen_addr = "0.0.0.0:18080"
 advertise_base_url = "http://192.168.2.52:18080"
 access_token = "yo*************en"
 no_auth = true
+local_single_user = false
 show_upgrade = true
 
 [bootstrap]
 default_manager_template = "builtin.manager-codex"
 default_worker_template = "builtin.dsh-worker"
-
-[sandbox]
-provider = "boxlite"
-# using default debian registries: ["harbor.opencsg.com", "docker.io"]
-debian_registries_override = []
 
 [hub]
 default_registry = "builtin"
@@ -1706,18 +1701,16 @@ func TestSandboxServiceOptionsSupportsConfiguredProvider(t *testing.T) {
 	}
 }
 
-func TestNewAgentServiceRejectsUnsupportedSandboxProvider(t *testing.T) {
+func TestNewAgentServiceIgnoresUnusedSandboxProvider(t *testing.T) {
 	_, err := newAgentService(config.Config{
 		Sandbox: config.SandboxConfig{
 			Provider: "not-a-sandbox-backend",
 		},
 	}, nil)
-	if err == nil {
-		t.Fatal("newAgentService() error = nil, want unsupported sandbox provider")
+	if err != nil {
+		t.Fatalf("unused provider blocked host runtime startup: %v", err)
 	}
-	if !strings.Contains(err.Error(), `unsupported sandbox provider "not-a-sandbox-backend"`) {
-		t.Fatalf("newAgentService() error = %q, want unsupported sandbox provider", err)
-	}
+
 }
 
 func TestNewAgentServiceAllowsMissingConfiguredBoxLiteAtStartup(t *testing.T) {
@@ -1878,7 +1871,7 @@ func stubServeDependencies(t *testing.T) func() {
 	NewFeishuBindingManager = func(*feishu.Service, agentengine.Interface) (feishuBindingManager, error) {
 		return nil, nil
 	}
-	NewCSGClawAdapterSource = func(*agentengine.Engine, *agent.Controller, *im.Service, *im.Bus, *participant.Service, worklease.ParticipantWorkReporter, *im.ParticipantBridge, *csgclawinteraction.Coordinator) (csgclawAdapterSource, error) {
+	NewCSGClawAdapterSource = func(context.Context, *agentengine.Engine, *agent.Controller, *im.Service, *im.Bus, *participant.Service, worklease.ParticipantWorkReporter, *im.ParticipantBridge, *csgclawinteraction.Coordinator, *llm.Service) (csgclawAdapterSource, error) {
 		return nil, nil
 	}
 	EnsureCLIProxy = func(context.Context) error { return nil }
@@ -2216,7 +2209,7 @@ func TestRefreshStartupModelProvidersSkipsCSGHub(t *testing.T) {
 		t.Fatal("platform startup probed models")
 		return agent.ModelProviderCheckResult{}
 	}
-	cfg := config.Config{Sandbox: config.SandboxConfig{Provider: "csghub"}}
+	cfg := config.Config{Server: config.ServerConfig{DeploymentMode: "csghub"}}
 	_, results, err := refreshStartupModelProviders(context.Background(), cfg, filepath.Join(t.TempDir(), "missing", "config.toml"), nil)
 	if err != nil || len(results) != 0 {
 		t.Fatalf("results = %v, error = %v", results, err)

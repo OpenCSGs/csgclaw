@@ -17,15 +17,35 @@ var (
 	errAgentWorkspaceNotFound = errors.New("agent not found")
 )
 
+// Authenticate before resolving any path. A configured workspace can alias
+// another directory or contain hard links to files stored in a different room.
+func (h *Handler) authorizeWorkspaceAccess(w http.ResponseWriter, r *http.Request) bool {
+	if appRequestAgentID(r) != "" || h.validateServerAccessToken(r.Header.Get("Authorization")) {
+		return true
+	}
+	w.Header().Set("WWW-Authenticate", `Bearer realm="csgclaw"`)
+	writeCodedAPIError(w, http.StatusUnauthorized, "unauthorized", "Workspace access requires authentication")
+	return false
+}
+
+func (h *Handler) requireWorkspaceAccess(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "private, no-store")
+		if h.authorizeWorkspaceAccess(w, r) {
+			next.ServeHTTP(w, r)
+		}
+	})
+}
+
 func (h *Handler) handleAgentWorkspace(w http.ResponseWriter, r *http.Request) {
 	h.handleAgentWorkspaceListing(w, r, func(id string) (string, error) {
-		return h.conversationWorkspaceRoot(id, r.URL.Query().Get("room_id"))
+		return h.requestWorkspaceRoot(r, id)
 	})
 }
 
 func (h *Handler) handleAgentWorkspaceFile(w http.ResponseWriter, r *http.Request) {
 	h.handleAgentWorkspaceFileRead(w, r, func(id string) (string, error) {
-		return h.conversationWorkspaceRoot(id, r.URL.Query().Get("room_id"))
+		return h.requestWorkspaceRoot(r, id)
 	})
 }
 
@@ -112,12 +132,31 @@ func (h *Handler) handleAgentWorkspaceFileRead(w http.ResponseWriter, r *http.Re
 	writeJSON(w, http.StatusOK, file)
 }
 
+func (h *Handler) configuredAgentWorkspace(agentID string, options map[string]any) (string, error) {
+	if root, ok := options["local_workspace_dir"].(string); ok && strings.TrimSpace(root) != "" {
+		return strings.TrimSpace(root), nil
+	}
+	if h.workspace == nil {
+		return "", errors.New("agent workspace service is unavailable")
+	}
+	return h.workspace.WorkspaceRootByID(agentID)
+}
+
+// MigrateSessionWorkspaces binds historical attachment IDs to their existing
+// file in the owning agent's configured workspace before HTTP serves downloads.
+func (h *Handler) MigrateSessionWorkspaces() error {
+	if h.im == nil || h.svc == nil {
+		return nil
+	}
+	return h.im.MigrateSessionWorkspaces(h.agentWorkspaceRoot)
+}
+
 func (h *Handler) agentWorkspaceRoot(id string) (string, error) {
 	item, ok := h.svc.Agent(id)
 	if !ok {
 		return "", errAgentWorkspaceNotFound
 	}
-	return h.workspace.WorkspaceRoot(item.Name)
+	return h.configuredAgentWorkspace(item.ID, item.RuntimeOptions)
 }
 
 // Room configuration locks the same root used by task execution, preview, and sharing.
@@ -149,6 +188,26 @@ func (h *Handler) conversationWorkspaceRoot(agentID, roomID string) (string, err
 	return root, nil
 }
 
+// A draft can preview a directory before its room exists. Only the management
+// client can select this root; a saved room always uses its locked directory.
+func (h *Handler) requestWorkspaceRoot(r *http.Request, agentID string) (string, error) {
+	query := r.URL.Query()
+	roomID, dir := query.Get("room_id"), strings.TrimSpace(query.Get("dir"))
+	root, err := h.conversationWorkspaceRoot(agentID, roomID)
+	if err != nil || dir == "" || strings.TrimSpace(roomID) != "" {
+		return root, err
+	}
+	auth := r.Header.Get("Authorization")
+	if appRequestAgentID(r) != "" || strings.HasPrefix(auth, "Bearer agent.") ||
+		(!h.validServerCredential(auth) && !localWorkspaceClient(r)) {
+		return "", errors.New("draft workspace selection requires local or management access")
+	}
+	if !filepath.IsAbs(dir) {
+		return "", errors.New("working directory must be absolute")
+	}
+	return filepath.Clean(dir), nil
+}
+
 func (h *Handler) agentSkillsRoot(id string) (string, error) {
 	item, ok := h.svc.Agent(id)
 	if !ok {
@@ -172,7 +231,7 @@ func (h *Handler) handleAgentWorkspaceContent(w http.ResponseWriter, r *http.Req
 		writeCodedAPIError(w, http.StatusServiceUnavailable, "workspace_file_unavailable", "Workspace is unavailable")
 		return
 	}
-	root, err := h.conversationWorkspaceRoot(strings.TrimSpace(pathValue(r, "id")), r.URL.Query().Get("room_id"))
+	root, err := h.requestWorkspaceRoot(r, strings.TrimSpace(pathValue(r, "id")))
 	if err != nil {
 		writeCodedAPIError(w, http.StatusNotFound, "workspace_file_unavailable", "Workspace is unavailable")
 		return

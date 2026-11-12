@@ -4,13 +4,18 @@ import (
 	"context"
 	"csgclaw/internal/activity"
 	"csgclaw/internal/agentengine/contract"
+	"csgclaw/internal/agentengine/lifecycle"
+	"csgclaw/internal/agentmemory"
 	"csgclaw/internal/diagnostics"
+	agentidentity "csgclaw/internal/identity"
 	"fmt"
 	"log/slog"
 	"reflect"
 	goruntime "runtime"
+	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -30,6 +35,8 @@ type conversationRuntimeAdapter interface {
 // identity, pending interactions, replay-safe event delivery, and terminal
 // result idempotency.
 type Engine struct {
+	lifecycle     *lifecycle.Coordinator
+	memory        atomic.Pointer[agentmemory.Store]
 	generateImage imageGenerator
 	generateVideo videoGenerator
 	agents        AgentInterface
@@ -140,16 +147,21 @@ func (c *conversations) Run(ctx context.Context, request TurnRequest, sink Event
 	if request.Continuation != ContinuationCreateOrResume && request.Continuation != ContinuationRequireExisting {
 		return failedResult(ErrorInvalidRequest, fmt.Sprintf("unsupported continuation policy %q", request.Continuation))
 	}
-	if request.Interaction != InteractionResolve && request.Interaction != InteractionReject && request.Interaction != InteractionSkipUserInput {
+	if !request.Interaction.Valid() {
 		return failedResult(ErrorInvalidRequest, fmt.Sprintf("unsupported interaction policy %q", request.Interaction))
 	}
-	if err := validateInput(request.Input); err != nil {
+	if err := contract.ValidateInput(request.Input); err != nil {
 		return TurnResult{Status: TurnFailed, Error: err}
 	}
 	if err := ctx.Err(); err != nil {
 		return resultFromContext(ctx, err)
 	}
 
+	if c.engine.agents != nil {
+		if selected, err := c.engine.agents.Get(ctx, c.agentID, AgentGetOptions{}); err == nil && selected.ArchivedAt != nil {
+			return failedResult(ErrorAgentUnavailable, "agent is archived")
+		}
+	}
 	identity := conversationIdentity{agentID: c.agentID, key: request.ConversationKey}
 	if replay, existing, preflightResult := c.engine.preflightTurn(identity, request); replay != nil {
 		return replayCompleted(ctx, sink, *replay)
@@ -193,6 +205,23 @@ func (c *conversations) Run(ctx context.Context, request TurnRequest, sink Event
 	}
 	slog.InfoContext(turn.ctx, "agent turn admitted", "agent_id", c.agentID, "conversation_key", request.ConversationKey)
 
+	if (request.ImageGeneration != nil || request.VideoGeneration != nil) && c.engine.lifecycle != nil {
+		release, err := c.engine.lifecycle.Execution(turn.ctx, agentidentity.CanonicalAgentID(c.agentID))
+		if err == nil {
+			defer release()
+			if selected, getErr := c.engine.agents.Get(turn.ctx, c.agentID, AgentGetOptions{}); getErr != nil {
+				err = getErr
+			} else if selected.ArchivedAt != nil {
+				err = fmt.Errorf("agent is archived")
+			}
+		}
+		if err != nil {
+			result := failedResult(ErrorAgentUnavailable, err.Error())
+			turn.cancel()
+			c.engine.complete(identity, turn, result)
+			return result
+		}
+	}
 	if request.ImageGeneration != nil {
 		if request.ImageGeneration.Model == nil && c.engine.agents != nil {
 			selected, err := c.engine.agents.Get(turn.ctx, c.agentID, AgentGetOptions{})
@@ -230,6 +259,11 @@ func (c *conversations) Run(ctx context.Context, request TurnRequest, sink Event
 		c.engine.complete(identity, turn, result)
 		return result
 	}
+	if result, handled := c.forgetMemory(turn.ctx, request.MemorySource); handled {
+		turn.cancel()
+		c.engine.complete(identity, turn, result)
+		return result
+	}
 	if c.engine.agents != nil {
 		selected, err := c.engine.agents.Get(turn.ctx, c.agentID, AgentGetOptions{})
 		if err == nil {
@@ -237,7 +271,12 @@ func (c *conversations) Run(ctx context.Context, request TurnRequest, sink Event
 			turn.ctx = contract.WithVideoGenerationHandler(turn.ctx, c.videoHandler(turn, sink, selected.Spec.Model.VideoGeneration))
 		}
 	}
-	c.engine.interactions.Interrupt(c.agentID, request.ConversationKey, "", true)
+	if err := c.engine.interactions.BeginTurn(c.agentID, request); err != nil {
+		result := TurnResult{Status: TurnFailed, Error: err}
+		turn.cancel()
+		c.engine.complete(identity, turn, result)
+		return result
+	}
 	runtimeAdapter, releaseRuntime, resolveErr := c.engine.runtimes.conversationRuntime(turn.ctx, c.agentID)
 	if resolveErr != nil {
 		diagnostics.From(turn.ctx).Failure(string(resolveErr.Code), "runtime.prepare", resolveErr.Message)
@@ -255,8 +294,13 @@ func (c *conversations) Run(ctx context.Context, request TurnRequest, sink Event
 		return c.engine.recordAndEmit(diagnostics.WithRecord(eventCtx, diagnostics.From(turn.ctx)), turn, sink, event)
 	})
 
+	if runtimeRequest.Interaction == InteractionTextOnly {
+		const guidance = "Question forms (request_user_input) are disabled for this turn. If you need clarification, ask in your reply and wait for the user's next message."
+		runtimeRequest.Input = append([]InputPart{{Kind: InputPartText, Text: guidance}}, runtimeRequest.Input...)
+	}
 	diagnostics.From(turn.ctx).Capture("runtime.input", runtimeRequest)
 	captureTurnInputFiles(turn.ctx, runtimeRequest)
+	memoryTicket := c.prepareMemory(&runtimeRequest)
 	result := runtimeAdapter.Run(turn.ctx, runtimeRequest, orderedSink)
 	for _, file := range result.RuntimeFiles {
 		captureTurnOutputFile(turn.ctx, file)
@@ -289,16 +333,18 @@ func (c *conversations) Run(ctx context.Context, request TurnRequest, sink Event
 	} else {
 		c.engine.interactions.Interrupt(c.agentID, request.ConversationKey, request.ID, false)
 	}
-	if result.Status == TurnSucceeded && request.Interaction == InteractionResolve && turn.structuredUserInput != nil {
-		interaction, err := c.engine.interactions.CreateDetached(c.agentID, request.ConversationKey, request.ID, *turn.structuredUserInput, func(interaction InteractionRequest) {
+	if result.Status == TurnSucceeded && request.Interaction.For(InteractionUserInput) == InteractionResolve && turn.structuredUserInput != nil {
+		interaction, err := c.engine.interactions.CreateDetached(c.agentID, request.ConversationKey, request.ID, *turn.structuredUserInput, request.Interaction, func(interaction InteractionRequest) {
 			c.engine.emitDetached(identity, turn, sink, interaction)
 		})
 		if err != nil {
 			result = failedResult(ErrorRuntimeFailed, err.Error())
+			result.Dispatched = true
 		} else {
 			result.Interactions = []InteractionRequest{interaction}
 		}
 	}
+	c.learnMemory(request, memoryTicket, result)
 	turn.cancel()
 	releaseRuntime()
 	c.engine.complete(identity, turn, result)
@@ -412,6 +458,18 @@ func (c *conversations) Reset(ctx context.Context, key ConversationKey) error {
 		return err
 	}
 	return nil
+}
+
+func (c *conversations) PendingInteractions(ctx context.Context, key ConversationKey) ([]InteractionRequest, error) {
+	if ctx != nil {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+	}
+	if c == nil || c.engine == nil || c.agentID == "" || key == "" {
+		return nil, &TurnError{Code: ErrorInvalidRequest, Message: "agent and conversation are required"}
+	}
+	return c.engine.interactions.Pending(c.agentID, key), nil
 }
 
 func (c *conversations) GetInteraction(ctx context.Context, key ConversationKey, id string) (InteractionRequest, error) {
@@ -691,6 +749,10 @@ func cloneCompletedTurn(input completedTurn) completedTurn {
 }
 
 func cloneTurnRequest(input TurnRequest) TurnRequest {
+	if input.Model != nil {
+		model := *input.Model
+		input.Model = &model
+	}
 	if input.RoomConfiguration != nil {
 		configuration := *input.RoomConfiguration
 		input.RoomConfiguration = &configuration
@@ -703,13 +765,7 @@ func cloneTurnRequest(input TurnRequest) TurnRequest {
 		task := contract.CloneVideoGenerationTask(*input.VideoGeneration)
 		input.VideoGeneration = &task
 	}
-	input.Input = append([]InputPart(nil), input.Input...)
-	for index := range input.Input {
-		if input.Input[index].File != nil {
-			fileCopy := *input.Input[index].File
-			input.Input[index].File = &fileCopy
-		}
-	}
+	input.Input = contract.CloneInput(input.Input)
 	return input
 }
 
@@ -722,6 +778,7 @@ func cloneTurnEvents(input []TurnEvent) []TurnEvent {
 }
 
 func cloneTurnEvent(input TurnEvent) TurnEvent {
+	input.RecoveredText = slices.Clone(input.RecoveredText)
 	if input.Tool != nil {
 		copy := *input.Tool
 		input.Tool = &copy
@@ -796,27 +853,6 @@ func normalizedInteraction(policy InteractionPolicy) InteractionPolicy {
 	return InteractionPolicy(strings.TrimSpace(strings.ToLower(string(policy))))
 }
 
-func validateInput(input []InputPart) *TurnError {
-	for _, part := range input {
-		switch part.Kind {
-		case InputPartText:
-			if part.File != nil || strings.TrimSpace(part.Text) == "" {
-				return &TurnError{Code: ErrorInvalidRequest, Message: "text input must contain only non-empty text"}
-			}
-		case InputPartFile:
-			if part.File == nil || strings.TrimSpace(part.Text) != "" {
-				return &TurnError{Code: ErrorInvalidRequest, Message: "file input must include only a file"}
-			}
-			if strings.TrimSpace(part.File.ID) == "" {
-				return &TurnError{Code: ErrorInvalidRequest, Message: "file ID is required"}
-			}
-		default:
-			return &TurnError{Code: ErrorInvalidRequest, Message: fmt.Sprintf("unsupported input kind %q", part.Kind)}
-		}
-	}
-	return nil
-}
-
 func failedResult(code ErrorCode, message string) TurnResult {
 	return TurnResult{Status: TurnFailed, Error: &TurnError{Code: code, Message: message}}
 }
@@ -839,4 +875,16 @@ func (e *Engine) emitDetached(identity conversationIdentity, turn *activeTurn, s
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	_ = emitTurnEvent(ctx, sink, event)
+}
+
+// interruptAgent cancels every active conversation, including image/video generation.
+func (e *Engine) interruptAgent(agentID string) {
+	e.mu.Lock()
+	for identity, turn := range e.active {
+		if agentidentity.CanonicalAgentID(identity.agentID) == agentID {
+			turn.cancel()
+		}
+	}
+	e.mu.Unlock()
+	e.interactions.Interrupt(agentID, "", "", true)
 }

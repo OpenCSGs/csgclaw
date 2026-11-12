@@ -1,0 +1,66 @@
+.workspace-tree-row {
+  --indent-step: 20px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 32px;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  padding: 4px 6px 4px calc(var(--workspace-tree-depth) * var(--indent-step));
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.5;
+  text-align: left;
+  cursor: default;
+}
+
+.workspace-tree-row:global(.file) {
+  cursor: pointer;
+}
+
+.workspace-tree-row:global(.file):hover,
+.workspace-tree-row:global(.file):global(.active) {
+  border-radius: 6px;
+  background: var(--primary-soft);
+  color: var(--primary-strong);
+}
+
+.workspace-tree-toggle {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.workspace-tree-toggle:global(.spacer) {
+  color: transparent;
+}
+
+.workspace-tree-toggle svg {
+  transform: rotate(90deg);
+  transition: transform 0.15s ease;
+}
+
+.workspace-tree-toggle svg:global(.collapsed) {
+  transform: rotate(0deg);
+}
+
+.workspace-tree-glyph {
+  width: 22px;
+  height: 22px;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+}
+
+.workspace-tree-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

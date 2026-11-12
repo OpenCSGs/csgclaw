@@ -28,12 +28,13 @@ type taskStore interface {
 }
 
 type Service struct {
-	mu        sync.Mutex
-	store     taskStore
-	agentTask agentTaskRunner
-	now       func() time.Time
-	state     state
-	inFlight  map[string]struct{}
+	checkAgent func(string) error
+	mu         sync.Mutex
+	store      taskStore
+	agentTask  agentTaskRunner
+	now        func() time.Time
+	state      state
+	inFlight   map[string]struct{}
 }
 
 func NewService(store taskStore, agentTask *agenttask.Service, opts ...Option) (*Service, error) {
@@ -112,9 +113,17 @@ func (s *Service) Create(input CreateInput) (Task, error) {
 	if s == nil {
 		return Task{}, fmt.Errorf("scheduled task service is required")
 	}
+	if s.checkAgent != nil {
+		if err := s.checkAgent(input.AgentID); err != nil {
+			return Task{}, err
+		}
+	}
 	title := strings.TrimSpace(input.Title)
 	agentID := agent.CanonicalID(input.AgentID)
 	prompt := strings.TrimSpace(input.Prompt)
+	if !validRecurrence(input.Recurrence) {
+		return Task{}, fmt.Errorf("recurrence must be once, daily, weekly, or monthly")
+	}
 	recurrence := normalizeRecurrence(input.Recurrence)
 	if title == "" {
 		return Task{}, fmt.Errorf("title is required")
@@ -177,6 +186,9 @@ func (s *Service) Update(input UpdateInput) (Task, error) {
 		item.Prompt = strings.TrimSpace(*input.Prompt)
 	}
 	if input.Recurrence != nil {
+		if !validRecurrence(*input.Recurrence) {
+			return Task{}, fmt.Errorf("recurrence must be once, daily, weekly, or monthly")
+		}
 		item.Recurrence = normalizeRecurrence(*input.Recurrence)
 	}
 	if input.NextRunAt != nil {
@@ -196,6 +208,11 @@ func (s *Service) Update(input UpdateInput) (Task, error) {
 	}
 	if item.Prompt == "" {
 		return Task{}, fmt.Errorf("prompt is required")
+	}
+	if item.Enabled && s.checkAgent != nil {
+		if err := s.checkAgent(item.AgentID); err != nil {
+			return Task{}, err
+		}
 	}
 	if item.Enabled && item.NextRunAt.IsZero() {
 		return Task{}, fmt.Errorf("next_run_at is required")
@@ -283,6 +300,12 @@ func (s *Service) Start(ctx context.Context) {
 }
 
 func (s *Service) trigger(ctx context.Context, item Task, advanceSchedule bool, skipIfActive bool) (Run, error) {
+	if s.checkAgent != nil {
+		if err := s.checkAgent(item.AgentID); err != nil {
+			return Run{}, err
+		}
+	}
+
 	now := s.now()
 	s.mu.Lock()
 	if s.inFlightLocked(item.ID) || s.hasActiveRunLocked(item.ID) {
@@ -317,11 +340,12 @@ func (s *Service) trigger(ctx context.Context, item Task, advanceSchedule bool, 
 		run.Error = "agent task service is not configured"
 	} else {
 		task, err := s.agentTask.CreateAgentTask(ctx, agenttask.CreateInput{
-			ID:        run.TaskID,
-			AgentID:   item.AgentID,
-			Title:     item.Title,
-			Body:      item.Prompt,
-			CreatedBy: schedulerCreatedBy,
+			ID:             run.TaskID,
+			AgentID:        item.AgentID,
+			Title:          item.Title,
+			Body:           item.Prompt,
+			CreatedBy:      schedulerCreatedBy,
+			NewTaskSession: true,
 		})
 		if err != nil {
 			run.Status = StatusFailed
@@ -340,7 +364,7 @@ func (s *Service) trigger(ctx context.Context, item Task, advanceSchedule bool, 
 		updated := next.Tasks[idx]
 		updated.LastRunAt = &now
 		updated.UpdatedAt = now
-		if advanceSchedule {
+		if advanceSchedule && updated.Enabled {
 			scheduledNext, ok := nextRunAt(updated, now)
 			updated.NextRunAt = scheduledNext
 			updated.Enabled = ok && !expired(updated, scheduledNext)
@@ -478,4 +502,32 @@ func taskIDForRunID(runID string) string {
 		return ""
 	}
 	return "task-" + runID
+}
+
+// SetAgentCheck is configured before the scheduler starts.
+func (s *Service) SetAgentCheck(check func(string) error) { s.checkAgent = check }
+func (s *Service) DisableAgent(id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	next := cloneServiceState(s.state)
+	for i := range next.Tasks {
+		if next.Tasks[i].AgentID == id {
+			next.Tasks[i].Enabled = false
+			next.Tasks[i].UpdatedAt = s.now()
+		}
+	}
+	if err := s.store.Save(next); err != nil {
+		return err
+	}
+	s.state = next
+	return nil
+}
+
+func validRecurrence(value string) bool {
+	switch strings.TrimSpace(value) {
+	case "", RecurrenceOnce, RecurrenceDaily, RecurrenceWeekly, RecurrenceMonthly:
+		return true
+	default:
+		return false
+	}
 }

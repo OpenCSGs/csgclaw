@@ -72,7 +72,7 @@ func (s *IMTranscriptStore) DeliverFinalMessage(
 	files []agentengine.OutputFile,
 ) error {
 	uploads, rejected := s.outputFileSources(ctx, turn.AgentID, files)
-	defer closeOutputFileSources(uploads)
+	defer CloseOutputFileSources(uploads)
 	text = outputFileDeliveryText(text, rejected, turn.Locale)
 	if strings.TrimSpace(text) == "" && len(uploads) == 0 {
 		return nil
@@ -97,6 +97,18 @@ func (s *IMTranscriptStore) outputFileSources(
 	agentID string,
 	files []agentengine.OutputFile,
 ) ([]im.AttachmentSource, []string) {
+	var store agentengine.FileInterface
+	if len(files) > 0 && s != nil && s.files != nil {
+		if conversation := s.files.Conversations(strings.TrimSpace(agentID)); conversation != nil {
+			store = conversation.Files()
+		}
+	}
+	return OpenOutputFileSources(ctx, store, files)
+}
+
+// OpenOutputFileSources opens verified Engine snapshots for IM attachment storage.
+// The caller must close all returned sources, including when a file was rejected.
+func OpenOutputFileSources(ctx context.Context, store agentengine.FileInterface, files []agentengine.OutputFile) ([]im.AttachmentSource, []string) {
 	uploads := make([]im.AttachmentSource, 0, len(files))
 	rejected := make([]string, 0)
 	for _, file := range files {
@@ -104,20 +116,11 @@ func (s *IMTranscriptStore) outputFileSources(
 		if name == "" {
 			name = "attachment"
 		}
-		if file.SizeBytes <= 0 {
+		if file.SizeBytes < 0 || store == nil {
 			rejected = append(rejected, name)
 			continue
 		}
-		if s == nil || s.files == nil {
-			rejected = append(rejected, name)
-			continue
-		}
-		conversation := s.files.Conversations(strings.TrimSpace(agentID))
-		if conversation == nil || conversation.Files() == nil {
-			rejected = append(rejected, name)
-			continue
-		}
-		content, err := conversation.Files().Get(ctx, file.ID)
+		content, err := store.Get(ctx, file.ID)
 		if err != nil {
 			rejected = append(rejected, name)
 			continue
@@ -130,14 +133,15 @@ func (s *IMTranscriptStore) outputFileSources(
 			continue
 		}
 		uploads = append(uploads, im.AttachmentSource{
-			Name: content.Metadata.Name, MediaType: content.Metadata.MediaType,
+			Name: content.Metadata.Name, SourcePath: content.SourcePath, MediaType: content.Metadata.MediaType,
 			SizeBytes: file.SizeBytes, SHA256: file.SHA256, Reader: outputFileReader{ReadCloser: content.Content, ctx: ctx},
 		})
 	}
 	return uploads, rejected
 }
 
-func closeOutputFileSources(sources []im.AttachmentSource) {
+// CloseOutputFileSources releases the Engine snapshots opened for delivery.
+func CloseOutputFileSources(sources []im.AttachmentSource) {
 	for _, source := range sources {
 		_ = source.Reader.Close()
 	}
@@ -157,8 +161,13 @@ func (r outputFileReader) Read(data []byte) (int, error) {
 
 func outputFileDeliveryText(text string, rejected []string, locale string) string {
 	text = strings.TrimSpace(text)
+	return text + OutputFileDeliveryNote(text, rejected, locale)
+}
+
+// OutputFileDeliveryNote appends the names of generated files that could not be delivered.
+func OutputFileDeliveryNote(text string, rejected []string, locale string) string {
 	if len(rejected) == 0 {
-		return text
+		return ""
 	}
 	names := make([]string, 0, len(rejected))
 	for _, name := range rejected {
@@ -168,10 +177,10 @@ func outputFileDeliveryText(text string, rejected []string, locale string) strin
 	if strings.HasPrefix(strings.ToLower(strings.TrimSpace(locale)), "zh") {
 		warning = "无法发送生成的文件：" + strings.Join(names, "、") + "。"
 	}
-	if text == "" {
+	if strings.TrimSpace(text) == "" {
 		return warning
 	}
-	return text + "\n\n" + warning
+	return "\n\n" + warning
 }
 
 // DeliverFailure keeps Runtime internals out of the transcript and preserves

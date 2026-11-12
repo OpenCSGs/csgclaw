@@ -1,0 +1,3659 @@
+import { PanelEmptyState } from "@/components/business/PanelEmptyState";
+import { EntityPane } from "@/components/business/EntityDetail";
+import profileFormLayoutStyles from "@/components/business/ProfileControls/ProfileFormLayout.module.css";
+import { TemplateProfilePanel } from "./TemplateProfilePanel";
+import { classNames } from "@/shared/lib/classNames";
+import {
+  templatePublicationStatus,
+  templatePublicationDestination,
+  templatePublicationTarget,
+  templateVersionLabel,
+} from "@/models/templatePublication";
+import { useTemplatePublication } from "./useTemplatePublication";
+import { useTemplateInstructionsEditor } from "./useTemplateInstructionsEditor";
+import { templateAvatar, templateInGroup, templateSourceLabelKey, type TemplateGroup } from "@/models/templateGroups";
+import { AgentAvatarImage } from "@/components/business/AgentAvatar";
+import { defaultAgentAvatar } from "@/shared/avatarOptions";
+import { agenticHubCreateAgentURL, agenticHubTemplatesURL } from "@/models/agenticHub";
+import { parseMCPServerDocument } from "@/models/mcpServerDocument";
+import { GlobalAppsPanel } from "@/components/business/Apps";
+import { ResourceListCard } from "@/components/business/ResourceListCard";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { ReactNode } from "react";
+import {
+  Search,
+  ChevronDown,
+  Plus,
+  AlertCircle,
+  BookOpen,
+  CheckCircle2,
+  CloudDownload,
+  ExternalLink,
+  FileCode2,
+  LoaderCircle,
+  RefreshCw,
+  Server,
+  Trash2,
+} from "lucide-react";
+import { ConnectorBoxesIcon, SidebarMcpIcon, SidebarPuzzlePiece02Icon } from "@/components/business/Icons";
+import { KnowledgeBaseDiscoveryDialog } from "@/components/business/KnowledgeBaseDiscoveryDialog";
+import { formatRuntimeKindLabel } from "@/models/agents";
+import {
+  canPublishHubTemplateToCommunity,
+  hubTemplateFullName,
+  hubTemplateReviewState,
+  isDeletableHubTemplate,
+  isHubTemplateMemoryEnabled,
+} from "@/models/hubWorkspace";
+import {
+  formatMCPServerDocument,
+  mcpServerDisplayName,
+  mcpManagedKnowledgeBaseSource,
+  mcpServerDescription,
+  mcpServersFromTemplateDocument,
+  mcpToolParameters,
+} from "@/models/mcp";
+import type { MCPProbeResult, MCPServerPayload, MCPServerSourceStatus, RemoteMCPServer } from "@/models/mcp";
+import { WorkspaceFilePreview, WorkspaceFileTree } from "@/components/business/WorkspaceFileTree";
+import { WorkspaceTemplatesIcon } from "@/components/business/Icons";
+import {
+  StatusBadge,
+  InlineError,
+  Field,
+  TextArea,
+  SegmentedControl,
+  Button,
+  LinkButton,
+  DropdownMenuRoot,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  Checkbox,
+  DismissibleAlert,
+  DialogBody,
+  DialogCloseButton,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogRoot,
+  DialogTitle,
+  TextInput,
+} from "@/components/ui";
+import type { LocaleCode, TranslateFn } from "@/models/conversations";
+import type { HubTemplate } from "@/models/hubWorkspace";
+import type { MCPServer } from "@/models/mcp";
+import type { RemoteKnowledgeBase } from "@/models/knowledgeBases";
+import { isReadonlySkill, skillSourceBadgeName } from "@/models/skillhub";
+import type { SkillFile, SkillSummary, SkillTree } from "@/models/skillhub";
+import type { WorkspaceEntry, WorkspaceFile } from "@/models/workspace";
+import { RemoteMCPList } from "./RemoteMCPList";
+import { TemplateVersionHistory } from "./TemplateVersionHistory";
+import styles from "./HubDetailPane.module.css";
+import skillResourceStyles from "./SkillResource.module.css";
+import mCPResourceStyles from "./MCPResource.module.css";
+import knowledgeBaseResourceStyles from "./KnowledgeBaseResource.module.css";
+import templateResourceStyles from "./TemplateResource.module.css";
+import { JSONConfigEditor } from "./JSONConfigEditor";
+
+const EMPTY_WORKSPACE_ENTRIES: readonly WorkspaceEntry[] = [];
+type TemplateDetailTabID = "profile" | "instructions" | "memory" | "skills" | "mcp" | "versions";
+type MCPCreateMode = "manual" | "remote";
+type SkillFilterTabID = "all" | "remote" | "local";
+type TemplateFilterTabID = TemplateGroup;
+type KnowledgeFilterTabID = "all" | "available" | "added";
+
+type TemplateSkillSummary = {
+  description: string;
+  name: string;
+};
+
+function knowledgeBaseUnavailableText(reason: string, t: TranslateFn): string {
+  switch (String(reason || "").trim()) {
+    case "missing_content":
+    case "content_not_ready":
+      return t("resourcesKnowledgeBaseNoActiveContent");
+    case "mcp_not_ready":
+      return t("resourcesKnowledgeBaseMCPNotReady");
+    case "remote_state_unavailable":
+      return t("resourcesKnowledgeBaseRemoteUnavailable");
+    default:
+      return reason;
+  }
+}
+
+function formatKnowledgeBaseMCPPreview(server: MCPServer | null, name = "", description = ""): string {
+  if (!server) {
+    return "";
+  }
+  const config = JSON.parse(
+    JSON.stringify(server.config, (key, value) =>
+      key.toLowerCase() === "authorization" ? "Bearer ${OPENCSG_TOKEN}" : value,
+    ),
+  ) as MCPServer["config"];
+  config.description = [name, description]
+    .map((value) => String(value || "").trim())
+    .filter(Boolean)
+    .join(" | ");
+  return formatMCPServerDocument(server.name, config);
+}
+
+function templateSectionEntries(
+  entries: readonly WorkspaceEntry[],
+  section: "instructions" | "memories" | "skills" | "mcps",
+): WorkspaceEntry[] {
+  const prefix = `${section}/`;
+  return entries
+    .filter((entry) => entry.path.startsWith(prefix))
+    .map((entry) => ({
+      ...entry,
+      path: entry.path.slice(prefix.length),
+      depth: Math.max(0, (entry.depth ?? 1) - 1),
+    }));
+}
+
+function templateSectionPath(path: string, section: "instructions" | "memories" | "skills" | "mcps"): string {
+  const prefix = `${section}/`;
+  return path.startsWith(prefix) ? path.slice(prefix.length) : "";
+}
+
+function firstTemplateSectionFile(
+  entries: readonly WorkspaceEntry[],
+  section: "instructions" | "memories" | "skills" | "mcps",
+  preferredName?: string,
+): string {
+  const prefix = `${section}/`;
+  const files = entries
+    .filter((entry) => entry.type === "file" && entry.path.startsWith(prefix))
+    .map((entry) => entry.path);
+  if (!files.length) {
+    return "";
+  }
+  if (preferredName) {
+    const preferred = files.find(
+      (path) => path.endsWith(`/${preferredName}`) || path === `${section}/${preferredName}`,
+    );
+    if (preferred) {
+      return preferred;
+    }
+  }
+  return files[0] || "";
+}
+
+function parseSkillMarkdownSummary(content: string): Pick<TemplateSkillSummary, "description"> {
+  const frontmatter = /^---\s*\n([\s\S]*?)\n---/.exec(content);
+  if (frontmatter) {
+    const description = parseYamlScalar(frontmatter[1] || "", "description");
+    if (description) {
+      return { description };
+    }
+  }
+  const firstParagraph =
+    content
+      .replace(/^---\s*\n[\s\S]*?\n---/, "")
+      .split(/\n{2,}/)
+      .map((block) =>
+        block
+          .split("\n")
+          .map((line) => line.replace(/^#+\s*/, "").trim())
+          .filter(Boolean)
+          .join(" "),
+      )
+      .find(Boolean) || "";
+  return { description: firstParagraph };
+}
+
+function parseYamlScalar(source: string, key: string): string {
+  const pattern = new RegExp(`^${key}:\\s*(.*)$`, "im");
+  const match = pattern.exec(source);
+  if (!match) {
+    return "";
+  }
+  return String(match[1] || "")
+    .trim()
+    .replace(/^["']|["']$/g, "");
+}
+
+function templateSkillSummaries(
+  entries: readonly WorkspaceEntry[],
+  workspaceFile: WorkspaceFile | null,
+  workspaceFiles: Readonly<Record<string, WorkspaceFile>>,
+): TemplateSkillSummary[] {
+  const skillNames = Array.from(
+    new Set(
+      entries
+        .filter((entry) => entry.path.startsWith("skills/"))
+        .map((entry) => entry.path.split("/")[1] || "")
+        .filter(Boolean),
+    ),
+  ).sort((left, right) => left.localeCompare(right));
+
+  return skillNames.map((name) => {
+    const skillPath = `skills/${name}/SKILL.md`;
+    const summaryFile = workspaceFiles[skillPath] || (workspaceFile?.path === skillPath ? workspaceFile : null);
+    const loadedDescription =
+      summaryFile && !summaryFile.binary ? parseSkillMarkdownSummary(summaryFile.content || "").description : "";
+    return {
+      name,
+      description: loadedDescription,
+    };
+  });
+}
+
+function templateMCPServerSummaries(
+  workspaceFile: WorkspaceFile | null,
+  workspaceFiles: Readonly<Record<string, WorkspaceFile>>,
+) {
+  const mcpFile = workspaceFiles["mcps/mcp.json"] || (workspaceFile?.path === "mcps/mcp.json" ? workspaceFile : null);
+  if (!mcpFile || mcpFile.binary) {
+    return [];
+  }
+  try {
+    return mcpServersFromTemplateDocument(JSON.parse(mcpFile.content || ""));
+  } catch {
+    return [];
+  }
+}
+
+function skillMatchesQuery(skill: SkillSummary, query: string): boolean {
+  const normalizedQuery = query.trim().toLocaleLowerCase();
+  if (!normalizedQuery) {
+    return true;
+  }
+  return [skill.name, skill.description, skill.source, skill.remotePath, skill.remoteURL].some((value) =>
+    String(value || "")
+      .toLocaleLowerCase()
+      .includes(normalizedQuery),
+  );
+}
+
+function skillMatchesFilter(skill: SkillSummary, filter: SkillFilterTabID): boolean {
+  if (filter === "all") {
+    return true;
+  }
+  const source = skillSourceBadgeName(skill);
+  if (filter === "local") {
+    return source === "local";
+  }
+  return source !== "local";
+}
+
+function skillFilterLabel(filter: SkillFilterTabID, t: TranslateFn): string {
+  switch (filter) {
+    case "remote":
+      return t("resourcesSkillRemoteFilter");
+    case "local":
+      return t("resourcesSkillLocalFilter");
+    default:
+      return t("resourcesSkillAllFilter");
+  }
+}
+
+function templateFilterLabel(filter: TemplateFilterTabID, t: TranslateFn): string {
+  if (filter === "official") return t("taskEntryOverview_official");
+  if (filter === "mine") return t("taskEntryOverview_personal");
+  if (filter === "public") return t("resourcesPublicTemplates");
+  return t("resourcesSkillAllFilter");
+}
+
+function templateMatchesQuery(template: HubTemplate, query: string): boolean {
+  const normalizedQuery = query.trim().toLocaleLowerCase();
+  if (!normalizedQuery) {
+    return true;
+  }
+  return [
+    template.id,
+    template.name,
+    template.display_name,
+    template.namespace,
+    template.description,
+    template.image,
+    template.runtime_kind,
+    template.workspace?.kind,
+    template.source?.kind,
+    template.source?.name,
+  ].some((value) =>
+    String(value || "")
+      .toLocaleLowerCase()
+      .includes(normalizedQuery),
+  );
+}
+
+function mcpMatchesQuery(server: MCPServer, query: string): boolean {
+  const normalizedQuery = query.trim().toLocaleLowerCase();
+  if (!normalizedQuery) {
+    return true;
+  }
+  return [
+    mcpServerDisplayName(server),
+    server.name,
+    server.description,
+    mcpServerDescription(server.config),
+    JSON.stringify(server.config),
+  ].some((value) =>
+    String(value || "")
+      .toLocaleLowerCase()
+      .includes(normalizedQuery),
+  );
+}
+
+function mcpMatchesFilter(server: MCPServer, filter: SkillFilterTabID): boolean {
+  if (filter === "all") {
+    return true;
+  }
+  const configType = String(server.config?.type || server.config?.transport || "")
+    .trim()
+    .toLocaleLowerCase();
+  const isRemote = configType.includes("remote") || Boolean(server.config?.url);
+  return filter === "remote" ? isRemote : !isRemote;
+}
+
+function knowledgeBaseMatchesQuery(item: RemoteKnowledgeBase, query: string): boolean {
+  const normalizedQuery = query.trim().toLocaleLowerCase();
+  if (!normalizedQuery) {
+    return true;
+  }
+  return [item.id, item.name, item.description, item.configuredMCPName, item.contentID].some((value) =>
+    String(value || "")
+      .toLocaleLowerCase()
+      .includes(normalizedQuery),
+  );
+}
+
+function knowledgeBaseMatchesFilter(item: RemoteKnowledgeBase, filter: KnowledgeFilterTabID): boolean {
+  if (filter === "all") {
+    return true;
+  }
+  if (filter === "added") {
+    return Boolean(item.configuredMCPName);
+  }
+  return item.availability === "available";
+}
+
+function knowledgeFilterLabel(filter: KnowledgeFilterTabID, t: TranslateFn): string {
+  switch (filter) {
+    case "available":
+      return t("resourcesKnowledgeBaseAvailable");
+    case "added":
+      return t("resourcesKnowledgeBaseAdded");
+    default:
+      return t("resourcesSkillAllFilter");
+  }
+}
+
+export function ResourceFeaturedIcon({ children }: { children: ReactNode }) {
+  return (
+    <span className={skillResourceStyles["hub-skill-featured-icon"]} aria-hidden="true">
+      <span className={skillResourceStyles["hub-skill-featured-icon-shadow"]}></span>
+      <span className={skillResourceStyles["hub-skill-featured-icon-glass"]}>{children}</span>
+    </span>
+  );
+}
+
+export function SkillFeaturedIcon() {
+  return (
+    <ResourceFeaturedIcon>
+      <SidebarPuzzlePiece02Icon size={16} aria-hidden="true" />
+    </ResourceFeaturedIcon>
+  );
+}
+
+export function ResourceSearchField({
+  onChange,
+  placeholder,
+  value,
+}: {
+  onChange: (value: string) => void;
+  placeholder: string;
+  value: string;
+}) {
+  return (
+    <label className={skillResourceStyles["hub-skill-search"]}>
+      <span className="sr-only">{placeholder}</span>
+      <TextInput
+        className={skillResourceStyles["hub-skill-search-input"]}
+        type="search"
+        value={value}
+        placeholder={placeholder}
+        aria-label={placeholder}
+        onChange={(event) => onChange(event.currentTarget.value)}
+      />
+    </label>
+  );
+}
+
+function ResourceListTitle({ children, count }: { children: ReactNode; count: number }) {
+  return (
+    <div className={skillResourceStyles["hub-skill-list-title-row"]}>
+      <h1>{children}</h1>
+      <span className={skillResourceStyles["hub-skill-list-count-badge"]}>{count}</span>
+    </div>
+  );
+}
+
+function MCPProbePanel({ result, t }: { result: MCPProbeResult; t: TranslateFn }) {
+  const serverLabel = result.serverInfo?.title || result.serverInfo?.name || "";
+  return (
+    <section className={mCPResourceStyles["mcp-probe-panel"]} aria-live="polite">
+      <div className={mCPResourceStyles["mcp-probe-header"]}>
+        <span className={mCPResourceStyles["mcp-probe-success-icon"]} aria-hidden="true">
+          <CheckCircle2 size={18} strokeWidth={2.2} />
+        </span>
+        <div className={mCPResourceStyles["mcp-probe-heading-copy"]}>
+          <strong>{t("resourcesMCPTestSuccess")}</strong>
+          <span>
+            {result.toolsSupported
+              ? t("resourcesMCPTestSuccessSummary", { count: result.tools.length })
+              : t("resourcesMCPToolsUnsupported")}
+          </span>
+        </div>
+        <div className={mCPResourceStyles["mcp-probe-meta"]}>
+          {serverLabel ? (
+            <span>
+              {serverLabel}
+              {result.serverInfo?.version ? ` ${result.serverInfo.version}` : ""}
+            </span>
+          ) : null}
+          {result.protocolVersion ? (
+            <span>{t("resourcesMCPProtocolVersion", { version: result.protocolVersion })}</span>
+          ) : null}
+          <span>{t("resourcesMCPTestDuration", { duration: result.durationMs })}</span>
+        </div>
+      </div>
+
+      {result.toolsSupported ? (
+        <div className={mCPResourceStyles["mcp-tools-section"]}>
+          <div className={mCPResourceStyles["mcp-tools-heading"]}>
+            <strong>{t("resourcesMCPToolsTitle")}</strong>
+            <span>{result.tools.length}</span>
+          </div>
+          {result.tools.length ? (
+            <div className={mCPResourceStyles["mcp-tools-list"]}>
+              {result.tools.map((tool) => {
+                const parameters = mcpToolParameters(tool);
+                const displayName = tool.title || tool.name;
+                return (
+                  <article key={tool.name} className={mCPResourceStyles["mcp-tool-card"]}>
+                    <div className={mCPResourceStyles["mcp-tool-title-row"]}>
+                      <strong>{displayName}</strong>
+                      {displayName !== tool.name ? <code>{tool.name}</code> : null}
+                    </div>
+                    {tool.description ? <p>{tool.description}</p> : null}
+                    {parameters.length ? (
+                      <div className={mCPResourceStyles["mcp-tool-parameters"]}>
+                        {parameters.map((parameter) => (
+                          <span
+                            key={parameter.name}
+                            className={classNames(
+                              mCPResourceStyles["mcp-tool-parameter"],
+                              parameter.required && mCPResourceStyles["mcp-tool-parameter-required"],
+                            )}
+                            title={parameter.description}
+                          >
+                            <code>{parameter.name}</code>
+                            <span>{parameter.type}</span>
+                            <em>
+                              {parameter.required
+                                ? t("resourcesMCPToolParameterRequired")
+                                : t("resourcesMCPToolParameterOptional")}
+                            </em>
+                          </span>
+                        ))}
+                      </div>
+                    ) : null}
+                  </article>
+                );
+              })}
+            </div>
+          ) : (
+            <div className={mCPResourceStyles["mcp-tools-empty"]}>{t("resourcesMCPToolsEmpty")}</div>
+          )}
+          {result.truncated ? (
+            <div className={mCPResourceStyles["mcp-tools-truncated"]}>
+              {t("resourcesMCPToolsTruncated", { count: result.tools.length })}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+type HubDetailPaneHub = {
+  detailPaneProps: {
+    deleteBusy?: boolean;
+    detailLoading?: boolean;
+    error: string;
+    loaded: boolean;
+    onDeleteSkill?: (item: SkillSummary | null | undefined) => Promise<boolean> | boolean;
+    onCreateMCP?: (payload: MCPServerPayload) => Promise<boolean> | boolean;
+    onCheckMCPSource?: () => Promise<MCPServerSourceStatus | null> | MCPServerSourceStatus | null;
+    onClearMCPProbe?: () => void;
+    onDeleteMCP?: (item: MCPServer | null | undefined) => Promise<boolean> | boolean;
+    onDeleteTemplate?: (item: HubTemplate | null | undefined) => unknown;
+    publishedTemplate?: HubTemplate | null;
+    onDismissPublishedTemplate?: () => void;
+    onPublishTemplate?: (
+      item: HubTemplate | null | undefined,
+      includeMemory?: boolean,
+    ) =>
+      | Promise<{ status: "success"; template?: HubTemplate } | null>
+      | { status: "success"; template?: HubTemplate }
+      | null;
+    onSelectMCP?: (name: string | null | undefined) => void;
+    onProbeMCP?: (payload: MCPServerPayload) => Promise<MCPProbeResult | null> | MCPProbeResult | null;
+    onSyncMCPSource?: () => Promise<boolean> | boolean;
+    onUpdateMCP?: (currentName: string, payload: MCPServerPayload) => Promise<boolean> | boolean;
+    onRetry: () => void | Promise<void>;
+    onSelectKnowledgeBase?: (item: RemoteKnowledgeBase | null | undefined) => void;
+    onSelectSkill?: (name: string | null | undefined) => void;
+    onSelectSkillFile?: (path: string) => void;
+    onSelectTemplate?: (item: HubTemplate | null | undefined) => void;
+    onSelectWorkspaceFile: (workspacePath: string) => void;
+    onUpdateTemplateInstructions?: (content: string) => boolean | Promise<boolean>;
+    onToggleWorkspaceDir?: (workspacePath: string) => void | Promise<void>;
+    mcpServers?: readonly MCPServer[];
+    mcpStateError?: string;
+    mcpStateLoading?: boolean;
+    mcpMutationBusy?: boolean;
+    mcpMutationError?: string;
+    mcpProbeBusy?: boolean;
+    mcpProbeError?: string;
+    mcpProbeResult?: MCPProbeResult | null;
+    mcpSourceBusy?: boolean;
+    mcpSourceError?: string;
+    mcpSourceStatus?: MCPServerSourceStatus | null;
+    mcpSourceSyncBusy?: boolean;
+    knowledgeBaseAdded?: boolean;
+    mcpAdded?: boolean;
+    mcpCreateError?: string;
+    mcpCreateSource?: "mcp" | "knowledge";
+    mcpCreateDialogOpen?: boolean;
+    mcpCreateInitialDocument?: string;
+    knowledgeBases?: {
+      cancelMCPConfig: () => void;
+      confirmMCPConfig: () => Promise<boolean>;
+      copyBusyID: string;
+      copyError: string;
+      discoveryHasMore: boolean;
+      discoveryItems: readonly RemoteKnowledgeBase[];
+      discoveryLoadError: string;
+      discoveryLoadMore: () => Promise<unknown>;
+      discoveryLoading: boolean;
+      discoveryLoadingMore: boolean;
+      discoveryRefetch: () => Promise<unknown>;
+      items: readonly RemoteKnowledgeBase[];
+      loginRequired: boolean;
+      loading: boolean;
+      loadError: string;
+      pendingMCPKnowledgeBase: RemoteKnowledgeBase | null;
+      requestMCPConfig: (id: string) => Promise<boolean>;
+      search: string;
+      selected: RemoteKnowledgeBase | null;
+      setSearch: (value: string) => void;
+    };
+    onMCPCreateDialogOpenChange?: (open: boolean) => void;
+    onOpenSkillUpload?: () => void;
+    onKnowledgeBaseLogin?: () => void | Promise<void>;
+    onInstallRemoteMCP?: (item: RemoteMCPServer) => Promise<boolean> | boolean;
+    onLoadMoreRemoteMCPServers?: () => Promise<unknown> | unknown;
+    onRefreshRemoteMCPServers?: () => Promise<unknown> | unknown;
+    onRemoteMCPServersSearchChange?: (value: string) => void;
+    onRemoteMCPVisibleChange?: (visible: boolean) => void;
+    remoteMCPInstallBusy?: string;
+    remoteMCPServers?: readonly RemoteMCPServer[];
+    remoteMCPServersError?: string;
+    remoteMCPServersHasMore?: boolean;
+    remoteMCPServersLoading?: boolean;
+    remoteMCPServersLoadingMore?: boolean;
+    remoteMCPServersSearch?: string;
+    selectedMCPServer?: MCPServer | null;
+    selectedMCPServerName?: string;
+    selectedResourceType?: "knowledge" | "mcp" | "skill" | "template";
+    selectedSkill: SkillSummary | null;
+    selectedSkillPath: string;
+    selectedTemplate: HubTemplate | null;
+    selectedTemplateId: string;
+    selectedWorkspacePath: string;
+    skillFile: SkillFile | null;
+    skillFileError: string;
+    skillFileLoading: boolean;
+    skillDeleteBusy?: boolean;
+    publishBusy?: boolean;
+    publishDisabled?: boolean;
+    publishError?: string;
+    onResetPublishError?: () => void;
+    skills: readonly SkillSummary[];
+    skillTree: SkillTree | null;
+    skillTreeError: string;
+    skillTreeLoading: boolean;
+    templates: readonly HubTemplate[];
+    workspaceFile: WorkspaceFile | null;
+    workspaceFileError: string;
+    workspaceFileLoading: boolean;
+    workspaceFiles?: Readonly<Record<string, WorkspaceFile>>;
+    workspaceEntries?: readonly WorkspaceEntry[];
+    workspaceTreeLoading?: boolean;
+    loadingWorkspaceDirs?: ReadonlySet<string>;
+  };
+};
+
+const EMPTY_HUB_DETAIL_PROPS: HubDetailPaneHub["detailPaneProps"] = {
+  deleteBusy: false,
+  error: "",
+  loaded: false,
+  onRetry: () => {},
+  mcpServers: [],
+  mcpStateError: "",
+  mcpStateLoading: false,
+  mcpMutationBusy: false,
+  mcpMutationError: "",
+  mcpProbeBusy: false,
+  mcpProbeError: "",
+  mcpProbeResult: null,
+  mcpCreateError: "",
+  mcpCreateSource: "mcp",
+  mcpCreateDialogOpen: false,
+  mcpCreateInitialDocument: "",
+  remoteMCPInstallBusy: "",
+  remoteMCPServers: [],
+  remoteMCPServersError: "",
+  remoteMCPServersHasMore: false,
+  remoteMCPServersLoading: false,
+  remoteMCPServersLoadingMore: false,
+  remoteMCPServersSearch: "",
+  selectedMCPServer: null,
+  selectedMCPServerName: "",
+  onSelectSkillFile: () => {},
+  onSelectWorkspaceFile: () => {},
+  onToggleWorkspaceDir: () => {},
+  onCreateMCP: () => false,
+  onCheckMCPSource: () => null,
+  onClearMCPProbe: () => {},
+  onDeleteMCP: () => false,
+  onProbeMCP: () => null,
+  onSyncMCPSource: () => false,
+  onUpdateMCP: () => false,
+  selectedResourceType: "template",
+  selectedSkill: null,
+  selectedSkillPath: "",
+  selectedTemplate: null,
+  selectedTemplateId: "",
+  selectedWorkspacePath: "",
+  skillFile: null,
+  skillFileError: "",
+  skillFileLoading: false,
+  skillDeleteBusy: false,
+  skills: [],
+  skillTree: null,
+  skillTreeError: "",
+  skillTreeLoading: false,
+  templates: [],
+  workspaceFile: null,
+  workspaceFileError: "",
+  workspaceFileLoading: false,
+  workspaceFiles: {},
+  workspaceEntries: [],
+  workspaceTreeLoading: false,
+  loadingWorkspaceDirs: new Set(),
+};
+
+const DEFAULT_MCP_SERVER_DOCUMENT =
+  '{\n  "mcpServers": {\n    "filesystem": {\n      "command": "npx",\n      "args": ["-y", "@modelcontextprotocol/server-filesystem", "${workspace}"],\n      "startup_timeout_sec": 60\n    }\n  }\n}';
+
+function HubPreviewEmptyIcon() {
+  return (
+    <svg
+      className="hub-preview-empty-icon"
+      width="32"
+      height="32"
+      viewBox="0 0 32 32"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+    >
+      <path
+        opacity="0.12"
+        d="M5.33337 13.3337V18.667C5.33337 22.4007 5.33337 24.2675 6.06 25.6936C6.69915 26.948 7.71902 27.9679 8.97344 28.607C10.3995 29.3337 12.2664 29.3337 16 29.3337C19.7337 29.3337 21.6006 29.3337 23.0266 28.607C24.2811 27.9679 25.3009 26.948 25.9401 25.6936C26.6667 24.2675 26.6667 22.4007 26.6667 18.667V12.8003C26.6667 12.0536 26.6667 11.6802 26.5214 11.395C26.3936 11.1441 26.1896 10.9401 25.9387 10.8123C25.6535 10.667 25.2801 10.667 24.5334 10.667H22.9334C21.4399 10.667 20.6932 10.667 20.1227 10.3763C19.621 10.1207 19.213 9.71273 18.9574 9.21097C18.6667 8.64054 18.6667 7.8938 18.6667 6.40033V4.80033C18.6667 4.05359 18.6667 3.68022 18.5214 3.395C18.3936 3.14412 18.1896 2.94015 17.9387 2.81232C17.6535 2.66699 17.2801 2.66699 16.5334 2.66699H16C12.2664 2.66699 10.3995 2.66699 8.97344 3.39362C7.71902 4.03277 6.69915 5.05264 6.06 6.30706C5.33337 7.73313 5.33337 9.59997 5.33337 13.3337Z"
+        fill="#4D6AD6"
+      />
+      <path
+        d="M18.6667 3.33366V6.40037C18.6667 7.89384 18.6667 8.64058 18.9574 9.21101C19.213 9.71277 19.621 10.1207 20.1227 10.3764C20.6932 10.667 21.4399 10.667 22.9334 10.667H26M12 16.0003H20M12 21.3337H17.3334M26.6667 11.9846V22.9337C26.6667 25.1739 26.6667 26.294 26.2307 27.1496C25.8472 27.9023 25.2353 28.5142 24.4827 28.8977C23.627 29.3337 22.5069 29.3337 20.2667 29.3337H11.7334C9.49317 29.3337 8.37306 29.3337 7.51741 28.8977C6.76476 28.5142 6.15284 27.9023 5.76935 27.1496C5.33337 26.294 5.33337 25.1739 5.33337 22.9337V9.06699C5.33337 6.82678 5.33337 5.70668 5.76935 4.85103C6.15284 4.09838 6.76476 3.48646 7.51741 3.10297C8.37306 2.66699 9.49316 2.66699 11.7334 2.66699H17.3491C18.3274 2.66699 18.8166 2.66699 19.277 2.77751C19.6851 2.8755 20.0753 3.03712 20.4332 3.25643C20.8368 3.5038 21.1828 3.8497 21.8746 4.54151L24.7922 7.45914C25.484 8.15095 25.8299 8.49685 26.0773 8.90052C26.2966 9.25841 26.4582 9.64859 26.5562 10.0567C26.6667 10.5171 26.6667 11.0063 26.6667 11.9846Z"
+        stroke="#4D6AD6"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+export type HubDetailPaneProps = {
+  agenticHubSiteURL?: string;
+  templateUsername?: string;
+  onTemplateLogin?: () => void;
+  hub?: HubDetailPaneHub;
+  inlineTemplateDetail?: boolean;
+  hideInlineTemplateHeader?: boolean;
+  inlineTemplateProfileIntro?: ReactNode;
+  inlineTemplateInstanceModel?: string;
+  locale?: LocaleCode;
+  onCreateFromTemplate?: (item: HubTemplate) => void | Promise<void>;
+  t?: TranslateFn;
+};
+
+export function HubDetailPane({
+  agenticHubSiteURL = "",
+  templateUsername = "",
+  onTemplateLogin,
+  t = (key) => key,
+  locale = "en",
+  hub,
+  inlineTemplateDetail = false,
+  hideInlineTemplateHeader = false,
+  inlineTemplateProfileIntro,
+  inlineTemplateInstanceModel,
+  onCreateFromTemplate = () => {},
+}: HubDetailPaneProps) {
+  const {
+    templates,
+    skills,
+    mcpServers = [],
+    selectedTemplate,
+    selectedTemplateId,
+    selectedSkill,
+    selectedSkillPath,
+    selectedMCPServer,
+    selectedResourceType = "template",
+    loaded,
+    error,
+    selectedWorkspacePath,
+    workspaceFile,
+    workspaceFileLoading,
+    workspaceFileError,
+    workspaceFiles = {},
+    skillTree,
+    skillTreeLoading,
+    skillTreeError,
+    skillFile,
+    skillFileLoading,
+    skillFileError,
+    mcpStateError = "",
+    mcpStateLoading = false,
+    mcpMutationBusy = false,
+    mcpMutationError = "",
+    mcpProbeBusy = false,
+    mcpProbeError = "",
+    mcpProbeResult = null,
+    mcpSourceBusy = false,
+    mcpSourceError = "",
+    mcpSourceStatus = null,
+    mcpSourceSyncBusy = false,
+    knowledgeBaseAdded = false,
+    mcpAdded = false,
+    mcpCreateError = "",
+    mcpCreateDialogOpen = false,
+    mcpCreateSource = "mcp",
+    mcpCreateInitialDocument = "",
+    knowledgeBases,
+    remoteMCPInstallBusy = "",
+    remoteMCPServers = [],
+    remoteMCPServersError = "",
+    remoteMCPServersHasMore = false,
+    remoteMCPServersLoading = false,
+    remoteMCPServersLoadingMore = false,
+    remoteMCPServersSearch = "",
+    onSelectWorkspaceFile,
+    onToggleWorkspaceDir,
+    workspaceEntries = EMPTY_WORKSPACE_ENTRIES,
+    workspaceTreeLoading = false,
+    onClearMCPProbe,
+    onCheckMCPSource,
+    onDeleteSkill,
+    onCreateMCP,
+    onDeleteMCP,
+    onDeleteTemplate,
+    onPublishTemplate,
+    onSelectMCP,
+    onSelectKnowledgeBase,
+    onSelectSkill,
+    onSelectSkillFile,
+    onSelectTemplate,
+    onMCPCreateDialogOpenChange,
+    onKnowledgeBaseLogin,
+    onInstallRemoteMCP,
+    onLoadMoreRemoteMCPServers,
+    onRefreshRemoteMCPServers,
+    onRemoteMCPServersSearchChange,
+    onRemoteMCPVisibleChange,
+    onOpenSkillUpload,
+    onProbeMCP,
+    onSyncMCPSource,
+    onUpdateMCP,
+    onUpdateTemplateInstructions,
+    deleteBusy = false,
+    publishedTemplate,
+    onDismissPublishedTemplate,
+    publishBusy = false,
+    publishDisabled = false,
+    publishError = "",
+    onResetPublishError,
+    skillDeleteBusy = false,
+  } = hub?.detailPaneProps ?? EMPTY_HUB_DETAIL_PROPS;
+  const canDeleteTemplate = isDeletableHubTemplate(selectedTemplate);
+  const templatesURL = agenticHubTemplatesURL(agenticHubSiteURL);
+  const canPublishTemplate = canPublishHubTemplateToCommunity(selectedTemplate);
+  const templateReview = hubTemplateReviewState(selectedTemplate);
+
+  const activeResourceType = useMemo(() => {
+    if (selectedResourceType === "knowledge") {
+      return "knowledge";
+    }
+    if (selectedResourceType === "mcp") {
+      return "mcp";
+    }
+    if (selectedResourceType === "skill") {
+      return "skill";
+    }
+    if (selectedResourceType === "template") {
+      return "template";
+    }
+    if (templates.length) {
+      return "template";
+    }
+    if (mcpServers.length) {
+      return "mcp";
+    }
+    if (skills.length) {
+      return "skill";
+    }
+    return "template";
+  }, [mcpServers.length, selectedResourceType, skills.length, templates.length]);
+  const [deleteSkillDialogOpen, setDeleteSkillDialogOpen] = useState(false);
+  const [publishSuccessDialogOpen, setPublishSuccessDialogOpen] = useState(false);
+  const [publishedTemplateID, setPublishedTemplateID] = useState("");
+  const publishSuccessURL = agenticHubCreateAgentURL(agenticHubSiteURL, publishedTemplate?.id || publishedTemplateID);
+  const dismissPublishSuccess = () => {
+    setPublishSuccessDialogOpen(false);
+    onDismissPublishedTemplate?.();
+  };
+  const [publishChoiceDialogOpen, setPublishChoiceDialogOpen] = useState(false);
+  const publishTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const [publishTemplateIncludeMemory, setPublishTemplateIncludeMemory] = useState(false);
+  const [mcpDeleteDialogOpen, setMCPDeleteDialogOpen] = useState(false);
+  const [knowledgeBaseDeleteDialogOpen, setKnowledgeBaseDeleteDialogOpen] = useState(false);
+  const [knowledgeBaseDiscoveryOpen, setKnowledgeBaseDiscoveryOpen] = useState(false);
+  const [showKnowledgeBaseAddedAlert, setShowKnowledgeBaseAddedAlert] = useState(false);
+  useEffect(() => {
+    if (knowledgeBaseAdded) {
+      setShowKnowledgeBaseAddedAlert(true);
+      const timer = window.setTimeout(() => setShowKnowledgeBaseAddedAlert(false), 4000);
+      return () => window.clearTimeout(timer);
+    }
+    setShowKnowledgeBaseAddedAlert(false);
+  }, [knowledgeBaseAdded]);
+  const [showMCPAddedAlert, setShowMCPAddedAlert] = useState(false);
+  useEffect(() => {
+    if (mcpAdded) {
+      setShowMCPAddedAlert(true);
+      const timer = window.setTimeout(() => setShowMCPAddedAlert(false), 4000);
+      return () => window.clearTimeout(timer);
+    }
+    setShowMCPAddedAlert(false);
+  }, [mcpAdded]);
+  function openKnowledgeBaseDiscovery(): void {
+    if (knowledgeBases?.loginRequired) {
+      void onKnowledgeBaseLogin?.();
+      return;
+    }
+    setKnowledgeBaseDiscoveryOpen(true);
+  }
+  const [mcpDraftDocument, setMCPDraftDocument] = useState(DEFAULT_MCP_SERVER_DOCUMENT);
+  const [mcpDetailDocument, setMCPDetailDocument] = useState("");
+  const [mcpDetailInitialDocument, setMCPDetailInitialDocument] = useState("");
+  const [mcpDetailError, setMCPDetailError] = useState("");
+  const [mcpFormError, setMCPFormError] = useState("");
+  const [appCatalogOpen, setAppCatalogOpen] = useState(false);
+  const mcpRequestedMode = useRef<MCPCreateMode>("manual");
+  const [mcpCreateMode, setMCPCreateMode] = useState<MCPCreateMode>("manual");
+  const [skillDetailDialogOpen, setSkillDetailDialogOpen] = useState(false);
+  const [skillFilter, setSkillFilter] = useState<SkillFilterTabID>("all");
+  const [skillSearch, setSkillSearch] = useState("");
+  const [templateDetailDialogOpen, setTemplateDetailDialogOpen] = useState(false);
+  const [templateFilter, setTemplateFilter] = useState<TemplateFilterTabID>("all");
+  const [templateSearch, setTemplateSearch] = useState("");
+  const [mcpDetailDialogOpen, setMCPDetailDialogOpen] = useState(false);
+  const [mcpFilter, setMCPFilter] = useState<SkillFilterTabID>("all");
+  const [mcpSearch, setMCPSearch] = useState("");
+  const [knowledgeBaseDetailDialogOpen, setKnowledgeBaseDetailDialogOpen] = useState(false);
+  const [knowledgeBaseFilter, setKnowledgeBaseFilter] = useState<KnowledgeFilterTabID>("all");
+  const [knowledgeBaseSearch, setKnowledgeBaseSearch] = useState("");
+
+  // Restore detail dialog visibility from route-driven selection on initial load / refresh
+  useEffect(() => {
+    if (selectedSkill) setSkillDetailDialogOpen(true);
+  }, [selectedSkill]);
+  const selectedTemplateID = selectedTemplate?.id;
+  const selectedTemplateAvatar = selectedTemplate ? templateAvatar(selectedTemplate) || defaultAgentAvatar() : "";
+  const selectedTemplateIsMine = Boolean(
+    selectedTemplate && templateInGroup(selectedTemplate, "mine", templateUsername),
+  );
+  useEffect(() => {
+    if (!selectedTemplateID) return;
+    setTemplateSearch("");
+    setTemplateFilter(selectedTemplateIsMine ? "mine" : "all");
+  }, [selectedTemplateID, selectedTemplateIsMine]);
+  useEffect(() => {
+    // Refreshing the same template must not reopen details over the agent creation form.
+    setTemplateDetailDialogOpen(Boolean(selectedTemplateID));
+  }, [selectedTemplateID]);
+  useEffect(() => {
+    if (selectedMCPServer) setMCPDetailDialogOpen(true);
+  }, [selectedMCPServer]);
+  useEffect(() => {
+    if (knowledgeBases?.selected) setKnowledgeBaseDetailDialogOpen(true);
+  }, [knowledgeBases?.selected]);
+  const filteredSkills = useMemo(
+    () => skills.filter((skill) => skillMatchesFilter(skill, skillFilter) && skillMatchesQuery(skill, skillSearch)),
+    [skillFilter, skillSearch, skills],
+  );
+  const skillFilterTabs = useMemo(
+    () =>
+      (["all", "remote", "local"] as const).map((id) => ({
+        id,
+        label:
+          id === "remote"
+            ? t("resourcesSkillSystemBadge")
+            : id === "local"
+              ? t("resourcesSkillInstalledTitle")
+              : skillFilterLabel(id, t),
+      })),
+    [t],
+  );
+  const resourceFilterTabs = useMemo(
+    () => (["all", "remote", "local"] as const).map((id) => ({ id, label: skillFilterLabel(id, t) })),
+    [t],
+  );
+  const templateFilterTabs = useMemo(
+    () =>
+      (["all", "official", "mine", "public"] as const).map((id) => ({
+        id,
+        label: templateFilterLabel(id, t),
+      })),
+    [t],
+  );
+  const knowledgeBaseFilterTabs = useMemo(
+    () =>
+      (["all", "available", "added"] as const).map((id) => ({
+        id,
+        label: knowledgeFilterLabel(id, t),
+      })),
+    [t],
+  );
+  const filteredTemplates = useMemo(
+    () =>
+      templates.filter(
+        (template) =>
+          templateInGroup(template, templateFilter, templateUsername) && templateMatchesQuery(template, templateSearch),
+      ),
+    [templateFilter, templateSearch, templateUsername, templates],
+  );
+  const filteredMCPServers = useMemo(
+    () => mcpServers.filter((server) => mcpMatchesFilter(server, mcpFilter) && mcpMatchesQuery(server, mcpSearch)),
+    [mcpFilter, mcpSearch, mcpServers],
+  );
+  const filteredKnowledgeBases = useMemo(
+    () =>
+      (knowledgeBases?.items ?? []).filter(
+        (item) =>
+          knowledgeBaseMatchesFilter(item, knowledgeBaseFilter) && knowledgeBaseMatchesQuery(item, knowledgeBaseSearch),
+      ),
+    [knowledgeBaseFilter, knowledgeBaseSearch, knowledgeBases?.items],
+  );
+  const configuredKnowledgeBaseMCP = useMemo(() => {
+    const name = knowledgeBases?.selected?.configuredMCPName;
+    return name ? mcpServers.find((server) => server.name === name) || null : null;
+  }, [knowledgeBases?.selected?.configuredMCPName, mcpServers]);
+  const knowledgeBaseMCPPreview = useMemo(
+    () =>
+      formatKnowledgeBaseMCPPreview(
+        configuredKnowledgeBaseMCP,
+        knowledgeBases?.selected?.name,
+        knowledgeBases?.selected?.description,
+      ),
+    [configuredKnowledgeBaseMCP, knowledgeBases?.selected?.description, knowledgeBases?.selected?.name],
+  );
+  const selectedManagedMCPSource = useMemo(
+    () => mcpManagedKnowledgeBaseSource(selectedMCPServer?.config),
+    [selectedMCPServer?.config],
+  );
+  const [activeTemplateTab, setActiveTemplateTab] = useState<TemplateDetailTabID>("profile");
+  const templateSection =
+    activeTemplateTab === "mcp" ? "mcps" : activeTemplateTab === "memory" ? "memories" : activeTemplateTab;
+  const templateSectionWorkspaceEntries = useMemo(
+    () =>
+      templateSection === "instructions" ||
+      templateSection === "memories" ||
+      templateSection === "skills" ||
+      templateSection === "mcps"
+        ? templateSectionEntries(workspaceEntries, templateSection)
+        : [],
+    [templateSection, workspaceEntries],
+  );
+  const templateSkillCount = useMemo(
+    () =>
+      new Set(
+        templateSectionEntries(workspaceEntries, "skills")
+          .map((entry) => entry.path.split("/")[0])
+          .filter(Boolean),
+      ).size,
+    [workspaceEntries],
+  );
+  const templateSkills = useMemo(
+    () => templateSkillSummaries(workspaceEntries, workspaceFile, workspaceFiles),
+    [workspaceEntries, workspaceFile, workspaceFiles],
+  );
+  const templateMCPServers = useMemo(
+    () => templateMCPServerSummaries(workspaceFile, workspaceFiles),
+    [workspaceFile, workspaceFiles],
+  );
+  const templateInstructionsFile =
+    workspaceFiles["instructions/AGENTS.md"] ||
+    (workspaceFile?.path === "instructions/AGENTS.md" ? workspaceFile : null);
+  const templateMemoryFile =
+    workspaceFiles["memories/memory_summary.md"] ||
+    (workspaceFile?.path === "memories/memory_summary.md" ? workspaceFile : null);
+  const templateInstructionsReadonly = selectedTemplate?.source?.kind !== "local";
+  const templateInstructionsIncomplete = Boolean(
+    templateInstructionsFile?.binary || templateInstructionsFile?.truncated,
+  );
+  const instructionsEditor = useTemplateInstructionsEditor({
+    templateId: selectedTemplateId,
+    content: templateInstructionsFile ? templateInstructionsFile.content || "" : null,
+    blocked:
+      templateInstructionsReadonly ||
+      workspaceFileLoading ||
+      Boolean(workspaceFileError) ||
+      templateInstructionsIncomplete,
+    onSave: onUpdateTemplateInstructions,
+  });
+  const templateInstructionsMode = instructionsEditor.mode;
+  const setTemplateInstructionsMode = instructionsEditor.setMode;
+  const templateInstructionsValue = instructionsEditor.value;
+  const templateMemoryEnabled = isHubTemplateMemoryEnabled(selectedTemplate);
+  useEffect(() => {
+    setKnowledgeBaseDeleteDialogOpen(false);
+  }, [knowledgeBases?.selected?.id]);
+  const templateTabs = useMemo(
+    () => [
+      { id: "profile" as const, label: t("agentProfileTab") },
+      { id: "instructions" as const, label: t("agentInstructions") },
+      ...(templateMemoryEnabled ? [{ id: "memory" as const, label: t("agentMemoryTab") }] : []),
+      {
+        id: "skills" as const,
+        label: t("agentProfileSkillsTab"),
+        count: templateSkillCount > 0 ? templateSkillCount : undefined,
+      },
+      {
+        id: "mcp" as const,
+        label: t("agentAppsTab"),
+        count: templateMCPServers.length > 0 ? templateMCPServers.length : undefined,
+      },
+      ...(selectedTemplate?.source?.kind === "local"
+        ? [
+            {
+              id: "versions" as const,
+              label: t("templateVersionsTab"),
+              count: selectedTemplate.version_count ?? 1,
+            },
+          ]
+        : []),
+    ],
+    [
+      t,
+      templateMCPServers.length,
+      templateMemoryEnabled,
+      templateSkillCount,
+      selectedTemplate?.source?.kind,
+      selectedTemplate?.version_count,
+    ],
+  );
+  useEffect(() => {
+    setActiveTemplateTab("profile");
+  }, [selectedTemplateId]);
+  useEffect(() => {
+    const directories = new Set<string>(["skills"]);
+    if (activeTemplateTab !== "profile" && activeTemplateTab !== "versions") {
+      directories.add(
+        activeTemplateTab === "mcp" ? "mcps" : activeTemplateTab === "memory" ? "memories" : activeTemplateTab,
+      );
+    }
+    if (activeTemplateTab === "skills") {
+      templateSkills.forEach((skill) => directories.add(`skills/${skill.name}`));
+    }
+    for (const directory of directories) {
+      if (workspaceEntries.some((entry) => entry.path === directory && entry.type === "dir")) {
+        void onToggleWorkspaceDir?.(directory);
+      }
+    }
+  }, [activeTemplateTab, onToggleWorkspaceDir, templateSkills, workspaceEntries]);
+  useEffect(() => {
+    if (activeTemplateTab !== "memory" || selectedWorkspacePath === "memories/memory_summary.md") {
+      return;
+    }
+    const memoryFile = firstTemplateSectionFile(workspaceEntries, "memories", "memory_summary.md");
+    if (memoryFile) {
+      onSelectWorkspaceFile(memoryFile);
+    }
+  }, [activeTemplateTab, onSelectWorkspaceFile, selectedWorkspacePath, workspaceEntries]);
+  useEffect(() => {
+    if (mcpCreateDialogOpen) {
+      setMCPDraftDocument(mcpCreateInitialDocument || DEFAULT_MCP_SERVER_DOCUMENT);
+      setMCPFormError("");
+      setMCPCreateMode(mcpRequestedMode.current);
+      if (mcpRequestedMode.current === "remote") onRemoteMCPVisibleChange?.(true);
+      mcpRequestedMode.current = "manual";
+    }
+  }, [onRemoteMCPVisibleChange, mcpCreateDialogOpen, mcpCreateInitialDocument]);
+  useEffect(() => {
+    if (!selectedMCPServer) {
+      setMCPDetailDocument("");
+      setMCPDetailInitialDocument("");
+      setMCPDetailError("");
+      return;
+    }
+    const formatted = formatMCPServerDocument(selectedMCPServer.name, selectedMCPServer.config);
+    setMCPDetailDocument(formatted);
+    setMCPDetailInitialDocument(formatted);
+    setMCPDetailError("");
+  }, [selectedMCPServer]);
+  const mcpDetailDirty = mcpDetailDocument !== mcpDetailInitialDocument;
+  async function handleDeleteSkillConfirm() {
+    const deleted = await onDeleteSkill?.(selectedSkill);
+    if (deleted) {
+      setDeleteSkillDialogOpen(false);
+      setSkillDetailDialogOpen(false);
+    }
+  }
+
+  async function handleSaveMCP() {
+    const result = parseMCPServerDocument(mcpDraftDocument, t);
+    if (result.kind !== "valid") {
+      setMCPFormError(result.kind === "structure" ? result.message : "");
+      return;
+    }
+    const saved = await onCreateMCP?.(result.payload);
+    if (saved) {
+      closeMCPFormDialog();
+    }
+  }
+
+  async function handleSaveMCPDetail() {
+    if (!selectedMCPServer) {
+      return;
+    }
+    const result = parseMCPServerDocument(mcpDetailDocument, t);
+    if (result.kind !== "valid") {
+      setMCPDetailError(result.kind === "structure" ? result.message : "");
+      return;
+    }
+    const saved = await onUpdateMCP?.(selectedMCPServer.name, result.payload);
+    if (saved) {
+      setMCPDetailError("");
+      setMCPDetailInitialDocument(mcpDetailDocument);
+    }
+  }
+
+  async function handleProbeMCPDetail() {
+    const result = parseMCPServerDocument(mcpDetailDocument, t);
+    if (result.kind !== "valid") {
+      setMCPDetailError(result.kind === "structure" ? result.message : "");
+      return;
+    }
+    setMCPDetailError("");
+    await onProbeMCP?.(result.payload);
+  }
+
+  async function handleCheckMCPSource() {
+    await onCheckMCPSource?.();
+  }
+
+  async function handleSyncMCPSource() {
+    await onSyncMCPSource?.();
+  }
+
+  async function handleDeleteMCPConfirm() {
+    const deleted = await onDeleteMCP?.(selectedMCPServer);
+    if (deleted) {
+      setMCPDeleteDialogOpen(false);
+      setMCPDetailDialogOpen(false);
+    }
+  }
+
+  async function handleDeleteKnowledgeBaseMCPConfirm() {
+    const deleted = await onDeleteMCP?.(configuredKnowledgeBaseMCP);
+    if (deleted) {
+      setKnowledgeBaseDeleteDialogOpen(false);
+      setKnowledgeBaseDetailDialogOpen(false);
+    }
+  }
+
+  const publishVersionLabel = templateVersionLabel(selectedTemplate) || t("templatePublishLegacyVersion");
+  const publication = useTemplatePublication(
+    selectedTemplate,
+    templates,
+    templateUsername,
+    agenticHubSiteURL,
+    publishBusy,
+  );
+  const hasCloudTemplateWithSameName = Boolean(publication.target);
+  const publishDestination = templatePublicationDestination(
+    selectedTemplate,
+    templates,
+    templateUsername,
+    agenticHubSiteURL,
+  );
+  const remoteVersion = templateVersionLabel(publication.remote);
+  const lastPublishedRevision = publication.target?.publication?.revision;
+  const communityVersionLabel = remoteVersion
+    ? t("templateCommunityVersion", { version: remoteVersion })
+    : lastPublishedRevision
+      ? t("templateLastPublishedVersion", { version: `V${lastPublishedRevision}` })
+      : t("templateViewCommunity");
+  const publicationStatus = selectedTemplate
+    ? templatePublicationStatus(selectedTemplate, publication.remote)
+    : "unknown";
+  const publicationBadge =
+    publicationStatus === "current"
+      ? t("templateCurrentVersionPublished")
+      : publicationStatus === "different"
+        ? t("templateCommunityVersionDifferent")
+        : lastPublishedRevision
+          ? t("templateLastPublishedVersion", { version: `V${lastPublishedRevision}` })
+          : t("templateCommunityVersionUnconfirmed");
+  const currentVersionPublished = publicationStatus === "current";
+  const publishActionLabel = currentVersionPublished
+    ? t("templateVersionPublished", { version: publishVersionLabel })
+    : templateVersionLabel(selectedTemplate)
+      ? t("templatePublishVersionAction", { version: publishVersionLabel })
+      : t("agentPublishCommunity");
+
+  async function handlePublishTemplate() {
+    const result = await onPublishTemplate?.(selectedTemplate, publishTemplateIncludeMemory);
+    if (result?.status === "success") {
+      setPublishedTemplateID(String(result.template?.id || ""));
+      setPublishChoiceDialogOpen(false);
+      setPublishSuccessDialogOpen(true);
+    }
+  }
+
+  function restorePublishFocus(event: Event) {
+    event.preventDefault();
+    // A success dialog takes over focus after publication. Return to the actual
+    // opener only when neither publication dialog remains open.
+    if (!publishChoiceDialogOpen && !publishSuccessDialogOpen && !publishedTemplate) {
+      const trigger = publishTriggerRef.current;
+      if (trigger?.isConnected && !trigger.disabled) trigger.focus();
+    }
+  }
+
+  function handleMCPDraftDocumentChange(value: string) {
+    setMCPDraftDocument(value);
+    const result = parseMCPServerDocument(value, t);
+    setMCPFormError(result.kind === "structure" ? result.message : "");
+  }
+
+  function handleMCPDetailDocumentChange(value: string) {
+    setMCPDetailDocument(value);
+    onClearMCPProbe?.();
+    const result = parseMCPServerDocument(value, t);
+    setMCPDetailError(result.kind === "structure" ? result.message : "");
+  }
+
+  function closeMCPFormDialog() {
+    setMCPFormError("");
+    setMCPCreateMode("manual");
+    onMCPCreateDialogOpenChange?.(false);
+  }
+
+  function selectTemplateTab(tab: TemplateDetailTabID) {
+    setActiveTemplateTab(tab);
+    if (tab !== "profile" && tab !== "versions") {
+      const selectedFile =
+        tab === "skills"
+          ? firstTemplateSectionFile(workspaceEntries, "skills", "SKILL.md")
+          : tab === "mcp"
+            ? firstTemplateSectionFile(workspaceEntries, "mcps", "mcp.json")
+            : tab === "memory"
+              ? firstTemplateSectionFile(workspaceEntries, "memories", "memory_summary.md")
+              : firstTemplateSectionFile(workspaceEntries, "instructions", "AGENTS.md");
+      onSelectWorkspaceFile(selectedFile);
+    }
+  }
+
+  function openSkillDetail(skill: SkillSummary) {
+    onSelectSkill?.(skill.name);
+    setSkillDetailDialogOpen(true);
+  }
+
+  function openTemplateDetail(template: HubTemplate) {
+    onSelectTemplate?.(template);
+    setTemplateDetailDialogOpen(true);
+  }
+
+  function openMCPDetail(server: MCPServer) {
+    onSelectMCP?.(server.name);
+    setMCPDetailDialogOpen(true);
+  }
+
+  function openKnowledgeBaseDetail(item: RemoteKnowledgeBase) {
+    onSelectKnowledgeBase?.(item);
+    setKnowledgeBaseDetailDialogOpen(true);
+  }
+
+  return (
+    <EntityPane
+      className={classNames(styles["hub-detail-pane"], hideInlineTemplateHeader && styles["hub-embedded-template"])}
+    >
+      {!loaded && !error && activeResourceType !== "mcp" ? (
+        <div className={styles["hub-loading-state"]} role="status" aria-live="polite">
+          <LoaderCircle className={styles["hub-loading-spinner"]} size={24} aria-hidden="true" />
+          <span>
+            {activeResourceType === "skill"
+              ? t("resourcesSkillsLoading")
+              : activeResourceType === "knowledge"
+                ? t("resourcesKnowledgeBasesLoading")
+                : t("resourcesLoading")}
+          </span>
+        </div>
+      ) : activeResourceType !== "knowledge" &&
+        activeResourceType !== "mcp" &&
+        !(inlineTemplateDetail && selectedTemplate) &&
+        templates.length === 0 &&
+        skills.length === 0 &&
+        mcpServers.length === 0 ? (
+        <PanelEmptyState title={t("resourcesEmpty")} mark="*" className={styles["hub-empty-state"]} />
+      ) : (
+        <div
+          className={classNames(
+            styles["hub-workbench"],
+            styles["hub-inspector-panel"],
+            activeResourceType === "template" &&
+              inlineTemplateDetail &&
+              selectedTemplate &&
+              activeTemplateTab === "versions" &&
+              styles["hub-template-versions-panel"],
+          )}
+        >
+          {activeResourceType === "knowledge" ? (
+            <div className={skillResourceStyles["hub-skill-list-page"]}>
+              <header className={skillResourceStyles["hub-skill-list-header"]}>
+                <div className={skillResourceStyles["hub-skill-list-heading"]}>
+                  <ResourceListTitle count={knowledgeBases?.items.length ?? 0}>
+                    {t("resourcesKnowledgeBasesLabel")}
+                  </ResourceListTitle>
+                  <p>{t("resourcesKnowledgeBasesDescription")}</p>
+                </div>
+                <Button variant="primary" size="md" onClick={openKnowledgeBaseDiscovery}>
+                  <span aria-hidden="true">+</span>
+                  {t("resourcesMCPAdd")}
+                </Button>
+              </header>
+
+              <ResourceSearchField
+                value={knowledgeBaseSearch}
+                placeholder={t("resourcesKnowledgeBaseSearchPlaceholder")}
+                onChange={setKnowledgeBaseSearch}
+              />
+
+              <section className={skillResourceStyles["hub-skill-list-section"]}>
+                <div
+                  className={styles["hub-skill-filter-tabs"]}
+                  role="tablist"
+                  aria-label={t("resourcesKnowledgeBasesLabel")}
+                >
+                  {knowledgeBaseFilterTabs.map((tab) => {
+                    const active = tab.id === knowledgeBaseFilter;
+                    return (
+                      <button
+                        key={tab.id}
+                        type="button"
+                        role="tab"
+                        aria-selected={active}
+                        className={classNames(styles["hub-skill-filter-tab"], active && "active")}
+                        onClick={() => setKnowledgeBaseFilter(tab.id)}
+                      >
+                        {tab.label}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {showKnowledgeBaseAddedAlert ? (
+                  <div className={knowledgeBaseResourceStyles["kb-added-alert"]} aria-live="polite">
+                    <CheckCircle2 size={16} aria-hidden="true" />
+                    <span>{t("resourcesKnowledgeBaseAddSuccess")}</span>
+                  </div>
+                ) : null}
+
+                {error || knowledgeBases?.loadError ? (
+                  <DismissibleAlert
+                    className={mCPResourceStyles["mcp-error-notice"]}
+                    aria-live="polite"
+                    messageKey={error || knowledgeBases?.loadError}
+                    closeLabel={t("close")}
+                  >
+                    <AlertCircle size={16} aria-hidden="true" />
+                    <span>{error || knowledgeBases?.loadError}</span>
+                  </DismissibleAlert>
+                ) : null}
+
+                {knowledgeBases?.loading ? (
+                  <div className="workspace-empty px-2.5 py-2 text-[13px] text-[var(--muted)]">
+                    {t("resourcesKnowledgeBasesLoading")}
+                  </div>
+                ) : filteredKnowledgeBases.length ? (
+                  <div className={styles["hub-skill-card-grid"]}>
+                    {filteredKnowledgeBases.map((item) => {
+                      const active = knowledgeBases?.selected?.id === item.id;
+                      return (
+                        <button
+                          key={item.id}
+                          type="button"
+                          className={classNames(styles["hub-skill-list-card"], active && "active")}
+                          onClick={() => openKnowledgeBaseDetail(item)}
+                        >
+                          <ResourceFeaturedIcon>
+                            <BookOpen size={16} strokeWidth={2} />
+                          </ResourceFeaturedIcon>
+                          <span className={skillResourceStyles["hub-skill-card-copy"]}>
+                            <span className={skillResourceStyles["hub-skill-card-title"]}>{item.name}</span>
+                            <span className={skillResourceStyles["hub-skill-card-description"]}>
+                              {item.description || item.name}
+                            </span>
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : knowledgeBases?.items.length ? (
+                  <PanelEmptyState title={t("workspaceSearchNoResults")} className={styles["hub-empty-state"]} />
+                ) : (
+                  <PanelEmptyState
+                    title={t("resourcesKnowledgeBasesEmpty")}
+                    icon={<BookOpen size={28} strokeWidth={1.5} aria-hidden="true" />}
+                    description={t("resourcesKnowledgeBasesEmptyHint")}
+                    actions={
+                      knowledgeBases?.loginRequired ? (
+                        <Button variant="primary" size="sm" onClick={() => void onKnowledgeBaseLogin?.()}>
+                          {t("resourcesKnowledgeBasesLogin")}
+                        </Button>
+                      ) : null
+                    }
+                    className={styles["hub-empty-state"]}
+                  />
+                )}
+              </section>
+            </div>
+          ) : activeResourceType === "template" && !(inlineTemplateDetail && selectedTemplate) ? (
+            <div className={skillResourceStyles["hub-skill-list-page"]}>
+              <header className={skillResourceStyles["hub-skill-list-header"]}>
+                <div className={skillResourceStyles["hub-skill-list-heading"]}>
+                  <ResourceListTitle count={templates.length}>{t("resourcesTemplatesSection")}</ResourceListTitle>
+                  <p>{t("resourcesTemplateListSubtitle")}</p>
+                </div>
+              </header>
+
+              <ResourceSearchField
+                value={templateSearch}
+                placeholder={t("resourcesTemplateSearchPlaceholder")}
+                onChange={setTemplateSearch}
+              />
+
+              <section className={skillResourceStyles["hub-skill-list-section"]}>
+                <div
+                  className={styles["hub-skill-filter-tabs"]}
+                  role="tablist"
+                  aria-label={t("resourcesTemplatesSection")}
+                >
+                  {templateFilterTabs.map((tab) => {
+                    const active = tab.id === templateFilter;
+                    return (
+                      <button
+                        key={tab.id}
+                        type="button"
+                        role="tab"
+                        aria-selected={active}
+                        className={classNames(styles["hub-skill-filter-tab"], active && "active")}
+                        onClick={() => setTemplateFilter(tab.id)}
+                      >
+                        {tab.label}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {error ? (
+                  <DismissibleAlert
+                    className={mCPResourceStyles["mcp-error-notice"]}
+                    aria-live="polite"
+                    messageKey={error}
+                    closeLabel={t("close")}
+                  >
+                    <AlertCircle size={16} aria-hidden="true" />
+                    <span>{error}</span>
+                  </DismissibleAlert>
+                ) : null}
+
+                {templateFilter === "mine" && !templateUsername ? (
+                  <div className="flex items-center gap-2 text-sm text-[var(--muted)]">
+                    <span>{t("resourcesMyTemplatesLoginHint")}</span>
+                    <Button variant="secondaryGray" size="sm" disabled={!onTemplateLogin} onClick={onTemplateLogin}>
+                      {t("csghubSignIn")}
+                    </Button>
+                  </div>
+                ) : null}
+                {filteredTemplates.length ? (
+                  <div className={styles["hub-skill-card-grid"]}>
+                    {filteredTemplates.map((template) => {
+                      const active = selectedTemplate?.id === template.id;
+                      const review = hubTemplateReviewState(template);
+                      const listPublication = templatePublicationTarget(
+                        template,
+                        templates,
+                        templateUsername,
+                        agenticHubSiteURL,
+                      );
+                      return (
+                        <button
+                          key={template.id}
+                          ref={(element) => {
+                            if (active) element?.scrollIntoView?.({ block: "nearest" });
+                          }}
+                          aria-current={active ? "true" : undefined}
+                          type="button"
+                          className={classNames(
+                            styles["hub-skill-list-card"],
+                            skillResourceStyles["hub-skill-list-card--no-check"],
+                            active && "active",
+                          )}
+                          onClick={() => openTemplateDetail(template)}
+                        >
+                          {templateAvatar(template) ? (
+                            <span className={styles["hub-template-avatar"]} aria-hidden="true">
+                              <AgentAvatarImage avatar={templateAvatar(template)} />
+                            </span>
+                          ) : (
+                            <ResourceFeaturedIcon>
+                              <WorkspaceTemplatesIcon />
+                            </ResourceFeaturedIcon>
+                          )}
+                          <span className={skillResourceStyles["hub-skill-card-copy"]}>
+                            <span className={skillResourceStyles["hub-skill-card-title"]}>
+                              {template.display_name?.trim() || hubTemplateFullName(template)}
+                              {listPublication ? (
+                                <StatusBadge kind="tag">
+                                  {listPublication.publication?.revision
+                                    ? t("templateLastPublishedVersion", {
+                                        version: `V${listPublication.publication.revision}`,
+                                      })
+                                    : t("templateCommunityVersionUnconfirmed")}
+                                </StatusBadge>
+                              ) : null}
+                            </span>
+                            <span className={skillResourceStyles["hub-skill-card-description"]}>
+                              {review
+                                ? review.kind === "pending"
+                                  ? t("resourcesTemplateReviewPending")
+                                  : t("resourcesTemplateReviewFailed")
+                                : template.description || template.id}
+                            </span>
+                          </span>
+                          {!(templateFilter === "mine" && !templateUsername) ? (
+                            <span className={styles["hub-template-source-badge"]} aria-hidden="true">
+                              <span className={styles["hub-template-source-badge-dot"]}></span>
+                              {t(templateSourceLabelKey(template, templateUsername))}
+                            </span>
+                          ) : null}
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : templates.length ? (
+                  <PanelEmptyState title={t("workspaceSearchNoResults")} className={styles["hub-empty-state"]} />
+                ) : (
+                  <PanelEmptyState title={t("resourcesEmpty")} className={styles["hub-empty-state"]} />
+                )}
+              </section>
+            </div>
+          ) : inlineTemplateDetail && selectedTemplate ? (
+            <>
+              {!hideInlineTemplateHeader ? (
+                <div className={styles["hub-inspector-hero"]}>
+                  <div className={classNames(styles["hub-inspector-hero-row"], styles["hub-template-hero-layout"])}>
+                    <div className={styles["hub-inspector-brand"]}>
+                      <div className={styles["hub-inspector-copy"]}>
+                        <div className={styles["hub-inspector-title-row"]}>
+                          {selectedTemplateAvatar ? (
+                            <span
+                              className={classNames(
+                                styles["hub-inspector-title-icon"],
+                                templateResourceStyles["hub-template-title-avatar"],
+                              )}
+                              aria-hidden="true"
+                            >
+                              <AgentAvatarImage avatar={selectedTemplateAvatar} />
+                            </span>
+                          ) : null}
+                          <h2>{hubTemplateFullName(selectedTemplate)}</h2>
+                          <div className={styles["hub-inspector-badge-row"]}>
+                            <StatusBadge kind="tag" className={"template-runtime-badge"}>
+                              {selectedTemplate.runtime_kind || selectedTemplate.workspace?.kind
+                                ? formatRuntimeKindLabel(
+                                    selectedTemplate.runtime_kind || selectedTemplate.workspace?.kind,
+                                    t,
+                                  )
+                                : "-"}
+                            </StatusBadge>
+                            <StatusBadge kind="tag" className={"template-source-badge"}>
+                              <span className={"template-source-badge-dot"} aria-hidden="true"></span>
+                              {t(templateSourceLabelKey(selectedTemplate, templateUsername))}
+                            </StatusBadge>
+                            {hasCloudTemplateWithSameName ? (
+                              <StatusBadge kind="tag">{publicationBadge}</StatusBadge>
+                            ) : null}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    {selectedTemplate.description ? (
+                      <p className={styles["hub-template-description"]}>{selectedTemplate.description}</p>
+                    ) : null}
+                    <div className={styles["hub-template-actions"]}>
+                      <Button
+                        variant="primary"
+                        size="md"
+                        title={t("iaTemplateCreateAgentHint")}
+                        onClick={() => onCreateFromTemplate?.(selectedTemplate)}
+                      >
+                        <span>{t("iaTemplateCreateAgent")}</span>
+                      </Button>
+                      {hasCloudTemplateWithSameName && templatesURL ? (
+                        <LinkButton
+                          variant="secondaryGray"
+                          size="md"
+                          href={templatesURL}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          {communityVersionLabel} <ExternalLink size={14} />
+                        </LinkButton>
+                      ) : null}
+                      {canPublishTemplate ? (
+                        <Button
+                          ref={publishTriggerRef}
+                          variant="secondaryGray"
+                          size="md"
+                          loading={publishBusy}
+                          disabled={publishBusy || publishDisabled || currentVersionPublished}
+                          title={publishDisabled ? t("agentPublishLoginRequired") : undefined}
+                          onClick={() => {
+                            onResetPublishError?.();
+                            setPublishTemplateIncludeMemory(false);
+                            setPublishChoiceDialogOpen(true);
+                          }}
+                        >
+                          {publishActionLabel}
+                        </Button>
+                      ) : null}
+                      {canDeleteTemplate ? (
+                        <Button
+                          variant="danger"
+                          size="md"
+                          loading={deleteBusy}
+                          disabled={deleteBusy}
+                          onClick={() => onDeleteTemplate?.(selectedTemplate)}
+                        >
+                          {t("resourcesDeleteTemplate")}
+                        </Button>
+                      ) : null}
+                    </div>
+                  </div>
+                  {templateReview ? (
+                    <div className={classNames(styles["hub-template-review-alert"], templateReview.kind)} role="status">
+                      <strong>
+                        {templateReview.kind === "pending"
+                          ? t("resourcesTemplateReviewPending")
+                          : t("resourcesTemplateReviewFailed")}
+                      </strong>
+                      {templateReview.kind === "exception" && templateReview.paths.length ? (
+                        <>
+                          <span>{t("resourcesTemplateReviewFailedFiles")}</span>
+                          <ul>
+                            {templateReview.paths.map((path, index) => (
+                              <li key={`${index}-${path}`}>{path}</li>
+                            ))}
+                          </ul>
+                        </>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+
+              <nav className={styles["hub-template-section-nav"]} aria-label={t("agentProfileSectionNavLabel")}>
+                {templateTabs.map((tab) => {
+                  const active = tab.id === activeTemplateTab;
+                  return (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      className={classNames(templateResourceStyles["hub-template-section-tab"], active && "active")}
+                      aria-current={active ? "location" : undefined}
+                      onClick={() => selectTemplateTab(tab.id)}
+                    >
+                      <span>{tab.label}</span>
+                      {typeof tab.count === "number" ? (
+                        <span
+                          className={templateResourceStyles["hub-template-section-tab-count"]}
+                          aria-label={String(tab.count)}
+                        >
+                          {tab.count}
+                        </span>
+                      ) : null}
+                    </button>
+                  );
+                })}
+              </nav>
+
+              {activeTemplateTab === "versions" && selectedTemplate.source?.kind === "local" ? (
+                <TemplateVersionHistory key={selectedTemplate.id} template={selectedTemplate} t={t} locale={locale} />
+              ) : null}
+              {activeTemplateTab === "versions" ? null : activeTemplateTab === "profile" ? (
+                <TemplateProfilePanel
+                  selectedTemplate={selectedTemplate}
+                  templateUsername={templateUsername}
+                  locale={locale}
+                  t={t}
+                  showHeading
+                  intro={inlineTemplateProfileIntro}
+                  instanceModel={inlineTemplateInstanceModel}
+                  templateModel={selectedTemplate.model_config?.model_id ?? undefined}
+                />
+              ) : activeTemplateTab === "instructions" ? (
+                <section
+                  className={classNames(
+                    `profile-section ${profileFormLayoutStyles["profile-section"]}`,
+                    styles["hub-template-instructions-section"],
+                  )}
+                >
+                  <div className={templateResourceStyles["hub-template-instructions-header"]}>
+                    <div className="profile-section-heading">
+                      <div className={`profile-section-title ${profileFormLayoutStyles["profile-section-title"]}`}>
+                        {t("agentInstructions")}
+                      </div>
+                      <p className="profile-section-description">
+                        {templateInstructionsMode === "default"
+                          ? t("resourcesTemplateInstructionsDefaultHint")
+                          : t("resourcesTemplateInstructionsAdvancedHint")}
+                      </p>
+                    </div>
+                    <SegmentedControl
+                      label={t("agentInstructionsViewMode")}
+                      size="sm"
+                      value={templateInstructionsMode}
+                      onChange={setTemplateInstructionsMode}
+                      options={[
+                        {
+                          value: "default",
+                          label: t("agentInstructionsDefaultMode"),
+                          disabled: instructionsEditor.saving,
+                        },
+                        {
+                          value: "advanced",
+                          label: t("agentInstructionsAdvancedMode"),
+                          disabled: instructionsEditor.saving,
+                        },
+                      ]}
+                    />
+                  </div>
+                  <div className={templateResourceStyles["hub-template-instructions-content"]}>
+                    {templateInstructionsReadonly ? (
+                      templateInstructionsValue.trim() ? (
+                        <div className={styles["hub-template-instructions-preview"]}>
+                          <div className={styles["hub-template-instructions-preview-bar"]}>
+                            <FileCode2 size={16} strokeWidth={2} aria-hidden="true" />
+                            <span>
+                              {templateInstructionsMode === "advanced"
+                                ? t("agentInstructionsEffective")
+                                : t("agentInstructionsDefaultMode")}
+                            </span>
+                          </div>
+                          <pre aria-label={t("agentInstructions")}>{templateInstructionsValue}</pre>
+                        </div>
+                      ) : (
+                        <div className={styles["hub-template-instructions-empty"]}>
+                          <span
+                            className={templateResourceStyles["hub-template-instructions-empty-icon"]}
+                            aria-hidden="true"
+                          >
+                            <FileCode2 size={20} strokeWidth={1.8} />
+                          </span>
+                          <strong>{t("resourcesTemplateInstructionsEmptyTitle")}</strong>
+                          <p>{t("resourcesTemplateInstructionsEmptyDescription")}</p>
+                          <Button
+                            variant="secondaryGray"
+                            size="sm"
+                            onClick={() => setTemplateInstructionsMode("advanced")}
+                          >
+                            {t("resourcesTemplateInstructionsViewAdvancedAction")}
+                          </Button>
+                        </div>
+                      )
+                    ) : (
+                      <div className={`profile-grid-compact ${profileFormLayoutStyles["profile-grid-compact"]}`}>
+                        <Field className={`span-2 ${profileFormLayoutStyles["span-2"]}`}>
+                          <TextArea
+                            aria-label={t("agentInstructions")}
+                            className={classNames(
+                              "compact-textarea",
+                              "hub-template-instructions-editor",
+                              templateInstructionsMode === "advanced" ? "is-advanced" : "is-default",
+                            )}
+                            value={templateInstructionsValue}
+                            disabled={!instructionsEditor.editable}
+                            onInput={(event) => {
+                              instructionsEditor.change(event.currentTarget.value);
+                            }}
+                            placeholder={t("agentInstructionsPlaceholder")}
+                          />
+                        </Field>
+                      </div>
+                    )}
+                  </div>
+                  {selectedTemplate.source?.kind === "local" ? (
+                    <div
+                      className={classNames(
+                        "form-actions",
+                        templateResourceStyles["hub-template-instructions-actions"],
+                      )}
+                    >
+                      <Button
+                        variant="primary"
+                        disabled={!instructionsEditor.canSave}
+                        loading={instructionsEditor.saving}
+                        loadingLabel={t("resourcesTemplateInstructionsSaving")}
+                        onClick={() => void instructionsEditor.save()}
+                      >
+                        {t("save")}
+                      </Button>
+                      {instructionsEditor.dirty && !instructionsEditor.conflict ? (
+                        <Button
+                          variant="secondaryGray"
+                          disabled={!instructionsEditor.editable}
+                          onClick={instructionsEditor.reload}
+                        >
+                          {t("resourcesTemplateInstructionsDiscard")}
+                        </Button>
+                      ) : null}
+                      <span
+                        role="status"
+                        aria-live="polite"
+                        className={templateResourceStyles["hub-template-instructions-status"]}
+                      >
+                        {instructionsEditor.saving
+                          ? t("resourcesTemplateInstructionsSaving")
+                          : workspaceFileLoading || !templateInstructionsFile
+                            ? t("resourcesTemplateInstructionsUnavailable")
+                            : instructionsEditor.dirty
+                              ? t("resourcesTemplateInstructionsUnsaved")
+                              : instructionsEditor.saved
+                                ? t("resourcesTemplateInstructionsSaved")
+                                : t("resourcesTemplateInstructionsUnchanged")}
+                      </span>
+                    </div>
+                  ) : null}
+                  {!templateInstructionsReadonly &&
+                  (instructionsEditor.failed ||
+                    instructionsEditor.conflict ||
+                    workspaceFileError ||
+                    templateInstructionsIncomplete) ? (
+                    <InlineError role="alert">
+                      {instructionsEditor.conflict
+                        ? t("resourcesTemplateInstructionsConflict")
+                        : instructionsEditor.failed
+                          ? t("agentInstructionsSaveFailed")
+                          : workspaceFileError || t("resourcesTemplateInstructionsIncomplete")}
+                      {instructionsEditor.conflict ? (
+                        <Button size="sm" variant="secondaryGray" onClick={instructionsEditor.reload}>
+                          {t("resourcesTemplateInstructionsReload")}
+                        </Button>
+                      ) : null}
+                    </InlineError>
+                  ) : null}
+                </section>
+              ) : activeTemplateTab === "memory" ? (
+                <section
+                  className={classNames(
+                    `profile-section ${profileFormLayoutStyles["profile-section"]}`,
+                    styles["hub-template-memory-panel"],
+                  )}
+                >
+                  <div className={templateResourceStyles["hub-template-memory-heading"]}>
+                    <div className="profile-section-heading">
+                      <div className={`profile-section-title ${profileFormLayoutStyles["profile-section-title"]}`}>
+                        memory_summary.md
+                      </div>
+                      <p className="profile-section-description">{t("resourcesTemplateMemoryDescription")}</p>
+                      <code className={templateResourceStyles["hub-template-memory-location"]}>
+                        memories/memory_summary.md
+                      </code>
+                    </div>
+                  </div>
+                  {workspaceFileError ? <InlineError>{workspaceFileError}</InlineError> : null}
+                  {workspaceFileLoading ? (
+                    <div className={styles["hub-template-memory-empty"]} role="status">
+                      <strong>{t("resourcesWorkspaceFileLoading")}</strong>
+                    </div>
+                  ) : templateMemoryFile && !templateMemoryFile.binary ? (
+                    <div
+                      className={classNames(
+                        "agent-section-form",
+                        templateResourceStyles["hub-template-memory-document-shell"],
+                      )}
+                    >
+                      <TextArea
+                        className={classNames("compact-textarea", styles["hub-template-memory-document"])}
+                        value={templateMemoryFile.content || ""}
+                        readOnly
+                        aria-label={t("agentMemoryDocumentLabel")}
+                      />
+                    </div>
+                  ) : (
+                    <div className={styles["hub-template-memory-empty"]}>
+                      <strong>{t("resourcesTemplateMemoryEmptyTitle")}</strong>
+                      <p>{t("resourcesTemplateMemoryEmptyDescription")}</p>
+                    </div>
+                  )}
+                </section>
+              ) : activeTemplateTab === "skills" ? (
+                <section
+                  className={classNames(
+                    `profile-section ${profileFormLayoutStyles["profile-section"]}`,
+                    templateResourceStyles["hub-template-summary-panel"],
+                    styles["hub-template-skills-panel"],
+                  )}
+                >
+                  <div className={templateResourceStyles["hub-template-summary-heading"]}>
+                    <div className="profile-section-heading">
+                      <div className={`profile-section-title ${profileFormLayoutStyles["profile-section-title"]}`}>
+                        {t("agentSkillsTitle")}
+                      </div>
+                      <p className="profile-section-description">{t("resourcesTemplateSkillsDescription")}</p>
+                    </div>
+                    <span className={templateResourceStyles["hub-template-summary-count"]}>
+                      {t("resourcesTemplateSkillsCount", { count: templateSkills.length })}
+                    </span>
+                  </div>
+                  {templateSkills.length ? (
+                    <div className={templateResourceStyles["hub-template-skills-list"]}>
+                      {templateSkills.map((skill) => (
+                        <article className={styles["hub-template-skill-row"]} key={skill.name}>
+                          <span className={templateResourceStyles["hub-template-skill-icon"]} aria-hidden="true">
+                            <FileCode2 size={18} strokeWidth={1.8} />
+                          </span>
+                          <div className={templateResourceStyles["hub-template-skill-copy"]}>
+                            <div className={templateResourceStyles["hub-template-skill-name"]}>{skill.name}</div>
+                            <p>{skill.description || "-"}</p>
+                          </div>
+                        </article>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className={templateResourceStyles["hub-template-skills-empty"]}>
+                      <span className={templateResourceStyles["hub-template-skill-icon"]} aria-hidden="true">
+                        <FileCode2 size={18} strokeWidth={1.8} />
+                      </span>
+                      <div>
+                        <strong>{t("resourcesSkillsEmpty")}</strong>
+                        <p>{t("resourcesTemplateSkillsEmptyHint")}</p>
+                      </div>
+                    </div>
+                  )}
+                </section>
+              ) : activeTemplateTab === "mcp" ? (
+                <section
+                  className={classNames(
+                    `profile-section ${profileFormLayoutStyles["profile-section"]}`,
+                    templateResourceStyles["hub-template-summary-panel"],
+                    styles["hub-template-mcp-panel"],
+                  )}
+                >
+                  <div className={templateResourceStyles["hub-template-summary-heading"]}>
+                    <div className="profile-section-heading">
+                      <div className={`profile-section-title ${profileFormLayoutStyles["profile-section-title"]}`}>
+                        {t("resourcesTemplateMCPServersTitle")}
+                      </div>
+                      <p className="profile-section-description">{t("resourcesTemplateMCPServersDescription")}</p>
+                    </div>
+                    <span className={templateResourceStyles["hub-template-summary-count"]}>
+                      {t("resourcesTemplateMCPServersCount", { count: templateMCPServers.length })}
+                    </span>
+                  </div>
+                  {templateMCPServers.length ? (
+                    <div className={templateResourceStyles["hub-template-mcp-list"]}>
+                      {templateMCPServers.map((server) => (
+                        <article className={styles["hub-template-mcp-row"]} key={server.name}>
+                          <span className={templateResourceStyles["hub-template-mcp-icon"]} aria-hidden="true">
+                            <Server size={18} strokeWidth={1.8} />
+                          </span>
+                          <div className={templateResourceStyles["hub-template-mcp-copy"]}>
+                            <div className={templateResourceStyles["hub-template-mcp-name"]}>
+                              {mcpServerDisplayName(server)}
+                            </div>
+                            <p>{server.description || mcpServerDescription(server.config) || "-"}</p>
+                          </div>
+                        </article>
+                      ))}
+                    </div>
+                  ) : workspaceFileLoading ? (
+                    <div className={templateResourceStyles["hub-template-mcp-empty"]}>
+                      <span className={templateResourceStyles["hub-template-mcp-icon"]} aria-hidden="true">
+                        <Server size={18} strokeWidth={1.8} />
+                      </span>
+                      <div>
+                        <strong>{t("resourcesWorkspaceFileLoading")}</strong>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className={templateResourceStyles["hub-template-mcp-empty"]}>
+                      <span className={templateResourceStyles["hub-template-mcp-icon"]} aria-hidden="true">
+                        <Server size={18} strokeWidth={1.8} />
+                      </span>
+                      <div>
+                        <strong>{t("resourcesMCPEmpty")}</strong>
+                        <p>{t("resourcesTemplateMCPServersEmptyHint")}</p>
+                      </div>
+                    </div>
+                  )}
+                </section>
+              ) : (
+                <div
+                  className={classNames(
+                    styles["hub-workspace-block"],
+                    templateResourceStyles["hub-template-tab-panel"],
+                  )}
+                >
+                  <div className={templateResourceStyles["hub-workspace-panels"]}>
+                    <WorkspaceFileTree
+                      key={`${selectedTemplateId}-${activeTemplateTab}`}
+                      className={templateResourceStyles["hub-workspace-tree"]}
+                      entries={templateSectionWorkspaceEntries}
+                      loading={workspaceTreeLoading}
+                      loadingText={t("resourcesWorkspaceLoading")}
+                      emptyText={t("resourcesWorkspacePreviewHint")}
+                      selectedPath={templateSectionPath(
+                        selectedWorkspacePath,
+                        templateSection as "instructions" | "memories" | "skills" | "mcps",
+                      )}
+                      onSelectFile={(path) => onSelectWorkspaceFile(`${templateSection}/${path}`)}
+                    />
+                    <WorkspaceFilePreview
+                      className={templateResourceStyles["hub-workspace-preview"]}
+                      file={workspaceFile}
+                      loading={workspaceFileLoading}
+                      error={workspaceFileError}
+                      loadingText={t("resourcesWorkspaceFileLoading")}
+                      emptyTitle={t("resourcesWorkspacePreviewTitle")}
+                      emptyHint={t("resourcesWorkspacePreviewHint")}
+                      emptyIcon={<HubPreviewEmptyIcon />}
+                      binaryText={t("resourcesWorkspaceBinary")}
+                      emptyFileText={t("resourcesWorkspaceEmptyFile")}
+                      previewText={t("workspacePreviewPreviewTab")}
+                      codeText={t("workspacePreviewCodeTab")}
+                      viewToggleLabel={t("workspacePreviewViewMode")}
+                      closeText={t("close")}
+                      truncatedText={t("workspacePreviewTruncated")}
+                    />
+                  </div>
+                </div>
+              )}
+            </>
+          ) : activeResourceType === "skill" ? (
+            <div className={skillResourceStyles["hub-skill-list-page"]}>
+              <header className={skillResourceStyles["hub-skill-list-header"]}>
+                <div className={skillResourceStyles["hub-skill-list-heading"]}>
+                  <ResourceListTitle count={skills.length}>{t("resourcesSkillsLabel")}</ResourceListTitle>
+                  <p>{t("resourcesSkillListSubtitle")}</p>
+                </div>
+                <Button variant="primary" size="md" onClick={() => onOpenSkillUpload?.()}>
+                  <span aria-hidden="true">+</span>
+                  {t("resourcesSkillAdd")}
+                </Button>
+              </header>
+
+              <ResourceSearchField
+                value={skillSearch}
+                placeholder={t("resourcesSkillSearchPlaceholder")}
+                onChange={setSkillSearch}
+              />
+
+              <section className={skillResourceStyles["hub-skill-list-section"]}>
+                <div className={styles["hub-skill-filter-tabs"]} role="tablist" aria-label={t("resourcesSkillsLabel")}>
+                  {skillFilterTabs.map((tab) => {
+                    const active = tab.id === skillFilter;
+                    return (
+                      <button
+                        key={tab.id}
+                        type="button"
+                        role="tab"
+                        aria-selected={active}
+                        className={classNames(styles["hub-skill-filter-tab"], active && "active")}
+                        onClick={() => setSkillFilter(tab.id)}
+                      >
+                        {tab.label}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {error ? (
+                  <DismissibleAlert
+                    className={mCPResourceStyles["mcp-error-notice"]}
+                    aria-live="polite"
+                    messageKey={error}
+                    closeLabel={t("close")}
+                  >
+                    <AlertCircle size={16} aria-hidden="true" />
+                    <span>{error}</span>
+                  </DismissibleAlert>
+                ) : null}
+
+                {filteredSkills.length ? (
+                  <div className={styles["hub-skill-card-grid"]}>
+                    {filteredSkills.map((skill) => {
+                      const active = selectedSkill?.name === skill.name;
+                      return (
+                        <ResourceListCard
+                          key={skill.name}
+                          title={skill.name}
+                          description={skill.description}
+                          icon={<SkillFeaturedIcon />}
+                          active={active}
+                          onOpen={() => openSkillDetail(skill)}
+                          actions={
+                            <span className={styles["hub-template-source-badge"]}>
+                              {skillSourceBadgeName(skill) === "local"
+                                ? t("resourcesSkillInstalledTitle")
+                                : t("resourcesSkillSystemBadge")}
+                            </span>
+                          }
+                        />
+                      );
+                    })}
+                  </div>
+                ) : skills.length ? (
+                  <PanelEmptyState title={t("workspaceSearchNoResults")} className={styles["hub-empty-state"]} />
+                ) : (
+                  <PanelEmptyState title={t("resourcesSkillsEmpty")} className={styles["hub-empty-state"]} />
+                )}
+              </section>
+            </div>
+          ) : activeResourceType === "mcp" ? (
+            <div className={classNames(skillResourceStyles["hub-skill-list-page"], styles["connector-page"])}>
+              <header className={skillResourceStyles["hub-skill-list-header"]}>
+                <div className={skillResourceStyles["hub-skill-list-heading"]}>
+                  <h1>{t("agentAppsTab")}</h1>
+                  <p>{t("connectorsDescription")}</p>
+                </div>
+                <DropdownMenuRoot>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="primary">
+                      <Plus size={16} />
+                      {t("connectorsAdd")}
+                      <ChevronDown size={14} />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent>
+                    <DropdownMenuItem onSelect={() => setAppCatalogOpen(true)}>
+                      <ConnectorBoxesIcon size={16} />
+                      <span>
+                        {t("connectorsAddApplication")}
+                        <small className={styles.connectorMenuHint}>{t("connectorsChooseType")}</small>
+                      </span>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onSelect={() => {
+                        mcpRequestedMode.current = "manual";
+                        onMCPCreateDialogOpenChange?.(true);
+                      }}
+                    >
+                      <FileCode2 size={16} />
+                      <span>
+                        {t("resourcesMCPManualTab")}
+                        <small className={styles.connectorMenuHint}>{t("connectorsManualHint")}</small>
+                      </span>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onSelect={() => {
+                        mcpRequestedMode.current = "remote";
+                        onMCPCreateDialogOpenChange?.(true);
+                      }}
+                    >
+                      <CloudDownload size={16} />
+                      <span>
+                        {t("resourcesMCPRemoteInstallTab")}
+                        <small className={styles.connectorMenuHint}>{t("connectorsRemoteHint")}</small>
+                      </span>
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenuRoot>
+              </header>
+
+              {showMCPAddedAlert ? (
+                <div className={knowledgeBaseResourceStyles["kb-added-alert"]} aria-live="polite">
+                  <CheckCircle2 size={16} aria-hidden="true" />
+                  <span>{t("resourcesMCPAddSuccess")}</span>
+                </div>
+              ) : null}
+
+              <div className={styles.connectorSearch}>
+                <Search size={18} aria-hidden="true" />
+                <ResourceSearchField value={mcpSearch} placeholder={t("connectorsSearch")} onChange={setMCPSearch} />
+              </div>
+
+              <GlobalAppsPanel
+                t={t}
+                embedded
+                search={mcpSearch}
+                catalogOpen={appCatalogOpen}
+                onCatalogOpenChange={setAppCatalogOpen}
+              />
+              <section className={skillResourceStyles["hub-skill-list-section"]}>
+                <h2 className={styles.connectorSectionTitle}>{t("connectorsTools")}</h2>
+                <div className={styles["hub-skill-filter-tabs"]} role="tablist" aria-label={t("resourcesMCPLabel")}>
+                  {resourceFilterTabs.map((tab) => {
+                    const active = tab.id === mcpFilter;
+                    return (
+                      <button
+                        key={tab.id}
+                        type="button"
+                        role="tab"
+                        aria-selected={active}
+                        className={classNames(styles["hub-skill-filter-tab"], active && "active")}
+                        onClick={() => setMCPFilter(tab.id)}
+                      >
+                        {tab.label}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {error || (!mcpCreateDialogOpen && mcpMutationError) || mcpProbeError ? (
+                  <DismissibleAlert
+                    className={mCPResourceStyles["mcp-error-notice"]}
+                    aria-live="polite"
+                    messageKey={error || (!mcpCreateDialogOpen && mcpMutationError) || mcpProbeError}
+                    closeLabel={t("close")}
+                  >
+                    <AlertCircle size={16} aria-hidden="true" />
+                    <span>{error || (!mcpCreateDialogOpen && mcpMutationError) || mcpProbeError}</span>
+                  </DismissibleAlert>
+                ) : null}
+
+                {filteredMCPServers.length ? (
+                  <div className={styles["hub-skill-card-grid"]}>
+                    {filteredMCPServers.map((server) => {
+                      const active = selectedMCPServer?.name === server.name;
+                      return (
+                        <button
+                          key={server.name}
+                          type="button"
+                          className={classNames(
+                            styles["hub-skill-list-card"],
+                            skillResourceStyles["hub-skill-list-card--no-check"],
+                            active && "active",
+                          )}
+                          onClick={() => openMCPDetail(server)}
+                        >
+                          <ResourceFeaturedIcon>
+                            <SidebarMcpIcon size={16} aria-hidden="true" />
+                          </ResourceFeaturedIcon>
+                          <span className={skillResourceStyles["hub-skill-card-copy"]}>
+                            <span className={skillResourceStyles["hub-skill-card-title"]}>
+                              {mcpServerDisplayName(server)}
+                            </span>
+                            <span className={skillResourceStyles["hub-skill-card-description"]}>
+                              {server.description ||
+                                mcpServerDescription(server.config) ||
+                                mcpServerDisplayName(server)}
+                            </span>
+                          </span>
+                          <span className={styles["hub-template-source-badge"]} aria-hidden="true">
+                            <span className={styles["hub-template-source-badge-dot"]}></span>
+                            {(() => {
+                              const configType = String(server.config?.type || server.config?.transport || "")
+                                .trim()
+                                .toLocaleLowerCase();
+                              const isRemote = configType.includes("remote") || Boolean(server.config?.url);
+                              return isRemote ? t("resourcesSkillRemoteFilter") : t("resourcesSkillLocalFilter");
+                            })()}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : mcpServers.length ? (
+                  <PanelEmptyState title={t("workspaceSearchNoResults")} className={styles["hub-empty-state"]} />
+                ) : mcpStateLoading ? (
+                  <div className="workspace-empty px-2.5 py-2 text-[13px] text-[var(--muted)]">
+                    {t("resourcesMCPLoading")}
+                  </div>
+                ) : (
+                  <PanelEmptyState title={t("resourcesMCPEmpty")} className={styles["hub-empty-state"]} />
+                )}
+              </section>
+            </div>
+          ) : (
+            <PanelEmptyState
+              title={
+                templates.length || skills.length || mcpServers.length ? t("resourcesLoading") : t("resourcesEmpty")
+              }
+              mark="*"
+              className={styles["hub-empty-state"]}
+            />
+          )}
+        </div>
+      )}
+      <DialogRoot
+        open={activeResourceType === "skill" && skillDetailDialogOpen && Boolean(selectedSkill)}
+        onOpenChange={(open) => {
+          setSkillDetailDialogOpen(open);
+          if (!open) onSelectSkill?.(null);
+        }}
+      >
+        <DialogContent className={skillResourceStyles["hub-standard-skill-dialog"]}>
+          {selectedSkill ? (
+            <>
+              <DialogHeader>
+                <div>
+                  <DialogTitle>{selectedSkill.name}</DialogTitle>
+                  <DialogDescription>{selectedSkill.description || selectedSkill.name}</DialogDescription>
+                </div>
+                <DialogCloseButton label={t("close")} size="md" variant="tertiaryGray" />
+              </DialogHeader>
+              <DialogBody className={styles["hub-standard-skill-dialog-body"]}>
+                <div
+                  className={classNames(
+                    templateResourceStyles["hub-workspace-panels"],
+                    skillResourceStyles["hub-skill-detail-file-panels"],
+                  )}
+                >
+                  <WorkspaceFileTree
+                    key={selectedSkill.name}
+                    className={templateResourceStyles["hub-workspace-tree"]}
+                    entries={skillTree?.entries ?? []}
+                    loading={skillTreeLoading}
+                    loadingText={t("resourcesSkillFilesLoading")}
+                    emptyText={skillTreeError || t("resourcesSkillPreviewHint")}
+                    selectedPath={selectedSkillPath}
+                    onSelectFile={onSelectSkillFile}
+                  />
+                  <WorkspaceFilePreview
+                    className={templateResourceStyles["hub-workspace-preview"]}
+                    file={skillFile}
+                    loading={skillFileLoading}
+                    error={skillFileError}
+                    loadingText={t("resourcesWorkspaceFileLoading")}
+                    emptyTitle={t("resourcesSkillPreviewTitle")}
+                    emptyHint={skillTreeError || t("resourcesSkillPreviewHint")}
+                    emptyIcon={<HubPreviewEmptyIcon />}
+                    binaryText={t("resourcesWorkspaceBinary")}
+                    emptyFileText={t("resourcesWorkspaceEmptyFile")}
+                    previewText={t("workspacePreviewPreviewTab")}
+                    codeText={t("workspacePreviewCodeTab")}
+                    viewToggleLabel={t("workspacePreviewViewMode")}
+                    closeText={t("close")}
+                    truncatedText={t("workspacePreviewTruncated")}
+                  />
+                </div>
+              </DialogBody>
+              {!isReadonlySkill(selectedSkill) && onDeleteSkill ? (
+                <DialogFooter>
+                  <Button
+                    className="mr-auto"
+                    variant="danger"
+                    size="md"
+                    disabled={skillDeleteBusy}
+                    onClick={() => setDeleteSkillDialogOpen(true)}
+                  >
+                    <Trash2 size={16} strokeWidth={2} aria-hidden="true" />
+                    {t("resourcesDeleteSkill")}
+                  </Button>
+                </DialogFooter>
+              ) : null}
+            </>
+          ) : null}
+        </DialogContent>
+      </DialogRoot>
+      <DialogRoot
+        open={
+          !inlineTemplateDetail &&
+          activeResourceType === "template" &&
+          templateDetailDialogOpen &&
+          !publishedTemplate &&
+          !publishSuccessDialogOpen &&
+          Boolean(selectedTemplate)
+        }
+        onOpenChange={(open) => {
+          setTemplateDetailDialogOpen(open);
+          if (!open) onSelectTemplate?.(null);
+        }}
+      >
+        <DialogContent className={skillResourceStyles["hub-standard-skill-dialog"]}>
+          {selectedTemplate ? (
+            <>
+              <DialogHeader>
+                <div>
+                  <DialogTitle>
+                    {hubTemplateFullName(selectedTemplate)}
+                    {hasCloudTemplateWithSameName ? <StatusBadge kind="tag">{publicationBadge}</StatusBadge> : null}
+                  </DialogTitle>
+                  <DialogDescription>{selectedTemplate.description || ""}</DialogDescription>
+                </div>
+                <DialogCloseButton label={t("close")} size="md" variant="tertiaryGray" />
+              </DialogHeader>
+              <DialogBody
+                className={classNames(
+                  styles["hub-standard-skill-dialog-body"],
+                  skillResourceStyles["hub-standard-resource-dialog-body"],
+                )}
+              >
+                {templateReview ? (
+                  <div className={classNames(styles["hub-template-review-alert"], templateReview.kind)} role="status">
+                    <strong>
+                      {templateReview.kind === "pending"
+                        ? t("resourcesTemplateReviewPending")
+                        : t("resourcesTemplateReviewFailed")}
+                    </strong>
+                    {templateReview.kind === "exception" && templateReview.paths.length ? (
+                      <ul>
+                        {templateReview.paths.map((path, index) => (
+                          <li key={`${index}-${path}`}>{path}</li>
+                        ))}
+                      </ul>
+                    ) : null}
+                  </div>
+                ) : null}
+                <nav className={styles["hub-template-section-nav"]} aria-label={t("agentProfileSectionNavLabel")}>
+                  {templateTabs.map((tab) => {
+                    const active = tab.id === activeTemplateTab;
+                    return (
+                      <button
+                        key={tab.id}
+                        type="button"
+                        className={classNames(templateResourceStyles["hub-template-section-tab"], active && "active")}
+                        aria-current={active ? "location" : undefined}
+                        onClick={() => selectTemplateTab(tab.id)}
+                      >
+                        <span>{tab.label}</span>
+                        {typeof tab.count === "number" ? (
+                          <span className={templateResourceStyles["hub-template-section-tab-count"]}>{tab.count}</span>
+                        ) : null}
+                      </button>
+                    );
+                  })}
+                </nav>
+                {activeTemplateTab === "versions" && selectedTemplate.source?.kind === "local" ? (
+                  <TemplateVersionHistory key={selectedTemplate.id} template={selectedTemplate} t={t} locale={locale} />
+                ) : null}
+                {activeTemplateTab === "versions" ? null : activeTemplateTab === "profile" ? (
+                  <TemplateProfilePanel
+                    selectedTemplate={selectedTemplate}
+                    templateUsername={templateUsername}
+                    locale={locale}
+                    t={t}
+                  />
+                ) : activeTemplateTab === "instructions" ? (
+                  <section
+                    className={classNames(
+                      `profile-section ${profileFormLayoutStyles["profile-section"]}`,
+                      styles["hub-template-instructions-section"],
+                    )}
+                  >
+                    <div className={templateResourceStyles["hub-template-instructions-header"]}>
+                      <div className="profile-section-heading">
+                        <div className={`profile-section-title ${profileFormLayoutStyles["profile-section-title"]}`}>
+                          {t("agentInstructions")}
+                        </div>
+                        <p className="profile-section-description">
+                          {templateInstructionsMode === "default"
+                            ? t("resourcesTemplateInstructionsDefaultHint")
+                            : t("resourcesTemplateInstructionsAdvancedHint")}
+                        </p>
+                      </div>
+                      <SegmentedControl
+                        label={t("agentInstructionsViewMode")}
+                        size="sm"
+                        value={templateInstructionsMode}
+                        onChange={setTemplateInstructionsMode}
+                        options={[
+                          { value: "default", label: t("agentInstructionsDefaultMode") },
+                          { value: "advanced", label: t("agentInstructionsAdvancedMode") },
+                        ]}
+                      />
+                    </div>
+                    {templateInstructionsValue.trim() ? (
+                      <div className={styles["hub-template-instructions-preview"]}>
+                        <div className={styles["hub-template-instructions-preview-bar"]}>
+                          <FileCode2 size={16} strokeWidth={2} aria-hidden="true" />
+                          <span>
+                            {templateInstructionsMode === "advanced"
+                              ? t("agentInstructionsEffective")
+                              : t("agentInstructionsDefaultMode")}
+                          </span>
+                        </div>
+                        <pre aria-label={t("agentInstructions")}>{templateInstructionsValue}</pre>
+                      </div>
+                    ) : (
+                      <div className={styles["hub-template-instructions-empty"]}>
+                        <span
+                          className={templateResourceStyles["hub-template-instructions-empty-icon"]}
+                          aria-hidden="true"
+                        >
+                          <FileCode2 size={20} strokeWidth={1.8} />
+                        </span>
+                        <strong>{t("resourcesTemplateInstructionsEmptyTitle")}</strong>
+                        <p>{t("resourcesTemplateInstructionsEmptyDescription")}</p>
+                        <Button
+                          variant="secondaryGray"
+                          size="md"
+                          onClick={() => setTemplateInstructionsMode("advanced")}
+                        >
+                          {t("resourcesTemplateInstructionsViewAdvancedAction")}
+                        </Button>
+                      </div>
+                    )}
+                    {!templateInstructionsReadonly ? (
+                      <Button
+                        size="md"
+                        variant="primary"
+                        disabled={!instructionsEditor.canSave}
+                        loading={instructionsEditor.saving}
+                        loadingLabel={t("resourcesTemplateInstructionsSaving")}
+                        onClick={() => void instructionsEditor.save()}
+                      >
+                        {t("save")}
+                      </Button>
+                    ) : null}
+                  </section>
+                ) : activeTemplateTab === "memory" ? (
+                  <section
+                    className={classNames(
+                      `profile-section ${profileFormLayoutStyles["profile-section"]}`,
+                      styles["hub-template-memory-panel"],
+                    )}
+                  >
+                    {workspaceFileLoading ? (
+                      <div className={styles["hub-template-memory-empty"]} role="status">
+                        <strong>{t("resourcesWorkspaceFileLoading")}</strong>
+                      </div>
+                    ) : templateMemoryFile && !templateMemoryFile.binary ? (
+                      <div
+                        className={classNames(
+                          "agent-section-form",
+                          templateResourceStyles["hub-template-memory-document-shell"],
+                        )}
+                      >
+                        <TextArea
+                          className={classNames("compact-textarea", styles["hub-template-memory-document"])}
+                          value={templateMemoryFile.content || ""}
+                          readOnly
+                          aria-label={t("agentMemoryDocumentLabel")}
+                        />
+                      </div>
+                    ) : (
+                      <div className={styles["hub-template-memory-empty"]}>
+                        <strong>{t("resourcesTemplateMemoryEmptyTitle")}</strong>
+                        <p>{t("resourcesTemplateMemoryEmptyDescription")}</p>
+                      </div>
+                    )}
+                  </section>
+                ) : activeTemplateTab === "skills" ? (
+                  <section
+                    className={classNames(
+                      `profile-section ${profileFormLayoutStyles["profile-section"]}`,
+                      templateResourceStyles["hub-template-summary-panel"],
+                      styles["hub-template-skills-panel"],
+                    )}
+                  >
+                    <div className={templateResourceStyles["hub-template-summary-heading"]}>
+                      <div className={`profile-section-title ${profileFormLayoutStyles["profile-section-title"]}`}>
+                        {t("agentSkillsTitle")}
+                      </div>
+                      <span className={templateResourceStyles["hub-template-summary-count"]}>
+                        {t("resourcesTemplateSkillsCount", { count: templateSkills.length })}
+                      </span>
+                    </div>
+                    {templateSkills.length ? (
+                      <div className={templateResourceStyles["hub-template-skills-list"]}>
+                        {templateSkills.map((skill) => (
+                          <article className={styles["hub-template-skill-row"]} key={skill.name}>
+                            <span className={templateResourceStyles["hub-template-skill-icon"]} aria-hidden="true">
+                              <FileCode2 size={18} strokeWidth={1.8} />
+                            </span>
+                            <div className={templateResourceStyles["hub-template-skill-copy"]}>
+                              <div className={templateResourceStyles["hub-template-skill-name"]}>{skill.name}</div>
+                              <p>{skill.description || "-"}</p>
+                            </div>
+                          </article>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className={templateResourceStyles["hub-template-skills-empty"]}>
+                        <strong>{t("resourcesSkillsEmpty")}</strong>
+                        <p>{t("resourcesTemplateSkillsEmptyHint")}</p>
+                      </div>
+                    )}
+                  </section>
+                ) : (
+                  <section
+                    className={classNames(
+                      `profile-section ${profileFormLayoutStyles["profile-section"]}`,
+                      templateResourceStyles["hub-template-summary-panel"],
+                      styles["hub-template-mcp-panel"],
+                    )}
+                  >
+                    <div className={templateResourceStyles["hub-template-summary-heading"]}>
+                      <div className={`profile-section-title ${profileFormLayoutStyles["profile-section-title"]}`}>
+                        {t("resourcesTemplateMCPServersTitle")}
+                      </div>
+                      <span className={templateResourceStyles["hub-template-summary-count"]}>
+                        {t("resourcesTemplateMCPServersCount", { count: templateMCPServers.length })}
+                      </span>
+                    </div>
+                    {templateMCPServers.length ? (
+                      <div className={templateResourceStyles["hub-template-mcp-list"]}>
+                        {templateMCPServers.map((server) => (
+                          <article className={styles["hub-template-mcp-row"]} key={server.name}>
+                            <span className={templateResourceStyles["hub-template-mcp-icon"]} aria-hidden="true">
+                              <Server size={18} strokeWidth={1.8} />
+                            </span>
+                            <div className={templateResourceStyles["hub-template-mcp-copy"]}>
+                              <div className={templateResourceStyles["hub-template-mcp-name"]}>
+                                {mcpServerDisplayName(server)}
+                              </div>
+                              <p>{server.description || mcpServerDescription(server.config) || "-"}</p>
+                            </div>
+                          </article>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className={templateResourceStyles["hub-template-mcp-empty"]}>
+                        <strong>{t("resourcesMCPEmpty")}</strong>
+                        <p>{t("resourcesTemplateMCPServersEmptyHint")}</p>
+                      </div>
+                    )}
+                  </section>
+                )}
+              </DialogBody>
+              <DialogFooter>
+                {canDeleteTemplate ? (
+                  <Button
+                    variant="danger"
+                    size="md"
+                    loading={deleteBusy}
+                    disabled={deleteBusy}
+                    onClick={() => onDeleteTemplate?.(selectedTemplate)}
+                  >
+                    {t("resourcesDeleteTemplate")}
+                  </Button>
+                ) : null}
+                {hasCloudTemplateWithSameName && templatesURL ? (
+                  <LinkButton
+                    variant="secondaryGray"
+                    size="md"
+                    href={templatesURL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    {communityVersionLabel} <ExternalLink size={14} />
+                  </LinkButton>
+                ) : null}
+                {canPublishTemplate ? (
+                  <Button
+                    ref={publishTriggerRef}
+                    variant="secondaryGray"
+                    size="md"
+                    loading={publishBusy}
+                    disabled={publishBusy || publishDisabled || currentVersionPublished}
+                    title={publishDisabled ? t("agentPublishLoginRequired") : undefined}
+                    onClick={() => {
+                      onResetPublishError?.();
+                      setPublishTemplateIncludeMemory(false);
+                      setPublishChoiceDialogOpen(true);
+                    }}
+                  >
+                    {publishActionLabel}
+                  </Button>
+                ) : null}
+                {
+                  <Button
+                    variant="primary"
+                    size="md"
+                    title={t("iaTemplateCreateAgentHint")}
+                    onClick={() => {
+                      setTemplateDetailDialogOpen(false);
+                      void onCreateFromTemplate?.(selectedTemplate);
+                    }}
+                  >
+                    {t("iaTemplateCreateAgent")}
+                  </Button>
+                }
+              </DialogFooter>
+            </>
+          ) : null}
+        </DialogContent>
+      </DialogRoot>
+      <DialogRoot
+        open={activeResourceType === "knowledge" && knowledgeBaseDetailDialogOpen && Boolean(knowledgeBases?.selected)}
+        onOpenChange={(open) => {
+          setKnowledgeBaseDetailDialogOpen(open);
+          if (!open) onSelectKnowledgeBase?.(null);
+        }}
+      >
+        <DialogContent className={skillResourceStyles["hub-standard-skill-dialog"]}>
+          {knowledgeBases?.selected ? (
+            <>
+              <DialogHeader>
+                <div>
+                  <DialogTitle>{knowledgeBases.selected.name}</DialogTitle>
+                  <DialogDescription>
+                    {knowledgeBases.selected.description || t("resourcesKnowledgeBasesDescription")}
+                  </DialogDescription>
+                </div>
+                <DialogCloseButton label={t("close")} size="md" variant="tertiaryGray" />
+              </DialogHeader>
+              <DialogBody
+                className={classNames(
+                  styles["hub-standard-skill-dialog-body"],
+                  skillResourceStyles["hub-standard-resource-dialog-body"],
+                )}
+              >
+                {knowledgeBases.selected.unavailableReason ? (
+                  <DismissibleAlert
+                    className={mCPResourceStyles["mcp-error-notice"]}
+                    aria-live="polite"
+                    messageKey={knowledgeBaseUnavailableText(knowledgeBases.selected.unavailableReason, t)}
+                    closeLabel={t("close")}
+                  >
+                    <AlertCircle size={16} aria-hidden="true" />
+                    <span>{knowledgeBaseUnavailableText(knowledgeBases.selected.unavailableReason, t)}</span>
+                  </DismissibleAlert>
+                ) : null}
+                {knowledgeBases.copyError || knowledgeBases.loadError ? (
+                  <DismissibleAlert
+                    className={mCPResourceStyles["mcp-error-notice"]}
+                    aria-live="polite"
+                    messageKey={knowledgeBases.copyError || knowledgeBases.loadError}
+                    closeLabel={t("close")}
+                  >
+                    <AlertCircle size={16} aria-hidden="true" />
+                    <span>{knowledgeBases.copyError || knowledgeBases.loadError}</span>
+                  </DismissibleAlert>
+                ) : null}
+                {knowledgeBases.selected.configuredMCPName ? (
+                  <div className={knowledgeBaseResourceStyles["knowledge-base-configured"]}>
+                    <p>{t("resourcesKnowledgeBaseConfiguredDescription")}</p>
+                    <div className={knowledgeBaseResourceStyles["knowledge-base-mcp-name"]}>
+                      <span>{t("resourcesKnowledgeBaseMCPNameLabel")}</span>
+                      <strong>{knowledgeBases.selected.configuredMCPName}</strong>
+                    </div>
+                    {knowledgeBaseMCPPreview ? (
+                      <pre
+                        className={knowledgeBaseResourceStyles["knowledge-base-mcp-preview"]}
+                        aria-label={t("resourcesKnowledgeBaseMCPConfigLabel")}
+                      >
+                        <code>{knowledgeBaseMCPPreview}</code>
+                      </pre>
+                    ) : (
+                      <div className={knowledgeBaseResourceStyles["knowledge-base-mcp-loading"]}>
+                        {t("resourcesMCPLoading")}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className={knowledgeBaseResourceStyles["knowledge-base-help"]}>
+                    <strong>{t("resourcesKnowledgeBaseHowToTitle")}</strong>
+                    <p>{t("resourcesKnowledgeBaseHowToDescription")}</p>
+                  </div>
+                )}
+              </DialogBody>
+              <DialogFooter>
+                {knowledgeBases.selected.configuredMCPName ? (
+                  <>
+                    <Button
+                      variant="secondaryGray"
+                      size="md"
+                      onClick={() => onSelectMCP?.(knowledgeBases.selected?.configuredMCPName)}
+                    >
+                      <ExternalLink size={16} strokeWidth={2} aria-hidden="true" />
+                      {t("resourcesKnowledgeBaseViewMCP")}
+                    </Button>
+                    <Button
+                      variant="danger"
+                      size="md"
+                      disabled={!configuredKnowledgeBaseMCP}
+                      onClick={() => setKnowledgeBaseDeleteDialogOpen(true)}
+                    >
+                      <Trash2 size={16} strokeWidth={2} aria-hidden="true" />
+                      {t("resourcesKnowledgeBaseRemoveMCP")}
+                    </Button>
+                  </>
+                ) : (
+                  <Button
+                    variant="primary"
+                    size="md"
+                    disabled={knowledgeBases.selected.availability !== "available"}
+                    onClick={() => void knowledgeBases.requestMCPConfig(knowledgeBases.selected?.id || "")}
+                  >
+                    {t("resourcesKnowledgeBaseAddMCP")}
+                  </Button>
+                )}
+              </DialogFooter>
+            </>
+          ) : null}
+        </DialogContent>
+      </DialogRoot>
+      <DialogRoot
+        open={activeResourceType === "mcp" && !mcpCreateDialogOpen && mcpDetailDialogOpen && Boolean(selectedMCPServer)}
+        onOpenChange={(open) => {
+          setMCPDetailDialogOpen(open);
+          if (!open) onSelectMCP?.(null);
+        }}
+      >
+        <DialogContent className={skillResourceStyles["hub-standard-skill-dialog"]}>
+          {selectedMCPServer ? (
+            <>
+              <DialogHeader>
+                <div>
+                  <DialogTitle>{mcpServerDisplayName(selectedMCPServer)}</DialogTitle>
+                  <DialogDescription>
+                    {selectedMCPServer.description ||
+                      mcpServerDescription(selectedMCPServer.config) ||
+                      mcpServerDisplayName(selectedMCPServer)}
+                  </DialogDescription>
+                </div>
+                <DialogCloseButton label={t("close")} size="md" variant="tertiaryGray" />
+              </DialogHeader>
+              <DialogBody
+                className={classNames(
+                  styles["hub-standard-skill-dialog-body"],
+                  skillResourceStyles["hub-standard-resource-dialog-body"],
+                )}
+              >
+                {selectedManagedMCPSource ? (
+                  <StatusBadge kind="tag" className={"mcp-knowledge-badge"}>
+                    {t("resourcesKnowledgeMCPBadge")}
+                  </StatusBadge>
+                ) : null}
+                {mcpStateError || mcpMutationError || mcpProbeError ? (
+                  <DismissibleAlert
+                    className={mCPResourceStyles["mcp-error-notice"]}
+                    aria-live="polite"
+                    messageKey={mcpStateError || mcpMutationError || mcpProbeError}
+                    closeLabel={t("close")}
+                  >
+                    <AlertCircle size={16} aria-hidden="true" />
+                    <span>{mcpStateError || mcpMutationError || mcpProbeError}</span>
+                  </DismissibleAlert>
+                ) : null}
+                {mcpStateLoading ? (
+                  <div className="workspace-empty px-2.5 py-2 text-[13px] text-[var(--muted)]">
+                    {t("resourcesMCPLoading")}
+                  </div>
+                ) : null}
+                {selectedManagedMCPSource && (mcpSourceError || mcpSourceStatus?.updateAvailable) ? (
+                  <div
+                    className={classNames(
+                      mCPResourceStyles["mcp-source-notice"],
+                      mcpSourceStatus?.updateAvailable ? "update-available" : "",
+                      mcpSourceError && !mcpSourceStatus?.updateAvailable ? "check-failed" : "",
+                    )}
+                    role={mcpSourceStatus?.updateAvailable ? "status" : "alert"}
+                  >
+                    <div className={mCPResourceStyles["mcp-source-notice-copy"]}>
+                      <strong>
+                        {mcpSourceStatus?.updateAvailable
+                          ? t("resourcesKnowledgeMCPUpdateAvailable")
+                          : t("resourcesKnowledgeMCPCheckFailed")}
+                      </strong>
+                      <span>
+                        {mcpSourceStatus?.updateAvailable
+                          ? t("resourcesKnowledgeMCPUpdateHint")
+                          : t("resourcesKnowledgeMCPCheckFailedHint")}
+                      </span>
+                    </div>
+                    <div className={mCPResourceStyles["mcp-source-notice-actions"]}>
+                      {mcpSourceStatus?.updateAvailable ? (
+                        <Button
+                          variant="primary"
+                          size="sm"
+                          loading={mcpSourceSyncBusy}
+                          disabled={mcpSourceBusy}
+                          onClick={handleSyncMCPSource}
+                        >
+                          {t("resourcesMCPSourceUpdate")}
+                        </Button>
+                      ) : (
+                        <Button
+                          variant="secondaryGray"
+                          size="sm"
+                          loading={mcpSourceBusy}
+                          disabled={mcpSourceSyncBusy}
+                          onClick={handleCheckMCPSource}
+                        >
+                          {t("resourcesMCPSourceRetry")}
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                ) : null}
+                <div className={classNames(styles["hub-workspace-block"], styles["mcp-server-document-block"])}>
+                  <p className={styles["mcp-server-document-hint"]}>{t("resourcesMCPIdentityHint")}</p>
+                  <JSONConfigEditor
+                    label={t("resourcesMCPServerDocumentLabel")}
+                    value={mcpDetailDocument}
+                    onChange={handleMCPDetailDocumentChange}
+                    invalid={Boolean(mcpDetailError)}
+                    minRows={12}
+                    t={t}
+                  />
+                  {mcpDetailError ? (
+                    <InlineError className={styles["hub-json-editor-error"]}>{mcpDetailError}</InlineError>
+                  ) : null}
+                  {mcpProbeResult ? <MCPProbePanel result={mcpProbeResult} t={t} /> : null}
+                </div>
+              </DialogBody>
+              <DialogFooter>
+                <Button
+                  variant="danger"
+                  size="md"
+                  disabled={mcpMutationBusy || mcpProbeBusy}
+                  onClick={() => setMCPDeleteDialogOpen(true)}
+                >
+                  <Trash2 size={16} strokeWidth={2} />
+                  <span>{t("resourcesMCPDelete")}</span>
+                </Button>
+                <div style={{ flex: 1 }} />
+                <Button
+                  variant="secondaryGray"
+                  size="md"
+                  loading={mcpProbeBusy}
+                  disabled={mcpMutationBusy}
+                  onClick={handleProbeMCPDetail}
+                >
+                  <RefreshCw size={16} strokeWidth={2} aria-hidden="true" />
+                  {mcpProbeBusy ? t("resourcesMCPTesting") : t("resourcesMCPTest")}
+                </Button>
+                {mcpDetailDirty ? (
+                  <Button
+                    variant="primary"
+                    size="md"
+                    loading={mcpMutationBusy}
+                    disabled={mcpProbeBusy}
+                    onClick={handleSaveMCPDetail}
+                  >
+                    {mcpMutationBusy ? t("resourcesMCPSaving") : t("resourcesMCPSave")}
+                  </Button>
+                ) : null}
+              </DialogFooter>
+            </>
+          ) : null}
+        </DialogContent>
+      </DialogRoot>
+      <DialogRoot open={deleteSkillDialogOpen} onOpenChange={setDeleteSkillDialogOpen}>
+        <DialogContent className={mCPResourceStyles["hub-skill-delete-dialog"]}>
+          <DialogHeader className={mCPResourceStyles["hub-skill-delete-dialog-header"]}>
+            <div className={mCPResourceStyles["hub-skill-delete-dialog-copy"]}>
+              <DialogTitle>{t("resourcesDeleteSkill")}</DialogTitle>
+              <DialogDescription>
+                {t("resourcesDeleteSkillConfirmMessage", { name: selectedSkill?.name || "" })}
+              </DialogDescription>
+            </div>
+            <DialogCloseButton label={t("close")} size="sm" variant="tertiaryGray" />
+          </DialogHeader>
+          <DialogFooter className={mCPResourceStyles["hub-skill-delete-dialog-actions"]}>
+            <Button
+              variant="secondaryGray"
+              size="sm"
+              disabled={skillDeleteBusy}
+              onClick={() => setDeleteSkillDialogOpen(false)}
+            >
+              {t("cancel")}
+            </Button>
+            <Button variant="danger" size="sm" loading={skillDeleteBusy} onClick={handleDeleteSkillConfirm}>
+              {t("resourcesDeleteSkillConfirmAction")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </DialogRoot>
+      <DialogRoot
+        open={publishSuccessDialogOpen || Boolean(publishedTemplate)}
+        onOpenChange={(open) => {
+          if (!open) dismissPublishSuccess();
+        }}
+      >
+        <DialogContent className={mCPResourceStyles["hub-skill-delete-dialog"]} onCloseAutoFocus={restorePublishFocus}>
+          <DialogHeader className={mCPResourceStyles["hub-skill-delete-dialog-header"]}>
+            <div className={mCPResourceStyles["hub-skill-delete-dialog-copy"]}>
+              <DialogTitle>{t("resourcesPublishCommunitySuccessTitle")}</DialogTitle>
+              <DialogDescription>{t("resourcesPublishCommunitySuccessMessage")}</DialogDescription>
+            </div>
+            <DialogCloseButton label={t("close")} size="sm" variant="tertiaryGray" />
+          </DialogHeader>
+          <DialogFooter className={mCPResourceStyles["hub-skill-delete-dialog-actions"]}>
+            {publishSuccessURL ? (
+              <LinkButton
+                variant="secondaryGray"
+                size="sm"
+                href={publishSuccessURL}
+                target="_blank"
+                rel="noopener noreferrer"
+                title={t("agentTemplateCreateInHubHint")}
+              >
+                <ExternalLink size={14} aria-hidden="true" />
+                {t("agentTemplateCreateInHub")}
+              </LinkButton>
+            ) : null}
+            <Button variant="primary" size="sm" onClick={dismissPublishSuccess}>
+              {t("resourcesPublishCommunitySuccessDismiss")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </DialogRoot>
+      <DialogRoot
+        open={publishChoiceDialogOpen}
+        onOpenChange={(open) => {
+          setPublishChoiceDialogOpen(open);
+          if (!open) {
+            setPublishTemplateIncludeMemory(false);
+          }
+        }}
+      >
+        <DialogContent
+          className={templateResourceStyles["hub-template-publish-dialog"]}
+          onCloseAutoFocus={restorePublishFocus}
+        >
+          <DialogHeader>
+            <div>
+              <DialogTitle>{t("agentPublishTemplateTitle")}</DialogTitle>
+              <DialogDescription>{t("templatePublishCommunitySubtitle")}</DialogDescription>
+            </div>
+            <DialogCloseButton label={t("close")} size="sm" variant="tertiaryGray" />
+          </DialogHeader>
+          <DialogBody className={templateResourceStyles["hub-template-publish-body"]}>
+            <section
+              className={templateResourceStyles["hub-template-publish-version"]}
+              aria-label={t("templatePublishVersionLabel")}
+            >
+              <span>{t("templatePublishVersionLabel")}</span>
+              <strong>{publishVersionLabel}</strong>
+              <h3>{selectedTemplate?.display_name?.trim() || selectedTemplate?.name || selectedTemplate?.id}</h3>
+              <small>{t("templatePublishLatestHint")}</small>
+            </section>
+            <section
+              className={templateResourceStyles["hub-template-publish-section"]}
+              aria-label={t("templatePublishDestinationHeading")}
+            >
+              <h3>{t("templatePublishDestinationHeading")}</h3>
+              <dl className={templateResourceStyles["hub-template-publish-destination"]}>
+                <dt>{t("templatePublishTarget")}</dt>
+                <dd className={templateResourceStyles["hub-template-publish-target"]}>
+                  {publishDestination.id || t("templatePublishDestinationUnknown")}
+                </dd>
+                <dt>{t("templatePublishSite")}</dt>
+                <dd>{publishDestination.site || t("templatePublishDestinationUnknown")}</dd>
+                <dt>{t("templatePublishAccount")}</dt>
+                <dd>{publishDestination.namespace || t("templatePublishDestinationUnknown")}</dd>
+              </dl>
+              <p className={templateResourceStyles["hub-template-publish-hint"]}>{t("templatePublishVisibility")}</p>
+              <p className={templateResourceStyles["hub-template-publish-notice"]}>{t("templatePublishEffect")}</p>
+            </section>
+            <section
+              className={templateResourceStyles["hub-template-publish-section"]}
+              aria-label={t("templatePublishContentsHeading")}
+            >
+              <h3>{t("templatePublishContentsHeading")}</h3>
+              <p className={templateResourceStyles["hub-template-publish-hint"]}>{t("templatePublishContents")}</p>
+              {templateMemoryEnabled ? (
+                <label className={templateResourceStyles["hub-template-publish-memory-option"]}>
+                  <Checkbox
+                    aria-label={t("agentPublishIncludeMemory")}
+                    checked={publishTemplateIncludeMemory}
+                    onCheckedChange={(checked) => setPublishTemplateIncludeMemory(checked === true)}
+                  />
+                  <span>
+                    <strong>{t("agentPublishIncludeMemory")}</strong>
+                    <small>{t("agentPublishIncludeMemoryWarning")}</small>
+                  </span>
+                </label>
+              ) : null}
+            </section>
+            {selectedTemplate?.uid ? (
+              <details className={templateResourceStyles["hub-template-publish-identity"]}>
+                <summary>{t("templateVersionUID")}</summary>
+                <code>{selectedTemplate.uid}</code>
+              </details>
+            ) : null}
+          </DialogBody>
+          {publishError ? (
+            <InlineError className={templateResourceStyles["hub-template-publish-error"]} role="alert">
+              <span className="whitespace-pre-wrap break-words">{publishError}</span>
+            </InlineError>
+          ) : null}
+          <DialogFooter>
+            <Button
+              variant="secondaryGray"
+              size="md"
+              disabled={publishBusy}
+              onClick={() => setPublishChoiceDialogOpen(false)}
+            >
+              {t("cancel")}
+            </Button>
+            <Button
+              variant="primary"
+              size="md"
+              loading={publishBusy}
+              loadingLabel={t("agentPublishing")}
+              disabled={publishBusy}
+              onClick={() => void handlePublishTemplate()}
+            >
+              {templateVersionLabel(selectedTemplate)
+                ? t("templatePublishVersionAction", { version: publishVersionLabel })
+                : t("agentPublishCommunityTemplateOnly")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </DialogRoot>
+      <DialogRoot
+        open={Boolean(knowledgeBases?.pendingMCPKnowledgeBase)}
+        onOpenChange={(open) => {
+          if (!open && !knowledgeBases?.copyBusyID) {
+            knowledgeBases?.cancelMCPConfig();
+          }
+        }}
+      >
+        <DialogContent className={knowledgeBaseResourceStyles["knowledge-base-guide-dialog"]}>
+          <DialogHeader className={mCPResourceStyles["hub-skill-delete-dialog-header"]}>
+            <div className={mCPResourceStyles["hub-skill-delete-dialog-copy"]}>
+              <DialogTitle>{t("resourcesKnowledgeBaseGuideTitle")}</DialogTitle>
+            </div>
+            <DialogCloseButton
+              label={t("close")}
+              size="sm"
+              variant="tertiaryGray"
+              disabled={Boolean(knowledgeBases?.copyBusyID)}
+            />
+          </DialogHeader>
+          <DialogBody>
+            <DialogDescription className={knowledgeBaseResourceStyles["knowledge-base-guide-description"]}>
+              {t("resourcesKnowledgeBaseGuideDescription", {
+                name: knowledgeBases?.pendingMCPKnowledgeBase?.name || "",
+              })}
+            </DialogDescription>
+            {knowledgeBases?.copyError ? (
+              <InlineError className={knowledgeBaseResourceStyles["knowledge-base-guide-error"]}>
+                {knowledgeBases.copyError}
+              </InlineError>
+            ) : null}
+          </DialogBody>
+          <DialogFooter className={mCPResourceStyles["hub-skill-delete-dialog-actions"]}>
+            <Button
+              variant="secondaryGray"
+              size="sm"
+              disabled={Boolean(knowledgeBases?.copyBusyID)}
+              onClick={() => knowledgeBases?.cancelMCPConfig()}
+            >
+              {t("resourcesKnowledgeBaseGuideLater")}
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              loading={knowledgeBases?.copyBusyID === knowledgeBases?.pendingMCPKnowledgeBase?.id}
+              onClick={() => void knowledgeBases?.confirmMCPConfig()}
+            >
+              {t("resourcesKnowledgeBaseGuideContinue")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </DialogRoot>
+      <DialogRoot
+        open={mcpCreateDialogOpen}
+        onOpenChange={(open) => {
+          if (open) {
+            setMCPDraftDocument(mcpCreateInitialDocument || DEFAULT_MCP_SERVER_DOCUMENT);
+            setMCPFormError("");
+            setMCPCreateMode("manual");
+            onMCPCreateDialogOpenChange?.(true);
+          } else {
+            closeMCPFormDialog();
+          }
+        }}
+      >
+        <DialogContent className={mCPResourceStyles["mcp-dialog"]}>
+          <DialogHeader className={mCPResourceStyles["hub-skill-delete-dialog-header"]}>
+            <div className={mCPResourceStyles["hub-skill-delete-dialog-copy"]}>
+              <DialogTitle>{t("resourcesMCPCreateTitle")}</DialogTitle>
+              <DialogDescription>{t("resourcesMCPFormDescription")}</DialogDescription>
+            </div>
+            <DialogCloseButton label={t("close")} size="sm" variant="tertiaryGray" />
+          </DialogHeader>
+          <DialogBody className={mCPResourceStyles["mcp-form"]}>
+            {mcpCreateSource !== "knowledge" ? (
+              <div
+                className={mCPResourceStyles["mcp-form-mode"]}
+                role="tablist"
+                aria-label={t("resourcesMCPCreateTitle")}
+              >
+                <button
+                  type="button"
+                  className={classNames(mCPResourceStyles["mcp-form-tab"], mcpCreateMode === "manual" && "active")}
+                  aria-selected={mcpCreateMode === "manual"}
+                  role="tab"
+                  onClick={() => setMCPCreateMode("manual")}
+                >
+                  <Server size={15} strokeWidth={2} aria-hidden="true" />
+                  {t("resourcesMCPManualTab")}
+                </button>
+                <button
+                  type="button"
+                  className={classNames(mCPResourceStyles["mcp-form-tab"], mcpCreateMode === "remote" && "active")}
+                  aria-selected={mcpCreateMode === "remote"}
+                  role="tab"
+                  onClick={() => {
+                    if (mcpCreateMode === "remote") {
+                      onRemoteMCPVisibleChange?.(true);
+                      return;
+                    }
+                    setMCPCreateMode("remote");
+                  }}
+                >
+                  <CloudDownload size={15} strokeWidth={2} aria-hidden="true" />
+                  {t("resourcesMCPRemoteInstallTab")}
+                </button>
+              </div>
+            ) : null}
+            {mcpCreateMode === "manual" ? (
+              <>
+                <JSONConfigEditor
+                  fillAvailableHeight
+                  hideLabel
+                  label={t("resourcesMCPServerDocumentJSONLabel")}
+                  value={mcpDraftDocument}
+                  onChange={handleMCPDraftDocumentChange}
+                  invalid={Boolean(mcpFormError)}
+                  lineWrapping={false}
+                  minRows={12}
+                  t={t}
+                />
+                {mcpFormError || mcpCreateError ? (
+                  <InlineError className={styles["hub-json-editor-error"]}>
+                    {mcpFormError || mcpCreateError}
+                  </InlineError>
+                ) : null}
+              </>
+            ) : (
+              <RemoteMCPList
+                error={remoteMCPServersError || mcpMutationError}
+                hasMore={remoteMCPServersHasMore}
+                installedServers={mcpServers}
+                installBusy={remoteMCPInstallBusy}
+                items={remoteMCPServers}
+                loading={remoteMCPServersLoading}
+                loadingMore={remoteMCPServersLoadingMore}
+                onInstall={onInstallRemoteMCP}
+                onLoadMore={onLoadMoreRemoteMCPServers}
+                onRefresh={onRefreshRemoteMCPServers}
+                onSearchChange={onRemoteMCPServersSearchChange}
+                onVisibleChange={onRemoteMCPVisibleChange}
+                search={remoteMCPServersSearch}
+                t={t}
+              />
+            )}
+          </DialogBody>
+          <DialogFooter className={mCPResourceStyles["hub-skill-delete-dialog-actions"]}>
+            <Button variant="secondaryGray" size="md" disabled={mcpMutationBusy} onClick={closeMCPFormDialog}>
+              {t("cancel")}
+            </Button>
+            {mcpCreateMode === "manual" ? (
+              <Button variant="primary" size="md" loading={mcpMutationBusy} onClick={handleSaveMCP}>
+                {mcpMutationBusy ? t("resourcesMCPCreating") : t("resourcesMCPCreateAction")}
+              </Button>
+            ) : null}
+          </DialogFooter>
+        </DialogContent>
+      </DialogRoot>
+      <KnowledgeBaseDiscoveryDialog
+        open={knowledgeBaseDiscoveryOpen}
+        onOpenChange={setKnowledgeBaseDiscoveryOpen}
+        items={knowledgeBases?.discoveryItems ?? []}
+        hasMore={knowledgeBases?.discoveryHasMore ?? false}
+        loading={knowledgeBases?.discoveryLoading ?? false}
+        loadingMore={knowledgeBases?.discoveryLoadingMore ?? false}
+        loadError={knowledgeBases?.discoveryLoadError ?? ""}
+        loginRequired={knowledgeBases?.loginRequired ?? false}
+        copyBusyID={knowledgeBases?.copyBusyID ?? ""}
+        copyError={knowledgeBases?.copyError ?? ""}
+        onAdd={async (id) => (await knowledgeBases?.requestMCPConfig?.(id)) ?? false}
+        onLogin={() => {
+          setKnowledgeBaseDiscoveryOpen(false);
+          return onKnowledgeBaseLogin?.();
+        }}
+        onLoadMore={() => void (knowledgeBases?.discoveryLoadMore?.() ?? Promise.resolve())}
+        onRetry={() => void knowledgeBases?.discoveryRefetch?.()}
+        onSearchChange={knowledgeBases?.setSearch ?? (() => {})}
+        search={knowledgeBases?.search ?? ""}
+        t={t}
+      />
+      <DialogRoot open={knowledgeBaseDeleteDialogOpen} onOpenChange={setKnowledgeBaseDeleteDialogOpen}>
+        <DialogContent className={mCPResourceStyles["hub-skill-delete-dialog"]}>
+          <DialogHeader className={mCPResourceStyles["hub-skill-delete-dialog-header"]}>
+            <div className={mCPResourceStyles["hub-skill-delete-dialog-copy"]}>
+              <DialogTitle>{t("resourcesKnowledgeBaseRemoveMCP")}</DialogTitle>
+              <DialogDescription>
+                {t("resourcesKnowledgeBaseRemoveMCPConfirm", {
+                  name: configuredKnowledgeBaseMCP?.name || knowledgeBases?.selected?.configuredMCPName || "",
+                })}
+              </DialogDescription>
+            </div>
+            <DialogCloseButton label={t("close")} size="sm" variant="tertiaryGray" />
+          </DialogHeader>
+          {mcpMutationError ? (
+            <DismissibleAlert
+              className={mCPResourceStyles["mcp-error-notice"]}
+              messageKey={mcpMutationError}
+              closeLabel={t("close")}
+            >
+              <AlertCircle size={16} aria-hidden="true" />
+              <span>{mcpMutationError}</span>
+            </DismissibleAlert>
+          ) : null}
+          <DialogFooter className={mCPResourceStyles["hub-skill-delete-dialog-actions"]}>
+            <Button
+              variant="secondaryGray"
+              size="sm"
+              disabled={mcpMutationBusy}
+              onClick={() => setKnowledgeBaseDeleteDialogOpen(false)}
+            >
+              {t("cancel")}
+            </Button>
+            <Button
+              variant="danger"
+              size="sm"
+              loading={mcpMutationBusy}
+              disabled={!configuredKnowledgeBaseMCP}
+              onClick={handleDeleteKnowledgeBaseMCPConfirm}
+            >
+              {t("resourcesKnowledgeBaseRemoveMCP")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </DialogRoot>
+      <DialogRoot open={mcpDeleteDialogOpen} onOpenChange={setMCPDeleteDialogOpen}>
+        <DialogContent className={mCPResourceStyles["hub-skill-delete-dialog"]}>
+          <DialogHeader className={mCPResourceStyles["hub-skill-delete-dialog-header"]}>
+            <div className={mCPResourceStyles["hub-skill-delete-dialog-copy"]}>
+              <DialogTitle>{t("resourcesMCPDelete")}</DialogTitle>
+              <DialogDescription>
+                {t("resourcesMCPDeleteConfirmMessage", {
+                  name: selectedMCPServer ? mcpServerDisplayName(selectedMCPServer) : "",
+                })}
+              </DialogDescription>
+            </div>
+            <DialogCloseButton label={t("close")} size="sm" variant="tertiaryGray" />
+          </DialogHeader>
+          {mcpMutationError ? (
+            <DismissibleAlert
+              className={mCPResourceStyles["mcp-error-notice"]}
+              messageKey={mcpMutationError}
+              closeLabel={t("close")}
+            >
+              <AlertCircle size={16} aria-hidden="true" />
+              <span>{mcpMutationError}</span>
+            </DismissibleAlert>
+          ) : null}
+          <DialogFooter className={mCPResourceStyles["hub-skill-delete-dialog-actions"]}>
+            <Button
+              variant="secondaryGray"
+              size="sm"
+              disabled={mcpMutationBusy}
+              onClick={() => setMCPDeleteDialogOpen(false)}
+            >
+              {t("cancel")}
+            </Button>
+            <Button variant="danger" size="sm" loading={mcpMutationBusy} onClick={handleDeleteMCPConfirm}>
+              {t("resourcesDeleteSkillConfirmAction")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </DialogRoot>
+    </EntityPane>
+  );
+}
+
+export function ResourceFilterTabs<TID extends string>({
+  label,
+  onChange,
+  tabs,
+  value,
+}: {
+  label: string;
+  onChange: (id: TID) => void;
+  tabs: ReadonlyArray<{ id: TID; label: string }>;
+  value: TID;
+}) {
+  return (
+    <div className={styles["hub-skill-filter-tabs"]} role="tablist" aria-label={label}>
+      {tabs.map((tab) => {
+        const active = tab.id === value;
+        return (
+          <button
+            key={tab.id}
+            type="button"
+            role="tab"
+            aria-selected={active}
+            className={classNames(styles["hub-skill-filter-tab"], active && "active")}
+            onClick={() => onChange(tab.id)}
+          >
+            {tab.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+export function MCPServerCreateDialog({
+  busy,
+  createError,
+  initialDocument,
+  manualOnly = false,
+  onChangeDocument,
+  onCreate,
+  onOpenChange,
+  onRemoteVisibleChange,
+  open,
+  remote,
+  source = "mcp",
+  t,
+}: {
+  busy: boolean;
+  createError: string;
+  initialDocument: string;
+  onChangeDocument?: (value: string) => void;
+  onCreate: (payload: MCPServerPayload) => Promise<boolean> | boolean | undefined;
+  onOpenChange: (open: boolean) => void;
+  onRemoteVisibleChange?: (visible: boolean) => void;
+  open: boolean;
+  remote: {
+    error: string;
+    hasMore: boolean;
+    installBusy: string;
+    installedServers: readonly MCPServer[];
+    items: readonly RemoteMCPServer[];
+    loading: boolean;
+    loadingMore: boolean;
+    search: string;
+    onInstall?: (server: RemoteMCPServer) => Promise<boolean> | boolean;
+    onLoadMore?: () => void;
+    onRefresh?: () => void;
+    onSearchChange?: (value: string) => void;
+  };
+  source?: "mcp" | "knowledge";
+  /** Hides remote installation when the caller provides a separate marketplace. */
+  manualOnly?: boolean;
+  t: TranslateFn;
+}) {
+  const [mode, setMode] = useState<MCPCreateMode>("manual");
+  const [document, setDocument] = useState(initialDocument || DEFAULT_MCP_SERVER_DOCUMENT);
+  const [parseError, setParseError] = useState("");
+
+  useEffect(() => {
+    if (open) {
+      setDocument(initialDocument || DEFAULT_MCP_SERVER_DOCUMENT);
+      setParseError("");
+      setMode("manual");
+    }
+  }, [initialDocument, open]);
+
+  function close() {
+    setParseError("");
+    setMode("manual");
+    onOpenChange(false);
+  }
+
+  function changeDocument(value: string) {
+    setDocument(value);
+    onChangeDocument?.(value);
+    setParseError("");
+  }
+
+  async function save() {
+    const result = parseMCPServerDocument(document, t);
+    if (result.kind !== "valid") {
+      setParseError(result.kind === "structure" ? result.message : "");
+      return;
+    }
+    const saved = await onCreate(result.payload);
+    if (saved) {
+      close();
+    }
+  }
+
+  const activeMode: MCPCreateMode = manualOnly ? "manual" : mode;
+
+  return (
+    <DialogRoot
+      open={open}
+      onOpenChange={(next) => {
+        if (next) {
+          onOpenChange(true);
+        } else {
+          close();
+        }
+      }}
+    >
+      <DialogContent className={mCPResourceStyles["mcp-dialog"]}>
+        <DialogHeader className={mCPResourceStyles["hub-skill-delete-dialog-header"]}>
+          <div className={mCPResourceStyles["hub-skill-delete-dialog-copy"]}>
+            <DialogTitle>{t("resourcesMCPCreateTitle")}</DialogTitle>
+            <DialogDescription>{t("resourcesMCPFormDescription")}</DialogDescription>
+          </div>
+          <DialogCloseButton label={t("close")} size="sm" variant="tertiaryGray" />
+        </DialogHeader>
+        <DialogBody className={mCPResourceStyles["mcp-form"]}>
+          {source !== "knowledge" && !manualOnly ? (
+            <div
+              className={mCPResourceStyles["mcp-form-mode"]}
+              role="tablist"
+              aria-label={t("resourcesMCPCreateTitle")}
+            >
+              <button
+                type="button"
+                className={classNames(mCPResourceStyles["mcp-form-tab"], mode === "manual" && "active")}
+                aria-selected={mode === "manual"}
+                role="tab"
+                onClick={() => setMode("manual")}
+              >
+                <Server size={15} strokeWidth={2} aria-hidden="true" />
+                {t("resourcesMCPManualTab")}
+              </button>
+              <button
+                type="button"
+                className={classNames(mCPResourceStyles["mcp-form-tab"], mode === "remote" && "active")}
+                aria-selected={mode === "remote"}
+                role="tab"
+                onClick={() => {
+                  if (mode === "remote") {
+                    onRemoteVisibleChange?.(true);
+                    return;
+                  }
+                  setMode("remote");
+                }}
+              >
+                <CloudDownload size={15} strokeWidth={2} aria-hidden="true" />
+                {t("resourcesMCPRemoteInstallTab")}
+              </button>
+            </div>
+          ) : null}
+          {activeMode === "manual" ? (
+            <>
+              <JSONConfigEditor
+                fillAvailableHeight
+                hideLabel
+                label={t("resourcesMCPServerDocumentJSONLabel")}
+                value={document}
+                onChange={changeDocument}
+                invalid={Boolean(parseError)}
+                lineWrapping={false}
+                minRows={12}
+                t={t}
+              />
+              {parseError || createError ? (
+                <InlineError className={styles["hub-json-editor-error"]}>{parseError || createError}</InlineError>
+              ) : null}
+            </>
+          ) : (
+            <RemoteMCPList
+              error={remote.error}
+              hasMore={remote.hasMore}
+              installedServers={remote.installedServers}
+              installBusy={remote.installBusy}
+              items={remote.items}
+              loading={remote.loading}
+              loadingMore={remote.loadingMore}
+              onInstall={remote.onInstall}
+              onLoadMore={remote.onLoadMore}
+              onRefresh={remote.onRefresh}
+              onSearchChange={remote.onSearchChange}
+              onVisibleChange={onRemoteVisibleChange}
+              search={remote.search}
+              t={t}
+            />
+          )}
+        </DialogBody>
+        <DialogFooter className={mCPResourceStyles["hub-skill-delete-dialog-actions"]}>
+          <Button variant="secondaryGray" size="md" disabled={busy} onClick={close}>
+            {t("cancel")}
+          </Button>
+          {activeMode === "manual" ? (
+            <Button variant="primary" size="md" loading={busy} onClick={save}>
+              {busy ? t("resourcesMCPCreating") : t("resourcesMCPCreateAction")}
+            </Button>
+          ) : null}
+        </DialogFooter>
+      </DialogContent>
+    </DialogRoot>
+  );
+}

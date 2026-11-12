@@ -48,7 +48,8 @@ func New(controller *agent.Controller) *Engine {
 	}
 	engine.runtimes = backend
 	engine.extensions = extensions
-	controller.AttachEngine(files, &engine.interactions, extensions)
+	controller.AttachEngine(files, &engine.interactions, extensions, engine.interruptAgent)
+	engine.lifecycle = controller.LifecycleCoordinator()
 	controller.RuntimeRegistry().Seal()
 	engine.agents = controller
 	engine.generateImage = controller.Models().GenerateImage
@@ -320,6 +321,10 @@ func (a runtimeBackend) conversationRuntime(ctx context.Context, agentID string)
 	if getErr != nil {
 		release()
 		return nil, nil, &TurnError{Code: ErrorAgentUnavailable, Message: getErr.Error()}
+	}
+	if selected.ArchivedAt != nil {
+		release()
+		return nil, nil, &TurnError{Code: ErrorAgentUnavailable, Message: "agent is archived"}
 	}
 	diagnostics.From(ctx).AgentName(selected.Spec.Name)
 	if runtimeNeedsPendingRecovery(selected) {

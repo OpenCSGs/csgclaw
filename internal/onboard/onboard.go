@@ -10,7 +10,6 @@ import (
 	"csgclaw/internal/migrations"
 	"csgclaw/internal/migrations/retiredclaws"
 	"csgclaw/internal/participant"
-	"csgclaw/internal/sandboxproviders"
 	hub "csgclaw/internal/template"
 	"fmt"
 	"os"
@@ -140,17 +139,13 @@ func createManagerParticipant(ctx context.Context, agentsPath, imStatePath strin
 	if err != nil {
 		return participant.Participant{}, err
 	}
-	opts, err := sandboxproviders.ServiceOptions(cfg.Sandbox)
-	if err != nil {
-		return participant.Participant{}, err
-	}
-	opts = append(opts,
+	opts := []agent.ControllerOption{
 		runtimewiring.WithCodexRuntime(),
 		runtimewiring.WithDSHRuntime(),
 		agent.WithBootstrapDefaultTemplates(cfg.Bootstrap),
 		agent.WithHubService(hubSvc),
 		agent.WithDeferredManagerRuntimeStart(),
-	)
+	}
 
 	if noAuthDetectFromContext(ctx) {
 		opts = append(opts, agent.WithStartupProfileDetectionDisabled())
@@ -203,10 +198,11 @@ func noAuthDetectFromContext(ctx context.Context) bool {
 func defaultConfig() config.Config {
 	return config.Config{
 		Server: config.ServerConfig{
-			ListenAddr:  config.DefaultListenAddr(),
-			AccessToken: config.DefaultAccessToken,
-			NoAuth:      false,
-			ShowUpgrade: true,
+			ListenAddr:      config.DefaultListenAddr(),
+			AccessToken:     config.DefaultAccessToken,
+			NoAuth:          false,
+			LocalSingleUser: false,
+			ShowUpgrade:     true,
 		},
 		Bootstrap: config.BootstrapConfig{},
 		Sandbox:   config.SandboxConfig{},
@@ -252,9 +248,6 @@ func configNeedsCompletion(content string) bool {
 		`advertise_base_url = `,
 		`access_token = `,
 		`no_auth = `,
-		"[sandbox]",
-		`provider = `,
-		`debian_registries_override = `,
 	}
 	for _, snippet := range requiredSnippets {
 		if !strings.Contains(content, snippet) {

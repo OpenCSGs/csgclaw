@@ -7,7 +7,7 @@ import (
 	"unicode/utf8"
 )
 
-const MaxMentionNameRunes = 32
+const MaxMentionNameRunes = 64
 
 func ValidateMentionName(name string) error {
 	name = strings.TrimSpace(name)

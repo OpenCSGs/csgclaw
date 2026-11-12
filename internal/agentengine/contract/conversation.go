@@ -2,6 +2,7 @@ package contract
 
 import (
 	"context"
+	"csgclaw/internal/modelcap"
 	"csgclaw/internal/taskconfig"
 )
 
@@ -12,6 +13,7 @@ type ConversationInterface interface {
 	Run(ctx context.Context, request TurnRequest, sink EventSink) TurnResult
 	Cancel(ctx context.Context, key ConversationKey, turnID TurnID) error
 	Reset(ctx context.Context, key ConversationKey) error
+	PendingInteractions(ctx context.Context, key ConversationKey) ([]InteractionRequest, error)
 	GetInteraction(ctx context.Context, key ConversationKey, id string) (InteractionRequest, error)
 	Resolve(ctx context.Context, resolution InteractionResolution) error
 }
@@ -58,23 +60,50 @@ type InteractionPolicy string
 
 const (
 	InteractionResolve       InteractionPolicy = "resolve"
+	InteractionUserInputOnly InteractionPolicy = "user_input_only"
+	InteractionTextOnly      InteractionPolicy = "text_only"
 	InteractionReject        InteractionPolicy = "reject"
 	InteractionSkipUserInput InteractionPolicy = "skip_user_input"
 )
+
+func (p InteractionPolicy) Valid() bool {
+	switch p {
+	case InteractionResolve, InteractionUserInputOnly, InteractionTextOnly, InteractionReject, InteractionSkipUserInput:
+		return true
+	default:
+		return false
+	}
+}
+
+// For returns the policy to apply to this kind of interaction.
+func (p InteractionPolicy) For(kind InteractionKind) InteractionPolicy {
+	if p != InteractionUserInputOnly && p != InteractionTextOnly {
+		return p
+	}
+	if kind != InteractionUserInput {
+		return InteractionReject
+	}
+	if p == InteractionTextOnly {
+		return InteractionSkipUserInput
+	}
+	return InteractionResolve
+}
 
 // InputPartKind identifies one normalized turn input.
 type InputPartKind string
 
 const (
-	InputPartText InputPartKind = "text"
-	InputPartFile InputPartKind = "file"
+	InputPartText          InputPartKind = "text"
+	InputPartFile          InputPartKind = "file"
+	InputPartWorkspaceFile InputPartKind = "workspace_file"
 )
 
 // InputPart is text or a caller-authorized file.
 type InputPart struct {
-	Kind InputPartKind `json:"kind"`
-	Text string        `json:"text,omitempty"`
-	File *InputFile    `json:"file,omitempty"`
+	Kind          InputPartKind  `json:"kind"`
+	Text          string         `json:"text,omitempty"`
+	File          *InputFile     `json:"file,omitempty"`
+	WorkspaceFile *WorkspaceFile `json:"-"`
 }
 
 // InputFile references one immutable Agent-scoped Conversation file resource.
@@ -92,8 +121,23 @@ type RoomConfiguration struct {
 	Configuration taskconfig.Config
 }
 
+// TurnModel is a resolved selection for one turn; credentials remain with the provider.
+type TurnModel struct {
+	ModelID         string
+	ReasoningEffort string
+	Metadata        modelcap.Resolved
+}
+
 // TurnRequest contains conversation identity and caller-normalized input.
 type TurnRequest struct {
+	Model         *TurnModel     `json:"-"`
+	MemorySource  *MemorySource  `json:"-"`
+	RuntimeMemory *RuntimeMemory `json:"-"`
+	// RespondingTo identifies the detached answer reserved for this turn.
+	RespondingTo string `json:"-"`
+	// PreservePendingInteractions prevents this turn from superseding a pending form.
+	PreservePendingInteractions bool `json:"-"`
+
 	RoomConfiguration *RoomConfiguration   `json:"-"`
 	ImageGeneration   *ImageGenerationTask `json:"image_generation,omitempty"`
 	VideoGeneration   *VideoGenerationTask `json:"video_generation,omitempty"`
@@ -118,6 +162,12 @@ const (
 	TurnEventOutputItem         TurnEventKind = "output_item"
 )
 
+// RecoveredTextPart is either a tool result boundary or an answer fragment in native history order.
+type RecoveredTextPart struct {
+	ToolID string
+	Text   string
+}
+
 // TurnEvent is the replay-safe envelope for one normalized Runtime event.
 // Sequence starts at one and increases monotonically for each TurnID.
 type TurnEvent struct {
@@ -133,6 +183,9 @@ type TurnEvent struct {
 	Activity     *ActivityUpdate     `json:"activity,omitempty"`
 	Interaction  *InteractionRequest `json:"interaction,omitempty"`
 	Output       *OutputItem         `json:"output,omitempty"`
+
+	// A terminal history update may reconcile text still buffered by an in-process consumer.
+	RecoveredText []RecoveredTextPart `json:"-"`
 }
 
 // ToolActivity contains normalized tool progress. Payload must be JSON-compatible.
@@ -184,6 +237,9 @@ type InteractionResolution struct {
 	// BeforeResolve persists caller-owned effects after validation and reservation,
 	// but before releasing the Runtime request. Failure leaves it retryable.
 	BeforeResolve func(context.Context, InteractionRequest) error `json:"-"`
+	// ContinueDetached delivers a validated, public answer in a new turn. Return
+	// true once the runtime has accepted it, even if the turn subsequently fails.
+	ContinueDetached func(context.Context, InteractionRequest) bool `json:"-"`
 }
 
 // InteractionAnswer is a normalized answer for one Runtime question.
@@ -229,6 +285,7 @@ const (
 	ErrorFileUnavailable             ErrorCode = "file_unavailable"
 	ErrorFileNotFound                ErrorCode = "file_not_found"
 	ErrorInteractionNotFound         ErrorCode = "interaction_not_found"
+	ErrorInteractionPending          ErrorCode = "interaction_pending"
 	ErrorInteractionUnsupported      ErrorCode = "interaction_unsupported"
 	ErrorInteractionAlreadyResolved  ErrorCode = "interaction_already_resolved"
 	ErrorInteractionGone             ErrorCode = "interaction_gone"

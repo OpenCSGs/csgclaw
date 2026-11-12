@@ -22,6 +22,8 @@ import (
 	"csgclaw/internal/participant"
 	"csgclaw/internal/runtimecatalog"
 	"csgclaw/internal/scheduledtask"
+	"csgclaw/internal/skill/discovery"
+	skilllocal "csgclaw/internal/skill/local"
 	"csgclaw/internal/team"
 	hub "csgclaw/internal/template"
 	"csgclaw/internal/upgrade"
@@ -62,6 +64,8 @@ type Options struct {
 	AppsStatePath      string
 	AccessToken        string
 	NoAuth             bool
+	LocalSingleUser    bool
+	MemoryCloud        bool
 	AdvertiseBaseURL   string
 	InternalBaseURL    string
 	Desktop            *DesktopOptions
@@ -124,7 +128,38 @@ func Run(opts Options) error {
 		}
 	}
 
+	if root, err := skilllocal.SkillsRoot(); err == nil {
+		// Initial registration completes before the server reports readiness.
+		if _, err := discovery.Sync(root); err != nil {
+			slog.Warn("local skill discovery failed", "error", err)
+		}
+		go func() {
+			ticker := time.NewTicker(30 * time.Second)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-runCtx.Done():
+					return
+				case <-ticker.C:
+					if _, err := discovery.Sync(root); err != nil {
+						slog.Warn("local skill discovery failed", "error", err)
+					}
+				}
+			}
+		}()
+	}
 	handler := newHandler(opts)
+	closeMemory := startAgentMemory(runCtx, opts, listener, handler)
+	defer closeMemory()
+	if err := handler.MigrateSessionWorkspaces(); err != nil {
+		_ = listener.Close()
+		return fmt.Errorf("migrate session workspace attachments: %w", err)
+	}
+	if err := handler.EnableRelay(runCtx); err != nil {
+		_ = listener.Close()
+		return fmt.Errorf("initialize relay: %w", err)
+	}
+	defer handler.CloseRelay()
 	if opts.AppsStatePath != "" {
 		if err := handler.EnableConnectors(opts.AppsStatePath); err != nil {
 			_ = listener.Close()

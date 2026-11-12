@@ -28,7 +28,7 @@ import (
 	"csgclaw/internal/identity"
 	agentruntime "csgclaw/internal/runtime"
 	runtimeinstructions "csgclaw/internal/runtime/instructions"
-	"csgclaw/internal/runtime/sandboxgateway"
+	runtimeworkspace "csgclaw/internal/runtime/workspace"
 	larkextension "csgclaw/internal/runtimeextension/larkcli"
 	templateembed "csgclaw/internal/template/embed"
 )
@@ -66,6 +66,7 @@ type AgentRef struct {
 type BinaryResolver func(context.Context) (dshcli.Info, error)
 
 type Dependencies struct {
+	DisableNativeMemory   bool
 	ResolveRoomProfile    func(string, string, taskconfig.Config) (agentruntime.Profile, error)
 	ResolveBinary         BinaryResolver
 	ResolveAgent          func(agentruntime.Handle) (AgentRef, error)
@@ -229,17 +230,17 @@ func (r *Runtime) Provision(ctx context.Context, req agentruntime.ProvisionReque
 		return err
 	}
 	root := filepath.Dir(layout.WorkspaceRoot)
-	if err := sandboxgateway.EnsureEmbeddedWorkspace(templateembed.DSHWorkerRoot, layout.WorkspaceRoot); err != nil {
+	if err := runtimeworkspace.EnsureEmbeddedWorkspace(templateembed.DSHWorkerRoot, layout.WorkspaceRoot); err != nil {
 		return fmt.Errorf("seed DSH worker workspace: %w", err)
 	}
 	if overlay := strings.TrimSpace(req.WorkspaceOverlay); overlay != "" {
-		if err := sandboxgateway.OverlayWorkspaceTree(overlay, layout.WorkspaceRoot); err != nil {
+		if err := runtimeworkspace.OverlayWorkspaceTree(overlay, layout.WorkspaceRoot); err != nil {
 			return fmt.Errorf("overlay DSH worker workspace: %w", err)
 		}
 	}
 	workspaceSkills := filepath.Join(layout.WorkspaceRoot, "skills")
 	if info, statErr := os.Stat(workspaceSkills); statErr == nil && info.IsDir() {
-		if err := sandboxgateway.OverlayWorkspaceTree(workspaceSkills, layout.SkillsRoot); err != nil {
+		if err := runtimeworkspace.OverlayWorkspaceTree(workspaceSkills, layout.SkillsRoot); err != nil {
 			return fmt.Errorf("install DSH template skills: %w", err)
 		}
 	} else if statErr != nil && !errors.Is(statErr, os.ErrNotExist) {
@@ -280,8 +281,10 @@ func (r *Runtime) Provision(ctx context.Context, req agentruntime.ProvisionReque
 	if err := writeRuntimePatch(filepath.Join(root, patchFileName), req.Profile); err != nil {
 		return err
 	}
-	if err := provisionMemory(root, req); err != nil {
-		return fmt.Errorf("provision DSH memory: %w", err)
+	if !r.deps.DisableNativeMemory {
+		if err := provisionMemory(root, req); err != nil {
+			return fmt.Errorf("provision DSH memory: %w", err)
+		}
 	}
 	r.mu.Lock()
 	r.roots[strings.TrimSpace(req.RuntimeID)] = root
@@ -327,7 +330,7 @@ func writeRuntimePatch(path string, profile agentruntime.Profile) error {
 	if err != nil {
 		return err
 	}
-	patch := fmt.Sprintf("- id: llm-deepseek\n  config: %s\n- id: acp\n  config:\n    provider: deepseek-official\n    model: %q\n- id: compaction-basic\n  config:\n    thresholdRatio: 0.75\n    maxOverflowRetries: 1\n    auto: %t\n- insert:\n    - id: csgclaw-context\n      name: %q\n", providerConfig, profile.ModelID, enabled, bridgePath)
+	patch := fmt.Sprintf("- id: llm-deepseek\n  config: %s\n- id: acp\n  config:\n    provider: deepseek-official\n    model: %q\n- id: compaction-basic\n  config:\n    thresholdRatio: 0.75\n    maxOverflowRetries: 1\n    auto: %t\n- insert:\n    - id: csgclaw-context\n      name: %q\n", providerConfig, profile.ModelID, enabled, moduleFileURL(bridgePath))
 	if err := os.WriteFile(filepath.Join(filepath.Dir(path), contextPatchFileName), []byte(patch), 0o600); err != nil {
 		return err
 	}
@@ -439,8 +442,10 @@ func (r *Runtime) start(ctx context.Context, h agentruntime.Handle, spec *agentr
 	if err := writeRuntimePatch(filepath.Join(root, patchFileName), ref.Profile); err != nil {
 		return agentruntime.StateUnknown, err
 	}
-	if err := writeMemoryPatch(root, ref.RuntimeOptions, ref.Profile); err != nil {
-		return agentruntime.StateUnknown, err
+	if !r.deps.DisableNativeMemory {
+		if err := writeMemoryPatch(root, ref.RuntimeOptions, ref.Profile); err != nil {
+			return agentruntime.StateUnknown, err
+		}
 	}
 	if err := projectSkills(root, layout.SkillsRoot, ref.SkillStates); err != nil {
 		return agentruntime.StateUnknown, err
@@ -483,7 +488,11 @@ func (r *Runtime) launch(ctx context.Context, root, workspace, binary string, pr
 	if info, err := stderr.Stat(); err == nil {
 		logStartOffset = info.Size()
 	}
-	cmd := exec.Command(binary, dshLaunchArgs(root, enablePresent)...)
+	args := dshLaunchArgs(root, enablePresent)
+	if r.deps.DisableNativeMemory {
+		args = append(args[:4], args[6:]...)
+	}
+	cmd := exec.Command(binary, args...)
 	configureProcessGroup(cmd)
 	cmd.Dir = workspace
 	cmd.Env = environment
@@ -521,7 +530,8 @@ func (r *Runtime) launch(ctx context.Context, root, workspace, binary string, pr
 			} `json:"mcpCapabilities"`
 		} `json:"agentCapabilities"`
 	}
-	initCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	// Cold Node.js startup must fit inside the caller's startup budget.
+	initCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
 	if err := client.call(initCtx, "initialize", map[string]any{"protocolVersion": 1, "clientCapabilities": map[string]any{}}, &initialized, nil); err != nil {
 		_ = terminateProcessTree(cmd.Process.Pid, true)

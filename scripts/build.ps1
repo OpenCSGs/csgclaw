@@ -216,8 +216,9 @@ function Ensure-WebLayout {
     if (-not (Test-Path -LiteralPath (Join-Path $script:WebAppDir "package.json") -PathType Leaf)) {
         throw "Web UI package.json is missing: $(Join-Path $script:WebAppDir 'package.json')."
     }
-    if (-not (Test-Path -LiteralPath (Join-Path $script:WebAppDir "pnpm-lock.yaml") -PathType Leaf)) {
-        throw "Web UI pnpm lockfile is missing: $(Join-Path $script:WebAppDir 'pnpm-lock.yaml'). Restore the lockfile before building the Web UI."
+    $workspaceLock = Join-Path $script:WebAppDir "../../pnpm-lock.yaml"
+    if (-not (Test-Path -LiteralPath $workspaceLock -PathType Leaf)) {
+        throw "Web UI pnpm lockfile is missing: $workspaceLock. Restore the lockfile before building the Web UI."
     }
 }
 
@@ -296,7 +297,9 @@ function Ensure-WebDeps {
 
     $viteUnix = Join-Path $script:WebAppDir "node_modules/.bin/vite"
     $viteWindows = Join-Path $script:WebAppDir "node_modules/.bin/vite.cmd"
-    if ((Test-Path -LiteralPath $viteUnix -PathType Leaf) -or (Test-Path -LiteralPath $viteWindows -PathType Leaf)) {
+    $uiPackage = Join-Path $script:WebAppDir "node_modules/csgclaw-ui/package.json"
+    if ((Test-Path -LiteralPath $uiPackage -PathType Leaf) -and
+        ((Test-Path -LiteralPath $viteUnix -PathType Leaf) -or (Test-Path -LiteralPath $viteWindows -PathType Leaf))) {
         return
     }
 
@@ -320,7 +323,7 @@ function Ensure-DesktopDeps {
 function Invoke-TargetHelp {
     @(
         "scripts\build.cmd build                         - Windows wrapper; same as build with execution-policy bypass"
-        "powershell -File scripts/build.ps1 build        - build Web UI, companion host binaries, and the Linux sandbox CLI"
+        "powershell -File scripts/build.ps1 build        - build Web UI, companion host binaries"
         "powershell -File scripts/build.ps1 build-all    - same as build"
         "powershell -File scripts/build.ps1 fmt          - format Go files"
         "powershell -File scripts/build.ps1 test         - run go test ./..."
@@ -330,7 +333,6 @@ function Invoke-TargetHelp {
         "scripts\build.cmd desktop-package               - build the Windows website package"
         "scripts\build.cmd desktop-msix                  - build the Windows Microsoft Store MSIX package"
         "powershell -File scripts/build.ps1 build-server-bin - build bin/csgclaw, bin/csgclaw-cli, and bundled Codex"
-        "powershell -File scripts/build.ps1 build-sandbox-cli - build Linux csgclaw-cli into bin/sandbox-tools"
         "powershell -File scripts/build.ps1 run          - build, then run the server"
         "powershell -File scripts/build.ps1 package      - package the current platform"
         "powershell -File scripts/build.ps1 package-all  - build and package current platform artifacts"
@@ -461,15 +463,6 @@ function Invoke-TargetBuildServerBin {
     Fetch-CodexCli -Goos $script:TargetOs -Goarch $script:TargetArch -OutputDir $script:BinDir
 }
 
-function Invoke-TargetBuildSandboxCli {
-    Ensure-Directory -Path $script:SandboxBundleToolsDir
-    Invoke-GoBuild -OutputPath $script:SandboxCliBin -PackagePath "./cmd/csgclaw-cli" -Ldflags $script:CliLdflags -Env @{
-        CGO_ENABLED = "0"
-        GOOS        = "linux"
-        GOARCH      = $script:TargetArch
-    }
-}
-
 function Invoke-DesktopBackendBundle {
     param(
         [Parameter(Mandatory = $true)][string]$Goos,
@@ -483,8 +476,7 @@ function Invoke-DesktopBackendBundle {
 
     $bundleRoot = Join-Path (Join-Path $outputRoot "backend") "csgclaw"
     $binDir = Join-Path $bundleRoot "bin"
-    $sandboxCliDir = Join-Path $binDir "sandbox-tools"
-    Ensure-Directory -Path $sandboxCliDir
+    Ensure-Directory -Path $binDir
     Set-Content -LiteralPath (Join-Path $bundleRoot ".csgclaw-bundle.json") -Value "{""app"":""csgclaw"",""layout"":""official-bundle"",""version"":""$($script:Version)""}" -NoNewline
 
     $targetEnv = @{
@@ -493,12 +485,7 @@ function Invoke-DesktopBackendBundle {
         GOARCH      = $Goarch
     }
     Invoke-GoBuild -OutputPath (Join-Path $binDir (Get-BinaryName -BaseName "csgclaw" -Goos $Goos)) -PackagePath "./cmd/csgclaw" -Ldflags $script:Ldflags -Env $targetEnv -Tags $script:GoBuildTags -Quiet
-    Invoke-GoBuild -OutputPath (Join-Path $binDir (Get-BinaryName -BaseName "csgclaw-cli" -Goos $Goos)) -PackagePath $script:SandboxCliCmdPath -Ldflags $script:CliLdflags -Env $targetEnv -Quiet
-    Invoke-GoBuild -OutputPath (Join-Path $sandboxCliDir "csgclaw-cli") -PackagePath $script:SandboxCliCmdPath -Ldflags $script:CliLdflags -Env @{
-        CGO_ENABLED = "0"
-        GOOS        = "linux"
-        GOARCH      = $Goarch
-    } -Quiet
+    Invoke-GoBuild -OutputPath (Join-Path $binDir (Get-BinaryName -BaseName "csgclaw-cli" -Goos $Goos)) -PackagePath $script:HostCliCmdPath -Ldflags $script:CliLdflags -Env $targetEnv -Quiet
     Fetch-CodexCli -Goos $Goos -Goarch $Goarch -OutputDir $binDir
 
     if ($Goos -eq "windows") {
@@ -511,100 +498,6 @@ function Invoke-DesktopBackendBundle {
     }
 
     Write-Host "Desktop backend ready: $bundleRoot"
-}
-
-function Supports-BoxLiteBundle {
-    param(
-        [Parameter(Mandatory = $true)][string]$Goos,
-        [Parameter(Mandatory = $true)][string]$Goarch
-    )
-
-    return ($Goos -eq "darwin" -and $Goarch -eq "arm64") -or
-        ($Goos -eq "linux" -and $Goarch -eq "amd64") -or
-        ($Goos -eq "linux" -and $Goarch -eq "arm64")
-}
-
-function Resolve-IncludeBoxlite {
-    param(
-        [Parameter(Mandatory = $true)][string]$AppName,
-        [Parameter(Mandatory = $true)][string]$Goos,
-        [Parameter(Mandatory = $true)][string]$Goarch
-    )
-
-    if (-not [string]::IsNullOrWhiteSpace($script:IncludeBoxlite)) {
-        return $script:IncludeBoxlite
-    }
-
-    if (-not [string]::IsNullOrWhiteSpace($script:PackageMode)) {
-        switch ($script:PackageMode) {
-            "bundled-boxlite-cli" { return "1" }
-            "legacy-single-binary" { return "0" }
-            default { throw "unsupported PACKAGE_MODE: $($script:PackageMode)" }
-        }
-    }
-
-    if ($AppName -eq "csgclaw" -and (Supports-BoxLiteBundle -Goos $Goos -Goarch $Goarch)) {
-        return "1"
-    }
-
-    return "0"
-}
-
-function Resolve-BoxLiteTargetSuffix {
-    param(
-        [Parameter(Mandatory = $true)][string]$Goos,
-        [Parameter(Mandatory = $true)][string]$Goarch
-    )
-
-    switch ("$Goos/$Goarch") {
-        "darwin/arm64" { return "aarch64-apple-darwin" }
-        "linux/amd64" { return "x86_64-unknown-linux-gnu" }
-        "linux/arm64" { return "aarch64-unknown-linux-gnu" }
-        default { throw "unsupported boxlite-cli target: $Goos/$Goarch" }
-    }
-}
-
-function Fetch-BoxLiteCli {
-    param(
-        [Parameter(Mandatory = $true)][string]$Goos,
-        [Parameter(Mandatory = $true)][string]$Goarch,
-        [Parameter(Mandatory = $true)][string]$OutputDir
-    )
-
-    $suffix = Resolve-BoxLiteTargetSuffix -Goos $Goos -Goarch $Goarch
-    $archiveName = "boxlite-cli-$($script:BoxliteCliVersion)-$suffix.tar.gz"
-    $downloadUrl = "$($script:BoxliteCliBaseUrl)/$($script:BoxliteCliVersion)/$archiveName"
-
-    $tmpDir = Join-Path ([System.IO.Path]::GetTempPath()) ("csgclaw-boxlite-" + [guid]::NewGuid().ToString("N"))
-    Ensure-Directory -Path $tmpDir
-    $archivePath = Join-Path $tmpDir $archiveName
-    $extractDir = Join-Path $tmpDir "extract"
-    Ensure-Directory -Path $extractDir
-    Ensure-Directory -Path $OutputDir
-
-    try {
-        Write-Host "fetching $downloadUrl"
-        Invoke-WebRequest -Uri $downloadUrl -OutFile $archivePath -UseBasicParsing
-
-        $tar = Get-CommandPathOrNull "tar"
-        if ($null -eq $tar) {
-            throw "missing required command: tar"
-        }
-
-        Invoke-Checked -FilePath $tar -Arguments @("-xzf", $archivePath, "-C", $extractDir)
-
-        $boxlite = Get-ChildItem -Path $extractDir -Recurse -File | Where-Object { $_.Name -eq "boxlite" } | Select-Object -First 1
-        if ($null -eq $boxlite) {
-            throw "boxlite binary not found in $archiveName"
-        }
-
-        Copy-Item -LiteralPath $boxlite.FullName -Destination (Join-Path $OutputDir "boxlite") -Force
-    }
-    finally {
-        if (Test-Path -LiteralPath $tmpDir) {
-            Remove-Item -LiteralPath $tmpDir -Recurse -Force
-        }
-    }
 }
 
 function Resolve-CodexCliDownloadTarget {
@@ -742,17 +635,6 @@ function Invoke-PackageRelease {
         [Parameter(Mandatory = $true)][string]$Goarch
     )
 
-    $includeBoxlite = Resolve-IncludeBoxlite -AppName $AppName -Goos $Goos -Goarch $Goarch
-    if ($includeBoxlite -notin @("0", "1")) {
-        throw "INCLUDE_BOXLITE must be 0 or 1, got: $includeBoxlite"
-    }
-    if ($AppName -ne "csgclaw" -and $includeBoxlite -eq "1") {
-        throw "INCLUDE_BOXLITE=1 is only supported for APP=csgclaw"
-    }
-    if ($AppName -eq "csgclaw" -and $includeBoxlite -eq "1" -and -not (Supports-BoxLiteBundle -Goos $Goos -Goarch $Goarch)) {
-        throw "bundled boxlite is not supported for $Goos/$Goarch"
-    }
-
     Require-WebAssets -AppName $AppName
     Ensure-Directory -Path $script:DistDir
 
@@ -789,23 +671,13 @@ function Invoke-PackageRelease {
 
         if ($AppName -eq "csgclaw") {
             $stageDir = Split-Path -Parent $binaryOutput
-            $sandboxCliDir = Join-Path $stageDir "sandbox-tools"
-            Ensure-Directory -Path $sandboxCliDir
-            Invoke-GoBuild -OutputPath (Join-Path $sandboxCliDir "csgclaw-cli") -PackagePath $script:SandboxCliCmdPath -Ldflags $script:CliLdflags -Env @{
-                CGO_ENABLED = "0"
-                GOOS        = "linux"
-                GOARCH      = $Goarch
-            }
-            Invoke-GoBuild -OutputPath (Join-Path $stageDir (Get-BinaryName -BaseName "csgclaw-cli" -Goos $Goos)) -PackagePath $script:SandboxCliCmdPath -Ldflags $script:CliLdflags -Env @{
+            Invoke-GoBuild -OutputPath (Join-Path $stageDir (Get-BinaryName -BaseName "csgclaw-cli" -Goos $Goos)) -PackagePath $script:HostCliCmdPath -Ldflags $script:CliLdflags -Env @{
                 CGO_ENABLED = "0"
                 GOOS        = $Goos
                 GOARCH      = $Goarch
             }
         }
 
-        if ($AppName -eq "csgclaw" -and $includeBoxlite -eq "1") {
-            Fetch-BoxLiteCli -Goos $Goos -Goarch $Goarch -OutputDir (Split-Path -Parent $binaryOutput)
-        }
 
         if ($AppName -eq "csgclaw") {
             Fetch-CodexCli -Goos $Goos -Goarch $Goarch -OutputDir (Split-Path -Parent $binaryOutput)
@@ -850,10 +722,9 @@ function Invoke-PackageRelease {
 }
 
 function Invoke-TargetBuild {
-    Write-Host "Starting full build: Web UI, companion host binaries, and Linux sandbox CLI."
+    Write-Host "Starting full build: Web UI, companion host binaries."
     Invoke-TargetBuildWeb
     Invoke-TargetBuildServerBin
-    Invoke-TargetBuildSandboxCli
     Write-Host "Build complete."
 }
 
@@ -960,24 +831,18 @@ $script:BuildTime = Get-EnvOrDefault -Name "BUILD_TIME" -Default ((Get-Date).ToU
 $script:Ldflags = Get-EnvOrDefault -Name "LDFLAGS" -Default "-X $($script:VersionPkg).Version=$($script:Version) -X $($script:VersionPkg).Commit=$($script:Commit) -X $($script:VersionPkg).BuildTime=$($script:BuildTime)"
 $script:CliLdflags = Get-EnvOrDefault -Name "CLI_LDFLAGS" -Default "-s -w $($script:Ldflags)"
 $script:CgoEnabled = Get-EnvOrDefault -Name "CGO_ENABLED" -Default "0"
-$script:WebAppDir = Get-EnvOrDefault -Name "WEB_APP_DIR" -Default (Join-Path $RootDir "web/app")
+$script:WebAppDir = Get-EnvOrDefault -Name "WEB_APP_DIR" -Default (Join-Path $RootDir "web/packages/app")
 $script:WebStaticDistDir = Get-EnvOrDefault -Name "WEB_STATIC_DIST_DIR" -Default (Join-Path $RootDir "web/static-dist")
 $script:DesktopDir = Get-EnvOrDefault -Name "DESKTOP_DIR" -Default (Join-Path $RootDir "desktop")
 $script:DesktopMakeDir = Join-Path $script:DesktopDir "out/make"
-$script:SandboxBundleToolsDir = Get-EnvOrDefault -Name "SANDBOX_BUNDLE_TOOLS_DIR" -Default (Join-Path $script:BinDir "sandbox-tools")
-$script:SandboxCliBin = Get-EnvOrDefault -Name "SANDBOX_CLI_BIN" -Default (Join-Path $script:SandboxBundleToolsDir "csgclaw-cli")
 $script:HostGoos = Resolve-GoEnv -Name "GOOS"
 $script:HostGoarch = Resolve-GoEnv -Name "GOARCH"
 $script:TargetOs = Get-EnvOrDefault -Name "TARGET_OS" -Default $script:HostGoos
 $script:TargetArch = Get-EnvOrDefault -Name "TARGET_ARCH" -Default $script:HostGoarch
 $script:GoBuildTags = Get-EnvOrDefault -Name "GO_BUILD_TAGS" -Default ""
-$script:PackageMode = Get-EnvOrDefault -Name "PACKAGE_MODE" -Default ""
-$script:IncludeBoxlite = Get-EnvOrDefault -Name "INCLUDE_BOXLITE" -Default ""
-$script:BoxliteCliVersion = Get-EnvOrDefault -Name "BOXLITE_CLI_VERSION" -Default "v0.9.0"
-$script:BoxliteCliBaseUrl = Get-EnvOrDefault -Name "BOXLITE_CLI_BASE_URL" -Default "https://github.com/boxlite-ai/boxlite/releases/download"
 $script:CodexCliDownloadBaseUrl = Get-EnvOrDefault -Name "CODEX_CLI_DOWNLOAD_BASE_URL" -Default "https://csgclaw.opencsg.com/codex-cli/latest"
 $script:CodexCliPlatformsPath = Join-Path $RootDir "scripts/codex-cli-platforms.txt"
-$script:SandboxCliCmdPath = Get-EnvOrDefault -Name "SANDBOX_CLI_CMD_PATH" -Default "./cmd/csgclaw-cli"
+$script:HostCliCmdPath = Get-EnvOrDefault -Name "HOST_CLI_CMD_PATH" -Default "./cmd/csgclaw-cli"
 
 Push-Location $RootDir
 try {
@@ -991,8 +856,6 @@ try {
         "web-dev" { Invoke-TargetWebDev }
         "build-web" { Invoke-TargetBuildWeb }
         "build-server-bin" { Invoke-TargetBuildServerBin }
-        "build-sandbox-cli" { Invoke-TargetBuildSandboxCli }
-        "install-sandbox-cli" { Invoke-TargetBuildSandboxCli }
         "build" { Invoke-TargetBuild }
         "build-all" { Invoke-TargetBuild }
         "desktop-package" { Invoke-TargetDesktopPackage }

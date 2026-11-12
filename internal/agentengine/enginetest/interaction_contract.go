@@ -83,6 +83,35 @@ func runDetachedInteractionContract(t *testing.T, factory InterfaceFactory) {
 			t.Fatal("missing post-Turn resolution event")
 		}
 	})
+	t.Run("invalid follow-up question does not redeliver the answer", func(t *testing.T) {
+		var expiry uint64
+		conversations := newClient(t, &expiry).Conversations("agent-a")
+		ctx := t.Context()
+		first := conversations.Run(ctx, contractTurn("question", "conversation"), nil)
+		if len(first.Interactions) != 1 {
+			t.Fatalf("expected an initial question, got %+v", first)
+		}
+		expiry = uint64((25 * time.Hour).Milliseconds())
+		resolution := agentengine.InteractionResolution{
+			ConversationKey: "conversation", InteractionID: first.Interactions[0].ID,
+			Answers: map[string]agentengine.InteractionAnswer{"secret": {Values: []string{"user_note: test"}}},
+			ContinueDetached: func(ctx context.Context, item agentengine.InteractionRequest) bool {
+				turn := contractTurn("answer", "conversation")
+				turn.RespondingTo = item.ID
+				result := conversations.Run(ctx, turn, nil)
+				if result.Status != agentengine.TurnFailed || !result.Dispatched || agentengine.ErrorCodeOf(result.Error) != agentengine.ErrorRuntimeFailed {
+					t.Errorf("turn emitting invalid question = %+v, want a dispatched failure", result)
+				}
+				return result.Dispatched
+			},
+		}
+		if err := conversations.Resolve(ctx, resolution); err != nil {
+			t.Fatalf("previous answer was not recorded as delivered: %v", err)
+		}
+		if err := conversations.Resolve(ctx, resolution); agentengine.ErrorCodeOf(err) != agentengine.ErrorInteractionAlreadyResolved {
+			t.Fatalf("duplicate answer = %v", err)
+		}
+	})
 	t.Run("invalid recreate preserves pending question", func(t *testing.T) {
 		client := newClient(t, nil)
 		conversations := client.Conversations("agent-a")

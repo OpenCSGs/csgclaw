@@ -1,13 +1,13 @@
 # 前端架构图解
 
-这张图用一个完整视角解释 `web/app` 前端架构，是 `development.zh.md` 的图形化补充。
+这张图用一个完整视角解释 `web/packages/app` 前端架构，是 `development.zh.md` 的图形化补充。
 
 英文版: `architecture.md`。
 
 ```text
 +==============================================================================================+
 |                                   CSGClaw Web 前端架构                                        |
-|                           web/app/src 下的 Vite + React 应用                                  |
+|                           web/packages/app/src 下的 Vite + React 应用                         |
 +==============================================================================================+
 
   构建与托管边界
@@ -15,7 +15,7 @@
 
   +-----------------------+        +-----------------------+        +---------------------------+
   | 开发源码              |        | Vite 构建             |        | 嵌入产物                  |
-  | web/app/src           | -----> | pnpm / make build-web | -----> | web/static-dist           |
+  | web/packages/app/src  | -----> | pnpm / make build-web | -----> | web/static-dist           |
   | 只在这里改源码        |        | 生成前端资源          |        | 由 Go embed 托管          |
   +-----------------------+        +-----------------------+        +---------------------------+
 
@@ -46,7 +46,7 @@
   源码架构
   ----------------------------------------------------------------------------------------------
 
-  web/app/src
+  web/packages/app/src
   |
   +-- main.tsx
   |     只做 React 入口
@@ -259,12 +259,29 @@
   ----------------------------------------------------------------------------------------------
 
   只改文档                         -> 通读并检查 Markdown
-  TypeScript 或 import 路径变化    -> pnpm --dir web/app typecheck
-  前端源码变化                     -> pnpm --dir web/app lint
-  纯 model/helper 变化             -> pnpm --dir web/app test
-  标准前端验证                     -> pnpm --dir web/app check
-  不写 static-dist 的打包冒烟      -> pnpm --dir web/app exec vite build --outDir /private/tmp/csgclaw-web-build --emptyOutDir
-  明确要更新嵌入产物               -> pnpm --dir web/app build
+  TypeScript 或 import 路径变化    -> pnpm --dir web/packages/app typecheck
+  前端源码变化                     -> pnpm --dir web/packages/app lint
+  纯 model/helper 变化             -> pnpm --dir web/packages/app test
+  标准前端验证                     -> pnpm --dir web/packages/app check
+  不写 static-dist 的打包冒烟      -> pnpm --dir web/packages/app exec vite build --outDir /private/tmp/csgclaw-web-build --emptyOutDir
+  明确要更新嵌入产物               -> pnpm --dir web/packages/app build
 ```
 
 共享视图归属：AgentDetails、TeamDetailPane、ConversationWorkspace 位于 components/business；路由页面负责控制器 props 与 URL 的适配。AppsPage、HubPage 都使用 HubDetailPane。workspaceControllerContract 定义显式契约，bindings 组合视图 props；应用主题由 bootstrap/AppThemeSynchronizer 同步。独立 UI Lab 使用生产组件，通用边界测试位于 tests/components，公共解析工具位于 tests/helpers，并通过 pnpm test/check 运行。
+
+## 智能体目录视图
+
+`AgentOverviewPage` 继续使用 `/agents` 路由：`?tab=templates` 为智能体模板，
+`?tab=plaza` 为云端智能体广场，`?cloud=<relay-agent-id>` 为“我的智能体”中
+已添加的云端智能体详情。链接由 `models/routing.ts` 的辅助函数生成。
+本地智能体继续使用 `/agents/:agentId`；云端 ID 不传入本地 Agent API。
+
+广场通过 `GET /api/v1/relay/agents` 从当前登录社区的 instance 列表发现公开智能体，
+以 `relay.agent_id` 中的 Relay Agent ID 查询状态和召唤，支持其他机器发布的 Agent。
+外部发布先注册 Relay，再幂等创建 source=external 的社区 instance；平台模板 worker 按
+CSGCLAW_NAME 的 content ID 回写已有 instance。广场使用 registered=true 包含两类来源。
+服务端按本地 API 地址和端口隔离持久化 client ID 及发布状态，连接引用绑定站点和账号。
+浏览器保存展示信息、Relay ID 和连接引用，不保存 Token。
+下架或不可用的智能体在“我的智能体”中保留为离线引用。
+云端聊天和任务通过服务端 Relay 代理，按连接隔离历史，以 Response ID 续聊。
+社区转发使用 `/api/v1/relay/v1/*`，上游验证凭据并注入可信用户 UUID。

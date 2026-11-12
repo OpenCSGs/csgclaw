@@ -1,6 +1,6 @@
 # Interaction Design Rules
 
-Apply these rules when changing user-visible layout, controls, navigation, fields, icons, copy, localization, or interaction states in `web/app`. This English document is the agent-facing source of truth; [Chinese companion](interaction-design.zh.md).
+Apply these rules when changing user-visible layout, controls, navigation, fields, icons, copy, localization, or interaction states in `web/packages/app` and the shared UI package `web/packages/csgclaw-ui`. This English document is the agent-facing source of truth; [Chinese companion](interaction-design.zh.md).
 
 [Development](development.md) owns code structure, styling, i18n mechanisms and test commands. [UI components](ui-components.md) owns primitive APIs, keyboard contracts and layering. This document owns user-visible outcomes. The [walkthrough plan](../../ux/interaction-quality-plan.zh.md) owns rollout, issue records and evaluation.
 

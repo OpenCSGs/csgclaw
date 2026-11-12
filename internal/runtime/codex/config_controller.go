@@ -111,7 +111,7 @@ func (r *Runtime) resetPersistedConversationMappings(runtimeID string) error {
 	if err != nil {
 		return fmt.Errorf("resolve codex session metadata after model change: %w", err)
 	}
-	if err := writeJSONFile(r.writeFile, path, meta); err != nil {
+	if err := writeJSONFile(r.writeMetadataFile, path, meta); err != nil {
 		return fmt.Errorf("reset codex conversations after model change: %w", err)
 	}
 	return nil
@@ -185,7 +185,7 @@ func (r *Runtime) ReconcileMCPServers(_ context.Context, h agentruntime.Handle, 
 	if err != nil {
 		return err
 	}
-	return r.seedCodexHomeConfig(codexHomeDir, workspaceDir, agentRef.Profile.Normalized(), agentRef.RuntimeOptions, servers)
+	return r.seedCodexHomeConfig(codexHomeDir, workspaceDir, agentRef.Profile.Normalized(), agentRef.RuntimeOptions, servers, r.sessionModelCatalog(agentRef.ID, agentRef.Profile)...)
 }
 
 func (r *Runtime) ListMCPServers(_ context.Context, h agentruntime.Handle, _ agentruntime.MCPServersSnapshot) (agentruntime.MCPServersSnapshot, error) {

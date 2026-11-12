@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"csgclaw/internal/agentengine"
+	"csgclaw/internal/agentengine/contract"
 	"csgclaw/internal/apitypes"
 	"csgclaw/internal/channel"
 	channelrender "csgclaw/internal/channel/csgclaw/render"
@@ -69,12 +70,18 @@ func TestTranscriptRendererPersistsGeneratedFilesWithFinalMessage(t *testing.T) 
 	// Generated files above the former 25 MiB limit must reach the chat transcript.
 	line := []byte("# Generated report\n")
 	markdown := bytes.Repeat(line, (26*1024*1024)/len(line))
-	created, err := files.Create(context.Background(), agentengine.FileCreateRequest{
-		Name: "report.md", MIMEType: "text/markdown", SizeBytes: int64(len(markdown)),
+	published, err := contract.NewOutputFile(t.Context(), contract.OutputFileMetadata{
+		Name: "report.md", MediaType: "text/markdown", SizeBytes: int64(len(markdown)),
 	}, bytes.NewReader(markdown))
 	if err != nil {
 		t.Fatalf("Create(output file) error = %v", err)
 	}
+	published.SourcePath = "reports/original.md"
+	outputs, registerErr := fileStore.RegisterTurnFiles("agent-worker", "conversation-1", "turn-files", []*agentengine.OutputFile{published})
+	if registerErr != nil {
+		t.Fatal(registerErr)
+	}
+	created := outputs[0]
 	t.Cleanup(func() { _ = files.Delete(context.Background(), created.ID) })
 	store, err := NewIMTranscriptStore(imService, fixedParticipantResolver{item: apitypes.Participant{
 		ID: "pt-worker", ChannelUserRef: "user-worker",
@@ -117,6 +124,9 @@ func TestTranscriptRendererPersistsGeneratedFilesWithFinalMessage(t *testing.T) 
 		t.Fatalf("attachments = %+v, want one generated file", message.Attachments)
 	}
 	attachment := message.Attachments[0]
+	if attachment.SourcePath != "reports/original.md" {
+		t.Fatalf("room attachment source path = %q, want reports/original.md", attachment.SourcePath)
+	}
 	if attachment.Name != "report.md" || attachment.MediaType != "text/markdown" || attachment.SHA256 != created.SHA256 {
 		t.Fatalf("attachment = %+v, want generated file metadata", attachment)
 	}
@@ -128,6 +138,9 @@ func TestTranscriptRendererPersistsGeneratedFilesWithFinalMessage(t *testing.T) 
 	file, err := reloaded.AttachmentFile(attachment.ID)
 	if err != nil {
 		t.Fatalf("AttachmentFile() after restart error = %v", err)
+	}
+	if file.Attachment.SourcePath != attachment.SourcePath {
+		t.Fatalf("reloaded attachment source path = %q, want %q", file.Attachment.SourcePath, attachment.SourcePath)
 	}
 	content, err := os.ReadFile(file.Path)
 	if err != nil || !bytes.Equal(content, markdown) {
@@ -304,6 +317,9 @@ func assertChannelMetadata(t *testing.T, metadata map[string]any) map[string]any
 	return namespace
 }
 
+func (fixedOutputFileConversation) PendingInteractions(context.Context, agentengine.ConversationKey) ([]agentengine.InteractionRequest, error) {
+	return nil, nil
+}
 func (fixedOutputFileConversation) GetInteraction(context.Context, agentengine.ConversationKey, string) (agentengine.InteractionRequest, error) {
 	return agentengine.InteractionRequest{}, &agentengine.TurnError{Code: agentengine.ErrorInteractionNotFound, Message: "no interaction in this test fixture"}
 }

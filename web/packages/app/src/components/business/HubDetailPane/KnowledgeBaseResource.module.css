@@ -1,0 +1,153 @@
+.knowledge-base-status:global(.available) {
+  color: #087443;
+  background: #e8f8ef;
+}
+
+.knowledge-base-status:global(.unavailable) {
+  color: #b42318;
+  background: #fef0ee;
+}
+
+.knowledge-base-overview {
+  padding: 0;
+}
+
+.knowledge-base-badges {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+
+.knowledge-base-source-badge {
+  color: var(--brand-700);
+  background: color-mix(in srgb, var(--brand-500) 10%, var(--panel-soft));
+}
+
+.knowledge-base-mcp-badge {
+  color: var(--gray-700);
+  background: var(--gray-100);
+}
+
+:root[data-theme="dark"] .knowledge-base-mcp-badge {
+  color: var(--gray-300);
+  background: var(--gray-800);
+}
+
+.knowledge-base-help {
+  padding: 20px 22px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel-strong);
+}
+
+.knowledge-base-help strong {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--text);
+  font-size: 15px;
+}
+
+.knowledge-base-help p {
+  margin: 0;
+  color: var(--gray-600);
+  line-height: 1.6;
+}
+
+.knowledge-base-configured {
+  display: grid;
+  gap: 16px;
+  width: 100%;
+}
+
+.knowledge-base-configured > p {
+  margin: 0;
+  color: var(--gray-600);
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+.knowledge-base-mcp-name {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  color: var(--gray-600);
+  font-size: 13px;
+}
+
+.knowledge-base-mcp-name strong {
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-weight: 600;
+}
+
+.knowledge-base-mcp-preview {
+  width: 100%;
+  max-height: min(480px, 54vh);
+  margin: 0;
+  overflow: auto;
+  padding: 20px 22px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--panel-strong);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.65;
+  tab-size: 2;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.knowledge-base-mcp-loading {
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--panel-strong);
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.knowledge-base-guide-dialog {
+  width: min(620px, calc(100vw - 40px));
+  max-width: 620px;
+}
+
+.knowledge-base-guide-description {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.knowledge-base-guide-error {
+  margin-top: 14px;
+}
+
+.kb-added-alert {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 10px 13px;
+  border: 1px solid color-mix(in oklab, var(--success-500) 30%, var(--line));
+  border-radius: 12px;
+  background: color-mix(in oklab, var(--success-500) 9%, var(--surface));
+  color: color-mix(in oklab, var(--success-600) 86%, var(--text));
+  font-size: 13px;
+  font-weight: 680;
+  line-height: 18px;
+}
+
+:root[data-theme="dark"] .kb-added-alert {
+  border-color: color-mix(in oklab, var(--success-500) 38%, var(--line));
+  background: color-mix(in oklab, var(--success-500) 14%, transparent);
+  color: color-mix(in oklab, var(--success-400) 78%, var(--text));
+}
+
+:root[data-theme="dark"] .knowledge-base-help p,
+:root[data-theme="dark"] .knowledge-base-configured > p,
+:root[data-theme="dark"] .knowledge-base-mcp-name {
+  color: var(--gray-300);
+}

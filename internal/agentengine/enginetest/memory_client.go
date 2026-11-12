@@ -16,6 +16,7 @@ import (
 
 	"csgclaw/internal/activity"
 	"csgclaw/internal/agentengine"
+	"csgclaw/internal/agentengine/contract"
 	"csgclaw/internal/agentengine/interactionstate"
 	"csgclaw/internal/agentengine/lifecycle"
 	agentruntime "csgclaw/internal/runtime"
@@ -387,11 +388,14 @@ func (a *memoryAgents) Get(ctx context.Context, agentID string, options agenteng
 	return item, nil
 }
 
-func (a *memoryAgents) List(context.Context, agentengine.AgentListOptions) ([]agentengine.Agent, error) {
+func (a *memoryAgents) List(_ context.Context, options agentengine.AgentListOptions) ([]agentengine.Agent, error) {
 	a.client.mu.Lock()
 	defer a.client.mu.Unlock()
 	out := make([]agentengine.Agent, 0, len(a.client.agents))
 	for _, item := range a.client.agents {
+		if item.ArchivedAt != nil && !options.IncludeArchived {
+			continue
+		}
 		item.Status.SkillSummaries = nil
 		out = append(out, a.client.withExtensionReadinessLocked(item))
 	}
@@ -619,16 +623,10 @@ func (c *memoryConversations) Run(ctx context.Context, request agentengine.TurnR
 	if c.agentID == "" || request.ID == "" || request.ConversationKey == "" || len(request.Input) == 0 {
 		return failed(agentengine.ErrorInvalidRequest, "agent ID, turn ID, conversation key, and input are required")
 	}
+	if err := contract.ValidateInput(request.Input); err != nil {
+		return failed(err.Code, err.Message)
+	}
 	for _, part := range request.Input {
-		if part.Kind == agentengine.InputPartText && (strings.TrimSpace(part.Text) == "" || part.File != nil) {
-			return failed(agentengine.ErrorInvalidRequest, "text input must contain only non-empty text")
-		}
-		if part.Kind == agentengine.InputPartFile && (part.File == nil || strings.TrimSpace(part.Text) != "") {
-			return failed(agentengine.ErrorInvalidRequest, "file input must include only a file")
-		}
-		if part.Kind == agentengine.InputPartFile && strings.TrimSpace(part.File.ID) == "" {
-			return failed(agentengine.ErrorInvalidRequest, "file ID is required")
-		}
 		if part.Kind == agentengine.InputPartFile {
 			download, err := c.client.files.Scope(c.agentID).Get(ctx, part.File.ID)
 			if err != nil {
@@ -637,9 +635,6 @@ func (c *memoryConversations) Run(ctx context.Context, request agentengine.TurnR
 			if err := download.Content.Close(); err != nil {
 				return failed(agentengine.ErrorFileUnavailable, "file content is unavailable")
 			}
-		}
-		if part.Kind != agentengine.InputPartText && part.Kind != agentengine.InputPartFile {
-			return failed(agentengine.ErrorInvalidRequest, "unsupported input kind")
 		}
 	}
 	if request.Continuation == "" {
@@ -657,7 +652,7 @@ func (c *memoryConversations) Run(ctx context.Context, request agentengine.TurnR
 	if request.Continuation != agentengine.ContinuationCreateOrResume && request.Continuation != agentengine.ContinuationRequireExisting {
 		return failed(agentengine.ErrorInvalidRequest, fmt.Sprintf("unsupported continuation policy %q", request.Continuation))
 	}
-	if request.Interaction != agentengine.InteractionResolve && request.Interaction != agentengine.InteractionReject && request.Interaction != agentengine.InteractionSkipUserInput {
+	if !request.Interaction.Valid() {
 		return failed(agentengine.ErrorInvalidRequest, fmt.Sprintf("unsupported interaction policy %q", request.Interaction))
 	}
 	if err := ctx.Err(); err != nil {
@@ -688,7 +683,12 @@ func (c *memoryConversations) Run(ctx context.Context, request agentengine.TurnR
 		return result
 	}
 	defer releaseExecution()
-	c.client.interactions.Interrupt(c.agentID, request.ConversationKey, "", true)
+	if err := c.client.interactions.BeginTurn(c.agentID, request); err != nil {
+		result := agentengine.TurnResult{Status: agentengine.TurnFailed, Error: err}
+		turn.cancel()
+		c.completeMemoryTurn(key, turn, result)
+		return result
+	}
 
 	c.client.mu.Lock()
 	agentItem, exists := c.client.agents[c.agentID]
@@ -729,7 +729,7 @@ func (c *memoryConversations) Run(ctx context.Context, request agentengine.TurnR
 	var policyResult *agentengine.TurnResult
 	recordingSink := agentengine.EventSinkFunc(func(eventCtx context.Context, event agentengine.TurnEvent) error {
 		if event.Interaction != nil {
-			switch request.Interaction {
+			switch request.Interaction.For(event.Interaction.Kind) {
 			case agentengine.InteractionReject:
 				result := failed(agentengine.ErrorInteractionUnsupported, "Runtime interaction is not supported by this caller")
 				result.Dispatched = true
@@ -774,7 +774,7 @@ func (c *memoryConversations) Run(ctx context.Context, request agentengine.TurnR
 	} else {
 		c.client.interactions.Interrupt(c.agentID, request.ConversationKey, request.ID, false)
 	}
-	if result.Status == agentengine.TurnSucceeded && request.Interaction == agentengine.InteractionResolve {
+	if result.Status == agentengine.TurnSucceeded && request.Interaction.For(agentengine.InteractionUserInput) == agentengine.InteractionResolve {
 		var args *activity.RequestUserInputArgs
 		for _, event := range turn.events {
 			if event.Output != nil && event.Output.Kind == agentengine.OutputItemRequestUserInput {
@@ -784,7 +784,7 @@ func (c *memoryConversations) Run(ctx context.Context, request agentengine.TurnR
 			}
 		}
 		if args != nil {
-			item, err := c.client.interactions.CreateDetached(c.agentID, request.ConversationKey, request.ID, *args, func(item agentengine.InteractionRequest) {
+			item, err := c.client.interactions.CreateDetached(c.agentID, request.ConversationKey, request.ID, *args, request.Interaction, func(item agentengine.InteractionRequest) {
 				event := agentengine.TurnEvent{Kind: agentengine.TurnEventActivityUpdate, Activity: &agentengine.ActivityUpdate{ID: item.ID, Kind: string(activity.RuntimeEventUserInputResolved), Payload: item.Payload}}
 				if snapshot, ok := item.Payload.(activity.UserInputSnapshot); ok {
 					event.Activity.Status = string(snapshot.Status)
@@ -795,6 +795,7 @@ func (c *memoryConversations) Run(ctx context.Context, request agentengine.TurnR
 			})
 			if err != nil {
 				result = failed(agentengine.ErrorRuntimeFailed, err.Error())
+				result.Dispatched = true
 			} else {
 				result.Interactions = []agentengine.InteractionRequest{item}
 			}
@@ -853,6 +854,18 @@ func (c *memoryConversations) Reset(ctx context.Context, key agentengine.Convers
 	delete(c.client.conversations, identity)
 	c.client.mu.Unlock()
 	return nil
+}
+
+func (c *memoryConversations) PendingInteractions(ctx context.Context, key agentengine.ConversationKey) ([]agentengine.InteractionRequest, error) {
+	if ctx != nil {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+	}
+	if c == nil || c.client == nil || c.agentID == "" || key == "" {
+		return nil, &agentengine.TurnError{Code: agentengine.ErrorInvalidRequest, Message: "agent and conversation are required"}
+	}
+	return c.client.interactions.Pending(c.agentID, key), nil
 }
 
 func (c *memoryConversations) GetInteraction(ctx context.Context, key agentengine.ConversationKey, id string) (agentengine.InteractionRequest, error) {
@@ -1228,13 +1241,7 @@ func redactedModelView(spec agentengine.ModelSpec, apiKey string) agentengine.Mo
 }
 
 func cloneRequest(input agentengine.TurnRequest) agentengine.TurnRequest {
-	input.Input = append([]agentengine.InputPart(nil), input.Input...)
-	for index := range input.Input {
-		if input.Input[index].File != nil {
-			fileCopy := *input.Input[index].File
-			input.Input[index].File = &fileCopy
-		}
-	}
+	input.Input = contract.CloneInput(input.Input)
 	return input
 }
 
@@ -1358,3 +1365,33 @@ func cloneAny(input any) any {
 
 var _ agentengine.Interface = (*MemoryClient)(nil)
 var _ agentengine.AgentInterface = (*memoryAgents)(nil)
+
+func (a *memoryAgents) SetArchived(ctx context.Context, id string, archived bool) (agentengine.Agent, error) {
+	a.client.mu.Lock()
+	defer a.client.mu.Unlock()
+	item, ok := a.client.agents[id]
+	if !ok {
+		return agentengine.Agent{}, fmt.Errorf("agent not found")
+	}
+	if item.Spec.Role == agentengine.AgentRoleManager {
+		return agentengine.Agent{}, fmt.Errorf("manager cannot be archived")
+	}
+	if archived {
+		if item.ArchivedAt == nil {
+			now := time.Now().UTC()
+			item.ArchivedAt = &now
+			item.ArchivedBy = contract.ArchiveActorFromContext(ctx)
+		}
+		item.Status.State = agentengine.AgentStateStopped
+		item.Status.Ready = false
+		item.Spec.DesiredState = agentengine.AgentDesiredStateStopped
+	} else {
+		item.ArchivedAt = nil
+		item.ArchivedBy = ""
+		item.Status.State = agentengine.AgentStateRunning
+		item.Status.Ready = true
+		item.Spec.DesiredState = agentengine.AgentDesiredStateRunning
+	}
+	a.client.agents[id] = item
+	return cloneAgent(item), nil
+}

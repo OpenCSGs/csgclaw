@@ -2,7 +2,6 @@ package codex
 
 import (
 	"context"
-	"csgclaw/internal/diagnostics"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -10,6 +9,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"csgclaw/internal/diagnostics"
 )
 
 type appServerClient struct {
@@ -45,6 +46,18 @@ func newAppServerClient(stdin io.Writer, logger *slog.Logger) *appServerClient {
 }
 
 func (c *appServerClient) request(ctx context.Context, method string, params any) (json.RawMessage, error) {
+	return c.call(ctx, method, params, nil)
+}
+
+// probe skips a busy or non-pollable stdin instead of delaying normal RPCs.
+func (c *appServerClient) probe(ctx context.Context, method string, params any) (json.RawMessage, error) {
+	if ctx == nil {
+		return nil, fmt.Errorf("codex app-server probe requires a context")
+	}
+	return c.call(ctx, method, params, ctx)
+}
+
+func (c *appServerClient) call(ctx context.Context, method string, params any, probeCtx context.Context) (json.RawMessage, error) {
 	if c == nil || c.stdin == nil {
 		return nil, fmt.Errorf("codex app-server client is not configured")
 	}
@@ -80,7 +93,7 @@ func (c *appServerClient) request(ctx context.Context, method string, params any
 		msg["params"] = params
 	}
 	diagnostics.From(ctx).Capture("runtime.rpc_request", msg)
-	if err := c.writeJSONLine(msg, func() {
+	if err := c.writeJSONLine(probeCtx, msg, func() {
 		if method == "turn/start" {
 			diagnostics.From(ctx).RuntimeStart()
 		}
@@ -117,7 +130,7 @@ func (c *appServerClient) notify(method string) {
 		"jsonrpc": appServerJSONRPCVersion,
 		"method":  method,
 	}
-	if err := c.writeJSONLine(msg); err != nil {
+	if err := c.writeJSONLine(nil, msg); err != nil {
 		c.logDebug("write codex app-server notification failed", "method", method, "error", err)
 	}
 }
@@ -255,7 +268,7 @@ func (c *appServerClient) respond(id json.RawMessage, result any) error {
 		ID:      id,
 		Result:  result,
 	}
-	return c.writeJSONLine(msg)
+	return c.writeJSONLine(nil, msg)
 }
 
 func (c *appServerClient) respondError(id json.RawMessage, code int, message string) error {
@@ -274,10 +287,10 @@ func (c *appServerClient) respondError(id json.RawMessage, code int, message str
 			Message: message,
 		},
 	}
-	return c.writeJSONLine(msg)
+	return c.writeJSONLine(nil, msg)
 }
 
-func (c *appServerClient) writeJSONLine(msg any, beforeWrite ...func()) error {
+func (c *appServerClient) writeJSONLine(probeCtx context.Context, msg any, beforeWrite ...func()) error {
 	if c == nil || c.stdin == nil {
 		return fmt.Errorf("codex app-server client is not configured")
 	}
@@ -286,7 +299,13 @@ func (c *appServerClient) writeJSONLine(msg any, beforeWrite ...func()) error {
 		return err
 	}
 	data = append(data, '\n')
-	c.writeMu.Lock()
+	if probeCtx != nil {
+		if !c.writeMu.TryLock() {
+			return fmt.Errorf("codex app-server stdin is busy")
+		}
+	} else {
+		c.writeMu.Lock()
+	}
 	defer c.writeMu.Unlock()
 	c.mu.Lock()
 	closed := c.closed
@@ -297,7 +316,43 @@ func (c *appServerClient) writeJSONLine(msg any, beforeWrite ...func()) error {
 	for _, fn := range beforeWrite {
 		fn()
 	}
+	if probeCtx != nil {
+		return c.writeProbe(probeCtx, data)
+	}
 	_, err = c.stdin.Write(data)
+	return err
+}
+
+// A probe must fit in one atomic POSIX pipe write (minimum PIPE_BUF = 512).
+// A timeout can then leave no partial JSON frame for the next RPC.
+func (c *appServerClient) writeProbe(ctx context.Context, data []byte) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	writer, ok := c.stdin.(interface{ SetWriteDeadline(time.Time) error })
+	if !ok || len(data) > 512 {
+		return fmt.Errorf("codex app-server stdin cannot safely write probe")
+	}
+	deadline, ok := ctx.Deadline()
+	if !ok {
+		return fmt.Errorf("codex app-server probe requires a deadline")
+	}
+	if err := writer.SetWriteDeadline(deadline); err != nil {
+		return err
+	}
+	canceled := make(chan struct{})
+	stop := context.AfterFunc(ctx, func() {
+		_ = writer.SetWriteDeadline(time.Now())
+		close(canceled)
+	})
+	_, err := c.stdin.Write(data)
+	if !stop() {
+		<-canceled
+	}
+	_ = writer.SetWriteDeadline(time.Time{})
+	if err != nil && ctx.Err() != nil {
+		return ctx.Err()
+	}
 	return err
 }
 

@@ -885,7 +885,7 @@ models = ["minimax-m2.7"]
 	}
 }
 
-func TestLoadRejectsRemovedLegacyBoxLiteProvider(t *testing.T) {
+func TestLoadIgnoresRemovedSandboxProvider(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.toml")
 	content := `[server]
@@ -906,12 +906,12 @@ models = ["minimax-m2.7"]
 		t.Fatalf("WriteFile() error = %v", err)
 	}
 
-	_, err := Load(path)
-	if err == nil {
-		t.Fatal("Load() error = nil, want unsupported sandbox provider error")
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if !strings.Contains(err.Error(), `unsupported sandbox provider "boxlite-cli"`) {
-		t.Fatalf("Load() error = %q, want unsupported legacy provider error", err)
+	if !cfg.NeedsMigrationRewrite() {
+		t.Fatal("legacy sandbox did not request cleanup")
 	}
 }
 
@@ -1259,17 +1259,17 @@ func TestSaveWritesModelsSection(t *testing.T) {
 	if strings.Contains(content, "[models]") || strings.Contains(content, "[models.providers.default]") {
 		t.Fatalf("saved config should not contain models sections:\n%s", content)
 	}
-	if !strings.Contains(content, "[sandbox]") || !strings.Contains(content, `provider = "boxlite"`) {
-		t.Fatalf("saved config missing sandbox section:\n%s", content)
+	if strings.Contains(content, "[sandbox]") {
+		t.Fatalf("retired sandbox was written: %s", content)
 	}
 	if strings.Contains(content, "boxlite_cli_path") {
 		t.Fatalf("saved config should not contain boxlite_cli_path:\n%s", content)
 	}
-	if !strings.Contains(content, `debian_registries_override = ["registry.a", "docker.io"]`) {
-		t.Fatalf("saved config missing sandbox debian_registries_override:\n%s", content)
+	if strings.Contains(content, `debian_registries_override`) {
+		t.Fatalf("saved config retained retired registries:\n%s", content)
 	}
-	if !strings.Contains(content, `storage_path = "/mnt/csgclaw"`) {
-		t.Fatalf("saved config missing storage_path:\n%s", content)
+	if strings.Contains(content, `storage_path = "/mnt/csgclaw"`) {
+		t.Fatalf("saved config retained retired storage_path:\n%s", content)
 	}
 	modelsPath, err := ModelsPathForConfigPath(path)
 	if err != nil {
@@ -1415,15 +1415,12 @@ listen_addr = "0.0.0.0:18080"
 advertise_base_url = "http://192.168.2.52:18080"
 access_token = "your_access_token"
 no_auth = true
+local_single_user = false
 show_upgrade = true
 
 [bootstrap]
 default_manager_template = "builtin.manager-codex"
 default_worker_template = "builtin.dsh-worker"
-
-[sandbox]
-provider = "boxlite"
-debian_registries_override = []
 
 [hub]
 default_registry = "builtin"
@@ -1520,7 +1517,7 @@ func TestSaveWritesHubConfig(t *testing.T) {
 	}
 }
 
-func TestSaveWritesEmptySandboxDebianRegistriesOverride(t *testing.T) {
+func TestSaveOmitsUnusedSandboxSettings(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.toml")
 	cfg := Config{
@@ -1548,8 +1545,8 @@ func TestSaveWritesEmptySandboxDebianRegistriesOverride(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadFile() error = %v", err)
 	}
-	if !strings.Contains(string(data), `debian_registries_override = []`) {
-		t.Fatalf("saved config missing empty sandbox debian_registries_override:\n%s", string(data))
+	if strings.Contains(string(data), `debian_registries_override`) {
+		t.Fatalf("saved config retained retired sandbox settings:\n%s", string(data))
 	}
 }
 

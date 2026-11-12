@@ -31,22 +31,11 @@ func localWorkspaceClient(r *http.Request) bool {
 	return host == "localhost" || net.ParseIP(strings.Trim(host, "[]")).IsLoopback()
 }
 
-// NoAuth is an access policy, not proof that an explicit credential is valid.
-// Native open actions may skip Origin only for a configured management token.
-func (h *Handler) validWorkspaceOpenCredential(header string) bool {
-	for _, configured := range []string{h.serverAccessToken, h.desktopSessionToken} {
-		if token := strings.TrimSpace(configured); token != "" && header == "Bearer "+token {
-			return true
-		}
-	}
-	return false
-}
-
 func (h *Handler) workspaceOpenTargets(r *http.Request, path string, directory bool) []workspaceOpenTarget {
 	if !localWorkspaceClient(r) || appRequestAgentID(r) != "" || r.Header.Get("X-CSGClaw-Caller-Agent") != "" || strings.HasPrefix(r.Header.Get("Authorization"), "Bearer agent.") {
 		return []workspaceOpenTarget{}
 	}
-	if header := r.Header.Get("Authorization"); header != "" && !h.validWorkspaceOpenCredential(header) {
+	if header := r.Header.Get("Authorization"); header != "" && !h.validServerCredential(header) {
 		return []workspaceOpenTarget{}
 	}
 	targets := []workspaceOpenTarget{}
@@ -81,7 +70,7 @@ func (h *Handler) resolveWorkspaceLocation(r *http.Request, relative string) (wo
 	if h.svc == nil || h.workspace == nil {
 		return workspaceLocation{}, errors.New("workspace unavailable")
 	}
-	root, err := h.conversationWorkspaceRoot(strings.TrimSpace(pathValue(r, "id")), r.URL.Query().Get("room_id"))
+	root, err := h.requestWorkspaceRoot(r, strings.TrimSpace(pathValue(r, "id")))
 	if err != nil {
 		return workspaceLocation{}, err
 	}
@@ -120,7 +109,7 @@ func (h *Handler) workspaceOpenRequestAllowed(r *http.Request) bool {
 	if len(h.workspaceOpenTargets(r, "", true)) == 0 {
 		return false
 	}
-	if h.validWorkspaceOpenCredential(r.Header.Get("Authorization")) {
+	if h.validServerCredential(r.Header.Get("Authorization")) {
 		return true
 	}
 	origin, err := url.Parse(r.Header.Get("Origin"))

@@ -1,0 +1,9 @@
+{
+  "name": "csgclaw-web-workspace",
+  "private": true,
+  "packageManager": "pnpm@11.1.3",
+  "engines": {
+    "node": ">=22.13.0 <25",
+    "pnpm": ">=9 <12"
+  }
+}

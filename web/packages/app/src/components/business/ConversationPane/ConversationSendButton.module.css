@@ -1,0 +1,137 @@
+.composer-send-button:active {
+  transform: translateY(1px) scale(0.99);
+}
+
+.composer-send-button:where(:not([data-csg-control])):focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+button.composer-send-button[data-csg-control] {
+  /* The slot stays the same size when switching to the danger variant. */
+  --composer-action-size: 28px;
+  width: var(--composer-action-size);
+  min-width: var(--composer-action-size);
+  height: var(--composer-action-size);
+  min-height: var(--composer-action-size);
+  border-radius: var(--radius-full);
+}
+
+.composer-send-button:where(:not([data-csg-control])):disabled {
+  cursor: not-allowed;
+  pointer-events: none;
+  background: var(--gray-100);
+  border-color: var(--gray-200);
+  color: var(--gray-400);
+  box-shadow: var(--shadow-xs);
+  opacity: 1;
+}
+
+:global(:root[data-theme="dark"]) .composer-send-button:where(:not([data-csg-control])):hover:not(:disabled) {
+  border-color: var(--brand-100);
+  background: var(--brand-100);
+  color: var(--gray-950);
+}
+
+:global(:root[data-theme="dark"]) .composer-send-button:where(:not([data-csg-control])):disabled {
+  border-color: rgba(208, 213, 221, 0.12);
+  background: rgba(208, 213, 221, 0.08);
+  color: var(--gray-500);
+  box-shadow: none;
+}
+
+:global(:root[data-theme="dark"]) .composer-send-button:where(:not([data-csg-control])) {
+  border-color: #3250bd;
+  background: #3250bd;
+  color: #ffffff;
+}
+
+.composer-send-button:where(:not([data-csg-control])):hover:not(:disabled) {
+  border-color: var(--brand-700);
+  background: var(--brand-700);
+  color: var(--white);
+  box-shadow: var(--shadow-xs);
+  transform: none;
+}
+
+.composer-send-button:where(:not([data-csg-control])):active:not(:disabled) {
+  border-color: var(--brand-700);
+  background: var(--brand-700);
+  color: var(--white);
+  box-shadow: var(--shadow-xs);
+  transform: none;
+}
+
+.composer-send-button:where(:not([data-csg-control])):disabled,
+.composer-send-button:where(:not([data-csg-control]))[disabled] {
+  border-color: var(--gray-200);
+  background: var(--gray-100);
+  color: var(--gray-400);
+  box-shadow: var(--shadow-xs);
+  opacity: 1;
+  transform: none;
+}
+
+:global(:root[data-theme="dark"]) .composer-send-button:where(:not([data-csg-control])),
+:global(:root[data-theme="dark"]) .composer-send-button:where(:not([data-csg-control])):hover:not(:disabled),
+:global(:root[data-theme="dark"]) .composer-send-button:where(:not([data-csg-control])):active:not(:disabled),
+:global(:root[data-theme="dark"]) .composer-send-button:where(:not([data-csg-control])):focus-visible {
+  color: var(--white);
+}
+
+.composer-send-button:where(:not([data-csg-control])) {
+  border-radius: 6px;
+  border-color: var(--brand-600);
+  background: var(--brand-600);
+  color: var(--white);
+  box-shadow: var(--shadow-xs);
+}
+
+.composer-send-button:where(:not([data-csg-control])):hover:not(:disabled),
+.composer-send-button:where(:not([data-csg-control])):active:not(:disabled) {
+  border-color: var(--brand-700);
+  background: var(--brand-700);
+  color: var(--white);
+  box-shadow: var(--shadow-xs);
+  transform: none;
+}
+
+.composer-send-button:where(:not([data-csg-control])):focus-visible {
+  border-color: var(--brand-600);
+  background: var(--brand-600);
+  color: var(--white);
+  box-shadow:
+    var(--shadow-xs),
+    0 0 0 4px rgba(77, 106, 214, 0.2);
+}
+
+:global(:root[data-theme="dark"]) .composer-send-button:where(:not([data-csg-control])) {
+  border-color: rgba(172, 189, 255, 0.34);
+  background: var(--brand-600);
+  color: var(--white);
+}
+
+:global(:root[data-theme="dark"]) .composer-send-button:where(:not([data-csg-control])):hover:not(:disabled),
+:global(:root[data-theme="dark"]) .composer-send-button:where(:not([data-csg-control])):active:not(:disabled) {
+  border-color: rgba(172, 189, 255, 0.44);
+  background: var(--brand-700);
+  color: var(--white);
+}
+
+.composer-send-button:where(:not([data-csg-control])):disabled,
+.composer-send-button:where(:not([data-csg-control]))[disabled] {
+  border-color: var(--gray-200);
+  background: var(--gray-100);
+  color: var(--gray-400);
+  box-shadow: var(--shadow-xs);
+  opacity: 1;
+  transform: none;
+}
+
+:global(:root[data-theme="dark"]) .composer-send-button:where(:not([data-csg-control])):disabled,
+:global(:root[data-theme="dark"]) .composer-send-button:where(:not([data-csg-control]))[disabled] {
+  border-color: rgba(208, 213, 221, 0.12);
+  background: rgba(208, 213, 221, 0.08);
+  color: var(--gray-500);
+  box-shadow: none;
+}

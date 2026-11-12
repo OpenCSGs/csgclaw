@@ -1,0 +1,43 @@
+.message-meta,
+.conversation-preview {
+  color: var(--muted);
+}
+
+.message-author {
+  font-size: 15px;
+  font-weight: 650;
+}
+
+.conversation-preview,
+.message-bubble {
+  line-height: 1.5;
+}
+
+.message-author {
+  font-weight: 680;
+}
+
+.message-bubble {
+  font-family: var(--font-sans);
+}
+
+:global(:root[data-theme="dark"]) .messages {
+  background: var(--bg);
+}
+
+:global(:root[data-theme="dark"]) .message-meta,
+:global(:root[data-theme="dark"]) .message-meta .message-author,
+:global(:root[data-theme="dark"]) .message-row .message-card .message-meta .message-author,
+:global(:root[data-theme="dark"]) .message-row:global(.own) .message-card .message-meta .message-author {
+  color: var(--muted);
+}
+
+:global(:root[data-theme="dark"]) .message-row:global(.own) .message-card .message-meta .message-author {
+  color: var(--gray-300);
+}
+
+:global(:root[data-theme="dark"]) .message-row:global(.own) .message-bubble {
+  border-color: #3250bd;
+  background: #3250bd;
+  color: #ffffff;
+}

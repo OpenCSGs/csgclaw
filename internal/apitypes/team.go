@@ -221,6 +221,7 @@ type PatchAgentTaskRequest struct {
 }
 
 type ScheduledTask struct {
+	AgentState string     `json:"agent_state,omitempty"`
 	ID         string     `json:"id"`
 	Title      string     `json:"title"`
 	AgentID    string     `json:"agent_id"`

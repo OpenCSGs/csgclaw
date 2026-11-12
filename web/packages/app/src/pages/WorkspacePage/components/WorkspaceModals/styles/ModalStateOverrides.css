@@ -1,0 +1,302 @@
+.profile-section {
+  padding: 18px;
+}
+
+.agent-modal > .form-error {
+  flex: 0 0 auto;
+  margin: 12px 24px 0;
+}
+
+.agent-modal .agent-billing-action {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  margin-left: 8px;
+  padding: 3px 10px;
+  border: 1px solid color-mix(in srgb, var(--error-700) 72%, transparent);
+  border-radius: var(--radius-md);
+  background: var(--error-600);
+  color: var(--white);
+  font-weight: var(--font-weight-semibold);
+  line-height: 1.25;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.agent-modal .agent-billing-action:hover {
+  background: var(--error-700);
+}
+
+.agent-modal .agent-billing-action:focus-visible {
+  outline: none;
+  box-shadow: var(--error-focus-ring);
+}
+
+.agent-modal > .agent-create-progress {
+  flex: 0 0 auto;
+  margin: 12px 24px 0;
+}
+
+.profile-section
+  .field:where(:not([data-csg-field]))
+  input:where(:not([data-csg-control])):not([type="checkbox"], [type="radio"]),
+.profile-section .field:where(:not([data-csg-field])) textarea:where(:not([data-csg-control])),
+.profile-section .field:where(:not([data-csg-field])) select:where(:not([data-csg-control])),
+.env-row input:where(:not([data-csg-control])) {
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid var(--input-border);
+  border-radius: var(--input-radius);
+  background-color: var(--input-background);
+  color: var(--input-text);
+  box-shadow: var(--input-shadow);
+  font-family: var(--font-sans);
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 24px;
+  outline: none;
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    color 160ms ease;
+}
+
+.profile-section .field input:where(:not([data-csg-control])):not([type="checkbox"], [type="radio"]),
+.profile-section .field select:where(:not([data-csg-control])),
+.env-row input:where(:not([data-csg-control])) {
+  height: 44px;
+  padding: 10px 14px;
+}
+
+.profile-section .field textarea:where(:not([data-csg-control])) {
+  min-height: 88px;
+  padding: 10px 14px;
+  resize: vertical;
+}
+
+.profile-section .field:where(:not([data-csg-field])) textarea:where(:not([data-csg-control])).compact-json {
+  min-height: 132px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.profile-section
+  .field:where(:not([data-csg-field]))
+  input:where(:not([data-csg-control])):not([type="checkbox"], [type="radio"])::placeholder,
+.profile-section .field:where(:not([data-csg-field])) textarea:where(:not([data-csg-control]))::placeholder,
+.env-row input:where(:not([data-csg-control]))::placeholder {
+  color: var(--input-text-placeholder);
+}
+
+.profile-section
+  .field:where(:not([data-csg-field]))
+  input:where(:not([data-csg-control])):not([type="checkbox"], [type="radio"]):hover,
+.profile-section .field:where(:not([data-csg-field])) textarea:where(:not([data-csg-control])):hover,
+.profile-section .field:where(:not([data-csg-field])) select:where(:not([data-csg-control])):hover,
+.env-row input:where(:not([data-csg-control])):hover {
+  border-color: var(--input-border-hover);
+}
+
+.profile-section
+  .field:where(:not([data-csg-field]))
+  input:where(:not([data-csg-control])):not([type="checkbox"], [type="radio"]):focus,
+.profile-section .field:where(:not([data-csg-field])) textarea:where(:not([data-csg-control])):focus,
+.profile-section .field:where(:not([data-csg-field])) select:where(:not([data-csg-control])):focus,
+.env-row input:where(:not([data-csg-control])):focus {
+  border-color: var(--input-border-focus);
+  box-shadow: var(--input-shadow-focus);
+}
+
+.profile-section
+  .field:where(:not([data-csg-field]))
+  input:where(:not([data-csg-control])):not([type="checkbox"], [type="radio"]):disabled,
+.profile-section .field:where(:not([data-csg-field])) textarea:where(:not([data-csg-control])):disabled,
+.profile-section .field:where(:not([data-csg-field])) select:where(:not([data-csg-control])):disabled,
+.env-row input:where(:not([data-csg-control])):disabled {
+  border-color: var(--input-border);
+  background-color: var(--input-background-disabled);
+  color: var(--input-text-disabled);
+  cursor: not-allowed;
+}
+
+.profile-section .selection-item.compact-toggle-row {
+  border-color: var(--gray-300);
+  background: var(--white);
+  color: var(--gray-700);
+  box-shadow: var(--shadow-xs);
+}
+
+.profile-section .selection-item.compact-toggle-row:hover,
+.profile-section .selection-item.compact-toggle-row:focus-within {
+  border-color: var(--brand-300);
+  background: var(--brand-25);
+  color: var(--brand-700);
+  box-shadow: var(--shadow-xs);
+}
+
+.profile-section .selection-item.compact-toggle-row:has(input:where(:not([data-csg-control])):checked) {
+  border-color: var(--brand-300);
+  background: var(--brand-50);
+  color: var(--brand-700);
+}
+
+:root[data-theme="dark"]
+  .profile-section
+  .field:where(:not([data-csg-field]))
+  input:where(:not([data-csg-control])):not([type="checkbox"], [type="radio"]):hover,
+:root[data-theme="dark"]
+  .profile-section
+  .field:where(:not([data-csg-field]))
+  textarea:where(:not([data-csg-control])):hover,
+:root[data-theme="dark"]
+  .profile-section
+  .field:where(:not([data-csg-field]))
+  select:where(:not([data-csg-control])):hover,
+:root[data-theme="dark"] .env-row input:where(:not([data-csg-control])):hover {
+  border-color: var(--gray-600);
+}
+
+:root[data-theme="dark"] .profile-modal.agent-modal .agent-fast-mode-field .compact-toggle-row,
+:root[data-theme="dark"]
+  .profile-modal.agent-modal
+  .agent-fast-mode-field
+  .compact-toggle-row:has(input:where(:not([data-csg-control])):checked) {
+  border-color: var(--input-border);
+  background: var(--input-background);
+  color: var(--input-text);
+}
+
+:root[data-theme="dark"] .profile-modal.agent-modal .agent-fast-mode-field .compact-toggle-row:hover,
+:root[data-theme="dark"] .profile-modal.agent-modal .agent-fast-mode-field .compact-toggle-row:focus-within {
+  border-color: var(--input-border);
+  background: var(--input-background);
+  color: var(--input-text);
+}
+
+:root[data-theme="dark"]
+  .profile-modal.agent-modal
+  .profile-section
+  .agent-model-config-grid
+  .selection-item.compact-toggle-row.agent-fast-mode-toggle,
+:root[data-theme="dark"]
+  .profile-modal.agent-modal
+  .profile-section
+  .agent-model-config-grid
+  .selection-item.compact-toggle-row.agent-fast-mode-toggle:hover,
+:root[data-theme="dark"]
+  .profile-modal.agent-modal
+  .profile-section
+  .agent-model-config-grid
+  .selection-item.compact-toggle-row.agent-fast-mode-toggle:focus-within,
+:root[data-theme="dark"]
+  .profile-modal.agent-modal
+  .profile-section
+  .agent-model-config-grid
+  .selection-item.compact-toggle-row.agent-fast-mode-toggle:has(input:where(:not([data-csg-control])):checked) {
+  border-color: var(--input-border);
+  background: var(--input-background);
+  color: var(--input-text);
+  box-shadow: var(--input-shadow);
+}
+:root[data-theme="dark"] .profile-modal.agent-modal .agent-fast-mode-help {
+  color: var(--input-text);
+}
+
+:root[data-theme="dark"]
+  .profile-modal.agent-modal
+  .agent-fast-mode-field
+  input:where(:not([data-csg-control]))[type="checkbox"] {
+  border-color: var(--input-border);
+  background: var(--input-background);
+  box-shadow: none;
+}
+
+:root[data-theme="dark"]
+  .profile-modal.agent-modal
+  .agent-fast-mode-field
+  input:where(:not([data-csg-control]))[type="checkbox"]:hover,
+:root[data-theme="dark"]
+  .profile-modal.agent-modal
+  .agent-fast-mode-field
+  input:where(:not([data-csg-control]))[type="checkbox"]:focus-visible {
+  border-color: var(--input-border);
+}
+
+:root[data-theme="dark"]
+  .profile-modal.agent-modal
+  .agent-fast-mode-field
+  input:where(:not([data-csg-control]))[type="checkbox"]:checked {
+  border-color: var(--gray-300);
+  background: var(--gray-300);
+}
+
+:root[data-theme="dark"]
+  .profile-modal.agent-modal
+  .agent-fast-mode-field
+  input:where(:not([data-csg-control]))[type="checkbox"]:checked::after {
+  border-color: var(--panel);
+}
+
+:root[data-theme="dark"] .upgrade-summary {
+  border-color: var(--line);
+  background: var(--panel-strong);
+}
+
+.profile-section .profile-advanced-grid {
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  gap: 12px;
+}
+
+.profile-section .profile-advanced-grid > .field {
+  margin-top: 0;
+}
+
+.profile-section .field textarea:where(:not([data-csg-control])).compact-json {
+  min-height: 136px;
+}
+
+.profile-section .profile-advanced-grid .env-editor {
+  max-height: 136px;
+  overflow-y: auto;
+  padding: var(--space-1);
+}
+
+.profile-section .profile-advanced-grid .env-row {
+  align-items: start;
+}
+
+.profile-section .profile-advanced-grid .env-add-button {
+  min-height: 38px;
+  padding: 8px 12px;
+}
+
+@media (max-width: 640px) {
+  .profile-modal.agent-modal .agent-create-kind-tabbar {
+    grid-template-columns: 1fr;
+  }
+
+  .agent-basics-grid {
+    grid-template-columns: 44px minmax(0, 1fr);
+  }
+
+  .agent-identity-layout {
+    grid-template-columns: 44px minmax(0, 1fr);
+  }
+
+  .agent-basics-grid > .field:not(.agent-avatar-field),
+  .agent-basics-grid > .span-2,
+  .agent-basics-grid > .agent-runtime-image-row {
+    grid-column: 1 / -1;
+  }
+
+  .agent-basics-grid .agent-runtime-image-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .agent-runtime-install-notice {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}

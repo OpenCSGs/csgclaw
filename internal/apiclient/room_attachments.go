@@ -22,6 +22,9 @@ func roomAttachmentsPath(roomID string) string {
 
 func (c *Client) ListRoomAttachments(ctx context.Context, roomID string, opts apitypes.RoomAttachmentListOptions) (apitypes.RoomAttachmentList, error) {
 	values := url.Values{"query": {opts.Query}, "message_id": {opts.MessageID}, "from": {strconv.Itoa(opts.From)}}
+	if opts.Sort != "" {
+		values.Set("sort", opts.Sort)
+	}
 	if opts.Limit != 0 {
 		values.Set("limit", strconv.Itoa(opts.Limit))
 	}

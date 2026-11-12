@@ -1,6 +1,6 @@
 # Release on tag v* / workflow_dispatch.
 #
-# Builds release archives; csgclaw bundles include the Linux sandbox CLI.
+# Builds release archives with the server and companion host CLI.
 #
 # <version> is the git tag (v*) or workflow_dispatch input.
 
@@ -139,7 +139,7 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
-          node-version-file: web/app/package.json
+          node-version-file: web/packages/app/package.json
 
       - name: Enable Corepack
         shell: bash
@@ -148,29 +148,28 @@ jobs:
       - name: Resolve pnpm store path
         id: pnpm_store
         shell: bash
-        working-directory: web/app
+        working-directory: web
         run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
 
       - name: Restore pnpm store cache
         uses: actions/cache@v4
         with:
           path: ${{ steps.pnpm_store.outputs.path }}
-          key: ${{ runner.os }}-pnpm-${{ hashFiles('web/app/pnpm-lock.yaml') }}
+          key: ${{ runner.os }}-pnpm-${{ hashFiles('web/pnpm-lock.yaml') }}
           restore-keys: |
             ${{ runner.os }}-pnpm-
 
       - name: Install Web UI dependencies
         shell: bash
-        working-directory: web/app
+        working-directory: web
         run: pnpm install --frozen-lockfile
 
       - name: Build Web UI
         shell: bash
-        working-directory: web/app
+        working-directory: web
         run: |
-          mkdir -p ../static-dist
-          pnpm build
-          test -f ../static-dist/index.html
+          pnpm --filter csgclaw-web build
+          test -f static-dist/index.html
 
       - name: Upload Web UI static assets
         uses: actions/upload-artifact@v4
@@ -251,7 +250,7 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
-          node-version-file: web/app/package.json
+          node-version-file: web/packages/app/package.json
 
       - name: Enable Corepack
         shell: bash
@@ -267,7 +266,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ steps.pnpm_store.outputs.path }}
-          key: ${{ runner.os }}-${{ runner.arch }}-pnpm-${{ hashFiles('web/app/pnpm-lock.yaml', 'desktop/pnpm-lock.yaml') }}
+          key: ${{ runner.os }}-${{ runner.arch }}-pnpm-${{ hashFiles('web/pnpm-lock.yaml', 'desktop/pnpm-lock.yaml') }}
           restore-keys: |
             ${{ runner.os }}-${{ runner.arch }}-pnpm-
 

@@ -208,3 +208,35 @@ func TestTranscriptRendererExcludesThoughtsFromChatTranscript(t *testing.T) {
 		t.Fatalf("messages = %#v, want final answer only", store.messages)
 	}
 }
+
+func TestTranscriptRendererOffersTitleOnlyAfterSuccessfulDelivery(t *testing.T) {
+	for _, tt := range []struct {
+		name   string
+		result agentengine.TurnResult
+		want   bool
+	}{
+		{name: "answered", result: agentengine.TurnResult{Status: agentengine.TurnSucceeded, Output: "Final answer"}, want: true},
+		{name: "failed", result: agentengine.TurnResult{Status: agentengine.TurnFailed}},
+		{name: "canceled", result: agentengine.TurnResult{Status: agentengine.TurnCanceled}},
+		{name: "empty", result: agentengine.TurnResult{Status: agentengine.TurnSucceeded}},
+		{name: "waiting", result: agentengine.TurnResult{Status: agentengine.TurnSucceeded, Output: "Please confirm",
+			Interactions: []agentengine.InteractionRequest{{ID: "question", Kind: agentengine.InteractionUserInput}}}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			store := &recordingStore{}
+			called := false
+			renderer := NewTranscriptRenderer(store, WithTaskTitleCallback(func(turn channel.TurnContext, answer string) {
+				called = true
+				if len(store.messages) != 1 || turn.SourceMessageID != "question" || answer != tt.result.Output {
+					t.Fatalf("callback saw %d messages, source %q, answer %q", len(store.messages), turn.SourceMessageID, answer)
+				}
+			}))
+			if err := renderer.Complete(context.Background(), channel.TurnContext{AgentTurn: true, RoomID: "room", SourceMessageID: "question"}, tt.result); err != nil {
+				t.Fatal(err)
+			}
+			if called != tt.want {
+				t.Fatalf("title callback called = %v, want %v", called, tt.want)
+			}
+		})
+	}
+}

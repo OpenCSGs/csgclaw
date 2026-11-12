@@ -1,6 +1,6 @@
 # Web Documentation
 
-This directory documents the CSGClaw frontend under `web/app`.
+This directory documents the CSGClaw frontend under `web/packages/app`.
 
 ## Documents
 

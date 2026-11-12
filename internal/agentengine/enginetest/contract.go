@@ -150,6 +150,9 @@ func RunInterfaceContract(t *testing.T, factory InterfaceFactory) {
 		if err != nil || recreated.ID != got.ID || recreated.Status.State == "" || recreated.Status.RuntimeID == "" || recreated.Spec.DesiredState != agentengine.AgentDesiredStateRunning || recreated.Spec.Runtime.Credentials != nil {
 			t.Fatalf("Recreate() = %+v, %v", recreated, err)
 		}
+		if _, err := agents.SetArchived(context.Background(), got.ID, true); err != nil {
+			t.Fatal(err)
+		}
 		if err := agents.Delete(context.Background(), got.ID); err != nil {
 			t.Fatalf("Delete() error = %v", err)
 		}
@@ -352,6 +355,9 @@ func RunInterfaceContract(t *testing.T, factory InterfaceFactory) {
 			Name: "owned.txt", MIMEType: "text/plain", SizeBytes: int64(len(content)),
 		}, bytes.NewReader(content))
 		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := client.Agents().SetArchived(context.Background(), "agent-a", true); err != nil {
 			t.Fatal(err)
 		}
 		if err := client.Agents().Delete(context.Background(), "agent-a"); err != nil {
@@ -622,9 +628,6 @@ func RunInterfaceContract(t *testing.T, factory InterfaceFactory) {
 				_, _ = agents.Recreate(ctx, item.ID, agentengine.AgentRecreateOptions{UpgradeImage: true})
 				return nil
 			},
-			"delete": func(ctx context.Context, agents agentengine.AgentInterface, item agentengine.Agent) error {
-				return agents.Delete(ctx, item.ID)
-			},
 		}
 		for name, operation := range operations {
 			operation := operation
@@ -779,7 +782,7 @@ func RunInterfaceContract(t *testing.T, factory InterfaceFactory) {
 		}
 	})
 
-	t.Run("interaction resolution", func(t *testing.T) {
+	testInteractionResolution := func(t *testing.T, policy agentengine.InteractionPolicy) {
 		resolved := make(chan struct{})
 		behavior := func(ctx context.Context, _ string, _ agentengine.TurnRequest, sink agentengine.EventSink) agentengine.TurnResult {
 			if err := sink.Emit(ctx, agentengine.TurnEvent{Kind: agentengine.TurnEventInteractionRequest, Interaction: &agentengine.InteractionRequest{ID: "question-1", Kind: agentengine.InteractionUserInput, Title: "Continue?"}}); err != nil {
@@ -794,7 +797,7 @@ func RunInterfaceContract(t *testing.T, factory InterfaceFactory) {
 		runDone := make(chan agentengine.TurnResult, 1)
 		go func() {
 			request := contractTurn("turn-1", "conversation-1")
-			request.Interaction = agentengine.InteractionResolve
+			request.Interaction = policy
 			runDone <- conversations.Run(context.Background(), request, agentengine.EventSinkFunc(func(_ context.Context, event agentengine.TurnEvent) error {
 				if event.Interaction != nil {
 					interactionID <- event.Interaction.ID
@@ -813,7 +816,10 @@ func RunInterfaceContract(t *testing.T, factory InterfaceFactory) {
 		if result := <-runDone; result.Status != agentengine.TurnSucceeded || !result.Dispatched {
 			t.Fatalf("Run() = %+v", result)
 		}
-	})
+	}
+	for _, policy := range []agentengine.InteractionPolicy{agentengine.InteractionResolve, agentengine.InteractionUserInputOnly} {
+		t.Run("interaction resolution/"+string(policy), func(t *testing.T) { testInteractionResolution(t, policy) })
+	}
 
 	t.Run("interaction policies", func(t *testing.T) {
 		interaction := agentengine.TurnEvent{Kind: agentengine.TurnEventInteractionRequest, Interaction: &agentengine.InteractionRequest{ID: "question-1", Kind: agentengine.InteractionUserInput}}

@@ -61,11 +61,12 @@ func List(root, relativePath string) (apitypes.WorkspaceListing, error) {
 			return nil
 		}
 		entry := apitypes.WorkspaceEntry{
-			Path:  rel,
-			Name:  d.Name(),
-			Type:  "file",
-			Depth: strings.Count(rel, "/"),
-			Size:  info.Size(),
+			Path:       rel,
+			Name:       d.Name(),
+			Type:       "file",
+			Depth:      strings.Count(rel, "/"),
+			Size:       info.Size(),
+			ModifiedAt: info.ModTime(),
 		}
 		if d.IsDir() {
 			entry.Type = "dir"
@@ -120,11 +121,12 @@ func ListDirectory(root, relativePath string) (apitypes.WorkspaceListing, error)
 			entryPath = cleanPath + "/" + child.Name()
 		}
 		entry := apitypes.WorkspaceEntry{
-			Path:  entryPath,
-			Name:  child.Name(),
-			Type:  "file",
-			Depth: strings.Count(entryPath, "/"),
-			Size:  childInfo.Size(),
+			Path:       entryPath,
+			Name:       child.Name(),
+			Type:       "file",
+			Depth:      strings.Count(entryPath, "/"),
+			Size:       childInfo.Size(),
+			ModifiedAt: childInfo.ModTime(),
 		}
 		if child.IsDir() {
 			entry.Type = "dir"

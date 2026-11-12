@@ -7,7 +7,9 @@
 
 ## Overview
 
-CSGClaw is a Go-based local multi-agent platform. The `csgclaw` CLI bootstraps config, starts the local HTTP server and Web UI, and manages agents, rooms, and users. BoxLite runtime integration is provided through the `boxlite` sandbox path.
+CSGClaw is a Go-based local multi-agent platform.
+The `csgclaw` CLI bootstraps config, starts the local HTTP server and Web UI, and manages agents, rooms, and users.
+Codex and DSH run as local processes; retired container providers are retained only for migration.
 
 ## Structure
 
@@ -19,13 +21,14 @@ internal/config/        config defaults, load/save
 internal/api/           HTTP handlers and router
 internal/im/            IM service and channel integration
 internal/server/        HTTP server and UI wiring
-web/app/                Web UI development source and Vite project
-web/static-dist/        generated Web UI assets for Go embed; run make web-build
+web/packages/app/       Web UI development source and Vite project
+web/packages/csgclaw-ui/ shared UI component package
+web/static-dist/        generated Web UI assets for Go embed; run make build-web
 ```
 
 ## Commands
 
-See [docs/tech/build.md](docs/tech/build.md) or [docs/tech/build.zh.md](docs/tech/build.zh.md) for Makefile targets, fixed runtime image refs, and sandbox CLI packaging.
+See [docs/tech/build.md](docs/tech/build.md) or [docs/tech/build.zh.md](docs/tech/build.zh.md) for Makefile targets, native runtime bundling, and companion CLI packaging.
 
 ```bash
 make                    # default build (no docker images)
@@ -46,7 +49,7 @@ make release
 - Prefer existing patterns and the standard library before adding dependencies.
 - Format with `make fmt`.
 - Add or update tests when changing CLI, config, API, or runtime behavior.
-- Before changing the Vite web app, read and follow `docs/tech/web/development.md`; it owns frontend structure, source layout, components, styling, state/data flow, accessibility, assets, and verification. This includes changes under `web/app/src`, frontend tests, package/config files, CSS/Tailwind/tokens, public asset paths, routes, i18n text, and generated `web/static-dist` handling.
+- Before changing the Vite web app, read and follow `docs/tech/web/development.md`; it owns frontend structure, source layout, components, styling, state/data flow, accessibility, assets, and verification. This includes changes under `web/packages/app/src`, frontend tests, package/config files, CSS/Tailwind/tokens, public asset paths, routes, i18n text, and generated `web/static-dist` handling.
 - For user-visible frontend changes, also read and follow `docs/tech/web/interaction-design.md` for layout adaptation, icon/copy consistency, localization, field behavior, feedback, and browser verification.
 - Do not change BoxLite sandbox integration or packaging paths unless the task is about sandbox/runtime integration.
 - When changing config fields or defaults, update loader, saver, onboard flow, tests, and docs together.
