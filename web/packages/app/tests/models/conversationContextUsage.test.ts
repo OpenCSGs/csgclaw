@@ -86,4 +86,20 @@ describe("room context snapshots", () => {
     const result = upsertConversationInData(fresh, { ...data.rooms[0], context_usage_epoch: 1 }) as IMData;
     expect(result.rooms[0].context_usage?.["user-worker"]).toEqual(usage);
   });
+  it.each([undefined, 0])("keeps newer usage when a stale members snapshot arrives at epoch %s", (epoch) => {
+    const updated = applyIMEvent(data, event) as IMData;
+    const staleRoom = {
+      ...data.rooms[0],
+      context_usage_epoch: epoch,
+      members: ["u-worker", "u-other"],
+      context_usage: { "user-worker": { ...usage, used_tokens: 1000, updated_at: "2026-11-10T00:00:00Z" } },
+    };
+    const result = applyIMEvent(updated, { type: "room.members_added", room: staleRoom }) as IMData;
+    expect(result.rooms[0].context_usage?.["user-worker"]).toEqual(usage);
+    const removed = applyIMEvent(result, {
+      type: "room.members_removed",
+      room: { ...staleRoom, members: ["u-other"] },
+    }) as IMData;
+    expect(removed.rooms[0].context_usage?.["user-worker"]).toBeUndefined();
+  });
 });

@@ -1350,7 +1350,7 @@ export function upsertConversationInData<T extends IMData | null | undefined>(
   let normalized = normalizeRoom(conversation);
   const previousEpoch = previous?.context_usage_epoch ?? 0;
   const incomingEpoch = normalized.context_usage_epoch ?? 0;
-  if (previous && previousEpoch > 0 && previousEpoch >= incomingEpoch) {
+  if (previous && previousEpoch >= incomingEpoch) {
     const usage: Record<string, ContextUsage> = previousEpoch > incomingEpoch ? {} : { ...normalized.context_usage };
     for (const [id, snapshot] of Object.entries(previous.context_usage ?? {})) {
       const incoming = usage[id];
