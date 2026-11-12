@@ -56,9 +56,7 @@ describe("model provider catalog helpers", () => {
     const refreshed = modelProviderCatalogWithModels(catalog, id, ["discovered-model"]);
     expect(modelProviderOptionsFromCatalog(refreshed)).toEqual([]);
     expect(modelProviderSelectOptionsFromCatalog(refreshed, staleOptions)).toEqual([]);
-    const recovered = normalizeModelProviderCatalog({
-      providers: [{ id, builtin: true, status: "connected", models: ["available-model"] }],
-    });
+    const recovered = modelProviderCatalogWithModels(catalog, id, ["available-model"], { confirmedConnected: true });
     expect(modelProviderSelectOptionsFromCatalog(recovered)).toMatchObject([{ id, models: ["available-model"] }]);
     expect(modelProviderSelectOptionsFromCatalog(recovered)[0].disabled).not.toBe(true);
   });
@@ -366,6 +364,9 @@ describe("model provider catalog helpers", () => {
       "Qwen/Qwen3-0.6B-GGUF",
     ]);
     expect(refreshed?.providers.find((provider) => provider.id === "codex")?.models).toEqual(["gpt-5.5"]);
+    const empty = modelProviderCatalogWithModels(catalog, "csghub_lite", []);
+    expect(empty?.providers.find((provider) => provider.id === "csghub-lite")?.models).toEqual([]);
+    expect(modelProviderCatalogWithModels(catalog, "csghub_lite", undefined)).toBe(catalog);
   });
 });
 

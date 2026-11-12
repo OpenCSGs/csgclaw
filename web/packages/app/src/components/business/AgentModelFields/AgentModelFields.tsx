@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { Field, Select } from "@/components/ui";
 import { ModelOptionLabel } from "@/components/business/ProfileControls";
 import {
@@ -16,7 +17,8 @@ export type AgentModelFieldsProps = {
   modelID: string;
   models: readonly string[];
   busy?: boolean;
-  modelHint?: string;
+  deferModelSelection?: boolean;
+  modelHint?: ReactNode;
   modelSaveError?: string;
   onPatch: (patch: Partial<AgentDraft>) => void;
   onRequireOpenCSGAuth: () => boolean;
@@ -29,6 +31,7 @@ export function AgentModelFields({
   modelID,
   models,
   busy = false,
+  deferModelSelection = false,
   modelHint,
   modelSaveError,
   onPatch,
@@ -38,7 +41,8 @@ export function AgentModelFields({
   providerOptions = providerOptions.filter(
     (option) =>
       !option.disabled &&
-      option.models.some((model) => !option.imageModels?.includes(model) && !option.videoModels?.includes(model)),
+      ((deferModelSelection && (option.id === providerID || option.models.length === 0)) ||
+        option.models.some((model) => !option.imageModels?.includes(model) && !option.videoModels?.includes(model))),
   );
   const selectedProvider = providerOptions.find((option) => option.id === providerID);
   return (
@@ -64,7 +68,7 @@ export function AgentModelFields({
             onPatch({
               provider: providerNameForProviderID(provider.id),
               model_provider_id: provider.id,
-              model_id: defaultModelIDForProvider(provider.id, provider.models),
+              model_id: deferModelSelection ? "" : defaultModelIDForProvider(provider.id, provider.models),
             });
           }}
           options={providerOptions.map((option) => ({

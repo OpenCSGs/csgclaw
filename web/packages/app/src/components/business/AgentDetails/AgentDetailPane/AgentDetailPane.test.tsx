@@ -350,6 +350,40 @@ describe("AgentDetailPane model loading error", () => {
     rerender(<Harness modelDirectory={["gpt-4.1-mini"]} modelSaveError="Model no longer routable" />);
     expect(model).toHaveAccessibleDescription("Model no longer routable");
     expect(model).toHaveAttribute("aria-invalid", "true");
+
+    rerender(<Harness modelDirectory={[]} modelSaveError="Model no longer routable" />);
+    expect(model).toHaveAccessibleDescription("profileModelOutsideDirectory");
+    expect(screen.queryByText("Model no longer routable")).not.toBeInTheDocument();
+  });
+
+  it("disables saving and explains how to recover when the current model blocks saving", () => {
+    render(<Harness hasUnsavedChanges modelDirectory={[]} modelSaveBlocked />);
+    expect(screen.getByRole("button", { name: "agentSaveChanges" })).toBeDisabled();
+    expect(screen.getByRole("combobox", { name: "profileModel" })).toHaveAccessibleDescription(
+      "profileModelOutsideDirectory profileModelSelectAvailableToSave",
+    );
+  });
+
+  it("offers a path back to model configuration when saving is blocked on another tab", async () => {
+    const user = userEvent.setup();
+    render(<Harness hasUnsavedChanges modelDirectory={[]} modelSaveBlocked workspaceSupported />);
+    await user.click(screen.getByRole("button", { name: /agentProfileSkillsTab/ }));
+    expect(screen.getByRole("button", { name: "agentSaveChanges" })).toBeDisabled();
+    expect(screen.getByText("profileModelOutsideDirectory profileModelSelectAvailableToSave")).toBeVisible();
+
+    await user.click(screen.getByRole("button", { name: "profileModelOpenConfiguration" }));
+    expect(screen.getByRole("combobox", { name: "profileModel" })).toHaveAccessibleDescription(
+      "profileModelOutsideDirectory profileModelSelectAvailableToSave",
+    );
+  });
+
+  it("allows refreshing a successfully loaded empty model directory", async () => {
+    const user = userEvent.setup();
+    const onRetryModels = vi.fn();
+    render(<Harness modelDirectory={[]} onRetryModels={onRetryModels} />);
+    expect(screen.getByText("modelProviderNoModels")).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "profileModelRefreshDirectory" }));
+    expect(onRetryModels).toHaveBeenCalledOnce();
   });
 
   it("keeps the model controls aligned and exposes retryable technical details", async () => {

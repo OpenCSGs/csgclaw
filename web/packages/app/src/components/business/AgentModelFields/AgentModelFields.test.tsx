@@ -36,6 +36,26 @@ test("provider changes choose its first model and OpenCSG authentication can blo
   expect(onPatch).toHaveBeenCalledWith({ provider: "api", model_provider_id: "custom", model_id: "first" });
 });
 
+test("waits for discovery when switching providers in an agent profile", async () => {
+  const user = userEvent.setup();
+  const onPatch = vi.fn();
+  render(
+    <AgentModelFields
+      providerOptions={providers}
+      providerID="custom"
+      modelID="first"
+      models={["first", "second"]}
+      deferModelSelection
+      onPatch={onPatch}
+      onRequireOpenCSGAuth={() => true}
+      t={t}
+    />,
+  );
+  await user.click(screen.getByRole("combobox", { name: t("profileModelProvider") }));
+  await user.click(screen.getByRole("option", { name: /OpenCSG/ }));
+  expect(onPatch).toHaveBeenCalledWith({ provider: "csghub", model_provider_id: "opencsg", model_id: "" });
+});
+
 test("model choices follow the selected provider when switching in both directions", async () => {
   const user = userEvent.setup();
   const onPatch = vi.fn();

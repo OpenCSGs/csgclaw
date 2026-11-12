@@ -238,8 +238,22 @@ func (s *RemoteStore) remotePublicationHead(ctx context.Context, name, branch st
 
 func (s *RemoteStore) commitRemoteTemplate(ctx context.Context, name, branch string, files map[string][]byte, existing bool, nickname string) error {
 	const maxAttempts = 3
+	policyRecoveryAttempted := false
 	for attempt := 1; ; attempt++ {
 		err := s.commitRemoteTemplateAttempt(ctx, name, branch, files, existing || attempt > 1, existing, nickname)
+		var preuploadErr *templatePreuploadError
+		var remoteErr *RemoteAPIError
+		if !policyRecoveryAttempted && ctx.Err() == nil &&
+			errors.As(err, &preuploadErr) && errors.As(preuploadErr, &remoteErr) &&
+			remoteErr.Code == "GIT-ERR-15" && remoteErr.Path == ".gitignore" {
+			policyRecoveryAttempted = true
+			if recoveryErr := s.ensureTemplateGitIgnore(ctx, name, branch); recoveryErr != nil {
+				err = recoveryErr
+			} else {
+				// The policy file can advance the branch. Recompute the snapshot from its new head.
+				err = s.commitRemoteTemplateAttempt(ctx, name, branch, files, true, existing, nickname)
+			}
+		}
 		if err == nil || attempt == maxAttempts || ctx.Err() != nil || !retryableTemplateCommit(err) {
 			return err
 		}
@@ -252,6 +266,40 @@ func (s *RemoteStore) commitRemoteTemplate(ctx context.Context, name, branch str
 		case <-timer.C:
 		}
 	}
+}
+
+type templatePreuploadError struct{ cause error }
+
+func (e *templatePreuploadError) Error() string {
+	return "preupload cloud template: " + e.cause.Error()
+}
+func (e *templatePreuploadError) Unwrap() error { return e.cause }
+
+// Older Hub deployments can fail preupload when this optional policy file is absent.
+func (s *RemoteStore) ensureTemplateGitIgnore(ctx context.Context, name, branch string) error {
+	head, err := s.remotePublicationHead(ctx, name, branch)
+	if err != nil {
+		return err
+	}
+	files := make(map[string]string)
+	if err := s.remotePublicationFiles(ctx, name, head, "", files); err != nil {
+		return err
+	}
+	if _, exists := files[".gitignore"]; exists {
+		return nil
+	}
+	// The single-file API uses Git's CREATE action. The batch commit API can turn
+	// a create into an update if another publisher has already created the file.
+	request := struct {
+		Branch  string `json:"branch"`
+		Content string `json:"content"`
+		Message string `json:"message"`
+	}{Branch: branch, Content: base64.StdEncoding.EncodeToString([]byte("\n")), Message: "Initialize template Git ignore rules"}
+	endpoint := s.remoteTemplateEndpoint(name) + "/raw/.gitignore?" + url.Values{"current_user": {s.username}}.Encode()
+	if err := s.postJSON(ctx, endpoint, request, nil); err != nil {
+		return fmt.Errorf("initialize cloud template .gitignore: %w", err)
+	}
+	return nil
 }
 
 func retryableTemplateCommit(err error) bool {
@@ -318,7 +366,7 @@ func (s *RemoteStore) commitRemoteTemplateAttempt(ctx context.Context, name, bra
 	}
 	for _, batch := range publicationBatches(preuploadPaths, files) {
 		if err := s.preuploadTemplateBatch(ctx, endpoint+"/preupload/"+url.PathEscape(preuploadRef)+query, batch, files, actions); err != nil {
-			return fmt.Errorf("preupload cloud template: %w", err)
+			return &templatePreuploadError{cause: err}
 		}
 	}
 

@@ -104,9 +104,10 @@ func CheckService(ctx context.Context, c ServiceConnection, verify bool) (Servic
 		return ServiceDirectory{}, connectionNetworkError(err)
 	}
 	out := ServiceDirectory{Source: "upstream"}
+	discovered := false
 	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
 		var list openAIModelsResponse
-		if json.Unmarshal(body, &list) != nil {
+		if json.Unmarshal(body, &list) != nil || list.Data == nil {
 			return out, &ConnectionError{502, "invalid_response", "The model service returned an invalid model list."}
 		}
 		complete := list
@@ -134,7 +135,7 @@ func CheckService(ctx context.Context, c ServiceConnection, verify bool) (Servic
 			}
 			list.Data = nil
 			list.HasMore = false
-			if json.Unmarshal(b, &list) != nil {
+			if json.Unmarshal(b, &list) != nil || list.Data == nil {
 				return out, &ConnectionError{502, "invalid_response", "Invalid paginated model list."}
 			}
 			complete.Data = append(complete.Data, list.Data...)
@@ -142,13 +143,12 @@ func CheckService(ctx context.Context, c ServiceConnection, verify bool) (Servic
 				return out, &ConnectionError{502, "invalid_response", "Model pagination did not advance."}
 			}
 		}
-		if len(complete.Data) > 0 {
-			directory, e := openAIModelDirectoryFromResponse(complete, c.BaseURL, false)
-			if e != nil {
-				return out, &ConnectionError{502, "invalid_response", "The model service returned no usable models."}
-			}
-			out.ModelDiscoveryResult = directory
+		directory, err := openAIModelDirectoryFromResponse(complete, c.BaseURL, false)
+		if err != nil {
+			return out, &ConnectionError{502, "invalid_response", "The model service returned no usable models."}
 		}
+		out.ModelDiscoveryResult = directory
+		discovered = true
 
 	} else if resp.StatusCode != 404 && resp.StatusCode != 405 && resp.StatusCode != 501 {
 		return out, serviceError(resp.StatusCode, body, c.APIKey)
@@ -167,6 +167,10 @@ func CheckService(ctx context.Context, c ServiceConnection, verify bool) (Servic
 	// Do not replace its media catalog with chat presets or issue a paid image/
 	// video generation request merely to verify the connection.
 	if len(out.Models) == 0 && (len(out.ImageModels) > 0 || len(out.VideoModels) > 0) {
+		return out, nil
+	}
+	// A read-only discovery check should reflect an authoritative empty catalog.
+	if discovered && !verify && len(out.Models) == 0 {
 		return out, nil
 	}
 	if len(out.Models) == 0 {

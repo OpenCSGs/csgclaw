@@ -54,7 +54,7 @@ export function useProfileModelOptions({ draft, enabled = true, onDraftChange }:
   );
 
   useEffect(() => {
-    if (!models.length || !draft || draft.model_id || !onDraftChange) {
+    if (!models.length || !draft || draft.model_id || !onDraftChange || query.isFetching) {
       return;
     }
     if (draftRequestKey !== requestKey) {
@@ -69,7 +69,7 @@ export function useProfileModelOptions({ draft, enabled = true, onDraftChange }:
         model_id: defaultModelIDForProvider(current.model_provider_id || "", models),
       };
     });
-  }, [draft, draftRequestKey, models, onDraftChange, requestKey]);
+  }, [draft, draftRequestKey, models, onDraftChange, query.isFetching, requestKey]);
 
   const resetModels = useCallback(() => {
     const key = requestKey || draftRequestKey;
@@ -84,9 +84,11 @@ export function useProfileModelOptions({ draft, enabled = true, onDraftChange }:
 
   const retryModels = query.refetch;
 
+  const modelsLoaded = shouldLoad && draftRequestKey === requestKey && query.isSuccess;
   return {
     models,
-    modelsLoaded: shouldLoad && draftRequestKey === requestKey && query.isSuccess,
+    modelsLoaded,
+    providerConfirmedConnected: modelsLoaded && !query.isFetching && query.data?.providerStatus === "connected",
     modelBusy: Boolean(requestDraft) && query.isFetching,
     modelError: shouldLoad && draftRequestKey === requestKey ? query.error : null,
     resetModels,
