@@ -292,7 +292,7 @@ describe("StartTaskPage task preparation", () => {
     );
     expect(open).not.toHaveBeenCalled();
     expect(screen.getByRole("textbox", { name: "taskEntryPrompt" })).toHaveValue("  检查代码  ");
-    fireEvent.click(screen.getByRole("button", { name: "taskEntryStart" }));
+    fireEvent.click(screen.getByRole("button", { name: "retrySend" }));
     await waitFor(() => expect(open).toHaveBeenCalledWith(room));
     expect(create).toHaveBeenCalledTimes(1);
     const sends = vi.mocked(sendMessageRequest).mock.calls;
@@ -374,6 +374,68 @@ describe("new task member mentions", () => {
       .mockReset()
       .mockResolvedValue({} as never),
   );
+
+  it("preserves a pasted participant mention as a structured reference", async () => {
+    setup("/new?agent=u-worker");
+    const user = userEvent.setup();
+    const editor = screen.getByRole("textbox", { name: "taskEntryPrompt" });
+    await user.click(editor);
+    await user.paste("Review @Worker please");
+    await user.click(screen.getByRole("button", { name: "taskEntryStart" }));
+    await waitFor(() =>
+      expect(sendMessageRequest).toHaveBeenCalledWith(
+        expect.objectContaining({ content: 'Review <at user_id="worker">Worker</at> please' }),
+      ),
+    );
+  });
+
+  it("browses a workspace directory with Tab and references a child file", async () => {
+    vi.mocked(fetchWorkspaceDirectory).mockImplementation(async (_agent, path) => ({
+      entries:
+        path === "docs"
+          ? [{ name: "guide.md", path: "docs/guide.md", type: "file" }]
+          : [{ name: "docs", path: "docs", type: "dir" }],
+    }));
+    try {
+      const user = userEvent.setup();
+      setup();
+      const editor = screen.getByRole("textbox", { name: "taskEntryPrompt" });
+      await user.type(editor, "Review @docs");
+      await screen.findByRole("option", { name: /docs/ });
+      await user.keyboard("{Tab}");
+      expect(editor).toHaveValue("Review @");
+      await screen.findByRole("option", { name: /guide.md/ });
+      await user.keyboard("{Enter}");
+      await user.click(screen.getByRole("button", { name: "taskEntryStart" }));
+      await waitFor(() =>
+        expect(sendMessageRequest).toHaveBeenCalledWith(
+          expect.objectContaining({
+            file_references: [expect.objectContaining({ path: "docs/guide.md" })],
+          }),
+        ),
+      );
+    } finally {
+      vi.mocked(fetchWorkspaceDirectory).mockResolvedValue({ entries: [] });
+    }
+  });
+
+  it("groups team members and files from the selected shared workspace", async () => {
+    vi.mocked(fetchWorkspaceDirectory).mockResolvedValue({
+      entries: [{ name: "guide.md", path: "guide.md", type: "file" }],
+    });
+    try {
+      setup("/new?team=team-1", "test-model", { configuration: { workspace_dir: "/shared-project" } });
+      const user = userEvent.setup();
+      const editor = screen.getByRole("textbox", { name: "taskEntryPrompt" });
+      await user.type(editor, "@");
+      expect(screen.getByText("chatMentionPeople")).toBeVisible();
+      expect(await screen.findByText("chatMentionFiles")).toBeVisible();
+      expect(screen.getByRole("option", { name: /guide.md/ })).toBeVisible();
+      expect(fetchWorkspaceDirectory).toHaveBeenCalledWith("u-manager", "", expect.anything(), "", "/shared-project");
+    } finally {
+      vi.mocked(fetchWorkspaceDirectory).mockResolvedValue({ entries: [] });
+    }
+  });
 
   it("selects a team member without submitting and sends a structured participant reference", async () => {
     const user = userEvent.setup();

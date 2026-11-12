@@ -246,6 +246,16 @@
   margin: 0;
 }
 
+.toolDetails .toolOutput {
+  max-block-size: min(16rem, 40vh);
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  background: var(--panel-soft);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+}
+
 .toolDetails small,
 .emptyOutput {
   margin: 0;
