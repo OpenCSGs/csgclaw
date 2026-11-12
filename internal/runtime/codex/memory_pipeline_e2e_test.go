@@ -37,6 +37,12 @@ memories."dedicated_tools" = true
 'dual_write' = true
 "dedicated_tools" = true
 `,
+		`[memories]
+"version" = """
+v2"""
+`,
+		"memories.version = '''\nv2'''\n",
+		"memories.version = \"\"\"\r\nv2\"\"\"",
 	} {
 		config := configureCodexHomeConfig(initial, agentruntime.Profile{}, nil)
 		var parsed struct {
@@ -58,7 +64,7 @@ memories."dedicated_tools" = true
 	}
 }
 
-func TestNormalizeMemoryKeysPreservesUnmanagedContent(t *testing.T) {
+func TestStripMemoryDirectivesPreservesUnmanagedContent(t *testing.T) {
 	input := `# Keep host configuration and literal dotted names.
 "memories.version" = "literal"
 ['features']
@@ -67,22 +73,24 @@ func TestNormalizeMemoryKeysPreservesUnmanagedContent(t *testing.T) {
 ["memories"]
 "ver\u0073ion" = "v2" # managed
 'use_memories' = false
+# Keep the following host setting.
 "custom" = "keep"
 [project]
 "version" = "keep"
 text = """
-"memories"."version" = "example"
+[memories]
+version = "example"
 """
 `
 	if err := toml.Unmarshal([]byte(input), new(map[string]any)); err != nil {
 		t.Fatal(err)
 	}
-	want := strings.ReplaceAll(input, `"ver\u0073ion"`, "version")
+	want := strings.ReplaceAll(input, `"ver\u0073ion" = "v2" # managed`+"\n", "")
 	want = strings.ReplaceAll(want, "['features']", "[features]")
-	want = strings.ReplaceAll(want, "'memories' = false", "memories = false")
+	want = strings.ReplaceAll(want, "'memories' = false\n", "")
 	want = strings.ReplaceAll(want, `["memories"]`, "[memories]")
-	want = strings.ReplaceAll(want, "'use_memories' = false", "use_memories = false")
-	if got := normalizeMemoryKeys(input); got != want {
+	want = strings.ReplaceAll(want, "'use_memories' = false\n", "")
+	if got := stripUserMemoryDirectives(input); got != want {
 		t.Fatalf("normalized config = %s, want %s", got, want)
 	}
 }
@@ -114,7 +122,7 @@ func TestMemoryPipelineBundledCodexE2E(t *testing.T) {
 			if err := os.MkdirAll(host, 0o700); err != nil {
 				t.Fatal(err)
 			}
-			if err := os.WriteFile(filepath.Join(host, "config.toml"), []byte("[memories]\n\"version\" = \"v2\"\n'dual_write' = true\n\"dedicated_tools\" = true\n"), 0o600); err != nil {
+			if err := os.WriteFile(filepath.Join(host, "config.toml"), []byte("[memories]\n\"version\" = \"\"\"\nv2\"\"\"\n'dual_write' = true\n\"dedicated_tools\" = true\n"), 0o600); err != nil {
 				t.Fatal(err)
 			}
 			var activeThread atomic.Value
