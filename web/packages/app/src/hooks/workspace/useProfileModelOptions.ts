@@ -86,6 +86,7 @@ export function useProfileModelOptions({ draft, enabled = true, onDraftChange }:
 
   return {
     models,
+    modelsLoaded: shouldLoad && draftRequestKey === requestKey && query.isSuccess,
     modelBusy: Boolean(requestDraft) && query.isFetching,
     modelError: shouldLoad && draftRequestKey === requestKey ? query.error : null,
     resetModels,

@@ -858,6 +858,19 @@ export function isOnDemandConversation(conversation: { type?: RoomType | null } 
   return roomType(conversation) === RoomTypes.onDemand;
 }
 
+export function roomInviteCandidates(
+  conversation: IMConversation | null | undefined,
+  users: readonly IMUser[] = [],
+): IMUser[] {
+  if (!conversation) return [];
+  return users.filter(
+    (user) =>
+      user.role !== "cloud" &&
+      !user.agent_state &&
+      !conversation.members.some((memberID) => localIdentitiesMatch(memberID, user.id)),
+  );
+}
+
 export function resolveRoomInviterID(
   room: Pick<IMConversation, "members"> | null | undefined,
   options: { preferredInviterIDs?: Array<string | null | undefined> } = {},

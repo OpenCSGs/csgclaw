@@ -44,6 +44,7 @@ import {
   isThreadReply,
   isToolCallMessage,
   localIdentitiesMatch,
+  roomInviteCandidates,
   participantIDForLocalIdentity,
   removeConversationFromData,
   resolveConversationUser,
@@ -222,13 +223,6 @@ function updateAttachmentDrafts(
 
 function conversationMemberParticipantIDs(conversation: IMConversation | null | undefined): Set<string> {
   return new Set((conversation?.members || []).map((id) => participantIDForLocalIdentity(id)).filter(Boolean));
-}
-
-function conversationHasLocalIdentity(
-  conversation: IMConversation | null | undefined,
-  id: string | null | undefined,
-): boolean {
-  return (conversation?.members || []).some((memberID) => localIdentitiesMatch(memberID, id));
 }
 
 function conversationAgentForMember(
@@ -767,10 +761,7 @@ export function useConversationController({
         .map((id) => resolveUserByLocalIdentity(id, usersById))
         .filter((user): user is IMUser => Boolean(user))
     : [];
-  const inviteCandidates = activeConversation
-    ? data?.users.filter((user) => !user.agent_state && !conversationHasLocalIdentity(activeConversation, user.id)) ||
-      []
-    : [];
+  const inviteCandidates = roomInviteCandidates(activeConversation, data?.users);
   const inviteActionLabel = t("memberManagement");
 
   const mentionCandidates = useMemo(() => {

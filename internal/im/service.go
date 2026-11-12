@@ -2713,20 +2713,24 @@ func (s *Service) AddRoomMembers(req AddRoomMembersRequest) (Room, error) {
 		if userID == "" {
 			continue
 		}
-		if _, ok := s.users[userID]; !ok {
+		user, ok := s.users[userID]
+		if !ok {
 			return Room{}, fmt.Errorf("%w: %s", ErrUserNotFound, userID)
 		}
 		if _, ok := existing[userID]; ok {
 			continue
 		}
+		if user.Role == "cloud" {
+			return Room{}, fmt.Errorf("cannot invite a cloud agent to this room")
+		}
 		existing[userID] = struct{}{}
-		room.Members = append(room.Members, userID)
 		addedIDs = append(addedIDs, userID)
 	}
 	if len(addedIDs) == 0 {
 		return Room{}, ErrNoNewUsersToInvite
 	}
 
+	room.Members = append(room.Members, addedIDs...)
 	room.Subtitle = formatRoomSubtitle(len(room.Members))
 	room.Messages = append(room.Messages, Message{
 		ID:       fmt.Sprintf("msg-%d", time.Now().UnixNano()),

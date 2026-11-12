@@ -80,7 +80,7 @@ test("model choices follow the selected provider when switching in both directio
   expect(screen.queryByRole("option", { name: /cloud-model/ })).not.toBeInTheDocument();
 });
 
-test("目录以外的模板模型保持显示并允许用户选择其他模型", async () => {
+test("保留目录以外的模板模型值，只提供目录中的模型选项", async () => {
   const user = userEvent.setup();
   const onPatch = vi.fn();
   render(
@@ -97,7 +97,7 @@ test("目录以外的模板模型保持显示并允许用户选择其他模型",
   const model = screen.getByRole("combobox", { name: t("profileModel") });
   expect(model).toHaveTextContent("template-model");
   await user.click(model);
-  expect(screen.getByRole("option", { name: /template-model/ })).toHaveAttribute("aria-selected", "true");
+  expect(screen.queryByRole("option", { name: /template-model/ })).not.toBeInTheDocument();
   await user.click(screen.getByRole("option", { name: /second/ }));
   expect(onPatch).toHaveBeenLastCalledWith({ provider: "api", model_provider_id: "custom", model_id: "second" });
 });

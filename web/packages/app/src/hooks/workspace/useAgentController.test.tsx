@@ -1357,6 +1357,7 @@ describe("useAgentController", () => {
     );
     const payload = vi.mocked(updateAgentRequest).mock.calls[0]?.[1];
     expect(payload).not.toHaveProperty("name");
+    expect(payload).not.toHaveProperty("agent_profile");
   });
 
   it("updates the live manager profile after changing its model provider", async () => {
@@ -1414,6 +1415,48 @@ describe("useAgentController", () => {
     expect(result.current.managerProfile?.model_id).toBe("deepseek-v4-pro");
     expect(result.current.refreshWorkspaceManagerProfile).not.toHaveBeenCalled();
   });
+
+  it.each(["model_not_found", "cluster_not_found"])(
+    "refreshes the model directory and surfaces a field error when saving returns %s",
+    async (code) => {
+      vi.mocked(fetchAgentProfileModels).mockResolvedValue({ models: ["retired-model", "current-model"] });
+      vi.mocked(updateAgentRequest).mockRejectedValueOnce({
+        status: 404,
+        code,
+        message: "Model no longer routable",
+      } satisfies ApiError);
+      const { result } = renderHook(() => useAgentControllerHarness().controller, { wrapper: createWrapper() });
+
+      await waitFor(() => expect(result.current.agentViewProps.modelDirectory).toContain("retired-model"));
+      vi.mocked(fetchAgentProfileModels)
+        .mockClear()
+        .mockResolvedValue({ models: ["current-model"] });
+      act(() => {
+        result.current.agentViewProps.onDraftChange?.({
+          ...result.current.agentViewProps.draft!,
+          model_id: "retired-model",
+        });
+      });
+
+      await act(async () => {
+        await result.current.agentViewProps.onSave?.();
+      });
+
+      await waitFor(() => expect(result.current.agentViewProps.modelDirectory).toEqual(["current-model"]));
+      expect(fetchAgentProfileModels).toHaveBeenCalled();
+      expect(result.current.agentViewProps.draft?.model_id).toBe("retired-model");
+      expect(result.current.agentViewProps.modelSaveError).toBe("Model no longer routable");
+      expect(result.current.agentViewProps.saveError).toBe("");
+
+      act(() => {
+        result.current.agentViewProps.onDraftChange?.({
+          ...result.current.agentViewProps.draft!,
+          model_id: "current-model",
+        });
+      });
+      expect(result.current.agentViewProps.modelSaveError).toBeUndefined();
+    },
+  );
 
   it("exposes the billing URL when saving the Agent page fails for insufficient balance", async () => {
     vi.mocked(updateAgentRequest).mockRejectedValueOnce({
