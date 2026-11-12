@@ -178,3 +178,39 @@
   font-size: 13px;
   line-height: 20px;
 }
+
+.agent-memory-content .agent-memory-error {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  margin-top: 0;
+  white-space: normal;
+}
+
+.agent-memory-error p {
+  margin: 0;
+  line-height: 1.6;
+}
+
+.agent-memory-error small {
+  opacity: 0.8;
+}
+
+.agent-memory-error summary {
+  width: fit-content;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.agent-memory-error summary:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 3px;
+}
+
+.agent-memory-error pre {
+  margin: 8px 0 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  line-height: 1.5;
+}

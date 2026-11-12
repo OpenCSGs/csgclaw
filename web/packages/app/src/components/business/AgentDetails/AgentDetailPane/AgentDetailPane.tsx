@@ -4,6 +4,7 @@ import agentDetailPaneStyles from "./AgentDetailPane.module.css";
 import agentSkillsStyles from "./AgentSkills.module.css";
 import agentPublicationStyles from "./AgentPublication.module.css";
 import agentMemoryStyles from "./AgentMemory.module.css";
+import { memoryErrorMessage } from "./memoryError";
 import agentInstructionsStyles from "./AgentInstructions.module.css";
 import agentChannelsStyles from "./AgentChannels.module.css";
 import { AgentProfileHeader } from "./AgentProfileHeader";
@@ -1985,7 +1986,7 @@ function AgentMemoryPanel({ agentID, onMemoryChange, portalContainer, t }: Agent
       const value = await fetchAgentMemoryDocument(agentID);
       if (request === loadRequest.current.sequence) setDocument(value);
     } catch (error) {
-      if (request === loadRequest.current.sequence) setLoadError(errorMessage(error, t("agentMemoryLoadFailed")));
+      if (request === loadRequest.current.sequence) setLoadError(memoryErrorMessage(error, t));
     } finally {
       if (request === loadRequest.current.sequence) setLoading(false);
     }
@@ -2056,7 +2057,7 @@ function AgentMemoryPanel({ agentID, onMemoryChange, portalContainer, t }: Agent
       setConfirmation(null);
       await onMemoryChange?.();
     } catch (error) {
-      setLoadError(errorMessage(error, t("agentMemoryUpdateFailed")));
+      setLoadError(memoryErrorMessage(error, t));
     } finally {
       setUpdating(false);
     }
@@ -2157,10 +2158,21 @@ function AgentMemoryPanel({ agentID, onMemoryChange, portalContainer, t }: Agent
 
         <div className={agentMemoryStyles["agent-memory-content"]}>
           {document?.last_error ? (
-            <InlineError>
-              <div>{t("agentMemoryLastError")}</div>
-              <div>{document.last_error.message}</div>
+            <InlineError className={agentMemoryStyles["agent-memory-error"]} role="alert">
+              <strong>
+                {t(
+                  document.last_error.operation === "initialization"
+                    ? "agentMemoryHistoryError"
+                    : "agentMemoryUpdateError",
+                )}
+              </strong>
+              <p>{memoryErrorMessage(document.last_error.message, t)}</p>
+              {document.status === "pending" ? <p>{t("agentMemoryErrorRetrying")}</p> : null}
               <small>{new Date(document.last_error.at).toLocaleString()}</small>
+              <details>
+                <summary>{t("agentMemoryErrorDetails")}</summary>
+                <pre>{document.last_error.message}</pre>
+              </details>
             </InlineError>
           ) : document?.status === "failed" ? (
             <p role="status">{t("agentMemoryLearningFailed")}</p>

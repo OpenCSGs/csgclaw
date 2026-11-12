@@ -2800,6 +2800,19 @@ export const messages = {
     agentMemoryFact: "已确认事实",
     agentMemoryCategoryEmpty: "暂无记忆",
     agentMemoryLastError: "最近一次记忆更新错误",
+    agentMemoryErrorContent: "记忆内容无法保存，请检查内容格式及长度后重试。",
+    agentMemoryErrorNotFound: "模型服务未找到请求的资源，请检查智能体的模型名称和服务地址。",
+    agentMemoryHistoryError: "历史私聊学习未完成",
+    agentMemoryUpdateError: "记忆更新未完成",
+    agentMemoryErrorDetails: "错误详情",
+    agentMemoryErrorRetrying: "后台仍有记忆任务待处理，你可以继续聊天。",
+    agentMemoryErrorTimeout: "模型处理时间过长，本次记忆提炼已超时。请稍后重试，或在智能体档案中更换响应更快的模型。",
+    agentMemoryErrorConflict: "记忆已发生变化，请重新打开记忆编辑器，确认最新内容后再保存。",
+    agentMemoryErrorCapacity: "记忆内容或待处理更新已达上限。请稍后重试，或编辑记忆、精简内容。",
+    agentMemoryErrorExpired: "这次记忆学习等待过久，已停止处理。请稍后重新尝试。",
+    agentMemoryErrorStorage: "无法读取或保存记忆文件。请检查磁盘空间及文件访问权限，或联系管理员。",
+    agentMemoryErrorResult: "模型返回的记忆结果无法使用。请重试；如果反复失败，可在智能体档案中更换模型。",
+    agentMemoryErrorUnknown: "本次记忆处理未完成，请稍后重试。如果反复失败，请展开错误详情并联系管理员。",
     agentMemoryEdit: "编辑记忆",
     agentMemoryMarkdownLabel: "Markdown 记忆",
     agentMemoryUpdated: "记忆已更新",
@@ -6225,6 +6238,26 @@ export const messages = {
     agentMemoryFact: "Confirmed fact",
     agentMemoryCategoryEmpty: "No memories yet",
     agentMemoryLastError: "Latest memory update error",
+    agentMemoryErrorContent: "Memory could not be saved. Check its format and length, then try again.",
+    agentMemoryErrorNotFound:
+      "The model service could not find the requested resource. Check the agent’s model name and service address.",
+    agentMemoryHistoryError: "Private chat history learning did not finish",
+    agentMemoryUpdateError: "Memory update did not finish",
+    agentMemoryErrorDetails: "Error details",
+    agentMemoryErrorRetrying: "There are still memory tasks being processed. You can keep chatting.",
+    agentMemoryErrorTimeout:
+      "The model took too long to process this memory update. Try again later, or choose a faster model in the agent profile.",
+    agentMemoryErrorConflict:
+      "Memory has changed. Reopen the memory editor and review the latest content before saving.",
+    agentMemoryErrorCapacity:
+      "Memory content or pending updates have reached their limit. Try again later, or edit and shorten the memory.",
+    agentMemoryErrorExpired: "This memory task waited too long and was stopped. Please try again later.",
+    agentMemoryErrorStorage:
+      "Memory files could not be read or saved. Check disk space and file access permissions, or contact an administrator.",
+    agentMemoryErrorResult:
+      "The model returned a memory result that could not be used. Try again; if this keeps happening, choose another model in the agent profile.",
+    agentMemoryErrorUnknown:
+      "Memory processing did not finish. Try again later. If this keeps happening, expand the error details and contact an administrator.",
     agentMemoryEdit: "Edit memory",
     agentMemoryMarkdownLabel: "Markdown memory",
     agentMemoryUpdated: "Memory updated",
