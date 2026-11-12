@@ -162,6 +162,9 @@ export function useTaskPromptMentions({
 
   return {
     candidates,
+    fileMentions: scopedMentions
+      .filter((item) => "reference" in item && value.slice(item.start, item.end) === `@${item.reference.label}`)
+      .sort((a, b) => a.start - b.start),
     activeIndex,
     choose,
     referenceFile,
