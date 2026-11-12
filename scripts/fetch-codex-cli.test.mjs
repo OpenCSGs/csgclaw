@@ -11,7 +11,9 @@ const source = resolve(import.meta.dirname);
 for (const platform of ['darwin', 'windows']) {
   for (const corrupt of [false, true]) {
     test(`${platform}: pinned download ${corrupt ? 'rejects corruption and preserves binary' : 'installs verified artifact'}`, () => {
-      const root = mkdtempSync(resolve(source, '../.cache/csgclaw-dev/codex-fetch-test-'));
+      const cache = resolve(source, '../.cache/csgclaw-dev');
+      mkdirSync(cache, { recursive: true });
+      const root = mkdtempSync(join(cache, 'codex-fetch-test-'));
       try {
         const scripts = join(root, 'scripts');
         const mirror = join(root, 'mirror');

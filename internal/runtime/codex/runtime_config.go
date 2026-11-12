@@ -15,6 +15,7 @@ import (
 	agentruntime "csgclaw/internal/runtime"
 
 	toml "github.com/pelletier/go-toml/v2"
+	"github.com/pelletier/go-toml/v2/unstable"
 )
 
 const (
@@ -1074,7 +1075,67 @@ func stripUserInputDirectives(content string) string {
 	return strings.Join(out, "\n")
 }
 
+// Normalize only managed memory keys using TOML's decoded names, preserving
+// comments, values, and unrelated keys (including literal keys containing dots).
+func normalizeMemoryKeys(content string) string {
+	var parser unstable.Parser
+	parser.Reset([]byte(content))
+	type replacement struct {
+		start, end int
+		text       string
+	}
+	var edits []replacement
+	var table []string
+	for parser.NextExpression() {
+		node := parser.Expression()
+		if node.Kind != unstable.Table && node.Kind != unstable.ArrayTable && node.Kind != unstable.KeyValue {
+			continue
+		}
+		var keys []string
+		var nodes []*unstable.Node
+		it := node.Key()
+		for it.Next() {
+			keys = append(keys, string(it.Node().Data))
+			nodes = append(nodes, it.Node())
+		}
+		managed := false
+		if node.Kind == unstable.Table || node.Kind == unstable.ArrayTable {
+			table = keys
+			managed = node.Kind == unstable.Table && len(keys) == 1 && (keys[0] == "memories" || keys[0] == "features")
+		} else {
+			path := append(append([]string(nil), table...), keys...)
+			if len(path) == 2 {
+				if path[0] == "features" && path[1] == "memories" {
+					managed = true
+				}
+				if path[0] == "memories" {
+					switch path[1] {
+					case "version", "dual_write", "dedicated_tools", "generate_memories", "use_memories", "min_rollout_idle_hours":
+						managed = true
+					}
+				}
+			}
+		}
+		if managed {
+			for i, key := range nodes {
+				if string(parser.Raw(key.Raw)) != keys[i] {
+					edits = append(edits, replacement{int(key.Raw.Offset), int(key.Raw.Offset + key.Raw.Length), keys[i]})
+				}
+			}
+		}
+	}
+	if parser.Error() != nil {
+		return content
+	}
+	for i := len(edits) - 1; i >= 0; i-- {
+		e := edits[i]
+		content = content[:e.start] + e.text + content[e.end:]
+	}
+	return content
+}
+
 func stripUserMemoryDirectives(content string) string {
+	content = normalizeMemoryKeys(content)
 	lines := strings.Split(content, "\n")
 	out := make([]string, 0, len(lines))
 	currentTable := ""
