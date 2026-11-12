@@ -1521,7 +1521,7 @@ func (r *Runtime) resolveAgent(h agentruntime.Handle) (AgentRef, error) {
 		return AgentRef{}, fmt.Errorf("resolved agent is incomplete")
 	}
 	if value, ok := r.conversationSettings.Load(h.RuntimeID); ok {
-		if settings, applied := value.(*conversationconfig.State).Current(); applied {
+		if settings, applied := value.(*codexConversationState).Current(); applied {
 			agentRef.Profile, agentRef.RuntimeOptions = settings.Profile, maps.Clone(settings.Options)
 		}
 	}
