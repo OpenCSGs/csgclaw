@@ -55,6 +55,7 @@ export type ParsedStructuredMessage = StructuredMessagePayload | ActionCardPaylo
 export type ProgressControlSlots = { header?: ReactNode; footer?: ReactNode };
 
 export type MessageContentProps = {
+  allowLegacyToolFormat?: boolean;
   videoMessages?: IMMessage[];
   progressControls?: ProgressControlSlots | null;
   showTurnProgress?: boolean;

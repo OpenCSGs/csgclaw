@@ -734,6 +734,7 @@ function ActivityRow({
               showTurnProgress={false}
               content={entry.message.content}
               message={entry.message}
+              allowLegacyToolFormat={entry.source === "agent"}
               actionBusy=""
               actionFeedback={{ key: "", message: "" }}
               onAction={() => undefined}

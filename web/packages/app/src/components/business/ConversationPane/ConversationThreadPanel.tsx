@@ -725,6 +725,7 @@ function ThreadMessage({
               key={`${message.id}:${theme}`}
               content={message.content}
               message={message}
+              allowLegacyToolFormat={Boolean(messageAgent)}
               progressControls={progressControls}
               videoMessages={embeddedVideos}
               onQuestionSelect={onQuestionSelect}

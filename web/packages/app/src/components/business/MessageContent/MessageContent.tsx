@@ -16,7 +16,12 @@ import { parseStructuredMessage } from "./structuredMessages";
 import type { ActionCardPayload, MessageContentProps } from "./types";
 import { mentionMarkupPattern, escapeHTML } from "./mentions";
 import { renderMessageMention } from "./messageMentionMarkup";
-import { hasAgentActivityMetadata, parseAgentActivity, parseMessageActivityCommand } from "@/models/agentActivity";
+import {
+  hasAgentActivityMetadata,
+  parseAgentActivity,
+  parseDeliveryCommand,
+  parseMessageActivityCommand,
+} from "@/models/agentActivity";
 import { AgentActivityMsgTypes } from "@/shared/constants/messages";
 import { prepareMermaidBlocks, renderMermaidBlocks } from "./mermaid";
 import "./MessageContent.css";
@@ -58,6 +63,7 @@ export const MessageContent = memo(function MessageContent(props: MessageContent
 });
 
 function MessageBody({
+  allowLegacyToolFormat = false,
   content,
   diagnosticText = false,
   message,
@@ -144,7 +150,8 @@ function MessageBody({
     return <AgentActivityCard activity={activity} onQuestionSelect={onQuestionSelect} t={t} />;
   }
 
-  const command = message && parseMessageActivityCommand({ content: displayContent, metadata: message.metadata });
+  const parseCommand = allowLegacyToolFormat ? parseMessageActivityCommand : parseDeliveryCommand;
+  const command = message && parseCommand({ content: displayContent, metadata: message.metadata });
   if (command?.output) {
     return (
       <ToolActivityOutput name={command.command} label={t?.("progressOutput") ?? "Output"} text={command.output} />
