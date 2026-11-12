@@ -885,7 +885,8 @@ func persistedPermissionMode(meta runtimeMetadata) string {
 	if mode := strings.TrimSpace(meta.PermissionMode); mode != "" {
 		return mode
 	}
-	return defaultPermissionMode
+	// Metadata without a permission mode predates the full-access default.
+	return PermissionModeWorkspaceWrite
 }
 
 func persistedWorkspaceDir(meta runtimeMetadata, defaultWorkspace string) string {

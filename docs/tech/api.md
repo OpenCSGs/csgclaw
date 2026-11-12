@@ -795,10 +795,10 @@ memory_mode = "disabled"
 Only template-safe runtime options are published.
 For Codex workers this currently means `execution_mode` and `memory_mode`; machine-local options such as `local_workspace_dir` are not published.
 Explicit runtime options in an agent create request override template values.
-Missing `execution_mode` defaults to `standard`.
+Missing `execution_mode` defaults to `standard`. Standard mode configures Codex with `sandbox_mode = "danger-full-access"`, allowing access outside the workspace subject to the operating system permissions of the runtime process.
 Missing `memory_mode` defaults to `enabled`.
 
-DSH workers accept `workspace-write`, `read-only`, or `danger-full-access` as `permission_mode`, defaulting to `workspace-write`. `local_workspace_dir` selects an absolute local path; when empty, DSH uses the managed Agent workspace. Changing the directory starts fresh DSH sessions so an old session is never resumed in a different directory. CSGClaw stores Agent instructions in the isolated `DSH_HOME/AGENTS.md`; DSH also loads the selected project's own `AGENTS.md` without modifying it. Template publishing retains only `permission_mode`, not the machine-local directory.
+DSH workers accept `workspace-write`, `read-only`, or `danger-full-access` as `permission_mode`, defaulting to `danger-full-access`. `local_workspace_dir` selects an absolute local path; when empty, DSH uses the managed Agent workspace. Changing the directory starts fresh DSH sessions so an old session is never resumed in a different directory. CSGClaw stores Agent instructions in the isolated `DSH_HOME/AGENTS.md`; DSH also loads the selected project's own `AGENTS.md` without modifying it. Template publishing retains only `permission_mode`, not the machine-local directory.
 
 ### `GET /api/v1/hub/templates`
 
