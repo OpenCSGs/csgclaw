@@ -308,6 +308,10 @@ type Worker struct {
 	Extract  func(ctx context.Context, agentID string, input Extraction) ([]Change, error)
 }
 
+// Reasoning models and full history segments can legitimately take longer than
+// a short interactive request. Bound each attempt while allowing them to finish.
+const memoryExtractionTimeout = 10 * time.Minute
+
 func (w Worker) Run(ctx context.Context) {
 	timer := time.NewTicker(time.Second)
 	defer timer.Stop()
@@ -410,7 +414,7 @@ func (w Worker) process(ctx context.Context, scope Scope) {
 		return
 	}
 	task := current.Jobs[0]
-	callCtx, cancel := context.WithTimeout(ctx, 45*time.Second)
+	callCtx, cancel := context.WithTimeout(ctx, memoryExtractionTimeout)
 	defer cancel()
 	if !w.Store.beginAttempt(current, cancel) {
 		return
@@ -448,6 +452,11 @@ func (w Worker) process(ctx context.Context, scope Scope) {
 		} else {
 			changes, err = w.Extract(callCtx, scope.AgentID, Extraction{Entries: current.Entries, Messages: messages, History: task.Message == nil})
 		}
+	}
+	// Provider adapters may wrap a canceled HTTP request as a connection error.
+	// Retain the attempt's deadline so the UI reports the actual failure.
+	if err != nil && callCtx.Err() != nil {
+		err = callCtx.Err()
 	}
 	if ctx.Err() != nil || (w.Eligible != nil && !w.Eligible(scope.AgentID)) {
 		return
