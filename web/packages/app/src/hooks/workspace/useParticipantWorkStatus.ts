@@ -161,6 +161,7 @@ export function useParticipantWorkStatus({ agents, users }: UseParticipantWorkSt
           const thinking = lease.status?.phase === "thinking" ? (lease.status.thinking?.text ?? "") : undefined;
           result.push({
             contextUsage: lease.status?.context_usage,
+            contextUsageEpoch: lease.status?.context_usage_epoch,
             showContextUsage:
               agentRuntimeKind(agent) === "codex" ||
               agentRuntimeKind(agent) === "dsh" ||

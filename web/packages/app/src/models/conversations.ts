@@ -1,7 +1,7 @@
 import { resourceMessageText } from "./conversationResources";
 import type { TaskConfiguration } from "@/models/taskConfiguration";
 import { newerProgressMessage } from "@/models/turnProgress";
-import type { ContextUsage } from "@/models/modelMetadata";
+import { normalizeContextUsage, type ContextUsage } from "@/models/modelMetadata";
 import { flattenMentionText } from "@/components/business/MessageContent/mentions";
 import {
   isToolDeliveryMessage,
@@ -158,6 +158,8 @@ function videoGenerationParentMessageID(message: IMMessage): string {
 }
 
 export type IMConversation = {
+  context_usage_epoch?: number;
+  context_usage?: Record<string, ContextUsage>;
   created_by?: string;
   cloud_agent?: { agent_id: string; connection_id: string; user_id: string };
   configuration?: TaskConfiguration;
@@ -223,6 +225,7 @@ export type ParticipantWorkUpdate = {
   status?: {
     phase: "working" | "thinking";
     context_usage?: ContextUsage;
+    context_usage_epoch?: number;
     sequence: number;
     stage?: ParticipantWorkStage | null;
     thinking?: {
@@ -1035,6 +1038,28 @@ export function applyIMEvent<T extends IMData | null | undefined>(
     return current;
   }
 
+  if (event.type === "participant.work.updated" && event.work && !event.work.thread_root_id) {
+    const work = event.work;
+    const usage = normalizeContextUsage(work.status?.context_usage);
+    if (!usage || !work.user_id || work.reason !== "status_updated") return current;
+    return {
+      ...current,
+      rooms: current.rooms.map((room) => {
+        if (room.id !== work.room_id || !room.members.some((id) => localIdentitiesMatch(id, work.user_id))) return room;
+        const epoch = work.status?.context_usage_epoch ?? 0;
+        const currentEpoch = room.context_usage_epoch ?? 0;
+        if (epoch < currentEpoch) return room;
+        const previous = epoch === currentEpoch ? room.context_usage?.[work.user_id] : undefined;
+        if (previous && Date.parse(previous.updated_at) > Date.parse(usage.updated_at)) return room;
+        return {
+          ...room,
+          context_usage_epoch: epoch,
+          context_usage: { ...(epoch === currentEpoch ? room.context_usage : {}), [work.user_id]: usage },
+        };
+      }),
+    };
+  }
+
   if (event.type === "room.attachment_deleted" && event.room_id && event.attachment_id) {
     const attachmentID = event.attachment_id;
     return {
@@ -1320,8 +1345,24 @@ export function upsertConversationInData<T extends IMData | null | undefined>(
     return current;
   }
 
-  const existing = current.rooms.some((item) => item.id === conversation.id);
-  const normalized = normalizeRoom(conversation);
+  const previous = current.rooms.find((item) => item.id === conversation.id);
+  const existing = Boolean(previous);
+  let normalized = normalizeRoom(conversation);
+  const previousEpoch = previous?.context_usage_epoch ?? 0;
+  const incomingEpoch = normalized.context_usage_epoch ?? 0;
+  if (previous && previousEpoch >= incomingEpoch) {
+    const usage: Record<string, ContextUsage> = previousEpoch > incomingEpoch ? {} : { ...normalized.context_usage };
+    for (const [id, snapshot] of Object.entries(previous.context_usage ?? {})) {
+      const incoming = usage[id];
+      if (
+        previousEpoch > incomingEpoch ||
+        !incoming ||
+        Date.parse(snapshot.updated_at) > Date.parse(incoming.updated_at)
+      )
+        usage[id] = snapshot;
+    }
+    normalized = normalizeRoom({ ...normalized, context_usage_epoch: previousEpoch, context_usage: usage });
+  }
   const rooms = existing
     ? current.rooms.map((item) => (item.id === conversation.id ? normalized : item))
     : [normalized, ...current.rooms];
@@ -1425,5 +1466,11 @@ export function normalizeRoom(room: IMConversation): IMConversation {
     ...room,
     messages: room.messages ?? [],
     threads: room.threads ?? [],
+    context_usage: Object.fromEntries(
+      Object.entries(room.context_usage ?? {}).flatMap(([id, value]) => {
+        const usage = normalizeContextUsage(value);
+        return usage && room.members.some((member) => localIdentitiesMatch(member, id)) ? [[id, usage]] : [];
+      }),
+    ),
   };
 }

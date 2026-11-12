@@ -50,6 +50,7 @@ export type ConversationWorkingAction = (typeof ConversationWorkingActions)[keyo
 
 export type ConversationWorkingParticipant = {
   contextUsage?: ContextUsage;
+  contextUsageEpoch?: number;
   showContextUsage?: boolean;
   activity?: {
     action: ConversationWorkingAction;

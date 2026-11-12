@@ -57,6 +57,26 @@ export function isCompletedAgentTurnMessage(message: IMMessage): boolean {
   return (metadata?.csgclaw?.delivery_kind ?? activityDeliveryKind(message)) === "final";
 }
 
+export function isFailedAgentTurnMessage(message: IMMessage): boolean {
+  const progress = parseTurnProgress(message);
+  if (progress) return progress.status === "failed";
+  return (message.metadata as { csgclaw?: { runtime_error?: unknown } } | undefined)?.csgclaw?.runtime_error === true;
+}
+
+export function failedTurnNotificationPreview(message: IMMessage, t: TranslateFn): string {
+  const progress = parseTurnProgress(message);
+  const error = formatTurnNotificationPreview(progress?.error || message.content);
+  const tool = progress?.items
+    .slice()
+    .reverse()
+    .find((item) => item.kind === "tool")?.tool;
+  const step = tool?.name;
+  return (
+    [error, step ? t("turnNotificationFailedStep", { step }) : ""].filter(Boolean).join(" · ") ||
+    t("turnNotificationFailedBody")
+  );
+}
+
 export function buildTurnNotificationTag(eventKey: string): string {
   // Chromium adds origin data to this value before passing it to the Windows
   // toast API, whose notification tag is limited to 64 characters.
