@@ -280,3 +280,67 @@ func TestNativeHistoryCanSupplyNewRoomAnswer(t *testing.T) {
 		t.Fatalf("answer=%q progress=%+v", store.answer, store.progress.Items)
 	}
 }
+
+func TestNativeHistoryPreservesRecoveredTextAndToolOrder(t *testing.T) {
+	for _, phase := range []string{"", "unknown", "commentary"} {
+		answerPhase := phase
+		if phase == "commentary" {
+			answerPhase = "final_answer"
+		}
+		for livePrefix := 0; livePrefix <= 5; livePrefix++ {
+			t.Run(fmt.Sprintf("phase=%s/live_prefix=%d", phase, livePrefix), func(t *testing.T) {
+				store := &nativeProgressStore{}
+				renderer := delivery.NewTranscriptRenderer(store)
+				turn := channel.TurnContext{AgentID: "agent", TurnID: "turn", ConversationKey: "room"}
+				var sequence uint64
+				sink := contract.EventSinkFunc(func(ctx context.Context, event contract.TurnEvent) error {
+					sequence++
+					event.Sequence = sequence
+					return renderer.Emit(ctx, turn, event)
+				})
+				adapter := &ConversationAdapter{}
+				var output conversationOutput
+				var files []*contract.OutputFile
+				events := []activity.RuntimeEvent{
+					{Kind: activity.RuntimeEventTextDelta, MessageID: "checking", Text: "Checking.", Payload: map[string]any{"phase": phase}},
+					{Kind: activity.RuntimeEventToolCallStart, ToolCallID: "A", ToolKind: "exec_command", ToolStatus: "started"},
+					{Kind: activity.RuntimeEventTextDelta, MessageID: "verified", Text: "Verified.", Payload: map[string]any{"phase": phase}},
+					{Kind: activity.RuntimeEventToolCallStart, ToolCallID: "B", ToolKind: "exec_command", ToolStatus: "started"},
+					{Kind: activity.RuntimeEventTextDelta, MessageID: "answer", Text: "Done.", Payload: map[string]any{"phase": answerPhase}},
+				}
+				for _, event := range events[:livePrefix] {
+					if result := adapter.handleEvent(t.Context(), contract.TurnRequest{}, sink, event, &output, &files); result != nil {
+						t.Fatal(result)
+					}
+				}
+				history := quietTurnItems(map[string]any{"itemsView": "full", "items": []any{
+					map[string]any{"type": "agentMessage", "id": "checking", "phase": phase, "text": "Checking."},
+					map[string]any{"type": "commandExecution", "id": "A", "status": "completed", "command": "pwd"},
+					map[string]any{"type": "agentMessage", "id": "verified", "phase": phase, "text": "Verified."},
+					map[string]any{"type": "commandExecution", "id": "B", "status": "completed", "command": "pwd"},
+					map[string]any{"type": "agentMessage", "id": "answer", "phase": answerPhase, "text": "Done."},
+				}})
+				for range 2 {
+					if err := output.restore(t.Context(), sink, history); err != nil {
+						t.Fatal(err)
+					}
+				}
+				if err := renderer.Complete(t.Context(), turn, contract.TurnResult{Status: contract.TurnSucceeded, Output: output.String(), RuntimeText: output.messageSnapshots()}); err != nil {
+					t.Fatal(err)
+				}
+				if store.answer != "Done." || len(store.progress.Items) != 4 {
+					t.Fatalf("answer=%q progress=%+v", store.answer, store.progress.Items)
+				}
+				for i, item := range store.progress.Items {
+					if i%2 == 0 {
+						if item.Kind != "commentary" || item.Text != []string{"Checking.", "Verified."}[i/2] {
+							t.Fatalf("progress[%d]=%+v", i, item)
+						}
+					} else if item.Tool == nil || item.ID != []string{"A", "B"}[i/2] || item.Tool.Status != "completed" {
+						t.Fatalf("progress[%d]=%+v", i, item)
+					}
+				}
+			})
+		}
+	}
+}

@@ -476,6 +476,9 @@ func (p *progressState) reconcileText(native []agentengine.TurnEvent) {
 			}
 		}
 		if item.index >= 0 {
+			if item.recovered && positions[i].known {
+				p.placeRecovered(item.index, positions[i].before)
+			}
 			p.snapshot.Items[item.index].Text = item.text
 			if !positions[i].known && item.index >= start && item.index < existingItems {
 				start = item.index + 1
@@ -515,19 +518,19 @@ func (p *progressState) nativePositions(native []agentengine.TurnEvent) []progre
 			}
 		} else if item := p.textItems[event.ItemID]; item != nil && !item.recovered {
 			position := progressPosition{before: item.position, after: item.position, known: true}
-			if item.index == item.position {
-				position.after++
+			if item.index >= 0 {
+				position.after = max(position.after, item.index+1)
 			}
 			positions[i] = position
 		}
 	}
-	// A recovered tool belongs after the preceding live anchor in native order.
-	// Its appended card index carries no ordering information about the live text.
+	// Recovered text and tools share the preceding live anchor. Their native
+	// traversal order determines their order within that insertion point.
 	previous := 0
 	for i, event := range native {
 		if positions[i].known {
 			previous = max(previous, positions[i].after)
-		} else if event.Tool != nil {
+		} else if event.Tool != nil || p.textItems[event.ItemID] != nil {
 			positions[i] = progressPosition{before: previous, after: previous, known: true}
 		}
 	}
