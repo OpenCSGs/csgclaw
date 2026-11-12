@@ -413,6 +413,53 @@ describe("MessageContent", () => {
     expect(screen.getByText(/go test/)).toBeInTheDocument();
   });
 
+  const legacyToolMarkdown = [
+    "🔧 `exec_command`",
+    "```json",
+    '{"command":"example command","stdout":"example output","stderr":"example warning"}',
+    "```",
+  ].join("\n");
+
+  it("preserves user Markdown that resembles legacy tool output in the activity panel", () => {
+    const { container } = render(
+      <MessageContent
+        content={legacyToolMarkdown}
+        message={{ id: "user-message", sender_id: "user-admin" }}
+        showTurnProgress={false}
+      />,
+    );
+
+    expect(screen.getByText("exec_command")).toBeInTheDocument();
+    expect(container.querySelector("pre code")).toHaveTextContent(
+      '{"command":"example command","stdout":"example output","stderr":"example warning"}',
+    );
+    expect(screen.queryByRole("region", { name: "Output" })).not.toBeInTheDocument();
+  });
+
+  it("renders legacy output for a confirmed Agent message", () => {
+    render(
+      <MessageContent
+        content={legacyToolMarkdown}
+        message={{ id: "agent-message", sender_id: "agent-example" }}
+        allowLegacyToolFormat
+      />,
+    );
+
+    expect(screen.getByText("example command")).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Output" })).toHaveTextContent("example output");
+  });
+
+  it("renders tool output with explicit delivery metadata without a resolved Agent", () => {
+    render(
+      <MessageContent
+        content={legacyToolMarkdown}
+        message={{ id: "tool-message", metadata: { codex: { delivery_kind: "tool" } } }}
+      />,
+    );
+
+    expect(screen.getByRole("region", { name: "Output" })).toHaveTextContent("example output");
+  });
+
   it("renders Codex permission buttons and posts decisions", async () => {
     const user = userEvent.setup();
     const fetchMock = vi.fn().mockResolvedValue(

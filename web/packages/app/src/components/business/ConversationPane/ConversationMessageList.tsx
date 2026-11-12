@@ -273,6 +273,7 @@ const MessageListContent = memo(function MessageListContent({
                         key={`${message.id}:${theme}`}
                         content={message.content}
                         message={message}
+                        allowLegacyToolFormat={Boolean(messageAgent)}
                         progressControls={renderTurnControls?.(message)}
                         videoMessages={embeddedVideos}
                         actionBusy={messageActionBusy}

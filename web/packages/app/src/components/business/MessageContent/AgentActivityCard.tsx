@@ -1,12 +1,12 @@
 import messageContentStyles from "./MessageContent.module.css";
 import { useEffect, useMemo, useState } from "react";
-import { Check, CircleHelp, Clock3, LockKeyhole, ShieldAlert, ShieldCheck, ShieldX, X } from "lucide-react";
+import { Check, CircleHelp, Clock3, LockKeyhole, ShieldAlert, ShieldCheck, ShieldX, Wrench, X } from "lucide-react";
 import { decideChannelActivity } from "@/api/agentActivities";
 import { errorMessage } from "@/api/client";
 import { AgentActivityMsgTypes } from "@/shared/constants/messages";
 import { createTranslator } from "@/shared/i18n";
 import { questionOptions } from "@/models/agentActivity";
-import { renderMarkdown } from "./markdown";
+import { ToolOutput } from "@/components/business/ToolOutput";
 import type {
   AgentActivityAction,
   AgentActivityActionOption,
@@ -25,7 +25,7 @@ type AgentActivityCardProps = {
 export function AgentActivityCard({ activity, onQuestionSelect, t }: AgentActivityCardProps) {
   const translate = t ?? createTranslator("en");
   if (activity.content.msgtype === AgentActivityMsgTypes.tool && activity.content.tool) {
-    return <ToolActivityCard activity={activity} />;
+    return <ToolActivityCard activity={activity} t={translate} />;
   }
   if (activity.content.msgtype === AgentActivityMsgTypes.action && activity.content.action?.kind === "permission") {
     return <PermissionActivityCard activity={activity} action={activity.content.action} t={translate} />;
@@ -143,12 +143,24 @@ function questionStatusLabel(status: string, t: TranslateFn): string {
   return t(key);
 }
 
-function ToolActivityCard({ activity }: AgentActivityCardProps) {
+function ToolActivityCard({ activity, t }: { activity: AgentActivityPayload; t: TranslateFn }) {
   const tool = activity.content.tool!;
   const summary = tool.output_summary || tool.input_summary || activity.content.body || "";
-  const kind = displayToolKind(tool.kind);
-  const markdown = summary ? `🔧 \`${kind}\`\n\`\`\`\n${summary}\n\`\`\`` : `🔧 \`${kind}\``;
-  return <div className="message-content" dangerouslySetInnerHTML={{ __html: renderMarkdown(markdown) }} />;
+  const label = t(tool.output_summary ? "progressOutput" : tool.input_summary ? "progressInput" : "progressToolList");
+  return <ToolActivityOutput name={displayToolKind(tool.kind)} label={label} text={summary} />;
+}
+
+export function ToolActivityOutput({ name, label, text }: { name: string; label: string; text: string }) {
+  return (
+    <section className={messageContentStyles.toolActivity}>
+      <div className={messageContentStyles.toolActivityHeading}>
+        <Wrench size={14} aria-hidden="true" />
+        <code title={name}>{name}</code>
+        <span>{label}</span>
+      </div>
+      {text ? <ToolOutput label={label} text={text} /> : null}
+    </section>
+  );
 }
 
 function PermissionActivityCard({

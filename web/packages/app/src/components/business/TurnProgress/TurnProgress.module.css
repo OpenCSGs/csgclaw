@@ -229,7 +229,7 @@
   color: var(--muted);
 }
 
-.toolDetails pre {
+.detailSection > pre {
   overflow: visible;
   white-space: pre-wrap;
   overflow-wrap: anywhere;

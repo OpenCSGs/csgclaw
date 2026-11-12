@@ -1,3 +1,4 @@
+import { ToolOutput } from "@/components/business/ToolOutput";
 import {
   useCallback,
   useEffect,
@@ -733,6 +734,7 @@ function ActivityRow({
               showTurnProgress={false}
               content={entry.message.content}
               message={entry.message}
+              allowLegacyToolFormat={entry.source === "agent"}
               actionBusy=""
               actionFeedback={{ key: "", message: "" }}
               onAction={() => undefined}
@@ -743,7 +745,11 @@ function ActivityRow({
             details.map((detail) => (
               <section key={`${detail.kind}:${detail.value.slice(0, 32)}`} className={styles.detailSection}>
                 <strong>{detailLabel(detail.kind, t)}</strong>
-                <pre>{detail.value}</pre>
+                {detail.kind === "result" ? (
+                  <ToolOutput label={detailLabel(detail.kind, t)} text={detail.value} />
+                ) : (
+                  <pre>{detail.value}</pre>
+                )}
               </section>
             ))
           )}
