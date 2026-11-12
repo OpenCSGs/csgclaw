@@ -1,7 +1,11 @@
 /*! Derived from CSGClaw. Modified for standalone csgclaw-ui distribution. */
 import styles from "./Button.module.css";
-import { forwardRef } from "react";
-import type { AnchorHTMLAttributes, ButtonHTMLAttributes, ReactNode } from "react";
+import { Children, forwardRef } from "react";
+import type {
+  AnchorHTMLAttributes,
+  ButtonHTMLAttributes,
+  ReactNode,
+} from "react";
 import { classNames, legacyClassName } from "../../lib/classNames.js";
 
 export type ButtonVariant =
@@ -31,7 +35,10 @@ export type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
 
 const variantClassNames: Record<ButtonVariant, string> = {
   primary: classNames(styles["btn-primary"], legacyClassName("btn-primary")),
-  secondaryGray: classNames(styles["btn-secondary-gray"], legacyClassName("btn-secondary-gray")),
+  secondaryGray: classNames(
+    styles["btn-secondary-gray"],
+    legacyClassName("btn-secondary-gray"),
+  ),
   secondaryColor: styles["btn-secondary-color"],
   tertiaryGray: styles["btn-tertiary-gray"],
   tertiaryColor: styles["btn-tertiary-color"],
@@ -52,7 +59,11 @@ const sizeClassNames: Record<ButtonSize, string> = {
   "2xl": styles["btn-2xl"],
 };
 
-function buttonClassName(variant: ButtonVariant, size: ButtonSize, className?: string) {
+function buttonClassName(
+  variant: ButtonVariant,
+  size: ButtonSize,
+  className?: string,
+) {
   return classNames(
     classNames(styles["btn"], legacyClassName("btn")),
     variantClassNames[variant],
@@ -61,92 +72,146 @@ function buttonClassName(variant: ButtonVariant, size: ButtonSize, className?: s
   );
 }
 
-export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
-  {
-    active,
-    "aria-label": ariaLabel,
-    children,
-    className,
-    disabled,
-    iconOnly = false,
-    loading = false,
-    loadingLabel,
-    size = "md",
-    type = "button",
-    variant = "secondaryGray",
-    "aria-busy": ariaBusy,
-    ...props
-  },
-  ref,
+function buttonContent(
+  children: ReactNode,
+  variant: ButtonVariant,
+  iconOnly = false,
 ) {
-  const loadingAccessibleLabel =
-    typeof loadingLabel === "string" || typeof loadingLabel === "number" ? String(loadingLabel) : undefined;
-  const childAccessibleLabel =
-    typeof children === "string" || typeof children === "number" ? String(children) : undefined;
+  if (variant !== "secondaryGray" || iconOnly) return children;
+  return Children.map(children, (child) =>
+    typeof child === "string" || typeof child === "number" ? (
+      <span className={styles["btn-label"]}>{child}</span>
+    ) : (
+      child
+    ),
+  );
+}
 
-  return (
-    <button
-      ref={ref}
-      type={type}
-      disabled={disabled || loading}
-      data-csg-control="button"
-      className={buttonClassName(
-        variant,
-        size,
-        classNames(
-          active && classNames(styles["active"], legacyClassName("active")),
-          iconOnly && styles["csg-icon-button"],
-          loading && styles["btn-loading"],
-          className,
-        ),
-      )}
-      aria-label={ariaLabel ?? (loading ? loadingAccessibleLabel || childAccessibleLabel : undefined)}
-      aria-busy={ariaBusy ?? (loading ? true : undefined)}
-      {...props}
-    >
-      <span className={classNames(styles["btn-content"], legacyClassName("btn-content"))}>{children}</span>
-      {loading ? (
-        <span className={styles["btn-loading-overlay"]} aria-hidden="true">
-          <span className={styles["btn-loading-spinner"]} aria-hidden="true" />
+export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
+  function Button(
+    {
+      active,
+      "aria-label": ariaLabel,
+      children,
+      className,
+      disabled,
+      iconOnly = false,
+      loading = false,
+      loadingLabel,
+      size = "md",
+      type = "button",
+      variant = "secondaryGray",
+      "aria-busy": ariaBusy,
+      ...props
+    },
+    ref,
+  ) {
+    const loadingAccessibleLabel =
+      typeof loadingLabel === "string" || typeof loadingLabel === "number"
+        ? String(loadingLabel)
+        : undefined;
+    const childAccessibleLabel =
+      typeof children === "string" || typeof children === "number"
+        ? String(children)
+        : undefined;
+
+    return (
+      <button
+        ref={ref}
+        type={type}
+        disabled={disabled || loading}
+        data-csg-control="button"
+        className={buttonClassName(
+          variant,
+          size,
+          classNames(
+            active && classNames(styles["active"], legacyClassName("active")),
+            iconOnly && styles["csg-icon-button"],
+            loading && styles["btn-loading"],
+            className,
+          ),
+        )}
+        aria-label={
+          ariaLabel ??
+          (loading ? loadingAccessibleLabel || childAccessibleLabel : undefined)
+        }
+        aria-busy={ariaBusy ?? (loading ? true : undefined)}
+        {...props}
+      >
+        <span
+          className={classNames(
+            styles["btn-content"],
+            legacyClassName("btn-content"),
+          )}
+        >
+          {buttonContent(children, variant, iconOnly)}
         </span>
-      ) : null}
-    </button>
-  );
-});
+        {loading ? (
+          <span className={styles["btn-loading-overlay"]} aria-hidden="true">
+            <span
+              className={styles["btn-loading-spinner"]}
+              aria-hidden="true"
+            />
+          </span>
+        ) : null}
+      </button>
+    );
+  },
+);
 
-export type LinkButtonProps = AnchorHTMLAttributes<HTMLAnchorElement> & Pick<ButtonProps, "size" | "variant">;
+export type LinkButtonProps = AnchorHTMLAttributes<HTMLAnchorElement> &
+  Pick<ButtonProps, "size" | "variant">;
 
-export const LinkButton = forwardRef<HTMLAnchorElement, LinkButtonProps>(function LinkButton(
-  { children, className, size = "md", variant = "secondaryGray", ...props },
-  ref,
-) {
-  return (
-    <a ref={ref} data-csg-control="button" className={buttonClassName(variant, size, className)} {...props}>
-      <span className={classNames(styles["btn-content"], legacyClassName("btn-content"))}>{children}</span>
-    </a>
-  );
-});
+export const LinkButton = forwardRef<HTMLAnchorElement, LinkButtonProps>(
+  function LinkButton(
+    { children, className, size = "md", variant = "secondaryGray", ...props },
+    ref,
+  ) {
+    return (
+      <a
+        ref={ref}
+        data-csg-control="button"
+        className={buttonClassName(variant, size, className)}
+        {...props}
+      >
+        <span
+          className={classNames(
+            styles["btn-content"],
+            legacyClassName("btn-content"),
+          )}
+        >
+          {buttonContent(children, variant)}
+        </span>
+      </a>
+    );
+  },
+);
 
-export type IconButtonProps = Omit<ButtonProps, "aria-label" | "children" | "iconOnly"> & {
+export type IconButtonProps = Omit<
+  ButtonProps,
+  "aria-label" | "children" | "iconOnly"
+> & {
   icon: ReactNode;
   iconSize?: number;
   label: string;
   markClassName?: string;
 };
 
-export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(function IconButton(
-  { icon, iconSize, label, markClassName, ...props },
-  ref,
-) {
-  return (
-    <Button ref={ref} iconOnly aria-label={label} {...props}>
-      <span
-        className={classNames(iconSize ? styles["icon-mark"] : undefined, markClassName)}
-        style={iconSize ? { width: iconSize, height: iconSize } : undefined}
-        aria-hidden="true"
-      >
-        {icon}
-      </span>
-    </Button>
-  );
-});
+export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(
+  function IconButton({ icon, iconSize, label, markClassName, ...props }, ref) {
+    return (
+      <Button ref={ref} iconOnly aria-label={label} {...props}>
+        <span
+          className={classNames(
+            iconSize ? styles["icon-mark"] : undefined,
+            markClassName,
+          )}
+          style={iconSize ? { width: iconSize, height: iconSize } : undefined}
+          aria-hidden="true"
+        >
+          {icon}
+        </span>
+      </Button>
+    );
+  },
+);

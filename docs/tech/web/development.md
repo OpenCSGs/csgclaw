@@ -9,6 +9,7 @@ Chinese companion: `development.zh.md`. This English document is the agent-facin
 - Read this guide before changing the Vite app's source, tests, package/config files, public assets, or generated web asset pipeline.
 - Common triggers include React pages, components, hooks, shared models, route helpers, API clients, CSS/Tailwind/tokens, i18n text, Vite/Vitest/TypeScript config, dependency changes, public asset URLs, and `web/static-dist` handling.
 - When changing UI primitives, Radix wrappers, form controls, overlays, or component-library exports, also follow `docs/tech/web/ui-components.md`.
+- For user-visible changes, also follow [Interaction Design Rules](interaction-design.md) for layout adaptation, icons/copy, localization, fields, feedback, and browser verification.
 
 ## Tooling
 

@@ -1,7 +1,7 @@
 import type { CloudAgent } from "@/models/cloudAgents";
 import { useMemo, useRef, useState, type ReactNode } from "react";
 import { Check, ChevronDown, Plus, Search } from "lucide-react";
-import { TextInput, PopoverContent, PopoverRoot, PopoverTrigger } from "@/components/ui";
+import { Button, TextInput, PopoverContent, PopoverRoot, PopoverTrigger } from "@/components/ui";
 import { AgentAvatarContent } from "@/components/business/AgentAvatar";
 import { EntityPinHeading, EntityPinRow } from "@/components/business/EntityPinRow";
 import { entityPinKey, partitionPinned, usePinnedEntities } from "@/hooks/workspace/usePinnedEntities";
@@ -357,8 +357,9 @@ export function TargetPicker({
 
         {}
         <div className={styles.footer}>
-          <button
-            type="button"
+          <Button
+            variant="tertiaryColor"
+            size="sm"
             className={styles.footerButton}
             onClick={() => {
               close();
@@ -367,9 +368,10 @@ export function TargetPicker({
           >
             <Plus aria-hidden="true" size={15} strokeWidth={1.9} />
             <span>{t("iaTargetCreateAgent")}</span>
-          </button>
-          <button
-            type="button"
+          </Button>
+          <Button
+            variant="tertiaryColor"
+            size="sm"
             className={styles.footerButton}
             onClick={() => {
               close();
@@ -378,7 +380,7 @@ export function TargetPicker({
           >
             <Plus aria-hidden="true" size={15} strokeWidth={1.9} />
             <span>{t("iaTargetCreateTeam")}</span>
-          </button>
+          </Button>
         </div>
       </PopoverContent>
     </PopoverRoot>
