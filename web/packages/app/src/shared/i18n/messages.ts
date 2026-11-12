@@ -2463,6 +2463,8 @@ export const messages = {
     profileModelSectionDescription: "配置对话、图片和视频生成使用的模型。",
     profileModelLoadErrorHelp: "暂时无法获取模型列表，请检查服务配置或网络后重试。",
     profileModelCurrentSelectionRetained: "当前已保存的模型配置已保留。",
+    profileModelAvailabilityUnknown: "暂时无法确认当前模型是否在服务商目录中。",
+    profileModelOutsideDirectory: "当前模型不在服务商目录中。",
     profileModelErrorDetails: "详情",
     profileRuntimeOptions: "运行时选项",
     profileMCPServers: "MCP Servers",
@@ -5865,6 +5867,8 @@ export const messages = {
     profileModelLoadErrorHelp:
       "Could not load the model list. Check the service configuration or network connection and retry.",
     profileModelCurrentSelectionRetained: "Your currently saved model configuration has been retained.",
+    profileModelAvailabilityUnknown: "The current model’s availability in the provider catalog is unconfirmed.",
+    profileModelOutsideDirectory: "The current model is absent from the provider catalog.",
     profileModelErrorDetails: "Details",
     profileRuntimeOptions: "Runtime Options",
     profileMCPServers: "MCP Servers",

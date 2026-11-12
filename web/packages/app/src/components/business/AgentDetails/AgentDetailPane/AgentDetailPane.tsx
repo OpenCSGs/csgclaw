@@ -193,6 +193,8 @@ export type AgentDetailPaneProps = {
   item: AgentLike;
   modelBusy?: boolean;
   modelError?: unknown;
+  modelDirectory?: readonly string[] | null;
+  modelSaveError?: string;
   modelOptions?: ModelProviderOption[];
   modelProviders?: ModelProviderCatalog | null;
   models?: string[];
@@ -304,6 +306,8 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
     noticeTone = "warning",
     modelBusy = false,
     modelError = null,
+    modelDirectory,
+    modelSaveError,
     onRetryModels,
     saving = false,
     linkedTemplate,
@@ -597,7 +601,10 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
     });
   }, [draft, onDraftChange, selectedProviderID]);
   const selectedProvider = providerOptions.find((option) => option.id === selectedProviderID) ?? null;
-  const selectedProviderModels = modelIDsForProviderSelection(selectedProviderID, selectedProvider?.models ?? []);
+  const selectedProviderModels = modelIDsForProviderSelection(
+    selectedProviderID,
+    modelDirectory === undefined ? (selectedProvider?.models ?? []) : (modelDirectory ?? []),
+  );
   const selectedModelValue = draft?.model_id || "";
   const isNotifierDraft = Boolean(draft && isNotifierRuntimeDraftOnAgentPage(draft, item));
   const showMCPServers = Boolean(
@@ -658,6 +665,7 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
   const visibleActiveProfileTab = profileTabs.some((tab) => tab.id === selectedProfileTab)
     ? selectedProfileTab
     : profileTabs[0]?.id;
+  const visibleSaveError = saveError || (visibleActiveProfileTab !== "profile" ? modelSaveError : "");
   useEffect(() => {
     if (visibleActiveProfileTab === "skills" && workspaceSupported) void onRefreshSkills?.();
   }, [item.id, visibleActiveProfileTab, workspaceSupported, onRefreshSkills]);
@@ -1030,9 +1038,9 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
           }
         />
         {error ? <InlineError>{error}</InlineError> : null}
-        {saveError ? (
+        {visibleSaveError ? (
           <InlineError className={"whitespace-pre-wrap break-words"} role="alert">
-            {saveError}
+            {visibleSaveError}
             {saveBillingURL ? (
               <>
                 {" "}
@@ -1145,6 +1153,8 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
                     draft={draft}
                     modelBusy={modelBusy}
                     modelError={modelError}
+                    modelDirectory={modelDirectory}
+                    modelSaveError={modelSaveError}
                     onRetryModels={onRetryModels}
                     onRequireOpenCSGAuth={onRequireOpenCSGAuth}
                     providerOptions={providerOptions}

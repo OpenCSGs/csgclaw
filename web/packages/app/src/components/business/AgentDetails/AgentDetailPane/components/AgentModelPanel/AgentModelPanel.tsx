@@ -16,6 +16,8 @@ type AgentModelPanelProps = {
   draft: AgentDraft;
   modelBusy: boolean;
   modelError: unknown;
+  modelDirectory?: readonly string[] | null;
+  modelSaveError?: string;
   onRetryModels?: () => void | Promise<unknown>;
   onRequireOpenCSGAuth: () => boolean;
   providerOptions: readonly ModelProviderSelectOption[];
@@ -30,6 +32,8 @@ export function AgentModelPanel({
   draft,
   modelBusy,
   modelError,
+  modelDirectory,
+  modelSaveError,
   onRetryModels,
   onRequireOpenCSGAuth,
   providerOptions,
@@ -39,6 +43,14 @@ export function AgentModelPanel({
   t,
   updateDraft,
 }: AgentModelPanelProps) {
+  let modelHint: string | undefined;
+  if (selectedModelValue && !modelSaveError) {
+    if (modelDirectory === null || modelBusy) {
+      modelHint = t("profileModelAvailabilityUnknown");
+    } else if (modelDirectory && !selectedProviderModels.includes(selectedModelValue)) {
+      modelHint = t("profileModelOutsideDirectory");
+    }
+  }
   return (
     <section
       id="agent-profile-model"
@@ -59,6 +71,8 @@ export function AgentModelPanel({
             modelID={selectedModelValue}
             models={selectedProviderModels}
             busy={modelBusy}
+            modelHint={modelHint}
+            modelSaveError={modelSaveError}
             onPatch={updateDraft}
             onRequireOpenCSGAuth={onRequireOpenCSGAuth}
             t={t}

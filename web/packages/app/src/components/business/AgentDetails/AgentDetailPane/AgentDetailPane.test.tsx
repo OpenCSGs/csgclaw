@@ -336,6 +336,22 @@ describe("AgentDetailPane metadata editing", () => {
 });
 
 describe("AgentDetailPane model loading error", () => {
+  it("distinguishes an unknown model directory from a confirmed missing model", () => {
+    const { rerender } = render(<Harness modelDirectory={null} />);
+    const model = screen.getByRole("combobox", { name: "profileModel" });
+    expect(model).toHaveTextContent("gpt-4.1-mini");
+    expect(model).toHaveAccessibleDescription("profileModelAvailabilityUnknown");
+    expect(model).toBeDisabled();
+
+    rerender(<Harness modelDirectory={[]} />);
+    expect(model).toHaveTextContent("gpt-4.1-mini");
+    expect(model).toHaveAccessibleDescription("profileModelOutsideDirectory");
+
+    rerender(<Harness modelDirectory={["gpt-4.1-mini"]} modelSaveError="Model no longer routable" />);
+    expect(model).toHaveAccessibleDescription("Model no longer routable");
+    expect(model).toHaveAttribute("aria-invalid", "true");
+  });
+
   it("keeps the model controls aligned and exposes retryable technical details", async () => {
     const user = userEvent.setup();
     const onRetryModels = vi.fn();

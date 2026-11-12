@@ -110,6 +110,7 @@ import {
   resolveRuntimeSelection,
   resolveAgentChannelUserID,
   shouldWaitForManagerRuntimeAfterProfileSave,
+  modelRequestKey,
   startAgentCreateProgress,
 } from "@/models/agents";
 import type {
@@ -488,9 +489,16 @@ export function useAgentController({
   const pendingTemplatePublications = useRef(new Map<string, string>());
   const [agentPagePublishError, setAgentPagePublishError] = useState("");
   const [agentPageError, setAgentPageError] = useState("");
+  const [modelSaveFailure, setModelSaveFailure] = useState<{
+    agentID: string;
+    requestKey: string;
+    modelID: string;
+    message: string;
+  } | null>(null);
   const [agentPageBillingURL, setAgentPageBillingURL] = useState("");
   function setAgentPageSaveError(message: string, billingURL = ""): void {
     setAgentPageError(message);
+    setModelSaveFailure(null);
     setAgentPageBillingURL(billingURL);
   }
   const [agentSkillAddBusy, setAgentSkillAddBusy] = useState(false);
@@ -818,6 +826,7 @@ export function useAgentController({
   const agentModelOptions = useMemo(() => modelProviderOptionsFromCatalog(agentModelProviders), [agentModelProviders]);
   const {
     models: agentPageDiscoveredModels,
+    modelsLoaded: agentPageModelsLoaded,
     modelBusy: agentPageModelProbeBusy,
     modelError: agentPageModelError,
     retryModels: retryAgentPageModels,
@@ -1845,7 +1854,20 @@ export function useAgentController({
         showAgentPageNotice(t("profileSetupIncompleteAfterSave"), "warning", 5000, saved.id);
       }
     } catch (err) {
-      if (!(modelProviderConfigUsesOpenCSG(draftToSave) && handleOpenCSGAuthenticationError(err))) {
+      const code = apiErrorCode(err);
+      if (code === "model_not_found" || code === "cluster_not_found") {
+        const requestKey = modelRequestKey(draftToSave);
+        setModelSaveFailure({
+          agentID: selectedAgentForPage.id,
+          requestKey,
+          modelID: draftToSave.model_id,
+          message: errorMessage(err, t("agentActionFailed")),
+        });
+        void queryClient.invalidateQueries({
+          queryKey: workspaceQueryKeys.agentProfileModels(requestKey),
+          exact: true,
+        });
+      } else if (!(modelProviderConfigUsesOpenCSG(draftToSave) && handleOpenCSGAuthenticationError(err))) {
         setAgentPageSaveError(errorMessage(err, t("agentActionFailed")), apiErrorBillingURL(err));
       }
     } finally {
@@ -2894,6 +2916,14 @@ export function useAgentController({
       modelProviders: agentPageModelProviders,
       modelBusy: agentPageModelBusy,
       modelError: agentPageModelError,
+      modelDirectory: agentPageModelsLoaded ? agentPageDiscoveredModels : null,
+      modelSaveError:
+        modelSaveFailure &&
+        modelSaveFailure.agentID === selectedAgentForPage?.id &&
+        modelSaveFailure.requestKey === modelRequestKey(agentPageDraft) &&
+        modelSaveFailure.modelID === agentPageDraft?.model_id
+          ? modelSaveFailure.message
+          : undefined,
       onRetryModels: () => {
         if (modelProviderConfigUsesOpenCSG(agentPageDraft) && !requireOpenCSGAuthentication()) {
           return;
