@@ -529,7 +529,7 @@ describe("AgentDetailPane memory", () => {
       expect(fetchMock).toHaveBeenCalledTimes(1);
       await user.click(within(dialog).getByRole("button", { name: "agentMemoryClear" }));
       if (failure) {
-        expect(await within(dialog).findByText("clear request failed")).toBeVisible();
+        expect(await within(dialog).findByText("agentMemoryErrorUnknown")).toBeVisible();
         expect(dialog).toBeInTheDocument();
       } else {
         await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
@@ -782,7 +782,11 @@ describe("AgentDetailPane memory", () => {
     );
     render(<Harness item={{ ...agent, memory_supported: true }} />);
     await user.click(screen.getByRole("button", { name: "agentMemoryTab" }));
-    expect(await screen.findByText("HTTP 429: rate limit exceeded")).toBeVisible();
+    expect(await screen.findByText("errors.rate_limit_exceeded")).toBeVisible();
+    expect(screen.getByText("agentMemoryHistoryError")).toBeVisible();
+    expect(screen.getByText("HTTP 429: rate limit exceeded")).not.toBeVisible();
+    await user.click(screen.getByText("agentMemoryErrorDetails"));
+    expect(screen.getByText("HTTP 429: rate limit exceeded")).toBeVisible();
     expect(screen.queryByRole("button", { name: "agentMemoryEditEntries" })).not.toBeInTheDocument();
     const description = screen.getByText("agentMemoryDocumentDescription");
     await user.click(screen.getByRole("button", { name: "agentMemoryEdit" }));
