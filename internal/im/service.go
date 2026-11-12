@@ -4,6 +4,7 @@ import (
 	"context"
 	"csgclaw/internal/diagnostics"
 	"csgclaw/internal/migrations/retiredclaws"
+	"csgclaw/internal/modelcap"
 	"csgclaw/internal/taskconfig"
 	"encoding/json"
 	"errors"
@@ -254,9 +255,10 @@ type persistedBootstrap struct {
 }
 
 type persistedRoom struct {
-	TitleSource          string                        `json:"title_source,omitempty"`
-	CloudAgent           *apitypes.CloudAgentReference `json:"cloud_agent,omitempty"`
-	CreationWorkspaceDir *string                       `json:"creation_workspace_dir,omitempty"`
+	ContextUsage         map[string]modelcap.ContextUsage `json:"context_usage,omitempty"`
+	TitleSource          string                           `json:"title_source,omitempty"`
+	CloudAgent           *apitypes.CloudAgentReference    `json:"cloud_agent,omitempty"`
+	CreationWorkspaceDir *string                          `json:"creation_workspace_dir,omitempty"`
 
 	SourceTeamID       string             `json:"source_team_id,omitempty"`
 	CollaborationGuide string             `json:"collaboration_guide,omitempty"`
@@ -523,6 +525,7 @@ func loadPersistedRooms(statePath string, rooms []persistedRoom) ([]Room, error)
 			return nil, err
 		}
 		loaded = append(loaded, Room{
+			ContextUsage:         cloneContextUsage(room.ContextUsage),
 			CreationWorkspaceDir: room.CreationWorkspaceDir,
 			TitleSource:          room.TitleSource,
 			Archived:             room.Archived,
@@ -715,6 +718,7 @@ func saveRoomThreadsForState(statePath string, room Room, operations ...*diagnos
 
 func persistedRoomFromRoom(room Room) persistedRoom {
 	return persistedRoom{
+		ContextUsage:         cloneContextUsage(room.ContextUsage),
 		CreationWorkspaceDir: room.CreationWorkspaceDir,
 		TitleSource:          room.TitleSource,
 		Archived:             room.Archived,
@@ -1839,6 +1843,7 @@ func (s *Service) ClearRoomMessages(roomID string) (Room, error) {
 	}
 	room.Messages = []Message{}
 	room.Threads = []ThreadState{}
+	room.ContextUsage = nil
 	if err := s.saveRoomLocked(*room); err != nil {
 		s.mu.Unlock()
 		return Room{}, err
@@ -1878,6 +1883,7 @@ func (s *Service) DeleteUser(userID string) error {
 	delete(s.byName, strings.ToLower(user.Name))
 
 	for id, room := range s.rooms {
+		delete(room.ContextUsage, userID)
 		members := make([]string, 0, len(room.Members))
 		for _, memberID := range room.Members {
 			if canonicalIMUserID(memberID) != userID {
@@ -2827,6 +2833,9 @@ func (s *Service) RemoveRoomMembers(req AddRoomMembersRequest) (Room, error) {
 	}
 
 	room.Members = remaining
+	for _, id := range removedIDs {
+		delete(room.ContextUsage, id)
+	}
 	room.Subtitle = formatRoomSubtitle(len(room.Members))
 	room.Messages = append(room.Messages, Message{
 		ID:       fmt.Sprintf("msg-%d", time.Now().UnixNano()),
@@ -3153,6 +3162,7 @@ func cloneRoom(room Room) Room {
 	}
 	room.Configuration = taskconfig.Clone(room.Configuration)
 	cloned := room
+	cloned.ContextUsage = cloneContextUsage(room.ContextUsage)
 	cloned.Members = append([]string(nil), room.Members...)
 	cloned.MemberNames = append([]string(nil), room.MemberNames...)
 	cloned.Messages = cloneMessages(room.Messages)
@@ -3781,6 +3791,7 @@ func (s *Service) replaceStateLocked(state Bootstrap) {
 	}
 	for i := range rooms {
 		room := rooms[i]
+
 		s.rooms[room.ID] = &room
 	}
 	s.rebuildSessionRoomIndexLocked()

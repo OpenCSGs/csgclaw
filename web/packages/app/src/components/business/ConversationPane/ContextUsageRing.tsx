@@ -1,15 +1,27 @@
 import contextUsageRingStyles from "./ContextUsageRing.module.css";
-import { useState } from "react";
+import { useState, type ReactNode, type KeyboardEventHandler } from "react";
 import { Tooltip } from "@/components/ui";
 import type { TranslateFn } from "@/models/conversations";
 import { contextUsageRatio, formatContextSize, type ContextUsage } from "@/models/modelMetadata";
 
-export function ContextUsageRing({ usage, t }: { usage?: ContextUsage; t: TranslateFn }) {
+export function ContextUsageRing({
+  usage,
+  t,
+  content,
+  label: customLabel,
+  onKeyDown,
+}: {
+  usage?: ContextUsage;
+  t: TranslateFn;
+  content?: ReactNode;
+  label?: string;
+  onKeyDown?: KeyboardEventHandler<HTMLButtonElement>;
+}) {
   const [open, setOpen] = useState(false);
   const [hovered, setHovered] = useState(false);
   const ratio = contextUsageRatio(usage);
   const percent = ratio === null ? null : Math.round(ratio * 100);
-  const label = percent === null ? t("contextUsageUnknown") : t("contextUsagePercent", { percent });
+  const label = customLabel ?? (percent === null ? t("contextUsageUnknown") : t("contextUsagePercent", { percent }));
   const used = usage?.used_tokens;
   const tone =
     ratio !== null && ratio >= 1
@@ -18,9 +30,70 @@ export function ContextUsageRing({ usage, t }: { usage?: ContextUsage; t: Transl
         ? "warning"
         : "normal";
   const circumference = 2 * Math.PI * 7;
+
+  return (
+    <Tooltip
+      open={open}
+      onOpenChange={setOpen}
+      delayDuration={0}
+      content={content ?? <ContextUsageDetails usage={usage} t={t} />}
+      contentProps={{ side: "top", sideOffset: 6, "aria-label": content ? label : undefined }}
+    >
+      <button
+        type="button"
+        className={`${contextUsageRingStyles["context-usage-ring"]} is-${tone}`}
+        aria-label={label}
+        onKeyDown={onKeyDown}
+        data-preserve-scroll={hovered || open ? "true" : undefined}
+        onPointerEnter={() => setHovered(true)}
+        onPointerLeave={() => setHovered(false)}
+      >
+        <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+          <circle
+            className={contextUsageRingStyles["context-usage-track"]}
+            cx="8"
+            cy="8"
+            r="7"
+            fill="none"
+            strokeWidth="2"
+          />
+          {ratio !== null ? (
+            <circle
+              className="context-usage-value"
+              cx="8"
+              cy="8"
+              r="7"
+              fill="none"
+              strokeWidth="2"
+              strokeDasharray={`${Math.max(0, Math.min(1, ratio)) * circumference} ${circumference}`}
+              strokeLinecap={ratio > 0 ? "round" : "butt"}
+              transform="rotate(-90 8 8)"
+            />
+          ) : null}
+        </svg>
+      </button>
+    </Tooltip>
+  );
+}
+
+export function ContextUsageDetails({
+  usage,
+  t,
+  compact = false,
+}: {
+  usage?: ContextUsage;
+  t: TranslateFn;
+  compact?: boolean;
+}) {
+  const ratio = contextUsageRatio(usage);
+  const percent = ratio === null ? null : Math.round(ratio * 100);
+  const label = percent === null ? t("contextUsageUnknown") : t("contextUsagePercent", { percent });
+  const used = usage?.used_tokens;
   const format = formatContextSize;
-  const detail = (
-    <div className={contextUsageRingStyles["context-usage-details"]}>
+  return (
+    <div
+      className={`${contextUsageRingStyles["context-usage-details"]}${compact ? ` ${contextUsageRingStyles.compact}` : ""}`}
+    >
       <strong>{label}</strong>
       {usage ? (
         <>
@@ -44,41 +117,5 @@ export function ContextUsageRing({ usage, t }: { usage?: ContextUsage; t: Transl
         </>
       ) : null}
     </div>
-  );
-  return (
-    <Tooltip open={open} onOpenChange={setOpen} content={detail} contentProps={{ side: "top", sideOffset: 6 }}>
-      <button
-        type="button"
-        className={`${contextUsageRingStyles["context-usage-ring"]} is-${tone}`}
-        aria-label={label}
-        data-preserve-scroll={hovered || open ? "true" : undefined}
-        onPointerEnter={() => setHovered(true)}
-        onPointerLeave={() => setHovered(false)}
-      >
-        <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
-          <circle
-            className={contextUsageRingStyles["context-usage-track"]}
-            cx="8"
-            cy="8"
-            r="7"
-            fill="none"
-            strokeWidth="2"
-            strokeDasharray={ratio === null ? "2 2" : undefined}
-          />
-          {ratio !== null ? (
-            <circle
-              className="context-usage-value"
-              cx="8"
-              cy="8"
-              r="7"
-              fill="none"
-              strokeWidth="2"
-              strokeDasharray={`${Math.max(0, Math.min(1, ratio)) * circumference} ${circumference}`}
-              transform="rotate(-90 8 8)"
-            />
-          ) : null}
-        </svg>
-      </button>
-    </Tooltip>
   );
 }

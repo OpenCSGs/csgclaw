@@ -222,14 +222,24 @@ describe("agent overview team navigation", () => {
       </MemoryRouter>,
     );
     const user = userEvent.setup();
-    for (const name of [/测试智能体/, /回归团队 1/, /回归团队 2/, /测试智能体/, /^Back$/, /^Forward$/]) {
-      await user.click(screen.getByRole("button", { name }));
-      expect(screen.getByRole("button", { name: "全部 3" })).toHaveAttribute("aria-pressed", "true");
-      expect(screen.getByRole("button", { name: /测试智能体/ })).toBeVisible();
-      expect(screen.getByRole("button", { name: /回归团队 1/ })).toBeVisible();
-      expect(screen.getByRole("button", { name: /回归团队 2/ })).toBeVisible();
+    for (const [name, path] of [
+      [/测试智能体/, "/agents/agent-worker"],
+      [/回归团队 1/, "/teams/team-1"],
+      [/回归团队 2/, "/teams/team-2"],
+      [/测试智能体/, "/agents/agent-worker"],
+      [/^Back$/, "/teams/team-2"],
+      [/^Forward$/, "/agents/agent-worker"],
+    ] as const) {
+      const list = within(document.getElementById("agent-overview-list")!);
+      const controls = name.source === "^Back$" || name.source === "^Forward$" ? screen : list;
+      await user.click(controls.getByRole("button", { name }));
+      await waitFor(() => expect(screen.getByLabelText("Current URL")).toHaveTextContent(path));
+      expect(list.getByRole("button", { name: "全部 3" })).toHaveAttribute("aria-pressed", "true");
+      expect(list.getByRole("button", { name: /测试智能体/ })).toBeVisible();
+      expect(list.getByRole("button", { name: /回归团队 1/ })).toBeVisible();
+      expect(list.getByRole("button", { name: /回归团队 2/ })).toBeVisible();
     }
-    expect(screen.getByLabelText("Current URL")).toHaveTextContent("/agents/agent-worker");
+    await waitFor(() => expect(screen.getByLabelText("Current URL")).toHaveTextContent("/agents/agent-worker"));
   });
 
   it("keeps the team filter and search when selecting another result", async () => {

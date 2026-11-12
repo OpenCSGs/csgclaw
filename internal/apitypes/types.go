@@ -1,6 +1,7 @@
 package apitypes
 
 import (
+	"csgclaw/internal/modelcap"
 	"csgclaw/internal/taskconfig"
 	"encoding/json"
 	"io"
@@ -215,7 +216,8 @@ type CloudAgentReference struct {
 }
 
 type Room struct {
-	CloudAgent *CloudAgentReference `json:"cloud_agent,omitempty"`
+	ContextUsage map[string]modelcap.ContextUsage `json:"context_usage,omitempty"`
+	CloudAgent   *CloudAgentReference             `json:"cloud_agent,omitempty"`
 	// CreationWorkspaceDir retains the requested path (empty means automatic).
 	// It is private persistence metadata used to validate creation retries.
 	CreationWorkspaceDir *string `json:"-"`

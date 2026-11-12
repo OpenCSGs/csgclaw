@@ -59,7 +59,15 @@ Image generation models show their purpose instead of a default chat window.
 The image generation request does not consume this context setting; image size limits belong to the image service and delivery path.
 Editing preserves the exact token count and the API continues to store integer tokens.
 
-The 16-pixel ring appears between the current tool activity and Stop, supports hover and keyboard focus, and follows the activity row's lifecycle.
+The 16-pixel ring remains in the conversation composer while idle and supports hover and keyboard focus.
+The IM service persists the latest main-conversation report per room and Agent in the room's `context_usage` metadata and returns it through bootstrap and room responses.
+Accepted reports atomically update only the metadata index without rewriting transcripts or accumulating usage history.
+Identical reports and work heartbeats do not cause additional writes.
+Refreshing the browser and restarting the service retain the last report without starting an Agent or model request.
+Clearing a conversation clears its snapshot, and removing a member removes that member's saved usage.
+Thread reports never overwrite the main conversation's snapshot.
+Group conversations use the same ring, showing the highest individual occupancy rather than adding independent context windows together.
+Hovering expands a compact, scrollable list with the same statistics for each Agent, with no extra disclosure layer.
 Its tooltip shows usage, remaining tokens, capacity, source, model, automatic-compaction state, report time, and estimated-data status.
 Values over capacity retain their real percentage in the tooltip while the ring saturates at 100 percent.
 

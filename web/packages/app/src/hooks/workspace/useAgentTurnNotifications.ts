@@ -10,6 +10,8 @@ import {
 import type { IMConversation, IMMessage, IMServerEvent, TranslateFn, UsersById } from "@/models/conversations";
 import {
   buildTurnNotificationTag,
+  isFailedAgentTurnMessage,
+  failedTurnNotificationPreview,
   formatTurnNotificationBody,
   formatTurnNotificationPreview,
   isCompletedAgentTurnEvent,
@@ -123,7 +125,11 @@ export function useAgentTurnNotifications(args: UseAgentTurnNotificationsArgs): 
       const roomID = input.roomID.trim();
       const room = current.rooms.find((candidate) => candidate.id === roomID);
       const agentName = String(input.agent.name || input.agent.user_name || input.agent.id || "Agent").trim();
-      const preview = formatTurnNotificationPreview(input.message?.content);
+      const failed = Boolean(input.message && isFailedAgentTurnMessage(input.message));
+      const title = current.t(failed ? "turnNotificationFailedTitle" : "turnNotificationTitle", { agent: agentName });
+      const preview = failed
+        ? failedTurnNotificationPreview(input.message!, current.t)
+        : formatTurnNotificationPreview(input.message?.content);
       const roomTitle = String(room?.title || "").trim();
       const body = formatTurnNotificationBody(current.t, {
         agentName,
@@ -143,7 +149,7 @@ export function useAgentTurnNotifications(args: UseAgentTurnNotificationsArgs): 
         if (desktopBridge) {
           void desktopBridge
             .showTurnNotification({
-              title: current.t("turnNotificationTitle", { agent: agentName }),
+              title,
               body,
               id: buildTurnNotificationTag(eventKey),
               roomID,
@@ -152,7 +158,7 @@ export function useAgentTurnNotifications(args: UseAgentTurnNotificationsArgs): 
             .catch(onError);
           return;
         }
-        const notification = new window.Notification(current.t("turnNotificationTitle", { agent: agentName }), {
+        const notification = new window.Notification(title, {
           body,
           icon: "favicon.ico",
           tag: buildTurnNotificationTag(input.eventKey),
@@ -198,7 +204,7 @@ export function useAgentTurnNotifications(args: UseAgentTurnNotificationsArgs): 
             [event.work.user_id, event.work.participant_id],
             requestKey,
           );
-        if (message && !isCompletedAgentTurnMessage(message)) return;
+        if (message && !isCompletedAgentTurnMessage(message) && !isFailedAgentTurnMessage(message)) return;
         showAgentTurnNotification(current, {
           agent,
           eventKey,
@@ -226,7 +232,7 @@ export function useAgentTurnNotifications(args: UseAgentTurnNotificationsArgs): 
       if (turnMessagesRef.current.size > 512) {
         turnMessagesRef.current.delete(turnMessagesRef.current.keys().next().value!);
       }
-      if (!isCompletedAgentTurnMessage(event.message)) return;
+      if (!isCompletedAgentTurnMessage(event.message) && !isFailedAgentTurnMessage(event.message)) return;
       showAgentTurnNotification(current, {
         agent,
         eventKey,

@@ -79,6 +79,7 @@ type ParticipantDirectory interface {
 }
 
 type IMService interface {
+	RecordContextUsage(roomID, userID string, usage modelcap.ContextUsage) error
 	ResolveUserID(userID string) string
 	Room(roomID string) (im.Room, bool)
 	User(userID string) (im.User, bool)
@@ -285,6 +286,17 @@ func (r *Registry) UpdateStatus(
 	if lease.statusWindowCount >= MaxStatusPerWindow {
 		r.mu.Unlock()
 		return apitypes.ParticipantWorkUpdate{}, false, ErrRateLimited
+	}
+	if request.ContextUsage != nil && lease.threadRootID == "" {
+		usage := modelcap.CloneUsage(request.ContextUsage)
+		if usage.UpdatedAt == "" {
+			usage.UpdatedAt = now.Format(time.RFC3339Nano)
+		}
+		if err := r.im.RecordContextUsage(lease.roomID, lease.userID, *usage); err != nil {
+			r.mu.Unlock()
+			return apitypes.ParticipantWorkUpdate{}, false, err
+		}
+		request.ContextUsage = usage
 	}
 	lease.statusWindowCount++
 	lease.capabilities = append([]string(nil), request.Capabilities...)

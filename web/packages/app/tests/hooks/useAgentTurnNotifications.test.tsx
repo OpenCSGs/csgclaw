@@ -40,6 +40,9 @@ class FakeNotification {
 }
 
 const t: TranslateFn = (key, params = {}) => {
+  if (key === "turnNotificationFailedTitle") return `${params.agent} failed`;
+  if (key === "turnNotificationFailedBody") return "The agent turn failed.";
+  if (key === "turnNotificationFailedStep") return `Last tool: ${params.step}`;
   if (key === "turnNotificationTitle") {
     return `${params.agent} finished replying`;
   }
@@ -285,7 +288,7 @@ describe("useAgentTurnNotifications", () => {
     }
   });
 
-  it("does not describe a runtime failure as a completed reply", () => {
+  it("notifies a runtime failure with a distinct title", () => {
     const { result } = renderNotifications(TurnNotificationModes.always);
 
     act(() =>
@@ -301,7 +304,8 @@ describe("useAgentTurnNotifications", () => {
       }),
     );
 
-    expect(notificationRecords).toHaveLength(0);
+    expect(notificationRecords).toHaveLength(1);
+    expect(notificationRecords[0]?.title).toBe("Research Agent failed");
   });
 
   it("keeps the visible final reply fallback after observing work and deduplicates the release", () => {
@@ -423,27 +427,72 @@ describe("useAgentTurnNotifications", () => {
     },
   );
 
-  it.each(["failed", "cancelled"])("does not notify completion after a %s turn is released", (status) => {
-    const { result } = renderNotifications(TurnNotificationModes.always);
-    act(() =>
-      result.current.handleRealtimeEvent({
-        type: "message.created",
-        room_id: "room-1",
-        message: {
-          id: "nonfinal",
-          sender_id: "user-worker",
-          content: "\u200b",
-          metadata: {
-            codex: { request_id: "message-1", delivery_kind: "activity" },
-            csgclaw: {
-              turn_progress: { id: "turn-1", revision: 2, status, started_at: "2026-10-15T00:00:00Z", items: [] },
+  it.each(["failed", "cancelled"])(
+    "reports failure but suppresses cancellation after a %s turn is released",
+    (status) => {
+      const { result } = renderNotifications(TurnNotificationModes.always);
+      act(() =>
+        result.current.handleRealtimeEvent({
+          type: "message.created",
+          room_id: "room-1",
+          message: {
+            id: "nonfinal",
+            sender_id: "user-worker",
+            content: "\u200b",
+            metadata: {
+              codex: { request_id: "message-1", delivery_kind: "activity" },
+              csgclaw: {
+                turn_progress: { id: "turn-1", revision: 2, status, started_at: "2026-10-15T00:00:00Z", items: [] },
+              },
+            },
+          },
+        }),
+      );
+      act(() => result.current.handleRealtimeEvent(workEvent({ reason: "released", state: "idle" })));
+      expect(notificationRecords).toHaveLength(status === "failed" ? 1 : 0);
+      if (status === "failed") expect(notificationRecords[0]?.title).toBe("Research Agent failed");
+    },
+  );
+
+  it("includes the failure and last tool, deduplicates release, and opens the failed conversation", () => {
+    const { result, onSelectConversation } = renderNotifications(TurnNotificationModes.always);
+    const event: IMServerEvent = {
+      type: "message.created",
+      room_id: "room-1",
+      message: {
+        id: "failed-progress",
+        sender_id: "user-worker",
+        content: "\u200b",
+        metadata: {
+          codex: { request_id: "message-1" },
+          csgclaw: {
+            turn_progress: {
+              id: "turn-1",
+              revision: 2,
+              status: "failed",
+              started_at: "2026-11-11T00:00:00Z",
+              error: "The model service is unavailable.",
+              items: [
+                { id: "tool-1", kind: "tool", tool: { name: "shell", status: "completed", actions: ["execute"] } },
+              ],
             },
           },
         },
-      }),
-    );
+      },
+    };
+    act(() => result.current.handleRealtimeEvent(event));
+    act(() => result.current.handleRealtimeEvent(event));
     act(() => result.current.handleRealtimeEvent(workEvent({ reason: "released", state: "idle" })));
-    expect(notificationRecords).toHaveLength(0);
+    expect(notificationRecords).toHaveLength(1);
+    expect(notificationRecords[0]).toMatchObject({
+      title: "Research Agent failed",
+      body: "Research room: The model service is unavailable. · Last tool: shell",
+    });
+    notificationRecords[0]?.notification.onclick?.call(
+      notificationRecords[0].notification as unknown as Notification,
+      new Event("click"),
+    );
+    expect(onSelectConversation).toHaveBeenCalledWith("room-1");
   });
 
   it("requests notification permission from a user action", async () => {

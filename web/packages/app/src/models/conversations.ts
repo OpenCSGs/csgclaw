@@ -1,7 +1,7 @@
 import { resourceMessageText } from "./conversationResources";
 import type { TaskConfiguration } from "@/models/taskConfiguration";
 import { newerProgressMessage } from "@/models/turnProgress";
-import type { ContextUsage } from "@/models/modelMetadata";
+import { normalizeContextUsage, type ContextUsage } from "@/models/modelMetadata";
 import { flattenMentionText } from "@/components/business/MessageContent/mentions";
 import {
   isToolDeliveryMessage,
@@ -158,6 +158,7 @@ function videoGenerationParentMessageID(message: IMMessage): string {
 }
 
 export type IMConversation = {
+  context_usage?: Record<string, ContextUsage>;
   created_by?: string;
   cloud_agent?: { agent_id: string; connection_id: string; user_id: string };
   configuration?: TaskConfiguration;
@@ -1035,6 +1036,21 @@ export function applyIMEvent<T extends IMData | null | undefined>(
     return current;
   }
 
+  if (event.type === "participant.work.updated" && event.work && !event.work.thread_root_id) {
+    const work = event.work;
+    const usage = normalizeContextUsage(work.status?.context_usage);
+    if (!usage || !work.user_id) return current;
+    return {
+      ...current,
+      rooms: current.rooms.map((room) => {
+        if (room.id !== work.room_id || !room.members.some((id) => localIdentitiesMatch(id, work.user_id))) return room;
+        const previous = room.context_usage?.[work.user_id];
+        if (previous && Date.parse(previous.updated_at) > Date.parse(usage.updated_at)) return room;
+        return { ...room, context_usage: { ...room.context_usage, [work.user_id]: usage } };
+      }),
+    };
+  }
+
   if (event.type === "room.attachment_deleted" && event.room_id && event.attachment_id) {
     const attachmentID = event.attachment_id;
     return {
@@ -1425,5 +1441,11 @@ export function normalizeRoom(room: IMConversation): IMConversation {
     ...room,
     messages: room.messages ?? [],
     threads: room.threads ?? [],
+    context_usage: Object.fromEntries(
+      Object.entries(room.context_usage ?? {}).flatMap(([id, value]) => {
+        const usage = normalizeContextUsage(value);
+        return usage && room.members.some((member) => localIdentitiesMatch(member, id)) ? [[id, usage]] : [];
+      }),
+    ),
   };
 }
