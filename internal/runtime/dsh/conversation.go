@@ -47,6 +47,9 @@ func (c *conversation) Run(ctx context.Context, request contract.TurnRequest, si
 		return contract.TurnResult{Status: contract.TurnFailed, Error: inputErr}
 	}
 	defer cleanupInput()
+	if memory := contract.MemoryReference(request.RuntimeMemory); memory != "" {
+		prompt = append([]acpPromptBlock{{Type: "text", Text: memory}}, prompt...)
+	}
 	sessionID, turnErr := c.ensureSession(ctx, proc, request)
 	if turnErr != nil {
 		return contract.TurnResult{Status: contract.TurnFailed, Error: turnErr}
@@ -168,13 +171,17 @@ func (c *conversation) Run(ctx context.Context, request contract.TurnRequest, si
 }
 
 func (c *conversation) ensureSession(ctx context.Context, proc *process, request contract.TurnRequest) (string, *contract.TurnError) {
-	key := string(request.ConversationKey)
+	key := contract.RuntimeSessionKey(request)
 	proc.mu.Lock()
 	sessionID, exists := proc.meta.Sessions[key]
 	ready := proc.ready[sessionID]
 	proc.mu.Unlock()
 	if !exists && request.Continuation == contract.ContinuationRequireExisting {
 		return "", &contract.TurnError{Code: contract.ErrorConversationNotResumable, Message: "conversation has no DSH session mapping"}
+	}
+	// Reject a missing strict continuation before mutating other sessions.
+	if err := removeSessionBindings(ctx, proc, contract.LogicalRuntimeSessionKey(key), key); err != nil {
+		return "", &contract.TurnError{Code: contract.ErrorRuntimeFailed, Message: err.Error()}
 	}
 	if ready {
 		return sessionID, nil
@@ -321,22 +328,41 @@ func (c *conversation) Reset(ctx context.Context, key contract.ConversationKey) 
 	if err != nil {
 		return &contract.TurnError{Code: contract.ErrorRuntimeFailed, Message: err.Error()}
 	}
-	proc.mu.Lock()
-	sessionID, ok := proc.meta.Sessions[string(key)]
-	proc.mu.Unlock()
-	if !ok {
-		return nil
-	}
-	if err := proc.updateMetadata(func(meta *runtimeMetadata) {
-		if meta.Sessions[string(key)] == sessionID {
-			delete(meta.Sessions, string(key))
-			delete(proc.ready, sessionID)
-		}
-	}); err != nil {
+	if err := removeSessionBindings(ctx, proc, string(key), ""); err != nil {
 		return &contract.TurnError{Code: contract.ErrorRuntimeFailed, Message: err.Error()}
 	}
-	if err := proc.client.call(ctx, "session/close", map[string]any{"sessionId": sessionID}, nil, nil); err != nil {
-		return &contract.TurnError{Code: contract.ErrorRuntimeFailed, Message: fmt.Sprintf("close DSH session: %v", err)}
+	return nil
+}
+
+func removeSessionBindings(ctx context.Context, proc *process, logicalKey, keep string) error {
+	proc.mu.Lock()
+	var bindings []string
+	for key := range proc.meta.Sessions {
+		if key != keep && contract.LogicalRuntimeSessionKey(key) == logicalKey {
+			bindings = append(bindings, key)
+		}
+	}
+	proc.mu.Unlock()
+	if len(bindings) == 0 {
+		return nil
+	}
+	var active []string
+	if err := proc.updateMetadata(func(meta *runtimeMetadata) {
+		for _, key := range bindings {
+			id := meta.Sessions[key]
+			if proc.ready[id] {
+				active = append(active, id)
+				delete(proc.ready, id)
+			}
+			delete(meta.Sessions, key)
+		}
+	}); err != nil {
+		return err
+	}
+	for _, id := range active {
+		if err := proc.client.call(ctx, "session/close", map[string]any{"sessionId": id}, nil, nil); err != nil {
+			return fmt.Errorf("close DSH session: %w", err)
+		}
 	}
 	return nil
 }

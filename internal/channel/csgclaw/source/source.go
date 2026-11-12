@@ -438,6 +438,8 @@ func botEvent(value channel.Binding, event im.ParticipantEvent) channel.Event {
 	return channel.Event{
 		ResourceSelection: event.ResourceSelection.Clone(),
 		RoomManager:       event.RoomManager,
+		MemoryUserID:      event.MemoryUserID,
+		MemoryText:        event.MemoryText,
 		TaskAttempt:       event.TaskAttempt,
 		TaskID:            strings.TrimSpace(event.TaskID),
 		Channel:           string(channel.ChannelCSGClaw),

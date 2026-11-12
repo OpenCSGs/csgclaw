@@ -34,6 +34,7 @@ type ServerConfig struct {
 	AdvertiseBaseURL string
 	AccessToken      string
 	NoAuth           bool
+	LocalSingleUser  bool
 	ShowUpgrade      bool
 }
 
@@ -562,6 +563,12 @@ func Load(path string) (Config, error) {
 					return Config{}, fmt.Errorf("parse server.no_auth: %w", err)
 				}
 				cfg.Server.NoAuth = noAuth
+			case "local_single_user":
+				local, err := parseBoolValue(rawValue)
+				if err != nil {
+					return Config{}, fmt.Errorf("parse server.local_single_user: %w", err)
+				}
+				cfg.Server.LocalSingleUser = local
 			case "show_upgrade":
 				showUpgrade, err := parseBoolValue(rawValue)
 				if err != nil {
@@ -822,8 +829,9 @@ listen_addr = %q
 advertise_base_url = %q
 access_token = %q
 no_auth = %t
+local_single_user = %t
 show_upgrade = %t
-`, cfg.rawOrResolvedString(cfg.raw.server.ListenAddr, loadedRaw.server.ListenAddr, cfg.Server.ListenAddr), cfg.rawOrResolvedString(cfg.raw.server.AdvertiseBaseURL, loadedRaw.server.AdvertiseBaseURL, cfg.Server.AdvertiseBaseURL), cfg.rawOrResolvedString(cfg.raw.server.AccessToken, loadedRaw.server.AccessToken, cfg.Server.AccessToken), cfg.Server.NoAuth, cfg.Server.ShowUpgrade)
+`, cfg.rawOrResolvedString(cfg.raw.server.ListenAddr, loadedRaw.server.ListenAddr, cfg.Server.ListenAddr), cfg.rawOrResolvedString(cfg.raw.server.AdvertiseBaseURL, loadedRaw.server.AdvertiseBaseURL, cfg.Server.AdvertiseBaseURL), cfg.rawOrResolvedString(cfg.raw.server.AccessToken, loadedRaw.server.AccessToken, cfg.Server.AccessToken), cfg.Server.NoAuth, cfg.Server.LocalSingleUser, cfg.Server.ShowUpgrade)
 	if cfg.Server.DeploymentMode != "" || cfg.Sandbox.Provider == CSGHubProvider {
 		mode := cfg.Server.DeploymentMode
 		if mode == "" {

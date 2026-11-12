@@ -156,6 +156,7 @@ describe("shared chat sidebar", () => {
         expect.objectContaining({ source: "workspace", agent_id: "alice", path: "" }),
         "system",
         "",
+        "",
       ),
     );
     await user.click(screen.getByRole("button", { name: /^README.md/ }));
@@ -166,6 +167,7 @@ describe("shared chat sidebar", () => {
         "sidebar-test",
         expect.objectContaining({ source: "workspace", agent_id: "alice", path: "README.md" }),
         "app:/Applications/Code.app",
+        "",
         "",
       ),
     );
@@ -532,8 +534,32 @@ describe("shared chat sidebar", () => {
     await user.click(screen.getByRole("button", { name: "Files" }));
     await screen.findByRole("button", { name: /^second-task.md/ });
     expect(screen.queryByRole("button", { name: /^first-task.md/ })).not.toBeInTheDocument();
-    expect(fetchWorkspaceDirectory).toHaveBeenCalledWith("alice", "", expect.any(AbortSignal), "second-task");
+    expect(fetchWorkspaceDirectory).toHaveBeenCalledWith(
+      "alice",
+      "",
+      expect.any(AbortSignal),
+      "second-task",
+      undefined,
+    );
   });
+  it("defaults to latest workspace files and lets users sort by name", async () => {
+    vi.mocked(fetchWorkspaceDirectory).mockResolvedValue({
+      entries: [
+        { path: "a.md", name: "a.md", type: "file", modified_at: "2026-10-01T10:00:00Z" },
+        { path: "b.md", name: "b.md", type: "file", modified_at: "2026-10-02T10:00:00Z" },
+      ],
+    });
+    const user = userEvent.setup();
+    render(<Harness />, { wrapper: createQueryWrapper().wrapper });
+    await user.click(screen.getByRole("button", { name: "Files" }));
+    await screen.findByRole("button", { name: /^a.md/ });
+    const fileOrder = () => screen.getAllByRole("button", { name: /^[ab]\.md/ }).map((item) => item.textContent);
+    expect(fileOrder()[0]).toContain("b.md");
+    await user.click(screen.getByRole("combobox", { name: "Sort files" }));
+    await user.click(screen.getByRole("option", { name: "Name A–Z" }));
+    expect(fileOrder()[0]).toContain("a.md");
+  });
+
   it("supports application maximum size and gives Escape precedence to restoring layout", async () => {
     const user = userEvent.setup();
     render(<Harness />, { wrapper: createQueryWrapper().wrapper });

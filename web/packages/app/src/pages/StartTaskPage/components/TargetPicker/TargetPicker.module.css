@@ -118,10 +118,6 @@
   font-size: 12px;
 }
 
-.group + .group {
-  margin-top: 2px;
-}
-
 .groupLabel {
   padding: 6px 8px 2px 31px;
   color: var(--muted);
@@ -154,8 +150,8 @@
   cursor: pointer;
 }
 
-.row:hover,
-.row:focus-visible {
+.soloRow:hover,
+.soloRow:focus-visible {
   outline: none;
   background: var(--field);
 }
@@ -223,25 +219,7 @@
 
 .footerButton {
   width: 100%;
-  min-height: 32px;
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  padding: 5px 8px;
-  border: 0;
-  border-radius: 7px;
-  background: transparent;
-  color: var(--primary);
-  font: inherit;
-  font-size: 12px;
-  text-align: left;
-  cursor: pointer;
-}
-
-.footerButton:hover,
-.footerButton:focus-visible {
-  outline: none;
-  background: var(--primary-soft);
+  justify-content: flex-start;
 }
 
 .avatar :global(.agent-avatar-image),

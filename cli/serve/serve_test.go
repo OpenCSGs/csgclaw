@@ -1243,6 +1243,7 @@ func TestServeForegroundUsesSingleBuiltInIMAdapterSource(t *testing.T) {
 	var sourceBridge *im.ParticipantBridge
 	var cancelSubscription func()
 	NewCSGClawAdapterSource = func(
+		_ context.Context,
 		engine *agentengine.Engine,
 		_ *agent.Controller, _ *im.Service,
 		_ *im.Bus,
@@ -1250,6 +1251,7 @@ func TestServeForegroundUsesSingleBuiltInIMAdapterSource(t *testing.T) {
 		workReporter worklease.ParticipantWorkReporter,
 		bridge *im.ParticipantBridge,
 		_ *csgclawinteraction.Coordinator,
+		_ *llm.Service,
 	) (csgclawAdapterSource, error) {
 		if engine == nil || workReporter == nil || bridge == nil {
 			t.Fatal("built-in IM adapter dependencies were not assembled")
@@ -1605,6 +1607,7 @@ listen_addr = "0.0.0.0:18080"
 advertise_base_url = "http://192.168.2.52:18080"
 access_token = "yo*************en"
 no_auth = true
+local_single_user = false
 show_upgrade = true
 
 [bootstrap]
@@ -1868,7 +1871,7 @@ func stubServeDependencies(t *testing.T) func() {
 	NewFeishuBindingManager = func(*feishu.Service, agentengine.Interface) (feishuBindingManager, error) {
 		return nil, nil
 	}
-	NewCSGClawAdapterSource = func(*agentengine.Engine, *agent.Controller, *im.Service, *im.Bus, *participant.Service, worklease.ParticipantWorkReporter, *im.ParticipantBridge, *csgclawinteraction.Coordinator) (csgclawAdapterSource, error) {
+	NewCSGClawAdapterSource = func(context.Context, *agentengine.Engine, *agent.Controller, *im.Service, *im.Bus, *participant.Service, worklease.ParticipantWorkReporter, *im.ParticipantBridge, *csgclawinteraction.Coordinator, *llm.Service) (csgclawAdapterSource, error) {
 		return nil, nil
 	}
 	EnsureCLIProxy = func(context.Context) error { return nil }

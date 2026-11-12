@@ -71,6 +71,7 @@ func (h *Handler) registerCoreRoutes(router chi.Router) {
 				r.Put("/instructions", h.putAgentInstructions)
 				r.Get("/memory", h.getAgentMemory)
 				r.Put("/memory", h.putAgentMemory)
+				r.Delete("/memory/sources/{room}/{message}", h.deleteAgentMemorySource)
 				r.Group(func(r chi.Router) {
 					r.Use(h.requireWorkspaceAccess)
 					r.Get("/workspace", h.handleAgentWorkspace)
@@ -78,6 +79,10 @@ func (h *Handler) registerCoreRoutes(router chi.Router) {
 					r.Get("/workspace/content", h.handleAgentWorkspaceContent)
 					r.Get("/workspace/location", h.handleAgentWorkspaceLocation)
 					r.Post("/workspace/open", h.handleAgentWorkspaceOpen)
+					r.Get("/draft-workspace", h.handleAgentWorkspace)
+					r.Get("/draft-workspace/content", h.handleAgentWorkspaceContent)
+					r.Get("/draft-workspace/location", h.handleAgentWorkspaceLocation)
+					r.Post("/draft-workspace/open", h.handleAgentWorkspaceOpen)
 					r.Get("/skills", h.handleAgentSkills)
 					r.Get("/skills/file", h.handleAgentSkillsFile)
 				})

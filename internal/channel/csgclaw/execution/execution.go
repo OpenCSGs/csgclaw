@@ -266,6 +266,7 @@ func (a *Adapter) Run(ctx context.Context, binding channel.Binding, event channe
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	turn.AgentTurn = true
 	record.Capture("channel.turn", turn)
 	ctx, finishWork, observeWork := a.startWork(ctx, turn)
 	defer func() { finishWork(outcome.Result) }()
@@ -309,7 +310,13 @@ func (a *Adapter) Run(ctx context.Context, binding channel.Binding, event channe
 			session = &contract.RoomConfiguration{RoomID: room.ID, Configuration: *room.Configuration}
 		}
 	}
+	var memorySource *contract.MemorySource
+	if event.ChatType == "direct" && turn.TaskID == "" {
+		memorySource = &contract.MemorySource{UserID: event.MemoryUserID, RoomID: turn.RoomID,
+			MessageID: turn.SourceMessageID, Text: event.MemoryText, ReplyTo: event.ThreadRootID, Locale: event.Locale}
+	}
 	result := conversation.Run(ctx, agentengine.TurnRequest{
+		MemorySource:      memorySource,
 		RoomConfiguration: session,
 		ID:                turn.TurnID,
 		ConversationKey:   turn.ConversationKey,

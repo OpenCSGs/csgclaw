@@ -763,10 +763,10 @@ memory_mode = "disabled"
 发布时只保存适合模板复用的运行时选项。
 Codex Worker 目前保存 `execution_mode` 和 `memory_mode`，不会保存 `local_workspace_dir` 等本机选项。
 创建请求显式提供的运行时选项优先于模板值。
-缺少 `execution_mode` 时默认为 `standard`。
+缺少 `execution_mode` 时默认为 `standard`。标准模式为 Codex 配置 `sandbox_mode = "danger-full-access"`，允许访问工作目录之外的文件，访问范围受运行进程的操作系统权限限制。
 缺少 `memory_mode` 时默认为 `enabled`。
 
-DSH Worker 的 `permission_mode` 可选 `workspace-write`、`read-only`、`danger-full-access`，默认 `workspace-write`。`local_workspace_dir` 可指定本机绝对路径；留空时使用 Agent 自动管理的工作目录。切换目录会开启新 DSH 会话，避免恢复到旧目录。CSGClaw 将 Agent 指令保存在独立的 `DSH_HOME/AGENTS.md`，DSH 同时读取所选项目自己的 `AGENTS.md`，不会修改项目文件。发布模板只保留 `permission_mode`，不会发布本机工作目录。
+DSH Worker 的 `permission_mode` 可选 `workspace-write`、`read-only`、`danger-full-access`，默认 `danger-full-access`。`local_workspace_dir` 可指定本机绝对路径；留空时使用 Agent 自动管理的工作目录。切换目录会开启新 DSH 会话，避免恢复到旧目录。CSGClaw 将 Agent 指令保存在独立的 `DSH_HOME/AGENTS.md`，DSH 同时读取所选项目自己的 `AGENTS.md`，不会修改项目文件。发布模板只保留 `permission_mode`，不会发布本机工作目录。
 
 ### `GET /api/v1/hub/templates`
 
@@ -804,6 +804,9 @@ DSH Worker 的 `permission_mode` 可选 `workspace-write`、`read-only`、`dange
 - `agent_id` 必填
 - `registry` 省略时使用默认 publish registry
 - 只有显式设置 `include_memory: true` 才会发布 Codex 记忆摘要，包括通过 `template_id` 再发布已有本地模板时；由于记忆可能包含从对话中提取的隐私信息，该字段默认是 `false`
+- 发布到社区时，整份模板最多 100 MiB，客户端单文件上限为 50 MiB，均按 Base64 编码前的文件字节数计算。单文件还受 StarHub 普通 Git 文件上限约束。超过总上限返回 HTTP 413，`error.code` 为 `template_publish_total_too_large`，`error.max_total_bytes` 为允许的最大字节数。
+- 发布在仓库原有的默认分支上提交，更新时跳过内容未变的文件。每批以 10 MiB 原始文件内容为目标，最多 200 项文件操作。超过 10 MiB 且可通过普通 Git 上传的文件单独提交。
+- 遇到超时或可重试的服务错误时，最多自动重试两次。每次重试读取远端最新状态，只提交剩余变更。其他文件全部提交成功后才单独提交有变化的 `agent.toml`。发布失败后，远端可能已包含部分文件变更，模板版本标记仍保留旧值，用户可再次发布同一本地版本以补齐变更。
 - 发布成功返回 `201 Created`
 
 ### `GET /api/v1/hub/templates/{id}`
@@ -1507,6 +1510,8 @@ prompt context 使用；它不是 thread reply 列表。Participant client 可�
 服务端把文件保存到 Agent 的 workspace，返回 **201 Created** 和 `{"attachments":[…]}`。每项使用 `Message.attachments` 的字段。发送消息时，在同一会话的 `/responses` 请求中通过 `attachment_ids` 引用这些附件。
 
 ### `POST /api/v1/agents/{agent}/sessions/{session_id}/responses`
+
+第三方 UI 和客户端的完整接入流程见 [Agent Responses 接入指南](agent-responses-integration.zh.md)。
 
 通过选定 Agent 及其真实 CSGClaw runtime 执行一次 turn。
 `{agent}` selector 可以使用 Agent ID，也可以使用不区分大小写的唯一 Agent 名称。

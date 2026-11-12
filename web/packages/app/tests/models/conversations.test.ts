@@ -20,6 +20,7 @@ import {
   mergeRoomMetadataUpdateInData,
   removeUserFromData,
   resolveAgentForUser,
+  roomInviteCandidates,
   sortConversations,
   THREAD_RELATION_TYPE,
   resolveConversationUser,
@@ -54,6 +55,19 @@ function room(id: string, createdAt: string, extra: Partial<IMConversation> = {}
 }
 
 describe("conversation model helpers", () => {
+  it("keeps cloud task identities out of room invitations", () => {
+    const conversation = room("room", "", { members: ["pt-existing"] });
+    const worker = { id: "user-worker", name: "Worker", role: "worker" };
+    const candidates = roomInviteCandidates(conversation, [
+      worker,
+      { id: "user-existing", name: "Existing" },
+      { id: "user-archived", name: "Archived", agent_state: "archived" },
+      { id: "user-relay-history", name: "Cloud history", role: "cloud" },
+    ]);
+
+    expect(candidates).toEqual([worker]);
+  });
+
   it("formats structured event messages in English and Chinese", () => {
     const usersById = new Map([
       ["u-1", { id: "u-1", name: "Alice" }],

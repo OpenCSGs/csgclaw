@@ -1755,8 +1755,7 @@ func TestRuntimeCreateKeepsExistingRuntimeAuth(t *testing.T) {
 		t.Fatalf("runtime auth = %q, want existing runtime auth preserved", string(authRaw))
 	}
 	assertRuntimeConfigContains(t, filepath.Join(root, "agent-alice", ".codex", "home", configFileName),
-		`sandbox_mode = "workspace-write"`,
-		`sandbox_workspace_write.network_access = true`,
+		`sandbox_mode = "danger-full-access"`,
 		`features.multi_agent = false`,
 		`features.default_mode_request_user_input = true`,
 		`features.memories = true`,
@@ -2116,8 +2115,8 @@ func TestRuntimeCreateWritesConfigWithoutAuth(t *testing.T) {
 	if err := toml.Unmarshal(configRaw, &parsed); err != nil {
 		t.Fatalf("runtime config is invalid TOML: %v\n%s", err, configText)
 	}
-	if got := parsed["sandbox_mode"]; got != "workspace-write" {
-		t.Fatalf("root sandbox_mode = %#v, want workspace-write\n%s", got, configText)
+	if got := parsed["sandbox_mode"]; got != "danger-full-access" {
+		t.Fatalf("root sandbox_mode = %#v, want danger-full-access\n%s", got, configText)
 	}
 	features, ok := parsed["features"].(map[string]any)
 	if !ok || features["multi_agent"] != false || features["default_mode_request_user_input"] != true {
@@ -2971,7 +2970,8 @@ func TestConfigureCodexHomeConfigReplacesManagedBlocksIdempotently(t *testing.T)
 		csgclawProviderEndMarker,
 		``,
 		csgclawSandboxBeginMarker,
-		`sandbox_mode = "danger-full-access"`,
+		`sandbox_mode = "workspace-write"`,
+		`sandbox_workspace_write.network_access = true`,
 		csgclawSandboxEndMarker,
 		``,
 		`[features]`,
@@ -3015,6 +3015,8 @@ func TestConfigureCodexHomeConfigReplacesManagedBlocksIdempotently(t *testing.T)
 		}
 	}
 	for _, unwanted := range []string{
+		`sandbox_mode = "workspace-write"`,
+		`sandbox_workspace_write`,
 		`model = "old-model"`,
 		`multi_agent = true`,
 		`default_mode_request_user_input = false`,
@@ -3027,8 +3029,7 @@ func TestConfigureCodexHomeConfigReplacesManagedBlocksIdempotently(t *testing.T)
 		}
 	}
 	for _, expected := range []string{
-		`sandbox_mode = "workspace-write"`,
-		`sandbox_workspace_write.network_access = true`,
+		`sandbox_mode = "danger-full-access"`,
 		`default_mode_request_user_input = true`,
 		`memories = true`,
 		`generate_memories = true`,
@@ -3067,8 +3068,7 @@ func TestConfigureCodexHomeConfigDisablesMemories(t *testing.T) {
 func TestBuildSandboxConfigBlockUsesUnelevatedWindowsSandbox(t *testing.T) {
 	config := buildSandboxConfigBlock(ExecutionModeStandard)
 	for _, want := range []string{
-		`sandbox_mode = "workspace-write"`,
-		`sandbox_workspace_write.network_access = true`,
+		`sandbox_mode = "danger-full-access"`,
 	} {
 		if !strings.Contains(config, want) {
 			t.Fatalf("cross-platform sandbox config missing %q:\n%s", want, config)
@@ -4297,6 +4297,124 @@ func TestRuntimeInfoKeepsLiveSessionRunningWhenMetadataIsTemporarilyMissing(t *t
 	}
 	if !info.CreatedAt.Equal(createdAt) {
 		t.Fatalf("Info() created at = %s, want %s", info.CreatedAt, createdAt)
+	}
+}
+
+func TestRuntimeRepairsCorruptMetadataWithLiveAppServer(t *testing.T) {
+	withAppServerHelperCommand(t, "conversation-thread")
+	root := t.TempDir()
+	deps := Dependencies{
+		BinaryProvider: fakeBinaryProvider{path: "/tmp/codex"},
+		AgentHome:      func(id string) (string, error) { return filepath.Join(root, id), nil },
+		ResolveAgent: func(h agentruntime.Handle) (AgentRef, error) {
+			return AgentRef{ID: "agent-one", Name: "one", RuntimeID: h.RuntimeID}, nil
+		},
+	}
+	rt := New(deps)
+	t.Cleanup(func() { _ = rt.Close() })
+	ctx := context.Background()
+	spec := agentruntime.Spec{RuntimeID: "runtime-one", AgentID: "agent-one", AgentName: "one"}
+	handle, err := rt.New(ctx, spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	initial, err := rt.readRuntimeMetadata(handle.RuntimeID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	threadID, err := rt.EnsureEngineSession(ctx, handle.RuntimeID, "room-one")
+	if err != nil || threadID == "" {
+		t.Fatalf("ensure room thread = %q, %v", threadID, err)
+	}
+	runtimePath, err := rt.runtimeMetadataPath(handle.RuntimeID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	corruptTimestamp := []byte(`{"started_at":"2026-11-x"}`)
+	if err := os.WriteFile(runtimePath, corruptTimestamp, 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	if !canFindUntrackedRuntimeProcesses {
+		fresh := New(deps)
+		t.Cleanup(func() { _ = fresh.Close() })
+		state, stopErr := fresh.Stop(ctx, handle)
+		if state != agentruntime.StateUnknown || stopErr == nil || !strings.Contains(stopErr.Error(), "cannot verify") {
+			t.Fatalf("unverified stop = %q, %v", state, stopErr)
+		}
+		state, startErr := fresh.Start(ctx, handle)
+		if state != agentruntime.StateUnknown || startErr == nil || !strings.Contains(startErr.Error(), "cannot verify") {
+			t.Fatalf("unverified start = %q, %v", state, startErr)
+		}
+		if data, err := os.ReadFile(runtimePath); err != nil || !bytes.Equal(data, corruptTimestamp) {
+			t.Fatalf("unverified recovery changed corrupt metadata: %q, %v", data, err)
+		}
+		if !processAlive(initial.ProcessID) {
+			t.Fatal("unverified recovery interfered with the live app-server")
+		}
+	}
+
+	if _, err := rt.New(ctx, spec); err != nil {
+		t.Fatalf("repair malformed timestamp with live app-server: %v", err)
+	}
+	repaired, err := rt.readRuntimeMetadata(handle.RuntimeID)
+	if err != nil || repaired.ProcessID != initial.ProcessID || !repaired.StartedAt.Equal(initial.StartedAt) {
+		t.Fatalf("repair did not reuse app-server: %+v, %v", repaired, err)
+	}
+	session, err := rt.readSessionMetadata(handle.RuntimeID)
+	if err != nil || session.ConversationSessions["room-one"] != threadID || !session.FilePublishingConversations["room-one"] {
+		t.Fatalf("repair lost room session: %+v, %v", session, err)
+	}
+	backups, err := filepath.Glob(runtimePath + ".corrupt-*")
+	if err != nil || len(backups) != 1 {
+		t.Fatalf("corrupt timestamp backups = %v, %v", backups, err)
+	}
+	if data, err := os.ReadFile(backups[0]); err != nil || !bytes.Equal(data, corruptTimestamp) {
+		t.Fatalf("corrupt timestamp not preserved: %q, %v", data, err)
+	}
+
+	if err := os.WriteFile(runtimePath, []byte("{"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	state, err := rt.Stop(ctx, handle)
+	if err != nil || state != agentruntime.StateStopped {
+		t.Fatalf("stop with corrupt metadata = %q, %v", state, err)
+	}
+	stopped, err := rt.readRuntimeMetadata(handle.RuntimeID)
+	if err != nil || stopped.State != agentruntime.StateStopped || stopped.ProcessID != 0 ||
+		!stopped.StartedAt.Equal(initial.StartedAt) || !stopped.PreserveSkills {
+		t.Fatalf("explicit stop did not persist the stopped generation: %+v, %v", stopped, err)
+	}
+}
+
+func TestRuntimeMetadataKeepsNewerProcessState(t *testing.T) {
+	path := filepath.Join(t.TempDir(), runtimeFileName)
+	rt := New(Dependencies{})
+	started := time.Now().UTC()
+	old := runtimeMetadata{StartedAt: started, State: agentruntime.StateExited}
+	current := runtimeMetadata{StartedAt: started.Add(time.Second), State: agentruntime.StateRunning, ProcessID: 42}
+	if err := rt.storeRuntimeMetadata(path, current); err != nil {
+		t.Fatal(err)
+	}
+	if err := rt.storeRuntimeMetadata(path, old); err != nil {
+		t.Fatal(err)
+	}
+	if saved, err := rt.readRuntimeMetadataAt(path); err != nil || saved.State != agentruntime.StateRunning || saved.ProcessID != 42 {
+		t.Fatalf("old exit replaced the new process: %+v, %v", saved, err)
+	}
+
+	exited := current
+	exited.State = agentruntime.StateFailed
+	exited.ProcessID = 0
+	exited.ExitCode = 1
+	if err := rt.storeRuntimeMetadata(path, exited); err != nil {
+		t.Fatal(err)
+	}
+	if err := rt.storeRuntimeMetadata(path, current); err != nil {
+		t.Fatal(err)
+	}
+	if saved, err := rt.readRuntimeMetadataAt(path); err != nil || saved.State != agentruntime.StateFailed || saved.ExitCode != 1 {
+		t.Fatalf("delayed startup overwrote the process exit: %+v, %v", saved, err)
 	}
 }
 

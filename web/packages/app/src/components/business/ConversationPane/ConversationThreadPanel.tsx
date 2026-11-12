@@ -68,6 +68,7 @@ import {
 import type { SlashPickerCandidate } from "@/models/slashCommands";
 import type { ThemeMode } from "@/shared/theme/theme";
 import { AttachmentDraftStrip, MessageAttachments } from "./ConversationAttachments";
+import { useConversationMemory } from "./useConversationMemory";
 import { ConversationMessageActions } from "./ConversationMessageActions";
 import { dataTransferHasFiles, filesFromDataTransfer } from "./attachmentFiles";
 import { MentionPicker } from "./MentionPicker";
@@ -90,6 +91,7 @@ type ThreadMentionState = {
 
 export type ConversationThreadPanelProps = ComposerResourceProps & {
   currentUserID?: string;
+  memoryAgentID?: string;
   fileScope?: ChatFileScope;
   renderTurnControls?: (message: IMMessage) => ProgressControlSlots | null;
   agents?: AgentLike[];
@@ -129,6 +131,7 @@ export type ConversationThreadPanelProps = ComposerResourceProps & {
 
 export function ConversationThreadPanel({
   resourceAgentID,
+  memoryAgentID = "",
   onPickResources,
   fileScope,
   renderTurnControls,
@@ -180,6 +183,7 @@ export function ConversationThreadPanel({
   const [mentionState, setMentionState] = useState<ThreadMentionState | null>(null);
   const [mentionIndex, setMentionIndex] = useState(0);
   const root = thread?.root ?? null;
+  const memory = useConversationMemory(memoryAgentID, thread?.room_id || "");
   const replies = useMemo(() => thread?.replies ?? [], [thread?.replies]);
   const videoGroups = useMemo(() => groupVideoGenerationMessages(root ? [root, ...replies] : replies), [root, replies]);
   const visibleRoot =
@@ -374,6 +378,9 @@ export function ConversationThreadPanel({
           <div className={conversationThreadsStyles["thread-root"]}>
             <ThreadMessage
               message={visibleRoot}
+              onForgetMemory={
+                memory.sourceFor(visibleRoot) ? () => memory.forget(memory.sourceFor(visibleRoot)) : undefined
+              }
               currentUserID={currentUserID}
               progressControls={renderTurnControls?.(visibleRoot)}
               agents={agents}
@@ -396,6 +403,7 @@ export function ConversationThreadPanel({
               <ThreadMessage
                 key={message.id}
                 message={message}
+                onForgetMemory={memory.sourceFor(message) ? () => memory.forget(memory.sourceFor(message)) : undefined}
                 currentUserID={currentUserID}
                 progressControls={renderTurnControls?.(message)}
                 agents={agents}
@@ -616,12 +624,12 @@ export function ConversationThreadPanel({
                 variant="primary"
                 className={`composer-send-button ${conversationSendButtonStyles["composer-send-button"]}`}
                 iconOnly
-                size="lg"
+                size="sm"
                 aria-label={t("send")}
                 disabled={disabled || resourcePicker.active || !canSendComposer(draftSegments, attachmentDrafts.length)}
                 onClick={onSend}
               >
-                <ArrowUp aria-hidden="true" size={22} strokeWidth={1.5} />
+                <ArrowUp aria-hidden="true" size={17} strokeWidth={1.5} />
               </Button>
             </div>
           </div>
@@ -634,6 +642,7 @@ export function ConversationThreadPanel({
 type ThreadMessageProps = {
   currentUserID?: string;
   progressControls?: ProgressControlSlots | null;
+  onForgetMemory?: () => Promise<void>;
   agents?: AgentLike[];
   compact?: boolean;
   embeddedVideos?: IMMessage[];
@@ -652,6 +661,7 @@ type ThreadMessageProps = {
 function ThreadMessage({
   currentUserID,
   progressControls,
+  onForgetMemory,
   message,
   agents = [],
   usersById,
@@ -741,6 +751,7 @@ function ThreadMessage({
         <ConversationMessageActions
           metadata={message.metadata}
           className={conversationThreadsStyles["thread-message-actions"]}
+          onForgetMemory={onForgetMemory}
           content={message.metadata?.image_generation ? null : message.content}
           image={message.metadata?.image_generation ? message.attachments?.find(isImageAttachment) : undefined}
           t={t}

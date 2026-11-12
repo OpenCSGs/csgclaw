@@ -3054,13 +3054,17 @@ export function HubDetailPane({
           </DialogHeader>
           <DialogFooter className={mCPResourceStyles["hub-skill-delete-dialog-actions"]}>
             {publishSuccessURL ? (
-              <Button
+              <LinkButton
                 variant="secondaryGray"
                 size="sm"
-                onClick={() => window.open(publishSuccessURL, "_blank", "noopener,noreferrer")}
+                href={publishSuccessURL}
+                target="_blank"
+                rel="noopener noreferrer"
+                title={t("agentTemplateCreateInHubHint")}
               >
+                <ExternalLink size={14} aria-hidden="true" />
                 {t("agentTemplateCreateInHub")}
-              </Button>
+              </LinkButton>
             ) : null}
             <Button variant="primary" size="sm" onClick={dismissPublishSuccess}>
               {t("resourcesPublishCommunitySuccessDismiss")}

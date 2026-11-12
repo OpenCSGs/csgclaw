@@ -68,6 +68,7 @@ type Mention struct {
 }
 
 type Message struct {
+	MemoryUserID    string              `json:"-"`
 	ID              string              `json:"id"`
 	ClientMessageID string              `json:"client_message_id,omitempty"`
 	SenderID        string              `json:"sender_id"`
@@ -112,6 +113,7 @@ type MessageAttachmentUpload struct {
 }
 
 type CreateMessageRequest struct {
+	MemoryUserID      string             `json:"-"`
 	ResourceSelection *ResourceSelection `json:"-"`
 	// ResolveAttachments lazily opens referenced files after completed-send deduplication.
 	ResolveAttachments func() ([]MessageAttachmentUpload, error) `json:"-"`
@@ -217,6 +219,7 @@ type Room struct {
 	// CreationWorkspaceDir retains the requested path (empty means automatic).
 	// It is private persistence metadata used to validate creation retries.
 	CreationWorkspaceDir *string `json:"-"`
+	TitleSource          string  `json:"-"`
 
 	SourceTeamID       string             `json:"source_team_id,omitempty"`
 	CollaborationGuide string             `json:"collaboration_guide,omitempty"`
@@ -252,6 +255,7 @@ type CreateRoomTaskRequest struct {
 }
 
 type CreateRoomRequest struct {
+	AutoTitle          bool                 `json:"auto_title,omitempty"`
 	CloudAgent         *CloudAgentReference `json:"cloud_agent,omitempty"`
 	SourceTeamID       string               `json:"source_team_id,omitempty"`
 	CollaborationGuide string               `json:"collaboration_guide,omitempty"`

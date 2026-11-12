@@ -5,10 +5,11 @@ import { useEffect, useRef, useState } from "react";
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AtSign, RefreshCw } from "lucide-react";
 import { attachmentCapability, fetchWorkspaceDirectory, filePreviewItem } from "@/api/chatFiles";
-import { errorMessage } from "@/api/client";
+import { apiErrorCode } from "@/api/client";
 import { Breadcrumb, Button, Select, TextInput, Tooltip } from "@/components/ui";
 import { FileTypeIcon } from "@/components/business/FileTypeIcon";
 import { formatAttachmentSize, type AttachmentPreviewItem } from "@/models/attachments";
+import { compareFiles, fileSortOptions, type FileSort } from "@/models/workspace";
 import type { ComposerFileReference } from "@/models/fileReferences";
 import type { TranslateFn } from "@/models/conversations";
 import type { ChatFileScope, ReferenceFile } from "./types";
@@ -27,9 +28,11 @@ export function FilesTab({
   onReference: ReferenceFile;
   t: TranslateFn;
 }) {
-  const source = controller.state.fileSource;
+  const draftWorkspace = !scope.roomID;
+  const source = draftWorkspace ? "workspace" : controller.state.fileSource;
   const setSource = (fileSource: "workspace" | "attachments") => controller.patch({ fileSource });
   const [query, setQuery] = useState("");
+  const [sort, setSort] = useState<FileSort>("updated-desc");
   const [visibleCount, setVisibleCount] = useState(100);
   const queryClient = useQueryClient();
   const reader = useRoomFileReader(scope);
@@ -54,34 +57,45 @@ export function FilesTab({
   const directory = controller.state.directory;
   const directorySegments = directory.split("/").filter(Boolean);
   const rootWorkspace = useQuery({
-    queryKey: ["chat-workspace", scope.roomID, agentID, ""],
-    queryFn: ({ signal }) => fetchWorkspaceDirectory(agentID, "", signal, scope.roomID),
-    enabled: Boolean(agentID),
+    queryKey: ["chat-workspace", scope.roomID, agentID, "", scope.workspaceDir],
+    queryFn: ({ signal }) => fetchWorkspaceDirectory(agentID, "", signal, scope.roomID, scope.workspaceDir),
+    enabled: Boolean(agentID) && !scope.automaticWorkspace,
   });
   const workspace = useQuery({
-    queryKey: ["chat-workspace", scope.roomID, agentID, directory],
-    queryFn: ({ signal }) => fetchWorkspaceDirectory(agentID, directory, signal, scope.roomID),
-    enabled: Boolean(agentID),
+    queryKey: ["chat-workspace", scope.roomID, agentID, directory, scope.workspaceDir],
+    queryFn: ({ signal }) => fetchWorkspaceDirectory(agentID, directory, signal, scope.roomID, scope.workspaceDir),
+    enabled: Boolean(agentID) && !scope.automaticWorkspace,
   });
   const workspaceRootName =
     rootWorkspace.data?.absolute_path?.split(/[\\/]/).filter(Boolean).at(-1) || t("chatWorkspaceFiles");
   const attachments = useInfiniteQuery({
-    queryKey: ["chat-room-files", scope.roomID, query],
-    queryFn: ({ pageParam, signal }) => reader.read(query, pageParam, signal),
+    queryKey: ["chat-room-files", scope.roomID, query, sort],
+    enabled: Boolean(scope.roomID),
+    queryFn: ({ pageParam, signal }) => reader.read(query, pageParam, signal, sort),
     initialPageParam: 0,
     getNextPageParam: (last) =>
       last.from + last.items.length < last.total ? last.from + last.items.length : undefined,
   });
-  const isWorkspace = source === "workspace" && Boolean(agentID);
+  const isWorkspace = source === "workspace" && (draftWorkspace || Boolean(agentID));
   const entries = (workspace.data?.entries ?? [])
     .filter((entry) => (entry.name ?? entry.path).toLowerCase().includes(query.toLowerCase()))
     .sort(
       (a, b) =>
-        Number(b.type === "dir") - Number(a.type === "dir") || (a.name ?? a.path).localeCompare(b.name ?? b.path),
+        Number(b.type === "dir") - Number(a.type === "dir") ||
+        compareFiles(
+          { name: a.name ?? a.path, date: a.modified_at },
+          { name: b.name ?? b.path, date: b.modified_at },
+          sort,
+        ),
     );
   const files = attachments.data?.pages.flatMap((page) => page.items) ?? [];
   const loading = isWorkspace ? workspace.isLoading : attachments.isLoading;
   const error = isWorkspace ? workspace.error : attachments.error;
+  const errorLabel = isWorkspace
+    ? apiErrorCode(error) === "unauthorized"
+      ? "chatWorkspaceFilesAuthenticationRequired"
+      : "chatWorkspaceFilesLoadFailed"
+    : "chatConversationFilesLoadFailed";
   function changeDirectory(path: string) {
     controller.patch({ directory: path });
     setQuery("");
@@ -119,7 +133,9 @@ export function FilesTab({
         <button
           type="button"
           className={chatSidePanelStyles["chat-files-open"]}
-          onClick={() => onPreview(filePreviewItem(scope.roomID, reference, size, mediaType, token))}
+          onClick={() =>
+            onPreview(filePreviewItem(scope.roomID, reference, size, mediaType, token, scope.workspaceDir))
+          }
           title={reference.label}
         >
           <span className="chat-file-glyph">
@@ -135,42 +151,53 @@ export function FilesTab({
   return (
     <section className={chatSidePanelStyles["chat-files-tab"]} aria-label={t("chatFiles")}>
       <div className={chatSidePanelStyles["chat-files-toolbar"]}>
-        <div className={chatSidePanelStyles["chat-files-sources"]} role="tablist" aria-label={t("chatFileSource")}>
-          <Button
-            role="tab"
-            aria-selected={isWorkspace}
-            active={isWorkspace}
-            size="sm"
-            variant="tertiaryGray"
-            disabled={!scope.agents.length}
-            onClick={() => {
-              setSource("workspace");
-              setQuery("");
-            }}
-          >
-            {t("chatWorkspaceFiles")}
-          </Button>
-          <Button
-            role="tab"
-            aria-selected={!isWorkspace}
-            active={!isWorkspace}
-            size="sm"
-            variant="tertiaryGray"
-            onClick={() => {
-              setSource("attachments");
-              setQuery("");
-            }}
-          >
-            {t("chatConversationFiles")}
-          </Button>
-        </div>
+        {!draftWorkspace ? (
+          <div className={chatSidePanelStyles["chat-files-sources"]} role="tablist" aria-label={t("chatFileSource")}>
+            <Button
+              role="tab"
+              aria-selected={isWorkspace}
+              active={isWorkspace}
+              size="sm"
+              variant="tertiaryGray"
+              disabled={!scope.agents.length}
+              onClick={() => {
+                setSource("workspace");
+                setQuery("");
+              }}
+            >
+              {t("chatWorkspaceFiles")}
+            </Button>
+            <Button
+              role="tab"
+              aria-selected={!isWorkspace}
+              active={!isWorkspace}
+              size="sm"
+              variant="tertiaryGray"
+              onClick={() => {
+                setSource("attachments");
+                setQuery("");
+              }}
+            >
+              {t("chatConversationFiles")}
+            </Button>
+          </div>
+        ) : (
+          <strong>{t("chatWorkspaceFiles")}</strong>
+        )}
         <Tooltip content={t("chatRefresh")}>
-          <Button iconOnly aria-label={t("chatRefresh")} size="sm" variant="tertiaryGray" onClick={refresh}>
+          <Button
+            iconOnly
+            aria-label={t("chatRefresh")}
+            disabled={scope.automaticWorkspace}
+            size="sm"
+            variant="tertiaryGray"
+            onClick={refresh}
+          >
             <RefreshCw size={16} />
           </Button>
         </Tooltip>
       </div>
-      {isWorkspace ? (
+      {isWorkspace && !scope.automaticWorkspace ? (
         <div className={chatSidePanelStyles["chat-files-location"]}>
           {scope.sharedWorkspace ? <span>{t("chatSharedWorkspace")}</span> : null}
           {!scope.direct && !scope.sharedWorkspace ? (
@@ -202,6 +229,7 @@ export function FilesTab({
           />
           <WorkspacePathActions
             roomID={scope.roomID}
+            workspaceDir={scope.workspaceDir}
             reference={{ source: "workspace", agent_id: agentID, path: directory, name: directory, label: directory }}
             location={
               workspace.data?.absolute_path
@@ -220,11 +248,25 @@ export function FilesTab({
         <TextInput
           size="sm"
           type="search"
+          disabled={scope.automaticWorkspace}
           placeholder={t("chatSearchFiles")}
           aria-label={t("chatSearchFiles")}
           value={query}
           onChange={(event) => {
             setQuery(event.target.value);
+            setVisibleCount(100);
+          }}
+        />
+        <Select
+          size="sm"
+          disabled={scope.automaticWorkspace}
+          triggerProps={{ "aria-label": t("chatSortFiles") }}
+          triggerClassName={chatSidePanelStyles["chat-files-sort"]}
+          contentClassName={chatSidePanelStyles["chat-files-sort-menu"]}
+          value={sort}
+          options={fileSortOptions.map((value) => ({ value, label: t(`chatFileSort.${value}`) }))}
+          onValueChange={(value) => {
+            if (fileSortOptions.some((option) => option === value)) setSort(value as FileSort);
             setVisibleCount(100);
           }}
         />
@@ -236,14 +278,16 @@ export function FilesTab({
           </div>
         ) : error ? (
           <div className={chatSidePanelStyles["chat-side-status"]} role="alert">
-            {errorMessage(error, t("attachmentPreviewFailed"))}
+            {t(errorLabel)}
             <Button onClick={refresh} size="sm" variant="secondaryGray">
-              {t("retrySend")}
+              {t("retry")}
             </Button>
           </div>
         ) : null}
         {!loading && !error && (isWorkspace ? entries.length === 0 : files.length === 0) ? (
-          <div className={chatSidePanelStyles["chat-side-status"]}>{t("chatFilesEmpty")}</div>
+          <div className={chatSidePanelStyles["chat-side-status"]}>
+            {t(scope.automaticWorkspace ? "collaborationWorkdirAutomaticHint" : "chatFilesEmpty")}
+          </div>
         ) : null}
         {isWorkspace
           ? entries.slice(0, visibleCount).map((entry) =>

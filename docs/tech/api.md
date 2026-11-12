@@ -795,10 +795,10 @@ memory_mode = "disabled"
 Only template-safe runtime options are published.
 For Codex workers this currently means `execution_mode` and `memory_mode`; machine-local options such as `local_workspace_dir` are not published.
 Explicit runtime options in an agent create request override template values.
-Missing `execution_mode` defaults to `standard`.
+Missing `execution_mode` defaults to `standard`. Standard mode configures Codex with `sandbox_mode = "danger-full-access"`, allowing access outside the workspace subject to the operating system permissions of the runtime process.
 Missing `memory_mode` defaults to `enabled`.
 
-DSH workers accept `workspace-write`, `read-only`, or `danger-full-access` as `permission_mode`, defaulting to `workspace-write`. `local_workspace_dir` selects an absolute local path; when empty, DSH uses the managed Agent workspace. Changing the directory starts fresh DSH sessions so an old session is never resumed in a different directory. CSGClaw stores Agent instructions in the isolated `DSH_HOME/AGENTS.md`; DSH also loads the selected project's own `AGENTS.md` without modifying it. Template publishing retains only `permission_mode`, not the machine-local directory.
+DSH workers accept `workspace-write`, `read-only`, or `danger-full-access` as `permission_mode`, defaulting to `danger-full-access`. `local_workspace_dir` selects an absolute local path; when empty, DSH uses the managed Agent workspace. Changing the directory starts fresh DSH sessions so an old session is never resumed in a different directory. CSGClaw stores Agent instructions in the isolated `DSH_HOME/AGENTS.md`; DSH also loads the selected project's own `AGENTS.md` without modifying it. Template publishing retains only `permission_mode`, not the machine-local directory.
 
 ### `GET /api/v1/hub/templates`
 
@@ -836,6 +836,9 @@ Notes:
 - `agent_id` is required
 - `registry` uses the default publish registry when omitted
 - `include_memory` must be explicitly set to `true` to publish the Codex memory summary, including when republishing an existing local template via `template_id`; it defaults to `false` because memories may contain private conversation-derived information
+- Community publication accepts up to 100 MiB per template and applies a 50 MiB client limit per file, measured before Base64 encoding. StarHub's ordinary Git file limit also applies. A template over the total limit returns HTTP 413 with `error.code: "template_publish_total_too_large"` and `error.max_total_bytes`.
+- Publication commits to the repository's existing default branch and skips unchanged files on update. Batches target 10 MiB of raw file content and allow at most 200 file operations. A larger file accepted for ordinary Git upload uses its own batch.
+- Timeouts and retryable service errors trigger up to two automatic retries. Each retry reads the current remote state and commits the remaining changes. A changed `agent.toml` gets its own commit after all other files succeed. A failed publication can leave some file changes on the branch with the previous version marker. Publishing the same local version again reconciles the remaining changes.
 - Successful publish returns `201 Created`
 
 ### `GET /api/v1/hub/templates/{id}`

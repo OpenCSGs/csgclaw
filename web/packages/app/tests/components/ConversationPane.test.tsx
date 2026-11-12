@@ -289,6 +289,8 @@ function renderThreadPane({
     const [inviteUserIDs, setInviteUserIDs] = useState<string[]>([]);
     const [showTools, setShowTools] = useState(showToolCalls);
     const [threadDraftSegments, setThreadDraftSegments] = useState<ComposerSegment[]>([]);
+    const [draftSegments, setDraftSegments] = useState<ComposerSegment[]>([]);
+    const editorRef = useRef<HTMLDivElement>(null);
     const [agentDetailOpen, setAgentDetailOpen] = useState(Boolean(agentDetailPanelProps));
     if (agentDetailPanelStateRef) {
       agentDetailPanelStateRef.close = () => setAgentDetailOpen(false);
@@ -307,9 +309,9 @@ function renderThreadPane({
         conversation={conversation}
         conversationMembers={conversationMembers}
         currentUserID="u-admin"
-        draftSegments={[]}
-        draftText=""
-        editorRef={createRef<HTMLDivElement>()}
+        draftSegments={draftSegments}
+        draftText={segmentsToPlainText(draftSegments)}
+        editorRef={editorRef}
         inviteActionLabel="Invite"
         locale="zh"
         logAgent={null}
@@ -353,7 +355,7 @@ function renderThreadPane({
         onPreviewUser={onPreviewUser}
         onSendMessage={() => {}}
         onSendThreadReply={() => {}}
-        onSyncComposer={() => {}}
+        onSyncComposer={() => setDraftSegments(parseComposerSegments(editorRef.current))}
         onToggleChannelTools={setShowChannelTools}
         onToggleMemberList={setShowMemberList}
         onToggleToolCalls={setShowTools}
@@ -442,7 +444,7 @@ describe("ConversationPane", () => {
     expect(screen.queryByText("Preparing a reply")).not.toBeInTheDocument();
   });
 
-  it("shows the pending reply beside the agent avatar before its progress message arrives", async () => {
+  it.each([true, false])("keeps the pending reply visible and stops the right turn (direct: %s)", async (isDirect) => {
     const participant = {
       id: "u-manager",
       name: "manager",
@@ -453,12 +455,67 @@ describe("ConversationPane", () => {
       canStop: true,
     };
     const onStopWorkingTurn = vi.fn();
-    const { container } = renderThreadPane({ workingParticipants: [participant], onStopWorkingTurn });
+    const { container } = renderThreadPane({ isDirect, workingParticipants: [participant], onStopWorkingTurn });
     const pending = screen.getByText("Preparing a reply").closest(".message-row");
     expect(pending).not.toBeNull();
     expect(pending?.querySelector(".avatar")).toBeInTheDocument();
     expect(container.querySelector(".composer > .composer-working")).not.toBeInTheDocument();
-    await userEvent.click(within(pending as HTMLElement).getByRole("button", { name: "conversationWorkingStopAria" }));
+    const stopButton = screen.getByRole("button", { name: "conversationWorkingStopAria" });
+    expect(stopButton.closest(isDirect ? ".composer-box" : ".message-row")).not.toBeNull();
+    await userEvent.click(stopButton);
+    expect(onStopWorkingTurn).toHaveBeenCalledWith(expect.objectContaining(participant));
+  });
+
+  it.each(["pending", "progress"])("switches from Stop to Send while drafting during a %s turn", async (stage) => {
+    const user = userEvent.setup();
+    const participant = {
+      id: "u-manager",
+      name: "manager",
+      participantID: "pt-manager",
+      roomID: "room-1",
+      requestID: "request-follow-up",
+      leaseID: "lease-follow-up",
+      canStop: true,
+    };
+    const onStopWorkingTurn = vi.fn();
+    const { container } = renderThreadPane({
+      workingParticipants: [participant],
+      onStopWorkingTurn,
+      messages:
+        stage === "progress"
+          ? [
+              {
+                id: "progress-follow-up",
+                sender_id: "u-manager",
+                content: "\u200b",
+                metadata: {
+                  csgclaw: {
+                    request_id: participant.requestID,
+                    turn_progress: {
+                      id: "turn-follow-up",
+                      revision: 1,
+                      status: "running",
+                      started_at: "2026-11-11T00:00:00Z",
+                      items: [],
+                    },
+                  },
+                },
+              },
+            ]
+          : [],
+    });
+    const composer = container.querySelector(".composer-box") as HTMLElement;
+    const editor = within(composer).getByRole("textbox");
+    expect(within(composer).getByRole("button", { name: "conversationWorkingStopAria" })).toBeEnabled();
+
+    await user.type(editor, "Follow up");
+    expect(within(composer).getByRole("button", { name: "Send" })).toBeEnabled();
+    expect(screen.queryByRole("button", { name: "conversationWorkingStopAria" })).not.toBeInTheDocument();
+
+    await user.clear(editor);
+    const stop = screen.getByRole("button", { name: "conversationWorkingStopAria" });
+    expect(composer).toContainElement(stop);
+    await user.click(stop);
     expect(onStopWorkingTurn).toHaveBeenCalledWith(expect.objectContaining(participant));
   });
 
@@ -498,9 +555,10 @@ describe("ConversationPane", () => {
       });
       expect(container.querySelector("[data-work-lease-id]")).not.toBeInTheDocument();
       expect(container.querySelector(".composer > .composer-working")).not.toBeInTheDocument();
-      expect(
-        container.querySelectorAll(`.message-row .${testWorkingTurnStyles["composer-working-stop"]}`),
-      ).toHaveLength(status === "running" ? 1 : 0);
+      expect(container.querySelector(`.message-row .${testWorkingTurnStyles["composer-working-stop"]}`)).toBeNull();
+      const stop = screen.queryByRole("button", { name: "conversationWorkingStopAria" });
+      if (status === "running") expect(stop?.closest(".composer-box")).toBeInTheDocument();
+      else expect(stop).not.toBeInTheDocument();
     },
   );
 
@@ -1032,7 +1090,7 @@ describe("ConversationPane", () => {
     const avatarEditor = screen.getByRole("dialog", { name: "editAvatar" });
     expect(drawer).not.toContainElement(avatarEditor);
     await user.click(within(avatarEditor).getByRole("radio", { name: "agentAvatarStyle3D 2" }));
-    await user.click(within(avatarEditor).getByRole("button", { name: "confirm" }));
+    await user.click(within(avatarEditor).getByRole("button", { name: "avatarApply" }));
 
     expect(onDraftChange).toHaveBeenCalledWith(expect.objectContaining({ avatar: "avatar/3D-2.png" }));
     expect(screen.getByRole("dialog", { name: "agentDetailPanel" })).toBeInTheDocument();

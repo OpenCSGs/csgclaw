@@ -40,22 +40,25 @@ import type { ChatSidePanelController } from "./useChatSidePanel";
 export type ChatSidePanelProps = {
   controller: ChatSidePanelController;
   fileScope: ChatFileScope;
-  conversation: IMConversation;
+  conversation?: IMConversation;
+  toolKinds?: readonly ChatToolKind[];
   agents: AgentLike[];
   usersById: UsersById;
   locale: LocaleCode;
   t: TranslateFn;
   onReference: ReferenceFile;
   onPreview: (item: AttachmentPreviewItem) => void;
-  onSources: (selection: CitationSelection) => void;
+  onSources?: (selection: CitationSelection) => void;
   onCollapse: () => void;
   activeThreadRootID?: string;
   threadPanel?: ReactNode;
   roomTasksPanel?: ReactNode;
   suspended?: boolean;
-  onThreadSelect: (rootID: string) => void;
-  onThreadClose: () => void;
+  onThreadSelect?: (rootID: string) => void;
+  onThreadClose?: () => void;
 };
+
+export type ChatToolKind = "files" | "browser" | "activity" | "tasks";
 
 const DEFAULT_PANEL_WIDTH = 496;
 
@@ -71,6 +74,7 @@ export function ChatSidePanel({
   controller,
   fileScope,
   conversation,
+  toolKinds,
   agents,
   usersById,
   locale,
@@ -86,6 +90,8 @@ export function ChatSidePanel({
   onThreadSelect,
   onThreadClose,
 }: ChatSidePanelProps) {
+  const roomID = fileScope.roomID;
+  const kinds = toolKinds ?? ["files", "browser", "activity", ...(roomTasksPanel ? ["tasks" as const] : [])];
   const panelRef = useRef<HTMLElement>(null);
   const [width, setWidth] = useState(readWidth);
   const [containerWidth, setContainerWidth] = useState(0);
@@ -97,7 +103,7 @@ export function ChatSidePanel({
   const overlay = containerWidth < 680;
   useEffect(() => {
     setMaximized(false);
-  }, [conversation.id]);
+  }, [roomID]);
   useEffect(() => {
     if (!controller.state.open) setMaximized(false);
   }, [controller.state.open]);
@@ -127,14 +133,14 @@ export function ChatSidePanel({
   useEffect(() => {
     const rootID = state.open ? threadRoot : "";
     const previous = threadActivation.current;
-    const firstForRoom = previous?.roomID !== conversation.id;
+    const firstForRoom = previous?.roomID !== roomID;
     const changed = firstForRoom || previous.rootID !== rootID;
-    threadActivation.current = { roomID: conversation.id, rootID };
+    threadActivation.current = { roomID: roomID, rootID };
     // Restore on activation only. A root selected by the main conversation wins
     // while its tab catches up, including a persisted tab on initial mounting.
     if (changed && rootID && activeThreadRootID !== rootID && (!firstForRoom || !activeThreadRootID))
-      onThreadSelect(rootID);
-  }, [state.open, threadRoot, onThreadSelect, activeThreadRootID, conversation.id]);
+      onThreadSelect?.(rootID);
+  }, [state.open, threadRoot, onThreadSelect, activeThreadRootID, roomID]);
 
   useEffect(() => {
     if (!visible) return;
@@ -170,7 +176,7 @@ export function ChatSidePanel({
   }, [visible, maximized, overlay, onCollapse]);
   function close(tab: ChatSideTab) {
     closeTab(tab.id);
-    if (tab.kind === "thread") onThreadClose();
+    if (tab.kind === "thread") onThreadClose?.();
     requestAnimationFrame(() =>
       panelRef.current
         ?.querySelector<HTMLButtonElement>('.chat-side-tabs [aria-selected="true"], .chat-side-welcome button')
@@ -180,7 +186,7 @@ export function ChatSidePanel({
   function closeAll() {
     const hasThread = state.tabs.some((tab) => tab.kind === "thread");
     patch({ tabs: [], activeID: "" });
-    if (hasThread) onThreadClose();
+    if (hasThread) onThreadClose?.();
   }
   function persistWidth(next: number) {
     setWidth(next);
@@ -406,15 +412,16 @@ export function ChatSidePanel({
         </div>
       </header>
       <div className={chatSidePanelStyles["chat-side-content"]}>
-        {!state.tabs.length ? <WelcomeTab t={t} onSelect={newTab} hasRoomTasks={Boolean(roomTasksPanel)} /> : null}
+        {!state.tabs.length ? <WelcomeTab t={t} onSelect={newTab} kinds={kinds} /> : null}
         {state.tabs.map((tab) => (
           <TabBody key={tab.id} tab={tab} active={tab.id === state.activeID && visible}>
             {tab.kind === "new" ? (
-              <WelcomeTab t={t} onSelect={(kind) => newTab(kind, tab.id)} hasRoomTasks={Boolean(roomTasksPanel)} />
+              <WelcomeTab t={t} onSelect={(kind) => newTab(kind, tab.id)} kinds={kinds} />
             ) : tab.kind === "tasks" ? (
               roomTasksPanel
             ) : tab.kind === "files" ? (
               <FilesTab
+                key={fileScope.roomID || JSON.stringify([fileScope.defaultAgentID, fileScope.workspaceDir])}
                 scope={fileScope}
                 controller={controller}
                 onPreview={onPreview}
@@ -430,21 +437,23 @@ export function ChatSidePanel({
                 t={t}
               />
             ) : tab.kind === "activity" ? (
-              <ConversationActivityPanel
-                embedded
-                agents={agents}
-                conversation={conversation}
-                initialEntryID={tab.entryID}
-                locale={locale}
-                t={t}
-                usersById={usersById}
-                onClose={() => close(tab)}
-                onCitationSelect={onSources}
-              />
+              conversation ? (
+                <ConversationActivityPanel
+                  embedded
+                  agents={agents}
+                  conversation={conversation}
+                  initialEntryID={tab.entryID}
+                  locale={locale}
+                  t={t}
+                  usersById={usersById}
+                  onClose={() => close(tab)}
+                  onCitationSelect={onSources}
+                />
+              ) : null
             ) : tab.kind === "file" ? (
               <FileTab
                 tab={tab}
-                roomID={conversation.id}
+                roomID={roomID}
                 fileScope={fileScope}
                 active={tab.id === state.activeID && visible}
                 t={t}
@@ -461,7 +470,7 @@ export function ChatSidePanel({
                   tab.cited ??
                   [
                     ...parseCitationDocument(
-                      conversation.messages.find((message) => message.id === tab.messageID)?.content ?? "",
+                      conversation?.messages.find((message) => message.id === tab.messageID)?.content ?? "",
                     ).sources.values(),
                   ].map((source) => ({ ...source, number: Number(source.id) }))
                 }
@@ -479,13 +488,12 @@ export function ChatSidePanel({
 function WelcomeTab({
   t,
   onSelect,
-  hasRoomTasks,
+  kinds,
 }: {
   t: TranslateFn;
   onSelect: (kind: "files" | "browser" | "activity" | "tasks") => void;
-  hasRoomTasks?: boolean;
+  kinds: readonly ChatToolKind[];
 }) {
-  const kinds = ["files", "browser", "activity", ...(hasRoomTasks ? ["tasks" as const] : [])] as const;
   return (
     <div className="chat-side-welcome">
       {kinds.map((kind) => {
@@ -590,8 +598,9 @@ function FileTab({
       tab.sizeBytes,
       tab.mediaType,
       resolved ? attachmentCapability(resolved) : "",
+      fileScope.workspaceDir,
     );
-  }, [tab, roomID, needsCapability, resolved]);
+  }, [tab, roomID, needsCapability, resolved, fileScope.workspaceDir]);
   const [current, setCurrent] = useState(candidate);
   useEffect(() => {
     setCurrent((previous) =>
@@ -618,6 +627,7 @@ function FileTab({
         tab.reference ? (
           <WorkspacePathActions
             roomID={roomID}
+            workspaceDir={fileScope.workspaceDir}
             reference={tab.reference}
             token={resolved ? attachmentCapability(resolved) : ""}
             active={active}

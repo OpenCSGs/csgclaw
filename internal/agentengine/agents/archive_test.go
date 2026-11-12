@@ -93,11 +93,21 @@ func TestArchivePersistsDisablesStartupAndPreservesWorkspaceOnDelete(t *testing.
 	if err = os.WriteFile(filepath.Join(home, "private-token"), []byte("remove"), 0600); err != nil {
 		t.Fatal(err)
 	}
+	memoryDir := filepath.Join(home, "memory", "user-admin")
+	if err = os.MkdirAll(memoryDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err = os.WriteFile(filepath.Join(memoryDir, "MEMORY.md"), []byte("private memory"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	if err = svc.Delete(context.Background(), item.ID); err != nil {
 		t.Fatal(err)
 	}
 	if data, err := os.ReadFile(filepath.Join(root, "result.txt")); err != nil || string(data) != "keep" {
 		t.Fatalf("working file: %q %v", data, err)
+	}
+	if _, err = os.Stat(memoryDir); !os.IsNotExist(err) {
+		t.Fatalf("private memory survived workspace restoration: %v", err)
 	}
 	if _, err = os.Stat(filepath.Join(home, "private-token")); !os.IsNotExist(err) {
 		t.Fatalf("private runtime state remains: %v", err)
@@ -145,5 +155,28 @@ func TestFailedRestoreRetainsOriginalArchiveMetadata(t *testing.T) {
 	item, _ := svc.Agent("agent-worker")
 	if item.ArchivedAt == nil || !item.ArchivedAt.Equal(archivedAt) || item.ArchivedBy != "Jared" {
 		t.Fatalf("failed restore changed original archive metadata: %+v", item)
+	}
+}
+
+func TestRuntimeReplacementPreservesAgentMemory(t *testing.T) {
+	home := t.TempDir()
+	memory := filepath.Join(home, "memory", "user-admin")
+	runtime := filepath.Join(home, ".codex")
+	for _, dir := range []string{memory, runtime} {
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "state.json"), []byte("keep only memory"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := removeAgentRuntimeHome(home, true); err != nil {
+		t.Fatal(err)
+	}
+	if data, err := os.ReadFile(filepath.Join(memory, "state.json")); err != nil || string(data) != "keep only memory" {
+		t.Fatalf("memory after replacement = %s, %v", data, err)
+	}
+	if _, err := os.Stat(runtime); !os.IsNotExist(err) {
+		t.Fatalf("old Runtime survived replacement: %v", err)
 	}
 }

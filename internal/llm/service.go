@@ -201,6 +201,9 @@ func (s *Service) Responses(ctx context.Context, botID string, body []byte) (*Up
 	if err != nil {
 		return nil, err
 	}
+	if profile.Provider == agent.ProviderCodex {
+		profile.APIProtocol = modelpreset.Responses
+	}
 	ctx = withModelRequestContext(ctx, botID, profile, body)
 	response, callErr := s.forwardRemoteResponses(ctx, profile, body)
 	if response != nil && response.StatusCode == http.StatusRequestEntityTooLarge {

@@ -4,7 +4,9 @@ import mentionPickerStyles from "./MentionPicker.module.css";
 import type { SkillContinuation } from "@/models/slashCommands";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { BoxIcon, TerminalIcon } from "lucide-react";
+import { ConnectorLogo } from "../ConnectorLogo/ConnectorLogo";
 import type { TranslateFn } from "@/models/conversations";
+import { Button } from "@/components/ui";
 import type { SlashPickerCandidate } from "@/models/slashCommands";
 
 export type SlashPickerProps = {
@@ -101,7 +103,7 @@ export function SlashPicker({
             {candidate.type === "command" ? (
               <TerminalIcon size={18} strokeWidth={1.8} />
             ) : (
-              <BoxIcon size={18} strokeWidth={1.8} />
+              <ConnectorLogo name={candidate.name} fallback={<BoxIcon size={18} strokeWidth={1.8} />} />
             )}
           </span>
           <div className={slashPickerStyles["slash-option-copy"]}>
@@ -120,16 +122,22 @@ export function SlashPicker({
         {continuation?.failed ? (
           <div role="alert">
             {t("resourceLoadFailed")}{" "}
-            <button type="button" onClick={continuation.retry}>
+            <Button variant="tertiaryGray" size="sm" onClick={continuation.retry}>
               {t("retry")}
-            </button>
+            </Button>
           </div>
         ) : null}
         {continuation?.loading && !loading ? <div role="status">{t("slashPickerLoading")}</div> : null}
         {continuation?.hasMore && !continuation.failed ? (
-          <button type="button" disabled={continuation.loading} onClick={() => void continuation.loadMore()}>
+          <Button
+            variant="tertiaryGray"
+            size="sm"
+            loading={continuation.loading}
+            loadingLabel={t("resourceLoading")}
+            onClick={() => void continuation.loadMore()}
+          >
             {t("resourceLoadMore")}
-          </button>
+          </Button>
         ) : null}
       </div>
     </div>

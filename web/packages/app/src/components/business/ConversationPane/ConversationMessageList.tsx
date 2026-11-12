@@ -1,3 +1,6 @@
+import { Button } from "@/components/ui";
+import { useConversationMemory, conversationMemoryAgent } from "./useConversationMemory";
+import memoryStyles from "./ConversationMemory.module.css";
 import { PanelEmptyState } from "@/components/business/PanelEmptyState";
 import avatarLayoutStyles from "@/components/business/AgentAvatar/AvatarLayout.module.css";
 import messageLayoutStyles from "@/components/business/ConversationPane/MessageLayout.module.css";
@@ -129,6 +132,11 @@ const MessageListContent = memo(function MessageListContent({
   onQuestionSelect,
   onCitationSelect,
 }: ConversationMessageListProps) {
+  const memory = useConversationMemory(
+    conversationMemoryAgent(conversation, agents, currentUserID, usersById),
+    conversation.id,
+  );
+  const [memoryEnableState, setMemoryEnableState] = useState<"idle" | "busy" | "error">("idle");
   const [expandedLongMessages, setExpandedLongMessages] = useState<Record<string, boolean>>({});
   const videoGroups = useMemo(() => groupVideoGenerationMessages(visibleMessages), [visibleMessages]);
   const displayMessages = useMemo(
@@ -145,6 +153,27 @@ const MessageListContent = memo(function MessageListContent({
     <div className={`conversation-message-area ${timelineStyles.area}`}>
       <section ref={messageListRef} className={`messages ${messageLayoutStyles["messages"]}`}>
         {headerSlot}
+        {memory.available && !memory.enabled ? (
+          <div className={memoryStyles.enable}>
+            <Button
+              variant="secondaryGray"
+              size="sm"
+              disabled={memoryEnableState === "busy"}
+              onClick={async () => {
+                setMemoryEnableState("busy");
+                try {
+                  await memory.enable();
+                  setMemoryEnableState("idle");
+                } catch {
+                  setMemoryEnableState("error");
+                }
+              }}
+            >
+              {t("agentMemoryEnabled")}
+            </Button>
+            {memoryEnableState === "error" ? <span role="alert">{t("agentMemoryUpdateFailed")}</span> : null}
+          </div>
+        ) : null}
         {conversation.messages.length === 0 ? (
           (emptyStateSlot ?? (
             <PanelEmptyState
@@ -196,6 +225,7 @@ const MessageListContent = memo(function MessageListContent({
           const messageStateKey = longMessageStateKey(conversation, message, index);
           const embeddedVideos = message.id ? videoGroups.childrenByParentID.get(message.id) || [] : [];
           const isVideoGeneration = Boolean(message.metadata?.video_generation);
+          const memorySource = memory.sourceFor(message);
           return (
             <Fragment key={message.id || `message-${index}`}>
               {showDivider ? <MessageTimeDivider parts={timestampParts} /> : null}
@@ -329,6 +359,7 @@ const MessageListContent = memo(function MessageListContent({
                     image={
                       message.metadata?.image_generation ? message.attachments?.find(isImageAttachment) : undefined
                     }
+                    onForgetMemory={memorySource ? () => memory.forget(memorySource) : undefined}
                     onOpenThread={conversation.cloud_agent ? undefined : () => onOpenThread(message)}
                     t={t}
                   />

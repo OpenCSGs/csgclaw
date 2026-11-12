@@ -2,6 +2,7 @@ import avatarLayoutStyles from "@/components/business/AgentAvatar/AvatarLayout.m
 import messageLayoutStyles from "@/components/business/ConversationPane/MessageLayout.module.css";
 import mentionPickerStyles from "./MentionPicker.module.css";
 import { useLayoutEffect, useRef } from "react";
+import { FileTypeIcon } from "@/components/business/FileTypeIcon";
 import { AgentAvatarContent } from "@/components/business/AgentAvatar";
 import { avatarFallbackText } from "@/shared/avatar";
 import { localizeRole } from "@/shared/i18n";
@@ -49,16 +50,20 @@ export function MentionPicker({
             }}
           >
             <span className={`avatar ${avatarLayoutStyles["avatar"]}`}>
-              <AgentAvatarContent
-                avatar={user.avatar}
-                fallback={avatarFallbackText(user.avatar, mentionLabel, user.id)}
-              />
+              {user.fileReference ? (
+                <FileTypeIcon name={user.fileReference.name} />
+              ) : (
+                <AgentAvatarContent
+                  avatar={user.avatar}
+                  fallback={avatarFallbackText(user.avatar, mentionLabel, user.id)}
+                />
+              )}
             </span>
             <div>
               <div className={`message-author ${messageLayoutStyles["message-author"]}`}>@{mentionLabel}</div>
               <div className={`conversation-preview ${messageLayoutStyles["conversation-preview"]}`}>
-                {user.id}
-                {showRole ? ` · ${localizeRole(user.role || "", t)}` : ""}
+                {user.fileReference?.label ?? user.id}
+                {showRole && !user.fileReference ? ` · ${localizeRole(user.role || "", t)}` : ""}
               </div>
             </div>
           </button>

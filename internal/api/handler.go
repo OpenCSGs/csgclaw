@@ -5,6 +5,7 @@ import (
 	"context"
 	"csgclaw/internal/agentengine"
 	agent "csgclaw/internal/agentengine/agents"
+	"csgclaw/internal/agentmemory"
 	"csgclaw/internal/agentsession"
 	"csgclaw/internal/agenttask"
 	"csgclaw/internal/apitypes"
@@ -96,6 +97,8 @@ type Handler struct {
 	serverAccessToken          string
 	desktopSessionToken        string
 	serverNoAuth               bool
+	agentMemory                *agentmemory.Store
+	memoryMode                 string
 	upgradeManager             *upgrade.Manager
 	upgradeConfigPath          string
 	upgradeApply               func(upgrade.ApplyHelperOptions) error
@@ -1945,6 +1948,15 @@ func (h *Handler) handleHubTemplates(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		if err != nil {
+			var totalTooLarge *hub.PublishTotalTooLargeError
+			if errors.As(err, &totalTooLarge) {
+				writeHubTemplateErrorPayload(w, http.StatusRequestEntityTooLarge, map[string]any{
+					"code":            "template_publish_total_too_large",
+					"message":         totalTooLarge.Error(),
+					"max_total_bytes": totalTooLarge.MaxBytes,
+				}, savedTemplateID)
+				return
+			}
 			var tooLarge *hub.PublishFileTooLargeError
 			if errors.As(err, &tooLarge) {
 				writeHubTemplateErrorPayload(w, http.StatusRequestEntityTooLarge, map[string]any{
@@ -3057,6 +3069,16 @@ func (h *Handler) handleCreateMessage(w http.ResponseWriter, r *http.Request) {
 	}
 	serviceReq.DiagnosticStart = receivedAt
 	serviceReq = h.resolveCSGClawParticipantMessageRequest(serviceReq)
+	if userID := h.memoryUser(r); userID != "" && h.im != nil &&
+		h.im.MemoryPrivateRoom(serviceReq.RoomID, userID, "") {
+		sender := h.im.ResolveUserID(serviceReq.SenderID)
+		if sender == "" {
+			sender = h.im.CurrentUserID()
+		}
+		if sender == userID {
+			serviceReq.MemoryUserID = userID
+		}
+	}
 	if caller := strings.TrimSpace(r.Header.Get("X-CSGClaw-Caller-Agent")); caller != "" {
 		if !h.participantBridgeTargetForRoomMember(serviceReq.SenderID).matches(caller) {
 			http.Error(w, "message sender must match runtime caller", http.StatusForbidden)

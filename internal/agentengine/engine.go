@@ -5,6 +5,7 @@ import (
 	"csgclaw/internal/activity"
 	"csgclaw/internal/agentengine/contract"
 	"csgclaw/internal/agentengine/lifecycle"
+	"csgclaw/internal/agentmemory"
 	"csgclaw/internal/diagnostics"
 	agentidentity "csgclaw/internal/identity"
 	"fmt"
@@ -14,6 +15,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -34,6 +36,7 @@ type conversationRuntimeAdapter interface {
 // result idempotency.
 type Engine struct {
 	lifecycle     *lifecycle.Coordinator
+	memory        atomic.Pointer[agentmemory.Store]
 	generateImage imageGenerator
 	generateVideo videoGenerator
 	agents        AgentInterface
@@ -256,6 +259,11 @@ func (c *conversations) Run(ctx context.Context, request TurnRequest, sink Event
 		c.engine.complete(identity, turn, result)
 		return result
 	}
+	if result, handled := c.forgetMemory(turn.ctx, request.MemorySource); handled {
+		turn.cancel()
+		c.engine.complete(identity, turn, result)
+		return result
+	}
 	if c.engine.agents != nil {
 		selected, err := c.engine.agents.Get(turn.ctx, c.agentID, AgentGetOptions{})
 		if err == nil {
@@ -292,6 +300,7 @@ func (c *conversations) Run(ctx context.Context, request TurnRequest, sink Event
 	}
 	diagnostics.From(turn.ctx).Capture("runtime.input", runtimeRequest)
 	captureTurnInputFiles(turn.ctx, runtimeRequest)
+	memoryTicket := c.prepareMemory(&runtimeRequest)
 	result := runtimeAdapter.Run(turn.ctx, runtimeRequest, orderedSink)
 	for _, file := range result.RuntimeFiles {
 		captureTurnOutputFile(turn.ctx, file)
@@ -335,6 +344,7 @@ func (c *conversations) Run(ctx context.Context, request TurnRequest, sink Event
 			result.Interactions = []InteractionRequest{interaction}
 		}
 	}
+	c.learnMemory(request, memoryTicket, result)
 	turn.cancel()
 	releaseRuntime()
 	c.engine.complete(identity, turn, result)

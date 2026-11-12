@@ -39,6 +39,29 @@ func TestRoomAttachmentReferencesIncludeRetainedContext(t *testing.T) {
 	}
 }
 
+func TestRoomAttachmentSortAppliesBeforePagination(t *testing.T) {
+	now := time.Now()
+	files := []MessageAttachment{
+		{ID: "old", Name: "B.md", CreatedAt: now.Add(-time.Hour)},
+		{ID: "new", Name: "c.md", CreatedAt: now},
+		{ID: "middle", Name: "a.md", CreatedAt: now.Add(-time.Minute)},
+	}
+	s := NewServiceFromBootstrap(Bootstrap{Rooms: []Room{{ID: "room", Messages: []Message{{ID: "message", Attachments: files}}}}})
+	for _, tt := range []struct{ sort, first, second string }{
+		{"", "new", "middle"},
+		{"updated-asc", "old", "middle"},
+		{"name-asc", "middle", "old"},
+		{"name-desc", "new", "old"},
+	} {
+		for page, want := range []string{tt.first, tt.second} {
+			got, err := s.ListRoomAttachments("room", apitypes.RoomAttachmentListOptions{From: page, Limit: 1, Sort: tt.sort})
+			if err != nil || got.Total != 3 || len(got.Items) != 1 || got.Items[0].ID != want {
+				t.Fatalf("sort %q page %d: %+v %v, want %s", tt.sort, page, got, err, want)
+			}
+		}
+	}
+}
+
 func TestDeleteRoomAttachmentPreservesMessagesOtherIDsAndSavedCopies(t *testing.T) {
 	state := filepath.Join(t.TempDir(), "im", "state.json")
 	bus := NewBus()

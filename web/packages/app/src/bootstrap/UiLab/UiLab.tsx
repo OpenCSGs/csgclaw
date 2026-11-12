@@ -1,8 +1,10 @@
 import profileFormLayoutStyles from "@/components/business/ProfileControls/ProfileFormLayout.module.css";
 import messageLayoutStyles from "@/components/business/ConversationPane/MessageLayout.module.css";
 import { useEffect, useState } from "react";
+import { Plus } from "lucide-react";
 import {
   Button,
+  IconButton,
   LinkButton,
   Checkbox,
   Combobox,
@@ -106,6 +108,30 @@ export function UiLab() {
                     }}
                   />
                 </div>
+              </div>
+            ))}
+          </section>
+          <section className={styles.card}>
+            <h2>Secondary gray · Figma</h2>
+            <p className={styles.intro}>Default, leading icon, disabled, loading, icon only and navigation.</p>
+            {(["sm", "md", "lg", "xl", "2xl"] as const).map((size) => (
+              <div key={size} className={styles.row} role="group" aria-label={`Secondary gray ${size}`}>
+                <span>{size}</span>
+                <Button size={size}>登录账号</Button>
+                <Button size={size}>
+                  <Plus />
+                  新建智能体
+                </Button>
+                <Button size={size} disabled>
+                  登录账号
+                </Button>
+                <Button size={size} loading loadingLabel={`Saving ${size}`}>
+                  登录账号
+                </Button>
+                <IconButton size={size} icon={<Plus />} label={`Add ${size}`} />
+                <LinkButton size={size} href="#selection-controls">
+                  View items
+                </LinkButton>
               </div>
             ))}
           </section>

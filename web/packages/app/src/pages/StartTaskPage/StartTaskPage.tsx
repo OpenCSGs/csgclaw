@@ -9,10 +9,25 @@ import {
   supportsTaskConfiguration,
   type TaskConfiguration,
 } from "@/models/taskConfiguration";
-import { useMemo, useRef, useState } from "react";
+import { useId, useMemo, useRef, useState } from "react";
 import { useSearchParams, useLocation } from "react-router-dom";
-import { ArrowUp, BookOpen, ClipboardCheck, FileText, Presentation, Search, Users, X } from "lucide-react";
-import { TextArea, Button, PopoverAnchor, PopoverContent, PopoverRoot } from "@/components/ui";
+import {
+  ArrowUp,
+  BookOpen,
+  ClipboardCheck,
+  FileText,
+  PanelRightOpen,
+  Presentation,
+  Search,
+  Square,
+  Undo2,
+  Users,
+  X,
+} from "lucide-react";
+import { Button, DismissibleInlineError, PopoverAnchor, PopoverContent, PopoverRoot, Tooltip } from "@/components/ui";
+import { ChatSidePanel, useChatSidePanel } from "@/components/business/ChatSidePanel";
+import { closeChatSideTab } from "@/models/chatSidePanel";
+import { fileReferenceKey } from "@/models/fileReferences";
 import { useWorkspaceControllerContext } from "@/hooks/workspace";
 import { sendMessageRequest } from "@/api/im";
 import { errorMessage } from "@/api/client";
@@ -23,8 +38,35 @@ import { taskConversationTitle } from "@/models/taskConversations";
 import type { IMConversation } from "@/models/conversations";
 import styles from "./StartTaskPage.module.css";
 import { TargetPicker, SOLO_TEAM_ID } from "./components/TargetPicker";
-import { MentionPicker, type MentionPickerUser } from "@/components/business/ConversationPane";
+import {
+  MentionPicker,
+  SlashPicker,
+  handleSlashPickerNavigation,
+  type MentionPickerUser,
+} from "@/components/business/ConversationPane";
+import { AttachmentDraftStrip } from "@/components/business/ConversationPane/ConversationAttachments";
+import { dataTransferHasFiles, filesFromDataTransfer } from "@/components/business/ConversationPane/attachmentFiles";
+import { isComposerKeyboardEventComposing } from "@/models/composer";
+import {
+  attachmentSelectionError,
+  createAttachmentDrafts,
+  selectAttachmentFiles,
+  type AttachmentDraft,
+} from "@/models/attachments";
+import {
+  builtinSlashCommandNames,
+  normalizeSlashShorthandForPayload,
+  suggestedSlashCommandNames,
+} from "@/models/slashCommands";
+import {
+  buildSlashPickerState,
+  slashCommandInputText,
+  slashPickerQueryForDraft,
+} from "@/hooks/workspace/useConversationController";
+import { useInfiniteAgentSkills } from "@/hooks/workspace/useInfiniteAgentSkills";
+import { useSlashSelection } from "@/hooks/workspace/useSlashSelection";
 import { useTaskPromptMentions } from "./useTaskPromptMentions";
+import { TaskPromptEditor } from "./components/TaskPromptEditor";
 import {
   ConversationResourcePicker,
   useComposerResourcePicker,
@@ -73,7 +115,7 @@ function StartTaskForm({
   const cloud = useCloudAgents(controller.sidebarProps?.authStatus);
   const { openSettings } = useWorkspaceDialogs();
   const [configuration, setConfiguration] = useState<TaskConfiguration>(initialConfiguration || {});
-  const [target, setTarget] = useState(initialTarget);
+  const [{ target, revision }, setTarget] = useState({ target: initialTarget, revision: 0 });
   const [resources, setResources] = useState<ResourceSnapshot[]>([]);
   const [examplesHidden, setExamplesHidden] = useState(() => {
     try {
@@ -83,16 +125,29 @@ function StartTaskForm({
     }
   });
   const [draft, setDraft] = useState("");
-  const [files, setFiles] = useState<File[]>([]);
+  const [attachments, setAttachments] = useState<AttachmentDraft[]>([]);
+  const [removedAttachments, setRemovedAttachments] = useState<{ draft: AttachmentDraft; index: number }[]>([]);
+  const [attachmentWarning, setAttachmentWarning] = useState("");
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+  const [uploadFailed, setUploadFailed] = useState(false);
+  const [slashQuery, setSlashQuery] = useState<string | null>(null);
+  const [slashIndex, setSlashIndex] = useState(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const created = useRef<IMConversation | null>(null);
   const requestID = useRef(createUUID());
+  const targetRevision = useRef(0);
   const sendID = useRef({ fingerprint: "", id: "" });
   const inFlight = useRef(false);
+  const composing = useRef(false);
+  const upload = useRef<AbortController | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const editorRef = useRef<HTMLTextAreaElement>(null);
+  const pageRef = useRef<HTMLElement>(null);
+  const panelTrigger = useRef<HTMLButtonElement>(null);
+  const panelID = useId();
   const sidebar = controller.ready ? controller.sidebarProps : null;
+  const sidePanel = useChatSidePanel(sidebar?.currentUserID ?? "", `start-task-${panelID}`, false);
   const agents = useMemo(() => sidebar?.workerAgentItems ?? [], [sidebar?.workerAgentItems]);
   const teams = useMemo(() => sidebar?.teams ?? [], [sidebar?.teams]);
   const manager = agents.find((agent) => agent.role === "manager");
@@ -101,6 +156,14 @@ function StartTaskForm({
   const selectedCloud = cloud.agents.find((agent) => selected === `cloud:${agent.id}`);
   const selectedAgent = agents.find((agent) => selected === `agent:${agent.id}`);
   const selectedTeam = teams.find((team) => selected === `team:${team.id}`);
+  const cloudTarget = selected.startsWith("cloud:");
+  const workspaceDir =
+    !cloudTarget && (!selectedAgent || supportsTaskConfiguration(selectedAgent))
+      ? configuration.workspace_dir
+      : undefined;
+  const automaticWorkspace = !cloudTarget && !selectedAgent && !workspaceDir;
+  const workspaceAgent = cloudTarget || automaticWorkspace ? undefined : (selectedAgent ?? manager);
+  const workspaceAgentID = workspaceAgent?.id || "";
   const mentionMembers = useMemo(() => {
     const ids = new Set(selectedTeam ? [selectedTeam.lead_agent_id, ...selectedTeam.member_agent_ids] : []);
     return agents
@@ -133,8 +196,19 @@ function StartTaskForm({
     onChange: setDraft,
     members: mentionMembers,
     editorRef,
+    workspaceAgentID,
+    workspaceDir,
     disabled: busy || resourcePicker.active,
   });
+  const slashAgentID = cloudTarget ? "" : (selectedAgent || manager)?.id || "";
+  const slashEnabled = Boolean(slashAgentID && !busy && !resourcePicker.active);
+  const skills = useInfiniteAgentSkills(slashAgentID, slashQuery, slashEnabled, Boolean(resourceAgentID));
+  const slashState = useMemo(
+    () =>
+      buildSlashPickerState({ draftText: draft, enabled: slashEnabled, query: slashQuery, skillOptions: skills.items }),
+    [draft, slashEnabled, slashQuery, skills.items],
+  );
+  useSlashSelection(slashState.candidates, slashIndex, setSlashIndex, JSON.stringify([slashAgentID, slashQuery]));
   if (!controller.ready || !sidebar || !controller.taskEntry) return null;
   const readySidebar = sidebar;
   const { t } = sidebar;
@@ -146,6 +220,19 @@ function StartTaskForm({
   const modelMissing = recipient && (selectedProfile?.profile_complete === false || !selectedProfile?.model_id);
   const targetName = selectedCloud?.name || selectedAgent?.name || selectedTeam?.title || t("taskEntrySolo");
 
+  function resetFilePanel(nextCloud = cloudTarget, clearDrafts = false) {
+    sidePanel.patch((current) => {
+      const next = current.tabs.reduce(
+        (state, tab) =>
+          (tab.kind === "file" && (!tab.draft || clearDrafts)) || (nextCloud && tab.kind === "files")
+            ? closeChatSideTab(state, tab.id)
+            : state,
+        current,
+      );
+      return { tabs: next.tabs, activeID: next.activeID, directory: "", agentID: "" };
+    });
+  }
+
   function messageInput(prompt: string) {
     if (selectedCloud) return { content: prompt.trim(), resource_refs: [] };
     const content = promptMentions.serialize(prompt).trim();
@@ -154,13 +241,77 @@ function StartTaskForm({
           resources.map((resource) => resourceSegment(resource)),
           content,
         )
-      : { content, resource_refs: [] };
+      : { content: normalizeSlashShorthandForPayload(content), resource_refs: [] };
   }
   const draftInput = messageInput(draft);
+  const draftFileCount = promptMentions.fileReferences(draft).length;
+
+  function syncSlash(editor: HTMLTextAreaElement) {
+    const query =
+      !composing.current && editor.selectionStart === editor.selectionEnd
+        ? slashPickerQueryForDraft(editor.value.slice(0, editor.selectionStart))
+        : null;
+    if (query === slashQuery) return;
+    setSlashQuery(query);
+    setSlashIndex(0);
+  }
+
+  function applySlashCandidate(name: string) {
+    const editor = editorRef.current;
+    if (!editor || !name) return;
+    const start = editor.value.length - editor.value.trimStart().length;
+    const end = start + (editor.value.slice(start).match(/^\S+/u)?.[0].length ?? 0);
+    const isCommand = builtinSlashCommandNames.includes(name) || suggestedSlashCommandNames.includes(name);
+    if (!isCommand && resourceAgentID) {
+      setResources((current) => uniqueResources([...current, { source: "skill", id: name, name, type: "skill" }]));
+      editor.setRangeText("", 0, end, "end");
+    } else {
+      editor.setRangeText(
+        slashCommandInputText(name).trimEnd() + (end === editor.value.length ? " " : ""),
+        start,
+        end,
+        "end",
+      );
+    }
+    promptMentions.change(editor);
+    setSlashQuery(null);
+    editor.focus();
+  }
+
+  function addAttachments(files: File[]) {
+    if (busy || cloudTarget || !files.length) return;
+    const selection = selectAttachmentFiles(files, attachments);
+    setAttachmentWarning(attachmentSelectionError(selection, t));
+    if (!selection.files.length) return;
+    setAttachments([...attachments, ...createAttachmentDrafts(selection.files, attachments.length)]);
+    setRemovedAttachments([]);
+    setUploadFailed(false);
+  }
+
+  function removeAttachment(id: string) {
+    const index = attachments.findIndex((item) => item.id === id);
+    if (busy || index < 0) return;
+    setAttachments(attachments.filter((item) => item.id !== id));
+    setRemovedAttachments([...removedAttachments, { draft: attachments[index], index }]);
+    setAttachmentWarning("");
+    setUploadFailed(false);
+  }
+
+  function undoRemoveAttachments() {
+    const next = [...attachments];
+    for (const { draft, index } of [...removedAttachments].reverse()) next.splice(index, 0, draft);
+    setAttachments(next);
+    setRemovedAttachments([]);
+  }
 
   async function start(empty = false, prompt = draft, confirmed = false) {
     const input = messageInput(prompt);
-    if (inFlight.current || (!empty && !canSendResources(input.content, input.resource_refs, files.length))) return;
+    const fileReferences = selectedCloud ? [] : promptMentions.fileReferences(prompt);
+    if (
+      inFlight.current ||
+      (!empty && !canSendResources(input.content, input.resource_refs, attachments.length + fileReferences.length))
+    )
+      return;
     if (!selectedCloud && !selectedAgent && !selectedTeam && selected !== "solo") {
       setError(t("taskEntryMissingTarget"));
       return;
@@ -203,6 +354,7 @@ function StartTaskForm({
           throw new Error(t("taskEntryMembersMissing"));
         }
         room = await entry.create({
+          auto_title: Boolean(selectedAgent && !selectedCloud),
           title: taskConversationTitle(prompt, `${targetName} · ${new Date().toLocaleString(readySidebar.locale)}`),
           member_ids: members,
           cloud_agent: selectedCloud
@@ -224,30 +376,49 @@ function StartTaskForm({
           locale: readySidebar.locale,
         });
         created.current = room;
-        if (room.configuration) setConfiguration(room.configuration);
+        if (room.configuration) {
+          if (room.configuration.workspace_dir !== workspaceDir) resetFilePanel();
+          setConfiguration(room.configuration);
+        }
       }
       if (!empty) {
         const fingerprint = JSON.stringify([
           input.content,
           input.resource_refs,
-          files.map((file) => [file.name, file.size, file.lastModified]),
+          fileReferences,
+          attachments.map(({ file }) => [file.name, file.size, file.lastModified]),
         ]);
         if (sendID.current.fingerprint !== fingerprint) sendID.current = { fingerprint, id: createUUID() };
-        const message = await sendMessageRequest({
+        const messageFiles = selectedCloud ? [] : attachments.map(({ file }) => file);
+        const payload = {
           room_id: room.id,
           sender_id: readySidebar.currentUserID,
           content: input.content,
           resource_refs: input.resource_refs,
-          attachments: selectedCloud ? [] : files,
+          ...(fileReferences.length ? { file_references: fileReferences } : {}),
+          attachments: messageFiles,
           client_message_id: sendID.current.id,
           locale: readySidebar.locale,
-        });
+        };
+        if (messageFiles.length) {
+          upload.current = new AbortController();
+          setUploadProgress(0);
+          setUploadFailed(false);
+        }
+        const message = upload.current
+          ? await sendMessageRequest(payload, { signal: upload.current.signal, onUploadProgress: setUploadProgress })
+          : await sendMessageRequest(payload);
         entry.onMessage(room.id, message);
       }
       entry.open(room);
     } catch (cause) {
-      setError(localizeAPIError(cause, t, errorMessage(cause, t("sendFailed"))));
+      if (!upload.current?.signal.aborted) {
+        setUploadFailed(Boolean(upload.current));
+        setError(localizeAPIError(cause, t, errorMessage(cause, t("sendFailed"))));
+      }
     } finally {
+      upload.current = null;
+      setUploadProgress(null);
       inFlight.current = false;
       setBusy(false);
     }
@@ -266,284 +437,437 @@ function StartTaskForm({
           { key: "review", icon: ClipboardCheck },
         ];
   return (
-    <section className={styles.page}>
+    <section className={styles.page} ref={pageRef}>
       {selectedCloud && consent.dialog ? (
         <CloudPrivacyDialog agentName={selectedCloud.name} confirmation={consent.dialog} t={t} />
       ) : null}
-      <div className={styles.inner}>
-        <header className={styles.head}>
-          <h1>{t("iaStartTitle")}</h1>
-          <p>{t(selectedAgent || selectedCloud ? "iaStartSubtitleDirect" : "iaStartSubtitleRooms")}</p>
-        </header>
-        <div className={styles.pane}>
-          <TargetPicker
-            agents={agents}
-            cloudAgents={cloud.agents}
-            teams={teams}
-            usersById={sidebar.usersById}
-            value={
-              selected === "solo"
-                ? { kind: "team", id: SOLO_TEAM_ID }
-                : {
-                    kind: selected.startsWith("cloud:") ? "cloud" : selected.startsWith("team:") ? "team" : "agent",
-                    id: selected.slice(selected.indexOf(":") + 1),
-                  }
-            }
-            onChange={(value) => {
-              requestID.current = createUUID();
-              promptMentions.clear();
-              setResources([]);
-              setFiles([]);
-              setTarget(value.id === SOLO_TEAM_ID ? "solo" : `${value.kind}:${value.id}`);
-              setConfiguration({});
-            }}
-            locked={busy || Boolean(created.current)}
-            t={t}
-            onCreateAgent={() => void sidebar.onCreateCustomAgent()}
-            onCreateTeam={() => void sidebar.onOpenCreateTeam()}
-          />
-          {!selectedCloud && (modelMissing || !agents.length) ? (
-            <div className={styles.setup} role="status">
-              <strong>{t("iaStartNeedsModelTitle")}</strong>
-              <p>{t(modelMissing ? "taskEntryModelMissing" : "taskEntryNoAgents")}</p>
-              <Button
-                variant="primary"
-                size="sm"
-                onClick={() =>
-                  selectedAgent ? void controller.openAgentSettings(selectedAgent) : openSettings("models")
-                }
-              >
-                {t("iaStartNeedsModelAction")}
-              </Button>
-            </div>
-          ) : null}
-          <div className={styles.composerGroup}>
-            <div className={styles.composer}>
-              {resourcePicker.pickerProps ? (
-                <ConversationResourcePicker
-                  key={`${resourceAgentID}:${resourcePicker.pickerProps.kind}`}
-                  {...resourcePicker.pickerProps}
-                  t={t}
-                  className={styles.resourceSearch}
-                />
-              ) : null}
-              <div className={styles.draft} hidden={resourcePicker.active}>
-                {resources.map((resource) => (
-                  <ResourceTag
-                    key={resourceKey(resource)}
-                    resource={resource}
-                    removal={{
-                      label: t("remove"),
-                      disabled: busy,
-                      onRemove: () =>
-                        setResources((current) =>
-                          current.filter((item) => resourceKey(item) !== resourceKey(resource)),
-                        ),
-                    }}
-                  />
-                ))}
-                <TextArea
-                  ref={editorRef}
-                  autoFocus
-                  className={styles.input}
-                  aria-label={t("taskEntryPrompt")}
-                  placeholder={
-                    resources.length || files.length || draft.length
-                      ? ""
-                      : t(selectedCloud ? "cloudChatPlaceholder" : "iaStartComposerPlaceholder")
-                  }
-                  value={draft}
-                  onChange={(event) => promptMentions.change(event.currentTarget)}
-                  onSelect={(event) => promptMentions.sync(event.currentTarget)}
-                  onBlur={promptMentions.dismiss}
-                  onCompositionStart={promptMentions.compositionStart}
-                  onCompositionEnd={(event) => promptMentions.compositionEnd(event.currentTarget)}
-                  disabled={busy}
-                  onKeyDown={(event) => {
-                    if (promptMentions.keyDown(event)) return;
-                    if (
-                      event.key === "Enter" &&
-                      !event.shiftKey &&
-                      !event.nativeEvent.isComposing &&
-                      event.keyCode !== 229
-                    ) {
-                      event.preventDefault();
-                      void start();
+      <div className={styles.main}>
+        {!sidePanel.state.open ? (
+          <Tooltip content={t("chatSideExpand")}>
+            <Button
+              ref={panelTrigger}
+              className={styles.panelToggle}
+              iconOnly
+              size="sm"
+              variant="tertiaryGray"
+              aria-label={t("chatSideExpand")}
+              onClick={() => sidePanel.patch({ open: true })}
+            >
+              <PanelRightOpen size={17} />
+            </Button>
+          </Tooltip>
+        ) : null}
+        <div className={styles.inner}>
+          <header className={styles.head}>
+            <h1>{t("iaStartTitle")}</h1>
+            <p>{t(selectedAgent || selectedCloud ? "iaStartSubtitleDirect" : "iaStartSubtitleRooms")}</p>
+          </header>
+          <div className={styles.pane}>
+            <TargetPicker
+              agents={agents}
+              cloudAgents={cloud.agents}
+              teams={teams}
+              usersById={sidebar.usersById}
+              currentUserID={sidebar.currentUserID}
+              value={
+                selected === "solo"
+                  ? { kind: "team", id: SOLO_TEAM_ID }
+                  : {
+                      kind: selected.startsWith("cloud:") ? "cloud" : selected.startsWith("team:") ? "team" : "agent",
+                      id: selected.slice(selected.indexOf(":") + 1),
                     }
-                  }}
-                />
-              </div>
-              {promptMentions.candidates.length ? (
-                <PopoverRoot
-                  open
-                  onOpenChange={(open) => {
-                    if (!open) promptMentions.dismiss();
-                  }}
-                >
-                  <PopoverAnchor asChild>
-                    <span className={styles.mentionAnchor} aria-hidden="true" />
-                  </PopoverAnchor>
-                  <PopoverContent
-                    side="top"
-                    align="start"
-                    role="presentation"
-                    className={styles.mentionPopover}
-                    onOpenAutoFocus={(event) => event.preventDefault()}
-                    onCloseAutoFocus={(event) => event.preventDefault()}
-                    onInteractOutside={(event) => {
-                      if (event.target === editorRef.current) event.preventDefault();
-                    }}
-                  >
-                    <MentionPicker
-                      className={styles.mentions}
-                      users={promptMentions.candidates}
-                      activeIndex={promptMentions.activeIndex}
-                      onSelect={promptMentions.choose}
-                      t={t}
-                    />
-                  </PopoverContent>
-                </PopoverRoot>
-              ) : null}
-              {files.length ? (
-                <ul className={styles.files}>
-                  {files.map((file, index) => (
-                    <li key={`${file.name}-${index}`}>
-                      <span>{file.name}</span>
-                      <Button
-                        variant="tertiaryGray"
-                        size="sm"
-                        disabled={busy}
-                        aria-label={`${t("taskEntryRemove")} ${file.name}`}
-                        onClick={() => setFiles((value) => value.filter((_, at) => at !== index))}
-                      >
-                        <X size={14} />
-                      </Button>
-                    </li>
-                  ))}
-                </ul>
-              ) : null}
-              <div className={selectedCloud ? `${styles.actions} ${styles.cloudActions}` : styles.actions}>
-                {!selectedCloud ? (
-                  <>
-                    <input
-                      type="file"
-                      multiple
-                      ref={fileInput}
-                      hidden
-                      onChange={(event) => {
-                        setFiles((value) => [...value, ...Array.from(event.target.files ?? [])]);
-                        event.target.value = "";
-                      }}
-                    />
-                    <ComposerAddMenu
-                      onOpenResourcePicker={resourcePicker.open}
-                      disabled={busy}
-                      t={t}
-                      buttonClassName={`composer-add-button ${styles.addButton}`}
-                      onAddFiles={() => fileInput.current?.click()}
-                    />
-                    <TaskConfigurationToolbar
-                      configuration={configuration}
-                      onChange={async (value) => {
-                        if (created.current) await entry.patch(created.current.id, { configuration: value });
-                        else requestID.current = createUUID();
-                        setConfiguration(value);
-                      }}
-                      directoryLocked={Boolean(created.current)}
-                      directoryMode={selectedAgent ? "agent" : "collaboration"}
-                      agent={selectedAgent || manager}
-                      showModel={Boolean(selectedAgent)}
-                      showDirectory
-                      disabled={busy}
-                    />
-                  </>
-                ) : null}
+              }
+              onChange={(value) => {
+                targetRevision.current++;
+                requestID.current = createUUID();
+                promptMentions.clearFiles(true);
+                resetFilePanel(value.kind === "cloud", true);
+                setResources([]);
+                setAttachments([]);
+                setRemovedAttachments([]);
+                setAttachmentWarning("");
+                setUploadFailed(false);
+                setSlashQuery(null);
+                setTarget({
+                  target: value.id === SOLO_TEAM_ID ? "solo" : `${value.kind}:${value.id}`,
+                  revision: targetRevision.current,
+                });
+                setConfiguration({});
+              }}
+              locked={busy || Boolean(created.current)}
+              t={t}
+              onCreateAgent={() => void sidebar.onCreateCustomAgent()}
+              onCreateTeam={() => void sidebar.onOpenCreateTeam()}
+            />
+            {!selectedCloud && (modelMissing || !agents.length) ? (
+              <div className={styles.setup} role="status">
+                <strong>{t("iaStartNeedsModelTitle")}</strong>
+                <p>{t(modelMissing ? "taskEntryModelMissing" : "taskEntryNoAgents")}</p>
                 <Button
-                  className={
-                    selectedCloud
-                      ? `composer-send-button ${conversationSendButtonStyles["composer-send-button"]}`
-                      : styles.send
-                  }
                   variant="primary"
-                  iconOnly
                   size="sm"
-                  aria-label={t("taskEntryStart")}
-                  disabled={
-                    busy ||
-                    Boolean(selectedCloud && selectedCloud.status !== "online") ||
-                    resourcePicker.active ||
-                    !canSendResources(draftInput.content, draftInput.resource_refs, files.length) ||
-                    Boolean(modelMissing)
+                  onClick={() =>
+                    selectedAgent ? void controller.openAgentSettings(selectedAgent) : openSettings("models")
                   }
-                  onClick={() => void start()}
                 >
-                  <ArrowUp
-                    aria-hidden="true"
-                    size={selectedCloud ? 22 : 17}
-                    strokeWidth={selectedCloud ? 1.5 : undefined}
-                  />
+                  {t("iaStartNeedsModelAction")}
                 </Button>
               </div>
+            ) : null}
+            <div className={styles.composerGroup}>
+              <div
+                className={styles.composer}
+                onDragOver={(event) => {
+                  if (!dataTransferHasFiles(event.dataTransfer)) return;
+                  event.preventDefault();
+                  event.dataTransfer.dropEffect = busy || cloudTarget ? "none" : "copy";
+                }}
+                onDrop={(event) => {
+                  const dropped = filesFromDataTransfer(event.dataTransfer);
+                  if (!dropped.length) return;
+                  event.preventDefault();
+                  addAttachments(dropped);
+                }}
+              >
+                <AttachmentDraftStrip
+                  drafts={attachments}
+                  progress={uploadProgress ?? 0}
+                  status={uploadProgress !== null ? "uploading" : uploadFailed ? "failed" : "idle"}
+                  t={t}
+                  onRemove={removeAttachment}
+                  onPreviewAttachment={({ items, index }) => {
+                    const item = items[index];
+                    if (!item) return;
+                    sidePanel.openTab({
+                      id: `draft:${item.id}`,
+                      kind: "file",
+                      name: item.name,
+                      sizeBytes: item.sizeBytes,
+                      mediaType: item.mediaType,
+                      draft: item,
+                    });
+                  }}
+                />
+                {resourcePicker.pickerProps ? (
+                  <ConversationResourcePicker
+                    key={`${resourceAgentID}:${resourcePicker.pickerProps.kind}`}
+                    {...resourcePicker.pickerProps}
+                    t={t}
+                    className={styles.resourceSearch}
+                  />
+                ) : null}
+                <div className={styles.draft} hidden={resourcePicker.active}>
+                  {resources.map((resource) => (
+                    <ResourceTag
+                      key={resourceKey(resource)}
+                      resource={resource}
+                      removal={{
+                        label: t("remove"),
+                        disabled: busy,
+                        onRemove: () =>
+                          setResources((current) =>
+                            current.filter((item) => resourceKey(item) !== resourceKey(resource)),
+                          ),
+                      }}
+                    />
+                  ))}
+                  <TaskPromptEditor
+                    ref={editorRef}
+                    autoFocus
+                    fileMentions={promptMentions.fileMentions}
+                    aria-label={t("taskEntryPrompt")}
+                    placeholder={
+                      resources.length || attachments.length || draft.length
+                        ? ""
+                        : t(selectedCloud ? "cloudChatPlaceholder" : "iaStartComposerPlaceholder")
+                    }
+                    value={draft}
+                    onChange={(event) => {
+                      promptMentions.change(event.currentTarget);
+                      syncSlash(event.currentTarget);
+                    }}
+                    onSelect={(event) => {
+                      promptMentions.sync(event.currentTarget);
+                      syncSlash(event.currentTarget);
+                    }}
+                    onBlur={() => {
+                      promptMentions.dismiss();
+                      setSlashQuery(null);
+                    }}
+                    onCompositionStart={() => {
+                      composing.current = true;
+                      promptMentions.compositionStart();
+                      setSlashQuery(null);
+                    }}
+                    onCompositionEnd={(event) => {
+                      composing.current = false;
+                      promptMentions.compositionEnd(event.currentTarget);
+                      syncSlash(event.currentTarget);
+                    }}
+                    onPaste={(event) => {
+                      const pasted = filesFromDataTransfer(event.clipboardData);
+                      if (!pasted.length) return;
+                      if (!event.clipboardData.getData("text/plain")) event.preventDefault();
+                      addAttachments(pasted);
+                    }}
+                    disabled={busy}
+                    onKeyDown={(event) => {
+                      if (composing.current || isComposerKeyboardEventComposing(event) || promptMentions.keyDown(event))
+                        return;
+                      if (
+                        handleSlashPickerNavigation({
+                          event,
+                          candidates: slashState.candidates,
+                          activeIndex: slashIndex,
+                          continuation: skills.continuation,
+                          pickerOpen: slashState.active,
+                          onIndexChange: setSlashIndex,
+                          onApply: applySlashCandidate,
+                          onDismiss: () => setSlashQuery(null),
+                        })
+                      )
+                        return;
+                      if (event.key === "Enter" && !event.shiftKey) {
+                        event.preventDefault();
+                        void start();
+                      }
+                    }}
+                  />
+                </div>
+                {promptMentions.candidates.length || slashState.active ? (
+                  <PopoverRoot
+                    open
+                    onOpenChange={(open) => {
+                      if (!open) {
+                        promptMentions.dismiss();
+                        setSlashQuery(null);
+                      }
+                    }}
+                  >
+                    <PopoverAnchor asChild>
+                      <span className={styles.mentionAnchor} aria-hidden="true" />
+                    </PopoverAnchor>
+                    <PopoverContent
+                      side="top"
+                      align="start"
+                      role="presentation"
+                      className={styles.mentionPopover}
+                      onOpenAutoFocus={(event) => event.preventDefault()}
+                      onCloseAutoFocus={(event) => event.preventDefault()}
+                      onInteractOutside={(event) => {
+                        if (event.target === editorRef.current) event.preventDefault();
+                      }}
+                    >
+                      {promptMentions.candidates.length ? (
+                        <MentionPicker
+                          className={styles.mentions}
+                          users={promptMentions.candidates}
+                          activeIndex={promptMentions.activeIndex}
+                          onSelect={promptMentions.choose}
+                          t={t}
+                        />
+                      ) : (
+                        <SlashPicker
+                          className={styles.mentions}
+                          candidates={slashState.candidates}
+                          activeIndex={slashIndex}
+                          continuation={skills.continuation}
+                          loading={skills.loading}
+                          onSelect={applySlashCandidate}
+                          t={t}
+                        />
+                      )}
+                    </PopoverContent>
+                  </PopoverRoot>
+                ) : null}
+                <div className={selectedCloud ? `${styles.actions} ${styles.cloudActions}` : styles.actions}>
+                  {!selectedCloud ? (
+                    <>
+                      <input
+                        type="file"
+                        multiple
+                        ref={fileInput}
+                        className="sr-only"
+                        aria-label={t("addAttachment")}
+                        disabled={busy}
+                        onChange={(event) => {
+                          addAttachments(Array.from(event.currentTarget.files ?? []));
+                          event.currentTarget.value = "";
+                        }}
+                      />
+                      <ComposerAddMenu
+                        onOpenResourcePicker={resourcePicker.open}
+                        disabled={busy}
+                        t={t}
+                        buttonClassName={`composer-add-button ${styles.addButton}`}
+                        onAddFiles={() => fileInput.current?.click()}
+                      />
+                      <TaskConfigurationToolbar
+                        configuration={configuration}
+                        onChange={async (value) => {
+                          if (targetRevision.current !== revision || inFlight.current) return;
+                          if (created.current) await entry.patch(created.current.id, { configuration: value });
+                          else requestID.current = createUUID();
+                          if (value.workspace_dir !== configuration.workspace_dir) {
+                            promptMentions.clearFiles();
+                            resetFilePanel();
+                          }
+                          setConfiguration(value);
+                        }}
+                        directoryLocked={Boolean(created.current)}
+                        directoryMode={selectedAgent ? "agent" : "collaboration"}
+                        agent={selectedAgent || manager}
+                        showModel={Boolean(selectedAgent)}
+                        showDirectory
+                        disabled={busy}
+                      />
+                    </>
+                  ) : null}
+                  <Button
+                    className={`composer-send-button ${conversationSendButtonStyles["composer-send-button"]}`}
+                    variant={uploadProgress !== null ? "danger" : "primary"}
+                    iconOnly
+                    size="sm"
+                    aria-label={t(uploadProgress !== null ? "stopSending" : "taskEntryStart")}
+                    disabled={
+                      uploadProgress === null &&
+                      (busy ||
+                        Boolean(selectedCloud && selectedCloud.status !== "online") ||
+                        resourcePicker.active ||
+                        !canSendResources(
+                          draftInput.content,
+                          draftInput.resource_refs,
+                          attachments.length + draftFileCount,
+                        ) ||
+                        Boolean(modelMissing))
+                    }
+                    onClick={() => (upload.current ? upload.current.abort() : void start())}
+                  >
+                    {uploadProgress !== null ? (
+                      <Square aria-hidden="true" size={14} fill="currentColor" />
+                    ) : (
+                      <ArrowUp aria-hidden="true" size={17} strokeWidth={1.5} />
+                    )}
+                  </Button>
+                </div>
+              </div>
+              {removedAttachments.length ? (
+                <div className={styles.attachmentFeedback} role="status">
+                  <span>
+                    {removedAttachments.length === 1
+                      ? t("attachmentRemoved", { name: removedAttachments[0].draft.name })
+                      : t("attachmentsRemoved", { count: removedAttachments.length })}
+                  </span>
+                  <Button size="sm" variant="secondaryGray" disabled={busy} onClick={undoRemoveAttachments}>
+                    <Undo2 aria-hidden="true" size={14} />
+                    {t("undo")}
+                  </Button>
+                </div>
+              ) : null}
+              {attachmentWarning ? (
+                <DismissibleInlineError messageKey={attachmentWarning} closeLabel={t("close")}>
+                  <span role="alert">{attachmentWarning}</span>
+                </DismissibleInlineError>
+              ) : null}
             </div>
+            {selectedCloud && selectedCloud.status !== "online" ? <p role="status">{t("cloudChatOffline")}</p> : null}
+            {error ? (
+              <p role="alert" className={styles.error}>
+                {error}
+                {created.current ? ` ${t("taskEntryRetryCreated")}` : ""}
+              </p>
+            ) : null}
+            {!selectedAgent && !selectedCloud ? (
+              <div className={styles.emptyRoom}>
+                <Button variant="linkGray" size="sm" disabled={busy || !manager} onClick={() => void start(true)}>
+                  {t("taskEntryEmptyRoom")}
+                </Button>
+                <span className={styles.emptyRoomHint}>{t("taskEntryEmptyRoomHint")}</span>
+              </div>
+            ) : null}
           </div>
-          {selectedCloud && selectedCloud.status !== "online" ? <p role="status">{t("cloudChatOffline")}</p> : null}
-          {error ? (
-            <p role="alert" className={styles.error}>
-              {error}
-              {created.current ? ` ${t("taskEntryRetryCreated")}` : ""}
-            </p>
-          ) : null}
-          {!selectedAgent && !selectedCloud ? (
-            <button
-              className={styles.emptyRoom}
-              type="button"
-              disabled={busy || !manager}
-              onClick={() => void start(true)}
-            >
-              {t("taskEntryEmptyRoom")}
-            </button>
+          {!examplesHidden && !modelMissing && (agents.length || selectedCloud) ? (
+            <div className={styles.examples}>
+              <span>{t("iaStartExamples")}</span>
+              <div className={styles.chips}>
+                {examples.map(({ key, icon: Icon }) => (
+                  <button
+                    key={key}
+                    type="button"
+                    disabled={busy}
+                    className={styles.chip}
+                    onClick={() => {
+                      const prompt = t(`iaStartExample_${key}_prompt`);
+                      promptMentions.clearFiles(true);
+                      setDraft(prompt);
+                      void start(false, prompt);
+                    }}
+                  >
+                    <Icon size={15} />
+                    {t(`iaStartExample_${key}_title`)}
+                  </button>
+                ))}
+              </div>
+              <button
+                type="button"
+                className={styles.examplesClose}
+                aria-label={t("iaStartExamplesHide")}
+                onClick={() => {
+                  setExamplesHidden(true);
+                  try {
+                    sessionStorage.setItem(TASK_EXAMPLES_HIDDEN_STORAGE_KEY, "true");
+                  } catch {
+                    /* Storage may be unavailable. */
+                  }
+                }}
+              >
+                <X size={16} />
+              </button>
+            </div>
           ) : null}
         </div>
-        {!examplesHidden && !modelMissing && (agents.length || selectedCloud) ? (
-          <div className={styles.examples}>
-            <span>{t("iaStartExamples")}</span>
-            <div className={styles.chips}>
-              {examples.map(({ key, icon: Icon }) => (
-                <button
-                  key={key}
-                  type="button"
-                  disabled={busy}
-                  className={styles.chip}
-                  onClick={() => {
-                    const prompt = t(`iaStartExample_${key}_prompt`);
-                    promptMentions.clear();
-                    setDraft(prompt);
-                    void start(false, prompt);
-                  }}
-                >
-                  <Icon size={15} />
-                  {t(`iaStartExample_${key}_title`)}
-                </button>
-              ))}
-            </div>
-            <button
-              type="button"
-              className={styles.examplesClose}
-              aria-label={t("iaStartExamplesHide")}
-              onClick={() => {
-                setExamplesHidden(true);
-                try {
-                  sessionStorage.setItem(TASK_EXAMPLES_HIDDEN_STORAGE_KEY, "true");
-                } catch {
-                  /* Storage may be unavailable. */
-                }
-              }}
-            >
-              <X size={16} />
-            </button>
-          </div>
-        ) : null}
       </div>
+      <ChatSidePanel
+        controller={sidePanel}
+        fileScope={{
+          roomID: "",
+          direct: Boolean(selectedAgent),
+          sharedWorkspace: Boolean(workspaceDir && !selectedAgent),
+          workspaceDir,
+          automaticWorkspace,
+          userID: readySidebar.currentUserID,
+          agents: workspaceAgentID ? [{ id: workspaceAgentID, name: workspaceAgent?.name || workspaceAgentID }] : [],
+          defaultAgentID: workspaceAgentID,
+        }}
+        agents={agents}
+        usersById={readySidebar.usersById}
+        locale={readySidebar.locale}
+        t={t}
+        toolKinds={cloudTarget ? ["browser"] : ["files", "browser"]}
+        onPreview={(item) => {
+          if (!item.reference) return;
+          sidePanel.openTab({
+            id: fileReferenceKey(item.reference),
+            kind: "file",
+            name: item.name,
+            sizeBytes: item.sizeBytes,
+            mediaType: item.mediaType,
+            reference: item.reference,
+            originTabID: "files",
+          });
+        }}
+        onReference={(reference) => {
+          if (pageRef.current?.querySelector(".chat-side-panel:is(.is-overlay, .is-maximized)")) {
+            sidePanel.patch({ open: false });
+            requestAnimationFrame(() => editorRef.current?.focus({ preventScroll: true }));
+          }
+          promptMentions.referenceFile(reference);
+        }}
+        onCollapse={() => {
+          sidePanel.patch({ open: false });
+          requestAnimationFrame(() => panelTrigger.current?.focus());
+        }}
+      />
     </section>
   );
 }

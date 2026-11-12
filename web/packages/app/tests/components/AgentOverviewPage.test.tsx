@@ -10,7 +10,7 @@ import type { AgentLike } from "@/models/agents";
 import type { WorkspaceTeam } from "@/models/tasks";
 import { AgentOverviewPage } from "@/pages/AgentOverviewPage/AgentOverviewPage";
 import { createTranslator } from "@/shared/i18n";
-import { CLOUD_AGENTS_STORAGE_KEY } from "@/shared/storage/keys";
+import { CLOUD_AGENTS_STORAGE_KEY, PINNED_ENTITIES_STORAGE_KEY } from "@/shared/storage/keys";
 import { RELAY_PUBLICATIONS_CHANGED_EVENT } from "@/shared/constants/relay";
 import { fetchCloudAgentTemplate, fetchRelayCatalog } from "@/api/relay";
 import { cloudAgentFixture } from "../helpers/cloudAgentFixture";
@@ -182,7 +182,38 @@ function TeamNavigationContents({ remountOnNavigation = false }: { remountOnNavi
 
 describe("agent overview team navigation", () => {
   beforeEach(() => vi.mocked(useWorkspaceHubTemplatesQuery).mockReturnValue(queryState()));
-  afterEach(() => localStorage.removeItem(CLOUD_AGENTS_STORAGE_KEY));
+  afterEach(() => {
+    localStorage.removeItem(CLOUD_AGENTS_STORAGE_KEY);
+    localStorage.removeItem(`${PINNED_ENTITIES_STORAGE_KEY}:${location.pathname}:`);
+  });
+
+  it("keeps pin actions separate from selection and reveals collapsed matches when searching", async () => {
+    render(
+      <MemoryRouter initialEntries={["/teams/team-1"]}>
+        <TeamNavigationContents />
+      </MemoryRouter>,
+    );
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "全部 3" }));
+    const selected = screen.getByRole("button", { name: /回归团队 1/ });
+    expect(selected).toHaveAttribute("aria-current", "true");
+    const agent = () => screen.getByRole("button", { name: /测试智能体/ });
+    await user.click(within(agent().parentElement!).getByRole("button", { name: "置顶" }));
+
+    const heading = screen.getByRole("button", { name: "置顶", expanded: true });
+    await user.click(heading);
+    expect(heading).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByRole("button", { name: /测试智能体/ })).not.toBeInTheDocument();
+    expect(selected).toBeVisible();
+
+    await user.type(screen.getByRole("textbox", { name: "搜索智能体和团队" }), "测试");
+    expect(heading).toHaveAttribute("aria-expanded", "true");
+    expect(agent()).toBeVisible();
+    await user.click(within(agent().parentElement!).getByRole("button", { name: "取消置顶" }));
+    expect(heading).not.toBeInTheDocument();
+    expect(agent()).toBeVisible();
+    expect(screen.getByLabelText("Current URL")).toHaveTextContent("/teams/team-1");
+  });
 
   it("keeps All selected while switching between agent and team details, including history navigation", async () => {
     render(
@@ -520,7 +551,7 @@ it("moves the signed-in user's community templates to My templates with a cloud 
     Node.DOCUMENT_POSITION_FOLLOWING,
   );
   expect(within(screen.getByRole("button", { name: /alice worker 云端/ })).getByText("云端")).toBeVisible();
-  expect(screen.getByRole("link", { name: "在 AgenticHub 上管理我的模板" })).toHaveAttribute(
+  expect(screen.getByRole("link", { name: "管理云端模板" })).toHaveAttribute(
     "href",
     "https://qa.opencsg.com/agentichub?view=resources&subview=template",
   );
@@ -606,7 +637,7 @@ describe("personal template cloud sign-in", () => {
     expect(heading.compareDocumentPosition(empty) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(list.queryByRole("button", { name: "去登录" })).not.toBeInTheDocument();
     if (hasLocal) expect(list.getByRole("button", { name: "Local worker" })).toBeVisible();
-    expect(list.getByRole("link", { name: "在 AgenticHub 上管理我的模板" })).toBeVisible();
+    expect(list.getByRole("link", { name: "管理云端模板" })).toBeVisible();
   });
 
   it.each([{ isLoading: true }, { isFetching: true }, { isError: true }])(
