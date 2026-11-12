@@ -7,6 +7,8 @@ export type BrowserBounds = {
 export type DesktopBrowserRequest = { id: string } & (
   | { action: "sync"; url: string; visible: boolean; bounds: BrowserBounds }
   | { action: "navigate"; url: string }
+  | { action: "previewHTML"; html: string }
+  | { action: "releaseHTML" }
   | { action: "reload" | "back" | "forward" | "close" }
 );
 export type DesktopBrowserState = {

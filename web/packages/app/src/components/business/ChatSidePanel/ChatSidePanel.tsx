@@ -34,6 +34,7 @@ import type { CitationSelection } from "@/components/business/MessageContent";
 import { CHAT_SIDE_PANEL_WIDTH_STORAGE_KEY } from "@/shared/storage/keys";
 import { FilesTab } from "./FilesTab";
 import { BrowserTab } from "./BrowserTab";
+import { HTMLBrowserTab } from "./HTMLBrowserTab";
 import type { ChatFileScope, ReferenceFile } from "./types";
 import type { ChatSidePanelController } from "./useChatSidePanel";
 
@@ -459,6 +460,7 @@ export function ChatSidePanel({
                 t={t}
                 onClose={() => close(tab)}
                 onReference={onReference}
+                onPopup={(url) => openTab({ id: createUUID(), kind: "browser", url })}
               />
             ) : tab.kind === "thread" ? (
               (threadPanel ?? <div className={chatSidePanelStyles["chat-side-status"]}>{t("loading")}</div>)
@@ -562,6 +564,7 @@ function FileTab({
   t,
   onClose,
   onReference,
+  onPopup,
 }: {
   tab: Extract<ChatSideTab, { kind: "file" }>;
   roomID: string;
@@ -570,6 +573,7 @@ function FileTab({
   t: TranslateFn;
   onClose: () => void;
   onReference: ReferenceFile;
+  onPopup: (url: string) => void;
 }) {
   const reader = useRoomFileReader(fileScope);
   const attachmentID = tab.reference?.source === "attachment" ? tab.reference.attachment_id : "";
@@ -615,6 +619,9 @@ function FileTab({
         : candidate,
     );
   }, [candidate]);
+  if (current && documentPreviewKind(current) === "html") {
+    return <HTMLBrowserTab item={current} active={active} onPopup={onPopup} t={t} />;
+  }
   return current ? (
     <DocumentPreviewPanel
       items={[current]}

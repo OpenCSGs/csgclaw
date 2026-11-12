@@ -11,12 +11,14 @@ export function BrowserTab({
   active,
   onNavigate,
   onPopup,
+  onReload,
   t,
 }: {
   url: string;
   active: boolean;
   onNavigate: (url: string) => void;
   onPopup: (url: string) => void;
+  onReload?: () => void;
   t: TranslateFn;
 }) {
   const [address, setAddress] = useState(url);
@@ -39,7 +41,7 @@ export function BrowserTab({
       );
     }
   }, [native.available, url]);
-  const externalURL = normalizeBrowserURL(address) || url;
+  const externalURL = normalizeBrowserURL(address) || normalizeBrowserURL(url);
   return (
     <section className="chat-browser-tab" aria-label={t("chatBrowser")}>
       <form
@@ -115,7 +117,11 @@ export function BrowserTab({
               variant="tertiaryGray"
               aria-label={t("chatRefresh")}
               disabled={!url}
-              onClick={() => (native.available ? void native.command("reload") : setReload((value) => value + 1))}
+              onClick={() => {
+                if (onReload) onReload();
+                else if (native.available) void native.command("reload");
+                else setReload((value) => value + 1);
+              }}
             >
               <RefreshCw size={16} />
             </Button>
@@ -173,10 +179,12 @@ export function BrowserTab({
             className={`${chatSidePanelStyles["chat-browser-hint"]} ${chatSidePanelStyles["chat-browser-embed-hint"]}`}
           >
             <span>{t("chatBrowserEmbedHint")}</span>
-            <LinkButton href={externalURL} target="_blank" rel="noopener noreferrer" size="sm" variant="linkColor">
-              <ExternalLink size={14} />
-              {t("chatBrowserSystem")}
-            </LinkButton>
+            {externalURL ? (
+              <LinkButton href={externalURL} target="_blank" rel="noopener noreferrer" size="sm" variant="linkColor">
+                <ExternalLink size={14} />
+                {t("chatBrowserSystem")}
+              </LinkButton>
+            ) : null}
           </div>
           <iframe
             key={`${url}:${reload}`}

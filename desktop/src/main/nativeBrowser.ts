@@ -16,6 +16,7 @@ import {
   parseBrowserRequest,
 } from "./browserPolicy";
 import { isTrustedMainFrame } from "./navigationPolicy";
+import { HTMLPreviewServer } from "./htmlPreviewServer";
 
 type Page = {
   view: WebContentsView;
@@ -28,6 +29,7 @@ type Page = {
 // have no preload, Node access, application authorization headers or desktop IPC.
 export class NativeBrowserManager {
   private readonly pages = new Map<string, Page>();
+  private readonly htmlPreviews = new HTMLPreviewServer();
   private readonly browserSession: Session;
   constructor(
     private readonly window: BrowserWindow,
@@ -104,7 +106,15 @@ export class NativeBrowserManager {
     item.setSaveDialogOptions({});
   };
 
-  command(request: DesktopBrowserRequest): DesktopBrowserState | null {
+  async command(request: DesktopBrowserRequest): Promise<DesktopBrowserState | null> {
+    if (request.action === "previewHTML") {
+      const url = await this.htmlPreviews.publish(request.id, request.html);
+      return { id: request.id, url, loading: false, canGoBack: false, canGoForward: false };
+    }
+    if (request.action === "releaseHTML") {
+      this.htmlPreviews.release(request.id);
+      return null;
+    }
     if (request.action === "close") {
       this.close(request.id);
       return null;
@@ -302,10 +312,12 @@ export class NativeBrowserManager {
   }
   private closeAll(): void {
     for (const id of this.pages.keys()) this.close(id);
+    this.htmlPreviews.clear();
   }
   dispose(): void {
     this.browserSession.removeListener("will-download", this.handleDownload);
     ipcMain.removeHandler(DesktopIPC.browserCommand);
     this.closeAll();
+    this.htmlPreviews.dispose();
   }
 }

@@ -32,9 +32,13 @@ test("browser requests and bounds are validated at the IPC boundary", () => {
     bounds: { x: 10, y: 20, width: 500, height: 400 },
   };
   assert.deepEqual(parseBrowserRequest(request), request);
+  const preview = { id: "html", action: "previewHTML", html: "<script>game()</script>" };
+  assert.deepEqual(parseBrowserRequest(preview), preview);
+  assert.deepEqual(parseBrowserRequest({ id: "html", action: "releaseHTML" }), { id: "html", action: "releaseHTML" });
   for (const value of [
     null,
     {},
+    { id: "html", action: "previewHTML", html: 42 },
     { ...request, action: "executeJavaScript" },
     { ...request, id: "" },
     { ...request, visible: 1 },
