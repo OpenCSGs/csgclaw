@@ -32,6 +32,13 @@ func Stop(pid int, force bool) error {
 		if errors.Is(err, syscall.ESRCH) {
 			return nil
 		}
+		// Darwin can return EPERM while the last members are being reaped.
+		// Only accept that race after confirming no executing members remain.
+		if errors.Is(err, syscall.EPERM) {
+			if alive, checkErr := Alive(pid); checkErr == nil && !alive {
+				return nil
+			}
+		}
 		return err
 	}
 	if !force {
@@ -61,7 +68,7 @@ func Alive(pid int) (bool, error) {
 	}
 	if err := syscall.Kill(-pid, 0); errors.Is(err, syscall.ESRCH) {
 		return false, nil
-	} else if err != nil {
+	} else if err != nil && !errors.Is(err, syscall.EPERM) {
 		return false, err
 	}
 	data, err := exec.Command("ps", "-axo", "pgid=,stat=").Output()

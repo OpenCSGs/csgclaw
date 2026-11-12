@@ -2,6 +2,20 @@
 
 This document describes the repository build, test, and release commands.
 
+## Bundled Codex version
+
+The bundled Codex CLI is pinned to `0.167.1` in `scripts/codex-cli-version.txt`.
+Shell, PowerShell, Docker, and release builds download the same version from `/codex-cli/v<version>/<filename>` and verify `scripts/codex-cli-checksums.txt` before installing the runtime.
+`CODEX_CLI_DOWNLOAD_BASE_URL` overrides the mirror root (default `https://csgclaw.opencsg.com/codex-cli`), not the version or checksum.
+To upgrade, upload all six official platform packages into the mirror's `v<version>/` directory, verify their SHA-256 digests against the upstream release, then update the version and checksums together in source control.
+Builds install the complete official Codex package, preserving its helper binaries, metadata, and resources beside `bin/`.
+Linux command execution requires the packaged `bwrap`; copying only the main Codex executable is insufficient.
+A CSGClaw source upgrade therefore determines the bundled Codex upgrade; builds never resolve `latest`.
+
+CSGClaw explicitly selects the same v1 memory pipeline for fresh and existing Codex agents, with dual-write and dedicated memory tools disabled.
+This preserves the current memory document, template, and runtime recreation behavior while using the upgraded Codex runtime.
+Stable upstream defaults such as shell snapshots remain available without adding version-dependent UI or controls.
+
 ## Default build
 
 ```bash
@@ -95,6 +109,11 @@ csgclaw/
     csgclaw[.exe]
     csgclaw-cli[.exe]            # companion CLI for the release host platform
     codex[.exe]                  # bundled Codex CLI for the release host platform
+    codex-code-mode-host[.exe]
+    codex-exec-server[.exe]
+  codex-package.json
+  codex-resources/               # includes Linux bwrap and Windows sandbox helpers
+  codex-path/
 ```
 
 The canonical CSGClaw-platform-to-Codex-artifact mapping is in

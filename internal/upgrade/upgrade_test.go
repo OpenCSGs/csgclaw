@@ -749,6 +749,38 @@ func TestClientInstallPreparedAllowsLegacyOfficialBundleWithoutMarker(t *testing
 	assertFileContent(t, filepath.Join(installRoot, bundleMarkerFileName), `{"app":"csgclaw","layout":"official-bundle","version":"test"}`)
 }
 
+func TestClientInstallPreparedReplacesCompleteCodexPackage(t *testing.T) {
+	installRoot := writeBundleDir(t, t.TempDir(), "old")
+	staleDir := filepath.Join(installRoot, "codex-resources")
+	if err := os.MkdirAll(staleDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(staleDir, "stale-helper"), []byte("old"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	files := map[string]string{
+		filepath.Join("csgclaw", "bin", "csgclaw"):           "#!/bin/sh\n",
+		filepath.Join("csgclaw", "bin", "codex-exec-server"): "execution helper",
+		filepath.Join("csgclaw", "codex-package.json"):       `{"version":"0.167.1"}`,
+		filepath.Join("csgclaw", "codex-resources", "bwrap"): "sandbox helper",
+		filepath.Join("csgclaw", "codex-path", "rg"):         "search helper",
+	}
+	preparedRoot := writeBundleFiles(t, t.TempDir(), files)
+	client := Client{ExecutablePath: func() (string, error) {
+		return filepath.Join(installRoot, "bin", "csgclaw"), nil
+	}}
+	if _, err := client.InstallPrepared(PreparedBundle{BundleDir: preparedRoot}); err != nil {
+		t.Fatal(err)
+	}
+	for path, content := range files {
+		relative, _ := filepath.Rel("csgclaw", path)
+		assertFileContent(t, filepath.Join(installRoot, relative), content)
+	}
+	if _, err := os.Stat(filepath.Join(installRoot, "codex-resources", "stale-helper")); !os.IsNotExist(err) {
+		t.Fatalf("stale Codex resource remains after upgrade: %v", err)
+	}
+}
+
 func TestClientInstallPreparedMigratesMarkedOfficialBundleWithoutCodex(t *testing.T) {
 	installRoot := writeBundleFilesWithoutMarker(t, t.TempDir(), map[string]string{
 		filepath.Join("csgclaw", "bin", "csgclaw"):     "#!/bin/sh\n# old\n",

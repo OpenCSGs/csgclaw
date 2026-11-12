@@ -162,6 +162,14 @@ func TestTurnActivityBundledCodexE2E(t *testing.T) {
 			if wantPrefix != "" {
 				waitForRuntime(t, func() bool {
 					waiter := live.appServerTurnWaiter(thread)
+					if mode == "compaction" {
+						// Token usage can arrive after item/started and replace
+						// lastActivity while compaction is still in progress.
+						live.mu.Lock()
+						compacting := live.contextUsage[thread].Compacting
+						live.mu.Unlock()
+						return waiter != nil && waiter.progressVersion() > 0 && compacting
+					}
 					return waiter != nil && strings.HasPrefix(waiter.currentLastActivity(), wantPrefix)
 				})
 			}

@@ -51,22 +51,22 @@ ARG VERSION=dev
 ARG COMMIT=unknown
 ARG BUILD_TIME=unknown
 ARG VERSION_PKG=csgclaw/internal/version
-ARG CODEX_CLI_DOWNLOAD_BASE_URL=https://csgclaw.opencsg.com/codex-cli/latest
+ARG CODEX_CLI_DOWNLOAD_BASE_URL=https://csgclaw.opencsg.com/codex-cli
 
 RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
     go build -trimpath \
       -ldflags="-s -w -X ${VERSION_PKG}.Version=${VERSION} -X ${VERSION_PKG}.Commit=${COMMIT} -X ${VERSION_PKG}.BuildTime=${BUILD_TIME}" \
-      -o /out/csgclaw ./cmd/csgclaw && \
+      -o /out/bin/csgclaw ./cmd/csgclaw && \
     CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
     go build -trimpath \
       -ldflags="-s -w -X ${VERSION_PKG}.Version=${VERSION} -X ${VERSION_PKG}.Commit=${COMMIT} -X ${VERSION_PKG}.BuildTime=${BUILD_TIME}" \
-      -o /out/csgclaw-cli ./cmd/csgclaw-cli
+      -o /out/bin/csgclaw-cli ./cmd/csgclaw-cli
 
 RUN set -eux; \
     test "${TARGETOS}" = linux || { echo "unsupported bundled Codex CLI target: ${TARGETOS}/${TARGETARCH}" >&2; exit 1; }; \
     CODEX_CLI_DOWNLOAD_BASE_URL="${CODEX_CLI_DOWNLOAD_BASE_URL}" \
-      ./scripts/fetch-codex-cli.sh "${TARGETOS}" "${TARGETARCH}" /out; \
-    test -x /out/codex
+      ./scripts/fetch-codex-cli.sh "${TARGETOS}" "${TARGETARCH}" /out/bin; \
+    test -x /out/bin/codex
 
 FROM ${RUNTIME_IMAGE}
 
@@ -77,9 +77,7 @@ ARG APK_REPOSITORY
 RUN sed -i "s|https://dl-cdn.alpinelinux.org/alpine|${APK_REPOSITORY}|g" /etc/apk/repositories && \
     apk add --no-cache ca-certificates tzdata
 
-COPY --from=build /out/csgclaw /opt/csgclaw/bin/csgclaw
-COPY --from=build /out/csgclaw-cli /opt/csgclaw/bin/csgclaw-cli
-COPY --from=build /out/codex /opt/csgclaw/bin/codex
+COPY --from=build /out/ /opt/csgclaw/
 
 RUN chmod 755 /opt/csgclaw/bin/csgclaw /opt/csgclaw/bin/csgclaw-cli /opt/csgclaw/bin/codex && \
     /opt/csgclaw/bin/codex --version && \
