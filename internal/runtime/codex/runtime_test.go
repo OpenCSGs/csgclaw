@@ -1755,8 +1755,7 @@ func TestRuntimeCreateKeepsExistingRuntimeAuth(t *testing.T) {
 		t.Fatalf("runtime auth = %q, want existing runtime auth preserved", string(authRaw))
 	}
 	assertRuntimeConfigContains(t, filepath.Join(root, "agent-alice", ".codex", "home", configFileName),
-		`sandbox_mode = "workspace-write"`,
-		`sandbox_workspace_write.network_access = true`,
+		`sandbox_mode = "danger-full-access"`,
 		`features.multi_agent = false`,
 		`features.default_mode_request_user_input = true`,
 		`features.memories = true`,
@@ -2116,8 +2115,8 @@ func TestRuntimeCreateWritesConfigWithoutAuth(t *testing.T) {
 	if err := toml.Unmarshal(configRaw, &parsed); err != nil {
 		t.Fatalf("runtime config is invalid TOML: %v\n%s", err, configText)
 	}
-	if got := parsed["sandbox_mode"]; got != "workspace-write" {
-		t.Fatalf("root sandbox_mode = %#v, want workspace-write\n%s", got, configText)
+	if got := parsed["sandbox_mode"]; got != "danger-full-access" {
+		t.Fatalf("root sandbox_mode = %#v, want danger-full-access\n%s", got, configText)
 	}
 	features, ok := parsed["features"].(map[string]any)
 	if !ok || features["multi_agent"] != false || features["default_mode_request_user_input"] != true {
@@ -2971,7 +2970,8 @@ func TestConfigureCodexHomeConfigReplacesManagedBlocksIdempotently(t *testing.T)
 		csgclawProviderEndMarker,
 		``,
 		csgclawSandboxBeginMarker,
-		`sandbox_mode = "danger-full-access"`,
+		`sandbox_mode = "workspace-write"`,
+		`sandbox_workspace_write.network_access = true`,
 		csgclawSandboxEndMarker,
 		``,
 		`[features]`,
@@ -3015,6 +3015,8 @@ func TestConfigureCodexHomeConfigReplacesManagedBlocksIdempotently(t *testing.T)
 		}
 	}
 	for _, unwanted := range []string{
+		`sandbox_mode = "workspace-write"`,
+		`sandbox_workspace_write`,
 		`model = "old-model"`,
 		`multi_agent = true`,
 		`default_mode_request_user_input = false`,
@@ -3027,8 +3029,7 @@ func TestConfigureCodexHomeConfigReplacesManagedBlocksIdempotently(t *testing.T)
 		}
 	}
 	for _, expected := range []string{
-		`sandbox_mode = "workspace-write"`,
-		`sandbox_workspace_write.network_access = true`,
+		`sandbox_mode = "danger-full-access"`,
 		`default_mode_request_user_input = true`,
 		`memories = true`,
 		`generate_memories = true`,
@@ -3067,8 +3068,7 @@ func TestConfigureCodexHomeConfigDisablesMemories(t *testing.T) {
 func TestBuildSandboxConfigBlockUsesUnelevatedWindowsSandbox(t *testing.T) {
 	config := buildSandboxConfigBlock(ExecutionModeStandard)
 	for _, want := range []string{
-		`sandbox_mode = "workspace-write"`,
-		`sandbox_workspace_write.network_access = true`,
+		`sandbox_mode = "danger-full-access"`,
 	} {
 		if !strings.Contains(config, want) {
 			t.Fatalf("cross-platform sandbox config missing %q:\n%s", want, config)

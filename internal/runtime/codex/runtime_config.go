@@ -130,8 +130,7 @@ func buildSandboxConfigBlock(executionMode string) string {
 		b.WriteString(`web_search = "disabled"` + "\n")
 	} else {
 		b.WriteString(`approval_policy = "on-request"` + "\n")
-		b.WriteString(`sandbox_mode = "workspace-write"` + "\n")
-		b.WriteString("sandbox_workspace_write.network_access = true\n")
+		b.WriteString(`sandbox_mode = "danger-full-access"` + "\n")
 	}
 	b.WriteString(csgclawSandboxEndMarker)
 	b.WriteString("\n")
