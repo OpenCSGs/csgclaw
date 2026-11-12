@@ -112,9 +112,15 @@
   min-height: 148px;
   padding: 16px 16px 8px;
 }
-.page .composer .input {
+.promptEditor {
+  position: relative;
   flex: 1;
   min-width: 120px;
+}
+.page .composer .input {
+  display: block;
+  width: 100%;
+  min-width: 0;
   min-height: 116px;
   padding: 0;
   border: 0;
@@ -126,6 +132,40 @@
   font-size: 15.5px;
   line-height: 25px;
   resize: none;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  scrollbar-gutter: stable;
+}
+.promptMirror {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.page .composer .promptEditor[data-highlighted] textarea {
+  position: relative;
+  color: transparent;
+  caret-color: var(--text);
+}
+.promptEditor[data-highlighted] textarea::selection {
+  color: transparent;
+  background: color-mix(in srgb, var(--primary) 30%, transparent);
+}
+.fileMention {
+  color: var(--primary);
+}
+@media (forced-colors: active) {
+  .promptMirror {
+    display: none;
+  }
+  .page .composer .promptEditor[data-highlighted] textarea {
+    color: CanvasText;
+    caret-color: auto;
+  }
+  .promptEditor[data-highlighted] textarea::selection {
+    color: HighlightText;
+    background: Highlight;
+  }
 }
 .page .composer .input:focus {
   outline: none;

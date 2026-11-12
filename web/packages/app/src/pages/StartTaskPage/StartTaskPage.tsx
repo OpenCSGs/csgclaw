@@ -24,15 +24,7 @@ import {
   Users,
   X,
 } from "lucide-react";
-import {
-  TextArea,
-  Button,
-  DismissibleInlineError,
-  PopoverAnchor,
-  PopoverContent,
-  PopoverRoot,
-  Tooltip,
-} from "@/components/ui";
+import { Button, DismissibleInlineError, PopoverAnchor, PopoverContent, PopoverRoot, Tooltip } from "@/components/ui";
 import { ChatSidePanel, useChatSidePanel } from "@/components/business/ChatSidePanel";
 import { closeChatSideTab } from "@/models/chatSidePanel";
 import { fileReferenceKey } from "@/models/fileReferences";
@@ -74,6 +66,7 @@ import {
 import { useInfiniteAgentSkills } from "@/hooks/workspace/useInfiniteAgentSkills";
 import { useSlashSelection } from "@/hooks/workspace/useSlashSelection";
 import { useTaskPromptMentions } from "./useTaskPromptMentions";
+import { TaskPromptEditor } from "./components/TaskPromptEditor";
 import {
   ConversationResourcePicker,
   useComposerResourcePicker,
@@ -578,10 +571,10 @@ function StartTaskForm({
                       }}
                     />
                   ))}
-                  <TextArea
+                  <TaskPromptEditor
                     ref={editorRef}
                     autoFocus
-                    className={styles.input}
+                    fileMentions={promptMentions.fileMentions}
                     aria-label={t("taskEntryPrompt")}
                     placeholder={
                       resources.length || attachments.length || draft.length
