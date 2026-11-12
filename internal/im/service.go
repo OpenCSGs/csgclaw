@@ -255,6 +255,7 @@ type persistedBootstrap struct {
 }
 
 type persistedRoom struct {
+	ContextUsageEpoch    uint64                           `json:"context_usage_epoch,omitempty"`
 	ContextUsage         map[string]modelcap.ContextUsage `json:"context_usage,omitempty"`
 	TitleSource          string                           `json:"title_source,omitempty"`
 	CloudAgent           *apitypes.CloudAgentReference    `json:"cloud_agent,omitempty"`
@@ -526,6 +527,7 @@ func loadPersistedRooms(statePath string, rooms []persistedRoom) ([]Room, error)
 		}
 		loaded = append(loaded, Room{
 			ContextUsage:         cloneContextUsage(room.ContextUsage),
+			ContextUsageEpoch:    room.ContextUsageEpoch,
 			CreationWorkspaceDir: room.CreationWorkspaceDir,
 			TitleSource:          room.TitleSource,
 			Archived:             room.Archived,
@@ -719,6 +721,7 @@ func saveRoomThreadsForState(statePath string, room Room, operations ...*diagnos
 func persistedRoomFromRoom(room Room) persistedRoom {
 	return persistedRoom{
 		ContextUsage:         cloneContextUsage(room.ContextUsage),
+		ContextUsageEpoch:    room.ContextUsageEpoch,
 		CreationWorkspaceDir: room.CreationWorkspaceDir,
 		TitleSource:          room.TitleSource,
 		Archived:             room.Archived,
@@ -1844,6 +1847,7 @@ func (s *Service) ClearRoomMessages(roomID string) (Room, error) {
 	room.Messages = []Message{}
 	room.Threads = []ThreadState{}
 	room.ContextUsage = nil
+	room.ContextUsageEpoch++
 	if err := s.saveRoomLocked(*room); err != nil {
 		s.mu.Unlock()
 		return Room{}, err

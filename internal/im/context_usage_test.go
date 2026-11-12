@@ -24,7 +24,7 @@ func TestContextUsagePersistsWithoutRewritingTranscripts(t *testing.T) {
 	}
 	used := int64(123)
 	usage := modelcap.ContextUsage{SessionID: "s", ModelID: "m", ContextWindow: 32768, ContextSource: "default", UsedTokens: &used, CompactThreshold: 24000, UpdatedAt: time.Now().UTC().Format(time.RFC3339Nano)}
-	if err := service.RecordContextUsage("r", "user-worker", usage); err != nil {
+	if _, err := service.RecordContextUsage("r", "user-worker", usage); err != nil {
 		t.Fatal(err)
 	}
 	after, err := os.Stat(transcript)
@@ -35,7 +35,7 @@ func TestContextUsagePersistsWithoutRewritingTranscripts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := service.RecordContextUsage("r", "user-worker", usage); err != nil {
+	if _, err := service.RecordContextUsage("r", "user-worker", usage); err != nil {
 		t.Fatal(err)
 	}
 	unchanged, err := os.Stat(path)
@@ -63,7 +63,7 @@ func TestContextUsagePersistsWithoutRewritingTranscripts(t *testing.T) {
 	service.statePath = filepath.Join(blocker, "state.json")
 	changed := int64(456)
 	usage.UsedTokens = &changed
-	if err := service.RecordContextUsage("r", "user-worker", usage); err == nil {
+	if _, err := service.RecordContextUsage("r", "user-worker", usage); err == nil {
 		t.Fatal("storage failure was hidden")
 	}
 	room, _ = service.Room("r")
@@ -79,7 +79,7 @@ func TestContextUsagePersistsWithoutRewritingTranscripts(t *testing.T) {
 		t.Fatal(err)
 	}
 	room, _ = cleared.Room("r")
-	if len(room.ContextUsage) != 0 {
-		t.Fatal("cleared room restored usage")
+	if len(room.ContextUsage) != 0 || room.ContextUsageEpoch == 0 {
+		t.Fatal("cleared room lost its usage boundary after restart")
 	}
 }

@@ -4,7 +4,10 @@ import { logDesktopError } from "./desktopLogger";
 
 export class TurnNotifications {
   // macOS removes delivered notifications when their native objects are collected.
-  private readonly active = new Map<string, Notification>();
+  private readonly active = new Map<
+    string,
+    { notification: Notification; input: DesktopTurnNotification }
+  >();
 
   constructor(
     private readonly onClick: (roomID: string) => void,
@@ -17,18 +20,27 @@ export class TurnNotifications {
     const parsed = parseTurnNotification(input);
     if (!this.supported())
       throw new Error("System notifications are unavailable.");
-    if (this.active.has(parsed.id)) return Promise.resolve();
+    const previous = this.active.get(parsed.id);
+    if (previous) {
+      if (JSON.stringify(previous.input) === JSON.stringify(parsed))
+        return Promise.resolve();
+      this.active.delete(parsed.id);
+      previous.notification.close();
+    }
     if (this.active.size >= 128) {
       const oldest = this.active.entries().next().value;
       if (oldest) {
         this.active.delete(oldest[0]);
-        oldest[1].close();
+        oldest[1].notification.close();
       }
     }
     const notification = this.create(parsed);
-    this.active.set(parsed.id, notification);
+    this.active.set(parsed.id, { notification, input: parsed });
     return new Promise((resolve, reject) => {
-      const remove = () => this.active.delete(parsed.id);
+      const remove = () => {
+        if (this.active.get(parsed.id)?.notification === notification)
+          this.active.delete(parsed.id);
+      };
       notification.once("show", () => resolve());
       notification.once("failed", (_event, detail) => {
         remove();
@@ -36,7 +48,10 @@ export class TurnNotifications {
         logDesktopError("turn-notification-failed", error);
         reject(error);
       });
-      notification.once("close", remove);
+      notification.once("close", () => {
+        remove();
+        resolve();
+      });
       notification.once("click", () => {
         remove();
         notification.close();
@@ -52,7 +67,7 @@ export class TurnNotifications {
   }
 
   dispose(): void {
-    for (const notification of this.active.values()) notification.close();
+    for (const entry of this.active.values()) entry.notification.close();
     this.active.clear();
   }
 }

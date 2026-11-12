@@ -23,22 +23,22 @@ func cloneContextUsage(values map[string]modelcap.ContextUsage) map[string]model
 // RecordContextUsage saves the latest report in room metadata without
 // rewriting the transcript or retaining per-turn history.
 // It is called for accepted main-conversation reports, not work heartbeats.
-func (s *Service) RecordContextUsage(roomID, userID string, usage modelcap.ContextUsage) error {
+func (s *Service) RecordContextUsage(roomID, userID string, usage modelcap.ContextUsage) (uint64, error) {
 	if !usage.Valid() {
-		return ErrInvalidContextUsage
+		return 0, ErrInvalidContextUsage
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	room, ok := s.rooms[roomID]
 	if !ok {
-		return ErrRoomNotFound
+		return 0, ErrRoomNotFound
 	}
 	userID = s.resolveRoomUserIDLocked(userID)
 	if !slices.Contains(room.Members, userID) {
-		return ErrInviterNotRoomMember
+		return 0, ErrInviterNotRoomMember
 	}
 	if previous, ok := room.ContextUsage[userID]; ok && reflect.DeepEqual(previous, usage) {
-		return nil
+		return room.ContextUsageEpoch, nil
 	}
 	previous := room.ContextUsage
 	room.ContextUsage = cloneContextUsage(previous)
@@ -56,8 +56,8 @@ func (s *Service) RecordContextUsage(roomID, userID string, usage modelcap.Conte
 		}
 		if err := writePersistedBootstrap(s.statePath, metadata); err != nil {
 			room.ContextUsage = previous
-			return err
+			return 0, err
 		}
 	}
-	return nil
+	return room.ContextUsageEpoch, nil
 }

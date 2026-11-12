@@ -95,3 +95,50 @@ test("silent notifications preserve the banner title and body", async () => {
   await notifications.show(silent);
   notifications.dispose();
 });
+
+test("changed content replaces the same native notification id", async () => {
+  const created: FakeNotification[] = [];
+  const notifications = new TurnNotifications(
+    () => {},
+    () => {
+      const item = new FakeNotification();
+      created.push(item);
+      return item as unknown as Notification;
+    },
+    () => true,
+  );
+  await notifications.show(input);
+  const failed = {
+    ...input,
+    title: "Agent failed",
+    body: "The request failed",
+  };
+  await notifications.show(failed);
+  assert.equal(created.length, 2);
+  assert.equal(created[0]?.closed, true);
+  created[0]?.emit("close");
+  await notifications.show(failed);
+  assert.equal(created.length, 2);
+  notifications.dispose();
+});
+
+test(
+  "replacing a pending notification settles its delivery promise",
+  { timeout: 1000 },
+  async () => {
+    let count = 0;
+    const notifications = new TurnNotifications(
+      () => {},
+      () => {
+        const item = new FakeNotification();
+        if (count++ === 0) item.show = () => {};
+        return item as unknown as Notification;
+      },
+      () => true,
+    );
+    const fallback = notifications.show(input);
+    await notifications.show({ ...input, title: "Agent failed" });
+    await fallback;
+    notifications.dispose();
+  },
+);

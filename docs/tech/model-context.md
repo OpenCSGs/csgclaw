@@ -64,7 +64,9 @@ The IM service persists the latest main-conversation report per room and Agent i
 Accepted reports atomically update only the metadata index without rewriting transcripts or accumulating usage history.
 Identical reports and work heartbeats do not cause additional writes.
 Refreshing the browser and restarting the service retain the last report without starting an Agent or model request.
-Clearing a conversation clears its snapshot, and removing a member removes that member's saved usage.
+Clearing a conversation clears its snapshot and advances its persisted usage epoch, so queued or renewed leases cannot restore an older report.
+Only an explicit new usage report receives the current epoch; status-only updates preserve the previous one.
+Removing a member removes that member's saved usage.
 Thread reports never overwrite the main conversation's snapshot.
 Group conversations use the same ring, showing the highest individual occupancy rather than adding independent context windows together.
 Hovering expands a compact, scrollable list with the same statistics for each Agent, with no extra disclosure layer.

@@ -30,7 +30,12 @@ export function ConversationContextUsage({
   if (conversation.cloud_agent || !entries.length) return null;
   const usageFor = (agent: AgentLike): ContextUsage | undefined => {
     const id = resolveAgentChannelUserID(agent);
-    const active = participants.find((p) => !p.threadRootID && localIdentitiesMatch(p.id, id))?.contextUsage;
+    const active = participants.find(
+      (p) =>
+        !p.threadRootID &&
+        localIdentitiesMatch(p.id, id) &&
+        (p.contextUsageEpoch ?? 0) === (conversation.context_usage_epoch ?? 0),
+    )?.contextUsage;
     if (active) return active;
     const saved = Object.entries(conversation.context_usage ?? {}).find(([user]) =>
       localIdentitiesMatch(user, id),

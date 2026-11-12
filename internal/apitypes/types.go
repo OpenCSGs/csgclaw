@@ -216,8 +216,9 @@ type CloudAgentReference struct {
 }
 
 type Room struct {
-	ContextUsage map[string]modelcap.ContextUsage `json:"context_usage,omitempty"`
-	CloudAgent   *CloudAgentReference             `json:"cloud_agent,omitempty"`
+	ContextUsageEpoch uint64                           `json:"context_usage_epoch,omitempty"`
+	ContextUsage      map[string]modelcap.ContextUsage `json:"context_usage,omitempty"`
+	CloudAgent        *CloudAgentReference             `json:"cloud_agent,omitempty"`
 	// CreationWorkspaceDir retains the requested path (empty means automatic).
 	// It is private persistence metadata used to validate creation retries.
 	CreationWorkspaceDir *string `json:"-"`

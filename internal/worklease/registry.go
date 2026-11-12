@@ -79,7 +79,7 @@ type ParticipantDirectory interface {
 }
 
 type IMService interface {
-	RecordContextUsage(roomID, userID string, usage modelcap.ContextUsage) error
+	RecordContextUsage(roomID, userID string, usage modelcap.ContextUsage) (uint64, error)
 	ResolveUserID(userID string) string
 	Room(roomID string) (im.Room, bool)
 	User(userID string) (im.User, bool)
@@ -287,16 +287,22 @@ func (r *Registry) UpdateStatus(
 		r.mu.Unlock()
 		return apitypes.ParticipantWorkUpdate{}, false, ErrRateLimited
 	}
+	var usageEpoch uint64
+	if lease.status != nil {
+		usageEpoch = lease.status.ContextUsageEpoch
+	}
 	if request.ContextUsage != nil && lease.threadRootID == "" {
 		usage := modelcap.CloneUsage(request.ContextUsage)
 		if usage.UpdatedAt == "" {
 			usage.UpdatedAt = now.Format(time.RFC3339Nano)
 		}
-		if err := r.im.RecordContextUsage(lease.roomID, lease.userID, *usage); err != nil {
+		epoch, err := r.im.RecordContextUsage(lease.roomID, lease.userID, *usage)
+		if err != nil {
 			r.mu.Unlock()
 			return apitypes.ParticipantWorkUpdate{}, false, err
 		}
 		request.ContextUsage = usage
+		usageEpoch = epoch
 	}
 	lease.statusWindowCount++
 	lease.capabilities = append([]string(nil), request.Capabilities...)
@@ -305,11 +311,12 @@ func (r *Registry) UpdateStatus(
 		request.ContextUsage = lease.status.ContextUsage
 	}
 	lease.status = &apitypes.ParticipantWorkStatus{
-		ContextUsage: modelcap.CloneUsage(request.ContextUsage),
-		Sequence:     request.Sequence,
-		Phase:        request.Phase,
-		Stage:        request.Stage,
-		Thinking:     cloneThinking(request.Thinking),
+		ContextUsageEpoch: usageEpoch,
+		ContextUsage:      modelcap.CloneUsage(request.ContextUsage),
+		Sequence:          request.Sequence,
+		Phase:             request.Phase,
+		Stage:             request.Stage,
+		Thinking:          cloneThinking(request.Thinking),
 	}
 	lease.revision++
 	r.activeByKey[key] = lease
@@ -691,11 +698,12 @@ func (r *Registry) updateFor(lease activeLease, state, reason string) apitypes.P
 	}
 	if lease.status != nil {
 		update.Status = &apitypes.ParticipantWorkStatus{
-			ContextUsage: modelcap.CloneUsage(lease.status.ContextUsage),
-			Sequence:     lease.status.Sequence,
-			Phase:        lease.status.Phase,
-			Stage:        lease.status.Stage,
-			Thinking:     cloneThinking(lease.status.Thinking),
+			ContextUsage:      modelcap.CloneUsage(lease.status.ContextUsage),
+			ContextUsageEpoch: lease.status.ContextUsageEpoch,
+			Sequence:          lease.status.Sequence,
+			Phase:             lease.status.Phase,
+			Stage:             lease.status.Stage,
+			Thinking:          cloneThinking(lease.status.Thinking),
 		}
 	}
 	return update

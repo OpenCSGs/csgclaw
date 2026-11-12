@@ -539,4 +539,27 @@ describe("useAgentTurnNotifications", () => {
       title: "Research Agent finished replying",
     });
   });
+  it("replaces a release-only fallback when the failed transcript arrives later", () => {
+    const { result } = renderNotifications(TurnNotificationModes.whenUnfocused);
+    act(() =>
+      result.current.handleRealtimeEvent(workEvent({ request_id: "release-first", reason: "released", state: "idle" })),
+    );
+    expect(notificationRecords).toHaveLength(1);
+    vi.mocked(document.hasFocus).mockReturnValue(true);
+    act(() =>
+      result.current.handleRealtimeEvent({
+        type: "message.created",
+        room_id: "room-1",
+        message: {
+          id: "failed-late",
+          sender_id: "user-worker",
+          content: "Request failed",
+          metadata: { codex: { request_id: "release-first" }, csgclaw: { runtime_error: true } },
+        },
+      }),
+    );
+    expect(notificationRecords).toHaveLength(2);
+    expect(notificationRecords[1]?.title).toBe("Research Agent failed");
+    expect(notificationRecords[1]?.tag).toBe(notificationRecords[0]?.tag);
+  });
 });

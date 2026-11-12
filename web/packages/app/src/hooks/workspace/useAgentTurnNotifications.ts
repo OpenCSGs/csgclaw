@@ -50,7 +50,7 @@ export function readSystemNotificationPermission(): SystemNotificationPermission
 
 export function useAgentTurnNotifications(args: UseAgentTurnNotificationsArgs): AgentTurnNotificationController {
   const refs = useRef(args);
-  const notifiedEventKeysRef = useRef(new Set<string>());
+  const notifiedEventKeysRef = useRef(new Map<string, { kind: "fallback" | "completed" | "failed" }>());
   const turnMessagesRef = useRef(new Map<string, IMMessage>());
   const [permission, setPermission] = useState<SystemNotificationPermission>(readSystemNotificationPermission);
 
@@ -105,11 +105,17 @@ export function useAgentTurnNotifications(args: UseAgentTurnNotificationsArgs): 
         roomID: string;
       },
     ): void => {
+      const failed = Boolean(input.message && isFailedAgentTurnMessage(input.message));
+      const previous = notifiedEventKeysRef.current.get(input.eventKey);
+      const replaceFallback = failed && previous?.kind === "fallback";
+      const attempt = {
+        kind: failed ? ("failed" as const) : input.message ? ("completed" as const) : ("fallback" as const),
+      };
       if (
         current.mode === TurnNotificationModes.off ||
         readSystemNotificationPermission() !== "granted" ||
         input.participantIdentities.some((id) => localIdentitiesMatch(id, current.currentUserID)) ||
-        notifiedEventKeysRef.current.has(input.eventKey)
+        (previous && !replaceFallback)
       ) {
         return;
       }
@@ -117,7 +123,8 @@ export function useAgentTurnNotifications(args: UseAgentTurnNotificationsArgs): 
         !shouldShowTurnNotification(current.mode, {
           documentVisible: document.visibilityState === "visible",
           windowFocused: typeof document.hasFocus !== "function" || document.hasFocus(),
-        })
+        }) &&
+        !replaceFallback
       ) {
         return;
       }
@@ -125,7 +132,6 @@ export function useAgentTurnNotifications(args: UseAgentTurnNotificationsArgs): 
       const roomID = input.roomID.trim();
       const room = current.rooms.find((candidate) => candidate.id === roomID);
       const agentName = String(input.agent.name || input.agent.user_name || input.agent.id || "Agent").trim();
-      const failed = Boolean(input.message && isFailedAgentTurnMessage(input.message));
       const title = current.t(failed ? "turnNotificationFailedTitle" : "turnNotificationTitle", { agent: agentName });
       const preview = failed
         ? failedTurnNotificationPreview(input.message!, current.t)
@@ -139,9 +145,9 @@ export function useAgentTurnNotifications(args: UseAgentTurnNotificationsArgs): 
       });
 
       const eventKey = input.eventKey;
-      notifiedEventKeysRef.current.add(eventKey);
+      notifiedEventKeysRef.current.set(eventKey, attempt);
       const onError = () => {
-        notifiedEventKeysRef.current.delete(eventKey);
+        if (notifiedEventKeysRef.current.get(eventKey) === attempt) notifiedEventKeysRef.current.delete(eventKey);
         refreshPermission();
       };
       try {

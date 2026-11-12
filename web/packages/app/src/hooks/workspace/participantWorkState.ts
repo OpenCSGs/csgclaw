@@ -353,10 +353,22 @@ function normalizeParticipantWorkStatus(
   }
   const stage = normalizeParticipantWorkStage(status.stage, status.phase);
   if (status.phase === "working") {
-    return { phase: "working", sequence, stage, context_usage: normalizeContextUsage(status.context_usage) };
+    return {
+      phase: "working",
+      sequence,
+      stage,
+      context_usage_epoch: status.context_usage_epoch ?? 0,
+      context_usage: normalizeContextUsage(status.context_usage),
+    };
   }
   if (!status.thinking) {
-    return { phase: "thinking", sequence, stage, context_usage: normalizeContextUsage(status.context_usage) };
+    return {
+      phase: "thinking",
+      sequence,
+      stage,
+      context_usage_epoch: status.context_usage_epoch ?? 0,
+      context_usage: normalizeContextUsage(status.context_usage),
+    };
   }
   if (
     status.thinking.format !== "plain_text" ||
@@ -367,6 +379,7 @@ function normalizeParticipantWorkStatus(
   }
   return {
     phase: "thinking",
+    context_usage_epoch: status.context_usage_epoch ?? 0,
     context_usage: normalizeContextUsage(status.context_usage),
     sequence,
     stage,

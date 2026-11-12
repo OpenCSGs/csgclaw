@@ -95,4 +95,15 @@ describe("conversation context usage", () => {
     );
     expect(screen.getByRole("button", { name: "上下文已使用 20%" })).toBeInTheDocument();
   });
+  it("does not show the active lease's previous usage after the room is cleared", () => {
+    render(
+      <TaskConversationControls
+        conversation={{ ...room, context_usage_epoch: 1 }}
+        agents={agents}
+        t={t}
+        participants={participants}
+      />,
+    );
+    expect(screen.getByRole("button", { name: "尚未获得上下文用量" })).toBeInTheDocument();
+  });
 });
