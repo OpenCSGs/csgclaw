@@ -620,7 +620,15 @@ function FileTab({
     );
   }, [candidate]);
   if (current && documentPreviewKind(current) === "html") {
-    return <HTMLBrowserTab item={current} active={active} onPopup={onPopup} t={t} />;
+    return (
+      <HTMLBrowserTab
+        item={current}
+        sourceKey={JSON.stringify([roomID, fileScope.workspaceDir ?? "", current.id])}
+        active={active}
+        onPopup={onPopup}
+        t={t}
+      />
+    );
   }
   return current ? (
     <DocumentPreviewPanel

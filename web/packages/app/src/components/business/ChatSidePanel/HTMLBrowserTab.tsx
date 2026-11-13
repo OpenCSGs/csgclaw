@@ -10,11 +10,13 @@ import styles from "./ChatSidePanel.module.css";
 
 export function HTMLBrowserTab({
   item,
+  sourceKey,
   active,
   onPopup,
   t,
 }: {
   item: AttachmentPreviewItem;
+  sourceKey: string;
   active: boolean;
   onPopup: (url: string) => void;
   t: TranslateFn;
@@ -45,7 +47,7 @@ export function HTMLBrowserTab({
       const text = formatPreviewText(await file.arrayBuffer(), item.mediaType, { contentType: file.type });
       if (disposed) return;
       const next = bridge
-        ? (await bridge.browserCommand({ id, action: "previewHTML", html: text }))?.url
+        ? (await bridge.browserCommand({ id, action: "previewHTML", html: text, sourceKey }))?.url
         : (objectURL = URL.createObjectURL(new Blob([text], { type: "text/html;charset=utf-8" })));
       if (disposed) {
         if (bridge) await bridge.browserCommand({ id, action: "releaseHTML" });
@@ -64,7 +66,7 @@ export function HTMLBrowserTab({
       if (objectURL) URL.revokeObjectURL(objectURL);
       if (bridge) void bridge.browserCommand({ id, action: "releaseHTML" }).catch(() => {});
     };
-  }, [item, revision]);
+  }, [item, revision, sourceKey]);
 
   return url ? (
     <BrowserTab

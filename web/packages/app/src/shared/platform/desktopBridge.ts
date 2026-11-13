@@ -2,7 +2,7 @@ export type BrowserBounds = { x: number; y: number; width: number; height: numbe
 export type DesktopBrowserRequest = { id: string } & (
   | { action: "sync"; url: string; visible: boolean; bounds: BrowserBounds }
   | { action: "navigate"; url: string }
-  | { action: "previewHTML"; html: string }
+  | { action: "previewHTML"; html: string; sourceKey: string }
   | { action: "releaseHTML" }
   | { action: "reload" | "back" | "forward" | "close" }
 );
