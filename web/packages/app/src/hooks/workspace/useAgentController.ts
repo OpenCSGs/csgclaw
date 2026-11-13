@@ -48,7 +48,7 @@ import {
 } from "@/api/hub";
 import type { HubTemplate } from "@/models/hubWorkspace";
 import { createUserRequest, joinAgentToRoomRequest } from "@/api/im";
-import { applyAgentCreationResources } from "@/api/agentCreation";
+import { applyAgentCreationResources, reconcileCreatedAgentRuntime } from "@/api/agentCreation";
 import type { AgentCreationResources } from "@/models/agentCreation";
 import { createTeamRequest, deleteTeamRequest, fetchTeams, updateTeamRequest } from "@/api/tasks";
 import type { CreateTeamPayload } from "@/api/tasks";
@@ -2174,19 +2174,33 @@ export function useAgentController({
             ...(payload.runtime_options !== undefined ? { runtime_options: payload.runtime_options } : {}),
             ...(payload.mcpServers !== undefined ? { mcpServers: payload.mcpServers } : {}),
           });
+      let finalSaved = saved;
+      const creationWarnings: string[] = [];
       if (isCreate && resources && saved.id) {
         const failedResources = await applyAgentCreationResources(saved.id, resources);
         if (failedResources.length)
-          showAgentPageNotice(
-            t("agentWizardResourcesFailed", { names: failedResources.join(", ") }),
-            "warning",
-            0,
-            saved.id,
-            true,
-          );
+          creationWarnings.push(t("agentWizardResourcesFailed", { names: failedResources.join(", ") }));
       }
-      syncManagerProfileFromAgent(saved);
-      await saveLinkedAgentUserAvatar(saved?.participants?.length ? saved : editingAgent || saved, agentDraft.avatar);
+      if (isCreate && saved.id) {
+        try {
+          const reconciled = await reconcileCreatedAgentRuntime(saved.id);
+          if (reconciled?.id === saved.id) {
+            finalSaved = {
+              ...saved,
+              ...reconciled,
+              participants: reconciled.participants ?? saved.participants,
+              skipped_resources: saved.skipped_resources,
+            };
+          }
+        } catch {
+          creationWarnings.push(t("agentCreateRuntimeRecoveryFailed"));
+        }
+      }
+      syncManagerProfileFromAgent(finalSaved);
+      await saveLinkedAgentUserAvatar(
+        finalSaved?.participants?.length ? finalSaved : editingAgent || finalSaved,
+        agentDraft.avatar,
+      );
       if (!isCreate && mcpServersChanged) {
         await queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.agentMCPServers(editingAgentID) });
       }
@@ -2198,25 +2212,22 @@ export function useAgentController({
               ? t("agentTemplateSkippedKnowledgeBase", { name: String(resource.name || "") })
               : t("agentTemplateSkippedMCP", { name: String(resource.name || "") }),
           );
-          showAgentPageNotice(
-            [t("agentTemplateCreatedWithSkippedResources"), ...resourceLines].join("\n"),
-            "warning",
-            0,
-            saved.id,
-            true,
-          );
+          creationWarnings.push([t("agentTemplateCreatedWithSkippedResources"), ...resourceLines].join("\n"));
+        }
+        if (saved.id && creationWarnings.length > 0) {
+          showAgentPageNotice(creationWarnings.join("\n"), "warning", 0, saved.id, true);
         }
       }
       await refreshAgents();
       await refreshWorkspaceBootstrap();
-      await refreshAgentSkills(saved.id || editingAgentID);
+      await refreshAgentSkills(finalSaved.id || editingAgentID);
       if (isCreate) {
         setAgentProgress((current) =>
           current
             ? { ...current, percent: 100, status: "done", index: Math.max(0, (current.steps?.length || 1) - 1) }
             : current,
         );
-        selectAgent(saved, { replace: true });
+        selectAgent(finalSaved, { replace: true });
       }
       setShowAgentModal(false);
       setAgentDraft(null);

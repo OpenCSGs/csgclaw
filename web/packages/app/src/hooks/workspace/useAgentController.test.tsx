@@ -3666,6 +3666,46 @@ describe("useAgentController", () => {
     expect(patchCsgclawUserRequest).toHaveBeenCalledWith("user-worker", { avatar: selectedAvatar });
   });
 
+  it("restarts a created worker left stopped after resource setup", async () => {
+    const stoppedWorker: AgentLike = {
+      ...oldAgent,
+      id: "u-worker",
+      name: "worker",
+      participants: [
+        {
+          agent_id: "u-worker",
+          channel: "csgclaw",
+          channel_user_ref: "user-worker",
+          id: "pt-worker",
+          type: "agent",
+        },
+      ],
+      role: "worker",
+      status: "stopped",
+    };
+    const runningWorker = { ...stoppedWorker, status: "running" };
+    const { result } = renderHook(() => useAgentControllerHarness(), { wrapper: createWrapper() });
+
+    await act(async () => {
+      await result.current.controller.computerViewProps.onCreateAgent();
+    });
+    await waitFor(() => expect(result.current.controller.agentProfileModalProps).not.toBeNull());
+
+    vi.mocked(fetchAgent).mockReset().mockResolvedValue(stoppedWorker);
+    vi.mocked(runAgentActionRequest).mockResolvedValue(runningWorker);
+
+    await act(async () => {
+      await result.current.controller.agentProfileModalProps?.onSave();
+    });
+
+    expect(fetchAgent).toHaveBeenCalledWith("u-worker", { cacheBust: true });
+    expect(runAgentActionRequest).toHaveBeenCalledWith("u-worker", "start");
+    expect(result.current.selectAgent).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "u-worker", status: "running" }),
+      { replace: true },
+    );
+  });
+
   it("uses another available provider when OpenCSG is signed out", async () => {
     vi.mocked(fetchAgentProfileDefaults).mockResolvedValue({
       model_provider_id: "opencsg",
