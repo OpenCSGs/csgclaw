@@ -106,7 +106,17 @@ PowerShell 和 Docker 打包均读取该文件。正式 release 平台仍维护�
 | `make desktop-oss-upload-packages VERSION=<version> DESKTOP_OSS_TARGETS=<os-arch>` | 只上传指定桌面目标的不可变包，不修改 OSS channel JSON |
 | `make release` | 构建配置的跨平台 release bundle |
 
-发布 CI 使用 `.github/workflows/release.yml` 和 `.gitlab/ci.yml`。GitHub tag 推送保持完整发布路径：将 Server/CLI bundle 和原生桌面安装包附加到对应的 GitHub Release，并把完整 Server/CLI 平台矩阵、两个 macOS DMG、Windows x64 安装器和 Electron 原生更新 feed 发布到 beta 或 release OSS channel。手动运行 GitHub workflow 只接受 `vX.Y.Z-alpha.N`，并只填写一个 `desktop_target`；任务只构建该桌面目标并上传不可变包，不修改 `downloads.json`、`RELEASES` 或 `RELEASES.json`，下载地址会显示在 Actions Summary。GitLab 保留原有上传到 `https://csgclaw.opencsg.com/releases/<tag>/` 的 SSH 发布链路，并继续发布 CSGClaw 产品镜像。其桌面 job 是可选手动构建：成功的安装包作为 GitLab artifact 保留一天，不会上传到公开发布目录。GitLab 的 macOS 和 Windows 桌面 job 需要提供并打上 `csgclaw-macos-arm64`、`csgclaw-macos-amd64`、`csgclaw-windows-amd64` tag 的原生 runner。
+发布 CI 使用 `.github/workflows/release.yml` 和 `.gitlab/ci.yml`。
+GitHub tag 推送保持完整发布路径：将 Server/CLI bundle 和原生桌面安装包附加到对应的 GitHub Release，并把完整 Server/CLI 平台矩阵、两个 macOS DMG、Windows x64 安装器和 Electron 原生更新 feed 发布到 beta 或 release OSS channel。
+未提供 `recovery_run_id` 时，手动运行 GitHub workflow 只接受 `vX.Y.Z-alpha.N`，并只填写一个 `desktop_target`；任务只构建该桌面目标并上传不可变包，不修改 `downloads.json`、`RELEASES` 或 `RELEASES.json`，下载地址会显示在 Actions Summary。
+GitLab 保留原有上传到 `https://csgclaw.opencsg.com/releases/<tag>/` 的 SSH 发布链路，并继续发布 CSGClaw 产品镜像。
+其桌面 job 是可选手动构建：成功的安装包作为 GitLab artifact 保留一天，不会上传到公开发布目录。
+GitLab 的 macOS 和 Windows 桌面 job 需要提供并打上 `csgclaw-macos-arm64`、`csgclaw-macos-amd64`、`csgclaw-windows-amd64` tag 的原生 runner。
+
+当 beta 发布只有一个桌面构建失败时，可手动运行同一 workflow，将已有 beta tag 填入 `version`，选择失败的 `desktop_target`，并填写原始 `recovery_run_id`。
+恢复流程核对 tag 提交、成功 job 和尚未过期的 artifact ID，从原始提交重建该桌面目标，再合并已成功的包发布 GitHub Release 和 OSS channel。
+原始产物保留一天，应在过期前执行恢复。
+Windows 校验回归检查分别在 Windows PowerShell 和 PowerShell 7 中执行，CI 直接在其 PowerShell 7 宿主中调用打包脚本。
 
 桌面安装包采用如 `csgclaw-desktop_v0.4.3_darwin_arm64.dmg` 的命名。普通 `desktop-package` 在凭据缺失时仍保持 macOS ad-hoc、Windows 未签名的默认行为；严格本地 macOS target 在 Developer ID 或公证凭据不完整时会直接失败，不会产出半签名包。它复用 CI 已使用的 Forge 打包 target 和产物收集器，但不修改现有 GitHub workflow；只写入 `desktop/out/local/`，绝不上传 OSS。GitHub Release CI 会把桌面更新源配置到相互隔离的 `channels/<channel>/updates/`；桌面端后台检查并下载，只有下载完成后才提示用户安装。
 
