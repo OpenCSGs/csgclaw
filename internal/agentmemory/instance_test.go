@@ -82,13 +82,16 @@ func TestMemoryGlobalModeTransitionPreservesOtherSections(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	since := time.Now()
+	store.instance.HistoryAfter = time.Now()
+	if err := localstore.WriteSection(path, "agent_memory", store.instance); err != nil {
+		t.Fatal(err)
+	}
 	next, err := Open(agents, path, "local")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if next.instance.Epoch == store.instance.Epoch || next.instance.HistoryAfter.Before(since) {
-		t.Fatalf("mode transition did not rotate policy and set history boundary: %+v", next.instance)
+	if next.instance.Epoch == store.instance.Epoch || !next.instance.HistoryAfter.IsZero() {
+		t.Fatalf("mode transition did not rotate policy and allow all private history: %+v", next.instance)
 	}
 	var saved instance
 	if found, err := localstore.ReadSection(path, "agent_memory", &saved); err != nil || !found || saved.Epoch != next.instance.Epoch || saved.Mode != "local" || !saved.HistoryAfter.Equal(next.instance.HistoryAfter) {
@@ -97,6 +100,18 @@ func TestMemoryGlobalModeTransitionPreservesOtherSections(t *testing.T) {
 	var other map[string]string
 	if found, err := localstore.ReadSection(path, "participants", &other); err != nil || !found || other["fixture"] != "preserve" {
 		t.Fatalf("other global section changed: %+v, %v", other, err)
+	}
+	if doc, err := next.GetOrInitialize(testScope); err != nil || !doc.Enabled {
+		t.Fatalf("default memory did not start history learning: %+v %v", doc, err)
+	}
+	worker := Worker{Store: next, History: historyOnce("old-private-message", "Historical reporting preference"),
+		Extract: func(_ context.Context, _ string, input Extraction) ([]Change, error) {
+			return []Change{{Kind: "preference", Text: input.Messages[0].Text, SourceMessageID: input.Messages[0].MessageID}}, nil
+		}}
+	worker.process(context.Background(), testScope)
+	worker.process(context.Background(), testScope)
+	if doc := getMemory(t, next, testScope); len(doc.Entries) != 1 || doc.Entries[0].Text != "Historical reporting preference" {
+		t.Fatalf("history from before enabling memory was lost: %+v", doc)
 	}
 }
 
@@ -137,5 +152,33 @@ func TestMemoryFirstStartupPreservesExistingRootSections(t *testing.T) {
 	var auth map[string]string
 	if err := json.Unmarshal(sections["auth"], &auth); err != nil || auth["fixture"] != "preserve" {
 		t.Fatalf("first startup changed auth: %v", err)
+	}
+}
+
+func TestDefaultMemoryAndManualOptOutSurviveRestart(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "state.json")
+	agents := filepath.Join(root, "agents")
+	store, err := Open(agents, path, "local")
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc, err := store.GetOrInitialize(testScope)
+	if err != nil || !doc.Enabled {
+		t.Fatalf("default memory is not enabled: %+v %v", doc, err)
+	}
+	disabled := false
+	if _, err := store.Update(testScope, Update{Revision: &doc.Revision, Enabled: &disabled}); err != nil {
+		t.Fatal(err)
+	}
+	restarted, err := Open(agents, path, "local")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if doc := getMemory(t, restarted, testScope); doc.Enabled {
+		t.Fatal("restart overwrote manual opt-out")
+	}
+	if doc := getMemory(t, restarted, Scope{AgentID: testScope.AgentID, UserID: "user-other"}); !doc.Enabled {
+		t.Fatal("manual opt-out changed the default for another scope")
 	}
 }

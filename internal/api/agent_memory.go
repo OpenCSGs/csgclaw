@@ -98,26 +98,12 @@ func (h *Handler) SetAgentMemory(store *agentmemory.Store, mode string) {
 }
 
 func (h *Handler) memoryUser(r *http.Request) string {
-	if h.agentMemory == nil || !localWorkspaceClient(r) || appRequestAgentID(r) != "" ||
+	if h.agentMemory == nil || appRequestAgentID(r) != "" ||
 		r.Header.Get("X-CSGClaw-Caller-Agent") != "" {
 		return ""
 	}
-	for _, name := range []string{"Forwarded", "X-Forwarded-For", "X-Forwarded-Host", "X-Forwarded-Proto"} {
-		if r.Header.Get(name) != "" {
-			return ""
-		}
-	}
-	if origin := r.Header.Get("Origin"); origin != "" && origin != "http://"+r.Host && origin != "https://"+r.Host {
-		return ""
-	}
 	header := r.Header.Get("Authorization")
-	switch h.memoryMode {
-	case "desktop", "local":
-		if strings.HasPrefix(header, "Bearer agent.") ||
-			(!h.serverNoAuth || header != "") && !h.validServerCredential(header) {
-			return ""
-		}
-	default:
+	if strings.HasPrefix(header, "Bearer agent.") || !h.validateServerAccessToken(header) {
 		return ""
 	}
 	return im.AdminUserID
