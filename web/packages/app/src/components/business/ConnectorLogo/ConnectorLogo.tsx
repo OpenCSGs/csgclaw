@@ -1,3 +1,4 @@
+import styles from "./ConnectorLogo.module.css";
 import type { ReactNode } from "react";
 import { ConnectorGitLabIcon } from "@/components/business/Icons";
 
@@ -22,7 +23,8 @@ export function ConnectorLogo({
 }) {
   const brand = connectorBrand(name);
   if (!brand) return fallback;
-  if (brand === "gitlab") return <ConnectorGitLabIcon size={18} className={className} aria-hidden="true" />;
+  const logoClassName = className ? `${styles.logo} ${className}` : styles.logo;
+  if (brand === "gitlab") return <ConnectorGitLabIcon size={18} className={logoClassName} aria-hidden="true" />;
   const src = brand === "feishu" ? "icons/feishu.png" : "icons/github.svg";
-  return <img className={className} src={src} width={18} height={18} alt="" aria-hidden="true" />;
+  return <img className={logoClassName} src={src} width={18} height={18} alt="" aria-hidden="true" />;
 }

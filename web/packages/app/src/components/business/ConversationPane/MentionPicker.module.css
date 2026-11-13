@@ -22,8 +22,25 @@
   box-shadow: var(--focus-ring);
 }
 
-.mention-option > div {
+.mention-text {
+  display: flex;
+  flex: 1;
   min-width: 0;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.mention-text > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mention-text > span:last-child {
+  max-width: 42%;
+  flex-shrink: 0;
 }
 
 .mention-option {
@@ -43,6 +60,12 @@
   color: var(--avatar-default-fg);
   font-weight: var(--avatar-default-weight);
   font-size: 13px;
+}
+
+.mention-option .mention-person-avatar {
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
 }
 
 .mention-option :global(.message-author) {

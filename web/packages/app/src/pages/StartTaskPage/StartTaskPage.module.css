@@ -24,6 +24,7 @@
 }
 .inner {
   width: min(880px, 100%);
+  min-width: 0;
   padding: 44px 32px 56px;
   margin: auto;
   display: flex;
@@ -35,6 +36,7 @@
   align-items: center;
   gap: 8px;
   text-align: center;
+  overflow-wrap: anywhere;
   margin-bottom: 22px;
 }
 .head h1 {
@@ -59,6 +61,7 @@
   position: relative;
 }
 .composer {
+  container: start-task-composer / inline-size;
   display: flex;
   flex-direction: column;
   border: 1px solid var(--input-border);
@@ -97,6 +100,10 @@
   box-shadow: none;
   animation: none;
 }
+.slashPopover {
+  width: min(560px, var(--radix-popover-trigger-width), var(--radix-popover-content-available-width));
+  --slash-picker-available-width: 100%;
+}
 .mentionStatus {
   padding: 12px;
   border: 1px solid var(--input-border);
@@ -111,6 +118,13 @@
   max-height: min(240px, var(--radix-popover-content-available-height));
   margin: 0;
   animation: none;
+}
+.peopleAndFiles > [role="option"] {
+  min-height: 40px;
+  padding: 6px 8px;
+}
+.peopleAndFiles > [role="option"] + [role="option"] {
+  margin-block-start: 4px;
 }
 .draft:not([hidden]) {
   display: flex;
@@ -256,10 +270,16 @@
 }
 .chips {
   display: flex;
+  flex: 1;
+  min-width: 0;
   flex-wrap: wrap;
   gap: 8px;
 }
 .chip {
+  min-width: 0;
+  max-width: 100%;
+  text-align: start;
+  overflow-wrap: anywhere;
   padding: 5px 12px 5px 9px;
   border: 1px solid var(--line);
   border-radius: 999px;
@@ -274,6 +294,7 @@
   cursor: pointer;
 }
 .chip svg {
+  flex-shrink: 0;
   color: var(--primary);
 }
 .chip:hover {
@@ -282,6 +303,7 @@
   background: var(--primary-soft);
 }
 .examplesClose {
+  flex: 0 0 24px;
   border: 0;
   background: transparent;
   color: var(--muted);

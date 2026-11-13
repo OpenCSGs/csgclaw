@@ -1,8 +1,7 @@
-import messageLayoutStyles from "@/components/business/ConversationPane/MessageLayout.module.css";
 import mentionPickerStyles from "@/components/business/ConversationPane/MentionPicker.module.css";
 import { useRoomFileReader } from "@/components/business/ChatSidePanel/useRoomFileReader";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type RefObject } from "react";
-import { File, Folder, User } from "lucide-react";
+import { File, Folder } from "lucide-react";
 import { fetchWorkspaceDirectory, type RoomFile } from "@/api/chatFiles";
 import {
   getComposerMentionState,
@@ -15,6 +14,7 @@ import type { WorkspaceEntry } from "@/models/workspace";
 import type { TranslateFn } from "@/models/conversations";
 import type { ChatFileScope } from "@/components/business/ChatSidePanel/types";
 import { useChatSidePanel } from "@/components/business/ChatSidePanel/useChatSidePanel";
+import { MentionOptionText, MentionPersonAvatar } from "../MentionPicker";
 import type { MentionPickerUser } from "../types";
 
 type Candidate =
@@ -200,7 +200,7 @@ export function useFileMentions({
           : candidate.kind === "directory"
             ? candidate.path + "/"
             : candidate.reference.label;
-        const Icon = person ? User : candidate.kind === "directory" ? Folder : File;
+        const Icon = candidate.kind === "directory" ? Folder : File;
         return (
           <div
             key={
@@ -227,19 +227,23 @@ export function useFileMentions({
                 apply(candidate);
               }}
             >
-              <span className={mentionPickerStyles["mention-icon"]}>
-                <Icon size={16} />
-              </span>
-              <span>
-                <span className={`message-author ${messageLayoutStyles["message-author"]}`}>@{label}</span>
-                <span className={`conversation-preview ${messageLayoutStyles["conversation-preview"]}`}>
-                  {person
+              {person ? (
+                <MentionPersonAvatar user={candidate.user} />
+              ) : (
+                <span className={mentionPickerStyles["mention-icon"]} aria-hidden="true">
+                  <Icon size={16} />
+                </span>
+              )}
+              <MentionOptionText
+                label={label}
+                description={
+                  person
                     ? candidate.user.id
                     : candidate.kind === "file"
                       ? candidate.sourceLabel
-                      : t("chatDirectoryCompletionHint")}
-                </span>
-              </span>
+                      : t("chatDirectoryCompletionHint")
+                }
+              />
             </button>
           </div>
         );

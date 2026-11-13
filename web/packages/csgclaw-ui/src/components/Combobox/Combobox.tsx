@@ -2,12 +2,28 @@
 import selectionStyles from "../Select/Select.module.css";
 import styles from "./Combobox.module.css";
 import { Check, ChevronDown, Search } from "lucide-react";
-import { Fragment, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import type { ButtonHTMLAttributes, ReactNode } from "react";
-import { PopoverContent, PopoverRoot, PopoverTrigger } from "../Popover/index.js";
+import {
+  PopoverContent,
+  PopoverRoot,
+  PopoverTrigger,
+} from "../Popover/index.js";
 import type { PopoverContentProps } from "../Popover/index.js";
+import { Tooltip } from "../Tooltip/index.js";
 import { TextInput } from "../FormControls/index.js";
-import { FieldContext, useFieldControlProps } from "../FormControls/fieldContext.js";
+import {
+  FieldContext,
+  useFieldControlProps,
+} from "../FormControls/fieldContext.js";
 import { classNames, legacyClassName } from "../../lib/classNames.js";
 import { nextFocusTarget } from "./focus.js";
 
@@ -42,7 +58,11 @@ export type ComboboxProps = {
   loadingLabel?: ReactNode;
   size?: "sm" | "md";
   triggerClassName?: string;
-  triggerProps?: Omit<ButtonHTMLAttributes<HTMLButtonElement>, "children" | "className">;
+  triggerTooltip?: ReactNode;
+  triggerProps?: Omit<
+    ButtonHTMLAttributes<HTMLButtonElement>,
+    "children" | "className"
+  >;
   contentClassName?: string;
   contentProps?: Omit<PopoverContentProps, "children" | "className">;
 };
@@ -50,7 +70,9 @@ export type ComboboxProps = {
 function searchText(option: ComboboxOption): string {
   return (
     option.textValue ??
-    (typeof option.label === "string" || typeof option.label === "number" ? String(option.label) : option.value)
+    (typeof option.label === "string" || typeof option.label === "number"
+      ? String(option.label)
+      : option.value)
   );
 }
 
@@ -75,6 +97,7 @@ export function Combobox({
   size = "md",
   triggerClassName,
   triggerProps = {},
+  triggerTooltip,
   contentClassName,
   contentProps,
 }: ComboboxProps) {
@@ -105,24 +128,33 @@ export function Combobox({
       ? options.filter(
           (option) =>
             option.alwaysVisible ||
-            (option.value !== "" && searchText(option).toLocaleLowerCase().includes(normalized)),
+            (option.value !== "" &&
+              searchText(option).toLocaleLowerCase().includes(normalized)),
         )
       : options;
   }, [options, query]);
   const groups = useMemo(() => {
-    const result: { name?: string; items: { option: ComboboxOption; index: number }[] }[] = [];
+    const result: {
+      name?: string;
+      items: { option: ComboboxOption; index: number }[];
+    }[] = [];
     filtered.forEach((option, index) => {
       const name = option.group?.trim() || undefined;
-      if (!result.length || result.at(-1)?.name !== name) result.push({ name, items: [] });
+      if (!result.length || result.at(-1)?.name !== name)
+        result.push({ name, items: [] });
       result.at(-1)?.items.push({ option, index });
     });
     return result;
   }, [filtered]);
   const enabled = loading ? [] : filtered.filter((option) => !option.disabled);
-  const activeValue = enabled.some((option) => option.value === highlightedValue)
+  const activeValue = enabled.some(
+    (option) => option.value === highlightedValue,
+  )
     ? highlightedValue
     : (enabled[0]?.value ?? null);
-  const activeIndex = filtered.findIndex((option) => option.value === activeValue);
+  const activeIndex = filtered.findIndex(
+    (option) => option.value === activeValue,
+  );
   const activeId = activeIndex >= 0 ? `${listId}-${activeIndex}` : undefined;
 
   function changeOpen(next: boolean) {
@@ -148,11 +180,14 @@ export function Combobox({
   function moveHighlight(offset: number) {
     if (!enabled.length) return;
     const index = enabled.findIndex((option) => option.value === activeValue);
-    setHighlightedValue(enabled[(index + offset + enabled.length) % enabled.length].value);
+    setHighlightedValue(
+      enabled[(index + offset + enabled.length) % enabled.length].value,
+    );
   }
 
   useEffect(() => {
-    if (isOpen && activeId) document.getElementById(activeId)?.scrollIntoView({ block: "nearest" });
+    if (isOpen && activeId)
+      document.getElementById(activeId)?.scrollIntoView({ block: "nearest" });
   }, [activeId, isOpen]);
 
   useEffect(() => {
@@ -164,47 +199,63 @@ export function Combobox({
     return () => cancelAnimationFrame(frame);
   }, [isOpen, lockedSide]);
 
+  const trigger = (
+    <PopoverTrigger asChild>
+      <button
+        data-csg-control="combobox"
+        {...fieldProps}
+        ref={attachTrigger}
+        type="button"
+        className={classNames(
+          classNames(
+            selectionStyles["csg-select-trigger"],
+            legacyClassName("csg-select-trigger"),
+          ),
+          selectionStyles[`csg-select-trigger-${size}`],
+          triggerClassName,
+        )}
+        disabled={disabled}
+        role="combobox"
+        aria-haspopup="listbox"
+        aria-controls={isOpen ? listId : undefined}
+        aria-expanded={isOpen}
+        aria-hidden={isOpen || undefined}
+        aria-required={required || fieldProps["aria-required"]}
+        data-placeholder={!selected && !selectedValue ? "" : undefined}
+        onKeyDown={(event) => {
+          triggerProps.onKeyDown?.(event);
+          if (event.defaultPrevented) return;
+          if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+            event.preventDefault();
+            changeOpen(true);
+            if (event.key === "ArrowUp")
+              setHighlightedValue(enabled.at(-1)?.value ?? null);
+          }
+        }}
+      >
+        <span
+          className={classNames(
+            selectionStyles["csg-select-value"],
+            legacyClassName("csg-select-value"),
+          )}
+        >
+          {selectedLabel ?? selected?.label ?? (selectedValue || placeholder)}
+        </span>
+        <ChevronDown
+          className={classNames(
+            selectionStyles["csg-select-chevron"],
+            legacyClassName("csg-select-chevron"),
+          )}
+          aria-hidden="true"
+          size={16}
+        />
+      </button>
+    </PopoverTrigger>
+  );
+
   return (
     <PopoverRoot open={isOpen} onOpenChange={changeOpen} modal={inDialog}>
-      <PopoverTrigger asChild>
-        <button
-          data-csg-control="combobox"
-          {...fieldProps}
-          ref={attachTrigger}
-          type="button"
-          className={classNames(
-            classNames(selectionStyles["csg-select-trigger"], legacyClassName("csg-select-trigger")),
-            selectionStyles[`csg-select-trigger-${size}`],
-            triggerClassName,
-          )}
-          disabled={disabled}
-          role="combobox"
-          aria-haspopup="listbox"
-          aria-controls={isOpen ? listId : undefined}
-          aria-expanded={isOpen}
-          aria-hidden={isOpen || undefined}
-          aria-required={required || fieldProps["aria-required"]}
-          data-placeholder={!selected && !selectedValue ? "" : undefined}
-          onKeyDown={(event) => {
-            triggerProps.onKeyDown?.(event);
-            if (event.defaultPrevented) return;
-            if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-              event.preventDefault();
-              changeOpen(true);
-              if (event.key === "ArrowUp") setHighlightedValue(enabled.at(-1)?.value ?? null);
-            }
-          }}
-        >
-          <span className={classNames(selectionStyles["csg-select-value"], legacyClassName("csg-select-value"))}>
-            {selectedLabel ?? selected?.label ?? (selectedValue || placeholder)}
-          </span>
-          <ChevronDown
-            className={classNames(selectionStyles["csg-select-chevron"], legacyClassName("csg-select-chevron"))}
-            aria-hidden="true"
-            size={16}
-          />
-        </button>
-      </PopoverTrigger>
+      <Tooltip content={triggerTooltip} contentProps={{ side: "top" }}>{trigger}</Tooltip>
       {name || required ? (
         <select
           data-csg-control="native-select"
@@ -216,7 +267,9 @@ export function Combobox({
           required={required}
           disabled={disabled}
           onChange={(event) => {
-            const option = options.find((item) => item.value === event.target.value);
+            const option = options.find(
+              (item) => item.value === event.target.value,
+            );
             if (option) commit(option);
           }}
           onInvalid={(event) => {
@@ -224,10 +277,18 @@ export function Combobox({
             triggerRef.current?.focus();
           }}
         >
-          {!options.some((option) => option.value === "") ? <option value="" /> : null}
-          {selectedValue && !selected ? <option value={selectedValue}>{selectedValue}</option> : null}
+          {!options.some((option) => option.value === "") ? (
+            <option value="" />
+          ) : null}
+          {selectedValue && !selected ? (
+            <option value={selectedValue}>{selectedValue}</option>
+          ) : null}
           {options.map((option) => (
-            <option key={option.value} value={option.value} disabled={option.disabled}>
+            <option
+              key={option.value}
+              value={option.value}
+              disabled={option.disabled}
+            >
               {searchText(option)}
             </option>
           ))}
@@ -267,7 +328,10 @@ export function Combobox({
           if (!event.defaultPrevented) restoreFocus.current = false;
         }}
       >
-        <div className={styles["csg-combobox-search"]} data-invalid={fieldProps["aria-invalid"] || undefined}>
+        <div
+          className={styles["csg-combobox-search"]}
+          data-invalid={fieldProps["aria-invalid"] || undefined}
+        >
           <Search size={15} aria-hidden="true" />
           <FieldContext.Provider value={null}>
             <TextInput
@@ -298,7 +362,12 @@ export function Combobox({
                 composing.current = false;
               }}
               onKeyDown={(event) => {
-                if (composing.current || event.nativeEvent.isComposing || event.keyCode === 229) return;
+                if (
+                  composing.current ||
+                  event.nativeEvent.isComposing ||
+                  event.keyCode === 229
+                )
+                  return;
                 if (event.key === "ArrowDown" || event.key === "ArrowUp") {
                   event.preventDefault();
                   event.stopPropagation();
@@ -306,12 +375,18 @@ export function Combobox({
                 } else if (event.key === "Enter") {
                   event.preventDefault();
                   event.stopPropagation();
-                  const option = enabled.find((item) => item.value === activeValue);
+                  const option = enabled.find(
+                    (item) => item.value === activeValue,
+                  );
                   if (option) commit(option);
                 } else if (event.key === "Tab") {
                   restoreFocus.current = false;
                   tabTarget.current = triggerRef.current
-                    ? nextFocusTarget(triggerRef.current, contentRef.current, event.shiftKey)
+                    ? nextFocusTarget(
+                        triggerRef.current,
+                        contentRef.current,
+                        event.shiftKey,
+                      )
                     : null;
                   if (tabTarget.current) event.preventDefault();
                   changeOpen(false);
@@ -340,7 +415,10 @@ export function Combobox({
                 className={styles["csg-combobox-group"]}
               >
                 {group.name ? (
-                  <div className={styles["csg-combobox-group-title"]} aria-hidden="true">
+                  <div
+                    className={styles["csg-combobox-group-title"]}
+                    aria-hidden="true"
+                  >
                     {group.name}
                   </div>
                 ) : null}
@@ -351,7 +429,9 @@ export function Combobox({
                       role="option"
                       aria-selected={option.value === selectedValue}
                       aria-disabled={option.disabled || undefined}
-                      data-highlighted={option.value === activeValue ? "" : undefined}
+                      data-highlighted={
+                        option.value === activeValue ? "" : undefined
+                      }
                       data-disabled={option.disabled ? "" : undefined}
                       className={selectionStyles["csg-select-item"]}
                       onPointerMove={() => {
@@ -361,12 +441,26 @@ export function Combobox({
                       onClick={() => commit(option)}
                     >
                       {option.value === selectedValue ? (
-                        <Check className={selectionStyles["csg-select-item-indicator"]} size={16} aria-hidden="true" />
+                        <Check
+                          className={
+                            selectionStyles["csg-select-item-indicator"]
+                          }
+                          size={16}
+                          aria-hidden="true"
+                        />
                       ) : null}
                       <span className={selectionStyles["csg-select-item-copy"]}>
-                        <span className={styles["csg-combobox-label"]}>{option.label}</span>
+                        <span className={styles["csg-combobox-label"]}>
+                          {option.label}
+                        </span>
                         {option.description ? (
-                          <span className={selectionStyles["csg-select-item-description"]}>{option.description}</span>
+                          <span
+                            className={
+                              selectionStyles["csg-select-item-description"]
+                            }
+                          >
+                            {option.description}
+                          </span>
                         ) : null}
                       </span>
                     </div>

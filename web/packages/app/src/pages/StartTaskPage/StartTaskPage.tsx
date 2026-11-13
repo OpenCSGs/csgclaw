@@ -672,7 +672,9 @@ function StartTaskForm({
                       side="top"
                       align="start"
                       role="presentation"
-                      className={styles.mentionPopover}
+                      className={`${styles.mentionPopover} ${
+                        promptMentions.candidates.length || promptMentions.directoryStatus ? "" : styles.slashPopover
+                      }`}
                       onOpenAutoFocus={(event) => event.preventDefault()}
                       onCloseAutoFocus={(event) => event.preventDefault()}
                       onInteractOutside={(event) => {
@@ -683,7 +685,7 @@ function StartTaskForm({
                         <MentionPicker
                           groupPeopleAndFiles
                           showRole={false}
-                          className={styles.mentions}
+                          className={`${styles.mentions} ${styles.peopleAndFiles}`}
                           users={promptMentions.candidates}
                           activeIndex={promptMentions.activeIndex}
                           onSelect={promptMentions.choose}
@@ -858,7 +860,7 @@ function StartTaskForm({
                     }}
                   >
                     <Icon size={15} />
-                    {t(`iaStartExample_${key}_title`)}
+                    <span className="min-w-0">{t(`iaStartExample_${key}_title`)}</span>
                   </button>
                 ))}
               </div>

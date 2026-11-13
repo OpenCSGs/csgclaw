@@ -6,8 +6,7 @@
 
 .slash-picker {
   left: 12px;
-  right: 12px;
-  width: auto;
+  right: auto;
   max-height: min(352px, calc(100dvh - 220px));
   padding: 8px;
   border-color: rgba(148, 163, 184, 0.18);
@@ -16,12 +15,15 @@
   box-shadow: 0 18px 42px rgba(15, 23, 42, 0.12);
 }
 
+.slash-picker:global(.mention-picker) {
+  width: min(560px, var(--slash-picker-available-width, calc(100% - 28px)));
+}
+
 .slash-picker .slash-option {
   display: grid;
   grid-template-columns: 28px minmax(0, 1fr) auto;
   gap: 12px;
-  min-height: 44px;
-  padding: 6px 10px;
+  padding: 6px 8px;
   border-radius: 14px;
 }
 
@@ -43,15 +45,24 @@
   min-width: 0;
   display: flex;
   align-items: baseline;
-  gap: 12px;
+  gap: 4px;
 }
 
 .slash-picker :global(.message-author) {
   flex: 0 0 auto;
+  min-width: 0;
+  max-width: max(50%, calc(100% - 4px - 4ch));
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: var(--text);
   font-size: 15px;
   font-weight: 560;
   line-height: 24px;
+}
+
+.slash-picker :global(.message-author):only-child {
+  max-width: 100%;
 }
 
 .slash-option-description {
