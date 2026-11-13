@@ -238,6 +238,43 @@ func (f *fakeConversationRuntime) publish(event activity.RuntimeEvent) {
 	}
 }
 
+func TestConversationCompletionPreservesNativeMessagesForReplay(t *testing.T) {
+	runtimeImpl := &fakeConversationRuntime{}
+	promptCalls := 0
+	runtimeImpl.prompt = func(_ context.Context, runtimeID, sessionID, _ string) error {
+		promptCalls++
+		for _, event := range []activity.RuntimeEvent{
+			{Kind: activity.RuntimeEventTextDelta, MessageID: "comment", Text: "Checking.", Payload: map[string]any{"phase": "commentary"}},
+			{Kind: activity.RuntimeEventTextDelta, MessageID: "answer", Text: "Draft.", Payload: map[string]any{"phase": "unknown"}},
+			{Kind: activity.RuntimeEventTextDelta, MessageID: "answer", Text: "Answer.", Payload: map[string]any{"phase": "final_answer", "text_snapshot": true}},
+			{Kind: activity.RuntimeEventPromptCompleted},
+		} {
+			event.RuntimeID, event.SessionID = runtimeID, sessionID
+			runtimeImpl.publish(event)
+		}
+		return nil
+	}
+	engine := New(newTestAgentService(t, []agent.Agent{{
+		ID: "agent-a", Name: "A", Role: agent.RoleWorker, RuntimeKind: agent.RuntimeKindCodex,
+		RuntimeID: "runtime-a", Status: string(runtime.StateRunning),
+	}}, runtimeImpl))
+	request := TurnRequest{ID: "native-messages", ConversationKey: "conversation", Input: textInput("hello")}
+	result := engine.Conversations("agent-a").Run(t.Context(), request, nil)
+	if result.Status != TurnSucceeded || result.Output != "Answer." || len(result.RuntimeText) != 2 {
+		t.Fatalf("result=%+v", result)
+	}
+	result.RuntimeText[0].Text = "Changed by caller."
+	result.RuntimeText[1].Phase = "commentary"
+	replayed := engine.Conversations("agent-a").Run(t.Context(), request, nil)
+	want := []TurnEvent{
+		{Kind: TurnEventTextDelta, ItemID: "comment", Phase: "commentary", Text: "Checking.", TextSnapshot: true},
+		{Kind: TurnEventTextDelta, ItemID: "answer", Phase: "final_answer", Text: "Answer.", TextSnapshot: true},
+	}
+	if replayed.Status != TurnSucceeded || !reflect.DeepEqual(replayed.RuntimeText, want) || promptCalls != 1 {
+		t.Fatalf("replayed=%+v promptCalls=%d", replayed, promptCalls)
+	}
+}
+
 func TestConversationRunAuthorizesRuntimeOutputFile(t *testing.T) {
 	workspace := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(workspace, "reports"), 0o700); err != nil {

@@ -1136,6 +1136,9 @@ func cloneMemoryCompleted(input memoryCompletedTurn) memoryCompletedTurn {
 
 func cloneMemoryResult(input agentengine.TurnResult) agentengine.TurnResult {
 	input.Files = cloneMemoryFiles(input.Files)
+	if input.RuntimeText != nil {
+		input.RuntimeText = cloneEvents(input.RuntimeText)
+	}
 	if input.Interactions != nil {
 		items := make([]agentengine.InteractionRequest, len(input.Interactions))
 		for i, item := range input.Interactions {

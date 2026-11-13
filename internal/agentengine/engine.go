@@ -806,6 +806,9 @@ func cloneTurnEvent(input TurnEvent) TurnEvent {
 
 func cloneTurnResult(input TurnResult) TurnResult {
 	input.Files = cloneOutputFiles(input.Files)
+	if input.RuntimeText != nil {
+		input.RuntimeText = cloneTurnEvents(input.RuntimeText)
+	}
 	if input.Interactions != nil {
 		interactions := make([]InteractionRequest, len(input.Interactions))
 		for i, item := range input.Interactions {

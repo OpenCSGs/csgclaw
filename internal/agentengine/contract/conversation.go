@@ -184,6 +184,9 @@ type TurnEvent struct {
 	Interaction  *InteractionRequest `json:"interaction,omitempty"`
 	Output       *OutputItem         `json:"output,omitempty"`
 
+	// Recovered identifies events reconstructed from Runtime history.
+	Recovered bool `json:"-"`
+
 	// A terminal history update may reconcile text still buffered by an in-process consumer.
 	RecoveredText []RecoveredTextPart `json:"-"`
 }
@@ -341,4 +344,9 @@ type TurnResult struct {
 
 	// RuntimeFiles transfers immutable snapshots from the Adapter to Engine.
 	RuntimeFiles []*OutputFile `json:"-"`
+
+	// RuntimeText preserves authoritative native message identities for
+	// in-process delivery, including text recovered from native history.
+	// Recovered tool boundaries retain the original commentary positions.
+	RuntimeText []TurnEvent `json:"-"`
 }
