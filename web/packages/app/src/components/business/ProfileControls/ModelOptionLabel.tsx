@@ -1,8 +1,9 @@
-import type { ReactNode } from "react";
+import { Fragment, type ReactNode } from "react";
 
 export type ModelOptionLabelProps = {
   avatar?: string;
   badge?: string;
+  badges?: readonly string[];
   icon?: ReactNode;
   model: string;
   provider?: string;
@@ -13,6 +14,7 @@ export type ModelOptionLabelProps = {
 export function ModelOptionLabel({
   avatar,
   badge,
+  badges,
   icon,
   model,
   provider,
@@ -39,7 +41,12 @@ export function ModelOptionLabel({
       <span className="model-option-copy">
         <span className="model-option-model">
           <span className="model-option-model-name">{model}</span>
-          {badge ? <span className="model-option-badge">{badge}</span> : null}
+          {(badges ?? (badge ? [badge] : [])).map((label) => (
+            <Fragment key={label}>
+              {" "}
+              <span className="model-option-badge">{label}</span>
+            </Fragment>
+          ))}
         </span>
         {hasProvider ? <span className="model-option-provider">{provider}</span> : null}
       </span>

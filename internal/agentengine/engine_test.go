@@ -1002,10 +1002,11 @@ func TestCodexInputPreservesOrderedTextImageAndFileBlocks(t *testing.T) {
 		t.Fatalf("clientUserMessageId = %q", runtimeImpl.turnID)
 	}
 	blocks := runtimeImpl.promptBlocks
-	if len(blocks) != 5 || blocks[0].Text == nil || blocks[0].Text.Text != "before" ||
-		blocks[1].LocalImage == nil || blocks[2].Text == nil || !strings.Contains(blocks[2].Text.Text, "notes.txt") ||
-		blocks[3].Text == nil || !strings.Contains(blocks[3].Text.Text, saved) ||
-		blocks[4].Text == nil || blocks[4].Text.Text != "after" {
+	if len(blocks) != 6 || blocks[0].Text == nil || blocks[0].Text.Text != "before" ||
+		blocks[1].Text == nil || blocks[1].Text.Text != "Attached reference image 1 (\"image.png\"):" ||
+		blocks[2].LocalImage == nil || blocks[3].Text == nil || !strings.Contains(blocks[3].Text.Text, "notes.txt") ||
+		blocks[4].Text == nil || !strings.Contains(blocks[4].Text.Text, saved) ||
+		blocks[5].Text == nil || blocks[5].Text.Text != "after" {
 		t.Fatalf("prompt blocks = %#v", blocks)
 	}
 }

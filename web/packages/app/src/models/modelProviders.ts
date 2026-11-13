@@ -62,6 +62,7 @@ export type ModelProvider = {
   headers?: Record<string, unknown>;
   models: string[];
   imageModels?: string[];
+  imageMetadata?: Record<string, ImageModelCapabilities>;
   videoModels?: string[];
   reasoning_effort?: string;
   status: ModelProviderStatus;
@@ -85,6 +86,8 @@ export type ModelProviderOption = {
   builtin?: boolean;
 };
 
+type ImageModelCapabilities = { textToImage: boolean; imageToImage: boolean };
+
 export type ModelProviderSelectOption = {
   reasoningEfforts?: Record<string, string[]>;
   brandName?: string;
@@ -96,6 +99,7 @@ export type ModelProviderSelectOption = {
   id: string;
   models: string[];
   imageModels?: string[];
+  imageMetadata?: Record<string, ImageModelCapabilities>;
   videoModels?: string[];
   value: string;
 };
@@ -219,6 +223,7 @@ function normalizeModelProvider(raw: unknown): ModelProvider {
     api_protocol: String(record.api_protocol || "") || undefined,
     model_source: String(record.model_source || "") || undefined,
     imageModels: normalizeModelIDs(record.image_models),
+    imageMetadata: normalizeImageMetadata(record.image_metadata),
     videoModels: normalizeModelIDs(record.video_models),
     model_metadata: normalizeModelMetadataMap(record.model_metadata),
     reasoning_efforts: normalizeReasoningEfforts(record.reasoning_efforts),
@@ -440,6 +445,7 @@ export function modelProviderSelectOptionsFromCatalog(
       models: modelIDsForProviderSelection(provider.id, provider.models),
       ...(provider.reasoning_efforts ? { reasoningEfforts: provider.reasoning_efforts } : {}),
       imageModels: provider.imageModels ?? [],
+      ...(provider.imageMetadata ? { imageMetadata: provider.imageMetadata } : {}),
       videoModels: provider.videoModels ?? [],
       value: provider.id,
     });
@@ -600,6 +606,18 @@ function compareModelProviders(a: ModelProvider, b: ModelProvider): number {
     return (rankA ?? 1000) - (rankB ?? 1000);
   }
   return a.display_name.localeCompare(b.display_name) || a.id.localeCompare(b.id);
+}
+
+function normalizeImageMetadata(raw: unknown): Record<string, ImageModelCapabilities> | undefined {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
+  const entries: [string, ImageModelCapabilities][] = [];
+  for (const [model, value] of Object.entries(raw)) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) continue;
+    const textToImage = value.text_to_image === true;
+    const imageToImage = value.image_to_image === true;
+    if (textToImage || imageToImage) entries.push([model, { textToImage, imageToImage }]);
+  }
+  return entries.length ? Object.fromEntries(entries) : undefined;
 }
 
 function normalizeModelIDs(raw: unknown): string[] {

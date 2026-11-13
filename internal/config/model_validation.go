@@ -5,6 +5,7 @@ import (
 	"csgclaw/internal/modelpreset"
 	"errors"
 	"fmt"
+	"maps"
 	"strings"
 )
 
@@ -27,6 +28,7 @@ type ProviderConfig struct {
 	Headers         map[string]string                   `json:"headers,omitempty"`
 	Models          []string                            `json:"models,omitempty"`
 	ImageModels     []string                            `json:"image_models,omitempty"`
+	ImageMetadata   map[string]modelcap.ImageGeneration `json:"image_metadata,omitempty"`
 	VideoModels     []string                            `json:"video_models,omitempty"`
 	VideoMetadata   map[string]modelcap.VideoGeneration `json:"video_metadata,omitempty"`
 	VisionModels    []string                            `json:"vision_models,omitempty"`
@@ -143,6 +145,7 @@ func (c ProviderConfig) Resolved() ProviderConfig {
 	out.Models = normalizeModelIDs(out.Models)
 	out.ImageModels = normalizeModelIDs(out.ImageModels)
 	out.VideoModels = normalizeModelIDs(out.VideoModels)
+	out.ImageMetadata = maps.Clone(c.ImageMetadata)
 	out.VideoMetadata = modelcap.CloneVideoGeneration(c.VideoMetadata)
 	out.VisionModels = normalizeModelIDs(out.VisionModels)
 	out.Status = strings.ToLower(strings.TrimSpace(out.Status))

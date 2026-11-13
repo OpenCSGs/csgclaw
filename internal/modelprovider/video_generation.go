@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"csgclaw/internal/modelcap"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -30,6 +31,7 @@ func CloneVideoGeneration(in *VideoGenerationConfig) *VideoGenerationConfig {
 }
 
 type VideoGenerationOptions struct {
+	Reference *ReferenceImage               `json:"-"`
 	Size      string                        `json:"size,omitempty"`
 	Seconds   int                           `json:"seconds,omitempty"`
 	RequestID string                        `json:"-"`
@@ -109,18 +111,7 @@ func GenerateVideo(ctx context.Context, client *http.Client, baseURL, key string
 	created.ID = strings.TrimSpace(options.ResumeID)
 	reportVideoProgress(options.Progress, created.ID, "submitting")
 	if created.ID == "" {
-		requestBody := map[string]any{"model": model, "prompt": prompt}
-		if options.Size != "" {
-			requestBody["size"] = options.Size
-		}
-		if options.Seconds > 0 {
-			requestBody["seconds"] = options.Seconds
-		}
-		body, err := json.Marshal(requestBody)
-		if err != nil {
-			return result, err
-		}
-		if err := videoJSON(ctx, client, http.MethodPost, baseURL+"/videos", key, headers, body, options.RequestID, &created); err != nil {
+		if err := submitVideo(ctx, client, baseURL+"/videos", key, headers, model, prompt, options, &created); err != nil {
 			return result, err
 		}
 	} else {
@@ -153,7 +144,7 @@ func GenerateVideo(ctx context.Context, client *http.Client, baseURL, key string
 		}
 		var pollErr error
 		for attempt := 0; attempt < videoRetryLimit; attempt++ {
-			pollErr = videoJSON(ctx, client, http.MethodGet, baseURL+"/videos/"+created.ID, key, headers, nil, "", &state)
+			pollErr = videoJSON(ctx, client, http.MethodGet, baseURL+"/videos/"+created.ID, key, headers, nil, "", "", &state)
 			if pollErr == nil || !retryableVideoError(pollErr) {
 				break
 			}
@@ -259,7 +250,47 @@ func reportVideoProgress(callback func(VideoGenerationProgress), id, status stri
 	callback(VideoGenerationProgress{ID: strings.TrimSpace(id), Status: strings.TrimSpace(status), UpdatedAt: time.Now().UTC()})
 }
 
-func videoJSON(ctx context.Context, client *http.Client, method, url, key string, headers map[string]string, body []byte, requestID string, out any) error {
+func submitVideo(ctx context.Context, client *http.Client, endpoint, key string, headers map[string]string, model, prompt string, options VideoGenerationOptions, out any) error {
+	fields := map[string]string{"model": model, "prompt": prompt}
+	requestBody := map[string]any{"model": model, "prompt": prompt}
+	if options.Size != "" {
+		fields["size"] = options.Size
+		requestBody["size"] = options.Size
+	}
+	if options.Seconds > 0 {
+		fields["seconds"] = strconv.Itoa(options.Seconds)
+		requestBody["seconds"] = options.Seconds
+	}
+	if options.Reference != nil {
+		body, contentType, err := referenceImageMultipart(fields, "input_reference", []ReferenceImage{*options.Reference})
+		if err != nil {
+			return err
+		}
+		err = videoJSON(ctx, client, http.MethodPost, endpoint, key, headers, body, contentType, options.RequestID, out)
+		if err == nil {
+			return nil
+		}
+		// Fall back only after an explicit rejection of the multipart encoding.
+		var rejection *VideoGenerationError
+		if !errors.As(err, &rejection) || rejection.HTTPStatus != http.StatusBadRequest ||
+			!strings.EqualFold(strings.TrimSpace(rejection.Message), "selected model does not support multipart input_reference") {
+			return err
+		}
+		data := options.Reference.Data
+		prefix := "data:" + http.DetectContentType(data) + ";base64,"
+		if len(prefix)+base64.StdEncoding.EncodedLen(len(data)) > 20<<20 {
+			return &VideoGenerationError{Code: "reference_image_too_large", Message: "The reference image exceeds the supported size for JSON video requests."}
+		}
+		requestBody["input_reference"] = map[string]string{"image_url": prefix + base64.StdEncoding.EncodeToString(data)}
+	}
+	body, err := json.Marshal(requestBody)
+	if err != nil {
+		return err
+	}
+	return videoJSON(ctx, client, http.MethodPost, endpoint, key, headers, body, "application/json", options.RequestID, out)
+}
+
+func videoJSON(ctx context.Context, client *http.Client, method, url, key string, headers map[string]string, body []byte, contentType, requestID string, out any) error {
 	requestCtx, cancel := context.WithTimeout(ctx, videoRequestTimeout)
 	defer cancel()
 	req, err := http.NewRequestWithContext(requestCtx, method, url, bytes.NewReader(body))
@@ -270,8 +301,8 @@ func videoJSON(ctx context.Context, client *http.Client, method, url, key string
 	if requestID != "" {
 		req.Header.Set("Idempotency-Key", requestID)
 	}
-	if len(body) > 0 {
-		req.Header.Set("Content-Type", "application/json")
+	if contentType != "" {
+		req.Header.Set("Content-Type", contentType)
 	}
 	resp, err := client.Do(req)
 	if err != nil {

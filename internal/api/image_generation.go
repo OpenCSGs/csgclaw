@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"net/http"
+	"os"
 	"strings"
 
 	"csgclaw/internal/agentengine"
@@ -84,8 +85,36 @@ func (h *Handler) retryImageGeneration(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	renderer := delivery.NewTranscriptRenderer(store)
-	result := h.agentEngine.Conversations(turn.AgentID).Run(r.Context(), agentengine.TurnRequest{
-		ID: turn.TurnID, ConversationKey: turn.ConversationKey, Input: []agentengine.InputPart{{Kind: agentengine.InputPartText, Text: task.Prompt}},
+	conversation := h.agentEngine.Conversations(turn.AgentID)
+	parts := []agentengine.InputPart{{Kind: agentengine.InputPartText, Text: task.Prompt}}
+	if task.File == nil {
+		files := conversation.Files()
+		for _, id := range task.AttachmentIDs {
+			attachment, err := h.im.RoomAttachmentFile(turn.RoomID, id)
+			if err != nil {
+				writeCodedAPIError(w, http.StatusConflict, "image_reference_unavailable", "The original reference image is unavailable.")
+				return
+			}
+			source, err := os.Open(attachment.Path)
+			if err != nil {
+				writeCodedAPIError(w, http.StatusConflict, "image_reference_unavailable", "The original reference image is unavailable.")
+				return
+			}
+			file, err := files.Create(r.Context(), agentengine.FileCreateRequest{
+				Name: attachment.SafeName, MIMEType: attachment.MediaType,
+				SizeBytes: attachment.Attachment.SizeBytes, SHA256: attachment.Attachment.SHA256,
+			}, source)
+			_ = source.Close()
+			if err != nil {
+				writeCodedAPIError(w, http.StatusConflict, "image_reference_unavailable", "The original reference image is unavailable.")
+				return
+			}
+			defer files.Delete(context.WithoutCancel(r.Context()), file.ID)
+			parts = append(parts, agentengine.InputPart{Kind: agentengine.InputPartFile, File: &agentengine.InputFile{ID: file.ID, AttachmentID: id}})
+		}
+	}
+	result := conversation.Run(r.Context(), agentengine.TurnRequest{
+		ID: turn.TurnID, ConversationKey: turn.ConversationKey, Input: parts,
 		Admission: agentengine.AdmissionRejectIfBusy, ImageGeneration: &task,
 	}, contract.ImageGenerationSink{EventSink: agentengine.EventSinkFunc(func(ctx context.Context, event agentengine.TurnEvent) error { return renderer.Emit(ctx, turn, event) })})
 	writeJSON(w, http.StatusOK, result)

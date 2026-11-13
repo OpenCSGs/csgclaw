@@ -111,6 +111,9 @@ type InputPart struct {
 type InputFile struct {
 	ID string `json:"id"`
 
+	// AttachmentID identifies the durable chat attachment behind a staged file.
+	AttachmentID string `json:"-"`
+
 	// Resolved is available only to the selected Runtime Adapter, never JSON clients.
 	Resolved *OutputFile `json:"-"`
 }

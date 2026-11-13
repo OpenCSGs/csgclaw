@@ -55,20 +55,39 @@ function room(id: string, createdAt: string, extra: Partial<IMConversation> = {}
 }
 
 describe("conversation model helpers", () => {
-  it("keeps cloud task and legacy notifier identities out of room invitations", () => {
+  it("only invites local agents from the agent list by identity", () => {
     const conversation = room("room", "", { members: ["pt-existing"] });
     const worker = { id: "user-worker", name: "Worker", role: "worker" };
-    const candidates = roomInviteCandidates(conversation, [
-      worker,
-      { id: "user-existing", name: "Existing" },
-      { id: "user-archived", name: "Archived", agent_state: "archived" },
-      { id: "user-relay-history", name: "Cloud history", role: "cloud" },
-      { id: "user-old-notifier", role: "worker", legacy_notifier: true },
-      { id: "user-notifier-role", role: "notifier" },
-      { id: "user-notification", participants: [{ type: "notification" }] },
-    ]);
+    const candidates = roomInviteCandidates(
+      conversation,
+      [
+        worker,
+        { id: "user-manager", agent_id: "agent-manager", role: "manager" },
+        { id: "user-bound", agent_id: "agent-custom", role: "worker" },
+        { id: "user-existing", name: "Existing" },
+        { id: "user-archived", agent_state: "archived" },
+        { id: "user-relay-history", role: "cloud" },
+        { id: "user-old-notifier", legacy_notifier: true },
+        { id: "user-notifier-role", role: "notifier" },
+        { id: "user-leb4tr", name: "12", role: "worker" },
+        { id: "user-stale", name: "Worker", role: "worker" },
+        { id: "user-abc-deadbeef", name: "Other agent", role: "worker" },
+        { id: "user-mismatch", agent_id: "agent-deleted", role: "worker" },
+      ],
+      [
+        { id: "agent-worker", name: "Worker" },
+        { id: "agent-manager", role: "manager" },
+        {
+          id: "agent-custom",
+          participants: [{ id: "pt-custom", channel: "csgclaw", channel_user_ref: "user-bound" }],
+        },
+        ...["existing", "archived", "relay-history", "old-notifier", "notifier-role", "abc", "mismatch"].map((id) => ({
+          id: `agent-${id}`,
+        })),
+      ],
+    );
 
-    expect(candidates.map((user) => user.id)).toEqual([worker.id, "user-notification"]);
+    expect(candidates.map((user) => user.id)).toEqual([worker.id, "user-manager", "user-bound"]);
   });
 
   it("formats structured event messages in English and Chinese", () => {

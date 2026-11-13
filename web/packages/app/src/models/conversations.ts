@@ -1,3 +1,9 @@
+import {
+  isNotificationBotAgent,
+  partitionWorkspaceAgentItems,
+  resolveAgentChannelUserID,
+  type AgentLike,
+} from "@/models/agents";
 import { resourceMessageText } from "./conversationResources";
 import type { TaskConfiguration } from "@/models/taskConfiguration";
 import { newerProgressMessage } from "@/models/turnProgress";
@@ -864,13 +870,46 @@ export function isOnDemandConversation(conversation: { type?: RoomType | null } 
 
 export function roomInviteCandidates(
   conversation: IMConversation | null | undefined,
-  users: readonly IMUser[] = [],
+  users: readonly IMUser[] | undefined,
+  agents: readonly AgentLike[],
 ): IMUser[] {
+  if (!conversation) return [];
+  const { workerAgentItems } = partitionWorkspaceAgentItems(agents);
+  const agentIDsByUserID = new Map<string, string>();
+  for (const agent of workerAgentItems) {
+    const agentID = stripLocalIdentityPrefixes(agent.id ?? "");
+    const userID = stripLocalIdentityPrefixes(resolveAgentChannelUserID(agent));
+    if (agentID && userID && !agent.archived_at) agentIDsByUserID.set(userID, agentID);
+  }
+  return availableRoomUsers(conversation, users).filter((user) => {
+    const agentID = agentIDsByUserID.get(stripLocalIdentityPrefixes(user.id));
+    return (
+      Boolean(agentID) &&
+      (!user.agent_id || stripLocalIdentityPrefixes(user.agent_id) === agentID) &&
+      !user.participants?.some((participant) => participant.type === "notification")
+    );
+  });
+}
+
+export function roomExternalMessageCandidates(
+  conversation: IMConversation | null | undefined,
+  users: readonly IMUser[] | undefined,
+  agents: readonly AgentLike[],
+): IMUser[] {
+  return availableRoomUsers(conversation, users).filter(
+    (user) =>
+      user.participants?.some((participant) => participant.type === "notification") ||
+      isNotificationBotAgent(resolveAgentForUser(agents, user)),
+  );
+}
+
+function availableRoomUsers(conversation: IMConversation | null | undefined, users: readonly IMUser[] = []): IMUser[] {
   if (!conversation) return [];
   return users.filter(
     (user) =>
       user.role !== "cloud" &&
       !user.agent_state &&
+      !user.deleted_at &&
       !user.legacy_notifier &&
       normalizeComparable(user.role) !== "notifier" &&
       !conversation.members.some((memberID) => localIdentitiesMatch(memberID, user.id)),

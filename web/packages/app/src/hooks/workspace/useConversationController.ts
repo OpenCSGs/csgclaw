@@ -44,6 +44,7 @@ import {
   isThreadReply,
   isToolCallMessage,
   localIdentitiesMatch,
+  roomExternalMessageCandidates,
   roomInviteCandidates,
   participantIDForLocalIdentity,
   removeConversationFromData,
@@ -761,7 +762,7 @@ export function useConversationController({
         .map((id) => resolveUserByLocalIdentity(id, usersById))
         .filter((user): user is IMUser => Boolean(user))
     : [];
-  const inviteCandidates = roomInviteCandidates(activeConversation, data?.users);
+  const inviteCandidates = roomInviteCandidates(activeConversation, data?.users, agents);
   const inviteActionLabel = t("memberManagement");
 
   const mentionCandidates = useMemo(() => {
@@ -1507,7 +1508,11 @@ export function useConversationController({
   }
 
   async function inviteUsers(): Promise<void> {
-    await addRoomMembers(inviteUserIDs, { closePanel: true });
+    const selected = new Set(inviteUserIDs);
+    await addRoomMembers(
+      inviteCandidates.filter((candidate) => selected.has(candidate.id)).map((candidate) => candidate.id),
+      { closePanel: true },
+    );
   }
 
   async function addRoomMembers(
@@ -1968,7 +1973,12 @@ export function useConversationController({
           ? {
               t,
               agents,
-              candidates: inviteCandidates,
+              candidates: [
+                ...new Set([
+                  ...inviteCandidates,
+                  ...roomExternalMessageCandidates(activeConversation, data.users, agents),
+                ]),
+              ],
               members: activeConversationMembers,
               currentUserID: data.current_user_id || "",
               inviteUserIDs,

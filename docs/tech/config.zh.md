@@ -170,14 +170,17 @@ default_worker_template = "builtin.codex-worker"
 
 Agent 可以在档案中单独选择可选的图片生成服务商和模型，与对话模型分开配置。
 当前接入 Codex Runtime 的 CSGClaw 网页对话生图工具，并复用所选服务商的凭证。
-服务商声明的 `text-to-image` 模型单独缓存在 `image_models` 中；缺少任务元数据时，也会识别已适配的 GPT Image 型号。
+服务商声明的 `text-to-image` 和 `image-to-image` 模型单独缓存在 `image_models` 中；缺少任务元数据时，也会识别已适配的 GPT Image 型号。
+模型下拉列表从 `image_metadata` 读取服务商声明的输入能力。已有目录可通过重新检查服务商连接更新标签。
 连接检查会刷新该缓存，但目录声明不代表当前账号或上游适配器已通过真实生图请求。
-图片适配器使用 OpenAI Images API 并请求 base64 输出；仅暴露其他原生请求格式的服务商需要由兼容网关完成适配。
+在网页对话中上传图片后，可以让 Agent 编辑图片或参考图片生成。所选模型须支持 OpenAI 兼容的 multipart `POST /v1/images/edits` 并返回 `b64_json` 或在 `data[0].url` 中提供可下载的图片链接。纯文字请求使用 `POST /v1/images/generations`。
 
 ### 视频生成模型
 
 Agent 可以在档案中单独选择视频生成服务商和模型。服务商声明的 `text-to-video` 或 `image-to-video` 模型缓存在 `video_models` 中。
-视频适配器使用 AIGateway 的 OpenAI-compatible 异步接口：`POST /v1/videos` 创建任务，`GET /v1/videos/{id}` 查询状态，完成后通过 `GET /v1/videos/{id}/content` 获取视频。Codex Runtime 通过 `csgclaw_generate_video` 工具调用该能力；生成结果作为会话视频附件保存和投递。
+视频适配器使用 AIGateway 的 OpenAI-compatible 异步接口：`POST /v1/videos` 创建任务，`GET /v1/videos/{id}` 查询状态，完成后通过 `GET /v1/videos/{id}/content` 获取视频。图生视频时，在对话中上传一张图片并要求 Agent 将其用作首帧。适配器通过 multipart `input_reference` 上传参考图。网关明确拒绝此格式时，改用 JSON 的 `input_reference.image_url`。Codex Runtime 通过 `csgclaw_generate_video` 工具调用该能力；生成结果作为会话视频附件保存和投递。
+
+参考图支持 PNG、JPEG 和 WebP。每次请求的参考图合计最多 32 MiB，图生图最多可传入 16 张。
 
 ### 动态 Codex 或 Claude Code Profile
 
