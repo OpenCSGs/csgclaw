@@ -64,7 +64,6 @@ type Options struct {
 	AppsStatePath      string
 	AccessToken        string
 	NoAuth             bool
-	LocalSingleUser    bool
 	MemoryCloud        bool
 	AdvertiseBaseURL   string
 	InternalBaseURL    string

@@ -66,9 +66,6 @@ func TestEnsureStateCreatesConfigAndBootstrapsManagerState(t *testing.T) {
 	if got, want := gotCfg.Server.AccessToken, config.DefaultAccessToken; got != want {
 		t.Fatalf("cfg.Server.AccessToken = %q, want %q", got, want)
 	}
-	if gotCfg.Server.LocalSingleUser {
-		t.Fatal("fresh onboarding must not assume a personal instance")
-	}
 	if got := gotCfg.Sandbox.Provider; got != "" {
 		t.Fatalf("cfg.Sandbox.Provider = %q, want empty dynamic default", got)
 	}
@@ -464,7 +461,6 @@ listen_addr = "127.0.0.1:19090"
 advertise_base_url = "http://example.test"
 access_token = "custom-token"
 no_auth = false
-local_single_user = true
 
 [bootstrap]
 manager_image_override = ""
@@ -507,9 +503,6 @@ models = ["gpt-test"]
 	CreateManagerParticipant = func(_ context.Context, _, _ string, cfg config.Config) (participant.Participant, error) {
 		if got, want := cfg.Server.ListenAddr, "127.0.0.1:19090"; got != want {
 			t.Fatalf("cfg.Server.ListenAddr = %q, want %q", got, want)
-		}
-		if !cfg.Server.LocalSingleUser {
-			t.Fatal("existing personal-instance configuration must be preserved")
 		}
 		return participant.Participant{}, nil
 	}

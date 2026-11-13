@@ -112,11 +112,7 @@ func (h *Handler) memoryUser(r *http.Request) string {
 	}
 	header := r.Header.Get("Authorization")
 	switch h.memoryMode {
-	case "desktop":
-		if h.desktopSessionToken == "" || header != "Bearer "+h.desktopSessionToken {
-			return ""
-		}
-	case "local":
+	case "desktop", "local":
 		if strings.HasPrefix(header, "Bearer agent.") ||
 			(!h.serverNoAuth || header != "") && !h.validServerCredential(header) {
 			return ""

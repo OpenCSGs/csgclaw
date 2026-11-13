@@ -180,3 +180,50 @@ func TestManagedMemoryRequiresTrustedLocalAccess(t *testing.T) {
 		t.Fatalf("shared memory status=%d body=%s", got.Code, got.Body.String())
 	}
 }
+
+func TestPersonalWebAndDesktopMemoryUseInstanceCredentials(t *testing.T) {
+	root := t.TempDir()
+	store, err := agentmemory.Open(filepath.Join(root, "agents"), filepath.Join(root, "state.json"), "local")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, mode := range []string{"local", "desktop"} {
+		t.Run(mode, func(t *testing.T) {
+			for _, tc := range []struct {
+				name, peer, host, token string
+				noAuth, allowed         bool
+				headers                 map[string]string
+			}{
+				{name: "personal no login", peer: "127.0.0.1:4321", host: "localhost:18080", noAuth: true, allowed: true},
+				{name: "server credential", peer: "127.0.0.1:4321", host: "127.0.0.1:18080", token: "server-fixture", allowed: true},
+				{name: "desktop credential", peer: "[::1]:4321", host: "[::1]:18080", token: "desktop-fixture", allowed: true},
+				{name: "missing credential", peer: "127.0.0.1:4321", host: "localhost:18080"},
+				{name: "wrong credential", peer: "127.0.0.1:4321", host: "localhost:18080", token: "wrong", noAuth: true},
+				{name: "remote", peer: "192.0.2.1:4321", host: "localhost:18080", noAuth: true},
+				{name: "nonlocal host", peer: "127.0.0.1:4321", host: "shared.example:18080", noAuth: true},
+				{name: "agent credential", peer: "127.0.0.1:4321", host: "localhost:18080", token: "agent.fixture", noAuth: true},
+				{name: "agent caller", peer: "127.0.0.1:4321", host: "localhost:18080", noAuth: true, headers: map[string]string{"X-CSGClaw-Caller-Agent": "agent-manager"}},
+				{name: "cross origin", peer: "127.0.0.1:4321", host: "localhost:18080", noAuth: true, headers: map[string]string{"Origin": "https://other.example"}},
+				{name: "forwarded", peer: "127.0.0.1:4321", host: "localhost:18080", noAuth: true, headers: map[string]string{"Forwarded": "for=192.0.2.1"}},
+				{name: "forwarded for", peer: "127.0.0.1:4321", host: "localhost:18080", noAuth: true, headers: map[string]string{"X-Forwarded-For": "192.0.2.1"}},
+				{name: "forwarded host", peer: "127.0.0.1:4321", host: "localhost:18080", noAuth: true, headers: map[string]string{"X-Forwarded-Host": "shared.example"}},
+				{name: "forwarded proto", peer: "127.0.0.1:4321", host: "localhost:18080", noAuth: true, headers: map[string]string{"X-Forwarded-Proto": "https"}},
+			} {
+				t.Run(tc.name, func(t *testing.T) {
+					h := &Handler{agentMemory: store, memoryMode: mode, serverNoAuth: tc.noAuth, serverAccessToken: "server-fixture", desktopSessionToken: "desktop-fixture"}
+					req := httptest.NewRequest(http.MethodGet, "http://"+tc.host+"/api/v1/agents/agent-manager/memory", nil)
+					req.RemoteAddr = tc.peer
+					if tc.token != "" {
+						req.Header.Set("Authorization", "Bearer "+tc.token)
+					}
+					for k, v := range tc.headers {
+						req.Header.Set(k, v)
+					}
+					if got := h.memoryUser(req); (got != "") != tc.allowed {
+						t.Fatalf("memory user=%q allowed=%v", got, tc.allowed)
+					}
+				})
+			}
+		})
+	}
+}

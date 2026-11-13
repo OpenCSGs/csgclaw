@@ -1415,7 +1415,6 @@ listen_addr = "0.0.0.0:18080"
 advertise_base_url = "http://192.168.2.52:18080"
 access_token = "your_access_token"
 no_auth = true
-local_single_user = false
 show_upgrade = true
 
 [bootstrap]
@@ -2160,5 +2159,29 @@ func TestDefaultWorkerTemplateIsCodex(t *testing.T) {
 	}
 	if got := (BootstrapConfig{DefaultWorkerTemplate: "builtin.dsh-worker"}).ResolvedDefaultWorkerTemplate(); got != "builtin.dsh-worker" {
 		t.Fatalf("explicit template changed to %q", got)
+	}
+}
+
+func TestConfigDoesNotPersistManualLocalMemoryGate(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	if err := os.WriteFile(path, []byte("[server]\nlisten_addr=\"127.0.0.1:18080\"\nlocal_single_user=false\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := cfg.Save(path); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(data), "local_single_user") {
+		t.Fatalf("manual memory gate persisted: %s", data)
+	}
+	if cfg.Server.ListenAddr != "127.0.0.1:18080" {
+		t.Fatalf("listener changed: %s", cfg.Server.ListenAddr)
 	}
 }

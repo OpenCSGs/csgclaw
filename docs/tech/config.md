@@ -68,9 +68,10 @@ When it is set, the Web UI login flow also uses it as the trusted public base fo
 
 `no_auth` controls whether CSGClaw skips the bearer-token check. The default is `false`. Set it to `true` only for trusted local or development environments.
 
-`local_single_user = true` declares a standalone Web server bound only to loopback as a personal instance.
-Agent memory is then on by default in private chats and can be disabled from the Agent’s memory page.
-The default is `false`, which shared unauthenticated deployments use.
+Standalone Web servers bound only to loopback (such as `127.0.0.1:18080` or `[::1]:18080`) automatically enable personal memory without additional configuration.
+Agent memory is enabled by default for private CSGClaw chats and can be disabled per Agent in its memory tab.
+Shared servers listening on `0.0.0.0`, `[::]`, or another non-loopback address, and cloud deployments, keep memory disabled even when the page is opened through `127.0.0.1`.
+Forwarded, remote, and Agent-identity requests cannot access personal memory; authenticated instances require valid instance credentials from both local Web and desktop clients.
 
 Memory is stored in `~/.csgclaw/agents/<agent-id>/memory/<user-id>/`, containing `state.json` and the plain Markdown document `MEMORY.md`.
 Instance-level memory state is stored in the `agent_memory` section of `~/.csgclaw/state.json` and is only updated on initialization or a deployment mode change.
