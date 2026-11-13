@@ -47,6 +47,11 @@ csgclaw 的 HTTP、SSE 和 `csgrelay.v1` WebSocket 握手携带 Bearer Token、
 `X-CSG-Client-ID`、请求 ID 和幂等 Key。社区验证 Token、覆盖可信用户 UUID，
 移除 Authorization/Cookie 后转发。客户端不自行发送可信用户身份头。
 
+登录前，CSGClaw 的站点选择器通过本地 `GET /api/v1/auth/login-sites` 获取目录。
+本地 API 向 `https://opencsg.com/relay/v1/login-sites` 发送不带平台凭证的 GET 请求。
+OpenCSG 代理将该请求转发到 CSGRelay 的 `GET /v1/login-sites`。
+目录提供站点 ID、HTTPS 地址、内嵌头像及多语言名称和描述。目录加载失败时，可以重试或手动输入站点地址。
+
 同一 csgclaw 服务的所有 Agent 共用持久化 client ID；按本地 API 地址和端口隔离，
 重启保持不变。`~/.csgclaw/relay/<地址 sha256>/` 保存权限为 0600 的身份和发布状态。
 对于 `csgclaw` 和 `csgclaw-workspace` 平台沙箱，如果发布清单和身份文件均未保存

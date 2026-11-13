@@ -13,3 +13,15 @@ export function beginAuthLogin(returnURL = "", environment?: AuthEnvironmentLogi
 export function logoutAuth(): Promise<unknown> {
   return post(ApiEndpoints.authLogout);
 }
+
+export type AuthLoginSite = {
+  id: string;
+  url: string;
+  icon: string;
+  locales: Record<"zh" | "en", { title: string; description: string }>;
+};
+
+export async function fetchAuthLoginSites(signal: AbortSignal): Promise<AuthLoginSite[]> {
+  const catalog = await get<{ sites: AuthLoginSite[] }>(ApiEndpoints.authLoginSites, { signal });
+  return catalog.sites;
+}
