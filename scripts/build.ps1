@@ -573,7 +573,20 @@ function Invoke-CodexCliDownload {
 function Assert-CodexCliChecksum {
     param([string]$Path, [string]$Expected)
 
-    if ((Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant() -ne $Expected) {
+    $algorithm = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        $stream = [System.IO.File]::OpenRead($Path)
+        try {
+            $actual = [BitConverter]::ToString($algorithm.ComputeHash($stream)).Replace("-", "").ToLowerInvariant()
+        }
+        finally {
+            $stream.Dispose()
+        }
+    }
+    finally {
+        $algorithm.Dispose()
+    }
+    if ($actual -ne $Expected) {
         throw "Codex CLI checksum mismatch: $(Split-Path -Leaf $Path)"
     }
 }

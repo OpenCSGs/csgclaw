@@ -13,8 +13,12 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Alpha only (for example v0.2.1-alpha.1); beta/stable releases must use tags"
+        description: "Alpha version, or the existing beta tag when recovering a failed release"
         required: true
+      recovery_run_id:
+        description: "Optional failed beta Release run; rebuild one failed desktop and reuse successful artifacts"
+        type: string
+        required: false
       desktop_target:
         description: "Single desktop target to package"
         required: true
@@ -28,6 +32,7 @@ on:
           - linux-arm64
 
 permissions:
+  actions: read
   contents: read
 
 env:
@@ -46,9 +51,15 @@ jobs:
       oss_manifest_url: ${{ steps.release_meta.outputs.oss_manifest_url }}
       commit: ${{ steps.release_meta.outputs.commit }}
       build_time: ${{ steps.release_meta.outputs.build_time }}
+      source_ref: ${{ steps.recovery.outputs.source_ref || github.sha }}
+      recovery_run_id: ${{ steps.recovery.outputs.recovery_run_id }}
+      recovery_archive_ids: ${{ steps.recovery.outputs.recovery_archive_ids }}
+      recovery_desktop_ids: ${{ steps.recovery.outputs.recovery_desktop_ids }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Node
         uses: actions/setup-node@v4
@@ -56,7 +67,7 @@ jobs:
           node-version-file: desktop/package.json
 
       - name: Validate manual alpha version
-        if: ${{ github.event_name == 'workflow_dispatch' }}
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.recovery_run_id == '' }}
         shell: bash
         env:
           DISPATCH_VERSION: ${{ github.event.inputs.version }}
@@ -65,6 +76,33 @@ jobs:
             echo "::error title=Invalid manual release version::${validation_error}"
             exit 1
           fi
+
+      - name: Validate failed beta release recovery
+        id: recovery
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.recovery_run_id != '' }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_RUN_ID: ${{ inputs.recovery_run_id }}
+          DISPATCH_VERSION: ${{ inputs.version }}
+          DESKTOP_TARGET: ${{ inputs.desktop_target }}
+        run: |
+          if [[ ! "${SOURCE_RUN_ID}" =~ ^[0-9]+$ ]]; then
+            echo "::error::recovery_run_id must be numeric."
+            exit 1
+          fi
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${SOURCE_RUN_ID}" > "${RUNNER_TEMP}/source-run.json"
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${SOURCE_RUN_ID}/jobs?per_page=100" > "${RUNNER_TEMP}/source-jobs.json"
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${SOURCE_RUN_ID}/artifacts?per_page=100" > "${RUNNER_TEMP}/source-artifacts.json"
+          node scripts/release-recovery.mjs \
+            "${RUNNER_TEMP}/source-run.json" "${RUNNER_TEMP}/source-jobs.json" "${RUNNER_TEMP}/source-artifacts.json" \
+            "${DISPATCH_VERSION}" "${DESKTOP_TARGET}" > "${RUNNER_TEMP}/recovery-outputs"
+          source_sha="$(sed -n 's/^source_ref=//p' "${RUNNER_TEMP}/recovery-outputs")"
+          if [[ "${source_sha}" != "$(git rev-parse "refs/tags/${DISPATCH_VERSION}^{commit}")" ]]; then
+            echo "::error::Source run does not match the existing release tag."
+            exit 1
+          fi
+          cat "${RUNNER_TEMP}/recovery-outputs" >> "$GITHUB_OUTPUT"
 
       - name: Build matrix from release-platforms.txt
         id: set-matrix
@@ -116,6 +154,7 @@ jobs:
         shell: bash
         env:
           DISPATCH_VERSION: ${{ github.event.inputs.version }}
+          SOURCE_SHA: ${{ steps.recovery.outputs.source_ref || github.sha }}
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             version="${DISPATCH_VERSION}"
@@ -126,7 +165,7 @@ jobs:
           echo "version=${version}" >> "$GITHUB_OUTPUT"
           echo "release_channel=${release_channel}" >> "$GITHUB_OUTPUT"
           echo "oss_manifest_url=https://opencsg-public-resource.oss-cn-beijing.aliyuncs.com/csgclaw-desktop/channels/${release_channel}/downloads.json" >> "$GITHUB_OUTPUT"
-          echo "commit=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+          echo "commit=$(git rev-parse --short "${SOURCE_SHA}")" >> "$GITHUB_OUTPUT"
           echo "build_time=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
 
   web:
@@ -241,6 +280,19 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Check Windows checksum verification in both PowerShell hosts
+        if: ${{ matrix.goos == 'windows' }}
+        shell: pwsh
+        run: |
+          .\scripts\build.tests.ps1
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\build.tests.ps1
+
+      - name: Checkout original release source for recovery
+        if: ${{ needs.prepare.outputs.recovery_run_id != '' }}
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.source_ref }}
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -428,7 +480,17 @@ jobs:
       - name: Package Windows desktop artifacts
         if: ${{ matrix.goos == 'windows' }}
         shell: pwsh
-        run: .\scripts\build.cmd desktop-package
+        run: .\scripts\build.ps1 desktop-package
+
+      - name: Verify packaged Windows runtimes
+        if: ${{ matrix.goos == 'windows' }}
+        shell: pwsh
+        run: |
+          $bin = "desktop/out/input/windows-amd64/backend/csgclaw/bin"
+          & "$bin/csgclaw.exe" --version
+          if ($LASTEXITCODE -ne 0) { throw "Packaged CSGClaw did not start" }
+          & "$bin/codex.exe" --version
+          if ($LASTEXITCODE -ne 0) { throw "Packaged Codex did not start" }
 
       - name: Stage Unix release assets
         if: ${{ matrix.goos != 'windows' }}
@@ -471,20 +533,35 @@ jobs:
       version: ${{ needs.prepare.outputs.version }}
 
   merge-and-release:
-    if: ${{ !cancelled() && github.event_name == 'push' && needs.build.result == 'success' && needs.desktop-build.result == 'success' && (needs.windows-store-build.result == 'success' || needs.windows-store-build.result == 'skipped') }}
+    if: ${{ !cancelled() && needs.prepare.result == 'success' && (github.event_name == 'push' && needs.build.result == 'success' || needs.prepare.outputs.recovery_run_id != '') && needs.desktop-build.result == 'success' && (needs.windows-store-build.result == 'success' || needs.windows-store-build.result == 'skipped') }}
     needs: [prepare, build, desktop-build, windows-store-build]
     runs-on: ubuntu-latest
     permissions:
+      actions: read
       contents: write
     steps:
       - name: Download all platform artifacts
         uses: actions/download-artifact@v4
         with:
+          run-id: ${{ needs.prepare.outputs.recovery_run_id || github.run_id }}
+          github-token: ${{ github.token }}
+          artifact-ids: ${{ needs.prepare.outputs.recovery_archive_ids }}
           pattern: dist-*
           path: dist
           merge-multiple: true
 
       - name: Download all desktop artifacts
+        uses: actions/download-artifact@v4
+        with:
+          run-id: ${{ needs.prepare.outputs.recovery_run_id || github.run_id }}
+          github-token: ${{ github.token }}
+          artifact-ids: ${{ needs.prepare.outputs.recovery_desktop_ids }}
+          pattern: desktop-dist-*
+          path: dist
+          merge-multiple: true
+
+      - name: Download recovered desktop artifacts
+        if: ${{ needs.prepare.outputs.recovery_run_id != '' }}
         uses: actions/download-artifact@v4
         with:
           pattern: desktop-dist-*
@@ -506,7 +583,7 @@ jobs:
           files: dist/csgclaw*
 
   publish-desktop-oss:
-    if: ${{ !cancelled() && github.event_name == 'push' && needs.merge-and-release.result == 'success' }}
+    if: ${{ !cancelled() && (github.event_name == 'push' || needs.prepare.outputs.recovery_run_id != '') && needs.merge-and-release.result == 'success' }}
     needs: [prepare, merge-and-release]
     concurrency:
       group: desktop-oss-${{ needs.prepare.outputs.release_channel }}
@@ -532,6 +609,9 @@ jobs:
       - name: Download desktop release artifacts
         uses: actions/download-artifact@v4
         with:
+          run-id: ${{ needs.prepare.outputs.recovery_run_id || github.run_id }}
+          github-token: ${{ github.token }}
+          artifact-ids: ${{ needs.prepare.outputs.recovery_desktop_ids }}
           pattern: desktop-dist-*
           path: desktop-release
           merge-multiple: true
@@ -539,7 +619,18 @@ jobs:
       - name: Download Server and CLI release artifacts
         uses: actions/download-artifact@v4
         with:
+          run-id: ${{ needs.prepare.outputs.recovery_run_id || github.run_id }}
+          github-token: ${{ github.token }}
+          artifact-ids: ${{ needs.prepare.outputs.recovery_archive_ids }}
           pattern: dist-*
+          path: desktop-release
+          merge-multiple: true
+
+      - name: Download recovered desktop artifacts
+        if: ${{ needs.prepare.outputs.recovery_run_id != '' }}
+        uses: actions/download-artifact@v4
+        with:
+          pattern: desktop-dist-*
           path: desktop-release
           merge-multiple: true
 
@@ -615,7 +706,7 @@ jobs:
           done
 
   publish-manual-desktop-packages:
-    if: ${{ github.event_name == 'workflow_dispatch' }}
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.recovery_run_id == '' }}
     needs: [prepare, desktop-build]
     runs-on: ubuntu-latest
     timeout-minutes: 20
