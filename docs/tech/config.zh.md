@@ -68,9 +68,10 @@ GPT-5.4 和 GPT-5.5 支持 `none` 到 `xhigh`，不支持 `minimal` 或 `max`。
 
 `no_auth` 控制 CSGClaw 是否跳过 bearer token 检查，默认值是 `false`。仅建议在可信的本地或开发环境中设置为 `true`。
 
-`local_single_user = true` 将仅监听回环地址的独立 Web 服务声明为单人本地实例。
-启用后，Agent 记忆在站内私聊默认开启，可在 Agent 的记忆页关闭。
-默认值为 `false`，共享免鉴权部署使用默认值。
+独立 Web 服务仅监听本机回环地址（如 `127.0.0.1:18080` 或 `[::1]:18080`）时，自动按单人本地实例启用记忆，无需额外配置。
+Agent 记忆在站内私聊默认开启，可在 Agent 的记忆页单独关闭。
+监听 `0.0.0.0`、`[::]` 或其他非回环地址的共享服务以及云端部署关闭记忆，即使用 `127.0.0.1` 打开页面也不会启用。
+代理转发、远程请求和 Agent 身份请求不能访问个人记忆；开启 API 鉴权时，本地 Web 和桌面客户端都必须提供有效的实例访问凭证。
 
 记忆保存在 `~/.csgclaw/agents/<agent-id>/memory/<user-id>/`，包含 `state.json` 和纯正文 `MEMORY.md`。
 实例级记忆状态保存在 `~/.csgclaw/state.json` 的 `agent_memory` 小节，仅在首次初始化或实例模式变化时更新。

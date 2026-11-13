@@ -20,17 +20,7 @@ func startAgentMemory(ctx context.Context, opts Options, listener net.Listener, 
 	if !ok || !ownsAgents || opts.IM == nil {
 		return func() {}
 	}
-	mode := "disabled"
-	if !opts.MemoryCloud {
-		switch {
-		case opts.Desktop != nil:
-			mode = "desktop"
-		case opts.LocalSingleUser:
-			if addr, ok := listener.Addr().(*net.TCPAddr); ok && addr.IP.IsLoopback() {
-				mode = "local"
-			}
-		}
-	}
+	mode := agentMemoryMode(opts, listener)
 
 	managerHome, err := controller.RuntimeHost().AgentHome(identity.ManagerAgentID)
 	root := filepath.Dir(managerHome)
@@ -80,4 +70,20 @@ func startAgentMemory(ctx context.Context, opts Options, listener net.Listener, 
 		worker.Run(workerCtx)
 	}()
 	return func() { cancel(); <-done }
+}
+
+// Personal memory follows the actual bound listener, not a user-maintained flag.
+// A loopback URL alone does not make a network-facing deployment personal.
+func agentMemoryMode(opts Options, listener net.Listener) string {
+	if opts.MemoryCloud || listener == nil {
+		return "disabled"
+	}
+	addr, ok := listener.Addr().(*net.TCPAddr)
+	if !ok || addr == nil || !addr.IP.IsLoopback() {
+		return "disabled"
+	}
+	if opts.Desktop != nil {
+		return "desktop"
+	}
+	return "local"
 }
