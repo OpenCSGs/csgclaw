@@ -6843,7 +6843,7 @@ func TestHandleFeishuEventsSendsHeartbeat(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/channels/feishu/participants/u-manager/events", nil).WithContext(ctx)
 	req.Header.Set("Authorization", "Bearer secret")
-	rec := httptest.NewRecorder()
+	rec := newSSERecorder()
 
 	done := make(chan struct{})
 	go func() {
@@ -6851,11 +6851,17 @@ func TestHandleFeishuEventsSendsHeartbeat(t *testing.T) {
 		close(done)
 	}()
 
-	time.Sleep(20 * time.Millisecond)
+	t.Cleanup(func() {
+		cancel()
+		<-done
+	})
+	waitForCondition(t, 2*time.Second, 5*time.Millisecond, func() bool {
+		return strings.Contains(rec.BodyString(), ": ping\n\n")
+	})
 	cancel()
 	<-done
 
-	if body := rec.Body.String(); !strings.Contains(body, ": ping\n\n") {
+	if body := rec.BodyString(); !strings.Contains(body, ": ping\n\n") {
 		t.Fatalf("body = %q, want heartbeat ping", body)
 	}
 }

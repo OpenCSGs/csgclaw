@@ -3,7 +3,6 @@ package server
 import (
 	"context"
 	"log/slog"
-	"net"
 	"path/filepath"
 
 	"csgclaw/internal/agentengine"
@@ -14,13 +13,13 @@ import (
 	"csgclaw/internal/localstore"
 )
 
-func startAgentMemory(ctx context.Context, opts Options, listener net.Listener, handler *api.Handler) func() {
+func startAgentMemory(ctx context.Context, opts Options, handler *api.Handler) func() {
 	engine, ok := opts.AgentEngine.(*agentengine.Engine)
 	controller, ownsAgents := opts.AgentServices.Records.(*agent.Controller)
 	if !ok || !ownsAgents || opts.IM == nil {
 		return func() {}
 	}
-	mode := agentMemoryMode(opts, listener)
+	mode := agentMemoryMode(opts)
 
 	managerHome, err := controller.RuntimeHost().AgentHome(identity.ManagerAgentID)
 	root := filepath.Dir(managerHome)
@@ -50,7 +49,7 @@ func startAgentMemory(ctx context.Context, opts Options, listener net.Listener, 
 		return func() {}
 	}
 	engine.SetMemory(store)
-	if mode == "disabled" || opts.LLM == nil {
+	if opts.LLM == nil {
 		return func() {}
 	}
 	worker := agentmemory.Worker{
@@ -72,16 +71,8 @@ func startAgentMemory(ctx context.Context, opts Options, listener net.Listener, 
 	return func() { cancel(); <-done }
 }
 
-// Personal memory follows the actual bound listener, not a user-maintained flag.
-// A loopback URL alone does not make a network-facing deployment personal.
-func agentMemoryMode(opts Options, listener net.Listener) string {
-	if opts.MemoryCloud || listener == nil {
-		return "disabled"
-	}
-	addr, ok := listener.Addr().(*net.TCPAddr)
-	if !ok || addr == nil || !addr.IP.IsLoopback() {
-		return "disabled"
-	}
+// Memory defaults on in every deployment and does not depend on provisioning metadata.
+func agentMemoryMode(opts Options) string {
 	if opts.Desktop != nil {
 		return "desktop"
 	}

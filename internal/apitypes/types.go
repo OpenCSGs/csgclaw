@@ -70,6 +70,8 @@ type Mention struct {
 }
 
 type Message struct {
+	// Set by trusted ingress; prevents ineligible messages entering history learning.
+	MemoryExcluded  bool                `json:"-"`
 	MemoryUserID    string              `json:"-"`
 	ID              string              `json:"id"`
 	ClientMessageID string              `json:"client_message_id,omitempty"`

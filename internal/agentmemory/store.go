@@ -89,9 +89,8 @@ func Open(root, statePath, mode string) (*Store, error) {
 		return nil, err
 	}
 	if s.instance.Mode != mode || s.instance.Epoch == "" {
-		if s.instance.Mode == "disabled" && mode != "disabled" {
-			s.instance.HistoryAfter = time.Now()
-		}
+		// Deployment changes no longer exclude older private chat from learning.
+		s.instance.HistoryAfter = time.Time{}
 		s.instance.Mode, s.instance.Epoch = mode, newID()
 		if err := localstore.WriteSection(statePath, "agent_memory", s.instance); err != nil {
 			return nil, err

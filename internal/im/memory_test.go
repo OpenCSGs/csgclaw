@@ -2,7 +2,10 @@ package im
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -20,7 +23,7 @@ func TestMemoryHistoryIncludesPrivateTaskConversationOnly(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err := svc.CreateMessage(CreateMessageRequest{RoomID: created.ID, SenderID: AdminUserID, Content: room.Title}); err != nil {
+		if _, err := svc.CreateMessage(CreateMessageRequest{RoomID: created.ID, SenderID: AdminUserID, Content: room.Title, MemoryUserID: AdminUserID}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -94,5 +97,52 @@ func TestMemoryHistoryPagesCoverAllPrivateMessagesWithStableTies(t *testing.T) {
 	cancel()
 	if _, err := svc.MemoryHistory(ctx, scope, time.Time{}, stamp, agentmemory.HistoryCursor{}); err != context.Canceled {
 		t.Fatalf("cancellation ignored: %v", err)
+	}
+}
+
+func TestMemoryHistoryExcludesIneligibleIngressAcrossRestart(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "state.json")
+	svc, err := NewServiceFromPath(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	room, err := svc.CreateRoom(CreateRoomRequest{Title: "Private", CreatorID: AdminUserID, MemberIDs: []string{ManagerUserID}, IsDirect: true, TaskSession: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	local, err := svc.CreateMessage(CreateMessageRequest{RoomID: room.ID, SenderID: AdminUserID, Content: "Local preference", MemoryUserID: AdminUserID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var remote CreateMessageRequest
+	raw := fmt.Sprintf(`{"room_id":%q,"sender_id":%q,"content":"Remote preference","memory_user_id":%q,"memory_excluded":false}`, room.ID, AdminUserID, AdminUserID)
+	if err := json.Unmarshal([]byte(raw), &remote); err != nil {
+		t.Fatal(err)
+	}
+	if remote.MemoryUserID != "" {
+		t.Fatal("client forged trusted memory identity")
+	}
+	denied, err := svc.CreateMessage(remote)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if local.MemoryExcluded || !denied.MemoryExcluded {
+		t.Fatalf("wrong provenance: local=%+v remote=%+v", local, denied)
+	}
+	delivered, err := svc.DeliverMessage(DeliverMessageRequest{RoomID: room.ID, SenderID: AdminUserID, Content: strings.Repeat("Untrusted delivery. ", 6000)})
+	if err != nil || !delivered.MemoryExcluded {
+		t.Fatalf("untrusted delivery was not excluded: %+v %v", delivered, err)
+	}
+	reloaded, err := NewServiceFromPath(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	scope := agentmemory.Scope{AgentID: "agent-manager", UserID: AdminUserID}
+	history, err := reloaded.MemoryHistory(t.Context(), scope, time.Time{}, time.Now(), agentmemory.HistoryCursor{})
+	if err != nil || len(history) != 1 || history[0].MessageID != local.ID {
+		t.Fatalf("history mixed callers after restart: %+v %v", history, err)
+	}
+	if reloaded.MemorySourceExists(scope, agentmemory.Source{RoomID: room.ID, MessageID: denied.ID}) {
+		t.Fatal("ineligible source can be used for memory")
 	}
 }

@@ -851,7 +851,6 @@ func startServerWithConfigPath(ctx context.Context, run *command.Context, cfg co
 		AppsStatePath:      legacyStatePath,
 		AccessToken:        cfg.Server.AccessToken,
 		NoAuth:             cfg.Server.NoAuth,
-		MemoryCloud:        cfg.IsCSGHubDeployment(),
 		AdvertiseBaseURL:   apiURL,
 		InternalBaseURL:    serveInternalBaseURL(cfg.Server, serveOpts),
 		Desktop:            serveOpts.Desktop,
