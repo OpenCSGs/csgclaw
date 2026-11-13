@@ -33,6 +33,13 @@ describe("document preview helpers", () => {
     expect(documentPreviewKind({ mediaType, name })).toBe(expected);
   });
 
+  it.each(["failed.pdf", "report.docx", "report.xlsx", "report.pptx", "image.png", "movie.mp4", "data.json"])(
+    "keeps explicit plain-text content readable for %s",
+    (name) => {
+      expect(documentPreviewKind({ mediaType: "text/plain; charset=utf-8", name })).toBe("text");
+    },
+  );
+
   it("pretty prints valid JSON and preserves invalid JSON", () => {
     expect(formatPreviewText(new TextEncoder().encode('{"ok":true}').buffer, "application/json")).toBe(
       '{\n  "ok": true\n}',

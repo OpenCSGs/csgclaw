@@ -65,6 +65,9 @@ export function documentPreviewKind(
   }
   const extension = item.name.toLowerCase().split(".").pop() ?? "";
   const byExtension = extensionKinds.get(extension);
+  if (mediaType === "text/plain") {
+    return byExtension === "markdown" || byExtension === "html" ? byExtension : "text";
+  }
   if (byExtension) {
     return byExtension;
   }

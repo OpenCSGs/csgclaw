@@ -191,6 +191,21 @@ describe("DocumentPreviewPanel", () => {
     },
   );
 
+  it("displays a plain-text error saved with a PDF extension", async () => {
+    const text = "Download failed: upstream returned an error.";
+    const file = new File([text], "failed.pdf", { type: "text/plain" });
+    render(
+      <DocumentPreviewPanel
+        index={0}
+        items={[{ id: "plain-pdf", name: file.name, mediaType: file.type, sizeBytes: file.size, file }]}
+        t={t}
+        onClose={vi.fn()}
+        onIndexChange={vi.fn()}
+      />,
+    );
+    expect(await screen.findByText(text)).toBeInTheDocument();
+  });
+
   it("loads, renders, navigates, zooms, downloads, and restores focus", async () => {
     const user = userEvent.setup();
     const anchor = document.createElement("button");
