@@ -403,6 +403,17 @@ describe("shared chat sidebar", () => {
       await user.click(screen.getByRole("button", { name: "Refresh" }));
       await waitFor(() => expect(screen.getByTitle("Browser")).toHaveAttribute("src", "blob:game-2"));
       expect(revokeURL).toHaveBeenCalledWith("blob:game-1");
+      const address = screen.getByRole("textbox", { name: "Web address" });
+      await user.clear(address);
+      await user.type(address, "https://example.org/{Enter}");
+      expect(screen.getByRole("tab", { name: "example.org" })).toHaveAttribute("aria-selected", "true");
+      const gameTab = screen.getByRole("tab", { name: "game.html" });
+      const gamePanel = document.getElementById(gameTab.getAttribute("aria-controls")!)!;
+      expect(gamePanel).not.toBeVisible();
+      expect(within(gamePanel).getByTitle("Browser")).toHaveAttribute("src", "blob:game-2");
+      expect(revokeURL).not.toHaveBeenCalledWith("blob:game-2");
+      await user.click(screen.getByRole("tab", { name: "game.html" }));
+      expect(screen.getByRole("textbox", { name: "Web address" })).toHaveValue("blob:game-2");
       await user.click(screen.getByRole("button", { name: "Close tab game.html" }));
       expect(screen.getByRole("tab", { name: "Files" })).toHaveAttribute("aria-selected", "true");
       expect(revokeURL).toHaveBeenCalledWith("blob:game-2");

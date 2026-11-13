@@ -11,6 +11,7 @@ export function BrowserTab({
   active,
   onNavigate,
   onPopup,
+  onOpenAddress,
   onReload,
   t,
 }: {
@@ -18,6 +19,7 @@ export function BrowserTab({
   active: boolean;
   onNavigate: (url: string) => void;
   onPopup: (url: string) => void;
+  onOpenAddress?: (url: string) => void;
   onReload?: () => void;
   t: TranslateFn;
 }) {
@@ -51,6 +53,11 @@ export function BrowserTab({
           const next = normalizeBrowserURL(address);
           setInvalid(!next);
           if (next) {
+            if (onOpenAddress && next !== url) {
+              onOpenAddress(next);
+              setAddress(url);
+              return;
+            }
             if (!native.available && next !== url) {
               setHistory((current) => ({
                 urls: [...current.urls.slice(0, current.index + 1), next],

@@ -75,6 +75,7 @@ export function HTMLBrowserTab({
       active={active}
       onNavigate={setURL}
       onPopup={onPopup}
+      onOpenAddress={onPopup}
       onReload={url === sourceURL ? () => setRevision((value) => value + 1) : undefined}
       t={t}
     />

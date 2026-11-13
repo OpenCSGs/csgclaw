@@ -10,6 +10,8 @@ const desktop = vi.hoisted(() => ({
 }));
 vi.mock("@/shared/platform/desktopBridge", () => ({ getDesktopBridge: () => desktop }));
 
+beforeEach(() => vi.clearAllMocks());
+
 it("keeps the source identity when refreshing and changes it between rooms", async () => {
   let revision = 0;
   desktop.browserCommand.mockImplementation(async (request) =>
@@ -44,4 +46,33 @@ it("keeps the source identity when refreshing and changes it between rooms", asy
   expect(previews()[2].sourceKey).toBe(nextKey);
   view.unmount();
   expect(desktop.browserCommand).toHaveBeenCalledWith({ id: previews()[2].id, action: "releaseHTML" });
+});
+
+it("opens a new browser tab for an entered address without replacing the HTML view", async () => {
+  const sourceURL = "http://127.0.0.1:19433/preview/index.html";
+  desktop.browserCommand.mockImplementation(async (request) =>
+    request.action === "previewHTML" ? { id: request.id, url: sourceURL } : null,
+  );
+  const item: AttachmentPreviewItem = {
+    id: "game",
+    name: "game.html",
+    file: new File(["<h1>Game</h1>"], "game.html", { type: "text/html" }),
+    mediaType: "text/html",
+    sizeBytes: 13,
+  };
+  const onPopup = vi.fn();
+  const user = userEvent.setup();
+  render(<HTMLBrowserTab item={item} sourceKey="room:game" active t={createTranslator("en")} onPopup={onPopup} />);
+  const address = await screen.findByRole("textbox", { name: "Web address" });
+  await user.clear(address);
+  await user.type(address, "https://example.org/page{Enter}");
+  expect(onPopup).toHaveBeenCalledExactlyOnceWith("https://example.org/page");
+  expect(address).toHaveValue(sourceURL);
+  expect(desktop.browserCommand).not.toHaveBeenCalledWith(expect.objectContaining({ action: "releaseHTML" }));
+  expect(desktop.browserCommand).not.toHaveBeenCalledWith(
+    expect.objectContaining({ action: "navigate", url: "https://example.org/page" }),
+  );
+  await user.keyboard("{Enter}");
+  expect(onPopup).toHaveBeenCalledTimes(1);
+  expect(desktop.browserCommand).toHaveBeenCalledWith(expect.objectContaining({ action: "reload" }));
 });
