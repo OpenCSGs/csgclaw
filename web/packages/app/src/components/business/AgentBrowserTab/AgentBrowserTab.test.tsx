@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { AgentBrowserTab } from "./AgentBrowserTab";
 import {
@@ -138,4 +138,45 @@ it("requires takeover and a fresh frame before allowing user input", async () =>
   await user.click(screen.getByRole("button", { name: "Return control" }));
   await waitFor(() => expect(releaseBrowserControl).toHaveBeenCalled());
   expect(screen.getByRole("button", { name: "Type" })).toBeDisabled();
+});
+
+it.each(["hidden", "hidden then shown", "unmounted"])(
+  "releases a pending takeover when the original tab becomes %s",
+  async (transition) => {
+    let resolveControl!: (value: { session: BrowserSession; token: string }) => void;
+    vi.mocked(takeBrowserControl).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveControl = resolve;
+        }),
+    );
+    const user = userEvent.setup();
+    const props = { roomID: "room", session, active: true, t: createTranslator("en") };
+    const view = render(<AgentBrowserTab {...props} />);
+    await user.click(screen.getByRole("button", { name: "Take control" }));
+    await waitFor(() => expect(takeBrowserControl).toHaveBeenCalled());
+    if (transition === "unmounted") view.unmount();
+    else {
+      view.rerender(<AgentBrowserTab {...props} active={false} />);
+      if (transition === "hidden then shown") view.rerender(<AgentBrowserTab {...props} />);
+    }
+    await act(async () => {
+      resolveControl({ session, token: "late-control" });
+    });
+    await waitFor(() => expect(releaseBrowserControl).toHaveBeenCalledWith("room", "shared", "late-control"));
+    expect(fetchBrowserFrame).not.toHaveBeenCalledWith("room", "shared", expect.anything(), "late-control");
+  },
+);
+
+it("forwards Space as a key so focused form controls can be activated", async () => {
+  const user = userEvent.setup();
+  render(<AgentBrowserTab roomID="room" session={session} active t={createTranslator("en")} />);
+  await user.click(screen.getByRole("button", { name: "Take control" }));
+  const image = await screen.findByRole("img", { name: "Interactive browser view" });
+  fireEvent.load(image);
+  await waitFor(() => expect(screen.getByRole("button", { name: "Type" })).toBeEnabled());
+  fireEvent.keyDown(image, { key: " " });
+  await waitFor(() =>
+    expect(browserCommand).toHaveBeenCalledWith("room", "shared", { action: "key", key: "Space" }, "test-control", "1"),
+  );
 });

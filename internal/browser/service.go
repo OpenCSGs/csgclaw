@@ -68,6 +68,7 @@ type session struct {
 	state             State                             // guarded by Service.mu
 	refs              map[string]proto.DOMBackendNodeID // guarded by gate
 	lastUsed          time.Time
+	loaderID          proto.NetworkLoaderID
 	controlToken      string
 	controlUntil      time.Time
 	controlFrameReady bool
@@ -289,13 +290,26 @@ func (s *Service) update(ctx context.Context, e *session) error {
 	if err != nil {
 		return fmt.Errorf("read browser navigation history: %w", err)
 	}
+	frame, err := readDocument(ctx, func() (*proto.PageGetFrameTreeResult, error) {
+		return (proto.PageGetFrameTree{}).Call(p)
+	})
+	if err != nil {
+		return fmt.Errorf("read browser document identity: %w", err)
+	}
+	if frame.FrameTree == nil || frame.FrameTree.Frame == nil {
+		return errors.New("browser main document is unavailable")
+	}
+	loaderID := frame.FrameTree.Frame.LoaderID
 	s.mu.Lock()
+	// A reload can replace the main document without changing its URL or title.
+	// Bind input to that document as well as its viewport and scroll position.
+	if e.loaderID != loaderID || e.state.URL != info.URL {
+		e.loaderID = loaderID
+		e.controlRevision++
+		e.controlFrameReady = false
+	}
 	back, forward := history.CurrentIndex > 0, history.CurrentIndex+1 < len(history.Entries)
 	if e.state.URL != info.URL || e.state.Title != info.Title || e.state.CanGoBack != back || e.state.CanGoForward != forward || e.state.Revision == 0 {
-		if e.state.URL != info.URL {
-			e.controlRevision++
-			e.controlFrameReady = false
-		}
 		e.state.URL, e.state.Title = info.URL, info.Title
 		e.state.CanGoBack, e.state.CanGoForward = back, forward
 		e.state.Revision++

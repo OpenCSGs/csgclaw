@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { ArrowLeft, ArrowRight, Camera, ExternalLink, RefreshCw } from "lucide-react";
 import { Button, TextInput, Tooltip } from "@/components/ui";
 import {
@@ -17,6 +17,7 @@ import styles from "./AgentBrowserTab.module.css";
 
 const keys = new Set([
   "Enter",
+  "Space",
   "Tab",
   "Escape",
   "Backspace",
@@ -60,6 +61,13 @@ export function AgentBrowserTab({
   const viewport = useRef<HTMLDivElement>(null);
   const queue = useRef(Promise.resolve());
   const mounted = useRef(true);
+  const controlEpoch = useRef(0);
+  useLayoutEffect(() => {
+    const epoch = ++controlEpoch.current;
+    return () => {
+      controlEpoch.current = epoch + 1;
+    };
+  }, [roomID, session.id, active]);
   const revision = useRef(0);
   useEffect(() => {
     mounted.current = true;
@@ -122,17 +130,19 @@ export function AgentBrowserTab({
     }
   }, [active]);
   async function toggleControl() {
+    const epoch = controlEpoch.current;
     changingRef.current = true;
     setChanging(true);
     setError(false);
     try {
       await queue.current;
+      if (!mounted.current || !active || epoch !== controlEpoch.current) return;
       if (controlToken) {
         await releaseBrowserControl(roomID, session.id, controlToken);
         if (mounted.current) setControlToken("");
       } else {
         const control = await takeBrowserControl(roomID, session.id);
-        if (!mounted.current) {
+        if (!mounted.current || !active || epoch !== controlEpoch.current) {
           await releaseBrowserControl(roomID, session.id, control.token);
           return;
         }
@@ -377,9 +387,10 @@ export function AgentBrowserTab({
             onKeyDown={(event) => {
               if (event.nativeEvent.isComposing || event.ctrlKey || event.metaKey || event.altKey) return;
               if (event.key === "Tab" || event.key === "Escape") return;
-              if (keys.has(event.key)) {
+              const key = event.key === " " ? "Space" : event.key;
+              if (keys.has(key)) {
                 event.preventDefault();
-                command({ action: "key", key: event.key });
+                command({ action: "key", key });
               } else if (event.key.length === 1) {
                 event.preventDefault();
                 command({ action: "type", text: event.key });
