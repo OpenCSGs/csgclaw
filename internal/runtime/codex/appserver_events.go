@@ -291,8 +291,17 @@ func (m *appServerManager) handleRawItemNotification(runtimeID string, live *liv
 	// Account for it before the item lifecycle handler below.
 	switch method {
 	case "item/reasoning/textDelta", "item/reasoning/summaryTextDelta", "item/reasoning/summaryPartAdded", "item/mcpToolCall/progress":
+		turnID := appServerNotificationTurnID(params)
+		if method != "item/mcpToolCall/progress" && live.appServerTurnWaiter(threadID).startReasoning(turnID) {
+			m.publishAppServerEvent(SessionEvent{
+				RuntimeID: runtimeID,
+				SessionID: threadID,
+				TurnID:    turnID,
+				Kind:      activitypkg.RuntimeEventReasoningStarted,
+			})
+		}
 		live.notifyAppServerTurn(threadID, appServerTurnResult{
-			turnID:   appServerNotificationTurnID(params),
+			turnID:   turnID,
 			activity: strings.TrimPrefix(method, "item/") + ":" + appServerString(params, "itemId"),
 			progress: true,
 		})

@@ -302,7 +302,7 @@ func (a *ConversationAdapter) handleEvent(ctx context.Context, request contract.
 		tool := toolActivity(event)
 		output.observeTool(contract.TurnEventToolCallUpdate, tool)
 		return emit(contract.TurnEvent{Kind: contract.TurnEventToolCallUpdate, Tool: tool})
-	case activity.RuntimeEventTokenUsage, activity.RuntimeEventContextUsage, activity.RuntimeEventPlanUpdate, activity.RuntimeEventActionDecision, activity.RuntimeEventUserInputResolved:
+	case activity.RuntimeEventTokenUsage, activity.RuntimeEventContextUsage, activity.RuntimeEventPlanUpdate, activity.RuntimeEventActionDecision, activity.RuntimeEventUserInputResolved, activity.RuntimeEventReasoningStarted:
 		return emit(contract.TurnEvent{Kind: contract.TurnEventActivityUpdate, Activity: &contract.ActivityUpdate{
 			ID: event.ActionID + event.UserInputID, Kind: string(event.Kind), Status: event.ActionStatus + event.UserInputStatus, Payload: event.Payload,
 		}})

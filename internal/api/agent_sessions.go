@@ -262,6 +262,14 @@ func (h *Handler) runSessionResponse(ctx context.Context, w http.ResponseWriter,
 					return nil
 				}
 				return eventStream.writeText(event.Text)
+			case agentengine.TurnEventThoughtDelta:
+				if strings.TrimSpace(event.Thought) != "" {
+					return eventStream.writeThinkingStart()
+				}
+			case agentengine.TurnEventActivityUpdate:
+				if event.Activity != nil && event.Activity.Kind == string(activity.RuntimeEventReasoningStarted) {
+					return eventStream.writeThinkingStart()
+				}
 			case agentengine.TurnEventInteractionRequest:
 				if !acceptUserInput || event.Interaction == nil {
 					return nil
@@ -273,9 +281,8 @@ func (h *Handler) runSessionResponse(ctx context.Context, w http.ResponseWriter,
 				return eventStream.writeUserInput(question)
 			case agentengine.TurnEventToolCallStart, agentengine.TurnEventToolCallUpdate:
 				return eventStream.writeToolEvent(event.Kind, event.Tool)
-			default:
-				return nil
 			}
+			return nil
 		})
 	}
 
@@ -832,6 +839,7 @@ type agentSessionEventStream struct {
 	writeMu       sync.Mutex
 	contentIndex  int
 	textBlockOpen bool
+	thinkingSent  bool
 	tools         map[string]*agentSessionStreamTool
 	pendingTools  []*agentSessionStreamTool       // In tool_use order, until their following text can be delivered.
 	recoveredText []agentengine.RecoveredTextPart // Non-nil while terminal history owns the buffered answer.
@@ -933,6 +941,17 @@ func (s *agentSessionEventStream) writeMessageStart(messageID string, inputs []i
 		fields["input_attachments"] = inputs
 	}
 	return s.write("message_start", fields)
+}
+
+func (s *agentSessionEventStream) writeThinkingStart() error {
+	if s.thinkingSent || s.text.Len() != 0 {
+		return nil
+	}
+	if err := s.write("thinking_start", map[string]any{}); err != nil {
+		return err
+	}
+	s.thinkingSent = true
+	return nil
 }
 
 func (s *agentSessionEventStream) writeText(delta string) error {

@@ -5,6 +5,8 @@ import (
 	"testing"
 	"testing/synctest"
 	"time"
+
+	"csgclaw/internal/activity"
 )
 
 // Virtual time crosses the former 5/10/30 minute limits without a slow test.
@@ -94,5 +96,37 @@ func TestAppServerProgressNotificationsRecordActivity(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestAppServerPublishesReasoningStartOncePerTurn(t *testing.T) {
+	sink := &recordingSink{}
+	manager := newAppServerManager(testAppServerManagerDepsWithSink(sink))
+	live := &liveSession{spec: SessionSpec{RuntimeID: "runtime-1", Profile: testProfile()}, session: &Session{SessionID: "thread-1"}}
+	manager.sessions["runtime-1"] = live
+	notify := func(turnID, method string) {
+		t.Helper()
+		params := map[string]any{"threadId": "thread-1", "turnId": turnID, "itemId": "item-1", "delta": "reasoning text"}
+		manager.handleAppServerNotification("runtime-1", live, appServerNotification{Method: method, Params: mustJSONRaw(t, params)})
+	}
+	for i, turnID := range []string{"turn-1", "turn-2"} {
+		waiter, err := live.registerAppServerTurnWaiter("thread-1")
+		if err != nil {
+			t.Fatal(err)
+		}
+		waiter.setTurnID(turnID)
+		notify("previous-turn", "item/reasoning/textDelta")
+		notify(turnID, "item/mcpToolCall/progress")
+		notify(turnID, "item/reasoning/textDelta")
+		notify(turnID, "item/reasoning/summaryTextDelta")
+		events := sink.snapshot()
+		if len(events) != i+1 {
+			t.Fatalf("got %d events, want %d: %+v", len(events), i+1, events)
+		}
+		event := events[i]
+		if event.Kind != activity.RuntimeEventReasoningStarted || event.TurnID != turnID || event.Text != "" || event.Payload != nil {
+			t.Fatalf("unexpected reasoning event: %+v", event)
+		}
+		live.removeAppServerTurnWaiter("thread-1", waiter)
 	}
 }

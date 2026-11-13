@@ -1619,6 +1619,7 @@ type appServerTurnWaiter struct {
 	terminalResults          map[string]appServerTurnResult
 	lastActivity             string
 	progressSequence         uint64
+	reasoningStarted         bool
 	structuredOutputBoundary bool
 	textOnlyUserInput        bool
 }
@@ -2007,6 +2008,25 @@ func (w *appServerTurnWaiter) wake(result appServerTurnResult) {
 	case w.ch <- result:
 	default:
 	}
+}
+
+func (w *appServerTurnWaiter) startReasoning(turnID string) bool {
+	if w == nil {
+		return false
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.reasoningStarted || !w.accepted || (turnID != "" && w.turnID != turnID) {
+		return false
+	}
+	if _, ended := w.terminalResults[w.turnID]; ended {
+		return false
+	}
+	if _, ended := w.terminalResults[""]; ended {
+		return false
+	}
+	w.reasoningStarted = true
+	return true
 }
 
 func (s *liveSession) appServerTurnWaiter(threadID string) *appServerTurnWaiter {

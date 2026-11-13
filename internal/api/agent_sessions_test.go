@@ -3,6 +3,7 @@ package api
 import (
 	"bytes"
 	"context"
+	"csgclaw/internal/activity"
 	"csgclaw/internal/agentengine"
 	agent "csgclaw/internal/agentengine/agents"
 	"csgclaw/internal/agentengine/enginetest"
@@ -587,6 +588,30 @@ func TestAgentSessionResponsesStreamsExistingSSEShapeAndToolBlocks(t *testing.T)
 	}
 	if strings.Count(body, "hello world") != 0 {
 		t.Fatalf("completed text was duplicated in SSE: %s", body)
+	}
+}
+
+func TestAgentSessionResponsesStreamThinkingBeforeAnswer(t *testing.T) {
+	engine := &fakeSessionEngine{run: func(ctx context.Context, _ string, _ agentengine.TurnRequest, sink agentengine.EventSink) agentengine.TurnResult {
+		for _, event := range []agentengine.TurnEvent{
+			{Kind: agentengine.TurnEventActivityUpdate, Activity: &agentengine.ActivityUpdate{Kind: string(activity.RuntimeEventReasoningStarted)}},
+			{Kind: agentengine.TurnEventThoughtDelta, Thought: "private reasoning"},
+			{Kind: agentengine.TurnEventTextDelta, Text: "final answer"},
+		} {
+			if err := sink.Emit(ctx, event); err != nil {
+				t.Fatalf("emit %s: %v", event.Kind, err)
+			}
+		}
+		return agentengine.TurnResult{Status: agentengine.TurnSucceeded, Output: "final answer"}
+	}}
+	handler, _, _, _ := newAgentSessionTestHandler(t, []agent.Agent{sessionCodexAgent("agent-alpha", "Alpha")}, engine, "")
+	recorder := performAgentSessionRequest(t, handler, "agent-alpha", "thinking", map[string]any{"input": "hello", "stream": true})
+	body := recorder.Body.String()
+	thinking := strings.Index(body, "event: thinking_start\ndata: {\"type\":\"thinking_start\"}\n\n")
+	answer := strings.Index(body, "final answer")
+	if recorder.Code != http.StatusOK || thinking < 0 || answer <= thinking || strings.Count(body, "event: thinking_start\n") != 1 ||
+		strings.Contains(body, "private reasoning") || strings.Contains(body, "\"type\":\"tool_use\"") {
+		t.Fatalf("unexpected response: %d %s", recorder.Code, body)
 	}
 }
 
