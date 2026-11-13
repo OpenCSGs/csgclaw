@@ -22,12 +22,13 @@ const skillFileName = "SKILL.md"
 var ErrSkillInvalid = errors.New("skill directory must contain SKILL.md")
 
 type SkillSummary struct {
-	Name        string           `json:"name"`
-	Description string           `json:"description,omitempty"`
-	Error       string           `json:"error,omitempty"`
-	Source      string           `json:"source,omitempty"`
-	Discovery   *discovery.Skill `json:"discovery,omitempty"`
-	Directory   string           `json:"directory,omitempty"`
+	Name        string               `json:"name"`
+	Description string               `json:"description,omitempty"`
+	Error       string               `json:"error,omitempty"`
+	Source      string               `json:"source,omitempty"`
+	Discovery   *discovery.Skill     `json:"discovery,omitempty"`
+	Directory   string               `json:"directory,omitempty"`
+	Install     *skillinstall.Record `json:"install,omitempty"`
 }
 
 func SkillsRoot() (string, error) {
@@ -79,7 +80,12 @@ func List(root string) ([]SkillSummary, error) {
 		if err != nil {
 			return nil, err
 		}
+		var origin *skillinstall.Record
+		if record, ok := records[entry.Name()]; ok {
+			origin = &record
+		}
 		items = append(items, SkillSummary{
+			Install:     origin,
 			Name:        entry.Name(),
 			Description: description,
 			Source:      records[entry.Name()].SourceKind(),

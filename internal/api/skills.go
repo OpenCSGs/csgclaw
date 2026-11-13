@@ -263,6 +263,7 @@ func listSkills(root string) ([]skillsystem.SkillSummary, error) {
 	} else {
 		for _, item := range localItems {
 			itemsByName[item.Name] = skillsystem.SkillSummary{
+				Install:     item.Install,
 				Name:        item.Name,
 				Description: item.Description,
 				Source:      item.Source,

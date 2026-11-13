@@ -1,0 +1,140 @@
+.dialog {
+  width: min(800px, calc(100vw - 32px));
+}
+.footer {
+  flex-wrap: wrap;
+}
+.body {
+  display: grid;
+  gap: 20px;
+  min-width: 0;
+}
+.skill {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+}
+.versionRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  overflow-wrap: anywhere;
+}
+.versions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.versions strong {
+  color: var(--accent-text);
+}
+.hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+.changelog {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.6;
+  margin: 8px 0;
+}
+.skill summary {
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.target {
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+.target > summary > * {
+  margin-inline-end: 10px;
+}
+.file {
+  margin: 8px 0;
+  padding: 8px;
+  border-radius: var(--radius-md);
+  background: var(--field);
+}
+.file summary span {
+  margin-right: 8px;
+  color: var(--muted);
+}
+.diff {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+.diff pre {
+  max-height: 280px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+}
+.diff > div > span {
+  color: var(--muted);
+  font-size: 12px;
+}
+.choices {
+  display: grid;
+  gap: 10px;
+  padding: 0;
+  border: 0;
+  margin: 0;
+}
+.choices legend {
+  margin-bottom: 10px;
+  font-size: 14px;
+  font-weight: 500;
+}
+.choice {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+}
+.choice[data-selected="true"] {
+  border-color: var(--accent-text);
+  background: var(--field);
+}
+.choice input {
+  margin-top: 4px;
+  accent-color: var(--accent-text);
+}
+.choice strong,
+.choice small {
+  display: block;
+}
+.choice strong {
+  font-size: 14px;
+}
+.choice small {
+  margin-top: 5px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+.results p {
+  margin: 6px 0;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 600px) {
+  .diff {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

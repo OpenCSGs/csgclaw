@@ -25,8 +25,10 @@ var (
 )
 
 type InstallArchiveOptions struct {
-	Replace bool
-	Origin  skillinstall.Record
+	Replace       bool
+	Origin        skillinstall.Record
+	ExpectedState string
+	ExpectedName  string
 }
 
 func InstallArchive(root, filename string, archive []byte) (SkillSummary, error) {
@@ -67,6 +69,9 @@ func InstallArchiveWithOptions(root, filename string, archive []byte, options In
 	if err != nil {
 		return SkillSummary{}, err
 	}
+	if options.ExpectedName != "" && summary.Name != options.ExpectedName {
+		return SkillSummary{}, fmt.Errorf("%w: archive skill name changed", ErrSkillArchiveInvalid)
+	}
 	if skillsystem.IsName(summary.Name) {
 		return SkillSummary{}, fmt.Errorf("%w: %s", ErrSkillAlreadyExists, summary.Name)
 	}
@@ -84,7 +89,7 @@ func InstallArchiveWithOptions(root, filename string, archive []byte, options In
 	if err := ensurePathInsideRoot(root, destDir); err != nil {
 		return SkillSummary{}, err
 	}
-	err = skillinstall.Update(root, summary.Name, &record, func() error {
+	apply := func() error {
 		if _, err := os.Stat(destDir); err == nil {
 			if !options.Replace {
 				return fmt.Errorf("%w: %s", ErrSkillAlreadyExists, summary.Name)
@@ -98,9 +103,18 @@ func InstallArchiveWithOptions(root, filename string, archive []byte, options In
 			return err
 		}
 		return nil
-	})
+	}
+	if options.ExpectedState != "" {
+		err = skillinstall.UpdateChecked(root, summary.Name, &record, options.ExpectedState, apply)
+	} else {
+		err = skillinstall.Update(root, summary.Name, &record, apply)
+	}
 	if err != nil {
 		return SkillSummary{}, err
+	}
+	if records, err := skillinstall.Read(root); err == nil {
+		record := records[summary.Name]
+		summary.Install = &record
 	}
 	return summary, nil
 }
@@ -148,10 +162,15 @@ func extractArchive(archive []byte, dstDir string) error {
 		return ErrSkillArchiveEmpty
 	}
 	fileCount := 0
+	var total uint64
 	for _, file := range reader.File {
 		if file == nil {
 			continue
 		}
+		if file.UncompressedSize64 > uint64(maxArchiveBytes)-total || len(reader.File) > 10000 {
+			return fmt.Errorf("%w: skill archive is too large", ErrSkillArchiveInvalid)
+		}
+		total += file.UncompressedSize64
 		if file.Mode()&os.ModeSymlink != 0 {
 			return fmt.Errorf("%w: %s", ErrSkillArchiveUnsafe, file.Name)
 		}

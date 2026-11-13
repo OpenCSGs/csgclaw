@@ -7,6 +7,7 @@ import { AuthLoginNotice } from "../AuthLoginNotice";
 import { FloatingChat } from "../FloatingChat";
 import { ProfilePreviewPopover } from "../ProfilePreviewPopover";
 import { OnboardingGuide } from "./OnboardingGuide";
+import { SkillUpdateDialog } from "@/components/business/SkillUpdateDialog";
 import {
   AgentProfileModal,
   CreateModelProviderModal,
@@ -33,6 +34,15 @@ export function WorkspaceOverlays() {
         {current === "settings" ? <SettingsPage /> : null}
         {current === "profile" ? <HumanPage /> : null}
       </Suspense>
+      {controller.hubViewProps?.hub?.skillUpdateNames?.length ? (
+        <SkillUpdateDialog
+          key={controller.hubViewProps.hub.skillUpdateNames.join("\u0000")}
+          names={controller.hubViewProps.hub.skillUpdateNames}
+          locale={controller.sidebarProps?.locale}
+          t={controller.t}
+          onClose={controller.hubViewProps.hub.finishSkillUpdates}
+        />
+      ) : null}
       <AuthLoginNotice
         notice={controller.authNotice}
         closeLabel={closeLabel}

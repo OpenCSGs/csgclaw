@@ -12,6 +12,9 @@ import type { SkillSummary } from "@/models/skillhub";
 import { ResourceFeaturedIcon } from "@/components/business/ResourceListCard";
 import { SidebarMcpIcon, SidebarPuzzlePiece02Icon } from "@/components/business/Icons";
 import { SkillMarketPreview } from "./SkillMarketPreview";
+import { SkillUpdateDialog } from "@/components/business/SkillUpdateDialog";
+import { useSkillUpdatePrompt } from "@/hooks/workspace/useSkillUpdates";
+import { useOptionalWorkspaceControllerContext } from "@/hooks/workspace/useWorkspaceControllerContext";
 import type { TranslateFn } from "@/models/conversations";
 import { localizeAPIError } from "@/shared/i18n";
 import { errorMessage } from "@/api/client";
@@ -45,7 +48,10 @@ export function AgentResourcePicker({
   portalContainer?: HTMLElement | null;
   t: TranslateFn;
 }) {
-  const picker = useAgentResourcePicker({ agentID, kind, authenticated, onAdd, t });
+  const controller = useOptionalWorkspaceControllerContext();
+  const updatePrompt = useSkillUpdatePrompt();
+  const requestSkillUpdate = controller?.hubViewProps?.hub?.requestSkillUpdates ?? updatePrompt.requestSkillUpdates;
+  const picker = useAgentResourcePicker({ agentID, kind, authenticated, onAdd, t, requestSkillUpdate });
   const { openSettings } = useWorkspaceDialogs();
   const [selected, setSelected] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
@@ -380,6 +386,15 @@ export function AgentResourcePicker({
           onAfterClose={() => previewTrigger.current?.focus()}
           onInstall={() => void picker.installSkill(preview)}
           portalContainer={portalContainer}
+        />
+      ) : null}
+      {updatePrompt.skillUpdateNames.length ? (
+        <SkillUpdateDialog
+          key={updatePrompt.skillUpdateNames.join("\u0000")}
+          names={updatePrompt.skillUpdateNames}
+          locale={controller?.sidebarProps?.locale}
+          t={t}
+          onClose={updatePrompt.finishSkillUpdates}
         />
       ) : null}
       <SkillUploadDialog

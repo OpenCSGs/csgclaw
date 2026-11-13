@@ -2,6 +2,7 @@ import { useWorkspaceSkillsQuery } from "@/hooks/workspace/workspaceQueries";
 import { InstalledSkillLibrary } from "./InstalledSkillLibrary";
 import { useEffect, useMemo, useState } from "react";
 import { Plus } from "lucide-react";
+import { useSkillUpdatesQuery } from "@/hooks/workspace/useSkillUpdates";
 import { InlineError, Button } from "@/components/ui";
 import { useWorkspaceControllerContext } from "@/hooks/workspace";
 import { isAuthenticated } from "@/models/auth";
@@ -25,6 +26,11 @@ export function SkillsSection() {
   const [query, setQuery] = useState("");
   const [detail, setDetail] = useState<SkillDetailTarget | null>(null);
   const [uploadOpen, setUploadOpen] = useState(false);
+  const [checked, setChecked] = useState(false);
+  const updatesQuery = useSkillUpdatesQuery();
+  const updates = updatesQuery.data?.items ?? [];
+  const available = updates.filter((item) => item.available);
+  const checkFailed = updatesQuery.isError || updates.some((item) => item.error);
 
   const skillsQuery = useWorkspaceSkillsQuery({ refetchInterval: 30000 });
   const skills = useMemo(() => skillsQuery.data ?? hub?.skills ?? [], [skillsQuery.data, hub?.skills]);
@@ -40,11 +46,10 @@ export function SkillsSection() {
     setRemoteEnabled(tab === "market" && authed);
   }, [authed, setRemoteEnabled, tab]);
 
-  async function installAndReveal(item: SkillSummary, replace: boolean) {
+  async function installFromMarket(item: SkillSummary, replace: boolean) {
     const installed = await hub?.installRemoteSkill?.(item, { replace });
     if (installed) {
       setDetail(null);
-      setTab("installed");
     }
   }
 
@@ -99,6 +104,31 @@ export function SkillsSection() {
             busy={skillsQuery.isFetching}
             loading={!skillsQuery.isFetched}
             t={t}
+            updates={updates}
+            onScanRemote={() => {
+              setChecked(true);
+              void updatesQuery.refetch();
+            }}
+            scanningRemote={updatesQuery.isFetching}
+            updateAction={
+              available.length ? (
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={() => void hub?.requestSkillUpdates(available.map((item) => item.name))}
+                >
+                  {t("skillUpdatesReviewAll", { count: available.length })}
+                </Button>
+              ) : null
+            }
+            updateNotice={
+              <>
+                {checked && !updatesQuery.isFetching && !available.length && !checkFailed ? (
+                  <span role="status">{t("skillUpdatesUpToDate")}</span>
+                ) : null}
+                {checkFailed ? <InlineError role="alert">{t("skillUpdatesCheckFailed")}</InlineError> : null}
+              </>
+            }
           />
         </>
       ) : (
@@ -107,7 +137,7 @@ export function SkillsSection() {
           hub={hub}
           installedSkills={skills}
           onLogin={() => controller.sidebarProps?.onRequireOpenCSGAuthentication?.()}
-          onInstall={(item, replace) => void installAndReveal(item, replace)}
+          onInstall={(item, replace) => void installFromMarket(item, replace)}
           onOpenSkill={(skill) => setDetail({ skill, variant: "market" })}
           remoteSkills={remoteSkills}
           t={t}
@@ -145,6 +175,11 @@ export function SkillsSection() {
       />
 
       <SkillDetailDialog
+        update={detail?.variant === "installed" ? updates.find((item) => item.name === detail.skill.name) : undefined}
+        onRequestUpdate={(name) => {
+          setDetail(null);
+          void hub?.requestSkillUpdates([name]);
+        }}
         target={
           detail?.variant === "installed"
             ? { ...detail, skill: skills.find((skill) => skill.name === detail.skill.name) ?? detail.skill }
@@ -157,7 +192,7 @@ export function SkillsSection() {
                 installed: hasSkillName(skills, remoteSkillInstallName(detail.skill)),
                 busy: hub?.remoteInstallBusy === (detail.skill.remotePath || detail.skill.name),
                 onAction: () =>
-                  void installAndReveal(detail.skill, hasSkillName(skills, remoteSkillInstallName(detail.skill))),
+                  void installFromMarket(detail.skill, hasSkillName(skills, remoteSkillInstallName(detail.skill))),
               }
             : undefined
         }
