@@ -99,6 +99,8 @@
   justify-content: flex-end;
   gap: 6px;
   flex-shrink: 0;
+  min-width: 0;
+  max-width: 45%;
 }
 @media (max-width: 720px) {
   .grid {

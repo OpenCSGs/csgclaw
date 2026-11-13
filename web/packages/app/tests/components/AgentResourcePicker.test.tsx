@@ -36,6 +36,22 @@ function setup(
   const fetch = vi.fn(async (input: string, init?: RequestInit) => {
     const url = new URL(String(input), "http://localhost/");
     const path = url.pathname;
+    if (path.endsWith("/update-check"))
+      return Response.json({
+        name: installedName,
+        available: true,
+        localVersion: "1.0.0",
+        latestVersion: "1.1.0",
+        commit: "fixed-commit",
+        state: "reviewed-state",
+        publishedAt: "2026-11-13T00:00:00Z",
+        checkedAt: "2026-11-13T01:00:00Z",
+        sourceUrl: "https://example.com/skills/team/review",
+        remotePath: "team/review",
+        targets: [{ id: "library", name: "", version: "1.0.0", state: "local-state", changes: [] }],
+      });
+    if (path === "/api/v1/skills:updates" && init?.method === "POST")
+      return Response.json({ results: [{ name: installedName, targetId: "library", status: "updated" }] });
     if (path === "/api/v1/skills") return Response.json(installed ? [{ name: installedName }] : []);
     if (path.endsWith("/skill-summaries")) {
       return Response.json(
@@ -91,6 +107,16 @@ afterEach(async () => {
   // Radix restores focus after unmount; finish that cleanup before the next dialog mounts.
   await new Promise((resolve) => setTimeout(resolve, 0));
 });
+
+async function confirmSkillUpdate(user: ReturnType<typeof userEvent.setup>, t: ReturnType<typeof createTranslator>) {
+  const dialog = within(await screen.findByRole("dialog", { name: t("skillUpdatesConfirmTitle", { count: 1 }) }));
+  const confirm = dialog.getByRole("button", { name: t("skillUpdatesConfirmUpdate") });
+  expect(await dialog.findByRole("radio", { name: new RegExp(`^${t("skillUpdatesChoiceUpdate")}`) })).toBeChecked();
+  expect(confirm).toBeEnabled();
+  await user.click(confirm);
+  await dialog.findByText(t("skillUpdatesDone"));
+  await user.click(dialog.getAllByRole("button", { name: t("close") }).at(-1)!);
+}
 
 describe("Agent global resource picker", () => {
   it.each([
@@ -187,11 +213,15 @@ describe("Agent skill market preview", () => {
     await preview.findByText("Review instructions");
     expect(preview.getByRole("button", { name: t("iaSkillsUpdate") })).toHaveClass("btn-secondary-gray");
     await user.click(preview.getByRole("button", { name: t("iaSkillsUpdate") }));
-    await waitFor(() => expect(onAdd).toHaveBeenCalledExactlyOnceWith(["review"], { replace: true }));
+    expect(fetch.mock.calls.some(([, options]) => options?.method === "POST")).toBe(false);
+    await confirmSkillUpdate(user, t);
+    await waitFor(() => expect(onAdd).toHaveBeenCalledExactlyOnceWith(["review"]));
     expect(onClose).not.toHaveBeenCalled();
-    expect(fetch.mock.calls.find(([path]) => String(path) === "api/v1/skills:install")?.[1]?.body).toBe(
-      JSON.stringify({ remote_path: "team/review", ref: "main", replace: true }),
-    );
+    expect(fetch.mock.calls.some(([path]) => String(path) === "api/v1/skills:install")).toBe(false);
+    expect(
+      JSON.parse(String(fetch.mock.calls.find(([path]) => String(path) === "api/v1/skills:updates")?.[1]?.body))
+        .items[0],
+    ).toMatchObject({ version: "1.1.0", commit: "fixed-commit", state: "reviewed-state" });
   });
 
   it("allows an enabled worker skill to be replaced from the list and preview", async () => {
@@ -203,10 +233,9 @@ describe("Agent skill market preview", () => {
     await user.click(screen.getByRole("button", { name: "Review" }));
     const preview = within(screen.getByRole("dialog", { name: "Review" }));
     await user.click(preview.getByRole("button", { name: t("iaSkillsUpdate") }));
-    await waitFor(() => expect(onAdd).toHaveBeenCalledExactlyOnceWith(["review"], { replace: true }));
-    expect(fetch.mock.calls.find(([path]) => String(path) === "api/v1/skills:install")?.[1]?.body).toBe(
-      JSON.stringify({ remote_path: "team/review", ref: "main", replace: true }),
-    );
+    await confirmSkillUpdate(user, t);
+    expect(onAdd).not.toHaveBeenCalled();
+    expect(fetch.mock.calls.some(([path]) => String(path) === "api/v1/skills:install")).toBe(false);
   });
 
   it("allows a disabled skill to be selected in the library and replaced from the market", async () => {
@@ -217,10 +246,9 @@ describe("Agent skill market preview", () => {
     await user.click(screen.getByRole("radio", { name: t("profileSkillMarket") }));
     await screen.findByRole("button", { name: "Review" });
     await user.click(screen.getByRole("button", { name: t("iaSkillsUpdate") }));
-    await waitFor(() => expect(onAdd).toHaveBeenCalledExactlyOnceWith(["review"], { replace: true }));
-    expect(fetch.mock.calls.find(([path]) => String(path) === "api/v1/skills:install")?.[1]?.body).toBe(
-      JSON.stringify({ remote_path: "team/review", ref: "main", replace: true }),
-    );
+    await confirmSkillUpdate(user, t);
+    expect(onAdd).not.toHaveBeenCalled();
+    expect(fetch.mock.calls.some(([path]) => String(path) === "api/v1/skills:install")).toBe(false);
   });
 
   it("shows replace after installation and retries a worker failure without reinstalling", async () => {
@@ -245,6 +273,15 @@ describe("Agent skill market preview", () => {
       const { fetch, t, user } = setup(locale);
       await user.click(screen.getByRole("radio", { name: t("profileSkillMarket") }));
       await user.type(screen.getByRole("searchbox"), "Review");
+      // Wait for the debounced search so the trigger belongs to the current results.
+      await waitFor(() =>
+        expect(
+          fetch.mock.calls.some(([path]) => {
+            const url = new URL(String(path), "http://localhost/");
+            return url.pathname === "/api/v1/skills/remote" && url.searchParams.get("search") === "Review";
+          }),
+        ).toBe(true),
+      );
       const item = await screen.findByRole("button", { name: "Review" });
       item.focus();
       await user.keyboard("{Enter}");

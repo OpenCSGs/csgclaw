@@ -4556,6 +4556,17 @@ func TestHandleRemoteSkillsUsesEffectiveOfficialHub(t *testing.T) {
 	t.Cleanup(func() { remoteSkillsHubAccessToken = previousAccessToken })
 
 	officialHub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/v1/skills/AIWizards/agent-builder" {
+			want := ""
+			if currentStatus.Authenticated {
+				want = "Bearer private-skill-token"
+			}
+			if r.Header.Get("Authorization") != want {
+				t.Error("release request did not preserve matching authentication")
+			}
+			writeJSON(w, 200, map[string]any{"data": map[string]any{"latest_version": "1.2.0", "versions": []any{}}})
+			return
+		}
 		if r.URL.Path != "/api/v1/agent/skills" {
 			t.Fatalf("path = %q, want /api/v1/agent/skills", r.URL.Path)
 		}

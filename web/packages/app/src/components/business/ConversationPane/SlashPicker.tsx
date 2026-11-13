@@ -46,7 +46,7 @@ export function SlashPicker({
       list.scrollTop = Math.max(0, candidates.length * rowStride - rowGap - list.clientHeight);
       setScrollTop(list.scrollTop);
     }
-  }, [candidates.length]);
+  }, [candidates.length, rowStride]);
   useLayoutEffect(() => {
     const list = listRef.current;
     if (!list) return;
@@ -54,7 +54,7 @@ export function SlashPicker({
     if (top < list.scrollTop) list.scrollTop = top;
     else if (top + rowHeight > list.scrollTop + list.clientHeight) list.scrollTop = top + rowHeight - list.clientHeight;
     setScrollTop(list.scrollTop);
-  }, [activeIndex]);
+  }, [activeIndex, rowStride]);
   useEffect(() => {
     const sentinel = sentinelRef.current;
     if (

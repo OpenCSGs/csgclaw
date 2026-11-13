@@ -49,8 +49,9 @@ func TestUsePythonHelperThenUpgrade(t *testing.T) {
 				t.Fatal(err)
 			}
 			// Import the actual bundled module, generating its normal bytecode cache.
+			// Keep the cache beside the module even when Python defaults to a system cache prefix.
 			// Importing defines functions only; it does not run LibreOffice or install dependencies.
-			cmd := exec.Command(python, "-c", `import office.soffice; from pathlib import Path; assert list(Path('office/__pycache__').glob('soffice.*.pyc'))`)
+			cmd := exec.Command(python, "-X", "pycache_prefix=", "-c", `import office.soffice; from pathlib import Path; assert list(Path('office/__pycache__').glob('soffice.*.pyc'))`)
 			cmd.Dir = filepath.Join(dst, "scripts")
 			for _, env := range os.Environ() {
 				key, _, _ := strings.Cut(env, "=")

@@ -5,9 +5,16 @@ export function skillDirectory(skill: SkillSummary): string {
 }
 
 export function skillLibrarySource(skill: SkillSummary): string {
+  if (skill.install?.source) return skill.install.source;
   if (skill.discovery) return skill.discovery.tool;
   const kind = skillOriginKind(skill);
   return kind === "unknown" ? "local" : kind;
+}
+
+// Builtin installation versions are integrity fingerprints, not release labels.
+export function skillLibraryVersion(skill: SkillSummary): string {
+  const source = skillLibrarySource(skill);
+  return source === "builtin" || source === "system" ? "" : skill.install?.version || skill.discovery?.version || "";
 }
 
 // A deduplicated skill remains discoverable under every app that installed it,

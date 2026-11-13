@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { acknowledgeDiscoveredSkills, rescanDiscoveredSkills } from "@/api/skills";
@@ -61,7 +61,7 @@ describe("compact installed skill library", () => {
     render(
       <InstalledSkillLibrary skills={[]} query="" onOpen={vi.fn()} onRefresh={refresh} t={createTranslator("zh")} />,
     );
-    await userEvent.click(screen.getByRole("button", { name: "重新扫描" }));
+    await userEvent.click(screen.getByRole("button", { name: "本地刷新" }));
     expect(await screen.findByRole("status")).toHaveTextContent("已关联 1 项本机技能");
     expect(rescanDiscoveredSkills).toHaveBeenCalledOnce();
     expect(refresh).toHaveBeenCalledOnce();
@@ -78,11 +78,11 @@ describe("compact installed skill library", () => {
         t={createTranslator("zh")}
       />,
     );
-    await userEvent.click(screen.getByRole("button", { name: "重新扫描" }));
+    await userEvent.click(screen.getByRole("button", { name: "本地刷新" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("失败");
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
     expect(refresh).not.toHaveBeenCalled();
-    expect(screen.getByRole("button", { name: "重新扫描" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "本地刷新" })).toBeEnabled();
   });
   it("replaces the ambiguous plus-count with an explicit version and software count", async () => {
     const item: SkillSummary = { ...skills[0], discovery: { ...skills[0].discovery!, version: "0.9.1" } };
@@ -94,5 +94,54 @@ describe("compact installed skill library", () => {
     expect(screen.queryByText("Codex +1")).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "查看 pdf 的版本与来源" }));
     expect(open).toHaveBeenCalledWith(item);
+  });
+  it.each(["zh", "en"] as const)(
+    "keeps online and local actions adjacent with independent callbacks in %s",
+    async (locale) => {
+      const t = createTranslator(locale),
+        online = vi.fn(),
+        refresh = vi.fn().mockResolvedValue({ isError: false });
+      render(
+        <InstalledSkillLibrary
+          skills={skills}
+          query=""
+          onOpen={vi.fn()}
+          onRefresh={refresh}
+          onScanRemote={online}
+          t={t}
+        />,
+      );
+      const remote = screen.getByRole("button", { name: t("skillUpdatesCheck") });
+      const local = screen.getByRole("button", { name: t("iaSkillsDiscoveryRescan") });
+      expect(remote.parentElement).toBe(local.parentElement);
+      expect(within(remote.parentElement!).getAllByRole("button")).toEqual([remote, local]);
+      await userEvent.click(remote);
+      expect(online).toHaveBeenCalledOnce();
+      expect(rescanDiscoveredSkills).not.toHaveBeenCalled();
+      await userEvent.click(local);
+      await waitFor(() => expect(refresh).toHaveBeenCalledOnce());
+      expect(rescanDiscoveredSkills).toHaveBeenCalledOnce();
+    },
+  );
+  it("hides builtin fingerprints and preserves complete published versions in the badge tooltip", () => {
+    const fingerprint = "fd3c189fe171ad974bd9d43dc5d526fe31b7bad2bd37e53a33266a26192896e6";
+    const version = "2026.11.13-preview." + "long-release-name".repeat(6);
+    render(
+      <InstalledSkillLibrary
+        skills={[
+          { name: "builtin", source: "builtin", install: { source: "builtin", version: fingerprint } },
+          { name: "market", source: "market", install: { source: "market", version } },
+        ]}
+        query=""
+        onOpen={vi.fn()}
+        onRefresh={vi.fn()}
+        t={createTranslator("zh")}
+      />,
+    );
+    expect(screen.queryByText(new RegExp(fingerprint))).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "查看 market 的版本与来源" })).toHaveAttribute(
+      "title",
+      `技能市场 · v${version}`,
+    );
   });
 });

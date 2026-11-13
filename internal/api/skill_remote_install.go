@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"sync"
 
 	skillinstall "csgclaw/internal/skill/installstate"
 	skilllocal "csgclaw/internal/skill/local"
@@ -32,6 +33,7 @@ type remoteSkillsListResponse struct {
 
 type remoteSkillSummary struct {
 	Recommended bool   `json:"recommended"`
+	Version     string `json:"version,omitempty"`
 	Description string `json:"description,omitempty"`
 	Name        string `json:"name"`
 	Readonly    bool   `json:"readonly"`
@@ -75,6 +77,28 @@ func (h *Handler) handleRemoteSkills(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), status)
 		return
 	}
+	// Hub's catalog may omit release metadata that is available on the detail API.
+	var versions sync.WaitGroup
+	jobs := make(chan int)
+	for range min(4, len(list.Items)) {
+		versions.Add(1)
+		go func() {
+			defer versions.Done()
+			for index := range jobs {
+				if list.Items[index].Version != "" {
+					continue
+				}
+				if releases, err := skillremote.GetAgenticHubSkillReleases(r.Context(), baseURL, token, list.Items[index].RemotePath); err == nil {
+					list.Items[index].Version = releases.LatestVersion
+				}
+			}
+		}()
+	}
+	for index := range list.Items {
+		jobs <- index
+	}
+	close(jobs)
+	versions.Wait()
 	siteBaseURL := h.currentOpenCSGEnvironment(r).OpenCSGBaseURL
 	items := make([]remoteSkillSummary, 0, len(list.Items))
 	for _, item := range list.Items {
@@ -84,6 +108,7 @@ func (h *Handler) handleRemoteSkills(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		items = append(items, remoteSkillSummary{
+			Version:     item.Version,
 			Description: item.Description,
 			Recommended: item.Recommended,
 			Name:        item.Name,
@@ -128,6 +153,21 @@ func (h *Handler) handleSkillInstall(w http.ResponseWriter, r *http.Request) {
 		writeRemoteSkillsHubError(w, err)
 		return
 	}
+	version, commit := "", ""
+	releases, releaseErr := skillremote.GetAgenticHubSkillReleases(r.Context(), baseURL, token, remotePath)
+	if releaseErr != nil && !strings.Contains(releaseErr.Error(), "status 404") {
+		http.Error(w, "skill release information is unavailable", http.StatusBadGateway)
+		return
+	}
+	if release, ok := releases.Latest(); ok && (req.Ref == "" || req.Ref == "main" || req.Ref == releases.DefaultBranch || req.Ref == release.Commit) {
+		version, commit, ref = release.Version, release.Commit, release.Commit
+	}
+	for _, release := range releases.Versions {
+		if release.Version == req.Ref || release.Commit == req.Ref {
+			version, commit, ref = release.Version, release.Commit, release.Commit
+			break
+		}
+	}
 	archive, err := skillremote.FetchAgenticHubSkillArchive(r.Context(), baseURL, token, remotePath, ref)
 	if err != nil {
 		if skillremote.IsInvalidAgenticHubRequest(err) {
@@ -147,9 +187,12 @@ func (h *Handler) handleSkillInstall(w http.ResponseWriter, r *http.Request) {
 		skillremote.AgenticHubSkillArchiveName(remotePath),
 		archive,
 		skilllocal.InstallArchiveOptions{Replace: req.Replace, Origin: skillinstall.Record{
-			Source:    skillinstall.SourceMarket,
-			SourceURL: sourceURL,
-			Ref:       ref,
+			Source:     skillinstall.SourceMarket,
+			SourceURL:  sourceURL,
+			Ref:        ref,
+			RemotePath: remotePath,
+			Version:    version,
+			Commit:     commit,
 		}},
 	)
 	if err != nil {

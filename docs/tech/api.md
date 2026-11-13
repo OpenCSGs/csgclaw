@@ -203,6 +203,39 @@ The server keeps the current Hub catalog ordering and returns normalized Skill s
 
 ### `POST /api/v1/skills:install`
 
+Published installations resolve the selected release to its commit and record the source URL, remote path, version, commit, installation time, update time, and content digest.
+The market catalog includes the latest published version when the Hub supplies it; missing catalog metadata is read from the skill detail API.
+
+### Skill update review
+
+`GET /api/v1/skills/updates` checks market installations against their original Hub and returns per-skill update information plus `checkedAt`.
+The Web UI checks every five minutes and offers a manual check in Settings > Skills.
+An unavailable source or failed check remains an error, rather than being represented as an up-to-date installation.
+External discoveries and custom local skills continue to be managed at their original source.
+Missing `SKILL.md` versions do not disable update checks: installation metadata is authoritative, followed by a published commit or immutable ref.
+For an installation without either version or resolvable commit, the original install digest is compared with the latest published package.
+An exact match identifies the installed release; different contents offer a reviewed replacement while keeping the current version explicitly unknown.
+Local edits alone do not trigger a remote update when the original install digest already matches the published package.
+
+`GET /api/v1/skills/{name}/update-check?preview=true` prepares a confirmation containing each installed version, the target published version and commit, release notes, affected same-source Agent copies, and added/modified/deleted files.
+File comparisons use actual local contents; binary and oversized files retain their change entry without a text preview.
+The confirmation includes a state token covering the reviewed installation records, files, and affected targets.
+Checking and previewing do not replace files.
+
+`POST /api/v1/skills:updates` accepts `{"items":[{"name":"example","version":"1.2.0","commit":"<published commit>","state":"<reviewed state>","strategy":"update"}]}`.
+The `update` strategy downloads the exact reviewed published commit and replaces the listed library and Agent copies without changing Agent enablement.
+The `keep-local` strategy leaves files untouched and persists an ignored release identifier; a later release is still eligible for notification.
+The dialog defaults to updating and lists every skill's current-to-target version transition before the user confirms.
+Confirmation stays disabled while the preview is loading or has failed, and opening the dialog does not apply an update.
+Changed files, changed origins, changed target membership, or a removed/rebound release invalidate the confirmation.
+Results identify every successful or failed target, so a partially completed batch is never presented as wholly successful.
+Downloads and archive validation complete before replacement, and failed replacement restores the previous directory.
+No local branches, merge workflow, or retained version history are created.
+Existing running tasks may have already loaded previous instructions; subsequent skill reads use the new files.
+Release visibility and any enterprise publication approval remain controlled by the Hub; this API does not introduce a separate client-side approval system.
+
+### Initial remote skill installation
+
 Installs one remote Skill from the same effective OpenCSG Hub. For a signed-in user, the server sends the matching OpenCSG access token with the archive request and with every legacy tree/blob fallback request, allowing installation of private Skills visible to that user. Signed-out installs remain limited to public Skills. Set `replace` to overwrite an existing local Skill with the same name. Built-in Skills cannot be replaced; the remote install dialog hides the action when the installation name matches a built-in Skill.
 
 ```json

@@ -48,6 +48,7 @@ type AgenticHubSkillSummary struct {
 	Name        string
 	Ref         string
 	RemotePath  string
+	Version     string
 }
 
 type AgenticHubSkillList struct {
@@ -86,6 +87,7 @@ type agenticHubSkillsResponse struct {
 
 type agenticHubSkillRecord struct {
 	Recommended        bool   `json:"recommended"`
+	LatestVersion      string `json:"latest_version"`
 	DefaultBranch      string `json:"default_branch"`
 	DefaultBranchCamel string `json:"defaultBranch"`
 	Description        string `json:"description"`
@@ -536,6 +538,7 @@ func agenticHubSkillSummaryFromRecord(record agenticHubSkillRecord) (AgenticHubS
 		name = agenticHubSkillName(remotePath)
 	}
 	return AgenticHubSkillSummary{
+		Version:     record.LatestVersion,
 		Description: firstAgenticHubValue(record.Description, record.Summary),
 		Recommended: record.Recommended,
 		Name:        name,

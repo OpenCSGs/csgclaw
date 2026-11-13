@@ -1,9 +1,12 @@
 import { del, get, request } from "@/api/client";
+import type { ApiError } from "@/api/client";
 import { SKILL_SOURCE_OFFICIAL } from "@/models/skillhub";
 import type { SkillFile, SkillSummary, SkillTree } from "@/models/skillhub";
+import type { SkillUpdateInfo, SkillUpdateResult, SkillUpdateStrategy } from "@/models/skillUpdates";
 
 const SKILLS_PATH = "api/v1/skills";
 const REMOTE_SKILLS_PAGE_SIZE = 16;
+const SKILL_UPDATE_BATCH_SIZE = 100;
 
 export type RemoteSkillsPage = {
   hasMore: boolean;
@@ -115,6 +118,7 @@ function normalizeRemoteSkill(record: unknown): SkillSummary | null {
     return null;
   }
   return {
+    ...(stringFromUnknown(values.version) ? { version: stringFromUnknown(values.version) } : {}),
     description: stringFromUnknown(values.description) || undefined,
     name,
     recommended: values.recommended === true,
@@ -146,4 +150,50 @@ export function acknowledgeDiscoveredSkills(keys: string[]): Promise<void> {
 
 export function rescanDiscoveredSkills(): Promise<SkillSummary[]> {
   return request<SkillSummary[]>(`${SKILLS_PATH}/discovery/rescan`, { method: "POST" });
+}
+
+export function fetchSkillUpdates(): Promise<{ items: SkillUpdateInfo[]; checkedAt: string }> {
+  return get(`${SKILLS_PATH}/updates`);
+}
+
+export function previewSkillUpdate(name: string): Promise<SkillUpdateInfo> {
+  return get(`${SKILLS_PATH}/${encodeURIComponent(name)}/update-check?preview=true`);
+}
+
+export async function applySkillUpdates(
+  items: readonly SkillUpdateInfo[],
+  strategy: SkillUpdateStrategy,
+): Promise<{ results: SkillUpdateResult[] }> {
+  const results: SkillUpdateResult[] = [];
+  for (let offset = 0; offset < items.length; offset += SKILL_UPDATE_BATCH_SIZE) {
+    const batch = items.slice(offset, offset + SKILL_UPDATE_BATCH_SIZE);
+    try {
+      const response = await request<{ results: SkillUpdateResult[] }>(`${SKILLS_PATH}:updates`, {
+        method: "POST",
+        json: {
+          items: batch.map((item) => ({
+            name: item.name,
+            version: item.latestVersion,
+            commit: item.commit,
+            state: item.state,
+            strategy,
+          })),
+        },
+      });
+      results.push(...response.results);
+    } catch (err) {
+      results.push(
+        ...batch.map(
+          (item): SkillUpdateResult => ({
+            name: item.name,
+            targetId: "",
+            targetName: "",
+            status: "failed",
+            error: (err as ApiError).code || "skill_update_failed",
+          }),
+        ),
+      );
+    }
+  }
+  return { results };
 }

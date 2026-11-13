@@ -2,10 +2,13 @@ import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "r
 import { useQueryClient } from "@tanstack/react-query";
 import { errorMessage as apiErrorMessage } from "@/api/client";
 import { deleteHubTemplateRequest, publishHubTemplateToCommunityRequest } from "@/api/hub";
-import { deleteSkillRequest, installRemoteSkillRequest, uploadSkillArchive } from "@/api/skills";
+import { deleteSkillRequest, fetchSkills, installRemoteSkillRequest, uploadSkillArchive } from "@/api/skills";
+import { useSkillUpdatePrompt, useSkillUpdatesQuery } from "./useSkillUpdates";
+import type { SkillUpdateInfo } from "@/models/skillUpdates";
+import { hasDifferentSkillOrigin } from "@/models/skillUpdates";
 import { hubTemplateFullName, isDeletableHubTemplate, isVisibleInHubTemplateList } from "@/models/hubWorkspace";
 import type { HubTemplate } from "@/models/hubWorkspace";
-import { isReadonlySkill } from "@/models/skillhub";
+import { isReadonlySkill, remoteSkillInstallName } from "@/models/skillhub";
 import type { SkillSummary } from "@/models/skillhub";
 import { localizeAPIError, localizeAPIErrorWithDiagnostics } from "@/shared/i18n";
 import { confirmWithFocusRecovery } from "@/shared/platform/confirm";
@@ -57,6 +60,10 @@ export function nextWorkspaceSkillAfterDelete(
 
 export type WorkspaceHubController = {
   hub: Omit<WorkspaceHubSelection, "detailPaneProps"> & {
+    skillUpdateNames: string[];
+    requestSkillUpdates: (names: string[]) => Promise<boolean>;
+    finishSkillUpdates: (updated: boolean) => void;
+    skillUpdates: SkillUpdateInfo[];
     deleteBusy: boolean;
     deleteHubTemplate: DeleteHubTemplate;
     publishBusy: boolean;
@@ -118,6 +125,9 @@ export function useWorkspaceHubController({
     [t],
   );
   const queryClient = useQueryClient();
+  const skillUpdatePrompt = useSkillUpdatePrompt();
+  const { requestSkillUpdates } = skillUpdatePrompt;
+  const skillUpdatesQuery = useSkillUpdatesQuery();
   const templateDrafts = useContext(TemplateInstructionsDraftContext);
   const [resourcesManualError, setResourcesManualError] = useState("");
   const [resourcesDeleteBusy, setResourcesDeleteBusy] = useState(false);
@@ -371,7 +381,24 @@ export function useWorkspaceHubController({
       setResourcesRemoteInstallBusy(remotePath);
       setResourcesRemoteInstallError("");
       try {
-        const installed = await installRemoteSkillRequest(remotePath, skill?.remoteRef, Boolean(options.replace));
+        let installed: SkillSummary;
+        if (options.replace) {
+          const name = remoteSkillInstallName(skill!);
+          const local = queryClient
+            .getQueryData<SkillSummary[]>(workspaceQueryKeys.skills())
+            ?.find((item) => item.name === name);
+          if (hasDifferentSkillOrigin(local, skill!)) {
+            setResourcesRemoteInstallError(t("skillUpdatesSourceUnavailable"));
+            return null;
+          }
+          if (!(await requestSkillUpdates([name]))) return null;
+          const current = await fetchSkills();
+          const updated = current.find((item) => item.name === name);
+          if (!updated) return null;
+          installed = updated;
+        } else {
+          installed = await installRemoteSkillRequest(remotePath, skill?.remoteRef);
+        }
         queryClient.setQueryData<SkillSummary[]>(workspaceQueryKeys.skills(), (current) => {
           return upsertSkillSummary(current, installed);
         });
@@ -393,6 +420,7 @@ export function useWorkspaceHubController({
       errorMessage,
       handleOpenCSGAuthenticationError,
       queryClient,
+      requestSkillUpdates,
       requireOpenCSGAuthentication,
       setSelectedHubResourceType,
       setSelectedHubSkillName,
@@ -404,6 +432,8 @@ export function useWorkspaceHubController({
   return {
     hub: {
       ...hub,
+      ...skillUpdatePrompt,
+      skillUpdates: skillUpdatesQuery.data?.items ?? [],
       error: hub.error || mutationError,
       deleteBusy: resourcesDeleteBusy,
       deleteHubTemplate,

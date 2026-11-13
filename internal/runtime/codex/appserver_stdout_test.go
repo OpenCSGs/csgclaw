@@ -92,6 +92,14 @@ func TestAppServerStdoutFailureHelper(t *testing.T) {
 	if len(args) < 3 || args[len(args)-2] != "--" {
 		return
 	}
+	// This subprocess speaks JSON-RPC on stdout. Do not let the Go test
+	// runner append its PASS footer when the parent closes stdin to stop it.
+	defer func() {
+		if t.Failed() {
+			os.Exit(1)
+		}
+		os.Exit(0)
+	}()
 	mode := args[len(args)-1]
 	if mode == "hold-stdout" {
 		time.Sleep(10 * time.Second)

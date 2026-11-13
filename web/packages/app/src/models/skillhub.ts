@@ -21,6 +21,18 @@ export type DiscoveredSkill = DiscoveredSkillSource & {
 
 export type SkillSummary = {
   recommended?: boolean;
+  version?: string;
+  install?: {
+    source: string;
+    source_url?: string;
+    remote_path?: string;
+    ref?: string;
+    version: string;
+    commit?: string;
+    installed_at?: string;
+    updated_at?: string;
+    skipped_version?: string;
+  };
   directory?: string;
   discovery?: DiscoveredSkill;
   description?: string;

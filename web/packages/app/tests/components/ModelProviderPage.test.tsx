@@ -215,8 +215,10 @@ describe("ModelProviderPage", () => {
     await waitFor(() => expect(screen.queryByText("stale-model")).not.toBeInTheDocument());
     expect(screen.getAllByText("Sign in first").length).toBeGreaterThan(0);
     expect(screen.queryByText("Connected")).not.toBeInTheDocument();
-    await userEvent.setup().click(screen.getByRole("button", { name: "Check" }));
-    expect(within(screen.getByRole("dialog")).getAllByText("Sign in first")).toHaveLength(1);
+    const check = await screen.findByRole("button", { name: "Check" });
+    await waitFor(() => expect(check).toBeEnabled());
+    await userEvent.setup().click(check);
+    expect(within(await screen.findByRole("dialog")).getAllByText("Sign in first")).toHaveLength(1);
   });
 
   it("checks the provider when opening the page", async () => {

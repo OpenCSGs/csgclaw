@@ -9,6 +9,7 @@ import accountSectionStyles from "./AccountSection.module.css";
 import resourceSettingsStyles from "./ResourceSettings.module.css";
 import type { SkillSummary } from "@/models/skillhub";
 import type { TranslateFn } from "@/models/conversations";
+import { skillVersionLabel } from "@/models/skillLibrary";
 
 type SkillsHub = NonNullable<ReturnType<typeof useWorkspaceControllerContext>["hubViewProps"]>["hub"];
 
@@ -144,7 +145,12 @@ export function SkillMarketPane({
             <ResourceListCard
               key={installKey}
               title={item.name}
-              titleBadge={item.recommended ? <RecommendationBadge label={t("resourceRecommended")} /> : null}
+              badge={
+                <span className="flex flex-wrap items-center gap-2 text-xs">
+                  {item.recommended ? <RecommendationBadge label={t("resourceRecommended")} /> : null}
+                  {item.version ? <span>{skillVersionLabel(item.version)}</span> : null}
+                </span>
+              }
               description={item.description || item.name}
               icon={
                 <ResourceFeaturedIcon>

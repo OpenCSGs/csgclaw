@@ -195,15 +195,16 @@ describe("agent overview team navigation", () => {
     );
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: "全部 3" }));
-    const selected = screen.getByRole("button", { name: /回归团队 1/ });
+    const list = within(document.getElementById("agent-overview-list")!);
+    const selected = list.getByRole("button", { name: /回归团队 1/ });
     expect(selected).toHaveAttribute("aria-current", "true");
-    const agent = () => screen.getByRole("button", { name: /测试智能体/ });
+    const agent = () => list.getByRole("button", { name: /测试智能体/ });
     await user.click(within(agent().parentElement!).getByRole("button", { name: "置顶" }));
 
-    const heading = screen.getByRole("button", { name: "置顶", expanded: true });
+    const heading = list.getByRole("button", { name: "置顶", expanded: true });
     await user.click(heading);
     expect(heading).toHaveAttribute("aria-expanded", "false");
-    expect(screen.queryByRole("button", { name: /测试智能体/ })).not.toBeInTheDocument();
+    expect(list.queryByRole("button", { name: /测试智能体/ })).not.toBeInTheDocument();
     expect(selected).toBeVisible();
 
     await user.type(screen.getByRole("textbox", { name: "搜索智能体和团队" }), "测试");
