@@ -19,6 +19,7 @@ import {
   PanelRightOpen,
   Presentation,
   Search,
+  RotateCcw,
   Square,
   Undo2,
   Users,
@@ -55,6 +56,7 @@ import {
 } from "@/models/attachments";
 import {
   builtinSlashCommandNames,
+  composerActionSuggestions,
   normalizeSlashShorthandForPayload,
   suggestedSlashCommandNames,
 } from "@/models/slashCommands";
@@ -243,8 +245,17 @@ function StartTaskForm({
         )
       : { content: normalizeSlashShorthandForPayload(content), resource_refs: [] };
   }
+  const actionSuggestions = cloudTarget || resourcePicker.active ? [] : composerActionSuggestions(draft);
+  const composerHelpId = `${panelID}-composer-help`;
   const draftInput = messageInput(draft);
   const draftFileCount = promptMentions.fileReferences(draft).length;
+  const cannotSend =
+    busy ||
+    Boolean(selectedCloud && selectedCloud.status !== "online") ||
+    resourcePicker.active ||
+    !canSendResources(draftInput.content, draftInput.resource_refs, attachments.length + draftFileCount) ||
+    Boolean(modelMissing);
+  const sendLabel = t(uploadProgress !== null ? "stopSending" : "taskEntryStart");
 
   function syncSlash(editor: HTMLTextAreaElement) {
     const query =
@@ -260,7 +271,9 @@ function StartTaskForm({
     const editor = editorRef.current;
     if (!editor || !name) return;
     const start = editor.value.length - editor.value.trimStart().length;
-    const end = start + (editor.value.slice(start).match(/^\S+/u)?.[0].length ?? 0);
+    const end = editor.value.trimStart().startsWith("/")
+      ? start + (editor.value.slice(start).match(/^\S+/u)?.[0].length ?? 0)
+      : editor.value.length;
     const isCommand = builtinSlashCommandNames.includes(name) || suggestedSlashCommandNames.includes(name);
     if (!isCommand && resourceAgentID) {
       setResources((current) => uniqueResources([...current, { source: "skill", id: name, name, type: "skill" }]));
@@ -574,8 +587,9 @@ function StartTaskForm({
                   <TaskPromptEditor
                     ref={editorRef}
                     autoFocus
-                    fileMentions={promptMentions.fileMentions}
+                    mentionRanges={promptMentions.mentionRanges}
                     aria-label={t("taskEntryPrompt")}
+                    aria-describedby={composerHelpId}
                     placeholder={
                       resources.length || attachments.length || draft.length
                         ? ""
@@ -606,9 +620,16 @@ function StartTaskForm({
                     }}
                     onPaste={(event) => {
                       const pasted = filesFromDataTransfer(event.clipboardData);
-                      if (!pasted.length) return;
-                      if (!event.clipboardData.getData("text/plain")) event.preventDefault();
-                      addAttachments(pasted);
+                      const text = event.clipboardData.getData("text/plain");
+                      if (pasted.length && (!cloudTarget || !text)) {
+                        event.preventDefault();
+                        addAttachments(pasted);
+                      }
+                      if (text && !cloudTarget) {
+                        event.preventDefault();
+                        promptMentions.pasteText(event.currentTarget, text);
+                        syncSlash(event.currentTarget);
+                      }
                     }}
                     disabled={busy}
                     onKeyDown={(event) => {
@@ -634,7 +655,7 @@ function StartTaskForm({
                     }}
                   />
                 </div>
-                {promptMentions.candidates.length || slashState.active ? (
+                {promptMentions.candidates.length || promptMentions.directoryStatus || slashState.active ? (
                   <PopoverRoot
                     open
                     onOpenChange={(open) => {
@@ -660,12 +681,19 @@ function StartTaskForm({
                     >
                       {promptMentions.candidates.length ? (
                         <MentionPicker
+                          groupPeopleAndFiles
+                          showRole={false}
                           className={styles.mentions}
                           users={promptMentions.candidates}
                           activeIndex={promptMentions.activeIndex}
                           onSelect={promptMentions.choose}
                           t={t}
                         />
+                      ) : promptMentions.directoryStatus ? (
+                        <div className={styles.mentionStatus} role="status">
+                          <div>{promptMentions.directoryStatus.path}/</div>
+                          <div>{t(promptMentions.directoryStatus.message)}</div>
+                        </div>
                       ) : (
                         <SlashPicker
                           className={styles.mentions}
@@ -680,6 +708,26 @@ function StartTaskForm({
                     </PopoverContent>
                   </PopoverRoot>
                 ) : null}
+                {actionSuggestions.length ? (
+                  <div className="flex flex-wrap items-center gap-2" aria-label={t("suggestedActions")}>
+                    <span>{t("suggestedActions")}</span>
+                    {actionSuggestions.map((suggestion) => (
+                      <Button
+                        key={suggestion.name}
+                        size="sm"
+                        variant="secondaryGray"
+                        disabled={busy}
+                        onClick={() => applySlashCandidate(suggestion.name)}
+                      >
+                        /{suggestion.name}
+                      </Button>
+                    ))}
+                    <small>{t("suggestedActionsOnly")}</small>
+                  </div>
+                ) : null}
+                <span id={composerHelpId} className="sr-only">
+                  {t("composerTip")}
+                </span>
                 <div className={selectedCloud ? `${styles.actions} ${styles.cloudActions}` : styles.actions}>
                   {!selectedCloud ? (
                     <>
@@ -723,32 +771,32 @@ function StartTaskForm({
                       />
                     </>
                   ) : null}
-                  <Button
-                    className={`composer-send-button ${conversationSendButtonStyles["composer-send-button"]}`}
-                    variant={uploadProgress !== null ? "danger" : "primary"}
-                    iconOnly
-                    size="sm"
-                    aria-label={t(uploadProgress !== null ? "stopSending" : "taskEntryStart")}
-                    disabled={
-                      uploadProgress === null &&
-                      (busy ||
-                        Boolean(selectedCloud && selectedCloud.status !== "online") ||
-                        resourcePicker.active ||
-                        !canSendResources(
-                          draftInput.content,
-                          draftInput.resource_refs,
-                          attachments.length + draftFileCount,
-                        ) ||
-                        Boolean(modelMissing))
-                    }
-                    onClick={() => (upload.current ? upload.current.abort() : void start())}
-                  >
-                    {uploadProgress !== null ? (
-                      <Square aria-hidden="true" size={14} fill="currentColor" />
-                    ) : (
-                      <ArrowUp aria-hidden="true" size={17} strokeWidth={1.5} />
-                    )}
-                  </Button>
+                  {busy ? (
+                    <span role="status" aria-live="polite">
+                      {uploadProgress === null
+                        ? t("sending")
+                        : t("sendingWithProgress", { progress: Math.round(uploadProgress) })}
+                    </span>
+                  ) : null}
+                  <Tooltip content={sendLabel}>
+                    <span>
+                      <Button
+                        className={`composer-send-button ${conversationSendButtonStyles["composer-send-button"]}`}
+                        variant={uploadProgress !== null ? "danger" : "primary"}
+                        iconOnly
+                        size="sm"
+                        aria-label={sendLabel}
+                        disabled={uploadProgress === null && cannotSend}
+                        onClick={() => (upload.current ? upload.current.abort() : void start())}
+                      >
+                        {uploadProgress !== null ? (
+                          <Square aria-hidden="true" size={14} fill="currentColor" />
+                        ) : (
+                          <ArrowUp aria-hidden="true" size={17} strokeWidth={1.5} />
+                        )}
+                      </Button>
+                    </span>
+                  </Tooltip>
                 </div>
               </div>
               {removedAttachments.length ? (
@@ -775,6 +823,12 @@ function StartTaskForm({
               <p role="alert" className={styles.error}>
                 {error}
                 {created.current ? ` ${t("taskEntryRetryCreated")}` : ""}
+                {created.current && !cannotSend ? (
+                  <Button size="sm" variant="secondaryGray" onClick={() => void start()}>
+                    <RotateCcw aria-hidden="true" size={14} />
+                    {t("retrySend")}
+                  </Button>
+                ) : null}
               </p>
             ) : null}
             {!selectedAgent && !selectedCloud ? (

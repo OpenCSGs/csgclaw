@@ -212,7 +212,9 @@ export function useFileMentions({
             }
           >
             {i === 0 || (candidates[i - 1].kind === "person" && !person) ? (
-              <div className="chat-file-mention-group">{t(person ? "chatMentionPeople" : "chatMentionFiles")}</div>
+              <div className={mentionPickerStyles["mention-group"]}>
+                {t(person ? "chatMentionPeople" : "chatMentionFiles")}
+              </div>
             ) : null}
             <button
               type="button"
@@ -225,7 +227,7 @@ export function useFileMentions({
                 apply(candidate);
               }}
             >
-              <span className="chat-file-mention-icon">
+              <span className={mentionPickerStyles["mention-icon"]}>
                 <Icon size={16} />
               </span>
               <span>

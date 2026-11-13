@@ -341,9 +341,13 @@ const ToolRow = memo(function ToolRow({ tool, number, t }: { tool: ProgressTool;
             </div>
           ) : null}
           <div className={styles.detailSection}>
-            <span className={styles.detailLabel}>{t("progressOutput")}</span>
+            <span id={`${id}-output`} className={styles.detailLabel}>
+              {t("progressOutput")}
+            </span>
             {tool.output ? (
-              <pre>{tool.output}</pre>
+              <pre className={styles.toolOutput} tabIndex={0} role="region" aria-labelledby={`${id}-output`}>
+                {tool.output}
+              </pre>
             ) : (
               <p className={styles.emptyOutput}>
                 {t(terminalTool(tool.status) ? "progressNoOutput" : "progressWaitingOutput")}

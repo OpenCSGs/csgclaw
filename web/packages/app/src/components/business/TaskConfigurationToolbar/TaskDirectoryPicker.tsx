@@ -121,7 +121,6 @@ export function TaskDirectoryPicker({
           {
             value: "",
             alwaysVisible: true,
-            separatorAfter: true,
             textValue: automaticLabel,
             label: (
               <span className={styles.directoryLabel}>

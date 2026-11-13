@@ -3,7 +3,7 @@ import type { MentionPickerUser } from "@/components/business/ConversationPane";
 import { useQuery } from "@tanstack/react-query";
 import { fetchWorkspaceDirectory } from "@/api/chatFiles";
 import { fileReferenceKey, type ComposerFileReference } from "@/models/fileReferences";
-import { getMentionCandidates } from "@/models/composer";
+import { getMentionCandidates, splitTextSegmentByMentions } from "@/models/composer";
 import {
   serializeTaskPromptMentions,
   taskPromptFileReferences,
@@ -32,12 +32,13 @@ export function useTaskPromptMentions({
   const [mention, setMention] = useState<{ start: number; end: number; query: string } | null>(null);
   const [chosen, setChosen] = useState<TaskPromptMention[]>([]);
   const [activeIndex, setActiveIndex] = useState(0);
+  const [directory, setDirectory] = useState("");
   const pendingCaret = useRef<number | null>(null);
   const latestDraft = useRef({ value, chosen });
   const composing = useRef(false);
   const listing = useQuery({
-    queryKey: ["chat-workspace", "", workspaceAgentID, "", workspaceDir],
-    queryFn: ({ signal }) => fetchWorkspaceDirectory(workspaceAgentID, "", signal, "", workspaceDir),
+    queryKey: ["chat-workspace", "", workspaceAgentID, directory, workspaceDir],
+    queryFn: ({ signal }) => fetchWorkspaceDirectory(workspaceAgentID, directory, signal, "", workspaceDir),
     enabled: Boolean(mention && !disabled && workspaceAgentID),
   });
   const scopedMentions = chosen.filter(
@@ -47,7 +48,7 @@ export function useTaskPromptMentions({
   const candidates: MentionPickerUser[] =
     mention && !disabled
       ? [
-          ...getMentionCandidates(members, mention.query, { limit: members.length }),
+          ...(!directory ? getMentionCandidates(members, mention.query, { limit: members.length }) : []),
           ...(workspaceAgentID
             ? (listing.data?.entries ?? [])
                 .filter((entry) =>
@@ -86,6 +87,7 @@ export function useTaskPromptMentions({
       ? { start: editor.selectionStart - match[1].length - 1, end: editor.selectionStart, query: match[1] }
       : null;
     if (next?.start === mention?.start && next?.end === mention?.end && next?.query === mention?.query) return;
+    if (!next || next.start !== mention?.start) setDirectory("");
     setMention(next);
     setActiveIndex(0);
   }
@@ -93,6 +95,39 @@ export function useTaskPromptMentions({
   function change(editor: HTMLTextAreaElement) {
     const next = editor.value;
     setChosen((current) => updateTaskPromptMentions(value, next, current));
+    onChange(next);
+    sync(editor);
+  }
+
+  function pasteText(editor: HTMLTextAreaElement, text: string) {
+    const names = new Map(
+      members.flatMap((member) => (member.name ? [[member.name.toLowerCase(), member] as const] : [])),
+    );
+    const start = editor.selectionStart;
+    const end = editor.selectionEnd;
+    let pasted = "";
+    const inserted: TaskPromptMention[] = [];
+    for (const segment of splitTextSegmentByMentions(text.replace(/\r\n?/gu, "\n"), names)) {
+      if (segment.type === "mention") {
+        const mentionStart = start + pasted.length;
+        pasted += `@${segment.userName}`;
+        inserted.push({ ...segment, start: mentionStart, end: start + pasted.length });
+      } else if (segment.type === "text") {
+        pasted += segment.text;
+      }
+    }
+    editor.setRangeText(pasted, start, end, "end");
+    const next = editor.value;
+    const shift = pasted.length - (end - start);
+    setChosen((current) => [
+      ...current.flatMap((item) => {
+        if (item.end <= start) return [item];
+        if (item.start >= end) return [{ ...item, start: item.start + shift, end: item.end + shift }];
+        return [];
+      }),
+      ...inserted,
+    ]);
+    pendingCaret.current = editor.selectionStart;
     onChange(next);
     sync(editor);
   }
@@ -113,6 +148,7 @@ export function useTaskPromptMentions({
     pendingCaret.current = start + text.length + 1;
     onChange(next);
     setMention(null);
+    setDirectory("");
   }
 
   function choose(member: MentionPickerUser) {
@@ -135,18 +171,45 @@ export function useTaskPromptMentions({
     const draft = latestDraft.current;
     const next = withoutTaskPromptFiles(draft.value, draft.chosen);
     setMention(null);
+    setDirectory("");
     setChosen(clearPeople ? [] : next.mentions);
     if (next.text !== draft.value) onChange(next.text);
   }
 
   function keyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
-    if (composing.current || event.nativeEvent.isComposing || event.keyCode === 229 || !mention) return false;
+    if (composing.current || event.nativeEvent.isComposing || event.keyCode === 229) return false;
+    const editor = event.currentTarget;
+    if (editor.selectionStart === editor.selectionEnd && (event.key === "Backspace" || event.key === "Delete")) {
+      const caret = editor.selectionStart;
+      const adjacent = scopedMentions.find((item) =>
+        event.key === "Backspace" ? item.end === caret : item.start === caret,
+      );
+      if (adjacent) {
+        event.preventDefault();
+        editor.setRangeText("", adjacent.start, adjacent.end, "end");
+        pendingCaret.current = adjacent.start;
+        change(editor);
+        return true;
+      }
+    }
+    if (!mention) return false;
+    if (event.key === "ArrowLeft" && directory && !mention.query) {
+      event.preventDefault();
+      setDirectory(directory.split("/").slice(0, -1).join("/"));
+      setActiveIndex(0);
+      return true;
+    }
     if (event.key === "Escape") {
       event.preventDefault();
       setMention(null);
+      setDirectory("");
       return true;
     }
-    if (!candidates.length) return false;
+    if (!candidates.length) {
+      if (!directory || event.key !== "Enter" || event.shiftKey) return false;
+      event.preventDefault();
+      return true;
+    }
     if (event.key === "ArrowDown" || event.key === "ArrowUp") {
       event.preventDefault();
       setActiveIndex((index) => (index + (event.key === "ArrowDown" ? 1 : -1) + candidates.length) % candidates.length);
@@ -154,7 +217,17 @@ export function useTaskPromptMentions({
     }
     if ((event.key === "Enter" || event.key === "Tab") && !event.shiftKey) {
       event.preventDefault();
-      choose(candidates[activeIndex] || candidates[0]);
+      const candidate = candidates[activeIndex] || candidates[0];
+      const file = candidate.fileReference;
+      if (event.key === "Tab" && file?.source === "workspace" && file.label.endsWith("/")) {
+        editor.setRangeText("@", mention.start, mention.end, "end");
+        pendingCaret.current = mention.start + 1;
+        change(editor);
+        setDirectory(file.path.replace(/\/$/u, ""));
+        setActiveIndex(0);
+      } else {
+        choose(candidate);
+      }
       return true;
     }
     return false;
@@ -162,8 +235,24 @@ export function useTaskPromptMentions({
 
   return {
     candidates,
-    fileMentions: scopedMentions
-      .filter((item) => "reference" in item && value.slice(item.start, item.end) === `@${item.reference.label}`)
+    directoryStatus:
+      mention && directory && !disabled && !candidates.length
+        ? {
+            path: directory,
+            message: listing.isError
+              ? ("agentWorkspaceLoadFailed" as const)
+              : listing.isPending
+                ? ("agentWorkspaceLoading" as const)
+                : listing.data?.entries?.length
+                  ? ("workspaceSearchNoResults" as const)
+                  : ("agentWorkspaceEmpty" as const),
+          }
+        : null,
+    mentionRanges: scopedMentions
+      .filter((item) => {
+        const label = "reference" in item ? item.reference.label : item.userName;
+        return value.slice(item.start, item.end) === `@${label}`;
+      })
       .sort((a, b) => a.start - b.start),
     activeIndex,
     choose,
@@ -171,9 +260,13 @@ export function useTaskPromptMentions({
     clearFiles,
     fileReferences: (text: string) => taskPromptFileReferences(text, text === value ? scopedMentions : []),
     change,
+    pasteText,
     sync,
     keyDown,
-    dismiss: () => setMention(null),
+    dismiss: () => {
+      setMention(null);
+      setDirectory("");
+    },
     compositionStart: () => {
       composing.current = true;
       setMention(null);

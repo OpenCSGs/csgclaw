@@ -97,6 +97,14 @@
   box-shadow: none;
   animation: none;
 }
+.mentionStatus {
+  padding: 12px;
+  border: 1px solid var(--input-border);
+  border-radius: 12px;
+  background: var(--input-background);
+  box-shadow: var(--shadow-xs);
+  overflow-wrap: anywhere;
+}
 .mentionPopover .mentions {
   position: static;
   width: 100%;
