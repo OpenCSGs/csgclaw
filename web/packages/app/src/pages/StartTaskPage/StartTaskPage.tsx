@@ -628,6 +628,7 @@ function StartTaskForm({
                       if (text && !cloudTarget) {
                         event.preventDefault();
                         promptMentions.pasteText(event.currentTarget, text);
+                        syncSlash(event.currentTarget);
                       }
                     }}
                     disabled={busy}
@@ -654,7 +655,7 @@ function StartTaskForm({
                     }}
                   />
                 </div>
-                {promptMentions.candidates.length || slashState.active ? (
+                {promptMentions.candidates.length || promptMentions.directoryStatus || slashState.active ? (
                   <PopoverRoot
                     open
                     onOpenChange={(open) => {
@@ -688,6 +689,11 @@ function StartTaskForm({
                           onSelect={promptMentions.choose}
                           t={t}
                         />
+                      ) : promptMentions.directoryStatus ? (
+                        <div className={styles.mentionStatus} role="status">
+                          <div>{promptMentions.directoryStatus.path}/</div>
+                          <div>{t(promptMentions.directoryStatus.message)}</div>
+                        </div>
                       ) : (
                         <SlashPicker
                           className={styles.mentions}

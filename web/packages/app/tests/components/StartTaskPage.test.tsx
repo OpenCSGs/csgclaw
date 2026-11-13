@@ -380,11 +380,11 @@ describe("new task member mentions", () => {
     const user = userEvent.setup();
     const editor = screen.getByRole("textbox", { name: "taskEntryPrompt" });
     await user.click(editor);
-    await user.paste("Review @Worker please");
+    await user.paste("Review\r\n@Worker please");
     await user.click(screen.getByRole("button", { name: "taskEntryStart" }));
     await waitFor(() =>
       expect(sendMessageRequest).toHaveBeenCalledWith(
-        expect.objectContaining({ content: 'Review <at user_id="worker">Worker</at> please' }),
+        expect.objectContaining({ content: 'Review\n<at user_id="worker">Worker</at> please' }),
       ),
     );
   });
@@ -414,6 +414,28 @@ describe("new task member mentions", () => {
           }),
         ),
       );
+    } finally {
+      vi.mocked(fetchWorkspaceDirectory).mockResolvedValue({ entries: [] });
+    }
+  });
+
+  it("shows an empty directory and allows keyboard navigation back", async () => {
+    vi.mocked(fetchWorkspaceDirectory).mockImplementation(async (_agent, path) => ({
+      entries: path ? [] : [{ name: "docs", path: "docs", type: "dir" }],
+    }));
+    try {
+      const user = userEvent.setup();
+      const { create } = setup();
+      const editor = screen.getByRole("textbox", { name: "taskEntryPrompt" });
+      await user.type(editor, "Review @docs");
+      await screen.findByRole("option", { name: /docs/ });
+      await user.keyboard("{Tab}");
+      expect(await screen.findByText("agentWorkspaceEmpty")).toBeVisible();
+      expect(screen.getByText("docs/")).toBeVisible();
+      await user.keyboard("{Enter}");
+      expect(create).not.toHaveBeenCalled();
+      await user.keyboard("{ArrowLeft}");
+      expect(await screen.findByRole("option", { name: /docs/ })).toBeVisible();
     } finally {
       vi.mocked(fetchWorkspaceDirectory).mockResolvedValue({ entries: [] });
     }
@@ -779,7 +801,8 @@ it("selects a slash skill from the shared picker and shows the connector logo", 
   const { create } = setup();
   const user = userEvent.setup();
   const editor = screen.getByRole("textbox", { name: "taskEntryPrompt" });
-  await user.type(editor, "/fei");
+  await user.click(editor);
+  await user.paste("/fei");
   const option = await screen.findByRole("option", { name: /feishu-docs/ });
   expect(option.querySelector("img")).toHaveAttribute("src", "icons/feishu.png");
   await user.keyboard("{Enter}");

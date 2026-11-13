@@ -107,7 +107,7 @@ export function useTaskPromptMentions({
     const end = editor.selectionEnd;
     let pasted = "";
     const inserted: TaskPromptMention[] = [];
-    for (const segment of splitTextSegmentByMentions(text, names)) {
+    for (const segment of splitTextSegmentByMentions(text.replace(/\r\n?/gu, "\n"), names)) {
       if (segment.type === "mention") {
         const mentionStart = start + pasted.length;
         pasted += `@${segment.userName}`;
@@ -235,6 +235,19 @@ export function useTaskPromptMentions({
 
   return {
     candidates,
+    directoryStatus:
+      mention && directory && !disabled && !candidates.length
+        ? {
+            path: directory,
+            message: listing.isError
+              ? ("agentWorkspaceLoadFailed" as const)
+              : listing.isPending
+                ? ("agentWorkspaceLoading" as const)
+                : listing.data?.entries?.length
+                  ? ("workspaceSearchNoResults" as const)
+                  : ("agentWorkspaceEmpty" as const),
+          }
+        : null,
     mentionRanges: scopedMentions
       .filter((item) => {
         const label = "reference" in item ? item.reference.label : item.userName;
