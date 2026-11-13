@@ -1621,6 +1621,7 @@ type appServerTurnWaiter struct {
 	lastActivity             string
 	progressSequence         uint64
 	streamReasoningSummary   bool
+	reasoningSummaries       map[string]*appServerReasoningSummary
 	structuredOutputBoundary bool
 	textOnlyUserInput        bool
 }

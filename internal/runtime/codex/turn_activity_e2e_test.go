@@ -32,8 +32,9 @@ func TestTurnActivityBundledCodexE2E(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, mode := range []string{"reasoning_text", "reasoning_summary", "mcp_progress", "compaction", "silent", "cancel_silent"} {
+	for _, mode := range []string{"reasoning_text", "reasoning_summary", "reasoning_snapshot", "mcp_progress", "compaction", "silent", "cancel_silent"} {
 		t.Run(mode, func(t *testing.T) {
+			reasoning := strings.HasPrefix(mode, "reasoning_")
 			home := t.TempDir()
 			t.Setenv("HOME", home)
 			t.Setenv("CODEX_HOME", filepath.Join(home, "host"))
@@ -82,16 +83,24 @@ func TestTurnActivityBundledCodexE2E(t *testing.T) {
 				if mode == "mcp_progress" && n == 1 {
 					emit(map[string]any{"type": "response.output_item.done", "item": map[string]any{"type": "function_call", "call_id": "slow-call", "namespace": "mcp__csgclaw", "name": "slow_operation", "arguments": "{}"}})
 				} else {
-					if n == 1 && (mode == "reasoning_text" || mode == "reasoning_summary") {
+					if n == 1 && reasoning {
 						item := map[string]any{"id": "reasoning-1", "type": "reasoning", "summary": []any{}}
 						emit(map[string]any{"type": "response.output_item.added", "output_index": 0, "item": item})
 						deltaType := "response.reasoning_text.delta"
 						if mode == "reasoning_summary" {
 							deltaType = "response.reasoning_summary_text.delta"
 						}
-						emit(map[string]any{"type": deltaType, "item_id": "reasoning-1", "output_index": 0, "content_index": 0, "summary_index": 0, "delta": "thinking"})
+						if mode != "reasoning_snapshot" {
+							emit(map[string]any{"type": deltaType, "item_id": "reasoning-1", "output_index": 0, "content_index": 0, "summary_index": 0, "delta": "thinking"})
+						}
 						if !waitForRelease(r.Context()) {
 							return
+						}
+						if mode == "reasoning_snapshot" {
+							item["summary"] = []map[string]any{
+								{"type": "summary_text", "text": "First"},
+								{"type": "summary_text", "text": "Second"},
+							}
 						}
 						emit(map[string]any{"type": "response.output_item.done", "output_index": 0, "item": item})
 					}
@@ -144,7 +153,7 @@ func TestTurnActivityBundledCodexE2E(t *testing.T) {
 			go func() {
 				done <- rt.PromptTurn(promptCtx, h.RuntimeID, PromptRequest{
 					SessionID: thread, Prompt: []PromptContentBlock{TextBlock("continue working")},
-					StreamReasoningSummary: mode == "reasoning_summary",
+					StreamReasoningSummary: mode == "reasoning_summary" || mode == "reasoning_snapshot",
 				})
 			}()
 			select {
@@ -160,6 +169,8 @@ func TestTurnActivityBundledCodexE2E(t *testing.T) {
 				wantPrefix = "reasoning/textDelta:"
 			case "reasoning_summary":
 				wantPrefix = "reasoning/summaryTextDelta:"
+			case "reasoning_snapshot":
+				wantPrefix = "started:reasoning:"
 			case "mcp_progress":
 				// Bundled Codex 0.149.1 logs remote MCP progress but does not
 				// forward it as an app-server notification. Check its real tool
@@ -182,7 +193,7 @@ func TestTurnActivityBundledCodexE2E(t *testing.T) {
 					return waiter != nil && strings.HasPrefix(waiter.currentLastActivity(), wantPrefix)
 				})
 			}
-			if mode == "reasoning_text" || mode == "reasoning_summary" {
+			if reasoning {
 				waitForTestReasoningStart(t, ctx, events, done)
 				if mode == "reasoning_summary" {
 					select {
@@ -217,7 +228,17 @@ func TestTurnActivityBundledCodexE2E(t *testing.T) {
 			case <-ctx.Done():
 				t.Fatal(ctx.Err())
 			}
-			if mode == "reasoning_text" || mode == "reasoning_summary" {
+			if mode == "reasoning_snapshot" {
+				select {
+				case event := <-events:
+					if event.Kind != activity.RuntimeEventReasoningSummary || event.Text != "First\n\nSecond" {
+						t.Fatalf("invalid reasoning snapshot event: %+v", event)
+					}
+				case <-ctx.Done():
+					t.Fatal(ctx.Err())
+				}
+			}
+			if reasoning {
 				select {
 				case event := <-events:
 					if event.Kind != activity.RuntimeEventReasoningCompleted || event.MessageID == "" || event.Text != "" {
