@@ -125,7 +125,10 @@ export function SlashPicker({
           </span>
         </button>
       ))}
-      <div aria-hidden="true" style={{ height: Math.max(0, candidates.length - end) * rowHeight, flexShrink: 0 }} />
+      <div
+        aria-hidden="true"
+        style={{ height: Math.max(0, (candidates.length - end) * rowStride - rowGap), flexShrink: 0 }}
+      />
       <div ref={sentinelRef}>
         {continuation?.failed ? (
           <div role="alert">
