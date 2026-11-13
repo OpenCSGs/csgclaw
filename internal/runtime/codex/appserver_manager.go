@@ -1163,7 +1163,9 @@ func (m *appServerManager) handleAppServerDynamicToolCall(runtimeID string, live
 			return appServerDynamicToolResponse(false, "image generation is unavailable in read-only mode"), nil
 		}
 		var args struct {
-			Prompt string `json:"prompt"`
+			Prompt          string `json:"prompt"`
+			ReferenceImages []int  `json:"reference_images"`
+			modelprovider.ImageGenerationOptions
 		}
 		if json.Unmarshal(params.Arguments, &args) != nil {
 			return appServerDynamicToolResponse(false, "invalid image generation arguments"), nil
@@ -1172,7 +1174,7 @@ func (m *appServerManager) handleAppServerDynamicToolCall(runtimeID string, live
 		if !ok {
 			return appServerDynamicToolResponse(false, "image generation requires an active turn"), nil
 		}
-		if err := contract.GenerateImage(ctx, params.CallID, args.Prompt); err != nil {
+		if err := contract.GenerateImage(ctx, params.CallID, args.Prompt, args.ReferenceImages, args.ImageGenerationOptions); err != nil {
 			return appServerDynamicToolResponse(false, err.Error()), nil
 		}
 		return appServerDynamicToolResponse(true, "Image generated and delivered to the current conversation. Do not generate again or publish another copy. Continue responding using the original chat model."), nil
@@ -1182,9 +1184,10 @@ func (m *appServerManager) handleAppServerDynamicToolCall(runtimeID string, live
 			return appServerDynamicToolResponse(false, "video generation is unavailable in read-only mode"), nil
 		}
 		var args struct {
-			Prompt  string `json:"prompt"`
-			Size    string `json:"size"`
-			Seconds int    `json:"seconds"`
+			Prompt          string `json:"prompt"`
+			Size            string `json:"size"`
+			Seconds         int    `json:"seconds"`
+			ReferenceImages []int  `json:"reference_images"`
 		}
 		if json.Unmarshal(params.Arguments, &args) != nil {
 			return appServerDynamicToolResponse(false, "invalid video generation arguments"), nil
@@ -1193,7 +1196,7 @@ func (m *appServerManager) handleAppServerDynamicToolCall(runtimeID string, live
 		if !ok {
 			return appServerDynamicToolResponse(false, "video generation requires an active turn"), nil
 		}
-		if err := contract.GenerateVideo(ctx, params.CallID, args.Prompt, modelprovider.VideoGenerationOptions{Size: args.Size, Seconds: args.Seconds}); err != nil {
+		if err := contract.GenerateVideo(ctx, params.CallID, args.Prompt, modelprovider.VideoGenerationOptions{Size: args.Size, Seconds: args.Seconds}, args.ReferenceImages...); err != nil {
 			return appServerDynamicToolResponse(false, err.Error()), nil
 		}
 		return appServerDynamicToolResponse(true, "Video generation was submitted. Briefly acknowledge submission without describing a transient status such as still generating, downloading, completed, or delivered. The attached task card is the source of truth and updates automatically. Do not publish another copy."), nil
@@ -2606,13 +2609,23 @@ func redactSecretishLine(line string) string {
 func appServerGenerateImageToolSpec() map[string]any {
 	return map[string]any{
 		"name":        "csgclaw_generate_image",
-		"description": "Generate one image from the user's requested description using this Agent's configured image generation model and deliver it to the current conversation. Use this tool whenever the user asks to create an image. Never switch the chat model or call providers with shell commands. If image_model_not_configured is returned, ask the user to configure the Image generation model in the Agent profile; do not retry automatically.",
-		"inputSchema": map[string]any{"type": "object", "properties": map[string]any{"prompt": map[string]any{"type": "string", "description": "Faithfully express the user's image request. Resolve references using established conversation context, but do not invent subjects, styles, text exclusions, or other constraints. Expand creatively only when explicitly requested. Preserve a supplied verbatim prompt unchanged."}}, "required": []string{"prompt"}, "additionalProperties": false},
+		"description": "Generate or edit one image from the user's requested description and optional reference images using this Agent's configured image generation model and deliver it to the current conversation. Use this tool whenever the user asks to create an image. Never switch the chat model or call providers with shell commands. If image_model_not_configured is returned, ask the user to configure the Image generation model in the Agent profile; do not retry automatically.",
+		"inputSchema": map[string]any{"type": "object", "properties": map[string]any{"reference_images": appServerReferenceImagesSchema(modelprovider.MaxImageEditReferences), "size": map[string]any{"type": "string", "description": "Output dimensions supported by the configured image model, for example 1024x1024."}, "resolution": map[string]any{"type": "string", "description": "Provider-specific resolution tier. Use only when required by the configured provider and the supported tier is known."}, "prompt": map[string]any{"type": "string", "description": "Faithfully express the user's image request. Resolve references using established conversation context, but do not invent subjects, styles, text exclusions, or other constraints. Expand creatively only when explicitly requested. Preserve a supplied verbatim prompt unchanged."}}, "required": []string{"prompt"}, "additionalProperties": false},
 	}
 }
 
 func appServerGenerateVideoToolSpec() map[string]any {
-	return map[string]any{"name": "csgclaw_generate_video", "description": "Generate one video using this Agent's configured video model and deliver it to the conversation. Omit size or seconds unless the user explicitly supplied them; CSGClaw applies the selected model's advertised defaults and validates explicit values.", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{"prompt": map[string]any{"type": "string"}, "size": map[string]any{"type": "string", "description": "Optional provider-advertised size value. Do not convert it to width x height or guess a value."}, "seconds": map[string]any{"type": "integer", "minimum": 1, "description": "Optional requested duration. Omit when the user did not specify one."}}, "required": []string{"prompt"}, "additionalProperties": false}}
+	return map[string]any{"name": "csgclaw_generate_video", "description": "Generate one video with an optional first-frame reference image using this Agent's configured video model and deliver it to the conversation. Omit size or seconds unless the user explicitly supplied them; CSGClaw applies the selected model's advertised defaults and validates explicit values.", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{"reference_images": appServerReferenceImagesSchema(1), "prompt": map[string]any{"type": "string"}, "size": map[string]any{"type": "string", "description": "Optional provider-advertised size value. Do not convert it to width x height or guess a value."}, "seconds": map[string]any{"type": "integer", "minimum": 1, "description": "Optional requested duration. Omit when the user did not specify one."}}, "required": []string{"prompt"}, "additionalProperties": false}}
+}
+
+func appServerReferenceImagesSchema(maxItems int) map[string]any {
+	return map[string]any{
+		"type":        "array",
+		"description": "Indices of the attached images the user wants to use as references. Use the numbered image labels in the current turn. Omit for text-only generation.",
+		"items":       map[string]any{"type": "integer", "minimum": 1},
+		"uniqueItems": true,
+		"maxItems":    maxItems,
+	}
 }
 
 // Explicit per-thread values override settings retained by cold-resumed threads.

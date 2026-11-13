@@ -13,6 +13,7 @@ import (
 	"encoding/base64"
 	"image"
 	"image/png"
+	"io"
 	"path/filepath"
 
 	"encoding/json"
@@ -48,7 +49,7 @@ func TestImageModelProfileHTTPRoundTripKeepsChatModel(t *testing.T) {
 	}
 }
 
-func TestImageRetryHTTPUsesCapturedModelAndPersistsAttachment(t *testing.T) {
+func TestImageEditRetryHTTPUsesCapturedModelAndReferences(t *testing.T) {
 	var pixels bytes.Buffer
 	if err := png.Encode(&pixels, image.NewRGBA(image.Rect(0, 0, 4, 4))); err != nil {
 		t.Fatal(err)
@@ -57,15 +58,28 @@ func TestImageRetryHTTPUsesCapturedModelAndPersistsAttachment(t *testing.T) {
 	fail := true
 	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		calls++
-		if r.URL.Path != "/v1/images/generations" {
+		if r.URL.Path != "/v1/images/edits" {
 			t.Errorf("wrong endpoint %s", r.URL.Path)
 		}
-		var request map[string]any
-		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
-			t.Fatal(err)
+		if err := r.ParseMultipartForm(1 << 20); err != nil {
+			t.Errorf("parse edit request: %v", err)
+			w.WriteHeader(http.StatusBadRequest)
+			return
 		}
-		if request["prompt"] != "exact captured prompt" || request["model"] != "vendor-image" || request["response_format"] != "b64_json" || request["output_format"] != nil {
-			t.Errorf("retry changed original request: %v", request)
+		defer r.MultipartForm.RemoveAll()
+		if r.FormValue("prompt") != "exact captured prompt" || r.FormValue("model") != "vendor-image" || r.FormValue("size") != "1024x1024" || r.FormValue("resolution") != "1024" {
+			t.Errorf("retry changed original request: %v", r.MultipartForm.Value)
+		}
+		source, header, err := r.FormFile("image")
+		if err != nil {
+			t.Errorf("missing image reference: %v", err)
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		data, err := io.ReadAll(source)
+		_ = source.Close()
+		if err != nil || !bytes.Equal(data, pixels.Bytes()) || header.Header.Get("Content-Type") != "image/png" {
+			t.Errorf("incorrect reference image: %v", err)
 		}
 		if fail {
 			w.WriteHeader(http.StatusBadRequest)
@@ -94,7 +108,11 @@ func TestImageRetryHTTPUsesCapturedModelAndPersistsAttachment(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	task := contract.ImageGenerationTask{ID: "call-image", Prompt: "exact captured prompt", State: "failed", Model: &modelprovider.ImageGenerationConfig{ProviderID: "fixture", ModelID: "vendor-image"}, Error: "image_generation_failed"}
+	input, err := imSvc.CreateMessage(im.CreateMessageRequest{RoomID: room.ID, SenderID: "user-admin", Attachments: []im.MessageAttachmentUpload{{Name: "reference.png", Data: pixels.Bytes()}}})
+	if err != nil || len(input.Attachments) != 1 {
+		t.Fatalf("create source attachment: %v", err)
+	}
+	task := contract.ImageGenerationTask{Options: modelprovider.ImageGenerationOptions{Size: "1024x1024", Resolution: "1024"}, AttachmentIDs: []string{input.Attachments[0].ID}, ID: "call-image", Prompt: "exact captured prompt", State: "failed", Model: &modelprovider.ImageGenerationConfig{ProviderID: "fixture", ModelID: "vendor-image"}, Error: "image_generation_failed"}
 	turn := channel.TurnContext{AgentID: "agent-alice", ParticipantID: "pt-alice", RoomID: room.ID, ConversationKey: "room-image", TurnID: "turn-original"}
 	if err := store.DeliverImageGeneration(context.Background(), turn, task); err != nil {
 		t.Fatal(err)
@@ -152,7 +170,7 @@ func TestImageRetryHTTPUsesCapturedModelAndPersistsAttachment(t *testing.T) {
 		}
 	}
 	messages, _ = imSvc.ListMessages(room.ID)
-	if calls != 2 || len(messages) != 2 || len(messages[1].Attachments) != 1 {
+	if calls != 2 || len(messages) != 3 || len(messages[len(messages)-1].Attachments) != 1 {
 		t.Fatalf("calls=%d, messages=%d, output=%+v", calls, len(messages), messages)
 	}
 	current, ok := svc.Agent("agent-alice")

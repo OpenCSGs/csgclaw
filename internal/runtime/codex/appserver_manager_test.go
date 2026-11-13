@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"csgclaw/internal/agentengine/contract"
+	"csgclaw/internal/modelprovider"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -4104,9 +4105,9 @@ func assertServerRequestResponse(t *testing.T, msg map[string]any, wantID int, a
 
 func TestGenerateImageToolUsesActiveTurnHandler(t *testing.T) {
 	called := 0
-	ctx := contract.WithImageGenerationHandler(context.Background(), func(_ context.Context, id, prompt string) error {
+	ctx := contract.WithImageGenerationHandler(context.Background(), func(_ context.Context, id, prompt string, references []int, options modelprovider.ImageGenerationOptions) error {
 		called++
-		if id != "call-image" || prompt != "blue sky" {
+		if id != "call-image" || prompt != "blue sky" || len(references) != 1 || references[0] != 2 || options.Size != "1024x1024" {
 			t.Fatalf("wrong request %s %s", id, prompt)
 		}
 		return nil
@@ -4114,7 +4115,7 @@ func TestGenerateImageToolUsesActiveTurnHandler(t *testing.T) {
 	live := &liveSession{filePublishingThreads: map[string]bool{"thread-1": true}, turnContexts: testAppServerTurnContexts("thread-1", "turn-1", ctx)}
 	manager := newAppServerManager(testAppServerManagerDepsWithSink(&recordingSink{}))
 	for _, turnID := range []string{"turn-other", "turn-1"} {
-		response, err := manager.handleAppServerServerRequest("runtime-1", live, appServerServerRequest{Method: "item/tool/call", Params: mustJSONRaw(t, map[string]any{"threadId": "thread-1", "turnId": turnID, "callId": "call-image", "tool": "csgclaw_generate_image", "arguments": map[string]any{"prompt": "blue sky"}})})
+		response, err := manager.handleAppServerServerRequest("runtime-1", live, appServerServerRequest{Method: "item/tool/call", Params: mustJSONRaw(t, map[string]any{"threadId": "thread-1", "turnId": turnID, "callId": "call-image", "tool": "csgclaw_generate_image", "arguments": map[string]any{"prompt": "blue sky", "reference_images": []int{2}, "size": "1024x1024"}})})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -4162,7 +4163,7 @@ func TestAppServerCompletedMessageCorrectsStreamedDraft(t *testing.T) {
 
 func TestGenerateImageToolFollowsCurrentExecutionMode(t *testing.T) {
 	calls := 0
-	ctx := contract.WithImageGenerationHandler(context.Background(), func(context.Context, string, string) error {
+	ctx := contract.WithImageGenerationHandler(context.Background(), func(context.Context, string, string, []int, modelprovider.ImageGenerationOptions) error {
 		calls++
 		return nil
 	})
@@ -4171,7 +4172,7 @@ func TestGenerateImageToolFollowsCurrentExecutionMode(t *testing.T) {
 	for _, mode := range []string{ExecutionModeReadOnly, ExecutionModeStandard, ExecutionModeReadOnly, ExecutionModeStandard} {
 		live.spec.ExecutionMode = mode
 		response, err := manager.handleAppServerServerRequest("runtime-1", live, appServerServerRequest{Method: "item/tool/call", Params: mustJSONRaw(t, map[string]any{
-			"threadId": "thread-1", "turnId": "turn-1", "callId": "call-image", "tool": "csgclaw_generate_image", "arguments": map[string]any{"prompt": "blue sky"},
+			"threadId": "thread-1", "turnId": "turn-1", "callId": "call-image", "tool": "csgclaw_generate_image", "arguments": map[string]any{"prompt": "blue sky", "reference_images": []int{2}},
 		})})
 		if err != nil {
 			t.Fatal(err)

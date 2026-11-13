@@ -579,6 +579,7 @@ func (a *ConversationAdapter) prepareInput(ctx context.Context, turnID contract.
 		}
 	}
 	blocks := make([]PromptContentBlock, 0, len(input))
+	imageIndex := 0
 	for index, part := range input {
 		if part.Kind == contract.InputPartText {
 			blocks = append(blocks, TextBlock(part.Text))
@@ -607,7 +608,8 @@ func (a *ConversationAdapter) prepareInput(ctx context.Context, turnID contract.
 			return nil, func() {}, a.runtimeInputFileUnavailable("copy_input", err)
 		}
 		if strings.HasPrefix(mediaType, "image/") {
-			blocks = append(blocks, LocalImageBlock(path))
+			imageIndex++
+			blocks = append(blocks, TextBlock(fmt.Sprintf("Attached reference image %d (%q):", imageIndex, part.File.Resolved.Name)), LocalImageBlock(path))
 		} else {
 			blocks = append(blocks, TextBlock(fmt.Sprintf("Attached file %q is temporarily available for this turn at %s. This managed input is deleted when the turn ends. If the user asks to save or keep it for later, copy it to a regular workspace path outside .csgclaw/engine-inputs and .csgclaw/attachments, verify the saved file, and report that persistent path. Do not claim it was saved without doing the copy. In later turns, recover missing inputs using the current room attachment list/download commands instead of reusing this temporary path.", part.File.Resolved.Name, path)))
 		}

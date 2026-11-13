@@ -12,7 +12,7 @@ import (
 
 func TestImageDeliveryRetryDoesNotGenerateAgain(t *testing.T) {
 	calls := 0
-	engine := &Engine{files: NewFileStore(), generateImage: func(context.Context, *modelprovider.ImageGenerationConfig, string) (modelprovider.GeneratedImage, error) {
+	engine := &Engine{files: NewFileStore(), generateImage: func(context.Context, *modelprovider.ImageGenerationConfig, string, modelprovider.ImageGenerationOptions, ...modelprovider.ReferenceImage) (modelprovider.GeneratedImage, error) {
 		calls++
 		return modelprovider.GeneratedImage{Data: []byte("generated image"), MediaType: "image/png"}, nil
 	}}
@@ -47,7 +47,7 @@ func TestImageDeliveryRetryDoesNotGenerateAgain(t *testing.T) {
 
 func TestImageGenerationRequiresChannelDeliverySupport(t *testing.T) {
 	calls := 0
-	engine := &Engine{generateImage: func(context.Context, *modelprovider.ImageGenerationConfig, string) (modelprovider.GeneratedImage, error) {
+	engine := &Engine{generateImage: func(context.Context, *modelprovider.ImageGenerationConfig, string, modelprovider.ImageGenerationOptions, ...modelprovider.ReferenceImage) (modelprovider.GeneratedImage, error) {
 		calls++
 		return modelprovider.GeneratedImage{}, nil
 	}}
@@ -62,7 +62,7 @@ func TestSuccessfulImageRetryParticipatesInCompletedTurnEviction(t *testing.T) {
 	ctx := context.Background()
 	fail := true
 	calls := 0
-	engine := &Engine{files: NewFileStore(), runtimes: directConversationResolver{}, generateImage: func(context.Context, *modelprovider.ImageGenerationConfig, string) (modelprovider.GeneratedImage, error) {
+	engine := &Engine{files: NewFileStore(), runtimes: directConversationResolver{}, generateImage: func(context.Context, *modelprovider.ImageGenerationConfig, string, modelprovider.ImageGenerationOptions, ...modelprovider.ReferenceImage) (modelprovider.GeneratedImage, error) {
 		calls++
 		if fail {
 			return modelprovider.GeneratedImage{}, errors.New("provider unavailable")

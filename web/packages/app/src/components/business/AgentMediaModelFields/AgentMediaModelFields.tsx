@@ -80,6 +80,14 @@ export function AgentMediaModelFields({
             <ModelPicker
               value={imageModelID}
               models={imageModels}
+              modelBadges={(model) => {
+                const capabilities = selectedImageProvider?.imageMetadata?.[model];
+                if (!capabilities) return [t("profileImageCapabilityUnknown")];
+                const labels = [];
+                if (capabilities.textToImage) labels.push(t("profileImageCapabilityText"));
+                if (capabilities.imageToImage) labels.push(t("profileImageCapabilityReference"));
+                return labels;
+              }}
               disabled={busy || selectedImageProvider?.disabled || !imageProviderID || !imageModels.length}
               label={t("profileImageModel")}
               unavailableLabel={t("profileImageModelUnavailable")}

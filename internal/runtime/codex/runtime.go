@@ -2190,7 +2190,7 @@ type runtimeMetadata struct {
 // Increment whenever the engine-facing dynamic tool set or schema changes.
 // Persisted Codex threads cannot acquire new dynamic tools through thread/resume,
 // so an older version must rotate to a fresh thread on the next conversation turn.
-const engineDynamicToolsVersion = 5
+const engineDynamicToolsVersion = 7
 
 type sessionMetadata struct {
 	DynamicToolsVersion            int               `json:"dynamic_tools_version,omitempty"`

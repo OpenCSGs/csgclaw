@@ -557,7 +557,7 @@ func TestModelDirectorySeparatesImageGenerationFromVisionAndUnavailableModels(t 
 		_, _ = w.Write([]byte(`{"data":[
    {"id":"chat-vision","task":"text-generation,image-text-to-text"},
    {"id":"image-one","task":"text-to-image"},
-   {"id":"image-two","task":["text-to-image","image-to-image"]},
+   {"id":"image-two","task":"text-to-image","metadata":{"tasks":["image-to-image"]}},
    {"id":"editor-only","task":"image-to-image"},
    {"id":"image-offline","task":"text-to-image","availability":{"is_available":false}},
    {"id":"MiniMax-Hailuo-2.3","task":"text-to-video","metadata":{"capabilities":{"video":{"size":["768P","1080P"],"seconds":[6,10]}}}},
@@ -569,8 +569,13 @@ func TestModelDirectorySeparatesImageGenerationFromVisionAndUnavailableModels(t 
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(directory.ImageModels, []string{"image-one", "image-two", "gpt-image-2"}) {
+	if !reflect.DeepEqual(directory.ImageModels, []string{"image-one", "image-two", "editor-only", "gpt-image-2"}) {
 		t.Fatalf("image models: %v", directory.ImageModels)
+	}
+	if got := directory.ImageMetadata; len(got) != 3 || !got["image-one"].TextToImage || got["image-one"].ImageToImage ||
+		!got["image-two"].TextToImage || !got["image-two"].ImageToImage ||
+		got["editor-only"].TextToImage || !got["editor-only"].ImageToImage {
+		t.Fatalf("image metadata: %#v", got)
 	}
 	if !reflect.DeepEqual(directory.VideoModels, []string{"MiniMax-Hailuo-2.3"}) {
 		t.Fatalf("video models: %v", directory.VideoModels)

@@ -129,7 +129,7 @@ func (r *LocalResolver) Resolve(
 	}
 	files := conversation.Files()
 	var releaseOnce sync.Once
-	return agentengine.InputFile{ID: created.ID}, func() {
+	return agentengine.InputFile{ID: created.ID, AttachmentID: attachmentID}, func() {
 		releaseOnce.Do(func() {
 			if err := files.Delete(context.Background(), created.ID); err != nil && agentengine.ErrorCodeOf(err) != agentengine.ErrorFileNotFound {
 				slog.Warn("delete staged IM attachment from Agent Engine failed", "agent_file_id", created.ID, "error", err)

@@ -20,7 +20,11 @@ test("conversation settings are grouped separately and media changes only patch 
           displayName: "Custom",
           avatar: "",
           models: ["chat"],
-          imageModels: ["image", "image-2"],
+          imageModels: ["image", "image-2", "image-unknown"],
+          imageMetadata: {
+            image: { textToImage: true, imageToImage: true },
+            "image-2": { textToImage: false, imageToImage: true },
+          },
           videoModels: ["video"],
         },
       ]}
@@ -39,7 +43,15 @@ test("conversation settings are grouped separately and media changes only patch 
   const image = within(screen.getByRole("group", { name: t("profileImageModelGroup") }));
   expect(image.queryByRole("checkbox")).not.toBeInTheDocument();
   await user.click(image.getByRole("combobox", { name: t("profileImageModel") }));
-  await user.click(screen.getByRole("option", { name: "image-2" }));
+  expect(
+    screen.getByRole("option", {
+      name: `image ${t("profileImageCapabilityText")} ${t("profileImageCapabilityReference")}`,
+    }),
+  ).toBeInTheDocument();
+  expect(
+    screen.getByRole("option", { name: `image-unknown ${t("profileImageCapabilityUnknown")}` }),
+  ).toBeInTheDocument();
+  await user.click(screen.getByRole("option", { name: `image-2 ${t("profileImageCapabilityReference")}` }));
   expect(onPatch).toHaveBeenLastCalledWith({ image_generation: { provider_id: "custom", model_id: "image-2" } });
   const video = within(screen.getByRole("group", { name: t("profileVideoModelGroup") }));
   expect(video.queryByRole("checkbox")).not.toBeInTheDocument();
