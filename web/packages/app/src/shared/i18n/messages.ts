@@ -42,6 +42,7 @@ export const messages = {
     cloudChatSend: "发送",
 
     agentPlazaTitle: "智能体广场",
+    agentPlazaLoadMore: "加载更多",
     agentPlazaLoading: "正在加载已发布智能体…",
     agentPlazaLoadFailed: "无法加载智能体广场",
     relay_login_required: "请登录 OpenCSG",
@@ -2357,6 +2358,7 @@ export const messages = {
     questionSkip: "跳过",
     questionClose: "关闭并跳过全部问题",
     questionRecommended: "推荐",
+    resourceRecommended: "推荐",
     questionAnswerRequired: "请选择一个选项或输入回答。",
     questionOtherDetailRequired: "请选择“以上都不是”时补充具体回答。",
     questionResponseFailed: "提交回答失败",
@@ -3394,6 +3396,7 @@ export const messages = {
     cloudChatSend: "Send",
 
     agentPlazaTitle: "Agent Plaza",
+    agentPlazaLoadMore: "Load more",
     agentPlazaLoading: "Loading published agents…",
     agentPlazaLoadFailed: "Unable to load the agent plaza",
     relay_login_required: "Sign in to OpenCSG",
@@ -5784,6 +5787,7 @@ export const messages = {
     questionSkip: "Skip",
     questionClose: "Close and skip all questions",
     questionRecommended: "Recommended",
+    resourceRecommended: "Recommended",
     questionAnswerRequired: "Select an option or type an answer.",
     questionOtherDetailRequired: "Add a specific answer when selecting None of the above.",
     questionResponseFailed: "Could not submit the answer",

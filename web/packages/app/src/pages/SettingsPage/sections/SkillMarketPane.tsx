@@ -1,3 +1,4 @@
+import { RecommendationBadge } from "@/components/business/RecommendationBadge";
 import { LoaderCircle, LogIn, Plus, RefreshCw } from "lucide-react";
 import { InlineError, Button, Tooltip } from "@/components/ui";
 import { ResourceList, ResourceListCard } from "@/components/business/ResourceListCard";
@@ -91,7 +92,10 @@ export function SkillMarketPane({
                   <SkillFeaturedIcon />
                 </ResourceFeaturedIcon>
                 <button type="button" className="agent-skill-candidate-copy" onClick={() => onOpenSkill(item)}>
-                  <span className="agent-skill-name">{item.name}</span>
+                  <span className="agent-skill-name">
+                    <span>{item.name}</span>
+                    {item.recommended ? <RecommendationBadge label={t("resourceRecommended")} /> : null}
+                  </span>
                   <span className="agent-skill-description">{item.description || item.name}</span>
                 </button>
                 <Button
@@ -140,6 +144,7 @@ export function SkillMarketPane({
             <ResourceListCard
               key={installKey}
               title={item.name}
+              titleBadge={item.recommended ? <RecommendationBadge label={t("resourceRecommended")} /> : null}
               description={item.description || item.name}
               icon={
                 <ResourceFeaturedIcon>

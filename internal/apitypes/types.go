@@ -32,20 +32,21 @@ type LegacyBot struct {
 }
 
 type User struct {
-	AgentState   string        `json:"agent_state,omitempty"`
-	AgentID      string        `json:"agent_id,omitempty"`
-	DeletedAt    *time.Time    `json:"deleted_at,omitempty"`
-	ID           string        `json:"id"`
-	Name         string        `json:"name"`
-	Description  string        `json:"description,omitempty"`
-	Locale       string        `json:"locale,omitempty"`
-	Role         string        `json:"role"`
-	Avatar       string        `json:"avatar"`
-	IsOnline     bool          `json:"is_online"`
-	LastSeen     string        `json:"last_seen,omitempty"`
-	AccentHex    string        `json:"accent_hex"`
-	Participants []Participant `json:"participants,omitempty"`
-	CreatedAt    time.Time     `json:"created_at,omitempty"`
+	LegacyNotifier bool          `json:"legacy_notifier,omitempty"`
+	AgentState     string        `json:"agent_state,omitempty"`
+	AgentID        string        `json:"agent_id,omitempty"`
+	DeletedAt      *time.Time    `json:"deleted_at,omitempty"`
+	ID             string        `json:"id"`
+	Name           string        `json:"name"`
+	Description    string        `json:"description,omitempty"`
+	Locale         string        `json:"locale,omitempty"`
+	Role           string        `json:"role"`
+	Avatar         string        `json:"avatar"`
+	IsOnline       bool          `json:"is_online"`
+	LastSeen       string        `json:"last_seen,omitempty"`
+	AccentHex      string        `json:"accent_hex"`
+	Participants   []Participant `json:"participants,omitempty"`
+	CreatedAt      time.Time     `json:"created_at,omitempty"`
 }
 
 type CreateUserRequest struct {

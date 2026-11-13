@@ -55,7 +55,7 @@ function room(id: string, createdAt: string, extra: Partial<IMConversation> = {}
 }
 
 describe("conversation model helpers", () => {
-  it("keeps cloud task identities out of room invitations", () => {
+  it("keeps cloud task and legacy notifier identities out of room invitations", () => {
     const conversation = room("room", "", { members: ["pt-existing"] });
     const worker = { id: "user-worker", name: "Worker", role: "worker" };
     const candidates = roomInviteCandidates(conversation, [
@@ -63,9 +63,12 @@ describe("conversation model helpers", () => {
       { id: "user-existing", name: "Existing" },
       { id: "user-archived", name: "Archived", agent_state: "archived" },
       { id: "user-relay-history", name: "Cloud history", role: "cloud" },
+      { id: "user-old-notifier", role: "worker", legacy_notifier: true },
+      { id: "user-notifier-role", role: "notifier" },
+      { id: "user-notification", participants: [{ type: "notification" }] },
     ]);
 
-    expect(candidates).toEqual([worker]);
+    expect(candidates.map((user) => user.id)).toEqual([worker.id, "user-notification"]);
   });
 
   it("formats structured event messages in English and Chinese", () => {

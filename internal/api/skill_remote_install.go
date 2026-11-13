@@ -31,6 +31,7 @@ type remoteSkillsListResponse struct {
 }
 
 type remoteSkillSummary struct {
+	Recommended bool   `json:"recommended"`
 	Description string `json:"description,omitempty"`
 	Name        string `json:"name"`
 	Readonly    bool   `json:"readonly"`
@@ -67,7 +68,11 @@ func (h *Handler) handleRemoteSkills(w http.ResponseWriter, r *http.Request) {
 		Search: r.URL.Query().Get("search"),
 	})
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadGateway)
+		status := http.StatusBadGateway
+		if errors.Is(err, skillremote.ErrAgenticHubSignInRequired) {
+			status = http.StatusUnauthorized
+		}
+		http.Error(w, err.Error(), status)
 		return
 	}
 	siteBaseURL := h.currentOpenCSGEnvironment(r).OpenCSGBaseURL
@@ -80,6 +85,7 @@ func (h *Handler) handleRemoteSkills(w http.ResponseWriter, r *http.Request) {
 		}
 		items = append(items, remoteSkillSummary{
 			Description: item.Description,
+			Recommended: item.Recommended,
 			Name:        item.Name,
 			Readonly:    true,
 			RemotePath:  item.RemotePath,

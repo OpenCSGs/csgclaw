@@ -73,7 +73,7 @@ func TestRelayCatalogAuthenticationError(t *testing.T) {
 	}
 }
 
-func TestRelayCatalogTargetIgnoresUnrelatedProbeFailure(t *testing.T) {
+func TestRelayCatalogShowsFailedProbeAsOffline(t *testing.T) {
 	const target = "agt_0123456789abcdef01234567"
 	const other = "agt_1234567890abcdef12345678"
 	var otherUnavailable atomic.Bool
@@ -82,7 +82,7 @@ func TestRelayCatalogTargetIgnoresUnrelatedProbeFailure(t *testing.T) {
 		switch r.URL.Path {
 		case "/api/v1/agent/instances":
 			_ = json.NewEncoder(w).Encode(map[string]any{"data": []relay.CommunityInstance{
-				{ID: 1, Type: "csgclaw", Kind: "runtime", Public: true, Relay: &relay.RelayRegistration{AgentID: target}},
+				{ID: 1, Type: "csgclaw", Kind: "runtime", Public: true, Recommended: true, Relay: &relay.RelayRegistration{AgentID: target}},
 				{ID: 2, Type: "csgclaw", Kind: "runtime", Public: true, Relay: &relay.RelayRegistration{AgentID: other}},
 			}})
 		case "/api/v1/relay/v1/agents/" + target:
@@ -111,6 +111,9 @@ func TestRelayCatalogTargetIgnoresUnrelatedProbeFailure(t *testing.T) {
 	if err != nil || len(entries) != 2 {
 		t.Fatalf("initial discovery returned %d entries: %v", len(entries), err)
 	}
+	if entries[0].Agent.ID != target || !entries[0].Recommended || entries[1].Agent.ID != other || entries[1].Recommended {
+		t.Fatalf("catalog order or recommendation changed: %+v", entries)
+	}
 	h := &Handler{relayManager: manager}
 	catalog := func(query string) *httptest.ResponseRecorder {
 		response := httptest.NewRecorder()
@@ -119,14 +122,20 @@ func TestRelayCatalogTargetIgnoresUnrelatedProbeFailure(t *testing.T) {
 	}
 
 	otherUnavailable.Store(true)
-	if response := catalog(""); response.Code != http.StatusBadGateway {
-		t.Fatalf("full catalog returned HTTP %d, want 502", response.Code)
-	}
-	params := url.Values{"agent_id": {target}, "connection_id": {entries[0].ConnectionID}}
-	response := catalog("?" + params.Encode())
+	response := catalog("")
 	var body struct {
 		Data []relay.CatalogEntry `json:"data"`
 	}
+	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if response.Code != http.StatusOK || len(body.Data) != 2 ||
+		body.Data[0].Agent.ID != target || body.Data[0].Agent.Status != "online" ||
+		body.Data[1].Agent.ID != other || body.Data[1].Agent.Status != "offline" {
+		t.Fatalf("full catalog returned HTTP %d: %s", response.Code, response.Body)
+	}
+	params := url.Values{"agent_id": {target}, "connection_id": {entries[0].ConnectionID}}
+	response = catalog("?" + params.Encode())
 	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
 		t.Fatal(err)
 	}

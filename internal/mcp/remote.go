@@ -51,6 +51,7 @@ type RemoteServerListOptions struct {
 
 // RemoteServer is an installable MCP server from the configured OpenCSG Hub.
 type RemoteServer struct {
+	Recommended bool
 	HubURL      string
 	Description string
 	Headers     map[string]string
@@ -342,6 +343,7 @@ func decodeRemoteServerDetail(body []byte) (RemoteServer, error) {
 }
 
 type remoteServerRecord struct {
+	Recommended bool              `json:"recommended"`
 	Description string            `json:"description"`
 	Headers     map[string]string `json:"headers"`
 	ID          json.RawMessage   `json:"id"`
@@ -358,6 +360,7 @@ func (r remoteServerRecord) remoteServerSummary() (RemoteServer, bool) {
 	}
 	return RemoteServer{
 		Description: strings.TrimSpace(r.Description),
+		Recommended: r.Recommended,
 		ID:          id,
 		Name:        name,
 		Protocol:    remoteServerTransport(r.Protocol),

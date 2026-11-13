@@ -2129,6 +2129,7 @@ func presentHubTemplates(items []hub.Template) []apitypes.HubTemplate {
 
 func presentHubTemplate(item hub.Template) apitypes.HubTemplate {
 	presented := apitypes.HubTemplate{
+		Recommended:    item.Recommended,
 		LatestRevision: item.LatestRevision,
 		VersionCount:   item.VersionCount,
 		Publications:   item.Publications,

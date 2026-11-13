@@ -52,6 +52,7 @@ describe("skills API", () => {
               {
                 description: "Build agents from natural language.",
                 name: "agent-builder",
+                recommended: true,
                 readonly: true,
                 remote_path: "AIWizards/agent-builder",
                 remote_ref: "dev",
@@ -74,6 +75,7 @@ describe("skills API", () => {
         {
           description: "Build agents from natural language.",
           name: "agent-builder",
+          recommended: true,
           readonly: true,
           remotePath: "AIWizards/agent-builder",
           remoteRef: "dev",

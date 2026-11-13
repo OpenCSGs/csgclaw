@@ -20,6 +20,7 @@ export type DiscoveredSkill = DiscoveredSkillSource & {
 };
 
 export type SkillSummary = {
+  recommended?: boolean;
   directory?: string;
   discovery?: DiscoveredSkill;
   description?: string;

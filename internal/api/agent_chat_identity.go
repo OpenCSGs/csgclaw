@@ -97,3 +97,37 @@ func (h *Handler) chatUserLifecycleState(user im.User) string {
 	}
 	return ""
 }
+
+func (h *Handler) chatUserIsLegacyNotifier(user im.User) bool {
+	if h.agentEngine == nil || user.AgentState == "deleted" {
+		return false
+	}
+	bound := false
+	for _, p := range h.localChatParticipants() {
+		if p.ChannelUserKind != participant.ChannelUserKindLocalUserID || localUserIDFromAny(p.ChannelUserRef) != user.ID {
+			continue
+		}
+		bound = true
+		if p.Type != participant.TypeAgent || !h.agentHasLegacyNotifierRuntime(p.AgentID) {
+			return false
+		}
+	}
+	if bound {
+		return true
+	}
+	if user.AgentID != "" {
+		return h.agentHasLegacyNotifierRuntime(user.AgentID)
+	}
+	id := workerAgentIDFromUserID(user.ID)
+	return h.agentHasLegacyNotifierRuntime(id) && h.legacyChatUserMatchesAgent(user, id)
+}
+
+func (h *Handler) agentHasLegacyNotifierRuntime(id string) bool {
+	id = agent.CanonicalID(id)
+	if id == "" {
+		return false
+	}
+	item, err := h.agentEngine.Agents().Get(context.Background(), id, agentengine.AgentGetOptions{})
+	return err == nil && agent.CanonicalID(item.ID) == id && (strings.EqualFold(strings.TrimSpace(item.Status.RuntimeKind), "notifier") ||
+		strings.EqualFold(strings.TrimSpace(item.Spec.Runtime.Adapter), "notifier"))
+}

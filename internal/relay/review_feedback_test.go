@@ -3,7 +3,6 @@ package relay
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -130,13 +129,13 @@ func TestRestoredPublicationLoginWaitStopsOnShutdown(t *testing.T) {
 	}
 }
 
-func TestCommunityAvailabilityPreservesQueryFailures(t *testing.T) {
+func TestCommunityAvailabilityFallsBackToOfflineOnProbeErrors(t *testing.T) {
 	for _, test := range []struct {
 		status int
 		state  string
 	}{
-		{http.StatusUnauthorized, ""}, {http.StatusTooManyRequests, ""},
-		{http.StatusServiceUnavailable, ""}, {http.StatusNotFound, ""},
+		{http.StatusUnauthorized, "offline"}, {http.StatusTooManyRequests, "offline"},
+		{http.StatusServiceUnavailable, "offline"}, {http.StatusNotFound, "offline"},
 		{http.StatusOK, "offline"}, {http.StatusOK, "online"}, {http.StatusOK, "unhealthy"},
 	} {
 		status := test.status
@@ -162,25 +161,14 @@ func TestCommunityAvailabilityPreservesQueryFailures(t *testing.T) {
 			}
 			defer m.Close()
 			entries, err := m.Discover(context.Background())
-			if status == http.StatusNotFound || status == http.StatusOK {
-				expected := test.state
-				if status == http.StatusNotFound {
-					expected = "offline"
-				}
-				if err != nil || len(entries) != 1 || entries[0].Agent.Status != expected {
-					t.Fatalf("confirmed offline registration lost: %v %+v", err, entries)
-				}
-			} else {
-				var remote *HTTPError
-				if !errors.As(err, &remote) || remote.Status != status || len(entries) != 0 {
-					t.Fatalf("query failure became an offline listing: %v %+v", err, entries)
-				}
+			if err != nil || len(entries) != 1 || entries[0].Agent.ID != testRelayID || entries[0].Agent.Status != test.state {
+				t.Fatalf("expected registration with status %q: %v %+v", test.state, err, entries)
 			}
 		})
 	}
 }
 
-func TestCommunityAvailabilityTransportFailureIsNotOffline(t *testing.T) {
+func TestCommunityAvailabilityFallsBackToOfflineOnTransportFailure(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api/v1/agent/instances" {
 			writeTestJSON(w, 200, map[string]any{"data": []CommunityInstance{{ID: 1, Type: "csgclaw", Kind: "runtime", Source: "external", Public: true, Relay: &RelayRegistration{AgentID: testRelayID}}}})
@@ -200,7 +188,8 @@ func TestCommunityAvailabilityTransportFailureIsNotOffline(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer m.Close()
-	if entries, err := m.Discover(context.Background()); err == nil || len(entries) != 0 {
-		t.Fatalf("transport failure became offline: %v %+v", err, entries)
+	if entries, err := m.Discover(context.Background()); err != nil || len(entries) != 1 ||
+		entries[0].Agent.ID != testRelayID || entries[0].Agent.Status != "offline" {
+		t.Fatalf("expected offline registration after transport failure: %v %+v", err, entries)
 	}
 }
