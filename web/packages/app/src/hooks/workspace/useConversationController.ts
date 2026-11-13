@@ -772,8 +772,13 @@ export function useConversationController({
     return getMentionCandidates(
       data.users.filter((user) => !user.agent_state && allowed.has(participantIDForLocalIdentity(user.id))),
       composerMentionState.query,
-    );
-  }, [data, activeConversation, composerMentionState]);
+    ).map((user) => ({
+      ...user,
+      avatar:
+        resolveUserByLocalIdentity(user.id, usersById)?.avatar ||
+        conversationAgentForMember(user.id, agents, usersById)?.avatar,
+    }));
+  }, [data, activeConversation, composerMentionState, agents, usersById]);
   const mentionableUsersByName = useMemo(() => {
     const result = new Map<string, IMUser>();
     const duplicateNames = new Set<string>();

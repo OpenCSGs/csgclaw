@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Check, ChevronDown, Gauge, ShieldCheck } from "lucide-react";
-import { PopoverRoot, PopoverTrigger, PopoverContent } from "@/components/ui";
+import { PopoverRoot, PopoverTrigger, PopoverContent, Tooltip, TooltipProvider } from "@/components/ui";
 import { ReasoningEffortPicker } from "@/components/business/ReasoningEffortPicker";
 import { reasoningEffortLabel } from "@/components/business/ProfileControls";
 import { useOptionalWorkspaceControllerContext } from "@/hooks/workspace";
@@ -129,82 +129,99 @@ export function TaskConfigurationToolbar({
     );
   }
   return (
-    <div className={styles.root} title={!editable ? t("taskConfigurationUnsupported") : undefined}>
-      {showDirectory ? (
-        <TaskDirectoryPicker
-          value={configuration.workspace_dir || ""}
-          defaultDirectory={directoryMode === "collaboration" ? "" : String(options.local_workspace_dir || "")}
-          defaultLabel={directoryMode === "collaboration" ? t("collaborationWorkdirAutomatic") : undefined}
-          defaultHint={directoryMode === "collaboration" ? t("collaborationWorkdirAutomaticHint") : undefined}
-          locked={directoryLocked}
-          disabled={blocked || !editable}
-          onChoose={(path) => change({ workspace_dir: path }, false, true)}
-          t={t}
-        />
-      ) : null}
-      {showModel && schema ? (
-        <PopoverRoot open={open === "mode"} onOpenChange={(value) => toggle("mode", value)}>
-          <PopoverTrigger asChild>
-            <button type="button" disabled={blocked} className={styles.trigger} aria-label={t("iaRunModeTitle")}>
-              <ShieldCheck size={15} />
-              <span>{labelForMode(mode)}</span>
-              <ChevronDown size={12} />
-            </button>
-          </PopoverTrigger>
-          <PopoverContent className={styles.popover} side="top" aria-label={t("iaRunModeTitle")}>
-            {row(t("iaRunModeFollowAgent"), !configuration.execution_mode, () => void change({ execution_mode: "" }))}
-            {(schema.choices || []).map((choice) =>
-              row(
-                labelForMode(String(choice.value || "")),
-                configuration.execution_mode === choice.value,
-                () => void change({ execution_mode: String(choice.value || "") }),
-              ),
-            )}
-            {errorMessage}
-            {hint}
-          </PopoverContent>
-        </PopoverRoot>
-      ) : null}
-      {showModel ? (
-        <div className={styles.modelGroup}>
-          <TaskModelPicker
-            providers={providers}
-            providerID={configuration.model_provider_id || profile?.model_provider_id || ""}
-            modelID={configuration.model_id || profile?.model_id || ""}
-            agentModelID={profile?.model_id || ""}
-            agentProviderID={profile?.model_provider_id || ""}
-            followDefault={!configuration.model_id}
+    <TooltipProvider>
+      <div className={styles.root} title={!editable ? t("taskConfigurationUnsupported") : undefined}>
+        {showDirectory ? (
+          <TaskDirectoryPicker
+            value={configuration.workspace_dir || ""}
+            defaultDirectory={directoryMode === "collaboration" ? "" : String(options.local_workspace_dir || "")}
+            defaultLabel={directoryMode === "collaboration" ? t("collaborationWorkdirAutomatic") : undefined}
+            defaultHint={directoryMode === "collaboration" ? t("collaborationWorkdirAutomaticHint") : undefined}
+            locked={directoryLocked}
             disabled={blocked || !editable}
-            onFollowDefault={() => change({ model_provider_id: "", model_id: "", reasoning_effort: "" }, false, true)}
-            onChoose={(id, model) =>
-              change({ model_provider_id: id, model_id: model, reasoning_effort: "auto" }, false, true)
-            }
+            onChoose={(path) => change({ workspace_dir: path }, false, true)}
             t={t}
           />
-          <PopoverRoot open={open === "reasoning"} onOpenChange={(value) => toggle("reasoning", value)}>
-            <PopoverTrigger asChild>
-              <button type="button" disabled={blocked} className={styles.trigger} aria-label={t("iaReasoningTitle")}>
-                <Gauge size={15} />
-                <span>{labelForReasoning(configuration.reasoning_effort ? reasoning : "auto")}</span>
-                <ChevronDown size={12} />
-              </button>
-            </PopoverTrigger>
-            <PopoverContent className={styles.popover} side="top" align="end" aria-label={t("iaReasoningTitle")}>
-              <ReasoningEffortPicker
-                compact
-                value={reasoningPreview ?? configuration.reasoning_effort ?? ""}
-                agentEffort={profile?.reasoning_effort ?? undefined}
-                supportedEfforts={supportedEfforts}
-                disabled={!editable || blocked}
-                onValueChange={setReasoningPreview}
-                onValueCommit={(value) => void commitReasoning(value)}
-                t={t}
-              />
+        ) : null}
+        {showModel && schema ? (
+          <PopoverRoot open={open === "mode"} onOpenChange={(value) => toggle("mode", value)}>
+            <Tooltip content={labelForMode(mode)} contentProps={{ side: "top" }}>
+              <PopoverTrigger asChild>
+                <button type="button" disabled={blocked} className={styles.trigger} aria-label={t("iaRunModeTitle")}>
+                  <ShieldCheck size={15} />
+                  <span>{labelForMode(mode)}</span>
+                  <ChevronDown size={12} />
+                </button>
+              </PopoverTrigger>
+            </Tooltip>
+            <PopoverContent className={styles.popover} side="top" aria-label={t("iaRunModeTitle")}>
+              {row(t("iaRunModeFollowAgent"), !configuration.execution_mode, () => void change({ execution_mode: "" }))}
+              {(schema.choices || []).map((choice) =>
+                row(
+                  labelForMode(String(choice.value || "")),
+                  configuration.execution_mode === choice.value,
+                  () => void change({ execution_mode: String(choice.value || "") }),
+                ),
+              )}
               {errorMessage}
+              {hint}
             </PopoverContent>
           </PopoverRoot>
-        </div>
-      ) : null}
-    </div>
+        ) : null}
+        {showModel ? (
+          <div className={styles.modelGroup}>
+            <TaskModelPicker
+              providers={providers}
+              providerID={configuration.model_provider_id || profile?.model_provider_id || ""}
+              modelID={configuration.model_id || profile?.model_id || ""}
+              agentModelID={profile?.model_id || ""}
+              agentProviderID={profile?.model_provider_id || ""}
+              followDefault={!configuration.model_id}
+              disabled={blocked || !editable}
+              onFollowDefault={() => change({ model_provider_id: "", model_id: "", reasoning_effort: "" }, false, true)}
+              onChoose={(id, model) =>
+                change({ model_provider_id: id, model_id: model, reasoning_effort: "auto" }, false, true)
+              }
+              t={t}
+            />
+            <PopoverRoot open={open === "reasoning"} onOpenChange={(value) => toggle("reasoning", value)}>
+              <Tooltip
+                content={
+                  open === "reasoning"
+                    ? undefined
+                    : labelForReasoning(configuration.reasoning_effort ? reasoning : "auto")
+                }
+              >
+                <PopoverTrigger asChild>
+                  <button
+                    type="button"
+                    disabled={blocked}
+                    className={styles.trigger}
+                    aria-label={t("iaReasoningTitle")}
+                  >
+                    <Gauge size={15} />
+                    <span>{labelForReasoning(configuration.reasoning_effort ? reasoning : "auto")}</span>
+                    <ChevronDown size={12} />
+                  </button>
+                </PopoverTrigger>
+              </Tooltip>
+              <PopoverContent className={styles.popover} side="top" align="end" aria-label={t("iaReasoningTitle")}>
+                <ReasoningEffortPicker
+                  compact
+                  value={reasoningPreview ?? configuration.reasoning_effort ?? ""}
+                  agentEffort={profile?.reasoning_effort ?? undefined}
+                  supportedEfforts={supportedEfforts}
+                  disabled={!editable || blocked}
+                  onValueChange={setReasoningPreview}
+                  onValueCommit={(value) => void commitReasoning(value)}
+                  t={t}
+                />
+                {errorMessage}
+              </PopoverContent>
+            </PopoverRoot>
+          </div>
+        ) : null}
+      </div>
+    </TooltipProvider>
   );
 }

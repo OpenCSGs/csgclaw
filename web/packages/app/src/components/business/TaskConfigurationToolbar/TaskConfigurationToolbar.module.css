@@ -321,6 +321,16 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.directoryMenu .directoryLabel {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  width: 100%;
+}
+.directoryLabel .pathTail {
+  direction: rtl;
+  text-align: left;
+  white-space: nowrap;
+}
 .directoryTrigger,
 .modelTrigger {
   width: auto;
@@ -392,5 +402,32 @@
   .directoryTrigger,
   .lockedDirectory {
     max-width: 160px;
+  }
+}
+
+@container start-task-composer (max-width: 480px) {
+  .directoryTrigger,
+  .modelTrigger,
+  .trigger,
+  .lockedDirectory {
+    flex: none;
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    justify-content: center;
+  }
+
+  .modelGroup {
+    margin-left: auto;
+  }
+
+  .directoryTrigger .directoryLabel > span,
+  .lockedDirectory > span,
+  .modelTrigger :global(.csg-select-value) > :global(.model-option-label.single-line) > :global(.model-option-copy),
+  .modelTrigger :global(.csg-select-chevron),
+  .directoryTrigger :global(.csg-select-chevron),
+  .trigger > span,
+  .trigger > svg:last-child {
+    display: none;
   }
 }

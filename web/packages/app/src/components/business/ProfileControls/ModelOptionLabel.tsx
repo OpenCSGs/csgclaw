@@ -21,7 +21,7 @@ export function ModelOptionLabel({
 }: ModelOptionLabelProps) {
   const hasAvatar = showAvatar && Boolean(avatar || icon);
   const hasProvider = Boolean(provider);
-  const resolvedTitle = title || [model, provider].filter(Boolean).join(" · ");
+  const resolvedTitle = title ?? [model, provider].filter(Boolean).join(" · ");
   return (
     <span
       className={`model-option-label${hasAvatar ? "" : " no-avatar"}${hasProvider ? "" : " single-line"}`}

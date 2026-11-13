@@ -622,11 +622,10 @@ describe("collaboration directory selection", () => {
         managerDirectory: "/manager-private",
         configuration: { workspace_dir },
       });
-      expect(screen.getByLabelText("iaWorkdirTitle")).toHaveAttribute(
-        "title",
-        workspace_dir || "collaborationWorkdirAutomaticHint",
-      );
-      expect(screen.queryByTitle("/manager-private")).not.toBeInTheDocument();
+      fireEvent.focus(screen.getByLabelText("iaWorkdirTitle"));
+      const tooltip = await screen.findByRole("tooltip");
+      expect(tooltip).toHaveTextContent(workspace_dir || "collaborationWorkdirAutomaticHint");
+      expect(tooltip).not.toHaveTextContent("/manager-private");
       fireEvent.click(screen.getByRole("button", { name: "taskEntryEmptyRoom" }));
       await waitFor(() => expect(open).toHaveBeenCalled());
       expect(create).toHaveBeenCalledWith(expect.objectContaining({ configuration: { workspace_dir } }));

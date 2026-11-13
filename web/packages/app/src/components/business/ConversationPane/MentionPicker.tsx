@@ -2,13 +2,39 @@ import avatarLayoutStyles from "@/components/business/AgentAvatar/AvatarLayout.m
 import messageLayoutStyles from "@/components/business/ConversationPane/MessageLayout.module.css";
 import mentionPickerStyles from "./MentionPicker.module.css";
 import { Fragment, useLayoutEffect, useRef } from "react";
-import { File, Folder, User } from "lucide-react";
+import { File, Folder } from "lucide-react";
 import { FileTypeIcon } from "@/components/business/FileTypeIcon";
 import { AgentAvatarContent } from "@/components/business/AgentAvatar";
+import { normalizeAgentAvatarPath } from "@/shared/avatarOptions";
 import { avatarFallbackText } from "@/shared/avatar";
 import { localizeRole } from "@/shared/i18n";
 import type { TranslateFn } from "@/models/conversations";
 import type { MentionPickerUser } from "./types";
+
+export function MentionPersonAvatar({ user }: { user: MentionPickerUser }) {
+  const avatar = normalizeAgentAvatarPath(user.avatar);
+  return (
+    <span
+      className={`avatar ${avatarLayoutStyles["avatar"]} ${mentionPickerStyles["mention-person-avatar"]}`}
+      aria-hidden="true"
+    >
+      <AgentAvatarContent avatar={avatar} fallback={avatarFallbackText(user.avatar, user.name, user.id)} />
+    </span>
+  );
+}
+
+export function MentionOptionText({ label, description }: { label: string; description: string }) {
+  return (
+    <span className={mentionPickerStyles["mention-text"]}>
+      <span className={`message-author ${messageLayoutStyles["message-author"]}`} title={`@${label}`}>
+        @{label}
+      </span>
+      <span className={`conversation-preview ${messageLayoutStyles["conversation-preview"]}`} title={description}>
+        {description}
+      </span>
+    </span>
+  );
+}
 
 export type MentionPickerProps = {
   activeIndex?: number;
@@ -42,7 +68,7 @@ export function MentionPicker({
         const mentionLabel = user.name || user.id;
         const file = user.fileReference;
         const directory = file?.label.endsWith("/");
-        const Icon = file ? (directory ? Folder : File) : User;
+        const Icon = directory ? Folder : File;
         const startsGroup = index === 0 || Boolean(users[index - 1].fileReference) !== Boolean(file);
         return (
           <Fragment key={user.id}>
@@ -62,31 +88,25 @@ export function MentionPicker({
                 onSelect(user);
               }}
             >
-              {groupPeopleAndFiles ? (
+              {!file ? (
+                <MentionPersonAvatar user={user} />
+              ) : groupPeopleAndFiles ? (
                 <span className={mentionPickerStyles["mention-icon"]} aria-hidden="true">
                   <Icon size={16} />
                 </span>
               ) : (
-                <span className={`avatar ${avatarLayoutStyles["avatar"]}`}>
-                  {file ? (
-                    <FileTypeIcon name={file.name} />
-                  ) : (
-                    <AgentAvatarContent
-                      avatar={user.avatar}
-                      fallback={avatarFallbackText(user.avatar, mentionLabel, user.id)}
-                    />
-                  )}
+                <span className={`avatar ${avatarLayoutStyles["avatar"]}`} aria-hidden="true">
+                  <FileTypeIcon name={file.name} />
                 </span>
               )}
-              <div>
-                <div className={`message-author ${messageLayoutStyles["message-author"]}`}>
-                  @{file && directory && groupPeopleAndFiles ? file.label : mentionLabel}
-                </div>
-                <div className={`conversation-preview ${messageLayoutStyles["conversation-preview"]}`}>
-                  {directory && groupPeopleAndFiles ? t("chatDirectoryCompletionHint") : (file?.label ?? user.id)}
-                  {showRole && !file ? ` · ${localizeRole(user.role || "", t)}` : ""}
-                </div>
-              </div>
+              <MentionOptionText
+                label={file && directory && groupPeopleAndFiles ? file.label : mentionLabel}
+                description={
+                  directory && groupPeopleAndFiles
+                    ? t("chatDirectoryCompletionHint")
+                    : `${file?.label ?? user.id}${showRole && !file ? ` · ${localizeRole(user.role || "", t)}` : ""}`
+                }
+              />
             </button>
           </Fragment>
         );

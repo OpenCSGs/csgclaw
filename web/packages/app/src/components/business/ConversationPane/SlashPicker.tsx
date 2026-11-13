@@ -31,8 +31,10 @@ export function SlashPicker({
   const listRef = useRef<HTMLDivElement>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
   const [scrollTop, setScrollTop] = useState(0);
-  const rowHeight = 44;
-  const start = Math.max(0, Math.floor(scrollTop / rowHeight) - 4);
+  const rowHeight = 40;
+  const rowGap = 4;
+  const rowStride = rowHeight + rowGap;
+  const start = Math.max(0, Math.floor(scrollTop / rowStride) - 4);
   const end = Math.min(candidates.length, start + 24);
   useLayoutEffect(() => {
     if (listRef.current) listRef.current.scrollTop = 0;
@@ -40,15 +42,15 @@ export function SlashPicker({
   }, [continuation?.scope]);
   useLayoutEffect(() => {
     const list = listRef.current;
-    if (list && list.scrollTop > Math.max(0, candidates.length * rowHeight - list.clientHeight)) {
-      list.scrollTop = Math.max(0, candidates.length * rowHeight - list.clientHeight);
+    if (list && list.scrollTop > Math.max(0, candidates.length * rowStride - rowGap - list.clientHeight)) {
+      list.scrollTop = Math.max(0, candidates.length * rowStride - rowGap - list.clientHeight);
       setScrollTop(list.scrollTop);
     }
   }, [candidates.length]);
   useLayoutEffect(() => {
     const list = listRef.current;
     if (!list) return;
-    const top = activeIndex * rowHeight;
+    const top = activeIndex * rowStride;
     if (top < list.scrollTop) list.scrollTop = top;
     else if (top + rowHeight > list.scrollTop + list.clientHeight) list.scrollTop = top + rowHeight - list.clientHeight;
     setScrollTop(list.scrollTop);
@@ -84,13 +86,19 @@ export function SlashPicker({
       {!loading && !continuation?.failed && candidates.length === 0 ? (
         <div className={slashPickerStyles["slash-picker-empty"]}>{t("slashPickerEmpty")}</div>
       ) : null}
-      <div aria-hidden="true" style={{ height: start * rowHeight, flexShrink: 0 }} />
+      <div aria-hidden="true" style={{ height: start * rowStride, flexShrink: 0 }} />
       {candidates.slice(start, end).map((candidate, visibleIndex) => (
         <button
           key={`${candidate.type}:${candidate.name}`}
-          style={{ height: rowHeight, minHeight: rowHeight, flexShrink: 0 }}
+          style={{
+            height: rowHeight,
+            minHeight: rowHeight,
+            flexShrink: 0,
+            marginBlockEnd: visibleIndex + start < candidates.length - 1 ? rowGap : 0,
+          }}
           aria-posinset={visibleIndex + start + 1}
           aria-setsize={continuation?.hasMore ? -1 : candidates.length}
+          title={[candidate.name, candidate.description].filter(Boolean).join(" · ")}
           role="option"
           aria-selected={visibleIndex + start === activeIndex}
           className={`${mentionPickerStyles["mention-option"]} ${slashPickerStyles["slash-option"]} ${candidate.type === "command" ? "command-option" : "skill-slash-option"} ${visibleIndex + start === activeIndex ? "active" : ""}`}
@@ -117,7 +125,10 @@ export function SlashPicker({
           </span>
         </button>
       ))}
-      <div aria-hidden="true" style={{ height: Math.max(0, candidates.length - end) * rowHeight, flexShrink: 0 }} />
+      <div
+        aria-hidden="true"
+        style={{ height: Math.max(0, (candidates.length - end) * rowStride - rowGap), flexShrink: 0 }}
+      />
       <div ref={sentinelRef}>
         {continuation?.failed ? (
           <div role="alert">
