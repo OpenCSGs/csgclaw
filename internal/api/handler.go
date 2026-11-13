@@ -11,6 +11,7 @@ import (
 	"csgclaw/internal/apitypes"
 	"csgclaw/internal/apps"
 	"csgclaw/internal/auth"
+	"csgclaw/internal/browser"
 	csgclawchannel "csgclaw/internal/channel/csgclaw"
 	"csgclaw/internal/channel/csgclaw/notification"
 	"csgclaw/internal/channel/feishu"
@@ -53,6 +54,8 @@ import (
 )
 
 type Handler struct {
+	browserMu                  sync.Mutex
+	browser                    *browser.Service
 	agentArchiveMu             sync.Mutex
 	cloudTaskWG                sync.WaitGroup
 	relayCancel                context.CancelFunc
@@ -2556,6 +2559,12 @@ func (h *Handler) handleLocalRoomByID(w http.ResponseWriter, r *http.Request, id
 			}
 			writeAPIError(w, err, http.StatusBadRequest)
 			return
+		}
+		h.browserMu.Lock()
+		browsers := h.browser
+		h.browserMu.Unlock()
+		if browsers != nil {
+			browsers.CloseRoom(r.Context(), id)
 		}
 		if hasDeletedRoom {
 			h.publishRoomEvent(im.EventTypeRoomDeleted, deletedRoom)
