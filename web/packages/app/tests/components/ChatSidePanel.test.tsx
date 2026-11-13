@@ -375,6 +375,56 @@ describe("shared chat sidebar", () => {
       total: 1,
     });
   });
+  it("opens HTML workspace files in the right browser and reloads their source", async () => {
+    const user = userEvent.setup();
+    vi.mocked(fetchWorkspaceDirectory).mockResolvedValue({
+      entries: [{ path: "game.html", name: "game.html", type: "file", size: 100 }],
+    });
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(
+        new Response("<canvas></canvas><script>startGame()</script>", { headers: { "Content-Type": "text/html" } }),
+      );
+    let revision = 0;
+    const createURL = vi.spyOn(URL, "createObjectURL").mockImplementation(() => `blob:game-${++revision}`);
+    const revokeURL = vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
+    const view = render(<Harness />, { wrapper: createQueryWrapper().wrapper });
+    try {
+      await user.click(screen.getByRole("button", { name: "Files" }));
+      await user.click(await screen.findByRole("button", { name: /^game.html/ }));
+      expect(await screen.findByTitle("Browser")).toHaveAttribute("src", "blob:game-1");
+      expect(screen.queryByTitle("HTML preview document")).not.toBeInTheDocument();
+      expect(screen.getByRole("textbox", { name: "Web address" })).toBeInTheDocument();
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining("workspace/content?path=game.html"),
+        expect.objectContaining({ credentials: "same-origin" }),
+      );
+      fetchMock.mockResolvedValue(new Response("<h1>Updated</h1>", { headers: { "Content-Type": "text/html" } }));
+      await user.click(screen.getByRole("button", { name: "Refresh" }));
+      await waitFor(() => expect(screen.getByTitle("Browser")).toHaveAttribute("src", "blob:game-2"));
+      expect(revokeURL).toHaveBeenCalledWith("blob:game-1");
+      const address = screen.getByRole("textbox", { name: "Web address" });
+      await user.clear(address);
+      await user.type(address, "https://example.org/{Enter}");
+      expect(screen.getByRole("tab", { name: "example.org" })).toHaveAttribute("aria-selected", "true");
+      const gameTab = screen.getByRole("tab", { name: "game.html" });
+      const gamePanel = document.getElementById(gameTab.getAttribute("aria-controls")!)!;
+      expect(gamePanel).not.toBeVisible();
+      expect(within(gamePanel).getByTitle("Browser")).toHaveAttribute("src", "blob:game-2");
+      expect(revokeURL).not.toHaveBeenCalledWith("blob:game-2");
+      await user.click(screen.getByRole("tab", { name: "game.html" }));
+      expect(screen.getByRole("textbox", { name: "Web address" })).toHaveValue("blob:game-2");
+      await user.click(screen.getByRole("button", { name: "Close tab game.html" }));
+      expect(screen.getByRole("tab", { name: "Files" })).toHaveAttribute("aria-selected", "true");
+      expect(revokeURL).toHaveBeenCalledWith("blob:game-2");
+    } finally {
+      view.unmount();
+      fetchMock.mockRestore();
+      createURL.mockRestore();
+      revokeURL.mockRestore();
+    }
+  });
+
   it("retains tabs on collapse, restores per-conversation state, and does not persist capabilities", async () => {
     const user = userEvent.setup();
     const wrapper = createQueryWrapper().wrapper;

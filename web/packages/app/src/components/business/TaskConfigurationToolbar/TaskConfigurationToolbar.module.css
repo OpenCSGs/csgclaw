@@ -1,7 +1,8 @@
 .root {
   display: flex;
   align-items: center;
-  flex: 1;
+  flex: 1 1 240px;
+  flex-wrap: wrap;
   min-width: 0;
   gap: 8px;
 }
@@ -34,6 +35,8 @@
 }
 .modelGroup {
   display: flex;
+  flex-wrap: wrap;
+  min-width: 0;
   align-items: center;
   gap: 6px;
   margin-left: auto;
