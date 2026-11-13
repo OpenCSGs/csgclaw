@@ -17,12 +17,22 @@ The currently inspected `sandbox-runtime` server image at `50a0d2a` does not ins
 Update that image before enabling browser tasks in cloud deployments, and verify the actual deployed image and server restart path.
 Browser state is ephemeral, so replacing a persisted CSGClaw bundle does not migrate browser profiles.
 
+Only public HTTP(S) destinations are allowed by default.
+A server-owned forward proxy validates DNS results for every connection and dials the checked IP directly, covering redirects and subresources too.
+Loopback, private, link-local and other non-public addresses are denied.
+For local pages, intranet applications or private test sites, the deployment administrator must set `CSGCLAW_BROWSER_ALLOW_PRIVATE_NETWORK=true` before starting the server.
+This is a service-wide authorization and cannot be enabled through Agent tool arguments.
+
 ## Using the browser
 
 Ask an Agent in a chat to open a URL, read a page, complete a form or take a screenshot.
 The Agent opens a browser session in that chat's side panel automatically.
 The panel displays the actual controlled page, including sites that prohibit iframe embedding.
-Click the page to focus a field, then type, paste or use the input bar below the page, including Chinese text.
+Click Take control and wait for the fresh frame before clicking, typing, pasting or using the input bar below the page.
+Agent mutations and closure are blocked while a user controls the browser.
+Return control to let the Agent continue.
+Hiding the panel or leaving the chat releases control; an abandoned lease expires after 30 seconds.
+Viewport changes require a new frame, and inputs associated with obsolete frames are rejected.
 The toolbar supports back, forward, reload, changing the address and downloading a full-page PNG.
 The Next field and Enter controls send those keys to the page.
 Resizing the panel adjusts the browser viewport rather than shrinking desktop text into a thumbnail.
@@ -56,6 +66,7 @@ Reuse a session with `navigate` when a task needs its existing login state.
 The PNG uses the existing persistent attachment store, so users can view or download it after the browser closes or the server restarts.
 No workspace path or separate file-publication call is required.
 Use `send_to_chat: false` only for screenshots needed for the Agent's own inspection.
+Read-only Agents must use this option; publishing an attachment is rejected by the write-permission guard.
 In thread replies, provide the current `thread_root_id`; Codex native turn metadata binds this automatically.
 
 ## Lifecycle and limits

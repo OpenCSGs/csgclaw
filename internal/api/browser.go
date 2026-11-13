@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
 	"time"
 
 	"csgclaw/internal/browser"
@@ -62,13 +63,17 @@ func (h *Handler) registerBrowserTools(agentID string) {
 	props := platformTextFields("url", "ref", "text", "key")
 	props["action"] = map[string]any{"type": "string", "enum": []string{"navigate", "click", "fill", "select", "key", "scroll", "back", "forward", "reload"}}
 	props["x"], props["y"] = map[string]any{"type": "number"}, map[string]any{"type": "number"}
-	add("browser_act", "Operate this chat's browser. navigate: url; click: ref; fill: ref and text (replaces input; dates use YYYY-MM-DD); select: ref and option text; key: Enter/Tab/Escape/Backspace/Delete/ArrowUp/ArrowDown/ArrowLeft/ArrowRight/Space/Home/End/PageUp/PageDown; scroll: x/y pixel deltas; back/forward/reload. Call browser_snapshot to inspect the result. Submit forms only as authorized by the user.", props, []string{"browser_id", "action"}, false, func(ctx context.Context, room, id string, args map[string]any) (any, error) {
+	add("browser_act", "Operate this chat's browser. navigate: url; click: ref; fill: ref and text (replaces input; dates use YYYY-MM-DD); select: ref and option text; key: Enter/Tab/Escape/Backspace/Delete/ArrowUp/ArrowDown/ArrowLeft/ArrowRight/Space/Home/End/PageUp/PageDown; scroll: x/y pixel deltas; back/forward/reload. Call browser_snapshot to inspect the result. If a user has taken control, wait until they return it before changing the page. Submit forms only as authorized by the user.", props, []string{"browser_id", "action"}, false, func(ctx context.Context, room, id string, args map[string]any) (any, error) {
 		data, _ := json.Marshal(args)
 		var cmd browser.Command
 		_ = json.Unmarshal(data, &cmd)
 		return h.browserService().Run(ctx, room, id, cmd)
 	})
 	add("browser_screenshot", "Capture the current browser page as a PNG image. By default, also send the actual PNG attachment to the user in this chat; delivery is confirmed by delivered=true and message_id in the result. No workspace file or separate publish_file call is needed. Set send_to_chat=false only for your own visual inspection. Set full_page for the entire page. When replying in a thread, pass its thread_root_id; native Codex turns bind this automatically.", map[string]any{"full_page": map[string]any{"type": "boolean"}, "send_to_chat": map[string]any{"type": "boolean", "default": true}, "thread_root_id": map[string]any{"type": "string"}}, []string{"browser_id"}, true, func(ctx context.Context, room, id string, args map[string]any) (any, error) {
+		send, specified := args["send_to_chat"].(bool)
+		if (!specified || send) && h.connectorReadOnlyAgent(agentID) {
+			return nil, fmt.Errorf("read-only Agent cannot send screenshot attachments; use send_to_chat=false for capture only")
+		}
 		full, _ := args["full_page"].(bool)
 		data, err := h.browserService().Screenshot(ctx, room, id, full)
 		if err != nil {
@@ -78,6 +83,9 @@ func (h *Handler) registerBrowserTools(agentID string) {
 		if send, ok := args["send_to_chat"].(bool); ok && !send {
 			result.StructuredContent = map[string]any{"delivered": false}
 			return result, nil
+		}
+		if h.connectorReadOnlyAgent(agentID) {
+			return nil, fmt.Errorf("read-only Agent cannot send screenshot attachments")
 		}
 		if h.im == nil {
 			return nil, fmt.Errorf("screenshot delivery is unavailable")
@@ -98,7 +106,7 @@ func (h *Handler) registerBrowserTools(agentID string) {
 		return result, nil
 	})
 	add("browser_close", "Close this chat's browser session and discard its cookies and page state.", nil, []string{"browser_id"}, false, func(ctx context.Context, room, id string, args map[string]any) (any, error) {
-		err := h.browserService().CloseSession(ctx, room, id)
+		err := h.browserService().CloseAgentSession(ctx, room, id)
 		return map[string]bool{"closed": err == nil}, err
 	})
 }
@@ -147,14 +155,15 @@ func (h *Handler) handleRoomBrowsers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if r.Method == http.MethodGet {
-		data, err := s.Screenshot(ctx, room, id, r.URL.Query().Get("full_page") == "true")
+		data, err := s.UserScreenshot(ctx, room, id, r.URL.Query().Get("full_page") == "true", r.Header.Get(browser.ControlHeader))
 		if err != nil {
 			browserAPIError(w, err)
 			return
 		}
 		w.Header().Set("Content-Type", "image/png")
 		w.Header().Set("X-Content-Type-Options", "nosniff")
-		_, _ = w.Write(data)
+		w.Header().Set(browser.FrameHeader, strconv.FormatUint(data.Revision, 10))
+		_, _ = w.Write(data.Data)
 		return
 	}
 	var cmd browser.Command
@@ -164,7 +173,33 @@ func (h *Handler) handleRoomBrowsers(w http.ResponseWriter, r *http.Request) {
 		writeCodedAPIError(w, 400, "invalid_request", "Invalid browser command")
 		return
 	}
-	state, err := s.Run(ctx, room, id, cmd)
+	if cmd.Action == "takeover" {
+		control, err := s.TakeControl(ctx, room, id)
+		if err != nil {
+			browserAPIError(w, err)
+			return
+		}
+		writeJSON(w, 200, control)
+		return
+	}
+	if cmd.Action == "release" {
+		state, err := s.ReleaseControl(ctx, room, id, r.Header.Get(browser.ControlHeader))
+		if err != nil {
+			browserAPIError(w, err)
+			return
+		}
+		writeJSON(w, 200, state)
+		return
+	}
+	if frame := r.Header.Get(browser.FrameHeader); frame != "" {
+		revision, err := strconv.ParseUint(frame, 10, 64)
+		if err != nil {
+			writeCodedAPIError(w, 400, "invalid_request", "Invalid browser frame")
+			return
+		}
+		cmd.FrameRevision = revision
+	}
+	state, err := s.RunUser(ctx, room, id, cmd, r.Header.Get(browser.ControlHeader))
 	if err != nil {
 		browserAPIError(w, err)
 		return
@@ -173,6 +208,14 @@ func (h *Handler) handleRoomBrowsers(w http.ResponseWriter, r *http.Request) {
 }
 
 func browserAPIError(w http.ResponseWriter, err error) {
+	if errors.Is(err, browser.ErrUserControl) || errors.Is(err, browser.ErrControlRequired) {
+		writeCodedAPIError(w, http.StatusConflict, "browser_control_required", err.Error())
+		return
+	}
+	if errors.Is(err, browser.ErrEgressDenied) {
+		writeCodedAPIError(w, http.StatusForbidden, "browser_egress_denied", err.Error())
+		return
+	}
 	if errors.Is(err, browser.ErrNotFound) {
 		writeCodedAPIError(w, 404, "browser_not_found", err.Error())
 		return

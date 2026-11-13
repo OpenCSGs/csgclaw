@@ -3,6 +3,9 @@ import { ArrowLeft, ArrowRight, Camera, ExternalLink, RefreshCw } from "lucide-r
 import { Button, TextInput, Tooltip } from "@/components/ui";
 import {
   browserCommand,
+  takeBrowserControl,
+  releaseBrowserControl,
+  BrowserControlExpired,
   browserScreenshotURL,
   fetchBrowserFrame,
   type BrowserCommand,
@@ -41,6 +44,14 @@ export function AgentBrowserTab({
 }) {
   const [address, setAddress] = useState(session.url);
   const [frame, setFrame] = useState("");
+  const [controlToken, setControlToken] = useState("");
+  const [frameControl, setFrameControl] = useState("");
+  const [frameRevision, setFrameRevision] = useState("");
+  const [inputReady, setInputReady] = useState(false);
+  const displayedRevision = useRef("");
+  const [changing, setChanging] = useState(false);
+  const changingRef = useRef(false);
+  const controlled = Boolean(controlToken && frameControl === controlToken && frameRevision && inputReady);
   const [error, setError] = useState(false);
   const [busy, setBusy] = useState(false);
   const [invalid, setInvalid] = useState(false);
@@ -66,15 +77,25 @@ export function AgentBrowserTab({
     let objectURL = "";
     async function poll() {
       try {
-        const blob = await fetchBrowserFrame(roomID, session.id, controller.signal);
+        const captured = await fetchBrowserFrame(roomID, session.id, controller.signal, controlToken);
+        const blob = captured.blob;
         if (controller.signal.aborted) return;
         const next = URL.createObjectURL(blob);
         const previous = objectURL;
         objectURL = next;
+        if (controlToken && captured.revision !== displayedRevision.current) setInputReady(false);
         setFrame(next);
+        setFrameControl(controlToken);
+        setFrameRevision(captured.revision);
         if (previous) URL.revokeObjectURL(previous);
-      } catch {
-        if (!controller.signal.aborted) setError(true);
+      } catch (cause) {
+        if (!controller.signal.aborted) {
+          setError(true);
+          if (cause instanceof BrowserControlExpired) {
+            setControlToken("");
+            setInputReady(false);
+          }
+        }
       } finally {
         if (!controller.signal.aborted) timer = setTimeout(() => void poll(), 800);
       }
@@ -85,16 +106,59 @@ export function AgentBrowserTab({
       clearTimeout(timer);
       if (objectURL) URL.revokeObjectURL(objectURL);
     };
-  }, [roomID, session.id, active, retry]);
+  }, [roomID, session.id, active, retry, controlToken]);
 
+  useEffect(() => {
+    if (!controlToken || !active) return;
+    return () => {
+      void releaseBrowserControl(roomID, session.id, controlToken).catch(() => {});
+    };
+  }, [roomID, session.id, active, controlToken]);
+  useEffect(() => {
+    if (!active) {
+      setControlToken("");
+      setInputReady(false);
+      setFrame("");
+    }
+  }, [active]);
+  async function toggleControl() {
+    changingRef.current = true;
+    setChanging(true);
+    setError(false);
+    try {
+      await queue.current;
+      if (controlToken) {
+        await releaseBrowserControl(roomID, session.id, controlToken);
+        if (mounted.current) setControlToken("");
+      } else {
+        const control = await takeBrowserControl(roomID, session.id);
+        if (!mounted.current) {
+          await releaseBrowserControl(roomID, session.id, control.token);
+          return;
+        }
+        setFrame("");
+        setFrameControl("");
+        setFrameRevision("");
+        setInputReady(false);
+        setControlToken(control.token);
+      }
+    } catch {
+      if (mounted.current) setError(true);
+    } finally {
+      changingRef.current = false;
+      if (mounted.current) setChanging(false);
+    }
+  }
   function command(value: BrowserCommand) {
+    if (changingRef.current || (value.action !== "resize" && !controlled)) return Promise.resolve(false);
+    if (value.action === "resize" && session.user_controlled && !controlToken) return Promise.resolve(false);
     const current = ++revision.current;
     setBusy(true);
     setError(false);
     const pending = queue.current.then(async () => {
       if (!mounted.current) return false;
       try {
-        const result = await browserCommand(roomID, session.id, value);
+        const result = await browserCommand(roomID, session.id, value, controlToken, frameRevision);
         if (mounted.current && value.action === "navigate") setAddress(result.url);
         return true;
       } catch {
@@ -131,7 +195,7 @@ export function AgentBrowserTab({
   }, [active, session.id]);
   useEffect(() => {
     const host = viewport.current;
-    if (!host || !active) return;
+    if (!host || !active || !controlled) return;
     let dx = 0,
       dy = 0;
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -156,7 +220,7 @@ export function AgentBrowserTab({
       host.removeEventListener("wheel", wheel);
       clearTimeout(timer);
     };
-  }, [active]);
+  }, [active, controlled]);
   const toolbarButton = (label: string, icon: ReactNode, action: BrowserCommand["action"], disabled = false) => (
     <Tooltip content={label}>
       <span className="inline-flex">
@@ -165,7 +229,7 @@ export function AgentBrowserTab({
           size="sm"
           variant="tertiaryGray"
           aria-label={label}
-          disabled={disabled || busy}
+          disabled={disabled || busy || !controlled}
           onClick={() => command({ action })}
         >
           {icon}
@@ -179,7 +243,7 @@ export function AgentBrowserTab({
         className={styles.toolbar}
         onSubmit={(event) => {
           event.preventDefault();
-          if (busy) return;
+          if (busy || !controlled) return;
           const url = normalizeBrowserURL(address);
           setInvalid(!url);
           if (!url) {
@@ -196,6 +260,7 @@ export function AgentBrowserTab({
           size="sm"
           aria-label={t("chatBrowserAddress")}
           value={address}
+          disabled={!controlled || busy}
           aria-invalid={invalid}
           onChange={(event) => {
             setAddress(event.target.value);
@@ -226,7 +291,31 @@ export function AgentBrowserTab({
           </a>
         </Tooltip>
       </form>
-      <p className={styles.hint}>{t("chatAgentBrowserHint")}</p>
+      <div className={styles.control}>
+        <p className={styles.hint}>
+          {t(
+            controlToken
+              ? "chatAgentBrowserControlled"
+              : session.user_controlled
+                ? "chatAgentBrowserOtherControl"
+                : "chatAgentBrowserHint",
+          )}
+        </p>
+        <Button
+          size="sm"
+          variant="secondaryGray"
+          disabled={busy || changing || (!controlToken && Boolean(session.user_controlled))}
+          onClick={() => void toggleControl()}
+        >
+          {t(
+            changing
+              ? "chatAgentBrowserControlPending"
+              : controlToken
+                ? "chatAgentBrowserReleaseControl"
+                : "chatAgentBrowserTakeControl",
+          )}
+        </Button>
+      </div>
       {invalid ? (
         <div role="alert" className={styles.status}>
           {t("chatBrowserInvalid")}
@@ -254,9 +343,17 @@ export function AgentBrowserTab({
             className={styles.frame}
             src={frame}
             alt={t("chatAgentBrowserPage")}
-            tabIndex={active ? 0 : -1}
+            tabIndex={active && controlled ? 0 : -1}
+            aria-disabled={!controlled}
+            onLoad={() => {
+              if (controlToken && frameControl === controlToken) {
+                displayedRevision.current = frameRevision;
+                setInputReady(true);
+              }
+            }}
             draggable={false}
             onClick={(event) => {
+              if (!controlled) return;
               const bounds = event.currentTarget.getBoundingClientRect();
               event.currentTarget.focus();
               command({
@@ -303,7 +400,7 @@ export function AgentBrowserTab({
         className={styles.input}
         onSubmit={(event) => {
           event.preventDefault();
-          if (busy) return;
+          if (busy || !controlled) return;
           const form = event.currentTarget;
           const text = String(new FormData(form).get("text") ?? "");
           if (text) {
@@ -318,17 +415,23 @@ export function AgentBrowserTab({
           size="sm"
           aria-label={t("chatAgentBrowserText")}
           placeholder={t("chatAgentBrowserText")}
+          disabled={!controlled || busy}
         />
-        <Button type="submit" size="sm" variant="secondaryGray" disabled={busy}>
+        <Button type="submit" size="sm" variant="secondaryGray" disabled={busy || !controlled}>
           {t("chatAgentBrowserType")}
         </Button>
-        <Button size="sm" variant="tertiaryGray" disabled={busy} onClick={() => command({ action: "key", key: "Tab" })}>
+        <Button
+          size="sm"
+          variant="tertiaryGray"
+          disabled={busy || !controlled}
+          onClick={() => command({ action: "key", key: "Tab" })}
+        >
           {t("chatAgentBrowserNext")}
         </Button>
         <Button
           size="sm"
           variant="tertiaryGray"
-          disabled={busy}
+          disabled={busy || !controlled}
           onClick={() => command({ action: "key", key: "Enter" })}
         >
           {t("chatAgentBrowserEnter")}

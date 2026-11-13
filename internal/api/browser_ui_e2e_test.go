@@ -24,6 +24,7 @@ import (
 // This fixture serves the real Web UI, API, MCP gateway and Chromium page.
 // A headless client verifies the Agent-to-user takeover boundary without a model.
 func TestBrowserUIFixture(t *testing.T) {
+	t.Setenv("CSGCLAW_BROWSER_ALLOW_PRIVATE_NETWORK", "true")
 	ready := os.Getenv("CSGCLAW_BROWSER_UI_READY_FILE")
 	if ready == "" {
 		t.Skip("set CSGCLAW_BROWSER_UI_READY_FILE for browser UI acceptance")

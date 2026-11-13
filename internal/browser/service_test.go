@@ -25,6 +25,7 @@ func TestBrowserURLValidation(t *testing.T) {
 }
 
 func TestBrowserEndToEnd(t *testing.T) {
+	t.Setenv("CSGCLAW_BROWSER_ALLOW_PRIVATE_NETWORK", "true")
 	if _, ok := launcher.LookPath(); !ok && os.Getenv("CSGCLAW_BROWSER_BIN") == "" {
 		t.Skip("Chromium is not installed")
 	}

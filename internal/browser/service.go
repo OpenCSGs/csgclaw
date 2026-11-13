@@ -27,28 +27,30 @@ const Width, Height = 1280, 800
 var ErrNotFound = errors.New("browser session not found in this room")
 
 type State struct {
-	ID           string `json:"id"`
-	RoomID       string `json:"room_id"`
-	URL          string `json:"url"`
-	Title        string `json:"title"`
-	Revision     uint64 `json:"revision"`
-	Width        int    `json:"width"`
-	Height       int    `json:"height"`
-	CanGoBack    bool   `json:"can_go_back"`
-	CanGoForward bool   `json:"can_go_forward"`
+	ID             string `json:"id"`
+	RoomID         string `json:"room_id"`
+	URL            string `json:"url"`
+	Title          string `json:"title"`
+	Revision       uint64 `json:"revision"`
+	Width          int    `json:"width"`
+	Height         int    `json:"height"`
+	UserControlled bool   `json:"user_controlled"`
+	CanGoBack      bool   `json:"can_go_back"`
+	CanGoForward   bool   `json:"can_go_forward"`
 }
 
 type Command struct {
-	Action   string  `json:"action"`
-	URL      string  `json:"url,omitempty"`
-	Ref      string  `json:"ref,omitempty"`
-	Text     string  `json:"text,omitempty"`
-	Key      string  `json:"key,omitempty"`
-	X        float64 `json:"x,omitempty"`
-	Y        float64 `json:"y,omitempty"`
-	FullPage bool    `json:"full_page,omitempty"`
-	Width    int     `json:"width,omitempty"`
-	Height   int     `json:"height,omitempty"`
+	Action        string  `json:"action"`
+	URL           string  `json:"url,omitempty"`
+	Ref           string  `json:"ref,omitempty"`
+	Text          string  `json:"text,omitempty"`
+	Key           string  `json:"key,omitempty"`
+	X             float64 `json:"x,omitempty"`
+	Y             float64 `json:"y,omitempty"`
+	FrameRevision uint64  `json:"-"`
+	FullPage      bool    `json:"full_page,omitempty"`
+	Width         int     `json:"width,omitempty"`
+	Height        int     `json:"height,omitempty"`
 }
 
 type Snapshot struct {
@@ -60,12 +62,16 @@ type Snapshot struct {
 }
 
 type session struct {
-	gate     chan struct{}
-	page     *rod.Page
-	context  *rod.Browser
-	state    State                             // guarded by Service.mu
-	refs     map[string]proto.DOMBackendNodeID // guarded by gate
-	lastUsed time.Time
+	gate              chan struct{}
+	page              *rod.Page
+	context           *rod.Browser
+	state             State                             // guarded by Service.mu
+	refs              map[string]proto.DOMBackendNodeID // guarded by gate
+	lastUsed          time.Time
+	controlToken      string
+	controlUntil      time.Time
+	controlFrameReady bool
+	controlRevision   uint64
 }
 
 type Service struct {
@@ -75,6 +81,8 @@ type Service struct {
 	cancel      context.CancelFunc
 	browser     *rod.Browser
 	launcher    *launcher.Launcher
+	egress      *egressProxy
+	policy      *egressPolicy
 	sessions    map[string]*session
 	closedRooms map[string]bool
 	closed      bool
@@ -83,7 +91,7 @@ type Service struct {
 
 func New() *Service {
 	ctx, cancel := context.WithCancel(context.Background())
-	s := &Service{ctx: ctx, cancel: cancel, sessions: map[string]*session{}, closedRooms: map[string]bool{}}
+	s := &Service{ctx: ctx, cancel: cancel, sessions: map[string]*session{}, closedRooms: map[string]bool{}, policy: newEgressPolicy(strings.EqualFold(strings.TrimSpace(os.Getenv(PrivateNetworkEnv)), "true"))}
 	return s
 }
 
@@ -107,6 +115,7 @@ func (s *Service) start(ctx context.Context) (*rod.Browser, error) {
 		// stale inventory and allow the next browser_open to recover.
 		s.launcher.Kill()
 		s.launcher.Cleanup()
+		s.egress.Close()
 		s.browser, s.launcher = nil, nil
 		s.mu.Lock()
 		clear(s.sessions)
@@ -121,20 +130,26 @@ func (s *Service) start(ctx context.Context) (*rod.Browser, error) {
 	}
 	// Keep navigation from freezing a controlled document in Chromium's
 	// back/forward cache while its DevTools session still owns input events.
-	l := launcher.New().Bin(bin).Headless(true).Set("disable-back-forward-cache")
+	proxy, err := newEgressProxy(s.ctx, s.policy)
+	if err != nil {
+		return nil, fmt.Errorf("start browser egress proxy: %w", err)
+	}
+	l := launcher.New().Bin(bin).Headless(true).Proxy(proxy.URL()).Set("disable-back-forward-cache").Set("proxy-bypass-list", "<-loopback>").Set("disable-quic").Set("force-webrtc-ip-handling-policy", "disable_non_proxied_udp")
 	control, err := l.Context(ctx).Launch()
 	if err != nil {
 		l.Kill()
 		l.Cleanup()
+		proxy.Close()
 		return nil, fmt.Errorf("start Chromium: %w", err)
 	}
 	b := rod.New().ControlURL(control).Context(s.ctx).NoDefaultDevice()
 	if err = b.Connect(); err != nil {
 		l.Kill()
 		l.Cleanup()
+		proxy.Close()
 		return nil, fmt.Errorf("connect Chromium: %w", err)
 	}
-	s.launcher, s.browser = l, b
+	s.launcher, s.browser, s.egress = l, b, proxy
 	return b, nil
 }
 
@@ -152,6 +167,9 @@ func (s *Service) Open(ctx context.Context, roomID, rawURL string) (State, error
 	}
 	u, err := validURL(rawURL)
 	if err != nil {
+		return State{}, err
+	}
+	if err = s.policy.checkURL(ctx, u); err != nil {
 		return State{}, err
 	}
 	b, err := s.start(ctx)
@@ -210,7 +228,7 @@ func (s *Service) Open(ctx context.Context, roomID, rawURL string) (State, error
 		return State{}, err
 	}
 	s.mu.Lock()
-	state := e.state
+	state := s.stateLocked(e)
 	s.mu.Unlock()
 	return state, nil
 }
@@ -254,7 +272,7 @@ func (s *Service) List(room string) []State {
 	}
 	for _, e := range s.sessions {
 		if e.state.RoomID == room && e.state.Revision > 0 {
-			out = append(out, e.state)
+			out = append(out, s.stateLocked(e))
 		}
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
@@ -274,6 +292,10 @@ func (s *Service) update(ctx context.Context, e *session) error {
 	s.mu.Lock()
 	back, forward := history.CurrentIndex > 0, history.CurrentIndex+1 < len(history.Entries)
 	if e.state.URL != info.URL || e.state.Title != info.Title || e.state.CanGoBack != back || e.state.CanGoForward != forward || e.state.Revision == 0 {
+		if e.state.URL != info.URL {
+			e.controlRevision++
+			e.controlFrameReady = false
+		}
 		e.state.URL, e.state.Title = info.URL, info.Title
 		e.state.CanGoBack, e.state.CanGoForward = back, forward
 		e.state.Revision++
@@ -348,7 +370,7 @@ func (s *Service) Snapshot(ctx context.Context, room, id string) (Snapshot, erro
 	}
 	e.refs = refs
 	s.mu.Lock()
-	state := e.state
+	state := s.stateLocked(e)
 	s.mu.Unlock()
 	return Snapshot{State: state, Content: content.String(), ScrollX: metrics.CSSLayoutViewport.PageX, ScrollY: metrics.CSSLayoutViewport.PageY, ContentHeight: metrics.CSSContentSize.Height}, nil
 }
@@ -365,15 +387,36 @@ func truncate(text string, max int) string {
 }
 
 func (s *Service) Run(ctx context.Context, room, id string, c Command) (State, error) {
+	return s.run(ctx, room, id, c, "", false)
+}
+
+func (s *Service) run(ctx context.Context, room, id string, c Command, token string, user bool) (State, error) {
 	e, release, err := s.acquire(ctx, room, id)
 	if err != nil {
 		return State{}, err
 	}
 	defer release()
+	if err = s.checkControl(e, token, user && c.Action != "resize"); err != nil {
+		return State{}, err
+	}
+
 	p := e.page.Context(ctx)
 	var el *rod.Element
 	if err = waitDocument(p); err != nil {
 		return State{}, err
+	}
+	if user && c.Action != "resize" {
+		if err = s.update(ctx, e); err != nil {
+			return State{}, err
+		}
+	}
+	if user && c.Action != "resize" {
+		s.mu.Lock()
+		ready := e.controlFrameReady && c.FrameRevision == e.controlRevision
+		s.mu.Unlock()
+		if !ready {
+			return State{}, ErrControlRequired
+		}
 	}
 	if c.Action == "click" || c.Action == "fill" || c.Action == "select" {
 		node, ok := e.refs[c.Ref]
@@ -390,7 +433,10 @@ func (s *Service) Run(ctx context.Context, room, id string, c Command) (State, e
 		var u string
 		u, err = validURL(c.URL)
 		if err == nil {
-			err = p.Navigate(u)
+			err = s.policy.checkURL(ctx, u)
+			if err == nil {
+				err = p.Navigate(u)
+			}
 		}
 		if err == nil {
 			err = waitDocument(p)
@@ -435,6 +481,12 @@ func (s *Service) Run(ctx context.Context, room, id string, c Command) (State, e
 			return State{}, errors.New("scroll distance exceeds limit")
 		}
 		err = p.Mouse.Scroll(c.X, c.Y, 1)
+		if err == nil && user {
+			s.mu.Lock()
+			e.controlRevision++
+			e.controlFrameReady = false
+			s.mu.Unlock()
+		}
 	case "resize":
 		if c.Width < 320 || c.Width > 1920 || c.Height < 200 || c.Height > 1440 {
 			return State{}, errors.New("viewport must be between 320x200 and 1920x1440")
@@ -443,6 +495,8 @@ func (s *Service) Run(ctx context.Context, room, id string, c Command) (State, e
 		if err == nil {
 			s.mu.Lock()
 			e.state.Width, e.state.Height = c.Width, c.Height
+			e.controlFrameReady = false
+			e.controlRevision++
 			s.mu.Unlock()
 		}
 	default:
@@ -455,21 +509,63 @@ func (s *Service) Run(ctx context.Context, room, id string, c Command) (State, e
 		return State{}, err
 	}
 	s.mu.Lock()
-	state := e.state
+	state := s.stateLocked(e)
 	s.mu.Unlock()
 	return state, nil
 }
 
 func (s *Service) Screenshot(ctx context.Context, room, id string, full bool) ([]byte, error) {
+	frame, err := s.capture(ctx, room, id, full, "")
+	return frame.Data, err
+}
+
+type Frame struct {
+	Data     []byte
+	Revision uint64
+}
+
+func (s *Service) capture(ctx context.Context, room, id string, full bool, token string) (Frame, error) {
 	e, release, err := s.acquire(ctx, room, id)
 	if err != nil {
-		return nil, err
+		return Frame{}, err
 	}
 	defer release()
-	if err = s.update(ctx, e); err != nil {
-		return nil, err
+	if token != "" {
+		if err = s.checkControl(e, token, true); err != nil {
+			return Frame{}, err
+		}
 	}
-	return e.page.Context(ctx).Screenshot(full, &proto.PageCaptureScreenshot{Format: proto.PageCaptureScreenshotFormatPng})
+	if err = s.update(ctx, e); err != nil {
+		return Frame{}, err
+	}
+	page := e.page.Context(ctx)
+	var data []byte
+	if full {
+		metrics, readErr := readDocument(ctx, func() (*proto.PageGetLayoutMetricsResult, error) { return (proto.PageGetLayoutMetrics{}).Call(page) })
+		if readErr != nil {
+			return Frame{}, readErr
+		}
+		if metrics.CSSContentSize == nil {
+			return Frame{}, errors.New("browser content size is unavailable")
+		}
+		size := metrics.CSSContentSize
+		captured, captureErr := (proto.PageCaptureScreenshot{Format: proto.PageCaptureScreenshotFormatPng, FromSurface: true, CaptureBeyondViewport: true, Clip: &proto.PageViewport{X: size.X, Y: size.Y, Width: size.Width, Height: size.Height, Scale: 1}}).Call(page)
+		err = captureErr
+		if captured != nil {
+			data = captured.Data
+		}
+	} else {
+		data, err = page.Screenshot(false, &proto.PageCaptureScreenshot{Format: proto.PageCaptureScreenshotFormatPng})
+	}
+	if err == nil && token != "" {
+		s.mu.Lock()
+		e.controlFrameReady = true
+		s.mu.Unlock()
+	}
+	s.mu.Lock()
+	revision := e.controlRevision
+	s.mu.Unlock()
+	return Frame{Data: data, Revision: revision}, err
 }
 
 func (s *Service) CloseSession(ctx context.Context, room, id string) error {
@@ -477,11 +573,20 @@ func (s *Service) CloseSession(ctx context.Context, room, id string) error {
 }
 
 func (s *Service) closeSession(ctx context.Context, room, id string, idleBefore time.Time) error {
+	return s.closeSessionWithControl(ctx, room, id, idleBefore, false)
+}
+
+func (s *Service) closeSessionWithControl(ctx context.Context, room, id string, idleBefore time.Time, agent bool) error {
 	e, release, err := s.lockSession(ctx, room, id, false)
 	if err != nil {
 		return err
 	}
 	defer release()
+	if agent {
+		if err = s.checkControl(e, "", false); err != nil {
+			return err
+		}
+	}
 	s.mu.Lock()
 	if !idleBefore.IsZero() && !e.lastUsed.Before(idleBefore) {
 		s.mu.Unlock()
@@ -553,4 +658,5 @@ func (s *Service) Close() {
 		s.launcher.Kill()
 		s.launcher.Cleanup()
 	}
+	s.egress.Close()
 }

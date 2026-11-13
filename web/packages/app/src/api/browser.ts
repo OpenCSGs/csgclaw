@@ -6,6 +6,7 @@ export type BrowserSession = {
   url: string;
   title: string;
   revision: number;
+  user_controlled?: boolean;
   width: number;
   height: number;
   can_go_back: boolean;
@@ -35,16 +36,40 @@ export function closeBrowserSession(roomID: string, id: string) {
   return request<void>(browserPath(roomID, id), { method: "DELETE" });
 }
 
-export function browserCommand(roomID: string, id: string, command: BrowserCommand) {
-  return request<BrowserSession>(browserPath(roomID, id), { method: "POST", json: command });
+const controlHeader = "X-CSGClaw-Browser-Control";
+const frameHeader = "X-CSGClaw-Browser-Frame";
+export type BrowserControl = { session: BrowserSession; token: string };
+export class BrowserControlExpired extends Error {}
+
+export function takeBrowserControl(roomID: string, id: string) {
+  return request<BrowserControl>(browserPath(roomID, id), { method: "POST", json: { action: "takeover" } });
+}
+export function releaseBrowserControl(roomID: string, id: string, token: string) {
+  return request<BrowserSession>(browserPath(roomID, id), {
+    method: "POST",
+    json: { action: "release" },
+    headers: { [controlHeader]: token },
+  });
+}
+export function browserCommand(roomID: string, id: string, command: BrowserCommand, token = "", revision = "") {
+  return request<BrowserSession>(browserPath(roomID, id), {
+    method: "POST",
+    json: command,
+    headers: { [controlHeader]: token, [frameHeader]: revision },
+  });
 }
 
 export function browserScreenshotURL(roomID: string, id: string) {
   return resolveRequestPath(browserPath(roomID, id));
 }
 
-export async function fetchBrowserFrame(roomID: string, id: string, signal: AbortSignal) {
-  const response = await fetch(browserScreenshotURL(roomID, id), { signal, cache: "no-store" });
+export async function fetchBrowserFrame(roomID: string, id: string, signal: AbortSignal, token = "") {
+  const response = await fetch(browserScreenshotURL(roomID, id), {
+    signal,
+    cache: "no-store",
+    headers: token ? { [controlHeader]: token } : undefined,
+  });
+  if (response.status === 409) throw new BrowserControlExpired("Browser control expired");
   if (!response.ok) throw new Error(`Browser frame: ${response.status}`);
-  return response.blob();
+  return { blob: await response.blob(), revision: response.headers.get(frameHeader) || "" };
 }
